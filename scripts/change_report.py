@@ -65,6 +65,19 @@ def changed_paths(root, base):
     return sorted({path for path in (diff + untracked).split("\0") if path})
 
 
+def added_and_removed(root, base):
+    """Paths the change added (untracked files included) and paths it removed."""
+    added, removed = set(), set()
+    fields = git(root, "diff", "--name-status", "--no-renames", "-z", base).stdout.split("\0")
+    for status, path in zip(fields[0::2], fields[1::2]):
+        if status == "A":
+            added.add(path)
+        elif status == "D":
+            removed.add(path)
+    added |= {path for path in git(root, "ls-files", "--others", "--exclude-standard", "-z").stdout.split("\0") if path}
+    return sorted(added), sorted(removed)
+
+
 def changed_lines(root, base, paths):
     """Line numbers each path adds or changes relative to base; new files count whole."""
     out = {}

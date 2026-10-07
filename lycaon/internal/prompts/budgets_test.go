@@ -5,14 +5,13 @@ import (
 	"testing"
 )
 
-func TestPromptSizesCapPrefersEntriesOverTheCategoryLimit(t *testing.T) {
+func TestPromptSizesCapPrefersAnExceptionOverTheCategoryLimit(t *testing.T) {
 	t.Parallel()
 	sizes := PromptSizes{
-		Limits:        map[string]SizeLimit{"worker_personas": {Warn: 16, Limit: 20}},
-		Grandfathered: map[string]map[string]int{"worker_personas": {"legacy": 30}},
-		Exceptions:    map[string]map[string]SizeException{"worker_personas": {"special": {Cap: 40, Reason: "r"}}},
+		Limits:     map[string]SizeLimit{"worker_personas": {Warn: 16, Limit: 20}},
+		Exceptions: map[string]map[string]SizeException{"worker_personas": {"special": {Cap: 40, Reason: "r"}}},
 	}
-	for id, want := range map[string]int{"plain": 20, "legacy": 30, "special": 40} {
+	for id, want := range map[string]int{"plain": 20, "special": 40} {
 		if got := sizes.Cap("worker_personas", id); got != want {
 			t.Errorf("Cap(%s) = %d, want %d", id, got, want)
 		}

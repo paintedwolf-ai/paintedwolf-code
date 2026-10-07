@@ -1,11 +1,17 @@
 package contract
 
 import (
-	"bytes"
+	"context"
 	"fmt"
 	"path/filepath"
+	"sort"
 
+	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/promptunit"
+	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/skills"
 	"github.com/lycaon/lycaon/test/contract/internal/sizebudget"
 	"gopkg.in/yaml.v3"
 )
@@ -15,7 +21,6 @@ const promptBudgetPolicyPath = "lycaon/config/packs/painted-wolf/platform/host/p
 var promptBudgetSuite = sizebudget.Suite{
 	Name:       "prompts",
 	PolicyPath: promptBudgetPolicyPath,
-	Refresh:    "UPDATE_PROMPT_BUDGETS=1 ./task budgets",
 	Categories: map[string]sizebudget.Category{
 		"worker_personas": {
 			Unit:     "bytes",
@@ -42,10 +47,20 @@ var promptBudgetSuite = sizebudget.Suite{
 			Measures: "Host kick template, including parsed partials and phase obligations",
 			Remedy:   "A kick answers one situation; point to procedure instead of restating it.",
 		},
-		"tool_surfaces": {
+		"units": {
 			Unit:     "bytes",
-			Measures: "Wire-facing tool definitions a profile puts on every request (deferred tools excluded)",
-			Remedy:   "Change cold tools from sticky to true so their schemas load on demand through request_tools.",
+			Measures: "One instruction unit rendered on its own; it rides a turn only when its tools are offered and the decision engine keeps it",
+			Remedy:   "A unit carries one procedure or rule for the tools it attaches to; split a unit that serves two requests.",
+		},
+		"coordinator_tool_surfaces": {
+			Unit:     "bytes",
+			Measures: "Wire-facing tool definitions one coordinator surface puts on every request: its plan's immediate tools, trimmed for the coordinator",
+			Remedy:   "Move cold tools from the surface floor to its loadable list so their schemas load on demand through request_tools.",
+		},
+		"worker_tool_surfaces": {
+			Unit:     "bytes",
+			Measures: "Wire-facing tool definitions one worker tool profile puts on every request: its sticky tools",
+			Remedy:   "Change cold tools from sticky to true in the profile so their schemas load on demand through request_tools.",
 		},
 	},
 }
@@ -53,9 +68,8 @@ var promptBudgetSuite = sizebudget.Suite{
 // promptSizePolicy views the shipped prompt size limits as a budget policy.
 func promptSizePolicy(sizes prompts.PromptSizes) sizebudget.Policy {
 	policy := sizebudget.Policy{
-		Limits:        map[string]sizebudget.Limit{},
-		Grandfathered: sizes.Grandfathered,
-		Exceptions:    map[string]map[string]sizebudget.Exception{},
+		Limits:     map[string]sizebudget.Limit{},
+		Exceptions: map[string]map[string]sizebudget.Exception{},
 	}
 	for name, limit := range sizes.Limits {
 		policy.Limits[name] = sizebudget.Limit{Warn: limit.Warn, Limit: limit.Limit}
@@ -134,38 +148,6 @@ func promptBudgetDetail(catalog map[string]map[string]promptBudgetEntry) func(si
 	}
 }
 
-// tightenPromptBudgetFile rewrites only sizes.grandfathered, so the comments
-// and runtime limits around it keep their authored form.
-func tightenPromptBudgetFile(raw []byte, grandfathered map[string]map[string]int) ([]byte, error) {
-	var document yaml.Node
-	if err := yaml.Unmarshal(raw, &document); err != nil {
-		return nil, fmt.Errorf("decode prompt budgets: %w", err)
-	}
-	sizes := mappingValue(document.Content[0], "sizes")
-	if sizes == nil {
-		return nil, fmt.Errorf("prompt budgets: sizes missing")
-	}
-	target := mappingValue(sizes, "grandfathered")
-	if target == nil {
-		return nil, fmt.Errorf("prompt budgets: sizes.grandfathered missing")
-	}
-	var replacement yaml.Node
-	if err := replacement.Encode(grandfathered); err != nil {
-		return nil, fmt.Errorf("encode grandfathered prompt caps: %w", err)
-	}
-	target.Kind, target.Style, target.Tag, target.Content = replacement.Kind, replacement.Style, replacement.Tag, replacement.Content
-	var out bytes.Buffer
-	encoder := yaml.NewEncoder(&out)
-	encoder.SetIndent(4)
-	if err := encoder.Encode(&document); err != nil {
-		return nil, fmt.Errorf("encode prompt budgets: %w", err)
-	}
-	if err := encoder.Close(); err != nil {
-		return nil, fmt.Errorf("encode prompt budgets: %w", err)
-	}
-	return out.Bytes(), nil
-}
-
 func mappingValue(node *yaml.Node, key string) *yaml.Node {
 	if node == nil || node.Kind != yaml.MappingNode {
 		return nil
@@ -180,4 +162,107 @@ func mappingValue(node *yaml.Node, key string) *yaml.Node {
 
 func promptBudgetPolicyFile(root string) string {
 	return filepath.Join(root, filepath.FromSlash(promptBudgetPolicyPath))
+}
+
+// PromptBudgetRegistry lists every artifact measured by TestRenderedPromptsWithinBudget.
+type PromptBudgetRegistry struct {
+	LycaonRoot     string
+	WorkerPersonas map[string]prompts.AgentPersonaDef
+	AgentSkills    map[string]skills.Selector
+	Tripartite     []ContextDietMatrixRow
+	Injects        []PromptBudgetInjectSpec
+	KickIDs        []string
+	AgentTemplates map[string]string // profile id → system_prompt_template ref
+	// Units are the stock instruction units a turn carries only when selected.
+	Units []promptunit.Unit
+	// CoordinatorSurfaces lists every coordinator surface a plan compiles for.
+	CoordinatorSurfaces []string
+}
+
+// LoadPromptBudgetRegistry discovers budget artifacts from production config.
+func LoadPromptBudgetRegistry(lycaonRoot string) (*PromptBudgetRegistry, error) {
+	persona, err := prompts.LoadPersonaContract()
+	if err != nil {
+		return nil, err
+	}
+	kickIDs, err := kickTemplateIDs()
+	if err != nil {
+		return nil, err
+	}
+	reg := orchestration.NewMemoryAgentRegistry()
+	if err := orchestration.LoadRequiredAgentRegistry(context.Background(), reg); err != nil {
+		return nil, err
+	}
+	agentTemplates := map[string]string{}
+	agentSkills := map[string]skills.Selector{}
+	for _, profile := range reg.List() {
+		agentSkills[profile.ID] = profile.Skills
+		if persona.IsWorkerAgent(profile.ID) {
+			continue
+		}
+		ref := profile.SystemPromptTemplate
+		if ref == "" {
+			continue
+		}
+		agentTemplates[profile.ID] = ref
+	}
+	units, err := prompts.UnitCatalogFor(nil)
+	if err != nil {
+		return nil, err
+	}
+	var stockUnits []promptunit.Unit
+	for _, unit := range units.Units() {
+		if unit.Stock {
+			stockUnits = append(stockUnits, unit)
+		}
+	}
+	plans, err := surface.CompileToolPlans(1)
+	if err != nil {
+		return nil, err
+	}
+	coordinatorSurfaces := make([]string, 0, len(plans))
+	for id := range plans {
+		coordinatorSurfaces = append(coordinatorSurfaces, id)
+	}
+	sort.Strings(coordinatorSurfaces)
+	return &PromptBudgetRegistry{
+		LycaonRoot:          lycaonRoot,
+		WorkerPersonas:      persona.Agents,
+		AgentSkills:         agentSkills,
+		Tripartite:          ContextDietMatrix,
+		Injects:             PromptBudgetInjectMatrix,
+		KickIDs:             kickIDs,
+		AgentTemplates:      agentTemplates,
+		Units:               stockUnits,
+		CoordinatorSurfaces: coordinatorSurfaces,
+	}, nil
+}
+
+// ToolProfileIDs lists production tool profile ids for tool-surface budgets.
+func (r *PromptBudgetRegistry) ToolProfileIDs() []string {
+	if r == nil {
+		return nil
+	}
+	profiles, err := sandbox.LoadToolProfiles()
+	if err != nil {
+		return nil
+	}
+	ids := make([]string, 0, len(profiles))
+	for _, p := range profiles {
+		ids = append(ids, p.ID)
+	}
+	sort.Strings(ids)
+	return ids
+}
+
+func (r *PromptBudgetRegistry) WorkerPersonaIDs() []string {
+	if r == nil {
+		return nil
+	}
+	ids := make([]string, 0, len(r.WorkerPersonas))
+	for id := range r.WorkerPersonas {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids
 }

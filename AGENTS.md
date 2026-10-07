@@ -101,12 +101,14 @@ Backend test conventions, including labeled errors, live in
 [`lycaon-den/AGENTS.md`](lycaon-den/AGENTS.md#testing).
 
 **Size budgets and changed coverage run in both gates.** `./task budgets` holds
-prompts and code to category limits; `coverage:changes` and
-`den:coverage:changes` require tests for the statements a change adds. They
-fail only on growth past a chosen line. Answer a failure by reshaping or
-trimming. An exception needs a reason a reviewer can weigh, and grandfathered
-caps never grow. Run `./task budgets` while adding prompt copy or large code,
-not only at closeout. See
+every file, directory, Go type, and prompt a change touches to its category
+limit, or to an exception that says why it must be larger;
+`coverage:changes` and `den:coverage:changes` require tests for the statements
+a change adds. Heed the warning line: when a file you are growing passes it,
+put new behavior in a new file or package. Before editing something large,
+check its standing with `PW_BUDGETS_INSPECT="<path>" ./task budgets`. Answer
+a failure by reshaping or trimming; an exception needs a reason a reviewer can
+weigh. See
 [Size budgets and changed coverage](docs/test-strategy.md#size-budgets-and-changed-coverage).
 
 ### Queue scope

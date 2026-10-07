@@ -1,12 +1,12 @@
 // Package sizebudget holds measured artifacts to the size limits a category
-// chose on purpose. Only growth past a chosen line fails; cleanup the policy
-// could absorb is reported as a note with its fix.
+// chose on purpose, with reasoned exceptions for artifacts that must be
+// larger. Standing is absolute: no recorded sizes and no comparison with an
+// earlier state. A change answers for the artifacts it touches.
 package sizebudget
 
 import (
 	"cmp"
 	"fmt"
-	"maps"
 	"slices"
 	"strings"
 
@@ -19,32 +19,17 @@ type Limit struct {
 	Limit int `yaml:"limit" json:"limit"`
 }
 
-// MarshalYAML writes a limit on one line, so a policy reads as a table.
-func (l Limit) MarshalYAML() (any, error) {
-	var node yaml.Node
-	if err := node.Encode(struct {
-		Warn  int `yaml:"warn"`
-		Limit int `yaml:"limit"`
-	}{l.Warn, l.Limit}); err != nil {
-		return nil, err
-	}
-	node.Style = yaml.FlowStyle
-	return &node, nil
-}
-
-// Exception admits one artifact above its category limit for a stated reason.
+// Exception admits one artifact above its category limit, up to its cap, for
+// a reason a reviewer can weigh.
 type Exception struct {
 	Cap    int    `yaml:"cap"`
 	Reason string `yaml:"reason"`
 }
 
-// Policy is the reviewed limit state of one budget suite. Grandfathered caps
-// record artifacts that predate their limit: refreshes only lower or drop
-// them. Exceptions are hand-written and always carry a reason.
+// Policy is the reviewed limit state of one budget suite.
 type Policy struct {
-	Limits        map[string]Limit                `yaml:"limits"`
-	Grandfathered map[string]map[string]int       `yaml:"grandfathered"`
-	Exceptions    map[string]map[string]Exception `yaml:"exceptions"`
+	Limits     map[string]Limit                `yaml:"limits"`
+	Exceptions map[string]map[string]Exception `yaml:"exceptions"`
 }
 
 // Validate checks the policy against the categories its suite measures.
@@ -60,26 +45,15 @@ func (p Policy) Validate(categories []string) error {
 			return fmt.Errorf("category %s needs 0 < warn (%d) < limit (%d)", name, limit.Warn, limit.Limit)
 		}
 	}
-	for _, section := range []map[string]map[string]int{toCaps(p.Exceptions), p.Grandfathered} {
-		for name := range section {
-			if !known[name] {
-				return fmt.Errorf("unknown category %q", name)
-			}
-		}
-	}
 	for name := range p.Limits {
 		if !known[name] {
 			return fmt.Errorf("unknown category %q", name)
 		}
 	}
-	for name, entries := range p.Grandfathered {
-		for id, limitCap := range entries {
-			if limitCap <= p.Limits[name].Limit {
-				return fmt.Errorf("grandfathered %s[%q] cap %d must exceed the limit %d", name, id, limitCap, p.Limits[name].Limit)
-			}
-		}
-	}
 	for name, entries := range p.Exceptions {
+		if !known[name] {
+			return fmt.Errorf("unknown category %q", name)
+		}
 		for id, exception := range entries {
 			if exception.Cap <= p.Limits[name].Limit {
 				return fmt.Errorf("exception %s[%q] cap %d must exceed the limit %d", name, id, exception.Cap, p.Limits[name].Limit)
@@ -87,160 +61,17 @@ func (p Policy) Validate(categories []string) error {
 			if strings.TrimSpace(exception.Reason) == "" {
 				return fmt.Errorf("exception %s[%q] needs a reason", name, id)
 			}
-			if _, ok := p.Grandfathered[name][id]; ok {
-				return fmt.Errorf("%s[%q] is both grandfathered and an exception", name, id)
-			}
 		}
 	}
 	return nil
 }
 
-// Cap returns the most an artifact may measure, and the entry that allows it.
-func (p Policy) Cap(category, id string) (int, Entry) {
+// Cap returns the most an artifact may measure, and whether an exception sets it.
+func (p Policy) Cap(category, id string) (int, bool) {
 	if exception, ok := p.Exceptions[category][id]; ok {
-		return exception.Cap, EntryException
+		return exception.Cap, true
 	}
-	if limitCap, ok := p.Grandfathered[category][id]; ok {
-		return limitCap, EntryGrandfathered
-	}
-	return p.Limits[category].Limit, EntryNone
-}
-
-// Entry names what admits an artifact above its category limit.
-type Entry string
-
-const (
-	EntryNone          Entry = ""
-	EntryGrandfathered Entry = "grandfathered"
-	EntryException     Entry = "exception"
-)
-
-// Kind classifies one finding.
-type Kind string
-
-const (
-	// OverLimit: an artifact without an entry grew past its category limit.
-	OverLimit Kind = "over_limit"
-	// OverCap: an artifact with an entry grew past the cap it records.
-	OverCap Kind = "over_cap"
-	// OverWarn: an artifact passed its category's warning line.
-	OverWarn Kind = "over_warn"
-	// Slack: a grandfathered artifact shrank below its cap.
-	Slack Kind = "slack"
-	// Unneeded: an artifact with an entry now fits its category limit.
-	Unneeded Kind = "unneeded"
-	// Vanished: an entry names an artifact that no longer exists.
-	Vanished Kind = "vanished"
-	// GrandfatherRaised: a grandfathered cap was added or raised since the
-	// change base; growth past a limit needs an exception and its reason.
-	GrandfatherRaised Kind = "grandfather_raised"
-)
-
-// Fails reports whether a finding is growth past a chosen line.
-func (k Kind) Fails() bool { return k == OverLimit || k == OverCap || k == GrandfatherRaised }
-
-// Finding is one artifact's standing against the policy.
-type Finding struct {
-	Category string `json:"category"`
-	ID       string `json:"id"`
-	Kind     Kind   `json:"kind"`
-	Measured int    `json:"measured"`
-	// Bound is the line the finding is measured against: the cap, the limit,
-	// or the warning line.
-	Bound  int    `json:"bound"`
-	Entry  Entry  `json:"entry,omitempty"`
-	Reason string `json:"reason,omitempty"`
-}
-
-// Measurements maps category → artifact ID → measured size.
-type Measurements map[string]map[string]int
-
-// Evaluate classifies every measured artifact and every policy entry.
-func Evaluate(p Policy, measured Measurements) []Finding {
-	var out []Finding
-	for name, artifacts := range measured {
-		limit := p.Limits[name]
-		for id, value := range artifacts {
-			limitCap, entry := p.Cap(name, id)
-			finding := Finding{Category: name, ID: id, Measured: value, Entry: entry, Reason: p.Exceptions[name][id].Reason}
-			switch {
-			case value > limitCap:
-				finding.Kind, finding.Bound = OverLimit, limitCap
-				if entry != EntryNone {
-					finding.Kind = OverCap
-				}
-			case entry != EntryNone && value <= limit.Limit:
-				finding.Kind, finding.Bound = Unneeded, limit.Limit
-			case entry == EntryGrandfathered && value < limitCap:
-				finding.Kind, finding.Bound = Slack, limitCap
-			case entry == EntryNone && value > limit.Warn:
-				finding.Kind, finding.Bound = OverWarn, limit.Warn
-			default:
-				continue
-			}
-			out = append(out, finding)
-		}
-	}
-	for name, entries := range entryCaps(p) {
-		for id, limitCap := range entries {
-			if _, ok := measured[name][id]; !ok {
-				_, entry := p.Cap(name, id)
-				out = append(out, Finding{Category: name, ID: id, Kind: Vanished, Bound: limitCap, Entry: entry})
-			}
-		}
-	}
-	sortFindings(out)
-	return out
-}
-
-func sortFindings(findings []Finding) {
-	slices.SortFunc(findings, func(a, b Finding) int {
-		return cmp.Or(strings.Compare(a.Category, b.Category), strings.Compare(string(a.Kind), string(b.Kind)), strings.Compare(a.ID, b.ID))
-	})
-}
-
-// Tighten lowers grandfathered caps to their measurements and drops entries
-// that no longer admit anything. It never adds an entry or raises a cap, and
-// it leaves hand-written exceptions alone.
-func Tighten(p Policy, measured Measurements) Policy {
-	out := Policy{Limits: maps.Clone(p.Limits), Grandfathered: map[string]map[string]int{}, Exceptions: p.Exceptions}
-	for name, entries := range p.Grandfathered {
-		for id, limitCap := range entries {
-			value, ok := measured[name][id]
-			if !ok || value <= p.Limits[name].Limit {
-				continue
-			}
-			if out.Grandfathered[name] == nil {
-				out.Grandfathered[name] = map[string]int{}
-			}
-			out.Grandfathered[name][id] = min(limitCap, value)
-		}
-	}
-	return out
-}
-
-func entryCaps(p Policy) map[string]map[string]int {
-	out := map[string]map[string]int{}
-	for _, section := range []map[string]map[string]int{p.Grandfathered, toCaps(p.Exceptions)} {
-		for name, entries := range section {
-			if out[name] == nil {
-				out[name] = map[string]int{}
-			}
-			maps.Copy(out[name], entries)
-		}
-	}
-	return out
-}
-
-func toCaps(exceptions map[string]map[string]Exception) map[string]map[string]int {
-	out := map[string]map[string]int{}
-	for name, entries := range exceptions {
-		out[name] = map[string]int{}
-		for id, exception := range entries {
-			out[name][id] = exception.Cap
-		}
-	}
-	return out
+	return p.Limits[category].Limit, false
 }
 
 // RequireIntegers rejects a policy node whose sizes are not plain integers. A
@@ -263,4 +94,142 @@ func RequireIntegers(policy *yaml.Node) error {
 		return nil
 	}
 	return walk(policy, "")
+}
+
+// Kind classifies one finding.
+type Kind string
+
+const (
+	// OverLimit: an artifact the change touched is past its category limit
+	// and no exception admits it.
+	OverLimit Kind = "over_limit"
+	// OverCap: an artifact is past the ceiling its exception records.
+	OverCap Kind = "over_cap"
+	// OverWarn: an artifact the change touched is past its warning line.
+	OverWarn Kind = "over_warn"
+	// Excepted: the change touched an artifact an exception admits.
+	Excepted Kind = "excepted"
+	// Unneeded: an artifact with an exception now fits its category limit.
+	Unneeded Kind = "unneeded"
+	// Vanished: an exception names an artifact that no longer exists.
+	Vanished Kind = "vanished"
+	// ExceptionAdded: this change added an exception or raised its cap.
+	ExceptionAdded Kind = "exception_added"
+)
+
+// Fails reports whether a finding stops the change.
+func (k Kind) Fails() bool { return k == OverLimit || k == OverCap }
+
+// Finding is one artifact's standing against the policy.
+type Finding struct {
+	Category string `json:"category"`
+	ID       string `json:"id"`
+	Kind     Kind   `json:"kind"`
+	Measured int    `json:"measured"`
+	// Bound is the line the finding is measured against: an exception cap,
+	// the category limit, or the warning line.
+	Bound  int    `json:"bound"`
+	Reason string `json:"reason,omitempty"`
+	// Previous is a raised exception's former cap.
+	Previous *int `json:"previous,omitempty"`
+}
+
+// Measurements maps category → artifact ID → measured size.
+type Measurements map[string]map[string]int
+
+// Touched reports whether a change touched one artifact.
+type Touched func(category, id string) bool
+
+// Evaluate holds every artifact to an absolute standard. An artifact the
+// change touched must be within its category limit, or within the cap of the
+// exception that says why it must be larger. No exception may be outgrown,
+// touched or not. Untouched artifacts past their limit are counted, not
+// failed: the standard applies when someone next works in them.
+func Evaluate(p Policy, measured Measurements, touched Touched) []Finding {
+	var out []Finding
+	for name, artifacts := range measured {
+		limit := p.Limits[name]
+		for id, value := range artifacts {
+			finding := Finding{Category: name, ID: id, Measured: value}
+			exception, excepted := p.Exceptions[name][id]
+			switch {
+			case excepted && value > exception.Cap:
+				finding.Kind, finding.Bound, finding.Reason = OverCap, exception.Cap, exception.Reason
+			case excepted && value <= limit.Limit:
+				finding.Kind, finding.Bound, finding.Reason = Unneeded, limit.Limit, exception.Reason
+			case !touched(name, id):
+				continue
+			case excepted:
+				finding.Kind, finding.Bound, finding.Reason = Excepted, exception.Cap, exception.Reason
+			case value > limit.Limit:
+				finding.Kind, finding.Bound = OverLimit, limit.Limit
+			case value > limit.Warn:
+				finding.Kind, finding.Bound = OverWarn, limit.Warn
+			default:
+				continue
+			}
+			out = append(out, finding)
+		}
+	}
+	for name, entries := range p.Exceptions {
+		for id, exception := range entries {
+			if _, ok := measured[name][id]; !ok {
+				out = append(out, Finding{Category: name, ID: id, Kind: Vanished, Bound: exception.Cap, Reason: exception.Reason})
+			}
+		}
+	}
+	sortFindings(out)
+	return out
+}
+
+// Untouched counts, per category, the artifacts past their limit that no
+// exception admits and the change did not touch.
+func Untouched(p Policy, measured Measurements, touched Touched) map[string]int {
+	out := map[string]int{}
+	for name, artifacts := range measured {
+		for id, value := range artifacts {
+			if _, excepted := p.Exceptions[name][id]; !excepted && value > p.Limits[name].Limit && !touched(name, id) {
+				out[name]++
+			}
+		}
+	}
+	return out
+}
+
+// ExceptionChanges reports exceptions this change added or raised, so a
+// reviewer weighs each one alongside the growth it admits.
+func ExceptionChanges(base, head Policy) []Finding {
+	var out []Finding
+	for name, entries := range head.Exceptions {
+		for id, exception := range entries {
+			previous, ok := base.Exceptions[name][id]
+			if ok && exception.Cap <= previous.Cap {
+				continue
+			}
+			finding := Finding{Category: name, ID: id, Kind: ExceptionAdded, Measured: exception.Cap, Reason: exception.Reason}
+			if ok {
+				finding.Previous = &previous.Cap
+			}
+			out = append(out, finding)
+		}
+	}
+	sortFindings(out)
+	return out
+}
+
+func sortFindings(findings []Finding) {
+	slices.SortFunc(findings, func(a, b Finding) int {
+		return cmp.Or(strings.Compare(a.Category, b.Category), strings.Compare(string(a.Kind), string(b.Kind)), strings.Compare(a.ID, b.ID))
+	})
+}
+
+// Failures returns the findings that fail the suite.
+func Failures(findings []Finding) []Finding {
+	var out []Finding
+	for _, f := range findings {
+		if f.Kind.Fails() {
+			out = append(out, f)
+		}
+	}
+	return out
 }

@@ -7,8 +7,6 @@ import (
 	"go/parser"
 	"go/scanner"
 	"go/token"
-	"os"
-	"os/exec"
 	"path"
 	"path/filepath"
 	"slices"
@@ -27,36 +25,20 @@ type source struct {
 	Body           []byte
 }
 
-// discoverSources reads the handwritten sources of the checkout, tracked or not.
-func discoverSources(root string) ([]source, error) {
-	raw, err := exec.Command("git", "-C", root, "ls-files", "--cached", "--others", "--exclude-standard", "-z").Output()
-	if err != nil {
-		return nil, fmt.Errorf("list maintained sources: %w", err)
-	}
-	generated, err := generatedOutputs(root)
+// discoverSources reads the handwritten sources of a checkout.
+func discoverSources(tree *workingTree) ([]source, error) {
+	generated, err := generatedOutputs(tree)
 	if err != nil {
 		return nil, err
 	}
-	paths := strings.Split(strings.TrimSuffix(string(raw), "\x00"), "\x00")
-	slices.Sort(paths)
 	var sources []source
-	for _, relative := range slices.Compact(paths) {
+	for _, relative := range tree.files() {
 		language := languageOf(relative)
-		if language == "" || excludedPath(relative) || generated[relative] {
+		// A tracked deletion or a link is not maintained source.
+		if language == "" || excludedPath(relative) || generated[relative] || !tree.regular(relative) {
 			continue
 		}
-		full := filepath.Join(root, filepath.FromSlash(relative))
-		info, err := os.Lstat(full)
-		if os.IsNotExist(err) {
-			continue // A tracked deletion.
-		}
-		if err != nil {
-			return nil, fmt.Errorf("stat maintained source %s: %w", relative, err)
-		}
-		if !info.Mode().IsRegular() {
-			continue
-		}
-		body, err := os.ReadFile(full)
+		body, err := tree.read(relative)
 		if err != nil {
 			return nil, fmt.Errorf("read maintained source %s: %w", relative, err)
 		}
@@ -114,14 +96,14 @@ func testPath(relative string) bool {
 
 // generatedOutputs trusts generator declarations, never filenames or
 // self-declared headers, so handwritten code cannot opt out of its budget.
-func generatedOutputs(root string) (map[string]bool, error) {
+func generatedOutputs(tree *workingTree) (map[string]bool, error) {
 	var taskfile struct {
 		Tasks map[string]struct {
 			Dir       string
 			Generates []string
 		}
 	}
-	raw, err := os.ReadFile(filepath.Join(root, "Taskfile.yml"))
+	raw, err := tree.read("Taskfile.yml")
 	if err == nil {
 		err = yaml.Unmarshal(raw, &taskfile)
 	}
@@ -145,21 +127,17 @@ func generatedOutputs(root string) (map[string]bool, error) {
 			if strings.Contains(pattern, "{{") {
 				return nil, fmt.Errorf("unresolved generator output %s: %s", name, pattern)
 			}
-			matches, err := filepath.Glob(filepath.Join(root, dir, pattern))
+			matches, err := glob(tree, path.Join(dir, pattern))
 			if err != nil {
 				return nil, fmt.Errorf("expand generator output %s: %w", pattern, err)
 			}
 			for _, match := range matches {
-				relative, err := filepath.Rel(root, match)
-				if err != nil {
-					return nil, err
-				}
-				out[filepath.ToSlash(relative)] = true
+				out[match] = true
 			}
 		}
 	}
 	// codegen:wire-enums derives its outputs from the vocabulary files.
-	vocabulary, err := filepath.Glob(filepath.Join(root, "docs/openapi/vocab/*.yaml"))
+	vocabulary, err := glob(tree, "docs/openapi/vocab/*.yaml")
 	if err != nil {
 		return nil, err
 	}
@@ -172,7 +150,7 @@ func generatedOutputs(root string) (map[string]bool, error) {
 			} `yaml:"state_machine"`
 			TSLabels *struct{ Path string } `yaml:"ts_labels"`
 		}
-		raw, err := os.ReadFile(file)
+		raw, err := tree.read(file)
 		if err == nil {
 			err = yaml.Unmarshal(raw, &entry)
 		}
@@ -211,11 +189,22 @@ type inventory struct {
 	measured measurements
 	// sources lists the files declaring each Go type artifact.
 	sources map[string][]string
-	methods map[string]map[string]bool
+	// declarations and methods locate each Go type's struct declaration and
+	// receiver methods, so a change touches a type's fields only when it edits
+	// the declaration, and its methods only when it edits a method.
+	declarations map[string][]span
+	methodSpans  map[string][]span
+	methods      map[string]map[string]bool
 }
 
-func measure(ctx context.Context, root string, sources []source) (*inventory, error) {
-	inv := &inventory{measured: newMeasurements(), sources: map[string][]string{}, methods: map[string]map[string]bool{}}
+// span is an inclusive line range in one file.
+type span struct {
+	file        string
+	first, last int
+}
+
+func measure(ctx context.Context, tree *workingTree, sources []source) (*inventory, error) {
+	inv := &inventory{measured: newMeasurements(), sources: map[string][]string{}, declarations: map[string][]span{}, methodSpans: map[string][]span{}, methods: map[string]map[string]bool{}}
 	for _, src := range sources {
 		var lines map[int]bool
 		var err error
@@ -223,7 +212,7 @@ func measure(ctx context.Context, root string, sources []source) (*inventory, er
 			lines, err = inv.measureGo(src)
 		} else {
 			var imports map[string]bool
-			lines, imports, err = measureTree(ctx, root, src)
+			lines, imports, err = measureTree(ctx, tree, src)
 			if imports != nil {
 				inv.measured["ts_local_dependencies"][src.Path] = len(imports)
 			}
@@ -293,6 +282,7 @@ func (inv *inventory) measureGo(src source) (map[int]bool, error) {
 				// Build-variant declarations of one type count once, at their largest.
 				inv.measured["go_struct_fields"][id] = max(inv.measured["go_struct_fields"][id], fields)
 				inv.addSource(id, src.Path)
+				inv.declarations[id] = append(inv.declarations[id], span{src.Path, file.Line(named.Pos()), file.Line(named.End())})
 			}
 		case *ast.FuncDecl:
 			if decl.Recv == nil {
@@ -309,6 +299,7 @@ func (inv *inventory) measureGo(src source) (map[int]bool, error) {
 				}
 			}
 			inv.addSource(id, src.Path)
+			inv.methodSpans[id] = append(inv.methodSpans[id], span{src.Path, file.Line(decl.Pos()), file.Line(decl.End())})
 		}
 	}
 	return lines, nil
@@ -342,7 +333,7 @@ func receiverName(expr ast.Expr) string {
 
 // measureTree counts code-bearing lines with tree-sitter; production
 // TypeScript also reports its resolved local imports (nil otherwise).
-func measureTree(ctx context.Context, root string, src source) (map[int]bool, map[string]bool, error) {
+func measureTree(ctx context.Context, files *workingTree, src source) (map[int]bool, map[string]bool, error) {
 	entry := grammars.DetectLanguageByName(src.Language)
 	if entry == nil {
 		return nil, nil, fmt.Errorf("no grammar for %s", src.Language)
@@ -369,7 +360,7 @@ func measureTree(ctx context.Context, root string, src source) (map[int]bool, ma
 		}
 		if imports != nil {
 			if specifier := importSpecifier(node, language, src.Body); strings.HasPrefix(specifier, ".") {
-				resolved, err := resolveImport(root, src.Path, specifier)
+				resolved, err := resolveImport(files, src.Path, specifier)
 				if err != nil {
 					return err
 				}
@@ -440,7 +431,7 @@ func importSpecifier(node *gotreesitter.Node, language *gotreesitter.Language, b
 }
 
 // resolveImport follows TypeScript bundler resolution to a checkout file.
-func resolveImport(root, from, specifier string) (string, error) {
+func resolveImport(tree *workingTree, from, specifier string) (string, error) {
 	specifier, _, _ = strings.Cut(specifier, "?")
 	base := path.Join(path.Dir(from), specifier)
 	if base == ".." || strings.HasPrefix(base, "../") {
@@ -455,12 +446,8 @@ func resolveImport(root, from, specifier string) (string, error) {
 		candidates = append(candidates, base+ext, base+"/index"+ext)
 	}
 	for _, candidate := range candidates {
-		info, err := os.Stat(filepath.Join(root, filepath.FromSlash(candidate)))
-		if err == nil && info.Mode().IsRegular() {
+		if tree.regular(candidate) {
 			return candidate, nil
-		}
-		if err != nil && !os.IsNotExist(err) {
-			return "", fmt.Errorf("resolve import %q from %s: %w", specifier, from, err)
 		}
 	}
 	return "", fmt.Errorf("unresolved local import %q from %s", specifier, from)

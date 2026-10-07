@@ -3,22 +3,33 @@
 # runtime limits.
 version: 1
 sizes:
-    # Rendered prompt bytes per category. An artifact past its limit fails
-    # unless an entry admits it; warnings show when a change touches it.
+    # Rendered prompt bytes per category. Every prompt past its limit needs an
+    # exception; the report warns when a change edits a prompt past its
+    # warning line.
     limits:
         worker_personas: {warn: 16000, limit: 20000}
         coordinator_tripartite: {warn: 30000, limit: 36000}
         coordinator_injects: {warn: 4000, limit: 6000}
         agent_templates: {warn: 6000, limit: 8000}
         kicks: {warn: 1500, limit: 3000}
-        tool_surfaces: {warn: 60000, limit: 72000}
-    # Caps that predate their limit. They only shrink:
-    # UPDATE_PROMPT_BUDGETS=1 ./task budgets lowers and drops them.
-    grandfathered:
-        worker_personas:
-            implementer: 34431
-    # Hand-written admissions; each says why the artifact must be that large.
+        units: {warn: 2500, limit: 4000}
+        coordinator_tool_surfaces: {warn: 32000, limit: 40000}
+        worker_tool_surfaces: {warn: 32000, limit: 40000}
+    # Each exception admits one prompt up to its cap, with room for ordinary
+    # edits, for a reason a reviewer can weigh.
     exceptions:
+        coordinator_tool_surfaces:
+            implement_overlay_promote:
+                cap: 82000
+                reason: The integration surface lands or rejects worker overlays and verifies them, so its floor carries overlay, command, verification, terminal, secret, and scan tools.
+        worker_tool_surfaces:
+            implement:
+                cap: 68000
+                reason: The only worker profile that runs commands; it keeps command, verification, and terminal tools sticky beside the file editing tools.
+        worker_personas:
+            implementer:
+                cap: 36000
+                reason: The worker that implements changes; it alone carries the implement shell archetype and the implement addenda playbook.
         kicks:
             coordinator-process-finished:
                 cap: 6000

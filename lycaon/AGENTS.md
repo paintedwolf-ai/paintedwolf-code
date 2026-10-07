@@ -83,7 +83,7 @@ Channel map: [`../docs/agent-tool-feedback.md`](../docs/agent-tool-feedback.md).
 
 ## Agent prompt copy (`lycaon/config/`)
 
-Catalog prompts compose per surface via pongo — grep rendered system prompt in debug `llm-requests.jsonl` before editing (`./task den:sidecar:llm-debug`, `./task llm:debug:tail`). Size limits: `sizes` in `config/packs/painted-wolf/platform/host/prompt-budgets.yaml`; `./task budgets` reports a change against them.
+Catalog prompts compose per surface via pongo — grep rendered system prompt in debug `llm-requests.jsonl` before editing (`./task den:sidecar:llm-debug`, `./task llm:debug:tail`). Size limits: `sizes` in `config/packs/painted-wolf/platform/host/prompt-budgets.yaml`; `./task budgets` holds prompts to them.
 
 **Generic copy only** — no language-, stack-, or session-specific tuning in shipped catalog defaults. Project-specific behavior belongs in `{project}/.paintedwolf/`, not `lycaon/config/`.
 

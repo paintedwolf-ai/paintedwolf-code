@@ -1,8 +1,13 @@
-"""Size budgets for prompts and code, reported against the change being made.
+"""Size budgets for prompts and code, reported for the change being made.
 
-Runs the budget suites (Go tests tagged `budgets`), then reports: every
-artifact that grew past a chosen line, warnings and grandfathered standing for
-the artifacts the change touched, and cleanup the policy could absorb.
+Every artifact a change touches must be within its category limit, or within
+the cap of an exception that says why it must be larger; no exception may be
+outgrown. The report also warns about touched artifacts past their warning
+line, so the limit is never a surprise.
+
+`PW_BUDGETS_INSPECT="<path> ..." ./task budgets` reports the standing of
+those files and directories as if the change had touched them: look before
+editing something large.
 """
 
 import json
@@ -21,91 +26,94 @@ SUITES = {
     "maintainability": ("./test/contract/maintainability", "TestMaintainabilityWithinBudget"),
     "prompts": ("./test/contract/agentcontext", "TestRenderedPromptsWithinBudget"),
 }
-FAILING = {"over_limit", "over_cap", "grandfather_raised"}
-CLEANUP = {"slack", "unneeded", "vanished"}
 
 
-def run_suites(report_dir, scope):
-    if report_dir.exists():
-        shutil.rmtree(report_dir)
-    report_dir.mkdir(parents=True)
-    env = {**os.environ, "PW_BUDGET_REPORT_DIR": str(report_dir)}
-    if scope is not None:
-        env[change_report.BASE_ENV] = scope.base
+def change_set(scope, inspect):
+    added, removed = change_report.added_and_removed(ROOT, scope.base)
+    lines = change_report.changed_lines(ROOT, scope.base, [p for p in scope.paths if p not in set(removed)])
+    return {"base": scope.base, "lines": {path: sorted(numbers) for path, numbers in lines.items()},
+            "added": added, "removed": removed, "inspect": inspect}
+
+
+def run_suites(work, change):
+    if work.exists():
+        shutil.rmtree(work)
+    reports = work / "reports"
+    reports.mkdir(parents=True)
+    (work / "change.json").write_text(json.dumps(change))
+    env = {**os.environ, "PW_BUDGET_REPORT_DIR": str(reports), "PW_CHANGE_SET": str(work / "change.json")}
     tests = "|".join(test for _, test in SUITES.values())
     # Fresh runs: the suites read git state that the test cache does not key on.
     command = ["bash", str(ROOT / "scripts" / "go-test-digest.sh"), "--tags", "budgets", "--name", "budgets", "--",
                "-count=1", "-run", f"^({tests})$", *(package for package, _ in SUITES.values())]
-    return subprocess.call(command, cwd=ROOT / "lycaon", env=env)
+    code = subprocess.call(command, cwd=ROOT / "lycaon", env=env)
+    return code, {name: json.loads((reports / f"{name}.json").read_text())
+                  for name in SUITES if (reports / f"{name}.json").exists()}
 
 
-def load_reports(report_dir):
-    return {name: json.loads((report_dir / f"{name}.json").read_text())
-            for name in SUITES if (report_dir / f"{name}.json").exists()}
-
-
-def size(report, category, value):
-    return f'{value:,} {report["categories"][category]["unit"]}'
-
-
-def suite_findings(name, report, scope):
+def suite_findings(name, report):
     """Findings for one suite report, and whether any of them fails."""
-    sources = {(a["category"], a["id"]): a["sources"] for a in report["artifacts"]}
+    out, failed = [], False
 
-    def source(category, artifact):
-        paths = sources.get((category, artifact)) or []
-        return paths[0] if paths else None
+    def size(f):
+        return f'{f["measured"]:,} {report["categories"][f["category"]]["unit"]}'
 
-    out, failed, cleanup = [], False, 0
     for f in report["findings"]:
-        kind, category, artifact = f["kind"], f["category"], f["id"]
-        label = f"{category} {artifact}"
-        if kind == "grandfather_raised":
+        kind, label = f["kind"], f'{f["category"]} {f["id"]}'
+        limit = report["categories"][f["category"]]["limit"]
+        source = f["sources"][0] if f["sources"] else None
+        if kind == "over_limit":
             failed = True
-            out.append(Finding("error", name, f'{label}: grandfathered cap raised to {f["measured"]:,} from '
-                               f'{f["bound"]:,}; grandfathered caps only shrink, so move it to exceptions with a reason',
+            out.append(Finding("error", name, f"{label}: {size(f)}, past its limit of {limit:,}. Bring it within the "
+                               "limit, or add an exception that says why it must be this large", source))
+        elif kind == "over_cap":
+            failed = True
+            out.append(Finding("error", name, f'{label}: {size(f)}, past its exception cap of {f["bound"]:,}. Make it '
+                               f'smaller, or revisit the reason: {f["reason"]}', source))
+        elif kind == "over_warn":
+            out.append(Finding("warning", name, f"{label}: {size(f)}, past the warning line of {f['bound']:,} on the way "
+                               f"to its limit of {limit:,}; put new behavior in a new file or package", source))
+        elif kind == "excepted":
+            out.append(Finding("notice", name, f'{label}: {size(f)}, admitted up to {f["bound"]:,} because: '
+                               f'{f["reason"]}', source))
+        elif kind == "unneeded":
+            out.append(Finding("notice", name, f"{label}: {size(f)} fits its limit of {limit:,}; remove its exception",
                                report["policy"]))
-        elif kind in FAILING:
-            failed = True
-            bound = "limit" if not f.get("entry") else f'{f["entry"]} cap'
-            out.append(Finding("error", name, f'{label}: {size(report, category, f["measured"])}, over its {bound} of '
-                               f'{f["bound"]:,} by {f["measured"] - f["bound"]:,}', source(category, artifact)))
-        elif kind in CLEANUP:
-            cleanup += 1
-        elif kind == "over_warn" and scope is not None and scope.touches(sources.get((category, artifact), [])):
-            limit = report["categories"][category]["limit"]
-            out.append(Finding("warning", name, f'{label}: {size(report, category, f["measured"])}, past the warning '
-                               f'line of {f["bound"]:,} (limit {limit:,}); this change touched it, so weigh its shape now',
-                               source(category, artifact)))
-    if scope is not None:
-        for a in report["artifacts"]:
-            if a.get("entry") and a["measured"] <= a["cap"] and scope.touches(a["sources"]):
-                limit = report["categories"][a["category"]]["limit"]
-                out.append(Finding("notice", name, f'{a["category"]} {a["id"]}: {size(report, a["category"], a["measured"])}, '
-                                   f'{a["entry"]} at {a["cap"]:,} over a limit of {limit:,}; this change touched it',
-                                   a["sources"][0] if a["sources"] else None))
-    if cleanup:
-        entries = "1 entry" if cleanup == 1 else f"{cleanup} entries"
-        out.append(Finding("notice", name, f"{entries} can be tightened, because the artifact shrank, fits its limit, or "
-                           f"is gone; `{report['refresh']}` tightens them", report["policy"]))
-    out += [Finding("info", name, note) for note in report["notes"]]
+        elif kind == "vanished":
+            out.append(Finding("notice", name, f"{label}: no longer exists; remove its exception", report["policy"]))
+        elif kind == "exception_added":
+            change = (f"raised from {f['previous']:,} to {f['measured']:,}" if f.get("previous") is not None
+                      else f"added at {f['measured']:,}")
+            out.append(Finding("notice", name, f"{label}: exception {change}; reason: {f['reason']}", report["policy"]))
+    untouched = sum(report["untouched"].values())
+    if untouched:
+        out.append(Finding("info", name, f"{untouched} artifact(s) past their limit were not touched; each must meet "
+                           "its limit, or gain an exception, when a change next touches it"))
+    out += [Finding("warning", name, text) for text in report["warnings"]]
+    out += [Finding("info", name, text) for text in report["notes"]]
     return out, failed
 
 
+INSPECT_ENV = "PW_BUDGETS_INSPECT"
+
+
 def main():
-    report_dir = artifact_root(ROOT) / "budgets"
+    inspect = [Path(path).as_posix().strip("/") for path in os.environ.get(INSPECT_ENV, "").split()]
     scope = change_report.resolve(ROOT)
-    code = run_suites(report_dir, scope)
-    reports = load_reports(report_dir)
+    if scope is None:
+        print("Budgets: no change base. Budgets judge what a change touched since it left main; fetch `origin/main`, "
+              f"or set {change_report.BASE_ENV} to the commit this change builds on.")
+        return 2
+    code, reports = run_suites(artifact_root(ROOT) / "budgets", change_set(scope, inspect))
     findings, failed = [], code != 0
     for name in SUITES:
         if name not in reports:
             findings.append(Finding("error", name, "the suite wrote no report; read the test output above"))
             continue
-        suite, suite_failed = suite_findings(name, reports[name], scope)
+        suite, suite_failed = suite_findings(name, reports[name])
         findings += suite
         failed = failed or suite_failed
-    header = scope.describe() if scope else "no main branch is reachable, so only failures are reported"
+    header = scope.describe() + (f"; inspecting {', '.join(inspect)}" if inspect else "")
     change_report.emit(ROOT, "Budgets", header, findings, failed)
     if failed:
         return 1

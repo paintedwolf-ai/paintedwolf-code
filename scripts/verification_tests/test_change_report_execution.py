@@ -48,6 +48,8 @@ class ChangeScopeTests(unittest.TestCase):
         self.assertFalse(scope.touches(["dir/old.ts", "di"]))
         lines = change_report.changed_lines(self.root, scope.base, scope.paths)
         self.assertEqual(lines, {"kept.go": {2, 5}, "dir/new.ts": {1, 2}})
+        git(self.root, "rm", "-q", "dir/old.ts")
+        self.assertEqual(change_report.added_and_removed(self.root, scope.base), (["dir/new.ts"], ["dir/old.ts"]))
 
     def test_explicit_base_must_be_a_commit(self):
         with patch.dict(os.environ, {change_report.BASE_ENV: "no-such-ref"}):
@@ -77,49 +79,45 @@ class ChangeScopeTests(unittest.TestCase):
         self.assertIn("- go: context", summary.read_text())
 
 
-def report(findings, artifacts, notes=()):
-    return {"policy": "policy.yaml", "refresh": "UPDATE=1 ./task budgets",
-            "categories": {"files": {"unit": "lines", "warn": 10, "limit": 20}},
-            "artifacts": artifacts, "findings": findings, "notes": list(notes)}
+def report(findings, untouched=None, notes=(), warnings=()):
+    return {"policy": "policy.yaml", "categories": {"files": {"unit": "lines", "warn": 10, "limit": 20}},
+            "findings": findings, "untouched": untouched or {}, "notes": list(notes), "warnings": list(warnings)}
+
+
+def finding(kind, artifact, measured, bound, **extra):
+    return {"category": "files", "id": artifact, "kind": kind, "measured": measured, "bound": bound,
+            "sources": [artifact], **extra}
 
 
 class BudgetReportTests(unittest.TestCase):
-    def scope(self, *paths):
-        return change_report.Scope("a" * 40, "merge base with main", list(paths))
-
-    def test_growth_fails_and_names_its_source(self):
-        artifacts = [{"category": "files", "id": "big.go", "measured": 25, "cap": 20, "sources": ["big.go"]}]
-        findings = [{"category": "files", "id": "big.go", "kind": "over_limit", "measured": 25, "bound": 20}]
-        lines, failed = budgets.suite_findings("maintainability", report(findings, artifacts), self.scope())
+    def test_touched_artifacts_past_a_line_fail_and_name_their_source(self):
+        findings = [finding("over_limit", "big.go", 25, 20),
+                    finding("over_cap", "special.go", 51, 50, reason="one table per dialect")]
+        lines, failed = budgets.suite_findings("maintainability", report(findings))
         self.assertTrue(failed)
-        self.assertEqual([(f.level, f.path) for f in lines], [("error", "big.go")])
-        self.assertIn("over its limit of 20 by 5", lines[0].text)
+        self.assertEqual([(f.level, f.path) for f in lines], [("error", "big.go"), ("error", "special.go")])
+        self.assertIn("past its limit of 20", lines[0].text)
+        self.assertIn("revisit the reason: one table per dialect", lines[1].text)
 
-    def test_warnings_and_grandfathered_standing_only_for_touched_artifacts(self):
-        artifacts = [
-            {"category": "files", "id": "warm.go", "measured": 15, "cap": 20, "sources": ["warm.go"]},
-            {"category": "files", "id": "other.go", "measured": 15, "cap": 20, "sources": ["other.go"]},
-            {"category": "files", "id": "old.go", "measured": 30, "cap": 30, "entry": "grandfathered", "sources": ["old.go"]},
-        ]
-        findings = [{"category": "files", "id": i, "kind": "over_warn", "measured": 15, "bound": 10}
-                    for i in ("warm.go", "other.go")]
-        lines, failed = budgets.suite_findings("maintainability", report(findings, artifacts), self.scope("warm.go", "old.go"))
+    def test_signals_before_the_limit_do_not_fail(self):
+        findings = [finding("over_warn", "warm.go", 15, 10),
+                    finding("excepted", "shell.tsx", 40, 50, reason="composition root")]
+        lines, failed = budgets.suite_findings("maintainability", report(findings, untouched={"files": 3}))
         self.assertFalse(failed)
-        self.assertEqual([(f.level, f.path) for f in lines], [("warning", "warm.go"), ("notice", "old.go")])
+        self.assertEqual([f.level for f in lines], ["warning", "notice", "info"])
+        self.assertIn("past the warning line of 10", lines[0].text)
+        self.assertIn("admitted up to 50 because: composition root", lines[1].text)
+        self.assertIn("3 artifact(s) past their limit were not touched", lines[2].text)
 
-    def test_cleanup_is_one_notice_and_notes_pass_through(self):
-        findings = [{"category": "files", "id": i, "kind": k, "measured": 0, "bound": 30}
-                    for i, k in (("a", "slack"), ("b", "vanished"))]
-        lines, failed = budgets.suite_findings("prompts", report(findings, [], ["window headroom"]), None)
+    def test_exception_changes_and_headroom_are_reported(self):
+        findings = [finding("exception_added", "big.go", 40, 0, reason="one table per dialect", previous=30),
+                    finding("unneeded", "small.go", 12, 20, reason="r")]
+        lines, failed = budgets.suite_findings("prompts", report(findings, warnings=["coordinator: 8% headroom"],
+                                                                 notes=["worker: 36% headroom"]))
         self.assertFalse(failed)
-        self.assertEqual([f.level for f in lines], ["notice", "info"])
-        self.assertIn("2 entries can be tightened", lines[0].text)
-
-    def test_raised_grandfathered_cap_fails_at_the_policy(self):
-        findings = [{"category": "files", "id": "old.go", "kind": "grandfather_raised", "measured": 31, "bound": 30}]
-        lines, failed = budgets.suite_findings("maintainability", report(findings, []), None)
-        self.assertTrue(failed)
-        self.assertEqual(lines[0].path, "policy.yaml")
+        self.assertEqual([f.level for f in lines], ["notice", "notice", "warning", "info"])
+        self.assertIn("exception raised from 30 to 40; reason: one table per dialect", lines[0].text)
+        self.assertIn("remove its exception", lines[1].text)
 
 
 class ChangedCoverageTests(unittest.TestCase):

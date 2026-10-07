@@ -1,9 +1,10 @@
 // Package maintainability measures structural size across the checkout and
-// holds every measured artifact to its category's limit.
+// holds each artifact a change touches to its category's limit.
 package maintainability
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 
 	"github.com/lycaon/lycaon/test/contract/internal/sizebudget"
@@ -15,7 +16,6 @@ const policyPath = "lycaon/test/contract/maintainability-budgets.yaml"
 var suite = sizebudget.Suite{
 	Name:       "maintainability",
 	PolicyPath: policyPath,
-	Refresh:    "UPDATE_MAINTAINABILITY_BUDGETS=1 ./task budgets",
 	Categories: map[string]sizebudget.Category{
 		"source_files":          {Unit: "lines", Measures: "Code-bearing physical lines of maintained production source", Remedy: "Separate cohesive responsibilities; moving comments or squeezing statements does not improve structure."},
 		"test_files":            {Unit: "lines", Measures: "Code-bearing physical lines of tests and test support", Remedy: "Group scenarios by the behavior they prove and keep reusable fixtures explicit."},
@@ -39,14 +39,8 @@ func newMeasurements() measurements {
 	return out
 }
 
-const policyHeader = `# Maintainability limits. An artifact past its category limit fails unless an
-# entry admits it. Grandfathered caps predate their limits and only shrink:
-# UPDATE_MAINTAINABILITY_BUDGETS=1 ./task budgets lowers and drops them.
-# Exceptions are written by hand and say why the artifact must be that large.
-`
-
 // decodePolicy rejects unknown fields, unknown categories, duplicate keys,
-// and entries a reviewer could not weigh.
+// sizes that are not plain integers, and exceptions without a reason.
 func decodePolicy(raw []byte) (sizebudget.Policy, error) {
 	var document yaml.Node
 	if err := yaml.Unmarshal(raw, &document); err != nil {
@@ -70,16 +64,47 @@ func decodePolicy(raw []byte) (sizebudget.Policy, error) {
 	return policy, nil
 }
 
-func encodePolicy(policy sizebudget.Policy) ([]byte, error) {
-	raw, err := yaml.Marshal(policy)
+// measureWorkingTree measures the checkout as it stands, tracked or not.
+func measureWorkingTree(ctx context.Context, root string) (*inventory, error) {
+	tree, err := openWorkingTree(root)
 	if err != nil {
-		return nil, fmt.Errorf("encode maintainability budgets: %w", err)
+		return nil, err
 	}
-	return append([]byte(policyHeader), raw...), nil
+	sources, err := discoverSources(tree)
+	if err != nil {
+		return nil, err
+	}
+	return measure(ctx, tree, sources)
 }
 
-// artifactSources names the files each artifact is made from, so the change
-// report can tell which artifacts a change touched.
+// touched decides which artifacts a change answers for: files it edited,
+// directories it added files to or removed files from, and Go types whose
+// declaration or methods it edited.
+func touched(inv *inventory, change *sizebudget.ChangeSet) sizebudget.Touched {
+	return func(category, id string) bool {
+		switch category {
+		case "source_directories", "test_directories":
+			return change.TouchesDirectory(id)
+		case "go_struct_fields":
+			return touchesSpans(change, inv.declarations[id])
+		case "go_receiver_methods", "go_receiver_lines":
+			return touchesSpans(change, inv.methodSpans[id])
+		default:
+			return change.TouchesFile(id)
+		}
+	}
+}
+
+func touchesSpans(change *sizebudget.ChangeSet, spans []span) bool {
+	for _, s := range spans {
+		if change.TouchesLines(s.file, s.first, s.last) {
+			return true
+		}
+	}
+	return false
+}
+
+// artifactSources names the files each artifact is made from.
 func artifactSources(inv *inventory) map[string]map[string][]string {
 	out := map[string]map[string][]string{}
 	for name, artifacts := range inv.measured {

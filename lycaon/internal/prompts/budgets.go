@@ -98,11 +98,10 @@ type AttachmentVideo struct {
 
 // PromptSizes limits rendered prompt artifacts in UTF-8 bytes by category:
 // worker_personas, coordinator_tripartite, coordinator_injects,
-// agent_templates, kicks, and tool_surfaces.
+// agent_templates, kicks, units, coordinator_tool_surfaces, and
+// worker_tool_surfaces.
 type PromptSizes struct {
 	Limits map[string]SizeLimit `yaml:"limits"`
-	// Grandfathered caps record artifacts that predate their limit; they only shrink.
-	Grandfathered map[string]map[string]int `yaml:"grandfathered"`
 	// Exceptions admit artifacts above their limit for a stated reason.
 	Exceptions map[string]map[string]SizeException `yaml:"exceptions"`
 }
@@ -123,9 +122,6 @@ type SizeException struct {
 func (s PromptSizes) Cap(category, id string) int {
 	if exception, ok := s.Exceptions[category][id]; ok {
 		return exception.Cap
-	}
-	if grandfathered, ok := s.Grandfathered[category][id]; ok {
-		return grandfathered
 	}
 	return s.Limits[category].Limit
 }

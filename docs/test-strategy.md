@@ -133,11 +133,11 @@ and import manifests, so a split file never leaves them inspecting an empty entr
 
 ## Size budgets and changed coverage
 
-Agents write code and prompt copy fast, so these checks ask for a decision at
-the moment something grows past a line someone chose on purpose, and stay quiet
-otherwise. `check-fast` and `check` both run them, and CI runs them in the
-`limits` lane, which reports within minutes of a push. Only growth fails:
-cleanup, warnings, and context are reported without failing.
+Agents write code and prompt copy fast. These checks shape it through
+feedback an agent meets while it works: a warning as something approaches
+its limit, then a stop for a change that leaves a touched artifact past it.
+`check-fast` and `check` run them, and CI runs them in the `limits` lane with
+the same rules and the same words, so CI says nothing `check-fast` did not.
 
 ### Size budgets
 
@@ -146,36 +146,63 @@ cleanup, warnings, and context are reported without failing.
 | Suite | Measures | Policy |
 |---|---|---|
 | Maintainability (`test/contract/maintainability`) | Code-bearing lines per production and test file; handwritten files per production and test directory; Go struct fields; Go receiver methods and receiver lines summed across files and platform variants, so splitting a file cannot hide concentration; distinct local TypeScript imports per module. Generated and vendored files are classified from generator inventories. | [`maintainability-budgets.yaml`](../lycaon/test/contract/maintainability-budgets.yaml) |
-| Prompts (`test/contract/agentcontext`) | UTF-8 bytes of every rendered worker persona, coordinator tripartite fixture, inject, agent template, kick, and tool surface; and the largest coordinator and worker static stacks against the model window | `sizes` and `absolute_maximums` in [`prompt-budgets.yaml`](../lycaon/config/packs/painted-wolf/platform/host/prompt-budgets.yaml) |
+| Prompts (`test/contract/agentcontext`) | UTF-8 bytes of every rendered worker persona, coordinator tripartite fixture, inject, agent template, kick, and instruction unit; the tools each coordinator surface and worker profile sends upfront, limited as two classes; and each turn kind's widest static prompt against the model window | `sizes` and `absolute_maximums` in [`prompt-budgets.yaml`](../lycaon/config/packs/painted-wolf/platform/host/prompt-budgets.yaml) |
 
-Each category has a warning line and a limit. An artifact past its limit fails
-unless an entry admits it:
+Each category has a warning line and a limit. Standing is absolute: nothing
+records earlier sizes, and an artifact is never allowed because an earlier
+change was. An artifact that must be larger has an **exception**: a cap with
+room for ordinary edits, and a reason a reviewer can weigh.
 
-- **Grandfathered** caps record artifacts that predate their limit. They may
-  shrink but never grow, and a change may not add or raise one: the suite
-  compares the policy with the [change base](#the-change-base).
-- **Exceptions** are written by hand with a reason a reviewer can weigh. Use
-  one when a single artifact must be large; raise a category limit only when
-  the whole category should change.
+| Standing | Result |
+|---|---|
+| A touched artifact past its warning line | Warning: new behavior belongs in a new file or package |
+| A touched artifact past its limit, with no exception | Fails |
+| Any artifact past its exception cap | Fails: the reason no longer covers it |
+| A touched artifact within its exception | Notice naming the reason |
+| An untouched artifact past its limit | Counted; it meets the standard when next touched |
+| An exception the change adds or raises | Notice for review |
 
-When a file, type, or prompt fails, split it along a real seam
+A change touches a file it edits, a directory it adds files to or removes
+files from, and a Go type whose declaration or methods it edits, compared
+with the [change base](#the-change-base). Editing a helper beside a large type
+does not make the change answer for the type. Prompts are few, so every
+prompt past its limit needs an exception, and warnings name the prompts whose
+sources a change edited.
+
+The host assembles a prompt per turn: instruction units render only while
+their tools are offered, requestable tool schemas load on demand, and the
+decision engine may leave out the units it is confident a request does not
+need. The prompt suite measures those parts where they vary. Each instruction
+unit has its own limit, because it rides wherever its tools go. Each turn
+kind's widest static prompt is then assembled from its own parts: a
+coordinator turn from its fixture's system prompt, its surface's upfront
+tools, and the injects that can ride a coordinator turn; a worker turn from
+its persona, its profile's upfront tools, and the worker injects. Each adds
+one request's largest tool loads (`max_loads` in `decisions.yaml`) and the
+units they bring. That widest prompt is the one the window check holds,
+because every mandatory unit renders when the decision engine abstains or
+fails. Every run reports the widest coordinator and worker turns' headroom,
+warning below 10%, beside their size once every requestable tool has loaded:
+warm turns can accumulate loads until the next cold boundary, so that
+figure is context for the runtime rather than a static guarantee. Kicks and project content
+(AGENTS.md chains, MCP schemas, source briefs, skill bodies) are sized by
+the project at runtime; they ride in the reserved session budget, which
+compaction calibrates against the provider's reported token counts.
+
+Look before editing something large:
+`PW_BUDGETS_INSPECT="lycaon/internal/hitl" ./task budgets` reports those
+files and directories as if the change had touched them. When an artifact
+fails, split it along a real seam
 ([Organizing code](architecture.md#organizing-code)) or trim the copy the
-failure names. The report also names the artifacts a change touched that are
-past their warning line or admitted by an entry, the entries that can be
-tightened, and the static stacks' headroom in the model window. The worker
-persona cap also bounds `pw prompts render --check` and pack persona
-validation.
+failure names. Raise a category limit only when the whole category should
+change. The worker persona cap also bounds `pw prompts render --check` and
+pack persona validation.
 
-`UPDATE_MAINTAINABILITY_BUDGETS=1 ./task budgets` and
-`UPDATE_PROMPT_BUDGETS=1 ./task budgets` tighten: they lower grandfathered caps
-to their measurements and drop entries that admit nothing. They never add an
-entry or raise a cap, so a tightening diff loosens nothing. The suites carry
-the `budgets` build tag, so `test:contract` and `test:full` do not repeat them.
-Caps record a reviewed state, not a quality target: a passing budget does not
-show cohesion, so review still reads the structure. Dependency direction is
-enforced separately by the [import-graph layering contract](package-layering.md),
-Go rejects import cycles at compile time, and `funlen` in
-`lycaon/.golangci.yml` stays in force.
+The suites carry the `budgets` build tag, so `test:contract` and `test:full`
+do not repeat them. A passing budget does not show cohesion, so review still
+reads the structure. Dependency direction is enforced separately by the
+[import-graph layering contract](package-layering.md), Go rejects import
+cycles at compile time, and `funlen` in `lycaon/.golangci.yml` stays in force.
 
 ### Changed coverage
 
@@ -202,7 +229,9 @@ and run nightly.
 
 Budgets and changed coverage measure against the merge base with the main
 branch (`origin/main`, then `main`), so a branch is measured from where it
-left. `PW_CHANGE_BASE` names a different base. Inside a source snapshot the
+left; the base decides which lines a change touched, never what size an
+artifact may be. `PW_CHANGE_BASE` names a different base. Without a reachable
+base, `budgets` reports that nothing was established rather than guessing. Inside a source snapshot the
 change includes uncommitted and untracked work. On GitHub Actions every
 finding also annotates its file and the job summary.
 
