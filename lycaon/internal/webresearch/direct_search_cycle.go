@@ -107,8 +107,12 @@ func (d *directDiscoverer) beginDirectSearch(ctx context.Context, dreq DirectReq
 func (d *directDiscoverer) search(ctx context.Context, dreq DirectRequest, stats *searchStats) ([]WebHit, bool, error) {
 	query, maxResults := dreq.Query, dreq.MaxResults
 	s := d.beginDirectSearch(ctx, dreq, stats)
-	defer s.cancel()
-	defer s.crawler.releaseSlot()
+	defer func() {
+		// Crawls stop before the slot they may hold is released.
+		s.cancel()
+		s.crawler.wait()
+		s.crawler.releaseSlot()
+	}()
 	defer func() {
 		stats.noteFrontier(s.fr.rounds, s.fr.spent, s.fr.budget, s.crawler.launchedCount())
 	}()
