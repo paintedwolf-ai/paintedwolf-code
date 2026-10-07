@@ -11151,7 +11151,7 @@ source_files:
     lycaon/cmd/codegen-dependency-inventory/main.go: 96
     lycaon/cmd/codegen-dependency-inventory/manifests.go: 256
     lycaon/cmd/codegen-dependency-inventory/pins.go: 293
-    lycaon/cmd/codegen-dependency-inventory/render.go: 244
+    lycaon/cmd/codegen-dependency-inventory/render.go: 248
     lycaon/cmd/codegen-dependency-inventory/sources.go: 141
     lycaon/cmd/codegen-dependency-inventory/upstream.go: 297
     lycaon/cmd/codegen-dependency-inventory/versions.go: 106
