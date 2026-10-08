@@ -335,7 +335,10 @@ export function attachKnownBackend(
   cachedClient = client;
   void invalidateContributionFrame();
   markSidecarConnected(appStore);
-  void readHostHandshake(client, backendGeneration).catch(() => undefined);
+  const generation = backendGeneration;
+  void readHostHandshake(client, generation).then((host) => {
+    if (host.compatible) resubscribeForegroundProjectEvents(appStore);
+  }).catch(() => undefined);
   return client;
 }
 

@@ -581,6 +581,18 @@ describe("app-connection cache reconcile", () => {
     expect(hostIdentity()?.host_id).toBe("00000000-0000-4000-8000-0000000000a2");
   });
 
+  it("keeps an attached home window subscribed for engine recovery", async () => {
+    const mod = await loadModule();
+    const appStore = createAppStore();
+    mod.attachKnownBackend(appStore, { baseUrl: "http://127.0.0.1:8788", apiToken: "attached" });
+    await vi.waitFor(() => expect(subscribeEvents).toHaveBeenCalledOnce());
+    expect(subscribedProjectIds).toEqual([""]);
+    lastSubscribeOptions?.onReconnectAttempt?.();
+    appStore.actions.setSidecarStatus("disconnected");
+    lastSubscribeOptions?.onOpen?.("reconnect");
+    expect(appStore.state.sidecarStatus).toBe("connected");
+  });
+
   it("uses no routes of a host serving a different major contract", async () => {
     getHost.mockResolvedValue(testHostInfo({ contract_version: "2.0.0" }));
     const appStore = createAppStore();
