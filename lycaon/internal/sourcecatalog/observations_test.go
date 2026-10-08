@@ -29,8 +29,16 @@ func TestDirectoryListingDuringSaveOmitsOnlyTheDoorsStaging(t *testing.T) {
 	var listed, scanned []string
 	_, err := fseffect.Replace(fseffect.ReplaceRequest{
 		Location: fseffect.Location{Root: root.Path, Rel: "notes.txt"}, Source: strings.NewReader("saved"), Mode: 0o644,
-		ObserveStagingPath: func(path string) { staged = path },
 		ReviewStaged: func(fseffect.Target, fseffect.Result) error {
+			onDisk, err := os.ReadDir(root.Path)
+			if err != nil {
+				return err
+			}
+			for _, entry := range onDisk {
+				if entry.Name() != "notes.txt" && entry.Name() != lookalike {
+					staged = entry.Name()
+				}
+			}
 			if _, err := catalog.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{Priority: backgroundwork.PriorityInteractive}); err != nil {
 				return err
 			}
@@ -43,7 +51,10 @@ func TestDirectoryListingDuringSaveOmitsOnlyTheDoorsStaging(t *testing.T) {
 		},
 	})
 	testutil.FailErr(t, "save during listing", err)
-	name := filepath.Base(staged)
+	if staged == "" {
+		t.Fatal("save staged no entry beside its destination")
+	}
+	name := staged
 	for label, names := range map[string][]string{"navigation": listed, "structural scan": scanned} {
 		if slices.Contains(names, name) {
 			t.Fatalf("%s published the in-flight staging entry %q: %v", label, name, names)

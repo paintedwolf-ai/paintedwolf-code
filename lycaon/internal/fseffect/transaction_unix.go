@@ -398,9 +398,6 @@ func replace(req ReplaceRequest, inject func(stage) error) (Result, error) {
 		return Result{}, err
 	}
 	defer held.retire()
-	if req.ObserveStagingPath != nil {
-		req.ObserveStagingPath(filepath.Join(parent.root.path, parent.rel, tmpName))
-	}
 	closed := false
 	committed := false
 	defer func() {
@@ -602,9 +599,6 @@ func removeRegularConditionally(parent *openedParent, req RemoveRequest) error {
 		return fmt.Errorf("stage removal: %w", err)
 	}
 	defer held.retire()
-	if req.ObserveQuarantinePath != nil {
-		req.ObserveQuarantinePath(filepath.Join(parent.root.path, parent.rel, quarantine))
-	}
 	stagedParent := *parent
 	stagedParent.name = quarantine
 	if err := req.BeforeCommit(targetAt{parent: &stagedParent}); err != nil {

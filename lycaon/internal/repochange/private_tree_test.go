@@ -41,8 +41,8 @@ func TestInFlightSaveStagingNeverReachesObservers(t *testing.T) {
 	filter := NewPrivateDirectoryFilter(root)
 	_, err := fseffect.Replace(fseffect.ReplaceRequest{
 		Location: fseffect.Location{Root: root, Rel: "notes.txt"}, Source: strings.NewReader("saved"), Mode: 0o644,
-		ObserveStagingPath: func(path string) { staged = path },
 		ReviewStaged: func(fseffect.Target, fseffect.Result) error {
+			staged = addedEntry(t, root, lookalike)
 			name := filepath.Base(staged)
 			if !filter.Contains(name) || !IsPrivatePath(filepath.Join(root, name)) {
 				t.Fatal("listing filters admitted the in-flight staging entry")
@@ -60,6 +60,20 @@ func TestInFlightSaveStagingNeverReachesObservers(t *testing.T) {
 	if slices.Contains(got, filepath.Base(staged)) || !slices.Contains(got, lookalike) || !slices.Contains(got, "notes.txt") {
 		t.Fatalf("observed paths=%v staging=%q", got, filepath.Base(staged))
 	}
+}
+
+// addedEntry finds the save's staging entry from the directory listing.
+func addedEntry(t *testing.T, dir string, before ...string) string {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	testutil.FailErr(t, "list save directory", err)
+	for _, entry := range entries {
+		if !slices.Contains(before, entry.Name()) {
+			return filepath.Join(dir, entry.Name())
+		}
+	}
+	t.Fatal("save staged no entry")
+	return ""
 }
 
 func TestPrivateDirectoryFilterResolvesAliases(t *testing.T) {

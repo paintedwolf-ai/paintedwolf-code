@@ -328,9 +328,6 @@ func replace(req ReplaceRequest, inject func(stage) error) (Result, error) {
 		return Result{}, err
 	}
 	defer held.retire()
-	if req.ObserveStagingPath != nil {
-		req.ObserveStagingPath(filepath.Join(parent.path, tmpName))
-	}
 	committed := false
 	defer func() {
 		if !committed {

@@ -3,6 +3,7 @@ package fseffect
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -14,6 +15,24 @@ import (
 // lookalike follows the staging grammar but was written by the user.
 const lookalike = ".notes.txt.0123456789abcdef01234567.tmp"
 
+// AddedEntry returns the one entry of dir absent from before, so tests find
+// the door's staging path from the filesystem rather than from the door.
+func AddedEntry(t testing.TB, dir string, before ...string) string {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	testutil.FailErr(t, "list staging directory", err)
+	var added []string
+	for _, entry := range entries {
+		if !slices.Contains(before, entry.Name()) {
+			added = append(added, entry.Name())
+		}
+	}
+	if len(added) != 1 {
+		t.Fatalf("expected one staged entry in %s, found %v", dir, added)
+	}
+	return filepath.Join(dir, added[0])
+}
+
 func TestReplaceStagingIsRegisteredOnlyForItsOwnEntry(t *testing.T) {
 	root := t.TempDir()
 	other := t.TempDir()
@@ -21,12 +40,9 @@ func TestReplaceStagingIsRegisteredOnlyForItsOwnEntry(t *testing.T) {
 	var staged string
 	_, err := Replace(ReplaceRequest{
 		Location: Location{Root: root, Rel: "notes.txt"}, Source: strings.NewReader("saved"), Mode: 0o644,
-		ObserveStagingPath: func(path string) { staged = path },
 		ReviewStaged: func(Target, Result) error {
+			staged = AddedEntry(t, root, lookalike)
 			name := filepath.Base(staged)
-			if _, err := os.Lstat(staged); err != nil {
-				t.Fatalf("staging entry is not on disk during the save: %v", err)
-			}
 			if !IsStaging(root, name) {
 				t.Fatal("in-flight staging entry was not registered")
 			}
@@ -52,11 +68,10 @@ func TestReplaceStagingIsRegisteredOnlyForItsOwnEntry(t *testing.T) {
 func TestConditionalRemoveQuarantineIsRegistered(t *testing.T) {
 	root := t.TempDir()
 	testutil.FailErr(t, "seed target", os.WriteFile(filepath.Join(root, "notes.txt"), []byte("old"), 0o600))
-	var quarantine string
 	err := Remove(RemoveRequest{
-		Location:              Location{Root: root, Rel: "notes.txt"},
-		ObserveQuarantinePath: func(path string) { quarantine = path },
+		Location: Location{Root: root, Rel: "notes.txt"},
 		BeforeCommit: func(Target) error {
+			quarantine := AddedEntry(t, root)
 			if !IsStaging(root, filepath.Base(quarantine)) {
 				t.Fatal("in-flight removal quarantine was not registered")
 			}

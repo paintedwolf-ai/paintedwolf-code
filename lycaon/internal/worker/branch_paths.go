@@ -10,7 +10,6 @@ import (
 	"github.com/lycaon/lycaon/internal/fssync"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
-	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -160,12 +159,11 @@ func (p PromoteRoots) writePrimaryBytes(task *api.WorkerTask, qualifiedPath stri
 		return err
 	}
 	_, err = fseffect.Replace(fseffect.ReplaceRequest{
-		Location:           fseffect.Location{Root: primaryRoot, Rel: primaryRel},
-		Source:             bytes.NewReader(content),
-		Mode:               mode,
-		PreserveMode:       restoreMode == nil,
-		DirMode:            0o750,
-		ObserveStagingPath: sourcefeed.NoteHostTemporaryPath,
+		Location:     fseffect.Location{Root: primaryRoot, Rel: primaryRel},
+		Source:       bytes.NewReader(content),
+		Mode:         mode,
+		PreserveMode: restoreMode == nil,
+		DirMode:      0o750,
 		BeforeCommit: func(target fseffect.Target, _ fseffect.Result) error {
 			if verify != nil {
 				return verify(target)
@@ -261,9 +259,8 @@ func (p PromoteRoots) dropPrimary(task *api.WorkerTask, qualifiedPath string, ve
 		return err
 	}
 	err = fseffect.Remove(fseffect.RemoveRequest{
-		Location:              fseffect.Location{Root: primaryRoot, Rel: primaryRel},
-		BeforeCommit:          verify,
-		ObserveQuarantinePath: sourcefeed.NoteHostTemporaryPath,
+		Location:     fseffect.Location{Root: primaryRoot, Rel: primaryRel},
+		BeforeCommit: verify,
 	})
 	if err != nil && os.IsNotExist(err) {
 		return nil

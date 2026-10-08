@@ -64,7 +64,6 @@ func applyAgentFile(ctx context.Context, tctx tools.ToolContext, target mutation
 	var journal sourceeffect.Pending
 	_, err := fseffect.Replace(fseffect.ReplaceRequest{
 		Location: target.Location, Source: bytes.NewReader(after), Mode: 0o644, PreserveMode: true,
-		ObserveStagingPath: sourcefeed.NoteHostTemporaryPath,
 		ReviewStaged: func(current fseffect.Target, _ fseffect.Result) error {
 			if err := verifyTextWriteBase(current, target.Abs, baseSHA256); err != nil {
 				return err
@@ -113,7 +112,6 @@ func applyAgentStream(ctx context.Context, tctx tools.ToolContext, req agentStre
 	var captured revisionCapture
 	result, err := fseffect.Replace(fseffect.ReplaceRequest{
 		Location: req.Target.Location, Source: io.TeeReader(req.Source, &captured), Mode: 0o644, PreserveMode: true,
-		ObserveStagingPath: sourcefeed.NoteHostTemporaryPath,
 		ReviewStaged: func(target fseffect.Target, staged fseffect.Result) error {
 			if req.BeforeCommit != nil {
 				if err := req.BeforeCommit(target, staged); err != nil {
@@ -209,7 +207,7 @@ func discardAgentEntry(ctx context.Context, tctx tools.ToolContext, target mutat
 	if err != nil {
 		return err
 	}
-	remove := fseffect.RemoveRequest{Location: target.Location, ObserveQuarantinePath: sourcefeed.NoteHostTemporaryPath}
+	remove := fseffect.RemoveRequest{Location: target.Location}
 	if mutation.BeforeSHA256 != "" {
 		remove.BeforeCommit = func(current fseffect.Target) error {
 			f, openErr := current.Open()
