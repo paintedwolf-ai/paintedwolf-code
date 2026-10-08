@@ -385,7 +385,11 @@ func TestReleaseBlastRadiusFixtureHonesty(t *testing.T) {
 		t.Fatalf("schema_version type %T", m["schema_version"])
 	}
 	toolID, _ := m["tool_result_message_id"].(string)
-	dbPath := filepath.Join(baseline, "store.db")
+	// Opening the committed WAL-mode fixture in place creates -wal/-shm sidecars beside it.
+	payload, err := os.ReadFile(filepath.Join(baseline, "store.db"))
+	contractcheck.FailErr(t, "read store.db", err)
+	dbPath := filepath.Join(t.TempDir(), "store.db")
+	contractcheck.FailErr(t, "copy store.db", os.WriteFile(dbPath, payload, 0o600))
 	db, err := sql.Open("sqlite", dbPath)
 	contractcheck.FailErr(t, "open store.db", err)
 	defer func() { _ = db.Close() }()
