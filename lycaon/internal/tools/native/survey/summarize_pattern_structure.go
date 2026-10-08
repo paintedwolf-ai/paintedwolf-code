@@ -10,35 +10,34 @@ import (
 
 	"github.com/lycaon/lycaon/internal/summarize"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
-func (g *summarizeGatherer) structureFromPathPattern(ctx context.Context, display, pattern string, matches []grepMatch) (summarize.StructureCandidate, int, error) {
-	resolved, err := projectpaths.ResolveRead(ctx, g.boundary, g.tctx, display)
+func (g *summaryPatterns) structureFromPathPattern(ctx context.Context, display, pattern string, matches []grepMatch) (summarize.StructureCandidate, int, error) {
+	resolved, err := g.access.reads.Resolve(ctx, display)
 	if err != nil {
 		return summarize.StructureCandidate{}, 0, err
 	}
-	content, err := g.readFileCached(ctx, resolved.Abs)
+	content, err := g.sources.readFileCached(ctx, resolved.Abs)
 	if err != nil {
 		if errors.Is(err, errFileNeedsStreaming) {
-			sc, n, ok := g.structureFromStream(ctx, resolved.Abs, resolved.DisplayPath)
+			sc, n, ok := g.sources.structureFromStream(ctx, resolved.Abs, resolved.DisplayPath)
 			if !ok {
 				return summarize.StructureCandidate{}, 0, fmt.Errorf("summarize pattern structure %s", display)
 			}
-			g.markPartialStructure(resolved.Abs, &sc)
+			g.sources.markPartialStructure(resolved.Abs, &sc)
 			sc.Symbols = patternMatchSymbols(matches)
 			sc.ContentHash = structureContentHashPattern(sc, pattern)
 			return sc, n, nil
 		}
 		return summarize.StructureCandidate{}, 0, fmt.Errorf("summarize pattern read %s: %w", display, err)
 	}
-	sc, _, ok := g.structureFromContent(ctx, resolved.DisplayPath, content)
+	sc, _, ok := g.sources.structureFromContent(ctx, resolved.DisplayPath, content)
 	if !ok {
 		return summarize.StructureCandidate{}, 0, fmt.Errorf("summarize pattern structure %s", display)
 	}
 	lines := strings.Split(string(content), "\n")
 	sc = scopeStructureToMatches(sc, pattern, matches, lines, g.caps.Gather.FileHeadLines)
-	g.markPartialStructure(resolved.Abs, &sc)
+	g.sources.markPartialStructure(resolved.Abs, &sc)
 	return sc, len(sc.Head), nil
 }
 
@@ -63,6 +62,7 @@ func patternMatchSymbols(matches []grepMatch) []summarize.StructureSymbol {
 }
 
 // patternSymbolWindow bounds nearby outline symbols.
+
 const patternSymbolWindow = 40
 
 const patternMatchSampleLineMax = 160
@@ -168,11 +168,11 @@ func scopeStructureToMatches(sc summarize.StructureCandidate, pattern string, ma
 	return sc
 }
 
-func patternNoMaterialReject(ctx context.Context, g *summarizeGatherer, paths []string, pattern string, skipped []string) *tools.ToolReject {
+func patternNoMaterialReject(ctx context.Context, g *summaryPatterns, paths []string, pattern string, skipped []string) *tools.ToolReject {
 	for _, path := range skipped {
-		g.noteSkippedPath(path)
+		g.sources.noteSkippedPath(path)
 	}
-	data := g.noMaterialData(summarize.Request{Paths: paths, Pattern: pattern})
+	data := g.sources.noMaterialData(summarize.Request{Paths: paths, Pattern: pattern})
 	data["match_count"] = 0
 	if len(paths) == 1 {
 		if samples := g.sampleOutlineIdentifiers(ctx, paths[0], 8); len(samples) > 0 {
@@ -182,11 +182,11 @@ func patternNoMaterialReject(ctx context.Context, g *summarizeGatherer, paths []
 	return &tools.ToolReject{Code: "SUMMARIZE_NO_MATERIAL", Data: data}
 }
 
-func (g *summarizeGatherer) sampleOutlineIdentifiers(ctx context.Context, display string, max int) []string {
+func (g *summaryPatterns) sampleOutlineIdentifiers(ctx context.Context, display string, max int) []string {
 	if g == nil || max <= 0 || strings.TrimSpace(display) == "" || display == "." {
 		return nil
 	}
-	resolved, err := projectpaths.ResolveRead(ctx, g.boundary, g.tctx, display)
+	resolved, err := g.access.reads.Resolve(ctx, display)
 	if err != nil {
 		return nil
 	}
@@ -194,7 +194,7 @@ func (g *summarizeGatherer) sampleOutlineIdentifiers(ctx context.Context, displa
 	if serr != nil || info.IsDir() {
 		return nil
 	}
-	sc, _, ok := g.structureFromAbs(ctx, resolved.Abs, resolved.DisplayPath)
+	sc, _, ok := g.sources.structureFromAbs(ctx, resolved.Abs, resolved.DisplayPath)
 	if !ok {
 		return nil
 	}

@@ -2,13 +2,12 @@ package survey
 
 import (
 	"context"
-	"strings"
-	"testing"
-
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/summarize"
 	"github.com/lycaon/lycaon/internal/testutil"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
+	"strings"
+	"testing"
 )
 
 func TestSummarizeDefaultFileRetainsSourceWithoutReferenceLeads(t *testing.T) {
@@ -54,7 +53,7 @@ func TestSummarizeDefaultDirectoryKeepsDocRankingWithoutFanInScan(t *testing.T) 
 	fanInTieFixture(t, dir)
 	writeFile(t, dir, "README.md", "# App\n\nSee [beta](beta/b.go).\n")
 	g := testSummarizeGatherer(t, dir, summarize.DefaultCaps())
-	g.catalog = sourcecatalog.New()
+	g.access.catalog = sourcecatalog.New()
 	res, err := g.Gather(context.Background(), summarize.Request{Path: ".", Task: "explain beta"})
 	testutil.FailErr(t, "gather directory with shipped caps", err)
 	if res.Stats.FaninGrepPasses != 0 {

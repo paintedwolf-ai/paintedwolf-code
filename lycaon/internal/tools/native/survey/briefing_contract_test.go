@@ -3,16 +3,15 @@ package survey
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
-	"testing"
-	"time"
-
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/summarize"
 	"github.com/lycaon/lycaon/internal/testutil"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/internal/tools/surveyreceipt"
+	"strings"
+	"testing"
+	"time"
 )
 
 func prepareBriefingCatalog(t *testing.T, dir string, tool *SummarizeTool) {
@@ -147,10 +146,10 @@ func TestBriefingDoesNotSuggestObservedNonTextSource(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "metadata.any", "\x00\x01\x02opaque bytes")
 	g := testSummarizeGatherer(t, dir, summarize.DefaultCaps())
-	if _, ok := g.Outline(t.Context(), "metadata.any"); ok {
+	if _, ok := g.sources.Outline(t.Context(), "metadata.any"); ok {
 		t.Fatal("binary source accepted as text")
 	}
-	actions := g.actionableSources([]summarize.NextAction{{Tool: "summarize", Path: "metadata.any"}, {Tool: "summarize", Path: "src"}})
+	actions := g.sources.actionableSources([]summarize.NextAction{{Tool: "summarize", Path: "metadata.any"}, {Tool: "summarize", Path: "src"}})
 	if len(actions) != 1 || actions[0].Path != "src" {
 		t.Fatalf("source actions=%+v", actions)
 	}

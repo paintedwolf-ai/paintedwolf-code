@@ -3,16 +3,14 @@ package survey
 import (
 	"context"
 	"fmt"
-	"path/filepath"
-	"strings"
-	"testing"
-	"time"
-
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/summarize"
 	"github.com/lycaon/lycaon/internal/testutil"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
-	"github.com/lycaon/lycaon/internal/tools/projectpaths"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
 )
 
 func TestSummarizeMultiplePathsPinOneGenerationPerRoot(t *testing.T) {
@@ -20,26 +18,26 @@ func TestSummarizeMultiplePathsPinOneGenerationPerRoot(t *testing.T) {
 	writeFile(t, dir, "a/source.go", "package a")
 	writeFile(t, dir, "b/source.go", "package b")
 	g := testSummarizeGatherer(t, dir, summarize.DefaultCaps())
-	g.catalog = sourcecatalog.New()
-	first := g.buildSubtreeForTarget(t.Context(), "a")
-	if first == nil || len(g.treeReaders) != 1 {
+	g.access.catalog = sourcecatalog.New()
+	first := g.trees.buildSubtreeForTarget(t.Context(), "a")
+	if first == nil || len(g.trees.treeReaders) != 1 {
 		t.Fatal("first scope did not pin an indexed generation")
 	}
 	writeFile(t, dir, "b/new.go", "package b")
-	g.catalog.InvalidateRoot(dir, "b/new.go")
-	resolved, err := projectpaths.ResolveRead(t.Context(), g.boundary, g.tctx, ".")
+	g.access.catalog.InvalidateRoot(dir, "b/new.go")
+	resolved, err := g.access.reads.Resolve(t.Context(), ".")
 	testutil.FailErr(t, "resolve indexed root", err)
-	scope, err := g.boundary.CompileReadScope(t.Context(), resolved.Root.Path, g.tctx.ProfileID())
+	scope, err := g.access.boundary.CompileReadScope(t.Context(), resolved.Root.Path, g.access.profileID)
 	testutil.FailErr(t, "compile read scope", err)
-	fresh, _, err := g.catalog.OpenSummary(t.Context(), g.tctx.ProjectID, sourcecatalog.Root{ID: resolved.Root.ID, Path: resolved.Root.Path}, sourcecatalog.TreeScope{Key: scope.Key, Filter: scope.Filter, PruneNestedVCS: g.caps.Gather.PruneNestedVCS}, 30*time.Second)
+	fresh, _, err := g.access.catalog.OpenSummary(t.Context(), g.access.projectID, sourcecatalog.Root{ID: resolved.Root.ID, Path: resolved.Root.Path}, sourcecatalog.TreeScope{Key: scope.Key, Filter: scope.Filter, PruneNestedVCS: g.caps.Gather.PruneNestedVCS}, 30*time.Second)
 	testutil.FailErr(t, "publish intervening edit", err)
 	if fresh == nil {
 		t.Fatal("updated index unavailable")
 	}
 	defer func() { _ = fresh.Close() }()
-	second := g.buildSubtreeForTarget(t.Context(), "b")
-	if second == nil || second.Material.SourceFiles != 1 || first.Revision != second.Revision || len(g.treeReaders) != 1 {
-		t.Fatalf("inconsistent scope generations: first=%+v second=%+v readers=%d", first, second, len(g.treeReaders))
+	second := g.trees.buildSubtreeForTarget(t.Context(), "b")
+	if second == nil || second.Material.SourceFiles != 1 || first.Revision != second.Revision || len(g.trees.treeReaders) != 1 {
+		t.Fatalf("inconsistent scope generations: first=%+v second=%+v readers=%d", first, second, len(g.trees.treeReaders))
 	}
 }
 
@@ -51,16 +49,16 @@ func TestSummarizePartialSourceDoesNotClaimWholeFileDiagnostics(t *testing.T) {
 	caps.Gather.FileReadBytes = 128
 	caps.Gather.MaxBytes = 256
 	g := testSummarizeGatherer(t, dir, caps)
-	sc, _, ok := g.structureFromAbs(t.Context(), filepath.Join(dir, "large.go"), "large.go")
+	sc, _, ok := g.sources.structureFromAbs(t.Context(), filepath.Join(dir, "large.go"), "large.go")
 	if !ok || sc.Head == "" || sc.LineCount != 0 || sc.Parses != nil || len(sc.Errors) > 0 || sc.ErrorKind != "" {
 		t.Fatalf("partial observation=%+v ok=%v", sc, ok)
 	}
-	if g.sourceReadBytes != 128 || !g.sourceLimited {
-		t.Fatalf("source bytes=%d limited=%v", g.sourceReadBytes, g.sourceLimited)
+	if g.sources.sourceReadBytes != 128 || !g.sources.sourceLimited {
+		t.Fatalf("source bytes=%d limited=%v", g.sources.sourceReadBytes, g.sources.sourceLimited)
 	}
-	_, _, _ = g.structureFromAbs(t.Context(), filepath.Join(dir, "large.go"), "large.go")
-	if g.sourceReadBytes != 128 || g.sourceFiles != 1 {
-		t.Fatalf("memoized source reread: bytes=%d files=%d", g.sourceReadBytes, g.sourceFiles)
+	_, _, _ = g.sources.structureFromAbs(t.Context(), filepath.Join(dir, "large.go"), "large.go")
+	if g.sources.sourceReadBytes != 128 || g.sources.sourceFiles != 1 {
+		t.Fatalf("memoized source reread: bytes=%d files=%d", g.sources.sourceReadBytes, g.sources.sourceFiles)
 	}
 }
 
@@ -192,9 +190,9 @@ func TestSummarizeWarmOrientationPreservesReadmeAndUnknownCounts(t *testing.T) {
 	writeFile(t, dir, "README.md", "# Project purpose\nThis repository coordinates source indexing.\n")
 	writeFile(t, dir, "subtree/file.go", "package source\n")
 	g := testSummarizeGatherer(t, dir, summarize.DefaultCaps())
-	resolved, err := projectpaths.ResolveRead(t.Context(), g.boundary, g.tctx, ".")
+	resolved, err := g.access.reads.Resolve(t.Context(), ".")
 	testutil.FailErr(t, "resolve scope", err)
-	root := g.warmingSubtree(context.Background(), resolved)
+	root := g.trees.warmingSubtree(context.Background(), resolved)
 	if !root.UnknownMaterial || root.Material.SourceFiles != 0 || !subtreeContains(root, "README.md") {
 		t.Fatalf("warm orientation=%+v", root)
 	}
@@ -213,7 +211,7 @@ func TestSummarizeReadBudgetPreservesUTF8Prefix(t *testing.T) {
 			caps.Gather.FileReadBytes = len("# Useful orientation\n") + 4
 			caps.Gather.FileChunkBytes = chunk
 			g := testSummarizeGatherer(t, dir, caps)
-			sc, _, ok := g.structureFromAbs(t.Context(), filepath.Join(dir, "README.md"), "README.md")
+			sc, _, ok := g.sources.structureFromAbs(t.Context(), filepath.Join(dir, "README.md"), "README.md")
 			if !ok || !strings.Contains(sc.Head, "Useful") || sc.LineCount != 0 {
 				t.Fatalf("truncated UTF-8 observation=%+v ok=%v", sc, ok)
 			}

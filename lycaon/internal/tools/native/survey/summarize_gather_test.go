@@ -4,15 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
-	"strings"
-	"testing"
-
 	"github.com/lycaon/lycaon/internal/summarize"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
 )
 
 func TestSummarizeGatherInlineChunking(t *testing.T) {
@@ -503,7 +502,7 @@ func TestSummarizeStreamsFileStructureInBoundedChunks(t *testing.T) {
 	caps := summarize.DefaultCaps()
 	caps.Gather.FileChunkBytes = 1024
 	g := testSummarizeGatherer(t, dir, caps)
-	sc, _, ok := g.structureFromAbs(context.Background(), largePath, "large.go")
+	sc, _, ok := g.sources.structureFromAbs(context.Background(), largePath, "large.go")
 	if !ok {
 		t.Fatal("streamed structure was unavailable")
 	}
@@ -580,7 +579,7 @@ func TestSummarizePatternStopsAtSourceBudgetOnWideLine(t *testing.T) {
 	g := testSummarizeGatherer(t, dir, summarize.DefaultCaps())
 	result, err := g.Gather(t.Context(), summarize.Request{Path: "large.txt", Pattern: "Needle"})
 	testutil.FailErr(t, "bounded wide pattern source", err)
-	if result.MatchCount != 0 || !g.sourceLimited || g.sourceReadBytes > int64(g.caps.Gather.FileReadBytes) {
-		t.Fatalf("pattern read=%d matches=%d limited=%v", g.sourceReadBytes, result.MatchCount, g.sourceLimited)
+	if result.MatchCount != 0 || !g.sources.sourceLimited || g.sources.sourceReadBytes > int64(g.caps.Gather.FileReadBytes) {
+		t.Fatalf("pattern read=%d matches=%d limited=%v", g.sources.sourceReadBytes, result.MatchCount, g.sources.sourceLimited)
 	}
 }
