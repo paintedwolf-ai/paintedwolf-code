@@ -395,7 +395,7 @@ func TestDirectIPNarrowingEndToEnd(t *testing.T) {
 	c, ok := confine.DefaultConfinement(confine.Request{
 		Roots:            []string{proj},
 		Egress:           confine.EgressDirectIP,
-		DirectIPDeclared: []string{"udp://time.nist.gov:123"},
+		DirectIPDeclared: []string{"udp://time.example:123"},
 	})
 	if !ok || c == nil {
 		t.Fatalf("direct IP confinement must apply: ok=%v c=%+v", ok, c)
@@ -408,39 +408,45 @@ func TestDirectIPNarrowingEndToEnd(t *testing.T) {
 		t.Fatalf("declared strings must reach the confinement: got %v want %v", c.DirectIPPermits, want)
 	}
 
-	// The narrowed profile retains name resolution. Public NTP servers drop
-	// requests under load, so any one of several may answer; a denial fails at once.
-	ntp := []string{"/usr/bin/python3", "-c", `import socket,struct,sys
-errors = []
-for host in ("time.apple.com", "time.google.com", "pool.ntp.org", "time.nist.gov"):
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.settimeout(4)
-        s.connect((socket.gethostbyname(host), 123))
-        s.send(b"\x1b" + 47 * b"\0")
-        print(struct.unpack("!12I", s.recv(48))[10] - 2208988800)
-        sys.exit(0)
-    except PermissionError:
-        raise
-    except OSError as error:
-        errors.append(f"{host}: {error}")
-sys.exit("no NTP server answered: " + "; ".join(errors))`}
-	code, out, stderr := confinedStdout(t, self, *c, ntp[0], ntp[1:]...)
-	if code != 0 {
-		t.Fatalf("narrowed direct IP must complete an NTP round trip by name: exit=%d out=%s stderr=%s", code, out, stderr)
+	// The host's own mDNS name is answered by mDNSResponder without traffic,
+	// so it proves the resolver socket stays open under narrowing.
+	name := mdnsSelfName(t)
+	resolve := []string{"/usr/bin/python3", "-c", "import socket,sys; socket.gethostbyname(sys.argv[1])", name}
+	deny := confine.Confinement{Roots: []string{proj}, Network: confine.NetworkDeny}
+	if code, out := confinedRun(t, self, deny, resolve[0], resolve[1:]...); code == 0 {
+		t.Fatalf("%s must need the system resolver, which deny withholds: out=%s", name, out)
 	}
-	epoch, err := strconv.ParseInt(strings.TrimSpace(out), 10, 64)
-	if err != nil {
-		t.Fatalf("expected a unix timestamp from the server, got %q (%v; stderr=%s)", out, err, stderr)
-	}
-	// The response must contain a plausible timestamp.
-	if epoch < 1_700_000_000 || epoch > 4_000_000_000 {
-		t.Fatalf("implausible NTP timestamp %d — the exchange did not reach a real server", epoch)
+	if code, out := confinedRun(t, self, *c, resolve[0], resolve[1:]...); code != 0 {
+		t.Fatalf("narrowed direct IP must resolve %s: exit=%d out=%s", name, code, out)
 	}
 
-	// Undeclared transports remain denied.
-	if code, out := confinedRun(t, self, *c, "/usr/bin/python3", "-c",
-		"import socket;s=socket.socket();s.settimeout(3);s.connect(('1.1.1.1',443));print('tcp ok')"); code == 0 {
-		t.Fatalf("undeclared tcp must stay denied on the end-to-end path: out=%s", out)
+	// Seatbelt's localhost covers every local interface address, so only a
+	// non-local peer reaches the narrowed rules. TEST-NET-1 never answers; the
+	// verdict is the connect or send errno, not a reply.
+	verdicts := []string{"/usr/bin/python3", "-c", `import socket
+for proto, port in (("udp", 123), ("udp", 124), ("tcp", 123)):
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM if proto == "udp" else socket.SOCK_STREAM)
+    s.setblocking(False)
+    try:
+        s.connect(("192.0.2.1", port))
+        if proto == "udp":
+            s.send(b"x")
+        verdict = "allowed"
+    except PermissionError:
+        verdict = "denied"
+    except OSError:
+        verdict = "allowed"
+    print(f"{proto}/{port} {verdict}")`}
+	code, out, stderr := confinedStdout(t, self, *c, verdicts[0], verdicts[1:]...)
+	wantVerdicts := "udp/123 allowed\nudp/124 denied\ntcp/123 denied\n"
+	if code != 0 || out != wantVerdicts {
+		t.Fatalf("only the declared transport may leave the host: exit=%d got:\n%swant:\n%sstderr=%s", code, out, wantVerdicts, stderr)
 	}
+}
+
+func mdnsSelfName(t *testing.T) string {
+	t.Helper()
+	out, err := exec.Command("/usr/sbin/scutil", "--get", "LocalHostName").Output()
+	testutil.FailErr(t, "read LocalHostName", err)
+	return strings.TrimSpace(string(out)) + ".local"
 }
