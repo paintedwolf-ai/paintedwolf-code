@@ -601,7 +601,7 @@ describe("app-connection cache reconcile", () => {
     mod.attachKnownBackend(appStore, { baseUrl: "http://127.0.0.1:8788", apiToken: "attached" });
     await vi.waitFor(() => expect(subscribeEvents).toHaveBeenCalledOnce());
     expect(subscribedProjectIds).toEqual([""]);
-    lastSubscribeOptions?.onReconnectAttempt?.();
+    lastSubscribeOptions?.onReconnectAttempt?.(1, 0);
     appStore.actions.setSidecarStatus("disconnected");
     lastSubscribeOptions?.onOpen?.("reconnect");
     expect(appStore.state.sidecarStatus).toBe("connected");
