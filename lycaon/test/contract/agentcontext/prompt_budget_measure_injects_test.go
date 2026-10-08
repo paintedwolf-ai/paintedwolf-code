@@ -1,3 +1,5 @@
+//go:build budgets
+
 package contract
 
 import (
@@ -15,10 +17,14 @@ import (
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/packboard"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/reviewcoverage"
+	scancoverage "github.com/lycaon/lycaon/internal/scan/coverage"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/workflow"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
+	"github.com/lycaon/lycaon/test/contract/internal/workflowfixture"
 )
 
 func measureCoordinatorInjectSizes(
@@ -157,4 +163,42 @@ func measureCoordinatorInjectBlock(
 		t.Fatalf("PromptBudgetInjectMatrix missing measure hook for %q — add case in measureCoordinatorInjectBlock", spec.ID)
 		return ""
 	}
+}
+
+// Measure live phase-exit shapes as well as the baseline research fixture, so
+// required verdict fields cannot grow outside the measured prompt surface.
+func largestCatalogPhaseInject(t *testing.T, renderer *prompts.InjectRenderer, hints *guidance.HintConfig, gates *feedback.GateFeedbackCatalog, largest string) string {
+	t.Helper()
+	manifests, err := workflowfixture.LoadMergedWorkflowCatalog(t)
+	contractcheck.FailErr(t, "load phase budget catalog", err)
+	for _, manifest := range manifests {
+		rows := make([]inject.WorkflowPhaseRow, 0, len(manifest.PhaseDefs))
+		for _, phase := range manifest.PhaseDefs {
+			rows = append(rows, inject.WorkflowPhaseRow{ID: phase.ID, CompleteWhen: phase.CompleteWhen, Next: phase.Next, Terminal: phase.Terminal})
+		}
+		for _, phase := range manifest.PhaseDefs {
+			frame := inject.CoordinatorTurnFrame{
+				RunContext: api.CoordinatorRunContext{WorkflowID: manifest.ID, CurrentPhase: phase.ID, RunID: "budget-run", RunStatus: "running"},
+				Runtime:    inject.WorkflowRuntimeSnapshot{Phases: rows, PhaseExit: workflow.ProjectPhaseExit(manifest, phase, nil, nil).InjectView()},
+			}
+			block, err := inject.RenderActiveWorkflowInject(t.Context(), renderer, "sess-inject-test", frame, hints, nil, gates)
+			contractcheck.FailErr(t, "render catalog phase budget", err)
+			if len(block) > len(largest) {
+				largest = block
+			}
+		}
+	}
+	return largest
+}
+
+func promptBudgetCoverageAssignment() *reviewcoverage.Assignment {
+	var warnings []api.ScanWarning
+	for i := range 36 {
+		warnings = append(warnings, api.ScanWarning{File: fmt.Sprintf("component-%02d/src/entry.go", i), Construct: "indirect_call"})
+	}
+	scope := scancoverage.Summarize(warnings)
+	facts := reviewcoverage.Facts{Obligations: []reviewcoverage.Fact{{ID: "survey/entry", Kind: "planned_area", Subject: "External entry points"}}, Gaps: []reviewcoverage.Fact{{ID: "gap/partial", Kind: "file_partial_semantics", FileCount: scope.Files, Count: scope.Warnings, Paths: scope.PathsSample, Distribution: &scope.Profile, Scans: []string{"scan-fixture"}}}}
+	candidate := api.CoverageReview{Revision: "candidate", Assessments: []api.CoverageAssessment{{ID: "gap/partial", Disposition: "immaterial", Reason: "Candidate excludes the affected scope", Obligations: []string{"survey/entry"}, CitedEvidence: []api.CitationGroundingCitedEvidence{{Handle: "scan#1"}}}}}
+	assignment := reviewcoverage.Assign(facts, candidate, "challenge")
+	return &assignment
 }
