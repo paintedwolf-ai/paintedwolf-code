@@ -1,7 +1,8 @@
 name: Platform verification
 
-# The merge queue's jobs that a catalog lane cannot express: macOS confinement and
-# engine checks, the upgrade corpus, and the Playwright web and desktop tiers.
+# The merge queue's jobs that a catalog lane cannot express: the upgrade corpus,
+# macOS confinement and engine checks, and the Playwright web and desktop tiers.
+# The free plan runs five macOS jobs at once, so only what needs macOS runs there.
 on:
   workflow_call:
 
@@ -13,36 +14,19 @@ env:
   DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
 
 jobs:
-  # Boot last N corpus fixtures with HEAD; named so a corpus failure is distinct.
+  # Boot the retained upgrade-corpus fixtures with HEAD. Booting stored databases
+  # is platform-neutral, so it stays off the scarce macOS runners.
   upgrade-corpus:
-    runs-on: macos-15
+    runs-on: ubuntu-latest
     timeout-minutes: 150
+    env:
+      PW_TEST_HOST: dedicated
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: lycaon/go.mod
-          cache-dependency-path: lycaon/go.sum
-
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        with:
-          bun-version-file: .bun-version
-
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version-file: .node-version
-
-      - name: Set up maintained OpenGrep
-        uses: ./.github/actions/setup-opengrep
-
-      - name: Install frontend dependencies
-        working-directory: lycaon-den
-        run: bun install --frozen-lockfile
+      - uses: ./.github/actions/setup-verification
 
       - uses: ./.github/actions/setup-bialy
-
-      - uses: ./.github/actions/cache-decide
 
       - name: Build sidecar
         timeout-minutes: 60
@@ -59,31 +43,10 @@ jobs:
           name: upgrade-corpus-${{ github.run_attempt }}
           status: ${{ job.status }}
 
-  # Applied Seatbelt profiles (darwin; --full).
-  seatbelt:
-    runs-on: macos-15
-    timeout-minutes: 90
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: lycaon/go.mod
-          cache-dependency-path: lycaon/go.sum
-
-      - name: Applied Seatbelt confinement
-        timeout-minutes: 60
-        run: ./task test:seatbelt
-
-      - uses: ./.github/actions/verification-evidence
-        if: always()
-        timeout-minutes: 5
-        with:
-          name: seatbelt-${{ github.run_attempt }}
-          status: ${{ job.status }}
-
-  # Managed browser under Seatbelt.
-  browser-confinement:
+  # Applied Seatbelt profiles, the managed browser under Seatbelt, and the owned
+  # Git engine's parity matrix (darwin-arm64 only) share one macOS runner and one
+  # sidecar build. Each suite runs even when an earlier one fails.
+  confinement:
     runs-on: macos-15
     timeout-minutes: 150
     steps:
@@ -101,8 +64,12 @@ jobs:
 
       - uses: ./.github/actions/cache-decide
 
+      - name: Fetch pinned git engine
+        run: ./task gitengine:fetch
+
       - name: Build sidecar and provision pinned browser
         id: browser
+        timeout-minutes: 60
         run: |
           set -euo pipefail
           ./task build:lycaon-dev
@@ -112,8 +79,13 @@ jobs:
           test -x "$BROWSER_PATH"
           echo "path=$BROWSER_PATH" >> "$GITHUB_OUTPUT"
 
+      - name: Applied Seatbelt confinement
+        timeout-minutes: 45
+        run: ./task test:seatbelt
+
       - name: Confined browser launch and screenshot regression
-        timeout-minutes: 60
+        if: ${{ !cancelled() && steps.browser.outcome == 'success' }}
+        timeout-minutes: 30
         env:
           LYCAON_BROWSER_BIN: ${{ steps.browser.outputs.path }}
           # The step above provisioned one, so a skip here would be a green job
@@ -124,30 +96,9 @@ jobs:
           -run '^(TestHeadlessLauncherPinsSubprocessPath|TestLaunchHeadlessUnderBrowserConfinement|TestProbeUsabilityUnderBrowserConfinement|TestPoolNewPageUnderBrowserConfinement|TestCaptureURLReachesHostLoopback|TestConfinedBrowserFloorReachesHostLoopback|TestBrowserBoundaryRefusesWhenConfinementCannotBeBuilt|TestLaunchHeadlessRefusesUnsafeCacheDir)$'
           -count=1
 
-      - uses: ./.github/actions/verification-evidence
-        if: always()
-        timeout-minutes: 5
-        with:
-          name: browser-confinement-${{ github.run_attempt }}
-          status: ${{ job.status }}
-
-  # Owned git engine is darwin-arm64 only.
-  git-parity:
-    runs-on: macos-15
-    timeout-minutes: 90
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: lycaon/go.mod
-          cache-dependency-path: lycaon/go.sum
-
-      - name: Fetch pinned git engine
-        run: ./task gitengine:fetch
-
       - name: Git engine parity matrix
-        timeout-minutes: 60
+        if: ${{ !cancelled() }}
+        timeout-minutes: 30
         env:
           LYCAON_GIT_REFERENCE: /usr/bin/git
           LYCAON_GIT_PARITY_REQUIRED: "1"
@@ -159,7 +110,7 @@ jobs:
         if: always()
         timeout-minutes: 5
         with:
-          name: git-parity-${{ github.run_attempt }}
+          name: confinement-${{ github.run_attempt }}
           status: ${{ job.status }}
 
   playwright-web:

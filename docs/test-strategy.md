@@ -117,7 +117,7 @@ state relevant to a scenario. Tests of database recovery, backup, Git plumbing,
 or filesystem traversal may still use the underlying mechanism directly when
 that mechanism is the subject of the test.
 
-### Contract organization and maintainability budgets
+### Contract organization
 
 Contract suites live in domain packages under `lycaon/test/contract/`:
 `agentcontext`, `architecture`, `catalogs`, `evidence`, `files`, `frontend`,
@@ -131,27 +131,109 @@ and `guidancescan` fixtures. Keep a scanner with the contract it proves and use
 shared support for cross-domain mechanics. Source assertions follow subpackages
 and import manifests, so a split file never leaves them inspecting an empty entry.
 
-`TestMaintainabilityWithinBudget` in `test/contract/maintainability` measures
-code-bearing lines per production and test file, handwritten files per
-production and test directory, Go struct fields, Go receiver methods and
-receiver lines summed across files and platform variants (so splitting a file
-cannot hide concentration), and distinct local TypeScript imports per module.
-Generated and vendored files are classified from generator inventories. Caps live in
-`lycaon/test/contract/maintainability-budgets.yaml` as category maps of integer
-caps. Measurements at or below their caps pass. Failures are `over_cap`,
-`missing_cap`, or `stale_cap`; there is no warning tier or automatic ratchet.
+## Size budgets and changed coverage
 
-When a failure exposes mixed responsibilities, extract a coherent operation or
-feature and preserve its behavior. Intentional growth can receive a deliberate
-cap bump. Refresh measured caps, including new and removed paths, with
-`UPDATE_MAINTAINABILITY_BUDGETS=1 ./task test:contract -- ./test/contract/maintainability -run '^TestMaintainabilityWithinBudget$'`,
-review the entire budget diff, then run without the variable; refreshing is not
-verification, and ordinary runs never write caps. Caps record the reviewed
-state, not a quality target: a green budget does not show cohesion, so review
-still reads the structure ([Organizing code](architecture.md#organizing-code)).
-Dependency direction is enforced separately by the
-[import-graph layering contract](package-layering.md), Go rejects import cycles
-at compile time, and `funlen` in `lycaon/.golangci.yml` stays in force.
+Agents write code and prompt copy fast. These checks shape it through
+feedback an agent meets while it works: a warning as something approaches
+its limit, then a stop for a change that leaves a touched artifact past it.
+`check-fast` and `check` run them, and CI runs them in the `limits` lane with
+the same rules and the same words, so CI says nothing `check-fast` did not.
+
+### Size budgets
+
+`./task budgets` measures two suites:
+
+| Suite | Measures | Policy |
+|---|---|---|
+| Maintainability (`test/contract/maintainability`) | Code-bearing lines per production and test file; handwritten files per production and test directory; Go struct fields; Go receiver methods and receiver lines summed across files and platform variants, so splitting a file cannot hide concentration; distinct local TypeScript imports per module. Generated and vendored files are classified from generator inventories. | [`maintainability-budgets.yaml`](../lycaon/test/contract/maintainability-budgets.yaml) |
+| Prompts (`test/contract/agentcontext`) | UTF-8 bytes of every rendered worker persona, coordinator tripartite fixture, inject, agent template, kick, and instruction unit; the tools each coordinator surface and worker profile sends upfront, limited as two classes; and each turn kind's widest static prompt against the model window | `sizes` and `absolute_maximums` in [`prompt-budgets.yaml`](../lycaon/config/packs/painted-wolf/platform/host/prompt-budgets.yaml) |
+
+Each category has a warning line and a limit. Standing is absolute: nothing
+records earlier sizes, and an artifact is never allowed because an earlier
+change was. An artifact that must be larger has an **exception**: a cap with
+room for ordinary edits, and a reason a reviewer can weigh.
+
+| Standing | Result |
+|---|---|
+| A touched artifact past its warning line | Warning: new behavior belongs in a new file or package |
+| A touched artifact past its limit, with no exception | Fails |
+| Any artifact past its exception cap | Fails: the reason no longer covers it |
+| A touched artifact within its exception | Notice naming the reason |
+| An untouched artifact past its limit | Counted; it meets the standard when next touched |
+| An exception the change adds or raises | Notice for review |
+
+A change touches a file it edits, a directory it adds files to or removes
+files from, and a Go type whose declaration or methods it edits, compared
+with the [change base](#the-change-base). Editing a helper beside a large type
+does not make the change answer for the type. Prompts are few, so every
+prompt past its limit needs an exception, and warnings name the prompts whose
+sources a change edited.
+
+The host assembles a prompt per turn: instruction units render only while
+their tools are offered, requestable tool schemas load on demand, and the
+decision engine may leave out the units it is confident a request does not
+need. The prompt suite measures those parts where they vary. Each instruction
+unit has its own limit, because it rides wherever its tools go. Each turn
+kind's widest static prompt is then assembled from its own parts: a
+coordinator turn from its fixture's system prompt, its surface's upfront
+tools, and the injects that can ride a coordinator turn; a worker turn from
+its persona, its profile's upfront tools, and the worker injects. Each adds
+one request's largest tool loads (`max_loads` in `decisions.yaml`) and the
+units they bring. That widest prompt is the one the window check holds,
+because every mandatory unit renders when the decision engine abstains or
+fails. Every run reports the widest coordinator and worker turns' headroom,
+warning below 10%, beside their size once every requestable tool has loaded:
+warm turns can accumulate loads until the next cold boundary, so that
+figure is context for the runtime rather than a static guarantee. Kicks and project content
+(AGENTS.md chains, MCP schemas, source briefs, skill bodies) are sized by
+the project at runtime; they ride in the reserved session budget, which
+compaction calibrates against the provider's reported token counts.
+
+Look before editing something large:
+`PW_BUDGETS_INSPECT="lycaon/internal/hitl" ./task budgets` reports those
+files and directories as if the change had touched them. When an artifact
+fails, split it along a real seam
+([Organizing code](architecture.md#organizing-code)) or trim the copy the
+failure names. Raise a category limit only when the whole category should
+change. The worker persona cap also bounds `pw prompts render --check` and
+pack persona validation.
+
+The suites carry the `budgets` build tag, so `test:contract` and `test:full`
+do not repeat them. A passing budget does not show cohesion, so review still
+reads the structure. Dependency direction is enforced separately by the
+[import-graph layering contract](package-layering.md), Go rejects import
+cycles at compile time, and `funlen` in `lycaon/.golangci.yml` stays in force.
+
+### Changed coverage
+
+`./task coverage:changes` (Go) and `./task den:coverage:changes` (Den) measure
+the statements a change adds or modifies. A unit (a Go package or a Den file)
+fails when more than the policy's grace count of its changed statements are
+uncovered and fewer than its percentage are covered. Code a change does not
+touch never fails it, and floors live in
+[`coverage-policy.json`](../scripts/coverage-policy.json).
+
+- **Go** measures each changed package with its own short tests, then measures
+  a package that falls short again with the tests of the packages that import
+  it, crediting coverage across packages. Changed functions in a package no
+  test reaches fail. Packages in `lycaon/coverage-exempt.txt` and generated
+  files are skipped, and a touched package below the package floor is noted.
+- **Den** runs the Vitest tests related to the changed files and measures
+  coverage of those files. Tests, mocks, declarations, and generated files are
+  skipped.
+
+Aggregate floors (`check:coverage`, `den:coverage-check`) read the same policy
+and run nightly.
+
+### The change base
+
+Budgets and changed coverage measure against the merge base with the main
+branch (`origin/main`, then `main`), so a branch is measured from where it
+left; the base decides which lines a change touched, never what size an
+artifact may be. `PW_CHANGE_BASE` names a different base. Without a reachable
+base, `budgets` reports that nothing was established rather than guessing. Inside a source snapshot the
+change includes uncommitted and untracked work. On GitHub Actions every
+finding also annotates its file and the job summary.
 
 ## Concurrency and type floors
 
@@ -380,8 +462,10 @@ Run every task from the repository root through `./task`.
 | `./task perf:bench` | Repeated Go microbenchmarks and an optional baseline comparison |
 | `./task perf:sidecar` | Representative isolated sidecar workload with enforced latency/resource/correctness budgets |
 | `./task perf:soak` | Long mixed workload with graceful restart, task recovery, SSE cursor reset, and leak checks |
-| `./task check-fast` | Pull request gate and local handoff: build, lint:fast, unit/component Go suite, repository contracts, Den typecheck, lint, and den:test:fast |
-| `./task check` | Merge queue gate: cross-compile, drift, complete Go and scanner suites, full Den and Rust correctness suites, lint, and vulnerability checks |
+| `./task budgets` | Prompt and code size budgets for what the change touches |
+| `./task coverage:changes` / `./task den:coverage:changes` | Coverage of the Go and Den statements a change adds or modifies |
+| `./task check-fast` | Pull request gate and local handoff: build, lint:fast, size budgets, unit/component Go suite, repository contracts, Den typecheck, lint, den:test:fast, and changed coverage |
+| `./task check` | Merge queue gate: cross-compile, drift, complete Go and scanner suites, full Den and Rust correctness suites, size budgets, changed coverage, lint, and vulnerability checks |
 
 Each gate runs once per change. A pushed change gets `check-fast` on its pull request and `check` in the merge queue, so it runs neither locally first; a change handed off without a push runs `./task check-fast`. Each gate uses one stable source snapshot. Digest runners keep failure captures under `last-run/` in the [artifact root](dev-tasks.md#build-outputs-caches-and-locks); `./task test:failed` replays the latest failed Go run from its retained source commit with the recorded arguments and timeouts, bounded by the current worker budget. A passing scoped run does not erase that failure.
 
@@ -400,8 +484,8 @@ allocation before claiming an end-to-end speedup.
 |------|-------|
 | `./task test:full` | Complete Go behavior, wiring, smoke, HTTP, and required bundled scanner suites |
 | `./task test:race` | Go race detector with integration scenarios and no `-short`; the dedicated `test/security` HTTP journeys remain in `test:full` |
-| `./task check:coverage` | Go statement coverage floor |
-| `./task den:coverage-check` | Den coverage floors |
+| `./task check:coverage` | Go aggregate statement coverage floor |
+| `./task den:coverage-check` | Den aggregate coverage floors |
 | `./task den:test:rust` | Tauri Rust tests |
 | `./task test:scanners` | Bundled scanners against the committed corpus, with a staged engine |
 | `./task perf:sidecar` | Sidecar service-level objectives and integrity invariants |
@@ -415,14 +499,20 @@ required check, `check`:
 
 | Event | Tier | Work |
 |---|---|---|
-| Pull request | Fast | The `fast` profile: the stages of `./task check-fast`, split into build and lint, Go, and frontend jobs on `ubuntu-latest`. |
-| Merge queue | Full | The `check` profile, every stage of `./task check`, plus [`platform-verification.yml`](../.github/workflows/platform-verification.yml): upgrade corpus, applied Seatbelt, browser confinement, and Git parity on `macos-15`, Playwright web E2E in three shards, and desktop E2E. |
+| Pull request | Fast | The `fast` profile: the stages of `./task check-fast`, split into build and lint, Go (two shards), and frontend jobs on `ubuntu-latest`. |
+| Merge queue | Full | The `check` profile, every stage of `./task check`, plus [`platform-verification.yml`](../.github/workflows/platform-verification.yml): the upgrade corpus on Linux; applied Seatbelt, browser confinement, and Git parity in one `macos-15` job; Playwright web E2E in three shards; and desktop E2E. |
 | Manual dispatch | Full | The merge-queue tier on any branch, to try a change before queueing or to reproduce a queue failure. |
 
 The merge queue squashes each pull request onto main and tests the resulting
 commit; main then advances to exactly that commit, so CI does not run again on
 push. A required check that ran only on pull requests would admit commits that
-were never tested together. Neither tier uses path filters: generated
+were never tested together. When the queue merges, rebuilds, or drops a group,
+it deletes the group's branch but leaves its CI running; the scheduled
+[`merge-queue-prune.yml`](../.github/workflows/merge-queue-prune.yml) cancels
+those runs every ten minutes so they stop holding runners the live groups need.
+The aggregates run under `!cancelled()` rather than `always()`: they still judge
+failed and timed-out jobs, but a cancelled run no longer waits for a runner to
+schedule its verdict. Neither tier uses path filters: generated
 documentation, shipped prompts, and the changelog are Markdown the build and
 tests read.
 
@@ -437,8 +527,8 @@ gates cannot drift apart.
 
 | Profile | Work and required result |
 |---|---|
-| Fast | Build and fast lint, Go (unit/component suite and repository contracts), and frontend (Den typecheck, lint, seam canaries). `CI/check` requires all three and excuses only the platform workflow, which a pull request skips. |
-| Check | Build, contracts and drift, lint, vulnerabilities, runner tests, full Go behavior, frontend, native Rust, and WebKit each have their own budget. `CI/check` requires these and every platform job. |
+| Fast | Build and fast lint, Go (unit/component suite and repository contracts), frontend (Den typecheck, lint, seam canaries), and limits (size budgets and changed coverage). `CI/check` requires all four and excuses only the platform workflow, which a pull request skips. |
+| Check | Build, limits, contracts and drift, lint, vulnerabilities, runner tests, full Go behavior, frontend, native Rust, and WebKit each have their own budget. `CI/check` requires these and every platform job. |
 | Nightly | Full behavior, race, fuzz, Go and Den coverage, stress, transcript scale, benchmarks, sidecar budgets, and a ten-minute soak run independently. Manual selection filters jobs before matrix expansion; vulnerability freshness and upgrade rehearsal always run. The terminal `nightly` job requires every selected job. |
 | Release | The tagged commit must carry a passing full-tier `CI/check`, which every commit the queue lands has, so a release runs no verification lanes. The signed build starts after source classification, in parallel with preflight and the upgrade rehearsal; `ship-gates` requires both before anything publishes. |
 
@@ -457,7 +547,8 @@ repositories); a lane declares `macos-15` only when it tests macOS-specific
 behavior. A lane may declare `shards`: the race lane runs as three jobs, each
 verifying every third package of the planner's sorted selection
 (`PW_GO_SHARD=k/N`), so its longest package starts early instead of behind
-three hundred others. A lane may also cap `workers` below the CPU count when
+three hundred others. The pull request tier's Go lane runs as two, because its
+unit suite is the longest job a pull request waits for. A lane may also cap `workers` below the CPU count when
 its peak memory outgrows the runner. WebKit runs on macOS so its platform check
 cannot silently skip the suite. Desktop E2E shares one reusable workflow across
 the merge queue and the nightly run, with separate staging and test deadlines.

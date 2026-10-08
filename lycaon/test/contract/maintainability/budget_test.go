@@ -8,80 +8,94 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/test/contract/internal/sizebudget"
 )
 
-func TestMaintainabilityWithinBudget(t *testing.T) {
-	root := testutil.CheckoutRoot(t)
-	sources, err := discoverSources(root)
-	testutil.FailErr(t, "discover maintained sources", err)
-	inv, err := measure(t.Context(), root, sources)
-	testutil.FailErr(t, "measure maintained sources", err)
-	budgets := filepath.Join(root, budgetPath)
-	if os.Getenv("UPDATE_MAINTAINABILITY_BUDGETS") == "1" {
-		raw, err := encodeBudgets(inv.measured)
-		testutil.FailErr(t, "encode maintainability budgets", err)
-		testutil.FailErr(t, "write maintainability budgets", os.WriteFile(budgets, raw, 0o644))
-		return
-	}
-	raw, err := os.ReadFile(budgets)
+func TestMaintainabilityPolicyCoversEveryCategory(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join(testutil.CheckoutRoot(t), policyPath))
 	testutil.FailErr(t, "read maintainability budgets", err)
-	caps, err := decodeBudgets(raw)
+	_, err = decodePolicy(raw)
 	testutil.FailErr(t, "decode maintainability budgets", err)
-	if found := compareBudgets(inv.measured, caps); len(found) > 0 {
-		t.Fatal(budgetReport(found, inv.sources))
-	}
 }
 
-func TestMaintainabilityBudgetComparison(t *testing.T) {
-	measured, caps := newMeasurements(), newMeasurements()
-	measured["go_receiver_lines"] = map[string]int{"equal": 10, "smaller": 9, "larger": 11, "new": 0}
-	caps["go_receiver_lines"] = map[string]int{"equal": 10, "smaller": 10, "larger": 10, "gone": 10}
-	want := []violation{
-		{"go_receiver_lines", "new", "missing_cap", 0, 0},
-		{"go_receiver_lines", "larger", "over_cap", 11, 10},
-		{"go_receiver_lines", "gone", "stale_cap", 0, 10},
+func TestMaintainabilityPolicyRejectsWhatAReviewerCannotWeigh(t *testing.T) {
+	var limits strings.Builder
+	for _, name := range suite.CategoryNames() {
+		limits.WriteString("    " + name + ": {warn: 400, limit: 600}\n")
 	}
-	got := compareBudgets(measured, caps)
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("budget violations = %#v, want %#v", got, want)
+	valid := "limits:\n" + limits.String() + "exceptions:\n    source_files:\n        a.go:\n            cap: 700\n            reason: one table per dialect\n"
+	if _, err := decodePolicy([]byte(valid)); err != nil {
+		t.Fatalf("valid policy rejected: %v", err)
 	}
-	report := budgetReport(got, map[string][]string{"larger": {"feature/one.go", "feature/two.go"}})
-	for _, required := range []string{"over_cap", "missing_cap", "stale_cap", "excess: 1 lines", "source: feature/one.go", "source: feature/two.go", refreshCommand} {
-		if !strings.Contains(report, required) {
-			t.Errorf("failure report missing %q: %s", required, report)
-		}
-	}
-}
-
-func TestMaintainabilityBudgetRefreshRoundTrip(t *testing.T) {
-	measured := newMeasurements()
-	measured["source_files"]["b.go"] = 2
-	measured["source_files"]["a.go"] = 0
-	raw, err := encodeBudgets(measured)
-	testutil.FailErr(t, "encode measured caps", err)
-	got, err := decodeBudgets(raw)
-	testutil.FailErr(t, "decode measured caps", err)
-	if !reflect.DeepEqual(got, measured) {
-		t.Fatalf("decoded caps = %#v, want %#v", got, measured)
-	}
-	again, err := encodeBudgets(got)
-	testutil.FailErr(t, "encode caps again", err)
-	if string(raw) != string(again) {
-		t.Fatal("refresh output is not deterministic")
-	}
-	base := string(raw)
 	for name, body := range map[string]string{
-		"unknown category":   base + "unknown: {}\n",
-		"duplicate category": base + "source_files: {}\n",
-		"duplicate artifact": strings.ReplaceAll(base, "a.go: 0", "a.go: 0\n    a.go: 1"),
-		"fractional cap":     strings.ReplaceAll(base, "a.go: 0", "a.go: 1.5"),
-		"negative cap":       strings.ReplaceAll(base, "a.go: 0", "a.go: -1"),
-		"quoted cap":         strings.ReplaceAll(base, "a.go: 0", "a.go: '1'"),
+		"unknown field":      valid + "grandfathered: {}\n",
+		"duplicate artifact": strings.Replace(valid, "        a.go:\n", "        a.go:\n            cap: 701\n        a.go:\n", 1),
+		"fractional cap":     strings.Replace(valid, "cap: 700", "cap: 700.5", 1),
+		"quoted cap":         strings.Replace(valid, "cap: 700", "cap: '700'", 1),
+		"cap within limit":   strings.Replace(valid, "cap: 700", "cap: 600", 1),
+		"missing reason":     strings.Replace(valid, "reason: one table per dialect", "reason: ''", 1),
+		"missing category":   strings.Replace(valid, "    source_files: {warn: 400, limit: 600}\n", "", 1),
 	} {
 		t.Run(name, func(t *testing.T) {
-			if _, err := decodeBudgets([]byte(body)); err == nil {
-				t.Fatalf("accepted invalid budget:\n%s", body)
+			if _, err := decodePolicy([]byte(body)); err == nil {
+				t.Fatalf("accepted invalid policy:\n%s", body)
 			}
 		})
+	}
+}
+
+func TestMaintainabilityTouchesTypesByTheLinesAChangeEdits(t *testing.T) {
+	root := t.TempDir()
+	writeFixture(t, root, map[string]string{
+		"Taskfile.yml":            "tasks: {}\n",
+		"feature/server.go":       "package feature\n\ntype Server struct{ a, b int }\n\nfunc (s *Server) One() int { return s.a }\n\nfunc helper() int { return 1 }\n",
+		"feature/server_extra.go": "package feature\n\nfunc (s *Server) Two() int {\n\treturn s.b\n}\n",
+		"web/main.ts":             "import { one } from './one';\nexport const two = one + 1;\n",
+		"web/one.ts":              "export const one = 1;\n",
+	})
+	tree := fixtureTree(t, root)
+	sources, err := discoverSources(tree)
+	testutil.FailErr(t, "discover fixture sources", err)
+	inv, err := measure(t.Context(), tree, sources)
+	testutil.FailErr(t, "measure fixture", err)
+	const server = "feature/feature.Server"
+	for name, tc := range map[string]struct {
+		change                   sizebudget.ChangeSet
+		fields, methods, entries bool
+	}{
+		"helper edit":      {change: sizebudget.ChangeSet{Lines: map[string][]int{"feature/server.go": {7}}}},
+		"declaration edit": {change: sizebudget.ChangeSet{Lines: map[string][]int{"feature/server.go": {3}}}, fields: true},
+		"method edit":      {change: sizebudget.ChangeSet{Lines: map[string][]int{"feature/server_extra.go": {4}}}, methods: true},
+		"new file":         {change: sizebudget.ChangeSet{Added: []string{"web/new.ts"}}, entries: true},
+		"inspected file":   {change: sizebudget.ChangeSet{Inspect: []string{"feature/server.go"}}, fields: true, methods: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			isTouched := touched(inv, &tc.change)
+			if got := isTouched("go_struct_fields", server); got != tc.fields {
+				t.Errorf("fields touched = %v, want %v", got, tc.fields)
+			}
+			if got := isTouched("go_receiver_lines", server); got != tc.methods {
+				t.Errorf("methods touched = %v, want %v", got, tc.methods)
+			}
+			if got := isTouched("source_directories", "web"); got != tc.entries {
+				t.Errorf("directory touched = %v, want %v", got, tc.entries)
+			}
+		})
+	}
+	if got := inv.measured["go_receiver_methods"][server]; got != 2 {
+		t.Fatalf("receiver methods across files = %d, want 2", got)
+	}
+}
+
+func TestMaintainabilityArtifactSources(t *testing.T) {
+	inv := &inventory{measured: newMeasurements(), sources: map[string][]string{"pkg/p.Server": {"pkg/a.go", "pkg/b.go"}}}
+	inv.measured["source_files"]["pkg/a.go"] = 10
+	inv.measured["source_directories"]["pkg"] = 2
+	inv.measured["go_receiver_lines"]["pkg/p.Server"] = 30
+	got := artifactSources(inv)
+	if !reflect.DeepEqual(got["source_files"]["pkg/a.go"], []string{"pkg/a.go"}) ||
+		!reflect.DeepEqual(got["source_directories"]["pkg"], []string{"pkg"}) ||
+		!reflect.DeepEqual(got["go_receiver_lines"]["pkg/p.Server"], []string{"pkg/a.go", "pkg/b.go"}) {
+		t.Fatalf("artifact sources = %#v", got)
 	}
 }
