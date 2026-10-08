@@ -232,59 +232,6 @@ func openWindowsFile(parent *windowsParent, name string, access, disposition, op
 	return os.NewFile(uintptr(handle), filepath.Join(parent.path, name)), nil
 }
 
-// ReadRoot names an admitted root; each read opens a held, non-reparse parent.
-type ReadRoot struct{ path string }
-
-// OpenReadRoot records the directory at path.
-func OpenReadRoot(path string) (*ReadRoot, error) {
-	clean, err := cleanReadLocation(Location{Root: path, Rel: "."})
-	if err != nil {
-		return nil, err
-	}
-	root, err := filepath.EvalSymlinks(clean.Root)
-	if err != nil {
-		return nil, err
-	}
-	return &ReadRoot{path: root}, nil
-}
-
-// Path is the root's canonical path.
-func (r *ReadRoot) Path() string { return r.path }
-
-// Open opens rel beneath the root.
-func (r *ReadRoot) Open(rel string) (*os.File, error) {
-	return OpenRead(Location{Root: r.path, Rel: rel})
-}
-
-// Close releases nothing; each read holds its own parent.
-func (r *ReadRoot) Close() error { return nil }
-
-// OpenRead opens a target relative to a held, non-reparse parent.
-func OpenRead(loc Location) (*os.File, error) {
-	clean, err := cleanReadLocation(loc)
-	if err != nil {
-		return nil, err
-	}
-	if clean.Rel == "." {
-		root, err := filepath.EvalSymlinks(clean.Root)
-		if err != nil {
-			return nil, err
-		}
-		handle, err := openWindowsRoot(root, false)
-		if err != nil {
-			return nil, err
-		}
-		return os.NewFile(uintptr(handle), root), nil
-	}
-	parent, err := openWindowsParent(clean, false, false)
-	if err != nil {
-		return nil, err
-	}
-	f, err := openWindowsFile(parent, parent.name, windows.FILE_GENERIC_READ, windows.FILE_OPEN, 0)
-	parent.close()
-	return f, err
-}
-
 // OpenWrite opens command output relative to a held, non-reparse parent.
 func OpenWrite(loc Location, appendMode bool, mode os.FileMode) (*os.File, error) {
 	parent, err := openWindowsParent(loc, true, true)
@@ -323,13 +270,11 @@ func replace(req ReplaceRequest, inject func(stage) error) (Result, error) {
 		return Result{}, err
 	}
 	defer parent.close()
-	tmpName, tmp, err := createWindowsTemp(parent)
+	tmpName, tmp, held, err := createWindowsTemp(parent)
 	if err != nil {
 		return Result{}, err
 	}
-	if req.ObserveStagingPath != nil {
-		req.ObserveStagingPath(filepath.Join(parent.path, tmpName))
-	}
+	defer held.retire()
 	committed := false
 	defer func() {
 		if !committed {
@@ -406,25 +351,35 @@ func replace(req ReplaceRequest, inject func(stage) error) (Result, error) {
 	return result, injectAt(inject, stageVerified)
 }
 
-func createWindowsTemp(parent *windowsParent) (string, *os.File, error) {
+// createWindowsTemp holds the staging name before creating it so no listing
+// sees the entry unregistered; the caller retires the hold after it is gone.
+func createWindowsTemp(parent *windowsParent) (string, *os.File, stagingHold, error) {
+	directory, err := fspath.EntryIdentityHandle(parent.handle)
+	if err != nil {
+		return "", nil, stagingHold{}, fmt.Errorf("identify replacement parent: %w", err)
+	}
 	for range 64 {
 		var nonce [12]byte
 		if _, err := rand.Read(nonce[:]); err != nil {
-			return "", nil, err
+			return "", nil, stagingHold{}, err
 		}
 		name := "." + parent.name + "." + hex.EncodeToString(nonce[:]) + ".tmp"
+		held := holdStaging(directory, name)
 		handle, err := ntOpenRelative(parent.handle, name,
 			windows.FILE_GENERIC_READ|windows.FILE_GENERIC_WRITE|windows.DELETE,
 			windows.FILE_CREATE, windows.FILE_NON_DIRECTORY_FILE|windows.FILE_WRITE_THROUGH)
+		if err != nil {
+			held.abandon()
+		}
 		if errors.Is(err, windows.ERROR_FILE_EXISTS) || errors.Is(err, windows.ERROR_ALREADY_EXISTS) {
 			continue
 		}
 		if err != nil {
-			return "", nil, err
+			return "", nil, stagingHold{}, err
 		}
-		return name, os.NewFile(uintptr(handle), filepath.Join(parent.path, name)), nil
+		return name, os.NewFile(uintptr(handle), filepath.Join(parent.path, name)), held, nil
 	}
-	return "", nil, fmt.Errorf("create replacement: exhausted unique names")
+	return "", nil, stagingHold{}, fmt.Errorf("create replacement: exhausted unique names")
 }
 
 type fileRenameInformation struct {
