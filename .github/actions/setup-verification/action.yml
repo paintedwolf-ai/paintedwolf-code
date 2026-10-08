@@ -123,10 +123,11 @@ runs:
       with:
         save: ${{ inputs.save-caches }}
 
-    - name: Generate shell resource notices
+    # Preparation writes resources into this checkout; verification checks use isolated snapshots.
+    - name: Prepare shell resource notices
       if: inputs.setup == 'shell'
       shell: bash
-      run: ./task licenses:notices
+      run: ./task setup-dev -- --shell-resources
 
     - name: Restore analysis tools
       if: inputs.analysis != 'none'
