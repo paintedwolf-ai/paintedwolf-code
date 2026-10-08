@@ -96,7 +96,7 @@ func (s *Store) recordObservation(
 		return false, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	landed, err := s.recordObservationTx(ctx, s.queries.WithTx(tx), projectID, head, after, transactionID, cause)
+	landed, err := s.recordObservationTx(ctx, tx, projectID, head, after, transactionID, cause)
 	if err != nil || !landed {
 		return landed, err
 	}
@@ -107,13 +107,18 @@ func (s *Store) recordObservation(
 // which a batch of path observations shares.
 func (s *Store) recordObservationTx(
 	ctx context.Context,
-	q *db.Queries,
+	tx *sql.Tx,
 	projectID string,
 	head db.SourceBranchHeads,
 	after *observedFile,
 	transactionID string,
 	cause observationCause,
 ) (bool, error) {
+	pending, err := sourceMutationPending(ctx, tx, projectID)
+	if err != nil || pending {
+		return false, err
+	}
+	q := s.queries.WithTx(tx)
 	current, err := q.GetSourceBranchHeadByFile(ctx, db.GetSourceBranchHeadByFileParams{
 		ProjectID: projectID, BranchID: head.BranchID, FileID: head.FileID,
 	})
@@ -188,10 +193,40 @@ func (s *Store) recordWindowAdmissions(ctx context.Context, inputs []RecordInput
 	recorded := 0
 	for _, key := range order {
 		batch := byCause[key]
-		if err := s.RecordBatch(ctx, batch); err != nil {
+		landed, err := s.recordObservedBatch(ctx, batch)
+		if err != nil {
 			return recorded, err
 		}
-		recorded += len(batch)
+		if landed {
+			recorded += len(batch)
+		}
 	}
 	return recorded, nil
+}
+
+// A prepared operation can publish bytes before it commits attribution. Observe
+// the registry in the attribution transaction so a concurrent operation cannot
+// be mistaken for an outside write, including after a failed commit.
+func sourceMutationPending(ctx context.Context, database db.DBTX, projectID string) (bool, error) {
+	var pending bool
+	err := database.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM source_mutations WHERE project_id=? AND status IN ('prepared','file_applied'))`, projectID).Scan(&pending)
+	return pending, err
+}
+
+func (s *Store) recordObservedBatch(ctx context.Context, inputs []RecordInput) (bool, error) {
+	s.recordMu.Lock()
+	defer s.recordMu.Unlock()
+	tx, err := s.sqlDB.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	pending, err := sourceMutationPending(ctx, tx, inputs[0].ProjectID)
+	if err != nil || pending {
+		return false, err
+	}
+	if err := s.RecordBatchTx(ctx, tx, inputs); err != nil {
+		return false, err
+	}
+	return true, tx.Commit()
 }
