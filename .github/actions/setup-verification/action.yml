@@ -8,10 +8,20 @@ inputs:
       stack, without the shell's packaging inputs)
     default: verification
     required: false
+  save-caches:
+    description: Save the toolchain and build caches (main's warm job only); every other run restores without saving
+    default: 'false'
+    required: false
 outputs:
   artifact-root:
     description: Checkout artifact directory
     value: ${{ steps.paths.outputs.artifact-root }}
+  go-cache-hit:
+    description: Whether the Go caches for the current module graph were restored
+    value: ${{ steps.go.outputs.cache-hit }}
+  rust-cache-hit:
+    description: Whether the Tauri shell dependency build for the current lockfile was restored
+    value: ${{ steps.rust.outputs.cache-hit }}
 runs:
   using: composite
   steps:
@@ -23,13 +33,19 @@ runs:
     - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
       with:
         go-version-file: lycaon/go.mod
-        cache-dependency-path: |
-          lycaon/go.sum
-          scripts/commentlint/go.sum
+        cache: false
+
+    # Caches restore only what main saved: a run on any other ref cannot share
+    # what it saves, and its entries would evict main's.
+    - id: go
+      uses: ./.github/actions/cache-go
+      with:
+        save: ${{ inputs.save-caches }}
 
     - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
       with:
         bun-version-file: .bun-version
+        no-cache: true
 
     - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
       with:
@@ -49,17 +65,23 @@ runs:
           libjavascriptcoregtk-4.1-dev librsvg2-dev patchelf
 
     - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      id: rust
       if: inputs.setup != 'verification'
       with:
-        # Source snapshots build into lycaon-den/target.
         workspaces: lycaon-den/src-tauri -> ../target
+        shared-key: den-shell
+        save-if: ${{ inputs.save-caches == 'true' }}
 
     - name: Restore the decision engine build
       if: runner.os == 'macOS' && inputs.setup == 'shell'
       uses: ./.github/actions/cache-decide
+      with:
+        save: ${{ inputs.save-caches }}
 
     - name: Set up maintained OpenGrep
       uses: ./.github/actions/setup-opengrep
+      with:
+        save: ${{ inputs.save-caches }}
 
     # Source-scanning frontend tests shell out to ripgrep.
     - name: Install ripgrep
@@ -84,20 +106,12 @@ runs:
       working-directory: lycaon-den
       run: bun install --frozen-lockfile
 
-    - name: Resolve tool directory
-      id: tools
-      shell: bash
-      run: echo "bin=$(python3 scripts/artifact_paths.py bin)" >> "$GITHUB_OUTPUT"
-
     # The notices script pins both tools; cargo-about otherwise compiles from source on every runner.
-    - name: Restore license tools
+    - name: Restore notices tools
       if: inputs.setup != 'harness'
-      uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+      uses: ./.github/actions/cache-notices-tools
       with:
-        path: |
-          ${{ steps.tools.outputs.bin }}/go-licenses
-          ${{ steps.tools.outputs.bin }}/cargo-about
-        key: license-tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/licenses-notices.sh') }}
+        save: ${{ inputs.save-caches }}
 
     - name: Generate third-party notices
       if: inputs.setup != 'harness'

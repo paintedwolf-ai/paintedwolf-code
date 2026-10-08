@@ -566,6 +566,14 @@ diagnostics for 14 days, on success as well as failure. Artifact names
 distinguish profiles, jobs, and run attempts. Caches accelerate builds; they
 never substitute for the required job result.
 
+Only [`build-caches.yml`](../.github/workflows/build-caches.yml) saves caches,
+on pushes to main. A run restores only caches saved on its own ref or on main,
+and each merge-queue run has its own ref, so an entry the queue saved could
+serve no later run while it evicted main's under the repository's 10 GB limit.
+Pull request, merge-queue, nightly, and tag runs therefore restore without
+saving. Keys follow toolchains and dependency locks, so main saves once per
+dependency change, and the workflow's summary reports total cache usage.
+
 ## Fixtures
 
 | Area | Location |
