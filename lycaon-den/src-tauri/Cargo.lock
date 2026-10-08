@@ -2582,11 +2582,8 @@ dependencies = [
  "minisign-verify",
  "objc2",
  "objc2-app-kit",
- "objc2-core-foundation",
- "objc2-core-graphics",
  "objc2-foundation",
  "objc2-local-authentication",
- "objc2-quartz-core",
  "objc2-user-notifications",
  "objc2-web-kit",
  "rand 0.8.6",
@@ -2606,6 +2603,7 @@ dependencies = [
  "tokio",
  "ureq",
  "uuid",
+ "wheel-glide",
  "which",
  "windows 0.61.3",
  "windows-sys 0.61.2",
@@ -4876,6 +4874,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "webkit-harness"
+version = "0.1.0"
+dependencies = [
+ "block2",
+ "libc",
+ "objc2",
+ "objc2-app-kit",
+ "objc2-core-foundation",
+ "objc2-core-graphics",
+ "objc2-foundation",
+ "objc2-web-kit",
+ "serde",
+ "serde_json",
+ "wheel-glide",
+]
+
+[[package]]
 name = "webkit2gtk"
 version = "2.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4976,6 +4991,23 @@ name = "weezl"
 version = "0.1.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a28ac98ddc8b9274cb41bb4d9d4d5c425b6020c50c46f25559911905610b4a88"
+
+[[package]]
+name = "wheel-glide"
+version = "0.1.0"
+dependencies = [
+ "block2",
+ "libc",
+ "objc2",
+ "objc2-app-kit",
+ "objc2-core-foundation",
+ "objc2-core-graphics",
+ "objc2-foundation",
+ "objc2-quartz-core",
+ "objc2-web-kit",
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "which"

@@ -2,9 +2,6 @@
 //! app is: events dispatch through `sendEvent:`, where the host's wheel
 //! smoothing monitor runs, and page script is evaluated on the main thread.
 
-// Each example drives part of this surface.
-#![allow(dead_code)]
-
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
@@ -23,7 +20,7 @@ use objc2_foundation::{NSDate, NSDefaultRunLoopMode, NSError, NSPoint, NSRect, N
 use objc2_web_kit::{
     WKUserScript, WKUserScriptInjectionTime, WKWebView, WKWebViewConfiguration, WKWebsiteDataStore,
 };
-use painted_wolf_code_lib::wheel_smoothing::{self, glide::GlideReport};
+use wheel_glide::glide::{GlideReport, PIXELS_PER_LINE};
 
 pub struct Driver {
     pub app: Retained<NSApplication>,
@@ -80,7 +77,7 @@ impl Driver {
 
         let reports = Rc::new(RefCell::new(Vec::new()));
         let sink = Rc::clone(&reports);
-        wheel_smoothing::install(Rc::new(move |entry| sink.borrow_mut().push(entry)))
+        wheel_glide::install(Rc::new(move |entry| sink.borrow_mut().push(entry)))
             .expect("install wheel smoothing");
         Driver { app, window, web, reports }
     }
@@ -176,7 +173,7 @@ impl Driver {
     /// the distance WebKit would scroll for it natively.
     pub fn send_notch(&self, lines: i32, point: NSPoint) -> f64 {
         let event = self.wheel_event(CGScrollEventUnit::Line, lines, true, point);
-        let expected = -event.deltaY() * wheel_smoothing::glide::PIXELS_PER_LINE;
+        let expected = -event.deltaY() * PIXELS_PER_LINE;
         self.app.sendEvent(&event);
         expected
     }
