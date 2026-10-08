@@ -6,9 +6,10 @@ version: "2"
 run:
   timeout: 20m
   tests: true
-  # Analyze integration-tagged files.
+  # Analyze integration- and budget-tagged files.
   build-tags:
     - integration
+    - budgets
   # Concurrent lint processes share the checkout cache.
   allow-parallel-runners: true
 

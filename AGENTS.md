@@ -115,6 +115,17 @@ Backend test conventions, including labeled errors, live in
 [`lycaon/AGENTS.md`](lycaon/AGENTS.md#testing); frontend conventions live in
 [`lycaon-den/AGENTS.md`](lycaon-den/AGENTS.md#testing).
 
+**Size budgets and changed coverage run in both gates.** `./task budgets` holds
+every file, directory, Go type, and prompt a change touches to its category
+limit, or to an exception that says why it must be larger;
+`coverage:changes` and `den:coverage:changes` require tests for the statements
+a change adds. Heed the warning line: when a file you are growing passes it,
+put new behavior in a new file or package. Before editing something large,
+check its standing with `PW_BUDGETS_INSPECT="<path>" ./task budgets`. Answer
+a failure by reshaping or trimming; an exception needs a reason a reviewer can
+weigh. See
+[Size budgets and changed coverage](docs/test-strategy.md#size-budgets-and-changed-coverage).
+
 ### Queue scope
 
 **Use the verification queue, including for lint.** Builds, typechecks,
@@ -343,6 +354,7 @@ Run from the repository root. Setup and pinned toolchain requirements:
 |---|---|
 | `./task test:digest -- ./internal/foo/...` | Scoped Go verification |
 | `./task den:typecheck` / `./task den:test` | Frontend verification |
+| `./task budgets` | Prompt and code size budgets for what your change touches |
 | `./task check-fast` / `./task check` | Handoff without a push / full local verification ([testing](#testing)) |
 | `./task test:status` | Queue state, blocking reasons, and advisories |
 | `./task test:cancel -- <ticket> --reason "<why>"` | Withdraw one queued or running [request](#stuck-verification) |

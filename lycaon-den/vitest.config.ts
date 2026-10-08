@@ -112,12 +112,8 @@ export default defineConfig({
         "src/**/*.test.ts",
         "src/api/mocks/**",
       ],
-      thresholds: {
-        lines: 58,
-        functions: 50,
-        branches: 50,
-        statements: 58,
-      },
+      // Floors live in scripts/coverage-policy.json and are enforced by
+      // den:coverage-check and den:coverage:changes.
     },
   },
 });

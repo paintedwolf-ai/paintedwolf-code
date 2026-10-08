@@ -155,7 +155,8 @@ func TestCheckFastGateMembership(t *testing.T) {
 		t.Fatal("check-fast:workspace must reject an unpinned source tree")
 	}
 	plan := verificationCatalog(t)
-	want := []string{"build", "lint:fast", "den:typecheck", "den:lint", "den:test:fast", "test:short", "test:contract"}
+	want := []string{"build", "lint:fast", "budgets", "den:typecheck", "den:lint", "den:test:fast", "den:coverage:changes",
+		"test:short", "test:contract", "coverage:changes"}
 	if !slices.Equal(plan.Groups["check-fast"], want) {
 		t.Fatalf("check-fast stages = %v, want %v", plan.Groups["check-fast"], want)
 	}

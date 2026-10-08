@@ -6,11 +6,14 @@
     "check-fast": [
       "build",
       "lint:fast",
+      "budgets",
       "den:typecheck",
       "den:lint",
       "den:test:fast",
+      "den:coverage:changes",
       "test:short",
-      "test:contract"
+      "test:contract",
+      "coverage:changes"
     ],
     "oar:verify": [
       "test:oar",
@@ -27,6 +30,9 @@
       "test:fail-messages:check",
       "comments:check",
       "lint:full",
+      "budgets",
+      "coverage:changes",
+      "den:coverage:changes",
       "lint:vuln"
     ],
     "check:tests": [
@@ -193,6 +199,15 @@
     ],
     "build:cross": [
       "build:cross"
+    ],
+    "budgets": [
+      "budgets"
+    ],
+    "coverage:changes": [
+      "coverage:changes"
+    ],
+    "den:coverage:changes": [
+      "den:coverage:changes"
     ],
     "codegen:approval-explanations:check": [
       "codegen:approval-explanations:check"
@@ -392,6 +407,24 @@
       ],
       "workers": "shared"
     },
+    "budgets": {
+      "locks": [
+        "go"
+      ],
+      "shared_locks": [
+        "go"
+      ],
+      "workers": "shared"
+    },
+    "coverage:changes": {
+      "locks": [
+        "go"
+      ],
+      "shared_locks": [
+        "go"
+      ],
+      "workers": "shared"
+    },
     "den:test": {
       "locks": [
         "frontend"
@@ -405,6 +438,12 @@
       "workers": "shared"
     },
     "den:test:fast": {
+      "locks": [
+        "frontend"
+      ],
+      "workers": "shared"
+    },
+    "den:coverage:changes": {
       "locks": [
         "frontend"
       ],
@@ -702,6 +741,20 @@
       "minutes": 45,
       "profiles": [
         "fast"
+      ],
+      "suite": "all",
+      "native": false
+    },
+    "limits": {
+      "targets": [
+        "budgets",
+        "coverage:changes",
+        "den:coverage:changes"
+      ],
+      "minutes": 45,
+      "profiles": [
+        "fast",
+        "check"
       ],
       "suite": "all",
       "native": false

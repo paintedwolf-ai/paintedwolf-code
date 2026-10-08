@@ -16,10 +16,7 @@ func TestRuntimePersonaValidationDoesNotEnforceAuthoringByteCap(t *testing.T) {
 
 	budgets, err := LoadPromptBudgets()
 	testutil.FailErr(t, "load prompt budgets", err)
-	capBytes := budgets.WorkerPersonas["repo-researcher"]
-	if capBytes <= 0 {
-		t.Fatal("repo-researcher authoring byte cap is not configured")
-	}
+	capBytes := budgets.Sizes.Cap("worker_personas", "repo-researcher")
 	if len(body) <= capBytes {
 		body += strings.Repeat("x", capBytes-len(body)+1)
 	}

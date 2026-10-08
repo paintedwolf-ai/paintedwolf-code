@@ -8,11 +8,12 @@ fi
 cd "$ROOT/lycaon-den"
 
 # Scoped to the packages listed in lycaon-den/vitest.config.ts coverage.include.
-# Aggregate coverage floors may be overridden with DEN_COVERAGE_MIN_*.
-MIN_LINES="$(python3 "$ROOT/scripts/coverage_policy.py" "${DEN_COVERAGE_MIN_LINES-58}")"
-MIN_FUNCS="$(python3 "$ROOT/scripts/coverage_policy.py" "${DEN_COVERAGE_MIN_FUNCTIONS-50}")"
-MIN_BRANCH="$(python3 "$ROOT/scripts/coverage_policy.py" "${DEN_COVERAGE_MIN_BRANCHES-50}")"
-MIN_STMT="$(python3 "$ROOT/scripts/coverage_policy.py" "${DEN_COVERAGE_MIN_STATEMENTS-58}")"
+# Floors come from scripts/coverage-policy.json; DEN_COVERAGE_MIN_* overrides them.
+policy() { python3 "$ROOT/scripts/coverage_policy.py" get "den.total.$1"; }
+MIN_LINES="$(python3 "$ROOT/scripts/coverage_policy.py" "${DEN_COVERAGE_MIN_LINES-$(policy lines)}")"
+MIN_FUNCS="$(python3 "$ROOT/scripts/coverage_policy.py" "${DEN_COVERAGE_MIN_FUNCTIONS-$(policy functions)}")"
+MIN_BRANCH="$(python3 "$ROOT/scripts/coverage_policy.py" "${DEN_COVERAGE_MIN_BRANCHES-$(policy branches)}")"
+MIN_STMT="$(python3 "$ROOT/scripts/coverage_policy.py" "${DEN_COVERAGE_MIN_STATEMENTS-$(policy statements)}")"
 
 REPORT_DIR="$(mktemp -d -t den-coverage.XXXXXX)"
 trap 'rm -rf "$REPORT_DIR"' EXIT

@@ -1,121 +1,42 @@
-# Rendered prompt caps measure UTF-8 bytes with fixture variables.
-# Model ceilings, attachment caps, and the perception window are manual.
+# Prompt limits. Rendered prompt sizes are UTF-8 bytes measured with fixture
+# variables. Model ceilings, attachment caps, and the perception window are
+# runtime limits.
 version: 1
-worker_personas:
-    code-reviewer: 14800
-    implementer: 34465
-    path-explorer: 14371
-    plan-reviewer: 10687
-    plan-reviewer-alt: 10420
-    plan-writer: 17184
-    repo-researcher: 14170
-    security-reviewer: 15780
-    skeptic: 14059
-    web-researcher: 8615
-coordinator_tripartite:
-    implement_dispatch_workflow_orchestrate: 20929
-    implement_investigate_first_user: 33213
-    implement_investigate_follow_up: 33213
-    implement_investigate_idle: 33213
-    implement_overlay_promote_pending_writes: 33797
-    implement_synthesis_implementer_chain: 20921
-    implement_synthesis_path_explorer_chain: 20921
-    implement_synthesis_repo_researcher_chain: 20921
-    implement_synthesis_with_feedback_overlay: 9293
-    plan_research_surface: 13420
-    workflow_compose: 7268
-coordinator_injects:
-    active_workflow: 2086
-    board_orientation: 1001
-    command_jobs: 5130
-    implement_spawn: 1311
-    source_changes: 5337
-    tool_procedures: 4596
-    worker_command_jobs: 5130
-    worker_leg: 334
-    worker_task_assignment: 3589
-    worker_task_preamble: 657
-agent_templates:
-    coordinator: 5917
-kicks:
-    active-workflow: 402
-    agents-md: 1
-    blueprint: 43
-    board-orientation: 59
-    command-jobs: 68
-    coordinator-authz-seal-failed: 415
-    coordinator-citation-grounding: 824
-    coordinator-closeout: 703
-    coordinator-compose-done: 101
-    coordinator-debate-select: 1221
-    coordinator-edit-follow-up-repeat: 320
-    coordinator-fanout-execute: 813
-    coordinator-feedback-pending: 176
-    coordinator-feedback-received: 98
-    coordinator-gate-blocked: 650
-    coordinator-iterations-low: 493
-    coordinator-leg-finished: 306
-    coordinator-overlay-promote-complete: 427
-    coordinator-phase-advanced: 652
-    coordinator-phase-exit-required: 269
-    coordinator-plan-critique: 1247
-    coordinator-process-finished: 5709
-    coordinator-process-refused: 5819
-    coordinator-progress-missing: 596
-    coordinator-progress-stale: 582
-    coordinator-recon-drill-plan: 684
-    coordinator-recon-pack-plan: 1247
-    coordinator-recon-reconcile: 653
-    coordinator-report-document: 613
-    coordinator-review-loop-continue: 100
-    coordinator-review-loop-decide: 264
-    coordinator-root-detach-canceled: 106
-    coordinator-roots-changed: 732
-    coordinator-scan-delta: 366
-    coordinator-scan-finished: 492
-    coordinator-scheduled: 801
-    coordinator-secret-withheld: 503
-    coordinator-security-challenge: 2549
-    coordinator-security-claims: 1378
-    coordinator-security-execute: 1688
-    coordinator-security-plan: 2872
-    coordinator-security-synthesis: 1767
-    coordinator-spend-runway-low: 524
-    coordinator-spend-soft-stop: 600
-    coordinator-survey-streak: 407
-    coordinator-topology-synthesis: 541
-    coordinator-turn-closeout: 255
-    coordinator-worker-budget-requested: 803
-    coordinator-worker-task-finished: 355
-    implement-spawn: 409
-    scan-guidance-ephemeral: 61
-    skill-pointer: 144
-    skill-procedure: 215
-    source-changes: 102
-    synthesis-evidence: 1
-    tool-procedures: 1
-    transition: 3
-    worker-budget-declined: 358
-    worker-budget-raised: 195
-    worker-cancel-closeout: 367
-    worker-citation-grounding: 2126
-    worker-closeout: 366
-    worker-iterations-low: 838
-    worker-leg: 258
-    worker-leg-started: 113
-    worker-summary-trim: 253
-    worker-task-assignment: 825
-    worker-task-preamble: 41
-    worker-task-started: 235
-tool_surfaces:
-    coordinator: 69288
-    editor_file: 30304
-    explore_readonly: 31919
-    implement: 65227
-    plan_review_readonly: 35150
-    plan_write_only: 32363
-    web_research: 19960
-    worker_readonly: 30518
+sizes:
+    # Rendered prompt bytes per category. Every prompt past its limit needs an
+    # exception; the report warns when a change edits a prompt past its
+    # warning line.
+    limits:
+        worker_personas: {warn: 16000, limit: 20000}
+        coordinator_tripartite: {warn: 30000, limit: 36000}
+        coordinator_injects: {warn: 4000, limit: 6000}
+        agent_templates: {warn: 6000, limit: 8000}
+        kicks: {warn: 1500, limit: 3000}
+        units: {warn: 2500, limit: 4000}
+        coordinator_tool_surfaces: {warn: 32000, limit: 40000}
+        worker_tool_surfaces: {warn: 32000, limit: 40000}
+    # Each exception admits one prompt up to its cap, with room for ordinary
+    # edits, for a reason a reviewer can weigh.
+    exceptions:
+        coordinator_tool_surfaces:
+            implement_overlay_promote:
+                cap: 82000
+                reason: The integration surface lands or rejects worker overlays and verifies them, so its floor carries overlay, command, verification, terminal, secret, and scan tools.
+        worker_tool_surfaces:
+            implement:
+                cap: 68000
+                reason: The only worker profile that runs commands; it keeps command, verification, and terminal tools sticky beside the file editing tools.
+        worker_personas:
+            implementer:
+                cap: 36000
+                reason: The worker that implements changes; it alone carries the implement shell archetype and the implement addenda playbook.
+        kicks:
+            coordinator-process-finished:
+                cap: 6000
+                reason: Embeds the terminal command envelope, which the fixture renders at its 5,400-byte bound.
+            coordinator-process-refused:
+                cap: 6000
+                reason: Embeds the command refusal envelope, which the fixture renders at its 5,400-byte bound.
 absolute_maximums:
     model: accounts/fireworks/models/kimi-k2p7-code
     model_context_window_tokens: 262144

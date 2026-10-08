@@ -124,7 +124,7 @@ func ValidatePersonaRender(agentID, body string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("prompt budgets: %w", err)
 	}
-	if capBytes, ok := budgets.WorkerPersonas[agentID]; ok && capBytes > 0 && len(body) > capBytes {
+	if capBytes := budgets.Sizes.Cap("worker_personas", agentID); len(body) > capBytes {
 		violations = append(violations, fmt.Sprintf("budget_exceeded:%s:%d/%d", agentID, len(body), capBytes))
 	}
 	return violations, nil

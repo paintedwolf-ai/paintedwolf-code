@@ -83,13 +83,13 @@ Channel map: [`../docs/agent-tool-feedback.md`](../docs/agent-tool-feedback.md).
 
 ## Agent prompt copy (`lycaon/config/`)
 
-Catalog prompts compose per surface via pongo — grep rendered system prompt in debug `llm-requests.jsonl` before editing (`./task den:sidecar:llm-debug`, `./task llm:debug:tail`). Budget caps: `config/packs/painted-wolf/platform/host/prompt-budgets.yaml`.
+Catalog prompts compose per surface via pongo — grep rendered system prompt in debug `llm-requests.jsonl` before editing (`./task den:sidecar:llm-debug`, `./task llm:debug:tail`). Size limits: `sizes` in `config/packs/painted-wolf/platform/host/prompt-budgets.yaml`; `./task budgets` holds prompts to them.
 
 **Generic copy only** — no language-, stack-, or session-specific tuning in shipped catalog defaults. Project-specific behavior belongs in `{project}/.paintedwolf/`, not `lycaon/config/`.
 
-## Structure when lint limits fire
+## Structure when limits fire
 
-`funlen` (and kin) exist so large functions get **better pieces**, not quieter lints. Root greenfield: [`../AGENTS.md`](../AGENTS.md) § Greenfield policy.
+`funlen` and the size budgets (`./task budgets`) exist so large functions, files, and types get **better pieces**, not quieter checks or higher caps. Root greenfield: [`../AGENTS.md`](../AGENTS.md) § Greenfield policy.
 
 | Do | Do not |
 |----|--------|

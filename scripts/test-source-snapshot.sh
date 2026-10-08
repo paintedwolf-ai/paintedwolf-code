@@ -124,8 +124,6 @@ FIXTURE_REFRESHES=(
   "UPDATE_ANCHOR_KICK_GOLDEN=lycaon/internal/coordinator/anchor/testdata/golden/kicks"
   "UPDATE_CITATION_GROUNDING_PARITY_GOLDENS=lycaon/test/fixtures/citation-grounding-parity"
   "UPDATE_CORPUS_BASELINE=lycaon/internal/oar/testdata/corpus_baseline.json"
-  "UPDATE_PROMPT_BUDGETS=lycaon/config/packs/painted-wolf/platform/host/prompt-budgets.yaml"
-  "UPDATE_MAINTAINABILITY_BUDGETS=lycaon/test/contract/maintainability-budgets.yaml"
   "UPDATE_RUST_HOST_WIRE_FIXTURES=lycaon-den/src-tauri/tests/host_wire_fixtures.json"
 )
 
