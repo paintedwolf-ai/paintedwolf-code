@@ -93,23 +93,23 @@ func ApplyFindings(gc *GuardContext, findings []Finding) {
 		gc.Published[f.Fact] = raw
 		switch f.Fact {
 		case "prompt_injection_score":
-			gc.PromptInjectionScore = f.Score
+			gc.Content.PromptInjectionScore = f.Score
 		case "jailbreak_score":
-			gc.JailbreakScore = f.Score
+			gc.Content.JailbreakScore = f.Score
 		case "pii_entities":
 			if f.Value != nil {
 				if list, ok := f.Value.([]any); ok {
-					gc.PIIEntities = list
+					gc.Content.PIIEntities = list
 				} else {
-					gc.PIIEntities = []any{f.Value}
+					gc.Content.PIIEntities = []any{f.Value}
 				}
 			}
 		case "secret_matches":
 			if f.Value != nil {
 				if list, ok := f.Value.([]any); ok {
-					gc.SecretMatches = list
+					gc.Content.SecretMatches = list
 				} else {
-					gc.SecretMatches = []any{f.Value}
+					gc.Content.SecretMatches = []any{f.Value}
 				}
 			}
 		}
@@ -134,10 +134,10 @@ func captureDetectorFacts(gc *GuardContext) detectorFactState {
 		return detectorFactState{}
 	}
 	state := detectorFactState{
-		promptInjectionScore: gc.PromptInjectionScore,
-		jailbreakScore:       gc.JailbreakScore,
-		piiEntities:          append([]any(nil), gc.PIIEntities...),
-		secretMatches:        append([]any(nil), gc.SecretMatches...),
+		promptInjectionScore: gc.Content.PromptInjectionScore,
+		jailbreakScore:       gc.Content.JailbreakScore,
+		piiEntities:          append([]any(nil), gc.Content.PIIEntities...),
+		secretMatches:        append([]any(nil), gc.Content.SecretMatches...),
 		published:            make(map[string]detectorPublishedFact, 4),
 	}
 	for _, name := range detectorFactNames {
@@ -151,10 +151,10 @@ func restoreDetectorFacts(gc *GuardContext, state detectorFactState) {
 	if gc == nil {
 		return
 	}
-	gc.PromptInjectionScore = state.promptInjectionScore
-	gc.JailbreakScore = state.jailbreakScore
-	gc.PIIEntities = state.piiEntities
-	gc.SecretMatches = state.secretMatches
+	gc.Content.PromptInjectionScore = state.promptInjectionScore
+	gc.Content.JailbreakScore = state.jailbreakScore
+	gc.Content.PIIEntities = state.piiEntities
+	gc.Content.SecretMatches = state.secretMatches
 	for _, name := range detectorFactNames {
 		prior := state.published[name]
 		if prior.present {

@@ -103,16 +103,16 @@ func TestObserveHostResourceResolutionPublishesExternalAuthorizationOutcome(t *t
 	gc := &oar.GuardContext{}
 	observeHostResourceResolution(gc, resolution)
 
-	if !reflect.DeepEqual(gc.ActionHostResources, []string{"docker", "podman"}) {
-		t.Fatalf("action host resources = %#v", gc.ActionHostResources)
+	if !reflect.DeepEqual(gc.Access.ActionHostResources, []string{"docker", "podman"}) {
+		t.Fatalf("action host resources = %#v", gc.Access.ActionHostResources)
 	}
-	if !reflect.DeepEqual(gc.ActionHostResourceDenials, []string{"docker"}) {
-		t.Fatalf("action host-resource denials = %#v", gc.ActionHostResourceDenials)
+	if !reflect.DeepEqual(gc.Access.ActionHostResourceDenials, []string{"docker"}) {
+		t.Fatalf("action host-resource denials = %#v", gc.Access.ActionHostResourceDenials)
 	}
-	if got := gc.HostResourceStatus["podman"]; got != "unknown" {
+	if got := gc.Access.HostResourceStatus["podman"]; got != "unknown" {
 		t.Fatalf("podman status = %q, want unknown", got)
 	}
-	if got := gc.HostResourcePolicy["docker"]; got != "deny" {
+	if got := gc.Access.HostResourcePolicy["docker"]; got != "deny" {
 		t.Fatalf("docker policy = %q, want deny", got)
 	}
 }

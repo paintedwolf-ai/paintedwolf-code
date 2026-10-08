@@ -6,10 +6,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
-
-	"reflect"
 
 	"github.com/lycaon/lycaon/internal/jsonvalue"
 	"github.com/lycaon/lycaon/internal/oarcore"
@@ -182,21 +181,21 @@ func evaluateCorpusOccurrences(fx corpusFixture, prepared corpusPrepared) Corpus
 			return failCorpus(fx, "fixture declares no anchor")
 		}
 		gc := factsToContext(occ.Facts)
-		gc.SessionID = prepared.sessionID
+		gc.Session.SessionID = prepared.sessionID
 		if occ.ToolCall != nil {
 			gc.ObserveToolCall(occ.ToolCall.Name, occ.ToolCall.Arguments)
 			if tool, ok := occ.Facts["tool"].(string); ok {
-				gc.Tool = tool
+				gc.Invocation.Tool = tool
 			}
 			if args, ok := occ.Facts["tool_args"].(map[string]any); ok {
-				gc.ToolArgs = args
+				gc.Invocation.ToolArgs = args
 			}
 		}
-		gc.RecentToolNames = occ.RecentActivity
+		gc.Session.RecentToolNames = occ.RecentActivity
 		if occ.Content != nil {
-			gc.Content = *occ.Content
-			gc.ContentSet = true
-			gc.ContentLength = int64(len([]rune(gc.Content)))
+			gc.Content.Content = *occ.Content
+			gc.Content.ContentSet = true
+			gc.Content.ContentLength = int64(len([]rune(gc.Content.Content)))
 		}
 		detectors := corpusReservedDetectors()
 		if occ.DetectorFacts != nil {

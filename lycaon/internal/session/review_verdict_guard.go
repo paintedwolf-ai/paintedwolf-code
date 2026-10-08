@@ -24,9 +24,9 @@ func (m *Manager) maybeRejectCloseoutForMissingVerdict(ctx context.Context, sess
 	root := RootSessionID(ctx, m.store, sess.ID)
 	delayCount, delayed := m.closeout.delay(sess.ID, root, closeoutVerdictDelay, workersIdle && verdictPending, verdictDelayMaxPerPrompt)
 	return m.tryOARFinishBlock(ctx, sess, func(gc *oar.GuardContext) error {
-		gc.WorkersIdle = workersIdle
-		gc.ReviewVerdictGateOpen = verdictPending
-		gc.VerdictDelayCount = int64(delayCount)
+		gc.Workers.WorkersIdle = workersIdle
+		gc.Workflow.ReviewVerdictGateOpen = verdictPending
+		gc.Workflow.VerdictDelayCount = int64(delayCount)
 		if delayed {
 			gc.PutRejectData(reviewVerdictMissingCode, map[string]any{})
 		}

@@ -54,7 +54,7 @@ func TestSynthesisGuardUsesRequestAvailabilityForNewTools(t *testing.T) {
 	for _, offered := range []bool{false, true} {
 		gc := oar.NewGuardContext()
 		ObserveCoordinatorSynthesisWrapupTool(spawn.SurfaceImplementSynthesis, "new_catalog_tool", offered, gc)
-		if gc.SynthesisWrapupToolForbidden == offered {
+		if gc.Workflow.SynthesisWrapupToolForbidden == offered {
 			t.Fatalf("new tool availability %v did not control the observation: %+v", offered, gc)
 		}
 	}

@@ -164,7 +164,7 @@ func TestCatalogEveryIntrinsicRejectionResolvesBeforeFallback(t *testing.T) {
 				for _, scenario := range cases {
 					t.Run(tool+"/"+scenario.ID, func(t *testing.T) {
 						gc := oar.NewGuardContext()
-						gc.SessionID = t.Name()
+						gc.Session.SessionID = t.Name()
 						gc.ObserveToolCall(tool, nil)
 						applyToolRejectObservations(gc, &ToolReject{Code: rule.ID, Data: scenario.Vars})
 						result, err := bp.Pipeline.EvaluateBlock(t.Context(), oar.AnchorToolRejected, gc)

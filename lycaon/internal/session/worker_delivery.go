@@ -24,11 +24,11 @@ func (m *Manager) evaluateWorkerDelivery(ctx context.Context, env WorkerCompleti
 	}
 	gc := oar.NewGuardContext()
 	m.fillOARSessionFacts(ctx, gc, nil, "", nil)
-	gc.SessionID = env.ChildSessionID
-	gc.Profile = "worker"
-	gc.WorkerLeg = true
+	gc.Session.SessionID = env.ChildSessionID
+	gc.Session.Profile = "worker"
+	gc.Session.WorkerLeg = true
 	m.registerWorkerSessionFacts(ctx, gc, env.ChildSessionID)
-	gc.WorkerSummaryPresent = strings.TrimSpace(env.Summary) != ""
+	gc.Grounding.WorkerSummaryPresent = strings.TrimSpace(env.Summary) != ""
 	gc.SetContentSegments([]oar.ContentSegment{{
 		Content: FormatWorkerCompletionEnvelope(env), Role: "assistant", Origin: "peer",
 		Authority: "none", TrustTier: "untrusted", Source: env.ChildSessionID,
@@ -87,10 +87,10 @@ func (m *Manager) registerWorkerSessionFacts(ctx context.Context, gc *oar.GuardC
 		return sessionErr
 	}
 	for _, name := range []string{"session_posture", "principal", "principal_roles"} {
-		if name == "principal" && gc.Principal != "" {
+		if name == "principal" && gc.Session.Principal != "" {
 			continue
 		}
-		if name == "principal_roles" && len(gc.PrincipalRoles) != 0 {
+		if name == "principal_roles" && len(gc.Session.PrincipalRoles) != 0 {
 			continue
 		}
 		gc.RegisterProvider(name, bindSession)
@@ -103,7 +103,7 @@ func (m *Manager) registerWorkerSessionFacts(ctx context.Context, gc *oar.GuardC
 			return nil
 		}
 		profile, err := m.promptToolProfile(ctx, workerSession)
-		gc.PermissionProfile = profile
+		gc.Session.PermissionProfile = profile
 		return err
 	})
 }

@@ -15,8 +15,8 @@ func (m *Manager) evaluateAgentPostTurn(ctx context.Context, sess *api.Session, 
 	}
 	gc := oar.NewGuardContext()
 	m.fillOARSessionFacts(ctx, gc, sess, "", nil)
-	gc.LastAssistant = content
-	gc.WorkersIdle = workersIdle
+	gc.Session.LastAssistant = content
+	gc.Workers.WorkersIdle = workersIdle
 	gc.SetContentSegments([]oar.ContentSegment{{Content: content, Role: "assistant", Origin: "model", Authority: "none", TrustTier: "trusted", Source: "agent_turn"}})
 	res, err := m.oarPipeline.EvaluateBlock(ctx, oar.AnchorCoordinatorPostTurn, gc)
 	if err != nil {

@@ -65,7 +65,7 @@ func TestObserveProgressReconcileIgnoresOtherContentTools(t *testing.T) {
 	gc := oar.NewGuardContext()
 	gc.ObserveToolCall("write", nil)
 	ObserveProgressReconcileOnSynthesis(spawn.SurfaceImplementSynthesis, "- [x] done", map[string]any{"content": "- [ ] unrelated"}, gc)
-	if gc.ProgressReconcileNeeded {
+	if gc.Progress.ProgressReconcileNeeded {
 		t.Fatal("unrelated tool became a checklist update")
 	}
 }

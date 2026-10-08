@@ -31,15 +31,15 @@ func ObserveConfine(gc *oar.GuardContext, obs confine.Observation) {
 	if gc == nil || !obs.Applied {
 		return
 	}
-	gc.ConfineApplied = true
-	gc.NetworkMode = obs.Network
-	gc.DenialSubject = obs.DenialSubject
-	gc.ConfineSignals = append([]string(nil), obs.Signals...)
-	gc.FailedStages = append([]string(nil), obs.FailedStages...)
-	gc.ProcessRunning = obs.Running
+	gc.Execution.ConfineApplied = true
+	gc.Execution.NetworkMode = obs.Network
+	gc.Execution.DenialSubject = obs.DenialSubject
+	gc.Execution.ConfineSignals = append([]string(nil), obs.Signals...)
+	gc.Execution.FailedStages = append([]string(nil), obs.FailedStages...)
+	gc.Execution.ProcessRunning = obs.Running
 	observeSandboxRefusals(gc, obs.Refusals)
-	gc.KernelRefusalSilence = len(obs.FailedStages) > 0 && obs.Refusals.Witness == confine.WitnessKernel && len(obs.Refusals.Refusals) == 0
-	data := map[string]any{"tool": gc.Tool}
+	gc.Refusals.SandboxRefusalWitness = string(obs.Refusals.Witness)
+	data := map[string]any{"tool": gc.Invocation.Tool}
 	if dest := obs.Destination; dest != "" {
 		data["destination"] = dest
 	}
@@ -56,42 +56,42 @@ func ObserveConfine(gc *oar.GuardContext, obs confine.Observation) {
 // layer's recovery would request; control-plane paths have none.
 func observeSandboxRefusals(gc *oar.GuardContext, refusals confine.SandboxRefusals) {
 	for _, refusal := range refusals.Refusals {
-		gc.SandboxRefusals = append(gc.SandboxRefusals, refusal.Display())
+		gc.Execution.SandboxRefusals = append(gc.Execution.SandboxRefusals, refusal.Display())
 		switch refusal.Recovery {
 		case confine.RecoverSocketPath:
-			gc.RefusedSocketPaths = appendUnique(gc.RefusedSocketPaths, refusal.Grant)
+			gc.Refusals.RefusedSocketPaths = appendUnique(gc.Refusals.RefusedSocketPaths, refusal.Grant)
 		case confine.RecoverOutboundPort:
-			gc.RefusedConnectPorts = appendUnique(gc.RefusedConnectPorts, refusal.Port())
+			gc.Refusals.RefusedConnectPorts = appendUnique(gc.Refusals.RefusedConnectPorts, refusal.Port())
 		case confine.RecoverLocalListen:
-			gc.RefusedListenPorts = appendUnique(gc.RefusedListenPorts, refusal.Port())
+			gc.Refusals.RefusedListenPorts = appendUnique(gc.Refusals.RefusedListenPorts, refusal.Port())
 		case confine.RecoverProcessControl:
-			gc.RefusedSignals = append(gc.RefusedSignals, refusal.Display())
+			gc.Refusals.RefusedSignals = append(gc.Refusals.RefusedSignals, refusal.Display())
 		case confine.RecoverHostExecution:
-			gc.UnsandboxedRefusals = append(gc.UnsandboxedRefusals, refusal.Display())
+			gc.Refusals.UnsandboxedRefusals = append(gc.Refusals.UnsandboxedRefusals, refusal.Display())
 		case confine.RecoverWriteRoot, confine.RecoverReadPath, confine.RecoverNone:
 			// Filesystem layers and their grants are grouped below.
 		}
 	}
 	for _, path := range refusals.Paths(confine.AccessWrite) {
-		gc.RefusedWritePaths = append(gc.RefusedWritePaths, path.Path)
+		gc.Refusals.RefusedWritePaths = append(gc.Refusals.RefusedWritePaths, path.Path)
 		if path.Layer.Recovery().Terminal() {
-			gc.RefusedTerminalWritePaths = appendUnique(gc.RefusedTerminalWritePaths, path.Path)
+			gc.Refusals.RefusedTerminalWritePaths = appendUnique(gc.Refusals.RefusedTerminalWritePaths, path.Path)
 		}
 		if path.Grant != "" {
-			gc.RefusedWriteGrants = append(gc.RefusedWriteGrants, path.Grant)
+			gc.Refusals.RefusedWriteGrants = append(gc.Refusals.RefusedWriteGrants, path.Grant)
 		}
 	}
 	for _, path := range refusals.Paths(confine.AccessRead) {
-		gc.RefusedReadPaths = append(gc.RefusedReadPaths, path.Path)
+		gc.Refusals.RefusedReadPaths = append(gc.Refusals.RefusedReadPaths, path.Path)
 		if path.Layer.Recovery().Terminal() {
-			gc.RefusedTerminalReadPaths = appendUnique(gc.RefusedTerminalReadPaths, path.Path)
+			gc.Refusals.RefusedTerminalReadPaths = appendUnique(gc.Refusals.RefusedTerminalReadPaths, path.Path)
 		}
 		if path.Grant != "" {
-			gc.RefusedReadGrants = append(gc.RefusedReadGrants, path.Grant)
+			gc.Refusals.RefusedReadGrants = append(gc.Refusals.RefusedReadGrants, path.Grant)
 		}
 	}
-	gc.RefusedWriteGrants = confine.CoveringGrants(gc.RefusedWriteGrants)
-	gc.RefusedReadGrants = confine.CoveringGrants(gc.RefusedReadGrants)
+	gc.Refusals.RefusedWriteGrants = confine.CoveringGrants(gc.Refusals.RefusedWriteGrants)
+	gc.Refusals.RefusedReadGrants = confine.CoveringGrants(gc.Refusals.RefusedReadGrants)
 }
 
 func appendUnique(list []string, value string) []string {
@@ -118,9 +118,9 @@ func registerWorktreeFacts(ctx context.Context, gc *oar.GuardContext, snapshot i
 			}
 			result, err := snapshot.Stale(ctx, keep)
 			compareErr = err
-			target.WorktreeStalePaths = result.Stale
-			target.WorktreeLeftoverPaths = result.Leftover
-			target.WorktreeConflictPaths = result.Conflicted
+			target.Source.WorktreeStalePaths = result.Stale
+			target.Source.WorktreeLeftoverPaths = result.Leftover
+			target.Source.WorktreeConflictPaths = result.Conflicted
 		})
 		return compareErr
 	}
@@ -134,11 +134,11 @@ func ObserveSourceParsingFeedback(gc *oar.GuardContext, raised guidance.ToolResu
 		return
 	}
 	if raised.HasCode(tools.SourceAnalysisUnavailableCode) {
-		gc.SourceAnalysisUnavailable = true
+		gc.Source.SourceAnalysisUnavailable = true
 		gc.PutRejectData(tools.SourceAnalysisUnavailableCode, raised.FeedbackFor(tools.SourceAnalysisUnavailableCode).Details)
 	}
 	if raised.HasCode(tools.SyntaxCheckOverriddenCode) {
-		gc.SyntaxCheckOverridden = true
+		gc.Source.SyntaxCheckOverridden = true
 		gc.PutRejectData(tools.SyntaxCheckOverriddenCode, syntaxOverrideDetails(raised))
 	}
 }
@@ -227,7 +227,7 @@ func ObserveEditorConfigMismatch(gc *oar.GuardContext, raised guidance.ToolResul
 	if gc == nil || !raised.HasCode(tools.EditorConfigMismatchCode) {
 		return
 	}
-	gc.EditorConfigMismatch = true
+	gc.Source.EditorConfigMismatch = true
 	gc.PutRejectData(tools.EditorConfigMismatchCode, raised.FeedbackFor(tools.EditorConfigMismatchCode).Details)
 }
 
@@ -237,7 +237,7 @@ func ObserveHTTPRequestWebPage(gc *oar.GuardContext, raised guidance.ToolResultF
 	if gc == nil || !raised.HasCode(tools.HTTPRequestWebPageCode) {
 		return
 	}
-	gc.HTTPRequestWebPage = true
+	gc.Invocation.HTTPRequestWebPage = true
 	gc.PutRejectData(tools.HTTPRequestWebPageCode, raised.FeedbackFor(tools.HTTPRequestWebPageCode).Details)
 }
 

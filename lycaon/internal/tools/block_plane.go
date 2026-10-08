@@ -25,12 +25,12 @@ func fillOccurrenceIdentity(ctx context.Context, gc *oar.GuardContext) {
 	}
 	RegisterRecoveryFacts(ctx, gc)
 	sess := curationctx.SessionFrom(ctx)
-	gc.SessionID = sess.SessionID
-	gc.Principal = sess.OwnerPersonID
-	gc.SessionPosture = sess.Posture
+	gc.Session.SessionID = sess.SessionID
+	gc.Session.Principal = sess.OwnerPersonID
+	gc.Session.SessionPosture = sess.Posture
 	if caller, ok := people.Caller(ctx); ok {
-		gc.Principal = caller.ID
-		gc.PrincipalRoles = []string{string(caller.Role)}
+		gc.Session.Principal = caller.ID
+		gc.Session.PrincipalRoles = []string{string(caller.Role)}
 	}
 }
 
@@ -51,9 +51,9 @@ func (bp *BlockPlane) Evaluate(ctx context.Context, anchor, tool, profile string
 	gc := oar.NewGuardContext()
 	fillOccurrenceIdentity(ctx, gc)
 	gc.ObserveToolCall(tool, args)
-	gc.Profile = profile
-	gc.PermissionProfile = profile
-	gc.VerifyHasCommand = commandsurface.HasCommandInput(args)
+	gc.Session.Profile = profile
+	gc.Session.PermissionProfile = profile
+	gc.Progress.VerifyHasCommand = commandsurface.HasCommandInput(args)
 	gc.DeriveToolClassFacts()
 	if observe != nil {
 		if err := observe(gc); err != nil {
@@ -102,9 +102,9 @@ func (bp *BlockPlane) RejectFromObservation(ctx context.Context, anchor, tool, p
 	gc := oar.NewGuardContext()
 	fillOccurrenceIdentity(ctx, gc)
 	gc.ObserveToolCall(tool, args)
-	gc.Profile = profile
-	gc.PermissionProfile = profile
-	gc.VerifyHasCommand = commandsurface.HasCommandInput(args)
+	gc.Session.Profile = profile
+	gc.Session.PermissionProfile = profile
+	gc.Progress.VerifyHasCommand = commandsurface.HasCommandInput(args)
 	if bp.MCPCatalog != nil {
 		oar.ObserveMCPStructuralPre(gc, tool, bp.MCPCatalog)
 	}
@@ -156,18 +156,18 @@ func applyToolRejectObservations(gc *oar.GuardContext, tr *ToolReject) {
 	gc.ObservedRejectCode = code
 	// [OAR-PROF-3] A handler or host-state failure is not an argument check.
 	if tr.ArgumentValidation {
-		gc.ArgValidationErrors = appendUnique(gc.ArgValidationErrors, code)
-		gc.ArgValidationReason, _ = tr.Data["reason"].(string)
-		gc.ArgValidationField, _ = tr.Data["field"].(string)
+		gc.Invocation.ArgValidationErrors = appendUnique(gc.Invocation.ArgValidationErrors, code)
+		gc.Invocation.ArgValidationReason, _ = tr.Data["reason"].(string)
+		gc.Invocation.ArgValidationField, _ = tr.Data["field"].(string)
 	}
 	if code != "" {
 		gc.PutRejectData(code, tr.Data)
 	}
 	// MCP rules branch on the structured machine code.
-	if strings.HasPrefix(strings.TrimSpace(gc.Tool), "mcp_") {
+	if strings.HasPrefix(strings.TrimSpace(gc.Invocation.Tool), "mcp_") {
 		if mc := tr.MachineErrorCode(); mc != "" {
-			gc.MCPErrorCode = mc
-			gc.MCPCallOK = false
+			gc.MCP.MCPErrorCode = mc
+			gc.MCP.MCPCallOK = false
 			shared := map[string]any{}
 			for k, v := range tr.Data {
 				shared[k] = v
@@ -189,66 +189,66 @@ func applyToolRejectObservations(gc *oar.GuardContext, tr *ToolReject) {
 	}
 	applyObservationToken(gc, obs)
 	if strings.HasPrefix(code, "USE_") {
-		gc.HabitRedirectMatch = code
+		gc.Invocation.HabitRedirectMatch = code
 	}
 	switch code {
 	case "COMMAND_NOT_ARGV":
-		gc.CommandNotArgv = true
-		gc.PolicyDenied = true
+		gc.Invocation.CommandNotArgv = true
+		gc.Rejection.PolicyDenied = true
 	case "TOOL_PROFILE_DENIED", "COORDINATOR_TOOL_DENIED":
-		gc.ToolAllowedForProfile = false
-		gc.PolicyDenied = true
+		gc.Invocation.ToolAllowedForProfile = false
+		gc.Rejection.PolicyDenied = true
 	case "WRITE_SCOPE_DENIED", "COORDINATOR_READ_OUTSIDE_SCOPE", "COORDINATOR_INVESTIGATE_DENIED_PATH":
-		gc.PathOutsideScope = true
-		gc.PolicyDenied = true
+		gc.Access.PathOutsideScope = true
+		gc.Rejection.PolicyDenied = true
 	}
 }
 
 func applyObservationToken(gc *oar.GuardContext, obs string) {
 	switch obs {
 	case "is_directory":
-		gc.IsDirectory = true
+		gc.Rejection.IsDirectory = true
 	case "not_found":
-		gc.NotFound = true
+		gc.Rejection.NotFound = true
 	case "path_denied":
-		gc.PathDenied = true
+		gc.Rejection.PathDenied = true
 	case "bulk_denied":
-		gc.BulkDenied = true
+		gc.Rejection.BulkDenied = true
 	case "binary_denied":
-		gc.BinaryDenied = true
+		gc.Rejection.BinaryDenied = true
 	case "mode_denied":
-		gc.ModeDenied = true
+		gc.Rejection.ModeDenied = true
 	case "path_escape":
-		gc.PathEscape = true
+		gc.Rejection.PathEscape = true
 	case "beyond_eof":
-		gc.BeyondEOF = true
+		gc.Rejection.BeyondEOF = true
 	case "not_running":
-		gc.NotRunning = true
+		gc.Rejection.NotRunning = true
 	case "unsupported":
-		gc.Unsupported = true
+		gc.Rejection.Unsupported = true
 	case "resource_limit":
-		gc.ResourceLimit = true
+		gc.Rejection.ResourceLimit = true
 	case "conflict":
-		gc.Conflict = true
+		gc.Rejection.Conflict = true
 	case "path_required":
-		gc.PathRequired = true
+		gc.Rejection.PathRequired = true
 	case "id_required":
-		gc.IDRequired = true
+		gc.Rejection.IDRequired = true
 	case "policy_denied":
-		gc.PolicyDenied = true
+		gc.Rejection.PolicyDenied = true
 	case "unknown_target":
-		gc.UnknownTarget = true
+		gc.Rejection.UnknownTarget = true
 	case "missing":
-		gc.Missing = true
+		gc.Rejection.Missing = true
 	case "forbidden":
-		gc.Forbidden = true
+		gc.Rejection.Forbidden = true
 	case "selector_empty":
-		gc.SelectorEmpty = true
+		gc.Rejection.SelectorEmpty = true
 	case "selector_ambiguous":
-		gc.SelectorAmbiguous = true
+		gc.Rejection.SelectorAmbiguous = true
 	default:
 		// Agent anchors have no active tool profile.
-		gc.RejectObservation = obs
+		gc.Rejection.RejectObservation = obs
 	}
 }
 

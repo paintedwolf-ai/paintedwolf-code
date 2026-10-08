@@ -189,7 +189,7 @@ func TestArgumentCheckFactsExcludeOperationalFailures(t *testing.T) {
 	}
 	gc := oar.NewGuardContext()
 	applyToolRejectObservations(gc, invalid)
-	if len(gc.ArgValidationErrors) != 1 || gc.ArgValidationErrors[0] != invalid.Code || gc.ArgValidationReason == "" {
+	if len(gc.Invocation.ArgValidationErrors) != 1 || gc.Invocation.ArgValidationErrors[0] != invalid.Code || gc.Invocation.ArgValidationReason == "" {
 		t.Fatalf("[OAR-PROF-3] lost observed argument check: %#v", gc)
 	}
 	operational := &ToolReject{Code: "HTTP_REQUEST_FAILED", Data: map[string]any{
@@ -198,7 +198,7 @@ func TestArgumentCheckFactsExcludeOperationalFailures(t *testing.T) {
 	}}
 	gc = oar.NewGuardContext()
 	applyToolRejectObservations(gc, operational)
-	if len(gc.ArgValidationErrors) != 0 || gc.ArgValidationReason != "" || gc.ArgValidationField != "" {
+	if len(gc.Invocation.ArgValidationErrors) != 0 || gc.Invocation.ArgValidationReason != "" || gc.Invocation.ArgValidationField != "" {
 		t.Fatal("[OAR-PROF-3] operational failure was reported as an argument check")
 	}
 	err := bp.RejectFromObservation(t.Context(), oar.AnchorToolRejected, "http_request", "implement", nil, operational)
