@@ -38,7 +38,7 @@ func ObserveConfine(gc *oar.GuardContext, obs confine.Observation) {
 	gc.FailedStages = append([]string(nil), obs.FailedStages...)
 	gc.ProcessRunning = obs.Running
 	observeSandboxRefusals(gc, obs.Refusals)
-	gc.KernelRefusalSilence = len(obs.FailedStages) > 0 && obs.Refusals.Witness == confine.WitnessKernel && len(obs.Refusals.Refusals) == 0
+	gc.SandboxRefusalWitness = string(obs.Refusals.Witness)
 	data := map[string]any{"tool": gc.Tool}
 	if dest := obs.Destination; dest != "" {
 		data["destination"] = dest

@@ -6,8 +6,16 @@ selector:
   tool: [command, verify, command_output]
 requires:
   profiles: [tool]
-  facts: [paintedwolf.kernel_refusal_silence]
-when: paintedwolf.kernel_refusal_silence
+  facts:
+    - paintedwolf.confine_applied
+    - paintedwolf.failed_stages
+    - paintedwolf.sandbox_refusal_witness
+    - paintedwolf.sandbox_refusals
+when: >-
+  paintedwolf.confine_applied
+  && size(paintedwolf.failed_stages) > 0
+  && paintedwolf.sandbox_refusal_witness == "kernel"
+  && size(paintedwolf.sandbox_refusals) == 0
 effect: warn
 copy:
   what: This confined invocation failed without a kernel refusal report.

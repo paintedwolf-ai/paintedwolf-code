@@ -13,12 +13,12 @@ func TestTerminalRefusalsRetainPathsWithoutRecoverableGrants(t *testing.T) {
 		{Operation: "file-read-data", Target: "/state/store.db", Layer: confine.FloorReadControlPlane, Recovery: confine.RecoverNone},
 		{Operation: "file-write-data", Target: "/state/approvals.yaml", Layer: confine.FloorControlPlane, Recovery: confine.RecoverNone},
 	}}})
-	if len(gc.RefusedTerminalReadPaths) != 1 || len(gc.RefusedTerminalWritePaths) != 1 || len(gc.RefusedReadGrants) != 0 || len(gc.RefusedWriteGrants) != 0 || gc.KernelRefusalSilence {
+	if len(gc.RefusedTerminalReadPaths) != 1 || len(gc.RefusedTerminalWritePaths) != 1 || len(gc.RefusedReadGrants) != 0 || len(gc.RefusedWriteGrants) != 0 || gc.SandboxRefusalWitness != string(confine.WitnessKernel) {
 		t.Fatalf("terminal facts=%+v", gc)
 	}
 }
 
-func TestKernelSilenceOnlyMarksFailedConfinedInvocation(t *testing.T) {
+func TestRefusalWitnessReportsTheObservedLayerWithoutPolicyCombination(t *testing.T) {
 	for _, witness := range []confine.RefusalWitness{confine.WitnessKernel, confine.WitnessIncomplete, confine.WitnessUnavailable} {
 		for _, failed := range []bool{false, true} {
 			gc := &oar.GuardContext{}
@@ -27,7 +27,7 @@ func TestKernelSilenceOnlyMarksFailedConfinedInvocation(t *testing.T) {
 				obs.FailedStages = []string{"tool"}
 			}
 			ObserveConfine(gc, obs)
-			if gc.KernelRefusalSilence != (failed && witness == confine.WitnessKernel) {
+			if gc.SandboxRefusalWitness != string(witness) {
 				t.Fatalf("witness=%s failed=%v facts=%+v", witness, failed, gc)
 			}
 		}

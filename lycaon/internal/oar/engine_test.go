@@ -247,3 +247,33 @@ func TestSyncRegistryFromStockIncludesNonPlatformPack(t *testing.T) {
 		t.Fatalf("stock sync too small: %d codes (expected full pack union)", n)
 	}
 }
+
+func TestKernelRefusalSilenceIsComposedByThePublishedRule(t *testing.T) {
+	rule, ok := loadStockRules(t).Get("SANDBOX_REFUSAL_REPORT_SILENT")
+	if !ok {
+		t.Fatal("kernel refusal silence rule is missing")
+	}
+	for _, applied := range []bool{false, true} {
+		for _, failed := range []bool{false, true} {
+			for _, witness := range []string{"", "kernel", "incomplete", "unavailable"} {
+				for _, report := range []bool{false, true} {
+					gc := NewGuardContext()
+					gc.ConfineApplied = applied
+					gc.SandboxRefusalWitness = witness
+					if failed {
+						gc.FailedStages = []string{"tool"}
+					}
+					if report {
+						gc.SandboxRefusals = []string{"file-read-data: /fixture"}
+					}
+					fires, err := EvaluateCondition(rule.When, gc)
+					testutil.FailErr(t, "evaluate published kernel-refusal warning", err)
+					want := applied && failed && witness == "kernel" && !report
+					if fires != want {
+						t.Fatalf("applied=%v failed=%v witness=%q report=%v fires=%v, want %v", applied, failed, witness, report, fires, want)
+					}
+				}
+			}
+		}
+	}
+}
