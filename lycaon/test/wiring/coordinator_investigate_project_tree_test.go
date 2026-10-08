@@ -100,8 +100,18 @@ func TestInvestigateCoordinatorWriteLandsOnProjectTree(t *testing.T) {
 	h.SeedProgress(t, ctx, sess.ID)
 
 	done := make(chan error, 1)
+	promptCtx, cancelPrompt := context.WithCancel(ctx)
+	promptExited := make(chan struct{})
+	// The turn must end before harness teardown closes the app and restores
+	// the staged config, or it keeps running into the next test.
+	t.Cleanup(func() {
+		cancelPrompt()
+		h.SessionMgr.CancelInFlightPrompt(sess.ID)
+		<-promptExited
+	})
 	go func() {
-		_, promptErr := h.SessionMgr.Prompt(ctx, sess.ID, "fix auth in src/foo.go")
+		defer close(promptExited)
+		_, promptErr := h.SessionMgr.Prompt(promptCtx, sess.ID, "fix auth in src/foo.go")
 		done <- promptErr
 	}()
 	hitlMgr, ok := h.CheckpointMgr.(*hitl.Manager)
@@ -132,7 +142,7 @@ func TestInvestigateCoordinatorWriteLandsOnProjectTree(t *testing.T) {
 	if !promptFinished {
 		select {
 		case promptErr = <-done:
-		case <-time.After(10 * time.Second):
+		case <-time.After(testutil.Timeout(10 * time.Second)):
 			pending, _ := hitlMgr.ListPending(ctx, sess.ID, ptrKind(api.CheckpointKindToolApproval))
 			msgs, _ := h.Store.GetMessages(ctx, sess.ID)
 			t.Fatalf("prompt did not finish: stage=%d pending=%+v messages=%+v", stage.Load(), pending, msgs)

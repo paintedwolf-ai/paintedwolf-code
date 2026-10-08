@@ -141,6 +141,9 @@ func (e *AssemblyEngine) buildTailSystemInjects(
 	return tail, nil
 }
 
+// boardOrientRefreshLimit bounds frame refreshes after orientation advances a run.
+const boardOrientRefreshLimit = 3
+
 // prepareCoordinatorBoard refreshes state after board-driven advancement.
 func (e *AssemblyEngine) prepareCoordinatorBoard(
 	ctx context.Context,
@@ -159,27 +162,34 @@ func (e *AssemblyEngine) prepareCoordinatorBoard(
 	}
 	run := frame.RunContext
 	block, changed := deps.Board.PrependBoardIfChanged(ctx, sess, run)
-	if changed && deps.BoardOrientReady != nil {
+	// The board marks each run and phase oriented once, so every inject it
+	// renders is recorded; a refresh onto another run or phase renders a new one.
+	for pass := 0; changed && deps.BoardOrientReady != nil; pass++ {
 		if hash := deps.Board.BoardInjectHash(sess.ID); hash != "" {
 			if err := deps.BoardOrientReady.RecordBoardOrientReady(ctx, sess.ID, hash); err != nil {
 				deps.Board.InvalidateOrientation(sess.ID)
 				return frame, "", err
 			}
 		}
-		if deps.CoordinatorFrame != nil {
-			refreshed, err := deps.CoordinatorFrame.BuildCoordinatorTurnFrame(ctx, sess.ID, sess)
-			if err != nil {
-				deps.Board.InvalidateOrientation(sess.ID)
-				return frame, "", err
-			}
-			machine := frame.Machine
-			frame = refreshed
-			inject.StampMachine(&frame, machine)
+		if deps.CoordinatorFrame == nil || pass == boardOrientRefreshLimit {
+			break
 		}
-		if frame.RunContext.RunID != run.RunID || frame.RunContext.CurrentPhase != run.CurrentPhase {
-			if refreshedBlock, ok := deps.Board.PrependBoardIfChanged(ctx, sess, frame.RunContext); ok {
-				block = refreshedBlock
-			}
+		refreshed, err := deps.CoordinatorFrame.BuildCoordinatorTurnFrame(ctx, sess.ID, sess)
+		if err != nil {
+			deps.Board.InvalidateOrientation(sess.ID)
+			return frame, "", err
+		}
+		machine := frame.Machine
+		frame = refreshed
+		inject.StampMachine(&frame, machine)
+		if frame.RunContext.RunID == run.RunID && frame.RunContext.CurrentPhase == run.CurrentPhase {
+			break
+		}
+		run = frame.RunContext
+		var refreshedBlock string
+		refreshedBlock, changed = deps.Board.PrependBoardIfChanged(ctx, sess, run)
+		if changed {
+			block = refreshedBlock
 		}
 	}
 	if strings.TrimSpace(block) == "" && turn.Iteration > 0 {
