@@ -76,6 +76,7 @@ func TestServerEndToEnd(t *testing.T) {
 		t.Fatalf("decode session: %v", err)
 	}
 	resp.Body.Close()
+	sess = waitSessionPrepared(t, baseURL, sess)
 
 	resp, err = authedHTTPGet(baseURL + "/v1/sessions/" + sess.ID)
 	if err != nil {

@@ -210,6 +210,7 @@ type Manager struct {
 	reconstructedDirectIPMu sync.Mutex
 	reconstructedDirectIP   map[string]map[string]struct{}
 	curation                promptCurations
+	roundEndDrains          roundEndDrains
 	loopbackProv            LoopbackProvenanceResolver
 }
 
