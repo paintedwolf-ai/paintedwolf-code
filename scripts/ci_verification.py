@@ -124,6 +124,33 @@ def prune_merge_queue(repository):
     return [run["id"] for run in stale]
 
 
+def task_json(arguments):
+    """Run a queue control through ./task and parse the JSON it prints after Task's command echo."""
+    result = subprocess.run(["./task", *arguments], cwd=ROOT, capture_output=True, text=True)
+    output = result.stdout[result.stdout.find("{"):] if "{" in result.stdout else ""
+    return result.returncode, json.loads(output) if output else None
+
+
+def release_leftover_requests(step):
+    """Withdraw requests an earlier step left in the queue so cleanup is not admitted behind them.
+
+    A shared batch outlives the client that submitted it, so a step killed at its deadline leaves
+    its run holding admission. A hosted runner serves one job, so every request it holds is this job's.
+    """
+    if os.environ.get("GITHUB_ACTIONS") != "true":
+        raise ValueError("release withdraws every queued request, which is only this job's own on a hosted runner")
+    _, status = task_json(["test:status"])
+    requests = [entry for entry in status["runs"] if entry.get("kind") == "request"]
+    unreleased = []
+    for entry in requests:
+        code, value = task_json(["test:cancel", "--", entry["ticket"], "--force",
+                                 "--reason", f"{entry['name']} outlived the {step} step"])
+        print(f"cancelled {entry['name']} ({entry['ticket']}): {json.dumps(value, sort_keys=True)}", flush=True)
+        if code != 0:
+            unreleased.append(entry["ticket"])
+    return unreleased
+
+
 def require_full_tier(repository, sha):
     """The commit itself passed `CI/check` in the full tier, as every commit the merge queue lands has."""
     runs = github(f"repos/{repository}/commits/{sha}/check-runs", check_name="check", filter="all")["check_runs"]
@@ -297,6 +324,8 @@ def main():
     verified = commands.add_parser("verified")
     verified.add_argument("sha")
     commands.add_parser("prune")
+    release = commands.add_parser("release")
+    release.add_argument("step", help="the step whose leftover requests are withdrawn")
     args = parser.parse_args()
     if args.command == "matrix":
         print(json.dumps(matrix(args.profile, args.suite), separators=(",", ":")))
@@ -308,6 +337,11 @@ def main():
         require_full_tier(os.environ["GITHUB_REPOSITORY"], args.sha)
     elif args.command == "prune":
         prune_merge_queue(os.environ["GITHUB_REPOSITORY"])
+    elif args.command == "release":
+        # Cleanup still runs; a request that would not release is reported, not fatal.
+        unreleased = release_leftover_requests(args.step)
+        if unreleased:
+            print(f"::warning::queue requests still held after cancellation: {', '.join(unreleased)}", flush=True)
     else:
         report(args.status)
     return 0

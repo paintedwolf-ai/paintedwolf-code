@@ -279,3 +279,41 @@ class HostedVerificationTests(unittest.TestCase):
             record = json.loads((root / "ci/run.json").read_text())
             self.assertEqual(record["status"], "running")
             self.assertNotIn("exit_code", record)
+
+    def test_release_withdraws_every_leftover_request_through_task_cancel(self):
+        status = {"runs": [
+            {"kind": "request", "name": "e2e:den", "ticket": "1-a", "state": "sharing"},
+            {"kind": "batch", "name": "verification batch", "ticket": "1-a-batch", "members": ["1-a"]},
+            {"kind": "request", "name": "e2e:cleanup", "ticket": "2-b", "state": "queued"},
+        ]}
+        calls = []
+
+        def task_json(arguments):
+            calls.append(arguments)
+            if arguments == ["test:status"]:
+                return 0, status
+            return (0, {"released": True}) if arguments[2] == "1-a" else (2, {"released": False})
+
+        with patch.object(ci, "task_json", task_json), patch.dict(ci.os.environ, {"GITHUB_ACTIONS": "true"}), \
+                patch("builtins.print"):
+            self.assertEqual(ci.release_leftover_requests("Playwright web E2E"), ["2-b"])
+        # Batches release once their members are withdrawn; only requests are cancelled.
+        self.assertEqual(calls[1:], [
+            ["test:cancel", "--", "1-a", "--force", "--reason", "e2e:den outlived the Playwright web E2E step"],
+            ["test:cancel", "--", "2-b", "--force", "--reason", "e2e:cleanup outlived the Playwright web E2E step"],
+        ])
+
+    def test_release_refuses_outside_a_hosted_runner(self):
+        with patch.dict(ci.os.environ, {"GITHUB_ACTIONS": ""}), patch.object(ci, "task_json") as task, \
+                self.assertRaises(ValueError):
+            ci.release_leftover_requests("cleanup")
+        task.assert_not_called()
+
+    def test_task_json_reads_past_the_command_echo(self):
+        result = ci.subprocess.CompletedProcess([], 2, stdout='task: [test:cancel] python3 x\n{"released": false}\n')
+        with patch.object(ci.subprocess, "run", return_value=result) as run:
+            self.assertEqual(ci.task_json(["test:cancel"]), (2, {"released": False}))
+        self.assertEqual(run.call_args.args[0], ["./task", "test:cancel"])
+        refused = ci.subprocess.CompletedProcess([], 1, stdout="")
+        with patch.object(ci.subprocess, "run", return_value=refused):
+            self.assertEqual(ci.task_json(["test:cancel"]), (1, None))
