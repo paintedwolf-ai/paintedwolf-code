@@ -294,8 +294,6 @@ func (g *RuleApprovalGate) declaredFileTargets(action hitl.ProposedAction) []*ga
 		if subject.Kind == confine.WriteSubjectKeyMaterial ||
 			(subject.Kind != confine.WriteSubjectOrdinary && mode == gate.ModeWrite) {
 			target.ProtectedSubject = true
-		} else if mode == gate.ModeRead && !target.OutsideRoots {
-			target.ProtectedSubject = false
 		}
 		if target.OutsideRoots || target.ProtectedSubject {
 			targets = append(targets, target)

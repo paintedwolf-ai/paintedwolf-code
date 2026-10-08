@@ -28504,6 +28504,9 @@ components:
         group:
           type: string
           description: Optional ladder heading when a card carries a second subject (absorbed predicate or host resources). Absent means the primary ladder.
+        directory_scope:
+          type: string
+          description: Host-minted directory candidate covered by this option; absent for unscoped options.
         title:
           type: string
         coverage:
@@ -28580,6 +28583,11 @@ components:
         - recommended_option_id
       additionalProperties: false
       properties:
+        directory_scopes:
+          type: array
+          description: Host-approved directory candidates, from the containing folder outward; the first is the default.
+          items:
+            type: string
         id:
           type: string
           pattern: ^[A-Za-z0-9_.:-]+$

@@ -343,16 +343,14 @@ func TestParseCapabilityRequestWriteRootDeclaresProtectedLocations(t *testing.T)
 			t.Fatalf("declared %q, parsed %+v", root, req)
 		}
 	}
-	_, reject := tools.ParseCapabilityRequest(map[string]any{"capability_request": map[string]any{
-		"write_root": "/",
-	}})
-	if reject == nil || reject.Code != "SANDBOX_CAPABILITY_REQUEST_INVALID" {
-		t.Fatalf("filesystem root reject = %+v", reject)
+	req, reject := tools.ParseCapabilityRequest(map[string]any{"capability_request": map[string]any{"write_root": "/"}})
+	if reject != nil || req == nil || req.WriteRoot != "/" {
+		t.Fatalf("filesystem root declaration = %+v, rejection = %+v", req, reject)
 	}
 }
 
 // Key paths are declarable for reads — the broker asks; only the control
-// plane and the filesystem root are refused before the ask.
+// plane is refused before the ask.
 func TestParseCapabilityRequestReadPathDeclares(t *testing.T) {
 	home, err := os.UserHomeDir()
 	if err != nil || home == "" {

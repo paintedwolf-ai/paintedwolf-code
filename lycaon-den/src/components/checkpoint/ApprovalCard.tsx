@@ -16,6 +16,7 @@ import {
 } from "../../chat/checkpoint/approval-display.ts";
 import { gateLabel } from "../../chat/checkpoint/gate-copy.ts";
 import { APPROVALS_COPY } from "../../settings/security/approvals-copy.ts";
+import { DenSelect } from "../primitives/DenSelect.tsx";
 import { DenButton } from "../primitives/DenButton.tsx";
 import { DenCheckboxControl } from "../primitives/DenCheckbox.tsx";
 import { openFilesSurface } from "../../platform/navigation/open-files-surface.ts";
@@ -232,10 +233,20 @@ function ToolApprovalBody(props: Props) {
     }
     if (loc.revealToolCallId) showInChat(loc.revealToolCallId);
   };
-  const options = createMemo(() => plan()?.options ?? []);
+  const [chosenDirectory, setChosenDirectory] = createSignal("");
+  createEffect(on(() => plan()?.id, () => setChosenDirectory("")));
+  const directoryScopes = createMemo(() => plan()?.directory_scopes ?? []);
+  const directoryScope = createMemo(() => directoryScopes().includes(chosenDirectory())
+    ? chosenDirectory() : directoryScopes()[0] ?? "");
+  const offeredOptions = createMemo(() => plan()?.options ?? []);
+  const options = createMemo(() => offeredOptions().filter((option) =>
+    !option.directory_scope || option.directory_scope === directoryScope()));
   const recommended = createMemo(() => {
     const id = plan()?.recommended_option_id;
-    return id ? options().find((option) => option.id === id) : undefined;
+    const original = offeredOptions().find((option) => option.id === id);
+    return options().find((option) => option.id === id) ??
+      options().find((option) => option.rung === original?.rung && option.group === original?.group &&
+        option.kind === original?.kind && !option.disabled);
   });
   const held = () => plan()?.held_release;
   // Approving a held send while the chat is locked needs the desktop shell
@@ -496,6 +507,18 @@ function ToolApprovalBody(props: Props) {
               preview={targetPreview}
               sharedFact={sharedPackageBoundary()}
             />
+          </Show>
+          <Show when={directoryScopes().length > 1}>
+            <div class="den-approval-directory-scope" onKeyDown={(event) => event.stopPropagation()}>
+              <span>{copy.directoryScope}</span>
+              <DenSelect
+                aria-label={copy.directoryScope}
+                options={directoryScopes().map((path) => ({ value: path, label: path }))}
+                value={directoryScope()}
+                disabled={props.resolving}
+                onValueChange={setChosenDirectory}
+              />
+            </div>
           </Show>
           <Show when={location()} keyed>
             {(loc) => (

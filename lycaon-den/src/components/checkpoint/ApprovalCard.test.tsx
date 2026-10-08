@@ -1096,3 +1096,31 @@ describe("held release", () => {
     expect(onToolApproval).not.toHaveBeenCalled();
   });
 });
+
+describe("directory scope", () => {
+  it("defaults to the containing folder and dispatches the selected host option", () => {
+    const onToolApproval = vi.fn();
+    const narrow = "/workspace/src/pkg";
+    const broad = "/workspace";
+    const cp = checkpoint();
+    cp.tool_approval = toolApprovalFixture({
+      tool: "read",
+      directoryScopes: [narrow, broad],
+      options: [narrow, broad].map((path, index) => approvalOptionFixture({
+        id: `chat-${index}`, kind: "lease", rung: "chat", scope: "chat",
+        title: "Allow for this chat", directory_scope: path,
+        coverage: `reads of ${path}`,
+      })),
+      recommendedOptionId: "chat-0",
+    });
+    const view = render(() => <ApprovalCard checkpoint={cp} resolving={false} onToolApproval={onToolApproval} onContentApply={vi.fn()} />);
+    const selector = view.getByRole("button", {name: "Directory scope"});
+    expect(selector.textContent).toContain(narrow);
+    fireEvent.keyDown(selector, {key:"Enter"});
+    expect(onToolApproval).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("option", {name:broad}));
+    expect(selector.textContent).toContain(broad);
+    fireEvent.keyDown(view.getByTestId("tool-approval-card"), {key:"3"});
+    expect(onToolApproval).toHaveBeenCalledWith("approve", {optionId:"chat-1"});
+  });
+});

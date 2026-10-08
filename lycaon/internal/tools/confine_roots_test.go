@@ -155,14 +155,14 @@ func TestConfineRootsSkipsBlankPaths(t *testing.T) {
 // the lane code rides as data.
 func TestValidateRootsForActionPublishRegisteredCode(t *testing.T) {
 	for name, reject := range map[string]*ToolReject{
-		"attached": ValidateAttachedRootsForAction([]string{string(filepath.Separator)}),
-		"granted":  ValidateGrantedRootsForAction([]string{string(filepath.Separator)}),
+		"attached": ValidateAttachedRootsForAction([]string{"relative"}),
+		"granted":  ValidateGrantedRootsForAction([]string{"relative"}),
 	} {
 		if reject == nil || reject.Code != "SANDBOX_CAPABILITY_REQUEST_INVALID" {
 			t.Fatalf("%s reject = %+v, want SANDBOX_CAPABILITY_REQUEST_INVALID", name, reject)
 		}
-		if reject.Data["reason"] != confine.WriteRootCodeFilesystemRoot {
-			t.Fatalf("%s reject data = %+v, want reason %q", name, reject.Data, confine.WriteRootCodeFilesystemRoot)
+		if reject.Data["reason"] != confine.WriteRootCodeNotAbsolute {
+			t.Fatalf("%s reject data = %+v, want reason %q", name, reject.Data, confine.WriteRootCodeNotAbsolute)
 		}
 	}
 }

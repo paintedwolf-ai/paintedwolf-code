@@ -214,10 +214,11 @@ const (
 	ApiErrorCodeInvalidJson ApiErrorCode = "invalid_json"
 	// ApiErrorCodeInvalidPath path traversal or unsafe path argument
 	ApiErrorCodeInvalidPath ApiErrorCode = "invalid_path"
-	// ApiErrorCodeWriteRootIsFilesystemRoot project root or write_root grant is
-	// filesystem root
+	// ApiErrorCodeWriteRootIsFilesystemRoot Retired refusal: filesystem root is
+	// now permitted; per-path protected floors still apply.
 	ApiErrorCodeWriteRootIsFilesystemRoot ApiErrorCode = "write_root_is_filesystem_root"
-	// ApiErrorCodeWriteRootIsHome project root or write_root grant is bare $HOME
+	// ApiErrorCodeWriteRootIsHome Retired refusal: home directory is now
+	// permitted; per-path protected floors still apply.
 	ApiErrorCodeWriteRootIsHome ApiErrorCode = "write_root_is_home"
 	// ApiErrorCodeWriteRootNotAbsolute project root or write_root grant is not an
 	// absolute path

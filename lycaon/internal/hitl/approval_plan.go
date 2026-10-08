@@ -236,11 +236,12 @@ type ApprovalOption struct {
 	Rung  ApprovalOptionRung `json:"rung"`
 	Scope ApprovalGrantScope `json:"scope,omitempty"`
 	// Group names a second ladder on a two-subject card. Empty is the primary.
-	Group       string `json:"group,omitempty"`
-	Title       string `json:"title"`
-	Coverage    string `json:"coverage"`
-	ExpiresWhen string `json:"expires_when"`
-	ReaskWhen   string `json:"reask_when"`
+	Group          string `json:"group,omitempty"`
+	DirectoryScope string `json:"directory_scope,omitempty"`
+	Title          string `json:"title"`
+	Coverage       string `json:"coverage"`
+	ExpiresWhen    string `json:"expires_when"`
+	ReaskWhen      string `json:"reask_when"`
 	// DecisionAction controls release or redaction after resolution.
 	DecisionAction ApprovalOptionDecision `json:"decision_action"`
 	// Disabled preserves the option position and displays Note as its reason.
@@ -263,6 +264,7 @@ type ApprovalPlan struct {
 	Presentation        ApprovalPresentation `json:"presentation"`
 	Reasons             []api.ApprovalGate   `json:"reasons"`
 	Options             []ApprovalOption     `json:"options"`
+	DirectoryScopes     []string             `json:"directory_scopes,omitempty"`
 	RecommendedOptionID string               `json:"recommended_option_id"`
 	// Held names person-held values an approving option would send; while
 	// their chat is locked, each such answer needs the person's verified
@@ -289,6 +291,7 @@ func NewApprovalPlan(action ProposedAction, stage ApprovalStage, subject Approva
 		Presentation:        presentation,
 		Reasons:             compactReasons,
 		Options:             sorted,
+		DirectoryScopes:     approvalDirectoryScopes(options),
 		RecommendedOptionID: faceID,
 	}
 	id, err := candidate.canonicalID()
@@ -313,6 +316,9 @@ func NewApprovalPlan(action ProposedAction, stage ApprovalStage, subject Approva
 
 // Validate enforces the invariants that make the plan safe to render and apply.
 func (p ApprovalPlan) Validate() error {
+	if err := p.validateDirectoryScopes(); err != nil {
+		return err
+	}
 	if strings.TrimSpace(p.ID) == "" || strings.TrimSpace(p.ActionDigest) == "" {
 		return fmt.Errorf("approval plan identity is incomplete")
 	}
@@ -403,7 +409,7 @@ func (p ApprovalPlan) Validate() error {
 			return fmt.Errorf("duplicate approval option %q", id)
 		}
 		seenID[id] = struct{}{}
-		groupKey := strings.TrimSpace(option.Group) + "\x00" + string(option.Rung)
+		groupKey := strings.TrimSpace(option.Group) + "\x00" + string(option.Rung) + "\x00" + option.DirectoryScope
 		if _, exists := seenRung[groupKey]; exists {
 			return fmt.Errorf("duplicate approval rung %q in group %q", option.Rung, option.Group)
 		}
@@ -1135,7 +1141,7 @@ func GrantOption(offer ApprovalGrantOffer) ApprovalOption {
 	}
 	return ApprovalOption{
 		ID: offer.ID, Kind: ApprovalOptionLease, Rung: offer.Rung, Scope: offer.Scope,
-		Group: offer.Group, Title: offer.Title, Coverage: offer.Coverage,
+		Group: offer.Group, DirectoryScope: offer.DirectoryScope, Title: offer.Title, Coverage: offer.Coverage,
 		ExpiresWhen: offer.ExpiresWhen, ReaskWhen: offer.ReaskWhen,
 		DecisionAction: ApprovalOptionApprove,
 		Disabled:       offer.Disabled, Note: offer.Note,
