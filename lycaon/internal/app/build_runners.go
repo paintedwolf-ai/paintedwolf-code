@@ -164,7 +164,7 @@ func (b delegationWiring) reconcileStoreCoupledStorage(ctx context.Context) erro
 	}
 	removedHost, hostErr := project.ReconcileHostStorage(b.dataDir, ids)
 	removedCheckpoints, checkpointErr := sessioncheckpoint.ReconcileRoots(b.dataDir, roots)
-	removedCatalogs, catalogErr := sourcecatalog.Process().ReconcileTreeStores(ctx, sourcecatalog.TreeStoreRetention)
+	removedCatalogs, catalogErr := sourcecatalog.Process().ReconcileTreeStores(ctx)
 	removedSandboxes, sandboxErr := b.reconcileWorkerSandboxes(ctx, roots)
 	removedSpills, spillErr := scan.ReconcileSpills(ctx, b.dataDir, b.scanStore)
 	if removedHost+removedCheckpoints+removedCatalogs+removedSandboxes+removedSpills > 0 {

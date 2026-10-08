@@ -196,7 +196,7 @@ func openTreeDB(ctx context.Context, file string) (*sql.DB, error) {
 // zero never waits.
 func openTreeDBWaiting(ctx context.Context, file string, busyMS int) (*sql.DB, error) {
 	u := url.URL{Scheme: "file", Path: file}
-	db, err := sql.Open("sqlite", u.String()+fmt.Sprintf("?_pragma=recursive_triggers(1)&_pragma=busy_timeout(%d)&_pragma=cache_size(-4096)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=journal_size_limit(%d)", busyMS, treeJournalSizeLimit))
+	db, err := sql.Open("sqlite", u.String()+fmt.Sprintf("?_pragma=auto_vacuum(INCREMENTAL)&_pragma=recursive_triggers(1)&_pragma=busy_timeout(%d)&_pragma=cache_size(-4096)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=journal_size_limit(%d)", busyMS, treeJournalSizeLimit))
 	if err != nil {
 		return nil, err
 	}

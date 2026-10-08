@@ -308,7 +308,7 @@ func TestStructuralCheckpointRetention(t *testing.T) {
 	catalog.treeDir = t.TempDir()
 	file := filepath.Join(catalog.treeDir, "expired.tree")
 	testutil.FailErr(t, "write expired cache", os.WriteFile(file, []byte("cache"), 0o600))
-	old := time.Now().Add(-2 * TreeStoreRetention)
+	old := time.Now().Add(-2 * defaultTreeStorePolicy().retention)
 	testutil.FailErr(t, "age expired cache", os.Chtimes(file, old, old))
 	// Visible scratch files are orphaned only after the grace period.
 	orphan := filepath.Join(catalog.treeDir, "structural-segments-1.tmp")
@@ -316,7 +316,7 @@ func TestStructuralCheckpointRetention(t *testing.T) {
 	testutil.FailErr(t, "age orphaned scratch", os.Chtimes(orphan, old, old))
 	fresh := filepath.Join(catalog.treeDir, "structural-scan-2.tmp")
 	testutil.FailErr(t, "write fresh scratch", os.WriteFile(fresh, []byte("spool"), 0o600))
-	removed, err := catalog.ReconcileTreeStores(t.Context(), TreeStoreRetention)
+	removed, err := catalog.ReconcileTreeStores(t.Context())
 	testutil.FailErr(t, "reconcile structural caches", err)
 	if removed != 1 {
 		t.Fatalf("removed structural caches = %d", removed)
