@@ -730,6 +730,10 @@ func TestDirectoryHierarchyMintsDistinctOptionsAndDefaultsToContainingFolder(t *
 	if !ok || option.DirectoryScope != folder || len(plan.DirectoryScopes) != len(scopes) {
 		t.Fatalf("wrong default: %+v scopes=%v", option, plan.DirectoryScopes)
 	}
+	plan.DirectoryScopes[0] += string(filepath.Separator) + "."
+	if err := plan.Validate(); err == nil {
+		t.Fatal("noncanonical directory scope was admitted")
+	}
 }
 
 func TestCredentialStoreReadAsksInsideAnAttachedHome(t *testing.T) {
@@ -754,5 +758,30 @@ func TestCredentialStoreReadAsksInsideAnAttachedHome(t *testing.T) {
 		if offer.Grant.GrantedPath == nil || offer.Grant.GrantedPath.Tree || offer.Grant.GrantedPath.Path != path {
 			t.Fatalf("credential read widened: %+v", offer)
 		}
+	}
+}
+
+func TestMultipleReadTargetsOfferOneCrossingHierarchy(t *testing.T) {
+	base := filepath.Join(filepath.VolumeName(os.TempDir())+string(filepath.Separator), "unattached", t.Name())
+	first := filepath.Join(base, "first", "file.go")
+	second := filepath.Join(base, "second", "file.go")
+	action := hitl.ProposedAction{Tool: "read", Files: []string{first, second}, ProjectDir: t.TempDir(), ProjectID: "project", SessionID: "chat"}
+	_, offers := filesystemCard(t, action)
+	if len(offers) == 0 || offers[0].DirectoryScope != filepath.Dir(first) {
+		t.Fatalf("wrong selected crossing hierarchy: %+v", offers)
+	}
+	if grantedpath.CoversPath(offers[0].DirectoryScope, true, second) {
+		t.Fatal("nearest directory grant silently covered a sibling crossing")
+	}
+	previous := offers[0].DirectoryScope
+	for _, offer := range offers {
+		path := offer.DirectoryScope
+		if path == "" || filepath.Clean(path) != path || !grantedpath.CoversPath(path, true, first) {
+			t.Fatalf("option did not belong to selected crossing: %+v", offer)
+		}
+		if path != previous && !grantedpath.CoversPath(path, true, previous) {
+			t.Fatalf("unrelated crossing added to hierarchy: %q after %q", path, previous)
+		}
+		previous = path
 	}
 }

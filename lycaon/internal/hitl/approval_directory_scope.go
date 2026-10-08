@@ -22,7 +22,7 @@ func approvalDirectoryScopes(options []ApprovalOption) []string {
 // validateDirectoryScopes binds every presentation candidate to its exact offered authority.
 func (p *ApprovalPlan) validateDirectoryScopes() error {
 	for index, path := range p.DirectoryScopes {
-		if !filepath.IsAbs(path) || (index > 0 && !confine.PathStrictlyUnder(p.DirectoryScopes[index-1], path)) {
+		if !filepath.IsAbs(path) || filepath.Clean(path) != path || (index > 0 && !confine.PathStrictlyUnder(p.DirectoryScopes[index-1], path)) {
 			return fmt.Errorf("directory scopes must be canonical ancestors")
 		}
 	}
