@@ -22,7 +22,7 @@ webE2e("a tool-only forced final response shows an error and permits recovery", 
     await apiJson(request, "POST", "/harness/llm/respond", {
       id: pending.id, content: "", tool_calls: [{ id: crypto.randomUUID(), name: "read", args: { path: "README.md" } }],
     });
-    await expect(page.getByRole("status", { name: "Status messages", exact: true })).toContainText("Model returned no response", { timeout: 30_000 });
+    await expect(page.getByRole("status", { name: "Status messages", exact: true })).toContainText("Model skipped its closing summary", { timeout: 30_000 });
     // The failed closeout ends the turn without a blank answer or another model request.
     await expect.poll(async () => (await apiJson<{ status: string }>(request, "GET", `/v1/sessions/${sessionId}`)).status).toBe("idle");
     const followup = await apiJson<{ pending: boolean }>(request, "GET", `/harness/llm/pending?session_id=${sessionId}`);
