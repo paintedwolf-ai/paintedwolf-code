@@ -10,7 +10,7 @@ import threading
 from pathlib import Path
 
 from artifact_paths import bin_dir
-from analysis_tools import ensure
+from analysis_tools import ensure, toolchain
 
 ROOT = Path(__file__).resolve().parent.parent
 GO_DIR = ROOT / "lycaon"
@@ -30,17 +30,6 @@ GOOS_RE = re.compile(r"^\s{4}goos:\s*(\w+)\s*$")
 PACKAGE_GROUPS = 12
 # A soft limit trades collector time for peak memory within a group.
 MEMORY_LIMIT = "8GiB"
-
-
-def go_toolchain() -> str:
-    for line in (GO_DIR / "go.mod").read_text(encoding="utf-8").splitlines():
-        if line.startswith("go "):
-            return f"go{line.split()[1]}"
-    raise SystemExit("govulncheck gate: missing go directive in lycaon/go.mod")
-
-
-def ensure_govulncheck(toolchain: str) -> None:
-    ensure("govulncheck", ROOT, BIN_DIR, toolchain)
 
 
 def load_allowlist() -> tuple[dict[str, str], dict[str, str]]:
@@ -161,11 +150,11 @@ def parse_reported_ids(output: str) -> list[str]:
 
 
 def main() -> int:
-    toolchain = go_toolchain()
-    ensure_govulncheck(toolchain)
+    compiler = toolchain(ROOT)
+    ensure("govulncheck", ROOT, BIN_DIR, compiler)
     allowed, allowed_goos = load_allowlist()
     env = os.environ.copy()
-    env["GOTOOLCHAIN"] = toolchain
+    env["GOTOOLCHAIN"] = compiler
     env.setdefault("GOMEMLIMIT", MEMORY_LIMIT)
     goos = subprocess.run(
         ["go", "env", "GOOS"], cwd=GO_DIR, env=env, check=True, capture_output=True, text=True
