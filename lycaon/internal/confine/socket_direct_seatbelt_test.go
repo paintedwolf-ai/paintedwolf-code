@@ -275,14 +275,10 @@ func TestSeatbeltSystemResolverIsDirectIPOnly(t *testing.T) {
 	proj := filepath.Join(dir, "proj")
 	testutil.FailErr(t, "mkdir", os.Mkdir(proj, 0o755))
 
-	// The host's own mDNS name is answered by mDNSResponder without traffic.
-	// Hosts-file names resolve in-process even under deny, so they prove nothing.
-	name := mdnsSelfName(t)
-	resolve := []string{"/usr/bin/python3", "-c", "import socket,sys; socket.gethostbyname(sys.argv[1])", name}
-
+	name := registerMDNSName(t)
 	direct := confine.Confinement{Roots: []string{proj}, Network: confine.NetworkDirectIP}
-	if code, out := confinedRun(t, self, direct, resolve[0], resolve[1:]...); code != 0 {
-		t.Fatalf("direct IP must resolve %s, else it is a literal-IP-only capability: exit=%d out=%s", name, code, out)
+	if code, addr := confinedResolve(t, self, direct, name); code != 0 || addr != mdnsProbeAddr {
+		t.Fatalf("direct IP must resolve %s, else it is a literal-IP-only capability: exit=%d addr=%q", name, code, addr)
 	}
 
 	proxyEndpoint, err := net.Listen("tcp", "127.0.0.1:0")
@@ -295,9 +291,9 @@ func TestSeatbeltSystemResolverIsDirectIPOnly(t *testing.T) {
 		if mode == confine.NetworkProxyOnly {
 			c.ProxyAddr = proxyEndpoint.Addr().String()
 		}
-		if code, out := confinedRun(t, self, c, resolve[0], resolve[1:]...); code == 0 {
-			t.Fatalf("%s must not resolve %s through the system resolver: out=%s",
-				confine.NetworkLabel(mode), name, out)
+		if code, addr := confinedResolve(t, self, c, name); code == 0 {
+			t.Fatalf("%s must not resolve %s through the system resolver: addr=%q",
+				confine.NetworkLabel(mode), name, addr)
 		}
 	}
 }
@@ -366,13 +362,6 @@ for spec in sys.argv[1:]:
 	return out
 }
 
-func mdnsSelfName(t *testing.T) string {
-	t.Helper()
-	out, err := exec.Command("/usr/sbin/scutil", "--get", "LocalHostName").Output()
-	testutil.FailErr(t, "read LocalHostName", err)
-	return strings.TrimSpace(string(out)) + ".local"
-}
-
 // TestDirectIPPermitsNarrowOnly verifies declarations cannot add access.
 func TestDirectIPPermitsNarrowOnly(t *testing.T) {
 	for _, tc := range []struct {
@@ -431,16 +420,14 @@ func TestDirectIPNarrowingEndToEnd(t *testing.T) {
 		t.Fatalf("declared strings must reach the confinement: got %v want %v", c.DirectIPPermits, want)
 	}
 
-	// The narrowed profile keeps the system resolver. The host's own mDNS name
-	// is answered by mDNSResponder without traffic, and deny withholds it.
-	name := mdnsSelfName(t)
-	resolve := []string{"/usr/bin/python3", "-c", "import socket,sys; socket.gethostbyname(sys.argv[1])", name}
+	// The narrowed profile keeps the system resolver, which deny withholds.
+	name := registerMDNSName(t)
 	deny := confine.Confinement{Roots: []string{proj}, Network: confine.NetworkDeny}
-	if code, out := confinedRun(t, self, deny, resolve[0], resolve[1:]...); code == 0 {
-		t.Fatalf("%s must need the system resolver, which deny withholds: out=%s", name, out)
+	if code, addr := confinedResolve(t, self, deny, name); code == 0 {
+		t.Fatalf("%s must need the system resolver, which deny withholds: addr=%q", name, addr)
 	}
-	if code, out := confinedRun(t, self, *c, resolve[0], resolve[1:]...); code != 0 {
-		t.Fatalf("narrowed direct IP must resolve %s: exit=%d out=%s", name, code, out)
+	if code, addr := confinedResolve(t, self, *c, name); code != 0 || addr != mdnsProbeAddr {
+		t.Fatalf("narrowed direct IP must resolve %s: exit=%d addr=%q", name, code, addr)
 	}
 
 	// Only the declared transport leaves the host.
