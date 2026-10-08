@@ -5,7 +5,7 @@ import type {
   StructuredToolSection,
   ToolFact,
 } from "../../chat/tool/tool-presentation-contract.ts";
-import type { ResolveProjectRoot } from "../../api/project-path.ts";
+import { resolveProjectFile, type ResolveProjectRoot } from "../../api/project-path.ts";
 import type { HostSecretRedactionMeta } from "../../api/types.ts";
 import { BackgroundProcessPanel } from "./BackgroundProcessPanel.tsx";
 import { RetainedToolContent } from "./RetainedToolContent.tsx";
@@ -71,8 +71,16 @@ function FactsGrid(props: {
     );
   };
   /** Redacted paths render as plain text. */
-  const linkTarget = (fact: ToolFact) =>
-    fact.path && pid() && factSpans(fact).length === 0 ? fact.path : undefined;
+  const linkTarget = (fact: ToolFact) => {
+    const target = fact.path;
+    if (!target || !pid() || factSpans(fact).length > 0) return undefined;
+    const roots = props.rootRefs;
+    if (roots?.length) {
+      const scoped = target.rootId ? roots.filter((root) => root.id === target.rootId) : roots;
+      if ("error" in resolveProjectFile({ roots: scoped }, target.path)) return undefined;
+    }
+    return target;
+  };
   return (
     <dl class="den-tool-part-card-facts">
       <Index each={props.facts}>
