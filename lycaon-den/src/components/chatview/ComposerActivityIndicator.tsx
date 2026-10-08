@@ -1,10 +1,11 @@
-import { Show, createEffect, createSignal, on, onCleanup, untrack } from "solid-js";
+import { Show, createEffect, createSignal, on, onCleanup, onMount, untrack } from "solid-js";
 import { chromeProps } from "../../styling/ui-chrome.ts";
 import type { TurnClock } from "../../api/types.ts";
 import { turnClockElapsedMs } from "../../chat/session/turn-clock.ts";
 import { useNow } from "../../time/now.ts";
 import { formatElapsed } from "../../time/time-copy.ts";
 import { prefersReducedMotion } from "../../platform/interaction/reduced-motion.ts";
+import { driveActivitySpinner } from "./activity-spinner-motion.ts";
 import { HEIGHT_TOGGLE_TIMING } from "../../ui/height-toggle-motion.ts";
 
 export const COMPOSER_ACTIVITY_LEAVING_ATTR = "data-leaving";
@@ -140,6 +141,8 @@ function ActivityLine(props: {
   activityLabel?: string;
   turnClock?: TurnClock;
 }) {
+  let spinner: HTMLSpanElement | undefined;
+  onMount(() => { if (spinner) onCleanup(driveActivitySpinner(spinner)); });
   const activity = () => props.activityLabel?.trim() || "Thinking";
   const nowMs = useNow("second", () => props.turnClock?.running === true);
   const elapsed = () => turnClockElapsedMs(props.turnClock, nowMs());
@@ -156,6 +159,7 @@ function ActivityLine(props: {
       {...chromeProps()}
     >
       <span
+        ref={spinner}
         class="den-composer-activity-spinner"
         aria-hidden="true"
         data-testid="thinking-spinner"
