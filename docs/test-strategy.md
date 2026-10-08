@@ -509,9 +509,9 @@ The merge queue squashes each pull request onto main and tests the resulting
 commit; main then advances to exactly that commit, so CI does not run again on
 push. A required check that ran only on pull requests would admit commits that
 were never tested together. When the queue merges, rebuilds, or drops a group,
-it deletes the group's branch but leaves its CI running; the scheduled
-[`merge-queue-prune.yml`](../.github/workflows/merge-queue-prune.yml) cancels
-those runs every ten minutes so they stop holding runners the live groups need.
+it deletes the group's branch but leaves its CI running; the
+[runner priority](#runner-priority) sweep cancels those runs so they stop
+holding runners the live groups need.
 The aggregates run under `!cancelled()` rather than `always()`: they still judge
 failed and timed-out jobs, but a cancelled run no longer waits for a runner to
 schedule its verdict. Neither tier uses path filters: generated
@@ -587,7 +587,8 @@ Pull request, merge-queue, nightly, and tag runs therefore restore without
 saving. Keys follow toolchains and dependency locks, so main saves once per
 dependency change, and the workflow's summary reports total cache usage.
 A running warmer finishes before the next push starts warming, so frequent
-merges cannot repeatedly cancel cold preparation before it saves.
+merges cannot repeatedly cancel cold preparation before it saves; a newer push
+replaces a warmer still pending, so only main's newest commit waits to warm.
 Release builds restore the shared Go cache; their separate cache retains only
 Tauri release builds. The cache actions enforce the main-ref write boundary
 themselves. Pinned Go analyzers have separate lint and vulnerability caches; their module versions
@@ -602,6 +603,67 @@ setup generates its required resource file before Rust compilation, and releases
 generate the actual notices before packaging. The catalog derives the notice
 and analyzer setup inputs from each lane's targets, so the gate and its setup
 remain aligned.
+
+### Runner priority
+
+Hosted runners have no priority setting: they start queued jobs roughly first
+come, first served. The GitHub Free plan runs twenty jobs at once across the
+organization, five of them on macOS.
+[`runner-priority.yml`](../.github/workflows/runner-priority.yml) gives that
+capacity to work in this order, highest first:
+
+| Priority | Work | Gives up runners |
+|---|---|---|
+| 1 | Merge-queue CI, and the `release`, `release-halt`, and `release-secrets-check` workflows | Never; only CI of a merge group that no longer exists is cancelled |
+| 2 | CI of ready pull requests | Newest first, after everything below |
+| 3 | CI of draft pull requests, closed pull requests, and superseded heads | Before ready pull requests |
+| 4 | Main cache warming (`build-caches.yml`) | Before pull requests |
+| 5 | Scheduled and background work: nightly, dependency inventory, the release-system live test, and issue automation | First, and whenever the merge queue holds a group |
+
+The `runner_priority` table in
+[`scripts/verification-plan.json`](../scripts/verification-plan.json) declares
+each workflow's class; CI's class follows its event. Contract tests require
+every workflow with its own trigger, other than CI and the sweep, to declare
+one. Dispatched CI, often a release candidate's verification, is never
+cancelled, and neither is issue automation an issue event starts, since each
+such run handles one issue.
+
+Each sweep runs `python3 scripts/ci_verification.py schedule` and decides from
+structured facts only: run events, states, and attempts; job states and runner
+labels; merge-queue branches; and each pull request's draft state and head.
+
+1. It force-cancels CI of merge groups whose branch is gone.
+2. For each platform, it counts the runners that waiting merge-queue and
+   release jobs need: those queued beyond the runners this repository leaves
+   free, and any queued for five minutes, since other repositories share the
+   plan.
+3. It cancels runs in reverse priority order until the runners they hold cover
+   that need. Waiting macOS jobs preempt only runs holding macOS runners, and
+   waiting Linux jobs only runs holding Linux runners. A lower-priority run
+   that holds nothing but waits on that platform is cancelled too, since it
+   would take the next free runner. A run is the unit of cancellation, so a
+   run chosen for one platform also frees its jobs on the other.
+4. While the merge queue holds any group, it cancels scheduled and background
+   runs.
+5. Once no merge-queue or release job waits, it re-runs the cancelled jobs of
+   the newest CI run of each ready pull request's head and of main's newest
+   cache-warming push. Once the merge queue is also empty, it does the same for
+   each background workflow's newest scheduled run.
+
+Preempted work is delayed, not lost. Run history is the record: a resumable
+run is one that ended cancelled while still the newest run of its pull request
+head, warming push, or schedule, so a re-run sweep finds nothing left to do. A
+newer push or schedule supersedes it, and so does converting the pull request
+to draft, the way to stop a pull request's CI for good. Resumption keeps the
+jobs that already passed and stops at a run's fifth attempt; past that, the
+next push or schedule carries the work. Runs started by hand are re-run by
+whoever started them.
+
+The sweep runs when CI, release, release-halt, nightly, dependency inventory,
+or the release-system live test is requested or completes, other than pull
+request CI, and every ten minutes, because workflows cannot trigger on a merge
+group's removal or a job waiting for a runner. It is itself a short Linux job
+that waits for a runner like any other.
 
 ## Fixtures
 
