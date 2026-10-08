@@ -9,7 +9,7 @@ Lead with the inferred or stated model (kind, who can reach it, how auth works).
 
 Do not pad severity levels, score excluded adversaries, or paste raw worker logs. Weigh the skeptic's per-claim `survives` / `refuted` and any web-researcher currency notes; a CVE page does not outrank `path:line` in this tree.
 
-Carry every review outcome into `findings` and prose, keeping claim ids. Use `disposition: unresolved` for open questions, never `held` (examined and sound) or accepted risk. Unresolved findings have no rating answers. State material limitations and use the accepted coverage assessment. The host states each rated finding's level from its answers, so leave out `severity`.
+Carry every review outcome into `findings` and prose, keeping claim ids. Use `disposition: unresolved` for open questions, never `held` (examined and sound) or accepted risk. Unresolved findings have no rating answers. State material limitations and use the accepted coverage assessment. The host states each rated finding's level from its answers, so leave out `severity`; `rating` is your overall call from the whole review, with its reason.
 
 Answer without tools using the Report document fence. Prior claim links and set-asides count toward accounting. Add `set_asides` only for remaining groups, as `{scanner, paths, reason}` or `{scan_group_ids, reason}`; the reason must cover every selected group. Zero findings need none.
 

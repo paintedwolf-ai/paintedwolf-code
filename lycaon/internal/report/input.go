@@ -157,12 +157,15 @@ type ReportBrief struct {
 	Question string `json:"question"`
 	// Levels run most severe first.
 	Levels []ReportLevel `json:"levels"`
-	// Worst and Best index Levels; they differ when an unknown answer could
-	// decide either.
+	// Worst and Best index Levels. They are the review's call when it made
+	// one, and differ only when no call was accepted and an unknown answer
+	// could decide either.
 	Worst int `json:"worst"`
 	Best  int `json:"best"`
 	// Basis says why the deciding finding set Worst, in declared phrases.
 	Basis string `json:"basis,omitempty"`
+	// Call is the review's reason for the level it chose.
+	Call string `json:"call,omitempty"`
 	// Dimensions label the rating questions, in declared order.
 	Dimensions []string      `json:"dimensions,omitempty"`
 	Rated      []ReportRated `json:"rated,omitempty"`

@@ -94,7 +94,7 @@ func (s *Handler) BuildRunReportInput(ctx context.Context, runID string) (report
 		Findings:         findingRows(findings),
 		FindingsLabel:    manifest.ReportFindingsLabel(),
 		Limits:           reportLimits(completion),
-		Brief:            reportBrief(manifest.ReportBrief(), findings, claims, unreported),
+		Brief:            reportBrief(manifest.ReportBrief(), findings, claims, unreported, completion.CompletionReport.Rating),
 		Ask:              reportAsk(completion.CompletionReport),
 		UnreportedClaims: len(unreported),
 		Defects:          reportDefects(completion.CompletionReport),

@@ -57,7 +57,7 @@ func TestReportFindings_StatesTheRatedLevel(t *testing.T) {
 	if got[1].finding.Severity != "Low" || got[1].finding.SeverityTone != "low" {
 		t.Fatalf("c3 = %+v, want the review's Low level over the authored word", got[1].finding)
 	}
-	rated := reportBrief(brief, got, claims, nil)
+	rated := reportBrief(brief, got, claims, nil, nil)
 	for i, r := range rated.Rated {
 		if want := got[r.Number-1].finding.Severity; rated.Levels[r.Worst].Label != want {
 			t.Fatalf("rated[%d] = %s, finding %d states %s; the table and the finding must agree", i, rated.Levels[r.Worst].Label, r.Number, want)

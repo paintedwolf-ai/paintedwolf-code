@@ -81,18 +81,22 @@ func TestBrief_RangeWhenAnOpenAnswerCouldDecide(t *testing.T) {
 	}
 }
 
-// Open answers prevent a conclusive rating.
-func TestBrief_OpenRatingIsNotRated(t *testing.T) {
+// The review's call states one level and its own reason, whatever ranges the
+// findings' answers leave.
+func TestBrief_TheReviewsCallIsStatedFirmly(t *testing.T) {
 	in := briefInput()
-	in.Brief.Best, in.Brief.Worst = 4, 0
+	in.Brief.Best, in.Brief.Worst = 2, 2
+	in.Brief.Call = "two production advisories whose reachability the review could not settle"
 	joined := joinRowValues(briefBlocks(testMeasurer(t), in))
-	for _, want := range []string{"Not rated, possibly critical.", "Open answers leave it anywhere from none to critical."} {
+	for _, want := range []string{"Moderate risk.", "Two production advisories whose reachability the review could not settle."} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("brief = %q, want %q", joined, want)
 		}
 	}
-	if strings.Contains(joined, "No known risk") {
-		t.Fatalf("an open rating stated as no known risk: %q", joined)
+	for _, avoid := range []string{"possibly", "Not rated", "Worst of"} {
+		if strings.Contains(joined, avoid) {
+			t.Fatalf("a firm call hedged: %q", joined)
+		}
 	}
 }
 

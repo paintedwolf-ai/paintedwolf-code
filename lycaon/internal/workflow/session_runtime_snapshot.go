@@ -124,7 +124,7 @@ func (m *RunManager) workflowRuntimeSnapshot(
 		snap.ReportDocumentEnabled = manifest.ReportEnabled() && workflowdef.PhaseHasGate(def, "topology_report_delivered")
 		snap.CloseoutRetries = def.CloseoutRetries
 		if brief := manifest.ReportBrief(); snap.ReportDocumentEnabled && brief != nil {
-			snap.ReportRating = &inject.ReportRatingView{Dimensions: brief.DimensionIDs(), Questions: brief.PromptText()}
+			snap.ReportRating = &inject.ReportRatingView{Question: brief.Question, Levels: strings.Join(brief.LevelLabels(), ", "), Dimensions: brief.DimensionIDs(), Questions: brief.PromptText()}
 		}
 		if plan, found := FanoutPlanForPhase(vars, def); found {
 			snap.FanoutPlan = FormatFanoutPlan(plan)

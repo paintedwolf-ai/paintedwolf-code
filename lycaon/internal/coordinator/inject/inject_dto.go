@@ -112,6 +112,10 @@ type WorkflowRequestView struct {
 
 // ReportRatingView is a workflow's declared rating as a report fence answers it.
 type ReportRatingView struct {
+	// Question is what the report's rating answers.
+	Question string
+	// Levels names the declared levels, most severe first.
+	Levels string
 	// Dimensions are the answer keys, in declared order.
 	Dimensions []string
 	// Questions list each dimension with its question and allowed answers.
@@ -507,5 +511,5 @@ func reportRatingRow(r *ReportRatingView) map[string]any {
 	if r == nil {
 		return nil
 	}
-	return map[string]any{"dimensions": append([]string(nil), r.Dimensions...), "questions": r.Questions}
+	return map[string]any{"question": r.Question, "levels": r.Levels, "dimensions": append([]string(nil), r.Dimensions...), "questions": r.Questions}
 }

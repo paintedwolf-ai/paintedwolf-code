@@ -187,3 +187,24 @@ func TestBrief_PromptTextAndRoundTrip(t *testing.T) {
 		t.Fatal("clone shares conditions with its source")
 	}
 }
+
+func TestBrief_LevelIndexMatchesLabelOrTone(t *testing.T) {
+	b := testBrief(t)
+	for want, l := range b.Levels {
+		names := []string{l.Label, strings.ToLower(l.Label)}
+		if l.Tone != "" {
+			names = append(names, l.Tone)
+		}
+		for _, name := range names {
+			if got, ok := b.LevelIndex(name); !ok || got != want {
+				t.Fatalf("LevelIndex(%q) = %d,%v want %d", name, got, ok, want)
+			}
+		}
+	}
+	if _, ok := b.LevelIndex("severe"); ok {
+		t.Fatal("an undeclared level resolved")
+	}
+	if got := b.LevelLabels(); len(got) != len(b.Levels) || got[0] != "Critical" || got[len(got)-1] != "None" {
+		t.Fatalf("labels = %q", got)
+	}
+}

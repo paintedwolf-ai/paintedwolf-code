@@ -35,8 +35,17 @@ type CoordinatorCompletionReport struct {
 	Limits []string `json:"limits,omitempty"`
 	// Ask is the one decision the report asks of its reader.
 	Ask *CoordinatorAsk `json:"ask,omitempty"`
+	// Rating is the review's call on the declared brief question, made from
+	// all the run's work.
+	Rating *CoordinatorRating `json:"rating,omitempty"`
 	// SetAsides account for scanner groups no finding or claim assessed.
 	SetAsides []CoordinatorSetAside `json:"set_asides,omitempty"`
+}
+
+// CoordinatorRating names one declared level and the reason for it.
+type CoordinatorRating struct {
+	Level string `json:"level"`
+	Why   string `json:"why"`
 }
 
 // CoordinatorFinding pairs an assessed conclusion with source citations.
