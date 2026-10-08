@@ -1,5 +1,9 @@
 name: Set up maintained OpenGrep
 description: Download or restore the pinned, verified engine release
+inputs:
+  save:
+    description: Save a downloaded release (main only); every other run restores without saving
+    default: 'false'
 outputs:
   artifact-directory:
     description: Absolute directory containing the verified maintained artifact
@@ -39,7 +43,7 @@ runs:
         printf 'artifact-directory=%s\n' "${ARTIFACT_DIR}" >> "${GITHUB_OUTPUT}"
 
     - name: Cache verified release
-      if: steps.cache.outputs.cache-hit != 'true'
+      if: inputs.save == 'true' && github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
       uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ steps.identity.outputs.cache-directory }}

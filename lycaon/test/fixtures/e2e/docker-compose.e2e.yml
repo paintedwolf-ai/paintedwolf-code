@@ -167,10 +167,8 @@ services:
       - -c
       - |
         set -eu
-        echo "e2e-sidecar: go build…" >&2
-        # The staged scanner verifies against the identity it was built with.
-        go build -ldflags "-X github.com/lycaon/lycaon/internal/scan/bundled.buildIdentityBase64=${LYCAON_E2E_OPENGREP_IDENTITY:-}" \
-          -o /tmp/lycaon ./cmd/lycaon
+        # e2e-den.sh cross-builds this engine once for every shard.
+        cp "${LYCAON_E2E_STATE_DIR}/container/lycaon" /tmp/lycaon
         # A crash restart kills the recorded sidecar and this loop serves again
         # on the same store. Restarting the container instead rebuilds its
         # network link, and Chromium aborts in-flight requests when the host's

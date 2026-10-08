@@ -1,0 +1,44 @@
+name: Cache Go builds
+description: Restore the module and build caches that main warms for verification
+inputs:
+  save:
+    description: Save the caches after the job (main only); every other run restores without saving
+    default: 'false'
+outputs:
+  cache-hit:
+    description: Whether the exact key for the current module graph was restored
+    value: ${{ steps.save.outputs.cache-hit || steps.restore.outputs.cache-hit }}
+runs:
+  using: composite
+  steps:
+    - name: Resolve Go cache paths
+      id: paths
+      shell: bash
+      run: |
+        set -euo pipefail
+        {
+          printf 'gocache=%s\n' "$(go env GOCACHE)"
+          printf 'gomodcache=%s\n' "$(go env GOMODCACHE)"
+          printf 'key_prefix=go-%s-%s-%s-%s-\n' "${RUNNER_OS}" "${RUNNER_ARCH}" "${ImageOS:-}" "$(go env GOVERSION)"
+        } >> "${GITHUB_OUTPUT}"
+
+    # Keys follow the module graph, so main saves once per dependency change.
+    # Saving starts clean rather than from an older entry, which would carry
+    # superseded dependencies forward.
+    - if: ${{ inputs.save == 'true' && github.ref == 'refs/heads/main' }}
+      id: save
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          ${{ steps.paths.outputs.gocache }}
+          ${{ steps.paths.outputs.gomodcache }}
+        key: ${{ steps.paths.outputs.key_prefix }}${{ hashFiles('lycaon/go.mod', 'lycaon/go.sum', 'scripts/commentlint/go.mod', 'scripts/commentlint/go.sum') }}
+    - if: ${{ inputs.save != 'true' || github.ref != 'refs/heads/main' }}
+      id: restore
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          ${{ steps.paths.outputs.gocache }}
+          ${{ steps.paths.outputs.gomodcache }}
+        key: ${{ steps.paths.outputs.key_prefix }}${{ hashFiles('lycaon/go.mod', 'lycaon/go.sum', 'scripts/commentlint/go.mod', 'scripts/commentlint/go.sum') }}
+        restore-keys: ${{ steps.paths.outputs.key_prefix }}

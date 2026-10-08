@@ -1,5 +1,13 @@
 name: Cache decision engine build
 description: Reuse the bialy release build and its compiled MLX kernels across verification jobs
+inputs:
+  save:
+    description: Save the build after the job (main only); every other run restores without saving
+    default: 'false'
+outputs:
+  cache-hit:
+    description: Whether the exact decision engine build was restored
+    value: ${{ steps.save.outputs.cache-hit || steps.restore.outputs.cache-hit }}
 runs:
   using: composite
   steps:
@@ -13,7 +21,19 @@ runs:
 
     # The target and the kernels it records as built are restored together:
     # a target without its metallib would skip the MLX build that writes it.
-    - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+    - if: ${{ inputs.save == 'true' && github.ref == 'refs/heads/main' }}
+      id: save
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          ${{ steps.paths.outputs.target }}
+          ${{ steps.paths.outputs.metal }}
+        key: decide-${{ runner.os }}-${{ runner.arch }}-${{ env.DEVELOPER_DIR }}-${{ hashFiles('rust-toolchain.toml', 'lycaon/internal/decide/native/Cargo.toml', 'lycaon/internal/decide/native/Cargo.lock', 'lycaon/internal/platformfloor/macos_floor.txt', 'scripts/decide-features.sh', 'scripts/build-decide.sh') }}
+        restore-keys: |
+          decide-${{ runner.os }}-${{ runner.arch }}-${{ env.DEVELOPER_DIR }}-
+    - if: ${{ inputs.save != 'true' || github.ref != 'refs/heads/main' }}
+      id: restore
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: |
           ${{ steps.paths.outputs.target }}
