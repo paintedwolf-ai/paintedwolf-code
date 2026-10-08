@@ -21,16 +21,7 @@ export GOLANGCI_LINT_CACHE="${CACHE_DIR}/golangci-cache-${GOLANGCI_VERSION#v}"
 export GOCACHE="${GOCACHE:-$(go env GOCACHE)}"
 mkdir -p "${BIN_DIR}" "${GOLANGCI_LINT_CACHE}" "${GOCACHE}"
 
-install_golangci_lint() {
-  echo "Installing golangci-lint ${GOLANGCI_VERSION} to ${BIN_DIR} (toolchain ${GOTOOLCHAIN})..." >&2
-  (cd "${GO_DIR}" && GOBIN="${BIN_DIR}" go install "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${GOLANGCI_VERSION}")
-}
-
-if [[ ! -x "${GOLANGCI}" ]]; then
-  install_golangci_lint
-elif ! "${GOLANGCI}" version 2>/dev/null | grep -q "${GOLANGCI_VERSION#v}"; then
-  install_golangci_lint
-fi
+python3 "${ROOT}/scripts/analysis_tools.py" ensure golangci-lint
 
 cd "${GO_DIR}"
 mode="${1:-fast}"

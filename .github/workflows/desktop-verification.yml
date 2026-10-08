@@ -41,4 +41,7 @@ jobs:
       - name: Clean up desktop test resources
         if: always()
         timeout-minutes: 5
-        run: ./task e2e:cleanup
+        # A run killed at its step deadline keeps its admission; withdraw it so cleanup is not queued behind it.
+        run: |
+          python3 scripts/ci_verification.py release "desktop end-to-end tests"
+          ./task e2e:cleanup

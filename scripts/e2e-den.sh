@@ -50,21 +50,27 @@ prepare_engine() {
     aarch64|arm64) target=aarch64-unknown-linux-gnu goarch=arm64 ;;
     *) echo "error: unsupported Docker architecture: ${arch}" >&2; return 1 ;;
   esac
-  if ! awk -v arch="${goarch}" '$2 == "goos:" { os = $3 } $1 == "goarch:" && os == "linux" && $2 == arch { found = 1 } END { exit !found }' \
+  if awk -v arch="${goarch}" '$2 == "goos:" { os = $3 } $1 == "goarch:" && os == "linux" && $2 == arch { found = 1 } END { exit !found }' \
     "${ROOT}/lycaon/config/runtime/scanners/bundled-manifest.yaml"; then
+    export LYCAON_E2E_OPENGREP_TARGET="${target}"
+    LYCAON_E2E_OPENGREP_ARTIFACT_DIR="$(bash "${ROOT}/scripts/resolve-opengrep.sh" --artifact-dir-only --target "${target}")"
+    export LYCAON_E2E_OPENGREP_ARTIFACT_DIR
+    LYCAON_E2E_OPENGREP_IDENTITY="$(cd "${ROOT}/lycaon" && env -u LYCAON_OPENGREP_CANDIDATE go run ./cmd/opengrep-artifact \
+      -mode identity -target "${target}" -artifact-directory "${LYCAON_E2E_OPENGREP_ARTIFACT_DIR}")"
+    export LYCAON_E2E_OPENGREP_IDENTITY
+  else
     echo "e2e-den: no maintained scanner release for linux/${goarch}; scanner specs will fail" >&2
-    return 0
   fi
-  export LYCAON_E2E_OPENGREP_TARGET="${target}"
-  LYCAON_E2E_OPENGREP_ARTIFACT_DIR="$(bash "${ROOT}/scripts/resolve-opengrep.sh" --artifact-dir-only --target "${target}")"
-  export LYCAON_E2E_OPENGREP_ARTIFACT_DIR
-  LYCAON_E2E_OPENGREP_IDENTITY="$(cd "${ROOT}/lycaon" && env -u LYCAON_OPENGREP_CANDIDATE go run ./cmd/opengrep-artifact \
-    -mode identity -target "${target}" -artifact-directory "${LYCAON_E2E_OPENGREP_ARTIFACT_DIR}")"
-  export LYCAON_E2E_OPENGREP_IDENTITY
+  # One cross-build serves every shard's container; the staged scanner verifies against this identity.
+  mkdir -p "${prepared}/container"
+  (cd "${ROOT}/lycaon" && CGO_ENABLED=0 GOOS=linux GOARCH="${goarch}" go build \
+    -ldflags "-X github.com/lycaon/lycaon/internal/scan/bundled.buildIdentityBase64=${LYCAON_E2E_OPENGREP_IDENTITY:-}" \
+    -o "${prepared}/container/lycaon" ./cmd/lycaon)
 }
 
 stage_shard_engine() {
   cp -R "${LYCAON_E2E_PREPARED_DIR}/runtime" "${LYCAON_E2E_STATE_DIR}/runtime"
+  cp -R "${LYCAON_E2E_PREPARED_DIR}/container" "${LYCAON_E2E_STATE_DIR}/container"
   [[ -n "${LYCAON_E2E_OPENGREP_ARTIFACT_DIR:-}" ]] || return 0
   (cd "${ROOT}/lycaon" && env -u LYCAON_OPENGREP_CANDIDATE go run ./cmd/opengrep-artifact -mode stage \
     -target "${LYCAON_E2E_OPENGREP_TARGET}" -artifact-directory "${LYCAON_E2E_OPENGREP_ARTIFACT_DIR}" \
@@ -89,7 +95,7 @@ if [[ "${LYCAON_E2E_SHARD_CHILD:-0}" != "1" ]]; then
   total_shards=$((job_count * shard_count))
   if ((shard_count > 1 || job_count > 1)); then
     cd "${ROOT}/lycaon-den"
-    if ! bunx playwright install chromium webkit --with-deps; then
+    if [[ "${LYCAON_E2E_PLAYWRIGHT_READY:-0}" != "1" ]] && ! bunx playwright install chromium webkit --with-deps; then
       echo "playwright install --with-deps failed; retrying without system deps" >&2
       bunx playwright install chromium webkit
     fi
@@ -99,6 +105,10 @@ if [[ "${LYCAON_E2E_SHARD_CHILD:-0}" != "1" ]]; then
     prepared="$(mktemp -d "${PW_ARTIFACT_ROOT}/e2e-state/prepared.XXXXXX")"
     trap 'rm -rf "${prepared}"' EXIT
     prepare_engine "${prepared}"
+    # Playwright's --shard splits by test count and sends every file with its own browser options
+    # to the last shard; dealing files in turn spreads each family of slow specs across shards.
+    PLAYWRIGHT_E2E=web bunx playwright test --project=web "$@" --list --reporter=json \
+      | python3 "${E2E_DIR}/deal-test-files.py" "${total_shards}" "${prepared}/test-lists"
     pids=()
     stop_shards() {
       if ((${#pids[@]} > 0)); then
@@ -114,12 +124,18 @@ if [[ "${LYCAON_E2E_SHARD_CHILD:-0}" != "1" ]]; then
     trap exit_shards INT TERM
     for ((shard = 1; shard <= shard_count; shard++)); do
       global_shard=$(( (job_index - 1) * shard_count + shard ))
+      selection="${prepared}/test-lists/shard-${global_shard}.txt"
+      [[ -s "${selection}" ]] || continue
       LYCAON_E2E_SHARD_CHILD=1 \
       LYCAON_E2E_PLAYWRIGHT_READY=1 \
       LYCAON_E2E_OUTPUT_DIR="${ROOT}/lycaon-den/test-results/shard-${shard}" \
-        bash "$0" "$@" --shard="${global_shard}/${total_shards}" &
+        bash "$0" "$@" --test-list "${prepared}/test-lists/shard-${global_shard}.txt" &
       pids+=("$!")
     done
+    if ((${#pids[@]} == 0)); then
+      echo "error: job shard ${job_shard} selects no E2E specs" >&2
+      exit 1
+    fi
     status=0
     for pid in "${pids[@]}"; do
       if ! wait "${pid}"; then

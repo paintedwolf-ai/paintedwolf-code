@@ -78,7 +78,7 @@ func requireHostedGate(t *testing.T, jobs map[string]hostedJob, gate string, dep
 
 func TestHostedVerificationAggregatesRequireEveryJob(t *testing.T) {
 	t.Parallel()
-	for workflow, gate := range map[string]string{"ci": "check", "nightly": "nightly", "verification": "verified"} {
+	for workflow, gate := range map[string]string{"ci": "check", "nightly": "nightly"} {
 		jobs := hostedJobs(t, workflow)
 		var dependencies []string
 		for name := range jobs {
@@ -87,6 +87,30 @@ func TestHostedVerificationAggregatesRequireEveryJob(t *testing.T) {
 			}
 		}
 		requireHostedGate(t, jobs, gate, dependencies)
+	}
+}
+
+func TestReusableVerificationFailsWithItsPlanOrAnyMatrixJob(t *testing.T) {
+	t.Parallel()
+	jobs := hostedJobs(t, "verification")
+	if len(jobs) != 2 {
+		t.Fatalf("reusable verification must contain only planning and execution, got %d jobs", len(jobs))
+	}
+	plan, planOK := jobs["plan"]
+	verify, verifyOK := jobs["verify"]
+	if !planOK || !verifyOK || plan.Continue || verify.Continue || verify.If != "" {
+		t.Fatal("planning and every selected matrix job must contribute to the reusable workflow verdict")
+	}
+	if !slices.Equal(hostedNeeds(t, verify), []string{"plan"}) {
+		t.Fatal("matrix execution must depend on successful planning")
+	}
+	if verify.Strategy.FailFast == nil || *verify.Strategy.FailFast {
+		t.Fatal("each selected matrix job must run and retain its own evidence")
+	}
+	for _, step := range verify.Steps {
+		if strings.HasPrefix(step.Run, "python3 scripts/ci_verification.py run") && step.Continue {
+			t.Fatal("an unverified or failed lane must fail the reusable workflow")
+		}
 	}
 }
 

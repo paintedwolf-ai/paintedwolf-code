@@ -84,7 +84,7 @@ release, update both the host manifest and the action's revision pin together.
 3. If provider integrations changed, run the [provider checks](#provider-integration-checks).
 4. Merge the candidate through the merge queue, which runs the full CI tier on
    the commit that lands, and wait for
-   [Release build cache](../../.github/workflows/release-build-cache.yml) to
+   [Build caches](../../.github/workflows/build-caches.yml) to
    pass; the release build restores the Go and Tauri compiles that run saved.
    Tag that exact commit as `v<VERSION>` and push the tag. This starts
    [Release](../../.github/workflows/release.yml), which refuses a commit

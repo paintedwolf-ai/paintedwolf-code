@@ -156,7 +156,7 @@ func TestCheckFastGateMembership(t *testing.T) {
 	}
 	plan := verificationCatalog(t)
 	want := []string{"build", "lint:fast", "budgets", "den:typecheck", "den:lint", "den:test:fast", "den:coverage:changes",
-		"test:short", "test:contract", "coverage:changes"}
+		"test:short", "test:contract", "coverage:changes", "licenses:notices"}
 	if !slices.Equal(plan.Groups["check-fast"], want) {
 		t.Fatalf("check-fast stages = %v, want %v", plan.Groups["check-fast"], want)
 	}
@@ -178,8 +178,8 @@ func TestCheckFastGateMembership(t *testing.T) {
 	if !strings.Contains(checkWorkspace, `test -n "${PW_SOURCE_SNAPSHOT_COMMIT:-}"`) {
 		t.Fatal("check:workspace must reject an unpinned source tree")
 	}
-	if !slices.Contains(plan.Groups["check"], "build:cross") || !slices.Contains(plan.Groups["check"], "check:tests") {
-		t.Fatal("check:workspace must run cross-build and complete tests")
+	if !slices.Contains(plan.Groups["check"], "build:cross") || !slices.Contains(plan.Groups["check"], "check:tests") || !slices.Contains(plan.Groups["check"], "licenses:notices") {
+		t.Fatal("check:workspace must run cross-build, complete tests, and notices")
 	}
 
 	if !strings.Contains(checkWorkspace, "test-execution.py plan -- check") {
