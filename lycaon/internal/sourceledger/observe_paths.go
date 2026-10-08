@@ -106,10 +106,14 @@ func (s *Store) recordPathDrift(ctx context.Context, projectID string, roots []R
 		return 0, err
 	}
 	defer func() { _ = tx.Rollback() }()
+	scope, err := s.mutationObservationScope(ctx, tx, projectID)
+	if err != nil {
+		return 0, err
+	}
 	recorded := 0
 	for _, drift := range drifts {
 		cause.gitTransitionID = transitionByRoot[drift.rootID]
-		landed, err := s.recordObservationTx(ctx, tx, projectID, drift.head, drift.observed, newID(), cause)
+		landed, err := s.recordObservationTx(ctx, tx, scope, projectID, drift.head, drift.observed, newID(), cause)
 		if err != nil {
 			return 0, fmt.Errorf("record %s: %w", drift.head.Path, err)
 		}

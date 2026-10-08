@@ -43,12 +43,16 @@ type SourceMutationService struct {
 }
 
 func NewSourceMutationService(database db.Handle, ledger *sourceledger.Store) *SourceMutationService {
-	return &SourceMutationService{
+	service := &SourceMutationService{
 		db: database, ledger: ledger, trash: desktoptrash.Move, sameFilesystem: fspath.SameFilesystem, recoveryBytes: make(map[string][]byte), recoveryEntries: make(map[string][]sourceledger.RecoveryEntry),
 		people:  peoplestore.New(database),
 		memory:  make(map[string]*sourceMutationRow),
 		history: make(map[string]*sourceHistoryEntry),
 	}
+	if ledger != nil {
+		ledger.SetMutationScopeProvider(service)
+	}
+	return service
 }
 
 func (s *SourceMutationService) execute(ctx context.Context, operationID, projectID, inputDigest string, prepare func() (*sourceMutationPlan, error)) (json.RawMessage, error) {

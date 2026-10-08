@@ -65,6 +65,7 @@ type Store struct {
 
 	gitObservations    keylock.Group
 	recordMu           sync.Mutex
+	mutationScopes     MutationScopeProvider
 	inventoryMu        sync.Mutex
 	inventoryJobs      map[string]*inventoryJob
 	inventorySuspended map[string]int
