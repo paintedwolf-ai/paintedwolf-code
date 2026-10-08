@@ -12,7 +12,6 @@ import (
 
 type hostWriteTarget struct {
 	path, digest string
-	temporary    bool
 }
 
 type hostWriteState struct {
@@ -22,8 +21,7 @@ type hostWriteState struct {
 }
 
 type hostWriteReceipt struct {
-	at        time.Time
-	temporary bool
+	at time.Time
 	hostWriteState
 }
 
@@ -39,12 +37,6 @@ func NoteHostWrite(absPath string) {
 	noteHostWritePaths([]hostWriteTarget{{path: absPath}})
 }
 
-// NoteHostTemporaryPath suppresses lifecycle events for a write door's private
-// staging or quarantine path, including its removal after commit.
-func NoteHostTemporaryPath(absPath string) {
-	noteHostWritePaths([]hostWriteTarget{{path: absPath, temporary: true}})
-}
-
 func noteHostWritePaths(paths []hostWriteTarget) {
 	observed := make(map[string]hostWriteReceipt, len(paths))
 	for _, target := range paths {
@@ -55,12 +47,8 @@ func noteHostWritePaths(paths []hostWriteTarget) {
 		if err != nil {
 			continue
 		}
-		state, ok := hostWriteState{}, target.temporary
-		if !target.temporary {
-			state, ok = readHostWriteState(key, target.digest)
-		}
-		if ok {
-			observed[key] = hostWriteReceipt{at: time.Now(), temporary: target.temporary, hostWriteState: state}
+		if state, ok := readHostWriteState(key, target.digest); ok {
+			observed[key] = hostWriteReceipt{at: time.Now(), hostWriteState: state}
 		}
 	}
 	if len(observed) == 0 {
@@ -142,9 +130,6 @@ func isRecentHostWrite(absPath string) bool {
 	selfMu.Unlock()
 	if !ok || time.Since(receipt.at) > selfWriteWindow {
 		return false
-	}
-	if receipt.temporary {
-		return true
 	}
 	current, ok := readHostWriteState(key, "")
 	return ok && current == receipt.hostWriteState

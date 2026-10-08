@@ -11,7 +11,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/fseffect"
-	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/textfile"
 )
 
@@ -205,11 +204,10 @@ func applyProjectSourceWrite(plan *sourceWritePlan) error {
 		return ErrSourceWriteConflict
 	}
 	if _, err := fseffect.Replace(fseffect.ReplaceRequest{
-		Location:           fseffect.Location{Root: plan.RootPath, Rel: filepath.FromSlash(plan.Result.Path)},
-		Source:             bytes.NewReader(plan.Result.After),
-		Mode:               0o644,
-		PreserveMode:       true,
-		ObserveStagingPath: sourcefeed.NoteHostTemporaryPath,
+		Location:     fseffect.Location{Root: plan.RootPath, Rel: filepath.FromSlash(plan.Result.Path)},
+		Source:       bytes.NewReader(plan.Result.After),
+		Mode:         0o644,
+		PreserveMode: true,
 		BeforeCommit: func(target fseffect.Target, _ fseffect.Result) error {
 			f, err := target.Open()
 			if err != nil {

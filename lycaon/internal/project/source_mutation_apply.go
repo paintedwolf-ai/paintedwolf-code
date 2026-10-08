@@ -10,7 +10,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/fspath"
-	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/textfile"
 )
 
@@ -174,7 +173,6 @@ func applySourceCreate(plan *sourceMutationPlan) error {
 	_, err = fseffect.Replace(fseffect.ReplaceRequest{
 		Location: fseffect.Location{Root: plan.RootPath, Rel: filepath.FromSlash(plan.Path)},
 		Source:   bytes.NewReader(plan.After), Mode: sourceCreateFileMode,
-		ObserveStagingPath: sourcefeed.NoteHostTemporaryPath,
 		BeforeCommit: func(target fseffect.Target, _ fseffect.Result) error {
 			_, statErr := target.Lstat()
 			if os.IsNotExist(statErr) {

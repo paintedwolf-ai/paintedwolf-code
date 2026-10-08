@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
-	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/textfile"
 )
@@ -107,8 +106,7 @@ func replaceState(root string, before, after sourceledger.RestorableVersion, mod
 	}
 	_, err = fseffect.Replace(fseffect.ReplaceRequest{
 		Location: loc, Source: bytes.NewReader(after.Content), Mode: os.FileMode(mode), DirMode: 0o755,
-		ObserveStagingPath: sourcefeed.NoteHostTemporaryPath,
-		BeforeCommit:       func(_ fseffect.Target, _ fseffect.Result) error { return matchState(root, before) },
+		BeforeCommit: func(_ fseffect.Target, _ fseffect.Result) error { return matchState(root, before) },
 	})
 	return err
 }

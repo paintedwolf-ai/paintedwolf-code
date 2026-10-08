@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/fspath"
 )
 
@@ -39,7 +40,12 @@ func HoldPrivateTree(path string) func() {
 	}
 }
 
+// IsPrivatePath reports whether path lies in a held private tree or is an
+// entry the durable-write door is staging.
 func IsPrivatePath(path string) bool {
+	if fseffect.IsStaging(filepath.Dir(path), filepath.Base(path)) {
+		return true
+	}
 	privateTrees.RLock()
 	defer privateTrees.RUnlock()
 	if len(privateTrees.paths) == 0 {
@@ -70,6 +76,9 @@ func NewPrivateDirectoryFilter(directory string) *PrivateDirectoryFilter {
 
 // Contains reports whether the named direct child is currently private.
 func (f *PrivateDirectoryFilter) Contains(name string) bool {
+	if fseffect.IsStaging(f.directory, name) {
+		return true
+	}
 	privateTrees.RLock()
 	havePrivateTrees := len(privateTrees.paths) != 0
 	privateTrees.RUnlock()
