@@ -431,39 +431,21 @@ func TestDirectIPNarrowingEndToEnd(t *testing.T) {
 		t.Fatalf("declared strings must reach the confinement: got %v want %v", c.DirectIPPermits, want)
 	}
 
-	// The narrowed profile retains name resolution. Public NTP servers drop
-	// requests under load, so any one of several may answer; a denial fails at once.
-	ntp := []string{"/usr/bin/python3", "-c", `import socket,struct,sys
-errors = []
-for host in ("time.apple.com", "time.google.com", "pool.ntp.org", "time.nist.gov"):
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.settimeout(4)
-        s.connect((socket.gethostbyname(host), 123))
-        s.send(b"\x1b" + 47 * b"\0")
-        print(struct.unpack("!12I", s.recv(48))[10] - 2208988800)
-        sys.exit(0)
-    except PermissionError:
-        raise
-    except OSError as error:
-        errors.append(f"{host}: {error}")
-sys.exit("no NTP server answered: " + "; ".join(errors))`}
-	code, out, stderr := confinedStdout(t, self, *c, ntp[0], ntp[1:]...)
-	if code != 0 {
-		t.Fatalf("narrowed direct IP must complete an NTP round trip by name: exit=%d out=%s stderr=%s", code, out, stderr)
+	// The narrowed profile keeps the system resolver. The host's own mDNS name
+	// is answered by mDNSResponder without traffic, and deny withholds it.
+	name := mdnsSelfName(t)
+	resolve := []string{"/usr/bin/python3", "-c", "import socket,sys; socket.gethostbyname(sys.argv[1])", name}
+	deny := confine.Confinement{Roots: []string{proj}, Network: confine.NetworkDeny}
+	if code, out := confinedRun(t, self, deny, resolve[0], resolve[1:]...); code == 0 {
+		t.Fatalf("%s must need the system resolver, which deny withholds: out=%s", name, out)
 	}
-	epoch, err := strconv.ParseInt(strings.TrimSpace(out), 10, 64)
-	if err != nil {
-		t.Fatalf("expected a unix timestamp from the server, got %q (%v; stderr=%s)", out, err, stderr)
-	}
-	// The response must contain a plausible timestamp.
-	if epoch < 1_700_000_000 || epoch > 4_000_000_000 {
-		t.Fatalf("implausible NTP timestamp %d — the exchange did not reach a real server", epoch)
+	if code, out := confinedRun(t, self, *c, resolve[0], resolve[1:]...); code != 0 {
+		t.Fatalf("narrowed direct IP must resolve %s: exit=%d out=%s", name, code, out)
 	}
 
-	// Undeclared transports remain denied.
-	if code, out := confinedRun(t, self, *c, "/usr/bin/python3", "-c",
-		"import socket;s=socket.socket();s.settimeout(3);s.connect(('1.1.1.1',443));print('tcp ok')"); code == 0 {
-		t.Fatalf("undeclared tcp must stay denied on the end-to-end path: out=%s", out)
+	// Only the declared transport leaves the host.
+	if got, want := directIPVerdicts(t, self, *c, "udp/123", "udp/124", "tcp/123", "tcp/443"),
+		"udp/123 allowed\nudp/124 denied\ntcp/123 denied\ntcp/443 denied\n"; got != want {
+		t.Fatalf("the declared udp/123 must be the only direct transport end to end:\ngot:\n%swant:\n%s", got, want)
 	}
 }
