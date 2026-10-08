@@ -2,12 +2,12 @@ name: Cache Go builds
 description: Restore the module and build caches that main warms for verification
 inputs:
   save:
-    description: Save the caches after the job (main only); every other run restores without saving
+    description: Publish prepared caches (main only); the default restores without saving
     default: 'false'
 outputs:
   cache-hit:
     description: Whether the exact key for the current module graph was restored
-    value: ${{ steps.save.outputs.cache-hit || steps.restore.outputs.cache-hit }}
+    value: ${{ steps.restore.outputs.cache-hit }}
 runs:
   using: composite
   steps:
@@ -27,7 +27,7 @@ runs:
     # superseded dependencies forward.
     - if: ${{ inputs.save == 'true' && github.ref == 'refs/heads/main' }}
       id: save
-      uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+      uses: actions/cache/save@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
       with:
         path: |
           ${{ steps.paths.outputs.gocache }}

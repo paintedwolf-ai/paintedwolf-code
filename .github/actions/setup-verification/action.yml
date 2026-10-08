@@ -48,8 +48,6 @@ runs:
     # what it saves, and its entries would evict main's.
     - id: go
       uses: ./.github/actions/cache-go
-      with:
-        save: ${{ inputs.save-caches }}
 
     - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
       with:
@@ -85,8 +83,6 @@ runs:
       id: decide
       if: runner.os == 'macOS' && inputs.setup == 'shell'
       uses: ./.github/actions/cache-decide
-      with:
-        save: ${{ inputs.save-caches }}
 
     - name: Set up maintained OpenGrep
       uses: ./.github/actions/setup-opengrep
@@ -120,8 +116,6 @@ runs:
     - name: Restore notices tools
       if: inputs.setup == 'shell' || inputs.notices == 'true'
       uses: ./.github/actions/cache-notices-tools
-      with:
-        save: ${{ inputs.save-caches }}
 
     # Preparation writes resources into this checkout; verification checks use isolated snapshots.
     - name: Prepare shell resource notices
@@ -134,4 +128,3 @@ runs:
       uses: ./.github/actions/cache-analysis-tools
       with:
         tools: ${{ inputs.analysis }}
-        save: ${{ inputs.save-caches }}
