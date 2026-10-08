@@ -4,6 +4,9 @@ inputs:
   save:
     description: Publish prepared caches (main only); the default restores without saving
     default: 'false'
+  exact:
+    description: Restore only the current module graph when preparing its main cache
+    default: 'false'
 outputs:
   cache-hit:
     description: Whether the exact key for the current module graph was restored
@@ -41,4 +44,4 @@ runs:
           ${{ steps.paths.outputs.gocache }}
           ${{ steps.paths.outputs.gomodcache }}
         key: ${{ steps.paths.outputs.key_prefix }}${{ hashFiles('lycaon/go.mod', 'lycaon/go.sum', 'scripts/commentlint/go.mod', 'scripts/commentlint/go.sum') }}
-        restore-keys: ${{ steps.paths.outputs.key_prefix }}
+        restore-keys: ${{ inputs.exact != 'true' && steps.paths.outputs.key_prefix || '' }}
