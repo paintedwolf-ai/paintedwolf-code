@@ -72,6 +72,7 @@ func (e *engine) ListForPrompt(ctx context.Context, sess *api.Session, profileID
 	base := tools.ListToolsForProfile(ctx, e.deps.ToolInvoker, filter)
 	workerChild := sess.IsWorkerChild()
 	out := make([]tools.ToolMeta, 0, len(base))
+	var listing *rules.EvalContext
 	for _, meta := range base {
 		// A profile grants capability; only the session says which shape is running.
 		if !toolcontract.AdmitsSession(meta.Name, workerChild) {
@@ -82,13 +83,34 @@ func (e *engine) ListForPrompt(ctx context.Context, sess *api.Session, profileID
 			out = append(out, meta)
 			continue
 		}
-		_, outcome, err := e.checkInvocation(ctx, sess, meta.Name, nil)
-		if err != nil || (outcome != nil && !outcome.Allowed) {
+		if !e.listingAdmits(ctx, sess, meta.Name, &listing) {
 			continue
 		}
 		out = append(out, meta)
 	}
 	return out
+}
+
+// listingAdmits asks checkInvocation's question for an empty-args call. Session
+// state is read once per listing; only the tool name differs between candidates.
+func (e *engine) listingAdmits(ctx context.Context, sess *api.Session, tool string, listing **rules.EvalContext) bool {
+	if e == nil || sess == nil {
+		return true
+	}
+	if err := e.evaluatePreInvoke(ctx, sess, tool, nil); err != nil {
+		return false
+	}
+	if e.deps.Rules == nil {
+		return true
+	}
+	if *listing == nil {
+		shared := BuildEvalContext(ctx, e.deps, sess, tool, nil)
+		*listing = &shared
+	}
+	eval := **listing
+	eval.ToolName = tool
+	outcome, err := e.deps.Rules.Evaluate(ctx, eval)
+	return err == nil && (outcome == nil || outcome.Allowed)
 }
 
 func (e *engine) EvaluateInvoke(ctx context.Context, sess *api.Session, toolName string, args map[string]any) error {
