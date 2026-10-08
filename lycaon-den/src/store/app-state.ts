@@ -1,3 +1,4 @@
+import { batch } from "solid-js";
 import { createStore, produce } from "solid-js/store";
 import { projectMatchesDir } from "../api/project-path.ts";
 import { isEnterableSessionStatus } from "../api/session-status.generated.ts";
@@ -93,7 +94,8 @@ export function createAppStore(
     },
     installSessionBootstrap(bootstrap, sessionOverride) {
       const session = sessionOverride ?? bootstrap.session;
-      const previousQueue = queueDrafts.get(session.id.trim());
+      const sid = session.id.trim();
+      const queue = rememberQueueDraft(sid, bootstrap.queue);
       setState(
         produce((draft) => {
           draft.sessionViewEpoch++;
@@ -103,9 +105,8 @@ export function createAppStore(
           draft.progress = bootstrap.progress;
           draft.turnClock = bootstrap.turn_clock;
           draft.findings = loaded(bootstrap.findings ?? null);
-          draft.queueDraft = rememberQueueDraft(session.id.trim(), bootstrap.queue);
+          draft.queueDraft = queue;
           draft.coordinatorRunContext = bootstrap.coordinator;
-          const sid = session.id.trim();
           mutateSessionActivity(draft, sid, (entry) => {
             entry.activities = bootstrap.activities?.length
               ? Object.fromEntries(bootstrap.activities.map((activity) => [activity.activity_id, activity]))
@@ -132,9 +133,7 @@ export function createAppStore(
           draft.pendingCheckpoints = bootstrap.checkpoints.map(pendingFromEvent);
         }),
       );
-      if (!previousQueue || bootstrap.queue.revision > previousQueue.revision) {
-        reconcilePendingOnQueueDraft({ state, actions }, session.id.trim(), bootstrap.queue);
-      }
+      reconcilePendingOnQueueDraft({ state, actions }, sid, queue);
       replayForegroundBufferedMessages({ state, actions }, session.id);
     },
     setWorkers(workers) {
@@ -562,15 +561,12 @@ export function createAppStore(
     setQueueDraft(sessionId, epoch, queueDraft) {
       const sid = sessionId.trim();
       if (state.currentSession?.id.trim() !== sid || state.sessionViewEpoch !== epoch) return false;
-      const current = queueDrafts.get(sid);
-      if (current && current.revision >= queueDraft.revision) return false;
-      queueDrafts.set(sid, queueDraft);
-      setState(
-        produce((s) => {
-          s.queueDraft = queueDraft;
-        }),
-      );
-      return true;
+      const queue = rememberQueueDraft(sid, queueDraft);
+      batch(() => {
+        setState("queueDraft", queue);
+        reconcilePendingOnQueueDraft({ state, actions }, sid, queue);
+      });
+      return queue === queueDraft;
     },
     bumpVerifyDetectRevision() {
       setState("verifyDetectRevision", state.verifyDetectRevision + 1);
