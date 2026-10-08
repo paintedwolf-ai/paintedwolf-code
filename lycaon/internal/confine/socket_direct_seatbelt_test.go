@@ -275,12 +275,14 @@ func TestSeatbeltSystemResolverIsDirectIPOnly(t *testing.T) {
 	proj := filepath.Join(dir, "proj")
 	testutil.FailErr(t, "mkdir", os.Mkdir(proj, 0o755))
 
-	resolve := []string{"/usr/bin/python3", "-c",
-		"import socket; socket.gethostbyname('example.com'); print('resolved')"}
+	// The host's own mDNS name is answered by mDNSResponder without traffic.
+	// Hosts-file names resolve in-process even under deny, so they prove nothing.
+	name := mdnsSelfName(t)
+	resolve := []string{"/usr/bin/python3", "-c", "import socket,sys; socket.gethostbyname(sys.argv[1])", name}
 
 	direct := confine.Confinement{Roots: []string{proj}, Network: confine.NetworkDirectIP}
 	if code, out := confinedRun(t, self, direct, resolve[0], resolve[1:]...); code != 0 {
-		t.Fatalf("direct IP must resolve names, else it is a literal-IP-only capability: exit=%d out=%s", code, out)
+		t.Fatalf("direct IP must resolve %s, else it is a literal-IP-only capability: exit=%d out=%s", name, code, out)
 	}
 
 	proxyEndpoint, err := net.Listen("tcp", "127.0.0.1:0")
@@ -294,8 +296,8 @@ func TestSeatbeltSystemResolverIsDirectIPOnly(t *testing.T) {
 			c.ProxyAddr = proxyEndpoint.Addr().String()
 		}
 		if code, out := confinedRun(t, self, c, resolve[0], resolve[1:]...); code == 0 {
-			t.Fatalf("%s must not reach the system resolver: exit=%d out=%s",
-				confine.NetworkLabel(mode), code, out)
+			t.Fatalf("%s must not resolve %s through the system resolver: out=%s",
+				confine.NetworkLabel(mode), name, out)
 		}
 	}
 }
@@ -313,30 +315,16 @@ func TestSeatbeltDirectIPNarrowing(t *testing.T) {
 		DirectIPPermits: []confine.DirectIPPermit{{Protocol: "udp", Port: 123}},
 	}
 
-	udp := []string{"/usr/bin/python3", "-c",
-		"import socket;s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM);s.settimeout(2);" +
-			"s.connect(('132.163.96.1',123));s.send(b'x');print('udp ok')"}
-	if code, out := confinedRun(t, self, narrowed, udp[0], udp[1:]...); code != 0 {
-		t.Fatalf("declared udp/123 must be permitted: exit=%d out=%s", code, out)
-	}
-
-	// Undeclared transports remain unavailable.
-	tcp := []string{"/usr/bin/python3", "-c",
-		"import socket;s=socket.socket();s.settimeout(3);s.connect(('1.1.1.1',443));print('tcp ok')"}
-	if code, out := confinedRun(t, self, narrowed, tcp[0], tcp[1:]...); code == 0 {
-		t.Fatalf("undeclared tcp/443 must be denied under a udp/123 permit: out=%s", out)
-	}
-	otherUDP := []string{"/usr/bin/python3", "-c",
-		"import socket;s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM);s.settimeout(2);" +
-			"s.connect(('1.1.1.1',53));s.send(b'x');print('udp53 ok')"}
-	if code, out := confinedRun(t, self, narrowed, otherUDP[0], otherUDP[1:]...); code == 0 {
-		t.Fatalf("undeclared udp/53 must be denied under a udp/123 permit: out=%s", out)
+	if got, want := directIPVerdicts(t, self, narrowed, "udp/123", "udp/53", "tcp/123", "tcp/443"),
+		"udp/123 allowed\nudp/53 denied\ntcp/123 denied\ntcp/443 denied\n"; got != want {
+		t.Fatalf("a udp/123 permit must admit only udp/123:\ngot:\n%swant:\n%s", got, want)
 	}
 
 	// Empty permits leave direct IP unrestricted.
 	wide := confine.Confinement{Roots: []string{proj}, Network: confine.NetworkDirectIP}
-	if code, out := confinedRun(t, self, wide, tcp[0], tcp[1:]...); code != 0 {
-		t.Fatalf("unnarrowed direct IP must still reach tcp/443: exit=%d out=%s", code, out)
+	if got, want := directIPVerdicts(t, self, wide, "udp/53", "tcp/443"),
+		"udp/53 allowed\ntcp/443 allowed\n"; got != want {
+		t.Fatalf("unnarrowed direct IP must admit every transport:\ngot:\n%swant:\n%s", got, want)
 	}
 
 	// Direct IP rules cannot narrow the peer host.
@@ -348,6 +336,41 @@ func TestSeatbeltDirectIPNarrowing(t *testing.T) {
 	if strings.Contains(profile, `(remote ip "*:*")`) {
 		t.Fatalf("narrowed profile must not keep the wide-open allowance: %s", profile)
 	}
+}
+
+// directIPVerdicts reports the sandbox verdict for each "proto/port" toward
+// TEST-NET-1. Seatbelt's localhost covers every local interface address, so
+// only a non-local peer reaches the direct-IP rules; TEST-NET-1 never answers,
+// so the verdict is the connect or send errno, not a reply.
+func directIPVerdicts(t *testing.T, self string, c confine.Confinement, transports ...string) string {
+	t.Helper()
+	probe := []string{"/usr/bin/python3", "-c", `import socket,sys
+for spec in sys.argv[1:]:
+    proto, port = spec.split("/")
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM if proto == "udp" else socket.SOCK_STREAM)
+    s.setblocking(False)
+    try:
+        s.connect(("192.0.2.1", int(port)))
+        if proto == "udp":
+            s.send(b"x")
+        verdict = "allowed"
+    except PermissionError:
+        verdict = "denied"
+    except OSError:
+        verdict = "allowed"
+    print(spec, verdict)`}
+	code, out, stderr := confinedStdout(t, self, c, probe[0], append(probe[1:], transports...)...)
+	if code != 0 {
+		t.Fatalf("verdict probe failed: exit=%d out=%s stderr=%s", code, out, stderr)
+	}
+	return out
+}
+
+func mdnsSelfName(t *testing.T) string {
+	t.Helper()
+	out, err := exec.Command("/usr/sbin/scutil", "--get", "LocalHostName").Output()
+	testutil.FailErr(t, "read LocalHostName", err)
+	return strings.TrimSpace(string(out)) + ".local"
 }
 
 // TestDirectIPPermitsNarrowOnly verifies declarations cannot add access.
