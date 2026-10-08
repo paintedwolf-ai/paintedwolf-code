@@ -52,7 +52,7 @@ func TestSeatbeltGatedTestsAreCoveredByAGate(t *testing.T) {
 	}
 	contractcheck.FailViolations(t, "tests engage OS confinement but no CI scope runs them — off a "+
 		"sandboxed host they skip, and a skip is indistinguishable from a pass. Add each to "+
-		"the test:seatbelt -run filter in Taskfile.yml (or to the browser-confinement job in "+
+		"the test:seatbelt -run filter in Taskfile.yml (or to the confinement job's browser step in "+
 		".github/workflows/platform-verification.yml for browser tests, which is the only leg that stages a browser)",
 		uncovered)
 }
@@ -199,14 +199,14 @@ func seatbeltDeclaredScopes(t *testing.T, root string) []goTestScope {
 	}
 	scopes = append(scopes, parseGoTestScopes("Taskfile.yml test:seatbelt", body)...)
 
-	job := extractYAMLJob(contractcheck.ReadRepoFile(t, root, ".github/workflows/platform-verification.yml"), "browser-confinement")
+	job := extractYAMLJob(contractcheck.ReadRepoFile(t, root, ".github/workflows/platform-verification.yml"), "confinement")
 	if job == "" {
-		t.Fatal(".github/workflows/platform-verification.yml has no browser-confinement job")
+		t.Fatal(".github/workflows/platform-verification.yml has no confinement job")
 	}
-	scopes = append(scopes, parseGoTestScopes("platform-verification.yml browser-confinement", job)...)
+	scopes = append(scopes, parseGoTestScopes("platform-verification.yml confinement", job)...)
 
 	if len(scopes) == 0 {
-		t.Fatal("parsed no run scopes from the seatbelt task or the browser-confinement job")
+		t.Fatal("parsed no run scopes from the seatbelt task or the confinement job")
 	}
 	return scopes
 }
