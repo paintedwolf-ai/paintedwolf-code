@@ -1,12 +1,15 @@
 name: CI
 
-# Pull requests run the fast tier, the stages of `./task check-fast`. The merge
-# queue runs the full tier on the exact commit that lands on main: every stage of
-# `./task check` plus platform verification. `check` is the one required check
-# for both, so main only advances to a commit the full tier passed.
+# Ready pull requests run the fast tier, the stages of `./task check-fast`. The
+# merge queue runs the full tier on the exact commit that lands on main: every
+# stage of `./task check` plus platform verification. `check` is the one
+# required check for both, so main only advances to a commit the full tier
+# passed. Drafts spend no verification runners, and their `check` fails until
+# they are marked ready.
 on:
   pull_request:
     branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
   merge_group:
   # The full tier on any branch, before queueing or to reproduce a queue failure.
   workflow_dispatch:
@@ -20,6 +23,7 @@ concurrency:
 
 jobs:
   verification:
+    if: ${{ !github.event.pull_request.draft }}
     uses: ./.github/workflows/verification.yml
     with:
       profile: ${{ github.event_name == 'pull_request' && 'fast' || 'check' }}
@@ -40,4 +44,5 @@ jobs:
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}
           SKIPPED: ${{ github.event_name == 'pull_request' && 'platform' || '' }}
-        run: python3 scripts/ci_verification.py gate --skipped "$SKIPPED"
+          DRAFT: ${{ github.event.pull_request.draft == true }}
+        run: python3 scripts/ci_verification.py gate --skipped "$SKIPPED" --draft "$DRAFT"

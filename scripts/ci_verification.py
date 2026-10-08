@@ -94,8 +94,10 @@ def matrix(profile, suite="all"):
     return {"include": result}
 
 
-def require_success(results, skipped=()):
+def require_success(results, skipped=(), draft=False):
     """Every job passed, except those the caller's tier skips on purpose, which must not have run."""
+    if draft:
+        raise ValueError("draft pull requests are not verified; mark the pull request ready for review to run its checks")
     if not isinstance(results, dict) or not results:
         raise ValueError("required-job results are missing")
     unknown = set(skipped) - set(results)
@@ -327,6 +329,8 @@ def main():
     gate = commands.add_parser("gate")
     gate.add_argument("--skipped", type=lambda value: [name for name in value.split(",") if name], default=[],
                       help="comma-separated jobs this tier skips on purpose")
+    gate.add_argument("--draft", choices=["true", "false"], default="false",
+                      help="whether the run verifies a draft pull request")
     summary = commands.add_parser("report")
     summary.add_argument("status")
     verified = commands.add_parser("verified")
@@ -340,7 +344,7 @@ def main():
     elif args.command == "run":
         return run_lane(args.lane, args.shard)
     elif args.command == "gate":
-        require_success(json.loads(os.environ["NEEDS_JSON"]), args.skipped)
+        require_success(json.loads(os.environ["NEEDS_JSON"]), args.skipped, args.draft == "true")
     elif args.command == "verified":
         require_full_tier(os.environ["GITHUB_REPOSITORY"], args.sha)
     elif args.command == "prune":

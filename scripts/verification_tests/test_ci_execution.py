@@ -152,6 +152,13 @@ class HostedVerificationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             ci.require_success({"verification": {"result": "success"}}, ["platform"])
 
+    def test_draft_pull_requests_never_pass_the_required_check(self):
+        # Drafts skip verification, and a skipped required check would otherwise read as passing.
+        for results in [{"verification": {"result": "skipped"}, "platform": {"result": "skipped"}},
+                        {"verification": {"result": "success"}, "platform": {"result": "skipped"}}]:
+            with self.subTest(results=results), self.assertRaisesRegex(ValueError, "ready for review"):
+                ci.require_success(results, ["platform"], draft=True)
+
     def test_lane_uses_task_admission_and_preserves_the_verdict(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

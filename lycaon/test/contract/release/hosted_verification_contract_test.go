@@ -154,6 +154,32 @@ func TestCIRunsTheFastTierOnPullRequestsAndTheFullTierBeforeMain(t *testing.T) {
 	}
 }
 
+// Drafts spend no verification runners, never pass the required check, and get
+// the fast tier once marked ready.
+func TestDraftPullRequestsWaitForReadyForReview(t *testing.T) {
+	t.Parallel()
+	workflow := hostedWorkflowFile(t, "ci")
+	var pullRequest struct{ Types []string }
+	trigger := workflow.On["pull_request"]
+	contractcheck.FailErr(t, "decode pull_request trigger", trigger.Decode(&pullRequest))
+	types := slices.Clone(pullRequest.Types)
+	slices.Sort(types)
+	if !slices.Equal(types, []string{"opened", "ready_for_review", "reopened", "synchronize"}) {
+		t.Errorf("pull request CI must run when a ready pull request changes and when a draft becomes ready, got %v", pullRequest.Types)
+	}
+	if workflow.Jobs["verification"].If != "${{ !github.event.pull_request.draft }}" {
+		t.Error("draft pull requests must not start verification")
+	}
+	refused := false
+	for _, step := range workflow.Jobs["check"].Steps {
+		refused = refused || strings.HasPrefix(step.Run, "python3 scripts/ci_verification.py gate") &&
+			step.Env["DRAFT"] == "${{ github.event.pull_request.draft == true }}" && strings.Contains(step.Run, `--draft "$DRAFT"`)
+	}
+	if !refused {
+		t.Error("the required check must refuse a draft rather than pass on skipped verification")
+	}
+}
+
 // A release ships only a commit the full tier passed, and gates publication on
 // its own preflight and upgrade rehearsal while the signed build runs alongside them.
 func TestReleaseGatesPrecedePublication(t *testing.T) {
