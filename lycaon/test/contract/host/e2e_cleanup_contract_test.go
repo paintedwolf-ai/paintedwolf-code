@@ -105,12 +105,11 @@ func TestE2EWorkflowsAlwaysRunCleanup(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
 	workflows := []string{
-		filepath.Join(root, ".github", "workflows", "platform-verification.yml"),
-		filepath.Join(root, ".github", "workflows", "desktop-verification.yml"),
+		filepath.Join(root, ".github", "workflows", "e2e-verification.yml"),
 	}
-	nightly := readFile(t, filepath.Join(root, ".github", "workflows", "lycaon-den-nightly.yml"))
-	if !strings.Contains(nightly, "uses: ./.github/workflows/desktop-verification.yml") {
-		t.Fatal("nightly Den workflow must invoke desktop verification")
+	nightly := readFile(t, filepath.Join(root, ".github", "workflows", "nightly.yml"))
+	if !strings.Contains(nightly, "uses: ./.github/workflows/e2e-verification.yml") {
+		t.Fatal("nightly workflow must invoke end-to-end verification")
 	}
 	for _, path := range workflows {
 		body := readFile(t, path)
