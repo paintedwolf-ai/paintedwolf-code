@@ -1,3 +1,4 @@
+import { traceSourceViewState } from "../../api/source-view-event-trace.ts";
 import { LycaonApiError } from "../../api/http.ts";
 import { withInterest, waitForRetry } from "./interest.ts";
 import { ViewportInterest } from "./viewport-interest.ts";
@@ -90,6 +91,7 @@ export class SourceViewSession<K extends Kind> {
   private readonly invalidated = () => {
     if (this.errorValue) return;
     this.dirty = true;
+    if (this.value) traceSourceViewState(this.value.id, this.value.state, "invalidated");
     this.scheduleRefresh();
   };
 
@@ -589,6 +591,7 @@ export class SourceViewSession<K extends Kind> {
     const checked = this.checkedState(state);
     this.summaryVersion++;
     this.value = checked;
+    traceSourceViewState(checked.id, checked.state, "installed");
     this.errorValue = undefined;
     if (this.subscribedId !== state.id) {
       this.unsubscribeEvents();

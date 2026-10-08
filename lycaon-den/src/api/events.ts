@@ -1,3 +1,4 @@
+import { traceSourceViewDelivery } from "./source-view-event-trace.ts";
 import {
   clearSessionHostErrorNotices,
   publishSessionHostError,
@@ -373,6 +374,7 @@ export function subscribeEvents(
   };
 
   const applyEnvelope = (envelope: EventEnvelope) => {
+    traceSourceViewDelivery(envelope, "applied");
     if (envelope.topic === "session") {
       const session = envelope.data;
       // An error is independently useful even when its snapshot is superseded.
@@ -485,6 +487,7 @@ export function subscribeEvents(
           if (!msg.data) continue;
           const envelope = parseEventEnvelope(msg.data);
           if (!envelope) continue;
+          traceSourceViewDelivery(envelope, "received");
           // Replay advances only through the fully applied arrival prefix.
           frameQueue.enqueue(envelope, delivered(envelope.event_id));
         }
