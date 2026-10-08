@@ -24,7 +24,7 @@ jobs:
           fetch-depth: 0
       - uses: ./.github/actions/setup-verification
         with:
-          native: 'true'
+          setup: shell
       - uses: ./.github/actions/setup-bialy
       - name: Stage desktop engine
         timeout-minutes: 45

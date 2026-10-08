@@ -59,6 +59,7 @@ Do **not** use in-app "restart backend" while `./task den:dev` runs — restart 
 | `src/` | Solid.js app |
 | `src/api/types.ts` | Generated wire types (`codegen:den-types` — DO NOT EDIT) |
 | `src-tauri/` | Tauri shell + sidecar lifecycle |
+| `src-tauri/crates/` | Shell-independent Rust: wheel glide and the macOS WebKit harness |
 | `e2e/` | Playwright specs |
 
 ## Responsive layout
