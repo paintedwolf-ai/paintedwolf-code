@@ -90,6 +90,24 @@ class HostedVerificationTests(unittest.TestCase):
                 with patch.object(ci, "catalog", return_value=data), self.assertRaises(ValueError):
                     ci.matrix("check")
 
+    def test_combined_analysis_targets_restore_both_tool_sets(self):
+        self.assertEqual(ci.analysis_set(["lint:full", "lint:vuln"]), "all")
+
+    def test_lane_setup_restores_only_the_required_tool_sets(self):
+        for profile in ci.PROFILES:
+            for row in ci.matrix(profile)["include"]:
+                targets = ci.lanes()[row["lane"]]["targets"]
+                self.assertEqual(row["notices"], "licenses:notices" in targets)
+                if row["analysis"] == "lint":
+                    self.assertTrue(set(targets) & {"lint:fast", "lint:full"})
+                elif row["analysis"] == "vulnerabilities":
+                    self.assertTrue(set(targets) & {"lint:vuln", "lint:vuln:fresh"})
+                else:
+                    self.assertEqual(row["analysis"], "none")
+        for profile in ["fast", "check"]:
+            jobs = [row for row in ci.matrix(profile)["include"] if row["notices"]]
+            self.assertEqual(len(jobs), 1)
+
     def test_aggregate_rejects_failure_cancellation_skip_and_missing_results(self):
         ci.require_success({"a": {"result": "success"}, "b": {"result": "success"}})
         for status in ["failure", "cancelled", "skipped", "", None]:

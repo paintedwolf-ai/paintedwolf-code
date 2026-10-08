@@ -27,6 +27,7 @@ jobs:
   # Compiles what a tag release compiles, with the same flags and no signing
   # credentials, so tag runs restore warm Go and Tauri builds.
   release:
+    needs: verification
     runs-on: macos-15
     timeout-minutes: 60
     defaults:
@@ -66,46 +67,9 @@ jobs:
         with:
           save: ${{ github.ref == 'refs/heads/main' }}
 
-      - name: Install the notices tools
-        run: |
-          set -euo pipefail
-          bin="$(python3 scripts/artifact_paths.py bin "${GITHUB_WORKSPACE}")"
-          mkdir -p "${bin}"
-          if [[ ! -x "${bin}/cargo-about" ]]; then
-            version="$(sed -n 's/^CARGO_ABOUT_VERSION="\(.*\)"/\1/p' scripts/licenses-notices.sh)"
-            cargo install cargo-about --version "${version}" --locked --features cli --root "${RUNNER_TEMP}/cargo-about-root"
-            mv -f "${RUNNER_TEMP}/cargo-about-root/bin/cargo-about" "${bin}/cargo-about"
-          fi
-          if [[ ! -x "${bin}/go-licenses" ]]; then
-            version="$(sed -n 's/^GO_LICENSES_VERSION="\(.*\)"/\1/p' scripts/licenses-notices.sh)"
-            (cd lycaon && GOBIN="${bin}" go install "github.com/google/go-licenses/v2@${version}")
-          fi
-
-      # Mirrors scripts/stage-engine.sh --release; link flags do not affect cached packages.
-      - name: Compile the release sidecar
+      - name: Warm release compiler caches
         if: steps.build.outputs.cache-hit != 'true'
-        working-directory: lycaon
-        run: |
-          set -euo pipefail
-          export MACOSX_DEPLOYMENT_TARGET="$(tr -d '[:space:]' < internal/platformfloor/macos_floor.txt)"
-          export CGO_ENABLED=1
-          go build -trimpath -tags=paintedwolf_release -o "${RUNNER_TEMP}/pw" ./cmd/lycaon
-          go build -trimpath -tags=paintedwolf_release -o "${RUNNER_TEMP}/pw-logs" ./cmd/pw-logs
-
-      # Mirrors scripts/den-build-bundle.sh up to bundling.
-      - name: Compile the release desktop shell
-        if: steps.build.outputs.cache-hit != 'true'
-        run: |
-          set -euo pipefail
-          export MACOSX_DEPLOYMENT_TARGET="$(tr -d '[:space:]' < lycaon/internal/platformfloor/macos_floor.txt)"
-          bash scripts/sync-den-versions.sh
-          # Cache warming compiles the shell without shipping it; an empty notices resource satisfies the manifest.
-          [[ -f lycaon-den/src-tauri/THIRD-PARTY-NOTICES.md ]] || : > lycaon-den/src-tauri/THIRD-PARTY-NOTICES.md
-          bash scripts/ensure-tauri-binaries.sh
-          mkdir -p lycaon-den/src-tauri/engine-root
-          cd lycaon-den
-          bun install --frozen-lockfile
-          CI=false bun run tauri build --no-bundle --target "$(rustc --print host-tuple)"
+        run: ./task setup-dev -- --release-cache
 
   # Seeds the caches setup-verification restores in the merge queue, pull
   # requests, and nightly runs, by compiling the dependencies their lanes build.
@@ -131,6 +95,7 @@ jobs:
         with:
           setup: shell
           save-caches: ${{ github.ref == 'refs/heads/main' }}
+          analysis: all
 
       - uses: ./.github/actions/setup-bialy
 
@@ -141,17 +106,15 @@ jobs:
       # The macOS platform jobs build the development sidecar, which also
       # builds the decision engine whenever its cache key changes.
       - name: Build the development sidecar
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && (steps.setup.outputs.go-cache-hit != 'true' || steps.setup.outputs.decide-cache-hit != 'true')
         run: ./task build:lycaon-dev
 
-      # Native lanes test the shell, and macOS lanes also run it and its examples.
-      - name: Compile the desktop shell tests
+      - name: Prepare pinned analysis tools
+        run: ./task setup-dev -- --analysis-tools
+
+      - name: Warm desktop workspace builds
         if: steps.setup.outputs.rust-cache-hit != 'true'
-        run: |
-          set -euo pipefail
-          bash scripts/ensure-tauri-binaries.sh
-          cd lycaon-den/src-tauri
-          cargo test --all-targets --no-run
+        run: ./task setup-dev -- --workspace-cache
 
   usage:
     if: always()

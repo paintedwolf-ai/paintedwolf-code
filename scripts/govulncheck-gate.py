@@ -10,6 +10,7 @@ import threading
 from pathlib import Path
 
 from artifact_paths import bin_dir
+from analysis_tools import ensure
 
 ROOT = Path(__file__).resolve().parent.parent
 GO_DIR = ROOT / "lycaon"
@@ -39,26 +40,7 @@ def go_toolchain() -> str:
 
 
 def ensure_govulncheck(toolchain: str) -> None:
-    BIN_DIR.mkdir(parents=True, exist_ok=True)
-    if GOVULNCHECK.is_file() and os.access(GOVULNCHECK, os.X_OK):
-        return
-    print(
-        f"Installing govulncheck {GOVULNCHECK_VERSION} to {BIN_DIR} (toolchain {toolchain})...",
-        file=sys.stderr,
-    )
-    env = os.environ.copy()
-    env["GOBIN"] = str(BIN_DIR)
-    env["GOTOOLCHAIN"] = toolchain
-    subprocess.run(
-        [
-            "go",
-            "install",
-            f"golang.org/x/vuln/cmd/govulncheck@{GOVULNCHECK_VERSION}",
-        ],
-        cwd=GO_DIR,
-        env=env,
-        check=True,
-    )
+    ensure("govulncheck", ROOT, BIN_DIR, toolchain)
 
 
 def load_allowlist() -> tuple[dict[str, str], dict[str, str]]:

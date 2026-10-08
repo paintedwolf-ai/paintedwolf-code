@@ -556,7 +556,10 @@ its peak memory outgrows the runner. WebKit runs on macOS to compile its harness
 are virtual machines without a scrolling thread, so its scenarios end there with a
 skip notice in the job summary. Desktop E2E shares one reusable workflow across
 the merge queue and the nightly run, with separate staging and test deadlines.
-Aggregates reject failed, cancelled, missing, or unexpectedly skipped results.
+The reusable verification workflow's result covers its plan and every selected
+matrix job. The caller's required gate judges that result and the platform tier,
+without scheduling an intermediate verdict job. Aggregates reject failed,
+cancelled, missing, or unexpectedly skipped results.
 
 Each catalog job reports what did not pass as a workflow annotation on the pull
 request and in the Actions summary: the stage, the Go package or task, the
@@ -573,6 +576,19 @@ serve no later run while it evicted main's under the repository's 10 GB limit.
 Pull request, merge-queue, nightly, and tag runs therefore restore without
 saving. Keys follow toolchains and dependency locks, so main saves once per
 dependency change, and the workflow's summary reports total cache usage.
+The cache actions enforce the main-ref write boundary themselves. Pinned Go
+analyzers have separate lint and vulnerability caches; their module versions
+and compiler identity are checked before use, including after a cache restore.
+A missing or mismatched binary is rebuilt before analysis. Cache warming enters
+through `./task setup-dev`; workspace verification enters through its ordinary
+managed targets.
+
+Third-party notices run once as an explicit stage in each fast and full gate,
+in the build lane. Other verification lanes do not regenerate them. Shell
+setup generates its required resource file before Rust compilation, and releases
+generate the actual notices before packaging. The catalog derives the notice
+and analyzer setup inputs from each lane's targets, so the gate and its setup
+remain aligned.
 
 ## Fixtures
 

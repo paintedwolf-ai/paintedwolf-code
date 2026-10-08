@@ -68,6 +68,12 @@ def lanes():
     return values
 
 
+def analysis_set(targets):
+    lint = bool(set(targets) & {"lint:fast", "lint:full"})
+    vulnerabilities = bool(set(targets) & {"lint:vuln", "lint:vuln:fresh"})
+    return "all" if lint and vulnerabilities else "lint" if lint else "vulnerabilities" if vulnerabilities else "none"
+
+
 def matrix(profile, suite="all"):
     if profile not in PROFILES or suite not in SUITES or profile != "nightly" and suite != "all":
         raise ValueError(f"unsupported CI selection: {profile}/{suite}")
@@ -80,6 +86,8 @@ def matrix(profile, suite="all"):
             result.append({"lane": name, "shard": f"{index}/{count}" if count > 1 else "",
                            "minutes": lane["minutes"], "job_minutes": lane["minutes"] + 30,
                            "setup": lane["setup"],
+                           "notices": "licenses:notices" in lane["targets"],
+                           "analysis": analysis_set(lane["targets"]),
                            "runner": lane.get("runner", "ubuntu-latest")})
     if not result:
         raise ValueError("CI selection contains no verification")
