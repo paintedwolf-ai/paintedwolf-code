@@ -17,7 +17,7 @@ async function saveRetainedFixture(request: APIRequestContext, source: string,
   expect(saved.ok(), await saved.text()).toBe(true);
 }
 
-/** Exact path: the host's atomic replace briefly lists a `.<name>.<nonce>.tmp` sibling that a text filter also matches. */
+/** Exact path, so a sibling whose name contains this one never matches. */
 function treeFile(page: Page, filePath: string) {
   return page.locator(`[data-testid="files-tree-file"][data-path="${filePath}"]`);
 }
