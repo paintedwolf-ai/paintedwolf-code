@@ -7,6 +7,8 @@
 
 pub mod glide;
 #[cfg(target_os = "macos")]
+mod events;
+#[cfg(target_os = "macos")]
 mod macos;
 
 #[cfg(target_os = "macos")]

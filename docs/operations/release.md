@@ -20,8 +20,16 @@ go to Preview; versions such as `1.0.0` go to Stable.
 | Environment | Secrets | Variables |
 |---|---|---|
 | `release-signing` | `APPLE_CERTIFICATE` (base64 p12), `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ENGINE_PROVISIONING_PROFILE_BASE64`, `APPLE_API_KEY_P8` (base64), `APPLE_API_ISSUER`, `APPLE_API_KEY_ID`, `TAURI_SIGNING_PRIVATE_KEY`, optional `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`; Windows candidates also need `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID` | Windows candidates: `AZURE_ARTIFACT_SIGNING_ENDPOINT`, `AZURE_ARTIFACT_SIGNING_ACCOUNT`, `AZURE_ARTIFACT_SIGNING_PROFILE` |
-| `release-publication` | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `R2_BUCKET`, `HOMEBREW_TAP_TOKEN`, `WWW_DISPATCH_TOKEN`, `FEED_SIGNING_PRIVATE_KEY`, optional `FEED_SIGNING_PRIVATE_KEY_PASSWORD` | `HOMEBREW_TAP_REPO=paintedwolf-ai/homebrew-tap` |
+| `release-publication` | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `R2_BUCKET`, `HOMEBREW_TAP_TOKEN`, `WWW_DISPATCH_TOKEN`, `FEED_SIGNING_KEYS_JSON` | `HOMEBREW_TAP_REPO=paintedwolf-ai/homebrew-tap` |
 | `release-rehearsal` | `RELEASE_TEST_R2_API_TOKEN` | `RELEASE_TEST_R2_ACCOUNT_ID`, `RELEASE_TEST_R2_BUCKET`, `RELEASE_TEST_DOWNLOAD_BASE_URL` |
+
+Before enabling these workflows, replace the publication environment's two unnumbered feed secrets with `FEED_SIGNING_KEYS_JSON`:
+
+```json
+{"format_version":1,"generations":{"1":{"private_key":"<generation-1 private key>","password":""}}}
+```
+
+Retain every generation's feed credential while its feed may need a halt; add a separate entry before publishing a bridge. Each signing invocation receives only its selected credential. Build jobs never receive the map. The registered public key is checked even in rehearsals, which use an explicit fixture registry restricted to `release-system-tests/`.
 
 The `release-rehearsal` environment serves the weekly [release system live
 test](../../.github/workflows/release-system-live-test.yml), which exercises
@@ -146,6 +154,10 @@ Keep results with the release evidence. A local unit pass is not a claim of Gate
    all affected feeds and withdraws or replaces the tap and website downloads.
 3. Verify the public download state. Existing installations are not downgraded.
    Publish a fixed version and explain the affected versions and recovery steps.
+
+Halt preparation signs and validates every affected pointer before recording a permanent withdrawal or changing discovery. Dry runs perform the same signing checks. The workflow retains `prepared-halt/` with the reviewed plan (including its distribution scope), original pointers, exact prepared pointer/signature bytes and their SHA-256 digests. Apply validates the complete set and rechecks every feed before writing withdrawal markers, then uses those exact signed bytes. `application.json` records each attempted feed and its result; failures do not prevent attempts on the other prepared feeds. A retry accepts an unchanged original pointer or the already-applied replacement. A changed feed requires a new reviewed preparation. Pointer and signature objects are separate writes, so clients can briefly reject a mismatched pair; they must never install through that rejection.
+
+For a retained preparation, run `./task release:halt -- --plan <halt-plan.json> --apply-prepared <prepared-halt-directory>` with publication credentials. Do not edit the signed files. Keep the generation feed keys available offline as part of recovery custody.
 
 ## When updating dependencies
 

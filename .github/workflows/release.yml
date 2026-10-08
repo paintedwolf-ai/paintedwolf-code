@@ -574,8 +574,7 @@ jobs:
       - name: Activate release channel last
         env:
           CHANNEL: ${{ needs.classify.outputs.channel }}
-          FEED_SIGNING_PRIVATE_KEY: ${{ secrets.FEED_SIGNING_PRIVATE_KEY }}
-          FEED_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.FEED_SIGNING_PRIVATE_KEY_PASSWORD }}
+          FEED_SIGNING_KEYS_JSON: ${{ secrets.FEED_SIGNING_KEYS_JSON }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           R2_BUCKET: ${{ secrets.R2_BUCKET }}

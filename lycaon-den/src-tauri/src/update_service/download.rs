@@ -118,7 +118,7 @@ async fn prepare(
     if service.preparation_generation.load(Ordering::Acquire) != generation {
         return Ok(inner.state.clone());
     }
-    let confirmed_at = inner.state.offer_confirmed_at.unwrap_or_else(super::now);
+    let confirmed_at = inner.state.offer_confirmed_at;
     match result.and_then(|(identity, permit)| {
         staging::publish(&candidate, identity, confirmed_at).map(|()| permit)
     }) {

@@ -3,6 +3,9 @@
 set -euo pipefail
 
 FILE=""
+PREPARE_OUTPUT=""
+PREPARED_SIGNATURE=""
+REGISTRY="${FEED_TEST_REGISTRY:-}"
 CHANNEL=""
 GENERATION=""
 KEY=""
@@ -18,6 +21,8 @@ usage() {
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --prepare-output) PREPARE_OUTPUT="${2:-}"; shift 2 ;;
+    --signature) PREPARED_SIGNATURE="${2:-}"; shift 2 ;;
     --file) FILE="${2:-}"; shift 2 ;;
     --channel) CHANNEL="${2:-}"; shift 2 ;;
     --generation) GENERATION="${2:-}"; shift 2 ;;
@@ -32,7 +37,9 @@ done
 [[ -n "${FILE}" ]] || usage
 [[ -n "${GENERATION}" ]] || GENERATION="$(jq -er '.update_keys.signing_generation' "${FILE}")"
 # Clients accept a pointer only with a signature from this generation's feed key.
-: "${FEED_SIGNING_PRIVATE_KEY:?missing FEED_SIGNING_PRIVATE_KEY}"
+[[ -z "${PREPARE_OUTPUT}${PREPARED_SIGNATURE}" || -n "${FROM_VERSION}" ]] || {
+  echo "error: prepared pointers require the halt path" >&2; exit 1;
+}
 [[ "${GENERATION}" =~ ^[1-9][0-9]*$ ]] || usage
 case "${CHANNEL}" in
   stable|preview) KEY="updates/${CHANNEL}/key-${GENERATION}/latest.json" ;;
@@ -105,7 +112,7 @@ if [[ -z "${FROM_VERSION}" ]]; then
   advance_args=()
   [[ "${ADVANCE_IF_NEWER}" -eq 0 ]] || advance_args+=(--optional)
   advance="$(python3 "$(dirname "$0")/release_distribution.py" advance --file "${FILE}" \
-    --key "${OBJECT_KEY}" "${advance_args[@]}")"
+    --key "${OBJECT_KEY}" ${advance_args[@]+"${advance_args[@]}"})"
   if [[ "${advance}" == false ]]; then
     echo "release-pointer: ${CHANNEL} already advertises a newer release; no advance needed" >&2
     exit 0
@@ -120,16 +127,23 @@ FEED_NAME="latest-${CHANNEL}-key-${GENERATION}.json"
 SIGNED_COPY="${WORKDIR}/${FEED_NAME}"
 SIGNATURE="${SIGNED_COPY}.sig"
 cp "${FILE}" "${SIGNED_COPY}"
-(
-  cd "$(dirname "$0")/../lycaon-den"
-  TAURI_SIGNING_PRIVATE_KEY="${FEED_SIGNING_PRIVATE_KEY}" \
-  TAURI_SIGNING_PRIVATE_KEY_PASSWORD="${FEED_SIGNING_PRIVATE_KEY_PASSWORD:-}" \
-    bun run tauri signer sign --app-version "${EXPECTED_VERSION}" "${SIGNED_COPY}" >/dev/null
-)
-rehearsal_args=()
-[[ -z "${STORAGE_PREFIX}" ]] || rehearsal_args+=(--rehearsal)
+registry_args=()
+[[ -z "${REGISTRY}" ]] || registry_args+=(--registry "${REGISTRY}")
+if [[ -n "${PREPARED_SIGNATURE}" ]]; then
+  cp "${PREPARED_SIGNATURE}" "${SIGNATURE}"
+else
+  python3 "$(dirname "$0")/feed_signing.py" --file "${SIGNED_COPY}" \
+    --generation "${GENERATION}" --storage-prefix "${STORAGE_PREFIX}" ${registry_args[@]+"${registry_args[@]}"}
+fi
 python3 "$(dirname "$0")/feed_signature.py" --signature "${SIGNATURE}" --file "${FEED_NAME}" \
-  --version "${EXPECTED_VERSION}" --generation "${GENERATION}" "${rehearsal_args[@]}" >/dev/null
+  --version "${EXPECTED_VERSION}" --generation "${GENERATION}" \
+  --storage-prefix "${STORAGE_PREFIX}" ${registry_args[@]+"${registry_args[@]}"} >/dev/null
+if [[ -n "${PREPARE_OUTPUT}" ]]; then
+  mkdir -p "${PREPARE_OUTPUT}"
+  cp "${SIGNED_COPY}" "${PREPARE_OUTPUT}/${FEED_NAME}"
+  cp "${SIGNATURE}" "${PREPARE_OUTPUT}/${FEED_NAME}.sig"
+  exit 0
+fi
 
 publish_signature() {
   "${WRANGLER[@]}" r2 object put "${R2_BUCKET}/${OBJECT_KEY}.sig" \
@@ -140,13 +154,15 @@ get_status="$(python3 "$(dirname "$0")/release_distribution.py" storage-read \
   --key "${OBJECT_KEY}" --output "${CURRENT}")"
 case "${get_status}" in
   200)
-    if python3 -c 'import json,sys; sys.exit(json.load(open(sys.argv[1])) != json.load(open(sys.argv[2])))' "${FILE}" "${CURRENT}"; then
+    if cmp -s "${FILE}" "${CURRENT}"; then
       echo "release-pointer: authenticated pointer already has the requested bytes" >&2
       publish_signature
     else
       bash "$(dirname "$0")/release-validate-updater-manifest.sh" --file "${CURRENT}" --existing
       current_version="$(jq -r '.version' "${CURRENT}")"
-      if [[ -n "${FROM_VERSION}" ]]; then
+      if python3 -c 'import json,sys; sys.exit(json.load(open(sys.argv[1])) != json.load(open(sys.argv[2])))' "${FILE}" "${CURRENT}"; then
+        : # Equal content still needs the exact bytes covered by the prepared signature.
+      elif [[ -n "${FROM_VERSION}" ]]; then
         [[ "${current_version}" == "${FROM_VERSION}" ]] || {
           echo "error: updater pointer changed to ${current_version}; expected ${FROM_VERSION}" >&2
           exit 1

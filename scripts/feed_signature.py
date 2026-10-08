@@ -4,7 +4,7 @@
 `tauri signer sign` writes a base64 minisign document whose trusted comment is
 `timestamp:<unix>\tfile:<name>\tversion:<version>`. Cryptographic verification happens
 on clients; this check establishes that the pointer was signed under the right name and
-version and, outside an isolated rehearsal prefix, by the registered feed key.
+version and by the registered feed key, including isolated rehearsals.
 """
 from __future__ import annotations
 
@@ -45,13 +45,13 @@ def parse_document(document: str) -> tuple[bytes, dict[str, str]]:
     return signature[2:10], fields
 
 
-def check(document: str, *, file: str, version: str, number: int, rehearsal: bool) -> int:
+def check(document: str, *, file: str, version: str, number: int, registry: dict | None = None) -> int:
     signer, fields = parse_document(document)
     if fields["file"] != file:
         raise ValueError(f"feed signature is bound to {fields['file']!r}, not {file!r}")
     if fields["version"] != version:
         raise ValueError(f"feed signature is bound to version {fields['version']}, not {version}")
-    if not rehearsal and signer != key_id(generation(load_registry(), number)["feed_public_key"]):
+    if signer != key_id(generation(registry if registry is not None else load_registry(), number)["feed_public_key"]):
         raise ValueError(f"feed signature was not made by the registered feed key of generation {number}")
     return int(fields["timestamp"])
 
@@ -62,11 +62,14 @@ def main() -> int:
     parser.add_argument("--file", required=True)
     parser.add_argument("--version", required=True)
     parser.add_argument("--generation", type=int, required=True)
-    parser.add_argument("--rehearsal", action="store_true", help="an isolated prefix signed with an ephemeral key")
+    parser.add_argument("--registry", type=Path)
+    parser.add_argument("--storage-prefix", default="")
     args = parser.parse_args()
     try:
+        from feed_signing import signing_registry
+        registry = signing_registry(args.registry, args.storage_prefix)
         timestamp = check(args.signature.read_text(encoding="utf-8"), file=args.file, version=args.version,
-                          number=args.generation, rehearsal=args.rehearsal)
+                          number=args.generation, registry=registry)
     except (OSError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
