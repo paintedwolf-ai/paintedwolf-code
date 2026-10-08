@@ -89,7 +89,7 @@ function PlanRow(props: { item: DisplayRow; embedded?: boolean }) {
         {stateGlyph(props.item.state)}
       </span>
       <div class="progress-strip__label">
-        <MarkdownBody source={props.item.label} />
+        <MarkdownBody inline literalHtml source={props.item.label} />
       </div>
     </li>
   );

@@ -148,6 +148,7 @@ let renderHtmlLiterally = false;
 const markdownHtmlCache = new ByteCache<string, string>(8 * 1024 * 1024, 512);
 
 export type RenderMarkdownOptions = {
+  inline?: boolean;
   /** Surface destinations on untrusted links. */
   untrusted?: boolean;
   /** Project context for project-path navigation buttons. */
@@ -167,6 +168,7 @@ export function renderMarkdownHtml(
   source: string | Token[],
   opts?: RenderMarkdownOptions,
 ): string {
+  const inline = opts?.inline === true;
   const untrusted = opts?.untrusted === true;
   const projectId = opts?.projectId?.trim();
   const citations = opts?.citations;
@@ -175,7 +177,7 @@ export function renderMarkdownHtml(
     opts?.requireValidatedProjectPaths === true;
   const literalHtml = opts?.literalHtml === true;
   const cacheKey = typeof source === "string"
-    ? `${untrusted ? "u" : "t"}${requireValidatedProjectPaths ? "v" : "-"}${literalHtml ? "l" : "-"}\0${projectId ?? ""}\0${citations?.key ?? ""}\0${navigation?.key ?? ""}\0${source}`
+    ? `${untrusted ? "u" : "t"}${requireValidatedProjectPaths ? "v" : "-"}${literalHtml ? "l" : "-"}${inline ? "i" : "b"}\0${projectId ?? ""}\0${citations?.key ?? ""}\0${navigation?.key ?? ""}\0${source}`
     : undefined;
   const cached = cacheKey === undefined ? undefined : markdownHtmlCache.get(cacheKey);
   if (cached !== undefined) return cached;
@@ -194,8 +196,8 @@ export function renderMarkdownHtml(
       "markdown.render",
       () => {
         const raw = typeof source === "string"
-          ? marked.parse(source, { async: false })
-          : marked.parser(source);
+          ? (inline ? marked.parseInline(source, { async: false }) : marked.parse(source, { async: false }))
+          : inline ? marked.Parser.parseInline(source) : marked.parser(source);
         ensureDOMPurifyConfigured();
         // Transforming nodes before serialization preserves attribute delimiters.
         const fragment = DOMPurify.sanitize(raw, {
