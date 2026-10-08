@@ -170,6 +170,8 @@ A reject recommends only actions the receiving profile can perform: a worker wit
 
 ## Transcript presentation
 
+On Linux, each command runs beneath a dedicated child subreaper. A completed or cancelled command settles its original leader status and tears down every descendant, including double-forked processes that start another session. Background execution retains the tree while its leader runs; disposal or engine exit tears it down. Descendants are attributed through the supervisor's own parent-child tree, never by comparing launch times between concurrent commands. Stable process descriptors prevent a recycled PID from naming another process. Linux command launches require kernel support for child subreapers and pidfds.
+
 Tool execution and transcript presentation are separate concerns. `tool-presentation.yaml` declares titles, activity headlines and salience, long-running behavior, and which result fields form concise context. A long-running call may appear on the live assistant row while unsettled; ordinary calls appear after settlement. Den reads typed invocation and process fields rather than parsing tool output for “running” or “failed.”
 
 Tool owners retain a readable `display_subject` with each result: the original command, worker brief, delegation task, or scan identity. Durable secret screening covers that subject before the host formats `display_title`. Den prefers the result title over the call's provisional argument title, so completed cards remain readable across pagination, reload, and resource retirement.

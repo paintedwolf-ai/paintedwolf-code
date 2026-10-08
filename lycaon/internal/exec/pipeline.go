@@ -60,9 +60,10 @@ func buildExecCmd(ctx context.Context, name string, args []string, opts ExecOpts
 		if err != nil {
 			return nil, nil, fmt.Errorf("build sandboxed command: %w", err)
 		}
-		return confined, cleanup, nil
+		return superviseCommand(confined, cleanup)
 	}
-	return exec.CommandContext(ctx, name, args...), func() {}, nil //nolint:gosec // G204 — validated argv stages, no shell
+	cmd := exec.CommandContext(ctx, name, args...) //nolint:gosec // G204 — validated argv stages, no shell
+	return superviseCommand(cmd, func() {})
 }
 
 func configureCmdEnv(cmd *exec.Cmd, opts ExecOpts) error {
