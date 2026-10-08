@@ -17,13 +17,22 @@ def locations(suite):
 
 
 def deal(listing, total):
+    if total < 1:
+        raise ValueError("the shard count must be positive")
     if listing.get("errors"):
         raise ValueError("Playwright could not list the suite: "
                          + "; ".join(error.get("message", "") for error in listing["errors"]))
     specs = sorted(listing["suites"], key=lambda suite: suite["file"])
+    if not specs:
+        raise ValueError("the E2E selection contains no specs")
     shards = [[] for _ in range(total)]
+    assigned = set()
     for index, suite in enumerate(specs):
-        shards[index % total] += [suite["file"], *sorted(locations(suite) - {suite["file"]})]
+        files = {suite["file"], *locations(suite)}
+        if assigned & files:
+            raise ValueError("a test location belongs to multiple specs: " + ", ".join(sorted(assigned & files)))
+        assigned |= files
+        shards[index % total] += [suite["file"], *sorted(files - {suite["file"]})]
     return shards
 
 

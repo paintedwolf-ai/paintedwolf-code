@@ -107,7 +107,7 @@ if [[ "${LYCAON_E2E_SHARD_CHILD:-0}" != "1" ]]; then
     prepare_engine "${prepared}"
     # Playwright's --shard splits by test count and sends every file with its own browser options
     # to the last shard; dealing files in turn spreads each family of slow specs across shards.
-    PLAYWRIGHT_E2E=web bunx playwright test --project=web --list --reporter=json \
+    PLAYWRIGHT_E2E=web bunx playwright test --project=web "$@" --list --reporter=json \
       | python3 "${E2E_DIR}/deal-test-files.py" "${total_shards}" "${prepared}/test-lists"
     pids=()
     stop_shards() {
@@ -124,12 +124,18 @@ if [[ "${LYCAON_E2E_SHARD_CHILD:-0}" != "1" ]]; then
     trap exit_shards INT TERM
     for ((shard = 1; shard <= shard_count; shard++)); do
       global_shard=$(( (job_index - 1) * shard_count + shard ))
+      selection="${prepared}/test-lists/shard-${global_shard}.txt"
+      [[ -s "${selection}" ]] || continue
       LYCAON_E2E_SHARD_CHILD=1 \
       LYCAON_E2E_PLAYWRIGHT_READY=1 \
       LYCAON_E2E_OUTPUT_DIR="${ROOT}/lycaon-den/test-results/shard-${shard}" \
         bash "$0" "$@" --test-list "${prepared}/test-lists/shard-${global_shard}.txt" &
       pids+=("$!")
     done
+    if ((${#pids[@]} == 0)); then
+      echo "error: job shard ${job_shard} selects no E2E specs" >&2
+      exit 1
+    fi
     status=0
     for pid in "${pids[@]}"; do
       if ! wait "${pid}"; then
