@@ -9,7 +9,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/fseffect"
-	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/textfile"
 )
 
@@ -47,11 +46,10 @@ func ApplySourceWriteCreate(p *Project, req SourceWriteRequest) (*SourceWriteRes
 	}
 	location := fseffect.Location{Root: root.Path, Rel: filepath.FromSlash(rel)}
 	if _, err := fseffect.Replace(fseffect.ReplaceRequest{
-		Location:           location,
-		Source:             bytes.NewReader(next),
-		Mode:               sourceCreateFileMode,
-		DirMode:            sourceCreateDirMode,
-		ObserveStagingPath: sourcefeed.NoteHostTemporaryPath,
+		Location: location,
+		Source:   bytes.NewReader(next),
+		Mode:     sourceCreateFileMode,
+		DirMode:  sourceCreateDirMode,
 		BeforeCommit: func(target fseffect.Target, _ fseffect.Result) error {
 			// The target must still be free under the parent lock.
 			if _, err := target.Lstat(); err == nil {

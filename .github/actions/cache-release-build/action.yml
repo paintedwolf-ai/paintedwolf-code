@@ -1,9 +1,13 @@
 name: Cache release build
-description: Reuse the release-mode Go, Tauri, and notices tool builds that main warms for tag releases
+description: Reuse shared Go builds and release-mode Tauri builds warmed on main
 inputs:
   save:
     description: Save the caches after the job (main only); tag releases restore without saving
     default: 'false'
+outputs:
+  cache-hit:
+    description: Whether the exact key for the current toolchains and dependency locks was restored
+    value: ${{ steps.save.outputs.cache-hit || steps.restore.outputs.cache-hit }}
 runs:
   using: composite
   steps:
@@ -12,53 +16,37 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        bin="$(python3 scripts/artifact_paths.py bin "${GITHUB_WORKSPACE}")"
         {
-          printf 'gocache=%s\n' "$(go env GOCACHE)"
-          printf 'gomodcache=%s\n' "$(go env GOMODCACHE)"
-          printf 'bin=%s\n' "${bin}"
           printf 'build_key=release-build-%s-%s-%s-\n' "${RUNNER_OS}" "${RUNNER_ARCH}" "${DEVELOPER_DIR:-}"
         } >> "${GITHUB_OUTPUT}"
 
-    # The notices script reuses any installed tool, so only its exact pins restore.
-    - if: ${{ inputs.save == 'true' }}
-      uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
-      with:
-        path: |
-          ${{ steps.paths.outputs.bin }}/cargo-about
-          ${{ steps.paths.outputs.bin }}/go-licenses
-        key: notices-tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/licenses-notices.sh', 'rust-toolchain.toml', 'lycaon/go.mod') }}
-    - if: ${{ inputs.save != 'true' }}
-      uses: actions/cache/restore@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
-      with:
-        path: |
-          ${{ steps.paths.outputs.bin }}/cargo-about
-          ${{ steps.paths.outputs.bin }}/go-licenses
-        key: notices-tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/licenses-notices.sh', 'rust-toolchain.toml', 'lycaon/go.mod') }}
+    # Go compiler entries validate their inputs across verification and release.
+    # Restore the shared main cache rather than retaining a second Go payload.
+    - uses: ./.github/actions/cache-go
 
-    # Compiler caches are content-checked, so any earlier main commit is a safe
-    # starting point; each main commit saves its own entry.
-    - if: ${{ inputs.save == 'true' }}
+    - uses: ./.github/actions/cache-notices-tools
+      with:
+        save: ${{ inputs.save }}
+
+    # Keys follow the toolchains and dependency locks, so main saves once per
+    # change instead of once per commit; a release recompiles its own crate.
+    # Saving starts clean so superseded dependencies do not accumulate.
+    # Compiler caches are content-checked, so a tag release may
+    # start from an older entry.
+    - if: ${{ inputs.save == 'true' && github.ref == 'refs/heads/main' }}
+      id: save
       uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
       with:
         path: |
-          ${{ steps.paths.outputs.gocache }}
-          ${{ steps.paths.outputs.gomodcache }}
           lycaon-den/src-tauri/target
           !lycaon-den/src-tauri/target/*/release/bundle
-        key: ${{ steps.paths.outputs.build_key }}${{ hashFiles('rust-toolchain.toml', 'lycaon/go.sum', 'lycaon-den/src-tauri/Cargo.lock') }}-${{ github.sha }}
-        restore-keys: |
-          ${{ steps.paths.outputs.build_key }}${{ hashFiles('rust-toolchain.toml', 'lycaon/go.sum', 'lycaon-den/src-tauri/Cargo.lock') }}-
-          ${{ steps.paths.outputs.build_key }}
-    - if: ${{ inputs.save != 'true' }}
+        key: ${{ steps.paths.outputs.build_key }}${{ hashFiles('rust-toolchain.toml', 'lycaon-den/src-tauri/Cargo.lock', 'lycaon/internal/platformfloor/macos_floor.txt') }}
+    - if: ${{ inputs.save != 'true' || github.ref != 'refs/heads/main' }}
+      id: restore
       uses: actions/cache/restore@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
       with:
         path: |
-          ${{ steps.paths.outputs.gocache }}
-          ${{ steps.paths.outputs.gomodcache }}
           lycaon-den/src-tauri/target
           !lycaon-den/src-tauri/target/*/release/bundle
-        key: ${{ steps.paths.outputs.build_key }}${{ hashFiles('rust-toolchain.toml', 'lycaon/go.sum', 'lycaon-den/src-tauri/Cargo.lock') }}-${{ github.sha }}
-        restore-keys: |
-          ${{ steps.paths.outputs.build_key }}${{ hashFiles('rust-toolchain.toml', 'lycaon/go.sum', 'lycaon-den/src-tauri/Cargo.lock') }}-
-          ${{ steps.paths.outputs.build_key }}
+        key: ${{ steps.paths.outputs.build_key }}${{ hashFiles('rust-toolchain.toml', 'lycaon-den/src-tauri/Cargo.lock', 'lycaon/internal/platformfloor/macos_floor.txt') }}
+        restore-keys: ${{ steps.paths.outputs.build_key }}

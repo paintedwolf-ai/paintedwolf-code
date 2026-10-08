@@ -48,6 +48,7 @@ var retentionAnswers = map[string]retentionAnswer{
 	"lycaon/internal/session/worker_touch_ledger.go#byJob":             retentionReleased,
 	"lycaon/internal/session/promptstate/state.go#Prompt":              retentionJustified,
 	"lycaon/internal/session/prompt_curation.go#bySession":             retentionReleased,
+	"lycaon/internal/session/queue_round_drain.go#bySession":           retentionReleased,
 	"lycaon/internal/session/store/memory.go#sessions":                 retentionJustified,
 	"lycaon/internal/session/store/memory.go#messages":                 retentionJustified,
 	"lycaon/internal/session/store/memory.go#untrustedRecords":         retentionJustified,

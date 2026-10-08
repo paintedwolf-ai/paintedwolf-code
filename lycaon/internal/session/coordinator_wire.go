@@ -885,6 +885,7 @@ func (m *Manager) buildLoopWakeDeps() loopwake.LoopDeps {
 			if err := m.settleDeferredUserTurn(ctx, sessionID); err != nil {
 				slog.ErrorContext(ctx, "settle deferred user turn", "session_id", sessionID, "error", err)
 			}
+			m.drainQueuedPromptsAtRoundEnd(ctx, sessionID)
 		},
 		IsCoordinatorSession:    m.isCoordinatorSessionForLoop,
 		WorkflowObligationsOpen: m.workflowObligationsOpen,

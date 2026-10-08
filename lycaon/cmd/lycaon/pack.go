@@ -110,8 +110,8 @@ func runPackTest(ctx context.Context, dir string) error {
 						return fmt.Errorf("%s inject render %s: %w", relWf, inject.Render, err)
 					}
 					if budgets != nil {
-						if cap, ok := budgets.Kicks[inject.Render]; ok && len(rendered) > cap {
-							return fmt.Errorf("%s prompt %s rendered bytes %d exceeds cap %d", relWf, inject.Render, len(rendered), cap)
+						if limit := budgets.Sizes.Cap("coordinator_injects", inject.Render); limit > 0 && len(rendered) > limit {
+							return fmt.Errorf("%s prompt %s rendered bytes %d exceeds cap %d", relWf, inject.Render, len(rendered), limit)
 						}
 					}
 					fmt.Printf("  ✓ prompt render: %s\n", inject.Render)

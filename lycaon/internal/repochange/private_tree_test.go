@@ -4,7 +4,12 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/fseffect"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestPrivateTreeSuppressesOnlyItsOwnWatcherChanges(t *testing.T) {
@@ -22,6 +27,53 @@ func TestPrivateTreeSuppressesOnlyItsOwnWatcherChanges(t *testing.T) {
 	if !IsPrivatePath(filepath.Join(stage, "child")) || IsPrivatePath(filepath.Join(root, "staging-other")) {
 		t.Fatal("private tree scope escaped its path boundary")
 	}
+}
+
+func TestInFlightSaveStagingNeverReachesObservers(t *testing.T) {
+	root := t.TempDir()
+	// The user's file follows the staging grammar; only the door's entry is private.
+	lookalike := ".notes.txt.0123456789abcdef01234567.tmp"
+	testutil.FailErr(t, "write user lookalike", os.WriteFile(filepath.Join(root, lookalike), []byte("user"), 0o600))
+	var got []string
+	unbind := RegisterObserver(func(_ context.Context, event Event) { got = append(got, event.Paths...) })
+	defer unbind()
+	var staged string
+	filter := NewPrivateDirectoryFilter(root)
+	_, err := fseffect.Replace(fseffect.ReplaceRequest{
+		Location: fseffect.Location{Root: root, Rel: "notes.txt"}, Source: strings.NewReader("saved"), Mode: 0o644,
+		ReviewStaged: func(fseffect.Target, fseffect.Result) error {
+			staged = addedEntry(t, root, lookalike)
+			name := filepath.Base(staged)
+			if !filter.Contains(name) || !IsPrivatePath(filepath.Join(root, name)) {
+				t.Fatal("listing filters admitted the in-flight staging entry")
+			}
+			if filter.Contains(lookalike) || IsPrivatePath(filepath.Join(root, lookalike)) {
+				t.Fatal("listing filters hid the user's lookalike file")
+			}
+			Notify(t.Context(), Event{ProjectDir: root, Kind: WorktreeChanged, Source: SourceWatcher, Paths: []string{name, lookalike}})
+			return nil
+		},
+	})
+	testutil.FailErr(t, "save", err)
+	// The watcher reports the staging entry's removal after the commit.
+	Notify(t.Context(), Event{ProjectDir: root, Kind: WorktreeChanged, Source: SourceWatcher, Paths: []string{filepath.Base(staged), "notes.txt"}})
+	if slices.Contains(got, filepath.Base(staged)) || !slices.Contains(got, lookalike) || !slices.Contains(got, "notes.txt") {
+		t.Fatalf("observed paths=%v staging=%q", got, filepath.Base(staged))
+	}
+}
+
+// addedEntry finds the save's staging entry from the directory listing.
+func addedEntry(t *testing.T, dir string, before ...string) string {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	testutil.FailErr(t, "list save directory", err)
+	for _, entry := range entries {
+		if !slices.Contains(before, entry.Name()) {
+			return filepath.Join(dir, entry.Name())
+		}
+	}
+	t.Fatal("save staged no entry")
+	return ""
 }
 
 func TestPrivateDirectoryFilterResolvesAliases(t *testing.T) {

@@ -1,0 +1,49 @@
+name: Cache Go analysis tools
+description: Restore pinned analyzers warmed by trusted main builds
+inputs:
+  tools:
+    description: Analyzer set (lint, vulnerabilities, all)
+    required: true
+  save:
+    description: Save tools from main; other refs restore only
+    default: 'false'
+runs:
+  using: composite
+  steps:
+    - name: Resolve analysis tool caches
+      id: paths
+      shell: bash
+      run: |
+        set -euo pipefail
+        printf 'bin=%s\n' "$(python3 scripts/artifact_paths.py bin "${GITHUB_WORKSPACE}")" >> "${GITHUB_OUTPUT}"
+        printf 'lint=%s\n' "$(python3 scripts/analysis_tools.py key lint)" >> "${GITHUB_OUTPUT}"
+        printf 'vulnerabilities=%s\n' "$(python3 scripts/analysis_tools.py key vulnerabilities)" >> "${GITHUB_OUTPUT}"
+
+    - if: inputs.tools == 'lint' || inputs.tools == 'all'
+      uses: actions/cache/restore@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+      with:
+        path: |
+          ${{ steps.paths.outputs.bin }}/golangci-lint
+          ${{ steps.paths.outputs.bin }}/deadcode
+        key: analyzers-${{ runner.os }}-${{ runner.arch }}-${{ steps.paths.outputs.lint }}
+
+    - if: inputs.tools == 'vulnerabilities' || inputs.tools == 'all'
+      uses: actions/cache/restore@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+      with:
+        path: ${{ steps.paths.outputs.bin }}/govulncheck
+        key: analyzers-${{ runner.os }}-${{ runner.arch }}-${{ steps.paths.outputs.vulnerabilities }}
+
+    # Save actions run before preparation, so their post-job hooks capture the installed binaries.
+    - if: inputs.save == 'true' && github.ref == 'refs/heads/main' && (inputs.tools == 'lint' || inputs.tools == 'all')
+      uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+      with:
+        path: |
+          ${{ steps.paths.outputs.bin }}/golangci-lint
+          ${{ steps.paths.outputs.bin }}/deadcode
+        key: analyzers-${{ runner.os }}-${{ runner.arch }}-${{ steps.paths.outputs.lint }}
+
+    - if: inputs.save == 'true' && github.ref == 'refs/heads/main' && (inputs.tools == 'vulnerabilities' || inputs.tools == 'all')
+      uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+      with:
+        path: ${{ steps.paths.outputs.bin }}/govulncheck
+        key: analyzers-${{ runner.os }}-${{ runner.arch }}-${{ steps.paths.outputs.vulnerabilities }}

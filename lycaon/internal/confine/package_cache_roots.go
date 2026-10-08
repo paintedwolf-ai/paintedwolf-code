@@ -3,6 +3,8 @@ package confine
 import (
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 )
 
 // packageCacheHomeRelRoots are home-relative package stores allowed as default
@@ -25,4 +27,35 @@ func toolchainStateRoots() []string {
 		return nil
 	}
 	return []string{filepath.Join(dir, "go", "telemetry")}
+}
+
+// standardCacheDataRoots returns conventional cache and data directories.
+func standardCacheDataRoots() []string {
+	roots := []string{}
+	home, _ := os.UserHomeDir()
+	join := func(base, rel string) string {
+		if base == "" {
+			return ""
+		}
+		return filepath.Join(base, rel)
+	}
+	candidates := []string{
+		os.Getenv("XDG_CACHE_HOME"), join(home, ".cache"),
+		os.Getenv("XDG_DATA_HOME"), join(home, ".local/share"),
+		os.Getenv("XDG_STATE_HOME"), join(home, ".local/state"),
+	}
+	if runtime.GOOS == "darwin" {
+		candidates = append(candidates, join(home, "Library/Caches"))
+	}
+	for _, rel := range packageCacheHomeRelRoots {
+		candidates = append(candidates, join(home, rel))
+	}
+	candidates = append(candidates, toolchainStateRoots()...)
+	candidates = append(candidates, environmentWriteRoots()...)
+	for _, c := range candidates {
+		if strings.TrimSpace(c) != "" {
+			roots = append(roots, c)
+		}
+	}
+	return roots
 }

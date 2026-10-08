@@ -13,7 +13,8 @@
       "den:coverage:changes",
       "test:short",
       "test:contract",
-      "coverage:changes"
+      "coverage:changes",
+      "licenses:notices"
     ],
     "oar:verify": [
       "test:oar",
@@ -33,7 +34,8 @@
       "budgets",
       "coverage:changes",
       "den:coverage:changes",
-      "lint:vuln"
+      "lint:vuln",
+      "licenses:notices"
     ],
     "check:tests": [
       "test:runner",
@@ -182,7 +184,7 @@
         "--tags",
         "integration",
         "--timeout",
-        "90m"
+        "40m"
       ],
       "packages": [
         "./..."
@@ -337,6 +339,9 @@
     ],
     "decide:test": [
       "decide:test"
+    ],
+    "licenses:notices": [
+      "licenses:notices"
     ]
   },
   "private": [
@@ -656,6 +661,12 @@
         "rust"
       ],
       "workers": "shared"
+    },
+    "licenses:notices": {
+      "locks": [
+        "notices"
+      ],
+      "workers": 1
     }
   },
   "environment": {
@@ -710,7 +721,8 @@
     "fast-build": {
       "targets": [
         "build",
-        "lint:fast"
+        "lint:fast",
+        "licenses:notices"
       ],
       "minutes": 60,
       "profiles": [
@@ -762,7 +774,8 @@
     "build": {
       "targets": [
         "build",
-        "build:cross"
+        "build:cross",
+        "licenses:notices"
       ],
       "minutes": 120,
       "profiles": [
