@@ -182,7 +182,7 @@
         "--tags",
         "integration",
         "--timeout",
-        "90m"
+        "40m"
       ],
       "packages": [
         "./..."
