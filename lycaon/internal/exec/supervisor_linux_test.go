@@ -5,9 +5,12 @@ package exec
 import (
 	"context"
 	"fmt"
+	"io"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -41,7 +44,7 @@ while not os.path.exists(path):
 func supervisedDaemonCommand(t *testing.T) (*exec.Cmd, func(), string) {
 	t.Helper()
 	cmd, cleanup, path := detachedDaemonCommand(t, context.Background(), true)
-	cmd, cleanup, err := superviseCommand(cmd, cleanup)
+	cmd, cleanup, err := superviseCommand(cmd, cleanup, ProcessPriorityNormal)
 	testutil.FailErr(t, "supervise daemon fixture", err)
 	return cmd, cleanup, path
 }
@@ -97,4 +100,42 @@ func TestSupervisorCompanionRequestsOwnedTreeCleanup(t *testing.T) {
 	reapLines(fmt.Sprintf("+s%d\n", cmd.Process.Pid))
 	_ = cmd.Wait()
 	testutil.FailErr(t, "daemon survived companion cleanup", waitForProcessGone(pid, 5*time.Second))
+}
+
+func TestGuardedPipelinePriorityReachesPrimary(t *testing.T) {
+	python, err := exec.LookPath("python3")
+	testutil.FailErr(t, "locate priority fixture", err)
+	inherited, err := processNice(os.Getpid())
+	testutil.FailErr(t, "read inherited priority", err)
+	result, err := RunPipeline(t.Context(), []Stage{{Name: python, Args: []string{"-c", "import os; print(os.getpid(), os.getpriority(os.PRIO_PROCESS, 0))"}}}, ExecOpts{
+		Launch: HostLaunch("priority inheritance regression"), ProcessPriority: ProcessPriorityBelowNormal,
+	})
+	testutil.FailErr(t, "run priority fixture", err)
+	var pid, nice int
+	_, err = fmt.Sscanf(string(result.Output), "%d %d", &pid, &nice)
+	testutil.FailErr(t, "read primary priority", err)
+	if result.ExitCode != 0 || pid <= 0 || nice != max(inherited, DefaultBelowNormalNice) {
+		t.Fatalf("primary priority: pid=%d nice=%d inherited=%d result=%+v", pid, nice, inherited, result)
+	}
+}
+
+func TestSupervisedPTYInteractiveShellOwnsForeground(t *testing.T) {
+	bash, err := exec.LookPath("bash")
+	testutil.FailErr(t, "locate interactive shell", err)
+	terminal, err := StartPTY(t.Context(), bash, []string{"--noprofile", "--norc", "-i"}, PTYOpts{Launch: HostLaunch("interactive terminal regression"), Timeout: 10 * time.Second})
+	testutil.FailErr(t, "start interactive terminal", err)
+	defer terminal.Close()
+	done := make(chan string, 1)
+	go func() { bytes, _ := io.ReadAll(terminal); done <- string(bytes) }()
+	_, err = terminal.Write([]byte("printf '__foreground_ok__\\n'; exit\n"))
+	testutil.FailErr(t, "send interactive terminal input", err)
+	testutil.FailErr(t, "wait interactive shell", terminal.Wait())
+	select {
+	case output := <-done:
+		if !strings.Contains(output, "__foreground_ok__\r\n") || strings.Contains(output, "no job control") {
+			t.Fatalf("interactive shell did not control terminal: %q", output)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("terminal output did not settle")
+	}
 }

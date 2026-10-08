@@ -42,7 +42,7 @@ func supervisorStartupError(cmd *exec.Cmd) error {
 		return fmt.Errorf("command supervisor startup: %w", err)
 	}
 	if result.Errno != 0 {
-		return &os.PathError{Op: "fork/exec", Path: cmd.Args[3], Err: syscall.Errno(result.Errno)}
+		return &os.PathError{Op: "fork/exec", Path: cmd.Args[4], Err: syscall.Errno(result.Errno)}
 	}
 	return nil
 }
@@ -54,7 +54,7 @@ func init() {
 }
 
 // superviseCommand preserves the target's descriptors and adds an engine-lifetime pipe.
-func superviseCommand(cmd *exec.Cmd, cleanup func()) (*exec.Cmd, func(), error) {
+func superviseCommand(cmd *exec.Cmd, cleanup func(), priority ProcessPriority) (*exec.Cmd, func(), error) {
 	self, err := os.Executable()
 	if err != nil {
 		cleanup()
@@ -75,7 +75,7 @@ func superviseCommand(cmd *exec.Cmd, cleanup func()) (*exec.Cmd, func(), error) 
 	count := len(cmd.ExtraFiles)
 	cmd.ExtraFiles = append(cmd.ExtraFiles, read, statusWrite)
 	supervisorStarts.Store(cmd, statusRead)
-	cmd.Args = append([]string{self, supervisorCommand, strconv.Itoa(count), cmd.Path}, cmd.Args...)
+	cmd.Args = append([]string{self, supervisorCommand, strconv.Itoa(count), string(priority), cmd.Path}, cmd.Args...)
 	cmd.Path = self
 	return cmd, func() {
 		_ = read.Close()
@@ -110,7 +110,7 @@ func signalSupervisor(pid int, start int64, hard bool) bool {
 
 // runCommandSupervisor retains orphaned descendants inside one command's lineage.
 func runCommandSupervisor(args []string) int {
-	if len(args) < 3 {
+	if len(args) < 4 {
 		return 125
 	}
 	count, err := strconv.Atoi(args[0])
@@ -137,17 +137,19 @@ func runCommandSupervisor(args []string) int {
 	go func() { var b [1]byte; _, _ = monitor.Read(b[:]); close(gone) }()
 	status := os.NewFile(uintptr(4+count), "command-startup")
 	defer status.Close()
-	cmd := &exec.Cmd{Path: args[1], Args: args[2:], Stdin: os.Stdin, Stdout: os.Stdout, Stderr: os.Stderr, Env: os.Environ()}
+	cmd := &exec.Cmd{Path: args[2], Args: args[3:], Stdin: os.Stdin, Stdout: os.Stdout, Stderr: os.Stderr, Env: os.Environ()}
 	for i := 0; i < count; i++ {
 		cmd.ExtraFiles = append(cmd.ExtraFiles, os.NewFile(uintptr(3+i), "target-descriptor"))
 	}
-	if err := cmd.Start(); err != nil {
+	if err := startSupervisorTarget(cmd, ProcessPriority(args[1])); err != nil {
 		var pathError *os.PathError
 		result := supervisorLaunchResult{Errno: int(syscall.EIO)}
 		if errors.As(err, &pathError) {
-			if errno, ok := pathError.Err.(syscall.Errno); ok {
-				result.Errno = int(errno)
-			}
+			err = pathError.Err
+		}
+		var errno syscall.Errno
+		if errors.As(err, &errno) {
+			result.Errno = int(errno)
 		}
 		_ = json.NewEncoder(status).Encode(result)
 		return 127
@@ -227,4 +229,23 @@ func exitWithSignal(sig syscall.Signal) {
 	mask := uint64(1) << (uint(sig) - 1)
 	_, _, _ = unix.RawSyscall6(unix.SYS_RT_SIGPROCMASK, unix.SIG_UNBLOCK, uintptr(unsafe.Pointer(&mask)), 0, 8, 0, 0)
 	_ = syscall.Kill(os.Getpid(), sig)
+}
+
+// Forking from the configured thread gives the primary its requested priority.
+func startSupervisorTarget(cmd *exec.Cmd, priority ProcessPriority) error {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	if priority == ProcessPriorityBelowNormal {
+		tid := unix.Gettid()
+		nice, err := processNice(tid)
+		if err != nil {
+			return err
+		}
+		if nice < DefaultBelowNormalNice {
+			if err := syscall.Setpriority(syscall.PRIO_PROCESS, tid, DefaultBelowNormalNice); err != nil {
+				return err
+			}
+		}
+	}
+	return cmd.Start()
 }

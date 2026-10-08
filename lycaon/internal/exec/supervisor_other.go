@@ -4,7 +4,7 @@ package exec
 
 import "os/exec"
 
-func superviseCommand(cmd *exec.Cmd, cleanup func()) (*exec.Cmd, func(), error) {
+func superviseCommand(cmd *exec.Cmd, cleanup func(), _ ProcessPriority) (*exec.Cmd, func(), error) {
 	return cmd, cleanup, nil
 }
 func commandSupervisor(*exec.Cmd) bool       { return false }

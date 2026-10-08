@@ -317,7 +317,7 @@ func wirePipelineStages(
 			releaseWired(wired[:i])
 			return nil, err
 		}
-		cmd, cleanup, err = superviseCommand(cmd, cleanup)
+		cmd, cleanup, err = superviseCommand(cmd, cleanup, opts.ProcessPriority)
 		if err != nil {
 			guard.release()
 			releaseWired(wired[:i])

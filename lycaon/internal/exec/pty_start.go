@@ -26,7 +26,7 @@ func StartPTY(ctx context.Context, name string, args []string, opts PTYOpts) (PT
 		guard.release()
 		return nil, err
 	}
-	cmd, cleanup, err = superviseCommand(cmd, cleanup)
+	cmd, cleanup, err = superviseCommand(cmd, cleanup, execOpts.ProcessPriority)
 	if err != nil {
 		guard.release()
 		return nil, err

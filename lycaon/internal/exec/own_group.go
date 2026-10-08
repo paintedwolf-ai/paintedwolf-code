@@ -9,7 +9,7 @@ import (
 // controlling terminal (a job object on Windows). The whole session dies on
 // cancellation, when the command exits, or with the engine.
 func RunInOwnGroup(cmd *exec.Cmd) error {
-	cmd, cleanup, err := superviseCommand(cmd, func() {})
+	cmd, cleanup, err := superviseCommand(cmd, func() {}, ProcessPriorityNormal)
 	if err != nil {
 		return err
 	}
