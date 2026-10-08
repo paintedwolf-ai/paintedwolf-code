@@ -18,11 +18,11 @@ import {
   listBranches,
   pullChanges,
   pushChanges,
-  refreshGitStatus,
   refreshWorktree,
   stashChanges,
   unbindWorktree,
 } from "../../chat/actions/git-actions.ts";
+import { refreshGitStatus } from "../../chat/actions/git-status-reads.ts";
 
 type ChatGitOptions = {
   appStore: Accessor<AppStore>;
