@@ -52,7 +52,7 @@ func TestOneLedgerCloseoutAssembler(t *testing.T) {
 	if hits := countSourceDefs(t, "func (m *Manager) assembleLedgerCloseout("); totalDefs(hits) != 1 {
 		t.Fatalf("assembleLedgerCloseout defined %d times, want exactly 1 surface-aware assembler: %v", totalDefs(hits), hits)
 	}
-	if hits := countSourceDefs(t, "func (l *PromptLoop) emitAssembledCloseout("); totalDefs(hits) != 1 {
+	if hits := countSourceDefs(t, "func (l turnCloseout) emitAssembledCloseout("); totalDefs(hits) != 1 {
 		t.Fatalf("emitAssembledCloseout defined %d times, want exactly 1: %v", totalDefs(hits), hits)
 	}
 }

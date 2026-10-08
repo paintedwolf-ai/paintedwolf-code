@@ -266,32 +266,32 @@ func Build(ctx context.Context, cfg Config) (*ServeApp, error) {
 		{"egress-broker", startupprotocol.PhaseConfiguration, b.wireEgressBroker},
 		{"refusal-watch", startupprotocol.PhaseConfiguration, b.wireRefusalWatch},
 		{"user-path", startupprotocol.PhaseUserPath, b.wireUserPath},
-		{"credential-floors", startupprotocol.PhaseCredentials, b.wireCredentialFloors},
+		{"credential-floors", startupprotocol.PhaseCredentials, sessionWiring{b}.wireCredentialFloors},
 		{"host_resources", startupprotocol.PhaseHostResources, b.wireHostResources},
 		{"llm", startupprotocol.PhaseProviders, b.wireLLM},
 		{"tool-runtime", startupprotocol.PhaseTools, b.wireToolRuntime},
 		{"presence", startupprotocol.PhaseTools, b.wirePresence},
 		{"agents", startupprotocol.PhaseAgents, b.wireAgents},
-		{"session-manager", startupprotocol.PhaseSessions, b.wireSessionManager},
-		{"oar-block-plane", startupprotocol.PhasePolicy, b.wireOARBlockPlane},
+		{"session-manager", startupprotocol.PhaseSessions, sessionWiring{b}.wireSessionManager},
+		{"oar-block-plane", startupprotocol.PhasePolicy, toolWiring{b}.wireOARBlockPlane},
 		{"events", startupprotocol.PhaseEvents, b.wireEvents},
-		{"authz-capturer", startupprotocol.PhasePolicy, b.assertAuthzCapturer},
-		{"workflows", startupprotocol.PhaseWorkflows, b.wireWorkflows},
-		{"delegation-workers", startupprotocol.PhaseWorkers, b.wireDelegationWorkers},
-		{"scan", startupprotocol.PhaseScan, b.wireScan},
-		{"board-research", startupprotocol.PhaseResearch, b.wireBoardAndResearch},
-		{"grounding-findings", startupprotocol.PhaseGrounding, b.wireGroundingAndFindings},
-		{"coordinator-runtime", startupprotocol.PhaseCoordinator, b.wireCoordinatorRuntime},
-		{"coordinator-tools", startupprotocol.PhaseCoordinator, b.registerCoordinatorTools},
-		{"orchestrator", startupprotocol.PhaseCoordinator, b.wireOrchestrator},
-		{"runtime-services", startupprotocol.PhaseServer, b.wireRuntimeServices},
-		{"mcp", startupprotocol.PhaseServer, b.wireMCP},
+		{"authz-capturer", startupprotocol.PhasePolicy, sessionWiring{b}.assertAuthzCapturer},
+		{"workflows", startupprotocol.PhaseWorkflows, boardWiring{b}.wireWorkflows},
+		{"delegation-workers", startupprotocol.PhaseWorkers, delegationWiring{b}.wireDelegationWorkers},
+		{"scan", startupprotocol.PhaseScan, toolWiring{b}.wireScan},
+		{"board-research", startupprotocol.PhaseResearch, boardWiring{b}.wireBoardAndResearch},
+		{"grounding-findings", startupprotocol.PhaseGrounding, boardWiring{b}.wireGroundingAndFindings},
+		{"coordinator-runtime", startupprotocol.PhaseCoordinator, toolWiring{b}.wireCoordinatorRuntime},
+		{"coordinator-tools", startupprotocol.PhaseCoordinator, toolWiring{b}.registerCoordinatorTools},
+		{"orchestrator", startupprotocol.PhaseCoordinator, serverWiring{b}.wireOrchestrator},
+		{"runtime-services", startupprotocol.PhaseServer, serverWiring{b}.wireRuntimeServices},
+		{"mcp", startupprotocol.PhaseServer, toolWiring{b}.wireMCP},
 		// The API is built once, after every service it serves exists.
-		{"server", startupprotocol.PhaseServices, b.wireServer},
+		{"server", startupprotocol.PhaseServices, serverWiring{b}.wireServer},
 		// The deferred gate stays closed until every producer is wired.
-		{"seal-approvals", startupprotocol.PhasePolicy, b.sealApprovalGate},
+		{"seal-approvals", startupprotocol.PhasePolicy, serverWiring{b}.sealApprovalGate},
 		// Run recovery after subsystem owners are constructed.
-		{"boot-recovery", startupprotocol.PhaseRecovery, b.runBuildRecovery},
+		{"boot-recovery", startupprotocol.PhaseRecovery, delegationWiring{b}.runBuildRecovery},
 	} {
 		if err := ctx.Err(); err != nil {
 			// Shutdown arrived mid-startup; stop before starting more children.
@@ -329,7 +329,7 @@ func Build(ctx context.Context, cfg Config) (*ServeApp, error) {
 		}
 	}
 	buildOutcome = "ok"
-	return b.serveApp(), nil
+	return serverWiring{b}.serveApp(), nil
 }
 
 func (b *serveBuilder) closeFailedBuild(ctx context.Context) {

@@ -22,7 +22,7 @@ type credentialFiles struct {
 	exposure func(ctx context.Context, sessionID, path string) error
 }
 
-func (b *serveBuilder) newCredentialFiles() *credentialFiles {
+func (b sessionWiring) newCredentialFiles() *credentialFiles {
 	return &credentialFiles{
 		harvest: b.secretHarvest, fp: b.secretFingerprinter, queries: db.New(b.db),
 		managed: func(projectID string) []secretmatch.Remembered {

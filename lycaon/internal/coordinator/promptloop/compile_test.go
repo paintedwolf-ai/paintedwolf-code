@@ -34,7 +34,7 @@ func TestCompiledSurfaceLiveResourceAddsWaitOnInvestigate(t *testing.T) {
 	sess := &api.Session{ID: "s1", WorkspacePath: "/tmp/repo"}
 	plan, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: tools.SurfaceImplementInvestigate}, 1)
 	testutil.FailErr(t, "compile tool plan", err)
-	plan = loop.compileRuntimeToolPlan(plan, api.CoordinatorRunContext{}, nil, nil, tools.MCPToolPlan{}, false, sess)
+	plan = modelTurn{loop}.compileRuntimeToolPlan(plan, api.CoordinatorRunContext{}, nil, nil, tools.MCPToolPlan{}, false, sess)
 	for _, name := range []string{"command_output", "command_stop", "wait"} {
 		if !plan.Immediate(name) {
 			t.Fatalf("investigate + live jobs missing immediate %s: %v", name, plan.ImmediateNames())
@@ -51,8 +51,8 @@ func TestCompiledTurnPlanAdmitsActivatedOpenWorld(t *testing.T) {
 	sess := &api.Session{ID: "s1", WorkspacePath: "/tmp/repo"}
 	plan, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: "implement_park"}, 1)
 	testutil.FailErr(t, "compile tool plan", err)
-	active := loop.activeDeferredTools(sess)
-	plan = loop.compileRuntimeToolPlan(plan, api.CoordinatorRunContext{}, nil, active, tools.MCPToolPlan{}, false, sess)
+	active := modelTurn{loop}.activeDeferredTools(sess)
+	plan = modelTurn{loop}.compileRuntimeToolPlan(plan, api.CoordinatorRunContext{}, nil, active, tools.MCPToolPlan{}, false, sess)
 	if !plan.Immediate("mcp_github_create_pr") {
 		t.Fatalf("activated MCP must bypass surface: %v", plan.ImmediateNames())
 	}
@@ -166,7 +166,7 @@ func TestEveryCoordinatorSurfaceProjectsItsCompiledImmediateSet(t *testing.T) {
 			for _, name := range plan.AddressableNames() {
 				metas = append(metas, tools.ToolMeta{Name: name, Deferred: true})
 			}
-			offered := trimCoordinatorToolMetasForPlan(plan, metas, nil)
+			offered := trimCoordinatorToolMetasForPlan(plan, metas, nil, nil)
 			for _, name := range plan.ImmediateNames() {
 				if !containsMeta(offered, name) {
 					t.Fatalf("immediate tool %q omitted when profile metadata marks it deferred", name)
@@ -193,14 +193,14 @@ func TestCompiledTurnPlanIncludesMCPOnInvestigate(t *testing.T) {
 	plan, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: "implement_investigate"}, 1)
 	testutil.FailErr(t, "compile investigate plan", err)
 	metas := reg.List()
-	mcpPlan := loop.mcpToolPlan(context.Background(), sess, metas, nil)
-	plan = loop.compileRuntimeToolPlan(plan, api.CoordinatorRunContext{}, metas, nil, mcpPlan, true, sess)
+	mcpPlan := modelTurn{loop}.mcpToolPlan(context.Background(), sess, metas, nil)
+	plan = modelTurn{loop}.compileRuntimeToolPlan(plan, api.CoordinatorRunContext{}, metas, nil, mcpPlan, true, sess)
 	if !plan.Addressable("mcp_coropa_intel_search") {
 		t.Fatalf("investigate must allow MCP invoke without request_tools: %v", plan.AddressableNames())
 	}
 	park, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: "implement_park"}, 1)
 	testutil.FailErr(t, "compile park plan", err)
-	park = loop.compileRuntimeToolPlan(park, api.CoordinatorRunContext{}, metas, nil, mcpPlan, false, sess)
+	park = modelTurn{loop}.compileRuntimeToolPlan(park, api.CoordinatorRunContext{}, metas, nil, mcpPlan, false, sess)
 	if park.Addressable("mcp_coropa_intel_search") {
 		t.Fatalf("park must not allow MCP: %v", park.AddressableNames())
 	}
@@ -359,7 +359,7 @@ func mustCoordinatorToolsForTurn(
 	frame inject.CoordinatorTurnFrame,
 ) ([]tools.ToolMeta, toolsurface.Plan) {
 	t.Helper()
-	metas, plan, _, err := loop.coordinatorToolsForTurn(
+	metas, plan, _, err := modelTurn{loop}.coordinatorToolsForTurn(
 		context.Background(), sess, prompts.CoordinatorProfileID, nil, "do work", 0, 8, frame, nil,
 	)
 	testutil.FailErr(t, "compile coordinator tools", err)

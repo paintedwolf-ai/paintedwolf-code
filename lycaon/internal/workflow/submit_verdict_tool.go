@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/workflow/verdictcall"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -35,14 +36,18 @@ const (
 	SubmitVerdictIterationCapCode         = "SUBMIT_VERDICT_ITERATION_CAP"
 )
 
-// RegisterSubmitVerdictTool registers submit_verdict. The host validates the
-// payload against the active phase's verdict_schema and, on a terminal verdict,
+// RegisterSubmitVerdictTool registers submit_verdict. Review phases compose
+// the call they accept from its catalog schema; the host validates the payload
+// against the active phase's verdict_schema and, on a terminal verdict,
 // satisfies evidence_passed:<key> and auto-advances.
 func RegisterSubmitVerdictTool(reg *tools.DefaultRegistry, runs *RunManager) error {
 	if reg == nil || runs == nil {
 		return fmt.Errorf("registry and run manager required")
 	}
-	return reg.Register("submit_verdict", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
+	// The stock call schema composes a phase's accepted call when a turn
+	// offered none; it is read once the tool's catalog metadata is registered.
+	var stock map[string]any
+	if err := reg.Register("submit_verdict", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
 		if !isCoordinatorAgent(tctx.Agent) {
 			return "", fmt.Errorf("submit_verdict requires coordinator role")
 		}
@@ -66,16 +71,17 @@ func RegisterSubmitVerdictTool(reg *tools.DefaultRegistry, runs *RunManager) err
 			})
 		}
 		rl := *def.ReviewLoop
+		outline := verdictOutline(tctx.TurnOfferedToolSchemas["submit_verdict"], stock, rl, manifest.ReportBrief())
 		verdict, cited, citedURLs, err := parseSubmitVerdictArgs(rl, args)
 		if err != nil {
-			return rejectSubmitVerdict(tctx, ReviewLoopVerdictInvalidCode, active.CurrentPhase, verdictInvalidDetails(rl, err))
+			return rejectSubmitVerdict(tctx, ReviewLoopVerdictInvalidCode, active.CurrentPhase, verdictInvalidDetails(outline, err))
 		}
 		rules, err := runs.VerdictRulesFor(ctx, active)
 		if err != nil {
 			return "", err
 		}
 		if err := ValidateReviewLoopVerdict(rl, verdict, rules); err != nil {
-			return rejectSubmitVerdict(tctx, ReviewLoopVerdictInvalidCode, active.CurrentPhase, verdictInvalidDetails(rl, err))
+			return rejectSubmitVerdict(tctx, ReviewLoopVerdictInvalidCode, active.CurrentPhase, verdictInvalidDetails(outline, err))
 		}
 		groups, err := CheckScanGroups(ctx, runs.Inventory, active.ID, VerdictScanGroups(rl, verdict))
 		if err != nil {
@@ -96,7 +102,7 @@ func RegisterSubmitVerdictTool(reg *tools.DefaultRegistry, runs *RunManager) err
 		if err != nil {
 			return "", err
 		}
-		if repairs := verdictRepairs(rl, outcome); len(repairs) > 0 {
+		if repairs := verdictRepairs(outline, outcome); len(repairs) > 0 {
 			primary := repairs[0]
 			details := maps.Clone(primary.Details)
 			details["repairs"] = repairs
@@ -106,8 +112,8 @@ func RegisterSubmitVerdictTool(reg *tools.DefaultRegistry, runs *RunManager) err
 			return rejectSubmitVerdict(tctx, SubmitVerdictIterationCapCode, active.CurrentPhase, map[string]any{
 				"attempt":        outcome.Attempt,
 				"iteration_cap":  reviewLoopIterationCap(rl),
-				"terminal_value": VerdictEnum(rl)[0],
-				"expected_call":  describeVerdictCall(rl),
+				"terminal_value": rl.Decisions()[0],
+				"expected_call":  describeVerdictCall(outline),
 			})
 		}
 		stampVerdictOutcome(tctx, rl, outcome, verdict)
@@ -133,7 +139,18 @@ func RegisterSubmitVerdictTool(reg *tools.DefaultRegistry, runs *RunManager) err
 			res.IterationCap = 0
 		}
 		return marshalSubmitVerdictResult(res)
-	})
+	}); err != nil {
+		return err
+	}
+	meta, ok := reg.Meta("submit_verdict")
+	if !ok {
+		return fmt.Errorf("submit_verdict registered without catalog metadata")
+	}
+	if err := verdictcall.CheckFragments(meta.ArgsSchema); err != nil {
+		return err
+	}
+	stock = meta.ArgsSchema
+	return nil
 }
 
 // Structured verdict fields retain JSON in the durable string-valued record.
@@ -301,32 +318,6 @@ func rejectUnknownKeys(values map[string]any, object string, allowed ...string) 
 	return fmt.Errorf("%s has undeclared field(s): %s", object, strings.Join(unknown, ", "))
 }
 
-// VerdictSchemaShape renders the phase's verdict shape for prompts and refusals.
-func VerdictSchemaShape(rl workflowdef.ReviewLoopDef) string {
-	enum := VerdictEnum(rl)
-	parts := []string{fmt.Sprintf("verdict: %s (first is terminal)", strings.Join(enum, "|"))}
-	for _, field := range requiredVerdictFields(rl) {
-		switch strings.TrimSpace(rl.VerdictSchema[field]) {
-		case workflowdef.VerdictClaimsType:
-			parts = append(parts, fmt.Sprintf(
-				"%s: array of {id, title (new ids), statement, status: %s, cited_evidence, answers?, scan_group_ids?}",
-				field, strings.Join(rl.StatusWords(), "|")))
-			if rl.FollowupAttempts > 0 {
-				parts = append(parts, "open claims require question: {missing_fact, obligations} when registering investigation")
-			}
-			continue
-		case workflowdef.VerdictCoverageType:
-			parts = append(parts, field+": "+CoverageReviewShape)
-			continue
-		case workflowdef.VerdictSetAsidesType:
-			parts = append(parts, field+": array of {reason, scan_group_ids} or {reason, scanner, paths}")
-			continue
-		}
-		parts = append(parts, field+": non-empty string")
-	}
-	return "{" + strings.Join(parts, "; ") + "}"
-}
-
 func marshalSubmitVerdictResult(res SubmitVerdictToolResult) (string, error) {
 	raw, err := json.Marshal(res)
 	if err != nil {
@@ -389,28 +380,52 @@ func scanGroupRejectDetails(check ScanGroupCheck) map[string]any {
 	}
 }
 
-func verdictInvalidDetails(rl workflowdef.ReviewLoopDef, err error) map[string]any {
+func verdictInvalidDetails(outline string, err error) map[string]any {
 	return map[string]any{
-		"reason":         err.Error(),
-		"verdict_schema": VerdictSchemaShape(rl),
-		"example":        VerdictExample(rl),
-		"expected_call":  describeVerdictCall(rl),
+		"reason":        err.Error(),
+		"expected_call": describeVerdictCall(outline),
 	}
 }
 
-func describeVerdictCall(rl workflowdef.ReviewLoopDef) string {
-	return "submit_verdict(verdict=" + VerdictSchemaShape(rl) +
+// describeVerdictCall renders the call a review phase accepts from its
+// verdict outline; the offered submit_verdict schema carries the types.
+func describeVerdictCall(outline string) string {
+	return "submit_verdict(verdict=" + outline +
 		`, cited_evidence=[{"handle":"<observed-handle>"}], cited_urls=["<observed-url>"])`
 }
 
+// verdictOutline renders the call a review phase accepts: the phase schema
+// this turn offered, or the stock catalog's composition for the phase.
+func verdictOutline(offered, stock map[string]any, rl workflowdef.ReviewLoopDef, brief *workflowdef.Brief) string {
+	if offeredPhaseCall(offered) {
+		return verdictcall.Outline(offered)
+	}
+	call, err := verdictcall.Compose(stock, rl, brief)
+	if err != nil {
+		return "{verdict: " + strings.Join(rl.Decisions(), "|") + "}"
+	}
+	return verdictcall.Outline(call)
+}
+
+// offeredPhaseCall reports whether an offered submit_verdict schema is a
+// phase composition, whose decision member declares its values.
+func offeredPhaseCall(offered map[string]any) bool {
+	props, _ := offered["properties"].(map[string]any)
+	verdict, _ := props["verdict"].(map[string]any)
+	members, _ := verdict["properties"].(map[string]any)
+	decision, _ := members[workflowdef.VerdictDecisionKey].(map[string]any)
+	_, ok := decision["enum"]
+	return ok
+}
+
 // verdictGroundingRejectDetails returns bounded machine-readable citation audit facts.
-func verdictGroundingRejectDetails(rl workflowdef.ReviewLoopDef, out ReviewLoopVerdictOutcome) map[string]any {
+func verdictGroundingRejectDetails(outline string, out ReviewLoopVerdictOutcome) map[string]any {
 	return map[string]any{
 		"ungrounded_count":  out.UngroundedCount,
 		"ungrounded_sample": out.UngroundedSample,
 		"uncited_reviewers": out.UncitedReviewers,
 		"observed_handles":  out.ObservedHandles,
-		"expected_call":     describeVerdictCall(rl),
+		"expected_call":     describeVerdictCall(outline),
 	}
 }
 
@@ -430,32 +445,13 @@ func stampVerdictOutcome(tctx tools.ToolContext, rl workflowdef.ReviewLoopDef, o
 	}
 }
 
-// VerdictExample renders the active manifest's nested submission shape.
-func VerdictExample(def workflowdef.ReviewLoopDef) map[string]any {
-	verdict := map[string]any{}
-	for field, kind := range def.VerdictSchema {
-		switch kind {
-		case workflowdef.VerdictClaimsType, workflowdef.VerdictSetAsidesType:
-			verdict[field] = []any{}
-		case workflowdef.VerdictCoverageType:
-			verdict[field] = map[string]any{"revision": "<current facts.revision>", "assessments": []any{}}
-		default:
-			verdict[field] = "<" + field + ">"
-		}
-	}
-	if values := VerdictEnum(def); len(values) > 0 {
-		verdict["verdict"] = values[0]
-	}
-	return map[string]any{"verdict": verdict, "cited_evidence": []map[string]string{{"handle": "<observed handle>"}}}
-}
-
 // verdictRepair retains each refusal's code and facts in the same response.
 type verdictRepair struct {
 	Code    string         `json:"code"`
 	Details map[string]any `json:"details"`
 }
 
-func verdictRepairs(rl workflowdef.ReviewLoopDef, out ReviewLoopVerdictOutcome) []verdictRepair {
+func verdictRepairs(outline string, out ReviewLoopVerdictOutcome) []verdictRepair {
 	var repairs []verdictRepair
 	if issue := out.InventoryIssue; issue != nil {
 		details := issue.Details()
@@ -466,16 +462,23 @@ func verdictRepairs(rl workflowdef.ReviewLoopDef, out ReviewLoopVerdictOutcome) 
 		repairs = append(repairs, verdictRepair{code, details})
 	}
 	if len(out.MissingAgents) > 0 {
-		repairs = append(repairs, verdictRepair{SubmitVerdictReviewerMissingCode, map[string]any{"missing_reviewers": out.MissingAgents, "expected_call": describeVerdictCall(rl)}})
+		repairs = append(repairs, verdictRepair{SubmitVerdictReviewerMissingCode, map[string]any{"missing_reviewers": out.MissingAgents, "expected_call": describeVerdictCall(outline)}})
 	}
 	if out.GroundingCode != "" {
-		repairs = append(repairs, verdictRepair{out.GroundingCode, verdictGroundingRejectDetails(rl, out)})
+		repairs = append(repairs, verdictRepair{out.GroundingCode, verdictGroundingRejectDetails(outline, out)})
 	}
 	if out.QuestionIssue != nil {
 		repairs = append(repairs, verdictRepair{out.QuestionIssue.Code, out.QuestionIssue.Data})
 	}
 	if issue := out.CoverageIssue; issue != nil && !slices.ContainsFunc(repairs, func(r verdictRepair) bool { return r.Code == issue.Code }) {
-		repairs = append(repairs, verdictRepair{issue.Code, issue.Data})
+		details := maps.Clone(issue.Data)
+		if details == nil {
+			details = map[string]any{}
+		}
+		if _, ok := details["expected_call"]; !ok && issue.Code == ReviewLoopVerdictInvalidCode {
+			details["expected_call"] = describeVerdictCall(outline)
+		}
+		repairs = append(repairs, verdictRepair{issue.Code, details})
 	}
 	return repairs
 }

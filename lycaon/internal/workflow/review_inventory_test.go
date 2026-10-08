@@ -42,7 +42,7 @@ func TestReviewInventoryRefusalDoesNotAdvanceOrConsumeReviewRound(t *testing.T) 
 	mgr.Inventory = fakeInventory{run: []api.CodeScan{{ID: "scan", Status: api.CodeScanStatusComplete,
 		ScannerID: "secrets", Findings: []api.SecurityFinding{secretFinding("src/a.go")},
 	}}}
-	reg := tools.NewDefaultRegistry()
+	reg := catalogRegistry(t)
 	testutil.FailErr(t, "register verdict", RegisterSubmitVerdictTool(reg, mgr))
 	verdict := map[string]any{"verdict": "SELECTED", "claims": []any{}, "set_asides": []any{}}
 	_, err := reg.Run(t.Context(), "submit_verdict", map[string]any{"verdict": verdict}, toolContext("coordinator", "sess-1", dir))
