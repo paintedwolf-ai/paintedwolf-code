@@ -85,6 +85,9 @@ type Runtime struct {
 	// gitStatusCache is shared with the board GET path when the host wires it.
 	// Native git_status always loads with force=true.
 	gitStatusCache atomic.Pointer[git.StatusCache]
+	// releaseOwnStatusCache unbinds the default cache from repochange once a
+	// host cache replaces it; repeated calls are no-ops.
+	releaseOwnStatusCache func()
 }
 
 // RenderSkillBody uses the same renderer as skills_read.
@@ -144,7 +147,9 @@ func (r *Runtime) SetGitStatusCache(cache *git.StatusCache) {
 	if r == nil {
 		return
 	}
-	r.gitStatusCache.Store(cache)
+	if previous := r.gitStatusCache.Swap(cache); previous != cache && r.releaseOwnStatusCache != nil {
+		r.releaseOwnStatusCache()
+	}
 }
 
 // SetBackgroundRegistry wires session-scoped background command processes.
@@ -610,7 +615,7 @@ func NewRuntime(cfg RuntimeConfig) (*Runtime, error) {
 
 	gitMgr := git.NewManager()
 	statusCache := git.NewStatusCache(gitMgr)
-	statusCache.RegisterRepochangeObserver()
+	releaseStatusCache := statusCache.RegisterRepochangeObserver()
 	surveyCat, err := survey.LoadCatalog(survey.CatalogDir())
 	if err != nil {
 		return nil, fmt.Errorf("survey catalog: %w", err)
@@ -628,6 +633,8 @@ func NewRuntime(cfg RuntimeConfig) (*Runtime, error) {
 		Boundary:   boundary,
 		activation: activation,
 		fileAge:    ageProvider,
+
+		releaseOwnStatusCache: releaseStatusCache,
 	}
 	runtime.gitStatusCache.Store(statusCache)
 	registry, mutationTools, err := buildNativeRegistry(buildDeps{

@@ -112,24 +112,26 @@ func (b serverWiring) wireRuntimeObservers() error {
 			b.eventPub.PublishPreflight(context.Background(), preflight.ProbeLiteSlot)
 		})
 	}
-	findings.RegisterAppendObserver(func(ctx context.Context, evt findings.AppendEvent) {
+	// The observer registries are process-wide; each hook captures this
+	// host's services, so Close must release it.
+	b.resources.releaseObserver("findings-append", findings.RegisterAppendObserver(func(ctx context.Context, evt findings.AppendEvent) {
 		if strings.TrimSpace(evt.SessionID) == "" {
 			return
 		}
 		rev := findings.BumpRevision(evt.SessionID)
 		b.eventPub.PublishFindings(ctx, evt.SessionID, rev)
-	})
-	repochange.RegisterObserver(func(ctx context.Context, ev repochange.Event) {
+	}))
+	b.resources.releaseObserver("repo-change", repochange.RegisterObserver(func(ctx context.Context, ev repochange.Event) {
 		if b.repoProvider != nil {
 			b.repoProvider.Changed(ctx, ev.ProjectDir)
 		}
 		if ev.Kind == repochange.HeadMoved {
 			b.toolRuntime.InvalidateFileAge(ev.ProjectDir)
 		}
-	})
+	}))
 	activeRun := activeRunIDFromWorkflow(b.workflowMgr)
 	progressCoalescer := progress.NewCoalescer(progress.DefaultCoalesceWindow, newProgressChangeEmitter(b.store, b.eventPub, activeRun, b.progressStore))
-	progress.RegisterWriteObserver(func(ctx context.Context, evt progress.WriteEvent) {
+	b.resources.releaseObserver("progress-write", progress.RegisterWriteObserver(func(ctx context.Context, evt progress.WriteEvent) {
 		if strings.TrimSpace(evt.SessionID) == "" {
 			return
 		}
@@ -141,7 +143,7 @@ func (b serverWiring) wireRuntimeObservers() error {
 		if b.mgr != nil {
 			b.mgr.MaybeClearProgressClosureAfterWrite(ctx, evt.SessionID)
 		}
-	})
+	}))
 	return nil
 }
 

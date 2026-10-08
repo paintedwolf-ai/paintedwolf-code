@@ -122,7 +122,7 @@ func (b toolWiring) wireScan() error {
 	b.scanCadence.OverlayRootsApply = b.projectScanConfigGate().FilterPaths
 	b.scanCadence.Preempt = b.scanRunner.Preempt
 	b.scanCadence.Scopes = b.sourceScopes
-	b.scanCadence.ObserveRepochange()
+	b.resources.releaseObserver("scan-cadence-repochange", b.scanCadence.ObserveRepochange())
 	if b.workerMergeSvc != nil {
 		b.workerMergeSvc.Scans = b.scanCadence
 	}
