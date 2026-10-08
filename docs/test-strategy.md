@@ -416,7 +416,7 @@ required check, `check`:
 | Event | Tier | Work |
 |---|---|---|
 | Pull request | Fast | The `fast` profile: the stages of `./task check-fast`, split into build and lint, Go (two shards), and frontend jobs on `ubuntu-latest`. |
-| Merge queue | Full | The `check` profile, every stage of `./task check`, plus [`platform-verification.yml`](../.github/workflows/platform-verification.yml): upgrade corpus, applied Seatbelt, browser confinement, and Git parity on `macos-15`, Playwright web E2E in three shards, and desktop E2E. |
+| Merge queue | Full | The `check` profile, every stage of `./task check`, plus [`platform-verification.yml`](../.github/workflows/platform-verification.yml): the upgrade corpus on Linux; applied Seatbelt, browser confinement, and Git parity in one `macos-15` job; Playwright web E2E in three shards; and desktop E2E. |
 | Manual dispatch | Full | The merge-queue tier on any branch, to try a change before queueing or to reproduce a queue failure. |
 
 The merge queue squashes each pull request onto main and tests the resulting

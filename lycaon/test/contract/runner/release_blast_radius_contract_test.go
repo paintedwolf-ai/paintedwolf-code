@@ -139,11 +139,11 @@ func TestReleaseBlastRadiusCiSeatbeltJob(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
 	t.Parallel()
 	platform := contractcheck.ReadRepoFile(t, root, ".github/workflows/platform-verification.yml")
-	if !strings.Contains(platform, "seatbelt:") {
-		t.Fatal("platform-verification.yml missing seatbelt job")
+	if !strings.Contains(platform, "confinement:") {
+		t.Fatal("platform-verification.yml missing the confinement job")
 	}
 	if !strings.Contains(platform, "test:seatbelt") {
-		t.Fatal("platform-verification.yml seatbelt job must run test:seatbelt")
+		t.Fatal("platform-verification.yml confinement job must run test:seatbelt")
 	}
 	if !strings.Contains(platform, "runs-on: macos-15") {
 		t.Fatal("platform-verification.yml must keep macos-15 runners for darwin-gated jobs")
