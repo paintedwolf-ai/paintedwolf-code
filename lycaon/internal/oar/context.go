@@ -94,10 +94,13 @@ type GuardContext struct {
 	SandboxRefusals []string
 	// Refused paths are paths the kernel refused; the grant lists name what
 	// each layer's recovery would request.
-	RefusedWritePaths  []string
-	RefusedWriteGrants []string
-	RefusedReadPaths   []string
-	RefusedReadGrants  []string
+	RefusedWritePaths         []string
+	RefusedWriteGrants        []string
+	RefusedReadPaths          []string
+	RefusedReadGrants         []string
+	RefusedTerminalReadPaths  []string
+	RefusedTerminalWritePaths []string
+	KernelRefusalSilence      bool
 	// The remaining refusals, by the capability that would admit them.
 	RefusedSocketPaths  []string
 	RefusedConnectPorts []string

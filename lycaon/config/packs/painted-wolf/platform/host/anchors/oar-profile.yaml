@@ -561,6 +561,18 @@ host_facts:
  - name: paintedwolf.refused_read_grants
    type: list<string>
    observation: The capability_request.read_path path whose approval would open each refused read path that a reviewed grant can open; empty when none.
+ - name: paintedwolf.receiving_tool_summarize
+   type: bool
+   observation: The receiving tool identity is summarize.
+ - name: paintedwolf.refused_terminal_read_paths
+   type: list<string>
+   observation: Kernel-observed read paths whose floor no approval opens.
+ - name: paintedwolf.refused_terminal_write_paths
+   type: list<string>
+   observation: Kernel-observed write paths whose floor no approval opens.
+ - name: paintedwolf.kernel_refusal_silence
+   type: bool
+   observation: A failed confined invocation with kernel witness and no refusal reports; silence does not establish absence of refusal.
  - name: paintedwolf.refused_socket_paths
    type: list<string>
    observation: Unix socket paths the kernel refused the invocation's processes a connection to; empty when none.

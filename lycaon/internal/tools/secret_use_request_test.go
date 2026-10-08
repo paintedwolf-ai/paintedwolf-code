@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"errors"
 	"slices"
 	"testing"
 
@@ -31,6 +32,11 @@ func TestSecretUseRequiresExplicitHTTPOriginsAndManagedReference(t *testing.T) {
 	noReference["command"] = "setup"
 	if _, err := parseSecretUse(catalogContract(t, "command"), noReference); err == nil {
 		t.Fatal("service permission without a managed value")
+	} else {
+		var reject *ToolReject
+		if !errors.As(err, &reject) || reject.Code != "SECRET_USE_WITHOUT_REFERENCE" {
+			t.Fatalf("missing structured rejection: %v", err)
+		}
 	}
 }
 

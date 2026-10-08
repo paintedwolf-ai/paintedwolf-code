@@ -1,0 +1,27 @@
+oar: '1.0'
+id: SANDBOX_REFUSAL_REPORT_SILENT
+kind: policy
+anchor: tool.post_invoke
+selector:
+  tool: [command, verify, command_output]
+requires:
+  profiles: [tool]
+  facts: [paintedwolf.kernel_refusal_silence]
+when: paintedwolf.kernel_refusal_silence
+effect: warn
+copy:
+  what: This confined invocation failed without a kernel refusal report.
+  cause: The kernel can suppress repeated refusals even when the reporting stream has no detected gap.
+  why: Silence does not establish that the sandbox allowed every attempted effect.
+  fix: Diagnose the recorded failure and the invocation's declared boundary. Do not treat this empty report as proof of unrestricted access or infer a refused path from error prose.
+  instead: Report the uncertainty; no refusal path was observed for this invocation
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:sandbox
+x-paintedwolf-message: failed confinement has no observed refusal
+x-paintedwolf-scenarios:
+  - id: silence
+    vars:
+      tool: command
+    expect_contains:
+      - 'Code: SANDBOX_REFUSAL_REPORT_SILENT'
+      - Silence

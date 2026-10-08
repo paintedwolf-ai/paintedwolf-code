@@ -444,7 +444,8 @@ func (r *Runtime) SetSandboxWriteRootGate(writeRoot native.SandboxWriteRootGate)
 				SessionID: tc.SessionID, ParentSessionID: tc.ParentSessionID,
 				ProjectID: tc.ProjectID, ToolCallID: tc.ToolCallID, ProjectDir: tc.ActiveRootPath(),
 				ToolName: tool, Command: commandsurface.PrimaryCommandLine(args, nil), ProposedReadPath: path,
-				ReadDenyPaths: tools.ActionConfineInputsForContext(tc, nil).ReadDenyPaths,
+				ReadDenyPaths:      tools.ActionConfineInputsForContext(tc, nil).ReadDenyPaths,
+				SessionScratchRoot: tc.SessionScratchDir,
 			})
 			return result.Authorized, result.Denied, result.UserGuidance, err
 		})

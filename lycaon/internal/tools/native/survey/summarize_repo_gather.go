@@ -75,8 +75,11 @@ func (g *summarizeGatherer) gatherRepo(ctx context.Context, req summarize.Reques
 			if errors.As(rerr, &reject) {
 				return repoGather{}, rerr
 			}
-			missing = append(missing, target)
-			continue
+			var scope *sandbox.ScopeError
+			if errors.As(rerr, &scope) || errors.Is(rerr, sandbox.ErrPathEscape) {
+				return repoGather{}, &tools.ToolReject{Code: "SURVEY_PATH_ESCAPE", Data: map[string]any{"path": target, "reason": rerr.Error()}}
+			}
+			return repoGather{}, rerr
 		}
 		info, serr := os.Stat(resolved.Abs)
 		if serr != nil {

@@ -32,7 +32,7 @@ func parseSecretUse(contract toolcontract.Contract, args map[string]any) (*secre
 		return nil, fmt.Errorf("secret_use.services requires 1 to 8 HTTP origins")
 	}
 	if !secretcap.ReferenceUseInSlots(args, nil).Complete {
-		return nil, fmt.Errorf("secret_use requires a managed secret reference in this invocation")
+		return nil, RejectInvalidArguments("SECRET_USE_WITHOUT_REFERENCE", map[string]any{"field": "secret_use"})
 	}
 	var recipients []secretmatch.Recipient
 	var connectPorts []uint16

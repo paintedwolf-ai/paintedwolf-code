@@ -38,6 +38,7 @@ func ObserveConfine(gc *oar.GuardContext, obs confine.Observation) {
 	gc.FailedStages = append([]string(nil), obs.FailedStages...)
 	gc.ProcessRunning = obs.Running
 	observeSandboxRefusals(gc, obs.Refusals)
+	gc.KernelRefusalSilence = len(obs.FailedStages) > 0 && obs.Refusals.Witness == confine.WitnessKernel && len(obs.Refusals.Refusals) == 0
 	data := map[string]any{"tool": gc.Tool}
 	if dest := obs.Destination; dest != "" {
 		data["destination"] = dest
@@ -73,12 +74,18 @@ func observeSandboxRefusals(gc *oar.GuardContext, refusals confine.SandboxRefusa
 	}
 	for _, path := range refusals.Paths(confine.AccessWrite) {
 		gc.RefusedWritePaths = append(gc.RefusedWritePaths, path.Path)
+		if path.Layer.Recovery().Terminal() {
+			gc.RefusedTerminalWritePaths = appendUnique(gc.RefusedTerminalWritePaths, path.Path)
+		}
 		if path.Grant != "" {
 			gc.RefusedWriteGrants = append(gc.RefusedWriteGrants, path.Grant)
 		}
 	}
 	for _, path := range refusals.Paths(confine.AccessRead) {
 		gc.RefusedReadPaths = append(gc.RefusedReadPaths, path.Path)
+		if path.Layer.Recovery().Terminal() {
+			gc.RefusedTerminalReadPaths = appendUnique(gc.RefusedTerminalReadPaths, path.Path)
+		}
 		if path.Grant != "" {
 			gc.RefusedReadGrants = append(gc.RefusedReadGrants, path.Grant)
 		}

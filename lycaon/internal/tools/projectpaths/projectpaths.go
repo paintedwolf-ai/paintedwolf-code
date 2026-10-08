@@ -465,6 +465,10 @@ func resolveHostDataRead(tctx tools.ToolContext, modelPath string) (Resolved, bo
 }
 
 func mapResolveErr(err error, modelPath string) error {
+	var scope *sandbox.ScopeError
+	if errors.As(err, &scope) || errors.Is(err, sandbox.ErrPathEscape) {
+		return &tools.ToolReject{Code: "SURVEY_PATH_ESCAPE", Data: map[string]any{"path": modelPath, "reason": err.Error()}}
+	}
 	switch {
 	case errors.Is(err, projectroot.ErrNoProjectRoots):
 		return noRootsReject()

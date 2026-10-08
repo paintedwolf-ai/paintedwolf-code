@@ -375,23 +375,23 @@ func TestParseCapabilityRequestReadPathDeclares(t *testing.T) {
 	}
 }
 
-func TestParseCapabilityRequestReadPathRefusesControlPlane(t *testing.T) {
+func TestCapabilityPathAuthorityReadRefusesControlPlane(t *testing.T) {
 	cfg := t.TempDir()
 	t.Setenv("LYCAON_CONFIG_DIR", cfg)
-	_, reject := tools.ParseCapabilityRequest(map[string]any{"capability_request": map[string]any{
+	reject := tools.ValidateCapabilityPathAuthority(map[string]any{"capability_request": map[string]any{
 		"read_path": filepath.Join(cfg, "credential-vault.age"),
-	}})
+	}}, "")
 	if reject == nil || reject.Code != "SANDBOX_CONTROL_PLANE_DENIED" {
 		t.Fatalf("control-plane read path reject = %+v", reject)
 	}
 }
 
-func TestParseCapabilityRequestWriteRootRefusesControlPlane(t *testing.T) {
+func TestCapabilityPathAuthorityWriteRefusesControlPlane(t *testing.T) {
 	cfg := t.TempDir()
 	t.Setenv("LYCAON_CONFIG_DIR", cfg)
-	_, reject := tools.ParseCapabilityRequest(map[string]any{"capability_request": map[string]any{
+	reject := tools.ValidateCapabilityPathAuthority(map[string]any{"capability_request": map[string]any{
 		"write_root": filepath.Join(cfg, "credential-vault.age"),
-	}})
+	}}, "")
 	if reject == nil || reject.Code != "SANDBOX_CONTROL_PLANE_DENIED" {
 		t.Fatalf("control-plane write root reject = %+v", reject)
 	}
@@ -469,5 +469,20 @@ func TestCapabilityArgumentFailuresKeepTheirObservationKind(t *testing.T) {
 	completed := tools.CompleteFailureMetadata(reject, "command", "fixture")
 	if !completed.ArgumentValidation || completed.Code != reject.Code {
 		t.Fatal("failure metadata changed the observed argument-check result")
+	}
+}
+
+func TestCapabilityPathAuthorityLeavesOnlyInvokingScratch(t *testing.T) {
+	cfg := t.TempDir()
+	t.Setenv("LYCAON_CONFIG_DIR", cfg)
+	scratch := filepath.Join(cfg, "scratch", "own")
+	for _, field := range []string{"read_path", "write_root"} {
+		for _, path := range []string{filepath.Join(scratch, "file"), filepath.Join(cfg, "scratch", "other", "file"), filepath.Join(cfg, "store.db")} {
+			reject := tools.ValidateCapabilityPathAuthority(map[string]any{"capability_request": map[string]any{field: path}}, scratch)
+			own := path == filepath.Join(scratch, "file")
+			if (reject == nil) != own {
+				t.Fatalf("%s %s reject=%+v", field, path, reject)
+			}
+		}
 	}
 }

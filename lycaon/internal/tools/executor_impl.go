@@ -59,14 +59,14 @@ type DefaultToolExecutor struct {
 	// presenceAvailableFn reports whether held values can be released at all.
 	presenceAvailableFn func() bool
 	// vaultUnlocks holds each chat's unlock for values a person holds.
-	vaultUnlocks        *presence.Unlocks
+	vaultUnlocks *presence.Unlocks
 	// heldAsks counts each chat's open cards whose approval can unlock it.
-	heldAsks            heldAskCounter
-	secretMatcher       *secretmatch.Matcher
-	secretIgnores       *projectignore.SecretService
-	secretResolver      func(context.Context, map[string]any, secretcap.ResolveContext) (*secretcap.Resolution, error)
-	secretReceiptOnce   sync.Once
-	secretReceiptRT     *secretReceiptRuntime
+	heldAsks          heldAskCounter
+	secretMatcher     *secretmatch.Matcher
+	secretIgnores     *projectignore.SecretService
+	secretResolver    func(context.Context, map[string]any, secretcap.ResolveContext) (*secretcap.Resolution, error)
+	secretReceiptOnce sync.Once
+	secretReceiptRT   *secretReceiptRuntime
 	// secretExposure reads the session's credential-exposure fact.
 	secretExposure func(ctx context.Context, chatSessionID string) (bool, error)
 	// untrustedIngestion reads the session's external-content ingestion fact.
@@ -166,6 +166,10 @@ func (e *DefaultToolExecutor) Invoke(ctx context.Context, qualifiedName string, 
 	}
 	secretUse, parseErr := parseSecretUse(tc.Invocation.Contract, args)
 	if parseErr != nil {
+		var reject *ToolReject
+		if errors.As(parseErr, &reject) {
+			return "", e.rejectBeforeInvoke(ctx, qualifiedName, profileID, args, reject)
+		}
 		return "", e.rejectBeforeInvoke(ctx, qualifiedName, profileID, args, RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"tool": qualifiedName, "reason": parseErr.Error()}))
 	}
 	ctx = withSecretUse(ctx, secretUse)
@@ -269,6 +273,16 @@ func (e *DefaultToolExecutor) validateInvocation(
 	if reject := argvShapeReject(qualifiedName, args); reject != nil {
 		return reject
 	}
+	if qualifiedName == "command" || qualifiedName == "verify" {
+		_, parseErr := commandsurface.ParsePlan(args)
+		if reject := CommandSurfaceObservation(qualifiedName, profileID, commandsurface.PrimaryCommandLine(args, nil), args, toolschema.ArgFieldPaths(e.argsSchemaFor(ctx, tc.SessionID, qualifiedName)), parseErr); reject != nil {
+			return reject
+		}
+	}
+	if reject := ValidateCapabilityPathAuthority(args, tc.SessionScratchDir); reject != nil {
+		return reject
+	}
+
 	// Freeze the registry contract when the caller did not lease one.
 	// Dynamic tools are absent from the compiled catalog.
 	if strings.TrimSpace(tc.Invocation.Contract.Owner) == "" {

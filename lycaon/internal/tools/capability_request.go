@@ -231,7 +231,7 @@ func parseReadPath(raw any) (string, *ToolReject) {
 	return parseCapabilityPath(raw, "read_path", "a file or directory")
 }
 
-// parseCapabilityPath rejects only control-plane paths before approval.
+// parseCapabilityPath validates syntax; authority requires the invocation scratch root.
 func parseCapabilityPath(raw any, capability, target string) (string, *ToolReject) {
 	path, ok := raw.(string)
 	path = filepath.Clean(strings.TrimSpace(path))
@@ -244,15 +244,6 @@ func parseCapabilityPath(raw any, capability, target string) (string, *ToolRejec
 		return "", RejectInvalidArguments(isolation.CodeCapabilityRequestInvalid, map[string]any{
 			"reason": capability + " must name " + target + ", not the filesystem root", "capability": capability,
 		})
-	}
-	controlPlaneDenied := confine.ControlPlaneWriteDenied(path)
-	if capability == "read_path" {
-		controlPlaneDenied = confine.ControlPlaneReadDenied(path)
-	}
-	if controlPlaneDenied {
-		return "", &ToolReject{Code: isolation.CodeControlPlaneDenied, Data: map[string]any{
-			"reason": capability + " is protected", "path": path, "capability": capability,
-		}}
 	}
 	return confine.NormalizeWriteRootKey(path), nil
 }
