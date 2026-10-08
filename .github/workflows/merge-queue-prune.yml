@@ -1,0 +1,31 @@
+name: Merge queue prune
+
+# When the merge queue merges, rebuilds, or drops a group, it deletes the group's
+# branch but leaves that group's CI running, holding runners the live groups
+# need. Workflows cannot trigger on a group's removal, so this sweeps instead.
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: merge-queue-prune
+  cancel-in-progress: false
+
+jobs:
+  prune:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: scripts
+
+      - name: Cancel CI for merge groups that no longer exist
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/ci_verification.py prune
