@@ -30,6 +30,9 @@ EXCERPT_LINES = 60
 # Go's progress lines for tests that are running or passed; they bury a parallel package's failure.
 GO_PROGRESS = re.compile(r"^=== (RUN|PAUSE|CONT|NAME)\b|^\s*--- (PASS|SKIP):")
 SUITES = {"all", "behavior", "race", "coverage", "performance", "fuzz"}
+# What a lane installs: the shared toolchains, plus the Tauri shell and its staged engine,
+# or the Den Rust workspace and harness stack without the shell's packaging inputs.
+SETUPS = {"verification", "shell", "harness"}
 
 
 def lanes():
@@ -39,7 +42,7 @@ def lanes():
     for name, lane in values.items():
         if not re.fullmatch(r"[a-z][a-z0-9-]*", name):
             raise ValueError(f"invalid CI lane: {name}")
-        if set(lane) - {"targets", "minutes", "profiles", "suite", "native", "runner", "workers", "shards"}:
+        if set(lane) - {"targets", "minutes", "profiles", "suite", "setup", "runner", "workers", "shards"}:
             raise ValueError(f"unknown CI lane fields: {name}")
         if not lane["targets"] or not set(lane["targets"]).issubset(targets):
             raise ValueError(f"CI lane {name} must name existing task targets")
@@ -47,7 +50,7 @@ def lanes():
             raise ValueError(f"CI lane {name} must leave time for setup and evidence upload")
         if not lane["profiles"] or not set(lane["profiles"]).issubset(PROFILES):
             raise ValueError(f"invalid CI profiles: {name}")
-        if lane["suite"] not in SUITES or type(lane["native"]) is not bool:
+        if lane["suite"] not in SUITES or lane.get("setup") not in SETUPS:
             raise ValueError(f"invalid CI setup or suite: {name}")
         if lane.get("runner", "macos-15") not in {"macos-15", "ubuntu-latest"}:
             raise ValueError(f"unsupported CI runner: {name}")
@@ -65,6 +68,12 @@ def lanes():
     return values
 
 
+def analysis_set(targets):
+    lint = bool(set(targets) & {"lint:fast", "lint:full"})
+    vulnerabilities = bool(set(targets) & {"lint:vuln", "lint:vuln:fresh"})
+    return "all" if lint and vulnerabilities else "lint" if lint else "vulnerabilities" if vulnerabilities else "none"
+
+
 def matrix(profile, suite="all"):
     if profile not in PROFILES or suite not in SUITES or profile != "nightly" and suite != "all":
         raise ValueError(f"unsupported CI selection: {profile}/{suite}")
@@ -76,7 +85,9 @@ def matrix(profile, suite="all"):
         for index in range(1, count + 1):
             result.append({"lane": name, "shard": f"{index}/{count}" if count > 1 else "",
                            "minutes": lane["minutes"], "job_minutes": lane["minutes"] + 30,
-                           "native": lane["native"],
+                           "setup": lane["setup"],
+                           "notices": "licenses:notices" in lane["targets"],
+                           "analysis": analysis_set(lane["targets"]),
                            "runner": lane.get("runner", "ubuntu-latest")})
     if not result:
         raise ValueError("CI selection contains no verification")
@@ -119,6 +130,33 @@ def prune_merge_queue(repository):
         github(f"repos/{repository}/actions/runs/{run['id']}/force-cancel", method="POST")
         print(f"cancelled run {run['id']}: merge group {run['head_branch']} no longer exists", flush=True)
     return [run["id"] for run in stale]
+
+
+def task_json(arguments):
+    """Run a queue control through ./task and parse the JSON it prints after Task's command echo."""
+    result = subprocess.run(["./task", *arguments], cwd=ROOT, capture_output=True, text=True)
+    output = result.stdout[result.stdout.find("{"):] if "{" in result.stdout else ""
+    return result.returncode, json.loads(output) if output else None
+
+
+def release_leftover_requests(step):
+    """Withdraw requests an earlier step left in the queue so cleanup is not admitted behind them.
+
+    A shared batch outlives the client that submitted it, so a step killed at its deadline leaves
+    its run holding admission. A hosted runner serves one job, so every request it holds is this job's.
+    """
+    if os.environ.get("GITHUB_ACTIONS") != "true":
+        raise ValueError("release withdraws every queued request, which is only this job's own on a hosted runner")
+    _, status = task_json(["test:status"])
+    requests = [entry for entry in status["runs"] if entry.get("kind") == "request"]
+    unreleased = []
+    for entry in requests:
+        code, value = task_json(["test:cancel", "--", entry["ticket"], "--force",
+                                 "--reason", f"{entry['name']} outlived the {step} step"])
+        print(f"cancelled {entry['name']} ({entry['ticket']}): {json.dumps(value, sort_keys=True)}", flush=True)
+        if code != 0:
+            unreleased.append(entry["ticket"])
+    return unreleased
 
 
 def require_full_tier(repository, sha):
@@ -294,6 +332,8 @@ def main():
     verified = commands.add_parser("verified")
     verified.add_argument("sha")
     commands.add_parser("prune")
+    release = commands.add_parser("release")
+    release.add_argument("step", help="the step whose leftover requests are withdrawn")
     args = parser.parse_args()
     if args.command == "matrix":
         print(json.dumps(matrix(args.profile, args.suite), separators=(",", ":")))
@@ -305,6 +345,11 @@ def main():
         require_full_tier(os.environ["GITHUB_REPOSITORY"], args.sha)
     elif args.command == "prune":
         prune_merge_queue(os.environ["GITHUB_REPOSITORY"])
+    elif args.command == "release":
+        # Cleanup still runs; a request that would not release is reported, not fatal.
+        unreleased = release_leftover_requests(args.step)
+        if unreleased:
+            print(f"::warning::queue requests still held after cancellation: {', '.join(unreleased)}", flush=True)
     else:
         report(args.status)
     return 0

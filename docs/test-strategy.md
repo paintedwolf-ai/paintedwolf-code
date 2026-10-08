@@ -373,7 +373,8 @@ that reservation and assigns unused package slots to `GOMAXPROCS` for small
 scopes; race runs default to two runtime workers per package. Parallel tests per
 package obey the same per-process share; Vitest uses at most four workers.
 Fuzzing and Rust builds share the same budget. Runners use the worker limits
-assigned at admission; host load only adjusts timeouts. Hosted CI sets
+assigned at admission; host load only adjusts timeouts, and race runs scale
+scheduler-dependent waits at least 3×. Hosted CI sets
 `PW_TEST_HOST=dedicated`: one lane owns the runner, so the budget is every CPU
 (still at most eight) and a shared operation reserves all of it.
 
@@ -542,17 +543,23 @@ a job-level kill can still prevent upload. Adjust the affected partition from
 hosted timings rather than raising every job to the six-hour hosted-runner
 ceiling.
 
-Verification lanes run on `ubuntu-latest` (4 CPUs, 16 GB on public
-repositories); a lane declares `macos-15` only when it tests macOS-specific
-behavior. A lane may declare `shards`: the race lane runs as three jobs, each
+Verification lanes run on `ubuntu-latest` (4 CPUs, 16 GB); a lane declares
+`macos-15` only when it tests macOS-specific behavior. A lane declares its
+`setup`: `verification` for the shared toolchains, `shell` to also build the
+Tauri shell and stage its engine, or `harness` for the Den Rust workspace and
+the harness stack. A lane may declare `shards`: the race lane runs as three jobs, each
 verifying every third package of the planner's sorted selection
 (`PW_GO_SHARD=k/N`), so its longest package starts early instead of behind
 three hundred others. The pull request tier's Go lane runs as two, because its
 unit suite is the longest job a pull request waits for. A lane may also cap `workers` below the CPU count when
-its peak memory outgrows the runner. WebKit runs on macOS so its platform check
-cannot silently skip the suite. Desktop E2E shares one reusable workflow across
+its peak memory outgrows the runner. WebKit runs on macOS to compile its harness and probe the host; hosted runners
+are virtual machines without a scrolling thread, so its scenarios end there with a
+skip notice in the job summary. Desktop E2E shares one reusable workflow across
 the merge queue and the nightly run, with separate staging and test deadlines.
-Aggregates reject failed, cancelled, missing, or unexpectedly skipped results.
+The reusable verification workflow's result covers its plan and every selected
+matrix job. The caller's required gate judges that result and the platform tier,
+without scheduling an intermediate verdict job. Aggregates reject failed,
+cancelled, missing, or unexpectedly skipped results.
 
 Each catalog job reports what did not pass as a workflow annotation on the pull
 request and in the Actions summary: the stage, the Go package or task, the
@@ -561,6 +568,30 @@ receipts, stage logs, digest captures, performance reports, and browser
 diagnostics for 14 days, on success as well as failure. Artifact names
 distinguish profiles, jobs, and run attempts. Caches accelerate builds; they
 never substitute for the required job result.
+
+Only [`build-caches.yml`](../.github/workflows/build-caches.yml) saves caches,
+on pushes to main. A run restores only caches saved on its own ref or on main,
+and each merge-queue run has its own ref, so an entry the queue saved could
+serve no later run while it evicted main's under the repository's 10 GB limit.
+Pull request, merge-queue, nightly, and tag runs therefore restore without
+saving. Keys follow toolchains and dependency locks, so main saves once per
+dependency change, and the workflow's summary reports total cache usage.
+A running warmer finishes before the next push starts warming, so frequent
+merges cannot repeatedly cancel cold preparation before it saves.
+Release builds restore the shared Go cache; their separate cache retains only
+Tauri release builds. The cache actions enforce the main-ref write boundary
+themselves. Pinned Go analyzers have separate lint and vulnerability caches; their module versions
+and compiler identity are checked before use, including after a cache restore.
+A missing or mismatched binary is rebuilt before analysis. Cache warming enters
+through `./task setup-dev`; workspace verification enters through its ordinary
+managed targets.
+
+Third-party notices run once as an explicit stage in each fast and full gate,
+in the build lane. Other verification lanes do not regenerate them. Shell
+setup generates its required resource file before Rust compilation, and releases
+generate the actual notices before packaging. The catalog derives the notice
+and analyzer setup inputs from each lane's targets, so the gate and its setup
+remain aligned.
 
 ## Fixtures
 

@@ -57,11 +57,13 @@ jobs:
 
       - uses: ./.github/actions/setup-verification
         with:
-          native: ${{ matrix.native }}
+          setup: ${{ matrix.setup }}
+          notices: ${{ matrix.notices }}
+          analysis: ${{ matrix.analysis }}
 
-      # Native lanes build the Tauri shell, which stages the decision engine heads.
+      # Shell lanes stage the engine, including the decision engine heads.
       - uses: ./.github/actions/setup-bialy
-        if: ${{ matrix.native }}
+        if: ${{ matrix.setup == 'shell' }}
 
       - name: Run verification
         timeout-minutes: ${{ matrix.minutes }}
@@ -76,16 +78,3 @@ jobs:
         with:
           name: verification-${{ inputs.profile }}-${{ matrix.lane }}${{ matrix.shard != '' && format('-{0}', strategy.job-index) || '' }}-${{ github.run_attempt }}
           status: ${{ job.status }}
-
-  verified:
-    # Judges failed and timed-out jobs, but a cancelled run must not wait for a runner to do so.
-    if: ${{ !cancelled() }}
-    needs: [plan, verify]
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Require every selected verification job
-        env:
-          NEEDS_JSON: ${{ toJSON(needs) }}
-        run: python3 scripts/ci_verification.py gate
