@@ -1,7 +1,8 @@
 """Deal Playwright spec files to shards in turn and write one --test-list file per shard.
 
 Reads `playwright test --list --reporter=json` on stdin. A spec whose tests are defined in a
-helper module also lists that module, because --test-list matches tests by their location file.
+helper module also lists that module, because --test-list matches tests by their location file;
+specs that share such a module are dealt together.
 """
 
 import json
@@ -16,6 +17,21 @@ def locations(suite):
     return found
 
 
+def groups(specs):
+    """Join specs that share a test location: --test-list selects by location, so they share a shard."""
+    merged = []
+    for suite in specs:
+        files = {suite["file"], *locations(suite)}
+        joined = [group for group in merged if group["files"] & files]
+        group = {"specs": [suite["file"]], "files": files}
+        for other in joined:
+            merged.remove(other)
+            group["specs"] += other["specs"]
+            group["files"] |= other["files"]
+        merged.append(group)
+    return sorted(merged, key=lambda group: min(group["specs"]))
+
+
 def deal(listing, total):
     if total < 1:
         raise ValueError("the shard count must be positive")
@@ -26,13 +42,9 @@ def deal(listing, total):
     if not specs:
         raise ValueError("the E2E selection contains no specs")
     shards = [[] for _ in range(total)]
-    assigned = set()
-    for index, suite in enumerate(specs):
-        files = {suite["file"], *locations(suite)}
-        if assigned & files:
-            raise ValueError("a test location belongs to multiple specs: " + ", ".join(sorted(assigned & files)))
-        assigned |= files
-        shards[index % total] += [suite["file"], *sorted(files - {suite["file"]})]
+    for index, group in enumerate(groups(specs)):
+        heads = sorted(group["specs"])
+        shards[index % total] += [*heads, *sorted(group["files"] - set(heads))]
     return shards
 
 

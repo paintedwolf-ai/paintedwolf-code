@@ -23,12 +23,20 @@ class E2EShardsTests(unittest.TestCase):
     def test_narrow_selection_leaves_empty_shards_without_expanding_the_suite(self):
         self.assertEqual(shards.deal({"suites": [{"file": "one.ts"}]}, 3), [["one.ts"], [], []])
 
-    def test_invalid_or_ambiguous_listings_cannot_report_partitioned_coverage(self):
+    def test_specs_sharing_a_location_share_a_shard(self):
+        listing = {"suites": [
+            {"file": "a.ts"},
+            {"file": "b.ts", "suites": [{"specs": [{"file": "journey.ts"}]}]},
+            {"file": "c.ts"},
+            {"file": "d.ts", "specs": [{"file": "journey.ts"}]},
+        ]}
+        self.assertEqual(shards.deal(listing, 3), [["a.ts"], ["b.ts", "d.ts", "journey.ts"], ["c.ts"]])
+
+    def test_invalid_listings_cannot_report_partitioned_coverage(self):
         for listing, count in [
             ({"errors": [{"message": "discovery failed"}]}, 2),
             ({"suites": []}, 2),
             ({"suites": [{"file": "one.ts"}]}, 0),
-            ({"suites": [{"file": name, "specs": [{"file": "shared.ts"}]} for name in ['one.ts', 'two.ts']]}, 2),
         ]:
             with self.subTest(listing=listing, count=count), self.assertRaises(ValueError):
                 shards.deal(listing, count)
