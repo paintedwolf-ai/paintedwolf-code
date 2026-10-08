@@ -20,3 +20,11 @@ exceptions:
         scripts:
             cap: 170
             reason: Task and CI entry points are invoked by path and import sibling modules by name; the change-scoped budget and coverage reports joined them here.
+    go_receiver_lines:
+        lycaon/internal/workflow/workflow.RunManager:
+            cap: 6500
+            reason: The workflow run lifecycle (advance, gates, topology settlement, closeout, report delivery, runtime snapshots) shares one manager's run locks and ledger; splitting it needs its own change with a lifecycle and locking review.
+    go_receiver_methods:
+        lycaon/internal/workflow/workflow.RunManager:
+            cap: 250
+            reason: The workflow run lifecycle (advance, gates, topology settlement, closeout, report delivery, runtime snapshots) shares one manager's run locks and ledger; splitting it needs its own change with a lifecycle and locking review.
