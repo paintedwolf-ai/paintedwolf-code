@@ -196,7 +196,7 @@ class HaltPlanTests(unittest.TestCase):
         import sys
         import tempfile
         from pathlib import Path
-        plan = {"source_generation": 1, "feeds": [{"generation": 1, "channel": channel, "bad": "1.0.0", "last_good": None} for channel in ("stable", "preview")]}
+        plan = {"source_generation": 1, "feeds": [{"generation": 1, "channel": channel, "bad": "1.0.0", "last_good": "0.9.0"} for channel in ("stable", "preview")]}
         with tempfile.TemporaryDirectory() as tmp:
             source = Path(tmp) / "plan.json"
             source.write_text(json.dumps(plan))
@@ -224,7 +224,7 @@ class HaltPlanTests(unittest.TestCase):
         values = [{"version": "1.0.0"}, {"version": "1.0.0"}, None, {"version": "1.1.0-rc.1"}]
         with patch.object(self.plan, "generation"), patch.object(self.plan, "validate_binding"), \
              patch.object(self.plan, "read_storage", side_effect=values):
-            plan = self.plan.plan_withdrawal(registry, 1, "1.0.0", None)
+            plan = self.plan.plan_withdrawal(registry, 1, "1.0.0", "0.9.0")
         self.assertEqual([row["channel"] for row in plan["feeds"] if "bad" in row], ["stable", "preview"])
         self.assertEqual(plan["feeds"][-1]["keep_version"], "1.1.0-rc.1")
         self.assertEqual([row["channel"] for row in self.plan.distribution_plan(plan["feeds"])["channels"]], ["stable"])
