@@ -536,3 +536,41 @@ func TestStructuralCompactionDueOnSegmentCountWithoutDebt(t *testing.T) {
 		t.Fatal("fixture carried debt, so the segment ceiling was not what triggered")
 	}
 }
+
+func TestStructuralCheckpointSkipsUnchangedMembership(t *testing.T) {
+	store := checkpointTestStore(t)
+	installStructuralIncrement(t, store, 1, "a")
+	defer func() {
+		store.mu.Lock()
+		store.releaseCompletedStructureLocked()
+		if store.structure != nil {
+			store.structure.close()
+			store.structure = nil
+		}
+		store.mu.Unlock()
+	}()
+	written, err := store.checkpointStructure(t.Context())
+	testutil.FailErr(t, "write first checkpoint", err)
+	if !written {
+		t.Fatal("first complete tree did not checkpoint")
+	}
+	first, err := os.ReadFile(store.structureFile)
+	testutil.FailErr(t, "read first checkpoint", err)
+	installStructuralIncrement(t, store, 2, "a")
+	written, err = store.checkpointStructure(t.Context())
+	testutil.FailErr(t, "checkpoint unchanged membership", err)
+	if written {
+		t.Fatal("generation and observation clocks caused a checkpoint rewrite")
+	}
+	same, err := os.ReadFile(store.structureFile)
+	testutil.FailErr(t, "read unchanged checkpoint", err)
+	if !bytes.Equal(first, same) {
+		t.Fatal("unchanged checkpoint bytes moved")
+	}
+	installStructuralIncrement(t, store, 3, "a", "b")
+	written, err = store.checkpointStructure(t.Context())
+	testutil.FailErr(t, "checkpoint changed membership", err)
+	if !written {
+		t.Fatal("new entry did not checkpoint")
+	}
+}

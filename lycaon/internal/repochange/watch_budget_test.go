@@ -1,10 +1,12 @@
 package repochange
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -409,5 +411,29 @@ func TestTruncatedCoverageHealsWhenCapacityFrees(t *testing.T) {
 	reg.mu.Unlock()
 	if w == nil || !w.watchesForTest(small) {
 		t.Fatal("healed coverage left the root directory itself unwatched")
+	}
+}
+
+func TestCoverageShortfallDoesNotPublishMutation(t *testing.T) {
+	root := t.TempDir()
+	var changes atomic.Int32
+	RegisterObserver(func(_ context.Context, event Event) {
+		if event.ProjectDir == root && event.Kind == WorktreeChanged {
+			changes.Add(1)
+		}
+	})
+	defer ResetObserversForTest()
+	defer ResetDebouncerForTest(context.Background())
+	watcher := &worktreeWatcher{root: root, watched: make(map[string]int)}
+	before := CurrentEpoch(root)
+	for _, count := range []int{4, 9, 0} {
+		watcher.setTruncated(count)
+		if got := watcher.coverage().Truncated; got != count {
+			t.Fatalf("coverage shortfall = %d, want %d", got, count)
+		}
+	}
+	ResetDebouncerForTest(t.Context())
+	if changes.Load() != 0 || CurrentEpoch(root) != before {
+		t.Fatal("coverage change published a filesystem mutation")
 	}
 }

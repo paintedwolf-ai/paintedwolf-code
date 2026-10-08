@@ -193,7 +193,7 @@ func (r *WatcherRegistry) Seed(ctx context.Context, root string, directories []W
 	// A recursive root stream already observes every catalog directory; the
 	// only registration that can fall short is the root itself.
 	if w.recursive {
-		w.setTruncated(ctx, missing)
+		w.setTruncated(missing)
 		return
 	}
 	for i, directory := range eligible {
@@ -207,7 +207,7 @@ func (r *WatcherRegistry) Seed(ctx context.Context, root string, directories []W
 			break
 		}
 	}
-	w.setTruncated(ctx, missing)
+	w.setTruncated(missing)
 	coverage := w.coverage()
 	slog.InfoContext(ctx, "worktree watch seeded",
 		"root", key, "directories", len(eligible), "watched", coverage.Watched, "unwatched", coverage.Truncated)
@@ -355,7 +355,7 @@ func newWorktreeWatcher(ctx context.Context, root string, maxDirs int, budget *w
 		watched:      map[string]int{},
 	}
 	if w.addMeasuredDir(root) != addRegistered {
-		w.setTruncated(ctx, 1)
+		w.setTruncated(1)
 	}
 	w.armRefWatch()
 	return w, nil
@@ -464,19 +464,14 @@ func (w *worktreeWatcher) forgetRemovedTree(path string) {
 }
 
 // Zero truncation clears the shortfall and re-arms its warning.
-func (w *worktreeWatcher) setTruncated(ctx context.Context, missing int) {
+func (w *worktreeWatcher) setTruncated(missing int) {
 	w.mu.Lock()
-	changed := w.truncated != missing
 	w.truncated = missing
 	if missing == 0 {
 		w.reported = false
 	}
 	w.mu.Unlock()
 	w.reportCoverage()
-	// Notify consumers when coverage changes.
-	if changed {
-		NotifyWorktreeDebounced(ctx, w.root, []string{"."}, SourceWatcher)
-	}
 }
 
 // noteUnwatchedDir counts one newly discovered directory that could not be
