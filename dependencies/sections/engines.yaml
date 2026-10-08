@@ -20,7 +20,7 @@ rows:
     friction_reason: |
       Update the version and the per-platform SHA-256 values in `chrome_pin.go`. Provision with
       `./task browser:ensure` and check that `go-rod` still drives the new CDP protocol.
-      Re-verify confinement with `./task test:seatbelt` and the CI `browser-confinement` job.
+      Re-verify confinement with `./task test:seatbelt` and the CI `confinement` job.
       The macOS bundle Developer ID–signs the tree.
 
   - id: git-engine

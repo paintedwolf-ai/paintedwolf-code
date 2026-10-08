@@ -440,12 +440,17 @@ func TestWriteRootsForBoundaryAliasesOnlyWholeSegments(t *testing.T) {
 	}
 }
 
-// Package stores are writable by default; their tool homes, which hold
-// executables, are not.
+// Package stores and Go's local telemetry counters are writable by default;
+// the tool homes and Go config directory around them are not.
 func TestStandardCacheDataRootsNameStoresNotToolHomes(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("LYCAON_SANDBOX_WRITE_ROOTS", "")
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		t.Fatalf("user config dir: %v", err)
+	}
 	roots := map[string]bool{}
 	for _, r := range standardCacheDataRoots() {
 		roots[r] = true
@@ -458,6 +463,14 @@ func TestStandardCacheDataRootsNameStoresNotToolHomes(t *testing.T) {
 	for _, refused := range []string{".bun", ".npm", ".cargo"} {
 		if roots[filepath.Join(home, refused)] {
 			t.Errorf("default roots include tool home ~/%s", refused)
+		}
+	}
+	if !roots[filepath.Join(configDir, "go", "telemetry")] {
+		t.Errorf("default roots miss Go telemetry counters under %s: %v", configDir, roots)
+	}
+	for _, refused := range []string{configDir, filepath.Join(configDir, "go")} {
+		if roots[refused] {
+			t.Errorf("default roots include Go config directory %s", refused)
 		}
 	}
 }
