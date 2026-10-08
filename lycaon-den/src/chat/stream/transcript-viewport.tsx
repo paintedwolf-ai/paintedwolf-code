@@ -714,7 +714,7 @@ export function createTranscriptViewportController(opts: {
       const target = stream;
       if (!target) return () => {};
       if (direction === "close") {
-        scrollportMotionForViewport(target)?.releaseTailRange();
+        scrollportMotionForViewport(target)?.tail.releaseTailRange();
       }
       if (!disclosureMotion) {
         const wasFollowing =

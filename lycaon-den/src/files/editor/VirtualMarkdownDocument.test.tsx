@@ -55,14 +55,14 @@ describe("Markdown preview scroll window", () => {
     expect(view.container.textContent).toContain("Section 0");
 
     setItems([row(10), row(11)]);
-    motion.beginThumbGesture();
+    motion.input.beginThumbGesture();
     motion.commit(1000, "thumb_drag");
     expect(view.container.querySelector('[data-retained="true"]')).not.toBeNull();
     expect(view.container.textContent).toContain("Section 0");
     expect((view.container.querySelector('[data-index="0"]') as HTMLElement).style.transform).toBe("translateY(1000px)");
     instance.scrollOffset = 1000;
     expect(instance.shouldAdjustScrollPositionOnItemSizeChange!(row(0), 100, instance)).toBe(false);
-    motion.endThumbGesture();
+    motion.input.endThumbGesture();
     receivers.get(10)!(tokens(10));
     expect(view.container.textContent).not.toContain("Section 10");
     receivers.get(11)!(tokens(11));

@@ -111,15 +111,15 @@ describe("overlay scrollbar auto-hide", () => {
   it("keeps the bar through a running gesture and fades once it settles", () => {
     const { host, idle, motion, stop } = createFixture();
 
-    motion.beginThumbGesture();
+    motion.input.beginThumbGesture();
     expect(idle()).toEqual([false, false]);
     vi.advanceTimersByTime(SCROLLBAR_IDLE_DELAY_MS * 3);
     expect(idle()).toEqual([false, false]);
 
-    motion.endThumbGesture();
+    motion.input.endThumbGesture();
     // The direct-input settle window outlives the gesture.
     vi.advanceTimersByTime(SCROLLBAR_IDLE_DELAY_MS);
-    expect(motion.isDirectInputActive()).toBe(false);
+    expect(motion.input.isDirectInputActive()).toBe(false);
     vi.advanceTimersByTime(SCROLLBAR_IDLE_DELAY_MS);
     expect(idle()).toEqual([true, true]);
     stop();

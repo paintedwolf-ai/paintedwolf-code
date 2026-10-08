@@ -354,7 +354,7 @@ export function FilesTree(props: FilesTreeProps) {
     if (!headDiffers || current.state !== "ready") return;
     const host = navEl?.closest<HTMLElement>(".den-files-tree-scroll-frame");
     const motion = host ? scrollportMotionForHost(host) : undefined;
-    if (previous.state.intent_revision === current.intent_revision && motion?.isDirectInputActive()) return;
+    if (previous.state.intent_revision === current.intent_revision && motion?.input.isDirectInputActive()) return;
     const intent = `${current.id}:${current.intent_revision}`;
     const key = `${intent}:${current.projection_revision}:${logicalOffset}`;
     if (pendingRebase?.intent === intent && (pendingRebase.key === key ||

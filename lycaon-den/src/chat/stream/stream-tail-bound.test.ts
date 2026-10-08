@@ -215,7 +215,7 @@ describe("the chat viewport cannot rest below the transcript", () => {
     now.mockReturnValue(1_000);
     const fixture = createStreamFixture({ contentHeight: 2_000, scrollTop: 1_400 });
 
-    fixture.motion.noteNativeInput("wheel");
+    fixture.motion.input.noteNativeInput("wheel");
     fixture.setContentHeight(1_000);
     fixture.motion.notifyLayoutMutated();
     expect(fixture.host.scrollTop).toBe(1_400);
@@ -291,7 +291,7 @@ describe("the chat viewport cannot rest below the transcript", () => {
     now.mockReturnValue(1_000);
     const fixture = createStreamFixture({ contentHeight: 2_000, scrollTop: 1_400 });
 
-    fixture.motion.noteNativeInput("touch");
+    fixture.motion.input.noteNativeInput("touch");
     fixture.setContentHeight(1_100);
     fixture.motion.notifyLayoutMutated();
     await settleStreamScroll(fixture.host, 6);
@@ -314,7 +314,7 @@ describe("the chat viewport cannot rest below the transcript", () => {
     vi.spyOn(performance, "now").mockImplementation(() => currentTime);
     const fixture = createStreamFixture({ contentHeight: 2_000, scrollTop: 1_400 });
 
-    fixture.motion.noteNativeInput("touch");
+    fixture.motion.input.noteNativeInput("touch");
     fixture.setContentHeight(1_100);
     fixture.motion.notifyLayoutMutated();
 

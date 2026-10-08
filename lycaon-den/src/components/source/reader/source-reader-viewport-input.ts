@@ -13,9 +13,9 @@ export function bindReaderViewportInput(host: HTMLElement, input: (pendingScroll
       stopCommits = next.subscribeCommits(source => {
         if (source === "thumb_drag" || source === "track_click") input(false);
       });
-      stopSettled = next.subscribeInputSettled(settled);
+      stopSettled = next.input.subscribeInputSettled(settled);
     }
-    const thumb = next?.isThumbGestureActive() ?? false;
+    const thumb = next?.input.isThumbGestureActive() ?? false;
     const synchronous = thumb || thumbGesture;
     thumbGesture = thumb;
     input(!synchronous);

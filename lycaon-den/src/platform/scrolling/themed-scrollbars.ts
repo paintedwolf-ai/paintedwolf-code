@@ -206,7 +206,7 @@ function noteDirectInput(host: HTMLElement): void {
     host,
     setTimeout(() => {
       directInputTimers.delete(host);
-      if (scrollportMotionForHost(host)?.isDirectInputActive()) {
+      if (scrollportMotionForHost(host)?.input.isDirectInputActive()) {
         noteDirectInput(host);
         return;
       }
@@ -393,7 +393,7 @@ function bindScrollbar(
     if (schedule) placeChrome();
     else chromePlacements.request(host);
   };
-  const stopExtent = motion.subscribeExtent(requestPlaceChrome);
+  const stopExtent = motion.extent.subscribeExtent(requestPlaceChrome);
   const stopCommits = vertical ? motion.subscribeCommits(requestPlaceChrome) : undefined;
   const stopContentExtent = options.extent
     ? observeExtent(host, viewport, options.extent, options.axis ?? "both")

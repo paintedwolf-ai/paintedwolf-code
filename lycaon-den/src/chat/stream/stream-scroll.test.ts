@@ -415,29 +415,29 @@ describe("the reader's own scrolling", () => {
   it("stops following when the reader drags the scrollbar thumb up", () => {
     const f = readerFixture({ height: 1_000, scrollTop: 900, clientHeight: 100 });
     const motion = scrollportMotionForHost(f.el)!;
-    motion.beginThumbGesture();
+    motion.input.beginThumbGesture();
     expect(f.handlers.onReaderInput).toHaveBeenCalledOnce();
     f.scrollTo(700);
     expect(f.handlers.stopFollowing).toHaveBeenCalledOnce();
-    motion.endThumbGesture();
+    motion.input.endThumbGesture();
     f.stop();
   });
 
   it("resumes following when the scrollbar thumb returns to the tail", () => {
     const f = readerFixture({ height: 1_000, scrollTop: 500, clientHeight: 100, following: false });
     const motion = scrollportMotionForHost(f.el)!;
-    motion.beginThumbGesture();
+    motion.input.beginThumbGesture();
     f.scrollTo(890);
     expect(f.handlers.resumeFollowing).toHaveBeenCalledOnce();
-    motion.endThumbGesture();
+    motion.input.endThumbGesture();
     f.stop();
   });
 
   it("reads a track click's landing, observed after the click, as reading", () => {
     const f = readerFixture({ height: 1_000, scrollTop: 500, clientHeight: 100, following: false });
     const motion = scrollportMotionForHost(f.el)!;
-    motion.beginThumbGesture();
-    motion.endThumbGesture();
+    motion.input.beginThumbGesture();
+    motion.input.endThumbGesture();
     f.scrollTo(900);
     expect(f.handlers.resumeFollowing).toHaveBeenCalledOnce();
     f.stop();
@@ -445,7 +445,7 @@ describe("the reader's own scrolling", () => {
 
   it("leaves wheel input on the scrollport frame to the wheel's own direction", () => {
     const f = readerFixture({ height: 1_000, scrollTop: 500, clientHeight: 100, following: false });
-    scrollportMotionForHost(f.el)!.noteNativeInput("wheel");
+    scrollportMotionForHost(f.el)!.input.noteNativeInput("wheel");
     f.scrollTo(900);
     expect(f.handlers.resumeFollowing).not.toHaveBeenCalled();
     f.stop();

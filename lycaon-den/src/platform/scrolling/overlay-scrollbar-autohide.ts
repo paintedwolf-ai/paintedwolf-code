@@ -70,7 +70,7 @@ export function bindOverlayScrollbarAutoHide(
       return;
     }
     // A gesture still running keeps its bar until it settles.
-    if (pointerOverBar || motion.isDirectInputActive()) {
+    if (pointerOverBar || motion.input.isDirectInputActive()) {
       armHide();
       return;
     }

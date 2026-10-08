@@ -285,7 +285,7 @@ export function streamTailOffset(streamTarget: HTMLElement): number {
   const motion = scrollportMotionForViewport(streamTarget);
   if (motion) {
     ensureStreamTailPolicy(streamTarget);
-    return motion.tailOffsetY();
+    return motion.extent.tailOffsetY();
   }
   const naturalTail = Math.max(0, streamTarget.scrollHeight - scrollportClientHeight(streamTarget));
   const renderedTail = streamRenderedTranscriptTailOffset(streamTarget);
@@ -327,7 +327,7 @@ function streamRenderedTranscriptTailOffset(streamTarget: HTMLElement): number |
 /** Scrollable content height, synthetic extent excluded. */
 function streamContentHeight(streamTarget: HTMLElement): number {
   const motion = scrollportMotionForViewport(streamTarget);
-  if (motion) return motion.contentHeight();
+  if (motion) return motion.extent.contentHeight();
   return streamTarget.scrollHeight;
 }
 
@@ -355,7 +355,7 @@ function dispatchStreamScroll(streamTarget: HTMLElement): void {
         }
       };
       const motion = scrollportMotionForViewport(streamTarget);
-      if (motion) motion.measureGeometry(deliver);
+      if (motion) motion.extent.measureGeometry(deliver);
       else deliver();
     };
     streamScrollDeliveries.set(streamTarget, dispatch);
@@ -439,7 +439,7 @@ function syncStreamReaderScroll(
   const tail = streamTailOffset(streamTarget);
   // Native scroll samples can exceed the painted transcript.
   if (scrollTop > tail + SCROLL_EPSILON_PX) {
-    scrollportMotionForViewport(streamTarget)?.reconcileTailBound();
+    scrollportMotionForViewport(streamTarget)?.tail.reconcileTailBound();
   }
 
   const pressing = state.activePointer || state.scrollbarGesture === true;
@@ -669,7 +669,7 @@ export function watchStreamReaderIntent(
   const onScrollportInput = (event: Event) => {
     const motion = scrollportMotionForViewport(streamTarget);
     if (!motion || event.target !== motion.host) return;
-    if (motion.isThumbGestureActive()) {
+    if (motion.input.isThumbGestureActive()) {
       if (state.scrollbarGesture) return;
       state.scrollbarGesture = true;
       state.suppressEngageUntil = 0;

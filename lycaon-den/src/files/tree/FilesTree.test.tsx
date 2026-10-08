@@ -994,7 +994,7 @@ it("publishes a filesystem change after direct input settles without another scr
   await findFileRow("README.md");
   const scroll = document.querySelector<HTMLElement>(".den-files-tree-scroll")!;
   const motion = scrollportMotionForViewport(scroll)!;
-  motion.noteNativeInput("wheel");
+  motion.input.noteNativeInput("wheel");
   fixture.rows([treeRow(".", "directory", true), treeRow("added.txt"), treeRow("README.md")]);
   fixture.notify();
   await new Promise(resolve => setTimeout(resolve, 350));
