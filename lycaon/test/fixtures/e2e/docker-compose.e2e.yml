@@ -155,6 +155,8 @@ services:
       LYCAON_HARNESS: "1"
       LYCAON_DEV: "1"
       LYCAON_DEV_CORS: "1"
+      # Specs seed several chats each; repeat runs would otherwise hit the 10/min product default.
+      LYCAON_RATE_SESSIONS_PER_MIN: ${LYCAON_RATE_SESSIONS_PER_MIN:-600}
       LYCAON_DOCUMENT_CORE_BINARY: ${LYCAON_E2E_STATE_DIR}/document-core/pw-document-core
       LYCAON_ENGINE_ROOT: ${LYCAON_E2E_STATE_DIR}/engine-root
       GOPROXY: https://proxy.golang.org,direct

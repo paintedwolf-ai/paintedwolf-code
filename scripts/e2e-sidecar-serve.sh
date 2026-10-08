@@ -73,6 +73,8 @@ export LYCAON_LLM_MANUAL="${LYCAON_LLM_MANUAL:-0}"
 export LYCAON_DEV=1
 export LYCAON_HARNESS=1
 export LYCAON_DEV_CORS=1
+# Specs seed several chats each; repeat runs would otherwise hit the 10/min product default.
+export LYCAON_RATE_SESSIONS_PER_MIN="${LYCAON_RATE_SESSIONS_PER_MIN:-600}"
 export LYCAON_ENGINE_ROOT="${LYCAON_ENGINE_ROOT:-${ROOT}/lycaon-den/src-tauri/engine-root}"
 
 BIN="${STATE_DIR}/runtime/sidecar"
