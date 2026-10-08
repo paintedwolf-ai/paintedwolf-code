@@ -30,6 +30,9 @@ EXCERPT_LINES = 60
 # Go's progress lines for tests that are running or passed; they bury a parallel package's failure.
 GO_PROGRESS = re.compile(r"^=== (RUN|PAUSE|CONT|NAME)\b|^\s*--- (PASS|SKIP):")
 SUITES = {"all", "behavior", "race", "coverage", "performance", "fuzz"}
+# What a lane installs: the shared toolchains, plus the Tauri shell and its staged engine,
+# or the Den Rust workspace and harness stack without the shell's packaging inputs.
+SETUPS = {"verification", "shell", "harness"}
 
 
 def lanes():
@@ -39,7 +42,7 @@ def lanes():
     for name, lane in values.items():
         if not re.fullmatch(r"[a-z][a-z0-9-]*", name):
             raise ValueError(f"invalid CI lane: {name}")
-        if set(lane) - {"targets", "minutes", "profiles", "suite", "native", "runner", "workers", "shards"}:
+        if set(lane) - {"targets", "minutes", "profiles", "suite", "setup", "runner", "workers", "shards"}:
             raise ValueError(f"unknown CI lane fields: {name}")
         if not lane["targets"] or not set(lane["targets"]).issubset(targets):
             raise ValueError(f"CI lane {name} must name existing task targets")
@@ -47,7 +50,7 @@ def lanes():
             raise ValueError(f"CI lane {name} must leave time for setup and evidence upload")
         if not lane["profiles"] or not set(lane["profiles"]).issubset(PROFILES):
             raise ValueError(f"invalid CI profiles: {name}")
-        if lane["suite"] not in SUITES or type(lane["native"]) is not bool:
+        if lane["suite"] not in SUITES or lane.get("setup") not in SETUPS:
             raise ValueError(f"invalid CI setup or suite: {name}")
         if lane.get("runner", "macos-15") not in {"macos-15", "ubuntu-latest"}:
             raise ValueError(f"unsupported CI runner: {name}")
@@ -76,7 +79,7 @@ def matrix(profile, suite="all"):
         for index in range(1, count + 1):
             result.append({"lane": name, "shard": f"{index}/{count}" if count > 1 else "",
                            "minutes": lane["minutes"], "job_minutes": lane["minutes"] + 30,
-                           "native": lane["native"],
+                           "setup": lane["setup"],
                            "runner": lane.get("runner", "ubuntu-latest")})
     if not result:
         raise ValueError("CI selection contains no verification")

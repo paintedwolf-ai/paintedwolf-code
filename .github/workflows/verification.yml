@@ -57,11 +57,11 @@ jobs:
 
       - uses: ./.github/actions/setup-verification
         with:
-          native: ${{ matrix.native }}
+          setup: ${{ matrix.setup }}
 
-      # Native lanes build the Tauri shell, which stages the decision engine heads.
+      # Shell lanes stage the engine, including the decision engine heads.
       - uses: ./.github/actions/setup-bialy
-        if: ${{ matrix.native }}
+        if: ${{ matrix.setup == 'shell' }}
 
       - name: Run verification
         timeout-minutes: ${{ matrix.minutes }}

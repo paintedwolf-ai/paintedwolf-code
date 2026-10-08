@@ -69,6 +69,27 @@ class HostedVerificationTests(unittest.TestCase):
                     # macOS hosts only the lanes that test macOS-specific behavior.
                     self.assertEqual(row["runner"], "macos-15" if row["lane"] == "webkit" else "ubuntu-latest")
 
+    def test_each_lane_installs_only_its_declared_setup(self):
+        setups = {row["lane"]: row["setup"] for row in ci.matrix("check")["include"]}
+        self.assertEqual(setups["native"], "shell")
+        # The WebKit harness builds without the shell, so the lane skips its packaging inputs.
+        self.assertEqual(setups["webkit"], "harness")
+        self.assertEqual({setup for lane, setup in setups.items() if lane not in {"native", "webkit"}},
+                         {"verification"})
+        for mutation in ("unknown", "missing", "boolean"):
+            with self.subTest(mutation=mutation):
+                data = copy.deepcopy(planning.catalog())
+                lane = data["ci"]["webkit"]
+                if mutation == "unknown":
+                    lane["setup"] = "everything"
+                elif mutation == "missing":
+                    del lane["setup"]
+                else:
+                    del lane["setup"]
+                    lane["native"] = True
+                with patch.object(ci, "catalog", return_value=data), self.assertRaises(ValueError):
+                    ci.matrix("check")
+
     def test_aggregate_rejects_failure_cancellation_skip_and_missing_results(self):
         ci.require_success({"a": {"result": "success"}, "b": {"result": "success"}})
         for status in ["failure", "cancelled", "skipped", "", None]:

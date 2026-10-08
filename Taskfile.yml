@@ -466,7 +466,7 @@ tasks:
       - bash {{.SCRIPTS_DIR}}/den-harness-test.sh {{.CLI_ARGS}}
 
   den:webkit:scroll:
-    desc: 'WebKit scroll-thread invariants: host wheel glides into the harness Den in a real WKWebView (macOS)'
+    desc: 'WebKit scroll-thread invariants: probes the host, then glides host wheel input into the harness Den in a real WKWebView (macOS)'
     preconditions:
       - sh: command -v go
         msg: Go required — see lycaon/go.mod
@@ -584,11 +584,13 @@ tasks:
       - LYCAON_VITEST_PERF=1 bash {{.SCRIPTS_DIR}}/vitest-digest.sh --name den:test:transcript-scale -- src/chat/transcript/layout/transcript-scale.perf.test.ts
 
   den:test:rust:
-    desc: Tauri shell Rust tests and operational examples
+    desc: Den Rust workspace tests and operational examples (shell, wheel glide, WebKit harness)
     dir: lycaon-den/src-tauri
     sources:
       - 'src/**/*.rs'
       - 'examples/**/*.rs'
+      - 'crates/**/*.rs'
+      - 'crates/**/Cargo.toml'
       - build.rs
       - 'tauri*.conf.json'
       - 'permissions/**/*.toml'
@@ -606,7 +608,7 @@ tasks:
         msg: cargo required — install rustup from https://rustup.rs; rust-toolchain.toml selects the version
     cmds:
       - bash {{.SCRIPTS_DIR}}/ensure-tauri-binaries.sh
-      - cargo test --all-targets --quiet
+      - cargo test --workspace --all-targets --quiet
 
   decide:test:
     desc: Decision engine (bialy) Rust tests

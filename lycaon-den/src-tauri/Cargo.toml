@@ -1,78 +1,14 @@
-[package]
-name = "painted-wolf-code"
-version = "1.0.1"
-description = "Painted Wolf Code desktop shell"
-authors = ["Painted Wolf Code"]
-edition = "2021"
-license = "Apache-2.0"
+[workspace]
+members = ["crates/wheel-glide", "crates/webkit-harness"]
+resolver = "2"
 
-[lib]
-name = "painted_wolf_code_lib"
-crate-type = ["staticlib", "cdylib", "rlib"]
-
-[features]
-# Enables the inspector for local release profiling.
-profiling = ["tauri/devtools"]
-
-[build-dependencies]
-tauri-build = { version = "2", features = [] }
-semver = "1"
-
-[dependencies]
-tauri = { version = "2", features = [] }
-tauri-plugin-dialog = "2"
-tauri-plugin-shell = "2"
-tokio = { version = "1", features = ["sync", "time", "fs", "io-util", "macros"] }
-reqwest = { version = "0.13", default-features = false, features = ["stream"] }
-rustls = { version = "0.23", default-features = false, features = ["ring"] }
-sha2 = "0.10"
-flate2 = "1"
-tar = "0.4"
-futures-util = "0.3"
+# One set of Apple bindings for the shell, the wheel glide, and the WebKit harness.
+[workspace.dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-semver = "1"
-base64 = "0.23"
-minisign-verify = "0.3.0"
-rand = "0.8"
-ed25519-dalek = { version = "2", features = ["rand_core"] }
-which = "8"
-ureq = "2"
 libc = "0.2"
-# The blocking picker preserves window-level presentation.
-# The dialog plugin builds rfd with gtk3; rfd refuses gtk3 and xdg-portal together.
-rfd = { version = "0.17", default-features = false, features = ["gtk3"] }
-arboard = "3"
-uuid = { version = "1", features = ["v4"] }
-
-# macOS posts through UserNotifications directly; other targets use the plugin.
-[target.'cfg(not(target_os = "macos"))'.dependencies]
-tauri-plugin-notification = "2"
-
-[target.'cfg(target_os = "windows")'.dependencies]
-windows-sys = { version = "0.61", features = [
-  "Win32_Foundation",
-  "Win32_Storage_FileSystem",
-  "Win32_System_Threading",
-  "Win32_System_Com",
-  "Win32_UI_Shell",
-  "Win32_UI_WindowsAndMessaging",
-] }
-windows = { version = "0.61.3", features = [
-  "Foundation",
-  "Security_Credentials_UI",
-  "Win32_Foundation",
-  "Win32_System_WinRT",
-] }
-
-[target.'cfg(target_os = "macos")'.dependencies]
 block2 = "0.6"
 objc2 = "0.6"
-objc2-local-authentication = { version = "0.3.2", default-features = false, features = [
-  "std",
-  "LAContext",
-  "block2",
-] }
 objc2-foundation = { version = "0.3", features = [
   "NSString",
   "NSDictionary",
@@ -91,18 +27,10 @@ objc2-foundation = { version = "0.3", features = [
   "NSURLRequest",
   "block2",
 ] }
-objc2-user-notifications = { version = "0.3", features = [
-  "block2",
-  "UNUserNotificationCenter",
-  "UNNotification",
-  "UNNotificationContent",
-  "UNNotificationRequest",
-  "UNNotificationResponse",
-  "UNNotificationSettings",
-] }
 objc2-app-kit = { version = "0.3", default-features = false, features = [
   "std",
   "block2",
+  "objc2-core-foundation",
   "objc2-core-graphics",
   "objc2-quartz-core",
   "NSAccessibility",
@@ -138,6 +66,7 @@ objc2-web-kit = { version = "0.3", default-features = false, features = [
   "std",
   "block2",
   "objc2-app-kit",
+  "objc2-core-foundation",
   "WKNavigation",
   "WKPreferences",
   "WKUserContentController",
@@ -146,3 +75,92 @@ objc2-web-kit = { version = "0.3", default-features = false, features = [
   "WKWebViewConfiguration",
   "WKWebsiteDataStore",
 ] }
+
+[package]
+name = "painted-wolf-code"
+version = "1.0.1"
+description = "Painted Wolf Code desktop shell"
+authors = ["Painted Wolf Code"]
+edition = "2021"
+license = "Apache-2.0"
+
+[lib]
+name = "painted_wolf_code_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[features]
+# Enables the inspector for local release profiling.
+profiling = ["tauri/devtools"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+semver = "1"
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-shell = "2"
+tokio = { version = "1", features = ["sync", "time", "fs", "io-util", "macros"] }
+reqwest = { version = "0.13", default-features = false, features = ["stream"] }
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
+sha2 = "0.10"
+flate2 = "1"
+tar = "0.4"
+futures-util = "0.3"
+serde.workspace = true
+serde_json.workspace = true
+semver = "1"
+base64 = "0.23"
+minisign-verify = "0.3.0"
+rand = "0.8"
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+which = "8"
+ureq = "2"
+libc.workspace = true
+# The blocking picker preserves window-level presentation.
+# The dialog plugin builds rfd with gtk3; rfd refuses gtk3 and xdg-portal together.
+rfd = { version = "0.17", default-features = false, features = ["gtk3"] }
+arboard = "3"
+uuid = { version = "1", features = ["v4"] }
+wheel-glide = { path = "crates/wheel-glide" }
+
+# macOS posts through UserNotifications directly; other targets use the plugin.
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+tauri-plugin-notification = "2"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-sys = { version = "0.61", features = [
+  "Win32_Foundation",
+  "Win32_Storage_FileSystem",
+  "Win32_System_Threading",
+  "Win32_System_Com",
+  "Win32_UI_Shell",
+  "Win32_UI_WindowsAndMessaging",
+] }
+windows = { version = "0.61.3", features = [
+  "Foundation",
+  "Security_Credentials_UI",
+  "Win32_Foundation",
+  "Win32_System_WinRT",
+] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2-local-authentication = { version = "0.3.2", default-features = false, features = [
+  "std",
+  "LAContext",
+  "block2",
+] }
+objc2-user-notifications = { version = "0.3", features = [
+  "block2",
+  "UNUserNotificationCenter",
+  "UNNotification",
+  "UNNotificationContent",
+  "UNNotificationRequest",
+  "UNNotificationResponse",
+  "UNNotificationSettings",
+] }
+block2.workspace = true
+objc2.workspace = true
+objc2-foundation.workspace = true
+objc2-app-kit.workspace = true
+objc2-web-kit.workspace = true

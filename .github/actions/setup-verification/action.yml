@@ -1,9 +1,12 @@
 name: Set up verification
 description: Install pinned toolchains and dependencies for hosted verification
 inputs:
-  native:
-    description: Install the Tauri shell build dependencies
-    default: 'false'
+  setup:
+    description: >-
+      What the lane builds: verification (shared toolchains), shell (also the Tauri
+      shell and its staged engine), or harness (the Den Rust workspace and harness
+      stack, without the shell's packaging inputs)
+    default: verification
     required: false
 outputs:
   artifact-root:
@@ -37,7 +40,7 @@ runs:
       run: rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)" --profile minimal
 
     - name: Install Tauri Linux build dependencies
-      if: runner.os == 'Linux' && inputs.native == 'true'
+      if: runner.os == 'Linux' && inputs.setup == 'shell'
       shell: bash
       run: |
         sudo apt-get update
@@ -46,12 +49,13 @@ runs:
           libjavascriptcoregtk-4.1-dev librsvg2-dev patchelf
 
     - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
-      if: inputs.native == 'true'
+      if: inputs.setup != 'verification'
       with:
-        workspaces: lycaon-den/src-tauri
+        # Source snapshots build into lycaon-den/target.
+        workspaces: lycaon-den/src-tauri -> ../target
 
     - name: Restore the decision engine build
-      if: runner.os == 'macOS'
+      if: runner.os == 'macOS' && inputs.setup == 'shell'
       uses: ./.github/actions/cache-decide
 
     - name: Set up maintained OpenGrep
@@ -59,6 +63,7 @@ runs:
 
     # Source-scanning frontend tests shell out to ripgrep.
     - name: Install ripgrep
+      if: inputs.setup != 'harness'
       shell: bash
       run: |
         set -euo pipefail
@@ -86,6 +91,7 @@ runs:
 
     # The notices script pins both tools; cargo-about otherwise compiles from source on every runner.
     - name: Restore license tools
+      if: inputs.setup != 'harness'
       uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
       with:
         path: |
@@ -94,5 +100,6 @@ runs:
         key: license-tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/licenses-notices.sh') }}
 
     - name: Generate third-party notices
+      if: inputs.setup != 'harness'
       shell: bash
       run: ./task licenses:notices
