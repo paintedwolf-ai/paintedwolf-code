@@ -13,7 +13,7 @@ if ! python3 "$ROOT/scripts/test-execution.py" holding; then
 fi
 cd "${ROOT}/lycaon"
 
-MIN="$(python3 "$ROOT/scripts/coverage_policy.py" "${COVERAGE_PKG_MIN-40}")"
+MIN="$(python3 "$ROOT/scripts/coverage_policy.py" "${COVERAGE_PKG_MIN-$(python3 "$ROOT/scripts/coverage_policy.py" get go.package)}")"
 ENFORCE="${COVERAGE_PKG_ENFORCE:-0}"
 [[ "$ENFORCE" == 0 || "$ENFORCE" == 1 ]] || { echo "COVERAGE_PKG_ENFORCE must be 0 or 1" >&2; exit 2; }
 EXEMPT_FILE="${ROOT}/lycaon/coverage-exempt.txt"

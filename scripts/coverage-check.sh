@@ -8,7 +8,7 @@ if ! python3 "$ROOT/scripts/test-execution.py" holding; then
 fi
 cd "${ROOT}/lycaon"
 
-MIN="$(python3 "$ROOT/scripts/coverage_policy.py" "${COVERAGE_MIN-62}")"
+MIN="$(python3 "$ROOT/scripts/coverage_policy.py" "${COVERAGE_MIN-$(python3 "$ROOT/scripts/coverage_policy.py" get go.total)}")"
 
 profile="$(mktemp -t lycaon-coverage.XXXXXX)"
 trap 'rm -f "${profile}"' EXIT
