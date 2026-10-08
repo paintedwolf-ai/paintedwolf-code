@@ -2,12 +2,15 @@ name: Cache Go builds
 description: Restore the module and build caches that main warms for verification
 inputs:
   save:
-    description: Save the caches after the job (main only); every other run restores without saving
+    description: Publish prepared caches (main only); the default restores without saving
+    default: 'false'
+  exact:
+    description: Restore only the current module graph when preparing its main cache
     default: 'false'
 outputs:
   cache-hit:
     description: Whether the exact key for the current module graph was restored
-    value: ${{ steps.save.outputs.cache-hit || steps.restore.outputs.cache-hit }}
+    value: ${{ steps.restore.outputs.cache-hit }}
 runs:
   using: composite
   steps:
@@ -27,7 +30,7 @@ runs:
     # superseded dependencies forward.
     - if: ${{ inputs.save == 'true' && github.ref == 'refs/heads/main' }}
       id: save
-      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: |
           ${{ steps.paths.outputs.gocache }}
@@ -41,4 +44,4 @@ runs:
           ${{ steps.paths.outputs.gocache }}
           ${{ steps.paths.outputs.gomodcache }}
         key: ${{ steps.paths.outputs.key_prefix }}${{ hashFiles('lycaon/go.mod', 'lycaon/go.sum', 'scripts/commentlint/go.mod', 'scripts/commentlint/go.sum') }}
-        restore-keys: ${{ steps.paths.outputs.key_prefix }}
+        restore-keys: ${{ inputs.exact != 'true' && steps.paths.outputs.key_prefix || '' }}

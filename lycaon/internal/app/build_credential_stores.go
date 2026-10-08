@@ -8,7 +8,7 @@ import (
 )
 
 // wireCredentialFloors loads key-material and credential-store paths.
-func (b *serveBuilder) wireCredentialFloors() error {
+func (b sessionWiring) wireCredentialFloors() error {
 	if err := b.wireKeyMaterial(); err != nil {
 		return err
 	}
@@ -16,7 +16,7 @@ func (b *serveBuilder) wireCredentialFloors() error {
 }
 
 // wireKeyMaterial installs the key-material write floor.
-func (b *serveBuilder) wireKeyMaterial() error {
+func (b sessionWiring) wireKeyMaterial() error {
 	paths, err := detectionpack.BundledKeyMaterialPaths()
 	if err != nil {
 		return fmt.Errorf("key material catalogue: %w", err)
@@ -25,7 +25,7 @@ func (b *serveBuilder) wireKeyMaterial() error {
 	return nil
 }
 
-func (b *serveBuilder) wireCredentialStores() error {
+func (b sessionWiring) wireCredentialStores() error {
 	bundled, err := detectionpack.BundledCredentialStorePaths()
 	if err != nil {
 		return fmt.Errorf("credential store catalogue: %w", err)

@@ -1,7 +1,7 @@
 name: Platform verification
 
-# The merge queue's jobs that a catalog lane cannot express: the upgrade corpus,
-# macOS confinement and engine checks, and the Playwright web and desktop tiers.
+# The merge queue's platform gates: the retained upgrade corpus and macOS
+# confinement, browser-boundary, and Git engine checks.
 # The free plan runs five macOS jobs at once, so only what needs macOS runs there.
 on:
   workflow_call:
@@ -114,69 +114,3 @@ jobs:
         with:
           name: confinement-${{ github.run_attempt }}
           status: ${{ job.status }}
-
-  playwright-web:
-    name: playwright-web (${{ matrix.shard }}/3)
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2, 3]
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: lycaon/go.mod
-          cache: false
-
-      - uses: ./.github/actions/cache-go
-
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        with:
-          bun-version-file: .bun-version
-          no-cache: true
-
-      - name: Install frontend dependencies
-        working-directory: lycaon-den
-        run: bun install --frozen-lockfile
-
-      # Browser system packages come from the distribution mirror, whose speed
-      # varies by minutes; this step's time stays out of the test budget.
-      - name: Install Playwright browsers
-        working-directory: lycaon-den
-        timeout-minutes: 20
-        run: bunx playwright install chromium webkit --with-deps
-
-      # The containers' engine runs the maintained scanner.
-      - name: Set up maintained OpenGrep
-        uses: ./.github/actions/setup-opengrep
-
-      - name: Playwright web E2E (Tier B)
-        timeout-minutes: 40
-        env:
-          # Keep traces and reports on disk so the failure-upload step below
-          # can capture them; the cleanup trap otherwise deletes them.
-          LYCAON_E2E_KEEP_ARTIFACTS: "1"
-          LYCAON_E2E_JOB_SHARD: ${{ matrix.shard }}/3
-          LYCAON_E2E_PLAYWRIGHT_READY: "1"
-        run: ./task e2e:den
-
-      - uses: ./.github/actions/verification-evidence
-        if: always()
-        timeout-minutes: 5
-        with:
-          name: playwright-web-${{ matrix.shard }}-${{ github.run_attempt }}
-          status: ${{ job.status }}
-
-      - name: E2E cleanup
-        timeout-minutes: 5
-        if: always()
-        # A run killed at its step deadline keeps its admission; withdraw it so cleanup is not queued behind it.
-        run: |
-          python3 scripts/ci_verification.py release "Playwright web E2E"
-          ./task e2e:cleanup
-
-  playwright-desktop:
-    uses: ./.github/workflows/desktop-verification.yml

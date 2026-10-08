@@ -235,7 +235,7 @@ func (l *PromptLoop) Run(ctx context.Context, in PromptRunInput) (*PromptRunResu
 	if err != nil {
 		return nil, err
 	}
-	if err := l.capturePromptRunCloseout(ctx, setup.state, result); err != nil {
+	if err := (turnCloseout{l}).capturePromptRunCloseout(ctx, setup.state, result); err != nil {
 		return nil, err
 	}
 	return result, nil
@@ -257,7 +257,7 @@ loop:
 			var hold bool
 			maxIter, hold = l.workerLoopCeiling(ctx, sess, st, baseLim, surfaceID, completed, maxIter)
 			if hold {
-				l.awaitWorkerBudgetAnswer(ctx, sess, st)
+				turnNudges{l}.awaitWorkerBudgetAnswer(ctx, sess, st)
 				continue
 			}
 		}
@@ -286,7 +286,7 @@ loop:
 		if guard.IsCoordinatorProfile(profileID) && st.coordinatorFrameReady {
 			turnCtx = toolpolicy.WithCoordinatorTurnFrame(ctx, &st.coordinatorFrame)
 		}
-		spend, err := l.applySpendCeiling(turnCtx, sess, id, profileID, userPrompt, maxIter, in, st)
+		spend, err := turnNudges{l}.applySpendCeiling(turnCtx, sess, id, profileID, userPrompt, maxIter, in, st)
 		if err != nil {
 			return nil, err
 		}
@@ -296,7 +296,7 @@ loop:
 		if l.Deps.WorkerGracefulCancelPending != nil && sess.IsWorkerChild() {
 			if reason, pending := l.Deps.WorkerGracefulCancelPending(turnCtx, sess); pending {
 				loopExit = loopExitGracefulCancel
-				closedHistory, aid, content, cerr := l.runEarlyTurnCloseout(turnCtx, sess, id, profileID, userPrompt, st.history, maxIter, TurnCloseoutCanceled, reason, false, in, st)
+				closedHistory, aid, content, cerr := turnCloseout{l}.runEarlyTurnCloseout(turnCtx, sess, id, profileID, userPrompt, st.history, maxIter, TurnCloseoutCanceled, reason, false, in, st)
 				if cerr != nil {
 					return nil, cerr
 				}
@@ -319,7 +319,7 @@ loop:
 			}
 		}
 
-		landingCloseout, err := l.applyLandingAdvisories(turnCtx, sess, id, profileID, step, maxIter, spend.Runway, spend.WindDown, st)
+		landingCloseout, err := turnCloseout{l}.applyLandingAdvisories(turnCtx, sess, id, profileID, step, maxIter, spend.Runway, spend.WindDown, st)
 		if err != nil {
 			return nil, err
 		}
@@ -327,14 +327,14 @@ loop:
 			closeoutNudgeSent = true
 		}
 
-		assistantMsg, completion, _, err := l.runAssistantStreamTurn(turnCtx, id, sess, st.history, st, profileID, userPrompt, step, maxIter, in.HostTurn)
+		assistantMsg, completion, _, err := modelTurn{l}.runAssistantStreamTurn(turnCtx, id, sess, st.history, st, profileID, userPrompt, step, maxIter, in.HostTurn)
 		if err != nil {
 			if errors.Is(err, ErrLLMTurnTimeout) && strings.TrimSpace(st.lastAssistantID) != "" {
 				loopExit = loopExitLLMTimeout
 				break
 			}
 			if errors.Is(err, llm.ErrModelRequestSecretWithheld) {
-				retry, werr := l.handleSecretWithheldTurn(turnCtx, sess, id, err, st)
+				retry, werr := turnNudges{l}.handleSecretWithheldTurn(turnCtx, sess, id, err, st)
 				if werr != nil {
 					return nil, werr
 				}
@@ -364,7 +364,7 @@ loop:
 		if sent, sendErr := l.takeUserSend(turnCtx, id, st, &userPrompt); sendErr != nil {
 			return nil, sendErr
 		} else if sent {
-			if withdrawErr := l.withdrawCoordinatorDraft(
+			if withdrawErr := (turnNudges{l}).withdrawCoordinatorDraft(
 				context.WithoutCancel(turnCtx), sess, id, st, assistantMsg.Content,
 			); withdrawErr != nil {
 				return nil, withdrawErr
@@ -531,11 +531,11 @@ func (l *PromptLoop) refreshCoordinatorSurface(
 		}
 		st.coordinatorFrame.PostureRules = append([]string(nil), paths...)
 	}
-	st.coordinatorFrame.ProjectRootCount = l.projectRootCount(ctx, sess)
+	st.coordinatorFrame.ProjectRootCount = modelTurn{l}.projectRootCount(ctx, sess)
 	if l.Deps.OverlayRootPaths != nil {
 		st.coordinatorFrame.OverlayRootPaths = append([]string(nil), l.Deps.OverlayRootPaths(ctx, sess)...)
 	}
-	surfaceID := l.resolveTurnProfile(ctx, sess, st.history, st.coordinatorFrame).SurfaceID
+	surfaceID := modelTurn{l}.resolveTurnProfile(ctx, sess, st.history, st.coordinatorFrame).SurfaceID
 	if l.Deps.SetPromptTurnSurface != nil {
 		l.Deps.SetPromptTurnSurface(sessionID, surfaceID)
 	}

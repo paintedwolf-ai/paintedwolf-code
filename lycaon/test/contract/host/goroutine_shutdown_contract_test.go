@@ -29,6 +29,7 @@ var goroutineShutdownAllowlist = map[string]string{
 	"internal/app/parent_watch.go":             "watchParentExit — Run cancels the watch context and joins the returned channel before draining",
 	"internal/app/secret_screen.go":            "secret-harvest growth sweep is an event callback; SweepSessionTree is idempotent and controls its session cancellation",
 	"internal/session/compaction_runner.go":    "CompactionRunner.Wait drains Trigger goroutines on shutdown",
+	"internal/session/queue_round_drain.go":    "round-end drain passes count on roundEndDrains.wg, which WaitForCoordinatorAsyncTurns cancels and joins on shutdown",
 }
 
 func TestBackgroundGoroutinesPairedWithShutdown(t *testing.T) {

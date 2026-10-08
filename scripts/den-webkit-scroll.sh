@@ -26,6 +26,9 @@ harness probe || status=$?
 if ((status == ABSENT_ON_VIRTUAL_MACHINE)); then
   if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
     echo "::notice title=WebKit scroll invariants::Skipped: this virtual machine's WebKit has no scrolling thread"
+    if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+      printf '\n### WebKit scroll coverage\n\nThe harness compiled and the host probe completed. Scroll scenarios were **skipped** because this virtual machine has no scrolling thread. Run `./task den:webkit:scroll` on a physical Mac to verify those scenarios.\n' >> "${GITHUB_STEP_SUMMARY}"
+    fi
   fi
   exit 0
 fi

@@ -16,7 +16,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func (b *serveBuilder) loadSecretMatcher() (*secretmatch.Matcher, error) {
+func (b sessionWiring) loadSecretMatcher() (*secretmatch.Matcher, error) {
 	if b.secretMatcher != nil {
 		return b.secretMatcher, nil
 	}
@@ -45,7 +45,7 @@ func (b *serveBuilder) loadSecretMatcher() (*secretmatch.Matcher, error) {
 }
 
 // wireSecretEvidence installs runtime evidence sources.
-func (b *serveBuilder) wireSecretEvidence(m *secretmatch.Matcher, fp *secretmatch.Fingerprinter) {
+func (b sessionWiring) wireSecretEvidence(m *secretmatch.Matcher, fp *secretmatch.Fingerprinter) {
 	b.secretFingerprinter = fp
 	b.secretHarvest = secretharvest.NewRuntime(fp)
 	harvest := b.secretHarvest
@@ -155,7 +155,7 @@ func (b *serveBuilder) wireSecretEvidence(m *secretmatch.Matcher, fp *secretmatc
 	})
 }
 
-func (b *serveBuilder) secretAskFunc() secretmatch.AskFunc {
+func (b sessionWiring) secretAskFunc() secretmatch.AskFunc {
 	return func(ctx context.Context, finding secretmatch.Alert) (secretmatch.Resolution, error) {
 		if b.toolRuntime == nil || b.toolRuntime.Executor == nil {
 			return secretmatch.Resolution{}, secretmatch.NewAskFault(
@@ -180,7 +180,7 @@ func (b *serveBuilder) secretAskFunc() secretmatch.AskFunc {
 	}
 }
 
-func (b *serveBuilder) wireCredentialObservations() {
+func (b sessionWiring) wireCredentialObservations() {
 	if b.mgr == nil {
 		return
 	}

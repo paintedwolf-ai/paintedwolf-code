@@ -75,6 +75,7 @@ func (m *Manager) WaitForCoordinatorAsyncTurns(ctx context.Context) {
 		return
 	}
 	m.ensureCoordinatorRuntime().CoordinatorLoop().WaitForAsyncTurns(ctx)
+	m.roundEndDrains.wait(ctx)
 }
 
 // parkBlockedLiveCommands waits for command completion after a repetition limit.

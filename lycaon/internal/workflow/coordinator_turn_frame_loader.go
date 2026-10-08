@@ -2,11 +2,13 @@ package workflow
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/spawn"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/internal/workflow/verdictcall"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -15,6 +17,9 @@ type CoordinatorTurnFrameLoader struct {
 	Runs         *RunManager
 	SessionStore SessionWorkflowStore
 	ConfigRoot   string
+	// VerdictCatalog is a session's effective submit_verdict schema, which a
+	// project pack may customize; a review phase composes its call from it.
+	VerdictCatalog func(ctx context.Context, sessionID string) map[string]any
 }
 
 // BuildCoordinatorTurnFrame loads one workflow revision.
@@ -58,6 +63,7 @@ func (l *CoordinatorTurnFrameLoader) BuildCoordinatorTurnFrame(
 		return inject.CoordinatorTurnFrame{WorkflowRevision: active.Revision, RunContext: out}, err
 	}
 	runtime := l.Runs.workflowRuntimeSnapshot(ctx, active, manifest, vars)
+	l.attachPhaseVerdictCall(ctx, sessionID, active, manifest, runtime.PhaseExit)
 	out.WorkflowID = active.WorkflowID
 	out.WorkflowVersion = active.WorkflowVersion
 	out.CurrentPhase = active.CurrentPhase
@@ -195,3 +201,22 @@ func recordGateFailure(vars map[string]any, failedLeaves []string) map[string]an
 }
 
 var _ inject.CoordinatorTurnFrameSource = (*CoordinatorTurnFrameLoader)(nil)
+
+// attachPhaseVerdictCall gives a review phase's exit the submit_verdict call it
+// accepts, composed from the session's effective catalog.
+func (l *CoordinatorTurnFrameLoader) attachPhaseVerdictCall(ctx context.Context, sessionID string, active *api.WorkflowRun, manifest workflowdef.Manifest, exit *inject.PhaseExitView) {
+	if exit == nil || l.VerdictCatalog == nil {
+		return
+	}
+	def, ok := manifest.PhaseForRun(active, active.CurrentPhase)
+	if !ok || def.ReviewLoop == nil {
+		return
+	}
+	catalog := l.VerdictCatalog(ctx, sessionID)
+	if catalog == nil {
+		return
+	}
+	if err := verdictcall.Attach(exit, catalog, *def.ReviewLoop, manifest.ReportBrief()); err != nil {
+		slog.ErrorContext(ctx, "compose phase verdict call", "run_id", active.ID, "phase", def.ID, "error", err)
+	}
+}

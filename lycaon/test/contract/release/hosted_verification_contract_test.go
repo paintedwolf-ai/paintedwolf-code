@@ -202,7 +202,7 @@ func TestHostedVerificationBudgetsAndEvidence(t *testing.T) {
 	if !bounded || !evidence {
 		t.Fatal("verification needs an invocation deadline and always-run evidence collection")
 	}
-	for _, workflow := range []string{"ci", "nightly", "verification", "platform-verification", "desktop-verification"} {
+	for _, workflow := range []string{"ci", "nightly", "verification", "platform-verification", "e2e-verification"} {
 		for name, job := range hostedJobs(t, workflow) {
 			if job.Continue || job.Uses == "" && job.Timeout == "" {
 				t.Errorf("%s/%s must be blocking and have an explicit deadline", workflow, name)
@@ -216,11 +216,61 @@ func TestHostedVerificationBudgetsAndEvidence(t *testing.T) {
 	}
 }
 
-func TestDesktopVerificationHasOneImplementation(t *testing.T) {
+func TestEndToEndVerificationRunsOnlyInTheSelectedNightlyTier(t *testing.T) {
 	t.Parallel()
-	for workflow, job := range map[string]string{"platform-verification": "playwright-desktop", "lycaon-den-nightly": "playwright-desktop"} {
-		if hostedJobs(t, workflow)[job].Uses != "./.github/workflows/desktop-verification.yml" {
-			t.Errorf("%s must use the shared desktop verification workflow", workflow)
+	platform := hostedJobs(t, "platform-verification")
+	if len(platform) != 2 || platform["confinement"].Timeout == "" || platform["upgrade-corpus"].Timeout == "" {
+		t.Fatal("merge admission must retain confinement and upgrade gates without browser journeys")
+	}
+	e2e := hostedJobs(t, "e2e-verification")
+	if len(e2e) != 2 || e2e["playwright-desktop"].Timeout == "" {
+		t.Fatal("end-to-end verification must run web and desktop suites")
+	}
+	web := e2e["playwright-web"]
+	if web.Strategy.FailFast == nil || *web.Strategy.FailFast || web.Continue {
+		t.Fatal("each web shard must run independently and contribute to the verdict")
+	}
+	const selected = "github.event_name == 'schedule' || inputs.suite == 'all' || inputs.suite == 'e2e'"
+	nightly := hostedJobs(t, "nightly")
+	if nightly["e2e"].Uses != "./.github/workflows/e2e-verification.yml" || nightly["e2e"].If != selected {
+		t.Fatal("scheduled, full, and explicit E2E nightly runs must include browser verification")
+	}
+	requireHostedGate(t, nightly, "nightly", []string{"verification", "upgrade-path", "e2e"})
+	const skipped = "${{ github.event_name != 'schedule' && inputs.suite != 'all' && inputs.suite != 'e2e' && 'e2e' || '' }}"
+	for _, step := range nightly["nightly"].Steps {
+		if strings.HasPrefix(step.Run, "python3 scripts/ci_verification.py gate") &&
+			step.Env["SKIPPED"] == skipped && strings.Contains(step.Run, `--skipped "$SKIPPED"`) {
+			return
+		}
+	}
+	t.Fatal("nightly may excuse only deliberately unselected E2E; failures and unexpected skips must block")
+}
+
+func TestBrowserVerificationRetainsSuitesEvidenceAndCleanup(t *testing.T) {
+	t.Parallel()
+	workflow := hostedWorkflowFile(t, "e2e-verification")
+	if len(workflow.On) != 1 {
+		t.Fatal("browser verification must have one caller-owned schedule")
+	}
+	if _, ok := workflow.On["workflow_call"]; !ok {
+		t.Fatal("browser verification must be a reusable workflow")
+	}
+	for name, command := range map[string]string{
+		"playwright-web": "./task e2e:den", "playwright-desktop": "./task e2e:den:desktop",
+	} {
+		var tests, evidence, cleanup bool
+		for _, step := range workflow.Jobs[name].Steps {
+			tests = tests || step.Run == command && step.Timeout != "" && !step.Continue
+			if step.Uses == "./.github/actions/verification-evidence" {
+				evidence = tests && step.If == "always()" && step.Timeout != ""
+			}
+			if strings.Contains(step.Run, "./task e2e:cleanup") {
+				cleanup = evidence && step.If == "always()" && step.Timeout != "" &&
+					strings.Contains(step.Run, "ci_verification.py release")
+			}
+		}
+		if !tests || !evidence || !cleanup {
+			t.Errorf("%s must run its bounded suite, retain evidence, then release admission and clean up", name)
 		}
 	}
 }
@@ -235,7 +285,7 @@ func TestHostedProfilesAndSetupAreReachable(t *testing.T) {
 	if hostedJobs(t, "nightly")["verification"].With["profile"] != "nightly" {
 		t.Error("nightly must invoke the nightly catalog profile")
 	}
-	for workflow, job := range map[string]string{"verification": "verify", "desktop-verification": "desktop", "release": "preflight"} {
+	for workflow, job := range map[string]string{"verification": "verify", "e2e-verification": "playwright-desktop", "release": "preflight"} {
 		setup := false
 		for _, step := range hostedJobs(t, workflow)[job].Steps {
 			setup = setup || step.Uses == "./.github/actions/setup-verification"

@@ -25,8 +25,6 @@ runs:
     - uses: ./.github/actions/cache-go
 
     - uses: ./.github/actions/cache-notices-tools
-      with:
-        save: ${{ inputs.save }}
 
     # Keys follow the toolchains and dependency locks, so main saves once per
     # change instead of once per commit; a release recompiles its own crate.

@@ -29,7 +29,7 @@ QUEUE_BRANCHES = "gh-readonly-queue/"
 EXCERPT_LINES = 60
 # Go's progress lines for tests that are running or passed; they bury a parallel package's failure.
 GO_PROGRESS = re.compile(r"^=== (RUN|PAUSE|CONT|NAME)\b|^\s*--- (PASS|SKIP):")
-SUITES = {"all", "behavior", "race", "coverage", "performance", "fuzz"}
+SUITES = {"all", "behavior", "race", "coverage", "performance", "fuzz", "e2e"}
 # What a lane installs: the shared toolchains, plus the Tauri shell and its staged engine,
 # or the Den Rust workspace and harness stack without the shell's packaging inputs.
 SETUPS = {"verification", "shell", "harness"}

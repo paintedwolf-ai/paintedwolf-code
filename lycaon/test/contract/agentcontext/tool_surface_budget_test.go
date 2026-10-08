@@ -12,8 +12,10 @@ import (
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/workflow/verdictcall"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/toolfixture"
+	"github.com/lycaon/lycaon/test/contract/internal/workflowfixture"
 )
 
 // toolSurfaceWireView is the serialized provider tool shape.
@@ -105,9 +107,12 @@ func measureToolSurfaces(t *testing.T) toolSurfaceMeasurements {
 
 // measureCoordinatorSurfaces sizes each coordinator surface the way the
 // prompt loop offers it: the plan's immediate tools upfront, its deferred
-// tools on request, all trimmed for the coordinator.
+// tools on request, all trimmed for the coordinator. A review phase offers
+// its own submit_verdict call, so each surface carries the largest one any
+// shipped phase composes.
 func measureCoordinatorSurfaces(t *testing.T, metas []tools.ToolMeta) map[string]toolSchemas {
 	t.Helper()
+	metas = withLargestPhaseVerdictCall(t, metas)
 	plans, err := surface.CompileToolPlans(1)
 	contractcheck.FailErr(t, "surface.CompileToolPlans", err)
 	out := make(map[string]toolSchemas, len(plans))
@@ -167,4 +172,36 @@ func TestCoordinatorInvestigateWireSurfaceStaysCompact(t *testing.T) {
 	if size == 0 || size > 32_000 {
 		t.Fatalf("implement_investigate wire schema bytes = %d want 1..32000", size)
 	}
+}
+
+// withLargestPhaseVerdictCall replaces submit_verdict with the largest call
+// schema a shipped review phase composes.
+func withLargestPhaseVerdictCall(t *testing.T, metas []tools.ToolMeta) []tools.ToolMeta {
+	t.Helper()
+	manifests, err := workflowfixture.LoadMergedWorkflowCatalog(t)
+	contractcheck.FailErr(t, "load workflow catalog", err)
+	catalog := catalogVerdictCall(t)
+	var largest map[string]any
+	largestBytes := 0
+	for _, manifest := range manifests {
+		for _, phase := range manifest.PhaseDefs {
+			if phase.ReviewLoop == nil {
+				continue
+			}
+			schema, err := verdictcall.Compose(catalog, *phase.ReviewLoop, manifest.ReportBrief())
+			contractcheck.FailErr(t, "compose "+manifest.ID+" "+phase.ID+" verdict schema", err)
+			raw, err := json.Marshal(tools.TrimCoordinatorToolMeta(tools.ToolMeta{ArgsSchema: schema}).ArgsSchema)
+			contractcheck.FailErr(t, "marshal "+manifest.ID+" "+phase.ID+" verdict schema", err)
+			if len(raw) > largestBytes {
+				largest, largestBytes = schema, len(raw)
+			}
+		}
+	}
+	out := slices.Clone(metas)
+	for i := range out {
+		if out[i].Name == "submit_verdict" && largest != nil {
+			out[i].ArgsSchema = largest
+		}
+	}
+	return out
 }

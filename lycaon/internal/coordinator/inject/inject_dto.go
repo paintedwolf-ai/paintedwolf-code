@@ -22,11 +22,13 @@ type PhaseExitView struct {
 	OpenGates           []string
 	DormantGates        []string
 	CompleteWhen        string
-	VerdictShape        string
 	ReviewLoopKey       string
 	ReviewLoopCap       int
 	FollowupAttempts    int
-	VerdictExample      string
+	// VerdictOutline renders the verdict member of SubmitVerdictArgsSchema,
+	// the submit_verdict call a review phase accepts.
+	VerdictOutline          string
+	SubmitVerdictArgsSchema map[string]any
 	// ReviewAgents is the verdict-owed reviewer roster for a review_loop phase.
 	ReviewAgents      []string
 	HumanApproval     bool
@@ -413,11 +415,10 @@ func ActiveWorkflowInjectToMap(data ActiveWorkflowInjectData, hints *guidance.Hi
 			"open_gates":           append([]string(nil), data.PhaseExit.OpenGates...),
 			"dormant_gates":        append([]string(nil), data.PhaseExit.DormantGates...),
 			"complete_when":        data.PhaseExit.CompleteWhen,
-			"verdict_shape":        data.PhaseExit.VerdictShape,
+			"verdict_outline":      data.PhaseExit.VerdictOutline,
 			"review_loop_key":      data.PhaseExit.ReviewLoopKey,
 			"review_loop_cap":      data.PhaseExit.ReviewLoopCap,
 			"followup_attempts":    data.PhaseExit.FollowupAttempts,
-			"verdict_example":      data.PhaseExit.VerdictExample,
 			"review_agents":        append([]string(nil), data.PhaseExit.ReviewAgents...),
 			"human_approval":       data.PhaseExit.HumanApproval,
 			"invoke_workflow_id":   data.PhaseExit.InvokeWorkflowID,

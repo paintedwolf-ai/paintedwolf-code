@@ -87,6 +87,7 @@ type Request struct {
 	Reasoning            *modelcall.ReasoningWire `json:"reasoning,omitempty"`
 	Provider             *providerRoutingWire     `json:"provider,omitempty"`
 	Tools                []openai.Tool            `json:"tools,omitempty"`
+	ToolChoice           string                   `json:"tool_choice,omitempty"`
 	StreamOptions        *openai.StreamOptions    `json:"stream_options,omitempty"`
 	PromptCacheKey       string                   `json:"prompt_cache_key,omitempty"`
 	PromptCacheRetention string                   `json:"prompt_cache_retention,omitempty"`
@@ -123,6 +124,9 @@ type chatCompletionStreamChunkWire struct {
 	} `json:"choices"`
 	Usage *Usage `json:"usage,omitempty"`
 }
+
+// toolChoiceNone keeps tool definitions while forbidding a call.
+const toolChoiceNone = "none"
 
 func encodeChatCompletionRequest(req modelcall.CompletionRequest, p *Provider, stream bool, opts controlOpts) ([]byte, error) {
 	model := p.ResolveModel(req)
@@ -175,6 +179,9 @@ func encodeChatCompletionRequest(req modelcall.CompletionRequest, p *Provider, s
 	}
 	if len(req.Tools) > 0 {
 		wire.Tools = ProjectTools(req.Tools)
+		if !req.ToolsCallable() {
+			wire.ToolChoice = toolChoiceNone
+		}
 	}
 	wire.ResponseFormat = modelcall.ResponseFormatToWire(req.ResponseFormat)
 	// Keep syntax characters literal in tool JSON.

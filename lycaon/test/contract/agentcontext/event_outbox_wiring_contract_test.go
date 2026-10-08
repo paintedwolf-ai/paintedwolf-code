@@ -78,14 +78,24 @@ func TestOutboxWiringPassesTheBuiltOutbox(t *testing.T) {
 func TestOutboxConstructionIsGuarded(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	src, err := os.ReadFile(filepath.Join(root, "lycaon", "internal/app/build_session.go"))
-	contractcheck.FailErr(t, "read build_session.go", err)
-	body := string(src)
-	if !strings.Contains(body, "b."+outboxBuilderField+" = eventoutbox.New(") {
-		t.Fatal("build_session.go must construct the event outbox")
+	paths, err := filepath.Glob(filepath.Join(root, "lycaon", "internal", "app", "*.go"))
+	contractcheck.FailErr(t, "list composition root", err)
+	var constructs, guards bool
+	for _, path := range paths {
+		if strings.HasSuffix(path, "_test.go") {
+			continue
+		}
+		src, err := os.ReadFile(path)
+		contractcheck.FailErr(t, "read "+filepath.Base(path), err)
+		body := string(src)
+		constructs = constructs || strings.Contains(body, "b."+outboxBuilderField+" = eventoutbox.New(")
+		guards = guards || strings.Contains(body, "if b."+outboxBuilderField+" == nil {")
 	}
-	if !strings.Contains(body, "if b."+outboxBuilderField+" == nil {") {
-		t.Fatal("build_session.go must refuse to boot when the constructed outbox is nil — " +
+	if !constructs {
+		t.Fatal("the composition root must construct the event outbox")
+	}
+	if !guards {
+		t.Fatal("the composition root must refuse to boot when the constructed outbox is nil — " +
 			"every store below would silently drop its events")
 	}
 }

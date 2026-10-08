@@ -231,10 +231,6 @@ func coverageGap(kind, scanner string, paths, scans []string, evidence any) revi
 	return fact
 }
 
-// CoverageReviewShape is the one description of the coverage verdict member,
-// quoted by the schema summary and by every refusal of a malformed member.
-const CoverageReviewShape = "{revision, assessments: [{id, disposition: satisfied (obligation) | covered | immaterial (gap) | material_open | essential_open, reason, obligations: [affected obligation ids], cited_evidence}]} from current coverage facts; every obligation and gap requires an assessment"
-
 // ParseVerdictCoverage reads the single coverage_review field declared by a phase.
 func ParseVerdictCoverage(def workflowdef.ReviewLoopDef, verdict map[string]string) (*api.CoverageReview, error) {
 	var out *api.CoverageReview
@@ -248,13 +244,13 @@ func ParseVerdictCoverage(def workflowdef.ReviewLoopDef, verdict map[string]stri
 		dec := json.NewDecoder(strings.NewReader(verdict[field]))
 		dec.DisallowUnknownFields()
 		if err := dec.Decode(&out); err != nil {
-			return nil, fmt.Errorf("coverage review: %w; the member is %s", err, CoverageReviewShape)
+			return nil, fmt.Errorf("coverage review: %w", err)
 		}
 		if out == nil {
-			return nil, fmt.Errorf("coverage review must be an object: %s", CoverageReviewShape)
+			return nil, fmt.Errorf("coverage review must be an object")
 		}
 		if err := dec.Decode(&struct{}{}); err != io.EOF {
-			return nil, fmt.Errorf("coverage review must contain one object: %s", CoverageReviewShape)
+			return nil, fmt.Errorf("coverage review must contain one object")
 		}
 	}
 	return out, nil
@@ -318,8 +314,10 @@ func (m *RunManager) checkReviewCoverage(ctx context.Context, run *api.WorkflowR
 	return nil, nil
 }
 
-func coverageReject(def workflowdef.ReviewLoopDef, cause error) *tools.ToolReject {
-	return &tools.ToolReject{Code: ReviewLoopVerdictInvalidCode, Data: verdictInvalidDetails(def, cause)}
+// coverageReject refuses a coverage review the model can repair. The
+// submit_verdict handler adds the call the phase accepts to every repair.
+func coverageReject(_ workflowdef.ReviewLoopDef, cause error) *tools.ToolReject {
+	return &tools.ToolReject{Code: ReviewLoopVerdictInvalidCode, Data: map[string]any{"reason": cause.Error()}}
 }
 
 // Coverage ends at the final assessment phase; report and follow-on work do not

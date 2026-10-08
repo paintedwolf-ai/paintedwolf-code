@@ -2,7 +2,7 @@ name: Cache notices tools
 description: Restore the pinned go-licenses and cargo-about builds that main warms
 inputs:
   save:
-    description: Save the tools after the job (main only); every other run restores without saving
+    description: Publish prepared tools (main only); the default restores without saving
     default: 'false'
 runs:
   using: composite
@@ -14,7 +14,7 @@ runs:
 
     # The notices script reuses any installed tool, so only its exact pins restore.
     - if: ${{ inputs.save == 'true' && github.ref == 'refs/heads/main' }}
-      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: |
           ${{ steps.paths.outputs.bin }}/cargo-about
