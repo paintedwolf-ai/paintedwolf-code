@@ -114,6 +114,8 @@ func TestRequireIntegersRejectsTruncatableSizes(t *testing.T) {
 		"limits: {files: {warn: 1, limit: 2.5}}\n":                                                     false,
 		"exceptions: {files: {a: {cap: '30', reason: r}}}\n":                                           false,
 		"exceptions: {files: {a: {cap: 3e2, reason: r}}}\n":                                            false,
+		"limits: {files: [1, 2]}\n":                                                                    false,
+		"base: &b {warn: 1, limit: 2}\nlimits: {files: *b}\n":                                          false,
 	} {
 		var node yaml.Node
 		if err := yaml.Unmarshal([]byte(body), &node); err != nil {
