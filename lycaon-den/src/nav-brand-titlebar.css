@@ -22,6 +22,15 @@
 .den-custom-chrome .den-shell-aside-main > .den-nav-brand {
   /* Compact hit target; the lockup stays on the stage tab strip. */
   height: auto;
+  /* The collapse control occupies the row above the lockup. */
+  max-width: calc(100% - 2 * var(--den-nav-rail-gutter));
+}
+
+.den-nav-brand .den-brand-lockup__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .den-custom-chrome .den-shell-aside-main {
@@ -34,6 +43,7 @@
   .den-shell--orientation-mirrored:has(.project-files-view)
   .den-shell-aside-main > .den-nav-brand {
   left: calc(var(--den-nav-rail-gutter) + 38px);
+  max-width: calc(100% - (2 * var(--den-nav-rail-gutter) + 38px));
 }
 
 /* Offset the main rail under the titlebar lockup; dock stays put. */
