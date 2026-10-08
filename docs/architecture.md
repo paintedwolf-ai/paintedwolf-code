@@ -392,7 +392,7 @@ Each area has one home. The sidecar's import rules are in [Package layering](pac
 | Scanning | `lycaon/internal/scan` and its subpackages ([scan packages](package-layering.md#scan-packages)) |
 | Tools | `lycaon/internal/tools` (registry, executor, and rejects), `tools/native` and its families, and `internal/toolhost` (registration) |
 | Wire DTOs | `lycaon/pkg/api` |
-| Contract tests | `lycaon/test/contract/<domain>/` ([Test strategy](test-strategy.md#contract-organization-and-maintainability-budgets)) |
+| Contract tests | `lycaon/test/contract/<domain>/` ([Test strategy](test-strategy.md#contract-organization)) |
 | Den | `lycaon-den/src/`: shell, `files/`, `platform/`, `api/`, and feature components |
 | Den native shell | `lycaon-den/src-tauri/` |
 | Verification runner | `scripts/` and `Taskfile.yml`; runner tests in `scripts/verification_tests/` |
@@ -421,5 +421,5 @@ line counts are signals of that, not targets.
 
 Deliberate exceptions are the central SQL schema, the keyed policy and notice
 catalogs, the native shell's `lib.rs` (the ordered composition root and IPC
-table), and generated outputs. [Maintainability budgets](test-strategy.md#contract-organization-and-maintainability-budgets)
-flag concentration for review.
+table), and generated outputs. [Size budgets](test-strategy.md#size-budgets) ask
+for a decision when concentration grows.

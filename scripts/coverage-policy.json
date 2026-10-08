@@ -1,0 +1,22 @@
+{
+  "go": {
+    "total": 62,
+    "package": 40,
+    "changed": {
+      "percent": 70,
+      "grace": 5
+    }
+  },
+  "den": {
+    "total": {
+      "lines": 58,
+      "functions": 50,
+      "branches": 50,
+      "statements": 58
+    },
+    "changed": {
+      "percent": 70,
+      "grace": 5
+    }
+  }
+}
