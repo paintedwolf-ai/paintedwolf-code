@@ -182,7 +182,7 @@
         "--tags",
         "integration",
         "--timeout",
-        "90m"
+        "40m"
       ],
       "packages": [
         "./..."
@@ -717,7 +717,7 @@
         "fast"
       ],
       "suite": "all",
-      "native": false
+      "setup": "verification"
     },
     "fast-go": {
       "targets": [
@@ -729,7 +729,7 @@
         "fast"
       ],
       "suite": "all",
-      "native": false,
+      "setup": "verification",
       "shards": 2
     },
     "fast-frontend": {
@@ -743,7 +743,7 @@
         "fast"
       ],
       "suite": "all",
-      "native": false
+      "setup": "verification"
     },
     "limits": {
       "targets": [
@@ -757,7 +757,7 @@
         "check"
       ],
       "suite": "all",
-      "native": false
+      "setup": "verification"
     },
     "build": {
       "targets": [
@@ -770,7 +770,7 @@
         "release"
       ],
       "suite": "all",
-      "native": false
+      "setup": "verification"
     },
     "contracts": {
       "targets": [
@@ -785,7 +785,7 @@
         "release"
       ],
       "suite": "all",
-      "native": false
+      "setup": "verification"
     },
     "lint": {
       "targets": [
@@ -798,7 +798,7 @@
         "check"
       ],
       "suite": "all",
-      "native": false
+      "setup": "verification"
     },
     "vulnerabilities": {
       "targets": [
@@ -810,7 +810,7 @@
         "release"
       ],
       "suite": "all",
-      "native": false
+      "setup": "verification"
     },
     "runner": {
       "targets": [
@@ -821,7 +821,7 @@
         "check"
       ],
       "suite": "all",
-      "native": false
+      "setup": "verification"
     },
     "behavior": {
       "targets": [
@@ -834,7 +834,7 @@
         "nightly"
       ],
       "suite": "behavior",
-      "native": false,
+      "setup": "verification",
       "workers": 3
     },
     "frontend": {
@@ -849,7 +849,7 @@
         "release"
       ],
       "suite": "all",
-      "native": false
+      "setup": "verification"
     },
     "native": {
       "targets": [
@@ -861,18 +861,18 @@
         "release"
       ],
       "suite": "all",
-      "native": true
+      "setup": "shell"
     },
     "webkit": {
       "targets": [
         "den:webkit:scroll"
       ],
-      "minutes": 120,
+      "minutes": 30,
       "profiles": [
         "check"
       ],
       "suite": "all",
-      "native": true,
+      "setup": "harness",
       "runner": "macos-15"
     },
     "race": {
@@ -884,7 +884,7 @@
         "nightly"
       ],
       "suite": "race",
-      "native": false,
+      "setup": "verification",
       "shards": 3
     },
     "fuzz": {
@@ -896,7 +896,7 @@
         "nightly"
       ],
       "suite": "fuzz",
-      "native": false
+      "setup": "verification"
     },
     "stress": {
       "targets": [
@@ -907,7 +907,7 @@
         "nightly"
       ],
       "suite": "performance",
-      "native": false
+      "setup": "verification"
     },
     "go-coverage": {
       "targets": [
@@ -918,7 +918,7 @@
         "nightly"
       ],
       "suite": "coverage",
-      "native": false
+      "setup": "verification"
     },
     "frontend-coverage": {
       "targets": [
@@ -929,7 +929,7 @@
         "nightly"
       ],
       "suite": "coverage",
-      "native": false
+      "setup": "verification"
     },
     "transcript-scale": {
       "targets": [
@@ -940,7 +940,7 @@
         "nightly"
       ],
       "suite": "performance",
-      "native": false
+      "setup": "verification"
     },
     "vulnerability-freshness": {
       "targets": [
@@ -951,7 +951,7 @@
         "nightly"
       ],
       "suite": "all",
-      "native": false
+      "setup": "verification"
     },
     "benchmarks": {
       "targets": [
@@ -962,7 +962,7 @@
         "nightly"
       ],
       "suite": "performance",
-      "native": false
+      "setup": "verification"
     },
     "sidecar-performance": {
       "targets": [
@@ -973,7 +973,7 @@
         "nightly"
       ],
       "suite": "performance",
-      "native": false
+      "setup": "verification"
     },
     "sidecar-soak": {
       "targets": [
@@ -984,7 +984,7 @@
         "nightly"
       ],
       "suite": "performance",
-      "native": false
+      "setup": "verification"
     }
   }
 }

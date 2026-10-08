@@ -373,7 +373,8 @@ that reservation and assigns unused package slots to `GOMAXPROCS` for small
 scopes; race runs default to two runtime workers per package. Parallel tests per
 package obey the same per-process share; Vitest uses at most four workers.
 Fuzzing and Rust builds share the same budget. Runners use the worker limits
-assigned at admission; host load only adjusts timeouts. Hosted CI sets
+assigned at admission; host load only adjusts timeouts, and race runs scale
+scheduler-dependent waits at least 3×. Hosted CI sets
 `PW_TEST_HOST=dedicated`: one lane owns the runner, so the budget is every CPU
 (still at most eight) and a shared operation reserves all of it.
 
@@ -542,15 +543,18 @@ a job-level kill can still prevent upload. Adjust the affected partition from
 hosted timings rather than raising every job to the six-hour hosted-runner
 ceiling.
 
-Verification lanes run on `ubuntu-latest` (4 CPUs, 16 GB on public
-repositories); a lane declares `macos-15` only when it tests macOS-specific
-behavior. A lane may declare `shards`: the race lane runs as three jobs, each
+Verification lanes run on `ubuntu-latest` (4 CPUs, 16 GB); a lane declares
+`macos-15` only when it tests macOS-specific behavior. A lane declares its
+`setup`: `verification` for the shared toolchains, `shell` to also build the
+Tauri shell and stage its engine, or `harness` for the Den Rust workspace and
+the harness stack. A lane may declare `shards`: the race lane runs as three jobs, each
 verifying every third package of the planner's sorted selection
 (`PW_GO_SHARD=k/N`), so its longest package starts early instead of behind
 three hundred others. The pull request tier's Go lane runs as two, because its
 unit suite is the longest job a pull request waits for. A lane may also cap `workers` below the CPU count when
-its peak memory outgrows the runner. WebKit runs on macOS so its platform check
-cannot silently skip the suite. Desktop E2E shares one reusable workflow across
+its peak memory outgrows the runner. WebKit runs on macOS to compile its harness and probe the host; hosted runners
+are virtual machines without a scrolling thread, so its scenarios end there with a
+skip notice in the job summary. Desktop E2E shares one reusable workflow across
 the merge queue and the nightly run, with separate staging and test deadlines.
 Aggregates reject failed, cancelled, missing, or unexpectedly skipped results.
 

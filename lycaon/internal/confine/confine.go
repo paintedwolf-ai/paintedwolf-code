@@ -6,11 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"sort"
 	"strconv"
@@ -18,7 +16,6 @@ import (
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/configdir"
-	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/lineage"
 )
@@ -505,7 +502,7 @@ func filesystemRules(c Confinement) (FilesystemRules, error) {
 			rules.add(fsRule{op: opReadMetadata, allow: true, matches: literalMatches(ancestors, "")})
 		}
 	}
-	addControlPlaneReadFloor(&rules, c.ReadRoots)
+	addControlPlaneReadFloor(&rules, c.ReadRoots, c.SessionScratchRoot)
 	// Writes confined to the project plus temp and the standard device sinks.
 	sinks := subpathMatches(writeRoots, "")
 	sinks = append(sinks,
@@ -618,131 +615,6 @@ func protectedGrantRule(grants []ProtectedPathGrant) fsRule {
 	return rule
 }
 
-func writeNetworkRules(b *strings.Builder, c Confinement) error {
-	// Direct IP and Browser carry local listen; otherwise only an explicit grant.
-	if c.Network == NetworkDirectIP || c.Browser {
-		writeLocalListenRules(b)
-	} else if c.LocalListen {
-		writeListenGrantRules(b, c.LocalListenPorts)
-	}
-	// One fact carries local outbound authority and its port limits.
-	if c.Network != NetworkDirectIP && c.LoopbackConnect {
-		writeLoopbackConnectRules(b, c.LoopbackConnectPorts)
-	}
-	switch c.Network {
-	case NetworkDirectIP:
-		// Exact local sockets remain a separate capability.
-		b.WriteString("(allow network-outbound (remote ip \"localhost:*\"))\n")
-		writeDirectIPRules(b, c.DirectIPPermits)
-		writeSystemResolverRule(b)
-	case NetworkProxyOnly:
-		if err := writeMediatedProxyRules(b, c); err != nil {
-			return err
-		}
-	case NetworkDeny:
-		// Exact local socket grants are rendered below.
-	}
-	writeSocketGrantRules(b, c.SocketGrants)
-	return nil
-}
-
-// writeLoopbackConnectRules grants outbound TCP/UDP to the specified local ports.
-func writeLoopbackConnectRules(b *strings.Builder, ports []uint16) {
-	if len(ports) == 0 {
-		b.WriteString("(allow network-outbound (remote ip \"localhost:*\"))\n")
-		return
-	}
-	for _, p := range ports {
-		b.WriteString("(allow network-outbound (remote ip " + sbplString("localhost:"+strconv.Itoa(int(p))) + "))\n")
-	}
-}
-
-// writeMediatedProxyRules grants only the action lease endpoints.
-func writeMediatedProxyRules(b *strings.Builder, c Confinement) error {
-	seen := map[string]struct{}{}
-	for _, addr := range []string{c.ProxyAddr, c.SocksProxyAddr} {
-		addr = strings.TrimSpace(addr)
-		if addr == "" {
-			continue
-		}
-		host, portText, err := net.SplitHostPort(addr)
-		if err != nil {
-			return fmt.Errorf("invalid mediated proxy address %q: %w", addr, err)
-		}
-		ip := net.ParseIP(strings.Trim(host, "[]"))
-		port, err := strconv.Atoi(portText)
-		if ip == nil || !ip.IsLoopback() || err != nil || port < 1 || port > 65535 {
-			return fmt.Errorf("invalid mediated proxy endpoint %q", addr)
-		}
-		endpoint := "localhost:" + strconv.Itoa(port)
-		if _, duplicate := seen[endpoint]; duplicate {
-			continue
-		}
-		seen[endpoint] = struct{}{}
-		b.WriteString("(allow network-outbound (remote tcp " + sbplString(endpoint) + "))\n")
-	}
-	if len(seen) == 0 {
-		return fmt.Errorf("proxy-only confinement has no bound action endpoint")
-	}
-	return nil
-}
-
-// writeLocalListenRules grants the backend's host-local bind scope.
-func writeLocalListenRules(b *strings.Builder) {
-	b.WriteString("(allow network-bind (local ip \"localhost:*\"))\n")
-	b.WriteString("(allow network-inbound (local ip \"localhost:*\"))\n")
-}
-
-// writeListenGrantRules narrows an approved listener by port.
-func writeListenGrantRules(b *strings.Builder, ports []uint16) {
-	if len(ports) == 0 {
-		writeLocalListenRules(b)
-		return
-	}
-	for _, p := range ports {
-		endpoint := sbplString("localhost:" + strconv.Itoa(int(p)))
-		b.WriteString("(allow network-bind (local ip " + endpoint + "))\n")
-		b.WriteString("(allow network-inbound (local ip " + endpoint + "))\n")
-	}
-}
-
-// writeDirectIPRules narrows direct IP by transport and port, not peer.
-func writeDirectIPRules(b *strings.Builder, permits []DirectIPPermit) {
-	if len(permits) == 0 {
-		b.WriteString("(allow network-outbound (remote ip \"*:*\"))\n")
-		return
-	}
-	b.WriteString("; direct IP narrowed to declared transports (host is not expressible in SBPL)\n")
-	for _, p := range permits {
-		port := strconv.Itoa(int(p.Port))
-		b.WriteString("(allow network-outbound (remote " + p.Protocol + " " + sbplString("*:"+port) + "))\n")
-	}
-}
-
-// systemResolverSocketPaths includes both canonical resolver aliases.
-var systemResolverSocketPaths = []string{
-	"/var/run/mDNSResponder",
-	"/private/var/run/mDNSResponder",
-}
-
-// writeSystemResolverRule enables names only for direct-IP egress.
-func writeSystemResolverRule(b *strings.Builder) {
-	b.WriteString("; system resolver: names for direct IP, which already reaches any resolver\n")
-	for _, path := range systemResolverSocketPaths {
-		b.WriteString("(allow network-outbound (literal " + sbplString(path) + "))\n")
-	}
-}
-
-func writeSocketGrantRules(b *strings.Builder, grants []SocketGrant) {
-	if len(grants) == 0 {
-		return
-	}
-	b.WriteString("; exact AF_UNIX socket grants\n")
-	for _, g := range grants {
-		b.WriteString("(allow network-outbound (literal " + sbplString(g.ResolvedPath) + "))\n")
-	}
-}
-
 func writeHostCapabilityDenials(b *strings.Builder, deny string) {
 	b.WriteString("(deny mach-lookup\n")
 	b.WriteString("  (global-name \"com.apple.system.powerd\")\n")
@@ -751,222 +623,6 @@ func writeHostCapabilityDenials(b *strings.Builder, deny string) {
 		b.WriteString("  " + strings.TrimSpace(deny) + "\n")
 	}
 	b.WriteString(")\n")
-}
-
-// WriteRootsForBoundary is the write profile for one confinement: attached
-// roots, session scratch, OS caches, durable grants, and per-action granted overlays.
-func WriteRootsForBoundary(projectID string, projectRoots, granted []string, sessionScratchRoot string) []string {
-	roots := []string{}
-	add := func(p string) {
-		if strings.TrimSpace(p) == "" {
-			return
-		}
-		cp := fspath.CanonicalPath(p)
-		if cp != "" {
-			roots = append(roots, cp)
-		}
-		// Seatbelt checks paths before symlink traversal; register both raw and canonical Darwin aliases.
-		if runtime.GOOS == "darwin" {
-			for _, alias := range []string{"/var", "/tmp"} {
-				if rest, ok := pathUnder(cp, "/private"+alias); ok {
-					roots = append(roots, alias+rest)
-				}
-				if _, ok := pathUnder(filepath.Clean(p), alias); ok {
-					roots = append(roots, filepath.Clean(p))
-				}
-			}
-		}
-	}
-	for _, r := range projectRoots {
-		add(r)
-	}
-	if sessionScratchRoot != "" {
-		add(sessionScratchRoot)
-	}
-	add("/tmp")
-	add("/private/tmp")
-	add("/var/tmp")
-	add("/private/var/tmp")
-	add(os.TempDir())
-	for _, r := range standardCacheDataRoots() {
-		add(r)
-	}
-	for _, r := range granted {
-		add(r)
-	}
-	// Durable grants are resolved for each execution.
-	for _, r := range grantedWriteRoots(projectID) {
-		add(r)
-	}
-	seen := map[string]bool{}
-	out := []string{}
-	for _, r := range roots {
-		r = strings.TrimRight(r, "/")
-		if r == "" || seen[r] {
-			continue
-		}
-		seen[r] = true
-		out = append(out, r)
-	}
-	sort.Strings(out)
-	return out
-}
-
-func validatedWriteRoots(projectID string, projectRoots, granted []string, sessionScratchRoot string) ([]string, error) {
-	roots := WriteRootsForBoundary(projectID, projectRoots, granted, sessionScratchRoot)
-	grantedSet := map[string]bool{}
-	for _, g := range append(append([]string(nil), granted...), grantedWriteRoots(projectID)...) {
-		if g = strings.TrimSpace(g); g == "" {
-			continue
-		}
-		grantedSet[strings.TrimRight(fspath.CanonicalPath(g), "/")] = true
-	}
-	if err := validateEffectiveWriteRoots(roots, grantedSet); err != nil {
-		return nil, err
-	}
-	return roots, nil
-}
-
-// validateEffectiveWriteRoots rejects ambient home and filesystem roots.
-func validateEffectiveWriteRoots(roots []string, granted map[string]bool) *WriteRootRefusalError {
-	home, _ := os.UserHomeDir()
-	homeKey := strings.TrimRight(fspath.CanonicalPath(home), "/")
-	for _, root := range normalizePathList(roots) {
-		resolved := fspath.CanonicalPath(root)
-		if resolved == "" || !filepath.IsAbs(resolved) {
-			return &WriteRootRefusalError{Path: root, Code: WriteRootCodeNotAbsolute}
-		}
-		if resolved == string(filepath.Separator) {
-			return &WriteRootRefusalError{Path: root, Code: WriteRootCodeFilesystemRoot}
-		}
-		if homeKey != "" && strings.TrimRight(resolved, "/") == homeKey && !granted[strings.TrimRight(resolved, "/")] {
-			return &WriteRootRefusalError{Path: root, Code: WriteRootCodeHome}
-		}
-	}
-	return nil
-}
-
-// secretReadDenyDisabled reports an explicit read-floor opt-out.
-func secretReadDenyDisabled() bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("LYCAON_SANDBOX_DENY_READ"))) {
-	case "off", "none", "disable", "disabled":
-		return true
-	}
-	return false
-}
-
-// requireReadFloorResolvable checks inputs before emitting the read floor.
-func requireReadFloorResolvable() error {
-	if !secretReadDenyDisabled() {
-		if _, err := configdir.UserConfigDir(); err != nil {
-			return fmt.Errorf("confine: control-plane read floor unresolvable: %w", err)
-		}
-	}
-	// Key-material inputs remain required after a control-plane opt-out.
-	if !homeRelPathsResolvable(catalogedKeyMaterialPaths()) {
-		return fmt.Errorf("confine: key-material read floor unresolvable: home directory unreadable")
-	}
-	return nil
-}
-
-// homeRelPathsResolvable reports whether every ~/-relative entry can be
-// joined onto a home directory.
-func homeRelPathsResolvable(paths []string) bool {
-	needsHome := false
-	for _, p := range paths {
-		if strings.HasPrefix(strings.TrimSpace(p), "~/") {
-			needsHome = true
-			break
-		}
-	}
-	if !needsHome {
-		return true
-	}
-	home, err := os.UserHomeDir()
-	return err == nil && strings.TrimSpace(home) != ""
-}
-
-func SecretReadDenyRoots() []string {
-	if secretReadDenyDisabled() {
-		return nil
-	}
-	env := strings.TrimSpace(os.Getenv("LYCAON_SANDBOX_DENY_READ"))
-	raw := controlPlaneReadDenyRoots()
-	for _, e := range filepath.SplitList(env) {
-		if strings.TrimSpace(e) != "" {
-			raw = append(raw, e)
-		}
-	}
-	return resolveEach(raw)
-}
-
-// traversalAncestors returns denied parents needed for path traversal.
-func traversalAncestors(deny, allow []string) []string {
-	sep := string(filepath.Separator)
-	inDeny := func(p string) bool {
-		for _, d := range deny {
-			d = filepath.Clean(d)
-			if p == d || strings.HasPrefix(p, d+sep) {
-				return true
-			}
-		}
-		return false
-	}
-	seen := map[string]bool{}
-	var out []string
-	for _, a := range allow {
-		for dir := filepath.Dir(filepath.Clean(a)); inDeny(dir); dir = filepath.Dir(dir) {
-			if !seen[dir] {
-				seen[dir] = true
-				out = append(out, dir)
-			}
-			if parent := filepath.Dir(dir); parent == dir {
-				break
-			}
-		}
-	}
-	sort.Strings(out)
-	return out
-}
-
-// SecretReadAllowBackRoots returns readable workspace carve-outs.
-func SecretReadAllowBackRoots() []string {
-	if SecretReadDenyRoots() == nil {
-		return nil
-	}
-	return resolveEach(agentWorkspaceRootsUnderControlPlane())
-}
-
-// agentWorkspaceRootsUnderControlPlane returns the engine-managed workspaces
-// inside the state tree, independent of the read-floor switch.
-func agentWorkspaceRootsUnderControlPlane() []string {
-	dir, err := configdir.UserConfigDir()
-	if err != nil || strings.TrimSpace(dir) == "" {
-		return nil
-	}
-	return enginepaths.AgentWorkspaceRootsUnder(dir)
-}
-
-// controlPlaneReadDenyRoots returns the host-managed configuration tree.
-func controlPlaneReadDenyRoots() []string {
-	dir, err := configdir.UserConfigDir()
-	if err != nil || strings.TrimSpace(dir) == "" {
-		return nil
-	}
-	return []string{dir}
-}
-
-// resolveEach canonicalizes missing paths through their existing ancestor.
-func resolveEach(paths []string) []string {
-	out := make([]string, 0, len(paths))
-	for _, p := range paths {
-		if rp := fspath.CanonicalPath(p); rp != "" {
-			out = append(out, rp)
-		} else {
-			out = append(out, p)
-		}
-	}
-	return out
 }
 
 // pathUnder reports whether path is root or lies beneath it, with the remainder
@@ -979,37 +635,6 @@ func pathUnder(path, root string) (string, bool) {
 		return strings.TrimPrefix(path, root), true
 	}
 	return "", false
-}
-
-// standardCacheDataRoots returns conventional cache and data directories.
-func standardCacheDataRoots() []string {
-	roots := []string{}
-	home, _ := os.UserHomeDir()
-	join := func(base, rel string) string {
-		if base == "" {
-			return ""
-		}
-		return filepath.Join(base, rel)
-	}
-	candidates := []string{
-		os.Getenv("XDG_CACHE_HOME"), join(home, ".cache"),
-		os.Getenv("XDG_DATA_HOME"), join(home, ".local/share"),
-		os.Getenv("XDG_STATE_HOME"), join(home, ".local/state"),
-	}
-	if runtime.GOOS == "darwin" {
-		candidates = append(candidates, join(home, "Library/Caches"))
-	}
-	for _, rel := range packageCacheHomeRelRoots {
-		candidates = append(candidates, join(home, rel))
-	}
-	candidates = append(candidates, toolchainStateRoots()...)
-	candidates = append(candidates, environmentWriteRoots()...)
-	for _, c := range candidates {
-		if strings.TrimSpace(c) != "" {
-			roots = append(roots, c)
-		}
-	}
-	return roots
 }
 
 // sbplString renders a Scheme string literal for SBPL, escaping backslashes and quotes.

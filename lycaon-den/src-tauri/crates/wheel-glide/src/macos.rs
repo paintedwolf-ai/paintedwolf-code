@@ -17,7 +17,7 @@ use objc2_foundation::{NSObject, NSObjectProtocol, NSPoint, NSRunLoop, NSRunLoop
 use objc2_quartz_core::CADisplayLink;
 use objc2_web_kit::WKWebView;
 
-use super::glide::{route, GlideReport, Glides, Origin, Vector, WheelFacts, WheelRoute, PIXELS_PER_LINE};
+use crate::glide::{route, GlideReport, Glides, Origin, Vector, WheelFacts, WheelRoute, PIXELS_PER_LINE};
 
 /// Source user data stamped on replayed events.
 const SYNTHETIC_TAG: i64 = 0x5057_474c_4944;

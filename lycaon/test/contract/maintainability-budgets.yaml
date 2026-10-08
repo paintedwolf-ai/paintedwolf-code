@@ -16,15 +16,21 @@ limits:
     go_receiver_lines: {warn: 400, limit: 1000}
     ts_local_dependencies: {warn: 20, limit: 30}
 exceptions:
-    source_directories:
-        scripts:
-            cap: 170
-            reason: Task and CI entry points are invoked by path and import sibling modules by name; the change-scoped budget and coverage reports joined them here.
     go_receiver_lines:
+        lycaon/internal/coordinator/assembly/assembly.AssemblyEngine:
+            cap: 1200
+            reason: Already past the limit before the boot-orientation fix, which adds one bounded loop; the split is tracked in #270.
         lycaon/internal/workflow/workflow.RunManager:
             cap: 6500
             reason: The workflow run lifecycle (advance, gates, topology settlement, closeout, report delivery, runtime snapshots) shares one manager's run locks and ledger; splitting it needs its own change with a lifecycle and locking review.
     go_receiver_methods:
+        lycaon/internal/coordinator/assembly/assembly.AssemblyEngine:
+            cap: 55
+            reason: Already past the limit before the boot-orientation fix; the split is tracked in #270.
         lycaon/internal/workflow/workflow.RunManager:
             cap: 250
             reason: The workflow run lifecycle (advance, gates, topology settlement, closeout, report delivery, runtime snapshots) shares one manager's run locks and ledger; splitting it needs its own change with a lifecycle and locking review.
+    source_directories:
+        scripts:
+            cap: 170
+            reason: Task and CI entry points are invoked by path and import sibling modules by name; the change-scoped budget and coverage reports joined them here.
