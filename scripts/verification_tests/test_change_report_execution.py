@@ -156,6 +156,17 @@ class ChangedCoverageTests(unittest.TestCase):
             blocks = coverage_changes.read_go_profile(profile, "example.com/m")
         self.assertEqual(sorted(blocks["lycaon/internal/a/a.go"]), [(3, 5, 2, True), (7, 7, 1, False)])
 
+    def test_den_changed_run_asks_the_config_not_the_cli_to_ignore_rerun_triggers(self):
+        # Vitest's CLI rejects unknown options, so a rerun-trigger override must reach vitest.config.ts.
+        changed = "lycaon-den/src/App.tsx"
+        with patch.object(coverage_changes.subprocess, "call", return_value=1) as call:
+            coverage_changes.run_den(change_report.Scope("base", "test", [changed]))
+        command, env = call.call_args.args[0], call.call_args.kwargs["env"]
+        self.assertEqual(env["PW_VITEST_CHANGED_ONLY"], "1")
+        self.assertFalse([a for a in command if a.startswith("--forceRerunTriggers")])
+        config = (coverage_changes.ROOT / "lycaon-den" / "vitest.config.ts").read_text()
+        self.assertIn('process.env.PW_VITEST_CHANGED_ONLY === "1"', config)
+
     def test_policy_floors_are_read_from_the_policy_file(self):
         floor = coverage_policy.changed("go")
         self.assertGreater(floor["percent"], 0)
