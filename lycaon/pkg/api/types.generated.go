@@ -3416,6 +3416,13 @@ type HealthResponse struct {
 	RecoverySnapshotAt time.Time `json:"recovery_snapshot_at,omitempty"`
 }
 
+// HistoryClassUsage
+type HistoryClassUsage struct {
+	Class string `json:"class"`
+	// Uncompressed retained content referenced by this class, deduplicated within the class. SQLite classes count serialized detail fields, excluding row and page overhead. Shared bodies can appear in multiple classes; this is neither exclusive disk allocation nor reclaimable bytes.
+	ContentBytes int64 `json:"content_bytes"`
+}
+
 // HistoryProtection
 type HistoryProtection struct {
 	ScopeType string `json:"scope_type"`
@@ -3490,6 +3497,7 @@ type HistoryStorageLane struct {
 // HistoryStorageStatus
 type HistoryStorageStatus struct {
 	Policy      HistoryRetentionPolicy `json:"policy"`
+	Classes     []HistoryClassUsage    `json:"classes,omitempty"`
 	Lanes       []HistoryStorageLane   `json:"lanes"`
 	Protections []HistoryProtection    `json:"protections"`
 }
