@@ -35,10 +35,10 @@ func TestContractNoAmbientNetworkAllowAlias(t *testing.T) {
 func TestContractSocketEmitterForbidsBroadPredicates(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	src := contractcheck.ReadRepoFile(t, root, "lycaon/internal/confine/confine.go")
+	src := contractcheck.ReadRepoFile(t, root, "lycaon/internal/confine/network_profile.go")
 	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, "confine.go", src, 0)
-	contractcheck.FailErr(t, "parse confine.go", err)
+	file, err := parser.ParseFile(fset, "network_profile.go", src, 0)
+	contractcheck.FailErr(t, "parse network_profile.go", err)
 	fn := findNamedFunc(file, "writeSocketGrantRules")
 	if fn == nil {
 		t.Fatal("writeSocketGrantRules missing")
