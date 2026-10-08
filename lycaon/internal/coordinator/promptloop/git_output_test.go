@@ -77,9 +77,9 @@ func TestGitDiffSpillsOnlyScreenedHunks(t *testing.T) {
 	diff := strings.Repeat("+unchanged\n", 100) + "+" + storageBoundarySecret + "\n"
 	raw, err := git.MarshalDiffToolResponse(git.DiffToolResponse{MaxBytes: 100, Files: []git.DiffToolEntry{{Path: "secret.env", Diff: diff}}, FilesTotal: 1}, nil)
 	testutil.FailErr(t, "marshal sensitive diff", err)
-	projection := loop.projectToolResultForStorage(t.Context(), raw, nil)
+	projection := toolInvocations{loop}.projectToolResultForStorage(t.Context(), raw, nil)
 	sess := &api.Session{ID: "screened-git", ProjectID: testdbseed.DefaultProjectID}
-	got := loop.truncateToolResultForSession(t.Context(), "git_diff", projection, raw, 64000, 0, sess)
+	got := toolInvocations{loop}.truncateToolResultForSession(t.Context(), "git_diff", projection, raw, 64000, 0, sess)
 	if got.reject != nil {
 		t.Fatalf("screened diff rejected: %+v", got.reject)
 	}

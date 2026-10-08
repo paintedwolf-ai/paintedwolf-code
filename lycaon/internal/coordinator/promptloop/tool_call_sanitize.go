@@ -5,10 +5,14 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"context"
+	"errors"
 
 	"github.com/lycaon/lycaon/internal/jsonvalue"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
+	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/tools/surveyreceipt"
 )
 
 func sanitizeToolCallsForExecution(calls []api.ToolCall) []api.ToolCall {
@@ -267,4 +271,79 @@ func attachThoughtSignature(tc *api.ToolCall, sig string) {
 		tc.ExtraContent["google"] = google
 	}
 	google["thought_signature"] = sig
+}
+
+// recordSearchOutcome records survey material from structured receipts.
+func (l turnNudges) recordSearchOutcome(ctx context.Context, sessionID, tool string, args map[string]any, output string) {
+	if l.Deps.DoomLoop == nil {
+		return
+	}
+	receipt, ok := surveyreceipt.Parse(output)
+	if !ok {
+		return
+	}
+	_, _ = l.Deps.DoomLoop.RecordSearchOutcome(ctx, sessionID, tool, args, receipt.PathsTouched > 0)
+}
+
+func (l turnNudges) checkDoomLoop(ctx context.Context, sessionID, responseID, tool string, args map[string]any, countOut *int) error {
+	if l.Deps.DoomLoop == nil {
+		return nil
+	}
+	// Repeated terminal keystrokes are valid interactive input.
+	if strings.EqualFold(strings.TrimSpace(tool), "terminal_send") {
+		return nil
+	}
+	if tools.ToolOffered(ctx, tool) {
+		if err := l.Deps.DoomLoop.ResolveRejection(ctx, sessionID, tool, args, "TOOL_NOT_OFFERED"); err != nil {
+			return err
+		}
+	}
+	allowed, count, repeatedCode, err := l.Deps.DoomLoop.Check(ctx, sessionID, responseID, tool, args)
+	if err != nil {
+		return err
+	}
+	if countOut != nil {
+		*countOut = count
+	}
+	if allowed {
+		return nil
+	}
+	if l.Deps.FormatDoomLoopReject != nil {
+		reject, fmtErr := l.Deps.FormatDoomLoopReject(ctx, sessionID, tool, args, count, repeatedCode)
+		if fmtErr != nil {
+			return fmtErr
+		}
+		if reject != nil && strings.TrimSpace(reject.Body) != "" {
+			return reject
+		}
+	}
+	// Missing enforcement decisions block execution.
+	return errors.New("doom loop blocked")
+}
+
+// escalateRepeatedCode returns escalation for a repeated rejection code.
+func (l turnNudges) escalateRepeatedCode(ctx context.Context, sessionID, tool string, original *guidance.Refusal) *guidance.Refusal {
+	if l.Deps.EscalateRepeatedCode == nil || original == nil || original.Code() == "" {
+		return nil
+	}
+	if strings.EqualFold(strings.TrimSpace(tool), "terminal_send") {
+		return nil
+	}
+	return l.Deps.EscalateRepeatedCode(ctx, sessionID, tool, original)
+}
+
+func (l turnNudges) recordDoomLoopAttempt(
+	ctx context.Context,
+	sessionID, responseID, tool string,
+	args map[string]any,
+	rejectCode string,
+	mutated bool,
+) error {
+	if l.Deps.DoomLoop == nil {
+		return nil
+	}
+	if strings.EqualFold(strings.TrimSpace(tool), "terminal_send") {
+		return nil
+	}
+	return l.Deps.DoomLoop.RecordAttempt(ctx, sessionID, responseID, tool, args, rejectCode, mutated)
 }

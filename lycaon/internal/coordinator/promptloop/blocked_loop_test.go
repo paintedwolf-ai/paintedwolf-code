@@ -40,7 +40,7 @@ func (c *alwaysSameToolClient) Complete(ctx context.Context, req modelcall.Compl
 	c.calls++
 	c.iterations = append(c.iterations, req.Debug.Iteration)
 	c.toolCounts = append(c.toolCounts, len(req.Tools))
-	if !c.ignoreCloseout && (c.closeout || len(req.Tools) == 0) {
+	if !c.ignoreCloseout && (c.closeout || !req.ToolsCallable()) {
 		return &modelcall.Completion{Content: "Stopping: the same call keeps being blocked."}, nil
 	}
 	return &modelcall.Completion{ToolCalls: []api.ToolCall{{ID: "tc1", Name: "read", Args: c.args}}}, nil
@@ -272,7 +272,7 @@ func (c *closeoutSynthesisClient) Stream(ctx context.Context, req modelcall.Comp
 	ch := make(chan modelcall.StreamChunk)
 	go func() {
 		defer close(ch)
-		if len(req.Tools) == 0 || c.inner.calls >= promptloop.BlockedLoopRejectCap {
+		if !req.ToolsCallable() || c.inner.calls >= promptloop.BlockedLoopRejectCap {
 			c.inner.calls++
 			body := "```json\n{\"synthesis\":" + quoteJSON(c.synthesis) + "}\n```"
 			ch <- modelcall.StreamChunk{Content: body, Done: true}
@@ -392,7 +392,7 @@ func (c *schemaRejectThenProseClient) Complete(ctx context.Context, req modelcal
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if len(req.Tools) == 0 {
+	if !req.ToolsCallable() {
 		return &modelcall.Completion{Content: "forced closeout received"}, nil
 	}
 	c.calls++
@@ -505,7 +505,7 @@ func (c *varyingArgsToolClient) Complete(ctx context.Context, req modelcall.Comp
 		return nil, err
 	}
 	c.calls++
-	if c.closeout || len(req.Tools) == 0 || (c.stopAfter > 0 && c.calls > c.stopAfter) {
+	if c.closeout || !req.ToolsCallable() || (c.stopAfter > 0 && c.calls > c.stopAfter) {
 		return &modelcall.Completion{Content: "Stopping: the same call keeps being blocked."}, nil
 	}
 	calls := make([]api.ToolCall, max(1, c.batchSize))

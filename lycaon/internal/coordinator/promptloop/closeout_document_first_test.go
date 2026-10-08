@@ -61,7 +61,7 @@ func TestCloseoutDocumentDefectRefusedBeforeCitations(t *testing.T) {
 		{ID: "u1", Role: api.MessageRoleUser, Content: "research"},
 		{ID: "slot-1", Role: api.MessageRoleAssistant, Content: "no citations here", Visibility: api.MessageVisibilityInternal},
 	}
-	out, err := loop.handleAcceptedCloseoutReport(
+	out, err := turnCloseout{loop}.handleAcceptedCloseoutReport(
 		context.Background(), &api.Session{ID: "s1", WorkspacePath: t.TempDir()},
 		"s1", "", "implement_synthesis", st, history,
 		api.Message{ID: "slot-1", Role: api.MessageRoleAssistant, Content: "no citations here"},

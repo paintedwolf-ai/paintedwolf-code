@@ -17,7 +17,7 @@ func TestEvidenceCommitFailureStopsEnrichment(t *testing.T) {
 	}}
 	message := api.Message{ID: "result", Content: "observed bytes"}
 	history := []api.Message{message}
-	_, err := loop.enrichCommittedToolRow(t.Context(), "session", &api.Session{ID: "session"}, history,
+	_, err := toolBatch{loop}.enrichCommittedToolRow(t.Context(), "session", &api.Session{ID: "session"}, history,
 		"read", map[string]any{"path": "data.json"}, message.ID, true, &promptLoopTurnState{})
 	if !errors.Is(err, failure) {
 		t.Fatalf("evidence failure = %v, want store failure", err)

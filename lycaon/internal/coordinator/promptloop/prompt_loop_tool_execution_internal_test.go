@@ -47,7 +47,7 @@ func TestCheckDoomLoopUsesRejectFormatter(t *testing.T) {
 		},
 	}}
 	var n int
-	err := loop.checkDoomLoop(context.Background(), "s1", "response", "read", map[string]any{"path": "x"}, &n)
+	err := turnNudges{loop}.checkDoomLoop(context.Background(), "s1", "response", "read", map[string]any{"path": "x"}, &n)
 	if err == nil || !strings.Contains(err.Error(), "Code: DOOM_LOOP_REPEAT") {
 		t.Fatalf("err = %v", err)
 	}
@@ -202,7 +202,7 @@ func TestPromptLoop_PhaseGateUnmetJSONSkipsDoomLoopRecord(t *testing.T) {
 		},
 	})
 	sess := &api.Session{ID: "s1", Posture: api.SessionPostureSpec}
-	_ = loop.executeToolCall(context.Background(), sess, "s1", "", nil, api.ToolCall{
+	_ = toolInvocations{loop}.executeToolCall(context.Background(), sess, "s1", "", nil, api.ToolCall{
 		Name: "workflow_advance",
 		Args: map[string]any{},
 	}, tools.ToolContext{SessionID: "s1"}, nil, 0, "", api.CoordinatorRunContext{})
@@ -219,7 +219,7 @@ func TestExecuteToolCallCarriesCompiledInvocationContract(t *testing.T) {
 		return "ok", nil
 	}))
 	loop := NewPromptLoopForTest(PromptLoopDeps{Tools: reg})
-	loop.executeToolCall(context.Background(), &api.Session{ID: "s1"}, "s1", "", nil, api.ToolCall{
+	toolInvocations{loop}.executeToolCall(context.Background(), &api.Session{ID: "s1"}, "s1", "", nil, api.ToolCall{
 		ID: "call-1", Name: "read", Args: map[string]any{},
 	}, tools.ToolContext{SessionID: "s1"}, nil, 0, "", api.CoordinatorRunContext{})
 	want, ok := toolcontract.Lookup("read")
@@ -238,7 +238,7 @@ func TestExecuteToolCallTracksWhetherTheSubsystemOwnerRan(t *testing.T) {
 	}))
 	blocked.SetFail("read", errors.New("blocked before subsystem owner"))
 	loop := NewPromptLoopForTest(PromptLoopDeps{Tools: blocked})
-	run := loop.executeToolCall(t.Context(), &api.Session{ID: "s1"}, "s1", "", nil, api.ToolCall{
+	run := toolInvocations{loop}.executeToolCall(t.Context(), &api.Session{ID: "s1"}, "s1", "", nil, api.ToolCall{
 		ID: "call-1", Name: "read", Args: map[string]any{},
 	}, tools.ToolContext{SessionID: "s1"}, nil, 0, "", api.CoordinatorRunContext{})
 	if run.invoked {
@@ -250,7 +250,7 @@ func TestExecuteToolCallTracksWhetherTheSubsystemOwnerRan(t *testing.T) {
 		return "", errors.New("subsystem owner failed")
 	}))
 	loop = NewPromptLoopForTest(PromptLoopDeps{Tools: invoked})
-	run = loop.executeToolCall(t.Context(), &api.Session{ID: "s1"}, "s1", "", nil, api.ToolCall{
+	run = toolInvocations{loop}.executeToolCall(t.Context(), &api.Session{ID: "s1"}, "s1", "", nil, api.ToolCall{
 		ID: "call-2", Name: "read", Args: map[string]any{},
 	}, tools.ToolContext{SessionID: "s1"}, nil, 0, "", api.CoordinatorRunContext{})
 	if !run.invoked {
@@ -262,10 +262,10 @@ func TestSurveyReceiptsReachDoomLoopObservers(t *testing.T) {
 	guard := &memoryDoomLoopGuard{}
 	loop := NewPromptLoopForTest(PromptLoopDeps{DoomLoop: guard})
 	args := map[string]any{"pattern": "result"}
-	loop.recordSearchOutcome(t.Context(), "s1", "grep", args, "unstructured result")
+	turnNudges{loop}.recordSearchOutcome(t.Context(), "s1", "grep", args, "unstructured result")
 	for _, touched := range []int{0, 2} {
 		output := surveyreceipt.Attach("result", surveyreceipt.New("grep", ".", touched, 6, false))
-		loop.recordSearchOutcome(t.Context(), "s1", "grep", args, output)
+		turnNudges{loop}.recordSearchOutcome(t.Context(), "s1", "grep", args, output)
 	}
 	want := []bool{false, true}
 	if !reflect.DeepEqual(guard.searchOutcomes, want) {
@@ -308,7 +308,7 @@ func TestPreExecutorRefusalsUseOneOccurrenceAndOfferedRecovery(t *testing.T) {
 			if tc.loadable {
 				deferred = []string{"command"}
 			}
-			reject := loop.rejectToolOccurrence(t.Context(), sess, api.ToolCall{Name: "command"}, tools.ToolContext{Agent: "coordinator", TurnOfferedToolNames: tc.offered, TurnToolPlan: toolsurface.Compile(tc.offered, deferred)}, tc.code, nil)
+			reject := toolInvocations{loop}.rejectToolOccurrence(t.Context(), sess, api.ToolCall{Name: "command"}, tools.ToolContext{Agent: "coordinator", TurnOfferedToolNames: tc.offered, TurnToolPlan: toolsurface.Compile(tc.offered, deferred)}, tc.code, nil)
 			if reject.Code() != tc.code || reject.Copy == nil || tools.AsToolReject(reject) == nil {
 				t.Fatalf("pre-executor refusal lost decision: %+v", reject)
 			}

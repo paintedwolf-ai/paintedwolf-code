@@ -11,22 +11,19 @@ import (
 	"github.com/lycaon/lycaon/internal/agentpresence"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
-	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/ingestion"
-	"github.com/lycaon/lycaon/internal/invocation"
-	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/observability"
-	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tooloutput"
-	"github.com/lycaon/lycaon/internal/toolpolicy"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
-	"github.com/lycaon/lycaon/internal/visual"
 	"github.com/lycaon/lycaon/pkg/api"
 )
+
+// toolBatch runs one assistant message's tool calls: ordering, concurrency, holds, and settlement.
+type toolBatch struct{ *PromptLoop }
 
 const concurrentToolCallLimit = spawn.MaxConcurrentToolCalls
 
@@ -128,8 +125,8 @@ func partitionToolBatchRuns(reg tools.ToolRegistry, calls []api.ToolCall) [][]ap
 }
 
 // toolContextForCall refreshes the session tool context before execution.
-func (l *PromptLoop) toolContextForCall(ctx context.Context, sess *api.Session, base tools.ToolContext, machine inject.Machine) (tools.ToolContext, error) {
-	if l == nil || l.Deps.RefreshToolContext == nil || sess == nil {
+func (l toolBatch) toolContextForCall(ctx context.Context, sess *api.Session, base tools.ToolContext, machine inject.Machine) (tools.ToolContext, error) {
+	if l.PromptLoop == nil || l.Deps.RefreshToolContext == nil || sess == nil {
 		return base, nil
 	}
 	refreshed, err := l.Deps.RefreshToolContext(ctx, sess, machine)
@@ -147,7 +144,7 @@ func (l *PromptLoop) toolContextForCall(ctx context.Context, sess *api.Session, 
 	return refreshed, nil
 }
 
-func (l *PromptLoop) executeToolCallsInTurn(
+func (l toolBatch) executeToolCallsInTurn(
 	ctx context.Context,
 	sess *api.Session,
 	sessionID string,
@@ -293,8 +290,8 @@ type batchHolds struct {
 	answeringUnderHost bool
 }
 
-func (l *PromptLoop) batchStartHolds(ctx context.Context, sessionID, turnSurfaceID string) batchHolds {
-	if l == nil {
+func (l toolBatch) batchStartHolds(ctx context.Context, sessionID, turnSurfaceID string) batchHolds {
+	if l.PromptLoop == nil {
 		return batchHolds{}
 	}
 	return batchHolds{
@@ -307,8 +304,8 @@ func (l *PromptLoop) batchStartHolds(ctx context.Context, sessionID, turnSurface
 // hostHITLParked reports a host-managed wait that ends the batch. A turn
 // already running under one continues to its reply: review edits under an
 // awaiting approval, and the person's turns while the host holds the phase.
-func (l *PromptLoop) hostHITLParked(ctx context.Context, sessionID string, holds batchHolds) bool {
-	if l == nil {
+func (l toolBatch) hostHITLParked(ctx context.Context, sessionID string, holds batchHolds) bool {
+	if l.PromptLoop == nil {
 		return false
 	}
 	if !holds.approval && l.Deps.HumanApprovalAwaiting != nil && l.Deps.HumanApprovalAwaiting(ctx, sessionID) {
@@ -318,7 +315,7 @@ func (l *PromptLoop) hostHITLParked(ctx context.Context, sessionID string, holds
 }
 
 // runConcurrentToolBatch executes bounded concurrent calls and preserves call order.
-func (l *PromptLoop) runConcurrentToolBatch(
+func (l toolBatch) runConcurrentToolBatch(
 	ctx context.Context,
 	sess *api.Session,
 	sessionID, userPrompt string,
@@ -380,7 +377,7 @@ func (l *PromptLoop) runConcurrentToolBatch(
 }
 
 // applyParallelToolOutcomes retains every settled result before returning a host error.
-func (l *PromptLoop) applyParallelToolOutcomes(
+func (l toolBatch) applyParallelToolOutcomes(
 	ctx context.Context,
 	outcomes []toolCallOutcome,
 	commit *parallelBatchCommit,
@@ -406,13 +403,13 @@ func commitSnapshot(commit *parallelBatchCommit) ([]api.Message, []string, bool,
 	return commit.history, commit.turnTools, commit.anyTaskEnqueued, commit.taskEnqueuedThisTurn, commit.lastTaskMessageID
 }
 
-func (l *PromptLoop) syncAssistantToolCallsOnStore(
+func (l toolBatch) syncAssistantToolCallsOnStore(
 	ctx context.Context,
 	sessionID, assistantMessageID string,
 	history []api.Message,
 	toolCalls []api.ToolCall,
 ) {
-	if l == nil || l.Deps.UpdateMessage == nil {
+	if l.PromptLoop == nil || l.Deps.UpdateMessage == nil {
 		return
 	}
 	assistantMessageID = strings.TrimSpace(assistantMessageID)
@@ -430,22 +427,9 @@ func (l *PromptLoop) syncAssistantToolCallsOnStore(
 	}
 }
 
-// settleToolRow advances cards after the result is durable.
-func (l *PromptLoop) settleToolRow(
-	ctx context.Context,
-	sess *api.Session,
-	sessionID, toolName string,
-	turnTools []string,
-	st *promptLoopTurnState,
-) []string {
-	l.announceToolAskAfterCommit(ctx, sessionID, toolName)
-	l.publishWorkerProgress(ctx, sess, st.workerRunID(), st.progress().SettleCall(), false)
-	return append(turnTools, toolName)
-}
-
 // announceToolAskAfterCommit adds the question card after its tool row is durable.
-func (l *PromptLoop) announceToolAskAfterCommit(ctx context.Context, sessionID, toolName string) {
-	if l == nil || l.Deps.AnnouncePendingToolAsk == nil {
+func (l toolBatch) announceToolAskAfterCommit(ctx context.Context, sessionID, toolName string) {
+	if l.PromptLoop == nil || l.Deps.AnnouncePendingToolAsk == nil {
 		return
 	}
 	if strings.TrimSpace(strings.ToLower(toolName)) != "ask_user" {
@@ -466,15 +450,7 @@ type singleToolOutcome struct {
 	endTurn error
 }
 
-// attachRejectReceipt binds the settled invocation to its own tool result.
-func attachRejectReceipt(out singleToolOutcome, receipt *api.InvocationReceipt) singleToolOutcome {
-	if out.toolMsg.ToolResult != nil {
-		out.toolMsg.ToolResult.Invocation = receipt
-	}
-	return out
-}
-
-func (l *PromptLoop) executeOneToolCall(
+func (l toolBatch) executeOneToolCall(
 	ctx context.Context,
 	sess *api.Session,
 	sessionID string,
@@ -489,14 +465,14 @@ func (l *PromptLoop) executeOneToolCall(
 ) singleToolOutcome {
 	ctx = tools.WithRecoveryTools(ctx, toolCtx.TurnOfferedToolNames)
 	if proseTurn && !workerProseAllowsTool(sess, tc.Name) {
-		return l.refuseToolCall(tc, assistantMessageID, l.rejectToolOccurrence(ctx, sess, tc, toolCtx, "TOOL_INVOKE_PROSE_TURN", nil))
+		return l.refuseToolCall(tc, assistantMessageID, toolInvocations(l).rejectToolOccurrence(ctx, sess, tc, toolCtx, "TOOL_INVOKE_PROSE_TURN", nil))
 	}
 	ctx, doomPreCount, reject := l.preflightToolCall(ctx, sess, sessionID, assistantMessageID, tc, taskAllowlist)
 	if reject != nil {
 		return l.refuseToolCall(tc, assistantMessageID, reject)
 	}
 
-	run := l.executeToolCall(ctx, sess, sessionID, userPrompt, history, tc, toolCtx, taskAllowlist, doomPreCount, assistantMessageID, runCtx)
+	run := toolInvocations(l).executeToolCall(ctx, sess, sessionID, userPrompt, history, tc, toolCtx, taskAllowlist, doomPreCount, assistantMessageID, runCtx)
 	if !run.invoked && run.reject != nil {
 		settled, err := l.settlePreInvokeReject(ctx, run)
 		if err != nil {
@@ -513,7 +489,7 @@ func (l *PromptLoop) executeOneToolCall(
 				"tool", tc.Name,
 				"bytes", data["bytes"],
 				"cap", data["cap"])
-			run = l.refuseOutputDelivery(ctx, sess, tc, toolCtx, run, code, data)
+			run = toolInvocations(l).refuseOutputDelivery(ctx, sess, tc, toolCtx, run, code, data)
 		}
 	}
 	if !run.succeeded() {
@@ -524,8 +500,8 @@ func (l *PromptLoop) executeOneToolCall(
 	}
 
 	// Compact only after stamping evidence handles.
-	storageProjection := l.projectToolResultForStorage(ctx, run.content, tc.Args)
-	projected := l.truncateToolResultForSession(
+	storageProjection := toolInvocations(l).projectToolResultForStorage(ctx, run.content, tc.Args)
+	projected := toolInvocations(l).truncateToolResultForSession(
 		ctx,
 		tc.Name,
 		storageProjection,
@@ -535,7 +511,7 @@ func (l *PromptLoop) executeOneToolCall(
 		sess,
 	)
 	if projected.reject != nil {
-		run = l.refuseOutputDelivery(ctx, sess, tc, toolCtx, run, projected.reject.Code, projected.reject.Data)
+		run = toolInvocations(l).refuseOutputDelivery(ctx, sess, tc, toolCtx, run, projected.reject.Code, projected.reject.Data)
 		return l.settleRejectedInvocation(ctx, sess, sessionID, tc, assistantMessageID, run)
 	}
 	run.content = projected.content
@@ -551,11 +527,11 @@ func (l *PromptLoop) executeOneToolCall(
 	if ingestion.IsRetrievalTool(tc.Name) {
 		toolOrigin = api.MessageOriginRetrieval
 	}
-	if reject, blocked, transformed, changed := l.evaluateContentAnchor(ctx, sess, oar.AnchorContentToolResult, []oar.ContentSegment{
+	if reject, blocked, transformed, changed := modelTurn(l).evaluateContentAnchor(ctx, sess, oar.AnchorContentToolResult, []oar.ContentSegment{
 		oarContentSegment(run.content, api.MessageRoleTool, toolOrigin, api.ContentAuthorityNone, api.ContentTrustTierUntrusted, tc.Name),
 	}, tc.Name, tc.Args); blocked {
 		run.failure = rejectionFailure(reject.Code(), "content_policy_rejection", invocationFailureOwner(run.contract, run.captures), reject.Facts.FeedbackFor(reject.Code()).Details)
-		settled, settleErr := l.settleInvocation(ctx, run, api.InvocationStatusRejected, "content_policy", reject.Code(), run.captures.ownerRef)
+		settled, settleErr := toolInvocations(l).settleInvocation(ctx, run, api.InvocationStatusRejected, "content_policy", reject.Code(), run.captures.ownerRef)
 		if settleErr != nil {
 			return l.settlementHostFault(tc, assistantMessageID, run, settleErr)
 		}
@@ -564,14 +540,14 @@ func (l *PromptLoop) executeOneToolCall(
 		run.replaceContent(transformed)
 	}
 
-	toolMsg := l.composeToolResultMessage(ctx, sess, sessionID, tc, assistantMessageID, toolOrigin, &run)
+	toolMsg := toolInvocations(l).composeToolResultMessage(ctx, sess, sessionID, tc, assistantMessageID, toolOrigin, &run)
 	settled, settleErr := l.settleToolResult(ctx, tc, toolCtx, toolMsg, run)
 	if settleErr != nil {
 		return l.settlementHostFault(tc, assistantMessageID, run, settleErr)
 	}
 	run = settled
 	l.recordReturnedText(ctx, sessionID, tc, run)
-	l.recordSourceRunEvidence(ctx, sessionID, sess, tc.Name, run)
+	toolInvocations(l).recordSourceRunEvidence(ctx, sessionID, sess, tc.Name, run)
 	if run.succeeded() && l.Deps.ToolObserved != nil {
 		l.Deps.ToolObserved(ctx, sess, toolCtx, tc.Name)
 	}
@@ -586,297 +562,4 @@ func (l *PromptLoop) executeOneToolCall(
 		handleEligible: sess != nil && toolEvidenceEligible(run, tc.Name, tc.Args),
 		agentNote:      run.captures.note,
 	}
-}
-
-func (l *PromptLoop) settleToolResult(
-	ctx context.Context,
-	tc api.ToolCall,
-	toolCtx tools.ToolContext,
-	toolMsg api.Message,
-	run toolInvocation,
-) (toolInvocation, error) {
-	status := api.InvocationStatusCompleted
-	evidenceKind := string(run.contract.Evidence())
-	if run.hostAnswered {
-		// Host answers carry no subsystem evidence.
-		evidenceKind = "host_answer"
-	}
-	if ctx.Err() != nil {
-		status = api.InvocationStatusInterrupted
-		evidenceKind = "user_stop"
-		if run.failure == nil {
-			run.failure = statedOrOwnerFailure(run.facts, run.contract, run.captures)
-		}
-	} else if !run.succeeded() {
-		status = api.InvocationStatusError
-		evidenceKind = "error"
-		if run.failure == nil {
-			run.failure = statedOrOwnerFailure(run.facts, run.contract, run.captures)
-		}
-	}
-	ownerRef := invocationOwnerRef(run.captures.ownerRef, toolMsg.ToolResult)
-	run.sourceRevision, run.sourceRootDigest = invocation.SourceRevisionForRoot(tools.HostWriteRoot(toolCtx))
-	if tc.Name == "complete_leg" {
-		run.sourceRevision, run.sourceRootDigest = sourceledger.VerificationState(ctx, toolCtx.SourceLedger, tools.HostWriteRoot(toolCtx))
-	}
-	if source := run.captures.sourceRun; source != nil {
-		run.sourceRevision, run.sourceRootDigest = source.SourceRevision, source.SourceRootDigest
-	}
-	return l.settleInvocation(ctx, run, status, evidenceKind, toolMsg.ID, ownerRef)
-}
-
-func (l *PromptLoop) toolResultLimits(ctx context.Context, sess *api.Session) (int, int) {
-	if l.Deps.Limits == nil {
-		return 0, 0
-	}
-	limits := l.Deps.Limits(ctx, sess)
-	return limits.MaxToolResultBytes, limits.MaxToolSpillBytes
-}
-
-func (l *PromptLoop) preflightToolCall(
-	ctx context.Context,
-	sess *api.Session,
-	sessionID, responseID string,
-	tc api.ToolCall,
-	taskAllowlist []string,
-) (context.Context, int, *guidance.Refusal) {
-	if taskAllowlist != nil {
-		ctx = toolpolicy.WithTaskSpawnAllowlist(ctx, taskAllowlist)
-	}
-	if l.Deps.Policy != nil {
-		if err := l.Deps.Policy.EvaluateInvoke(ctx, sess, tc.Name, tc.Args); err != nil {
-			return ctx, 0, rejectForCallError(err)
-		}
-	}
-	doomPreCount := 0
-	if err := l.checkDoomLoop(ctx, sessionID, responseID, tc.Name, tc.Args, &doomPreCount); err != nil {
-		return ctx, 0, rejectForCallError(err)
-	}
-	return ctx, doomPreCount, nil
-}
-
-// refuseToolCall builds a structured refusal result.
-func (l *PromptLoop) refuseToolCall(tc api.ToolCall, assistantMessageID string, reject *guidance.Refusal) singleToolOutcome {
-	return singleToolOutcome{
-		toolName: tc.Name,
-		toolMsg:  l.toolRejectMessage(tc.Name, tc.ID, assistantMessageID, tc.Args, reject),
-	}
-}
-
-// settlePreInvokeReject closes an opened ledger row.
-func (l *PromptLoop) settlePreInvokeReject(ctx context.Context, run toolInvocation) (toolInvocation, error) {
-	if run.receipt == nil || run.reject == nil {
-		return run, nil
-	}
-	code := run.reject.Code()
-	if run.failure == nil {
-		run.failure = rejectionFailure(code, "policy_rejection", invocationFailureOwner(run.contract, run.captures), run.reject.Facts.FeedbackFor(code).Details)
-	}
-	return l.settleInvocation(ctx, run, api.InvocationStatusRejected, "rejection", code, run.captures.ownerRef)
-}
-
-// refusePreInvokeReject records refusal and repeat escalation.
-func (l *PromptLoop) refusePreInvokeReject(
-	ctx context.Context,
-	sess *api.Session,
-	sessionID string,
-	tc api.ToolCall,
-	assistantMessageID string,
-	reject *guidance.Refusal,
-) singleToolOutcome {
-	code := reject.Code()
-	advance := l.overlayIntegrateRejectEndsToolLoop(ctx, sess, sessionID, code)
-	if !advance {
-		_ = l.recordDoomLoopAttempt(ctx, sessionID, assistantMessageID, tc.Name, tc.Args, code, false)
-		// Recorded first so the escalation reads the current total.
-		if escalated := l.escalateRepeatedCode(ctx, sessionID, tc.Name, reject); escalated != nil {
-			combined := *reject
-			combined.Body += "\n\n" + escalated.Body
-			combined.Facts = combined.Facts.Merge(escalated.Facts)
-			reject = &combined
-		}
-	}
-	out := l.refuseToolCall(tc, assistantMessageID, reject)
-	out.breakToolLoop = out.breakToolLoop || advance
-	return out
-}
-
-func (l *PromptLoop) settleRejectedInvocation(
-	ctx context.Context,
-	sess *api.Session,
-	sessionID string,
-	tc api.ToolCall,
-	assistantMessageID string,
-	run toolInvocation,
-) singleToolOutcome {
-	if run.failure == nil {
-		code := run.facts.PrimaryCode()
-		run.failure = rejectionFailure(code, "host_rejection", invocationFailureOwner(run.contract, run.captures), run.facts.FeedbackFor(code).Details)
-	}
-	settled, err := l.settleInvocation(ctx, run, api.InvocationStatusRejected, "rejection", run.facts.PrimaryCode(), run.captures.ownerRef)
-	if err != nil {
-		return l.settlementHostFault(tc, assistantMessageID, run, err)
-	}
-	return l.settleRejectedToolCall(ctx, sess, sessionID, tc, assistantMessageID, settled)
-}
-
-// settleRejectedToolCall records and projects a refusal.
-func (l *PromptLoop) settleRejectedToolCall(
-	ctx context.Context,
-	sess *api.Session,
-	sessionID string,
-	tc api.ToolCall,
-	assistantMessageID string,
-	run toolInvocation,
-) singleToolOutcome {
-	rejectCode := run.facts.PrimaryCode()
-	advance := l.overlayIntegrateRejectEndsToolLoop(ctx, sess, sessionID, rejectCode)
-	// Host-managed failures do not count as caller repetition.
-	if !advance && run.failure.CallerFault() {
-		_ = l.recordDoomLoopAttempt(ctx, sessionID, assistantMessageID, tc.Name, tc.Args, rejectCode, false)
-		// Recorded first so the escalation reads the current total.
-		if escalated := l.escalateRepeatedCode(ctx, sessionID, tc.Name, run.asReject()); escalated != nil {
-			run.content += "\n\n" + escalated.Body
-			run.facts = run.facts.Merge(escalated.Facts)
-		}
-	}
-	if l.Deps.OnToolReject != nil {
-		l.Deps.OnToolReject(ctx, sessionID, tc.ID, rejectCode, run.content, run.facts)
-	}
-	out := singleToolOutcome{
-		toolName:      tc.Name,
-		toolMsg:       l.toolRejectMessage(tc.Name, tc.ID, assistantMessageID, tc.Args, run.asReject()),
-		breakToolLoop: advance,
-	}
-	if out.toolMsg.ToolResult != nil {
-		out.toolMsg.ToolResult.Invocation = run.receipt
-	}
-	return out
-}
-
-// rejectForCallError projects pre-invocation errors as refusals.
-func rejectForCallError(err error) *guidance.Refusal {
-	if reject, ok := guidance.RefusalFromError(err); ok {
-		return reject
-	}
-	return guidance.NewRefusal("", err.Error())
-}
-
-// stampCommitOrderTS assigns monotonically increasing timestamps in call order.
-func stampCommitOrderTS(msg *api.Message, last *time.Time) {
-	now := time.Now().UTC()
-	if !now.After(*last) {
-		now = last.Add(time.Microsecond)
-	}
-	*last = now
-	msg.CreatedAt = now
-}
-
-// tagToolHandleOnCommit persists the evidence record and stamps the host handle on the tool result.
-func (l *PromptLoop) tagToolHandleOnCommit(ctx context.Context, sessionID string, sess *api.Session, toolName string, args map[string]any, msg *api.Message, eligible bool) error {
-	if msg == nil {
-		return nil
-	}
-	if sess != nil && toolName == "verify" && l.Deps.ConfirmVerifyResult != nil &&
-		msg.ToolResult != nil && msg.ToolResult.Outcome == api.ToolResultOutcomeCompleted {
-		content := strings.TrimSpace(msg.ToolResult.Content)
-		if content == "" {
-			content = strings.TrimSpace(msg.Content)
-		}
-		if stamped := l.Deps.ConfirmVerifyResult(sess, content); stamped != "" {
-			msg.ToolResult.Content = stamped
-		}
-	}
-	if !eligible {
-		return nil
-	}
-	content := msg.Content
-	if msg.ToolResult != nil && strings.TrimSpace(msg.ToolResult.Content) != "" {
-		content = msg.ToolResult.Content
-	}
-	handle := ""
-	patchedContent := content
-	if l.Deps.CommitEvidenceToolResult != nil && sess != nil {
-		artifactID := ""
-		if msg.ToolResult != nil && msg.ToolResult.Visual != nil {
-			artifactID = msg.ToolResult.Visual.ID
-		}
-		var err error
-		handle, patchedContent, err = l.Deps.CommitEvidenceToolResult(ctx, sessionID, sess, toolName, args, content, artifactID)
-		if err != nil {
-			return fmt.Errorf("record %s evidence: %w", toolName, err)
-		}
-	}
-	content = patchedContent
-	if handle == "" {
-		return nil
-	}
-	// Re-stamp artifact_id after evidence rewrites the JSON.
-	if msg.ToolResult != nil && msg.ToolResult.Visual != nil {
-		content = visual.StampArtifactID(content, msg.ToolResult.Visual.ID)
-	}
-	msg.Content = guidance.PrependHandleTag(content, handle)
-	if msg.ToolResult != nil {
-		msg.ToolResult.Content = guidance.PrependHandleTag(content, handle)
-		if msg.ToolResult.Visual != nil {
-			msg.ToolResult.Visual.EvidenceHandle = handle
-		}
-		// Evidence handles do not change structured outcome fields.
-	}
-	msg.EvidenceHandles = append(append([]string(nil), msg.EvidenceHandles...), handle)
-	return nil
-}
-
-// stampDietFieldsOnCommit sets durable Message diet stamps from machine producers.
-func stampDietFieldsOnCommit(toolName string, msg *api.Message) {
-	if msg == nil {
-		return
-	}
-	content := msg.Content
-	if msg.ToolResult != nil && strings.TrimSpace(msg.ToolResult.Content) != "" {
-		content = msg.ToolResult.Content
-	}
-	if !tooloutput.IsOverlayPromoteTool(toolName) {
-		return
-	}
-	if compaction.IsOverlayPromoteConflictProtected(content) {
-		msg.DietStamp = compaction.DietStampPreserveStructure
-		msg.DietStampSource = compaction.DietStampSourceOverlayMerge
-	}
-}
-
-// compactToolWireOnCommit compacts payloads after evidence handles are minted.
-func (l *PromptLoop) compactToolWireOnCommit(ctx context.Context, sess *api.Session, toolName string, msg *api.Message) {
-	if l == nil || msg == nil || l.Deps.CompactToolWire == nil {
-		return
-	}
-	stampDietFieldsOnCommit(toolName, msg)
-	content := msg.Content
-	if msg.ToolResult != nil && strings.TrimSpace(msg.ToolResult.Content) != "" {
-		content = msg.ToolResult.Content
-	}
-	out, meta := l.Deps.CompactToolWire(ctx, sess, toolName, content, compaction.CompactToolWireOpts{
-		DietStamp:       msg.DietStamp,
-		DietStampSource: msg.DietStampSource,
-		EvidenceHandles: append([]string(nil), msg.EvidenceHandles...),
-	})
-	msg.Content = out
-	if msg.ToolResult != nil {
-		msg.ToolResult.Content = out
-	}
-	msg.CompactedChunk = meta
-}
-
-// retrievalSourceLabel formats host-observed retrieval attribution.
-func retrievalSourceLabel(tool, observed string) string {
-	label := strings.TrimSpace(tool)
-	if label == "" {
-		label = "retrieval"
-	}
-	// Redirects use only the handler's observed destination.
-	detail := strings.TrimSpace(observed)
-	if detail == "" {
-		return label
-	}
-	return label + " · " + detail
 }
