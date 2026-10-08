@@ -2,10 +2,7 @@ package wiring
 
 import (
 	"context"
-	"crypto/sha256"
 	"database/sql"
-	"encoding/hex"
-	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -33,9 +30,8 @@ func TestArchivedRunStateResume_101Database(t *testing.T) {
 func testArchivedRunStateResumeForRelease(t *testing.T, releaseVersion string) {
 	root := testutil.CheckoutRoot(t)
 	corpusDB := filepath.Join(root, "lycaon", "testdata", "upgrade-corpus", releaseVersion, "store.db")
-	if _, err := os.Stat(corpusDB); err != nil {
-		t.Skipf("v%s upgrade-corpus store.db not found at %s: %v", releaseVersion, corpusDB, err)
-	}
+	_, statErr := os.Stat(corpusDB)
+	testutil.FailErr(t, "locate released upgrade fixture", statErr)
 
 	// Copy the frozen database into an isolated temp directory.
 	tempDir := t.TempDir()
@@ -52,23 +48,8 @@ func testArchivedRunStateResumeForRelease(t *testing.T, releaseVersion string) {
 	testutil.FailErr(t, "copy store.db", err)
 	testutil.FailErr(t, "close targetDB", dstFile.Close())
 
-	before := fileSHA256(t, targetDB)
 	ctx := context.Background()
-
 	err = db.UpgradeStaged(ctx, targetDB)
-	var incompatible *db.StoreIncompatibleError
-	if errors.As(err, &incompatible) {
-		// No registered route covers the shipped shape yet: the store
-		// must be refused into recovery non-destructively, exactly as
-		// startup would refuse it.
-		if !errors.Is(err, db.ErrStoreIncompatible) {
-			t.Fatalf("want store-incompatible refusal, got %v", err)
-		}
-		if after := fileSHA256(t, targetDB); after != before {
-			t.Fatal("refusal modified the frozen store bytes")
-		}
-		return
-	}
 	testutil.FailErr(t, "upgrade staged frozen "+releaseVersion+" store", err)
 
 	// The registered route landed the store on the current revision.
@@ -160,15 +141,4 @@ func testArchivedRunStateResumeForRelease(t *testing.T, releaseVersion string) {
 			t.Errorf("provenance UnitID = %s, want coordinator-test", records[0].UnitID)
 		}
 	}
-}
-
-func fileSHA256(t *testing.T, path string) string {
-	t.Helper()
-	file, err := os.Open(path)
-	testutil.FailErr(t, "open "+path+" for digest", err)
-	defer file.Close()
-	sum := sha256.New()
-	_, err = io.Copy(sum, file)
-	testutil.FailErr(t, "digest "+path, err)
-	return hex.EncodeToString(sum.Sum(nil))
 }

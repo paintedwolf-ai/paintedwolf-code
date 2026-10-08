@@ -88,6 +88,10 @@ overrides name their target explicitly.
 Review repair episodes and blocked report snapshots are durable workflow
 variables committed through the existing workflow command journal. Their new
 reserved key is additive; existing runs without it have no repair episode.
+Run asset provenance adds database revision 2 through the registered
+`002_workflow_provenance` migration from the released revision 1 shape. Released
+upgrade fixtures remain byte-for-byte unchanged.
+
 Worker `coverage_gaps` is an additive completion-report field. Co-shipped Go and
 Den wire types move together, and archived workflows do not acquire the new
 plan-charter requirement.

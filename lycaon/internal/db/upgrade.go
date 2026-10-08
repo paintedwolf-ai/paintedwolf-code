@@ -13,8 +13,7 @@ import (
 //go:embed released-baselines.json
 var releasedBaselinesJSON []byte
 
-// registeredMigrations stays empty until the first change to a released schema.
-var registeredMigrations = []migrations.Step{}
+var registeredMigrations = []migrations.Step{migrations.WorkflowProvenance()}
 
 // Before captures recovery data; After records the upgrade commit.
 type UpgradeHooks struct {

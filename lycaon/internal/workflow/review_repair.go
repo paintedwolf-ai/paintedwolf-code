@@ -130,7 +130,7 @@ func (m *RunManager) RecordReviewToolResult(ctx context.Context, sessionID strin
 		rows = append(rows, ReviewRepair{ID: uuid.NewString(), Phase: run.CurrentPhase, State: "repairing", CreatedAt: now})
 	}
 	episode := &rows[len(rows)-1]
-	if !episode.observeResponse(response, msg.ID, reviewIssueFingerprint(result.Feedback, result.Codes)) {
+	if !episode.observeResponse(response, msg.ID, reviewIssueFingerprint(result.Feedback)) {
 		return nil
 	}
 	episode.CandidateMessageID = msg.ID
@@ -181,7 +181,7 @@ func (r *ReviewRepair) observeResponse(response, result, fingerprint string) boo
 	last.Fingerprint = fingerprint
 	r.Fingerprint = fingerprint
 	r.Repeated = 0
-	for i := len(r.Responses) - 1; i >= 0 && r.Responses[i].Fingerprint == fingerprint; i-- {
+	for i := len(r.Responses) - 1; fingerprint != "" && i >= 0 && r.Responses[i].Fingerprint == fingerprint; i-- {
 		r.Repeated++
 	}
 	return true
@@ -197,13 +197,17 @@ func repairableVerdictCodes(codes []string) bool {
 	return false
 }
 
-func reviewIssueFingerprint(feedback []api.ToolFeedback, codes []string) string {
+func reviewIssueFingerprint(feedback []api.ToolFeedback) string {
 	var signatures []string
 	for _, f := range feedback {
-		signatures = append(signatures, reviewDiagnosticIdentity(f.Code, f.Details))
+		identity := reviewDiagnosticIdentity(f.Code, f.Details)
+		if identity == "" {
+			return ""
+		}
+		signatures = append(signatures, identity)
 	}
 	if len(signatures) == 0 {
-		signatures = slices.Clone(codes)
+		return ""
 	}
 	slices.Sort(signatures)
 	return reviewcoverage.Identity(signatures)
@@ -239,11 +243,18 @@ func reviewDiagnosticIdentity(code string, details map[string]any) string {
 		if json.Unmarshal(encoded, &repairs) == nil {
 			stable := make([]string, 0, len(repairs))
 			for _, repair := range repairs {
-				stable = append(stable, reviewDiagnosticIdentity(repair.Code, repair.Details))
+				identity := reviewDiagnosticIdentity(repair.Code, repair.Details)
+				if identity == "" {
+					return ""
+				}
+				stable = append(stable, identity)
 			}
 			slices.Sort(stable)
 			sig["repairs"] = stable
 		}
+	}
+	if len(sig) == 1 {
+		return ""
 	}
 	return reviewcoverage.Identity(sig)
 }

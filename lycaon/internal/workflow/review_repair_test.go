@@ -19,7 +19,7 @@ func TestReviewRepairBlocksOnceAndResumeRetainsWork(t *testing.T) {
 	setTestRegistry(t, mgr, blueprintMgr, conditions.TestRegistryDeps())
 	run := startReviewLoopRun(t.Context(), t, mgr)
 	for i := 0; i < 3; i++ {
-		msg := api.Message{ID: fmt.Sprintf("result-%d", i), WorkflowRunID: run.ID, ToolResult: &api.ToolResult{Tool: "submit_verdict", Outcome: api.ToolResultOutcomeRejected, AssistantMessageID: fmt.Sprintf("response-%d", i), ToolCallID: fmt.Sprintf("call-%d", i), Codes: []string{"TOOL_ARGS_INVALID"}}}
+		msg := api.Message{ID: fmt.Sprintf("result-%d", i), WorkflowRunID: run.ID, ToolResult: &api.ToolResult{Tool: "submit_verdict", Outcome: api.ToolResultOutcomeRejected, AssistantMessageID: fmt.Sprintf("response-%d", i), ToolCallID: fmt.Sprintf("call-%d", i), Codes: []string{"TOOL_ARGS_INVALID"}, Feedback: []api.ToolFeedback{{Code: "TOOL_ARGS_INVALID", Details: map[string]any{"field": "verdict.coverage"}}}}}
 		testutil.FailErr(t, "record repair", mgr.RecordReviewToolResult(t.Context(), run.SessionID, msg))
 		testutil.FailErr(t, "replay repair", mgr.RecordReviewToolResult(t.Context(), run.SessionID, msg))
 	}
@@ -71,11 +71,11 @@ func TestReviewRepairFingerprintUsesStructuredDefects(t *testing.T) {
 	feedback := func(path string, reason string) []api.ToolFeedback {
 		return []api.ToolFeedback{{Code: "TOOL_ARGS_INVALID", Details: map[string]any{"field": path, "reason": reason}}}
 	}
-	first := reviewIssueFingerprint(feedback("verdict.coverage", "wording one"), nil)
-	if first != reviewIssueFingerprint(feedback("verdict.coverage", "wording two"), nil) {
+	first := reviewIssueFingerprint(feedback("verdict.coverage", "wording one"))
+	if first != reviewIssueFingerprint(feedback("verdict.coverage", "wording two")) {
 		t.Fatal("diagnostic prose changes repair identity")
 	}
-	if first == reviewIssueFingerprint(feedback("verdict.claims", "wording one"), nil) {
+	if first == reviewIssueFingerprint(feedback("verdict.claims", "wording one")) {
 		t.Fatal("distinct defects share repair identity")
 	}
 }
@@ -166,11 +166,11 @@ func TestReviewRepairFingerprintTracksAllRepairsAsASet(t *testing.T) {
 	}
 	first := verdictRepair{Code: "TOOL_ARGS_INVALID", Details: map[string]any{"field": "coverage"}}
 	second := verdictRepair{Code: "TOOL_ARGS_INVALID", Details: map[string]any{"field": "claims"}}
-	before := reviewIssueFingerprint(feedback(first, second), nil)
-	if before != reviewIssueFingerprint(feedback(second, first), nil) {
+	before := reviewIssueFingerprint(feedback(first, second))
+	if before != reviewIssueFingerprint(feedback(second, first)) {
 		t.Fatal("repair ordering changed defect identity")
 	}
-	if before == reviewIssueFingerprint(feedback(first), nil) {
+	if before == reviewIssueFingerprint(feedback(first)) {
 		t.Fatal("fixing a secondary repair did not change defect identity")
 	}
 }
@@ -187,5 +187,19 @@ func TestReviewVerdictsDoesNotTreatUnreadableLedgerAsEmpty(t *testing.T) {
 	_, err := ReviewVerdicts(t.Context(), unavailableReviewLedger{want}, &api.WorkflowRun{ID: "run", SessionID: "session"}, manifest)
 	if !errors.Is(err, want) {
 		t.Fatalf("ledger failure hidden: %v", err)
+	}
+}
+
+func TestReviewRepairDoesNotInferSameDefectFromCodeOrProse(t *testing.T) {
+	identity := reviewIssueFingerprint([]api.ToolFeedback{{Code: ReviewLoopVerdictInvalidCode, Details: map[string]any{"reason": "invalid claim"}}})
+	if identity != "" {
+		t.Fatal("unstructured diagnostic treated as a proven repeated defect")
+	}
+	var episode ReviewRepair
+	for i := 0; i < 3; i++ {
+		episode.observeResponse(fmt.Sprint(i), fmt.Sprint(i), identity)
+	}
+	if episode.Repeated != 0 || len(episode.Responses) != 3 {
+		t.Fatalf("unstructured errors charged the wrong budget: %+v", episode)
 	}
 }
