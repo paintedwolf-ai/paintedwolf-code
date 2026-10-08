@@ -229,11 +229,13 @@ def run_den(scope):
     shutil.rmtree(reports, ignore_errors=True)
     include = [f"--coverage.include={Path(p).relative_to('lycaon-den').as_posix()}" for p in changed]
     # Only tests related to the changed sources measure them, so a changed
-    # config or lockfile must not widen the run to the whole suite.
+    # config or lockfile must not widen the run to the whole suite; Vitest's
+    # CLI has no flag for that, so vitest.config.ts reads PW_VITEST_CHANGED_ONLY.
     code = subprocess.call(["bash", str(ROOT / "scripts" / "vitest-digest.sh"), "--name", "den:coverage:changes", "--",
-                            "--changed", scope.base, "--forceRerunTriggers=.no-forced-rerun", "--passWithNoTests",
+                            "--changed", scope.base, "--passWithNoTests",
                             "--coverage", "--coverage.reporter=json",
-                            f"--coverage.reportsDirectory={reports}", *include], cwd=ROOT)
+                            f"--coverage.reportsDirectory={reports}", *include], cwd=ROOT,
+                           env={**os.environ, "PW_VITEST_CHANGED_ONLY": "1"})
     result = reports / "coverage-final.json"
     if code != 0 or not result.exists():
         return [Finding("error", "den", "tests failed, so changed coverage was not measured; fix the tests above")], True, \

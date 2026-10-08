@@ -9,6 +9,8 @@ import {
 
 const includePerf = process.env.LYCAON_VITEST_PERF === "1";
 const vitestFast = process.env.LYCAON_VITEST_FAST === "1";
+// Changed-coverage runs measure only tests related to changed sources, whatever else changed.
+const changedOnly = process.env.PW_VITEST_CHANGED_ONLY === "1";
 const denRoot = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(denRoot, "..");
 
@@ -67,6 +69,7 @@ export default defineConfig({
   test: {
     globals: true,
     maxWorkers: maxWorkers(),
+    ...(changedOnly ? { forceRerunTriggers: [] } : {}),
     testTimeout: VITEST_DEFAULT_TIMEOUT_MS,
     hookTimeout: VITEST_HOOK_TIMEOUT_MS,
     setupFiles: ["./vitest.setup.ts"],
