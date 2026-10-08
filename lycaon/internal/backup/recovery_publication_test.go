@@ -156,7 +156,7 @@ func publishFixtureRecoveryWithoutPointer(t *testing.T, root string) (CreateOpts
 	testutil.FailErr(t, "create recovery namespace", os.MkdirAll(recoveryRoot, 0o700))
 	name := uuid.NewString()
 	temporary := ".backup-snapshot-" + name
-	manifest, err := captureRecoveryDirectory(t.Context(), opts, filepath.Join(recoveryRoot, temporary))
+	manifest, _, err := captureRecoveryDirectory(t.Context(), opts, filepath.Join(recoveryRoot, temporary))
 	testutil.FailErr(t, "capture complete temporary snapshot", err)
 	inventory, err := manifestInventory(manifest)
 	testutil.FailErr(t, "bind captured inventory", err)

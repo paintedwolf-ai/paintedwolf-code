@@ -85,9 +85,10 @@ func TestStressEditorWorkingYearWithRecovery(t *testing.T) {
 	live := yearFileUsage(t, config)
 	plan, err := db.PlanUpgrade(t.Context(), database)
 	testutil.FailErr(t, "plan baseline", err)
+	var captureUsage []backup.RecoveryCaptureUsage
 	for update := 1; update <= 3; update++ {
 		version := fmt.Sprintf("1.0.%d", update)
-		testutil.FailErr(t, "capture independent recovery", backup.CaptureUpgradeRecovery(t.Context(), backup.CreateOpts{ConfigDir: config, DBPath: dbPath, SQLDB: database, SchemaUserVersion: db.SchemaVersion, AppVersion: fmt.Sprintf("1.0.%d", update-1)}, plan, version))
+		testutil.FailErr(t, "capture independent recovery", backup.CaptureUpgradeRecovery(t.Context(), backup.CreateOpts{ConfigDir: config, DBPath: dbPath, SQLDB: database, SchemaUserVersion: db.SchemaVersion, AppVersion: fmt.Sprintf("1.0.%d", update-1), OnRecoveryCapture: func(usage backup.RecoveryCaptureUsage) { captureUsage = append(captureUsage, usage) }}, plan, version))
 		if update < 3 {
 			testutil.FailErr(t, "complete preceding update", backup.CompleteUpgradeRecovery(config, version))
 		}
@@ -109,9 +110,16 @@ func TestStressEditorWorkingYearWithRecovery(t *testing.T) {
 	testutil.FailErr(t, "count retained versions", database.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM source_versions WHERE capture_state='stored' AND landing='working_file'`).Scan(&versions))
 	testutil.FailErr(t, "count snapshot cache", database.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM editor_document_snapshots`).Scan(&snapshots))
 	t.Logf("250 days x 100 real saves, ten %d-byte sources: live logical/allocated bytes %+v; live plus three recovery captures %+v; source bodies %+v; native editor %+v; save identities %d; source versions %d; cached snapshots %d", len("// revision 000000\n")+body.Len(), live, peak, yearFileUsage(t, filepath.Join(config, "source-content")), yearFileUsage(t, filepath.Join(config, editoroutbox.Directory())), saves, versions, snapshots)
-	// Three retained upgrade-recovery copies of the whole store dominate the peak.
-	if saves != 25000 || versions < 25000 || max(peak.logical, peak.allocated) > 10<<30 {
-		t.Fatalf("annual workload: saves=%d versions=%d peak=%+v", saves, versions, peak)
+	var databaseCopies, payloadCopied, payloadShared int64
+	for _, usage := range captureUsage {
+		databaseCopies += usage.DatabaseBytes
+		payloadCopied += usage.PayloadCopiedBytes
+		payloadShared += usage.PayloadSharedBytes
+	}
+	t.Logf("recovery materialization: captures=%d database copies=%d payload copied=%d payload shared=%d", len(captureUsage), databaseCopies, payloadCopied, payloadShared)
+	// Kernel clones are logical payload, not another independent body allocation.
+	if saves != 25000 || versions < 25000 || len(captureUsage) != 3 || max(live.logical, live.allocated) > 3<<30 || databaseCopies > 7<<30 || payloadCopied > 1<<30 || payloadCopied+payloadShared > 3*live.logical {
+		t.Fatalf("annual workload: saves=%d versions=%d live=%+v database copies=%d payload copied/shared=%d/%d", saves, versions, live, databaseCopies, payloadCopied, payloadShared)
 	}
 }
 

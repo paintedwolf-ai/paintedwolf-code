@@ -32,6 +32,7 @@ type CreateOpts struct {
 	AppVersion        string
 	SchemaUserVersion int
 	Now               time.Time
+	OnRecoveryCapture func(RecoveryCaptureUsage)
 }
 
 type archiveSource struct {
@@ -63,7 +64,7 @@ func Create(ctx context.Context, opts CreateOpts, destPath string) (Manifest, er
 	}
 	defer func() { _ = os.RemoveAll(tmpDir) }()
 
-	if err := captureEditorOutbox(ctx, opts.ConfigDir, tmpDir); err != nil {
+	if err := captureEditorOutbox(ctx, opts.ConfigDir, tmpDir, nil); err != nil {
 		return Manifest{}, err
 	}
 	snapshotPath := filepath.Join(tmpDir, storeRelPath)
