@@ -337,6 +337,7 @@ export function attachKnownBackend(
   markSidecarConnected(appStore);
   const generation = backendGeneration;
   void readHostHandshake(client, generation).then((host) => {
+    assertCurrentBackend(generation, client);
     if (host.compatible) resubscribeForegroundProjectEvents(appStore);
   }).catch(() => undefined);
   return client;
