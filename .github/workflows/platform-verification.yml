@@ -23,11 +23,14 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: lycaon/go.mod
-          cache-dependency-path: lycaon/go.sum
+          cache: false
+
+      - uses: ./.github/actions/cache-go
 
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version-file: .bun-version
+          no-cache: true
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -69,7 +72,9 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: lycaon/go.mod
-          cache-dependency-path: lycaon/go.sum
+          cache: false
+
+      - uses: ./.github/actions/cache-go
 
       - name: Applied Seatbelt confinement
         timeout-minutes: 60
@@ -92,7 +97,9 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: lycaon/go.mod
-          cache-dependency-path: lycaon/go.sum
+          cache: false
+
+      - uses: ./.github/actions/cache-go
 
       - name: Set up maintained OpenGrep
         uses: ./.github/actions/setup-opengrep
@@ -141,7 +148,9 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: lycaon/go.mod
-          cache-dependency-path: lycaon/go.sum
+          cache: false
+
+      - uses: ./.github/actions/cache-go
 
       - name: Fetch pinned git engine
         run: ./task gitengine:fetch
@@ -176,11 +185,14 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: lycaon/go.mod
-          cache-dependency-path: lycaon/go.sum
+          cache: false
+
+      - uses: ./.github/actions/cache-go
 
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version-file: .bun-version
+          no-cache: true
 
       - name: Install frontend dependencies
         working-directory: lycaon-den

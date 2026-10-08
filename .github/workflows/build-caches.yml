@@ -1,7 +1,10 @@
-name: Release build cache
+name: Build caches
 
-# Compiles what a tag release compiles, with the same flags and no signing
-# credentials, so tag runs restore warm Go and Tauri builds saved on main.
+# The only workflow that saves caches. A run can restore only caches saved on
+# its own ref or on main, so merge-queue, pull request, and tag runs restore
+# what this saves on main and save nothing themselves. Keys follow toolchains
+# and dependency locks, so most pushes find every key present and skip the
+# compiles.
 on:
   push:
     branches: [main]
@@ -14,14 +17,16 @@ permissions:
   contents: read
 
 concurrency:
-  group: release-build-cache
+  group: build-caches
   cancel-in-progress: true
 
 env:
   DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
 
 jobs:
-  warm:
+  # Compiles what a tag release compiles, with the same flags and no signing
+  # credentials, so tag runs restore warm Go and Tauri builds.
+  release:
     runs-on: macos-15
     timeout-minutes: 60
     defaults:
@@ -38,23 +43,28 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version-file: .bun-version
+          no-cache: true
 
       - name: Install the pinned Rust toolchain
         run: rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)" --profile minimal
 
+      # The verification job below builds and saves it on every run.
       - name: Restore the decision engine build
         uses: ./.github/actions/cache-decide
 
       - name: Download or restore qualified maintained engine
         uses: ./.github/actions/setup-opengrep
+        with:
+          save: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Download pinned Bialy heads
         uses: ./.github/actions/setup-bialy
 
       - name: Cache the release build
+        id: build
         uses: ./.github/actions/cache-release-build
         with:
-          save: 'true'
+          save: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Install the notices tools
         run: |
@@ -73,6 +83,7 @@ jobs:
 
       # Mirrors scripts/stage-engine.sh --release; link flags do not affect cached packages.
       - name: Compile the release sidecar
+        if: steps.build.outputs.cache-hit != 'true'
         working-directory: lycaon
         run: |
           set -euo pipefail
@@ -83,6 +94,7 @@ jobs:
 
       # Mirrors scripts/den-build-bundle.sh up to bundling.
       - name: Compile the release desktop shell
+        if: steps.build.outputs.cache-hit != 'true'
         run: |
           set -euo pipefail
           export MACOSX_DEPLOYMENT_TARGET="$(tr -d '[:space:]' < lycaon/internal/platformfloor/macos_floor.txt)"
@@ -94,3 +106,74 @@ jobs:
           cd lycaon-den
           bun install --frozen-lockfile
           CI=false bun run tauri build --no-bundle --target "$(rustc --print host-tuple)"
+
+  # Seeds the caches setup-verification restores in the merge queue, pull
+  # requests, and nightly runs, by compiling the dependencies their lanes build.
+  verification:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-latest, macos-15]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    env:
+      PW_TEST_HOST: dedicated
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - id: setup
+        uses: ./.github/actions/setup-verification
+        with:
+          native: 'true'
+          save-caches: ${{ github.ref == 'refs/heads/main' }}
+
+      - uses: ./.github/actions/setup-bialy
+
+      - name: Compile the Go module
+        if: steps.setup.outputs.go-cache-hit != 'true'
+        run: ./task build
+
+      # The macOS platform jobs build the development sidecar, which also
+      # builds the decision engine whenever its cache key changes.
+      - name: Build the development sidecar
+        if: runner.os == 'macOS'
+        run: ./task build:lycaon-dev
+
+      # Native lanes test the shell, and macOS lanes also run it and its examples.
+      - name: Compile the desktop shell tests
+        if: steps.setup.outputs.rust-cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          bash scripts/ensure-tauri-binaries.sh
+          cd lycaon-den/src-tauri
+          cargo test --all-targets --no-run
+
+  usage:
+    if: always()
+    needs: [release, verification]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+    steps:
+      - name: Report repository cache usage
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          {
+            echo '### Repository caches'
+            gh api "repos/${REPO}/actions/cache/usage" \
+              --jq '"\(.active_caches_count) caches, \(.active_caches_size_in_bytes / 1048576 | floor) MiB of the 10 GiB limit"'
+            echo
+            echo '| Ref | MiB | Key |'
+            echo '|---|---|---|'
+            gh api --paginate "repos/${REPO}/actions/caches?per_page=100&sort=size_in_bytes" \
+              --jq '.actions_caches[] | "| \(.ref) | \(.size_in_bytes / 1048576 | floor) | `\(.key)` |"'
+          } >> "${GITHUB_STEP_SUMMARY}"
