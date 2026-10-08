@@ -22,7 +22,6 @@ func TestVerdictRepairReportsIndependentShapeErrors(t *testing.T) {
 }
 
 func TestVerdictRepairsRetainEveryStructuredCode(t *testing.T) {
-	def := workflowdef.ReviewLoopDef{}
 	out := ReviewLoopVerdictOutcome{
 		InventoryIssue: &InventoryIssue{ReportDocumentIssue: guidance.ReportDocumentIssue{Code: SubmitVerdictScansPendingCode}},
 		MissingAgents:  []string{"skeptic"},
@@ -30,7 +29,7 @@ func TestVerdictRepairsRetainEveryStructuredCode(t *testing.T) {
 		QuestionIssue:  tools.AsToolReject(rejectReviewQuestion("current_review_required", "question/c1")),
 		CoverageIssue:  &tools.ToolReject{Code: ReviewLoopVerdictInvalidCode, Data: map[string]any{"reason": "stale coverage revision"}},
 	}
-	repairs := verdictRepairs(def, out)
+	repairs := verdictRepairs("", out)
 	want := []string{SubmitVerdictScansPendingCode, SubmitVerdictReviewerMissingCode, out.GroundingCode, submitVerdictQuestionInvalidCode, ReviewLoopVerdictInvalidCode}
 	if len(repairs) != len(want) {
 		t.Fatalf("repairs = %+v", repairs)
@@ -53,14 +52,14 @@ func TestVerdictRepairsStateEachCodeOnce(t *testing.T) {
 		InventoryIssue: &InventoryIssue{ReportDocumentIssue: guidance.ReportDocumentIssue{Code: SubmitVerdictScansPendingCode}},
 		CoverageIssue:  &tools.ToolReject{Code: SubmitVerdictScansPendingCode, Data: map[string]any{}},
 	}
-	repairs := verdictRepairs(workflowdef.ReviewLoopDef{}, out)
+	repairs := verdictRepairs("", out)
 	if len(repairs) != 1 || repairs[0].Code != SubmitVerdictScansPendingCode {
 		t.Fatalf("pending scans repeated across channels: %+v", repairs)
 	}
 }
 
 func TestVerdictInventoryRepairUsesToolCode(t *testing.T) {
-	repairs := verdictRepairs(workflowdef.ReviewLoopDef{}, ReviewLoopVerdictOutcome{InventoryIssue: &InventoryIssue{ReportDocumentIssue: guidance.ReportDocumentIssue{Code: guidance.ReportInventoryUnaccountedCode}}})
+	repairs := verdictRepairs("", ReviewLoopVerdictOutcome{InventoryIssue: &InventoryIssue{ReportDocumentIssue: guidance.ReportDocumentIssue{Code: guidance.ReportInventoryUnaccountedCode}}})
 	if len(repairs) != 1 || repairs[0].Code != SubmitVerdictInventoryUnaccountedCode {
 		t.Fatalf("report code escaped into verdict rejection: %+v", repairs)
 	}

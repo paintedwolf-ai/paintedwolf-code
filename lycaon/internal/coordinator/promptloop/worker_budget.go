@@ -58,7 +58,7 @@ func workerJobLive(status api.WorkerStatus) bool {
 // awaitWorkerBudgetAnswer holds the final round until the coordinator answers
 // the open request, the job stops, or the wait elapses. The request stays on
 // the job after a timeout so a resume inherits it.
-func (l *PromptLoop) awaitWorkerBudgetAnswer(ctx context.Context, sess *api.Session, st *promptLoopTurnState) {
+func (l turnNudges) awaitWorkerBudgetAnswer(ctx context.Context, sess *api.Session, st *promptLoopTurnState) {
 	w := &st.workerBudget
 	w.heldFor = w.requestedAt
 	wait := l.Deps.WorkerBudgetAnswerWait
@@ -101,7 +101,7 @@ func (l *PromptLoop) awaitWorkerBudgetAnswer(ctx context.Context, sess *api.Sess
 
 // maybeWorkerBudgetAnswerNudge tells a worker once how its coordinator
 // answered: a raised ceiling, or a decline.
-func (l *PromptLoop) maybeWorkerBudgetAnswerNudge(
+func (l turnNudges) maybeWorkerBudgetAnswerNudge(
 	ctx context.Context,
 	sess *api.Session,
 	sessionID string,
@@ -109,7 +109,7 @@ func (l *PromptLoop) maybeWorkerBudgetAnswerNudge(
 	iterIndex, maxIter int,
 	st *promptLoopTurnState,
 ) ([]api.Message, error) {
-	if l == nil || sess == nil {
+	if l.PromptLoop == nil || sess == nil {
 		return history, nil
 	}
 	w := &st.workerBudget

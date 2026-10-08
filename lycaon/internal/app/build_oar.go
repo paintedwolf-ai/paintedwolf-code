@@ -17,7 +17,7 @@ import (
 
 // wireOARBlockPlane loads OAR rules, enables catalog Anchors for active
 // families, and attaches the Emit/Binding block plane.
-func (b *serveBuilder) wireOARBlockPlane() error {
+func (b toolWiring) wireOARBlockPlane() error {
 	if b.toolRuntime == nil || b.mgr == nil {
 		return fmt.Errorf("oar: tool runtime and session manager required")
 	}
@@ -39,7 +39,7 @@ func (b *serveBuilder) wireOARBlockPlane() error {
 	if err := oar.InstallCapabilityBundled(schemaDir); err != nil {
 		return fmt.Errorf("oar: %w", err)
 	}
-	matcher, err := b.loadSecretMatcher()
+	matcher, err := sessionWiring(b).loadSecretMatcher()
 	if err != nil {
 		return fmt.Errorf("oar secretmatch detector: %w", err)
 	}

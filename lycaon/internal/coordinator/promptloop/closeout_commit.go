@@ -36,14 +36,14 @@ type closeoutCommitOutcome struct {
 	assistantMsg       api.Message
 }
 
-func (l *PromptLoop) maxCitationGroundingRetries() int {
-	if l != nil && l.Deps.MaxCloseoutCitationGroundingRetries > 0 {
+func (l turnCloseout) maxCitationGroundingRetries() int {
+	if l.PromptLoop != nil && l.Deps.MaxCloseoutCitationGroundingRetries > 0 {
 		return l.Deps.MaxCloseoutCitationGroundingRetries
 	}
 	return limits.DefaultCitationGroundingRetries
 }
 
-func (l *PromptLoop) handleAcceptedCloseoutReport(
+func (l turnCloseout) handleAcceptedCloseoutReport(
 	ctx context.Context,
 	sess *api.Session,
 	sessionID, userPrompt, surfaceID string,
@@ -53,7 +53,7 @@ func (l *PromptLoop) handleAcceptedCloseoutReport(
 	read guidance.CloseoutRead,
 ) (closeoutCommitOutcome, error) {
 	var out closeoutCommitOutcome
-	if l == nil {
+	if l.PromptLoop == nil {
 		return out, fmt.Errorf("closeout grounding not configured")
 	}
 	report := read.Report
@@ -140,12 +140,12 @@ func (l *PromptLoop) handleAcceptedCloseoutReport(
 			break
 		}
 	}
-	if err := l.closeCoordinatorDraftSlot(ctx, sessionID, st, committed.ID); err != nil {
+	if err := turnNudges(l).closeCoordinatorDraftSlot(ctx, sessionID, st, committed.ID); err != nil {
 		return out, err
 	}
 	l.completeCloseout(ctx, sessionID, st)
 	if committed.Grounding != nil && committed.Grounding.Traced {
-		l.maybeNotifyGroundedSynthesisAccepted(ctx, sess, sessionID, surfaceID, history, workersIdleForSynthesis(l, ctx, sess))
+		l.maybeNotifyGroundedSynthesisAccepted(ctx, sess, sessionID, surfaceID, history, workersIdleForSynthesis(l.PromptLoop, ctx, sess))
 	}
 	out.committed = true
 	out.history = history
@@ -153,7 +153,7 @@ func (l *PromptLoop) handleAcceptedCloseoutReport(
 	return out, nil
 }
 
-func (l *PromptLoop) rejectCloseoutGrounding(
+func (l turnCloseout) rejectCloseoutGrounding(
 	ctx context.Context,
 	sessionID string,
 	st *promptLoopTurnState,
@@ -193,11 +193,11 @@ func (l *PromptLoop) rejectCloseoutGrounding(
 	if err != nil {
 		return out, err
 	}
-	history, err = l.retractRejectedAssistantTurn(ctx, sessionID, history, assistantMessageID, closeoutDraftSlotID(st, assistantMessageID), guidance.NewRefusal(code, nudge))
+	history, err = toolInvocations(l).retractRejectedAssistantTurn(ctx, sessionID, history, assistantMessageID, closeoutDraftSlotID(st, assistantMessageID), guidance.NewRefusal(code, nudge))
 	if err != nil {
 		return out, err
 	}
-	history, err = l.appendHostNudge(ctx, sessionID, history, HostNudge{Content: nudge, SignalID: string(budget.kick)}, "", st)
+	history, err = turnNudges(l).appendHostNudge(ctx, sessionID, history, HostNudge{Content: nudge, SignalID: string(budget.kick)}, "", st)
 	if err != nil {
 		return out, err
 	}
@@ -216,8 +216,8 @@ func (l *PromptLoop) rejectCloseoutGrounding(
 }
 
 // Rendering failures retain the host marker for the requested kick.
-func (l *PromptLoop) hostKickRenderer(ctx context.Context) guard.HostKickRenderer {
-	if l == nil || l.Deps.RenderHostKick == nil {
+func (l turnCloseout) hostKickRenderer(ctx context.Context) guard.HostKickRenderer {
+	if l.PromptLoop == nil || l.Deps.RenderHostKick == nil {
 		return nil
 	}
 	render := l.Deps.RenderHostKick
@@ -237,8 +237,8 @@ func closeoutDraftSlotID(st *promptLoopTurnState, assistantMessageID string) str
 	return ""
 }
 
-func (l *PromptLoop) pinnedCloseoutSynthesis(ctx context.Context, sessionID string) string {
-	if l == nil || l.Deps.CloseoutStallState == nil {
+func (l turnCloseout) pinnedCloseoutSynthesis(ctx context.Context, sessionID string) string {
+	if l.PromptLoop == nil || l.Deps.CloseoutStallState == nil {
 		return ""
 	}
 	retained := l.Deps.CloseoutStallState(ctx, sessionID)
@@ -250,8 +250,8 @@ func (l *PromptLoop) pinnedCloseoutSynthesis(ctx context.Context, sessionID stri
 
 // repairsReportDocument reports whether the session's closeout is in a report
 // document repair: a refusal of its fields is retained and not yet answered.
-func (l *PromptLoop) repairsReportDocument(ctx context.Context, sessionID string) bool {
-	if l == nil || l.Deps.CloseoutStallState == nil {
+func (l turnCloseout) repairsReportDocument(ctx context.Context, sessionID string) bool {
+	if l.PromptLoop == nil || l.Deps.CloseoutStallState == nil {
 		return false
 	}
 	retained := l.Deps.CloseoutStallState(ctx, sessionID)
@@ -265,7 +265,7 @@ func closeoutHasCitationIssues(gc *oar.GuardContext) bool {
 	return gc.RejectObservation == "citations_required" || len(gc.UnobservedCitedHandles) > 0 || len(gc.UnobservedCitedURLs) > 0 || gc.CitationUnverifiable
 }
 
-func (l *PromptLoop) completeCloseout(ctx context.Context, sessionID string, st *promptLoopTurnState) {
+func (l turnCloseout) completeCloseout(ctx context.Context, sessionID string, st *promptLoopTurnState) {
 	if st != nil {
 		st.closeoutRetry = closeoutRetryState{}
 	}

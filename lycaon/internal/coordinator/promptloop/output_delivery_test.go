@@ -37,7 +37,7 @@ func TestOutputDeliveryRefusalRetainsExecutionAndEvaluatesOnce(t *testing.T) {
 					run.failure = &api.InvocationFailure{Code: "ORIGINAL_FAILURE", Class: api.FailureClassOwnerError}
 				}
 				data := map[string]any{"bytes": 2048, "cap": 1024}
-				got := loop.refuseOutputDelivery(t.Context(), sess, api.ToolCall{Name: "command"}, tools.ToolContext{Agent: "coordinator"}, run, code, data)
+				got := toolInvocations{loop}.refuseOutputDelivery(t.Context(), sess, api.ToolCall{Name: "command"}, tools.ToolContext{Agent: "coordinator"}, run, code, data)
 				details := got.facts.FeedbackFor(code).Details
 				if got.facts.PrimaryCode() != code || !got.facts.HasCode("PRIOR_ADVISORY") {
 					t.Fatalf("settled refusal identity or prior advisory lost: %+v", got.facts)
@@ -68,7 +68,7 @@ func TestOutputDeliveryRefusalRetainsExecutionAndEvaluatesOnce(t *testing.T) {
 func TestOutputSpillRefusalReturnsObservationWithoutClaimingASpill(t *testing.T) {
 	loop := NewPromptLoopForTest(PromptLoopDeps{DataDir: t.TempDir()})
 	content := `{"truncated":true,"value":"` + strings.Repeat("x", 2048) + `"}`
-	got := loop.truncateToolResultForSession(t.Context(), "command", toolResultStorageProjection{content: content}, content, 128, 1024, &api.Session{ID: "session", ProjectID: "project"})
+	got := toolInvocations{loop}.truncateToolResultForSession(t.Context(), "command", toolResultStorageProjection{content: content}, content, 128, 1024, &api.Session{ID: "session", ProjectID: "project"})
 	if got.reject == nil || got.reject.Code != tooloutput.ToolOutputSpillCapExceededCode {
 		t.Fatalf("spill observation = %+v", got)
 	}

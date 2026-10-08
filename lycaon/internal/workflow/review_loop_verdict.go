@@ -18,21 +18,6 @@ import (
 // ReviewLoopVerdictInvalidCode identifies an invalid review result.
 const ReviewLoopVerdictInvalidCode = "SUBMIT_VERDICT_INVALID"
 
-// VerdictEnum returns verdicts with the terminal value first.
-func VerdictEnum(def workflowdef.ReviewLoopDef) []string {
-	raw := strings.TrimSpace(def.VerdictSchema[workflowdef.VerdictDecisionKey])
-	if raw == "" {
-		return nil
-	}
-	var out []string
-	for _, v := range strings.Split(raw, "|") {
-		if v = strings.TrimSpace(v); v != "" {
-			out = append(out, v)
-		}
-	}
-	return out
-}
-
 // requiredVerdictFields returns required fields in stable order.
 func requiredVerdictFields(def workflowdef.ReviewLoopDef) []string {
 	var out []string
@@ -177,7 +162,7 @@ func ParseVerdictSetAsides(def workflowdef.ReviewLoopDef, verdict map[string]str
 // claims against the phase's statuses and the run's rules.
 func ValidateReviewLoopVerdict(def workflowdef.ReviewLoopDef, verdict map[string]string, rules VerdictRules) error {
 	var issues []error
-	enum := VerdictEnum(def)
+	enum := def.Decisions()
 	got := strings.TrimSpace(verdict[workflowdef.VerdictDecisionKey])
 	switch {
 	case len(enum) == 0:
@@ -198,7 +183,11 @@ func ValidateReviewLoopVerdict(def workflowdef.ReviewLoopDef, verdict map[string
 		issues = append(issues, fmt.Errorf("%s: undeclared verdict field(s): %s", ReviewLoopVerdictInvalidCode, strings.Join(undeclared, ", ")))
 	}
 	for _, field := range requiredVerdictFields(def) {
-		if strings.TrimSpace(verdict[field]) == "" {
+		value, present := verdict[field]
+		switch {
+		case !present:
+			issues = append(issues, fmt.Errorf("%s: required verdict field %q is missing", ReviewLoopVerdictInvalidCode, field))
+		case strings.TrimSpace(value) == "":
 			issues = append(issues, fmt.Errorf("%s: required verdict field %q is empty", ReviewLoopVerdictInvalidCode, field))
 		}
 	}
@@ -255,7 +244,7 @@ func validateVerdictClaim(def workflowdef.ReviewLoopDef, field string, c Verdict
 
 // The first declared decision value is terminal.
 func ReviewLoopVerdictTerminal(def workflowdef.ReviewLoopDef, verdict map[string]string) bool {
-	enum := VerdictEnum(def)
+	enum := def.Decisions()
 	if len(enum) == 0 {
 		return false
 	}

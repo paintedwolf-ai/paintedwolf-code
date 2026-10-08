@@ -90,7 +90,7 @@ func TestCloseoutRetryBudget_WorkflowConfiguredLimit(t *testing.T) {
 			},
 		},
 	}
-	budget := loop.closeoutRetryBudget(t.Context(), "sess-1", stDefault, guidance.ReportFenceUnreadableCode, "{}")
+	budget := turnCloseout{loop}.closeoutRetryBudget(t.Context(), "sess-1", stDefault, guidance.ReportFenceUnreadableCode, "{}")
 	if budget.limit != 3 {
 		t.Fatalf("expected default limit 3, got %d", budget.limit)
 	}
@@ -103,7 +103,7 @@ func TestCloseoutRetryBudget_WorkflowConfiguredLimit(t *testing.T) {
 			},
 		},
 	}
-	budget5 := loop.closeoutRetryBudget(t.Context(), "sess-1", stConfigured, guidance.ReportFenceUnreadableCode, "{}")
+	budget5 := turnCloseout{loop}.closeoutRetryBudget(t.Context(), "sess-1", stConfigured, guidance.ReportFenceUnreadableCode, "{}")
 	if budget5.limit != 5 {
 		t.Fatalf("expected configured limit 5, got %d", budget5.limit)
 	}

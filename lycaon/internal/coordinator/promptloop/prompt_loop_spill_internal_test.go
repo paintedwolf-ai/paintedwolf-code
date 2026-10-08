@@ -31,7 +31,7 @@ func TestTruncateToolResultForSessionClampAppendsRegisteredCode(t *testing.T) {
 	loop := NewPromptLoopForTest(PromptLoopDeps{
 		HintConfig: loadCoordinatorTestHintConfig(t),
 	})
-	got := loop.truncateToolResultForSession(t.Context(), "find", toolResultStorageProjection{content: string(payload)}, string(payload), 8192, 0, &api.Session{ID: "s1"})
+	got := toolInvocations{loop}.truncateToolResultForSession(t.Context(), "find", toolResultStorageProjection{content: string(payload)}, string(payload), 8192, 0, &api.Session{ID: "s1"})
 	if !strings.Contains(got.content, "Code: TOOL_SURVEY_BYTE_CLAMPED") {
 		t.Fatalf("expected registered clamp banner, got %q", got.content)
 	}
@@ -54,7 +54,7 @@ func TestTruncateToolResultForSessionOverlaySpillsUnderProject(t *testing.T) {
 		HintConfig: loadCoordinatorTestHintConfig(t),
 		DataDir:    dataDir,
 	})
-	got := loop.truncateToolResultForSession(t.Context(), "preview_overlay", toolResultStorageProjection{content: payload}, payload, 4096, 0, &api.Session{
+	got := toolInvocations{loop}.truncateToolResultForSession(t.Context(), "preview_overlay", toolResultStorageProjection{content: payload}, payload, 4096, 0, &api.Session{
 		ID:        "s1",
 		ProjectID: "proj-spill",
 	})
@@ -78,7 +78,7 @@ func TestTruncateToolResultForSessionGenericSpillsInHostData(t *testing.T) {
 		HintConfig: loadCoordinatorTestHintConfig(t),
 		DataDir:    dataDir,
 	})
-	got := loop.truncateToolResultForSession(t.Context(), "read", toolResultStorageProjection{content: payload}, payload, 512, 0, &api.Session{
+	got := toolInvocations{loop}.truncateToolResultForSession(t.Context(), "read", toolResultStorageProjection{content: payload}, payload, 512, 0, &api.Session{
 		ID:        "s1",
 		ProjectID: "proj-spill",
 	})

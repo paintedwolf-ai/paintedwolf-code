@@ -25,7 +25,10 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (b *serveBuilder) wireDelegationWorkers() error {
+// delegationWiring wires delegation workers, workflow hooks, and background runners.
+type delegationWiring struct{ *serveBuilder }
+
+func (b delegationWiring) wireDelegationWorkers() error {
 	if err := b.wireWorkerServices(); err != nil {
 		return err
 	}
@@ -35,7 +38,7 @@ func (b *serveBuilder) wireDelegationWorkers() error {
 	return b.wireWorkerContext()
 }
 
-func (b *serveBuilder) wireWorkerServices() error {
+func (b delegationWiring) wireWorkerServices() error {
 	b.criteriaChecker = &delegation.GitInspectorCriteriaChecker{
 		Git:       b.gitMgr,
 		Inspector: b.simpleInspector,
@@ -106,7 +109,7 @@ func (b *serveBuilder) wireWorkerServices() error {
 	return nil
 }
 
-func (b *serveBuilder) configureDelegationWorkflow() error {
+func (b delegationWiring) configureDelegationWorkflow() error {
 	b.mgr.SetWorkflowSessionView(b.workflowMgr)
 	b.mgr.SetWorkflowToolAccessView(b.workflowMgr)
 	b.mgr.SetSessionWorkflowStop(b.workflowMgr)
@@ -145,9 +148,10 @@ func (b *serveBuilder) configureDelegationWorkflow() error {
 	b.workflowMgr.OnReviewLoopHeld = b.onWorkflowReviewLoopHeld
 	b.delegationMgr.OnCloseout = b.onDelegationCloseout
 	b.mgr.SetCoordinatorTurnFrameSource(&workflow.CoordinatorTurnFrameLoader{
-		Runs:         b.workflowMgr,
-		SessionStore: b.sessionWorkflowStore,
-		ConfigRoot:   b.configRoot,
+		Runs:           b.workflowMgr,
+		SessionStore:   b.sessionWorkflowStore,
+		ConfigRoot:     b.configRoot,
+		VerdictCatalog: b.sessionVerdictCatalog,
 	})
 	if b.synthesisCurator != nil {
 		b.mgr.SetSynthesisCurator(b.synthesisCurator)
@@ -155,7 +159,7 @@ func (b *serveBuilder) configureDelegationWorkflow() error {
 	return nil
 }
 
-func (b *serveBuilder) wireWorkerContext() error {
+func (b delegationWiring) wireWorkerContext() error {
 	personaContract, err := prompts.LoadPersonaContract()
 	if err != nil {
 		return fmt.Errorf("persona contract: %w", err)
@@ -214,7 +218,7 @@ func (b *serveBuilder) wireWorkerContext() error {
 	return nil
 }
 
-func (b *serveBuilder) onWorkflowPhaseEnter(ctx context.Context, rc *workflow.RunContext, def workflowdef.PhaseDef) {
+func (b delegationWiring) onWorkflowPhaseEnter(ctx context.Context, rc *workflow.RunContext, def workflowdef.PhaseDef) {
 	if rc == nil {
 		return
 	}
@@ -319,7 +323,7 @@ func (b *serveBuilder) onWorkflowPhaseEnter(ctx context.Context, rc *workflow.Ru
 	}
 }
 
-func (b *serveBuilder) onWorkflowPhaseReenter(ctx context.Context, rc *workflow.RunContext, def workflowdef.PhaseDef) {
+func (b delegationWiring) onWorkflowPhaseReenter(ctx context.Context, rc *workflow.RunContext, def workflowdef.PhaseDef) {
 	if rc == nil {
 		return
 	}
@@ -335,7 +339,7 @@ func (b *serveBuilder) onWorkflowPhaseReenter(ctx context.Context, rc *workflow.
 	b.mgr.Emit(ctx, rc.SessionID, id, b.mgr.CoordinatorEnvelopeForWorkerCycleTerminal(ctx, rc.SessionID, ""))
 }
 
-func (b *serveBuilder) onWorkflowPhaseAutoAdvanced(ctx context.Context, sessionID, runID, previousPhase, newPhase string) {
+func (b delegationWiring) onWorkflowPhaseAutoAdvanced(ctx context.Context, sessionID, runID, previousPhase, newPhase string) {
 	run, runErr := b.workflowMgr.Get(context.WithoutCancel(ctx), runID)
 	if runErr != nil || run == nil || run.Status != wire.WorkflowRunStatusRunning {
 		return
@@ -375,7 +379,7 @@ func (b *serveBuilder) onWorkflowPhaseAutoAdvanced(ctx context.Context, sessionI
 	b.mgr.NudgeCoordinatorLoop(ctx, sessionID, anchor.PhaseAdvanced, "", "", anchor.Envelope{})
 }
 
-func (b *serveBuilder) onWorkflowRunCompleted(ctx context.Context, run *wire.WorkflowRun) {
+func (b delegationWiring) onWorkflowRunCompleted(ctx context.Context, run *wire.WorkflowRun) {
 	if run == nil || run.Status != wire.WorkflowRunStatusComplete {
 		return
 	}
@@ -384,7 +388,7 @@ func (b *serveBuilder) onWorkflowRunCompleted(ctx context.Context, run *wire.Wor
 	}
 }
 
-func (b *serveBuilder) onWorkflowRunResumed(ctx context.Context, run *wire.WorkflowRun) {
+func (b delegationWiring) onWorkflowRunResumed(ctx context.Context, run *wire.WorkflowRun) {
 	active, err := b.workflowMgr.GetActive(ctx, run.SessionID)
 	if err != nil || active == nil || active.ID != run.ID || active.Status != wire.WorkflowRunStatusRunning {
 		return
@@ -396,7 +400,7 @@ func (b *serveBuilder) onWorkflowRunResumed(ctx context.Context, run *wire.Workf
 	b.mgr.NudgeCoordinatorLoop(ctx, run.SessionID, anchor.PhaseAdvanced, "", "", anchor.Envelope{})
 }
 
-func (b *serveBuilder) onWorkflowHumanApprovalAdvanced(ctx context.Context, run *wire.WorkflowRun) {
+func (b delegationWiring) onWorkflowHumanApprovalAdvanced(ctx context.Context, run *wire.WorkflowRun) {
 	if run == nil {
 		return
 	}
@@ -413,21 +417,21 @@ func (b *serveBuilder) onWorkflowHumanApprovalAdvanced(ctx context.Context, run 
 	b.mgr.NudgeCoordinatorLoop(ctx, sessionID, anchor.PhaseAdvanced, "", "", anchor.Envelope{})
 }
 
-func (b *serveBuilder) onWorkflowFeedbackPending(ctx context.Context, sessionID, _ string) {
+func (b delegationWiring) onWorkflowFeedbackPending(ctx context.Context, sessionID, _ string) {
 	b.mgr.Emit(ctx, sessionID, anchor.FeedbackPending, anchor.Envelope{})
 }
 
-func (b *serveBuilder) onWorkflowToolAskOpened(ctx context.Context, sessionID, _ string) {
+func (b delegationWiring) onWorkflowToolAskOpened(ctx context.Context, sessionID, _ string) {
 	b.coordRuntime.CoordinatorLoop().ParkForPendingUserInput(ctx, sessionID, "waiting for user ask")
 }
 
-func (b *serveBuilder) onWorkflowFeedbackResolved(ctx context.Context, sessionID, _, _, _ string) {
+func (b delegationWiring) onWorkflowFeedbackResolved(ctx context.Context, sessionID, _, _, _ string) {
 	b.mgr.DropCoordinatorKick(sessionID, anchor.FeedbackPending)
 	b.mgr.Emit(ctx, sessionID, anchor.FeedbackReceived, anchor.Envelope{})
 	b.mgr.NudgeCoordinatorLoop(ctx, sessionID, anchor.PhaseAdvanced, anchor.FeedbackReceived, "", anchor.Envelope{})
 }
 
-func (b *serveBuilder) onWorkflowReviewLoopHeld(ctx context.Context, sessionID string, decisionRequired bool) {
+func (b delegationWiring) onWorkflowReviewLoopHeld(ctx context.Context, sessionID string, decisionRequired bool) {
 	id := anchor.ReviewLoopContinue
 	if decisionRequired {
 		id = anchor.ReviewLoopDecide
@@ -436,9 +440,23 @@ func (b *serveBuilder) onWorkflowReviewLoopHeld(ctx context.Context, sessionID s
 	b.mgr.NudgeCoordinatorLoop(ctx, sessionID, anchor.PhaseAdvanced, id, "", anchor.Envelope{})
 }
 
-func (b *serveBuilder) onDelegationCloseout(ctx context.Context, _, sessionID, workflowRunID string) {
+func (b delegationWiring) onDelegationCloseout(ctx context.Context, _, sessionID, workflowRunID string) {
 	if strings.TrimSpace(workflowRunID) == "" {
 		return
 	}
 	_, _ = b.workflowMgr.TryAutoAdvance(ctx, workflowRunID)
+}
+
+// sessionVerdictCatalog is the session's effective submit_verdict schema, or
+// the registered one when the session has no catalog view.
+func (b delegationWiring) sessionVerdictCatalog(ctx context.Context, sessionID string) map[string]any {
+	if view := b.mgr.Catalog().ViewForSessionID(ctx, sessionID); view != nil && view.ToolSchemas != nil {
+		if meta, ok := view.ToolSchemas.ToolMeta("submit_verdict"); ok {
+			return meta.ArgsSchema
+		}
+	}
+	if meta, ok := b.toolRuntime.Registry.Meta("submit_verdict"); ok {
+		return meta.ArgsSchema
+	}
+	return nil
 }

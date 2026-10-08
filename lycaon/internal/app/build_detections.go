@@ -58,7 +58,7 @@ func (r *detectionRuntime) egressSource() *detectionpack.EgressSource {
 }
 
 // Detection load failures leave approval facts incomplete.
-func (b *serveBuilder) wireDetectionPacks() {
+func (b toolWiring) wireDetectionPacks() {
 	semantics, semanticsErr := detectionpack.LoadActionSemantics(b.dataDir)
 	if semanticsErr != nil {
 		slog.Warn("detection action semantics unavailable", "error", semanticsErr)
@@ -82,8 +82,8 @@ func (b *serveBuilder) wireDetectionPacks() {
 	b.detections.publish(detectionpack.NewMatcher(cat))
 }
 
-func (b *serveBuilder) contributedDetectionPacks() []detectionpack.Pack {
-	if b == nil || b.deviceView == nil {
+func (b toolWiring) contributedDetectionPacks() []detectionpack.Pack {
+	if b.serveBuilder == nil || b.deviceView == nil {
 		return nil
 	}
 	return b.deviceView.DetectionPacks()

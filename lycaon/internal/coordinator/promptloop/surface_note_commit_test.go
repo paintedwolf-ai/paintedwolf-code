@@ -35,7 +35,7 @@ func TestCommitToolResultWithOptionalNoteAtomicPair(t *testing.T) {
 		Content:   "Grounded fact.",
 		Grounding: &api.CitationGrounding{Traced: true},
 	}
-	history, err := loop.commitToolResultWithOptionalNote(context.Background(), "sess", nil, toolMsg, nil, note, &last, nil)
+	history, err := toolInvocations{loop}.commitToolResultWithOptionalNote(context.Background(), "sess", nil, toolMsg, nil, note, &last, nil)
 	testutil.FailErr(t, "commit", err)
 	if len(batches) != 1 || len(batches[0]) != 2 {
 		t.Fatalf("batches = %+v want one pair", batches)
@@ -66,7 +66,7 @@ func TestCommitToolResultWithOptionalNoteAppendFailureCommitsNeither(t *testing.
 	last := time.Time{}
 	toolMsg := api.Message{ID: "tool-1", Role: api.MessageRoleTool, Content: "ok"}
 	stampCommitOrderTS(&toolMsg, &last)
-	history, err := loop.commitToolResultWithOptionalNote(context.Background(), "sess", []api.Message{{ID: "prior"}}, toolMsg, nil, &tools.AgentNoteCapture{
+	history, err := toolInvocations{loop}.commitToolResultWithOptionalNote(context.Background(), "sess", []api.Message{{ID: "prior"}}, toolMsg, nil, &tools.AgentNoteCapture{
 		MessageID: "note-1",
 		Content:   "note",
 	}, &last, nil)
@@ -89,7 +89,7 @@ func TestCommitToolResultNilNoteSingleAppend(t *testing.T) {
 	last := time.Time{}
 	toolMsg := api.Message{ID: "tool-1", Role: api.MessageRoleTool, Content: "ok"}
 	stampCommitOrderTS(&toolMsg, &last)
-	history, err := loop.commitToolResultWithOptionalNote(context.Background(), "sess", nil, toolMsg, nil, nil, &last, nil)
+	history, err := toolInvocations{loop}.commitToolResultWithOptionalNote(context.Background(), "sess", nil, toolMsg, nil, nil, &last, nil)
 	testutil.FailErr(t, "commit", err)
 	if len(sizes) != 1 || sizes[0] != 1 || len(history) != 1 {
 		t.Fatalf("sizes=%v history=%+v", sizes, history)
@@ -110,7 +110,7 @@ func TestExecuteOneToolCallDiscardsNoteOnEmitReject(t *testing.T) {
 	})
 	loop := NewPromptLoopForTest(PromptLoopDeps{Tools: reg})
 	sess := &api.Session{ID: "s1"}
-	out := loop.executeOneToolCall(context.Background(), sess, "s1", "", nil, api.ToolCall{
+	out := toolBatch{loop}.executeOneToolCall(context.Background(), sess, "s1", "", nil, api.ToolCall{
 		ID: "tc1", Name: "surface_note", Args: map[string]any{"summary": "x"},
 	}, tools.ToolContext{SessionID: "s1", Agent: "coordinator"}, nil, "", api.CoordinatorRunContext{}, false)
 	testutil.FailErr(t, "executeOneToolCall", out.endTurn)
@@ -138,7 +138,7 @@ func TestExecuteOneToolCallDiscardsNoteOnHandlerReject(t *testing.T) {
 		return "", &tools.ToolReject{Code: "SURFACE_NOTE_UNGROUNDED", Data: map[string]any{}}
 	})
 	loop := NewPromptLoopForTest(PromptLoopDeps{Tools: reg})
-	out := loop.executeOneToolCall(context.Background(), &api.Session{ID: "s1"}, "s1", "", nil, api.ToolCall{
+	out := toolBatch{loop}.executeOneToolCall(context.Background(), &api.Session{ID: "s1"}, "s1", "", nil, api.ToolCall{
 		ID: "tc1", Name: "surface_note", Args: map[string]any{"summary": "x"},
 	}, tools.ToolContext{SessionID: "s1", Agent: "coordinator"}, nil, "", api.CoordinatorRunContext{}, false)
 	testutil.FailErr(t, "executeOneToolCall", out.endTurn)
@@ -168,7 +168,7 @@ func TestCommitToolResultWithOptionalNoteRetryYieldsOnePair(t *testing.T) {
 	last := time.Time{}
 	toolMsg := api.Message{ID: "tool-1", Role: api.MessageRoleTool, Content: `{"status":"noted"}`}
 	stampCommitOrderTS(&toolMsg, &last)
-	history, err := loop.commitToolResultWithOptionalNote(context.Background(), "sess", nil, toolMsg, nil, note, &last, nil)
+	history, err := toolInvocations{loop}.commitToolResultWithOptionalNote(context.Background(), "sess", nil, toolMsg, nil, note, &last, nil)
 	if err == nil {
 		t.Fatal("first attempt must fail")
 	}
@@ -178,7 +178,7 @@ func TestCommitToolResultWithOptionalNoteRetryYieldsOnePair(t *testing.T) {
 	last = time.Time{}
 	toolMsg = api.Message{ID: "tool-1", Role: api.MessageRoleTool, Content: `{"status":"noted"}`}
 	stampCommitOrderTS(&toolMsg, &last)
-	history, err = loop.commitToolResultWithOptionalNote(context.Background(), "sess", nil, toolMsg, nil, note, &last, nil)
+	history, err = toolInvocations{loop}.commitToolResultWithOptionalNote(context.Background(), "sess", nil, toolMsg, nil, note, &last, nil)
 	testutil.FailErr(t, "retry commit", err)
 	if len(batches) != 1 || len(batches[0]) != 2 {
 		t.Fatalf("retry batches = %+v want one pair", batches)
@@ -225,7 +225,7 @@ func TestSurfaceNoteThenSiblingToolContinues(t *testing.T) {
 	history := []api.Message{{
 		ID: assistantID, Role: api.MessageRoleAssistant, ToolCalls: calls,
 	}}
-	history, turnTools, _, _, _, breakLoop, err := loop.executeToolCallsInTurn(
+	history, turnTools, _, _, _, breakLoop, err := toolBatch{loop}.executeToolCallsInTurn(
 		context.Background(),
 		sess,
 		sess.ID,
@@ -282,7 +282,7 @@ func TestOps8ToolResultPolicyControlsEveryDeliveredCapture(t *testing.T) {
 					return nil, false, "reviewed replacement", true
 				},
 			})
-			out := loop.executeOneToolCall(t.Context(), &api.Session{ID: "session"}, "session", "", nil,
+			out := toolBatch{loop}.executeOneToolCall(t.Context(), &api.Session{ID: "session"}, "session", "", nil,
 				api.ToolCall{ID: "call", Name: "surface_note", Args: map[string]any{"summary": "observed-input"}},
 				tools.ToolContext{SessionID: "session", Agent: "coordinator"}, nil, "", api.CoordinatorRunContext{}, false)
 			testutil.FailErr(t, "execute tool delivery", out.endTurn)

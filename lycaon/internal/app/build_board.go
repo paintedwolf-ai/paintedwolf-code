@@ -44,7 +44,10 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func (b *serveBuilder) wireBoardAndResearch() error {
+// boardWiring wires the board, research, grounding, and workflow subsystems.
+type boardWiring struct{ *serveBuilder }
+
+func (b boardWiring) wireBoardAndResearch() error {
 	var err error
 	b.repoProvider = repoinfo.NewProvider(sourcecatalog.Process(), b.repoCatalogRoot, filepath.Join(enginepaths.RepoOrientationRootUnder(b.dataDir), "v1"))
 	b.resources.track("source-catalog", 86, sourcecatalog.Process().Drain)
@@ -152,14 +155,14 @@ func (b *serveBuilder) wireBoardAndResearch() error {
 			b.mgr.WarmIndexForFetch(ctx, sessionID, toolCallID, pageURL, title, projectDir)
 		},
 	}
-	if matcher, err := b.loadSecretMatcher(); err != nil {
+	if matcher, err := sessionWiring(b).loadSecretMatcher(); err != nil {
 		return err
 	} else {
 		deps.SecretMatcher = matcher
-		deps.SecretAsk = b.secretAskFunc()
+		deps.SecretAsk = sessionWiring(b).secretAskFunc()
 		deps.VisualStore = b.visualStore
 		deps.VisualScreen = visualscreen.NewGate(visualscreen.NewScanner(nil).WithRenderedReferences(browser.RenderLoadsReference), matcher, deps.SecretAsk)
-		if err := b.wireSecretCapabilities(); err != nil {
+		if err := sessionWiring(b).wireSecretCapabilities(); err != nil {
 			return err
 		}
 	}
@@ -177,7 +180,7 @@ func (b *serveBuilder) wireBoardAndResearch() error {
 	return nil
 }
 
-func (b *serveBuilder) repoCatalogFileCount(projectDir string) (int, bool) {
+func (b boardWiring) repoCatalogFileCount(projectDir string) (int, bool) {
 	ctx := context.Background()
 	identity, ok, err := b.repoCatalogRoot(ctx, projectDir)
 	if err != nil || !ok {
@@ -198,7 +201,7 @@ func (b *serveBuilder) repoCatalogFileCount(projectDir string) (int, bool) {
 	return count, true
 }
 
-func (b *serveBuilder) repoCatalogRoot(ctx context.Context, rootPath string) (repoinfo.CatalogRoot, bool, error) {
+func (b boardWiring) repoCatalogRoot(ctx context.Context, rootPath string) (repoinfo.CatalogRoot, bool, error) {
 	if b.registry == nil {
 		return repoinfo.CatalogRoot{}, false, nil
 	}
@@ -217,7 +220,7 @@ func (b *serveBuilder) repoCatalogRoot(ctx context.Context, rootPath string) (re
 	return repoinfo.CatalogRoot{}, false, nil
 }
 
-func (b *serveBuilder) projectIDForRoot(ctx context.Context, rootPath string) (string, error) {
+func (b boardWiring) projectIDForRoot(ctx context.Context, rootPath string) (string, error) {
 	if b.registry == nil {
 		return "", nil
 	}
@@ -236,7 +239,7 @@ func (b *serveBuilder) projectIDForRoot(ctx context.Context, rootPath string) (s
 	return "", nil
 }
 
-func (b *serveBuilder) wireGroundingAndFindings() error {
+func (b boardWiring) wireGroundingAndFindings() error {
 	b.mgr.SetRuleEngine(b.ruleEngine)
 	if err := b.wireGroundingCoordinators(); err != nil {
 		return err
@@ -254,7 +257,7 @@ func (b *serveBuilder) wireGroundingAndFindings() error {
 	return nil
 }
 
-func (b *serveBuilder) wireGroundingCoordinators() error {
+func (b boardWiring) wireGroundingCoordinators() error {
 	groundingCfg, err := delegation.LoadGroundingConfig()
 	if err != nil {
 		return fmt.Errorf("grounding config: %w", err)
@@ -285,7 +288,7 @@ func (b *serveBuilder) wireGroundingCoordinators() error {
 	return nil
 }
 
-func (b *serveBuilder) wireFindingAndProgressTools() error {
+func (b boardWiring) wireFindingAndProgressTools() error {
 	b.findingsStore = findings.NewSQLStore(b.db)
 	b.mgr.SetFindingsStore(b.findingsStore)
 	b.mgr.SetPeerRejectionFeed(session.NewPeerRejectionFeed())
@@ -313,7 +316,7 @@ func (b *serveBuilder) wireFindingAndProgressTools() error {
 	if err := native.RegisterUpdateProgressTool(b.toolRuntime.Registry, b.progressStore, b.rootSessionKey); err != nil {
 		return fmt.Errorf("update_progress tool: %w", err)
 	}
-	if err := native.RegisterCompleteLegTool(b.toolRuntime.Registry, b.decodeCompleteLeg); err != nil {
+	if err := native.RegisterCompleteLegTool(b.toolRuntime.Registry, delegationWiring(b).decodeCompleteLeg); err != nil {
 		return fmt.Errorf("complete_leg tool: %w", err)
 	}
 	// Recall reach follows session topology.
@@ -323,7 +326,7 @@ func (b *serveBuilder) wireFindingAndProgressTools() error {
 	return nil
 }
 
-func (b *serveBuilder) wireVisualAndRenderTools() error {
+func (b boardWiring) wireVisualAndRenderTools() error {
 	artifactRecords := visual.NewRecords(b.db, b.eventOutbox, visual.ArtifactProjection{
 		Write: func(ctx context.Context, tx *sql.Tx, projectID string, rec visual.ArtifactRecord) error {
 			return search.ProjectArtifactTx(ctx, tx, projectID, search.ProjectArtifactInput{
@@ -399,8 +402,8 @@ func (b *serveBuilder) wireVisualAndRenderTools() error {
 	}); err != nil {
 		return err
 	}
-	matcher, _ := b.loadSecretMatcher()
-	screen := visualscreen.NewGate(visualscreen.NewScanner(nil).WithRenderedReferences(browser.RenderLoadsReference), matcher, b.secretAskFunc())
+	matcher, _ := sessionWiring(b).loadSecretMatcher()
+	screen := visualscreen.NewGate(visualscreen.NewScanner(nil).WithRenderedReferences(browser.RenderLoadsReference), matcher, sessionWiring(b).secretAskFunc())
 	if err := native.RegisterViewImageTool(b.toolRuntime.Registry, page.ViewImageDeps{
 		Boundary:      b.toolRuntime.Boundary,
 		Raster:        b.browserRaster,
@@ -423,7 +426,7 @@ func (b *serveBuilder) wireVisualAndRenderTools() error {
 	return nil
 }
 
-func (b *serveBuilder) wireDecisionAndCallTools() error {
+func (b boardWiring) wireDecisionAndCallTools() error {
 	b.decisionStore = session.NewSQLDecisionStore(b.db)
 	b.mgr.SetDecisionStore(b.decisionStore)
 	b.workerBudgetLedger = worker.NewSQLBudgetLedger(b.store, b.workerQueue)
@@ -474,12 +477,12 @@ func (b *serveBuilder) wireDecisionAndCallTools() error {
 	return nil
 }
 
-func (b *serveBuilder) rootSessionKey(ctx context.Context, sessionID string) string {
+func (b boardWiring) rootSessionKey(ctx context.Context, sessionID string) string {
 	return session.RootSessionID(ctx, b.store, sessionID)
 }
 
 // wireApprovalRationaleAttacher records rationale after checkpoint creation.
-func (b *serveBuilder) wireApprovalRationaleAttacher() {
+func (b boardWiring) wireApprovalRationaleAttacher() {
 	if b.toolRuntime == nil || b.checkpointMgr == nil || b.mgr == nil || b.progressStore == nil {
 		return
 	}
@@ -519,7 +522,7 @@ func (r sessionRootResolver) RootSessionID(ctx context.Context, sessionID string
 }
 
 // Each project's primary root precedes its additional roots.
-func (b *serveBuilder) projectRootPaths(ctx context.Context) ([]string, error) {
+func (b boardWiring) projectRootPaths(ctx context.Context) ([]string, error) {
 	if b.registry == nil {
 		return nil, nil
 	}

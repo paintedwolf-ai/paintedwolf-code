@@ -24,7 +24,7 @@ func TestFitMessagesForCompactionKeepsPromptCacheBreakpoint(t *testing.T) {
 			ToolResult: &api.ToolResult{ToolCallID: "c1", Tool: "read", Content: "result"}},
 		{Role: api.MessageRoleSystem, Content: "volatile"},
 	}
-	out := loop.fitMessagesForCompaction(context.Background(), &api.Session{ID: "s"}, "s", msgs, nil)
+	out := modelTurn{loop}.fitMessagesForCompaction(context.Background(), &api.Session{ID: "s"}, "s", msgs, nil)
 	var marked []int
 	for i, m := range out {
 		if m.PromptCacheBreakpoint != api.PromptCacheTierNone {

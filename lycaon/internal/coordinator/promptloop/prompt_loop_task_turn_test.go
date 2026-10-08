@@ -28,7 +28,7 @@ Code: BANNER_TASK_QUEUED
 >>> Tool feedback
 Workflow gate blocked at phase adjudicate
 Code: WORKFLOW_GATE_BLOCKED`
-	msg := loop.toolRejectMessage("task", "call-1", "asst-1", map[string]any{"agent_type": "skeptic"},
+	msg := toolInvocations{loop}.toolRejectMessage("task", "call-1", "asst-1", map[string]any{"agent_type": "skeptic"},
 		guidance.NewRefusal("WORKFLOW_GATE_BLOCKED", body))
 	if msg.ToolResult == nil {
 		t.Fatal("missing tool_result")

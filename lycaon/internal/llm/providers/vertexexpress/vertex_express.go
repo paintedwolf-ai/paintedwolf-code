@@ -84,7 +84,11 @@ func (p *Provider) Prepare(req modelcall.CompletionRequest) Request {
 	system, contents := ProjectMessages(req.Messages, vision, req.Debug.SessionID)
 
 	cfg := p.resolveRequestControls(req, model)
-	return Request{Contents: contents, SystemInstruction: system, Tools: ProjectTools(req.Tools), GenerationConfig: &cfg}
+	out := Request{Contents: contents, SystemInstruction: system, Tools: ProjectTools(req.Tools), GenerationConfig: &cfg}
+	if len(req.Tools) > 0 && !req.ToolsCallable() {
+		out.ToolConfig = &vertexExpressToolConfig{FunctionCallingConfig: vertexExpressFunctionCallingConfig{Mode: "NONE"}}
+	}
+	return out
 }
 
 // modelURL builds a global endpoint with optional SSE framing.

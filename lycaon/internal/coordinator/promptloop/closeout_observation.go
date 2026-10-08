@@ -18,7 +18,7 @@ type closeoutReportObservation struct {
 }
 
 // Document defects precede citation repair, which retains the document fields.
-func (l *PromptLoop) observeCloseoutReport(ctx context.Context, sess *api.Session, history []api.Message, surfaceID string, report guidance.CoordinatorCompletionReport, unread []jsonshape.Issue, turnTools []string, deliversRunReport bool) (closeoutReportObservation, error) {
+func (l turnCloseout) observeCloseoutReport(ctx context.Context, sess *api.Session, history []api.Message, surfaceID string, report guidance.CoordinatorCompletionReport, unread []jsonshape.Issue, turnTools []string, deliversRunReport bool) (closeoutReportObservation, error) {
 	observation := closeoutReportObservation{facts: oar.NewGuardContext()}
 	gc := observation.facts
 	gc.Surface = strings.TrimSpace(surfaceID)

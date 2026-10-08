@@ -26,7 +26,7 @@ func TestAppendTurnCloseoutNudge(t *testing.T) {
 			return nil
 		},
 	})
-	history, err := loop.appendTurnCloseoutNudge(context.Background(), &api.Session{Posture: api.SessionPostureBuild}, "s1", "coordinator", nil, TurnCloseoutCause{Reason: TurnCloseoutIterationCap}, nil)
+	history, err := turnCloseout{loop}.appendTurnCloseoutNudge(context.Background(), &api.Session{Posture: api.SessionPostureBuild}, "s1", "coordinator", nil, TurnCloseoutCause{Reason: TurnCloseoutIterationCap}, nil)
 	if err != nil {
 		t.Fatalf("appendTurnCloseoutNudge: %v", err)
 	}
@@ -60,14 +60,14 @@ func TestAppendTurnCloseoutNudgeDedupsVerbatim(t *testing.T) {
 		},
 	})
 	sess := &api.Session{Posture: api.SessionPostureBuild}
-	history, err := loop.appendTurnCloseoutNudge(context.Background(), sess, "s1", "coordinator", nil, TurnCloseoutCause{Reason: TurnCloseoutIterationCap}, nil)
+	history, err := turnCloseout{loop}.appendTurnCloseoutNudge(context.Background(), sess, "s1", "coordinator", nil, TurnCloseoutCause{Reason: TurnCloseoutIterationCap}, nil)
 	if err != nil {
 		t.Fatalf("first closeout: %v", err)
 	}
 	// Insert a distinct internal nudge.
 	history = append(history, api.Message{Role: api.MessageRoleUser, Visibility: api.MessageVisibilityInternal, Content: "Rejected: write files to disk"})
 	// Repeated closeout copy stays deduplicated.
-	history, err = loop.appendTurnCloseoutNudge(context.Background(), sess, "s1", "coordinator", history, TurnCloseoutCause{Reason: TurnCloseoutIterationCap}, nil)
+	history, err = turnCloseout{loop}.appendTurnCloseoutNudge(context.Background(), sess, "s1", "coordinator", history, TurnCloseoutCause{Reason: TurnCloseoutIterationCap}, nil)
 	if err != nil {
 		t.Fatalf("second closeout: %v", err)
 	}
@@ -117,7 +117,7 @@ func TestEarlyWorkerCloseoutExecutesCompleteLeg(t *testing.T) {
 	history := []api.Message{{ID: "user-1", Role: api.MessageRoleUser, Content: "finish"}}
 	state := &promptLoopTurnState{history: history}
 	var assistantID string
-	history, assistantID, _, err = loop.runEarlyTurnCloseout(
+	history, assistantID, _, err = turnCloseout{loop}.runEarlyTurnCloseout(
 		t.Context(), sess, sess.ID, "security-reviewer", "finish", history, 1,
 		TurnCloseoutIterationCap, "", false,
 		PromptRunInput{ToolCtx: tools.ToolContext{SessionID: sess.ID, Agent: sess.AgentType}}, state,

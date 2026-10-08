@@ -22,7 +22,7 @@ import (
 )
 
 // branchRetentionDeps binds the sweep to this engine's branch root and queue.
-func (b *serveBuilder) branchRetentionDeps() branchretention.Deps {
+func (b delegationWiring) branchRetentionDeps() branchretention.Deps {
 	return branchretention.Deps{
 		BranchRoot: b.workerBranchRoot,
 		Jobs: func(ctx context.Context) (map[string]branchretention.JobState, error) {
@@ -40,7 +40,7 @@ func (b *serveBuilder) branchRetentionDeps() branchretention.Deps {
 	}
 }
 
-func (b *serveBuilder) registerBackgroundRunners(app *ServeApp) {
+func (b delegationWiring) registerBackgroundRunners(app *ServeApp) {
 	type registration struct {
 		run     func(context.Context) error
 		oneShot bool
@@ -144,7 +144,7 @@ func (b *serveBuilder) registerBackgroundRunners(app *ServeApp) {
 // reconcileStoreCoupledStorage removes host storage the registry no longer
 // names. It refuses once the store path is replaced: the registry then describes
 // another store and every tree would look orphaned.
-func (b *serveBuilder) reconcileStoreCoupledStorage(ctx context.Context) error {
+func (b delegationWiring) reconcileStoreCoupledStorage(ctx context.Context) error {
 	if b.storeClaim != nil {
 		if err := b.storeClaim.Verify(); err != nil {
 			return err
@@ -178,7 +178,7 @@ func (b *serveBuilder) reconcileStoreCoupledStorage(ctx context.Context) error {
 
 // reconcileWorkerSandboxes preserves durable job references even when their
 // captured project root is no longer attached.
-func (b *serveBuilder) reconcileWorkerSandboxes(ctx context.Context, roots []string) (int, error) {
+func (b delegationWiring) reconcileWorkerSandboxes(ctx context.Context, roots []string) (int, error) {
 	if b.workerBranchRoot == "" {
 		return 0, nil
 	}
@@ -213,22 +213,22 @@ func (b *serveBuilder) reconcileWorkerSandboxes(ctx context.Context, roots []str
 	return removed, errors.Join(errs...)
 }
 
-func (b *serveBuilder) registerRecovery(e bootrecovery.Entry) error {
+func (b delegationWiring) registerRecovery(e bootrecovery.Entry) error {
 	if b.recovery == nil {
 		b.recovery = bootrecovery.New()
 	}
 	return b.recovery.Register(e)
 }
 
-func (b *serveBuilder) runBuildRecovery() error {
+func (b delegationWiring) runBuildRecovery() error {
 	return b.reportRecovery(b.recovery.Run(b.ctx, bootrecovery.PhaseBuild))
 }
 
-func (b *serveBuilder) runServeRecovery(ctx context.Context) error {
+func (b delegationWiring) runServeRecovery(ctx context.Context) error {
 	return b.reportRecovery(b.recovery.Run(ctx, bootrecovery.PhaseServe))
 }
 
-func (b *serveBuilder) reportRecovery(report bootrecovery.Report, err error) error {
+func (b delegationWiring) reportRecovery(report bootrecovery.Report, err error) error {
 	if err != nil {
 		return err
 	}

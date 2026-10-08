@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -352,15 +353,7 @@ func TestValidateCallArgumentsIntrospectionMisnestedField(t *testing.T) {
 	if reject == nil || reject.Code != "TOOL_ARGS_INVALID" {
 		t.Fatalf("expected TOOL_ARGS_INVALID, got: %#v", reject)
 	}
-	if reject.Data["relocated_field"] != "host_resources" {
-		t.Errorf("relocated_field = %v, want host_resources", reject.Data["relocated_field"])
-	}
-	if reject.Data["nested_under"] != "capability_request" {
-		t.Errorf("nested_under = %v, want capability_request", reject.Data["nested_under"])
-	}
-	if reject.Data["expected_path"] != "capability_request.host_resources" {
-		t.Errorf("expected_path = %v, want capability_request.host_resources", reject.Data["expected_path"])
-	}
+	assertMisplaced(t, reject.Data, []string{"host_resources"}, "", "capability_request")
 	rep, ok := reject.Data["replacement_args"].(map[string]any)
 	if !ok {
 		t.Fatalf("replacement_args missing or not a map: %#v", reject.Data["replacement_args"])
@@ -397,12 +390,10 @@ func TestValidateCallArgumentsIntrospectionStringifiedJSON(t *testing.T) {
 	if reject == nil || reject.Code != "TOOL_ARGS_INVALID" {
 		t.Fatalf("expected TOOL_ARGS_INVALID, got: %#v", reject)
 	}
-	if reject.Data["unparsed_json"] != true {
-		t.Errorf("unparsed_json = %v, want true", reject.Data["unparsed_json"])
+	if reject.Data["json_encoded"] != true || reject.Data["field"] != "host_resources" {
+		t.Errorf("json_encoded = %v field = %v, want true host_resources", reject.Data["json_encoded"], reject.Data["field"])
 	}
-	if reject.Data["relocated_field"] != "host_resources" {
-		t.Errorf("relocated_field = %v, want host_resources", reject.Data["relocated_field"])
-	}
+	assertMisplaced(t, reject.Data, []string{"host_resources"}, "", "capability_request")
 	rep, ok := reject.Data["replacement_args"].(map[string]any)
 	if !ok {
 		t.Fatalf("replacement_args missing or not a map: %#v", reject.Data["replacement_args"])
@@ -546,7 +537,7 @@ func TestValidateCallArgumentsIntrospectionUnknownJSONNotUnparsed(t *testing.T) 
 		t.Fatal("command schema missing")
 	}
 
-	// An unknown key containing valid JSON string should not be flagged as unparsed_json
+	// An unknown key holding JSON text is not a structured slot.
 	args := map[string]any{
 		"command":     "echo hi",
 		"custom_opts": "[\"flag1\", \"flag2\"]",
@@ -555,8 +546,8 @@ func TestValidateCallArgumentsIntrospectionUnknownJSONNotUnparsed(t *testing.T) 
 	if reject == nil || reject.Code != "TOOL_ARGS_INVALID" {
 		t.Fatalf("expected TOOL_ARGS_INVALID, got: %#v", reject)
 	}
-	if reject.Data["unparsed_json"] == true {
-		t.Errorf("unknown property custom_opts was falsely flagged as unparsed_json")
+	if reject.Data["json_encoded"] == true || reject.Data["json_malformed"] == true {
+		t.Errorf("unknown property custom_opts was flagged as JSON text")
 	}
 }
 
@@ -581,8 +572,8 @@ func TestValidateCallArgumentsIntrospectionNestedStringifiedJSON(t *testing.T) {
 	if reject == nil || reject.Code != "TOOL_ARGS_INVALID" {
 		t.Fatalf("expected TOOL_ARGS_INVALID, got: %#v", reject)
 	}
-	if reject.Data["unparsed_json"] != true {
-		t.Errorf("unparsed_json = %v, want true", reject.Data["unparsed_json"])
+	if reject.Data["json_encoded"] != true || reject.Data["field"] != "capability_request.host_resources" {
+		t.Errorf("json_encoded = %v field = %v, want true capability_request.host_resources", reject.Data["json_encoded"], reject.Data["field"])
 	}
 	rep, ok := reject.Data["replacement_args"].(map[string]any)
 	if !ok {
@@ -595,5 +586,14 @@ func TestValidateCallArgumentsIntrospectionNestedStringifiedJSON(t *testing.T) {
 	res, ok := capReq["host_resources"].([]any)
 	if !ok || len(res) != 1 || res[0] != "colima" {
 		t.Errorf("repaired capability_request.host_resources = %#v, want [colima]", capReq["host_resources"])
+	}
+}
+
+func assertMisplaced(t *testing.T, data map[string]any, fields []string, found, belongs string) {
+	t.Helper()
+	got, _ := data["misplaced_fields"].([]string)
+	if !slices.Equal(got, fields) || data["found_under"] != found || data["belongs_under"] != belongs {
+		t.Fatalf("misplaced = %v under %q → %q, want %v under %q → %q",
+			got, data["found_under"], data["belongs_under"], fields, found, belongs)
 	}
 }

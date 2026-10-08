@@ -39,6 +39,11 @@ func TestToolSchemaArgPropertiesHaveDescriptions(t *testing.T) {
 			violations = append(violations, fmt.Sprintf("%s: tool description is empty", name))
 		}
 		collectUndescribedProperties(name, "", entry.Schema, &violations)
+		// Fragments under $defs compose model-facing members, so they carry
+		// descriptions too.
+		if defs, ok := entry.Schema["$defs"].(map[string]any); ok {
+			collectUndescribedProperties(name, "$defs", map[string]any{"properties": defs}, &violations)
+		}
 	}
 	contractcheck.FailViolations(t, "tools/schemas properties missing non-empty description", violations)
 }

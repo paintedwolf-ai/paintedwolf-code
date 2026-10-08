@@ -243,12 +243,12 @@ func (l *PromptLoop) processPromptLoopAssistantTurn(
 
 	if completion == nil || len(completion.ToolCalls) == 0 {
 		var unread []jsonshape.Issue
-		st.lastAssistantContent, unread = l.maybeCoerceCloseoutContent(ctx, st.history, sessionID, surfaceID, st.lastAssistantContent, st.lastAssistantID)
+		st.lastAssistantContent, unread = toolInvocations{l}.maybeCoerceCloseoutContent(ctx, st.history, sessionID, surfaceID, st.lastAssistantContent, st.lastAssistantID)
 		invokeAllowed := !st.proseTurn(sess, step, maxIter)
 		var blocked bool
 		var refusal *guidance.Refusal
 		var err error
-		st.history, refusal, blocked, err = l.tryRejectNoToolTurn(
+		st.history, refusal, blocked, err = toolInvocations{l}.tryRejectNoToolTurn(
 			ctx, sess, st.history, userPrompt, st.lastAssistantContent, surfaceID, st.turnTools, sessionID, st.lastAssistantID, st, invokeAllowed,
 		)
 		if err != nil {
@@ -279,7 +279,7 @@ func (l *PromptLoop) processPromptLoopAssistantTurn(
 		var breakToolLoop bool
 		var batchTurnTools []string
 		var err error
-		st.history, batchTurnTools, anyTaskEnqueued, taskEnqueuedThisTurn, lastTaskMessageID, breakToolLoop, err = l.executeToolCallsInTurn(
+		st.history, batchTurnTools, anyTaskEnqueued, taskEnqueuedThisTurn, lastTaskMessageID, breakToolLoop, err = toolBatch{l}.executeToolCallsInTurn(
 			ctx, sess, sessionID, completion.ToolCalls, in.ToolCtx, st.history, userPrompt, st.lastAssistantID, surfaceID, st,
 		)
 		if err != nil {
@@ -297,7 +297,7 @@ func (l *PromptLoop) processPromptLoopAssistantTurn(
 			}
 		}
 		// Close the slot; the next model turn opens a fresh one.
-		if err := l.closeCoordinatorDraftSlot(ctx, sessionID, st, assistantMsg.ID); err != nil {
+		if err := (turnNudges{l}).closeCoordinatorDraftSlot(ctx, sessionID, st, assistantMsg.ID); err != nil {
 			return out, err
 		}
 		if sess != nil && sess.IsWorkerChild() && batchHasUnsettledOwner(st.history, assistantMsg.ID) {
@@ -306,7 +306,7 @@ func (l *PromptLoop) processPromptLoopAssistantTurn(
 		st.turnTools = append(st.turnTools, batchTurnTools...)
 		st.tasksDispatchedCount += taskEnqueuedThisTurn
 		if anyTaskEnqueued {
-			if err := l.appendInFlightWorkerRosterNote(ctx, sessionID, sess, st.history, taskEnqueuedThisTurn, lastTaskMessageID); err != nil {
+			if err := (toolInvocations{l}).appendInFlightWorkerRosterNote(ctx, sessionID, sess, st.history, taskEnqueuedThisTurn, lastTaskMessageID); err != nil {
 				return out, err
 			}
 		}
@@ -322,7 +322,7 @@ func (l *PromptLoop) processPromptLoopAssistantTurn(
 			out.exit = loopExitCompleted
 			return out, nil
 		}
-		st.history, err = l.reloadHistoryAfterToolCompaction(ctx, sessionID, sess, surfaceID, st.history, st)
+		st.history, err = toolInvocations{l}.reloadHistoryAfterToolCompaction(ctx, sessionID, sess, surfaceID, st.history, st)
 		if err != nil {
 			return out, err
 		}
@@ -335,7 +335,7 @@ func (l *PromptLoop) processPromptLoopAssistantTurn(
 		return out, err
 	}
 	st.history[len(st.history)-1] = committed
-	if err := l.closeCoordinatorDraftSlot(ctx, sessionID, st, committed.ID); err != nil {
+	if err := (turnNudges{l}).closeCoordinatorDraftSlot(ctx, sessionID, st, committed.ID); err != nil {
 		return out, err
 	}
 	if st.proseTurn(sess, step, maxIter) {
@@ -355,7 +355,7 @@ func (l *PromptLoop) applyAcceptedCloseoutReport(
 	read guidance.CloseoutRead,
 ) (promptLoopAssistantTurnResult, error) {
 	var out promptLoopAssistantTurnResult
-	commitOut, cerr := l.handleAcceptedCloseoutReport(
+	commitOut, cerr := turnCloseout{l}.handleAcceptedCloseoutReport(
 		ctx, sess, sessionID, userPrompt, surfaceID, st, st.history, assistantMsg, read,
 	)
 	if cerr != nil {
@@ -376,7 +376,7 @@ func (l *PromptLoop) applyAcceptedCloseoutReport(
 	}
 	if commitOut.exhausted {
 		// Exhaustion preserves the pinned report and latest proposed citations.
-		emitOut, eerr := l.emitAssembledCloseout(
+		emitOut, eerr := turnCloseout{l}.emitAssembledCloseout(
 			ctx, sess, sessionID, userPrompt, surfaceID, commitOut.draftedContent, st.closeoutRetry.codes, st, st.history,
 		)
 		if eerr != nil {
@@ -391,7 +391,7 @@ func (l *PromptLoop) applyAcceptedCloseoutReport(
 			return out, nil
 		}
 		st.turnEndedGuidanceReject = true
-		if err := l.closeCoordinatorDraftSlot(ctx, sessionID, st, st.draftSlotID); err != nil {
+		if err := (turnNudges{l}).closeCoordinatorDraftSlot(ctx, sessionID, st, st.draftSlotID); err != nil {
 			return out, err
 		}
 		out.breakLoop = true
@@ -400,7 +400,7 @@ func (l *PromptLoop) applyAcceptedCloseoutReport(
 	}
 	if !commitOut.committed {
 		st.turnEndedGuidanceReject = true
-		if err := l.closeCoordinatorDraftSlot(ctx, sessionID, st, st.draftSlotID); err != nil {
+		if err := (turnNudges{l}).closeCoordinatorDraftSlot(ctx, sessionID, st, st.draftSlotID); err != nil {
 			return out, err
 		}
 		out.breakLoop = true
@@ -426,10 +426,10 @@ func (l *PromptLoop) maybeEmitStalledCloseout(
 	sessionID, userPrompt, surfaceID string,
 	st *promptLoopTurnState,
 ) (committed bool, err error) {
-	if !l.closeoutFuseTripped(ctx, sess, sessionID, surfaceID) {
+	if !(turnCloseout{l}).closeoutFuseTripped(ctx, sess, sessionID, surfaceID) {
 		return false, nil
 	}
-	emitOut, eerr := l.emitStalledCloseout(ctx, sess, sessionID, userPrompt, surfaceID, st, st.history)
+	emitOut, eerr := turnCloseout{l}.emitStalledCloseout(ctx, sess, sessionID, userPrompt, surfaceID, st, st.history)
 	if eerr != nil {
 		return false, eerr
 	}
@@ -508,7 +508,7 @@ func (l *PromptLoop) finalizePromptLoopRun(
 			reason = TurnCloseoutBlockedLoop
 		case loopExitNone, loopExitCompleted, loopExitToolBoundary, loopExitGracefulCancel, loopExitSecretWithheld:
 		}
-		closedHistory, aid, content, cerr := l.runEarlyTurnCloseout(ctx, sess, sessionID, profileID, userPrompt, st.history, maxIter, reason, "", closeoutNudgeSent, in, st)
+		closedHistory, aid, content, cerr := turnCloseout{l}.runEarlyTurnCloseout(ctx, sess, sessionID, profileID, userPrompt, st.history, maxIter, reason, "", closeoutNudgeSent, in, st)
 		if cerr != nil {
 			return nil, cerr
 		}
@@ -521,7 +521,7 @@ func (l *PromptLoop) finalizePromptLoopRun(
 
 	// A resumed worker with no remaining budget receives an exhaustion summary.
 	if st.lastAssistantID == "" && st.turnsRanThisRun == 0 && sess.IsWorkerChild() && !st.turnEndedGuidanceReject {
-		closedHistory, aid, content, cerr := l.runEarlyTurnCloseout(ctx, sess, sessionID, profileID, userPrompt, st.history, maxIter, TurnCloseoutIterationCap, "", closeoutNudgeSent, in, st)
+		closedHistory, aid, content, cerr := turnCloseout{l}.runEarlyTurnCloseout(ctx, sess, sessionID, profileID, userPrompt, st.history, maxIter, TurnCloseoutIterationCap, "", closeoutNudgeSent, in, st)
 		if cerr != nil {
 			return nil, cerr
 		}
@@ -532,10 +532,10 @@ func (l *PromptLoop) finalizePromptLoopRun(
 		}
 	}
 
-	if err := l.maybeWithdrawCoordinatorDraft(ctx, sess, sessionID, st); err != nil {
+	if err := (turnNudges{l}).maybeWithdrawCoordinatorDraft(ctx, sess, sessionID, st); err != nil {
 		return nil, err
 	}
-	if err := l.flushDeferredUserNudges(ctx, sessionID, st); err != nil {
+	if err := (turnNudges{l}).flushDeferredUserNudges(ctx, sessionID, st); err != nil {
 		return nil, err
 	}
 	if st.lastAssistantID == "" {

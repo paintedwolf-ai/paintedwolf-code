@@ -49,7 +49,7 @@ func TestExecuteToolCallsInTurnCommitsAssistantBeforeFirstTool(t *testing.T) {
 		return nil
 	}
 
-	_, turnTools, _, _, _, _, err := loop.executeToolCallsInTurn(
+	_, turnTools, _, _, _, _, err := toolBatch{loop}.executeToolCallsInTurn(
 		context.Background(),
 		sess,
 		sess.ID,

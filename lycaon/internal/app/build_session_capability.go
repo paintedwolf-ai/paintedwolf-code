@@ -12,7 +12,7 @@ import (
 
 // wireExceptionalCapability installs AF_UNIX / direct-IP runtimes, ledger hooks,
 // and the ExternalAccess builder used by tool results and protection chrome.
-func (b *serveBuilder) wireExceptionalCapability() error {
+func (b sessionWiring) wireExceptionalCapability() error {
 	socketCapabilityRT := approvalstate.NewSocketCapabilityRuntime()
 	b.socketCapabilityRT = socketCapabilityRT
 	b.toolRuntime.Executor.SetSocketCapabilityRuntime(socketCapabilityAdapter{rt: socketCapabilityRT})

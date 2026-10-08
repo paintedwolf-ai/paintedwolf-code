@@ -172,7 +172,7 @@ func TestNonSlotRejectNeverDeletesRow(t *testing.T) {
 		},
 	})
 	history := []api.Message{before}
-	_, err := loop.rejectBlockedAssistantTurn(
+	_, err := toolInvocations{loop}.rejectBlockedAssistantTurn(
 		context.Background(), "s1", history, "a1", "", refusalForTest("Code: TEST"), nil,
 	)
 	testutil.FailErr(t, "rejectBlockedAssistantTurn", err)
@@ -218,7 +218,7 @@ func TestWithdrawPreservesIDAndOrd(t *testing.T) {
 		CountDraftVersions: func(_ context.Context, _, _ string) (int, error) { return 0, nil },
 		UpdateMessage:      store.Update,
 	})
-	testutil.FailErr(t, "withdraw", loop.maybeWithdrawCoordinatorDraft(
+	testutil.FailErr(t, "withdraw", turnNudges{loop}.maybeWithdrawCoordinatorDraft(
 		context.Background(), &api.Session{ID: "s1"}, "s1", st,
 	))
 

@@ -107,7 +107,7 @@ func walkPlanRunToReview(ctx context.Context, t *testing.T, mgr *RunManager, blu
 
 func TestSubmitVerdictTerminalAdvancesReview(t *testing.T) {
 	mgr, _, blueprintMgr, projectDir := testManagerWithRegistry(t)
-	reg := tools.NewDefaultRegistry()
+	reg := catalogRegistry(t)
 	testutil.FailErr(t, "RegisterSubmitVerdictTool", RegisterSubmitVerdictTool(reg, mgr))
 	ctx := context.Background()
 	run := walkPlanRunToReview(ctx, t, mgr, blueprintMgr, "sess-1")
@@ -131,7 +131,7 @@ func TestSubmitVerdictTerminalAdvancesReview(t *testing.T) {
 
 func TestSubmitVerdictNonTerminalReloops(t *testing.T) {
 	mgr, _, blueprintMgr, projectDir := testManagerWithRegistry(t)
-	reg := tools.NewDefaultRegistry()
+	reg := catalogRegistry(t)
 	testutil.FailErr(t, "RegisterSubmitVerdictTool", RegisterSubmitVerdictTool(reg, mgr))
 	ctx := context.Background()
 	run := walkPlanRunToReview(ctx, t, mgr, blueprintMgr, "sess-1")
@@ -158,7 +158,7 @@ func TestSubmitVerdictNonTerminalReloops(t *testing.T) {
 // cap (RecordReviewLoopVerdict's IterationCapExceeded branch).
 func TestSubmitVerdictRejectsNonTerminalPastIterationCap(t *testing.T) {
 	mgr, _, blueprintMgr, projectDir := testManagerWithRegistry(t)
-	reg := tools.NewDefaultRegistry()
+	reg := catalogRegistry(t)
 	testutil.FailErr(t, "RegisterSubmitVerdictTool", RegisterSubmitVerdictTool(reg, mgr))
 	ctx := context.Background()
 	run := walkPlanRunToReview(ctx, t, mgr, blueprintMgr, "sess-1")
@@ -202,7 +202,7 @@ func TestSubmitVerdictRejectsNonTerminalPastIterationCap(t *testing.T) {
 
 func TestSubmitVerdictExactToolReplayDoesNotConsumeAnotherAttempt(t *testing.T) {
 	mgr, _, blueprintMgr, projectDir := testManagerWithRegistry(t)
-	reg := tools.NewDefaultRegistry()
+	reg := catalogRegistry(t)
 	testutil.FailErr(t, "register submit_verdict", RegisterSubmitVerdictTool(reg, mgr))
 	ctx := context.Background()
 	run := walkPlanRunToReview(ctx, t, mgr, blueprintMgr, "sess-1")
@@ -254,7 +254,7 @@ func TestRecoverPreparedVerdictOperation(t *testing.T) {
 
 func TestSubmitVerdictRejectsOffReviewLoopPhase(t *testing.T) {
 	mgr, _, _, projectDir := testManagerWithRegistry(t)
-	reg := tools.NewDefaultRegistry()
+	reg := catalogRegistry(t)
 	testutil.FailErr(t, "RegisterSubmitVerdictTool", RegisterSubmitVerdictTool(reg, mgr))
 	ctx := context.Background()
 	_, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.0")
@@ -268,7 +268,7 @@ func TestSubmitVerdictRejectsOffReviewLoopPhase(t *testing.T) {
 
 func TestSubmitVerdictInvalidEchoesSchema(t *testing.T) {
 	mgr, _, blueprintMgr, projectDir := testManagerWithRegistry(t)
-	reg := tools.NewDefaultRegistry()
+	reg := catalogRegistry(t)
 	testutil.FailErr(t, "RegisterSubmitVerdictTool", RegisterSubmitVerdictTool(reg, mgr))
 	ctx := context.Background()
 	run := walkPlanRunToReview(ctx, t, mgr, blueprintMgr, "sess-1")
@@ -314,7 +314,7 @@ func TestSubmitVerdictGroundingRejectReturnsRecoverableCode(t *testing.T) {
 			ObservedHandles: []string{"reviewer-1:read#1"},
 		}, nil
 	}
-	reg := tools.NewDefaultRegistry()
+	reg := catalogRegistry(t)
 	testutil.FailErr(t, "RegisterSubmitVerdictTool", RegisterSubmitVerdictTool(reg, mgr))
 	ctx := context.Background()
 	run := walkPlanRunToReview(ctx, t, mgr, blueprintMgr, "sess-1")

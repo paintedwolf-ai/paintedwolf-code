@@ -5,12 +5,17 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"fmt"
 
 	"github.com/lycaon/lycaon/pkg/api"
+	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/llm/compaction"
+	"github.com/lycaon/lycaon/internal/tooloutput"
+	"github.com/lycaon/lycaon/internal/visual"
 )
 
 // persistClassifiedToolOutcome stores and enriches one tool result.
-func (l *PromptLoop) persistClassifiedToolOutcome(
+func (l toolBatch) persistClassifiedToolOutcome(
 	ctx context.Context,
 	sessionID string,
 	sess *api.Session,
@@ -21,8 +26,8 @@ func (l *PromptLoop) persistClassifiedToolOutcome(
 ) ([]api.Message, error) {
 	ctx = context.WithoutCancel(ctx)
 	stampCommitOrderTS(&out.toolMsg, lastToolTS)
-	stored, transient := l.storageSafeMessage(ctx, out.toolMsg)
-	history, err := l.commitToolResultWithOptionalNote(
+	stored, transient := toolInvocations(l).storageSafeMessage(ctx, out.toolMsg)
+	history, err := toolInvocations(l).commitToolResultWithOptionalNote(
 		ctx, sessionID, history, stored, transient, out.agentNote, lastToolTS, st,
 	)
 	if err != nil {
@@ -32,7 +37,7 @@ func (l *PromptLoop) persistClassifiedToolOutcome(
 }
 
 // enrichCommittedToolRow applies evidence and compaction to a stored result.
-func (l *PromptLoop) enrichCommittedToolRow(
+func (l toolBatch) enrichCommittedToolRow(
 	ctx context.Context,
 	sessionID string,
 	sess *api.Session,
@@ -169,7 +174,7 @@ func newParallelBatchCommit(
 	}
 }
 
-func (l *PromptLoop) appendParallelResult(
+func (l toolBatch) appendParallelResult(
 	ctx context.Context,
 	commit *parallelBatchCommit,
 	out *toolCallOutcome,
@@ -187,7 +192,7 @@ func (l *PromptLoop) appendParallelResult(
 	}
 }
 
-func (l *PromptLoop) appendParallelOutcomeLocked(
+func (l toolBatch) appendParallelOutcomeLocked(
 	ctx context.Context,
 	commit *parallelBatchCommit,
 	out *toolCallOutcome,
@@ -198,9 +203,9 @@ func (l *PromptLoop) appendParallelOutcomeLocked(
 	} else {
 		stampCommitOrderTS(&out.toolMsg, commit.lastToolTS)
 	}
-	stored, transient := l.storageSafeMessage(ctx, out.toolMsg)
-	rows, transients := l.classifiedResultRows(ctx, stored, transient, out.agentNote, commit.lastToolTS)
-	if err := l.persistStorageSafeMessages(ctx, commit.sessionID, rows); err != nil {
+	stored, transient := toolInvocations(l).storageSafeMessage(ctx, out.toolMsg)
+	rows, transients := toolInvocations(l).classifiedResultRows(ctx, stored, transient, out.agentNote, commit.lastToolTS)
+	if err := toolInvocations(l).persistStorageSafeMessages(ctx, commit.sessionID, rows); err != nil {
 		return err
 	}
 	out.committed = true
@@ -216,7 +221,7 @@ func (l *PromptLoop) appendParallelOutcomeLocked(
 	return nil
 }
 
-func (l *PromptLoop) finishParallelToolOutcomes(
+func (l toolBatch) finishParallelToolOutcomes(
 	ctx context.Context,
 	commit *parallelBatchCommit,
 	outcomes []toolCallOutcome,
@@ -247,4 +252,123 @@ func (l *PromptLoop) finishParallelToolOutcomes(
 		}
 	}
 	return nil
+}
+
+// stampCommitOrderTS assigns monotonically increasing timestamps in call order.
+func stampCommitOrderTS(msg *api.Message, last *time.Time) {
+	now := time.Now().UTC()
+	if !now.After(*last) {
+		now = last.Add(time.Microsecond)
+	}
+	*last = now
+	msg.CreatedAt = now
+}
+
+// tagToolHandleOnCommit persists the evidence record and stamps the host handle on the tool result.
+func (l toolBatch) tagToolHandleOnCommit(ctx context.Context, sessionID string, sess *api.Session, toolName string, args map[string]any, msg *api.Message, eligible bool) error {
+	if msg == nil {
+		return nil
+	}
+	if sess != nil && toolName == "verify" && l.Deps.ConfirmVerifyResult != nil &&
+		msg.ToolResult != nil && msg.ToolResult.Outcome == api.ToolResultOutcomeCompleted {
+		content := strings.TrimSpace(msg.ToolResult.Content)
+		if content == "" {
+			content = strings.TrimSpace(msg.Content)
+		}
+		if stamped := l.Deps.ConfirmVerifyResult(sess, content); stamped != "" {
+			msg.ToolResult.Content = stamped
+		}
+	}
+	if !eligible {
+		return nil
+	}
+	content := msg.Content
+	if msg.ToolResult != nil && strings.TrimSpace(msg.ToolResult.Content) != "" {
+		content = msg.ToolResult.Content
+	}
+	handle := ""
+	patchedContent := content
+	if l.Deps.CommitEvidenceToolResult != nil && sess != nil {
+		artifactID := ""
+		if msg.ToolResult != nil && msg.ToolResult.Visual != nil {
+			artifactID = msg.ToolResult.Visual.ID
+		}
+		var err error
+		handle, patchedContent, err = l.Deps.CommitEvidenceToolResult(ctx, sessionID, sess, toolName, args, content, artifactID)
+		if err != nil {
+			return fmt.Errorf("record %s evidence: %w", toolName, err)
+		}
+	}
+	content = patchedContent
+	if handle == "" {
+		return nil
+	}
+	// Re-stamp artifact_id after evidence rewrites the JSON.
+	if msg.ToolResult != nil && msg.ToolResult.Visual != nil {
+		content = visual.StampArtifactID(content, msg.ToolResult.Visual.ID)
+	}
+	msg.Content = guidance.PrependHandleTag(content, handle)
+	if msg.ToolResult != nil {
+		msg.ToolResult.Content = guidance.PrependHandleTag(content, handle)
+		if msg.ToolResult.Visual != nil {
+			msg.ToolResult.Visual.EvidenceHandle = handle
+		}
+		// Evidence handles do not change structured outcome fields.
+	}
+	msg.EvidenceHandles = append(append([]string(nil), msg.EvidenceHandles...), handle)
+	return nil
+}
+
+// stampDietFieldsOnCommit sets durable Message diet stamps from machine producers.
+func stampDietFieldsOnCommit(toolName string, msg *api.Message) {
+	if msg == nil {
+		return
+	}
+	content := msg.Content
+	if msg.ToolResult != nil && strings.TrimSpace(msg.ToolResult.Content) != "" {
+		content = msg.ToolResult.Content
+	}
+	if !tooloutput.IsOverlayPromoteTool(toolName) {
+		return
+	}
+	if compaction.IsOverlayPromoteConflictProtected(content) {
+		msg.DietStamp = compaction.DietStampPreserveStructure
+		msg.DietStampSource = compaction.DietStampSourceOverlayMerge
+	}
+}
+
+// compactToolWireOnCommit compacts payloads after evidence handles are minted.
+func (l toolBatch) compactToolWireOnCommit(ctx context.Context, sess *api.Session, toolName string, msg *api.Message) {
+	if l.PromptLoop == nil || msg == nil || l.Deps.CompactToolWire == nil {
+		return
+	}
+	stampDietFieldsOnCommit(toolName, msg)
+	content := msg.Content
+	if msg.ToolResult != nil && strings.TrimSpace(msg.ToolResult.Content) != "" {
+		content = msg.ToolResult.Content
+	}
+	out, meta := l.Deps.CompactToolWire(ctx, sess, toolName, content, compaction.CompactToolWireOpts{
+		DietStamp:       msg.DietStamp,
+		DietStampSource: msg.DietStampSource,
+		EvidenceHandles: append([]string(nil), msg.EvidenceHandles...),
+	})
+	msg.Content = out
+	if msg.ToolResult != nil {
+		msg.ToolResult.Content = out
+	}
+	msg.CompactedChunk = meta
+}
+
+// retrievalSourceLabel formats host-observed retrieval attribution.
+func retrievalSourceLabel(tool, observed string) string {
+	label := strings.TrimSpace(tool)
+	if label == "" {
+		label = "retrieval"
+	}
+	// Redirects use only the handler's observed destination.
+	detail := strings.TrimSpace(observed)
+	if detail == "" {
+		return label
+	}
+	return label + " · " + detail
 }

@@ -221,7 +221,7 @@ func TestNonHTTPContractHTTPSocksStillReachPreDialMatch(t *testing.T) {
 	}
 	_, files := contractcheck.ParseNonTestGoTree(t, filepath.Join(root, "lycaon", "internal", "app"))
 	wiring := map[string]bool{
-		"wireToolRuntime/b.wireDetectionPacks":        false,
+		"wireToolRuntime/wireDetectionPacks":          false,
 		"wireDetectionPacks/SetEgressDetectionSource": false,
 		"publish/detectionpack.NewEgressSource":       false,
 	}

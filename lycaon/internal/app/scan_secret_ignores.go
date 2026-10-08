@@ -8,7 +8,7 @@ import (
 
 // Background scans carry root identity. A root shared by multiple projects
 // cannot borrow either project's classifier acceptance.
-func (b *serveBuilder) scanSecretIgnores(ctx context.Context, root string) map[string]projectignore.SecretEntry {
+func (b toolWiring) scanSecretIgnores(ctx context.Context, root string) map[string]projectignore.SecretEntry {
 	if b.registry == nil || b.secretIgnores == nil || b.secretFingerprinter == nil {
 		return nil
 	}

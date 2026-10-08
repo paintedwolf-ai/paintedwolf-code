@@ -90,8 +90,8 @@ func TestCompleteStreamUsesPolicyList(t *testing.T) {
 		},
 	}}
 	sess := &api.Session{ID: "s1", Posture: api.SessionPostureSpec}
-	if _, _, err := loop.completeStream(context.Background(), sess, "s1", []api.Message{{Role: api.MessageRoleUser, Content: "go"}}, "coordinator", "go", 0, 8, false, nil, nil); err != nil {
-		testutil.FailErr(t, "loop.completeStream failed", err)
+	if _, _, err := (modelTurn{loop}).completeStream(context.Background(), sess, "s1", []api.Message{{Role: api.MessageRoleUser, Content: "go"}}, "coordinator", "go", 0, 8, false, nil, nil); err != nil {
+		testutil.FailErr(t, "modelTurn{loop}.completeStream failed", err)
 	}
 	if len(policy.listCalls) != 1 || policy.listCalls[0] != "coordinator" {
 		t.Fatalf("list calls = %v", policy.listCalls)
@@ -142,7 +142,7 @@ func TestCoordinatorToolsForTurnTrimsEveryDiscoveredProfile(t *testing.T) {
 	ids := discoveredPromptProfileIDs(t)
 	offered := 0
 	for _, id := range ids {
-		got, _, _, err := loop.coordinatorToolsForTurn(
+		got, _, _, err := modelTurn{loop}.coordinatorToolsForTurn(
 			context.Background(),
 			&api.Session{ID: "child-1", ParentSessionID: "parent-1", AgentType: id},
 			id,

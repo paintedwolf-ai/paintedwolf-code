@@ -69,8 +69,8 @@ func TestCappedToolResultLeavesNoSecretFragmentAnywhere(t *testing.T) {
 		t.Fatal("fixture no longer cuts through the credential")
 	}
 	rawArgs := map[string]any{"path": ".env"}
-	projection := loop.projectToolResultForStorage(context.Background(), rawContent, rawArgs)
-	projected := loop.truncateToolResultForSession(
+	projection := toolInvocations{loop}.projectToolResultForStorage(context.Background(), rawContent, rawArgs)
+	projected := toolInvocations{loop}.truncateToolResultForSession(
 		context.Background(), "read", projection, rawContent, maxBytes, 0, sess,
 	)
 	if !strings.Contains(projected.content, "Code: TOOL_OUTPUT_TRUNCATED") {
@@ -90,7 +90,7 @@ func TestCappedToolResultLeavesNoSecretFragmentAnywhere(t *testing.T) {
 		},
 	}
 	last := time.Time{}
-	_, err = loop.persistClassifiedToolOutcome(
+	_, err = toolBatch{loop}.persistClassifiedToolOutcome(
 		context.Background(), sess.ID, sess, nil, toolCallOutcome{
 			toolName: "read", toolArgs: rawArgs, toolMsg: toolMsg,
 		}, &last, &promptLoopTurnState{},

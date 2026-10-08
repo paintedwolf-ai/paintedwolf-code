@@ -12,7 +12,7 @@ import (
 
 // commitToolResultWithOptionalNote appends the tool row, and its agent note
 // when present, as one AppendMessages batch.
-func (l *PromptLoop) commitToolResultWithOptionalNote(
+func (l toolInvocations) commitToolResultWithOptionalNote(
 	ctx context.Context,
 	sessionID string,
 	history []api.Message,
@@ -26,7 +26,7 @@ func (l *PromptLoop) commitToolResultWithOptionalNote(
 	return l.appendStorageSafeMessages(ctx, sessionID, history, stored, transient, st)
 }
 
-func (l *PromptLoop) classifiedResultRows(
+func (l toolInvocations) classifiedResultRows(
 	ctx context.Context,
 	toolMsg api.Message,
 	transientTool *api.Message,
@@ -54,7 +54,7 @@ func (l *PromptLoop) classifiedResultRows(
 	return []api.Message{toolMsg, storedNote}, []*api.Message{transientTool, transientNote}
 }
 
-func (l *PromptLoop) appendStorageSafeMessages(
+func (l toolInvocations) appendStorageSafeMessages(
 	ctx context.Context,
 	sessionID string,
 	history []api.Message,
@@ -68,8 +68,8 @@ func (l *PromptLoop) appendStorageSafeMessages(
 	return foldStorageSafeMessages(history, stored, transient, st), nil
 }
 
-func (l *PromptLoop) persistStorageSafeMessages(ctx context.Context, sessionID string, stored []api.Message) error {
-	if l == nil || l.Deps.AppendMessages == nil {
+func (l toolInvocations) persistStorageSafeMessages(ctx context.Context, sessionID string, stored []api.Message) error {
+	if l.PromptLoop == nil || l.Deps.AppendMessages == nil {
 		return fmt.Errorf("append messages not configured")
 	}
 	return l.Deps.AppendMessages(ctx, sessionID, stored...)

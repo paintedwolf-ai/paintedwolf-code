@@ -39,9 +39,9 @@ func managedScreeningFixture(t *testing.T) (*serveBuilder, *secretmatch.Matcher,
 	fp, err := secretmatch.NewFingerprinter(bytes.Repeat([]byte{0x5a}, 32))
 	testutil.FailErr(t, "build fingerprinter", err)
 	matcher.SetFingerprinter(fp)
-	b.wireSecretEvidence(matcher, fp)
+	sessionWiring{b}.wireSecretEvidence(matcher, fp)
 	b.secretCaps = secretcap.NewWithStore(database, values, func(root string, values []secretmatch.Remembered) { b.secretHarvest.Remember(root, values...) })
-	b.wireMessageSecretRedaction(matcher)
+	sessionWiring{b}.wireMessageSecretRedaction(matcher)
 	t.Cleanup(func() { sessionstore.SetMessageRedactor(nil); observability.SetCaptureRedactor(nil) })
 	return b, matcher, sessionstore.NewSQL(database), values
 }
@@ -124,7 +124,7 @@ func TestMarkingAProjectSecretRescreensExistingTaskHistory(t *testing.T) {
 				b.secretCaps.AddScreeningInvalidationObserver(func(context.Context, string) { cancel() })
 			}
 			b.mgr = session.NewManager(store, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
-			b.wireMessageSecretRedaction(matcher)
+			sessionWiring{b}.wireMessageSecretRedaction(matcher)
 			_, err := b.secretCaps.Put(requestCtx, secretcap.PutRequest{
 				ProjectID: testdbseed.DefaultProjectID, OperationID: "late-mark", Name: "Late token", Purpose: "screen earlier reads",
 				Scope: secretcap.ScopeProject, Origin: secretcap.OriginFileMarked, PersonID: testdbseed.OwnerID(t, store.DB()), Value: raw,

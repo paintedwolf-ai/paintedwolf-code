@@ -28,7 +28,7 @@ func TestToolContextForCallPreservesCompiledSurface(t *testing.T) {
 		TurnWritePinRootID:   "root-2",
 		TurnWritePinGlobs:    []string{"src/**", "README.md"},
 	}
-	got, err := loop.toolContextForCall(t.Context(), &api.Session{}, base, inject.Machine{})
+	got, err := toolBatch{loop}.toolContextForCall(t.Context(), &api.Session{}, base, inject.Machine{})
 	testutil.FailErr(t, "toolContextForCall", err)
 	if got.EditorReadBases != base.EditorReadBases || got.TurnSurfaceID != base.TurnSurfaceID ||
 		!slices.Equal(got.TurnToolPlan.ImmediateNames(), base.TurnToolPlan.ImmediateNames()) ||

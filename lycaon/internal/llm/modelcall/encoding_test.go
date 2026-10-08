@@ -39,7 +39,7 @@ func TestInternalAttemptControlsStayOutOfEncodedRequests(t *testing.T) {
 				keys    []string
 				visible map[string]any
 			}{
-				{"request", request, []string{"Model", "Messages", "Tools", "Debug", "Composition", "Think", "MaxTokens", "ResponseFormat"}, map[string]any{"Model": "fixture"}},
+				{"request", request, []string{"Model", "Messages", "Tools", "ToolUse", "Debug", "Composition", "Think", "MaxTokens", "ResponseFormat"}, map[string]any{"Model": "fixture"}},
 				{"chunk", chunk, []string{"Scripted", "Content", "ProviderID", "Model", "Fallback", "Reasoning", "ReasoningDetails", "ToolCalls", "Usage", "Done", "Progress", "Err"}, map[string]any{"Content": "delta", "Reasoning": "reason", "Done": true}},
 				{"budget", *request.AttemptBudget, []string{}, nil},
 			} {

@@ -10,7 +10,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func (l *PromptLoop) appendToolProcedures(
+func (l toolInvocations) appendToolProcedures(
 	ctx context.Context, sess *api.Session, profileID string,
 	messages []api.Message, offered []tools.ToolMeta,
 ) ([]api.Message, error) {

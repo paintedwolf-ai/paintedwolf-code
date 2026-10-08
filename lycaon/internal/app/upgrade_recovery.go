@@ -15,7 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/version"
 )
 
-func (b *serveBuilder) openUpgradeableStore(path string) (*db.Store, error) {
+func (b serverWiring) openUpgradeableStore(path string) (*db.Store, error) {
 	hooks := db.UpgradeHooks{
 		Before: func(ctx context.Context, source *sql.DB, plan migrations.Plan) error {
 			previous, _, err := db.ReadAppVersion(ctx, source)
@@ -66,7 +66,7 @@ func (b *serveBuilder) openUpgradeableStore(path string) (*db.Store, error) {
 	return database, nil
 }
 
-func (b *serveBuilder) prepareUpgradeReadiness(database *db.Store, dataDir string) error {
+func (b serverWiring) prepareUpgradeReadiness(database *db.Store, dataDir string) error {
 	recoveryDir := filepath.Join(dataDir, db.UpgradeRecoveryDirName)
 	pending := filepath.Join(recoveryDir, "pending.json")
 	if _, err := os.Stat(pending); err == nil {
@@ -96,7 +96,7 @@ func (b *serveBuilder) prepareUpgradeReadiness(database *db.Store, dataDir strin
 	return nil
 }
 
-func (b *serveBuilder) captureVersionRecovery(path string, hooks db.UpgradeHooks) error {
+func (b serverWiring) captureVersionRecovery(path string, hooks db.UpgradeHooks) error {
 	source, err := db.OpenReadOnly(b.ctx, path)
 	if err != nil {
 		// OpenWithOptions classifies corrupt and incompatible stores.

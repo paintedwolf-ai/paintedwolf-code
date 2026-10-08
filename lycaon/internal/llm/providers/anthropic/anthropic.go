@@ -86,6 +86,9 @@ func (p *Provider) Prepare(req modelcall.CompletionRequest, stream bool) Request
 	}
 	if len(req.Tools) > 0 {
 		out.Tools = ProjectTools(req.Tools)
+		if !req.ToolsCallable() {
+			out.ToolChoice = &anthropicToolChoice{Type: "none"}
+		}
 	}
 	return out
 }

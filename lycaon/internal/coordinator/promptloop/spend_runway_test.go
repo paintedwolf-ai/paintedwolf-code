@@ -76,8 +76,8 @@ func TestMaybeSpendRunwayNudge(t *testing.T) {
 	st := &promptLoopTurnState{}
 	history := []api.Message{{ID: "u1", Role: api.MessageRoleUser, Content: "hi"}}
 
-	got, err := loop.maybeSpendRunwayNudge(context.Background(), sess, "s1", history, SpendRunway{Low: true, CeilingUSD: 5}, st)
-	testutil.FailErr(t, "loop.maybeSpendRunwayNudge failed", err)
+	got, err := turnNudges{loop}.maybeSpendRunwayNudge(context.Background(), sess, "s1", history, SpendRunway{Low: true, CeilingUSD: 5}, st)
+	testutil.FailErr(t, "turnNudges{loop}.maybeSpendRunwayNudge failed", err)
 	if calls != 1 || gotCeiling != 5 {
 		t.Fatalf("calls=%d ceiling=%v", calls, gotCeiling)
 	}
@@ -85,8 +85,8 @@ func TestMaybeSpendRunwayNudge(t *testing.T) {
 		t.Fatalf("history len = %d want 2", len(got))
 	}
 
-	got2, err := loop.maybeSpendRunwayNudge(context.Background(), sess, "s1", got, SpendRunway{Low: false, CeilingUSD: 5}, st)
-	testutil.FailErr(t, "loop.maybeSpendRunwayNudge failed", err)
+	got2, err := turnNudges{loop}.maybeSpendRunwayNudge(context.Background(), sess, "s1", got, SpendRunway{Low: false, CeilingUSD: 5}, st)
+	testutil.FailErr(t, "turnNudges{loop}.maybeSpendRunwayNudge failed", err)
 	if calls != 1 {
 		t.Fatalf("Low=false called nudge: %d", calls)
 	}
@@ -104,7 +104,7 @@ func TestApplySpendCeilingGrantsOneCoordinatorWindDown(t *testing.T) {
 		IsSpendCeiling: func(err error) bool { return errors.Is(err, ceilingErr) },
 	}}
 	st := &promptLoopTurnState{lastAssistantID: "a1"}
-	decision, err := loop.applySpendCeiling(
+	decision, err := turnNudges{loop}.applySpendCeiling(
 		context.Background(), &api.Session{ID: "s1"}, "s1", "implement", "prompt", 10,
 		PromptRunInput{}, st,
 	)
@@ -128,7 +128,7 @@ func TestMaybeSpendSoftStopNudge(t *testing.T) {
 		},
 	}}
 	history := []api.Message{{ID: "u1", Role: api.MessageRoleUser, Content: "hi"}}
-	got, err := loop.maybeSpendSoftStopNudge(
+	got, err := turnNudges{loop}.maybeSpendSoftStopNudge(
 		context.Background(), &api.Session{ID: "s1"}, "s1", history, true, &promptLoopTurnState{},
 	)
 	if err != nil {

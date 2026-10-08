@@ -34,12 +34,12 @@ func EnforceToolCallSupport(profile providerprofile.Profile, req modelcall.Compl
 	}
 	if profile.TextToolCallGrammars.Supports(providerprofile.TextToolCallGrammarHarmony) {
 		recovered := *c
-		c = RecoverHarmonyCompletion(&recovered, len(req.Tools) > 0)
+		c = RecoverHarmonyCompletion(&recovered, req.ToolsCallable())
 		if len(c.ToolCalls) > 0 && !validRecoveredToolCalls(c.ToolCalls, req.Tools) {
 			return nil, &failure.ProviderToolCallsInProseError{ProviderID: providerID, Model: model}
 		}
 	}
-	if len(req.Tools) == 0 || len(c.ToolCalls) > 0 {
+	if !req.ToolsCallable() || len(c.ToolCalls) > 0 {
 		return c, nil
 	}
 	if strings.TrimSpace(c.Content) == "" {

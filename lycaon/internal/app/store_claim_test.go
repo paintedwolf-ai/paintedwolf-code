@@ -67,7 +67,7 @@ func TestReconcileStoreCoupledStorageRefusesWhenTheStoreClaimIsLost(t *testing.T
 	dbPath, claim := claimedTestStore(t)
 	replaceStoreFile(t, dbPath)
 
-	err := (&serveBuilder{storeClaim: claim}).reconcileStoreCoupledStorage(context.Background())
+	err := delegationWiring{&serveBuilder{storeClaim: claim}}.reconcileStoreCoupledStorage(context.Background())
 	if !errors.Is(err, hostlock.ErrStoreClaimLost) {
 		t.Fatalf("reconcile should refuse on a lost claim, got %v", err)
 	}

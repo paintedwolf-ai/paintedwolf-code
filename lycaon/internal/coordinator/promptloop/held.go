@@ -33,7 +33,7 @@ type heldToolCall struct {
 // runHeldToolCall runs a detachable call. A call that settles inside its
 // budget returns exactly as an ordinary call does. One that does not returns a
 // running result and a handle, and keeps running under the host's context.
-func (l *PromptLoop) runHeldToolCall(
+func (l toolBatch) runHeldToolCall(
 	ctx context.Context,
 	sess *api.Session,
 	tc api.ToolCall,
@@ -43,7 +43,7 @@ func (l *PromptLoop) runHeldToolCall(
 	// The supervised call writes settled before it finishes; the caller reads it
 	// only after the call settles inside the budget.
 	var settled toolInvocation
-	screened, _ := l.storageSafeMessage(ctx, api.Message{ToolCalls: []api.ToolCall{tc}})
+	screened, _ := toolInvocations(l).storageSafeMessage(ctx, api.Message{ToolCalls: []api.ToolCall{tc}})
 	visible := messageview.RedactMessage(screened)
 	title := strings.ReplaceAll(tc.Name, "_", " ")
 	if detail := toolpresentation.Title(tc.Name, visible.ToolCalls[0].Args); detail != "" {
@@ -66,7 +66,7 @@ func (l *PromptLoop) runHeldToolCall(
 	return heldRunning(tc.Name, outcome, held)
 }
 
-func (l *PromptLoop) heldCallBudget() time.Duration {
+func (l toolBatch) heldCallBudget() time.Duration {
 	if l.Deps.HeldCallBudget > 0 {
 		return l.Deps.HeldCallBudget
 	}
@@ -99,7 +99,7 @@ func heldRunning(tool string, outcome heldcall.Outcome, held heldToolCall) toolI
 }
 
 // refuseHeldCall renders a duplicate or over-capacity call as a host refusal.
-func (l *PromptLoop) refuseHeldCall(
+func (l toolBatch) refuseHeldCall(
 	ctx context.Context,
 	sess *api.Session,
 	tc api.ToolCall,
@@ -123,7 +123,7 @@ func (l *PromptLoop) refuseHeldCall(
 		refused.receipt, refused.contract = held.receipt, held.contract
 		return refused
 	}
-	refused := refusedInvocation(l.rejectToolOccurrence(ctx, sess, tc, toolCtx, code, data))
+	refused := refusedInvocation(toolInvocations(l).rejectToolOccurrence(ctx, sess, tc, toolCtx, code, data))
 	refused.receipt, refused.contract = held.receipt, held.contract
 	return refused
 }

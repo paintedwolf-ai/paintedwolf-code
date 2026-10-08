@@ -82,6 +82,17 @@ func (d ReviewLoopDef) CarriesClaims() bool {
 	return false
 }
 
+// Decisions lists the declared verdict values with the terminal value first.
+func (d ReviewLoopDef) Decisions() []string {
+	var out []string
+	for _, v := range strings.Split(d.VerdictSchema[VerdictDecisionKey], "|") {
+		if v = strings.TrimSpace(v); v != "" {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
 // StatusWords lists the declared status words in stable order.
 func (d ReviewLoopDef) StatusWords() []string {
 	out := make([]string, 0, len(d.ClaimStatuses))

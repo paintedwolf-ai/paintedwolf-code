@@ -20,7 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/scan/bundled"
 )
 
-func (b *serveBuilder) buildPreflightEnv() preflight.Env {
+func (b serverWiring) buildPreflightEnv() preflight.Env {
 	configDir, err := configdir.UserConfigDir()
 	if err != nil {
 		configDir = ""
@@ -43,7 +43,7 @@ func (b *serveBuilder) buildPreflightEnv() preflight.Env {
 // checkDecisionEngineForPreflight reports the engine's own status: the client
 // knows whether it is disabled, missing, waiting for its checkpoint, or failed
 // its handshake.
-func (b *serveBuilder) checkDecisionEngineForPreflight(context.Context) preflight.DecisionReason {
+func (b serverWiring) checkDecisionEngineForPreflight(context.Context) preflight.DecisionReason {
 	if client, ok := b.decider.(*bialy.Client); ok {
 		return preflight.DecisionReason(client.Status())
 	}
@@ -54,7 +54,7 @@ func (b *serveBuilder) checkDecisionEngineForPreflight(context.Context) prefligh
 	return ""
 }
 
-func (b *serveBuilder) liteSlotUnavailableForPreflight() (bool, map[string]string) {
+func (b serverWiring) liteSlotUnavailableForPreflight() (bool, map[string]string) {
 	if b.llmSvc == nil || b.llmSvc.Utility == nil {
 		return false, nil
 	}
@@ -83,14 +83,14 @@ var preflightBrowserProbe = struct {
 }{}
 
 // providerCountForPreflight reads configured providers without discovery.
-func (b *serveBuilder) providerCountForPreflight() int {
+func (b serverWiring) providerCountForPreflight() int {
 	if b.llmSvc == nil || b.llmSvc.Registry == nil {
 		return 0
 	}
 	return b.llmSvc.Registry.ConfiguredCount()
 }
 
-func (b *serveBuilder) missingRoleProvidersForPreflight() map[string]string {
+func (b serverWiring) missingRoleProvidersForPreflight() map[string]string {
 	if b.llmSvc == nil || b.llmSvc.Registry == nil || b.llmSvc.Policy == nil {
 		return nil
 	}
@@ -127,7 +127,7 @@ func (b *serveBuilder) missingRoleProvidersForPreflight() map[string]string {
 }
 
 // checkBrowserForPreflight validates the resolved browser without remediation.
-func (b *serveBuilder) checkBrowserForPreflight(ctx context.Context) (preflight.BrowserReason, error) {
+func (b serverWiring) checkBrowserForPreflight(ctx context.Context) (preflight.BrowserReason, error) {
 	cacheDir := browserengine.ManagedCacheDir()
 	resolved, ok := browserengine.ResolveBinary(browserengine.ResolveOptions{CacheDir: cacheDir})
 	if !ok {
@@ -158,7 +158,7 @@ func (b *serveBuilder) checkBrowserForPreflight(ctx context.Context) (preflight.
 
 var errNoBrowserResolved = errors.New("no headless browser resolved (env, bundle, or managed cache)")
 
-func (b *serveBuilder) resolveScannerForPreflight() (string, string, error) {
+func (b serverWiring) resolveScannerForPreflight() (string, string, error) {
 	manifest, err := bundled.LoadManifest()
 	if err != nil {
 		return "", "not_found", err

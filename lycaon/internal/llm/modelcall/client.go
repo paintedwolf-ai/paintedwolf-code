@@ -54,6 +54,8 @@ type CompletionRequest struct {
 	Model                 string
 	Messages              []api.Message
 	Tools                 []tools.ToolMeta
+	// ToolUse says whether the model may call Tools in this request.
+	ToolUse               ToolUse
 	Debug                 RequestDebug
 	// Composition says who composed this request. The zero value is the
 	// coordinator conversation; utility calls stamp their own at one funnel.
@@ -64,6 +66,23 @@ type CompletionRequest struct {
 	MaxTokens int
 	// ResponseFormat requests structured output.
 	ResponseFormat *ResponseFormat
+}
+
+// ToolUse says whether the model may call a request's tools.
+type ToolUse uint8
+
+const (
+	// ToolUseAllowed lets the model call any offered tool.
+	ToolUseAllowed ToolUse = iota
+	// ToolUseForbidden asks for a prose answer. Tool definitions stay in the
+	// request, since transports validate tool history against them; each
+	// adapter maps the restriction onto its own no-call control.
+	ToolUseForbidden
+)
+
+// ToolsCallable reports whether the model may call one of the request's tools.
+func (r CompletionRequest) ToolsCallable() bool {
+	return len(r.Tools) > 0 && r.ToolUse != ToolUseForbidden
 }
 
 // SystemPrompt joins system messages in request order.

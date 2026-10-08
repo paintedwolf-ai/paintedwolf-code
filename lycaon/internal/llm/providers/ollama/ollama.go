@@ -243,7 +243,7 @@ func (p *Provider) Prepare(ctx context.Context, req modelcall.CompletionRequest,
 	body := Request{
 		Model:     model,
 		Messages:  ProjectMessages(req.Messages, vision, req.Debug.SessionID),
-		Tools:     toolsToOllama(req.Tools),
+		Tools:     ollamaCallableTools(req),
 		Stream:    stream,
 		KeepAlive: providerwire.ProjectPromptCache(req, p.profile.PromptCache, modelinfo.ModelCapabilities{}).KeepAlive,
 		Options: ollamaOptions{
@@ -440,3 +440,12 @@ func (p *Provider) warnIfTruncated(payload Request, promptEstimate, reportedProm
 }
 
 var _ modelcall.Provider = (*Provider)(nil)
+
+// ollamaCallableTools omits definitions when the request forbids a call: the
+// chat API has no no-call control and renders tool history without them.
+func ollamaCallableTools(req modelcall.CompletionRequest) []ollamaTool {
+	if !req.ToolsCallable() {
+		return nil
+	}
+	return toolsToOllama(req.Tools)
+}

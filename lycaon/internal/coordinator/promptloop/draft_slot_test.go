@@ -71,7 +71,7 @@ func TestRejectEmitsNoDeleteForCoordinatorDraftSlot(t *testing.T) {
 		{ID: "u1", Role: api.MessageRoleUser, Content: "go"},
 		{ID: "slot-1", Role: api.MessageRoleAssistant, Content: "bad synthesis", Visibility: api.MessageVisibilityInternal},
 	}
-	_, err := loop.rejectBlockedAssistantTurn(
+	_, err := toolInvocations{loop}.rejectBlockedAssistantTurn(
 		context.Background(), "s1", history, "slot-1", "slot-1",
 		refusalForTest("Rejected: test\nCode: SYNTH_HANDLE_NOT_IN_LEGS"),
 		nil,
@@ -92,7 +92,7 @@ func TestRetryPromptExcludesRejectedProse(t *testing.T) {
 		{ID: "u1", Role: api.MessageRoleUser, Content: "go"},
 		{ID: "slot-1", Role: api.MessageRoleAssistant, Content: "rejected prose", Visibility: api.MessageVisibilityInternal},
 	}
-	out, err := loop.retractRejectedAssistantTurn(context.Background(), "s1", history, "slot-1", "slot-1", refusalForTest("Code: TEST"))
+	out, err := toolInvocations{loop}.retractRejectedAssistantTurn(context.Background(), "s1", history, "slot-1", "slot-1", refusalForTest("Code: TEST"))
 	testutil.FailErr(t, "retractRejectedAssistantTurn", err)
 	if len(out) != 1 {
 		t.Fatalf("history len = %d want 1", len(out))
@@ -114,7 +114,7 @@ func TestRejectSnapshotsVersionsWithOutcomeCode(t *testing.T) {
 		UpdateMessage: func(_ context.Context, _, _ string, _ api.Message) error { return nil },
 	})
 	history := []api.Message{{ID: "slot-1", Role: api.MessageRoleAssistant, Content: "v1"}}
-	_, err := loop.retractRejectedAssistantTurn(
+	_, err := toolInvocations{loop}.retractRejectedAssistantTurn(
 		context.Background(), "s1", history, "slot-1", "slot-1",
 		refusalForTest("Rejected: x\nCode: COORDINATOR_UNGROUNDED_CLAIM"),
 	)
@@ -138,7 +138,7 @@ func TestRetractKeepsRejectedBodyOnWireRow(t *testing.T) {
 	history := []api.Message{
 		{ID: "slot-1", Role: api.MessageRoleAssistant, Content: "rejected prose", Visibility: api.MessageVisibilityInternal},
 	}
-	_, err := loop.retractRejectedAssistantTurn(context.Background(), "s1", history, "slot-1", "slot-1", refusalForTest("Code: TEST"))
+	_, err := toolInvocations{loop}.retractRejectedAssistantTurn(context.Background(), "s1", history, "slot-1", "slot-1", refusalForTest("Code: TEST"))
 	testutil.FailErr(t, "retractRejectedAssistantTurn", err)
 	if patched.Content != "rejected prose" {
 		t.Fatalf("wire content = %q want rejected body kept (no blank draft rail)", patched.Content)
@@ -277,7 +277,7 @@ func TestWithdrawnTerminalState(t *testing.T) {
 			return nil
 		},
 	})
-	err := loop.maybeWithdrawCoordinatorDraft(context.Background(), &api.Session{ID: "s1"}, "s1", st)
+	err := turnNudges{loop}.maybeWithdrawCoordinatorDraft(context.Background(), &api.Session{ID: "s1"}, "s1", st)
 	testutil.FailErr(t, "maybeWithdrawCoordinatorDraft", err)
 	if patched.Kind != api.MessageKindDraft || patched.DraftStatus != api.DraftStatusWithdrawn {
 		t.Fatalf("patched = %+v want withdrawn draft", patched)
@@ -320,7 +320,7 @@ func TestNonSlotRejectSupersedesInPlace(t *testing.T) {
 		AppendDraftVersion: func(context.Context, string, string, string, string) (int, error) { return 1, nil },
 	})
 	history := []api.Message{{ID: "a1", Role: api.MessageRoleAssistant, Content: "worker bad", Ord: 3}}
-	_, err := loop.rejectBlockedAssistantTurn(context.Background(), "s1", history, "a1", "", refusalForTest("Code: TEST"), nil)
+	_, err := toolInvocations{loop}.rejectBlockedAssistantTurn(context.Background(), "s1", history, "a1", "", refusalForTest("Code: TEST"), nil)
 	testutil.FailErr(t, "rejectBlockedAssistantTurn", err)
 	if patched.ID != "a1" {
 		t.Fatalf("patched id = %q want a1", patched.ID)

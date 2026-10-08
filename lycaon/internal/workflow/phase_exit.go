@@ -1,7 +1,6 @@
 package workflow
 
 import (
-	"encoding/json"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
@@ -55,12 +54,9 @@ type PhaseExitView struct {
 	DormantGates []string
 	// CompleteWhen is a non-gate completion expression, when the phase declares one.
 	CompleteWhen string
-	// VerdictShape is the rendered verdict_schema a terminal verdict must follow.
-	VerdictShape     string
 	ReviewLoopKey    string
 	ReviewLoopCap    int
 	FollowupAttempts int
-	VerdictExample   string
 	// ReviewAgents is the verdict-owed reviewer roster: required_agents plus the
 	// spawnable if_spawnable subset. A terminal verdict needs a succeeded task()
 	// envelope from each.
@@ -98,12 +94,10 @@ func ProjectPhaseExit(manifest workflowdef.Manifest, phase workflowdef.PhaseDef,
 			out.ReviewLoopCap = 0
 		}
 		out.FollowupAttempts = phase.ReviewLoop.FollowupAttempts
-		out.VerdictExample = verdictExampleJSON(*phase.ReviewLoop)
 		if len(reviewAgents) == 0 {
 			reviewAgents = dedupeReviewAgents(phase.ReviewLoop.RequiredAgents, phase.ReviewLoop.IfSpawnable)
 		}
 		out.ReviewAgents = append([]string(nil), reviewAgents...)
-		out.VerdictShape = VerdictSchemaShape(*phase.ReviewLoop)
 	case phase.HumanApproval != nil:
 		out.Kind = PhaseExitKindHumanApproval
 		out.HumanApproval = true
@@ -184,11 +178,9 @@ func (exit PhaseExitView) InjectView() *inject.PhaseExitView {
 		OpenGates:           append([]string(nil), exit.OpenGates...),
 		DormantGates:        append([]string(nil), exit.DormantGates...),
 		CompleteWhen:        exit.CompleteWhen,
-		VerdictShape:        exit.VerdictShape,
 		ReviewLoopKey:       exit.ReviewLoopKey,
 		ReviewLoopCap:       exit.ReviewLoopCap,
 		FollowupAttempts:    exit.FollowupAttempts,
-		VerdictExample:      exit.VerdictExample,
 		ReviewAgents:        append([]string(nil), exit.ReviewAgents...),
 		HumanApproval:       exit.HumanApproval,
 		InvokeWorkflowID:    exit.InvokeWorkflowID,
@@ -205,12 +197,4 @@ func (exit PhaseExitView) InjectView() *inject.PhaseExitView {
 		}
 	}
 	return pe
-}
-
-func verdictExampleJSON(def workflowdef.ReviewLoopDef) string {
-	raw, err := json.Marshal(VerdictExample(def))
-	if err != nil {
-		return ""
-	}
-	return string(raw)
 }

@@ -18,8 +18,8 @@ type toolResultStorageProjection struct {
 	args    map[string]any
 }
 
-func (l *PromptLoop) storageSafeMessage(ctx context.Context, msg api.Message) (api.Message, *api.Message) {
-	if l == nil || l.Deps.RedactMessageForStorage == nil {
+func (l toolInvocations) storageSafeMessage(ctx context.Context, msg api.Message) (api.Message, *api.Message) {
+	if l.PromptLoop == nil || l.Deps.RedactMessageForStorage == nil {
 		return msg, nil
 	}
 	stored, changed := l.Deps.RedactMessageForStorage(ctx, msg)
@@ -32,7 +32,7 @@ func (l *PromptLoop) storageSafeMessage(ctx context.Context, msg api.Message) (a
 
 // projectToolResultForStorage applies the durable transcript policy before a
 // tool payload can cross an earlier persistence seam such as an overflow spill.
-func (l *PromptLoop) projectToolResultForStorage(ctx context.Context, content string, args map[string]any) toolResultStorageProjection {
+func (l toolInvocations) projectToolResultForStorage(ctx context.Context, content string, args map[string]any) toolResultStorageProjection {
 	stored, _ := l.storageSafeMessage(ctx, api.Message{
 		Content: content,
 		ToolResult: &api.ToolResult{

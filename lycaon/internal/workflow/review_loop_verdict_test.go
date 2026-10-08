@@ -4,14 +4,18 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/internal/workflow/verdictcall"
 )
 
 // reviewLoopFixture ties a live workflow review_loop phase to its verdict fixture, so the
@@ -263,5 +267,194 @@ func TestReviewLoopVerdictAnswersFollowTheDeclaredRating(t *testing.T) {
 	}
 	if err := workflow.ValidateReviewLoopVerdict(def, ok, workflow.VerdictRules{KnownClaims: rules.KnownClaims}); err == nil {
 		t.Fatal("answers accepted for a workflow that declares no rating")
+	}
+}
+
+func catalogVerdictSchema(t *testing.T) map[string]any {
+	t.Helper()
+	cfg, err := toolschema.LoadSchemaDir(filepath.Join(configlayout.FindModuleRoot(), "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
+	testutil.FailErr(t, "LoadSchemaDir", err)
+	meta, ok := cfg.ToolMeta("submit_verdict")
+	if !ok {
+		t.Fatal("submit_verdict schema missing")
+	}
+	return meta.ArgsSchema
+}
+
+// offeredVerdictSchema is the phase's call as the coordinator is offered it,
+// which is also the schema admission checks.
+func offeredVerdictSchema(t *testing.T, f reviewLoopFixture) map[string]any {
+	t.Helper()
+	manifests, err := workflowdef.RegistryFromDirs("")
+	testutil.FailErr(t, "RegistryFromDirs", err)
+	m, err := manifests.Get(f.workflowID, f.version)
+	testutil.FailErr(t, "manifests.Get "+f.workflowID, err)
+	schema, err := verdictcall.Compose(catalogVerdictSchema(t), reviewLoopDef(t, f), m.ReportBrief())
+	testutil.FailErr(t, "PhaseVerdictArgsSchema", err)
+	return tools.TrimCoordinatorToolMeta(tools.ToolMeta{Name: "submit_verdict", ArgsSchema: schema}).ArgsSchema
+}
+
+// verdictCall turns a stored verdict back into the call that produced it.
+func verdictCall(t *testing.T, def workflowdef.ReviewLoopDef, stored map[string]string) map[string]any {
+	t.Helper()
+	verdict := map[string]any{}
+	for field, raw := range stored {
+		switch def.VerdictSchema[field] {
+		case workflowdef.VerdictClaimsType, workflowdef.VerdictSetAsidesType, workflowdef.VerdictCoverageType:
+			var v any
+			testutil.FailErr(t, "decode "+field, json.Unmarshal([]byte(raw), &v))
+			verdict[field] = v
+		default:
+			verdict[field] = raw
+		}
+	}
+	return map[string]any{"verdict": verdict, "cited_evidence": []any{map[string]any{"handle": "h1"}}}
+}
+
+func verdictMember(schema map[string]any, path ...string) map[string]any {
+	node := schema
+	for _, name := range path {
+		props, _ := node["properties"].(map[string]any)
+		node, _ = props[name].(map[string]any)
+		if items, ok := node["items"].(map[string]any); ok && node["type"] == "array" {
+			node = items
+		}
+	}
+	return node
+}
+
+func TestPhaseVerdictSchemaAcceptsEveryShippedFixture(t *testing.T) {
+	for _, f := range reviewLoopFixtures {
+		t.Run(f.key, func(t *testing.T) {
+			call := verdictCall(t, reviewLoopDef(t, f), loadVerdictFixture(t, f.fixture))
+			if err := tools.ValidateToolArgs(offeredVerdictSchema(t, f), call); err != nil {
+				t.Fatalf("a verdict the host accepts fails its phase schema: %v", err)
+			}
+		})
+	}
+}
+
+func TestPhaseVerdictSchemaRejectsMembersNestedInCoverage(t *testing.T) {
+	f := reviewLoopFixtures[1] // security survey claims
+	def := reviewLoopDef(t, f)
+	stored := loadVerdictFixture(t, f.fixture)
+	call := verdictCall(t, def, stored)
+	verdict := call["verdict"].(map[string]any)
+	coverage := verdict["coverage"].(map[string]any)
+	for _, field := range []string{"set_asides", "threat_model"} {
+		coverage[field] = verdict[field]
+		delete(verdict, field)
+	}
+
+	reject := tools.ValidateCallArguments("submit_verdict", call, offeredVerdictSchema(t, f), tools.ToolContext{})
+	if reject == nil {
+		t.Fatal("phase schema accepted members nested inside coverage")
+	}
+	got, _ := reject.Data["misplaced_fields"].([]string)
+	if !slices.Equal(got, []string{"set_asides", "threat_model"}) || reject.Data["found_under"] != "verdict.coverage" || reject.Data["belongs_under"] != "verdict" {
+		t.Fatalf("misplaced = %v under %v → %v", got, reject.Data["found_under"], reject.Data["belongs_under"])
+	}
+
+	raw, err := json.Marshal(coverage)
+	testutil.FailErr(t, "marshal coverage", err)
+	stored["coverage"] = string(raw)
+	delete(stored, "set_asides")
+	delete(stored, "threat_model")
+	err = workflow.ValidateReviewLoopVerdict(def, stored, reviewLoopRules(t, f))
+	if err == nil || !strings.Contains(err.Error(), `"set_asides" is missing`) {
+		t.Fatalf("validator error = %v, want set_asides reported missing", err)
+	}
+}
+
+func TestPhaseVerdictSchemaFollowsThePhaseDeclaration(t *testing.T) {
+	claims := offeredVerdictSchema(t, reviewLoopFixtures[1])
+	challenge := offeredVerdictSchema(t, reviewLoopFixtures[2])
+
+	decision := verdictMember(challenge, "verdict", "verdict")
+	if enum, _ := decision["enum"].([]any); len(enum) != 2 || enum[0] != "CHALLENGED" {
+		t.Fatalf("challenge decision enum = %v, want the terminal value first", decision["enum"])
+	}
+
+	claim := verdictMember(claims, "verdict", "claims")
+	if required, _ := claim["required"].([]any); slices.Contains(required, any("status")) {
+		t.Fatal("a phase with one status word must not require status")
+	}
+	if _, ok := verdictMember(claims, "verdict", "claims", "question")["type"]; ok {
+		t.Fatal("question offered in a phase without follow-up work")
+	}
+	challenged := verdictMember(challenge, "verdict", "challenges")
+	if required, _ := challenged["required"].([]any); !slices.Contains(required, any("status")) {
+		t.Fatal("a phase with several status words must require status")
+	}
+	if _, ok := verdictMember(challenge, "verdict", "challenges", "question")["type"]; !ok {
+		t.Fatal("follow-up phase does not offer question")
+	}
+
+	answers := verdictMember(claims, "verdict", "claims", "answers")
+	props, _ := answers["properties"].(map[string]any)
+	for _, dim := range []string{"reachable", "outcome", "attacker"} {
+		if _, ok := props[dim]; !ok {
+			t.Fatalf("answers lacks rating question %q: %v", dim, props)
+		}
+	}
+	reachable, _ := props["reachable"].(map[string]any)
+	if enum, _ := reachable["enum"].([]any); !slices.Contains(enum, any(workflowdef.BriefUnknown)) {
+		t.Fatalf("reachable enum = %v, want the declared unknown answer", enum)
+	}
+
+}
+
+func TestPhaseVerdictOutlineNamesMembersAndTerminalValue(t *testing.T) {
+	outline := verdictcall.Outline(offeredVerdictSchema(t, reviewLoopFixtures[1]))
+	for _, want := range []string{"coverage: {assessments: [", "revision}", "set_asides: [", "threat_model", "verdict: CLAIMED}"} {
+		if !strings.Contains(outline, want) {
+			t.Fatalf("outline %q lacks %q", outline, want)
+		}
+	}
+}
+
+func TestEveryShippedReviewPhaseComposesItsVerdictSchema(t *testing.T) {
+	manifests, err := workflowdef.RegistryFromDirs("")
+	testutil.FailErr(t, "RegistryFromDirs", err)
+	catalog := catalogVerdictSchema(t)
+	for _, m := range manifests.All() {
+		for _, phase := range m.PhaseDefs {
+			if phase.ReviewLoop == nil {
+				continue
+			}
+			if _, err := verdictcall.Compose(catalog, *phase.ReviewLoop, m.ReportBrief()); err != nil {
+				t.Errorf("%s %s phase %s: %v", m.ID, m.Version, phase.ID, err)
+			}
+		}
+	}
+}
+
+// The claims submission that stalled a security survey run: coverage was never
+// closed, so the provider passed verdict through as text and every later
+// member was read inside coverage.
+func TestObservedUnclosedCoverageSubmissionNamesItsDefect(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join(configlayout.FindModuleRoot(), "internal", "workflow", "testdata", "review_loop", "survey_claims_unclosed_coverage.json"))
+	testutil.FailErr(t, "read observed submission", err)
+	var call map[string]any
+	testutil.FailErr(t, "decode observed submission", json.Unmarshal(raw, &call))
+
+	reject := tools.ValidateCallArguments("submit_verdict", call, offeredVerdictSchema(t, reviewLoopFixtures[1]), tools.ToolContext{})
+	if reject == nil || reject.Code != "TOOL_ARGS_INVALID" {
+		t.Fatalf("observed submission was not refused as invalid arguments: %#v", reject)
+	}
+	data := reject.Data
+	if data["field"] != "verdict" || data["json_malformed"] != true {
+		t.Fatalf("field = %v json_malformed = %v", data["field"], data["json_malformed"])
+	}
+	if open, _ := data["json_open_paths"].([]string); !slices.Equal(open, []string{"verdict"}) {
+		t.Fatalf("json_open_paths = %v, want [verdict]", open)
+	}
+	misplaced, _ := data["misplaced_fields"].([]string)
+	if !slices.Equal(misplaced, []string{"set_asides", "threat_model", "verdict"}) ||
+		data["found_under"] != "verdict.coverage" || data["belongs_under"] != "verdict" || data["close_before"] != "set_asides" {
+		t.Fatalf("misplaced = %v under %v → %v, close before %v", misplaced, data["found_under"], data["belongs_under"], data["close_before"])
+	}
+	if _, ok := data["replacement_args_json"]; ok {
+		t.Fatal("an 11 KB submission was restated in the refusal")
 	}
 }

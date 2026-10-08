@@ -20,7 +20,7 @@ func TestToolResultMessageRetainsProvenanceAfterMetadata(t *testing.T) {
 				captures: toolCaptures{completion: &api.ToolCompletion{Operation: "fetch", State: "completed"}},
 			}
 			call := api.ToolCall{ID: "call-1", Name: "fetch_url", Args: map[string]any{"url": "https://example.com"}}
-			message := loop.composeToolResultMessage(t.Context(), nil, "session-1", call, "assistant-1", origin, &run)
+			message := toolInvocations{loop}.composeToolResultMessage(t.Context(), nil, "session-1", call, "assistant-1", origin, &run)
 			if datamark.Framed(message.Content) != (origin == api.MessageOriginRetrieval) {
 				t.Fatalf("origin %s lost its provenance framing: %q", origin, message.Content)
 			}

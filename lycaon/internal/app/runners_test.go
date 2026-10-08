@@ -137,7 +137,7 @@ func TestOneShotRunnerFailureAbortsStartup(t *testing.T) {
 func TestReportRecoveryBlocksNormalServing(t *testing.T) {
 	boom := errors.New("source mutation journal remained unsettled")
 	b := &serveBuilder{}
-	err := b.reportRecovery(bootrecovery.Report{
+	err := delegationWiring{b}.reportRecovery(bootrecovery.Report{
 		Phase: bootrecovery.PhaseBuild,
 		Outcomes: []bootrecovery.Outcome{{
 			Name: "source-mutations", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseBuild, Err: boom,

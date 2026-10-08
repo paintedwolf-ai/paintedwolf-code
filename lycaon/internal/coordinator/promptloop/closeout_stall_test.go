@@ -17,19 +17,19 @@ func TestCloseoutFuseTrippedGuards(t *testing.T) {
 	})
 	ctx := context.Background()
 
-	if !l.closeoutFuseTripped(ctx, &api.Session{ID: "s1"}, "s1", "implement_investigate") {
+	if !(turnCloseout{l}).closeoutFuseTripped(ctx, &api.Session{ID: "s1"}, "s1", "implement_investigate") {
 		t.Fatal("coordinator closeout surface with a tripped dep should trip")
 	}
-	if l.closeoutFuseTripped(ctx, &api.Session{ID: "s1"}, "s1", "implement") {
+	if (turnCloseout{l}).closeoutFuseTripped(ctx, &api.Session{ID: "s1"}, "s1", "implement") {
 		t.Fatal("non-closeout surface must never trip the fuse")
 	}
 	worker := &api.Session{ID: "w1", ParentSessionID: "s1"}
-	if l.closeoutFuseTripped(ctx, worker, "w1", "implement_investigate") {
+	if (turnCloseout{l}).closeoutFuseTripped(ctx, worker, "w1", "implement_investigate") {
 		t.Fatal("worker child must never trip the coordinator fuse")
 	}
 
 	nofuse := NewPromptLoopForTest(PromptLoopDeps{})
-	if nofuse.closeoutFuseTripped(ctx, &api.Session{ID: "s1"}, "s1", "implement_investigate") {
+	if (turnCloseout{nofuse}).closeoutFuseTripped(ctx, &api.Session{ID: "s1"}, "s1", "implement_investigate") {
 		t.Fatal("no fuse dep wired → must never trip")
 	}
 }
@@ -53,7 +53,7 @@ func TestEmitStalledCloseoutUsesRetainedDraftAndClears(t *testing.T) {
 	st := &promptLoopTurnState{draftSlotID: "slot-1", draftSlotAppended: true, closeoutRetry: closeoutRetryState{attempt: 3}}
 	history := []api.Message{{ID: "slot-1", Role: api.MessageRoleAssistant}}
 
-	out, err := l.emitStalledCloseout(context.Background(), &api.Session{ID: "s1"}, "s1", "", "implement_investigate", st, history)
+	out, err := turnCloseout{l}.emitStalledCloseout(context.Background(), &api.Session{ID: "s1"}, "s1", "", "implement_investigate", st, history)
 	testutil.FailErr(t, "emitStalledCloseout", err)
 
 	if !out.committed {
@@ -85,7 +85,7 @@ func TestCitationOnlyRetryStitchesPersistedCloseoutDraftBeforeGuard(t *testing.T
 	})
 	const trailer = "```json\n{\"cited_evidence\":[{\"evidence\":\"leg-1:list#1\"}],\"cited_urls\":[],\"artifact_ids\":[]}\n```"
 	history := []api.Message{{ID: "draft-1", Role: api.MessageRoleAssistant, Content: trailer}}
-	prepared, _ := loop.maybeCoerceCloseoutContent(
+	prepared, _ := toolInvocations{loop}.maybeCoerceCloseoutContent(
 		context.Background(), history, "session-1", "implement_synthesis", trailer, "draft-1",
 	)
 	report, ok := guidance.ParseCoordinatorCompletionReport(prepared)
@@ -103,7 +103,7 @@ func TestCitationOnlyRetryStitchesPersistedCloseoutDraftBeforeGuard(t *testing.T
 			return guidance.RetainedCloseout{Drafted: pinned}
 		},
 	})
-	if got, _ := inactive.maybeCoerceCloseoutContent(context.Background(), nil, "session-1", "implement_synthesis", trailer, ""); got != trailer {
+	if got, _ := (toolInvocations{inactive}).maybeCoerceCloseoutContent(context.Background(), nil, "session-1", "implement_synthesis", trailer, ""); got != trailer {
 		t.Fatalf("inactive stall stitched stale draft: %q", got)
 	}
 }

@@ -111,12 +111,18 @@ type Request struct {
 	System       []ContentBlock         `json:"system,omitempty"`
 	Messages     []anthropicMessage     `json:"messages"`
 	Tools        []anthropicTool        `json:"tools,omitempty"`
+	ToolChoice   *anthropicToolChoice   `json:"tool_choice,omitempty"`
 	Thinking     *anthropicThinking     `json:"thinking,omitempty"`
 	OutputConfig *anthropicOutputConfig `json:"output_config,omitempty"`
 	Temperature  *float64               `json:"temperature,omitempty"`
 	Stream       bool                   `json:"stream,omitempty"`
 	// CacheControl enables top-level automatic caching.
 	CacheControl *anthropicCacheControl `json:"cache_control,omitempty"`
+}
+
+// anthropicToolChoice selects how the model may use the request's tools.
+type anthropicToolChoice struct {
+	Type string `json:"type"`
 }
 
 type Usage struct {

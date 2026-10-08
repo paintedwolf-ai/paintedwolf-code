@@ -9,7 +9,7 @@ import (
 	workertools "github.com/lycaon/lycaon/internal/tools/native/workercontrol"
 )
 
-func (b *serveBuilder) decodeCompleteLeg(ctx context.Context, args map[string]any, tctx tools.ToolContext) (workertools.CompleteLegRecord, error) {
+func (b delegationWiring) decodeCompleteLeg(ctx context.Context, args map[string]any, tctx tools.ToolContext) (workertools.CompleteLegRecord, error) {
 	record, err := workercompletion.CompleteLegDecoder(ctx, args, tctx)
 	if err != nil || record.LegStatus != "complete" {
 		return record, err

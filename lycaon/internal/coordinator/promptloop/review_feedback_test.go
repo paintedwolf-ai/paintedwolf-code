@@ -32,7 +32,7 @@ func TestReviewFeedbackCanReadReviseAndVerifyBeforeParking(t *testing.T) {
 		id := fmt.Sprintf("review-%d", i)
 		calls := []api.ToolCall{{ID: id + "-call", Name: tool, Args: map[string]any{"path": "blueprint.md", "step": id}}}
 		history = append(history, api.Message{ID: id, Role: api.MessageRoleAssistant, ToolCalls: calls})
-		next, _, _, _, _, parked, err := loop.executeToolCallsInTurn(t.Context(), sess, sess.ID, calls, tools.ToolContext{}, history, "Revise the blueprint", id, "", nil)
+		next, _, _, _, _, parked, err := toolBatch{loop}.executeToolCallsInTurn(t.Context(), sess, sess.ID, calls, tools.ToolContext{}, history, "Revise the blueprint", id, "", nil)
 		testutil.FailErr(t, "execute review feedback", err)
 		if parked {
 			t.Fatalf("existing approval stopped feedback after %s", tool)
@@ -78,7 +78,7 @@ func TestApprovalBoundaryAcrossSerialAndParallelBatches(t *testing.T) {
 					}
 					sess := &api.Session{ID: "boundary"}
 					history := []api.Message{{ID: "assistant", Role: api.MessageRoleAssistant, ToolCalls: calls}}
-					_, _, _, _, _, parked, err := loop.executeToolCallsInTurn(t.Context(), sess, sess.ID, calls, tools.ToolContext{}, history, "feedback", "assistant", "", nil)
+					_, _, _, _, _, parked, err := toolBatch{loop}.executeToolCallsInTurn(t.Context(), sess, sess.ID, calls, tools.ToolContext{}, history, "feedback", "assistant", "", nil)
 					testutil.FailErr(t, "execute approval boundary", err)
 					wantPark := !initiallyAwaiting || hostHeld
 					wantCalls := int32(2)

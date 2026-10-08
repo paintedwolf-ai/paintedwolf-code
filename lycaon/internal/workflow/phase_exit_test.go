@@ -1,12 +1,18 @@
 package workflow
 
 import (
+	"context"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/toolschema"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/internal/workflow/verdictcall"
 )
 
 // Prompt tests cover each projected exit kind.
@@ -134,8 +140,10 @@ func TestProjectPhaseExitReviewLoopNamesOwedReviewers(t *testing.T) {
 	if exit.ReviewLoopKey != "survey_challenged" {
 		t.Fatalf("review loop key = %q", exit.ReviewLoopKey)
 	}
-	if !strings.HasPrefix(exit.VerdictShape, "{verdict: CHALLENGED|NEEDS_INVESTIGATION (first is terminal)") {
-		t.Fatalf("verdict shape = %q want CHALLENGED|NEEDS_INVESTIGATION first", exit.VerdictShape)
+	view := exit.InjectView()
+	testutil.FailErr(t, "attach verdict call", verdictcall.Attach(view, catalogSubmitVerdictSchema(t), *challenge.ReviewLoop, m.ReportBrief()))
+	if !strings.Contains(view.VerdictOutline, "verdict: CHALLENGED|NEEDS_INVESTIGATION}") {
+		t.Fatalf("verdict outline = %q, want the terminal value first", view.VerdictOutline)
 	}
 }
 
@@ -152,4 +160,54 @@ func TestProjectPhaseExitReviewLoopFallsBackToDeclaredRoster(t *testing.T) {
 	if !slices.Contains(exit.ReviewAgents, "skeptic") {
 		t.Fatalf("declared-roster fallback must name required agents: %v", exit.ReviewAgents)
 	}
+}
+
+// The frame loader composes a review phase's call from the session's catalog;
+// without a catalog source the phase offers the stock schema unchanged.
+func TestFrameLoaderAttachesTheSessionVerdictCall(t *testing.T) {
+	mgr, _, blueprintMgr, _ := testManagerWithRegistry(t)
+	walkPlanRunToReview(t.Context(), t, mgr, blueprintMgr, "sess-1")
+	catalog := catalogSubmitVerdictSchema(t)
+	var asked string
+	loader := &CoordinatorTurnFrameLoader{Runs: mgr, VerdictCatalog: func(_ context.Context, sessionID string) map[string]any {
+		asked = sessionID
+		return catalog
+	}}
+	frame, err := loader.BuildCoordinatorTurnFrame(t.Context(), "sess-1", nil)
+	testutil.FailErr(t, "build frame", err)
+	exit := frame.Runtime.PhaseExit
+	if asked != "sess-1" || exit == nil || exit.SubmitVerdictArgsSchema == nil || !strings.Contains(exit.VerdictOutline, "verdict: APPROVED|NEEDS_REVISION}") {
+		t.Fatalf("asked %q, phase exit = %+v", asked, exit)
+	}
+	frame, err = (&CoordinatorTurnFrameLoader{Runs: mgr}).BuildCoordinatorTurnFrame(t.Context(), "sess-1", nil)
+	testutil.FailErr(t, "build frame without catalog", err)
+	if frame.Runtime.PhaseExit.SubmitVerdictArgsSchema != nil {
+		t.Fatal("a loader without a catalog source composed a phase call")
+	}
+}
+
+func shippedToolSchemas(t *testing.T) *toolschema.Config {
+	t.Helper()
+	cfg, err := toolschema.LoadSchemaDir(filepath.Join(configlayout.FindModuleRoot(), "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
+	testutil.FailErr(t, "LoadSchemaDir", err)
+	return cfg
+}
+
+// catalogRegistry registers tools with their shipped metadata, which
+// submit_verdict composes review phase schemas from.
+func catalogRegistry(t *testing.T) *tools.DefaultRegistry {
+	t.Helper()
+	reg, err := tools.NewCatalogRegistry(shippedToolSchemas(t))
+	testutil.FailErr(t, "NewCatalogRegistry", err)
+	return reg
+}
+
+// catalogSubmitVerdictSchema loads the shipped submit_verdict call schema.
+func catalogSubmitVerdictSchema(t *testing.T) map[string]any {
+	t.Helper()
+	meta, ok := shippedToolSchemas(t).ToolMeta("submit_verdict")
+	if !ok {
+		t.Fatal("submit_verdict schema missing")
+	}
+	return meta.ArgsSchema
 }

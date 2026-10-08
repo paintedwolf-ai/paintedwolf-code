@@ -6,7 +6,7 @@ Stamp candidate claims from the worker closeouts and run scan ledger below. This
 {% if rating_questions %}4. Flaw claims need `answers`:
 {{ rating_questions }}
 {% endif %}
-Submit the nested phase shape in the workflow instructions using `submit_verdict` with `verdict: CLAIMED`, filling every coverage assessment from current host facts. Lists may be empty only when no corresponding work exists. Cite observed handles or paths/lines; scanner groups are cited through `scan_group_ids`, not as file paths. Never invent evidence.
+Submit through `submit_verdict`, whose schema gives this phase's shape, with `verdict: CLAIMED`, filling every coverage assessment from current host facts. Lists may be empty only when no corresponding work exists. Cite observed handles or paths/lines; scanner groups are cited through `scan_group_ids`, not as file paths. Never invent evidence.
 
 These claims brief the reviewers. Do not restate the user's ask as a proposition or dispatch reviewers here. The host advances on the terminal verdict.
 

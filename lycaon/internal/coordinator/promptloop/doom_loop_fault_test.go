@@ -36,7 +36,7 @@ func settleFailure(t *testing.T, guard *recordingDoomLoop, failure *api.Invocati
 		facts:   guidance.ToolResultFacts{Outcome: api.ToolResultOutcomeError}.WithCode(code),
 		failure: failure,
 	}
-	return loop.settleRejectedToolCall(
+	return toolBatch{loop}.settleRejectedToolCall(
 		context.Background(), &api.Session{ID: "s1"}, "s1",
 		api.ToolCall{ID: "call-1", Name: "task"}, "a1", run,
 	)
@@ -77,7 +77,7 @@ func TestRenderedOwnerFailureKeepsOwnershipClassification(t *testing.T) {
 		return "", rendered
 	}))
 	loop := NewPromptLoopForTest(PromptLoopDeps{Tools: registry})
-	run := loop.executeToolCall(t.Context(), &api.Session{ID: "s1"}, "s1", "", nil, api.ToolCall{
+	run := toolInvocations{loop}.executeToolCall(t.Context(), &api.Session{ID: "s1"}, "s1", "", nil, api.ToolCall{
 		ID: "call-1", Name: "read", Args: map[string]any{},
 	}, tools.ToolContext{SessionID: "s1"}, nil, 0, "", api.CoordinatorRunContext{})
 	failure := run.failure

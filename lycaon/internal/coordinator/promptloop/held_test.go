@@ -26,7 +26,7 @@ func heldTestCall(run func(context.Context) toolInvocation) heldToolCall {
 }
 
 func runHeldTestCall(loop *PromptLoop, call heldToolCall) toolInvocation {
-	return loop.runHeldToolCall(
+	return toolBatch{loop}.runHeldToolCall(
 		context.Background(),
 		&api.Session{ID: "s1", ProjectID: "p1"},
 		api.ToolCall{ID: "tc1", Name: "find"},

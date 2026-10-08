@@ -69,7 +69,7 @@ func TestUnreadReportFenceIsRefusedByName(t *testing.T) {
 	assistant := api.Message{ID: "slot-1", Role: api.MessageRoleAssistant, Content: content}
 	st := &promptLoopTurnState{coordinatorFrame: testReportFrame(), draftSlotID: "slot-1", draftSlotAppended: true,
 		history: []api.Message{{ID: "u1", Role: api.MessageRoleUser, Content: "Survey it"}, assistant}}
-	out, err := loop.handleAcceptedCloseoutReport(t.Context(), &api.Session{ID: "s1", WorkspacePath: t.TempDir()}, "s1", "", "coordinator_security_synthesis", st, st.history, assistant, read)
+	out, err := turnCloseout{loop}.handleAcceptedCloseoutReport(t.Context(), &api.Session{ID: "s1", WorkspacePath: t.TempDir()}, "s1", "", "coordinator_security_synthesis", st, st.history, assistant, read)
 	testutil.FailErr(t, "refuse the unread fence", err)
 
 	if !out.retry || noted.code != guidance.ReportFenceUnreadableCode || len(noted.unread) != 2 {
@@ -100,7 +100,7 @@ func TestUnreadReportFencePrecedesArtifactEmbed(t *testing.T) {
 	if !ok || len(read.Unread) == 0 {
 		t.Fatal("fixture must contain an unread report member")
 	}
-	observed, err := loop.observeCloseoutReport(t.Context(), &api.Session{ID: "session"}, nil, "coordinator_security_synthesis", report, read.Unread, nil, true)
+	observed, err := turnCloseout{loop}.observeCloseoutReport(t.Context(), &api.Session{ID: "session"}, nil, "coordinator_security_synthesis", report, read.Unread, nil, true)
 	testutil.FailErr(t, "observe unread fence with embed", err)
 	if observed.facts.RejectObservation != guidance.ReportDocumentObservation(guidance.ReportFenceUnreadableCode) {
 		t.Fatalf("unread fence was masked by embed: %s", observed.facts.RejectObservation)

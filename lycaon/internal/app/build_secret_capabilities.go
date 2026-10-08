@@ -10,7 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/workflow"
 )
 
-func (b *serveBuilder) wireSecretCapabilities() error {
+func (b sessionWiring) wireSecretCapabilities() error {
 	if b.secretCaps != nil {
 		return nil
 	}
