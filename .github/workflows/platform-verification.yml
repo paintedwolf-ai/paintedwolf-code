@@ -137,6 +137,13 @@ jobs:
         working-directory: lycaon-den
         run: bun install --frozen-lockfile
 
+      # Browser system packages come from the distribution mirror, whose speed
+      # varies by minutes; this step's time stays out of the test budget.
+      - name: Install Playwright browsers
+        working-directory: lycaon-den
+        timeout-minutes: 20
+        run: bunx playwright install chromium webkit --with-deps
+
       # The containers' engine runs the maintained scanner.
       - name: Set up maintained OpenGrep
         uses: ./.github/actions/setup-opengrep
@@ -148,6 +155,7 @@ jobs:
           # can capture them; the cleanup trap otherwise deletes them.
           LYCAON_E2E_KEEP_ARTIFACTS: "1"
           LYCAON_E2E_JOB_SHARD: ${{ matrix.shard }}/3
+          LYCAON_E2E_PLAYWRIGHT_READY: "1"
         run: ./task e2e:den
 
       - uses: ./.github/actions/verification-evidence
@@ -160,7 +168,10 @@ jobs:
       - name: E2E cleanup
         timeout-minutes: 5
         if: always()
-        run: ./task e2e:cleanup
+        # A run killed at its step deadline keeps its admission; withdraw it so cleanup is not queued behind it.
+        run: |
+          python3 scripts/ci_verification.py release "Playwright web E2E"
+          ./task e2e:cleanup
 
   playwright-desktop:
     uses: ./.github/workflows/desktop-verification.yml
