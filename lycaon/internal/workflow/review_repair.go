@@ -97,6 +97,17 @@ func (m *RunManager) RecordReviewToolResult(ctx context.Context, sessionID strin
 			return nil
 		}
 	}
+	if m.Sessions == nil {
+		return fmt.Errorf("review repair requires transcript storage")
+	}
+	messages, err := m.Sessions.GetMessages(ctx, sessionID)
+	if err != nil {
+		return err
+	}
+	settled, err := finalReviewResponseResult(messages, msg)
+	if err != nil || !settled {
+		return err
+	}
 	manifest, err := m.manifestForRun(ctx, run)
 	if err != nil {
 		return err
@@ -328,4 +339,43 @@ func (m *RunManager) RecoverReviewRepairs(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+// A response can submit multiple calls. Repair admission waits for every
+// verdict result, so an earlier rejection cannot interrupt a later correction.
+func finalReviewResponseResult(messages []api.Message, candidate api.Message) (bool, error) {
+	response := candidate.ToolResult.AssistantMessageID
+	expected := map[string]bool{}
+	found := false
+	for _, msg := range messages {
+		if msg.ID != response || msg.Role != api.MessageRoleAssistant {
+			continue
+		}
+		found = true
+		for _, call := range msg.ToolCalls {
+			if call.Name == "submit_verdict" {
+				expected[call.ID] = true
+			}
+		}
+	}
+	if !found || len(expected) == 0 {
+		return false, fmt.Errorf("review repair requires the durable assistant call batch")
+	}
+	last := ""
+	for _, msg := range messages {
+		result := msg.ToolResult
+		if result == nil || result.AssistantMessageID != response || result.Tool != "submit_verdict" {
+			continue
+		}
+		if _, exists := expected[result.ToolCallID]; exists {
+			expected[result.ToolCallID] = false
+			last = msg.ID
+		}
+	}
+	for _, pending := range expected {
+		if pending {
+			return false, nil
+		}
+	}
+	return last == candidate.ID, nil
 }

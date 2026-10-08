@@ -119,6 +119,8 @@ Review repair is separate from adjudication. The workflows subsystem records rej
 assistant response identity. Rejections do not consume review rounds or emit
 phase-progress wakes. Three consecutive identical structured defects, or eight
 rejected responses in one repair episode, pause the run with `review_blocked`.
+Code-only or prose-only diagnostics cannot establish an identical defect; they
+count only toward the overall response limit.
 Accepted verdicts resolve the episode. Startup replays unaccounted results after
 the last accepted verdict; human resume starts a new episode and retains the
 phase, completed work, and accepted evidence. The host also checks that current
@@ -136,7 +138,7 @@ gate. Repair episodes and snapshots are host-managed workflow variables; model
 
 Coverage facts include full-scope file distributions by directory and extension, warning counts by construct, and a bounded sample spread across the sorted paths. Counts and samples do not classify production or test code. Any workflow can use native `scan_query(view: coverage)` to filter warnings by `warning_kind`, `construct`, `rule_id`, or a path subtree and page locations with `offset` and `limit` (default 20, maximum 100). Summaries cover all matching warnings, even when locations are paged. Normal coverage review uses existing reviewers and budgets, with targeted source inspection rather than exhaustive warning enumeration.
 
-Reports derive completion from that accepted review: complete means the planned obligations are satisfied with evidenced immaterial limitations disclosed; mostly means bounded material work remains; incomplete means essential work or coverage acceptance remains. Failed required scans, missing planned work, unaccounted scanner groups, and document defects remain independent failures. Open claims without an accepted question assessment also remain incomplete. The report separates remaining work, scanner limitations, assessed exclusions, and the evidence for coverage judgments. Set-aside findings are accounted inventory, not uncovered work. A retired manifest (`retired: true`) remains available to existing runs but is absent from the start catalog. Each run projects its selected definition into its UI state, so retirement preserves its name, phase progress, and controls. Run visibility follows its attachment policy and ancestry, independently of start-catalog membership.
+Reports derive completion from that accepted review: complete means the planned obligations are satisfied with evidenced immaterial limitations disclosed; mostly means bounded material work remains; incomplete means essential work or coverage acceptance remains. Failed required scans, missing planned work, unaccounted scanner groups, and document defects remain independent failures. Open claims without an accepted question assessment also remain incomplete. The report separates remaining work, scanner limitations, assessed exclusions, and the evidence for coverage judgments. Set-aside findings are accounted inventory, not uncovered work. A sealed archived version remains available to existing runs but is absent from the start catalog. A live retired manifest (`retired: true`) refuses resumption. Each run projects its selected definition into its UI state, preserving its name, phase progress, and controls. Run visibility follows its attachment policy and ancestry, independently of start-catalog membership.
 
 Security survey 2.0.0 adds `followup_attempts: 2` to its challenge phase. A non-terminal verdict registers each open claim's `question: {missing_fact, obligations}` in host-owned state. The returned `question/<claim id>` work ID binds focused read tasks; its `/review` work ID binds the required reviewers' reassessment. Completed investigations consume the allowance; failed providers and invalid submissions do not. The host prevents duplicate active work, requires fresh review after investigation, and permits an essential-open report for a recorded execution blocker. Otherwise material questions require resolution, evidenced immateriality, or exhausted investigation. An exhausted question cannot open another non-terminal follow-up; it must receive an explicit terminal outcome and coverage assessment. A question's materiality must agree with the obligations it affects. The report's `unresolved` finding disposition preserves unanswered questions without calling them sound or accepted risk.
 
@@ -269,7 +271,7 @@ A pending coordinator question clears the gated state: a run waiting on a person
 
 ### Reports
 
-Downloadable reports require `controls.report.enabled: true`, a terminal run, and either the host-recorded `topology_report_delivered` gate or a run failed as `REPORT_NOT_ACCEPTED`. The host projects this decision as `WorkflowRun.ui.report_available`; Den does not derive it from the catalog or coordinator prose. The run PDF endpoint applies the same decision and requires a grounded, run-scoped completion from that run.
+Downloadable reports require `controls.report.enabled: true`. A terminal run with the host-recorded `topology_report_delivered` gate or a run failed as `REPORT_NOT_ACCEPTED` uses its grounded, run-scoped completion. A run paused as `review_blocked`, or subsequently canceled, instead uses its retained incomplete snapshot. The host projects this decision as `WorkflowRun.ui.report_available`; Den and the run PDF endpoint use the same authorization.
 
 The delivery gate requires a persisted, grounded completion whose run and phase match the current report phase and that carries no document defects; an ordinary successful turn or a completion from another phase cannot satisfy it. A matching completion stored with defects fails the run instead. Recovery can finish this transition from the saved completion after process loss. Plan and implement produce ordinary completion replies, and report document fields are taught only in an enabled report phase.
 
@@ -379,7 +381,7 @@ The manifest format is versioned by `extension_api` (current format range `1..1`
 | `format` | `int` | Optional | `1` | Manifest format version. Missing format defaults to `1`. |
 | `name` | `string` | Optional | Empty | User-facing display name in sentence case. |
 | `description` | `string` | Optional | Empty | Summary of workflow objective and operation. |
-| `retired` | `bool` | Optional | `false` | When `true`, hides the workflow from start catalogs while keeping it loadable for historical runs. |
+| `retired` | `bool` | Optional | `false` | When `true`, decommissions the live definition: refuses new starts and resumption. Sealed archives support historical runs. |
 | `trigger` | `string` | Optional | Empty | Trigger keyword or slash command activating this workflow. |
 | `initial_posture` | `string` | Optional | Empty | Initial session posture applied on workflow start (e.g. `read_only`). |
 | `icon` | `string` | Optional | Empty | UI icon identifier for catalog display. |

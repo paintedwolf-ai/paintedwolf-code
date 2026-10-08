@@ -18,7 +18,7 @@ func TestBlockedReportUsesFrozenEvidenceWithoutCompletion(t *testing.T) {
 		Scans:     []wire.CodeScan{{ID: "scan", ScannerID: "sast", Status: wire.CodeScanStatusComplete, CoverageStatus: wire.ScanCoveragePartial, Warnings: []wire.ScanWarning{{Kind: wire.ScanWarningFilePartialSemantics, File: "src/core.go"}}}},
 		Candidate: map[string]any{"verdict": map[string]any{"claims": []any{map[string]any{"id": "candidate", "statement": "Unaccepted candidate observation"}}}},
 	}}
-	h := Handler{Runs: coverageRuns{vars: map[string]any{"review_repairs": []workflow.ReviewRepair{repair}}}}
+	h := Handler{Deps: Deps{Runs: coverageRuns{vars: map[string]any{"review_repairs": []workflow.ReviewRepair{repair}}}}}
 	run := &wire.WorkflowRun{ID: "run", CurrentPhase: "claims", Status: wire.WorkflowRunStatusPaused, PauseReason: workflow.ReviewBlockedReason}
 	input, ok, err := h.blockedRunReport(t.Context(), run, workflowdef.Manifest{Name: "Security review"})
 	testutil.FailErr(t, "build paused snapshot", err)

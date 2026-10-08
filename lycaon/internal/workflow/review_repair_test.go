@@ -20,6 +20,7 @@ func TestReviewRepairBlocksOnceAndResumeRetainsWork(t *testing.T) {
 	run := startReviewLoopRun(t.Context(), t, mgr)
 	for i := 0; i < 3; i++ {
 		msg := api.Message{ID: fmt.Sprintf("result-%d", i), WorkflowRunID: run.ID, ToolResult: &api.ToolResult{Tool: "submit_verdict", Outcome: api.ToolResultOutcomeRejected, AssistantMessageID: fmt.Sprintf("response-%d", i), ToolCallID: fmt.Sprintf("call-%d", i), Codes: []string{"TOOL_ARGS_INVALID"}, Feedback: []api.ToolFeedback{{Code: "TOOL_ARGS_INVALID", Details: map[string]any{"field": "verdict.coverage"}}}}}
+		persistReviewResponse(t, mgr, run.SessionID, msg)
 		testutil.FailErr(t, "record repair", mgr.RecordReviewToolResult(t.Context(), run.SessionID, msg))
 		testutil.FailErr(t, "replay repair", mgr.RecordReviewToolResult(t.Context(), run.SessionID, msg))
 	}
@@ -86,7 +87,7 @@ func TestReviewRepairRecoveryCountsResponsesOnce(t *testing.T) {
 	run := startReviewLoopRun(t.Context(), t, mgr)
 	for i := 0; i < 3; i++ {
 		msg := api.Message{ID: fmt.Sprintf("durable-result-%d", i), Role: api.MessageRoleTool, WorkflowRunID: run.ID, CreatedAt: time.Now().UTC(), ToolResult: &api.ToolResult{Tool: "submit_verdict", ToolCallID: fmt.Sprintf("call-%d", i), AssistantMessageID: fmt.Sprintf("response-%d", i), Outcome: api.ToolResultOutcomeRejected, Codes: []string{"TOOL_ARGS_INVALID"}, Feedback: []api.ToolFeedback{{Code: "TOOL_ARGS_INVALID", Details: map[string]any{"workflow_phase": run.CurrentPhase, "field": "verdict.coverage"}}}}}
-		testutil.FailErr(t, "persist unaccounted refusal", mgr.Sessions.AppendMessages(t.Context(), run.SessionID, msg))
+		persistReviewResponse(t, mgr, run.SessionID, msg)
 	}
 	testutil.FailErr(t, "recover response accounting", mgr.RecoverReviewRepairs(t.Context()))
 	testutil.FailErr(t, "repeat recovery", mgr.RecoverReviewRepairs(t.Context()))
@@ -148,6 +149,7 @@ func TestReviewRepairTotalBudgetBoundsChangingDefects(t *testing.T) {
 	run := startReviewLoopRun(t.Context(), t, mgr)
 	for i := 0; i < 8; i++ {
 		msg := api.Message{ID: fmt.Sprintf("result-%d", i), WorkflowRunID: run.ID, ToolResult: &api.ToolResult{Tool: "submit_verdict", ToolCallID: fmt.Sprintf("call-%d", i), AssistantMessageID: fmt.Sprintf("response-%d", i), Outcome: api.ToolResultOutcomeRejected, Codes: []string{"TOOL_ARGS_INVALID"}, Feedback: []api.ToolFeedback{{Code: "TOOL_ARGS_INVALID", Details: map[string]any{"field": fmt.Sprintf("verdict.claims[%d]", i)}}}}}
+		persistReviewResponse(t, mgr, run.SessionID, msg)
 		testutil.FailErr(t, "record changing defect", mgr.RecordReviewToolResult(t.Context(), run.SessionID, msg))
 		got, err := mgr.Get(t.Context(), run.ID)
 		testutil.FailErr(t, "read repair state", err)
@@ -201,5 +203,35 @@ func TestReviewRepairDoesNotInferSameDefectFromCodeOrProse(t *testing.T) {
 	}
 	if episode.Repeated != 0 || len(episode.Responses) != 3 {
 		t.Fatalf("unstructured errors charged the wrong budget: %+v", episode)
+	}
+}
+
+func persistReviewResponse(t *testing.T, mgr *RunManager, session string, msg api.Message) {
+	t.Helper()
+	assistant := api.Message{ID: msg.ToolResult.AssistantMessageID, Role: api.MessageRoleAssistant, CreatedAt: time.Now().UTC(), ToolCalls: []api.ToolCall{{ID: msg.ToolResult.ToolCallID, Name: "submit_verdict"}}}
+	msg.CreatedAt = assistant.CreatedAt.Add(time.Millisecond)
+	msg.Role = api.MessageRoleTool
+	testutil.FailErr(t, "persist review response", mgr.Sessions.AppendMessages(t.Context(), session, assistant, msg))
+}
+
+func TestReviewRepairWaitsForWholeResponse(t *testing.T) {
+	assistant := api.Message{ID: "response", Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{ID: "first", Name: "submit_verdict"}, {ID: "second", Name: "submit_verdict"}}}
+	first := api.Message{ID: "result-1", ToolResult: &api.ToolResult{Tool: "submit_verdict", AssistantMessageID: "response", ToolCallID: "first"}}
+	second := api.Message{ID: "result-2", ToolResult: &api.ToolResult{Tool: "submit_verdict", AssistantMessageID: "response", ToolCallID: "second"}}
+	ready, err := finalReviewResponseResult([]api.Message{assistant, first}, first)
+	testutil.FailErr(t, "inspect unfinished response", err)
+	if ready {
+		t.Fatal("first rejection can interrupt the response's later correction")
+	}
+	history := []api.Message{assistant, first, second}
+	ready, err = finalReviewResponseResult(history, first)
+	testutil.FailErr(t, "replay earlier result", err)
+	if ready {
+		t.Fatal("recovery accounted the earlier candidate")
+	}
+	ready, err = finalReviewResponseResult(history, second)
+	testutil.FailErr(t, "inspect settled response", err)
+	if !ready {
+		t.Fatal("final candidate was not admitted for repair accounting")
 	}
 }
