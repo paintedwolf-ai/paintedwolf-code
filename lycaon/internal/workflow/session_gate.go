@@ -178,7 +178,7 @@ func (m *RunManager) ActiveReviewVerdictPending(ctx context.Context, sessionID s
 		return false
 	}
 	active, err := m.Store.ActiveBySession(ctx, sessionID)
-	if err != nil || active == nil {
+	if err != nil || active == nil || active.Status != api.WorkflowRunStatusRunning {
 		return false
 	}
 	manifest, err := m.manifestForRun(ctx, active)
@@ -207,7 +207,7 @@ func (m *RunManager) ActiveCloseoutGateState(ctx context.Context, sessionID stri
 		return state
 	}
 	active, err := m.Store.ActiveBySession(ctx, sessionID)
-	if err != nil || active == nil {
+	if err != nil || active == nil || active.Status != api.WorkflowRunStatusRunning {
 		return state
 	}
 	manifest, err := m.manifestForRun(ctx, active)
@@ -252,6 +252,8 @@ func (m *RunManager) ActiveManifest(ctx context.Context, sessionID string) (sess
 		CoordinatorProfile: strings.TrimSpace(manifest.CoordinatorProfile),
 		Rules:              append([]string(nil), manifest.Rules...),
 		HostPhaseAdvance:   workflowdef.PhaseHostPhaseAdvance(manifest, active.CurrentPhase),
+		Sealed:             manifest.Sealed,
+		ArchiveDir:         manifest.ArchiveDir,
 	}, true
 }
 

@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -43,4 +44,7 @@ type RunStore interface {
 	commitVerdictOperation(ctx context.Context, op verdictOperation, run *api.WorkflowRun, projectDir string, vars map[string]any, outcome ReviewLoopVerdictOutcome) error
 	resolveVerdictOperationDiverged(ctx context.Context, toolCallID, reason string) error
 	rebaseVerdictOperation(ctx context.Context, toolCallID string, sourceRevision int64) error
+	RecordUnitProvenance(ctx context.Context, runID, phase string, rec prompts.UnitProvenanceRecord) error
+	ListUnitProvenance(ctx context.Context, runID string) ([]prompts.UnitProvenanceRecord, error)
+	ListUnitProvenanceByPhase(ctx context.Context, runID, phase string) ([]prompts.UnitProvenanceRecord, error)
 }

@@ -37,7 +37,7 @@ func (s *Handler) BuildRunReportInput(ctx context.Context, runID string) (report
 	if run == nil {
 		return report.ReportInput{}, false, nil
 	}
-	if !workflow.IsTerminal(run.Status) {
+	if !workflow.IsTerminal(run.Status) && run.PauseReason != workflow.ReviewBlockedReason {
 		return report.ReportInput{}, false, nil
 	}
 
@@ -49,6 +49,12 @@ func (s *Handler) BuildRunReportInput(ctx context.Context, runID string) (report
 		return report.ReportInput{}, false, nil
 	}
 
+	if run.PauseReason == workflow.ReviewBlockedReason || run.Status == wire.WorkflowRunStatusCanceled {
+		input, ok, err := s.blockedRunReport(ctx, run, manifest)
+		if err != nil || ok {
+			return input, ok, err
+		}
+	}
 	msgs, err := s.Store.GetMessages(ctx, run.SessionID)
 	if err != nil {
 		return report.ReportInput{}, false, err
@@ -67,7 +73,10 @@ func (s *Handler) BuildRunReportInput(ctx context.Context, runID string) (report
 		name = strings.TrimSpace(run.WorkflowID)
 	}
 
-	phaseVerdicts := workflow.ReviewVerdicts(ctx, s.Workflows, run, manifest)
+	phaseVerdicts, err := workflow.ReviewVerdicts(ctx, s.Workflows, run, manifest)
+	if err != nil {
+		return report.ReportInput{}, false, err
+	}
 	claims := workflow.ReconcileClaims(phaseVerdicts)
 	verdicts, channels, verdictURLs := projectVerdicts(phaseVerdicts)
 	cites := append(closeoutCitations(completion.Grounding), verdictCitations(verdicts, channels)...)
@@ -94,7 +103,7 @@ func (s *Handler) BuildRunReportInput(ctx context.Context, runID string) (report
 		Findings:         findingRows(findings),
 		FindingsLabel:    manifest.ReportFindingsLabel(),
 		Limits:           reportLimits(completion),
-		Brief:            reportBrief(manifest.ReportBrief(), findings, claims, unreported),
+		Brief:            reportBrief(manifest.ReportBrief(), findings, claims, unreported, completion.CompletionReport.Rating),
 		Ask:              reportAsk(completion.CompletionReport),
 		UnreportedClaims: len(unreported),
 		Defects:          reportDefects(completion.CompletionReport),

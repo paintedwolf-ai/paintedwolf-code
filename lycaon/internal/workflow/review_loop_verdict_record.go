@@ -96,6 +96,12 @@ func (m *RunManager) RecordReviewLoopVerdict(
 		committedVars = bumpReviewLoopAttempt(vars, active.CurrentPhase)
 		out.Attempt = ReviewLoopAttempt(committedVars, active.CurrentPhase)
 	}
+	if out.Valid && committedVars != nil {
+		committedVars, err = resolveReviewRepair(committedVars, active.CurrentPhase)
+		if err != nil {
+			return out, err
+		}
+	}
 	evidenceID := uuid.NewSHA1(uuid.NameSpaceOID, []byte("verdict-evidence:"+operationID)).String()
 	op := verdictOperation{
 		ToolCallID: operationID, RunID: active.ID, SourceRevision: active.Revision,
@@ -133,7 +139,9 @@ func (m *RunManager) RecordReviewLoopVerdict(
 	}
 	if !out.Valid {
 		// Only an exceeded iteration cap requests a decision.
-		m.notifyReviewLoopHeld(ctx, sessionID, out.IterationCapExceeded)
+		if out.IterationCapExceeded {
+			m.notifyReviewProgress(ctx, sessionID, ReviewDecisionRequired)
+		}
 		return out, nil
 	}
 	if rl.FollowupAttempts > 0 {
@@ -141,9 +149,9 @@ func (m *RunManager) RecordReviewLoopVerdict(
 	}
 	switch {
 	case out.Attempt < reviewLoopIterationCap(rl):
-		m.notifyReviewLoopHeld(ctx, sessionID, false)
+		m.notifyReviewProgress(ctx, sessionID, ReviewRoundAccepted)
 	case out.Attempt == reviewLoopIterationCap(rl):
-		m.notifyReviewLoopHeld(ctx, sessionID, true)
+		m.notifyReviewProgress(ctx, sessionID, ReviewDecisionRequired)
 	}
 	return out, nil
 }
@@ -432,9 +440,9 @@ func (m *RunManager) missingReviewAgents(ctx context.Context, run *api.WorkflowR
 	return missing
 }
 
-func (m *RunManager) notifyReviewLoopHeld(ctx context.Context, sessionID string, decisionRequired bool) {
-	if m != nil && m.OnReviewLoopHeld != nil {
-		m.OnReviewLoopHeld(ctx, sessionID, decisionRequired)
+func (m *RunManager) notifyReviewProgress(ctx context.Context, sessionID string, progress ReviewProgress) {
+	if m != nil && m.OnReviewProgress != nil {
+		m.OnReviewProgress(ctx, sessionID, progress)
 	}
 }
 

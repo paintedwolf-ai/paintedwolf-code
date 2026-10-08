@@ -8,10 +8,9 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/agentpresence"
+	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
-	"github.com/lycaon/lycaon/internal/coordinator/anchor"
-	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/events"
@@ -25,6 +24,7 @@ import (
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolpolicy"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -108,6 +108,7 @@ type PromptLoopDeps struct {
 	SpendRunwayNudge            SpendRunwayNudge
 	SpendSoftStopNudge          SpendSoftStopNudge
 	WorkerGracefulCancelPending func(ctx context.Context, sess *api.Session) (reason string, pending bool)
+	RecordReviewToolResult      func(context.Context, string, api.Message) error
 	OnToolReject                func(ctx context.Context, sessionID, toolCallID, code, content string, facts guidance.ToolResultFacts)
 	// AnnouncePendingToolAsk appends an ordered pending marker.
 	AnnouncePendingToolAsk      func(ctx context.Context, sessionID string)

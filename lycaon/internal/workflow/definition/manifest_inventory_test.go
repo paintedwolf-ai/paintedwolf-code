@@ -130,7 +130,7 @@ func TestManifestFieldInventoryDeclarationOrder(t *testing.T) {
 			order = append(order, r.Key)
 		}
 	}
-	want := []string{"id", "version", "attach", "request", "extends", "name"}
+	want := []string{"id", "version", "format", "attach", "request", "extends", "name"}
 	if len(order) < len(want) {
 		t.Fatalf("root fields = %v", order)
 	}

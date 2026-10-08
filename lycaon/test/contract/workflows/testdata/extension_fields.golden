@@ -1,0 +1,19 @@
+# extension_api: 1.1.0
+manifest_version int required default=1
+id string required
+name string required
+description string optional
+version string required
+compatibility block required
+compatibility.extension_api string required
+compatibility.requires_capabilities []string optional default=[]
+dependencies map[string]block optional
+dependencies.source string required
+dependencies.version string required
+requires_scanners []string optional default=[]
+feature string optional
+exports []string optional default=[]
+routing block optional
+routing.redirect map[string]string optional
+routing.deprecated map[string]string optional
+routing.removed []string optional default=[]

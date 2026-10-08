@@ -10391,6 +10391,13 @@ export interface components {
             /** @description The consequence that makes the ask worth the reader's time. */
             why?: string;
         };
+        /** @description The report's own answer to the workflow's rating question, made from all the run's work: one declared level and the reason for it. */
+        CompletionReportRating: {
+            /** @description A level label the workflow's brief declares. */
+            level: string;
+            /** @description One line saying what decided the level. */
+            why: string;
+        };
         /** @description Scanner groups accounted for together: named by id, or selected as every group one scanner reported entirely inside the listed path globs. */
         CompletionReportSetAside: {
             scan_group_ids?: string[];
@@ -10430,6 +10437,7 @@ export interface components {
             /** @description Coverage gaps the report declares, one per entry: what was not checked, run, or reached. Rendered as a boxed list so a gap survives a reader who never reaches the closing paragraph. */
             limits?: string[];
             ask?: components["schemas"]["CompletionReportAsk"];
+            rating?: components["schemas"]["CompletionReportRating"];
             /** @description Scanner groups the report accounts for without assessing them one by one, each with its reason. */
             set_asides?: components["schemas"]["CompletionReportSetAside"][];
             /** @description Run scope only. The document requirements this report still failed when its repairs ran out and the host stored it as drafted, one per failing requirement. Absent on a report the host accepted; a report that carries defects ends its run as not accepted. */
@@ -10888,6 +10896,12 @@ export interface components {
              */
             base_overlay_id?: string;
         };
+        WorkerCoverageGap: {
+            id: string;
+            subject: string;
+            reason: string;
+            paths?: string[];
+        };
         CoverageAssessment: {
             id: string;
             /** @enum {string} */
@@ -10918,6 +10932,7 @@ export interface components {
             reason?: string;
         };
         WorkerCompletionReport: {
+            coverage_gaps?: components["schemas"]["WorkerCoverageGap"][];
             coverage_review?: components["schemas"]["CoverageReview"];
             /** @description Leg status the worker declared; leg_status is the host-graded status. */
             declared_leg_status?: string;
@@ -16033,7 +16048,7 @@ export interface components {
          */
         SessionEventAction: "created" | "updated" | "deleted";
         /** @enum {string} */
-        NoticeCode: "attachment_scanned_no_text" | "grounding_escalated" | "host_fault" | "model_refused" | "project_mutation_in_progress" | "prompt_failed" | "provider_context_too_small" | "provider_empty_completion" | "provider_not_configured" | "provider_overloaded" | "provider_rate_limited" | "provider_request_rejected" | "provider_response_interrupted" | "provider_server_error" | "provider_silent" | "provider_tool_calls_in_prose" | "provider_tool_calls_unsupported" | "provider_unreachable" | "session_preparation_failed" | "session_spend_ceiling_reached" | "thinking_override_unavailable" | "turn_closeout_tool_call" | "user_image_not_visible" | "workflow_active" | "workflow_not_runnable" | "worktree_stale";
+        NoticeCode: "attachment_scanned_no_text" | "grounding_escalated" | "host_fault" | "model_refused" | "project_mutation_in_progress" | "prompt_failed" | "provider_context_too_small" | "provider_empty_completion" | "provider_not_configured" | "provider_overloaded" | "provider_rate_limited" | "provider_request_rejected" | "provider_response_interrupted" | "provider_server_error" | "provider_silent" | "provider_tool_calls_in_prose" | "provider_tool_calls_unsupported" | "provider_unreachable" | "session_preparation_failed" | "session_spend_ceiling_reached" | "thinking_override_unavailable" | "turn_closeout_tool_call" | "user_image_not_visible" | "workflow_active" | "workflow_not_runnable" | "workflow_version_unavailable" | "worktree_stale";
         /**
          * @description Why a session went idle, stated so clients tell a stop from an error without reading message text or error strings. `interrupted` is the engine stopping under a live turn — a shutdown signal, or a session still busy at boot after process death — and does not render as an error. It is the session-level peer of the TOOL_OWNER_INTERRUPTED tool result.
          * @enum {string}
@@ -29614,6 +29629,7 @@ export type CompletionReportFindingDisposition = components["schemas"]["Completi
 export type CompletionReportFinding = components["schemas"]["CompletionReportFinding"];
 export type CompletionReportAskEffort = components["schemas"]["CompletionReportAskEffort"];
 export type CompletionReportAsk = components["schemas"]["CompletionReportAsk"];
+export type CompletionReportRating = components["schemas"]["CompletionReportRating"];
 export type CompletionReportSetAside = components["schemas"]["CompletionReportSetAside"];
 export type CompletionReportDefectCode = components["schemas"]["CompletionReportDefectCode"];
 export type CompletionReportDefect = components["schemas"]["CompletionReportDefect"];
@@ -29664,6 +29680,7 @@ export type WorkspaceProvisionStrategy = components["schemas"]["WorkspaceProvisi
 export type WorkspacePreparation = components["schemas"]["WorkspacePreparation"];
 export type TaskScopeMode = components["schemas"]["TaskScopeMode"];
 export type TaskScope = components["schemas"]["TaskScope"];
+export type WorkerCoverageGap = components["schemas"]["WorkerCoverageGap"];
 export type CoverageAssessment = components["schemas"]["CoverageAssessment"];
 export type CoverageReview = components["schemas"]["CoverageReview"];
 export type WorkerCompletionFinding = components["schemas"]["WorkerCompletionFinding"];

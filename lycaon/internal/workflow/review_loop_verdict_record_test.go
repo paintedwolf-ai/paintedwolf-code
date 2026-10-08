@@ -187,12 +187,12 @@ func TestRecordReviewLoopVerdictInvalidHolds(t *testing.T) {
 	ctx := context.Background()
 	run := startReviewLoopRun(ctx, t, mgr)
 
-	var heldCalls []bool
-	mgr.OnReviewLoopHeld = func(_ context.Context, _ string, decisionRequired bool) {
-		heldCalls = append(heldCalls, decisionRequired)
+	var heldCalls []ReviewProgress
+	mgr.OnReviewProgress = func(_ context.Context, _ string, progress ReviewProgress) {
+		heldCalls = append(heldCalls, progress)
 	}
 
-	// Off-enum verdict → schema-invalid → holds, re-prompts (continue), does NOT consume the cap.
+	// An invalid verdict neither consumes a review round nor schedules a wake.
 	verdict := map[string]string{"verdict": "MAYBE", "winner": "B"}
 	if _, err := mgr.RecordReviewLoopVerdict(ctx, "sess-1", verdict, nil, nil); err != nil {
 		testutil.FailErr(t, "RecordReviewLoopVerdict", err)
@@ -208,8 +208,8 @@ func TestRecordReviewLoopVerdictInvalidHolds(t *testing.T) {
 	if n := ReviewLoopAttempt(vars, "judge"); n != 0 {
 		t.Fatalf("attempt = %d want 0 (invalid verdict is not a review round)", n)
 	}
-	if len(heldCalls) != 1 || heldCalls[0] != false {
-		t.Fatalf("held calls = %v want [false] (continue, not decision-required)", heldCalls)
+	if len(heldCalls) != 0 {
+		t.Fatalf("held calls = %v want no continuation", heldCalls)
 	}
 }
 
@@ -219,9 +219,9 @@ func TestRecordReviewLoopVerdictIterationCap(t *testing.T) {
 	ctx := context.Background()
 	run := startReviewLoopRun(ctx, t, mgr) // rltest judge: iteration_cap 2
 
-	var heldCalls []bool
-	mgr.OnReviewLoopHeld = func(_ context.Context, _ string, decisionRequired bool) {
-		heldCalls = append(heldCalls, decisionRequired)
+	var heldCalls []ReviewProgress
+	mgr.OnReviewProgress = func(_ context.Context, _ string, progress ReviewProgress) {
+		heldCalls = append(heldCalls, progress)
 	}
 	needsRevision := map[string]string{"verdict": "NEEDS_REVISION", "winner": "undecided"}
 
@@ -250,7 +250,7 @@ func TestRecordReviewLoopVerdictIterationCap(t *testing.T) {
 	if n := ReviewLoopAttempt(vars, "judge"); n != 2 {
 		t.Fatalf("attempt = %d want 2 (rejected round must not bump past the cap)", n)
 	}
-	want := []bool{false, true, true} // continue, decision-required, decision-required again on the rejected round
+	want := []ReviewProgress{ReviewRoundAccepted, ReviewDecisionRequired, ReviewDecisionRequired} // continue, decision-required, decision-required again on the rejected round
 	if len(heldCalls) != len(want) {
 		t.Fatalf("held calls = %v want %v", heldCalls, want)
 	}

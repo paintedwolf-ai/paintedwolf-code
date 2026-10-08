@@ -118,7 +118,11 @@ func (w sessionWorkflowManifest) ActiveManifest(ctx context.Context, sessionID s
 	if !ok {
 		return assembly.ActiveWorkflowManifest{}, false
 	}
-	return assembly.ActiveWorkflowManifest{CoordinatorProfile: manifest.CoordinatorProfile}, true
+	return assembly.ActiveWorkflowManifest{
+		CoordinatorProfile: manifest.CoordinatorProfile,
+		Sealed:             manifest.Sealed,
+		ArchiveDir:         manifest.ArchiveDir,
+	}, true
 }
 
 func (w sessionWorkflowManifest) RecordBoardOrientReady(ctx context.Context, sessionID, injectKey string) error {
@@ -322,6 +326,12 @@ func (m *Manager) bindPromptLoopRuntimeDeps(deps *promptloop.PromptLoopDeps) {
 	deps.SpendRunwayNudge = m.spendRunwayNudge
 	deps.SpendSoftStopNudge = m.spendSoftStopNudge
 	deps.WorkerGracefulCancelPending = m.WorkerGracefulCancelPending
+	deps.RecordReviewToolResult = func(ctx context.Context, sessionID string, msg api.Message) error {
+		if m.workflows == nil {
+			return nil
+		}
+		return m.workflows.RecordReviewToolResult(ctx, sessionID, msg)
+	}
 	deps.OnToolReject = func(ctx context.Context, sessionID, toolCallID, code, content string, facts guidance.ToolResultFacts) {
 		if m != nil && m.planToolStash != nil {
 			m.planToolStash.Put(sessionID, toolCallID, code, content)

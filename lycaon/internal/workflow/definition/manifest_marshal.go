@@ -25,6 +25,7 @@ func manifestToWorkflowFile(m Manifest) workflowFile {
 	wf := workflowFile{
 		ID:      m.ID,
 		Version: m.Version,
+		Format:  m.Format,
 		Retired: m.Retired,
 		Attach:  manifestAttachYAML(m.Attach),
 		Request: manifestRequestYAML(m.Request),
@@ -177,8 +178,8 @@ func phaseToYAML(p PhaseDef) phaseYAML {
 			MaxWriteWorkers: p.ParallelTask.MaxWriteWorkers,
 		}
 	}
-	if p.Fanout.RequireThreatModel || p.Fanout.MaxAttempts > 0 {
-		out.Fanout = &fanoutYAML{RequireThreatModel: p.Fanout.RequireThreatModel, MaxAttempts: p.Fanout.MaxAttempts}
+	if p.Fanout.RequireThreatModel || p.Fanout.RequireTaskCharter || p.Fanout.MaxAttempts > 0 {
+		out.Fanout = &fanoutYAML{RequireThreatModel: p.Fanout.RequireThreatModel, RequireTaskCharter: p.Fanout.RequireTaskCharter, MaxAttempts: p.Fanout.MaxAttempts}
 	}
 	if len(p.TouchPaths) > 0 {
 		out.Touch = &phaseTouchYAML{Paths: append([]string(nil), p.TouchPaths...)}

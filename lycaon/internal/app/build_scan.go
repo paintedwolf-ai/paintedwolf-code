@@ -142,7 +142,7 @@ func (b toolWiring) wireScan() error {
 		},
 	}
 	b.mgr.SetScanGuidance(b.scanGuidance)
-	if err := scantoolapi.RegisterScanTools(b.toolRuntime.Registry, b.scanCoordinator, b.scannerReg, b.scanCadence, b.rejectFmt, b.settingsSvc.SecurityScanners); err != nil {
+	if err := scantoolapi.RegisterScanTools(b.toolRuntime.Registry, b.scanCoordinator, b.scannerReg, b.scanCadence, b.rejectFmt, b.settingsSvc.SecurityScanners, b.workflowMgr); err != nil {
 		return fmt.Errorf("scan tools: %w", err)
 	}
 	if err := workflow.RegisterComposeTool(b.toolRuntime.Registry, b.workflowComposer); err != nil {

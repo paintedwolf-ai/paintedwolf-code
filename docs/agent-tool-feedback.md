@@ -119,6 +119,16 @@ A `claims`-typed member is a JSON array of `{id, title, statement, status, answe
 
 A review phase offers `submit_verdict` with that phase's call schema: `verdict` declares exactly the phase's members, their nesting, decision values, claim statuses, and rating answers, and admission validates against the schema the turn offered. The rejection details include the active phase, the expected call as an outline of that schema, and bounded offender or reviewer facts. Independent acceptance failures appear together as typed `repairs` entries, each retaining its code and details; the primary refusal keeps its specific code. Running scans use `SUBMIT_VERDICT_SCANS_PENDING`, distinct from unaccounted groups. Correct the named condition and resubmit. A verdict rejection is not a completed review round and does not authorize abandoning the phase exit.
 
+### Workflow version rejections
+
+When an agent attempts to advance or transition a workflow run whose version is retired and marked non-resumable, the host returns `WORKFLOW_VERSION_UNAVAILABLE`.
+
+- **Code:** `WORKFLOW_VERSION_UNAVAILABLE`
+- **Cause:** The workflow version is retired and cannot be resumed or advanced.
+- **Why:** Incompatible workflow definitions that are retired without resumption support cannot transition to subsequent phases safely.
+- **Fix:** Start a new workflow run on an active, supported workflow version, or consult project administrators if this run needs manual recovery.
+- **Instead:** Do not retry advancing the retired workflow run.
+
 ## Spawn and history hygiene
 
 Worker creation and history reads produce their own structured outcomes: invalid or unavailable worker type, concurrency or wave limit, incomplete task charter, forbidden scope or resource, stale batch state, missing result or evidence handle, and history trimmed but still addressable. The remedy points to the batch or task assignee and never suggests bypassing the ledger with an untracked parallel action.
@@ -165,3 +175,20 @@ Do not create a second copy registry in tests or documentation. Contract validat
 - Tool success and no-op state are producer facts.
 - Deduplication uses structured identity.
 - Feedback never teaches a bypass of the enforcing boundary.
+
+### Review repair accounting
+
+A refused `submit_verdict` has no phase-progress effect. Schema admission publishes
+structured instance paths and keyword paths; coverage validation publishes issue
+kinds, field paths, fact ids, and expected values. Diagnostic prose is explanatory
+and never selects a control branch. The workflows subsystem observes screened,
+durable result rows, retaining the run and phase that offered the call. Multiple
+results from one assistant response consume one repair attempt; replay does not
+replace a later candidate with an earlier result.
+
+Three consecutive equivalent structured defects, or eight rejected responses,
+pause the phase as `review_blocked`. Missing workers and unsettled scans retain
+their existing wait semantics. An impossible offered coverage-id contract blocks
+before a model call. Pausing records the report snapshot and worker hold in the
+workflow command transaction; startup replays the transcript-to-accounting crash
+window. Neither pause nor snapshot delivery stamps an evidence verdict.

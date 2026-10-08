@@ -417,8 +417,9 @@ var registeredCoordinatorBooleanGates = map[string]bool{
 	"spawnable_reviewers":          true,
 	"review_followup_attempts":     true,
 	// Roster ids from spawn_roster_surface.go, gated on being non-empty.
-	"spawn_read_agent_ids":  true,
-	"spawn_write_agent_ids": true,
+	"spawn_read_agent_ids":     true,
+	"spawn_write_agent_ids":    true,
+	"review_followup_attempts": true,
 }
 
 func scanCoordinatorPongoBooleanGates(catalogRoot string) ([]string, error) {

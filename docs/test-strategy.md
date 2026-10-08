@@ -565,6 +565,40 @@ diagnostics for 14 days, on success as well as failure. Artifact names
 distinguish profiles, jobs, and run attempts. Caches accelerate builds; they
 never substitute for the required job result.
 
+## PR compatibility gate
+
+Every pull request proves the durable surfaces it touches against released
+material, before review. The gate composes three proofs, all in the shared
+`./task` queue:
+
+- **Sealed archive replay.** `lycaon/test/wiring/archived_workflow_replay_test.go`
+  replays the sealed v1.0.0 security-survey workflow against the current runtime:
+  exact archived prompt bindings, real `submit_verdict` semantics under the
+  sealed verdict schemas (including enum rejection), reviewer-roster
+  enforcement, and host-driven phase advance. Output drift fails unless
+  documented in the fixture's `changes.yaml` with `spec_fix` or `safety`.
+- **Frozen store resume.**
+  `lycaon/test/wiring/archived_run_state_resume_test.go` copies the frozen
+  v1.0.0 corpus database into a temp directory and exercises the durable-store
+  contract: the store either upgrades through a registered migration route and
+  resumes its 1.0.0 runs with provenance recording, or — while no route covers
+  the shipped revision — is refused into recovery without a byte changing.
+  Hand-mutating the schema is never part of the contract, and a test that does
+  it is wrong.
+- **Live-contract wiring.** The remaining wiring and contract suites
+  (`./task test:wiring`, `./task test:contract`) run against the current
+  released artifacts only — removed versions are never kept alive for tests,
+  and repointing them is part of removing a release.
+
+The hosted `CI/check` profile requires the upgrade corpus alongside these
+suites, so a PR cannot pass while a released store shape is unregistered. The
+upgrade corpus fixtures under `lycaon/testdata/upgrade-corpus/` are sealed at
+each release: their `store.db`, `backup.zip`, and manifest digests are frozen,
+and a release that changes a released schema must ship a registered baseline
+and migration step in the same change. Fixture seeds come from
+[`scripts/upgrade-corpus-boot.sh`](../scripts/upgrade-corpus-boot.sh), which
+self-tests its own immutability and refusal behavior.
+
 ## Fixtures
 
 | Area | Location |

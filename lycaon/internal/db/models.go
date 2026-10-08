@@ -2055,6 +2055,18 @@ type WorkflowRunPageOrdinals struct {
 	RunID   string `json:"run_id"`
 }
 
+type WorkflowRunUnitProvenance struct {
+	ID            string `json:"id"`
+	RunID         string `json:"run_id"`
+	Phase         string `json:"phase"`
+	UnitKind      string `json:"unit_kind"`
+	UnitID        string `json:"unit_id"`
+	SourceTier    string `json:"source_tier"`
+	SourcePath    string `json:"source_path"`
+	ContentSha256 string `json:"content_sha256"`
+	CreatedAt     string `json:"created_at"`
+}
+
 type WorkflowRuns struct {
 	ID              string         `json:"id"`
 	SessionID       string         `json:"session_id"`

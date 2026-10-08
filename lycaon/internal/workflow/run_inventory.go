@@ -202,7 +202,11 @@ func (m *RunManager) checkReviewInventory(ctx context.Context, run *api.Workflow
 		return nil, err
 	}
 	var phases []PhaseVerdict
-	for _, prior := range ReviewVerdicts(ctx, m, run, manifest) {
+	verdicts, err := ReviewVerdicts(ctx, m, run, manifest)
+	if err != nil {
+		return nil, err
+	}
+	for _, prior := range verdicts {
 		if prior.Phase != run.CurrentPhase {
 			phases = append(phases, prior)
 		}

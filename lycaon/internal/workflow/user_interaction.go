@@ -47,7 +47,7 @@ func (m *RunManager) TryResolveUserFeedback(ctx context.Context, sessionID, mess
 	if !ok {
 		return nil
 	}
-	manifest, err := m.manifestForRun(ctx, active)
+	manifest, err := m.runnableManifestForRun(ctx, active)
 	if err != nil {
 		return err
 	}
@@ -92,7 +92,10 @@ func (m *RunManager) resolveUserFeedback(ctx context.Context, answererID, sessio
 		}
 		return nil, fmt.Errorf("%w: run %s is not running", ErrRunRevisionConflict, run.ID)
 	}
-	manifest, _ := m.manifestForRun(ctx, run)
+	manifest, err := m.runnableManifestForRun(ctx, run)
+	if err != nil {
+		return nil, err
+	}
 	if phaseID == workflowRequestFeedbackID && manifest.Request != nil {
 		return m.resolveWorkflowRequest(ctx, answererID, sessionID, run, manifest, response)
 	}
@@ -267,7 +270,7 @@ func (m *RunManager) ResolveUserDecision(ctx context.Context, sessionID, runID, 
 		}
 		return nil, fmt.Errorf("%w: run %s is not running", ErrRunRevisionConflict, run.ID)
 	}
-	manifest, err := m.manifestForRun(ctx, run)
+	manifest, err := m.runnableManifestForRun(ctx, run)
 	if err != nil {
 		return nil, err
 	}
@@ -779,7 +782,7 @@ func (m *RunManager) SyncHumanApproval(ctx context.Context, runID, projectDir st
 	if err != nil {
 		return nil, err
 	}
-	manifest, err := m.manifestForRun(ctx, run)
+	manifest, err := m.runnableManifestForRun(ctx, run)
 	if err != nil {
 		return nil, err
 	}
@@ -799,7 +802,7 @@ func (m *RunManager) validateHumanApprovalReady(ctx context.Context, runID, proj
 	bound := false
 	if _, err := m.StampRunVarsInProject(ctx, runID, projectDir, func(ctx context.Context, run *api.WorkflowRun, vars map[string]any) (map[string]any, bool, error) {
 		ready, bound = false, false
-		manifest, err := m.manifestForRun(ctx, run)
+		manifest, err := m.runnableManifestForRun(ctx, run)
 		if err != nil {
 			return nil, false, err
 		}

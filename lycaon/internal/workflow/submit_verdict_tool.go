@@ -11,8 +11,8 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/workflow/verdictcall"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/internal/workflow/verdictcall"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -60,7 +60,7 @@ func RegisterSubmitVerdictTool(reg *tools.DefaultRegistry, runs *RunManager) err
 				"reason": "no_active_workflow_run",
 			})
 		}
-		manifest, err := runs.manifestForRun(ctx, active)
+		manifest, err := runs.runnableManifestForRun(ctx, active)
 		if err != nil {
 			return "", err
 		}

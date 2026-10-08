@@ -239,3 +239,7 @@ func TestToolpolicyEngineDepsWiresWorkflowView(t *testing.T) {
 		}
 	}
 }
+
+func (s *recordingWorkflowView) RecordReviewToolResult(context.Context, string, api.Message) error {
+	return nil
+}

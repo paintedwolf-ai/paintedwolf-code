@@ -118,7 +118,12 @@ func (b boardWiring) wireWorkflows() error {
 	}
 	if err := delegationWiring(b).registerRecovery(bootrecovery.Entry{
 		Name: "workflow-verdicts", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseServe,
-		Run: b.workflowMgr.RecoverVerdictOperations,
+		Run: func(ctx context.Context) error {
+			if err := b.workflowMgr.RecoverVerdictOperations(ctx); err != nil {
+				return err
+			}
+			return b.workflowMgr.RecoverReviewRepairs(ctx)
+		},
 	}); err != nil {
 		return err
 	}

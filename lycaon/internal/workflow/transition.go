@@ -50,7 +50,7 @@ func (m *RunManager) FireTransition(ctx context.Context, runID, transitionID, ac
 	if IsTerminal(run.Status) || run.Status != api.WorkflowRunStatusRunning {
 		return nil, &NotRunnableError{RunID: runID, Status: run.Status, Reason: string(run.Status)}
 	}
-	manifest, err := m.manifestForRun(ctx, run)
+	manifest, err := m.runnableManifestForRun(ctx, run)
 	if err != nil {
 		return nil, err
 	}
@@ -132,11 +132,12 @@ func (m *RunManager) FireTransition(ctx context.Context, runID, transitionID, ac
 	if def, ok := manifest.PhaseByID(edge.To); ok && !terminalSink {
 		m.triggerPhaseEnter(ctx, run, projectDir, def)
 		rc := &RunContext{
-			SessionID:     run.SessionID,
-			RunID:         run.ID,
-			WorkflowID:    run.WorkflowID,
-			Phase:         edge.To,
-			PreviousPhase: prevPhase,
+			SessionID:       run.SessionID,
+			RunID:           run.ID,
+			WorkflowID:      run.WorkflowID,
+			WorkflowVersion: run.WorkflowVersion,
+			Phase:           edge.To,
+			PreviousPhase:   prevPhase,
 		}
 		if m.PhaseEnterHook != nil {
 			m.PhaseEnterHook(ctx, rc, def)

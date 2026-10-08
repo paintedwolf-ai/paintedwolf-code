@@ -8,6 +8,7 @@ import (
 type workflowFile struct {
 	ID                 string                           `yaml:"id"`
 	Version            string                           `yaml:"version"`
+	Format             int                              `yaml:"format,omitempty"`
 	Attach             *attachYAML                      `yaml:"attach"`
 	Request            *requestYAML                     `yaml:"request"`
 	Extends            string                           `yaml:"extends"`
@@ -193,6 +194,7 @@ type parallelTaskYAML struct {
 
 type fanoutYAML struct {
 	RequireThreatModel bool `yaml:"require_threat_model"`
+	RequireTaskCharter bool `yaml:"require_task_charter"`
 	MaxAttempts        int  `yaml:"max_attempts,omitempty"`
 }
 

@@ -100,3 +100,21 @@ func IsNotRunnable(err error) (*NotRunnableError, bool) {
 func (e *NotRunnableError) NoticeCode() api.NoticeCode {
 	return api.NoticeCodeWorkflowNotRunnable
 }
+
+// WorkflowVersionUnavailableError indicates a workflow version is retired and marked non-resumable.
+type WorkflowVersionUnavailableError struct {
+	WorkflowID string
+	Version    string
+}
+
+func (e *WorkflowVersionUnavailableError) Error() string {
+	return fmt.Sprintf("workflow %s@%s is unavailable and cannot be resumed", e.WorkflowID, e.Version)
+}
+
+func (e *WorkflowVersionUnavailableError) RejectionCode() string {
+	return "WORKFLOW_VERSION_UNAVAILABLE"
+}
+
+func (e *WorkflowVersionUnavailableError) NoticeCode() api.NoticeCode {
+	return api.NoticeCodeWorkflowVersionUnavailable
+}

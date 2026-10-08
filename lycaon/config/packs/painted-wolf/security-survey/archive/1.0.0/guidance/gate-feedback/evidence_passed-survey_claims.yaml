@@ -1,0 +1,11 @@
+id: evidence_passed:survey_claims
+kind: evidence-gate
+purpose: |
+  Candidate claims must be stamped before challenge.
+missing_signals:
+  - id: claims_incomplete
+    when: "true"
+    detail: "Candidate claims have not been stamped."
+    fix: "Call `submit_verdict` with `verdict: CLAIMED`, a `claims` array (empty when no claims remain), and a non-empty `threat_model`; prose does not stamp them."
+satisfy:
+  - "Stamp `CLAIMED` with the grounded claims, or `claims: []`, and the threat model."

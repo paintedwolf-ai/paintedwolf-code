@@ -15,6 +15,7 @@ import (
 type FileTemplateEngine struct {
 	layers     PromptLayers
 	registered map[string]string
+	onRender   func(ref string, prov []UnitProvenanceRecord)
 }
 
 // NewFileTemplateEngineLayers creates an engine with site/project/bundled overlay order.
@@ -24,6 +25,16 @@ func NewFileTemplateEngineLayers(layers PromptLayers) *FileTemplateEngine {
 		layers:     layers,
 		registered: make(map[string]string),
 	}
+}
+
+// WithProvenanceRecorder binds a callback invoked on each template execution with its provenance records.
+func (e *FileTemplateEngine) WithProvenanceRecorder(fn func(ref string, prov []UnitProvenanceRecord)) *FileTemplateEngine {
+	if e == nil {
+		return nil
+	}
+	derived := *e
+	derived.onRender = fn
+	return &derived
 }
 
 // WithProjectOverlay returns an engine scoped to projectDir.
@@ -59,6 +70,18 @@ func (e *FileTemplateEngine) WithProjectOverlays(rootPaths []string) *FileTempla
 			derived.layers.ProjectActive = ""
 		}
 	}
+	return &derived
+}
+
+// WithWorkflowArchive binds a sealed workflow archive directory.
+func (e *FileTemplateEngine) WithWorkflowArchive(archiveDir string) *FileTemplateEngine {
+	if e == nil {
+		return nil
+	}
+	derived := *e
+	derived.layers.overlaySnapshot = nil
+	derived.layers.revision = ""
+	derived.layers.WorkflowArchive = strings.TrimSpace(archiveDir)
 	return &derived
 }
 
@@ -109,6 +132,15 @@ func (e *FileTemplateEngine) Render(ctx context.Context, templateRef string, dat
 		return "", fmt.Errorf("empty template ref")
 	}
 	return e.executeTemplate(ctx, ref, data)
+}
+
+// RenderWithProvenance resolves and executes templateRef, returning rendered output and provenance records.
+func (e *FileTemplateEngine) RenderWithProvenance(ctx context.Context, templateRef string, data map[string]any) (string, []UnitProvenanceRecord, error) {
+	ref := strings.TrimSpace(templateRef)
+	if ref == "" {
+		return "", nil, fmt.Errorf("empty template ref")
+	}
+	return e.executeTemplateWithProvenance(ctx, ref, data)
 }
 
 // Register stores an in-memory template.

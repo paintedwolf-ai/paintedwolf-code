@@ -13,6 +13,8 @@ type ActiveWorkflowManifest struct {
 	CoordinatorProfile string
 	Rules              []string
 	HostPhaseAdvance   bool
+	Sealed             bool
+	ArchiveDir         string
 }
 
 func (m *Manager) assertWorkflowRunnable(ctx context.Context, sessionID string) error {

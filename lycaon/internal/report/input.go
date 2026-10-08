@@ -11,7 +11,10 @@ import (
 )
 
 // ReportInput contains the host-assembled report and its supporting records.
+const BlockedReviewSnapshot = "blocked_review_snapshot"
+
 type ReportInput struct {
+	Kind string `json:"kind,omitempty"`
 	// CoverageReview is present only for workflows declaring reviewed coverage.
 	CoverageReview *api.CoverageReview   `json:"coverage_review,omitempty"`
 	CoverageFacts  *reviewcoverage.Facts `json:"coverage_facts,omitempty"`
@@ -157,12 +160,15 @@ type ReportBrief struct {
 	Question string `json:"question"`
 	// Levels run most severe first.
 	Levels []ReportLevel `json:"levels"`
-	// Worst and Best index Levels; they differ when an unknown answer could
-	// decide either.
+	// Worst and Best index Levels. They are the review's call when it made
+	// one, and differ only when no call was accepted and an unknown answer
+	// could decide either.
 	Worst int `json:"worst"`
 	Best  int `json:"best"`
 	// Basis says why the deciding finding set Worst, in declared phrases.
 	Basis string `json:"basis,omitempty"`
+	// Call is the review's reason for the level it chose.
+	Call string `json:"call,omitempty"`
 	// Dimensions label the rating questions, in declared order.
 	Dimensions []string      `json:"dimensions,omitempty"`
 	Rated      []ReportRated `json:"rated,omitempty"`
@@ -256,6 +262,9 @@ const (
 // Completeness retains hard failures, then applies the accepted coverage review.
 // Workflows without a declared review use the observed gap classification.
 func (in ReportInput) Completeness() string {
+	if in.Kind == BlockedReviewSnapshot {
+		return CompletenessIncomplete
+	}
 	if len(in.Defects) > 0 || in.UnreportedClaims > 0 || (in.Inventory != nil && in.Inventory.Unaccounted > 0) {
 		return CompletenessIncomplete
 	}
