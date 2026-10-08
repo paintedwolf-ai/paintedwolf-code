@@ -29,8 +29,9 @@ runs:
         save: ${{ inputs.save }}
 
     # Keys follow the toolchains and dependency locks, so main saves once per
-    # change instead of once per commit; a release recompiles its own crate. Saving starts clean so superseded dependencies do not
-    # accumulate. Compiler caches are content-checked, so a tag release may
+    # change instead of once per commit; a release recompiles its own crate.
+    # Saving starts clean so superseded dependencies do not accumulate.
+    # Compiler caches are content-checked, so a tag release may
     # start from an older entry.
     - if: ${{ inputs.save == 'true' && github.ref == 'refs/heads/main' }}
       id: save

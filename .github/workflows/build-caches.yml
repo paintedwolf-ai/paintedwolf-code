@@ -18,7 +18,8 @@ permissions:
 
 concurrency:
   group: build-caches
-  cancel-in-progress: true
+  # Finish cold preparation so frequent main pushes cannot starve cache publication.
+  cancel-in-progress: false
 
 env:
   DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer

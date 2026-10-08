@@ -47,3 +47,18 @@ func TestReleaseBuildReusesTheSharedGoCache(t *testing.T) {
 		t.Fatal("release cache must not duplicate the shared Go payload")
 	}
 }
+
+func TestMainCacheWarmingCompletesBeforeTheNextPush(t *testing.T) {
+	t.Parallel()
+	var workflow struct {
+		Concurrency struct {
+			Group  string
+			Cancel *bool `yaml:"cancel-in-progress"`
+		}
+	}
+	data := contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), ".github/workflows/build-caches.yml")
+	contractcheck.FailErr(t, "decode cache warmer concurrency", yaml.Unmarshal([]byte(data), &workflow))
+	if workflow.Concurrency.Group == "" || workflow.Concurrency.Cancel == nil || *workflow.Concurrency.Cancel {
+		t.Fatal("main pushes must serialize cache warming without cancelling cold preparation")
+	}
+}
