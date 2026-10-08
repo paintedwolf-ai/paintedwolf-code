@@ -121,8 +121,7 @@ if [[ -z "${FROM_VERSION}" ]]; then
     --output "${WORKDIR}/active.json" --storage-prefix "${STORAGE_PREFIX}"
   FILE="${WORKDIR}/active.json"
 fi
-# The signature binds the pointer's channel and generation through its file name, the
-# announced version, and a timestamp clients require to advance.
+# Signatures bind the channel, generation, version, and replay timestamp.
 FEED_NAME="latest-${CHANNEL}-key-${GENERATION}.json"
 SIGNED_COPY="${WORKDIR}/${FEED_NAME}"
 SIGNATURE="${SIGNED_COPY}.sig"

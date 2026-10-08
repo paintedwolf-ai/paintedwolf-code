@@ -31,7 +31,7 @@ def parse_document(document: str) -> tuple[bytes, dict[str, str]]:
         signature = base64.b64decode(lines[1], validate=True)
     except binascii.Error as exc:
         raise ValueError("feed signature line is not base64") from exc
-    # "ED" is minisign's prehashed Ed25519 mode, which the Tauri signer emits.
+    # "ED" selects prehashed Ed25519.
     if len(signature) != 74 or signature[:2] not in (b"Ed", b"ED"):
         raise ValueError("feed signature is not an Ed25519 minisign signature")
     fields: dict[str, str] = {}

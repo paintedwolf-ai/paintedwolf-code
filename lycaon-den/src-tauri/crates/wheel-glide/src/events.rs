@@ -9,9 +9,7 @@ use objc2_foundation::NSPoint;
 /// Source user data stamped on replayed events.
 pub(crate) const SYNTHETIC_TAG: i64 = 0x5057_474c_4944;
 
-/// A continuous scroll event of `dx`/`dy` points at `point` in window
-/// coordinates. Built fresh rather than copied from the notch, so no hardware
-/// field outlives the conversion; only the modifiers carry over.
+/// Fresh pixel events retain modifiers without carrying hardware notch fields.
 pub(crate) fn replay(
     _mtm: MainThreadMarker,
     flags: CGEventFlags,
@@ -28,8 +26,7 @@ pub(crate) fn replay(
     NSEvent::eventWithCGEvent(&event)
 }
 
-/// Nanoseconds since boot: the clock event timestamps and display link
-/// timestamps both count on.
+/// Uses the uptime clock shared by events and display links.
 fn uptime_ns() -> u64 {
     let mut now = libc::timespec { tv_sec: 0, tv_nsec: 0 };
     // SAFETY: a valid clock id and a live out-pointer.
@@ -41,11 +38,7 @@ pub(crate) fn uptime_s() -> f64 {
     uptime_ns() as f64 / 1e9
 }
 
-/// Sets the CG location whose windowless `locationInWindow` is `point`.
-///
-/// AppKit derives a windowless event's location from its CG location through
-/// a display flip whose base depends on the screen layout, so measure the
-/// mapping with two throwaway events and invert it.
+/// Two probes invert AppKit's screen-dependent mapping to window coordinates.
 fn aim(event: &CGEvent, point: NSPoint) -> Option<()> {
     let seen_at = |x: f64, y: f64| {
         CGEvent::set_location(Some(event), CGPoint::new(x, y));

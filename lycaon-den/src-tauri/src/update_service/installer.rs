@@ -22,7 +22,6 @@ pub use coordination::{
     try_activation, InstallationLease,
 };
 
-/// Where a bundle declares its product version; reads are bounded by `PRODUCT_VERSION_LIMIT`.
 pub const PRODUCT_VERSION_RESOURCE: &str = "Contents/Resources/release-version";
 const PRODUCT_VERSION_LIMIT: u64 = 128;
 
@@ -49,7 +48,6 @@ pub fn supported() -> bool {
         false
     }
 }
-/// The product version a bundle declares, or the failure code for an unreadable resource.
 pub fn product_version(bundle: &Path, failure: Failure) -> Result<String, UpdateError> {
     use std::io::Read;
     let file = fs::File::open(bundle.join(PRODUCT_VERSION_RESOURCE))
@@ -211,7 +209,7 @@ pub fn prepare_at(target: &Path, candidate: &Candidate) -> Result<PreparedIdenti
         Err(Failure::UnsupportedInstallation.into())
     }
 }
-// Eviction belongs to archive verification, independently of UI state or relaunch.
+// Failed verification evicts the cached archive.
 fn retain_verified_artifact(
     path: &Path,
     verified: Result<(), UpdateError>,

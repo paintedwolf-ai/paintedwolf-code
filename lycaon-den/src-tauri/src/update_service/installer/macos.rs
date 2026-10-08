@@ -1,4 +1,4 @@
-//! macOS installation: leases on the installed bundle, preparation beside it, and the exchange.
+//! macOS destination checks, bundle preparation, and atomic exchange.
 use super::{
     archive, bundle_hash, executable, hash, prepared_path, prepared_prefix, verify_bundle,
     Candidate, Failure, PreparedIdentity, UpdateError,

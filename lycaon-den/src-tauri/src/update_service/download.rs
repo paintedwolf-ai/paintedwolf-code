@@ -179,11 +179,9 @@ async fn transfer(
     let permit = service.preparation.clone().lock_owned().await;
     #[cfg(target_os = "macos")]
     let permit = {
-        let lease = tauri::async_runtime::spawn_blocking(|| {
-            super::installer::acquire_preparation(&super::installer::bundle()?)
-        })
-        .await
-        .map_err(|e| UpdateError::new(Failure::StateUnavailable, e))??;
+        let lease = tauri::async_runtime::spawn_blocking(super::installer::acquire_preparation)
+            .await
+            .map_err(|e| UpdateError::new(Failure::StateUnavailable, e))??;
         (permit, lease)
     };
     if service.preparation_generation.load(Ordering::Acquire) != generation {

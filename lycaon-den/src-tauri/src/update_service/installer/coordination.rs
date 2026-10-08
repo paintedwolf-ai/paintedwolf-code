@@ -53,7 +53,7 @@ pub fn acquire_lease(
 ) -> Result<InstallationLease, UpdateError> {
     lock(directory(target)?, exclusive, nonblocking)
 }
-pub fn acquire_preparation(_: &Path) -> Result<InstallationLease, UpdateError> {
+pub fn acquire_preparation() -> Result<InstallationLease, UpdateError> {
     let dir = super::super::persistence::update_dir()?;
     lock(
         super::super::record_lock::open(&dir, "preparation.lock")?,

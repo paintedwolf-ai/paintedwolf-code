@@ -49,7 +49,7 @@ def sign(pointer: Path, number: int, registry: dict) -> Path:
     env.pop("FEED_SIGNING_KEYS_JSON", None)
     env["TAURI_SIGNING_PRIVATE_KEY"] = row["private_key"]
     env["TAURI_SIGNING_PRIVATE_KEY_PASSWORD"] = row["password"]
-    # Signer diagnostics can contain input credentials; never forward them to logs.
+    # Signer diagnostics can contain credentials.
     result = subprocess.run(["bun", "run", "tauri", "signer", "sign", "--app-version", version, str(pointer.resolve())],
                             cwd=Path(__file__).resolve().parent.parent / "lycaon-den", env=env, capture_output=True)
     if result.returncode:

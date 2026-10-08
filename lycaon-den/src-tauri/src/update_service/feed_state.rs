@@ -8,7 +8,7 @@ pub async fn accept(dir: &Path, feed: &str, timestamp: u64) -> Result<(), Update
     accept_locked(dir, feed, timestamp)
 }
 
-/// The newest signed pointer timestamp accepted per feed; an older pointer is a replay.
+/// Each channel and key generation has an independent replay watermark.
 #[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct FeedState {
@@ -27,7 +27,6 @@ fn read_feed_state(dir: &Path) -> Result<FeedState, UpdateError> {
         feeds: BTreeMap::new(),
     }))
 }
-/// Accepts a pointer timestamp for a feed unless a newer one was already accepted.
 fn accept_locked(dir: &Path, feed: &str, timestamp: u64) -> Result<(), UpdateError> {
     let mut state = read_feed_state(dir)?;
     match state.feeds.get(feed) {

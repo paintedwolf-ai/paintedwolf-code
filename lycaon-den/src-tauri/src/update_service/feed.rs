@@ -1,8 +1,4 @@
-//! Signed feed discovery: the channel pointer, its signature, and the offer it carries.
-//!
-//! The pointer is fetched directly from the release origin without proxies or redirects,
-//! verified with the embedded feed key, and ordered by its signed timestamp before any
-//! field is read. The artifact signature inside it is verified again when bytes arrive.
+//! Channel pointers are authenticated and replay-checked before their offers are accepted.
 use super::{
     persistence, verification, Candidate, Failure, RolloutEligibility, UpdateChannel, UpdateError,
     CHECK_REQUEST_TIMEOUT, DOWNLOAD_ORIGIN,

@@ -1,4 +1,4 @@
-//! Device records: preferences, feed freshness, and the per-installation namespace.
+//! Device preferences and records scoped to each installed application.
 use super::{Failure, InstallSource, UpdateChannel, UpdateError};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{
