@@ -23,7 +23,7 @@ pub(crate) fn hash(path: &Path) -> Result<String, UpdateError> {
         }
         digest.update(&buffer[..n]);
     }
-    Ok(format!("{:x}", digest.finalize()))
+    Ok(hex::encode(digest.finalize()))
 }
 
 /// A digest over every path, mode, link target, and file body beneath `root`.
@@ -80,7 +80,7 @@ pub(crate) fn bundle_hash(root: &Path) -> Result<String, UpdateError> {
     let mut digest = Sha256::new();
     visit(root, root, &mut digest)
         .map_err(|error| UpdateError::new(Failure::VerificationFailed, error))?;
-    Ok(format!("{:x}", digest.finalize()))
+    Ok(hex::encode(digest.finalize()))
 }
 #[cfg(not(unix))]
 pub(crate) fn bundle_hash(_root: &Path) -> Result<String, UpdateError> {

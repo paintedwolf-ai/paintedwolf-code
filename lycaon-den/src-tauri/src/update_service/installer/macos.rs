@@ -70,7 +70,7 @@ fn lock_path(target: &Path, kind: &str) -> Result<PathBuf, UpdateError> {
         crate::config_dir::ensure_private_dir(&root)
             .map_err(|e| UpdateError::new(Failure::StateUnavailable, e))?;
     }
-    let id = format!("{:x}", Sha256::digest(target.as_os_str().as_bytes()));
+    let id = hex::encode(Sha256::digest(target.as_os_str().as_bytes()));
     Ok(root.join(format!("installation-{id}-{kind}.lock")))
 }
 fn acquire_named_lease(

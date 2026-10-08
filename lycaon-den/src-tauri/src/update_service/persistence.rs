@@ -166,10 +166,7 @@ pub fn preferences_dir() -> Result<PathBuf, UpdateError> {
 static HELPER_INSTALLATION: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 pub fn installation_id(target: &Path) -> String {
     use sha2::{Digest, Sha256};
-    format!(
-        "{:x}",
-        Sha256::digest(target.as_os_str().as_encoded_bytes())
-    )
+    hex::encode(Sha256::digest(target.as_os_str().as_encoded_bytes()))
 }
 pub fn helper_installation(id: &str) -> Result<(), UpdateError> {
     if !hex_digest(id) {

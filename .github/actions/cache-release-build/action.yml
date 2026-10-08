@@ -22,14 +22,14 @@ runs:
 
     # The notices script reuses any installed tool, so only its exact pins restore.
     - if: ${{ inputs.save == 'true' }}
-      uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: |
           ${{ steps.paths.outputs.bin }}/cargo-about
           ${{ steps.paths.outputs.bin }}/go-licenses
         key: notices-tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/licenses-notices.sh', 'rust-toolchain.toml', 'lycaon/go.mod') }}
     - if: ${{ inputs.save != 'true' }}
-      uses: actions/cache/restore@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: |
           ${{ steps.paths.outputs.bin }}/cargo-about
@@ -39,7 +39,7 @@ runs:
     # Compiler caches are content-checked, so any earlier main commit is a safe
     # starting point; each main commit saves its own entry.
     - if: ${{ inputs.save == 'true' }}
-      uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: |
           ${{ steps.paths.outputs.gocache }}
@@ -51,7 +51,7 @@ runs:
           ${{ steps.paths.outputs.build_key }}${{ hashFiles('rust-toolchain.toml', 'lycaon/go.sum', 'lycaon-den/src-tauri/Cargo.lock') }}-
           ${{ steps.paths.outputs.build_key }}
     - if: ${{ inputs.save != 'true' }}
-      uses: actions/cache/restore@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: |
           ${{ steps.paths.outputs.gocache }}
