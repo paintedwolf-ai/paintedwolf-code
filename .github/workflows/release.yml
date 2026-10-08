@@ -127,7 +127,8 @@ jobs:
           status: ${{ job.status }}
 
   ship-gates:
-    if: always()
+    # Judges failed and timed-out jobs, but a cancelled run must not wait for a runner to do so.
+    if: ${{ !cancelled() }}
     needs: [classify, preflight, upgrade]
     runs-on: ubuntu-latest
     timeout-minutes: 5
