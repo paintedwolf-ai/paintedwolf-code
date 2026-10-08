@@ -50,8 +50,8 @@ func (e *promptSurface) effectiveCatalog(ctx context.Context, sess *api.Session)
 
 // omittedUnits returns the instruction units the turn ledger left out.
 func (e *promptSurface) omittedUnits(sess *api.Session) map[string]bool {
-	if e == nil || sess == nil || e.wiring.OmittedUnits == nil {
+	if e == nil || sess == nil || e.deps.OmittedUnits == nil {
 		return nil
 	}
-	return e.wiring.OmittedUnits(sess.ID)
+	return e.deps.OmittedUnits(sess.ID)
 }

@@ -13,7 +13,7 @@ func (e *turnContextAssembler) agentsMDIndexInject(ctx context.Context, sess *ap
 	if e == nil || sess == nil || turn == nil {
 		return nil
 	}
-	deps := e.surface.wiring
+	deps := e.deps
 	if deps.AgentsMDIndex == nil {
 		return nil
 	}
@@ -30,7 +30,7 @@ func (e *turnContextAssembler) agentsMDChainInject(ctx context.Context, sess *ap
 	if e == nil || sess == nil || turn == nil {
 		return nil
 	}
-	deps := e.surface.wiring
+	deps := e.deps
 	if deps.AgentsMDChain == nil {
 		return nil
 	}

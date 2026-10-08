@@ -13,16 +13,14 @@ import (
 
 // promptSurface resolves and renders one immutable host wiring snapshot.
 type promptSurface struct {
-	wiring AssemblyDeps
-	cache  *SessionPromptCache
+	deps  promptSurfaceDeps
+	cache *SessionPromptCache
 }
 
 func (e *promptSurface) resolveSystemPromptRef(ctx context.Context, sess *api.Session) (string, error) {
 	coordinatorProfile := ""
-	if e != nil && e.wiring.Workflows != nil {
-		if manifest, ok := e.wiring.Workflows.ActiveManifest(ctx, sess.ID); ok {
-			coordinatorProfile = manifest.CoordinatorProfile
-		}
+	if e != nil && e.deps.CoordinatorProfile != nil {
+		coordinatorProfile = e.deps.CoordinatorProfile(ctx, sess.ID)
 	}
 	return ResolveSystemPromptTemplate(sess, e.agentsForSession(ctx, sess), coordinatorProfile), nil
 }
@@ -30,16 +28,16 @@ func (e *promptSurface) agentsForSession(ctx context.Context, sess *api.Session)
 	if view := e.sessionCatalogView(ctx, sess); view != nil {
 		return view
 	}
-	return e.wiring.Agents
+	return e.deps.Agents
 }
 func (e *promptSurface) projectPrompts(ctx context.Context, sess *api.Session) prompts.PromptTemplateEngine {
-	pe := e.wiring.Prompts
+	pe := e.deps.Prompts
 	fe, ok := pe.(*prompts.FileTemplateEngine)
 	if !ok || fe == nil || sess == nil {
 		return pe
 	}
 	// Empty trusted roots disable project prompt layers.
-	if resolve := e.wiring.ProjectOverlayRootPaths; resolve != nil {
+	if resolve := e.deps.ProjectOverlayRootPaths; resolve != nil {
 		paths := resolve(ctx, sess)
 		if len(paths) == 0 {
 			return e.attachSessionCatalog(ctx, sess, fe)
@@ -68,7 +66,7 @@ func (e *promptSurface) attachSessionCatalog(ctx context.Context, sess *api.Sess
 	if e == nil || fe == nil {
 		return fe
 	}
-	if resolve := e.wiring.SessionView; resolve != nil {
+	if resolve := e.deps.SessionView; resolve != nil {
 		if view := resolve(ctx, sess); view != nil && view.Catalog != nil {
 			return fe.WithEffectiveCatalog(view.Catalog)
 		}
@@ -80,7 +78,7 @@ func (e *promptSurface) sessionCatalogView(ctx context.Context, sess *api.Sessio
 	if e == nil {
 		return nil
 	}
-	if resolve := e.wiring.SessionView; resolve != nil {
+	if resolve := e.deps.SessionView; resolve != nil {
 		return resolve(ctx, sess)
 	}
 	return nil

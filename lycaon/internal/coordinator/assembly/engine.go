@@ -192,8 +192,7 @@ func (e *AssemblyEngine) BuildCompletionMessages(
 		return history, nil
 	}
 	deps := e.deps()
-	prompt := &promptSurface{wiring: deps, cache: &e.cache}
-	contextAssembler := &turnContextAssembler{surface: prompt}
+	prompt, contextAssembler := newAssemblyDomains(deps, &e.cache)
 	messages := api.FilterPromptHistory(history)
 	if deps.Prompts == nil {
 		if deps.ScanGuidance != nil {

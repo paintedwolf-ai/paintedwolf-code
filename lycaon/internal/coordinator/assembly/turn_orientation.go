@@ -17,7 +17,8 @@ import (
 
 // turnContextAssembler projects volatile host state around stable prompt history.
 type turnContextAssembler struct {
-	surface *promptSurface
+	surface promptProjection
+	deps    turnContextDeps
 }
 
 func (e *turnContextAssembler) prependCoordinatorRunInject(
@@ -28,7 +29,7 @@ func (e *turnContextAssembler) prependCoordinatorRunInject(
 	turn *TurnAssemblyScratch,
 	history []api.Message,
 ) ([]api.Message, error) {
-	deps := e.surface.wiring
+	deps := e.deps
 	var out []api.Message
 	runCtx := frame.RunContext
 	if frame.Roster == nil {
@@ -90,15 +91,15 @@ func (e *turnContextAssembler) workerBoard(
 	sess *api.Session,
 	turn *TurnAssemblyScratch,
 ) (string, bool) {
-	if e == nil || e.surface.wiring.Board == nil {
+	if e == nil || e.deps.Board == nil {
 		return "", false
 	}
-	block, ok := e.surface.wiring.Board.WorkerBoard(ctx, sess)
+	block, ok := e.deps.Board.WorkerBoard(ctx, sess)
 	if !ok {
 		return "", false
 	}
 	turn.BoardBlock = block
-	turn.BoardKey = e.surface.wiring.Board.BoardInjectHash(sess.ID)
+	turn.BoardKey = e.deps.Board.BoardInjectHash(sess.ID)
 	return block, true
 }
 func (e *turnContextAssembler) prependTransitionInject(
@@ -108,7 +109,7 @@ func (e *turnContextAssembler) prependTransitionInject(
 	history []api.Message,
 	turn *TurnAssemblyScratch,
 ) (string, bool) {
-	if e == nil || e.surface.wiring.Prompts == nil || sess == nil || turn == nil {
+	if e == nil || !e.deps.PromptConfigured || sess == nil || turn == nil {
 		return "", false
 	}
 	profile, implState := e.surface.resolveCoordinatorProfile(ctx, sess, frame, history, turn)
@@ -126,7 +127,7 @@ func (e *turnContextAssembler) prependTransitionInject(
 		return "", false
 	}
 
-	inj := e.surface.wiring.Injects
+	inj := e.deps.Injects
 	if inj == nil {
 		return "", false
 	}

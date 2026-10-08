@@ -14,11 +14,11 @@ import (
 )
 
 func (e *promptSurface) repoKnownEmpty(ctx context.Context, workspacePath string) bool {
-	fn := e.wiring.RepoKnownEmpty
+	fn := e.deps.RepoKnownEmpty
 	return fn != nil && fn(ctx, workspacePath)
 }
 func (e *promptSurface) mergeVisibleTools(ctx context.Context, sess *api.Session, frame inject.CoordinatorTurnFrame, vars map[string]any) {
-	if e == nil || vars == nil || sess == nil || e.wiring.PromptToolLister == nil {
+	if e == nil || vars == nil || sess == nil || e.deps.PromptToolLister == nil {
 		return
 	}
 	profileID := strings.TrimSpace(frame.Machine.ProfileID)
@@ -28,7 +28,7 @@ func (e *promptSurface) mergeVisibleTools(ctx context.Context, sess *api.Session
 		}
 	}
 	if profileID == "" {
-		fe, ok := e.wiring.Prompts.(*prompts.FileTemplateEngine)
+		fe, ok := e.deps.Prompts.(*prompts.FileTemplateEngine)
 		if !ok || fe == nil {
 			return
 		}
@@ -38,7 +38,7 @@ func (e *promptSurface) mergeVisibleTools(ctx context.Context, sess *api.Session
 			return
 		}
 	}
-	metas, err := e.wiring.PromptToolLister(ctx, sess, profileID)
+	metas, err := e.deps.PromptToolLister(ctx, sess, profileID)
 	if err != nil || len(metas) == 0 {
 		return
 	}
@@ -64,8 +64,8 @@ func (e *promptSurface) mergeEffectivePromptSurface(ctx context.Context, sess *a
 	switch {
 	case frame.Machine.Compiled():
 		surface = frame.Machine.Surface
-	case e.wiring.EffectivePromptSurface != nil:
-		surface = e.wiring.EffectivePromptSurface(ctx, sess)
+	case e.deps.EffectivePromptSurface != nil:
+		surface = e.deps.EffectivePromptSurface(ctx, sess)
 	default:
 		return
 	}
@@ -109,7 +109,7 @@ func (e *promptSurface) mergeVisibleToolCapabilityVars(vars map[string]any) {
 	capability.MergeVars(vars, capability.Derive(rootCount, visible, nil))
 }
 func (e *promptSurface) workerToolBudget(ctx context.Context, sess *api.Session) spawn.WorkerToolBudget {
-	if deps := e.wiring; deps.Limits != nil {
+	if deps := e.deps; deps.Limits != nil {
 		return deps.Limits(ctx, sess).WorkerToolBudget()
 	}
 	return spawn.DefaultWorkerToolBudget()
@@ -129,7 +129,7 @@ func (e *promptSurface) workspaceRootsForTurn(ctx context.Context, sess *api.Ses
 	if turn != nil && turn.WorkspaceRootsLoaded {
 		return turn.WorkspaceRoots, turn.WorkspaceRootCount, turn.WorkspaceActivePath, true
 	}
-	load := e.wiring.WorkspaceRoots
+	load := e.deps.WorkspaceRoots
 	if load == nil {
 		return nil, 0, "", false
 	}
@@ -159,7 +159,7 @@ func (e *promptSurface) resolveTurnRoster(
 		repoKnownEmpty = e.repoKnownEmpty(ctx, path)
 	}
 	webSearchEnabled := true
-	if fn := e.wiring.WebSearchEnabled; fn != nil {
+	if fn := e.deps.WebSearchEnabled; fn != nil {
 		webSearchEnabled = fn()
 	}
 	declared := frame.RunContext.AllowedAgents

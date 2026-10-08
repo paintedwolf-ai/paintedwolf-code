@@ -5,14 +5,17 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func testPromptSurface(e *AssemblyEngine) *promptSurface {
-	return &promptSurface{wiring: e.deps(), cache: &e.cache}
+	prompt, _ := newAssemblyDomains(e.deps(), &e.cache)
+	return prompt
 }
 func testTurnContext(e *AssemblyEngine) *turnContextAssembler {
-	return &turnContextAssembler{surface: testPromptSurface(e)}
+	_, turn := newAssemblyDomains(e.deps(), &e.cache)
+	return turn
 }
 
 func TestCompletionKeepsOneWiringSnapshot(t *testing.T) {
@@ -36,13 +39,13 @@ func TestCompletionKeepsOneWiringSnapshot(t *testing.T) {
 	session := &api.Session{ID: "snapshot", ParentSessionID: "parent", AgentType: "repo-researcher", WorkspacePath: t.TempDir()}
 	engine.BeginPromptTurn(session.ID)
 	if _, err := engine.BuildCompletionMessages(t.Context(), session, nil, nil); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "build completion from captured wiring", err)
 	}
 	if oldReads != 1 || newReads != 0 {
 		t.Fatalf("first completion read old=%d replacement=%d", oldReads, newReads)
 	}
 	if _, err := engine.BuildCompletionMessages(t.Context(), session, nil, nil); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "build completion from captured wiring", err)
 	}
 	if oldReads != 1 || newReads != 1 {
 		t.Fatalf("next completion read old=%d replacement=%d", oldReads, newReads)

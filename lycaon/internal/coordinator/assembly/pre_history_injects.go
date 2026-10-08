@@ -52,7 +52,7 @@ func (e *turnContextAssembler) sourceBriefBlocks(ctx context.Context, sess *api.
 	if turn != nil && turn.SourceBriefsLoaded {
 		return turn.SourceBriefBlocks
 	}
-	deps := e.surface.wiring
+	deps := e.deps
 	var blocks map[string]string
 	if deps.TurnSourceBriefs != nil {
 		for openingID, brief := range deps.TurnSourceBriefs(ctx, sess) {
@@ -95,7 +95,7 @@ func (e *turnContextAssembler) buildTailSystemInjects(
 		}
 	}
 
-	deps := e.surface.wiring
+	deps := e.deps
 	if deps.CommandJobs != nil {
 		jobs := deps.CommandJobs(sess.ID)
 		var held []heldcall.Running
@@ -151,7 +151,7 @@ func (e *turnContextAssembler) prepareCoordinatorBoard(
 	frame inject.CoordinatorTurnFrame,
 	turn *TurnAssemblyScratch,
 ) (inject.CoordinatorTurnFrame, string, error) {
-	deps := e.surface.wiring
+	deps := e.deps
 	if deps.Board == nil {
 		return frame, "", nil
 	}

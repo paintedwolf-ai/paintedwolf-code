@@ -37,7 +37,7 @@ func (e *promptSurface) renderCoordinatorStablePrompt(
 	}
 	settingsFP += fmt.Sprintf(";verify_command=%s;overlay_promote=%t", strings.TrimSpace(implState.VerifyCommand), len(implState.PendingOverlayIDs) > 0)
 	webSearchEnabled := true
-	if fn := e.wiring.WebSearchEnabled; fn != nil {
+	if fn := e.deps.WebSearchEnabled; fn != nil {
 		webSearchEnabled = fn()
 	}
 	settingsFP += stableCapabilityFingerprint(vars, frame.Roster, webSearchEnabled)
@@ -78,10 +78,10 @@ func stableCapabilityFingerprint(vars map[string]any, roster *inject.AgentRoster
 }
 
 func (e *promptSurface) loadExecutionModeState(ctx context.Context, sessionID string) surface.ExecutionModeState {
-	if e == nil || e.wiring.LoadExecutionModeState == nil {
+	if e == nil || e.deps.LoadExecutionModeState == nil {
 		return surface.ExecutionModeState{}
 	}
-	return e.wiring.LoadExecutionModeState(ctx, sessionID)
+	return e.deps.LoadExecutionModeState(ctx, sessionID)
 }
 
 func (e *promptSurface) renderTripartiteCoordinatorPrompt(
@@ -108,7 +108,7 @@ func (e *promptSurface) renderTripartiteCoordinatorPrompt(
 		rootCount = v
 	}
 	webSearchEnabled := true
-	if fn := e.wiring.WebSearchEnabled; fn != nil {
+	if fn := e.deps.WebSearchEnabled; fn != nil {
 		webSearchEnabled = fn()
 	}
 	roster := frame.Roster
@@ -225,10 +225,10 @@ func copyPromptVarsSorted(dst, src map[string]any) {
 }
 
 func (e *promptSurface) implementSessionState(ctx context.Context, sess *api.Session) surface.ImplementSessionState {
-	if e == nil || e.wiring.ImplementSessionState == nil || sess == nil {
+	if e == nil || e.deps.ImplementSessionState == nil || sess == nil {
 		return surface.ImplementSessionState{}
 	}
-	return e.wiring.ImplementSessionState(ctx, sess)
+	return e.deps.ImplementSessionState(ctx, sess)
 }
 
 func sessionPromptCacheKey(profile surface.TurnProfile, templateRef, agentType, projectDir, posture, settingsHash string, rootCount int, promptRevision string) string {
@@ -258,10 +258,10 @@ func rootCountFromVars(vars map[string]any) int {
 
 // loadedTools returns the turn ledger's loaded set for the session.
 func (e *promptSurface) loadedTools(sess *api.Session) map[string]bool {
-	if e == nil || sess == nil || e.wiring.LoadedTools == nil {
+	if e == nil || sess == nil || e.deps.LoadedTools == nil {
 		return nil
 	}
-	return e.wiring.LoadedTools(sess.ID)
+	return e.deps.LoadedTools(sess.ID)
 }
 
 func loadedFingerprint(loaded map[string]bool) string {

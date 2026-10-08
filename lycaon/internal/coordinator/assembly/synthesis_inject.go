@@ -14,7 +14,7 @@ func (e *turnContextAssembler) prependSynthesisEvidenceInject(
 	if e == nil || sess == nil || sess.IsWorkerChild() {
 		return nil
 	}
-	src := e.surface.wiring.SynthesisEvidence
+	src := e.deps.SynthesisEvidence
 	if src == nil {
 		return nil
 	}
