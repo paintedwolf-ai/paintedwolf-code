@@ -4,6 +4,8 @@ export type FrameLimits = { rows: number; bytes: number; pages: number; concurre
 export const DEFAULT_FRAME_LIMITS: FrameLimits = { rows: 2_000, bytes: 8 * 1024 * 1024, pages: 32, concurrent: 2 };
 
 type FrameReadOptions<F> = {
+  /** The coordinates the read is made in; defaults to the bound coordinates. */
+  basis?: FrameIdentity;
   identity?: (frame: F) => FrameIdentity;
   follow?: boolean;
   retain?: (frame: F) => readonly F[];
@@ -87,7 +89,7 @@ export class PagedViewController<F> {
     if (cached !== undefined) return Promise.resolve(cached);
     let request = this.pending.get(key);
     if (!request) {
-      request = { key, generation: this.generation, basis: this.identity, controller: new AbortController(), load, options, waiters: new Set(), running: false };
+      request = { key, generation: this.generation, basis: options.basis ?? this.identity, controller: new AbortController(), load, options, waiters: new Set(), running: false };
       this.pending.set(key, request);
     }
     const target = request;

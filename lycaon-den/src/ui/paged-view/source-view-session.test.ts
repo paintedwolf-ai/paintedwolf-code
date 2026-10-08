@@ -563,3 +563,32 @@ it("attach reads a detached view again once its host lease has lapsed", async ()
   again();
   await session.close();
 });
+
+it("keeps concurrent first pages when the host captures the presentation past the view state", async () => {
+  const current = { ...state("one"), extent: { rows: 400, complete: true } };
+  let arrived!: () => void, releaseSecond!: () => void;
+  const secondArrived = new Promise<void>(resolve => { arrived = resolve; });
+  const second = new Promise<void>(resolve => { releaseSecond = resolve; });
+  const client = wireClient(async <T>(path: string, init?: RequestInit): Promise<T> => {
+    // A projection landed after the view was read; the presentation holds it.
+    if (path.endsWith("/presentations") && init?.method === "POST") return { id: "presented", view: { ...current, projection_revision: "two" } } as T;
+    if (init?.method === "DELETE") return undefined as T;
+    if (path.includes("/rows?")) {
+      const start = Number(new URL(path, "http://fixture").searchParams.get("offset") ?? 0);
+      if (start === 0) await secondArrived; else { arrived(); await second; }
+      return { kind: "tree", view_id: "view", intent_revision: "intent", projection_revision: "two", extent: current.extent,
+        span: { start, end: start + 1 }, ancestors: [], anchor: { root_id: "root", path: "." },
+        rows: [{ address: { root_id: "root", path: "." }, name: String(start), kind: "directory", depth: 0, expanded: true }] } as T;
+    }
+    return current as T;
+  });
+  const session = new SourceViewSession(client, "project", { kind: "tree", client_id: "window:main", operation_id: "create", workspace_id: "workspace", intent: {} }, frame => ({ rows: frame.rows.length, bytes: 256 }));
+  const detach = session.attach();
+  try {
+    await session.ready();
+    const first = session.frame(0), next = session.frame(200).catch(error => error);
+    expect((await first).projection_revision).toBe("two");
+    releaseSecond();
+    expect(await next).toMatchObject({ projection_revision: "two", span: { start: 200 } });
+  } finally { releaseSecond(); detach(); await session.close(); }
+});
