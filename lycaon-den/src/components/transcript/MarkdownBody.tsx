@@ -26,6 +26,7 @@ type Props = {
   /** Tokens retain references resolved by whole-document lexing. */
   source: string | Token[];
   class?: string;
+  onExternalLink?: (href: string) => void | Promise<unknown>;
   /** Surface link destinations and disable project-path opens. */
   untrusted?: boolean;
   /** Project context for project-path links. */
@@ -83,6 +84,17 @@ export function MarkdownBody(props: Props) {
         return;
       }
     }
+    if (props.onExternalLink && target instanceof Element) {
+      const anchor = target.closest("a.den-external-link[href]");
+      if (anchor instanceof HTMLAnchorElement) {
+        if (e instanceof KeyboardEvent && e.key !== "Enter") return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (e instanceof MouseEvent && clickSelectedText(e, anchor)) return;
+        void props.onExternalLink(anchor.getAttribute("href") ?? "");
+        return;
+      }
+    }
     // Untrusted project paths remain inert.
     if (props.untrusted === true) return;
     if (onMarkdownProjectPathLinkClick(e, props.projectId)) return;
@@ -136,6 +148,7 @@ export function MarkdownBody(props: Props) {
         innerHTML={html()}
         onClick={onClick}
         onKeyDown={onClick}
+        onAuxClick={onClick}
         onContextMenu={onContextMenu}
       />
       <Show when={menu()} keyed>
