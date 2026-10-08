@@ -17,14 +17,7 @@ DEADCODE_PACKAGES=(./cmd/... ./internal/... ./pkg/... ./test/contract/... ./test
 export GOTOOLCHAIN="go$(grep '^go ' "${GO_DIR}/go.mod" | awk '{print $2}')"
 mkdir -p "${BIN_DIR}"
 
-install_deadcode() {
-  echo "Installing deadcode ${DEADCODE_VERSION} to ${BIN_DIR} (toolchain ${GOTOOLCHAIN})..." >&2
-  (cd "${GO_DIR}" && GOBIN="${BIN_DIR}" go install "golang.org/x/tools/cmd/deadcode@${DEADCODE_VERSION}")
-}
-
-if [[ ! -x "${DEADCODE}" ]]; then
-  install_deadcode
-fi
+python3 "${ROOT}/scripts/analysis_tools.py" ensure deadcode
 
 cd "${GO_DIR}"
 
