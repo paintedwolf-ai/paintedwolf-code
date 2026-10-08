@@ -123,10 +123,12 @@ runs:
       with:
         save: ${{ inputs.save-caches }}
 
+    # Preparation writes the workspace copy that native stages link into their snapshots;
+    # the catalog's licenses:notices check runs in its own snapshot and leaves the workspace bare.
     - name: Generate shell resource notices
       if: inputs.setup == 'shell'
       shell: bash
-      run: ./task licenses:notices
+      run: bash scripts/licenses-notices.sh
 
     - name: Restore analysis tools
       if: inputs.analysis != 'none'
