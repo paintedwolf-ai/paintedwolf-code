@@ -20,7 +20,9 @@ import (
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/search"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/testdbseed"
+	catalogtest "github.com/lycaon/lycaon/internal/testsetup/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -268,7 +270,7 @@ func TestHandleSearchKindCodeFansOut(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "store.db")
 
 	dir := t.TempDir()
-	testdbseed.InsertProjectRoot(t, sqlDB, "proj-a", dir)
+	rootID := testdbseed.InsertProjectRoot(t, sqlDB, "proj-a", dir)
 	if err := os.WriteFile(filepath.Join(dir, "needle.go"), []byte("package main\nvar NeedleToken = 1\n"), 0o644); err != nil {
 		testutil.FailErr(t, "write file", err)
 	}
@@ -276,6 +278,9 @@ func TestHandleSearchKindCodeFansOut(t *testing.T) {
 	st := store.NewSQL(sqlDB)
 	reg := project.NewSQLRegistry(sqlDB)
 	srv := NewServer(requiredTestDeps(t, Dependencies{Store: st, Projects: reg}), nil, TestAPIToken)
+	// A root still warming answers with no code hits, so settle it first.
+	testutil.FailErr(t, "settle source inventory", catalogtest.AwaitIndex(t.Context(), sourcecatalog.Process(), "proj-a",
+		sourcecatalog.Root{ID: rootID, Path: dir}))
 
 	body := `{"query":"kind:code NeedleToken","origin_project_id":"proj-a"}`
 	req := newAuthedRequest(http.MethodPost, "/v1/search", strings.NewReader(body))

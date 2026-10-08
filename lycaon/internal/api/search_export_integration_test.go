@@ -3,7 +3,6 @@
 package api
 
 import (
-	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -14,7 +13,11 @@ import (
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/search"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/sourcecatalog"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
+	catalogtest "github.com/lycaon/lycaon/internal/testsetup/sourcecatalog"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestHandleSearchExportJSONLAcrossProjects(t *testing.T) {
@@ -124,13 +127,21 @@ func TestHandleSearchExportTruncationHeaderFalseForSmallResult(t *testing.T) {
 func newSearchExportServer(t *testing.T) (db.Handle, *Server) {
 	t.Helper()
 	sqlDB := testdbfixture.Open(t, "store.db")
-	dirA := t.TempDir()
-	dirB := t.TempDir()
-	testdbseed.InsertProjectRoot(t, sqlDB, "proj-a", dirA)
-	testdbseed.InsertProjectRoot(t, sqlDB, "proj-b", dirB)
+	roots := map[string]sourcecatalog.Root{}
+	for _, projectID := range []string{"proj-a", "proj-b"} {
+		dir := t.TempDir()
+		roots[projectID] = sourcecatalog.Root{ID: testdbseed.InsertProjectRoot(t, sqlDB, projectID, dir), Path: dir}
+	}
 	store := store.NewSQL(sqlDB)
 	reg := project.NewSQLRegistry(sqlDB)
-	return sqlDB, NewServer(requiredTestDeps(t, Dependencies{Store: store, Projects: reg}), nil, TestAPIToken)
+	srv := NewServer(requiredTestDeps(t, Dependencies{Store: store, Projects: reg}), nil, TestAPIToken)
+	// Unscoped exports also search every attached root's source; an unsettled
+	// root makes the code leg report partial coverage, which export marks truncated.
+	for projectID, root := range roots {
+		testutil.FailErr(t, "settle source inventory for "+projectID,
+			catalogtest.AwaitIndex(t.Context(), sourcecatalog.Process(), projectID, root))
+	}
+	return sqlDB, srv
 }
 
 func postSearchExport(t *testing.T, srv *Server, body string) *httptest.ResponseRecorder {
