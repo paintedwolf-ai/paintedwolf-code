@@ -2,8 +2,9 @@ name: Qualification
 
 # The deep tier a release requires of its exact commit, beyond the merge queue's
 # full tier: the `qualification` profile's behavior, race, fuzz, coverage, stress,
-# and performance lanes. A complete run records its verdict on the commit as the
-# `qualification` status, which a release reuses instead of qualifying again.
+# performance, and WebKit lanes, and the web and desktop browser journeys. A
+# complete run records its verdict on the commit as the `qualification` status,
+# which a release reuses instead of qualifying again.
 on:
   workflow_call:
     inputs:
@@ -22,10 +23,14 @@ jobs:
       profile: qualification
       suite: ${{ inputs.suite }}
 
+  e2e:
+    if: inputs.suite == 'all' || inputs.suite == 'e2e'
+    uses: ./.github/workflows/e2e-verification.yml
+
   qualified:
     # Judges failed and timed-out jobs, but a cancelled run must not wait for a runner to do so.
     if: ${{ !cancelled() }}
-    needs: [verification]
+    needs: [verification, e2e]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -38,6 +43,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           NEEDS_JSON: ${{ toJSON(needs) }}
           SUITE: ${{ inputs.suite }}
+          SKIPPED: ${{ inputs.suite != 'all' && inputs.suite != 'e2e' && 'e2e' || '' }}
           COMMIT: ${{ github.sha }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: python3 scripts/ci_verification.py qualify "$COMMIT" --suite "$SUITE"
+        run: python3 scripts/ci_verification.py qualify "$COMMIT" --suite "$SUITE" --skipped "$SKIPPED"

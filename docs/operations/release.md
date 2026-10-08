@@ -55,9 +55,10 @@ reuse the public bucket and domain or point at a scratch bucket.
   (`HEADGREEN`). Each group contains every pull request ahead of it, so main
   still advances only to a commit the full tier passed, and a flaky earlier
   group no longer sends the entries behind it back to rebuild. A full-tier run
-  takes about an hour, with WebKit as its longest job, and runs three macOS
-  jobs totalling about 90 minutes against five macOS runners; more concurrent
-  groups would only queue for runners and hold back pull requests' fast tiers. Confirm the queue is live afterwards:
+  keeps browser journeys in qualification and runs one macOS confinement/Git-parity
+  job per group. Full Go behavior uses two Linux shards. Calibrate queue
+  concurrency from current runner wait and execution times after cache warming;
+  additional groups can still hold back pull requests' fast tiers. Confirm the queue is live afterwards:
   the repository's `mergeQueue(branch: "main")` in the GraphQL API is not null.
 - [ ] Configure public repository presentation: description (`Local-first AI coding agent`), website (`https://paintedwolf.ai`), topics (`ai`, `agent`, `tauri`, `golang`, `solidjs`, `local-first`), and social preview image.
 

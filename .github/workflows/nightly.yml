@@ -6,7 +6,6 @@ name: nightly
 # release repeats them.
 on:
   schedule:
-    # 05:00 UTC — before the Den desktop nightly (macOS runner contention).
     - cron: "0 5 * * *"
   push:
     branches: [main]
@@ -18,7 +17,7 @@ on:
         description: Which qualification suites to run; only all records a verdict
         type: choice
         default: all
-        options: [all, behavior, race, coverage, performance, fuzz]
+        options: [all, behavior, race, coverage, performance, fuzz, e2e]
 
 permissions:
   contents: read

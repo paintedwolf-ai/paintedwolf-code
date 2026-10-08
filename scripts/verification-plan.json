@@ -43,8 +43,7 @@
       "den:typecheck",
       "den:lint",
       "den:test",
-      "den:test:rust",
-      "den:webkit:scroll"
+      "den:test:rust"
     ],
     "check:drift": [
       "codegen:wire-enums:check",
@@ -844,7 +843,8 @@
       ],
       "suite": "behavior",
       "setup": "verification",
-      "workers": 3
+      "workers": 3,
+      "shards": 2
     },
     "frontend": {
       "targets": [
@@ -876,9 +876,9 @@
       ],
       "minutes": 30,
       "profiles": [
-        "check"
+        "qualification"
       ],
-      "suite": "all",
+      "suite": "e2e",
       "setup": "harness",
       "runner": "macos-15"
     },

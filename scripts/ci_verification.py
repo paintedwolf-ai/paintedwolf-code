@@ -35,7 +35,7 @@ QUEUE_BRANCHES = "gh-readonly-queue/"
 EXCERPT_LINES = 60
 # Go's progress lines for tests that are running or passed; they bury a parallel package's failure.
 GO_PROGRESS = re.compile(r"^=== (RUN|PAUSE|CONT|NAME)\b|^\s*--- (PASS|SKIP):")
-SUITES = {"all", "behavior", "race", "coverage", "performance", "fuzz"}
+SUITES = {"all", "behavior", "race", "coverage", "performance", "fuzz", "e2e"}
 # What a lane installs: the shared toolchains, plus the Tauri shell and its staged engine,
 # or the Den Rust workspace and harness stack without the shell's packaging inputs.
 SETUPS = {"verification", "shell", "harness"}
@@ -179,13 +179,14 @@ def require_full_tier(repository, sha):
                          "or dispatch CI on it before releasing")
 
 
-def qualify(repository, sha, results, suite, run_url):
+def qualify(repository, sha, results, suite, run_url, skipped=()):
     """Judge a qualification run; a complete one records its verdict on the commit for releases to reuse.
 
-    A run of one suite proves nothing about the others, so it records nothing.
+    A run of one suite proves nothing about the others, so it records nothing and may skip the jobs it
+    did not select; a complete run excuses nothing.
     """
     try:
-        require_success(results)
+        require_success(results, () if suite == "all" else skipped)
     except ValueError:
         if suite == "all":
             record_qualification(repository, sha, "failure", run_url)
@@ -367,6 +368,10 @@ def report(status):
         output.write("\n".join(lines))
 
 
+def job_names(value):
+    return [name for name in value.split(",") if name]
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -377,8 +382,7 @@ def main():
     run.add_argument("lane")
     run.add_argument("--shard", default="")
     gate = commands.add_parser("gate")
-    gate.add_argument("--skipped", type=lambda value: [name for name in value.split(",") if name], default=[],
-                      help="comma-separated jobs this tier skips on purpose")
+    gate.add_argument("--skipped", type=job_names, default=[], help="comma-separated jobs this tier skips on purpose")
     summary = commands.add_parser("report")
     summary.add_argument("status")
     verified = commands.add_parser("verified")
@@ -386,6 +390,7 @@ def main():
     qualify_run = commands.add_parser("qualify")
     qualify_run.add_argument("sha")
     qualify_run.add_argument("--suite", default="all", choices=sorted(SUITES))
+    qualify_run.add_argument("--skipped", type=job_names, default=[], help="comma-separated jobs the suite leaves out")
     evidence = commands.add_parser("qualified")
     evidence.add_argument("sha")
     evidence.add_argument("--require", action="store_true", help="fail unless the latest qualification passed")
@@ -403,7 +408,7 @@ def main():
         require_full_tier(os.environ["GITHUB_REPOSITORY"], args.sha)
     elif args.command == "qualify":
         qualify(os.environ["GITHUB_REPOSITORY"], args.sha, json.loads(os.environ["NEEDS_JSON"]), args.suite,
-                os.environ["RUN_URL"])
+                os.environ["RUN_URL"], args.skipped)
     elif args.command == "qualified":
         passed = qualified(os.environ["GITHUB_REPOSITORY"], args.sha, args.require)
         print("true" if passed else "false")

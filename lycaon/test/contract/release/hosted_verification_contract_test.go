@@ -215,8 +215,8 @@ func TestQualificationRecordsAReusableVerdict(t *testing.T) {
 		t.Error("qualification must run the selected suites of the qualification profile")
 	}
 	qualified := jobs["qualified"]
-	if !slices.Equal(hostedNeeds(t, qualified), []string{"verification"}) || qualified.If != "${{ !cancelled() }}" ||
-		qualified.Permissions["statuses"] != "write" || len(jobs) != 2 {
+	if !slices.Equal(hostedNeeds(t, qualified), []string{"verification", "e2e"}) || qualified.If != "${{ !cancelled() }}" ||
+		qualified.Permissions["statuses"] != "write" || len(jobs) != 3 {
 		t.Fatal("the qualification verdict must judge every lane and be able to record itself")
 	}
 	recorded := false
@@ -273,7 +273,7 @@ func TestHostedVerificationBudgetsAndEvidence(t *testing.T) {
 	if !bounded || !evidence {
 		t.Fatal("verification needs an invocation deadline and always-run evidence collection")
 	}
-	for _, workflow := range []string{"ci", "nightly", "qualification", "verification", "platform-verification", "desktop-verification"} {
+	for _, workflow := range []string{"ci", "nightly", "qualification", "verification", "platform-verification", "e2e-verification"} {
 		for name, job := range hostedJobs(t, workflow) {
 			if job.Continue || job.Uses == "" && job.Timeout == "" {
 				t.Errorf("%s/%s must be blocking and have an explicit deadline", workflow, name)
@@ -287,11 +287,60 @@ func TestHostedVerificationBudgetsAndEvidence(t *testing.T) {
 	}
 }
 
-func TestDesktopVerificationHasOneImplementation(t *testing.T) {
+func TestEndToEndVerificationRunsOnlyInSelectedQualification(t *testing.T) {
 	t.Parallel()
-	for workflow, job := range map[string]string{"platform-verification": "playwright-desktop", "lycaon-den-nightly": "playwright-desktop"} {
-		if hostedJobs(t, workflow)[job].Uses != "./.github/workflows/desktop-verification.yml" {
-			t.Errorf("%s must use the shared desktop verification workflow", workflow)
+	platform := hostedJobs(t, "platform-verification")
+	if len(platform) != 2 || platform["confinement"].Timeout == "" || platform["upgrade-corpus"].Timeout == "" {
+		t.Fatal("merge admission must retain confinement and upgrade gates without browser journeys")
+	}
+	e2e := hostedJobs(t, "e2e-verification")
+	if len(e2e) != 2 || e2e["playwright-desktop"].Timeout == "" {
+		t.Fatal("end-to-end verification must run web and desktop suites")
+	}
+	web := e2e["playwright-web"]
+	if web.Strategy.FailFast == nil || *web.Strategy.FailFast || web.Continue {
+		t.Fatal("each web shard must run independently and contribute to the verdict")
+	}
+	qualification := hostedJobs(t, "qualification")
+	if qualification["e2e"].Uses != "./.github/workflows/e2e-verification.yml" ||
+		qualification["e2e"].If != "inputs.suite == 'all' || inputs.suite == 'e2e'" {
+		t.Fatal("complete and explicit E2E qualification runs must include browser verification")
+	}
+	const skipped = "${{ inputs.suite != 'all' && inputs.suite != 'e2e' && 'e2e' || '' }}"
+	for _, step := range qualification["qualified"].Steps {
+		if strings.HasPrefix(step.Run, "python3 scripts/ci_verification.py qualify") &&
+			step.Env["SKIPPED"] == skipped && strings.Contains(step.Run, `--skipped "$SKIPPED"`) {
+			return
+		}
+	}
+	t.Fatal("qualification may excuse only deliberately unselected E2E; failures and unexpected skips must block")
+}
+
+func TestBrowserVerificationRetainsSuitesEvidenceAndCleanup(t *testing.T) {
+	t.Parallel()
+	workflow := hostedWorkflowFile(t, "e2e-verification")
+	if len(workflow.On) != 1 {
+		t.Fatal("browser verification must have one caller-owned schedule")
+	}
+	if _, ok := workflow.On["workflow_call"]; !ok {
+		t.Fatal("browser verification must be a reusable workflow")
+	}
+	for name, command := range map[string]string{
+		"playwright-web": "./task e2e:den", "playwright-desktop": "./task e2e:den:desktop",
+	} {
+		var tests, evidence, cleanup bool
+		for _, step := range workflow.Jobs[name].Steps {
+			tests = tests || step.Run == command && step.Timeout != "" && !step.Continue
+			if step.Uses == "./.github/actions/verification-evidence" {
+				evidence = tests && step.If == "always()" && step.Timeout != ""
+			}
+			if strings.Contains(step.Run, "./task e2e:cleanup") {
+				cleanup = evidence && step.If == "always()" && step.Timeout != "" &&
+					strings.Contains(step.Run, "ci_verification.py release")
+			}
+		}
+		if !tests || !evidence || !cleanup {
+			t.Errorf("%s must run its bounded suite, retain evidence, then release admission and clean up", name)
 		}
 	}
 }
@@ -303,7 +352,7 @@ func TestHostedProfilesAndSetupAreReachable(t *testing.T) {
 			t.Errorf("%s must invoke catalog verification", workflow)
 		}
 	}
-	for workflow, job := range map[string]string{"verification": "verify", "desktop-verification": "desktop", "release": "preflight"} {
+	for workflow, job := range map[string]string{"verification": "verify", "e2e-verification": "playwright-desktop", "release": "preflight"} {
 		setup := false
 		for _, step := range hostedJobs(t, workflow)[job].Steps {
 			setup = setup || step.Uses == "./.github/actions/setup-verification"
