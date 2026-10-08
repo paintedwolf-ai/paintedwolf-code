@@ -1,0 +1,43 @@
+name: Qualification
+
+# The deep tier a release requires of its exact commit, beyond the merge queue's
+# full tier: the `qualification` profile's behavior, race, fuzz, coverage, stress,
+# and performance lanes. A complete run records its verdict on the commit as the
+# `qualification` status, which a release reuses instead of qualifying again.
+on:
+  workflow_call:
+    inputs:
+      suite:
+        description: Qualification suite; only `all` records a verdict on the commit
+        default: all
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  verification:
+    uses: ./.github/workflows/verification.yml
+    with:
+      profile: qualification
+      suite: ${{ inputs.suite }}
+
+  qualified:
+    # Judges failed and timed-out jobs, but a cancelled run must not wait for a runner to do so.
+    if: ${{ !cancelled() }}
+    needs: [verification]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      statuses: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Record the commit's qualification
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NEEDS_JSON: ${{ toJSON(needs) }}
+          SUITE: ${{ inputs.suite }}
+          COMMIT: ${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: python3 scripts/ci_verification.py qualify "$COMMIT" --suite "$SUITE"

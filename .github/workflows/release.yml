@@ -24,7 +24,9 @@ jobs:
       contents: read
       checks: read
       actions: read
+      statuses: read
     outputs:
+      qualified: ${{ steps.qualification.outputs.qualified }}
       publish: ${{ steps.release.outputs.publish }}
       version: ${{ steps.release.outputs.version }}
       channel: ${{ steps.release.outputs.channel }}
@@ -53,6 +55,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 scripts/ci_verification.py verified "${GITHUB_SHA}"
+
+      # A candidate is qualified as it lands on main; without that verdict, this run qualifies it.
+      - name: Find the release commit's qualification
+        id: qualification
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          qualified="$(python3 scripts/ci_verification.py qualified "${GITHUB_SHA}")"
+          echo "qualified=${qualified}" >> "${GITHUB_OUTPUT}"
 
       - name: Classify release
         id: release
@@ -126,21 +138,47 @@ jobs:
           name: release-upgrade-${{ github.run_attempt }}
           status: ${{ job.status }}
 
+  # Lanes whose verdict depends on the date rather than the commit run at every release.
+  release-checks:
+    needs: classify
+    uses: ./.github/workflows/verification.yml
+    with:
+      profile: release
+
+  # Runs only when the commit has no passing qualification to reuse.
+  qualification:
+    needs: classify
+    if: needs.classify.outputs.qualified != 'true'
+    permissions:
+      contents: read
+      statuses: write
+    uses: ./.github/workflows/qualification.yml
+
   ship-gates:
     # Judges failed and timed-out jobs, but a cancelled run must not wait for a runner to do so.
     if: ${{ !cancelled() }}
-    needs: [classify, preflight, upgrade]
+    needs: [classify, preflight, upgrade, release-checks, qualification]
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
+      statuses: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Require every release gate
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}
-        run: python3 scripts/ci_verification.py gate
+          SKIPPED: ${{ needs.classify.outputs.qualified == 'true' && 'qualification' || '' }}
+        run: python3 scripts/ci_verification.py gate --skipped "$SKIPPED"
+      # Whichever run produced it, the commit's latest verdict decides, so a failure
+      # recorded since classification withdraws the evidence.
+      - name: Require the release commit's qualification
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/ci_verification.py qualified --require "${GITHUB_SHA}"
 
-  # The merge queue verified this commit; the signed build starts with preflight, and
-  # nothing leaves the run until ship-gates passes.
+  # The signed build starts alongside every gate, and nothing leaves the run until
+  # ship-gates passes.
   build-release:
     needs: [classify]
     strategy:

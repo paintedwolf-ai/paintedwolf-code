@@ -20,11 +20,11 @@ class HostedVerificationTests(unittest.TestCase):
                 actual = sorted(stage["name"] for lane in lanes.values() if profile in lane["profiles"]
                                 for stage in planning.expand(lane["targets"]))
                 self.assertEqual(actual, expected)
-        check = {row["lane"] for row in ci.matrix("check")["include"]}
+        qualification = {row["lane"] for row in ci.matrix("qualification")["include"]}
         release = {row["lane"] for row in ci.matrix("release")["include"]}
-        # Releases gate on whether the product works; style, tooling, and the deep tiers run elsewhere.
-        self.assertLessEqual(release, check)
-        self.assertEqual(release, {"build", "contracts", "behavior", "frontend", "native", "vulnerabilities"})
+        # A release repeats only what judges the published world; a recorded qualification covers the commit.
+        self.assertEqual(release, {"vulnerability-freshness"})
+        self.assertFalse(release & qualification)
 
     def test_partition_drift_refuses_to_plan_before_any_tests_run(self):
         for mutation in ("missing", "fast-missing", "duplicate", "unknown", "unbounded"):
@@ -43,20 +43,20 @@ class HostedVerificationTests(unittest.TestCase):
                 with patch.object(ci, "catalog", return_value=data), self.assertRaises(ValueError):
                     ci.matrix("check")
 
-    def test_nightly_selection_includes_only_requested_and_unconditional_jobs(self):
+    def test_qualification_selection_includes_only_requested_suites(self):
         lanes = ci.lanes()
-        nightly = {target for row in ci.matrix("nightly")["include"] for target in lanes[row["lane"]]["targets"]}
-        self.assertEqual(nightly, {"test:full", "test:race", "test:fuzz", "test:stress", "check:coverage",
-                                   "den:coverage-check", "den:test:transcript-scale", "lint:vuln:fresh",
-                                   "perf:bench", "perf:sidecar", "perf:soak"})
+        qualification = {target for row in ci.matrix("qualification")["include"]
+                         for target in lanes[row["lane"]]["targets"]}
+        self.assertEqual(qualification, {"test:full", "test:race", "test:fuzz", "test:stress", "check:coverage",
+                                         "den:coverage-check", "den:test:transcript-scale",
+                                         "perf:bench", "perf:sidecar", "perf:soak"})
         for suite in ci.SUITES - {"all"}:
             with self.subTest(suite=suite):
-                names = {row["lane"] for row in ci.matrix("nightly", suite)["include"]}
-                expected = {name for name, lane in lanes.items() if "nightly" in lane["profiles"]
+                names = {row["lane"] for row in ci.matrix("qualification", suite)["include"]}
+                expected = {name for name, lane in lanes.items() if "qualification" in lane["profiles"]
                             and lane["suite"] in {"all", suite}}
                 self.assertEqual(names, expected)
-                self.assertIn("vulnerability-freshness", names)
-        for profile, suite in [("unknown", "all"), ("release", "race"), ("nightly", "typo")]:
+        for profile, suite in [("unknown", "all"), ("release", "race"), ("qualification", "typo")]:
             with self.assertRaises(ValueError):
                 ci.matrix(profile, suite)
 
@@ -159,7 +159,7 @@ class HostedVerificationTests(unittest.TestCase):
 
     def test_sharded_lane_expands_into_jobs_that_each_select_their_slice(self):
         count = ci.lanes()["race"]["shards"]
-        rows = [row for row in ci.matrix("nightly", "race")["include"] if row["lane"] == "race"]
+        rows = [row for row in ci.matrix("qualification", "race")["include"] if row["lane"] == "race"]
         self.assertEqual([row["shard"] for row in rows], [f"{k}/{count}" for k in range(1, count + 1)])
         with tempfile.TemporaryDirectory() as directory, \
                 patch.object(ci, "artifact_root", return_value=Path(directory)), \
@@ -216,6 +216,59 @@ class HostedVerificationTests(unittest.TestCase):
             with self.subTest(runs=runs, events=events), patch.object(ci, "github", fake(runs, events)), \
                     self.assertRaises(ValueError):
                 ci.require_full_tier("owner/repo", "abc")
+
+    def test_complete_qualification_records_its_verdict_on_the_commit(self):
+        url = "https://github.com/owner/repo/actions/runs/7"
+        passed = {"verification": {"result": "success"}}
+        failed = {"verification": {"result": "failure"}}
+        for results, suite, recorded in [(passed, "all", "success"), (failed, "all", "failure"),
+                                         (passed, "race", None), (failed, "race", None)]:
+            calls = []
+
+            def github(path, method="GET", **fields):
+                calls.append((method, path, fields))
+
+            with self.subTest(results=results, suite=suite), patch.object(ci, "github", github):
+                if results is failed:
+                    with self.assertRaises(ValueError):
+                        ci.qualify("owner/repo", "abc", results, suite, url)
+                else:
+                    ci.qualify("owner/repo", "abc", results, suite, url)
+                # One suite proves nothing about the others, so it neither grants nor withdraws evidence.
+                expected = [] if recorded is None else [("POST", "repos/owner/repo/statuses/abc", {
+                    "state": recorded, "context": "qualification", "target_url": url,
+                    "description": ci.QUALIFICATION_DESCRIPTIONS[recorded]})]
+                self.assertEqual(calls, expected)
+
+    def test_release_reuses_only_the_latest_workflow_recorded_qualification(self):
+        def status(identifier, state, context="qualification", login=ci.WORKFLOW_ACCOUNT):
+            return {"id": identifier, "state": state, "context": context, "creator": {"login": login},
+                    "created_at": "2026-10-08T00:00:00Z", "target_url": f"https://example.test/{identifier}"}
+
+        def lookup(statuses):
+            def github(path, **query):
+                self.assertEqual((path, query), ("repos/owner/repo/commits/abc/statuses", {"per_page": 100}))
+                return statuses
+            return github
+
+        for statuses in [[status(2, "success"), status(1, "failure")],
+                         # Statuses another account or another context recorded are not qualification.
+                         [status(3, "failure", login="someone"), status(2, "failure", context="ci"),
+                          status(1, "success")]]:
+            with self.subTest(statuses=statuses), patch.object(ci, "github", lookup(statuses)), \
+                    patch("builtins.print"):
+                self.assertTrue(ci.qualified("owner/repo", "abc"))
+                self.assertTrue(ci.qualified("owner/repo", "abc", required=True))
+        for statuses in [[],
+                         # A failure after a success on the same commit withdraws the evidence.
+                         [status(2, "failure"), status(1, "success")],
+                         [status(1, "success", login="someone")],
+                         [status(1, "success", context="qualification/partial")]]:
+            with self.subTest(statuses=statuses), patch.object(ci, "github", lookup(statuses)), \
+                    patch("builtins.print"):
+                self.assertFalse(ci.qualified("owner/repo", "abc"))
+                with self.assertRaises(ValueError):
+                    ci.qualified("owner/repo", "abc", required=True)
 
     def test_prune_cancels_only_runs_whose_merge_group_is_gone(self):
         live, gone = "gh-readonly-queue/main/pr-2-b", "gh-readonly-queue/main/pr-1-a"

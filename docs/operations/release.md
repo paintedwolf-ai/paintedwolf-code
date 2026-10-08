@@ -86,17 +86,23 @@ release, update both the host manifest and the action's revision pin together.
    baseline with the candidate ([compatibility](../compatibility.md)).
 3. If provider integrations changed, run the [provider checks](#provider-integration-checks).
 4. Merge the candidate through the merge queue, which runs the full CI tier on
-   the commit that lands, and wait for
-   [Build caches](../../.github/workflows/build-caches.yml) to
-   pass; the release build restores the Go and Tauri compiles that run saved.
-   Tag that exact commit as `v<VERSION>` and push the tag. This starts
+   the commit that lands. Landing the `VERSION` change starts
+   [nightly](../../.github/workflows/nightly.yml) on that commit, which
+   records its [qualification](../test-strategy.md#release-qualification) in
+   about two hours; [Build caches](../../.github/workflows/build-caches.yml)
+   warms the Go and Tauri compiles the release build restores. Once both pass,
+   tag that exact commit as `v<VERSION>` and push the tag. This starts
    [Release](../../.github/workflows/release.yml), which refuses a commit
-   without a passing full-tier `CI/check`. A dependency-inventory refresh
-   pushed after the candidate bypasses the queue: dispatch
-   [CI](../../.github/workflows/ci.yml) on `main` and tag once it passes.
-5. The workflow tests, builds, signs, notarizes, publishes the downloads,
-   updates the tap and website, and activates the updater feeds. Manual dispatch
-   never publishes.
+   without a passing full-tier `CI/check` and reuses its qualification. A
+   dependency-inventory refresh pushed after the candidate bypasses the queue:
+   dispatch [CI](../../.github/workflows/ci.yml) and nightly on `main`, and tag
+   once both pass.
+5. The workflow checks vulnerability freshness and the upgrade from the
+   channel's published release, then builds, signs, notarizes, publishes the
+   downloads, updates the tap and website, and activates the updater feeds. A
+   tag pushed before its commit's qualification passed waits for the release to
+   qualify the commit itself; a failed qualification publishes nothing. Manual
+   dispatch never publishes.
 6. Download the public app on a clean Mac. Open it, configure a provider, attach
    a project, complete a turn, then quit and relaunch. If a previous public
    release exists, also check updating from it and preserving local state.

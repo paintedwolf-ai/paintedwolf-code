@@ -19,13 +19,14 @@ type hostedStep struct {
 }
 
 type hostedJob struct {
-	Uses     string
-	Needs    yaml.Node
-	If       string
-	Timeout  string `yaml:"timeout-minutes"`
-	Continue bool   `yaml:"continue-on-error"`
-	With     map[string]string
-	Steps    []hostedStep
+	Uses        string
+	Needs       yaml.Node
+	If          string
+	Timeout     string `yaml:"timeout-minutes"`
+	Continue    bool   `yaml:"continue-on-error"`
+	With        map[string]string
+	Permissions map[string]string
+	Steps       []hostedStep
 	Strategy struct {
 		FailFast *bool `yaml:"fail-fast"`
 	}
@@ -154,14 +155,16 @@ func TestCIRunsTheFastTierOnPullRequestsAndTheFullTierBeforeMain(t *testing.T) {
 	}
 }
 
-// A release ships only a commit the full tier passed, and gates publication on
-// its own preflight and upgrade rehearsal while the signed build runs alongside them.
+// A release ships only a commit the full tier passed and qualification passed, and
+// gates publication on its own preflight, upgrade rehearsal, and release-time lanes
+// while the signed build runs alongside them.
 func TestReleaseGatesPrecedePublication(t *testing.T) {
 	t.Parallel()
 	jobs := hostedJobs(t, "release")
-	requireHostedGate(t, jobs, "ship-gates", []string{"classify", "preflight", "upgrade"})
+	requireHostedGate(t, jobs, "ship-gates", []string{"classify", "preflight", "upgrade", "release-checks", "qualification"})
 	for name, dependencies := range map[string][]string{
 		"preflight": {"classify"}, "upgrade": {"classify", "preflight"}, "build-release": {"classify"},
+		"release-checks": {"classify"},
 	} {
 		if !slices.Equal(hostedNeeds(t, jobs[name]), dependencies) || jobs[name].If != "" {
 			t.Errorf("%s must require successful %v before running", name, dependencies)
@@ -177,6 +180,74 @@ func TestReleaseGatesPrecedePublication(t *testing.T) {
 	}
 	if !slices.Contains(hostedNeeds(t, jobs["publish-immutable"]), "ship-gates") {
 		t.Error("publish-immutable must require ship-gates; signing may overlap the gates, publication may not")
+	}
+	if jobs["release-checks"].Uses != "./.github/workflows/verification.yml" || jobs["release-checks"].With["profile"] != "release" {
+		t.Error("every release must run the release-time catalog profile")
+	}
+	found := false
+	for _, step := range jobs["classify"].Steps {
+		found = found || strings.Contains(step.Run, `python3 scripts/ci_verification.py qualified "${GITHUB_SHA}"`) && step.If == ""
+	}
+	qualification := jobs["qualification"]
+	if !found || qualification.Uses != "./.github/workflows/qualification.yml" ||
+		qualification.If != "needs.classify.outputs.qualified != 'true'" || qualification.Permissions["statuses"] != "write" {
+		t.Error("a release must qualify its commit itself unless classification found a passing qualification")
+	}
+	var excused, required bool
+	for _, step := range jobs["ship-gates"].Steps {
+		excused = excused || strings.HasPrefix(step.Run, "python3 scripts/ci_verification.py gate") &&
+			step.Env["SKIPPED"] == "${{ needs.classify.outputs.qualified == 'true' && 'qualification' || '' }}" &&
+			strings.Contains(step.Run, `--skipped "$SKIPPED"`)
+		required = required || step.Run == `python3 scripts/ci_verification.py qualified --require "${GITHUB_SHA}"` && step.If == ""
+	}
+	if !excused || !required {
+		t.Error("ship-gates may excuse qualification only when it was reused, and must find the commit's latest qualification passed")
+	}
+}
+
+// A complete qualification run records its verdict on the commit, and nightly
+// qualifies main daily and each release candidate as it lands.
+func TestQualificationRecordsAReusableVerdict(t *testing.T) {
+	t.Parallel()
+	jobs := hostedJobs(t, "qualification")
+	if verification := jobs["verification"]; verification.Uses != "./.github/workflows/verification.yml" ||
+		verification.With["profile"] != "qualification" || verification.With["suite"] != "${{ inputs.suite }}" {
+		t.Error("qualification must run the selected suites of the qualification profile")
+	}
+	qualified := jobs["qualified"]
+	if !slices.Equal(hostedNeeds(t, qualified), []string{"verification"}) || qualified.If != "${{ !cancelled() }}" ||
+		qualified.Permissions["statuses"] != "write" || len(jobs) != 2 {
+		t.Fatal("the qualification verdict must judge every lane and be able to record itself")
+	}
+	recorded := false
+	for _, step := range qualified.Steps {
+		recorded = recorded || strings.HasPrefix(step.Run, "python3 scripts/ci_verification.py qualify") &&
+			step.Env["NEEDS_JSON"] == "${{ toJSON(needs) }}" && step.Env["SUITE"] == "${{ inputs.suite }}" &&
+			step.Env["COMMIT"] == "${{ github.sha }}"
+	}
+	if !recorded {
+		t.Error("the qualification verdict must be recorded on the run's commit from structured job results")
+	}
+
+	nightly := hostedWorkflowFile(t, "nightly")
+	var push struct {
+		Branches []string
+		Paths    []string
+	}
+	trigger := nightly.On["push"]
+	contractcheck.FailErr(t, "decode nightly push trigger", trigger.Decode(&push))
+	if !slices.Equal(push.Branches, []string{"main"}) || !slices.Equal(push.Paths, []string{"VERSION"}) {
+		t.Error("nightly must qualify a release candidate as it lands on main")
+	}
+	if _, ok := nightly.On["schedule"]; !ok {
+		t.Error("nightly must qualify main on a schedule")
+	}
+	if job := nightly.Jobs["qualification"]; job.Uses != "./.github/workflows/qualification.yml" ||
+		job.With["suite"] != "${{ inputs.suite || 'all' }}" || job.Permissions["statuses"] != "write" {
+		t.Error("nightly must run every qualification suite unless a dispatch selects one")
+	}
+	if job := nightly.Jobs["release-checks"]; job.Uses != "./.github/workflows/verification.yml" || job.With["profile"] != "release" {
+		t.Error("nightly must run the release-time profile as an early warning")
 	}
 }
 
@@ -202,7 +273,7 @@ func TestHostedVerificationBudgetsAndEvidence(t *testing.T) {
 	if !bounded || !evidence {
 		t.Fatal("verification needs an invocation deadline and always-run evidence collection")
 	}
-	for _, workflow := range []string{"ci", "nightly", "verification", "platform-verification", "desktop-verification"} {
+	for _, workflow := range []string{"ci", "nightly", "qualification", "verification", "platform-verification", "desktop-verification"} {
 		for name, job := range hostedJobs(t, workflow) {
 			if job.Continue || job.Uses == "" && job.Timeout == "" {
 				t.Errorf("%s/%s must be blocking and have an explicit deadline", workflow, name)
@@ -227,13 +298,10 @@ func TestDesktopVerificationHasOneImplementation(t *testing.T) {
 
 func TestHostedProfilesAndSetupAreReachable(t *testing.T) {
 	t.Parallel()
-	for _, workflow := range []string{"ci", "nightly"} {
+	for _, workflow := range []string{"ci", "qualification"} {
 		if hostedJobs(t, workflow)["verification"].Uses != "./.github/workflows/verification.yml" {
 			t.Errorf("%s must invoke catalog verification", workflow)
 		}
-	}
-	if hostedJobs(t, "nightly")["verification"].With["profile"] != "nightly" {
-		t.Error("nightly must invoke the nightly catalog profile")
 	}
 	for workflow, job := range map[string]string{"verification": "verify", "desktop-verification": "desktop", "release": "preflight"} {
 		setup := false

@@ -1,13 +1,21 @@
 name: nightly
 
+# Qualifies main daily and each release candidate as it lands, so a tag finds its
+# commit's verdict already recorded. The release-time checks run alongside as an
+# early warning: they judge the published world rather than the commit, so every
+# release repeats them.
 on:
   schedule:
     # 05:00 UTC — before the Den desktop nightly (macOS runner contention).
     - cron: "0 5 * * *"
+  push:
+    branches: [main]
+    # A release candidate changes VERSION.
+    paths: [VERSION]
   workflow_dispatch:
     inputs:
       suite:
-        description: Which legs to run
+        description: Which qualification suites to run; only all records a verdict
         type: choice
         default: all
         options: [all, behavior, race, coverage, performance, fuzz]
@@ -16,7 +24,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: nightly-${{ github.ref }}
+  group: nightly-${{ github.sha }}
   cancel-in-progress: false
 
 env:
@@ -24,11 +32,18 @@ env:
   DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
 
 jobs:
-  verification:
+  qualification:
+    permissions:
+      contents: read
+      statuses: write
+    uses: ./.github/workflows/qualification.yml
+    with:
+      suite: ${{ inputs.suite || 'all' }}
+
+  release-checks:
     uses: ./.github/workflows/verification.yml
     with:
-      profile: nightly
-      suite: ${{ github.event_name == 'schedule' && 'all' || inputs.suite }}
+      profile: release
 
   # Prior release binary opens the corpus, then HEAD migrates the same store.
   upgrade-path:
@@ -73,12 +88,12 @@ jobs:
   nightly:
     # Judges failed and timed-out jobs, but a cancelled run must not wait for a runner to do so.
     if: ${{ !cancelled() }}
-    needs: [verification, upgrade-path]
+    needs: [qualification, release-checks, upgrade-path]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Require all selected nightly verification
+      - name: Require every selected nightly job
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}
         run: python3 scripts/ci_verification.py gate

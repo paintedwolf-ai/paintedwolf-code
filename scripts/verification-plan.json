@@ -779,8 +779,7 @@
       ],
       "minutes": 120,
       "profiles": [
-        "check",
-        "release"
+        "check"
       ],
       "suite": "all",
       "setup": "verification"
@@ -794,8 +793,7 @@
       ],
       "minutes": 120,
       "profiles": [
-        "check",
-        "release"
+        "check"
       ],
       "suite": "all",
       "setup": "verification"
@@ -819,8 +817,7 @@
       ],
       "minutes": 60,
       "profiles": [
-        "check",
-        "release"
+        "check"
       ],
       "suite": "all",
       "setup": "verification"
@@ -843,8 +840,7 @@
       "minutes": 150,
       "profiles": [
         "check",
-        "release",
-        "nightly"
+        "qualification"
       ],
       "suite": "behavior",
       "setup": "verification",
@@ -858,8 +854,7 @@
       ],
       "minutes": 90,
       "profiles": [
-        "check",
-        "release"
+        "check"
       ],
       "suite": "all",
       "setup": "verification"
@@ -870,8 +865,7 @@
       ],
       "minutes": 90,
       "profiles": [
-        "check",
-        "release"
+        "check"
       ],
       "suite": "all",
       "setup": "shell"
@@ -894,7 +888,7 @@
       ],
       "minutes": 150,
       "profiles": [
-        "nightly"
+        "qualification"
       ],
       "suite": "race",
       "setup": "verification",
@@ -906,7 +900,7 @@
       ],
       "minutes": 180,
       "profiles": [
-        "nightly"
+        "qualification"
       ],
       "suite": "fuzz",
       "setup": "verification"
@@ -917,7 +911,7 @@
       ],
       "minutes": 180,
       "profiles": [
-        "nightly"
+        "qualification"
       ],
       "suite": "performance",
       "setup": "verification"
@@ -928,7 +922,7 @@
       ],
       "minutes": 180,
       "profiles": [
-        "nightly"
+        "qualification"
       ],
       "suite": "coverage",
       "setup": "verification"
@@ -939,7 +933,7 @@
       ],
       "minutes": 90,
       "profiles": [
-        "nightly"
+        "qualification"
       ],
       "suite": "coverage",
       "setup": "verification"
@@ -950,7 +944,7 @@
       ],
       "minutes": 60,
       "profiles": [
-        "nightly"
+        "qualification"
       ],
       "suite": "performance",
       "setup": "verification"
@@ -961,7 +955,7 @@
       ],
       "minutes": 90,
       "profiles": [
-        "nightly"
+        "release"
       ],
       "suite": "all",
       "setup": "verification"
@@ -972,7 +966,7 @@
       ],
       "minutes": 120,
       "profiles": [
-        "nightly"
+        "qualification"
       ],
       "suite": "performance",
       "setup": "verification"
@@ -983,7 +977,7 @@
       ],
       "minutes": 120,
       "profiles": [
-        "nightly"
+        "qualification"
       ],
       "suite": "performance",
       "setup": "verification"
@@ -994,7 +988,7 @@
       ],
       "minutes": 90,
       "profiles": [
-        "nightly"
+        "qualification"
       ],
       "suite": "performance",
       "setup": "verification"

@@ -4,11 +4,11 @@ on:
   workflow_call:
     inputs:
       profile:
-        description: Catalog profile (fast, check, nightly, or release)
+        description: Catalog profile (fast, check, qualification, or release)
         required: true
         type: string
       suite:
-        description: Nightly suite selection
+        description: Qualification suite selection
         default: all
         type: string
 

@@ -8,6 +8,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -17,11 +18,16 @@ from verification_plan import catalog, expand
 
 
 ROOT = Path(__file__).resolve().parent.parent
-PROFILES = {"fast", "check", "nightly", "release"}
+PROFILES = {"fast", "check", "qualification", "release"}
 # Each profile on the left runs exactly the stages of the local gate on the right.
 GATES = {"fast": "check-fast", "check": "check"}
 # Runs of `CI/check` that executed the full tier; pull requests run the fast tier on a merge preview.
 FULL_TIER_EVENTS = {"merge_group", "workflow_dispatch"}
+# The commit status a complete qualification run records, and the account its workflows record it as.
+QUALIFICATION_CONTEXT = "qualification"
+WORKFLOW_ACCOUNT = "github-actions[bot]"
+QUALIFICATION_DESCRIPTIONS = {"success": "Every qualification lane passed on this commit",
+                              "failure": "A qualification lane did not pass on this commit"}
 # Run states that still hold, or will claim, a runner.
 UNFINISHED_RUNS = ("requested", "waiting", "pending", "queued", "in_progress")
 QUEUE_BRANCHES = "gh-readonly-queue/"
@@ -75,7 +81,7 @@ def analysis_set(targets):
 
 
 def matrix(profile, suite="all"):
-    if profile not in PROFILES or suite not in SUITES or profile != "nightly" and suite != "all":
+    if profile not in PROFILES or suite not in SUITES or profile != "qualification" and suite != "all":
         raise ValueError(f"unsupported CI selection: {profile}/{suite}")
     result = []
     for name, lane in lanes().items():
@@ -171,6 +177,52 @@ def require_full_tier(repository, sha):
     if not events & FULL_TIER_EVENTS:
         raise ValueError(f"{sha} has no passing full-tier CI/check; land it through the merge queue "
                          "or dispatch CI on it before releasing")
+
+
+def qualify(repository, sha, results, suite, run_url):
+    """Judge a qualification run; a complete one records its verdict on the commit for releases to reuse.
+
+    A run of one suite proves nothing about the others, so it records nothing.
+    """
+    try:
+        require_success(results)
+    except ValueError:
+        if suite == "all":
+            record_qualification(repository, sha, "failure", run_url)
+        raise
+    if suite == "all":
+        record_qualification(repository, sha, "success", run_url)
+
+
+def record_qualification(repository, sha, state, run_url):
+    github(f"repos/{repository}/statuses/{sha}", method="POST", state=state, context=QUALIFICATION_CONTEXT,
+           target_url=run_url, description=QUALIFICATION_DESCRIPTIONS[state])
+
+
+def qualification(repository, sha):
+    """The commit's latest qualification verdict a workflow recorded, or None when no complete run finished.
+
+    The latest verdict stands, so a failure after a success on the same commit withdraws the evidence.
+    The API lists a commit's statuses newest first, so its first page holds the latest.
+    """
+    statuses = github(f"repos/{repository}/commits/{sha}/statuses", per_page=100)
+    recorded = [status for status in statuses if status["context"] == QUALIFICATION_CONTEXT
+                and (status.get("creator") or {}).get("login") == WORKFLOW_ACCOUNT]
+    return max(recorded, key=lambda status: status["id"], default=None)
+
+
+def qualified(repository, sha, required=False):
+    """Whether the commit's latest qualification passed, explained for the release log."""
+    verdict = qualification(repository, sha)
+    if verdict is None:
+        explanation = f"{sha} has no recorded qualification"
+    else:
+        explanation = f"{sha} qualification {verdict['state']} at {verdict['created_at']}: {verdict['target_url']}"
+    passed = verdict is not None and verdict["state"] == "success"
+    if required and not passed:
+        raise ValueError(explanation + "; a release publishes only a commit whose latest qualification passed")
+    print(explanation, file=sys.stderr, flush=True)
+    return passed
 
 
 def invocation(targets):
@@ -331,6 +383,12 @@ def main():
     summary.add_argument("status")
     verified = commands.add_parser("verified")
     verified.add_argument("sha")
+    qualify_run = commands.add_parser("qualify")
+    qualify_run.add_argument("sha")
+    qualify_run.add_argument("--suite", default="all", choices=sorted(SUITES))
+    evidence = commands.add_parser("qualified")
+    evidence.add_argument("sha")
+    evidence.add_argument("--require", action="store_true", help="fail unless the latest qualification passed")
     commands.add_parser("prune")
     release = commands.add_parser("release")
     release.add_argument("step", help="the step whose leftover requests are withdrawn")
@@ -343,6 +401,12 @@ def main():
         require_success(json.loads(os.environ["NEEDS_JSON"]), args.skipped)
     elif args.command == "verified":
         require_full_tier(os.environ["GITHUB_REPOSITORY"], args.sha)
+    elif args.command == "qualify":
+        qualify(os.environ["GITHUB_REPOSITORY"], args.sha, json.loads(os.environ["NEEDS_JSON"]), args.suite,
+                os.environ["RUN_URL"])
+    elif args.command == "qualified":
+        passed = qualified(os.environ["GITHUB_REPOSITORY"], args.sha, args.require)
+        print("true" if passed else "false")
     elif args.command == "prune":
         prune_merge_queue(os.environ["GITHUB_REPOSITORY"])
     elif args.command == "release":

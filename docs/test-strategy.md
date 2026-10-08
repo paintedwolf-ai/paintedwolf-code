@@ -17,7 +17,7 @@ How Painted Wolf Code proves v1 behavior.
 | Den | `lycaon-den/src/**/*.test.*` | Stores, components, projections, accessibility, and client behavior |
 | Browser and desktop | `lycaon-den/e2e/` | Complete user journeys through the web harness and Tauri shell |
 | Performance | `cmd/lycaon-perf`, Go benchmarks | Release-channel boot and mixed workloads, latency distributions, resource stability, restart/replay recovery, and focused hot paths |
-| Release | release workflow targets | Full Go behavior, race detection, scanner corpora, and Go and Den coverage floors |
+| Qualification | [`qualification.yml`](../.github/workflows/qualification.yml) | Full Go behavior, race detection, fuzzing, Go and Den coverage floors, stress, and performance budgets, required of every release commit |
 | Verification runner | `scripts/verification_tests/` | The `./task` queue: planning, batching, admission, cancellation, caching, reuse, health, and worker limits, through bounded subprocess fixtures |
 | Coordinator benchmark | `scripts/coordinator-benchmark/` | Opt-in paid runs of candidate models through the real application, graded on environment outcomes — [Coordinator benchmark](coordinator-benchmark.md) |
 
@@ -223,7 +223,7 @@ touch never fails it, and floors live in
   skipped.
 
 Aggregate floors (`check:coverage`, `den:coverage-check`) read the same policy
-and run nightly.
+and run in [qualification](#release-qualification).
 
 ### The change base
 
@@ -432,12 +432,12 @@ deletion with bounded row counts. `./task test:stress` runs the 100,000-,
 one-million-, and ten-million-row source trees, the 50,000-message session
 tree, and a working year of 25,000 real editor saves with retained source
 history and three recovery captures. Its catalog recipe keeps packages and tests
-serial and allows 90 minutes per package before host-load scaling. The nightly
-workflow includes this tier. Active fuzz exploration runs through
-`./task test:fuzz` in nightly verification, separately from
+serial and allows 90 minutes per package before host-load scaling. Qualification
+includes this tier. Active fuzz exploration runs through
+`./task test:fuzz` in qualification, separately from
 `check`; ordinary Go tests still execute saved fuzz seed cases. Transcript
 performance tests use the `.perf.test.ts` suffix and run through
-`./task den:test:transcript-scale` in nightly verification; normal
+`./task den:test:transcript-scale` in qualification; normal
 Den suites exclude elapsed-time assertions while retaining memory and DOM bounds
 as ordinary correctness tests. SQL query and OpenAPI bundle generation drift are
 checked once through `db:sqlc:check` and `openapi:bundle:check` in
@@ -503,6 +503,8 @@ required check, `check`:
 | Pull request | Fast | The `fast` profile: the stages of `./task check-fast`, split into build and lint, Go (two shards), and frontend jobs on `ubuntu-latest`. |
 | Merge queue | Full | The `check` profile, every stage of `./task check`, plus [`platform-verification.yml`](../.github/workflows/platform-verification.yml): the upgrade corpus on Linux; applied Seatbelt, browser confinement, and Git parity in one `macos-15` job; Playwright web E2E in three shards; and desktop E2E. |
 | Manual dispatch | Full | The merge-queue tier on any branch, to try a change before queueing or to reproduce a queue failure. |
+| Nightly schedule, or a `VERSION` change landing on main | Qualification | [`nightly.yml`](../.github/workflows/nightly.yml) qualifies the commit, and runs the release-time checks as an early warning: the `release` profile and the prior-release upgrade rehearsal. |
+| Release tag | Release | [`release.yml`](../.github/workflows/release.yml) requires the full tier and a passing qualification of the tagged commit, reusing a recorded verdict or qualifying the commit itself, and runs the release-time checks. |
 
 The merge queue squashes each pull request onto main and tests the resulting
 commit; main then advances to exactly that commit, so CI does not run again on
@@ -530,11 +532,8 @@ gates cannot drift apart.
 |---|---|
 | Fast | Build and fast lint, Go (unit/component suite and repository contracts), frontend (Den typecheck, lint, seam canaries), and limits (size budgets and changed coverage). `CI/check` requires all four and excuses only the platform workflow, which a pull request skips. |
 | Check | Build, limits, contracts and drift, lint, vulnerabilities, runner tests, full Go behavior, frontend, native Rust, and WebKit each have their own budget. `CI/check` requires these and every platform job. |
-| Nightly | Full behavior, race, fuzz, Go and Den coverage, stress, transcript scale, benchmarks, sidecar budgets, and a ten-minute soak run independently. Manual selection filters jobs before matrix expansion; vulnerability freshness and upgrade rehearsal always run. The terminal `nightly` job requires every selected job. |
-| Release | The tagged commit must carry a passing full-tier `CI/check`, which every commit the queue lands has, so a release runs no verification lanes. The signed build starts after source classification, in parallel with preflight and the upgrade rehearsal; `ship-gates` requires both before anything publishes. |
-
-The release profile is the subset of `check` that decides whether the product
-works: build, contracts, behavior, frontend, native, and vulnerabilities.
+| Qualification | Full behavior, race (three shards), fuzz, Go and Den coverage, stress, transcript scale, benchmarks, sidecar budgets, and a ten-minute soak run independently. A manual nightly dispatch may select one suite, which filters jobs before matrix expansion. |
+| Release | Vulnerability freshness against the live advisory databases. These lanes judge the world the commit ships into rather than the commit, so every release runs them, alongside its preflight and its upgrade rehearsal from the channel's published release. |
 
 The catalog grants each verification invocation 45–180 minutes and each job an
 additional 30 minutes for setup and evidence collection. Step timeouts leave an
@@ -592,6 +591,38 @@ setup generates its required resource file before Rust compilation, and releases
 generate the actual notices before packaging. The catalog derives the notice
 and analyzer setup inputs from each lane's targets, so the gate and its setup
 remain aligned.
+
+### Release qualification
+
+A release publishes only a commit that passed the whole suite: the full tier,
+which the merge queue ran as the commit landed, and qualification, which is
+too long to hold every merge for. The release decides from facts recorded on
+the exact commit it ships, never from a neighboring commit, a run's name, or
+its age.
+
+- **Qualification is recorded on the commit.** The terminal `qualified` job of
+  [`qualification.yml`](../.github/workflows/qualification.yml) judges every
+  lane and records the result as the `qualification` commit status, with the
+  run as its target. A run of one suite proves nothing about the others, so it
+  records nothing.
+- **The latest verdict stands.** The release reads the newest `qualification`
+  status that a workflow recorded; statuses from other accounts are ignored. A
+  failure after a success on the same commit withdraws the evidence, so a flaky
+  lane must be fixed, not outrun.
+- **Evidence does not expire.** Qualification lanes judge only the commit, so a
+  verdict holds for as long as the commit exists. Whatever depends on the date or
+  on what is already published runs at every release instead: the `release`
+  profile, preflight, and the upgrade rehearsal from the channel's current
+  release.
+- **The release qualifies what nobody has.** Classification looks the verdict
+  up. When none passed, the release runs `qualification.yml` itself while the
+  signed build proceeds, and `ship-gates` requires the commit's latest verdict
+  to have passed, whichever run recorded it, before anything publishes.
+
+A candidate lands by changing `VERSION`, which starts nightly on that commit.
+A tag pushed after that qualification passes reuses it, and the release takes as
+long as its own build and checks, about an hour. A tag pushed earlier still
+ships only qualified code, after qualifying the commit in about two more hours.
 
 ## Fixtures
 

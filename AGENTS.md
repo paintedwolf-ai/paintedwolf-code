@@ -218,7 +218,8 @@ Before changing verification infrastructure, read
 Gate composition and Go recipes belong in `scripts/verification-plan.json`;
 use `./task test:runner` for scheduler changes. Use `./task test:stress` for
 scale-sensitive changes. Full suites include required scanners and saved fuzz
-cases; active fuzzing and performance runs have separate nightly/release tiers.
+cases; active fuzzing and performance runs belong to qualification, which every
+release requires.
 
 ### Stuck verification
 
