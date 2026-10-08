@@ -81,7 +81,7 @@ func signalCommandDescendants(root int, sig unix.Signal) int {
 				fields := bytes.Fields(raw[end+1:])
 				if len(fields) >= 20 {
 					start, err := strconv.ParseUint(string(fields[19]), 10, 64)
-					if err == nil && start == child.start {
+					if err == nil && start == child.start && descendantOf(child.pid, root) {
 						_ = unix.PidfdSendSignal(fd, sig, nil, 0)
 					}
 				}
@@ -100,4 +100,32 @@ func reapAdoptedChildren() {
 			return
 		}
 	}
+}
+
+// descendantOf revalidates ancestry so a stale intermediate PID cannot confer lineage.
+func descendantOf(pid, root int) bool {
+	seen := map[int]bool{}
+	for pid > 0 && !seen[pid] {
+		if pid == root {
+			return true
+		}
+		seen[pid] = true
+		raw, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
+		if err != nil {
+			return false
+		}
+		end := bytes.LastIndexByte(raw, ')')
+		if end < 0 {
+			return false
+		}
+		fields := bytes.Fields(raw[end+1:])
+		if len(fields) < 2 {
+			return false
+		}
+		pid, err = strconv.Atoi(string(fields[1]))
+		if err != nil {
+			return false
+		}
+	}
+	return false
 }

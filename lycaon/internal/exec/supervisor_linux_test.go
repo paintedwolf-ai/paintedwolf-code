@@ -38,6 +38,14 @@ while not os.path.exists(path):
 	return cmd, cleanup, path
 }
 
+func supervisedDaemonCommand(t *testing.T) (*exec.Cmd, func(), string) {
+	t.Helper()
+	cmd, cleanup, path := detachedDaemonCommand(t, context.Background(), true)
+	cmd, cleanup, err := superviseCommand(cmd, cleanup)
+	testutil.FailErr(t, "supervise daemon fixture", err)
+	return cmd, cleanup, path
+}
+
 func TestSupervisorCleansDoubleForkedNewSessionOnCommandCompletion(t *testing.T) {
 	cmd, cleanup, path := detachedDaemonCommand(t, context.Background(), false)
 	defer cleanup()
@@ -47,7 +55,7 @@ func TestSupervisorCleansDoubleForkedNewSessionOnCommandCompletion(t *testing.T)
 }
 
 func TestSupervisorCancellationSparesAnotherCommandsDetachedDaemon(t *testing.T) {
-	other, otherCleanup, otherPath := detachedDaemonCommand(t, context.Background(), true)
+	other, otherCleanup, otherPath := supervisedDaemonCommand(t)
 	defer otherCleanup()
 	testutil.FailErr(t, "start independent supervisor", other.Start())
 	otherPID := waitForPIDFile(t, otherPath)
@@ -72,7 +80,7 @@ func TestSupervisorCancellationSparesAnotherCommandsDetachedDaemon(t *testing.T)
 }
 
 func TestSupervisorEngineLifetimeEOFRemovesDetachedDaemon(t *testing.T) {
-	cmd, cleanup, path := detachedDaemonCommand(t, context.Background(), true)
+	cmd, cleanup, path := supervisedDaemonCommand(t)
 	defer cleanup()
 	testutil.FailErr(t, "start supervisor", cmd.Start())
 	pid := waitForPIDFile(t, path)
@@ -82,7 +90,7 @@ func TestSupervisorEngineLifetimeEOFRemovesDetachedDaemon(t *testing.T) {
 }
 
 func TestSupervisorCompanionRequestsOwnedTreeCleanup(t *testing.T) {
-	cmd, cleanup, path := detachedDaemonCommand(t, context.Background(), true)
+	cmd, cleanup, path := supervisedDaemonCommand(t)
 	defer cleanup()
 	testutil.FailErr(t, "start supervised command", cmd.Start())
 	pid := waitForPIDFile(t, path)

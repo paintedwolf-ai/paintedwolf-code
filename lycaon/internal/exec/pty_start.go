@@ -26,6 +26,11 @@ func StartPTY(ctx context.Context, name string, args []string, opts PTYOpts) (PT
 		guard.release()
 		return nil, err
 	}
+	cmd, cleanup, err = superviseCommand(cmd, cleanup)
+	if err != nil {
+		guard.release()
+		return nil, err
+	}
 	if err := configureCmdEnv(cmd, execOpts); err != nil {
 		cleanup()
 		guard.release()

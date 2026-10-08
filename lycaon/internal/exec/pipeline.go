@@ -60,10 +60,9 @@ func buildExecCmd(ctx context.Context, name string, args []string, opts ExecOpts
 		if err != nil {
 			return nil, nil, fmt.Errorf("build sandboxed command: %w", err)
 		}
-		return superviseCommand(confined, cleanup)
+		return confined, cleanup, nil
 	}
-	cmd := exec.CommandContext(ctx, name, args...) //nolint:gosec // G204 — validated argv stages, no shell
-	return superviseCommand(cmd, func() {})
+	return exec.CommandContext(ctx, name, args...), func() {}, nil //nolint:gosec // G204 — validated argv stages, no shell
 }
 
 func configureCmdEnv(cmd *exec.Cmd, opts ExecOpts) error {
@@ -313,6 +312,12 @@ func wirePipelineStages(
 			return nil, err
 		}
 		cmd, cleanup, err := buildExecCmd(runCtx, stage.Name, stage.Args, opts)
+		if err != nil {
+			guard.release()
+			releaseWired(wired[:i])
+			return nil, err
+		}
+		cmd, cleanup, err = superviseCommand(cmd, cleanup)
 		if err != nil {
 			guard.release()
 			releaseWired(wired[:i])
