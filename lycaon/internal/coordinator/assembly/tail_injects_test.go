@@ -141,6 +141,64 @@ func TestBoardOrientationRefreshesAtomicTurnFrameBeforeRender(t *testing.T) {
 	}
 }
 
+type childStartTurnFrameSource struct {
+	runID, phase string
+}
+
+func (s *childStartTurnFrameSource) BuildCoordinatorTurnFrame(_ context.Context, _ string, _ *api.Session) (inject.CoordinatorTurnFrame, error) {
+	return inject.CoordinatorTurnFrame{RunContext: api.CoordinatorRunContext{
+		WorkflowID: "atomic", WorkflowVersion: "1", RunID: s.runID,
+		RunStatus: "running", CurrentPhase: s.phase,
+	}}, nil
+}
+
+// childStartOrientRecorder starts a child run while the parent's inject is recorded.
+type childStartOrientRecorder struct {
+	source   *childStartTurnFrameSource
+	recorded []string
+}
+
+func (r *childStartOrientRecorder) RecordBoardOrientReady(context.Context, string, string) error {
+	r.recorded = append(r.recorded, r.source.runID+"/"+r.source.phase)
+	switch r.source.runID {
+	case "parent":
+		r.source.runID, r.source.phase = "child", "boot"
+	case "child":
+		r.source.phase = "work"
+	}
+	return nil
+}
+
+func TestBoardOrientationRecordsInjectForRefreshedRun(t *testing.T) {
+	root := prefixStabilityTestRoot(t)
+	pe := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: root})
+	source := &childStartTurnFrameSource{runID: "parent", phase: "execute"}
+	recorder := &childStartOrientRecorder{source: source}
+	eng := &AssemblyEngine{}
+	eng.SetDeps(AssemblyDeps{
+		Prompts: pe, Injects: prompts.NewInjectRenderer(pe),
+		Limits:           func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
+		CoordinatorFrame: source,
+		Board:            advancingBoard{},
+		BoardOrientReady: recorder,
+		PromptToolLister: prompttest.CoordinatorTools,
+	})
+	sess := &api.Session{ID: "child-start-frame", AgentType: orchestration.ProfileCoordinator, WorkspacePath: t.TempDir()}
+	eng.BeginPromptTurn(sess.ID, "")
+	msgs, err := eng.BuildCompletionMessages(context.Background(), sess, nil, nil)
+	testutil.FailErr(t, "build completion messages", err)
+	if len(recorder.recorded) < 2 || recorder.recorded[1] != "child/boot" {
+		t.Fatalf("recorded orientations = %v, want the child boot inject recorded", recorder.recorded)
+	}
+	joined := ""
+	for _, msg := range msgs {
+		joined += msg.Content + "\n"
+	}
+	if !strings.Contains(joined, "board phase=work") {
+		t.Fatalf("prompt missing board for the advanced child phase:\n%s", joined)
+	}
+}
+
 func TestWorkerPackBoardFollowsHistory(t *testing.T) {
 	root := prefixStabilityTestRoot(t)
 	pe := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: root})

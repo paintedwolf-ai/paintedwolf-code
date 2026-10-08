@@ -41,22 +41,27 @@ const EnvConfigRoot = "LYCAON_CONFIG_ROOT"
 // ConfigDirName is the config subdirectory inside a LYCAON_CONFIG_ROOT checkout.
 const ConfigDirName = "config"
 
-// source is the active bundled configuration tree.
-var source fs.FS = embedded
+// source holds the active bundled configuration tree. Test staging swaps it
+// while engine goroutines read it, so every access is atomic.
+var source atomic.Pointer[sourceTree]
+
+type sourceTree struct{ fsys fs.FS }
 
 func init() {
+	var tree fs.FS = embedded
 	if root := strings.TrimSpace(os.Getenv(EnvConfigRoot)); root != "" {
-		source = overlay{disk: os.DirFS(filepath.Join(root, ConfigDirName)), base: embedded}
+		tree = overlay{disk: os.DirFS(filepath.Join(root, ConfigDirName)), base: embedded}
 	}
+	source.Store(&sourceTree{fsys: tree})
 }
 
 // Source returns the active bundled configuration filesystem.
-func Source() fs.FS { return source }
+func Source() fs.FS { return source.Load().fsys }
 
 // SourceImmutable reports whether reads use only the embedded, immutable bytes.
 // Disk overlays and caller-supplied filesystems can change without a source swap.
 func SourceImmutable() bool {
-	_, embeddedOnly := source.(embed.FS)
+	_, embeddedOnly := Source().(embed.FS)
 	return embeddedOnly
 }
 
@@ -68,11 +73,10 @@ func SourceGeneration() uint64 { return sourceGen.Load() }
 
 // UseFS replaces the bundled source until its restore function runs.
 func UseFS(fsys fs.FS) func() {
-	prev := source
-	source = fsys
+	prev := source.Swap(&sourceTree{fsys: fsys})
 	sourceGen.Add(1)
 	return func() {
-		source = prev
+		source.Store(prev)
 		sourceGen.Add(1)
 	}
 }
@@ -111,7 +115,7 @@ const OverlayDirToken = "${overlay_dir}"
 
 // Read returns the bundled file at rel, with OverlayDirToken expanded.
 func Read(rel Rel) ([]byte, error) {
-	data, err := fs.ReadFile(source, rel.fsPath())
+	data, err := fs.ReadFile(Source(), rel.fsPath())
 	if err != nil {
 		return nil, err
 	}
@@ -145,7 +149,7 @@ func ExpandOverlayDir(data []byte) []byte {
 
 // List returns the entries of the bundled directory at rel, sorted by name.
 func List(rel Rel) ([]fs.DirEntry, error) {
-	ents, err := fs.ReadDir(source, rel.fsPath())
+	ents, err := fs.ReadDir(Source(), rel.fsPath())
 	if err != nil {
 		return nil, err
 	}
@@ -154,7 +158,7 @@ func List(rel Rel) ([]fs.DirEntry, error) {
 }
 
 // Info stats the bundled entry at rel.
-func Info(rel Rel) (fs.FileInfo, error) { return fs.Stat(source, rel.fsPath()) }
+func Info(rel Rel) (fs.FileInfo, error) { return fs.Stat(Source(), rel.fsPath()) }
 
 // Has reports whether rel exists in the bundled tree.
 func Has(rel Rel) bool {
@@ -165,13 +169,13 @@ func Has(rel Rel) bool {
 // Walk visits the bundled tree with paths relative to its root.
 func Walk(rel Rel, fn func(Rel, fs.DirEntry, error) error) error {
 	root := rel.fsPath()
-	return fs.WalkDir(source, root, func(p string, d fs.DirEntry, err error) error {
+	return fs.WalkDir(Source(), root, func(p string, d fs.DirEntry, err error) error {
 		return fn(relFromFS(root, rel, p), d, err)
 	})
 }
 
 // Sub returns the bundled subtree rooted at rel.
-func Sub(rel Rel) (fs.FS, error) { return fs.Sub(source, rel.fsPath()) }
+func Sub(rel Rel) (fs.FS, error) { return fs.Sub(Source(), rel.fsPath()) }
 
 func relFromFS(root string, rootRel Rel, p string) Rel {
 	suffix := strings.TrimPrefix(p, root)
