@@ -122,7 +122,7 @@ func (l *PromptLoop) commitGuardedAssistantTurn(
 	midRunStep := msg.DraftStatus == api.DraftStatusLive && len(msg.ToolCalls) > 0
 	if msg.Kind == api.MessageKindDraft || proseCommit || midRunStep {
 		msg.DraftStatus = api.DraftStatusCommitted
-		if err := l.stampDraftVersionCount(ctx, sessionID, &msg); err != nil {
+		if err := (turnNudges{l}).stampDraftVersionCount(ctx, sessionID, &msg); err != nil {
 			return api.Message{}, err
 		}
 		// Retried tool-only steps retain the draft card's version history.

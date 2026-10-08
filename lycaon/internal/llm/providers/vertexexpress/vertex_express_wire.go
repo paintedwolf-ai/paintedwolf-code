@@ -77,7 +77,17 @@ type Request struct {
 	Contents          []vertexExpressContent         `json:"contents"`
 	SystemInstruction *vertexExpressContent          `json:"systemInstruction,omitempty"`
 	Tools             []vertexExpressTool            `json:"tools,omitempty"`
+	ToolConfig        *vertexExpressToolConfig       `json:"toolConfig,omitempty"`
 	GenerationConfig  *vertexExpressGenerationConfig `json:"generationConfig,omitempty"`
+}
+
+// vertexExpressToolConfig selects how the model may use declared functions.
+type vertexExpressToolConfig struct {
+	FunctionCallingConfig vertexExpressFunctionCallingConfig `json:"functionCallingConfig"`
+}
+
+type vertexExpressFunctionCallingConfig struct {
+	Mode string `json:"mode"`
 }
 
 type vertexExpressUsageMetadata struct {

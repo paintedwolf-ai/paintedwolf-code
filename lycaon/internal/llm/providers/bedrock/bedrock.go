@@ -299,6 +299,9 @@ func (p *Provider) buildConverseInput(req modelcall.CompletionRequest, model str
 	if len(system) > 0 {
 		input.System = system
 	}
+	// Converse has no no-call tool choice and requires the tool configuration
+	// whenever history holds tool blocks, so a request that forbids tool use
+	// keeps its definitions and the host refuses any call it returns.
 	if tcfg := bedrockToolConfig(req.Tools); tcfg != nil {
 		input.ToolConfig = tcfg
 	}

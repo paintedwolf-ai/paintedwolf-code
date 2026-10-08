@@ -3,7 +3,7 @@ package promptloop_test
 import (
 	"context"
 	"path/filepath"
-	"strings"
+	"slices"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
@@ -35,7 +35,7 @@ func TestTaskArgumentValidationPrecedesScopeGuard(t *testing.T) {
 		{name: "scope swallowed by string brief", call: api.ToolCall{Args: map[string]any{
 			"agent_type": "implementer",
 			"brief":      `{"goal":"Implement the engine","done_when":["Tests pass"]}, "files":["Sources"], "scope":{"mode":"write"}}`,
-		}}, code: "TOOL_ARGS_INVALID", field: "/brief"},
+		}}, code: "TOOL_ARGS_INVALID", field: "brief"},
 		{name: "malformed transport", call: api.ToolCall{ArgsMalformed: true}, code: "TOOL_ARGS_MALFORMED"},
 		{name: "truncated transport", call: api.ToolCall{ArgsTruncated: true}, code: "TOOL_ARGS_TRUNCATED"},
 		{name: "valid shape still needs write scope", call: api.ToolCall{Args: taskCallArgs("implementer", "Implement the engine")}, code: "TASK_SCOPE_WRITE_REQUIRED", guard: true},
@@ -58,9 +58,11 @@ func TestTaskArgumentValidationPrecedesScopeGuard(t *testing.T) {
 				t.Fatalf("rejection receipt = %+v; want %s before owner invocation", settlement, tc.code)
 			}
 			if tc.field != "" {
-				reason, _ := settlement.Failure.Details["reason"].(string)
-				if !strings.Contains(reason, tc.field) || !strings.Contains(reason, "got string, want object") {
-					t.Fatalf("diagnostic did not identify the brief type: %q", reason)
+				// The brief text closed, then carried the call's files and scope.
+				details := settlement.Failure.Details
+				trailing, _ := details["json_trailing_members"].([]string)
+				if details["field"] != tc.field || details["json_malformed"] != true || !slices.Equal(trailing, []string{"files", "scope"}) {
+					t.Fatalf("diagnostic did not name the members after the early close: %v", details)
 				}
 			}
 		})

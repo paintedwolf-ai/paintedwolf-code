@@ -40,7 +40,7 @@ func TestCompleteStreamPublishesLLMErrorWhenTheCallFails(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		_, _, streamErr := loop.completeStream(context.Background(), sess, "s1", []api.Message{{Role: api.MessageRoleUser, Content: "go"}}, "coordinator", "go", 0, 8, false, nil, nil)
+		_, _, streamErr := modelTurn{loop}.completeStream(context.Background(), sess, "s1", []api.Message{{Role: api.MessageRoleUser, Content: "go"}}, "coordinator", "go", 0, 8, false, nil, nil)
 		if streamErr == nil {
 			t.Error("completeStream returned nil error for a failing stream")
 		}
@@ -104,7 +104,7 @@ func TestCompleteStreamPublishesLLMActiveBeforeUserTurnCompletes(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		_, _, err := loop.completeStream(context.Background(), sess, "s1", []api.Message{{Role: api.MessageRoleUser, Content: "go"}}, "coordinator", "go", 0, 8, false, nil, nil)
+		_, _, err := modelTurn{loop}.completeStream(context.Background(), sess, "s1", []api.Message{{Role: api.MessageRoleUser, Content: "go"}}, "coordinator", "go", 0, 8, false, nil, nil)
 		testutil.FailErr(t, "completeStream failed", err)
 	}()
 
@@ -169,7 +169,7 @@ func TestCompleteStreamPublishesLLMForCoordinatorTurns(t *testing.T) {
 	defer unsub()
 
 	// Worker turns do not publish session LLM events.
-	if _, _, err := loop.completeStream(context.Background(), worker, "w1", history, "implementer", "go", 0, 8, false, nil, nil); err != nil {
+	if _, _, err := (modelTurn{loop}).completeStream(context.Background(), worker, "w1", history, "implementer", "go", 0, 8, false, nil, nil); err != nil {
 		testutil.FailErr(t, "worker completeStream failed", err)
 	}
 	hub.FlushDebounced()
@@ -179,7 +179,7 @@ func TestCompleteStreamPublishesLLMForCoordinatorTurns(t *testing.T) {
 	}
 
 	// Coordinator turns publish usage and loop progress.
-	if _, _, err := loop.completeStream(context.Background(), sess, "s1", history, "coordinator", "go", 0, 8, false, nil, nil); err != nil {
+	if _, _, err := (modelTurn{loop}).completeStream(context.Background(), sess, "s1", history, "coordinator", "go", 0, 8, false, nil, nil); err != nil {
 		testutil.FailErr(t, "non-host coordinator completeStream failed", err)
 	}
 	hub.FlushDebounced()
@@ -210,7 +210,7 @@ func TestCompleteStreamPublishesLLMForCoordinatorTurns(t *testing.T) {
 		t.Fatalf("compaction_threshold = %d want > 0", plainEv.Tokens.CompactionThreshold)
 	}
 
-	if _, _, err := loop.completeStream(context.Background(), sess, "s1", history, "coordinator", "go", 0, 8, true, nil, nil); err != nil {
+	if _, _, err := (modelTurn{loop}).completeStream(context.Background(), sess, "s1", history, "coordinator", "go", 0, 8, true, nil, nil); err != nil {
 		testutil.FailErr(t, "host first iteration completeStream failed", err)
 	}
 	hub.FlushDebounced()
@@ -229,7 +229,7 @@ func TestCompleteStreamPublishesLLMForCoordinatorTurns(t *testing.T) {
 		t.Fatalf("first iteration coordinator_loop = %+v want iteration 1", firstEv.CoordinatorLoop)
 	}
 
-	if _, _, err := loop.completeStream(context.Background(), sess, "s1", history, "coordinator", "go", 1, 8, true, nil, nil); err != nil {
+	if _, _, err := (modelTurn{loop}).completeStream(context.Background(), sess, "s1", history, "coordinator", "go", 1, 8, true, nil, nil); err != nil {
 		testutil.FailErr(t, "host completeStream failed", err)
 	}
 	hub.FlushDebounced()

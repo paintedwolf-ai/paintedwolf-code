@@ -335,7 +335,7 @@ func TestRejectBlockedAssistantTurnRetractsProvisionalRow(t *testing.T) {
 		{ID: "u1", Role: api.MessageRoleUser, Content: "go"},
 		{ID: "a1", Role: api.MessageRoleAssistant, Content: "bad synthesis", Visibility: api.MessageVisibilityInternal},
 	}
-	out, err := loop.rejectBlockedAssistantTurn(
+	out, err := toolInvocations{loop}.rejectBlockedAssistantTurn(
 		context.Background(),
 		"s1",
 		history,

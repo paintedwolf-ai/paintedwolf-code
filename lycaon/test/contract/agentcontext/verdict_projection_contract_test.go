@@ -2,13 +2,18 @@ package contract
 
 import (
 	"maps"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/internal/workflow/verdictcall"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/workflowfixture"
 )
@@ -43,50 +48,75 @@ func TestVerdictProjectionMatchesCatalogAdmission(t *testing.T) {
 	}
 }
 
+// catalogVerdictCall loads the shipped submit_verdict call schema that review
+// phases compose their accepted call from.
+func catalogVerdictCall(t *testing.T) map[string]any {
+	t.Helper()
+	cfg, err := toolschema.LoadSchemaDir(filepath.Join(configlayout.FindModuleRoot(), "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
+	contractcheck.FailErr(t, "load tool schemas", err)
+	meta, ok := cfg.ToolMeta("submit_verdict")
+	if !ok {
+		t.Fatal("submit_verdict schema missing")
+	}
+	return meta.ArgsSchema
+}
+
+// assertVerdictProjection holds the prompt outline, the offered call schema,
+// and admission to one phase declaration.
 func assertVerdictProjection(t *testing.T, manifest workflowdef.Manifest, phase workflowdef.PhaseDef) {
 	t.Helper()
 	def := *phase.ReviewLoop
 	def.VerdictSchema = maps.Clone(def.VerdictSchema)
 	phase.ReviewLoop = &def
-	exit := workflow.ProjectPhaseExit(manifest, phase, nil, nil)
-	snapshot := inject.WorkflowRuntimeSnapshot{PhaseExit: exit.InjectView()}
+	catalog := catalogVerdictCall(t)
+	project := func() *inject.PhaseExitView {
+		view := workflow.ProjectPhaseExit(manifest, phase, nil, nil).InjectView()
+		contractcheck.FailErr(t, "attach verdict call", verdictcall.Attach(view, catalog, *phase.ReviewLoop, manifest.ReportBrief()))
+		return view
+	}
+	exit := project()
+	snapshot := inject.WorkflowRuntimeSnapshot{PhaseExit: exit}
 	data := inject.BuildActiveWorkflowInjectData(inject.CoordinatorTurnFrame{Runtime: snapshot})
-	vars := inject.ActiveWorkflowInjectToMap(data, nil, nil)
-	raw := vars["phase_exit"].(map[string]any)["verdict_shape"].(string)
+	projectedOutline := func() string {
+		return inject.ActiveWorkflowInjectToMap(data, nil, nil)["phase_exit"].(map[string]any)["verdict_outline"].(string)
+	}
+	raw := projectedOutline()
+	offered := tools.TrimCoordinatorToolMeta(tools.ToolMeta{Name: "submit_verdict", ArgsSchema: exit.SubmitVerdictArgsSchema}).ArgsSchema
+	if raw != verdictcall.Outline(exit.SubmitVerdictArgsSchema) {
+		t.Fatalf("projected outline = %q, want the offered schema's outline", raw)
+	}
 	schema := phase.ReviewLoop.VerdictSchema
-	if raw != workflow.VerdictSchemaShape(*phase.ReviewLoop) {
-		t.Fatalf("projected shape = %q, want the admission shape", raw)
-	}
-	for key, kind := range schema {
-		if !strings.Contains(raw, key+": ") {
-			t.Fatalf("projected shape %q omits field %q", raw, key)
-		}
-		if kind == workflowdef.VerdictClaimsType {
-			for _, word := range phase.ReviewLoop.StatusWords() {
-				if !strings.Contains(raw, word) {
-					t.Fatalf("projected shape %q omits claim status %q", raw, word)
-				}
-			}
+	for key := range schema {
+		if !strings.Contains(raw, key) {
+			t.Fatalf("projected outline %q omits field %q", raw, key)
 		}
 	}
-	if !strings.Contains(renderPhaseExitBlock(t, exit), raw) {
+	if !strings.Contains(raw, "verdict: "+strings.ReplaceAll(schema["verdict"], " ", "")) {
+		t.Fatalf("projected outline %q omits the decision values %q", raw, schema["verdict"])
+	}
+	if !strings.Contains(renderPhaseExitView(t, exit), raw) {
 		t.Fatal("rendered phase exit lost the structured verdict contract")
 	}
 	for i, value := range strings.Split(schema["verdict"], "|") {
 		verdict := map[string]string{"verdict": strings.TrimSpace(value)}
+		call := map[string]any{"verdict": strings.TrimSpace(value)}
 		for key, kind := range schema {
 			if key == "verdict" {
 				continue
 			}
 			verdict[key] = "bounded evidence"
-			if kind == workflowdef.VerdictCoverageType {
+			call[key] = "bounded evidence"
+			switch kind {
+			case workflowdef.VerdictCoverageType:
 				verdict[key] = `{ "revision": "fixture", "assessments": [] }`
-			}
-			if kind == workflowdef.VerdictClaimsType || kind == workflowdef.VerdictSetAsidesType {
+				call[key] = map[string]any{"revision": "fixture", "assessments": []any{}}
+			case workflowdef.VerdictClaimsType, workflowdef.VerdictSetAsidesType:
 				verdict[key] = "[]"
+				call[key] = []any{}
 			}
 		}
 		contractcheck.FailErr(t, "admit schema-derived verdict", workflow.ValidateReviewLoopVerdict(*phase.ReviewLoop, verdict, workflow.VerdictRules{}))
+		contractcheck.FailErr(t, "offered schema accepts the admitted verdict", tools.ValidateToolArgs(offered, map[string]any{"verdict": call}))
 		if workflow.ReviewLoopVerdictTerminal(*phase.ReviewLoop, verdict) != (i == 0) {
 			t.Fatal("projected enum order disagrees with terminal admission")
 		}
@@ -96,18 +126,20 @@ func assertVerdictProjection(t *testing.T, manifest workflowdef.Manifest, phase 
 			if workflow.ValidateReviewLoopVerdict(*phase.ReviewLoop, missing, workflow.VerdictRules{}) == nil {
 				t.Fatalf("omitted required field %q accepted", key)
 			}
+			missingCall := maps.Clone(call)
+			delete(missingCall, key)
+			if tools.ValidateToolArgs(offered, map[string]any{"verdict": missingCall}) == nil {
+				t.Fatalf("offered schema accepts a verdict without %q", key)
+			}
 		}
 	}
-	projectedShape := func() string {
-		return inject.ActiveWorkflowInjectToMap(data, nil, nil)["phase_exit"].(map[string]any)["verdict_shape"].(string)
-	}
-	before := projectedShape()
+	before := projectedOutline()
 	phase.ReviewLoop.VerdictSchema["new_required_field"] = "string"
-	if exit.VerdictShape != before {
+	if exit.VerdictOutline != before {
 		t.Fatal("projection aliases manifest schema")
 	}
-	data.PhaseExit = workflow.ProjectPhaseExit(manifest, phase, nil, nil).InjectView()
-	if before == projectedShape() {
+	data.PhaseExit = project()
+	if before == projectedOutline() {
 		t.Fatal("schema change did not reach the prompt projection")
 	}
 }

@@ -236,3 +236,16 @@ func TestEnforceToolCallSupportDoesNotPromotePartialHarmony(t *testing.T) {
 		t.Fatalf("malformed Harmony promoted partial calls: %#v, %v", out, err)
 	}
 }
+
+func TestEnforceToolCallSupportKeepsProseWhenToolUseForbidden(t *testing.T) {
+	req := toolReq()
+	req.ToolUse = modelcall.ToolUseForbidden
+	content := `<tool_call>{"name": "read", "arguments": {"path": "main.go"}}</tool_call>`
+	out, err := EnforceToolCallSupport(providerprofile.OpenAI(), req, &modelcall.Completion{Content: content}, "p", "m")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(out.ToolCalls) != 0 || out.Content != content {
+		t.Fatalf("a forbidden turn recovered %d tool calls from prose", len(out.ToolCalls))
+	}
+}

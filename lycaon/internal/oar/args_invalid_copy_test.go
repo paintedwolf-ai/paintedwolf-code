@@ -17,23 +17,26 @@ func TestEvaluateBlockToolArgsInvalidCopyBranches(t *testing.T) {
 	p := NewGuardPipeline(rs, l, NewCounterStore())
 	p.EnableAnchor(AnchorToolRejected)
 
+	// Each branch must carry the identifiers the caller needs to repair the
+	// call: the field, where it was written, and where it belongs.
 	cases := []struct {
-		name         string
-		data         map[string]any
-		wantWhat     string
-		wantCause    string
-		wantFix      string
+		name      string
+		data      map[string]any
+		wantWhat  string
+		wantCause string
+		wantFix   string
 	}{
 		{
-			name: "relocated field",
+			name: "misplaced at the top level",
 			data: map[string]any{
-				"relocated_field": "host_resources",
-				"nested_under":    "capability_request",
-				"expected_path":   "capability_request.host_resources",
+				"field":            "host_resources",
+				"misplaced_fields": []string{"host_resources"},
+				"found_under":      "",
+				"belongs_under":    "capability_request",
 			},
-			wantWhat:  "Argument `host_resources` was placed at root; it belongs under `capability_request`",
-			wantCause: "The tool schema does not accept `host_resources` at root; it must be nested under `capability_request`.",
-			wantFix:   "nested inside `capability_request`",
+			wantWhat:  "`host_resources`",
+			wantCause: "`capability_request`",
+			wantFix:   "`capability_request`",
 		},
 		{
 			name: "did you mean typo",
@@ -41,43 +44,71 @@ func TestEvaluateBlockToolArgsInvalidCopyBranches(t *testing.T) {
 				"field":        "timeout",
 				"did_you_mean": "timeout_ms",
 			},
-			wantWhat:  "Unknown argument `timeout`: did you mean `timeout_ms`?",
-			wantCause: "The property `timeout` is not defined on this tool; `timeout_ms` is declared.",
-			wantFix:   "Use `timeout_ms` instead of `timeout`.",
+			wantWhat:  "`timeout_ms`",
+			wantCause: "`timeout`",
+			wantFix:   "`timeout_ms`",
 		},
 		{
-			name: "unparsed JSON string",
+			name: "encoded JSON string",
 			data: map[string]any{
 				"field":         "body_json",
-				"unparsed_json": true,
+				"json_encoded":  true,
 				"expected_type": "object",
 			},
-			wantWhat:  "Argument `body_json` was passed as a JSON string instead of a native object",
-			wantCause: "The tool schema expects a structured JSON object, but received a string literal containing escaped JSON.",
-			wantFix:   "Correct the field type, required value, or structure",
+			wantWhat:  "`body_json`",
+			wantCause: "object",
+			wantFix:   "`body_json`",
+		},
+		{
+			name: "malformed JSON text",
+			data: map[string]any{
+				"field":              "verdict",
+				"json_malformed":     true,
+				"json_open_paths":    []string{"verdict"},
+				"expected_type":      "object",
+				"misplaced_fields":   []string{"set_asides", "threat_model", "verdict"},
+				"found_under":        "verdict.coverage",
+				"belongs_under":      "verdict",
+				"close_before":       "set_asides",
+			},
+			wantWhat:  "`verdict`",
+			wantCause: "`verdict.coverage`",
+			wantFix:   "`set_asides`",
+		},
+		{
+			name: "malformed JSON text at an offset",
+			data: map[string]any{
+				"field":              "body_json",
+				"json_malformed":           true,
+				"json_unexpected_token_at": 42,
+				"expected_type":      "object",
+			},
+			wantWhat:  "`body_json`",
+			wantCause: "42",
+			wantFix:   "`body_json`",
 		},
 		{
 			name: "conflict keys",
 			data: map[string]any{
 				"conflict_keys": []string{"operations", "start_line"},
 			},
-			wantWhat:  "Conflicting arguments provided: pass only one of operations, start_line",
-			wantCause: "The supplied arguments violate mutual exclusivity.",
+			wantWhat:  "operations, start_line",
+			wantCause: "mutual exclusivity",
 			wantFix:   "Correct the field type, required value, or structure",
 		},
 		{
 			name: "replacement args json",
 			data: map[string]any{
-				"relocated_field":       "host_resources",
-				"nested_under":          "capability_request",
+				"field":                 "host_resources",
+				"misplaced_fields":      []string{"host_resources"},
+				"belongs_under":         "capability_request",
 				"replacement_args_json": "{\n  \"command\": \"colima start\"\n}",
 			},
-			wantWhat:  "Argument `host_resources` was placed at root; it belongs under `capability_request`",
-			wantCause: "The tool schema does not accept `host_resources` at root; it must be nested under `capability_request`.",
-			wantFix:   "Reissue the call with repaired arguments:\n```json\n{\n  \"command\": \"colima start\"\n}\n```",
+			wantWhat:  "`host_resources`",
+			wantCause: "`capability_request`",
+			wantFix:   "```json\n{\n  \"command\": \"colima start\"\n}\n```",
 		},
 	}
-
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			gc := NewGuardContext()

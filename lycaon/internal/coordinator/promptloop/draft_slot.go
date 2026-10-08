@@ -49,8 +49,8 @@ func (st *promptLoopTurnState) usesCoordinatorDraftSlot(assistantMessageID strin
 	return strings.TrimSpace(assistantMessageID) == st.draftSlotID
 }
 
-func (l *PromptLoop) draftVersionCount(ctx context.Context, sessionID, slotID string) (int, error) {
-	if l == nil || l.Deps.CountDraftVersions == nil {
+func (l turnNudges) draftVersionCount(ctx context.Context, sessionID, slotID string) (int, error) {
+	if l.PromptLoop == nil || l.Deps.CountDraftVersions == nil {
 		return 0, nil
 	}
 	sidecar, err := l.Deps.CountDraftVersions(ctx, sessionID, slotID)
@@ -60,8 +60,8 @@ func (l *PromptLoop) draftVersionCount(ctx context.Context, sessionID, slotID st
 	return sidecar + 1, nil
 }
 
-func (l *PromptLoop) stampDraftVersionCount(ctx context.Context, sessionID string, msg *api.Message) error {
-	if l == nil || msg == nil || msg.ID == "" {
+func (l turnNudges) stampDraftVersionCount(ctx context.Context, sessionID string, msg *api.Message) error {
+	if l.PromptLoop == nil || msg == nil || msg.ID == "" {
 		return nil
 	}
 	count, err := l.draftVersionCount(ctx, sessionID, msg.ID)
@@ -72,7 +72,7 @@ func (l *PromptLoop) stampDraftVersionCount(ctx context.Context, sessionID strin
 	return nil
 }
 
-func (l *PromptLoop) maybeWithdrawCoordinatorDraft(
+func (l turnNudges) maybeWithdrawCoordinatorDraft(
 	ctx context.Context,
 	sess *api.Session,
 	sessionID string,
@@ -85,14 +85,14 @@ func (l *PromptLoop) maybeWithdrawCoordinatorDraft(
 	return l.withdrawCoordinatorDraft(ctx, sess, sessionID, st, content)
 }
 
-func (l *PromptLoop) withdrawCoordinatorDraft(
+func (l turnNudges) withdrawCoordinatorDraft(
 	ctx context.Context,
 	sess *api.Session,
 	sessionID string,
 	st *promptLoopTurnState,
 	content string,
 ) error {
-	if l == nil || st == nil || st.draftSlotID == "" || !st.draftSlotAppended {
+	if l.PromptLoop == nil || st == nil || st.draftSlotID == "" || !st.draftSlotAppended {
 		return nil
 	}
 	if l.Deps.UpdateMessage == nil {

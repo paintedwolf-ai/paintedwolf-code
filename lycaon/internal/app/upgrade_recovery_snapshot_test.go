@@ -23,7 +23,7 @@ func TestUnwritableRecoveryMetadataKeepsRecoveryRoutesEligible(t *testing.T) {
 	testutil.FailErr(t, "close source", database.Close())
 	testutil.FailErr(t, "block recovery metadata with directory", os.MkdirAll(filepath.Join(root, db.UpgradeRecoveryDirName, "pending.json"), 0o700))
 	builder := &serveBuilder{ctx: t.Context(), logger: slog.Default()}
-	database, err = builder.openUpgradeableStore(dbPath)
+	database, err = serverWiring{builder}.openUpgradeableStore(dbPath)
 	if database != nil {
 		_ = database.Close()
 		t.Fatal("store exposed despite recovery metadata failure")
@@ -47,7 +47,7 @@ func TestRecoverySnapshotPrecedesRetention(t *testing.T) {
 	testutil.FailErr(t, "write durable body", os.WriteFile(bodyPath, []byte("preserved body"), 0o600))
 	testutil.FailErr(t, "close source", database.Close())
 	builder := &serveBuilder{ctx: ctx, logger: slog.Default()}
-	database, err = builder.openUpgradeableStore(dbPath)
+	database, err = serverWiring{builder}.openUpgradeableStore(dbPath)
 	testutil.FailErr(t, "open application update", err)
 	defer database.Close()
 	_, err = db.RunRetention(ctx, database, db.RetentionConfig{Enabled: true, OperationJournals: time.Nanosecond})
@@ -89,13 +89,13 @@ func TestStoreOpenDetachesEmbeddedRecoveryBeforeWritersStart(t *testing.T) {
 	testutil.FailErr(t, "stamp older application", db.New(database).UpsertStoreMeta(ctx, db.UpsertStoreMetaParams{Key: "app_version", Value: "0.0.1"}))
 	testutil.FailErr(t, "close source", database.Close())
 	builder := &serveBuilder{ctx: ctx, logger: slog.Default()}
-	database, err = builder.openUpgradeableStore(dbPath)
+	database, err = serverWiring{builder}.openUpgradeableStore(dbPath)
 	testutil.FailErr(t, "capture application update", err)
 	testutil.FailErr(t, "stamp current application", db.New(database).UpsertStoreMeta(ctx, db.UpsertStoreMetaParams{Key: "app_version", Value: version.Version}))
 	testutil.FailErr(t, "close updated store", database.Close())
 	testutil.FailErr(t, "simulate missing pending publication", os.Remove(filepath.Join(root, db.UpgradeRecoveryDirName, "pending.json")))
 	restarted := &serveBuilder{ctx: ctx, logger: slog.Default()}
-	database, err = restarted.openUpgradeableStore(dbPath)
+	database, err = serverWiring{restarted}.openUpgradeableStore(dbPath)
 	testutil.FailErr(t, "restart current application", err)
 	defer database.Close()
 	if restarted.upgradeRecoveryReady == nil {

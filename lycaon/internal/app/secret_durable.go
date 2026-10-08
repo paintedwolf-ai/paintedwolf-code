@@ -11,7 +11,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (b *serveBuilder) wireMessageSecretRedaction(matcher *secretmatch.Matcher) {
+func (b sessionWiring) wireMessageSecretRedaction(matcher *secretmatch.Matcher) {
 	// Store and pre-spill projection share the same evidence and field walker.
 	redact := func(ctx context.Context, msg wire.Message) (wire.Message, bool) {
 		return llm.RedactMessageForStorage(ctx, matcher, msg)
@@ -29,7 +29,7 @@ func (b *serveBuilder) wireMessageSecretRedaction(matcher *secretmatch.Matcher) 
 	}
 }
 
-func (b *serveBuilder) sweepManagedSecretTrees(ctx context.Context, projectID string) {
+func (b sessionWiring) sweepManagedSecretTrees(ctx context.Context, projectID string) {
 	rows, err := db.New(b.db).ListSessions(ctx)
 	if err != nil {
 		slog.WarnContext(ctx, "could not refresh managed secret transcript screening", "error", err)

@@ -22,6 +22,7 @@ import (
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workflow"
+	"github.com/lycaon/lycaon/internal/workflow/verdictcall"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/workflowfixture"
@@ -171,15 +172,20 @@ func largestCatalogPhaseInject(t *testing.T, renderer *prompts.InjectRenderer, h
 	t.Helper()
 	manifests, err := workflowfixture.LoadMergedWorkflowCatalog(t)
 	contractcheck.FailErr(t, "load phase budget catalog", err)
+	catalog := catalogVerdictCall(t)
 	for _, manifest := range manifests {
 		rows := make([]inject.WorkflowPhaseRow, 0, len(manifest.PhaseDefs))
 		for _, phase := range manifest.PhaseDefs {
 			rows = append(rows, inject.WorkflowPhaseRow{ID: phase.ID, CompleteWhen: phase.CompleteWhen, Next: phase.Next, Terminal: phase.Terminal})
 		}
 		for _, phase := range manifest.PhaseDefs {
+			exit := workflow.ProjectPhaseExit(manifest, phase, nil, nil).InjectView()
+			if phase.ReviewLoop != nil {
+				contractcheck.FailErr(t, "attach verdict call", verdictcall.Attach(exit, catalog, *phase.ReviewLoop, manifest.ReportBrief()))
+			}
 			frame := inject.CoordinatorTurnFrame{
 				RunContext: api.CoordinatorRunContext{WorkflowID: manifest.ID, CurrentPhase: phase.ID, RunID: "budget-run", RunStatus: "running"},
-				Runtime:    inject.WorkflowRuntimeSnapshot{Phases: rows, PhaseExit: workflow.ProjectPhaseExit(manifest, phase, nil, nil).InjectView()},
+				Runtime:    inject.WorkflowRuntimeSnapshot{Phases: rows, PhaseExit: exit},
 			}
 			block, err := inject.RenderActiveWorkflowInject(t.Context(), renderer, "sess-inject-test", frame, hints, nil, gates)
 			contractcheck.FailErr(t, "render catalog phase budget", err)

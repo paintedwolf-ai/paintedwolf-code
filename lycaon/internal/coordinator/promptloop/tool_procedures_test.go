@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
+	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -25,7 +26,7 @@ func TestToolProceduresCloseStandingPrefixBeforeSourceBrief(t *testing.T) {
 		{Role: api.MessageRoleSystem, Content: "source brief"},
 		{Role: api.MessageRoleUser, Content: "request", PromptCacheBreakpoint: api.PromptCacheTierHistory},
 	}
-	out, err := l.appendToolProcedures(t.Context(), &api.Session{ID: "s"}, "coordinator", messages, []tools.ToolMeta{{Name: "read"}})
+	out, err := toolInvocations{l}.appendToolProcedures(t.Context(), &api.Session{ID: "s"}, "coordinator", messages, []tools.ToolMeta{{Name: "read"}})
 	testutil.FailErr(t, "append tool procedures", err)
 	if len(out) != 4 || out[1].Content != "tool procedures" || out[1].PromptCacheBreakpoint != api.PromptCacheTierStanding || out[0].PromptCacheBreakpoint != api.PromptCacheTierNone || out[2].Content != "source brief" || out[3].PromptCacheBreakpoint != api.PromptCacheTierHistory {
 		t.Fatalf("incorrect prefix boundary: %+v", out)
@@ -59,7 +60,7 @@ func TestProviderRequestProceduresUseActualToolSet(t *testing.T) {
 		if activated {
 			active["command"] = true
 		}
-		turn, err := loop.buildTurnRequest(t.Context(), sess, sess.ID, history, prompts.CoordinatorProfileID, "inspect", 0, 20, false, &promptLoopTurnState{})
+		turn, err := modelTurn{loop}.buildTurnRequest(t.Context(), sess, sess.ID, history, prompts.CoordinatorProfileID, "inspect", 0, 20, false, &promptLoopTurnState{})
 		testutil.FailErr(t, "build provider request", err)
 		wireNames := namesOf(turn.Req.Tools)
 		if !slices.Equal(delivered, wireNames) {
@@ -93,9 +94,9 @@ func TestProviderRequestProceduresUseActualToolSet(t *testing.T) {
 	}
 }
 
-// A report-document repair asks only for the fence, so its turn offers no
-// tool; a citation repair keeps the surface's tools.
-func TestReportDocumentRepairOffersNoTools(t *testing.T) {
+// A report-document repair asks only for the fence, so its turn forbids tool
+// use while keeping the definitions; a citation repair keeps the surface's tools.
+func TestReportDocumentRepairForbidsToolUse(t *testing.T) {
 	retained := guidance.RetainedCloseout{}
 	loop := NewPromptLoopForTest(PromptLoopDeps{
 		Policy: registryTestPolicy{metas: []tools.ToolMeta{{Name: "read"}, {Name: "update_progress"}}},
@@ -115,11 +116,45 @@ func TestReportDocumentRepairOffersNoTools(t *testing.T) {
 		{guidance.RetainedCloseout{Active: true, DocumentAttempt: 1, ForcedBy: []string{guidance.ReportClaimUnreportedCode}}, false},
 	} {
 		retained = tc.retained
-		turn, err := loop.buildTurnRequest(t.Context(), sess, sess.ID, history, prompts.CoordinatorProfileID, "report", 0, 20, false, &promptLoopTurnState{})
+		turn, err := modelTurn{loop}.buildTurnRequest(t.Context(), sess, sess.ID, history, prompts.CoordinatorProfileID, "report", 0, 20, false, &promptLoopTurnState{})
 		testutil.FailErr(t, "build provider request", err)
-		if got := len(turn.Req.Tools) > 0; got != tc.wantTools {
-			t.Fatalf("retained %+v offered %v, want tools offered = %v", tc.retained, namesOf(turn.Req.Tools), tc.wantTools)
+		if got := turn.Req.ToolsCallable(); got != tc.wantTools {
+			t.Fatalf("retained %+v callable = %v, want %v", tc.retained, got, tc.wantTools)
 		}
+		if len(turn.Req.Tools) == 0 {
+			t.Fatalf("retained %+v dropped the tool definitions", tc.retained)
+		}
+	}
+}
+
+// A coordinator's final prose turn keeps its tool definitions, which providers
+// validate tool history against, and forbids calling them; it renders no tool
+// procedures. A worker's final turn still offers its completion tool.
+func TestProseFinishTurnForbidsCoordinatorToolUse(t *testing.T) {
+	procedures := 0
+	loop := NewPromptLoopForTest(PromptLoopDeps{
+		Policy: registryTestPolicy{metas: []tools.ToolMeta{{Name: "read"}, {Name: "submit_verdict"}}},
+		BuildMessages: func(_ context.Context, _ *api.Session, history []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
+			return history, nil
+		},
+		ToolProcedures: func(context.Context, *api.Session, string, []string) (string, error) {
+			procedures++
+			return "procedure", nil
+		},
+	})
+	sess := &api.Session{ID: "closeout", AgentType: prompts.CoordinatorProfileID, WorkspacePath: "/tmp/repo", Posture: api.SessionPostureBuild}
+	history := []api.Message{{Role: api.MessageRoleSystem, Content: "charter", ContextPinned: true}, {Role: api.MessageRoleUser, Content: "survey"}}
+	st := &promptLoopTurnState{proseFinish: true}
+	turn, err := modelTurn{loop}.buildTurnRequest(t.Context(), sess, sess.ID, history, prompts.CoordinatorProfileID, "survey", 3, 20, false, st)
+	testutil.FailErr(t, "build closeout request", err)
+	if turn.Req.ToolUse != modelcall.ToolUseForbidden || len(turn.Req.Tools) == 0 {
+		t.Fatalf("closeout tool use = %d with %d tools, want forbidden with definitions kept", turn.Req.ToolUse, len(turn.Req.Tools))
+	}
+	if procedures != 0 {
+		t.Fatal("a turn that forbids tool use rendered tool procedures")
+	}
+	if st.offeredToolNames == nil || len(st.offeredToolNames) != 0 {
+		t.Fatalf("offered names = %v, want an empty settled set", st.offeredToolNames)
 	}
 }
 
@@ -130,7 +165,7 @@ func TestToolProceduresSurviveContextFit(t *testing.T) {
 		history = append(history, api.Message{Role: api.MessageRoleAssistant, Content: strings.Repeat("old context ", 100)})
 	}
 	history = append(history, api.Message{Role: api.MessageRoleUser, Content: "current request"})
-	got, err := loop.appendToolProcedures(t.Context(), &api.Session{}, "coordinator", history, []tools.ToolMeta{{Name: "command"}})
+	got, err := toolInvocations{loop}.appendToolProcedures(t.Context(), &api.Session{}, "coordinator", history, []tools.ToolMeta{{Name: "command"}})
 	testutil.FailErr(t, "append procedures", err)
 	fitted := compaction.DeterministicFit(compaction.CompactionConfig{KeepRecentMessages: 2}, compaction.ContextMessagesFromAPI(got), 100)
 	found := false
@@ -147,7 +182,7 @@ func TestToolProceduresSurviveContextFit(t *testing.T) {
 func TestToolProcedureRenderFailureStopsRequest(t *testing.T) {
 	want := errors.New("template unavailable")
 	loop := &PromptLoop{Deps: PromptLoopDeps{ToolProcedures: func(context.Context, *api.Session, string, []string) (string, error) { return "", want }}}
-	_, err := loop.appendToolProcedures(t.Context(), &api.Session{}, "coordinator", nil, []tools.ToolMeta{{Name: "command"}})
+	_, err := toolInvocations{loop}.appendToolProcedures(t.Context(), &api.Session{}, "coordinator", nil, []tools.ToolMeta{{Name: "command"}})
 	if !errors.Is(err, want) {
 		t.Fatalf("render failure = %v", err)
 	}

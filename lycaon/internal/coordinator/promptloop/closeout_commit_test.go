@@ -82,7 +82,7 @@ func TestCloseoutCitationsRequiredHostAssemblesImmediately(t *testing.T) {
 				{ID: "slot-1", Role: api.MessageRoleAssistant, Content: "no citations here", Visibility: api.MessageVisibilityInternal},
 			}
 			report := guidance.CoordinatorCompletionReport{Synthesis: "no citations here", Headline: "Overview", Limits: []string{"Inspection only."}}
-			out, err := loop.handleAcceptedCloseoutReport(
+			out, err := turnCloseout{loop}.handleAcceptedCloseoutReport(
 				context.Background(), &api.Session{ID: "s1", WorkspacePath: t.TempDir()},
 				"s1", "", tc.surface, st, history,
 				api.Message{ID: "slot-1", Role: api.MessageRoleAssistant, Content: "no citations here"},
@@ -152,7 +152,7 @@ func TestCloseoutCitationRetryKeepsPinnedSynthesis(t *testing.T) {
 		{ID: "u1", Role: api.MessageRoleUser, Content: "research"},
 		{ID: "slot-1", Role: api.MessageRoleAssistant, Content: "Invented REST CLI success story", Visibility: api.MessageVisibilityInternal},
 	}
-	out, err := loop.handleAcceptedCloseoutReport(
+	out, err := turnCloseout{loop}.handleAcceptedCloseoutReport(
 		context.Background(), &api.Session{ID: "s1", WorkspacePath: t.TempDir()},
 		"s1", "", "implement_investigate", st, history,
 		api.Message{ID: "slot-1", Role: api.MessageRoleAssistant, Content: "Invented REST CLI success story"},
@@ -217,7 +217,7 @@ func TestCloseoutCitationRepairPreservesReportOnCommit(t *testing.T) {
 				repaired.CitedEvidence = []guidance.CoordinatorCitedEvidence{{Evidence: "command#1"}}
 			}
 			st := &promptLoopTurnState{coordinatorFrame: testReportFrame(), draftSlotID: "slot-1", draftSlotAppended: true, turnTools: []string{"command"}, closeoutRetry: closeoutRetryState{attempt: 1}}
-			out, err := loop.handleAcceptedCloseoutReport(t.Context(), &api.Session{ID: "s1", WorkspacePath: t.TempDir()}, "s1", "", "implement_investigate", st,
+			out, err := turnCloseout{loop}.handleAcceptedCloseoutReport(t.Context(), &api.Session{ID: "s1", WorkspacePath: t.TempDir()}, "s1", "", "implement_investigate", st,
 				[]api.Message{{ID: "u1", Role: api.MessageRoleUser, Content: "merge"}, {ID: "slot-1", Role: api.MessageRoleAssistant}},
 				api.Message{ID: "slot-1", Role: api.MessageRoleAssistant}, guidance.CloseoutRead{Report: repaired})
 			testutil.FailErr(t, "commit citation repair", err)

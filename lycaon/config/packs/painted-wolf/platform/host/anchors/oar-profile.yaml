@@ -1111,16 +1111,34 @@ host_facts:
    type: bool
  - name: paintedwolf.http_request_web_page
    type: bool
- - name: paintedwolf.relocated_field
+ - name: paintedwolf.misplaced_fields
+   type: list<string>
+ - name: paintedwolf.found_under
    type: string
- - name: paintedwolf.nested_under
+ - name: paintedwolf.belongs_under
+   type: string
+ - name: paintedwolf.close_before
    type: string
  - name: paintedwolf.expected_path
    type: string
  - name: paintedwolf.did_you_mean
    type: string
- - name: paintedwolf.unparsed_json
+ - name: paintedwolf.json_encoded
    type: bool
+ - name: paintedwolf.json_malformed
+   type: bool
+ - name: paintedwolf.json_open_paths
+   type: list<string>
+ - name: paintedwolf.json_unexpected_token_at
+   type: int
+ - name: paintedwolf.json_unterminated_string_at
+   type: int
+ - name: paintedwolf.json_trailing_text_at
+   type: int
+ - name: paintedwolf.json_trailing_members
+   type: list<string>
+ - name: paintedwolf.json_trailing_belongs_under
+   type: string
  - name: paintedwolf.expected_type
    type: string
  - name: paintedwolf.conflict_keys

@@ -71,7 +71,7 @@ func TestExecuteToolCallsInTurnHostDecoratedCycleTerminator(t *testing.T) {
 			calls := []api.ToolCall{{ID: "call-1", Name: tt.tool, Args: map[string]any{}}}
 			history := []api.Message{{ID: assistantID, Role: api.MessageRoleAssistant, ToolCalls: calls}}
 
-			_, _, _, _, _, breakLoop, err := loop.executeToolCallsInTurn(
+			_, _, _, _, _, breakLoop, err := toolBatch{loop}.executeToolCallsInTurn(
 				context.Background(), sess, sess.ID, calls, tools.ToolContext{SessionID: sess.ID},
 				history, "continue", assistantID, "", nil,
 			)
@@ -104,7 +104,7 @@ func TestExecuteToolCallsInTurnHumanApprovalEndsCycle(t *testing.T) {
 	calls := []api.ToolCall{{ID: "call-1", Name: "write", Args: map[string]any{"path": "bp.md"}}}
 	history := []api.Message{{ID: assistantID, Role: api.MessageRoleAssistant, ToolCalls: calls}}
 
-	_, _, _, _, _, breakLoop, err := loop.executeToolCallsInTurn(
+	_, _, _, _, _, breakLoop, err := toolBatch{loop}.executeToolCallsInTurn(
 		context.Background(), sess, sess.ID, calls, tools.ToolContext{SessionID: sess.ID},
 		history, "continue", assistantID, "", nil,
 	)
@@ -173,7 +173,7 @@ func runHostHoldBatch(t *testing.T, held *atomic.Bool, surfaceID string, onCall 
 		st = &promptLoopTurnState{turnToolPlan: plan}
 	}
 
-	_, _, _, _, _, breakLoop, err := loop.executeToolCallsInTurn(
+	_, _, _, _, _, breakLoop, err := toolBatch{loop}.executeToolCallsInTurn(
 		context.Background(), sess, sess.ID, calls, tools.ToolContext{SessionID: sess.ID},
 		history, "continue", assistantID, surfaceID, st,
 	)
@@ -200,7 +200,7 @@ func TestExecuteToolCallsInTurnWriteContinuesWhenNotAwaiting(t *testing.T) {
 	calls := []api.ToolCall{{ID: "call-1", Name: "write", Args: map[string]any{"path": "bp.md"}}}
 	history := []api.Message{{ID: assistantID, Role: api.MessageRoleAssistant, ToolCalls: calls}}
 
-	_, _, _, _, _, breakLoop, err := loop.executeToolCallsInTurn(
+	_, _, _, _, _, breakLoop, err := toolBatch{loop}.executeToolCallsInTurn(
 		context.Background(), sess, sess.ID, calls, tools.ToolContext{SessionID: sess.ID},
 		history, "continue", assistantID, "", nil,
 	)
@@ -224,7 +224,7 @@ func TestWorkerDecisionSettlesUnattemptedCompletion(t *testing.T) {
 	calls := []api.ToolCall{{ID: "decision", Name: "request_decision"}, {ID: "completion", Name: "complete_leg"}}
 	sess := &api.Session{ID: "worker", ParentSessionID: "parent"}
 	history := []api.Message{{ID: "assistant", Role: api.MessageRoleAssistant, ToolCalls: calls}}
-	history, _, _, _, _, stopped, err := loop.executeToolCallsInTurn(t.Context(), sess, sess.ID, calls, tools.ToolContext{}, history, "implement", "assistant", "", nil)
+	history, _, _, _, _, stopped, err := toolBatch{loop}.executeToolCallsInTurn(t.Context(), sess, sess.ID, calls, tools.ToolContext{}, history, "implement", "assistant", "", nil)
 	testutil.FailErr(t, "pause worker batch", err)
 	if !stopped || completed || len(history) != 3 {
 		t.Fatalf("stopped=%v completed=%v history=%+v", stopped, completed, history)
