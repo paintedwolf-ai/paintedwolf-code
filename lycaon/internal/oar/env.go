@@ -319,7 +319,7 @@ func bareActivation(gc *GuardContext) map[string]any {
 		"receiving_tool_summarize":        gc.Tool == "summarize",
 		"refused_terminal_read_paths":     strList(gc.RefusedTerminalReadPaths),
 		"refused_terminal_write_paths":    strList(gc.RefusedTerminalWritePaths),
-		"kernel_refusal_silence":          gc.KernelRefusalSilence,
+		"sandbox_refusal_witness":         gc.SandboxRefusalWitness,
 		"refused_socket_paths":            strList(gc.RefusedSocketPaths),
 		"refused_connect_ports":           strList(gc.RefusedConnectPorts),
 		"refused_listen_ports":            strList(gc.RefusedListenPorts),

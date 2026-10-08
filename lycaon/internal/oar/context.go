@@ -100,7 +100,7 @@ type GuardContext struct {
 	RefusedReadGrants         []string
 	RefusedTerminalReadPaths  []string
 	RefusedTerminalWritePaths []string
-	KernelRefusalSilence      bool
+	SandboxRefusalWitness     string
 	// The remaining refusals, by the capability that would admit them.
 	RefusedSocketPaths  []string
 	RefusedConnectPorts []string

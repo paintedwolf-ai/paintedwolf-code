@@ -570,9 +570,9 @@ host_facts:
  - name: paintedwolf.refused_terminal_write_paths
    type: list<string>
    observation: Kernel-observed write paths whose floor no approval opens.
- - name: paintedwolf.kernel_refusal_silence
-   type: bool
-   observation: A failed confined invocation with kernel witness and no refusal reports; silence does not establish absence of refusal.
+ - name: paintedwolf.sandbox_refusal_witness
+   type: string
+   observation: The confinement reporting layer's declared witness (kernel, incomplete, or unavailable); empty without an observed invocation.
  - name: paintedwolf.refused_socket_paths
    type: list<string>
    observation: Unix socket paths the kernel refused the invocation's processes a connection to; empty when none.
