@@ -1,6 +1,7 @@
 package confine_test
 
 import (
+	"encoding/binary"
 	"fmt"
 	"net"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -391,11 +393,15 @@ func TestDirectIPNarrowingEndToEnd(t *testing.T) {
 	t.Setenv("LYCAON_SANDBOX", "")
 	t.Setenv("LYCAON_SANDBOX_NETWORK", "")
 
+	// Hosted runners cannot count on public UDP egress, so the declared
+	// destination is an NTP responder this test serves on the host's own
+	// non-loopback address.
+	server, port := serveNTPOnHostAddress(t)
 	proj := t.TempDir()
 	c, ok := confine.DefaultConfinement(confine.Request{
 		Roots:            []string{proj},
 		Egress:           confine.EgressDirectIP,
-		DirectIPDeclared: []string{"udp://time.nist.gov:123"},
+		DirectIPDeclared: []string{fmt.Sprintf("udp://ntp.test:%d", port)},
 	})
 	if !ok || c == nil {
 		t.Fatalf("direct IP confinement must apply: ok=%v c=%+v", ok, c)
@@ -403,39 +409,29 @@ func TestDirectIPNarrowingEndToEnd(t *testing.T) {
 	if c.Network != confine.NetworkDirectIP {
 		t.Fatalf("network mode: got %s", confine.NetworkLabel(c.Network))
 	}
-	want := []confine.DirectIPPermit{{Protocol: "udp", Port: 123}}
+	want := []confine.DirectIPPermit{{Protocol: "udp", Port: uint16(port)}} //nolint:gosec // A UDP port fits.
 	if !slices.Equal(c.DirectIPPermits, want) {
 		t.Fatalf("declared strings must reach the confinement: got %v want %v", c.DirectIPPermits, want)
 	}
 
-	// The narrowed profile retains name resolution. Public NTP servers drop
-	// requests under load, so any one of several may answer; a denial fails at once.
-	ntp := []string{"/usr/bin/python3", "-c", `import socket,struct,sys
-errors = []
-for host in ("time.apple.com", "time.google.com", "pool.ntp.org", "time.nist.gov"):
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.settimeout(4)
-        s.connect((socket.gethostbyname(host), 123))
-        s.send(b"\x1b" + 47 * b"\0")
-        print(struct.unpack("!12I", s.recv(48))[10] - 2208988800)
-        sys.exit(0)
-    except PermissionError:
-        raise
-    except OSError as error:
-        errors.append(f"{host}: {error}")
-sys.exit("no NTP server answered: " + "; ".join(errors))`}
+	// The narrowed profile retains name resolution and the declared UDP round trip.
+	ntp := []string{"/usr/bin/python3", "-c", fmt.Sprintf(`import socket,struct
+socket.getaddrinfo("github.com", 443)
+s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+s.settimeout(10)
+s.connect((%q, %d))
+s.send(b"\x1b" + 47 * b"\0")
+print(struct.unpack("!12I", s.recv(48))[10] - 2208988800)`, server, port)}
 	code, out, stderr := confinedStdout(t, self, *c, ntp[0], ntp[1:]...)
 	if code != 0 {
-		t.Fatalf("narrowed direct IP must complete an NTP round trip by name: exit=%d out=%s stderr=%s", code, out, stderr)
+		t.Fatalf("narrowed direct IP must resolve a name and complete the declared UDP round trip: exit=%d out=%s stderr=%s", code, out, stderr)
 	}
 	epoch, err := strconv.ParseInt(strings.TrimSpace(out), 10, 64)
 	if err != nil {
-		t.Fatalf("expected a unix timestamp from the server, got %q (%v; stderr=%s)", out, err, stderr)
+		t.Fatalf("expected a unix timestamp from the responder, got %q (%v; stderr=%s)", out, err, stderr)
 	}
-	// The response must contain a plausible timestamp.
 	if epoch < 1_700_000_000 || epoch > 4_000_000_000 {
-		t.Fatalf("implausible NTP timestamp %d — the exchange did not reach a real server", epoch)
+		t.Fatalf("implausible NTP timestamp %d — the exchange did not reach the responder", epoch)
 	}
 
 	// Undeclared transports remain denied.
@@ -443,4 +439,44 @@ sys.exit("no NTP server answered: " + "; ".join(errors))`}
 		"import socket;s=socket.socket();s.settimeout(3);s.connect(('1.1.1.1',443));print('tcp ok')"); code == 0 {
 		t.Fatalf("undeclared tcp must stay denied on the end-to-end path: out=%s", out)
 	}
+}
+
+// serveNTPOnHostAddress answers NTP client requests on an ephemeral UDP port at
+// the host's first non-loopback IPv4 address and returns that address and port.
+func serveNTPOnHostAddress(t *testing.T) (string, int) {
+	t.Helper()
+	addrs, err := net.InterfaceAddrs()
+	testutil.FailErr(t, "list interface addresses", err)
+	var host net.IP
+	for _, addr := range addrs {
+		if ipNet, ok := addr.(*net.IPNet); ok {
+			if ip := ipNet.IP.To4(); ip != nil && !ip.IsLoopback() && !ip.IsLinkLocalUnicast() {
+				host = ip
+				break
+			}
+		}
+	}
+	if host == nil {
+		t.Fatal("no non-loopback IPv4 address to serve NTP on")
+	}
+	conn, err := net.ListenUDP("udp4", &net.UDPAddr{IP: host})
+	testutil.FailErr(t, "listen for NTP requests", err)
+	t.Cleanup(func() { _ = conn.Close() })
+	go func() {
+		buf := make([]byte, 48)
+		for {
+			n, peer, err := conn.ReadFromUDP(buf)
+			if err != nil {
+				return
+			}
+			if n < 48 {
+				continue
+			}
+			reply := make([]byte, 48)
+			reply[0] = 0x1c                                                              // LI 0, version 3, server mode
+			binary.BigEndian.PutUint32(reply[40:], uint32(time.Now().Unix()+2208988800)) //nolint:gosec // NTP era-0 seconds fit.
+			_, _ = conn.WriteToUDP(reply, peer)
+		}
+	}()
+	return host.String(), conn.LocalAddr().(*net.UDPAddr).Port
 }
