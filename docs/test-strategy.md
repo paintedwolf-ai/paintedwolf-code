@@ -416,13 +416,19 @@ required check, `check`:
 | Event | Tier | Work |
 |---|---|---|
 | Pull request | Fast | The `fast` profile: the stages of `./task check-fast`, split into build and lint, Go (two shards), and frontend jobs on `ubuntu-latest`. |
-| Merge queue | Full | The `check` profile, every stage of `./task check`, plus [`platform-verification.yml`](../.github/workflows/platform-verification.yml): upgrade corpus, applied Seatbelt, browser confinement, and Git parity on `macos-15`, Playwright web E2E in three shards, and desktop E2E. |
+| Merge queue | Full | The `check` profile, every stage of `./task check`, plus [`platform-verification.yml`](../.github/workflows/platform-verification.yml): the upgrade corpus on Linux; applied Seatbelt, browser confinement, and Git parity in one `macos-15` job; Playwright web E2E in three shards; and desktop E2E. |
 | Manual dispatch | Full | The merge-queue tier on any branch, to try a change before queueing or to reproduce a queue failure. |
 
 The merge queue squashes each pull request onto main and tests the resulting
 commit; main then advances to exactly that commit, so CI does not run again on
 push. A required check that ran only on pull requests would admit commits that
-were never tested together. Neither tier uses path filters: generated
+were never tested together. When the queue merges, rebuilds, or drops a group,
+it deletes the group's branch but leaves its CI running; the scheduled
+[`merge-queue-prune.yml`](../.github/workflows/merge-queue-prune.yml) cancels
+those runs every ten minutes so they stop holding runners the live groups need.
+The aggregates run under `!cancelled()` rather than `always()`: they still judge
+failed and timed-out jobs, but a cancelled run no longer waits for a runner to
+schedule its verdict. Neither tier uses path filters: generated
 documentation, shipped prompts, and the changelog are Markdown the build and
 tests read.
 
