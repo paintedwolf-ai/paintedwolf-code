@@ -95,7 +95,8 @@ func TestScannerSuiteRunsOnlyScannerGatedTests(t *testing.T) {
 func TestHostedProfilesRequireTheFullScannerSuite(t *testing.T) {
 	t.Parallel()
 	plan := verificationCatalog(t)
-	for _, profile := range []string{"check", "nightly", "release"} {
+	// The profiles that judge a commit's code; the release profile judges only the world it ships into.
+	for _, profile := range []string{"check", "qualification"} {
 		found := false
 		for _, lane := range plan.CI {
 			if slices.Contains(lane.Profiles, profile) && slices.Contains(lane.Targets, "test:full") {
