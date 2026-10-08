@@ -329,3 +329,40 @@ func TestAcceptedWorkflowRequestCurationSurvivesInitiatingTurnCancellation(t *te
 		t.Fatalf("accepted workflow title = %q", got.Title)
 	}
 }
+
+func TestEngineShutdownCancelsAndDrainsDetachedNaming(t *testing.T) {
+	t.Setenv("LYCAON_LLM_MOCK", "")
+	ctx := t.Context()
+	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
+	reg := project.NewMemoryRegistry()
+	p, err := reg.Create(ctx, project.CreateParams{Draft: true})
+	testutil.FailErr(t, "create project", err)
+	mem := store.NewMemory()
+	blocker := &blockingNamingLLM{entered: make(chan struct{}, 2), release: make(chan struct{}), text: "Should never publish"}
+	mgr := NewManager(mem, blocker, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr.SetProjectRegistry(reg)
+	providers := &llm.Registry{}
+	testutil.FailErr(t, "register naming provider", providers.Register(blocker))
+	mgr.llmSvc = &llm.Service{Registry: providers, Policy: llm.NewInMemoryPolicyStore(llm.ModelPolicy{Lite: llm.ModelRef{ProviderID: blocker.ID(), Model: "naming-model"}}), Utility: llm.NewUtilityPlane()}
+	sess, err := mgr.CreateForProject(ctx, p.ID, api.SessionPostureBuild)
+	testutil.FailErr(t, "create session", err)
+	mgr.kickPromptCuration(ctx, sess, "Build a CLI todo tracker with SQLite persistence")
+	select {
+	case <-blocker.entered:
+	case <-time.After(time.Second):
+		t.Fatal("detached naming did not start")
+	}
+	mgr.BeginEngineShutdown()
+	testutil.FailErr(t, "drain engine naming", mgr.WaitForEngineShutdown(ctx))
+	got, err := mem.Get(ctx, sess.ID)
+	testutil.FailErr(t, "read settled session", err)
+	if got.Title != "" {
+		t.Fatalf("cancelled naming published title %q", got.Title)
+	}
+	mgr.kickPromptCuration(ctx, sess, "Another request after shutdown")
+	select {
+	case <-blocker.entered:
+		t.Fatal("naming admitted after shutdown")
+	default:
+	}
+}

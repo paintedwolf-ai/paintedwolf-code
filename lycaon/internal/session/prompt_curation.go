@@ -68,16 +68,25 @@ func (m *Manager) kickPromptCuration(ctx context.Context, sess *wire.Session, us
 	}
 	var bg context.Context
 	var work *curationWork
+	var finish func()
 	if err := m.WithSessionTreeAdmission(ctx, sess.ID, func() error {
+		owned, done, err := m.engineWork.Begin(curationctx.WithoutLane(context.WithoutCancel(ctx)))
+		if err != nil {
+			return err
+		}
+		finish = done
 		var cancel context.CancelFunc
-		bg, cancel = context.WithCancel(curationctx.WithoutLane(context.WithoutCancel(ctx)))
+		bg, cancel = context.WithCancel(owned)
 		work = m.curation.Register(sess.ID, cancel)
 		return nil
 	}); err != nil {
 		return
 	}
 	//nolint:contextcheck // Session stop controls this context.
-	go m.runPromptCuration(bg, sess, userPrompt, work)
+	go func() {
+		defer finish()
+		m.runPromptCuration(bg, sess, userPrompt, work)
+	}()
 }
 
 func (m *Manager) runPromptCuration(ctx context.Context, sess *wire.Session, userPrompt string, work *curationWork) {

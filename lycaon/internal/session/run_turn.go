@@ -28,6 +28,11 @@ import (
 var RunTurnBusyWindowFaultForTest func()
 
 func (m *Manager) runTurnLocked(ctx context.Context, id string, in PromptInput) (resp *promptresult.Result, runErr error) {
+	ctx, finishWork, err := m.engineWork.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer finishWork()
 	ctx = m.attachPromptCancel(ctx, id)
 	defer m.detachPromptCancel(id)
 
@@ -217,18 +222,18 @@ func (m *Manager) executePromptRun(
 	finishPreparing()
 
 	result, err := m.ensureCoordinatorRuntime().RunPrompt(ctx, promptloop.PromptRunInput{
-		SessionID:   sessionID,
-		TurnID:      turn.Turn.ID,
-		AttemptID:   turn.Attempt.ID,
-		Session:     sess,
-		History:     assembly.History,
-		ProfileID:   assembly.ProfileID,
-		UserPrompt:  userPrompt,
+		SessionID:    sessionID,
+		TurnID:       turn.Turn.ID,
+		AttemptID:    turn.Attempt.ID,
+		Session:      sess,
+		History:      assembly.History,
+		ProfileID:    assembly.ProfileID,
+		UserPrompt:   userPrompt,
 		HostTurn:     hostTurn,
 		HostSignalID: in.hostSignalID(),
 		ProseFinish:  in.ProseFinish,
-		ToolCtx:     assembly.ToolCtx,
-		Machine:     assembly.Machine,
+		ToolCtx:      assembly.ToolCtx,
+		Machine:      assembly.Machine,
 	})
 	if err != nil {
 		return execution, mapPromptRunError(err)
