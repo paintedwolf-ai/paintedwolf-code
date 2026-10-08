@@ -1,0 +1,24 @@
+[package]
+name = "wheel-glide"
+version = "0.1.0"
+description = "Glides for notched mouse wheels over WebKit on macOS"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+[dependencies]
+serde.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+block2.workspace = true
+libc.workspace = true
+objc2.workspace = true
+objc2-app-kit.workspace = true
+objc2-core-foundation.workspace = true
+objc2-core-graphics.workspace = true
+objc2-foundation.workspace = true
+objc2-quartz-core.workspace = true
+objc2-web-kit.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
