@@ -50,12 +50,15 @@ reuse the public bucket and domain or point at a scratch bucket.
   squash through a merge queue, the required checks `check` (GitHub Actions) and
   `DCO`, no force-pushes or deletions, and the dependency-inventory deploy key
   as the only bypass actor. `check` is the aggregate of every CI tier, so no
-  individual job is listed. The queue builds one group at a time (up to five
-  pull requests, all required to pass): one full-tier run occupies about 20
-  hosted jobs, six of them on macOS, which is the free plan's whole runner pool,
-  so a second concurrent group would stall every pull request's fast tier.
-  Confirm the queue is live afterwards: the repository's `mergeQueue(branch:
-  "main")` in the GraphQL API is not null.
+  individual job is listed. The queue builds up to three groups at once and
+  merges up to five pull requests when the newest passing group's head passes
+  (`HEADGREEN`). Each group contains every pull request ahead of it, so main
+  still advances only to a commit the full tier passed, and a flaky earlier
+  group no longer sends the entries behind it back to rebuild. A full-tier run
+  takes about an hour, with WebKit as its longest job, and runs three macOS
+  jobs totalling about 90 minutes against five macOS runners; more concurrent
+  groups would only queue for runners and hold back pull requests' fast tiers. Confirm the queue is live afterwards:
+  the repository's `mergeQueue(branch: "main")` in the GraphQL API is not null.
 - [ ] Configure public repository presentation: description (`Local-first AI coding agent`), website (`https://paintedwolf.ai`), topics (`ai`, `agent`, `tauri`, `golang`, `solidjs`, `local-first`), and social preview image.
 
 ## Release
@@ -84,7 +87,7 @@ release, update both the host manifest and the action's revision pin together.
 3. If provider integrations changed, run the [provider checks](#provider-integration-checks).
 4. Merge the candidate through the merge queue, which runs the full CI tier on
    the commit that lands, and wait for
-   [Release build cache](../../.github/workflows/release-build-cache.yml) to
+   [Build caches](../../.github/workflows/build-caches.yml) to
    pass; the release build restores the Go and Tauri compiles that run saved.
    Tag that exact commit as `v<VERSION>` and push the tag. This starts
    [Release](../../.github/workflows/release.yml), which refuses a commit

@@ -76,10 +76,20 @@ func (p Policy) Cap(category, id string) (int, bool) {
 
 // RequireIntegers rejects a policy node whose sizes are not plain integers. A
 // YAML decoder would otherwise truncate 700.5 to 700 or accept a quoted number.
+// Policies are mappings of sizes, so a list or an alias, which could carry a
+// size past this check, is rejected too.
 func RequireIntegers(policy *yaml.Node) error {
 	var walk func(node *yaml.Node, key string) error
 	walk = func(node *yaml.Node, key string) error {
 		switch node.Kind {
+		case yaml.DocumentNode:
+			for _, child := range node.Content {
+				if err := walk(child, key); err != nil {
+					return err
+				}
+			}
+		case yaml.SequenceNode, yaml.AliasNode:
+			return fmt.Errorf("line %d: %s must be a mapping or a plain integer", node.Line, key)
 		case yaml.MappingNode:
 			for i := 0; i+1 < len(node.Content); i += 2 {
 				if err := walk(node.Content[i+1], node.Content[i].Value); err != nil {

@@ -9,6 +9,21 @@ if [[ "${1:-}" == "--frontend" ]]; then
   exit 0
 fi
 
+if [[ "${1:-}" == "--analysis-tools" ]]; then
+  exec python3 "${ROOT}/scripts/analysis_tools.py" ensure all
+fi
+
+if [[ "${1:-}" == "--workspace-cache" ]]; then
+  exec bash "${ROOT}/scripts/warm-workspace-build.sh"
+fi
+if [[ "${1:-}" == "--release-cache" ]]; then
+  exec bash "${ROOT}/scripts/warm-release-build.sh"
+fi
+if [[ $# != 0 ]]; then
+  echo "usage: ./task setup-dev [-- --frontend|--analysis-tools|--workspace-cache|--release-cache]" >&2
+  exit 2
+fi
+
 version_at_least() {
 	local got="${1#v}" want="${2#v}" i
 	got="${got%%[-+]*}"

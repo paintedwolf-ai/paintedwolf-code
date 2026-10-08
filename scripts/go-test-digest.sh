@@ -192,7 +192,12 @@ else
 
   NCPU="$(test_host_cpu_count)"
   HOST_LOAD="$(test_host_load_one)"
+  EXPLICIT_TIMEOUT_SCALE="${PW_TEST_TIMEOUT_SCALE:-}"
   TEST_TIMEOUT_SCALE="$(test_host_timeout_scale "${NCPU}" "${HOST_LOAD}")"
+  # The race detector slows instrumented code several-fold whatever the host load.
+  if ((${#RACE_FLAG[@]})) && [[ -z "${EXPLICIT_TIMEOUT_SCALE}" ]] && ((TEST_TIMEOUT_SCALE < 3)); then
+    TEST_TIMEOUT_SCALE=3
+  fi
   export PW_TEST_TIMEOUT_SCALE="${TEST_TIMEOUT_SCALE}"
   P_PKGS="${GO_TEST_P:?verification admission must set GO_TEST_P}"
   P_INTRA="${GO_TEST_PARALLEL:?verification admission must set GO_TEST_PARALLEL}"

@@ -132,9 +132,9 @@ func TestNoticesGitignoredAndWorkflowsWired(t *testing.T) {
 	if !strings.Contains(gitignore, "THIRD-PARTY-NOTICES.md") {
 		t.Fatal(".gitignore must ignore THIRD-PARTY-NOTICES.md")
 	}
-	setup := contractcheck.ReadRepoFile(t, root, ".github/actions/setup-verification/action.yml")
-	if !strings.Contains(setup, "run: ./task licenses:notices") {
-		t.Fatal("hosted verification setup must generate third-party notices")
+	plan := contractcheck.ReadRepoFile(t, root, "scripts/verification-plan.json")
+	if !strings.Contains(plan, `"licenses:notices"`) {
+		t.Fatal("verification must declare the third-party notices check")
 	}
 	tauri := contractcheck.ReadRepoFile(t, root, "lycaon-den/src-tauri/tauri.conf.json")
 	if !strings.Contains(tauri, "THIRD-PARTY-NOTICES.md") {
