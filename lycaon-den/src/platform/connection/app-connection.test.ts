@@ -120,6 +120,7 @@ vi.mock("../../api/events.ts", () => ({
 
 type SubscribeOptions = {
   onOpen?: (reason: EventOpenReason) => void;
+  onReconnectAttempt?: (attempt: number, delayMs: number) => void;
   onInvalidate?: (keys: string[], scope: EventScope) => void;
 };
 

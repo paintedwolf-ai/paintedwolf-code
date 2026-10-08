@@ -38,6 +38,9 @@ exceptions:
         lycaon/internal/session/coordinator_wire.go:
             cap: 1100
             reason: Predates the limits; fixes still land here while the package is decomposed (#271).
+        lycaon-den/src/platform/connection/app-connection.ts:
+            cap: 1000
+            reason: Den's app connection owns attachment, handshake, event subscription and cache reconcile in one module; it is split along those seams in #355.
     test_directories:
         lycaon/internal/session:
             cap: 265
@@ -49,3 +52,11 @@ exceptions:
         scripts:
             cap: 170
             reason: Task and CI entry points are invoked by path and import sibling modules by name; the change-scoped budget and coverage reports joined them here.
+    test_files:
+        lycaon-den/src/platform/connection/app-connection.test.ts:
+            cap: 1150
+            reason: Den's app connection owns attachment, handshake, event subscription and cache reconcile in one module; it is split along those seams in #355.
+    ts_local_dependencies:
+        lycaon-den/src/platform/connection/app-connection.ts:
+            cap: 55
+            reason: Den's app connection owns attachment, handshake, event subscription and cache reconcile in one module; it is split along those seams in #355.
