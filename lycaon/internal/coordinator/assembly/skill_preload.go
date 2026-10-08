@@ -8,8 +8,8 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func (e *AssemblyEngine) skillProcedureInject(ctx context.Context, sess *api.Session, profileID string) (api.Message, bool) {
-	deps := e.deps()
+func (e *turnContextAssembler) skillProcedureInject(ctx context.Context, sess *api.Session, profileID string) (api.Message, bool) {
+	deps := e.surface.wiring
 	if deps.SkillPreload == nil || deps.Injects == nil || sess == nil {
 		return api.Message{}, false
 	}
@@ -27,8 +27,8 @@ func (e *AssemblyEngine) skillProcedureInject(ctx context.Context, sess *api.Ses
 
 // skillPointerInject names, in one line, the skill a turn's first loadable
 // tool call fitted without reading it. A read skill supersedes the pointer.
-func (e *AssemblyEngine) skillPointerInject(ctx context.Context, sess *api.Session, profileID string) (api.Message, bool) {
-	deps := e.deps()
+func (e *turnContextAssembler) skillPointerInject(ctx context.Context, sess *api.Session, profileID string) (api.Message, bool) {
+	deps := e.surface.wiring
 	if deps.SkillPointer == nil || deps.Injects == nil || sess == nil {
 		return api.Message{}, false
 	}

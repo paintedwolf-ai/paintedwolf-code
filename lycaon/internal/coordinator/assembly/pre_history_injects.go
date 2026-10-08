@@ -11,7 +11,7 @@ import (
 )
 
 // appendPreHistorySystemInjects adds the session's standing blocks before history.
-func (e *AssemblyEngine) appendPreHistorySystemInjects(
+func (e *turnContextAssembler) appendPreHistorySystemInjects(
 	ctx context.Context,
 	sess *api.Session,
 	turn *TurnAssemblyScratch,
@@ -28,7 +28,7 @@ func (e *AssemblyEngine) appendPreHistorySystemInjects(
 // interleaveSourceBriefs places each turn's source-change brief directly
 // before the prompt that opened the turn, where its window ends. Briefs are
 // fixed at turn open, so history stays append-only.
-func (e *AssemblyEngine) interleaveSourceBriefs(ctx context.Context, sess *api.Session, turn *TurnAssemblyScratch, messages []api.Message) []api.Message {
+func (e *turnContextAssembler) interleaveSourceBriefs(ctx context.Context, sess *api.Session, turn *TurnAssemblyScratch, messages []api.Message) []api.Message {
 	blocks := e.sourceBriefBlocks(ctx, sess, turn)
 	if len(blocks) == 0 {
 		return messages
@@ -48,11 +48,11 @@ func (e *AssemblyEngine) interleaveSourceBriefs(ctx context.Context, sess *api.S
 }
 
 // sourceBriefBlocks renders the session's turn briefs once per prompt run.
-func (e *AssemblyEngine) sourceBriefBlocks(ctx context.Context, sess *api.Session, turn *TurnAssemblyScratch) map[string]string {
+func (e *turnContextAssembler) sourceBriefBlocks(ctx context.Context, sess *api.Session, turn *TurnAssemblyScratch) map[string]string {
 	if turn != nil && turn.SourceBriefsLoaded {
 		return turn.SourceBriefBlocks
 	}
-	deps := e.deps()
+	deps := e.surface.wiring
 	var blocks map[string]string
 	if deps.TurnSourceBriefs != nil {
 		for openingID, brief := range deps.TurnSourceBriefs(ctx, sess) {
@@ -71,7 +71,7 @@ func (e *AssemblyEngine) sourceBriefBlocks(ctx context.Context, sess *api.Sessio
 }
 
 // buildTailSystemInjects returns dynamic blocks and the final coordinator board.
-func (e *AssemblyEngine) buildTailSystemInjects(
+func (e *turnContextAssembler) buildTailSystemInjects(
 	ctx context.Context,
 	sess *api.Session,
 	coordinator bool,
@@ -95,7 +95,7 @@ func (e *AssemblyEngine) buildTailSystemInjects(
 		}
 	}
 
-	deps := e.deps()
+	deps := e.surface.wiring
 	if deps.CommandJobs != nil {
 		jobs := deps.CommandJobs(sess.ID)
 		var held []heldcall.Running
@@ -145,13 +145,13 @@ func (e *AssemblyEngine) buildTailSystemInjects(
 const boardOrientRefreshLimit = 3
 
 // prepareCoordinatorBoard refreshes state after board-driven advancement.
-func (e *AssemblyEngine) prepareCoordinatorBoard(
+func (e *turnContextAssembler) prepareCoordinatorBoard(
 	ctx context.Context,
 	sess *api.Session,
 	frame inject.CoordinatorTurnFrame,
 	turn *TurnAssemblyScratch,
 ) (inject.CoordinatorTurnFrame, string, error) {
-	deps := e.deps()
+	deps := e.surface.wiring
 	if deps.Board == nil {
 		return frame, "", nil
 	}

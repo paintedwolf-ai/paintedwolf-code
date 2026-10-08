@@ -15,7 +15,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func (e *AssemblyEngine) renderCoordinatorStablePrompt(
+func (e *promptSurface) renderCoordinatorStablePrompt(
 	ctx context.Context,
 	pe prompts.PromptTemplateEngine,
 	promptRevision string,
@@ -37,7 +37,7 @@ func (e *AssemblyEngine) renderCoordinatorStablePrompt(
 	}
 	settingsFP += fmt.Sprintf(";verify_command=%s;overlay_promote=%t", strings.TrimSpace(implState.VerifyCommand), len(implState.PendingOverlayIDs) > 0)
 	webSearchEnabled := true
-	if fn := e.deps().WebSearchEnabled; fn != nil {
+	if fn := e.wiring.WebSearchEnabled; fn != nil {
 		webSearchEnabled = fn()
 	}
 	settingsFP += stableCapabilityFingerprint(vars, frame.Roster, webSearchEnabled)
@@ -77,21 +77,14 @@ func stableCapabilityFingerprint(vars map[string]any, roster *inject.AgentRoster
 	return fmt.Sprintf(";vision=%t;web_search=%t;effective_agents=%s", vision, webSearchEnabled, effectiveAgents)
 }
 
-func (e *AssemblyEngine) saveExecutionModeFamily(ctx context.Context, sessionID, family string) {
-	if e == nil || e.deps().SaveExecutionModeState == nil {
-		return
-	}
-	e.deps().SaveExecutionModeState(ctx, sessionID, family)
-}
-
-func (e *AssemblyEngine) loadExecutionModeState(ctx context.Context, sessionID string) surface.ExecutionModeState {
-	if e == nil || e.deps().LoadExecutionModeState == nil {
+func (e *promptSurface) loadExecutionModeState(ctx context.Context, sessionID string) surface.ExecutionModeState {
+	if e == nil || e.wiring.LoadExecutionModeState == nil {
 		return surface.ExecutionModeState{}
 	}
-	return e.deps().LoadExecutionModeState(ctx, sessionID)
+	return e.wiring.LoadExecutionModeState(ctx, sessionID)
 }
 
-func (e *AssemblyEngine) renderTripartiteCoordinatorPrompt(
+func (e *promptSurface) renderTripartiteCoordinatorPrompt(
 	ctx context.Context,
 	pe prompts.PromptTemplateEngine,
 	sess *api.Session,
@@ -115,7 +108,7 @@ func (e *AssemblyEngine) renderTripartiteCoordinatorPrompt(
 		rootCount = v
 	}
 	webSearchEnabled := true
-	if fn := e.deps().WebSearchEnabled; fn != nil {
+	if fn := e.wiring.WebSearchEnabled; fn != nil {
 		webSearchEnabled = fn()
 	}
 	roster := frame.Roster
@@ -231,11 +224,11 @@ func copyPromptVarsSorted(dst, src map[string]any) {
 	}
 }
 
-func (e *AssemblyEngine) implementSessionState(ctx context.Context, sess *api.Session) surface.ImplementSessionState {
-	if e == nil || e.deps().ImplementSessionState == nil || sess == nil {
+func (e *promptSurface) implementSessionState(ctx context.Context, sess *api.Session) surface.ImplementSessionState {
+	if e == nil || e.wiring.ImplementSessionState == nil || sess == nil {
 		return surface.ImplementSessionState{}
 	}
-	return e.deps().ImplementSessionState(ctx, sess)
+	return e.wiring.ImplementSessionState(ctx, sess)
 }
 
 func sessionPromptCacheKey(profile surface.TurnProfile, templateRef, agentType, projectDir, posture, settingsHash string, rootCount int, promptRevision string) string {
@@ -264,11 +257,11 @@ func rootCountFromVars(vars map[string]any) int {
 }
 
 // loadedTools returns the turn ledger's loaded set for the session.
-func (e *AssemblyEngine) loadedTools(sess *api.Session) map[string]bool {
-	if e == nil || sess == nil || e.deps().LoadedTools == nil {
+func (e *promptSurface) loadedTools(sess *api.Session) map[string]bool {
+	if e == nil || sess == nil || e.wiring.LoadedTools == nil {
 		return nil
 	}
-	return e.deps().LoadedTools(sess.ID)
+	return e.wiring.LoadedTools(sess.ID)
 }
 
 func loadedFingerprint(loaded map[string]bool) string {
