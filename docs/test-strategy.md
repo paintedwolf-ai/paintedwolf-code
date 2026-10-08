@@ -576,7 +576,8 @@ serve no later run while it evicted main's under the repository's 10 GB limit.
 Pull request, merge-queue, nightly, and tag runs therefore restore without
 saving. Keys follow toolchains and dependency locks, so main saves once per
 dependency change, and the workflow's summary reports total cache usage.
-The cache actions enforce the main-ref write boundary themselves. Pinned Go
+Release builds restore the shared Go cache; their separate cache retains only
+Tauri release builds. The cache actions enforce the main-ref write boundary themselves. Pinned Go
 analyzers have separate lint and vulnerability caches; their module versions
 and compiler identity are checked before use, including after a cache restore.
 A missing or mismatched binary is rebuilt before analysis. Cache warming enters

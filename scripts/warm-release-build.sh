@@ -20,7 +20,6 @@ export CGO_ENABLED=1
 (cd lycaon && go build -trimpath -tags=paintedwolf_release -o "${RUNNER_TEMP}/pw" ./cmd/lycaon)
 (cd lycaon && go build -trimpath -tags=paintedwolf_release -o "${RUNNER_TEMP}/pw-logs" ./cmd/pw-logs)
 
-set -euo pipefail
 bash scripts/sync-den-versions.sh
 # Cache warming compiles the shell without shipping it; an empty notices resource satisfies the manifest.
 [[ -f lycaon-den/src-tauri/THIRD-PARTY-NOTICES.md ]] || : > lycaon-den/src-tauri/THIRD-PARTY-NOTICES.md
