@@ -422,7 +422,13 @@ required check, `check`:
 The merge queue squashes each pull request onto main and tests the resulting
 commit; main then advances to exactly that commit, so CI does not run again on
 push. A required check that ran only on pull requests would admit commits that
-were never tested together. Neither tier uses path filters: generated
+were never tested together. When the queue merges, rebuilds, or drops a group,
+it deletes the group's branch but leaves its CI running; the scheduled
+[`merge-queue-prune.yml`](../.github/workflows/merge-queue-prune.yml) cancels
+those runs every ten minutes so they stop holding runners the live groups need.
+The aggregates run under `!cancelled()` rather than `always()`: they still judge
+failed and timed-out jobs, but a cancelled run no longer waits for a runner to
+schedule its verdict. Neither tier uses path filters: generated
 documentation, shipped prompts, and the changelog are Markdown the build and
 tests read.
 

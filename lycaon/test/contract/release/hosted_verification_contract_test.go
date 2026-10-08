@@ -65,8 +65,8 @@ func requireHostedGate(t *testing.T, jobs map[string]hostedJob, gate string, dep
 	got := hostedNeeds(t, job)
 	slices.Sort(got)
 	slices.Sort(dependencies)
-	if !slices.Equal(got, dependencies) || job.If != "always()" {
-		t.Fatalf("%s must always judge every dependency: got %v (%s), want %v", gate, got, job.If, dependencies)
+	if !slices.Equal(got, dependencies) || job.If != "${{ !cancelled() }}" {
+		t.Fatalf("%s must judge every dependency unless the run is cancelled: got %v (%s), want %v", gate, got, job.If, dependencies)
 	}
 	for _, step := range job.Steps {
 		if strings.HasPrefix(step.Run, "python3 scripts/ci_verification.py gate") && step.Env["NEEDS_JSON"] == "${{ toJSON(needs) }}" {
