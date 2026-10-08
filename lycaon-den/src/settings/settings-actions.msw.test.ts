@@ -13,7 +13,7 @@ import { emptyProjects } from "../test/projects-fixture.ts";
 const base = "http://127.0.0.1:8787";
 
 describe("settings-actions MSW", () => {
-  beforeAll(() => mswServer.listen({ onUnhandledRequest: "error" }));
+  beforeAll(() => mswServer.listen({ onUnhandledFrame: "error" }));
   afterEach(() => mswServer.resetHandlers());
   afterAll(() => mswServer.close());
 
