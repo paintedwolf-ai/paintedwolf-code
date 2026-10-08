@@ -35,6 +35,9 @@ exceptions:
             cap: 145
             reason: Predates the limits; fixes still land here while the package is decomposed (#271).
     source_files:
+        lycaon-den/src/platform/scrolling/scrollport-motion.ts:
+            cap: 1100
+            reason: ScrollportMotion is the single state machine that owns every scroll commit for a host; splitting it along its seams needs its own change verified on the scroll harness (#349).
         lycaon/internal/session/coordinator_wire.go:
             cap: 1100
             reason: Predates the limits; fixes still land here while the package is decomposed (#271).
