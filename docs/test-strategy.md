@@ -373,7 +373,8 @@ that reservation and assigns unused package slots to `GOMAXPROCS` for small
 scopes; race runs default to two runtime workers per package. Parallel tests per
 package obey the same per-process share; Vitest uses at most four workers.
 Fuzzing and Rust builds share the same budget. Runners use the worker limits
-assigned at admission; host load only adjusts timeouts. Hosted CI sets
+assigned at admission; host load only adjusts timeouts, and race runs scale
+scheduler-dependent waits at least 3×. Hosted CI sets
 `PW_TEST_HOST=dedicated`: one lane owns the runner, so the budget is every CPU
 (still at most eight) and a shared operation reserves all of it.
 
