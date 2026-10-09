@@ -26,7 +26,7 @@ type ContributionRuntime struct {
 
 func (s *Contributions) CaptureContributionFrame(ctx context.Context, projectID, projectDir string) (*contribframe.Frame, error) {
 	// Project scope affects provider readiness, not the device contribution set.
-	view := s.Sessions.Catalog().DeviceView(ctx)
+	view := s.Sessions.Catalog.DeviceView(ctx)
 	gen := s.MCP.CurrentGeneration(ctx, mcp.CallScope{ProjectID: projectID, ProjectDir: projectDir})
 	if frame, ok := s.cachedDeviceContributionFrame(view, gen); ok {
 		s.rememberContributionFrame(frame)
@@ -71,7 +71,7 @@ func (s *Contributions) invalidateDeviceContributionFrame() {
 
 // WarmContributionFrame compiles the published device catalog for first use.
 func (s *Contributions) WarmContributionFrame(ctx context.Context) error {
-	view := s.Sessions.Catalog().PublishedDeviceView(ctx)
+	view := s.Sessions.Catalog.PublishedDeviceView(ctx)
 	if view == nil {
 		return nil
 	}

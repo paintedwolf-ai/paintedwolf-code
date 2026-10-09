@@ -58,7 +58,7 @@ func NewContributionHTTPTestServer(t *testing.T) *hostapi.Server {
 	root := configlayout.FindModuleRoot()
 	boot := extpackstest.StockCatalog(t)
 	srv.Admin.SessionAdmin.Lifecycle.Sessions.SetEffectiveCatalogDeps(root, boot, nil)
-	srv.Admin.SessionAdmin.Lifecycle.Sessions.Catalog().SetCatalogViewCache(catalogview.NewCache(root, slog.Default()))
+	srv.Admin.SessionAdmin.Lifecycle.Sessions.Catalog.SetCatalogViewCache(catalogview.NewCache(root, slog.Default()))
 	return srv
 }
 
