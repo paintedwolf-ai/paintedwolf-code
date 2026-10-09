@@ -65,7 +65,7 @@ func TestCostTrackingOnPricedSummaryAndSSE(t *testing.T) {
 	testutil.FailErr(t, "Subscribe", err)
 	defer unsub()
 
-	if _, err := h.SessionMgr.Prompt(ctx, sess.ID, "hello"); err != nil {
+	if _, err := h.SessionMgr.Submissions.Prompt(ctx, sess.ID, "hello"); err != nil {
 		testutil.FailErr(t, "Prompt", err)
 	}
 
@@ -132,7 +132,7 @@ func TestCostTrackingOffUnpricedNoFetch(t *testing.T) {
 	sess, err := h.CreateHarnessSession(t, wire.CreateSessionRequest{}, t.TempDir())
 	testutil.FailErr(t, "CreateHarnessSession", err)
 
-	if _, err := h.SessionMgr.Prompt(ctx, sess.ID, "hello"); err != nil {
+	if _, err := h.SessionMgr.Submissions.Prompt(ctx, sess.ID, "hello"); err != nil {
 		testutil.FailErr(t, "Prompt", err)
 	}
 

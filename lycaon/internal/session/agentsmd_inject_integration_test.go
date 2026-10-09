@@ -4,12 +4,12 @@ package session_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/configlayout"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session"
@@ -66,12 +66,12 @@ func TestSessionWarmIncludesAgentsMDIndex(t *testing.T) {
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, projectID)
 	testutil.FailErr(t, "create session", err)
 	sess.WorkspacePath = projectDir
-	mgr.WarmAgentsMD(t.Context(), sess)
+	mgr.PolicyIndex.Warm(t.Context(), sess)
 
-	if _, err := mgr.Prompt(ctx, sess.ID, "hello"); err != nil {
+	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "hello"); err != nil {
 		testutil.FailErr(t, "Prompt", err)
 	}
-	if _, err := mgr.Prompt(ctx, sess.ID, "continue"); err != nil {
+	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "continue"); err != nil {
 		testutil.FailErr(t, "second Prompt", err)
 	}
 	reqs := rec.AllRequests()

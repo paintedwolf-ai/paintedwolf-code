@@ -129,7 +129,7 @@ func newWorkflowOrchestrator(t *testing.T, rec *recordingDelegation, spy *spyWor
 func createOrchestrateSession(t *testing.T, sqlDB db.Handle, sessMgr *session.Manager, dir string) *api.Session {
 	t.Helper()
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
-	sess, err := sessMgr.CreateForProject(context.Background(), testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
+	sess, err := sessMgr.Chats.CreateForProject(context.Background(), testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "sessMgr.CreateForProject failed", err)
 	return sess
 }

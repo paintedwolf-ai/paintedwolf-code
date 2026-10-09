@@ -7,9 +7,10 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/providerretry"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/spendguard"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/workflow"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -112,13 +113,13 @@ func TestContextFromPromptErrorGeneric(t *testing.T) {
 	if ctx["detail"] != "boom" {
 		t.Fatalf("generic error ctx = %#v want detail=boom", ctx)
 	}
-	if ctx := ContextFromPromptError(session.ErrGroundingEscalated); len(ctx) != 0 {
+	if ctx := ContextFromPromptError(guidance.ErrGroundingEscalated); len(ctx) != 0 {
 		t.Fatalf("grounding ctx = %#v want empty map", ctx)
 	}
 }
 
 func TestContextFromSpendCeilingErrorDisclosesPartialPricing(t *testing.T) {
-	ctx := ContextFromPromptError(&session.SessionSpendCeilingReached{
+	ctx := ContextFromPromptError(&spendguard.CeilingReached{
 		CeilingUSD: 5, SpentUSD: 5.12, Coverage: wire.CostEstimateLowerBound, UnpricedTokens: 100, UnknownChargedCalls: 2,
 	})
 	if ctx["ceiling_usd"] != "5.00" || ctx["spent_usd"] != "5.12" || ctx["estimate_coverage"] != "lower_bound" || ctx["unpriced_tokens"] != 100 || ctx["unknown_charged_calls"] != 2 {

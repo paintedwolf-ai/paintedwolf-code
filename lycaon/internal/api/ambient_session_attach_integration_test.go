@@ -257,7 +257,7 @@ attach:
 
 	mgr := session.NewManager(store, nil, nil, settings.DefaultSessionLimits())
 	mgr.SetWorkflowSessionView(wfMgr)
-	mgr.SetSessionWorkflowStop(wfMgr)
+	mgr.Stops.SetWorkflowStop(wfMgr)
 
 	srv := NewServer(requiredTestDeps(t, Dependencies{
 		Store: store, Projects: projReg, Sessions: mgr,

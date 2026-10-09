@@ -3,7 +3,6 @@ package session_test
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/testutil/oartest"
 	"strings"
 	"testing"
 
@@ -16,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/oartest"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -53,15 +53,15 @@ func TestPromptDoesNotQueueGreenfieldBuildKickForPlanReviewPolicyPrompt(t *testi
 	wirePromptTestManager(t, mgr)
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
 	mgr.SetProgressStore(progress.NewMemoryStore())
-	testutil.FailErr(t, "install anchor registry", mgr.InstallAnchorRegistry())
+	testutil.FailErr(t, "install anchor registry", mgr.Guidance.InstallAnchorRegistry())
 
 	ctx := context.Background()
-	sess, err := mgr.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureBuild)
+	sess, err := mgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureBuild)
 	testutil.FailErr(t, "create coordinator session", err)
-	if _, err := mgr.Prompt(ctx, sess.ID, incidentPlanReviewPolicyPrompt); err != nil {
-		testutil.FailErr(t, "mgr.Prompt failed", err)
+	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, incidentPlanReviewPolicyPrompt); err != nil {
+		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 	}
-	if id, ok := mgr.PendingKickIDForTest(sess.ID); ok && id != "" {
+	if id, ok := mgr.Runner.Coordinator.Kicks().PeekPendingKickID(sess.ID); ok && id != "" {
 		t.Fatalf("TakePendingKickID = %q want empty (greenfield-build kick must not queue)", id)
 	}
 	for _, msg := range rec.LastRequest().Messages {
@@ -84,9 +84,9 @@ func TestQueueCoordinatorKickPrependsOnPrompt(t *testing.T) {
 
 	sess, err := store.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
-	mgr.Emit(context.Background(), sess.ID, anchor.ComposeDone, anchor.Envelope{})
-	if _, err := mgr.Prompt(ctx, sess.ID, "continue"); err != nil {
-		testutil.FailErr(t, "mgr.Prompt failed", err)
+	mgr.Guidance.Emit(context.Background(), sess.ID, anchor.ComposeDone, anchor.Envelope{})
+	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "continue"); err != nil {
+		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 	}
 	req := rec.LastRequest()
 	foundKick := false
@@ -128,25 +128,25 @@ func TestPromptRenderFailurePreservesCoordinatorKickForRetry(t *testing.T) {
 	mgr := session.NewManager(st, rec, tools.NewStubRegistry(), settings.DefaultSessionLimits())
 	oartest.InstallCloseoutPolicy(t, mgr)
 	wirePromptTestManager(t, mgr)
-	testutil.FailErr(t, "install anchor registry", mgr.InstallAnchorRegistry())
+	testutil.FailErr(t, "install anchor registry", mgr.Guidance.InstallAnchorRegistry())
 	mgr.SetPromptEngine(failingKickPromptEngine{err: errors.New("template unavailable")})
 
 	ctx := context.Background()
 	sess, err := st.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	mgr.Emit(ctx, sess.ID, anchor.ComposeDone, anchor.Envelope{})
-	if _, err := mgr.Prompt(ctx, sess.ID, "continue"); err == nil {
+	mgr.Guidance.Emit(ctx, sess.ID, anchor.ComposeDone, anchor.Envelope{})
+	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "continue"); err == nil {
 		t.Fatal("Prompt error = nil, want kick render failure")
 	}
-	if id, ok := mgr.PendingKickIDForTest(sess.ID); !ok || !anchor.SameInform(id, anchor.ComposeDone) {
+	if id, ok := mgr.Runner.Coordinator.Kicks().PeekPendingKickID(sess.ID); !ok || !anchor.SameInform(id, anchor.ComposeDone) {
 		t.Fatalf("pending kick after render failure = (%q, %v), want compose-done", id, ok)
 	}
 
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
-	if _, err := mgr.Prompt(ctx, sess.ID, "continue"); err != nil {
+	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "continue"); err != nil {
 		testutil.FailErr(t, "retry prompt", err)
 	}
-	if id, ok := mgr.PendingKickIDForTest(sess.ID); ok || id != "" {
+	if id, ok := mgr.Runner.Coordinator.Kicks().PeekPendingKickID(sess.ID); ok || id != "" {
 		t.Fatalf("pending kick after successful retry = (%q, %v), want empty", id, ok)
 	}
 }

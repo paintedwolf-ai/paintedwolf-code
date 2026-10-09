@@ -73,13 +73,13 @@ func TestLoopRunsConcurrentTools(t *testing.T) {
 	})})
 	store := store.NewMemory()
 	deps := promptloop.StoreDeps(store)
-	deps.LoadedTools = workersLoaded
-	deps.Limits = loopTestLimits(2)
-	deps.LLM = client
-	deps.Tools = reg
-	deps.Policy = &recordingToolPolicy{}
-	deps.CoordinatorFrame = investigateCoordinatorContext()
-	deps.CommitEvidenceToolResult = commitEvidenceFromStore(store)
+	deps.Context.LoadedTools = workersLoaded
+	deps.Context.Limits = loopTestLimits(2)
+	deps.Model.LLM = client
+	deps.Context.Tools = reg
+	deps.Context.Policy = &recordingToolPolicy{}
+	deps.Context.CoordinatorFrame = investigateCoordinatorContext()
+	deps.Tools.CommitEvidenceToolResult = commitEvidenceFromStore(store)
 	loop := promptloop.NewPromptLoopForTest(deps)
 	ctx := context.Background()
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
@@ -110,14 +110,14 @@ func TestLoopCoordinatorReadsGetHandlesAcrossSurfaces(t *testing.T) {
 			})})
 			store := store.NewMemory()
 			deps := promptloop.StoreDeps(store)
-			deps.LoadedTools = workersLoaded
+			deps.Context.LoadedTools = workersLoaded
 			// The final iteration is prose-only.
-			deps.Limits = loopTestLimits(2)
-			deps.LLM = client
-			deps.Tools = reg
-			deps.Policy = &recordingToolPolicy{}
-			deps.CoordinatorFrame = staticCoordinatorContext{run: api.CoordinatorRunContext{WorkflowID: "release", CurrentPhase: "record", PhaseCoordinatorSurface: surface}}
-			deps.CommitEvidenceToolResult = commitEvidenceFromStore(store)
+			deps.Context.Limits = loopTestLimits(2)
+			deps.Model.LLM = client
+			deps.Context.Tools = reg
+			deps.Context.Policy = &recordingToolPolicy{}
+			deps.Context.CoordinatorFrame = staticCoordinatorContext{run: api.CoordinatorRunContext{WorkflowID: "release", CurrentPhase: "record", PhaseCoordinatorSurface: surface}}
+			deps.Tools.CommitEvidenceToolResult = commitEvidenceFromStore(store)
 			loop := promptloop.NewPromptLoopForTest(deps)
 			ctx := context.Background()
 			sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
@@ -169,12 +169,12 @@ func TestLoopParallelWorkerReadsCommitInCallOrder(t *testing.T) {
 	})})
 	store := store.NewMemory()
 	deps := promptloop.StoreDeps(store)
-	deps.LoadedTools = workersLoaded
-	deps.Limits = loopTestLimits(2)
-	deps.LLM = client
-	deps.Tools = reg
-	deps.Policy = &recordingToolPolicy{}
-	deps.CommitEvidenceToolResult = commitEvidenceFromStore(store)
+	deps.Context.LoadedTools = workersLoaded
+	deps.Context.Limits = loopTestLimits(2)
+	deps.Model.LLM = client
+	deps.Context.Tools = reg
+	deps.Context.Policy = &recordingToolPolicy{}
+	deps.Tools.CommitEvidenceToolResult = commitEvidenceFromStore(store)
 	loop := promptloop.NewPromptLoopForTest(deps)
 	ctx := context.Background()
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
@@ -261,12 +261,12 @@ func TestLoopMixedBatchSerializesWriteAfterParallelReads(t *testing.T) {
 	})})
 	store := store.NewMemory()
 	deps := promptloop.StoreDeps(store)
-	deps.LoadedTools = workersLoaded
-	deps.Limits = loopTestLimits(2)
-	deps.LLM = client
-	deps.Tools = reg
-	deps.Policy = &recordingToolPolicy{}
-	deps.CommitEvidenceToolResult = commitEvidenceFromStore(store)
+	deps.Context.LoadedTools = workersLoaded
+	deps.Context.Limits = loopTestLimits(2)
+	deps.Model.LLM = client
+	deps.Context.Tools = reg
+	deps.Context.Policy = &recordingToolPolicy{}
+	deps.Tools.CommitEvidenceToolResult = commitEvidenceFromStore(store)
 	loop := promptloop.NewPromptLoopForTest(deps)
 	ctx := context.Background()
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
@@ -305,11 +305,11 @@ func TestLoopDropsEmptyArgPhantomTaskBeforeExecution(t *testing.T) {
 	})})
 	store := store.NewMemory()
 	deps := promptloop.StoreDeps(store)
-	deps.LoadedTools = workersLoaded
-	deps.Limits = loopTestLimits(2)
-	deps.LLM = client
-	deps.Tools = reg
-	deps.Policy = &recordingToolPolicy{}
+	deps.Context.LoadedTools = workersLoaded
+	deps.Context.Limits = loopTestLimits(2)
+	deps.Model.LLM = client
+	deps.Context.Tools = reg
+	deps.Context.Policy = &recordingToolPolicy{}
 	loop := promptloop.NewPromptLoopForTest(deps)
 	ctx := context.Background()
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
@@ -362,13 +362,13 @@ func TestLoopPublishesClassifiedResultBeforeEvidence(t *testing.T) {
 	})})
 	mem := store.NewMemory()
 	deps := promptloop.StoreDeps(mem)
-	deps.LoadedTools = workersLoaded
-	deps.Limits = loopTestLimits(2)
-	deps.LLM = client
-	deps.Tools = reg
-	deps.Policy = &recordingToolPolicy{}
-	deps.CoordinatorFrame = investigateCoordinatorContext()
-	deps.AppendMessages = func(ctx context.Context, sessionID string, msgs ...api.Message) error {
+	deps.Context.LoadedTools = workersLoaded
+	deps.Context.Limits = loopTestLimits(2)
+	deps.Model.LLM = client
+	deps.Context.Tools = reg
+	deps.Context.Policy = &recordingToolPolicy{}
+	deps.Context.CoordinatorFrame = investigateCoordinatorContext()
+	deps.Projection.AppendMessages = func(ctx context.Context, sessionID string, msgs ...api.Message) error {
 		for _, msg := range msgs {
 			if msg.Role == api.MessageRoleTool {
 				note("append")
@@ -376,7 +376,7 @@ func TestLoopPublishesClassifiedResultBeforeEvidence(t *testing.T) {
 		}
 		return mem.AppendMessages(ctx, sessionID, msgs...)
 	}
-	deps.CommitEvidenceToolResult = func(ctx context.Context, sessionID string, sess *api.Session, toolName string, args map[string]any, content, artifactID string) (string, string, error) {
+	deps.Tools.CommitEvidenceToolResult = func(ctx context.Context, sessionID string, sess *api.Session, toolName string, args map[string]any, content, artifactID string) (string, string, error) {
 		note("evidence")
 		return mem.CommitVisualEvidenceToolResult(ctx, sessionID, sess.WorkspacePath, toolName, args, content, artifactID)
 	}
@@ -419,13 +419,13 @@ func TestLoopPublishesParallelResultAsEachFinishes(t *testing.T) {
 	})})
 	mem := store.NewMemory()
 	deps := promptloop.StoreDeps(mem)
-	deps.LoadedTools = workersLoaded
-	deps.Limits = loopTestLimits(2)
-	deps.LLM = client
-	deps.Tools = reg
-	deps.Policy = &recordingToolPolicy{}
-	deps.CommitEvidenceToolResult = commitEvidenceFromStore(mem)
-	deps.AppendMessages = func(ctx context.Context, sessionID string, msgs ...api.Message) error {
+	deps.Context.LoadedTools = workersLoaded
+	deps.Context.Limits = loopTestLimits(2)
+	deps.Model.LLM = client
+	deps.Context.Tools = reg
+	deps.Context.Policy = &recordingToolPolicy{}
+	deps.Tools.CommitEvidenceToolResult = commitEvidenceFromStore(mem)
+	deps.Projection.AppendMessages = func(ctx context.Context, sessionID string, msgs ...api.Message) error {
 		err := mem.AppendMessages(ctx, sessionID, msgs...)
 		for _, msg := range msgs {
 			if msg.Role == api.MessageRoleTool && msg.ToolResult != nil &&

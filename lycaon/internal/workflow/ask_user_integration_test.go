@@ -62,7 +62,7 @@ func setupAskUserIntegration(t *testing.T) *askUserFixture {
 
 	store := store.NewSQL(sqlDB)
 	sessMgr := session.NewManager(store, llm.NewMockProvider(nil), tools.NewStubRegistry(), settings.DefaultSessionLimits())
-	testutil.FailErr(t, "install anchor registry", sessMgr.InstallAnchorRegistry())
+	testutil.FailErr(t, "install anchor registry", sessMgr.Guidance.InstallAnchorRegistry())
 
 	manifest := askUserHostManifest()
 	manifestReg := workflowdef.NewRegistry(map[string]workflowdef.Manifest{
@@ -81,12 +81,12 @@ func setupAskUserIntegration(t *testing.T) *askUserFixture {
 	wfMgr.OnFeedbackPending = func(_ context.Context, sessionID, _ string) {
 		fx.pending = true
 		fx.kicks = append(fx.kicks, anchor.InformRender(anchor.FeedbackPending))
-		sessMgr.Emit(context.Background(), sessionID, anchor.FeedbackPending, anchor.Envelope{})
+		sessMgr.Guidance.Emit(context.Background(), sessionID, anchor.FeedbackPending, anchor.Envelope{})
 	}
 	wfMgr.OnFeedbackResolved = func(_ context.Context, sessionID, _, _, _ string) {
 		fx.kicks = append(fx.kicks, anchor.InformRender(anchor.FeedbackReceived))
-		sessMgr.DropCoordinatorKick(sessionID, anchor.FeedbackPending)
-		sessMgr.Emit(context.Background(), sessionID, anchor.FeedbackReceived, anchor.Envelope{})
+		sessMgr.Guidance.Drop(sessionID, anchor.FeedbackPending)
+		sessMgr.Guidance.Emit(context.Background(), sessionID, anchor.FeedbackReceived, anchor.Envelope{})
 	}
 
 	toolReg := tools.NewDefaultRegistry()
@@ -187,7 +187,7 @@ func TestAskUserTextResolveAndKick(t *testing.T) {
 	}
 
 	// Answer delivery replaces the pending-feedback kick.
-	if id, ok := fx.sessMgr.PendingKickIDForTest(fx.sess.ID); !ok || id != anchor.InformRender(anchor.FeedbackReceived) {
+	if id, ok := fx.sessMgr.Runner.Coordinator.Kicks().PeekPendingKickID(fx.sess.ID); !ok || id != anchor.InformRender(anchor.FeedbackReceived) {
 		t.Fatalf("pending kick after resolve = %q ok=%v want %s", id, ok, anchor.InformRender(anchor.FeedbackReceived))
 	}
 }

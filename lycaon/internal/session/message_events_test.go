@@ -3,17 +3,19 @@ package session_test
 import (
 	"context"
 	"encoding/json"
+	"testing"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"testing"
-	"time"
 )
 
 func TestAppendMessagesPublishesMessageSSE(t *testing.T) {
@@ -41,7 +43,7 @@ func TestAppendMessagesPublishesMessageSSE(t *testing.T) {
 	testutil.FailErr(t, "subscribe failed", err)
 	defer unsub()
 
-	if _, err := mgr.AppendWorkerSummary(ctx, sess.ID, session.WorkerSummaryInput{
+	if _, err := mgr.Workers.Summaries.Append(ctx, sess.ID, workeroutcomes.SummaryInput{
 		Summary: "worker done", JobID: "job-sse", ChildSessionID: child.ID, AgentType: "implementer",
 	}); err != nil {
 		testutil.FailErr(t, "mgr.AppendWorkerSummary failed", err)

@@ -51,7 +51,7 @@ func TestScanGuidancePrependDoesNotPersistMessages(t *testing.T) {
 	mgr.SetScanGuidance(adapter)
 
 	ctx := context.Background()
-	sess, err := mgr.CreateForProject(ctx, projectDir, api.SessionPostureBuild)
+	sess, err := mgr.Chats.CreateForProject(ctx, projectDir, api.SessionPostureBuild)
 	testutil.FailErr(t, "mgr.Create failed", err)
 
 	history := []api.Message{{Role: api.MessageRoleUser, Content: "next"}}
@@ -63,16 +63,16 @@ func TestScanGuidancePrependDoesNotPersistMessages(t *testing.T) {
 		t.Fatalf("role = %q", out[0].Role)
 	}
 
-	after, err := mgr.GetMessages(ctx, sess.ID)
+	after, err := mgr.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "mgr.GetMessages failed", err)
 	if len(after) != 0 {
 		t.Fatalf("message store must stay empty before persist, got %d", len(after))
 	}
 
-	if _, err := mgr.Prompt(ctx, sess.ID, "hello"); err != nil {
-		testutil.FailErr(t, "mgr.Prompt failed", err)
+	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "hello"); err != nil {
+		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 	}
-	msgs, err := mgr.GetMessages(ctx, sess.ID)
+	msgs, err := mgr.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "mgr.GetMessages failed", err)
 	for _, msg := range msgs {
 		if msg.Role == api.MessageRoleSystem {

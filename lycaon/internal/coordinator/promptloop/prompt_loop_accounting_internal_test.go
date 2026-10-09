@@ -22,16 +22,20 @@ import (
 func TestCompleteStreamVoidsReceiptWhenProviderRejectsBeforeStreaming(t *testing.T) {
 	tracker := costtest.NewTracker(t, nil)
 	providerErr := errors.New("request rejected before generation")
-	loop := &PromptLoop{Deps: PromptLoopDeps{
-		LLM:  &immediateFailingStreamLLM{err: providerErr},
-		Cost: tracker,
-		BuildMessages: func(_ context.Context, _ *api.Session, history []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
-			return history, nil
+	loop := NewPromptLoop(PromptLoopDeps{
+		Model: ModelDeps{
+			LLM:  &immediateFailingStreamLLM{err: providerErr},
+			Cost: tracker,
 		},
-	}}
+		Context: ContextDeps{
+			BuildMessages: func(_ context.Context, _ *api.Session, history []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
+				return history, nil
+			},
+		},
+	})
 	sess := &api.Session{ID: "s1", ProjectID: "project-1"}
 
-	_, _, err := modelTurn{loop}.completeStream(t.Context(), sess, sess.ID, []api.Message{{Role: api.MessageRoleUser, Content: "go"}}, "coordinator", "go", 0, 8, false, nil, nil)
+	_, _, err := loop.Model.completeStream(t.Context(), sess, sess.ID, []api.Message{{Role: api.MessageRoleUser, Content: "go"}}, "coordinator", "go", 0, 8, false, nil, nil)
 	if !errors.Is(err, providerErr) {
 		t.Fatalf("completeStream error = %v want provider rejection", err)
 	}
@@ -44,19 +48,23 @@ func TestCompleteStreamVoidsReceiptWhenProviderRejectsBeforeStreaming(t *testing
 
 func TestCompleteStreamDoesNotFailWhenAccountingIsUnavailable(t *testing.T) {
 	base := costtest.NewTracker(t, nil)
-	loop := &PromptLoop{Deps: PromptLoopDeps{
-		LLM: &usageStreamLLM{usage: modelcall.TokenUsage{PromptTokens: 4, CompletionTokens: 2}},
-		Cost: accountingFailureTracker{
-			CostTracker: base,
-			err:         errors.New("ledger unavailable"),
+	loop := NewPromptLoop(PromptLoopDeps{
+		Model: ModelDeps{
+			LLM: &usageStreamLLM{usage: modelcall.TokenUsage{PromptTokens: 4, CompletionTokens: 2}},
+			Cost: accountingFailureTracker{
+				CostTracker: base,
+				err:         errors.New("ledger unavailable"),
+			},
 		},
-		BuildMessages: func(_ context.Context, _ *api.Session, history []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
-			return history, nil
+		Context: ContextDeps{
+			BuildMessages: func(_ context.Context, _ *api.Session, history []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
+				return history, nil
+			},
 		},
-	}}
+	})
 	sess := &api.Session{ID: "s1", ProjectID: "project-1"}
 
-	completion, _, err := modelTurn{loop}.completeStream(t.Context(), sess, sess.ID, []api.Message{{Role: api.MessageRoleUser, Content: "go"}}, "coordinator", "go", 0, 8, false, nil, nil)
+	completion, _, err := loop.Model.completeStream(t.Context(), sess, sess.ID, []api.Message{{Role: api.MessageRoleUser, Content: "go"}}, "coordinator", "go", 0, 8, false, nil, nil)
 	testutil.FailErr(t, "completeStream", err)
 	if completion == nil || completion.Content != "ok" {
 		t.Fatalf("completion = %+v want successful model output", completion)
@@ -68,17 +76,23 @@ func TestCompleteStreamRecordsUsage(t *testing.T) {
 	tracker := costtest.NewTracker(t, nil)
 	hub := events.NewMemoryHub()
 	pub := &events.Publisher{Hub: hub}
-	loop := &PromptLoop{Deps: PromptLoopDeps{
-		LLM:    &usageStreamLLM{usage: modelcall.TokenUsage{PromptTokens: 3, CompletionTokens: 2}},
-		Cost:   tracker,
-		Events: pub,
-		Policy: &recordingToolPolicy{},
-		BuildMessages: func(_ context.Context, _ *api.Session, history []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
-			return history, nil
+	loop := NewPromptLoop(PromptLoopDeps{
+		Model: ModelDeps{
+			LLM:  &usageStreamLLM{usage: modelcall.TokenUsage{PromptTokens: 3, CompletionTokens: 2}},
+			Cost: tracker,
 		},
-	}}
+		Projection: ProjectionDeps{
+			Events: pub,
+		},
+		Context: ContextDeps{
+			Policy: &recordingToolPolicy{},
+			BuildMessages: func(_ context.Context, _ *api.Session, history []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
+				return history, nil
+			},
+		},
+	})
 	sess := &api.Session{ID: "s1", ProjectID: projectID, WorkspacePath: t.TempDir()}
-	if _, _, err := (modelTurn{loop}).completeStream(context.Background(), sess, "s1", []api.Message{{Role: api.MessageRoleUser, Content: "go"}}, "coordinator", "go", 0, 8, false, nil, nil); err != nil {
+	if _, _, err := loop.Model.completeStream(context.Background(), sess, "s1", []api.Message{{Role: api.MessageRoleUser, Content: "go"}}, "coordinator", "go", 0, 8, false, nil, nil); err != nil {
 		testutil.FailErr(t, "modelTurn{loop}.completeStream failed", err)
 	}
 	summary, err := tracker.Summary(context.Background(), api.CostScopeSession, "s1", "")
@@ -92,13 +106,19 @@ func TestRecordUsagePublishesRootScopedRollupForWorkerTurns(t *testing.T) {
 	projectID := eventFixtureProject(t)
 	tracker := costtest.NewTracker(t, nil)
 	hub := events.NewMemoryHub()
-	loop := &PromptLoop{Deps: PromptLoopDeps{
-		Cost:   tracker,
-		Events: &events.Publisher{Hub: hub},
-		RootSessionID: func(context.Context, string) string {
-			return "root-1"
+	loop := NewPromptLoop(PromptLoopDeps{
+		Model: ModelDeps{
+			Cost: tracker,
 		},
-	}}
+		Projection: ProjectionDeps{
+			Events: &events.Publisher{Hub: hub},
+		},
+		Context: ContextDeps{
+			RootSessionID: func(context.Context, string) string {
+				return "root-1"
+			},
+		},
+	})
 	worker := &api.Session{ID: "w1", ProjectID: projectID, ParentSessionID: "root-1"}
 
 	subCtx, cancel := context.WithCancel(context.Background())
@@ -107,7 +127,7 @@ func TestRecordUsagePublishesRootScopedRollupForWorkerTurns(t *testing.T) {
 	testutil.FailErr(t, "hub.Subscribe failed", err)
 	defer unsub()
 
-	testutil.FailErr(t, "recordUsage", modelTurn{loop}.recordUsage(
+	testutil.FailErr(t, "recordUsage", loop.Model.recordUsage(
 		context.Background(), worker, "call-1", "mock", "m", modelcall.CompletionRequest{},
 		&modelcall.Completion{Usage: modelcall.TokenUsage{PromptTokens: 5, CompletionTokens: 2}}))
 	hub.FlushDebounced()
@@ -136,12 +156,16 @@ func TestRecordUsagePublishesRootScopedRollupForWorkerTurns(t *testing.T) {
 
 func TestRecordAbandonedTurnUsageSurvivesCancellation(t *testing.T) {
 	tracker := costtest.NewTracker(t, nil)
-	loop := &PromptLoop{Deps: PromptLoopDeps{Cost: tracker}}
+	loop := NewPromptLoop(PromptLoopDeps{
+		Model: ModelDeps{
+			Cost: tracker,
+		},
+	})
 	sess := &api.Session{ID: "s1", ProjectID: "proj-1"}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	modelTurn{loop}.recordAbandonedTurnUsage(ctx, sess, "call-1", "mock", "m", modelcall.CompletionRequest{},
+	loop.Model.recordAbandonedTurnUsage(ctx, sess, "call-1", "mock", "m", modelcall.CompletionRequest{},
 		&modelcall.Completion{Usage: modelcall.TokenUsage{PromptTokens: 4, CompletionTokens: 1}})
 
 	summary, err := tracker.Summary(context.Background(), api.CostScopeSession, "s1", "")
@@ -153,12 +177,16 @@ func TestRecordAbandonedTurnUsageSurvivesCancellation(t *testing.T) {
 
 func TestRecordUsageMeasuresInterruptedTurnWithoutProviderUsage(t *testing.T) {
 	tracker := costtest.NewTracker(t, nil)
-	loop := &PromptLoop{Deps: PromptLoopDeps{Cost: tracker}}
+	loop := NewPromptLoop(PromptLoopDeps{
+		Model: ModelDeps{
+			Cost: tracker,
+		},
+	})
 	sess := &api.Session{ID: "s1", ProjectID: "proj-1"}
 	req := modelcall.CompletionRequest{Messages: []api.Message{{Role: api.MessageRoleUser, Content: strings.Repeat("prompt ", 100)}}}
 	delivered := &modelcall.Completion{Content: strings.Repeat("answer ", 40)}
 
-	testutil.FailErr(t, "recordUsage", modelTurn{loop}.recordUsage(
+	testutil.FailErr(t, "recordUsage", loop.Model.recordUsage(
 		context.Background(), sess, "call-1", "mock", "m", req, delivered))
 
 	summary, err := tracker.Summary(context.Background(), api.CostScopeSession, "s1", "")
@@ -177,14 +205,18 @@ func TestRecordUsageMeasuresInterruptedTurnWithoutProviderUsage(t *testing.T) {
 
 func TestRecordUsageLeavesEmptyTurnUnreported(t *testing.T) {
 	tracker := costtest.NewTracker(t, nil)
-	loop := &PromptLoop{Deps: PromptLoopDeps{Cost: tracker}}
+	loop := NewPromptLoop(PromptLoopDeps{
+		Model: ModelDeps{
+			Cost: tracker,
+		},
+	})
 	sess := &api.Session{ID: "s1", ProjectID: "proj-1"}
 	testutil.FailErr(t, "BeginCall", tracker.BeginCall(context.Background(), cost.UsageEvent{
 		ID: "call-1", SessionID: "s1", ProjectID: "proj-1", ProviderID: "mock", Model: "m",
 		Caller: cost.CallerCoordinator,
 	}))
 
-	testutil.FailErr(t, "recordUsage", modelTurn{loop}.recordUsage(
+	testutil.FailErr(t, "recordUsage", loop.Model.recordUsage(
 		context.Background(), sess, "call-1", "mock", "m", modelcall.CompletionRequest{}, nil))
 
 	summary, err := tracker.Summary(context.Background(), api.CostScopeSession, "s1", "")
@@ -196,14 +228,18 @@ func TestRecordUsageLeavesEmptyTurnUnreported(t *testing.T) {
 
 func TestRecordUsageRecordsFallbackSelection(t *testing.T) {
 	tracker := costtest.NewTracker(t, nil)
-	loop := &PromptLoop{Deps: PromptLoopDeps{Cost: tracker}}
+	loop := NewPromptLoop(PromptLoopDeps{
+		Model: ModelDeps{
+			Cost: tracker,
+		},
+	})
 	sess := &api.Session{ID: "s1", ProjectID: "proj-1"}
 	testutil.FailErr(t, "BeginCall", tracker.BeginCall(t.Context(), cost.UsageEvent{
 		ID: "call-1", SessionID: sess.ID, ProjectID: sess.ProjectID,
 		Caller: cost.CallerCoordinator,
 	}))
 
-	testutil.FailErr(t, "recordUsage", modelTurn{loop}.recordUsage(
+	testutil.FailErr(t, "recordUsage", loop.Model.recordUsage(
 		t.Context(), sess, "call-1", "mock", "mock", modelcall.CompletionRequest{},
 		&modelcall.Completion{Content: "fixture", Usage: modelcall.TokenUsage{PromptTokens: 4, CompletionTokens: 2}, Fallback: true}))
 
@@ -215,13 +251,15 @@ func TestRecordUsageRecordsFallbackSelection(t *testing.T) {
 }
 
 func TestWorkerContextUsage(t *testing.T) {
-	loop := &PromptLoop{Deps: PromptLoopDeps{
-		CompactionConfig: staticCompactionConfig,
-	}}
-	if got := loop.workerContextUsage(context.Background(), nil, 0); got != nil {
+	loop := NewPromptLoop(PromptLoopDeps{
+		Model: ModelDeps{
+			CompactionConfig: staticCompactionConfig,
+		},
+	})
+	if got := loop.Nudges.workerContextUsage(context.Background(), nil, 0); got != nil {
 		t.Fatalf("workerContextUsage(0) = %+v want nil (no tokens yet)", got)
 	}
-	usage := loop.workerContextUsage(context.Background(), nil, 1234)
+	usage := loop.Nudges.workerContextUsage(context.Background(), nil, 1234)
 	if usage == nil {
 		t.Fatal("workerContextUsage(1234) = nil want populated")
 	}
@@ -235,15 +273,15 @@ func TestWorkerContextUsage(t *testing.T) {
 		t.Fatalf("CompactionThreshold = %d want > 0", usage.CompactionThreshold)
 	}
 
-	noCfg := (&PromptLoop{}).workerContextUsage(context.Background(), nil, 50)
+	noCfg := (NewPromptLoop(PromptLoopDeps{})).workerContextUsage(context.Background(), nil, 50)
 	if noCfg == nil || noCfg.PromptTokens != 50 || noCfg.Window != 0 {
 		t.Fatalf("workerContextUsage without compaction config = %+v want prompt 50, window 0", noCfg)
 	}
 }
 
 func TestResolveUsageMetaPrefersCompletionFields(t *testing.T) {
-	loop := &PromptLoop{}
-	pid, model := modelTurn{loop}.resolveUsageMeta(&api.Session{}, &modelcall.Completion{
+	loop := NewPromptLoop(PromptLoopDeps{})
+	pid, model := loop.Model.resolveUsageMeta(&api.Session{}, &modelcall.Completion{
 		ProviderID: "openai",
 		Model:      "gpt-4",
 	})
@@ -258,8 +296,12 @@ func TestResolveUsageMetaUsesRouterSelection(t *testing.T) {
 		Coordinator: llm.ModelRef{ProviderID: "openai", Model: "gpt-4o"},
 	})
 	svc := &llm.Service{Registry: &llm.Registry{}, Router: llm.NewStaticModelRouter(policy)}
-	loop := &PromptLoop{Deps: PromptLoopDeps{LLMService: svc}}
-	pid, model := modelTurn{loop}.resolveUsageMeta(&api.Session{}, &modelcall.Completion{})
+	loop := NewPromptLoop(PromptLoopDeps{
+		Model: ModelDeps{
+			LLMService: svc,
+		},
+	})
+	pid, model := loop.Model.resolveUsageMeta(&api.Session{}, &modelcall.Completion{})
 	if pid != "openai" || model != "gpt-4o" {
 		t.Fatalf("meta = %q %q", pid, model)
 	}

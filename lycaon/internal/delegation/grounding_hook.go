@@ -94,7 +94,7 @@ func (g *GroundingCoordinator) AfterPrompt(ctx context.Context, sessionID string
 	}
 	// Aggregate friction includes rejects from different grounding rules.
 	if g.Sessions != nil {
-		g.Sessions.RecordGroundingFriction(ctx, sessionID)
+		g.Sessions.Runner.Closeouts.RecordGroundingFriction(ctx, sessionID)
 	}
 	if g.Pipeline == nil || !g.Pipeline.AnchorEnforced(oar.AnchorCoordinatorPostTurn) {
 		return nil
@@ -108,7 +108,7 @@ func (g *GroundingCoordinator) AfterPrompt(ctx context.Context, sessionID string
 	}
 	g.publishGroundingVerdict(ctx, sessionID, delegationID, verdict)
 	if g.IsEscalated(sessionID) {
-		return session.ErrGroundingEscalated
+		return guidance.ErrGroundingEscalated
 	}
 	return nil
 }
@@ -224,7 +224,7 @@ func (g *GroundingCoordinator) summaryTags(ctx context.Context, sessionID string
 	if g.Sessions == nil {
 		return nil
 	}
-	msgs, err := g.Sessions.GetMessages(ctx, sessionID)
+	msgs, err := g.Sessions.Transcript.GetMessages(ctx, sessionID)
 	if err != nil {
 		return nil
 	}

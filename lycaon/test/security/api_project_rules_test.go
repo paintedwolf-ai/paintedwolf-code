@@ -67,7 +67,7 @@ rules:
 		project.ProjectScope{ProjectID: p.ID, WorkspacePath: projectDir}, worker.DefaultWorkersConfig()))
 	jobID, err := h.WorkerQueue.Enqueue(ctx, task)
 	testutil.FailErr(t, "enqueue worker job", err)
-	child, err := h.SessionMgr.SpawnChild(ctx, parent.ID, wire.SpawnChildRequest{
+	child, err := h.SessionMgr.Workers.SpawnChild(ctx, parent.ID, wire.SpawnChildRequest{
 		AgentType:   "implementer",
 		Prompt:      "attempt project write",
 		WorkerJobID: jobID,
@@ -76,10 +76,10 @@ rules:
 	testutil.FailErr(t, "link child", h.WorkerQueue.SetChildSessionID(ctx, jobID, child.ID))
 	// A worker child's turn resolves its queued task from the bound job.
 	workerCtx := workercontext.WithJob(ctx, jobID)
-	if _, err := h.SessionMgr.Prompt(workerCtx, child.ID, "[[scn:project_rule_write]] attempt project write"); err != nil {
+	if _, err := h.SessionMgr.Submissions.Prompt(workerCtx, child.ID, "[[scn:project_rule_write]] attempt project write"); err != nil {
 		testutil.FailErr(t, "prompt denied write", err)
 	}
-	messages, err := h.SessionMgr.GetMessages(t.Context(), child.ID)
+	messages, err := h.SessionMgr.Transcript.GetMessages(t.Context(), child.ID)
 	testutil.FailErr(t, "read denied tool result", err)
 	for _, tool := range recording.LastRequest().Tools {
 		if tool.Name == "write" {

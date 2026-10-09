@@ -49,7 +49,7 @@ type Runtime struct {
 func NewRuntime(deps RuntimeDeps) *Runtime {
 	kicks := &kick.KickEngine{}
 	return &Runtime{
-		loop:               &promptloop.PromptLoop{},
+		loop:               promptloop.NewPromptLoop(promptloop.PromptLoopDeps{}),
 		loopDeps:           deps.LoopDeps,
 		assembler:          &assembly.AssemblyEngine{},
 		assemblyDepsFn:     deps.AssemblyDeps,
@@ -70,13 +70,10 @@ func (r *Runtime) refreshDepsLocked() {
 		r.coordLoop = loopwake.NewLoopEngine()
 	}
 	if r.loopDeps != nil {
-		if r.loop == nil {
-			r.loop = &promptloop.PromptLoop{}
-		}
-		r.loop.Deps = r.loopDeps()
-		// Direct binding avoids reentering depsMu.
-		r.loop.Deps.ObservePrompt = r.coordLoop.ObservePrompt
-		r.loop.Deps.CommitWorkerContext = r.assemblyEngineLocked().CommitWorkerContext
+		deps := r.loopDeps()
+		deps.Context.ObservePrompt = r.coordLoop.ObservePrompt
+		deps.Context.CommitWorkerContext = r.assemblyEngineLocked().CommitWorkerContext
+		r.loop = promptloop.NewPromptLoop(deps)
 	}
 	if r.assemblyDepsFn != nil {
 		deps := r.assemblyDepsFn()
@@ -113,13 +110,13 @@ func (r *Runtime) RunPrompt(ctx context.Context, in promptloop.PromptRunInput) (
 // PromptLoop returns the loop instance with deps refreshed (tests and parity checks).
 func (r *Runtime) PromptLoop() *promptloop.PromptLoop {
 	if r == nil {
-		return &promptloop.PromptLoop{}
+		return promptloop.NewPromptLoop(promptloop.PromptLoopDeps{})
 	}
 	r.depsMu.Lock()
 	defer r.depsMu.Unlock()
 	r.refreshDepsLocked()
 	if r.loop == nil {
-		r.loop = &promptloop.PromptLoop{}
+		r.loop = promptloop.NewPromptLoop(promptloop.PromptLoopDeps{})
 	}
 	return r.loop
 }

@@ -97,7 +97,7 @@ func TestWorkerLegInjectRecordsDeliveredSiblingNotes(t *testing.T) {
 		t.Fatalf("commit worker context: %v", err)
 	}
 	if !spy.called {
-		t.Fatal("SiblingNoteDelivery.CommitSiblingNotes was not called for the worker leg")
+		t.Fatal("SiblingNoteDelivery.Notes.CommitSiblingNotes was not called for the worker leg")
 	}
 	if len(spy.got) != 1 || spy.got[0].Agent != "job-2" || spy.got[0].Ref != "AGENTS.md:1" {
 		t.Fatalf("delivered notes = %+v want the single peer note", spy.got)

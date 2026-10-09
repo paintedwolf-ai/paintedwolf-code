@@ -44,7 +44,7 @@ func newScratchFixture(t *testing.T) scratchFixture {
 
 func (f scratchFixture) toolContext(t *testing.T, sess *api.Session) tools.ToolContext {
 	t.Helper()
-	tctx, err := f.mgr.buildToolContext(t.Context(), sess, tools.DefaultToolProfileID, inject.Machine{})
+	tctx, err := f.mgr.ToolContext.Build(t.Context(), sess, tools.DefaultToolProfileID, inject.Machine{})
 	testutil.FailErr(t, "build tool context", err)
 	return tctx
 }
@@ -85,7 +85,7 @@ func TestDeletingAChatRemovesScratchForItsWholeTree(t *testing.T) {
 	testutil.FailErr(t, "create unrelated session", err)
 	f.toolContext(t, other)
 
-	testutil.FailErr(t, "delete chat", f.mgr.DeleteSession(t.Context(), f.root.ID))
+	testutil.FailErr(t, "delete chat", f.mgr.Chats.Delete(t.Context(), f.root.ID))
 	for _, id := range []string{f.root.ID, f.worker.ID} {
 		if _, err := os.Stat(f.dir(id)); !os.IsNotExist(err) {
 			t.Fatalf("scratch for %q survived its chat's deletion: %v", id, err)
@@ -103,9 +103,9 @@ func TestReclaimScratchKeepsChatsWithATurnInFlight(t *testing.T) {
 	busyFile := filepath.Join(f.dir(f.worker.ID), "draft.md")
 	testutil.FailErr(t, "write worker scratch", os.WriteFile(busyFile, []byte("x"), 0o600))
 
-	turn := f.mgr.promptState.Prompt.Acquire(f.worker.ID)
+	turn := f.mgr.Runner.Execution.Prompt.Acquire(f.worker.ID)
 	turn.Lock()
-	err := f.mgr.ReclaimScratch(t.Context())
+	err := f.mgr.Runner.Execution.ReclaimScratch(t.Context())
 	turn.Unlock()
 	testutil.FailErr(t, "reclaim scratch", err)
 

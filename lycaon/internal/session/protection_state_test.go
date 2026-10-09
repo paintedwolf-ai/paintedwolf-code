@@ -15,6 +15,8 @@ import (
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
+	"github.com/lycaon/lycaon/internal/session/protection"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -44,7 +46,7 @@ func TestBuildProtectionStateUnknownVsActive(t *testing.T) {
 	testutil.FailErr(t, "start", err)
 	t.Cleanup(func() { _, _ = reg.Stop("sess-prot", handle) })
 
-	prot := session.BuildProtectionState("sess-prot", reg)
+	prot := protection.BuildProtectionState("sess-prot", reg)
 	if prot == nil || len(prot.BackgroundDirect) != 1 {
 		t.Fatalf("prot = %+v", prot)
 	}
@@ -56,7 +58,7 @@ func TestBuildProtectionStateUnknownVsActive(t *testing.T) {
 	}
 
 	testutil.FailErr(t, "mark unknown", reg.MarkDirectIPLivenessUnknown("sess-prot", handle))
-	prot = session.BuildProtectionState("sess-prot", reg)
+	prot = protection.BuildProtectionState("sess-prot", reg)
 	if prot.BackgroundDirect[0].Status != api.SessionBackgroundDirectStatusUnknown {
 		t.Fatalf("want unknown, got %s", prot.BackgroundDirect[0].Status)
 	}
@@ -85,27 +87,27 @@ func TestProtectionStateReconstructEmitsOnceWithoutDestinations(t *testing.T) {
 	testutil.FailErr(t, "start", err)
 	t.Cleanup(func() { _, _ = reg.Stop("sess-rec", handle) })
 
-	mgr := session.NewManager(nil, nil, nil, settings.DefaultSessionLimits())
+	mgr := session.NewManager(sessionstore.NewMemory(), nil, nil, settings.DefaultSessionLimits())
 	mgr.SetBackgroundRegistry(reg)
 	var emits atomic.Int32
-	mgr.SetDirectIPReconstructHook(func(sessionID, gotHandle, toolCallID string) {
+	mgr.Protection.SetDirectIPReconstructHook(func(sessionID, gotHandle, toolCallID string) {
 		emits.Add(1)
 		if sessionID != "sess-rec" || gotHandle != handle || toolCallID != "call-9" {
 			t.Errorf("unexpected reconstruct args: %s %s %s", sessionID, gotHandle, toolCallID)
 		}
 	})
 
-	_ = mgr.ProtectionStateForSession("sess-rec")
-	_ = mgr.ProtectionStateForSession("sess-rec")
+	_ = mgr.Protection.ProtectionStateForSession("sess-rec")
+	_ = mgr.Protection.ProtectionStateForSession("sess-rec")
 	if got := emits.Load(); got != 1 {
 		t.Fatalf("reconstruct emits = %d want 1", got)
 	}
 
 	var replacementEmits atomic.Int32
-	mgr.SetDirectIPReconstructHook(func(_, _, _ string) {
+	mgr.Protection.SetDirectIPReconstructHook(func(_, _, _ string) {
 		replacementEmits.Add(1)
 	})
-	_ = mgr.ProtectionStateForSession("sess-rec")
+	_ = mgr.Protection.ProtectionStateForSession("sess-rec")
 	if got := replacementEmits.Load(); got != 1 {
 		t.Fatalf("replacement hook emits = %d want 1", got)
 	}
@@ -146,7 +148,7 @@ func TestRevokeChatGrantAfterRecoveryKeepsBackgroundWarning(t *testing.T) {
 	if len(rt.AppliedGrants("sess-rev")) != 0 {
 		t.Fatal("revoke must affect next boundary")
 	}
-	prot := session.BuildProtectionState("sess-rev", reg)
+	prot := protection.BuildProtectionState("sess-rev", reg)
 	if prot == nil || len(prot.BackgroundDirect) != 1 {
 		t.Fatalf("still-running direct process must keep warning, prot=%+v", prot)
 	}
@@ -158,7 +160,7 @@ func TestProtectionStateReportsStartupOverrides(t *testing.T) {
 	t.Setenv("LYCAON_SANDBOX_DENY_READ", "off")
 	root := t.TempDir()
 	t.Setenv("LYCAON_SANDBOX_WRITE_ROOTS", root)
-	prot := session.BuildProtectionState("session", nil)
+	prot := protection.BuildProtectionState("session", nil)
 	if prot == nil || !prot.ControlPlaneReadsAllowed || len(prot.AdditionalWriteRoots) != 1 {
 		t.Fatalf("startup overrides = %+v", prot)
 	}

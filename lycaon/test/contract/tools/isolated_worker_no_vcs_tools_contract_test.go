@@ -14,7 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/workeradmission"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -51,8 +51,8 @@ func TestMutationCapableWorkersAreAlwaysIsolated(t *testing.T) {
 			continue
 		}
 		checked++
-		code := session.ValidateTaskScopeForAgent(agent.ID, api.TaskScope{Mode: api.TaskScopeModeRead})
-		if code != session.TaskScopeWriteRequiredCode {
+		code := workeradmission.ValidateTaskScopeForAgent(agent.ID, api.TaskScope{Mode: api.TaskScopeModeRead})
+		if code != workeradmission.TaskScopeWriteRequiredCode {
 			t.Errorf("mutation-capable worker %q accepts scope.mode read (code %q) — it is no "+
 				"longer guaranteed an isolated branch", agent.ID, code)
 		}

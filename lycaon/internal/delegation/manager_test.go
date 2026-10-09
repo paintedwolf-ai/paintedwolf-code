@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -106,7 +107,7 @@ func TestDelegationSingleLegDispatchAndCloseout(t *testing.T) {
 		t.Fatalf("implementer dispatch scope=%+v overlay_id=%q, want write overlay", task.EffectiveScope(), task.OverlayID)
 	}
 
-	exec := worker.NewLocalWorkerExecutor(mgr, queue)
+	exec := worker.NewLocalWorkerExecutor(mgr.Workers, queue, mgr.Workspace, mgr.Submissions, mgr.Transcript, mgr.Runner.Execution, mgr.Workers.Cancel, mgr.Workers.Cancellations)
 	exec.SetPromptInjects(promptstest.InjectRenderer(t))
 	poller := worker.NewLocalWorkerPoller(queue, exec, worker.DefaultWorkersConfig(), &worker.SessionOutcomeBridge{Inner: delegationMgr})
 	queue.SetRunningCancel(poller.Abort)
@@ -229,7 +230,7 @@ func TestBudgetExhaustedLegResumesPreservedChild(t *testing.T) {
 	}
 	testutil.FailErr(t, "bind child", queue.SetChildSessionID(ctx, prior.ID, "child-session"))
 	testutil.FailErr(t, "record budget exhaustion", manager.RecordOutcome(ctx, delegation.ID, leg.ID, dispatched.WorkerID, api.WorkerResult{
-		Status: "partial", HintCode: session.WorkerBudgetExhaustedCode, Summary: "survey is incomplete",
+		Status: "partial", HintCode: workeroutcomes.WorkerBudgetExhaustedCode, Summary: "survey is incomplete",
 	}))
 	pending, err := store.GetLeg(ctx, delegation.ID, leg.ID)
 	testutil.FailErr(t, "load retry pending leg", err)

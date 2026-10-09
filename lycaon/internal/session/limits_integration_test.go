@@ -40,8 +40,8 @@ func TestManagerEffectiveLimitsUsesProjectOverlay(t *testing.T) {
 	mgr := session.NewManager(store.NewMemory(), llm.NewMockProvider(&llm.MockConfig{
 		Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}},
 	}), tools.NewStubRegistry(), settings.DefaultSessionLimits())
-	mgr.SetLimitsProvider(settings.ProjectLimitsAdapter{Store: limitsStore})
-	mgr.SetMaxIterations(99)
+	mgr.Limits.SetProvider(settings.ProjectLimitsAdapter{Store: limitsStore})
+	mgr.Limits.SetMaxIterations(99)
 
 	// Project limits require project settings trust.
 	projectID := session.RegisterProjectContextForTest(t, mgr, projectDir)

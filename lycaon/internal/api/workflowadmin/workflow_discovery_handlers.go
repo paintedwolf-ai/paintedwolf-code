@@ -37,7 +37,7 @@ func (s *Handler) HandleListWorkflows(w http.ResponseWriter, r *http.Request) {
 	if projectID != "" {
 		catalog = workflow.ManifestResolver{
 			SessionStore: s.Catalog.SessionStore,
-			CatalogFor:   s.Sessions.Catalog().CatalogForProjectDir(projectID),
+			CatalogFor:   s.Sessions.Catalog.CatalogForProjectDir(projectID),
 			// Project workflows retain their trust gate.
 			ProjectTierApplies: s.Catalog.ProjectTierApplies,
 		}

@@ -120,7 +120,7 @@ type executionWorkerBranch struct {
 	root string
 }
 
-func (b executionWorkerBranch) EnsureWorkerBranch(_ context.Context, tc tools.ToolContext) (tools.ToolContext, error) {
+func (b executionWorkerBranch) EnsureBranch(_ context.Context, tc tools.ToolContext) (tools.ToolContext, error) {
 	tc.WorkerBranchRoot = b.root
 	return tc, nil
 }

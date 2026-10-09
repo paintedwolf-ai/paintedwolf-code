@@ -52,7 +52,7 @@ func TestFollowUpAfterCompletedWorkflowCanAskAndReceiveAnswer(t *testing.T) {
 		t.Fatal("fixture must have no active workflow before the follow-up")
 	}
 
-	_, err = h.SessionMgr.Prompt(ctx, sess.ID, "Start again with a native Swift game.")
+	_, err = h.SessionMgr.Submissions.Prompt(ctx, sess.ID, "Start again with a native Swift game.")
 	testutil.FailErr(t, "submit follow-up", err)
 	if calls.Load() != 1 {
 		t.Fatalf("model calls = %d, want one call then park on the question", calls.Load())

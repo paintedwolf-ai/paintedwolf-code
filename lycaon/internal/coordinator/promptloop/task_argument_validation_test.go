@@ -92,11 +92,11 @@ func runTaskArgumentCall(t *testing.T, call api.ToolCall) (invocation.Settlement
 	testutil.FailErr(t, "create session", err)
 	rec := newRecordingRecorder()
 	deps := promptloop.StoreDeps(mem)
-	deps.LoadedTools = workersLoaded
-	deps.Tools, deps.Invocations = reg, rec
-	deps.Limits = loopTestLimits(2)
-	deps.LLM = &sequentialLLMClient{completions: []*modelcall.Completion{{ToolCalls: []api.ToolCall{call}}, {Content: "Done"}}}
-	deps.BeforeToolRun = func(_ context.Context, _ *api.Session, _ []api.Message, _, _ string, args map[string]any) (string, bool, error) {
+	deps.Context.LoadedTools = workersLoaded
+	deps.Context.Tools, deps.Tools.Invocations = reg, rec
+	deps.Context.Limits = loopTestLimits(2)
+	deps.Model.LLM = &sequentialLLMClient{completions: []*modelcall.Completion{{ToolCalls: []api.ToolCall{call}}, {Content: "Done"}}}
+	deps.Tools.BeforeToolRun = func(_ context.Context, _ *api.Session, _ []api.Message, _, _ string, args map[string]any) (string, bool, error) {
 		guarded = true
 		scope, scopeErr := api.TaskScopeFromArgs(args)
 		if scopeErr != nil {

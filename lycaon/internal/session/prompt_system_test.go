@@ -42,7 +42,7 @@ func newPromptTestManager(t *testing.T, llmClient modelcall.LLMClient) (*session
 	toolReg := tools.NewExecutorRegistry(nil, tools.NewDefaultRegistry())
 	mgr := session.NewManager(store, llmClient, toolReg, settings.DefaultSessionLimits())
 	oartest.InstallCloseoutPolicy(t, mgr)
-	mgr.SetAgentRegistry(loadTestAgentRegistry(t))
+	mgr.Profiles.SetAgentRegistry(loadTestAgentRegistry(t))
 	wirePromptTestManager(t, mgr)
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
 	return mgr, store
@@ -68,8 +68,8 @@ func TestCompleteStreamInjectsAgentSystemPrompt(t *testing.T) {
 
 	coord, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
-	if _, err := mgr.Prompt(ctx, coord.ID, "hello coordinator"); err != nil {
-		testutil.FailErr(t, "mgr.Prompt failed", err)
+	if _, err := mgr.Submissions.Prompt(ctx, coord.ID, "hello coordinator"); err != nil {
+		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 	}
 	coordReq := rec.LastRequest()
 	coordSys, ok := firstSystemMessage(coordReq.Messages)
@@ -80,13 +80,13 @@ func TestCompleteStreamInjectsAgentSystemPrompt(t *testing.T) {
 		t.Fatalf("coordinator system = %q want investigate default", coordSys.Content)
 	}
 
-	child, err := mgr.SpawnChild(ctx, coord.ID, api.SpawnChildRequest{
+	child, err := mgr.Workers.SpawnChild(ctx, coord.ID, api.SpawnChildRequest{
 		AgentType: orchestration.ProfileImplementer,
 		Prompt:    "implement feature",
 	})
-	testutil.FailErr(t, "mgr.SpawnChild failed", err)
-	if _, err := mgr.Prompt(ctx, child.ID, "implement feature"); err != nil {
-		testutil.FailErr(t, "mgr.Prompt failed", err)
+	testutil.FailErr(t, "mgr.Workers.SpawnChild failed", err)
+	if _, err := mgr.Submissions.Prompt(ctx, child.ID, "implement feature"); err != nil {
+		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 	}
 	implReq := rec.LastRequest()
 	implSys, ok := firstSystemMessage(implReq.Messages)
@@ -125,8 +125,8 @@ func TestCoordinatorPromptIncludesPackBoardInject(t *testing.T) {
 	sess, err := store.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	testdbseed.BindSessionWorkspace(t, store, sess.ID, dir)
-	if _, err := mgr.Prompt(ctx, sess.ID, "plan"); err != nil {
-		testutil.FailErr(t, "mgr.Prompt failed", err)
+	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "plan"); err != nil {
+		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 	}
 	found := false
 	for _, msg := range rec.LastRequest().Messages {
@@ -149,8 +149,8 @@ func TestCompleteStreamCoordinatorDefault(t *testing.T) {
 
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureSpec}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
-	if _, err := mgr.Prompt(ctx, sess.ID, "plan something"); err != nil {
-		testutil.FailErr(t, "mgr.Prompt failed", err)
+	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "plan something"); err != nil {
+		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 	}
 	sys, ok := firstSystemMessage(rec.LastRequest().Messages)
 	if !ok {
@@ -166,15 +166,15 @@ func TestCompleteStreamMissingTemplateFails(t *testing.T) {
 	mgr, store := newPromptTestManager(t, llm.NewMockProvider(nil))
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
 	mgr.SetPromptEngine(engine)
-	mgr.SetAgentRegistry(&stubAgentResolver{profile: agentdef.Profile{
+	mgr.Profiles.SetAgentRegistry(&stubAgentResolver{profile: agentdef.Profile{
 		ID:                   "broken",
 		SystemPromptTemplate: "agents/missing.md",
 	}})
 
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
-	_ = mgr.SetAgentType(ctx, sess.ID, "broken")
-	if _, err := mgr.Prompt(ctx, sess.ID, "hi"); err == nil {
+	_ = mgr.Chats.SetAgentType(ctx, sess.ID, "broken")
+	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "hi"); err == nil {
 		t.Fatal("expected prompt error for missing template")
 	} else if !strings.Contains(err.Error(), "system prompt") {
 		t.Fatalf("error = %v", err)

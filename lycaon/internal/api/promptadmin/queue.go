@@ -17,7 +17,7 @@ func (s *Handler) HandleGetQueue(w http.ResponseWriter, r *http.Request) {
 	if !requestscope.SessionExists(s.Store, s.responses, w, r, id) {
 		return
 	}
-	httpio.WriteJSON(w, http.StatusOK, s.Sessions.QueueSnapshot(id))
+	httpio.WriteJSON(w, http.StatusOK, s.Sessions.Drafts.Snapshot(id))
 }
 
 func (s *Handler) HandleUpdateSessionQueue(w http.ResponseWriter, r *http.Request) {
@@ -38,35 +38,35 @@ func (s *Handler) HandleUpdateSessionQueue(w http.ResponseWriter, r *http.Reques
 	)
 	switch req.Op {
 	case "reorder":
-		draft, err = s.Sessions.QueueReorder(ctx, id, req.ExpectedRevision, req.ItemIDs)
+		draft, err = s.Sessions.Drafts.Reorder(ctx, id, req.ExpectedRevision, req.ItemIDs)
 	case "link":
-		draft, err = s.Sessions.QueueLink(ctx, id, req.ExpectedRevision, req.ItemIDs)
+		draft, err = s.Sessions.Drafts.Link(ctx, id, req.ExpectedRevision, req.ItemIDs)
 	case "unlink":
-		draft, err = s.Sessions.QueueUnlink(ctx, id, req.ExpectedRevision, req.ItemIDs)
+		draft, err = s.Sessions.Drafts.Unlink(ctx, id, req.ExpectedRevision, req.ItemIDs)
 	case "remove":
 		if len(req.ItemIDs) == 0 {
 			s.responses.Fail(w, api.ApiErrorCodeInvalidRequest, "remove requires item_ids")
 			return
 		}
-		draft, err = s.Sessions.QueueRemove(ctx, id, req.ExpectedRevision, req.ItemIDs)
+		draft, err = s.Sessions.Drafts.Remove(ctx, id, req.ExpectedRevision, req.ItemIDs)
 	case "update":
 		if len(req.ItemIDs) != 1 || req.Text == nil {
 			s.responses.Fail(w, api.ApiErrorCodeInvalidRequest, "update requires one item id and text")
 			return
 		}
-		draft, err = s.Sessions.QueueUpdateText(ctx, id, req.ExpectedRevision, req.ItemIDs[0], *req.Text)
+		draft, err = s.Sessions.Drafts.UpdateText(ctx, id, req.ExpectedRevision, req.ItemIDs[0], *req.Text)
 	case "hold":
 		if req.Hold == nil {
 			s.responses.Fail(w, api.ApiErrorCodeInvalidRequest, "hold requires hold")
 			return
 		}
-		draft, err = s.Sessions.QueueSetHold(ctx, id, req.ExpectedRevision, *req.Hold)
+		draft, err = s.Sessions.Drafts.SetHold(ctx, id, req.ExpectedRevision, *req.Hold)
 	case "fire_now":
-		draft, err = s.Sessions.QueueFireNow(ctx, id, req.ExpectedRevision, req.ItemIDs)
+		draft, err = s.Sessions.Drafts.FireNow(ctx, id, req.ExpectedRevision, req.ItemIDs)
 	case "send":
-		draft, err = s.Sessions.QueueSend(ctx, id, req.ExpectedRevision)
+		draft, err = s.Sessions.Drafts.Send(ctx, id, req.ExpectedRevision)
 	case "cancel_send":
-		draft, err = s.Sessions.QueueCancelSend(ctx, id, req.ExpectedRevision)
+		draft, err = s.Sessions.Drafts.CancelSend(ctx, id, req.ExpectedRevision)
 	default:
 		s.responses.FailReason(w, api.ApiErrorCodeInvalidRequest, "unknown op: "+req.Op)
 		return
@@ -106,10 +106,10 @@ func (s *Handler) writeQueueError(w http.ResponseWriter, r *http.Request, err er
 
 // MaybeDrainQueue drains only when no prompt loop can consume Send.
 func (s *Handler) MaybeDrainQueue(parent context.Context, id string) {
-	if s.Sessions.PromptState().Running(id) {
+	if s.Sessions.Runner.Execution.Running(id) {
 		return
 	}
 	s.background.Go(parent, func(ctx context.Context) {
-		s.Sessions.DrainQueue(ctx, id)
+		s.Sessions.Submissions.DrainQueue(ctx, id)
 	})
 }

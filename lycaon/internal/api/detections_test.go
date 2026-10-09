@@ -41,7 +41,7 @@ func newDetectionsTestServer(t *testing.T) (*Server, string) {
 		Desired: extpacks.EmptyDesired(),
 	})
 	srv.sessions.SetEffectiveCatalogDeps(root, boot, nil)
-	srv.sessions.Catalog().SetCatalogViewCache(catalogview.NewCache(root, slog.Default()))
+	srv.sessions.Catalog.SetCatalogViewCache(catalogview.NewCache(root, slog.Default()))
 	_ = last
 	return srv, cfgDir
 }

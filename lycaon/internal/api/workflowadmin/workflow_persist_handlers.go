@@ -52,7 +52,7 @@ func (s *Handler) HandlePersistWorkflow(w http.ResponseWriter, r *http.Request) 
 		s.responses.InternalError(w, r, err)
 		return
 	}
-	s.Sessions.Catalog().InvalidateEffectiveCatalog(sess.ProjectID)
+	s.Sessions.Catalog.InvalidateEffectiveCatalog(sess.ProjectID)
 	if s.EventPublisher != nil {
 		s.EventPublisher.PublishWorkflowPersisted(r.Context(), sess.ProjectID, sessionID, wire.WorkflowEvent{
 			Event:      wire.WorkflowEventKindWorkflowPersisted,

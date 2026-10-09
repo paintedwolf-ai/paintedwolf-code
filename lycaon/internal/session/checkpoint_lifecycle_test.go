@@ -26,7 +26,7 @@ func TestRemoveOrphanCheckpointsKeepsLiveSessionsOnly(t *testing.T) {
 	_, err = store.Open(t.Context(), "deleted-session", "anchor-dead")
 	testutil.FailErr(t, "open orphan anchor", err)
 
-	if removed := mgr.RemoveOrphanCheckpoints(ctx, dir); removed != 1 {
+	if removed := mgr.Captures.RemoveOrphanCheckpoints(ctx, dir); removed != 1 {
 		t.Fatalf("removed = %d, want 1", removed)
 	}
 	if _, err := store.Load(t.Context(), liveSessionID, "anchor-live"); err != nil {
@@ -43,7 +43,7 @@ func TestDeleteSessionRemovesCheckpoints(t *testing.T) {
 	_, err := checkpoint.Open(t.Context(), sessionID, "anchor")
 	testutil.FailErr(t, "open checkpoint", err)
 
-	testutil.FailErr(t, "delete session", mgr.DeleteSession(t.Context(), sessionID))
+	testutil.FailErr(t, "delete session", mgr.Chats.Delete(t.Context(), sessionID))
 	if _, err := checkpoint.Load(t.Context(), sessionID, "anchor"); !errors.Is(err, sessionstore.ErrCheckpointMissing) {
 		t.Fatalf("checkpoint survived session deletion: %v", err)
 	}

@@ -15,6 +15,7 @@ func (m *Manager) SetLoopWorkflowSource(src loopwake.LoopWorkflowSource) {
 		return
 	}
 	m.loopWorkflowSource = src
+	m.Runner.Settlement.SetWorkflowSource(src)
 }
 
 // NudgeCoordinatorLoop queues an optional inform and maybe runs a host coordinator turn.
@@ -52,18 +53,6 @@ func (m *Manager) nudgeLegFinished(ctx context.Context, parentID string, complet
 	m.ensureCoordinatorRuntime().CoordinatorLoop().NudgeLegFinished(ctx, parentID, completedAt, legID)
 }
 
-func (m *Manager) takeWorkerDigest(jobID string) string {
-	jobID = strings.TrimSpace(jobID)
-	if jobID == "" {
-		return ""
-	}
-	digest, ok := m.workerDigests.LoadAndDelete(jobID)
-	if !ok {
-		return ""
-	}
-	return strings.TrimSpace(digest)
-}
-
 // ShouldLoopWake exposes loop policy evaluation for tests.
 func (m *Manager) ShouldLoopWake(ctx context.Context, sessionID string, wake anchor.ID) (bool, string, error) {
 	return m.ensureCoordinatorRuntime().CoordinatorLoop().ShouldLoopWake(ctx, sessionID, wake)
@@ -75,15 +64,15 @@ func (m *Manager) WaitForCoordinatorAsyncTurns(ctx context.Context) {
 		return
 	}
 	m.ensureCoordinatorRuntime().CoordinatorLoop().WaitForAsyncTurns(ctx)
-	m.roundEndDrains.wait(ctx)
+	m.Admission.WaitDrains(ctx)
 }
 
 // parkBlockedLiveCommands waits for command completion after a repetition limit.
 func (m *Manager) parkBlockedLiveCommands(ctx context.Context, sessionID string) bool {
-	if m == nil || m.bgRegistry == nil || strings.TrimSpace(sessionID) == "" {
+	if m == nil || m.Processes.Background == nil || strings.TrimSpace(sessionID) == "" {
 		return false
 	}
-	jobs := m.bgRegistry.ActiveJobs(sessionID)
+	jobs := m.Processes.Background.ActiveJobs(sessionID)
 	if len(jobs) == 0 {
 		return false
 	}
@@ -108,7 +97,7 @@ func (m *Manager) parkBlockedLiveCommands(ctx context.Context, sessionID string)
 	)
 	loop.MarkWaitCalled(sessionID)
 	// Completion between the job snapshot and EnterSleep needs an explicit wake.
-	if !m.bgRegistry.HasRunningHandles(sessionID, handles) {
+	if !m.Processes.Background.HasRunningHandles(sessionID, handles) {
 		loop.NudgeProcessFinished(ctx, sessionID, handles[0], anchor.Envelope{})
 	}
 	return true

@@ -31,14 +31,14 @@ func TestSetTitleOverwritesAndPublishes(t *testing.T) {
 	hub := events.NewMemoryHub()
 	mgr.SetEventPublisher(&events.Publisher{Hub: hub, Lookup: project.ScopeLookup{Registry: reg}})
 
-	sess, err := mgr.CreateForProject(ctx, p.ID, api.SessionPostureBuild)
+	sess, err := mgr.Chats.CreateForProject(ctx, p.ID, api.SessionPostureBuild)
 	testutil.FailErr(t, "create session", err)
 
 	eventsCh, unsubscribe, err := hub.Subscribe(ctx, events.Subscription{Project: p.ID, Viewer: testutil.HostOwner()})
 	testutil.FailErr(t, "subscribe", err)
 	defer unsubscribe()
 
-	updated, err := mgr.SetTitle(ctx, sess.ID, "  Ship readiness checklist  ")
+	updated, err := mgr.Naming.SetTitle(ctx, sess.ID, "  Ship readiness checklist  ")
 	testutil.FailErr(t, "set title", err)
 	if updated.Title != "Ship readiness checklist" {
 		t.Fatalf("title = %q", updated.Title)
@@ -86,14 +86,14 @@ func TestUpdateTitleIfUnsetNoOpsAfterManualSet(t *testing.T) {
 	mgr := NewManager(mem, mock, tools.NewStubRegistry(), settings.DefaultSessionLimits())
 	mgr.SetProjectRegistry(reg)
 
-	sess, err := mgr.CreateForProject(ctx, p.ID, api.SessionPostureBuild)
+	sess, err := mgr.Chats.CreateForProject(ctx, p.ID, api.SessionPostureBuild)
 	testutil.FailErr(t, "create session", err)
 
-	_, err = mgr.SetTitle(ctx, sess.ID, "Manual name")
+	_, err = mgr.Naming.SetTitle(ctx, sess.ID, "Manual name")
 	testutil.FailErr(t, "manual set", err)
 
 	// The auto-title path does not overwrite a manual title.
-	mgr.autoTitleSessionFromPrompt(ctx, sess, "Build a completely different thing")
+	mgr.Naming.SessionFromPrompt(ctx, sess, "Build a completely different thing")
 	got, err := mem.Get(ctx, sess.ID)
 	testutil.FailErr(t, "get", err)
 	if got.Title != "Manual name" {
@@ -119,11 +119,11 @@ func TestSetTitleWinsRaceVsIfUnset(t *testing.T) {
 	mgr := NewManager(mem, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
 	mgr.SetProjectRegistry(reg)
 
-	sess, err := mgr.CreateForProject(ctx, p.ID, api.SessionPostureBuild)
+	sess, err := mgr.Chats.CreateForProject(ctx, p.ID, api.SessionPostureBuild)
 	testutil.FailErr(t, "create session", err)
 
 	// Concurrent-style: Set always writes; subsequent IfUnset no-ops.
-	_, err = mgr.SetTitle(ctx, sess.ID, "User wins")
+	_, err = mgr.Naming.SetTitle(ctx, sess.ID, "User wins")
 	testutil.FailErr(t, "set", err)
 	ok, err := mem.UpdateTitleIfUnset(ctx, sess.ID, "Auto late")
 	testutil.FailErr(t, "ifunset", err)

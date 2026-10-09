@@ -41,7 +41,7 @@ func (s *Handler) TryRunPromotion(ctx context.Context, projectID string) {
 	if err != nil || p == nil || p.Promotion == nil {
 		return
 	}
-	quiescent, err := s.Sessions.ProjectPromoteQuiescent(ctx, projectID)
+	quiescent, err := s.Sessions.ProjectControl.ProjectPromoteQuiescent(ctx, projectID)
 	if err != nil || !quiescent {
 		return
 	}
@@ -60,7 +60,7 @@ func (s *Handler) executeDraftPromote(ctx context.Context, id, destPath string, 
 		return nil, gateErr
 	}
 	defer s.MutationGate.EndMutation(id)
-	quiescent, err := s.Sessions.ProjectPromoteQuiescent(ctx, id)
+	quiescent, err := s.Sessions.ProjectControl.ProjectPromoteQuiescent(ctx, id)
 	if err != nil {
 		return nil, err
 	}

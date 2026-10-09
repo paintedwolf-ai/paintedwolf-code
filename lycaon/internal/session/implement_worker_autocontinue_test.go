@@ -3,11 +3,16 @@ package session_test
 import (
 	"context"
 	"fmt"
+	"strings"
+	"testing"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
+	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -16,9 +21,6 @@ import (
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workflow"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"strings"
-	"testing"
-	"time"
 )
 
 func TestImplementModeWorkerSummaryUsesCompletionEnvelope(t *testing.T) {
@@ -29,7 +31,7 @@ func TestImplementModeWorkerSummaryUsesCompletionEnvelope(t *testing.T) {
 	mgr := session.NewManager(store, rec, tools.NewStubRegistry(), settings.DefaultSessionLimits())
 	agents := orchestration.NewMemoryAgentRegistry()
 	_ = orchestration.LoadRequiredAgentRegistry(context.Background(), agents)
-	mgr.SetAgentRegistry(agents)
+	mgr.Profiles.SetAgentRegistry(agents)
 
 	wfStore := workflow.NewSQLStore(sqlDB)
 	wfMgr := workflow.NewManager(wfStore, store, nil, nil)
@@ -67,7 +69,7 @@ func TestImplementModeWorkerSummaryUsesCompletionEnvelope(t *testing.T) {
 			testutil.FailErr(t, "store.AppendMessages failed", err)
 		}
 	}
-	status, err := mgr.AppendWorkerSummary(ctx, sess.ID, session.WorkerSummaryInput{
+	status, err := mgr.Workers.Summaries.Append(ctx, sess.ID, workeroutcomes.SummaryInput{
 		Summary:        "Created game.py",
 		Report:         workercompletion.WorkerCompletionReport{Brief: "Created game.py", LegStatus: "complete", FilesModified: []string{"game.py"}},
 		JobID:          jobID,
@@ -125,7 +127,7 @@ func TestAppendWorkerSummaryFinalizesEnqueuedTaskTool(t *testing.T) {
 	); err != nil {
 		t.Fatal(err)
 	}
-	_, err = mgr.AppendWorkerSummary(ctx, parent.ID, session.WorkerSummaryInput{
+	_, err = mgr.Workers.Summaries.Append(ctx, parent.ID, workeroutcomes.SummaryInput{
 		Summary:        "done",
 		Report:         workercompletion.WorkerCompletionReport{Brief: "done", LegStatus: "complete"},
 		JobID:          "job-9",

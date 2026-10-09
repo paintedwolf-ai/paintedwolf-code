@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/session/postturn"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -21,7 +22,8 @@ func newPostHookManager(t *testing.T) *Manager {
 	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
 	hints, err := guidance.LoadHintConfigStock()
 	testutil.FailErr(t, "load hint registry", err)
-	mgr := &Manager{rejectFmt: guidance.NewStaticRejectFormatter(hints)}
+	mgr, _ := newTestManager(t)
+	mgr.SetRejectFormatter(guidance.NewStaticRejectFormatter(hints))
 	mgr.ensureCoordinatorRuntime()
 	return mgr
 }
@@ -58,9 +60,9 @@ func (s postHookWorkflowContext) BuildCoordinatorTurnFrame(_ context.Context, _ 
 
 func TestProgressMissingNudgesOnDispatchWithoutPlan(t *testing.T) {
 	mgr := newPostHookManager(t)
-	mgr.progress = progress.NewMemoryStore()
+	mgr.SetProgressStore(progress.NewMemoryStore())
 
-	mgr.maybeNudgeProgressMissing(t.Context(), "root-1", []string{"task"})
+	mgr.Runner.PostTurn.ProgressMissing(t.Context(), "root-1", []string{"task"})
 	if !pendingProgressMissingNudge(mgr, "root-1") {
 		t.Fatal("expected PROGRESS_MISSING after task() without plan")
 	}
@@ -68,9 +70,9 @@ func TestProgressMissingNudgesOnDispatchWithoutPlan(t *testing.T) {
 
 func TestProgressMissingSkipsAfterRejectedDispatchTurn(t *testing.T) {
 	mgr := newPostHookManager(t)
-	mgr.progress = progress.NewMemoryStore()
+	mgr.SetProgressStore(progress.NewMemoryStore())
 
-	mgr.maybeNudgeProgressMissing(t.Context(), "root-1", []string{"list_dir"})
+	mgr.Runner.PostTurn.ProgressMissing(t.Context(), "root-1", []string{"list_dir"})
 	if pendingProgressMissingNudge(mgr, "root-1") {
 		t.Fatal("plan missing nudge only fires on the turn that attempts dispatch")
 	}
@@ -85,13 +87,14 @@ func TestProgressMissingSkipsWorkerChild(t *testing.T) {
 	child, err := mem.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "CreateChild", err)
 	mgr.store = mem
-	mgr.progress = progress.NewMemoryStore()
+	mgr.Runner.PostTurn = postturn.New(mem, mgr.Guidance)
+	mgr.SetProgressStore(progress.NewMemoryStore())
 
-	mgr.maybeNudgeProgressMissing(ctx, child.ID, []string{"task"})
+	mgr.Runner.PostTurn.ProgressMissing(ctx, child.ID, []string{"task"})
 	if pendingProgressMissingNudge(mgr, child.ID) {
 		t.Fatal("worker children must not receive coordinator progress-missing informs")
 	}
-	if err := mgr.afterPrompt(ctx, child.ID, orchestration.ProfileImplementer, []string{"task"}); err != nil {
+	if err := mgr.Runner.PostTurn.After(ctx, child.ID, orchestration.ProfileImplementer, []string{"task"}); err != nil {
 		testutil.FailErr(t, "afterPrompt", err)
 	}
 	if pendingProgressMissingNudge(mgr, child.ID) {
@@ -105,9 +108,10 @@ func TestProgressMissingSkipsSpecWorkflowArtifacts(t *testing.T) {
 	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureSpec}, "proj-1")
 	testutil.FailErr(t, "Create session", err)
 	mgr.store = mem
-	mgr.progress = progress.NewMemoryStore()
+	mgr.Runner.PostTurn = postturn.New(mem, mgr.Guidance)
+	mgr.SetProgressStore(progress.NewMemoryStore())
 
-	mgr.maybeNudgeProgressMissing(t.Context(), sess.ID, []string{"write"})
+	mgr.Runner.PostTurn.ProgressMissing(t.Context(), sess.ID, []string{"write"})
 	if pendingProgressMissingNudge(mgr, sess.ID) {
 		t.Fatal("spec workflow artifact writes must not require a build checklist")
 	}
@@ -119,7 +123,8 @@ func TestWorkflowPhaseExitNudgesAfterUnrelatedToolArc(t *testing.T) {
 	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, "proj-1")
 	testutil.FailErr(t, "Create session", err)
 	mgr.store = mem
-	mgr.coordinatorFrame = postHookWorkflowContext{wf: feedback.WorkflowEvaluationContext{
+	mgr.Runner.PostTurn = postturn.New(mem, mgr.Guidance)
+	mgr.SetCoordinatorTurnFrameSource(postHookWorkflowContext{wf: feedback.WorkflowEvaluationContext{
 		WorkflowID:         "example",
 		CurrentPhase:       "intake",
 		RunActive:          true,
@@ -127,9 +132,9 @@ func TestWorkflowPhaseExitNudgesAfterUnrelatedToolArc(t *testing.T) {
 		CurrentGatesKnown:  true,
 		CurrentGatesPassed: true,
 		PhaseExitKind:      "proof",
-	}}
+	}})
 
-	if !mgr.maybeNudgeWorkflowPhaseExit(t.Context(), sess.ID, orchestration.ProfileCoordinator, []string{"read"}) {
+	if !mgr.Runner.PostTurn.WorkflowExit(t.Context(), sess.ID, orchestration.ProfileCoordinator, []string{"read"}) {
 		t.Fatal("expected phase-exit nudge")
 	}
 	if id := mgr.ensureCoordinatorRuntime().Kicks().TakePendingKickID(sess.ID); !anchor.SameInform(id, anchor.PhaseExitRequired) {
@@ -143,7 +148,8 @@ func TestWorkflowPhaseExitAllowsAnotherAsk(t *testing.T) {
 	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, "proj-1")
 	testutil.FailErr(t, "Create session", err)
 	mgr.store = mem
-	mgr.coordinatorFrame = postHookWorkflowContext{wf: feedback.WorkflowEvaluationContext{
+	mgr.Runner.PostTurn = postturn.New(mem, mgr.Guidance)
+	mgr.SetCoordinatorTurnFrameSource(postHookWorkflowContext{wf: feedback.WorkflowEvaluationContext{
 		WorkflowID:         "example",
 		CurrentPhase:       "intake",
 		RunActive:          true,
@@ -151,9 +157,9 @@ func TestWorkflowPhaseExitAllowsAnotherAsk(t *testing.T) {
 		CurrentGatesKnown:  true,
 		CurrentGatesPassed: true,
 		PhaseExitKind:      "proof",
-	}}
+	}})
 
-	if mgr.maybeNudgeWorkflowPhaseExit(t.Context(), sess.ID, orchestration.ProfileCoordinator, []string{"ask_user"}) {
+	if mgr.Runner.PostTurn.WorkflowExit(t.Context(), sess.ID, orchestration.ProfileCoordinator, []string{"ask_user"}) {
 		t.Fatal("another structured ask must keep coordinator intake open")
 	}
 }

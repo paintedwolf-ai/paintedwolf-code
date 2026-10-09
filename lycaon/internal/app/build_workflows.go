@@ -21,7 +21,9 @@ import (
 	"github.com/lycaon/lycaon/internal/scan"
 	scancfg "github.com/lycaon/lycaon/internal/scan/configuration"
 	"github.com/lycaon/lycaon/internal/search"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/profiles"
+	"github.com/lycaon/lycaon/internal/session/protection"
+	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/toolhost"
 	"github.com/lycaon/lycaon/internal/vocabulary"
 	"github.com/lycaon/lycaon/internal/worker"
@@ -61,7 +63,7 @@ func (b boardWiring) wireWorkflows() error {
 		CatalogFor: func(ctx context.Context, _ string, sessionID string) *extpacks.EffectiveCatalog {
 			if b.mgr != nil && b.store != nil && strings.TrimSpace(sessionID) != "" {
 				if sess, err := b.store.Get(ctx, sessionID); err == nil && sess != nil {
-					if c, err := b.mgr.Catalog().EffectiveCatalogForProject(ctx, sess.ProjectID); err == nil && c != nil {
+					if c, err := b.mgr.Catalog.EffectiveCatalogForProject(ctx, sess.ProjectID); err == nil && c != nil {
 						return c
 					}
 				}
@@ -91,10 +93,10 @@ func (b boardWiring) wireWorkflows() error {
 		return candidates
 	}
 	b.workflowMgr.OrphanReconcileBefore = time.Now().UTC()
-	b.workflowMgr.VerdictGrounding = b.mgr.EvaluateVerdictGrounding
+	b.workflowMgr.VerdictGrounding = b.mgr.Closeout.EvaluateVerdictGrounding
 	b.workflowMgr.Resolver = b.manifestResolver
 	b.workflowMgr.SessionScaffold = workflow.NewSessionScaffoldSQLStore(b.db)
-	b.eventPub.SessionUI = session.UIWithProtection{Inner: b.workflowMgr, Mgr: b.mgr}
+	b.eventPub.SessionUI = protection.UIWithProtection{Inner: b.workflowMgr, Protection: b.mgr.Protection}
 	b.workflowMgr.BlueprintCreate = blueprint.WorkflowBlueprintCreator{Manager: b.blueprintMgr}
 	b.workflowMgr.BlueprintGet = b.blueprintMgr
 	workflowStore := b.workflowStore
@@ -103,9 +105,9 @@ func (b boardWiring) wireWorkflows() error {
 		if err != nil || run == nil {
 			return
 		}
-		b.mgr.RecordPrimaryMutation(ctx, run.SessionID, from)
-		b.mgr.RecordPrimaryMutation(ctx, run.SessionID, to)
-		b.mgr.RecordBlueprintBinding(ctx, run.SessionID, from)
+		b.mgr.Captures.RecordPrimaryMutation(ctx, run.SessionID, from)
+		b.mgr.Captures.RecordPrimaryMutation(ctx, run.SessionID, to)
+		b.mgr.Captures.RecordBlueprintBinding(ctx, run.SessionID, from)
 	}
 	b.blueprintMgr.AfterRetarget = b.workflowMgr.RebindBlueprintPath
 	// A blueprint a live run executes cannot be deleted out from under it.
@@ -178,9 +180,9 @@ func (b boardWiring) wireWorkflowEvidence() error {
 		b.blueprintMgr.SetDataDir(b.dataDir)
 	}
 	// Verify gating reads run-keyed evidence and the declared test command.
-	b.mgr.SetEvidenceStore(b.evidenceStore)
+	b.mgr.Verification.SetEvidenceStore(b.evidenceStore)
 	if b.settingsSvc != nil {
-		b.mgr.SetVerifyConfig(b.settingsSvc.Verify)
+		b.mgr.Verification.SetVerifyConfig(b.settingsSvc.Verify)
 		if b.toolRuntime != nil {
 			// The tool and gate share one declared-command resolver.
 			b.toolRuntime.SetVerifyDeclaredCommand(b.settingsSvc.Verify.VerifyTestCommand)
@@ -273,7 +275,7 @@ func (b boardWiring) wireWorkflowConditions() error {
 			return workflow.ReadBlueprintFile(projectDir, relPath)
 		},
 		DelegationCloseout:      delegation.CloseoutComplete(b.delegationStore),
-		SourceVerifyPassed:      b.mgr.WorkflowSourceVerifyPassed,
+		SourceVerifyPassed:      b.mgr.Verification.WorkflowSourceVerifyPassed,
 		DeliveryReported:        b.mgr.WorkflowDeliveryReported,
 		ScanLedger:              b.scanStore,
 		SourceSnapshots:         snapshotStore,
@@ -281,7 +283,7 @@ func (b boardWiring) wireWorkflowConditions() error {
 		SecurityScannersEnabled: func() bool { return b.settingsSvc.SecurityScanners.Effective().Enabled },
 		ApprovalDenied:          b.checkpointMgr.SessionApprovalDenied,
 		WorkerCycleIdle: func(projectID, sessionID, completingJobID string) (bool, error) {
-			return session.ParentSessionWorkerCycleIdle(b.ctx, b.workerQueue, projectID, sessionID, completingJobID)
+			return workeroutcomes.ParentSessionWorkerCycleIdle(b.ctx, b.workerQueue, projectID, sessionID, completingJobID)
 		},
 		ChildRunStatus: func(parentRunID string) (string, bool) {
 			child, err := b.workflowStore.LatestChildByParentRunID(b.ctx, parentRunID)
@@ -302,7 +304,7 @@ func (b boardWiring) wireWorkflowConditions() error {
 	if err != nil {
 		return fmt.Errorf("rules config: %w", err)
 	}
-	if err := rules.ValidatePostureRules(b.postureRegistry, session.AllSessionPostures(), b.bundledRules); err != nil {
+	if err := rules.ValidatePostureRules(b.postureRegistry, profiles.AllSessionPostures(), b.bundledRules); err != nil {
 		return fmt.Errorf("posture rules: %w", err)
 	}
 	ruleConfigs := make([]*rules.RulesConfig, 0, len(b.bundledRules))

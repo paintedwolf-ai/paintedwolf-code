@@ -23,7 +23,7 @@ func TestHTTPRequestWebPageCardPointsAtFetchURL(t *testing.T) {
 		}, &api.FeedbackSubject{Kind: "host", ID: "docs.example.test"})
 	}
 
-	out, facts := mgr.appendPostToolGuidance(context.Background(), sess, "http_request", args, `{"status":200}`, 1, raised(false))
+	out, facts := mgr.ToolPolicy.AfterTool(context.Background(), sess, "http_request", args, `{"status":200}`, 1, raised(false))
 	for _, want := range []string{
 		`{"status":200}`,
 		"Code: HTTP_REQUEST_WEB_PAGE",
@@ -38,12 +38,12 @@ func TestHTTPRequestWebPageCardPointsAtFetchURL(t *testing.T) {
 		t.Fatalf("facts = %#v, want the web page code", facts)
 	}
 
-	deferred, _ := mgr.appendPostToolGuidance(context.Background(), sess, "http_request", args, `{"status":200}`, 1, raised(true))
+	deferred, _ := mgr.ToolPolicy.AfterTool(context.Background(), sess, "http_request", args, `{"status":200}`, 1, raised(true))
 	if !strings.Contains(deferred, "after loading it with request_tools") {
 		t.Fatalf("deferred fetch_url card omits request_tools:\n%s", deferred)
 	}
 
-	plain, _ := mgr.appendPostToolGuidance(context.Background(), sess, "http_request", args, `{"status":200}`, 1, guidance.ToolResultFacts{})
+	plain, _ := mgr.ToolPolicy.AfterTool(context.Background(), sess, "http_request", args, `{"status":200}`, 1, guidance.ToolResultFacts{})
 	if strings.Contains(plain, "HTTP_REQUEST_WEB_PAGE") {
 		t.Fatalf("an exchange with no stated web page carried the card:\n%s", plain)
 	}

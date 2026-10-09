@@ -57,7 +57,7 @@ func TestDefaultPipelineActiveWorkflowInjectVisible(t *testing.T) {
 	mgr := session.NewManager(store, nil, nil, settings.DefaultSessionLimits())
 	agents := orchestration.NewMemoryAgentRegistry()
 	_ = orchestration.LoadRequiredAgentRegistry(ctx, agents)
-	mgr.SetAgentRegistry(agents)
+	mgr.Profiles.SetAgentRegistry(agents)
 	mgr.SetPromptEngine(contractcheck.BundledPromptEngineForRoot(t))
 	hintCfg, err := guidance.LoadHintConfigStock()
 	contractcheck.FailErr(t, "LoadHintConfigStock", err)

@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/coordinator/batch"
 	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/profiles"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -128,7 +129,7 @@ func saveBaselinePosture(vars map[string]any, posture api.SessionPosture) map[st
 func workflowMutationPosture(run *api.WorkflowRun, vars map[string]any, active api.SessionPosture) api.SessionPosture {
 	if run != nil && IsTerminal(run.Status) {
 		baseline, _ := vars[hostVarBaselinePosture].(string)
-		if session.ValidSessionPosture(baseline) {
+		if profiles.ValidSessionPosture(baseline) {
 			return api.SessionPosture(baseline)
 		}
 	}

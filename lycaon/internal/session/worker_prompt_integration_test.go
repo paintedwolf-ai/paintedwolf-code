@@ -4,16 +4,13 @@ package session_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/configlayout"
-	"github.com/lycaon/lycaon/internal/session/store"
-	"github.com/lycaon/lycaon/internal/testdbseed"
-	repotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/board"
+	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/git"
@@ -21,7 +18,10 @@ import (
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/testdbseed"
+	repotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -48,7 +48,7 @@ func setupWorkerPromptFixture(t *testing.T) (*session.Manager, *store.Memory, *l
 	if err := orchestration.LoadRequiredAgentRegistry(context.Background(), agents); err != nil {
 		testutil.FailErr(t, "LoadRequiredAgentRegistry", err)
 	}
-	mgr.SetAgentRegistry(agents)
+	mgr.Profiles.SetAgentRegistry(agents)
 	wirePromptTestManager(t, mgr)
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
 	mgr.SetBoardInject(&board.InjectBuilder{SnapshotBuilder: &board.SnapshotBuilder{
@@ -82,16 +82,16 @@ func TestChildPromptIncludesWorkerContextBlock(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module worker.board\n"), 0o644); err != nil {
 		testutil.FailErr(t, "write file", err)
 	}
-	parent, err := mgr.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureBuild)
+	parent, err := mgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureBuild)
 	testutil.FailErr(t, "mgr.Create failed", err)
 	testdbseed.BindSessionWorkspace(t, store, parent.ID, dir)
-	child, err := mgr.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{
+	child, err := mgr.Workers.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{
 		AgentType: orchestration.ProfileImplementer,
 		Prompt:    "implement feature",
 	})
-	testutil.FailErr(t, "mgr.SpawnChild failed", err)
-	if _, err := mgr.Prompt(ctx, child.ID, "implement feature"); err != nil {
-		testutil.FailErr(t, "mgr.Prompt failed", err)
+	testutil.FailErr(t, "mgr.Workers.SpawnChild failed", err)
+	if _, err := mgr.Submissions.Prompt(ctx, child.ID, "implement feature"); err != nil {
+		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 	}
 	var legBlock string
 	for _, msg := range rec.LastRequest().Messages {
@@ -123,15 +123,15 @@ func TestChildPromptIncludesPlaybookWhenMatched(t *testing.T) {
 	}})
 
 	ctx := context.Background()
-	parent, err := mgr.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureBuild)
+	parent, err := mgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureBuild)
 	testutil.FailErr(t, "mgr.Create failed", err)
-	child, err := mgr.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{
+	child, err := mgr.Workers.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{
 		AgentType: orchestration.ProfileImplementer,
 		Prompt:    "go",
 	})
-	testutil.FailErr(t, "mgr.SpawnChild failed", err)
-	if _, err := mgr.Prompt(ctx, child.ID, "go"); err != nil {
-		testutil.FailErr(t, "mgr.Prompt failed", err)
+	testutil.FailErr(t, "mgr.Workers.SpawnChild failed", err)
+	if _, err := mgr.Submissions.Prompt(ctx, child.ID, "go"); err != nil {
+		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 	}
 	found := false
 	for _, msg := range rec.LastRequest().Messages {
@@ -149,15 +149,15 @@ func TestChildPromptDistinctAgentTypes(t *testing.T) {
 	mgr.SetWorkerContextBuilder(&stubWorkerContext{ctx: inject.WorkerLegContext{Checklist: []string{"x"}}})
 
 	ctx := context.Background()
-	parent, err := mgr.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureBuild)
+	parent, err := mgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureBuild)
 	testutil.FailErr(t, "mgr.Create failed", err)
-	implChild, err := mgr.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{
+	implChild, err := mgr.Workers.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{
 		AgentType: orchestration.ProfileImplementer,
 		Prompt:    "implement",
 	})
-	testutil.FailErr(t, "mgr.SpawnChild failed", err)
-	if _, err := mgr.Prompt(ctx, implChild.ID, "implement"); err != nil {
-		testutil.FailErr(t, "mgr.Prompt failed", err)
+	testutil.FailErr(t, "mgr.Workers.SpawnChild failed", err)
+	if _, err := mgr.Submissions.Prompt(ctx, implChild.ID, "implement"); err != nil {
+		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 	}
 	var implL1 string
 	for _, msg := range rec.LastRequest().Messages {
@@ -167,13 +167,13 @@ func TestChildPromptDistinctAgentTypes(t *testing.T) {
 		}
 	}
 
-	reviewerChild, err := mgr.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{
+	reviewerChild, err := mgr.Workers.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{
 		AgentType: "plan-reviewer",
 		Prompt:    "review plan",
 	})
-	testutil.FailErr(t, "mgr.SpawnChild failed", err)
-	if _, err := mgr.Prompt(ctx, reviewerChild.ID, "review plan"); err != nil {
-		testutil.FailErr(t, "mgr.Prompt failed", err)
+	testutil.FailErr(t, "mgr.Workers.SpawnChild failed", err)
+	if _, err := mgr.Submissions.Prompt(ctx, reviewerChild.ID, "review plan"); err != nil {
+		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 	}
 	var reviewL1 string
 	for _, msg := range rec.LastRequest().Messages {
@@ -203,10 +203,10 @@ func TestCoordinatorPromptUnchanged(t *testing.T) {
 	}})
 
 	ctx := context.Background()
-	sess, err := mgr.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureBuild)
+	sess, err := mgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureBuild)
 	testutil.FailErr(t, "mgr.Create failed", err)
-	if _, err := mgr.Prompt(ctx, sess.ID, "coordinate"); err != nil {
-		testutil.FailErr(t, "mgr.Prompt failed", err)
+	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "coordinate"); err != nil {
+		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 	}
 	for _, msg := range rec.LastRequest().Messages {
 		if strings.Contains(msg.Content, inject.WorkerLegInjectSentinel) {
@@ -221,15 +221,15 @@ func TestWorkerPromptKeepsCuratedSkillsOutOfStandingPrompt(t *testing.T) {
 	mgr.SetWorkerContextBuilder(&stubWorkerContext{ctx: inject.WorkerLegContext{Checklist: []string{"survey"}}})
 
 	ctx := context.Background()
-	parent, err := mgr.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureBuild)
+	parent, err := mgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureBuild)
 	testutil.FailErr(t, "mgr.Create", err)
-	child, err := mgr.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{
+	child, err := mgr.Workers.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{
 		AgentType: orchestration.ProfileRepoResearcher,
 		Prompt:    "trace the relevant code",
 	})
-	testutil.FailErr(t, "mgr.SpawnChild", err)
+	testutil.FailErr(t, "mgr.Workers.SpawnChild", err)
 	curated := map[string]bool{}
-	for _, sk := range mgr.CompileMachine(ctx, child, orchestration.ProfileRepoResearcher).Surface.Skills {
+	for _, sk := range mgr.Profiles.CompileMachine(ctx, child, orchestration.ProfileRepoResearcher).Surface.Skills {
 		curated[sk.Name] = true
 	}
 	for _, name := range []string{"investigate-code-history", "trace-a-system-invariant"} {
@@ -242,8 +242,8 @@ func TestWorkerPromptKeepsCuratedSkillsOutOfStandingPrompt(t *testing.T) {
 			t.Fatalf("repo researcher received skill outside its agent definition: %q", name)
 		}
 	}
-	if _, err := mgr.Prompt(ctx, child.ID, "trace the relevant code"); err != nil {
-		testutil.FailErr(t, "mgr.Prompt", err)
+	if _, err := mgr.Submissions.Prompt(ctx, child.ID, "trace the relevant code"); err != nil {
+		testutil.FailErr(t, "mgr.Submissions.Prompt", err)
 	}
 
 	var system string
@@ -263,10 +263,10 @@ func TestCoordinatorInvestigateIndexesAllSkills(t *testing.T) {
 	mgr, _, _ := setupWorkerPromptFixture(t)
 	wireSkillsCatalogForPromptTest(t, mgr)
 	ctx := context.Background()
-	sess, err := mgr.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureBuild)
+	sess, err := mgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureBuild)
 	testutil.FailErr(t, "mgr.Create", err)
 	listed := map[string]bool{}
-	for _, sk := range mgr.CompileMachine(ctx, sess, prompts.CoordinatorProfileID).Surface.Skills {
+	for _, sk := range mgr.Profiles.CompileMachine(ctx, sess, prompts.CoordinatorProfileID).Surface.Skills {
 		listed[sk.Name] = true
 	}
 	for _, name := range []string{

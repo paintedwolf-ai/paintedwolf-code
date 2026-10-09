@@ -47,7 +47,7 @@ func setupCoordinatorPromptFixture(t *testing.T) coordinatorPromptFixture {
 	mgr := session.NewManager(store, rec, tools.NewStubRegistry(), settings.DefaultSessionLimits())
 	agents := orchestration.NewMemoryAgentRegistry()
 	testutil.FailErr(t, "load agent registry", orchestration.LoadRequiredAgentRegistry(context.Background(), agents))
-	mgr.SetAgentRegistry(agents)
+	mgr.Profiles.SetAgentRegistry(agents)
 	wirePromptTestManager(t, mgr)
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
 
@@ -107,7 +107,7 @@ phases:
 func firstCoordinatorPromptRequest(t *testing.T, fix coordinatorPromptFixture, prompt string) modelcall.CompletionRequest {
 	t.Helper()
 	before := len(fix.rec.AllRequests())
-	_, err := fix.mgr.Prompt(t.Context(), fix.sess.ID, prompt)
+	_, err := fix.mgr.Submissions.Prompt(t.Context(), fix.sess.ID, prompt)
 	testutil.FailErr(t, "run coordinator prompt", err)
 	requests := fix.rec.AllRequests()
 	if len(requests) <= before {

@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/boolexpr"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/profiles"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 )
 
@@ -131,7 +132,7 @@ func evaluateReadinessCondition(reg *conditions.ConditionRegistry, ec conditions
 func applyOnEnter(enter workflowdef.PhaseOnEnter, phaseID string, vars map[string]any) (map[string]any, error) {
 	vars = cloneAskVars(vars)
 	if sm := strings.TrimSpace(enter.SetPosture); sm != "" {
-		if !session.ValidSessionPosture(sm) {
+		if !profiles.ValidSessionPosture(sm) {
 			return nil, fmt.Errorf("invalid set_posture %q on phase %q", sm, phaseID)
 		}
 	}

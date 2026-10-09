@@ -31,23 +31,27 @@ func TestCheckDoomLoopUsesRejectFormatter(t *testing.T) {
 			"DOOM_LOOP_REPEAT": {Message: "blocked repeat"},
 		},
 	})
-	loop := &PromptLoop{Deps: PromptLoopDeps{
-		DoomLoop:  guard,
-		RejectFmt: fmttr,
-		FormatDoomLoopReject: func(_ context.Context, _, tool string, _ map[string]any, count int, repeatedCode string) (*guidance.Refusal, error) {
-			data := map[string]any{"count": count, "tool": tool}
-			if repeatedCode != "" {
-				data["code"] = repeatedCode
-			}
-			block, ferr := fmttr.Format("DOOM_LOOP_REPEAT", data)
-			if ferr != nil {
-				return nil, ferr
-			}
-			return guidance.NewRefusal("DOOM_LOOP_REPEAT", block), nil
+	loop := NewPromptLoop(PromptLoopDeps{
+		Nudges: NudgesDeps{
+			DoomLoop: guard,
+			FormatDoomLoopReject: func(_ context.Context, _, tool string, _ map[string]any, count int, repeatedCode string) (*guidance.Refusal, error) {
+				data := map[string]any{"count": count, "tool": tool}
+				if repeatedCode != "" {
+					data["code"] = repeatedCode
+				}
+				block, ferr := fmttr.Format("DOOM_LOOP_REPEAT", data)
+				if ferr != nil {
+					return nil, ferr
+				}
+				return guidance.NewRefusal("DOOM_LOOP_REPEAT", block), nil
+			},
 		},
-	}}
+		Closeout: CloseoutDeps{
+			RejectFmt: fmttr,
+		},
+	})
 	var n int
-	err := turnNudges{loop}.checkDoomLoop(context.Background(), "s1", "response", "read", map[string]any{"path": "x"}, &n)
+	err := loop.Nudges.checkDoomLoop(context.Background(), "s1", "response", "read", map[string]any{"path": "x"}, &n)
 	if err == nil || !strings.Contains(err.Error(), "Code: DOOM_LOOP_REPEAT") {
 		t.Fatalf("err = %v", err)
 	}
@@ -64,25 +68,31 @@ func TestRunExecutesRegisteredTool(t *testing.T) {
 	}})
 	var appended []api.Message
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		Limits: func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
-		LLM:    client,
-		Tools:  reg,
-		Policy: &recordingToolPolicy{},
-		BuildMessages: func(_ context.Context, _ *api.Session, history []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
-			return history, nil
+		Context: ContextDeps{
+			Limits: func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
+			Tools:  reg,
+			Policy: &recordingToolPolicy{},
+			BuildMessages: func(_ context.Context, _ *api.Session, history []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
+				return history, nil
+			},
 		},
-		AppendMessages: func(_ context.Context, _ string, msgs ...api.Message) error {
-			appended = append(appended, msgs...)
-			return nil
+		Model: ModelDeps{
+			LLM: client,
 		},
-		UpdateMessage: func(_ context.Context, _, messageID string, msg api.Message) error {
-			for i := range appended {
-				if appended[i].ID == messageID {
-					appended[i] = msg
-					return nil
+		Projection: ProjectionDeps{
+			AppendMessages: func(_ context.Context, _ string, msgs ...api.Message) error {
+				appended = append(appended, msgs...)
+				return nil
+			},
+			UpdateMessage: func(_ context.Context, _, messageID string, msg api.Message) error {
+				for i := range appended {
+					if appended[i].ID == messageID {
+						appended[i] = msg
+						return nil
+					}
 				}
-			}
-			return nil
+				return nil
+			},
 		},
 	})
 	sess := &api.Session{ID: "s1", Posture: api.SessionPostureBuild}
@@ -120,47 +130,57 @@ func TestPromptLoop_ToolMessageContainsSpecProgress(t *testing.T) {
 	enricher := guidance.NewToolOutputEnricher(hints, nil)
 	var appended []api.Message
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		Limits: func(context.Context, *api.Session) settings.SessionLimits {
-			lim := settings.DefaultSessionLimits()
-			lim.MaxIterations = 2
-			return lim
+		Context: ContextDeps{
+			Limits: func(context.Context, *api.Session) settings.SessionLimits {
+				lim := settings.DefaultSessionLimits()
+				lim.MaxIterations = 2
+				return lim
+			},
+			Tools:  reg,
+			Policy: &recordingToolPolicy{},
+			BuildMessages: func(_ context.Context, _ *api.Session, history []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
+				return history, nil
+			},
 		},
-		LLM:      client,
-		Tools:    reg,
-		DoomLoop: guard,
-		Policy:   &recordingToolPolicy{},
-		EnrichToolOutput: func(_ context.Context, sess *api.Session, tool string, args map[string]any, output string, _ guidance.ToolResultFacts, _ int) (string, guidance.ToolResultFacts) {
-			enriched := enricher.Enrich(t.Context(), guidance.EnrichInput{
-				SessionID: sess.ID,
-				Session:   sess,
-				Tool:      tool,
-				Args:      args,
-				Output:    output,
-				PlanProgress: guidance.PlanProgress{
-					PhaseInferred:     1,
-					PhaseInferredName: "stub",
-					NextAction:        "write stub",
-					ProgressChecklist: "[ ] Phase 1 — stub\n",
-					ChecklistHash:     "h1",
-				},
-			})
-			return enriched.Output, enriched.Facts
+		Model: ModelDeps{
+			LLM: client,
 		},
-		BuildMessages: func(_ context.Context, _ *api.Session, history []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
-			return history, nil
+		Nudges: NudgesDeps{
+			DoomLoop: guard,
 		},
-		AppendMessages: func(_ context.Context, _ string, msgs ...api.Message) error {
-			appended = append(appended, msgs...)
-			return nil
+		Tools: ToolsDeps{
+			EnrichToolOutput: func(_ context.Context, sess *api.Session, tool string, args map[string]any, output string, _ guidance.ToolResultFacts, _ int) (string, guidance.ToolResultFacts) {
+				enriched := enricher.Enrich(t.Context(), guidance.EnrichInput{
+					SessionID: sess.ID,
+					Session:   sess,
+					Tool:      tool,
+					Args:      args,
+					Output:    output,
+					PlanProgress: guidance.PlanProgress{
+						PhaseInferred:     1,
+						PhaseInferredName: "stub",
+						NextAction:        "write stub",
+						ProgressChecklist: "[ ] Phase 1 — stub\n",
+						ChecklistHash:     "h1",
+					},
+				})
+				return enriched.Output, enriched.Facts
+			},
 		},
-		UpdateMessage: func(_ context.Context, _, messageID string, msg api.Message) error {
-			for i := range appended {
-				if appended[i].ID == messageID {
-					appended[i] = msg
-					return nil
+		Projection: ProjectionDeps{
+			AppendMessages: func(_ context.Context, _ string, msgs ...api.Message) error {
+				appended = append(appended, msgs...)
+				return nil
+			},
+			UpdateMessage: func(_ context.Context, _, messageID string, msg api.Message) error {
+				for i := range appended {
+					if appended[i].ID == messageID {
+						appended[i] = msg
+						return nil
+					}
 				}
-			}
-			return nil
+				return nil
+			},
 		},
 	})
 	sess := &api.Session{ID: "s1", Posture: api.SessionPostureSpec}
@@ -193,16 +213,22 @@ func TestPromptLoop_PhaseGateUnmetJSONSkipsDoomLoopRecord(t *testing.T) {
 		return `{"error":"phase_gate_unmet","failed_gate":"research_satisfied","phase":"research"}`, nil
 	})
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		Tools:    reg,
-		DoomLoop: guard,
-		// The banner carries the gate refusal.
-		EnrichToolOutput: func(_ context.Context, _ *api.Session, _ string, _ map[string]any, output string, raised guidance.ToolResultFacts, _ int) (string, guidance.ToolResultFacts) {
-			return output + "\n\n>>> Tool feedback\nGate blocked\nCode: WORKFLOW_GATE_BLOCKED",
-				raised.WithCode("WORKFLOW_GATE_BLOCKED").WithOutcome(api.ToolResultOutcomeRejected)
+		Context: ContextDeps{
+			Tools: reg,
+		},
+		Nudges: NudgesDeps{
+			DoomLoop: guard,
+			// The banner carries the gate refusal.,
+		},
+		Tools: ToolsDeps{
+			EnrichToolOutput: func(_ context.Context, _ *api.Session, _ string, _ map[string]any, output string, raised guidance.ToolResultFacts, _ int) (string, guidance.ToolResultFacts) {
+				return output + "\n\n>>> Tool feedback\nGate blocked\nCode: WORKFLOW_GATE_BLOCKED",
+					raised.WithCode("WORKFLOW_GATE_BLOCKED").WithOutcome(api.ToolResultOutcomeRejected)
+			},
 		},
 	})
 	sess := &api.Session{ID: "s1", Posture: api.SessionPostureSpec}
-	_ = toolInvocations{loop}.executeToolCall(context.Background(), sess, "s1", "", nil, api.ToolCall{
+	_ = loop.Tools.executeToolCall(context.Background(), sess, "s1", "", nil, api.ToolCall{
 		Name: "workflow_advance",
 		Args: map[string]any{},
 	}, tools.ToolContext{SessionID: "s1"}, nil, 0, "", api.CoordinatorRunContext{})
@@ -218,8 +244,12 @@ func TestExecuteToolCallCarriesCompiledInvocationContract(t *testing.T) {
 		captured = tctx
 		return "ok", nil
 	}))
-	loop := NewPromptLoopForTest(PromptLoopDeps{Tools: reg})
-	toolInvocations{loop}.executeToolCall(context.Background(), &api.Session{ID: "s1"}, "s1", "", nil, api.ToolCall{
+	loop := NewPromptLoopForTest(PromptLoopDeps{
+		Context: ContextDeps{
+			Tools: reg,
+		},
+	})
+	loop.Tools.executeToolCall(context.Background(), &api.Session{ID: "s1"}, "s1", "", nil, api.ToolCall{
 		ID: "call-1", Name: "read", Args: map[string]any{},
 	}, tools.ToolContext{SessionID: "s1"}, nil, 0, "", api.CoordinatorRunContext{})
 	want, ok := toolcontract.Lookup("read")
@@ -237,8 +267,12 @@ func TestExecuteToolCallTracksWhetherTheSubsystemOwnerRan(t *testing.T) {
 		return "", nil
 	}))
 	blocked.SetFail("read", errors.New("blocked before subsystem owner"))
-	loop := NewPromptLoopForTest(PromptLoopDeps{Tools: blocked})
-	run := toolInvocations{loop}.executeToolCall(t.Context(), &api.Session{ID: "s1"}, "s1", "", nil, api.ToolCall{
+	loop := NewPromptLoopForTest(PromptLoopDeps{
+		Context: ContextDeps{
+			Tools: blocked,
+		},
+	})
+	run := loop.Tools.executeToolCall(t.Context(), &api.Session{ID: "s1"}, "s1", "", nil, api.ToolCall{
 		ID: "call-1", Name: "read", Args: map[string]any{},
 	}, tools.ToolContext{SessionID: "s1"}, nil, 0, "", api.CoordinatorRunContext{})
 	if run.invoked {
@@ -249,8 +283,12 @@ func TestExecuteToolCallTracksWhetherTheSubsystemOwnerRan(t *testing.T) {
 	testutil.FailErr(t, "register failing read", invoked.Register("read", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 		return "", errors.New("subsystem owner failed")
 	}))
-	loop = NewPromptLoopForTest(PromptLoopDeps{Tools: invoked})
-	run = toolInvocations{loop}.executeToolCall(t.Context(), &api.Session{ID: "s1"}, "s1", "", nil, api.ToolCall{
+	loop = NewPromptLoopForTest(PromptLoopDeps{
+		Context: ContextDeps{
+			Tools: invoked,
+		},
+	})
+	run = loop.Tools.executeToolCall(t.Context(), &api.Session{ID: "s1"}, "s1", "", nil, api.ToolCall{
 		ID: "call-2", Name: "read", Args: map[string]any{},
 	}, tools.ToolContext{SessionID: "s1"}, nil, 0, "", api.CoordinatorRunContext{})
 	if !run.invoked {
@@ -260,12 +298,16 @@ func TestExecuteToolCallTracksWhetherTheSubsystemOwnerRan(t *testing.T) {
 
 func TestSurveyReceiptsReachDoomLoopObservers(t *testing.T) {
 	guard := &memoryDoomLoopGuard{}
-	loop := NewPromptLoopForTest(PromptLoopDeps{DoomLoop: guard})
+	loop := NewPromptLoopForTest(PromptLoopDeps{
+		Nudges: NudgesDeps{
+			DoomLoop: guard,
+		},
+	})
 	args := map[string]any{"pattern": "result"}
-	turnNudges{loop}.recordSearchOutcome(t.Context(), "s1", "grep", args, "unstructured result")
+	loop.Nudges.recordSearchOutcome(t.Context(), "s1", "grep", args, "unstructured result")
 	for _, touched := range []int{0, 2} {
 		output := surveyreceipt.Attach("result", surveyreceipt.New("grep", ".", touched, 6, false))
-		turnNudges{loop}.recordSearchOutcome(t.Context(), "s1", "grep", args, output)
+		loop.Nudges.recordSearchOutcome(t.Context(), "s1", "grep", args, output)
 	}
 	want := []bool{false, true}
 	if !reflect.DeepEqual(guard.searchOutcomes, want) {
@@ -283,7 +325,11 @@ func TestPreExecutorRefusalsUseOneOccurrenceAndOfferedRecovery(t *testing.T) {
 	testutil.FailErr(t, "load policy", err)
 	pipeline := oar.NewGuardPipeline(rules, loader, oar.NewCounterStore())
 	pipeline.EnableAnchor(oar.AnchorToolRejected)
-	loop := NewPromptLoopForTest(PromptLoopDeps{BlockPlane: &tools.BlockPlane{Pipeline: pipeline, Renderer: oar.NewRenderer(nil, nil)}})
+	loop := NewPromptLoopForTest(PromptLoopDeps{
+		Tools: ToolsDeps{
+			BlockPlane: &tools.BlockPlane{Pipeline: pipeline, Renderer: oar.NewRenderer(nil, nil)},
+		},
+	})
 	for _, code := range []string{"TOOL_NOT_OFFERED", "TOOL_INVOKE_PROSE_TURN"} {
 		rule, _ := rules.Get(code)
 		rule.OnFire = []oar.OnFireAction{oar.OnFireIncrementCounter}
@@ -308,7 +354,7 @@ func TestPreExecutorRefusalsUseOneOccurrenceAndOfferedRecovery(t *testing.T) {
 			if tc.loadable {
 				deferred = []string{"command"}
 			}
-			reject := toolInvocations{loop}.rejectToolOccurrence(t.Context(), sess, api.ToolCall{Name: "command"}, tools.ToolContext{Agent: "coordinator", TurnOfferedToolNames: tc.offered, TurnToolPlan: toolsurface.Compile(tc.offered, deferred)}, tc.code, nil)
+			reject := loop.Tools.rejectToolOccurrence(t.Context(), sess, api.ToolCall{Name: "command"}, tools.ToolContext{Agent: "coordinator", TurnOfferedToolNames: tc.offered, TurnToolPlan: toolsurface.Compile(tc.offered, deferred)}, tc.code, nil)
 			if reject.Code() != tc.code || reject.Copy == nil || tools.AsToolReject(reject) == nil {
 				t.Fatalf("pre-executor refusal lost decision: %+v", reject)
 			}

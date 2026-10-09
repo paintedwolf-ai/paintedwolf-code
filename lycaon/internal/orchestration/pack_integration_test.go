@@ -4,10 +4,6 @@ package orchestration_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/session/store"
-	"github.com/lycaon/lycaon/internal/settings"
-	"github.com/lycaon/lycaon/internal/testdbseed"
-	"github.com/lycaon/lycaon/internal/testutil"
 	"sync"
 	"testing"
 	"time"
@@ -16,6 +12,10 @@ import (
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/testdbseed"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -69,7 +69,7 @@ func TestPackParallelProbeDispatch(t *testing.T) {
 	ctx := context.Background()
 	orch, rec, sessMgr, sessStore := newPackTimestampOrchestrator(t)
 
-	sess, err := sessMgr.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
+	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "sessMgr.Create failed", err)
 	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore, sess)
 
@@ -122,7 +122,7 @@ func TestPackFirstValidSkipsFailedProbe(t *testing.T) {
 		Agents:     reg,
 	})
 
-	sess, err := sessMgr.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
+	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "sessMgr.Create failed", err)
 	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore, sess)
 
@@ -147,7 +147,7 @@ func TestPackProbeYamlMockRun(t *testing.T) {
 		t.Fatalf("pattern = %q", spec.Pattern)
 	}
 
-	sess, err := sessMgr.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
+	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "sessMgr.Create failed", err)
 	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore, sess)
 
@@ -186,7 +186,7 @@ func TestPackAllFailReturnsError(t *testing.T) {
 		Agents:     reg,
 	})
 
-	sess, err := sessMgr.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
+	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "sessMgr.Create failed", err)
 	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore, sess)
 

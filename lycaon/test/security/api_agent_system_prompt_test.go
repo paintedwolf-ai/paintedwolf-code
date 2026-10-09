@@ -34,16 +34,16 @@ func TestWorkerSpawnUsesAgentSystemPrompt(t *testing.T) {
 	legID := r.Legs[0].ID
 	leg, err := h.DelegationMgr.DispatchLeg(ctx, r.ID, legID, "")
 	testutil.FailErr(t, "h.DelegationMgr.DispatchLeg failed", err)
-	child, err := mgr.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{
+	child, err := mgr.Workers.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{
 		AgentType:   orchestration.ProfileImplementer,
 		Prompt:      "add handler",
 		WorkerJobID: leg.WorkerID,
 	})
-	testutil.FailErr(t, "mgr.SpawnChild failed", err)
+	testutil.FailErr(t, "mgr.Workers.SpawnChild failed", err)
 	testutil.FailErr(t, "bind worker child", h.WorkerQueue.SetChildSessionID(ctx, leg.WorkerID, child.ID))
 	// A worker child's turn resolves its queued task from the bound job.
-	if _, err := mgr.Prompt(workercontext.WithJob(ctx, leg.WorkerID), child.ID, "add handler"); err != nil {
-		testutil.FailErr(t, "mgr.Prompt failed", err)
+	if _, err := mgr.Submissions.Prompt(workercontext.WithJob(ctx, leg.WorkerID), child.ID, "add handler"); err != nil {
+		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 	}
 
 	var sysContent string

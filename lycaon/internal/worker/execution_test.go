@@ -55,7 +55,7 @@ func newExecutionStack(t *testing.T) (*session.Manager, *InMemoryQueue, *LocalWo
 	cfg := DefaultWorkersConfig()
 	queue := NewInMemoryQueue(cfg.Poller.MaxConcurrency)
 	queue.SetWorkersConfig(cfg)
-	exec := NewLocalWorkerExecutor(mgr, queue)
+	exec := NewLocalWorkerExecutor(mgr.Workers, queue, mgr.Workspace, mgr.Submissions, mgr.Transcript, mgr.Runner.Execution, mgr.Workers.Cancel, mgr.Workers.Cancellations)
 	exec.SetPromptInjects(promptstest.InjectRenderer(t))
 	poller := NewLocalWorkerPoller(queue, exec, cfg, discardOutcomeRecorder{})
 	queue.SetRunningCancel(poller.Abort)
@@ -172,7 +172,7 @@ func TestParentMessageCapAfterWorkers(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 
-	parent, err := mgr.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
+	parent, err := mgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "mgr.Create failed", err)
 	pollCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
@@ -195,7 +195,7 @@ func TestParentMessageCapAfterWorkers(t *testing.T) {
 		return len(tasks) >= 5
 	})
 
-	msgs, err := mgr.GetMessages(ctx, parent.ID)
+	msgs, err := mgr.Transcript.GetMessages(ctx, parent.ID)
 	testutil.FailErr(t, "mgr.GetMessages failed", err)
 	if len(msgs) > 20 {
 		t.Fatalf("parent messages = %d, want <= 20", len(msgs))

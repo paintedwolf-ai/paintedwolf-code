@@ -7,11 +7,10 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/assembly"
 	"github.com/lycaon/lycaon/internal/coordinator/batch"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
-	"github.com/lycaon/lycaon/internal/session/workercompletion"
-
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/guidance/feedback"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -19,6 +18,10 @@ import (
 func (m *Manager) SetPromptEngine(engine prompts.PromptTemplateEngine) {
 	if m != nil {
 		m.prompts = engine
+		m.Closeout.SetPrompts(engine)
+		m.Workers.SetPromptEngine(engine)
+		m.Nudges.SetPrompts(engine)
+		m.PolicyIndex.SetRenderer(engine)
 		guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(engine))
 		m.ensureCoordinatorRuntime().Kicks().SetPromptEngine(engine)
 	}
@@ -28,6 +31,10 @@ func (m *Manager) SetPromptEngine(engine prompts.PromptTemplateEngine) {
 func (m *Manager) SetCoordinatorTurnFrameSource(source inject.CoordinatorTurnFrameSource) {
 	if m != nil {
 		m.coordinatorFrame = source
+		m.Guards.SetFrame(source)
+		m.Runner.PostTurn.SetFrame(source)
+		m.Runner.Preparation.SetFrame(source)
+		m.Guidance.SetFrame(source)
 	}
 }
 
@@ -35,6 +42,7 @@ func (m *Manager) SetCoordinatorTurnFrameSource(source inject.CoordinatorTurnFra
 func (m *Manager) SetWorkerContextBuilder(b assembly.WorkerContextBuilder) {
 	if m != nil {
 		m.workerContext = b
+		m.Workers.SetContext(b)
 	}
 }
 
@@ -42,9 +50,13 @@ func (m *Manager) SetWorkerContextBuilder(b assembly.WorkerContextBuilder) {
 func (m *Manager) SetWorkflowHints(cfg *guidance.HintConfig, gateFeedback *feedback.GateFeedbackCatalog) {
 	if m != nil {
 		m.workflowHints = cfg
+		m.Workers.Summaries.SetEvaluation(m.workspaceCheck, m.workflowHints, m.ToolPolicy.Pipeline)
+		m.Workers.SetEvaluation(m.workspaceCheck, m.workflowHints, m.ToolPolicy.Pipeline)
 		m.gateFeedback = gateFeedback
+		m.Guidance.SetFeedback(gateFeedback)
 		// Phase formatting retains copy evaluated at the rejection occurrence.
 		m.toolRejectFormatter = guidance.NewToolRejectFormatter(guidance.NewFeedbackDeduper())
+		m.Guards.SetRejects(m.rejectFmt, m.toolRejectFormatter)
 		m.toolOutputEnricher = guidance.NewToolOutputEnricher(cfg, gateFeedback)
 	}
 }
@@ -53,6 +65,9 @@ func (m *Manager) SetWorkflowHints(cfg *guidance.HintConfig, gateFeedback *feedb
 func (m *Manager) SetWorkspaceChecker(c workercompletion.WorkspaceChangeChecker) {
 	if m != nil {
 		m.workspaceCheck = c
+		m.Guards.SetWorkspaceCheck(c)
+		m.Workers.Summaries.SetEvaluation(m.workspaceCheck, m.workflowHints, m.ToolPolicy.Pipeline)
+		m.Workers.SetEvaluation(m.workspaceCheck, m.workflowHints, m.ToolPolicy.Pipeline)
 	}
 }
 
@@ -66,7 +81,7 @@ func (m *Manager) buildCompletionMessages(
 }
 
 func (m *Manager) renderToolProcedures(ctx context.Context, sess *api.Session, profileID string, offered []string) (string, error) {
-	return inject.RenderToolProceduresBlock(ctx, prompts.NewInjectRenderer(m.prompts), sess.ID, profileID, offered, m.turnLoads.Omitted(sess.ID))
+	return inject.RenderToolProceduresBlock(ctx, prompts.NewInjectRenderer(m.prompts), sess.ID, profileID, offered, m.Loading.Ledger.Omitted(sess.ID))
 }
 
 // CoordinatorRunContext returns the same block exposed on Prompt prepend (optional GET).
@@ -86,7 +101,7 @@ func (m *Manager) CoordinatorRunContext(ctx context.Context, sessionID string) (
 		return api.CoordinatorRunContext{}, err
 	}
 	runCtx := frame.RunContext
-	state := m.BuildImplementSessionState(ctx, sess)
+	state := m.Workers.State.ForSession(ctx, sess)
 	if wirePhase := batch.ToWirePhase(state.BatchPhase); wirePhase != "" {
 		runCtx.BatchPhase = wirePhase
 		runCtx.BatchSeq = state.BatchSeq

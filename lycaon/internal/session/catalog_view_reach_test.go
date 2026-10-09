@@ -50,7 +50,7 @@ func newViewManager(t *testing.T, root string, surfaces *settings.TrustSurfacesS
 	})
 	m.SetEffectiveCatalogDeps(root, boot, surfaces)
 	cache := catalogview.NewCache(root, slog.Default())
-	m.Catalog().SetCatalogViewCache(cache)
+	m.Catalog.SetCatalogViewCache(cache)
 	return m, cache
 }
 
@@ -78,14 +78,14 @@ func TestW10ReachMatrix(t *testing.T) {
 	pB, err := project.CreateWithRoot(ctx, reg, projB)
 	testutil.FailErr(t, "CreateWithRoot B", err)
 
-	viewA := m.Catalog().ViewForProject(ctx, pA.ID)
+	viewA := m.Catalog.ViewForProject(ctx, pA.ID)
 	if viewA == nil || viewA.Catalog == nil {
 		t.Fatal("view A nil")
 	}
 	if viewA.Catalog.HasLoaded(extpacks.GuidanceUnitID("coordinator-gate-blocked")) {
 		t.Fatal("project A should disable guidance/coordinator-gate-blocked")
 	}
-	viewB := m.Catalog().ViewForProject(ctx, pB.ID)
+	viewB := m.Catalog.ViewForProject(ctx, pB.ID)
 	if viewB == nil || viewB.Catalog == nil {
 		t.Fatal("view B nil")
 	}
@@ -102,7 +102,7 @@ func TestW10ReachMatrix(t *testing.T) {
 		{&api.Session{ID: "sa", ProjectID: pA.ID, WorkspacePath: projA}, viewA},
 		{&api.Session{ID: "sb", ProjectID: pB.ID, WorkspacePath: projB}, viewB},
 	} {
-		got := m.Catalog().ViewForSession(ctx, tc.session)
+		got := m.Catalog.ViewForSession(ctx, tc.session)
 		if got == nil || got.Catalog == nil || got.Catalog.Revision != tc.view.Catalog.Revision {
 			t.Fatalf("session %s received the wrong project catalog", tc.session.ID)
 		}
@@ -141,8 +141,8 @@ func TestW11GateMatrix(t *testing.T) {
 					testutil.FailErr(t, "SetTrustEnabled", err)
 				}
 			}
-			view := m.Catalog().ViewForProject(ctx, p.ID)
-			device := m.Catalog().DeviceView(ctx)
+			view := m.Catalog.ViewForProject(ctx, p.ID)
+			device := m.Catalog.DeviceView(ctx)
 			if view == nil || device == nil {
 				t.Fatal("nil view")
 			}
@@ -243,10 +243,10 @@ func TestW13NoSharedMutation(t *testing.T) {
 	pA := makeProj(extpacks.GuidanceUnitID("coordinator-gate-blocked"))
 	pB := makeProj("")
 
-	pipeline := oar.NewGuardPipeline(m.Catalog().DeviceView(ctx).Rules, nil, oar.NewCounterStore())
+	pipeline := oar.NewGuardPipeline(m.Catalog.DeviceView(ctx).Rules, nil, oar.NewCounterStore())
 	pipeline.EnableAnchor(oar.AnchorToolPreInvoke)
 	pipeline.SetRuleSetFor(func(ctx context.Context, sessionID string) *oar.RuleSet {
-		return m.Catalog().ViewForSessionID(ctx, sessionID).Rules
+		return m.Catalog.ViewForSessionID(ctx, sessionID).Rules
 	})
 	var wg sync.WaitGroup
 	errs := make(chan error, 32)
@@ -258,7 +258,7 @@ func TestW13NoSharedMutation(t *testing.T) {
 			if i%2 == 0 {
 				id = pB.ID
 			}
-			view := m.Catalog().ViewForProject(ctx, id)
+			view := m.Catalog.ViewForProject(ctx, id)
 			if view == nil {
 				errs <- context.Canceled
 				return
@@ -295,12 +295,12 @@ func TestW14FailureDegradesToDevice(t *testing.T) {
 		testutil.FailErr(t, "PutEnabled", err)
 	}
 	m, _ := newViewManager(t, root, surfaces)
-	device := m.Catalog().DeviceView(ctx)
+	device := m.Catalog.DeviceView(ctx)
 	if device == nil {
 		t.Fatal("device view required")
 	}
 	// Missing projects use the device view.
-	got := m.Catalog().ViewForProject(ctx, "missing-project-id")
+	got := m.Catalog.ViewForProject(ctx, "missing-project-id")
 	if got == nil || got.Catalog == nil {
 		t.Fatal("expected device fallback view")
 	}
@@ -315,7 +315,7 @@ func TestW14FailureDegradesToDevice(t *testing.T) {
 	writeProjectExtensions(t, dir, "disabled: []\n")
 	p, err := project.CreateWithRoot(ctx, reg, dir)
 	testutil.FailErr(t, "CreateWithRoot", err)
-	good := m.Catalog().ViewForProject(ctx, p.ID)
+	good := m.Catalog.ViewForProject(ctx, p.ID)
 	if good == nil {
 		t.Fatal("good project view nil")
 	}
@@ -332,7 +332,7 @@ func TestDeviceViewCarriesStockThemes(t *testing.T) {
 	}
 	m, _ := newViewManager(t, configlayout.FindModuleRoot(), surfaces)
 
-	device := m.Catalog().DeviceView(ctx)
+	device := m.Catalog.DeviceView(ctx)
 	if device == nil || device.Contributions == nil {
 		t.Fatal("device view must carry contributions")
 	}

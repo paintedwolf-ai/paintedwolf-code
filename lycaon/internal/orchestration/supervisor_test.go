@@ -2,10 +2,6 @@ package orchestration_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/session/store"
-	"github.com/lycaon/lycaon/internal/settings"
-	"github.com/lycaon/lycaon/internal/testdbseed"
-	"github.com/lycaon/lycaon/internal/testutil"
 	"sync"
 	"testing"
 	"time"
@@ -14,6 +10,10 @@ import (
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/testdbseed"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -61,7 +61,7 @@ func TestSupervisorTopologyParentLinks(t *testing.T) {
 	rec := &recordingDelegation{}
 	orch, store, sessMgr, sessStore := newSupervisorTestOrchestrator(t, rec)
 
-	sess, err := sessMgr.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
+	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "sessMgr.Create failed", err)
 	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore, sess)
 
@@ -112,7 +112,7 @@ func TestSupervisorMaxAgentsRejected(t *testing.T) {
 	ctx := context.Background()
 	orch, _, sessMgr, sessStore := newSupervisorTestOrchestrator(t, nil)
 
-	sess, err := sessMgr.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
+	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "sessMgr.Create failed", err)
 	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore, sess)
 
@@ -145,7 +145,7 @@ func TestSupervisorStrategyParallel(t *testing.T) {
 	rec := &recordingDelegation{order: make([]string, 0, 4)}
 	orch, _, sessMgr, sessStore := newSupervisorTestOrchestrator(t, rec)
 
-	sess, err := sessMgr.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
+	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "sessMgr.Create failed", err)
 	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore, sess)
 
@@ -172,7 +172,7 @@ func TestSupervisorWorkersDispatchInParallel(t *testing.T) {
 	rec := &timestampRecording{}
 	orch, _, sessMgr, sessStore := newSupervisorTestOrchestrator(t, rec)
 
-	sess, err := sessMgr.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
+	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "sessMgr.Create failed", err)
 	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore, sess)
 
@@ -204,7 +204,7 @@ func TestSupervisorParallelYamlMockRun(t *testing.T) {
 	spec, err := orch.LoadTopology(ctx, bundledTopologyPath(t, "supervisor-parallel.yaml"))
 	testutil.FailErr(t, "orch.LoadTopology failed", err)
 
-	sess, err := sessMgr.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
+	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "sessMgr.Create failed", err)
 	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore, sess)
 

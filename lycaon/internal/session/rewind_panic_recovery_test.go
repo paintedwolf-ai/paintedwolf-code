@@ -8,9 +8,10 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/lycaon/lycaon/internal/enginepaths"
 	sessioncheckpoint "github.com/lycaon/lycaon/internal/session/checkpoint"
 	"github.com/lycaon/lycaon/internal/sourceeffect"
+	"github.com/lycaon/lycaon/internal/sourceledger"
+	"github.com/lycaon/lycaon/internal/sourcerewind"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -43,11 +44,12 @@ func TestRewindApplyPanicRollsBackInPlace(t *testing.T) {
 	recordRewindTestEffect(t, mgr, sessionID, "b.txt", []byte("before-b"), []byte("after-b"), api.SourceChangeOpWrite)
 
 	// Apply a.txt before injecting a panic on b.txt.
-	mgr.sourceRewinds.Mutations = &rewindFaultJournal{delegate: mgr.sourceMutations, before: func(entryIndex int) {
+	faultSource := &sourcerewind.Service{Ledger: mgr.sourceLedger.(*sourceledger.Store), Mutations: &rewindFaultJournal{delegate: mgr.sourceMutations, before: func(entryIndex int) {
 		if entryIndex == 1 {
 			panic("boom: injected rewind apply panic")
 		}
-	}}
+	}}}
+	mgr.Rewinds.SetSourceRewinds(faultSource)
 
 	operationID := uuid.NewString()
 	_, err = rewindTest(t, mgr, ctx, operationID, sessionID, anchor.ID)
@@ -70,9 +72,9 @@ func TestRewindApplyPanicRollsBackInPlace(t *testing.T) {
 		t.Fatalf("b.txt = %q, want untouched after-b", gotB)
 	}
 
-	msgs, err := mgr.GetMessages(ctx, sessionID)
+	msgs, err := mgr.Transcript.GetMessages(ctx, sessionID)
 	testutil.FailErr(t, "get messages", err)
-	if _, ok := findMessage(msgs, anchor.ID); !ok {
+	if _, ok := rewindFixtureHasMessage(msgs, anchor.ID); !ok {
 		t.Fatal("a rolled-back rewind must leave the transcript intact")
 	}
 
@@ -83,66 +85,11 @@ func TestRewindApplyPanicRollsBackInPlace(t *testing.T) {
 	}
 
 	// Retry in the same process after rollback.
-	mgr.sourceRewinds.Mutations = mgr.sourceMutations
+	mgr.Rewinds.SetSourceRewinds(&sourcerewind.Service{Ledger: mgr.sourceLedger.(*sourceledger.Store), Mutations: mgr.sourceMutations})
 	result, err := rewindTest(t, mgr, ctx, uuid.NewString(), sessionID, anchor.ID)
 	testutil.FailErr(t, "rewind after recovery", err)
 	if result == nil {
 		t.Fatal("rewind after recovery returned a nil result")
-	}
-}
-
-// Startup reclaims anchors left behind after the rewind commit.
-func TestSweepCommittedRewindsReclaimsOrphanedAnchor(t *testing.T) {
-	mgr, sessionID, dir := newCheckpointTestSession(t)
-	ctx := checkpointCaller(t, mgr)
-
-	anchor := api.Message{
-		ID: "u-sweep", Role: api.MessageRoleUser, Content: "change file",
-		Origin: api.MessageOriginUser, Authority: api.ContentAuthorityUser,
-		TrustTier: api.ContentTrustTierTrusted,
-	}
-	testutil.FailErr(t, "append", mgr.store.AppendMessages(ctx, sessionID, anchor))
-
-	path := filepath.Join(dir, "file.txt")
-	testutil.FailErr(t, "seed", os.WriteFile(path, []byte("before"), 0o640))
-	cpStore := sessioncheckpoint.New(mgr.dataDir, dir, mgr.store)
-	_, err := cpStore.Open(t.Context(), sessionID, anchor.ID)
-	testutil.FailErr(t, "open checkpoint", err)
-	testutil.FailErr(t, "capture", cpStore.CapturePreImage(t.Context(), sessionID, anchor.ID, "file.txt"))
-	testutil.FailErr(t, "turn writes", os.WriteFile(path, []byte("after"), 0o640))
-	recordRewindTestEffect(t, mgr, sessionID, "file.txt", []byte("before"), []byte("after"), api.SourceChangeOpWrite)
-
-	rootID := RootSessionID(ctx, mgr.store, sessionID)
-	// The existence check below fails loudly if this checkpoint layout changes.
-	anchorDir := filepath.Join(enginepaths.ProjectCheckpointDir(enginepaths.SessionCheckpointsRootUnder(mgr.dataDir), filepath.Clean(dir)), "anchors", rootID, anchor.ID)
-	if _, err := os.Stat(anchorDir); err != nil {
-		t.Fatalf("anchor dir missing before rewind: %v", err)
-	}
-
-	msgs, err := mgr.store.GetMessages(ctx, sessionID)
-	testutil.FailErr(t, "get messages", err)
-	anchorIDs := eligibleAnchorIDsFrom(msgs, anchor.ID)
-	operationID := uuid.NewString()
-	result := &RewindResult{}
-	// Stop after commit to leave anchor cleanup pending.
-	_, err = mgr.executeRewind(ctx, cpStore, rootID, operationID, rewindInputDigest(sessionID, anchor.ID), sessionID, anchor.ID, anchorIDs, rewindTestDigest(t, mgr, sessionID, anchor.ID), result)
-	testutil.FailErr(t, "execute rewind", err)
-
-	if _, err := os.Stat(anchorDir); err != nil {
-		t.Fatalf("anchor dir missing right after commit (test setup invalid): %v", err)
-	}
-
-	testutil.FailErr(t, "sweep committed rewinds", mgr.sweepCommittedRewinds(ctx))
-
-	if _, err := os.Stat(anchorDir); !os.IsNotExist(err) {
-		t.Fatalf("anchor dir still present after sweep, err=%v", err)
-	}
-
-	// Retained receipts remain available for retries.
-	op, err := mgr.store.GetRewindOperation(ctx, operationID)
-	testutil.FailErr(t, "get rewind operation", err)
-	if op == nil || op.Status != "committed" {
-		t.Fatalf("operation = %+v, want still committed (within retention)", op)
 	}
 }
 
@@ -167,7 +114,7 @@ func (j *rewindFaultJournal) RemoveEntry(ctx context.Context, r sourceeffect.Rem
 
 func rewindTestDigest(t *testing.T, m *Manager, id, anchor string) string {
 	t.Helper()
-	preview, err := m.PreviewRewind(checkpointCaller(t, m), id, anchor)
+	preview, err := m.Rewinds.PreviewRewind(checkpointCaller(t, m), id, anchor)
 	testutil.FailErr(t, "preview rewind", err)
 	if len(preview.Issues) > 0 {
 		t.Fatalf("preview issues: %+v", preview.Issues)

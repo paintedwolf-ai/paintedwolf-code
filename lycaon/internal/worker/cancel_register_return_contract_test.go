@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/events"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
@@ -69,7 +69,7 @@ func newMockGracefulCancelSession() *mockGracefulCancelSession {
 	return &mockGracefulCancelSession{registered: map[string]mockGracefulRegistration{}}
 }
 
-func (m *mockGracefulCancelSession) RegisterWorkerGracefulCancel(childSessionID, jobID, reason string) error {
+func (m *mockGracefulCancelSession) Register(childSessionID, jobID, reason string) error {
 	childSessionID = strings.TrimSpace(childSessionID)
 	jobID = strings.TrimSpace(jobID)
 	if childSessionID == "" || jobID == "" {
@@ -81,7 +81,7 @@ func (m *mockGracefulCancelSession) RegisterWorkerGracefulCancel(childSessionID,
 	return nil
 }
 
-func (m *mockGracefulCancelSession) AppendWorkerCancellation(context.Context, string, session.WorkerCancellationInput) error {
+func (m *mockGracefulCancelSession) Append(context.Context, string, workeroutcomes.CancellationInput) error {
 	return nil
 }
 
@@ -122,7 +122,7 @@ func TestCancelRunningGracefulOutlivesRequest(t *testing.T) {
 	hub := &recordingHub{}
 	queue.SetEventPublisher(&events.Publisher{Hub: hub})
 	mock := newMockGracefulCancelSession()
-	svc := &CancelService{Queue: queue, Sessions: mock}
+	svc := &CancelService{Queue: queue, Sessions: mock, Cancellations: mock, Graceful: mock}
 
 	const child = "child-outlives"
 	jobID := setupRunningWorker(t, queue, child)
@@ -176,7 +176,7 @@ func TestCancelRunningGracefulOutlivesRequest(t *testing.T) {
 func TestCancelRunningGracefulNonBlockingUnderSlowCloseout(t *testing.T) {
 	queue := NewInMemoryQueue(2)
 	mock := newMockGracefulCancelSession()
-	svc := &CancelService{Queue: queue, Sessions: mock}
+	svc := &CancelService{Queue: queue, Sessions: mock, Cancellations: mock, Graceful: mock}
 
 	const child = "child-slow"
 	jobID := setupRunningWorker(t, queue, child)
@@ -214,12 +214,12 @@ func TestCancelPendingAndHeldWorkersFinalizeSynchronously(t *testing.T) {
 	hub := &recordingHub{}
 	queue.SetEventPublisher(&events.Publisher{Hub: hub})
 
-	parent, err := mgr.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureBuild)
+	parent, err := mgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureBuild)
 	testutil.FailErr(t, "Create parent", err)
 
 	svc := &CancelService{
 		Queue:    queue,
-		Sessions: mgr,
+		Sessions: mgr, Graceful: mgr.Workers.Cancel,
 		Reports: ChangeReportDeps{
 			Messages: func(context.Context, string) ([]api.Message, error) { return nil, nil },
 		},

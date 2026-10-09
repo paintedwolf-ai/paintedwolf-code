@@ -8,25 +8,25 @@ import (
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/boot"
 	"github.com/lycaon/lycaon/internal/bootrecovery"
+	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/coordinator"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/delegation"
+	"github.com/lycaon/lycaon/internal/events"
+	"github.com/lycaon/lycaon/internal/llm"
+	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/parse"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/scan"
+	"github.com/lycaon/lycaon/internal/secretcap"
+	"github.com/lycaon/lycaon/internal/secretspan"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workflow"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"github.com/lycaon/lycaon/internal/captureprojection"
-	"github.com/lycaon/lycaon/internal/events"
-	"github.com/lycaon/lycaon/internal/llm"
-	"github.com/lycaon/lycaon/internal/mcp"
-	"github.com/lycaon/lycaon/internal/secretcap"
-	"github.com/lycaon/lycaon/internal/secretspan"
 )
 
 // toolWiring wires the coordinator tools, scanning, detection packs, and the OAR block plane.
@@ -109,34 +109,35 @@ func (b toolWiring) registerCoordinatorTools() error {
 	}); err != nil {
 		return fmt.Errorf("decline_worker_budget tool: %w", err)
 	}
-	b.toolRuntime.Boundary.SetMergeReconcileAllowlister(b.mgr)
+	b.toolRuntime.Boundary.SetMergeReconcileAllowlister(b.mgr.Promotion)
 	workerMergeSvc := &worker.MergeService{
 		Queue:        b.workerQueue,
 		Store:        b.workerQueue,
 		Workspace:    b.wsMgr,
 		Reject:       b.rejectFmt,
 		Sessions:     b.workerQueue,
-		Reconcile:    b.mgr,
-		Coord:        b.mgr,
+		Reconcile:    b.mgr.Promotion,
+		Captures:     b.mgr.Captures,
+		Coord:        b.mgr.Workers.Workspaces,
 		Closeout:     b.delegationMgr,
 		Projects:     b.registry,
 		Scans:        b.scanTriggers,
 		SourceLedger: b.sourceLedger,
 		DataDir:      b.dataDir,
 		Reports: worker.ChangeReportDeps{
-			SourceRuns: b.mgr.WorkerSourceRuns,
+			SourceRuns: b.mgr.Verification.WorkerSourceRuns,
 			Messages: func(ctx context.Context, childSessionID string) ([]wire.Message, error) {
 				return b.store.GetMessages(ctx, childSessionID)
 			},
 		},
 	}
 	workerMergeSvc.Evidence = worker.SourceEvidenceContext{
-		SourceRevision: b.mgr.WorkerVerificationRevision,
+		SourceRevision: b.mgr.Verification.WorkerRevision,
 		DeclaredCommand: func(ctx context.Context, task *wire.WorkerTask) string {
 			if task == nil {
 				return ""
 			}
-			return b.mgr.SourceVerifyCommand(ctx, task.WorkspacePath)
+			return b.mgr.Verification.SourceVerifyCommand(ctx, task.WorkspacePath)
 		},
 	}
 	b.workerMergeSvc = workerMergeSvc
@@ -152,7 +153,7 @@ func (b toolWiring) registerCoordinatorTools() error {
 	}); err != nil {
 		return fmt.Errorf("worker_cancel tool: %w", err)
 	}
-	b.mgr.SetOverlayPromoter(workerMergeSvc)
+	b.mgr.ProjectControl.SetOverlayPromoter(workerMergeSvc)
 	if err := worker.RegisterOverlayTools(b.toolRuntime.Registry, worker.OverlayToolDeps{
 		Merge: workerMergeSvc,
 	}); err != nil {
@@ -175,7 +176,6 @@ func (b toolWiring) registerCoordinatorTools() error {
 // and the worker assignment prompt.
 func (b toolWiring) taskToolDeps() worker.TaskToolDeps {
 	return worker.TaskToolDeps{
-		Sessions:         b.mgr,
 		Queue:            b.workerQueue,
 		Agents:           b.agentRegistry,
 		Workers:          b.workersCfg,
@@ -362,7 +362,7 @@ func (b toolWiring) wireMCP() error {
 		b.toolRuntime.Executor.SetMCPCatalog(b.mcpReg)
 	}
 	if b.mgr != nil {
-		b.mgr.SetMCPRuntime(b.mcpReg)
+		b.mgr.ToolPolicy.SetMCPRuntime(b.mcpReg)
 	}
 	return nil
 }

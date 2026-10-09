@@ -15,18 +15,22 @@ import (
 func TestAppendTurnCloseoutNudge(t *testing.T) {
 	var appended []api.Message
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		TurnCloseoutNudge: func(_ context.Context, _ *api.Session, _ string, cause TurnCloseoutCause) HostNudge {
-			return HostNudge{
-				Content:  "This is your final turn — " + cause.Text() + ". Give the user a closing summary.",
-				SignalID: "turn.closeout",
-			}
+		Closeout: CloseoutDeps{
+			TurnCloseoutNudge: func(_ context.Context, _ *api.Session, _ string, cause TurnCloseoutCause) HostNudge {
+				return HostNudge{
+					Content:  "This is your final turn — " + cause.Text() + ". Give the user a closing summary.",
+					SignalID: "turn.closeout",
+				}
+			},
 		},
-		AppendMessages: func(_ context.Context, _ string, msgs ...api.Message) error {
-			appended = append(appended, msgs...)
-			return nil
+		Projection: ProjectionDeps{
+			AppendMessages: func(_ context.Context, _ string, msgs ...api.Message) error {
+				appended = append(appended, msgs...)
+				return nil
+			},
 		},
 	})
-	history, err := turnCloseout{loop}.appendTurnCloseoutNudge(context.Background(), &api.Session{Posture: api.SessionPostureBuild}, "s1", "coordinator", nil, TurnCloseoutCause{Reason: TurnCloseoutIterationCap}, nil)
+	history, err := loop.Closeout.appendTurnCloseoutNudge(context.Background(), &api.Session{Posture: api.SessionPostureBuild}, "s1", "coordinator", nil, TurnCloseoutCause{Reason: TurnCloseoutIterationCap}, nil)
 	if err != nil {
 		t.Fatalf("appendTurnCloseoutNudge: %v", err)
 	}
@@ -48,26 +52,30 @@ func TestAppendTurnCloseoutNudge(t *testing.T) {
 func TestAppendTurnCloseoutNudgeDedupsVerbatim(t *testing.T) {
 	var appended []api.Message
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		TurnCloseoutNudge: func(_ context.Context, _ *api.Session, _ string, cause TurnCloseoutCause) HostNudge {
-			return HostNudge{
-				Content:  "This is your final turn — " + cause.Text() + ". Give the user a closing summary.",
-				SignalID: "turn.closeout",
-			}
+		Closeout: CloseoutDeps{
+			TurnCloseoutNudge: func(_ context.Context, _ *api.Session, _ string, cause TurnCloseoutCause) HostNudge {
+				return HostNudge{
+					Content:  "This is your final turn — " + cause.Text() + ". Give the user a closing summary.",
+					SignalID: "turn.closeout",
+				}
+			},
 		},
-		AppendMessages: func(_ context.Context, _ string, msgs ...api.Message) error {
-			appended = append(appended, msgs...)
-			return nil
+		Projection: ProjectionDeps{
+			AppendMessages: func(_ context.Context, _ string, msgs ...api.Message) error {
+				appended = append(appended, msgs...)
+				return nil
+			},
 		},
 	})
 	sess := &api.Session{Posture: api.SessionPostureBuild}
-	history, err := turnCloseout{loop}.appendTurnCloseoutNudge(context.Background(), sess, "s1", "coordinator", nil, TurnCloseoutCause{Reason: TurnCloseoutIterationCap}, nil)
+	history, err := loop.Closeout.appendTurnCloseoutNudge(context.Background(), sess, "s1", "coordinator", nil, TurnCloseoutCause{Reason: TurnCloseoutIterationCap}, nil)
 	if err != nil {
 		t.Fatalf("first closeout: %v", err)
 	}
 	// Insert a distinct internal nudge.
 	history = append(history, api.Message{Role: api.MessageRoleUser, Visibility: api.MessageVisibilityInternal, Content: "Rejected: write files to disk"})
 	// Repeated closeout copy stays deduplicated.
-	history, err = turnCloseout{loop}.appendTurnCloseoutNudge(context.Background(), sess, "s1", "coordinator", history, TurnCloseoutCause{Reason: TurnCloseoutIterationCap}, nil)
+	history, err = loop.Closeout.appendTurnCloseoutNudge(context.Background(), sess, "s1", "coordinator", history, TurnCloseoutCause{Reason: TurnCloseoutIterationCap}, nil)
 	if err != nil {
 		t.Fatalf("second closeout: %v", err)
 	}
@@ -107,17 +115,17 @@ func TestEarlyWorkerCloseoutExecutesCompleteLeg(t *testing.T) {
 		}},
 	})
 	deps := StoreDeps(memory)
-	deps.LLM = client
-	deps.Tools = reg
-	deps.Policy = &recordingToolPolicy{}
-	deps.TurnCloseoutNudge = func(context.Context, *api.Session, string, TurnCloseoutCause) HostNudge {
+	deps.Model.LLM = client
+	deps.Context.Tools = reg
+	deps.Context.Policy = &recordingToolPolicy{}
+	deps.Closeout.TurnCloseoutNudge = func(context.Context, *api.Session, string, TurnCloseoutCause) HostNudge {
 		return HostNudge{Content: "close out with complete_leg", SignalID: "turn.closeout"}
 	}
 	loop := NewPromptLoopForTest(deps)
 	history := []api.Message{{ID: "user-1", Role: api.MessageRoleUser, Content: "finish"}}
 	state := &promptLoopTurnState{history: history}
 	var assistantID string
-	history, assistantID, _, err = turnCloseout{loop}.runEarlyTurnCloseout(
+	history, assistantID, _, err = loop.Closeout.runEarlyTurnCloseout(
 		t.Context(), sess, sess.ID, "security-reviewer", "finish", history, 1,
 		TurnCloseoutIterationCap, "", false,
 		PromptRunInput{ToolCtx: tools.ToolContext{SessionID: sess.ID, Agent: sess.AgentType}}, state,

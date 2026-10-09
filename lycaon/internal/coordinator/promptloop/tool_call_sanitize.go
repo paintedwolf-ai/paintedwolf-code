@@ -1,18 +1,18 @@
 package promptloop
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
-	"context"
-	"errors"
 
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/jsonvalue"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/pkg/api"
-	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/tools/surveyreceipt"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func sanitizeToolCallsForExecution(calls []api.ToolCall) []api.ToolCall {
@@ -274,7 +274,7 @@ func attachThoughtSignature(tc *api.ToolCall, sig string) {
 }
 
 // recordSearchOutcome records survey material from structured receipts.
-func (l turnNudges) recordSearchOutcome(ctx context.Context, sessionID, tool string, args map[string]any, output string) {
+func (l *turnNudges) recordSearchOutcome(ctx context.Context, sessionID, tool string, args map[string]any, output string) {
 	if l.Deps.DoomLoop == nil {
 		return
 	}
@@ -285,7 +285,7 @@ func (l turnNudges) recordSearchOutcome(ctx context.Context, sessionID, tool str
 	_, _ = l.Deps.DoomLoop.RecordSearchOutcome(ctx, sessionID, tool, args, receipt.PathsTouched > 0)
 }
 
-func (l turnNudges) checkDoomLoop(ctx context.Context, sessionID, responseID, tool string, args map[string]any, countOut *int) error {
+func (l *turnNudges) checkDoomLoop(ctx context.Context, sessionID, responseID, tool string, args map[string]any, countOut *int) error {
 	if l.Deps.DoomLoop == nil {
 		return nil
 	}
@@ -322,7 +322,7 @@ func (l turnNudges) checkDoomLoop(ctx context.Context, sessionID, responseID, to
 }
 
 // escalateRepeatedCode returns escalation for a repeated rejection code.
-func (l turnNudges) escalateRepeatedCode(ctx context.Context, sessionID, tool string, original *guidance.Refusal) *guidance.Refusal {
+func (l *turnNudges) escalateRepeatedCode(ctx context.Context, sessionID, tool string, original *guidance.Refusal) *guidance.Refusal {
 	if l.Deps.EscalateRepeatedCode == nil || original == nil || original.Code() == "" {
 		return nil
 	}
@@ -332,7 +332,7 @@ func (l turnNudges) escalateRepeatedCode(ctx context.Context, sessionID, tool st
 	return l.Deps.EscalateRepeatedCode(ctx, sessionID, tool, original)
 }
 
-func (l turnNudges) recordDoomLoopAttempt(
+func (l *turnNudges) recordDoomLoopAttempt(
 	ctx context.Context,
 	sessionID, responseID, tool string,
 	args map[string]any,

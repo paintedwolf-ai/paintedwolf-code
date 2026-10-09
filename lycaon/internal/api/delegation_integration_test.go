@@ -5,11 +5,6 @@ package api
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/session/store"
-	"github.com/lycaon/lycaon/internal/settings"
-	repotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
-	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/testutil/oartest"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -23,6 +18,11 @@ import (
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/settings"
+	repotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/oartest"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -61,7 +61,7 @@ func newDelegationTestFixture(t *testing.T) (*Server, project.Registry, func()) 
 	workersCfg := worker.DefaultWorkersConfig()
 	queue := worker.NewInMemoryQueue(workersCfg.Poller.MaxConcurrency)
 	queue.SetWorkersConfig(workersCfg)
-	exec := worker.NewLocalWorkerExecutor(mgr, queue)
+	exec := worker.NewLocalWorkerExecutor(mgr.Workers, queue, mgr.Workspace, mgr.Submissions, mgr.Transcript, mgr.Execution, mgr.Workers.Cancel, mgr.Workers.Cancellations)
 	exec.SetPromptInjects(promptstest.InjectRenderer(t))
 	reg := project.NewMemoryRegistry()
 	delegationMgr := delegation.NewManager(delegationStore, queue, mgr, nil)

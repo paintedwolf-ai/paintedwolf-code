@@ -34,13 +34,13 @@ func TestSpawnChildStripsCoordinatorRejectMarkers(t *testing.T) {
 		"Call Task(agent_type=implementer) to spawn a worker via task tool.",
 	}, "\n")
 
-	child, err := mgr.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{
+	child, err := mgr.Workers.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{
 		AgentType: orchestration.ProfileImplementer,
 		Prompt:    dirty,
 	})
-	contractcheck.FailErr(t, "mgr.SpawnChild failed", err)
+	contractcheck.FailErr(t, "mgr.Workers.SpawnChild failed", err)
 
-	msgs, err := mgr.GetMessages(ctx, child.ID)
+	msgs, err := mgr.Transcript.GetMessages(ctx, child.ID)
 	contractcheck.FailErr(t, "mgr.GetMessages failed", err)
 	if len(msgs) == 0 {
 		t.Fatal("expected initial user prompt on child session")

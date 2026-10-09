@@ -11,8 +11,8 @@ import (
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/promptattach"
 	"github.com/lycaon/lycaon/internal/search"
-	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
+	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
 	"github.com/lycaon/lycaon/internal/sourceref"
 	"github.com/lycaon/lycaon/internal/visual"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -103,7 +103,7 @@ func (s *Handler) resolveReferencePath(ctx context.Context, projectID, rootID, p
 
 // lookupReferenceArtifact validates reused artifacts before they become provider image blocks.
 func (s *Handler) lookupReferenceArtifact(ctx context.Context, sessionID, artifactID string) (string, error) {
-	root := session.RootSessionID(ctx, s.Store, sessionID)
+	root := sessiontree.RootID(ctx, s.Store, sessionID)
 	id, res := visual.ResolveRef(ctx, s.VisualStore, root, artifactID)
 	if !res.IsPresent() {
 		return "", fmt.Errorf("artifact %s: %s", artifactID, res.Note())

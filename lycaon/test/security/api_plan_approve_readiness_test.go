@@ -84,7 +84,7 @@ func TestApprovePlanHTTPRejectsWhenNotReady(t *testing.T) {
 func TestApprovePlanHTTPPersistsBeforeAdvanceAndWakesCoordinator(t *testing.T) {
 	h := wiring.BuildForTest(t, wiring.WithRecordingLLM())
 	limits := &approvalWakeLimits{}
-	h.SessionMgr.SetLimitsProvider(limits)
+	h.SessionMgr.Limits.SetProvider(limits)
 	srv := h.Server
 	proj := createProjectHTTP(t, srv, h.ProjectDir(t, "approval-wake"))
 	sess := createSessionForProjectHTTP(t, srv, proj.ID, wire.SessionPostureBuild)

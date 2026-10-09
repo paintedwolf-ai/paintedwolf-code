@@ -6,5 +6,6 @@ import "github.com/lycaon/lycaon/internal/tools"
 func (m *Manager) SetCredentialFiles(files tools.CredentialFiles) {
 	if m != nil {
 		m.credentialFiles = files
+		m.ToolContext.SetCredentialFiles(files)
 	}
 }

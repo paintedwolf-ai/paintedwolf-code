@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -45,7 +46,7 @@ func TestOneCanonicalWorkerCardAndSupersedeInPlace(t *testing.T) {
 			lastStatus = statusGen.Draw(t, "status_"+strconv.Itoa(i))
 			childSessionID := "child-" + jobID
 			agentType := "implementer"
-			envelope := session.FormatWorkerCompletionEnvelope(session.WorkerCompletionEnvelope{
+			envelope := workercompletion.FormatWorkerCompletionEnvelope(workercompletion.WorkerCompletionEnvelope{
 				JobID:          jobID,
 				ChildSessionID: childSessionID,
 				AgentType:      agentType,
@@ -53,7 +54,7 @@ func TestOneCanonicalWorkerCardAndSupersedeInPlace(t *testing.T) {
 				Summary:        "x",
 			})
 			lastEnvelope = envelope
-			failErr(t, "project worker card", mgr.ProjectWorkerCard(ctx, sess.ID, jobID, &api.WorkerSummaryMeta{
+			failErr(t, "project worker card", mgr.Workers.Cards.Project(ctx, sess.ID, jobID, &api.WorkerSummaryMeta{
 				WorkerID:       jobID,
 				ChildSessionID: childSessionID,
 				AgentType:      agentType,
@@ -98,7 +99,7 @@ func TestOneCanonicalWorkerCardAndSupersedeInPlace(t *testing.T) {
 
 		preCount := len(all)
 		preContent := canonical.Content
-		failErr(t, "supersede", mgr.SupersedeWorkerReport(ctx, sess.ID, canonicalID))
+		failErr(t, "supersede", mgr.Transcript.SupersedeWorkerReport(ctx, sess.ID, canonicalID))
 		after, err := store.GetMessages(ctx, sess.ID)
 		failErr(t, "get messages post-supersede", err)
 		if len(after) != preCount {

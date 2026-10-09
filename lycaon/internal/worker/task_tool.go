@@ -13,7 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/workeradmission"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -21,7 +21,6 @@ import (
 
 // TaskToolDeps wires the native task spawn tool.
 type TaskToolDeps struct {
-	Sessions         session.PromptRunner
 	Queue            WorkerQueue
 	Agents           orchestration.AgentRegistry
 	Workers          WorkersConfig
@@ -50,7 +49,7 @@ func overlayDiscarded(status api.WorkerMergeStatus) bool {
 
 // RegisterTaskTool registers task(agent_type, brief, files?) for coordinator spawns.
 func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
-	if reg == nil || deps.Sessions == nil || deps.Queue == nil || deps.Agents == nil {
+	if reg == nil || deps.Queue == nil || deps.Agents == nil {
 		return fmt.Errorf("registry, sessions, queue, and agents required")
 	}
 	return reg.Register("task", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
@@ -71,7 +70,7 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 				return taskEnqueueOutput(tctx, scope, *prior)
 			}
 		}
-		maxToolLoops, err := session.ParseTaskMaxToolLoopsFromArgs(args)
+		maxToolLoops, err := workeradmission.ParseTaskMaxToolLoopsFromArgs(args)
 		if err != nil {
 			return "", err
 		}
@@ -79,7 +78,7 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 		if deps.ToolBudget != nil {
 			budget = deps.ToolBudget(tctx.ActiveRootPath())
 		}
-		if code := session.ValidateTaskMaxToolLoopsCode(maxToolLoops, budget); code != "" {
+		if code := workeradmission.ValidateTaskMaxToolLoopsCode(maxToolLoops, budget); code != "" {
 			return "", &tools.ToolReject{Code: code, Data: map[string]any{"max_tool_loops": maxToolLoops, "min_required": budget.Min, "host_max": budget.Max}}
 		}
 		identity, err := resolveTaskIdentity(ctx, deps, tctx, args, maxToolLoops, budget)

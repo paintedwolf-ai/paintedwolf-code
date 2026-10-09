@@ -36,7 +36,7 @@ func assertCoordinatorSurface(t *testing.T, h *Harness, ctx context.Context, ses
 	t.Helper()
 	runCtx, err := h.SessionMgr.CoordinatorRunContext(ctx, sess.ID)
 	testutil.FailErr(t, "CoordinatorRunContext", err)
-	state := h.SessionMgr.BuildImplementSessionState(ctx, sess)
+	state := h.SessionMgr.Workers.State.ForSession(ctx, sess)
 	profile := surface.ResolveTurnProfile(runCtx, sess, routingTurnHistory(nil, userPrompt), state)
 	if profile.SurfaceID != wantSurface {
 		t.Fatalf("surface = %q want %q (phase=%q workflow=%q)", profile.SurfaceID, wantSurface, runCtx.CurrentPhase, runCtx.WorkflowID)
@@ -67,7 +67,7 @@ func TestCustomDesignDocWorkflowLiveGolden(t *testing.T) {
 		Posture: api.SessionPostureSpec,
 	}, dir)
 	testutil.FailErr(t, "create session", err)
-	h.SessionMgr.Catalog().InvalidateEffectiveCatalog(sess.ProjectID)
+	h.SessionMgr.Catalog.InvalidateEffectiveCatalog(sess.ProjectID)
 
 	run, err := h.WorkflowMgr.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{
 		WorkflowID: "design-doc", WorkflowVersion: "1.0.0", Request: "Design the REST API",

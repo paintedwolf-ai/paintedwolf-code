@@ -40,7 +40,7 @@ func TestSupersedeWorkerReportPreservesRowInPlace(t *testing.T) {
 		}
 	}
 
-	if err := mgr.SupersedeWorkerReport(ctx, sess.ID, reportID); err != nil {
+	if err := mgr.Transcript.SupersedeWorkerReport(ctx, sess.ID, reportID); err != nil {
 		testutil.FailErr(t, "SupersedeWorkerReport", err)
 	}
 

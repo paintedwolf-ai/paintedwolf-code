@@ -7,6 +7,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/project"
 	sessionstore "github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/transcript"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -42,7 +43,7 @@ func TestNavigationCandidateRechecksOnlyTheSelectedStoredAddress(t *testing.T) {
 		refs[0].Deleted = true
 		return refs
 	}
-	out, err := mgr.ResolveMessageNavigation(t.Context(), sess.ID, req, resolve)
+	out, err := mgr.Transcript.ResolveNavigation(t.Context(), sess.ID, req, resolve)
 	testutil.FailErr(t, "resolve selected candidate", err)
 	if !out.References[0].Deleted || calls != 1 {
 		t.Fatalf("resolution = %+v, calls = %d", out, calls)
@@ -54,7 +55,7 @@ func TestNavigationCandidateRechecksOnlyTheSelectedStoredAddress(t *testing.T) {
 	}
 	for _, invalid := range []int{-1, 2, 3, 32} {
 		req.CandidateIndex = &invalid
-		if _, err := mgr.ResolveMessageNavigation(t.Context(), sess.ID, req, resolve); !errors.Is(err, ErrNavigationCandidateInvalid) {
+		if _, err := mgr.Transcript.ResolveNavigation(t.Context(), sess.ID, req, resolve); !errors.Is(err, transcript.ErrNavigationCandidateInvalid) {
 			t.Fatalf("candidate %d = %v", invalid, err)
 		}
 	}

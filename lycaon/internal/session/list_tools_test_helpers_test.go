@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/rules"
 	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -61,14 +62,14 @@ func setupContextualToolsFixtureFull(t *testing.T, posture api.SessionPosture, c
 	mgr := session.NewManager(store, client, tools.NewStubRegistry(), cfg)
 	oartest.InstallCloseoutPolicy(t, mgr)
 	mgr.SetProjectRegistry(project.NewSQLRegistry(sqlDB))
-	mgr.SetToolInvoker(rt.Executor)
+	mgr.Guards.SetInvoker(rt.Executor)
 	wireBundledToolPolicyForTest(t, mgr)
 
 	agents := orchestration.NewMemoryAgentRegistry()
 	if err := orchestration.LoadRequiredAgentRegistry(context.Background(), agents); err != nil {
 		testutil.FailErr(t, "LoadRequiredAgentRegistry", err)
 	}
-	mgr.SetAgentRegistry(agents)
+	mgr.Profiles.SetAgentRegistry(agents)
 
 	bundledDir := filepath.Join(configRoot, "config", "packs", "painted-wolf", "platform", "workflows")
 	manifestRegistry, err := workflowdef.RegistryFromDirs("")
@@ -105,8 +106,8 @@ func setupContextualToolsFixtureFull(t *testing.T, posture api.SessionPosture, c
 	ctx := context.Background()
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: posture}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
-	if err := mgr.SetAgentType(ctx, sess.ID, orchestration.ProfileCoordinator); err != nil {
-		testutil.FailErr(t, "mgr.SetAgentType failed", err)
+	if err := mgr.Chats.SetAgentType(ctx, sess.ID, orchestration.ProfileCoordinator); err != nil {
+		testutil.FailErr(t, "mgr.Chats.SetAgentType failed", err)
 	}
 	sess.AgentType = orchestration.ProfileCoordinator
 
@@ -123,11 +124,11 @@ func setupContextualToolsFixtureFull(t *testing.T, posture api.SessionPosture, c
 
 func wireBundledToolPolicyForTest(t *testing.T, mgr *session.Manager) {
 	t.Helper()
-	postures, err := session.LoadPostureRegistry()
-	testutil.FailErr(t, "LoadPostureRegistry", err)
+	postures, err := profiles.LoadPostureRegistry()
+	testutil.FailErr(t, "profiles.LoadPostureRegistry", err)
 	packs, err := rules.LoadBundledRules()
 	testutil.FailErr(t, "LoadBundledRules", err)
-	if err := rules.ValidatePostureRules(postures, session.AllSessionPostures(), packs); err != nil {
+	if err := rules.ValidatePostureRules(postures, profiles.AllSessionPostures(), packs); err != nil {
 		testutil.FailErr(t, "ValidatePostureRules", err)
 	}
 	condReg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{})
@@ -137,8 +138,8 @@ func wireBundledToolPolicyForTest(t *testing.T, mgr *session.Manager) {
 	}
 	engine, err := rules.NewPostureRuleEngine(postures, packs, condReg)
 	testutil.FailErr(t, "NewPostureRuleEngine", err)
-	mgr.SetPostureRegistry(postures)
-	mgr.SetRuleEngine(engine)
+	mgr.Profiles.SetPostureRegistry(postures)
+	mgr.Guards.SetRules(engine)
 }
 
 // wirePromptTestManager wires toolhost + posture rules so coordinator Prompt has visible_tools.
@@ -147,7 +148,7 @@ func wirePromptTestManager(t *testing.T, mgr *session.Manager) {
 	oartest.InstallCloseoutPolicy(t, mgr)
 	configRoot := configlayout.FindModuleRoot()
 	rt := newContextualToolsRuntime(t, configRoot)
-	mgr.SetToolInvoker(rt.Executor)
+	mgr.Guards.SetInvoker(rt.Executor)
 	wireBundledToolPolicyForTest(t, mgr)
 }
 
@@ -186,10 +187,9 @@ func registerContextualToolsCoordinatorExtras(
 		testutil.FailErr(t, "delegation.RegisterDelegationTools failed", err)
 	}
 	if err := worker.RegisterTaskTool(reg, worker.TaskToolDeps{
-		Sessions: mgr,
-		Queue:    queue,
-		Agents:   agents,
-		Workers:  worker.DefaultWorkersConfig(),
+		Queue:   queue,
+		Agents:  agents,
+		Workers: worker.DefaultWorkersConfig(),
 	}); err != nil {
 		t.Fatal(err)
 	}

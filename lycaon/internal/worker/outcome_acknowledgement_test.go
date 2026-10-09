@@ -140,7 +140,7 @@ func TestSessionBridgeReleasesCycleOnlyAfterDeliveryAcknowledgement(t *testing.T
 	for _, status := range []api.WorkerStatus{api.WorkerStatusComplete, api.WorkerStatusFailed, api.WorkerStatusCanceled} {
 		t.Run(string(status), func(t *testing.T) {
 			sessions := &proofCountSessions{shouldNudge: true}
-			bridge := &SessionOutcomeBridge{Sessions: sessions}
+			bridge := &SessionOutcomeBridge{Sessions: sessions, Results: sessions, State: sessions, Closure: sessions}
 			var err error
 			switch status {
 			case api.WorkerStatusComplete:

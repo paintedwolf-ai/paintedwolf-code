@@ -2,7 +2,6 @@ package wiring
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/promptresult"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -12,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/llm"
+	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/scaffoldvars"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -103,14 +103,14 @@ func TestInTurnLatchBlocksSecondSynthesis(t *testing.T) {
 	testutil.FailErr(t, "create session", err)
 	AttachDefaultAmbient(t, h, ctx, sess.ID)
 
-	h.SessionMgr.BeginPromptTurnForTest(sess.ID, anchor.InformRender(anchor.WorkerTaskFinished))
-	h.SessionMgr.AcceptCoordinatorGroundedSynthesisForTest(ctx, sess.ID)
+	h.SessionMgr.Runner.Settlement.Begin(sess.ID, anchor.InformRender(anchor.WorkerTaskFinished))
+	h.SessionMgr.Batch.AcceptSynthesis(ctx, sess.ID)
 
-	guard := h.SessionMgr.CoordinatorBatchTurnGuardForTest(sess.ID)
+	guard := h.SessionMgr.Batch.TurnGuard(sess.ID)
 	if !guard.SynthesisAcceptedThisTurn {
 		t.Fatal("first grounded synthesis should set in-turn latch")
 	}
-	state := h.SessionMgr.BuildImplementSessionState(ctx, sess)
+	state := h.SessionMgr.Workers.State.ForSession(ctx, sess)
 	if state.BatchPhase != batch.PhaseClosed {
 		t.Fatalf("batch_phase = %q want closed after synthesis", state.BatchPhase)
 	}
@@ -134,16 +134,16 @@ func TestStaleBatchSeqWakeDroppedAfterNewUserMessage(t *testing.T) {
 	testutil.FailErr(t, "create session", err)
 	AttachDefaultAmbient(t, h, ctx, sess.ID)
 
-	if _, err := h.SessionMgr.Prompt(ctx, sess.ID, "first batch experiment"); err != nil {
+	if _, err := h.SessionMgr.Submissions.Prompt(ctx, sess.ID, "first batch experiment"); err != nil {
 		testutil.FailErr(t, "Prompt first batch", err)
 	}
-	state := h.SessionMgr.BuildImplementSessionState(ctx, sess)
+	state := h.SessionMgr.Workers.State.ForSession(ctx, sess)
 	seqBefore := state.BatchSeq
 
-	if _, err := h.SessionMgr.Prompt(ctx, sess.ID, "second batch after closed synthesis window"); err != nil {
+	if _, err := h.SessionMgr.Submissions.Prompt(ctx, sess.ID, "second batch after closed synthesis window"); err != nil {
 		testutil.FailErr(t, "Prompt second batch", err)
 	}
-	state = h.SessionMgr.BuildImplementSessionState(ctx, sess)
+	state = h.SessionMgr.Workers.State.ForSession(ctx, sess)
 	if state.BatchSeq <= seqBefore {
 		t.Fatalf("batch_seq = %d want > %d after visible user message", state.BatchSeq, seqBefore)
 	}
@@ -152,7 +152,7 @@ func TestStaleBatchSeqWakeDroppedAfterNewUserMessage(t *testing.T) {
 		staleSeq = 1
 	}
 
-	msgsBefore, err := h.SessionMgr.GetMessages(ctx, sess.ID)
+	msgsBefore, err := h.SessionMgr.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages before stale wake", err)
 
 	h.SessionMgr.NudgeCoordinatorLoop(
@@ -163,15 +163,15 @@ func TestStaleBatchSeqWakeDroppedAfterNewUserMessage(t *testing.T) {
 		"",
 		anchor.Envelope{BatchSeq: staleSeq, BatchSeqSet: true},
 	)
-	h.SessionMgr.DrainLoopPendingForTest(ctx, sess.ID)
+	h.SessionMgr.Runner.Coordinator.CoordinatorLoop().DrainPending(ctx, sess.ID)
 	h.SessionMgr.WaitForCoordinatorAsyncTurns(testutil.BoundedContext(t, 5*time.Second))
 
-	msgsAfter, err := h.SessionMgr.GetMessages(ctx, sess.ID)
+	msgsAfter, err := h.SessionMgr.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages after stale wake", err)
 	if len(msgsAfter) != len(msgsBefore) {
 		t.Fatalf("stale batch_seq scheduled wake appended messages: before=%d after=%d", len(msgsBefore), len(msgsAfter))
 	}
-	if id, ok := h.SessionMgr.PendingKickIDForTest(sess.ID); ok && id == anchor.InformRender(anchor.WaitTimerFired) {
+	if id, ok := h.SessionMgr.Runner.Coordinator.Kicks().PeekPendingKickID(sess.ID); ok && id == anchor.InformRender(anchor.WaitTimerFired) {
 		t.Fatal("stale batch_seq wake must not leave scheduled kick queued")
 	}
 }

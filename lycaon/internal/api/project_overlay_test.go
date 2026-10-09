@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/projectcontrib"
 	"github.com/lycaon/lycaon/internal/rules"
 	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testtool"
@@ -36,9 +37,9 @@ func newProjectOverlayTestServer(t *testing.T, opts ...testDeps) (*Server, *proj
 	})
 	toolRegistry := tools.NewStubRegistry()
 	mgr := session.NewManager(sessionStore, mock, toolRegistry, settings.DefaultSessionLimits())
-	mgr.SetToolInvoker(testtool.RegistryInvoker{Registry: toolRegistry})
+	mgr.Guards.SetInvoker(testtool.RegistryInvoker{Registry: toolRegistry})
 
-	postures, err := session.LoadPostureRegistry()
+	postures, err := profiles.LoadPostureRegistry()
 	testutil.FailErr(t, "load posture registry", err)
 	packs, err := rules.LoadBundledRules()
 	testutil.FailErr(t, "load bundled rules", err)
@@ -49,8 +50,8 @@ func newProjectOverlayTestServer(t *testing.T, opts ...testDeps) (*Server, *proj
 	testutil.FailErr(t, "build posture rule engine", err)
 	overlay := rules.NewProjectRulesOverlay(conditionRegistry)
 	engine.Overlay = overlay
-	mgr.SetPostureRegistry(postures)
-	mgr.SetRuleEngine(engine)
+	mgr.Profiles.SetPostureRegistry(postures)
+	mgr.Guards.SetRules(engine)
 	mgr.SetProjectRegistry(projects)
 
 	surfaces, err := settings.NewTrustSurfacesStoreAt(filepath.Join(t.TempDir(), "trust-surfaces.yaml"))
@@ -62,7 +63,7 @@ func newProjectOverlayTestServer(t *testing.T, opts ...testDeps) (*Server, *proj
 	}).Applies
 
 	gate := project.NewMutationGate()
-	mgr.SetMutationGate(gate)
+	mgr.Runner.Execution.SetMutationGate(gate)
 	deps := Dependencies{
 		Store: sessionStore, Projects: projects, Sessions: mgr, Settings: &settings.Service{TrustSurfaces: surfaces},
 		MutationGate: gate, ProjectRules: overlay,
@@ -71,6 +72,6 @@ func newProjectOverlayTestServer(t *testing.T, opts ...testDeps) (*Server, *proj
 		opt(&deps)
 	}
 	srv := NewServer(requiredTestDeps(t, deps), nil, TestAPIToken)
-	mgr.SetPromotionHook(srv.Project.TryRunPromotion)
+	mgr.Admission.SetPromotion(srv.Project.TryRunPromotion)
 	return srv, projects
 }

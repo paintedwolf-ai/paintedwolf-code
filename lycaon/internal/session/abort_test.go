@@ -2,7 +2,6 @@ package session
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
@@ -46,8 +45,8 @@ func TestAbortStopsEntireSessionTreeAndClearsQueuedTurns(t *testing.T) {
 	workflows := &stubSessionWorkflowStop{}
 	warmer := &fakeIndexWarmer{}
 	mgr.SetSessionWorkerAbort(abort)
-	mgr.SetSessionWorkflowStop(workflows)
-	mgr.SetIndexWarmer(warmer)
+	mgr.Stops.SetWorkflowStop(workflows)
+	mgr.Research.SetWarmer(warmer)
 	root, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create root", err)
 	child, err := st.CreateChild(ctx, root, api.SpawnChildRequest{AgentType: "implementer"})
@@ -75,17 +74,17 @@ func TestAbortStopsEntireSessionTreeAndClearsQueuedTurns(t *testing.T) {
 	for _, id := range []string{root.ID, child.ID} {
 		testutil.FailErr(t, "mark tree busy", st.SetSessionStatus(ctx, id, api.SessionStatusBusy))
 		mgr.queue.AppendOrdered(id, "queued-"+id, testutil.HostOwner().ID, "next turn", 0, time.Time{})
-		beforeQueueRevision[id] = mgr.QueueSnapshot(id).Revision
+		beforeQueueRevision[id] = mgr.Drafts.Snapshot(id).Revision
 	}
 
-	testutil.FailErr(t, "abort child tree", mgr.Abort(ctx, child.ID, "user stopped"))
+	testutil.FailErr(t, "abort child tree", mgr.Stops.Abort(ctx, child.ID, "user stopped"))
 	for _, id := range []string{root.ID, child.ID} {
 		sess, err := st.Get(ctx, id)
 		testutil.FailErr(t, "get stopped session", err)
 		if sess.Status != api.SessionStatusIdle {
 			t.Fatalf("session %s status = %q, want idle", id, sess.Status)
 		}
-		if draft := mgr.QueueSnapshot(id); len(draft.QueueItems) != 0 {
+		if draft := mgr.Drafts.Snapshot(id); len(draft.QueueItems) != 0 {
 			t.Fatalf("session %s queue = %+v, want empty", id, draft)
 		} else if draft.Revision <= beforeQueueRevision[id] {
 			t.Fatalf("session %s queue revision = %d, want newer than %d", id, draft.Revision, beforeQueueRevision[id])
@@ -149,8 +148,8 @@ func TestAbortRetainsAddressedQueuedTurn(t *testing.T) {
 		t.Fatal("running prompt receipt was not claimed")
 	}
 
-	testutil.FailErr(t, "abort with queued direction", mgr.Abort(ctx, sess.ID, "use queued direction"))
-	if after := mgr.QueueSnapshot(sess.ID); after.Revision != draft.Revision || len(after.QueueItems) != 1 || after.QueueItems[0].ID != queuedReceiptID {
+	testutil.FailErr(t, "abort with queued direction", mgr.Stops.Abort(ctx, sess.ID, "use queued direction"))
+	if after := mgr.Drafts.Snapshot(sess.ID); after.Revision != draft.Revision || len(after.QueueItems) != 1 || after.QueueItems[0].ID != queuedReceiptID {
 		t.Fatalf("queue after abort = %+v, want preserved draft %+v", after, draft)
 	}
 	queued, err := st.GetPromptSubmission(ctx, queuedReceiptID)
@@ -184,7 +183,7 @@ func TestAbortCancelsWorkersAndMarksIdle(t *testing.T) {
 		testutil.FailErr(t, "SetSessionStatus busy", err)
 	}
 
-	if err := mgr.Abort(ctx, sess.ID, ""); err != nil {
+	if err := mgr.Stops.Abort(ctx, sess.ID, ""); err != nil {
 		testutil.FailErr(t, "Abort", err)
 	}
 	if !abort.called {
@@ -198,24 +197,5 @@ func TestAbortCancelsWorkersAndMarksIdle(t *testing.T) {
 	testutil.FailErr(t, "Get session", err)
 	if got.Status != api.SessionStatusIdle {
 		t.Fatalf("status = %q, want idle", got.Status)
-	}
-}
-
-func TestPromptCancelPropagatesAbort(t *testing.T) {
-	ctx := context.Background()
-	parent, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	mgr := &Manager{}
-	promptCtx := mgr.attachPromptCancel(parent, "sess-1")
-	done := make(chan error, 1)
-	go func() {
-		<-promptCtx.Done()
-		done <- promptCtx.Err()
-	}()
-
-	mgr.CancelInFlightPrompt("sess-1")
-	if err := <-done; !errors.Is(err, context.Canceled) {
-		t.Fatalf("err = %v, want context.Canceled", err)
 	}
 }

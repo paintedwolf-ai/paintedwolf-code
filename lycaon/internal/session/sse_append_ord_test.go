@@ -3,17 +3,17 @@ package session
 import (
 	"context"
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/events"
-	"github.com/lycaon/lycaon/internal/testdbfixture"
-	"github.com/lycaon/lycaon/internal/testutil"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -54,7 +54,7 @@ func TestAppendMessagesSSECarriesOrdForEveryMessageKind(t *testing.T) {
 			if msg.Kind == wire.MessageKindProgressUpdate || msg.Kind == wire.MessageKindProgressComplete {
 				msg.WorkflowRunID = runID
 			}
-			testutil.FailErr(t, "appendMessages", mgr.appendMessages(ctx, sess.ID, msg))
+			testutil.FailErr(t, "appendMessages", mgr.Transcript.Append(ctx, sess.ID, msg))
 
 			ev := waitParentMessageAppend(t, ch, sess.ID, msg.ID)
 			if ev.Message.Ord <= 0 {

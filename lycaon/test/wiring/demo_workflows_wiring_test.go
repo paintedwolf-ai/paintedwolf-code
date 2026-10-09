@@ -39,7 +39,7 @@ func TestSecuritySurveyFanOutWorkflowEndToEnd(t *testing.T) {
 
 	scaffoldTopologyOutput(t, h.WorkflowMgr, run.ID, orchestration.TopologyBindStageFanOut)
 
-	h.SessionMgr.ClearPendingKickForTest(sess.ID)
+	h.SessionMgr.Runner.Coordinator.Kicks().ClearPending(sess.ID)
 
 	claimed := map[string]string{
 		"verdict":      "CLAIMED",

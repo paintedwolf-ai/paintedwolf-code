@@ -87,7 +87,7 @@ func TestBuildImplementSessionStateListsLedgerPendingOverlays(t *testing.T) {
 	})
 	testutil.FailErr(t, "enqueue unchecked", err)
 
-	state := mgr.BuildImplementSessionState(ctx, parent)
+	state := mgr.Workers.State.ForSession(ctx, parent)
 	if len(state.PendingOverlayIDs) != 2 {
 		t.Fatalf("PendingOverlayIDs = %v want both ledger-pending overlays", state.PendingOverlayIDs)
 	}
@@ -120,7 +120,7 @@ func TestCompleteWriteWorkerThenHostCycleSelectsOverlayPromote(t *testing.T) {
 		t.Fatal("completion claim lost")
 	}
 
-	state := mgr.BuildImplementSessionState(ctx, parent)
+	state := mgr.Workers.State.ForSession(ctx, parent)
 	if len(state.PendingOverlayIDs) != 1 || state.PendingOverlayIDs[0] != jobID {
 		t.Fatalf("PendingOverlayIDs = %v want [%s] after Complete", state.PendingOverlayIDs, jobID)
 	}

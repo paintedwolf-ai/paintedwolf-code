@@ -16,7 +16,7 @@ func TestReviewGuidanceFollowsLiveVerdictGate(t *testing.T) {
 			for _, staged := range []bool{false, true} {
 				t.Run(fmt.Sprintf("%s/pending=%v/staged=%v", id, pending, staged), func(t *testing.T) {
 					mgr := NewManager(store.NewMemory(), nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
-					mgr.workflows = verdictPendingView{pending: true}
+					mgr.SetWorkflowSessionView(verdictPendingView{pending: true})
 					kicks := mgr.ensureCoordinatorRuntime().Kicks()
 					review := anchor.InformRender(id)
 					other := anchor.InformRender(anchor.ComposeDone)
@@ -24,16 +24,16 @@ func TestReviewGuidanceFollowsLiveVerdictGate(t *testing.T) {
 					kicks.QueueDeferred("review-session", other)
 					kicks.QueueDeferred("other-session", review)
 					if staged {
-						if got := kicks.TakePendingKickIDUnless("review-session", mgr.coordinatorKickCleared(t.Context(), "review-session")); got != review {
+						if got := kicks.TakePendingKickID("review-session"); got != review {
 							t.Fatalf("open review guidance = %q, want %q", got, review)
 						}
 					}
-					mgr.workflows = verdictPendingView{pending: pending}
+					mgr.SetWorkflowSessionView(verdictPendingView{pending: pending})
 					want := other
 					if pending {
 						want = review
 					}
-					if got := mgr.coordinatorKickIDs(t.Context(), "review-session"); len(got) == 0 || got[0] != want {
+					if got := mgr.Guidance.PendingIDs(t.Context(), "review-session"); len(got) == 0 || got[0] != want {
 						t.Fatalf("guidance = %v, want %q first for current verdict gate", got, want)
 					}
 					if got, ok := kicks.PeekPendingKickID("other-session"); !ok || got != review {

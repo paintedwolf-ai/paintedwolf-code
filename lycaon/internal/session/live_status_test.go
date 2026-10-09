@@ -20,7 +20,7 @@ func TestStampMessageLiveStatusStreamingOnlyForActiveRow(t *testing.T) {
 	}, "p1")
 	testutil.FailErr(t, "Create session", err)
 
-	mgr.Streams().SetActive(sess.ID, "live-row", 512)
+	mgr.Transcript.Streams.SetActive(sess.ID, "live-row", 512)
 
 	msgs := []api.Message{
 		{ID: "u1", Role: api.MessageRoleUser, Content: "hi", CreatedAt: sess.CreatedAt},
@@ -29,7 +29,7 @@ func TestStampMessageLiveStatusStreamingOnlyForActiveRow(t *testing.T) {
 	}
 	testutil.FailErr(t, "AppendMessages", store.AppendMessages(ctx, sess.ID, msgs...))
 
-	page, err := mgr.GetTranscriptPage(ctx, sess.ID, api.TranscriptPageQuery{})
+	page, err := mgr.Transcript.GetTranscriptPage(ctx, sess.ID, api.TranscriptPageQuery{})
 	testutil.FailErr(t, "GetTranscriptPage", err)
 	if len(page.Messages) != 3 {
 		t.Fatalf("messages = %d want 3", len(page.Messages))
@@ -74,7 +74,7 @@ func TestHydrationYieldsCompleteWhenNoActiveTurn(t *testing.T) {
 		CreatedAt:   sess.CreatedAt,
 	}))
 
-	page, err := mgr.GetTranscriptPage(ctx, sess.ID, api.TranscriptPageQuery{})
+	page, err := mgr.Transcript.GetTranscriptPage(ctx, sess.ID, api.TranscriptPageQuery{})
 	testutil.FailErr(t, "GetTranscriptPage", err)
 	if len(page.Messages) != 1 {
 		t.Fatalf("messages = %d want 1", len(page.Messages))

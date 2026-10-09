@@ -21,11 +21,11 @@ func (s *workerCoordSpy) AfterWorkerWrite(context.Context, tools.ToolContext, st
 	s.after++
 }
 
-func (s *workerCoordSpy) ReleaseWorkerReservations(context.Context, string, string) error {
+func (s *workerCoordSpy) ReleaseReservations(context.Context, string, string) error {
 	return nil
 }
 
-func (s *workerCoordSpy) EnsureWorkerBranch(_ context.Context, tctx tools.ToolContext) (tools.ToolContext, error) {
+func (s *workerCoordSpy) EnsureBranch(_ context.Context, tctx tools.ToolContext) (tools.ToolContext, error) {
 	return tctx, nil
 }
 

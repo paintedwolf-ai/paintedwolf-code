@@ -4,7 +4,6 @@ package coordinator_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/testutil/oartest"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -19,11 +18,13 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/rules"
 	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/extpackstest"
+	"github.com/lycaon/lycaon/internal/testutil/oartest"
 	"github.com/lycaon/lycaon/internal/testutil/prompttest"
 	"github.com/lycaon/lycaon/internal/toolhost"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -44,12 +45,12 @@ func wireManagerPromptPolicy(t *testing.T, mgr *session.Manager, root string) {
 	oartest.InstallCloseoutPolicy(t, mgr)
 	rt, err := toolhost.NewRuntime(toolhost.RuntimeConfig{ConfigRoot: root, Catalog: extpackstest.StockCatalog(t)})
 	testutil.FailErr(t, "toolhost.NewRuntime", err)
-	mgr.SetToolInvoker(rt.Executor)
-	postures, err := session.LoadPostureRegistry()
+	mgr.Guards.SetInvoker(rt.Executor)
+	postures, err := profiles.LoadPostureRegistry()
 	testutil.FailErr(t, "LoadPostureRegistry", err)
 	packs, err := rules.LoadBundledRules()
 	testutil.FailErr(t, "LoadBundledRules", err)
-	if err := rules.ValidatePostureRules(postures, session.AllSessionPostures(), packs); err != nil {
+	if err := rules.ValidatePostureRules(postures, profiles.AllSessionPostures(), packs); err != nil {
 		testutil.FailErr(t, "ValidatePostureRules", err)
 	}
 	condReg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{})
@@ -59,8 +60,8 @@ func wireManagerPromptPolicy(t *testing.T, mgr *session.Manager, root string) {
 	}
 	engine, err := rules.NewPostureRuleEngine(postures, packs, condReg)
 	testutil.FailErr(t, "NewPostureRuleEngine", err)
-	mgr.SetPostureRegistry(postures)
-	mgr.SetRuleEngine(engine)
+	mgr.Profiles.SetPostureRegistry(postures)
+	mgr.Guards.SetRules(engine)
 }
 
 func TestManagerPromptUsesCoordinatorAssembly(t *testing.T) {
@@ -76,8 +77,8 @@ func TestManagerPromptUsesCoordinatorAssembly(t *testing.T) {
 
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureSpec}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
-	if _, err := mgr.Prompt(ctx, sess.ID, "start"); err != nil {
-		testutil.FailErr(t, "mgr.Prompt failed", err)
+	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "start"); err != nil {
+		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 	}
 	req := rec.LastRequest()
 	if len(req.Messages) == 0 {
@@ -96,14 +97,14 @@ func TestManagerKickNudgeViaRuntime(t *testing.T) {
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
 	mgr := session.NewManager(store, rec, tools.NewStubRegistry(), settings.DefaultSessionLimits())
 	wireManagerPromptPolicy(t, mgr, root)
-	testutil.FailErr(t, "install anchor registry", mgr.InstallAnchorRegistry())
+	testutil.FailErr(t, "install anchor registry", mgr.Guidance.InstallAnchorRegistry())
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: root}))
 
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureSpec}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
-	mgr.Emit(context.Background(), sess.ID, anchor.ComposeDone, anchor.Envelope{})
-	if _, err := mgr.Prompt(ctx, sess.ID, "continue"); err != nil {
-		testutil.FailErr(t, "mgr.Prompt failed", err)
+	mgr.Guidance.Emit(context.Background(), sess.ID, anchor.ComposeDone, anchor.Envelope{})
+	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "continue"); err != nil {
+		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 	}
 	// Host kicks retain their system role and timeline position.
 	found := false

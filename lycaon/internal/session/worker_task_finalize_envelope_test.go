@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/transcript"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -37,7 +38,7 @@ func TestAppendWorkerSummaryDoesNotEchoEnvelopeInAssistantProse(t *testing.T) {
 	}); err != nil {
 		testutil.FailErr(t, "AppendMessages", err)
 	}
-	if _, err := mgr.AppendWorkerSummary(ctx, parent.ID, session.WorkerSummaryInput{
+	if _, err := mgr.Workers.Summaries.Append(ctx, parent.ID, workeroutcomes.SummaryInput{
 		Summary:        "done",
 		JobID:          jobID,
 		ChildSessionID: child.ID,
@@ -96,7 +97,7 @@ func TestAppendWorkerSummaryProjectsEnvelopeToModel(t *testing.T) {
 		testutil.FailErr(t, "AppendMessages", err)
 	}
 	const finding = "urlscan API key is a test fixture, not a live secret"
-	if _, err := mgr.AppendWorkerSummary(ctx, parent.ID, session.WorkerSummaryInput{
+	if _, err := mgr.Workers.Summaries.Append(ctx, parent.ID, workeroutcomes.SummaryInput{
 		Summary:        finding,
 		JobID:          jobID,
 		ChildSessionID: child.ID,

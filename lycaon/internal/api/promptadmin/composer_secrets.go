@@ -11,7 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/api/secretview"
 	"github.com/lycaon/lycaon/internal/people/personactions"
 	"github.com/lycaon/lycaon/internal/secretcap"
-	"github.com/lycaon/lycaon/internal/session"
+	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -31,7 +31,7 @@ func (s *Handler) HandleCreateComposerSecret(w http.ResponseWriter, r *http.Requ
 	if !ok {
 		return
 	}
-	chatSessionID := session.RootSessionID(r.Context(), s.Store, sessionID)
+	chatSessionID := sessiontree.RootID(r.Context(), s.Store, sessionID)
 	put, err := s.ManagedSecrets.Put(r.Context(), secretcap.PutRequest{
 		ProjectID: sess.ProjectID, ChatSessionID: chatSessionID, SessionID: sessionID,
 		OperationID: operationID.String(), Name: strings.TrimSpace(body.Name),

@@ -16,7 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance/feedback"
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workflow"
@@ -46,9 +46,9 @@ func (b delegationWiring) wireWorkerServices() error {
 	}
 
 	b.injectRenderer = prompts.NewInjectRenderer(b.promptEngine)
-	b.workerExec = worker.NewLocalWorkerExecutor(b.mgr, b.workerQueue)
+	b.workerExec = worker.NewLocalWorkerExecutor(b.mgr.Workers, b.workerQueue, b.mgr.Workspace, b.mgr.Submissions, b.mgr.Transcript, b.mgr.Runner.Execution, b.mgr.Workers.Cancel, b.mgr.Workers.Cancellations)
 	b.workerExec.Waits = &awaitstore.Store{DB: b.db}
-	b.workerQueue.SetSessionAdmission(b.mgr.WithSessionTreeAdmission)
+	b.workerQueue.SetSessionAdmission(b.mgr.Gate.WithSessionTreeAdmission)
 	b.workerExec.SetPromptInjects(b.injectRenderer)
 	b.workerExec.SetPhaseTouchPaths(b.workflowMgr)
 	b.workerBranchRoot = enginepaths.WorkerBranchesRootUnder(b.dataDir)
@@ -60,8 +60,9 @@ func (b delegationWiring) wireWorkerServices() error {
 
 	b.workerCancelSvc = &worker.CancelService{
 		Queue:    b.workerQueue,
-		Sessions: b.mgr,
-		Reject:   b.rejectFmt,
+		Sessions: b.mgr, Graceful: b.mgr.Workers.Cancel,
+		Cancellations: b.mgr.Workers.Cancellations,
+		Reject:        b.rejectFmt,
 		Reports: worker.ChangeReportDeps{
 			Messages: func(ctx context.Context, childSessionID string) ([]wire.Message, error) {
 				return b.store.GetMessages(ctx, childSessionID)
@@ -69,10 +70,11 @@ func (b delegationWiring) wireWorkerServices() error {
 		},
 	}
 	b.workflowMgr.WorkerStop = &worker.RunStopService{
-		Queue:       b.workerQueue,
-		Sessions:    b.mgr,
-		Reports:     b.workerCancelSvc.Reports,
-		Delegations: b.delegationStore,
+		Queue:         b.workerQueue,
+		Holds:         b.mgr.Workers.Cards,
+		Cancellations: b.mgr.Workers.Cancellations,
+		Reports:       b.workerCancelSvc.Reports,
+		Delegations:   b.delegationStore,
 	}
 	b.workflowMgr.SessionCoordinatorBusy = func(ctx context.Context, sessionID string) bool {
 		sess, err := b.store.Get(ctx, sessionID)
@@ -111,11 +113,11 @@ func (b delegationWiring) wireWorkerServices() error {
 
 func (b delegationWiring) configureDelegationWorkflow() error {
 	b.mgr.SetWorkflowSessionView(b.workflowMgr)
-	b.mgr.SetWorkflowToolAccessView(b.workflowMgr)
-	b.mgr.SetSessionWorkflowStop(b.workflowMgr)
-	b.workflowMgr.SessionAdmission = b.mgr
-	b.workflowMgr.SessionExit = b.mgr
-	b.workflowMgr.OnRequestAccepted = b.mgr.CurateAcceptedWorkflowRequest
+	b.mgr.Profiles.SetWorkflowToolAccessView(b.workflowMgr)
+	b.mgr.Stops.SetWorkflowStop(b.workflowMgr)
+	b.workflowMgr.SessionAdmission = b.mgr.Gate
+	b.workflowMgr.SessionExit = b.mgr.Stops
+	b.workflowMgr.OnRequestAccepted = b.mgr.Runner.Curation.AcceptedWorkflowRequest
 	if b.hintCfg == nil {
 		return fmt.Errorf("hint registry: not loaded")
 	}
@@ -132,7 +134,7 @@ func (b delegationWiring) configureDelegationWorkflow() error {
 	b.mgr.SetWorkspaceChecker(&workercompletion.CompositeWorkspaceChangeChecker{
 		Git: &workercompletion.GitWorkspaceChangeChecker{Git: b.gitMgr},
 	})
-	if err := b.mgr.InstallAnchorRegistry(); err != nil {
+	if err := b.mgr.Guidance.InstallAnchorRegistry(); err != nil {
 		return fmt.Errorf("anchor registry: %w", err)
 	}
 	b.mgr.SetLoopWorkflowSource(b.workflowMgr)
@@ -154,7 +156,7 @@ func (b delegationWiring) configureDelegationWorkflow() error {
 		VerdictCatalog: b.sessionVerdictCatalog,
 	})
 	if b.synthesisCurator != nil {
-		b.mgr.SetSynthesisCurator(b.synthesisCurator)
+		b.mgr.Closeout.SetSynthesisCurator(b.synthesisCurator)
 	}
 	return nil
 }
@@ -169,7 +171,7 @@ func (b delegationWiring) wireWorkerContext() error {
 		return fmt.Errorf("playbooks: %w", err)
 	}
 	legToolLister := delegation.LegToolListerFunc(func(ctx context.Context, sess *wire.Session, profileID string) []string {
-		policy := b.mgr.PromptToolPolicy()
+		policy := b.mgr.Guards.Policy()
 		if policy == nil || sess == nil {
 			return nil
 		}
@@ -181,14 +183,14 @@ func (b delegationWiring) wireWorkerContext() error {
 		}
 		return names
 	})
-	agentsForSession := func(sess *wire.Session) session.AgentProfileResolver {
-		if view := b.mgr.Catalog().ViewForSession(context.Background(), sess); view != nil {
+	agentsForSession := func(sess *wire.Session) profiles.AgentProfileResolver {
+		if view := b.mgr.Catalog.ViewForSession(context.Background(), sess); view != nil {
 			return view
 		}
 		return b.agentRegistry
 	}
 	playbooksForSession := func(sess *wire.Session) delegation.PlaybookMatcherInterface {
-		if view := b.mgr.Catalog().ViewForSession(context.Background(), sess); view != nil && view.Playbooks != nil {
+		if view := b.mgr.Catalog.ViewForSession(context.Background(), sess); view != nil && view.Playbooks != nil {
 			return view.Playbooks
 		}
 		return b.playbookMatcher
@@ -202,7 +204,7 @@ func (b delegationWiring) wireWorkerContext() error {
 			AgentsFor:     agentsForSession,
 			Tools:         legToolLister,
 			Scans:         b.scanCoordinator,
-			AgentsMDChain: b.mgr.AgentsMDChainForPaths,
+			AgentsMDChain: b.mgr.PolicyIndex.ForPaths,
 			Repo:          b.repoProvider,
 			Topology: func(workflowID string) string {
 				if strings.TrimSpace(workflowID) == "default-pipeline" {
@@ -222,7 +224,7 @@ func (b delegationWiring) onWorkflowPhaseEnter(ctx context.Context, rc *workflow
 	if rc == nil {
 		return
 	}
-	b.mgr.BeginWorkflowPhase(ctx, rc.SessionID)
+	b.mgr.Runner.Closeouts.BeginWorkflowPhase(ctx, rc.SessionID)
 	// Bind progress before checklist writes on this phase.
 	if b.progressStore != nil && progress.AdoptActiveRun(ctx, b.progressStore, rc.SessionID, rc.RunID, "") {
 		progress.NotifyWriteObservers(ctx, progress.WriteEvent{SessionID: rc.SessionID})
@@ -288,7 +290,7 @@ func (b delegationWiring) onWorkflowPhaseEnter(ctx context.Context, rc *workflow
 			}
 		}
 	}
-	b.mgr.EmitMatch(ctx, rc.SessionID, anchor.PhaseEntered, env, anchor.MatchContext{
+	b.mgr.Guidance.EmitMatch(ctx, rc.SessionID, anchor.PhaseEntered, env, anchor.MatchContext{
 		Surface:  "phase",
 		Phase:    rc.Phase,
 		Workflow: rc.WorkflowID,
@@ -302,7 +304,7 @@ func (b delegationWiring) onWorkflowPhaseEnter(ctx context.Context, rc *workflow
 	if heldByHost {
 		// Run start completes its topology hook before parking.
 		if !rc.IsRunStart() {
-			b.mgr.CancelInFlightPrompt(rc.SessionID)
+			b.mgr.Runner.Execution.Cancel(rc.SessionID)
 		}
 		b.coordRuntime.CoordinatorLoop().ParkForHostObligation(ctx, rc.SessionID)
 	}
@@ -336,7 +338,7 @@ func (b delegationWiring) onWorkflowPhaseReenter(ctx context.Context, rc *workfl
 		slog.WarnContext(ctx, "phase re-enter kick is not a catalog anchor", "session_id", rc.SessionID, "phase", def.ID, "kick", kickID)
 		return
 	}
-	b.mgr.Emit(ctx, rc.SessionID, id, b.mgr.CoordinatorEnvelopeForWorkerCycleTerminal(ctx, rc.SessionID, ""))
+	b.mgr.Guidance.Emit(ctx, rc.SessionID, id, b.mgr.Workers.Results.EnvelopeForTerminal(ctx, rc.SessionID, ""))
 }
 
 func (b delegationWiring) onWorkflowPhaseAutoAdvanced(ctx context.Context, sessionID, runID, previousPhase, newPhase string) {
@@ -359,7 +361,7 @@ func (b delegationWiring) onWorkflowPhaseAutoAdvanced(ctx context.Context, sessi
 			b.srv.Workflow.StartOrchestratedTopologyForRun(postStartCtx, sessionID, run)
 		}
 		if held, heldErr := b.workflowMgr.HostObligationHeld(postStartCtx, sessionID); heldErr == nil && held {
-			b.mgr.CancelInFlightPrompt(sessionID)
+			b.mgr.Runner.Execution.Cancel(sessionID)
 			b.coordRuntime.CoordinatorLoop().ParkForHostObligation(postStartCtx, sessionID)
 			return
 		}
@@ -383,7 +385,7 @@ func (b delegationWiring) onWorkflowRunCompleted(ctx context.Context, run *wire.
 	if run == nil || run.Status != wire.WorkflowRunStatusComplete {
 		return
 	}
-	if err := b.mgr.SettleCompletedWorkflow(ctx, run.SessionID, run.ID); err != nil {
+	if err := b.mgr.Runner.Settlement.CompleteWorkflow(ctx, run.SessionID, run.ID); err != nil {
 		slog.ErrorContext(ctx, "settle completed workflow", "session_id", run.SessionID, "run_id", run.ID, "error", err)
 	}
 }
@@ -409,7 +411,7 @@ func (b delegationWiring) onWorkflowHumanApprovalAdvanced(ctx context.Context, r
 	if err != nil || active == nil || active.Status != wire.WorkflowRunStatusRunning {
 		return
 	}
-	b.mgr.CancelInFlightPrompt(sessionID)
+	b.mgr.Runner.Execution.Cancel(sessionID)
 	if held, heldErr := b.workflowMgr.HostObligationHeld(ctx, sessionID); heldErr == nil && held {
 		b.coordRuntime.CoordinatorLoop().ParkForHostObligation(ctx, sessionID)
 		return
@@ -418,7 +420,7 @@ func (b delegationWiring) onWorkflowHumanApprovalAdvanced(ctx context.Context, r
 }
 
 func (b delegationWiring) onWorkflowFeedbackPending(ctx context.Context, sessionID, _ string) {
-	b.mgr.Emit(ctx, sessionID, anchor.FeedbackPending, anchor.Envelope{})
+	b.mgr.Guidance.Emit(ctx, sessionID, anchor.FeedbackPending, anchor.Envelope{})
 }
 
 func (b delegationWiring) onWorkflowToolAskOpened(ctx context.Context, sessionID, _ string) {
@@ -426,8 +428,8 @@ func (b delegationWiring) onWorkflowToolAskOpened(ctx context.Context, sessionID
 }
 
 func (b delegationWiring) onWorkflowFeedbackResolved(ctx context.Context, sessionID, _, _, _ string) {
-	b.mgr.DropCoordinatorKick(sessionID, anchor.FeedbackPending)
-	b.mgr.Emit(ctx, sessionID, anchor.FeedbackReceived, anchor.Envelope{})
+	b.mgr.Guidance.Drop(sessionID, anchor.FeedbackPending)
+	b.mgr.Guidance.Emit(ctx, sessionID, anchor.FeedbackReceived, anchor.Envelope{})
 	b.mgr.NudgeCoordinatorLoop(ctx, sessionID, anchor.PhaseAdvanced, anchor.FeedbackReceived, "", anchor.Envelope{})
 }
 
@@ -436,7 +438,7 @@ func (b delegationWiring) onWorkflowReviewLoopHeld(ctx context.Context, sessionI
 	if decisionRequired {
 		id = anchor.ReviewLoopDecide
 	}
-	b.mgr.Emit(ctx, sessionID, id, anchor.Envelope{})
+	b.mgr.Guidance.Emit(ctx, sessionID, id, anchor.Envelope{})
 	b.mgr.NudgeCoordinatorLoop(ctx, sessionID, anchor.PhaseAdvanced, id, "", anchor.Envelope{})
 }
 
@@ -450,7 +452,7 @@ func (b delegationWiring) onDelegationCloseout(ctx context.Context, _, sessionID
 // sessionVerdictCatalog is the session's effective submit_verdict schema, or
 // the registered one when the session has no catalog view.
 func (b delegationWiring) sessionVerdictCatalog(ctx context.Context, sessionID string) map[string]any {
-	if view := b.mgr.Catalog().ViewForSessionID(ctx, sessionID); view != nil && view.ToolSchemas != nil {
+	if view := b.mgr.Catalog.ViewForSessionID(ctx, sessionID); view != nil && view.ToolSchemas != nil {
 		if meta, ok := view.ToolSchemas.ToolMeta("submit_verdict"); ok {
 			return meta.ArgsSchema
 		}

@@ -110,7 +110,7 @@ func assertPlanWriteAllowed(t *testing.T, h *wiring.Harness, sessionID string) {
 	loaded, err := h.Store.Get(ctx, sessionID)
 	testutil.FailErr(t, "h.Store.Get failed", err)
 	planPath := settingsoverlay.Rel("blueprints/plan.md")
-	err = h.SessionMgr.PromptToolPolicy().EvaluateInvoke(ctx, loaded, "write", map[string]any{
+	err = h.SessionMgr.Guards.Policy().EvaluateInvoke(ctx, loaded, "write", map[string]any{
 		"path": planPath, "content": conditions.TestPlanContentWithTasks,
 	})
 	testutil.FailErr(t, "write invoke policy", err)

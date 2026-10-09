@@ -54,7 +54,7 @@ func TestCoordinatorPromptDietE2E(t *testing.T) {
 	AttachDefaultAmbient(t, h, ctx, sess.ID)
 	h.SeedProgress(t, ctx, sess.ID)
 
-	if _, err := h.SessionMgr.Prompt(ctx, sess.ID, "Add a TODO comment via implementer"); err != nil {
+	if _, err := h.SessionMgr.Submissions.Prompt(ctx, sess.ID, "Add a TODO comment via implementer"); err != nil {
 		testutil.FailErr(t, "Prompt dispatch", err)
 	}
 	if err := DrainPendingWorkerJobs(ctx, h, sess.ProjectID, sess.ID); err != nil {

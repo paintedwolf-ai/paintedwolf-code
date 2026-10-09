@@ -6,7 +6,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectremoval"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/projectcontrol"
 	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/workspace"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -23,7 +23,7 @@ func (s *Handler) deleteProject(ctx context.Context, id string, force bool) erro
 		return err
 	}
 	removedRootPaths := rootPathsOf(p)
-	dependents, err := s.Sessions.ProjectDependents(ctx, id)
+	dependents, err := s.Sessions.ProjectControl.ProjectDependents(ctx, id)
 	if err != nil {
 		return err
 	}
@@ -35,7 +35,7 @@ func (s *Handler) deleteProject(ctx context.Context, id string, force bool) erro
 		return &projectremoval.Failure{Code: wire.ApiErrorCodeRootBusy, Details: dependents.Details(), Message: "The project has in-flight dependents.", Documents: len(dependents.Documents), Sessions: len(dependents.Sessions), Workers: len(dependents.Workers), Overlays: len(dependents.Overlays)}
 	}
 	if force && dependents.HasAny() {
-		if err := s.Sessions.ForceCancelForProjectDelete(ctx, id, dependents); err != nil {
+		if err := s.Sessions.ProjectControl.ForceCancelForProjectDelete(ctx, id, dependents); err != nil {
 			return err
 		}
 	}
@@ -46,7 +46,7 @@ func (s *Handler) deleteProject(ctx context.Context, id string, force bool) erro
 	} else if !s.MutationGate.MutationDrained(id) {
 		return project.ErrProjectBusy
 	}
-	if err := s.Sessions.RetireForProjectDelete(ctx, id); err != nil {
+	if err := s.Sessions.Chats.RetireForProjectDelete(ctx, id); err != nil {
 		return err
 	}
 	mutationCtx := ctx
@@ -69,7 +69,7 @@ func (s *Handler) deleteProject(ctx context.Context, id string, force bool) erro
 	return nil
 }
 
-func (s *Handler) finishProjectDeletion(ctx context.Context, p *project.Project, dependents session.RootDependents, removedRootPaths []string) {
+func (s *Handler) finishProjectDeletion(ctx context.Context, p *project.Project, dependents projectcontrol.RootDependents, removedRootPaths []string) {
 	id := p.ID
 	s.forgetRemovedEditorDocuments(dependents)
 	s.Sources.InvalidateProjectSourceViews(id)

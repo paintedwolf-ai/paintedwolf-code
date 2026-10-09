@@ -273,7 +273,7 @@ func fillWorkers(t *testing.T, d *Deps) {
 		d.Workers = worker.NewInMemoryQueue(2)
 	}
 	if d.WorkerCancel == nil {
-		d.WorkerCancel = &worker.CancelService{Queue: d.Workers, Sessions: d.Sessions}
+		d.WorkerCancel = &worker.CancelService{Queue: d.Workers, Sessions: d.Sessions, Graceful: d.Sessions.Workers.Cancel, Cancellations: d.Sessions.Workers.Cancellations}
 	}
 	if d.Delegations == nil {
 		d.Delegations = delegation.NewManager(delegation.NewMemoryStore(), d.Workers, nil, nil)
@@ -300,8 +300,8 @@ func fillHarness(t *testing.T, d *Deps) {
 		return
 	}
 	if d.HarnessWorkers == nil {
-		scripted, err := harnessfixture.NewWorkers(t.TempDir(), d.Store, d.Workers, d.Sessions.VerifyHarnessWorker,
-			d.Sessions.ReadHarnessWorker, session.NewSQLDecisionStore(d.Database), refusingExecutor{})
+		scripted, err := harnessfixture.NewWorkers(t.TempDir(), d.Store, d.Workers, d.Sessions.Workers.Harness.Verify,
+			d.Sessions.Workers.Harness.Read, session.NewSQLDecisionStore(d.Database), refusingExecutor{})
 		testutil.FailErr(t, "scripted workers", err)
 		d.HarnessWorkers = scripted
 	}
@@ -337,7 +337,7 @@ func fillSessions(t *testing.T, d *Deps) {
 	d.Sessions = session.NewManager(d.Store, llm.NewMockProvider(nil), registry, settings.DefaultSessionLimits())
 	d.Sessions.SetDataDir(t.TempDir())
 	d.Sessions.SetProjectRegistry(d.Projects)
-	d.Sessions.SetToolInvoker(testtool.RegistryInvoker{Registry: registry})
+	d.Sessions.Guards.SetInvoker(testtool.RegistryInvoker{Registry: registry})
 }
 
 func fillSettings(t *testing.T, d *Deps) {

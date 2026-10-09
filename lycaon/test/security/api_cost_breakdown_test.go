@@ -140,8 +140,8 @@ func TestCostSSEIncludesBreakdown(t *testing.T) {
 	testutil.FailErr(t, "hub.Subscribe failed", err)
 	defer unsub()
 
-	if _, err := mgr.Prompt(ctx, parent.ID, "hello"); err != nil {
-		testutil.FailErr(t, "mgr.Prompt failed", err)
+	if _, err := mgr.Submissions.Prompt(ctx, parent.ID, "hello"); err != nil {
+		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 	}
 
 	var got wire.CostEvent

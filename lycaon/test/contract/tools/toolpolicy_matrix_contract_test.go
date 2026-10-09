@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/rules"
 	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -107,7 +108,7 @@ func listCoordinatorToolsForPosture(t *testing.T, row postureToolExpectation) []
 	rt, err := toolhost.NewRuntime(toolhost.RuntimeConfig{ConfigRoot: configRoot, Catalog: contractcheck.StockCatalog(t)})
 	contractcheck.FailErr(t, "toolhost.NewRuntime failed", err)
 	mgr := session.NewManager(store, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
-	mgr.SetToolInvoker(rt.Executor)
+	mgr.Guards.SetInvoker(rt.Executor)
 	workflowMgr := wireToolpolicyMatrixContract(t, configRoot, mgr, store, rt.Registry, sqlDB)
 
 	ctx := context.Background()
@@ -119,7 +120,7 @@ func listCoordinatorToolsForPosture(t *testing.T, row postureToolExpectation) []
 		}
 	}
 	names := make([]string, 0)
-	for _, meta := range mgr.PromptToolPolicy().ListForPrompt(ctx, sess, "coordinator") {
+	for _, meta := range mgr.Guards.Policy().ListForPrompt(ctx, sess, "coordinator") {
 		names = append(names, meta.Name)
 	}
 	return names
@@ -135,8 +136,8 @@ func wireToolpolicyMatrixContract(
 ) *workflow.RunManager {
 	t.Helper()
 	projectDir := t.TempDir()
-	postures, err := session.LoadPostureRegistry()
-	contractcheck.FailErr(t, "session.LoadPostureRegistry failed", err)
+	postures, err := profiles.LoadPostureRegistry()
+	contractcheck.FailErr(t, "profiles.LoadPostureRegistry failed", err)
 	packs, err := rules.LoadBundledRules()
 	contractcheck.FailErr(t, "rules.LoadBundledRules failed", err)
 	condReg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{})
@@ -146,12 +147,12 @@ func wireToolpolicyMatrixContract(
 	}
 	engine, err := rules.NewPostureRuleEngine(postures, packs, condReg)
 	contractcheck.FailErr(t, "rules.NewPostureRuleEngine failed", err)
-	mgr.SetPostureRegistry(postures)
-	mgr.SetRuleEngine(engine)
+	mgr.Profiles.SetPostureRegistry(postures)
+	mgr.Guards.SetRules(engine)
 
 	agents := orchestration.NewMemoryAgentRegistry()
 	_ = orchestration.LoadRequiredAgentRegistry(context.Background(), agents)
-	mgr.SetAgentRegistry(agents)
+	mgr.Profiles.SetAgentRegistry(agents)
 
 	manifestRegistry, err := workflowdef.RegistryFromDirs("")
 	contractcheck.FailErr(t, "workflow.RegistryFromDirs failed", err)

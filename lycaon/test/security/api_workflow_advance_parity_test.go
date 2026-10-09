@@ -140,10 +140,10 @@ func TestAdvanceToolAndHTTPParity(t *testing.T) {
 		httpRun := parity.startRunHTTP(t, "parity-coord", "1.0.0")
 		// Holding the execution lane keeps the coordinator loop from consuming the
 		// kick before it is read.
-		finishExecution := parity.sessionMgr.BeginPromptExecutionForTest(t.Context(), parity.httpSession.ID)
+		finishExecution := parity.sessionMgr.Runner.Coordinator.CoordinatorLoop().BeginPromptExecution(t.Context(), parity.httpSession.ID)
 		defer finishExecution()
 		// Drain startup feedback to isolate the failed-advance event.
-		parity.sessionMgr.ClearPendingKickForTest(parity.httpSession.ID)
+		parity.sessionMgr.Runner.Coordinator.Kicks().ClearPending(parity.httpSession.ID)
 
 		status, _, errBody := parity.advanceHTTP(t, httpRun.ID)
 		if status != http.StatusConflict {
@@ -152,7 +152,7 @@ func TestAdvanceToolAndHTTPParity(t *testing.T) {
 		if errBody.Code != "phase_gate_unmet" {
 			t.Fatalf("code = %q", errBody.Code)
 		}
-		kickID, ok := parity.sessionMgr.PendingKickIDForTest(parity.httpSession.ID)
+		kickID, ok := parity.sessionMgr.Runner.Coordinator.Kicks().PeekPendingKickID(parity.httpSession.ID)
 		if !ok || kickID != anchor.InformRender(anchor.GateBlocked) {
 			t.Fatalf("pending kick = %q, %v want %q", kickID, ok, anchor.InformRender(anchor.GateBlocked))
 		}

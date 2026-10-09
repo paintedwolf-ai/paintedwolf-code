@@ -9,7 +9,6 @@ import (
 
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/config/configtest"
-
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
@@ -157,7 +156,7 @@ func TestBuildPreservesExplicitSessionLimits(t *testing.T) {
 	testutil.FailErr(t, "build with explicit session limits", err)
 	t.Cleanup(func() { _ = app.Close() })
 	testdbseed.InsertProjectRoot(t, app.DB, testdbseed.DefaultProjectID, t.TempDir())
-	sess, err := app.SessionMgr.CreateForProject(t.Context(), testdbseed.DefaultProjectID, wire.SessionPostureBuild)
+	sess, err := app.SessionMgr.Chats.CreateForProject(t.Context(), testdbseed.DefaultProjectID, wire.SessionPostureBuild)
 	testutil.FailErr(t, "create session with explicit limits", err)
 	allowed, reason, err := app.CoordinatorRuntime.CoordinatorLoop().ShouldLoopWake(t.Context(), sess.ID, anchor.PhaseAdvanced)
 	testutil.FailErr(t, "evaluate workflow phase wake", err)

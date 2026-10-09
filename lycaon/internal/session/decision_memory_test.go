@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -40,7 +41,7 @@ func TestMemoryDecisionStorePutGetClear(t *testing.T) {
 }
 
 func TestFormatWorkerDecision(t *testing.T) {
-	sum, body := FormatWorkerDecision("implementer", api.WorkerDecisionRequest{
+	sum, body := workeroutcomes.FormatWorkerDecision("implementer", api.WorkerDecisionRequest{
 		WorkerID: "job-9", Question: "Refactor the shared type or work around it?",
 		Options: []string{"refactor", "work around"},
 	})

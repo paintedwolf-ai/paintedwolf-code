@@ -95,8 +95,8 @@ func TestWorkflowCoordinatorProfileOverridesPostureE2E(t *testing.T) {
 	sess := createSessionWithPostureHTTP(t, srv, projectDir, wire.SessionPostureSpec)
 	ctx := t.Context()
 
-	got, err := mgr.ResolvePromptToolProfile(ctx, sess.ID)
-	testutil.FailErr(t, "mgr.ResolvePromptToolProfile failed", err)
+	got, err := mgr.Profiles.ResolvePromptToolProfile(ctx, sess.ID)
+	testutil.FailErr(t, "mgr.Profiles.ResolvePromptToolProfile failed", err)
 	if got != "coordinator" {
 		t.Fatalf("before workflow profile = %q want coordinator", got)
 	}
@@ -107,8 +107,8 @@ func TestWorkflowCoordinatorProfileOverridesPostureE2E(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err = mgr.ResolvePromptToolProfile(ctx, sess.ID)
-	testutil.FailErr(t, "mgr.ResolvePromptToolProfile failed", err)
+	got, err = mgr.Profiles.ResolvePromptToolProfile(ctx, sess.ID)
+	testutil.FailErr(t, "mgr.Profiles.ResolvePromptToolProfile failed", err)
 	if got != "worker_readonly" {
 		t.Fatalf("with manifest coordinator_profile profile = %q want worker_readonly", got)
 	}

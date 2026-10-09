@@ -35,10 +35,10 @@ func TestFinishPromptExecutionDrainsLoopPendingAfterCanceledRequestCtx(t *testin
 	mgr := session.NewManager(store, rec, tools.NewStubRegistry(), settings.DefaultSessionLimits())
 	agents := orchestration.NewMemoryAgentRegistry()
 	_ = orchestration.LoadRequiredAgentRegistry(context.Background(), agents)
-	mgr.SetAgentRegistry(agents)
+	mgr.Profiles.SetAgentRegistry(agents)
 	wirePromptTestManager(t, mgr)
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
-	testutil.FailErr(t, "install anchor registry", mgr.InstallAnchorRegistry())
+	testutil.FailErr(t, "install anchor registry", mgr.Guidance.InstallAnchorRegistry())
 
 	wfStore := workflow.NewSQLStore(sqlDB)
 	bundledDir := filepath.Join(root, "config", "packs", "painted-wolf", "platform", "workflows")
@@ -65,16 +65,19 @@ func TestFinishPromptExecutionDrainsLoopPendingAfterCanceledRequestCtx(t *testin
 		testutil.FailErr(t, "store.SetSessionStatus failed", err)
 	}
 
-	finishExecution := mgr.BeginPromptExecutionForTest(t.Context(), sess.ID)
+	finishExecution := mgr.Runner.Coordinator.CoordinatorLoop().BeginPromptExecution(t.Context(), sess.ID)
 	mgr.NudgeCoordinatorLoop(ctx, sess.ID, anchor.LegFinished, anchor.LegFinished, workflow.ImplementWorkLegKey(sess.ID), anchor.Envelope{})
-	if _, ok := mgr.PendingLoopNudgeForTest(sess.ID); !ok {
+	if _, ok := mgr.Runner.Coordinator.CoordinatorLoop().PendingForTest(sess.ID); !ok {
 		t.Fatal("expected deferred loop wake while prompt execution is active")
 	}
 	finishExecution()
 
 	canceled, cancel := context.WithCancel(ctx)
 	cancel()
-	mgr.FinishPromptExecutionForTest(canceled, sess.ID, true, true)
+	func() {
+		_ = mgr.Runner.Settlement.Finish(canceled, sess.ID, true, true, "")
+		_ = mgr.Runner.Settlement.Drain(canceled, sess.ID)
+	}()
 
 	testutil.WaitFor(t, 5*time.Second, func() bool {
 		msgs, err := store.GetMessages(ctx, sess.ID)

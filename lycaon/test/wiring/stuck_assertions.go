@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/workflow"
 )
@@ -81,14 +81,14 @@ func inspectSessionForwardProgress(ctx context.Context, h *Harness, sessionID st
 		}
 	}
 	if h.SessionMgr != nil {
-		if id, ok := h.SessionMgr.PendingKickIDForTest(sessionID); ok {
+		if id, ok := h.SessionMgr.Runner.Coordinator.Kicks().PeekPendingKickID(sessionID); ok {
 			st.pendingKickID = id
 		}
-		if trigger, ok := h.SessionMgr.PendingLoopNudgeForTest(sessionID); ok {
+		if trigger, ok := h.SessionMgr.Runner.Coordinator.CoordinatorLoop().PendingForTest(sessionID); ok {
 			st.pendingTrigger = string(trigger)
 		}
 		if sess, err := h.Store.Get(ctx, sessionID); err == nil && sess != nil {
-			tasks, err := session.ParentSessionInFlightWorkers(ctx, h.WorkerQueue, sess.ProjectID, sessionID)
+			tasks, err := workeroutcomes.ParentSessionInFlightWorkers(ctx, h.WorkerQueue, sess.ProjectID, sessionID)
 			if err == nil {
 				st.inFlightWorkers = len(tasks)
 			}

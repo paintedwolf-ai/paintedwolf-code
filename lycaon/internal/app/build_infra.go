@@ -4,14 +4,15 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync/atomic"
 	"time"
-	"os"
-	"strings"
 
 	"github.com/lycaon/lycaon/internal/agentdef"
+	"github.com/lycaon/lycaon/internal/agentpresence"
 	"github.com/lycaon/lycaon/internal/backup"
 	"github.com/lycaon/lycaon/internal/bootrecovery"
 	"github.com/lycaon/lycaon/internal/catalogview"
@@ -24,10 +25,14 @@ import (
 	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/decide/bialy"
 	"github.com/lycaon/lycaon/internal/enginepaths"
+	"github.com/lycaon/lycaon/internal/eventoutbox"
+	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/extensionstate"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/git"
+	"github.com/lycaon/lycaon/internal/hostidentity"
 	"github.com/lycaon/lycaon/internal/hostlock"
+	"github.com/lycaon/lycaon/internal/hostpower"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/llm/providerwire"
@@ -41,10 +46,11 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/scan"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/skills"
+	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/startupprotocol"
@@ -52,12 +58,6 @@ import (
 	"github.com/lycaon/lycaon/internal/tsparse"
 	"github.com/lycaon/lycaon/internal/version"
 	"github.com/lycaon/lycaon/internal/webindex"
-	"github.com/lycaon/lycaon/internal/agentpresence"
-	"github.com/lycaon/lycaon/internal/eventoutbox"
-	"github.com/lycaon/lycaon/internal/events"
-	"github.com/lycaon/lycaon/internal/hostidentity"
-	"github.com/lycaon/lycaon/internal/hostpower"
-	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -274,13 +274,13 @@ func (b *serveBuilder) wireToolRuntime() error {
 	b.turnLoads = turnload.NewLedger()
 	// The session manager does not exist yet; the resolver reaches it at call time.
 	resolve := func(ctx context.Context, tctx tools.ToolContext, need string, cards []turnload.ToolCard) turnload.RequestOutcome {
-		return b.mgr.ResolveToolRequest(ctx, tctx, need, cards)
+		return b.mgr.Loading.ResolveToolRequest(ctx, tctx, need, cards)
 	}
 	record := func(ctx context.Context, tctx tools.ToolContext, outcome turnload.RequestOutcome, result turnload.RequestToolsResult, elapsed time.Duration) {
-		b.mgr.RecordToolRequest(ctx, tctx, outcome, result, elapsed)
+		b.mgr.Loading.RecordToolRequest(ctx, tctx, outcome, result, elapsed)
 	}
 	lookup := func(ctx context.Context, tctx tools.ToolContext, need string, roster []skills.Skill) turnload.LookupOutcome {
-		return b.mgr.LookupSkills(ctx, tctx, need, roster)
+		return b.mgr.Loading.LookupSkills(ctx, tctx, need, roster)
 	}
 	b.toolRuntime, err = loadToolRuntime(b.settingsSvc, b.configRoot, b.effective, b.turnLoads, resolve, record, lookup, b.rerank)
 	if err != nil {
@@ -330,7 +330,7 @@ func (b *serveBuilder) wireAgents() error {
 	if err := orchestration.ValidateAgentToolProfiles(b.agentRegistry, b.toolProfiles); err != nil {
 		return fmt.Errorf("agent tool profiles: %w", err)
 	}
-	b.postureRegistry, err = session.LoadPostureRegistry()
+	b.postureRegistry, err = profiles.LoadPostureRegistry()
 	if err != nil {
 		return fmt.Errorf("posture registry: %w", err)
 	}
@@ -516,7 +516,7 @@ func (b *serveBuilder) wireEvents() error {
 			if b.mgr == nil {
 				return nil, nil
 			}
-			page, err := b.mgr.ListProjectSessions(ctx, store.SummaryQuery{ProjectID: projectID, Limit: boardRepublishSessionLimit})
+			page, err := b.mgr.Chats.ListProjectSessions(ctx, store.SummaryQuery{ProjectID: projectID, Limit: boardRepublishSessionLimit})
 			if err != nil {
 				return nil, err
 			}
@@ -553,8 +553,8 @@ func (b *serveBuilder) wireEvents() error {
 	// One revision counter across the direct and outbox session-event paths.
 	b.store.SetSessionRevisions(b.eventPub)
 	// Both paths read prompt_pending from the manager.
-	b.store.SetPromptPending(b.mgr)
-	b.eventPub.SessionState = b.mgr
+	b.store.SetPromptPending(b.mgr.Runner.SubmissionState)
+	b.eventPub.SessionState = b.mgr.Runner.SubmissionState
 	b.eventOutbox.OnDelivered = func(ctx context.Context, delivered eventoutbox.DeliveredEvent) {
 		if err := b.hostPower.ObserveDelivered(delivered.Topic, delivered.Data); err != nil {
 			slog.WarnContext(ctx, "observe host power activity", "topic", delivered.Topic, "error", err)
@@ -570,7 +570,7 @@ func (b *serveBuilder) wireEvents() error {
 	if err := (delegationWiring{b}).registerRecovery(bootrecovery.Entry{
 		Name: "rewind-operations", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseBuild,
 		After: []string{"tool-invocations", "source-mutations", "editor-documents"},
-		Run:   b.mgr.RecoverRewinds,
+		Run:   b.mgr.Rewinds.RecoverRewinds,
 	}); err != nil {
 		return err
 	}

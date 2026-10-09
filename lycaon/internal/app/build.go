@@ -66,6 +66,7 @@ import (
 	"github.com/lycaon/lycaon/internal/secretspan"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
+	"github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/sourceledger"
@@ -171,7 +172,7 @@ type serveBuilder struct {
 	hintCfg          *guidance.HintConfig
 	agentRegistry    *orchestration.MemoryAgentRegistry
 	toolProfiles     []sandbox.ToolProfile
-	postureRegistry  *session.PostureRegistry
+	postureRegistry  *profiles.PostureRegistry
 	promptEngine     *prompts.FileTemplateEngine
 	mgr              *session.Manager
 	projectLiveness  *projectliveness.Tracker

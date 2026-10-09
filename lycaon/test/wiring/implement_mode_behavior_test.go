@@ -40,8 +40,8 @@ func TestImplementModeTaskEnqueue(t *testing.T) {
 	if sess.AgentType != orchestration.ProfileCoordinator {
 		t.Fatalf("agent_type = %q want coordinator", sess.AgentType)
 	}
-	if _, err := h.SessionMgr.Prompt(ctx, sess.ID, "add handler for health check"); err != nil {
-		testutil.FailErr(t, "h.SessionMgr.Prompt failed", err)
+	if _, err := h.SessionMgr.Submissions.Prompt(ctx, sess.ID, "add handler for health check"); err != nil {
+		testutil.FailErr(t, "h.SessionMgr.Submissions.Prompt failed", err)
 	}
 	if err := DrainPendingWorkerJobs(ctx, h, sess.ProjectID, sess.ID); err != nil {
 		testutil.FailErr(t, "DrainPendingWorkerJobs", err)
@@ -56,7 +56,7 @@ func TestImplementModeTaskEnqueue(t *testing.T) {
 	}
 	foundTask := false
 	testutil.WaitFor(t, 8*time.Second, func() bool {
-		msgs, err := h.SessionMgr.GetMessages(ctx, sess.ID)
+		msgs, err := h.SessionMgr.Transcript.GetMessages(ctx, sess.ID)
 		testutil.FailErr(t, "h.SessionMgr.GetMessages failed", err)
 		for _, msg := range msgs {
 			if msg.WorkerSummary != nil || strings.Contains(msg.Content, `<task job_id="`) {

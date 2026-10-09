@@ -1,19 +1,20 @@
 package promptadmin
 
 import (
+	"net/http/httptest"
+	"testing"
+
 	"github.com/google/uuid"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/promptinput"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"net/http/httptest"
-	"testing"
 )
 
 func TestRecoveryAdmissionDoesNotConvertButtonTextIntoNewContent(t *testing.T) {
 	handler, sessions, attachments, sess := newPromptAttachmentRecoveryFixture(t)
 	ctx := t.Context()
-	original, _, err := handler.Sessions.AdmitPrompt(ctx, sess.ID, uuid.NewString(), "review", session.PromptInput{Text: "Review"})
+	original, _, err := handler.Sessions.Submissions.AdmitPrompt(ctx, sess.ID, uuid.NewString(), "review", promptinput.Input{Text: "Review"})
 	testutil.FailErr(t, "admit original", err)
 	claimed, _, err := sessions.ClaimPromptSubmission(ctx, original.ID)
 	testutil.FailErr(t, "claim original", err)
@@ -27,7 +28,7 @@ func TestRecoveryAdmissionDoesNotConvertButtonTextIntoNewContent(t *testing.T) {
 	if !ok || len(prepared.input.ContentParts) != 0 {
 		t.Fatalf("recovery became a new content message: %+v", prepared)
 	}
-	admitted, _, err := handler.Sessions.AdmitPrompt(ctx, sess.ID, req.OperationID, req, prepared.input)
+	admitted, _, err := handler.Sessions.Submissions.AdmitPrompt(ctx, sess.ID, req.OperationID, req, prepared.input)
 	testutil.FailErr(t, "admit button recovery", err)
 	if admitted == nil {
 		t.Fatal("recovery not persisted")

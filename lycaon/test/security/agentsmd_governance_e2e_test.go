@@ -59,11 +59,11 @@ func runAgentsMDWriteApproval(t *testing.T, call llm.MockToolCall, kind wire.Che
 		`{"project_id":"`+project.ID+`","posture":"build"}`, http.StatusAccepted)
 	ctx, cancel := context.WithTimeout(t.Context(), 45*time.Second)
 	defer cancel()
-	testutil.FailErr(t, "set implementer profile", h.SessionMgr.SetAgentType(ctx, sess.ID, "implementer"))
+	testutil.FailErr(t, "set implementer profile", h.SessionMgr.Chats.SetAgentType(ctx, sess.ID, "implementer"))
 	// A checklist lets the write reach the approval gate.
 	h.SeedProgress(t, ctx, sess.ID)
 	done := make(chan error, 1)
-	go func() { _, err := h.SessionMgr.Prompt(ctx, sess.ID, "update agents policy"); done <- err }()
+	go func() { _, err := h.SessionMgr.Submissions.Prompt(ctx, sess.ID, "update agents policy"); done <- err }()
 	var checkpoint wire.CheckpointEvent
 	testutil.WaitFor(t, 15*time.Second, func() bool {
 		pending, err := h.CheckpointMgr.ListPending(ctx, sess.ID, nil)

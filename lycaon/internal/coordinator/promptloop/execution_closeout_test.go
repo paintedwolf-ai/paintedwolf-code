@@ -24,11 +24,11 @@ func TestPromptLoopResponseAdmissionStopsBeforeAnotherRequest(t *testing.T) {
 		{Content: "This request must not run."},
 	}}
 	deps := StoreDeps(messages)
-	deps.LLM = client
-	deps.Policy = softStopToolPolicy{}
-	deps.Tools = tools.NewStubRegistry()
-	deps.AdmitModelResponse = messages.AdmitModelResponse
-	deps.SettleModelOutput = messages.SettleModelOutput
+	deps.Model.LLM = client
+	deps.Context.Policy = softStopToolPolicy{}
+	deps.Context.Tools = tools.NewStubRegistry()
+	deps.Projection.AdmitModelResponse = messages.AdmitModelResponse
+	deps.Projection.SettleModelOutput = messages.SettleModelOutput
 	_, err = NewPromptLoopForTest(deps).Run(ctx, PromptRunInput{
 		SessionID: session.ID, Session: session, TurnID: execution.Turn.ID, AttemptID: execution.Attempt.ID,
 		History: []api.Message{{Role: api.MessageRoleUser, Content: "Read a."}}, ProfileID: "implement",

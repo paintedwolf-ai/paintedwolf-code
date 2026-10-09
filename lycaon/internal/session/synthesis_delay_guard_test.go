@@ -11,7 +11,9 @@ import (
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/session/promptinput"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -29,7 +31,9 @@ func newSynthesisDelayManager(t *testing.T) (*Manager, *api.Session) {
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create coordinator session", err)
 	rejectFmt := guidance.NewStaticRejectFormatter(hints)
-	mgr := &Manager{store: store, progress: progress.NewMemoryStore(), rejectFmt: rejectFmt}
+	mgr := NewManager(store, nil, nil, settings.DefaultSessionLimits())
+	mgr.SetProgressStore(progress.NewMemoryStore())
+	mgr.SetRejectFormatter(rejectFmt)
 	schemaDir := filepath.Join("..", "..", "..", "schemas")
 	loader, err := oar.NewLoader(schemaDir)
 	testutil.FailErr(t, "oar.NewLoader", err)
@@ -53,7 +57,7 @@ func (n synthesisDelayNudge) FormatNudge(ctx context.Context, code string, data 
 
 func rejectCloseout(t *testing.T, mgr *Manager, sess *api.Session, surfaceID string, workersIdle bool) (string, bool) {
 	t.Helper()
-	reject, blocked := mgr.maybeRejectCloseoutForOpenProgress(context.Background(), sess, nil, surfaceID, workersIdle, surface.ImplementSessionState{}, true)
+	reject, blocked := mgr.Guards.OpenProgress(context.Background(), sess, nil, surfaceID, workersIdle, surface.ImplementSessionState{}, true)
 	return reject.Error(), blocked
 }
 
@@ -61,7 +65,7 @@ func TestCloseoutSkipsOpenProgressWhenInvokeGated(t *testing.T) {
 	mgr, sess := newSynthesisDelayManager(t)
 	mgr.progress.Set(sess.ID, "## Progress\n- [ ] review")
 
-	if _, block := mgr.maybeRejectCloseoutForOpenProgress(
+	if _, block := mgr.Guards.OpenProgress(
 		context.Background(), sess, nil, "implement_investigate", true, surface.ImplementSessionState{}, false,
 	); block {
 		t.Fatal("expected no open-progress hold when invokeAllowed=false")
@@ -112,7 +116,7 @@ func TestCloseoutBoundedPerPrompt(t *testing.T) {
 	mgr.progress.Set(sess.ID, "## Progress\n- [ ] review")
 	ctx := context.Background()
 
-	for i := 0; i < synthesisDelayMaxPerPrompt; i++ {
+	for i := 0; i < 2; i++ {
 		if _, block := rejectCloseout(t, mgr, sess, "implement_investigate", true); !block {
 			t.Fatalf("delay %d should still block", i)
 		}
@@ -120,7 +124,7 @@ func TestCloseoutBoundedPerPrompt(t *testing.T) {
 	if _, block := rejectCloseout(t, mgr, sess, "implement_investigate", true); block {
 		t.Fatal("the closeout must be let through once the per-prompt delay cap is reached")
 	}
-	mgr.beginCloseoutPrompt(ctx, sess, PromptInput{Text: "continue"})
+	mgr.Runner.Closeouts.BeginPrompt(ctx, sess, promptinput.Input{Text: "continue"})
 	if _, block := rejectCloseout(t, mgr, sess, "implement_investigate", true); !block {
 		t.Fatal("reset should re-arm the push for the next prompt")
 	}

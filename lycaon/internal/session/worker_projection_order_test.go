@@ -35,7 +35,7 @@ func TestWorkerProjectionWaitsForOriginalDispatchResponse(t *testing.T) {
 				ToolCalls: []api.ToolCall{{ID: "call-dispatch", Name: tool}},
 			}))
 			summary := workerSummaryFixture(jobID, "child", "implementer", api.WorkerSummaryStatusFailed)
-			if err := mgr.ProjectWorkerCard(ctx, parent.ID, jobID, summary); err == nil {
+			if err := mgr.Workers.Cards.Project(ctx, parent.ID, jobID, summary); err == nil {
 				t.Fatal("terminal projection must remain pending until its dispatch response exists")
 			}
 			pending, err := messages.GetMessages(ctx, parent.ID)
@@ -48,7 +48,7 @@ func TestWorkerProjectionWaitsForOriginalDispatchResponse(t *testing.T) {
 			testutil.FailErr(t, "append original response", messages.AppendMessages(ctx, parent.ID, api.Message{
 				ID: "response", Role: api.MessageRoleTool, Origin: api.MessageOriginTool, Content: "queued", ToolResult: result,
 			}))
-			testutil.FailErr(t, "retry terminal projection", mgr.ProjectWorkerCard(ctx, parent.ID, jobID, summary))
+			testutil.FailErr(t, "retry terminal projection", mgr.Workers.Cards.Project(ctx, parent.ID, jobID, summary))
 			projected, err := messages.GetMessages(ctx, parent.ID)
 			testutil.FailErr(t, "read projected conversation", err)
 			if len(projected) != 2 || projected[1].ID != "response" || projected[1].WorkerSummary == nil || projected[1].ToolResult.ToolCallID != "call-dispatch" {

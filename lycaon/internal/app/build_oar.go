@@ -81,14 +81,14 @@ func (b toolWiring) wireOARBlockPlane() error {
 
 	mgr := b.mgr
 	pipeline.SetRuleSetFor(func(ctx context.Context, sessionID string) *oar.RuleSet {
-		view := mgr.Catalog().ViewForSessionID(ctx, sessionID)
+		view := mgr.Catalog.ViewForSessionID(ctx, sessionID)
 		if view == nil {
 			return nil
 		}
 		return view.Rules
 	})
 	anchor.SetAnchorsFor(func(ctx context.Context, sessionID string) *anchor.Registry {
-		view := mgr.Catalog().ViewForSessionID(ctx, sessionID)
+		view := mgr.Catalog.ViewForSessionID(ctx, sessionID)
 		if view == nil {
 			return nil
 		}
@@ -101,7 +101,7 @@ func (b toolWiring) wireOARBlockPlane() error {
 	b.mgr.SetOARPipeline(pipeline, renderer)
 
 	pipeline.SetMCPBindingsFor(func(ctx context.Context, sessionID string) []bindings.Binding {
-		view := mgr.Catalog().ViewForSessionID(ctx, sessionID)
+		view := mgr.Catalog.ViewForSessionID(ctx, sessionID)
 		if view == nil {
 			return nil
 		}

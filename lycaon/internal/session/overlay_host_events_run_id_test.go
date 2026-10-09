@@ -43,7 +43,7 @@ func TestAppendHostEventStampedWithActiveRun(t *testing.T) {
 	const runID = "run-host-1"
 	mgr, sessionID := newHostEventManager(t, &api.WorkflowRun{ID: runID})
 
-	if err := mgr.appendHostEvent(context.Background(), sessionID, hostmarker.OverlayPromoteEventPrefix, map[string]any{"overlay": "o1"}, ""); err != nil {
+	if err := mgr.ProjectControl.AppendHostEvent(context.Background(), sessionID, hostmarker.OverlayPromoteEventPrefix, map[string]any{"overlay": "o1"}, ""); err != nil {
 		testutil.FailErr(t, "appendHostEvent failed", err)
 	}
 	msgs, err := mgr.store.GetMessages(context.Background(), sessionID)
@@ -64,7 +64,7 @@ func TestAppendHostEventStampedWithActiveRun(t *testing.T) {
 func TestAppendHostEventUnstampedWhenNoActiveRun(t *testing.T) {
 	mgr, sessionID := newHostEventManager(t, nil)
 
-	if err := mgr.appendHostEvent(context.Background(), sessionID, hostmarker.OverlayRejectEventPrefix, map[string]any{"overlay": "o2"}, ""); err != nil {
+	if err := mgr.ProjectControl.AppendHostEvent(context.Background(), sessionID, hostmarker.OverlayRejectEventPrefix, map[string]any{"overlay": "o2"}, ""); err != nil {
 		testutil.FailErr(t, "appendHostEvent failed", err)
 	}
 	msgs, err := mgr.store.GetMessages(context.Background(), sessionID)

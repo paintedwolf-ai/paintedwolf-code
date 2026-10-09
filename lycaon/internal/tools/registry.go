@@ -3,7 +3,6 @@ package tools
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/agentpresence"
@@ -15,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/secretcap"
+	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourceeffect"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -107,9 +107,9 @@ type ToolInvocationOut struct {
 type WorkerWriteCoordinator interface {
 	BeforeWorkerWrite(ctx context.Context, tctx ToolContext, relPath string) error
 	AfterWorkerWrite(ctx context.Context, tctx ToolContext, relPath string)
-	ReleaseWorkerReservations(ctx context.Context, parentSessionID, jobID string) error
-	// EnsureWorkerBranch prepares a write worker's private branch.
-	EnsureWorkerBranch(ctx context.Context, tctx ToolContext) (ToolContext, error)
+	ReleaseReservations(ctx context.Context, parentSessionID, jobID string) error
+	// EnsureBranch prepares a write worker's private branch.
+	EnsureBranch(ctx context.Context, tctx ToolContext) (ToolContext, error)
 }
 
 // PrimaryMutationRecorder records primary-tree paths for rewind checkpoints.
@@ -148,14 +148,14 @@ type ToolContext struct {
 	// PreparedFileAccess permits staging; FileChangeReview authorizes the mutation.
 	PreparedFileAccess []hitl.GrantedPathDelta
 	// GrantedWriteRoots holds this invocation’s reviewed write roots.
-	GrantedWriteRoots   []string
-	PolicyWriteGrants   []confine.ProtectedPathGrant
-	ProcessReview       ProcessReviewer
-	FileChangeReview    FileChangeReviewer
-	contentReviews      *contentReviews
-	Agent               string
-	ToolAccess          sandbox.ToolAccess
-	TurnSurfaceID       string
+	GrantedWriteRoots []string
+	PolicyWriteGrants []confine.ProtectedPathGrant
+	ProcessReview     ProcessReviewer
+	FileChangeReview  FileChangeReviewer
+	contentReviews    *contentReviews
+	Agent             string
+	ToolAccess        sandbox.ToolAccess
+	TurnSurfaceID     string
 	// TurnOfferedToolNames binds execution to the schemas on this model request.
 	// Nil leaves non-model callers unconstrained; empty permits no tools.
 	TurnOfferedToolNames []string

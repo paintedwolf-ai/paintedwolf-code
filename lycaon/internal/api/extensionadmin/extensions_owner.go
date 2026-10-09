@@ -95,7 +95,7 @@ func (s *Handler) currentExtensionRevision(projectDir string) (string, error) {
 }
 
 func (s *Handler) InvalidateEffectiveCatalog(ctx context.Context, projectID string) {
-	s.Sessions.Catalog().InvalidateEffectiveCatalog(projectID)
+	s.Sessions.Catalog.InvalidateEffectiveCatalog(projectID)
 	s.invalidateDeviceContributionFrame()
 	// Complete trust invalidation after client disconnects.
 	detached := context.WithoutCancel(ctx)
@@ -113,7 +113,7 @@ func (s *Handler) WarmEffectiveCatalog(ctx context.Context, projectID string) {
 	}
 	s.background.Go(ctx, func(ctx context.Context) {
 		// Contribution reads require the committed view.
-		s.Sessions.Catalog().ViewForProject(ctx, projectID)
+		s.Sessions.Catalog.ViewForProject(ctx, projectID)
 	})
 }
 

@@ -219,7 +219,7 @@ func (s *Handler) HandleDeleteDetectionPack(w http.ResponseWriter, r *http.Reque
 }
 
 func (c *detectionPacksCtl) contributedLocked(ctx context.Context) []detectionpack.Pack {
-	view := c.sessions.Catalog().DeviceView(ctx)
+	view := c.sessions.Catalog.DeviceView(ctx)
 	if view == nil {
 		return nil
 	}

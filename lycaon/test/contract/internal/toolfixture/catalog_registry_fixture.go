@@ -240,7 +240,7 @@ func ContractServeBootRegistry(t *testing.T) *tools.DefaultRegistry {
 	}
 	memStore := store.NewMemory()
 	if err := native.RegisterSurfaceNoteTool(rt.Registry, reporttools.SurfaceNoteDeps{
-		Ledger: session.NewManager(memStore, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits()).CloseoutEvidence(),
+		Ledger: session.NewManager(memStore, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits()).Verification.Evidence,
 		Messages: func(ctx context.Context, sessionID string) ([]api.Message, error) {
 			return memStore.GetMessages(ctx, sessionID)
 		},

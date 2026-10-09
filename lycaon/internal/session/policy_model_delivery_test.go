@@ -51,7 +51,7 @@ func TestPolicyAdvisoryReachesActualModelRequest(t *testing.T) {
 			mgr.SetOARPipeline(pipeline, oar.NewRenderer(nil, nil))
 			sess, err := mem.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, proj.ID)
 			testutil.FailErr(t, "create session", err)
-			_, err = mgr.Prompt(t.Context(), sess.ID, "continue")
+			_, err = mgr.Submissions.Prompt(t.Context(), sess.ID, "continue")
 			testutil.FailErr(t, "run prompt", err)
 			if anchor == oar.AnchorCoordinatorPreInvoke && len(recorder.AllRequests()) < 2 {
 				t.Fatal("tool invocation did not reach a second model request")

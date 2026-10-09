@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/hostctx"
 	"github.com/lycaon/lycaon/internal/observability"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/profiles"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -412,7 +412,7 @@ func (m *RunManager) baselinePostureForRun(ctx context.Context, active *api.Work
 		return fallback
 	}
 	raw, _ := vars[hostVarBaselinePosture].(string)
-	if session.ValidSessionPosture(raw) {
+	if profiles.ValidSessionPosture(raw) {
 		return api.SessionPosture(raw)
 	}
 	return fallback

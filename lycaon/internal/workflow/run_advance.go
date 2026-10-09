@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/conditions"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/profiles"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -138,7 +138,7 @@ func (m *RunManager) advanceToNextPhase(ctx context.Context, run *api.WorkflowRu
 			terminalSink = completeTerminalPhaseEntry(run, def, now)
 		}
 		var posture api.SessionPosture
-		if def, found := manifest.PhaseByID(next); found && session.ValidSessionPosture(def.OnEnter.SetPosture) {
+		if def, found := manifest.PhaseByID(next); found && profiles.ValidSessionPosture(def.OnEnter.SetPosture) {
 			posture = api.SessionPosture(def.OnEnter.SetPosture)
 		}
 		messages := make([]api.Message, 0, 2)

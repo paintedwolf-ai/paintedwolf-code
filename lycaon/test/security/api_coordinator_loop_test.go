@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/wiring"
@@ -40,12 +40,12 @@ func TestPlanImplementLegLoopWakesCoordinator(t *testing.T) {
 		t.Fatalf("phase = %q want execute", run.CurrentPhase)
 	}
 
-	if _, err := mgr.Prompt(ctx, sess.ID, "plan implement leg"); err != nil {
-		testutil.FailErr(t, "mgr.Prompt failed", err)
+	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "plan implement leg"); err != nil {
+		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 	}
-	child, err := mgr.SpawnChild(ctx, sess.ID, wire.SpawnChildRequest{AgentType: "implementer"})
+	child, err := mgr.Workers.SpawnChild(ctx, sess.ID, wire.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "spawn child", err)
-	if _, err := mgr.AppendWorkerSummary(ctx, sess.ID, session.WorkerSummaryInput{
+	if _, err := mgr.Workers.Summaries.Append(ctx, sess.ID, workeroutcomes.SummaryInput{
 		Summary:        "implemented feature X",
 		DelegationID:   "dep-e2e",
 		LegID:          "leg-e2e",
@@ -69,8 +69,8 @@ func TestPlanImplementLegLoopWakesCoordinator(t *testing.T) {
 	mgr.NudgeCoordinatorLoop(ctx, sess.ID, anchor.LegFinished, anchor.LegFinished, "leg-e2e", anchor.Envelope{})
 
 	testutil.WaitFor(t, promptIdleBudget, func() bool {
-		mgr.DrainLoopPendingForTest(ctx, sess.ID)
-		msgs, err := mgr.GetMessages(ctx, sess.ID)
+		mgr.Runner.Coordinator.CoordinatorLoop().DrainPending(ctx, sess.ID)
+		msgs, err := mgr.Transcript.GetMessages(ctx, sess.ID)
 		if err != nil {
 			return false
 		}

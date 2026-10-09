@@ -15,8 +15,8 @@ import (
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/pagecursor"
-	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
+	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
 	"github.com/lycaon/lycaon/internal/visual"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -36,7 +36,7 @@ func (s *Server) handleListSessionArtifacts(w http.ResponseWriter, r *http.Reque
 		s.responses.InvalidQuery(w, err)
 		return
 	}
-	root := session.RootSessionID(r.Context(), s.sessionStore, sessionID)
+	root := sessiontree.RootID(r.Context(), s.sessionStore, sessionID)
 	scope := pagecursor.Scope(root)
 	var after *sessionArtifactCursor
 	if pq.Cursor != "" {
@@ -175,7 +175,7 @@ func (s *Server) handleCreateSessionArtifact(w http.ResponseWriter, r *http.Requ
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "live tool recording transcript origin not found")
 		return
 	}
-	root := session.RootSessionID(r.Context(), s.sessionStore, sess.ID)
+	root := sessiontree.RootID(r.Context(), s.sessionStore, sess.ID)
 	holder := strings.TrimSpace(sess.ID)
 	artifact, err := s.visualStore.Put(r.Context(), root, visual.Entry{
 		Meta: visual.LiveToolRecordingMeta(recordingMediaType, pageID, originMessageID, toolCallID, recordedAt, durationMS),
@@ -342,7 +342,7 @@ func (s *Server) handleSessionArtifact(w http.ResponseWriter, r *http.Request) {
 		s.responses.InternalError(w, r, err)
 		return
 	}
-	root := session.RootSessionID(r.Context(), s.sessionStore, sessionID)
+	root := sessiontree.RootID(r.Context(), s.sessionStore, sessionID)
 	res := s.visualStore.Resolve(r.Context(), root, artifactID)
 	if !res.IsPresent() {
 		switch res.Reason() {

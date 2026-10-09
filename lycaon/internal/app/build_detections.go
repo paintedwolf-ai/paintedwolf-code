@@ -8,7 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/detectionpack"
 	"github.com/lycaon/lycaon/internal/gate"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/policyfacts"
 	"github.com/lycaon/lycaon/internal/settings"
 )
 
@@ -43,7 +43,7 @@ func (r *detectionRuntime) gateSource() settings.DetectionSource {
 	return nil
 }
 
-func (r *detectionRuntime) mintedCredentialSource() session.MintedCredentialSource {
+func (r *detectionRuntime) mintedCredentialSource() policyfacts.MintedCredentialSource {
 	if current := r.current.Load(); current != nil {
 		return current.gate
 	}

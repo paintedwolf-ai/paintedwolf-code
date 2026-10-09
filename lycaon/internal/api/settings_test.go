@@ -34,7 +34,7 @@ func newSettingsTestServer(t *testing.T, opts ...testDeps) (*Server, string, *pr
 	store := store.NewMemory()
 	mock := llm.NewMockProvider(testMockConfig(t))
 	mgr := session.NewManagerWithLLMService(store, mock, nil, nil, settings.DefaultSessionLimits(), nil)
-	mgr.SetLimitsProvider(settings.ProjectLimitsAdapter{Store: svc.Limits})
+	mgr.Limits.SetProvider(settings.ProjectLimitsAdapter{Store: svc.Limits})
 	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	reg := project.NewMemoryRegistry()
 	hub := events.NewMemoryHub()

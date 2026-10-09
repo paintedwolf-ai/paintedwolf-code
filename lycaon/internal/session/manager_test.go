@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/hintregistry"
 	"github.com/lycaon/lycaon/internal/llm"
-	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/project"
@@ -36,14 +36,19 @@ func testMockConfig(t *testing.T) *llm.MockConfig {
 
 func newTestManager(t *testing.T) (*Manager, *store.Memory) {
 	t.Helper()
-	store := store.NewMemory()
+	memory := store.NewMemory()
+	return newTestManagerWithStore(t, memory), memory
+}
+
+func newTestManagerWithStore(t *testing.T, persistence Store) *Manager {
+	t.Helper()
 	registry := tools.NewStubRegistry()
-	mgr := NewManager(store, llm.NewMockProvider(testMockConfig(t)), registry, settings.DefaultSessionLimits())
+	mgr := NewManager(persistence, llm.NewMockProvider(testMockConfig(t)), registry, settings.DefaultSessionLimits())
 	oartest.InstallCloseoutPolicy(t, mgr)
-	mgr.SetToolInvoker(testtool.RegistryInvoker{Registry: registry})
+	mgr.Guards.SetInvoker(testtool.RegistryInvoker{Registry: registry})
 	// Rewind checkpoints use a state root separate from the project.
 	mgr.SetDataDir(t.TempDir())
-	return mgr, store
+	return mgr
 }
 
 func newRootedTestManager(t *testing.T) (*Manager, *store.Memory, string) {
@@ -72,13 +77,13 @@ func TestPromptTextResponse(t *testing.T) {
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 
-	resp, err := mgr.Prompt(ctx, sess.ID, "hello")
-	testutil.FailErr(t, "mgr.Prompt failed", err)
+	resp, err := mgr.Submissions.Prompt(ctx, sess.ID, "hello")
+	testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 	if resp.MessageID == "" {
 		t.Fatal("expected message id")
 	}
 
-	msgs, err := mgr.GetMessages(ctx, sess.ID)
+	msgs, err := mgr.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "mgr.GetMessages failed", err)
 	if len(msgs) != 2 {
 		t.Fatalf("messages = %d, want 2", len(msgs))
@@ -106,10 +111,10 @@ func TestPromptWithToolCall(t *testing.T) {
 	}, projectID)
 	testutil.FailErr(t, "create session in store", err)
 
-	_, err = mgr.Prompt(ctx, sess.ID, "read the readme")
-	testutil.FailErr(t, "mgr.Prompt failed", err)
+	_, err = mgr.Submissions.Prompt(ctx, sess.ID, "read the readme")
+	testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 
-	msgs, err := mgr.GetMessages(ctx, sess.ID)
+	msgs, err := mgr.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "mgr.GetMessages failed", err)
 	if len(msgs) < 4 {
 		t.Fatalf("messages = %d, want tool exchange and closeout", len(msgs))
@@ -145,7 +150,7 @@ func TestMaxIterationCap(t *testing.T) {
 	if hintCfg, err := guidance.LoadHintConfig(extpacks.Bundled(hintregistry.DefaultDir)); err == nil {
 		mgr.SetWorkflowHints(hintCfg, nil)
 	}
-	mgr.SetMaxIterations(3)
+	mgr.Limits.SetMaxIterations(3)
 	ctx := context.Background()
 
 	sess, err := store.Create(ctx, api.CreateSessionRequest{
@@ -153,7 +158,7 @@ func TestMaxIterationCap(t *testing.T) {
 	}, projectID)
 	testutil.FailErr(t, "create session in store", err)
 
-	_, err = mgr.Prompt(ctx, sess.ID, "infinite loop")
+	_, err = mgr.Submissions.Prompt(ctx, sess.ID, "infinite loop")
 	// The fixture spends its final, tool-less turn on another call; that is
 	// the model's miss, not an empty provider completion.
 	var miss *promptloop.ProseTurnToolCallError
@@ -164,7 +169,7 @@ func TestMaxIterationCap(t *testing.T) {
 		t.Fatalf("model's miss attributed to the provider: %v", err)
 	}
 
-	msgs, err := mgr.GetMessages(ctx, sess.ID)
+	msgs, err := mgr.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "mgr.GetMessages failed", err)
 	// The repeating fixture refuses the final prose request; no blank answer commits.
 	want := 7
@@ -194,12 +199,12 @@ func TestSessionHistoryAccumulation(t *testing.T) {
 	testutil.FailErr(t, "create session in store", err)
 
 	for i := 0; i < 3; i++ {
-		if _, err := mgr.Prompt(ctx, sess.ID, "hello"); err != nil {
-			testutil.FailErr(t, "mgr.Prompt failed", err)
+		if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "hello"); err != nil {
+			testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 		}
 	}
 
-	msgs, err := mgr.GetMessages(ctx, sess.ID)
+	msgs, err := mgr.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "mgr.GetMessages failed", err)
 	if len(msgs) != 6 {
 		t.Fatalf("messages = %d, want 6", len(msgs))
@@ -224,7 +229,7 @@ func TestToolCallError(t *testing.T) {
 	reg.SetFail("read", fmt.Errorf("read failed"))
 	mgr := NewManager(store, llm.NewMockProvider(testMockConfig(t)), reg, settings.DefaultSessionLimits())
 	oartest.InstallCloseoutPolicy(t, mgr)
-	mgr.SetToolInvoker(testtool.RegistryInvoker{Registry: reg})
+	mgr.Guards.SetInvoker(testtool.RegistryInvoker{Registry: reg})
 	projectID := attachTestProject(t, mgr)
 	ctx := context.Background()
 
@@ -233,11 +238,11 @@ func TestToolCallError(t *testing.T) {
 	}, projectID)
 	testutil.FailErr(t, "create session in store", err)
 
-	if _, err := mgr.Prompt(ctx, sess.ID, "read the readme"); err != nil {
-		testutil.FailErr(t, "mgr.Prompt failed", err)
+	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "read the readme"); err != nil {
+		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 	}
 
-	msgs, err := mgr.GetMessages(ctx, sess.ID)
+	msgs, err := mgr.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "mgr.GetMessages failed", err)
 	if len(msgs) < 3 {
 		t.Fatalf("messages = %d", len(msgs))
@@ -260,8 +265,8 @@ func TestConcurrentPrompts(t *testing.T) {
 	testutil.FailErr(t, "create session in store", err)
 
 	done := make(chan error, 2)
-	go func() { _, err := mgr.Prompt(ctx, sess.ID, "hello one"); done <- err }()
-	go func() { _, err := mgr.Prompt(ctx, sess.ID, "hello two"); done <- err }()
+	go func() { _, err := mgr.Submissions.Prompt(ctx, sess.ID, "hello one"); done <- err }()
+	go func() { _, err := mgr.Submissions.Prompt(ctx, sess.ID, "hello two"); done <- err }()
 	if err := <-done; err != nil {
 		testutil.FailErr(t, "operation failed", err)
 	}
@@ -269,7 +274,7 @@ func TestConcurrentPrompts(t *testing.T) {
 		testutil.FailErr(t, "operation failed", err)
 	}
 
-	msgs, err := mgr.GetMessages(ctx, sess.ID)
+	msgs, err := mgr.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "mgr.GetMessages failed", err)
 	if len(msgs) != 4 {
 		t.Fatalf("messages = %d, want 4", len(msgs))

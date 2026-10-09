@@ -21,6 +21,7 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -36,7 +37,7 @@ func wireImplementConvergenceHooks(t *testing.T, mgr *session.Manager, wfMgr *wo
 	t.Helper()
 	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{
 		WorkerCycleIdle: func(projectID, sessionID, completingJobID string) (bool, error) {
-			return session.ParentSessionWorkerCycleIdle(context.Background(), q, projectID, sessionID, completingJobID)
+			return workeroutcomes.ParentSessionWorkerCycleIdle(context.Background(), q, projectID, sessionID, completingJobID)
 		},
 	})
 	testutil.FailErr(t, "NewDefaultRegistry", err)
@@ -50,7 +51,7 @@ func wireImplementConvergenceHooks(t *testing.T, mgr *session.Manager, wfMgr *wo
 			return
 		}
 		if id, ok := anchor.ParseID(kickID); ok {
-			mgr.Emit(ctx, rc.SessionID, id, mgr.CoordinatorEnvelopeForWorkerCycleTerminal(ctx, rc.SessionID, ""))
+			mgr.Guidance.Emit(ctx, rc.SessionID, id, mgr.Workers.Results.EnvelopeForTerminal(ctx, rc.SessionID, ""))
 		}
 	}
 	wfMgr.OnPhaseAutoAdvanced = func(ctx context.Context, sessionID, runID, previousPhase, newPhase string) {
@@ -74,7 +75,7 @@ func wireImplementConvergenceHooks(t *testing.T, mgr *session.Manager, wfMgr *wo
 		if rc == nil {
 			return
 		}
-		mgr.EmitMatch(ctx, rc.SessionID, anchor.PhaseEntered, anchor.Envelope{}, anchor.MatchContext{
+		mgr.Guidance.EmitMatch(ctx, rc.SessionID, anchor.PhaseEntered, anchor.Envelope{}, anchor.MatchContext{
 			Surface:  "phase",
 			Phase:    rc.Phase,
 			Workflow: rc.WorkflowID,
@@ -118,8 +119,8 @@ func setupLoopFixture(t *testing.T, cfg settings.SessionLimits) loopFixture {
 	mgr := session.NewManager(store, rec, tools.NewStubRegistry(), cfg)
 	agents := orchestration.NewMemoryAgentRegistry()
 	_ = orchestration.LoadRequiredAgentRegistry(context.Background(), agents)
-	mgr.SetAgentRegistry(agents)
-	testutil.FailErr(t, "install anchor registry", mgr.InstallAnchorRegistry())
+	mgr.Profiles.SetAgentRegistry(agents)
+	testutil.FailErr(t, "install anchor registry", mgr.Guidance.InstallAnchorRegistry())
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
 	wirePromptTestManager(t, mgr)
 
@@ -213,7 +214,7 @@ func TestShouldLoopWakeDeniesWhenBusy(t *testing.T) {
 	if err := fix.store.SetSessionStatus(ctx, fix.sess.ID, wire.SessionStatusBusy); err != nil {
 		testutil.FailErr(t, "fix.store.SetSessionStatus failed", err)
 	}
-	finishExecution := fix.mgr.BeginPromptExecutionForTest(t.Context(), fix.sess.ID)
+	finishExecution := fix.mgr.Runner.Coordinator.CoordinatorLoop().BeginPromptExecution(t.Context(), fix.sess.ID)
 	defer finishExecution()
 	allow, reason, err := fix.mgr.ShouldLoopWake(ctx, fix.sess.ID, anchor.LegFinished)
 	testutil.FailErr(t, "fix.mgr.ShouldLoopWake failed", err)
@@ -235,10 +236,10 @@ func TestShouldLoopWakeRespectsBudget(t *testing.T) {
 		t.Fatal("missing run")
 	}
 	fix.mgr.ResetLoopBudget(run.ID)
-	if !fix.mgr.TryConsumeLoopBudgetForTest(ctx, fix.sess.ID, run.ID) {
+	if !fix.mgr.Runner.Coordinator.CoordinatorLoop().TryConsumeBudgetForTest(ctx, fix.sess.ID, run.ID) {
 		t.Fatal("expected first consume")
 	}
-	if fix.mgr.TryConsumeLoopBudgetForTest(ctx, fix.sess.ID, run.ID) {
+	if fix.mgr.Runner.Coordinator.CoordinatorLoop().TryConsumeBudgetForTest(ctx, fix.sess.ID, run.ID) {
 		t.Fatal("budget should be exhausted")
 	}
 }
@@ -274,17 +275,17 @@ func TestLoopDefersUntilIdle(t *testing.T) {
 	if err := fix.store.SetSessionStatus(ctx, fix.sess.ID, wire.SessionStatusBusy); err != nil {
 		testutil.FailErr(t, "fix.store.SetSessionStatus failed", err)
 	}
-	finishExecution := fix.mgr.BeginPromptExecutionForTest(t.Context(), fix.sess.ID)
+	finishExecution := fix.mgr.Runner.Coordinator.CoordinatorLoop().BeginPromptExecution(t.Context(), fix.sess.ID)
 	defer finishExecution()
 	fix.mgr.NudgeCoordinatorLoop(ctx, fix.sess.ID, anchor.LegFinished, anchor.LegFinished, "leg-1", anchor.Envelope{})
-	if _, ok := fix.mgr.PendingLoopNudgeForTest(fix.sess.ID); !ok {
+	if _, ok := fix.mgr.Runner.Coordinator.CoordinatorLoop().PendingForTest(fix.sess.ID); !ok {
 		t.Fatal("expected deferred loop wake")
 	}
 	if err := fix.store.SetSessionStatus(ctx, fix.sess.ID, wire.SessionStatusIdle); err != nil {
 		testutil.FailErr(t, "fix.store.SetSessionStatus failed", err)
 	}
 	finishExecution()
-	fix.mgr.DrainLoopPendingForTest(ctx, fix.sess.ID)
+	fix.mgr.Runner.Coordinator.CoordinatorLoop().DrainPending(ctx, fix.sess.ID)
 	testutil.WaitFor(t, 3*time.Second, func() bool {
 		msgs, err := fix.store.GetMessages(ctx, fix.sess.ID)
 		if err != nil {
@@ -308,8 +309,8 @@ func TestImplementWorkerSummaryLoopWakesWithCompletingJobStillRunning(t *testing
 	mgr := session.NewManager(store, rec, tools.NewStubRegistry(), settings.DefaultSessionLimits())
 	agents := orchestration.NewMemoryAgentRegistry()
 	_ = orchestration.LoadRequiredAgentRegistry(context.Background(), agents)
-	mgr.SetAgentRegistry(agents)
-	testutil.FailErr(t, "install anchor registry", mgr.InstallAnchorRegistry())
+	mgr.Profiles.SetAgentRegistry(agents)
+	testutil.FailErr(t, "install anchor registry", mgr.Guidance.InstallAnchorRegistry())
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
 
 	wfStore := workflow.NewSQLStore(sqlDB)
@@ -355,7 +356,7 @@ func TestImplementWorkerSummaryLoopWakesWithCompletingJobStillRunning(t *testing
 		t.Fatalf("claimed = %s want %s", claimed.ID, jobID)
 	}
 
-	if _, err := mgr.AppendWorkerSummary(ctx, sess.ID, session.WorkerSummaryInput{
+	if _, err := mgr.Workers.Summaries.Append(ctx, sess.ID, workeroutcomes.SummaryInput{
 		Summary:        "Found linux_cli_adventure.html",
 		JobID:          jobID,
 		AgentType:      orchestration.ProfilePathExplorer,
@@ -390,8 +391,8 @@ func TestImplementWorkerCompleteFiresSingleLoopWake(t *testing.T) {
 	mgr := session.NewManager(store, rec, tools.NewStubRegistry(), settings.DefaultSessionLimits())
 	agents := orchestration.NewMemoryAgentRegistry()
 	_ = orchestration.LoadRequiredAgentRegistry(context.Background(), agents)
-	mgr.SetAgentRegistry(agents)
-	testutil.FailErr(t, "install anchor registry", mgr.InstallAnchorRegistry())
+	mgr.Profiles.SetAgentRegistry(agents)
+	testutil.FailErr(t, "install anchor registry", mgr.Guidance.InstallAnchorRegistry())
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
 
 	wfStore := workflow.NewSQLStore(sqlDB)
@@ -437,7 +438,7 @@ func TestImplementWorkerCompleteFiresSingleLoopWake(t *testing.T) {
 		t.Fatalf("claimed = %s want %s", claimed.ID, jobID)
 	}
 
-	if _, err := mgr.AppendWorkerSummary(ctx, sess.ID, session.WorkerSummaryInput{
+	if _, err := mgr.Workers.Summaries.Append(ctx, sess.ID, workeroutcomes.SummaryInput{
 		Summary:        "Found linux_cli_adventure.html",
 		JobID:          jobID,
 		AgentType:      orchestration.ProfilePathExplorer,
@@ -494,8 +495,8 @@ func TestImplementWorkerSummaryLoopWakesCoordinator(t *testing.T) {
 	mgr := session.NewManager(store, rec, tools.NewStubRegistry(), settings.DefaultSessionLimits())
 	agents := orchestration.NewMemoryAgentRegistry()
 	_ = orchestration.LoadRequiredAgentRegistry(context.Background(), agents)
-	mgr.SetAgentRegistry(agents)
-	testutil.FailErr(t, "install anchor registry", mgr.InstallAnchorRegistry())
+	mgr.Profiles.SetAgentRegistry(agents)
+	testutil.FailErr(t, "install anchor registry", mgr.Guidance.InstallAnchorRegistry())
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
 
 	wfStore := workflow.NewSQLStore(sqlDB)
@@ -552,7 +553,7 @@ func TestImplementWorkerSummaryLoopWakesCoordinator(t *testing.T) {
 		t.Fatalf("claimed = %s want %s", claimed.ID, jobID)
 	}
 
-	if _, err := mgr.AppendWorkerSummary(ctx, sess.ID, session.WorkerSummaryInput{
+	if _, err := mgr.Workers.Summaries.Append(ctx, sess.ID, workeroutcomes.SummaryInput{
 		Summary:        "Created game.py",
 		JobID:          jobID,
 		AgentType:      orchestration.ProfileImplementer,
@@ -587,12 +588,12 @@ func TestLegFinishedQueuesKickAndAutoPrompts(t *testing.T) {
 	fix := setupLoopFixture(t, settings.DefaultSessionLimits())
 	ctx := context.Background()
 
-	if _, err := fix.mgr.Prompt(ctx, fix.sess.ID, "start implement"); err != nil {
-		testutil.FailErr(t, "fix.mgr.Prompt failed", err)
+	if _, err := fix.mgr.Submissions.Prompt(ctx, fix.sess.ID, "start implement"); err != nil {
+		testutil.FailErr(t, "fix.mgr.Submissions.Prompt failed", err)
 	}
 	child, err := fix.store.CreateChild(ctx, fix.sess, wire.SpawnChildRequest{AgentType: orchestration.ProfilePathExplorer})
 	testutil.FailErr(t, "create child", err)
-	if _, err := fix.mgr.AppendWorkerSummary(ctx, fix.sess.ID, session.WorkerSummaryInput{
+	if _, err := fix.mgr.Workers.Summaries.Append(ctx, fix.sess.ID, workeroutcomes.SummaryInput{
 		Summary:        "leg done",
 		DelegationID:   "dep-1",
 		LegID:          "leg-1",
@@ -646,7 +647,7 @@ func simulateWorkerJobComplete(t *testing.T, mgr *session.Manager, q worker.Work
 	if !won {
 		t.Fatal("completion claim lost")
 	}
-	bridge := &worker.SessionOutcomeBridge{Sessions: mgr}
+	bridge := &worker.SessionOutcomeBridge{Sessions: mgr, Results: mgr.Workers.Results, State: mgr.Workers.State, Closure: mgr.ProgressClosure}
 	testutil.FailErr(t, "OnWorkerComplete", bridge.OnWorkerComplete(ctx, jobID, result))
 	testutil.FailErr(t, "acknowledge worker outcome", q.MarkOutcomeDelivered(ctx, jobID))
 }
@@ -660,8 +661,8 @@ func TestImplementWorkerSummaryPartialSkipsLoopWake(t *testing.T) {
 	mgr.SetOARPipeline(sessionTestOARPipeline(t), oar.NewRenderer(nil, nil))
 	agents := orchestration.NewMemoryAgentRegistry()
 	_ = orchestration.LoadRequiredAgentRegistry(context.Background(), agents)
-	mgr.SetAgentRegistry(agents)
-	testutil.FailErr(t, "install anchor registry", mgr.InstallAnchorRegistry())
+	mgr.Profiles.SetAgentRegistry(agents)
+	testutil.FailErr(t, "install anchor registry", mgr.Guidance.InstallAnchorRegistry())
 
 	wfStore := workflow.NewSQLStore(sqlDB)
 	wfMgr := workflow.NewManager(wfStore, store, nil, nil)
@@ -690,7 +691,7 @@ func TestImplementWorkerSummaryPartialSkipsLoopWake(t *testing.T) {
 		testutil.FailErr(t, "store.AppendMessages failed", err)
 	}
 
-	status, err := mgr.AppendWorkerSummary(ctx, sess.ID, session.WorkerSummaryInput{
+	status, err := mgr.Workers.Summaries.Append(ctx, sess.ID, workeroutcomes.SummaryInput{
 		Summary:        "Created game.py",
 		JobID:          "job-command-only",
 		AgentType:      orchestration.ProfileImplementer,

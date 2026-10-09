@@ -9,15 +9,15 @@ import (
 )
 
 // citationRoots uses the session workspace when no roots are configured.
-func (l *PromptLoop) citationRoots(ctx context.Context, sess *api.Session) evidence.CitationRoots {
+func (l *promptContext) citationRoots(ctx context.Context, sess *api.Session) evidence.CitationRoots {
 	fallback := ""
 	if sess != nil {
 		fallback = strings.TrimSpace(sess.WorkspacePath)
 	}
-	if l == nil || l.Deps.CitationRoots == nil {
+	if l == nil || l.Closeout.Deps.CitationRoots == nil {
 		return evidence.CitationRoots{ProjectDir: fallback}
 	}
-	roots := l.Deps.CitationRoots(ctx, sess)
+	roots := l.Closeout.Deps.CitationRoots(ctx, sess)
 	if len(roots.Roots) == 0 && strings.TrimSpace(roots.ProjectDir) == "" {
 		roots.ProjectDir = fallback
 	}

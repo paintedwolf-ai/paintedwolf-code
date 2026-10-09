@@ -44,11 +44,11 @@ func TestCrossPhaseHostAdvanceQueuesCoordinatorWake(t *testing.T) {
 	sessionMgr := session.NewManager(sessionStore, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
 	sessionMgr.SetLoopWorkflowSource(wfMgr)
 	b := &serveBuilder{mgr: sessionMgr, workflowMgr: wfMgr}
-	finishExecution := sessionMgr.BeginPromptExecutionForTest(t.Context(), sess.ID)
+	finishExecution := sessionMgr.Runner.Coordinator.CoordinatorLoop().BeginPromptExecution(t.Context(), sess.ID)
 	defer finishExecution()
 	delegationWiring{b}.onWorkflowPhaseAutoAdvanced(ctx, sess.ID, run.ID, "triage", "expand")
 
-	got, ok := sessionMgr.PendingLoopNudgeForTest(sess.ID)
+	got, ok := sessionMgr.Runner.Coordinator.CoordinatorLoop().PendingForTest(sess.ID)
 	if !ok || got != anchor.PhaseAdvanced {
 		t.Fatalf("pending wake = %q, %v want %q, true", got, ok, anchor.PhaseAdvanced)
 	}
@@ -88,7 +88,7 @@ func TestTerminalCompletionSettlesWithoutAmbientWake(t *testing.T) {
 		t.Fatalf("status = %q, want idle after workflow approval", settled.Status)
 	}
 
-	if got, ok := sessionMgr.PendingLoopNudgeForTest(sess.ID); ok {
+	if got, ok := sessionMgr.Runner.Coordinator.CoordinatorLoop().PendingForTest(sess.ID); ok {
 		t.Fatalf("terminal workflow queued ambient wake %q", got)
 	}
 }
@@ -125,12 +125,12 @@ func TestHumanApprovalAdvanceQueuesWakeForRunningChild(t *testing.T) {
 
 	sessionMgr := session.NewManager(sessionStore, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
 	sessionMgr.SetLoopWorkflowSource(wfMgr)
-	finishExecution := sessionMgr.BeginPromptExecutionForTest(t.Context(), sess.ID)
+	finishExecution := sessionMgr.Runner.Coordinator.CoordinatorLoop().BeginPromptExecution(t.Context(), sess.ID)
 	defer finishExecution()
 	b := &serveBuilder{mgr: sessionMgr, workflowMgr: wfMgr}
 	delegationWiring{b}.onWorkflowHumanApprovalAdvanced(ctx, parent)
 
-	got, ok := sessionMgr.PendingLoopNudgeForTest(sess.ID)
+	got, ok := sessionMgr.Runner.Coordinator.CoordinatorLoop().PendingForTest(sess.ID)
 	if !ok || got != anchor.PhaseAdvanced {
 		t.Fatalf("pending child wake = %q, %v want %q, true", got, ok, anchor.PhaseAdvanced)
 	}

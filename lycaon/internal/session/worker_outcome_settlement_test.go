@@ -43,10 +43,10 @@ func TestWorkerSynthesisSettlesAfterOutcomeAcknowledgement(t *testing.T) {
 	}
 
 	q.pending = nil
-	mgr.beginPromptTurn(sess.ID, "")
-	testutil.FailErr(t, "finish worker synthesis", mgr.finishPromptExecution(ctx, sess.ID, false, true, ""))
+	mgr.Runner.Settlement.Begin(sess.ID, "")
+	testutil.FailErr(t, "finish worker synthesis", mgr.Runner.Settlement.Finish(ctx, sess.ID, false, true, ""))
 	finishExecution()
-	testutil.FailErr(t, "drain worker synthesis wakes", mgr.drainPendingLoopWakes(ctx, sess.ID))
+	testutil.FailErr(t, "drain worker synthesis wakes", mgr.Runner.Settlement.Drain(ctx, sess.ID))
 	settled, err := st.Get(ctx, sess.ID)
 	testutil.FailErr(t, "read completed session", err)
 	if settled.Status != api.SessionStatusIdle {

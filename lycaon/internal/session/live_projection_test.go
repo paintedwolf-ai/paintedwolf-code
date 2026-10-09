@@ -3,18 +3,18 @@ package session
 import (
 	"context"
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/events"
-	"github.com/lycaon/lycaon/internal/testdbfixture"
-	"github.com/lycaon/lycaon/internal/testutil"
 	"strconv"
 	"testing"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/eventoutbox"
+	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -55,13 +55,13 @@ func TestLiveProjectionCoalescesAndSkipsOutbox(t *testing.T) {
 	drainMessageEvents(t, ch, 200*time.Millisecond)
 
 	for i := 1; i <= 20; i++ {
-		testutil.FailErr(t, "project live", mgr.Streams().Project(ctx, sess.ID, api.Message{
+		testutil.FailErr(t, "project live", mgr.Transcript.Streams.Project(ctx, sess.ID, api.Message{
 			ID:      msgID,
 			Role:    api.MessageRoleAssistant,
 			Content: "token-body-" + strconv.Itoa(i),
 		}))
 	}
-	mgr.Streams().Flush(ctx, sess.ID)
+	mgr.Transcript.Streams.Flush(ctx, sess.ID)
 
 	patches := collectMessageOps(t, ch, 200*time.Millisecond)
 	if n := patches[api.MessageChangePatch]; n != 0 {
@@ -86,7 +86,7 @@ func TestLiveProjectionCoalescesAndSkipsOutbox(t *testing.T) {
 		t.Fatalf("outbox rows after live projection = %d want 0", outboxRows)
 	}
 
-	testutil.FailErr(t, "settle", mgr.updateMessage(ctx, sess.ID, msgID, api.Message{
+	testutil.FailErr(t, "settle", mgr.Transcript.Update(ctx, sess.ID, msgID, api.Message{
 		ID:         msgID,
 		Role:       api.MessageRoleAssistant,
 		Content:    "token-body-20",
@@ -129,7 +129,7 @@ func TestLiveProjectionPersistsLongRunningToolCallsWithoutWiping(t *testing.T) {
 	}))
 	waitOutboxEmpty(t, sqlDB)
 
-	testutil.FailErr(t, "project live tool_calls", mgr.Streams().Project(ctx, sess.ID, api.Message{
+	testutil.FailErr(t, "project live tool_calls", mgr.Transcript.Streams.Project(ctx, sess.ID, api.Message{
 		ID:      msgID,
 		Role:    api.MessageRoleAssistant,
 		Content: "running",
@@ -139,18 +139,18 @@ func TestLiveProjectionPersistsLongRunningToolCallsWithoutWiping(t *testing.T) {
 			Args: map[string]any{"command": "ls"},
 		}},
 	}))
-	mgr.Streams().Flush(ctx, sess.ID)
+	mgr.Transcript.Streams.Flush(ctx, sess.ID)
 	withCalls, err := st.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages after tool_calls", err)
 	if len(withCalls[0].ToolCalls) != 1 || withCalls[0].ToolCalls[0].Name != "command" {
 		t.Fatalf("live tool_calls = %+v", withCalls[0].ToolCalls)
 	}
-	testutil.FailErr(t, "project live content only", mgr.Streams().Project(ctx, sess.ID, api.Message{
+	testutil.FailErr(t, "project live content only", mgr.Transcript.Streams.Project(ctx, sess.ID, api.Message{
 		ID:      msgID,
 		Role:    api.MessageRoleAssistant,
 		Content: "still running",
 	}))
-	mgr.Streams().Flush(ctx, sess.ID)
+	mgr.Transcript.Streams.Flush(ctx, sess.ID)
 	kept, err := st.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages after content-only", err)
 	if kept[0].Content != "still running" {

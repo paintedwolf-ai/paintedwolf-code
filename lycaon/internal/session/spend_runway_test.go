@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/session/spendguard"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/workercloseout"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -90,7 +91,7 @@ func TestSpendCeilingStateOneSummaryCall(t *testing.T) {
 	sess := &api.Session{ID: "s1", ProjectID: "p1"}
 
 	before := counter.summary
-	st, err := mgr.spendCeilingState(ctx, "s1", sess)
+	st, err := mgr.Runner.Spend.State(ctx, "s1", sess)
 	testutil.FailErr(t, "spendCeilingState", err)
 	if counter.summary-before != 1 {
 		t.Fatalf("Summary calls = %d want 1", counter.summary-before)
@@ -100,7 +101,7 @@ func TestSpendCeilingStateOneSummaryCall(t *testing.T) {
 	}
 
 	before = counter.summary
-	testutil.FailErr(t, "checkSpendCeiling", mgr.checkSpendCeiling(ctx, "s1", sess))
+	testutil.FailErr(t, "checkSpendCeiling", mgr.Runner.Spend.Check(ctx, "s1", sess))
 	if counter.summary-before != 1 {
 		t.Fatalf("checkSpendCeiling Summary calls = %d want 1", counter.summary-before)
 	}
@@ -112,7 +113,7 @@ func TestPromptLoopSpendCheckFailsOpenWhenAccountingIsUnavailable(t *testing.T) 
 		CostTracker: base,
 		err:         errors.New("cost database unavailable"),
 	}, 5, true)
-	check, err := mgr.buildPromptLoopDeps().CheckSpendCeiling(
+	check, err := mgr.buildPromptLoopDeps().Nudges.CheckSpendCeiling(
 		t.Context(), "s1", &api.Session{ID: "s1", ProjectID: "p1"},
 	)
 	testutil.FailErr(t, "CheckSpendCeiling", err)
@@ -128,17 +129,17 @@ func TestSpendRunwayNudgeFiresOnce(t *testing.T) {
 	mgr := spendRunwayMgr(t, tracker, 5, true)
 	sess := &api.Session{ID: "s1", ProjectID: "p1"}
 
-	st, err := mgr.spendCeilingState(ctx, "s1", sess)
+	st, err := mgr.Runner.Spend.State(ctx, "s1", sess)
 	testutil.FailErr(t, "spendCeilingState", err)
 	if !st.Low {
 		t.Fatalf("want Low at 82%% of ceiling, got %+v", st)
 	}
-	first := mgr.spendRunwayNudge(ctx, sess, st.CeilingUSD)
+	first := mgr.Nudges.SpendRunway(ctx, sess, st.CeilingUSD)
 	if first.Empty() {
 		t.Fatal("first crossing must fire")
 	}
 	for i := 0; i < 5; i++ {
-		if got := mgr.spendRunwayNudge(ctx, sess, st.CeilingUSD); !got.Empty() {
+		if got := mgr.Nudges.SpendRunway(ctx, sess, st.CeilingUSD); !got.Empty() {
 			t.Fatalf("iteration %d re-fired: %q", i, got.Content)
 		}
 	}
@@ -149,10 +150,12 @@ func TestSpendRunwayUsesConfiguredWarningRatio(t *testing.T) {
 	tracker := costtest.NewTracker(t, stubSpendPricer{usd: 0.01})
 	recordSessionSpend(t, tracker, "s1", 2.6)
 	mgr := spendRunwayMgr(t, tracker, 5, true)
-	mgr.cfg.SpendWarningRatio = 0.5
+	defaults := mgr.Limits.Defaults()
+	defaults.SpendWarningRatio = 0.5
+	mgr.Limits.SetDefaults(defaults)
 	sess := &api.Session{ID: "s1", ProjectID: "p1"}
 
-	st, err := mgr.spendCeilingState(ctx, "s1", sess)
+	st, err := mgr.Runner.Spend.State(ctx, "s1", sess)
 	testutil.FailErr(t, "spendCeilingState", err)
 	if !st.Low || st.Reached {
 		t.Fatalf("state = %+v want warning at configured 50%% ratio", st)
@@ -166,24 +169,26 @@ func TestSpendRunwayNudgeRearmsOnChangedCeiling(t *testing.T) {
 	mgr := spendRunwayMgr(t, tracker, 5, true)
 	sess := &api.Session{ID: "s1", ProjectID: "p1"}
 
-	if got := mgr.spendRunwayNudge(ctx, sess, 5); got.Empty() {
+	if got := mgr.Nudges.SpendRunway(ctx, sess, 5); got.Empty() {
 		t.Fatal("fire at $5")
 	}
-	if got := mgr.spendRunwayNudge(ctx, sess, 5); !got.Empty() {
+	if got := mgr.Nudges.SpendRunway(ctx, sess, 5); !got.Empty() {
 		t.Fatalf("same ceiling re-armed: %q", got.Content)
 	}
 
 	recordSessionSpend(t, tracker, "s1", 12) // total ~16.1 against new $20 ceiling
-	mgr.cfg.SessionSpendCeilingUSD = 20
-	st, err := mgr.spendCeilingState(ctx, "s1", sess)
+	defaults := mgr.Limits.Defaults()
+	defaults.SessionSpendCeilingUSD = 20
+	mgr.Limits.SetDefaults(defaults)
+	st, err := mgr.Runner.Spend.State(ctx, "s1", sess)
 	testutil.FailErr(t, "spendCeilingState@$20", err)
 	if !st.Low || st.CeilingUSD != 20 {
 		t.Fatalf("state at $20 = %+v", st)
 	}
-	if got := mgr.spendRunwayNudge(ctx, sess, st.CeilingUSD); got.Empty() {
+	if got := mgr.Nudges.SpendRunway(ctx, sess, st.CeilingUSD); got.Empty() {
 		t.Fatal("changed ceiling must fire once more")
 	}
-	if got := mgr.spendRunwayNudge(ctx, sess, st.CeilingUSD); !got.Empty() {
+	if got := mgr.Nudges.SpendRunway(ctx, sess, st.CeilingUSD); !got.Empty() {
 		t.Fatalf("second fire at $20: %q", got.Content)
 	}
 
@@ -192,16 +197,18 @@ func TestSpendRunwayNudgeRearmsOnChangedCeiling(t *testing.T) {
 	recordSessionSpend(t, tracker2, "s2", 2.5)
 	mgr2 := spendRunwayMgr(t, tracker2, 5, true)
 	sess2 := &api.Session{ID: "s2", ProjectID: "p1"}
-	if got := mgr2.spendRunwayNudge(ctx, sess2, 5); got.Empty() {
+	if got := mgr2.Nudges.SpendRunway(ctx, sess2, 5); got.Empty() {
 		t.Fatal("fire at $5 on s2")
 	}
-	mgr2.cfg.SessionSpendCeilingUSD = 3
-	st, err = mgr2.spendCeilingState(ctx, "s2", sess2)
+	defaults2 := mgr2.Limits.Defaults()
+	defaults2.SessionSpendCeilingUSD = 3
+	mgr2.Limits.SetDefaults(defaults2)
+	st, err = mgr2.Runner.Spend.State(ctx, "s2", sess2)
 	testutil.FailErr(t, "spendCeilingState@$3", err)
 	if !st.Low || st.Reached || st.CeilingUSD != 3 {
 		t.Fatalf("state at lower ceiling = %+v", st)
 	}
-	if got := mgr2.spendRunwayNudge(ctx, sess2, st.CeilingUSD); got.Empty() {
+	if got := mgr2.Nudges.SpendRunway(ctx, sess2, st.CeilingUSD); got.Empty() {
 		t.Fatal("lower positive ceiling must re-arm")
 	}
 }
@@ -213,12 +220,12 @@ func TestSpendRunwayNudgeNeverAtWall(t *testing.T) {
 	mgr := spendRunwayMgr(t, tracker, 5, true)
 	sess := &api.Session{ID: "s1", ProjectID: "p1"}
 
-	st, err := mgr.spendCeilingState(ctx, "s1", sess)
+	st, err := mgr.Runner.Spend.State(ctx, "s1", sess)
 	testutil.FailErr(t, "spendCeilingState", err)
 	if !st.Reached || st.Low {
 		t.Fatalf("state = %+v want reached and not low", st)
 	}
-	if err := mgr.checkSpendCeiling(ctx, "s1", sess); err == nil {
+	if err := mgr.Runner.Spend.Check(ctx, "s1", sess); err == nil {
 		t.Fatal("reached must surface as checkSpendCeiling error")
 	}
 }
@@ -231,10 +238,10 @@ func TestSpendRunwayNudgeNeverForWorker(t *testing.T) {
 	root := &api.Session{ID: "root", ProjectID: "p1"}
 	worker := &api.Session{ID: "child", ProjectID: "p1", ParentSessionID: "root"}
 
-	if got := mgr.spendRunwayNudge(ctx, worker, 5); !got.Empty() {
+	if got := mgr.Nudges.SpendRunway(ctx, worker, 5); !got.Empty() {
 		t.Fatalf("worker nudge = %q", got.Content)
 	}
-	if got := mgr.spendRunwayNudge(ctx, root, 5); got.Empty() {
+	if got := mgr.Nudges.SpendRunway(ctx, root, 5); got.Empty() {
 		t.Fatal("coordinator must still be able to arm after worker no-op")
 	}
 }
@@ -249,12 +256,12 @@ func TestSpendRunwayUnpricedAndDisabled(t *testing.T) {
 		}))
 		mgr := spendRunwayMgr(t, tracker, 5, true)
 		sess := &api.Session{ID: "s1", ProjectID: "p1"}
-		st, err := mgr.spendCeilingState(ctx, "s1", sess)
+		st, err := mgr.Runner.Spend.State(ctx, "s1", sess)
 		testutil.FailErr(t, "spendCeilingState", err)
-		if st != (SpendCeilingState{}) {
+		if st != (spendguard.CeilingState{}) {
 			t.Fatalf("unpriced state = %+v", st)
 		}
-		if err := mgr.checkSpendCeiling(ctx, "s1", sess); err != nil {
+		if err := mgr.Runner.Spend.Check(ctx, "s1", sess); err != nil {
 			t.Fatalf("unpriced checkSpendCeiling = %v", err)
 		}
 	})
@@ -264,12 +271,12 @@ func TestSpendRunwayUnpricedAndDisabled(t *testing.T) {
 		recordSessionSpend(t, tracker, "s2", 9)
 		mgr := spendRunwayMgr(t, tracker, 5, false)
 		sess := &api.Session{ID: "s2", ProjectID: "p1"}
-		st, err := mgr.spendCeilingState(ctx, "s2", sess)
+		st, err := mgr.Runner.Spend.State(ctx, "s2", sess)
 		testutil.FailErr(t, "spendCeilingState", err)
-		if st != (SpendCeilingState{}) {
+		if st != (spendguard.CeilingState{}) {
 			t.Fatalf("disabled state = %+v", st)
 		}
-		if err := mgr.checkSpendCeiling(ctx, "s2", sess); err != nil {
+		if err := mgr.Runner.Spend.Check(ctx, "s2", sess); err != nil {
 			t.Fatalf("disabled checkSpendCeiling = %v", err)
 		}
 	})
@@ -279,12 +286,12 @@ func TestSpendRunwayUnpricedAndDisabled(t *testing.T) {
 		recordSessionSpend(t, tracker, "s3", 9)
 		mgr := spendRunwayMgr(t, tracker, 0, true)
 		sess := &api.Session{ID: "s3", ProjectID: "p1"}
-		st, err := mgr.spendCeilingState(ctx, "s3", sess)
+		st, err := mgr.Runner.Spend.State(ctx, "s3", sess)
 		testutil.FailErr(t, "spendCeilingState", err)
-		if st != (SpendCeilingState{}) {
+		if st != (spendguard.CeilingState{}) {
 			t.Fatalf("zero ceiling state = %+v", st)
 		}
-		if err := mgr.checkSpendCeiling(ctx, "s3", sess); err != nil {
+		if err := mgr.Runner.Spend.Check(ctx, "s3", sess); err != nil {
 			t.Fatalf("zero ceiling checkSpendCeiling = %v", err)
 		}
 	})
@@ -296,7 +303,7 @@ func TestSpendRunwayRenderedTextHasNoFigure(t *testing.T) {
 	recordSessionSpend(t, tracker, "s1", 4.1)
 	mgr := spendRunwayMgr(t, tracker, 5, true)
 	sess := &api.Session{ID: "s1", ProjectID: "p1"}
-	msg := mgr.spendRunwayNudge(ctx, sess, 5)
+	msg := mgr.Nudges.SpendRunway(ctx, sess, 5)
 	if msg.Empty() {
 		t.Fatal("expected rendered message")
 	}
@@ -357,11 +364,11 @@ func TestSpendRunwayLatchReleasedOnForget(t *testing.T) {
 	mgr := spendRunwayMgr(t, tracker, 5, true)
 	sess := &api.Session{ID: "s1", ProjectID: "p1"}
 
-	if got := mgr.spendRunwayNudge(ctx, sess, 5); got.Empty() {
+	if got := mgr.Nudges.SpendRunway(ctx, sess, 5); got.Empty() {
 		t.Fatal("first fire")
 	}
 	mgr.DisposeSessionResources(t.Context(), "s1")
-	if got := mgr.spendRunwayNudge(ctx, sess, 5); got.Empty() {
+	if got := mgr.Nudges.SpendRunway(ctx, sess, 5); got.Empty() {
 		t.Fatal("re-created session with same ceiling must arm again")
 	}
 }

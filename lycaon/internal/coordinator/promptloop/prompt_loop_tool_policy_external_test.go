@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm"
@@ -37,8 +36,8 @@ func TestLoopRuleRejectAppendsToolMessage(t *testing.T) {
 	}}})
 	store := store.NewMemory()
 	deps := promptloop.StoreDeps(store)
-	deps.LLM = client
-	deps.Policy = denyToolPolicy{}
+	deps.Model.LLM = client
+	deps.Context.Policy = denyToolPolicy{}
 	loop := promptloop.NewPromptLoopForTest(deps)
 	ctx := context.Background()
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
@@ -77,12 +76,12 @@ func TestPromptLoop_SpecDenyToolMessageShape(t *testing.T) {
 	}}
 	store := store.NewMemory()
 	deps := promptloop.StoreDeps(store)
-	deps.LLM = client
-	deps.Policy = listedEvaluatingPolicy{
+	deps.Model.LLM = client
+	deps.Context.Policy = listedEvaluatingPolicy{
 		metas:     []tools.ToolMeta{{Name: "delegate_dispatch", ArgsSchema: map[string]any{"type": "object"}}},
 		evaluator: policy,
 	}
-	deps.CoordinatorFrame = staticCoordinatorContext{run: api.CoordinatorRunContext{
+	deps.Context.CoordinatorFrame = staticCoordinatorContext{run: api.CoordinatorRunContext{
 		WorkflowID: "plan", CurrentPhase: "execute", PhaseCoordinatorSurface: "plan_execute",
 	}}
 	loop := promptloop.NewPromptLoopForTest(deps)
@@ -139,12 +138,12 @@ func TestLoopDoomLoopRejectKeepsCallResultPair(t *testing.T) {
 		},
 	})
 	deps := promptloop.StoreDeps(store)
-	deps.LLM = client
-	deps.Tools = tools.NewStubRegistry()
-	deps.Policy = &recordingToolPolicy{}
-	deps.DoomLoop = guard
-	deps.RejectFmt = fmttr
-	deps.FormatDoomLoopReject = func(_ context.Context, _, tool string, _ map[string]any, count int, repeatedCode string) (*guidance.Refusal, error) {
+	deps.Model.LLM = client
+	deps.Context.Tools = tools.NewStubRegistry()
+	deps.Context.Policy = &recordingToolPolicy{}
+	deps.Nudges.DoomLoop = guard
+	deps.Closeout.RejectFmt = fmttr
+	deps.Nudges.FormatDoomLoopReject = func(_ context.Context, _, tool string, _ map[string]any, count int, repeatedCode string) (*guidance.Refusal, error) {
 		data := map[string]any{"count": count, "tool": tool}
 		if repeatedCode != "" {
 			data["code"] = repeatedCode
@@ -193,11 +192,11 @@ func TestLoopTruncatesLargeToolResult(t *testing.T) {
 		{Pattern: ".*", Text: "done"},
 	}})
 	deps := promptloop.StoreDeps(store)
-	deps.Limits = func(context.Context, *api.Session) settings.SessionLimits { return limits }
-	deps.LLM = client
-	deps.Tools = reg
-	deps.CoordinatorFrame = investigateCoordinatorContext()
-	deps.Policy = &recordingToolPolicy{}
+	deps.Context.Limits = func(context.Context, *api.Session) settings.SessionLimits { return limits }
+	deps.Model.LLM = client
+	deps.Context.Tools = reg
+	deps.Context.CoordinatorFrame = investigateCoordinatorContext()
+	deps.Context.Policy = &recordingToolPolicy{}
 	loop := promptloop.NewPromptLoopForTest(deps)
 	ctx := context.Background()
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
@@ -259,9 +258,9 @@ func TestLoopRejectsUnofferedToolCalls(t *testing.T) {
 				return `{"status":"updated"}`, nil
 			})
 			deps := promptloop.StoreDeps(mem)
-			deps.LLM = client
-			deps.Policy = &fixedToolPolicy{metas: []tools.ToolMeta{{Name: "read"}}}
-			deps.Tools = reg
+			deps.Model.LLM = client
+			deps.Context.Policy = &fixedToolPolicy{metas: []tools.ToolMeta{{Name: "read"}}}
+			deps.Context.Tools = reg
 			loop := promptloop.NewPromptLoopForTest(deps)
 			result, err := loop.Run(ctx, promptloop.PromptRunInput{
 				SessionID: sess.ID,

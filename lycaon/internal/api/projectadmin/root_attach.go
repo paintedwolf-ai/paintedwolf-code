@@ -50,7 +50,7 @@ func (s *Handler) HandleAttachProjectRoot(w http.ResponseWriter, r *http.Request
 		s.afterRootAttached(r.Context(), id, change.Added.Path)
 	}
 	s.detectVerifyAsync(r.Context(), id)
-	s.Sessions.EnqueueRootsChangedKick(r.Context(), id, project.RootRefsFrom(change.Before), project.RootRefsFrom(change.After))
+	s.Sessions.ProjectControl.EnqueueRootsChangedKick(r.Context(), id, project.RootRefsFrom(change.Before), project.RootRefsFrom(change.After))
 	s.Sessions.ReopenBoardOrientationOnRootAttach(r.Context(), id)
 	s.publishProjectLifecycleEvent(r.Context(), wire.ProjectEventUpdated, change.After)
 	httpio.WriteJSON(w, http.StatusCreated, project.ToAPI(change.After))
@@ -84,9 +84,9 @@ func (s *Handler) HandleUpdateProjectRoot(w http.ResponseWriter, r *http.Request
 		return
 	}
 	s.Sources.InvalidateProjectSourceViews(id)
-	s.Sessions.InvalidateSessionWorkspacePaths(r.Context(), id)
+	s.Sessions.ProjectControl.InvalidateSessionWorkspacePaths(r.Context(), id)
 	if change.RootContextChanged {
-		s.Sessions.EnqueueRootsChangedKick(r.Context(), id, project.RootRefsFrom(change.Before), project.RootRefsFrom(change.After))
+		s.Sessions.ProjectControl.EnqueueRootsChangedKick(r.Context(), id, project.RootRefsFrom(change.Before), project.RootRefsFrom(change.After))
 	}
 	if change.RootContextChanged {
 		s.Sources.ScheduleSourceInventory(r.Context(), id)
@@ -99,7 +99,7 @@ func (s *Handler) ensureProjectRootsMutable(w http.ResponseWriter, r *http.Reque
 	if s.Sessions == nil {
 		return true
 	}
-	dependents, err := s.Sessions.ProjectDependents(r.Context(), projectID)
+	dependents, err := s.Sessions.ProjectControl.ProjectDependents(r.Context(), projectID)
 	if err != nil {
 		s.responses.ProjectRegistryError(w, r, err)
 		return false
@@ -125,11 +125,11 @@ func (s *Handler) afterRootAttached(ctx context.Context, projectID, workspacePat
 		overlayPaths = []string{workspacePath}
 	}
 	for _, rootPath := range overlayPaths {
-		if err := s.Sessions.WarmPostureOverlayForProject(p, rootPath); err != nil {
+		if err := s.Sessions.Profiles.WarmPostureOverlayForProject(p, rootPath); err != nil {
 			slog.WarnContext(ctx, "warm posture overlay on root attach", "path", rootPath, "err", err)
 		}
 	}
-	s.Sessions.Catalog().InvalidateEffectiveCatalog(projectID)
+	s.Sessions.Catalog.InvalidateEffectiveCatalog(projectID)
 	if s.ProjectRules != nil && len(overlayPaths) > 0 && requestscope.ProjectSurfaceApplies(s.Settings, p, projectcontrib.SurfaceProjectSettings) {
 		if err := s.ProjectRules.WarmOverlays(overlayPaths); err != nil {
 			slog.WarnContext(ctx, "warm project rules overlay on root attach", "paths", overlayPaths, "err", err)

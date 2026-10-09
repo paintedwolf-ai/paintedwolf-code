@@ -11,11 +11,13 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/providerretry"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/lifecycle"
+	"github.com/lycaon/lycaon/internal/session/spendguard"
 	"github.com/lycaon/lycaon/internal/usernotice"
 	"github.com/lycaon/lycaon/internal/workflow"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -51,10 +53,10 @@ func TestPromptHostErrorCode(t *testing.T) {
 			err  error
 			want wire.NoticeCode
 		}{
-			{session.ErrGroundingEscalated, "grounding_escalated"},
+			{guidance.ErrGroundingEscalated, "grounding_escalated"},
 			{project.ErrMutationInProgress, "project_mutation_in_progress"},
 			{workflow.ErrActiveRunExists, "workflow_active"},
-			{&session.SessionSpendCeilingReached{CeilingUSD: 5, SpentUSD: 5.1}, "session_spend_ceiling_reached"},
+			{&spendguard.CeilingReached{CeilingUSD: 5, SpentUSD: 5.1}, "session_spend_ceiling_reached"},
 			{&workflow.NotRunnableError{Reason: "paused"}, "workflow_not_runnable"},
 			{&failure.ProviderNotConfiguredError{ProviderID: "x"}, "provider_not_configured"},
 			{&failure.ProviderEmptyCompletionError{}, "provider_empty_completion"},
@@ -212,7 +214,7 @@ func TestInformationalPromptNoticesOfferNoPromptAction(t *testing.T) {
 	}{
 		{ErrUserImageNotVisible, []wire.NoticeAction{wire.NoticeActionOpenAiProviders}},
 		{ErrAttachmentScannedNoText, nil},
-		{session.ErrGroundingEscalated, nil},
+		{guidance.ErrGroundingEscalated, nil},
 	} {
 		for _, progress := range []bool{false, true} {
 			host := renderPromptHostError(catalog, tc.err, progress)

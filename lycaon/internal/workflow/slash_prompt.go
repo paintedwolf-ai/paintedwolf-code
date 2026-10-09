@@ -2,11 +2,11 @@ package workflow
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/promptresult"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/slash"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"

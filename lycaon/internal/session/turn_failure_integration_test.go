@@ -48,14 +48,14 @@ func TestFailedHostTurnReportsItself(t *testing.T) {
 	mgr := session.NewManager(st, silentProviderClient{}, tools.NewStubRegistry(), settings.DefaultSessionLimits())
 	agents := orchestration.NewMemoryAgentRegistry()
 	_ = orchestration.LoadRequiredAgentRegistry(context.Background(), agents)
-	mgr.SetAgentRegistry(agents)
+	mgr.Profiles.SetAgentRegistry(agents)
 	wirePromptTestManager(t, mgr)
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
-	testutil.FailErr(t, "install anchor registry", mgr.InstallAnchorRegistry())
+	testutil.FailErr(t, "install anchor registry", mgr.Guidance.InstallAnchorRegistry())
 
 	var mu sync.Mutex
 	var reported []error
-	mgr.SetTurnFailureSink(func(_ context.Context, _ string, err error) {
+	mgr.Runner.Turns.SetFailureSink(func(_ context.Context, _ string, err error) {
 		mu.Lock()
 		reported = append(reported, err)
 		mu.Unlock()
@@ -82,14 +82,14 @@ func TestFailedHostTurnReportsItself(t *testing.T) {
 	testutil.FailErr(t, "StartAmbient", err)
 	testutil.FailErr(t, "set session busy", st.SetSessionStatus(ctx, sess.ID, wire.SessionStatusBusy))
 
-	finishExecution := mgr.BeginPromptExecutionForTest(t.Context(), sess.ID)
+	finishExecution := mgr.Runner.Coordinator.CoordinatorLoop().BeginPromptExecution(t.Context(), sess.ID)
 	mgr.NudgeCoordinatorLoop(ctx, sess.ID, anchor.LegFinished, anchor.LegFinished,
 		workflow.ImplementWorkLegKey(sess.ID), anchor.Envelope{})
-	if _, ok := mgr.PendingLoopNudgeForTest(sess.ID); !ok {
+	if _, ok := mgr.Runner.Coordinator.CoordinatorLoop().PendingForTest(sess.ID); !ok {
 		t.Fatal("expected a deferred loop wake while prompt execution is active")
 	}
 	finishExecution()
-	mgr.DrainLoopPendingForTest(ctx, sess.ID)
+	mgr.Runner.Coordinator.CoordinatorLoop().DrainPending(ctx, sess.ID)
 
 	testutil.WaitFor(t, 10*time.Second, func() bool {
 		mu.Lock()

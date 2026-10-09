@@ -8,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/cost/costtest"
 	"github.com/lycaon/lycaon/internal/llm"
+	"github.com/lycaon/lycaon/internal/session/spendguard"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -44,7 +45,7 @@ func TestCheckSpendCeiling(t *testing.T) {
 		lim.SessionSpendCeilingUSD = 1
 		mgr := NewManagerWithLLMService(store.NewMemory(), llm.NewMockProvider(&llm.MockConfig{}), nil, tools.NewStubRegistry(), lim, tracker)
 		sess := &api.Session{ID: "s1", ProjectID: "p1"}
-		if err := mgr.checkSpendCeiling(ctx, "s1", sess); err != nil {
+		if err := mgr.Runner.Spend.Check(ctx, "s1", sess); err != nil {
 			t.Fatalf("disabled ceiling must not enforce: %v", err)
 		}
 	})
@@ -59,7 +60,7 @@ func TestCheckSpendCeiling(t *testing.T) {
 		lim.SessionSpendCeilingUSD = 1
 		mgr := NewManagerWithLLMService(store.NewMemory(), llm.NewMockProvider(&llm.MockConfig{}), nil, tools.NewStubRegistry(), lim, tracker)
 		sess := &api.Session{ID: "s2", ProjectID: "p1"}
-		if err := mgr.checkSpendCeiling(ctx, "s2", sess); err != nil {
+		if err := mgr.Runner.Spend.Check(ctx, "s2", sess); err != nil {
 			t.Fatalf("unpriced must not enforce: %v", err)
 		}
 	})
@@ -75,7 +76,7 @@ func TestCheckSpendCeiling(t *testing.T) {
 		lim.SessionSpendCeilingUSD = 5
 		mgr := NewManagerWithLLMService(store.NewMemory(), llm.NewMockProvider(&llm.MockConfig{}), nil, tools.NewStubRegistry(), lim, tracker)
 		sess := &api.Session{ID: "s3", ProjectID: "p1"}
-		if err := mgr.checkSpendCeiling(ctx, "s3", sess); err != nil {
+		if err := mgr.Runner.Spend.Check(ctx, "s3", sess); err != nil {
 			t.Fatalf("under ceiling must pass: %v", err)
 		}
 	})
@@ -95,11 +96,11 @@ func TestCheckSpendCeiling(t *testing.T) {
 		lim.SessionSpendCeilingUSD = 5
 		mgr := NewManagerWithLLMService(store.NewMemory(), llm.NewMockProvider(&llm.MockConfig{}), nil, tools.NewStubRegistry(), lim, tracker)
 		sess := &api.Session{ID: "s4", ProjectID: "p1"}
-		err := mgr.checkSpendCeiling(ctx, "s4", sess)
-		if !errors.Is(err, ErrSessionSpendCeiling) {
-			t.Fatalf("err = %v want ErrSessionSpendCeiling", err)
+		err := mgr.Runner.Spend.Check(ctx, "s4", sess)
+		if !errors.Is(err, spendguard.ErrCeiling) {
+			t.Fatalf("err = %v want spendguard.ErrCeiling", err)
 		}
-		var reached *SessionSpendCeilingReached
+		var reached *spendguard.CeilingReached
 		if !errors.As(err, &reached) || reached.CeilingUSD != 5 || reached.SpentUSD != 5.5 || reached.UnpricedTokens != 20 || reached.Coverage != api.CostEstimateLowerBound {
 			t.Fatalf("reached = %+v", reached)
 		}
@@ -117,8 +118,8 @@ func TestSpendCeilingRetainsUnknownChargedCalls(t *testing.T) {
 	lim.SpendCeilingEnabled = true
 	lim.SessionSpendCeilingUSD = 5
 	mgr := NewManagerWithLLMService(store.NewMemory(), llm.NewMockProvider(&llm.MockConfig{}), nil, tools.NewStubRegistry(), lim, tracker)
-	err := mgr.checkSpendCeiling(ctx, "s", &api.Session{ID: "s", ProjectID: "p"})
-	var reached *SessionSpendCeilingReached
+	err := mgr.Runner.Spend.Check(ctx, "s", &api.Session{ID: "s", ProjectID: "p"})
+	var reached *spendguard.CeilingReached
 	if !errors.As(err, &reached) || reached.UnknownChargedCalls != 1 || reached.UnpricedTokens != 0 || reached.Coverage != api.CostEstimateLowerBound {
 		t.Fatalf("ceiling error=%+v", reached)
 	}

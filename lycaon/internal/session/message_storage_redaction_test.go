@@ -19,18 +19,18 @@ func TestUpdateMessageReappliesStorageRedaction(t *testing.T) {
 	ctx := context.Background()
 	mem := store.NewMemory()
 	mgr := NewManager(mem, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
-	mgr.SetMessageStorageRedactor(redactMessageStorageFixture)
+	mgr.Transcript.SetRedactor(redactMessageStorageFixture)
 	sess, err := mem.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	placeholder := api.Message{ID: "assistant-1", Role: api.MessageRoleAssistant}
-	testutil.FailErr(t, "append placeholder", mgr.appendMessages(ctx, sess.ID, placeholder))
+	testutil.FailErr(t, "append placeholder", mgr.Transcript.Append(ctx, sess.ID, placeholder))
 	raw := placeholder
 	raw.ToolCalls = []api.ToolCall{{
 		ID: "call-write", Name: "write",
 		Args: map[string]any{"content": "TOKEN=" + messageStorageSecret},
 	}}
-	testutil.FailErr(t, "update assistant tool call", mgr.updateMessage(ctx, sess.ID, raw.ID, raw))
+	testutil.FailErr(t, "update assistant tool call", mgr.Transcript.Update(ctx, sess.ID, raw.ID, raw))
 
 	messages, err := mem.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "read messages", err)

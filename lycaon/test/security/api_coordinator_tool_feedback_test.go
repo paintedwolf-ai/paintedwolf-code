@@ -100,7 +100,7 @@ func TestCoordinatorPromptRejectsOffSurfaceDelegate(t *testing.T) {
 	}
 	seedPlanStub(t, blueprintMgr, run.ProjectID, run.BlueprintPath)
 
-	if _, err := h.SessionMgr.Prompt(ctx, sess.ID, "delegate now"); err != nil {
+	if _, err := h.SessionMgr.Submissions.Prompt(ctx, sess.ID, "delegate now"); err != nil {
 		testutil.FailErr(t, "run coordinator prompt", err)
 	}
 

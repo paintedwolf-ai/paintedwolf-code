@@ -44,7 +44,7 @@ func TestWorkerBridgeReleasesParentAfterQueueAcknowledgement(t *testing.T) {
 		t.Fatal("completed worker missing")
 	}
 	sessions := &cycleDeliverySessions{proofCountSessions: &proofCountSessions{}, queue: queue}
-	bridge := &SessionOutcomeBridge{Sessions: sessions}
+	bridge := &SessionOutcomeBridge{Sessions: sessions, Results: sessions, State: sessions, Closure: sessions}
 	poller := NewLocalWorkerPoller(queue, panicExecutor{}, DefaultWorkersConfig(), bridge)
 	testutil.FailErr(t, "deliver committed outcome", poller.deliverOutcome(t.Context(), *task))
 	testutil.FailErr(t, "read outcomes during parent release", sessions.readError)

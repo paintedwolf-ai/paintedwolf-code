@@ -11,7 +11,9 @@ import (
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
+	"github.com/lycaon/lycaon/internal/session/history"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -29,7 +31,7 @@ func newCompactionManager(t *testing.T, cfg compaction.CompactionConfig) (*Manag
 	mgr := NewManager(store, llm.NewMockProvider(testMockConfig(t)), tools.NewStubRegistry(), settings.DefaultSessionLimits())
 	mgr.SetDataDir(t.TempDir())
 	oartest.InstallCloseoutPolicy(t, mgr)
-	mgr.SetCompactor(compaction.NewSimpleCompactor(cfg, compaction.MockSummarizer{Text: "Continue from compacted context."}))
+	mgr.Runner.History.SetCompactor(compaction.NewSimpleCompactor(cfg, compaction.MockSummarizer{Text: "Continue from compacted context."}))
 	return mgr, store
 }
 
@@ -41,7 +43,7 @@ func appliedView(t *testing.T, mgr *Manager, store Store, sessID string) []api.M
 	testutil.FailErr(t, "store.Get", err)
 	msgs, err := store.GetMessages(ctx, sessID)
 	testutil.FailErr(t, "store.GetMessages", err)
-	return mgr.applyCompactionView(ctx, sess, msgs)
+	return mgr.Runner.History.ApplyView(ctx, sess, msgs)
 }
 
 func TestHugePasteCompaction(t *testing.T) {
@@ -67,9 +69,9 @@ func TestHugePasteCompaction(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = mgr.Prompt(ctx, sess.ID, "what failed?")
-	testutil.FailErr(t, "mgr.Prompt failed", err)
-	mgr.waitForCompaction()
+	_, err = mgr.Submissions.Prompt(ctx, sess.ID, "what failed?")
+	testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
+	mgr.Runner.History.Wait()
 
 	// The transcript stays canonical: GetMessages returns the originals untouched,
 	// so Den renders the real text and FTS indexes it.
@@ -136,9 +138,9 @@ func TestLongSessionCompaction(t *testing.T) {
 		testutil.FailErr(t, "store.AppendMessages failed", err)
 	}
 
-	_, err = mgr.Prompt(ctx, sess.ID, "continue")
-	testutil.FailErr(t, "mgr.Prompt failed", err)
-	mgr.waitForCompaction()
+	_, err = mgr.Submissions.Prompt(ctx, sess.ID, "continue")
+	testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
+	mgr.Runner.History.Wait()
 
 	// Canonical history is not collapsed — the 40 seeded messages remain in the store.
 	msgs, err := store.GetMessages(ctx, sess.ID)
@@ -184,9 +186,9 @@ func TestCompactionViewSplicesNewMessages(t *testing.T) {
 	}
 	testutil.FailErr(t, "store.AppendMessages failed", store.AppendMessages(ctx, sess.ID, seed...))
 
-	_, err = mgr.Prompt(ctx, sess.ID, "continue")
-	testutil.FailErr(t, "mgr.Prompt failed", err)
-	mgr.waitForCompaction()
+	_, err = mgr.Submissions.Prompt(ctx, sess.ID, "continue")
+	testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
+	mgr.Runner.History.Wait()
 
 	sess, err = store.Get(ctx, sess.ID)
 	testutil.FailErr(t, "store.Get failed", err)
@@ -243,19 +245,19 @@ func TestPromptHistorySeeksAfterCompactionWatermark(t *testing.T) {
 	sess, err = mem.Get(ctx, sess.ID)
 	testutil.FailErr(t, "reload session", err)
 
-	suffix, err := mgr.loadPromptHistory(ctx, sess)
+	suffix, err := mgr.Runner.History.Load(ctx, sess)
 	testutil.FailErr(t, "load prompt suffix", err)
 	if len(suffix) != 1 || suffix[0].ID != "new-user" {
 		t.Fatalf("prompt suffix = %+v, want only new-user", suffix)
 	}
-	assembled := mgr.applyCompactionView(ctx, sess, suffix)
+	assembled := mgr.Runner.History.ApplyView(ctx, sess, suffix)
 	if len(assembled) != 2 || assembled[0].ID != "summary" || assembled[1].ID != "new-user" {
 		t.Fatalf("assembled history = %+v, want summary plus new-user", assembled)
 	}
 	covered[0].Content = "edited old request"
 	_, err = mem.UpdateMessage(ctx, sess.ID, covered[0].ID, covered[0])
 	testutil.FailErr(t, "edit covered message", err)
-	canonical, err := mgr.loadPromptHistory(ctx, sess)
+	canonical, err := mgr.Runner.History.Load(ctx, sess)
 	testutil.FailErr(t, "load after covered edit", err)
 	if len(canonical) != 3 || canonical[0].Content != "edited old request" {
 		t.Fatalf("history after covered edit = %+v, want canonical facts", canonical)
@@ -273,7 +275,7 @@ func (p *promptHistoryReadProbe) GetMessages(context.Context, string) ([]api.Mes
 }
 
 func (p *promptHistoryReadProbe) GetMessagesAfterOrd(context.Context, string, int64, int) ([]api.Message, error) {
-	return make([]api.Message, promptHistoryUncompactedLimit+1), nil
+	return make([]api.Message, history.UncompactedLimit+1), nil
 }
 
 func TestPromptHistoryOverflowFailsWithoutUnboundedRead(t *testing.T) {
@@ -281,7 +283,7 @@ func TestPromptHistoryOverflowFailsWithoutUnboundedRead(t *testing.T) {
 	probe := &promptHistoryReadProbe{Store: mem}
 	mgr := NewManager(probe, nil, nil, settings.DefaultSessionLimits())
 	oartest.InstallCloseoutPolicy(t, mgr)
-	_, err := mgr.loadPromptHistory(t.Context(), &api.Session{ID: "large-session"})
+	_, err := mgr.Runner.History.Load(t.Context(), &api.Session{ID: "large-session"})
 	if err == nil || !strings.Contains(err.Error(), "unprojected rows") {
 		t.Fatalf("loadPromptHistory error = %v, want bounded projection lag", err)
 	}
@@ -320,10 +322,10 @@ func TestNoCompactionBetweenTargetAndTrigger(t *testing.T) {
 	}
 
 	// A ratio of one isolates the compaction trigger from cold-start reserves.
-	mgr.RecordCompactionTokenObservation(sess.ID, 1000, 1000)
+	mgr.Runner.History.ObserveTokens(sess.ID, 1000, 1000)
 
-	_, err = mgr.Prompt(ctx, sess.ID, "continue")
-	testutil.FailErr(t, "mgr.Prompt failed", err)
+	_, err = mgr.Submissions.Prompt(ctx, sess.ID, "continue")
+	testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 
 	msgs, err := store.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "store.GetMessages failed", err)
@@ -359,11 +361,11 @@ func TestWorkerSpawnDoesNotGrowParentMessages(t *testing.T) {
 
 	transcript := strings.Repeat("tool output line\n", 2000)
 	for i := 0; i < 5; i++ {
-		child, err := mgr.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{
+		child, err := mgr.Workers.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{
 			AgentType: "implement",
 			Prompt:    "do work",
 		})
-		testutil.FailErr(t, "mgr.SpawnChild failed", err)
+		testutil.FailErr(t, "mgr.Workers.SpawnChild failed", err)
 		if child.ParentSessionID != parent.ID {
 			t.Fatalf("child parent = %q, want %q", child.ParentSessionID, parent.ID)
 		}
@@ -374,7 +376,7 @@ func TestWorkerSpawnDoesNotGrowParentMessages(t *testing.T) {
 		); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := mgr.AppendWorkerSummary(ctx, parent.ID, WorkerSummaryInput{
+		if _, err := mgr.Workers.Summaries.Append(ctx, parent.ID, workeroutcomes.SummaryInput{
 			Summary: "worker finished task " + string(rune('A'+i)), JobID: "job-" + child.ID,
 			ChildSessionID: child.ID, AgentType: "implement",
 		}); err != nil {
@@ -418,8 +420,8 @@ func TestForceCompactHTTP(t *testing.T) {
 		api.Message{ID: "current", Role: api.MessageRoleUser, Content: "Continue the task"},
 	))
 
-	report, err := mgr.ForceCompact(ctx, sess.ID)
-	testutil.FailErr(t, "mgr.ForceCompact failed", err)
+	report, err := mgr.Runner.History.ForceCompact(ctx, sess.ID)
+	testutil.FailErr(t, "mgr.Runner.History.ForceCompact failed", err)
 	if report.ChunksCompacted == 0 && report.TokensAfter >= report.TokensBefore {
 		t.Fatalf("expected compaction shrink: before=%d after=%d chunks=%d", report.TokensBefore, report.TokensAfter, report.ChunksCompacted)
 	}
@@ -449,10 +451,10 @@ func TestCompactOversizedSplitReadsInSession(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := mgr.compactOversizedToolResultsInSession(ctx, sess); err != nil {
+	if err := mgr.Runner.History.ScheduleChunks(ctx, sess); err != nil {
 		testutil.FailErr(t, "compactOversizedToolResultsInSession failed", err)
 	}
-	mgr.waitForCompaction()
+	mgr.Runner.History.Wait()
 
 	// Canonical reads are untouched in the store — full bytes stay searchable.
 	msgs, err := store.GetMessages(ctx, sess.ID)
@@ -522,10 +524,10 @@ func TestCompactOversizedPreservesBoundedReadPagesInSession(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := mgr.compactOversizedToolResultsInSession(ctx, sess); err != nil {
+	if err := mgr.Runner.History.ScheduleChunks(ctx, sess); err != nil {
 		testutil.FailErr(t, "compactOversizedToolResultsInSession failed", err)
 	}
-	mgr.waitForCompaction()
+	mgr.Runner.History.Wait()
 
 	view := appliedView(t, mgr, store, sess.ID)
 	for _, m := range view {
@@ -551,7 +553,7 @@ func TestWorkerChildSessionDietsOversizedToolResultsInView(t *testing.T) {
 		Posture: api.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent session", err)
-	child, err := mgr.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{
+	child, err := mgr.Workers.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{
 		AgentType: "implementer",
 		Prompt:    "fix pacifism.py",
 	})
@@ -569,10 +571,10 @@ func TestWorkerChildSessionDietsOversizedToolResultsInView(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := mgr.compactOversizedToolResultsInSession(ctx, child); err != nil {
+	if err := mgr.Runner.History.ScheduleChunks(ctx, child); err != nil {
 		testutil.FailErr(t, "compactOversizedToolResultsInSession", err)
 	}
-	mgr.waitForCompaction()
+	mgr.Runner.History.Wait()
 
 	// Canonical rows stay full-fidelity in the store.
 	msgs, err := store.GetMessages(ctx, child.ID)

@@ -20,10 +20,10 @@ func TestToolStepReplayKeepsCardsWithoutProse(t *testing.T) {
 				ToolCalls: []wire.ToolCall{{ID: "wait-call", Name: "wait", Args: map[string]any{"reason": "Waiting for the CLI implementation"}}}}
 			testutil.FailErr(t, "append tool step", srv.sessionStore.AppendMessages(t.Context(), sess.ID, msg))
 			if cache == "content" {
-				srv.sessions.Streams().CacheReplay(msg.ID, msg.Content, nil)
+				srv.sessions.Transcript.Streams.CacheReplay(msg.ID, msg.Content, nil)
 			}
 			if cache == "tokens" {
-				srv.sessions.Streams().CacheReplay(msg.ID, msg.Content, []string{msg.Content})
+				srv.sessions.Transcript.Streams.CacheReplay(msg.ID, msg.Content, []string{msg.Content})
 			}
 			rec := httptest.NewRecorder()
 			srv.ServeHTTP(rec, newAuthedRequest(http.MethodGet, "/v1/sessions/"+sess.ID+"/stream?message="+msg.ID, nil))

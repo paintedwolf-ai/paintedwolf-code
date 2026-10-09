@@ -26,7 +26,7 @@ func newContributionHTTPTestServer(t *testing.T) *Server {
 		Desired: extpacks.EmptyDesired(),
 	})
 	srv.sessions.SetEffectiveCatalogDeps(root, boot, nil)
-	srv.sessions.Catalog().SetCatalogViewCache(catalogview.NewCache(root, slog.Default()))
+	srv.sessions.Catalog.SetCatalogViewCache(catalogview.NewCache(root, slog.Default()))
 	return srv
 }
 

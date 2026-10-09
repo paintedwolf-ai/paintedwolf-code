@@ -139,14 +139,14 @@ func (b sessionWiring) wireSecretEvidence(m *secretmatch.Matcher, fp *secretmatc
 	}
 	m.SetRemember(remember)
 	if b.mgr != nil {
-		b.mgr.SetRememberSecrets(remember)
+		b.mgr.ToolPolicy.SetRememberSecrets(remember)
 	}
 	// New evidence invalidates earlier screens.
 	harvest.OnGrowth(func(rootSessionID string, generation uint64) {
 		if b.mgr == nil {
 			return
 		}
-		go b.mgr.SweepSessionTree(context.WithoutCancel(context.Background()), rootSessionID, generation)
+		go b.mgr.Transcript.SweepSessionTree(context.WithoutCancel(context.Background()), rootSessionID, generation)
 	})
 	// Capture tags correlate redacted occurrences.
 	observability.SetCaptureRedactor(func(text string) string {
@@ -184,19 +184,19 @@ func (b sessionWiring) wireCredentialObservations() {
 	if b.mgr == nil {
 		return
 	}
-	b.mgr.SetCredentialSlotProvider(func(ctx context.Context, sess *api.Session) *secretmint.Inspector {
-		if view := b.mgr.Catalog().ViewForSession(ctx, sess); view != nil {
+	b.mgr.ToolPolicy.SetCredentialSlotProvider(func(ctx context.Context, sess *api.Session) *secretmint.Inspector {
+		if view := b.mgr.Catalog.ViewForSession(ctx, sess); view != nil {
 			return view.CredentialSlots
 		}
 		return nil
 	})
-	b.mgr.SetSecretFingerprinter(b.secretFingerprinter)
-	b.mgr.SetIgnoredCredentialCandidate(func(ctx context.Context, projectID, value string) bool {
+	b.mgr.ToolPolicy.SetSecretFingerprinter(b.secretFingerprinter)
+	b.mgr.ToolPolicy.SetIgnoredCredentialCandidate(func(ctx context.Context, projectID, value string) bool {
 		return b.secretMatcher.Ignored(secretmatch.WithAskAttribution(ctx, secretmatch.AskAttribution{ProjectID: projectID}), value)
 	})
 	if b.secretHarvest != nil {
 		harvest := b.secretHarvest
-		b.mgr.SetHarvestedFingerprint(func(root string, fp secretmatch.SecretFingerprint) bool {
+		b.mgr.ToolPolicy.SetHarvestedFingerprint(func(root string, fp secretmatch.SecretFingerprint) bool {
 			return harvest.Has(root, fp)
 		})
 	}

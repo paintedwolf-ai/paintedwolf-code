@@ -2,21 +2,21 @@ package orchestration_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/config"
-	"github.com/lycaon/lycaon/internal/extpacks"
-	"github.com/lycaon/lycaon/internal/session/store"
-	"github.com/lycaon/lycaon/internal/settings"
-	"github.com/lycaon/lycaon/internal/testdbseed"
-	"github.com/lycaon/lycaon/internal/testutil"
 	"slices"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/delegation"
+	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/testdbseed"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -57,7 +57,7 @@ func TestPipelineTopologyLegAgentTypes(t *testing.T) {
 		Agents:     reg,
 	})
 
-	sess, err := sessMgr.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
+	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "sessMgr.Create failed", err)
 	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore, sess)
 
@@ -114,7 +114,7 @@ func TestPipelineUnknownProfileFailsRun(t *testing.T) {
 		Agents:     reg,
 	})
 
-	sess, err := sessMgr.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
+	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "sessMgr.Create failed", err)
 	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore, sess)
 
@@ -167,7 +167,7 @@ func TestPipelineSequentialDispatchOrder(t *testing.T) {
 	testutil.FailErr(t, "orchestration.LoadTopologyFromFile failed", err)
 	spec.Task = "integration pipeline"
 
-	sess, err := sessMgr.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
+	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "sessMgr.Create failed", err)
 	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore, sess)
 
@@ -200,7 +200,7 @@ func TestPipelineReviewTestUnlockAfterImplement(t *testing.T) {
 	spec, err := orchestration.LoadTopologyFromFile(bundledTopologyPath(t, "default-pipeline.yaml"))
 	testutil.FailErr(t, "orchestration.LoadTopologyFromFile failed", err)
 
-	sess, err := sessMgr.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
+	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "sessMgr.Create failed", err)
 	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore, sess)
 
@@ -237,7 +237,7 @@ func TestPipelineFullDefaultPipelineMockRun(t *testing.T) {
 	spec, err := orch.LoadTopology(ctx, bundledTopologyPath(t, "default-pipeline.yaml"))
 	testutil.FailErr(t, "orch.LoadTopology failed", err)
 
-	sess, err := sessMgr.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
+	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "sessMgr.Create failed", err)
 	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore, sess)
 

@@ -3,6 +3,7 @@ package session
 import (
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/session/promptinput"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -14,14 +15,14 @@ func TestVisibleUserIntentMessageExcludesHostRows(t *testing.T) {
 		{Role: api.MessageRoleUser, Origin: api.MessageOriginHost, Visibility: api.MessageVisibilityInternal, Kind: api.MessageKindCoordinatorGuidance, HostSignalID: "PROGRESS_MISSING"},
 	}
 	for _, msg := range hostRows {
-		if isVisibleUserIntentMessage(msg) {
+		if promptinput.VisibleIntent(msg) {
 			t.Fatalf("%+v must not read as user intent", msg)
 		}
 	}
-	if !isVisibleUserIntentMessage(api.Message{Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "please add a --version flag"}) {
+	if !promptinput.VisibleIntent(api.Message{Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "please add a --version flag"}) {
 		t.Fatal("real user chat must read as user intent")
 	}
-	if isVisibleUserIntentMessage(api.Message{
+	if promptinput.VisibleIntent(api.Message{
 		Role: api.MessageRoleUser, Origin: api.MessageOriginUser,
 		Kind: api.MessageKindUserContinuation, Content: "use a different flag",
 	}) {

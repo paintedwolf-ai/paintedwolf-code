@@ -12,9 +12,9 @@ import (
 func TestListedToolsPassRulesEvalWithEmptyArgs(t *testing.T) {
 	fix := setupContextualToolsFixture(t, api.SessionPostureBuild)
 	ctx := context.Background()
-	listed := fix.Mgr.PromptToolPolicy().ListForPrompt(ctx, fix.Sess, fix.ProfileID)
+	listed := fix.Mgr.Guards.Policy().ListForPrompt(ctx, fix.Sess, fix.ProfileID)
 	for _, meta := range listed {
-		if err := fix.Mgr.PromptToolPolicy().EvaluateInvoke(ctx, fix.Sess, meta.Name, nil); err != nil {
+		if err := fix.Mgr.Guards.Policy().EvaluateInvoke(ctx, fix.Sess, meta.Name, nil); err != nil {
 			t.Fatalf("listed tool %q failed rules eval: %v", meta.Name, err)
 		}
 	}
@@ -24,8 +24,8 @@ func TestSpecPromptToolCountLessThanBuild(t *testing.T) {
 	specFix := setupContextualToolsFixture(t, api.SessionPostureSpec)
 	buildFix := setupContextualToolsFixture(t, api.SessionPostureBuild)
 	ctx := context.Background()
-	specCount := len(specFix.Mgr.PromptToolPolicy().ListForPrompt(ctx, specFix.Sess, specFix.ProfileID))
-	buildCount := len(buildFix.Mgr.PromptToolPolicy().ListForPrompt(ctx, buildFix.Sess, buildFix.ProfileID))
+	specCount := len(specFix.Mgr.Guards.Policy().ListForPrompt(ctx, specFix.Sess, specFix.ProfileID))
+	buildCount := len(buildFix.Mgr.Guards.Policy().ListForPrompt(ctx, buildFix.Sess, buildFix.ProfileID))
 	if specCount >= buildCount {
 		t.Fatalf("spec tool count = %d want < build %d", specCount, buildCount)
 	}

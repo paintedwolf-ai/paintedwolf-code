@@ -19,9 +19,9 @@ func TestRootWorkflowExitReleasesVisibleTurn(t *testing.T) {
 				mgr, st, _, _ := testManagerWithRegistry(t)
 				runtime := session.NewManager(st, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
 				runtime.SetLoopWorkflowSource(mgr)
-				runtime.SetSessionWorkflowStop(mgr)
-				mgr.SessionAdmission = runtime
-				mgr.SessionExit = runtime
+				runtime.Stops.SetWorkflowStop(mgr)
+				mgr.SessionAdmission = runtime.Gate
+				mgr.SessionExit = runtime.Stops
 				var run *api.WorkflowRun
 				var err error
 				if workflowID == "implement" {

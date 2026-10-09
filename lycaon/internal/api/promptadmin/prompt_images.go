@@ -3,11 +3,12 @@ package promptadmin
 import (
 	"context"
 	"fmt"
+
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/noticeerr"
 	"github.com/lycaon/lycaon/internal/promptattach"
 	"github.com/lycaon/lycaon/internal/promptattach/attacherr"
-	"github.com/lycaon/lycaon/internal/session"
+	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
 	"github.com/lycaon/lycaon/internal/visual"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -31,7 +32,7 @@ func (s *Handler) ingestPromptImages(ctx context.Context, sessionID, operationID
 			}
 		}
 	}
-	root := session.RootSessionID(ctx, s.Store, sessionID)
+	root := sessiontree.RootID(ctx, s.Store, sessionID)
 	ids := make([]string, 0, len(images))
 	for i, img := range images {
 		artifactID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(operationID+":"+group+":"+fmt.Sprint(i))).String()

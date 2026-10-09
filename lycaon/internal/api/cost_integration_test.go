@@ -145,7 +145,7 @@ func TestHandleProjectCostReportIncludesSessionBreakdownAndArchivedChats(t *test
 		Posture: wire.SessionPostureVet, ProjectID: p.ID,
 	}, "")
 	testutil.FailErr(t, "create second session", err)
-	_, err = mgr.SetArchived(t.Context(), second.ID, true)
+	_, err = mgr.Chats.SetArchived(t.Context(), second.ID, true)
 	testutil.FailErr(t, "archive second session", err)
 
 	firstUSD, childUSD, secondUSD, utilityUSD, retiredUSD := 0.40, 0.10, 0.20, 0.05, 0.15

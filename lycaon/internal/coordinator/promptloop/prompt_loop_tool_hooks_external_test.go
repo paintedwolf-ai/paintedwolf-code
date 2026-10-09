@@ -30,9 +30,9 @@ func TestLoopBeforeToolRunSkipsRegistryRun(t *testing.T) {
 		ToolCalls: []llm.MockToolCall{{ID: "tc1", Name: "state_update", Args: map[string]any{"path": "x", "value": "in_progress"}}},
 	}}})
 	deps := promptloop.StoreDeps(store)
-	deps.LLM = client
-	deps.Tools = reg
-	deps.BeforeToolRun = func(_ context.Context, _ *api.Session, _ []api.Message, _ string, tool string, _ map[string]any) (string, bool, error) {
+	deps.Model.LLM = client
+	deps.Context.Tools = reg
+	deps.Tools.BeforeToolRun = func(_ context.Context, _ *api.Session, _ []api.Message, _ string, tool string, _ map[string]any) (string, bool, error) {
 		if tool == "state_update" {
 			return "host answered", true, nil
 		}
@@ -74,9 +74,9 @@ func TestLoopAfterToolRunMutatesSuccessOutput(t *testing.T) {
 		ToolCalls: []llm.MockToolCall{{ID: "tc1", Name: "read", Args: map[string]any{"path": "x"}}},
 	}}})
 	deps := promptloop.StoreDeps(store)
-	deps.LLM = client
-	deps.Tools = reg
-	deps.AfterToolRun = func(_ context.Context, _ *api.Session, _ string, _ map[string]any, output string, _ bool, _ *tools.ToolInvocationOut) string {
+	deps.Model.LLM = client
+	deps.Context.Tools = reg
+	deps.Tools.AfterToolRun = func(_ context.Context, _ *api.Session, _ string, _ map[string]any, output string, _ bool, _ *tools.ToolInvocationOut) string {
 		return output + "\nmutated"
 	}
 	loop := promptloop.NewPromptLoopForTest(deps)
@@ -111,10 +111,10 @@ func TestLoopBeforeToolRunRejectDoesNotInvokeTool(t *testing.T) {
 		{Content: "Dispatching a worker instead."},
 	}}
 	deps := promptloop.StoreDeps(store)
-	deps.LLM = client
-	deps.Tools = reg
-	deps.LoadedTools = func(string) map[string]bool { return map[string]bool{"write": true} }
-	deps.BeforeToolRun = func(_ context.Context, _ *api.Session, _ []api.Message, _ string, _ string, _ map[string]any) (string, bool, error) {
+	deps.Model.LLM = client
+	deps.Context.Tools = reg
+	deps.Context.LoadedTools = func(string) map[string]bool { return map[string]bool{"write": true} }
+	deps.Tools.BeforeToolRun = func(_ context.Context, _ *api.Session, _ []api.Message, _ string, _ string, _ map[string]any) (string, bool, error) {
 		return "", true, fmt.Errorf("Rejected: COORDINATOR_ORCHESTRATE_WRITE_DENIED\nWhy: no\nInstead: task\nCode: COORDINATOR_ORCHESTRATE_WRITE_DENIED")
 	}
 	loop := promptloop.NewPromptLoopForTest(deps)

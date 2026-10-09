@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/providerprofile"
 	ollamaprovider "github.com/lycaon/lycaon/internal/llm/providers/ollama"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/session/naming"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -37,7 +38,7 @@ func TestAutoTitleSessionIdempotentOnReplay(t *testing.T) {
 	hub := events.NewMemoryHub()
 	mgr.SetEventPublisher(&events.Publisher{Hub: hub, Lookup: project.ScopeLookup{Registry: reg}})
 
-	sess, err := mgr.CreateForProject(ctx, p.ID, api.SessionPostureBuild)
+	sess, err := mgr.Chats.CreateForProject(ctx, p.ID, api.SessionPostureBuild)
 	testutil.FailErr(t, "create session", err)
 
 	userText := "Build a CLI todo tracker with SQLite persistence"
@@ -46,12 +47,12 @@ func TestAutoTitleSessionIdempotentOnReplay(t *testing.T) {
 	testutil.FailErr(t, "subscribe", err)
 	defer unsubscribe()
 
-	mgr.autoTitleSessionFromPrompt(ctx, sess, userText)
-	mgr.autoTitleSessionFromPrompt(ctx, sess, userText)
+	mgr.Naming.SessionFromPrompt(ctx, sess, userText)
+	mgr.Naming.SessionFromPrompt(ctx, sess, userText)
 
 	got, err := store.Get(ctx, sess.ID)
 	testutil.FailErr(t, "get session", err)
-	want := NameSession(ctx, nil, userText)
+	want := naming.NameSession(ctx, nil, userText)
 	if got.Title != want {
 		t.Fatalf("title = %q want %q", got.Title, want)
 	}
@@ -95,7 +96,7 @@ func TestPublishSessionTitleUsesStoreStatus(t *testing.T) {
 	hub := events.NewMemoryHub()
 	mgr.SetEventPublisher(&events.Publisher{Hub: hub, Lookup: project.ScopeLookup{Registry: reg}})
 
-	sess, err := mgr.CreateForProject(ctx, p.ID, api.SessionPostureBuild)
+	sess, err := mgr.Chats.CreateForProject(ctx, p.ID, api.SessionPostureBuild)
 	testutil.FailErr(t, "create session", err)
 	if err := store.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy); err != nil {
 		testutil.FailErr(t, "set session busy", err)
@@ -107,7 +108,7 @@ func TestPublishSessionTitleUsesStoreStatus(t *testing.T) {
 
 	stale := *sess
 	stale.Status = api.SessionStatusIdle
-	mgr.publishSessionTitleUpdated(ctx, &stale, "Chess game")
+	mgr.Naming.PublishSession(ctx, &stale, "Chess game")
 
 	deadline := time.After(500 * time.Millisecond)
 	for {
@@ -154,10 +155,10 @@ func TestAutoNameProjectSkipsNonDraft(t *testing.T) {
 	mgr := NewManager(store, mock, tools.NewStubRegistry(), settings.DefaultSessionLimits())
 	mgr.SetProjectRegistry(reg)
 
-	sess, err := mgr.CreateForProject(ctx, p.ID, api.SessionPostureBuild)
+	sess, err := mgr.Chats.CreateForProject(ctx, p.ID, api.SessionPostureBuild)
 	testutil.FailErr(t, "create session", err)
 
-	mgr.autoNameProjectFromPrompt(ctx, sess, "Rename me from prompt")
+	mgr.Naming.ProjectFromPrompt(ctx, sess, "Rename me from prompt")
 
 	got, err := reg.Get(ctx, p.ID)
 	testutil.FailErr(t, "get project", err)
@@ -212,24 +213,24 @@ func TestKickPromptCurationDoesNotBlockOnNaming(t *testing.T) {
 		release: make(chan struct{}),
 		text:    "Background title",
 	}
-	mgr := NewManager(mem, blocker, tools.NewStubRegistry(), settings.DefaultSessionLimits())
-	mgr.SetProjectRegistry(reg)
 	providers := &llm.Registry{}
 	testutil.FailErr(t, "register naming provider", providers.Register(blocker))
-	mgr.llmSvc = &llm.Service{
+	svc := &llm.Service{
 		Registry: providers,
 		Policy: llm.NewInMemoryPolicyStore(llm.ModelPolicy{
 			Lite: llm.ModelRef{ProviderID: blocker.ID(), Model: "naming-model"},
 		}),
 		Utility: llm.NewUtilityPlane(),
 	}
+	mgr := NewManagerWithLLMService(mem, blocker, svc, tools.NewStubRegistry(), settings.DefaultSessionLimits(), nil)
+	mgr.SetProjectRegistry(reg)
 
-	sess, err := mgr.CreateForProject(ctx, p.ID, api.SessionPostureBuild)
+	sess, err := mgr.Chats.CreateForProject(ctx, p.ID, api.SessionPostureBuild)
 	testutil.FailErr(t, "create session", err)
 
 	returned := make(chan struct{})
 	go func() {
-		mgr.kickPromptCuration(ctx, sess, "Build a CLI todo tracker with SQLite persistence")
+		mgr.Runner.Curation.Kick(ctx, sess, "Build a CLI todo tracker with SQLite persistence")
 		close(returned)
 	}()
 
@@ -252,7 +253,7 @@ func TestKickPromptCurationDoesNotBlockOnNaming(t *testing.T) {
 	}
 
 	close(blocker.release)
-	mgr.WaitForPromptCuration()
+	mgr.Runner.Curation.Wait()
 
 	got, err = mem.Get(ctx, sess.ID)
 	testutil.FailErr(t, "get session after name", err)
@@ -270,16 +271,16 @@ func TestCurationSharesLocalCoordinator(t *testing.T) {
 		Lite:        llm.ModelRef{ProviderID: "ollama-1", Model: "gemma4:e2b"},
 	})
 	mgr := NewManager(store.NewMemory(), nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
-	mgr.llmSvc = &llm.Service{Registry: registry, Policy: policy}
+	mgr.Runner.Curation.SetModelSources(policy, registry)
 
-	if !mgr.curationSharesLocalCoordinator(ctx, &api.Session{ProviderID: "ollama-1"}) {
+	if !mgr.Runner.Curation.SharesCoordinatorCapacity(ctx, &api.Session{ProviderID: "ollama-1"}) {
 		t.Fatal("shared single-flight coordinator and lite must defer curation")
 	}
-	if mgr.curationSharesLocalCoordinator(ctx, &api.Session{ProviderID: "together-ai-1"}) {
+	if mgr.Runner.Curation.SharesCoordinatorCapacity(ctx, &api.Session{ProviderID: "together-ai-1"}) {
 		t.Fatal("a hosted session override must not defer curation")
 	}
-	mgr.llmSvc = nil
-	if mgr.curationSharesLocalCoordinator(ctx, &api.Session{ProviderID: "ollama-1"}) {
+	mgr.Runner.Curation.SetModelSources(nil, nil)
+	if mgr.Runner.Curation.SharesCoordinatorCapacity(ctx, &api.Session{ProviderID: "ollama-1"}) {
 		t.Fatal("no service must not defer curation")
 	}
 }
@@ -290,16 +291,16 @@ func TestWorkflowRequestCurationPreservesManualTitlesAndExcludesWorkers(t *testi
 	mgr := NewManager(mem, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
 	parent, err := mem.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project-1")
 	testutil.FailErr(t, "create root chat", err)
-	_, err = mgr.SetTitle(t.Context(), parent.ID, "Manual orchard title")
+	_, err = mgr.Naming.SetTitle(t.Context(), parent.ID, "Manual orchard title")
 	testutil.FailErr(t, "set manual title", err)
 	child, err := mem.CreateChild(t.Context(), parent, api.SpawnChildRequest{AgentType: "researcher"})
 	testutil.FailErr(t, "create worker", err)
 	before, err := mem.Get(t.Context(), child.ID)
 	testutil.FailErr(t, "get worker title", err)
-	mgr.CurateAcceptedWorkflowRequest(t.Context(), parent.ID, "A different workflow request")
-	mgr.CurateAcceptedWorkflowRequest(t.Context(), child.ID, "A worker request")
-	mgr.CurateAcceptedWorkflowRequest(t.Context(), "missing-session", "A missing request")
-	mgr.WaitForPromptCuration()
+	mgr.Runner.Curation.AcceptedWorkflowRequest(t.Context(), parent.ID, "A different workflow request")
+	mgr.Runner.Curation.AcceptedWorkflowRequest(t.Context(), child.ID, "A worker request")
+	mgr.Runner.Curation.AcceptedWorkflowRequest(t.Context(), "missing-session", "A missing request")
+	mgr.Runner.Curation.Wait()
 	got, err := mem.Get(t.Context(), parent.ID)
 	testutil.FailErr(t, "get root title", err)
 	if got.Title != "Manual orchard title" {
@@ -321,11 +322,11 @@ func TestAcceptedWorkflowRequestCurationSurvivesInitiatingTurnCancellation(t *te
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	text := "Review the orchard irrigation choices"
-	mgr.CurateAcceptedWorkflowRequest(ctx, sess.ID, text)
-	mgr.WaitForPromptCuration()
+	mgr.Runner.Curation.AcceptedWorkflowRequest(ctx, sess.ID, text)
+	mgr.Runner.Curation.Wait()
 	got, err := mem.Get(t.Context(), sess.ID)
 	testutil.FailErr(t, "get named chat", err)
-	if got.Title != NameSession(t.Context(), nil, text) {
+	if got.Title != naming.NameSession(t.Context(), nil, text) {
 		t.Fatalf("accepted workflow title = %q", got.Title)
 	}
 }

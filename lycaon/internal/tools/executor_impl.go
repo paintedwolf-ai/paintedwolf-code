@@ -59,14 +59,14 @@ type DefaultToolExecutor struct {
 	// presenceAvailableFn reports whether held values can be released at all.
 	presenceAvailableFn func() bool
 	// vaultUnlocks holds each chat's unlock for values a person holds.
-	vaultUnlocks        *presence.Unlocks
+	vaultUnlocks *presence.Unlocks
 	// heldAsks counts each chat's open cards whose approval can unlock it.
-	heldAsks            heldAskCounter
-	secretMatcher       *secretmatch.Matcher
-	secretIgnores       *projectignore.SecretService
-	secretResolver      func(context.Context, map[string]any, secretcap.ResolveContext) (*secretcap.Resolution, error)
-	secretReceiptOnce   sync.Once
-	secretReceiptRT     *secretReceiptRuntime
+	heldAsks          heldAskCounter
+	secretMatcher     *secretmatch.Matcher
+	secretIgnores     *projectignore.SecretService
+	secretResolver    func(context.Context, map[string]any, secretcap.ResolveContext) (*secretcap.Resolution, error)
+	secretReceiptOnce sync.Once
+	secretReceiptRT   *secretReceiptRuntime
 	// secretExposure reads the session's credential-exposure fact.
 	secretExposure func(ctx context.Context, chatSessionID string) (bool, error)
 	// untrustedIngestion reads the session's external-content ingestion fact.
@@ -362,5 +362,5 @@ func (e *DefaultToolExecutor) ensureWorkerBranchIfNeeded(ctx context.Context, to
 			Data: map[string]any{"tool": tool, "reason": "worker branch coordinator not configured"},
 		}
 	}
-	return tc.WorkerCoord.EnsureWorkerBranch(ctx, tc)
+	return tc.WorkerCoord.EnsureBranch(ctx, tc)
 }

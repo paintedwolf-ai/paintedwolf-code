@@ -2,20 +2,20 @@ package promptloop
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
-	"fmt"
 
-	"github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/visual"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // persistClassifiedToolOutcome stores and enriches one tool result.
-func (l toolBatch) persistClassifiedToolOutcome(
+func (l *toolBatch) persistClassifiedToolOutcome(
 	ctx context.Context,
 	sessionID string,
 	sess *api.Session,
@@ -26,8 +26,8 @@ func (l toolBatch) persistClassifiedToolOutcome(
 ) ([]api.Message, error) {
 	ctx = context.WithoutCancel(ctx)
 	stampCommitOrderTS(&out.toolMsg, lastToolTS)
-	stored, transient := toolInvocations(l).storageSafeMessage(ctx, out.toolMsg)
-	history, err := toolInvocations(l).commitToolResultWithOptionalNote(
+	stored, transient := l.Projection.storageSafeMessage(ctx, out.toolMsg)
+	history, err := l.Tools.commitToolResultWithOptionalNote(
 		ctx, sessionID, history, stored, transient, out.agentNote, lastToolTS, st,
 	)
 	if err != nil {
@@ -37,7 +37,7 @@ func (l toolBatch) persistClassifiedToolOutcome(
 }
 
 // enrichCommittedToolRow applies evidence and compaction to a stored result.
-func (l toolBatch) enrichCommittedToolRow(
+func (l *toolBatch) enrichCommittedToolRow(
 	ctx context.Context,
 	sessionID string,
 	sess *api.Session,
@@ -71,8 +71,8 @@ func (l toolBatch) enrichCommittedToolRow(
 	if !toolRowNeedsEnrichmentPatch(before, beforeHandles, stored) {
 		return history, nil
 	}
-	if l.Deps.UpdateMessage != nil {
-		if err := l.Deps.UpdateMessage(ctx, sessionID, messageID, stored); err != nil {
+	if l.Projection.Deps.UpdateMessage != nil {
+		if err := l.Projection.Deps.UpdateMessage(ctx, sessionID, messageID, stored); err != nil {
 			return history, err
 		}
 	}
@@ -174,7 +174,7 @@ func newParallelBatchCommit(
 	}
 }
 
-func (l toolBatch) appendParallelResult(
+func (l *toolBatch) appendParallelResult(
 	ctx context.Context,
 	commit *parallelBatchCommit,
 	out *toolCallOutcome,
@@ -192,7 +192,7 @@ func (l toolBatch) appendParallelResult(
 	}
 }
 
-func (l toolBatch) appendParallelOutcomeLocked(
+func (l *toolBatch) appendParallelOutcomeLocked(
 	ctx context.Context,
 	commit *parallelBatchCommit,
 	out *toolCallOutcome,
@@ -203,9 +203,9 @@ func (l toolBatch) appendParallelOutcomeLocked(
 	} else {
 		stampCommitOrderTS(&out.toolMsg, commit.lastToolTS)
 	}
-	stored, transient := toolInvocations(l).storageSafeMessage(ctx, out.toolMsg)
-	rows, transients := toolInvocations(l).classifiedResultRows(ctx, stored, transient, out.agentNote, commit.lastToolTS)
-	if err := toolInvocations(l).persistStorageSafeMessages(ctx, commit.sessionID, rows); err != nil {
+	stored, transient := l.Projection.storageSafeMessage(ctx, out.toolMsg)
+	rows, transients := l.Tools.classifiedResultRows(ctx, stored, transient, out.agentNote, commit.lastToolTS)
+	if err := l.Projection.persistStorageSafeMessages(ctx, commit.sessionID, rows); err != nil {
 		return err
 	}
 	out.committed = true
@@ -221,7 +221,7 @@ func (l toolBatch) appendParallelOutcomeLocked(
 	return nil
 }
 
-func (l toolBatch) finishParallelToolOutcomes(
+func (l *toolBatch) finishParallelToolOutcomes(
 	ctx context.Context,
 	commit *parallelBatchCommit,
 	outcomes []toolCallOutcome,
@@ -265,17 +265,17 @@ func stampCommitOrderTS(msg *api.Message, last *time.Time) {
 }
 
 // tagToolHandleOnCommit persists the evidence record and stamps the host handle on the tool result.
-func (l toolBatch) tagToolHandleOnCommit(ctx context.Context, sessionID string, sess *api.Session, toolName string, args map[string]any, msg *api.Message, eligible bool) error {
+func (l *toolBatch) tagToolHandleOnCommit(ctx context.Context, sessionID string, sess *api.Session, toolName string, args map[string]any, msg *api.Message, eligible bool) error {
 	if msg == nil {
 		return nil
 	}
-	if sess != nil && toolName == "verify" && l.Deps.ConfirmVerifyResult != nil &&
+	if sess != nil && toolName == "verify" && l.Tools.Deps.ConfirmVerifyResult != nil &&
 		msg.ToolResult != nil && msg.ToolResult.Outcome == api.ToolResultOutcomeCompleted {
 		content := strings.TrimSpace(msg.ToolResult.Content)
 		if content == "" {
 			content = strings.TrimSpace(msg.Content)
 		}
-		if stamped := l.Deps.ConfirmVerifyResult(sess, content); stamped != "" {
+		if stamped := l.Tools.Deps.ConfirmVerifyResult(sess, content); stamped != "" {
 			msg.ToolResult.Content = stamped
 		}
 	}
@@ -288,13 +288,13 @@ func (l toolBatch) tagToolHandleOnCommit(ctx context.Context, sessionID string, 
 	}
 	handle := ""
 	patchedContent := content
-	if l.Deps.CommitEvidenceToolResult != nil && sess != nil {
+	if l.Tools.Deps.CommitEvidenceToolResult != nil && sess != nil {
 		artifactID := ""
 		if msg.ToolResult != nil && msg.ToolResult.Visual != nil {
 			artifactID = msg.ToolResult.Visual.ID
 		}
 		var err error
-		handle, patchedContent, err = l.Deps.CommitEvidenceToolResult(ctx, sessionID, sess, toolName, args, content, artifactID)
+		handle, patchedContent, err = l.Tools.Deps.CommitEvidenceToolResult(ctx, sessionID, sess, toolName, args, content, artifactID)
 		if err != nil {
 			return fmt.Errorf("record %s evidence: %w", toolName, err)
 		}
@@ -338,8 +338,8 @@ func stampDietFieldsOnCommit(toolName string, msg *api.Message) {
 }
 
 // compactToolWireOnCommit compacts payloads after evidence handles are minted.
-func (l toolBatch) compactToolWireOnCommit(ctx context.Context, sess *api.Session, toolName string, msg *api.Message) {
-	if l.PromptLoop == nil || msg == nil || l.Deps.CompactToolWire == nil {
+func (l *toolBatch) compactToolWireOnCommit(ctx context.Context, sess *api.Session, toolName string, msg *api.Message) {
+	if l == nil || msg == nil || l.Tools.Deps.CompactToolWire == nil {
 		return
 	}
 	stampDietFieldsOnCommit(toolName, msg)
@@ -347,7 +347,7 @@ func (l toolBatch) compactToolWireOnCommit(ctx context.Context, sess *api.Sessio
 	if msg.ToolResult != nil && strings.TrimSpace(msg.ToolResult.Content) != "" {
 		content = msg.ToolResult.Content
 	}
-	out, meta := l.Deps.CompactToolWire(ctx, sess, toolName, content, compaction.CompactToolWireOpts{
+	out, meta := l.Tools.Deps.CompactToolWire(ctx, sess, toolName, content, compaction.CompactToolWireOpts{
 		DietStamp:       msg.DietStamp,
 		DietStampSource: msg.DietStampSource,
 		EvidenceHandles: append([]string(nil), msg.EvidenceHandles...),

@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/workeradmission"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -38,7 +38,7 @@ func RegisterExtendWorkerBudgetTool(reg *tools.DefaultRegistry, deps ExtendBudge
 		if jobID == "" {
 			return "", fmt.Errorf("job_id is required")
 		}
-		newMax, err := session.ParseTaskMaxToolLoopsFromArgs(map[string]any{"max_tool_loops": args["max_tool_loops"]})
+		newMax, err := workeradmission.ParseTaskMaxToolLoopsFromArgs(map[string]any{"max_tool_loops": args["max_tool_loops"]})
 		if err != nil {
 			return "", err
 		}
@@ -60,7 +60,7 @@ func RegisterExtendWorkerBudgetTool(reg *tools.DefaultRegistry, deps ExtendBudge
 		if deps.ToolBudget != nil {
 			budget = deps.ToolBudget(tctx.ActiveRootPath())
 		}
-		if code := session.ValidateTaskMaxToolLoopsCode(newMax, budget); code != "" {
+		if code := workeradmission.ValidateTaskMaxToolLoopsCode(newMax, budget); code != "" {
 			return "", &tools.ToolReject{
 				Code: workerBudgetExtendInvalidCode,
 				Data: map[string]any{

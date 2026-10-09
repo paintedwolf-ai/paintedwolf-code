@@ -2,7 +2,6 @@ package session_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"reflect"
 	"strings"
 	"testing"
@@ -10,7 +9,10 @@ import (
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/workercompletion"
+	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -26,12 +28,12 @@ func TestCanceledWorkerProjectionPreservesProofOnRetry(t *testing.T) {
 	testutil.FailErr(t, "create cancellation parent", err)
 	child, err := s.CreateChild(t.Context(), parent, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "create cancellation child", err)
-	task := session.WorkerSummaryInput{JobID: "job-cancel", ChildSessionID: child.ID, ParentSessionID: parent.ID, AgentType: "implementer"}
+	task := workeroutcomes.SummaryInput{JobID: "job-cancel", ChildSessionID: child.ID, ParentSessionID: parent.ID, AgentType: "implementer"}
 	result := api.WorkerResult{Status: "canceled", Response: "canceled", Summary: "Canceled after a bounded edit", ChangeReport: &api.WorkerChangeReport{
 		ChangedPaths: []string{"README.md"}, ReceiptCount: 1, MutationTools: []string{"edit"},
 	}}
 	for attempt := 0; attempt < 2; attempt++ {
-		status, err := mgr.ProjectWorkerResult(t.Context(), task, result)
+		status, err := mgr.Workers.Results.ProjectResult(t.Context(), task, result)
 		testutil.FailErr(t, "project cancellation result", err)
 		if status != "canceled" {
 			t.Fatalf("status=%s", status)
@@ -46,7 +48,7 @@ func TestCanceledWorkerProjectionPreservesProofOnRetry(t *testing.T) {
 	if meta.Status != api.WorkerSummaryStatusCanceled || meta.ChildSessionID != child.ID {
 		t.Fatalf("cancellation identity=%+v", meta)
 	}
-	envelope, ok := session.ParseWorkerCompletionEnvelope(meta.Envelope)
+	envelope, ok := workercompletion.ParseWorkerCompletionEnvelope(meta.Envelope)
 	if !ok || envelope.State != "canceled" || envelope.Summary != result.Summary || !reflect.DeepEqual(envelope.Proof.ChangedPaths, result.ChangeReport.ChangedPaths) {
 		t.Fatalf("cancellation proof=%+v parsed=%v", envelope, ok)
 	}
@@ -65,7 +67,7 @@ func TestAppendWorkerSummarySQLStoreToolEnvelope(t *testing.T) {
 	child, err := store.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "create child", err)
 
-	if _, err := mgr.AppendWorkerSummary(ctx, parent.ID, session.WorkerSummaryInput{
+	if _, err := mgr.Workers.Summaries.Append(ctx, parent.ID, workeroutcomes.SummaryInput{
 		Summary:        "implemented feature X",
 		DelegationID:   "dep-1",
 		LegID:          "leg-1",

@@ -21,11 +21,11 @@ func TestStreamReplayRequiresTranscriptMembership(t *testing.T) {
 			testutil.FailErr(t, "append message", srv.sessionStore.AppendMessages(t.Context(), a.ID, msg))
 			switch mode {
 			case "tokens":
-				srv.sessions.Streams().CacheReplay(msg.ID, msg.Content, []string{msg.Content})
+				srv.sessions.Transcript.Streams.CacheReplay(msg.ID, msg.Content, []string{msg.Content})
 			case "content":
-				srv.sessions.Streams().CacheReplay(msg.ID, msg.Content, nil)
+				srv.sessions.Transcript.Streams.CacheReplay(msg.ID, msg.Content, nil)
 			case "active":
-				srv.sessions.Streams().CacheLive(a.ID, msg.ID, msg.Content, nil, 1)
+				srv.sessions.Transcript.Streams.CacheLive(a.ID, msg.ID, msg.Content, nil, 1)
 			}
 			request := func(sessionID string) *httptest.ResponseRecorder {
 				w := httptest.NewRecorder()
@@ -34,7 +34,7 @@ func TestStreamReplayRequiresTranscriptMembership(t *testing.T) {
 			}
 			assertErrorResponse(t, request(b.ID), http.StatusNotFound, "message_not_found")
 			if mode == "active" {
-				srv.sessions.Streams().Finish(t.Context(), a.ID)
+				srv.sessions.Transcript.Streams.Finish(t.Context(), a.ID)
 			}
 			if w := request(a.ID); w.Code != http.StatusOK || !strings.Contains(w.Body.String(), msg.Content) {
 				t.Fatalf("owner replay status=%d body=%s", w.Code, w.Body.String())
@@ -54,7 +54,7 @@ func TestSettledLiveSubscriptionRechecksTranscript(t *testing.T) {
 	srv := newTestServer(t)
 	sess := createSessionAtPathOnServer(t, srv, t.TempDir(), wire.SessionPostureBuild)
 	messageID := uuid.NewString()
-	srv.sessions.Streams().CacheReplay(messageID, "removed content", nil)
+	srv.sessions.Transcript.Streams.CacheReplay(messageID, "removed content", nil)
 	w := httptest.NewRecorder()
 	r := newAuthedRequest(http.MethodGet, "/v1/sessions/"+sess.ID+"/stream?message="+messageID, nil)
 	srv.followLiveStream(r, w, w, sess.ID, messageID)

@@ -11,11 +11,12 @@ import (
 
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/gitengine"
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/providerretry"
 	"github.com/lycaon/lycaon/internal/preflight"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/spendguard"
 	"github.com/lycaon/lycaon/internal/usernotice"
 	"github.com/lycaon/lycaon/internal/workflow"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -158,10 +159,10 @@ func contextFromPromptErrorFixtures() map[string]map[string]any {
 		"workflow_not_runnable": usernotice.ContextFromPromptError(
 			&workflow.NotRunnableError{RunID: "11111111-2222-4333-8444-555555555555", Reason: "paused", Status: wire.WorkflowRunStatusPaused},
 		),
-		"grounding_escalated": usernotice.ContextFromPromptError(session.ErrGroundingEscalated),
+		"grounding_escalated": usernotice.ContextFromPromptError(guidance.ErrGroundingEscalated),
 		"workflow_active":     usernotice.ContextFromPromptError(workflow.ErrActiveRunExists),
 		"session_spend_ceiling_reached": usernotice.ContextFromPromptError(
-			&session.SessionSpendCeilingReached{CeilingUSD: 5, SpentUSD: 5.12, Coverage: wire.CostEstimateLowerBound, UnpricedTokens: 100, UnknownChargedCalls: 2},
+			&spendguard.CeilingReached{CeilingUSD: 5, SpentUSD: 5.12, Coverage: wire.CostEstimateLowerBound, UnpricedTokens: 100, UnknownChargedCalls: 2},
 		),
 		"host_fault": usernotice.ContextFromPromptError(&promptloop.HostFaultError{
 			Tool: "write", CallRan: true, Cause: errors.New("fixture settlement refused"),

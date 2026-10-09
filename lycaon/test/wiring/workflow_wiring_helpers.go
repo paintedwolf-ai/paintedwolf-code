@@ -109,8 +109,8 @@ func assertFanOutWorkersMatchTopology(t *testing.T, h *Harness, runID string, le
 
 func deliverTopologyReport(t *testing.T, h *Harness, ctx context.Context, sess *api.Session, runID string) {
 	t.Helper()
-	if _, ok := h.SessionMgr.PendingKickIDForTest(sess.ID); ok {
-		h.SessionMgr.ClearPendingKickForTest(sess.ID)
+	if _, ok := h.SessionMgr.Runner.Coordinator.Kicks().PeekPendingKickID(sess.ID); ok {
+		h.SessionMgr.Runner.Coordinator.Kicks().ClearPending(sess.ID)
 	}
 	run, err := h.WorkflowMgr.Get(ctx, runID)
 	testutil.FailErr(t, "load report phase", err)

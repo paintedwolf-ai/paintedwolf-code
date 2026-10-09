@@ -3,8 +3,6 @@ package security
 import (
 	"context"
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/enginepaths"
-	"github.com/lycaon/lycaon/internal/sourceledger"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -15,6 +13,8 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/enginepaths"
+	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/wiring"
@@ -144,7 +144,7 @@ func TestRewindRestoresFilesAndTruncatesTranscript(t *testing.T) {
 	anchorID := lastVisibleUserMessageID(t, f.base, f.sessionID)
 
 	// Mutation capture retains the bytes from before the write.
-	f.h.SessionMgr.RecordPrimaryMutation(ctx, f.sessionID, "note.txt")
+	f.h.SessionMgr.Captures.RecordPrimaryMutation(ctx, f.sessionID, "note.txt")
 	testutil.FailErr(t, "write file", os.WriteFile(target, []byte("after"), 0o644))
 	var dbPath, rootID string
 	testutil.FailErr(t, "resolve source storage", f.h.DB.QueryRowContext(ctx, `SELECT file FROM pragma_database_list WHERE name='main'`).Scan(&dbPath))

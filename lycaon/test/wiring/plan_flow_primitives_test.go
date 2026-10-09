@@ -68,7 +68,7 @@ func TestPlanFlowPrimitivesWorkflow(t *testing.T) {
 
 	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureSpec}, dir)
 	testutil.FailErr(t, "create session", err)
-	h.SessionMgr.Catalog().InvalidateEffectiveCatalog(sess.ProjectID)
+	h.SessionMgr.Catalog.InvalidateEffectiveCatalog(sess.ProjectID)
 
 	run, err := h.WorkflowMgr.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{
 		WorkflowID: "plan-flow-primitives", WorkflowVersion: "1.0.0", Request: "Plan the fixture change",

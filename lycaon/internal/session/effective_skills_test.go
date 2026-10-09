@@ -70,13 +70,13 @@ func TestEffectiveSkillsGateMatrix(t *testing.T) {
 			}
 			m.SetProjectRegistry(reg)
 			m.SetEffectiveCatalogDeps("", extpacks.Active(), surfaces)
-			m.SetSkillsGate(&settings.ProjectSurfaceGate{
+			m.Profiles.SetSkillsGate(&settings.ProjectSurfaceGate{
 				Surface:  projectcontrib.SurfaceSkills,
 				Surfaces: surfaces,
 				Projects: reg,
 			})
 
-			loaded, _ := m.EffectiveSkills(ctx, p.ID, []string{root})
+			loaded, _ := m.Profiles.EffectiveSkills(ctx, p.ID, []string{root})
 			found := false
 			for _, sk := range loaded {
 				if sk.Name == "house-style" && sk.Project {
@@ -124,14 +124,14 @@ func TestEffectiveSkillsGateOffReadsNothing(t *testing.T) {
 	testutil.FailErr(t, "CreateWithRoot", err)
 	m.SetProjectRegistry(reg)
 	m.SetEffectiveCatalogDeps("", extpacks.Active(), surfaces)
-	m.SetSkillsGate(&settings.ProjectSurfaceGate{
+	m.Profiles.SetSkillsGate(&settings.ProjectSurfaceGate{
 		Surface:  projectcontrib.SurfaceSkills,
 		Surfaces: surfaces,
 		Projects: reg,
 	})
 
 	// With the gate off, DiscoverProject is never called.
-	_, diags := m.EffectiveSkills(ctx, p.ID, []string{root})
+	_, diags := m.Profiles.EffectiveSkills(ctx, p.ID, []string{root})
 	for _, d := range diags {
 		if strings.Contains(d.Message, "approval") || strings.Contains(d.Code, "path") {
 			t.Fatalf("unexpected disk diagnostic with gate off: %+v", d)
@@ -145,7 +145,7 @@ func TestEffectiveSkillsUnwiredGateClosed(t *testing.T) {
 	writeSkill(t, root, settingsoverlay.DirName()+"/skills", "house-style", "House rules.")
 	m := newSkillsTestManager(t)
 	// No SetSkillsGate.
-	loaded, _ := m.EffectiveSkills(ctx, "any", []string{root})
+	loaded, _ := m.Profiles.EffectiveSkills(ctx, "any", []string{root})
 	for _, sk := range loaded {
 		if sk.Project {
 			t.Fatalf("unwired gate must not load project skills: %#v", sk)
@@ -168,13 +168,13 @@ func TestEffectiveSkillsShadowsStock(t *testing.T) {
 	m.SetProjectRegistry(reg)
 	moduleRoot := filepath.Join("..", "..")
 	m.SetEffectiveCatalogDeps(moduleRoot, nil, surfaces)
-	m.SetSkillsGate(&settings.ProjectSurfaceGate{
+	m.Profiles.SetSkillsGate(&settings.ProjectSurfaceGate{
 		Surface:  projectcontrib.SurfaceSkills,
 		Surfaces: surfaces,
 		Projects: reg,
 	})
 
-	loaded, diags := m.EffectiveSkills(ctx, p.ID, []string{root})
+	loaded, diags := m.Profiles.EffectiveSkills(ctx, p.ID, []string{root})
 	var verify *skills.Skill
 	for i := range loaded {
 		if loaded[i].Name == "verify-a-change" {
@@ -216,7 +216,7 @@ func TestEffectiveSkillsNoTaint(t *testing.T) {
 	testutil.FailErr(t, "CreateWithRoot", err)
 	m.SetProjectRegistry(reg)
 	m.SetEffectiveCatalogDeps("", extpacks.Active(), surfaces)
-	m.SetSkillsGate(&settings.ProjectSurfaceGate{
+	m.Profiles.SetSkillsGate(&settings.ProjectSurfaceGate{
 		Surface:  projectcontrib.SurfaceSkills,
 		Surfaces: surfaces,
 		Projects: reg,
@@ -225,7 +225,7 @@ func TestEffectiveSkillsNoTaint(t *testing.T) {
 	sess, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, p.ID)
 	testutil.FailErr(t, "create session", err)
 
-	loaded, _ := m.EffectiveSkills(ctx, p.ID, []string{root})
+	loaded, _ := m.Profiles.EffectiveSkills(ctx, p.ID, []string{root})
 	found := false
 	for _, sk := range loaded {
 		if sk.Name == "release-check" && sk.Project {

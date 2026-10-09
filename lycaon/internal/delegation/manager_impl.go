@@ -15,6 +15,8 @@ import (
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
+	"github.com/lycaon/lycaon/internal/session/workerresults"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -85,11 +87,11 @@ func (m *Manager) Create(ctx context.Context, req api.CreateDelegationRequest) (
 			return prior, err
 		}
 	}
-	sess, err := m.Sessions.CreateForProject(ctx, req.ProjectID, api.SessionPostureOrchestrate)
+	sess, err := m.Sessions.Chats.CreateForProject(ctx, req.ProjectID, api.SessionPostureOrchestrate)
 	if err != nil {
 		return nil, err
 	}
-	_ = m.Sessions.SetAgentType(ctx, sess.ID, orchestration.ProfileCoordinator)
+	_ = m.Sessions.Chats.SetAgentType(ctx, sess.ID, orchestration.ProfileCoordinator)
 	return m.create(ctx, sess.ID, req, receipt)
 }
 
@@ -186,7 +188,7 @@ func (m *Manager) scopeForSessionID(ctx context.Context, sessionID, projectID st
 	if m.Sessions == nil {
 		return project.ProjectScope{ProjectID: projectID}, nil
 	}
-	sess, err := m.Sessions.Get(ctx, sessionID)
+	sess, err := m.Sessions.Chats.Get(ctx, sessionID)
 	if err != nil {
 		return project.ProjectScope{}, err
 	}
@@ -243,7 +245,7 @@ func (m *Manager) dispatchLegAdmitted(ctx context.Context, delegationID, legID, 
 	}
 	sourceToolCallID = strings.TrimSpace(sourceToolCallID)
 	if sourceToolCallID == "" {
-		sourceToolCallID = session.HostTaskCallPrefix + legID
+		sourceToolCallID = workerresults.HostTaskCallPrefix + legID
 	}
 	if leg.Status != api.LegStatusPending {
 		if replay := m.replayDispatchedLeg(leg, sourceToolCallID); replay != nil {
@@ -366,7 +368,7 @@ func (m *Manager) recordDispatchCard(ctx context.Context, sessionID, jobID, sour
 	if !ok || task == nil {
 		return nil
 	}
-	return m.Sessions.EnsureWorkerCardProjection(ctx, sessionID, session.WorkerDispatchRowInput{
+	return m.Sessions.Workers.Cards.Ensure(ctx, sessionID, workerresults.WorkerDispatchRowInput{
 		JobID:          task.ID,
 		AgentType:      task.AgentType,
 		Brief:          task.Brief,
@@ -432,7 +434,7 @@ func legStatusForOutcome(outcome api.WorkerResult) api.LegStatus {
 	case "needs_decision", "held":
 		return api.LegStatusHeld
 	case "partial":
-		if strings.TrimSpace(outcome.HintCode) == session.WorkerBudgetExhaustedCode {
+		if strings.TrimSpace(outcome.HintCode) == workeroutcomes.WorkerBudgetExhaustedCode {
 			return api.LegStatusRetryPending
 		}
 		return api.LegStatusFailed
@@ -448,7 +450,7 @@ func (m *Manager) ResumeLeg(ctx context.Context, delegationID, legID string) (*a
 	if err != nil {
 		return nil, err
 	}
-	if leg.Status != api.LegStatusRetryPending || leg.Result == nil || strings.TrimSpace(leg.Result.HintCode) != session.WorkerBudgetExhaustedCode {
+	if leg.Status != api.LegStatusRetryPending || leg.Result == nil || strings.TrimSpace(leg.Result.HintCode) != workeroutcomes.WorkerBudgetExhaustedCode {
 		return nil, ErrLegNotPending
 	}
 	prior, ok := m.Queue.Get(strings.TrimSpace(leg.WorkerID))
@@ -489,7 +491,7 @@ func (m *Manager) ResumeLeg(ctx context.Context, delegationID, legID string) (*a
 	}
 	task := api.WorkerTask{
 		ChildSessionID: prior.ChildSessionID, DelegationID: delegationID, LegID: legID,
-		ParentSessionID: sessionID, SourceToolCallID: session.HostTaskCallPrefix + legID + ":retry:" + prior.ID,
+		ParentSessionID: sessionID, SourceToolCallID: workerresults.HostTaskCallPrefix + legID + ":retry:" + prior.ID,
 		WorkflowRunID: delegation.WorkflowRunID, AgentType: prior.AgentType, Prompt: prior.Prompt, Brief: prior.Brief,
 		Scope: prior.Scope, Files: append([]string(nil), prior.Files...), WorkspaceRoot: prior.WorkspaceRoot,
 		SpawnReason: api.SpawnReasonRetry, Status: api.WorkerStatusPending, ExecutionTarget: prior.ExecutionTarget,

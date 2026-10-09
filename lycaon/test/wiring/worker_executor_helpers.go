@@ -15,7 +15,7 @@ func workerTestInjectRenderer(t *testing.T) *prompts.InjectRenderer {
 }
 
 func wiringWorkerExecutor(h *Harness) *worker.LocalWorkerExecutor {
-	exec := worker.NewLocalWorkerExecutor(h.SessionMgr, h.WorkerQueue)
+	exec := worker.NewLocalWorkerExecutor(h.SessionMgr.Workers, h.WorkerQueue, h.SessionMgr.Workspace, h.SessionMgr.Submissions, h.SessionMgr.Transcript, h.SessionMgr.Runner.Execution, h.SessionMgr.Workers.Cancel, h.SessionMgr.Workers.Cancellations)
 	exec.SetPromptInjects(prompts.NewInjectRenderer(
 		prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}),
 	))

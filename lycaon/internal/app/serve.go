@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/decide"
 	"io"
 	"log/slog"
 	"net"
@@ -22,6 +21,7 @@ import (
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/coordinator"
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/hitl"
@@ -274,7 +274,7 @@ func (a *ServeApp) Run(ctx context.Context) error {
 	}
 
 	// Settle active turns before background cancellation.
-	a.SessionMgr.BeginEngineShutdown()
+	a.SessionMgr.Runner.Settlement.BeginShutdown()
 	if closer, ok := a.decider.(io.Closer); ok {
 		_ = closer.Close()
 	}

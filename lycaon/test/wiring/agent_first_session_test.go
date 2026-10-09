@@ -24,8 +24,8 @@ func TestFirstPromptAttachesDefaultWorkflow(t *testing.T) {
 	if run != nil {
 		t.Fatal("store-only session fixture already has a workflow")
 	}
-	if _, err := h.SessionMgr.Prompt(ctx, sess.ID, "Let's build a basic python text adventure game."); err != nil {
-		testutil.FailErr(t, "h.SessionMgr.Prompt failed", err)
+	if _, err := h.SessionMgr.Submissions.Prompt(ctx, sess.ID, "Let's build a basic python text adventure game."); err != nil {
+		testutil.FailErr(t, "h.SessionMgr.Submissions.Prompt failed", err)
 	}
 	run, err = h.WorkflowMgr.GetActive(ctx, sess.ID)
 	testutil.FailErr(t, "h.WorkflowMgr.GetActive failed", err)
@@ -49,10 +49,10 @@ func TestNoWorkflowStartNudgeOnCasualPrompt(t *testing.T) {
 	sess, err := h.CreateHarnessSession(t, wire.CreateSessionRequest{}, projectDir)
 	testutil.FailErr(t, "h.Store.Create failed", err)
 	prompt := "Let's build a basic python text adventure game."
-	if _, err := h.SessionMgr.Prompt(ctx, sess.ID, prompt); err != nil {
-		testutil.FailErr(t, "h.SessionMgr.Prompt failed", err)
+	if _, err := h.SessionMgr.Submissions.Prompt(ctx, sess.ID, prompt); err != nil {
+		testutil.FailErr(t, "h.SessionMgr.Submissions.Prompt failed", err)
 	}
-	msgs, err := h.SessionMgr.GetMessages(ctx, sess.ID)
+	msgs, err := h.SessionMgr.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "h.SessionMgr.GetMessages failed", err)
 	for _, msg := range msgs {
 		if strings.Contains(msg.Content, "[host:workflow-start]") {

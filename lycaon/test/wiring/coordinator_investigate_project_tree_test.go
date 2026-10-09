@@ -2,7 +2,6 @@ package wiring
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/decide"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
@@ -91,7 +91,7 @@ func TestInvestigateCoordinatorWriteLandsOnProjectTree(t *testing.T) {
 
 	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{}, dir)
 	testutil.FailErr(t, "create session", err)
-	h.SessionMgr.SetVerifyConfig(fixedVerifyConfig("true"))
+	h.SessionMgr.Verification.SetVerifyConfig(fixedVerifyConfig("true"))
 	if sess.WorkspacePath != projectDir {
 		t.Fatalf("ProjectDir = %q want %q", sess.WorkspacePath, projectDir)
 	}
@@ -106,12 +106,12 @@ func TestInvestigateCoordinatorWriteLandsOnProjectTree(t *testing.T) {
 	// the staged config, or it keeps running into the next test.
 	t.Cleanup(func() {
 		cancelPrompt()
-		h.SessionMgr.CancelInFlightPrompt(sess.ID)
+		h.SessionMgr.Runner.Execution.Cancel(sess.ID)
 		<-promptExited
 	})
 	go func() {
 		defer close(promptExited)
-		_, promptErr := h.SessionMgr.Prompt(promptCtx, sess.ID, "fix auth in src/foo.go")
+		_, promptErr := h.SessionMgr.Submissions.Prompt(promptCtx, sess.ID, "fix auth in src/foo.go")
 		done <- promptErr
 	}()
 	hitlMgr, ok := h.CheckpointMgr.(*hitl.Manager)
@@ -160,7 +160,7 @@ func TestInvestigateCoordinatorWriteLandsOnProjectTree(t *testing.T) {
 		t.Fatalf("src/foo.go = %q want investigate edit in project tree ProjectDir; stage=%d messages=%+v", string(data), stage.Load(), msgs)
 	}
 
-	state := h.SessionMgr.BuildImplementSessionState(ctx, sess)
+	state := h.SessionMgr.Workers.State.ForSession(ctx, sess)
 	if len(state.PendingOverlayIDs) != 0 {
 		t.Fatalf("PendingOverlayIDs = %v want empty", state.PendingOverlayIDs)
 	}

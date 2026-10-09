@@ -6,7 +6,7 @@ import (
 
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/boolexpr"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/profiles"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -148,7 +148,7 @@ func allowedExtendsRef(ref string, allowlist []string) bool {
 }
 
 func resolvePolicyPosture(sessionPosture api.SessionPosture, manifestInitial string) api.SessionPosture {
-	if ip := strings.TrimSpace(manifestInitial); ip != "" && session.ValidSessionPosture(ip) {
+	if ip := strings.TrimSpace(manifestInitial); ip != "" && profiles.ValidSessionPosture(ip) {
 		return api.SessionPosture(ip)
 	}
 	return sessionPosture

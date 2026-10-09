@@ -2,12 +2,10 @@ package session
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/promptresult"
-	"strings"
 
 	"github.com/lycaon/lycaon/internal/coordinator/batch"
-	"github.com/lycaon/lycaon/internal/coordinator/inject"
-	"github.com/lycaon/lycaon/internal/guidance/feedback"
+	"github.com/lycaon/lycaon/internal/promptresult"
+	"github.com/lycaon/lycaon/internal/session/workflowfacts"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -19,15 +17,15 @@ type WorkflowSessionView interface {
 	AssertSessionRunnable(ctx context.Context, sessionID string) error
 	CurrentPhase(ctx context.Context, sessionID string) string
 	ActivePhaseHasReviewLoop(ctx context.Context, sessionID string) bool
-	ActivePhaseGuardState(ctx context.Context, sessionID string) WorkflowPhaseGuardState
+	ActivePhaseGuardState(ctx context.Context, sessionID string) workflowfacts.WorkflowPhaseGuardState
 	// ActiveReviewVerdictPending reports an unsatisfied review verdict.
 	ActiveReviewVerdictPending(ctx context.Context, sessionID string) bool
 	// ActiveCloseoutGateState reports a gated phase with open completion gates.
-	ActiveCloseoutGateState(ctx context.Context, sessionID string) WorkflowCloseoutGateState
+	ActiveCloseoutGateState(ctx context.Context, sessionID string) workflowfacts.WorkflowCloseoutGateState
 	AllowedAgents(ctx context.Context, sessionID string) []string
-	ActiveManifest(ctx context.Context, sessionID string) (ActiveWorkflowManifest, bool)
+	ActiveManifest(ctx context.Context, sessionID string) (workflowfacts.ActiveWorkflowManifest, bool)
 	// ResolvedRequest returns the active run's resolved request, if available.
-	ResolvedRequest(ctx context.Context, sessionID string) ResolvedWorkflowRequest
+	ResolvedRequest(ctx context.Context, sessionID string) workflowfacts.ResolvedWorkflowRequest
 	ParallelTaskMaxWorkers(ctx context.Context, sessionID string) int
 	ParallelTaskMaxReadWorkers(ctx context.Context, sessionID string) int
 	ParallelTaskMaxWriteWorkers(ctx context.Context, sessionID string) int
@@ -62,23 +60,9 @@ type WorkflowSessionView interface {
 	ForgetSession(sessionID string)
 }
 
-// WorkflowCloseoutGateState reports unresolved active closeout gates.
-type WorkflowCloseoutGateState struct {
-	Gated      bool
-	Phase      string
-	OpenLeaves []string
-}
+// workflowfacts.WorkflowCloseoutGateState reports unresolved active closeout gates.
 
-// WorkflowPhaseGuardState carries manifest-derived closeout and dispatch facts.
-type WorkflowPhaseGuardState struct {
-	Phase string
-	// ReportPhaseDeclared marks the phase that produces the run report.
-	ReportPhaseDeclared   bool
-	ReportCloseoutPending bool
-	// PendingObligationKinds identifies unsettled phase work.
-	PhaseObligationPending bool
-	PendingObligationKinds []string
-}
+// workflowfacts.WorkflowPhaseGuardState carries manifest-derived closeout and dispatch facts.
 
 // WorkerPhaseTouchPathsSource supplies manifest touch.paths for worker prompt inject.
 type WorkerPhaseTouchPathsSource interface {
@@ -88,6 +72,31 @@ type WorkerPhaseTouchPathsSource interface {
 // SetWorkflowSessionView wires the workflow session view for prompts, tools, and messages.
 func (m *Manager) SetWorkflowSessionView(v WorkflowSessionView) {
 	m.workflows = v
+	m.Closeout.SetWorkflow(v)
+	m.Guards.SetWorkflow(v)
+	m.Verification.Evidence.SetWorkflow(v)
+	m.Runner.SetControl(v)
+	m.Runner.SetRequests(v)
+	m.Runner.SetSlash(v)
+	m.Runner.Settlement.SetWorkflow(v)
+	m.Batch.SetWorkflow(v)
+	m.Guidance.SetWorkflow(v)
+	m.Workers.State.SetWorkflows(v)
+	m.Verification.SetWorkflow(v)
+	m.Profiles.SetCoordinatorProfile(func(ctx context.Context, id string) string {
+		if v == nil {
+			return ""
+		}
+		manifest, ok := v.ActiveManifest(ctx, id)
+		if !ok {
+			return ""
+		}
+		return manifest.CoordinatorProfile
+	})
+	m.Runner.Instructions.SetWorkflow(v)
+	m.Loading.SetWorkflow(v)
+	m.Transcript.SetPageReconciler(v)
+	m.Transcript.SetWorkflow(v)
 }
 
 // AcceptsEmptyWorkflowRequest reports whether an empty prompt has active workflow semantics.
@@ -96,39 +105,4 @@ func (m *Manager) AcceptsEmptyWorkflowRequest(ctx context.Context, sessionID str
 		return false
 	}
 	return m.workflows != nil && m.workflows.AcceptsEmptyRequest(ctx, sessionID)
-}
-
-func workflowEvaluationFromFrame(frame inject.CoordinatorTurnFrame) feedback.WorkflowEvaluationContext {
-	runCtx := frame.RunContext
-	out := feedback.WorkflowEvaluationContext{
-		WorkflowID:         strings.TrimSpace(runCtx.WorkflowID),
-		CurrentPhase:       strings.TrimSpace(runCtx.CurrentPhase),
-		FailedLeaves:       append([]string(nil), runCtx.FailedLeaves...),
-		RunActive:          strings.TrimSpace(runCtx.RunStatus) == string(api.WorkflowRunStatusRunning),
-		AdvanceWhenGateMet: strings.TrimSpace(runCtx.AdvanceWhenGateMet),
-	}
-	if frame.Runtime.PhaseExit != nil {
-		out.PhaseExitKind = frame.Runtime.PhaseExit.Kind
-	}
-	for _, phase := range frame.Runtime.Phases {
-		if phase.ID != out.CurrentPhase {
-			continue
-		}
-		out.CurrentGatesKnown = false
-		out.CurrentGatesPassed = false
-		out.FailedLeaves = nil
-		for _, gate := range phase.Gates {
-			if gate.Dormant {
-				continue
-			}
-			out.CurrentGatesKnown = true
-			if gate.Satisfied {
-				continue
-			}
-			out.FailedLeaves = append(out.FailedLeaves, gate.ID)
-		}
-		out.CurrentGatesPassed = out.CurrentGatesKnown && len(out.FailedLeaves) == 0
-		break
-	}
-	return out
 }

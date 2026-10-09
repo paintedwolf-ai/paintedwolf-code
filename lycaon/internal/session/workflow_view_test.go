@@ -3,11 +3,13 @@ package session
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/promptresult"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/batch"
+	"github.com/lycaon/lycaon/internal/promptresult"
+	"github.com/lycaon/lycaon/internal/session/promptinput"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/workflowfacts"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolpolicy"
@@ -41,14 +43,14 @@ func (r *recordingWorkflowView) ActiveReviewVerdictPending(ctx context.Context, 
 	return false
 }
 
-func (r *recordingWorkflowView) ActiveCloseoutGateState(ctx context.Context, sessionID string) WorkflowCloseoutGateState {
+func (r *recordingWorkflowView) ActiveCloseoutGateState(ctx context.Context, sessionID string) workflowfacts.WorkflowCloseoutGateState {
 	r.record("ActiveCloseoutGateState")
-	return WorkflowCloseoutGateState{}
+	return workflowfacts.WorkflowCloseoutGateState{}
 }
 
-func (r *recordingWorkflowView) ResolvedRequest(ctx context.Context, sessionID string) ResolvedWorkflowRequest {
+func (r *recordingWorkflowView) ResolvedRequest(ctx context.Context, sessionID string) workflowfacts.ResolvedWorkflowRequest {
 	r.record("ResolvedRequest")
-	return ResolvedWorkflowRequest{}
+	return workflowfacts.ResolvedWorkflowRequest{}
 }
 
 func (r *recordingWorkflowView) ActivePhaseHasReviewLoop(ctx context.Context, sessionID string) bool {
@@ -56,9 +58,9 @@ func (r *recordingWorkflowView) ActivePhaseHasReviewLoop(ctx context.Context, se
 	return false
 }
 
-func (r *recordingWorkflowView) ActivePhaseGuardState(ctx context.Context, sessionID string) WorkflowPhaseGuardState {
+func (r *recordingWorkflowView) ActivePhaseGuardState(ctx context.Context, sessionID string) workflowfacts.WorkflowPhaseGuardState {
 	r.record("ActivePhaseGuardState")
-	return WorkflowPhaseGuardState{Phase: "phase-a"}
+	return workflowfacts.WorkflowPhaseGuardState{Phase: "phase-a"}
 }
 
 func (r *recordingWorkflowView) AllowedAgents(ctx context.Context, sessionID string) []string {
@@ -66,9 +68,9 @@ func (r *recordingWorkflowView) AllowedAgents(ctx context.Context, sessionID str
 	return []string{"coordinator"}
 }
 
-func (r *recordingWorkflowView) ActiveManifest(ctx context.Context, sessionID string) (ActiveWorkflowManifest, bool) {
+func (r *recordingWorkflowView) ActiveManifest(ctx context.Context, sessionID string) (workflowfacts.ActiveWorkflowManifest, bool) {
 	r.record("ActiveManifest")
-	return ActiveWorkflowManifest{Rules: []string{"manifest-rules.yaml"}}, true
+	return workflowfacts.ActiveWorkflowManifest{Rules: []string{"manifest-rules.yaml"}}, true
 }
 
 func (r *recordingWorkflowView) ParallelTaskMaxWorkers(ctx context.Context, sessionID string) int {
@@ -192,7 +194,7 @@ func TestApplyPromptUserTurnPropagatesFeedbackFailure(t *testing.T) {
 	sess, err := st.Create(ctx, api.CreateSessionRequest{}, "project-1")
 	testutil.FailErr(t, "create session", err)
 
-	_, err = mgr.applyPromptUserTurn(ctx, sess.ID, PromptInput{Text: "answer"})
+	_, err = mgr.Runner.Instructions.Apply(ctx, sess.ID, promptinput.Input{Text: "answer"})
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("prompt user turn error = %v, want feedback failure", err)
 	}
@@ -204,7 +206,7 @@ func TestToolpolicyEngineDepsWiresWorkflowView(t *testing.T) {
 	mgr.SetWorkflowSessionView(view)
 	sess := &api.Session{ID: "s1", Posture: api.SessionPostureSpec}
 
-	eval := toolpolicy.BuildEvalContext(context.Background(), mgr.toolpolicyEngineDeps(), sess, "read_file", map[string]any{"path": "x"})
+	eval := toolpolicy.BuildEvalContext(context.Background(), mgr.Guards.PolicyDependencies(), sess, "read_file", map[string]any{"path": "x"})
 	if eval.Phase != "phase-a" {
 		t.Fatalf("phase = %q want phase-a", eval.Phase)
 	}

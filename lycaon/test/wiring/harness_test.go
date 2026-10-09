@@ -25,7 +25,7 @@ func TestBuildForTestComposition(t *testing.T) {
 	if h.Server == nil || h.SessionMgr == nil || h.WorkflowMgr == nil || h.DB == nil || h.ToolRegistry == nil {
 		t.Fatalf("incomplete harness composition: %+v", h)
 	}
-	if h.SessionMgr.PromptToolPolicy() == nil {
+	if h.SessionMgr.Guards.Policy() == nil {
 		t.Fatal("rule engine required for posture-aware prompts")
 	}
 	if h.Recording == nil {

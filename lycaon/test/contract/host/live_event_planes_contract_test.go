@@ -86,17 +86,17 @@ func TestParentOnlyProjectSubscriberCannotSeeWorkerLiveBodies(t *testing.T) {
 	}
 	_ = drain(200 * time.Millisecond)
 
-	liveCh, liveUnsub := mgr.Streams().Subscribe(childMsg)
+	liveCh, liveUnsub := mgr.Transcript.Streams.Subscribe(childMsg)
 	t.Cleanup(liveUnsub)
 
 	for i := 0; i < 30; i++ {
-		testutil.FailErr(t, "child live", mgr.Streams().Project(ctx, child.ID, api.Message{
+		testutil.FailErr(t, "child live", mgr.Transcript.Streams.Project(ctx, child.ID, api.Message{
 			ID:      childMsg,
 			Role:    api.MessageRoleAssistant,
 			Content: "worker-scratch-" + strconv.Itoa(i),
 		}))
 	}
-	mgr.Streams().Flush(ctx, child.ID)
+	mgr.Transcript.Streams.Flush(ctx, child.ID)
 
 	hubAfterLive := drain(200 * time.Millisecond)
 	for _, ev := range hubAfterLive {

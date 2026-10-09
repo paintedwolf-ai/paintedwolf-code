@@ -29,6 +29,8 @@ import (
 	"github.com/lycaon/lycaon/internal/repoinfo"
 	"github.com/lycaon/lycaon/internal/search"
 	"github.com/lycaon/lycaon/internal/session"
+	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
+	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/toolhost"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -81,7 +83,7 @@ func (b boardWiring) wireBoardAndResearch() error {
 		CostTrackingEnabled: func() bool {
 			return b.settingsSvc != nil && b.settingsSvc.Pricing != nil && b.settingsSvc.Pricing.Effective().CostTrackingEnabled
 		},
-		Worktree: b.mgr.BoardGitWorktreeFunc(b.gitMgr),
+		Worktree: b.mgr.Workspace.BoardWorktree(b.gitMgr),
 	}
 	b.mgr.SetBoardInject(&board.InjectBuilder{SnapshotBuilder: b.boardSnap, Projects: b.registry}, board.DefaultInjectFormatter())
 	b.mgr.SetIncludeScanLegend(func() bool {
@@ -94,9 +96,9 @@ func (b boardWiring) wireBoardAndResearch() error {
 		Builder:            b.boardSnap,
 		Findings:           func() findings.Store { return b.findingsStore },
 		RootSession:        b.rootSessionKey,
-		PromotePaths:       b.mgr.PromotePathBoardLines,
+		PromotePaths:       b.mgr.Promotion.PromotePathBoardLines,
 		OverlayMergePlan:   b.mgr.OverlayMergePlanFn(),
-		ActiveReservations: b.mgr.ActiveReservationBoardEntries,
+		ActiveReservations: b.mgr.Workers.Workspaces.ReservationEntries,
 	}); err != nil {
 		return fmt.Errorf("board tools: %w", err)
 	}
@@ -113,9 +115,10 @@ func (b boardWiring) wireBoardAndResearch() error {
 		}
 		return repoinfo.FormatOrientationBriefText(mrb.OrientationRoots()), nil
 	})
-	b.mgr.SetTurnLoads(b.turnLoads)
-	b.mgr.SetDecider(b.decider)
-	b.mgr.SetSkillBodyRenderer(b.toolRuntime.RenderSkillBody)
+	b.mgr.Loading.SetLedger(b.turnLoads)
+	b.mgr.Nudges.SetLedger(b.turnLoads)
+	b.mgr.Loading.SetDecider(b.decider)
+	b.mgr.Loading.SetSkillBodyRenderer(b.toolRuntime.RenderSkillBody)
 	b.webResearchRuntime, err = webresearch.WireRuntime()
 	if err != nil {
 		return fmt.Errorf("web research runtime: %w", err)
@@ -133,7 +136,7 @@ func (b boardWiring) wireBoardAndResearch() error {
 		if b.llmSvc != nil {
 			b.webWarmer.Plane = b.llmSvc.Utility
 		}
-		b.mgr.SetIndexWarmer(b.webWarmer)
+		b.mgr.Research.SetWarmer(b.webWarmer)
 		// Presence is evaluated for each warm cycle.
 		b.warmRunner = &webresearch.WarmRunner{
 			W: b.webWarmer, Roots: b.projectRootPaths, ProjectIDForRoot: b.projectIDForRoot, Repo: b.repoProvider,
@@ -149,10 +152,10 @@ func (b boardWiring) wireBoardAndResearch() error {
 		Rerank:   b.rerank,
 		Boundary: b.toolRuntime.Boundary,
 		SearchWarmHook: func(ctx context.Context, sessionID, toolCallID, query, projectDir string, hitURLs, residualURLs []string, strongHits, maxResults int, directParticipated bool) {
-			b.mgr.WarmIndexForSearch(ctx, sessionID, toolCallID, query, projectDir, hitURLs, residualURLs, strongHits, maxResults, directParticipated)
+			b.mgr.Research.Search(ctx, sessionID, toolCallID, query, projectDir, hitURLs, residualURLs, strongHits, maxResults, directParticipated)
 		},
 		FetchWarmHook: func(ctx context.Context, sessionID, toolCallID, pageURL, title, projectDir string) {
-			b.mgr.WarmIndexForFetch(ctx, sessionID, toolCallID, pageURL, title, projectDir)
+			b.mgr.Research.Fetch(ctx, sessionID, toolCallID, pageURL, title, projectDir)
 		},
 	}
 	if matcher, err := sessionWiring(b).loadSecretMatcher(); err != nil {
@@ -240,7 +243,7 @@ func (b boardWiring) projectIDForRoot(ctx context.Context, rootPath string) (str
 }
 
 func (b boardWiring) wireGroundingAndFindings() error {
-	b.mgr.SetRuleEngine(b.ruleEngine)
+	b.mgr.Guards.SetRules(b.ruleEngine)
 	if err := b.wireGroundingCoordinators(); err != nil {
 		return err
 	}
@@ -268,12 +271,12 @@ func (b boardWiring) wireGroundingCoordinators() error {
 	b.delegationMgr.Grounding = delegation.NewGroundingCoordinator(b.delegationStore, b.workerQueue, groundingGate, groundingCfg, groundingState, b.mgr)
 	b.delegationMgr.Grounding.InspectorCloseout = b.delegationMgr.InspectorCloseout
 	b.delegationMgr.Grounding.Events = b.eventPub
-	b.delegationMgr.Grounding.Pipeline = b.mgr.OARPipeline()
+	b.delegationMgr.Grounding.Pipeline = b.mgr.ToolPolicy.Pipeline
 	ambientGate := delegation.NewSimpleAmbientGroundingGate(groundingCfg)
 	ambientState := grounding.NewStateStore()
 	ambientCoord := delegation.NewAmbientGroundingCoordinator(b.delegationStore, b.workerQueue, ambientGate, groundingCfg, ambientState, b.mgr)
 	ambientCoord.Events = b.eventPub
-	ambientCoord.Pipeline = b.mgr.OARPipeline()
+	ambientCoord.Pipeline = b.mgr.ToolPolicy.Pipeline
 	b.mgr.SetGroundingHook(&delegation.ChainedGroundingCoordinator{
 		Delegation: b.delegationMgr.Grounding,
 		Ambient:    ambientCoord,
@@ -283,7 +286,7 @@ func (b boardWiring) wireGroundingCoordinators() error {
 		State:     grounding.NewStateStore(),
 		Ledger:    b.store,
 		RejectFmt: b.rejectFmt,
-		Nudger:    b.mgr,
+		Nudger:    b.mgr.Guidance,
 	}
 	return nil
 }
@@ -291,20 +294,20 @@ func (b boardWiring) wireGroundingCoordinators() error {
 func (b boardWiring) wireFindingAndProgressTools() error {
 	b.findingsStore = findings.NewSQLStore(b.db)
 	b.mgr.SetFindingsStore(b.findingsStore)
-	b.mgr.SetPeerRejectionFeed(session.NewPeerRejectionFeed())
+	b.mgr.SetPeerRejectionFeed(workeroutcomes.NewPeerRejectionFeed())
 	if err := native.RegisterRecordFindingTool(b.toolRuntime.Registry, reporttools.RecordFindingGates{
 		Grounding: b.groundingSvc,
 	}, b.findingsStore, b.rootSessionKey); err != nil {
 		return fmt.Errorf("record_finding tool: %w", err)
 	}
 	if err := native.RegisterSurfaceNoteTool(b.toolRuntime.Registry, reporttools.SurfaceNoteDeps{
-		Ledger: b.mgr.CloseoutEvidence(),
+		Ledger: b.mgr.Verification.Evidence,
 		Messages: func(ctx context.Context, sessionID string) ([]api.Message, error) {
 			return b.store.GetMessages(ctx, sessionID)
 		},
 		Friction: func(ctx context.Context, sessionID, code string) {
 			if b.mgr != nil {
-				b.mgr.RecordGroundingFriction(ctx, sessionID)
+				b.mgr.Runner.Closeouts.RecordGroundingFriction(ctx, sessionID)
 			}
 		},
 	}); err != nil {
@@ -373,7 +376,7 @@ func (b boardWiring) wireVisualAndRenderTools() error {
 	b.mgr.SetVisualStore(b.visualStore)
 	// Provider requests resolve image attachments from the root session's artifacts.
 	providerwire.SetVisualBytesResolver(func(sessionID, artifactID string) ([]byte, string, bool) {
-		root := session.RootSessionID(b.ctx, b.store, sessionID)
+		root := sessiontree.RootID(b.ctx, b.store, sessionID)
 		res := b.visualStore.Resolve(b.ctx, root, artifactID)
 		if !res.IsPresent() {
 			return nil, "", false
@@ -462,10 +465,9 @@ func (b boardWiring) wireDecisionAndCallTools() error {
 		return sess.WorkspacePath, nil
 	}}
 	b.callMgr = call.NewSQLManager(b.db, callLookup)
-	b.mgr.SetCallManager(b.callMgr)
-	b.mgr.SetWorkerTouchLedger(session.NewWorkerTouchLedger())
-	b.boardSnap.Touches = b.mgr
-	b.boardSnap.ActiveReservations = b.mgr.ActiveReservationBoardEntries
+	b.mgr.Workers.Workspaces.SetCalls(b.callMgr)
+	b.boardSnap.Touches = b.mgr.Workers.Workspaces.Touches
+	b.boardSnap.ActiveReservations = b.mgr.Workers.Workspaces.ReservationEntries
 
 	b.mgr.SetWorkerQueue(b.workerQueue)
 	b.mgr.SetSessionWorkerAbort(b.workerCancelSvc)
@@ -478,7 +480,7 @@ func (b boardWiring) wireDecisionAndCallTools() error {
 }
 
 func (b boardWiring) rootSessionKey(ctx context.Context, sessionID string) string {
-	return session.RootSessionID(ctx, b.store, sessionID)
+	return sessiontree.RootID(ctx, b.store, sessionID)
 }
 
 // wireApprovalRationaleAttacher records rationale after checkpoint creation.
@@ -502,7 +504,7 @@ func (b boardWiring) wireApprovalRationaleAttacher() {
 		enabledFn = perms.AIRationaleEnabled
 	}
 	attacher := toolhost.NewApprovalRationaleAttacher(toolhost.ApprovalRationaleDeps{
-		Messages:    b.mgr,
+		Messages:    b.mgr.Transcript,
 		Workers:     b.workerQueue,
 		Progress:    b.progressStore,
 		Root:        sessionRootResolver{store: b.store},
@@ -518,7 +520,7 @@ type sessionRootResolver struct {
 }
 
 func (r sessionRootResolver) RootSessionID(ctx context.Context, sessionID string) string {
-	return session.RootSessionID(ctx, r.store, sessionID)
+	return sessiontree.RootID(ctx, r.store, sessionID)
 }
 
 // Each project's primary root precedes its additional roots.

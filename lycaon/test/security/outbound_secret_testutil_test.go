@@ -138,7 +138,7 @@ func startPromptAsync(t *testing.T, h *wiring.Harness, sessionID, text string) <
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	t.Cleanup(func() {
-		h.SessionMgr.CancelInFlightPrompt(sessionID)
+		h.SessionMgr.Runner.Execution.Cancel(sessionID)
 		cancel()
 		select {
 		case <-done:
@@ -148,7 +148,7 @@ func startPromptAsync(t *testing.T, h *wiring.Harness, sessionID, text string) <
 	})
 	go func() {
 		defer close(done)
-		_, err := h.SessionMgr.Prompt(ctx, sessionID, text)
+		_, err := h.SessionMgr.Submissions.Prompt(ctx, sessionID, text)
 		done <- err
 	}()
 	return done
@@ -162,7 +162,7 @@ func awaitOutboundPrompt(t *testing.T, h *wiring.Harness, sessionID string, done
 	case <-time.After(testutil.Timeout(30 * time.Second)):
 		err := fmt.Errorf("outbound prompt did not finish after its approval was resolved")
 		dumpSessionFloorDebug(t, h, sessionID, err)
-		h.SessionMgr.CancelInFlightPrompt(sessionID)
+		h.SessionMgr.Runner.Execution.Cancel(sessionID)
 		return err
 	}
 }

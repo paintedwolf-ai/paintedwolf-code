@@ -24,14 +24,14 @@ func TestPathExplorerChildSchemaIsCommandFree(t *testing.T) {
 	dir := t.TempDir()
 	parent, err := h.CreateHarnessSession(t, api.CreateSessionRequest{}, dir)
 	testutil.FailErr(t, "create session", err)
-	child, err := h.SessionMgr.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{
+	child, err := h.SessionMgr.Workers.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{
 		AgentType: orchestration.ProfilePathExplorer,
 		Prompt:    "Survey Go files under src/",
 	})
 	testutil.FailErr(t, "SpawnChild", err)
 	prof, err := h.AgentRegistry.Get(orchestration.ProfilePathExplorer)
 	testutil.FailErr(t, "agents.Get", err)
-	policy := h.SessionMgr.PromptToolPolicy()
+	policy := h.SessionMgr.Guards.Policy()
 	var schema []string
 	for _, meta := range policy.ListForPrompt(ctx, child, prof.ToolProfile) {
 		schema = append(schema, meta.Name)

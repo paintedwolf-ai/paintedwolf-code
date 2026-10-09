@@ -4,12 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/promptresult"
 	"log/slog"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
-	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/coordinator"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/assembly"
@@ -23,17 +21,19 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance/feedback"
 	"github.com/lycaon/lycaon/internal/heldcall"
 	"github.com/lycaon/lycaon/internal/limits"
-	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
-	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/overlayplan"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/repoinfo"
 	"github.com/lycaon/lycaon/internal/scaffoldvars"
 	"github.com/lycaon/lycaon/internal/session/loopguard"
+	"github.com/lycaon/lycaon/internal/session/spendguard"
 	"github.com/lycaon/lycaon/internal/session/store"
-	"github.com/lycaon/lycaon/internal/session/workercompletion"
+	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
+	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolpolicy"
@@ -53,18 +53,7 @@ type DelegationLegLookup interface {
 func (m *Manager) SetDelegationLegLookup(store DelegationLegLookup) {
 	if m != nil {
 		m.delegations = store
-	}
-}
-
-func (m *Manager) SetProfileRuntimeRules(rules *toolpolicy.ProfileRuntimeRules) {
-	if m != nil {
-		m.profileRuntimeRules = rules
-	}
-}
-
-func (m *Manager) SetMessageStorageRedactor(redact func(ctx context.Context, msg api.Message) (api.Message, bool)) {
-	if m != nil {
-		m.redactMessageForStorage = redact
+		m.Closeout.SetDelegations(store)
 	}
 }
 
@@ -146,134 +135,149 @@ func (m *Manager) buildPromptLoopDeps() promptloop.PromptLoopDeps {
 	rt := m.ensureCoordinatorRuntime()
 	// CommitWorkerContext is bound by the runtime after these deps are built.
 	deps := promptloop.PromptLoopDeps{
-		Limits:                          m.effectiveLimits,
-		DataDir:                         m.dataDir,
-		CoordinatorSurfaceActivityLabel: surface.LoadCoordinatorSurfaceActivityLabel,
-		SetPromptTurnSurface: func(sessionID, surfaceID string) {
-			rt.Assembly().SetTurnSurfaceID(sessionID, surfaceID)
+		Context: promptloop.ContextDeps{
+			Limits:                          m.Limits.Effective,
+			CoordinatorSurfaceActivityLabel: surface.LoadCoordinatorSurfaceActivityLabel,
+			SetPromptTurnSurface: func(sessionID, surfaceID string) {
+				rt.Assembly().SetTurnSurfaceID(sessionID, surfaceID)
+			},
+			PromptTurnSurface: func(sessionID string) string {
+				return rt.PromptTurnSurfaceID(sessionID)
+			},
+			Tools: m.tools,
+			RootSessionID: func(ctx context.Context, sessionID string) string {
+				return sessiontree.RootID(ctx, m.store, sessionID)
+			},
+			Policy: m.Guards.Policy(),
+			CoordinatorPostureRules: func(ctx context.Context, sess *api.Session) ([]string, error) {
+				if sess == nil || sess.Posture == "" {
+					return nil, nil
+				}
+				postures, err := m.Profiles.EffectivePostures(ctx, sess)
+				if err != nil || postures == nil {
+					return nil, err
+				}
+				paths, err := postures.RulesPaths(sess.Posture)
+				if err != nil {
+					return nil, err
+				}
+				return append([]string(nil), paths...), nil
+			},
+			ProjectRootCount: func(ctx context.Context, sess *api.Session) int {
+				_, count, _ := m.Workspace.PromptRootRows(ctx, sess)
+				return count
+			},
+			OverlayRootPaths: func(ctx context.Context, sess *api.Session) []string {
+				return m.Workspace.SettingsRoots(ctx, sess)
+			},
+			LoadedTools:  m.Loading.LoadedTools,
+			ToolObserved: m.Loading.ObserveToolCall,
+			LiveResources: func(sessionID string) toolcontract.ResourcePresence {
+				presence := toolcontract.ResourcePresence{}
+				if m != nil && m.Processes.Background != nil {
+					presence.CommandJobs = m.Processes.Background.HasPipelineHandles(sessionID)
+					presence.Terminals = m.Processes.Background.CountLivePTYs(sessionID) > 0
+				}
+				if m != nil && m.pageRegistry != nil {
+					presence.Pages = m.pageRegistry.CountLive(sessionID) > 0
+				}
+				if m != nil {
+					presence.HeldCalls = m.Processes.Held.HasHandles(sessionID)
+				}
+				return presence
+			},
+			BuildMessages:         m.buildCompletionMessages,
+			WebSearchEnabled:      m.webSearchEnabled,
+			CoordinatorFrame:      m.coordinatorFrame,
+			ImplementSessionState: m.Workers.State.ForSession,
 		},
-		PromptTurnSurface: func(sessionID string) string {
-			return rt.PromptTurnSurfaceID(sessionID)
+		Tools: promptloop.ToolsDeps{
+			DataDir:       m.dataDir,
+			Invocations:   m.invocations,
+			VisualStore:   m.visual,
+			AgentPresence: m.agentPresence,
+			DesignateProjectCover: func(ctx context.Context, projectID, rootSessionID, artifactID string) error {
+				if m.visual == nil || m.projects == nil {
+					return nil
+				}
+				err := visual.DesignateCover(ctx, m.visual, project.CoverBinding{Registry: m.projects},
+					func(ctx context.Context, sessionID string) (string, error) {
+						sess, err := m.store.Get(ctx, sessionID)
+						if err != nil {
+							return "", err
+						}
+						return sess.ProjectID, nil
+					},
+					visual.DesignateRequest{
+						ProjectID:     projectID,
+						RootSessionID: rootSessionID,
+						ArtifactID:    artifactID,
+					},
+				)
+				if err == nil {
+					m.Naming.PublishProject(ctx, projectID)
+				}
+				return err
+			},
+			HeldCalls:     m.Processes,
+			BlockPlane:    &tools.BlockPlane{Pipeline: m.ToolPolicy.Pipeline, Renderer: m.Feedback.Renderer()},
+			BeforeToolRun: m.Guards.BeforeTool,
+			AfterToolRun: func(ctx context.Context, sess *api.Session, tool string, args map[string]any, output string, succeeded bool, out *tools.ToolInvocationOut) string {
+				return m.afterPromptLoopToolRun(ctx, sess, tool, args, output, succeeded, out)
+			},
+			EnrichToolOutput: m.enrichPromptLoopToolOutput,
 		},
-		ReconcileCoordinatorBatch: func(ctx context.Context, sessionID string) {
-			m.reconcileCoordinatorBatchFromLedger(ctx, sessionID)
+		Control: promptloop.ControlDeps{
+			ReconcileCoordinatorBatch: func(ctx context.Context, sessionID string) {
+				m.Batch.Reconcile(ctx, sessionID)
+			},
 		},
-		TakeUserSend:  m.takeQueuedSend,
-		LLM:           m.llm,
-		LLMService:    m.llmSvc,
-		Cost:          m.cost,
-		Events:        m.events,
-		Tools:         m.tools,
-		Invocations:   m.invocations,
-		VisualStore:   m.visual,
-		AgentPresence: m.agentPresence,
-		DesignateProjectCover: func(ctx context.Context, projectID, rootSessionID, artifactID string) error {
-			if m.visual == nil || m.projects == nil {
-				return nil
-			}
-			err := visual.DesignateCover(ctx, m.visual, project.CoverBinding{Registry: m.projects},
-				func(ctx context.Context, sessionID string) (string, error) {
-					sess, err := m.store.Get(ctx, sessionID)
-					if err != nil {
-						return "", err
-					}
-					return sess.ProjectID, nil
-				},
-				visual.DesignateRequest{
-					ProjectID:     projectID,
-					RootSessionID: rootSessionID,
-					ArtifactID:    artifactID,
-				},
-			)
-			if err == nil {
-				m.publishProjectUpdated(ctx, projectID)
-			}
-			return err
+		Inbox: promptloop.InboxDeps{
+			TakeUserSend:       m.Submissions.TakeSend,
+			TakePolicyFeedback: m.Guidance.TakePolicy,
+			TakePhaseGuidance:  m.Guidance.TakePhase,
 		},
-		RootSessionID: func(ctx context.Context, sessionID string) string {
-			return RootSessionID(ctx, m.store, sessionID)
+		Model: promptloop.ModelDeps{
+			LLM:        m.llm,
+			LLMService: m.llmSvc,
+			Cost:       m.cost,
 		},
-		Policy: m.buildToolpolicyEngine(),
-		CoordinatorPostureRules: func(ctx context.Context, sess *api.Session) ([]string, error) {
-			if sess == nil || sess.Posture == "" {
-				return nil, nil
-			}
-			postures, err := m.effectivePostures(ctx, sess)
-			if err != nil || postures == nil {
-				return nil, err
-			}
-			paths, err := postures.RulesPaths(sess.Posture)
-			if err != nil {
-				return nil, err
-			}
-			return append([]string(nil), paths...), nil
+		Projection: promptloop.ProjectionDeps{
+			Events:                  m.events,
+			RedactMessageForStorage: m.Transcript.Redact,
+			AppendMessages:          m.Transcript.Append,
+			Streams:                 m.Transcript.Streams,
 		},
-		ProjectRootCount: func(ctx context.Context, sess *api.Session) int {
-			_, count, _ := m.workspaceRootsForPrompt(ctx, sess)
-			return count
+		Nudges: promptloop.NudgesDeps{
+			DoomLoop: m.doomLoop,
+			FormatDoomLoopReject: func(ctx context.Context, sessionID, tool string, args map[string]any, count int, repeatedCode string) (*guidance.Refusal, error) {
+				return m.ToolPolicy.FormatDoomLoopReject(ctx, sessionID, tool, args, count, repeatedCode)
+			},
+			EscalateRepeatedCode: func(ctx context.Context, sessionID, tool string, original *guidance.Refusal) *guidance.Refusal {
+				total := m.ToolPolicy.CodeRejectResponses(sessionID, tool, original.Code())
+				if total < loopguard.DoomLoopMaxCodeRepeats {
+					return nil
+				}
+				return m.ToolPolicy.EscalateRepeatedCode(ctx, sessionID, tool, original, total)
+			},
 		},
-		OverlayRootPaths: func(ctx context.Context, sess *api.Session) []string {
-			return m.overlayRootPaths(ctx, sess)
+		Closeout: promptloop.CloseoutDeps{
+			RejectFmt:  m.rejectFmt,
+			HintConfig: m.workflowHints,
+			EvaluateContentAnchor: func(ctx context.Context, sess *api.Session, anchor string, segments []oar.ContentSegment, tool string, args map[string]any) (*guidance.Refusal, bool, string, bool) {
+				reject, blocked, content, transformed, err := m.ToolPolicy.ContentBlock(ctx, sess, anchor, segments, tool, args)
+				if err != nil {
+					return guidance.NewRefusal("", err.Error()), true, "", false
+				}
+				return reject, blocked, content, transformed
+			},
+			EvaluateCloseoutBlock: func(ctx context.Context, sess *api.Session, gc *oar.GuardContext) (*oar.Decision, error) {
+				return m.ToolPolicy.CloseoutBlock(ctx, sess, gc)
+			},
 		},
-		LoadedTools:  m.LoadedTools,
-		ToolObserved: m.observeToolCall,
-		LiveResources: func(sessionID string) toolcontract.ResourcePresence {
-			presence := toolcontract.ResourcePresence{}
-			if m != nil && m.bgRegistry != nil {
-				presence.CommandJobs = m.bgRegistry.HasPipelineHandles(sessionID)
-				presence.Terminals = m.bgRegistry.CountLivePTYs(sessionID) > 0
-			}
-			if m != nil && m.pageRegistry != nil {
-				presence.Pages = m.pageRegistry.CountLive(sessionID) > 0
-			}
-			if m != nil {
-				presence.HeldCalls = m.heldCalls.HasHandles(sessionID)
-			}
-			return presence
-		},
-		HeldCalls:  heldCallPort{m: m},
-		DoomLoop:   m.doomLoop,
-		RejectFmt:  m.rejectFmt,
-		BlockPlane: &tools.BlockPlane{Pipeline: m.oarPipeline, Renderer: m.oarRenderer},
-		HintConfig: m.workflowHints,
-		FormatDoomLoopReject: func(ctx context.Context, sessionID, tool string, args map[string]any, count int, repeatedCode string) (*guidance.Refusal, error) {
-			return m.formatDoomLoopReject(ctx, sessionID, tool, args, count, repeatedCode)
-		},
-		EscalateRepeatedCode: func(ctx context.Context, sessionID, tool string, original *guidance.Refusal) *guidance.Refusal {
-			total := m.CodeRejectResponses(sessionID, tool, original.Code())
-			if total < loopguard.DoomLoopMaxCodeRepeats {
-				return nil
-			}
-			return m.escalateRepeatedCode(ctx, sessionID, tool, original, total)
-		},
-		EvaluateContentAnchor: func(ctx context.Context, sess *api.Session, anchor string, segments []oar.ContentSegment, tool string, args map[string]any) (*guidance.Refusal, bool, string, bool) {
-			reject, blocked, content, transformed, err := m.tryOARContentBlock(ctx, sess, anchor, segments, tool, args)
-			if err != nil {
-				return guidance.NewRefusal("", err.Error()), true, "", false
-			}
-			return reject, blocked, content, transformed
-		},
-		EvaluateCloseoutBlock: func(ctx context.Context, sess *api.Session, gc *oar.GuardContext) (*oar.Decision, error) {
-			return m.evaluateOARCloseoutBlock(ctx, sess, gc)
-		},
-		BeforeToolRun:      m.beforePromptLoopToolRun,
-		TakePolicyFeedback: m.takePolicyFeedback,
-		TakePhaseGuidance:  m.takePhaseGuidance,
-		AfterToolRun: func(ctx context.Context, sess *api.Session, tool string, args map[string]any, output string, succeeded bool, out *tools.ToolInvocationOut) string {
-			return m.afterPromptLoopToolRun(ctx, sess, tool, args, output, succeeded, out)
-		},
-		EnrichToolOutput:        m.enrichPromptLoopToolOutput,
-		BuildMessages:           m.buildCompletionMessages,
-		ConfigRoot:              configlayout.FindModuleRoot(),
-		WebSearchEnabled:        m.webSearchEnabled,
-		CoordinatorFrame:        m.coordinatorFrame,
-		ImplementSessionState:   m.BuildImplementSessionState,
-		RedactMessageForStorage: m.redactMessageForStorage,
-		AppendMessages:          m.appendMessages,
-		Streams:                 m.Streams(),
 	}
 	if m.prompts != nil {
-		deps.ToolProcedures = m.renderToolProcedures
+		deps.Context.ToolProcedures = m.renderToolProcedures
 	}
 	m.bindPromptLoopRuntimeDeps(&deps)
 	m.bindPromptLoopWorkerDeps(&deps)
@@ -282,98 +286,97 @@ func (m *Manager) buildPromptLoopDeps() promptloop.PromptLoopDeps {
 }
 
 func (m *Manager) bindPromptLoopRuntimeDeps(deps *promptloop.PromptLoopDeps) {
-	deps.CheckSpendCeiling = func(ctx context.Context, sessionID string, sess *api.Session) (promptloop.SpendCeilingCheck, error) {
-		st, err := m.spendCeilingState(ctx, sessionID, sess)
+	deps.Nudges.CheckSpendCeiling = func(ctx context.Context, sessionID string, sess *api.Session) (promptloop.SpendCeilingCheck, error) {
+		st, err := m.Runner.Spend.State(ctx, sessionID, sess)
 		if err != nil {
 			slog.WarnContext(ctx, "check spend ceiling", "session_id", sessionID, "error", err)
 			return promptloop.SpendCeilingCheck{}, nil
 		}
 		if st.Reached {
-			return promptloop.SpendCeilingCheck{SoftStop: st.SoftStop}, st.reached()
+			return promptloop.SpendCeilingCheck{SoftStop: st.SoftStop}, st.ReachedError()
 		}
 		return promptloop.SpendCeilingCheck{
 			Runway: promptloop.SpendRunway{Low: st.Low, CeilingUSD: st.CeilingUSD},
 		}, nil
 	}
-	deps.IsSpendCeiling = func(err error) bool { return errors.Is(err, ErrSessionSpendCeiling) }
-	deps.AssertRunnable = m.assertWorkflowRunnable
-	deps.RefreshToolContext = func(ctx context.Context, sess *api.Session, machine inject.Machine) (tools.ToolContext, error) {
+	deps.Nudges.IsSpendCeiling = func(err error) bool { return errors.Is(err, spendguard.ErrCeiling) }
+	deps.Control.AssertRunnable = m.assertWorkflowRunnable
+	deps.Context.RefreshToolContext = func(ctx context.Context, sess *api.Session, machine inject.Machine) (tools.ToolContext, error) {
 		profileID := strings.TrimSpace(machine.ProfileID)
 		if profileID == "" {
 			var err error
-			profileID, err = m.promptToolProfile(ctx, sess)
+			profileID, err = m.Profiles.PromptToolProfile(ctx, sess)
 			if err != nil {
 				return tools.ToolContext{}, err
 			}
 		}
-		tctx, err := m.buildToolContext(ctx, sess, profileID, machine)
+		tctx, err := m.ToolContext.Build(ctx, sess, profileID, machine)
 		if err != nil {
 			return tools.ToolContext{}, err
 		}
-		return m.EnrichWorkerToolContext(ctx, sess, tctx)
+		return m.Workers.Workspaces.Enrich(ctx, sess, tctx)
 	}
-	deps.TurnCloseoutNudge = m.turnCloseoutNudge
-	deps.SecretWithheldNudge = m.secretWithheldNudge
-	deps.IterationRunwayNudge = m.iterationRunwayNudge
-	deps.WorkerBudgetRaisedNudge = m.workerBudgetAnswerNudge(anchor.WorkerBudgetRaised)
-	deps.WorkerBudgetDeclinedNudge = m.workerBudgetAnswerNudge(anchor.WorkerBudgetDeclined)
-	deps.WorkerBudgetAnswerWait = spawn.WorkerBudgetAnswerWait
-	deps.SurveyStreakNudge = m.surveyStreakNudge
-	deps.SpendRunwayNudge = m.spendRunwayNudge
-	deps.SpendSoftStopNudge = m.spendSoftStopNudge
-	deps.WorkerGracefulCancelPending = m.WorkerGracefulCancelPending
-	deps.OnToolReject = func(ctx context.Context, sessionID, toolCallID, code, content string, facts guidance.ToolResultFacts) {
+	deps.Closeout.TurnCloseoutNudge = m.Nudges.Closeout
+	deps.Nudges.SecretWithheldNudge = m.Nudges.SecretWithheld
+	deps.Closeout.IterationRunwayNudge = m.Nudges.IterationRunway
+	deps.Nudges.WorkerBudgetRaisedNudge = m.Nudges.BudgetAnswer(anchor.WorkerBudgetRaised)
+	deps.Nudges.WorkerBudgetDeclinedNudge = m.Nudges.BudgetAnswer(anchor.WorkerBudgetDeclined)
+	deps.Nudges.WorkerBudgetAnswerWait = spawn.WorkerBudgetAnswerWait
+	deps.Nudges.SurveyStreakNudge = m.Nudges.SurveyStreak
+	deps.Nudges.SpendRunwayNudge = m.Nudges.SpendRunway
+	deps.Nudges.SpendSoftStopNudge = m.Nudges.SpendSoftStop
+	deps.Control.WorkerGracefulCancelPending = m.Workers.Cancel.Pending
+	deps.Projection.OnToolReject = func(ctx context.Context, sessionID, toolCallID, code, content string, facts guidance.ToolResultFacts) {
 		if m != nil && m.planToolStash != nil {
 			m.planToolStash.Put(sessionID, toolCallID, code, content)
 		}
 		if m != nil {
-			m.recordPeerToolReject(ctx, sessionID, code, content, facts)
+			m.Workers.Rejections.RecordForChild(ctx, sessionID, code, content, facts)
 		}
 	}
-	deps.AnnouncePendingToolAsk = func(ctx context.Context, sessionID string) {
+	deps.Projection.AnnouncePendingToolAsk = func(ctx context.Context, sessionID string) {
 		if m != nil && m.workflows != nil {
 			m.workflows.AnnouncePendingAsk(ctx, sessionID)
 		}
 	}
-	deps.HasActiveWorkflow = m.hasActiveWorkflowRun
-	deps.HumanApprovalAwaiting = func(ctx context.Context, sessionID string) bool {
+	deps.Control.HumanApprovalAwaiting = func(ctx context.Context, sessionID string) bool {
 		if m == nil || m.loopWorkflowSource == nil {
 			return false
 		}
 		awaiting, err := m.loopWorkflowSource.HumanApprovalAwaiting(ctx, sessionID)
 		return err == nil && awaiting
 	}
-	deps.HostObligationHeld = func(ctx context.Context, sessionID string) bool {
+	deps.Control.HostObligationHeld = func(ctx context.Context, sessionID string) bool {
 		if m == nil || m.loopWorkflowSource == nil {
 			return false
 		}
 		held, err := m.loopWorkflowSource.HostObligationHeld(ctx, sessionID)
 		return err == nil && held
 	}
-	deps.ParkBlockedLiveCommands = m.parkBlockedLiveCommands
-	deps.BeforeFinishNoToolTurn = m.beforePromptLoopFinish
-	deps.OnGroundedSynthesisAccepted = func(ctx context.Context, _ *api.Session, sessionID string) {
-		m.acceptCoordinatorGroundedSynthesis(ctx, sessionID)
+	deps.Control.ParkBlockedLiveCommands = m.parkBlockedLiveCommands
+	deps.Closeout.BeforeFinishNoToolTurn = m.Guards.BeforeFinish
+	deps.Closeout.OnGroundedSynthesisAccepted = func(ctx context.Context, _ *api.Session, sessionID string) {
+		m.Batch.AcceptSynthesis(ctx, sessionID)
 	}
-	deps.ProseCitationGrounding = func(ctx context.Context, sess *api.Session, history []api.Message, _ string, prose, surfaceID string) *api.CitationGrounding {
+	deps.Closeout.ProseCitationGrounding = func(ctx context.Context, sess *api.Session, history []api.Message, _ string, prose, surfaceID string) *api.CitationGrounding {
 		if m == nil || sess == nil || sess.IsWorkerChild() {
 			return nil
 		}
-		roots, err := m.sessionCitationRoots(ctx, sess)
+		roots, err := m.Closeout.CitationRoots(ctx, sess)
 		if err != nil {
 			return nil
 		}
-		grounding, err := guard.BuildCoordinatorProseCitationGrounding(ctx, m.CloseoutEvidence(), sess, history, prose, surfaceID, roots)
+		grounding, err := guard.BuildCoordinatorProseCitationGrounding(ctx, m.Verification.Evidence, sess, history, prose, surfaceID, roots)
 		if err != nil {
 			return nil
 		}
 		return grounding
 	}
-	deps.CommitEvidenceToolResult = func(ctx context.Context, sessionID string, sess *api.Session, toolName string, args map[string]any, content, artifactID string) (string, string, error) {
+	deps.Tools.CommitEvidenceToolResult = func(ctx context.Context, sessionID string, sess *api.Session, toolName string, args map[string]any, content, artifactID string) (string, string, error) {
 		if m == nil || sess == nil {
 			return "", content, nil
 		}
-		projectDir, err := m.sessionActiveRootPath(ctx, sess)
+		projectDir, err := m.Workspace.ActivePath(ctx, sess)
 		if err != nil {
 			return "", content, err
 		}
@@ -385,58 +388,53 @@ func (m *Manager) bindPromptLoopRuntimeDeps(deps *promptloop.PromptLoopDeps) {
 }
 
 func (m *Manager) bindPromptLoopWorkerDeps(deps *promptloop.PromptLoopDeps) {
-	deps.RecordSourceRunEvidence = m.recordSourceRunEvidence
-	deps.ConfirmVerifyResult = m.confirmVerifyResult
-	deps.PublishWorkerProgress = m.publishWorkerProgress
-	deps.WorkerJob = m.workerJob
-	deps.UpdateMessage = func(ctx context.Context, sessionID, messageID string, msg api.Message) error {
+	deps.Tools.RecordSourceRunEvidence = m.Verification.RecordSourceRunEvidence
+	deps.Tools.ConfirmVerifyResult = m.Verification.ConfirmVerifyResult
+	deps.Nudges.PublishWorkerProgress = m.publishWorkerProgress
+	deps.Nudges.WorkerJob = m.workerJob
+	deps.Projection.UpdateMessage = func(ctx context.Context, sessionID, messageID string, msg api.Message) error {
 		if m == nil {
 			return fmt.Errorf("session store not configured")
 		}
-		return m.updateMessage(ctx, sessionID, messageID, msg)
+		return m.Transcript.Update(ctx, sessionID, messageID, msg)
 	}
-	deps.ProjectLiveModelOutput = func(ctx context.Context, out store.LiveModelOutput) error {
-		if m == nil || m.store == nil {
-			return fmt.Errorf("session store not configured")
-		}
-		return m.store.ProjectLiveModelOutput(ctx, out)
-	}
-	deps.AdmitModelResponse = m.store.AdmitModelResponse
-	deps.SettleModelOutput = func(ctx context.Context, out store.ModelOutput) (store.ModelOutput, error) {
+
+	deps.Projection.AdmitModelResponse = m.store.AdmitModelResponse
+	deps.Projection.SettleModelOutput = func(ctx context.Context, out store.ModelOutput) (store.ModelOutput, error) {
 		if m == nil || m.store == nil {
 			return store.ModelOutput{}, fmt.Errorf("session store not configured")
 		}
 		return m.store.SettleModelOutput(ctx, out)
 	}
-	deps.MarkModelOutputProjected = func(ctx context.Context, outputID string) error {
+	deps.Projection.MarkModelOutputProjected = func(ctx context.Context, outputID string) error {
 		if m == nil || m.store == nil {
 			return fmt.Errorf("session store not configured")
 		}
 		return m.store.MarkModelOutputProjected(ctx, outputID)
 	}
-	deps.CheckpointTurn = func(ctx context.Context, turnID, attemptID string, phase store.TurnPhase, checkpointJSON string) error {
+	deps.Projection.CheckpointTurn = func(ctx context.Context, turnID, attemptID string, phase store.TurnPhase, checkpointJSON string) error {
 		if m == nil || m.store == nil {
 			return fmt.Errorf("session store not configured")
 		}
 		return m.store.CheckpointTurn(ctx, turnID, attemptID, phase, checkpointJSON)
 	}
-	deps.AppendDraftVersion = func(ctx context.Context, sessionID, slotID, body, outcomeCode string) (int, error) {
+	deps.Projection.AppendDraftVersion = func(ctx context.Context, sessionID, slotID, body, outcomeCode string) (int, error) {
 		if m == nil {
 			return 0, fmt.Errorf("session store not configured")
 		}
 		return m.store.AppendDraftVersion(ctx, sessionID, slotID, body, outcomeCode)
 	}
-	deps.CountDraftVersions = func(ctx context.Context, sessionID, slotID string) (int, error) {
+	deps.Projection.CountDraftVersions = func(ctx context.Context, sessionID, slotID string) (int, error) {
 		if m == nil {
 			return 0, fmt.Errorf("session store not configured")
 		}
 		return m.store.CountDraftVersions(ctx, sessionID, slotID)
 	}
-	deps.InFlightWorkerRosterNote = func(ctx context.Context, sess *api.Session) string {
+	deps.Tools.InFlightWorkerRosterNote = func(ctx context.Context, sess *api.Session) string {
 		if m == nil || m.workerQueue == nil || sess == nil {
 			return ""
 		}
-		active, err := ParentSessionInFlightWorkers(ctx, m.workerQueue, sess.ProjectID, sess.ID)
+		active, err := workeroutcomes.ParentSessionInFlightWorkers(ctx, m.workerQueue, sess.ProjectID, sess.ID)
 		if err != nil || len(active) == 0 {
 			return ""
 		}
@@ -449,118 +447,67 @@ func (m *Manager) bindPromptLoopWorkerDeps(deps *promptloop.PromptLoopDeps) {
 }
 
 func (m *Manager) bindPromptLoopCompactionDeps(deps *promptloop.PromptLoopDeps) {
-	deps.CompactOversizedToolResults = func(ctx context.Context, sessionID string, sess *api.Session) error {
+	deps.Tools.CompactOversizedToolResults = func(ctx context.Context, sessionID string, sess *api.Session) error {
 		if m == nil {
 			return nil
 		}
-		return m.compactOversizedToolResultsInSession(ctx, sess)
+		return m.Runner.History.ScheduleChunks(ctx, sess)
 	}
-	deps.CompactToolWire = func(ctx context.Context, sess *api.Session, toolName, content string, opts compaction.CompactToolWireOpts) (string, *api.CompactedChunkMeta) {
+	deps.Tools.CompactToolWire = func(ctx context.Context, sess *api.Session, toolName, content string, opts compaction.CompactToolWireOpts) (string, *api.CompactedChunkMeta) {
 		if m == nil {
 			return content, nil
 		}
-		return m.prepareToolWireContent(ctx, sess, toolName, content, opts)
+		return m.Runner.History.ToolWire(ctx, sess, toolName, content, opts)
 	}
-	deps.CompactionConfig = m.liveCompactionConfigFor
-	deps.MCPAlwaysLoad = func(ctx context.Context, sess *api.Session) map[string]bool {
-		if m.mcpRuntime == nil {
+	deps.Model.CompactionConfig = m.Limits.Compaction
+	deps.Context.MCPAlwaysLoad = func(ctx context.Context, sess *api.Session) map[string]bool {
+		if m.ToolPolicy.MCP == nil {
 			return nil
 		}
-		return m.mcpRuntime.ToolLoadingModes(ctx, m.overlayProjectDir(ctx, sess))
+		return m.ToolPolicy.MCP.ToolLoadingModes(ctx, m.Workspace.SettingsPath(ctx, sess))
 	}
-	deps.RecordCompactionTokenObservation = func(sessionID string, reportedPromptTokens, transcriptEstimate int) {
+	deps.Model.RecordCompactionTokenObservation = func(sessionID string, reportedPromptTokens, transcriptEstimate int) {
 		if m != nil {
-			m.RecordCompactionTokenObservation(sessionID, reportedPromptTokens, transcriptEstimate)
+			m.Runner.History.ObserveTokens(sessionID, reportedPromptTokens, transcriptEstimate)
 		}
 	}
-	deps.CompactionTokenCalibration = func(sessionID string) compaction.PromptTokenCalibration {
+	deps.Model.CompactionTokenCalibration = func(sessionID string) compaction.PromptTokenCalibration {
 		if m == nil {
 			return compaction.PromptTokenCalibration{}
 		}
-		return m.CompactionTokenCalibration(sessionID)
+		return m.Runner.History.Calibration(sessionID)
 	}
-	deps.ReloadHistory = func(ctx context.Context, sessionID string, sess *api.Session, surfaceID string) ([]api.Message, error) {
+	deps.Tools.ReloadHistory = func(ctx context.Context, sessionID string, sess *api.Session, surfaceID string) ([]api.Message, error) {
 		if m == nil {
 			return nil, fmt.Errorf("session store not configured")
 		}
-		return m.reloadAssembledHistory(ctx, sessionID, sess, surfaceID)
+		return m.Runner.History.Reload(ctx, sessionID, sess, surfaceID)
 	}
-	deps.EvidenceLedger = m.CloseoutEvidence()
-	deps.MaxCloseoutCitationGroundingRetries = limits.DefaultCitationGroundingRetries
-	deps.RenderHostKick = m.renderWorkerKick
-	deps.BeginCloseoutIntent = m.beginCloseoutIntent
-	deps.RecordGroundingFriction = m.RecordGroundingFriction
-	deps.NoteCloseoutGroundingReject = m.NoteCloseoutGroundingReject
-	deps.NoteCoordinatorToolTurn = m.NoteCoordinatorToolTurn
-	deps.CloseoutStallState = m.CloseoutStallState
-	deps.ClearCloseoutStall = m.ClearCloseoutStall
+	deps.Closeout.EvidenceLedger = m.Verification.Evidence
+	deps.Closeout.MaxCloseoutCitationGroundingRetries = limits.DefaultCitationGroundingRetries
+	deps.Closeout.RenderHostKick = m.Workers.RenderKick
+	deps.Closeout.BeginCloseoutIntent = m.Runner.Closeouts.BeginIntent
+	deps.Closeout.RecordGroundingFriction = m.Runner.Closeouts.RecordGroundingFriction
+	deps.Closeout.NoteCloseoutGroundingReject = m.Runner.Closeouts.NoteCloseoutGroundingReject
+	deps.Closeout.NoteCoordinatorToolTurn = m.Runner.Closeouts.NoteCoordinatorToolTurn
+	deps.Closeout.CloseoutStallState = m.Runner.Closeouts.CloseoutStallState
+	deps.Closeout.ClearCloseoutStall = m.Runner.Closeouts.ClearCloseoutStall
 	if m.reportDocuments != nil {
-		deps.CheckRunReportDocument = m.reportDocuments.CheckRunReportDocument
+		deps.Closeout.CheckRunReportDocument = m.reportDocuments.CheckRunReportDocument
 	}
-	deps.AssembleLedgerCloseout = func(ctx context.Context, sessionID, surfaceID string, forcedBy []string, draftedContent string, retryCount int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
-		return m.assembleLedgerCloseout(ctx, sessionID, surfaceID, forcedBy, draftedContent, retryCount)
+	deps.Closeout.AssembleLedgerCloseout = func(ctx context.Context, sessionID, surfaceID string, forcedBy []string, draftedContent string, retryCount int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
+		return m.Closeout.Assemble(ctx, sessionID, surfaceID, forcedBy, draftedContent, retryCount)
 	}
-	deps.CitationRoots = func(ctx context.Context, sess *api.Session) evidence.CitationRoots {
+	deps.Closeout.CitationRoots = func(ctx context.Context, sess *api.Session) evidence.CitationRoots {
 		if m == nil || sess == nil {
 			return evidence.CitationRoots{}
 		}
-		roots, err := m.sessionCitationRoots(ctx, sess)
+		roots, err := m.Closeout.CitationRoots(ctx, sess)
 		if err != nil {
 			return evidence.CitationRoots{}
 		}
 		return roots
 	}
-}
-
-func (m *Manager) beforePromptLoopToolRun(
-	ctx context.Context,
-	sess *api.Session,
-	history []api.Message,
-	_ string,
-	tool string,
-	args map[string]any,
-) (string, bool, error) {
-	if reject, blocked, err := m.tryOARBlock(ctx, oar.AnchorSessionPreInvoke, sess, tool, args, nil); blocked || err != nil {
-		if reject != nil {
-			return "", false, reject
-		}
-		return "", blocked, err
-	}
-	implState := m.BuildImplementSessionState(ctx, sess)
-	surfaceID := m.ensureCoordinatorRuntime().PromptTurnSurfaceID(sess.ID)
-	root := RootSessionID(ctx, m.store, sess.ID)
-	currentProgress := ""
-	if m.progress != nil {
-		currentProgress = m.progress.Get(ctx, root)
-	}
-	reviewLoopActive := m.workflows != nil && m.workflows.ActivePhaseHasReviewLoop(ctx, sess.ID)
-	closureBaseline, closureArmed := m.progressClosureLatch(root)
-	guardDeps := m.workerCycleGuardDeps()
-	declaredVerify := ""
-	if tool == "verify" && m.verifyConfig != nil {
-		declaredVerify = m.verifyConfig.VerifyTestCommand(m.overlayProjectDir(ctx, sess))
-		guard.PrepareVerifyCall(tool, declaredVerify, args)
-	}
-	if reject, skip, err := m.tryOARBlock(ctx, oar.AnchorCoordinatorPreInvoke, sess, tool, args, func(gc *oar.GuardContext) error {
-		guard.ObserveTaskWhilePendingUserInput(sess, implState, tool, gc)
-		guard.ObserveCoordinatorWorkerBranchPath(sess, tool, args, gc)
-		guard.ObserveProgressMissingBeforeDispatch(sess, currentProgress, tool, reviewLoopActive, gc)
-		guard.ObserveProgressItemNotClosedBeforeDispatch(sess, currentProgress, tool, closureBaseline, closureArmed, gc)
-		guard.ObserveCoordinatorBatchPhaseTool(sess, tool, implState, m.coordinatorBatchTurnGuard(sess.ID), gc)
-		guard.ObserveCoordinatorSynthesisWrapupTool(surfaceID, tool, tools.ToolOffered(ctx, tool), gc)
-		guard.ObserveVerifyCommandUndeclared(tool, declaredVerify, args, gc)
-		guard.ObserveProgressReconcileOnSynthesis(surfaceID, currentProgress, args, gc)
-		return ObserveCoordinatorTaskInFlight(ctx, guardDeps, sess, tool, args, gc)
-	}); skip || err != nil {
-		if reject != nil {
-			return "", false, reject
-		}
-		return "", skip, err
-	}
-	if closureArmed {
-		m.clearProgressClosureIfSatisfied(root, currentProgress, closureBaseline)
-	}
-	return "", false, nil
 }
 
 func (m *Manager) afterPromptLoopToolRun(
@@ -576,7 +523,7 @@ func (m *Manager) afterPromptLoopToolRun(
 	if tool == "task" && succeeded && out != nil && out.Dispatch != nil {
 		if jobID := strings.TrimSpace(out.Dispatch.WorkerID); jobID != "" {
 			agentType, _ := args["agent_type"].(string)
-			m.maybeAdvanceCoordinatorBatchOnTaskEnqueued(ctx, sess.ID, agentType)
+			m.Batch.TaskEnqueued(ctx, sess.ID, agentType)
 			out.Facts = out.Facts.WithFeedback("BANNER_TASK_QUEUED", map[string]any{
 				"agent_type": agentType, "job_id": jobID, "max_in_flight": spawn.MaxInFlightTaskWorkers,
 			}, &api.FeedbackSubject{Kind: "worker", ID: jobID})
@@ -601,9 +548,9 @@ func (m *Manager) enrichPromptLoopToolOutput(
 	if m == nil || sess == nil {
 		return output, facts
 	}
-	if m.oarPipeline != nil && m.oarPipeline.AnchorEnforced(oar.AnchorToolPost) {
+	if m.ToolPolicy.Pipeline != nil && m.ToolPolicy.Pipeline.AnchorEnforced(oar.AnchorToolPost) {
 		var postFacts guidance.ToolResultFacts
-		output, postFacts = m.appendPostToolGuidance(
+		output, postFacts = m.ToolPolicy.AfterTool(
 			ctx, sess, tool, args, output, doomCompletionCountAfter, raised,
 		)
 		facts = facts.Merge(postFacts)
@@ -611,7 +558,7 @@ func (m *Manager) enrichPromptLoopToolOutput(
 	if !facts.Succeeded() || m.toolOutputEnricher == nil {
 		return output, facts
 	}
-	eval := toolpolicy.BuildEvalContext(ctx, m.toolpolicyEngineDeps(), sess, tool, args)
+	eval := toolpolicy.BuildEvalContext(ctx, m.Guards.PolicyDependencies(), sess, tool, args)
 	hostArgs := make(map[string]any, len(args)+1)
 	for key, value := range args {
 		hostArgs[key] = value
@@ -622,13 +569,13 @@ func (m *Manager) enrichPromptLoopToolOutput(
 	wfEval := feedback.WorkflowEvaluationContext{}
 	if m.coordinatorFrame != nil {
 		if frame, err := m.coordinatorFrame.BuildCoordinatorTurnFrame(ctx, sess.ID, sess); err == nil {
-			wfEval = workflowEvaluationFromFrame(frame)
+			wfEval = inject.WorkflowEvaluation(frame)
 		} else {
 			slog.ErrorContext(ctx, "coordinator turn frame unavailable; tool-output gate feedback degrades to empty workflow context",
 				"session_id", sess.ID, "tool", tool, "err", err)
 		}
 	}
-	batchPhase := m.BuildImplementSessionState(ctx, sess).BatchPhase
+	batchPhase := m.Workers.State.ForSession(ctx, sess).BatchPhase
 	enriched := m.toolOutputEnricher.Enrich(ctx, guidance.EnrichInput{
 		SessionID: sess.ID, Session: sess, Tool: tool, Args: hostArgs, Output: output,
 		PlanProgress: eval.PlanProgress, PlanContent: eval.PlanContent, BlueprintPath: eval.BlueprintPath,
@@ -636,109 +583,10 @@ func (m *Manager) enrichPromptLoopToolOutput(
 	})
 	merged := facts.Merge(enriched.Facts)
 	if merged.HasCode("WORKFLOW_GATE_BLOCKED") {
-		m.Emit(ctx, sess.ID, anchor.GateBlocked, anchor.Envelope{})
+		m.Guidance.Emit(ctx, sess.ID, anchor.GateBlocked, anchor.Envelope{})
 		m.NudgeCoordinatorLoop(ctx, sess.ID, anchor.PhaseAdvanced, anchor.GateBlocked, "", anchor.Envelope{})
 	}
 	return enriched.Output, merged
-}
-
-func (m *Manager) beforePromptLoopFinish(
-	ctx context.Context,
-	sess *api.Session,
-	history []api.Message,
-	_ string,
-	lastAssistant string,
-	surfaceID string,
-	workersIdle bool,
-	turnTools []string,
-	invokeAllowed bool,
-) (reject *guidance.Refusal, blocked bool) {
-	if m == nil || sess == nil {
-		return nil, false
-	}
-	if sess.IsWorkerChild() && m.workerDecisionPending(ctx, sess.ID) {
-		return nil, false
-	}
-	defer func() {
-		if !blocked {
-			reject, blocked = m.evaluateAgentPostTurn(ctx, sess, lastAssistant, workersIdle)
-		}
-	}()
-	if sess.IsWorkerChild() {
-		projectDir, _ := m.sessionActiveRootPath(ctx, sess)
-		return m.tryOARFinishBlock(ctx, sess, func(gc *oar.GuardContext) error {
-			workercompletion.ObserveImplementerFinishWithoutWrite(
-				ctx, sess, history, lastAssistant, projectDir, m.workspaceCheck, gc,
-			)
-			return nil
-		})
-	}
-	implState := m.BuildImplementSessionState(ctx, sess)
-	batchTurn := m.coordinatorBatchTurnGuard(sess.ID)
-	if reject, block := m.tryOARFinishBlock(ctx, sess, func(gc *oar.GuardContext) error {
-		guard.ObserveCoordinatorHostNoToolTurn(
-			sess, history, lastAssistant, turnTools, surfaceID, workersIdle, implState, batchTurn, gc,
-		)
-		return nil
-	}); block {
-		return reject, true
-	}
-	if reject, block := m.maybeRejectCloseoutForMissingVerdict(ctx, sess, workersIdle, invokeAllowed); block {
-		return reject, true
-	}
-	if reject, block := m.maybeRejectCloseoutBeforeReportPhase(ctx, sess, lastAssistant, surfaceID, invokeAllowed); block {
-		return reject, true
-	}
-	if reject, block := m.maybeRejectCloseoutForSourceEvidence(ctx, sess, history, surfaceID, invokeAllowed); block {
-		return reject, true
-	}
-	assessment := closeoutVerification(history)
-	if !assessment.Valid() || assessment.Method != "blocked" {
-		if reject, block := m.maybeRejectCloseoutForOpenGates(ctx, sess, workersIdle, invokeAllowed); block {
-			return reject, true
-		}
-	}
-	return m.maybeRejectCloseoutForOpenProgress(
-		ctx, sess, history, surfaceID, workersIdle, implState, invokeAllowed,
-	)
-}
-
-func (m *Manager) liveCompactionConfigFor(ctx context.Context, sess *api.Session) compaction.CompactionConfig {
-	cfg, _ := m.liveBudgetResolveForRoots(m.overlayRootPaths(ctx, sess))
-	return cfg
-}
-
-// liveBudgetResolveForRoots applies the active model policy.
-func (m *Manager) liveBudgetResolveForRoots(projectDirs []string) (compaction.CompactionConfig, llm.SessionLimitFields) {
-	base := compaction.DefaultCompactionConfig()
-	windows := modelinfo.DefaultModelContextWindows()
-	var policy llm.ModelPolicy
-	var lookup llm.ContextLengthLookup
-	if m != nil && m.llmSvc != nil {
-		if m.llmSvc.Policy != nil {
-			var err error
-			policy, err = m.llmSvc.Policy.GetForProjectRoots(projectDirs)
-			if err != nil {
-				fallback := llm.ScaleLimitsFromTrueWindow(modelinfo.DefaultFallbackTrueWindow)
-				if m.compactor != nil {
-					return m.compactor.Config(), fallback
-				}
-				return base, fallback
-			}
-		}
-		if m.llmSvc.Registry != nil {
-			lookup = m.llmSvc.Registry
-		}
-	}
-	cfg, limits, err := llm.ApplyLiveBudget(base, policy, lookup, windows)
-	if err != nil {
-		fallback := llm.ScaleLimitsFromTrueWindow(modelinfo.DefaultFallbackTrueWindow)
-		if m != nil && m.compactor != nil {
-			return m.compactor.Config(), fallback
-		}
-		return base, fallback
-	}
-	return cfg, limits
 }
 
 func (m *Manager) buildAssemblyDeps() assembly.AssemblyDeps {
@@ -750,14 +598,14 @@ func (m *Manager) buildAssemblyDeps() assembly.AssemblyDeps {
 	return assembly.AssemblyDeps{
 		Prompts:               m.prompts,
 		Injects:               prompts.NewInjectRenderer(m.prompts),
-		Limits:                m.effectiveLimits,
-		Agents:                m.agents,
+		Limits:                m.Limits.Effective,
+		Agents:                m.Profiles.Agents,
 		Workflows:             sessionWorkflowManifest{m: m},
 		CoordinatorFrame:      m.coordinatorFrame,
 		WorkerContext:         workerCtx,
-		SiblingNoteDelivery:   m,
-		PeerReservations:      m,
-		ImplementSessionState: m.BuildImplementSessionState,
+		SiblingNoteDelivery:   m.Workers.Notes,
+		PeerReservations:      m.Workers.Workspaces,
+		ImplementSessionState: m.Workers.State.ForSession,
 		LoadExecutionModeState: func(_ context.Context, sessionID string) surface.ExecutionModeState {
 			return rt.ExecutionModeStore().Load(sessionID)
 		},
@@ -768,7 +616,7 @@ func (m *Manager) buildAssemblyDeps() assembly.AssemblyDeps {
 		GateFeedback:  m.gateFeedback,
 		ScanGuidance:  m.scanGuidance,
 		RepoKnownEmpty: func(ctx context.Context, workspacePath string) bool {
-			return sessionWorkspaceKnownEmpty(ctx, m.repoProvider, workspacePath)
+			return repoinfo.MeasuredEmpty(ctx, m.repoProvider, workspacePath)
 		},
 		Board:            runtimeBoardHook{rt: rt},
 		BoardOrientReady: sessionWorkflowManifest{m: m},
@@ -779,30 +627,30 @@ func (m *Manager) buildAssemblyDeps() assembly.AssemblyDeps {
 			return EnrichHistoryToolPartsForAgent(sessionID, history, m.planToolStash)
 		},
 		PromptToolLister:        m.listPromptToolsForCoordinator,
-		LoadedTools:             m.LoadedTools,
-		OmittedUnits:            m.OmittedUnits,
-		SkillPreload:            m.SkillPreload,
-		SkillPointer:            m.SkillPointer,
-		WorkspaceRoots:          m.workspaceRootsForPrompt,
-		ProjectOverlayRootPaths: m.promptOverlayRootPaths,
-		SessionView:             m.Catalog().ViewForSession,
-		AgentsMDIndex:           m.agentsMDIndexInject,
-		AgentsMDChain:           m.agentsMDChainInject,
+		LoadedTools:             m.Loading.LoadedTools,
+		OmittedUnits:            m.Loading.OmittedUnits,
+		SkillPreload:            m.Loading.SkillPreload,
+		SkillPointer:            m.Loading.SkillPointer,
+		WorkspaceRoots:          m.Workspace.PromptRootRows,
+		ProjectOverlayRootPaths: m.Workspace.PromptRoots,
+		SessionView:             m.Catalog.ViewForSession,
+		AgentsMDIndex:           m.PolicyIndex.Index,
+		AgentsMDChain:           m.PolicyIndex.Chain,
 		WebSearchEnabled:        m.webSearchEnabled,
-		SynthesisEvidence:       m,
+		SynthesisEvidence:       m.Closeout,
 		CommandJobs: func(sessionID string) []bgprocess.JobSnapshot {
-			if m == nil || m.bgRegistry == nil {
+			if m == nil || m.Processes.Background == nil {
 				return nil
 			}
-			return m.bgRegistry.ActiveJobs(sessionID)
+			return m.Processes.Background.ActiveJobs(sessionID)
 		},
 		HeldCalls: func(sessionID string) []heldcall.Running {
 			if m == nil {
 				return nil
 			}
-			return m.heldCalls.Ledger(sessionID)
+			return m.Processes.Held.Ledger(sessionID)
 		},
-		TurnSourceBriefs:       m.turnSourceBriefs,
+		TurnSourceBriefs:       m.SourceBriefs.Recorded,
 		ModelVision:            m.SessionModelVision,
 		EffectivePromptSurface: m.agentPromptSurface,
 	}
@@ -812,8 +660,8 @@ func (m *Manager) agentPromptSurface(ctx context.Context, sess *api.Session) pro
 	if m == nil || sess == nil {
 		return prompts.AgentPromptSurface{}
 	}
-	profileID, _ := m.promptToolProfile(ctx, sess)
-	return m.CompileMachine(ctx, sess, profileID).Surface
+	profileID, _ := m.Profiles.PromptToolProfile(ctx, sess)
+	return m.Profiles.CompileMachine(ctx, sess, profileID).Surface
 }
 
 // SessionModelVision reports whether the session's active coordinator model declares vision.
@@ -821,7 +669,7 @@ func (m *Manager) SessionModelVision(ctx context.Context, sess *api.Session) boo
 	if m == nil || m.llmSvc == nil || m.llmSvc.Registry == nil || m.llmSvc.Router == nil || sess == nil {
 		return false
 	}
-	router := m.llmSvc.Router.WithOverlayRoots(m.overlayRootPaths(ctx, sess))
+	router := m.llmSvc.Router.WithOverlayRoots(m.Workspace.SettingsRoots(ctx, sess))
 	sel, err := router.ResolveSession(ctx, sess)
 	if err != nil || sel == nil {
 		return false
@@ -833,26 +681,26 @@ func (m *Manager) listPromptToolsForCoordinator(ctx context.Context, sess *api.S
 	if m == nil || sess == nil {
 		return nil, nil
 	}
-	policy := m.PromptToolPolicy()
+	policy := m.Guards.Policy()
 	if policy == nil {
 		return nil, nil
 	}
 	metas := policy.ListForPrompt(ctx, sess, profileID)
-	machine := m.CompileMachine(ctx, sess, profileID)
+	machine := m.Profiles.CompileMachine(ctx, sess, profileID)
 	return tools.HideSkillsReadWhenEmpty(metas, machine.SkillCount), nil
 }
 
 func (m *Manager) buildLoopWakeDeps() loopwake.LoopDeps {
 	return loopwake.LoopDeps{
 		RunPrompt: func(ctx context.Context, sessionID string) (*promptresult.Result, error) {
-			return m.promptHostLoopWake(ctx, sessionID)
+			return m.Submissions.LoopWake(ctx, sessionID)
 		},
-		RunWaitResume:   m.promptWaitResume,
-		HostTurnBlocked: m.hostTurnBlocked,
+		RunWaitResume:   m.Submissions.WaitResume,
+		HostTurnBlocked: m.Runner.Turns.HostTurnBlocked,
 		GetSession: func(ctx context.Context, sessionID string) (*api.Session, error) {
 			return m.store.Get(ctx, sessionID)
 		},
-		Limits:           m.effectiveLimits,
+		Limits:           m.Limits.Effective,
 		IsEscalated:      m.groundingEscalated,
 		WorkflowSource:   m.loopWorkflowSource,
 		CoordinatorFrame: m.coordinatorFrame,
@@ -860,7 +708,7 @@ func (m *Manager) buildLoopWakeDeps() loopwake.LoopDeps {
 			return m.ensureCoordinatorRuntime().Board().BoardWillForceInject(ctx, sess, run)
 		},
 		QueueInform: func(ctx context.Context, sessionID string, inform anchor.ID, env anchor.Envelope) {
-			m.Emit(ctx, sessionID, inform, env)
+			m.Guidance.Emit(ctx, sessionID, inform, env)
 		},
 		HasQueuedKick: func(sessionID, kickID string) bool {
 			return m.ensureCoordinatorRuntime().Kicks().HasQueuedKick(sessionID, kickID)
@@ -872,18 +720,18 @@ func (m *Manager) buildLoopWakeDeps() loopwake.LoopDeps {
 			m.ensureCoordinatorRuntime().Kicks().DropPendingKicksBeforeBatchSeq(sessionID, liveSeq)
 		},
 		OnLoopQuiescent: func(ctx context.Context, sessionID string) {
-			if err := m.settleDeferredUserTurn(ctx, sessionID); err != nil {
+			if err := m.Runner.Settlement.SettlePending(ctx, sessionID); err != nil {
 				slog.ErrorContext(ctx, "settle deferred user turn", "session_id", sessionID, "error", err)
 			}
-			m.drainQueuedPromptsAtRoundEnd(ctx, sessionID)
+			m.Admission.RoundEnd(ctx, sessionID)
 		},
 		IsCoordinatorSession:    m.isCoordinatorSessionForLoop,
-		WorkflowObligationsOpen: m.workflowObligationsOpen,
+		WorkflowObligationsOpen: m.Guidance.WorkflowObligationsOpen,
 		WorkerCycleIdle: func(ctx context.Context, sess *api.Session, completingJobID string) (bool, error) {
 			if m == nil || sess == nil {
 				return true, nil
 			}
-			return ParentSessionWorkerCycleIdle(ctx, m.workerQueue, sess.ProjectID, sess.ID, completingJobID)
+			return workeroutcomes.ParentSessionWorkerCycleIdle(ctx, m.workerQueue, sess.ProjectID, sess.ID, completingJobID)
 		},
 		HostWakeOverlayPromoteDue: func(ctx context.Context, sessionID string) bool {
 			if m == nil {
@@ -893,15 +741,15 @@ func (m *Manager) buildLoopWakeDeps() loopwake.LoopDeps {
 			if err != nil || sess == nil {
 				return false
 			}
-			state := m.BuildImplementSessionState(ctx, sess)
+			state := m.Workers.State.ForSession(ctx, sess)
 			return len(state.PendingOverlayIDs) > 0
 		},
 		ScanCycleOpen: func(ctx context.Context, sessionID string) bool {
 			return m != nil && m.scanWaits.InFlight != nil && m.scanWaits.InFlight(ctx, sessionID)
 		},
-		ProcessRunning:   m.processHandlesRunning,
-		ProcessState:     m.processHandleState,
-		ProcessReport:    m.processReport,
+		ProcessRunning:   m.Processes.HandlesRunning,
+		ProcessState:     m.Processes.HandleState,
+		ProcessReport:    m.Processes.Report,
 		PublishWaitLease: m.publishWaitLease,
 		HostWakeActionable: loopwake.BuildHostWakeActionable(loopwake.HostWakeActionableDeps{
 			GetMessages: func(ctx context.Context, sessionID string) ([]api.Message, error) {
@@ -920,7 +768,7 @@ func (m *Manager) buildLoopWakeDeps() loopwake.LoopDeps {
 				if m == nil || sess == nil {
 					return surface.ImplementSessionState{}
 				}
-				return m.BuildImplementSessionState(ctx, sess)
+				return m.Workers.State.ForSession(ctx, sess)
 			},
 			ActiveRun: func(ctx context.Context, sessionID string) (*api.WorkflowRun, error) {
 				if m == nil || m.workflows == nil {
@@ -928,7 +776,7 @@ func (m *Manager) buildLoopWakeDeps() loopwake.LoopDeps {
 				}
 				return m.workflows.GetActive(ctx, sessionID)
 			},
-			WorkflowObligationsOpen: m.workflowObligationsOpen,
+			WorkflowObligationsOpen: m.Guidance.WorkflowObligationsOpen,
 		}),
 	}
 }
@@ -938,13 +786,6 @@ func (m *Manager) groundingEscalated(sessionID string) bool {
 		return false
 	}
 	return m.grounding.IsEscalated(sessionID)
-}
-
-func (m *Manager) buildToolpolicyEngine() toolpolicy.Engine {
-	if m == nil {
-		return toolpolicy.NewEngine(toolpolicy.EngineDeps{})
-	}
-	return toolpolicy.NewEngine(m.toolpolicyEngineDeps())
 }
 
 // PushExecutionModeTransitionCause records the next execution-mode entry.
@@ -968,14 +809,17 @@ func (m *Manager) ensureCoordinatorRuntime() *coordinator.Runtime {
 			AssemblyDeps: m.buildAssemblyDeps,
 			LoopWakeDeps: m.buildLoopWakeDeps,
 		})
+		m.Stops.SetCoordinator(m.coordinatorRuntime)
+		m.Guidance.Bind(m.coordinatorRuntime.Kicks(), m.coordinatorRuntime.Anchors())
+		m.ToolPolicy.SetSurface(m.coordinatorRuntime)
 		if m.boardBuilder != nil || m.boardFormatter != nil {
 			m.coordinatorRuntime.SetBoardInject(m.boardBuilder, m.boardFormatter, func() bool {
 				return m.coordinatorFrame != nil
 			})
-			m.coordinatorRuntime.SetPromotePathOverlay(m.PromotePathBoardLines)
+			m.coordinatorRuntime.SetPromotePathOverlay(m.Promotion.PromotePathBoardLines)
 			m.coordinatorRuntime.SetOverlayMergePlan(m.OverlayMergePlanFn())
-			m.coordinatorRuntime.SetActiveReservations(m.ActiveReservationBoardEntries)
-			m.coordinatorRuntime.Board().SetWorkerRoots(m.workerBoardRoots)
+			m.coordinatorRuntime.SetActiveReservations(m.Workers.Workspaces.ReservationEntries)
+			m.coordinatorRuntime.Board().SetWorkerRoots(m.Workers.Workspaces.BoardRoots)
 			if m.includeScanLegend != nil {
 				m.coordinatorRuntime.SetIncludeScanLegend(m.includeScanLegend)
 			}
@@ -986,6 +830,23 @@ func (m *Manager) ensureCoordinatorRuntime() *coordinator.Runtime {
 
 func (m *Manager) SetCoordinatorRuntime(rt *coordinator.Runtime) {
 	m.coordinatorRuntime = rt
+	m.Processes.SetLoop(rt.CoordinatorLoop())
+	m.Admission.SetLoop(rt.CoordinatorLoop())
+	m.ProjectControl.SetAnchors(rt.Anchors())
+	if rt != nil {
+		m.Nudges.SetSurface(rt)
+		m.Guards.SetSurface(rt)
+		m.Batch.SetLoop(rt.CoordinatorLoop())
+		m.Runner.Settlement.SetRuntime(rt)
+		if m.Runner != nil {
+			m.Runner.SetRuntime(rt)
+		}
+	}
+	m.Stops.SetCoordinator(rt)
+	if m.Guidance != nil && rt != nil {
+		m.Guidance.Bind(rt.Kicks(), rt.Anchors())
+		m.ToolPolicy.SetSurface(rt)
+	}
 	if rt == nil {
 		return
 	}
@@ -996,10 +857,10 @@ func (m *Manager) SetCoordinatorRuntime(rt *coordinator.Runtime) {
 		rt.SetBoardInject(m.boardBuilder, m.boardFormatter, func() bool {
 			return m.coordinatorFrame != nil
 		})
-		rt.SetPromotePathOverlay(m.PromotePathBoardLines)
+		rt.SetPromotePathOverlay(m.Promotion.PromotePathBoardLines)
 		rt.SetOverlayMergePlan(m.OverlayMergePlanFn())
-		rt.SetActiveReservations(m.ActiveReservationBoardEntries)
-		rt.Board().SetWorkerRoots(m.workerBoardRoots)
+		rt.SetActiveReservations(m.Workers.Workspaces.ReservationEntries)
+		rt.Board().SetWorkerRoots(m.Workers.Workspaces.BoardRoots)
 		if m.includeScanLegend != nil {
 			rt.SetIncludeScanLegend(m.includeScanLegend)
 		}
@@ -1010,7 +871,7 @@ func (m *Manager) SetCoordinatorRuntime(rt *coordinator.Runtime) {
 func (m *Manager) OverlayMergePlanFn() func(sessionID string, tasks []api.WorkerTask) *api.OverlayMergePlan {
 	return func(sessionID string, tasks []api.WorkerTask) *api.OverlayMergePlan {
 		plan := overlayplan.Build(sessionID, tasks, func(sid, jobID string) (overlayplan.PreviewSnapshot, bool) {
-			order, after, blocked, clean, conflict, ok := m.OverlayPreviewSnapshot(sid, jobID)
+			order, after, blocked, clean, conflict, ok := m.Promotion.OverlayPreviewSnapshot(sid, jobID)
 			if !ok {
 				return overlayplan.PreviewSnapshot{}, false
 			}
@@ -1036,14 +897,6 @@ func (m *Manager) CoordinatorRuntimeDeps() coordinator.RuntimeDeps {
 		AssemblyDeps: m.buildAssemblyDeps,
 		LoopWakeDeps: m.buildLoopWakeDeps,
 	}
-}
-
-func (m *Manager) PromptLoopForTest() *promptloop.PromptLoop {
-	return m.ensureCoordinatorRuntime().PromptLoop()
-}
-
-func (m *Manager) PromptToolPolicy() toolpolicy.Engine {
-	return m.buildToolpolicyEngine()
 }
 
 // publishWaitLease exposes an armed sleep on the activity plane.

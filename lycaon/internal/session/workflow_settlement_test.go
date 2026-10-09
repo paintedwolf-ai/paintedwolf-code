@@ -81,11 +81,11 @@ func TestWorkflowCompletionSettlesAfterExecutionDrains(t *testing.T) {
 			case "workers":
 				unblock = func() { workers.idle.Store(true) }
 			case "session lock":
-				lock := mgr.promptState.Prompt.Acquire(sess.ID)
+				lock := mgr.Runner.Execution.Prompt.Acquire(sess.ID)
 				lock.Lock()
 				unblock = lock.Unlock
 			}
-			testutil.FailErr(t, "notify workflow completion", mgr.SettleCompletedWorkflow(ctx, sess.ID, "finished-run"))
+			testutil.FailErr(t, "notify workflow completion", mgr.Runner.Settlement.CompleteWorkflow(ctx, sess.ID, "finished-run"))
 			if blocker != "none" {
 				current, err := st.Get(ctx, sess.ID)
 				testutil.FailErr(t, "read held session", err)
@@ -95,7 +95,7 @@ func TestWorkflowCompletionSettlesAfterExecutionDrains(t *testing.T) {
 				assertNoSessionIdleEvent(t, eventCh)
 			}
 			unblock()
-			testutil.FailErr(t, "settle after drain", mgr.settleDeferredUserTurn(ctx, sess.ID))
+			testutil.FailErr(t, "settle after drain", mgr.Runner.Settlement.SettlePending(ctx, sess.ID))
 			if disposition := awaitIdleDisposition(t, eventCh); disposition != api.SessionIdleDispositionCompleted {
 				t.Fatalf("disposition=%q", disposition)
 			}
@@ -104,9 +104,9 @@ func TestWorkflowCompletionSettlesAfterExecutionDrains(t *testing.T) {
 			if current.Status != api.SessionStatusIdle || loop.IsSleeping(sess.ID) {
 				t.Fatalf("status=%q sleeping=%v", current.Status, loop.IsSleeping(sess.ID))
 			}
-			testutil.FailErr(t, "replay completed notification", mgr.SettleCompletedWorkflow(ctx, sess.ID, "finished-run"))
+			testutil.FailErr(t, "replay completed notification", mgr.Runner.Settlement.CompleteWorkflow(ctx, sess.ID, "finished-run"))
 			assertNoSessionIdleEvent(t, eventCh)
-			if _, ok := mgr.deferredWorkflowCompletions.Load(sess.ID); ok {
+			if mgr.Runner.Settlement.PendingWorkflow(sess.ID) {
 				t.Fatal("completed notification retained after settlement")
 			}
 		})
@@ -122,13 +122,13 @@ func TestWorkflowCompletionDoesNotSettleAnotherActiveRun(t *testing.T) {
 	sess, err := st.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	testutil.FailErr(t, "mark busy", st.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
-	testutil.FailErr(t, "deliver stale completion", mgr.SettleCompletedWorkflow(ctx, sess.ID, "old-run"))
+	testutil.FailErr(t, "deliver stale completion", mgr.Runner.Settlement.CompleteWorkflow(ctx, sess.ID, "old-run"))
 	current, err := st.Get(ctx, sess.ID)
 	testutil.FailErr(t, "read current session", err)
 	if current.Status != api.SessionStatusBusy {
 		t.Fatal("old workflow settled the active run")
 	}
-	if _, ok := mgr.deferredWorkflowCompletions.Load(sess.ID); ok {
+	if mgr.Runner.Settlement.PendingWorkflow(sess.ID) {
 		t.Fatal("stale notification retained")
 	}
 }
@@ -143,7 +143,7 @@ func TestWorkflowCompletionRetriesLookupFailure(t *testing.T) {
 	sess, err := st.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	testutil.FailErr(t, "mark busy", st.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
-	if err := mgr.SettleCompletedWorkflow(ctx, sess.ID, "finished-run"); !errors.Is(err, want) {
+	if err := mgr.Runner.Settlement.CompleteWorkflow(ctx, sess.ID, "finished-run"); !errors.Is(err, want) {
 		t.Fatalf("error=%v", err)
 	}
 	current, err := st.Get(ctx, sess.ID)
@@ -152,7 +152,7 @@ func TestWorkflowCompletionRetriesLookupFailure(t *testing.T) {
 		t.Fatal("lookup failure was treated as idle")
 	}
 	source.err = nil
-	testutil.FailErr(t, "retry settlement", mgr.settleDeferredUserTurn(ctx, sess.ID))
+	testutil.FailErr(t, "retry settlement", mgr.Runner.Settlement.SettlePending(ctx, sess.ID))
 	current, err = st.Get(ctx, sess.ID)
 	testutil.FailErr(t, "read recovered session", err)
 	if current.Status != api.SessionStatusIdle {

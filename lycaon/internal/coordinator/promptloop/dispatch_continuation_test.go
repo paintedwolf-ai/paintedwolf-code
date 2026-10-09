@@ -65,9 +65,9 @@ func TestDispatchContinuesUntilExplicitWait(t *testing.T) {
 			responses = append(responses, &modelcall.Completion{ToolCalls: []api.ToolCall{{ID: "wait", Name: "wait", Args: map[string]any{"conditions": []any{map[string]any{"kind": "next_worker_done"}}}}}})
 			client := &sequentialLLMClient{completions: responses}
 			deps := promptloop.StoreDeps(storage)
-			deps.LoadedTools = workersLoaded
-			deps.Tools, deps.LLM = reg, client
-			deps.ImplementSessionState = func(context.Context, *api.Session) surface.ImplementSessionState {
+			deps.Context.LoadedTools = workersLoaded
+			deps.Context.Tools, deps.Model.LLM = reg, client
+			deps.Context.ImplementSessionState = func(context.Context, *api.Session) surface.ImplementSessionState {
 				return surface.ImplementSessionState{WorkersInFlight: len(accepted)}
 			}
 			result, err := promptloop.NewPromptLoopForTest(deps).Run(t.Context(), promptloop.PromptRunInput{

@@ -12,7 +12,7 @@ import (
 
 func (s *Handler) HandleSessionCompact(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	report, err := s.Sessions.ForceCompact(r.Context(), id)
+	report, err := s.Sessions.Runner.History.ForceCompact(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, store.ErrSessionNotFound) {
 			s.responses.Fail(w, wire.ApiErrorCodeSessionNotFound, "session not found")
@@ -39,7 +39,7 @@ func (s *Handler) HandleSessionCompact(w http.ResponseWriter, r *http.Request) {
 
 func (s *Handler) HandleSessionContext(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	ctxInfo, err := s.Sessions.SessionContext(r.Context(), id)
+	ctxInfo, err := s.Sessions.Runner.History.SessionContext(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, store.ErrSessionNotFound) {
 			s.responses.Fail(w, wire.ApiErrorCodeSessionNotFound, "session not found")

@@ -67,9 +67,9 @@ func TestBuildPostureDisallowedAgentAfterImplementPhase(t *testing.T) {
 	advancePlanRunToImplement(t, h, srv, store, blueprintMgr, sess)
 
 	// Settle workflow setup before exercising its posture rules.
-	h.SessionMgr.CancelInFlightPrompt(sess.ID)
+	h.SessionMgr.Runner.Execution.Cancel(sess.ID)
 	h.SessionMgr.WaitForCoordinatorAsyncTurns(ctx)
-	h.SessionMgr.ClearPendingKickForTest(sess.ID)
+	h.SessionMgr.Runner.Coordinator.Kicks().ClearPending(sess.ID)
 	h.SeedProgress(t, ctx, sess.ID)
 	accepted := acceptPromptHTTP(t, srv, sess.ID, "spawn task")
 
@@ -124,9 +124,9 @@ func TestBuildPostureAllowsDelegationWithPlanManifestRules(t *testing.T) {
 	sess := createSessionHTTP(t, srv, t.TempDir())
 	ctx := t.Context()
 	advancePlanRunToImplement(t, h, srv, store, blueprintMgr, sess)
-	h.SessionMgr.CancelInFlightPrompt(sess.ID)
+	h.SessionMgr.Runner.Execution.Cancel(sess.ID)
 	h.SessionMgr.WaitForCoordinatorAsyncTurns(ctx)
-	h.SessionMgr.ClearPendingKickForTest(sess.ID)
+	h.SessionMgr.Runner.Coordinator.Kicks().ClearPending(sess.ID)
 
 	// Pending workers keep the workflow active until a poller claims them.
 	h.SeedProgress(t, ctx, sess.ID)

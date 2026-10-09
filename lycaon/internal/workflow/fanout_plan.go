@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/progress"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/workeradmission"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/tools"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
@@ -177,7 +177,7 @@ func parseFanoutPlanArgs(args map[string]any) (FanoutPlan, error) {
 			}
 			leg.Scope = &scope
 		}
-		loops, err := session.ParseTaskMaxToolLoopsFromArgs(m)
+		loops, err := workeradmission.ParseTaskMaxToolLoopsFromArgs(m)
 		if err != nil {
 			return FanoutPlan{}, fmt.Errorf("legs[%d].%w", i, err)
 		}
@@ -258,7 +258,7 @@ func validateFanoutPlan(plan FanoutPlan, allowedAgents, excludedAgents []string,
 // validateFanoutLegBudgets keeps each planned ceiling inside the host range.
 func validateFanoutLegBudgets(plan FanoutPlan, budget spawn.WorkerToolBudget) error {
 	for i, leg := range plan.Legs {
-		if session.ValidateTaskMaxToolLoopsCode(leg.MaxToolLoops, budget) != "" {
+		if workeradmission.ValidateTaskMaxToolLoopsCode(leg.MaxToolLoops, budget) != "" {
 			return fmt.Errorf("legs[%d].max_tool_loops is %d; set it between %d and %d, or omit it for the default %d",
 				i, leg.MaxToolLoops, budget.Min, budget.Max, budget.Default)
 		}

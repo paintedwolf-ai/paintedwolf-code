@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/llm"
+	"github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
@@ -17,8 +18,8 @@ import (
 )
 
 func TestManagerPostureOverlayIntegration(t *testing.T) {
-	reg, err := LoadPostureRegistry()
-	testutil.FailErr(t, "LoadPostureRegistry failed", err)
+	reg, err := profiles.LoadPostureRegistry()
+	testutil.FailErr(t, "profiles.LoadPostureRegistry failed", err)
 	dir := t.TempDir()
 	overlayDir := filepath.Join(dir, settingsoverlay.DirName())
 	if err := os.MkdirAll(overlayDir, 0o755); err != nil {
@@ -34,17 +35,17 @@ postures:
 	}
 
 	mgr := NewManager(store.NewMemory(), llm.NewMockProvider(testMockConfig(t)), tools.NewStubRegistry(), settings.DefaultSessionLimits())
-	mgr.SetPostureRegistry(reg)
-	if err := mgr.WarmPostureOverlay(dir); err != nil {
-		testutil.FailErr(t, "mgr.WarmPostureOverlay failed", err)
+	mgr.Profiles.SetPostureRegistry(reg)
+	if err := mgr.Profiles.WarmPostureOverlay(dir); err != nil {
+		testutil.FailErr(t, "mgr.Profiles.WarmPostureOverlay failed", err)
 	}
 
 	// Project postures require project settings trust.
 	projectID := RegisterProjectContextForTest(t, mgr, dir)
 	sess := &api.Session{ID: "overlay", ProjectID: projectID, Posture: api.SessionPostureVet, WorkspacePath: dir}
 
-	effective, err := mgr.effectivePostures(t.Context(), sess)
-	testutil.FailErr(t, "mgr.effectivePostures failed", err)
+	effective, err := mgr.Profiles.EffectivePostures(t.Context(), sess)
+	testutil.FailErr(t, "mgr.Profiles.EffectivePostures failed", err)
 	spec, err := effective.Get(api.SessionPostureVet)
 	testutil.FailErr(t, "effective.Get failed", err)
 	if spec.Label != "Audit" {
@@ -53,8 +54,8 @@ postures:
 }
 
 func TestWarmPostureOverlayRejectsUnknownPosture(t *testing.T) {
-	reg, err := LoadPostureRegistry()
-	testutil.FailErr(t, "LoadPostureRegistry failed", err)
+	reg, err := profiles.LoadPostureRegistry()
+	testutil.FailErr(t, "profiles.LoadPostureRegistry failed", err)
 	dir := t.TempDir()
 	overlayDir := filepath.Join(dir, settingsoverlay.DirName())
 	if err := os.MkdirAll(overlayDir, 0o755); err != nil {
@@ -68,8 +69,8 @@ postures:
 		testutil.FailErr(t, "write file", err)
 	}
 	mgr := NewManager(store.NewMemory(), nil, nil, settings.DefaultSessionLimits())
-	mgr.SetPostureRegistry(reg)
-	if err := mgr.WarmPostureOverlay(dir); err == nil {
+	mgr.Profiles.SetPostureRegistry(reg)
+	if err := mgr.Profiles.WarmPostureOverlay(dir); err == nil {
 		t.Fatal("expected unknown overlay posture error")
 	}
 }

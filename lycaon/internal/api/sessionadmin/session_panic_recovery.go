@@ -21,7 +21,7 @@ func (s *Handler) WithSessionPanicRecovery(next http.HandlerFunc) http.HandlerFu
 			sessionID := strings.TrimSpace(chi.URLParam(r, "id"))
 			if sessionID != "" {
 				recoverCtx := context.WithoutCancel(requestCtx)
-				if err := s.Sessions.RecoverSession(recoverCtx, sessionID); err != nil {
+				if err := s.Sessions.Interruptions.RecoverSession(recoverCtx, sessionID); err != nil {
 					s.responses.Logger.ErrorContext(recoverCtx, "scoped session recovery after panic failed",
 						"session_id", sessionID, "error", err)
 				}

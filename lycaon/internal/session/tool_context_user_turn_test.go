@@ -41,7 +41,7 @@ func TestToolContextUserTurnTracksSessionCurrentTurn(t *testing.T) {
 
 	assertTurn := func(step string, want int) {
 		t.Helper()
-		tctx, err := mgr.buildToolContext(ctx, sess, tools.DefaultToolProfileID, inject.Machine{})
+		tctx, err := mgr.ToolContext.Build(ctx, sess, tools.DefaultToolProfileID, inject.Machine{})
 		if err != nil {
 			t.Fatalf("%s: buildToolContext: %v", step, err)
 		}
@@ -51,7 +51,7 @@ func TestToolContextUserTurnTracksSessionCurrentTurn(t *testing.T) {
 		if tctx.SourceWorkspaceKind != api.SourceWorkspaceKindProject {
 			t.Fatalf("%s: workspace kind = %q, want project", step, tctx.SourceWorkspaceKind)
 		}
-		if tctx.MaxToolSpillBytes != mgr.effectiveLimits(ctx, sess).MaxToolSpillBytes {
+		if tctx.MaxToolSpillBytes != mgr.Limits.Effective(ctx, sess).MaxToolSpillBytes {
 			t.Fatal("tool recovery reads must use the session's spill retention bound")
 		}
 		hydrated, err := sessions.Get(ctx, sess.ID)

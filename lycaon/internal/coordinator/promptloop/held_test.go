@@ -14,7 +14,12 @@ import (
 )
 
 func heldTestLoop(held *heldcall.Registry) *PromptLoop {
-	return NewPromptLoopForTest(PromptLoopDeps{HeldCalls: held, HeldCallBudget: 20 * time.Millisecond})
+	return NewPromptLoopForTest(PromptLoopDeps{
+		Tools: ToolsDeps{
+			HeldCalls:      held,
+			HeldCallBudget: 20 * time.Millisecond,
+		},
+	})
 }
 
 func heldTestCall(run func(context.Context) toolInvocation) heldToolCall {
@@ -26,7 +31,7 @@ func heldTestCall(run func(context.Context) toolInvocation) heldToolCall {
 }
 
 func runHeldTestCall(loop *PromptLoop, call heldToolCall) toolInvocation {
-	return toolBatch{loop}.runHeldToolCall(
+	return loop.Batch.runHeldToolCall(
 		context.Background(),
 		&api.Session{ID: "s1", ProjectID: "p1"},
 		api.ToolCall{ID: "tc1", Name: "find"},

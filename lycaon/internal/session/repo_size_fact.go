@@ -1,8 +1,6 @@
 package session
 
 import (
-	"context"
-
 	"github.com/lycaon/lycaon/internal/repoinfo"
 )
 
@@ -12,14 +10,9 @@ func (m *Manager) SetRepoProvider(p repoinfo.Provider) {
 		return
 	}
 	m.repoProvider = p
+	m.Guards.SetRepoProvider(p)
+	m.ToolContext.SetRepoProvider(p)
 }
 
-// sessionWorkspaceKnownEmpty reports a measured empty tree for task() gates.
+// repoinfo.MeasuredEmpty reports a measured empty tree for task() gates.
 // Unmeasured trees return false.
-func sessionWorkspaceKnownEmpty(ctx context.Context, p repoinfo.Provider, workspacePath string) bool {
-	if p == nil || workspacePath == "" {
-		return false
-	}
-	empty, err := p.KnownEmpty(ctx, workspacePath)
-	return err == nil && empty
-}

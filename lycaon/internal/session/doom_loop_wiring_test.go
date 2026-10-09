@@ -5,6 +5,8 @@ import (
 
 	"github.com/lycaon/lycaon/internal/browser/pagesession"
 	"github.com/lycaon/lycaon/internal/session/loopguard"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/settings"
 )
 
 // resolverRecordingGuard observes the page-target resolver the manager installs.
@@ -29,7 +31,7 @@ func TestDoomLoopPageResolverWiringOrder(t *testing.T) {
 			name = "guard first"
 		}
 		t.Run(name, func(t *testing.T) {
-			manager := &Manager{}
+			manager := NewManager(sessionstore.NewMemory(), nil, nil, settings.DefaultSessionLimits())
 			guard := newResolverRecordingGuard()
 			pages := pagesession.NewRegistry(pagesession.DefaultConfig())
 			t.Cleanup(func() { pages.Close(t.Context()) })

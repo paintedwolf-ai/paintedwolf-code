@@ -15,11 +15,13 @@ import (
 )
 
 func TestToolContextForCallPreservesCompiledSurface(t *testing.T) {
-	loop := &PromptLoop{Deps: PromptLoopDeps{
-		RefreshToolContext: func(context.Context, *api.Session, inject.Machine) (tools.ToolContext, error) {
-			return tools.ToolContext{Agent: "coordinator"}, nil
+	loop := NewPromptLoop(PromptLoopDeps{
+		Context: ContextDeps{
+			RefreshToolContext: func(context.Context, *api.Session, inject.Machine) (tools.ToolContext, error) {
+				return tools.ToolContext{Agent: "coordinator"}, nil
+			},
 		},
-	}}
+	})
 	base := tools.ToolContext{
 		EditorReadBases:      tools.NewAgentReadBases(map[string]int64{"document": 7}),
 		TurnSurfaceID:        tools.SurfaceImplementInvestigate,
@@ -28,7 +30,7 @@ func TestToolContextForCallPreservesCompiledSurface(t *testing.T) {
 		TurnWritePinRootID:   "root-2",
 		TurnWritePinGlobs:    []string{"src/**", "README.md"},
 	}
-	got, err := toolBatch{loop}.toolContextForCall(t.Context(), &api.Session{}, base, inject.Machine{})
+	got, err := loop.Batch.toolContextForCall(t.Context(), &api.Session{}, base, inject.Machine{})
 	testutil.FailErr(t, "toolContextForCall", err)
 	if got.EditorReadBases != base.EditorReadBases || got.TurnSurfaceID != base.TurnSurfaceID ||
 		!slices.Equal(got.TurnToolPlan.ImmediateNames(), base.TurnToolPlan.ImmediateNames()) ||

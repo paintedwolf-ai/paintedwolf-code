@@ -4,16 +4,16 @@ import (
 	"context"
 	"time"
 
-	"github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/toolpolicy"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // settleUnattemptedCalls records calls skipped after a cycle boundary.
-func (l toolBatch) settleUnattemptedCalls(
+func (l *toolBatch) settleUnattemptedCalls(
 	ctx context.Context, sess *api.Session, sessionID, assistantID string,
 	history []api.Message, calls []api.ToolCall, turnTools []string,
 	lastToolTS *time.Time, st *promptLoopTurnState,
@@ -28,8 +28,8 @@ func (l toolBatch) settleUnattemptedCalls(
 		if settled[call.ID] {
 			continue
 		}
-		reject := toolInvocations(l).toolReject("TOOL_BATCH_NOT_RUN", map[string]any{"tool": call.Name})
-		msg := toolInvocations(l).toolRejectMessage(call.Name, call.ID, assistantID, call.Args, reject)
+		reject := l.Tools.toolReject("TOOL_BATCH_NOT_RUN", map[string]any{"tool": call.Name})
+		msg := l.Tools.toolRejectMessage(call.Name, call.ID, assistantID, call.Args, reject)
 		var err error
 		history, err = l.persistClassifiedToolOutcome(ctx, sessionID, sess, history,
 			toolCallOutcome{toolName: call.Name, toolArgs: call.Args, toolMsg: msg}, lastToolTS, st)
@@ -42,7 +42,7 @@ func (l toolBatch) settleUnattemptedCalls(
 }
 
 // settleToolRow advances cards after the result is durable.
-func (l toolBatch) settleToolRow(
+func (l *toolBatch) settleToolRow(
 	ctx context.Context,
 	sess *api.Session,
 	sessionID, toolName string,
@@ -50,7 +50,7 @@ func (l toolBatch) settleToolRow(
 	st *promptLoopTurnState,
 ) []string {
 	l.announceToolAskAfterCommit(ctx, sessionID, toolName)
-	l.publishWorkerProgress(ctx, sess, st.workerRunID(), st.progress().SettleCall(), false)
+	l.Nudges.publishWorkerProgress(ctx, sess, st.workerRunID(), st.progress().SettleCall(), false)
 	return append(turnTools, toolName)
 }
 
@@ -62,7 +62,7 @@ func attachRejectReceipt(out singleToolOutcome, receipt *api.InvocationReceipt) 
 	return out
 }
 
-func (l toolBatch) settleToolResult(
+func (l *toolBatch) settleToolResult(
 	ctx context.Context,
 	tc api.ToolCall,
 	toolCtx tools.ToolContext,
@@ -96,18 +96,18 @@ func (l toolBatch) settleToolResult(
 	if source := run.captures.sourceRun; source != nil {
 		run.sourceRevision, run.sourceRootDigest = source.SourceRevision, source.SourceRootDigest
 	}
-	return toolInvocations(l).settleInvocation(ctx, run, status, evidenceKind, toolMsg.ID, ownerRef)
+	return l.Tools.settleInvocation(ctx, run, status, evidenceKind, toolMsg.ID, ownerRef)
 }
 
-func (l toolBatch) toolResultLimits(ctx context.Context, sess *api.Session) (int, int) {
-	if l.Deps.Limits == nil {
+func (l *toolBatch) toolResultLimits(ctx context.Context, sess *api.Session) (int, int) {
+	if l.Context.Deps.Limits == nil {
 		return 0, 0
 	}
-	limits := l.Deps.Limits(ctx, sess)
+	limits := l.Context.Deps.Limits(ctx, sess)
 	return limits.MaxToolResultBytes, limits.MaxToolSpillBytes
 }
 
-func (l toolBatch) preflightToolCall(
+func (l *toolBatch) preflightToolCall(
 	ctx context.Context,
 	sess *api.Session,
 	sessionID, responseID string,
@@ -117,28 +117,28 @@ func (l toolBatch) preflightToolCall(
 	if taskAllowlist != nil {
 		ctx = toolpolicy.WithTaskSpawnAllowlist(ctx, taskAllowlist)
 	}
-	if l.Deps.Policy != nil {
-		if err := l.Deps.Policy.EvaluateInvoke(ctx, sess, tc.Name, tc.Args); err != nil {
+	if l.Context.Deps.Policy != nil {
+		if err := l.Context.Deps.Policy.EvaluateInvoke(ctx, sess, tc.Name, tc.Args); err != nil {
 			return ctx, 0, rejectForCallError(err)
 		}
 	}
 	doomPreCount := 0
-	if err := turnNudges(l).checkDoomLoop(ctx, sessionID, responseID, tc.Name, tc.Args, &doomPreCount); err != nil {
+	if err := l.Nudges.checkDoomLoop(ctx, sessionID, responseID, tc.Name, tc.Args, &doomPreCount); err != nil {
 		return ctx, 0, rejectForCallError(err)
 	}
 	return ctx, doomPreCount, nil
 }
 
 // refuseToolCall builds a structured refusal result.
-func (l toolBatch) refuseToolCall(tc api.ToolCall, assistantMessageID string, reject *guidance.Refusal) singleToolOutcome {
+func (l *toolBatch) refuseToolCall(tc api.ToolCall, assistantMessageID string, reject *guidance.Refusal) singleToolOutcome {
 	return singleToolOutcome{
 		toolName: tc.Name,
-		toolMsg:  toolInvocations(l).toolRejectMessage(tc.Name, tc.ID, assistantMessageID, tc.Args, reject),
+		toolMsg:  l.Tools.toolRejectMessage(tc.Name, tc.ID, assistantMessageID, tc.Args, reject),
 	}
 }
 
 // settlePreInvokeReject closes an opened ledger row.
-func (l toolBatch) settlePreInvokeReject(ctx context.Context, run toolInvocation) (toolInvocation, error) {
+func (l *toolBatch) settlePreInvokeReject(ctx context.Context, run toolInvocation) (toolInvocation, error) {
 	if run.receipt == nil || run.reject == nil {
 		return run, nil
 	}
@@ -146,11 +146,11 @@ func (l toolBatch) settlePreInvokeReject(ctx context.Context, run toolInvocation
 	if run.failure == nil {
 		run.failure = rejectionFailure(code, "policy_rejection", invocationFailureOwner(run.contract, run.captures), run.reject.Facts.FeedbackFor(code).Details)
 	}
-	return toolInvocations(l).settleInvocation(ctx, run, api.InvocationStatusRejected, "rejection", code, run.captures.ownerRef)
+	return l.Tools.settleInvocation(ctx, run, api.InvocationStatusRejected, "rejection", code, run.captures.ownerRef)
 }
 
 // refusePreInvokeReject records refusal and repeat escalation.
-func (l toolBatch) refusePreInvokeReject(
+func (l *toolBatch) refusePreInvokeReject(
 	ctx context.Context,
 	sess *api.Session,
 	sessionID string,
@@ -159,11 +159,11 @@ func (l toolBatch) refusePreInvokeReject(
 	reject *guidance.Refusal,
 ) singleToolOutcome {
 	code := reject.Code()
-	advance := toolInvocations(l).overlayIntegrateRejectEndsToolLoop(ctx, sess, sessionID, code)
+	advance := l.Tools.overlayIntegrateRejectEndsToolLoop(ctx, sess, sessionID, code)
 	if !advance {
-		_ = turnNudges(l).recordDoomLoopAttempt(ctx, sessionID, assistantMessageID, tc.Name, tc.Args, code, false)
+		_ = l.Nudges.recordDoomLoopAttempt(ctx, sessionID, assistantMessageID, tc.Name, tc.Args, code, false)
 		// Recorded first so the escalation reads the current total.
-		if escalated := turnNudges(l).escalateRepeatedCode(ctx, sessionID, tc.Name, reject); escalated != nil {
+		if escalated := l.Nudges.escalateRepeatedCode(ctx, sessionID, tc.Name, reject); escalated != nil {
 			combined := *reject
 			combined.Body += "\n\n" + escalated.Body
 			combined.Facts = combined.Facts.Merge(escalated.Facts)
@@ -175,7 +175,7 @@ func (l toolBatch) refusePreInvokeReject(
 	return out
 }
 
-func (l toolBatch) settleRejectedInvocation(
+func (l *toolBatch) settleRejectedInvocation(
 	ctx context.Context,
 	sess *api.Session,
 	sessionID string,
@@ -187,7 +187,7 @@ func (l toolBatch) settleRejectedInvocation(
 		code := run.facts.PrimaryCode()
 		run.failure = rejectionFailure(code, "host_rejection", invocationFailureOwner(run.contract, run.captures), run.facts.FeedbackFor(code).Details)
 	}
-	settled, err := toolInvocations(l).settleInvocation(ctx, run, api.InvocationStatusRejected, "rejection", run.facts.PrimaryCode(), run.captures.ownerRef)
+	settled, err := l.Tools.settleInvocation(ctx, run, api.InvocationStatusRejected, "rejection", run.facts.PrimaryCode(), run.captures.ownerRef)
 	if err != nil {
 		return l.settlementHostFault(tc, assistantMessageID, run, err)
 	}
@@ -195,7 +195,7 @@ func (l toolBatch) settleRejectedInvocation(
 }
 
 // settleRejectedToolCall records and projects a refusal.
-func (l toolBatch) settleRejectedToolCall(
+func (l *toolBatch) settleRejectedToolCall(
 	ctx context.Context,
 	sess *api.Session,
 	sessionID string,
@@ -204,22 +204,22 @@ func (l toolBatch) settleRejectedToolCall(
 	run toolInvocation,
 ) singleToolOutcome {
 	rejectCode := run.facts.PrimaryCode()
-	advance := toolInvocations(l).overlayIntegrateRejectEndsToolLoop(ctx, sess, sessionID, rejectCode)
+	advance := l.Tools.overlayIntegrateRejectEndsToolLoop(ctx, sess, sessionID, rejectCode)
 	// Host-managed failures do not count as caller repetition.
 	if !advance && run.failure.CallerFault() {
-		_ = turnNudges(l).recordDoomLoopAttempt(ctx, sessionID, assistantMessageID, tc.Name, tc.Args, rejectCode, false)
+		_ = l.Nudges.recordDoomLoopAttempt(ctx, sessionID, assistantMessageID, tc.Name, tc.Args, rejectCode, false)
 		// Recorded first so the escalation reads the current total.
-		if escalated := turnNudges(l).escalateRepeatedCode(ctx, sessionID, tc.Name, run.asReject()); escalated != nil {
+		if escalated := l.Nudges.escalateRepeatedCode(ctx, sessionID, tc.Name, run.asReject()); escalated != nil {
 			run.content += "\n\n" + escalated.Body
 			run.facts = run.facts.Merge(escalated.Facts)
 		}
 	}
-	if l.Deps.OnToolReject != nil {
-		l.Deps.OnToolReject(ctx, sessionID, tc.ID, rejectCode, run.content, run.facts)
+	if l.Projection.Deps.OnToolReject != nil {
+		l.Projection.Deps.OnToolReject(ctx, sessionID, tc.ID, rejectCode, run.content, run.facts)
 	}
 	out := singleToolOutcome{
 		toolName:      tc.Name,
-		toolMsg:       toolInvocations(l).toolRejectMessage(tc.Name, tc.ID, assistantMessageID, tc.Args, run.asReject()),
+		toolMsg:       l.Tools.toolRejectMessage(tc.Name, tc.ID, assistantMessageID, tc.Args, run.asReject()),
 		breakToolLoop: advance,
 	}
 	if out.toolMsg.ToolResult != nil {

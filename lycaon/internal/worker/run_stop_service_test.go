@@ -9,6 +9,8 @@ import (
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
+	"github.com/lycaon/lycaon/internal/session/workerresults"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -59,7 +61,7 @@ func TestRunStopServiceCancelProjectsWorkerCard(t *testing.T) {
 		ToolResult: &api.ToolResult{Tool: "task", Content: enqueue, Dispatch: &api.WorkerDispatch{WorkerID: jobID}},
 	}))
 
-	svc := &RunStopService{Queue: queue, Sessions: mgr}
+	svc := &RunStopService{Queue: queue, Holds: mgr.Workers.Cards, Cancellations: mgr.Workers.Cancellations}
 	testutil.FailErr(t, "cancel workers by run", svc.CancelWorkersByRunID(ctx, runID, "workflow stopped"))
 
 	msgs, err := store.GetMessages(ctx, sess.ID)
@@ -87,7 +89,7 @@ type poisonRunStopSession struct {
 	held      []string
 }
 
-func (p *poisonRunStopSession) AppendWorkerCancellation(_ context.Context, _ string, in session.WorkerCancellationInput) error {
+func (p *poisonRunStopSession) Append(_ context.Context, _ string, in workeroutcomes.CancellationInput) error {
 	if in.JobID == p.failJobID {
 		return errors.New("poison append")
 	}
@@ -95,7 +97,7 @@ func (p *poisonRunStopSession) AppendWorkerCancellation(_ context.Context, _ str
 	return nil
 }
 
-func (p *poisonRunStopSession) AppendWorkerHold(_ context.Context, _ string, in session.WorkerHoldInput) error {
+func (p *poisonRunStopSession) Hold(_ context.Context, _ string, in workerresults.HoldInput) error {
 	if in.JobID == p.failJobID {
 		return errors.New("poison append")
 	}
@@ -125,7 +127,7 @@ func TestRunStopServiceCancelSettlesRemainingTasksPastPoisonTask(t *testing.T) {
 	}
 
 	sessions := &poisonRunStopSession{failJobID: poisonID}
-	svc := &RunStopService{Queue: queue, Sessions: sessions}
+	svc := &RunStopService{Queue: queue, Holds: sessions, Cancellations: sessions}
 	err := svc.CancelWorkersByRunID(ctx, runID, "workflow stopped")
 	if err == nil {
 		t.Fatal("cancel workers by run: want joined poison error, got nil")
@@ -163,7 +165,7 @@ func TestRunStopServiceHoldContinuesPastPoisonTask(t *testing.T) {
 	}
 
 	sessions := &poisonRunStopSession{failJobID: poisonID}
-	svc := &RunStopService{Queue: queue, Sessions: sessions}
+	svc := &RunStopService{Queue: queue, Holds: sessions, Cancellations: sessions}
 	err := svc.HoldPendingWorkersByRunID(ctx, runID)
 	if err == nil {
 		t.Fatal("hold workers by run: want joined poison error, got nil")
@@ -214,7 +216,7 @@ func TestRunStopServiceHoldPatchesCanonicalWorkerRow(t *testing.T) {
 		ToolResult: &api.ToolResult{Tool: "task", Content: enqueue, Dispatch: &api.WorkerDispatch{WorkerID: jobID}},
 	}))
 
-	svc := &RunStopService{Queue: queue, Sessions: mgr}
+	svc := &RunStopService{Queue: queue, Holds: mgr.Workers.Cards, Cancellations: mgr.Workers.Cancellations}
 	testutil.FailErr(t, "hold workers by run", svc.HoldPendingWorkersByRunID(ctx, runID))
 
 	msgs, err := store.GetMessages(ctx, sess.ID)

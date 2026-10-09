@@ -30,18 +30,24 @@ func TestDispatchRejectionsPreserveIndependentPeersAndHistory(t *testing.T) {
 			var stored []api.Message
 			var inspected []int
 			loop := NewPromptLoopForTest(PromptLoopDeps{
-				Tools: reg,
-				BeforeToolRun: func(_ context.Context, _ *api.Session, _ []api.Message, _ string, _ string, args map[string]any) (string, bool, error) {
-					index := args["index"].(int)
-					inspected = append(inspected, index)
-					if rejects[index] {
-						return "", false, guidance.NewRefusal("TOOL_ARGS_INVALID", fmt.Sprintf("Invalid brief %d", index))
-					}
-					return "", false, nil
+				Context: ContextDeps{
+					Tools: reg,
 				},
-				AppendMessages: func(_ context.Context, _ string, messages ...api.Message) error {
-					stored = append(stored, messages...)
-					return nil
+				Tools: ToolsDeps{
+					BeforeToolRun: func(_ context.Context, _ *api.Session, _ []api.Message, _ string, _ string, args map[string]any) (string, bool, error) {
+						index := args["index"].(int)
+						inspected = append(inspected, index)
+						if rejects[index] {
+							return "", false, guidance.NewRefusal("TOOL_ARGS_INVALID", fmt.Sprintf("Invalid brief %d", index))
+						}
+						return "", false, nil
+					},
+				},
+				Projection: ProjectionDeps{
+					AppendMessages: func(_ context.Context, _ string, messages ...api.Message) error {
+						stored = append(stored, messages...)
+						return nil
+					},
 				},
 			})
 			calls := make([]api.ToolCall, 6)
@@ -53,7 +59,7 @@ func TestDispatchRejectionsPreserveIndependentPeersAndHistory(t *testing.T) {
 			history := []api.Message{{ID: "assistant", Role: api.MessageRoleAssistant, ToolCalls: calls, CreatedAt: time.Now().UTC()}}
 			state := &promptLoopTurnState{}
 			sess := &api.Session{ID: "session", Posture: api.SessionPostureBuild}
-			history, _, dispatched, count, _, stopped, err := toolBatch{loop}.executeToolCallsInTurn(t.Context(), sess, sess.ID, calls,
+			history, _, dispatched, count, _, stopped, err := loop.Batch.executeToolCallsInTurn(t.Context(), sess, sess.ID, calls,
 				tools.ToolContext{SessionID: sess.ID}, history, "build", "assistant", "", state)
 			testutil.FailErr(t, "dispatch wave", err)
 			if stopped || !dispatched || count != 6-len(rejected) || len(ran) != count || len(inspected) != 6 {

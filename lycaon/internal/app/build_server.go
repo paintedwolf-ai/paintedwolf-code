@@ -61,12 +61,12 @@ func (b serverWiring) wireRuntimeServices() error {
 		Publish: func(ctx context.Context, projectID, sessionID string, ev wire.BackgroundProcessEvent) {
 			b.eventPub.PublishProcess(ctx, projectID, sessionID, ev)
 		},
-		Complete: b.mgr.HandleCommandCompletion,
-		Refused:  b.mgr.HandleCommandRefusal,
+		Complete: b.mgr.Processes.HandleCommandCompletion,
+		Refused:  b.mgr.Processes.HandleCommandRefusal,
 	})
 	b.heldCalls = heldcall.New(func(ctx context.Context, projectID, sessionID string, ev wire.BackgroundProcessEvent) {
 		b.eventPub.PublishProcess(ctx, projectID, sessionID, ev)
-	}, b.mgr.HandleHeldCallSettled)
+	}, b.mgr.Processes.HandleHeldCallSettled)
 	b.pageRegistry = pagesession.NewRegistry(pagesession.DefaultConfig())
 	b.previewCtrl = preview.NewController(preview.DefaultConfig(), func(ctx context.Context, projectID, sessionID string, ev wire.PreviewEvent) {
 		b.eventPub.PublishPreview(ctx, projectID, sessionID, ev)
@@ -139,7 +139,7 @@ func (b serverWiring) wireRuntimeObservers() error {
 		emitProgressCompletion(ctx, b.store, b.eventPub, b.progressStore, activeRun, evt.SessionID)
 		// Progress closure releases the post-worker latch.
 		if b.mgr != nil {
-			b.mgr.MaybeClearProgressClosureAfterWrite(ctx, evt.SessionID)
+			b.mgr.ProgressClosure.AfterWrite(ctx, evt.SessionID)
 		}
 	})
 	return nil
@@ -201,8 +201,8 @@ func (b serverWiring) wireServer() error {
 		return nil
 	})
 	deps.ProjectLiveness = b.projectLiveness
-	b.mgr.SetProjectLiveness(b.projectLiveness)
-	b.mgr.SetMutationGate(deps.MutationGate)
+	b.mgr.Runner.Execution.SetProjectLiveness(b.projectLiveness)
+	b.mgr.Runner.Execution.SetMutationGate(deps.MutationGate)
 	prev, ok, err := db.ReadBootPreviousAppVersion(b.ctx, b.db)
 	if err != nil {
 		return fmt.Errorf("previous app version: %w", err)
@@ -270,9 +270,9 @@ func chatGrantLedger(checkpoints hitl.CheckpointManager) capabilityadmin.ChatGra
 // into the constructed server's handlers.
 func (b serverWiring) registerServerHooks(extensionJournal *extensionstate.SQLJournal) error {
 	// Publish execution failures before queued follow-up work can delay the caller.
-	b.mgr.SetTurnFailureSink(b.srv.Prompt.PublishTurnFailure)
-	b.mgr.SetPromotionHook(b.srv.Project.TryRunPromotion)
-	b.mgr.SetProjectSandboxReconcile(b.srv.Project.ScheduleProjectSandboxReconcile)
+	b.mgr.Runner.Turns.SetFailureSink(b.srv.Prompt.PublishTurnFailure)
+	b.mgr.Admission.SetPromotion(b.srv.Project.TryRunPromotion)
+	b.mgr.Runner.Settlement.SetSandboxReconcile(b.srv.Project.ScheduleProjectSandboxReconcile)
 	// Source views addressed by a chat end with it.
 	if err := b.mgr.RegisterSessionDisposal("source-views", 60, func(_ context.Context, sessionID string) error {
 		b.srv.Sources.ReleaseChatSourceViews(sessionID)
@@ -399,7 +399,7 @@ func (b serverWiring) wireSourceEditing(deps *api.Dependencies) error {
 	})
 	// A file the person has open is the document, for reads and writes alike.
 	b.mgr.SetEditorDocuments(editorDocumentsAdapter{service: editorDocuments})
-	b.mgr.SetSourceRewinds(&sourcerewind.Service{Ledger: b.sourceLedger, Mutations: sourceMutations, Documents: editorDocuments})
+	b.mgr.Rewinds.SetSourceRewinds(&sourcerewind.Service{Ledger: b.sourceLedger, Mutations: sourceMutations, Documents: editorDocuments})
 	// Contribution dispatch uses durable receipts and policy-derived authority.
 	deps.Contributions = extensionadmin.ContributionRuntime{
 		Receipts: commandinvoke.SQLReceipts{DB: b.db},
@@ -447,10 +447,10 @@ func (b serverWiring) wireOrchestrator() error {
 	}
 	b.workflowMgr.TopologyLegs = orchestration.TopologyLegView{Store: b.delegationStore, Catalog: extpacks.CatalogForConsumers}
 
-	workerOutcomes := &worker.SessionOutcomeBridge{Sessions: b.mgr, Inner: b.delegationMgr}
+	workerOutcomes := &worker.SessionOutcomeBridge{Sessions: b.mgr, Results: b.mgr.Workers.Results, State: b.mgr.Workers.State, Closure: b.mgr.ProgressClosure, Inner: b.delegationMgr}
 	var executor worker.WorkerExecutor = b.workerExec
 	if configdir.IsHarnessChannel() {
-		scripted, err := harnessfixture.NewWorkers(b.dataDir, b.store, b.workerQueue, b.mgr.VerifyHarnessWorker, b.mgr.ReadHarnessWorker, b.decisionStore, b.workerExec)
+		scripted, err := harnessfixture.NewWorkers(b.dataDir, b.store, b.workerQueue, b.mgr.Workers.Harness.Verify, b.mgr.Workers.Harness.Read, b.decisionStore, b.workerExec)
 		if err != nil {
 			return err
 		}

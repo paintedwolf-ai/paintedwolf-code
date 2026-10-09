@@ -50,7 +50,7 @@ func (b sessionWiring) wireSessionManager() error {
 		b.llmSvc.Preparation = preparation
 	}
 	b.mgr = session.NewManagerWithLLMService(b.store, b.mockLLM, b.llmSvc, b.toolReg, b.sessionCfg, b.costTracker)
-	b.mgr.SetMintedCredentialSource(b.detections.mintedCredentialSource)
+	b.mgr.ToolPolicy.SetMintedCredentialSource(b.detections.mintedCredentialSource)
 	invocations := invocation.NewSQLRecorder(b.db)
 	b.invocations = invocations
 	b.mgr.SetInvocationRecorder(invocations)
@@ -66,15 +66,15 @@ func (b sessionWiring) wireSessionManager() error {
 		return err
 	}
 	if compactor, err := loadCompactor(b.llmSvc, b.configRoot, b.costTracker); err == nil && compactor != nil {
-		b.mgr.SetCompactor(compactor)
+		b.mgr.Runner.History.SetCompactor(compactor)
 	}
 	return nil
 }
 
 func (b sessionWiring) configureSessionManager() error {
 	b.mgr.SetSourceLedger(b.sourceLedger)
-	b.mgr.SetAgentRegistry(b.agentRegistry)
-	b.mgr.SetHostResources(b.hostResources)
+	b.mgr.Profiles.SetAgentRegistry(b.agentRegistry)
+	b.mgr.Profiles.SetHostResources(b.hostResources)
 	if b.hostResources != nil && b.settingsSvc != nil && b.settingsSvc.Approvals != nil {
 		b.hostResources.SetPolicyBinder(newHostResourcePolicyBinder(b.settingsSvc.Approvals, b.mgr))
 	}
@@ -85,7 +85,7 @@ func (b sessionWiring) configureSessionManager() error {
 	b.promptEngine = prompts.NewFileTemplateEngineLayers(promptLayers)
 	b.mgr.SetPromptEngine(b.promptEngine)
 	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(b.promptEngine))
-	b.mgr.SetPostureRegistry(b.postureRegistry)
+	b.mgr.Profiles.SetPostureRegistry(b.postureRegistry)
 	b.mgr.SetProjectRegistry(b.registry)
 	b.mgr.SetDataDir(b.dataDir)
 	b.mgr.SetScratchFolders(scratch.New(b.dataDir))
@@ -94,20 +94,20 @@ func (b sessionWiring) configureSessionManager() error {
 	}
 	b.mgr.SetDoomLoopGuard(loopguard.NewMemoryDoomLoopGuard())
 	b.mgr.SetRejectFormatter(b.rejectFmt)
-	b.mgr.SetProfileRuntimeRules(loadProfileRuntimeRules())
+	b.mgr.Guards.SetRuntimeRules(loadProfileRuntimeRules())
 	if err := progress.InitProgressGatedTools(b.configRoot); err != nil {
 		return fmt.Errorf("init progress-gated tools: %w", err)
 	}
-	b.mgr.SetToolInvoker(b.toolRuntime.Executor)
+	b.mgr.Guards.SetInvoker(b.toolRuntime.Executor)
 	if b.settingsSvc != nil {
 		if b.cfg.TestSessionLimits == nil {
-			b.mgr.SetLimitsProvider(settings.ProjectLimitsAdapter{Store: b.settingsSvc.Limits})
+			b.mgr.Limits.SetProvider(settings.ProjectLimitsAdapter{Store: b.settingsSvc.Limits})
 		}
 		b.mgr.SetEffectiveCatalogDeps(b.configRoot, b.effective, b.settingsSvc.TrustSurfaces)
-		b.mgr.SetSkillsGate(b.projectSkillsGate())
+		b.mgr.Profiles.SetSkillsGate(b.projectSkillsGate())
 	}
 	if b.viewCache != nil {
-		b.mgr.Catalog().SetCatalogViewCache(b.viewCache)
+		b.mgr.Catalog.SetCatalogViewCache(b.viewCache)
 	}
 	return nil
 }
@@ -116,7 +116,7 @@ func (b sessionWiring) wireSessionToolSources() {
 	if b.toolRuntime != nil && b.toolRuntime.Boundary != nil {
 		mgr := b.mgr
 		b.toolRuntime.Boundary.SetProfileSource(func(ctx context.Context, sessionID string) []sandbox.ToolProfile {
-			view := mgr.Catalog().ViewForSessionID(ctx, sessionID)
+			view := mgr.Catalog.ViewForSessionID(ctx, sessionID)
 			if view == nil {
 				return nil
 			}
@@ -124,7 +124,7 @@ func (b sessionWiring) wireSessionToolSources() {
 		})
 		if b.toolRuntime.Executor != nil {
 			b.toolRuntime.Executor.SetToolSchemaSource(func(ctx context.Context, sessionID string) *toolschema.Config {
-				view := mgr.Catalog().ViewForSessionID(ctx, sessionID)
+				view := mgr.Catalog.ViewForSessionID(ctx, sessionID)
 				if view == nil {
 					return nil
 				}
@@ -144,7 +144,7 @@ func (b sessionWiring) wireSessionToolSources() {
 				}
 			}
 			sess, _ := mgr.SessionByID(ctx, tctx.SessionID)
-			loaded, _ := mgr.EffectiveSkillsForProfile(ctx, sess, tctx.Agent, roots)
+			loaded, _ := mgr.Profiles.EffectiveSkillsForProfile(ctx, sess, tctx.Agent, roots)
 			return loaded
 		})
 		b.toolRuntime.SetSkillTemplateVars(func(_ context.Context, tctx tools.ToolContext) map[string]any {
@@ -156,7 +156,7 @@ func (b sessionWiring) wireSessionToolSources() {
 		})
 		b.toolRuntime.SetSkillPackConfiguration(
 			func(ctx context.Context, tctx tools.ToolContext, packID string) map[string]any {
-				view := mgr.Catalog().ViewForSessionID(ctx, tctx.SessionID)
+				view := mgr.Catalog.ViewForSessionID(ctx, tctx.SessionID)
 				if view == nil {
 					return nil
 				}
@@ -204,7 +204,7 @@ func (b sessionWiring) wireSessionAuthorization() error {
 					return authzcontext.MCPInventory{ProviderIDs: b.mcpReg.EnabledProviderIDs()}
 				}
 			}
-			cap.Sealer.ToolAccess = b.mgr.ResolveToolAccess
+			cap.Sealer.ToolAccess = b.mgr.Profiles.ResolveToolAccess
 			if b.toolRuntime != nil && b.toolRuntime.Registry != nil {
 				cap.Sealer.RegisteredTools = func() []string {
 					metas := b.toolRuntime.Registry.List()
@@ -225,7 +225,7 @@ func (b sessionWiring) wireSessionAuthorization() error {
 				return spawn.AmbientAllowedAgents()
 			}
 			cap.Sealer.WorkerToolBudget = b.workerToolBudgetFor
-			b.mgr.SetAuthzSealer(cap.Sealer)
+			b.mgr.Runner.Authorization.SetSealer(cap.Sealer)
 		}
 	}
 	return nil
@@ -245,14 +245,14 @@ func (b sessionWiring) registerSessionCrashRecovery(invocations *invocation.SQLR
 	if err := delegationWiring(b).registerRecovery(bootrecovery.Entry{
 		Name: "session-turns", Kind: bootrecovery.KindReconcile, Phase: bootrecovery.PhaseBuild,
 		After: []string{"tool-invocations"},
-		Run:   b.mgr.RecoverOrphanedTurns,
+		Run:   b.mgr.Interruptions.RecoverOrphanedTurns,
 	}); err != nil {
 		return err
 	}
 	return delegationWiring(b).registerRecovery(bootrecovery.Entry{
 		Name: "transcript-invocations", Kind: bootrecovery.KindReconcile, Phase: bootrecovery.PhaseServe,
 		After: []string{"tool-invocations", "session-turns"},
-		Run:   b.mgr.RecoverInterruptedToolResults,
+		Run:   b.mgr.Interruptions.RecoverInterruptedToolResults,
 	})
 }
 
@@ -263,17 +263,17 @@ func (b sessionWiring) wireCheckpointRuntime() error {
 	checkpointStore := hitl.NewSQLStore(b.db)
 	checkpointStore.SetEventOutbox(b.eventOutbox)
 	checkpointMgr := hitl.NewManager(checkpointStore, b.eventPub, b.authzCapturer.Recorder)
-	checkpointMgr.SetSessionAdmission(b.mgr.WithSessionTreeAdmission)
+	checkpointMgr.SetSessionAdmission(b.mgr.Gate.WithSessionTreeAdmission)
 	checkpointMgr.SetVaultUnlock(b.presenceBroker, b.vaultUnlocks, unlockRecorder{})
 	b.toolRuntime.Executor.SetPresenceAvailable(checkpointMgr.PresenceAvailable)
-	checkpointMgr.SetCheckpointWaitObserver(b.mgr.BeginCheckpointWait)
+	checkpointMgr.SetCheckpointWaitObserver(b.mgr.Runner.Clocks.Wait)
 	var authzRec authzledger.Recorder = b.authzCapturer.Recorder
 	if b.toolRuntime != nil {
 		b.toolRuntime.SetAuthzRecorder(authzRec)
 	}
 	b.checkpointMgr = checkpointMgr
-	b.mgr.SetSessionCheckpointStop(checkpointMgr)
-	b.mgr.SetExecutionCheckpoints(checkpointMgr)
+	b.mgr.Stops.SetCheckpointStop(checkpointMgr)
+	b.mgr.Observations.SetExecutionCheckpoints(checkpointMgr)
 	b.toolRuntime.SetCheckpointManager(b.checkpointMgr)
 	if err := b.wireGrantedAccess(); err != nil {
 		return err
@@ -380,7 +380,7 @@ func (b sessionWiring) assertAuthzCapturer() error {
 	if b.authzCapturer.Store == nil || b.authzCapturer.Sealer == nil || b.authzCapturer.Ledger == nil {
 		return fmt.Errorf("authz: capturer incomplete")
 	}
-	if b.mgr == nil || !b.mgr.AuthzSealWired() {
+	if b.mgr == nil || !b.mgr.Runner.Authorization.Wired() {
 		return fmt.Errorf("authz: session manager missing authz sealer")
 	}
 	return nil

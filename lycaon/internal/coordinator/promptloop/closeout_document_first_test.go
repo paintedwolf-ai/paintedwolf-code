@@ -30,38 +30,43 @@ func TestCloseoutDocumentDefectRefusedBeforeCitations(t *testing.T) {
 	}
 	var assembled bool
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		HintConfig: hints, RejectFmt: guidance.NewStaticRejectFormatter(hints),
-		EvidenceLedger: closeoutLedgerReader{ledger: ledger},
-		CheckRunReportDocument: func(_ context.Context, _ string, _ guidance.CoordinatorCompletionReport) ([]guidance.ReportDocumentIssue, error) {
-			return []guidance.ReportDocumentIssue{{
-				Code:   guidance.ReportClaimUnreportedCode,
-				Reason: `finding "c9" has no answers`,
-				Count:  1,
-			}}, nil
+		Closeout: CloseoutDeps{
+			HintConfig:     hints,
+			RejectFmt:      guidance.NewStaticRejectFormatter(hints),
+			EvidenceLedger: closeoutLedgerReader{ledger: ledger},
+			CheckRunReportDocument: func(_ context.Context, _ string, _ guidance.CoordinatorCompletionReport) ([]guidance.ReportDocumentIssue, error) {
+				return []guidance.ReportDocumentIssue{{
+					Code:   guidance.ReportClaimUnreportedCode,
+					Reason: `finding "c9" has no answers`,
+					Count:  1,
+				}}, nil
+			},
+			EvaluateCloseoutBlock: func(_ context.Context, _ *api.Session, gc *oar.GuardContext) (*oar.Decision, error) {
+				code := guidance.ReportClaimUnreportedCode
+				if gc.RejectObservation != guidance.ReportDocumentObservation(code) {
+					t.Fatalf("observation = %q, want the document defect refused before the citation check", gc.RejectObservation)
+				}
+				return &oar.Decision{Code: code, Data: gc.RejectData[code]}, nil
+			},
+			AssembleLedgerCloseout: func(_ context.Context, _, _ string, _ []string, _ string, _ int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
+				assembled = true
+				return guidance.CoordinatorCompletionReport{Synthesis: "assembled"}, nil
+			},
+			NoteCloseoutGroundingReject: func(_ context.Context, _, code, _ string, _ string, _ []jsonshape.Issue) (int, string) {
+				return 1, ""
+			},
 		},
-		EvaluateCloseoutBlock: func(_ context.Context, _ *api.Session, gc *oar.GuardContext) (*oar.Decision, error) {
-			code := guidance.ReportClaimUnreportedCode
-			if gc.RejectObservation != guidance.ReportDocumentObservation(code) {
-				t.Fatalf("observation = %q, want the document defect refused before the citation check", gc.RejectObservation)
-			}
-			return &oar.Decision{Code: code, Data: gc.RejectData[code]}, nil
+		Projection: ProjectionDeps{
+			AppendMessages:     func(context.Context, string, ...api.Message) error { return nil },
+			AppendDraftVersion: func(context.Context, string, string, string, string) (int, error) { return 1, nil },
+			UpdateMessage:      func(context.Context, string, string, api.Message) error { return nil },
 		},
-		AssembleLedgerCloseout: func(_ context.Context, _, _ string, _ []string, _ string, _ int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
-			assembled = true
-			return guidance.CoordinatorCompletionReport{Synthesis: "assembled"}, nil
-		},
-		NoteCloseoutGroundingReject: func(_ context.Context, _, code, _ string, _ string, _ []jsonshape.Issue) (int, string) {
-			return 1, ""
-		},
-		AppendMessages:     func(context.Context, string, ...api.Message) error { return nil },
-		AppendDraftVersion: func(context.Context, string, string, string, string) (int, error) { return 1, nil },
-		UpdateMessage:      func(context.Context, string, string, api.Message) error { return nil },
 	})
 	history := []api.Message{
 		{ID: "u1", Role: api.MessageRoleUser, Content: "research"},
 		{ID: "slot-1", Role: api.MessageRoleAssistant, Content: "no citations here", Visibility: api.MessageVisibilityInternal},
 	}
-	out, err := turnCloseout{loop}.handleAcceptedCloseoutReport(
+	out, err := loop.Closeout.handleAcceptedCloseoutReport(
 		context.Background(), &api.Session{ID: "s1", WorkspacePath: t.TempDir()},
 		"s1", "", "implement_synthesis", st, history,
 		api.Message{ID: "slot-1", Role: api.MessageRoleAssistant, Content: "no citations here"},

@@ -18,7 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/secretmatch"
-	"github.com/lycaon/lycaon/internal/session"
+	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/visual"
 	"github.com/lycaon/lycaon/internal/workflow"
@@ -124,7 +124,7 @@ func (s *Server) handleHarnessTranscript(w http.ResponseWriter, r *http.Request)
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "messages must contain 1 to 1000 rows")
 		return
 	}
-	if err := s.sessions.AppendAndPublishMessages(
+	if err := s.sessions.Transcript.AppendPlain(
 		r.Context(),
 		sessionID,
 		s.stampActiveRun(r, sessionID, req.Messages)...,
@@ -328,7 +328,7 @@ func (s *Server) handleHarnessToolApprovalCheckpoint(w http.ResponseWriter, r *h
 			toolMsgID, assistantID, toolCallID, toolName, "awaiting approval",
 		))
 	}
-	if err := s.sessions.AppendAndPublishMessages(r.Context(), sessionID, s.stampActiveRun(r, sessionID, msgs)...); err != nil {
+	if err := s.sessions.Transcript.AppendPlain(r.Context(), sessionID, s.stampActiveRun(r, sessionID, msgs)...); err != nil {
 		s.responses.InternalError(w, r, err)
 		return
 	}
@@ -626,7 +626,7 @@ func (s *Server) handleHarnessAskUser(w http.ResponseWriter, r *http.Request) {
 		},
 		harnessToolResultMessage(toolMsgID, assistantID, toolCallID, "ask_user", pendingBody),
 	}
-	if err := s.sessions.AppendAndPublishMessages(r.Context(), sessionID, s.stampActiveRun(r, sessionID, msgs)...); err != nil {
+	if err := s.sessions.Transcript.AppendPlain(r.Context(), sessionID, s.stampActiveRun(r, sessionID, msgs)...); err != nil {
 		s.responses.InternalError(w, r, err)
 		return
 	}
@@ -801,7 +801,7 @@ func (s *Server) handleHarnessVisualFixture(w http.ResponseWriter, r *http.Reque
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "session_id is required")
 		return
 	}
-	root := session.RootSessionID(r.Context(), s.sessionStore, sessionID)
+	root := sessiontree.RootID(r.Context(), s.sessionStore, sessionID)
 	caption := strings.TrimSpace(req.Caption)
 	if caption == "" {
 		caption = "harness fixture"

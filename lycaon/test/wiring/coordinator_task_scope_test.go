@@ -11,7 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/workeradmission"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/worker"
@@ -29,7 +29,7 @@ func TestCoordinatorTaskScopeDispatchReadFanOutParallelWriteAllowed(t *testing.T
 	testutil.FailErr(t, "create session", err)
 
 	q := h.WorkerQueue
-	capDeps := session.WorkerCycleGuardDeps{
+	capDeps := workeradmission.WorkerCycleGuardDeps{
 		Workers:         q,
 		MaxWorkers:      func(context.Context, string) int { return 3 },
 		MaxReadWorkers:  func(context.Context, string) int { return 3 },
@@ -42,7 +42,7 @@ func TestCoordinatorTaskScopeDispatchReadFanOutParallelWriteAllowed(t *testing.T
 	}
 	for i, scope := range readScopes {
 		gc := observeReadScoutSpawn(t, ctx, capDeps, sess, []any{scope.Paths[0]})
-		if _, rejected := gc.RejectData[session.CoordinatorWorkerInFlightCode]; rejected || gc.WorkerSpawnBlocked {
+		if _, rejected := gc.RejectData[workeradmission.CoordinatorWorkerInFlightCode]; rejected || gc.WorkerSpawnBlocked {
 			t.Fatalf("expected read scout %d allowed", i+1)
 		}
 		s := scope
@@ -61,14 +61,14 @@ func TestCoordinatorTaskScopeDispatchReadFanOutParallelWriteAllowed(t *testing.T
 	if !gc.WorkerSpawnBlocked || gc.MaxWorkers != 3 || gc.ActiveWorkerCount != 3 {
 		t.Fatalf("expected reject at total cap after three read scouts; blocked=%v active=%d max=%d", gc.WorkerSpawnBlocked, gc.ActiveWorkerCount, gc.MaxWorkers)
 	}
-	if _, observed := gc.RejectData[session.CoordinatorWorkerInFlightCode]; !observed {
+	if _, observed := gc.RejectData[workeradmission.CoordinatorWorkerInFlightCode]; !observed {
 		t.Fatalf("guard did not stamp reject data at total cap; reject data = %v", gc.RejectData)
 	}
 
 	_, err = guidance.LoadHintConfigStock()
 	testutil.FailErr(t, "LoadHintConfig", err)
 	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
-	deps := session.WorkerCycleGuardDeps{
+	deps := workeradmission.WorkerCycleGuardDeps{
 		Workers: worker.NewInMemoryQueue(8),
 	}
 	q2 := worker.NewInMemoryQueue(8)
@@ -86,7 +86,7 @@ func TestCoordinatorTaskScopeDispatchReadFanOutParallelWriteAllowed(t *testing.T
 	testutil.FailErr(t, "enqueue write worker", err)
 
 	gc = oar.NewGuardContext()
-	testutil.FailErr(t, "Observe overlapping write", session.ObserveCoordinatorTaskInFlight(ctx, deps, sess, "task", map[string]any{
+	testutil.FailErr(t, "Observe overlapping write", workeradmission.ObserveCoordinatorTaskInFlight(ctx, deps, sess, "task", map[string]any{
 		"agent_type": "implementer",
 		"brief":      map[string]any{"goal": "parallel write same area", "done_when": []any{"Return grounded results."}},
 		"scope": map[string]any{

@@ -34,10 +34,10 @@ func TestFinishPromptExecutionQueuesOverlayIntegrateCompleteKick(t *testing.T) {
 	mgr := session.NewManager(store, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
 	agents := orchestration.NewMemoryAgentRegistry()
 	testutil.FailErr(t, "LoadRequiredAgentRegistry", orchestration.LoadRequiredAgentRegistry(context.Background(), agents))
-	mgr.SetAgentRegistry(agents)
+	mgr.Profiles.SetAgentRegistry(agents)
 	wirePromptTestManager(t, mgr)
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
-	testutil.FailErr(t, "install anchor registry", mgr.InstallAnchorRegistry())
+	testutil.FailErr(t, "install anchor registry", mgr.Guidance.InstallAnchorRegistry())
 
 	wfStore := workflow.NewSQLStore(sqlDB)
 	bundledDir := filepath.Join(root, "config", "packs", "painted-wolf", "platform", "workflows")
@@ -64,9 +64,12 @@ func TestFinishPromptExecutionQueuesOverlayIntegrateCompleteKick(t *testing.T) {
 	testutil.FailErr(t, "ApplyCoordinatorBatchEvent dispatch", wfMgr.ApplyCoordinatorBatchEvent(ctx, sess.ID, batch.EventWriterTaskEnqueued, 0))
 	testutil.FailErr(t, "ApplyCoordinatorBatchEvent integrate", wfMgr.ApplyCoordinatorBatchEvent(ctx, sess.ID, batch.EventOverlaysPendingIdle, 0))
 
-	mgr.FinishPromptExecutionForTest(ctx, sess.ID, false, true)
+	func() {
+		_ = mgr.Runner.Settlement.Finish(ctx, sess.ID, false, true, "")
+		_ = mgr.Runner.Settlement.Drain(ctx, sess.ID)
+	}()
 
-	kickID, ok := mgr.PendingKickIDForTest(sess.ID)
+	kickID, ok := mgr.Runner.Coordinator.Kicks().PeekPendingKickID(sess.ID)
 	wantID := anchor.InformRender(anchor.OverlayPromoteComplete)
 	if !ok || kickID != wantID {
 		t.Fatalf("kick_id = %q ok=%v want %q", kickID, ok, wantID)

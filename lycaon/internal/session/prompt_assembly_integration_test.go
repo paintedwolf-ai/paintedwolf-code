@@ -54,7 +54,7 @@ func TestRunContextInjectsEveryIteration(t *testing.T) {
 	testutil.FailErr(t, "create project", err)
 	mgr.SetProjectRegistry(projects)
 	// Reserve one iteration for prose closeout.
-	mgr.SetMaxIterations(3)
+	mgr.Limits.SetMaxIterations(3)
 	wirePromptTestManager(t, mgr)
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
 	mgr.SetCoordinatorTurnFrameSource(&phaseStubCoordinator{
@@ -65,9 +65,9 @@ func TestRunContextInjectsEveryIteration(t *testing.T) {
 
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, p.ID)
 	testutil.FailErr(t, "create session in store", err)
-	resp, err := mgr.Prompt(ctx, sess.ID, "multi-iter start")
+	resp, err := mgr.Submissions.Prompt(ctx, sess.ID, "multi-iter start")
 	if err != nil {
-		testutil.FailErr(t, "mgr.Prompt failed", err)
+		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 	}
 
 	reqs := rec.AllRequests()
@@ -103,13 +103,13 @@ func TestSecondPromptStillGetsRunContextAfterAdvance(t *testing.T) {
 
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureSpec}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
-	if _, err := mgr.Prompt(ctx, sess.ID, "turn one"); err != nil {
-		testutil.FailErr(t, "mgr.Prompt failed", err)
+	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "turn one"); err != nil {
+		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 	}
 	coord.phase = "build"
 	coord.brief = "phase build brief"
-	if _, err := mgr.Prompt(ctx, sess.ID, "turn two"); err != nil {
-		testutil.FailErr(t, "mgr.Prompt failed", err)
+	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "turn two"); err != nil {
+		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 	}
 	if countRunContextBlocks(rec.LastRequest().Messages) != 1 {
 		t.Fatal("expected fresh run context on second user Prompt after phase change")
@@ -138,7 +138,7 @@ func TestWorkerLegInjectsEveryIteration(t *testing.T) {
 	}}}))
 	store := store.NewMemory()
 	mgr := session.NewManager(store, rec, tools.NewStubRegistry(), settings.DefaultSessionLimits())
-	mgr.SetAgentRegistry(loadTestAgentRegistry(t))
+	mgr.Profiles.SetAgentRegistry(loadTestAgentRegistry(t))
 	wirePromptTestManager(t, mgr)
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
 	mgr.SetWorkerContextBuilder(&stubWorkerContext{ctx: inject.WorkerLegContext{
@@ -147,15 +147,15 @@ func TestWorkerLegInjectsEveryIteration(t *testing.T) {
 		Checklist: []string{"Run tests"},
 	}})
 
-	parent, err := mgr.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureBuild)
+	parent, err := mgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureBuild)
 	testutil.FailErr(t, "mgr.Create failed", err)
-	child, err := mgr.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{
+	child, err := mgr.Workers.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{
 		AgentType: "implementer",
 		Prompt:    "worker-multi go",
 	})
-	testutil.FailErr(t, "mgr.SpawnChild failed", err)
-	if _, err := mgr.Prompt(ctx, child.ID, "worker-multi go"); err != nil {
-		testutil.FailErr(t, "mgr.Prompt failed", err)
+	testutil.FailErr(t, "mgr.Workers.SpawnChild failed", err)
+	if _, err := mgr.Submissions.Prompt(ctx, child.ID, "worker-multi go"); err != nil {
+		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 	}
 	reqs := rec.AllRequests()
 	if len(reqs) < 2 {

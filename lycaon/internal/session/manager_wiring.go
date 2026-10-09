@@ -8,15 +8,9 @@ import (
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/invocation"
-	"github.com/lycaon/lycaon/internal/llm/compaction"
-	"github.com/lycaon/lycaon/internal/rules"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
-	sessioncatalog "github.com/lycaon/lycaon/internal/session/catalog"
 	"github.com/lycaon/lycaon/internal/session/loopguard"
-	"github.com/lycaon/lycaon/internal/session/promptstate"
-	"github.com/lycaon/lycaon/internal/session/stream"
 	"github.com/lycaon/lycaon/internal/settings"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/visual"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -24,31 +18,13 @@ import (
 // SetInvocationRecorder wires durable invocation receipts.
 func (m *Manager) SetInvocationRecorder(recorder invocation.Recorder) {
 	m.invocations = recorder
-}
-
-// SetLimitsProvider wires dynamic limits from settings store.
-func (m *Manager) SetLimitsProvider(p LimitsProvider) {
-	m.limits = p
-}
-
-// SetCompactor wires context compaction for coordinator prompts.
-func (m *Manager) SetCompactor(c compaction.ContextCompactor) {
-	m.compactor = c
-}
-
-// SetPostureRegistry wires posture → tool profile resolution.
-func (m *Manager) SetPostureRegistry(r *PostureRegistry) {
-	m.postures = r
-}
-
-// SetAgentRegistry wires agent profile resolution.
-func (m *Manager) SetAgentRegistry(r AgentProfileResolver) {
-	m.agents = r
+	m.Interruptions.SetRecorder(recorder)
 }
 
 // SetDoomLoopGuard wires identical tool-call repetition blocking.
 func (m *Manager) SetDoomLoopGuard(g loopguard.DoomLoopGuard) {
 	m.doomLoop = g
+	m.ToolPolicy.SetDoomLoopGuard(g)
 	if g != nil && m.pageRegistry != nil {
 		g.SetPageTargetResolver(m.pageRegistry.TargetURL)
 	}
@@ -69,16 +45,17 @@ func (m *Manager) SetScanGuidance(h ScanGuidanceHook) {
 // SetGroundingHook wires grounding checks for delegation coordinator sessions.
 func (m *Manager) SetGroundingHook(h GroundingHook) {
 	m.grounding = h
+	m.Runner.SetGrounding(h)
+	m.Runner.PostTurn.SetGrounding(h)
+	m.Workers.Summaries.SetGrounding(h)
+	m.Workers.Cancellations.SetGrounding(h)
 }
 
 // SetRejectFormatter wires structured tool reject formatting.
 func (m *Manager) SetRejectFormatter(f *guidance.StaticRejectFormatter) {
 	m.rejectFmt = f
-}
-
-// SetToolInvoker wires the policy-aware tool invoker for profile-filtered listing.
-func (m *Manager) SetToolInvoker(inv tools.ToolInvoker) {
-	m.toolInvoker = inv
+	m.Guards.SetRejects(f, m.toolRejectFormatter)
+	m.Guidance.SetRejectFormatter(f)
 }
 
 // SetPageRegistry wires session-scoped held browser pages.
@@ -97,12 +74,15 @@ func (m *Manager) SetPageRegistry(reg *pagesession.Registry) {
 // SetEventPublisher wires SSE publish hooks for session, LLM, and cost topics.
 func (m *Manager) SetEventPublisher(p *events.Publisher) {
 	m.events = p
-}
-
-func (m *Manager) SetMaxIterations(n int) {
-	if n > 0 {
-		m.cfg.MaxIterations = n
-	}
+	m.Runner.Status.SetPublisher(p)
+	m.Loading.SetPublisher(p)
+	m.Chats.SetPublisher(p)
+	m.Naming.SetPublisher(p)
+	m.Drafts.SetPublisher(p)
+	m.Runner.SubmissionState.SetPublisher(p)
+	m.Transcript.SetPublisher(p)
+	m.Rewinds.SetPublisher(p)
+	m.Runner.Clocks.Publisher = p
 }
 
 // SetEffectiveCatalogDeps wires session-scoped extension catalog resolution.
@@ -111,20 +91,16 @@ func (m *Manager) SetEffectiveCatalogDeps(moduleRoot string, boot *extpacks.Effe
 		return
 	}
 	m.trustSurfaces = surfaces
-	m.catalog.Configure(moduleRoot, boot, surfaces)
-}
-
-func (m *Manager) Catalog() *sessioncatalog.Service {
-	if m == nil {
-		return nil
-	}
-	return &m.catalog
+	m.Profiles.SetTrustSurfaces(surfaces)
+	m.Workspace.SetTrust(surfaces)
+	m.Catalog.Configure(moduleRoot, boot, surfaces)
 }
 
 // SetSandboxPathGrantRuntime wires write-root guard state.
 func (m *Manager) SetSandboxPathGrantRuntime(runtime *approvalstate.SandboxPathGrantRuntime) {
 	if m != nil {
 		m.writeRootRuntime = runtime
+		m.Runner.Instructions.SetIntentBoundaries(m.toolApprovalCoalesce, m.gateRepeatLedger, m.writeRootRuntime, m.listenRuntime, m.loopbackRuntime)
 	}
 }
 
@@ -132,12 +108,14 @@ func (m *Manager) SetSandboxPathGrantRuntime(runtime *approvalstate.SandboxPathG
 func (m *Manager) SetSandboxListenRuntime(runtime *approvalstate.SandboxPortGrantRuntime) {
 	if m != nil {
 		m.listenRuntime = runtime
+		m.Runner.Instructions.SetIntentBoundaries(m.toolApprovalCoalesce, m.gateRepeatLedger, m.writeRootRuntime, m.listenRuntime, m.loopbackRuntime)
 	}
 }
 
 func (m *Manager) SetSandboxLoopbackRuntime(runtime *approvalstate.SandboxPortGrantRuntime) {
 	if m != nil {
 		m.loopbackRuntime = runtime
+		m.Runner.Instructions.SetIntentBoundaries(m.toolApprovalCoalesce, m.gateRepeatLedger, m.writeRootRuntime, m.listenRuntime, m.loopbackRuntime)
 	}
 }
 
@@ -145,6 +123,7 @@ func (m *Manager) SetSandboxLoopbackRuntime(runtime *approvalstate.SandboxPortGr
 func (m *Manager) SetToolApprovalCoalesce(coalesce *approvalstate.ToolApprovalCoalesce) {
 	if m != nil {
 		m.toolApprovalCoalesce = coalesce
+		m.Runner.Instructions.SetIntentBoundaries(m.toolApprovalCoalesce, m.gateRepeatLedger, m.writeRootRuntime, m.listenRuntime, m.loopbackRuntime)
 	}
 }
 
@@ -152,19 +131,8 @@ func (m *Manager) SetToolApprovalCoalesce(coalesce *approvalstate.ToolApprovalCo
 func (m *Manager) SetGateRepeatLedger(ledger *approvalstate.GateRepeatLedger) {
 	if m != nil {
 		m.gateRepeatLedger = ledger
+		m.Runner.Instructions.SetIntentBoundaries(m.toolApprovalCoalesce, m.gateRepeatLedger, m.writeRootRuntime, m.listenRuntime, m.loopbackRuntime)
 	}
-}
-
-func (m *Manager) PromptState() *promptstate.State {
-	if m == nil {
-		return nil
-	}
-	return &m.promptState
-}
-
-func (m *Manager) Streams() *stream.State {
-	m.streamsOnce.Do(func() { m.streams = stream.New(m.store) })
-	return m.streams
 }
 
 // SetVisualStore wires the session-tree visual artifact store.
@@ -173,16 +141,6 @@ func (m *Manager) SetVisualStore(store visual.Store) {
 		return
 	}
 	m.visual = store
-}
-
-// RuleEvaluator evaluates scaffold rules before tool execution.
-type RuleEvaluator interface {
-	Evaluate(ctx context.Context, eval rules.EvalContext) (*rules.RuleOutcome, error)
-}
-
-// SetRuleEngine wires plan-mode tool gating.
-func (m *Manager) SetRuleEngine(e RuleEvaluator) {
-	m.rules = e
 }
 
 // GroundingHook runs grounding checks for delegation coordinator sessions.

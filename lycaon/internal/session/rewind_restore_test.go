@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	sessioncheckpoint "github.com/lycaon/lycaon/internal/session/checkpoint"
+	"github.com/lycaon/lycaon/internal/session/checkpointcontrol"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -24,12 +25,12 @@ func TestRewindRefusesWhenNoCheckpointRootIsConfigured(t *testing.T) {
 	}
 	testutil.FailErr(t, "append", mgr.store.AppendMessages(ctx, sessionID, anchor))
 
-	if _, err := rewindTest(t, mgr, ctx, uuid.NewString(), sessionID, anchor.ID); !errors.Is(err, errCheckpointRootUnset) {
-		t.Fatalf("RewindToPrompt err = %v, want errCheckpointRootUnset", err)
+	if _, err := rewindTest(t, mgr, ctx, uuid.NewString(), sessionID, anchor.ID); !errors.Is(err, checkpointcontrol.ErrCheckpointRootUnset) {
+		t.Fatalf("RewindToPrompt err = %v, want checkpointcontrol.ErrCheckpointRootUnset", err)
 	}
-	msgs, err := mgr.GetMessages(ctx, sessionID)
+	msgs, err := mgr.Transcript.GetMessages(ctx, sessionID)
 	testutil.FailErr(t, "get messages", err)
-	if _, ok := findMessage(msgs, anchor.ID); !ok {
+	if _, ok := rewindFixtureHasMessage(msgs, anchor.ID); !ok {
 		t.Fatal("a refused rewind must leave the transcript intact")
 	}
 }

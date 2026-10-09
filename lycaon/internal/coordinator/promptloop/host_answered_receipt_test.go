@@ -102,12 +102,12 @@ func readCallDeps(t *testing.T, rec *recordingRecorder) (promptloop.PromptLoopDe
 	})
 	mem := store.NewMemory()
 	deps := promptloop.StoreDeps(mem)
-	deps.Limits = loopTestLimits(2)
-	deps.LLM = llm.NewMockProvider(&llm.MockConfig{Responses: mockToolThenDone("review", []llm.MockToolCall{
+	deps.Context.Limits = loopTestLimits(2)
+	deps.Model.LLM = llm.NewMockProvider(&llm.MockConfig{Responses: mockToolThenDone("review", []llm.MockToolCall{
 		{ID: "tc1", Name: "read", Args: map[string]any{"path": "a.go"}},
 	})})
-	deps.Tools = reg
-	deps.Invocations = rec
+	deps.Context.Tools = reg
+	deps.Tools.Invocations = rec
 	return deps, mem
 }
 
@@ -128,7 +128,7 @@ func runReadCall(t *testing.T, deps promptloop.PromptLoopDeps, mem *store.Memory
 func TestHostAnsweredToolCallSettlesOnTheLedger(t *testing.T) {
 	rec := newRecordingRecorder()
 	deps, mem := readCallDeps(t, rec)
-	deps.BeforeToolRun = func(context.Context, *api.Session, []api.Message, string, string, map[string]any) (string, bool, error) {
+	deps.Tools.BeforeToolRun = func(context.Context, *api.Session, []api.Message, string, string, map[string]any) (string, bool, error) {
 		return "answered by the host", true, nil
 	}
 	runReadCall(t, deps, mem)
@@ -153,7 +153,7 @@ func TestHostAnsweredToolCallSettlesOnTheLedger(t *testing.T) {
 func TestPreInvokeRefusalSettlesOnTheLedger(t *testing.T) {
 	rec := newRecordingRecorder()
 	deps, mem := readCallDeps(t, rec)
-	deps.BeforeToolRun = func(context.Context, *api.Session, []api.Message, string, string, map[string]any) (string, bool, error) {
+	deps.Tools.BeforeToolRun = func(context.Context, *api.Session, []api.Message, string, string, map[string]any) (string, bool, error) {
 		return "", false, errors.New("refused before the subsystem owner")
 	}
 	runReadCall(t, deps, mem)
@@ -176,12 +176,12 @@ func TestOffSurfaceToolOpensNoReceipt(t *testing.T) {
 	reg := tools.NewStubRegistry()
 	mem := store.NewMemory()
 	deps := promptloop.StoreDeps(mem)
-	deps.Limits = loopTestLimits(2)
-	deps.LLM = llm.NewMockProvider(&llm.MockConfig{Responses: mockToolThenDone("review", []llm.MockToolCall{
+	deps.Context.Limits = loopTestLimits(2)
+	deps.Model.LLM = llm.NewMockProvider(&llm.MockConfig{Responses: mockToolThenDone("review", []llm.MockToolCall{
 		{ID: "tc1", Name: "no_such_tool", Args: map[string]any{}},
 	})})
-	deps.Tools = reg
-	deps.Invocations = rec
+	deps.Context.Tools = reg
+	deps.Tools.Invocations = rec
 	runReadCall(t, deps, mem)
 
 	rec.mu.Lock()
@@ -205,12 +205,12 @@ func TestStatedSourceVerdictReachesTheLedger(t *testing.T) {
 	})
 	mem := store.NewMemory()
 	deps := promptloop.StoreDeps(mem)
-	deps.Limits = loopTestLimits(2)
-	deps.LLM = llm.NewMockProvider(&llm.MockConfig{Responses: mockToolThenDone("review", []llm.MockToolCall{
+	deps.Context.Limits = loopTestLimits(2)
+	deps.Model.LLM = llm.NewMockProvider(&llm.MockConfig{Responses: mockToolThenDone("review", []llm.MockToolCall{
 		{ID: "tc1", Name: "command", Args: map[string]any{"command": "./check.sh"}},
 	})})
-	deps.Tools = reg
-	deps.Invocations = rec
+	deps.Context.Tools = reg
+	deps.Tools.Invocations = rec
 	runReadCall(t, deps, mem)
 
 	_, settlement := rec.only(t)
@@ -231,12 +231,12 @@ func TestOwnerWithoutSourceRunSettlesNoVerdict(t *testing.T) {
 	})
 	mem := store.NewMemory()
 	deps := promptloop.StoreDeps(mem)
-	deps.Limits = loopTestLimits(2)
-	deps.LLM = llm.NewMockProvider(&llm.MockConfig{Responses: mockToolThenDone("review", []llm.MockToolCall{
+	deps.Context.Limits = loopTestLimits(2)
+	deps.Model.LLM = llm.NewMockProvider(&llm.MockConfig{Responses: mockToolThenDone("review", []llm.MockToolCall{
 		{ID: "tc1", Name: "read", Args: map[string]any{"path": "a.go"}},
 	})})
-	deps.Tools = reg
-	deps.Invocations = rec
+	deps.Context.Tools = reg
+	deps.Tools.Invocations = rec
 	runReadCall(t, deps, mem)
 
 	_, settlement := rec.only(t)
@@ -251,7 +251,7 @@ func TestOwnerWithoutSourceRunSettlesNoVerdict(t *testing.T) {
 func TestGuidanceRejectedCallCarriesItsReceiptToTheCard(t *testing.T) {
 	rec := newRecordingRecorder()
 	deps, mem := readCallDeps(t, rec)
-	deps.BeforeToolRun = func(context.Context, *api.Session, []api.Message, string, string, map[string]any) (string, bool, error) {
+	deps.Tools.BeforeToolRun = func(context.Context, *api.Session, []api.Message, string, string, map[string]any) (string, bool, error) {
 		return "", false, guidance.NewRefusal("TOOL_TEST_REFUSED", "Rejected: no.\nCode: TOOL_TEST_REFUSED")
 	}
 

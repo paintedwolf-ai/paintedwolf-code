@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/promptinput"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -61,7 +61,7 @@ func TestPromptReplayPrecedesWorkspaceValidation(t *testing.T) {
 	sess := createSessionAtPathOnServer(t, srv, dir, wire.SessionPostureBuild)
 	operationID := uuid.NewString()
 	prompt := wire.PromptRequest{OperationID: operationID, Text: "hello"}
-	row, created, err := srv.sessions.AdmitPrompt(t.Context(), sess.ID, operationID, prompt, session.PromptInput{Text: prompt.Text})
+	row, created, err := srv.sessions.Submissions.AdmitPrompt(t.Context(), sess.ID, operationID, prompt, promptinput.Input{Text: prompt.Text})
 	if err != nil {
 		testutil.FailErr(t, "admit prompt", err)
 	}
@@ -229,7 +229,7 @@ func TestPromptConcurrentHTTP(t *testing.T) {
 
 func TestPromptMaxIterationHTTP(t *testing.T) {
 	srv := newTestServer(t)
-	srv.sessions.SetMaxIterations(3)
+	srv.sessions.Limits.SetMaxIterations(3)
 	baseURL := startTestHTTPServer(t, srv)
 	dir := t.TempDir()
 	sess := createTestSession(t, baseURL, dir)

@@ -2,16 +2,16 @@ package session
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/events"
-	"github.com/lycaon/lycaon/internal/testdbfixture"
-	"github.com/lycaon/lycaon/internal/testutil"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -59,7 +59,7 @@ func TestAgentNotePairSSEAndHydration(t *testing.T) {
 		Grounding:  &wire.CitationGrounding{Traced: true},
 	}
 
-	testutil.FailErr(t, "append pair", mgr.appendMessages(ctx, sess.ID, toolMsg, noteMsg))
+	testutil.FailErr(t, "append pair", mgr.Transcript.Append(ctx, sess.ID, toolMsg, noteMsg))
 
 	toolEv := waitParentMessageAppend(t, ch, sess.ID, toolID)
 	noteEv := waitParentMessageAppend(t, ch, sess.ID, noteID)

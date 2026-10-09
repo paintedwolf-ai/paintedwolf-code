@@ -36,11 +36,11 @@ func TestImplementDefaultTaskEnqueueWiresToolResultJobID(t *testing.T) {
 	testutil.FailErr(t, "create session in store", err)
 	h.SeedProgress(t, ctx, sess.ID)
 
-	if _, err := h.SessionMgr.Prompt(ctx, sess.ID, "add handler for health check"); err != nil {
-		testutil.FailErr(t, "h.SessionMgr.Prompt failed", err)
+	if _, err := h.SessionMgr.Submissions.Prompt(ctx, sess.ID, "add handler for health check"); err != nil {
+		testutil.FailErr(t, "h.SessionMgr.Submissions.Prompt failed", err)
 	}
 
-	msgs, err := h.SessionMgr.GetMessages(ctx, sess.ID)
+	msgs, err := h.SessionMgr.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "h.SessionMgr.GetMessages failed", err)
 	var found bool
 	for _, msg := range msgs {

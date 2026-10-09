@@ -15,8 +15,8 @@ func (m *Manager) SetBoardInject(builder assembly.BoardSnapshotBuilder, formatte
 	rt.SetBoardInject(builder, formatter, func() bool {
 		return m.coordinatorFrame != nil
 	})
-	rt.Board().SetWorkerRoots(m.workerBoardRoots)
-	rt.SetPromotePathOverlay(m.PromotePathBoardLines)
+	rt.Board().SetWorkerRoots(m.Workers.Workspaces.BoardRoots)
+	rt.SetPromotePathOverlay(m.Promotion.PromotePathBoardLines)
 	rt.SetOverlayMergePlan(m.OverlayMergePlanFn())
 	if m.includeScanLegend != nil {
 		rt.SetIncludeScanLegend(m.includeScanLegend)

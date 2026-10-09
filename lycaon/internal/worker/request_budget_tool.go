@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/workeradmission"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -45,7 +45,7 @@ func RegisterRequestBudgetTool(reg *tools.DefaultRegistry, deps RequestBudgetToo
 		if tools.OutOfSessionScope(RequestBudgetTool, tctx) || jobID == "" {
 			return "", &tools.ToolReject{Code: requestBudgetAddressedSessionCode, Data: map[string]any{"tool": RequestBudgetTool}}
 		}
-		rounds, err := session.ParseTaskMaxToolLoopsFromArgs(map[string]any{"max_tool_loops": args["rounds"]})
+		rounds, err := workeradmission.ParseTaskMaxToolLoopsFromArgs(map[string]any{"max_tool_loops": args["rounds"]})
 		if err != nil || rounds <= 0 {
 			return "", fmt.Errorf("rounds must be a positive integer")
 		}

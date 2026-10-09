@@ -34,7 +34,7 @@ func TestAutoNameProjectIdempotentOnReplay(t *testing.T) {
 	hub := events.NewMemoryHub()
 	mgr.SetEventPublisher(&events.Publisher{Hub: hub, Lookup: project.ScopeLookup{Registry: reg}})
 
-	sess, err := mgr.CreateForProject(ctx, p.ID, api.SessionPostureBuild)
+	sess, err := mgr.Chats.CreateForProject(ctx, p.ID, api.SessionPostureBuild)
 	testutil.FailErr(t, "create session", err)
 
 	userText := "Build a CLI todo tracker with SQLite persistence"
@@ -43,8 +43,8 @@ func TestAutoNameProjectIdempotentOnReplay(t *testing.T) {
 	testutil.FailErr(t, "subscribe", err)
 	defer unsubscribe()
 
-	mgr.autoNameProjectFromPrompt(ctx, sess, userText)
-	mgr.autoNameProjectFromPrompt(ctx, sess, userText)
+	mgr.Naming.ProjectFromPrompt(ctx, sess, userText)
+	mgr.Naming.ProjectFromPrompt(ctx, sess, userText)
 
 	got, err := reg.Get(ctx, p.ID)
 	testutil.FailErr(t, "get project", err)

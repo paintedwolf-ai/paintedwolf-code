@@ -94,7 +94,7 @@ func TestProjectSourceMutationRejectsLifecycleTransition(t *testing.T) {
 	srv := newTestServer(t, func(d *Dependencies) {
 		d.MutationGate = gate
 		if d.Sessions != nil {
-			d.Sessions.SetMutationGate(gate)
+			d.Sessions.Runner.Execution.SetMutationGate(gate)
 		}
 	})
 	root := t.TempDir()

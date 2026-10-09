@@ -65,7 +65,7 @@ func (s *Handler) HandleComposeWorkflow(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *Handler) queueComposeKick(ctx context.Context, sessionID string) {
-	s.Sessions.Emit(ctx, sessionID, anchor.ComposeDone, anchor.Envelope{})
+	s.Sessions.Guidance.Emit(ctx, sessionID, anchor.ComposeDone, anchor.Envelope{})
 }
 
 func (s *Handler) HandleListWorkflowTemplates(w http.ResponseWriter, r *http.Request) {

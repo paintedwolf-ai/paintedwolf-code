@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/session/store"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -25,9 +26,9 @@ func TestPrepareToolWireContentRetainsLargeFilesWithoutCompactor(t *testing.T) {
 	}
 	raw, err := json.Marshal(map[string]any{"files": files, "dirty": true})
 	testutil.FailErr(t, "json.Marshal failed", err)
-	mgr := &Manager{}
+	mgr := NewManager(sessionstore.NewMemory(), nil, nil, settings.DefaultSessionLimits())
 	sess := &api.Session{ID: "s1", Posture: api.SessionPostureBuild}
-	out, meta := mgr.prepareToolWireContent(context.Background(), sess, "git_status", string(raw), compaction.CompactToolWireOpts{})
+	out, meta := mgr.Runner.History.ToolWire(context.Background(), sess, "git_status", string(raw), compaction.CompactToolWireOpts{})
 	if meta != nil {
 		t.Fatalf("compact meta = %+v want nil without compactor", meta)
 	}
@@ -46,7 +47,7 @@ func TestPrepareToolWirePreservesBoundedRecallBody(t *testing.T) {
 	st := store.NewMemory()
 	mgr := NewManager(st, llm.NewMockProvider(testMockConfig(t)), tools.NewStubRegistry(), settings.DefaultSessionLimits())
 	mgr.SetDataDir(t.TempDir())
-	mgr.SetCompactor(compaction.NewSimpleCompactor(compaction.CompactionConfig{
+	mgr.Runner.History.SetCompactor(compaction.NewSimpleCompactor(compaction.CompactionConfig{
 		Enabled: true, ChunkTokenThreshold: 50, ChunkTargetTokens: 20,
 	}, compaction.MockSummarizer{Text: "summary"}))
 	sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
@@ -56,7 +57,7 @@ func TestPrepareToolWirePreservesBoundedRecallBody(t *testing.T) {
 		"resolution": "matched", "hits": []any{map[string]any{"handle": "read#1", "body": []string{body}}},
 	})
 	testutil.FailErr(t, "encode recall", err)
-	out, meta := mgr.prepareToolWireContent(t.Context(), sess, "recall", string(raw), compaction.CompactToolWireOpts{})
+	out, meta := mgr.Runner.History.ToolWire(t.Context(), sess, "recall", string(raw), compaction.CompactToolWireOpts{})
 	if meta != nil || out != string(raw) {
 		t.Fatalf("bounded recall was compacted before the model could inspect it: meta=%+v, content=%s", meta, out)
 	}
@@ -66,7 +67,7 @@ func TestPrepareToolWireContentCompactsBeforeStore(t *testing.T) {
 	store := store.NewMemory()
 	mgr := NewManager(store, llm.NewMockProvider(testMockConfig(t)), tools.NewStubRegistry(), settings.DefaultSessionLimits())
 	mgr.SetDataDir(t.TempDir())
-	mgr.SetCompactor(compaction.NewSimpleCompactor(compaction.CompactionConfig{
+	mgr.Runner.History.SetCompactor(compaction.NewSimpleCompactor(compaction.CompactionConfig{
 		Enabled:             true,
 		ChunkTokenThreshold: 50,
 		ChunkTargetTokens:   500,
@@ -80,7 +81,7 @@ func TestPrepareToolWireContentCompactsBeforeStore(t *testing.T) {
 	testutil.FailErr(t, "Create", err)
 
 	huge := `{"files":[` + repeatJSONPath(300) + `]}`
-	out, meta := mgr.prepareToolWireContent(ctx, sess, "git_status", huge, compaction.CompactToolWireOpts{})
+	out, meta := mgr.Runner.History.ToolWire(ctx, sess, "git_status", huge, compaction.CompactToolWireOpts{})
 	if meta == nil {
 		t.Fatal("expected compacted chunk meta")
 	}
@@ -98,13 +99,13 @@ func TestPrepareToolWireContentPreservesOutputBeyondSpillBound(t *testing.T) {
 	limits.MaxToolSpillBytes = 1024
 	mgr := NewManager(st, llm.NewMockProvider(testMockConfig(t)), tools.NewStubRegistry(), limits)
 	mgr.SetDataDir(t.TempDir())
-	mgr.SetCompactor(compaction.NewSimpleCompactor(compaction.CompactionConfig{
+	mgr.Runner.History.SetCompactor(compaction.NewSimpleCompactor(compaction.CompactionConfig{
 		Enabled: true, ChunkTokenThreshold: 100, ChunkTargetTokens: 200,
 	}, nil))
 	sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session with spill bound", err)
 	content := `{"files":[{"path":"a.go","diff":"` + strings.Repeat("x", 20000) + `"}]}`
-	out, meta := mgr.prepareToolWireContent(t.Context(), sess, "git_diff", content, compaction.CompactToolWireOpts{})
+	out, meta := mgr.Runner.History.ToolWire(t.Context(), sess, "git_diff", content, compaction.CompactToolWireOpts{})
 	if meta != nil || out != content {
 		t.Fatal("wire compaction changed output without complete retention")
 	}
@@ -114,7 +115,7 @@ func TestPrepareToolWireContentHandlePrefixedFind(t *testing.T) {
 	store := store.NewMemory()
 	mgr := NewManager(store, llm.NewMockProvider(testMockConfig(t)), tools.NewStubRegistry(), settings.DefaultSessionLimits())
 	mgr.SetDataDir(t.TempDir())
-	mgr.SetCompactor(compaction.NewSimpleCompactor(compaction.CompactionConfig{
+	mgr.Runner.History.SetCompactor(compaction.NewSimpleCompactor(compaction.CompactionConfig{
 		Enabled:             true,
 		ChunkTokenThreshold: 50,
 		ChunkTargetTokens:   500,
@@ -137,7 +138,7 @@ func TestPrepareToolWireContentHandlePrefixedFind(t *testing.T) {
 	raw, err := json.Marshal(map[string]any{"results": results, "total_results": 200})
 	testutil.FailErr(t, "marshal", err)
 	in := "[find#1]\n" + string(raw)
-	out, meta := mgr.prepareToolWireContent(ctx, sess, "find", in, compaction.CompactToolWireOpts{})
+	out, meta := mgr.Runner.History.ToolWire(ctx, sess, "find", in, compaction.CompactToolWireOpts{})
 	if meta == nil {
 		t.Fatal("expected compact meta for oversized find page")
 	}
@@ -156,7 +157,7 @@ func TestPrepareToolWireContentSummarizeSpillsFullPack(t *testing.T) {
 	store := store.NewMemory()
 	mgr := NewManager(store, llm.NewMockProvider(testMockConfig(t)), tools.NewStubRegistry(), settings.DefaultSessionLimits())
 	mgr.SetDataDir(t.TempDir())
-	mgr.SetCompactor(compaction.NewSimpleCompactor(compaction.CompactionConfig{
+	mgr.Runner.History.SetCompactor(compaction.NewSimpleCompactor(compaction.CompactionConfig{
 		Enabled:             true,
 		ChunkTokenThreshold: 800,
 		ChunkTargetTokens:   400,
@@ -197,7 +198,7 @@ func TestPrepareToolWireContentSummarizeSpillsFullPack(t *testing.T) {
 		t.Fatalf("fixture must exceed wire budget: tokens=%d", tokenest.EstimateDefault(in))
 	}
 
-	out, meta := mgr.prepareToolWireContent(ctx, sess, "summarize", in, compaction.CompactToolWireOpts{})
+	out, meta := mgr.Runner.History.ToolWire(ctx, sess, "summarize", in, compaction.CompactToolWireOpts{})
 	if meta == nil {
 		t.Fatal("expected compact meta for oversized summarize pack")
 	}
@@ -224,7 +225,7 @@ func TestPrepareToolWireContentSummarizeWireFittedLandsInline(t *testing.T) {
 	store := store.NewMemory()
 	mgr := NewManager(store, llm.NewMockProvider(testMockConfig(t)), tools.NewStubRegistry(), settings.DefaultSessionLimits())
 	mgr.SetDataDir(t.TempDir())
-	mgr.SetCompactor(compaction.NewSimpleCompactor(compaction.CompactionConfig{
+	mgr.Runner.History.SetCompactor(compaction.NewSimpleCompactor(compaction.CompactionConfig{
 		Enabled:             true,
 		ChunkTokenThreshold: 800,
 		ChunkTargetTokens:   400,
@@ -269,7 +270,7 @@ func TestPrepareToolWireContentSummarizeWireFittedLandsInline(t *testing.T) {
 		t.Fatalf("fixture must stay under wire budget: tokens=%d", tokens)
 	}
 
-	out, meta := mgr.prepareToolWireContent(ctx, sess, "summarize", in, compaction.CompactToolWireOpts{})
+	out, meta := mgr.Runner.History.ToolWire(ctx, sess, "summarize", in, compaction.CompactToolWireOpts{})
 	if meta != nil {
 		t.Fatalf("wire-fitted summarize must not compact at commit: meta=%+v out=%s", meta, out)
 	}

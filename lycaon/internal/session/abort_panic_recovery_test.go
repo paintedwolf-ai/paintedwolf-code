@@ -37,18 +37,18 @@ func TestAbortRecoversPanicAndClearsStopState(t *testing.T) {
 	testutil.FailErr(t, "create session", err)
 	testutil.FailErr(t, "mark session busy", st.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
 
-	if err := mgr.Abort(ctx, sess.ID, "user stopped"); err == nil {
+	if err := mgr.Stops.Abort(ctx, sess.ID, "user stopped"); err == nil {
 		t.Fatal("Abort returned no error; want the panic surfaced as an error, not swallowed or left to crash the process")
 	}
 
-	if mgr.sessionStopInProgress(ctx, sess.ID) {
+	if mgr.Gate.InProgress(ctx, sess.ID) {
 		t.Fatal("stop state stuck active after panic recovery; finishSessionStop did not run")
 	}
 
 	// A second Abort hangs if the first flight's active[rootID] entry or
 	// flight.done close were skipped.
 	done := make(chan error, 1)
-	go func() { done <- mgr.Abort(ctx, sess.ID, "second stop") }()
+	go func() { done <- mgr.Stops.Abort(ctx, sess.ID, "second stop") }()
 	select {
 	case err2 := <-done:
 		if err2 == nil {

@@ -18,7 +18,7 @@ func TestOverCapTurnMarksTheCheckpointTruncated(t *testing.T) {
 	ctx := context.Background()
 	testutil.FailErr(t, "mkdir src", os.MkdirAll(filepath.Join(dir, "src"), 0o755))
 
-	_, err := mgr.Prompt(ctx, sessionID, "touch everything")
+	_, err := mgr.Submissions.Prompt(ctx, sessionID, "touch everything")
 	testutil.FailErr(t, "prompt", err)
 	anchor := visibleUserMessageIDs(t, mgr, sessionID)[0]
 
@@ -26,7 +26,7 @@ func TestOverCapTurnMarksTheCheckpointTruncated(t *testing.T) {
 		rel := "src/f" + strconv.Itoa(i) + ".go"
 		testutil.FailErr(t, "seed "+rel,
 			os.WriteFile(filepath.Join(dir, filepath.FromSlash(rel)), []byte("before"), 0o644))
-		mgr.RecordPrimaryMutation(ctx, sessionID, rel)
+		mgr.Captures.RecordPrimaryMutation(ctx, sessionID, rel)
 	}
 
 	man, err := sessioncheckpoint.New(mgr.dataDir, dir, mgr.store).Load(t.Context(), sessionID, anchor)

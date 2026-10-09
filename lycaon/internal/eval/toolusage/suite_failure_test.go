@@ -3,11 +3,12 @@ package toolusage
 import (
 	"encoding/json"
 	"errors"
-	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/session/store"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	sessionobservation "github.com/lycaon/lycaon/internal/session/observation"
+	"github.com/lycaon/lycaon/internal/session/store"
 )
 
 func TestApplicationObservationPreservesFailureClassification(t *testing.T) {
@@ -22,7 +23,7 @@ func TestApplicationObservationPreservesFailureClassification(t *testing.T) {
 	} {
 		t.Run(tc.code, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				_ = json.NewEncoder(w).Encode(session.ExecutionObservation{SessionID: "root", SubmissionID: "admitted", Failures: []store.ExecutionSubmission{{SessionID: tc.session, ErrorCode: tc.code}}})
+				_ = json.NewEncoder(w).Encode(sessionobservation.ExecutionObservation{SessionID: "root", SubmissionID: "admitted", Failures: []store.ExecutionSubmission{{SessionID: tc.session, ErrorCode: tc.code}}})
 			}))
 			defer server.Close()
 			client := liveClient{base: server.URL, http: server.Client()}
@@ -63,7 +64,7 @@ func TestExecutionErrorsAlwaysCarryFailureMetadata(t *testing.T) {
 }
 
 func TestWorkerTaskFailureRemainsAvailableToCoordinator(t *testing.T) {
-	observation := session.ExecutionObservation{SessionID: "root", SubmissionID: "admitted", Failures: []store.ExecutionSubmission{{SessionID: "child", ErrorCode: "worker_task_failed"}}}
+	observation := sessionobservation.ExecutionObservation{SessionID: "root", SubmissionID: "admitted", Failures: []store.ExecutionSubmission{{SessionID: "child", ErrorCode: "worker_task_failed"}}}
 	if err := executionObservationFailure(observation); err != nil {
 		t.Fatalf("worker outcome stopped coordinator: %v", err)
 	}

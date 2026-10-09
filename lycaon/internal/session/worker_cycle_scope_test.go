@@ -8,17 +8,17 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/workeradmission"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func observeTaskInFlight(t *testing.T, ctx context.Context, deps session.WorkerCycleGuardDeps, sess *api.Session, args map[string]any) *oar.GuardContext {
+func observeTaskInFlight(t *testing.T, ctx context.Context, deps workeradmission.WorkerCycleGuardDeps, sess *api.Session, args map[string]any) *oar.GuardContext {
 	t.Helper()
 	gc := oar.NewGuardContext()
-	testutil.FailErr(t, "ObserveCoordinatorTaskInFlight", session.ObserveCoordinatorTaskInFlight(ctx, deps, sess, "task", args, gc))
+	testutil.FailErr(t, "workeradmission.ObserveCoordinatorTaskInFlight", workeradmission.ObserveCoordinatorTaskInFlight(ctx, deps, sess, "task", args, gc))
 	return gc
 }
 
@@ -42,7 +42,7 @@ func TestObserveCoordinatorTaskReadRepoWideAllowed(t *testing.T) {
 		Posture:       api.SessionPostureBuild,
 		AgentType:     "coordinator",
 	}
-	deps := session.WorkerCycleGuardDeps{
+	deps := workeradmission.WorkerCycleGuardDeps{
 		Workers: worker.NewInMemoryQueue(8),
 	}
 	gc := observeTaskInFlight(t, ctx, deps, sess, map[string]any{
@@ -53,7 +53,7 @@ func TestObserveCoordinatorTaskReadRepoWideAllowed(t *testing.T) {
 			"paths": []any{"**"},
 		},
 	})
-	if evaluateHasCode(t, gc, session.TaskScopeWriteRequiredCode) {
+	if evaluateHasCode(t, gc, workeradmission.TaskScopeWriteRequiredCode) {
 		t.Fatal("expected read ** allowed")
 	}
 }
@@ -71,7 +71,7 @@ func TestObserveCoordinatorTaskMutationAgentRequiresWriteScope(t *testing.T) {
 	cfg, err := guidance.LoadHintConfigStock()
 	testutil.FailErr(t, "LoadHintConfig", err)
 	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
-	deps := session.WorkerCycleGuardDeps{
+	deps := workeradmission.WorkerCycleGuardDeps{
 		Workers: worker.NewInMemoryQueue(8),
 	}
 	for _, agentType := range []string{"implementer", "plan-writer"} {
@@ -83,10 +83,10 @@ func TestObserveCoordinatorTaskMutationAgentRequiresWriteScope(t *testing.T) {
 			"agent_type": agentType,
 			"brief":      testTaskBrief("fix without write scope"),
 		})
-		if !evaluateHasCode(t, gc, session.TaskScopeWriteRequiredCode) {
+		if !evaluateHasCode(t, gc, workeradmission.TaskScopeWriteRequiredCode) {
 			t.Fatalf("%s: expected TASK_SCOPE_WRITE_REQUIRED", agentType)
 		}
-		if !strings.Contains(formatObserved(t, guidance.NewStaticRejectFormatter(cfg), gc, session.TaskScopeWriteRequiredCode), session.TaskScopeWriteRequiredCode) {
+		if !strings.Contains(formatObserved(t, guidance.NewStaticRejectFormatter(cfg), gc, workeradmission.TaskScopeWriteRequiredCode), workeradmission.TaskScopeWriteRequiredCode) {
 			t.Fatalf("%s: format missing code", agentType)
 		}
 	}
@@ -98,7 +98,7 @@ func TestObserveCoordinatorTaskMutationAgentRequiresWriteScope(t *testing.T) {
 			"paths": []any{"internal/auth/**"},
 		},
 	})
-	if !evaluateHasCode(t, gc, session.TaskScopeWriteRequiredCode) {
+	if !evaluateHasCode(t, gc, workeradmission.TaskScopeWriteRequiredCode) {
 		t.Fatal("implementer read scope: expected TASK_SCOPE_WRITE_REQUIRED")
 	}
 }
@@ -116,7 +116,7 @@ func TestObserveCoordinatorTaskReadOnlyProfileRejectsWriteScope(t *testing.T) {
 	cfg, err := guidance.LoadHintConfigStock()
 	testutil.FailErr(t, "LoadHintConfig", err)
 	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
-	deps := session.WorkerCycleGuardDeps{
+	deps := workeradmission.WorkerCycleGuardDeps{
 		Workers: worker.NewInMemoryQueue(8),
 	}
 	gc := observeTaskInFlight(t, ctx, deps, sess, map[string]any{
@@ -127,10 +127,10 @@ func TestObserveCoordinatorTaskReadOnlyProfileRejectsWriteScope(t *testing.T) {
 			"paths": []any{"docs/report.md"},
 		},
 	})
-	if !evaluateHasCode(t, gc, session.TaskScopeProfileReadOnlyCode) {
+	if !evaluateHasCode(t, gc, workeradmission.TaskScopeProfileReadOnlyCode) {
 		t.Fatal("expected TASK_SCOPE_PROFILE_READ_ONLY")
 	}
-	if !strings.Contains(formatObserved(t, guidance.NewStaticRejectFormatter(cfg), gc, session.TaskScopeProfileReadOnlyCode), session.TaskScopeProfileReadOnlyCode) {
+	if !strings.Contains(formatObserved(t, guidance.NewStaticRejectFormatter(cfg), gc, workeradmission.TaskScopeProfileReadOnlyCode), workeradmission.TaskScopeProfileReadOnlyCode) {
 		t.Fatal("format missing TASK_SCOPE_PROFILE_READ_ONLY")
 	}
 }
@@ -145,7 +145,7 @@ func TestObserveCoordinatorTaskImplementerWriteScopeAllowed(t *testing.T) {
 		Posture:       api.SessionPostureBuild,
 		AgentType:     "coordinator",
 	}
-	deps := session.WorkerCycleGuardDeps{
+	deps := workeradmission.WorkerCycleGuardDeps{
 		Workers: worker.NewInMemoryQueue(8),
 	}
 	gc := observeTaskInFlight(t, ctx, deps, sess, map[string]any{
@@ -156,7 +156,7 @@ func TestObserveCoordinatorTaskImplementerWriteScopeAllowed(t *testing.T) {
 			"paths": []any{"internal/http/**"},
 		},
 	})
-	if evaluateHasCode(t, gc, session.TaskScopeWriteRequiredCode) || evaluateHasCode(t, gc, session.TaskScopeProfileReadOnlyCode) {
+	if evaluateHasCode(t, gc, workeradmission.TaskScopeWriteRequiredCode) || evaluateHasCode(t, gc, workeradmission.TaskScopeProfileReadOnlyCode) {
 		t.Fatal("implementer write scope must be allowed")
 	}
 }
@@ -171,7 +171,7 @@ func TestObserveCoordinatorTaskWritePathsOptional(t *testing.T) {
 		Posture:       api.SessionPostureBuild,
 		AgentType:     "coordinator",
 	}
-	deps := session.WorkerCycleGuardDeps{
+	deps := workeradmission.WorkerCycleGuardDeps{
 		Workers: worker.NewInMemoryQueue(8),
 	}
 	gc := observeTaskInFlight(t, ctx, deps, sess, map[string]any{
@@ -181,7 +181,7 @@ func TestObserveCoordinatorTaskWritePathsOptional(t *testing.T) {
 			"mode": "write",
 		},
 	})
-	if evaluateHasCode(t, gc, session.TaskScopeWriteRequiredCode) || evaluateHasCode(t, gc, session.TaskScopeProfileReadOnlyCode) {
+	if evaluateHasCode(t, gc, workeradmission.TaskScopeWriteRequiredCode) || evaluateHasCode(t, gc, workeradmission.TaskScopeProfileReadOnlyCode) {
 		t.Fatal("write mode without suggested paths must be allowed")
 	}
 }
@@ -196,7 +196,7 @@ func TestObserveCoordinatorTaskRepoWideSuggestionAllowed(t *testing.T) {
 		Posture:       api.SessionPostureBuild,
 		AgentType:     "coordinator",
 	}
-	deps := session.WorkerCycleGuardDeps{
+	deps := workeradmission.WorkerCycleGuardDeps{
 		Workers: worker.NewInMemoryQueue(8),
 	}
 	gc := observeTaskInFlight(t, ctx, deps, sess, map[string]any{
@@ -207,7 +207,7 @@ func TestObserveCoordinatorTaskRepoWideSuggestionAllowed(t *testing.T) {
 			"paths": []any{"**/*"},
 		},
 	})
-	if evaluateHasCode(t, gc, session.TaskScopeWriteRequiredCode) || evaluateHasCode(t, gc, session.TaskScopeProfileReadOnlyCode) {
+	if evaluateHasCode(t, gc, workeradmission.TaskScopeWriteRequiredCode) || evaluateHasCode(t, gc, workeradmission.TaskScopeProfileReadOnlyCode) {
 		t.Fatal("repo-wide suggested paths must be allowed")
 	}
 }
@@ -223,7 +223,7 @@ func TestParallelWriteWorkersNonOverlappingAllowed(t *testing.T) {
 		Posture:       api.SessionPostureBuild,
 		AgentType:     "coordinator",
 	}
-	deps := session.WorkerCycleGuardDeps{
+	deps := workeradmission.WorkerCycleGuardDeps{
 		Workers: q,
 	}
 	_, err := q.Enqueue(ctx, api.WorkerTask{
@@ -244,7 +244,7 @@ func TestParallelWriteWorkersNonOverlappingAllowed(t *testing.T) {
 			"paths": []any{"internal/billing/invoice.go"},
 		},
 	})
-	if evaluateHasCode(t, gc, session.CoordinatorWorkerInFlightCode) {
+	if evaluateHasCode(t, gc, workeradmission.CoordinatorWorkerInFlightCode) {
 		t.Fatal("expected parallel non-overlapping write allowed")
 	}
 }
@@ -260,7 +260,7 @@ func TestParallelWriteWorkersOverlappingAllowed(t *testing.T) {
 		Posture:       api.SessionPostureBuild,
 		AgentType:     "coordinator",
 	}
-	deps := session.WorkerCycleGuardDeps{
+	deps := workeradmission.WorkerCycleGuardDeps{
 		Workers: q,
 	}
 	_, err := q.Enqueue(ctx, api.WorkerTask{
@@ -281,7 +281,7 @@ func TestParallelWriteWorkersOverlappingAllowed(t *testing.T) {
 			"paths": []any{"shellsim/parser.py"},
 		},
 	})
-	if evaluateHasCode(t, gc, session.CoordinatorWorkerInFlightCode) {
+	if evaluateHasCode(t, gc, workeradmission.CoordinatorWorkerInFlightCode) {
 		t.Fatal("expected overlapping write allowed (no spawn-time reject)")
 	}
 }
@@ -297,7 +297,7 @@ func TestParallelReadScoutsAllowedUnderReadCap(t *testing.T) {
 		Posture:       api.SessionPostureBuild,
 		AgentType:     "coordinator",
 	}
-	deps := session.WorkerCycleGuardDeps{
+	deps := workeradmission.WorkerCycleGuardDeps{
 		Workers:         q,
 		MaxWorkers:      func(context.Context, string) int { return 3 },
 		MaxReadWorkers:  func(context.Context, string) int { return 3 },
@@ -311,7 +311,7 @@ func TestParallelReadScoutsAllowedUnderReadCap(t *testing.T) {
 	}
 	for i := 0; i < 3; i++ {
 		gc := observeTaskInFlight(t, ctx, deps, sess, readScoutArgs)
-		if evaluateHasCode(t, gc, session.CoordinatorWorkerInFlightCode) || gc.WorkerSpawnBlocked {
+		if evaluateHasCode(t, gc, workeradmission.CoordinatorWorkerInFlightCode) || gc.WorkerSpawnBlocked {
 			t.Fatalf("expected read scout %d allowed", i+1)
 		}
 		_, err := q.Enqueue(ctx, api.WorkerTask{
@@ -325,7 +325,7 @@ func TestParallelReadScoutsAllowedUnderReadCap(t *testing.T) {
 		testutil.FailErr(t, "Enqueue", err)
 	}
 	gc := observeTaskInFlight(t, ctx, deps, sess, readScoutArgs)
-	if !evaluateHasCode(t, gc, session.CoordinatorWorkerInFlightCode) || !gc.WorkerSpawnBlocked {
+	if !evaluateHasCode(t, gc, workeradmission.CoordinatorWorkerInFlightCode) || !gc.WorkerSpawnBlocked {
 		t.Fatal("expected reject at read cap")
 	}
 	if gc.MaxReadWorkers != 3 || gc.ActiveReadCount != 3 {
@@ -346,7 +346,7 @@ func TestObserveCoordinatorTaskRejectsExploreReadonlyOnEmptyRepo(t *testing.T) {
 	cfg, err := guidance.LoadHintConfigStock()
 	testutil.FailErr(t, "LoadHintConfig", err)
 	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
-	deps := session.WorkerCycleGuardDeps{
+	deps := workeradmission.WorkerCycleGuardDeps{
 		Workers: worker.NewInMemoryQueue(8),
 		RepoKnownEmpty: func(context.Context, string) bool {
 			return true
@@ -372,11 +372,11 @@ func TestObserveCoordinatorTaskRejectsExploreReadonlyOnEmptyRepo(t *testing.T) {
 				"paths": []any{"**"},
 			},
 		})
-		if !evaluateHasCode(t, gc, session.RepoEmptyReadOnlyWorkerCode) {
-			t.Fatalf("%s: expected %s", agentType, session.RepoEmptyReadOnlyWorkerCode)
+		if !evaluateHasCode(t, gc, workeradmission.RepoEmptyReadOnlyWorkerCode) {
+			t.Fatalf("%s: expected %s", agentType, workeradmission.RepoEmptyReadOnlyWorkerCode)
 		}
-		if !strings.Contains(formatObserved(t, guidance.NewStaticRejectFormatter(cfg), gc, session.RepoEmptyReadOnlyWorkerCode), session.RepoEmptyReadOnlyWorkerCode) {
-			t.Fatalf("%s: format missing %s", agentType, session.RepoEmptyReadOnlyWorkerCode)
+		if !strings.Contains(formatObserved(t, guidance.NewStaticRejectFormatter(cfg), gc, workeradmission.RepoEmptyReadOnlyWorkerCode), workeradmission.RepoEmptyReadOnlyWorkerCode) {
+			t.Fatalf("%s: format missing %s", agentType, workeradmission.RepoEmptyReadOnlyWorkerCode)
 		}
 	}
 	gc := observeTaskInFlight(t, ctx, deps, sess, map[string]any{
@@ -387,7 +387,7 @@ func TestObserveCoordinatorTaskRejectsExploreReadonlyOnEmptyRepo(t *testing.T) {
 			"paths": []any{"README.md"},
 		},
 	})
-	if evaluateHasCode(t, gc, session.RepoEmptyReadOnlyWorkerCode) {
+	if evaluateHasCode(t, gc, workeradmission.RepoEmptyReadOnlyWorkerCode) {
 		t.Fatal("implementer must remain allowed on empty repo")
 	}
 	gc = observeTaskInFlight(t, ctx, deps, sess, map[string]any{
@@ -397,7 +397,7 @@ func TestObserveCoordinatorTaskRejectsExploreReadonlyOnEmptyRepo(t *testing.T) {
 			"mode": "read",
 		},
 	})
-	if evaluateHasCode(t, gc, session.RepoEmptyReadOnlyWorkerCode) {
+	if evaluateHasCode(t, gc, workeradmission.RepoEmptyReadOnlyWorkerCode) {
 		t.Fatal("web-researcher must remain allowed on empty repo")
 	}
 	surveys, ok := prompts.AgentSurveysProjectTree("web-researcher")
@@ -419,7 +419,7 @@ func TestObserveCoordinatorTaskAllowsMissingSuggestedPath(t *testing.T) {
 		Posture:       api.SessionPostureBuild,
 		AgentType:     "coordinator",
 	}
-	deps := session.WorkerCycleGuardDeps{Workers: worker.NewInMemoryQueue(8)}
+	deps := workeradmission.WorkerCycleGuardDeps{Workers: worker.NewInMemoryQueue(8)}
 	gc := observeTaskInFlight(t, ctx, deps, sess, map[string]any{
 		"agent_type": "path-explorer",
 		"brief":      testTaskBrief("survey the providers"),
@@ -428,7 +428,7 @@ func TestObserveCoordinatorTaskAllowsMissingSuggestedPath(t *testing.T) {
 			"paths": []any{"src/coropa/mcp", "src/coropa/providers"},
 		},
 	})
-	if evaluateHasCode(t, gc, session.TaskScopeWriteRequiredCode) || evaluateHasCode(t, gc, session.TaskScopeProfileReadOnlyCode) {
+	if evaluateHasCode(t, gc, workeradmission.TaskScopeWriteRequiredCode) || evaluateHasCode(t, gc, workeradmission.TaskScopeProfileReadOnlyCode) {
 		t.Fatal("missing suggested paths must not block dispatch")
 	}
 }

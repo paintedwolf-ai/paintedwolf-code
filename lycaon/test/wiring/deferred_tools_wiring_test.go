@@ -2,9 +2,9 @@ package wiring
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/decide"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -18,7 +18,7 @@ func TestListForPromptMarksDeferredMetas(t *testing.T) {
 	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{}, dir)
 	testutil.FailErr(t, "create session", err)
 
-	policy := h.SessionMgr.PromptToolPolicy()
+	policy := h.SessionMgr.Guards.Policy()
 	metas := policy.ListForPrompt(ctx, sess, "implement")
 	deferred := map[string]bool{}
 	var hasRequestTools bool

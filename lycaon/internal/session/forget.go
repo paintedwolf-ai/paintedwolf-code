@@ -2,7 +2,6 @@ package session
 
 import (
 	"context"
-	"log/slog"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/progress"
@@ -67,46 +66,39 @@ func (m *Manager) releaseSessionMemory(ctx context.Context, sessionID string) {
 	if sessionID == "" {
 		return
 	}
-	m.CancelInFlightPrompt(sessionID)
-	m.curation.Cancel(sessionID)
-	if m.compactionRunner != nil {
-		m.compactionRunner.CancelSession(sessionID)
+	m.Runner.Execution.Cancel(sessionID)
+	m.Runner.Curation.Cancel(sessionID)
+	if m.Runner.History.Runner != nil {
+		m.Runner.History.Runner.CancelSession(sessionID)
 	}
-	if m.indexWarmer != nil {
-		m.indexWarmer.CancelSession(sessionID)
-	}
+	m.Research.CancelSession(sessionID)
 	if m.coordinatorRuntime != nil {
 		m.coordinatorRuntime.ForgetSession(ctx, sessionID)
 	}
 	if m.workflows != nil {
 		m.workflows.ForgetSession(sessionID)
 	}
-	m.checkpointCapture.Reset(sessionID)
-	m.Streams().Finish(ctx, sessionID)
-	m.progressClosureExpect.Delete(sessionID)
-	m.closeout.forget(sessionID)
-	m.deferredTurnSettlement.remove(sessionID)
-	if m.cost != nil {
-		if err := m.cost.ClearSpendWarning(ctx, sessionID); err != nil {
-			slog.WarnContext(ctx, "clear spend warning", "session_id", sessionID, "error", err)
-		}
-	}
-	m.coordinatorBatchTurn.Delete(sessionID)
-	m.mergeReconcile.Delete(sessionID)
-	m.compactionTokenCalibration.Delete(sessionID)
-	m.promotePathStatus.Delete(sessionID)
-	m.stopState.Forget(sessionID)
-	m.agentsMDCache.Delete(sessionID)
+	m.Captures.Capture.Reset(sessionID)
+	m.Transcript.Streams.Finish(ctx, sessionID)
+	m.ProgressClosure.Forget(sessionID)
+	m.Runner.Closeouts.Forget(sessionID)
+	m.Runner.Settlement.Forget(sessionID)
+	m.Runner.Spend.Forget(ctx, sessionID)
+	m.Batch.BeginTurn(sessionID)
+	m.Promotion.Forget(sessionID)
+	m.Runner.History.ForgetCalibration(sessionID)
+	m.Gate.Forget(sessionID)
+	m.PolicyIndex.Forget(sessionID)
 	progress.ForgetClock(sessionID)
-	m.clearReconstructedDirectIP(sessionID)
+	m.Protection.Forget(sessionID)
 	if m.toolApprovalCoalesce != nil {
 		m.toolApprovalCoalesce.ForgetSession(sessionID)
 	}
 	if m.gateRepeatLedger != nil {
 		m.gateRepeatLedger.ForgetSession(sessionID)
 	}
-	if m.oarPipeline != nil {
-		m.oarPipeline.Counters().ForgetSession(sessionID)
+	if m.ToolPolicy.Pipeline != nil {
+		m.ToolPolicy.Pipeline.Counters().ForgetSession(sessionID)
 	}
 	if m.writeRootRuntime != nil {
 		m.writeRootRuntime.ReleaseRun(sessionID)
@@ -123,18 +115,6 @@ func (m *Manager) releaseSessionMemory(ctx context.Context, sessionID string) {
 	if m.toolOutputEnricher != nil {
 		m.toolOutputEnricher.ForgetSession(sessionID)
 	}
-}
-
-// ForgetJob releases terminal worker wake payloads.
-func (m *Manager) ForgetJob(jobID string) {
-	if m == nil {
-		return
-	}
-	jobID = strings.TrimSpace(jobID)
-	if jobID == "" {
-		return
-	}
-	m.workerDigests.Delete(jobID)
 }
 
 // forgetSandboxAuthority releases the approved sandbox grants a chat keeps

@@ -8,7 +8,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/scaffoldvars"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/profiles"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -103,7 +103,7 @@ func (m *RunManager) FireTransition(ctx context.Context, runID, transitionID, ac
 	run.UpdatedAt = now
 	terminalSink := completeTerminalPhaseEntry(run, target, now)
 	var posture api.SessionPosture
-	if session.ValidSessionPosture(target.OnEnter.SetPosture) {
+	if profiles.ValidSessionPosture(target.OnEnter.SetPosture) {
 		posture = api.SessionPosture(target.OnEnter.SetPosture)
 	}
 	messages := make([]api.Message, 0, 2)

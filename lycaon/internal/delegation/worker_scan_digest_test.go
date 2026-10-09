@@ -7,7 +7,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/orchestration"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -37,7 +37,7 @@ func scanDigestContext(t *testing.T, agent string, tools []string, runID string)
 		Tools: delegation.LegToolListerFunc(func(context.Context, *api.Session, string) []string {
 			return append([]string(nil), tools...)
 		}),
-		AgentsFor: func(*api.Session) session.AgentProfileResolver { return agents },
+		AgentsFor: func(*api.Session) profiles.AgentProfileResolver { return agents },
 	}
 	got, err := c.BuildWorkerPromptContext(sess.ID, sess)
 	testutil.FailErr(t, "build worker context", err)

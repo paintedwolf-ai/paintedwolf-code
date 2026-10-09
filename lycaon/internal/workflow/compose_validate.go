@@ -6,7 +6,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/boolexpr"
 	"github.com/lycaon/lycaon/internal/conditions"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/theme"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflowdiag"
@@ -70,7 +70,7 @@ func ValidateComposeManifest(reg *conditions.ConditionRegistry, specs Obligation
 			}
 		}
 		if sp := strings.TrimSpace(p.OnEnter.SetPosture); sp != "" {
-			if !session.ValidSessionPosture(sp) {
+			if !profiles.ValidSessionPosture(sp) {
 				out = append(out, workflowdiag.EmitDefault(workflowdiag.MustCode("invalid_posture"),
 					fmt.Sprintf("phases[%s].on_enter.set_posture", p.ID),
 					map[string]any{"posture": sp}))
@@ -95,7 +95,7 @@ func ValidateComposeManifest(reg *conditions.ConditionRegistry, specs Obligation
 		out = append(out, ValidateReviewAgentsDeclared(m, p)...)
 		out = append(out, ValidatePhaseObligations(specs, m, p)...)
 	}
-	if ip := strings.TrimSpace(m.InitialPosture); ip != "" && !session.ValidSessionPosture(ip) {
+	if ip := strings.TrimSpace(m.InitialPosture); ip != "" && !profiles.ValidSessionPosture(ip) {
 		out = append(out, workflowdiag.EmitDefault(workflowdiag.MustCode("invalid_posture"), "initial_posture",
 			map[string]any{"posture": ip}))
 	}

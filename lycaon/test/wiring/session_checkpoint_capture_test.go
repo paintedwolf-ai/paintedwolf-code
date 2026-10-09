@@ -52,10 +52,10 @@ func TestPromptSealsARewindAnchorInAProductionBuild(t *testing.T) {
 	testutil.FailErr(t, "create session", err)
 	AttachDefaultAmbient(t, h, ctx, sess.ID)
 
-	if _, err := h.SessionMgr.Prompt(ctx, sess.ID, "first ask"); err != nil {
+	if _, err := h.SessionMgr.Submissions.Prompt(ctx, sess.ID, "first ask"); err != nil {
 		testutil.FailErr(t, "first prompt", err)
 	}
-	if _, err := h.SessionMgr.Prompt(ctx, sess.ID, "second ask"); err != nil {
+	if _, err := h.SessionMgr.Submissions.Prompt(ctx, sess.ID, "second ask"); err != nil {
 		testutil.FailErr(t, "second prompt", err)
 	}
 

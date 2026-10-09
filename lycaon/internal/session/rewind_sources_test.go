@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/project"
 	sessioncheckpoint "github.com/lycaon/lycaon/internal/session/checkpoint"
+	"github.com/lycaon/lycaon/internal/session/checkpointcontrol"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -30,12 +31,12 @@ func TestSourceRewindRestoresEntireSuffixAndRecordsUserVersions(t *testing.T) {
 	appendRewindAsk(t, mgr, id)
 	testutil.FailErr(t, "create second file", os.WriteFile(filepath.Join(root, "second.txt"), []byte("second"), 0o644))
 	recordRewindTestEffect(t, mgr, id, "second.txt", nil, []byte("second"), api.SourceChangeOpCreate)
-	preview, err := mgr.PreviewRewind(ctx, id, first)
+	preview, err := mgr.Rewinds.PreviewRewind(ctx, id, first)
 	testutil.FailErr(t, "preview suffix", err)
 	if len(preview.Files) != 2 || len(preview.Issues) != 0 {
 		t.Fatalf("preview=%+v", preview)
 	}
-	p, err := mgr.rewindProject(ctx, id)
+	p, err := rewindFixtureProject(t, mgr, ctx, id)
 	testutil.FailErr(t, "project", err)
 	ledger := mgr.sourceLedger.(*sourceledger.Store)
 	fileIDs := map[string]string{}
@@ -45,7 +46,7 @@ func TestSourceRewindRestoresEntireSuffixAndRecordsUserVersions(t *testing.T) {
 		fileIDs[name] = head.FileID
 	}
 	operationID := uuid.NewString()
-	result, err := mgr.RewindToPrompt(ctx, operationID, id, first, preview.PlanDigest)
+	result, err := mgr.Rewinds.RewindToPrompt(ctx, operationID, id, first, preview.PlanDigest)
 	testutil.FailErr(t, "rewind suffix", err)
 	if result.TruncatedMessageCount != 2 || len(result.RestoredPaths) != 2 {
 		t.Fatalf("result=%+v", result)
@@ -55,7 +56,7 @@ func TestSourceRewindRestoresEntireSuffixAndRecordsUserVersions(t *testing.T) {
 			t.Fatalf("%s remains: %v", name, err)
 		}
 	}
-	replay, err := mgr.RewindToPrompt(ctx, operationID, id, first, preview.PlanDigest)
+	replay, err := mgr.Rewinds.RewindToPrompt(ctx, operationID, id, first, preview.PlanDigest)
 	testutil.FailErr(t, "replay operation", err)
 	if replay.TruncatedMessageCount != 2 {
 		t.Fatalf("replay=%+v", replay)
@@ -82,10 +83,10 @@ func TestSourceRewindPreservesUnobservedHumanEditAndTranscript(t *testing.T) {
 	path := filepath.Join(root, "file.txt")
 	testutil.FailErr(t, "write agent file", os.WriteFile(path, []byte("agent"), 0o644))
 	recordRewindTestEffect(t, mgr, id, "file.txt", nil, []byte("agent"), api.SourceChangeOpCreate)
-	preview, err := mgr.PreviewRewind(ctx, id, anchor)
+	preview, err := mgr.Rewinds.PreviewRewind(ctx, id, anchor)
 	testutil.FailErr(t, "preview before human edit", err)
 	testutil.FailErr(t, "human edit without watcher", os.WriteFile(path, []byte("human work"), 0o644))
-	_, err = mgr.RewindToPrompt(ctx, uuid.NewString(), id, anchor, preview.PlanDigest)
+	_, err = mgr.Rewinds.RewindToPrompt(ctx, uuid.NewString(), id, anchor, preview.PlanDigest)
 	var blocked *sourceledger.RewindBlockedError
 	if !errors.As(err, &blocked) {
 		t.Fatalf("rewind err=%v, want structured conflict", err)
@@ -95,7 +96,7 @@ func TestSourceRewindPreservesUnobservedHumanEditAndTranscript(t *testing.T) {
 	if string(raw) != "human work" {
 		t.Fatalf("human work lost: %q", raw)
 	}
-	messages, err := mgr.GetMessages(ctx, id)
+	messages, err := mgr.Transcript.GetMessages(ctx, id)
 	testutil.FailErr(t, "read retained transcript", err)
 	if len(messages) != 1 || messages[0].ID != anchor {
 		t.Fatalf("transcript=%+v", messages)
@@ -106,17 +107,17 @@ func TestSourceRewindRejectsStalePreviewAndContinuation(t *testing.T) {
 	mgr, id, _ := newCheckpointTestSession(t)
 	ctx := checkpointCaller(t, mgr)
 	anchor := appendRewindAsk(t, mgr, id)
-	preview, err := mgr.PreviewRewind(ctx, id, anchor)
+	preview, err := mgr.Rewinds.PreviewRewind(ctx, id, anchor)
 	testutil.FailErr(t, "preview", err)
 	appendRewindAsk(t, mgr, id)
-	_, err = mgr.RewindToPrompt(ctx, uuid.NewString(), id, anchor, preview.PlanDigest)
-	if !errors.Is(err, ErrRewindPlanChanged) {
+	_, err = mgr.Rewinds.RewindToPrompt(ctx, uuid.NewString(), id, anchor, preview.PlanDigest)
+	if !errors.Is(err, checkpointcontrol.ErrRewindPlanChanged) {
 		t.Fatalf("stale preview err=%v", err)
 	}
 	continuation := uuid.NewString()
 	testutil.FailErr(t, "append continuation", mgr.store.AppendMessages(ctx, id, api.Message{ID: continuation, Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Kind: api.MessageKindUserContinuation, Content: "more"}))
-	_, err = mgr.PreviewRewind(ctx, id, continuation)
-	if !errors.Is(err, ErrRewindAnchorIneligible) {
+	_, err = mgr.Rewinds.PreviewRewind(ctx, id, continuation)
+	if !errors.Is(err, checkpointcontrol.ErrRewindAnchorIneligible) {
 		t.Fatalf("continuation preview err=%v", err)
 	}
 }
@@ -130,7 +131,7 @@ func TestSourceRewindChecksUnrecordedChangesAcrossTheWholeSuffix(t *testing.T) {
 	testutil.FailErr(t, "open later checkpoint", err)
 	testutil.FailErr(t, "capture unversioned path", cp.CapturePreImage(t.Context(), id, second, "blueprint.md"))
 	testutil.FailErr(t, "simulate unversioned host mutation", os.WriteFile(filepath.Join(root, "blueprint.md"), []byte("host mutation"), 0o644))
-	preview, err := mgr.PreviewRewind(t.Context(), id, first)
+	preview, err := mgr.Rewinds.PreviewRewind(t.Context(), id, first)
 	testutil.FailErr(t, "preview incomplete suffix", err)
 	if len(preview.Issues) != 1 || preview.Issues[0].Code != "unrecorded_change" || preview.PlanDigest != "" {
 		t.Fatalf("preview=%+v", preview)
@@ -160,7 +161,7 @@ func TestSourceRewindRestoresDeletedExecutableMode(t *testing.T) {
 func TestSourceRewindResolvesEachRootAndRenamedFile(t *testing.T) {
 	mgr, id, root := newCheckpointTestSession(t)
 	ctx := checkpointCaller(t, mgr)
-	p, err := mgr.rewindProject(ctx, id)
+	p, err := rewindFixtureProject(t, mgr, ctx, id)
 	testutil.FailErr(t, "resolve project", err)
 	secondary := t.TempDir()
 	change, err := mgr.projects.AttachRoot(ctx, p.ID, project.AttachRootParams{Path: secondary, Label: "secondary"})
@@ -172,12 +173,12 @@ func TestSourceRewindResolvesEachRootAndRenamedFile(t *testing.T) {
 	ledger := mgr.sourceLedger.(*sourceledger.Store)
 	err = ledger.Record(ctx, sourceledger.RecordInput{ProjectID: p.ID, RootID: change.Added.ID, FromRootID: change.Added.ID, FromPath: "same.txt", Path: "renamed.txt", SessionID: id, Turn: 1, Origin: api.SourceChangeOriginAgent, Op: api.SourceChangeOpRename, Before: []byte("secondary"), After: []byte("secondary")})
 	testutil.FailErr(t, "record secondary rename", err)
-	preview, err := mgr.PreviewRewind(ctx, id, anchor)
+	preview, err := mgr.Rewinds.PreviewRewind(ctx, id, anchor)
 	testutil.FailErr(t, "preview multiple roots", err)
 	if len(preview.Files) != 2 || len(preview.Issues) != 0 {
 		t.Fatalf("preview=%+v", preview)
 	}
-	_, err = mgr.RewindToPrompt(ctx, uuid.NewString(), id, anchor, preview.PlanDigest)
+	_, err = mgr.Rewinds.RewindToPrompt(ctx, uuid.NewString(), id, anchor, preview.PlanDigest)
 	testutil.FailErr(t, "rewind multiple roots", err)
 	if _, err := os.Stat(filepath.Join(root, "same.txt")); !os.IsNotExist(err) {
 		t.Fatalf("primary file remains: %v", err)

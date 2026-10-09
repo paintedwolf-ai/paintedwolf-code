@@ -2,11 +2,11 @@ package wiring
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/coordinator/batch"
-	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/coordinator/batch"
+	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -56,13 +56,13 @@ func TestInvestigateTaskFanOutBlocksInvestigateUntilWorkersIdle(t *testing.T) {
 	AttachDefaultAmbient(t, h, ctx, sess.ID)
 	h.SeedProgress(t, ctx, sess.ID)
 
-	if _, err := h.SessionMgr.Prompt(ctx, sess.ID, "build parallel modules with implementer"); err != nil {
+	if _, err := h.SessionMgr.Submissions.Prompt(ctx, sess.ID, "build parallel modules with implementer"); err != nil {
 		testutil.FailErr(t, "Prompt", err)
 	}
 
 	var state surface.ImplementSessionState
 	testutil.WaitFor(t, 5*time.Second, func() bool {
-		state = h.SessionMgr.BuildImplementSessionState(ctx, sess)
+		state = h.SessionMgr.Workers.State.ForSession(ctx, sess)
 		if state.WorkersInFlight > 0 {
 			return true
 		}
@@ -78,7 +78,7 @@ func TestInvestigateTaskFanOutBlocksInvestigateUntilWorkersIdle(t *testing.T) {
 		t.Fatal("expected workers in flight after task() from investigate turn")
 	}
 
-	msgs, err := h.SessionMgr.GetMessages(ctx, sess.ID)
+	msgs, err := h.SessionMgr.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	wakeProfile := surface.ResolveTurnProfile(
 		api.CoordinatorRunContext{WorkflowID: "implement", CurrentPhase: "work"},
@@ -136,25 +136,25 @@ func TestInvestigateReturnsAfterWorkersCompleteAndNoQueuedPromotion(t *testing.T
 	AttachDefaultAmbient(t, h, ctx, sess.ID)
 	h.SeedProgress(t, ctx, sess.ID)
 
-	if _, err := h.SessionMgr.Prompt(ctx, sess.ID, "Add a TODO comment via implementer"); err != nil {
+	if _, err := h.SessionMgr.Submissions.Prompt(ctx, sess.ID, "Add a TODO comment via implementer"); err != nil {
 		testutil.FailErr(t, "Prompt dispatch", err)
 	}
 	if err := DrainPendingWorkerJobs(ctx, h, sess.ProjectID, sess.ID); err != nil {
 		testutil.FailErr(t, "DrainPendingWorkerJobs", err)
 	}
 
-	msgs, err := h.SessionMgr.GetMessages(ctx, sess.ID)
+	msgs, err := h.SessionMgr.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
-	state := h.SessionMgr.BuildImplementSessionState(ctx, sess)
+	state := h.SessionMgr.Workers.State.ForSession(ctx, sess)
 	if len(state.PendingOverlayIDs) == 0 {
 		t.Fatalf("expected pending overlay promote after write worker drain, PendingOverlayIDs=%v", state.PendingOverlayIDs)
 	}
 	if err := PromotePendingWriteOverlays(ctx, h, sess.ProjectID, sess.ID); err != nil {
 		testutil.FailErr(t, "PromotePendingWriteOverlays", err)
 	}
-	msgs, err = h.SessionMgr.GetMessages(ctx, sess.ID)
+	msgs, err = h.SessionMgr.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages after promote", err)
-	state = h.SessionMgr.BuildImplementSessionState(ctx, sess)
+	state = h.SessionMgr.Workers.State.ForSession(ctx, sess)
 	if len(state.PendingOverlayIDs) > 0 {
 		t.Fatalf("expected no pending overlay promote after promote_overlay, PendingOverlayIDs=%v", state.PendingOverlayIDs)
 	}
@@ -162,9 +162,9 @@ func TestInvestigateReturnsAfterWorkersCompleteAndNoQueuedPromotion(t *testing.T
 	// Wait for the batch ledger and follow-up surface to settle.
 	var followProfile surface.TurnProfile
 	settled := testutil.WaitForNoFatal(15*time.Second, func() bool {
-		state = h.SessionMgr.BuildImplementSessionState(ctx, sess)
+		state = h.SessionMgr.Workers.State.ForSession(ctx, sess)
 		if state.WorkersInFlight == 0 && state.BatchPhase != batch.PhaseDispatch {
-			msgs, err = h.SessionMgr.GetMessages(ctx, sess.ID)
+			msgs, err = h.SessionMgr.Transcript.GetMessages(ctx, sess.ID)
 			if err == nil && len(state.PendingOverlayIDs) == 0 {
 				runCtx, rerr := h.SessionMgr.CoordinatorRunContext(ctx, sess.ID)
 				if rerr == nil {
@@ -189,10 +189,10 @@ func TestInvestigateReturnsAfterWorkersCompleteAndNoQueuedPromotion(t *testing.T
 	}
 
 	seqBefore := state.BatchSeq
-	if _, err := h.SessionMgr.Prompt(ctx, sess.ID, "summarize what changed"); err != nil {
+	if _, err := h.SessionMgr.Submissions.Prompt(ctx, sess.ID, "summarize what changed"); err != nil {
 		testutil.FailErr(t, "Prompt follow-up", err)
 	}
-	state = h.SessionMgr.BuildImplementSessionState(ctx, sess)
+	state = h.SessionMgr.Workers.State.ForSession(ctx, sess)
 	if state.BatchSeq <= seqBefore {
 		t.Fatalf("batch_seq = %d want > %d after visible user follow-up (batch epoch reset)", state.BatchSeq, seqBefore)
 	}

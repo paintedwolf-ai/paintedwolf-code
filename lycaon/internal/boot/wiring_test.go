@@ -7,6 +7,7 @@ import (
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/rules"
 	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -16,8 +17,8 @@ import (
 )
 
 func TestValidateServeWiringAcceptsProductionShape(t *testing.T) {
-	postures, err := session.LoadPostureRegistry()
-	testutil.FailErr(t, "session.LoadPostureRegistry failed", err)
+	postures, err := profiles.LoadPostureRegistry()
+	testutil.FailErr(t, "profiles.LoadPostureRegistry failed", err)
 	packs, err := rules.LoadBundledRules()
 	testutil.FailErr(t, "rules.LoadBundledRules failed", err)
 	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{})
@@ -28,7 +29,7 @@ func TestValidateServeWiringAcceptsProductionShape(t *testing.T) {
 	engine, err := rules.NewPostureRuleEngine(postures, packs, reg)
 	testutil.FailErr(t, "rules.NewPostureRuleEngine failed", err)
 	mgr := session.NewManager(store.NewMemory(), nil, nil, settings.DefaultSessionLimits())
-	mgr.SetPostureRegistry(postures)
+	mgr.Profiles.SetPostureRegistry(postures)
 	manifests, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "workflow.RegistryFromDirs failed", err)
 	sqlDB := testdbfixture.Open(t, "wiring.db")

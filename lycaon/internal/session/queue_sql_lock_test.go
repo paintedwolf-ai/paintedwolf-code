@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/eventoutbox"
 	"github.com/lycaon/lycaon/internal/events"
+	"github.com/lycaon/lycaon/internal/session/promptinput"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -26,7 +27,7 @@ type gatedPromptPending struct {
 func (p *gatedPromptPending) PromptPendingAmong(sessionID string, ids []string) bool {
 	close(p.writerHeld)
 	<-p.queueHeld
-	return p.manager.PromptPendingAmong(sessionID, ids)
+	return p.manager.Runner.SubmissionState.PromptPendingAmong(sessionID, ids)
 }
 
 func TestQueuedReceiptClaimDoesNotDeadlockSessionSeenPublication(t *testing.T) {
@@ -37,7 +38,7 @@ func TestQueuedReceiptClaimDoesNotDeadlockSessionSeenPublication(t *testing.T) {
 	manager := NewManager(st, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
 	sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	row, _, err := manager.AdmitPrompt(t.Context(), sess.ID, uuid.NewString(), "queued", PromptInput{Text: "queued"})
+	row, _, err := manager.Submissions.AdmitPrompt(t.Context(), sess.ID, uuid.NewString(), "queued", promptinput.Input{Text: "queued"})
 	testutil.FailErr(t, "admit queued prompt", err)
 	manager.queue.AppendOrdered(sess.ID, row.ID, row.SubmittedBy, "queued", row.AdmissionSeq, row.CreatedAt)
 	pending := &gatedPromptPending{manager: manager, writerHeld: make(chan struct{}), queueHeld: make(chan struct{})}

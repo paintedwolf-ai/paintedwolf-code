@@ -48,7 +48,7 @@ func TestPromptHTTPReturnsSpendRejectionBeforeAcceptedReceipt(t *testing.T) {
 	if response.Code != http.StatusConflict || notice.Code != wire.ApiErrorCodeSessionSpendCeilingReached || notice.Message == "" {
 		t.Fatalf("prompt was not rejected synchronously: status=%d body=%s", response.Code, response.Body.String())
 	}
-	if _, err := srv.sessions.GetPromptSubmission(t.Context(), request.OperationID); !errors.Is(err, store.ErrPromptSubmissionNotFound) {
+	if _, err := srv.sessions.Submissions.GetPromptSubmission(t.Context(), request.OperationID); !errors.Is(err, store.ErrPromptSubmissionNotFound) {
 		t.Fatalf("rejected request left an accepted receipt: %v", err)
 	}
 }

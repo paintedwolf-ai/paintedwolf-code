@@ -31,7 +31,7 @@ func TestMaybeAdvanceCoordinatorBatchOnTaskEnqueued_writerStillDispatches(t *tes
 	mgr := session.NewManager(store, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
 	agents := orchestration.NewMemoryAgentRegistry()
 	testutil.FailErr(t, "LoadRequiredAgentRegistry", orchestration.LoadRequiredAgentRegistry(context.Background(), agents))
-	mgr.SetAgentRegistry(agents)
+	mgr.Profiles.SetAgentRegistry(agents)
 
 	wfStore := workflow.NewSQLStore(sqlDB)
 	bundledDir := filepath.Join(root, "config", "packs", "painted-wolf", "platform", "workflows")
@@ -51,9 +51,9 @@ func TestMaybeAdvanceCoordinatorBatchOnTaskEnqueued_writerStillDispatches(t *tes
 	_, err = wfMgr.StartAmbient(ctx, sess.ID, ref.ID, ref.Version)
 	testutil.FailErr(t, "StartAmbient", err)
 
-	mgr.MaybeAdvanceCoordinatorBatchOnTaskEnqueuedForTest(ctx, sess.ID, orchestration.ProfileImplementer)
+	mgr.Batch.TaskEnqueued(ctx, sess.ID, orchestration.ProfileImplementer)
 
-	state := mgr.BuildImplementSessionState(ctx, sess)
+	state := mgr.Workers.State.ForSession(ctx, sess)
 	if state.BatchPhase != batch.PhaseDispatch {
 		t.Fatalf("batch phase = %q want dispatch after writer enqueue", state.BatchPhase)
 	}

@@ -277,7 +277,7 @@ func TestGitWorktreeBindRejectsBusySession(t *testing.T) {
 	srv.ServeHTTP(w, req)
 	var sess wire.Session
 	testutil.FailErr(t, "decode", json.Unmarshal(w.Body.Bytes(), &sess))
-	unlock, ok := mgr.TryIdleMutation(sess.ID)
+	unlock, ok := mgr.Execution.TryIdleMutation(sess.ID)
 	if !ok {
 		t.Fatal("hold idle lock")
 	}
@@ -598,7 +598,7 @@ func TestGitWorktreeRemoveNotBound(t *testing.T) {
 func TestGitWorktreeLandBusy(t *testing.T) {
 	srv, mgr, projectID := newWorktreeTestServer(t)
 	sess, _, _ := createBoundSession(t, srv, projectID)
-	unlock, ok := mgr.TryIdleMutation(sess.ID)
+	unlock, ok := mgr.Execution.TryIdleMutation(sess.ID)
 	if !ok {
 		t.Fatal("hold lock")
 	}

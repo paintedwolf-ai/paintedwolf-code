@@ -35,7 +35,7 @@ func setupPlanTripartiteFixture(t *testing.T) coordinatorPromptFixture {
 	mgr := session.NewManager(store, rec, tools.NewStubRegistry(), settings.DefaultSessionLimits())
 	agents := orchestration.NewMemoryAgentRegistry()
 	_ = orchestration.LoadRequiredAgentRegistry(context.Background(), agents)
-	mgr.SetAgentRegistry(agents)
+	mgr.Profiles.SetAgentRegistry(agents)
 	wirePromptTestManager(t, mgr)
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
 	if hintCfg, err := guidance.LoadHintConfigStock(); err == nil {
@@ -85,8 +85,8 @@ func TestStructuredModeExitRestoresImplementTripartiteAndTools(t *testing.T) {
 		t.Fatalf("ambient implement phase = %q want boot", active.CurrentPhase)
 	}
 
-	if _, err := fix.mgr.Prompt(ctx, fix.sess.ID, "back to implement chat"); err != nil {
-		testutil.FailErr(t, "fix.mgr.Prompt failed", err)
+	if _, err := fix.mgr.Submissions.Prompt(ctx, fix.sess.ID, "back to implement chat"); err != nil {
+		testutil.FailErr(t, "fix.mgr.Submissions.Prompt failed", err)
 	}
 	req := fix.rec.LastRequest()
 	foundImplement := false
@@ -105,15 +105,15 @@ func TestStructuredModeExitRestoresImplementTripartiteAndTools(t *testing.T) {
 		t.Fatal("post-exit first implement prompt must load implement investigate mode partial")
 	}
 
-	listed := fix.mgr.PromptToolPolicy().ListForPrompt(ctx, fix.sess, orchestration.ProfileCoordinator)
+	listed := fix.mgr.Guards.Policy().ListForPrompt(ctx, fix.sess, orchestration.ProfileCoordinator)
 	_ = listed
 }
 
 func TestStructuredModePlanTripartiteOnActiveRun(t *testing.T) {
 	fix := setupPlanTripartiteFixture(t)
 	ctx := context.Background()
-	if _, err := fix.mgr.Prompt(ctx, fix.sess.ID, "what phase are we in"); err != nil {
-		testutil.FailErr(t, "fix.mgr.Prompt failed", err)
+	if _, err := fix.mgr.Submissions.Prompt(ctx, fix.sess.ID, "what phase are we in"); err != nil {
+		testutil.FailErr(t, "fix.mgr.Submissions.Prompt failed", err)
 	}
 	foundPlan := false
 	for _, msg := range fix.rec.LastRequest().Messages {

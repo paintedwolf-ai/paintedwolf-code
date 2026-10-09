@@ -52,8 +52,8 @@ func TestFreeChatImplementerTask(t *testing.T) {
 	AttachDefaultAmbient(t, h, ctx, sess.ID)
 	h.SeedProgress(t, ctx, sess.ID)
 	prompt := "Add a // TODO: review here comment at the top of main.go"
-	if _, err := h.SessionMgr.Prompt(ctx, sess.ID, prompt); err != nil {
-		testutil.FailErr(t, "h.SessionMgr.Prompt failed", err)
+	if _, err := h.SessionMgr.Submissions.Prompt(ctx, sess.ID, prompt); err != nil {
+		testutil.FailErr(t, "h.SessionMgr.Submissions.Prompt failed", err)
 	}
 	if err := DrainPendingWorkerJobs(ctx, h, sess.ProjectID, sess.ID); err != nil {
 		testutil.FailErr(t, "DrainPendingWorkerJobs", err)
@@ -91,14 +91,14 @@ func TestFreeChatImplementerChildIncludesCommandInSchema(t *testing.T) {
 	dir := t.TempDir()
 	parent, err := h.CreateHarnessSession(t, api.CreateSessionRequest{}, dir)
 	testutil.FailErr(t, "create session", err)
-	child, err := h.SessionMgr.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{
+	child, err := h.SessionMgr.Workers.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{
 		AgentType: "implementer",
 		Prompt:    "Add a test for main.go",
 	})
 	testutil.FailErr(t, "SpawnChild", err)
 	prof, err := h.AgentRegistry.Get("implementer")
 	testutil.FailErr(t, "agents.Get", err)
-	policy := h.SessionMgr.PromptToolPolicy()
+	policy := h.SessionMgr.Guards.Policy()
 	hasCommand := false
 	for _, meta := range policy.ListForPrompt(ctx, child, prof.ToolProfile) {
 		if meta.Name == "command" {

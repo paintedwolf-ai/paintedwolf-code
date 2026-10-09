@@ -144,7 +144,7 @@ func TestWorktreeReach_tabAndBoardAgree(t *testing.T) {
 		d.Board = &board.SnapshotBuilder{
 			Git:      gm,
 			Repo:     repoProvider,
-			Worktree: d.Sessions.BoardGitWorktreeFunc(gm),
+			Worktree: d.Sessions.Workspace.BoardWorktree(gm),
 		}
 	})
 	mgr.SetProjectRegistry(srv.projectRegistry)
@@ -279,7 +279,7 @@ func TestWorktreeReach_boardLineAbsentWhenUnbound(t *testing.T) {
 	repoProvider := repotest.NewProvider(t)
 	t.Cleanup(func() { _ = repoProvider.Close() })
 	srv, mgr, projectID := newWorktreeTestServer(t, func(d *Dependencies) {
-		d.Board = &board.SnapshotBuilder{Git: gm, Repo: repoProvider, Worktree: d.Sessions.BoardGitWorktreeFunc(gm)}
+		d.Board = &board.SnapshotBuilder{Git: gm, Repo: repoProvider, Worktree: d.Sessions.Workspace.BoardWorktree(gm)}
 	})
 	mgr.SetProjectRegistry(srv.projectRegistry)
 

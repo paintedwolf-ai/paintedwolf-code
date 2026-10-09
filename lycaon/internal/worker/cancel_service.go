@@ -8,7 +8,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/projectroot"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -30,11 +30,16 @@ const (
 )
 
 // CancelService cancels coordinator-spawned workers and returns a change report.
+type CancelRegistration interface {
+	Register(string, string, string) error
+}
 type CancelService struct {
-	Queue    WorkerQueue
-	Sessions GracefulCancelSession
-	Reports  ChangeReportDeps
-	Reject   *guidance.StaticRejectFormatter
+	Graceful      CancelRegistration
+	Cancellations WorkerCancellationProjection
+	Queue         WorkerQueue
+	Sessions      GracefulCancelSession
+	Reports       ChangeReportDeps
+	Reject        *guidance.StaticRejectFormatter
 }
 
 // CancelJob cancels by job id with a graceful closeout (HTTP worker pane).
@@ -158,7 +163,7 @@ func (s *CancelService) cancelTask(ctx context.Context, task *api.WorkerTask, se
 		})
 	}
 
-	if task.Status == api.WorkerStatusRunning && mode == CancelGraceful && strings.TrimSpace(task.ChildSessionID) != "" && s.Sessions != nil {
+	if task.Status == api.WorkerStatusRunning && mode == CancelGraceful && strings.TrimSpace(task.ChildSessionID) != "" && s.Sessions != nil && s.Graceful != nil {
 		return s.cancelRunningGraceful(ctx, task, sessionID, reason)
 	}
 	return s.cancelImmediate(ctx, task, sessionID, reason)
@@ -166,7 +171,7 @@ func (s *CancelService) cancelTask(ctx context.Context, task *api.WorkerTask, se
 
 func (s *CancelService) cancelRunningGraceful(ctx context.Context, task *api.WorkerTask, sessionID, reason string) (api.WorkerCancelResult, error) {
 	childSessionID := strings.TrimSpace(task.ChildSessionID)
-	if err := s.Sessions.RegisterWorkerGracefulCancel(childSessionID, task.ID, reason); err != nil {
+	if err := s.Graceful.Register(childSessionID, task.ID, reason); err != nil {
 		return s.cancelImmediate(ctx, task, sessionID, reason)
 	}
 	// The poller finalizes cancellation after the worker closeout.
@@ -196,8 +201,8 @@ func (s *CancelService) cancelImmediate(ctx context.Context, task *api.WorkerTas
 	if err := s.Queue.FinishCanceled(ctx, jobID, &result); err != nil {
 		return api.WorkerCancelResult{}, err
 	}
-	if s.Sessions != nil && sessionID != "" {
-		if err := s.Sessions.AppendWorkerCancellation(ctx, sessionID, session.WorkerCancellationInput{
+	if s.Cancellations != nil && sessionID != "" {
+		if err := s.Cancellations.Append(ctx, sessionID, workeroutcomes.CancellationInput{
 			JobID:          jobID,
 			AgentType:      task.AgentType,
 			ChildSessionID: task.ChildSessionID,

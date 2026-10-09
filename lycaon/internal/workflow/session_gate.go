@@ -7,7 +7,7 @@ import (
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/scaffoldvars"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/workflowfacts"
 	"github.com/lycaon/lycaon/internal/spawn"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -112,8 +112,8 @@ func (m *RunManager) ActivePhaseHasReviewLoop(ctx context.Context, sessionID str
 }
 
 // ActivePhaseGuardState derives closeout and dispatch facts for the active phase.
-func (m *RunManager) ActivePhaseGuardState(ctx context.Context, sessionID string) session.WorkflowPhaseGuardState {
-	var state session.WorkflowPhaseGuardState
+func (m *RunManager) ActivePhaseGuardState(ctx context.Context, sessionID string) workflowfacts.WorkflowPhaseGuardState {
+	var state workflowfacts.WorkflowPhaseGuardState
 	if m == nil || strings.TrimSpace(sessionID) == "" {
 		return state
 	}
@@ -201,8 +201,8 @@ func (m *RunManager) ActiveReviewVerdictPending(ctx context.Context, sessionID s
 }
 
 // ActiveCloseoutGateState reports open completion gates, excluding pending human input.
-func (m *RunManager) ActiveCloseoutGateState(ctx context.Context, sessionID string) session.WorkflowCloseoutGateState {
-	var state session.WorkflowCloseoutGateState
+func (m *RunManager) ActiveCloseoutGateState(ctx context.Context, sessionID string) workflowfacts.WorkflowCloseoutGateState {
+	var state workflowfacts.WorkflowCloseoutGateState
 	if m == nil || strings.TrimSpace(sessionID) == "" {
 		return state
 	}
@@ -236,19 +236,19 @@ func (m *RunManager) ActiveCloseoutGateState(ctx context.Context, sessionID stri
 }
 
 // ActiveManifest returns coordinator_profile and rules from the active workflow manifest.
-func (m *RunManager) ActiveManifest(ctx context.Context, sessionID string) (session.ActiveWorkflowManifest, bool) {
+func (m *RunManager) ActiveManifest(ctx context.Context, sessionID string) (workflowfacts.ActiveWorkflowManifest, bool) {
 	if m == nil || sessionID == "" {
-		return session.ActiveWorkflowManifest{}, false
+		return workflowfacts.ActiveWorkflowManifest{}, false
 	}
 	active, err := m.Store.ActiveBySession(ctx, sessionID)
 	if err != nil || active == nil {
-		return session.ActiveWorkflowManifest{}, false
+		return workflowfacts.ActiveWorkflowManifest{}, false
 	}
 	manifest, err := m.manifestForRun(ctx, active)
 	if err != nil {
-		return session.ActiveWorkflowManifest{}, false
+		return workflowfacts.ActiveWorkflowManifest{}, false
 	}
-	return session.ActiveWorkflowManifest{
+	return workflowfacts.ActiveWorkflowManifest{
 		CoordinatorProfile: strings.TrimSpace(manifest.CoordinatorProfile),
 		Rules:              append([]string(nil), manifest.Rules...),
 		HostPhaseAdvance:   workflowdef.PhaseHostPhaseAdvance(manifest, active.CurrentPhase),
@@ -256,16 +256,16 @@ func (m *RunManager) ActiveManifest(ctx context.Context, sessionID string) (sess
 }
 
 // ResolvedRequest returns the active run's resolved request.
-func (m *RunManager) ResolvedRequest(ctx context.Context, sessionID string) session.ResolvedWorkflowRequest {
+func (m *RunManager) ResolvedRequest(ctx context.Context, sessionID string) workflowfacts.ResolvedWorkflowRequest {
 	if m == nil || strings.TrimSpace(sessionID) == "" {
-		return session.ResolvedWorkflowRequest{}
+		return workflowfacts.ResolvedWorkflowRequest{}
 	}
 	active, vars, err := m.Store.ActiveStateBySession(ctx, sessionID)
 	if err != nil || active == nil {
-		return session.ResolvedWorkflowRequest{}
+		return workflowfacts.ResolvedWorkflowRequest{}
 	}
 	if state, ok := requestStateFromVars(vars); ok && state.Status == requestStatusResolved {
-		return session.ResolvedWorkflowRequest{RunID: active.ID, OpeningMessageID: active.StartMessageID, Text: strings.TrimSpace(state.Text)}
+		return workflowfacts.ResolvedWorkflowRequest{RunID: active.ID, OpeningMessageID: active.StartMessageID, Text: strings.TrimSpace(state.Text)}
 	}
-	return session.ResolvedWorkflowRequest{}
+	return workflowfacts.ResolvedWorkflowRequest{}
 }

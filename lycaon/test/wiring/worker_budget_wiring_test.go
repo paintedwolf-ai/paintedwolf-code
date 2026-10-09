@@ -7,8 +7,8 @@ import (
 
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/project"
-	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
+	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/worker"
@@ -134,7 +134,7 @@ func TestWorkerBudgetExhaustedEnvelopeWiring(t *testing.T) {
 		Content:    closeout,
 	}))
 
-	status, err := h.SessionMgr.AppendWorkerSummary(ctx, sess.ID, session.WorkerSummaryInput{
+	status, err := h.SessionMgr.Workers.Summaries.Append(ctx, sess.ID, workeroutcomes.SummaryInput{
 		JobID:          task.ID,
 		ChildSessionID: child.ID,
 		AgentType:      "implementer",
@@ -147,7 +147,7 @@ func TestWorkerBudgetExhaustedEnvelopeWiring(t *testing.T) {
 	}
 	msgs, err := h.Store.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "parent msgs", err)
-	if !anyMessageContains(msgs, session.WorkerBudgetExhaustedCode) {
+	if !anyMessageContains(msgs, workeroutcomes.WorkerBudgetExhaustedCode) {
 		t.Fatal("parent transcript missing WORKER_BUDGET_EXHAUSTED")
 	}
 }

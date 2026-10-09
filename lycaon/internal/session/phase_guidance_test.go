@@ -31,7 +31,7 @@ func TestPhaseGuidanceIsDeliveredOnTheNextModelCall(t *testing.T) {
 	}
 	kicks.QueueDeferredLatest(sess.ID, anchor.PhaseEntered.String(), "coordinator-security-claims")
 
-	msgs, err := mgr.takePhaseGuidance(t.Context(), sess.ID)
+	msgs, err := mgr.Guidance.TakePhase(t.Context(), sess.ID)
 	testutil.FailErr(t, "take phase guidance", err)
 	if len(msgs) != 1 || msgs[0].Content != phaseGuidance || msgs[0].Visibility != api.MessageVisibilityInternal {
 		t.Fatalf("delivered = %+v, want the claims phase guidance", msgs)
@@ -41,7 +41,7 @@ func TestPhaseGuidanceIsDeliveredOnTheNextModelCall(t *testing.T) {
 	if stored.Content != msgs[0].Content {
 		t.Fatal("phase guidance was not persisted")
 	}
-	if again, err := mgr.takePhaseGuidance(t.Context(), sess.ID); err != nil || len(again) != 0 {
+	if again, err := mgr.Guidance.TakePhase(t.Context(), sess.ID); err != nil || len(again) != 0 {
 		t.Fatalf("second take = %+v %v, want the guidance delivered once", again, err)
 	}
 	if got, ok := kicks.PeekPendingKickID(sess.ID); !ok || got != staged {

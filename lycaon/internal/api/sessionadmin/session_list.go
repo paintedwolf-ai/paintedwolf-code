@@ -7,7 +7,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
-	sessionmanager "github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/chats"
 	"github.com/lycaon/lycaon/internal/session/store"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -76,8 +76,8 @@ func (s *Handler) HandleListProjectSessions(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	page, err := s.Sessions.ListProjectSessions(r.Context(), query)
-	if errors.Is(err, sessionmanager.ErrInvalidSessionListCursor) {
+	page, err := s.Sessions.Chats.ListProjectSessions(r.Context(), query)
+	if errors.Is(err, chats.ErrInvalidSessionListCursor) {
 		s.responses.PageCursorError(w, r, "cursor", err)
 		return
 	}

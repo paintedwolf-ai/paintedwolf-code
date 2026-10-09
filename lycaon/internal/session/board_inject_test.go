@@ -2,18 +2,11 @@ package session_test
 
 import (
 	"context"
-	repotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
-	"github.com/lycaon/lycaon/internal/testutil/oartest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/lycaon/lycaon/internal/session/store"
-	"github.com/lycaon/lycaon/internal/settings"
-	"github.com/lycaon/lycaon/internal/testdbseed"
-	"github.com/lycaon/lycaon/internal/testutil"
 
 	"github.com/lycaon/lycaon/internal/board"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
@@ -23,6 +16,12 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/repoinfo"
 	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/testdbseed"
+	repotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/oartest"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -89,8 +88,8 @@ func TestInjectOnImplementDefaultFirstTurn(t *testing.T) {
 	testutil.FailErr(t, "create session in store", err)
 	testdbseed.BindSessionWorkspace(t, store, sess.ID, dir)
 	testdbseed.BindSessionWorkspace(t, store, sess.ID, dir)
-	if _, err := mgr.Prompt(ctx, sess.ID, "hello"); err != nil {
-		testutil.FailErr(t, "mgr.Prompt failed", err)
+	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "hello"); err != nil {
+		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 	}
 	if len(packBoardMessages(rec.LastRequest().Messages)) == 0 {
 		t.Fatal("implement-default chat should inject pack board on first turn")
@@ -108,11 +107,11 @@ func TestInjectSkipsWhenHashUnchanged(t *testing.T) {
 	sess, err := store.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	testdbseed.BindSessionWorkspace(t, store, sess.ID, dir)
-	if _, err := mgr.Prompt(ctx, sess.ID, "one"); err != nil {
-		testutil.FailErr(t, "mgr.Prompt failed", err)
+	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "one"); err != nil {
+		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 	}
-	if _, err := mgr.Prompt(ctx, sess.ID, "two"); err != nil {
-		testutil.FailErr(t, "mgr.Prompt failed", err)
+	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "two"); err != nil {
+		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 	}
 	if len(packBoardMessages(rec.LastRequest().Messages)) != 0 {
 		t.Fatal("expected no redundant pack board inject on stable second prompt")
@@ -131,12 +130,12 @@ func TestInjectForcesOnPhaseChange(t *testing.T) {
 	testutil.FailErr(t, "create session in store", err)
 	testdbseed.BindSessionWorkspace(t, store, sess.ID, dir)
 	mgr.SetCoordinatorTurnFrameSource(&phaseStubCoordinator{phase: "plan"})
-	if _, err := mgr.Prompt(ctx, sess.ID, "a"); err != nil {
-		testutil.FailErr(t, "mgr.Prompt failed", err)
+	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "a"); err != nil {
+		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 	}
 	mgr.SetCoordinatorTurnFrameSource(&phaseStubCoordinator{phase: "implement"})
-	if _, err := mgr.Prompt(ctx, sess.ID, "b"); err != nil {
-		testutil.FailErr(t, "mgr.Prompt failed", err)
+	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "b"); err != nil {
+		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 	}
 	if len(packBoardMessages(rec.LastRequest().Messages)) == 0 {
 		t.Fatal("expected inject after phase change")
@@ -167,7 +166,7 @@ func TestInjectOmitsWorkflowWhenRunContext(t *testing.T) {
 	if _, err := depStore.Create(ctx, api.Delegation{ProjectID: testdbseed.DefaultProjectID, WorkspacePath: dir, Task: "task", Phase: api.DelegationPhaseWorker}, sess.ID, []api.Leg{{}}); err != nil {
 		testutil.FailErr(t, "depStore.Create failed", err)
 	}
-	if _, err := mgr2.Prompt(ctx, sess.ID, "go"); err != nil {
+	if _, err := mgr2.Submissions.Prompt(ctx, sess.ID, "go"); err != nil {
 		testutil.FailErr(t, "mgr2.Prompt failed", err)
 	}
 	for _, msg := range rec2.LastRequest().Messages {
@@ -202,15 +201,15 @@ func TestLegFinishedKickIncludesRelativeTime(t *testing.T) {
 	mgr := session.NewManager(store, rec, tools.NewStubRegistry(), settings.DefaultSessionLimits())
 	oartest.InstallCloseoutPolicy(t, mgr)
 	wirePromptTestManager(t, mgr)
-	testutil.FailErr(t, "install anchor registry", mgr.InstallAnchorRegistry())
+	testutil.FailErr(t, "install anchor registry", mgr.Guidance.InstallAnchorRegistry())
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
 	ctx := context.Background()
 	sess, err := store.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	done := time.Now().UTC().Add(-2 * time.Minute)
-	mgr.Emit(context.Background(), sess.ID, anchor.LegFinished, anchor.Envelope{CompletedAt: &done})
-	if _, err := mgr.Prompt(ctx, sess.ID, "next"); err != nil {
-		testutil.FailErr(t, "mgr.Prompt failed", err)
+	mgr.Guidance.Emit(context.Background(), sess.ID, anchor.LegFinished, anchor.Envelope{CompletedAt: &done})
+	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "next"); err != nil {
+		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 	}
 	// Host-authored rows keep their system role and transcript position.
 	found := false
