@@ -11,7 +11,7 @@ func (m *Host) SetBackgroundRegistry(reg *bgprocess.Registry) {
 	m.Processes.Background = reg
 	m.Runner.Execution.SetProcesses(reg)
 	m.Chats.Protection.SetJobs(reg)
-	_ = m.Resources.RegisterCleanup("background-processes", 20, reg.DisposeSession)
+	_ = m.Resources.RegisterCleanup("background-processes", 20, reg.Lifecycle.DisposeSession)
 }
 func (m *Host) SetHeldCalls(reg *heldcall.Registry) {
 	m.Processes.Held = reg

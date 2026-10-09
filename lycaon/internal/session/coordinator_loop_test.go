@@ -62,7 +62,7 @@ func wireImplementConvergenceHooks(t *testing.T, mgr *session.Host, wfMgr *workf
 		manifest, err := wfMgr.Resolver.ForRunID(ctx, runID)
 		if err == nil {
 			if _, ok := workflowphases.ReenterLegForAdvance(manifest, previousPhase, newPhase, sessionID); ok {
-				reenter.NudgeOnManifestReenter(ctx, mgr, sessionID, manifest, previousPhase, newPhase)
+				reenter.NudgeOnManifestReenter(ctx, mgr.Coordinator.Runtime.CoordinatorLoop().Nudges, sessionID, manifest, previousPhase, newPhase)
 				return
 			}
 		}

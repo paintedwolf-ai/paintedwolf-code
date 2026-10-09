@@ -21,7 +21,7 @@ func (r *Runtime) OnWorkflowPhaseEnter(ctx context.Context, rc *workflowphases.R
 	if rc == nil {
 		return
 	}
-	r.deps.Sessions.Manager.BeginWorkflowPhase(ctx, rc.SessionID)
+	r.deps.Sessions.Manager.Runner.Closeouts.BeginWorkflowPhase(ctx, rc.SessionID)
 	// Bind progress before checklist writes on this phase.
 	if r.deps.Progress != nil {
 		if pStore := r.deps.Progress(); pStore != nil && progress.AdoptActiveRun(ctx, pStore, rc.SessionID, rc.RunID, "") {
@@ -91,7 +91,7 @@ func (r *Runtime) OnWorkflowPhaseEnter(ctx context.Context, rc *workflowphases.R
 			}
 		}
 	}
-	r.deps.Sessions.Manager.EmitMatch(ctx, rc.SessionID, anchor.PhaseEntered, env, anchor.MatchContext{
+	r.deps.Sessions.Manager.Coordinator.Guidance.EmitMatch(ctx, rc.SessionID, anchor.PhaseEntered, env, anchor.MatchContext{
 		Surface:  "phase",
 		Phase:    rc.Phase,
 		Workflow: rc.WorkflowID,
@@ -105,21 +105,21 @@ func (r *Runtime) OnWorkflowPhaseEnter(ctx context.Context, rc *workflowphases.R
 	if heldByHost {
 		// Run start completes its topology hook before parking.
 		if !rc.IsRunStart() {
-			r.deps.Sessions.Manager.CancelInFlightPrompt(rc.SessionID)
+			r.deps.Sessions.Manager.Runner.Execution.Cancel(rc.SessionID)
 		}
 		if r.deps.Coordinator != nil && r.deps.Coordinator() != nil {
-			r.deps.Coordinator().CoordinatorLoop().ParkForHostObligation(ctx, rc.SessionID)
+			r.deps.Coordinator().CoordinatorLoop().Waits.ParkForHostObligation(ctx, rc.SessionID)
 		}
 	}
 	if mode := workflowdef.ForceExecutionMode(def.OnEnter.SetExecutionMode); mode != "" {
-		r.deps.Sessions.Manager.PushExecutionModeTransitionCause(rc.SessionID, surface.ModeTransitionCause{
+		r.deps.Sessions.Manager.Coordinator.Runtime.PushModeTransitionCause(rc.SessionID, surface.ModeTransitionCause{
 			Kind: surface.ModeTransitionCausePhaseHook,
 			Mode: mode,
 		})
 	} else if manifest, err := r.deps.Workflows.Manager.Resolver.ForRunID(ctx, rc.RunID); err == nil {
 		if vars, err := r.deps.Workflows.Manager.Policy.ScaffoldVarsForSession(ctx, rc.SessionID); err == nil {
 			if mode, ok := workflowdef.WorkflowDefaultForceMode(manifest, vars); ok {
-				r.deps.Sessions.Manager.PushExecutionModeTransitionCause(rc.SessionID, surface.ModeTransitionCause{
+				r.deps.Sessions.Manager.Coordinator.Runtime.PushModeTransitionCause(rc.SessionID, surface.ModeTransitionCause{
 					Kind: surface.ModeTransitionCauseWorkflowDefault,
 					Mode: mode,
 				})
@@ -142,7 +142,7 @@ func (r *Runtime) OnWorkflowPhaseReenter(ctx context.Context, rc *workflowphases
 		slog.WarnContext(ctx, "phase re-enter kick is not a catalog anchor", "session_id", rc.SessionID, "phase", def.ID, "kick", kickID)
 		return
 	}
-	r.deps.Sessions.Manager.Emit(ctx, rc.SessionID, id, r.deps.Sessions.Manager.CoordinatorEnvelopeForWorkerCycleTerminal(ctx, rc.SessionID, ""))
+	r.deps.Sessions.Manager.Coordinator.Guidance.Emit(ctx, rc.SessionID, id, r.deps.Sessions.Manager.Workers.Results.EnvelopeForTerminal(ctx, rc.SessionID, ""))
 }
 
 // OnWorkflowPhaseAutoAdvanced manages coordinator nudges and topology starts on auto-advance.
@@ -155,7 +155,7 @@ func (r *Runtime) OnWorkflowPhaseAutoAdvanced(ctx context.Context, sessionID, ru
 	manifest, err := r.deps.Workflows.Manager.Resolver.ForRunID(ctx, runID)
 	if err == nil {
 		if _, ok := workflowphases.ReenterLegForAdvance(manifest, previousPhase, newPhase, sessionID); ok {
-			reenter.NudgeOnManifestReenter(ctx, r.deps.Sessions.Manager, sessionID, manifest, previousPhase, newPhase)
+			reenter.NudgeOnManifestReenter(ctx, r.deps.Sessions.Manager.Coordinator.Runtime.CoordinatorLoop().Nudges, sessionID, manifest, previousPhase, newPhase)
 			return
 		}
 	}
@@ -168,13 +168,13 @@ func (r *Runtime) OnWorkflowPhaseAutoAdvanced(ctx context.Context, sessionID, ru
 			}
 		}
 		if held, heldErr := r.deps.Workflows.Manager.Obligations.HostObligationHeld(postStartCtx, sessionID); heldErr == nil && held {
-			r.deps.Sessions.Manager.CancelInFlightPrompt(sessionID)
+			r.deps.Sessions.Manager.Runner.Execution.Cancel(sessionID)
 			if r.deps.Coordinator != nil && r.deps.Coordinator() != nil {
-				r.deps.Coordinator().CoordinatorLoop().ParkForHostObligation(postStartCtx, sessionID)
+				r.deps.Coordinator().CoordinatorLoop().Waits.ParkForHostObligation(postStartCtx, sessionID)
 			}
 			return
 		}
-		r.deps.Sessions.Manager.NudgeCoordinatorLoop(ctx, sessionID, anchor.PhaseAdvanced, "", "", anchor.Envelope{})
+		r.deps.Sessions.Manager.Coordinator.Runtime.CoordinatorLoop().Nudges.Nudge(ctx, sessionID, anchor.PhaseAdvanced, "", "", anchor.Envelope{})
 		return
 	}
 	// Host transitions wake the newly entered phase.
@@ -182,14 +182,14 @@ func (r *Runtime) OnWorkflowPhaseAutoAdvanced(ctx context.Context, sessionID, ru
 		postAdvanceCtx := context.WithoutCancel(ctx)
 		if held, heldErr := r.deps.Workflows.Manager.Obligations.HostObligationHeld(postAdvanceCtx, sessionID); heldErr == nil && held {
 			if r.deps.Coordinator != nil && r.deps.Coordinator() != nil {
-				r.deps.Coordinator().CoordinatorLoop().ParkForHostObligation(postAdvanceCtx, sessionID)
+				r.deps.Coordinator().CoordinatorLoop().Waits.ParkForHostObligation(postAdvanceCtx, sessionID)
 			}
 			return
 		}
-		r.deps.Sessions.Manager.NudgeCoordinatorLoop(postAdvanceCtx, sessionID, anchor.PhaseAdvanced, "", "", anchor.Envelope{})
+		r.deps.Sessions.Manager.Coordinator.Runtime.CoordinatorLoop().Nudges.Nudge(postAdvanceCtx, sessionID, anchor.PhaseAdvanced, "", "", anchor.Envelope{})
 		return
 	}
-	r.deps.Sessions.Manager.NudgeCoordinatorLoop(ctx, sessionID, anchor.PhaseAdvanced, "", "", anchor.Envelope{})
+	r.deps.Sessions.Manager.Coordinator.Runtime.CoordinatorLoop().Nudges.Nudge(ctx, sessionID, anchor.PhaseAdvanced, "", "", anchor.Envelope{})
 }
 
 // OnWorkflowRunCompleted settles completed workflow runs.
@@ -197,7 +197,7 @@ func (r *Runtime) OnWorkflowRunCompleted(ctx context.Context, run *wire.Workflow
 	if run == nil || run.Status != wire.WorkflowRunStatusComplete {
 		return
 	}
-	if err := r.deps.Sessions.Manager.SettleCompletedWorkflow(ctx, run.SessionID, run.ID); err != nil {
+	if err := r.deps.Sessions.Manager.Runner.Settlement.CompleteWorkflow(ctx, run.SessionID, run.ID); err != nil {
 		slog.ErrorContext(ctx, "settle completed workflow", "session_id", run.SessionID, "run_id", run.ID, "error", err)
 	}
 }
@@ -210,11 +210,11 @@ func (r *Runtime) OnWorkflowRunResumed(ctx context.Context, run *wire.WorkflowRu
 	}
 	if held, heldErr := r.deps.Workflows.Manager.Obligations.HostObligationHeld(ctx, run.SessionID); heldErr == nil && held {
 		if r.deps.Coordinator != nil && r.deps.Coordinator() != nil {
-			r.deps.Coordinator().CoordinatorLoop().ParkForHostObligation(ctx, run.SessionID)
+			r.deps.Coordinator().CoordinatorLoop().Waits.ParkForHostObligation(ctx, run.SessionID)
 		}
 		return
 	}
-	r.deps.Sessions.Manager.NudgeCoordinatorLoop(ctx, run.SessionID, anchor.PhaseAdvanced, "", "", anchor.Envelope{})
+	r.deps.Sessions.Manager.Coordinator.Runtime.CoordinatorLoop().Nudges.Nudge(ctx, run.SessionID, anchor.PhaseAdvanced, "", "", anchor.Envelope{})
 }
 
 // OnWorkflowHumanApprovalAdvanced nudges the loop after human approval.
@@ -227,33 +227,33 @@ func (r *Runtime) OnWorkflowHumanApprovalAdvanced(ctx context.Context, run *wire
 	if err != nil || active == nil || active.Status != wire.WorkflowRunStatusRunning {
 		return
 	}
-	r.deps.Sessions.Manager.CancelInFlightPrompt(sessionID)
+	r.deps.Sessions.Manager.Runner.Execution.Cancel(sessionID)
 	if held, heldErr := r.deps.Workflows.Manager.Obligations.HostObligationHeld(ctx, sessionID); heldErr == nil && held {
 		if r.deps.Coordinator != nil && r.deps.Coordinator() != nil {
-			r.deps.Coordinator().CoordinatorLoop().ParkForHostObligation(ctx, sessionID)
+			r.deps.Coordinator().CoordinatorLoop().Waits.ParkForHostObligation(ctx, sessionID)
 		}
 		return
 	}
-	r.deps.Sessions.Manager.NudgeCoordinatorLoop(ctx, sessionID, anchor.PhaseAdvanced, "", "", anchor.Envelope{})
+	r.deps.Sessions.Manager.Coordinator.Runtime.CoordinatorLoop().Nudges.Nudge(ctx, sessionID, anchor.PhaseAdvanced, "", "", anchor.Envelope{})
 }
 
 // OnWorkflowFeedbackPending emits a pending feedback kick.
 func (r *Runtime) OnWorkflowFeedbackPending(ctx context.Context, sessionID, _ string) {
-	r.deps.Sessions.Manager.Emit(ctx, sessionID, anchor.FeedbackPending, anchor.Envelope{})
+	r.deps.Sessions.Manager.Coordinator.Guidance.Emit(ctx, sessionID, anchor.FeedbackPending, anchor.Envelope{})
 }
 
 // OnWorkflowToolAskOpened parks coordinator for user input on tool ask.
 func (r *Runtime) OnWorkflowToolAskOpened(ctx context.Context, sessionID, _ string) {
 	if r.deps.Coordinator != nil && r.deps.Coordinator() != nil {
-		r.deps.Coordinator().CoordinatorLoop().ParkForPendingUserInput(ctx, sessionID, "waiting for user ask")
+		r.deps.Coordinator().CoordinatorLoop().Waits.ParkForPendingUserInput(ctx, sessionID, "waiting for user ask")
 	}
 }
 
 // OnWorkflowFeedbackResolved clears pending kick and nudges coordinator with received feedback.
 func (r *Runtime) OnWorkflowFeedbackResolved(ctx context.Context, sessionID, _, _, _ string) {
-	r.deps.Sessions.Manager.DropCoordinatorKick(sessionID, anchor.FeedbackPending)
-	r.deps.Sessions.Manager.Emit(ctx, sessionID, anchor.FeedbackReceived, anchor.Envelope{})
-	r.deps.Sessions.Manager.NudgeCoordinatorLoop(ctx, sessionID, anchor.PhaseAdvanced, anchor.FeedbackReceived, "", anchor.Envelope{})
+	r.deps.Sessions.Manager.Coordinator.Guidance.Drop(sessionID, anchor.FeedbackPending)
+	r.deps.Sessions.Manager.Coordinator.Guidance.Emit(ctx, sessionID, anchor.FeedbackReceived, anchor.Envelope{})
+	r.deps.Sessions.Manager.Coordinator.Runtime.CoordinatorLoop().Nudges.Nudge(ctx, sessionID, anchor.PhaseAdvanced, anchor.FeedbackReceived, "", anchor.Envelope{})
 }
 
 // OnWorkflowReviewLoopHeld emits loop decision kicks and nudges coordinator.
@@ -262,8 +262,8 @@ func (r *Runtime) OnWorkflowReviewLoopHeld(ctx context.Context, sessionID string
 	if decisionRequired {
 		id = anchor.ReviewLoopDecide
 	}
-	r.deps.Sessions.Manager.Emit(ctx, sessionID, id, anchor.Envelope{})
-	r.deps.Sessions.Manager.NudgeCoordinatorLoop(ctx, sessionID, anchor.PhaseAdvanced, id, "", anchor.Envelope{})
+	r.deps.Sessions.Manager.Coordinator.Guidance.Emit(ctx, sessionID, id, anchor.Envelope{})
+	r.deps.Sessions.Manager.Coordinator.Runtime.CoordinatorLoop().Nudges.Nudge(ctx, sessionID, anchor.PhaseAdvanced, id, "", anchor.Envelope{})
 }
 
 // OnDelegationCloseout advances workflow phases when delegations close out.

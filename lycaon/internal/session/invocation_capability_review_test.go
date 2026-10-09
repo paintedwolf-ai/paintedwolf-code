@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/toolexecution"
+	"github.com/lycaon/lycaon/internal/tools/native/command"
 	"net"
 	"os"
 	"path/filepath"
@@ -24,7 +25,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/tools/native"
 )
 
 type capabilityReviewCheckpoints struct {
@@ -166,11 +166,11 @@ func newCapabilityReviewFixture(t *testing.T, approve bool) *capabilityReviewFix
 	f.executor.Boundary.SetSessionWriteRootOverlay(broker.SessionWriteRoots)
 	f.executor.Boundary.SetSessionReadPathOverlay(broker.SessionReadPaths)
 	f.executor.Boundary.SetWriteRootPreflight(func(ctx context.Context, tool string, _ map[string]any, tc tools.ToolContext, path string) (bool, bool, string, error) {
-		result, err := broker.Authorize(ctx, native.SandboxWriteRootAsk{SessionID: tc.Identity.SessionID, ProjectID: tc.Identity.ProjectID, ToolCallID: tc.Identity.ToolCallID, ProjectDir: tc.ActiveRootPath(), ToolName: tool, ProposedWriteRoot: path})
+		result, err := broker.Authorize(ctx, command.SandboxWriteRootAsk{SessionID: tc.Identity.SessionID, ProjectID: tc.Identity.ProjectID, ToolCallID: tc.Identity.ToolCallID, ProjectDir: tc.ActiveRootPath(), ToolName: tool, ProposedWriteRoot: path})
 		return result.Authorized, result.Denied, result.UserGuidance, err
 	})
 	f.executor.Boundary.SetReadPathPreflight(func(ctx context.Context, tool string, _ map[string]any, tc tools.ToolContext, path string) (bool, bool, string, error) {
-		result, err := broker.AuthorizeRead(ctx, native.SandboxReadPathAsk{SessionID: tc.Identity.SessionID, ProjectID: tc.Identity.ProjectID, ToolCallID: tc.Identity.ToolCallID, ProjectDir: tc.ActiveRootPath(), ToolName: tool, ProposedReadPath: path, ReadDenyPaths: []string{read}})
+		result, err := broker.AuthorizeRead(ctx, command.SandboxReadPathAsk{SessionID: tc.Identity.SessionID, ProjectID: tc.Identity.ProjectID, ToolCallID: tc.Identity.ToolCallID, ProjectDir: tc.ActiveRootPath(), ToolName: tool, ProposedReadPath: path, ReadDenyPaths: []string{read}})
 		return result.Authorized, result.Denied, result.UserGuidance, err
 	})
 	f.executor.Boundary.SetSessionListenGrant(func(_ context.Context, session, _ string) (bool, []uint16) {

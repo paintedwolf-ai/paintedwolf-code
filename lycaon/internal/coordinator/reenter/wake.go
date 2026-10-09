@@ -10,13 +10,13 @@ import (
 
 // CoordinatorNudger schedules coordinator loop wakes after manifest same-phase re-enter.
 type CoordinatorNudger interface {
-	NudgeCoordinatorLoop(ctx context.Context, sessionID string, wake, inform anchor.ID, legID string, env anchor.Envelope)
+	Nudge(ctx context.Context, sessionID string, wake, inform anchor.ID, legID string, env anchor.Envelope)
 }
 
 // NudgeOnManifestReenter schedules a leg-finished loop wake for same-phase manifest re-enter
 // when on_reenter declares reenter_leg without worker-task-finished inject_kick.
 // worker-task-finished inject is kick-only (PhaseReenterHook); SessionOutcomeBridge schedules
-// the coordinator wake via ShouldNudgeCoordinatorLoopAfterWorkerTask.
+// the coordinator wake via ShouldNudgeAfterWorkerTask.
 func NudgeOnManifestReenter(
 	ctx context.Context,
 	n CoordinatorNudger,
@@ -35,5 +35,5 @@ func NudgeOnManifestReenter(
 	if hasDef && anchor.SameInform(def.OnReenter.InjectKick, anchor.WorkerTaskFinished) {
 		return
 	}
-	n.NudgeCoordinatorLoop(ctx, sessionID, anchor.LegFinished, anchor.LegFinished, legID, anchor.Envelope{})
+	n.Nudge(ctx, sessionID, anchor.LegFinished, anchor.LegFinished, legID, anchor.Envelope{})
 }

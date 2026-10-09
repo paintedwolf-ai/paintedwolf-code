@@ -3,6 +3,7 @@ package toolhost
 import (
 	"context"
 	"github.com/lycaon/lycaon/internal/toolexecution"
+	"github.com/lycaon/lycaon/internal/tools/native/command"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/commandsurface"
@@ -13,10 +14,10 @@ import (
 // CommandServices owns native command configuration and background lifecycle.
 type CommandServices struct {
 	bgRegistry        *bgprocess.Registry
-	commandTool       *native.CommandTool
+	commandTool       *command.CommandTool
 	verifyTool        *native.VerifyTool
-	commandOutputTool *native.CommandOutputTool
-	commandStopTool   *native.CommandStopTool
+	commandOutputTool *command.CommandOutputTool
+	commandStopTool   *command.CommandStopTool
 	reviews           *toolexecution.Approvals
 	paths             *toolexecution.Boundary
 }
@@ -43,7 +44,7 @@ func (r *CommandServices) SetBackgroundRegistry(reg *bgprocess.Registry) {
 	}
 }
 
-func (r *CommandServices) SetSandboxWriteRootGate(writeRoot native.SandboxWriteRootGate) {
+func (r *CommandServices) SetSandboxWriteRootGate(writeRoot command.SandboxWriteRootGate) {
 	if r == nil {
 		return
 	}
@@ -56,7 +57,7 @@ func (r *CommandServices) SetSandboxWriteRootGate(writeRoot native.SandboxWriteR
 	if r.paths != nil {
 		r.paths.SetSessionWriteRootOverlay(writeRoot.SessionWriteRoots)
 		r.paths.SetWriteRootPreflight(func(ctx context.Context, tool string, args map[string]any, tc tools.ToolContext, root string) (bool, bool, string, error) {
-			result, err := writeRoot.Authorize(ctx, native.SandboxWriteRootAsk{
+			result, err := writeRoot.Authorize(ctx, command.SandboxWriteRootAsk{
 				SessionID: tc.Identity.SessionID, ParentSessionID: tc.Identity.ParentSessionID,
 				ProjectID: tc.Identity.ProjectID, ToolCallID: tc.Identity.ToolCallID, ProjectDir: tc.ActiveRootPath(),
 				ToolName: tool, Command: commandsurface.PrimaryCommandLine(args, nil), ProposedWriteRoot: root,
@@ -66,7 +67,7 @@ func (r *CommandServices) SetSandboxWriteRootGate(writeRoot native.SandboxWriteR
 		})
 		r.paths.SetSessionReadPathOverlay(writeRoot.SessionReadPaths)
 		r.paths.SetReadPathPreflight(func(ctx context.Context, tool string, args map[string]any, tc tools.ToolContext, path string) (bool, bool, string, error) {
-			result, err := writeRoot.AuthorizeRead(ctx, native.SandboxReadPathAsk{
+			result, err := writeRoot.AuthorizeRead(ctx, command.SandboxReadPathAsk{
 				SessionID: tc.Identity.SessionID, ParentSessionID: tc.Identity.ParentSessionID,
 				ProjectID: tc.Identity.ProjectID, ToolCallID: tc.Identity.ToolCallID, ProjectDir: tc.ActiveRootPath(),
 				ToolName: tool, Command: commandsurface.PrimaryCommandLine(args, nil), ProposedReadPath: path,
@@ -78,7 +79,7 @@ func (r *CommandServices) SetSandboxWriteRootGate(writeRoot native.SandboxWriteR
 	}
 }
 
-func (r *CommandServices) SetVerifyDeclaredCommand(resolve native.DeclaredVerifyCommand) {
+func (r *CommandServices) SetVerifyDeclaredCommand(resolve command.DeclaredVerifyCommand) {
 	if r == nil {
 		return
 	}

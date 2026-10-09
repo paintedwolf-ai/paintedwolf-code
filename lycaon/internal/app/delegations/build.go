@@ -3,7 +3,6 @@ package delegations
 import (
 	"context"
 
-	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/app/configuration"
 	"github.com/lycaon/lycaon/internal/app/execution"
 	"github.com/lycaon/lycaon/internal/app/persistence"
@@ -11,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/app/scanning"
 	"github.com/lycaon/lycaon/internal/app/sessions"
 	"github.com/lycaon/lycaon/internal/app/workflows"
+	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/coordinator"
 	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/enginepaths"
@@ -49,7 +49,7 @@ func (r *Runtime) BuildWorkers(ctx context.Context, deps Dependencies) error {
 	}
 
 	r.InjectRenderer = prompts.NewInjectRenderer(deps.Sessions.PromptEngine)
-	r.Executor = worker.NewLocalWorkerExecutor(deps.Sessions.Manager, r.Queue)
+	r.Executor = worker.NewLocalWorkerExecutor(deps.Sessions.Manager.Workers, r.Queue, deps.Sessions.Manager.Workspace, deps.Sessions.Manager.Submissions, deps.Sessions.Manager.Runner.Transcript, deps.Sessions.Manager.Runner.Execution, deps.Sessions.Manager.Workers.Cancel, deps.Sessions.Manager.Workers.Cancellations)
 	r.Executor.Waits = &awaitstore.Store{DB: deps.Storage.Database}
 	r.Queue.SetSessionAdmission(deps.Sessions.Manager.Chats.Gate.WithSessionTreeAdmission)
 	r.Executor.SetPromptInjects(r.InjectRenderer)
@@ -62,9 +62,11 @@ func (r *Runtime) BuildWorkers(ctx context.Context, deps Dependencies) error {
 	r.Queue.SetProjectStore(deps.Storage.Projects)
 
 	r.Cancel = &worker.CancelService{
-		Queue:    r.Queue,
-		Sessions: deps.Sessions.Manager,
-		Reject:   deps.Execution.Rejections,
+		Queue:         r.Queue,
+		Graceful:      deps.Sessions.Manager.Workers.Cancel,
+		Cancellations: deps.Sessions.Manager.Workers.Cancellations,
+		Events:        deps.Sessions.Manager.Coordinator.Workers,
+		Reject:        deps.Execution.Rejections,
 		Reports: worker.ChangeReportDeps{
 			Messages: func(c context.Context, childSessionID string) ([]wire.Message, error) {
 				return deps.Storage.Sessions.GetMessages(c, childSessionID)
@@ -72,10 +74,11 @@ func (r *Runtime) BuildWorkers(ctx context.Context, deps Dependencies) error {
 		},
 	}
 	deps.Workflows.Manager.Controls.Cleanup.Workers = &worker.RunStopService{
-		Queue:       r.Queue,
-		Sessions:    deps.Sessions.Manager,
-		Reports:     r.Cancel.Reports,
-		Delegations: r.Store,
+		Queue:         r.Queue,
+		Holds:         deps.Sessions.Manager.Workers.Cards,
+		Cancellations: deps.Sessions.Manager.Workers.Cancellations,
+		Reports:       r.Cancel.Reports,
+		Delegations:   r.Store,
 	}
 	deps.Workflows.Manager.Recovery.Busy = func(c context.Context, sessionID string) bool {
 		sess, err := deps.Storage.Sessions.Get(c, sessionID)

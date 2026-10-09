@@ -19,31 +19,31 @@ import (
 
 func (b *serveBuilder) wireWorkflows() error {
 	b.delegations = delegations.New(b.storage.Database, b.events.Outbox, b.worker.cfg)
-	b.sessions.Manager.SetDelegationLegLookup(b.delegations.Store)
+	b.sessions.Manager.Coordinator.Closeout.SetDelegations(b.delegations.Store)
 
 	var err error
 	b.workflows, err = workflows.Build(b.startup.ctx, workflows.Dependencies{
-		Database:           b.storage.Database,
-		DataDir:            b.storage.Directory,
-		ModuleRoot:         b.catalog.ModuleRoot,
-		EffectiveCatalog:   b.catalog.Effective,
-		Projects:           b.storage.Projects,
-		Sessions:           b.storage.Sessions,
-		SessionManager:     b.sessions.Manager,
-		DelegationStore:    b.delegations.Store,
-		EventsOutbox:       b.events.Outbox,
-		EventPublisher:     b.events.Publisher,
-		AuthzRecorder:      b.security.Authority.Recorder,
-		WebResearchConfig:  nil,
+		Database:            b.storage.Database,
+		DataDir:             b.storage.Directory,
+		ModuleRoot:          b.catalog.ModuleRoot,
+		EffectiveCatalog:    b.catalog.Effective,
+		Projects:            b.storage.Projects,
+		Sessions:            b.storage.Sessions,
+		SessionManager:      b.sessions.Manager,
+		DelegationStore:     b.delegations.Store,
+		EventsOutbox:        b.events.Outbox,
+		EventPublisher:      b.events.Publisher,
+		AuthzRecorder:       b.security.Authority.Recorder,
+		WebResearchConfig:   nil,
 		ProjectSettingsGate: b.settings.ProjectSurfaceGate(projectcontrib.SurfaceProjectSettings, b.storage.Projects),
 	}, b.registerRecovery)
 	if err != nil {
 		return err
 	}
 
-	b.sessions.Manager.SetEvidenceStore(b.workflows.Evidence)
+	b.sessions.Manager.Verification.SetEvidenceStore(b.workflows.Evidence)
 	if b.settings.Service != nil {
-		b.sessions.Manager.SetVerifyConfig(b.settings.Service.Verify)
+		b.sessions.Manager.Verification.SetVerifyConfig(b.settings.Service.Verify)
 		if b.execution.Host != nil {
 			b.execution.Host.Commands.SetVerifyDeclaredCommand(b.settings.Service.Verify.VerifyTestCommand)
 		}
@@ -92,11 +92,11 @@ func (b *serveBuilder) wireWorkflowScanServices() error {
 		WorkflowRunParams: b.workflows.Manager.Obligations.ObligationParams,
 		OnDelta: func(ctx context.Context, completed api.CodeScan, introduced, fixed []api.SecurityFinding) {
 			if completed.TargetKind == api.ScanTargetPaths {
-				b.sessions.Manager.NoteScanDelta(ctx, completed, introduced, fixed)
+				b.sessions.Manager.Coordinator.Scans.Delta(ctx, completed, introduced, fixed)
 			}
 		},
 		OnScanDone: func(ctx context.Context, completed api.CodeScan) {
-			b.sessions.Manager.NudgeCoordinatorScanDone(ctx, completed)
+			b.sessions.Manager.Coordinator.Scans.Finished(ctx, completed)
 		},
 		RetryCloseout: func(ctx context.Context, delegationID string) error {
 			if b.delegations != nil && b.delegations.Manager != nil {
@@ -121,7 +121,7 @@ func (b *serveBuilder) wireWorkflowScanServices() error {
 
 	b.workflows.Manager.Coverage.Inventory = workflowScanInventory{store: b.scanning.Store}
 	b.sessions.Manager.SetReportDocumentChecker(b.workflows.Manager.Reports)
-	b.sessions.Manager.SetScanEvidenceRuns(b.workflows.Manager.Coverage)
+	b.sessions.Manager.Coordinator.Scans.Evidence = b.workflows.Manager.Coverage
 
 	b.events.BindWorkers(b.delegations.Queue)
 	b.delegations.Queue.SetWorkflowDomains(&worker.WorkflowDomains{Runs: b.workflows.Manager.Policy, Tasks: b.workflows.Manager.Fanout})
@@ -172,8 +172,8 @@ func (b *serveBuilder) wireWorkflowConditions() error {
 		EffectiveCatalog:        b.catalog.Effective,
 		TestTemplatesDir:        b.startup.cfg.TestWorkflowTemplatesDir,
 		ProjectSettingsGate:     b.settings.ProjectSurfaceGate(projectcontrib.SurfaceProjectSettings, b.storage.Projects),
-		SourceVerifyPassed:      b.sessions.Manager.WorkflowSourceVerifyPassed,
-		DeliveryReported:        b.sessions.Manager.WorkflowDeliveryReported,
+		SourceVerifyPassed:      b.sessions.Manager.Verification.WorkflowSourceVerifyPassed,
+		DeliveryReported:        b.sessions.Manager.Runner.Transcript.DeliveredWorkflowPhase,
 	})
 	if err != nil {
 		return err
