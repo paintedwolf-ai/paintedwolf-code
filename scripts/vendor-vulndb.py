@@ -114,7 +114,7 @@ def missing_pseudo_modules(index: list[dict]) -> list[str]:
 
 
 def check() -> int:
-    """Offline: the vendored bytes match their pin, and the pin matches this module."""
+    """Offline: verify snapshot integrity, coverage, and every referenced advisory."""
     if not PROVENANCE.is_file() or not VENDOR.is_dir():
         print("vendor-vulndb: no vendored database; run ./task lint:vuln:vendor", file=sys.stderr)
         return 1

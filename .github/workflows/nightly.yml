@@ -95,7 +95,7 @@ jobs:
   nightly:
     # Judges failed and timed-out jobs, but a cancelled run must not wait for a runner to do so.
     if: ${{ !cancelled() }}
-    needs: [verification, upgrade-path, e2e, quarantine]
+    needs: [verification, upgrade-path, e2e]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

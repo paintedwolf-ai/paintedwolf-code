@@ -46,7 +46,10 @@ class AdmissionTests(unittest.TestCase):
         self.assertEqual(evidence.classify(record, []), 'runner_oom')
         self.assertEqual(evidence.classify(record, [{'tests': ['TestA']}]), 'test_failure')
         self.assertEqual(evidence.classify(record, [{'resource_limit': {'kind': 'package_rss'}}]), 'test_failure')
+        self.assertEqual(evidence.classify(record, [{'exit_code': 1}]), 'test_failure')
+        self.assertEqual(evidence.classify(record, [{'exit_code': -9}]), 'runner_oom')
         self.assertEqual(evidence.classify({'exit_code': 137}, []), 'unknown')
+        self.assertEqual(evidence.classify({**record, 'status': 'passed'}, []), 'passed')
 
     def test_signature_ignores_output_and_test_order(self):
         first = {'stage': 'go', 'subject': 'pkg', 'tests': ['TestB', 'TestA'], 'log': '/one'}
@@ -107,6 +110,8 @@ class AdmissionTests(unittest.TestCase):
         report = summarize(runs, get)
         self.assertEqual(report['recurring'], {'a' * 20: ['0', '1', '2']})
         self.assertEqual(report['lanes']['behavior']['p95_seconds'], 10)
+        self.assertEqual(report['runs_without_receipts'], [])
+        self.assertEqual(summarize(runs, lambda _: ([], [], []))['runs_without_receipts'], [0, 1, 2])
         self.assertEqual(summarize(runs[:2], get)['recurring'], {})
         times = queue_times([{'number': 1, 'mergedAt': '2026-10-08T12:20:00Z', 'timelineItems': {'nodes': [
             {'__typename': 'AddedToMergeQueueEvent', 'createdAt': '2026-10-08T10:00:00Z'},
@@ -139,3 +144,9 @@ class AdmissionTests(unittest.TestCase):
                 self.assertEqual(module.check(), 0)
                 (db / 'index/modules.json').write_text('[]')
                 self.assertEqual(module.check(), 1)
+
+    def test_pr_recovery_never_downloads_untrusted_artifacts(self):
+        run = {'path': '.github/workflows/ci.yml', 'event': 'pull_request'}
+        with patch.dict('os.environ', GITHUB_REPOSITORY='owner/repo'), patch.object(recovery, 'evidence') as read:
+            recovery.recover(run)
+        read.assert_not_called()

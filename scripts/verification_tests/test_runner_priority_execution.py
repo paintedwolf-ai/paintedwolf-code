@@ -185,3 +185,16 @@ class RunnerPriorityTests(unittest.TestCase):
                     declared["urgent"] = ["build-caches.yml"]
                 with patch.object(rp, "catalog", return_value=data), self.assertRaises(ValueError):
                     rp.workflow_classes()
+
+    def test_qualification_yields_after_pull_requests_and_resumes_on_latest_push(self):
+        queue = run(1, 'ci.yml', 'merge_group', branch=GROUP)
+        qualification = run(2, 'qualification.yml', 'push')
+        ready = run(3, 'ci.yml', 'pull_request', sha='ready')
+        repository = Repository([queue, qualification, ready], groups=[GROUP],
+                                pulls=[{'draft': False, 'head': {'sha': 'ready'}}],
+                                jobs={1: jobs(queued=['linux'], age=10), 2: jobs(running=['linux']),
+                                      3: jobs(running=['linux'])})
+        cancelled_ids, _ = rp.schedule('owner/repo', repository, NOW)
+        self.assertEqual(cancelled_ids, [3])
+        latest = cancelled(20, 'qualification.yml', 'push')
+        self.assertEqual(rp.resumptions([], {rp.QUALIFICATION: [latest]}, set(), {rp.QUALIFICATION}), [latest])

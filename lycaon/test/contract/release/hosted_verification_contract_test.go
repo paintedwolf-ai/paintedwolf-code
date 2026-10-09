@@ -76,13 +76,13 @@ func requireHostedGate(t *testing.T, jobs map[string]hostedJob, gate string, dep
 	t.Fatalf("%s does not require successful structured dependency results", gate)
 }
 
-func TestHostedVerificationAggregatesRequireEveryJob(t *testing.T) {
+func TestHostedVerificationAggregatesRequireEveryBlockingJob(t *testing.T) {
 	t.Parallel()
 	for workflow, gate := range map[string]string{"ci": "check", "nightly": "nightly", "qualification": "qualification"} {
 		jobs := hostedJobs(t, workflow)
 		var dependencies []string
 		for name := range jobs {
-			if name != gate {
+			if name != gate && !(workflow == "nightly" && name == "quarantine") {
 				dependencies = append(dependencies, name)
 			}
 		}
@@ -241,11 +241,11 @@ func TestHostedVerificationBudgetsAndEvidence(t *testing.T) {
 	}
 }
 
-func TestEndToEndVerificationRunsOnlyInTheSelectedNightlyTier(t *testing.T) {
+func TestEndToEndVerificationRunsInQualificationAndSelectedNightly(t *testing.T) {
 	t.Parallel()
 	platform := hostedJobs(t, "platform-verification")
 	if len(platform) != 2 || platform["confinement"].Timeout == "" || platform["upgrade-corpus"].Timeout == "" {
-		t.Fatal("merge admission must retain confinement and upgrade gates without browser journeys")
+		t.Fatal("platform qualification must retain confinement and upgrade gates")
 	}
 	e2e := hostedJobs(t, "e2e-verification")
 	if len(e2e) != 2 || e2e["playwright-desktop"].Timeout == "" {
@@ -256,11 +256,18 @@ func TestEndToEndVerificationRunsOnlyInTheSelectedNightlyTier(t *testing.T) {
 		t.Fatal("each web shard must run independently and contribute to the verdict")
 	}
 	const selected = "github.event_name == 'schedule' || inputs.suite == 'all' || inputs.suite == 'e2e'"
+	qualification := hostedJobs(t, "qualification")
+	if qualification["e2e"].Uses != "./.github/workflows/e2e-verification.yml" {
+		t.Fatal("main qualification must include browser verification")
+	}
 	nightly := hostedJobs(t, "nightly")
+	if !nightly["quarantine"].Continue {
+		t.Fatal("quarantine observation must not block nightly qualification")
+	}
 	if nightly["e2e"].Uses != "./.github/workflows/e2e-verification.yml" || nightly["e2e"].If != selected {
 		t.Fatal("scheduled, full, and explicit E2E nightly runs must include browser verification")
 	}
-	requireHostedGate(t, nightly, "nightly", []string{"verification", "upgrade-path", "e2e", "quarantine"})
+	requireHostedGate(t, nightly, "nightly", []string{"verification", "upgrade-path", "e2e"})
 	const skipped = "${{ github.event_name != 'schedule' && inputs.suite != 'all' && inputs.suite != 'e2e' && 'e2e' || '' }}"
 	for _, step := range nightly["nightly"].Steps {
 		if strings.HasPrefix(step.Run, "python3 scripts/ci_verification.py gate") &&

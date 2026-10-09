@@ -228,11 +228,11 @@ class HostedVerificationTests(unittest.TestCase):
     def test_release_commit_needs_exact_main_qualification(self):
         good = {"head_sha": "abc", "head_branch": "main", "conclusion": "success", "event": "push"}
         with patch.object(ci, "github", return_value={"workflow_runs": [good]}):
-            ci.require_full_tier("owner/repo", "abc")
+            ci.require_qualification("owner/repo", "abc")
         for changed in ({"head_sha": "other"}, {"head_branch": "feature"}, {"conclusion": "failure"},
                         {"event": "merge_group"}, {"event": "pull_request"}):
             with patch.object(ci, "github", return_value={"workflow_runs": [{**good, **changed}]}), self.assertRaises(ValueError):
-                ci.require_full_tier("owner/repo", "abc")
+                ci.require_qualification("owner/repo", "abc")
 
     def test_report_names_what_did_not_pass_in_the_summary_and_annotations(self):
         with tempfile.TemporaryDirectory() as directory:

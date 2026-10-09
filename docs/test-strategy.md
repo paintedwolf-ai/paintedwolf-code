@@ -548,8 +548,8 @@ concurrency and maximum merge group size are one, with `ALLGREEN`. This avoids
 speculative predecessor cascades; setting only the merge group size cannot.
 The 20-minute queue objective and 15-minute integration objective are measured
 service objectives, not claims established by timeout settings. Broad changes
-may require longer verification. Hosted priority remains with the runner-priority
-scheduler (#357); qualification belongs below live merge groups in that policy.
+may require longer verification. Hosted priority is enforced by the integrated runner-priority scheduler;
+qualification yields after PR jobs and before protected merge or release work.
 
 Apply queue settings only after this workflow is available on main:
 `GITHUB_REPOSITORY=paintedwolf-ai/paintedwolf-code PYTHONPATH=scripts python3 -m ci_policy.queue_settings 24657984`
@@ -629,11 +629,12 @@ capacity to work in this order, highest first:
 
 | Priority | Work | Gives up runners |
 |---|---|---|
-| 1 | Merge-queue CI, and the `release`, `release-halt`, and `release-secrets-check` workflows | Never; only CI of a merge group that no longer exists is cancelled |
-| 2 | CI of ready pull requests | Newest first, after everything below |
-| 3 | CI of draft pull requests, closed pull requests, and superseded heads | Before ready pull requests |
-| 4 | Main cache warming (`build-caches.yml`) | Before pull requests |
-| 5 | Scheduled and background work: nightly, dependency inventory, the release-system live test, and issue automation | First, and whenever the merge queue holds a group |
+| 1 | Merge-queue CI, and release and verification-recovery workflows | Never; only CI of a merge group that no longer exists is cancelled |
+| 2 | Main qualification | After pull requests and before protected work |
+| 3 | CI of ready pull requests | Newest first, after everything below |
+| 4 | CI of draft pull requests, closed pull requests, and superseded heads | Before ready pull requests |
+| 5 | Main cache warming (`build-caches.yml`) | Before pull requests |
+| 6 | Scheduled and background work: nightly, dependency inventory, the release-system live test, and issue automation | First, and whenever the merge queue holds a group |
 
 The `runner_priority` table in
 [`scripts/verification-plan.json`](../scripts/verification-plan.json) declares
@@ -662,7 +663,7 @@ labels; merge-queue branches; and each pull request's draft state and head.
    runs.
 5. Once no merge-queue or release job waits, it re-runs the cancelled jobs of
    the newest CI run of each ready pull request's head and of main's newest
-   cache-warming push. Once the merge queue is also empty, it does the same for
+   cache-warming or qualification push. Once the merge queue is also empty, it does the same for
    each background workflow's newest scheduled run.
 
 Preempted work is delayed, not lost. Run history is the record: a resumable

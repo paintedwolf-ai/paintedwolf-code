@@ -19,13 +19,13 @@ def failure_signature(failure):
 
 def classify(record, failures):
     # An assertion or package resource budget is a source failure even if the runner also ran out of memory.
-    if any(f.get('tests') or f.get('resource_limit') for f in failures):
+    if any(f.get('tests') or f.get('resource_limit') or f.get('exit_code') == 1 for f in failures):
         return 'test_failure'
+    if record.get('status') == 'passed':
+        return 'passed'
     before, after = record.get('oom_before'), record.get('oom_after')
     if type(before) is int and type(after) is int and after > before:
         return 'runner_oom'
-    if record.get('status') == 'passed':
-        return 'passed'
     return 'check_failure' if failures else 'unknown'
 
 

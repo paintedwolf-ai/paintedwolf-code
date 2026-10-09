@@ -35,7 +35,7 @@ def write_all(data):
 
 
 def execute(binary, arguments, env, observe_forks, resource_limit=None):
-    """Run the binary with combined output streamed through; returns (wait status, output, forked)."""
+    """Run the binary with combined output streamed through; returns (wait status, output, forked, resource violation)."""
     output_read, output_write = os.pipe()
     ready_read, ready_write = os.pipe()
     pid = os.fork()

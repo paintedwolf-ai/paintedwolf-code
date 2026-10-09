@@ -22,8 +22,6 @@ ROOT = Path(__file__).resolve().parent.parent
 PROFILES = {"fast", "check", "nightly", "release", "integration"}
 # Each profile on the left runs exactly the stages of the local gate on the right.
 GATES = {"fast": "check-fast", "check": "check"}
-# Runs of `CI/check` that executed the full tier; pull requests run the fast tier on a merge preview.
-FULL_TIER_EVENTS = {"merge_group", "workflow_dispatch"}
 # Output lines kept per failure in the job log and summary; the full logs travel with the evidence.
 EXCERPT_LINES = 60
 # Go's progress lines for tests that are running or passed; they bury a parallel package's failure.
@@ -157,7 +155,7 @@ def release_leftover_requests(step):
     return unreleased
 
 
-def require_full_tier(repository, sha):
+def require_qualification(repository, sha):
     """Release eligibility comes from qualification of this exact commit."""
     runs = github(f"repos/{repository}/actions/workflows/qualification.yml/runs",
                   head_sha=sha, per_page=100)["workflow_runs"]
@@ -262,7 +260,7 @@ def failures(root):
         record = json.loads(receipt.read_text())
         if record.get("status") == "passed":
             continue
-        stages = [{"stage": evidence["stage"], "subject": subject, "status": result.get("status"),
+        stages = [{"stage": evidence["stage"], "subject": subject, "status": result.get("status"), "exit_code": result.get("exit_code"),
                    "tests": result.get("tests", []), "output": result.get("output"), "log": result.get("log"), "resource_limit": result.get("resource_limit")}
                   for evidence in record.get("evidence", [])
                   for subject, result in evidence.get("results", {}).items() if result.get("status") != "passed"]
@@ -370,7 +368,7 @@ def main():
     elif args.command == "gate":
         require_success(json.loads(os.environ["NEEDS_JSON"]), args.skipped, args.draft == "true")
     elif args.command == "verified":
-        require_full_tier(os.environ["GITHUB_REPOSITORY"], args.sha)
+        require_qualification(os.environ["GITHUB_REPOSITORY"], args.sha)
     elif args.command == "schedule":
         runner_priority.schedule(os.environ["GITHUB_REPOSITORY"], github)
     elif args.command == "release":

@@ -46,8 +46,11 @@ def recent_merges(since):
 
 def summarize(runs, get_evidence):
     signatures, lanes = defaultdict(dict), defaultdict(list)
+    missing = []
     for run in runs:
         records, failures, _ = get_evidence(run)
+        if not records:
+            missing.append(run['id'])
         for record in records:
             if 'finished_at' in record and 'started_at' in record:
                 lanes[record.get('lane', 'unknown')].append(record['finished_at'] - record['started_at'])
@@ -55,7 +58,7 @@ def summarize(runs, get_evidence):
             signature = failure.get('signature')
             if isinstance(signature, str) and len(signature) == 20:
                 signatures[signature][run['id']] = run['html_url']
-    return {'lanes': {name: {'count': len(values), 'p50_seconds': quantile(values, .5), 'p95_seconds': quantile(values, .95)}
+    return {'runs_observed': len(runs), 'runs_without_receipts': missing, 'lanes': {name: {'count': len(values), 'p50_seconds': quantile(values, .5), 'p95_seconds': quantile(values, .95)}
                       for name, values in lanes.items()},
             'recurring': {key: list(links.values()) for key, links in signatures.items() if len(links) >= 3}}
 
@@ -68,7 +71,7 @@ def main():
     report['window_start'] = since
     report['queue_to_merge'] = queue_times(recent_merges(since))
     report['queue_p95_seconds'] = quantile([r['seconds'] for r in report['queue_to_merge']], .95)
-    report['ejected_runs'] = [{'run': r['id'], 'conclusion': r['conclusion'], 'url': r['html_url']}
+    report['unsuccessful_runs'] = [{'run': r['id'], 'conclusion': r['conclusion'], 'url': r['html_url']}
                               for r in runs if r['conclusion'] != 'success']
     for signature, urls in report['recurring'].items():
         ensure_issue('Recurring queue failure: ' + signature,

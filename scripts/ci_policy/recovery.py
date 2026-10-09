@@ -104,10 +104,10 @@ def recover(run):
         return
     if run.get('repository', {}).get('full_name', os.environ['GITHUB_REPOSITORY']) != os.environ['GITHUB_REPOSITORY']:
         return
-    records, failures, debt = evidence(run)
-    # Artifacts from PR code may describe failures, but cannot authorize privileged recovery.
+    # Fork artifacts cannot authorize privileged recovery and need not be downloaded.
     if run.get('event') == 'pull_request':
         return
+    records, failures, debt = evidence(run)
     for item in debt:
         ensure_issue(f"Maintainability debt: {item['category']} {item['id']}",
                      f"Measured {item['measured']}; limit {item['bound']}. "
