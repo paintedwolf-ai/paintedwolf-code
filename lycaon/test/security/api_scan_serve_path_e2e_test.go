@@ -11,6 +11,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/app"
+	"github.com/lycaon/lycaon/internal/app/configuration"
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/scan/bundled"
@@ -42,7 +43,7 @@ func TestAPIScanServePathSASTE2E(t *testing.T) {
 	t.Setenv("LYCAON_API_TOKEN", api.TestAPIToken)
 	t.Setenv("LYCAON_TEST", "")
 
-	cfg := app.DefaultConfig()
+	cfg := configuration.Config{}
 	cfg.DBPath = filepath.Join(t.TempDir(), "serve-path-scan.db")
 	cfg.ListenAddr = "127.0.0.1:0"
 	cfg.TestMCPConnector = &mcp.MockConnector{Tools: map[string][]*sdkmcp.Tool{
