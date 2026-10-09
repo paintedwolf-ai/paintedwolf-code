@@ -58,16 +58,16 @@ func (s *conformanceSweep) sweepReads(ctx context.Context) {
 
 // observedRead sends one read and names what changed while it ran.
 func (s *conformanceSweep) observedRead(ctx context.Context, req conformanceRequest) (conformanceExchange, []string) {
-	if s.Effects == nil {
+	if s.effects == nil {
 		return s.send(ctx, req), nil
 	}
-	mark, err := s.Effects.mark(ctx)
+	mark, err := s.effects.mark(ctx)
 	if err != nil {
 		s.findings.add(ruleReadsHaveNoEffects, req.op.ID, req.probe, "could not observe host state: %v", err)
 		return s.send(ctx, req), nil
 	}
 	ex := s.send(ctx, req)
-	changes, err := s.Effects.since(ctx, mark)
+	changes, err := s.effects.since(ctx, mark)
 	if err != nil {
 		s.findings.add(ruleReadsHaveNoEffects, req.op.ID, req.probe, "could not observe host state: %v", err)
 		return ex, nil
