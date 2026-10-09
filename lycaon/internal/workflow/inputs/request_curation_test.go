@@ -8,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/hostctx"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/lifecycle"
+	"github.com/lycaon/lycaon/internal/session/naming"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -91,7 +92,7 @@ func TestWorkflowRequestsCurateRootChatAfterAdmission(t *testing.T) {
 			curator.Runner.Curation.Wait(t.Context())
 			got, err := sessions.Get(t.Context(), "sess-1")
 			testutil.FailErr(t, "get named session", err)
-			want := session.NameSession(t.Context(), nil, text)
+			want := naming.NameSession(t.Context(), nil, text)
 			if surface == "manual title" {
 				want = "Manual irrigation decision"
 			}

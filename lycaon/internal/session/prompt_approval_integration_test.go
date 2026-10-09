@@ -29,7 +29,7 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/session/profiles"
+	sessionprofiles "github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
@@ -100,12 +100,12 @@ func TestPromptAskWriteApproveRunsTool(t *testing.T) {
 	exec := toolexecution.NewExecutor(policy, reg, "implement")
 	hub := events.NewMemoryHub()
 	pub := &events.Publisher{Hub: hub}
-	hitlMgr := hitl.NewManager(hitl.NewSQLStore(sqlDB), pub, authzcontext.SQLRecorder(sqlDB))
-	hitlMgr.SetApprovalAuthorityInstaller(promptApprovalInstaller{})
-	exec.SetCheckpointManager(hitlMgr, gate)
+	hitlMgr := hitl.NewCheckpoints(hitl.NewSQLStore(sqlDB), pub, authzcontext.SQLRecorder(sqlDB))
+	hitlMgr.Authority.SetApprovalAuthorityInstaller(promptApprovalInstaller{})
+	exec.Approvals.SetCheckpointManager(hitlMgr, gate)
 	toolReg := tools.NewExecutorRegistry(exec, reg)
 
-	postureRegistry, err := profiles.LoadPostureRegistry()
+	postureRegistry, err := sessionprofiles.LoadPostureRegistry()
 	testutil.FailErr(t, "profiles.LoadPostureRegistry failed", err)
 	mgr := session.NewHost(store, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolReg)
 	oartest.InstallCloseoutPolicy(t, mgr)
@@ -137,7 +137,7 @@ func TestPromptAskWriteApproveRunsTool(t *testing.T) {
 		}
 		return false
 	})
-	if _, err := hitlMgr.ResolveApprovalOption(promptApprovalDecider(ctx, t, sqlDB), sess.ID, decisionID, "approve_current_action"); err != nil {
+	if _, err := hitlMgr.Authority.ResolveApprovalOption(promptApprovalDecider(ctx, t, sqlDB), sess.ID, decisionID, "approve_current_action"); err != nil {
 		testutil.FailErr(t, "hitlMgr.ResolveApprovalOption failed", err)
 	}
 	if err := <-done; err != nil {
@@ -219,14 +219,14 @@ func TestPromptAskWriteRejectSurfacesApprovalDenied(t *testing.T) {
 	outcomeCfg, err := approvaloutcome.Load()
 	testutil.FailErr(t, "load approval-outcome catalog", err)
 	outcomes := outcomeRenderer{cat: approvaloutcome.NewCatalog(outcomeCfg)}
-	exec.SetApprovalOutcomeRenderer(outcomes)
+	exec.Approvals.SetApprovalOutcomeRenderer(outcomes)
 	hub := events.NewMemoryHub()
 	pub := &events.Publisher{Hub: hub}
-	hitlMgr := hitl.NewManager(hitl.NewSQLStore(sqlDB), pub, authzcontext.SQLRecorder(sqlDB))
-	exec.SetCheckpointManager(hitlMgr, gate)
+	hitlMgr := hitl.NewCheckpoints(hitl.NewSQLStore(sqlDB), pub, authzcontext.SQLRecorder(sqlDB))
+	exec.Approvals.SetCheckpointManager(hitlMgr, gate)
 	toolReg := tools.NewExecutorRegistry(exec, reg)
 
-	postureRegistry, err := profiles.LoadPostureRegistry()
+	postureRegistry, err := sessionprofiles.LoadPostureRegistry()
 	testutil.FailErr(t, "profiles.LoadPostureRegistry failed", err)
 	mgr := session.NewHost(store, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolReg)
 	oartest.InstallCloseoutPolicy(t, mgr)

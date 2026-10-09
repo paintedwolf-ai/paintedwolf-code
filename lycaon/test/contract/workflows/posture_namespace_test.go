@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/evidence"
-	"github.com/lycaon/lycaon/internal/session/profiles"
+	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/workflowfixture"
@@ -13,7 +13,7 @@ import (
 func TestPostureNamespaceDisjointFromWorkflowsAndPhases(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	postures := postureIDSet(profiles.AllSessionPostures())
+	postures := postureIDSet(sessionposture.AllSessionPostures())
 	workflowIDs, phaseIDs := collectWorkflowNamespaces(t, root)
 
 	for id := range postures {
@@ -30,7 +30,7 @@ func TestPostureNamespaceDisjointFromWorkflowsAndPhases(t *testing.T) {
 
 func TestPostureNamespaceDisjointFromEvidenceTypes(t *testing.T) {
 	t.Parallel()
-	postures := postureIDSet(profiles.AllSessionPostures())
+	postures := postureIDSet(sessionposture.AllSessionPostures())
 	evidence := evidenceTypeIDSet()
 	for id := range postures {
 		if _, ok := evidence[id]; ok {
