@@ -664,7 +664,10 @@ labels; merge-queue branches; and each pull request's draft state and head.
 5. Once no merge-queue or release job waits, it re-runs the cancelled jobs of
    the newest CI run of each ready pull request's head and of main's newest
    cache-warming or qualification push. Once the merge queue is also empty, it does the same for
-   each background workflow's newest scheduled run.
+   each background workflow's newest scheduled run. A run resumes only when
+   its re-run jobs fit the runners left after every queued job starts, in
+   priority order and longest-waiting first, so resumed work never crowds the
+   merge queue it yielded to.
 
 Preempted work is delayed, not lost. Run history is the record: a resumable
 run is one that ended cancelled while still the newest run of its pull request

@@ -66,15 +66,26 @@ def count(jobs, status):
     return {name: counts[name] for name in PLATFORMS}
 
 
+def rerun_demand(jobs):
+    """Runners a re-run claims: every job of the attempt that did not succeed or skip."""
+    counts = Counter(platform(job) for job in jobs if job.get("conclusion") not in ("success", "skipped"))
+    return {name: counts[name] for name in PLATFORMS}
+
+
 def timestamp(value):
     return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
+def free_runners(running):
+    """Runners each platform can start: the plan's total, with macOS also under its own ceiling."""
+    busy = sum(running.values())
+    return {"macos": min(LIMITS["macos"] - running["macos"], LIMITS["total"] - busy), "linux": LIMITS["total"] - busy}
 
 
 def shortfall(protected, everything, now):
     """Runners each platform must free for its waiting merge-queue and release jobs."""
     running, queued = count(everything, "in_progress"), count(everything, "queued")
-    busy = sum(running.values())
-    free = {"macos": min(LIMITS["macos"] - running["macos"], LIMITS["total"] - busy), "linux": LIMITS["total"] - busy}
+    free = free_runners(running)
     need = {}
     for name in PLATFORMS:
         waiting = [job for job in protected if job["status"] == "queued" and platform(job) == name]
@@ -127,17 +138,38 @@ def decide(runs, kinds, jobs, live_groups, now):
 
 
 def resumptions(pull_runs, stream_runs, ready_heads, resumable):
-    """Cancelled newest runs of current work: a ready pull request's head, main's latest warming, each latest schedule."""
+    """Cancelled newest runs of current work, highest priority first and oldest first within a class:
+    a ready pull request's head, main's latest warming, each latest schedule."""
     chosen = []
     if READY in resumable:
         newest = {}
         for run in sorted(pull_runs, key=lambda run: (run["created_at"], run["id"]), reverse=True):
             newest.setdefault(run["head_sha"], run)
-        chosen += [run for sha, run in newest.items() if sha in ready_heads]
-    for kind in sorted(resumable & set(RESUMED_EVENTS)):
-        chosen += stream_runs.get(kind, [])
+        chosen += sorted((run for sha, run in newest.items() if sha in ready_heads),
+                         key=lambda run: (run["created_at"], run["id"]))
+    for kind in reversed(YIELD_ORDER):
+        if kind in resumable and kind in RESUMED_EVENTS:
+            chosen += stream_runs.get(kind, [])
     return [run for run in chosen if run["status"] == "completed" and run["conclusion"] == "cancelled"
             and run["run_attempt"] < ATTEMPTS]
+
+
+def admissions(candidates, demands, everything):
+    """Candidates whose re-run jobs fit the runners left once every queued job has started.
+
+    Resuming only into spare capacity keeps resumed work from crowding the merge queue it yielded to.
+    """
+    running, queued = count(everything, "in_progress"), count(everything, "queued")
+    free = free_runners(running)
+    room = {"total": free["linux"] - sum(queued.values()), "macos": free["macos"] - queued["macos"]}
+    chosen = []
+    for run in candidates:
+        demand = demands[run["id"]]
+        if demand["macos"] > room["macos"] or sum(demand.values()) > room["total"]:
+            continue
+        chosen.append(run)
+        room = {"total": room["total"] - sum(demand.values()), "macos": room["macos"] - demand["macos"]}
+    return chosen
 
 
 def act(github, path, message):
@@ -190,7 +222,14 @@ def schedule(repository, github, now=None):
                           for run in github(f"repos/{repository}/actions/workflows/{name}/runs",
                                             event=event, per_page=1)["workflow_runs"]]
                    for kind, event in RESUMED_EVENTS.items() if kind in plan.resumable}
-    resumed = [run["id"] for run in resumptions(pull_runs, stream_runs, ready_heads, plan.resumable)
-               if act(github, f"repos/{repository}/actions/runs/{run['id']}/rerun-failed-jobs",
-                      f"resumed run {run['id']} from attempt {run['run_attempt']}")]
+    candidates = resumptions(pull_runs, stream_runs, ready_heads, plan.resumable)
+    resumed = []
+    if candidates:
+        jobs.update(load(run for run in live if run["id"] not in jobs))
+        holding = [job for run in live if run["id"] not in cancelled for job in jobs.get(run["id"], [])]
+        reruns = load(candidates)
+        demands = {run["id"]: rerun_demand(reruns[run["id"]]) for run in candidates}
+        resumed = [run["id"] for run in admissions(candidates, demands, holding)
+                   if act(github, f"repos/{repository}/actions/runs/{run['id']}/rerun-failed-jobs",
+                          f"resumed run {run['id']} from attempt {run['run_attempt']}")]
     return cancelled, resumed

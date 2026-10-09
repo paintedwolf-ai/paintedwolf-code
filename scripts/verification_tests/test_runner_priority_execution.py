@@ -28,6 +28,12 @@ def jobs(running=(), queued=(), age=0):
             + [{"status": "queued", "labels": [LABELS[name]], "created_at": stamp(age)} for name in queued])
 
 
+def unfinished(linux=0, macos=0):
+    """A cancelled attempt's jobs: the ones a re-run claims runners for."""
+    return [{"status": "completed", "conclusion": "cancelled", "labels": [LABELS[name]], "created_at": stamp(0)}
+            for name, number in (("linux", linux), ("macos", macos)) for _ in range(number)]
+
+
 def cancelled(number, workflow, event, **fields):
     return run(number, workflow, event, status="completed", conclusion="cancelled", **fields)
 
@@ -152,6 +158,30 @@ class RunnerPriorityTests(unittest.TestCase):
                 self.assertEqual(set(repository.posted("/rerun-failed-jobs")), expected)
                 if not expected:
                     self.assertFalse([call for call in repository.calls if "/workflows/" in call[1]])
+
+    def test_preempted_work_resumes_only_into_spare_runners(self):
+        history = {("ci.yml", "pull_request"): [
+            cancelled(31, "ci.yml", "pull_request", sha="newer", age=5),
+            cancelled(30, "ci.yml", "pull_request", sha="older", age=20)]}
+        pulls = [("older", False), ("newer", False)]
+        queue = run(1, "ci.yml", "merge_group", branch=GROUP)
+        # Fifteen merge jobs run, so five runners are spare: room for the longer-waiting run only.
+        repository = Repository(runs=[queue], groups=[GROUP], pulls=pulls, history=history,
+                                jobs={1: jobs(running=["linux"] * 15), 30: unfinished(linux=3), 31: unfinished(linux=3)})
+        _, resumed = repository.schedule()
+        self.assertEqual(resumed, [30])
+
+    def test_resumption_respects_the_macos_ceiling(self):
+        history = {("ci.yml", "pull_request"): [
+            cancelled(41, "ci.yml", "pull_request", sha="mac", age=20),
+            cancelled(40, "ci.yml", "pull_request", sha="linux", age=5)]}
+        pulls = [("mac", False), ("linux", False)]
+        queue = run(1, "ci.yml", "merge_group", branch=GROUP)
+        repository = Repository(runs=[queue], groups=[GROUP], pulls=pulls, history=history,
+                                jobs={1: jobs(running=["macos"] * rp.LIMITS["macos"]),
+                                      40: unfinished(linux=2), 41: unfinished(linux=1, macos=1)})
+        _, resumed = repository.schedule()
+        self.assertEqual(resumed, [40])
 
     def test_a_refused_action_is_reported_and_the_sweep_continues(self):
         history = {("build-caches.yml", "push"): [cancelled(20, "build-caches.yml", "push")],
