@@ -2,6 +2,7 @@ package loopwake
 
 import (
 	"fmt"
+
 	awaitstore "github.com/lycaon/lycaon/internal/await"
 )
 

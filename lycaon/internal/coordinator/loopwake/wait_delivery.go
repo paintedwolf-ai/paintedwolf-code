@@ -1,9 +1,12 @@
 package loopwake
 
 import (
-	awaitstore "github.com/lycaon/lycaon/internal/await"
+	"strings"
 	"sync/atomic"
 	"time"
+
+	awaitstore "github.com/lycaon/lycaon/internal/await"
+	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 )
 
 const (
@@ -36,4 +39,15 @@ func waitResumeRetryDelay(attempt uint32) time.Duration {
 		}
 	}
 	return delay
+}
+
+func processWakeReport(wake anchor.ID, env anchor.Envelope) string {
+	switch wake {
+	case anchor.ProcessFinished:
+		return strings.TrimSpace(env.CommandCompletionDigest)
+	case anchor.ProcessRefused:
+		return strings.TrimSpace(env.CommandRefusalDigest)
+	default:
+		return ""
+	}
 }

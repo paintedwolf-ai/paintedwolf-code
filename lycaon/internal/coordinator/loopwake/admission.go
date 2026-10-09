@@ -2,12 +2,13 @@ package loopwake
 
 import (
 	"context"
+	"strings"
+	"sync"
+
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/scaffoldvars"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
-	"sync"
 )
 
 type AdmissionDeps struct {
@@ -171,3 +172,9 @@ func (l *Admission) ConsumeBudget(ctx context.Context, sessionID, runID string, 
 	loopLogBudget(sessionID, runID, count+1, max, true)
 	return true
 }
+
+type loopBudgetKey struct {
+	sessionID string
+	runID     string
+}
+type promptExecutionToken struct{ _ byte }

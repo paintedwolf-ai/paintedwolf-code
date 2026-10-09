@@ -2,11 +2,12 @@ package loopwake
 
 import (
 	"context"
+	"strings"
+	"sync"
+
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/promptresult"
-	"strings"
-	"sync"
 )
 
 type HostTurnsDeps struct {
@@ -200,4 +201,9 @@ func (l *HostTurns) Active(sessionID string) bool {
 func (l *HostTurns) hostTurnBlocked(ctx context.Context, sessionID string) bool {
 	blocked := l.loopDeps().HostTurnBlocked
 	return blocked != nil && blocked(ctx, sessionID)
+}
+
+type asyncTurnWork struct {
+	cancel context.CancelFunc
+	done   chan struct{}
 }

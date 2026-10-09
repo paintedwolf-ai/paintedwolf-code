@@ -2,9 +2,10 @@ package loopwake
 
 import (
 	"fmt"
+	"strings"
+
 	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
-	"strings"
 )
 
 // WaitTrigger names a host wake source an agent subscribed to in wait().

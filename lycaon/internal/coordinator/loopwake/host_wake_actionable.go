@@ -2,6 +2,7 @@ package loopwake
 
 import (
 	"context"
+
 	"github.com/lycaon/lycaon/internal/coordinator/batch"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/pkg/api"

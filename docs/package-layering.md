@@ -189,7 +189,7 @@ The invariant is the **direction**, not a fixed roster of consumers: a package t
 
 [`session.WorkflowDomains`](../lycaon/internal/session/workflow_view.go) binds the named workflow resources consumed by session execution. Each port describes one domain: run queries, phase policy, ambient admission, blueprints, batch facts, slash commands, requests, feedback, transcript publication, asks, fanout, phase progression, reports, recovery, or cleanup. The app binds each port directly to its actual workflow service or persistence owner.
 
-Coordinator wake decisions and tool policy use their own narrow resource sets in [`loopwake.WorkflowDomains`](../lycaon/internal/coordinator/loopwake/engine.go) and [`toolpolicy.WorkflowDomains`](../lycaon/internal/toolpolicy/workflow_view.go). Workflow services never receive the session orchestration manager or a whole workflow dependency bundle. Shared persisted posture and workflow facts live in `session/posture` and `session/workflowfacts`; consumers import the canonical definitions directly.
+Coordinator wake decisions and tool policy use their own narrow resource sets in [`loopwake.WorkflowDomains`](../lycaon/internal/coordinator/loopwake/contracts.go) and [`toolpolicy.WorkflowDomains`](../lycaon/internal/toolpolicy/workflow_view.go). Workflow services never receive the session orchestration manager or a whole workflow dependency bundle. Shared persisted posture and workflow facts live in `session/posture` and `session/workflowfacts`; consumers import the canonical definitions directly.
 
 ### Supporting dependency rules
 

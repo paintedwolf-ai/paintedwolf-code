@@ -3,7 +3,6 @@ package loopwake
 import (
 	"context"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
-
 	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"

@@ -1,9 +1,10 @@
 package loopwake
 
 import (
-	"github.com/google/uuid"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // SleepMover identifies who can end an armed sleep.

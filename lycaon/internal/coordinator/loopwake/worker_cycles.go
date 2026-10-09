@@ -2,9 +2,10 @@ package loopwake
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/pkg/api"
 	"log/slog"
 	"sync"
+
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 type WorkerCyclesDeps struct {

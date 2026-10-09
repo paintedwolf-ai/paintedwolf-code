@@ -2,13 +2,14 @@ package loopwake
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/scaffoldvars"
-	"github.com/lycaon/lycaon/internal/settings"
-	"github.com/lycaon/lycaon/pkg/api"
 	"log/slog"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/scaffoldvars"
+	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 type SessionFactsDeps struct {

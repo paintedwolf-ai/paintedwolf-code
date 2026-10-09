@@ -2,12 +2,13 @@ package loopwake
 
 import (
 	"context"
-	awaitstore "github.com/lycaon/lycaon/internal/await"
-	"github.com/lycaon/lycaon/internal/promptresult"
 	"log/slog"
 	"strings"
 	"sync"
 	"time"
+
+	awaitstore "github.com/lycaon/lycaon/internal/await"
+	"github.com/lycaon/lycaon/internal/promptresult"
 )
 
 type WaitDeliveriesDeps struct {

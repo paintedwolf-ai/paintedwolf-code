@@ -3,11 +3,12 @@ package loopwake
 import (
 	"context"
 	"fmt"
+	"strings"
+	"sync"
+
 	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
-	"sync"
 )
 
 type WaitSubscriptionsDeps struct {

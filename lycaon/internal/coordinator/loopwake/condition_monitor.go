@@ -2,18 +2,19 @@ package loopwake
 
 import (
 	"context"
-	awaitstore "github.com/lycaon/lycaon/internal/await"
-	"github.com/lycaon/lycaon/internal/confine"
-	"github.com/lycaon/lycaon/internal/coordinator/anchor"
-	"github.com/lycaon/lycaon/internal/egressclass"
-	"github.com/lycaon/lycaon/internal/egressgate"
-	"github.com/lycaon/lycaon/internal/outboundhttp"
 	"net"
 	"net/netip"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
+
+	awaitstore "github.com/lycaon/lycaon/internal/await"
+	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/coordinator/anchor"
+	"github.com/lycaon/lycaon/internal/egressclass"
+	"github.com/lycaon/lycaon/internal/egressgate"
+	"github.com/lycaon/lycaon/internal/outboundhttp"
 )
 
 const (

@@ -2,13 +2,14 @@ package loopwake
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/coordinator/anchor"
-	"github.com/lycaon/lycaon/internal/coordinator/inject"
-	"github.com/lycaon/lycaon/pkg/api"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/coordinator/anchor"
+	"github.com/lycaon/lycaon/internal/coordinator/inject"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 type NudgesDeps struct {
@@ -398,3 +399,22 @@ func (l *Nudges) flushDeferredWhenWorkerCycleIdle(ctx context.Context, sessionID
 }
 
 func (l *Nudges) nextSequence() uint64 { return l.nudgeSeq.Add(1) }
+
+type loopKickKey struct {
+	sessionID string
+	runID     string
+	legID     string
+	wake      anchor.ID
+}
+type loopKickStamp struct {
+	at time.Time
+}
+
+func kickDedupLegID(inform anchor.ID, legID, completingJobID string) string {
+	if inform == anchor.WorkerTaskFinished {
+		if jobID := strings.TrimSpace(completingJobID); jobID != "" {
+			return jobID
+		}
+	}
+	return legID
+}

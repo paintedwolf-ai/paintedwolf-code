@@ -2,12 +2,13 @@ package loopwake
 
 import (
 	"context"
-	awaitstore "github.com/lycaon/lycaon/internal/await"
-	"github.com/lycaon/lycaon/internal/coordinator/anchor"
-	"github.com/lycaon/lycaon/internal/coordinator/batch"
 	"strings"
 	"sync"
 	"time"
+
+	awaitstore "github.com/lycaon/lycaon/internal/await"
+	"github.com/lycaon/lycaon/internal/coordinator/anchor"
+	"github.com/lycaon/lycaon/internal/coordinator/batch"
 )
 
 type WaitsDeps struct {
