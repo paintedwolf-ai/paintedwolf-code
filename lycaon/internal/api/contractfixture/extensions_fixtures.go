@@ -12,11 +12,11 @@ import (
 	"github.com/lycaon/lycaon/internal/catalogview"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/extensionstate"
-	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/extpackstest"
 	"github.com/lycaon/lycaon/internal/testutil/extstatetest"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -56,14 +56,7 @@ func NewContributionHTTPTestServer(t *testing.T) *hostapi.Server {
 	t.Helper()
 	srv := NewTestServer(t)
 	root := configlayout.FindModuleRoot()
-	boot := extpacks.Resolve(t.Context(), extpacks.ResolveInput{
-		Packs: func() []extpacks.PackContent {
-			content, err := extpacks.DiscoverStockContent()
-			testutil.FailErr(t, "discover stock content", err)
-			return content
-		}(),
-		Desired: extpacks.EmptyDesired(),
-	})
+	boot := extpackstest.StockCatalog(t)
 	srv.Admin.SessionAdmin.Lifecycle.Sessions.SetEffectiveCatalogDeps(root, boot, nil)
 	srv.Admin.SessionAdmin.Lifecycle.Sessions.Catalog().SetCatalogViewCache(catalogview.NewCache(root, slog.Default()))
 	return srv

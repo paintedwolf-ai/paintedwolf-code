@@ -64,9 +64,9 @@ func TestCreateBlueprintInvalidPathReturns400NotInternalError(t *testing.T) {
 }
 
 // blueprintCall serves one authed blueprint request and checks its status.
-func blueprintCall(t *testing.T, srv *Server, method, target, body string, want int) *httptest.ResponseRecorder {
+func blueprintCall(t *testing.T, srv *hostapi.Server, method, target, body string, want int) *httptest.ResponseRecorder {
 	t.Helper()
-	req := newAuthedRequest(method, target, strings.NewReader(body))
+	req := contractfixture.NewAuthedRequest(method, target, strings.NewReader(body))
 	if body != "" {
 		req.Header.Set("Content-Type", "application/json")
 	}
@@ -80,10 +80,10 @@ func blueprintCall(t *testing.T, srv *Server, method, target, body string, want 
 
 func TestBlueprintRoutesEditAndRemoveABlueprint(t *testing.T) {
 	dir := t.TempDir()
-	srv := newTestServerWithWorkflows(t, func(d *Dependencies) {
-		d.Blueprints = blueprint.NewManager(blueprint.NewFileStoreForTest(dir))
+	srv := contractfixture.NewTestServerWithWorkflows(t, func(d *hostapi.Dependencies) {
+		d.Workflow.Blueprints = blueprint.NewManager(blueprint.NewFileStoreForTest(dir))
 	})
-	opened := createProjectForTest(t, srv, dir)
+	opened := contractfixture.CreateProjectForTest(t, srv, dir)
 	base := "/v1/projects/" + opened.ID + "/blueprints"
 
 	var created wire.Blueprint
