@@ -38,17 +38,13 @@ func (s *SourceMutationService) Write(ctx context.Context, operationID string, p
 			return nil, ErrSourceNotFound
 		}
 		return &sourceMutationPlan{
+			sourceMutationContent:     sourceMutationContent{Encoding: req.Encoding, BaseSHA256: writePlan.BaseSHA256, AfterSHA: writePlan.Result.SHA256, Before: writePlan.Result.Before, After: writePlan.Result.After},
 			sourceMutationAttribution: sourceMutationAttribution{ProjectID: p.SourceID(), WorkspaceID: p.WorkspaceID(), SessionID: req.SessionID, Turn: req.Turn},
 			Kind:                      "write",
 			RootID:                    writePlan.Result.RootID,
 			RootPath:                  root.Path,
 			Path:                      writePlan.Result.Path,
 			AbsPath:                   writePlan.Result.AbsPath,
-			Encoding:                  req.Encoding,
-			BaseSHA256:                writePlan.BaseSHA256,
-			AfterSHA:                  writePlan.Result.SHA256,
-			Before:                    writePlan.Result.Before,
-			After:                     writePlan.Result.After,
 			Changed:                   writePlan.Result.Changed,
 			Response:                  encoded,
 		}, nil
@@ -114,17 +110,13 @@ func (s *SourceMutationService) BatchWrite(ctx context.Context, operationID stri
 				return nil, ErrSourceNotFound
 			}
 			writes = append(writes, sourceMutationPlan{
+				sourceMutationContent:     sourceMutationContent{Encoding: write.Encoding, BaseSHA256: planned.BaseSHA256, AfterSHA: planned.Result.SHA256, Before: planned.Result.Before, After: planned.Result.After},
 				sourceMutationAttribution: sourceMutationAttribution{ProjectID: p.SourceID(), WorkspaceID: p.WorkspaceID(), SessionID: req.SessionID, Turn: req.Turn},
 				Kind:                      "write",
 				RootID:                    planned.Result.RootID,
 				RootPath:                  root.Path,
 				Path:                      planned.Result.Path,
 				AbsPath:                   planned.Result.AbsPath,
-				Encoding:                  write.Encoding,
-				BaseSHA256:                planned.BaseSHA256,
-				AfterSHA:                  planned.Result.SHA256,
-				Before:                    planned.Result.Before,
-				After:                     planned.Result.After,
 				Changed:                   planned.Result.Changed,
 			})
 		}
@@ -173,9 +165,9 @@ func (s *SourceMutationService) Create(ctx context.Context, operationID string, 
 		}
 		encoded, _ := json.Marshal(struct{ Path string }{rel})
 		plan := &sourceMutationPlan{
+			sourceMutationRecovery:    sourceMutationRecovery{RecoveryID: operationID},
 			sourceMutationAttribution: sourceMutationAttribution{ProjectID: p.SourceID(), WorkspaceID: p.WorkspaceID(), SessionID: req.SessionID, Turn: req.Turn},
 			Kind:                      "create",
-			RecoveryID:                operationID,
 			RootID:                    root.ID,
 			RootPath:                  root.Path,
 			Path:                      rel,

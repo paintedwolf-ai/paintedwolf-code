@@ -137,36 +137,27 @@ func (s *SourceHistory) planSourceHistory(ctx context.Context, operationID strin
 			}
 		}
 		undo := sourceMutationPlan{
+			sourceMutationContent:     sourceMutationContent{Before: original.After, BaseSHA256: original.AfterSHA, BeforeSize: original.AfterSize},
+			sourceMutationRecovery:    sourceMutationRecovery{RecoveryID: original.RecoveryID, RecoveryCount: original.RecoveryCount, TreeSHA: fingerprint, Disposal: sourceDisposalTrash},
 			sourceMutationAttribution: sourceMutationAttribution{ProjectID: original.ProjectID, WorkspaceID: original.WorkspaceID, BranchID: original.BranchID},
 			Kind:                      "delete",
 			RootID:                    original.RootID,
 			RootPath:                  original.RootPath,
 			Path:                      original.Path,
 			AbsPath:                   targetAbs,
-			RecoveryID:                original.RecoveryID,
-			RecoveryCount:             original.RecoveryCount,
-			TreeSHA:                   fingerprint,
 			EntryKind:                 original.EntryKind,
-			Before:                    original.After,
-			BaseSHA256:                original.AfterSHA,
-			BeforeSize:                original.AfterSize,
-			Disposal:                  sourceDisposalTrash,
 			Changed:                   true,
 		}
 		redo := sourceMutationPlan{
+			sourceMutationContent:     sourceMutationContent{After: original.After, AfterSHA: original.AfterSHA, AfterSize: original.AfterSize},
+			sourceMutationRecovery:    sourceMutationRecovery{RecoveryID: original.RecoveryID, RecoveryCount: original.RecoveryCount, TreeSHA: fingerprint},
 			sourceMutationAttribution: sourceMutationAttribution{ProjectID: original.ProjectID, WorkspaceID: original.WorkspaceID, BranchID: original.BranchID},
 			Kind:                      "restore",
 			RootID:                    original.RootID,
 			RootPath:                  original.RootPath,
 			Path:                      original.Path,
 			AbsPath:                   targetAbs,
-			RecoveryID:                original.RecoveryID,
-			RecoveryCount:             original.RecoveryCount,
-			TreeSHA:                   fingerprint,
 			EntryKind:                 original.EntryKind,
-			After:                     original.After,
-			AfterSHA:                  original.AfterSHA,
-			AfterSize:                 original.AfterSize,
 			Changed:                   true,
 		}
 		kind := original.Kind
@@ -176,19 +167,15 @@ func (s *SourceHistory) planSourceHistory(ctx context.Context, operationID strin
 		}, nil
 	case "delete":
 		undo := sourceMutationPlan{
+			sourceMutationContent:     sourceMutationContent{After: original.Before, AfterSHA: original.BaseSHA256, AfterSize: original.BeforeSize},
+			sourceMutationRecovery:    sourceMutationRecovery{RecoveryID: original.RecoveryID, RecoveryCount: original.RecoveryCount, TreeSHA: original.TreeSHA},
 			sourceMutationAttribution: sourceMutationAttribution{ProjectID: original.ProjectID, WorkspaceID: original.WorkspaceID, BranchID: original.BranchID},
 			Kind:                      "restore",
 			RootID:                    original.RootID,
 			RootPath:                  original.RootPath,
 			Path:                      original.Path,
 			AbsPath:                   original.AbsPath,
-			RecoveryID:                original.RecoveryID,
-			RecoveryCount:             original.RecoveryCount,
-			TreeSHA:                   original.TreeSHA,
 			EntryKind:                 original.EntryKind,
-			After:                     original.Before,
-			AfterSHA:                  original.BaseSHA256,
-			AfterSize:                 original.BeforeSize,
 			Changed:                   true,
 		}
 		redo := original

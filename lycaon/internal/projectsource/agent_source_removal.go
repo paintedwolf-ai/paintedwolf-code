@@ -76,22 +76,19 @@ func prepareAgentRemoval(ctx context.Context, operationID string, removal source
 		return nil, fmt.Errorf("%w: the file changed after it was reviewed", ErrSourceWriteConflict)
 	}
 	return &sourceMutationPlan{
+		sourceMutationContent:  sourceMutationContent{Before: evidence.content, BaseSHA256: evidence.sha256, BeforeSize: evidence.size},
+		sourceMutationRecovery: sourceMutationRecovery{Disposal: sourceDisposalDiscard, RecoveryID: operationID},
 		sourceMutationAttribution: sourceMutationAttribution{ProjectID: record.ProjectID, WorkspaceID: removal.Change.WorkspaceID, BranchID: record.BranchID, SessionID: record.SessionID, Turn: record.Turn, Agent: &sourceMutationAgent{
 			JobID: record.JobID, ToolCallID: record.ToolCallID, ToolName: record.ToolName,
 			WorkspaceKind: removal.Change.WorkspaceKind,
 		}},
-		Kind:       "delete",
-		Disposal:   sourceDisposalDiscard,
-		RootID:     record.RootID,
-		RootPath:   removal.RootPath,
-		Path:       rel,
-		AbsPath:    abs,
-		RecoveryID: operationID,
-		EntryKind:  sourceEntryKind(info),
-		Before:     evidence.content,
-		BaseSHA256: evidence.sha256,
-		BeforeSize: evidence.size,
-		Changed:    true,
-		Response:   json.RawMessage(`{}`),
+		Kind:      "delete",
+		RootID:    record.RootID,
+		RootPath:  removal.RootPath,
+		Path:      rel,
+		AbsPath:   abs,
+		EntryKind: sourceEntryKind(info),
+		Changed:   true,
+		Response:  json.RawMessage(`{}`),
 	}, nil
 }

@@ -232,7 +232,10 @@ func TestSourceStageRetryClearsReadOnlyTree(t *testing.T) {
 	testutil.FailErr(t, "make staged directory read-only", os.Chmod(entry, 0o500))
 	identity, err := fspath.EntryIdentity(entry)
 	testutil.FailErr(t, "identify private stage", err)
-	plan := &sourceMutationPlan{RootPath: stage, StageAbs: entry, StageIdentity: identity}
+	plan := &sourceMutationPlan{
+		sourceMutationPublication: sourceMutationPublication{StageAbs: entry, StageIdentity: identity},
+		RootPath:                  stage,
+	}
 	testutil.FailErr(t, "clear partial stage", clearSourceStage(plan))
 	if _, err := os.Lstat(entry); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("stage entry remains: %v", err)

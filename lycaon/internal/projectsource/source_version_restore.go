@@ -292,24 +292,21 @@ func prepareRestoreOverContent(
 			return nil, fingerprintErr
 		}
 		return &sourceMutationPlan{
+			sourceMutationContent:     sourceMutationContent{Before: before.content, BaseSHA256: before.sha256, BeforeSize: before.size},
+			sourceMutationRecovery:    sourceMutationRecovery{RecoveryID: operationID, TreeSHA: treeSHA, Disposal: sourceDisposalTrash},
 			sourceMutationAttribution: sourceMutationAttribution{ProjectID: p.SourceID(), WorkspaceID: p.WorkspaceID()},
 			Kind:                      "delete",
 			RootID:                    root.ID,
 			RootPath:                  root.Path,
 			Path:                      rel,
 			AbsPath:                   abs,
-			RecoveryID:                operationID,
-			TreeSHA:                   treeSHA,
 			EntryKind:                 SourceEntryFile,
-			Disposal:                  sourceDisposalTrash,
-			Before:                    before.content,
-			BaseSHA256:                before.sha256,
-			BeforeSize:                before.size,
 			Changed:                   true,
 		}, nil
 	}
 	changed := before.sha256 != req.Version.SHA256
 	return &sourceMutationPlan{
+		sourceMutationContent:     sourceMutationContent{Before: before.content, BaseSHA256: before.sha256, BeforeSize: before.size, After: append([]byte(nil), req.Version.Content...), AfterSHA: req.Version.SHA256, AfterSize: int64(len(req.Version.Content))},
 		sourceMutationAttribution: sourceMutationAttribution{ProjectID: p.SourceID(), WorkspaceID: p.WorkspaceID()},
 		Kind:                      "write",
 		RootID:                    root.ID,
@@ -317,12 +314,6 @@ func prepareRestoreOverContent(
 		Path:                      rel,
 		AbsPath:                   abs,
 		EntryKind:                 SourceEntryFile,
-		Before:                    before.content,
-		BaseSHA256:                before.sha256,
-		BeforeSize:                before.size,
-		After:                     append([]byte(nil), req.Version.Content...),
-		AfterSHA:                  req.Version.SHA256,
-		AfterSize:                 int64(len(req.Version.Content)),
 		Changed:                   changed,
 	}, nil
 }

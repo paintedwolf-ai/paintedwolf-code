@@ -29,9 +29,9 @@ func TestSourceStreamingTransferSharesRecoveryBytes(t *testing.T) {
 	testutil.FailErr(t, "open destination", err)
 	defer func() { _ = out.Close() }()
 	plan := &sourceMutationPlan{
+		sourceMutationRecovery:    sourceMutationRecovery{RecoveryID: uuid.NewString()},
 		sourceMutationAttribution: sourceMutationAttribution{ProjectID: p.ID},
 		Kind:                      "copy",
-		RecoveryID:                uuid.NewString(),
 	}
 	capture, err := service.recovery.beginRecoveryCapture(t.Context(), plan, "copying")
 	testutil.FailErr(t, "begin capture", err)

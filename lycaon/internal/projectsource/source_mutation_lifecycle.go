@@ -56,6 +56,7 @@ func (s *SourceMutationService) lifecycle(ctx context.Context, operationID strin
 		}
 		encoded, _ := json.Marshal(SourceLifecycleResult{RootID: root.ID, Path: toRel})
 		plan := &sourceMutationPlan{
+			sourceMutationPublication: sourceMutationPublication{EntryIdentity: identity},
 			sourceMutationAttribution: sourceMutationAttribution{ProjectID: p.SourceID(), WorkspaceID: p.WorkspaceID(), SessionID: sessionID, Turn: turn},
 			Kind:                      kind,
 			RootID:                    root.ID,
@@ -65,7 +66,6 @@ func (s *SourceMutationService) lifecycle(ctx context.Context, operationID strin
 			ToPath:                    toRel,
 			FromAbs:                   fromAbs,
 			ToAbs:                     toAbs,
-			EntryIdentity:             identity,
 			Changed:                   true,
 			Response:                  encoded,
 		}
@@ -140,17 +140,16 @@ func (s *SourceMutationService) Delete(ctx context.Context, operationID string, 
 			}
 		}
 		plan := &sourceMutationPlan{
+			sourceMutationContent:     sourceMutationContent{BeforeSize: info.Size()},
+			sourceMutationRecovery:    sourceMutationRecovery{RecoveryID: operationID, Disposal: sourceDisposalTrash},
 			sourceMutationAttribution: sourceMutationAttribution{ProjectID: p.SourceID(), WorkspaceID: p.WorkspaceID(), SessionID: req.SessionID, Turn: req.Turn},
 			Kind:                      "delete",
 			RootID:                    root.ID,
 			RootPath:                  root.Path,
 			Path:                      rel,
 			AbsPath:                   abs,
-			RecoveryID:                operationID,
 			Recursive:                 req.Recursive,
-			Disposal:                  sourceDisposalTrash,
 			EntryKind:                 sourceEntryKind(info),
-			BeforeSize:                info.Size(),
 			Changed:                   true,
 			Response:                  json.RawMessage(`{}`),
 		}

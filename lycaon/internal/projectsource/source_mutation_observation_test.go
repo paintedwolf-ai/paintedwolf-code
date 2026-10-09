@@ -34,16 +34,13 @@ func pendingObservationWrite(t *testing.T, status sourceMutationStatus) (*Source
 	now := time.Now().UTC()
 	row := &sourceMutationRow{ID: uuid.NewString(), ProjectID: p.ID, Kind: "write", InputDigest: "input", Status: status, CreatedAt: now, UpdatedAt: now,
 		Plan: sourceMutationPlan{
+			sourceMutationContent:     sourceMutationContent{Before: write.Result.Before, After: write.Result.After, BaseSHA256: write.BaseSHA256, AfterSHA: write.Result.SHA256},
 			sourceMutationAttribution: sourceMutationAttribution{ProjectID: p.ID, WorkspaceID: p.WorkspaceID()},
 			Kind:                      "write",
 			RootID:                    p.Roots[0].ID,
 			RootPath:                  root,
 			Path:                      "a.txt",
 			AbsPath:                   write.Result.AbsPath,
-			Before:                    write.Result.Before,
-			After:                     write.Result.After,
-			BaseSHA256:                write.BaseSHA256,
-			AfterSHA:                  write.Result.SHA256,
 			Changed:                   true,
 			Response:                  json.RawMessage(`{}`),
 		}}
@@ -207,8 +204,9 @@ func TestRecoveryKeepsAdmissionIdentityAndRefusesDivergedBytes(t *testing.T) {
 	}
 }
 
-func TestMutationAttributionPreservesDurableFlatPlan(t *testing.T) {
+func TestMutationDomainsPreserveDurableFlatPlan(t *testing.T) {
 	for _, stored := range []string{
+		`{"project_id":"p","workspace_id":"worktree:w","branch_id":"worktree:w","session_id":"s","turn":4,"person_id":"person","batch_id":"batch","cause":"restore","agent":{"job_id":"job","tool_call_id":"call","tool_name":"write","workspace_kind":"worker"},"agent_effect":null,"kind":"write","root_id":"root","root_path":"/root","path":"a","from_path":"old","to_path":"new","abs_path":"/root/a","from_abs":"/root/old","to_abs":"/root/new","cross_volume":true,"hold_abs":"/root/hold","move_cleanup_started":true,"hold_started":true,"destination_identity":"dest","effect_started":true,"stage_identity":"stage","publication_mode":448,"stage_abs":"/root/stage","recovery_id":"recover","recovery_count":2,"delete_identity":"delete","delete_started":true,"disposal":"trash","entry_kind":"file","recursive":true,"encoding":"utf-8","base_sha256":"base","after_sha256":"after","tree_sha256":"tree","entry_identity":"entry","before":"YmVmb3Jl","after":"YWZ0ZXI=","before_size":6,"after_size":5,"changed":true,"file_id":"file","derived_from_version_id":"version","history_entry_id":"history","history_transition":"undo","create_parents":true,"writes":[{"project_id":"child","workspace_id":"","kind":"write","root_id":"root","root_path":"/root","after":"Y2hpbGQ=","changed":true,"response":{}}],"response":{}}`,
 		`{"project_id":"p","workspace_id":"worktree:w","branch_id":"worktree:w","session_id":"session","turn":4,"person_id":"person","batch_id":"batch","cause":"restore","agent":{"job_id":"job","tool_call_id":"call","tool_name":"write","workspace_kind":"worker"},"kind":"write","root_id":"root","root_path":"/root","changed":true,"response":{}}`,
 		`{"project_id":"","workspace_id":"","kind":"","root_id":"","root_path":"","changed":false,"response":null}`,
 	} {
@@ -219,8 +217,29 @@ func TestMutationAttributionPreservesDurableFlatPlan(t *testing.T) {
 		var before, after map[string]any
 		testutil.FailErr(t, "decode stored keys", json.Unmarshal([]byte(stored), &before))
 		testutil.FailErr(t, "decode emitted keys", json.Unmarshal(encoded, &after))
+		if before["agent_effect"] == nil {
+			delete(before, "agent_effect")
+		}
 		if !reflect.DeepEqual(before, after) {
 			t.Fatalf("durable plan keys changed: %s", encoded)
+		}
+	}
+}
+
+func TestMutationPlanKeepsEmptyBytesAndUnknownFieldSemantics(t *testing.T) {
+	const stored = `{"project_id":"p","workspace_id":"","kind":"write","root_id":"r","root_path":"/r","changed":false,"response":null,"before":null,"after":"","unrecognized_intent":true}`
+	var plan sourceMutationPlan
+	testutil.FailErr(t, "decode sparse stored plan", json.Unmarshal([]byte(stored), &plan))
+	if plan.Before != nil || len(plan.After) != 0 || plan.EffectStarted {
+		t.Fatal("sparse plan changed intent")
+	}
+	encoded, err := json.Marshal(plan)
+	testutil.FailErr(t, "encode sparse plan", err)
+	var fields map[string]json.RawMessage
+	testutil.FailErr(t, "read emitted fields", json.Unmarshal(encoded, &fields))
+	for _, omitted := range []string{"before", "after", "unrecognized_intent"} {
+		if _, exists := fields[omitted]; exists {
+			t.Fatalf("unexpected emitted key %s", omitted)
 		}
 	}
 }

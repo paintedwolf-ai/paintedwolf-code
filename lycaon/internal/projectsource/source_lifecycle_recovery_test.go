@@ -27,9 +27,11 @@ func TestSourceMoveRecoveryRefusesDamagedDestinationDuringCleanup(t *testing.T) 
 	testutil.FailErr(t, "identify destination", err)
 	testutil.FailErr(t, "damage published destination", os.WriteFile(filepath.Join(destination, "file"), []byte("damaged"), 0o600))
 	row := &sourceMutationRow{Plan: sourceMutationPlan{
-		RootPath: root, FromAbs: filepath.Join(root, "source"), ToAbs: destination,
-		HoldAbs: held, EntryIdentity: heldID, DestinationIdentity: destinationID,
-		TreeSHA: sha, CrossVolume: true, HoldStarted: true, MoveCleanupStarted: true,
+		sourceMutationPublication: sourceMutationPublication{HoldAbs: held, EntryIdentity: heldID, DestinationIdentity: destinationID, CrossVolume: true, HoldStarted: true, MoveCleanupStarted: true},
+		sourceMutationRecovery:    sourceMutationRecovery{TreeSHA: sha},
+		RootPath:                  root,
+		FromAbs:                   filepath.Join(root, "source"),
+		ToAbs:                     destination,
 	}}
 	if err := service.Effects.publishSourceMove(t.Context(), row); !errors.Is(err, ErrSourceMutationDiverged) {
 		t.Fatalf("damaged destination accepted for cleanup: %v", err)
@@ -61,11 +63,11 @@ func TestSourceCapturePreservesRecordedContentExpectation(t *testing.T) {
 			path := filepath.Join(root, "file")
 			testutil.FailErr(t, "seed concurrent contents", os.WriteFile(path, []byte("external edit"), 0o600))
 			plan := &sourceMutationPlan{
+				sourceMutationRecovery:    sourceMutationRecovery{RecoveryID: uuid.NewString()},
 				sourceMutationAttribution: sourceMutationAttribution{ProjectID: p.ID},
 				Kind:                      kind,
 				RootPath:                  root,
 				Path:                      "file",
-				RecoveryID:                uuid.NewString(),
 				EntryKind:                 SourceEntryFile,
 			}
 			expected := textfile.SHA256([]byte("recorded contents"))

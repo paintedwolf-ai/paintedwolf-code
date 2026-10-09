@@ -70,16 +70,13 @@ func TestSourceMutationRecoveryFinishesAppliedWrite(t *testing.T) {
 	testutil.FailErr(t, "digest", err)
 	opID := uuid.NewString()
 	plan := sourceMutationPlan{
+		sourceMutationContent:     sourceMutationContent{BaseSHA256: writePlan.BaseSHA256, AfterSHA: writePlan.Result.SHA256, Before: writePlan.Result.Before, After: writePlan.Result.After},
 		sourceMutationAttribution: sourceMutationAttribution{ProjectID: p.ID, WorkspaceID: p.WorkspaceID()},
 		Kind:                      "write",
 		RootID:                    writePlan.Result.RootID,
 		RootPath:                  rootPath,
 		Path:                      writePlan.Result.Path,
 		AbsPath:                   writePlan.Result.AbsPath,
-		BaseSHA256:                writePlan.BaseSHA256,
-		AfterSHA:                  writePlan.Result.SHA256,
-		Before:                    writePlan.Result.Before,
-		After:                     writePlan.Result.After,
 		Changed:                   true,
 		Response:                  []byte(`{"Path":"recover.txt"}`),
 	}
@@ -151,16 +148,13 @@ func TestSourceMutationBatchWriteRollsBackOnConflict(t *testing.T) {
 			Content: item.content, Encoding: textfile.UTF8, BaseSHA256: textfile.SHA256([]byte("before"))})
 		testutil.FailErr(t, "plan "+item.path, err)
 		writes = append(writes, sourceMutationPlan{
+			sourceMutationContent:     sourceMutationContent{BaseSHA256: planned.BaseSHA256, AfterSHA: planned.Result.SHA256, Before: planned.Result.Before, After: planned.Result.After},
 			sourceMutationAttribution: sourceMutationAttribution{ProjectID: p.ID},
 			Kind:                      "write",
 			RootID:                    planned.Result.RootID,
 			RootPath:                  rootPath,
 			Path:                      planned.Result.Path,
 			AbsPath:                   planned.Result.AbsPath,
-			BaseSHA256:                planned.BaseSHA256,
-			AfterSHA:                  planned.Result.SHA256,
-			Before:                    planned.Result.Before,
-			After:                     planned.Result.After,
 			Changed:                   true,
 		})
 	}
@@ -269,16 +263,13 @@ func TestFileAppliedReceiptReprovesAndReappliesLostFilesystemEffect(t *testing.T
 		ID: uuid.NewString(), ProjectID: p.ID, Kind: "write", InputDigest: "digest",
 		Status: sourceMutationFileApplied, CreatedAt: now, UpdatedAt: now,
 		Plan: sourceMutationPlan{
+			sourceMutationContent:     sourceMutationContent{BaseSHA256: textfile.SHA256(before), AfterSHA: textfile.SHA256(after), Before: before, After: after},
 			sourceMutationAttribution: sourceMutationAttribution{ProjectID: p.ID, WorkspaceID: p.WorkspaceID()},
 			Kind:                      "write",
 			RootID:                    p.Roots[0].ID,
 			RootPath:                  rootPath,
 			Path:                      "note.txt",
 			AbsPath:                   path,
-			BaseSHA256:                textfile.SHA256(before),
-			AfterSHA:                  textfile.SHA256(after),
-			Before:                    before,
-			After:                     after,
 			Changed:                   true,
 			Response:                  json.RawMessage(`{}`),
 		},
