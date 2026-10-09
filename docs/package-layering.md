@@ -32,6 +32,11 @@ admission coordinates journal rows, path reservations, filesystem effects,
 recovery content, history, and atomic settlement through explicit domains.
 The recorder, head reader, and recovery archive are separate ledger ports;
 attribution, source events, and journal completion still share one transaction.
+Prepared plans contain attribution, content and revision state, filesystem
+publication intent, and recovery manifests. Their JSON keys remain flat in the
+durable journal and lifecycle history. Native effect admission grants one
+filesystem application; an already admitted ID is refused before apply, while
+host mutation requests may replay their committed response.
 
 ### HTTP route families
 
