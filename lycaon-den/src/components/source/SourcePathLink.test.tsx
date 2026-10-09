@@ -30,6 +30,16 @@ describe("SourcePathLink", () => {
     browseProjectSource.mockReset();
   });
 
+  it("explains an outside-root path without making a host open request", () => {
+    const reportError = vi.fn();
+    render(() => <NoticeReporterProvider reporter={{ reportError, publish: vi.fn() }}>
+      <SourcePathLink projectId="p1" path="/home/person/settings.json" rootRefs={[{ id: "root", path: "/repo" }]} />
+    </NoticeReporterProvider>);
+    fireEvent.click(screen.getByTestId("source-path-link"));
+    expect(openSourceLocation).not.toHaveBeenCalled();
+    expect(reportError.mock.calls[0]?.[0].message).toContain("outside the attached project folders");
+  });
+
   it("keeps the context menu bound to the source that opened it", () => {
     const [path, setPath] = createSignal("first.ts");
     render(() => <SourcePathLink projectId="p1" path={path()} line={12}

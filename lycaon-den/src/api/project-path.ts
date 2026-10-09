@@ -165,6 +165,16 @@ export function resolveProjectFile(
   };
 }
 
+/** Whether a path names a file inside the given roots; a host root id narrows to that root. */
+export function projectFileResolvable(
+  roots: readonly ResolveProjectRoot[],
+  relPath: string,
+  rootId?: string,
+): boolean {
+  const scoped = rootId ? roots.filter((root) => root.id === rootId) : roots;
+  return !("error" in resolveProjectFile({ roots: scoped }, relPath));
+}
+
 /** Relative paths use forward slashes; the root itself is ".". */
 export function relativeUnderRoot(
   absolutePath: string,

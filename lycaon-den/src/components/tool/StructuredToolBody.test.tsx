@@ -170,3 +170,9 @@ describe("StructuredToolBody source links", () => {
     }
   });
 });
+
+it("renders an outside-root tool path as an inert fact", () => {
+  const { container } = render(() => <StructuredToolBody part={part({ args: { path: "/home/person/settings.json" } })} projectId="proj-1" rootRefs={[{ id: "root", path: "/repo" }]} />);
+  expect(container.querySelector("[data-testid=source-path-link]")).toBeNull();
+  expect(container.textContent).toContain("/home/person/settings.json");
+});
