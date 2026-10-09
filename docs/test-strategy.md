@@ -579,9 +579,12 @@ one introducing merged PR and a qualified immediate parent. Ambiguous attributio
 advanced main, and conflicts leave an incident for investigation. Reverts never
 merge automatically.
 
-Each Linux Go test process has a 2 GiB RSS ceiling, declared in
-[`resources.json`](../scripts/ci_policy/resources.json); failure identifies the
-package, measured bytes, and bound. Security and wiring suites additionally
+Each Linux Go test process has a 3.5 GiB RSS ceiling, declared in
+[`resources.json`](../scripts/ci_policy/resources.json): hosted runners have
+16 GiB and run four packages at once, so the ceiling keeps one package from
+exhausting the runner while leaving room for the toolchain. A package that needs
+more declares its own ceiling with a tracking issue (`internal/api`, #382).
+Failure identifies the package, measured bytes, and bound. Security and wiring suites additionally
 check retained heap and goroutine growth after cleanup through
 `internal/testutil/resourceguard`. These guards detect resource regressions;
 they do not replace the host-release reachability guard or lifecycle repair in
