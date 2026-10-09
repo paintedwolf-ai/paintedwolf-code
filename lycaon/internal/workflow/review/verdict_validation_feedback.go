@@ -3,7 +3,7 @@ package review
 import (
 	"maps"
 
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 )
 
 func verdictInvalidDetails(outline string, err error) map[string]any {
@@ -11,7 +11,7 @@ func verdictInvalidDetails(outline string, err error) map[string]any {
 		"reason":        err.Error(),
 		"expected_call": describeVerdictCall(outline),
 	}
-	if rejection := tools.AsToolReject(err); rejection != nil {
+	if rejection := toolrejection.AsToolReject(err); rejection != nil {
 		maps.Copy(data, rejection.Data)
 		data["issues"] = err.Error()
 	}

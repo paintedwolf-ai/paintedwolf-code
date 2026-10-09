@@ -203,7 +203,11 @@ func (m *Tools) EnrichTool(
 	if !facts.Succeeded() || m.Enricher == nil {
 		return output, facts
 	}
-	eval := toolpolicy.BuildEvalContext(ctx, m.Guards.PolicyDependencies(), sess, tool, args)
+	eval, err := toolpolicy.BuildEvalContext(ctx, m.Guards.PolicyDependencies(), sess, tool, args)
+	if err != nil {
+		slog.ErrorContext(ctx, "tool output policy facts unavailable", "session_id", sess.ID, "tool", tool, "err", err)
+		return output, facts
+	}
 	hostArgs := make(map[string]any, len(args)+1)
 	for key, value := range args {
 		hostArgs[key] = value

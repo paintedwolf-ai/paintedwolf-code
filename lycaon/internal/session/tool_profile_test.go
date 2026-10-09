@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolpolicy"
 	"os"
 	"path/filepath"
 	"testing"
@@ -184,4 +185,8 @@ func (s stubWorkflowManifest) ForgetSession(string) {}
 
 func (s stubWorkflowManifest) RecordReviewToolResult(context.Context, string, api.Message) error {
 	return nil
+}
+
+func (s stubWorkflowManifest) PolicySnapshot(context.Context, string) (toolpolicy.WorkflowSnapshot, error) {
+	return toolpolicy.WorkflowSnapshot{ManifestRules: s.manifest.Rules}, nil
 }
