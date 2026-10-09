@@ -234,11 +234,11 @@ func runCommandForeground(
 	if directIPApplied {
 		tools.EmitDirectIPLifecycle(tctx, tools.DirectIPLifecycleStarted)
 	}
-	registry.WatchIndex(tctx.SessionID, handle, index)
+	registry.Lifecycle.WatchIndex(tctx.SessionID, handle, index)
 	networkLife := newCommandNetworkLifecycle(tctx, toolName, bound.lease, directIPApplied)
-	registry.OnExit(tctx.SessionID, handle, func() { networkLife.complete(ctx) })
+	registry.Lifecycle.OnExit(tctx.SessionID, handle, func() { networkLife.complete(ctx) })
 
-	finished, awaitErr := registry.Await(ctx, tctx.SessionID, handle, budget)
+	finished, awaitErr := registry.Lifecycle.Await(ctx, tctx.SessionID, handle, budget)
 	if awaitErr != nil {
 		return commandRunOutcome{}, errors.Join(awaitErr, stopAwaitedCommand(ctx, registry, tctx.SessionID, handle))
 	}
@@ -266,15 +266,15 @@ func runCommandForeground(
 		out.LeftRunning = networkLife.leftBehind()
 		out.SpillPath = spillCommandOutput(tctx, snap)
 		ft.record(tctx.SessionID, approach, out.Snapshot.ExitCode == 0)
-		out.IndexWatch = registry.TakeIndexWatch(tctx.SessionID, handle)
-		registry.Discard(tctx.SessionID, handle)
+		out.IndexWatch = registry.Lifecycle.TakeIndexWatch(tctx.SessionID, handle)
+		registry.Lifecycle.Discard(tctx.SessionID, handle)
 		recordContainerLaunch(tctx, snap)
 	} else {
 		// The running result shows these; only later refusals send a notice.
 		out.Refusals = bound.lease.Refusals()
-		registry.NoteRefusalsShown(tctx.SessionID, handle, len(out.Refusals.Refusals))
+		registry.Output.NoteRefusalsShown(tctx.SessionID, handle, len(out.Refusals.Refusals))
 		// Promoted commands retain egress attribution after the tool call.
-		if err := registry.Promote(ctx, tctx.SessionID, handle); err != nil {
+		if err := registry.Output.Promote(ctx, tctx.SessionID, handle); err != nil {
 			return commandRunOutcome{}, errors.Join(err, stopAwaitedCommand(ctx, registry, tctx.SessionID, handle))
 		}
 	}
@@ -346,16 +346,16 @@ func stopAwaitedCommand(ctx context.Context, registry *bgprocess.Registry, sessi
 	if registry == nil {
 		return nil
 	}
-	_, stopErr := registry.Stop(sessionID, handle)
+	_, stopErr := registry.Lifecycle.Stop(sessionID, handle)
 	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), commandCancelCleanupTimeout)
 	defer cancel()
-	finished, waitErr := registry.Await(cleanupCtx, sessionID, handle, 0)
+	finished, waitErr := registry.Lifecycle.Await(cleanupCtx, sessionID, handle, 0)
 	if waitErr == nil && finished {
-		registry.Discard(sessionID, handle)
+		registry.Lifecycle.Discard(sessionID, handle)
 		return stopErr
 	}
 	// Promote a process that outlives cancellation cleanup.
-	promoteErr := registry.Promote(cleanupCtx, sessionID, handle)
+	promoteErr := registry.Output.Promote(cleanupCtx, sessionID, handle)
 	return errors.Join(stopErr, waitErr, promoteErr)
 }
 

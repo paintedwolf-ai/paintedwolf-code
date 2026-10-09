@@ -28,12 +28,12 @@ func CloseHandler(bg *bgprocess.Registry) tools.ToolHandler {
 		if err != nil {
 			return "", err
 		}
-		if err := bg.LookupPTY(tctx.SessionID, in.ID); err != nil {
+		if err := bg.Terminal.LookupPTY(tctx.SessionID, in.ID); err != nil {
 			return "", mapTerminalLifecycleReject(err, in.ID)
 		}
 		subject, _ := bg.CommandLine(tctx.SessionID, in.ID)
 		tctx.SetDisplaySubject(subject)
-		res, err := bg.ClosePTY(tctx.SessionID, in.ID)
+		res, err := bg.Terminal.ClosePTY(tctx.SessionID, in.ID)
 		if err != nil {
 			return "", mapTerminalLifecycleReject(err, in.ID)
 		}

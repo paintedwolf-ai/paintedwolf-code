@@ -141,7 +141,7 @@ func TestCommandForegroundPromotesOnBudget(t *testing.T) {
 	if !reg.HasRunning("sess") {
 		t.Fatal("promoted command must still be running")
 	}
-	testutil.FailErr(t, "dispose session commands", reg.DisposeSession(context.Background(), "sess"))
+	testutil.FailErr(t, "dispose session commands", reg.Lifecycle.DisposeSession(context.Background(), "sess"))
 }
 
 func TestCommandForegroundCancellationStopsSilentJob(t *testing.T) {
@@ -175,7 +175,7 @@ func TestCommandForegroundReturnsStructuredLiveJobConflicts(t *testing.T) {
 	}, tctx)
 	testutil.FailErr(t, "start first awaited command", err)
 	t.Cleanup(func() {
-		testutil.FailErr(t, "dispose session commands", reg.DisposeSession(context.Background(), "sess"))
+		testutil.FailErr(t, "dispose session commands", reg.Lifecycle.DisposeSession(context.Background(), "sess"))
 	})
 
 	_, err = tool.Run(context.Background(), map[string]any{
