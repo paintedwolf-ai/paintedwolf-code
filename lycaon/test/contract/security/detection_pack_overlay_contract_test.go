@@ -59,18 +59,18 @@ func gateWithDetection(
 
 func containedCommand(cmd string) hitl.ProposedAction {
 	return hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-Args: map[string]any{"command": cmd},
-},
-Execution: hitl.ActionExecution{
-Contained: hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressProxy},
-},
-Scope: hitl.ActionScope{
-ProjectDir: "/tmp/proj",
-SessionID: "s1",
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+			Args: map[string]any{"command": cmd},
+		},
+		Execution: hitl.ActionExecution{
+			Contained: hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressProxy},
+		},
+		Scope: hitl.ActionScope{
+			ProjectDir: "/tmp/proj",
+			SessionID:  "s1",
+		},
+	}
 }
 
 func criticalAlwaysMatch() stubDetectionSource {
@@ -181,15 +181,15 @@ func TestDetectionOverlayNeverSuppressesRequired(t *testing.T) {
 	// Detection matches preserve the existing tool-definition approval.
 	approvalGate := gateWithDetection(t, gate.PostureStrict, src)
 	res, err := approvalGate.Evaluate(context.Background(), hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "mcp__demo__tool",
-Args: map[string]any{},
-},
-Scope: hitl.ActionScope{
-ProjectDir: t.TempDir(),
-SessionID: "s1",
-},
-})
+		Invocation: hitl.ActionInvocation{
+			Tool: "mcp__demo__tool",
+			Args: map[string]any{},
+		},
+		Scope: hitl.ActionScope{
+			ProjectDir: t.TempDir(),
+			SessionID:  "s1",
+		},
+	})
 	testutil.FailErr(t, "Evaluate", err)
 	if !res.Required() {
 		t.Fatalf("Strict MCP ask must stay Required, got %+v", res)
@@ -215,7 +215,7 @@ func TestDetectionOverlayZeroPackParity(t *testing.T) {
 		containedCommand("echo hi"),
 		containedCommand("aws s3 ls"),
 		containedCommand("terraform plan"),
-		{Tool: "read", Files: []string{"a.go"}, ProjectDir: t.TempDir(), SessionID: "s1"},
+		{Invocation: hitl.ActionInvocation{Tool: "read", Files: []string{"a.go"}}, Scope: hitl.ActionScope{ProjectDir: t.TempDir(), SessionID: "s1"}},
 	}
 
 	for _, posture := range []gate.Posture{
