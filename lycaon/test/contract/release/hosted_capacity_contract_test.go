@@ -119,10 +119,9 @@ func (p capacityPlan) group(t *testing.T, name string) string {
 		Group  string
 		Cancel string `yaml:"cancel-in-progress"`
 	}
-	switch node.Kind {
-	case yaml.ScalarNode:
+	if node.Kind == yaml.ScalarNode {
 		settings.Group = node.Value
-	case yaml.MappingNode:
+	} else if node.Kind == yaml.MappingNode {
 		contractcheck.FailErr(t, "decode concurrency of "+name, node.Decode(&settings))
 	}
 	if settings.Group == "" {
@@ -154,7 +153,7 @@ func (p capacityPlan) footprint(t *testing.T, name, event string, inputs map[str
 	weights := map[string]footprint{}
 	ancestors := map[string]map[string]bool{}
 	for job, spec := range workflow.Jobs {
-		if match := eventCondition.FindStringSubmatch(spec.If); match == nil || (match[2] == event) == (match[1] == "==") {
+		if admits(spec.If, event) {
 			weights[job] = p.jobFootprint(t, name, job, event, spec, inputs)
 		}
 	}
@@ -180,6 +179,15 @@ func (p capacityPlan) footprint(t *testing.T, name, event string, inputs map[str
 		total: widestAntichain(t, name, ancestors, func(job string) int { return weights[job].total }),
 		macos: widestAntichain(t, name, ancestors, func(job string) int { return weights[job].macos }),
 	}
+}
+
+// admits reports whether a job runs for the event: only a condition on the event alone can exclude it.
+func admits(condition, event string) bool {
+	match := eventCondition.FindStringSubmatch(condition)
+	if len(match) != 3 {
+		return true
+	}
+	return (match[2] == event) == (match[1] == "==")
 }
 
 // widestAntichain is the heaviest set of jobs that can run at once: none needs another, directly or transitively.
@@ -327,10 +335,10 @@ func boolCount(value bool) int {
 
 func capacityNeeds(t *testing.T, node yaml.Node) []string {
 	t.Helper()
-	switch node.Kind {
-	case 0:
+	if node.Kind == 0 {
 		return nil
-	case yaml.ScalarNode:
+	}
+	if node.Kind == yaml.ScalarNode {
 		return []string{node.Value}
 	}
 	var needs []string
