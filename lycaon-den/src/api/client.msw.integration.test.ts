@@ -3,7 +3,7 @@ import { createLycaonClient } from "./client-impl.ts";
 import { mswServer } from "./mocks/setup.ts";
 
 describe("LycaonClient MSW integration", () => {
-  beforeAll(() => mswServer.listen({ onUnhandledRequest: "error" }));
+  beforeAll(() => mswServer.listen({ onUnhandledFrame: "error" }));
   afterEach(() => mswServer.resetHandlers());
   afterAll(() => mswServer.close());
 

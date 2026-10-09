@@ -996,31 +996,6 @@
       "setup": "verification"
     }
   },
-  "runner_priority": {
-    "release": [
-      "release.yml",
-      "release-halt.yml",
-      "release-secrets-check.yml"
-    ],
-    "warming": [
-      "build-caches.yml"
-    ],
-    "background": [
-      "nightly.yml",
-      "dependency-inventory.yml",
-      "release-system-live-test.yml",
-      "issue-intake.yml",
-      "issue-stale.yml",
-      "issue-sweep.yml",
-      "queue-health.yml"
-    ],
-    "qualification": [
-      "qualification.yml"
-    ],
-    "one_shot": [
-      "verification-recovery.yml"
-    ]
-  },
   "capacity": {
     "runners": 20,
     "macos_runners": 5,
@@ -1045,8 +1020,7 @@
       "issue-stale.yml": 1,
       "issue-sweep.yml": 1,
       "issue-intake.yml": 1,
-      "verification-recovery.yml": 1,
-      "runner-priority.yml": 1
+      "verification-recovery.yml": 1
     }
   }
 }
