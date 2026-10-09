@@ -2,13 +2,12 @@ package session
 
 import (
 	"context"
-	"log/slog"
-	"strings"
-	"time"
-
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/pkg/api"
+	"log/slog"
+	"strings"
+	"time"
 )
 
 // NotifyWorkerCycleTerminal flushes deferred loop wakes when the parent worker cycle is idle.
@@ -16,7 +15,7 @@ func (m *Manager) NotifyWorkerCycleTerminal(ctx context.Context, parentID, compl
 	if m == nil {
 		return
 	}
-	m.ensureCoordinatorRuntime().CoordinatorLoop().OnWorkerCycleTerminal(ctx, parentID, completingJobID)
+	m.ensureCoordinatorRuntime().CoordinatorLoop().Cycles.OnWorkerCycleTerminal(ctx, parentID, completingJobID)
 	m.reconcileCoordinatorBatchFromLedger(ctx, parentID)
 	m.disarmCoordinatorLoopIfBatchTerminal(ctx, parentID)
 	m.maybeReconcileSandboxesOnIdle(ctx, parentID)

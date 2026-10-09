@@ -1,7 +1,5 @@
 package loopwake
 
-import "strings"
-
 // HostTurnWaitOnly reports a host turn that ended with only wait().
 func HostTurnWaitOnly(turnTools []string) bool {
 	if len(turnTools) != 1 {

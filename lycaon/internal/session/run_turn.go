@@ -4,13 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/promptresult"
-	"log/slog"
-	"runtime/debug"
-	"strings"
-	"sync"
-	"time"
-
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
@@ -18,10 +11,16 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/curationctx"
 	"github.com/lycaon/lycaon/internal/llm"
+	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/workercontext"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
+	"log/slog"
+	"runtime/debug"
+	"strings"
+	"sync"
+	"time"
 )
 
 // RunTurnBusyWindowFaultForTest injects a panic after the busy transition.
@@ -91,7 +90,7 @@ func (m *Manager) runTurnLocked(ctx context.Context, id string, in PromptInput) 
 		return nil, err
 	}
 	defer m.claimTurnLiveness(sess.ProjectID, turnExecution.Turn.ID)()
-	finishPromptExecution := m.ensureCoordinatorRuntime().CoordinatorLoop().BeginPromptExecution(ctx, id)
+	finishPromptExecution := m.ensureCoordinatorRuntime().CoordinatorLoop().Admission.BeginPromptExecution(ctx, id)
 	defer finishPromptExecution()
 	ctx = workercontext.WithJob(ctx, in.WorkerJobID)
 	finalOutputID, closeoutID := "", ""
@@ -153,7 +152,7 @@ func (m *Manager) runTurnLocked(ctx context.Context, id string, in PromptInput) 
 	m.beginPromptTurn(id, m.coordinatorKickIDs(ctx, id)...)
 	userPrompt := strings.TrimSpace(text)
 	if !hostTurn && (strings.TrimSpace(in.Text) != "" || len(in.ArtifactIDs) > 0) {
-		m.ensureCoordinatorRuntime().CoordinatorLoop().InterruptSleep(ctx, id)
+		m.ensureCoordinatorRuntime().CoordinatorLoop().Waits.InterruptSleep(ctx, id)
 	}
 	promptFailed := true
 	defer func() {
@@ -217,18 +216,18 @@ func (m *Manager) executePromptRun(
 	finishPreparing()
 
 	result, err := m.ensureCoordinatorRuntime().RunPrompt(ctx, promptloop.PromptRunInput{
-		SessionID:   sessionID,
-		TurnID:      turn.Turn.ID,
-		AttemptID:   turn.Attempt.ID,
-		Session:     sess,
-		History:     assembly.History,
-		ProfileID:   assembly.ProfileID,
-		UserPrompt:  userPrompt,
+		SessionID:    sessionID,
+		TurnID:       turn.Turn.ID,
+		AttemptID:    turn.Attempt.ID,
+		Session:      sess,
+		History:      assembly.History,
+		ProfileID:    assembly.ProfileID,
+		UserPrompt:   userPrompt,
 		HostTurn:     hostTurn,
 		HostSignalID: in.hostSignalID(),
 		ProseFinish:  in.ProseFinish,
-		ToolCtx:     assembly.ToolCtx,
-		Machine:     assembly.Machine,
+		ToolCtx:      assembly.ToolCtx,
+		Machine:      assembly.Machine,
 	})
 	if err != nil {
 		return execution, mapPromptRunError(err)

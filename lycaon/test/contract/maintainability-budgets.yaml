@@ -17,9 +17,6 @@ limits:
     ts_local_dependencies: {warn: 20, limit: 30}
 exceptions:
     go_receiver_lines:
-        lycaon/internal/coordinator/loopwake/loopwake.LoopEngine:
-            cap: 1835
-            reason: Past the limit before #356, which stops its wait timers at host shutdown without adding methods; the split is tracked in #364.
         lycaon/internal/coordinator/assembly/assembly.AssemblyEngine:
             cap: 1200
             reason: Already past the limit before the boot-orientation fix, which adds one bounded loop; the split is tracked in #270.
@@ -30,9 +27,6 @@ exceptions:
         lycaon/internal/toolhost/toolhost.Runtime:
             cap: 42
             reason: Past the limit before #356, which releases the default status cache through a binding without adding methods; the split is tracked in #363.
-        lycaon/internal/coordinator/loopwake/loopwake.LoopEngine:
-            cap: 121
-            reason: Past the limit before #356, which moves the sleep table into its own type to stop wait timers without growing the engine; the split is tracked in #364.
         lycaon/internal/hitl/hitl.Manager:
             cap: 48
             reason: Past the limit before #356, which moves expiry scheduling into its own type to stop timers without growing the manager; the split is tracked in #365.

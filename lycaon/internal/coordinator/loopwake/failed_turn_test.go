@@ -2,13 +2,12 @@ package loopwake
 
 import (
 	"context"
-	"sync/atomic"
-	"testing"
-	"time"
-
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"sync/atomic"
+	"testing"
+	"time"
 )
 
 func TestFailedTurnHoldsQueuedPhaseWakeUntilExplicitExecution(t *testing.T) {
@@ -16,22 +15,22 @@ func TestFailedTurnHoldsQueuedPhaseWakeUntilExplicitExecution(t *testing.T) {
 	var blocked atomic.Bool
 	f.deps.HostTurnBlocked = func(context.Context, string) bool { return blocked.Load() }
 	f.loop.SetDeps(f.deps)
-	finish := f.loop.BeginPromptExecution(t.Context(), "session")
-	f.loop.Nudge(t.Context(), "session", anchor.PhaseAdvanced, "", "", anchor.Envelope{})
+	finish := f.loop.Admission.BeginPromptExecution(t.Context(), "session")
+	f.loop.Nudges.Nudge(t.Context(), "session", anchor.PhaseAdvanced, "", "", anchor.Envelope{})
 	blocked.Store(true)
 	f.drain(t, finish)
-	f.loop.DrainPending(t.Context(), "session")
-	if f.prompts.Load() != 0 || !f.loop.HasPendingLoopWakes("session") {
-		t.Fatalf("prompts=%d, pending=%v", f.prompts.Load(), f.loop.HasPendingLoopWakes("session"))
+	f.loop.Nudges.DrainPending(t.Context(), "session")
+	if f.prompts.Load() != 0 || !f.loop.Nudges.HasPendingLoopWakes("session") {
+		t.Fatalf("prompts=%d, pending=%v", f.prompts.Load(), f.loop.Nudges.HasPendingLoopWakes("session"))
 	}
-	release, ok := f.loop.BeginUserTurnSettlement(t.Context(), "session")
+	release, ok := f.loop.Admission.BeginUserTurnSettlement(t.Context(), "session")
 	if !ok {
 		t.Fatal("held wake prevented failed-turn settlement")
 	}
 	release()
 	blocked.Store(false)
-	f.loop.DrainPending(t.Context(), "session")
-	f.loop.WaitForAsyncTurns(testutil.BoundedContext(t, 2*time.Second))
+	f.loop.Nudges.DrainPending(t.Context(), "session")
+	f.loop.Turns.WaitForAsyncTurns(testutil.BoundedContext(t, 2*time.Second))
 	if f.prompts.Load() != 1 {
 		t.Fatalf("resumed prompts=%d", f.prompts.Load())
 	}
@@ -48,21 +47,21 @@ func TestFailedTurnPreservesUndeliveredWaitResultWithoutRetry(t *testing.T) {
 	}
 	f.loop.SetDeps(f.deps)
 	f.arm(t)
-	finish := f.loop.BeginPromptExecution(t.Context(), "session")
+	finish := f.loop.Admission.BeginPromptExecution(t.Context(), "session")
 	blocked.Store(true)
-	f.loop.Nudge(t.Context(), "session", anchor.ProcessFinished, "", "target", anchor.Envelope{})
+	f.loop.Nudges.Nudge(t.Context(), "session", anchor.ProcessFinished, "", "target", anchor.Envelope{})
 	f.drain(t, finish)
 	if f.prompts.Load() != 0 || resumes.Load() != 0 {
 		t.Fatal("failed turn resumed automatically")
 	}
-	winner, ok := f.loop.waitWinner("session")
+	winner, ok := f.loop.Deliveries.waitWinner("session")
 	if !ok || winner.retryScheduled.Load() {
 		t.Fatalf("wait result missing or retry scheduled: %+v", winner)
 	}
 	blocked.Store(false)
-	f.loop.DrainPending(t.Context(), "session")
-	f.loop.WaitForAsyncTurns(testutil.BoundedContext(t, 2*time.Second))
-	if _, ok := f.loop.waitWinner("session"); ok || resumes.Load() != 1 {
+	f.loop.Nudges.DrainPending(t.Context(), "session")
+	f.loop.Turns.WaitForAsyncTurns(testutil.BoundedContext(t, 2*time.Second))
+	if _, ok := f.loop.Deliveries.waitWinner("session"); ok || resumes.Load() != 1 {
 		t.Fatalf("wait delivery: pending=%v resumes=%d", ok, resumes.Load())
 	}
 }

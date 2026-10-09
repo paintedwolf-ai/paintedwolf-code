@@ -4,13 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net"
-	"net/url"
-	"sort"
-	"strconv"
-	"strings"
-	"time"
-
 	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/batch"
@@ -21,6 +14,12 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 	"github.com/lycaon/lycaon/pkg/api"
+	"net"
+	"net/url"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
 )
 
 // One-second waits support short local readiness checks.
@@ -71,7 +70,7 @@ type waitRequest struct {
 }
 
 // RegisterWaitTool registers durable agent waits.
-func RegisterWaitTool(reg *tools.DefaultRegistry, loop *LoopEngine, deps WaitToolDeps) error {
+func RegisterWaitTool(reg *tools.DefaultRegistry, loop *WaitSubscriptions, deps WaitToolDeps) error {
 	if reg == nil || loop == nil {
 		return fmt.Errorf("registry and loop engine required")
 	}
@@ -107,19 +106,19 @@ func RegisterWaitTool(reg *tools.DefaultRegistry, loop *LoopEngine, deps WaitToo
 			triggerNames[i] = string(t)
 		}
 		// These states require a real wait even when workers are already idle.
-		batchPhase := loop.coordinatorBatchState(ctx, tctx.SessionID).Phase
+		batchPhase := loop.Policy.coordinatorBatchState(ctx, tctx.SessionID).Phase
 		batchClosed := batchPhase == batch.PhaseClosed
 		soloDurationWait := !explicitConditions && batchPhase == batch.PhasePreDispatch
-		pendingUserInput := loop.sessionHasPendingUserInput(ctx, tctx.SessionID)
+		pendingUserInput := loop.Facts.sessionHasPendingUserInput(ctx, tctx.SessionID)
 		if !batchClosed && !pendingUserInput && batchPhase != batch.PhasePreDispatch &&
-			waitSubscribesNextWorkerDone(triggers) && loop.WorkerCycleIsIdle(ctx, tctx.SessionID) {
+			waitSubscribesNextWorkerDone(triggers) && loop.Cycles.WorkerCycleIsIdle(ctx, tctx.SessionID) {
 			return waitAlreadySatisfied(
 				"next_worker_done",
 				"The dispatched workers have finished.",
 				triggerNames,
 			)
 		}
-		if !batchClosed && !soloDurationWait && !pendingUserInput && waitSubscribesAllWorkersIdle(triggers) && loop.WorkerCycleIsIdle(ctx, tctx.SessionID) {
+		if !batchClosed && !soloDurationWait && !pendingUserInput && waitSubscribesAllWorkersIdle(triggers) && loop.Cycles.WorkerCycleIsIdle(ctx, tctx.SessionID) {
 			return waitAlreadySatisfied(
 				"all_workers_idle",
 				"No workers are pending or running.",
@@ -140,12 +139,12 @@ func RegisterWaitTool(reg *tools.DefaultRegistry, loop *LoopEngine, deps WaitToo
 				triggerNames,
 			)
 		}
-		until, resumed := loop.ResolveWaitUntil(ctx, tctx.SessionID, resume && !request.ExplicitMode, time.Duration(timeoutMS)*time.Millisecond)
+		until, resumed := loop.Waits.ResolveWaitUntil(ctx, tctx.SessionID, resume && !request.ExplicitMode, time.Duration(timeoutMS)*time.Millisecond)
 		if request.ResumeDeadline.After(time.Now().UTC()) {
 			until, resumed = request.ResumeDeadline, true
 		}
 		if pendingUserInput && args["timeout_ms"] == nil {
-			if pendingUntil := loop.pendingUserInputWaitDeadline(ctx, tctx.SessionID); pendingUntil.After(until) {
+			if pendingUntil := loop.Facts.pendingUserInputWaitDeadline(ctx, tctx.SessionID); pendingUntil.After(until) {
 				until = pendingUntil
 			}
 		}
@@ -173,17 +172,17 @@ func RegisterWaitTool(reg *tools.DefaultRegistry, loop *LoopEngine, deps WaitToo
 			}
 			if strings.TrimSpace(tctx.WorkerJobID) == "" {
 				// Keep a result that settled this lease during registration.
-				if winner, ok := loop.waitWinner(tctx.SessionID); ok && winner.LeaseID != lease.ID {
-					loop.waitWinners.CompareAndDelete(strings.TrimSpace(tctx.SessionID), winner)
+				if winner, ok := loop.Deliveries.waitWinner(tctx.SessionID); ok && winner.LeaseID != lease.ID {
+					loop.Deliveries.waitWinners.CompareAndDelete(strings.TrimSpace(tctx.SessionID), winner)
 				}
 			}
 			leaseID = lease.ID
 		}
-		loop.enterSleep(ctx, tctx.SessionID, sleepArm{
+		loop.Waits.enterSleep(ctx, tctx.SessionID, sleepArm{
 			until: until, untilComplete: request.UntilComplete, reason: reason,
 			triggers: armedTriggers, processHandles: processHandles, workerHandles: request.WorkerHandles, mover: SleepMoverHost,
 		})
-		loop.MarkWaitCalled(tctx.SessionID)
+		loop.Waits.MarkWaitCalled(tctx.SessionID)
 		if deps.Store != nil {
 			monitorCtx := deps.RuntimeContext
 			if monitorCtx == nil {
@@ -222,7 +221,7 @@ func waitRequestReject(err error) error {
 	}}
 }
 
-func prepareWaitRequest(ctx context.Context, loop *LoopEngine, deps WaitToolDeps, args map[string]any, tctx tools.ToolContext) (waitRequest, error) {
+func prepareWaitRequest(ctx context.Context, loop *WaitSubscriptions, deps WaitToolDeps, args map[string]any, tctx tools.ToolContext) (waitRequest, error) {
 	request, err := parseWaitRequest(args)
 	if err != nil {
 		return waitRequest{}, waitRequestReject(err)
@@ -252,7 +251,7 @@ func prepareWaitRequest(ctx context.Context, loop *LoopEngine, deps WaitToolDeps
 	return request, nil
 }
 
-func restoreWaitRequest(ctx context.Context, loop *LoopEngine, store *awaitstore.Store, tctx tools.ToolContext, request *waitRequest) error {
+func restoreWaitRequest(ctx context.Context, loop *WaitSubscriptions, store *awaitstore.Store, tctx tools.ToolContext, request *waitRequest) error {
 	if strings.TrimSpace(tctx.WorkerJobID) == "" {
 		if subscription, complete := loop.runtimeWaitSubscription(tctx.SessionID); complete {
 			if !request.ExplicitConditions {
@@ -283,35 +282,6 @@ func restoreWaitRequest(ctx context.Context, loop *LoopEngine, store *awaitstore
 		request.WorkerHandles = workerHandlesFromConditions(request.Conditions)
 	}
 	return nil
-}
-
-func (l *LoopEngine) runtimeWaitSubscription(sessionID string) (waitSubscription, bool) {
-	value, found := l.sleep.Load(sessionID)
-	if !found {
-		return waitSubscription{}, false
-	}
-	state := value.(*sessionSleep)
-	state.mu.Lock()
-	defer state.mu.Unlock()
-	if len(state.waitTriggers) == 0 {
-		return waitSubscription{}, false
-	}
-	for _, trigger := range state.waitTriggers {
-		// Readiness parameters are retained only in the durable lease.
-		if trigger == WaitTriggerHTTPReady || trigger == WaitTriggerPortReady {
-			return waitSubscription{}, false
-		}
-	}
-	_, bounded := waitTriggerSet(state.waitTriggers)[WaitTriggerTimer]
-	subscription := waitSubscription{
-		UntilComplete:  state.untilComplete,
-		Bounded:        bounded,
-		Triggers:       append([]WaitTrigger(nil), state.waitTriggers...),
-		ProcessHandles: append([]string(nil), state.processHandles...),
-		WorkerHandles:  append([]string(nil), state.workerHandles...),
-	}
-	subscription.Conditions = conditionsFromTriggers(subscription.Triggers, subscription.ProcessHandles, subscription.WorkerHandles)
-	return subscription, true
 }
 
 func parseWaitRequest(args map[string]any) (waitRequest, error) {
@@ -637,7 +607,7 @@ func validateProfileConditions(profile string, conditions []awaitstore.Condition
 
 // RecoverWaitLeases reconstructs timers, subscriptions, and active probes after boot.
 // Worker deadlines and runnable transitions remain owned by the worker queue transaction.
-func RecoverWaitLeases(ctx context.Context, loop *LoopEngine, store *awaitstore.Store) error {
+func RecoverWaitLeases(ctx context.Context, loop *WaitSubscriptions, store *awaitstore.Store) error {
 	if loop == nil || store == nil {
 		return nil
 	}
@@ -657,7 +627,7 @@ func RecoverWaitLeases(ctx context.Context, loop *LoopEngine, store *awaitstore.
 		if lease.Deadline.IsZero() || strings.TrimSpace(lease.WorkerJobID) != "" {
 			triggers = removeWaitTrigger(triggers, WaitTriggerTimer)
 		}
-		loop.enterSleep(ctx, lease.SessionID, sleepArm{
+		loop.Waits.enterSleep(ctx, lease.SessionID, sleepArm{
 			until: lease.Deadline, untilComplete: lease.UntilComplete, reason: lease.Reason,
 			triggers: triggers, processHandles: handles, workerHandles: workerHandlesFromConditions(lease.Conditions), mover: SleepMoverHost,
 		})
@@ -668,8 +638,8 @@ func RecoverWaitLeases(ctx context.Context, loop *LoopEngine, store *awaitstore.
 		return err
 	}
 	for _, lease := range pending {
-		loop.rememberWaitWinner(lease.SessionID, lease.ID, lease.Winner)
-		loop.Nudge(ctx, lease.SessionID, anchor.LoopWake, anchor.LoopWake, lease.ID, anchor.Envelope{})
+		loop.Deliveries.rememberWaitWinner(lease.SessionID, lease.ID, lease.Winner)
+		loop.Nudges.Nudge(ctx, lease.SessionID, anchor.LoopWake, anchor.LoopWake, lease.ID, anchor.Envelope{})
 	}
 	return nil
 }
@@ -719,45 +689,4 @@ func toolResultStatus(content string) string {
 		return ""
 	}
 	return strings.TrimSpace(result.Status)
-}
-
-// ParkForPendingUserInput waits for feedback or the ask deadline.
-func (l *LoopEngine) ParkForPendingUserInput(ctx context.Context, sessionID, reason string) {
-	if l == nil {
-		return
-	}
-	sessionID = strings.TrimSpace(sessionID)
-	if sessionID == "" || !l.sessionHasPendingUserInput(ctx, sessionID) {
-		return
-	}
-	reason = strings.TrimSpace(reason)
-	if reason == "" {
-		reason = "waiting for user ask"
-	}
-	until := l.pendingUserInputWaitDeadline(ctx, sessionID)
-	// The timer bounds the park; user input ends it.
-	l.EnterSleep(ctx, sessionID, until, reason, []WaitTrigger{WaitTriggerTimer}, nil, SleepMoverUser)
-	l.MarkWaitCalled(sessionID)
-}
-
-// ParkForHostObligation waits for the current host-held phase.
-func (l *LoopEngine) ParkForHostObligation(ctx context.Context, sessionID string) {
-	if l == nil {
-		return
-	}
-	sessionID = strings.TrimSpace(sessionID)
-	if sessionID == "" || !l.sessionHostObligationHeld(ctx, sessionID) {
-		return
-	}
-	overlayPromoteDue := l.overlayPromoteDue(ctx, sessionID, anchor.Envelope{})
-	l.EnterSleep(
-		ctx,
-		sessionID,
-		time.Now().UTC().Add(l.sessionLimits(ctx, sessionID).CoordinatorMaxSleep()),
-		l.hostObligationParkReason(ctx, sessionID),
-		HostObligationWaitTriggers(overlayPromoteDue),
-		nil,
-		SleepMoverHost,
-	)
-	l.MarkWaitCalled(sessionID)
 }

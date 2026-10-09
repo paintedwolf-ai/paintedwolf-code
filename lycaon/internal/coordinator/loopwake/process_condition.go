@@ -2,11 +2,10 @@ package loopwake
 
 import (
 	"fmt"
-
 	awaitstore "github.com/lycaon/lycaon/internal/await"
 )
 
-func validateCompletionWait(loop *LoopEngine, sessionID string, conditions []awaitstore.Condition) error {
+func validateCompletionWait(loop *WaitSubscriptions, sessionID string, conditions []awaitstore.Condition) error {
 	state := loop.loopDeps().ProcessState
 	if state == nil {
 		return fmt.Errorf("process state is unavailable")
@@ -28,30 +27,3 @@ func validateCompletionWait(loop *LoopEngine, sessionID string, conditions []awa
 }
 
 // State reconciliation waits for the published completion digest before settling.
-func (l *LoopEngine) processConditionOutcome(sessionID string, condition awaitstore.Condition) (awaitstore.Condition, bool) {
-	deps := l.loopDeps()
-	for _, handle := range condition.Handles {
-		known, running := false, false
-		if deps.ProcessState != nil {
-			known, running = deps.ProcessState(sessionID, handle)
-		}
-		if known && running {
-			continue
-		}
-		condition.Handles = []string{handle}
-		if !known {
-			condition.Outcome = "unavailable"
-			return condition, true
-		}
-		if deps.ProcessReport != nil {
-			report, published := deps.ProcessReport(sessionID, handle)
-			if !published {
-				continue
-			}
-			condition.Report = report
-		}
-		condition.Outcome = "satisfied"
-		return condition, true
-	}
-	return awaitstore.Condition{}, false
-}

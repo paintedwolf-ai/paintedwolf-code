@@ -1,10 +1,9 @@
 package loopwake
 
 import (
+	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"log/slog"
 	"time"
-
-	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 )
 
 const loopLogComponent = "coordinator_loop"

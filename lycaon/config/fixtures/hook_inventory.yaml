@@ -83,7 +83,7 @@ hooks:
   - manager: workflow.RunManager
     field: OnToolAskOpened
     fires_on: "RequestUserInput commits a coordinator-tool ask_user (park-on-ask)"
-    binds_to: LoopEngine.ParkForPendingUserInput
+    binds_to: loopwake.Waits.ParkForPendingUserInput
     posture: synchronous
     reentrant: false
     notes: |

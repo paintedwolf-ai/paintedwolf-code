@@ -2,7 +2,6 @@ package session
 
 import (
 	"context"
-
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/guidance"
@@ -10,7 +9,7 @@ import (
 
 // TryConsumeLoopBudgetForTest exposes budget consumption for unit tests.
 func (m *Manager) TryConsumeLoopBudgetForTest(ctx context.Context, sessionID, runID string) bool {
-	return m.ensureCoordinatorRuntime().CoordinatorLoop().TryConsumeBudgetForTest(ctx, sessionID, runID)
+	return m.ensureCoordinatorRuntime().CoordinatorLoop().Admission.ConsumeBudget(ctx, sessionID, runID, anchor.LegFinished)
 }
 
 // PendingKickIDForTest reports a queued kick without consuming it.
@@ -25,17 +24,17 @@ func (m *Manager) ClearPendingKickForTest(sessionID string) {
 
 // PendingLoopNudgeForTest reports a deferred loop nudge.
 func (m *Manager) PendingLoopNudgeForTest(sessionID string) (anchor.ID, bool) {
-	return m.ensureCoordinatorRuntime().CoordinatorLoop().PendingForTest(sessionID)
+	return m.ensureCoordinatorRuntime().CoordinatorLoop().Nudges.Pending(sessionID)
 }
 
 // DrainLoopPendingForTest runs the idle drain path for tests.
 func (m *Manager) DrainLoopPendingForTest(ctx context.Context, sessionID string) {
-	m.ensureCoordinatorRuntime().CoordinatorLoop().DrainPending(ctx, sessionID)
+	m.ensureCoordinatorRuntime().CoordinatorLoop().Nudges.DrainPending(ctx, sessionID)
 }
 
 // BeginPromptExecutionForTest marks the short-lived execution lane occupied.
 func (m *Manager) BeginPromptExecutionForTest(ctx context.Context, sessionID string) func() {
-	return m.ensureCoordinatorRuntime().CoordinatorLoop().BeginPromptExecution(ctx, sessionID)
+	return m.ensureCoordinatorRuntime().CoordinatorLoop().Admission.BeginPromptExecution(ctx, sessionID)
 }
 
 // FinishPromptExecutionForTest settles an execution and drains queued wakes.

@@ -4,16 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
-	"runtime/debug"
-	"strings"
-	"time"
-
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/session/lifecycle"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/pkg/api"
+	"log/slog"
+	"runtime/debug"
+	"strings"
+	"time"
 )
 
 type sessionWorkerAbort interface {
@@ -172,9 +171,9 @@ func (m *Manager) cancelTreeTurns(ctx context.Context, tree []store.SessionTreeM
 	rt := m.ensureCoordinatorRuntime()
 	for _, sess := range tree {
 		m.CancelInFlightPrompt(sess.ID)
-		rt.CoordinatorLoop().ClearPending(sess.ID)
+		rt.CoordinatorLoop().Nudges.ClearPending(sess.ID)
 		rt.Kicks().ClearPending(sess.ID)
-		rt.CoordinatorLoop().InterruptSleep(ctx, sess.ID)
+		rt.CoordinatorLoop().Waits.InterruptSleep(ctx, sess.ID)
 	}
 }
 

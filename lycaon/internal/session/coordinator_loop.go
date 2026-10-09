@@ -2,11 +2,10 @@ package session
 
 import (
 	"context"
-	"strings"
-	"time"
-
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
+	"strings"
+	"time"
 )
 
 // SetLoopWorkflowSource wires workflow run lookups for coordinator loop policy.
@@ -19,7 +18,7 @@ func (m *Manager) SetLoopWorkflowSource(src loopwake.LoopWorkflowSource) {
 
 // NudgeCoordinatorLoop queues an optional inform and maybe runs a host coordinator turn.
 func (m *Manager) NudgeCoordinatorLoop(ctx context.Context, sessionID string, wake, inform anchor.ID, legID string, env anchor.Envelope) {
-	m.ensureCoordinatorRuntime().CoordinatorLoop().Nudge(ctx, sessionID, wake, inform, legID, env)
+	m.ensureCoordinatorRuntime().CoordinatorLoop().Nudges.Nudge(ctx, sessionID, wake, inform, legID, env)
 }
 
 // NudgeCoordinatorLoopAfterWorkerJobTerminal queues worker.task.finished inform and
@@ -32,7 +31,7 @@ func (m *Manager) NudgeCoordinatorLoopAfterWorkerJobTerminal(
 	if m == nil || strings.TrimSpace(parentID) == "" || strings.TrimSpace(completingJobID) == "" {
 		return
 	}
-	m.ensureCoordinatorRuntime().CoordinatorLoop().NudgeAfterWorkerJobTerminal(
+	m.ensureCoordinatorRuntime().CoordinatorLoop().Nudges.NudgeAfterWorkerJobTerminal(
 		ctx,
 		parentID,
 		completingJobID,
@@ -45,11 +44,11 @@ func (m *Manager) NudgeCoordinatorLoopAfterWorkerJobTerminal(
 
 // ResetLoopBudget clears the per-run coordinator loop cycle counter.
 func (m *Manager) ResetLoopBudget(runID string) {
-	m.ensureCoordinatorRuntime().CoordinatorLoop().ResetBudget(runID)
+	m.ensureCoordinatorRuntime().CoordinatorLoop().Admission.ResetBudget(runID)
 }
 
 func (m *Manager) nudgeLegFinished(ctx context.Context, parentID string, completedAt time.Time, legID string) {
-	m.ensureCoordinatorRuntime().CoordinatorLoop().NudgeLegFinished(ctx, parentID, completedAt, legID)
+	m.ensureCoordinatorRuntime().CoordinatorLoop().Nudges.NudgeLegFinished(ctx, parentID, completedAt, legID)
 }
 
 func (m *Manager) takeWorkerDigest(jobID string) string {
@@ -66,7 +65,7 @@ func (m *Manager) takeWorkerDigest(jobID string) string {
 
 // ShouldLoopWake exposes loop policy evaluation for tests.
 func (m *Manager) ShouldLoopWake(ctx context.Context, sessionID string, wake anchor.ID) (bool, string, error) {
-	return m.ensureCoordinatorRuntime().CoordinatorLoop().ShouldLoopWake(ctx, sessionID, wake)
+	return m.ensureCoordinatorRuntime().CoordinatorLoop().Admission.ShouldLoopWake(ctx, sessionID, wake)
 }
 
 // WaitForCoordinatorAsyncTurns drains host turns before session resources are released.
@@ -74,7 +73,7 @@ func (m *Manager) WaitForCoordinatorAsyncTurns(ctx context.Context) {
 	if m == nil {
 		return
 	}
-	m.ensureCoordinatorRuntime().CoordinatorLoop().WaitForAsyncTurns(ctx)
+	m.ensureCoordinatorRuntime().CoordinatorLoop().Turns.WaitForAsyncTurns(ctx)
 	m.roundEndDrains.wait(ctx)
 }
 
@@ -97,7 +96,7 @@ func (m *Manager) parkBlockedLiveCommands(ctx context.Context, sessionID string)
 		return false
 	}
 	loop := m.ensureCoordinatorRuntime().CoordinatorLoop()
-	loop.EnterSleep(
+	loop.Waits.EnterSleep(
 		ctx,
 		sessionID,
 		time.Now().UTC().Add(time.Duration(loopwake.DefaultWaitSeconds)*time.Second),
@@ -106,10 +105,10 @@ func (m *Manager) parkBlockedLiveCommands(ctx context.Context, sessionID string)
 		handles,
 		loopwake.SleepMoverHost,
 	)
-	loop.MarkWaitCalled(sessionID)
+	loop.Waits.MarkWaitCalled(sessionID)
 	// Completion between the job snapshot and EnterSleep needs an explicit wake.
 	if !m.bgRegistry.HasRunningHandles(sessionID, handles) {
-		loop.NudgeProcessFinished(ctx, sessionID, handles[0], anchor.Envelope{})
+		loop.Nudges.NudgeProcessFinished(ctx, sessionID, handles[0], anchor.Envelope{})
 	}
 	return true
 }

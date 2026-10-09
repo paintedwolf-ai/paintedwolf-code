@@ -2,25 +2,24 @@ package loopwake
 
 import (
 	"context"
-	"strings"
-	"sync"
-	"sync/atomic"
-	"testing"
-	"time"
-
 	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
 )
 
 // recordDeliveries captures each resumed wait's winner.
 func recordDeliveries(loop *LoopEngine) func() []awaitstore.Condition {
 	var mu sync.Mutex
 	var winners []awaitstore.Condition
-	deps := loop.loopDeps()
+	deps := loopDepsSnapshotForTest(loop)
 	deps.RunWaitResume = func(_ context.Context, _ string, delivery WaitDelivery) (*promptresult.Result, error) {
 		if err := delivery.Admitted(); err != nil {
 			return nil, err
@@ -77,7 +76,7 @@ func TestCompletionWakeCarriesTheCompletionReport(t *testing.T) {
 
 func TestReconciliationWaitsForThePublishedCompletion(t *testing.T) {
 	loop, store, reg := completionWaitFixture(t)
-	deps := loop.loopDeps()
+	deps := loopDepsSnapshotForTest(loop)
 	var published atomic.Bool
 	deps.ProcessState = func(string, string) (bool, bool) { return true, false }
 	deps.ProcessReport = func(string, string) (string, bool) {

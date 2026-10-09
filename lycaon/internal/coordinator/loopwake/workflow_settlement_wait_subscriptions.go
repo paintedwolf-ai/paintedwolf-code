@@ -5,8 +5,7 @@ import (
 	"fmt"
 )
 
-// CloseCompletedWorkflowWait releases a phase park without starting another model turn.
-func (l *LoopEngine) CloseCompletedWorkflowWait(ctx context.Context, sessionID string) (bool, error) {
+func (l *WaitSubscriptions) CloseCompletedWorkflowWait(ctx context.Context, sessionID string) (bool, error) {
 	deps := l.loopDeps()
 	if deps.WorkerCycleIdle != nil {
 		if deps.GetSession == nil {
@@ -24,7 +23,7 @@ func (l *LoopEngine) CloseCompletedWorkflowWait(ctx context.Context, sessionID s
 			return false, err
 		}
 	}
-	if l.sessionHasPendingUserInput(ctx, sessionID) {
+	if l.Facts.sessionHasPendingUserInput(ctx, sessionID) {
 		return false, nil
 	}
 	if store := l.durableWaitStore(); store != nil {
@@ -33,8 +32,8 @@ func (l *LoopEngine) CloseCompletedWorkflowWait(ctx context.Context, sessionID s
 			return false, err
 		}
 	}
-	l.breakSleep(ctx, sessionID, "workflow_complete", false)
-	st := l.sleep.state(sessionID)
+	l.Waits.breakSleep(ctx, sessionID, "workflow_complete", false)
+	st := l.Waits.sleep.state(sessionID)
 	st.mu.Lock()
 	st.waitThisTurn = false
 	st.mu.Unlock()

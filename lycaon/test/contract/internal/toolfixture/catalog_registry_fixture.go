@@ -2,9 +2,6 @@ package toolfixture
 
 import (
 	"context"
-	"path/filepath"
-	"testing"
-
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/blueprint"
@@ -49,6 +46,8 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/workflowfixture"
+	"path/filepath"
+	"testing"
 )
 
 func registerCatalogToolsOnto(t *testing.T, reg *tools.DefaultRegistry) {
@@ -200,7 +199,7 @@ func ContractServeBootRegistry(t *testing.T) *tools.DefaultRegistry {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := loopwake.RegisterWaitTool(rt.Registry, loopwake.NewLoopEngine(), loopwake.WaitToolDeps{}); err != nil {
+	if err := loopwake.RegisterWaitTool(rt.Registry, loopwake.NewLoopEngine().Subscriptions, loopwake.WaitToolDeps{}); err != nil {
 		contractcheck.FailErr(t, "loopwake.RegisterWaitTool failed", err)
 	}
 	renderBudgets, err := browser.LoadRenderBudgets()

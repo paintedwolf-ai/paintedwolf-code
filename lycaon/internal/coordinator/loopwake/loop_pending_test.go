@@ -6,7 +6,7 @@ import (
 )
 
 func TestHasPendingLoopWakes(t *testing.T) {
-	engine := &LoopEngine{}
+	engine := NewLoopEngine()
 	const id = "sess-pending"
 
 	if engine.HasPendingLoopWakes(id) {

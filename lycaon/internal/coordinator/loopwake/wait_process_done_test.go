@@ -3,13 +3,12 @@ package loopwake
 import (
 	"context"
 	"encoding/json"
-	"testing"
-	"time"
-
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
+	"testing"
+	"time"
 )
 
 func TestResolveConditionsAcceptsProcessDone(t *testing.T) {
@@ -49,16 +48,16 @@ func TestNudgeProcessFinishedBreaksSubscribedSleepOnly(t *testing.T) {
 	}
 	loop.SetDeps(deps)
 	deadline := time.Now().UTC().Add(10 * time.Minute)
-	loop.EnterSleep(context.Background(), "proc-waiter", deadline, "waiting for command", []WaitTrigger{WaitTriggerTimer, WaitTriggerProcessDone}, nil, SleepMoverHost)
-	loop.EnterSleep(context.Background(), "worker-waiter", deadline, "waiting for workers", DefaultCoordinatorWaitTriggers(false), nil, SleepMoverHost)
+	loop.Waits.EnterSleep(context.Background(), "proc-waiter", deadline, "waiting for command", []WaitTrigger{WaitTriggerTimer, WaitTriggerProcessDone}, nil, SleepMoverHost)
+	loop.Waits.EnterSleep(context.Background(), "worker-waiter", deadline, "waiting for workers", DefaultCoordinatorWaitTriggers(false), nil, SleepMoverHost)
 
-	loop.NudgeProcessFinished(context.Background(), "proc-waiter", "handle-1", anchor.Envelope{})
-	loop.NudgeProcessFinished(context.Background(), "worker-waiter", "handle-1", anchor.Envelope{})
+	loop.Nudges.NudgeProcessFinished(context.Background(), "proc-waiter", "handle-1", anchor.Envelope{})
+	loop.Nudges.NudgeProcessFinished(context.Background(), "worker-waiter", "handle-1", anchor.Envelope{})
 
-	if loop.IsSleeping("proc-waiter") {
+	if loop.Waits.IsSleeping("proc-waiter") {
 		t.Fatal("process_done nudge must break a subscribed sleep")
 	}
-	if !loop.IsSleeping("worker-waiter") {
+	if !loop.Waits.IsSleeping("worker-waiter") {
 		t.Fatal("process_done nudge must not break an unsubscribed sleep")
 	}
 }
@@ -73,18 +72,18 @@ func TestProcessDoneOnlySleepSurvivesPastAdvisoryDeadline(t *testing.T) {
 	loop.SetDeps(deps)
 	// The command remains live after its advisory deadline.
 	past := time.Now().UTC().Add(-2 * time.Minute)
-	loop.EnterSleep(
+	loop.Waits.EnterSleep(
 		context.Background(), "proc-waiter", past, "Wait for the test command to finish.",
 		[]WaitTrigger{WaitTriggerProcessDone}, []string{"handle-1"}, SleepMoverHost,
 	)
-	if !loop.IsSleeping("proc-waiter") {
+	if !loop.Waits.IsSleeping("proc-waiter") {
 		t.Fatal("process_done-only sleep must stay armed after the advisory wake_at")
 	}
-	if !loop.SessionSleepingOnProcess("proc-waiter", "handle-1") {
+	if !loop.Subscriptions.SessionSleepingOnProcess("proc-waiter", "handle-1") {
 		t.Fatal("exact handle must still match after the advisory wake_at")
 	}
-	loop.NudgeProcessFinished(context.Background(), "proc-waiter", "handle-1", anchor.Envelope{})
-	if loop.IsSleeping("proc-waiter") {
+	loop.Nudges.NudgeProcessFinished(context.Background(), "proc-waiter", "handle-1", anchor.Envelope{})
+	if loop.Waits.IsSleeping("proc-waiter") {
 		t.Fatal("process exit must break the event-only sleep")
 	}
 }
@@ -97,17 +96,17 @@ func TestNudgeProcessFinishedMatchesExactHandleSelection(t *testing.T) {
 	}
 	loop.SetDeps(deps)
 	deadline := time.Now().UTC().Add(10 * time.Minute)
-	loop.EnterSleep(
+	loop.Waits.EnterSleep(
 		context.Background(), "proc-waiter", deadline, "waiting for command",
 		[]WaitTrigger{WaitTriggerTimer, WaitTriggerProcessDone}, []string{"wanted-handle"}, SleepMoverHost,
 	)
 
-	loop.NudgeProcessFinished(context.Background(), "proc-waiter", "other-handle", anchor.Envelope{})
-	if !loop.IsSleeping("proc-waiter") {
+	loop.Nudges.NudgeProcessFinished(context.Background(), "proc-waiter", "other-handle", anchor.Envelope{})
+	if !loop.Waits.IsSleeping("proc-waiter") {
 		t.Fatal("a different command must not break an exact-handle wait")
 	}
-	loop.NudgeProcessFinished(context.Background(), "proc-waiter", "wanted-handle", anchor.Envelope{})
-	if loop.IsSleeping("proc-waiter") {
+	loop.Nudges.NudgeProcessFinished(context.Background(), "proc-waiter", "wanted-handle", anchor.Envelope{})
+	if loop.Waits.IsSleeping("proc-waiter") {
 		t.Fatal("the selected command must break the exact-handle wait")
 	}
 }
@@ -122,7 +121,7 @@ func TestWaitProcessDoneAlreadySatisfiedWhenNothingRunning(t *testing.T) {
 	loop := NewLoopEngine()
 	loop.SetDeps(processCycleLoopDeps(false))
 	reg := tools.NewDefaultRegistry()
-	if err := RegisterWaitTool(reg, loop, WaitToolDeps{}); err != nil {
+	if err := RegisterWaitTool(reg, loop.Subscriptions, WaitToolDeps{}); err != nil {
 		t.Fatalf("RegisterWaitTool: %v", err)
 	}
 	out, err := reg.Run(context.Background(), "wait", map[string]any{
@@ -141,7 +140,7 @@ func TestWaitProcessDoneAlreadySatisfiedWhenNothingRunning(t *testing.T) {
 	if result.Status != "process_done" {
 		t.Fatalf("status = %q want process_done", result.Status)
 	}
-	if loop.IsSleeping("s1") {
+	if loop.Waits.IsSleeping("s1") {
 		t.Fatal("must not arm sleep when nothing is running")
 	}
 }
@@ -150,7 +149,7 @@ func TestWaitProcessDoneArmsSleepWhileRunning(t *testing.T) {
 	loop := NewLoopEngine()
 	loop.SetDeps(processCycleLoopDeps(true))
 	reg := tools.NewDefaultRegistry()
-	if err := RegisterWaitTool(reg, loop, WaitToolDeps{}); err != nil {
+	if err := RegisterWaitTool(reg, loop.Subscriptions, WaitToolDeps{}); err != nil {
 		t.Fatalf("RegisterWaitTool: %v", err)
 	}
 	invocationOut := &tools.ToolInvocationOut{}
@@ -169,11 +168,11 @@ func TestWaitProcessDoneArmsSleepWhileRunning(t *testing.T) {
 	if !WaitCompletionEndsCycle("wait", invocationOut.Completion) {
 		t.Fatalf("output = %q", out)
 	}
-	if !loop.IsSleeping("s1") {
+	if !loop.Waits.IsSleeping("s1") {
 		t.Fatal("expected sleeping while a command is running")
 	}
-	if !hasWaitTrigger(loop.WaitSubscriptionForTest("s1"), WaitTriggerProcessDone) {
-		t.Fatalf("armed triggers = %v want process_done", loop.WaitSubscriptionForTest("s1"))
+	if !hasWaitTrigger(waitSubscriptionForTest(loop.Subscriptions, "s1"), WaitTriggerProcessDone) {
+		t.Fatalf("armed triggers = %v want process_done", waitSubscriptionForTest(loop.Subscriptions, "s1"))
 	}
 }
 
@@ -181,7 +180,7 @@ func TestWaitProcessDoneOnlyAutoAddsTimerBackstop(t *testing.T) {
 	loop := NewLoopEngine()
 	loop.SetDeps(processCycleLoopDeps(true))
 	reg := tools.NewDefaultRegistry()
-	if err := RegisterWaitTool(reg, loop, WaitToolDeps{}); err != nil {
+	if err := RegisterWaitTool(reg, loop.Subscriptions, WaitToolDeps{}); err != nil {
 		t.Fatalf("RegisterWaitTool: %v", err)
 	}
 	out, err := reg.Run(context.Background(), "wait", map[string]any{
@@ -208,11 +207,11 @@ func TestWaitProcessDoneOnlyAutoAddsTimerBackstop(t *testing.T) {
 	if len(result.Conditions) != 1 || result.Conditions[0].Kind != string(WaitTriggerProcessDone) {
 		t.Fatalf("result conditions = %v want process_done", result.Conditions)
 	}
-	armed := loop.WaitSubscriptionForTest("s1")
+	armed := waitSubscriptionForTest(loop.Subscriptions, "s1")
 	if !hasWaitTrigger(armed, WaitTriggerTimer) || !hasWaitTrigger(armed, WaitTriggerProcessDone) {
 		t.Fatalf("armed triggers = %v want timer+process_done", armed)
 	}
-	if !loop.IsSleeping("s1") {
+	if !loop.Waits.IsSleeping("s1") {
 		t.Fatal("expected sleeping with a real timer backstop")
 	}
 }
@@ -227,7 +226,7 @@ func TestWaitProcessDoneFastPathUsesExactHandles(t *testing.T) {
 	}
 	loop.SetDeps(deps)
 	reg := tools.NewDefaultRegistry()
-	if err := RegisterWaitTool(reg, loop, WaitToolDeps{}); err != nil {
+	if err := RegisterWaitTool(reg, loop.Subscriptions, WaitToolDeps{}); err != nil {
 		t.Fatalf("RegisterWaitTool: %v", err)
 	}
 	out, err := reg.Run(context.Background(), "wait", map[string]any{
@@ -252,13 +251,13 @@ func TestWaitResumePreservesExactProcessHandles(t *testing.T) {
 	loop := NewLoopEngine()
 	loop.SetDeps(processCycleLoopDeps(true))
 	deadline := time.Now().UTC().Add(10 * time.Minute)
-	loop.EnterSleep(
+	loop.Waits.EnterSleep(
 		context.Background(), "s1", deadline, "waiting for command",
 		[]WaitTrigger{WaitTriggerTimer, WaitTriggerProcessDone}, []string{"command-3"}, SleepMoverHost,
 	)
-	loop.breakSleep(t.Context(), "s1", "process.finished", true)
+	loop.Waits.breakSleep(t.Context(), "s1", "process.finished", true)
 	reg := tools.NewDefaultRegistry()
-	if err := RegisterWaitTool(reg, loop, WaitToolDeps{}); err != nil {
+	if err := RegisterWaitTool(reg, loop.Subscriptions, WaitToolDeps{}); err != nil {
 		t.Fatalf("RegisterWaitTool: %v", err)
 	}
 	out, err := reg.Run(context.Background(), "wait", map[string]any{
@@ -280,7 +279,7 @@ func TestWaitRejectsHandlesOutsideProcessDoneCondition(t *testing.T) {
 	loop := NewLoopEngine()
 	loop.SetDeps(idleWaitLoopDeps())
 	reg := tools.NewDefaultRegistry()
-	if err := RegisterWaitTool(reg, loop, WaitToolDeps{}); err != nil {
+	if err := RegisterWaitTool(reg, loop.Subscriptions, WaitToolDeps{}); err != nil {
 		t.Fatalf("RegisterWaitTool: %v", err)
 	}
 	_, err := resolveConditions([]any{map[string]any{"kind": "scan_done", "handles": []any{"command-1"}}})

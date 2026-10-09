@@ -1,11 +1,9 @@
 package loopwake
 
 import (
-	"context"
+	"github.com/google/uuid"
 	"strings"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 // SleepMover identifies who can end an armed sleep.
@@ -28,18 +26,6 @@ type WaitLease struct {
 	Active     bool
 	StartedAt  time.Time
 	Triggers   []WaitTrigger
-}
-
-// publishWaitLease publishes one lease edge when configured.
-func (l *LoopEngine) publishWaitLease(ctx context.Context, lease WaitLease) {
-	if l == nil || strings.TrimSpace(lease.ActivityID) == "" {
-		return
-	}
-	publish := l.loopDeps().PublishWaitLease
-	if publish == nil {
-		return
-	}
-	publish(ctx, lease.SessionID, lease)
 }
 
 // openWaitLeaseLocked opens a lease for a host-mover sleep.
@@ -73,15 +59,4 @@ func closeWaitLeaseLocked(st *sessionSleep, sessionID string) (WaitLease, bool) 
 	st.activityID = ""
 	st.activityStartedAt = time.Time{}
 	return lease, true
-}
-
-// WaitLeaseOpenForTest reports whether an armed-sleep lease is open.
-func (l *LoopEngine) WaitLeaseOpenForTest(sessionID string) bool {
-	if l == nil {
-		return false
-	}
-	st := l.sleep.state(sessionID)
-	st.mu.Lock()
-	defer st.mu.Unlock()
-	return strings.TrimSpace(st.activityID) != ""
 }

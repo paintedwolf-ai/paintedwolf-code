@@ -3,17 +3,16 @@ package loopwake
 import (
 	"context"
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/promptresult"
-	"sync/atomic"
-	"testing"
-	"time"
-
 	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
+	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
+	"sync/atomic"
+	"testing"
+	"time"
 )
 
 func completionWaitArgs() map[string]any {
@@ -35,7 +34,7 @@ func completionWaitFixture(t *testing.T) (*LoopEngine, *awaitstore.Store, *tools
 	}
 	loop.SetDeps(deps)
 	reg := tools.NewDefaultRegistry()
-	testutil.FailErr(t, "register completion wait", RegisterWaitTool(reg, loop, WaitToolDeps{Store: store, RuntimeContext: t.Context()}))
+	testutil.FailErr(t, "register completion wait", RegisterWaitTool(reg, loop.Subscriptions, WaitToolDeps{Store: store, RuntimeContext: t.Context()}))
 	return loop, store, reg
 }
 
@@ -96,7 +95,7 @@ func TestCompletionWaitAllowsBoundedTimeout(t *testing.T) {
 }
 
 func completionSleepState(loop *LoopEngine, sessionID string) (untilComplete, hasTimer bool, until time.Time) {
-	state := loop.sleep.state(sessionID)
+	state := loop.Waits.sleep.state(sessionID)
 	state.mu.Lock()
 	defer state.mu.Unlock()
 	return state.untilComplete, state.timer != nil, state.until
@@ -114,9 +113,9 @@ func TestBoundedCompletionWaitResumesFromDurableLease(t *testing.T) {
 	// A fresh engine has no runtime subscription, so resume reads the durable lease.
 	restarted := NewLoopEngine()
 	t.Cleanup(func() { restarted.ForgetSession(context.Background(), "s1") })
-	restarted.SetDeps(loop.loopDeps())
+	restarted.SetDeps(loopDepsSnapshotForTest(loop))
 	restartedReg := tools.NewDefaultRegistry()
-	testutil.FailErr(t, "register restarted wait", RegisterWaitTool(restartedReg, restarted, WaitToolDeps{Store: store, RuntimeContext: t.Context()}))
+	testutil.FailErr(t, "register restarted wait", RegisterWaitTool(restartedReg, restarted.Subscriptions, WaitToolDeps{Store: store, RuntimeContext: t.Context()}))
 	out, err := restartedReg.Run(t.Context(), "wait", map[string]any{"resume": true}, tctx)
 	testutil.FailErr(t, "resume bounded completion wait", err)
 	var result WaitToolResult
@@ -216,7 +215,7 @@ func TestCompletionWaitHasNoTimerAndResumesMode(t *testing.T) {
 	testutil.FailErr(t, "replace completion mode", err)
 	result = WaitToolResult{}
 	testutil.FailErr(t, "decode bounded replacement", json.Unmarshal([]byte(out), &result))
-	if result.UntilComplete || result.WakeAt == "" || !hasWaitTrigger(loop.WaitSubscriptionForTest("s1"), WaitTriggerTimer) {
+	if result.UntilComplete || result.WakeAt == "" || !hasWaitTrigger(waitSubscriptionForTest(loop, "s1"), WaitTriggerTimer) {
 		t.Fatalf("explicit timeout did not replace completion mode: %+v", result)
 	}
 }
@@ -225,7 +224,7 @@ func TestCompletionWaitDeliversTerminalOrLostProcessOnce(t *testing.T) {
 	for _, event := range []string{"exit", "during-arm", "recovery"} {
 		t.Run(event, func(t *testing.T) {
 			loop, store, reg := completionWaitFixture(t)
-			deps := loop.loopDeps()
+			deps := loopDepsSnapshotForTest(loop)
 			var deliveries atomic.Int32
 			deps.RunWaitResume = func(_ context.Context, _ string, delivery WaitDelivery) (*promptresult.Result, error) {
 				if event == "recovery" && delivery.Condition.Outcome != "unavailable" {
@@ -304,7 +303,7 @@ func TestCompletionWaitReconciliationKeepsLiveProcessParked(t *testing.T) {
 
 func TestCompletionWaitReturnsAlreadyFinishedWithoutParking(t *testing.T) {
 	loop, store, reg := completionWaitFixture(t)
-	deps := loop.loopDeps()
+	deps := loopDepsSnapshotForTest(loop)
 	deps.ProcessState = func(string, string) (bool, bool) { return true, false }
 	loop.SetDeps(deps)
 	out, err := reg.Run(t.Context(), "wait", completionWaitArgs(), tools.ToolContext{SessionID: "s1", ProjectID: testdbseed.DefaultProjectID})

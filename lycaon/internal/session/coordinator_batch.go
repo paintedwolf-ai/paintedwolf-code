@@ -2,13 +2,12 @@ package session
 
 import (
 	"context"
-	"strings"
-
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/batch"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/pkg/api"
+	"strings"
 )
 
 func (m *Manager) applyCoordinatorBatchEvent(ctx context.Context, sessionID string, ev batch.Event, eventSeq int) {
@@ -137,6 +136,6 @@ func (m *Manager) disarmCoordinatorLoopIfBatchTerminal(ctx context.Context, sess
 	state := m.BuildImplementSessionState(ctx, sess)
 	switch state.BatchPhase {
 	case batch.PhaseSynthesize, batch.PhaseClosed:
-		m.ensureCoordinatorRuntime().CoordinatorLoop().DisarmTimerBackstop(ctx, sessionID)
+		m.ensureCoordinatorRuntime().CoordinatorLoop().Waits.DisarmTimerBackstop(ctx, sessionID)
 	}
 }

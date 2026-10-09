@@ -4,9 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"testing"
-	"time"
-
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/events"
@@ -18,6 +15,8 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
+	"testing"
+	"time"
 )
 
 type sessionStatusFailStore struct {
@@ -104,7 +103,7 @@ func TestFinishPromptExecutionKeepsUserTurnBusyAcrossHostContinuation(t *testing
 	t.Cleanup(unsubscribe)
 
 	mgr.beginPromptTurn(sess.ID, "")
-	mgr.ensureCoordinatorRuntime().CoordinatorLoop().MarkWaitCalled(sess.ID)
+	mgr.ensureCoordinatorRuntime().CoordinatorLoop().Waits.MarkWaitCalled(sess.ID)
 	testutil.FailErr(t, "finish waiting prompt", mgr.finishPromptExecution(ctx, sess.ID, false, false, ""))
 	afterWait, err := st.Get(ctx, sess.ID)
 	testutil.FailErr(t, "read session after wait", err)
@@ -114,8 +113,8 @@ func TestFinishPromptExecutionKeepsUserTurnBusyAcrossHostContinuation(t *testing
 	assertNoSessionIdleEvent(t, eventCh)
 
 	loop := mgr.ensureCoordinatorRuntime().CoordinatorLoop()
-	finishExecution := loop.BeginPromptExecution(t.Context(), sess.ID)
-	loop.Nudge(ctx, sess.ID, anchor.PhaseAdvanced, "", "", anchor.Envelope{})
+	finishExecution := loop.Admission.BeginPromptExecution(t.Context(), sess.ID)
+	loop.Nudges.Nudge(ctx, sess.ID, anchor.PhaseAdvanced, "", "", anchor.Envelope{})
 	mgr.beginPromptTurn(sess.ID, "")
 	testutil.FailErr(t, "finish terminal host prompt", mgr.finishPromptExecution(ctx, sess.ID, false, true, ""))
 	deferred, err := st.Get(ctx, sess.ID)
@@ -165,7 +164,7 @@ func TestFinishPromptExecutionKeepsUserTurnBusyWhileWaitIsArmed(t *testing.T) {
 	testutil.FailErr(t, "mark visible turn busy", st.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
 
 	loop := mgr.ensureCoordinatorRuntime().CoordinatorLoop()
-	loop.EnterSleep(
+	loop.Waits.EnterSleep(
 		ctx,
 		sess.ID,
 		time.Now().UTC().Add(time.Minute),
@@ -174,7 +173,7 @@ func TestFinishPromptExecutionKeepsUserTurnBusyWhileWaitIsArmed(t *testing.T) {
 		[]string{"command-1"},
 		loopwake.SleepMoverHost,
 	)
-	loop.MarkWaitCalled(sess.ID)
+	loop.Waits.MarkWaitCalled(sess.ID)
 	mgr.beginPromptTurn(sess.ID, "")
 	testutil.FailErr(t, "finish waiting prompt", mgr.finishPromptExecution(ctx, sess.ID, false, true, ""))
 
