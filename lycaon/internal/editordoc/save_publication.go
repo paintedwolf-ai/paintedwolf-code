@@ -19,6 +19,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
+// Save publishes an exact accepted snapshot and deduplicates operation retries.
 func (s *Service) Save(ctx context.Context, p *project.Project, id, clientID, operationID, sessionID string, turn int, expected int64) (*Document, error) {
 	s.ops.RLock()
 	defer s.ops.RUnlock()

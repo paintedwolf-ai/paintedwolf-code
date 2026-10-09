@@ -429,7 +429,6 @@ func (s *Service) ObserveDisk(ctx context.Context, p *project.Project, id, clien
 	return s.withParticipants(d), nil
 }
 
-// Save publishes an exact accepted snapshot and deduplicates operation retries.
 func readDocumentSource(p *project.Project, d *Document) (*projectsource.SourceReadResult, error) {
 	_, read, err := observeDocumentSource(p, d)
 	return read, err

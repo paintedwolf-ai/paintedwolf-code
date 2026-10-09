@@ -18,8 +18,7 @@ type walkFileState struct {
 	unpresentedAgentEffects             int64
 }
 
-// walkFileStates reads each file's head on the branch its root reads under
-// the request, so trunk and a chat's worktree never answer for each other.
+// walkFileStates reads each file head on its root's selected branch.
 func (s *Walk) walkFileStates(
 	ctx context.Context,
 	projectID string,
