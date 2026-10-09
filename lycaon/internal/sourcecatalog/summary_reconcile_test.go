@@ -122,7 +122,7 @@ func TestTreeReconcileTruncatesWriteAheadLog(t *testing.T) {
 	}
 }
 
-func TestdefaultTreeStorePolicy().retentionRemovesOnlyUnusedGenerations(t *testing.T) {
+func TestTreeStoreRetentionRemovesOnlyUnusedGenerations(t *testing.T) {
 	c := treeTestCatalog(t)
 	root := Root{ID: "root", Path: t.TempDir()}
 	writeTreeTestFile(t, root.Path, "a.go", "package source")
@@ -137,8 +137,8 @@ func TestdefaultTreeStorePolicy().retentionRemovesOnlyUnusedGenerations(t *testi
 	}
 	recent := filepath.Join(c.Trees.treeDir, "0000cafef00d"+treeFileSuffix)
 	recentDB, err := openTreeDB(t.Context(), recent)
- testutil.FailErr(t, "open recent generation", err)
- testutil.FailErr(t, "close recent generation", recentDB.Close())
+	testutil.FailErr(t, "open recent generation", err)
+	testutil.FailErr(t, "close recent generation", recentDB.Close())
 	removed, err := c.Trees.ReconcileTreeStores(t.Context())
 	testutil.FailErr(t, "reconcile generations", err)
 	if removed != 1 {
