@@ -716,28 +716,15 @@
     ]
   },
   "ci": {
-    "fast-static": {
+    "ready": {
       "targets": [
         "build",
         "lint:fast",
+        "budgets",
         "den:typecheck",
         "den:lint"
       ],
-      "minutes": 30,
-      "profiles": [
-        "fast"
-      ],
-      "suite": "all",
-      "setup": "verification"
-    },
-    "fast-tests": {
-      "targets": [
-        "test:contract",
-        "budgets",
-        "coverage:changes",
-        "den:coverage:changes"
-      ],
-      "minutes": 30,
+      "minutes": 15,
       "profiles": [
         "fast"
       ],
@@ -756,7 +743,8 @@
         "integration"
       ],
       "suite": "all",
-      "setup": "verification"
+      "setup": "verification",
+      "first": true
     },
     "build": {
       "targets": [
@@ -800,7 +788,8 @@
         "integration"
       ],
       "suite": "all",
-      "setup": "verification"
+      "setup": "verification",
+      "first": true
     },
     "vulnerabilities": {
       "targets": [
@@ -1036,13 +1025,14 @@
     "runners": 20,
     "macos_runners": 5,
     "max_parallel": {
-      "fast": 2,
+      "fast": 1,
       "integration": 4,
       "check": 3,
       "nightly": 2,
       "release": 3
     },
     "footprints": {
+      "ci.yml": 1,
       "qualification.yml": 3,
       "build-caches.yml": 1,
       "nightly.yml": 2,

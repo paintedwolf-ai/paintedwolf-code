@@ -43,8 +43,10 @@ def lanes():
     for name, lane in values.items():
         if not re.fullmatch(r"[a-z][a-z0-9-]*", name):
             raise ValueError(f"invalid CI lane: {name}")
-        if set(lane) - {"targets", "minutes", "profiles", "suite", "setup", "runner", "workers", "shards"}:
+        if set(lane) - {"targets", "minutes", "profiles", "suite", "setup", "runner", "workers", "shards", "first"}:
             raise ValueError(f"unknown CI lane fields: {name}")
+        if lane.get("first", True) is not True:
+            raise ValueError(f"CI lane {name} marks itself first or leaves the field out")
         if not lane["targets"] or not set(lane["targets"]).issubset(targets):
             raise ValueError(f"CI lane {name} must name existing task targets")
         if type(lane["minutes"]) is not int or not 1 <= lane["minutes"] <= 300:
@@ -120,8 +122,9 @@ def matrix(profile, suite="all", scope=None):
                            "runner": lane.get("runner", "ubuntu-latest")})
     if not result:
         raise ValueError("CI selection contains no verification")
-    # A capped matrix starts jobs in order, so the longest lanes start first instead of finishing last.
-    return {"include": sorted(result, key=lambda row: -row["minutes"])}
+    # A capped matrix starts jobs in order: the cheap lanes that fail most often come first, so a
+    # failing group stops early, then the longest lanes, so they don't finish last.
+    return {"include": sorted(result, key=lambda row: (not values[row["lane"]].get("first"), -row["minutes"]))}
 
 
 def require_success(results, skipped=(), draft=False):
