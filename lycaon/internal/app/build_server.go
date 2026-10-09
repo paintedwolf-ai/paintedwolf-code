@@ -412,7 +412,7 @@ func (b serverWiring) wireSourceEditing(deps *api.Dependencies) error {
 	})
 	// A file the person has open is the document, for reads and writes alike.
 	b.mgr.SetEditorDocuments(editorDocumentsAdapter{service: editorDocuments})
-	b.mgr.SetSourceRewinds(&sourcerewind.Service{Ledger: b.sourceLedger, Mutations: sourceMutations, Documents: editorDocuments})
+	b.mgr.SetSourceRewinds(&sourcerewind.Service{Planner: b.sourceLedger.Comparisons, Mutations: sourceMutations, Documents: editorDocuments})
 	// Contribution dispatch uses durable receipts and policy-derived authority.
 	deps.Extensions.Contributions = extensionadmin.ContributionRuntime{
 		Receipts: commandinvoke.SQLReceipts{DB: b.db},

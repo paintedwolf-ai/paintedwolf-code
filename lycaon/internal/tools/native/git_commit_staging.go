@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 
 	"github.com/lycaon/lycaon/internal/git"
-	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
