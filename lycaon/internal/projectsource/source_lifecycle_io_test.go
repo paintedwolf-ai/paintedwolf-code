@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/desktoptrash"
 	"os"
 	"path/filepath"
 	"testing"
@@ -51,6 +52,7 @@ func TestSourceLifecycleValidationWorkIsBounded(t *testing.T) {
 			budget := total
 			switch operation {
 			case "trash":
+				budget = 0
 				testutil.FailErr(t, "trash tree", service.Delete(ctx, id, p, SourceDeleteRequest{RootID: p.Roots[0].ID, Path: "tree", Recursive: true}))
 			case "copy":
 				_, err := service.Copy(ctx, id, p, SourceCopyRequest{RootID: p.Roots[0].ID, From: "tree", To: "copy"})
@@ -62,6 +64,7 @@ func TestSourceLifecycleValidationWorkIsBounded(t *testing.T) {
 				testutil.FailErr(t, "move tree", err)
 				budget = 2 * total
 			case "restore":
+				budget = 0
 				testutil.FailErr(t, "trash tree", service.Delete(t.Context(), id, p, SourceDeleteRequest{RootID: p.Roots[0].ID, Path: "tree", Recursive: true}))
 				_, err := service.Undo(ctx, uuid.NewString(), p, SourceHistoryMutationRequest{ExpectedEntryID: id})
 				testutil.FailErr(t, "restore tree", err)
@@ -73,14 +76,17 @@ func TestSourceLifecycleValidationWorkIsBounded(t *testing.T) {
 	}
 }
 
-func TestSourceTrashRefusesChangesAfterCapture(t *testing.T) {
+func TestRetainedTrashRefusesChangesAfterCapture(t *testing.T) {
 	for _, change := range []string{"contents", "new child", "removed child", "mode"} {
 		t.Run(change, func(t *testing.T) {
 			service, p, root, _ := sourceMutationFixture(t)
 			tree := filepath.Join(root, "tree")
 			testutil.FailErr(t, "create tree", os.Mkdir(tree, 0o700))
 			testutil.FailErr(t, "seed file", os.WriteFile(filepath.Join(tree, "file"), []byte("retained"), 0o600))
-			service.Effects.SetTrashMover(func(context.Context, string) error { t.Fatal("changed tree reached Trash"); return nil })
+			service.Effects.SetTrashMover(func(context.Context, string) (desktoptrash.Receipt, error) {
+				t.Fatal("changed tree reached Trash")
+				return desktoptrash.Receipt{}, nil
+			})
 			changed := false
 			ctx := WithSourceProgress(t.Context(), func(progress SourceProgress) {
 				if changed || progress.Phase != "verifying" {
@@ -98,7 +104,7 @@ func TestSourceTrashRefusesChangesAfterCapture(t *testing.T) {
 					testutil.FailErr(t, "change child mode", os.Chmod(filepath.Join(tree, "file"), 0o400))
 				}
 			})
-			err := service.Delete(ctx, uuid.NewString(), p, SourceDeleteRequest{RootID: p.Roots[0].ID, Path: "tree", Recursive: true})
+			err := legacyTrashContext(ctx, t, service, uuid.NewString(), p, SourceDeleteRequest{RootID: p.Roots[0].ID, Path: "tree", Recursive: true})
 			if !errors.Is(err, ErrSourceMutationDiverged) {
 				t.Fatalf("changed tree accepted: %v", err)
 			}

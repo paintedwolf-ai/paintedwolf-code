@@ -27,7 +27,9 @@ func platformMove(path string) (Receipt, error) {
 		}
 		return Receipt{}, errors.New("failed to move item to trash")
 	}
-	if cResult == nil { return Receipt{}, errors.New("trash returned no recovery location") }
- defer C.free(unsafe.Pointer(cResult))
- return Receipt{Path: C.GoString(cResult)}, nil
+	if cResult == nil {
+		return Receipt{}, errors.New("trash returned no recovery location")
+	}
+	defer C.free(unsafe.Pointer(cResult))
+	return Receipt{Path: C.GoString(cResult)}, nil
 }

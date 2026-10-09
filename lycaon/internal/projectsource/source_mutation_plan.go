@@ -78,11 +78,11 @@ type sourceMutationPublication struct {
 }
 
 type sourceMutationRecovery struct {
- NativeTrash *sourceTrashRecovery `json:"native_trash,omitempty"`
-	RecoveryID    string         `json:"recovery_id,omitempty"`
-	RecoveryCount int64          `json:"recovery_count,omitempty"`
-	Disposal      sourceDisposal `json:"disposal,omitempty"`
-	TreeSHA       string         `json:"tree_sha256,omitempty"`
+	NativeTrash   *sourceTrashRecovery `json:"native_trash,omitempty"`
+	RecoveryID    string               `json:"recovery_id,omitempty"`
+	RecoveryCount int64                `json:"recovery_count,omitempty"`
+	Disposal      sourceDisposal       `json:"disposal,omitempty"`
+	TreeSHA       string               `json:"tree_sha256,omitempty"`
 }
 
 type sourceMutationPlan struct {

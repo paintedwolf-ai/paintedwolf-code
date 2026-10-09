@@ -461,6 +461,9 @@ const (
 	ApiErrorCodeSourceMoveIncomplete ApiErrorCode = "source_move_incomplete"
 	// ApiErrorCodeSourcePathBusy another file operation reserves this path
 	ApiErrorCodeSourcePathBusy ApiErrorCode = "source_path_busy"
+	// ApiErrorCodeSourceTrashRecoveryUnavailable the exact native Trash item is no
+	// longer available for restoration
+	ApiErrorCodeSourceTrashRecoveryUnavailable ApiErrorCode = "source_trash_recovery_unavailable"
 	// ApiErrorCodeSourceRecoveryFailed recovery content could not be preserved or
 	// restored
 	ApiErrorCodeSourceRecoveryFailed ApiErrorCode = "source_recovery_failed"
@@ -1107,6 +1110,7 @@ var allApiErrorCodeValues = []ApiErrorCode{
 	ApiErrorCodeSourcePathProtected,
 	ApiErrorCodeSourceMoveIncomplete,
 	ApiErrorCodeSourcePathBusy,
+	ApiErrorCodeSourceTrashRecoveryUnavailable,
 	ApiErrorCodeSourceRecoveryFailed,
 	ApiErrorCodeSourceNotFound,
 	ApiErrorCodeSourceBinaryDenied,
@@ -1559,7 +1563,8 @@ func (c ApiErrorCode) HTTPStatus() int {
 		ApiErrorCodeAskUserRejected:
 		return 409
 	case ApiErrorCodeArtifactUnavailable,
-		ApiErrorCodeArtifactDeleted:
+		ApiErrorCodeArtifactDeleted,
+		ApiErrorCodeSourceTrashRecoveryUnavailable:
 		return 410
 	case ApiErrorCodeSourceViewFrameTooLarge,
 		ApiErrorCodeBodyTooLarge,

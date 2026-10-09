@@ -68,7 +68,7 @@ async function followSourceOperation<T>(connection: BackendConnection, projectId
 
 async function submitSourceOperation<T>(connection: BackendConnection, projectId: string, id: string, path: string, init: RequestInit, signal: AbortSignal): Promise<T> {
   try {
-    const response = await lycaonFetch(connection, path, init);
+    const response = await lycaonFetch(connection, path, { ...init, signal });
     if (response.status !== 202) return await sourceResponse<T>(response);
     const state = await response.json() as SourceOperationStatus;
     if (state.complete) return await sourceOperationResult<T>(state);
@@ -83,9 +83,10 @@ async function submitSourceOperation<T>(connection: BackendConnection, projectId
 export async function sourceOperation<T>(connection: BackendConnection, projectId: string, id: string, path: string, init: RequestInit): Promise<T> {
   const completion = observeSourceOperationCompletion(connection, projectId, id);
   const follower = new AbortController();
+  const signal = init.signal ? AbortSignal.any([init.signal, follower.signal]) : follower.signal;
   try {
     return await Promise.race([
-      submitSourceOperation<T>(connection, projectId, id, path, init, follower.signal),
+      submitSourceOperation<T>(connection, projectId, id, path, init, signal),
       completion.result.then(sourceOperationResult<T>),
     ]);
   } finally {

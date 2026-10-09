@@ -4,9 +4,11 @@ package desktoptrash
 
 import (
 	"fmt"
+	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/fseffect"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"os"
 	"path/filepath"
-	"time"
 )
 
 func platformMove(path string) (Receipt, error) {
@@ -19,11 +21,12 @@ func platformMove(path string) (Receipt, error) {
 		return Receipt{}, fmt.Errorf("create trash directory: %w", err)
 	}
 
-	base := filepath.Base(path)
-	dest := filepath.Join(trashDir, base)
-	if _, err := os.Lstat(dest); err == nil {
-		dest = filepath.Join(trashDir, fmt.Sprintf("%s.%d", base, time.Now().UnixNano()))
+	name := filepath.Base(path) + "." + uuid.NewString()
+	identity, err := fspath.EntryIdentity(path)
+	if err != nil {
+		return Receipt{}, err
 	}
-
-	if err := os.Rename(path, dest); err != nil { return Receipt{}, err }; return Receipt{Path: dest}, nil
+	destination := filepath.Join(trashDir, name)
+	err = fseffect.RelocateGuarded(fseffect.Location{Root: filepath.Dir(path), Rel: filepath.Base(path)}, fseffect.Location{Root: trashDir, Rel: name}, identity)
+	return Receipt{Path: destination}, err
 }

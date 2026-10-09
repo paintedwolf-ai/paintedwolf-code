@@ -3,8 +3,11 @@ package projectsource_test
 import (
 	"context"
 	"database/sql"
+	"github.com/lycaon/lycaon/internal/desktoptrash"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"testing"
 
@@ -67,8 +70,14 @@ func TestHostWriteDoorsEmitOnce(t *testing.T) {
 	base := textfile.SHA256([]byte("package seed\n"))
 	service := projectsource.NewSourceMutationService(nil, nil)
 	trash := t.TempDir()
-	service.Effects.SetTrashMover(func(_ context.Context, path string) error {
-		return os.Rename(path, filepath.Join(trash, uuid.NewString()))
+	service.Effects.SetTrashMover(func(_ context.Context, path string) (desktoptrash.Receipt, error) {
+		destination := filepath.Join(trash, uuid.NewString())
+		identity, err := fspath.EntryIdentity(path)
+		if err != nil {
+			return desktoptrash.Receipt{}, err
+		}
+		err = os.Rename(path, destination)
+		return desktoptrash.Receipt{Platform: runtime.GOOS, Path: destination, Identity: identity}, err
 	})
 
 	cases := []struct {

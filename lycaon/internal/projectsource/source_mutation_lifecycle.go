@@ -79,6 +79,7 @@ func (s *SourceMutationService) lifecycle(ctx context.Context, operationID strin
 			plan.BeforeSize = info.Size()
 		}
 		if kind == "copy" {
+			plan.NativeTrash = &sourceTrashRecovery{}
 			plan.StageAbs = filepath.Join(filepath.Dir(toAbs), ".paintedwolf-copy-"+operationID)
 			if _, statErr := os.Lstat(plan.StageAbs); statErr == nil {
 				return nil, ErrSourceExists
@@ -154,7 +155,9 @@ func (s *SourceMutationService) Delete(ctx context.Context, operationID string, 
 			Response:                  json.RawMessage(`{}`),
 		}
 		plan.EntryIdentity, statErr = fspath.EntryIdentity(abs)
-		if statErr != nil { return nil, statErr }
+		if statErr != nil {
+			return nil, statErr
+		}
 		return plan, nil
 	})
 	return err

@@ -95,7 +95,9 @@ func verifySourceMutationApplied(ctx context.Context, plan *sourceMutationPlan) 
 		}
 		return nil
 	case "restore":
-		if plan.NativeTrash != nil { return requireSourceIdentity(plan.AbsPath, plan.DestinationIdentity) }
+		if plan.NativeTrash != nil {
+			return requireSourceIdentity(plan.AbsPath, plan.DestinationIdentity)
+		}
 		if err := requireSourceIdentity(plan.AbsPath, plan.DestinationIdentity); err != nil {
 			return err
 		}

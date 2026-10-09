@@ -92,7 +92,10 @@ func (p sourceMutationPlan) sourceChanges() []sourcefeed.Change {
 			change.WorkspaceKind = p.Agent.WorkspaceKind
 		}
 	}
-	if sourceLifecycleKind(p.Kind) { isDir := p.EntryKind == SourceEntryFolder; change.IsDir = &isDir }
+	if sourceLifecycleKind(p.Kind) {
+		isDir := p.EntryKind == SourceEntryFolder
+		change.IsDir = &isDir
+	}
 	switch p.Kind {
 	case "write":
 		change.Op, change.AfterSHA256 = api.SourceChangeOpWrite, p.AfterSHA

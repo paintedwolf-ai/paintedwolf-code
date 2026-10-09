@@ -242,6 +242,7 @@ func prepareRestoreOverAbsent(
 		return nil, err
 	}
 	plan := &sourceMutationPlan{
+		sourceMutationRecovery:    sourceMutationRecovery{NativeTrash: &sourceTrashRecovery{}},
 		sourceMutationAttribution: sourceMutationAttribution{ProjectID: p.SourceID(), WorkspaceID: p.WorkspaceID()},
 		Kind:                      "create",
 		RootID:                    root.ID,

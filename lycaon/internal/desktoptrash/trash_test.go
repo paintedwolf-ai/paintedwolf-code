@@ -2,6 +2,7 @@ package desktoptrash
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/fseffect"
 	"os"
 	"path/filepath"
 	"testing"
@@ -25,12 +26,16 @@ func TestMoveFileToTrash(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	if _, err := Move(ctx, filePath); err != nil {
+	receipt, err := Move(ctx, filePath)
+	if err != nil {
 		t.Fatalf("Move failed: %v", err)
 	}
 
 	if _, err := os.Lstat(filePath); !os.IsNotExist(err) {
 		t.Fatalf("expected file to be moved to trash, but it still exists: %v", err)
+	}
+	if err := Restore(ctx, receipt, fseffect.Location{Root: tmpDir, Rel: filepath.Base(filePath)}); err != nil {
+		t.Fatalf("restore native receipt: %v", err)
 	}
 }
 
@@ -46,11 +51,15 @@ func TestMoveDirectoryToTrash(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	if _, err := Move(ctx, subDir); err != nil {
+	receipt, err := Move(ctx, subDir)
+	if err != nil {
 		t.Fatalf("Move failed on directory: %v", err)
 	}
 
 	if _, err := os.Lstat(subDir); !os.IsNotExist(err) {
 		t.Fatalf("expected directory to be moved to trash, but it still exists: %v", err)
+	}
+	if err := Restore(ctx, receipt, fseffect.Location{Root: tmpDir, Rel: filepath.Base(subDir)}); err != nil {
+		t.Fatalf("restore native directory receipt: %v", err)
 	}
 }

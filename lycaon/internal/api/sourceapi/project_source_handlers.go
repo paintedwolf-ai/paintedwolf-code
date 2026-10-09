@@ -353,6 +353,8 @@ func (s *Workspace) WriteProjectSourceError(w http.ResponseWriter, r *http.Reque
 		s.responses.Fail(w, wire.ApiErrorCodeSourceMutationDiverged, "source changed while the operation was being recovered")
 	case errors.Is(err, projectsource.ErrSourceHistoryChanged):
 		s.responses.Fail(w, wire.ApiErrorCodeSourceHistoryChanged, "file history changed; review the current files before trying again")
+	case errors.Is(err, projectsource.ErrSourceTrashUnavailable):
+		s.responses.Fail(w, wire.ApiErrorCodeSourceTrashRecoveryUnavailable, "the item is no longer available in Trash")
 	case errors.Is(err, projectsource.ErrSourceRecoveryFailed):
 		s.responses.Logger.WarnContext(r.Context(), "source recovery data unavailable", "err", err)
 		s.responses.Fail(w, wire.ApiErrorCodeSourceRecoveryFailed, "could not preserve file recovery data")

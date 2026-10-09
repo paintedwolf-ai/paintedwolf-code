@@ -43,7 +43,7 @@ func TestSourceRestoreRefusesCorruptRecoveryBeforePublication(t *testing.T) {
 	service, p, root, _ := sourceMutationFixture(t)
 	testutil.FailErr(t, "seed source", os.WriteFile(filepath.Join(root, "file"), []byte("complete"), 0o600))
 	id := uuid.NewString()
-	testutil.FailErr(t, "trash source", service.Delete(t.Context(), id, p, SourceDeleteRequest{RootID: p.Roots[0].ID, Path: "file"}))
+	testutil.FailErr(t, "trash source", legacyTrash(t, service, id, p, SourceDeleteRequest{RootID: p.Roots[0].ID, Path: "file"}))
 	// A missing manifest body cannot become a successful restoration.
 	_, err := service.Journal.db.ExecContext(t.Context(), `UPDATE source_recovery_entries SET sha256=? WHERE recovery_id=?`, "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", id)
 	testutil.FailErr(t, "damage manifest reference", err)
