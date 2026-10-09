@@ -120,6 +120,7 @@ vi.mock("../../api/events.ts", () => ({
 
 type SubscribeOptions = {
   onOpen?: (reason: EventOpenReason) => void;
+  onReconnectAttempt?: (attempt: number, delayMs: number) => void;
   onInvalidate?: (keys: string[], scope: EventScope) => void;
 };
 
@@ -579,6 +580,31 @@ describe("app-connection cache reconcile", () => {
       expect.any(Function),
     );
     expect(hostIdentity()?.host_id).toBe("00000000-0000-4000-8000-0000000000a2");
+  });
+
+  it("does not subscribe a successful handshake replaced before its continuation", async () => {
+    const mod = await loadModule();
+    const appStore = createAppStore();
+    let second!: (host: typeof TEST_HOST_INFO) => void;
+    getHost.mockResolvedValueOnce(TEST_HOST_INFO).mockImplementationOnce(() => new Promise((resolve) => { second = resolve; }));
+    mod.attachKnownBackend(appStore, { baseUrl: "http://127.0.0.1:8788", apiToken: "first" });
+    queueMicrotask(() => mod.attachKnownBackend(appStore, { baseUrl: "http://127.0.0.1:8789", apiToken: "second" }));
+    await vi.waitFor(() => expect(getHost).toHaveBeenCalledTimes(2));
+    expect(subscribeEvents).not.toHaveBeenCalled();
+    second(TEST_HOST_INFO);
+    await vi.waitFor(() => expect(subscribeEvents).toHaveBeenCalledOnce());
+  });
+
+  it("keeps an attached home window subscribed for engine recovery", async () => {
+    const mod = await loadModule();
+    const appStore = createAppStore();
+    mod.attachKnownBackend(appStore, { baseUrl: "http://127.0.0.1:8788", apiToken: "attached" });
+    await vi.waitFor(() => expect(subscribeEvents).toHaveBeenCalledOnce());
+    expect(subscribedProjectIds).toEqual([""]);
+    lastSubscribeOptions?.onReconnectAttempt?.(1, 0);
+    appStore.actions.setSidecarStatus("disconnected");
+    lastSubscribeOptions?.onOpen?.("reconnect");
+    expect(appStore.state.sidecarStatus).toBe("connected");
   });
 
   it("uses no routes of a host serving a different major contract", async () => {
