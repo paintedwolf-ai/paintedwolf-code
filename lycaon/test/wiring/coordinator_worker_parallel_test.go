@@ -31,7 +31,7 @@ func TestCoordinatorParallelTaskCapMixedAgents(t *testing.T) {
 	for i := 0; i < cap; i++ {
 		agentType := agents[i%len(agents)]
 		gc := observeReadScoutSpawn(t, ctx, deps, sess, []any{"internal/**"})
-		if _, rejected := gc.RejectData[workeradmission.CoordinatorWorkerInFlightCode]; rejected || gc.WorkerSpawnBlocked {
+		if _, rejected := gc.RejectData[workeradmission.CoordinatorWorkerInFlightCode]; rejected || gc.Workers.WorkerSpawnBlocked {
 			t.Fatalf("expected allow before enqueuing %s at %d in flight", agentType, i)
 		}
 		_, err = q.Enqueue(ctx, api.WorkerTask{

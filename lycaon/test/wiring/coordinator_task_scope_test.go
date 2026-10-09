@@ -42,7 +42,7 @@ func TestCoordinatorTaskScopeDispatchReadFanOutParallelWriteAllowed(t *testing.T
 	}
 	for i, scope := range readScopes {
 		gc := observeReadScoutSpawn(t, ctx, capDeps, sess, []any{scope.Paths[0]})
-		if _, rejected := gc.RejectData[workeradmission.CoordinatorWorkerInFlightCode]; rejected || gc.WorkerSpawnBlocked {
+		if _, rejected := gc.RejectData[workeradmission.CoordinatorWorkerInFlightCode]; rejected || gc.Workers.WorkerSpawnBlocked {
 			t.Fatalf("expected read scout %d allowed", i+1)
 		}
 		s := scope
