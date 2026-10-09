@@ -86,7 +86,7 @@ func TestFailedHostTurnReportsItself(t *testing.T) {
 	finishExecution := mgr.Runner.Coordinator.CoordinatorLoop().Admission.BeginPromptExecution(t.Context(), sess.ID)
 	mgr.Coordinator.Runtime.CoordinatorLoop().Nudges.Nudge(ctx, sess.ID, anchor.LegFinished, anchor.LegFinished,
 		workflow.ImplementWorkLegKey(sess.ID), anchor.Envelope{})
-	if _, ok := mgr.Runner.Coordinator.CoordinatorLoop().PendingForTest(sess.ID); !ok {
+	if _, ok := mgr.Runner.Coordinator.CoordinatorLoop().Nudges.Pending(sess.ID); !ok {
 		t.Fatal("expected a deferred loop wake while prompt execution is active")
 	}
 	finishExecution()

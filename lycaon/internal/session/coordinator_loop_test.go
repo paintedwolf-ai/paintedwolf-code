@@ -242,10 +242,10 @@ func TestShouldLoopWakeRespectsBudget(t *testing.T) {
 		t.Fatal("missing run")
 	}
 	fix.mgr.Coordinator.Runtime.CoordinatorLoop().Admission.ResetBudget(run.ID)
-	if !fix.mgr.Runner.Coordinator.CoordinatorLoop().TryConsumeBudgetForTest(ctx, fix.sess.ID, run.ID) {
+	if !fix.mgr.Runner.Coordinator.CoordinatorLoop().Admission.ConsumeBudget(ctx, fix.sess.ID, run.ID, anchor.LegFinished) {
 		t.Fatal("expected first consume")
 	}
-	if fix.mgr.Runner.Coordinator.CoordinatorLoop().TryConsumeBudgetForTest(ctx, fix.sess.ID, run.ID) {
+	if fix.mgr.Runner.Coordinator.CoordinatorLoop().Admission.ConsumeBudget(ctx, fix.sess.ID, run.ID, anchor.LegFinished) {
 		t.Fatal("budget should be exhausted")
 	}
 }
@@ -284,7 +284,7 @@ func TestLoopDefersUntilIdle(t *testing.T) {
 	finishExecution := fix.mgr.Runner.Coordinator.CoordinatorLoop().Admission.BeginPromptExecution(t.Context(), fix.sess.ID)
 	defer finishExecution()
 	fix.mgr.Coordinator.Runtime.CoordinatorLoop().Nudges.Nudge(ctx, fix.sess.ID, anchor.LegFinished, anchor.LegFinished, "leg-1", anchor.Envelope{})
-	if _, ok := fix.mgr.Runner.Coordinator.CoordinatorLoop().PendingForTest(fix.sess.ID); !ok {
+	if _, ok := fix.mgr.Runner.Coordinator.CoordinatorLoop().Nudges.Pending(fix.sess.ID); !ok {
 		t.Fatal("expected deferred loop wake")
 	}
 	if err := fix.store.SetSessionStatus(ctx, fix.sess.ID, wire.SessionStatusIdle); err != nil {
@@ -650,7 +650,7 @@ func simulateWorkerJobComplete(t *testing.T, mgr *session.Host, q worker.WorkerQ
 	if !won {
 		t.Fatal("completion claim lost")
 	}
-	bridge := &worker.SessionOutcomeBridge{Workers: mgr.Coordinator.Workers, Loop: mgr.Coordinator.Runtime.CoordinatorLoop(), Results: mgr.Workers.Results, State: mgr.Workers.State, Closure: mgr.Coordinator.ProgressClosure}
+	bridge := &worker.SessionOutcomeBridge{Workers: mgr.Coordinator.Workers, Loop: mgr.Coordinator.Runtime.CoordinatorLoop().Nudges, Results: mgr.Workers.Results, State: mgr.Workers.State, Closure: mgr.Coordinator.ProgressClosure}
 	testutil.FailErr(t, "OnWorkerComplete", bridge.OnWorkerComplete(ctx, jobID, result))
 	testutil.FailErr(t, "acknowledge worker outcome", q.MarkOutcomeDelivered(ctx, jobID))
 }
