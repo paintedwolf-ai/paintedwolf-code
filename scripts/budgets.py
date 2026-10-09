@@ -16,6 +16,7 @@ import subprocess
 import sys
 
 from artifact_paths import artifact_root
+from ci_policy.budget_snapshot import seal
 import change_report
 from change_report import Finding
 
@@ -105,6 +106,12 @@ def main():
               f"or set {change_report.BASE_ENV} to the commit this change builds on.")
         return 2
     code, reports = run_suites(artifact_root(ROOT) / "budgets", change_set(scope, inspect))
+    if 'maintainability' in reports:
+        report = reports['maintainability']
+        source = os.environ.get('GITHUB_SHA') or change_report.git(ROOT, 'rev-parse', 'HEAD').stdout.strip()
+        tree = change_report.git(ROOT, 'rev-parse', 'HEAD^{tree}').stdout.strip()
+        seal(report, source, tree, change['base'])
+        (artifact_root(ROOT) / 'budgets' / 'reports' / 'maintainability.json').write_text(json.dumps(report) + '\n')
     findings, failed = [], code != 0
     for name in SUITES:
         if name not in reports:
