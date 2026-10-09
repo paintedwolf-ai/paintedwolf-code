@@ -1,6 +1,7 @@
 package session
 
 import (
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"os"
 	"path/filepath"
 	"testing"
@@ -44,7 +45,7 @@ func newScratchFixture(t *testing.T) scratchFixture {
 
 func (f scratchFixture) toolContext(t *testing.T, sess *api.Session) tools.ToolContext {
 	t.Helper()
-	tctx, err := f.mgr.buildToolContext(t.Context(), sess, tools.DefaultToolProfileID, inject.Machine{})
+	tctx, err := f.mgr.buildToolContext(t.Context(), sess, toolprofiles.DefaultToolProfileID, inject.Machine{})
 	testutil.FailErr(t, "build tool context", err)
 	return tctx
 }
@@ -54,13 +55,13 @@ func TestEverySessionGetsItsOwnScratchFolder(t *testing.T) {
 
 	rootCtx := f.toolContext(t, f.root)
 	workerCtx := f.toolContext(t, f.worker)
-	if rootCtx.SessionScratchDir != f.dir(f.root.ID) {
-		t.Fatalf("coordinator scratch = %q, want %q", rootCtx.SessionScratchDir, f.dir(f.root.ID))
+	if rootCtx.Host.SessionScratchDir != f.dir(f.root.ID) {
+		t.Fatalf("coordinator scratch = %q, want %q", rootCtx.Host.SessionScratchDir, f.dir(f.root.ID))
 	}
-	if workerCtx.SessionScratchDir != f.dir(f.worker.ID) {
-		t.Fatalf("worker scratch = %q, want its own sibling folder %q", workerCtx.SessionScratchDir, f.dir(f.worker.ID))
+	if workerCtx.Host.SessionScratchDir != f.dir(f.worker.ID) {
+		t.Fatalf("worker scratch = %q, want its own sibling folder %q", workerCtx.Host.SessionScratchDir, f.dir(f.worker.ID))
 	}
-	for _, dir := range []string{rootCtx.SessionScratchDir, workerCtx.SessionScratchDir} {
+	for _, dir := range []string{rootCtx.Host.SessionScratchDir, workerCtx.Host.SessionScratchDir} {
 		if info, err := os.Stat(dir); err != nil || !info.IsDir() {
 			t.Fatalf("scratch folder %q was not prepared: %v", dir, err)
 		}
@@ -72,7 +73,7 @@ func TestScratchUnavailableLeavesContextWithoutScratch(t *testing.T) {
 	scratchRoot := filepath.Dir(f.dir(f.root.ID))
 	testutil.FailErr(t, "plant link", os.Symlink(t.TempDir(), scratchRoot))
 
-	if dir := f.toolContext(t, f.root).SessionScratchDir; dir != "" {
+	if dir := f.toolContext(t, f.root).Host.SessionScratchDir; dir != "" {
 		t.Fatalf("scratch prepared through a linked root: %q", dir)
 	}
 }

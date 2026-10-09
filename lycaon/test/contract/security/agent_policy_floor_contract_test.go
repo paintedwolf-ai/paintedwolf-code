@@ -3,6 +3,7 @@ package contract
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -50,8 +51,17 @@ func TestProjectAgentPolicyAsksWhileHostStateDenies(t *testing.T) {
 			t.Fatalf("%s is not agent policy", rel)
 		}
 		res, err := gate.Evaluate(context.Background(), hitl.ProposedAction{
-			Tool: "write", Files: []string{path}, ProjectDir: proj, AgentPolicy: []hitl.AgentPolicyTarget{target},
-		})
+Invocation: hitl.ActionInvocation{
+Tool: "write",
+Files: []string{path},
+},
+Scope: hitl.ActionScope{
+ProjectDir: proj,
+},
+Mutations: hitl.ActionMutations{
+AgentPolicy: []hitl.AgentPolicyTarget{target},
+},
+})
 		testutil.FailErr(t, "Evaluate "+rel, err)
 		if res == nil || res.Denied || !res.Required() || !slices.Contains(res.Decision.Gates(), api.GateAgentPolicyChange) {
 			t.Fatalf("%s: want an agent-policy ask, got %+v", rel, res)
@@ -60,8 +70,14 @@ func TestProjectAgentPolicyAsksWhileHostStateDenies(t *testing.T) {
 
 	hostSink := filepath.Join(cfg, "mcp.yaml")
 	res, err := gate.Evaluate(context.Background(), hitl.ProposedAction{
-		Tool: "write", Files: []string{hostSink}, ProjectDir: proj,
-	})
+Invocation: hitl.ActionInvocation{
+Tool: "write",
+Files: []string{hostSink},
+},
+Scope: hitl.ActionScope{
+ProjectDir: proj,
+},
+})
 	testutil.FailErr(t, "Evaluate host sink", err)
 	if res == nil || !res.Denied || res.DenyCode != isolation.CodeControlPlaneDenied {
 		t.Fatalf("host state want %s, got %+v", isolation.CodeControlPlaneDenied, res)
@@ -76,8 +92,14 @@ func TestProjectAgentPolicyAsksWhileHostStateDenies(t *testing.T) {
 			t.Errorf("%s classified as agent policy; no loader reads it", free)
 		}
 		res, err := gate.Evaluate(context.Background(), hitl.ProposedAction{
-			Tool: "write", Files: []string{free}, ProjectDir: proj,
-		})
+Invocation: hitl.ActionInvocation{
+Tool: "write",
+Files: []string{free},
+},
+Scope: hitl.ActionScope{
+ProjectDir: proj,
+},
+})
 		testutil.FailErr(t, "Evaluate "+free, err)
 		if res != nil && res.Denied && res.DenyCode != isolation.CodeControlPlaneDenied {
 			t.Errorf("%s denied with %s", free, res.DenyCode)
@@ -92,7 +114,7 @@ func TestAgentPolicyResolvesForReview(t *testing.T) {
 	proj := t.TempDir()
 	testutil.FailErr(t, "mkdir overlay", os.MkdirAll(filepath.Join(proj, settingsoverlay.DirName()), 0o700))
 	tctx := tools.ToolContext{
-		Roots: []projectroot.RootRef{{ID: "primary", Path: proj, IsPrimary: true}},
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "primary", Path: proj, IsPrimary: true}}},
 	}
 	for _, rel := range []string{settingsoverlay.Rel(settingsoverlay.BasenameApprovals), ".env", "docs/AGENTS.md"} {
 		if _, err := projectpaths.ResolveWrite(context.Background(), nil, tctx, rel); err != nil {
@@ -268,11 +290,11 @@ func approvalGateForFloor(t *testing.T) hitl.ApprovalGate {
 	return settings.NewRuleApprovalGate(store, settings.NoSources())
 }
 
-func asToolReject(err error, out **tools.ToolReject) bool {
+func asToolReject(err error, out **toolrejection.ToolReject) bool {
 	if err == nil {
 		return false
 	}
-	r := &tools.ToolReject{}
+	r := &toolrejection.ToolReject{}
 	if errors.As(err, &r) {
 		*out = r
 		return true

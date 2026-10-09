@@ -70,10 +70,11 @@ func TestEnsureWorkerBranchRestoresPrimaryReadDeniesFromMetadata(t *testing.T) {
 	testutil.FailErr(t, "new branch workspace", err)
 
 	tctx, err := (&Manager{}).EnsureWorkerBranch(context.Background(), tools.ToolContext{
-		WorkerBranchRoot: binding.Root, BranchWorkspace: branch,
+		Source: tools.InvocationSource{WorkerBranchRoot: binding.Root,
+			BranchWorkspace: branch},
 	})
 	testutil.FailErr(t, "ensure existing branch", err)
-	if len(tctx.WorkerSourceRoots) != 1 || tctx.WorkerSourceRoots[0] != primary {
-		t.Fatalf("worker source roots = %v want [%s]", tctx.WorkerSourceRoots, primary)
+	if len(tctx.Source.WorkerSourceRoots) != 1 || tctx.Source.WorkerSourceRoots[0] != primary {
+		t.Fatalf("worker source roots = %v want [%s]", tctx.Source.WorkerSourceRoots, primary)
 	}
 }

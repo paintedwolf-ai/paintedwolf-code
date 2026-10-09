@@ -2,11 +2,11 @@ package native
 
 import (
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"sort"
 	"strings"
 
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
 	"github.com/lycaon/lycaon/internal/tools/native/toolkit"
 )
@@ -28,7 +28,7 @@ func resolveChmodMode(current os.FileMode, spec string) (os.FileMode, error) {
 		return 0, toolkit.MissingArg("mode")
 	}
 	if strings.ContainsAny(spec, "sStT") {
-		return 0, &tools.ToolReject{
+		return 0, &toolrejection.ToolReject{
 			Code: "CHMOD_SPECIAL_BIT_DENIED",
 			Data: map[string]any{"mode": spec},
 		}
@@ -61,7 +61,7 @@ func parseOctalChmodMode(spec string) (os.FileMode, error) {
 			return 0, chmodModeDenied(spec)
 		}
 		if special&0o7000 != 0 {
-			return 0, &tools.ToolReject{
+			return 0, &toolrejection.ToolReject{
 				Code: "CHMOD_SPECIAL_BIT_DENIED",
 				Data: map[string]any{"mode": spec},
 			}
@@ -170,7 +170,7 @@ func validateChmodResult(mode os.FileMode) error {
 }
 
 func chmodModeDenied(mode string) error {
-	return &tools.ToolReject{
+	return &toolrejection.ToolReject{
 		Code: "CHMOD_MODE_DENIED",
 		Data: map[string]any{"mode": mode, "chmod_allowed_modes": allowedChmodModes()},
 	}

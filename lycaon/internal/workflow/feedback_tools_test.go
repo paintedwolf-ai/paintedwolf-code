@@ -32,7 +32,8 @@ func TestWorkflowUserFeedbackPending(t *testing.T) {
 	testutil.FailErr(t, "startRun failed", err)
 	_ = run
 	out, err := reg.Run(ctx, "workflow_user_feedback", map[string]any{}, tools.ToolContext{
-		Agent: "coordinator", SessionID: "sess-1",
+		Identity: tools.InvocationIdentity{Agent: "coordinator",
+			SessionID: "sess-1"},
 	})
 	testutil.FailErr(t, "reg.Run failed", err)
 	if !strings.Contains(out, `"pending":true`) || !strings.Contains(out, `"phase_id":"clarify"`) {
@@ -50,7 +51,8 @@ func TestWorkflowUserFeedbackNotPending(t *testing.T) {
 		testutil.FailErr(t, "RegisterFeedbackTool failed", err)
 	}
 	out, err := reg.Run(context.Background(), "workflow_user_feedback", map[string]any{}, tools.ToolContext{
-		Agent: "coordinator", SessionID: "sess-no-run",
+		Identity: tools.InvocationIdentity{Agent: "coordinator",
+			SessionID: "sess-no-run"},
 	})
 	testutil.FailErr(t, "reg.Run failed", err)
 	if !strings.Contains(out, `"pending":false`) {
@@ -65,7 +67,8 @@ func TestWorkflowUserFeedbackCoordinatorOnly(t *testing.T) {
 		testutil.FailErr(t, "RegisterFeedbackTool failed", err)
 	}
 	_, err := reg.Run(context.Background(), "workflow_user_feedback", map[string]any{}, tools.ToolContext{
-		Agent: "implementer", SessionID: "sess-1",
+		Identity: tools.InvocationIdentity{Agent: "implementer",
+			SessionID: "sess-1"},
 	})
 	if err == nil || !strings.Contains(err.Error(), "coordinator") {
 		t.Fatalf("err = %v", err)

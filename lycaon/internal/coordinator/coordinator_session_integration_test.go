@@ -44,7 +44,7 @@ func wireManagerPromptPolicy(t *testing.T, mgr *session.Manager, root string) {
 	oartest.InstallCloseoutPolicy(t, mgr)
 	rt, err := toolhost.NewRuntime(toolhost.RuntimeConfig{ConfigRoot: root, Catalog: extpackstest.StockCatalog(t)})
 	testutil.FailErr(t, "toolhost.NewRuntime", err)
-	mgr.SetToolInvoker(rt.Executor)
+	mgr.SetToolInvoker(rt.Executor, rt.Executor.Metadata)
 	postures, err := session.LoadPostureRegistry()
 	testutil.FailErr(t, "LoadPostureRegistry", err)
 	packs, err := rules.LoadBundledRules()

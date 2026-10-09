@@ -1,8 +1,11 @@
 package toolpolicy
 
 import (
+	"github.com/lycaon/lycaon/internal/toolfeedback"
+
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"strings"
 
@@ -33,7 +36,7 @@ type PreInvokeGuard func(ctx context.Context, sess *api.Session, toolName string
 
 // EngineDeps wires prompt and invocation policy.
 type EngineDeps struct {
-	ToolInvoker      tools.ToolInvoker
+	ToolLister       tools.ToolProfileLister
 	Rules            RuleEvaluator
 	Workflows        WorkflowView
 	Postures         func(context.Context, *api.Session) (PostureRegistry, error)
@@ -41,7 +44,7 @@ type EngineDeps struct {
 	HasComposeDraft  func(context.Context, *api.Session) bool
 	ToolAccess       func(context.Context, *api.Session) sandbox.ToolAccess
 	RejectFormatter  *guidance.ToolRejectFormatter
-	BlockPlane       *tools.BlockPlane
+	BlockPlane       *toolfeedback.BlockPlane
 	PreInvoke        PreInvokeGuard
 	ProjectRootCount func(context.Context, *api.Session) int
 	OverlayRootPaths func(context.Context, *api.Session) []string
@@ -57,7 +60,7 @@ func NewEngine(deps EngineDeps) Engine {
 }
 
 func (e *engine) ListForPrompt(ctx context.Context, sess *api.Session, profileID string) []tools.ToolMeta {
-	if e == nil || e.deps.ToolInvoker == nil {
+	if e == nil || e.deps.ToolLister == nil {
 		return nil
 	}
 	filter := platform.ToolFilter{ProfileID: profileID}
@@ -69,7 +72,7 @@ func (e *engine) ListForPrompt(ctx context.Context, sess *api.Session, profileID
 	} else if e.deps.ProjectRootCount != nil && sess != nil {
 		filter.ProjectRootCount = e.deps.ProjectRootCount(ctx, sess)
 	}
-	base := tools.ListToolsForProfile(ctx, e.deps.ToolInvoker, filter)
+	base := tools.ListToolsForProfile(ctx, e.deps.ToolLister, filter)
 	workerChild := sess.IsWorkerChild()
 	out := make([]tools.ToolMeta, 0, len(base))
 	for _, meta := range base {
@@ -140,7 +143,7 @@ func isOverlayRemediationWrite(tool string, args map[string]any) bool {
 
 // Host workflow requirements are intrinsic refusals; OAR owns their selected copy.
 func (e *engine) rejectRuleOutcome(ctx context.Context, sess *api.Session, tool string, args map[string]any, eval rules.EvalContext, outcome rules.RuleOutcome) error {
-	tr := &tools.ToolReject{Code: rejectCodeFor(outcome), FailureClass: api.FailureClassPolicyRejection, Data: map[string]any{
+	tr := &toolrejection.ToolReject{Code: rejectCodeFor(outcome), FailureClass: api.FailureClassPolicyRejection, Data: map[string]any{
 		"tool":                    tool,
 		"reason":                  outcome.Message,
 		"min_required":            outcome.MinRequired,
@@ -157,7 +160,7 @@ func (e *engine) rejectRuleOutcome(ctx context.Context, sess *api.Session, tool 
 	}
 	err := e.deps.BlockPlane.RejectObservation(ctx, tool, profile, args, tr)
 	if err == nil {
-		err = tools.RenderReject(tr, nil)
+		err = toolrejection.RenderReject(tr, nil)
 	}
 	refusal, ok := guidance.RefusalFromError(err)
 	if !ok || strings.TrimSpace(outcome.PhaseRequired) == "" || e.deps.RejectFormatter == nil || refusal.Copy == nil {

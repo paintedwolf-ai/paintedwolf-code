@@ -53,7 +53,7 @@ func TestCloseoutReportUsesOnePolicyOccurrence(t *testing.T) {
 				AppendDraftVersion: func(context.Context, string, string, string, string) (int, error) { return 1, nil },
 				EvaluateCloseoutBlock: func(ctx context.Context, sess *api.Session, gc *oar.GuardContext) (*oar.Decision, error) {
 					calls++
-					gc.SessionID = sess.ID
+					gc.Session.SessionID = sess.ID
 					result, err := pipeline.EvaluateBlock(ctx, oar.AnchorCoordinatorCloseoutCheck, gc)
 					if err != nil {
 						return nil, err

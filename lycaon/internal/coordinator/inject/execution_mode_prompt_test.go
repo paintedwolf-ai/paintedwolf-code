@@ -1,11 +1,12 @@
 package inject
 
 import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/spawn"
-	"github.com/lycaon/lycaon/internal/tools"
 )
 
 func TestExecutionModeFamilyCoversOrchestrateSurfaces(t *testing.T) {
@@ -23,7 +24,7 @@ func TestExecutionModeFamilyCoversOrchestrateSurfaces(t *testing.T) {
 	if got := surface.ExecutionModeFamily(spawn.SurfaceImplementSynthesis); got != surface.ExecutionModeFamilyWrapup {
 		t.Fatalf("synthesis surface family = %q, want wrapup", got)
 	}
-	if got := surface.ExecutionModeFamily(tools.SurfaceImplementInvestigate); got != surface.ExecutionModeFamilyInvestigate {
+	if got := surface.ExecutionModeFamily(toolcontract.SurfaceImplementInvestigate); got != surface.ExecutionModeFamilyInvestigate {
 		t.Fatalf("investigate surface family = %q", got)
 	}
 	if got := surface.ExecutionModeFamily("plan_stub"); got != "" {

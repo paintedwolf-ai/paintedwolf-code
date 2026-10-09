@@ -1,13 +1,16 @@
 package tools
 
 import (
+	"github.com/lycaon/lycaon/internal/capabilityrequest"
+
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/isolation"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 )
 
 // ValidateCapabilityPathAuthority uses the same session boundary as execution.
-func ValidateCapabilityPathAuthority(args map[string]any, scratch string) *ToolReject {
-	request, reject := ParseCapabilityRequest(args)
+func ValidateCapabilityPathAuthority(args map[string]any, scratch string) *toolrejection.ToolReject {
+	request, reject := capabilityrequest.ParseCapabilityRequest(args)
 	if reject != nil || request == nil {
 		return reject
 	}
@@ -18,7 +21,7 @@ func ValidateCapabilityPathAuthority(args map[string]any, scratch string) *ToolR
 		{"read_path", request.ReadPath, false}, {"write_root", request.WriteRoot, true},
 	} {
 		if capability.path != "" && confine.ControlPlanePathDenied(capability.path, capability.write, scratch) {
-			return &ToolReject{Code: isolation.CodeControlPlaneDenied, Data: map[string]any{"path": capability.path, "capability": capability.name}}
+			return &toolrejection.ToolReject{Code: isolation.CodeControlPlaneDenied, Data: map[string]any{"path": capability.path, "capability": capability.name}}
 		}
 	}
 	return nil

@@ -264,3 +264,14 @@ func TestWorkflowObligationExplainFullPassNamesNewestPass(t *testing.T) {
 		})
 	}
 }
+
+func TestWorkflowWorkerDigestSeparatesExecutionFromCoverage(t *testing.T) {
+	digest, err := WorkflowWorkerScanDigest(t.Context(), stubWorkflowScanLedger{scans: []api.CodeScan{{ID: "sast", Status: api.CodeScanStatusComplete, CoverageStatus: api.ScanCoveragePartial, FindingsCount: 226}}}, "run")
+	testutil.FailErr(t, "read run scan digest", err)
+	joined := strings.Join(digest, "\n")
+	for _, fact := range []string{"execution_status=complete", "coverage_status=partial", "result_available=true", "findings_count=226"} {
+		if !strings.Contains(joined, fact) {
+			t.Fatalf("missing independent scan fact %s: %s", fact, joined)
+		}
+	}
+}

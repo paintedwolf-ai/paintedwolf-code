@@ -1,6 +1,8 @@
 package surface
 
 import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+
 	"strings"
 	"testing"
 
@@ -9,7 +11,6 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/surfacecatalog"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -105,7 +106,7 @@ var ruleReachabilityCases = []ruleReachabilityCase{
 	{
 		name:     "host_held_person_turn",
 		facts:    SurfaceFacts{PhaseHostHeld: true, VisibleUserTurn: true, ManifestBoundSurface: "observe_investigate"},
-		wantSurf: tools.SurfaceAwaitHost,
+		wantSurf: toolcontract.SurfaceAwaitHost,
 		wantRule: 2,
 	},
 	{
@@ -148,13 +149,13 @@ var ruleReachabilityCases = []ruleReachabilityCase{
 	{
 		name:     "declared_investigate",
 		facts:    SurfaceFacts{WorkflowDeclaredMode: ExecutionModeFamilyInvestigate, InvestigateHardBlock: false},
-		wantSurf: tools.SurfaceImplementInvestigate,
+		wantSurf: toolcontract.SurfaceImplementInvestigate,
 		wantRule: 7,
 	},
 	{
 		name:     "investigate_default_eligible",
 		facts:    SurfaceFacts{InvestigateDefaultEligible: true, InvestigateHardBlock: false},
-		wantSurf: tools.SurfaceImplementInvestigate,
+		wantSurf: toolcontract.SurfaceImplementInvestigate,
 		wantRule: 8,
 	},
 	{
@@ -172,7 +173,7 @@ var ruleReachabilityCases = []ruleReachabilityCase{
 	{
 		name:     "open_repair",
 		facts:    SurfaceFacts{WrapupGatesLoaded: true, OpenRepairSinceUserIntent: true},
-		wantSurf: tools.SurfaceImplementInvestigate,
+		wantSurf: toolcontract.SurfaceImplementInvestigate,
 		wantRule: 11,
 	},
 	{
@@ -183,7 +184,7 @@ var ruleReachabilityCases = []ruleReachabilityCase{
 			ProgressMissing:                       true,
 			ProgressGatedToolAttemptedSinceIntent: true,
 		},
-		wantSurf: tools.SurfaceImplementInvestigate,
+		wantSurf: toolcontract.SurfaceImplementInvestigate,
 		wantRule: 12,
 	},
 	{
@@ -202,25 +203,25 @@ var ruleReachabilityCases = []ruleReachabilityCase{
 	{
 		name:     "host_cycle_open_plan_read_scout",
 		facts:    SurfaceFacts{HostCycleTurn: true, ProgressHasOpenSteps: true},
-		wantSurf: tools.SurfaceImplementInvestigate,
+		wantSurf: toolcontract.SurfaceImplementInvestigate,
 		wantRule: 15,
 	},
 	{
 		name:     "host_cycle",
 		facts:    SurfaceFacts{HostCycleTurn: true},
-		wantSurf: tools.SurfaceImplementInvestigate,
+		wantSurf: toolcontract.SurfaceImplementInvestigate,
 		wantRule: 15,
 	},
 	{
 		name:     "visible_user_investigate",
 		facts:    SurfaceFacts{VisibleUserTurn: true, InvestigateDefaultEligible: true, InvestigateHardBlock: false},
-		wantSurf: tools.SurfaceImplementInvestigate,
+		wantSurf: toolcontract.SurfaceImplementInvestigate,
 		wantRule: 8,
 	},
 	{
 		name:     "default_investigate",
 		facts:    SurfaceFacts{},
-		wantSurf: tools.SurfaceImplementInvestigate,
+		wantSurf: toolcontract.SurfaceImplementInvestigate,
 		wantRule: -1,
 	},
 }
@@ -250,7 +251,7 @@ func TestEvaluateFlow_altTableChangesPersonality(t *testing.T) {
 			When: []FlowCondition{{Fact: FactInvestigateDefaultEligible, Comparator: FlowCmpEq, EqBool: true}},
 			Out:  FlowOutput{SurfaceID: "implement_routing"},
 		}},
-		Default: FlowOutput{SurfaceID: tools.SurfaceImplementInvestigate},
+		Default: FlowOutput{SurfaceID: toolcontract.SurfaceImplementInvestigate},
 	}
 	facts := SurfaceFacts{InvestigateDefaultEligible: true, InvestigateHardBlock: false}
 	ev, err := EvaluateFlow(alt, facts)
@@ -270,10 +271,10 @@ func TestEvaluateFlow_altTableChangesPersonality(t *testing.T) {
 
 func TestCoordinatorSurfaceModeRef_catalogSurfaces(t *testing.T) {
 	for surfaceID, want := range map[string]string{
-		tools.SurfaceImplementInvestigate: "implement-investigate",
-		"implement_routing":               "implement-routing",
-		SurfaceImplementPark:              "implement-park",
-		"review_adjudicate":               "review-adjudicate",
+		toolcontract.SurfaceImplementInvestigate: "implement-investigate",
+		"implement_routing":                      "implement-routing",
+		SurfaceImplementPark:                     "implement-park",
+		"review_adjudicate":                      "review-adjudicate",
 	} {
 		got, err := CoordinatorSurfaceModeRef(surfaceID)
 		testutil.FailErr(t, "CoordinatorSurfaceModeRef", err)
@@ -307,7 +308,9 @@ func TestReviewAdjudicateUsesVerdictModeContract(t *testing.T) {
 	body, _, err := prompts.DefaultBundledLayout().ReadBundled(ModeTemplateRef(profile.ModeRefs[0]))
 	testutil.FailErr(t, "read review adjudicate mode", err)
 	text := string(body)
-	for _, want := range []string{"`cited_evidence`", "`handle`", "`submit_verdict`'s schema", "Claims and coverage assessments also carry their own", "Do not use an `evidence` key"} {
+	// Field and citation shapes come from the offered schema; the mode names the
+	// exit tool and the host pause state it must honor.
+	for _, want := range []string{"`submit_verdict`", "`review_blocked`"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("review adjudicate mode missing %q", want)
 		}

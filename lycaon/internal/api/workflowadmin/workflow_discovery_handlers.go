@@ -13,7 +13,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Handler) HandleListWorkflows(w http.ResponseWriter, r *http.Request) {
+func (s *RunControl) HandleListWorkflows(w http.ResponseWriter, r *http.Request) {
 	// Workflow discovery accepts no project directory.
 	projectDir, ok := s.optionalProjectDirFromQuery(w, r)
 	if !ok {
@@ -66,7 +66,7 @@ func (s *Handler) HandleListWorkflows(w http.ResponseWriter, r *http.Request) {
 
 var workflowRunPageLimit = httpio.MustPageLimit(20, 1, 100)
 
-func (s *Handler) HandleListSessionWorkflowRuns(w http.ResponseWriter, r *http.Request) {
+func (s *RunControl) HandleListSessionWorkflowRuns(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "id")
 	if !requestscope.SessionExists(s.Store, s.responses, w, r, sessionID) {
 		return
@@ -113,7 +113,7 @@ func (s *Handler) HandleListSessionWorkflowRuns(w http.ResponseWriter, r *http.R
 	httpio.WriteJSON(w, http.StatusOK, page)
 }
 
-func (s *Handler) optionalProjectDirFromQuery(w http.ResponseWriter, r *http.Request) (projectDir string, ok bool) {
+func (s *RunControl) optionalProjectDirFromQuery(w http.ResponseWriter, r *http.Request) (projectDir string, ok bool) {
 	projectID := strings.TrimSpace(r.URL.Query().Get("project_id"))
 	if projectID == "" {
 		return "", true

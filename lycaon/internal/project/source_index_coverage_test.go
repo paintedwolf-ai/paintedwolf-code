@@ -22,7 +22,7 @@ func TestSourceIndexRetainsReadyRootsAlongsideUnavailableRoots(t *testing.T) {
 			other := Root{ID: "other", Path: t.TempDir()}
 			if failed {
 				other.Path = filepath.Join(other.Path, "absent")
-				reader, _, _ := catalog.OpenIndex(t.Context(), project.ID, sourcecatalog.Root{ID: other.ID, Path: other.Path}, time.Second)
+				reader, _, _ := catalog.Trees.OpenIndex(t.Context(), project.ID, sourcecatalog.Root{ID: other.ID, Path: other.Path}, time.Second)
 				if reader != nil {
 					_ = reader.Close()
 				}

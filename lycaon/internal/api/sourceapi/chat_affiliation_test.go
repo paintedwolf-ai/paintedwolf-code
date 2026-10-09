@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -21,12 +22,12 @@ func TestUserSourceChatAffiliationNamesTheChatAndOnlyAnActiveTurn(t *testing.T) 
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
-	server := &Handler{Deps: Deps{SessionStore: sessions}}
+	server := &Handler{Workspace: &Workspace{SessionStore: sessions}}
 	request := httptest.NewRequest("POST", "/source/rename?session_id="+sess.ID, nil)
 
 	assertAffiliation := func(step, wantSession string, wantTurn int) {
 		t.Helper()
-		gotSession, gotTurn := server.UserSourceChatAffiliation(request)
+		gotSession, gotTurn := server.Workspace.UserSourceChatAffiliation(request)
 		if gotSession != wantSession || gotTurn != wantTurn {
 			t.Fatalf("%s affiliation = (%q, %d), want (%q, %d)",
 				step, gotSession, gotTurn, wantSession, wantTurn)
@@ -48,10 +49,10 @@ func TestUserSourceChatAffiliationNamesTheChatAndOnlyAnActiveTurn(t *testing.T) 
 
 	// A chat the host cannot place leaves the change unaffiliated rather than refusing it.
 	gone := httptest.NewRequest("POST", "/source/rename?session_id=00000000-0000-4000-8000-000000000000", nil)
-	if gotSession, gotTurn := server.UserSourceChatAffiliation(gone); gotSession != "" || gotTurn != 0 {
+	if gotSession, gotTurn := server.Workspace.UserSourceChatAffiliation(gone); gotSession != "" || gotTurn != 0 {
 		t.Fatalf("unknown chat affiliation = (%q, %d), want none", gotSession, gotTurn)
 	}
-	if session, turn, err := server.chatAffiliation(ctx, "another-project", sess.ID); err != nil || session != "" || turn != 0 {
+	if session, turn, err := requestscope.ChatAffiliation(ctx, server.Workspace.SessionStore, "another-project", sess.ID); err != nil || session != "" || turn != 0 {
 		t.Fatalf("another project's chat affiliation = (%q, %d, %v), want none", session, turn, err)
 	}
 }

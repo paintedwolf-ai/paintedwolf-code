@@ -2,19 +2,19 @@ package promptloop
 
 import (
 	"context"
-	"fmt"
 	"errors"
+	"fmt"
+	"github.com/lycaon/lycaon/internal/toolcommand"
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/spawn"
-	"github.com/lycaon/lycaon/internal/tools"
 	workertools "github.com/lycaon/lycaon/internal/tools/native/workercontrol"
 	"github.com/lycaon/lycaon/pkg/api"
-	"github.com/google/uuid"
 )
 
 // turnCloseout ends a turn: closeout nudges, early closeouts, and the grounded closeout report.
@@ -42,7 +42,7 @@ const BlockedLoopAbsoluteCap = 12
 
 func schemaRejectExemptFromBlockedLoop(code string) bool {
 	code = strings.TrimSpace(code)
-	if tools.IsNativeCommandRedirectCode(code) {
+	if toolcommand.IsNativeCommandRedirectCode(code) {
 		return true
 	}
 	switch code {

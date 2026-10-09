@@ -3,6 +3,7 @@ package workercontrol
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/tools"
@@ -37,12 +38,12 @@ func DecisionHandler(deps RequestDecisionDeps) tools.ToolHandler {
 	rootOf := deps.RootSessionID
 	return func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
 		if tools.OutOfSessionScope(RequestDecisionTool, tctx) {
-			return "", &tools.ToolReject{
+			return "", &toolrejection.ToolReject{
 				Code: "REQUEST_DECISION_ADDRESSED_SESSION",
 				Data: map[string]any{"tool": RequestDecisionTool},
 			}
 		}
-		child := strings.TrimSpace(tctx.SessionID)
+		child := strings.TrimSpace(tctx.Identity.SessionID)
 		if child == "" {
 			return "", fmt.Errorf("session required")
 		}
@@ -87,15 +88,15 @@ func DecisionHandler(deps RequestDecisionDeps) tools.ToolHandler {
 			switch {
 			case res.IsPresent():
 				if !visual.IsInteractivePreviewMime(res.Meta().Mime) {
-					return &tools.ToolReject{Code: "REQUEST_DECISION_ARTIFACT_UNSUPPORTED", Data: map[string]any{
+					return &toolrejection.ToolReject{Code: "REQUEST_DECISION_ARTIFACT_UNSUPPORTED", Data: map[string]any{
 						"artifact_id": id, "mime": res.Meta().Mime, "artifact_preview_mimes": visual.InteractivePreviewMIMEs(),
 					}}
 				}
 				return nil
 			case res.Reason() == visual.AbsenceForeign:
-				return &tools.ToolReject{Code: "REQUEST_DECISION_ARTIFACT_FOREIGN", Data: map[string]any{"artifact_id": id}}
+				return &toolrejection.ToolReject{Code: "REQUEST_DECISION_ARTIFACT_FOREIGN", Data: map[string]any{"artifact_id": id}}
 			default:
-				return &tools.ToolReject{Code: "REQUEST_DECISION_ARTIFACT_NOT_FOUND", Data: map[string]any{"artifact_id": id, "reason": string(res.Reason())}}
+				return &toolrejection.ToolReject{Code: "REQUEST_DECISION_ARTIFACT_NOT_FOUND", Data: map[string]any{"artifact_id": id, "reason": string(res.Reason())}}
 			}
 		}
 		if artifactID != "" {
@@ -108,7 +109,7 @@ func DecisionHandler(deps RequestDecisionDeps) tools.ToolHandler {
 				return "", err
 			}
 		}
-		jobID := strings.TrimSpace(tctx.WorkerJobID)
+		jobID := strings.TrimSpace(tctx.Identity.WorkerJobID)
 		if jobID == "" {
 			return "", fmt.Errorf("request_decision requires an active worker job")
 		}

@@ -45,8 +45,8 @@ func TestUnreadReportFenceIsRefusedByName(t *testing.T) {
 		HintConfig: hints, RejectFmt: guidance.NewStaticRejectFormatter(hints),
 		EvaluateCloseoutBlock: func(_ context.Context, _ *api.Session, gc *oar.GuardContext) (*oar.Decision, error) {
 			code := guidance.ReportFenceUnreadableCode
-			if gc.RejectObservation != guidance.ReportDocumentObservation(code) {
-				t.Fatalf("observation = %q, want the unreadable fence first", gc.RejectObservation)
+			if gc.Rejection.RejectObservation != guidance.ReportDocumentObservation(code) {
+				t.Fatalf("observation = %q, want the unreadable fence first", gc.Rejection.RejectObservation)
 			}
 			return &oar.Decision{Code: code, Data: gc.RejectData[code]}, nil
 		},
@@ -102,7 +102,7 @@ func TestUnreadReportFencePrecedesArtifactEmbed(t *testing.T) {
 	}
 	observed, err := turnCloseout{loop}.observeCloseoutReport(t.Context(), &api.Session{ID: "session"}, nil, "coordinator_security_synthesis", report, read.Unread, nil, true)
 	testutil.FailErr(t, "observe unread fence with embed", err)
-	if observed.facts.RejectObservation != guidance.ReportDocumentObservation(guidance.ReportFenceUnreadableCode) {
-		t.Fatalf("unread fence was masked by embed: %s", observed.facts.RejectObservation)
+	if observed.facts.Rejection.RejectObservation != guidance.ReportDocumentObservation(guidance.ReportFenceUnreadableCode) {
+		t.Fatalf("unread fence was masked by embed: %s", observed.facts.Rejection.RejectObservation)
 	}
 }

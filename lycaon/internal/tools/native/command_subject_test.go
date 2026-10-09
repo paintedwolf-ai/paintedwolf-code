@@ -36,13 +36,19 @@ func TestCommandSubjectSurvivesProcessExit(t *testing.T) {
 		&CommandOutputTool{Registry: registry}, &CommandStopTool{Registry: registry},
 	} {
 		captured := &tools.ToolInvocationOut{}
-		_, err := tool.Run(t.Context(), map[string]any{"handle": handle, "cursor": float64(0)}, tools.ToolContext{SessionID: "session", Out: captured})
+		_, err := tool.Run(t.Context(), map[string]any{"handle": handle, "cursor": float64(0)}, tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: "session"},
+			Effects:  tools.InvocationEffects{Out: captured},
+		})
 		testutil.FailErr(t, "read completed command target", err)
 		if !strings.Contains(captured.DisplaySubject, argument) || strings.Contains(captured.DisplaySubject, handle) {
 			t.Fatalf("target = %q", captured.DisplaySubject)
 		}
 		other := &tools.ToolInvocationOut{}
-		_, err = tool.Run(t.Context(), map[string]any{"handle": handle, "cursor": float64(0)}, tools.ToolContext{SessionID: "other", Out: other})
+		_, err = tool.Run(t.Context(), map[string]any{"handle": handle, "cursor": float64(0)}, tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: "other"},
+			Effects:  tools.InvocationEffects{Out: other},
+		})
 		if err == nil || other.DisplaySubject != "" {
 			t.Fatal("command target crossed session ownership")
 		}

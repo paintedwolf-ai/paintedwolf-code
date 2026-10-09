@@ -73,7 +73,7 @@ func grantedPathOffersForAccess(action hitl.ProposedAction, target gate.FileTarg
 		note := ""
 		switch {
 		case rung.scope == hitl.ApprovalGrantScopeChat:
-		case !action.HasProjectIdentity():
+		case !action.Scope.HasProjectIdentity():
 			note = hitl.NoteNoProjectOpen
 		case !scopeWithin(rung.scope, ceiling):
 			note = hitl.NoteEndsWithChat
@@ -98,9 +98,9 @@ func grantedPathOffersForAccess(action hitl.ProposedAction, target gate.FileTarg
 			ID:            grantedPathGrantID(action, access, rung.scope, rung.rung),
 			Scope:         rung.scope,
 			Predicate:     hitl.ApprovalGrantPredicate{Category: string(ApprovalCategoryPath), Pattern: access.Path},
-			ChatSessionID: action.ChatSession(),
-			ProjectID:     action.ProjectID,
-			ProjectDir:    action.ProjectDir,
+			ChatSessionID: action.Scope.ChatSession(),
+			ProjectID:     action.Scope.ProjectID,
+			ProjectDir:    action.Scope.ProjectDir,
 			Title:         rung.title,
 			Coverage:      rungCoverage,
 			GrantedAt:     time.Now().UTC(),
@@ -116,7 +116,7 @@ func grantedPathOffersForAccess(action hitl.ProposedAction, target gate.FileTarg
 		authority := []hitl.ApprovalAuthorityDelta{{
 			Kind:          hitl.AuthorityGrantedPath,
 			Grant:         &grantCopy,
-			ChatSessionID: action.ChatSession(),
+			ChatSessionID: action.Scope.ChatSession(),
 			GrantedPath:   &accessCopy,
 		}, {
 			Kind: hitl.AuthorityGenericGrant, Grant: &grantCopy,
@@ -187,7 +187,7 @@ func grantedPathGrantID(
 	}
 	sum := sha256.Sum256([]byte(strings.Join([]string{
 		string(scope), string(rung), "granted_path", access.Path, mode, shape,
-		action.ChatSession(), action.ProjectID,
+		action.Scope.ChatSession(), action.Scope.ProjectID,
 	}, "\x00")))
 	return "grant_" + hex.EncodeToString(sum[:8])
 }

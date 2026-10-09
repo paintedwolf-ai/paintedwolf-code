@@ -130,14 +130,14 @@ func TestTreeStoreRetentionRemovesOnlyUnusedGenerations(t *testing.T) {
 	live := summaryStoreFor(t, c, root, TreeScope{Key: "all"})
 	stale := time.Now().Add(-2 * TreeStoreRetention)
 	testutil.FailErr(t, "age live generation", os.Chtimes(live.file, stale, stale))
-	orphan := filepath.Join(c.treeDir, "0000deadbeef"+treeFileSuffix)
+	orphan := filepath.Join(c.Trees.treeDir, "0000deadbeef"+treeFileSuffix)
 	for _, path := range append([]string{orphan}, treeSidecarPaths(orphan)...) {
 		testutil.FailErr(t, "write orphan generation", os.WriteFile(path, []byte("stale"), 0o600))
 		testutil.FailErr(t, "age orphan generation", os.Chtimes(path, stale, stale))
 	}
-	recent := filepath.Join(c.treeDir, "0000cafef00d"+treeFileSuffix)
+	recent := filepath.Join(c.Trees.treeDir, "0000cafef00d"+treeFileSuffix)
 	testutil.FailErr(t, "write recent generation", os.WriteFile(recent, []byte("recent"), 0o600))
-	removed, err := c.ReconcileTreeStores(t.Context(), TreeStoreRetention)
+	removed, err := c.Trees.ReconcileTreeStores(t.Context(), TreeStoreRetention)
 	testutil.FailErr(t, "reconcile generations", err)
 	if removed != 1 {
 		t.Fatalf("removed %d generations, want the one stale orphan", removed)
@@ -183,7 +183,7 @@ func TestClearTreeStoresRebuildsOnNextOpen(t *testing.T) {
 	first := readySummary(t, c, root, TreeScope{Key: "all"})
 	file := summaryStoreFor(t, c, root, TreeScope{Key: "all"}).file
 	testutil.FailErr(t, "release reader", first.Close())
-	testutil.FailErr(t, "clear generations", c.ClearTreeStores(context.Background(), nil))
+	testutil.FailErr(t, "clear generations", c.Trees.ClearTreeStores(context.Background(), nil))
 	testutil.FailErr(t, "remove generation files", removeTreeStore(file))
 	rebuilt := readySummary(t, c, root, TreeScope{Key: "all"})
 	n, err := rebuilt.Node(t.Context(), ".")
@@ -196,26 +196,26 @@ func TestClearTreeStoresRebuildsOnNextOpen(t *testing.T) {
 func TestClearTreeStoresExcludesNewAdmissionAndRetiresCapturedStore(t *testing.T) {
 	c := treeTestCatalog(t)
 	root := Root{ID: "root", Path: t.TempDir()}
-	stale, err := c.indexStore(t.Context(), "p", root)
+	stale, err := c.Trees.indexStore(t.Context(), "p", root)
 	testutil.FailErr(t, "create initial store", err)
 	entered := make(chan struct{})
 	release := make(chan struct{})
 	cleared := make(chan error, 1)
 	go func() {
-		cleared <- c.ClearTreeStores(t.Context(), func() error {
+		cleared <- c.Trees.ClearTreeStores(t.Context(), func() error {
 			close(entered)
 			<-release
 			return nil
 		})
 	}()
 	<-entered
-	if _, err := openStore(t.Context(), stale, 0, c.broker); !errors.Is(err, pagedview.ErrExpired) {
+	if _, err := openStore(t.Context(), stale, 0, c.Trees.broker); !errors.Is(err, pagedview.ErrExpired) {
 		t.Fatalf("captured store admitted work during clear: %v", err)
 	}
 	opened := make(chan *indexStore, 1)
 	openErr := make(chan error, 1)
 	go func() {
-		store, err := c.indexStore(t.Context(), "p", root)
+		store, err := c.Trees.indexStore(t.Context(), "p", root)
 		opened <- store
 		openErr <- err
 	}()
@@ -241,7 +241,7 @@ func TestReleaseTreeRootRemovesObsoleteCache(t *testing.T) {
 	testutil.FailErr(t, "close reader", reader.Close())
 	file := summaryStoreFor(t, c, root, TreeScope{Key: "all"}).file
 
-	testutil.FailErr(t, "release detached root", c.ReleaseTreeRoot(t.Context(), root.Path))
+	testutil.FailErr(t, "release detached root", c.Trees.ReleaseTreeRoot(t.Context(), root.Path))
 	if _, err := os.Stat(file); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("detached root cache remains: %v", err)
 	}
@@ -250,14 +250,14 @@ func TestReleaseTreeRootRemovesObsoleteCache(t *testing.T) {
 func TestClearTreeStoresJoinsPreviouslyAdmittedWriter(t *testing.T) {
 	c := treeTestCatalog(t)
 	root := Root{ID: "root", Path: t.TempDir()}
-	store, err := c.indexStore(t.Context(), "p", root)
+	store, err := c.Trees.indexStore(t.Context(), "p", root)
 	testutil.FailErr(t, "create store", err)
-	unwrite, err := store.write(t.Context())
+	unwrite, err := store.writer.Write(t.Context(), store.writable)
 	testutil.FailErr(t, "admit writer", err)
 	clearing := make(chan struct{})
 	done := make(chan error, 1)
 	go func() {
-		done <- c.ClearTreeStores(t.Context(), func() error {
+		done <- c.Trees.ClearTreeStores(t.Context(), func() error {
 			close(clearing)
 			return nil
 		})
@@ -274,7 +274,7 @@ func TestClearTreeStoresJoinsPreviouslyAdmittedWriter(t *testing.T) {
 		t.Fatal("storage clear did not join released writer")
 	}
 	testutil.FailErr(t, "clear tree stores", <-done)
-	if _, err := store.write(t.Context()); !errors.Is(err, pagedview.ErrExpired) {
+	if _, err := store.writer.Write(t.Context(), store.writable); !errors.Is(err, pagedview.ErrExpired) {
 		t.Fatalf("retired store admitted writer: %v", err)
 	}
 }

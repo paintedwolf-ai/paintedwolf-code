@@ -1130,6 +1130,10 @@ values:
     status: 409
     comment: >-
       workflow run is paused or terminal
+  - id: workflow_version_unavailable
+    status: 409
+    comment: >-
+      the run's pinned workflow version is no longer in the catalog, live or sealed
   - id: workflow_run_not_found
     status: 404
     comment: >-

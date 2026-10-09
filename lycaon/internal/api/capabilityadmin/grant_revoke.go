@@ -16,7 +16,7 @@ import (
 )
 
 // revokeGrantByID removes every authority projection sharing the reviewed ID.
-func (s *Handler) revokeGrantByID(ctx context.Context, id string) (bool, error) {
+func (s *Grants) revokeGrantByID(ctx context.Context, id string) (bool, error) {
 	stored, err := s.revokeStoredGrant(id)
 	if err != nil {
 		return false, err
@@ -25,10 +25,10 @@ func (s *Handler) revokeGrantByID(ctx context.Context, id string) (bool, error) 
 	return stored || runtime, nil
 }
 
-func (s *Handler) revokeRuntimeGrant(ctx context.Context, id string) bool {
+func (s *Grants) revokeRuntimeGrant(ctx context.Context, id string) bool {
 	// Granted paths share one ID across runtime and lease projections.
 	revoked := s.GrantedPaths != nil && s.GrantedPaths.RevokeByID(id)
-	if s.revokeDirectIPGrant(ctx, id) {
+	if s.Inventory.revokeDirectIPGrant(ctx, id) {
 		revoked = true
 	}
 	if s.ReadPaths != nil {
@@ -69,7 +69,7 @@ func (s *Handler) revokeRuntimeGrant(ctx context.Context, id string) bool {
 	return revoked
 }
 
-func (s *Handler) revokeStoredGrant(id string) (bool, error) {
+func (s *Grants) revokeStoredGrant(id string) (bool, error) {
 	return s.Gate.RevokeGrant(id)
 }
 
@@ -77,7 +77,7 @@ func (s *Handler) revokeStoredGrant(id string) (bool, error) {
 // live rows than this.
 const maxBulkRevokeIDs = 256
 
-func (s *Handler) HandleRevokeApprovalGrants(w http.ResponseWriter, r *http.Request) {
+func (s *Grants) HandleRevokeApprovalGrants(w http.ResponseWriter, r *http.Request) {
 	var req wire.RevokeApprovalGrantsRequest
 	if err := httpio.DecodeJSON(w, r, &req); err != nil {
 		s.responses.DecodeError(w, r, err)
@@ -113,7 +113,7 @@ func (s *Handler) HandleRevokeApprovalGrants(w http.ResponseWriter, r *http.Requ
 
 // revokeApprovalRecord removes persistence first so a failed durable removal
 // remains visible and retryable, rather than resurrecting on restart.
-func (s *Handler) revokeApprovalRecord(ctx context.Context, id string) wire.ElevatedAccessRevokeResult {
+func (s *Grants) revokeApprovalRecord(ctx context.Context, id string) wire.ElevatedAccessRevokeResult {
 	result := wire.ElevatedAccessRevokeResult{ID: id, Disposition: "failed"}
 	if !strings.HasPrefix(id, "grant_") && !strings.HasPrefix(id, "quiet_") {
 		result.Code = wire.ApiErrorCodeInvalidRequest
@@ -148,14 +148,14 @@ func (s *Handler) revokeApprovalRecord(ctx context.Context, id string) wire.Elev
 }
 
 // forgetChatGrant removes a revoked chat grant so a restart does not restore it.
-func (s *Handler) forgetChatGrant(ctx context.Context, id string) (bool, error) {
+func (s *Grants) forgetChatGrant(ctx context.Context, id string) (bool, error) {
 	if s.ChatGrants == nil {
 		return false, nil
 	}
 	return s.ChatGrants.ForgetChatGrant(ctx, id)
 }
 
-func (s *Handler) recordSocketRevoked(ctx context.Context, chatSessionID string, socket authzledger.CapabilitySocket) {
+func (s *Grants) recordSocketRevoked(ctx context.Context, chatSessionID string, socket authzledger.CapabilitySocket) {
 	if s == nil || s.AuthzRecorder == nil {
 		return
 	}
@@ -171,7 +171,7 @@ func (s *Handler) recordSocketRevoked(ctx context.Context, chatSessionID string,
 	})
 }
 
-func (s *Handler) lockApprovalRevocation() func() {
+func (s *Grants) lockApprovalRevocation() func() {
 	var releaseLedger func()
 	if owner, ok := s.ChatGrants.(interface{ LockApprovalAuthority() func() }); ok {
 		releaseLedger = owner.LockApprovalAuthority()

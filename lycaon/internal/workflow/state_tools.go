@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/conditions"
@@ -36,14 +37,14 @@ func RegisterStateTools(reg *tools.DefaultRegistry, deps StateToolDeps) error {
 		if err := requireSessionProject(ctx, deps.Sessions, tctx); err != nil {
 			return "", err
 		}
-		active, err := deps.Runs.GetActive(ctx, tctx.SessionID)
+		active, err := deps.Runs.GetActive(ctx, tctx.Identity.SessionID)
 		if err != nil {
 			return "", err
 		}
 		if active == nil {
 			return "", ErrNoActiveRun
 		}
-		run, err := deps.Runs.Exit(ctx, tctx.SessionID, active.ID, active.Revision, stringArg(args["reason"]))
+		run, err := deps.Runs.Exit(ctx, tctx.Identity.SessionID, active.ID, active.Revision, stringArg(args["reason"]))
 		if err != nil {
 			return "", err
 		}
@@ -57,14 +58,14 @@ func RegisterStateTools(reg *tools.DefaultRegistry, deps StateToolDeps) error {
 		if err := requireSessionProject(ctx, deps.Sessions, tctx); err != nil {
 			return "", err
 		}
-		run, err := deps.Runs.GetActive(ctx, tctx.SessionID)
+		run, err := deps.Runs.GetActive(ctx, tctx.Identity.SessionID)
 		if err != nil {
 			return "", err
 		}
 		if run == nil {
 			return "{}", nil
 		}
-		vars, err := deps.Runs.ScaffoldVarsForSession(ctx, tctx.SessionID)
+		vars, err := deps.Runs.ScaffoldVarsForSession(ctx, tctx.Identity.SessionID)
 		if err != nil {
 			return "", err
 		}
@@ -92,7 +93,7 @@ func RegisterStateTools(reg *tools.DefaultRegistry, deps StateToolDeps) error {
 			return "", fmt.Errorf("path required")
 		}
 		if hostWorkflowStatePath(path) {
-			return "", &tools.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"tool": "state_update", "field": "path", "reason": "host_managed_workflow_state", "path": path}}
+			return "", &toolrejection.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"tool": "state_update", "field": "path", "reason": "host_managed_workflow_state", "path": path}}
 		}
 		value, ok := args["value"]
 		if !ok {
@@ -102,14 +103,14 @@ func RegisterStateTools(reg *tools.DefaultRegistry, deps StateToolDeps) error {
 			Path  string `json:"path"`
 			Value any    `json:"value"`
 		}{Path: path, Value: value}
-		if _, replayed, replayErr := deps.Runs.replayCommandOperation(ctx, tctx.ToolCallID, "state_update", payload); replayErr != nil || replayed {
+		if _, replayed, replayErr := deps.Runs.replayCommandOperation(ctx, tctx.Identity.ToolCallID, "state_update", payload); replayErr != nil || replayed {
 			if replayErr != nil {
 				return "", replayErr
 			}
 			raw, _ := json.Marshal(map[string]any{"path": path, "value": value})
 			return string(raw), nil
 		}
-		run, err := deps.Runs.GetActive(ctx, tctx.SessionID)
+		run, err := deps.Runs.GetActive(ctx, tctx.Identity.SessionID)
 		if err != nil {
 			return "", err
 		}
@@ -127,7 +128,7 @@ func RegisterStateTools(reg *tools.DefaultRegistry, deps StateToolDeps) error {
 			return "", err
 		}
 		vars = SetHostVar(vars, path, value)
-		commandCtx := withWorkflowCommandOperation(WithExpectedRevision(ctx, run.Revision), tctx.ToolCallID)
+		commandCtx := withWorkflowCommandOperation(WithExpectedRevision(ctx, run.Revision), tctx.Identity.ToolCallID)
 		if err := rm.commitCommand(commandCtx, run, "state_update", payload, vars, nil, "", workflowWorkerMutation{}, nil); err != nil {
 			return "", err
 		}
@@ -146,7 +147,7 @@ func hostWorkflowStatePath(path string) bool {
 	}
 	root, _, _ := strings.Cut(path, ".")
 	switch root {
-	case "fanout_plans", "fanout_coverage", "fanout_settled", "worker_cycle", "gates",
+	case reviewRepairsKey, "fanout_plans", "fanout_coverage", "fanout_settled", "worker_cycle", "gates",
 		"human_approval", "phase_skipped", "review_if_spawnable", "review_loop", "review_verdict", "review_questions",
 		"user_feedback", "user_decision", "topology_stages", "topology_outputs", "orchestration_complete", "content_review",
 		hostVarBaselinePosture, workflowdef.ScaffoldExecutionModeVar, workflowRequestFeedbackID, coordinatorAskVar, obligationsVarKey,
@@ -163,7 +164,7 @@ func runStateStartTool(ctx context.Context, deps StateToolDeps, args map[string]
 		return "", err
 	}
 	req := api.StartWorkflowRunRequest{
-		OperationID:     strings.TrimSpace(tctx.ToolCallID),
+		OperationID:     strings.TrimSpace(tctx.Identity.ToolCallID),
 		WorkflowID:      stringArg(args["workflow_id"]),
 		WorkflowVersion: stringArg(args["workflow_version"]),
 		BlueprintPath:   stringArg(args["blueprint_path"]),
@@ -172,14 +173,14 @@ func runStateStartTool(ctx context.Context, deps StateToolDeps, args map[string]
 	if req.WorkflowID == "" || req.WorkflowVersion == "" {
 		return "", fmt.Errorf("workflow_id and workflow_version required")
 	}
-	if err := deps.Runs.ValidateUserFacingStart(ctx, tctx.ActiveRootPath(), tctx.SessionID, req.WorkflowID, req.WorkflowVersion); err != nil {
+	if err := deps.Runs.ValidateUserFacingStart(ctx, tctx.ActiveRootPath(), tctx.Identity.SessionID, req.WorkflowID, req.WorkflowVersion); err != nil {
 		return "", err
 	}
-	run, err := deps.Runs.Start(ctx, tctx.SessionID, req)
+	run, err := deps.Runs.Start(ctx, tctx.Identity.SessionID, req)
 	if err != nil {
 		if errors.Is(err, ErrWorkflowStartRequiresHumanApproval) {
-			_ = deps.Runs.NoteWorkflowStartProposal(ctx, tctx.SessionID, req.WorkflowID, req.WorkflowVersion)
-			return "", &tools.ToolReject{
+			_ = deps.Runs.NoteWorkflowStartProposal(ctx, tctx.Identity.SessionID, req.WorkflowID, req.WorkflowVersion)
+			return "", &toolrejection.ToolReject{
 				Code: "WORKFLOW_START_REQUIRES_HUMAN_APPROVAL",
 				Data: map[string]any{"workflow_id": req.WorkflowID},
 			}
@@ -197,13 +198,13 @@ func requireSessionProject(ctx context.Context, store session.Store, tctx tools.
 	if strings.TrimSpace(tctx.ActiveRootPath()) == "" {
 		return fmt.Errorf("project_dir required")
 	}
-	if strings.TrimSpace(tctx.SessionID) == "" {
+	if strings.TrimSpace(tctx.Identity.SessionID) == "" {
 		return fmt.Errorf("session_id required")
 	}
 	if store == nil {
 		return nil
 	}
-	sess, err := store.Get(ctx, tctx.SessionID)
+	sess, err := store.Get(ctx, tctx.Identity.SessionID)
 	if err != nil {
 		return err
 	}

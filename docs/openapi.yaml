@@ -18535,6 +18535,9 @@ components:
           maximum: 500
         budget:
           $ref: '#/components/schemas/SearchBudget'
+        include_dependencies:
+          type: boolean
+          description: Walk dependency, build and nested checkout directories on demand for this request. Omitted means false.
         regex:
           type: boolean
           description: When true, treat the code pattern as a Go regexp
@@ -18827,6 +18830,9 @@ components:
           format: uuid
         format:
           $ref: '#/components/schemas/SearchExportFormat'
+        include_dependencies:
+          type: boolean
+          description: Walk dependency, build and nested checkout directories on demand for this request. Omitted means false.
         regex:
           type: boolean
         case_sensitive:
@@ -25697,6 +25703,7 @@ components:
         - blueprint_draft_required
         - workflow_not_found
         - workflow_not_runnable
+        - workflow_version_unavailable
         - workflow_run_not_found
         - report_not_found
         - managed_secret_revoked
@@ -26780,6 +26787,22 @@ components:
         why:
           type: string
           description: The consequence that makes the ask worth the reader's time.
+    CompletionReportRating:
+      x-go-generate: true
+      type: object
+      required:
+        - level
+        - why
+      additionalProperties: false
+      description: |
+        The report's own answer to the workflow's rating question, made from all the run's work: one declared level and the reason for it.
+      properties:
+        level:
+          type: string
+          description: A level label the workflow's brief declares.
+        why:
+          type: string
+          description: One line saying what decided the level.
     CompletionReportSetAside:
       x-go-generate: true
       type: object
@@ -26875,6 +26898,9 @@ components:
         ask:
           x-go-pointer: true
           $ref: '#/components/schemas/CompletionReportAsk'
+        rating:
+          x-go-pointer: true
+          $ref: '#/components/schemas/CompletionReportRating'
         set_asides:
           type: array
           items:
@@ -27925,6 +27951,29 @@ components:
             Empty means "based on primary." Must be a non-terminal overlay
             (pending, applying, rebasing) on the same parent session, else
             spawn rejects with OVERLAY_BASE_MISSING or OVERLAY_BASE_NOT_PENDING.
+    WorkerCoverageGap:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - subject
+        - reason
+      properties:
+        id:
+          type: string
+          pattern: ^[A-Za-z0-9_.-]+$
+          description: Worker-local gap id; the host scopes it to the task.
+        subject:
+          type: string
+          minLength: 1
+        reason:
+          type: string
+          minLength: 1
+        paths:
+          type: array
+          items:
+            type: string
     CoverageAssessment:
       x-go-generate: true
       type: object
@@ -28020,6 +28069,10 @@ components:
       required:
         - leg_status
       properties:
+        coverage_gaps:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkerCoverageGap'
         coverage_review:
           x-go-pointer: true
           $ref: '#/components/schemas/CoverageReview'
@@ -30551,6 +30604,10 @@ components:
         recursive:
           type: boolean
           description: One root registration observes every descendant.
+        policy_unwatched:
+          type: integer
+          minimum: 0
+          description: Lazy boundary roots intentionally refreshed on demand, distinct from failed watcher registrations.
         unwatched_directories:
           type: integer
           minimum: 0
@@ -32637,6 +32694,9 @@ components:
         sends the word under the caret; the host narrows whole-word search
         hits to AST-confirmed declarations. Empty symbol is a client no-op.
       properties:
+        include_dependencies:
+          type: boolean
+          description: Walk dependency, build and nested checkout directories on demand for this request. Omitted means false.
         root_id:
           type: string
           format: uuid
@@ -35323,6 +35383,9 @@ components:
         origin_project_id:
           type: string
           format: uuid
+        include_dependencies:
+          type: boolean
+          description: Walk dependency, build and nested checkout directories on demand for this preview. Omitted means false.
         regex:
           type: boolean
         case_sensitive:
@@ -36483,6 +36546,27 @@ components:
           $ref: '#/components/schemas/HistoryRetentionRule'
         receipt_detail:
           $ref: '#/components/schemas/HistoryRetentionRule'
+    HistoryClassUsage:
+      type: object
+      x-go-generate: true
+      additionalProperties: false
+      required:
+        - class
+        - content_bytes
+      properties:
+        class:
+          type: string
+          enum:
+            - recordings
+            - checkpoints
+            - source_revisions
+            - scan_detail
+            - receipt_detail
+        content_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Uncompressed retained content referenced by this class, deduplicated within the class. SQLite classes count serialized detail fields, excluding row and page overhead. Shared bodies can appear in multiple classes; this is neither exclusive disk allocation nor reclaimable bytes.
     HistoryStorageLane:
       type: object
       x-go-generate: true
@@ -36537,6 +36621,10 @@ components:
       properties:
         policy:
           $ref: '#/components/schemas/HistoryRetentionPolicy'
+        classes:
+          type: array
+          items:
+            $ref: '#/components/schemas/HistoryClassUsage'
         lanes:
           type: array
           items:
@@ -40072,6 +40160,7 @@ components:
         - user_image_not_visible
         - workflow_active
         - workflow_not_runnable
+        - workflow_version_unavailable
         - worktree_stale
     SessionIdleDisposition:
       type: string

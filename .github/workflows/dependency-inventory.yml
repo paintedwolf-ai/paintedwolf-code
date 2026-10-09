@@ -1,7 +1,6 @@
 name: dependency inventory
 
-# Re-queries upstream versions weekly and commits the regenerated inventory.
-# Pull requests keep the offline inventory current through check:drift.
+# Refresh dependency evidence independently of feature PRs.
 on:
   schedule:
     # Mondays 06:00 UTC.
@@ -9,21 +8,21 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
+  pull-requests: write
+  actions: write
 
+# Maintenance runs one workflow at a time; staggered schedules keep a pending run from being replaced.
 concurrency:
-  group: dependency-inventory
+  group: maintenance
   cancel-in-progress: false
 
 jobs:
   refresh:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
     steps:
-      # The deploy key is the only actor that may push to main without a pull request.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ssh-key: ${{ secrets.DEPENDENCY_INVENTORY_DEPLOY_KEY }}
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -37,13 +36,11 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: ./task codegen:dependency-inventory:upstream
 
-      - name: Commit generated files
-        run: |
-          set -euo pipefail
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add -- docs/operations/dependency-inventory.md dependencies/upstream.json .github/dependabot.yml
-          git diff --cached --quiet && exit 0
-          git commit -s -m "deps: refresh dependency inventory"
-          git pull --rebase
-          git push
+      - name: Refresh complete advisory snapshot
+        run: ./task lint:vuln:vendor
+
+      - name: Propose updated evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PYTHONPATH: scripts
+        run: python3 -m ci_policy.maintenance

@@ -20,8 +20,10 @@ func TestTerminalOpenArgvParity(t *testing.T) {
 
 	dir := t.TempDir()
 	tctx := tools.ToolContext{
-		SessionID: "s", ProjectID: "p", Agent: "implement",
-		Roots: []projectroot.RootRef{{ID: "main", Path: dir, IsPrimary: true}},
+		Identity: tools.InvocationIdentity{SessionID: "s",
+			ProjectID: "p",
+			Agent:     "implement"},
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "main", Path: dir, IsPrimary: true}}},
 	}
 	_, err := reg.Run(context.Background(), terminal.OpenToolName, map[string]any{
 		"command": "curl https://example.com; rm -rf /",

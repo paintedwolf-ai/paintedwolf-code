@@ -42,9 +42,65 @@ type Deps struct {
 }
 
 type Handler struct {
-	Deps
+	BlueprintRoutes *BlueprintRoutes
+	Composition     *Composition
+	Reports         *Reports
+	RunControl      *RunControl
+	Topology        *Topology
+}
+
+type BlueprintRoutes struct {
+	RunControl   *RunControl
+	Blueprints   *blueprint.Manager
+	Catalog      workflow.ManifestResolver
+	Projects     project.Registry
+	Runs         workflow.RunStore
+	SessionAdmin *sessionadmin.Lifecycle
+	Topology     *Topology
+	Workflows    *workflow.RunManager
+	responses    *httpio.Responder
+}
+
+type Composition struct {
+	Composer       *workflow.Composer
+	EventPublisher *events.Publisher
+	Persister      *workflow.Persister
+	SessionView    *sessionview.Projector
+	Sessions       *session.Manager
+	Store          session.Store
+	responses      *httpio.Responder
+}
+
+type Reports struct {
+	RunControl  *RunControl
+	Projects    project.Registry
+	Runs        workflow.RunStore
+	Scans       scan.ScanCoordinator
+	Store       session.Store
+	VisualStore visual.Store
+	Workers     worker.WorkerQueue
+	Workflows   *workflow.RunManager
+	responses   *httpio.Responder
+}
+
+type RunControl struct {
+	Catalog        workflow.ManifestResolver
+	ManagedSecrets *secretcap.Service
+	Projects       project.Registry
+	Runs           workflow.RunStore
+	SessionView    *sessionview.Projector
+	Sessions       *session.Manager
+	Store          session.Store
+	Topology       *Topology
+	Workflows      *workflow.RunManager
+	responses      *httpio.Responder
+}
+
+type Topology struct {
+	Orchestrator       orchestration.Orchestrator
+	Runs               workflow.RunStore
+	Store              session.Store
 	activeTopologyRuns sync.Map // workflow run id → struct{} while topology settlement is executing
-	responses          *httpio.Responder
 	background         *taskgroup.Group
 }
 
@@ -59,5 +115,18 @@ func New(responses *httpio.Responder, background *taskgroup.Group, deps Deps) Ha
 		httpio.Required{Name: "Store", Present: deps.Store != nil},
 		httpio.Required{Name: "Workflows", Present: deps.Workflows != nil},
 	)
-	return Handler{Deps: deps, responses: responses, background: background}
+	h := Handler{}
+	h.BlueprintRoutes = &BlueprintRoutes{Runs: deps.Runs, Blueprints: deps.Blueprints, Catalog: deps.Catalog, Projects: deps.Projects, SessionAdmin: deps.SessionAdmin.Lifecycle, Workflows: deps.Workflows, responses: responses}
+	h.Composition = &Composition{Composer: deps.Composer, EventPublisher: deps.EventPublisher, Persister: deps.Persister, SessionView: deps.SessionView, Sessions: deps.Sessions, Store: deps.Store, responses: responses}
+	h.Reports = &Reports{Runs: deps.Runs, Projects: deps.Projects, Scans: deps.Scans, Store: deps.Store, VisualStore: deps.VisualStore, Workers: deps.Workers, Workflows: deps.Workflows, responses: responses}
+	h.RunControl = &RunControl{Runs: deps.Runs, Catalog: deps.Catalog, ManagedSecrets: deps.ManagedSecrets, Projects: deps.Projects, SessionView: deps.SessionView, Sessions: deps.Sessions, Store: deps.Store, Workflows: deps.Workflows, responses: responses}
+	h.Topology = &Topology{Runs: deps.Runs, Orchestrator: deps.Orchestrator, Store: deps.Store, background: background}
+
+	h.BlueprintRoutes.Topology = h.Topology
+
+	h.RunControl.Topology = h.Topology
+
+	h.BlueprintRoutes.RunControl = h.RunControl
+	h.Reports.RunControl = h.RunControl
+	return h
 }

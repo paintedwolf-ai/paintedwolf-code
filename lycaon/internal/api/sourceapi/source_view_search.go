@@ -65,7 +65,7 @@ func decodeSourceViewSearchCursor(raw, scope string, tree bool) (sourceViewSearc
 	return cursor, nil
 }
 
-func (s *Handler) HandleSearchSourceView(w http.ResponseWriter, r *http.Request) {
+func (s *Presentation) HandleSearchSourceView(w http.ResponseWriter, r *http.Request) {
 	view, r, release, ok := s.requestedSourcePresentation(w, r)
 	if !ok {
 		return
@@ -81,37 +81,37 @@ func (s *Handler) HandleSearchSourceView(w http.ResponseWriter, r *http.Request)
 		Sensitive           bool
 	}{view.id, view.scope.Person, query.query, query.sensitive})
 	scope := string(identity)
-	cursor, err := decodeSourceViewSearchCursor(query.page.Cursor, scope, view.tree != nil)
+	cursor, err := decodeSourceViewSearchCursor(query.page.Cursor, scope, view.navigation.tree != nil)
 	if err != nil {
 		s.responses.PageCursorError(w, r, "cursor", err)
 		return
 	}
 	read := view
 	var out wire.SourceViewSearchPage
-	if view.tree != nil {
+	if view.navigation.tree != nil {
 		out.Tree, err = read.searchTree(r, query, cursor, scope)
 	} else {
 		out.Comparison, err = read.searchComparison(r, query, cursor, scope)
 	}
 
 	if err != nil {
-		s.writeSourceViewError(w, r, err)
+		s.Views.writeSourceViewError(w, r, err)
 		return
 	}
 	httpio.WriteJSON(w, http.StatusOK, out)
 }
 
 func (view *sourceViewRead) searchTree(r *http.Request, query sourceViewSearchQuery, cursor sourceViewSearchCursor, scope string) (*wire.SourceTreeSearchPage, error) {
-	if view.reviewPreparing {
+	if view.reviewing.reviewPreparing {
 		return nil, treeReviewPreparing()
 	}
 	var page sourcetree.SearchPage
 	var err error
-	if view.treeIntent.Filter != "" {
-		if view.filtered == nil {
+	if view.navigation.treeIntent.Filter != "" {
+		if view.filtering.filtered == nil {
 			return nil, &comparisonFailure{wire.ApiErrorCodeSourceViewPreparing, "The source filter is being prepared."}
 		}
-		page, err = view.filtered.Find(r.Context(), cursor.Revision, query.query, cursor.Row, query.page.Limit, query.sensitive)
+		page, err = view.filtering.filtered.Find(r.Context(), cursor.Revision, query.query, cursor.Row, query.page.Limit, query.sensitive)
 	} else {
 		page, err = view.presentation.Find(r.Context(), cursor.Revision, query.query, cursor.Row, query.page.Limit, query.sensitive)
 	}
@@ -137,16 +137,16 @@ func (view *sourceViewRead) searchComparison(r *http.Request, query sourceViewSe
 		return nil, pagedview.ErrRevision
 	}
 	out := &wire.SourceComparisonSearchPage{Kind: "comparison", ViewID: view.id, ProjectionRevision: revision, Complete: true, Matches: []wire.SourceReaderMatch{}}
-	if view.comparison == nil && view.current == nil {
+	if view.comparisonData.comparison == nil && view.comparisonData.current == nil {
 		return out, nil
 	}
 	var page sourcecomparison.SearchPage
 	var err error
 	start := sourcecomparison.SearchCursor{Row: int(cursor.Row), Byte: cursor.Byte}
-	if view.current != nil {
-		page, err = view.current.document.Find(r.Context(), query.query, start, query.page.Limit, query.sensitive)
+	if view.comparisonData.current != nil {
+		page, err = view.comparisonData.current.document.Find(r.Context(), query.query, start, query.page.Limit, query.sensitive)
 	} else {
-		page, err = view.comparison.Find(r.Context(), query.query, start, query.page.Limit, query.sensitive)
+		page, err = view.comparisonData.comparison.Find(r.Context(), query.query, start, query.page.Limit, query.sensitive)
 	}
 	if err != nil {
 		return nil, err

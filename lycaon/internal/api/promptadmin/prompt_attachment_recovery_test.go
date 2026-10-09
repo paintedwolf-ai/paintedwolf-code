@@ -23,8 +23,8 @@ func newPromptAttachmentRecoveryFixture(t *testing.T) (*Handler, *store.Memory, 
 	testutil.FailErr(t, "create session", err)
 	manager := session.NewManager(sessions, nil, nil, settings.SessionLimits{})
 	manager.SetDataDir(t.TempDir())
-	server := &Handler{Deps: Deps{Store: sessions, Sessions: manager}}
-	attachmentStore, available := server.AttachmentStore(t.Context(), sess.ProjectID)
+	server := &Handler{Attachments: &Attachments{Store: sessions, Sessions: manager}, Submission: &Submission{Sessions: manager}}
+	attachmentStore, available := server.Attachments.AttachmentStore(t.Context(), sess.ProjectID)
 	if !available {
 		t.Fatal("attachment store unavailable")
 	}
@@ -57,7 +57,7 @@ func admitRetainedAttachment(
 func TestPromptAttachmentRetentionsDropFailedAdmission(t *testing.T) {
 	server, sessions, attachmentStore, sess := newPromptAttachmentRecoveryFixture(t)
 	operationID, blob := admitRetainedAttachment(t, sessions, attachmentStore, sess)
-	retentions, err := server.capturePromptAttachmentRetentions(t.Context(), operationID)
+	retentions, err := server.Attachments.capturePromptAttachmentRetentions(t.Context(), operationID)
 	testutil.FailErr(t, "capture attachment retentions", err)
 	claimed, won, err := sessions.ClaimPromptSubmission(t.Context(), operationID)
 	testutil.FailErr(t, "claim prompt", err)
@@ -68,7 +68,7 @@ func TestPromptAttachmentRetentionsDropFailedAdmission(t *testing.T) {
 		t.Context(), operationID, claimed.ClaimToken, store.PromptSubmissionFailed, "",
 		store.PromptSubmissionFailure{Message: "failed"},
 	))
-	testutil.FailErr(t, "reconcile attachment retentions", server.reconcilePromptAttachmentRetentions(t.Context(), retentions))
+	testutil.FailErr(t, "reconcile attachment retentions", server.Attachments.reconcilePromptAttachmentRetentions(t.Context(), retentions))
 	if _, err := attachmentStore.Resolve(blob.ID); !errors.Is(err, blobstore.ErrNotFound) {
 		t.Fatalf("failed prompt attachment survived: %v", err)
 	}
@@ -77,7 +77,7 @@ func TestPromptAttachmentRetentionsDropFailedAdmission(t *testing.T) {
 func TestPromptAttachmentRetentionsKeepMessageReference(t *testing.T) {
 	server, sessions, attachmentStore, sess := newPromptAttachmentRecoveryFixture(t)
 	operationID, blob := admitRetainedAttachment(t, sessions, attachmentStore, sess)
-	retentions, err := server.capturePromptAttachmentRetentions(t.Context(), operationID)
+	retentions, err := server.Attachments.capturePromptAttachmentRetentions(t.Context(), operationID)
 	testutil.FailErr(t, "capture attachment retentions", err)
 	claimed, won, err := sessions.ClaimPromptSubmission(t.Context(), operationID)
 	testutil.FailErr(t, "claim prompt", err)
@@ -91,7 +91,7 @@ func TestPromptAttachmentRetentionsKeepMessageReference(t *testing.T) {
 	testutil.FailErr(t, "finish prompt", sessions.FinishPromptSubmission(
 		t.Context(), operationID, claimed.ClaimToken, store.PromptSubmissionComplete, `{}`, store.PromptSubmissionFailure{},
 	))
-	testutil.FailErr(t, "reconcile attachment retentions", server.reconcilePromptAttachmentRetentions(t.Context(), retentions))
+	testutil.FailErr(t, "reconcile attachment retentions", server.Attachments.reconcilePromptAttachmentRetentions(t.Context(), retentions))
 	_, err = attachmentStore.DiscardStagedBefore(blob.ID, time.Time{})
 	testutil.FailErr(t, "attempt to discard message attachment", err)
 	if _, err := attachmentStore.Resolve(blob.ID); err != nil {

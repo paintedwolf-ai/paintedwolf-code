@@ -1,7 +1,10 @@
 package tools_test
 
 import (
+	"github.com/lycaon/lycaon/internal/capabilityrequest"
+
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"net"
 	"os"
 	"path/filepath"
@@ -16,7 +19,7 @@ import (
 )
 
 func TestParseCapabilityRequestAbsent(t *testing.T) {
-	req, reject := tools.ParseCapabilityRequest(map[string]any{"command": "echo hi"})
+	req, reject := capabilityrequest.ParseCapabilityRequest(map[string]any{"command": "echo hi"})
 	if reject != nil || req != nil {
 		t.Fatalf("absent capability_request = (%v, %v), want nil,nil", req, reject)
 	}
@@ -37,7 +40,7 @@ func TestCapabilityContractIsCatalogCompiled(t *testing.T) {
 			t.Fatalf("command lacks capability %d", capability)
 		}
 	}
-	if reject := tools.ValidateCapabilityContract(command, map[string]any{
+	if reject := capabilityrequest.ValidateCapabilityContract(command, map[string]any{
 		"capability_request": map[string]any{"loopback_connect": map[string]any{}},
 	}); reject != nil {
 		t.Fatalf("command loopback_connect reject = %+v", reject)
@@ -46,12 +49,12 @@ func TestCapabilityContractIsCatalogCompiled(t *testing.T) {
 	if !ok {
 		t.Fatal("verify contract missing")
 	}
-	if reject := tools.ValidateCapabilityContract(verify, map[string]any{
+	if reject := capabilityrequest.ValidateCapabilityContract(verify, map[string]any{
 		"capability_request": map[string]any{"local_listen": map[string]any{}},
 	}); reject != nil {
 		t.Fatalf("verify local-listen reject = %+v", reject)
 	}
-	if reject := tools.ValidateCapabilityContract(verify, map[string]any{
+	if reject := capabilityrequest.ValidateCapabilityContract(verify, map[string]any{
 		"capability_request": map[string]any{"write_root": filepath.Join(t.TempDir(), "cache")},
 	}); reject != nil {
 		t.Fatalf("verify write_root reject = %+v", reject)
@@ -79,7 +82,7 @@ func TestCompiledContractsMirrorCatalogCapabilities(t *testing.T) {
 }
 
 func TestParseCapabilityRequestEmptyObjectRejected(t *testing.T) {
-	_, reject := tools.ParseCapabilityRequest(map[string]any{
+	_, reject := capabilityrequest.ParseCapabilityRequest(map[string]any{
 		"capability_request": map[string]any{},
 	})
 	if reject == nil || reject.Code != "SANDBOX_CAPABILITY_REQUEST_INVALID" {
@@ -88,7 +91,7 @@ func TestParseCapabilityRequestEmptyObjectRejected(t *testing.T) {
 }
 
 func TestParseCapabilityRequestHostResources(t *testing.T) {
-	req, reject := tools.ParseCapabilityRequest(map[string]any{
+	req, reject := capabilityrequest.ParseCapabilityRequest(map[string]any{
 		"capability_request": map[string]any{
 			"host_resources": []any{"docker", "aws-cli", "docker"},
 		},
@@ -102,7 +105,7 @@ func TestParseCapabilityRequestHostResources(t *testing.T) {
 }
 
 func TestParseCapabilityRequestDedupesAndSorts(t *testing.T) {
-	req, reject := tools.ParseCapabilityRequest(map[string]any{
+	req, reject := capabilityrequest.ParseCapabilityRequest(map[string]any{
 		"capability_request": map[string]any{
 			"socket_paths": []any{"/tmp/b.sock", "/tmp/a.sock", "/tmp/a.sock"},
 		},
@@ -123,7 +126,7 @@ func TestParseCapabilityRequestOverCapRejected(t *testing.T) {
 	for i := 0; i < confine.MaxSocketGrants+1; i++ {
 		paths = append(paths, fmt.Sprintf("/tmp/overcap-%d.sock", i))
 	}
-	_, reject := tools.ParseCapabilityRequest(map[string]any{
+	_, reject := capabilityrequest.ParseCapabilityRequest(map[string]any{
 		"capability_request": map[string]any{"socket_paths": paths},
 	})
 	if reject == nil || reject.Code != "SANDBOX_SOCKET_PATH_LIMIT" {
@@ -132,7 +135,7 @@ func TestParseCapabilityRequestOverCapRejected(t *testing.T) {
 }
 
 func TestParseCapabilityRequestDirectIPTrue(t *testing.T) {
-	req, reject := tools.ParseCapabilityRequest(map[string]any{
+	req, reject := capabilityrequest.ParseCapabilityRequest(map[string]any{
 		"capability_request": map[string]any{"direct_ip": true},
 	})
 	if reject != nil {
@@ -147,7 +150,7 @@ func TestParseCapabilityRequestDirectIPTrue(t *testing.T) {
 }
 
 func TestParseCapabilityRequestDirectIPFalseRejected(t *testing.T) {
-	_, reject := tools.ParseCapabilityRequest(map[string]any{
+	_, reject := capabilityrequest.ParseCapabilityRequest(map[string]any{
 		"capability_request": map[string]any{"direct_ip": false},
 	})
 	if reject == nil || reject.Code != "SANDBOX_DIRECT_IP_REQUEST_INVALID" {
@@ -156,7 +159,7 @@ func TestParseCapabilityRequestDirectIPFalseRejected(t *testing.T) {
 }
 
 func TestParseCapabilityRequestDirectIPDestinationList(t *testing.T) {
-	req, reject := tools.ParseCapabilityRequest(map[string]any{
+	req, reject := capabilityrequest.ParseCapabilityRequest(map[string]any{
 		"capability_request": map[string]any{
 			"direct_ip": []any{"udp://time.nist.gov:123", "udp://time.google.com:123"},
 		},
@@ -170,7 +173,7 @@ func TestParseCapabilityRequestDirectIPDestinationList(t *testing.T) {
 }
 
 func TestParseCapabilityRequestDirectIPEmptyObject(t *testing.T) {
-	req, reject := tools.ParseCapabilityRequest(map[string]any{
+	req, reject := capabilityrequest.ParseCapabilityRequest(map[string]any{
 		"capability_request": map[string]any{
 			"direct_ip": map[string]any{},
 		},
@@ -190,7 +193,7 @@ func TestParseCapabilityRequestDirectIPEmptyObject(t *testing.T) {
 }
 
 func TestParseCapabilityRequestDirectIPDeclaredDedupesAndSorts(t *testing.T) {
-	req, reject := tools.ParseCapabilityRequest(map[string]any{
+	req, reject := capabilityrequest.ParseCapabilityRequest(map[string]any{
 		"capability_request": map[string]any{
 			"direct_ip": map[string]any{
 				"declared_destinations": []any{"db.example:5432", "api.example:443", "db.example:5432", "  api.example:443  "},
@@ -209,11 +212,11 @@ func TestParseCapabilityRequestDirectIPDeclaredDedupesAndSorts(t *testing.T) {
 }
 
 func TestParseCapabilityRequestDirectIPOverCapRejected(t *testing.T) {
-	dests := make([]any, 0, tools.MaxDirectIPDeclaredDestinations+1)
-	for i := 0; i < tools.MaxDirectIPDeclaredDestinations+1; i++ {
+	dests := make([]any, 0, capabilityrequest.MaxDirectIPDeclaredDestinations+1)
+	for i := 0; i < capabilityrequest.MaxDirectIPDeclaredDestinations+1; i++ {
 		dests = append(dests, fmt.Sprintf("host-%d.example:1", i))
 	}
-	_, reject := tools.ParseCapabilityRequest(map[string]any{
+	_, reject := capabilityrequest.ParseCapabilityRequest(map[string]any{
 		"capability_request": map[string]any{
 			"direct_ip": map[string]any{"declared_destinations": dests},
 		},
@@ -224,8 +227,8 @@ func TestParseCapabilityRequestDirectIPOverCapRejected(t *testing.T) {
 }
 
 func TestParseCapabilityRequestDirectIPByteLimitRejected(t *testing.T) {
-	tooLong := strings.Repeat("a", tools.MaxDirectIPDeclaredBytes+1)
-	_, reject := tools.ParseCapabilityRequest(map[string]any{
+	tooLong := strings.Repeat("a", capabilityrequest.MaxDirectIPDeclaredBytes+1)
+	_, reject := capabilityrequest.ParseCapabilityRequest(map[string]any{
 		"capability_request": map[string]any{
 			"direct_ip": map[string]any{
 				"declared_destinations": []any{tooLong},
@@ -239,7 +242,7 @@ func TestParseCapabilityRequestDirectIPByteLimitRejected(t *testing.T) {
 
 func TestParseCapabilityRequestDirectIPControlRejected(t *testing.T) {
 	for _, bad := range []string{"host\x00:1", "host\n:1", "host\t:1", "host\x7f:1"} {
-		_, reject := tools.ParseCapabilityRequest(map[string]any{
+		_, reject := capabilityrequest.ParseCapabilityRequest(map[string]any{
 			"capability_request": map[string]any{
 				"direct_ip": map[string]any{
 					"declared_destinations": []any{bad},
@@ -253,7 +256,7 @@ func TestParseCapabilityRequestDirectIPControlRejected(t *testing.T) {
 }
 
 func TestParseCapabilityRequestSocketAndDirectTogether(t *testing.T) {
-	req, reject := tools.ParseCapabilityRequest(map[string]any{
+	req, reject := capabilityrequest.ParseCapabilityRequest(map[string]any{
 		"capability_request": map[string]any{
 			"socket_paths": []any{"/tmp/a.sock"},
 			"direct_ip":    map[string]any{},
@@ -268,13 +271,13 @@ func TestParseCapabilityRequestSocketAndDirectTogether(t *testing.T) {
 }
 
 func TestParseCapabilityRequestUnsupportedFieldRejected(t *testing.T) {
-	_, reject := tools.ParseCapabilityRequest(map[string]any{
+	_, reject := capabilityrequest.ParseCapabilityRequest(map[string]any{
 		"capability_request": map[string]any{"network": true},
 	})
 	if reject == nil || reject.Code != "SANDBOX_CAPABILITY_REQUEST_INVALID" {
 		t.Fatalf("unsupported field reject = %+v", reject)
 	}
-	_, reject = tools.ParseCapabilityRequest(map[string]any{
+	_, reject = capabilityrequest.ParseCapabilityRequest(map[string]any{
 		"capability_request": map[string]any{"socks_proxy": true},
 	})
 	if reject == nil || reject.Code != "SANDBOX_CAPABILITY_REQUEST_INVALID" {
@@ -299,7 +302,7 @@ func TestParseCapabilityRequestAcceptsCatalogFields(t *testing.T) {
 		if !ok {
 			t.Fatalf("no parse payload for catalog field %q", field)
 		}
-		_, reject := tools.ParseCapabilityRequest(map[string]any{
+		_, reject := capabilityrequest.ParseCapabilityRequest(map[string]any{
 			"capability_request": map[string]any{field: raw},
 		})
 		if reject != nil {
@@ -310,7 +313,7 @@ func TestParseCapabilityRequestAcceptsCatalogFields(t *testing.T) {
 
 func TestParseCapabilityRequestWriteRootIsClosedAndCanonical(t *testing.T) {
 	base := t.TempDir()
-	req, reject := tools.ParseCapabilityRequest(map[string]any{"capability_request": map[string]any{
+	req, reject := capabilityrequest.ParseCapabilityRequest(map[string]any{"capability_request": map[string]any{
 		"write_root": filepath.Join(base, "cache", "..", "cache"),
 	}})
 	if reject != nil {
@@ -319,7 +322,7 @@ func TestParseCapabilityRequestWriteRootIsClosedAndCanonical(t *testing.T) {
 	if req == nil || req.WriteRoot != filepath.Join(base, "cache") {
 		t.Fatalf("write roots = %+v", req)
 	}
-	_, reject = tools.ParseCapabilityRequest(map[string]any{"capability_request": map[string]any{
+	_, reject = capabilityrequest.ParseCapabilityRequest(map[string]any{"capability_request": map[string]any{
 		"write_root": "relative/cache",
 	}})
 	if reject == nil || reject.Code != "SANDBOX_CAPABILITY_REQUEST_INVALID" {
@@ -333,7 +336,7 @@ func TestParseCapabilityRequestWriteRootDeclaresProtectedLocations(t *testing.T)
 		t.Skip("no home directory")
 	}
 	for _, root := range []string{home, filepath.Join(home, ".ssh"), filepath.Join(home, ".aws")} {
-		req, reject := tools.ParseCapabilityRequest(map[string]any{"capability_request": map[string]any{
+		req, reject := capabilityrequest.ParseCapabilityRequest(map[string]any{"capability_request": map[string]any{
 			"write_root": root,
 		}})
 		if reject != nil {
@@ -343,7 +346,7 @@ func TestParseCapabilityRequestWriteRootDeclaresProtectedLocations(t *testing.T)
 			t.Fatalf("declared %q, parsed %+v", root, req)
 		}
 	}
-	req, reject := tools.ParseCapabilityRequest(map[string]any{"capability_request": map[string]any{"write_root": "/"}})
+	req, reject := capabilityrequest.ParseCapabilityRequest(map[string]any{"capability_request": map[string]any{"write_root": "/"}})
 	if reject != nil || req == nil || req.WriteRoot != "/" {
 		t.Fatalf("filesystem root declaration = %+v, rejection = %+v", req, reject)
 	}
@@ -356,7 +359,7 @@ func TestParseCapabilityRequestReadPathDeclares(t *testing.T) {
 	if err != nil || home == "" {
 		t.Skip("no home directory")
 	}
-	req, reject := tools.ParseCapabilityRequest(map[string]any{"capability_request": map[string]any{
+	req, reject := capabilityrequest.ParseCapabilityRequest(map[string]any{"capability_request": map[string]any{
 		"read_path": filepath.Join(home, ".ssh", "id_ed25519"),
 	}})
 	if reject != nil {
@@ -365,7 +368,7 @@ func TestParseCapabilityRequestReadPathDeclares(t *testing.T) {
 	if req == nil || req.ReadPath != filepath.Join(home, ".ssh", "id_ed25519") {
 		t.Fatalf("parsed %+v", req)
 	}
-	_, reject = tools.ParseCapabilityRequest(map[string]any{"capability_request": map[string]any{
+	_, reject = capabilityrequest.ParseCapabilityRequest(map[string]any{"capability_request": map[string]any{
 		"read_path": "relative/key",
 	}})
 	if reject == nil || reject.Code != "SANDBOX_CAPABILITY_REQUEST_INVALID" {
@@ -398,13 +401,13 @@ func TestCapabilityPathAuthorityWriteRefusesControlPlane(t *testing.T) {
 func TestCapabilityRequestAllowsPolicyWriteApproval(t *testing.T) {
 	project := t.TempDir()
 	agents := filepath.Join(project, "AGENTS.md")
-	request, reject := tools.ParseCapabilityRequest(map[string]any{"capability_request": map[string]any{
+	request, reject := capabilityrequest.ParseCapabilityRequest(map[string]any{"capability_request": map[string]any{
 		"read_path": agents,
 	}})
 	if reject != nil || request == nil || request.ReadPath != agents {
 		t.Fatalf("governance read request = %+v reject=%+v", request, reject)
 	}
-	request, reject = tools.ParseCapabilityRequest(map[string]any{"capability_request": map[string]any{
+	request, reject = capabilityrequest.ParseCapabilityRequest(map[string]any{"capability_request": map[string]any{
 		"write_root": agents,
 	}})
 	if reject != nil || request == nil || request.WriteRoot != agents {
@@ -421,7 +424,7 @@ func TestResolveCapabilitySocketsLive(t *testing.T) {
 	testutil.FailErr(t, "net.Listen", err)
 	t.Cleanup(func() { _ = ln.Close() })
 
-	grants, reject := tools.ResolveCapabilitySockets(&tools.CapabilityRequest{
+	grants, reject := capabilityrequest.ResolveCapabilitySockets(&capabilityrequest.CapabilityRequest{
 		SocketPaths: []string{sockPath},
 	})
 	if reject != nil {
@@ -440,7 +443,7 @@ func TestResolveCapabilitySocketsNotSocketRejected(t *testing.T) {
 	if err := os.WriteFile(filePath, []byte("x"), 0o600); err != nil {
 		testutil.FailErr(t, "os.WriteFile", err)
 	}
-	_, reject := tools.ResolveCapabilitySockets(&tools.CapabilityRequest{
+	_, reject := capabilityrequest.ResolveCapabilitySockets(&capabilityrequest.CapabilityRequest{
 		SocketPaths: []string{filePath},
 	})
 	if reject == nil || reject.Code != "SANDBOX_SOCKET_PATH_NOT_SOCKET" {
@@ -449,8 +452,8 @@ func TestResolveCapabilitySocketsNotSocketRejected(t *testing.T) {
 }
 
 func TestResolveCapabilitySocketsDirectOnlyNil(t *testing.T) {
-	grants, reject := tools.ResolveCapabilitySockets(&tools.CapabilityRequest{
-		DirectIP: &tools.DirectIPRequest{},
+	grants, reject := capabilityrequest.ResolveCapabilitySockets(&capabilityrequest.CapabilityRequest{
+		DirectIP: &capabilityrequest.DirectIPRequest{},
 	})
 	if reject != nil || grants != nil {
 		t.Fatalf("direct-only resolve = (%v, %v)", grants, reject)
@@ -458,13 +461,13 @@ func TestResolveCapabilitySocketsDirectOnlyNil(t *testing.T) {
 }
 
 func TestCapabilityArgumentFailuresKeepTheirObservationKind(t *testing.T) {
-	_, reject := tools.ParseCapabilityRequest(map[string]any{"capability_request": map[string]any{
+	_, reject := capabilityrequest.ParseCapabilityRequest(map[string]any{"capability_request": map[string]any{
 		"loopback_connect": map[string]any{"ports": []any{float64(70000)}},
 	}})
 	if reject == nil || !reject.ArgumentValidation {
 		t.Fatal("[OAR-PROF-3] failed capability argument check lost its observation kind")
 	}
-	completed := tools.CompleteFailureMetadata(reject, "command", "fixture")
+	completed := toolrejection.CompleteFailureMetadata(reject, "command", "fixture")
 	if !completed.ArgumentValidation || completed.Code != reject.Code {
 		t.Fatal("failure metadata changed the observed argument-check result")
 	}

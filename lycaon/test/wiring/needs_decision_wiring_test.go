@@ -133,10 +133,14 @@ func anyMessageContains(msgs []wire.Message, sub string) bool {
 
 func wiringToolContext(sessionID, dir string, workerJobID ...string) tools.ToolContext {
 	roots := []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}}
-	tctx := tools.ToolContext{SessionID: sessionID, Roots: roots, ActiveRootID: "r1"}
+	tctx := tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: sessionID},
+		Source: tools.InvocationSource{Roots: roots,
+			ActiveRootID: "r1"},
+	}
 	if len(workerJobID) > 0 {
-		tctx.WorkerJobID = workerJobID[0]
-		tctx.ParentSessionID = "parent"
+		tctx.Identity.WorkerJobID = workerJobID[0]
+		tctx.Identity.ParentSessionID = "parent"
 	}
 	return tctx
 }

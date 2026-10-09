@@ -129,7 +129,6 @@ var factDecls = []factDecl{
 	{"mode_bits", oarcore.TypeString, FactTierHost, ""},
 	{"tool_args_fingerprint", oarcore.TypeString, FactTierStandard, ProfileTool},
 	{"posture_unresolved", oarcore.TypeBool, FactTierHost, ""},
-	{"high_risk_tool", oarcore.TypeBool, FactTierHost, ""},
 	{"tool_is_state", oarcore.TypeBool, FactTierHost, ""},
 	{"tool_is_delegation", oarcore.TypeBool, FactTierHost, ""},
 	{"tool_is_task", oarcore.TypeBool, FactTierHost, ""},

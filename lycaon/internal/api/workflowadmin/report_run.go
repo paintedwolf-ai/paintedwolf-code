@@ -14,10 +14,10 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Handler) HandleGetWorkflowRunReport(w http.ResponseWriter, r *http.Request) {
+func (s *Reports) HandleGetWorkflowRunReport(w http.ResponseWriter, r *http.Request) {
 	input, ok, err := s.BuildRunReportInput(r.Context(), chi.URLParam(r, "id"))
 	if err != nil {
-		s.writeRunLookupError(w, r, err)
+		s.RunControl.writeRunLookupError(w, r, err)
 		return
 	}
 	if !ok {
@@ -29,7 +29,7 @@ func (s *Handler) HandleGetWorkflowRunReport(w http.ResponseWriter, r *http.Requ
 
 // BuildRunReportInput assembles a workflow run's declared deliverable from
 // run-scoped records only; the manifest control gates the document.
-func (s *Handler) BuildRunReportInput(ctx context.Context, runID string) (report.ReportInput, bool, error) {
+func (s *Reports) BuildRunReportInput(ctx context.Context, runID string) (report.ReportInput, bool, error) {
 	run, err := s.Workflows.Get(ctx, runID)
 	if err != nil {
 		return report.ReportInput{}, false, err
@@ -37,7 +37,7 @@ func (s *Handler) BuildRunReportInput(ctx context.Context, runID string) (report
 	if run == nil {
 		return report.ReportInput{}, false, nil
 	}
-	if !workflow.IsTerminal(run.Status) {
+	if !workflow.IsTerminal(run.Status) && run.PauseReason != workflow.ReviewBlockedReason {
 		return report.ReportInput{}, false, nil
 	}
 
@@ -49,6 +49,12 @@ func (s *Handler) BuildRunReportInput(ctx context.Context, runID string) (report
 		return report.ReportInput{}, false, nil
 	}
 
+	if run.PauseReason == workflow.ReviewBlockedReason || run.Status == wire.WorkflowRunStatusCanceled {
+		input, ok, err := s.blockedRunReport(ctx, run, manifest)
+		if err != nil || ok {
+			return input, ok, err
+		}
+	}
 	msgs, err := s.Store.GetMessages(ctx, run.SessionID)
 	if err != nil {
 		return report.ReportInput{}, false, err
@@ -67,7 +73,10 @@ func (s *Handler) BuildRunReportInput(ctx context.Context, runID string) (report
 		name = strings.TrimSpace(run.WorkflowID)
 	}
 
-	phaseVerdicts := workflow.ReviewVerdicts(ctx, s.Workflows, run, manifest)
+	phaseVerdicts, err := workflow.ReviewVerdicts(ctx, s.Workflows, run, manifest)
+	if err != nil {
+		return report.ReportInput{}, false, err
+	}
 	claims := workflow.ReconcileClaims(phaseVerdicts)
 	verdicts, channels, verdictURLs := projectVerdicts(phaseVerdicts)
 	cites := append(closeoutCitations(completion.Grounding), verdictCitations(verdicts, channels)...)
@@ -81,20 +90,22 @@ func (s *Handler) BuildRunReportInput(ctx context.Context, runID string) (report
 	unreported := reportUnreported(findings, claims)
 
 	input := report.ReportInput{
-		Title:            name,
-		Headline:         reportHeadline(completion),
-		RunID:            run.ID,
-		Project:          s.reportProjectLabel(ctx, run.ProjectID),
-		StartedAt:        reportStartedAt(run),
-		CompletedAt:      completedAt,
-		Workflow:         &report.ReportWorkflow{ID: strings.TrimSpace(run.WorkflowID), Version: strings.TrimSpace(run.WorkflowVersion)},
-		Workforce:        workforceFor(sess, msgs, inRun),
+		ReportHeader: report.ReportHeader{
+			Title:       name,
+			Headline:    reportHeadline(completion),
+			RunID:       run.ID,
+			Project:     s.reportProjectLabel(ctx, run.ProjectID),
+			StartedAt:   reportStartedAt(run),
+			CompletedAt: completedAt,
+			Workflow:    &report.ReportWorkflow{ID: strings.TrimSpace(run.WorkflowID), Version: strings.TrimSpace(run.WorkflowVersion)},
+			Workforce:   workforceFor(sess, msgs, inRun),
+			Summary:     reportSummary(completion),
+		},
 		Synthesis:        completion.Content,
-		Summary:          reportSummary(completion),
 		Findings:         findingRows(findings),
 		FindingsLabel:    manifest.ReportFindingsLabel(),
 		Limits:           reportLimits(completion),
-		Brief:            reportBrief(manifest.ReportBrief(), findings, claims, unreported),
+		Brief:            reportBrief(manifest.ReportBrief(), findings, claims, unreported, completion.CompletionReport.Rating),
 		Ask:              reportAsk(completion.CompletionReport),
 		UnreportedClaims: len(unreported),
 		Defects:          reportDefects(completion.CompletionReport),
@@ -135,7 +146,7 @@ func (s *Handler) BuildRunReportInput(ctx context.Context, runID string) (report
 	return input, true, nil
 }
 
-func (s *Handler) artifactsForRun(ctx context.Context, run *wire.WorkflowRun, msgs []wire.Message) []report.ReportArtifact {
+func (s *Reports) artifactsForRun(ctx context.Context, run *wire.WorkflowRun, msgs []wire.Message) []report.ReportArtifact {
 	if s.VisualStore == nil || run == nil {
 		return nil
 	}
@@ -212,7 +223,7 @@ func artifactIDsForRun(msgs []wire.Message, runID string) []string {
 	return out
 }
 
-func (s *Handler) reportManifest(ctx context.Context, run *wire.WorkflowRun) (workflowdef.Manifest, bool, error) {
+func (s *Reports) reportManifest(ctx context.Context, run *wire.WorkflowRun) (workflowdef.Manifest, bool, error) {
 	m, err := s.Workflows.ManifestForRunID(ctx, run.ID)
 	if err != nil {
 		return workflowdef.Manifest{}, false, err
@@ -221,7 +232,7 @@ func (s *Handler) reportManifest(ctx context.Context, run *wire.WorkflowRun) (wo
 	return m, available, err
 }
 
-func (s *Handler) reportProjectLabel(ctx context.Context, projectID string) string {
+func (s *Reports) reportProjectLabel(ctx context.Context, projectID string) string {
 	projectID = strings.TrimSpace(projectID)
 	if projectID == "" {
 		return projectID

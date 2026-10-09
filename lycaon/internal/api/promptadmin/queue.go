@@ -12,7 +12,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Handler) HandleGetQueue(w http.ResponseWriter, r *http.Request) {
+func (s *Queue) HandleGetQueue(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	if !requestscope.SessionExists(s.Store, s.responses, w, r, id) {
 		return
@@ -20,7 +20,7 @@ func (s *Handler) HandleGetQueue(w http.ResponseWriter, r *http.Request) {
 	httpio.WriteJSON(w, http.StatusOK, s.Sessions.QueueSnapshot(id))
 }
 
-func (s *Handler) HandleUpdateSessionQueue(w http.ResponseWriter, r *http.Request) {
+func (s *Queue) HandleUpdateSessionQueue(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	var req api.QueueMutateRequest
 	if err := httpio.DecodeJSON(w, r, &req); err != nil {
@@ -81,7 +81,7 @@ func (s *Handler) HandleUpdateSessionQueue(w http.ResponseWriter, r *http.Reques
 }
 
 // writeQueueError maps queue rejections to client-rendered error codes.
-func (s *Handler) writeQueueError(w http.ResponseWriter, r *http.Request, err error, draft api.QueueDraft) {
+func (s *Queue) writeQueueError(w http.ResponseWriter, r *http.Request, err error, draft api.QueueDraft) {
 	switch {
 	case errors.Is(err, queuestore.ErrRevisionConflict):
 		var conflict *queuestore.RevisionConflictError
@@ -105,7 +105,7 @@ func (s *Handler) writeQueueError(w http.ResponseWriter, r *http.Request, err er
 }
 
 // MaybeDrainQueue drains only when no prompt loop can consume Send.
-func (s *Handler) MaybeDrainQueue(parent context.Context, id string) {
+func (s *Queue) MaybeDrainQueue(parent context.Context, id string) {
 	if s.Sessions.PromptState().Running(id) {
 		return
 	}

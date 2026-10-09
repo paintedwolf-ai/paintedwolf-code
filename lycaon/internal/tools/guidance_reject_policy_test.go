@@ -2,6 +2,8 @@ package tools_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolexecution"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/platform"
@@ -22,7 +24,7 @@ func TestGuidanceRejectPolicyEvaluateForListDelegatesAskTools(t *testing.T) {
 		},
 	}))
 	gate := settings.NewRuleApprovalGate(approvalStore, settings.NoSources())
-	wrapped := tools.NewGuidanceRejectPolicy(tools.NewApprovalPolicyEngine(tools.NewProfilePolicyEngine(boundary), gate))
+	wrapped := toolprofiles.NewGuidanceRejectPolicy(toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), gate))
 
 	ctx := context.Background()
 	eval := platform.PolicyContext{
@@ -47,7 +49,7 @@ func TestGuidanceRejectPolicyEvaluateForListChmodAutoApprove(t *testing.T) {
 	boundary := sandbox.NewBoundary(fixtureSandboxConfig(), fixtureToolProfiles(t))
 	approvalStore := isolatedApprovalStore(t)
 	gate := settings.NewRuleApprovalGate(approvalStore, settings.NoSources())
-	wrapped := tools.NewGuidanceRejectPolicy(tools.NewApprovalPolicyEngine(tools.NewProfilePolicyEngine(boundary), gate))
+	wrapped := toolprofiles.NewGuidanceRejectPolicy(toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), gate))
 
 	ctx := context.Background()
 	eval := platform.PolicyContext{
@@ -71,7 +73,7 @@ func TestGuidanceRejectPolicyListIncludesDeleteOnExecutor(t *testing.T) {
 	boundary := sandbox.NewBoundary(fixtureSandboxConfig(), fixtureToolProfiles(t))
 	approvalStore := isolatedApprovalStore(t)
 	gate := settings.NewRuleApprovalGate(approvalStore, settings.NoSources())
-	policy := tools.NewGuidanceRejectPolicy(tools.NewApprovalPolicyEngine(tools.NewProfilePolicyEngine(boundary), gate))
+	policy := toolprofiles.NewGuidanceRejectPolicy(toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), gate))
 	reg := tools.NewDefaultRegistry()
 	for _, name := range []string{"chmod", "delete", "write"} {
 		n := name
@@ -81,8 +83,8 @@ func TestGuidanceRejectPolicyListIncludesDeleteOnExecutor(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	exec := tools.NewDefaultToolExecutor(policy, reg, "implement")
-	listed, err := exec.List(context.Background(), platform.ToolFilter{ProfileID: "implement"})
+	exec := toolexecution.NewExecutor(policy, reg, "implement")
+	listed, err := exec.Metadata.List(context.Background(), platform.ToolFilter{ProfileID: "implement"})
 	testutil.FailErr(t, "List", err)
 	names := make(map[string]struct{}, len(listed))
 	for _, meta := range listed {

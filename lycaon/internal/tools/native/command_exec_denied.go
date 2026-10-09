@@ -2,11 +2,11 @@ package native
 
 import (
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/hostcmd"
-	"github.com/lycaon/lycaon/internal/tools"
 )
 
 // rejectCommandExecDenied reports a confine helper exec refusal as a reject.
@@ -23,7 +23,7 @@ func commandExecDeniedReject(path string) error {
 	if path != "" {
 		data["path"] = path
 	}
-	return &tools.ToolReject{Code: "COMMAND_EXEC_DENIED", Data: data}
+	return &toolrejection.ToolReject{Code: "COMMAND_EXEC_DENIED", Data: data}
 }
 
 func rejectStartCommandExecDenied(err error) error {

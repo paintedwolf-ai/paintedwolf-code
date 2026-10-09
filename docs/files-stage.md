@@ -284,7 +284,7 @@ While a CodeMirror panel, the more menu, or the dirty dialog is open inside the 
 
 The editor highlights bytes the host already treats as credentials, and lets a person mark one it missed. This is presentation, not a security prerequisite: content is never redacted in the editor, and loading does not wait for a screen. Every completed span is a host fact stamped onto the exact document revision by the same matcher that guards outbound seams; **Den detects nothing**. Lifecycle and security posture: [Secrets and redaction](secrets.md).
 
-**Machine truth:** [`secretspan`](../lycaon/internal/secretspan) · [`editor_secret_spans.go`](../lycaon/internal/api/sourceapi/editor_secret_spans.go) · [`secret-span-model.ts`](../lycaon-den/src/components/source/secrets/secret-span-model.ts) · [`secret-span-decorations.ts`](../lycaon-den/src/components/source/secrets/secret-span-decorations.ts) · `EditorDocument.secret_screen_status` / `secret_screen`
+**Machine truth:** [`secretspan`](../lycaon/internal/secretspan) · [`editor_secret_spans.go`](../lycaon/internal/api/editoradmin/editor_secret_spans.go) · [`secret-span-model.ts`](../lycaon-den/src/components/source/secrets/secret-span-model.ts) · [`secret-span-decorations.ts`](../lycaon-den/src/components/source/secrets/secret-span-decorations.ts) · `EditorDocument.secret_screen_status` / `secret_screen`
 
 ### States
 

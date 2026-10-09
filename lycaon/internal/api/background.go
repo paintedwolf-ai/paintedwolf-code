@@ -20,8 +20,8 @@ func (s *Server) StopBackground() {
 	if s == nil {
 		return
 	}
-	if s.Sources.FileBriefings != nil {
-		s.Sources.FileBriefings.Stop()
+	if s.fileBriefings != nil {
+		s.fileBriefings.Stop()
 	}
 	s.background.Stop()
 }
@@ -32,9 +32,9 @@ func (s *Server) WaitForBackground(ctx context.Context) {
 		return
 	}
 	var wg sync.WaitGroup
-	if s.Sources.FileBriefings != nil {
+	if s.fileBriefings != nil {
 		wg.Add(1)
-		go func() { defer wg.Done(); s.Sources.FileBriefings.Wait(ctx) }()
+		go func() { defer wg.Done(); s.fileBriefings.Wait(ctx) }()
 	}
 	wg.Add(1)
 	go func() {
@@ -49,7 +49,7 @@ func (s *Server) WaitForBackground(ctx context.Context) {
 		}()
 		go func() {
 			defer wg.Done()
-			s.sessions.WaitForPromptCuration()
+			s.sessions.WaitForPromptCuration(ctx)
 		}()
 	}
 	wg.Wait()

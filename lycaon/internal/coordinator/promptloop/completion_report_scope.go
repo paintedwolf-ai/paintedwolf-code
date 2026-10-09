@@ -1,6 +1,7 @@
 package promptloop
 
 import (
+	"maps"
 	"slices"
 	"strings"
 
@@ -43,6 +44,7 @@ func completionReportMeta(
 		meta.Findings = reportFindingsMeta(report.Findings)
 		meta.Limits = append([]string(nil), report.Limits...)
 		meta.Ask = reportAskMeta(report.Ask)
+		meta.Rating = reportRatingMeta(report.Rating)
 		meta.SetAsides = reportSetAsidesMeta(report.SetAsides)
 		return meta
 	}
@@ -89,6 +91,14 @@ func reportFindingsMeta(findings []guidance.CoordinatorFinding) []api.Completion
 	return out
 }
 
+// reportRatingMeta projects the review's call onto the wire record.
+func reportRatingMeta(rating *guidance.CoordinatorRating) *api.CompletionReportRating {
+	if rating == nil || strings.TrimSpace(rating.Level) == "" {
+		return nil
+	}
+	return &api.CompletionReportRating{Level: strings.TrimSpace(rating.Level), Why: strings.TrimSpace(rating.Why)}
+}
+
 // reportAskMeta drops an ask whose effort is off the enum; only a host-stored
 // report reaches here with one, and its defects name it.
 func reportAskMeta(ask *guidance.CoordinatorAsk) *api.CompletionReportAsk {
@@ -130,4 +140,28 @@ func completionReportBinding(st *promptLoopTurnState) CompletionReportBinding {
 		PhaseDeliversRunReport: frame.Runtime.ReportDocumentEnabled,
 		CloseoutRetries:        frame.Runtime.CloseoutRetries,
 	}
+}
+
+// bindReviewResult retains the offered workflow phase even when execution
+// advances the run before the tool result reaches transcript storage.
+func bindReviewResult(msg *api.Message, st *promptLoopTurnState) {
+	if msg.ToolResult == nil || msg.ToolResult.Tool != "submit_verdict" {
+		return
+	}
+	binding := completionReportBinding(st)
+	if binding.RunID == "" {
+		return
+	}
+	msg.WorkflowRunID = binding.RunID
+	result := *msg.ToolResult
+	result.Feedback = slices.Clone(result.Feedback)
+	for i := range result.Feedback {
+		details := maps.Clone(result.Feedback[i].Details)
+		if details == nil {
+			details = map[string]any{}
+		}
+		details["workflow_phase"] = binding.Phase
+		result.Feedback[i].Details = details
+	}
+	msg.ToolResult = &result
 }

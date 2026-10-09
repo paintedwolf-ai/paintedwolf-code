@@ -25,7 +25,7 @@ type projectPosition struct {
 
 var projectPages = pagecursor.For[projectPosition]("project_list")
 
-func (s *Handler) HandleCreateProject(w http.ResponseWriter, r *http.Request) {
+func (s *Projects) HandleCreateProject(w http.ResponseWriter, r *http.Request) {
 	var req wire.CreateProjectRequest
 	if err := httpio.DecodeJSON(w, r, &req); err != nil {
 		s.responses.DecodeError(w, r, err)
@@ -48,14 +48,14 @@ func (s *Handler) HandleCreateProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, root := range p.Roots {
-		if s.Sources.SourceLedger != nil && s.Sources.SourceLedger.SnapshotStore() != nil {
-			if err := s.Sources.SourceLedger.SnapshotStore().DiscardObservations(r.Context(), root.Path); err != nil {
+		if s.sourceWorkspace.SourceLedger != nil && s.sourceWorkspace.SourceLedger.SnapshotStore() != nil {
+			if err := s.sourceWorkspace.SourceLedger.SnapshotStore().DiscardObservations(r.Context(), root.Path); err != nil {
 				slog.WarnContext(r.Context(), "discard stale source observations", "path", root.Path, "err", err)
 			}
 		}
-		s.afterRootAttached(r.Context(), p.ID, root.Path)
+		s.Roots.afterRootAttached(r.Context(), p.ID, root.Path)
 	}
-	s.detectVerifyAsync(r.Context(), p.ID)
+	s.Verification.detectVerifyAsync(r.Context(), p.ID)
 	// Contributions and workflows are read next, and both resolve this
 	// project's catalog for the first time.
 	s.Extensions.WarmEffectiveCatalog(context.WithoutCancel(r.Context()), p.ID)
@@ -63,7 +63,7 @@ func (s *Handler) HandleCreateProject(w http.ResponseWriter, r *http.Request) {
 	httpio.WriteJSON(w, http.StatusCreated, project.ToAPI(p))
 }
 
-func (s *Handler) HandleGetProject(w http.ResponseWriter, r *http.Request) {
+func (s *Projects) HandleGetProject(w http.ResponseWriter, r *http.Request) {
 	p, ok := requestscope.ProjectByURLID(s.Registry, s.responses, w, r)
 	if !ok {
 		return
@@ -71,7 +71,7 @@ func (s *Handler) HandleGetProject(w http.ResponseWriter, r *http.Request) {
 	httpio.WriteJSON(w, http.StatusOK, project.ToAPI(p))
 }
 
-func (s *Handler) HandleUpdateProject(w http.ResponseWriter, r *http.Request) {
+func (s *Projects) HandleUpdateProject(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimSpace(chi.URLParam(r, "id"))
 	var req wire.UpdateProjectRequest
 	if err := httpio.DecodeJSON(w, r, &req); err != nil {
@@ -90,11 +90,11 @@ func (s *Handler) HandleUpdateProject(w http.ResponseWriter, r *http.Request) {
 	httpio.WriteJSON(w, http.StatusOK, project.ToAPI(p))
 }
 
-func (s *Handler) publishProjectLifecycleEvent(ctx context.Context, action wire.ProjectEventAction, p *project.Project) {
+func (s *Projects) publishProjectLifecycleEvent(ctx context.Context, action wire.ProjectEventAction, p *project.Project) {
 	projectview.PublishEvent(s.Registry, s.Events, ctx, action, p)
 }
 
-func (s *Handler) HandleListProjects(w http.ResponseWriter, r *http.Request) {
+func (s *Projects) HandleListProjects(w http.ResponseWriter, r *http.Request) {
 	query, err := httpio.ReadPageQuery(r, projectListBounds)
 	if err != nil {
 		s.responses.InvalidQuery(w, err)

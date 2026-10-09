@@ -1,0 +1,68 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "code.gitea.io/gitea"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.25.4"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-20904",
+  "GHSA-qqgv-v353-cv8p"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-4369"
+ },
+ "details": "Gitea does not properly validate ownership when toggling OpenID URI visibility in code.gitea.io/gitea",
+ "id": "GO-2026-4369",
+ "modified": "2026-02-02T21:05:55Z",
+ "published": "2026-02-02T21:05:55Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-qqgv-v353-cv8p"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-20904"
+  },
+  {
+   "type": "WEB",
+   "url": "https://blog.gitea.com/release-of-1.25.4"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/go-gitea/gitea/commit/ed5720af2ac94d74f822721c05b42b6148ff9c22"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/go-gitea/gitea/pull/36346"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/go-gitea/gitea/pull/36361"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/go-gitea/gitea/releases/tag/v1.25.4"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Gitea does not properly validate ownership when toggling OpenID URI visibility in code.gitea.io/gitea"
+}

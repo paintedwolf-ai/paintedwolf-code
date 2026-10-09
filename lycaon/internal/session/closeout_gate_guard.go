@@ -29,11 +29,11 @@ func (m *Manager) maybeRejectCloseoutForOpenGates(ctx context.Context, sess *api
 	leaves := strings.Join(state.OpenLeaves, ", ")
 	delayCount, delayed := m.closeout.delay(sess.ID, root, closeoutGateDelay, workersIdle, closeoutGateDelayMaxPerPrompt)
 	return m.tryOARFinishBlock(ctx, sess, func(gc *oar.GuardContext) error {
-		gc.WorkersIdle = workersIdle
-		gc.Phase = state.Phase
-		gc.CloseoutGatesOpen = true
-		gc.CloseoutGateOpenLeaves = leaves
-		gc.CloseoutGateDelayCount = int64(delayCount)
+		gc.Workers.WorkersIdle = workersIdle
+		gc.Session.Phase = state.Phase
+		gc.Workflow.CloseoutGatesOpen = true
+		gc.Workflow.CloseoutGateOpenLeaves = leaves
+		gc.Workflow.CloseoutGateDelayCount = int64(delayCount)
 		if delayed {
 			gc.PutRejectData(workflowGatesOpenCode, map[string]any{
 				"phase":                     state.Phase,

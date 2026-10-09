@@ -13,7 +13,7 @@ func TestTerminalRefusalsRetainPathsWithoutRecoverableGrants(t *testing.T) {
 		{Operation: "file-read-data", Target: "/state/store.db", Layer: confine.FloorReadControlPlane, Recovery: confine.RecoverNone},
 		{Operation: "file-write-data", Target: "/state/approvals.yaml", Layer: confine.FloorControlPlane, Recovery: confine.RecoverNone},
 	}}})
-	if len(gc.RefusedTerminalReadPaths) != 1 || len(gc.RefusedTerminalWritePaths) != 1 || len(gc.RefusedReadGrants) != 0 || len(gc.RefusedWriteGrants) != 0 || gc.SandboxRefusalWitness != string(confine.WitnessKernel) {
+	if len(gc.Refusals.RefusedTerminalReadPaths) != 1 || len(gc.Refusals.RefusedTerminalWritePaths) != 1 || len(gc.Refusals.RefusedReadGrants) != 0 || len(gc.Refusals.RefusedWriteGrants) != 0 || gc.Refusals.SandboxRefusalWitness != string(confine.WitnessKernel) {
 		t.Fatalf("terminal facts=%+v", gc)
 	}
 }
@@ -27,7 +27,7 @@ func TestRefusalWitnessReportsTheObservedLayerWithoutPolicyCombination(t *testin
 				obs.FailedStages = []string{"tool"}
 			}
 			ObserveConfine(gc, obs)
-			if gc.SandboxRefusalWitness != string(witness) {
+			if gc.Refusals.SandboxRefusalWitness != string(witness) {
 				t.Fatalf("witness=%s failed=%v facts=%+v", witness, failed, gc)
 			}
 		}

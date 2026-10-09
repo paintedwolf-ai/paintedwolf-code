@@ -122,6 +122,15 @@ func (b boardWiring) wireWorkflows() error {
 	}); err != nil {
 		return err
 	}
+	// Repair accounting replays rejections after the last accepted verdict, so
+	// interrupted verdict commits settle first.
+	if err := delegationWiring(b).registerRecovery(bootrecovery.Entry{
+		Name: "workflow-review-repairs", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseServe,
+		After: []string{"workflow-verdicts"},
+		Run:   workflow.ReviewRepairs{RunManager: b.workflowMgr}.Recover,
+	}); err != nil {
+		return err
+	}
 	if err := delegationWiring(b).registerRecovery(bootrecovery.Entry{
 		Name: "workflow-teardowns", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseServe,
 		Run: b.workflowMgr.RecoverTeardownOperations,
@@ -183,7 +192,7 @@ func (b boardWiring) wireWorkflowEvidence() error {
 		b.mgr.SetVerifyConfig(b.settingsSvc.Verify)
 		if b.toolRuntime != nil {
 			// The tool and gate share one declared-command resolver.
-			b.toolRuntime.SetVerifyDeclaredCommand(b.settingsSvc.Verify.VerifyTestCommand)
+			b.toolRuntime.Commands.SetVerifyDeclaredCommand(b.settingsSvc.Verify.VerifyTestCommand)
 		}
 	}
 	return b.wireWorkflowScanServices()
@@ -193,10 +202,10 @@ func (b boardWiring) wireWorkflowScanServices() error {
 	b.gitMgr = git.NewManager()
 	gitexec.SetHostConfig(gitexec.HostConfigResolver())
 	b.gitStatusCache = git.NewStatusCache(b.gitMgr)
-	b.gitStatusCache.RegisterRepochangeObserver()
+	b.resources.releaseObserver("git-status-repochange", b.gitStatusCache.RegisterRepochangeObserver())
 	b.gitRepoSetCache = git.NewRepoSetCache(git.DefaultStatusCacheTTL)
 	if b.toolRuntime != nil {
-		b.toolRuntime.SetGitStatusCache(b.gitStatusCache)
+		b.toolRuntime.Survey.SetGitStatusCache(b.gitStatusCache)
 	}
 
 	b.gatesCfg = scancfg.DefaultGatesConfig()
@@ -321,10 +330,10 @@ func (b boardWiring) wireWorkflowConditions() error {
 				Runs: b.workflowMgr,
 			},
 		}
-		b.toolRuntime.SetContentApply(contentApply)
+		b.toolRuntime.Mutations.SetContentApply(contentApply)
 	}
 	if b.toolRuntime != nil && b.workflowMgr != nil {
-		b.toolRuntime.SetBlueprintWriteObserver(b.workflowMgr)
+		b.toolRuntime.Mutations.SetBlueprintWriteObserver(b.workflowMgr)
 	}
 	b.workflowMgr.RegisterObligationKind(b.scanObligation)
 	b.workflowMgr.WorkerTasks = func(ctx context.Context, runID string) ([]api.WorkerTask, error) {

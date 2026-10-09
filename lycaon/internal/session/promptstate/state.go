@@ -19,6 +19,7 @@ type State struct {
 	operationLocks map[string]*operationLock
 	promptCancelMu sync.Mutex
 	promptCancel   map[string]context.CancelFunc
+	stopped        bool
 }
 
 // MutexRegistry holds one reference-counted mutex per id, dropped when the
@@ -145,6 +146,11 @@ func (m *State) RegisterCancel(sessionID string, cancel context.CancelFunc) {
 		return
 	}
 	m.promptCancelMu.Lock()
+	if m.stopped {
+		m.promptCancelMu.Unlock()
+		cancel()
+		return
+	}
 	defer m.promptCancelMu.Unlock()
 	if m.promptCancel == nil {
 		m.promptCancel = make(map[string]context.CancelFunc)
@@ -163,4 +169,16 @@ func (m *State) Running(sessionID string) bool {
 	defer m.promptCancelMu.Unlock()
 	_, ok := m.promptCancel[sessionID]
 	return ok
+}
+
+// Stop seals registration and cancels every prompt's independent stop context.
+func (m *State) Stop() {
+	m.promptCancelMu.Lock()
+	m.stopped = true
+	cancels := m.promptCancel
+	m.promptCancel = nil
+	m.promptCancelMu.Unlock()
+	for _, cancel := range cancels {
+		cancel()
+	}
 }

@@ -28,12 +28,12 @@ func ObserveImplementerFinishWithoutWrite(
 		return
 	}
 	proof := childHadImplementerArtifact(ctx, projectDir, history, wc)
-	gc.AgentIsImplementer = true
-	gc.WorkerArtifactPresent = proof == artifactPresent
-	gc.WorkerArtifactMeasured = proof != artifactUndetermined
-	gc.WorkerAttemptedMutation = childAttemptedFileContentMutation(history)
+	gc.Workers.AgentIsImplementer = true
+	gc.Grounding.WorkerArtifactPresent = proof == artifactPresent
+	gc.Grounding.WorkerArtifactMeasured = proof != artifactUndetermined
+	gc.Workers.WorkerAttemptedMutation = childAttemptedFileContentMutation(history)
 	// Rejection requires measured absence and an attempted mutation.
-	if proof == artifactAbsent && gc.WorkerAttemptedMutation {
+	if proof == artifactAbsent && gc.Workers.WorkerAttemptedMutation {
 		gc.PutRejectData(workerImplementNoArtifactCode, nil)
 	}
 }

@@ -58,8 +58,9 @@ func TestAbortEndsATurnBlockedInACommand(t *testing.T) {
 		Background: reg,
 	}
 	tctx := tools.ToolContext{
-		SessionID: sess.ID, Agent: "implement",
-		Roots: []projectroot.RootRef{{ID: "primary", Path: root, IsPrimary: true}},
+		Identity: tools.InvocationIdentity{SessionID: sess.ID,
+			Agent: "implement"},
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "primary", Path: root, IsPrimary: true}}},
 	}
 
 	turnDone := make(chan commandTurnResult, 1)

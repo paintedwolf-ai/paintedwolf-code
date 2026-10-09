@@ -61,6 +61,7 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/visual"
 	"github.com/lycaon/lycaon/internal/webresearch"
+	"github.com/lycaon/lycaon/internal/workscope"
 	"github.com/lycaon/lycaon/pkg/api"
 	"golang.org/x/sync/singleflight"
 )
@@ -83,6 +84,7 @@ type Manager struct {
 	tools                      tools.ToolRegistry
 	invocations                invocation.Recorder
 	toolInvoker                tools.ToolInvoker
+	toolLister                 tools.ToolProfileLister
 	sourceLedger               sourceledger.Recorder
 	sourceMutations            sourceeffect.Journal
 	sourceRewinds              *sourcerewind.Service
@@ -111,6 +113,7 @@ type Manager struct {
 	streams                 *stream.State
 	promptState             promptstate.State
 	engineStopping          atomic.Bool
+	engineWork              workscope.Group
 	stopState               lifecycle.State
 	sessionWorkerAbort      sessionWorkerAbort
 	sessionWorkflowStop     sessionWorkflowStop

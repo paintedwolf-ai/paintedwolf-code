@@ -1,6 +1,8 @@
 package session
 
 import (
+	"github.com/lycaon/lycaon/internal/toolfeedback"
+
 	"context"
 	"errors"
 	"fmt"
@@ -118,7 +120,10 @@ func (w sessionWorkflowManifest) ActiveManifest(ctx context.Context, sessionID s
 	if !ok {
 		return assembly.ActiveWorkflowManifest{}, false
 	}
-	return assembly.ActiveWorkflowManifest{CoordinatorProfile: manifest.CoordinatorProfile}, true
+	return assembly.ActiveWorkflowManifest{
+		CoordinatorProfile: manifest.CoordinatorProfile,
+		Archive:            manifest.Archive,
+	}, true
 }
 
 func (w sessionWorkflowManifest) RecordBoardOrientReady(ctx context.Context, sessionID, injectKey string) error {
@@ -234,7 +239,7 @@ func (m *Manager) buildPromptLoopDeps() promptloop.PromptLoopDeps {
 		HeldCalls:  heldCallPort{m: m},
 		DoomLoop:   m.doomLoop,
 		RejectFmt:  m.rejectFmt,
-		BlockPlane: &tools.BlockPlane{Pipeline: m.oarPipeline, Renderer: m.oarRenderer},
+		BlockPlane: &toolfeedback.BlockPlane{Pipeline: m.oarPipeline, Renderer: m.oarRenderer},
 		HintConfig: m.workflowHints,
 		FormatDoomLoopReject: func(ctx context.Context, sessionID, tool string, args map[string]any, count int, repeatedCode string) (*guidance.Refusal, error) {
 			return m.formatDoomLoopReject(ctx, sessionID, tool, args, count, repeatedCode)
@@ -269,7 +274,7 @@ func (m *Manager) buildPromptLoopDeps() promptloop.PromptLoopDeps {
 		CoordinatorFrame:        m.coordinatorFrame,
 		ImplementSessionState:   m.BuildImplementSessionState,
 		RedactMessageForStorage: m.redactMessageForStorage,
-		AppendMessages:          m.appendMessages,
+		AppendMessages:          m.appendLoopMessages,
 		Streams:                 m.Streams(),
 	}
 	if m.prompts != nil {
@@ -1084,4 +1089,21 @@ func (m *Manager) isCoordinatorSessionForLoop(_ context.Context, sess *api.Sessi
 		return false
 	}
 	return surface.IsCoordinatorSession(sess)
+}
+
+// appendLoopMessages persists coordinator rows, then hands each durable review
+// result to the workflows subsystem so repair accounting follows the transcript.
+func (m *Manager) appendLoopMessages(ctx context.Context, sessionID string, msgs ...api.Message) error {
+	if err := m.appendMessages(ctx, sessionID, msgs...); err != nil {
+		return err
+	}
+	if m.workflows == nil {
+		return nil
+	}
+	for _, msg := range msgs {
+		if err := m.workflows.RecordReviewToolResult(ctx, sessionID, msg); err != nil {
+			return err
+		}
+	}
+	return nil
 }

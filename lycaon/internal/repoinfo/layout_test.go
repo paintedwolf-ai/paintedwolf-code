@@ -81,7 +81,7 @@ func TestAnalyzeSmallRepoTopLevelPromotesRootFiles(t *testing.T) {
 func TestAnalyzeMediumRepoDirsOnly(t *testing.T) {
 	dir := t.TempDir()
 	for i := 0; i < 60; i++ {
-		rel := filepath.Join("pkg", "mod", "file"+itoa(i)+".go")
+		rel := filepath.Join("pkg", "domain", "file"+itoa(i)+".go")
 		path := filepath.Join(dir, rel)
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			testutil.FailErr(t, "mkdir", err)

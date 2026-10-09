@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 
 	"github.com/google/uuid"
@@ -58,16 +59,16 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 		if err != nil {
 			return "", err
 		}
-		if deps.TaskReceipt != nil && strings.TrimSpace(tctx.ToolCallID) != "" {
-			prior, err := deps.TaskReceipt(ctx, tctx.SessionID, strings.TrimSpace(tctx.ToolCallID))
+		if deps.TaskReceipt != nil && strings.TrimSpace(tctx.Identity.ToolCallID) != "" {
+			prior, err := deps.TaskReceipt(ctx, tctx.Identity.SessionID, strings.TrimSpace(tctx.Identity.ToolCallID))
 			if err != nil {
 				return "", err
 			}
 			if prior != nil {
-				if err := compareTaskReceipt(prior, api.WorkerTask{SourceToolCallID: tctx.ToolCallID, SourceArgsDigest: sourceDigest}); err != nil {
+				if err := compareTaskReceipt(prior, api.WorkerTask{SourceToolCallID: tctx.Identity.ToolCallID, SourceArgsDigest: sourceDigest}); err != nil {
 					return "", err
 				}
-				scope := project.ScopeFromToolContext(tctx.ProjectID, tctx.ActiveRootID, tctx.Roots, tctx.ActiveRootPath())
+				scope := project.ScopeFromToolContext(tctx.Identity.ProjectID, tctx.Source.ActiveRootID, tctx.Source.Roots, tctx.ActiveRootPath())
 				return taskEnqueueOutput(tctx, scope, *prior)
 			}
 		}
@@ -80,7 +81,7 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 			budget = deps.ToolBudget(tctx.ActiveRootPath())
 		}
 		if code := session.ValidateTaskMaxToolLoopsCode(maxToolLoops, budget); code != "" {
-			return "", &tools.ToolReject{Code: code, Data: map[string]any{"max_tool_loops": maxToolLoops, "min_required": budget.Min, "host_max": budget.Max}}
+			return "", &toolrejection.ToolReject{Code: code, Data: map[string]any{"max_tool_loops": maxToolLoops, "min_required": budget.Min, "host_max": budget.Max}}
 		}
 		identity, err := resolveTaskIdentity(ctx, deps, tctx, args, maxToolLoops, budget)
 		if err != nil {
@@ -88,12 +89,12 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 		}
 		agentType := identity.AgentType
 		if _, err := deps.Agents.Get(agentType); err != nil {
-			return "", &tools.ToolReject{
+			return "", &toolrejection.ToolReject{
 				Code: "WORKER_TYPE_UNAVAILABLE",
 				Data: map[string]any{"agent_type": agentType, "reason": "unknown_agent_type"},
 			}
 		}
-		brief, err := parseTaskCharter(args)
+		brief, err := plannedTaskCharter(identity.Charter, args)
 		if err != nil {
 			return "", err
 		}
@@ -118,7 +119,7 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 				return "", fmt.Errorf("load pending decision: %w", err)
 			}
 			if ok {
-				return "", &tools.ToolReject{
+				return "", &toolrejection.ToolReject{
 					Code: "TASK_DECISION_PENDING",
 					Data: map[string]any{
 						"child_session_id": childSessionID,
@@ -139,7 +140,7 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 			prompt = composed
 		}
 		if prior := identity.Prior; prior != nil && overlayDiscarded(prior.MergeStatus) {
-			return "", &tools.ToolReject{
+			return "", &toolrejection.ToolReject{
 				Code: "WORKER_RESUME_OVERLAY_DISCARDED",
 				Data: map[string]any{
 					"child_session_id": childSessionID,
@@ -149,15 +150,15 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 			}
 		}
 
-		projScope := project.ScopeFromToolContext(tctx.ProjectID, tctx.ActiveRootID, tctx.Roots, tctx.ActiveRootPath())
+		projScope := project.ScopeFromToolContext(tctx.Identity.ProjectID, tctx.Source.ActiveRootID, tctx.Source.Roots, tctx.ActiveRootPath())
 		if !projScope.HasRoots && !prompts.AgentRunsWithoutWorkspace(agentType) {
-			return "", &tools.ToolReject{
+			return "", &toolrejection.ToolReject{
 				Code: "WORKER_WORKSPACE_REQUIRED",
 				Data: map[string]any{"agent_type": agentType, "reason": "project_roots_required"},
 			}
 		}
 		if agentdef.DeclaresAny(agentType, agentdef.CapabilityExternal) && deps.WebSearchEnabled != nil && !deps.WebSearchEnabled() {
-			return "", &tools.ToolReject{
+			return "", &toolrejection.ToolReject{
 				Code: "WEB_SEARCH_DISABLED",
 				Data: map[string]any{"agent_type": agentType},
 			}
@@ -165,7 +166,7 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 		task := api.WorkerTask{
 			ID:              jobID,
 			AfterWorkers:    after,
-			ParentSessionID: tctx.SessionID,
+			ParentSessionID: tctx.Identity.SessionID,
 			ChildSessionID:  childSessionID,
 			AgentType:       agentType,
 			Prompt:          prompt,
@@ -183,7 +184,7 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 		if err := ApplyEnqueueDefaults(&task, projScope, deps.Workers); err != nil {
 			return "", err
 		}
-		task.SourceToolCallID = strings.TrimSpace(tctx.ToolCallID)
+		task.SourceToolCallID = strings.TrimSpace(tctx.Identity.ToolCallID)
 		if deps.BindWorkflowTask != nil {
 			if err := deps.BindWorkflowTask(ctx, tctx, identity.WorkflowWorkID, &task); err != nil {
 				return "", err
@@ -201,14 +202,14 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 
 func taskEnqueueOutput(tctx tools.ToolContext, scope project.ProjectScope, task api.WorkerTask) (string, error) {
 	jobID, childSessionID, agentType := task.ID, task.ChildSessionID, task.AgentType
-	if tctx.Out != nil {
-		tctx.Out.OwnerRef = jobID
-		tctx.Out.Dispatch = &api.WorkerDispatch{
+	if tctx.Effects.Out != nil {
+		tctx.Effects.Out.OwnerRef = jobID
+		tctx.Effects.Out.Dispatch = &api.WorkerDispatch{
 			WorkerID: jobID, ChildSessionID: childSessionID, AgentType: agentType,
 		}
 	}
 	taskToolLog.Info("task enqueued",
-		"parent_session_id", tctx.SessionID,
+		"parent_session_id", tctx.Identity.SessionID,
 		"job_id", jobID,
 		"agent_type", agentType,
 		"project_id", scope.ProjectID,
@@ -245,8 +246,8 @@ func taskToolArgsDigest(args map[string]any, tctx tools.ToolContext) (string, er
 		ActiveRootID string         `json:"active_root_id"`
 		Args         map[string]any `json:"args"`
 	}{
-		SessionID: strings.TrimSpace(tctx.SessionID), ProjectID: strings.TrimSpace(tctx.ProjectID),
-		ActiveRootID: strings.TrimSpace(tctx.ActiveRootID), Args: args,
+		SessionID: strings.TrimSpace(tctx.Identity.SessionID), ProjectID: strings.TrimSpace(tctx.Identity.ProjectID),
+		ActiveRootID: strings.TrimSpace(tctx.Source.ActiveRootID), Args: args,
 	}
 	raw, err := json.Marshal(canonical)
 	if err != nil {

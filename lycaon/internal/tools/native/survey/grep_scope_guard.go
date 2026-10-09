@@ -91,10 +91,10 @@ func resolveGrepGuardCount(
 	fileCountSource func(projectDir string) (int, bool),
 	threshold int,
 ) (fileCount int, applyGuard bool, topLevel []string) {
-	topLevel = append([]string(nil), tctx.RepoTopLevel...)
-	known := tctx.RepoFileCountKnown
-	if tctx.RepoFileCountKnown {
-		fileCount = tctx.RepoFileCount
+	topLevel = append([]string(nil), tctx.Source.RepoTopLevel...)
+	known := tctx.Source.RepoFileCountKnown
+	if tctx.Source.RepoFileCountKnown {
+		fileCount = tctx.Source.RepoFileCount
 	}
 	root := tctx.ActiveRootPath()
 	if fileCountSource != nil && root != "" {
@@ -119,11 +119,11 @@ type grepDensenessGate struct {
 }
 
 func (g *grepDensenessGate) key(tctx tools.ToolContext) string {
-	sid := strings.TrimSpace(tctx.SessionID)
+	sid := strings.TrimSpace(tctx.Identity.SessionID)
 	if sid == "" {
 		sid = "_"
 	}
-	pid := strings.TrimSpace(tctx.ProjectID)
+	pid := strings.TrimSpace(tctx.Identity.ProjectID)
 	return sid + "|" + pid
 }
 

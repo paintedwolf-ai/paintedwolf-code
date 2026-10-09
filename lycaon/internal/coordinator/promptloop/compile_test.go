@@ -16,7 +16,7 @@ import (
 )
 
 func TestCompiledSurfaceExpandsCommandFamily(t *testing.T) {
-	plan, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: tools.SurfaceImplementInvestigate}, 1)
+	plan, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: toolcontract.SurfaceImplementInvestigate}, 1)
 	testutil.FailErr(t, "compile tool plan", err)
 	for _, name := range []string{"command", "command_output", "command_stop"} {
 		if !plan.Deferred(name) {
@@ -32,7 +32,7 @@ func TestCompiledSurfaceLiveResourceAddsWaitOnInvestigate(t *testing.T) {
 		},
 	}}
 	sess := &api.Session{ID: "s1", WorkspacePath: "/tmp/repo"}
-	plan, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: tools.SurfaceImplementInvestigate}, 1)
+	plan, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: toolcontract.SurfaceImplementInvestigate}, 1)
 	testutil.FailErr(t, "compile tool plan", err)
 	plan = modelTurn{loop}.compileRuntimeToolPlan(plan, api.CoordinatorRunContext{}, nil, nil, tools.MCPToolPlan{}, false, sess)
 	for _, name := range []string{"command_output", "command_stop", "wait"} {

@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/backgroundwork"
@@ -18,8 +19,9 @@ const structuralFileSuffix = ".tree"
 // only the directories that changed since. Writing one is a whole-tree copy.
 const structuralCheckpointInterval = 5 * time.Minute
 
-// The store mutex protects checkpoint scheduling, including drain admission.
+// Checkpoint scheduling owns its admission and cancellation independently of publication.
 type structuralCheckpoint struct {
+	mu        sync.Mutex
 	cancel    context.CancelFunc
 	done      chan struct{}
 	pending   bool
@@ -28,66 +30,66 @@ type structuralCheckpoint struct {
 	nextWrite time.Time
 }
 
-func (s *indexStore) scheduleStructuralCheckpoint(parent context.Context) {
+func (s *structuralCheckpoint) Schedule(parent context.Context, write func(context.Context) (bool, error)) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.checkpoint.drained || s.navigation.retired || s.pins.drained {
+	if s.drained {
 		return
 	}
-	s.checkpoint.pending = true
-	if s.checkpoint.done != nil {
+	s.pending = true
+	if s.done != nil {
 		return
 	}
 	ctx, cancel := context.WithCancel(context.WithoutCancel(parent))
-	s.checkpoint.cancel = cancel
-	s.checkpoint.done = make(chan struct{})
-	go s.runStructuralCheckpoints(ctx)
+	s.cancel = cancel
+	s.done = make(chan struct{})
+	go s.run(ctx, write)
 }
 
-func (s *indexStore) runStructuralCheckpoints(ctx context.Context) {
+func (s *structuralCheckpoint) run(ctx context.Context, write func(context.Context) (bool, error)) {
 	for {
 		s.mu.Lock()
-		if ctx.Err() != nil || !s.checkpoint.pending {
-			s.finishStructuralCheckpointLocked()
+		if ctx.Err() != nil || !s.pending {
+			s.finishLocked()
 			s.mu.Unlock()
 			return
 		}
-		next := s.checkpoint.nextWrite
+		next := s.nextWrite
 		s.mu.Unlock()
 		timer := time.NewTimer(max(0, time.Until(next)))
 		select {
 		case <-ctx.Done():
 			timer.Stop()
 			s.mu.Lock()
-			s.finishStructuralCheckpointLocked()
+			s.finishLocked()
 			s.mu.Unlock()
 			return
 		case <-timer.C:
 		}
 		s.mu.Lock()
-		s.checkpoint.pending = false
+		s.pending = false
 		s.mu.Unlock()
-		written, err := s.checkpointStructure(ctx)
+		written, err := write(ctx)
 		s.mu.Lock()
-		s.checkpoint.lastError = err
+		s.lastError = err
 		if written {
-			s.checkpoint.nextWrite = time.Now().Add(structuralCheckpointInterval)
+			s.nextWrite = time.Now().Add(structuralCheckpointInterval)
 		}
 		s.mu.Unlock()
 	}
 }
 
-func (s *indexStore) finishStructuralCheckpointLocked() {
-	s.checkpoint.cancel()
-	close(s.checkpoint.done)
-	s.checkpoint.done, s.checkpoint.cancel = nil, nil
+func (s *structuralCheckpoint) finishLocked() {
+	s.cancel()
+	close(s.done)
+	s.done, s.cancel = nil, nil
 }
 
 // checkpointStructure writes the head when it is complete. An incomplete head
 // could never restore, so it is skipped and the next complete publication
 // schedules the write again.
 func (s *indexStore) checkpointStructure(ctx context.Context) (bool, error) {
-	release, err := s.catalog.broker.Acquire(ctx, backgroundwork.Request{
+	release, err := s.stores.broker.Acquire(ctx, backgroundwork.Request{
 		Key: s.workKey() + ":checkpoint", Lane: s.root.Path,
 		Priority: backgroundwork.PriorityProactive, Resources: []backgroundwork.Resource{backgroundwork.ResourceIO},
 	})
@@ -141,11 +143,30 @@ func (s *indexStore) writePinnedCheckpoint(ctx context.Context, pin *GenerationP
 	return writeErr
 }
 
-func (s *indexStore) drainStructuralCheckpointLocked() <-chan struct{} {
-	s.checkpoint.drained = true
-	s.checkpoint.pending = false
-	if s.checkpoint.cancel != nil {
-		s.checkpoint.cancel()
+func (s *structuralCheckpoint) Drain() <-chan struct{} {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.drained = true
+	s.pending = false
+	if s.cancel != nil {
+		s.cancel()
 	}
-	return s.checkpoint.done
+	return s.done
+}
+
+func (s *structuralCheckpoint) Drained() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.drained
+}
+
+func (s *structuralCheckpoint) Status() (<-chan struct{}, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.done, s.lastError
+}
+
+func (s *structuralCheckpoint) Active() bool {
+	done, _ := s.Status()
+	return done != nil
 }

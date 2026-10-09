@@ -120,7 +120,10 @@ func TestEarlyWorkerCloseoutExecutesCompleteLeg(t *testing.T) {
 	history, assistantID, _, err = turnCloseout{loop}.runEarlyTurnCloseout(
 		t.Context(), sess, sess.ID, "security-reviewer", "finish", history, 1,
 		TurnCloseoutIterationCap, "", false,
-		PromptRunInput{ToolCtx: tools.ToolContext{SessionID: sess.ID, Agent: sess.AgentType}}, state,
+		PromptRunInput{ToolCtx: tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: sess.ID,
+				Agent: sess.AgentType},
+		}}, state,
 	)
 	testutil.FailErr(t, "run early closeout", err)
 	if completeCalls != 1 {

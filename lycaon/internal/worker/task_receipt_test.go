@@ -46,7 +46,7 @@ func TestTaskToolReplaysReceiptAfterWorkflowMovedOn(t *testing.T) {
 	testutil.FailErr(t, "register", worker.RegisterTaskTool(reg, deps))
 	args := map[string]any{"agent_type": "repo-researcher", "brief": taskBrief("inspect"), "workflow_work_id": "leg-1", "scope": map[string]any{"mode": "read"}}
 	tctx := toolContext("parent-1", t.TempDir())
-	tctx.ToolCallID = "source-call"
+	tctx.Identity.ToolCallID = "source-call"
 	first, err := reg.Run(t.Context(), "task", args, tctx)
 	testutil.FailErr(t, "first dispatch", err)
 	replay, err := reg.Run(t.Context(), "task", args, tctx)

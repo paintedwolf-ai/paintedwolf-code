@@ -51,7 +51,7 @@ func placeResponseBody(resp outboundhttp.Response, tctx tools.ToolContext, lande
 // landHostData writes an oversized body to the host-data tool-output store,
 // which projectpaths resolves for read and the host reclaims on its own.
 func landHostData(tctx tools.ToolContext, body []byte) (string, bool) {
-	root := strings.TrimSpace(tctx.HostDataDir)
+	root := strings.TrimSpace(tctx.Host.HostDataDir)
 	if root == "" {
 		return "", false
 	}

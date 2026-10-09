@@ -1,6 +1,8 @@
 package wiring
 
 import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+
 	"context"
 	"github.com/lycaon/lycaon/internal/coordinator/batch"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
@@ -10,7 +12,6 @@ import (
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -86,7 +87,7 @@ func TestInvestigateTaskFanOutBlocksInvestigateUntilWorkersIdle(t *testing.T) {
 		routingTurnHistory(msgs, surface.HostLoopWakeSentinel),
 		state,
 	)
-	if wakeProfile.SurfaceID == tools.SurfaceImplementInvestigate {
+	if wakeProfile.SurfaceID == toolcontract.SurfaceImplementInvestigate {
 		t.Fatalf("loop wake with workers in flight must not select investigate, got %q", wakeProfile.SurfaceID)
 	}
 	if wakeProfile.SurfaceID != surface.SurfaceImplementPark {
@@ -169,7 +170,7 @@ func TestInvestigateReturnsAfterWorkersCompleteAndNoQueuedPromotion(t *testing.T
 				runCtx, rerr := h.SessionMgr.CoordinatorRunContext(ctx, sess.ID)
 				if rerr == nil {
 					followProfile = surface.ResolveTurnProfile(runCtx, sess, routingTurnHistory(msgs, "summarize what changed"), state)
-					if followProfile.SurfaceID == tools.SurfaceImplementInvestigate {
+					if followProfile.SurfaceID == toolcontract.SurfaceImplementInvestigate {
 						return true
 					}
 				}
@@ -182,7 +183,7 @@ func TestInvestigateReturnsAfterWorkersCompleteAndNoQueuedPromotion(t *testing.T
 		jobs, _ := h.WorkerQueue.ListBySession(ctx, sess.ProjectID, sess.ID)
 		t.Fatalf("follow-up surface did not settle: profile=%q state=%+v run=%+v jobs=%+v", followProfile.SurfaceID, state, runCtx, jobs)
 	}
-	if followProfile.SurfaceID != tools.SurfaceImplementInvestigate {
+	if followProfile.SurfaceID != toolcontract.SurfaceImplementInvestigate {
 		runCtx, _ := h.SessionMgr.CoordinatorRunContext(ctx, sess.ID)
 		jobs, _ := h.WorkerQueue.ListBySession(ctx, sess.ProjectID, sess.ID)
 		t.Fatalf("visible user follow-up surface = %q want investigate; state=%+v run=%+v jobs=%+v", followProfile.SurfaceID, state, runCtx, jobs)

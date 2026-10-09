@@ -213,8 +213,8 @@ func TestStructuralRetentionLeavesNoScratchToReclaim(t *testing.T) {
 	testutil.FailErr(t, "seal spilled segments", store.Seal())
 
 	catalog := New()
-	catalog.treeDir = dir
-	removed, err := catalog.ReconcileTreeStores(t.Context(), TreeStoreRetention)
+	catalog.Trees.treeDir = dir
+	removed, err := catalog.Trees.ReconcileTreeStores(t.Context(), TreeStoreRetention)
 	testutil.FailErr(t, "reconcile structural caches", err)
 	if removed != 0 {
 		t.Fatalf("removed entries = %d, want none", removed)

@@ -112,7 +112,7 @@ func (b delegationWiring) registerBackgroundRunners(app *ServeApp) {
 			return contentblob.RunGC(ctx, contentblob.GCDeps{Database: b.db, Queries: db.New(b.db), DataDir: b.dataDir, Guard: b.storeClaim})
 		}}
 		byName["history-retention"] = registration{run: b.historyStorage.Run}
-		byName["prompt-attachment-maintenance"] = registration{run: b.srv.Prompt.RunPromptAttachmentMaintenance}
+		byName["prompt-attachment-maintenance"] = registration{run: b.srv.Admin.Prompt.Attachments.RunPromptAttachmentMaintenance}
 		byName["content-density"] = registration{run: func(ctx context.Context) error {
 			deps := contentblob.DensityDeps{Queries: db.New(b.db), DataDir: b.dataDir}
 			return contentblob.RunDensity(ctx, deps, contentblob.DefaultDensityConfig())
@@ -164,7 +164,7 @@ func (b delegationWiring) reconcileStoreCoupledStorage(ctx context.Context) erro
 	}
 	removedHost, hostErr := project.ReconcileHostStorage(b.dataDir, ids)
 	removedCheckpoints, checkpointErr := sessioncheckpoint.ReconcileRoots(b.dataDir, roots)
-	removedCatalogs, catalogErr := sourcecatalog.Process().ReconcileTreeStores(ctx, sourcecatalog.TreeStoreRetention)
+	removedCatalogs, catalogErr := sourcecatalog.Process().Trees.ReconcileTreeStores(ctx, sourcecatalog.TreeStoreRetention)
 	removedSandboxes, sandboxErr := b.reconcileWorkerSandboxes(ctx, roots)
 	removedSpills, spillErr := scan.ReconcileSpills(ctx, b.dataDir, b.scanStore)
 	if removedHost+removedCheckpoints+removedCatalogs+removedSandboxes+removedSpills > 0 {

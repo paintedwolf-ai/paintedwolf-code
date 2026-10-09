@@ -25,7 +25,10 @@ func TestWorkflowCatalogSummariesTool(t *testing.T) {
 	dir := t.TempDir()
 	roots := []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}}
 	out, err := reg.Run(context.Background(), "workflow_catalog_summaries", map[string]any{}, tools.ToolContext{
-		SessionID: "sess-1", Roots: roots, ActiveRootID: "r1", Agent: "coordinator",
+		Identity: tools.InvocationIdentity{SessionID: "sess-1",
+			Agent: "coordinator"},
+		Source: tools.InvocationSource{Roots: roots,
+			ActiveRootID: "r1"},
 	})
 	testutil.FailErr(t, "reg.Run failed", err)
 	var payload map[string]any

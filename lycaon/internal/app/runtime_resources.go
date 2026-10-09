@@ -23,7 +23,7 @@ type runtimeResources struct {
 	cliSocket     *clisocket.Server
 	httpServer    *http.Server
 	profileServer *http.Server
-	mcpRegistry   *mcp.RegistryImpl
+	mcpRegistry   *mcp.Runtime
 	db            *db.Store
 }
 
@@ -40,10 +40,22 @@ func (r *runtimeResources) track(name string, order int, cleanup func(context.Co
 	})
 }
 
+// releaseObserver unregisters a process-wide observer hook after the processes
+// that raise its events stop and before the subsystems it calls into close.
+func (r *runtimeResources) releaseObserver(name string, release func()) {
+	if release == nil {
+		return
+	}
+	r.track(name+"-observer", 65, func(context.Context) error { release(); return nil })
+}
+
 // capture records resources acquired by a build phase.
 func (r *runtimeResources) capture(b *serveBuilder) {
 	if r == nil || b == nil {
 		return
+	}
+	if checkpoints, ok := b.checkpointMgr.(interface{ StopExpiryTimers() }); ok {
+		r.track("checkpoint-expiries", 25, func(context.Context) error { checkpoints.StopExpiryTimers(); return nil })
 	}
 	if b.egressBrokerBound {
 		// The front door closes after the processes that use it.

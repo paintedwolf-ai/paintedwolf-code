@@ -1,0 +1,6 @@
+{
+  "category": "test_directories",
+  "artifact": "lycaon/internal/tools/native",
+  "cap": 94,
+  "reason": "The native tool package holds every tool family; the command family moves to its own subpackage in #360."
+}

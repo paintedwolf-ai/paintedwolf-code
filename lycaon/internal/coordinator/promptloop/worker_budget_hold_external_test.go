@@ -107,7 +107,10 @@ func runBudgetHold(t *testing.T, wait time.Duration, answer func(*budgetJob)) bu
 	started := time.Now()
 	_, err = loop.Run(ctx, promptloop.PromptRunInput{
 		SessionID: sess.ID, Session: sess, History: userHistory("go"), ProfileID: "explore_readonly",
-		ToolCtx: tools.ToolContext{SessionID: sess.ID, WorkerJobID: "job-1"},
+		ToolCtx: tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: sess.ID,
+				WorkerJobID: "job-1"},
+		},
 	})
 	run.elapsed = time.Since(started)
 	testutil.FailErr(t, "loop.Run failed", err)

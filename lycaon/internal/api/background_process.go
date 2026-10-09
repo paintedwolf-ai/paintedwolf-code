@@ -10,16 +10,16 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Server) requireBackgroundProcessSession(w http.ResponseWriter, r *http.Request) (string, bool) {
+func (s *Conversation) requireBackgroundProcessSession(w http.ResponseWriter, r *http.Request) (string, bool) {
 	id := strings.TrimSpace(chi.URLParam(r, "id"))
-	if !requestscope.SessionExists(s.sessionStore, &s.responses, w, r, id) {
+	if !requestscope.SessionExists(s.sessionStore, s.responses, w, r, id) {
 		return "", false
 	}
 	return id, true
 }
 
 // handleListBackgroundProcesses provides process state for client rehydration.
-func (s *Server) handleListBackgroundProcesses(w http.ResponseWriter, r *http.Request) {
+func (s *Conversation) handleListBackgroundProcesses(w http.ResponseWriter, r *http.Request) {
 	id, ok := s.requireBackgroundProcessSession(w, r)
 	if !ok {
 		return
@@ -32,7 +32,7 @@ func (s *Server) handleListBackgroundProcesses(w http.ResponseWriter, r *http.Re
 }
 
 // handleGetBackgroundProcessOutput reads retained output without changing the process.
-func (s *Server) handleGetBackgroundProcessOutput(w http.ResponseWriter, r *http.Request) {
+func (s *Conversation) handleGetBackgroundProcessOutput(w http.ResponseWriter, r *http.Request) {
 	id, ok := s.requireBackgroundProcessSession(w, r)
 	if !ok {
 		return
@@ -51,7 +51,7 @@ func (s *Server) handleGetBackgroundProcessOutput(w http.ResponseWriter, r *http
 }
 
 // handleStopBackgroundProcess uses the same process registry as the command_stop tool.
-func (s *Server) handleStopBackgroundProcess(w http.ResponseWriter, r *http.Request) {
+func (s *Conversation) handleStopBackgroundProcess(w http.ResponseWriter, r *http.Request) {
 	id, ok := s.requireBackgroundProcessSession(w, r)
 	if !ok {
 		return

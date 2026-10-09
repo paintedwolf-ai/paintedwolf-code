@@ -5,6 +5,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
 // Reason states the primary finding for logs and the generic refusal copy.
@@ -33,6 +35,29 @@ func (diag Diagnosis) Reason(err error, args map[string]any) string {
 		return reason
 	}
 	return reason + received
+}
+
+// SchemaIssue identifies a violated contract without interpreting error prose.
+type SchemaIssue struct {
+	Path    []string `json:"path"`
+	Keyword []string `json:"keyword"`
+}
+
+// SchemaIssues lists each leaf violation's instance and keyword paths.
+func SchemaIssues(err *jsonschema.ValidationError) []SchemaIssue {
+	var out []SchemaIssue
+	var visit func(*jsonschema.ValidationError)
+	visit = func(e *jsonschema.ValidationError) {
+		if len(e.Causes) == 0 {
+			out = append(out, SchemaIssue{Path: e.InstanceLocation, Keyword: e.ErrorKind.KeywordPath()})
+			return
+		}
+		for _, cause := range e.Causes {
+			visit(cause)
+		}
+	}
+	visit(err)
+	return out
 }
 
 // argPathLabel names a dotted argument path for diagnostics.

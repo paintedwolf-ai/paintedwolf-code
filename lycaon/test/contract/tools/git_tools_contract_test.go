@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -28,10 +29,11 @@ func TestGitSurveysOutsideRepositoryReturnTypedRefusal(t *testing.T) {
 			dir := t.TempDir()
 			executor := toolfixture.ContractToolExecutor(t)
 			out, err := executor.Invoke(t.Context(), name, map[string]any{}, tools.ToolContext{
-				Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}},
-				ActiveRootID: "r1", Agent: "explore_readonly",
+				Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}},
+					ActiveRootID: "r1"},
+				Identity: tools.InvocationIdentity{Agent: "explore_readonly"},
 			})
-			var refusal *tools.ToolReject
+			var refusal *toolrejection.ToolReject
 			if !errors.As(err, &refusal) || refusal.Code != "TOOL_OWNER_FAILED" {
 				t.Fatalf("%s outside repository = %q, %v; want typed owner refusal", name, out, err)
 			}
@@ -61,9 +63,9 @@ func TestGitStatusPagesLargeTreeContract(t *testing.T) {
 
 	execTool := toolfixture.ContractToolExecutor(t)
 	tctx := tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}},
-		ActiveRootID: "r1",
-		Agent:        "coordinator",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{Agent: "coordinator"},
 	}
 	call := func(args map[string]any) map[string]any {
 		t.Helper()
@@ -169,9 +171,9 @@ func TestGitDiffRetainsSelectedHunksUntilScreenedProjectionContract(t *testing.T
 
 	execTool := toolfixture.ContractToolExecutor(t)
 	tctx := tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}},
-		ActiveRootID: "r1",
-		Agent:        "coordinator",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{Agent: "coordinator"},
 	}
 	call := func(args map[string]any) (map[string]any, string) {
 		t.Helper()

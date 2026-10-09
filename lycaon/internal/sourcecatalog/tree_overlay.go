@@ -36,7 +36,7 @@ type OverlayNode struct {
 // weighted pages are immutable after publication and need no retained read transaction.
 type TreeOverlay struct{ rows *ProjectionRows }
 
-func (c *Catalog) NewTreeOverlay(ctx context.Context, projectID string, root Root) (*TreeOverlay, error) {
+func (c *Directories) NewTreeOverlay(ctx context.Context, projectID string, root Root) (*TreeOverlay, error) {
 	rows, err := c.NewProjectionRows(ctx, projectID, root)
 	if err != nil {
 		return nil, err
@@ -50,7 +50,7 @@ func (o *TreeOverlay) Add(ctx context.Context, nodes []OverlayNode) error {
 	if len(nodes) > pagedview.MaxRows {
 		return pagedview.ErrRange
 	}
-	unwrite, err := o.rows.store.write(ctx)
+	unwrite, err := o.rows.store.writer.Write(ctx, o.rows.store.writable)
 	if err != nil {
 		return err
 	}
@@ -129,7 +129,7 @@ func (o *TreeOverlay) change(ctx context.Context, nodes []OverlayNode, weights b
 	if len(nodes) > pagedview.MaxRows {
 		return pagedview.ErrRange
 	}
-	unwrite, err := o.rows.store.write(ctx)
+	unwrite, err := o.rows.store.writer.Write(ctx, o.rows.store.writable)
 	if err != nil {
 		return err
 	}
@@ -199,7 +199,7 @@ func (o *TreeOverlay) deleteBatches(ctx context.Context, table string) error {
 		return pagedview.ErrRange
 	}
 	for {
-		unwrite, err := o.rows.store.write(ctx)
+		unwrite, err := o.rows.store.writer.Write(ctx, o.rows.store.writable)
 		if err != nil {
 			return err
 		}
@@ -213,4 +213,125 @@ func (o *TreeOverlay) deleteBatches(ctx context.Context, table string) error {
 			return err
 		}
 	}
+}
+
+// FactFingerprint excludes derived visibility and weights from the retained facts.
+func (o *TreeOverlay) FactFingerprint(ctx context.Context) (pagedview.Fingerprint, error) {
+	depth, err := o.Depth(ctx)
+	if err != nil {
+		return pagedview.Fingerprint{}, err
+	}
+	var result pagedview.Fingerprint
+	for level := 0; level <= depth; level++ {
+		after := ""
+		for {
+			nodes, err := o.Level(ctx, level, after)
+			if err != nil {
+				return pagedview.Fingerprint{}, err
+			}
+			if len(nodes) == 0 {
+				break
+			}
+			for _, node := range nodes {
+				result = result.Combine(TreeRowFingerprint(node.Path, "review-fact", false, node.Directory, ""))
+			}
+			after = nodes[len(nodes)-1].Path
+		}
+	}
+	return result, nil
+}
+
+// Fork copies sparse facts in bounded transactions, leaving projected weights
+// behind. An accepted disclosure gets independent immutable range pages.
+func (o *TreeOverlay) Fork(ctx context.Context) (*TreeOverlay, error) {
+	rows, err := newProjectionRows(ctx, o.rows.store)
+	if err != nil {
+		return nil, err
+	}
+	next := &TreeOverlay{rows: rows}
+	after := ""
+	for {
+		last, count, err := o.copyFactBatch(ctx, next, after)
+		if err != nil {
+			cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), treeOverlayCleanupTimeout)
+			_ = next.Release(cleanup)
+			cancel()
+			next.Close()
+			return nil, err
+		}
+		if count == 0 {
+			return next, nil
+		}
+		after = last
+	}
+}
+
+func (o *TreeOverlay) copyFactBatch(ctx context.Context, next *TreeOverlay, after string) (string, int64, error) {
+	unwrite, err := o.rows.store.writer.Write(ctx, o.rows.store.writable)
+	if err != nil {
+		return "", 0, err
+	}
+	defer unwrite()
+	tx, err := o.rows.db.BeginTx(ctx, nil)
+	if err != nil {
+		return "", 0, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	result, err := tx.ExecContext(ctx, `INSERT INTO tree_overlay_nodes(projection,path,parent,depth,directory)
+ SELECT ?,path,parent,depth,directory FROM tree_overlay_nodes WHERE projection=? AND path>? ORDER BY path LIMIT ?`, next.rows.id, o.rows.id, after, pagedview.MaxRows)
+	if err != nil {
+		return "", 0, err
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return "", 0, err
+	}
+	if count == 0 {
+		return "", 0, nil
+	}
+	var last string
+	if err := tx.QueryRowContext(ctx, "SELECT path FROM tree_overlay_nodes WHERE projection=? ORDER BY path DESC LIMIT 1", next.rows.id).Scan(&last); err != nil {
+		return "", 0, err
+	}
+	return last, count, tx.Commit()
+}
+
+type cachedOverlayNode struct {
+	node    OverlayNode
+	missing bool
+}
+
+// TreeOverlayReader bounds decoded detail for one immutable overlay read.
+type TreeOverlayReader struct {
+	overlay  *TreeOverlay
+	nodes    *pagedview.Cache[string, cachedOverlayNode]
+	children *pagedview.Cache[string, *pagedview.RangeIndex[TreeItem]]
+	pages    *pagedview.Cache[uint64, pagedview.RangePage[TreeItem]]
+}
+
+func (o *TreeOverlay) Reader() *TreeOverlayReader {
+	return &TreeOverlayReader{overlay: o, nodes: pagedview.NewCache[string, cachedOverlayNode](512, 256<<10), children: pagedview.NewCache[string, *pagedview.RangeIndex[TreeItem]](256, 128<<10), pages: pagedview.NewCache[uint64, pagedview.RangePage[TreeItem]](128, 2<<20)}
+}
+func (r *TreeOverlayReader) Node(ctx context.Context, rel string) (OverlayNode, error) {
+	if cached, ok := r.nodes.Get(rel); ok {
+		if cached.missing {
+			return OverlayNode{}, pagedview.ErrMissing
+		}
+		return cached.node, nil
+	}
+	node, err := r.overlay.Node(ctx, rel)
+	if err == nil || errors.Is(err, pagedview.ErrMissing) {
+		r.nodes.Put(rel, cachedOverlayNode{node: node, missing: err != nil}, int64(192+len(rel)+len(node.Path)+len(node.Parent)))
+	}
+	return node, err
+}
+func (r *TreeOverlayReader) Children(ctx context.Context, dir string) (*pagedview.RangeIndex[TreeItem], error) {
+	if index, ok := r.children.Get(dir); ok {
+		return index, nil
+	}
+	index, _, err := newRangeReader(r.overlay.rows.db, r.pages).Open(ctx, r.overlay.rows.id, dir)
+	if err == nil {
+		r.children.Put(dir, index, int64(128+len(dir)))
+	}
+	return index, err
 }

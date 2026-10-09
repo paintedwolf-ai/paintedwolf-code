@@ -16,16 +16,16 @@ func RegisterCatalogSummariesTool(reg *tools.DefaultRegistry, resolver ManifestR
 		return fmt.Errorf("registry required")
 	}
 	if err := reg.Register("workflow_catalog_summaries", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-		if !isCoordinatorAgent(tctx.Agent) {
+		if !isCoordinatorAgent(tctx.Identity.Agent) {
 			return "", fmt.Errorf("workflow_catalog_summaries requires coordinator role")
 		}
-		bundled, err := resolver.ListResolved(ctx, tctx.ActiveRootPath(), tctx.SessionID)
+		bundled, err := resolver.ListResolved(ctx, tctx.ActiveRootPath(), tctx.Identity.SessionID)
 		if err != nil {
 			return "", err
 		}
 		sessionRows := []api.WorkflowSummary(nil)
-		if sessionStore != nil && tctx.SessionID != "" {
-			records, err := sessionStore.ListBySession(ctx, tctx.SessionID)
+		if sessionStore != nil && tctx.Identity.SessionID != "" {
+			records, err := sessionStore.ListBySession(ctx, tctx.Identity.SessionID)
 			if err != nil {
 				return "", err
 			}

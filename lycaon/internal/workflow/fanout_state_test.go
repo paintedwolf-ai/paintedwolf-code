@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"reflect"
 	"testing"
 
@@ -19,9 +20,13 @@ func TestStateUpdateCannotForgeHostWorkflowProof(t *testing.T) {
 	testutil.FailErr(t, "register state tools", RegisterStateTools(reg, StateToolDeps{Runs: mgr, Sessions: sessions}))
 	before, err := mgr.Store.GetScaffoldVars(t.Context(), run.ID)
 	testutil.FailErr(t, "read initial variables", err)
-	tctx := tools.ToolContext{SessionID: "sess-1", Roots: []projectroot.RootRef{{ID: "root", Path: dir, IsPrimary: true}}, ActiveRootID: "root"}
+	tctx := tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "sess-1"},
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: dir, IsPrimary: true}},
+			ActiveRootID: "root"},
+	}
 	for _, path := range []string{
-		"fanout_plans.execute", "fanout_coverage", "fanout_settled", "worker_cycle.evaluating", "gates.worker_cycle_ready",
+		"review_repairs", "review_repairs.state", "fanout_plans.execute", "fanout_coverage", "fanout_settled", "worker_cycle.evaluating", "gates.worker_cycle_ready",
 		"human_approval", "human_approval.issued", "human_approval.blueprint_hash", "phase_skipped.approve",
 		"review_if_spawnable", "review_if_spawnable.challenge", "review_loop.challenge.attempt", "review_questions", "review_questions.challenge", "review_verdict.challenge",
 		"user_feedback", "user_feedback.approve.response", "user_decision", "user_decision.approve.choice",
@@ -33,7 +38,7 @@ func TestStateUpdateCannotForgeHostWorkflowProof(t *testing.T) {
 		HostAutoAdvancedFromKey, "workflow_compose_summary_id", "last_failed_leaves", "evidence_digest",
 	} {
 		_, err := reg.Run(t.Context(), "state_update", map[string]any{"path": path, "value": true}, tctx)
-		var reject *tools.ToolReject
+		var reject *toolrejection.ToolReject
 		if !errors.As(err, &reject) || reject.Code != "TOOL_ARGS_INVALID" || reject.Data["reason"] != "host_managed_workflow_state" {
 			t.Fatalf("%s: expected host-state rejection, got %v", path, err)
 		}
@@ -43,7 +48,7 @@ func TestStateUpdateCannotForgeHostWorkflowProof(t *testing.T) {
 	if !reflect.DeepEqual(before, after) {
 		t.Fatal("rejected state mutation changed host proof")
 	}
-	tctx.ToolCallID = "model-artifact"
+	tctx.Identity.ToolCallID = "model-artifact"
 	_, err = reg.Run(t.Context(), "state_update", map[string]any{"path": "artifact.summary", "value": "draft"}, tctx)
 	testutil.FailErr(t, "update model-authored artifact", err)
 }

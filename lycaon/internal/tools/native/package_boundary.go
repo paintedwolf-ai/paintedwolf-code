@@ -11,7 +11,7 @@ import (
 
 func agentCommandLaunch(tctx tools.ToolContext, subject string, confinement *confine.Confinement) lycexec.LaunchPlan {
 	launch := lycexec.AgentLaunch(lycexec.LaunchAgentCommand, subject, confinement)
-	if tctx.PackageExecution != nil {
+	if tctx.Files.PackageExecution != nil {
 		launch = launch.WithReducedEnvironment().WithExtraEnv(packageExecutionCacheEnv()...)
 	}
 	return launch

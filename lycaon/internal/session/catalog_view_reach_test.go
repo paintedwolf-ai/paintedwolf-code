@@ -264,8 +264,8 @@ func TestW13NoSharedMutation(t *testing.T) {
 				return
 			}
 			gc := oar.NewGuardContext()
-			gc.SessionID = "s-" + id
-			gc.Tool = "read"
+			gc.Session.SessionID = "s-" + id
+			gc.Invocation.Tool = "read"
 			if _, err := pipeline.EvaluateBlock(ctx, oar.AnchorToolPreInvoke, gc); err != nil {
 				errs <- err
 			}

@@ -19,8 +19,8 @@ type WorkflowInject struct {
 	Dedup    yaml.Node `yaml:"dedup,omitempty" json:"-"`
 }
 
-// Binding validates and binds the inject to its containing workflow.
-func (in WorkflowInject) Binding(workflowID string) (*Binding, error) {
+// NewWorkflowBinding validates and binds the inject to its containing workflow and exact version.
+func NewWorkflowBinding(in WorkflowInject, workflowID, version string) (*Binding, error) {
 	on := ID(strings.TrimSpace(in.On))
 	if on == "" {
 		return nil, fmt.Errorf("inject missing on")
@@ -36,15 +36,23 @@ func (in WorkflowInject) Binding(workflowID string) (*Binding, error) {
 	if !strings.EqualFold(tier, "workflow") {
 		return nil, fmt.Errorf("inject on %s: tier must be workflow (got %q)", on, tier)
 	}
+	wf := strings.TrimSpace(workflowID)
+	if wf == "" {
+		return nil, fmt.Errorf("inject on %s: workflow id required", on)
+	}
+	ver := strings.TrimSpace(version)
+	if ver == "" {
+		return nil, fmt.Errorf("inject on %s: workflow version required", on)
+	}
 	b := &Binding{
 		On: on, Selector: in.Selector, Effect: effect,
 		When: strings.TrimSpace(in.When), Render: strings.TrimSpace(in.Render), Tier: "workflow",
+		workflowVersion: ver,
 	}
 	if b.IsInform() && b.Render == "" {
 		return nil, fmt.Errorf("inject on %s: inform requires render", on)
 	}
-	wf := strings.TrimSpace(workflowID)
-	if wf != "" && (b.Selector.Workflow == nil || strings.TrimSpace(*b.Selector.Workflow) == "") {
+	if b.Selector.Workflow == nil || strings.TrimSpace(*b.Selector.Workflow) == "" {
 		b.Selector.Workflow = &wf
 	}
 	if b.Selector.Workflow == nil || strings.TrimSpace(*b.Selector.Workflow) == "" {
@@ -55,6 +63,7 @@ func (in WorkflowInject) Binding(workflowID string) (*Binding, error) {
 
 type workflowInjectDocument struct {
 	ID      string           `yaml:"id"`
+	Version string           `yaml:"version"`
 	Injects []WorkflowInject `yaml:"injects"`
 }
 
@@ -67,8 +76,12 @@ func (r *Registry) loadWorkflowInjects(unitID string, content []byte) error {
 	if workflowID == "" {
 		return fmt.Errorf("%s: workflow id required", unitID)
 	}
+	version := strings.TrimSpace(doc.Version)
+	if version == "" {
+		return fmt.Errorf("%s: workflow version required", unitID)
+	}
 	for i, inject := range doc.Injects {
-		b, err := inject.Binding(workflowID)
+		b, err := NewWorkflowBinding(inject, workflowID, version)
 		if err != nil {
 			return fmt.Errorf("%s injects[%d]: %w", unitID, i, err)
 		}
@@ -79,6 +92,9 @@ func (r *Registry) loadWorkflowInjects(unitID string, content []byte) error {
 			if err := r.loader.ValidateCondition(b.When); err != nil {
 				return fmt.Errorf("%s injects[%d] when: %w", unitID, i, err)
 			}
+		}
+		if err := r.checkWorkflowDuplicate(b); err != nil {
+			return fmt.Errorf("%s injects[%d]: %w", unitID, i, err)
 		}
 		r.add(b)
 	}

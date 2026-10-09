@@ -3,6 +3,7 @@ package wiring
 import (
 	"context"
 	"io/fs"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/delegation"
+	"github.com/lycaon/lycaon/internal/egress"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/mcp"
@@ -30,6 +32,7 @@ import (
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/scantest"
 	"github.com/lycaon/lycaon/internal/tools"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -61,6 +64,8 @@ func BuildForTest(t *testing.T, opts ...Option) *Harness {
 	t.Setenv("LYCAON_API_TOKEN", api.TestAPIToken)
 	t.Setenv("LYCAON_TEST", "1")
 	t.Setenv("LYCAON_LOG_LEVEL", "error")
+	// Destination checks resolve named hosts without DNS; no test reaches the network.
+	egress.TestingResolve(t, egress.StaticLookup(netip.MustParseAddr("1.1.1.1")))
 	// Isolate device configuration for deterministic tests.
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
 	// The process source catalog caches trees under <config>/cache; its builds
@@ -68,7 +73,7 @@ func BuildForTest(t *testing.T, opts ...Option) *Harness {
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
-		testutil.FailErr(t, "clear source catalog", sourcecatalog.Process().ClearTreeStores(ctx, nil))
+		testutil.FailErr(t, "clear source catalog", sourcecatalog.Process().Trees.ClearTreeStores(ctx, nil))
 	})
 
 	o := defaultOptions()
@@ -117,6 +122,10 @@ func BuildForTest(t *testing.T, opts ...Option) *Harness {
 			Result:       &scanoutput.Result{FindingsCount: 0},
 		}}
 	}
+	if o.useBundledScanners {
+		// Dependency scanning matches vendored advisories, never the advisory endpoint.
+		cfg.TestAdvisoryDatabase = scantest.OSVExport(t)
+	}
 	if !o.productionCostPricer {
 		cfg.TestCostPricer = testCostPricer{}
 	}
@@ -147,6 +156,8 @@ func BuildForTest(t *testing.T, opts ...Option) *Harness {
 	}
 
 	applyTestHarnessRelaxations(sa)
+
+	trackHost(t.Name(), sa)
 
 	harnessStore := store.NewSQL(sa.DB)
 	// Seeded and runtime evidence share the same content directory.
@@ -230,7 +241,9 @@ func (h *Harness) SeedProgress(t *testing.T, ctx context.Context, sessionID stri
 	}
 	if _, err := h.ToolRegistry.Run(ctx, "update_progress", map[string]any{
 		"content": "## Progress\n- [ ] wiring test plan\n",
-	}, tools.ToolContext{SessionID: sessionID}); err != nil {
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: sessionID},
+	}); err != nil {
 		t.Fatalf("SeedProgress: %v", err)
 	}
 }

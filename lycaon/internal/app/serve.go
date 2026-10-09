@@ -89,7 +89,7 @@ func (a *ServeApp) StartBackgroundWorkers(ctx context.Context) (context.CancelFu
 }
 
 // MCPRegistry returns the MCP registry when wired.
-func (a *ServeApp) MCPRegistry() *mcp.RegistryImpl {
+func (a *ServeApp) MCPRegistry() *mcp.Runtime {
 	if a == nil || a.resources == nil {
 		return nil
 	}
@@ -114,15 +114,24 @@ func (a *ServeApp) Close() error {
 	if a == nil {
 		return nil
 	}
+	if a.SessionMgr != nil {
+		a.SessionMgr.BeginEngineShutdown()
+	}
 	a.stopRunners()
 	drainCtx, cancel := context.WithTimeout(context.Background(), resourceReleaseTimeout)
 	defer cancel()
 	if a.Server != nil {
 		a.Server.StopBackground()
+	}
+	var drainErr error
+	if a.SessionMgr != nil {
+		drainErr = a.SessionMgr.WaitForEngineShutdown(drainCtx)
+	}
+	if a.Server != nil {
 		a.Server.WaitForBackground(drainCtx)
 	}
 	// Store shutdown retains its reserved cleanup floor.
-	err := a.resources.Close(drainCtx)
+	err := errors.Join(drainErr, a.resources.Close(drainCtx))
 	a.profileWG.Wait()
 	a.DB = nil
 	return err
@@ -218,8 +227,8 @@ func (a *ServeApp) Run(ctx context.Context) error {
 		}
 	}
 	if a.resources != nil && a.resources.mcpRegistry != nil {
-		a.resources.mcpRegistry.SetAPIAccess(a.APIToken)
-		if err := a.resources.mcpRegistry.Resync(ctx); err != nil {
+		a.resources.mcpRegistry.Connections.SetAPIAccess(a.APIToken)
+		if err := a.resources.mcpRegistry.Tools.Resync(ctx); err != nil {
 			slog.WarnContext(ctx, "mcp resync after listen", "err", err)
 		}
 	}

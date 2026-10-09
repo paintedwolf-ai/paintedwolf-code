@@ -160,7 +160,7 @@ func TestReportAdvisoryDetailsNameMalwareAndEveryAlias(t *testing.T) {
 func TestWorkAccountListsEachAttemptOnce(t *testing.T) {
 	manifests, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "RegistryFromDirs", err)
-	manifest, err := manifests.Get("security-survey", "1.0.1")
+	manifest, err := manifests.Get("security-survey", "2.0.0")
 	testutil.FailErr(t, "manifest", err)
 	var phase string
 	for _, p := range manifest.PhaseDefs {
@@ -178,10 +178,10 @@ func TestWorkAccountListsEachAttemptOnce(t *testing.T) {
 		{ID: "t3", AgentType: "skeptic", WorkflowPhase: "challenge", Status: wire.WorkerStatusComplete},
 		{ID: "t4", AgentType: "security-reviewer", WorkflowPhase: phase, WorkflowWorkID: "unplanned", Status: wire.WorkerStatusComplete},
 	}
-	h := &Handler{Deps: Deps{
+	h := &Reports{
 		Runs:    coverageRuns{vars: map[string]any{"fanout_plans": map[string]any{phase: plan}}},
 		Workers: coverageWorkers{tasks: tasks},
-	}}
+	}
 	var a runAccount
 	testutil.FailErr(t, "workAccount", h.workAccount(context.Background(), &a, &wire.WorkflowRun{ID: "run"}, manifest))
 	seen := map[string]int{}
@@ -279,10 +279,10 @@ func TestReportCoverageShowsHostCheckForPartialLeg(t *testing.T) {
 			},
 		},
 	}
-	h := &Handler{Deps: Deps{
+	h := &Reports{
 		Runs:    coverageRuns{vars: map[string]any{"fanout_plans": map[string]any{phase: plan}}},
 		Workers: coverageWorkers{tasks: tasks},
-	}}
+	}
 	var a runAccount
 	testutil.FailErr(t, "workAccount", h.workAccount(context.Background(), &a, &wire.WorkflowRun{ID: "run"}, manifest))
 

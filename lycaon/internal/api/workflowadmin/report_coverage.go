@@ -175,7 +175,7 @@ func claimName(c workflow.RunClaim) string {
 
 // workAccount accounts for the run's worker legs: every planned leg is a
 // check, and legs and helpers that stopped short are gaps.
-func (s *Handler) workAccount(ctx context.Context, a *runAccount, run *wire.WorkflowRun, manifest workflowdef.Manifest) error {
+func (s *Reports) workAccount(ctx context.Context, a *runAccount, run *wire.WorkflowRun, manifest workflowdef.Manifest) error {
 	if s.Workers == nil {
 		a.coverage = append(a.coverage, report.ReportCoverageItem{Subject: "Workers", Status: "Unavailable", Detail: "Worker accounting is unavailable."})
 		return nil
@@ -188,6 +188,11 @@ func (s *Handler) workAccount(ctx context.Context, a *runAccount, run *wire.Work
 	if err != nil {
 		return err
 	}
+	a.accountWorkers(manifest, vars, tasks)
+	return nil
+}
+
+func (a *runAccount) accountWorkers(manifest workflowdef.Manifest, vars map[string]any, tasks []wire.WorkerTask) {
 	taskByID := make(map[string]wire.WorkerTask, len(tasks))
 	for _, task := range tasks {
 		taskByID[task.ID] = task
@@ -260,5 +265,4 @@ func (s *Handler) workAccount(ctx context.Context, a *runAccount, run *wire.Work
 		}
 	}
 	a.gap(helpers)
-	return nil
 }

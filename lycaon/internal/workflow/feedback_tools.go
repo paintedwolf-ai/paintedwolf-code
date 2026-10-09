@@ -22,13 +22,13 @@ func RegisterFeedbackTool(reg *tools.DefaultRegistry, runs *RunManager) error {
 		return fmt.Errorf("registry and run manager required")
 	}
 	if err := reg.Register("workflow_user_feedback", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-		if !isCoordinatorAgent(tctx.Agent) {
+		if !isCoordinatorAgent(tctx.Identity.Agent) {
 			return "", fmt.Errorf("workflow_user_feedback requires coordinator role")
 		}
 		if len(args) > 0 {
 			return "", fmt.Errorf("workflow_user_feedback takes no arguments")
 		}
-		active, err := runs.Store.ActiveBySession(ctx, tctx.SessionID)
+		active, err := runs.Store.ActiveBySession(ctx, tctx.Identity.SessionID)
 		if err != nil {
 			return "", err
 		}

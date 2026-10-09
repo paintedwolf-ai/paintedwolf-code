@@ -121,11 +121,11 @@ func approveAgentsMDReview(t *testing.T, ctx context.Context, manager hitl.Check
 		testutil.FailErr(t, "approve content review", err)
 		return
 	}
-	resolver, ok := manager.(hitl.ApprovalOptionResolver)
+	resolver, ok := manager.(*hitl.Checkpoints)
 	if !ok {
 		t.Fatal("checkpoint manager lacks approval resolution")
 	}
-	_, err := resolver.ResolveApprovalOption(ctx, sessionID, checkpoint.ID, hitl.CurrentActionOption().ID)
+	_, err := resolver.Authority.ResolveApprovalOption(ctx, sessionID, checkpoint.ID, hitl.CurrentActionOption().ID)
 	testutil.FailErr(t, "approve instruction change", err)
 }
 

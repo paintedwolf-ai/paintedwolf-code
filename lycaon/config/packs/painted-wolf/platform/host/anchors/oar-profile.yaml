@@ -16,6 +16,11 @@
 oar_capability_version: "1.0"
 host: paintedwolf
 
+# Retired: paintedwolf.high_risk_tool combined policy categories (OAR-FACT-7).
+# Successor: compose paintedwolf.tool_is_state, tool_is_delegation,
+# tool_is_handoff, and tool_is_task explicitly in when. References to the
+# retired name fail rule loading; its old meaning is never reused.
+
 anchors:
   # Core anchor id -> the local catalog anchor that implements it.
   core:
@@ -357,8 +362,6 @@ host_facts:
  - name: paintedwolf.mode_bits
    type: string
  - name: paintedwolf.posture_unresolved
-   type: bool
- - name: paintedwolf.high_risk_tool
    type: bool
  - name: paintedwolf.tool_is_state
    type: bool

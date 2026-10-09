@@ -26,19 +26,19 @@ func (m *Manager) VerifyHarnessWorker(ctx context.Context, child *api.Session, j
 	if err != nil {
 		return nil, err
 	}
-	tctx.WorkerJobID = job.ID
+	tctx.Identity.WorkerJobID = job.ID
 	tctx, err = m.EnrichWorkerToolContext(ctx, child, tctx)
 	if err != nil {
 		return nil, err
 	}
-	tctx.ToolCallID = uuid.NewString()
-	tctx.MessageID = uuid.NewString()
-	tctx.Out = &tools.ToolInvocationOut{}
+	tctx.Identity.ToolCallID = uuid.NewString()
+	tctx.Identity.MessageID = uuid.NewString()
+	tctx.Effects.Out = &tools.ToolInvocationOut{}
 	_, err = m.tools.Run(ctx, "verify", map[string]any{"command": command}, tctx)
 	if err != nil {
 		return nil, err
 	}
-	run := tctx.Out.SourceRun
+	run := tctx.Effects.Out.SourceRun
 	if run == nil || run.CheckID == "" || !run.IsCheck || run.SourceRootDigest == "" {
 		return nil, fmt.Errorf("worker verification did not produce a source-bound terminal receipt")
 	}

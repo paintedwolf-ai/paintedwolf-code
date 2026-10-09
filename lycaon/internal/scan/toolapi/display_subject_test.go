@@ -34,7 +34,10 @@ func TestScanSubjectsKeepScopeAndMultiplicity(t *testing.T) {
 		"two":   {CanonicalPath: canonical, Categories: []api.ScanCategory{api.ScanCategorySecret}, StartedAt: &at},
 		"other": {CanonicalPath: t.TempDir(), Categories: []api.ScanCategory{api.ScanCategorySecurity}},
 	}}
-	tc := tools.ToolContext{Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}}, Out: &tools.ToolInvocationOut{}}
+	tc := tools.ToolContext{
+		Source:  tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}}},
+		Effects: tools.InvocationEffects{Out: &tools.ToolInvocationOut{}},
+	}
 	label := scanDisplaySubject(t.Context(), tc, coord, []string{"one", "two"})
 	if !strings.HasPrefix(label, "2 scans · ") || !strings.Contains(label, "security") || !strings.Contains(label, "secret") || !strings.Contains(label, "2026-09-30") {
 		t.Fatalf("scan subject = %q", label)
@@ -45,7 +48,7 @@ func TestScanSubjectsKeepScopeAndMultiplicity(t *testing.T) {
 		}
 	}
 	coord.reads = 0
-	tc.Out = nil
+	tc.Effects.Out = nil
 	if label := scanDisplaySubject(t.Context(), tc, coord, []string{"one"}); label != "" || coord.reads != 0 {
 		t.Fatal("non-presenting caller performed display lookup")
 	}

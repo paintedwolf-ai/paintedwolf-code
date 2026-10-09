@@ -15,7 +15,10 @@ func TestBackgroundOutputPreservesRemotePackageBoundaryAndRecovery(t *testing.T)
 	report := confine.ReportOf(boundary).WithRemotePackageExecution([]string{"proxy.golang.org"}, nil)
 	outFacts := &tools.ToolInvocationOut{}
 	payload := observeBackgroundOutput(
-		tools.ToolContext{SessionID: "session", Out: outFacts},
+		tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: "session"},
+			Effects:  tools.InvocationEffects{Out: outFacts},
+		},
 		commandOutput{Handle: "process", Running: false},
 		boundary,
 		confine.SpawnFacts{
@@ -45,7 +48,10 @@ func TestBackgroundOutputDoesNotClassifyOrdinaryLiveOutputAsRefusal(t *testing.T
 	boundary := confine.Boundary{Applied: true, Network: confine.NetworkProxyOnly}
 	outFacts := &tools.ToolInvocationOut{}
 	payload := observeBackgroundOutput(
-		tools.ToolContext{SessionID: "session", Out: outFacts},
+		tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: "session"},
+			Effects:  tools.InvocationEffects{Out: outFacts},
+		},
 		commandOutput{
 			Handle:  "process",
 			Running: true,

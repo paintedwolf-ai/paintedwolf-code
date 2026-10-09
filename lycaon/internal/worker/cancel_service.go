@@ -4,12 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -124,7 +124,7 @@ func (s *CancelService) abortTasks(ctx context.Context, tasks []api.WorkerTask, 
 	cancelErr := requestWorkerCancellations(ctx, s.Queue, tasks)
 	for _, task := range tasks {
 		if _, err := s.cancelTask(ctx, &task, strings.TrimSpace(task.ParentSessionID), reason, CancelImmediate); err != nil {
-			var reject *tools.ToolReject
+			var reject *toolrejection.ToolReject
 			if errors.As(err, &reject) && reject.Code == WorkerCancelTerminalCode {
 				continue
 			}
@@ -234,7 +234,7 @@ func (s *CancelService) reject(code string, data map[string]any) error {
 	if s != nil {
 		formatter = s.Reject
 	}
-	return tools.FormatDecisionReject(code, data, formatter)
+	return toolrejection.FormatDecisionReject(code, data, formatter)
 }
 
 func cancellationSummary(task api.WorkerTask, reason string, report api.WorkerChangeReport) string {

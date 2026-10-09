@@ -57,7 +57,7 @@ A block answers four questions without narrating implementation: which transitio
 ### Typed detail conventions
 
 - Browser action failures retain the original zero-based `index` and a bounded `completed_actions` prefix (index, type, locators per completed step). Those effects remain applied; the failing step may also have taken effect before settling failed. `interactive_controls` retains observed control names, text, and disabled state; `interactive_truncated` says the inventory is partial. An absent disabled value is unknown, not enabled. Successful idle waits return the settled control state.
-- Owner failures caused by a subprocess deadline carry `timeout` details: measured `elapsed_ms`, the effective `deadline`, and `source` (`command` or `caller`) ([`owner_failure.go`](../lycaon/internal/tools/owner_failure.go)). They describe the underlying execution, which can predate a tool that joined shared work, and never establish a root cause or permission to repeat effects.
+- Owner failures caused by a subprocess deadline carry `timeout` details: measured `elapsed_ms`, the effective `deadline`, and `source` (`command` or `caller`) ([`owner_failure.go`](../lycaon/internal/toolrejection/owner_failure.go)). They describe the underlying execution, which can predate a tool that joined shared work, and never establish a root cause or permission to repeat effects.
 
 - `TOOL_ARGS_INVALID` explains a schema failure in terms of what the caller wrote ([`tools/argdiag`](../lycaon/internal/tools/argdiag)). A member that a closed object does not declare, and that exactly one adjacent object (its parent or one child) declares and lacks, is reported as `misplaced_fields` with `found_under` and `belongs_under`, at any depth. A string in a declared object or array slot is JSON text: `json_encoded` when it parses, `json_malformed` when it does not. Malformed text names where reading stopped — `json_open_paths` for containers still open at the end, or the 1-based byte of an unexpected token, unterminated string, or trailing text — and the members its structure misplaces as written; `close_before` names where an object read too far should have closed. Members written after the value closed are `json_trailing_members`, placed under `json_trailing_belongs_under`: the slot when it declares them, or the object beside it when the text swallowed the call's other arguments. When every finding is repairable and the repaired call validates, `replacement_args_json` restates it, up to 3 KB; the host never applies a repair itself.
 
@@ -165,3 +165,20 @@ Do not create a second copy registry in tests or documentation. Contract validat
 - Tool success and no-op state are producer facts.
 - Deduplication uses structured identity.
 - Feedback never teaches a bypass of the enforcing boundary.
+
+### Review repair accounting
+
+A refused `submit_verdict` has no phase-progress effect. Schema admission publishes
+structured instance paths and keyword paths; coverage validation publishes issue
+kinds, field paths, fact ids, and expected values. Diagnostic prose is explanatory
+and never selects a control branch. The workflows subsystem observes screened,
+durable result rows, retaining the run and phase that offered the call. Multiple
+results from one assistant response consume one repair attempt; replay does not
+replace a later candidate with an earlier result.
+
+Three consecutive equivalent structured defects, or eight rejected responses,
+pause the phase as `review_blocked`. Missing workers and unsettled scans retain
+their existing wait semantics. An impossible offered coverage-id contract blocks
+before a model call. Pausing records the report snapshot and worker hold in the
+workflow command transaction; startup replays the transcript-to-accounting crash
+window. Neither pause nor snapshot delivery stamps an evidence verdict.

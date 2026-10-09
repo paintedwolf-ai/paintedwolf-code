@@ -70,7 +70,7 @@ func TestFindVisibleLabelsDoesNotExpandFolders(t *testing.T) {
 		testutil.FailErr(t, "create search fixture", os.Mkdir(dir, 0700))
 		testutil.FailErr(t, "create hidden descendant", os.WriteFile(filepath.Join(dir, "match-child.txt"), []byte("source"), 0600))
 	}
-	_, err := view.catalog.ObserveDirectory(t.Context(), "project", root, ".", sourcecatalog.DirectoryRead{Priority: backgroundwork.PriorityInteractive})
+	_, err := view.catalog.Directories.ObserveDirectory(t.Context(), "project", root, ".", sourcecatalog.DirectoryRead{Priority: backgroundwork.PriorityInteractive})
 	testutil.FailErr(t, "observe root", err)
 	revision, _, err := view.Revision(t.Context())
 	testutil.FailErr(t, "read search basis", err)
@@ -108,9 +108,9 @@ func TestRecursiveDisclosureOpensFoldersDiscoveredLater(t *testing.T) {
 	testutil.FailErr(t, "create later directory", os.Mkdir(filepath.Join(root.Path, "later"), 0700))
 	testutil.FailErr(t, "create later file", os.WriteFile(filepath.Join(root.Path, "later", "file.txt"), []byte("source"), 0600))
 	view.catalog.InvalidateRoot(root.Path, "later")
-	_, err := view.catalog.ObserveDirectory(t.Context(), "project", root, ".", sourcecatalog.DirectoryRead{Priority: backgroundwork.PriorityInteractive})
+	_, err := view.catalog.Directories.ObserveDirectory(t.Context(), "project", root, ".", sourcecatalog.DirectoryRead{Priority: backgroundwork.PriorityInteractive})
 	testutil.FailErr(t, "refresh root", err)
-	_, err = view.catalog.ObserveDirectory(t.Context(), "project", root, "later", sourcecatalog.DirectoryRead{Priority: backgroundwork.PriorityInteractive})
+	_, err = view.catalog.Directories.ObserveDirectory(t.Context(), "project", root, "later", sourcecatalog.DirectoryRead{Priority: backgroundwork.PriorityInteractive})
 	testutil.FailErr(t, "observe later directory for another consumer", err)
 	location, _, err := locateForTest(t, view, t.Context(), Address{Root: root.ID, Path: "later/file.txt"})
 	testutil.FailErr(t, "locate later child", err)
@@ -150,7 +150,7 @@ func observeFixture(t *testing.T, view *View, root sourcecatalog.Root) {
 		if err != nil {
 			return err
 		}
-		_, err = view.catalog.ObserveDirectory(t.Context(), view.scope.Project, root, filepath.ToSlash(relative), sourcecatalog.DirectoryRead{Priority: backgroundwork.PriorityInteractive})
+		_, err = view.catalog.Directories.ObserveDirectory(t.Context(), view.scope.Project, root, filepath.ToSlash(relative), sourcecatalog.DirectoryRead{Priority: backgroundwork.PriorityInteractive})
 		return err
 	})
 	testutil.FailErr(t, "observe fixture", err)
@@ -282,7 +282,7 @@ func TestRecursiveDisclosureKeepsCollapsedTreesClosed(t *testing.T) {
 		if testutil.WaitForNoFatal(10*time.Second, func() bool { return slices.Equal(derived(), want) }) {
 			return
 		}
-		boundaries, ready, err := view.catalog.CollapseBoundaries(t.Context(), view.scope.Project, root, ".")
+		boundaries, ready, err := view.catalog.Directories.CollapseBoundaries(t.Context(), view.scope.Project, root, ".")
 		t.Fatalf("view boundaries = %v, want %v; catalog answers %v (ready %v, err %v)", derived(), want, boundaries, ready, err)
 	}
 

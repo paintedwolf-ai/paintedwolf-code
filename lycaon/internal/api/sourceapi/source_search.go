@@ -53,12 +53,12 @@ var SearchDependencyPatterns = sync.OnceValue(func() []string {
 })
 
 // searchDeclarations runs declaration discovery over whole roots.
-var searchDeclarations = declarationSearchIn(nil, nil, nil)
+var searchDeclarations = declarationSearchIn(nil, nil, nil, false)
 
 // declarationSearchIn runs declaration-discovery passes on the live code
 // executor, each pattern ANDed with scope and bounded by the include and
 // exclude globs, so discovery sees the files the query's paths name.
-func declarationSearchIn(scope []search.Node, include, exclude []string) project.DeclarationSearch {
+func declarationSearchIn(scope []search.Node, include, exclude []string, includeDependencies bool) project.DeclarationSearch {
 	return func(ctx context.Context, query project.DeclarationSearchQuery) ([]project.DeclarationSearchHit, bool, error) {
 		hitCap := query.HitCap
 		if hitCap <= 0 {
@@ -90,13 +90,14 @@ func declarationSearchIn(scope []search.Node, include, exclude []string) project
 			Executor: search.ExecutorCode,
 			Cap:      probeCap,
 			Code: &search.CodePlanLeg{
-				Query:           pattern,
-				PathRoots:       roots,
-				Cap:             probeCap,
-				Lines:           true,
-				LineExcludeDirs: query.ExcludeDirs,
-				Flags:           flags,
-				Wall:            query.Wall,
+				IncludeDependencies: includeDependencies,
+				Query:               pattern,
+				PathRoots:           roots,
+				Cap:                 probeCap,
+				Lines:               true,
+				LineExcludeDirs:     query.ExcludeDirs,
+				Flags:               flags,
+				Wall:                query.Wall,
 			},
 		})
 		if err != nil {

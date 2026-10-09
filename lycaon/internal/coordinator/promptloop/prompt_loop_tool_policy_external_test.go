@@ -161,7 +161,9 @@ func TestLoopDoomLoopRejectKeepsCallResultPair(t *testing.T) {
 		Session:   sess,
 		History:   userHistory("go"),
 		ProfileID: "coordinator",
-		ToolCtx:   tools.ToolContext{SessionID: sess.ID},
+		ToolCtx: tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: sess.ID},
+		},
 	})
 	testutil.FailErr(t, "loop.Run failed", err)
 	msgs, err := store.GetMessages(ctx, sess.ID)
@@ -207,7 +209,9 @@ func TestLoopTruncatesLargeToolResult(t *testing.T) {
 		Session:   sess,
 		History:   userHistory("go"),
 		ProfileID: "coordinator",
-		ToolCtx:   tools.ToolContext{SessionID: sess.ID},
+		ToolCtx: tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: sess.ID},
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -268,7 +272,10 @@ func TestLoopRejectsUnofferedToolCalls(t *testing.T) {
 				Session:   sess,
 				History:   userHistory("implement"),
 				ProfileID: "implementer",
-				ToolCtx:   tools.ToolContext{SessionID: sess.ID, Agent: "implementer"},
+				ToolCtx: tools.ToolContext{
+					Identity: tools.InvocationIdentity{SessionID: sess.ID,
+						Agent: "implementer"},
+				},
 			})
 			testutil.FailErr(t, "loop.Run failed", err)
 			if (readCalls == 1) != withRead {

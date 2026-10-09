@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"maps"
 	"net/url"
 	"slices"
@@ -11,8 +12,8 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/workflow/verdictcall"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/internal/workflow/verdictcall"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -48,10 +49,10 @@ func RegisterSubmitVerdictTool(reg *tools.DefaultRegistry, runs *RunManager) err
 	// offered none; it is read once the tool's catalog metadata is registered.
 	var stock map[string]any
 	if err := reg.Register("submit_verdict", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-		if !isCoordinatorAgent(tctx.Agent) {
+		if !isCoordinatorAgent(tctx.Identity.Agent) {
 			return "", fmt.Errorf("submit_verdict requires coordinator role")
 		}
-		active, err := runs.Store.ActiveBySession(ctx, tctx.SessionID)
+		active, err := runs.Store.ActiveBySession(ctx, tctx.Identity.SessionID)
 		if err != nil {
 			return "", err
 		}
@@ -71,7 +72,7 @@ func RegisterSubmitVerdictTool(reg *tools.DefaultRegistry, runs *RunManager) err
 			})
 		}
 		rl := *def.ReviewLoop
-		outline := verdictOutline(tctx.TurnOfferedToolSchemas["submit_verdict"], stock, rl, manifest.ReportBrief())
+		outline := verdictOutline(tctx.Turn.TurnOfferedToolSchemas["submit_verdict"], stock, rl, manifest.ReportBrief())
 		verdict, cited, citedURLs, err := parseSubmitVerdictArgs(rl, args)
 		if err != nil {
 			return rejectSubmitVerdict(tctx, ReviewLoopVerdictInvalidCode, active.CurrentPhase, verdictInvalidDetails(outline, err))
@@ -97,8 +98,8 @@ func RegisterSubmitVerdictTool(reg *tools.DefaultRegistry, runs *RunManager) err
 			details["empty_set_asides"] = empty
 			return rejectSubmitVerdict(tctx, SubmitVerdictScanGroupUnknownCode, active.CurrentPhase, details)
 		}
-		ctx = withVerdictOperationID(ctx, tctx.ToolCallID)
-		outcome, err := runs.RecordReviewLoopVerdict(ctx, tctx.SessionID, verdict, cited, citedURLs)
+		ctx = withVerdictOperationID(ctx, tctx.Identity.ToolCallID)
+		outcome, err := runs.RecordReviewLoopVerdict(ctx, tctx.Identity.SessionID, verdict, cited, citedURLs)
 		if err != nil {
 			return "", err
 		}
@@ -327,12 +328,12 @@ func marshalSubmitVerdictResult(res SubmitVerdictToolResult) (string, error) {
 }
 
 func rejectSubmitVerdict(tctx tools.ToolContext, code, phase string, details map[string]any) (string, error) {
-	if tctx.Out != nil {
+	if tctx.Effects.Out != nil {
 		var subject *api.FeedbackSubject
 		if phase = strings.TrimSpace(phase); phase != "" {
 			subject = &api.FeedbackSubject{Kind: "workflow_phase", ID: phase}
 		}
-		tctx.Out.Facts = tctx.Out.Facts.
+		tctx.Effects.Out.Facts = tctx.Effects.Out.Facts.
 			WithOutcome(api.ToolResultOutcomeRejected).
 			WithFeedback(code, details, subject)
 	}
@@ -344,7 +345,7 @@ func rejectSubmitVerdict(tctx tools.ToolContext, code, phase string, details map
 	for key, value := range details {
 		data["review_"+key] = value
 	}
-	return "", &tools.ToolReject{Code: code, Data: data}
+	return "", &toolrejection.ToolReject{Code: code, Data: data}
 }
 
 // scanGroupRejectDetails names the cited ids that are not the run's groups,
@@ -431,10 +432,10 @@ func verdictGroundingRejectDetails(outline string, out ReviewLoopVerdictOutcome)
 
 // stampVerdictOutcome states the recorded verdict as typed result meta for Den.
 func stampVerdictOutcome(tctx tools.ToolContext, rl workflowdef.ReviewLoopDef, out ReviewLoopVerdictOutcome, verdict map[string]string) {
-	if tctx.Out == nil {
+	if tctx.Effects.Out == nil {
 		return
 	}
-	tctx.Out.Verdict = &api.VerdictOutcome{
+	tctx.Effects.Out.Verdict = &api.VerdictOutcome{
 		Verdict:      strings.TrimSpace(verdict[workflowdef.VerdictDecisionKey]),
 		Terminal:     out.Terminal,
 		Attempt:      out.Attempt,

@@ -1,6 +1,8 @@
 package session
 
 import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,7 +12,6 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	"gopkg.in/yaml.v3"
 )
 
@@ -26,7 +27,7 @@ var implementSurfaceUniverse = []string{
 	surface.SurfaceImplementDispatch,
 	surface.SurfaceImplementOverlayPromote,
 	surface.SurfaceImplementPark,
-	tools.SurfaceImplementInvestigate,
+	toolcontract.SurfaceImplementInvestigate,
 }
 
 // TestCloseoutPushCoversEveryReachableProseSurface covers open-progress closeout routing.
