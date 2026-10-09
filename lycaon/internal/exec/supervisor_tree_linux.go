@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"syscall"
+	"time"
 
 	"golang.org/x/sys/unix"
 )
@@ -15,6 +16,33 @@ type descendant struct {
 	pid    int
 	parent int
 	start  uint64
+}
+
+// parseProcStat reads the parent and start time from a /proc/<pid>/stat line;
+// the command name may itself contain ')' or spaces.
+func parseProcStat(raw []byte) (parent int, start uint64, ok bool) {
+	end := bytes.LastIndexByte(raw, ')')
+	if end < 0 {
+		return 0, 0, false
+	}
+	fields := bytes.Fields(raw[end+1:])
+	if len(fields) < 20 {
+		return 0, 0, false
+	}
+	parent, err := strconv.Atoi(string(fields[1]))
+	if err != nil {
+		return 0, 0, false
+	}
+	start, err = strconv.ParseUint(string(fields[19]), 10, 64)
+	return parent, start, err == nil
+}
+
+func procStat(pid int) (parent int, start uint64, ok bool) {
+	raw, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
+	if err != nil {
+		return 0, 0, false
+	}
+	return parseProcStat(raw)
 }
 
 func commandDescendants(root int) []descendant {
@@ -28,27 +56,9 @@ func commandDescendants(root int) []descendant {
 		if err != nil || pid <= 0 {
 			continue
 		}
-		raw, err := os.ReadFile("/proc/" + entry.Name() + "/stat")
-		if err != nil {
-			continue
+		if parent, start, ok := procStat(pid); ok {
+			all[pid] = descendant{pid: pid, parent: parent, start: start}
 		}
-		end := bytes.LastIndexByte(raw, ')')
-		if end < 0 {
-			continue
-		}
-		fields := bytes.Fields(raw[end+1:])
-		if len(fields) < 20 {
-			continue
-		}
-		parent, err := strconv.Atoi(string(fields[1]))
-		if err != nil {
-			continue
-		}
-		start, err := strconv.ParseUint(string(fields[19]), 10, 64)
-		if err != nil {
-			continue
-		}
-		all[pid] = descendant{pid: pid, parent: parent, start: start}
 	}
 	owned := map[int]bool{root: true}
 	var result []descendant
@@ -74,18 +84,8 @@ func signalCommandDescendants(root int, sig unix.Signal) int {
 			continue
 		}
 		// Confirm the snapshot incarnation before signalling through the stable descriptor.
-		raw, err := os.ReadFile("/proc/" + strconv.Itoa(child.pid) + "/stat")
-		if err == nil {
-			end := bytes.LastIndexByte(raw, ')')
-			if end >= 0 {
-				fields := bytes.Fields(raw[end+1:])
-				if len(fields) >= 20 {
-					start, err := strconv.ParseUint(string(fields[19]), 10, 64)
-					if err == nil && start == child.start && descendantOf(child.pid, root) {
-						_ = unix.PidfdSendSignal(fd, sig, nil, 0)
-					}
-				}
-			}
+		if _, start, ok := procStat(child.pid); ok && start == child.start && descendantOf(child.pid, root) {
+			_ = unix.PidfdSendSignal(fd, sig, nil, 0)
 		}
 		_ = unix.Close(fd)
 	}
@@ -110,22 +110,67 @@ func descendantOf(pid, root int) bool {
 			return true
 		}
 		seen[pid] = true
-		raw, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
-		if err != nil {
+		parent, _, ok := procStat(pid)
+		if !ok {
 			return false
 		}
-		end := bytes.LastIndexByte(raw, ')')
-		if end < 0 {
-			return false
-		}
-		fields := bytes.Fields(raw[end+1:])
-		if len(fields) < 2 {
-			return false
-		}
-		pid, err = strconv.Atoi(string(fields[1]))
-		if err != nil {
-			return false
-		}
+		pid = parent
 	}
 	return false
+}
+
+// supervision settles one primary command and every descendant of root.
+type supervision struct {
+	root     int
+	finished <-chan error
+	events   <-chan os.Signal
+	// gone closes when the engine that launched the command disappears.
+	gone  <-chan struct{}
+	grace time.Duration
+	reap  func()
+}
+
+// settle terminates the tree once the primary finishes or the engine asks,
+// escalating to SIGKILL on request, on engine loss, or after the grace period.
+func (s supervision) settle() error {
+	var result error
+	hard, settled := false, false
+	gone := s.gone
+	select {
+	case result = <-s.finished:
+		settled = true
+	case sig := <-s.events:
+		hard = sig == syscall.SIGUSR2
+	case <-gone:
+		hard, gone = true, nil
+	}
+	// Wait owns only the primary child; adopted children are reaped after it settles.
+	deadline := time.Now().Add(s.grace)
+	for {
+		sig := unix.SIGTERM
+		if hard || time.Now().After(deadline) {
+			sig = unix.SIGKILL
+		}
+		remaining := signalCommandDescendants(s.root, sig)
+		if !settled {
+			select {
+			case result = <-s.finished:
+				settled = true
+			default:
+			}
+		}
+		if settled {
+			s.reap()
+			if remaining == 0 && len(commandDescendants(s.root)) == 0 {
+				return result
+			}
+		}
+		select {
+		case sig := <-s.events:
+			hard = hard || sig == syscall.SIGUSR2
+		case <-gone:
+			hard, gone = true, nil
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
 }

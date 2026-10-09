@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -13,7 +14,6 @@ import (
 	"strconv"
 	"sync"
 	"syscall"
-	"time"
 	"unsafe"
 
 	"golang.org/x/sys/unix"
@@ -35,7 +35,7 @@ func supervisorStartupError(cmd *exec.Cmd) error {
 		return nil
 	}
 	read := value.(*os.File)
-	defer read.Close()
+	defer func() { _ = read.Close() }()
 	_ = cmd.ExtraFiles[len(cmd.ExtraFiles)-1].Close()
 	var result supervisorLaunchResult
 	if err := json.NewDecoder(read).Decode(&result); err != nil {
@@ -96,7 +96,7 @@ func signalSupervisor(pid int, start int64, hard bool) bool {
 	if err != nil {
 		return false
 	}
-	defer unix.Close(fd)
+	defer func() { _ = unix.Close(fd) }()
 	observed, alive := osprocess.StartTime(pid)
 	if !alive || observed != start {
 		return false
@@ -108,13 +108,74 @@ func signalSupervisor(pid int, start int64, hard bool) bool {
 	return unix.PidfdSendSignal(fd, sig, nil, 0) == nil
 }
 
-// runCommandSupervisor retains orphaned descendants inside one command's lineage.
-func runCommandSupervisor(args []string) int {
+// supervisorTarget is the command the parent asked the supervisor to start.
+type supervisorTarget struct {
+	extraFiles int
+	priority   ProcessPriority
+	path       string
+	args       []string
+}
+
+func parseSupervisorTarget(args []string) (supervisorTarget, bool) {
 	if len(args) < 4 {
-		return 125
+		return supervisorTarget{}, false
 	}
 	count, err := strconv.Atoi(args[0])
 	if err != nil || count < 0 {
+		return supervisorTarget{}, false
+	}
+	return supervisorTarget{extraFiles: count, priority: ProcessPriority(args[1]), path: args[2], args: args[3:]}, true
+}
+
+// command hands the target the descriptors its parent installed for it: the
+// standard streams at 0-2, then its extra files from 3.
+func (t supervisorTarget) command() *exec.Cmd {
+	cmd := &exec.Cmd{Path: t.path, Args: t.args, Env: os.Environ()}
+	cmd.Stdin = os.NewFile(0, "target-stdin")
+	cmd.Stdout = os.NewFile(1, "target-stdout")
+	cmd.Stderr = os.NewFile(2, "target-stderr")
+	for i := 0; i < t.extraFiles; i++ {
+		cmd.ExtraFiles = append(cmd.ExtraFiles, os.NewFile(uintptr(3+i), "target-descriptor"))
+	}
+	return cmd
+}
+
+// launchFailure reports the errno the parent's fork/exec would have seen.
+func launchFailure(err error) supervisorLaunchResult {
+	var errno syscall.Errno
+	if errors.As(err, &errno) {
+		return supervisorLaunchResult{Errno: int(errno)}
+	}
+	return supervisorLaunchResult{Errno: int(syscall.EIO)}
+}
+
+// reportLaunch answers supervisorStartupError with the target's launch errno.
+func reportLaunch(status io.WriteCloser, started error) error {
+	launch := supervisorLaunchResult{}
+	if started != nil {
+		launch = launchFailure(started)
+	}
+	err := json.NewEncoder(status).Encode(launch)
+	return errors.Join(err, status.Close())
+}
+
+// awaitEngineLoss closes the returned channel once the engine's end of the
+// lifetime pipe closes, which also happens when the engine dies.
+func awaitEngineLoss(monitor *os.File) <-chan struct{} {
+	gone := make(chan struct{})
+	go func() {
+		var b [1]byte
+		_, _ = monitor.Read(b[:])
+		_ = monitor.Close()
+		close(gone)
+	}()
+	return gone
+}
+
+// runCommandSupervisor retains orphaned descendants inside one command's lineage.
+func runCommandSupervisor(args []string) int {
+	target, ok := parseSupervisorTarget(args)
+	if !ok {
 		return 125
 	}
 	if err := unix.Prctl(unix.PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0); err != nil {
@@ -125,97 +186,49 @@ func runCommandSupervisor(args []string) int {
 		return 125
 	}
 	_ = unix.Close(fd)
-	monitor := os.NewFile(uintptr(3+count), "engine-lifetime")
-	if monitor == nil {
-		return 125
-	}
-	defer monitor.Close()
 	events := make(chan os.Signal, 4)
 	signal.Notify(events, syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP, syscall.SIGUSR2)
 	defer signal.Stop(events)
-	gone := make(chan struct{})
-	go func() { var b [1]byte; _, _ = monitor.Read(b[:]); close(gone) }()
-	status := os.NewFile(uintptr(4+count), "command-startup")
-	defer status.Close()
-	cmd := &exec.Cmd{Path: args[2], Args: args[3:], Stdin: os.Stdin, Stdout: os.Stdout, Stderr: os.Stderr, Env: os.Environ()}
-	for i := 0; i < count; i++ {
-		cmd.ExtraFiles = append(cmd.ExtraFiles, os.NewFile(uintptr(3+i), "target-descriptor"))
-	}
-	if err := startSupervisorTarget(cmd, ProcessPriority(args[1])); err != nil {
-		var pathError *os.PathError
-		result := supervisorLaunchResult{Errno: int(syscall.EIO)}
-		if errors.As(err, &pathError) {
-			err = pathError.Err
-		}
-		var errno syscall.Errno
-		if errors.As(err, &errno) {
-			result.Errno = int(errno)
-		}
-		_ = json.NewEncoder(status).Encode(result)
+	gone := awaitEngineLoss(os.NewFile(uintptr(3+target.extraFiles), "engine-lifetime"))
+	cmd := target.command()
+	started := startSupervisorTarget(cmd, target.priority)
+	reported := reportLaunch(os.NewFile(uintptr(4+target.extraFiles), "command-startup"), started)
+	if started != nil {
 		return 127
 	}
-	_ = json.NewEncoder(status).Encode(supervisorLaunchResult{})
-	_ = status.Close()
+	if reported != nil {
+		// The parent fails a launch it cannot confirm; stop the primary so the tree settles.
+		_ = cmd.Process.Kill()
+	}
 	for _, file := range cmd.ExtraFiles {
 		_ = file.Close()
 	}
 	finished := make(chan error, 1)
 	go func() { finished <- cmd.Wait() }()
-	var result error
-	hard := false
-	settled := false
-	select {
-	case result = <-finished:
-		settled = true
-	case sig := <-events:
-		hard = sig == syscall.SIGUSR2
-	case <-gone:
-		hard = true
+	code, sig := supervisorExit(supervision{
+		root: os.Getpid(), finished: finished, events: events, gone: gone,
+		grace: TerminateGrace, reap: reapAdoptedChildren,
+	}.settle())
+	if sig != 0 {
+		exitWithSignal(sig)
 	}
-	// Wait owns only the primary child; adopted children are reaped after it settles.
-	deadline := time.Now().Add(TerminateGrace)
-	for {
-		sig := unix.SIGTERM
-		if hard || time.Now().After(deadline) {
-			sig = unix.SIGKILL
-		}
-		remaining := signalCommandDescendants(os.Getpid(), sig)
-		if !settled {
-			select {
-			case result = <-finished:
-				settled = true
-			default:
-			}
-		}
-		if settled {
-			reapAdoptedChildren()
-			if remaining == 0 && len(commandDescendants(os.Getpid())) == 0 {
-				break
-			}
-		}
-		select {
-		case sig := <-events:
-			if sig == syscall.SIGUSR2 {
-				hard = true
-			}
-		case <-gone:
-			hard = true
-			gone = nil
-		case <-time.After(10 * time.Millisecond):
-		}
-	}
+	return code
+}
+
+// supervisorExit maps the primary's wait result to the supervisor's exit code,
+// and to the signal to re-raise when one killed the primary.
+func supervisorExit(result error) (int, syscall.Signal) {
 	if result == nil {
-		return 0
+		return 0, 0
 	}
 	var exit *exec.ExitError
-	if errors.As(result, &exit) {
-		if status, ok := exit.Sys().(syscall.WaitStatus); ok && status.Signaled() {
-			exitWithSignal(status.Signal())
-			return 128 + int(status.Signal())
-		}
-		return exit.ExitCode()
+	if !errors.As(result, &exit) {
+		return 125, 0
 	}
-	return 125
+	if status, ok := exit.Sys().(syscall.WaitStatus); ok && status.Signaled() {
+		return 128 + int(status.Signal()), status.Signal()
+	}
+	return exit.ExitCode(), 0
 }
 
 // exitWithSignal preserves the primary child's wait status after tree settlement.
@@ -225,9 +238,11 @@ func exitWithSignal(sig syscall.Signal) {
 		handler, flags, restorer uintptr
 		mask                     uint64
 	}{}
-	_, _, _ = unix.RawSyscall6(unix.SYS_RT_SIGACTION, uintptr(sig), uintptr(unsafe.Pointer(&action)), 0, 8, 0, 0)
+	// Go exposes no SIG_DFL reset, and its own handler would exit 2 or print a
+	// traceback for signals such as SIGQUIT instead of dying by the signal.
+	_, _, _ = unix.RawSyscall6(unix.SYS_RT_SIGACTION, uintptr(sig), uintptr(unsafe.Pointer(&action)), 0, 8, 0, 0) //nolint:gosec // G103 — zeroed kernel sigaction (SIG_DFL), 8-byte sigset
 	mask := uint64(1) << (uint(sig) - 1)
-	_, _, _ = unix.RawSyscall6(unix.SYS_RT_SIGPROCMASK, unix.SIG_UNBLOCK, uintptr(unsafe.Pointer(&mask)), 0, 8, 0, 0)
+	_, _, _ = unix.RawSyscall6(unix.SYS_RT_SIGPROCMASK, unix.SIG_UNBLOCK, uintptr(unsafe.Pointer(&mask)), 0, 8, 0, 0) //nolint:gosec // G103 — 8-byte kernel sigset for one signal
 	_ = syscall.Kill(os.Getpid(), sig)
 }
 
