@@ -9,7 +9,7 @@ Minimal project tree used by bundled scanner E2E:
 | File | Scanner | Expected signal |
 |------|---------|-----------------|
 | `secrets.env` | gitleaks (`secret`) | GitHub token–shaped secret |
-| `package-lock.json` | osv-scalibr (`sca`) | Known-vuln `lodash@4.17.4` (unit tests match a vendored OSV record) |
+| `package-lock.json` | osv-scalibr (`sca`) | Known-vuln `lodash@4.17.4`, matched against the vendored records in `test/testdata/osv` |
 | `vuln.go` | OpenGrep (`sast`) | TLS verification bypass in `vuln.go` (skipped under `-short`) |
 
 Do not run as an application; static analysis only.

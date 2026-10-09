@@ -27,6 +27,7 @@ const stderrTail = 64 << 10
 // Scanner reuses a worker process and its compiled rules across requests.
 type Scanner struct {
 	fingerprintKey []byte
+	advisories     string
 	id             string
 	impl           string
 	jobs           int
@@ -38,12 +39,14 @@ type Scanner struct {
 }
 
 type Options struct {
-	FingerprintKey  []byte
-	ID              string
-	Impl            string
-	Jobs            int
-	Categories      []api.ScanCategory
-	ProcessPriority exec.ProcessPriority
+	FingerprintKey []byte
+	// AdvisoryDatabase is a provisioned OSV export the worker matches against.
+	AdvisoryDatabase string
+	ID               string
+	Impl             string
+	Jobs             int
+	Categories       []api.ScanCategory
+	ProcessPriority  exec.ProcessPriority
 }
 
 func New(opts Options) *Scanner {
@@ -52,8 +55,8 @@ func New(opts Options) *Scanner {
 		priority = exec.ProcessPriorityBelowNormal
 	}
 	return &Scanner{
-		fingerprintKey: append([]byte(nil), opts.FingerprintKey...),
-		id:             strings.TrimSpace(opts.ID), impl: strings.TrimSpace(opts.Impl), jobs: opts.Jobs,
+		fingerprintKey: append([]byte(nil), opts.FingerprintKey...), advisories: opts.AdvisoryDatabase,
+		id: strings.TrimSpace(opts.ID), impl: strings.TrimSpace(opts.Impl), jobs: opts.Jobs,
 		categories: append([]api.ScanCategory(nil), opts.Categories...), priority: priority,
 	}
 }
@@ -66,7 +69,9 @@ func (s *Scanner) Categories() []api.ScanCategory {
 
 // Run replaces an exited worker once; cancellation stops its process.
 func (s *Scanner) Run(ctx context.Context, req scan.ScanRequest) (*scanoutput.Result, error) {
-	payload, err := surveyjson.Marshal(scanworker.Request{FingerprintKey: s.fingerprintKey, Impl: s.impl, ID: s.id, Jobs: s.jobs, Scan: req})
+	payload, err := surveyjson.Marshal(scanworker.Request{
+		FingerprintKey: s.fingerprintKey, AdvisoryDatabase: s.advisories, Impl: s.impl, ID: s.id, Jobs: s.jobs, Scan: req,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("encode library scan worker request: %w", err)
 	}

@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"net/netip"
 	"strings"
 	"testing"
 
@@ -135,19 +134,5 @@ func TestSearxngCatalogAllowsPrivateEndpoint(t *testing.T) {
 	entry, ok = cat.Entry("brave")
 	if !ok || entry.AllowPrivateEndpoint {
 		t.Fatalf("brave must not allow private endpoints: %+v", entry)
-	}
-}
-
-// Provider egress stays open for public HTTPS without a private grant, independent
-// of command confinement. Addresses are classified directly so the check needs no DNS.
-func TestProviderEgressAdmitsPublicHTTPS(t *testing.T) {
-	if _, err := validateProviderEndpoint("https://search.brave.com/", false); err != nil {
-		t.Fatalf("public HTTPS endpoint rejected: %v", err)
-	}
-	if !ipProviderEgress(netip.MustParseAddr("1.1.1.1"), false) {
-		t.Fatal("public address must be admitted for provider egress")
-	}
-	if ipProviderEgress(netip.MustParseAddr("127.0.0.1"), false) {
-		t.Fatal("loopback must not be admitted for provider egress")
 	}
 }

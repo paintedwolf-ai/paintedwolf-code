@@ -33,6 +33,7 @@ func (b toolWiring) wireScan() error {
 	} else {
 		reg, err := scanregistry.New(scanregistry.Options{
 			ScannerFingerprintKey: b.secretFingerprinter.ScannerKey(),
+			AdvisoryDatabase:      b.cfg.TestAdvisoryDatabase,
 			ModuleRoot:            b.configRoot,
 			ProcessPriority:       runnerCfg.ExecProcessPriority(),
 			ProjectTierApplies:    b.projectScanConfigGate().AppliesPath,

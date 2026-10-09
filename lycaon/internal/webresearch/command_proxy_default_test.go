@@ -1,9 +1,12 @@
 package webresearch_test
 
 import (
+	"context"
+	"net/netip"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/egress"
 	"github.com/lycaon/lycaon/internal/webresearch"
 )
 
@@ -35,5 +38,12 @@ func TestWebToolsUnaffectedByCommandProxyOnlyDefault(t *testing.T) {
 		if !c.LoopbackConnect {
 			t.Fatal("BrowserConfinement must keep host-local connect on the floor")
 		}
+	}
+
+	egress.TestingResolve(t, egress.StaticLookup(netip.MustParseAddr("1.1.1.1")))
+	if err := webresearch.ValidateProviderConfigEndpoint(
+		context.Background(), "https://search.brave.com/", false,
+	); err != nil {
+		t.Fatalf("provider endpoint validation must stay open for public HTTPS: %v", err)
 	}
 }
