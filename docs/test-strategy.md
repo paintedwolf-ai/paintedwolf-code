@@ -588,6 +588,24 @@ they do not replace the host-release reachability guard or lifecycle repair in
 #356. Other platforms retain the end-of-package guards but do not claim Linux
 RSS enforcement.
 
+Only [`build-caches.yml`](../.github/workflows/build-caches.yml) saves caches,
+on pushes to main. A run restores only caches saved on its own ref or on main,
+and each merge-queue run has its own ref, so an entry the queue saved could
+serve no later run while it evicted main's under the repository's 10 GB limit.
+Pull request, merge-queue, nightly, and tag runs therefore restore without
+saving. Keys follow toolchains and dependency locks, so main saves once per
+dependency change, and the workflow's summary reports total cache usage.
+A running warmer finishes before the next push starts warming, so frequent
+merges cannot repeatedly cancel cold preparation before it saves; a newer push
+replaces a warmer still pending, so only main's newest commit waits to warm.
+Release builds restore the shared Go cache; their separate cache retains only
+Tauri release builds. The cache actions enforce the main-ref write boundary
+themselves. Pinned Go analyzers have separate lint and vulnerability caches; their module versions
+and compiler identity are checked before use, including after a cache restore.
+A missing or mismatched binary is rebuilt before analysis. Cache warming enters
+through `./task setup-dev`; workspace verification enters through its ordinary
+managed targets.
+
 Quarantine is explicit reviewed policy in
 [`quarantine.json`](../scripts/ci_policy/quarantine.json), initially empty.
 Each entry names one package and exact top-level test, a GitHub issue, owner,
@@ -600,6 +618,67 @@ never labels an unexplained failure flaky or quarantines it automatically.
 lane durations, and unsuccessful merge-group runs. Three distinct runs sharing
 one failure signature open a deduplicated incident. Missing artifacts remain a
 coverage gap; cancellation is reported separately from an attributed test failure.
+
+### Runner priority
+
+Hosted runners have no priority setting: they start queued jobs roughly first
+come, first served. The GitHub Free plan runs twenty jobs at once across the
+organization, five of them on macOS.
+[`runner-priority.yml`](../.github/workflows/runner-priority.yml) gives that
+capacity to work in this order, highest first:
+
+| Priority | Work | Gives up runners |
+|---|---|---|
+| 1 | Merge-queue CI, and the `release`, `release-halt`, and `release-secrets-check` workflows | Never; only CI of a merge group that no longer exists is cancelled |
+| 2 | CI of ready pull requests | Newest first, after everything below |
+| 3 | CI of draft pull requests, closed pull requests, and superseded heads | Before ready pull requests |
+| 4 | Main cache warming (`build-caches.yml`) | Before pull requests |
+| 5 | Scheduled and background work: nightly, dependency inventory, the release-system live test, and issue automation | First, and whenever the merge queue holds a group |
+
+The `runner_priority` table in
+[`scripts/verification-plan.json`](../scripts/verification-plan.json) declares
+each workflow's class; CI's class follows its event. Contract tests require
+every workflow with its own trigger, other than CI and the sweep, to declare
+one. Dispatched CI, often a release candidate's verification, is never
+cancelled, and neither is issue automation an issue event starts, since each
+such run handles one issue.
+
+Each sweep runs `python3 scripts/ci_verification.py schedule` and decides from
+structured facts only: run events, states, and attempts; job states and runner
+labels; merge-queue branches; and each pull request's draft state and head.
+
+1. It force-cancels CI of merge groups whose branch is gone.
+2. For each platform, it counts the runners that waiting merge-queue and
+   release jobs need: those queued beyond the runners this repository leaves
+   free, and any queued for five minutes, since other repositories share the
+   plan.
+3. It cancels runs in reverse priority order until the runners they hold cover
+   that need. Waiting macOS jobs preempt only runs holding macOS runners, and
+   waiting Linux jobs only runs holding Linux runners. A lower-priority run
+   that holds nothing but waits on that platform is cancelled too, since it
+   would take the next free runner. A run is the unit of cancellation, so a
+   run chosen for one platform also frees its jobs on the other.
+4. While the merge queue holds any group, it cancels scheduled and background
+   runs.
+5. Once no merge-queue or release job waits, it re-runs the cancelled jobs of
+   the newest CI run of each ready pull request's head and of main's newest
+   cache-warming push. Once the merge queue is also empty, it does the same for
+   each background workflow's newest scheduled run.
+
+Preempted work is delayed, not lost. Run history is the record: a resumable
+run is one that ended cancelled while still the newest run of its pull request
+head, warming push, or schedule, so a re-run sweep finds nothing left to do. A
+newer push or schedule supersedes it, and so does converting the pull request
+to draft, the way to stop a pull request's CI for good. Resumption keeps the
+jobs that already passed and stops at a run's fifth attempt; past that, the
+next push or schedule carries the work. Runs started by hand are re-run by
+whoever started them.
+
+The sweep runs when CI, release, release-halt, nightly, dependency inventory,
+or the release-system live test is requested or completes, other than pull
+request CI, and every ten minutes, because workflows cannot trigger on a merge
+group's removal or a job waiting for a runner. It is itself a short Linux job
+that waits for a runner like any other.
 
 ## Fixtures
 

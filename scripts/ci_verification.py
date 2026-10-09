@@ -14,6 +14,7 @@ import time
 
 from artifact_paths import artifact_root
 from ci_policy.evidence import oom_events, classify, failure_signature
+import runner_priority
 from verification_plan import catalog, expand
 
 
@@ -23,9 +24,6 @@ PROFILES = {"fast", "check", "nightly", "release", "integration"}
 GATES = {"fast": "check-fast", "check": "check"}
 # Runs of `CI/check` that executed the full tier; pull requests run the fast tier on a merge preview.
 FULL_TIER_EVENTS = {"merge_group", "workflow_dispatch"}
-# Run states that still hold, or will claim, a runner.
-UNFINISHED_RUNS = ("requested", "waiting", "pending", "queued", "in_progress")
-QUEUE_BRANCHES = "gh-readonly-queue/"
 # Output lines kept per failure in the job log and summary; the full logs travel with the evidence.
 EXCERPT_LINES = 60
 # Go's progress lines for tests that are running or passed; they bury a parallel package's failure.
@@ -130,25 +128,6 @@ def github(path, method="GET", **query):
     command = ["gh", "api", "--method", method, path, *(f"-f{key}={value}" for key, value in query.items())]
     output = subprocess.run(command, check=True, capture_output=True, text=True).stdout
     return json.loads(output) if output.strip() else None
-
-
-def prune_merge_queue(repository):
-    """Cancel CI runs for merge groups the queue already merged, rebuilt, or dropped.
-
-    The queue deletes a group's branch when the group ends but leaves its runs holding runners.
-    Runs are listed before branches, so a group created in between counts as live.
-    """
-    runs = [run for status in UNFINISHED_RUNS
-            for run in github(f"repos/{repository}/actions/workflows/ci.yml/runs",
-                              event="merge_group", status=status, per_page=100)["workflow_runs"]]
-    live = {ref["ref"].removeprefix("refs/heads/")
-            for ref in github(f"repos/{repository}/git/matching-refs/heads/{QUEUE_BRANCHES}")}
-    stale = [run for run in runs if run["head_branch"] not in live]
-    for run in stale:
-        # A plain cancel still schedules a stale run's always() steps; force-cancel stops it outright.
-        github(f"repos/{repository}/actions/runs/{run['id']}/force-cancel", method="POST")
-        print(f"cancelled run {run['id']}: merge group {run['head_branch']} no longer exists", flush=True)
-    return [run["id"] for run in stale]
 
 
 def task_json(arguments):
@@ -375,7 +354,7 @@ def main():
     summary.add_argument("status")
     verified = commands.add_parser("verified")
     verified.add_argument("sha")
-    commands.add_parser("prune")
+    commands.add_parser("schedule", help="give hosted runners to work in priority order")
     release = commands.add_parser("release")
     release.add_argument("step", help="the step whose leftover requests are withdrawn")
     args = parser.parse_args()
@@ -392,8 +371,8 @@ def main():
         require_success(json.loads(os.environ["NEEDS_JSON"]), args.skipped, args.draft == "true")
     elif args.command == "verified":
         require_full_tier(os.environ["GITHUB_REPOSITORY"], args.sha)
-    elif args.command == "prune":
-        prune_merge_queue(os.environ["GITHUB_REPOSITORY"])
+    elif args.command == "schedule":
+        runner_priority.schedule(os.environ["GITHUB_REPOSITORY"], github)
     elif args.command == "release":
         # Cleanup still runs; a request that would not release is reported, not fatal.
         unreleased = release_leftover_requests(args.step)

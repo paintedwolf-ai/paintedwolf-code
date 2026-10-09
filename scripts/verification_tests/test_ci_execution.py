@@ -234,30 +234,6 @@ class HostedVerificationTests(unittest.TestCase):
             with patch.object(ci, "github", return_value={"workflow_runs": [{**good, **changed}]}), self.assertRaises(ValueError):
                 ci.require_full_tier("owner/repo", "abc")
 
-    def test_prune_cancels_only_runs_whose_merge_group_is_gone(self):
-        live, gone = "gh-readonly-queue/main/pr-2-b", "gh-readonly-queue/main/pr-1-a"
-        calls = []
-
-        def github(path, method="GET", **query):
-            calls.append((method, path, query.get("status")))
-            if path.endswith("/runs"):
-                self.assertEqual((query["event"], query["per_page"]), ("merge_group", 100))
-                runs = {"queued": [{"id": 1, "head_branch": gone}], "in_progress": [{"id": 2, "head_branch": live}]}
-                return {"workflow_runs": runs.get(query["status"], [])}
-            if "matching-refs" in path:
-                return [{"ref": f"refs/heads/{live}"}]
-            return None
-
-        with patch.object(ci, "github", github), patch("builtins.print"):
-            self.assertEqual(ci.prune_merge_queue("owner/repo"), [1])
-        self.assertEqual([call for call in calls if call[0] == "POST"],
-                         [("POST", "repos/owner/repo/actions/runs/1/force-cancel", None)])
-        # Runs are listed before branches, so a group created in between is treated as live.
-        listed = [index for index, call in enumerate(calls) if call[1].endswith("/runs")]
-        branches = next(index for index, call in enumerate(calls) if "matching-refs" in call[1])
-        self.assertLess(max(listed), branches)
-        self.assertEqual({call[2] for call in calls if call[1].endswith("/runs")}, set(ci.UNFINISHED_RUNS))
-
     def test_report_names_what_did_not_pass_in_the_summary_and_annotations(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

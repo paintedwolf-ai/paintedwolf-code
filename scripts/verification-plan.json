@@ -1018,5 +1018,28 @@
       "suite": "all",
       "setup": "verification"
     }
+  },
+  "runner_priority": {
+    "release": [
+      "release.yml",
+      "release-halt.yml",
+      "release-secrets-check.yml",
+      "verification-recovery.yml"
+    ],
+    "warming": [
+      "build-caches.yml"
+    ],
+    "background": [
+      "nightly.yml",
+      "dependency-inventory.yml",
+      "release-system-live-test.yml",
+      "issue-intake.yml",
+      "issue-stale.yml",
+      "issue-sweep.yml",
+      "queue-health.yml"
+    ],
+    "qualification": [
+      "qualification.yml"
+    ]
   }
 }
