@@ -170,10 +170,34 @@ class DCOExecutionTests(unittest.TestCase):
             dco.run(github, "pull_request_target", event)
         self.assertEqual(github.writes, [])
 
+
+    def test_workflow_run_requires_exact_ci_pr_association(self):
+        github = FakeGitHub()
+        association = {"number": 1, "head": {"sha": "head"}, "base": {"sha": "base"}}
+        run = {"id": 99, "repository": {"full_name": "org/repo"}, "workflow_id": 7,
+               "event": "pull_request", "status": "completed", "head_sha": "head", "pull_requests": [association]}
+        event = {"workflow_run": run}
+        with patch.object(github, "api", side_effect=[run, {"id": 7}]):
+            self.assertEqual(dco.target("workflow_run", event, github), ("head", [pull()], None))
+        for changed in [{**run, "pull_requests": []}, {**run, "pull_requests": [association, association]},
+                        {**run, "head_sha": "new"}, {**run, "workflow_id": 8},
+                        {**run, "event": "merge_group"}, {**run, "repository": {"full_name": "foreign/repo"}}]:
+            with patch.object(github, "api", side_effect=[changed, {"id": 7}]), self.assertRaises(dco.Refused):
+                dco.target("workflow_run", event, github)
+        for changed in [pull(head="new"), {**pull(), "baseRefOid": "newbase"}]:
+            with patch.object(github, "api", side_effect=[run, {"id": 7}]), patch.object(github, "pull", return_value=changed), self.assertRaises(dco.Refused):
+                dco.target("workflow_run", event, github)
+        with patch.object(github, "api", side_effect=[run, {"id": 7}]), patch.object(github, "pull", return_value=pull(draft=True)):
+            self.assertIsNone(dco.target("workflow_run", event, github))
+        self.assertEqual(github.writes, [])
+
     def test_trusted_workflow_does_not_checkout_pr_or_run_scripts_from_pr(self):
         workflow = (Path(__file__).parents[2] / ".github/workflows/dco.yml").read_text()
         self.assertIn("pull_request_target:", workflow)
         self.assertIn("ready_for_review, edited", workflow)
+        self.assertIn("workflows: [CI]", workflow)
+        self.assertIn("workflow_run.event == 'pull_request'", workflow)
+        self.assertNotIn("download-artifact", workflow)
         self.assertIn("merge_group:", workflow)
         self.assertIn("ref: ${{ github.event.repository.default_branch }}", workflow)
         self.assertIn("persist-credentials: false", workflow)

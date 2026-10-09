@@ -2,6 +2,9 @@ name: Original commit certification
 on:
   pull_request_target:
     types: [opened, synchronize, reopened, ready_for_review, edited]
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
   merge_group:
     types: [checks_requested]
   workflow_dispatch:
@@ -13,13 +16,14 @@ on:
 permissions:
   contents: read
   pull-requests: read
+  actions: read
   checks: write
 concurrency:
-  group: dco-${{ github.event.pull_request.number || github.event.merge_group.head_sha || inputs.pull_request }}
+  group: dco-${{ github.event.pull_request.number || github.event.workflow_run.pull_requests[0].number || github.event.merge_group.head_sha || inputs.pull_request }}
   cancel-in-progress: true
 jobs:
   certify:
-    if: github.event_name != 'pull_request_target' || github.event.pull_request.draft == false
+    if: (github.event_name != 'pull_request_target' || github.event.pull_request.draft == false) && (github.event_name != 'workflow_run' || github.event.workflow_run.event == 'pull_request')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

@@ -163,7 +163,33 @@ def certify_pull(github, expected):
     return failed
 
 
+def workflow_run_pull(event, github):
+    captured = event["workflow_run"]
+    run = github.api(f"repos/{github.repository}/actions/runs/{captured['id']}")
+    workflow = github.api(f"repos/{github.repository}/actions/workflows/ci.yml")
+    if (run["repository"]["full_name"] != github.repository or run["workflow_id"] != workflow["id"] or
+            run["event"] != "pull_request" or run["status"] != "completed" or
+            run["head_sha"] != captured["head_sha"] or run["workflow_id"] != captured["workflow_id"]):
+        raise Refused("Workflow run is not captured repository CI for a PR")
+    associations = captured["pull_requests"]
+    if len(associations) != 1 or run["pull_requests"] != associations:
+        raise Refused("Workflow run PR association is absent or ambiguous")
+    association = associations[0]
+    if association["head"]["sha"] != captured["head_sha"]:
+        raise Refused("Workflow run does not certify the associated PR head")
+    pr = github.pull(association["number"])
+    if pr["isDraft"]:
+        return None
+    if (pr["state"] != "OPEN" or pr["headRefOid"] != captured["head_sha"] or
+            pr["baseRefOid"] != association["base"]["sha"]):
+        raise Refused("Associated PR changed since CI captured it")
+    return pr
+
+
 def target(event_name, event, github):
+    if event_name == "workflow_run":
+        pr = workflow_run_pull(event, github)
+        return None if pr is None else (pr["headRefOid"], [pr], None)
     if event_name in ("pull_request_target", "workflow_dispatch"):
         pr = event["pull_request"] if event_name == "pull_request_target" else github.pull(int(event["inputs"]["pull_request"]))
         if pr.get("draft", pr.get("isDraft", False)):
