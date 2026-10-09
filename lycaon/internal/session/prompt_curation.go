@@ -97,9 +97,9 @@ func (m *Manager) runPromptCuration(ctx context.Context, sess *wire.Session, use
 	m.autoNameProjectFromPrompt(ctx, sess, userPrompt)
 }
 
-func (m *Manager) WaitForPromptCuration() {
+func (m *Manager) WaitForPromptCuration(ctx context.Context) {
 	if m != nil {
-		m.curation.Wait()
+		m.curation.Wait(ctx)
 	}
 }
 
@@ -164,7 +164,7 @@ func (m *promptCurations) Cancel(sessionID string) {
 }
 
 // Wait drains in-flight prompt curation.
-func (m *promptCurations) Wait() {
+func (m *promptCurations) Wait(ctx context.Context) {
 	if m == nil {
 		return
 	}
@@ -174,6 +174,9 @@ func (m *promptCurations) Wait() {
 	m.mu.Unlock()
 	if !idle {
 		// A new busy interval cannot invalidate an earlier waiter's completion.
-		<-done
+		select {
+		case <-done:
+		case <-ctx.Done():
+		}
 	}
 }

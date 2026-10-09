@@ -252,7 +252,7 @@ func TestKickPromptCurationDoesNotBlockOnNaming(t *testing.T) {
 	}
 
 	close(blocker.release)
-	mgr.WaitForPromptCuration()
+	mgr.WaitForPromptCuration(t.Context())
 
 	got, err = mem.Get(ctx, sess.ID)
 	testutil.FailErr(t, "get session after name", err)
@@ -299,7 +299,7 @@ func TestWorkflowRequestCurationPreservesManualTitlesAndExcludesWorkers(t *testi
 	mgr.CurateAcceptedWorkflowRequest(t.Context(), parent.ID, "A different workflow request")
 	mgr.CurateAcceptedWorkflowRequest(t.Context(), child.ID, "A worker request")
 	mgr.CurateAcceptedWorkflowRequest(t.Context(), "missing-session", "A missing request")
-	mgr.WaitForPromptCuration()
+	mgr.WaitForPromptCuration(t.Context())
 	got, err := mem.Get(t.Context(), parent.ID)
 	testutil.FailErr(t, "get root title", err)
 	if got.Title != "Manual orchard title" {
@@ -322,7 +322,7 @@ func TestAcceptedWorkflowRequestCurationSurvivesInitiatingTurnCancellation(t *te
 	cancel()
 	text := "Review the orchard irrigation choices"
 	mgr.CurateAcceptedWorkflowRequest(ctx, sess.ID, text)
-	mgr.WaitForPromptCuration()
+	mgr.WaitForPromptCuration(t.Context())
 	got, err := mem.Get(t.Context(), sess.ID)
 	testutil.FailErr(t, "get named chat", err)
 	if got.Title != NameSession(t.Context(), nil, text) {
