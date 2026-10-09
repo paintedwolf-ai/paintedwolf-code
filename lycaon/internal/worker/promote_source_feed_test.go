@@ -85,8 +85,8 @@ func (s *promoteLedgerStub) RecordBatchTx(ctx context.Context, _ *sql.Tx, inputs
 	return s.RecordBatch(ctx, inputs)
 }
 
-func (s *promoteLedgerStub) JobVersionForPath(context.Context, string, string, string, string) (string, error) {
-	return "", nil
+func (s *promoteLedgerStub) JobVersionForPath(context.Context, string, string, string, string) (string, string, error) {
+	return "", "", nil
 }
 
 func (s *promoteLedgerStub) JobPathFirstWriteOrder(context.Context, string, string) ([]string, error) {
