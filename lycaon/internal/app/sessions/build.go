@@ -91,7 +91,7 @@ func Build(ctx context.Context, deps Dependencies) (*Runtime, error) {
 	mgr.Profiles.SetAgentRegistry(deps.Agents.Registry)
 	mgr.Profiles.SetHostResources(deps.Settings.HostResources)
 	if deps.Settings.HostResources != nil && deps.Settings.Service != nil && deps.Settings.Service.Approvals != nil {
-		deps.Settings.HostResources.SetPolicyBinder(configuration.HostResourcePolicyBinder(deps.Settings.Service.Approvals, mgr.Profiles))
+		deps.Settings.HostResources.SetPolicyBinder(configuration.HostResourcePolicyBinder(deps.Settings.Service.Approvals, &mgr.Catalog))
 	}
 
 	promptLayers := prompts.PromptLayers{
