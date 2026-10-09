@@ -52,7 +52,7 @@ func assertResolvedProfileWriteScope(ctx context.Context, boundary *sandbox.Boun
 			ctx,
 			projectDir,
 			scopeRel,
-			tools.CoordinatorProductWriteScope,
+			toolcontract.CoordinatorProductWriteScope,
 		)
 	}
 	return boundary.AssertWriteScope(
