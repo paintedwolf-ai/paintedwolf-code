@@ -55,13 +55,13 @@ func TestEverySessionGetsItsOwnScratchFolder(t *testing.T) {
 
 	rootCtx := f.toolContext(t, f.root)
 	workerCtx := f.toolContext(t, f.worker)
-	if rootCtx.Source.SessionScratchDir != f.dir(f.root.ID) {
-		t.Fatalf("coordinator scratch = %q, want %q", rootCtx.Source.SessionScratchDir, f.dir(f.root.ID))
+	if rootCtx.Host.SessionScratchDir != f.dir(f.root.ID) {
+		t.Fatalf("coordinator scratch = %q, want %q", rootCtx.Host.SessionScratchDir, f.dir(f.root.ID))
 	}
-	if workerCtx.Source.SessionScratchDir != f.dir(f.worker.ID) {
-		t.Fatalf("worker scratch = %q, want its own sibling folder %q", workerCtx.Source.SessionScratchDir, f.dir(f.worker.ID))
+	if workerCtx.Host.SessionScratchDir != f.dir(f.worker.ID) {
+		t.Fatalf("worker scratch = %q, want its own sibling folder %q", workerCtx.Host.SessionScratchDir, f.dir(f.worker.ID))
 	}
-	for _, dir := range []string{rootCtx.Source.SessionScratchDir, workerCtx.Source.SessionScratchDir} {
+	for _, dir := range []string{rootCtx.Host.SessionScratchDir, workerCtx.Host.SessionScratchDir} {
 		if info, err := os.Stat(dir); err != nil || !info.IsDir() {
 			t.Fatalf("scratch folder %q was not prepared: %v", dir, err)
 		}
@@ -73,7 +73,7 @@ func TestScratchUnavailableLeavesContextWithoutScratch(t *testing.T) {
 	scratchRoot := filepath.Dir(f.dir(f.root.ID))
 	testutil.FailErr(t, "plant link", os.Symlink(t.TempDir(), scratchRoot))
 
-	if dir := f.toolContext(t, f.root).Source.SessionScratchDir; dir != "" {
+	if dir := f.toolContext(t, f.root).Host.SessionScratchDir; dir != "" {
 		t.Fatalf("scratch prepared through a linked root: %q", dir)
 	}
 }
