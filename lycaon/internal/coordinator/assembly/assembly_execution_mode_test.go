@@ -102,7 +102,7 @@ func TestPrependTransitionInjectExplicitCause(t *testing.T) {
 	turn := &TurnAssemblyScratch{PromptTurnSeq: 1}
 	turn.ModeTransitionCauses = []surface.ModeTransitionCause{{Kind: surface.ModeTransitionCauseWorkflowDefault, Mode: surface.ExecutionModeFamilyOrchestrate}}
 	sess := &api.Session{ID: "s1", Posture: api.SessionPostureBuild, WorkspacePath: t.TempDir()}
-	block, ok := eng.prependTransitionInject(context.Background(), sess, inject.CoordinatorTurnFrame{}, []api.Message{{Role: api.MessageRoleUser, Content: "hi"}}, turn)
+	block, ok := testTurnContext(eng).prependTransitionInject(context.Background(), sess, inject.CoordinatorTurnFrame{}, []api.Message{{Role: api.MessageRoleUser, Content: "hi"}}, turn)
 	if !ok {
 		t.Fatal("prependTransitionInject returned false")
 	}

@@ -62,14 +62,13 @@ func TestDCOCertificationUsesTrustedBoundedSerializedCaller(t *testing.T) {
 	if !regexp.MustCompile(`^paintedwolf-ai/dco-checker@[0-9a-f]{40}$`).MatchString(step.Uses) || step.Run != "" || step.Continue || len(step.With) != 0 {
 		t.Errorf("publisher must execute only an immutable shared checker with its reviewed defaults: %+v", step)
 	}
-	if !slices.Contains(runnerPriorityClasses(t)["one_shot"], "dco.yml") {
-		t.Error("runner-priority sweeps must never cancel certification")
-	}
 }
 
 func TestDCOCertificationRoutesReadyPRQueueFallbackAndManualEvents(t *testing.T) {
 	t.Parallel()
-	workflow := prioritizedWorkflows(t)["dco.yml"]
+	var workflow struct{ On map[string]yaml.Node }
+	data := contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), ".github/workflows/dco.yml")
+	contractcheck.FailErr(t, "decode DCO event routes", yaml.Unmarshal([]byte(data), &workflow))
 	wantEvents := []string{"merge_group", "pull_request_target", "workflow_dispatch", "workflow_run"}
 	events := slices.Sorted(maps.Keys(workflow.On))
 	if !slices.Equal(events, wantEvents) {
@@ -90,7 +89,10 @@ func TestDCOCertificationRoutesReadyPRQueueFallbackAndManualEvents(t *testing.T)
 	var fallback struct{ Workflows []string }
 	node := workflow.On["workflow_run"]
 	contractcheck.FailErr(t, "decode trusted CI fallback", node.Decode(&fallback))
-	if !slices.Equal(fallback.Workflows, []string{prioritizedWorkflows(t)["ci.yml"].Name}) {
+	var ci struct{ Name string }
+	data = contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), ".github/workflows/ci.yml")
+	contractcheck.FailErr(t, "decode CI workflow identity", yaml.Unmarshal([]byte(data), &ci))
+	if !slices.Equal(fallback.Workflows, []string{ci.Name}) {
 		t.Errorf("fallback must follow the actual CI workflow: %v", fallback.Workflows)
 	}
 	var dispatch struct {

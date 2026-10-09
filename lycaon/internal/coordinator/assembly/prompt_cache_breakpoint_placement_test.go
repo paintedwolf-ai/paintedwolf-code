@@ -69,20 +69,19 @@ func assertPromptCacheBreakpointBeforeVolatile(t *testing.T, msgs []api.Message,
 }
 
 func TestMarkPromptCacheBreakpointsNamesEachTier(t *testing.T) {
-	e := &AssemblyEngine{}
 	out := []api.Message{{Role: api.MessageRoleSystem}, {Role: api.MessageRoleUser}, {Role: api.MessageRoleTool}}
-	e.markPromptCacheBreakpoints(out, 0, 2)
+	markPromptCacheBreakpoints(out, 0, 2)
 	if out[0].PromptCacheBreakpoint != api.PromptCacheTierStanding || out[1].PromptCacheBreakpoint != api.PromptCacheTierNone || out[2].PromptCacheBreakpoint != api.PromptCacheTierHistory {
 		t.Fatalf("marks = %q %q %q", out[0].PromptCacheBreakpoint, out[1].PromptCacheBreakpoint, out[2].PromptCacheBreakpoint)
 	}
 	// With no history the one boundary closes the standing prefix.
 	lone := []api.Message{{Role: api.MessageRoleSystem}}
-	e.markPromptCacheBreakpoints(lone, 0, 0)
+	markPromptCacheBreakpoints(lone, 0, 0)
 	if lone[0].PromptCacheBreakpoint != api.PromptCacheTierStanding {
 		t.Fatalf("lone mark = %q", lone[0].PromptCacheBreakpoint)
 	}
 	// Out-of-range indexes mark nothing.
-	e.markPromptCacheBreakpoints(lone, -1, 7)
+	markPromptCacheBreakpoints(lone, -1, 7)
 }
 
 // promptCacheMarkedIndex is the last marked row: the end of stable history.
