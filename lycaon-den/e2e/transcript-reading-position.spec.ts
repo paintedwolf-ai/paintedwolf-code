@@ -65,7 +65,7 @@ async function wheelUpIntoHistory(page: Page) {
   await expect.poll(() => liveChatStage(page).locator(SCROLLER).evaluate(async (host) => {
     const url = "/src/platform/scrolling/scrollport-motion.ts";
     const { scrollportMotionForViewport } = await import(/* @vite-ignore */ url);
-    return scrollportMotionForViewport(host)?.isDirectInputActive();
+    return scrollportMotionForViewport(host)?.input.isDirectInputActive();
   })).toBe(false);
 }
 

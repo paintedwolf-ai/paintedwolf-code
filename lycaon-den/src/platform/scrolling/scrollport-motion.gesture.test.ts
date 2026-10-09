@@ -25,7 +25,7 @@ describe("ScrollportMotion layout reads under direct input", () => {
     stubAnimationFrames();
     const fixture = createScrollportFixture({ clientHeight: 300, initialScrollHeight: 1_000, initialScrollTop: 100 });
     const box = vi.spyOn(fixture.viewport, "getBoundingClientRect");
-    fixture.motion.beginThumbGesture();
+    fixture.motion.input.beginThumbGesture();
     fixture.resetScrollHeightReads();
 
     fixture.motion.commit(500, "thumb_drag", { measuredMaxOffset: 700 });
@@ -33,7 +33,7 @@ describe("ScrollportMotion layout reads under direct input", () => {
     expect(fixture.viewport.scrollTop).toBe(500);
     expect(fixture.scrollHeightReads()).toBe(0);
     expect(box).not.toHaveBeenCalled();
-    fixture.motion.endThumbGesture();
+    fixture.motion.input.endThumbGesture();
   });
 
   it("takes no layout reads for wheel input while nothing holds range", async () => {
@@ -41,7 +41,7 @@ describe("ScrollportMotion layout reads under direct input", () => {
     const fixture = createScrollportFixture({ clientHeight: 300, initialScrollHeight: 1_000, initialScrollTop: 100 });
     fixture.resetScrollHeightReads();
 
-    fixture.motion.noteNativeInput("wheel");
+    fixture.motion.input.noteNativeInput("wheel");
     // The reclaim frame follows a microtask.
     await Promise.resolve();
     flush(4, 0);
@@ -54,10 +54,10 @@ describe("ScrollportMotion layout reads under direct input", () => {
     stubAnimationFrames();
     const { motion, host } = createScrollportFixture();
     const settled = vi.fn();
-    const stop = motion.subscribeInputSettled(settled);
+    const stop = motion.input.subscribeInputSettled(settled);
     try {
       for (let n = 0; n < 30; n += 1) {
-        motion.noteNativeInput("wheel");
+        motion.input.noteNativeInput("wheel");
         vi.advanceTimersByTime(16);
       }
       expect(vi.getTimerCount()).toBe(2);
@@ -95,7 +95,7 @@ describe("ScrollportMotion press anchor", () => {
     const frames = stubAnimationFrames();
     const fixture = createScrollportFixture({ initialScrollTop: 1325, initialScrollHeight: 2000 });
     const pinned = vi.fn(() => true);
-    fixture.motion.setTailPin(pinned);
+    fixture.motion.tail.setTailPin(pinned);
     const { shell, press } = shellAt(fixture, () => 1500);
 
     pointerClick(press);
@@ -123,7 +123,7 @@ describe("ScrollportMotion press anchor", () => {
   ])("a pressed collapse at the tail never paints a clamped offset, landing %s", (_how, heights) => {
     stubAnimationFrames();
     const fixture = createScrollportFixture({ initialScrollTop: 1325, initialScrollHeight: 2000 });
-    fixture.motion.setTailPin(() => true);
+    fixture.motion.tail.setTailPin(() => true);
     const { shell, press } = shellAt(fixture, () => 1500);
 
     pointerClick(press);
@@ -214,7 +214,7 @@ describe("ScrollportMotion press anchor", () => {
     const frames = stubAnimationFrames();
     const fixture = createScrollportFixture({ initialScrollTop: 1325 });
     const pinned = vi.fn(() => true);
-    fixture.motion.setTailPin(pinned);
+    fixture.motion.tail.setTailPin(pinned);
     const { shell, press } = shellAt(fixture, () => 1500);
     pointerClick(press);
     fixture.motion.declareHeightChange(shell).end();
@@ -234,7 +234,7 @@ describe("ScrollportMotion direct input past the tail", () => {
     const frames = stubAnimationFrames();
     const fixture = createScrollportFixture({ initialScrollTop: 1325, initialScrollHeight: 2000 });
     const stop = bindScrollportNativeInput(fixture.motion);
-    fixture.motion.noteNativeInput("wheel");
+    fixture.motion.input.noteNativeInput("wheel");
     fixture.setNaturalScrollHeight(1700);
     expect(fixture.viewport.scrollTop).toBe(1325);
     expect(extentHoldPx(fixture.viewport)).toBeGreaterThan(0);
@@ -266,7 +266,7 @@ describe("ScrollportMotion direct input past the tail", () => {
     const held = extentHoldPx(fixture.viewport);
     for (const offset of [1285, 1245, 1285, 1325]) {
       fixture.viewport.scrollTop = offset;
-      fixture.motion.noteNativeInput("wheel");
+      fixture.motion.input.noteNativeInput("wheel");
       fixture.viewport.dispatchEvent(new Event("scroll"));
       expect(extentHoldPx(fixture.viewport), `at ${offset}`).toBeLessThanOrEqual(held);
     }
@@ -280,7 +280,7 @@ describe("ScrollportMotion direct input past the tail", () => {
       const { fixture, stop, settleFrames } = heldPastTail();
       const held = extentHoldPx(fixture.viewport);
       fixture.viewport.scrollTop = 900;
-      fixture.motion.noteNativeInput("wheel");
+      fixture.motion.input.noteNativeInput("wheel");
       fixture.viewport.dispatchEvent(new Event("scroll"));
       await settleFrames();
       // Back on content, but the scrolling thread may still be applying deltas against this range.
@@ -312,7 +312,7 @@ describe("ScrollportMotion direct input past the tail", () => {
         fixture.setNaturalScrollHeight(1600 + Math.round(random() * 200));
         const max = fixture.viewport.scrollHeight - 675;
         fixture.viewport.scrollTop = Math.max(0, Math.min(max, fixture.viewport.scrollTop + Math.round((random() - 0.5) * 160)));
-        fixture.motion.noteNativeInput("wheel");
+        fixture.motion.input.noteNativeInput("wheel");
         fixture.viewport.dispatchEvent(new Event("scroll"));
         fixture.motion.notifyLayoutMutated();
         await settleFrames();
@@ -342,7 +342,7 @@ describe("ScrollportMotion direct input past the tail", () => {
   it("never pulls an upward wheel back toward range it held", () => {
     stubAnimationFrames();
     const fixture = createScrollportFixture({ initialScrollTop: 1325, initialScrollHeight: 2000 });
-    fixture.motion.noteNativeInput("wheel");
+    fixture.motion.input.noteNativeInput("wheel");
     // Content contracts under the reader, and the clamp restores the held offset.
     fixture.setNaturalScrollHeight(1700);
     expect(fixture.viewport.scrollTop).toBe(1325);
@@ -351,7 +351,7 @@ describe("ScrollportMotion direct input past the tail", () => {
       // The scrolling thread moves before the wheel and scroll events reach the page.
       const moved = 1325 - step * 40;
       fixture.viewport.scrollTop = moved;
-      fixture.motion.noteNativeInput("wheel");
+      fixture.motion.input.noteNativeInput("wheel");
       fixture.viewport.dispatchEvent(new Event("scroll"));
       expect(fixture.viewport.scrollTop, `step ${step}`).toBe(moved);
     }
@@ -372,7 +372,7 @@ describe("ScrollportMotion under a live native stream", () => {
         const { motion, viewport } = fixture;
         const stop = bindScrollportNativeInput(motion);
         let pinned = random() < 0.5;
-        motion.setTailPin(() => pinned);
+        motion.tail.setTailPin(() => pinned);
 
         let top = viewport.scrollTop;
         let threadMoving = false;
@@ -396,7 +396,7 @@ describe("ScrollportMotion under a live native stream", () => {
           top = Math.max(0, Math.min(max, top + delta));
           threadMoving = false;
           lastInputAt = performance.now();
-          motion.noteNativeInput(random() < 0.8 ? "wheel" : "touch");
+          motion.input.noteNativeInput(random() < 0.8 ? "wheel" : "touch");
           viewport.dispatchEvent(new Event("scroll"));
         };
 
@@ -411,8 +411,8 @@ describe("ScrollportMotion under a live native stream", () => {
             threadMoving = false;
             motion.notifyLayoutMutated();
           } else if (roll < 0.65) motion.commit(viewport.scrollHeight, "repin_tail");
-          else if (roll < 0.72) motion.reconcileTailBound();
-          else if (roll < 0.77) motion.releaseTailRange();
+          else if (roll < 0.72) motion.tail.reconcileTailBound();
+          else if (roll < 0.77) motion.tail.releaseTailRange();
           else if (roll < 0.82) pinned = !pinned;
           frames.flush(3, performance.now());
           vi.advanceTimersByTime(random() < 0.1 ? 700 : Math.round(random() * 40));
@@ -443,7 +443,7 @@ describe("ScrollportMotion native input stopping at the range end", () => {
     for (const offset of offsets) {
       // The scrolling thread moves first; the page hears the wheel and scroll afterwards.
       fixture.viewport.scrollTop = offset;
-      fixture.motion.noteNativeInput("wheel");
+      fixture.motion.input.noteNativeInput("wheel");
       fixture.viewport.dispatchEvent(new Event("scroll"));
       vi.advanceTimersByTime(16);
     }

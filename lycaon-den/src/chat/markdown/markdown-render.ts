@@ -2,7 +2,7 @@ import DOMPurify from "isomorphic-dompurify";
 import { ByteCache } from "../../utils/byte-cache.ts";
 import { escapeHtml } from "./html-escape.ts";
 import { marked, type Token } from "marked";
-import { wrapInScrollportFrame } from "../../platform/scrolling/themed-scrollbars.ts";
+import { wrapInScrollportFrame } from "../../platform/scrolling/scrollport-frame-dom.ts";
 import { measureSync } from "../stream/den-main-thread-perf.ts";
 import { transformSanitizedMarkdown } from "./untrusted-markdown.ts";
 import {
@@ -54,7 +54,6 @@ function ensureDOMPurifyConfigured(): void {
   });
   purifyConfigured = true;
 }
-
 
 /** Percent-encode a link href; invalid values are dropped. */
 function cleanLinkHref(href: string): string {

@@ -28,7 +28,7 @@ describe("ScrollportMotion live tail", () => {
     });
     const { motion, viewport } = fixture;
 
-    motion.noteNativeInput("wheel");
+    motion.input.noteNativeInput("wheel");
     // Active input retains the current viewport offset.
     fixture.setNaturalScrollHeight(1_805);
     motion.notifyLayoutMutated();
@@ -36,7 +36,7 @@ describe("ScrollportMotion live tail", () => {
     expect(extentHoldPx(viewport)).toBeGreaterThan(0);
     // Raw geometry now overstates the bottom by the hold's height.
     expect(viewport.scrollHeight - viewport.clientHeight).toBe(1_400);
-    expect(motion.tailOffsetY()).toBe(1_205);
+    expect(motion.extent.tailOffsetY()).toBe(1_205);
 
     unbindScrollportMotion(fixture.host);
   });
@@ -71,7 +71,7 @@ describe("ScrollportMotion live tail", () => {
       initialScrollTop: 1_400,
     });
     const { motion, viewport } = fixture;
-    motion.setTailPin(() => true);
+    motion.tail.setTailPin(() => true);
 
     // Streaming contracts the transcript with no layout transaction open.
     fixture.setNaturalScrollHeight(1_700);
@@ -91,7 +91,7 @@ describe("ScrollportMotion live tail", () => {
       initialScrollTop: 1_400,
     });
     const { motion, viewport } = fixture;
-    motion.setTailPin(() => true);
+    motion.tail.setTailPin(() => true);
 
     fixture.setNaturalScrollHeight(2_600);
     motion.notifyLayoutMutated();
@@ -109,7 +109,7 @@ describe("ScrollportMotion live tail", () => {
       initialScrollTop: 1_400,
     });
     const { motion, viewport } = fixture;
-    motion.setTailPin(null);
+    motion.tail.setTailPin(null);
 
     fixture.setNaturalScrollHeight(1_700);
     motion.notifyLayoutMutated();
@@ -128,7 +128,7 @@ describe("ScrollportMotion live tail", () => {
     });
     const { motion, viewport } = fixture;
     let pinned = false;
-    motion.setTailPin(() => pinned);
+    motion.tail.setTailPin(() => pinned);
 
     fixture.setNaturalScrollHeight(2_600);
     motion.notifyLayoutMutated();
@@ -152,16 +152,16 @@ describe("ScrollportMotion live tail", () => {
         initialScrollTop: 1_400,
       });
       const { motion, viewport } = fixture;
-      motion.setTailPin(() => true);
+      motion.tail.setTailPin(() => true);
 
-      motion.noteNativeInput("wheel");
+      motion.input.noteNativeInput("wheel");
       fixture.setNaturalScrollHeight(2_600);
       motion.notifyLayoutMutated();
       motion.commit(2_000, "repin_tail");
       expect(viewport.scrollTop).toBe(1_400);
 
       vi.advanceTimersByTime(100);
-      motion.noteNativeInput("wheel");
+      motion.input.noteNativeInput("wheel");
       vi.advanceTimersByTime(149);
       expect(viewport.scrollTop).toBe(1_400);
 
@@ -179,23 +179,23 @@ describe("ScrollportMotion live tail", () => {
       initialScrollTop: 1_400,
     });
     const { motion, viewport } = fixture;
-    motion.setTailPin(() => true);
+    motion.tail.setTailPin(() => true);
 
-    motion.noteNativeInput("touch");
+    motion.input.noteNativeInput("touch");
     fixture.setNaturalScrollHeight(2_600);
     motion.notifyLayoutMutated();
     expect(viewport.scrollTop).toBe(1_400);
 
-    motion.interruptDirectInput();
+    motion.input.interruptDirectInput();
     motion.notifyLayoutMutated();
     expect(viewport.scrollTop).toBe(2_000);
 
-    motion.beginThumbGesture();
+    motion.input.beginThumbGesture();
     fixture.setNaturalScrollHeight(3_000);
     motion.notifyLayoutMutated();
     expect(viewport.scrollTop).toBe(2_000);
 
-    motion.endThumbGesture();
+    motion.input.endThumbGesture();
     motion.notifyLayoutMutated();
     expect(viewport.scrollTop).toBe(2_400);
 
@@ -213,18 +213,18 @@ describe("ScrollportMotion live tail", () => {
       resolveTail: () => 900,
       pinned: () => true,
     });
-    expect(fixture.motion.tailOffsetY()).toBe(900);
+    expect(fixture.motion.extent.tailOffsetY()).toBe(900);
 
     const content = document.createElement("div");
     fixture.viewport.append(content);
     const rebound = bindScrollportMotion(fixture.host, fixture.viewport, content);
 
     expect(rebound).not.toBe(fixture.motion);
-    expect(rebound.tailOffsetY()).toBe(900);
+    expect(rebound.extent.tailOffsetY()).toBe(900);
     rebound.notifyLayoutMutated();
     expect(fixture.viewport.scrollTop).toBe(900);
     setScrollportTailPolicy(fixture.host, null);
-    expect(rebound.tailOffsetY()).toBe(1_400);
+    expect(rebound.extent.tailOffsetY()).toBe(1_400);
   });
 
   it("applies a tail policy set before the host binds", () => {
@@ -259,7 +259,7 @@ describe("ScrollportMotion tail pin versus declared layout", () => {
   it("coalesces reactive notifications and reads the latest layout before paint", async () => {
     const frames = stubAnimationFrames();
     const fixture = createScrollportFixture({ clientHeight: 600, initialScrollHeight: 2000, initialScrollTop: 1400 });
-    fixture.motion.setTailPin(() => true);
+    fixture.motion.tail.setTailPin(() => true);
     fixture.resetScrollHeightReads();
     const requests = vi.mocked(requestAnimationFrame);
     const before = requests.mock.calls.length;
@@ -283,7 +283,7 @@ describe("ScrollportMotion tail pin versus declared layout", () => {
   it("lets a resize observation consume pending reconciliation without a second measurement", () => {
     const frames = stubAnimationFrames();
     const fixture = createScrollportFixture({ initialScrollTop: 0 });
-    fixture.motion.setTailPin(() => true);
+    fixture.motion.tail.setTailPin(() => true);
     fixture.motion.scheduleLayoutReconcile();
     fixture.motion.notifyLayoutMutated();
     fixture.resetScrollHeightReads();
@@ -294,7 +294,7 @@ describe("ScrollportMotion tail pin versus declared layout", () => {
   it("cancels queued geometry work when the scrollport detaches", () => {
     const frames = stubAnimationFrames();
     const fixture = createScrollportFixture();
-    fixture.motion.setTailPin(() => true);
+    fixture.motion.tail.setTailPin(() => true);
     fixture.motion.scheduleLayoutReconcile();
     unbindScrollportMotion(fixture.host);
     fixture.resetScrollHeightReads();
@@ -308,14 +308,14 @@ describe("ScrollportMotion tail pin versus declared layout", () => {
     const clientHeight = vi.fn(() => 300);
     Object.defineProperty(fixture.viewport, "clientHeight", { get: clientHeight, configurable: true });
     fixture.resetScrollHeightReads();
-    fixture.motion.measureGeometry(() => {
-      expect(fixture.motion.maxOffsetY()).toBe(700);
-      expect(fixture.motion.maxOffsetY()).toBe(700);
+    fixture.motion.extent.measureGeometry(() => {
+      expect(fixture.motion.extent.maxOffsetY()).toBe(700);
+      expect(fixture.motion.extent.maxOffsetY()).toBe(700);
     });
     expect(clientHeight).toHaveBeenCalledTimes(1);
     expect(fixture.scrollHeightReads()).toBe(1);
     fixture.setNaturalScrollHeight(1300);
-    expect(fixture.motion.maxOffsetY()).toBe(1000);
+    expect(fixture.motion.extent.maxOffsetY()).toBe(1000);
     expect(clientHeight).toHaveBeenCalledTimes(2);
     unbindScrollportMotion(fixture.host);
   });
@@ -324,16 +324,16 @@ describe("ScrollportMotion tail pin versus declared layout", () => {
     stubAnimationFrames();
     const fixture = createScrollportFixture({ clientHeight: 300, initialScrollHeight: 1000, initialScrollTop: 0 });
     const resolve = vi.fn(() => 650);
-    fixture.motion.setTailOffsetResolver(resolve);
+    fixture.motion.tail.setTailOffsetResolver(resolve);
     resolve.mockClear();
-    fixture.motion.measureGeometry(() => {
-      expect(fixture.motion.tailOffsetY()).toBe(650);
-      expect(fixture.motion.maxOffsetY()).toBe(650);
-      expect(fixture.motion.inputMaxOffsetY()).toBe(650);
+    fixture.motion.extent.measureGeometry(() => {
+      expect(fixture.motion.extent.tailOffsetY()).toBe(650);
+      expect(fixture.motion.extent.maxOffsetY()).toBe(650);
+      expect(fixture.motion.extent.inputMaxOffsetY()).toBe(650);
     });
     expect(resolve).toHaveBeenCalledTimes(1);
     resolve.mockReturnValue(600);
-    expect(fixture.motion.tailOffsetY()).toBe(600);
+    expect(fixture.motion.extent.tailOffsetY()).toBe(600);
     expect(resolve).toHaveBeenCalledTimes(2);
     unbindScrollportMotion(fixture.host);
   });
@@ -346,7 +346,7 @@ describe("ScrollportMotion tail pin versus declared layout", () => {
       initialScrollTop: 1_400,
     });
     const { motion } = fixture;
-    motion.setTailPin(() => true);
+    motion.tail.setTailPin(() => true);
     // Nested geometry reads share one measure pass.
     fixture.resetScrollHeightReads();
     motion.notifyLayoutMutated();
@@ -366,7 +366,7 @@ describe("ScrollportMotion tail pin versus declared layout", () => {
     const { motion, viewport } = fixture;
 
     // Each operation receives fresh geometry.
-    motion.beginThumbGesture();
+    motion.input.beginThumbGesture();
     fixture.setNaturalScrollHeight(700);
     motion.commit(500, "thumb_drag");
 
@@ -385,7 +385,7 @@ describe("ScrollportMotion tail pin versus declared layout", () => {
     const { motion } = fixture;
     const requestFrame = vi.mocked(requestAnimationFrame);
 
-    for (let i = 0; i < 10; i += 1) motion.interruptDirectInput();
+    for (let i = 0; i < 10; i += 1) motion.input.interruptDirectInput();
     const scheduledBefore = requestFrame.mock.calls.length;
     return Promise.resolve().then(() => {
       expect(requestFrame.mock.calls.length - scheduledBefore).toBe(1);
@@ -442,7 +442,7 @@ describe("ScrollportMotion quick reveal", () => {
     frames.flush(1, 0);
     frames.flush(1, 20);
     const interrupted = viewport.scrollTop;
-    motion.noteNativeInput("wheel");
+    motion.input.noteNativeInput("wheel");
     frames.flush(10, 200);
     expect(viewport.scrollTop).toBe(interrupted);
     expect(abandoned).not.toHaveBeenCalled();
@@ -506,9 +506,9 @@ it("exposes captured and committed offsets without another layout read", () => {
 it("reports a thumb gesture only while the thumb is held", () => {
   const el = document.createElement("div");
   const motion = bindScrollportMotion(el, el, el);
-  expect(motion.isThumbGestureActive()).toBe(false);
-  motion.beginThumbGesture();
-  expect(motion.isThumbGestureActive()).toBe(true);
-  motion.endThumbGesture();
-  expect(motion.isThumbGestureActive()).toBe(false);
+  expect(motion.input.isThumbGestureActive()).toBe(false);
+  motion.input.beginThumbGesture();
+  expect(motion.input.isThumbGestureActive()).toBe(true);
+  motion.input.endThumbGesture();
+  expect(motion.input.isThumbGestureActive()).toBe(false);
 });

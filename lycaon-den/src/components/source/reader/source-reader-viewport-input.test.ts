@@ -16,7 +16,7 @@ it("settles boundary input without a scroll and distinguishes scrollbar intent f
   const motion = bindScrollportMotion(host, viewport, content);
   const stop = bindReaderViewportInput(host, input, settled);
   try {
-    motion.noteNativeInput("wheel");
+    motion.input.noteNativeInput("wheel");
     expect(input).toHaveBeenLastCalledWith(true);
     vi.advanceTimersByTime(1000);
     expect(settled).toHaveBeenCalledOnce();
@@ -25,9 +25,9 @@ it("settles boundary input without a scroll and distinguishes scrollbar intent f
     expect(input).toHaveBeenCalledExactlyOnceWith(false);
     motion.commit(200, "restore_anchor", { measuredMaxOffset: 900 });
     expect(input).toHaveBeenCalledOnce();
-    motion.beginThumbGesture();
+    motion.input.beginThumbGesture();
     expect(input).toHaveBeenLastCalledWith(false);
-    motion.endThumbGesture();
+    motion.input.endThumbGesture();
     expect(input).toHaveBeenLastCalledWith(false);
     host.dispatchEvent(new KeyboardEvent("keydown", { key: "Home" }));
     expect(input).toHaveBeenLastCalledWith(false);

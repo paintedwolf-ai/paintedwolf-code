@@ -6,9 +6,9 @@
 import { isStreamScrollDebugEnabled } from "./den-scroll-debug.ts";
 import { perfMark } from "./den-main-thread-perf.ts";
 import {
-  SCROLL_EPSILON_PX,
   scrollportMotionForViewport,
 } from "../../platform/scrolling/scrollport-motion.ts";
+import { SCROLL_EPSILON_PX } from "../../platform/scrolling/scrollport-motion-types.ts";
 
 const STREAM_SCROLL_SPRING = {
   damping: 0.86,

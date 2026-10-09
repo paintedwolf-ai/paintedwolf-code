@@ -1,9 +1,6 @@
 import { EditorView, ViewPlugin, type ViewUpdate } from "@codemirror/view";
-import {
-  attachThemedViewportScrollbar,
-  updateThemedViewportScrollbar,
-  readThemedScrollbarGeometry,
-} from "../../../platform/scrolling/themed-scrollbars.ts";
+import { attachThemedViewportScrollbar, updateThemedViewportScrollbar } from "../../../platform/scrolling/themed-scrollbars.ts";
+import { scrollbarChrome } from "../../../platform/scrolling/scrollbar-chrome.ts";
 import { bindEditorScrollPaint } from "./editor-scroll-paint.ts";
 
 type EditorScrollbarLifetime = { detach: () => void; detachScrollPaint: () => void; plugin: object };
@@ -42,7 +39,7 @@ export const denScrollbars = ViewPlugin.fromClass(
         key: this,
         read: (view) => {
           if (!this.detach) return null;
-          const geometry = readThemedScrollbarGeometry(view.dom);
+          const geometry = scrollbarChrome.read(view.dom);
           return {
             signature: `${this.revision}:${Math.round(view.contentHeight)}:${geometry.verticalPercent}:${geometry.horizontalPercent}`,
             geometry,

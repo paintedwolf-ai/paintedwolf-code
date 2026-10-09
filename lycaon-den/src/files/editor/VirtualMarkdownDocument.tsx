@@ -85,7 +85,7 @@ export function VirtualMarkdownDocument(props: {
   });
   initialized.current = virtualizer;
   virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item, _delta, instance) =>
-    !motion()?.isDirectInputActive() && item.end <= (instance.scrollOffset ?? 0);
+    !motion()?.input.isDirectInputActive() && item.end <= (instance.scrollOffset ?? 0);
 
   const wanted = createMemo(() => virtualizer.getVirtualItems().map((item) => ({ ...item })));
   const ready = createMemo(() => {
@@ -149,7 +149,7 @@ export function VirtualMarkdownDocument(props: {
   /** Sizes one unmeasured block per turn, never during a scroll gesture. */
   function runSizeSweep(): void {
     if (disposed || sizingUnavailable) return;
-    if (motion()?.isDirectInputActive()) {
+    if (motion()?.input.isDirectInputActive()) {
       scheduleSizeSweep(SIZE_SWEEP_RETRY_MS);
       return;
     }

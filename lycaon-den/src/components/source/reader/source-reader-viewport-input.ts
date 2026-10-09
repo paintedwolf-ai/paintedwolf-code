@@ -1,4 +1,5 @@
-import { DEN_SCROLLPORT_INPUT_EVENT, scrollportMotionForHost, type ScrollportMotion } from "../../../platform/scrolling/scrollport-motion.ts";
+import { scrollportMotionForHost, type ScrollportMotion } from "../../../platform/scrolling/scrollport-motion.ts";
+import { DEN_SCROLLPORT_INPUT_EVENT } from "../../../platform/scrolling/scrollport-motion-types.ts";
 
 /** Viewport intent supersedes page restoration; layout and reflected scroll events do not. */
 export function bindReaderViewportInput(host: HTMLElement, input: (pendingScroll: boolean) => void, settled: () => void): () => void {
@@ -13,9 +14,9 @@ export function bindReaderViewportInput(host: HTMLElement, input: (pendingScroll
       stopCommits = next.subscribeCommits(source => {
         if (source === "thumb_drag" || source === "track_click") input(false);
       });
-      stopSettled = next.subscribeInputSettled(settled);
+      stopSettled = next.input.subscribeInputSettled(settled);
     }
-    const thumb = next?.isThumbGestureActive() ?? false;
+    const thumb = next?.input.isThumbGestureActive() ?? false;
     const synchronous = thumb || thumbGesture;
     thumbGesture = thumb;
     input(!synchronous);

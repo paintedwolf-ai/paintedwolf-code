@@ -36,7 +36,7 @@ fi
 
 # shellcheck source=scripts/harness/lib.sh
 source "${DIR}/harness/lib.sh"
-# The runner scripts every model completion.
+# Geometry fixtures use direct transcript admission; keep unrelated model work parked.
 export LYCAON_LLM_MANUAL=1
 # File watching would reload the page during a run.
 export LYCAON_E2E_FROZEN=1

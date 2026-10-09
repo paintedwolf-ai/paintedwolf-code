@@ -2,11 +2,7 @@
 import { makeFrame } from "./themed-scrollbars-test-harness.ts";
 import { OverlayScrollbars } from "overlayscrollbars";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  attachThemedViewportScrollbar,
-  resetScrollMeasureQuietForTests,
-  syncThemedScrollbar,
-} from "./themed-scrollbars.ts";
+import { attachThemedViewportScrollbar, resetScrollMeasureQuietForTests, syncThemedScrollbar } from "./themed-scrollbars.ts";
 
 /** Simulates selection loss triggered when viewport attachment moves focus. */
 function dropSelectionWhileAttaching(): () => void {

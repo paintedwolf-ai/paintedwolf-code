@@ -1,9 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render } from "@solidjs/testing-library";
-import {
-  TranscriptViewportProvider,
-  type TranscriptViewportController,
-} from "./transcript-viewport.tsx";
+import { TranscriptViewportProvider } from "./transcript-viewport.tsx";
+import { type TranscriptViewportController } from "./transcript-viewport-types.ts";
 import { TranscriptDayChip } from "./transcript-day-chip.tsx";
 
 function controller(opts: {

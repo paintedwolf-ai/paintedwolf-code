@@ -250,7 +250,7 @@ modelIndependentWebE2e("idle virtualized history stays on the same visible row",
   await expect.poll(() => stream.evaluate(async (host) => {
     const url = "/src/platform/scrolling/scrollport-motion.ts";
     const { scrollportMotionForViewport } = await import(/* @vite-ignore */ url);
-    return scrollportMotionForViewport(host)?.isDirectInputActive();
+    return scrollportMotionForViewport(host)?.input.isDirectInputActive();
   })).toBe(false);
   const samples = await stream.evaluate(async (host) => {
     const read = () => {

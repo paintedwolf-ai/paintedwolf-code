@@ -7,10 +7,10 @@ import { SegmentedScroll } from "../../ui/paged-view/geometry.ts";
 import { observeScrollportOffset } from "../../platform/scrolling/scrollport-offset.ts";
 import { batch, createEffect, createMemo, createSignal, onCleanup, onMount, untrack } from "solid-js";
 import {
-  DEN_SCROLLPORT_INPUT_EVENT,
   scrollportMotionForHost,
   scrollportMotionForViewport,
 } from "../../platform/scrolling/scrollport-motion.ts";
+import { DEN_SCROLLPORT_INPUT_EVENT } from "../../platform/scrolling/scrollport-motion-types.ts";
 import { attachThemedViewportScrollbar, updateThemedViewportScrollbar } from "../../platform/scrolling/themed-scrollbars.ts";
 import { FILES_TREE_ROW_HEIGHT_PX } from "./project-files-tree-flat.ts";
 import { type FixedVirtualWindow, fixedVirtualWindow, observeVirtualScrollOffset, windowCoversRows } from "./files-tree-virtual-scroll.ts";
@@ -279,12 +279,12 @@ export function createFilesTreeScrolling(options: {
       onCleanup(detach);
       // Thumb release refills the buffer and permits a pending presentation change.
       const motion = scrollportMotionForHost(host);
-      if (motion) onCleanup(motion.subscribeInputSettled(() => deps.setGestureVersion(version => version + 1)));
+      if (motion) onCleanup(motion.input.subscribeInputSettled(() => deps.setGestureVersion(version => version + 1)));
       const onDirectInput = () => {
         if (deps.revealViewport() || deps.navigatingViewport()) deps.cancelTreeReveal();
         options.restoration.pendingScroll = undefined; options.restoration.activeReveal = null;
         deps.setGestureVersion(version => version + 1);
-        if (!thumbDrag || motion?.isThumbGestureActive()) return;
+        if (!thumbDrag || motion?.input.isThumbGestureActive()) return;
         thumbDrag = false;
         updateVirtualWindow();
       };
@@ -430,7 +430,7 @@ export function createFilesTreeScrolling(options: {
         const motion = host ? scrollportMotionForHost(host) : undefined;
         motion?.cancelApplicationMotion();
         motion?.commit(physical, "tail_bound");
-        motion?.releaseTailRange();
+        motion?.tail.releaseTailRange();
       });
       geometryRows = rows;
       updateVirtualWindow();

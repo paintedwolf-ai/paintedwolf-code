@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
+vi.mock("../../../platform/scrolling/scrollbar-chrome.ts", () => ({ scrollbarChrome: { read: () => ({ verticalPercent: "1", horizontalPercent: "1", translate: "translate(0px, 0px)" }) } }));
 import { waitFor } from "@solidjs/testing-library";
 import { EditorView } from "@codemirror/view";
 import { createSourceEditorState } from "./codemirror-theme.ts";
@@ -13,7 +14,6 @@ vi.mock("../../../platform/scrolling/themed-scrollbars.ts", () => ({
   verticalScrollbarChromeFor: () => undefined,
   attachThemedViewportScrollbar: (host: HTMLElement, viewport: HTMLElement, options?: AttachOptions) =>
     attach(host, viewport, options),
-  readThemedScrollbarGeometry: () => ({ verticalPercent: "1", horizontalPercent: "1", translate: "translate(0px, 0px)" }),
   updateThemedViewportScrollbar: (host: HTMLElement, signature: string) =>
     updateScrollbar(host, signature),
 }));

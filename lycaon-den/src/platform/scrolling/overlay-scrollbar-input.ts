@@ -86,7 +86,7 @@ function bindAxis(
     }
     const captured = pointerId;
     pointerId = undefined;
-    motion.endThumbGesture();
+    motion.input.endThumbGesture();
     elements.host.removeAttribute(DEN_SCROLLBAR_DRAGGING_ATTR);
     if (handle.hasPointerCapture?.(captured)) {
       handle.releasePointerCapture(captured);
@@ -105,7 +105,7 @@ function bindAxis(
 
     event.preventDefault();
     event.stopPropagation();
-    motion.beginThumbGesture();
+    motion.input.beginThumbGesture();
     pointerId = event.pointerId;
     pointerStart = pendingPointer = readPointer(event);
     scrollStart = geometry.offset;
@@ -145,9 +145,9 @@ function bindAxis(
     const next = geometry.offset + ((pointer - trackStart - handleCenter) / travel) * range;
     event.preventDefault();
     event.stopPropagation();
-    motion.beginThumbGesture();
+    motion.input.beginThumbGesture();
     commit(next, "track_click", range);
-    motion.endThumbGesture();
+    motion.input.endThumbGesture();
   };
 
   track.addEventListener("pointerdown", onTrackPointerDown);

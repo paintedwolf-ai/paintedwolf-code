@@ -7,12 +7,7 @@ import {
   focusRetainingSelection,
   type SelectionLease,
 } from "../platform/interaction/selection-lease.ts";
-import {
-  DEN_SCROLLPORT_AXIS_ATTR,
-  DEN_SCROLLPORT_CLASS,
-  DEN_SCROLLPORT_CONTENT_CLASS,
-  DEN_SCROLLPORT_VIEWPORT_CLASS,
-} from "../platform/scrolling/themed-scrollbars.ts";
+import { DEN_SCROLLPORT_AXIS_ATTR, DEN_SCROLLPORT_CLASS, DEN_SCROLLPORT_CONTENT_CLASS, DEN_SCROLLPORT_VIEWPORT_CLASS } from "../platform/scrolling/scrollport-frame-dom.ts";
 
 type ContextMenuFields = {
   label: string;
