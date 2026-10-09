@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"reflect"
 	"strings"
 	"testing"
