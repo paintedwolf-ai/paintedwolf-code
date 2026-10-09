@@ -50,7 +50,7 @@ func NewSourceMutationService(database db.Handle, ledger *sourceledger.Store) *S
 		Effects:    &SourceEffects{Journal: journal, recovery: recovery, trash: desktoptrash.Move, sameFilesystem: fspath.SameFilesystem},
 		settlement: &sourceSettlement{db: database, recorder: recorder, Journal: journal, History: history},
 	}
-	service.Versions = &SourceVersions{heads: heads, recorder: recorder, execute: service.execute}
+	service.Versions = &SourceVersions{heads: heads, recorder: recorder, recovery: recovery, execute: service.execute}
 	if ledger != nil {
 		ledger.SetMutationScopeProvider(journal)
 	}

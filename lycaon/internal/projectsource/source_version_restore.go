@@ -15,6 +15,7 @@ import (
 
 // SourceVersions verifies retained states before mutation admission.
 type SourceVersions struct {
+	recovery *sourceRecovery
 	heads    SourceHeadReader
 	recorder SourceMutationRecorder
 	execute  func(context.Context, string, string, string, func() (*sourceMutationPlan, error)) (json.RawMessage, error)
