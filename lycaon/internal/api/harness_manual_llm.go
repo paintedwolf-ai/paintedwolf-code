@@ -79,20 +79,7 @@ func (s *Server) handleHarnessLLMRespond(w http.ResponseWriter, r *http.Request)
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "id is required")
 		return
 	}
-	var chunks []modelcall.StreamChunk
-	for _, c := range req.StreamChunks {
-		var streamErr error
-		if c.Error != "" {
-			streamErr = errors.New(c.Error)
-		}
-		chunks = append(chunks, modelcall.StreamChunk{
-			Content:   c.Content,
-			ToolCalls: c.ToolCalls,
-			Done:      c.Done,
-			Progress:  c.Progress,
-			Err:       streamErr,
-		})
-	}
+	chunks := harnessResponseChunks(req.StreamChunks)
 	if err := s.manualLLM.RespondWithChunks(req.ID, req.Content, req.ToolCalls, chunks); err != nil {
 		s.responses.Fail(w, wire.ApiErrorCodeManualLlmRequestNotFound, "manual LLM request is not pending")
 		return
@@ -115,3 +102,21 @@ func (s *Server) handleHarnessLLMAuto(w http.ResponseWriter, r *http.Request) {
 	httpio.WriteJSON(w, http.StatusOK, map[string]bool{"ok": true, "enabled": req.Enabled})
 }
 
+
+func harnessResponseChunks(input []harnessStreamChunk) []modelcall.StreamChunk {
+	var chunks []modelcall.StreamChunk
+	for _, c := range input {
+		var streamErr error
+		if c.Error != "" {
+			streamErr = errors.New(c.Error)
+		}
+		chunks = append(chunks, modelcall.StreamChunk{
+			Content:   c.Content,
+			ToolCalls: c.ToolCalls,
+			Done:      c.Done,
+			Progress:  c.Progress,
+			Err:       streamErr,
+		})
+	}
+	return chunks
+}
