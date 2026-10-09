@@ -113,10 +113,6 @@ func TestWorkerBranchEditRecordsAgainstWorkerBranch(t *testing.T) {
 			tctx.Identity.WorkerJobID = jobID
 			tctx.Source.SourceWorkspaceKind = api.SourceWorkspaceKindWorker
 			tctx.Source.SourceLedger = ledger
-			tctx.Source.History = tools.SourceHistory{Files: ledger.History, Comparison: ledger.Comparisons, Git: ledger.Git, Authorship: ledger.Walk}
-			tctx.Source.Commands = ledger.Commands
-			tctx.Source.Observations = ledger.Inventory
-			tctx.Source.GitMutations = ledger.Git
 			tctx.Identity.Agent = "implementer"
 			tctx.Identity.ToolCallID = "call-edit"
 
