@@ -39,11 +39,11 @@ func TestEvaluateVerdictGroundingHostAssemblesMissingCitations(t *testing.T) {
 		}},
 	))
 
-	mgr := NewManager(st, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	mgr.SetWorkerQueue(jobLister{tasks: []api.WorkerTask{{
 		AgentType: "skeptic", Status: api.WorkerStatusComplete, Result: &api.WorkerResult{CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"}}, ID: "job-1", ParentSessionID: parent.ID, ChildSessionID: child.ID, LegID: "leg-skeptic", CreatedAt: time.Now().UTC(),
 	}}})
-	eval, err := mgr.Closeout.EvaluateVerdictGrounding(ctx, parent.ID, nil, nil, []string{"skeptic"})
+	eval, err := mgr.Coordinator.Closeout.EvaluateVerdictGrounding(ctx, parent.ID, nil, nil, []string{"skeptic"})
 	testutil.FailErr(t, "evaluate verdict grounding", err)
 	if eval.Code != "" || eval.Grounding == nil {
 		t.Fatalf("evaluation = %+v want accepted grounding", eval)
@@ -64,9 +64,9 @@ func TestEvaluateVerdictGroundingRejectsInventedCitation(t *testing.T) {
 	st := store.NewMemory()
 	parent, err := st.Create(ctx, api.CreateSessionRequest{}, "project-1")
 	testutil.FailErr(t, "create parent", err)
-	mgr := NewManager(st, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 
-	eval, err := mgr.Closeout.EvaluateVerdictGrounding(ctx, parent.ID,
+	eval, err := mgr.Coordinator.Closeout.EvaluateVerdictGrounding(ctx, parent.ID,
 		[]api.CitationGroundingCitedEvidence{{Handle: "invented:read#99"}}, nil, nil)
 	testutil.FailErr(t, "evaluate invented citation", err)
 	if eval.Code != guidance.VerdictCitationUngroundedCode || eval.Grounding != nil {

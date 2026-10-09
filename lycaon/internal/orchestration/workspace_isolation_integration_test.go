@@ -50,7 +50,7 @@ func TestPackIsolatedLegsNoCrossWrite(t *testing.T) {
 	binder := &dirWorkspaceBinder{}
 	delStore := delegation.NewMemoryStore()
 	sessStore := store.NewMemory()
-	sessMgr := session.NewManager(sessStore, llm.NewMockProvider(nil), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	sessMgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	queue := worker.NewInMemoryQueue(10)
 	delMgr := delegation.NewManager(delStore, queue, sessMgr, delegation.AllowGate{})
 	rec := &recordingDelegation{inner: delMgr, store: delStore, order: make([]string, 0, 4)}

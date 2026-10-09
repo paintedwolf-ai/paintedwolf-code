@@ -55,7 +55,7 @@ func TestSessionWarmIncludesAgentsMDIndex(t *testing.T) {
 		Text:    "ok",
 	}}}))
 	store := store.NewMemory()
-	mgr := session.NewManager(store, rec, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	wirePromptTestManager(t, mgr)
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{
 		ModuleRoot: moduleRoot,
@@ -66,7 +66,7 @@ func TestSessionWarmIncludesAgentsMDIndex(t *testing.T) {
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, projectID)
 	testutil.FailErr(t, "create session", err)
 	sess.WorkspacePath = projectDir
-	mgr.PolicyIndex.Warm(t.Context(), sess)
+	mgr.Coordinator.PolicyIndex.Warm(t.Context(), sess)
 
 	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "hello"); err != nil {
 		testutil.FailErr(t, "Prompt", err)

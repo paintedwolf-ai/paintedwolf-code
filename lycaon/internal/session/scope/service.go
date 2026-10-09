@@ -25,6 +25,7 @@ type Projects interface {
 }
 
 type Service struct {
+	DataDir  string
 	store    Store
 	projects Projects
 	trust    *settings.TrustSurfacesStore
@@ -242,4 +243,8 @@ func (m *Service) CheckpointRoot(ctx context.Context, sess *api.Session) string 
 		}
 	}
 	return strings.TrimSpace(sess.WorkspacePath)
+}
+
+func (m *Service) HostDataDir(projectID string) string {
+	return project.HostDataDir(m.DataDir, projectID)
 }

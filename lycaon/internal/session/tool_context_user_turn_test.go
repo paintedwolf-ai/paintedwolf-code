@@ -30,7 +30,7 @@ func userTurnMessage(role api.MessageRole, visibility api.MessageVisibility) api
 func TestToolContextUserTurnTracksSessionCurrentTurn(t *testing.T) {
 	ctx := t.Context()
 	sessions := store.NewMemory()
-	mgr := NewManager(sessions, nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(sessions, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 
 	sess, err := sessions.Create(ctx, api.CreateSessionRequest{
 		Posture: api.SessionPostureBuild,

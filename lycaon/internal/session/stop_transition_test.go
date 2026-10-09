@@ -18,11 +18,11 @@ func TestReviewedStopTransitionPreservesRuntimeOnRejection(t *testing.T) {
 		t.Run(map[bool]string{false: "rejected", true: "accepted"}[accepted], func(t *testing.T) {
 			ctx := t.Context()
 			st := store.NewMemory()
-			mgr := NewManager(st, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+			mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 			sess, err := st.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 			testutil.FailErr(t, "create session", err)
 			testutil.FailErr(t, "mark busy", st.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
-			token, err := mgr.Gate.Capture(ctx, sess.ID)
+			token, err := mgr.Chats.Gate.Capture(ctx, sess.ID)
 			testutil.FailErr(t, "capture current turn", err)
 			refusal := errors.New("stale workflow revision")
 			err = mgr.Stops.WithSessionTreeStop(ctx, sess.ID, "reviewed exit", func(context.Context) error {
@@ -42,13 +42,13 @@ func TestReviewedStopTransitionPreservesRuntimeOnRejection(t *testing.T) {
 			if accepted {
 				want = api.SessionStatusIdle
 			}
-			if current.Status != want || mgr.Gate.MayDrain(token) == accepted {
-				t.Fatalf("status=%s drain=%v accepted=%v", current.Status, mgr.Gate.MayDrain(token), accepted)
+			if current.Status != want || mgr.Chats.Gate.MayDrain(token) == accepted {
+				t.Fatalf("status=%s drain=%v accepted=%v", current.Status, mgr.Chats.Gate.MayDrain(token), accepted)
 			}
-			if mgr.Gate.InProgress(ctx, sess.ID) {
+			if mgr.Chats.Gate.InProgress(ctx, sess.ID) {
 				t.Fatal("stop barrier retained after transition")
 			}
-			testutil.FailErr(t, "admit next turn", mgr.Gate.WithSessionTreeAdmission(ctx, sess.ID, func() error { return nil }))
+			testutil.FailErr(t, "admit next turn", mgr.Chats.Gate.WithSessionTreeAdmission(ctx, sess.ID, func() error { return nil }))
 		})
 	}
 }
@@ -56,7 +56,7 @@ func TestReviewedStopTransitionPreservesRuntimeOnRejection(t *testing.T) {
 func TestReviewedStopTransitionStillStopsOtherSessionWorkflows(t *testing.T) {
 	ctx := t.Context()
 	st := store.NewMemory()
-	mgr := NewManager(st, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	workflows := &stubSessionWorkflowStop{}
 	mgr.Stops.SetWorkflowStop(workflows)
 	root, err := st.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)

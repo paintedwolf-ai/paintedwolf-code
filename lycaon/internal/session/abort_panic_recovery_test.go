@@ -30,7 +30,7 @@ func (panicSessionWorkerAbort) AbortWorkersForRoot(context.Context, string, stri
 func TestAbortRecoversPanicAndClearsStopState(t *testing.T) {
 	ctx := context.Background()
 	st := store.NewMemory()
-	mgr := NewManager(st, nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetSessionWorkerAbort(panicSessionWorkerAbort{})
 
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
@@ -41,7 +41,7 @@ func TestAbortRecoversPanicAndClearsStopState(t *testing.T) {
 		t.Fatal("Abort returned no error; want the panic surfaced as an error, not swallowed or left to crash the process")
 	}
 
-	if mgr.Gate.InProgress(ctx, sess.ID) {
+	if mgr.Chats.Gate.InProgress(ctx, sess.ID) {
 		t.Fatal("stop state stuck active after panic recovery; finishSessionStop did not run")
 	}
 

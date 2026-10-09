@@ -69,7 +69,7 @@ func TestCostTrackingOnPricedSummaryAndSSE(t *testing.T) {
 		testutil.FailErr(t, "Prompt", err)
 	}
 
-	summary, err := h.SessionMgr.CostTracker().Summary(ctx, wire.CostScopeSession, sess.ID, "")
+	summary, err := h.SessionMgr.Coordinator.Model.Cost.Summary(ctx, wire.CostScopeSession, sess.ID, "")
 	testutil.FailErr(t, "Summary", err)
 	if summary.EstimateCoverage != wire.CostEstimateComplete || len(summary.PricingProvenance) != 1 || summary.PricingProvenance[0].Source != "fixture" || summary.PricingProvenance[0].PricedAt == nil {
 		t.Fatalf("summary = %+v", summary)
@@ -136,7 +136,7 @@ func TestCostTrackingOffUnpricedNoFetch(t *testing.T) {
 		testutil.FailErr(t, "Prompt", err)
 	}
 
-	summary, err := h.SessionMgr.CostTracker().Summary(ctx, wire.CostScopeSession, sess.ID, "")
+	summary, err := h.SessionMgr.Coordinator.Model.Cost.Summary(ctx, wire.CostScopeSession, sess.ID, "")
 	testutil.FailErr(t, "Summary", err)
 	if summary.EstimateCoverage != wire.CostEstimateUnpriced || len(summary.PricingProvenance) != 0 {
 		t.Fatalf("tracking off must be unpriced: %+v", summary)

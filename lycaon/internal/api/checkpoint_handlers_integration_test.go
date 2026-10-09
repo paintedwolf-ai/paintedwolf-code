@@ -67,7 +67,7 @@ func TestCheckpointHandlersListAndResolve(t *testing.T) {
 	mgr := hitl.NewManager(hitl.NewSQLStore(sqlDB), pub, authzcontext.SQLRecorder(sqlDB))
 
 	srv := api.NewServer(apitest.Dependencies(t, api.Dependencies{
-		Store: store, Projects: reg, Sessions: session.NewManager(store, nil, nil, settings.DefaultSessionLimits()), Checkpoints: mgr,
+		Store: store, Projects: reg, Sessions: session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil), Checkpoints: mgr,
 	}), nil, api.TestAPIToken)
 
 	dec, err := requestExplicitAPIApprovalCheckpoint(t, mgr, hitl.CheckpointRequest{
@@ -241,7 +241,7 @@ func TestCheckpointGrantOfferCreatesProjectLease(t *testing.T) {
 
 	approvals := settings.NewRuleApprovalGate(svc.Approvals, settings.NoSources())
 	srv := api.NewServer(apitest.Dependencies(t, api.Dependencies{
-		Store: store, Projects: reg, Sessions: session.NewManager(store, nil, nil, settings.DefaultSessionLimits()),
+		Store: store, Projects: reg, Sessions: session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil),
 		Settings: svc, Events: hub, Checkpoints: chkMgr, ApprovalGate: approvals,
 	}), nil, api.TestAPIToken)
 
@@ -331,7 +331,7 @@ func TestWriteRootPlanAtomicallyCreatesTaskAndDeviceAuthority(t *testing.T) {
 	approvals := settings.NewRuleApprovalGate(svc.Approvals, settings.NoSources())
 	writeRootRT := approvalstate.NewSandboxPathGrantRuntime()
 	srv := api.NewServer(apitest.Dependencies(t, api.Dependencies{
-		Store: store, Projects: reg, Sessions: session.NewManager(store, nil, nil, settings.DefaultSessionLimits()),
+		Store: store, Projects: reg, Sessions: session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil),
 		Settings: svc, Events: hub, Checkpoints: chkMgr, ApprovalGate: approvals,
 		Authority: capabilityadmin.Authority{WriteRoots: writeRootRT},
 	}), nil, api.TestAPIToken)
@@ -490,7 +490,7 @@ func newCheckpointHandlerFixture(t *testing.T) (*api.Server, *hitl.Manager, *wir
 	mgr := hitl.NewManager(hitl.NewSQLStore(sqlDB), pub, authzcontext.SQLRecorder(sqlDB))
 
 	srv := api.NewServer(apitest.Dependencies(t, api.Dependencies{
-		Store: store, Projects: reg, Sessions: session.NewManager(store, nil, nil, settings.DefaultSessionLimits()), Checkpoints: mgr,
+		Store: store, Projects: reg, Sessions: session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil), Checkpoints: mgr,
 	}), nil, api.TestAPIToken)
 	return srv, mgr, sess
 }

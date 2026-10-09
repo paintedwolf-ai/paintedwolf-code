@@ -50,7 +50,7 @@ func TestReadSensitivePathSetsSecretExposure(t *testing.T) {
 func TestSecretExposureInheritAndMerge(t *testing.T) {
 	ctx := context.Background()
 	mem := store.NewMemory()
-	mgr := session.NewManager(mem, llm.NewMockProvider(&llm.MockConfig{}), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(mem, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	parent, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
 	testutil.FailErr(t, "seed parent", mem.SeedSecretExposure(ctx, parent.ID))
@@ -88,7 +88,7 @@ func TestSpawnChildRollsBackWhenSecurityInheritanceFails(t *testing.T) {
 	testutil.FailErr(t, "create parent", err)
 	testutil.FailErr(t, "seed parent", mem.SeedSecretExposure(ctx, parent.ID))
 	failing := &failingSecretInheritanceStore{Memory: mem}
-	mgr := session.NewManager(failing, llm.NewMockProvider(&llm.MockConfig{}), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(failing, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 
 	if _, err := mgr.Workers.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{AgentType: "implementer"}); err == nil {
 		t.Fatal("SpawnChild succeeded without inheriting secret exposure")

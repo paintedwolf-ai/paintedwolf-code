@@ -26,7 +26,7 @@ func TestWorkerWritePublishesBoardByProjectIdentity(t *testing.T) {
 	testutil.FailErr(t, "subscribe to project events", err)
 	defer unsubscribe()
 	board := &workerEventBoard{}
-	manager := NewManager(sessionstore.NewMemory(), nil, nil, settings.DefaultSessionLimits())
+	manager := NewHost(sessionstore.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	manager.SetEventPublisher(&events.Publisher{Hub: hub, Board: board})
 	manager.Workers.Workspaces.AfterWorkerWrite(t.Context(), tools.ToolContext{ProjectID: testdbseed.DefaultProjectID, HandoffSessionID: "session"}, "file.go")
 	hub.FlushDebounced()

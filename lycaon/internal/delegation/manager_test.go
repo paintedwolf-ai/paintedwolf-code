@@ -35,10 +35,10 @@ func delegationTestMockConfig(t *testing.T) *llm.MockConfig {
 	return cfg
 }
 
-func newDelegationTestManager(t *testing.T) (*session.Manager, *MemoryStore, *worker.InMemoryQueue, *Manager, project.Registry) {
+func newDelegationTestManager(t *testing.T) (*session.Host, *MemoryStore, *worker.InMemoryQueue, *Manager, project.Registry) {
 	t.Helper()
 	store := store.NewMemory()
-	mgr := session.NewManager(store, llm.NewMockProvider(delegationTestMockConfig(t)), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(delegationTestMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	delegationStore := NewMemoryStore()
 	queue := worker.NewInMemoryQueue(10)
 	reg := project.NewMemoryRegistry()
@@ -107,7 +107,7 @@ func TestDelegationSingleLegDispatchAndCloseout(t *testing.T) {
 		t.Fatalf("implementer dispatch scope=%+v overlay_id=%q, want write overlay", task.EffectiveScope(), task.OverlayID)
 	}
 
-	exec := worker.NewLocalWorkerExecutor(mgr.Workers, queue, mgr.Workspace, mgr.Submissions, mgr.Transcript, mgr.Runner.Execution, mgr.Workers.Cancel, mgr.Workers.Cancellations)
+	exec := worker.NewLocalWorkerExecutor(mgr.Workers, queue, mgr.Workspace, mgr.Submissions, mgr.Runner.Transcript, mgr.Runner.Execution, mgr.Workers.Cancel, mgr.Workers.Cancellations)
 	exec.SetPromptInjects(promptstest.InjectRenderer(t))
 	poller := worker.NewLocalWorkerPoller(queue, exec, worker.DefaultWorkersConfig(), &worker.SessionOutcomeBridge{Inner: delegationMgr})
 	queue.SetRunningCancel(poller.Abort)

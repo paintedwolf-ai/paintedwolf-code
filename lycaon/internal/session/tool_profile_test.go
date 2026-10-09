@@ -45,7 +45,7 @@ func TestBuildSessionCreateDefaultsCoordinatorProfile(t *testing.T) {
 	}
 	reg, err := profiles.LoadPostureRegistry()
 	testutil.FailErr(t, "profiles.LoadPostureRegistry failed", err)
-	mgr := NewManager(store, nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(store, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.Profiles.SetPostureRegistry(reg)
 	mgr.Profiles.SetAgentRegistry(loadAgentsForTest(t))
 	got, err := mgr.Profiles.PromptToolProfile(ctx, sess)
@@ -58,7 +58,7 @@ func TestBuildSessionCreateDefaultsCoordinatorProfile(t *testing.T) {
 func TestManagerPromptToolProfileUsesWorkflowManifest(t *testing.T) {
 	reg, err := profiles.LoadPostureRegistry()
 	testutil.FailErr(t, "profiles.LoadPostureRegistry failed", err)
-	mgr := NewManager(store.NewMemory(), nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.Profiles.SetPostureRegistry(reg)
 	mgr.Profiles.SetAgentRegistry(loadAgentsForTest(t))
 	mgr.SetWorkflowDomains(workflowDomainFixture(stubWorkflowManifest{
@@ -89,7 +89,7 @@ postures:
 	if err := os.WriteFile(filepath.Join(overlayDir, "postures.yaml"), overlay, 0o644); err != nil {
 		testutil.FailErr(t, "write file", err)
 	}
-	mgr := NewManager(store.NewMemory(), nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.Profiles.SetPostureRegistry(reg)
 	mgr.Profiles.SetAgentRegistry(loadAgentsForTest(t))
 	projectID := RegisterProjectContextForTest(t, mgr, dir)

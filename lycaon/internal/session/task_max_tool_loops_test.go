@@ -72,7 +72,7 @@ func TestApplyWorkerMaxToolLoopsSkipsCoordinatorRoot(t *testing.T) {
 func TestSetWorkerMaxToolLoopsOnResumeChild(t *testing.T) {
 	ctx := context.Background()
 	store := store.NewMemory()
-	mgr := session.NewManager(store, nil, nil, settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
 	child, err := mgr.Workers.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{AgentType: "path-explorer"})

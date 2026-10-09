@@ -77,7 +77,7 @@ func (m *Service) retireSessionForProjectDelete(
 	}
 	m.removeScratch(ctx, tree)
 	for _, id := range tree {
-		m.gate.Forget(id)
+		m.Gate.Forget(id)
 	}
 	if m.events != nil && !m.store.MutationEventsOutboxed() {
 		for _, id := range tree {

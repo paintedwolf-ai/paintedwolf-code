@@ -26,7 +26,7 @@ func TestMergeReconcilePathsAllowCoordinatorWrite(t *testing.T) {
 	}}
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true}, profiles)
 
-	mgr := session.NewManager(sessionstore.NewMemory(), nil, nil, settings.SessionLimits{})
+	mgr := session.NewHost(sessionstore.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
 	mgr.Promotion.SetMergeReconcilePaths("sess-1", []string{"src/main.go"})
 	boundary.SetMergeReconcileAllowlister(mgr.Promotion)
 
@@ -44,7 +44,7 @@ func TestMergeReconcilePathsNotRegisteredForInvestigateProductWrite(t *testing.T
 	src := filepath.Join(root, "src", "foo.go")
 	testutil.FailErr(t, "MkdirAll", os.MkdirAll(filepath.Dir(src), 0o755))
 
-	mgr := session.NewManager(sessionstore.NewMemory(), nil, nil, settings.SessionLimits{})
+	mgr := session.NewHost(sessionstore.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
 	if mgr.Promotion.Allowed("sess-investigate", "src/foo.go") {
 		t.Fatal("investigate product path must not be reconcile-allowed without SetMergeReconcilePaths")
 	}

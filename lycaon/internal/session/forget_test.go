@@ -15,7 +15,7 @@ import (
 )
 
 // Bounded stores are zero-value usable.
-func newForgetTestManager(t *testing.T) *Manager {
+func newForgetTestManager(t *testing.T) *Host {
 	m, _ := newTestManager(t)
 	return m
 }
@@ -32,25 +32,25 @@ func TestForgetSessionClearsEveryReleasedStore(t *testing.T) {
 	progressStore := progress.NewMemoryStore()
 	progressStore.Set(sid, "- [ ] task")
 	m.SetProgressStore(progressStore)
-	m.ProgressClosure.Arm(t.Context(), sid, "job-closure")
+	m.Coordinator.ProgressClosure.Arm(t.Context(), sid, "job-closure")
 	m.Runner.Closeouts.RecordGroundingFriction(t.Context(), sid)
 	m.Runner.Closeouts.NoteCloseoutGroundingReject(t.Context(), sid, "citation", "offender", "draft", nil)
-	m.Batch.AcceptSynthesis(t.Context(), sid)
+	m.Coordinator.Batch.AcceptSynthesis(t.Context(), sid)
 	checkpoints := sessioncheckpoint.New(t.TempDir(), t.TempDir(), sessionstore.NewMemory())
-	testutil.FailErr(t, "open checkpoint capture", m.Captures.Capture.Open(t.Context(), checkpoints, sid, "anchor"))
+	testutil.FailErr(t, "open checkpoint capture", m.Chats.Captures.Capture.Open(t.Context(), checkpoints, sid, "anchor"))
 	m.Promotion.SetMergeReconcilePaths(sid, []string{"a.go"})
 	m.Runner.History.ObserveTokens(sid, 150, 100)
 	m.Promotion.RecordPromotePathStatus(sid, "job", []api.WorkerPromotePathStatus{{Path: "a.go"}})
-	m.writeRootRuntime = approvalstate.NewSandboxPathGrantRuntime()
-	m.Resources.Authority.Writes = m.writeRootRuntime
-	m.writeRootRuntime.GrantChat(sid, "/opt/cache", "grant-1", "cp-1", nil)
+	m.Resources.Authority.Writes = approvalstate.NewSandboxPathGrantRuntime()
 
-	m.queue.AppendOrdered(sid, "", testutil.HostOwner().ID, "queued follow-up", 0, time.Time{})
+	m.Resources.Authority.Writes.GrantChat(sid, "/opt/cache", "grant-1", "cp-1", nil)
+
+	m.Resources.Queue.AppendOrdered(sid, "", testutil.HostOwner().ID, "queued follow-up", 0, time.Time{})
 	progress.TurnStarted(sid)
 
 	m.Resources.Dispose(t.Context(), sid)
 
-	m.Captures.Capture.RecordPath(t.Context(), checkpoints, sid, "after.go")
+	m.Chats.Captures.Capture.RecordPath(t.Context(), checkpoints, sid, "after.go")
 	manifest, err := checkpoints.Load(t.Context(), sid, "anchor")
 	testutil.FailErr(t, "load released checkpoint", err)
 	if len(manifest.Paths) != 0 {
@@ -58,8 +58,8 @@ func TestForgetSessionClearsEveryReleasedStore(t *testing.T) {
 	}
 
 	held := map[string]func() bool{
-		"progressClosureExpect": func() bool { _, ok := m.ProgressClosure.Baseline(sid); return ok },
-		"coordinatorBatchTurn":  func() bool { return m.Batch.TurnGuard(sid).SynthesisAcceptedThisTurn },
+		"progressClosureExpect": func() bool { _, ok := m.Coordinator.ProgressClosure.Baseline(sid); return ok },
+		"coordinatorBatchTurn":  func() bool { return m.Coordinator.Batch.TurnGuard(sid).SynthesisAcceptedThisTurn },
 		"mergeReconcile":        func() bool { return m.Promotion.Allowed(sid, "a.go") },
 		"compactionTokenCalibration": func() bool {
 			return m.Runner.History.Calibration(sid) != (compaction.PromptTokenCalibration{})
@@ -77,11 +77,11 @@ func TestForgetSessionClearsEveryReleasedStore(t *testing.T) {
 	if len(forgot) != 1 || forgot[0] != sid {
 		t.Fatalf("approval gate release = %v, want [%s]", forgot, sid)
 	}
-	if len(m.writeRootRuntime.ListChatGrants(sid)) != 0 {
+	if len(m.Resources.Authority.Writes.ListChatGrants(sid)) != 0 {
 		t.Fatal("write-root runtime survived ForgetSession")
 	}
 
-	if got := m.Drafts.Snapshot(sid); len(got.QueueItems) != 0 || got.Revision != 0 {
+	if got := m.Chats.Drafts.Snapshot(sid); len(got.QueueItems) != 0 || got.Revision != 0 {
 		t.Fatalf("queue survived ForgetSession: %+v", got)
 	}
 	if clock := progress.Clock(sid); clock.Running() {
@@ -102,13 +102,13 @@ func TestStopKeepsTheChatsApprovedSandboxGrants(t *testing.T) {
 		return nil
 	}))
 	const sid = "sess-stop"
-	m.writeRootRuntime = approvalstate.NewSandboxPathGrantRuntime()
-	m.Resources.Authority.Writes = m.writeRootRuntime
-	m.writeRootRuntime.GrantChat(sid, "/opt/cache", "grant-1", "cp-1", nil)
-	m.writeRootRuntime.GrantSessionWriteRoot(sid, "/opt/derived")
+	m.Resources.Authority.Writes = approvalstate.NewSandboxPathGrantRuntime()
+
+	m.Resources.Authority.Writes.GrantChat(sid, "/opt/cache", "grant-1", "cp-1", nil)
+	m.Resources.Authority.Writes.GrantSessionWriteRoot(sid, "/opt/derived")
 
 	testutil.FailErr(t, "stop", m.Chats.ReleaseRuntime(t.Context(), sid))
-	if roots := m.writeRootRuntime.SessionWriteRoots(sid); len(roots) != 1 || roots[0] != "/opt/cache" {
+	if roots := m.Resources.Authority.Writes.SessionWriteRoots(sid); len(roots) != 1 || roots[0] != "/opt/cache" {
 		t.Fatalf("roots after Stop = %v, want only the approved grant", roots)
 	}
 	if len(released) != 1 || len(disposed) != 0 {
@@ -116,7 +116,7 @@ func TestStopKeepsTheChatsApprovedSandboxGrants(t *testing.T) {
 	}
 
 	m.Resources.Dispose(t.Context(), sid)
-	if roots := m.writeRootRuntime.SessionWriteRoots(sid); len(roots) != 0 {
+	if roots := m.Resources.Authority.Writes.SessionWriteRoots(sid); len(roots) != 0 {
 		t.Fatalf("roots after delete = %v", roots)
 	}
 	if len(disposed) != 1 || disposed[0] != sid {

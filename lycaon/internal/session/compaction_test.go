@@ -24,11 +24,11 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func newCompactionManager(t *testing.T, cfg compaction.CompactionConfig) (*Manager, *store.Memory) {
+func newCompactionManager(t *testing.T, cfg compaction.CompactionConfig) (*Host, *store.Memory) {
 	t.Helper()
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
 	store := store.NewMemory()
-	mgr := NewManager(store, llm.NewMockProvider(testMockConfig(t)), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(store, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	mgr.SetDataDir(t.TempDir())
 	oartest.InstallCloseoutPolicy(t, mgr)
 	mgr.Runner.History.SetCompactor(compaction.NewSimpleCompactor(cfg, compaction.MockSummarizer{Text: "Continue from compacted context."}))
@@ -36,7 +36,7 @@ func newCompactionManager(t *testing.T, cfg compaction.CompactionConfig) (*Manag
 }
 
 // Overlay the persisted compaction view on canonical messages.
-func appliedView(t *testing.T, mgr *Manager, store Store, sessID string) []api.Message {
+func appliedView(t *testing.T, mgr *Host, store Store, sessID string) []api.Message {
 	t.Helper()
 	ctx := context.Background()
 	sess, err := store.Get(ctx, sessID)
@@ -216,7 +216,7 @@ func TestCompactionViewSplicesNewMessages(t *testing.T) {
 func TestPromptHistorySeeksAfterCompactionWatermark(t *testing.T) {
 	ctx := context.Background()
 	mem := store.NewMemory()
-	mgr := NewManager(mem, nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	oartest.InstallCloseoutPolicy(t, mgr)
 	sess, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
@@ -281,7 +281,7 @@ func (p *promptHistoryReadProbe) GetMessagesAfterOrd(context.Context, string, in
 func TestPromptHistoryOverflowFailsWithoutUnboundedRead(t *testing.T) {
 	mem := store.NewMemory()
 	probe := &promptHistoryReadProbe{Store: mem}
-	mgr := NewManager(probe, nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(probe, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	oartest.InstallCloseoutPolicy(t, mgr)
 	_, err := mgr.Runner.History.Load(t.Context(), &api.Session{ID: "large-session"})
 	if err == nil || !strings.Contains(err.Error(), "unprojected rows") {
@@ -484,7 +484,7 @@ func TestCompactOversizedSplitReadsInSession(t *testing.T) {
 		if len(refs) != 1 {
 			t.Fatalf("read tool %s must retain one exact recovery reference: %v", m.ID, refs)
 		}
-		stored, err := os.ReadFile(tooloutput.DiskPath(mgr.HostDataDirFor(sess.ProjectID), refs[0]))
+		stored, err := os.ReadFile(tooloutput.DiskPath(mgr.Workspace.HostDataDir(sess.ProjectID), refs[0]))
 		testutil.FailErr(t, "read retained observation", err)
 		body, err := zstdcodec.Decompress(stored)
 		testutil.FailErr(t, "decode retained observation", err)

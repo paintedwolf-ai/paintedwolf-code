@@ -34,7 +34,7 @@ func TestSSEEndToEnd(t *testing.T) {
 
 	store := store.NewMemory()
 	srv := NewServer(requiredTestDeps(t, Dependencies{
-		Store: store, Projects: reg, Sessions: session.NewManager(store, nil, nil, settings.DefaultSessionLimits()), Events: hub,
+		Store: store, Projects: reg, Sessions: session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil), Events: hub,
 	}), nil, TestAPIToken)
 
 	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
@@ -91,7 +91,7 @@ func TestSSEDeviceWideSubscription(t *testing.T) {
 	srv := NewServer(requiredTestDeps(t, Dependencies{
 		Store:    sessionStore,
 		Projects: project.NewMemoryRegistry(),
-		Sessions: session.NewManager(sessionStore, nil, nil, settings.DefaultSessionLimits()),
+		Sessions: session.NewHost(sessionStore, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil),
 		Events:   hub,
 	}), nil, TestAPIToken)
 
@@ -228,7 +228,7 @@ func TestSSEHeartbeat(t *testing.T) {
 
 	store := store.NewMemory()
 	srv := NewServer(requiredTestDeps(t, Dependencies{
-		Store: store, Projects: reg, Sessions: session.NewManager(store, nil, nil, settings.DefaultSessionLimits()), Events: hub,
+		Store: store, Projects: reg, Sessions: session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil), Events: hub,
 	}), nil, TestAPIToken)
 
 	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")

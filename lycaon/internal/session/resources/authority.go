@@ -7,6 +7,7 @@ import (
 )
 
 type Grants interface {
+	NoteUserIntentBoundary(string)
 	ReleaseRun(string)
 	ForgetSession(string)
 }
@@ -45,8 +46,8 @@ func (a *Authority) dispose(_ context.Context, scope resourcelifecycle.Scope) er
 
 // ToolState forgets approval coalescing and feedback counters from a released run.
 type ToolState struct {
-	Approvals SessionForgetter
-	Repeat    SessionForgetter
+	Approvals IntentMemory
+	Repeat    IntentMemory
 	Counters  SessionForgetter
 	Rejects   SessionForgetter
 	Outputs   SessionForgetter
@@ -68,4 +69,9 @@ func (s *ToolState) Forget(id string) {
 	if s.Outputs != nil {
 		s.Outputs.ForgetSession(id)
 	}
+}
+
+type IntentMemory interface {
+	SessionForgetter
+	NoteUserIntentBoundary(string)
 }

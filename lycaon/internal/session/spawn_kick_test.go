@@ -29,7 +29,7 @@ func (s *stubKickWorkerContext) BuildWorkerPromptContext(_ string, _ *api.Sessio
 
 func TestSpawnChildInjectsWorkerKick(t *testing.T) {
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
-	mgr := session.NewManager(store.NewMemory(), rec, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store.NewMemory(), session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr)
 	wirePromptTestManager(t, mgr)
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
@@ -64,7 +64,7 @@ func TestSpawnChildInjectsWorkerKick(t *testing.T) {
 
 func TestSpawnChildInjectsImplementModeWorkerKick(t *testing.T) {
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
-	mgr := session.NewManager(store.NewMemory(), rec, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store.NewMemory(), session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr)
 	wirePromptTestManager(t, mgr)
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
@@ -99,7 +99,7 @@ func TestSpawnChildInjectsImplementModeWorkerKick(t *testing.T) {
 }
 
 func TestSpawnChildMissingKickTemplateSoftFails(t *testing.T) {
-	mgr := session.NewManager(store.NewMemory(), llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store.NewMemory(), session.Models{Client: llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr)
 	// No SetPromptEngine — worker kick queue is a no-op.
 	ctx := context.Background()

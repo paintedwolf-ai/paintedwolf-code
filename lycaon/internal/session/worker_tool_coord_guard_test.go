@@ -17,7 +17,7 @@ import (
 )
 
 func TestBeforeWorkerWriteRejectsReadScopedMutation(t *testing.T) {
-	mgr := session.NewManager(sessionstore.NewMemory(), nil, nil, settings.SessionLimits{})
+	mgr := session.NewHost(sessionstore.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
 	q := worker.NewInMemoryQueue(8)
 	mgr.SetWorkerQueue(q)
 	dir := t.TempDir()
@@ -51,7 +51,7 @@ func TestBeforeWorkerWriteRejectsReadScopedMutation(t *testing.T) {
 }
 
 func TestBeforeWorkerWriteAllowsPathOutsideSuggestion(t *testing.T) {
-	mgr := session.NewManager(sessionstore.NewMemory(), nil, nil, settings.SessionLimits{})
+	mgr := session.NewHost(sessionstore.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
 	q := worker.NewInMemoryQueue(8)
 	mgr.SetWorkerQueue(q)
 	writeScope := api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"src/allowed/**"}}
@@ -89,7 +89,7 @@ func TestEnsureWorkerBranchFailsWriteScopeWithoutWorkspace(t *testing.T) {
 
 func TestWorkerReadToolsIgnoreSuggestedPaths(t *testing.T) {
 	ctx := context.Background()
-	mgr := session.NewManager(sessionstore.NewMemory(), nil, nil, settings.SessionLimits{})
+	mgr := session.NewHost(sessionstore.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
 	queue := worker.NewInMemoryQueue(8)
 	mgr.SetWorkerQueue(queue)
 	scope := api.TaskScope{Mode: api.TaskScopeModeRead, Paths: []string{"docs/README.md"}}
@@ -128,9 +128,9 @@ func TestWorkerReadToolsIgnoreSuggestedPaths(t *testing.T) {
 	}
 }
 
-func readScopedWorkerManager(t *testing.T, jobID string, mode api.TaskScopeMode) (*session.Manager, context.Context) {
+func readScopedWorkerManager(t *testing.T, jobID string, mode api.TaskScopeMode) (*session.Host, context.Context) {
 	t.Helper()
-	mgr := session.NewManager(sessionstore.NewMemory(), nil, nil, settings.SessionLimits{})
+	mgr := session.NewHost(sessionstore.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
 	q := worker.NewInMemoryQueue(8)
 	mgr.SetWorkerQueue(q)
 	scope := api.TaskScope{Mode: mode, Paths: []string{"."}}

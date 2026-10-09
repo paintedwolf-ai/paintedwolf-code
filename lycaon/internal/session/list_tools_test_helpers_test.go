@@ -32,7 +32,7 @@ import (
 )
 
 type contextualToolsFixture struct {
-	Mgr        *session.Manager
+	Mgr        *session.Host
 	Store      session.Store
 	Workflow   *workflow.RunManager
 	Executor   *tools.DefaultToolExecutor
@@ -59,10 +59,10 @@ func setupContextualToolsFixtureFull(t *testing.T, posture api.SessionPosture, c
 
 	store := store.NewSQL(sqlDB)
 	rt := newContextualToolsRuntime(t, configRoot)
-	mgr := session.NewManager(store, client, tools.NewStubRegistry(), cfg)
+	mgr := session.NewHost(store, session.Models{Client: client, Provider: nil, Limits: cfg, Cost: nil}, tools.NewStubRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr)
 	mgr.SetProjectRegistry(project.NewSQLRegistry(sqlDB))
-	mgr.Guards.SetInvoker(rt.Executor)
+	mgr.Coordinator.Guards.SetInvoker(rt.Executor)
 	wireBundledToolPolicyForTest(t, mgr)
 
 	agents := orchestration.NewMemoryAgentRegistry()
@@ -81,7 +81,7 @@ func setupContextualToolsFixtureFull(t *testing.T, posture api.SessionPosture, c
 	projectDir := t.TempDir()
 	blueprintStore := blueprint.NewFileStoreForTest(projectDir)
 	blueprintMgr := blueprint.NewManager(blueprintStore)
-	workflowMgr.BlueprintCreate = blueprint.WorkflowBlueprintCreator{Manager: blueprintMgr}
+	workflowMgr.BlueprintCreate = blueprint.WorkflowBlueprintCreator{Host: blueprintMgr}
 	workflowMgr.BlueprintGet = blueprintMgr
 	mgr.SetWorkflowDomains(&session.WorkflowDomains{Runs: workflowMgr.Store.Runs, Policy: workflowMgr.Policy, Ambient: workflowMgr.Ambient, Blueprints: workflowMgr.Blueprints, Batch: workflowMgr.Batch, Slash: workflowMgr.Slash, Requests: workflowMgr.Requests, Feedback: workflowMgr.Feedback, Transcript: workflowMgr.Transcript, Asks: workflowMgr.Asks, Fanout: workflowMgr.Fanout, Phases: workflowMgr.Phases, Reports: workflowMgr.Reports, Recovery: workflowMgr.Recovery, Cleanup: workflowMgr})
 	mgr.SetCoordinatorTurnFrameSource(&workflow.CoordinatorTurnFrameLoader{Runs: workflowMgr, SessionStore: sessionWF})
@@ -122,7 +122,7 @@ func setupContextualToolsFixtureFull(t *testing.T, posture api.SessionPosture, c
 	}
 }
 
-func wireBundledToolPolicyForTest(t *testing.T, mgr *session.Manager) {
+func wireBundledToolPolicyForTest(t *testing.T, mgr *session.Host) {
 	t.Helper()
 	postures, err := profiles.LoadPostureRegistry()
 	testutil.FailErr(t, "profiles.LoadPostureRegistry", err)
@@ -139,16 +139,16 @@ func wireBundledToolPolicyForTest(t *testing.T, mgr *session.Manager) {
 	engine, err := rules.NewPostureRuleEngine(postures, packs, condReg)
 	testutil.FailErr(t, "NewPostureRuleEngine", err)
 	mgr.Profiles.SetPostureRegistry(postures)
-	mgr.Guards.SetRules(engine)
+	mgr.Coordinator.Guards.SetRules(engine)
 }
 
 // wirePromptTestManager wires toolhost + posture rules so coordinator Prompt has visible_tools.
-func wirePromptTestManager(t *testing.T, mgr *session.Manager) {
+func wirePromptTestManager(t *testing.T, mgr *session.Host) {
 	t.Helper()
 	oartest.InstallCloseoutPolicy(t, mgr)
 	configRoot := configlayout.FindModuleRoot()
 	rt := newContextualToolsRuntime(t, configRoot)
-	mgr.Guards.SetInvoker(rt.Executor)
+	mgr.Coordinator.Guards.SetInvoker(rt.Executor)
 	wireBundledToolPolicyForTest(t, mgr)
 }
 
@@ -174,7 +174,7 @@ func registerContextualToolsCoordinatorExtras(
 	t *testing.T,
 	configRoot string,
 	reg *tools.DefaultRegistry,
-	mgr *session.Manager,
+	mgr *session.Host,
 	agents *orchestration.MemoryAgentRegistry,
 	sessionWF *workflow.SessionWorkflowSQLStore,
 	bundledDir string,

@@ -87,27 +87,27 @@ func TestProtectionStateReconstructEmitsOnceWithoutDestinations(t *testing.T) {
 	testutil.FailErr(t, "start", err)
 	t.Cleanup(func() { _, _ = reg.Stop("sess-rec", handle) })
 
-	mgr := session.NewManager(sessionstore.NewMemory(), nil, nil, settings.DefaultSessionLimits())
+	mgr := session.NewHost(sessionstore.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetBackgroundRegistry(reg)
 	var emits atomic.Int32
-	mgr.Protection.SetDirectIPReconstructHook(func(sessionID, gotHandle, toolCallID string) {
+	mgr.Chats.Protection.SetDirectIPReconstructHook(func(sessionID, gotHandle, toolCallID string) {
 		emits.Add(1)
 		if sessionID != "sess-rec" || gotHandle != handle || toolCallID != "call-9" {
 			t.Errorf("unexpected reconstruct args: %s %s %s", sessionID, gotHandle, toolCallID)
 		}
 	})
 
-	_ = mgr.Protection.ProtectionStateForSession("sess-rec")
-	_ = mgr.Protection.ProtectionStateForSession("sess-rec")
+	_ = mgr.Chats.Protection.ProtectionStateForSession("sess-rec")
+	_ = mgr.Chats.Protection.ProtectionStateForSession("sess-rec")
 	if got := emits.Load(); got != 1 {
 		t.Fatalf("reconstruct emits = %d want 1", got)
 	}
 
 	var replacementEmits atomic.Int32
-	mgr.Protection.SetDirectIPReconstructHook(func(_, _, _ string) {
+	mgr.Chats.Protection.SetDirectIPReconstructHook(func(_, _, _ string) {
 		replacementEmits.Add(1)
 	})
-	_ = mgr.Protection.ProtectionStateForSession("sess-rec")
+	_ = mgr.Chats.Protection.ProtectionStateForSession("sess-rec")
 	if got := replacementEmits.Load(); got != 1 {
 		t.Fatalf("replacement hook emits = %d want 1", got)
 	}

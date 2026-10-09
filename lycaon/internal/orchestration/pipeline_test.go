@@ -45,7 +45,7 @@ func TestPipelineTopologyLegAgentTypes(t *testing.T) {
 	ctx := context.Background()
 	delStore := delegation.NewMemoryStore()
 	sessStore := store.NewMemory()
-	sessMgr := session.NewManager(sessStore, llm.NewMockProvider(nil), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	sessMgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	queue := worker.NewInMemoryQueue(10)
 	delMgr := delegation.NewManager(delStore, queue, sessMgr, delegation.AllowGate{})
 
@@ -103,7 +103,7 @@ func TestPipelineUnknownProfileFailsRun(t *testing.T) {
 	ctx := context.Background()
 	delStore := delegation.NewMemoryStore()
 	sessStore := store.NewMemory()
-	sessMgr := session.NewManager(sessStore, llm.NewMockProvider(nil), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	sessMgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	queue := worker.NewInMemoryQueue(10)
 	delMgr := delegation.NewManager(delStore, queue, sessMgr, delegation.AllowGate{})
 
@@ -138,14 +138,14 @@ func TestPipelineUnknownProfileFailsRun(t *testing.T) {
 	}
 }
 
-func newPipelineIntegrationOrchestrator(t *testing.T) (*orchestration.OrchestratorImpl, *recordingDelegation, *session.Manager, *store.Memory) {
+func newPipelineIntegrationOrchestrator(t *testing.T) (*orchestration.OrchestratorImpl, *recordingDelegation, *session.Host, *store.Memory) {
 	t.Helper()
 	mockCfg, err := llm.LoadMockConfig()
 	testutil.FailErr(t, "llm.LoadMockConfig failed", err)
 
 	delStore := delegation.NewMemoryStore()
 	sessStore := store.NewMemory()
-	sessMgr := session.NewManager(sessStore, llm.NewMockProvider(mockCfg), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	sessMgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(mockCfg), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	queue := worker.NewInMemoryQueue(10)
 	delMgr := delegation.NewManager(delStore, queue, sessMgr, delegation.AllowGate{})
 	rec := &recordingDelegation{inner: delMgr, store: delStore, order: make([]string, 0, 8)}

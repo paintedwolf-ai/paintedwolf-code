@@ -25,7 +25,7 @@ func TestPrepareToolWireContentRetainsLargeFilesWithoutCompactor(t *testing.T) {
 	}
 	raw, err := json.Marshal(map[string]any{"files": files, "dirty": true})
 	testutil.FailErr(t, "json.Marshal failed", err)
-	mgr := NewManager(sessionstore.NewMemory(), nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(sessionstore.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	sess := &api.Session{ID: "s1", Posture: api.SessionPostureBuild}
 	out, meta := mgr.Runner.History.ToolWire(context.Background(), sess, "git_status", string(raw), compaction.CompactToolWireOpts{})
 	if meta != nil {
@@ -44,7 +44,7 @@ func TestPrepareToolWireContentRetainsLargeFilesWithoutCompactor(t *testing.T) {
 
 func TestPrepareToolWirePreservesBoundedRecallBody(t *testing.T) {
 	st := store.NewMemory()
-	mgr := NewManager(st, llm.NewMockProvider(testMockConfig(t)), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(st, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	mgr.SetDataDir(t.TempDir())
 	mgr.Runner.History.SetCompactor(compaction.NewSimpleCompactor(compaction.CompactionConfig{
 		Enabled: true, ChunkTokenThreshold: 50, ChunkTargetTokens: 20,
@@ -64,7 +64,7 @@ func TestPrepareToolWirePreservesBoundedRecallBody(t *testing.T) {
 
 func TestPrepareToolWireContentCompactsBeforeStore(t *testing.T) {
 	store := store.NewMemory()
-	mgr := NewManager(store, llm.NewMockProvider(testMockConfig(t)), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(store, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	mgr.SetDataDir(t.TempDir())
 	mgr.Runner.History.SetCompactor(compaction.NewSimpleCompactor(compaction.CompactionConfig{
 		Enabled:             true,
@@ -96,7 +96,7 @@ func TestPrepareToolWireContentPreservesOutputBeyondSpillBound(t *testing.T) {
 	st := store.NewMemory()
 	limits := settings.DefaultSessionLimits()
 	limits.MaxToolSpillBytes = 1024
-	mgr := NewManager(st, llm.NewMockProvider(testMockConfig(t)), tools.NewStubRegistry(), limits)
+	mgr := NewHost(st, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: limits, Cost: nil}, tools.NewStubRegistry())
 	mgr.SetDataDir(t.TempDir())
 	mgr.Runner.History.SetCompactor(compaction.NewSimpleCompactor(compaction.CompactionConfig{
 		Enabled: true, ChunkTokenThreshold: 100, ChunkTargetTokens: 200,
@@ -112,7 +112,7 @@ func TestPrepareToolWireContentPreservesOutputBeyondSpillBound(t *testing.T) {
 
 func TestPrepareToolWireContentHandlePrefixedFind(t *testing.T) {
 	store := store.NewMemory()
-	mgr := NewManager(store, llm.NewMockProvider(testMockConfig(t)), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(store, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	mgr.SetDataDir(t.TempDir())
 	mgr.Runner.History.SetCompactor(compaction.NewSimpleCompactor(compaction.CompactionConfig{
 		Enabled:             true,
@@ -154,7 +154,7 @@ func TestPrepareToolWireContentHandlePrefixedFind(t *testing.T) {
 
 func TestPrepareToolWireContentSummarizeSpillsFullPack(t *testing.T) {
 	store := store.NewMemory()
-	mgr := NewManager(store, llm.NewMockProvider(testMockConfig(t)), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(store, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	mgr.SetDataDir(t.TempDir())
 	mgr.Runner.History.SetCompactor(compaction.NewSimpleCompactor(compaction.CompactionConfig{
 		Enabled:             true,
@@ -222,7 +222,7 @@ func TestPrepareToolWireContentSummarizeSpillsFullPack(t *testing.T) {
 
 func TestPrepareToolWireContentSummarizeWireFittedLandsInline(t *testing.T) {
 	store := store.NewMemory()
-	mgr := NewManager(store, llm.NewMockProvider(testMockConfig(t)), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(store, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	mgr.SetDataDir(t.TempDir())
 	mgr.Runner.History.SetCompactor(compaction.NewSimpleCompactor(compaction.CompactionConfig{
 		Enabled:             true,

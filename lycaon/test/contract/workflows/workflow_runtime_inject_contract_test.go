@@ -57,7 +57,7 @@ func TestDefaultPipelineActiveWorkflowInjectVisible(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "pipeline-inject.db")
 
 	store := store.NewSQL(sqlDB)
-	mgr := session.NewManager(store, nil, nil, settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	agents := orchestration.NewMemoryAgentRegistry()
 	_ = orchestration.LoadRequiredAgentRegistry(ctx, agents)
 	mgr.Profiles.SetAgentRegistry(agents)

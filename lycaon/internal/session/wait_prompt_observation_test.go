@@ -21,7 +21,7 @@ func TestConsumedStartupWakeKeepsWaitingUserTurnBusy(t *testing.T) {
 	ctx := t.Context()
 	memory := store.NewMemory()
 	client := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "unexpected follow-up"}}}))
-	mgr := NewManager(memory, client, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(memory, Models{Client: client, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	sess, err := memory.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	testutil.FailErr(t, "start visible turn", memory.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
@@ -29,7 +29,7 @@ func TestConsumedStartupWakeKeepsWaitingUserTurnBusy(t *testing.T) {
 		ID: "run", Revision: 5, Status: api.WorkflowRunStatusRunning, CurrentPhase: "work",
 	}}
 	mgr.SetLoopWorkflowSource(&loopwake.WorkflowDomains{Runs: loopWorkflowFixture1, Approvals: loopWorkflowFixture1, Obligations: loopWorkflowFixture1})
-	loop := mgr.ensureCoordinatorRuntime().CoordinatorLoop()
+	loop := mgr.Coordinator.Runtime.CoordinatorLoop()
 	t.Cleanup(func() { loop.ForgetSession(context.Background(), sess.ID) })
 	finish := loop.BeginPromptExecution(ctx, sess.ID)
 	observe := mgr.Runner.Coordinator.PromptLoop().Context.Deps.ObservePrompt(sess.ID)

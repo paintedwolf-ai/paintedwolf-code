@@ -239,7 +239,7 @@ func TestShouldNudgeCoordinatorLoopAfterWorkerTask(t *testing.T) {
 	q := worker.NewInMemoryQueue(8)
 	dir := t.TempDir()
 	parent := "parent-1"
-	mgr := session.NewManager(store.NewMemory(), nil, nil, settings.DefaultSessionLimits())
+	mgr := session.NewHost(store.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetWorkerQueue(q)
 
 	if !mgr.Workers.State.ShouldNudge(ctx, parent, testdbseed.DefaultProjectID, "") {
@@ -268,7 +268,7 @@ func TestShouldNudgeCoordinatorLoopAfterWorkerTaskWriteDefersUntilIdle(t *testin
 	q := worker.NewInMemoryQueue(8)
 	dir := t.TempDir()
 	parent := "parent-1"
-	mgr := session.NewManager(store.NewMemory(), nil, nil, settings.DefaultSessionLimits())
+	mgr := session.NewHost(store.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetWorkerQueue(q)
 
 	writeA, err := q.Enqueue(ctx, api.WorkerTask{
@@ -300,7 +300,7 @@ func TestShouldNudgeCoordinatorLoopAfterWorkerTaskPerJobWakeWhileSiblingsInFligh
 	q := worker.NewInMemoryQueue(8)
 	dir := t.TempDir()
 	parent := "parent-1"
-	mgr := session.NewManager(store.NewMemory(), nil, nil, settings.DefaultSessionLimits())
+	mgr := session.NewHost(store.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetWorkerQueue(q)
 
 	jobA, err := q.Enqueue(ctx, api.WorkerTask{
@@ -397,7 +397,7 @@ func TestBuildImplementSessionStateLedgerOverridesStaleEnvelope(t *testing.T) {
 		testutil.FailErr(t, "AppendMessages", err)
 	}
 
-	mgr := session.NewManager(store, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	mgr.SetWorkerQueue(q)
 	state := mgr.Workers.State.ForSession(ctx, parent)
 	if len(state.PendingOverlayIDs) != 0 {

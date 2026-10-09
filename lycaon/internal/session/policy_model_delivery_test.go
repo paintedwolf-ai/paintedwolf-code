@@ -34,7 +34,7 @@ func TestPolicyAdvisoryReachesActualModelRequest(t *testing.T) {
 			testutil.FailErr(t, "register directory tool", registry.Register("list_dir", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 				return "[]", nil
 			}))
-			mgr := session.NewManager(mem, recorder, registry, settings.DefaultSessionLimits())
+			mgr := session.NewHost(mem, session.Models{Client: recorder, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, registry)
 			projects := project.NewMemoryRegistry()
 			proj, err := project.CreateWithRoot(t.Context(), projects, root)
 			testutil.FailErr(t, "create rooted project", err)

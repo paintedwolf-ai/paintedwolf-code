@@ -7,6 +7,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/coordinator/kick"
 	"github.com/lycaon/lycaon/internal/session"
+	sessiondecisions "github.com/lycaon/lycaon/internal/session/decisions"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
@@ -20,8 +21,8 @@ import (
 func TestAppendWorkerSummaryCarriesStructuredDecisionRequest(t *testing.T) {
 	ctx := context.Background()
 	store := store.NewMemory()
-	mgr := session.NewManager(store, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
-	decisions := session.NewMemoryDecisionStore()
+	mgr := session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	decisions := sessiondecisions.NewMemory()
 	mgr.SetDecisionStore(decisions)
 
 	parent, err := store.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)

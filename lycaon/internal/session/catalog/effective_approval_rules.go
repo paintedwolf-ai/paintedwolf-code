@@ -1,4 +1,4 @@
-package session
+package catalog
 
 import (
 	"context"
@@ -9,16 +9,16 @@ import (
 )
 
 // RuleLayers returns trusted device and project approval rules.
-func (m *Manager) RuleLayers(ctx context.Context, projectID string) settings.ApprovalRuleLayers {
+func (m *Service) RuleLayers(ctx context.Context, projectID string) settings.ApprovalRuleLayers {
 	// Settings reads use the catalog published to this process.
-	deviceView := m.Catalog.PublishedDeviceView(ctx)
+	deviceView := m.PublishedDeviceView(ctx)
 	if deviceView == nil {
 		return settings.ApprovalRuleLayers{}
 	}
 	if projectID == "" {
 		return ruleLayersFromViews(deviceView, nil)
 	}
-	return ruleLayersFromViews(deviceView, m.Catalog.ViewForProject(ctx, projectID))
+	return ruleLayersFromViews(deviceView, m.ViewForProject(ctx, projectID))
 }
 
 func ruleLayersFromViews(deviceView, projectView *catalogview.View) settings.ApprovalRuleLayers {

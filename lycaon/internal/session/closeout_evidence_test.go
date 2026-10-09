@@ -33,7 +33,7 @@ func (jobLister) ClaimWorkerBranch(context.Context, string) (*api.WorkerTask, er
 
 func TestCloseoutEvidenceListsDispatchedLegsSinceTheIntent(t *testing.T) {
 	st := store.NewMemory()
-	mgr := NewManager(st, nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	parent, err := st.Create(t.Context(), api.CreateSessionRequest{}, "project-1")
 	testutil.FailErr(t, "create parent", err)
 	intent := time.Unix(1_000, 0).UTC()
@@ -85,7 +85,7 @@ func TestWorkflowEvidenceSurvivesLaterUserMessagesAndCompaction(t *testing.T) {
 	if len(legs) != 1 || legs[0].ChildSessionID != child.ID {
 		t.Fatalf("run evidence = %+v", legs)
 	}
-	reviewers, err := mgr.Closeout.ReviewerEvidence(t.Context(), parent.ID, []api.Message{{Role: api.MessageRoleUser, CreatedAt: before.Add(time.Minute)}}, []string{"skeptic"})
+	reviewers, err := mgr.Coordinator.Closeout.ReviewerEvidence(t.Context(), parent.ID, []api.Message{{Role: api.MessageRoleUser, CreatedAt: before.Add(time.Minute)}}, []string{"skeptic"})
 	testutil.FailErr(t, "read reviewers without summaries", err)
 	if len(reviewers) != 1 || len(reviewers[0].LegIDs) != 1 || reviewers[0].LegIDs[0] != child.ID {
 		t.Fatalf("reviewer membership = %+v", reviewers)

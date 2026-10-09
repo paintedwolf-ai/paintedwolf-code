@@ -88,7 +88,7 @@ func (s *Handler) HandleUploadAttachment(w http.ResponseWriter, r *http.Request)
 
 // attachmentStore resolves one project's attachment store.
 func (s *Handler) AttachmentStore(ctx context.Context, projectID string) (blobstore.Store, bool) {
-	root := strings.TrimSpace(s.Sessions.HostDataDirFor(projectID))
+	root := strings.TrimSpace(s.Sessions.Workspace.HostDataDir(projectID))
 	if root == "" {
 		return blobstore.Store{}, false
 	}

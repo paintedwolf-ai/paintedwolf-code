@@ -19,7 +19,7 @@ import (
 
 func TestDeleteSessionSharesTurnLifecycleGate(t *testing.T) {
 	mem := store.NewMemory()
-	mgr := NewManager(mem, nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild, ProjectID: "p1"}, "p1")
 	testutil.FailErr(t, "create session", err)
 	turnLock := mgr.Runner.Execution.Prompt.Acquire(sess.ID)
@@ -38,7 +38,7 @@ func TestDeleteSessionDisposesBackgroundRuntimeBeforeRow(t *testing.T) {
 		t.Skip("sleep fixture is unix-oriented")
 	}
 	mem := store.NewMemory()
-	mgr := NewManager(mem, nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	reg := bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{})
 	mgr.SetBackgroundRegistry(reg)
 	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild, ProjectID: "p1"}, "p1")
@@ -63,7 +63,7 @@ func TestDeleteSessionDisposesBackgroundRuntimeBeforeRow(t *testing.T) {
 
 func TestDeleteSession_refusesWhileBound(t *testing.T) {
 	mem := store.NewMemory()
-	mgr := NewManager(mem, nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	ctx := context.Background()
 	sess, err := mem.Create(ctx, api.CreateSessionRequest{
 		Posture:   api.SessionPostureBuild,
@@ -97,7 +97,7 @@ func TestDeleteSession_refusesWhileBound(t *testing.T) {
 
 func TestBoundSession_archivePinRenameUnaffected(t *testing.T) {
 	mem := store.NewMemory()
-	mgr := NewManager(mem, nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	ctx := context.Background()
 	sess, err := mem.Create(ctx, api.CreateSessionRequest{
 		Posture:   api.SessionPostureBuild,

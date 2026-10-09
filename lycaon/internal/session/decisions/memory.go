@@ -1,4 +1,4 @@
-package session
+package decisions
 
 import (
 	"context"
@@ -9,18 +9,18 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// MemoryDecisionStore stores decisions for tests.
-type MemoryDecisionStore struct {
+// Memory stores decisions for tests.
+type Memory struct {
 	mu      sync.Mutex
 	byChild map[string]api.WorkerDecisionRequest
 }
 
-// NewMemoryDecisionStore returns an empty decision store.
-func NewMemoryDecisionStore() *MemoryDecisionStore {
-	return &MemoryDecisionStore{byChild: make(map[string]api.WorkerDecisionRequest)}
+// NewMemory returns an empty decision store.
+func NewMemory() *Memory {
+	return &Memory{byChild: make(map[string]api.WorkerDecisionRequest)}
 }
 
-func (s *MemoryDecisionStore) Put(_ context.Context, decision api.WorkerDecisionRequest) error {
+func (s *Memory) Put(_ context.Context, decision api.WorkerDecisionRequest) error {
 	decision, err := normalizeDecision(decision)
 	if err != nil {
 		return err
@@ -36,7 +36,7 @@ func (s *MemoryDecisionStore) Put(_ context.Context, decision api.WorkerDecision
 	return nil
 }
 
-func (s *MemoryDecisionStore) Get(_ context.Context, childSessionID string) (api.WorkerDecisionRequest, bool, error) {
+func (s *Memory) Get(_ context.Context, childSessionID string) (api.WorkerDecisionRequest, bool, error) {
 	if s == nil {
 		return api.WorkerDecisionRequest{}, false, nil
 	}
@@ -47,7 +47,7 @@ func (s *MemoryDecisionStore) Get(_ context.Context, childSessionID string) (api
 	return cloneDecision(decision), ok, nil
 }
 
-func (s *MemoryDecisionStore) GetByJob(_ context.Context, jobID string) (api.WorkerDecisionRequest, bool, error) {
+func (s *Memory) GetByJob(_ context.Context, jobID string) (api.WorkerDecisionRequest, bool, error) {
 	if s == nil {
 		return api.WorkerDecisionRequest{}, false, nil
 	}
@@ -68,7 +68,7 @@ func cloneDecision(decision api.WorkerDecisionRequest) api.WorkerDecisionRequest
 	return decision
 }
 
-func (s *MemoryDecisionStore) Clear(_ context.Context, childSessionID string) error {
+func (s *Memory) Clear(_ context.Context, childSessionID string) error {
 	if s == nil {
 		return nil
 	}

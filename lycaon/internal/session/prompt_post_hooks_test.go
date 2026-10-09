@@ -17,19 +17,19 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func newPostHookManager(t *testing.T) *Manager {
+func newPostHookManager(t *testing.T) *Host {
 	t.Helper()
 	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
 	hints, err := guidance.LoadHintConfigStock()
 	testutil.FailErr(t, "load hint registry", err)
 	mgr, _ := newTestManager(t)
 	mgr.SetRejectFormatter(guidance.NewStaticRejectFormatter(hints))
-	mgr.ensureCoordinatorRuntime()
+	mgr.Coordinator.Runtime
 	return mgr
 }
 
-func pendingProgressMissingNudge(mgr *Manager, sessionID string) bool {
-	return anchor.SameInform(mgr.ensureCoordinatorRuntime().Kicks().TakePendingKickID(sessionID), anchor.ProgressMissing)
+func pendingProgressMissingNudge(mgr *Host, sessionID string) bool {
+	return anchor.SameInform(mgr.Coordinator.Runtime.Kicks().TakePendingKickID(sessionID), anchor.ProgressMissing)
 }
 
 type postHookWorkflowContext struct {
@@ -86,8 +86,8 @@ func TestProgressMissingSkipsWorkerChild(t *testing.T) {
 	testutil.FailErr(t, "Create parent", err)
 	child, err := mem.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "CreateChild", err)
-	mgr.store = mem
-	mgr.Runner.PostTurn = postturn.New(mem, mgr.Guidance)
+	mgr.Coordinator.Context.Sessions.(Store) = mem
+	mgr.Runner.PostTurn = postturn.New(mem, mgr.Coordinator.Guidance)
 	mgr.SetProgressStore(progress.NewMemoryStore())
 
 	mgr.Runner.PostTurn.ProgressMissing(ctx, child.ID, []string{"task"})
@@ -107,8 +107,8 @@ func TestProgressMissingSkipsSpecWorkflowArtifacts(t *testing.T) {
 	mem := store.NewMemory()
 	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureSpec}, "proj-1")
 	testutil.FailErr(t, "Create session", err)
-	mgr.store = mem
-	mgr.Runner.PostTurn = postturn.New(mem, mgr.Guidance)
+	mgr.Coordinator.Context.Sessions.(Store) = mem
+	mgr.Runner.PostTurn = postturn.New(mem, mgr.Coordinator.Guidance)
 	mgr.SetProgressStore(progress.NewMemoryStore())
 
 	mgr.Runner.PostTurn.ProgressMissing(t.Context(), sess.ID, []string{"write"})
@@ -122,8 +122,8 @@ func TestWorkflowPhaseExitNudgesAfterUnrelatedToolArc(t *testing.T) {
 	mem := store.NewMemory()
 	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, "proj-1")
 	testutil.FailErr(t, "Create session", err)
-	mgr.store = mem
-	mgr.Runner.PostTurn = postturn.New(mem, mgr.Guidance)
+	mgr.Coordinator.Context.Sessions.(Store) = mem
+	mgr.Runner.PostTurn = postturn.New(mem, mgr.Coordinator.Guidance)
 	mgr.SetCoordinatorTurnFrameSource(postHookWorkflowContext{wf: feedback.WorkflowEvaluationContext{
 		WorkflowID:         "example",
 		CurrentPhase:       "intake",
@@ -137,7 +137,7 @@ func TestWorkflowPhaseExitNudgesAfterUnrelatedToolArc(t *testing.T) {
 	if !mgr.Runner.PostTurn.WorkflowExit(t.Context(), sess.ID, orchestration.ProfileCoordinator, []string{"read"}) {
 		t.Fatal("expected phase-exit nudge")
 	}
-	if id := mgr.ensureCoordinatorRuntime().Kicks().TakePendingKickID(sess.ID); !anchor.SameInform(id, anchor.PhaseExitRequired) {
+	if id := mgr.Coordinator.Runtime.Kicks().TakePendingKickID(sess.ID); !anchor.SameInform(id, anchor.PhaseExitRequired) {
 		t.Fatalf("kick id = %q", id)
 	}
 }
@@ -147,8 +147,8 @@ func TestWorkflowPhaseExitAllowsAnotherAsk(t *testing.T) {
 	mem := store.NewMemory()
 	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, "proj-1")
 	testutil.FailErr(t, "Create session", err)
-	mgr.store = mem
-	mgr.Runner.PostTurn = postturn.New(mem, mgr.Guidance)
+	mgr.Coordinator.Context.Sessions.(Store) = mem
+	mgr.Runner.PostTurn = postturn.New(mem, mgr.Coordinator.Guidance)
 	mgr.SetCoordinatorTurnFrameSource(postHookWorkflowContext{wf: feedback.WorkflowEvaluationContext{
 		WorkflowID:         "example",
 		CurrentPhase:       "intake",

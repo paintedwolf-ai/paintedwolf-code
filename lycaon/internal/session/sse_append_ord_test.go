@@ -25,7 +25,7 @@ func TestAppendMessagesSSECarriesOrdForEveryMessageKind(t *testing.T) {
 	store := store.NewSQL(sqlDB)
 	hub := events.NewMemoryHub()
 	pub := &events.Publisher{Hub: hub}
-	mgr := NewManager(store, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(store, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	mgr.SetEventPublisher(pub)
 
 	ctx := context.Background()
@@ -54,7 +54,7 @@ func TestAppendMessagesSSECarriesOrdForEveryMessageKind(t *testing.T) {
 			if msg.Kind == wire.MessageKindProgressUpdate || msg.Kind == wire.MessageKindProgressComplete {
 				msg.WorkflowRunID = runID
 			}
-			testutil.FailErr(t, "appendMessages", mgr.Transcript.Append(ctx, sess.ID, msg))
+			testutil.FailErr(t, "appendMessages", mgr.Runner.Transcript.Append(ctx, sess.ID, msg))
 
 			ev := waitParentMessageAppend(t, ch, sess.ID, msg.ID)
 			if ev.Message.Ord <= 0 {

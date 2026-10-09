@@ -119,7 +119,7 @@ type Server struct {
 	sessionStore    session.Store
 	rerank          decide.Reranker
 	personActions   *personactions.Store
-	sessions        *session.Manager
+	sessions        *session.Host
 	projectRegistry project.Registry
 	llmSvc          *llm.Service
 	settingsSvc     *settings.Service
@@ -175,7 +175,7 @@ type Dependencies struct {
 	Store          session.Store
 	PersonActions  *personactions.Store
 	Projects       project.Registry
-	Sessions       *session.Manager
+	Sessions       *session.Host
 	LLM            *llm.Service
 	CostTracker    cost.CostTracker
 	Settings       *settings.Service

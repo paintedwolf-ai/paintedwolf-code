@@ -7,8 +7,8 @@ import (
 	"github.com/lycaon/lycaon/internal/progress"
 )
 
-func pendingReconcileNudge(mgr *Manager, rootID string) (string, bool) {
-	id := mgr.ensureCoordinatorRuntime().Kicks().TakePendingKickID(rootID)
+func pendingReconcileNudge(mgr *Host, rootID string) (string, bool) {
+	id := mgr.Coordinator.Runtime.Kicks().TakePendingKickID(rootID)
 	return id, anchor.SameInform(id, anchor.ProgressStale)
 }
 

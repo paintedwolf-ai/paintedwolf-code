@@ -29,7 +29,7 @@ func TestMaybeAdvanceCoordinatorBatchOnTaskEnqueued_writerStillDispatches(t *tes
 	sqlDB := testdbfixture.Open(t, "batch-writer.db")
 
 	store := store.NewSQL(sqlDB)
-	mgr := session.NewManager(store, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	agents := orchestration.NewMemoryAgentRegistry()
 	testutil.FailErr(t, "LoadRequiredAgentRegistry", orchestration.LoadRequiredAgentRegistry(context.Background(), agents))
 	mgr.Profiles.SetAgentRegistry(agents)
@@ -51,7 +51,7 @@ func TestMaybeAdvanceCoordinatorBatchOnTaskEnqueued_writerStillDispatches(t *tes
 	_, err = wfMgr.Ambient.StartAmbient(ctx, sess.ID, ref.ID, ref.Version)
 	testutil.FailErr(t, "StartAmbient", err)
 
-	mgr.Batch.TaskEnqueued(ctx, sess.ID, orchestration.ProfileImplementer)
+	mgr.Coordinator.Batch.TaskEnqueued(ctx, sess.ID, orchestration.ProfileImplementer)
 
 	state := mgr.Workers.State.ForSession(ctx, sess)
 	if state.BatchPhase != batch.PhaseDispatch {

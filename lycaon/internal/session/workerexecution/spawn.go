@@ -140,7 +140,7 @@ func (m *Service) WorkerSummaryFinalizeOpts(ctx context.Context, sess *api.Sessi
 		MaxGroundingRetries: m.history.WorkerGroundingRetries(),
 		WorkflowHints:       m.workflowHints,
 		RenderWorkerKick:    m.RenderKick,
-		WorkspaceCheck:      m.workspaceCheck,
+		WorkspaceCheck:      m.WorkspaceCheck,
 		Ledger:              m.store,
 		Pipeline:            m.pipeline,
 		DecisionPending:     m.DecisionPending,

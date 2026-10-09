@@ -115,8 +115,8 @@ func listCoordinatorToolsForPosture(t *testing.T, row postureToolExpectation) []
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, projectDir)
 	rt, err := toolhost.NewRuntime(toolhost.RuntimeConfig{ConfigRoot: configRoot, Catalog: contractcheck.StockCatalog(t)})
 	contractcheck.FailErr(t, "toolhost.NewRuntime failed", err)
-	mgr := session.NewManager(store, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
-	mgr.Guards.SetInvoker(rt.Executor)
+	mgr := session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr.Coordinator.Guards.SetInvoker(rt.Executor)
 	workflowMgr := wireToolpolicyMatrixContract(t, configRoot, mgr, store, rt.Registry, sqlDB)
 
 	ctx := context.Background()
@@ -128,7 +128,7 @@ func listCoordinatorToolsForPosture(t *testing.T, row postureToolExpectation) []
 		}
 	}
 	names := make([]string, 0)
-	for _, meta := range mgr.Guards.Policy().ListForPrompt(ctx, sess, "coordinator") {
+	for _, meta := range mgr.Coordinator.Guards.Policy().ListForPrompt(ctx, sess, "coordinator") {
 		names = append(names, meta.Name)
 	}
 	return names
@@ -137,7 +137,7 @@ func listCoordinatorToolsForPosture(t *testing.T, row postureToolExpectation) []
 func wireToolpolicyMatrixContract(
 	t *testing.T,
 	configRoot string,
-	mgr *session.Manager,
+	mgr *session.Host,
 	store session.Store,
 	reg *tools.DefaultRegistry,
 	sqlDB db.Handle,
@@ -156,7 +156,7 @@ func wireToolpolicyMatrixContract(
 	engine, err := rules.NewPostureRuleEngine(postures, packs, condReg)
 	contractcheck.FailErr(t, "rules.NewPostureRuleEngine failed", err)
 	mgr.Profiles.SetPostureRegistry(postures)
-	mgr.Guards.SetRules(engine)
+	mgr.Coordinator.Guards.SetRules(engine)
 
 	agents := orchestration.NewMemoryAgentRegistry()
 	_ = orchestration.LoadRequiredAgentRegistry(context.Background(), agents)

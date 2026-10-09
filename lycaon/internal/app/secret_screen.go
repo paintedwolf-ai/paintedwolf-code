@@ -146,7 +146,7 @@ func (b sessionWiring) wireSecretEvidence(m *secretmatch.Matcher, fp *secretmatc
 		if b.mgr == nil {
 			return
 		}
-		go b.mgr.Transcript.SweepSessionTree(context.WithoutCancel(context.Background()), rootSessionID, generation)
+		go b.mgr.Runner.Transcript.SweepSessionTree(context.WithoutCancel(context.Background()), rootSessionID, generation)
 	})
 	// Capture tags correlate redacted occurrences.
 	observability.SetCaptureRedactor(func(text string) string {

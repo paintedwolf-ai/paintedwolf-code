@@ -37,7 +37,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func wireImplementConvergenceHooks(t *testing.T, mgr *session.Manager, wfMgr *workflow.RunManager, q session.WorkerCycleLister) {
+func wireImplementConvergenceHooks(t *testing.T, mgr *session.Host, wfMgr *workflow.RunManager, q session.WorkerCycleLister) {
 	t.Helper()
 	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{
 		WorkerCycleIdle: func(projectID, sessionID, completingJobID string) (bool, error) {
@@ -55,7 +55,7 @@ func wireImplementConvergenceHooks(t *testing.T, mgr *session.Manager, wfMgr *wo
 			return
 		}
 		if id, ok := anchor.ParseID(kickID); ok {
-			mgr.Guidance.Emit(ctx, rc.SessionID, id, mgr.Workers.Results.EnvelopeForTerminal(ctx, rc.SessionID, ""))
+			mgr.Coordinator.Guidance.Emit(ctx, rc.SessionID, id, mgr.Workers.Results.EnvelopeForTerminal(ctx, rc.SessionID, ""))
 		}
 	}
 	wfMgr.Publication.OnPhaseAutoAdvanced = func(ctx context.Context, sessionID, runID, previousPhase, newPhase string) {
@@ -79,7 +79,7 @@ func wireImplementConvergenceHooks(t *testing.T, mgr *session.Manager, wfMgr *wo
 		if rc == nil {
 			return
 		}
-		mgr.Guidance.EmitMatch(ctx, rc.SessionID, anchor.PhaseEntered, anchor.Envelope{}, anchor.MatchContext{
+		mgr.Coordinator.Guidance.EmitMatch(ctx, rc.SessionID, anchor.PhaseEntered, anchor.Envelope{}, anchor.MatchContext{
 			Surface:  "phase",
 			Phase:    rc.Phase,
 			Workflow: rc.WorkflowID,
@@ -88,7 +88,7 @@ func wireImplementConvergenceHooks(t *testing.T, mgr *session.Manager, wfMgr *wo
 }
 
 // drainCoordinatorAsyncTurnsOnCleanup prevents writes during temp-dir cleanup.
-func drainCoordinatorAsyncTurnsOnCleanup(t *testing.T, mgr *session.Manager) {
+func drainCoordinatorAsyncTurnsOnCleanup(t *testing.T, mgr *session.Host) {
 	t.Helper()
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -107,7 +107,7 @@ func setImplementRunPhase(t *testing.T, wfStore *runstate.Repository, run *wire.
 }
 
 type loopFixture struct {
-	mgr   *session.Manager
+	mgr   *session.Host
 	wfMgr *workflow.RunManager
 	store *store.SQL
 	sess  *wire.Session
@@ -120,11 +120,11 @@ func setupLoopFixture(t *testing.T, cfg settings.SessionLimits) loopFixture {
 
 	store := store.NewSQL(sqlDB)
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ack"}}}))
-	mgr := session.NewManager(store, rec, tools.NewStubRegistry(), cfg)
+	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: cfg, Cost: nil}, tools.NewStubRegistry())
 	agents := orchestration.NewMemoryAgentRegistry()
 	_ = orchestration.LoadRequiredAgentRegistry(context.Background(), agents)
 	mgr.Profiles.SetAgentRegistry(agents)
-	testutil.FailErr(t, "install anchor registry", mgr.Guidance.InstallAnchorRegistry())
+	testutil.FailErr(t, "install anchor registry", mgr.Coordinator.Guidance.InstallAnchorRegistry())
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
 	wirePromptTestManager(t, mgr)
 
@@ -136,7 +136,7 @@ func setupLoopFixture(t *testing.T, cfg settings.SessionLimits) loopFixture {
 	dir := t.TempDir()
 	blueprintStore := blueprint.NewFileStoreForTest(dir)
 	blueprintMgr := blueprint.NewManager(blueprintStore)
-	wfMgr.Blueprints.Creator = blueprint.WorkflowBlueprintCreator{Manager: blueprintMgr}
+	wfMgr.Blueprints.Creator = blueprint.WorkflowBlueprintCreator{Host: blueprintMgr}
 	wfMgr.Blueprints.Getter = blueprintMgr
 	wfMgr.Presentation.BlueprintGetter = blueprintMgr
 	wfMgr.Approvals.Getter = blueprintMgr
@@ -312,11 +312,11 @@ func TestImplementWorkerSummaryLoopWakesWithCompletingJobStillRunning(t *testing
 
 	store := store.NewSQL(sqlDB)
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "traced"}}}))
-	mgr := session.NewManager(store, rec, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	agents := orchestration.NewMemoryAgentRegistry()
 	_ = orchestration.LoadRequiredAgentRegistry(context.Background(), agents)
 	mgr.Profiles.SetAgentRegistry(agents)
-	testutil.FailErr(t, "install anchor registry", mgr.Guidance.InstallAnchorRegistry())
+	testutil.FailErr(t, "install anchor registry", mgr.Coordinator.Guidance.InstallAnchorRegistry())
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
 
 	wfStore := workflowpersistence.New(sqlDB)
@@ -393,11 +393,11 @@ func TestImplementWorkerCompleteFiresSingleLoopWake(t *testing.T) {
 
 	store := store.NewSQL(sqlDB)
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "synthesized"}}}))
-	mgr := session.NewManager(store, rec, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	agents := orchestration.NewMemoryAgentRegistry()
 	_ = orchestration.LoadRequiredAgentRegistry(context.Background(), agents)
 	mgr.Profiles.SetAgentRegistry(agents)
-	testutil.FailErr(t, "install anchor registry", mgr.Guidance.InstallAnchorRegistry())
+	testutil.FailErr(t, "install anchor registry", mgr.Coordinator.Guidance.InstallAnchorRegistry())
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
 
 	wfStore := workflowpersistence.New(sqlDB)
@@ -496,11 +496,11 @@ func TestImplementWorkerSummaryLoopWakesCoordinator(t *testing.T) {
 
 	store := store.NewSQL(sqlDB)
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "traced"}}}))
-	mgr := session.NewManager(store, rec, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	agents := orchestration.NewMemoryAgentRegistry()
 	_ = orchestration.LoadRequiredAgentRegistry(context.Background(), agents)
 	mgr.Profiles.SetAgentRegistry(agents)
-	testutil.FailErr(t, "install anchor registry", mgr.Guidance.InstallAnchorRegistry())
+	testutil.FailErr(t, "install anchor registry", mgr.Coordinator.Guidance.InstallAnchorRegistry())
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
 
 	wfStore := workflowpersistence.New(sqlDB)
@@ -637,7 +637,7 @@ func autoContinuePtrTime(t time.Time) *time.Time {
 }
 
 // simulateWorkerJobComplete applies the queue and session terminal hooks.
-func simulateWorkerJobComplete(t *testing.T, mgr *session.Manager, q worker.WorkerQueue, jobID string) {
+func simulateWorkerJobComplete(t *testing.T, mgr *session.Host, q worker.WorkerQueue, jobID string) {
 	t.Helper()
 	ctx := context.Background()
 	result := wire.WorkerResult{Status: "complete"}
@@ -650,7 +650,7 @@ func simulateWorkerJobComplete(t *testing.T, mgr *session.Manager, q worker.Work
 	if !won {
 		t.Fatal("completion claim lost")
 	}
-	bridge := &worker.SessionOutcomeBridge{Sessions: mgr, Results: mgr.Workers.Results, State: mgr.Workers.State, Closure: mgr.ProgressClosure}
+	bridge := &worker.SessionOutcomeBridge{Workers: mgr.Coordinator.Workers, Loop: mgr.Coordinator.Runtime.CoordinatorLoop(), Results: mgr.Workers.Results, State: mgr.Workers.State, Closure: mgr.Coordinator.ProgressClosure}
 	testutil.FailErr(t, "OnWorkerComplete", bridge.OnWorkerComplete(ctx, jobID, result))
 	testutil.FailErr(t, "acknowledge worker outcome", q.MarkOutcomeDelivered(ctx, jobID))
 }
@@ -660,12 +660,12 @@ func TestImplementWorkerSummaryPartialSkipsLoopWake(t *testing.T) {
 
 	store := store.NewSQL(sqlDB)
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ack"}}}))
-	mgr := session.NewManager(store, rec, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	mgr.SetOARPipeline(sessionTestOARPipeline(t), oar.NewRenderer(nil, nil))
 	agents := orchestration.NewMemoryAgentRegistry()
 	_ = orchestration.LoadRequiredAgentRegistry(context.Background(), agents)
 	mgr.Profiles.SetAgentRegistry(agents)
-	testutil.FailErr(t, "install anchor registry", mgr.Guidance.InstallAnchorRegistry())
+	testutil.FailErr(t, "install anchor registry", mgr.Coordinator.Guidance.InstallAnchorRegistry())
 
 	wfStore := workflowpersistence.New(sqlDB)
 	wfMgr := workflow.NewManager(wfStore, store, nil, nil)

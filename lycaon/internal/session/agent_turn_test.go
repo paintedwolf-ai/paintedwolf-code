@@ -26,7 +26,7 @@ func TestProf10PostTurnGatesCompletedTurnOnce(t *testing.T) {
 	mgr, _ := newTestManager(t)
 	mgr.SetOARPipeline(pipeline, nil)
 	sess := &api.Session{ID: "child", ParentSessionID: "parent"}
-	reject, blocked := mgr.Guards.BeforeFinish(t.Context(), sess, nil, "", "assembled prose", "", true, nil, true)
+	reject, blocked := mgr.Coordinator.Guards.BeforeFinish(t.Context(), sess, nil, "", "assembled prose", "", true, nil, true)
 	if !blocked || reject == nil || reject.Code() != "TURN_POLICY" {
 		t.Fatalf("[OAR-PROF-10] completed turn bypassed policy: blocked=%v reject=%v", blocked, reject)
 	}

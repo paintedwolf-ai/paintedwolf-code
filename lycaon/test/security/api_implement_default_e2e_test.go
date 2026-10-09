@@ -108,7 +108,7 @@ func TestImplementDefaultParitySmoke(t *testing.T) {
 		t.Fatalf("GET active workflow status = %d want 200 body=%s", w.Code, w.Body.String())
 	}
 
-	msgs, err := h.SessionMgr.Transcript.GetMessages(ctx, sess.ID)
+	msgs, err := h.SessionMgr.Runner.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "h.SessionMgr.GetMessages failed", err)
 	foundTask := false
 	for _, msg := range msgs {

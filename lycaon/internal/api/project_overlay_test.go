@@ -36,8 +36,8 @@ func newProjectOverlayTestServer(t *testing.T, opts ...testDeps) (*Server, *proj
 		}},
 	})
 	toolRegistry := tools.NewStubRegistry()
-	mgr := session.NewManager(sessionStore, mock, toolRegistry, settings.DefaultSessionLimits())
-	mgr.Guards.SetInvoker(testtool.RegistryInvoker{Registry: toolRegistry})
+	mgr := session.NewHost(sessionStore, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolRegistry)
+	mgr.Coordinator.Guards.SetInvoker(testtool.RegistryInvoker{Registry: toolRegistry})
 
 	postures, err := profiles.LoadPostureRegistry()
 	testutil.FailErr(t, "load posture registry", err)
@@ -51,7 +51,7 @@ func newProjectOverlayTestServer(t *testing.T, opts ...testDeps) (*Server, *proj
 	overlay := rules.NewProjectRulesOverlay(conditionRegistry)
 	engine.Overlay = overlay
 	mgr.Profiles.SetPostureRegistry(postures)
-	mgr.Guards.SetRules(engine)
+	mgr.Coordinator.Guards.SetRules(engine)
 	mgr.SetProjectRegistry(projects)
 
 	surfaces, err := settings.NewTrustSurfacesStoreAt(filepath.Join(t.TempDir(), "trust-surfaces.yaml"))

@@ -40,13 +40,13 @@ func (s *stubSessionWorkerAbort) AbortAllWorkers(_ context.Context, sessionID, p
 func TestAbortStopsEntireSessionTreeAndClearsQueuedTurns(t *testing.T) {
 	ctx := context.Background()
 	st := store.NewMemory()
-	mgr := NewManager(st, nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	abort := &stubSessionWorkerAbort{}
 	workflows := &stubSessionWorkflowStop{}
 	warmer := &fakeIndexWarmer{}
 	mgr.SetSessionWorkerAbort(abort)
 	mgr.Stops.SetWorkflowStop(workflows)
-	mgr.Research.SetWarmer(warmer)
+	mgr.Chats.Research.SetWarmer(warmer)
 	root, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create root", err)
 	child, err := st.CreateChild(ctx, root, api.SpawnChildRequest{AgentType: "implementer"})
@@ -73,8 +73,8 @@ func TestAbortStopsEntireSessionTreeAndClearsQueuedTurns(t *testing.T) {
 	beforeQueueRevision := map[string]uint64{}
 	for _, id := range []string{root.ID, child.ID} {
 		testutil.FailErr(t, "mark tree busy", st.SetSessionStatus(ctx, id, api.SessionStatusBusy))
-		mgr.queue.AppendOrdered(id, "queued-"+id, testutil.HostOwner().ID, "next turn", 0, time.Time{})
-		beforeQueueRevision[id] = mgr.Drafts.Snapshot(id).Revision
+		mgr.Resources.Queue.AppendOrdered(id, "queued-"+id, testutil.HostOwner().ID, "next turn", 0, time.Time{})
+		beforeQueueRevision[id] = mgr.Chats.Drafts.Snapshot(id).Revision
 	}
 
 	testutil.FailErr(t, "abort child tree", mgr.Stops.Abort(ctx, child.ID, "user stopped"))
@@ -84,7 +84,7 @@ func TestAbortStopsEntireSessionTreeAndClearsQueuedTurns(t *testing.T) {
 		if sess.Status != api.SessionStatusIdle {
 			t.Fatalf("session %s status = %q, want idle", id, sess.Status)
 		}
-		if draft := mgr.Drafts.Snapshot(id); len(draft.QueueItems) != 0 {
+		if draft := mgr.Chats.Drafts.Snapshot(id); len(draft.QueueItems) != 0 {
 			t.Fatalf("session %s queue = %+v, want empty", id, draft)
 		} else if draft.Revision <= beforeQueueRevision[id] {
 			t.Fatalf("session %s queue revision = %d, want newer than %d", id, draft.Revision, beforeQueueRevision[id])
@@ -121,7 +121,7 @@ func TestAbortStopsEntireSessionTreeAndClearsQueuedTurns(t *testing.T) {
 func TestAbortRetainsAddressedQueuedTurn(t *testing.T) {
 	ctx := context.Background()
 	st := store.NewMemory()
-	mgr := NewManager(st, nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	testutil.FailErr(t, "mark busy", st.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
@@ -133,7 +133,7 @@ func TestAbortRetainsAddressedQueuedTurn(t *testing.T) {
 		Origin: store.PromptSubmissionOriginUser, SubmittedBy: sess.OwnerPersonID,
 	})
 	testutil.FailErr(t, "put queued prompt receipt", err)
-	draft := mgr.queue.AppendOrdered(sess.ID, queuedReceiptID, testutil.HostOwner().ID, "use the new direction", 1, time.Now())
+	draft := mgr.Resources.Queue.AppendOrdered(sess.ID, queuedReceiptID, testutil.HostOwner().ID, "use the new direction", 1, time.Now())
 
 	const runningReceiptID = "running-old-direction"
 	_, _, err = st.PutPromptSubmission(ctx, store.PromptSubmission{
@@ -149,7 +149,7 @@ func TestAbortRetainsAddressedQueuedTurn(t *testing.T) {
 	}
 
 	testutil.FailErr(t, "abort with queued direction", mgr.Stops.Abort(ctx, sess.ID, "use queued direction"))
-	if after := mgr.Drafts.Snapshot(sess.ID); after.Revision != draft.Revision || len(after.QueueItems) != 1 || after.QueueItems[0].ID != queuedReceiptID {
+	if after := mgr.Chats.Drafts.Snapshot(sess.ID); after.Revision != draft.Revision || len(after.QueueItems) != 1 || after.QueueItems[0].ID != queuedReceiptID {
 		t.Fatalf("queue after abort = %+v, want preserved draft %+v", after, draft)
 	}
 	queued, err := st.GetPromptSubmission(ctx, queuedReceiptID)
@@ -171,7 +171,7 @@ func (s *stubSessionWorkerAbort) AbortWorkersForRoot(_ context.Context, _, _ str
 func TestAbortCancelsWorkersAndMarksIdle(t *testing.T) {
 	ctx := context.Background()
 	store := store.NewMemory()
-	mgr := NewManager(store, nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(store, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	abort := &stubSessionWorkerAbort{}
 	mgr.SetSessionWorkerAbort(abort)
 

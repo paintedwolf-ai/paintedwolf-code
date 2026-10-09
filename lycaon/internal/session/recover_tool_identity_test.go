@@ -23,7 +23,7 @@ func TestInterruptedToolProjectionRetainsIdentityAcrossRecoveryPaths(t *testing.
 			database := testdbfixture.Open(t, "interrupted-identity.db")
 			testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
 			st := store.NewSQL(database)
-			manager := NewManager(st, nil, nil, settings.DefaultSessionLimits())
+			manager := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 			recorder := invocation.NewSQLRecorder(database)
 			manager.SetInvocationRecorder(recorder)
 			sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)

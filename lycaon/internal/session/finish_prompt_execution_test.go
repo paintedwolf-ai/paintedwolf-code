@@ -33,13 +33,13 @@ func TestFinishPromptExecutionDrainsLoopPendingAfterCanceledRequestCtx(t *testin
 
 	store := store.NewSQL(sqlDB)
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "follow-up"}}}))
-	mgr := session.NewManager(store, rec, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	agents := orchestration.NewMemoryAgentRegistry()
 	_ = orchestration.LoadRequiredAgentRegistry(context.Background(), agents)
 	mgr.Profiles.SetAgentRegistry(agents)
 	wirePromptTestManager(t, mgr)
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
-	testutil.FailErr(t, "install anchor registry", mgr.Guidance.InstallAnchorRegistry())
+	testutil.FailErr(t, "install anchor registry", mgr.Coordinator.Guidance.InstallAnchorRegistry())
 
 	wfStore := workflow.NewSQLStore(sqlDB)
 	bundledDir := filepath.Join(root, "config", "packs", "painted-wolf", "platform", "workflows")

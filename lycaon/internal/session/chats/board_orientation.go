@@ -1,11 +1,11 @@
-package session
+package chats
 
 import (
 	"context"
 )
 
 // ReopenBoardOrientationOnRootAttach refreshes open project sessions.
-func (m *Manager) ReopenBoardOrientationOnRootAttach(ctx context.Context, projectID string) {
+func (m *Service) ReopenOrientation(ctx context.Context, projectID string, board Orientation) {
 	if m == nil || m.store == nil || projectID == "" {
 		return
 	}
@@ -13,8 +13,6 @@ func (m *Manager) ReopenBoardOrientationOnRootAttach(ctx context.Context, projec
 	if err != nil {
 		return
 	}
-	rt := m.ensureCoordinatorRuntime()
-	board := rt.Board()
 	if board == nil {
 		return
 	}
@@ -25,3 +23,5 @@ func (m *Manager) ReopenBoardOrientationOnRootAttach(ctx context.Context, projec
 		board.InvalidateOrientation(sess.ID)
 	}
 }
+
+type Orientation interface{ InvalidateOrientation(string) }

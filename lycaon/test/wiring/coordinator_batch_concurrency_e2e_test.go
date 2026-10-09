@@ -104,7 +104,7 @@ func TestCoordinatorBatchThreeTasksAndFollowUpE2E(t *testing.T) {
 		testutil.FailErr(t, "Prompt", err)
 	}
 
-	msgs, err := h.SessionMgr.Transcript.GetMessages(ctx, sess.ID)
+	msgs, err := h.SessionMgr.Runner.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	if got := countTaskEnqueuedToolMessages(msgs); got != 3 {
 		t.Fatalf("enqueued task tool messages = %d want 3", got)
@@ -149,7 +149,7 @@ func TestCoordinatorBatchTaskAndReadFollowUpE2E(t *testing.T) {
 		testutil.FailErr(t, "Prompt", err)
 	}
 
-	msgs, err := h.SessionMgr.Transcript.GetMessages(ctx, sess.ID)
+	msgs, err := h.SessionMgr.Runner.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	if countTaskEnqueuedToolMessages(msgs) != 1 {
 		t.Fatalf("expected one enqueued task(), got %d enqueued messages", countTaskEnqueuedToolMessages(msgs))
@@ -176,7 +176,7 @@ func TestCoordinatorBatchOverCapRejectedInSameTurnE2E(t *testing.T) {
 		testutil.FailErr(t, "Prompt", err)
 	}
 
-	msgs, err := h.SessionMgr.Transcript.GetMessages(ctx, sess.ID)
+	msgs, err := h.SessionMgr.Runner.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	if got := countTaskEnqueuedToolMessages(msgs); got != spawn.MaxInFlightTaskWorkers {
 		t.Fatalf("enqueued = %d want %d before cap reject", got, spawn.MaxInFlightTaskWorkers)
@@ -206,7 +206,7 @@ func TestCoordinatorBatchRosterNoteOnMultiTaskE2E(t *testing.T) {
 		testutil.FailErr(t, "Prompt", err)
 	}
 
-	msgs, err := h.SessionMgr.Transcript.GetMessages(ctx, sess.ID)
+	msgs, err := h.SessionMgr.Runner.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	if !messageContains(msgs, "batch dispatch") {
 		t.Fatal("expected batch roster note when ≥2 task() enqueue in one turn")
@@ -235,7 +235,7 @@ func TestCoordinatorBatchRosterNoteAbsentOnSingleTaskE2E(t *testing.T) {
 		testutil.FailErr(t, "Prompt", err)
 	}
 
-	msgs, err := h.SessionMgr.Transcript.GetMessages(ctx, sess.ID)
+	msgs, err := h.SessionMgr.Runner.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	if messageContains(msgs, "batch dispatch") {
 		t.Fatal("batch roster note must not appear for single task() enqueue")

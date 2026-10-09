@@ -209,7 +209,7 @@ func (m *Service) StopRuntime(ctx context.Context, sess store.SessionTreeMember,
 		draft := m.queue.CancelAll(sess.ID)
 		m.drafts.Publish(ctx, sess.ID, draft.Revision)
 	}
-	errs = append(errs, m.interruptions.InterruptTools(ctx, sess.ID))
+	errs = append(errs, m.Recovery.InterruptTools(ctx, sess.ID))
 	return errors.Join(errs...)
 }
 

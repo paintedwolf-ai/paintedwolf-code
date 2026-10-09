@@ -250,7 +250,7 @@ func withTestFileBriefings(t *testing.T, store filebriefing.Store, cfg filebrief
 			enabled = d.Settings.FileSummaries
 		}
 		service := filebriefing.NewService(t.Context(), filebriefing.Dependencies{
-			Store: store, Config: cfg, Generator: filebriefing.NewModelGenerator(d.LLM, d.Sessions.CostTracker()), Events: d.Events, Settings: enabled, Logger: slog.Default(),
+			Store: store, Config: cfg, Generator: filebriefing.NewModelGenerator(d.LLM, d.Sessions.Coordinator.Model.Cost), Events: d.Events, Settings: enabled, Logger: slog.Default(),
 		})
 		t.Cleanup(func() { service.Stop(); service.Wait(context.Background()) })
 		d.FileBriefings = service

@@ -78,7 +78,7 @@ func TestInvestigateTaskFanOutBlocksInvestigateUntilWorkersIdle(t *testing.T) {
 		t.Fatal("expected workers in flight after task() from investigate turn")
 	}
 
-	msgs, err := h.SessionMgr.Transcript.GetMessages(ctx, sess.ID)
+	msgs, err := h.SessionMgr.Runner.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	wakeProfile := surface.ResolveTurnProfile(
 		api.CoordinatorRunContext{WorkflowID: "implement", CurrentPhase: "work"},
@@ -143,7 +143,7 @@ func TestInvestigateReturnsAfterWorkersCompleteAndNoQueuedPromotion(t *testing.T
 		testutil.FailErr(t, "DrainPendingWorkerJobs", err)
 	}
 
-	msgs, err := h.SessionMgr.Transcript.GetMessages(ctx, sess.ID)
+	msgs, err := h.SessionMgr.Runner.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	state := h.SessionMgr.Workers.State.ForSession(ctx, sess)
 	if len(state.PendingOverlayIDs) == 0 {
@@ -152,7 +152,7 @@ func TestInvestigateReturnsAfterWorkersCompleteAndNoQueuedPromotion(t *testing.T
 	if err := PromotePendingWriteOverlays(ctx, h, sess.ProjectID, sess.ID); err != nil {
 		testutil.FailErr(t, "PromotePendingWriteOverlays", err)
 	}
-	msgs, err = h.SessionMgr.Transcript.GetMessages(ctx, sess.ID)
+	msgs, err = h.SessionMgr.Runner.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages after promote", err)
 	state = h.SessionMgr.Workers.State.ForSession(ctx, sess)
 	if len(state.PendingOverlayIDs) > 0 {
@@ -164,7 +164,7 @@ func TestInvestigateReturnsAfterWorkersCompleteAndNoQueuedPromotion(t *testing.T
 	settled := testutil.WaitForNoFatal(15*time.Second, func() bool {
 		state = h.SessionMgr.Workers.State.ForSession(ctx, sess)
 		if state.WorkersInFlight == 0 && state.BatchPhase != batch.PhaseDispatch {
-			msgs, err = h.SessionMgr.Transcript.GetMessages(ctx, sess.ID)
+			msgs, err = h.SessionMgr.Runner.Transcript.GetMessages(ctx, sess.ID)
 			if err == nil && len(state.PendingOverlayIDs) == 0 {
 				runCtx, rerr := h.SessionMgr.Coordinator.Context.RunContext(ctx, sess.ID)
 				if rerr == nil {

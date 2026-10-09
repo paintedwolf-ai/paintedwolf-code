@@ -27,7 +27,7 @@ func TestCloseoutBlocksCompletionReportBeforeReportPhase(t *testing.T) {
 		ReportCloseoutPending: true,
 	}}))
 
-	reject, blocked := mgr.Guards.BeforeReportPhase(
+	reject, blocked := mgr.Coordinator.Guards.BeforeReportPhase(
 		context.Background(), sess, `{"synthesis":"done"}`, "implement_synthesis", true,
 	)
 	if !blocked {
@@ -44,14 +44,14 @@ func TestCloseoutPhaseGuardAllowsInterimProseAndReportPhase(t *testing.T) {
 		Phase:                 "ingest",
 		ReportCloseoutPending: true,
 	}}))
-	if _, blocked := mgr.Guards.BeforeReportPhase(
+	if _, blocked := mgr.Coordinator.Guards.BeforeReportPhase(
 		context.Background(), sess, "Still collecting scans.", "implement_synthesis", true,
 	); blocked {
 		t.Fatal("interim prose must not be treated as a completion report")
 	}
 
 	mgr.SetWorkflowDomains(workflowDomainFixture(phaseGuardWorkflowView{state: workflowfacts.WorkflowPhaseGuardState{Phase: "report"}}))
-	if _, blocked := mgr.Guards.BeforeReportPhase(
+	if _, blocked := mgr.Coordinator.Guards.BeforeReportPhase(
 		context.Background(), sess, `{"synthesis":"done"}`, "implement_synthesis", true,
 	); blocked {
 		t.Fatal("report phase must accept the completion report")

@@ -40,7 +40,7 @@ func (s *putFailStore) PutWorktreeBinding(ctx context.Context, b store.WorktreeB
 	return s.Store.PutWorktreeBinding(ctx, b)
 }
 
-func newWorktreeTestServer(t *testing.T, opts ...testDeps) (*Server, *session.Manager, string) {
+func newWorktreeTestServer(t *testing.T, opts ...testDeps) (*Server, *session.Host, string) {
 	t.Helper()
 	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	dir := initCommittedRepoDir(t)
@@ -48,7 +48,7 @@ func newWorktreeTestServer(t *testing.T, opts ...testDeps) (*Server, *session.Ma
 	database := testdbfixture.Open(t, "worktree.db")
 	mem := store.NewSQL(database)
 	mock := llm.NewMockProvider(testMockConfig(t))
-	mgr := session.NewManager(mem, mock, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(mem, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	wireTestBindingRegistry(t)
 	reg := project.NewSQLRegistry(database)
 	p, err := project.CreateWithRoot(t.Context(), reg, dir)
@@ -366,7 +366,7 @@ func TestGitWorktreeBindRollsBack(t *testing.T) {
 	mem := store.NewMemory()
 	failing := &putFailStore{Store: mem, failPut: true}
 	mock := llm.NewMockProvider(testMockConfig(t))
-	mgr := session.NewManager(failing, mock, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(failing, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	wireTestBindingRegistry(t)
 	reg := project.NewMemoryRegistry()
 	p, err := project.CreateWithRoot(t.Context(), reg, dir)

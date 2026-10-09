@@ -79,7 +79,7 @@ rules:
 	if _, err := h.SessionMgr.Submissions.Prompt(workerCtx, child.ID, "[[scn:project_rule_write]] attempt project write"); err != nil {
 		testutil.FailErr(t, "prompt denied write", err)
 	}
-	messages, err := h.SessionMgr.Transcript.GetMessages(t.Context(), child.ID)
+	messages, err := h.SessionMgr.Runner.Transcript.GetMessages(t.Context(), child.ID)
 	testutil.FailErr(t, "read denied tool result", err)
 	for _, tool := range recording.LastRequest().Tools {
 		if tool.Name == "write" {

@@ -56,7 +56,7 @@ func lastSessionEvent(t *testing.T, published []api.SessionEvent) api.SessionEve
 }
 
 // observePendingPrompts wires a publisher that reads session state from mgr.
-func observePendingPrompts(t *testing.T, mgr *Manager, st *store.Memory) (*events.MemoryHub, *api.Session, <-chan api.EventEnvelope) {
+func observePendingPrompts(t *testing.T, mgr *Host, st *store.Memory) (*events.MemoryHub, *api.Session, <-chan api.EventEnvelope) {
 	t.Helper()
 	hub := events.NewMemoryHub()
 	mgr.SetEventPublisher(&events.Publisher{Hub: hub, SessionState: mgr.Runner.SubmissionState})
@@ -136,7 +136,7 @@ func TestPromptStopsPendingWhenItsTurnBegins(t *testing.T) {
 	ctx := t.Context()
 	mgr, st := newTestManager(t)
 	hub, sess, ch := observePendingPrompts(t, mgr, st)
-	mgr.llm = failingTurnClient{&failure.ProviderEmptyCompletionError{ProviderID: "fixture"}}
+	mgr.Coordinator.Model.LLM = failingTurnClient{&failure.ProviderEmptyCompletionError{ProviderID: "fixture"}}
 
 	in := promptinput.Input{Text: "Continue."}
 	row, _, err := mgr.Submissions.AdmitPrompt(ctx, sess.ID, uuid.NewString(), in, in)
@@ -217,13 +217,13 @@ func TestDraftItemsPendUnlessHeldForEditing(t *testing.T) {
 		t.Fatalf("routed update = %+v, want an unheld draft item pending", last)
 	}
 
-	draft, err := mgr.Drafts.SetHold(ctx, sess.ID, mgr.Drafts.Snapshot(sess.ID).Revision, true)
+	draft, err := mgr.Chats.Drafts.SetHold(ctx, sess.ID, mgr.Chats.Drafts.Snapshot(sess.ID).Revision, true)
 	testutil.FailErr(t, "hold draft", err)
 	if last := lastSessionEvent(t, sessionEventsFor(t, hub, ch, sess.ID)); last.PromptPending {
 		t.Fatalf("held update = %+v, want a held draft item to wait on the person", last)
 	}
 
-	if _, err := mgr.Drafts.Send(ctx, sess.ID, draft.Revision); err != nil {
+	if _, err := mgr.Chats.Drafts.Send(ctx, sess.ID, draft.Revision); err != nil {
 		t.Fatalf("reserve the held item: %v", err)
 	}
 	if last := lastSessionEvent(t, sessionEventsFor(t, hub, ch, sess.ID)); !last.PromptPending {

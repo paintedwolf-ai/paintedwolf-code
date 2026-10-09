@@ -37,9 +37,9 @@ func (g *growingRedactor) redact(_ context.Context, msg api.Message) (api.Messag
 func TestSweepRewritesRowsScreenedBeforeTheEvidenceGrew(t *testing.T) {
 	ctx := context.Background()
 	mem := store.NewMemory()
-	mgr := NewManager(mem, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	evidence := &growingRedactor{}
-	mgr.Transcript.SetRedactor(evidence.redact)
+	mgr.Runner.Transcript.SetRedactor(evidence.redact)
 	sess, err := mem.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
@@ -48,7 +48,7 @@ func TestSweepRewritesRowsScreenedBeforeTheEvidenceGrew(t *testing.T) {
 		ID: "tool-1", Role: api.MessageRoleTool,
 		Content: "Access token was successfully created: " + sweepSecret,
 	}
-	testutil.FailErr(t, "append mint row", mgr.Transcript.Append(ctx, sess.ID, mint))
+	testutil.FailErr(t, "append mint row", mgr.Runner.Transcript.Append(ctx, sess.ID, mint))
 
 	stored, err := mem.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "read messages", err)
@@ -58,7 +58,7 @@ func TestSweepRewritesRowsScreenedBeforeTheEvidenceGrew(t *testing.T) {
 
 	// The same value is confirmed somewhere else, so the base grows.
 	evidence.known = true
-	mgr.Transcript.SweepSessionTree(ctx, sess.ID, 1)
+	mgr.Runner.Transcript.SweepSessionTree(ctx, sess.ID, 1)
 
 	swept, err := mem.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "read swept messages", err)
@@ -79,20 +79,20 @@ func TestSweepRewritesRowsScreenedBeforeTheEvidenceGrew(t *testing.T) {
 func TestSweepSkipsRowsAlreadyStampedAtTheGeneration(t *testing.T) {
 	ctx := context.Background()
 	mem := store.NewMemory()
-	mgr := NewManager(mem, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	evidence := &growingRedactor{known: true}
-	mgr.Transcript.SetRedactor(evidence.redact)
+	mgr.Runner.Transcript.SetRedactor(evidence.redact)
 	sess, err := mem.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
-	testutil.FailErr(t, "append row", mgr.Transcript.Append(ctx, sess.ID, api.Message{
+	testutil.FailErr(t, "append row", mgr.Runner.Transcript.Append(ctx, sess.ID, api.Message{
 		ID: "tool-1", Role: api.MessageRoleTool, Content: "token " + sweepSecret,
 	}))
-	mgr.Transcript.SweepSessionTree(ctx, sess.ID, 1)
+	mgr.Runner.Transcript.SweepSessionTree(ctx, sess.ID, 1)
 
 	afterFirst, err := mem.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "read after first sweep", err)
-	mgr.Transcript.SweepSessionTree(ctx, sess.ID, 1)
+	mgr.Runner.Transcript.SweepSessionTree(ctx, sess.ID, 1)
 	afterSecond, err := mem.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "read after second sweep", err)
 
@@ -109,7 +109,7 @@ func TestSweepRevisitsRowsStampedByAnEarlierRun(t *testing.T) {
 	testutil.FailErr(t, "create session", err)
 
 	blind := &growingRedactor{}
-	first := NewManager(mem, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	first := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	first.Transcript.SetRedactor(blind.redact)
 	testutil.FailErr(t, "append mint row", first.Transcript.Append(ctx, sess.ID, api.Message{
 		ID: "tool-1", Role: api.MessageRoleTool, Content: "token " + sweepSecret,
@@ -120,7 +120,7 @@ func TestSweepRevisitsRowsStampedByAnEarlierRun(t *testing.T) {
 	}
 
 	// Restart with an empty revision counter.
-	second := NewManager(mem, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	second := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	second.Transcript.SetRedactor((&growingRedactor{known: true}).redact)
 	second.Transcript.SweepSessionTree(ctx, sess.ID, 1)
 
@@ -148,8 +148,8 @@ func TestSweepContinuesPastARowTheStoreRefuses(t *testing.T) {
 	ctx := context.Background()
 	mem := store.NewMemory()
 	blocked := &failingUpdateStore{Memory: mem, messageID: "tool-1"}
-	mgr := NewManager(blocked, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
-	mgr.Transcript.SetRedactor((&growingRedactor{known: true}).redact)
+	mgr := NewHost(blocked, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr.Runner.Transcript.SetRedactor((&growingRedactor{known: true}).redact)
 	sess, err := mem.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	for _, id := range []string{"tool-1", "tool-2"} {
@@ -158,7 +158,7 @@ func TestSweepContinuesPastARowTheStoreRefuses(t *testing.T) {
 		}))
 	}
 
-	mgr.Transcript.SweepSessionTree(ctx, sess.ID, 1)
+	mgr.Runner.Transcript.SweepSessionTree(ctx, sess.ID, 1)
 
 	swept, err := mem.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "read swept messages", err)
@@ -170,7 +170,7 @@ func TestSweepContinuesPastARowTheStoreRefuses(t *testing.T) {
 	}
 	// The refused row keeps its earlier stamp, so the next pass finds it again.
 	blocked.messageID = ""
-	mgr.Transcript.SweepSessionTree(ctx, sess.ID, 2)
+	mgr.Runner.Transcript.SweepSessionTree(ctx, sess.ID, 2)
 	retried, err := mem.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "read retried messages", err)
 	if strings.Contains(retried[0].Content, sweepSecret) {
@@ -183,10 +183,10 @@ func TestSweepContinuesPastARowTheStoreRefuses(t *testing.T) {
 func TestScreenGenerationStampNarrowsTheCandidateSet(t *testing.T) {
 	ctx := context.Background()
 	mem := store.NewMemory()
-	mgr := NewManager(mem, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	sess, err := mem.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	testutil.FailErr(t, "append row", mgr.Transcript.Append(ctx, sess.ID, api.Message{
+	testutil.FailErr(t, "append row", mgr.Runner.Transcript.Append(ctx, sess.ID, api.Message{
 		ID: "m-1", Role: api.MessageRoleTool, Content: "plain",
 	}))
 

@@ -28,8 +28,8 @@ func TestRewindClearsTheNextTurnQueue(t *testing.T) {
 	testutil.FailErr(t, "prompt", err)
 	anchor := visibleUserMessageIDs(t, mgr, sessionID)[0]
 
-	mgr.queue.AppendOrdered(sessionID, "", testutil.HostOwner().ID, "queued follow-up", 0, time.Time{})
-	if got := mgr.Drafts.Snapshot(sessionID); len(got.QueueItems) != 1 {
+	mgr.Resources.Queue.AppendOrdered(sessionID, "", testutil.HostOwner().ID, "queued follow-up", 0, time.Time{})
+	if got := mgr.Chats.Drafts.Snapshot(sessionID); len(got.QueueItems) != 1 {
 		t.Fatalf("queue setup failed: %d items", len(got.QueueItems))
 	}
 
@@ -37,7 +37,7 @@ func TestRewindClearsTheNextTurnQueue(t *testing.T) {
 	first, err := rewindTest(t, mgr, ctx, operationID, sessionID, anchor)
 	testutil.FailErr(t, "rewind", err)
 
-	if got := mgr.Drafts.Snapshot(sessionID); len(got.QueueItems) != 0 {
+	if got := mgr.Chats.Drafts.Snapshot(sessionID); len(got.QueueItems) != 0 {
 		t.Fatalf("queue still holds %d item(s) after rewind", len(got.QueueItems))
 	}
 	replayed, err := rewindTest(t, mgr, ctx, operationID, sessionID, anchor)
@@ -58,20 +58,20 @@ func TestRewindClosesTheCaptureInterval(t *testing.T) {
 	_, err := mgr.Submissions.Prompt(ctx, sessionID, "the ask")
 	testutil.FailErr(t, "prompt", err)
 	anchor := visibleUserMessageIDs(t, mgr, sessionID)[0]
-	mgr.Captures.RecordPrimaryMutation(ctx, sessionID, "foo.go")
+	mgr.Chats.Captures.RecordPrimaryMutation(ctx, sessionID, "foo.go")
 
 	_, err = rewindTest(t, mgr, ctx, uuid.NewString(), sessionID, anchor)
 	testutil.FailErr(t, "rewind", err)
 
-	checkpoint := sessioncheckpoint.New(mgr.dataDir, dir, mgr.store)
-	mgr.Captures.RecordPrimaryMutation(ctx, sessionID, "foo.go")
+	checkpoint := sessioncheckpoint.New(mgr.Workspace.DataDir, dir, mgr.Coordinator.Context.Sessions.(Store))
+	mgr.Chats.Captures.RecordPrimaryMutation(ctx, sessionID, "foo.go")
 	if _, err := checkpoint.Load(ctx, sessionID, anchor); !errors.Is(err, sessionstore.ErrCheckpointMissing) {
 		t.Fatalf("capture recreated the rewound anchor: %v", err)
 	}
 	_, err = mgr.Submissions.Prompt(ctx, sessionID, "the next ask")
 	testutil.FailErr(t, "start next capture interval", err)
 	nextAnchor := visibleUserMessageIDs(t, mgr, sessionID)[0]
-	mgr.Captures.RecordPrimaryMutation(ctx, sessionID, "foo.go")
+	mgr.Chats.Captures.RecordPrimaryMutation(ctx, sessionID, "foo.go")
 	captured, err := checkpoint.Load(ctx, sessionID, nextAnchor)
 	testutil.FailErr(t, "load next capture interval", err)
 	if _, ok := captured.Paths["foo.go"]; !ok {
@@ -95,11 +95,11 @@ func TestRewindUndoesTurnChangesToTheProjectOverlay(t *testing.T) {
 	testutil.FailErr(t, "prompt", err)
 	anchor := visibleUserMessageIDs(t, mgr, sessionID)[0]
 
-	mgr.Captures.RecordPrimaryMutation(ctx, sessionID, blueprint)
+	mgr.Chats.Captures.RecordPrimaryMutation(ctx, sessionID, blueprint)
 	testutil.FailErr(t, "turn rewrites the plan", os.WriteFile(abs(blueprint), []byte("# agent plan\n"), 0o644))
-	mgr.Captures.RecordPrimaryMutation(ctx, sessionID, formatMarker)
+	mgr.Chats.Captures.RecordPrimaryMutation(ctx, sessionID, formatMarker)
 	testutil.FailErr(t, "publish ignore format", settingsoverlay.EnsureCurrentFormat(dir))
-	mgr.Captures.RecordPrimaryMutation(ctx, sessionID, ignores)
+	mgr.Chats.Captures.RecordPrimaryMutation(ctx, sessionID, ignores)
 	testutil.FailErr(t, "turn accepts a finding",
 		os.WriteFile(abs(ignores), []byte("version: 1\nfindings:\n  - path: test/**\n    reason: reviewed fixture\n"), 0o644))
 	testutil.FailErr(t, "validate current overlay", settingsoverlay.CheckFormat(dir))
@@ -143,7 +143,7 @@ func TestRewindRefusesWhileBusy(t *testing.T) {
 	testutil.FailErr(t, "prompt", err)
 	anchor := visibleUserMessageIDs(t, mgr, sessionID)[0]
 
-	testutil.FailErr(t, "mark busy", mgr.store.SetSessionStatus(ctx, sessionID, api.SessionStatusBusy))
+	testutil.FailErr(t, "mark busy", mgr.Coordinator.Context.Sessions.(Store).SetSessionStatus(ctx, sessionID, api.SessionStatusBusy))
 	_, err = rewindTest(t, mgr, ctx, uuid.NewString(), sessionID, anchor)
 	if err == nil {
 		t.Fatal("rewind succeeded on a busy session")
@@ -163,15 +163,15 @@ func TestRewindClearsTheProgressChecklist(t *testing.T) {
 	testutil.FailErr(t, "prompt", err)
 	anchor := visibleUserMessageIDs(t, mgr, sessionID)[0]
 
-	mgr.progress.Set(sessionID, "## Progress\n- [x] ship the thing\n")
-	if mgr.progress.Get(t.Context(), sessionID) == "" {
+	mgr.RewindRuntime.Progress.Set(sessionID, "## Progress\n- [x] ship the thing\n")
+	if mgr.RewindRuntime.Progress.Get(t.Context(), sessionID) == "" {
 		t.Fatal("progress setup failed")
 	}
 
 	_, err = rewindTest(t, mgr, ctx, uuid.NewString(), sessionID, anchor)
 	testutil.FailErr(t, "rewind", err)
 
-	if got := mgr.progress.Get(t.Context(), sessionID); got != "" {
+	if got := mgr.RewindRuntime.Progress.Get(t.Context(), sessionID); got != "" {
 		t.Fatalf("progress = %q, want cleared — it described work the rewind deleted", got)
 	}
 }

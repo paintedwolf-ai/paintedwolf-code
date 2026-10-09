@@ -47,7 +47,7 @@ func TestHumanInputScaffoldDeniesCoordinatorLoop(t *testing.T) {
 
 	store := store.NewSQL(sqlDB)
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ack"}}}))
-	mgr := session.NewManager(store, rec, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	agents := orchestration.NewMemoryAgentRegistry()
 	contractcheck.FailErr(t, "LoadRequiredAgentRegistry", orchestration.LoadRequiredAgentRegistry(ctx, agents))
 	mgr.Profiles.SetAgentRegistry(agents)

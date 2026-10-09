@@ -85,7 +85,7 @@ func (m *mockGracefulCancelSession) Append(context.Context, string, workeroutcom
 	return nil
 }
 
-func (m *mockGracefulCancelSession) NotifyWorkerCycleTerminal(context.Context, string, string) {}
+func (m *mockGracefulCancelSession) Terminal(context.Context, string, string) {}
 
 func (m *mockGracefulCancelSession) pending(childSessionID string) (mockGracefulRegistration, bool) {
 	m.mu.Lock()
@@ -122,7 +122,7 @@ func TestCancelRunningGracefulOutlivesRequest(t *testing.T) {
 	hub := &recordingHub{}
 	queue.SetEventPublisher(&events.Publisher{Hub: hub})
 	mock := newMockGracefulCancelSession()
-	svc := &CancelService{Queue: queue, Sessions: mock, Cancellations: mock, Graceful: mock}
+	svc := &CancelService{Queue: queue, Events: mock, Cancellations: mock, Graceful: mock}
 
 	const child = "child-outlives"
 	jobID := setupRunningWorker(t, queue, child)
@@ -176,7 +176,7 @@ func TestCancelRunningGracefulOutlivesRequest(t *testing.T) {
 func TestCancelRunningGracefulNonBlockingUnderSlowCloseout(t *testing.T) {
 	queue := NewInMemoryQueue(2)
 	mock := newMockGracefulCancelSession()
-	svc := &CancelService{Queue: queue, Sessions: mock, Cancellations: mock, Graceful: mock}
+	svc := &CancelService{Queue: queue, Events: mock, Cancellations: mock, Graceful: mock}
 
 	const child = "child-slow"
 	jobID := setupRunningWorker(t, queue, child)
@@ -218,8 +218,8 @@ func TestCancelPendingAndHeldWorkersFinalizeSynchronously(t *testing.T) {
 	testutil.FailErr(t, "Create parent", err)
 
 	svc := &CancelService{
-		Queue:    queue,
-		Sessions: mgr, Graceful: mgr.Workers.Cancel,
+		Queue:  queue,
+		Events: mgr.Coordinator.Workers, Graceful: mgr.Workers.Cancel,
 		Reports: ChangeReportDeps{
 			Messages: func(context.Context, string) ([]api.Message, error) { return nil, nil },
 		},

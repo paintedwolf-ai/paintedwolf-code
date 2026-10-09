@@ -27,7 +27,7 @@ type Deps struct {
 	ModuleRoot  string
 	Projects    project.Registry
 	Store       session.Store
-	Sessions    *session.Manager
+	Sessions    *session.Host
 	Settings    *settings.Service
 	Workflow    *workflowadmin.Handler
 	Prompt      *promptadmin.Handler

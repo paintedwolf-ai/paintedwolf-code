@@ -24,7 +24,7 @@ func TestAppendMessagesPublishesMessageSSE(t *testing.T) {
 	store := store.NewSQL(sqlDB)
 	hub := events.NewMemoryHub()
 	pub := &events.Publisher{Hub: hub}
-	mgr := session.NewManager(store, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	mgr.SetEventPublisher(pub)
 
 	ctx := context.Background()

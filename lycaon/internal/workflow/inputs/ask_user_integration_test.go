@@ -46,7 +46,7 @@ func askUserHostManifest() workflowdef.Manifest {
 
 type askUserFixture struct {
 	wfMgr   *workflow.RunManager
-	sessMgr *session.Manager
+	sessMgr *session.Host
 	sess    *wire.Session
 	toolReg *tools.DefaultRegistry
 	pending bool
@@ -64,7 +64,7 @@ func setupAskUserIntegration(t *testing.T) *askUserFixture {
 	sqlDB := testdbfixture.Open(t, "ask-user-int.db")
 
 	store := store.NewSQL(sqlDB)
-	sessMgr := session.NewManager(store, llm.NewMockProvider(nil), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	sessMgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	testutil.FailErr(t, "install anchor registry", sessMgr.Guidance.InstallAnchorRegistry())
 
 	manifest := askUserHostManifest()

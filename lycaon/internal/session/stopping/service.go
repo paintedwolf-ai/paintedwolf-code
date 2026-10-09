@@ -33,7 +33,7 @@ type Service struct {
 	chats              *chats.Service
 	queue              *queue.Store
 	drafts             *draftqueue.Service
-	interruptions      *execution.Recovery
+	Recovery           *execution.Recovery
 	status             *execution.Status
 	runtime            *coordinator.Runtime
 	Workers            WorkerAbort
@@ -44,7 +44,7 @@ type Service struct {
 }
 
 func New(store Store, gate *lifecycle.State, execution *execution.Lifetime, chats *chats.Service, queue *queue.Store, drafts *draftqueue.Service, interruptions *execution.Recovery, status *execution.Status) *Service {
-	return &Service{store: store, gate: gate, execution: execution, chats: chats, queue: queue, drafts: drafts, interruptions: interruptions, status: status, turnReleaseTimeout: DefaultTurnReleaseTimeout}
+	return &Service{store: store, gate: gate, execution: execution, chats: chats, queue: queue, drafts: drafts, Recovery: interruptions, status: status, turnReleaseTimeout: DefaultTurnReleaseTimeout}
 }
 func (m *Service) SetWorkers(workers WorkerAbort)               { m.Workers = workers }
 func (m *Service) SetCoordinator(runtime *coordinator.Runtime)  { m.runtime = runtime }

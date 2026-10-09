@@ -89,7 +89,7 @@ func TestProviderPromptAgainstStubBackend(t *testing.T) {
 	tracker := costtest.NewTracker(t, cost.NoopPricer{})
 	store := store.NewMemory()
 	mock := llm.NewMockProvider(testMockConfig(t))
-	mgr := session.NewManagerWithLLMService(store, mock, svc, tools.NewStubRegistry(), settings.DefaultSessionLimits(), tracker)
+	mgr := session.NewHost(store, session.Models{Client: mock, Provider: svc, Limits: settings.DefaultSessionLimits(), Cost: tracker}, tools.NewStubRegistry())
 	srv := NewServer(requiredTestDeps(t, Dependencies{Store: store, Projects: project.NewMemoryRegistry(), Sessions: mgr, LLM: svc}), nil, TestAPIToken)
 	baseURL := startTestHTTPServer(t, srv)
 
@@ -161,7 +161,7 @@ agent_pool:
 
 	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	store := store.NewMemory()
-	mgr := session.NewManagerWithLLMService(store, nil, svc, tools.NewStubRegistry(), settings.DefaultSessionLimits(), nil)
+	mgr := session.NewHost(store, session.Models{Client: nil, Provider: svc, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	srv := NewServer(requiredTestDeps(t, Dependencies{Store: store, Projects: project.NewMemoryRegistry(), Sessions: mgr, LLM: svc}), nil, TestAPIToken)
 	baseURL := startTestHTTPServer(t, srv)
 

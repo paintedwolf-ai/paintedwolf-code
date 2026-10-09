@@ -19,9 +19,9 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func newSkillsTestManager(t *testing.T) *Manager {
+func newSkillsTestManager(t *testing.T) *Host {
 	t.Helper()
-	return NewManager(store.NewMemory(), nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	return NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 }
 
 func writeSkill(t *testing.T, root, rel, name, desc string) {
@@ -207,7 +207,7 @@ func TestEffectiveSkillsNoTaint(t *testing.T) {
 	writeSkill(t, root, ".agents/skills", "release-check", "Release checklist.")
 
 	mem := store.NewMemory()
-	m := NewManager(mem, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	m := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	surfaces, err := settings.NewTrustSurfacesStoreAt(filepath.Join(t.TempDir(), "cs.yaml"))
 	testutil.FailErr(t, "surfaces", err)
 	project.SetDefaultOpenPolicy(project.TestOpenPolicy())

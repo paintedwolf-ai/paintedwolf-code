@@ -11,14 +11,14 @@ import (
 
 func TestStopWorkerRuntimePreservesParentAndSibling(t *testing.T) {
 	mgr, _ := newTestManager(t)
-	parent, err := mgr.store.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	parent, err := mgr.Coordinator.Context.Sessions.(Store).Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create worker parent", err)
-	child, err := mgr.store.CreateChild(t.Context(), parent, api.SpawnChildRequest{AgentType: "implementer"})
+	child, err := mgr.Coordinator.Context.Sessions.(Store).CreateChild(t.Context(), parent, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "create target worker", err)
-	sibling, err := mgr.store.CreateChild(t.Context(), parent, api.SpawnChildRequest{AgentType: "code-reviewer"})
+	sibling, err := mgr.Coordinator.Context.Sessions.(Store).CreateChild(t.Context(), parent, api.SpawnChildRequest{AgentType: "code-reviewer"})
 	testutil.FailErr(t, "create sibling worker", err)
 	for _, id := range []string{parent.ID, child.ID, sibling.ID} {
-		testutil.FailErr(t, "mark active runtime", mgr.store.SetSessionStatus(t.Context(), id, api.SessionStatusBusy))
+		testutil.FailErr(t, "mark active runtime", mgr.Coordinator.Context.Sessions.(Store).SetSessionStatus(t.Context(), id, api.SessionStatusBusy))
 	}
 	released := []string{}
 	testutil.FailErr(t, "register process cleanup", mgr.Resources.RegisterCleanup("fixture-processes", 20, func(_ context.Context, id string) error {
@@ -36,7 +36,7 @@ func TestStopWorkerRuntimePreservesParentAndSibling(t *testing.T) {
 		t.Fatalf("released resources=%v", released)
 	}
 	for _, id := range []string{parent.ID, child.ID, sibling.ID} {
-		got, err := mgr.store.Get(t.Context(), id)
+		got, err := mgr.Coordinator.Context.Sessions.(Store).Get(t.Context(), id)
 		testutil.FailErr(t, "inspect retained session", err)
 		want := api.SessionStatusBusy
 		if id == child.ID {

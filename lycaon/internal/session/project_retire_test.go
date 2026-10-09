@@ -34,7 +34,7 @@ func TestRetireForProjectDeleteRemovesSessionsAndAttention(t *testing.T) {
 	hub := events.NewMemoryHub()
 	src := &attention.Source{Sessions: mem}
 	pub := &events.Publisher{Hub: hub, Attention: src}
-	mgr := NewManager(mem, nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetEventPublisher(pub)
 
 	view, err := src.BuildView(ctx)
@@ -77,7 +77,7 @@ func TestRetireForProjectDeleteIgnoresWorktreeBinding(t *testing.T) {
 		BaseBranch:   "main",
 	}))
 
-	mgr := NewManager(mem, nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	if err := mgr.Chats.Delete(ctx, sess.ID); !errors.Is(err, chats.ErrSessionWorktreeBound) {
 		t.Fatalf("DeleteSession = %v, want chats.ErrSessionWorktreeBound", err)
 	}

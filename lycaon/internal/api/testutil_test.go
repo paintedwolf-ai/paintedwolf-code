@@ -85,9 +85,9 @@ func newTestServerWithRegistry(t *testing.T, reg tools.ToolRegistry, opts ...tes
 	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	store := store.NewMemory()
 	mock := llm.NewMockProvider(testMockConfig(t))
-	mgr := session.NewManager(store, mock, reg, settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, reg)
 	mgr.SetDataDir(t.TempDir())
-	mgr.Guards.SetInvoker(testtool.RegistryInvoker{Registry: reg})
+	mgr.Coordinator.Guards.SetInvoker(testtool.RegistryInvoker{Registry: reg})
 	// Stub bindings do not expose coordinator tools.
 	wireTestBindingRegistry(t)
 	return newServerForTest(t, Dependencies{Store: store, Projects: project.NewMemoryRegistry(), Sessions: mgr}, opts...)
@@ -106,9 +106,9 @@ func newTestServerWithWorkflowRegistry(t *testing.T, reg tools.ToolRegistry, opt
 
 	sessions := store.NewSQL(sqlDB)
 	mock := llm.NewMockProvider(testMockConfig(t))
-	mgr := session.NewManager(sessions, mock, reg, settings.DefaultSessionLimits())
+	mgr := session.NewHost(sessions, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, reg)
 	mgr.SetDataDir(t.TempDir())
-	mgr.Guards.SetInvoker(testtool.RegistryInvoker{Registry: reg})
+	mgr.Coordinator.Guards.SetInvoker(testtool.RegistryInvoker{Registry: reg})
 	wireTestBindingRegistry(t)
 
 	registry, err := workflowdef.RegistryFromDirs("")

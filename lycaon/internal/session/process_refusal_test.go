@@ -9,7 +9,6 @@ import (
 	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/confine"
-	"github.com/lycaon/lycaon/internal/coordinator"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/hostcmd"
@@ -45,13 +44,12 @@ func assertRefusalDigest(t *testing.T, digest string) {
 
 func TestHandleCommandRefusalWakesWithDigest(t *testing.T) {
 	memory := store.NewMemory()
-	mgr := NewManager(memory, nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(memory, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	sess, err := memory.Create(t.Context(), api.CreateSessionRequest{}, "")
 	testutil.FailErr(t, "create waiting session", err)
-	mgr.SetCoordinatorRuntime(coordinator.NewRuntime(coordinator.RuntimeDeps{}))
-	loop := mgr.ensureCoordinatorRuntime().CoordinatorLoop()
+	loop := mgr.Coordinator.Runtime.CoordinatorLoop()
 	reports := make(chan anchor.Envelope, 1)
-	deps := mgr.buildLoopWakeDeps()
+	deps := mgr.Coordinator.Loop.Build()
 	deps.HostWakeActionable = func(context.Context, loopwake.HostWakeActionableInput) bool { return true }
 	deps.QueueInform = func(_ context.Context, _ string, inform anchor.ID, env anchor.Envelope) {
 		if inform == anchor.ProcessRefused {

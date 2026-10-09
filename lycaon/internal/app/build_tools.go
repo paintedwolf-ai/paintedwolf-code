@@ -9,7 +9,6 @@ import (
 	"github.com/lycaon/lycaon/internal/boot"
 	"github.com/lycaon/lycaon/internal/bootrecovery"
 	"github.com/lycaon/lycaon/internal/captureprojection"
-	"github.com/lycaon/lycaon/internal/coordinator"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
@@ -34,8 +33,7 @@ import (
 type toolWiring struct{ *serveBuilder }
 
 func (b toolWiring) wireCoordinatorRuntime() error {
-	b.coordRuntime = coordinator.NewRuntime(b.mgr.CoordinatorRuntimeDeps())
-	b.mgr.SetCoordinatorRuntime(b.coordRuntime)
+	b.coordRuntime = b.mgr.Coordinator.Runtime
 	waitConditions := make(map[string]map[string]bool, len(b.toolProfiles))
 	for _, profile := range b.toolProfiles {
 		allowed := make(map[string]bool, len(profile.WaitConditions))
@@ -117,7 +115,7 @@ func (b toolWiring) registerCoordinatorTools() error {
 		Reject:       b.rejectFmt,
 		Sessions:     b.workerQueue,
 		Reconcile:    b.mgr.Promotion,
-		Captures:     b.mgr.Captures,
+		Captures:     b.mgr.Chats.Captures,
 		Coord:        b.mgr.Workers.Workspaces,
 		Closeout:     b.delegationMgr,
 		Projects:     b.registry,
@@ -184,10 +182,10 @@ func (b toolWiring) taskToolDeps() worker.TaskToolDeps {
 		WorkflowWork:     b.workflowMgr.Fanout.WorkflowWork,
 		TaskReceipt:      b.workerQueue.TaskReceipt,
 		PendingDecision: func(ctx context.Context, childSessionID string) (string, bool, error) {
-			if b.mgr == nil || b.mgr.Decisions() == nil {
+			if b.mgr == nil || b.mgr.Decisions == nil {
 				return "", false, nil
 			}
-			dec, ok, err := b.mgr.Decisions().Get(ctx, childSessionID)
+			dec, ok, err := b.mgr.Decisions.Get(ctx, childSessionID)
 			if err != nil {
 				return "", false, err
 			}

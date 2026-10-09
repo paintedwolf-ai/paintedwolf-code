@@ -89,7 +89,7 @@ func (s *Handler) executeDraftPromote(ctx context.Context, id, destPath string, 
 	folder := project.PrimaryRootPath(p)
 	s.afterRootAttached(ctx, id, folder)
 	s.detectVerifyAsync(ctx, id)
-	s.Sessions.ReopenBoardOrientationOnRootAttach(ctx, id)
+	s.Sessions.Chats.ReopenOrientation(ctx, id, s.Sessions.Coordinator.Runtime.Board())
 	return p, nil
 }
 

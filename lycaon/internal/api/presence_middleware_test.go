@@ -19,7 +19,7 @@ func presenceTestServer(t *testing.T) (*Server, *events.Presence) {
 	st := store.NewMemory()
 	p := events.NewPresence(hub, time.Minute)
 	srv := NewServer(requiredTestDeps(t, Dependencies{
-		Store: st, Projects: project.NewMemoryRegistry(), Sessions: session.NewManager(st, nil, nil, settings.DefaultSessionLimits()),
+		Store: st, Projects: project.NewMemoryRegistry(), Sessions: session.NewHost(st, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil),
 		Events: hub, Presence: p,
 	}), nil, TestAPIToken)
 	return srv, p
@@ -79,7 +79,7 @@ func TestPresenceMiddlewareUnwiredIsInert(t *testing.T) {
 	hub := events.NewMemoryHub()
 	st := store.NewMemory()
 	srv := NewServer(requiredTestDeps(t, Dependencies{
-		Store: st, Projects: project.NewMemoryRegistry(), Sessions: session.NewManager(st, nil, nil, settings.DefaultSessionLimits()),
+		Store: st, Projects: project.NewMemoryRegistry(), Sessions: session.NewHost(st, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil),
 		Events: hub,
 	}), nil, TestAPIToken)
 	presenceRequest(t, srv, http.MethodPost, "/v1/sessions/does-not-exist/prompts")

@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/closeoutassembly"
 	"github.com/lycaon/lycaon/internal/session/guidancedelivery"
 	"github.com/lycaon/lycaon/internal/session/instructions"
+	"github.com/lycaon/lycaon/internal/session/promptsource"
 	"github.com/lycaon/lycaon/internal/session/transcript"
 	"github.com/lycaon/lycaon/internal/session/turnguards"
 	"github.com/lycaon/lycaon/internal/session/turnsettlement"
@@ -118,47 +119,57 @@ type WorkerPhaseTouchPathsSource interface {
 }
 
 // SetWorkflowDomains wires the workflow resources for prompts, tools, and messages.
-func (m *Manager) SetWorkflowDomains(v *WorkflowDomains) {
-	m.workflows = v
+func (m *Host) SetWorkflowDomains(v *WorkflowDomains) {
+
+	m.Coordinator.Control.Workflow = nil
+	m.Coordinator.Projection.Workflow = nil
+	m.Coordinator.Assembly.Workflow = promptsource.AssemblyWorkflow{}
+	m.Coordinator.Loop.ActiveRuns = nil
+	if v != nil {
+		m.Coordinator.Control.Workflow = v.Policy
+		m.Coordinator.Projection.Workflow = v.Asks
+		m.Coordinator.Assembly.Workflow = promptsource.AssemblyWorkflow{Manifests: v.Policy, Orientation: v.Fanout}
+		m.Coordinator.Loop.ActiveRuns = v.Runs
+	}
 	if v == nil {
 		m.Resources.Work.Workflow = nil
 	} else {
 		m.Resources.Work.Workflow = v.Cleanup
 	}
 	if v == nil {
-		m.Closeout.SetWorkflow(nil)
+		m.Coordinator.Closeout.SetWorkflow(nil)
 		m.Verification.Evidence.SetWorkflow(nil)
 		m.Runner.Settlement.SetWorkflow(nil)
-		m.Guards.SetWorkflow(nil)
-		m.Transcript.SetWorkflow(nil)
+		m.Coordinator.Guards.SetWorkflow(nil)
+		m.Runner.Transcript.SetWorkflow(nil)
 		m.Verification.SetWorkflow(nil)
-		m.Batch.SetWorkflow(nil)
-		m.Guidance.SetWorkflow(nil)
-		m.Loading.SetWorkflow(nil)
+		m.Coordinator.Batch.SetWorkflow(nil)
+		m.Coordinator.Guidance.SetWorkflow(nil)
+		m.Coordinator.Loading.SetWorkflow(nil)
 		m.Runner.Instructions.SetWorkflow(nil)
 		m.Runner.SetControl(nil)
 		m.Runner.SetRequests(nil)
 		m.Runner.SetSlash(nil)
 		m.Workers.State.SetWorkflows(nil)
-		m.Transcript.SetPageReconciler(nil)
+		m.Runner.Transcript.SetPageReconciler(nil)
 		m.Profiles.SetCoordinatorProfile(nil)
 		return
 	}
-	m.Closeout.SetWorkflow(&closeoutassembly.WorkflowDomains{Policy: v.Policy, Runs: v.Runs})
+	m.Coordinator.Closeout.SetWorkflow(&closeoutassembly.WorkflowDomains{Policy: v.Policy, Runs: v.Runs})
 	m.Verification.Evidence.SetWorkflow(v.Runs)
 	m.Runner.Settlement.SetWorkflow(&turnsettlement.WorkflowDomains{Phases: v.Phases, Policy: v.Policy, Reports: v.Reports})
-	m.Guards.SetWorkflow(&turnguards.WorkflowDomains{Ambient: v.Ambient, Blueprints: v.Blueprints, Policy: v.Policy, Runs: v.Runs})
-	m.Transcript.SetWorkflow(&transcript.WorkflowDomains{Feedback: v.Feedback, Transcript: v.Transcript})
+	m.Coordinator.Guards.SetWorkflow(&turnguards.WorkflowDomains{Ambient: v.Ambient, Blueprints: v.Blueprints, Policy: v.Policy, Runs: v.Runs})
+	m.Runner.Transcript.SetWorkflow(&transcript.WorkflowDomains{Feedback: v.Feedback, Transcript: v.Transcript})
 	m.Verification.SetWorkflow(v.Policy)
-	m.Batch.SetWorkflow(v.Batch)
-	m.Guidance.SetWorkflow(&guidancedelivery.WorkflowDomains{Policy: v.Policy, Runs: v.Runs})
-	m.Loading.SetWorkflow(v.Policy)
+	m.Coordinator.Batch.SetWorkflow(v.Batch)
+	m.Coordinator.Guidance.SetWorkflow(&guidancedelivery.WorkflowDomains{Policy: v.Policy, Runs: v.Runs})
+	m.Coordinator.Loading.SetWorkflow(v.Policy)
 	m.Runner.Instructions.SetWorkflow(&instructions.WorkflowDomains{Batch: v.Batch, Feedback: v.Feedback, Runs: v.Runs})
 	m.Runner.SetControl(v.Policy)
 	m.Runner.SetRequests(v.Requests)
 	m.Runner.SetSlash(v.Slash)
 	m.Workers.State.SetWorkflows(v.Policy)
-	m.Transcript.SetPageReconciler(v.Recovery)
+	m.Runner.Transcript.SetPageReconciler(v.Recovery)
 	policy := v.Policy
 	m.Profiles.SetCoordinatorProfile(func(ctx context.Context, id string) string {
 		if policy == nil {
@@ -173,12 +184,6 @@ func (m *Manager) SetWorkflowDomains(v *WorkflowDomains) {
 }
 
 // AcceptsEmptyWorkflowRequest reports whether an empty prompt has active workflow semantics.
-func (m *Manager) AcceptsEmptyWorkflowRequest(ctx context.Context, sessionID string) bool {
-	if m == nil {
-		return false
-	}
-	return m.workflows != nil && m.workflows.Requests.AcceptsEmptyRequest(ctx, sessionID)
-}
 
 func workflowEvaluationFromFrame(frame inject.CoordinatorTurnFrame) feedback.WorkflowEvaluationContext {
 	runCtx := frame.RunContext

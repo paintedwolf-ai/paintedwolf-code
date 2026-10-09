@@ -35,7 +35,7 @@ func setupPlanTripartiteFixture(t *testing.T) coordinatorPromptFixture {
 	store := store.NewSQL(sqlDB)
 	inner := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}})
 	rec := llm.NewRecordingClient(inner)
-	mgr := session.NewManager(store, rec, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	agents := orchestration.NewMemoryAgentRegistry()
 	_ = orchestration.LoadRequiredAgentRegistry(context.Background(), agents)
 	mgr.Profiles.SetAgentRegistry(agents)
@@ -52,7 +52,7 @@ func setupPlanTripartiteFixture(t *testing.T) coordinatorPromptFixture {
 	dir := t.TempDir()
 	blueprintStore := blueprint.NewFileStoreForTest(dir)
 	blueprintMgr := blueprint.NewManager(blueprintStore)
-	wfMgr.Blueprints.Creator = blueprint.WorkflowBlueprintCreator{Manager: blueprintMgr}
+	wfMgr.Blueprints.Creator = blueprint.WorkflowBlueprintCreator{Host: blueprintMgr}
 	wfMgr.Blueprints.Getter = blueprintMgr
 	wfMgr.Presentation.BlueprintGetter = blueprintMgr
 	wfMgr.Approvals.Getter = blueprintMgr
@@ -109,7 +109,7 @@ func TestStructuredModeExitRestoresImplementTripartiteAndTools(t *testing.T) {
 		t.Fatal("post-exit first implement prompt must load implement investigate mode partial")
 	}
 
-	listed := fix.mgr.Guards.Policy().ListForPrompt(ctx, fix.sess, orchestration.ProfileCoordinator)
+	listed := fix.mgr.Coordinator.Guards.Policy().ListForPrompt(ctx, fix.sess, orchestration.ProfileCoordinator)
 	_ = listed
 }
 

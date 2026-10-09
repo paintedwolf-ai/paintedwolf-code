@@ -56,7 +56,7 @@ func TestImplementModeTaskEnqueue(t *testing.T) {
 	}
 	foundTask := false
 	testutil.WaitFor(t, 8*time.Second, func() bool {
-		msgs, err := h.SessionMgr.Transcript.GetMessages(ctx, sess.ID)
+		msgs, err := h.SessionMgr.Runner.Transcript.GetMessages(ctx, sess.ID)
 		testutil.FailErr(t, "h.SessionMgr.GetMessages failed", err)
 		for _, msg := range msgs {
 			if msg.WorkerSummary != nil || strings.Contains(msg.Content, `<task job_id="`) {

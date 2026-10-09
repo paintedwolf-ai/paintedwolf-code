@@ -1,4 +1,4 @@
-package session
+package decisions
 
 import (
 	"context"
@@ -11,20 +11,20 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// SQLDecisionStore persists decisions in the main database.
-type SQLDecisionStore struct {
+// SQL persists decisions in the main database.
+type SQL struct {
 	queries *db.Queries
 }
 
-// NewSQLDecisionStore returns a durable decision store.
-func NewSQLDecisionStore(database db.Handle) *SQLDecisionStore {
+// NewSQL returns a durable decision store.
+func NewSQL(database db.Handle) *SQL {
 	if database == nil {
-		return &SQLDecisionStore{}
+		return &SQL{}
 	}
-	return &SQLDecisionStore{queries: db.New(database)}
+	return &SQL{queries: db.New(database)}
 }
 
-func (s *SQLDecisionStore) Put(ctx context.Context, decision api.WorkerDecisionRequest) error {
+func (s *SQL) Put(ctx context.Context, decision api.WorkerDecisionRequest) error {
 	if s == nil || s.queries == nil {
 		return fmt.Errorf("decision store not configured")
 	}
@@ -42,7 +42,7 @@ func (s *SQLDecisionStore) Put(ctx context.Context, decision api.WorkerDecisionR
 	})
 }
 
-func (s *SQLDecisionStore) Get(ctx context.Context, childSessionID string) (api.WorkerDecisionRequest, bool, error) {
+func (s *SQL) Get(ctx context.Context, childSessionID string) (api.WorkerDecisionRequest, bool, error) {
 	if s == nil || s.queries == nil {
 		return api.WorkerDecisionRequest{}, false, fmt.Errorf("decision store not configured")
 	}
@@ -56,7 +56,7 @@ func (s *SQLDecisionStore) Get(ctx context.Context, childSessionID string) (api.
 	return decodeStoredDecision(row.ChildSessionID, row.JobID, row.DecisionJson)
 }
 
-func (s *SQLDecisionStore) GetByJob(ctx context.Context, jobID string) (api.WorkerDecisionRequest, bool, error) {
+func (s *SQL) GetByJob(ctx context.Context, jobID string) (api.WorkerDecisionRequest, bool, error) {
 	if s == nil || s.queries == nil {
 		return api.WorkerDecisionRequest{}, false, fmt.Errorf("decision store not configured")
 	}
@@ -70,7 +70,7 @@ func (s *SQLDecisionStore) GetByJob(ctx context.Context, jobID string) (api.Work
 	return decodeStoredDecision(row.ChildSessionID, row.JobID, row.DecisionJson)
 }
 
-func (s *SQLDecisionStore) Clear(ctx context.Context, childSessionID string) error {
+func (s *SQL) Clear(ctx context.Context, childSessionID string) error {
 	if s == nil || s.queries == nil {
 		return fmt.Errorf("decision store not configured")
 	}

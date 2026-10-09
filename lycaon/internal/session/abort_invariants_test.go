@@ -49,7 +49,7 @@ func (c *capturingWorkerAbort) AbortWorkersForRoot(_ context.Context, _, _ strin
 }
 
 func TestAbortRequiresSessionID(t *testing.T) {
-	mgr := NewManager(store.NewMemory(), nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	err := mgr.Stops.Abort(context.Background(), "", "")
 	if err == nil {
 		t.Fatal("expected error for empty session id")
@@ -63,7 +63,7 @@ func TestAbortRequiresSessionID(t *testing.T) {
 func TestAbortSignalsAndStopsWorkersBeforeSessionRuntimeGate(t *testing.T) {
 	ctx := context.Background()
 	st := store.NewMemory()
-	mgr := NewManager(st, nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	testutil.FailErr(t, "mark busy", st.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
@@ -102,7 +102,7 @@ func TestAbortSignalsAndStopsWorkersBeforeSessionRuntimeGate(t *testing.T) {
 func TestAbortPropagatesUserReason(t *testing.T) {
 	ctx := context.Background()
 	store := store.NewMemory()
-	mgr := NewManager(store, nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(store, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	abort := &capturingWorkerAbort{}
 	mgr.SetSessionWorkerAbort(abort)
 
@@ -121,7 +121,7 @@ func TestAbortPropagatesUserReason(t *testing.T) {
 func TestAbortDefaultsReasonWhenBlank(t *testing.T) {
 	ctx := context.Background()
 	store := store.NewMemory()
-	mgr := NewManager(store, nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(store, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	abort := &capturingWorkerAbort{}
 	mgr.SetSessionWorkerAbort(abort)
 
@@ -139,7 +139,7 @@ func TestAbortDefaultsReasonWhenBlank(t *testing.T) {
 func TestAbortWithoutWorkerAbortHookStillMarksIdle(t *testing.T) {
 	ctx := context.Background()
 	store := store.NewMemory()
-	mgr := NewManager(store, nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(store, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	// No SetSessionWorkerAbort: abort still marks the session idle.
 
 	sess, err := store.Create(ctx, api.CreateSessionRequest{
@@ -159,7 +159,7 @@ func TestAbortWithoutWorkerAbortHookStillMarksIdle(t *testing.T) {
 func TestAbortReportsWorkerAbortErrorAndDoesNotPublishFalseIdle(t *testing.T) {
 	ctx := context.Background()
 	store := store.NewMemory()
-	mgr := NewManager(store, nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(store, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	abort := &capturingWorkerAbort{err: context.DeadlineExceeded}
 	mgr.SetSessionWorkerAbort(abort)
 
@@ -197,7 +197,7 @@ func (s *blockingWorkflowStop) StopSession(context.Context, string, string) erro
 func TestConcurrentAbortCallsShareOneStopFlight(t *testing.T) {
 	ctx := context.Background()
 	st := store.NewMemory()
-	mgr := NewManager(st, nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	stop := &blockingWorkflowStop{started: make(chan struct{}), release: make(chan struct{})}
@@ -207,7 +207,7 @@ func TestConcurrentAbortCallsShareOneStopFlight(t *testing.T) {
 	go func() { first <- mgr.Stops.Abort(ctx, sess.ID, "stop") }()
 	<-stop.started
 	admitted := false
-	if err := mgr.Gate.WithSessionTreeAdmission(ctx, sess.ID, func() error {
+	if err := mgr.Chats.Gate.WithSessionTreeAdmission(ctx, sess.ID, func() error {
 		admitted = true
 		return nil
 	}); !errors.Is(err, lifecycle.ErrStopping) {
@@ -231,23 +231,23 @@ func TestConcurrentAbortCallsShareOneStopFlight(t *testing.T) {
 func TestPreStopTurnCannotDrainAfterStopCompletes(t *testing.T) {
 	ctx := context.Background()
 	st := store.NewMemory()
-	mgr := NewManager(st, nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	turn, err := mgr.Gate.Capture(ctx, sess.ID)
+	turn, err := mgr.Chats.Gate.Capture(ctx, sess.ID)
 	testutil.FailErr(t, "capture turn", err)
-	flight, leader := mgr.Gate.Begin(sess.ID)
+	flight, leader := mgr.Chats.Gate.Begin(sess.ID)
 	if !leader {
 		t.Fatal("first stop was not leader")
 	}
-	mgr.Gate.Finish(sess.ID, flight, nil)
-	if mgr.Gate.MayDrain(turn) {
+	mgr.Chats.Gate.Finish(sess.ID, flight, nil)
+	if mgr.Chats.Gate.MayDrain(turn) {
 		t.Fatal("pre-stop turn was allowed to drain queued or loop-wake work")
 	}
 }
 
 func TestAbortUnknownSessionReturnsError(t *testing.T) {
-	mgr := NewManager(store.NewMemory(), nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	err := mgr.Stops.Abort(context.Background(), "no-such-session", "")
 	if err == nil {
 		t.Fatal("expected error for unknown session id")
@@ -256,7 +256,7 @@ func TestAbortUnknownSessionReturnsError(t *testing.T) {
 
 func TestAbortLeaderOutlivesRequestCancellation(t *testing.T) {
 	st := store.NewMemory()
-	mgr := NewManager(st, nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	sess, err := st.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	testutil.FailErr(t, "mark busy", st.SetSessionStatus(t.Context(), sess.ID, api.SessionStatusBusy))
@@ -273,7 +273,7 @@ func TestAbortLeaderOutlivesRequestCancellation(t *testing.T) {
 func TestAbortPropagatesProjectDirToWorkerAbort(t *testing.T) {
 	ctx := context.Background()
 	store := store.NewMemory()
-	mgr := NewManager(store, nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(store, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	abort := &capturingWorkerAbort{}
 	mgr.SetSessionWorkerAbort(abort)
 
@@ -306,6 +306,6 @@ func TestAbortDoesNotListUnrelatedSessions(t *testing.T) {
 	testutil.FailErr(t, "create stop root", err)
 	_, err = st.CreateChild(t.Context(), root, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "create stop child", err)
-	mgr := NewManager(st, nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	testutil.FailErr(t, "stop tree without global session list", mgr.Stops.Abort(t.Context(), root.ID, "user stopped"))
 }

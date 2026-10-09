@@ -83,7 +83,7 @@ func TestPromptRetryRestoresOriginalInputFromReceipt(t *testing.T) {
 	_, err = mgr.Runner.Instructions.Apply(ctx, sess.ID, originalInput)
 	testutil.FailErr(t, "append original", err)
 	testutil.FailErr(t, "interrupt original", st.FinishPromptSubmission(ctx, original.ID, claimed.ClaimToken, store.PromptSubmissionInterrupted, "", store.PromptSubmissionFailure{Message: "provider disconnected"}))
-	restarted := NewManager(st, llm.NewMockProvider(testMockConfig(t)), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	restarted := NewHost(st, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	input := promptinput.Input{Text: "client text is not the retry authority", Recovery: &api.PromptRecovery{Action: "retry", AfterMessageID: original.ID}}
 	resumed, _, err := restarted.Submissions.AdmitPrompt(ctx, sess.ID, uuid.NewString(), input, input)
 	testutil.FailErr(t, "retry after manager restart", err)

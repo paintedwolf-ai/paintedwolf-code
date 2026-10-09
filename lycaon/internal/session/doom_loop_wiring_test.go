@@ -31,7 +31,7 @@ func TestDoomLoopPageResolverWiringOrder(t *testing.T) {
 			name = "guard first"
 		}
 		t.Run(name, func(t *testing.T) {
-			manager := NewManager(sessionstore.NewMemory(), nil, nil, settings.DefaultSessionLimits())
+			manager := NewHost(sessionstore.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 			guard := newResolverRecordingGuard()
 			pages := pagesession.NewRegistry(pagesession.DefaultConfig())
 			t.Cleanup(func() { pages.Close(t.Context()) })

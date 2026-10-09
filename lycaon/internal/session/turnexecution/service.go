@@ -45,6 +45,7 @@ type SlashCommands interface {
 	TrySlashPrompt(context.Context, string, string, string) (*promptresult.Result, bool, error)
 }
 type Requests interface {
+	AcceptsEmptyRequest(context.Context, string) bool
 	PrepareUserRequest(context.Context, string, string) (string, *promptresult.Result, bool, error)
 }
 type RunControl interface {
@@ -111,4 +112,8 @@ func (m *Service) assertRunnable(ctx context.Context, id string) error {
 		return nil
 	}
 	return m.workflow.AssertSessionRunnable(ctx, id)
+}
+
+func (m *Service) AcceptsEmpty(ctx context.Context, id string) bool {
+	return m != nil && m.requests != nil && m.requests.AcceptsEmptyRequest(ctx, id)
 }

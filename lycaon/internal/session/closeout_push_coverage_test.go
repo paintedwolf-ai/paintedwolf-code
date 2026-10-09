@@ -50,7 +50,7 @@ func TestCloseoutPushCoversEveryReachableProseSurface(t *testing.T) {
 	var fired []string
 	for _, surfaceID := range implementSurfaceUniverse {
 		mgr, sess := newSynthesisDelayManager(t)
-		mgr.progress.Set(sess.ID, openPlanFixture)
+		mgr.RewindRuntime.Progress.Set(sess.ID, openPlanFixture)
 
 		_, block := rejectCloseout(t, mgr, sess, surfaceID, true)
 

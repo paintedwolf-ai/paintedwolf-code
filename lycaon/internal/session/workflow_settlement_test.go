@@ -59,7 +59,7 @@ func TestWorkflowCompletionSettlesAfterExecutionDrains(t *testing.T) {
 		t.Run(blocker, func(t *testing.T) {
 			ctx := t.Context()
 			st := store.NewMemory()
-			mgr := NewManager(st, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+			mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 			loopWorkflowFixture1 := &settlementWorkflowSource{}
 			mgr.SetLoopWorkflowSource(&loopwake.WorkflowDomains{Runs: loopWorkflowFixture1, Approvals: loopWorkflowFixture1, Obligations: loopWorkflowFixture1})
 			sess, err := st.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
@@ -70,10 +70,10 @@ func TestWorkflowCompletionSettlesAfterExecutionDrains(t *testing.T) {
 			eventCh, unsubscribe, err := hub.Subscribe(ctx, events.Subscription{Project: sess.ProjectID, Viewer: testutil.HostOwner()})
 			testutil.FailErr(t, "subscribe", err)
 			t.Cleanup(unsubscribe)
-			loop := mgr.ensureCoordinatorRuntime().CoordinatorLoop()
+			loop := mgr.Coordinator.Runtime.CoordinatorLoop()
 			workers := &settlementWorkerQueue{}
 			workers.idle.Store(blocker != "workers")
-			mgr.workerQueue = workers
+			mgr.Coordinator.Tools.Workers = workers
 			loop.EnterSleep(ctx, sess.ID, time.Now().Add(time.Hour), "phase wait", loopwake.HostObligationWaitTriggers(false), nil, loopwake.SleepMoverHost)
 			unblock := func() {}
 			switch blocker {
@@ -117,7 +117,7 @@ func TestWorkflowCompletionSettlesAfterExecutionDrains(t *testing.T) {
 func TestWorkflowCompletionDoesNotSettleAnotherActiveRun(t *testing.T) {
 	ctx := t.Context()
 	st := store.NewMemory()
-	mgr := NewManager(st, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	source := &settlementWorkflowSource{active: &api.WorkflowRun{ID: "new-run", Status: api.WorkflowRunStatusRunning}}
 	loopWorkflowFixture2 := source
 	mgr.SetLoopWorkflowSource(&loopwake.WorkflowDomains{Runs: loopWorkflowFixture2, Approvals: loopWorkflowFixture2, Obligations: loopWorkflowFixture2})
@@ -138,7 +138,7 @@ func TestWorkflowCompletionDoesNotSettleAnotherActiveRun(t *testing.T) {
 func TestWorkflowCompletionRetriesLookupFailure(t *testing.T) {
 	ctx := t.Context()
 	st := store.NewMemory()
-	mgr := NewManager(st, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	want := errors.New("workflow store unavailable")
 	source := &settlementWorkflowSource{err: want}
 	loopWorkflowFixture3 := source

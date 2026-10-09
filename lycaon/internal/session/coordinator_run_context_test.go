@@ -23,7 +23,7 @@ func (s stubCoordinatorContext) BuildCoordinatorTurnFrame(_ context.Context, _ s
 
 func TestCoordinatorRunContextDelegatesToBuilder(t *testing.T) {
 	store := store.NewMemory()
-	mgr := session.NewManager(store, nil, nil, settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetCoordinatorTurnFrameSource(stubCoordinatorContext{
 		ctx: wire.CoordinatorRunContext{WorkflowID: "hotfix-session", CoordinatorBrief: "brief text"},
 	})

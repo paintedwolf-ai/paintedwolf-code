@@ -40,8 +40,8 @@ func TestCancelServiceReturnsChangeReportAndEnvelope(t *testing.T) {
 	}
 
 	svc := &CancelService{
-		Queue:    queue,
-		Sessions: mgr, Graceful: mgr.Workers.Cancel,
+		Queue:  queue,
+		Events: mgr.Coordinator.Workers, Graceful: mgr.Workers.Cancel,
 		Reports: ChangeReportDeps{
 			Messages: func(context.Context, string) ([]api.Message, error) { return nil, nil },
 		},

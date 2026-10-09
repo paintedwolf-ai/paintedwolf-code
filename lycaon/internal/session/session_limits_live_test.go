@@ -41,7 +41,7 @@ agent_pool:
 	limStore, err := settings.NewLimitsStoreAt(globalLimits)
 	testutil.FailErr(t, "NewLimitsStoreAt", err)
 
-	mgr := NewManagerWithLLMService(sessionstore.NewMemory(), nil, &llm.Service{Policy: policy}, nil, settings.SessionLimits{}, nil)
+	mgr := NewHost(sessionstore.NewMemory(), Models{Client: nil, Provider: &llm.Service{Policy: policy}, Limits: settings.SessionLimits{}, Cost: nil}, nil)
 	mgr.Limits.SetProvider(settings.ProjectLimitsAdapter{Store: limStore})
 
 	sess := &api.Session{WorkspacePath: tmp}

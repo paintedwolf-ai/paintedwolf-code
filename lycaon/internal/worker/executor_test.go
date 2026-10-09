@@ -435,7 +435,7 @@ func (*fakePromptRunner) Append(context.Context, string, workeroutcomes.Cancella
 	return errors.New("unexpected cancellation publication")
 }
 
-func (*fakePromptRunner) NotifyWorkerCycleTerminal(context.Context, string, string) {}
+func (*fakePromptRunner) Terminal(context.Context, string, string) {}
 
 func TestLocalExecutorAbortUsesChildRuntime(t *testing.T) {
 	for _, stopErr := range []error{nil, errors.New("cleanup failed")} {

@@ -65,7 +65,7 @@ func TestTerminalSendInputRedactedInPersistedTranscript(t *testing.T) {
 	}
 
 	// Transcript projection redacts by tool identity.
-	page, err := h.SessionMgr.Transcript.GetTranscriptPage(ctx, sess.ID, wire.TranscriptPageQuery{})
+	page, err := h.SessionMgr.Runner.Transcript.GetTranscriptPage(ctx, sess.ID, wire.TranscriptPageQuery{})
 	testutil.FailErr(t, "GetTranscriptPage", err)
 	foundTranscript := false
 	for _, m := range page.Messages {

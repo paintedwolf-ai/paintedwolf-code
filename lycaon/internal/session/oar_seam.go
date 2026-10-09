@@ -5,7 +5,7 @@ import (
 )
 
 // SetOARPipeline connects policy evaluation, rendering, and advisory delivery.
-func (m *Manager) SetOARPipeline(p *oar.GuardPipeline, r *oar.Renderer) {
+func (m *Host) SetOARPipeline(p *oar.GuardPipeline, r *oar.Renderer) {
 	if m == nil {
 		return
 	}
@@ -15,11 +15,11 @@ func (m *Manager) SetOARPipeline(p *oar.GuardPipeline, r *oar.Renderer) {
 	}
 	m.Workers.Delivery.SetPipeline(p)
 	m.ToolPolicy.SetPipeline(p)
-	m.Workers.Summaries.SetEvaluation(m.workspaceCheck, m.workflowHints, m.ToolPolicy.Pipeline)
-	m.Workers.SetEvaluation(m.workspaceCheck, m.workflowHints, m.ToolPolicy.Pipeline)
-	m.Feedback.SetRenderer(r)
-	m.Guidance.SetRenderer(r)
+	m.Workers.Summaries.SetEvaluation(m.Workers.WorkspaceCheck, m.Coordinator.Completion.Hints, m.ToolPolicy.Pipeline)
+	m.Workers.SetEvaluation(m.Workers.WorkspaceCheck, m.Coordinator.Completion.Hints, m.ToolPolicy.Pipeline)
+	m.Coordinator.Feedback.SetRenderer(r)
+	m.Coordinator.Guidance.SetRenderer(r)
 	if p != nil {
-		p.SetAdvisorySink(m.Guidance.DeliverAdvisories)
+		p.SetAdvisorySink(m.Coordinator.Guidance.DeliverAdvisories)
 	}
 }

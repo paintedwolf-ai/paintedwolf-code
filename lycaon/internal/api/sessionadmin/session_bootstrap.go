@@ -31,7 +31,7 @@ func (s *Handler) HandleSessionBootstrap(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	s.SessionView.EnrichSession(r.Context(), sess)
-	transcript, err := s.Sessions.Transcript.GetTranscriptPage(r.Context(), id, wire.TranscriptPageQuery{})
+	transcript, err := s.Sessions.Runner.Transcript.GetTranscriptPage(r.Context(), id, wire.TranscriptPageQuery{})
 	if err != nil {
 		s.responses.InternalError(w, r, err)
 		return
@@ -51,7 +51,7 @@ func (s *Handler) HandleSessionBootstrap(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	findingsDigest := findings.BuildDigestFromRows(rows, root)
-	queue := s.Sessions.Drafts.Snapshot(id)
+	queue := s.Sessions.Chats.Drafts.Snapshot(id)
 	coordinator, _ := s.Sessions.Coordinator.Context.RunContext(r.Context(), id)
 	workers, checkpoints, err := s.sessionBootstrapWorkersAndCheckpoints(
 		r.Context(), sess.ProjectID, id,

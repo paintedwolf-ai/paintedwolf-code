@@ -33,7 +33,7 @@ func TestFailedExecutionsReportOnceAndRetainTypedErrors(t *testing.T) {
 			ctx := t.Context()
 			mgr, st := newTestManager(t)
 			provider := &failure.ProviderEmptyCompletionError{ProviderID: "fixture"}
-			mgr.llm = failingTurnClient{provider}
+			mgr.Coordinator.Model.LLM = failingTurnClient{provider}
 			sess, err := st.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 			testutil.FailErr(t, "create failure session", err)
 			var delivered []error
@@ -67,7 +67,7 @@ func TestFailedExecutionsReportOnceAndRetainTypedErrors(t *testing.T) {
 func TestFailedTurnBlocksAutomaticAdmissionButAllowsExplicitRetry(t *testing.T) {
 	mgr, st := newTestManager(t)
 	provider := &failure.ProviderEmptyCompletionError{ProviderID: "fixture"}
-	mgr.llm = failingTurnClient{provider}
+	mgr.Coordinator.Model.LLM = failingTurnClient{provider}
 	sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	failures := 0
@@ -82,7 +82,7 @@ func TestFailedTurnBlocksAutomaticAdmissionButAllowsExplicitRetry(t *testing.T) 
 		if status != store.TurnStatusFailed {
 			t.Fatalf("turn status=%s", status)
 		}
-		loop := mgr.ensureCoordinatorRuntime().CoordinatorLoop()
+		loop := mgr.Coordinator.Runtime.CoordinatorLoop()
 		loop.Nudge(t.Context(), sess.ID, anchor.PhaseAdvanced, "", "", anchor.Envelope{})
 		if !loop.HasPendingLoopWakes(sess.ID) {
 			t.Fatal("failed turn discarded a new wake")

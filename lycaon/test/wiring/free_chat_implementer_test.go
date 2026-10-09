@@ -98,7 +98,7 @@ func TestFreeChatImplementerChildIncludesCommandInSchema(t *testing.T) {
 	testutil.FailErr(t, "SpawnChild", err)
 	prof, err := h.AgentRegistry.Get("implementer")
 	testutil.FailErr(t, "agents.Get", err)
-	policy := h.SessionMgr.Guards.Policy()
+	policy := h.SessionMgr.Coordinator.Guards.Policy()
 	hasCommand := false
 	for _, meta := range policy.ListForPrompt(ctx, child, prof.ToolProfile) {
 		if meta.Name == "command" {

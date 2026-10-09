@@ -25,7 +25,7 @@ func (q *pendingOutcomeQueue) ListPendingOutcomes(context.Context) ([]api.Worker
 func TestWorkerSynthesisSettlesAfterOutcomeAcknowledgement(t *testing.T) {
 	ctx := t.Context()
 	st := store.NewMemory()
-	mgr := NewManager(st, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	testutil.FailErr(t, "mark visible turn busy", st.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
@@ -33,7 +33,7 @@ func TestWorkerSynthesisSettlesAfterOutcomeAcknowledgement(t *testing.T) {
 		ID: "job-a", ProjectID: sess.ProjectID, ParentSessionID: sess.ID, Status: api.WorkerStatusComplete,
 	}}}
 	mgr.SetWorkerQueue(q)
-	loop := mgr.ensureCoordinatorRuntime().CoordinatorLoop()
+	loop := mgr.Coordinator.Runtime.CoordinatorLoop()
 	finishExecution := loop.BeginPromptExecution(t.Context(), sess.ID)
 	defer finishExecution()
 	loop.Nudge(ctx, sess.ID, anchor.PhaseAdvanced, anchor.PhaseAdvanced, "", anchor.Envelope{})

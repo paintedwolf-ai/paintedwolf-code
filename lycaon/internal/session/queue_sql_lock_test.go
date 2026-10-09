@@ -19,7 +19,7 @@ import (
 )
 
 type gatedPromptPending struct {
-	manager    *Manager
+	manager    *Host
 	writerHeld chan struct{}
 	queueHeld  chan struct{}
 }
@@ -35,7 +35,7 @@ func TestQueuedReceiptClaimDoesNotDeadlockSessionSeenPublication(t *testing.T) {
 	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
 	st := store.NewSQL(database)
 	st.SetEventOutbox(eventoutbox.New(database, events.NewMemoryHub()))
-	manager := NewManager(st, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	manager := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	row, _, err := manager.Submissions.AdmitPrompt(t.Context(), sess.ID, uuid.NewString(), "queued", promptinput.Input{Text: "queued"})

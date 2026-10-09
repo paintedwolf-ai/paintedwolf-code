@@ -48,7 +48,7 @@ func TestRunContextInjectsEveryIteration(t *testing.T) {
 	}); err != nil {
 		testutil.FailErr(t, "register list_dir", err)
 	}
-	mgr := session.NewManager(store, rec, reg, settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, reg)
 	projects := project.NewMemoryRegistry()
 	p, err := project.CreateWithRoot(ctx, projects, t.TempDir())
 	testutil.FailErr(t, "create project", err)
@@ -94,7 +94,7 @@ func TestSecondPromptStillGetsRunContextAfterAdvance(t *testing.T) {
 		{Pattern: ".", Text: "ok"},
 	}}))
 	store := store.NewMemory()
-	mgr := session.NewManager(store, rec, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	wirePromptTestManager(t, mgr)
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
 
@@ -137,7 +137,7 @@ func TestWorkerLegInjectsEveryIteration(t *testing.T) {
 		FollowUpText: "done",
 	}}}))
 	store := store.NewMemory()
-	mgr := session.NewManager(store, rec, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	mgr.Profiles.SetAgentRegistry(loadTestAgentRegistry(t))
 	wirePromptTestManager(t, mgr)
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))

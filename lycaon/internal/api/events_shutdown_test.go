@@ -30,7 +30,7 @@ func TestShutdownReleasesOpenEventStream(t *testing.T) {
 
 	memStore := store.NewMemory()
 	srv := NewServer(requiredTestDeps(t, Dependencies{
-		Store: memStore, Projects: reg, Sessions: session.NewManager(memStore, nil, nil, settings.DefaultSessionLimits()), Events: hub,
+		Store: memStore, Projects: reg, Sessions: session.NewHost(memStore, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil), Events: hub,
 	}), nil, TestAPIToken)
 
 	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")

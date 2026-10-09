@@ -26,14 +26,14 @@ func TestRewindApplyPanicRollsBackInPlace(t *testing.T) {
 		Origin: api.MessageOriginUser, Authority: api.ContentAuthorityUser,
 		TrustTier: api.ContentTrustTierTrusted,
 	}
-	testutil.FailErr(t, "append", mgr.store.AppendMessages(ctx, sessionID, anchor))
+	testutil.FailErr(t, "append", mgr.Coordinator.Context.Sessions.(Store).AppendMessages(ctx, sessionID, anchor))
 
 	pathA := filepath.Join(dir, "a.txt")
 	pathB := filepath.Join(dir, "b.txt")
 	testutil.FailErr(t, "seed a", os.WriteFile(pathA, []byte("before-a"), 0o640))
 	testutil.FailErr(t, "seed b", os.WriteFile(pathB, []byte("before-b"), 0o640))
 
-	cpStore := sessioncheckpoint.New(mgr.dataDir, dir, mgr.store)
+	cpStore := sessioncheckpoint.New(mgr.Workspace.DataDir, dir, mgr.Coordinator.Context.Sessions.(Store))
 	_, err := cpStore.Open(t.Context(), sessionID, anchor.ID)
 	testutil.FailErr(t, "open checkpoint", err)
 	testutil.FailErr(t, "capture a", cpStore.CapturePreImage(t.Context(), sessionID, anchor.ID, "a.txt"))
@@ -44,12 +44,12 @@ func TestRewindApplyPanicRollsBackInPlace(t *testing.T) {
 	recordRewindTestEffect(t, mgr, sessionID, "b.txt", []byte("before-b"), []byte("after-b"), api.SourceChangeOpWrite)
 
 	// Apply a.txt before injecting a panic on b.txt.
-	faultSource := &sourcerewind.Service{Ledger: mgr.sourceLedger.(*sourceledger.Store), Mutations: &rewindFaultJournal{delegate: mgr.sourceMutations, before: func(entryIndex int) {
+	faultSource := &sourcerewind.Service{Ledger: mgr.ToolContext.SourceLedger.(*sourceledger.Store), Mutations: &rewindFaultJournal{delegate: mgr.sourceMutations, before: func(entryIndex int) {
 		if entryIndex == 1 {
 			panic("boom: injected rewind apply panic")
 		}
 	}}}
-	mgr.Rewinds.SetSourceRewinds(faultSource)
+	mgr.Chats.Rewinds.SetSourceRewinds(faultSource)
 
 	operationID := uuid.NewString()
 	_, err = rewindTest(t, mgr, ctx, operationID, sessionID, anchor.ID)
@@ -72,20 +72,20 @@ func TestRewindApplyPanicRollsBackInPlace(t *testing.T) {
 		t.Fatalf("b.txt = %q, want untouched after-b", gotB)
 	}
 
-	msgs, err := mgr.Transcript.GetMessages(ctx, sessionID)
+	msgs, err := mgr.Runner.Transcript.GetMessages(ctx, sessionID)
 	testutil.FailErr(t, "get messages", err)
 	if _, ok := rewindFixtureHasMessage(msgs, anchor.ID); !ok {
 		t.Fatal("a rolled-back rewind must leave the transcript intact")
 	}
 
-	op, err := mgr.store.GetRewindOperation(ctx, operationID)
+	op, err := mgr.Coordinator.Context.Sessions.(Store).GetRewindOperation(ctx, operationID)
 	testutil.FailErr(t, "get rewind operation", err)
 	if op == nil || op.Status != "rolled_back" {
 		t.Fatalf("rewind operation status = %+v, want rolled_back", op)
 	}
 
 	// Retry in the same process after rollback.
-	mgr.Rewinds.SetSourceRewinds(&sourcerewind.Service{Ledger: mgr.sourceLedger.(*sourceledger.Store), Mutations: mgr.sourceMutations})
+	mgr.Chats.Rewinds.SetSourceRewinds(&sourcerewind.Service{Ledger: mgr.ToolContext.SourceLedger.(*sourceledger.Store), Mutations: mgr.sourceMutations})
 	result, err := rewindTest(t, mgr, ctx, uuid.NewString(), sessionID, anchor.ID)
 	testutil.FailErr(t, "rewind after recovery", err)
 	if result == nil {
@@ -112,9 +112,9 @@ func (j *rewindFaultJournal) RemoveEntry(ctx context.Context, r sourceeffect.Rem
 	return j.delegate.RemoveEntry(ctx, r)
 }
 
-func rewindTestDigest(t *testing.T, m *Manager, id, anchor string) string {
+func rewindTestDigest(t *testing.T, m *Host, id, anchor string) string {
 	t.Helper()
-	preview, err := m.Rewinds.PreviewRewind(checkpointCaller(t, m), id, anchor)
+	preview, err := m.Chats.Rewinds.PreviewRewind(checkpointCaller(t, m), id, anchor)
 	testutil.FailErr(t, "preview rewind", err)
 	if len(preview.Issues) > 0 {
 		t.Fatalf("preview issues: %+v", preview.Issues)

@@ -33,11 +33,11 @@ func packTopologySpec(count int, merge orchestration.MergeStrategy) orchestratio
 	}
 }
 
-func newPackTestOrchestrator(t *testing.T, del orchestration.PipelineDelegation) (*orchestration.OrchestratorImpl, *delegation.MemoryStore, *session.Manager, *store.Memory) {
+func newPackTestOrchestrator(t *testing.T, del orchestration.PipelineDelegation) (*orchestration.OrchestratorImpl, *delegation.MemoryStore, *session.Host, *store.Memory) {
 	t.Helper()
 	delStore := delegation.NewMemoryStore()
 	sessStore := store.NewMemory()
-	sessMgr := session.NewManager(sessStore, llm.NewMockProvider(nil), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	sessMgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	queue := worker.NewInMemoryQueue(10)
 	delMgr := delegation.NewManager(delStore, queue, sessMgr, delegation.AllowGate{})
 	if del == nil {
@@ -58,7 +58,7 @@ func newPackTestOrchestrator(t *testing.T, del orchestration.PipelineDelegation)
 	return orch, delStore, sessMgr, sessStore
 }
 
-func newPackTimestampOrchestrator(t *testing.T) (*orchestration.OrchestratorImpl, *packTimestampRecording, *session.Manager, *store.Memory) {
+func newPackTimestampOrchestrator(t *testing.T) (*orchestration.OrchestratorImpl, *packTimestampRecording, *session.Host, *store.Memory) {
 	t.Helper()
 	rec := &packTimestampRecording{recordingDelegation: recordingDelegation{order: make([]string, 0, 4)}}
 	orch, _, sessMgr, sessStore := newPackTestOrchestrator(t, rec)
@@ -108,7 +108,7 @@ func TestPackFirstValidSkipsFailedProbe(t *testing.T) {
 	ctx := context.Background()
 	delStore := delegation.NewMemoryStore()
 	sessStore := store.NewMemory()
-	sessMgr := session.NewManager(sessStore, llm.NewMockProvider(nil), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	sessMgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	queue := worker.NewInMemoryQueue(10)
 	delMgr := delegation.NewManager(delStore, queue, sessMgr, delegation.AllowGate{})
 	failDel := &failProbeDelegation{
@@ -172,7 +172,7 @@ func TestPackAllFailReturnsError(t *testing.T) {
 	ctx := context.Background()
 	delStore := delegation.NewMemoryStore()
 	sessStore := store.NewMemory()
-	sessMgr := session.NewManager(sessStore, llm.NewMockProvider(nil), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	sessMgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	queue := worker.NewInMemoryQueue(10)
 	delMgr := delegation.NewManager(delStore, queue, sessMgr, delegation.AllowGate{})
 	failDel := &failProbeDelegation{

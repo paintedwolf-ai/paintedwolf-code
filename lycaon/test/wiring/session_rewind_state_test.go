@@ -54,7 +54,7 @@ func TestRewindResetsCoordinatorBatchAtTheNewBoundary(t *testing.T) {
 
 	seqBefore := implementBatchSeq(t, h, ctx, sess.ID)
 
-	if _, err := h.SessionMgr.Rewinds.RewindToPrompt(ctx, uuid.NewString(), sess.ID, anchors[1], rewindDigest(t, h.SessionMgr, ctx, sess.ID, anchors[1])); err != nil {
+	if _, err := h.SessionMgr.Chats.Rewinds.RewindToPrompt(ctx, uuid.NewString(), sess.ID, anchors[1], rewindDigest(t, h.SessionMgr, ctx, sess.ID, anchors[1])); err != nil {
 		testutil.FailErr(t, "rewind to the second ask", err)
 	}
 
@@ -97,7 +97,7 @@ func TestRewindToFirstAskDropsSuffixCheckpoints(t *testing.T) {
 	testutil.FailErr(t, "get messages", err)
 	anchors := visibleUserMessageIDs(t, msgs)
 
-	if _, err := h.SessionMgr.Rewinds.RewindToPrompt(ctx, uuid.NewString(), sess.ID, anchors[0], rewindDigest(t, h.SessionMgr, ctx, sess.ID, anchors[0])); err != nil {
+	if _, err := h.SessionMgr.Chats.Rewinds.RewindToPrompt(ctx, uuid.NewString(), sess.ID, anchors[0], rewindDigest(t, h.SessionMgr, ctx, sess.ID, anchors[0])); err != nil {
 		testutil.FailErr(t, "rewind to the first ask", err)
 	}
 
@@ -170,7 +170,7 @@ func TestRewindPastAWorkerDispatchLeavesNoGhostState(t *testing.T) {
 		t.Fatal("touch-ledger setup failed")
 	}
 
-	if _, err := h.SessionMgr.Rewinds.RewindToPrompt(ctx, uuid.NewString(), sess.ID, anchor, rewindDigest(t, h.SessionMgr, ctx, sess.ID, anchor)); err != nil {
+	if _, err := h.SessionMgr.Chats.Rewinds.RewindToPrompt(ctx, uuid.NewString(), sess.ID, anchor, rewindDigest(t, h.SessionMgr, ctx, sess.ID, anchor)); err != nil {
 		testutil.FailErr(t, "rewind past the dispatch", err)
 	}
 
@@ -196,7 +196,7 @@ func mustMessages(t *testing.T, h *Harness, ctx context.Context, sessionID strin
 	return msgs
 }
 
-func rewindDigest(t *testing.T, mgr *session.Manager, ctx context.Context, sessionID, anchor string) string {
+func rewindDigest(t *testing.T, mgr *session.Host, ctx context.Context, sessionID, anchor string) string {
 	t.Helper()
 	preview, err := mgr.Rewinds.PreviewRewind(ctx, sessionID, anchor)
 	testutil.FailErr(t, "preview rewind", err)

@@ -48,12 +48,12 @@ func TestPromptDoesNotQueueGreenfieldBuildKickForPlanReviewPolicyPrompt(t *testi
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	store := store.NewMemory()
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
-	mgr := session.NewManager(store, rec, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr)
 	wirePromptTestManager(t, mgr)
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
 	mgr.SetProgressStore(progress.NewMemoryStore())
-	testutil.FailErr(t, "install anchor registry", mgr.Guidance.InstallAnchorRegistry())
+	testutil.FailErr(t, "install anchor registry", mgr.Coordinator.Guidance.InstallAnchorRegistry())
 
 	ctx := context.Background()
 	sess, err := mgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureBuild)
@@ -75,7 +75,7 @@ func TestQueueCoordinatorKickPrependsOnPrompt(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	store := store.NewMemory()
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
-	mgr := session.NewManager(store, rec, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr)
 	wirePromptTestManager(t, mgr)
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
@@ -84,7 +84,7 @@ func TestQueueCoordinatorKickPrependsOnPrompt(t *testing.T) {
 
 	sess, err := store.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
-	mgr.Guidance.Emit(context.Background(), sess.ID, anchor.ComposeDone, anchor.Envelope{})
+	mgr.Coordinator.Guidance.Emit(context.Background(), sess.ID, anchor.ComposeDone, anchor.Envelope{})
 	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "continue"); err != nil {
 		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 	}
@@ -125,16 +125,16 @@ func TestPromptRenderFailurePreservesCoordinatorKickForRetry(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	st := store.NewMemory()
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
-	mgr := session.NewManager(st, rec, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(st, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr)
 	wirePromptTestManager(t, mgr)
-	testutil.FailErr(t, "install anchor registry", mgr.Guidance.InstallAnchorRegistry())
+	testutil.FailErr(t, "install anchor registry", mgr.Coordinator.Guidance.InstallAnchorRegistry())
 	mgr.SetPromptEngine(failingKickPromptEngine{err: errors.New("template unavailable")})
 
 	ctx := context.Background()
 	sess, err := st.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	mgr.Guidance.Emit(ctx, sess.ID, anchor.ComposeDone, anchor.Envelope{})
+	mgr.Coordinator.Guidance.Emit(ctx, sess.ID, anchor.ComposeDone, anchor.Envelope{})
 	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "continue"); err == nil {
 		t.Fatal("Prompt error = nil, want kick render failure")
 	}

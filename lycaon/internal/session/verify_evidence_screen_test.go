@@ -21,7 +21,7 @@ func evidenceScreenRedactor(_ context.Context, msg api.Message) (api.Message, bo
 }
 
 // evidenceFileBytes reads every verify evidence row this project wrote.
-func evidenceFileBytes(t *testing.T, m *Manager, sess *api.Session) []byte {
+func evidenceFileBytes(t *testing.T, m *Host, sess *api.Session) []byte {
 	t.Helper()
 	root := m.Verification.EvidenceRootFor(sess)
 	if strings.TrimSpace(root) == "" {
@@ -48,7 +48,7 @@ func evidenceFileBytes(t *testing.T, m *Manager, sess *api.Session) []byte {
 
 func TestSourceRunEvidenceIsScreenedBeforeItIsPersisted(t *testing.T) {
 	mgr, sess, _ := verifyGateHarness(t, "")
-	mgr.Transcript.SetRedactor(evidenceScreenRedactor)
+	mgr.Runner.Transcript.SetRedactor(evidenceScreenRedactor)
 	recordVerify(t, mgr, sess, "deploy --token "+evidenceBoundarySecret, 0)
 
 	rows := evidenceFileBytes(t, mgr, sess)
@@ -62,7 +62,7 @@ func TestSourceRunEvidenceIsScreenedBeforeItIsPersisted(t *testing.T) {
 
 func TestScreenedEvidenceStillMatchesTheDeclaredCommand(t *testing.T) {
 	mgr, sess, history := verifyGateHarness(t, "make test")
-	mgr.Transcript.SetRedactor(evidenceScreenRedactor)
+	mgr.Runner.Transcript.SetRedactor(evidenceScreenRedactor)
 	recordVerify(t, mgr, sess, "make test", 0)
 
 	passed, _, _ := mgr.Verification.GateState(context.Background(), sess, workSince(history))

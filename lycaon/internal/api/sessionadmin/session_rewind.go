@@ -42,7 +42,7 @@ func (s *Handler) HandleRewindSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := s.Sessions.Rewinds.RewindToPrompt(r.Context(), req.OperationID, id, req.MessageID, req.PlanDigest)
+	result, err := s.Sessions.Chats.Rewinds.RewindToPrompt(r.Context(), req.OperationID, id, req.MessageID, req.PlanDigest)
 	if err != nil {
 		s.writeRewindError(w, r, err)
 		return
@@ -88,7 +88,7 @@ func (s *Handler) HandlePreviewSessionRewind(w http.ResponseWriter, r *http.Requ
 		s.responses.InvalidField(w, "message_id", "must be a UUID")
 		return
 	}
-	result, err := s.Sessions.Rewinds.PreviewRewind(r.Context(), chi.URLParam(r, "id"), req.MessageID)
+	result, err := s.Sessions.Chats.Rewinds.PreviewRewind(r.Context(), chi.URLParam(r, "id"), req.MessageID)
 	if err != nil {
 		s.writeRewindError(w, r, err)
 		return

@@ -14,11 +14,12 @@ import (
 
 // SessionOutcomeBridge wakes the session loop after a worker completes or fails.
 type SessionOutcomeBridge struct {
-	Sessions WorkerSessionOutcomes
-	Results  WorkerResultProjection
-	State    WorkerCycleWakeState
-	Closure  ProgressClosureArm
-	Inner    OutcomeProjection
+	Workers WorkerTerminalEvents
+	Loop    WorkerLegWakes
+	Results WorkerResultProjection
+	State   WorkerCycleWakeState
+	Closure ProgressClosureArm
+	Inner   OutcomeProjection
 }
 
 // OnWorkerComplete projects the result before waking its parent.
@@ -96,21 +97,21 @@ func (b *SessionOutcomeBridge) OnWorkerFailed(ctx context.Context, jobID string,
 
 // OnOutcomeDelivered releases parent deferrals after the queue acknowledgement is visible.
 func (b *SessionOutcomeBridge) OnOutcomeDelivered(ctx context.Context, task api.WorkerTask) {
-	if b.Sessions != nil && strings.TrimSpace(task.ParentSessionID) != "" {
-		b.Sessions.Coordinator.Workers.Terminal(ctx, task.ParentSessionID, task.ID)
+	if b.Workers != nil && strings.TrimSpace(task.ParentSessionID) != "" {
+		b.Workers.Terminal(ctx, task.ParentSessionID, task.ID)
 	}
 }
 
 func (b *SessionOutcomeBridge) scheduleParentWake(ctx context.Context, task workeroutcomes.SummaryInput, jobID, status string) {
 	parentID := strings.TrimSpace(task.ParentSessionID)
-	if parentID == "" || b.Sessions == nil {
+	if parentID == "" || b.Workers == nil {
 		return
 	}
 	if api.WorkerSummaryLegSucceeded(api.WorkerSummaryStatus(status)) {
 		b.Closure.Arm(ctx, parentID, jobID)
 	}
-	if strings.TrimSpace(task.LegID) != "" || strings.TrimSpace(task.DelegationID) != "" {
-		b.Sessions.Coordinator.Runtime.CoordinatorLoop().NudgeLegFinished(ctx, parentID, time.Now().UTC(), task.LegID)
+	if (strings.TrimSpace(task.LegID) != "" || strings.TrimSpace(task.DelegationID) != "") && b.Loop != nil {
+		b.Loop.NudgeLegFinished(ctx, parentID, time.Now().UTC(), task.LegID)
 		return
 	}
 	if !api.WorkerResultStatusReactable(status) {
@@ -119,7 +120,7 @@ func (b *SessionOutcomeBridge) scheduleParentWake(ctx context.Context, task work
 	if !b.State.ShouldNudge(ctx, parentID, task.ProjectID, jobID) {
 		return
 	}
-	b.Sessions.Coordinator.Workers.AfterTerminal(
+	b.Workers.AfterTerminal(
 		ctx,
 		parentID,
 		jobID,
@@ -127,24 +128,10 @@ func (b *SessionOutcomeBridge) scheduleParentWake(ctx context.Context, task work
 	)
 }
 
-// WorkerSessionOutcomes schedules coordinator loop wakes after a worker completes or fails.
-type WorkerSessionOutcomes interface {
-	NudgeLegFinishedLoopWake(ctx context.Context, parentID string, completedAt time.Time, legID string)
-	NotifyWorkerCycleTerminal(ctx context.Context, parentID, completingJobID string)
-	NudgeCoordinatorLoopAfterWorkerJobTerminal(ctx context.Context, parentID, completingJobID string, env anchor.Envelope)
+type WorkerTerminalEvents interface {
+	Terminal(context.Context, string, string)
+	AfterTerminal(context.Context, string, string, anchor.Envelope)
 }
-
-type WorkerCycleWakeState interface {
-	ShouldNudge(context.Context, string, string, string) bool
-}
-type WorkerResultProjection interface {
-	TaskByID(string) (workeroutcomes.SummaryInput, bool)
-	ProjectResult(context.Context, workeroutcomes.SummaryInput, api.WorkerResult) (string, error)
-	ProjectFailure(context.Context, workeroutcomes.SummaryInput, error) error
-	RecordTerminalProof(context.Context, string, string, string) error
-	EnvelopeForTerminal(context.Context, string, string) anchor.Envelope
-}
-
-type ProgressClosureArm interface {
-	Arm(context.Context, string, string)
+type WorkerLegWakes interface {
+	NudgeLegFinished(context.Context, string, time.Time, string)
 }

@@ -43,14 +43,14 @@ func initReachRepo(t *testing.T) string {
 }
 
 type reachFixture struct {
-	mgr     *Manager
+	mgr     *Host
 	mem     *store.Memory
 	reg     *project.MemoryRegistry
 	project *project.Project
 	sess    *api.Session
 	repoDir string
 	wtPath  string
-	gm      *git.Manager
+	gm      *git.Host
 }
 
 func newReachFixture(t *testing.T, rootPath string) *reachFixture {
@@ -58,7 +58,7 @@ func newReachFixture(t *testing.T, rootPath string) *reachFixture {
 	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	mem := store.NewMemory()
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}})
-	mgr := NewManager(mem, mock, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(mem, Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	reg := project.NewMemoryRegistry()
 	p, err := project.CreateWithRoot(t.Context(), reg, rootPath)
 	testutil.FailErr(t, "CreateWithRoot", err)
@@ -263,7 +263,7 @@ func TestWorktreeReach_rootBelowToplevel(t *testing.T) {
 	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	mem := store.NewMemory()
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}})
-	mgr := NewManager(mem, mock, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(mem, Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	reg := project.NewMemoryRegistry()
 	p, err := project.CreateWithRoot(t.Context(), reg, web)
 	testutil.FailErr(t, "CreateWithRoot", err)
@@ -360,7 +360,7 @@ func TestWorktreeReach_getFailureRefuses(t *testing.T) {
 	mem := store.NewMemory()
 	failing := &getFailStore{Store: mem, failGet: true}
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}})
-	mgr := NewManager(failing, mock, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(failing, Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	reg := project.NewMemoryRegistry()
 	p, err := project.CreateWithRoot(t.Context(), reg, repoDir)
 	testutil.FailErr(t, "CreateWithRoot", err)

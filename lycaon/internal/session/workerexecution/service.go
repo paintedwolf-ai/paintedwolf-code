@@ -70,7 +70,7 @@ type Service struct {
 	prompts        prompts.PromptTemplateEngine
 	workerContext  assembly.WorkerContextBuilder
 	workflowHints  *guidance.HintConfig
-	workspaceCheck workercompletion.WorkspaceChangeChecker
+	WorkspaceCheck workercompletion.WorkspaceChangeChecker
 	pipeline       *oar.GuardPipeline
 	decisions      Decisions
 }
@@ -85,7 +85,7 @@ func (m *Service) SetPromptEngine(engine prompts.PromptTemplateEngine) { m.promp
 func (m *Service) SetContext(context assembly.WorkerContextBuilder)    { m.workerContext = context }
 func (m *Service) SetDecisions(decisions Decisions)                    { m.decisions = decisions }
 func (m *Service) SetEvaluation(check workercompletion.WorkspaceChangeChecker, hints *guidance.HintConfig, pipeline *oar.GuardPipeline) {
-	m.workspaceCheck = check
+	m.WorkspaceCheck = check
 	m.workflowHints = hints
 	m.pipeline = pipeline
 }

@@ -34,7 +34,7 @@ func TestParentOnlyProjectSubscriberCannotSeeWorkerLiveBodies(t *testing.T) {
 	st := store.NewSQL(sqlDB)
 	st.SetEventOutbox(outbox)
 	pub := &events.Publisher{Hub: hub}
-	mgr := session.NewManager(st, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(st, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	mgr.SetEventPublisher(pub)
 
 	ctx := context.Background()
@@ -86,17 +86,17 @@ func TestParentOnlyProjectSubscriberCannotSeeWorkerLiveBodies(t *testing.T) {
 	}
 	_ = drain(200 * time.Millisecond)
 
-	liveCh, liveUnsub := mgr.Transcript.Streams.Subscribe(childMsg)
+	liveCh, liveUnsub := mgr.Runner.Transcript.Streams.Subscribe(childMsg)
 	t.Cleanup(liveUnsub)
 
 	for i := 0; i < 30; i++ {
-		testutil.FailErr(t, "child live", mgr.Transcript.Streams.Project(ctx, child.ID, api.Message{
+		testutil.FailErr(t, "child live", mgr.Runner.Transcript.Streams.Project(ctx, child.ID, api.Message{
 			ID:      childMsg,
 			Role:    api.MessageRoleAssistant,
 			Content: "worker-scratch-" + strconv.Itoa(i),
 		}))
 	}
-	mgr.Transcript.Streams.Flush(ctx, child.ID)
+	mgr.Runner.Transcript.Streams.Flush(ctx, child.ID)
 
 	hubAfterLive := drain(200 * time.Millisecond)
 	for _, ev := range hubAfterLive {

@@ -14,7 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-func advisoryTestManager(t *testing.T) *Manager {
+func advisoryTestManager(t *testing.T) *Host {
 	t.Helper()
 	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
 	hints, err := guidance.LoadHintConfigStock()
@@ -22,7 +22,7 @@ func advisoryTestManager(t *testing.T) *Manager {
 	rejectFmt := guidance.NewStaticRejectFormatter(hints)
 	mgr, _ := newTestManager(t)
 	mgr.SetRejectFormatter(rejectFmt)
-	mgr.ensureCoordinatorRuntime()
+	mgr.Coordinator.Runtime
 	mgr.SetOARPipeline(nil, oar.NewRenderer(rejectFmt, nil))
 	return mgr
 }
@@ -30,24 +30,24 @@ func advisoryTestManager(t *testing.T) *Manager {
 func TestQueueCoordinatorGuidanceAdvisoriesStacksDistinctCodes(t *testing.T) {
 	mgr := advisoryTestManager(t)
 	ctx := t.Context()
-	mgr.Guidance.QueueAdvisories(ctx, "sess-adv", []guidance.GuidanceNudge{
+	mgr.Coordinator.Guidance.QueueAdvisories(ctx, "sess-adv", []guidance.GuidanceNudge{
 		{Code: "COORDINATOR_UNGROUNDED_CLAIM"},
 		{Code: "COORDINATOR_HOST_TURN_REQUIRES_WAIT"},
 	})
-	first := mgr.ensureCoordinatorRuntime().Kicks().TakePendingKickID("sess-adv")
+	first := mgr.Coordinator.Runtime.Kicks().TakePendingKickID("sess-adv")
 	if first != "guidance:COORDINATOR_UNGROUNDED_CLAIM:session:sess-adv" {
 		t.Fatalf("first kick = %q", first)
 	}
-	text, lease, ok, _ := mgr.ensureCoordinatorRuntime().Kicks().RenderPendingNudge(ctx, "sess-adv", kick.CoordinatorKickRenderContext{})
+	text, lease, ok, _ := mgr.Coordinator.Runtime.Kicks().RenderPendingNudge(ctx, "sess-adv", kick.CoordinatorKickRenderContext{})
 	if !ok || !strings.Contains(text, "Code: COORDINATOR_UNGROUNDED_CLAIM") {
 		t.Fatalf("first nudge = %q ok=%v", text, ok)
 	}
-	mgr.ensureCoordinatorRuntime().Kicks().AckPendingNudge("sess-adv", lease)
-	second := mgr.ensureCoordinatorRuntime().Kicks().TakePendingKickID("sess-adv")
+	mgr.Coordinator.Runtime.Kicks().AckPendingNudge("sess-adv", lease)
+	second := mgr.Coordinator.Runtime.Kicks().TakePendingKickID("sess-adv")
 	if second != "guidance:COORDINATOR_HOST_TURN_REQUIRES_WAIT:session:sess-adv" {
 		t.Fatalf("second kick = %q", second)
 	}
-	text, _, ok, _ = mgr.ensureCoordinatorRuntime().Kicks().RenderPendingNudge(ctx, "sess-adv", kick.CoordinatorKickRenderContext{})
+	text, _, ok, _ = mgr.Coordinator.Runtime.Kicks().RenderPendingNudge(ctx, "sess-adv", kick.CoordinatorKickRenderContext{})
 	if !ok || !strings.Contains(text, "Code: COORDINATOR_HOST_TURN_REQUIRES_WAIT") {
 		t.Fatalf("second nudge = %q ok=%v", text, ok)
 	}
@@ -66,7 +66,7 @@ func TestRenderOARResultConcatenatesWarnAdvisories(t *testing.T) {
 			},
 		},
 	}
-	refuse, blocked, err := mgr.Feedback.RenderResult(context.Background(), oar.AnchorToolPost, res)
+	refuse, blocked, err := mgr.Coordinator.Feedback.RenderResult(context.Background(), oar.AnchorToolPost, res)
 	testutil.FailErr(t, "renderOARResult", err)
 	if blocked || refuse == nil {
 		t.Fatalf("blocked=%v refuse=%v", blocked, refuse)
@@ -82,8 +82,8 @@ func TestRenderOARResultConcatenatesWarnAdvisories(t *testing.T) {
 func TestErrGroundingNudgeSingleCodeQueues(t *testing.T) {
 	mgr := advisoryTestManager(t)
 	nudge := &guidance.ErrGroundingNudge{Code: "COORDINATOR_UNGROUNDED_CLAIM"}
-	mgr.Guidance.QueueAdvisories(t.Context(), "sess-one", nudge.Nudges())
-	if id := mgr.ensureCoordinatorRuntime().Kicks().TakePendingKickID("sess-one"); id != "guidance:COORDINATOR_UNGROUNDED_CLAIM:session:sess-one" {
+	mgr.Coordinator.Guidance.QueueAdvisories(t.Context(), "sess-one", nudge.Nudges())
+	if id := mgr.Coordinator.Runtime.Kicks().TakePendingKickID("sess-one"); id != "guidance:COORDINATOR_UNGROUNDED_CLAIM:session:sess-one" {
 		t.Fatalf("kick id = %q", id)
 	}
 }
@@ -92,11 +92,11 @@ func TestErrGroundingNudgeSingleCodeQueues(t *testing.T) {
 func TestGroundingNudgeQueuesFrozenCopy(t *testing.T) {
 	mgr := advisoryTestManager(t)
 	nudge := &guidance.ErrGroundingNudge{Code: "COORDINATOR_UNGROUNDED_CLAIM", Data: map[string]any{"count": 99}, Copy: map[string]string{"what": "Measured 3 claims", "fix": "Keep literal {{ count }}"}}
-	mgr.Guidance.QueueAdvisories(t.Context(), "frozen", nudge.Nudges())
-	if mgr.ensureCoordinatorRuntime().Kicks().TakePendingKickID("frozen") == "" {
+	mgr.Coordinator.Guidance.QueueAdvisories(t.Context(), "frozen", nudge.Nudges())
+	if mgr.Coordinator.Runtime.Kicks().TakePendingKickID("frozen") == "" {
 		t.Fatal("frozen nudge was not queued")
 	}
-	text, _, ok, err := mgr.ensureCoordinatorRuntime().Kicks().RenderPendingNudge(t.Context(), "frozen", kick.CoordinatorKickRenderContext{})
+	text, _, ok, err := mgr.Coordinator.Runtime.Kicks().RenderPendingNudge(t.Context(), "frozen", kick.CoordinatorKickRenderContext{})
 	testutil.FailErr(t, "render frozen grounding warning", err)
 	if !ok || !strings.Contains(text, "Measured 3 claims") || !strings.Contains(text, "{{ count }}") || strings.Contains(text, "Rejected:") {
 		t.Fatalf("lost frozen advisory: %s", text)

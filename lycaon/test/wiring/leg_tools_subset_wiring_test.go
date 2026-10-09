@@ -24,7 +24,7 @@ func TestExploreLegToolsSubsetHasNoCommand(t *testing.T) {
 	dir := t.TempDir()
 	parent, err := h.CreateHarnessSession(t, api.CreateSessionRequest{}, dir)
 	testutil.FailErr(t, "create session", err)
-	policy := h.SessionMgr.Guards.Policy()
+	policy := h.SessionMgr.Coordinator.Guards.Policy()
 	builder := compositeWorkerWithPolicy(h.AgentRegistry, policy)
 
 	for _, agentType := range exploreAgentsCommandFree {

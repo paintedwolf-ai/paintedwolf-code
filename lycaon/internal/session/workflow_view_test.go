@@ -189,7 +189,7 @@ func TestApplyPromptUserTurnPropagatesFeedbackFailure(t *testing.T) {
 	ctx := t.Context()
 	wantErr := errors.New("feedback store unavailable")
 	st := store.NewMemory()
-	mgr := NewManager(st, nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	workflowFixture1 := &recordingWorkflowView{feedbackErr: wantErr}
 	mgr.SetWorkflowDomains(&WorkflowDomains{Runs: workflowFixture1, Policy: workflowFixture1, Ambient: workflowFixture1, Blueprints: workflowFixture1, Batch: workflowFixture1, Slash: workflowFixture1, Requests: workflowFixture1, Feedback: workflowFixture1, Transcript: workflowFixture1, Asks: workflowFixture1, Fanout: workflowFixture1, Phases: workflowFixture1, Reports: workflowFixture1, Recovery: workflowFixture1, Cleanup: workflowFixture1})
 	sess, err := st.Create(ctx, api.CreateSessionRequest{}, "project-1")
@@ -203,12 +203,12 @@ func TestApplyPromptUserTurnPropagatesFeedbackFailure(t *testing.T) {
 
 func TestToolpolicyEngineDepsWiresWorkflowView(t *testing.T) {
 	view := &recordingWorkflowView{}
-	mgr := NewManager(store.NewMemory(), nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	workflowFixture2 := view
 	mgr.SetWorkflowDomains(&WorkflowDomains{Runs: workflowFixture2, Policy: workflowFixture2, Ambient: workflowFixture2, Blueprints: workflowFixture2, Batch: workflowFixture2, Slash: workflowFixture2, Requests: workflowFixture2, Feedback: workflowFixture2, Transcript: workflowFixture2, Asks: workflowFixture2, Fanout: workflowFixture2, Phases: workflowFixture2, Reports: workflowFixture2, Recovery: workflowFixture2, Cleanup: workflowFixture2})
 	sess := &api.Session{ID: "s1", Posture: api.SessionPostureSpec}
 
-	eval := toolpolicy.BuildEvalContext(context.Background(), mgr.Guards.PolicyDependencies(), sess, "read_file", map[string]any{"path": "x"})
+	eval := toolpolicy.BuildEvalContext(context.Background(), mgr.Coordinator.Guards.PolicyDependencies(), sess, "read_file", map[string]any{"path": "x"})
 	if eval.Phase != "phase-a" {
 		t.Fatalf("phase = %q want phase-a", eval.Phase)
 	}

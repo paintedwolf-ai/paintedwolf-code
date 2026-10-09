@@ -253,7 +253,7 @@ func TestGateParitySurfaceOffResolvesDevice(t *testing.T) {
 				}(),
 				Desired: extpacks.EmptyDesired(),
 			})
-			m := session.NewManager(store.NewMemory(), nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+			m := session.NewHost(store.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 			m.SetEffectiveCatalogDeps(root, boot, surfaces)
 			m.Catalog.SetCatalogViewCache(catalogview.NewCache(root, nil))
 

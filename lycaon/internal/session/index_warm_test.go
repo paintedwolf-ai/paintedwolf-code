@@ -79,7 +79,7 @@ func TestFirstPromptWithDeclaredURLFiresIndexWarmerAndAppendsMessage(t *testing.
 			Hosts: []string{"docs.example"}, Pages: 3,
 		},
 	}
-	mgr.Research.SetWarmer(warmer)
+	mgr.Chats.Research.SetWarmer(warmer)
 	ctx := context.Background()
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
@@ -93,7 +93,7 @@ func TestFirstPromptWithDeclaredURLFiresIndexWarmerAndAppendsMessage(t *testing.
 	if len(declaredURLs) != 1 || declaredURLs[0].urlSource != userText {
 		t.Fatalf("declared URL warms = %+v want urlSource=%q", declaredURLs, userText)
 	}
-	msgs, err := mgr.Transcript.GetMessages(ctx, sess.ID)
+	msgs, err := mgr.Runner.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "messages", err)
 	var row *api.Message
 	for i := range msgs {
@@ -120,7 +120,7 @@ func TestEachPromptOffersItsDeclaredURLsToWarming(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	mgr, store := newTestManager(t)
 	warmer := &fakeIndexWarmer{}
-	mgr.Research.SetWarmer(warmer)
+	mgr.Chats.Research.SetWarmer(warmer)
 	ctx := context.Background()
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
@@ -144,7 +144,7 @@ func TestWarmDeclaredURLsWithoutCallbackResultAppendsNothing(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	mgr, store := newTestManager(t)
 	warmer := &fakeIndexWarmer{}
-	mgr.Research.SetWarmer(warmer)
+	mgr.Chats.Research.SetWarmer(warmer)
 	ctx := context.Background()
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
@@ -155,7 +155,7 @@ func TestWarmDeclaredURLsWithoutCallbackResultAppendsNothing(t *testing.T) {
 	if len(warmer.declaredURLsSeen()) != 1 {
 		t.Fatalf("declared URL warm calls = %v", warmer.declaredURLsSeen())
 	}
-	msgs, err := mgr.Transcript.GetMessages(ctx, sess.ID)
+	msgs, err := mgr.Runner.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "messages", err)
 	for _, msg := range msgs {
 		if msg.Kind == api.MessageKindIndexWarming {
@@ -167,7 +167,7 @@ func TestWarmDeclaredURLsWithoutCallbackResultAppendsNothing(t *testing.T) {
 func TestHostTurnsDoNotWarm(t *testing.T) {
 	mgr, store := newTestManager(t)
 	warmer := &fakeIndexWarmer{fire: true, meta: api.IndexWarmingMeta{Trigger: "declared_url", Pages: 1}}
-	mgr.Research.SetWarmer(warmer)
+	mgr.Chats.Research.SetWarmer(warmer)
 	ctx := context.Background()
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
@@ -177,7 +177,7 @@ func TestHostTurnsDoNotWarm(t *testing.T) {
 	if len(warmer.declaredURLsSeen()) != 0 {
 		t.Fatalf("host turn warmed declared URLs: %v", warmer.declaredURLsSeen())
 	}
-	msgs, err := mgr.Transcript.GetMessages(ctx, sess.ID)
+	msgs, err := mgr.Runner.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "messages", err)
 	for _, msg := range msgs {
 		if msg.Kind == api.MessageKindHostLoopWake && msg.Origin == api.MessageOriginHost && msg.HostSignalID == anchor.LoopWake.String() {
@@ -191,7 +191,7 @@ func TestHostLoopWakeTextFromUserRemainsUserIntent(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	mgr, store := newTestManager(t)
 	warmer := &fakeIndexWarmer{}
-	mgr.Research.SetWarmer(warmer)
+	mgr.Chats.Research.SetWarmer(warmer)
 	ctx := context.Background()
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
@@ -202,7 +202,7 @@ func TestHostLoopWakeTextFromUserRemainsUserIntent(t *testing.T) {
 	if len(warmer.declaredURLsSeen()) != 1 {
 		t.Fatalf("first user prompt was not offered to declared-URL warmer: %v", warmer.declaredURLsSeen())
 	}
-	msgs, err := mgr.Transcript.GetMessages(ctx, sess.ID)
+	msgs, err := mgr.Runner.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "messages", err)
 	for _, msg := range msgs {
 		if msg.Content == surface.HostLoopWakeSentinel && msg.Origin == api.MessageOriginUser && msg.Kind == "" {

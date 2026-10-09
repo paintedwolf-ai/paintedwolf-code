@@ -27,10 +27,10 @@ var exitZero = 0
 func (s stubVerifyConfig) VerifyTestCommand(string) string { return s.cmd }
 
 // verifyGateHarness creates a session with persistent evidence.
-func verifyGateHarness(t *testing.T, declared string) (*Manager, *api.Session, []api.Message) {
+func verifyGateHarness(t *testing.T, declared string) (*Host, *api.Session, []api.Message) {
 	t.Helper()
 	ctx := context.Background()
-	mgr := NewManager(store.NewMemory(), nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetDataDir(t.TempDir())
 	mgr.Verification.SetEvidenceStore(inspector.NewJSONLStore(inspector.DefaultEvidenceDir))
 	mgr.Verification.SetRevisionSource(func(_ context.Context, root string) (string, string) {
@@ -39,7 +39,7 @@ func verifyGateHarness(t *testing.T, declared string) (*Manager, *api.Session, [
 	if declared != "" {
 		mgr.Verification.SetVerifyConfig(stubVerifyConfig{cmd: declared})
 	}
-	sess, err := mgr.store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "")
+	sess, err := mgr.Coordinator.Context.Sessions.(Store).Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "")
 	if err != nil {
 		t.Fatalf("create session: %v", err)
 	}
@@ -58,14 +58,14 @@ func statedRun(command string, exitCode int) tools.SourceRunCapture {
 	return tools.SourceRunCapture{Command: command, ExitCode: exitCode, Verdict: verdict, IsCheck: true, Cwd: "."}
 }
 
-func recordVerify(t *testing.T, m *Manager, sess *api.Session, command string, exitCode int) {
+func recordVerify(t *testing.T, m *Host, sess *api.Session, command string, exitCode int) {
 	t.Helper()
 	run := statedRun(command, exitCode)
 	run.SourceRevision, run.SourceRootDigest = invocation.SourceRevisionForRoot(sess.WorkspacePath)
 	m.Verification.RecordSourceRunEvidence(context.Background(), sess.ID, sess, verification.ProducerVerify, run)
 }
 
-func recordCommand(t *testing.T, m *Manager, sess *api.Session, command string, exitCode int) {
+func recordCommand(t *testing.T, m *Host, sess *api.Session, command string, exitCode int) {
 	t.Helper()
 	run := statedRun(command, exitCode)
 	run.SourceRevision, run.SourceRootDigest = invocation.SourceRevisionForRoot(sess.WorkspacePath)
@@ -234,7 +234,7 @@ func TestVerifyGateState_commandUnverifiableCountsAsAttempt(t *testing.T) {
 func TestWorkflowSourceVerifyPassedReadsCurrentSessionEvidence(t *testing.T) {
 	ctx := t.Context()
 	memory := store.NewMemory()
-	mgr := NewManager(memory, nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(memory, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetDataDir(t.TempDir())
 	mgr.Verification.SetEvidenceStore(inspector.NewJSONLStore(inspector.DefaultEvidenceDir))
 	mgr.Verification.SetRevisionSource(func(_ context.Context, root string) (string, string) {
@@ -278,7 +278,7 @@ func TestSourceRunEvidenceRequiresTerminalVerdict(t *testing.T) {
 func TestCommandCompletionRecordsPromotedCommandEvidence(t *testing.T) {
 	ctx := context.Background()
 	memory := store.NewMemory()
-	mgr := NewManager(memory, nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(memory, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetDataDir(t.TempDir())
 	evidenceStore := inspector.NewJSONLStore(inspector.DefaultEvidenceDir)
 	mgr.Verification.SetEvidenceStore(evidenceStore)
@@ -295,7 +295,7 @@ func TestCommandCompletionRecordsPromotedCommandEvidence(t *testing.T) {
 	})
 
 	records, err := evidenceStore.ReadAll(
-		ctx, mgr.HostDataDirFor(sess.ProjectID), sess.ID, verification.VerifySlot, evidence.GateTypeVerify,
+		ctx, mgr.Workspace.HostDataDir(sess.ProjectID), sess.ID, verification.VerifySlot, evidence.GateTypeVerify,
 	)
 	testutil.FailErr(t, "read completion command evidence", err)
 	if len(records) != 1 {
@@ -312,7 +312,7 @@ func TestCommandCompletionRecordsPromotedCommandEvidence(t *testing.T) {
 func TestCommandCompletionRecordsPromotedVerifyEvidence(t *testing.T) {
 	ctx := context.Background()
 	memory := store.NewMemory()
-	mgr := NewManager(memory, nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(memory, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetDataDir(t.TempDir())
 	evidenceStore := inspector.NewJSONLStore(inspector.DefaultEvidenceDir)
 	mgr.Verification.SetEvidenceStore(evidenceStore)
@@ -329,7 +329,7 @@ func TestCommandCompletionRecordsPromotedVerifyEvidence(t *testing.T) {
 	})
 
 	records, err := evidenceStore.ReadAll(
-		ctx, mgr.HostDataDirFor(sess.ProjectID), sess.ID, verification.VerifySlot, evidence.GateTypeVerify,
+		ctx, mgr.Workspace.HostDataDir(sess.ProjectID), sess.ID, verification.VerifySlot, evidence.GateTypeVerify,
 	)
 	testutil.FailErr(t, "read completion verify evidence", err)
 	if len(records) != 1 {

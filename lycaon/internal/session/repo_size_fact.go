@@ -5,12 +5,13 @@ import (
 )
 
 // SetRepoProvider wires progressive-brief file_count into ToolContext.
-func (m *Manager) SetRepoProvider(p repoinfo.Provider) {
+func (m *Host) SetRepoProvider(p repoinfo.Provider) {
 	if m == nil {
 		return
 	}
-	m.repoProvider = p
-	m.Guards.SetRepoProvider(p)
+	m.Coordinator.Assembly.Repository = p
+
+	m.Coordinator.Guards.SetRepoProvider(p)
 	m.ToolContext.SetRepoProvider(p)
 }
 

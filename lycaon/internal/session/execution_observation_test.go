@@ -41,7 +41,7 @@ func TestExecutionObservationUsesApplicationOwners(t *testing.T) {
 			testutil.FailErr(t, "create child", err)
 			_, _, err = st.PutPromptSubmission(t.Context(), store.PromptSubmission{ID: "admission", SessionID: parent.ID, ProjectID: parent.ProjectID, Origin: store.PromptSubmissionOriginUser, SubmittedBy: parent.OwnerPersonID, InputDigest: "task", InputJSON: "{}"})
 			testutil.FailErr(t, "admit task", err)
-			manager := session.NewManager(st, nil, nil, settings.SessionLimits{})
+			manager := session.NewHost(st, session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
 			checkpoints := &executionCheckpoints{}
 			manager.Observations.SetExecutionCheckpoints(checkpoints)
 			check := func(want bool) {
@@ -116,7 +116,7 @@ func TestExecutionObservationRejectsMissingSession(t *testing.T) {
 	st := store.NewMemory()
 	_, _, err := st.PutPromptSubmission(t.Context(), store.PromptSubmission{ID: "orphan", SessionID: "missing", Origin: store.PromptSubmissionOriginUser, SubmittedBy: testutil.HostOwner().ID})
 	testutil.FailErr(t, "retain orphan admission", err)
-	manager := session.NewManager(st, nil, nil, settings.SessionLimits{})
+	manager := session.NewHost(st, session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
 	if _, err := manager.Observations.Observe(t.Context(), "missing", "orphan"); err == nil {
 		t.Fatal("missing session became a wait state")
 	}
@@ -126,7 +126,7 @@ func TestExecutionTreeSupportsWorkflowStartsWithoutPromptAdmission(t *testing.T)
 	st := store.NewMemory()
 	root, err := st.Create(t.Context(), api.CreateSessionRequest{}, "project")
 	testutil.FailErr(t, "create workflow session", err)
-	manager := session.NewManager(st, nil, nil, settings.SessionLimits{})
+	manager := session.NewHost(st, session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
 	observation, err := manager.Observations.Tree(t.Context(), root.ID)
 	testutil.FailErr(t, "observe idle tree", err)
 	if !observation.Settled || observation.SubmissionID != "" {

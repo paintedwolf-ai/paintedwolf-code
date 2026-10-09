@@ -40,7 +40,7 @@ func TestImplementDefaultTaskEnqueueWiresToolResultJobID(t *testing.T) {
 		testutil.FailErr(t, "h.SessionMgr.Submissions.Prompt failed", err)
 	}
 
-	msgs, err := h.SessionMgr.Transcript.GetMessages(ctx, sess.ID)
+	msgs, err := h.SessionMgr.Runner.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "h.SessionMgr.GetMessages failed", err)
 	var found bool
 	for _, msg := range msgs {

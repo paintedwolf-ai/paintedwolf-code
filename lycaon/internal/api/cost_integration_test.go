@@ -42,7 +42,7 @@ func (t *projectReportCountingTracker) ProjectReport(ctx context.Context, projec
 func TestHandleCostSummarySessionBreakdown(t *testing.T) {
 	tracker := costtest.NewTracker(t, nil)
 	store := store.NewMemory()
-	mgr := session.NewManagerWithLLMService(store, llm.NewMockProvider(nil), nil, tools.NewStubRegistry(), settings.DefaultSessionLimits(), tracker)
+	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: tracker}, tools.NewStubRegistry())
 	srv := NewServer(requiredTestDeps(t, Dependencies{Store: store, Projects: project.NewMemoryRegistry(), Sessions: mgr}), nil, TestAPIToken)
 
 	parent, err := store.Create(t.Context(), wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, testdbseed.DefaultProjectID)
@@ -82,7 +82,7 @@ func TestHandleCostSummaryProjectBreakdown(t *testing.T) {
 	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	tracker := costtest.NewTracker(t, nil)
 	store := store.NewMemory()
-	mgr := session.NewManagerWithLLMService(store, llm.NewMockProvider(nil), nil, tools.NewStubRegistry(), settings.DefaultSessionLimits(), tracker)
+	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: tracker}, tools.NewStubRegistry())
 	reg := project.NewMemoryRegistry()
 	srv := NewServer(requiredTestDeps(t, Dependencies{Store: store, Projects: reg, Sessions: mgr}), nil, TestAPIToken)
 
@@ -126,7 +126,7 @@ func TestHandleProjectCostReportIncludesSessionBreakdownAndArchivedChats(t *test
 	sqlDB := testdbfixture.Open(t, "cost-report.db")
 	tracker := &projectReportCountingTracker{CostTracker: cost.NewSQLTracker(sqlDB, nil)}
 	memStore := store.NewSQL(sqlDB)
-	mgr := session.NewManagerWithLLMService(memStore, llm.NewMockProvider(nil), nil, tools.NewStubRegistry(), settings.DefaultSessionLimits(), tracker)
+	mgr := session.NewHost(memStore, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: tracker}, tools.NewStubRegistry())
 	reg := project.NewSQLRegistry(sqlDB)
 	srv := NewServer(requiredTestDeps(t, Dependencies{Store: memStore, Projects: reg, Sessions: mgr}), nil, TestAPIToken)
 

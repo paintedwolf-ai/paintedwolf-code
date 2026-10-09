@@ -24,7 +24,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func newPostToolGuidanceManager(t *testing.T) *Manager {
+func newPostToolGuidanceManager(t *testing.T) *Host {
 	t.Helper()
 	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
 	hints, err := guidance.LoadHintConfigStock()
@@ -42,7 +42,7 @@ func newPostToolGuidanceManager(t *testing.T) *Manager {
 	pipeline.EnableAnchor(oar.AnchorCredentialAssignment)
 	mgr, _ := newTestManager(t)
 	mgr.SetRejectFormatter(rejectFmt)
-	mgr.ensureCoordinatorRuntime()
+	mgr.Coordinator.Runtime
 	mgr.SetOARPipeline(pipeline, oar.NewRenderer(rejectFmt, nil))
 	return mgr
 }
@@ -51,7 +51,7 @@ var doomLoopWarnFloor = regexp.MustCompile(`paintedwolf\.repeat_count >= (\d+)`)
 
 // doomLoopWarnAfter reads the repeat count DOOM_LOOP_REPEAT_WARN first fires at
 // from the loaded policy unit.
-func doomLoopWarnAfter(t *testing.T, mgr *Manager) int {
+func doomLoopWarnAfter(t *testing.T, mgr *Host) int {
 	t.Helper()
 	for _, rule := range mgr.ToolPolicy.Pipeline.Rules().All() {
 		if rule.ID != "DOOM_LOOP_REPEAT_WARN" {
@@ -289,7 +289,7 @@ func TestLoopbackHandlerGuidanceRequiresTypedRejection(t *testing.T) {
 	}
 }
 
-func newWeakSecretMintGuidanceManager(t *testing.T) (*Manager, *secretharvest.Runtime) {
+func newWeakSecretMintGuidanceManager(t *testing.T) (*Host, *secretharvest.Runtime) {
 	t.Helper()
 	mgr := newPostToolGuidanceManager(t)
 	ins, err := secretmint.LoadBundled()

@@ -46,13 +46,13 @@ func TestFailedHostTurnReportsItself(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "host-turn-failure.db")
 
 	st := store.NewSQL(sqlDB)
-	mgr := session.NewManager(st, silentProviderClient{}, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(st, session.Models{Client: silentProviderClient{}, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	agents := orchestration.NewMemoryAgentRegistry()
 	_ = orchestration.LoadRequiredAgentRegistry(context.Background(), agents)
 	mgr.Profiles.SetAgentRegistry(agents)
 	wirePromptTestManager(t, mgr)
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
-	testutil.FailErr(t, "install anchor registry", mgr.Guidance.InstallAnchorRegistry())
+	testutil.FailErr(t, "install anchor registry", mgr.Coordinator.Guidance.InstallAnchorRegistry())
 
 	var mu sync.Mutex
 	var reported []error

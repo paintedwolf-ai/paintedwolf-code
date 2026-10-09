@@ -29,7 +29,7 @@ func TestImplementModeWorkerSummaryUsesCompletionEnvelope(t *testing.T) {
 
 	store := store.NewSQL(sqlDB)
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "traced"}}}))
-	mgr := session.NewManager(store, rec, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	agents := orchestration.NewMemoryAgentRegistry()
 	_ = orchestration.LoadRequiredAgentRegistry(context.Background(), agents)
 	mgr.Profiles.SetAgentRegistry(agents)
@@ -108,7 +108,7 @@ func TestImplementModeWorkerSummaryUsesCompletionEnvelope(t *testing.T) {
 
 func TestAppendWorkerSummaryFinalizesEnqueuedTaskTool(t *testing.T) {
 	store := store.NewMemory()
-	mgr := session.NewManager(store, nil, nil, settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	ctx := context.Background()
 
 	parent, err := store.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)

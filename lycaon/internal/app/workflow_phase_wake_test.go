@@ -42,7 +42,7 @@ func TestCrossPhaseHostAdvanceQueuesCoordinatorWake(t *testing.T) {
 	}
 	testutil.FailErr(t, "create workflow state", wfStore.CreateState(ctx, run, projectDir, nil))
 
-	sessionMgr := session.NewManager(sessionStore, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	sessionMgr := session.NewHost(sessionStore, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	sessionMgr.SetLoopWorkflowSource(&loopwake.WorkflowDomains{Runs: wfMgr.Store.Runs, Approvals: wfMgr.Policy, Obligations: wfMgr.Obligations})
 	b := &serveBuilder{mgr: sessionMgr, workflowMgr: wfMgr}
 	finishExecution := sessionMgr.Runner.Coordinator.CoordinatorLoop().BeginPromptExecution(t.Context(), sess.ID)
@@ -78,7 +78,7 @@ func TestTerminalCompletionSettlesWithoutAmbientWake(t *testing.T) {
 	}
 	testutil.FailErr(t, "create workflow state", wfStore.CreateState(ctx, run, projectDir, nil))
 
-	sessionMgr := session.NewManager(sessionStore, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	sessionMgr := session.NewHost(sessionStore, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	sessionMgr.SetLoopWorkflowSource(&loopwake.WorkflowDomains{Runs: wfMgr.Store.Runs, Approvals: wfMgr.Policy, Obligations: wfMgr.Obligations})
 	b := &serveBuilder{mgr: sessionMgr, workflowMgr: wfMgr}
 	delegationWiring{b}.onWorkflowPhaseAutoAdvanced(ctx, sess.ID, run.ID, "select", "done")
@@ -124,7 +124,7 @@ func TestHumanApprovalAdvanceQueuesWakeForRunningChild(t *testing.T) {
 	}
 	testutil.FailErr(t, "create child workflow state", wfStore.CreateState(ctx, child, projectDir, nil))
 
-	sessionMgr := session.NewManager(sessionStore, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	sessionMgr := session.NewHost(sessionStore, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	sessionMgr.SetLoopWorkflowSource(&loopwake.WorkflowDomains{Runs: wfMgr.Store.Runs, Approvals: wfMgr.Policy, Obligations: wfMgr.Obligations})
 	finishExecution := sessionMgr.Runner.Coordinator.CoordinatorLoop().BeginPromptExecution(t.Context(), sess.ID)
 	defer finishExecution()

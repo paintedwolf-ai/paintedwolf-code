@@ -62,12 +62,12 @@ func (c *countingCostTracker) ClearSpendWarning(ctx context.Context, sessionID s
 	return c.inner.ClearSpendWarning(ctx, sessionID)
 }
 
-func spendRunwayMgr(t *testing.T, tracker cost.CostTracker, ceilingUSD float64, enabled bool) *Manager {
+func spendRunwayMgr(t *testing.T, tracker cost.CostTracker, ceilingUSD float64, enabled bool) *Host {
 	t.Helper()
 	lim := settings.DefaultSessionLimits()
 	lim.SpendCeilingEnabled = enabled
 	lim.SessionSpendCeilingUSD = ceilingUSD
-	mgr := NewManagerWithLLMService(store.NewMemory(), llm.NewMockProvider(&llm.MockConfig{}), nil, tools.NewStubRegistry(), lim, tracker)
+	mgr := NewHost(store.NewMemory(), Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: lim, Cost: tracker}, tools.NewStubRegistry())
 	hints, err := guidance.LoadHintConfigStock()
 	testutil.FailErr(t, "LoadHintConfigStock", err)
 	mgr.SetWorkflowHints(hints, nil)
@@ -113,7 +113,7 @@ func TestPromptLoopSpendCheckFailsOpenWhenAccountingIsUnavailable(t *testing.T) 
 		CostTracker: base,
 		err:         errors.New("cost database unavailable"),
 	}, 5, true)
-	check, err := mgr.buildPromptLoopDeps().Nudges.CheckSpendCeiling(
+	check, err := mgr.Coordinator.RuntimeDependencies().LoopDeps().Nudges.CheckSpendCeiling(
 		t.Context(), "s1", &api.Session{ID: "s1", ProjectID: "p1"},
 	)
 	testutil.FailErr(t, "CheckSpendCeiling", err)
@@ -134,12 +134,12 @@ func TestSpendRunwayNudgeFiresOnce(t *testing.T) {
 	if !st.Low {
 		t.Fatalf("want Low at 82%% of ceiling, got %+v", st)
 	}
-	first := mgr.Nudges.SpendRunway(ctx, sess, st.CeilingUSD)
+	first := mgr.Coordinator.Nudges.SpendRunway(ctx, sess, st.CeilingUSD)
 	if first.Empty() {
 		t.Fatal("first crossing must fire")
 	}
 	for i := 0; i < 5; i++ {
-		if got := mgr.Nudges.SpendRunway(ctx, sess, st.CeilingUSD); !got.Empty() {
+		if got := mgr.Coordinator.Nudges.SpendRunway(ctx, sess, st.CeilingUSD); !got.Empty() {
 			t.Fatalf("iteration %d re-fired: %q", i, got.Content)
 		}
 	}
@@ -169,10 +169,10 @@ func TestSpendRunwayNudgeRearmsOnChangedCeiling(t *testing.T) {
 	mgr := spendRunwayMgr(t, tracker, 5, true)
 	sess := &api.Session{ID: "s1", ProjectID: "p1"}
 
-	if got := mgr.Nudges.SpendRunway(ctx, sess, 5); got.Empty() {
+	if got := mgr.Coordinator.Nudges.SpendRunway(ctx, sess, 5); got.Empty() {
 		t.Fatal("fire at $5")
 	}
-	if got := mgr.Nudges.SpendRunway(ctx, sess, 5); !got.Empty() {
+	if got := mgr.Coordinator.Nudges.SpendRunway(ctx, sess, 5); !got.Empty() {
 		t.Fatalf("same ceiling re-armed: %q", got.Content)
 	}
 
@@ -185,10 +185,10 @@ func TestSpendRunwayNudgeRearmsOnChangedCeiling(t *testing.T) {
 	if !st.Low || st.CeilingUSD != 20 {
 		t.Fatalf("state at $20 = %+v", st)
 	}
-	if got := mgr.Nudges.SpendRunway(ctx, sess, st.CeilingUSD); got.Empty() {
+	if got := mgr.Coordinator.Nudges.SpendRunway(ctx, sess, st.CeilingUSD); got.Empty() {
 		t.Fatal("changed ceiling must fire once more")
 	}
-	if got := mgr.Nudges.SpendRunway(ctx, sess, st.CeilingUSD); !got.Empty() {
+	if got := mgr.Coordinator.Nudges.SpendRunway(ctx, sess, st.CeilingUSD); !got.Empty() {
 		t.Fatalf("second fire at $20: %q", got.Content)
 	}
 
@@ -238,10 +238,10 @@ func TestSpendRunwayNudgeNeverForWorker(t *testing.T) {
 	root := &api.Session{ID: "root", ProjectID: "p1"}
 	worker := &api.Session{ID: "child", ProjectID: "p1", ParentSessionID: "root"}
 
-	if got := mgr.Nudges.SpendRunway(ctx, worker, 5); !got.Empty() {
+	if got := mgr.Coordinator.Nudges.SpendRunway(ctx, worker, 5); !got.Empty() {
 		t.Fatalf("worker nudge = %q", got.Content)
 	}
-	if got := mgr.Nudges.SpendRunway(ctx, root, 5); got.Empty() {
+	if got := mgr.Coordinator.Nudges.SpendRunway(ctx, root, 5); got.Empty() {
 		t.Fatal("coordinator must still be able to arm after worker no-op")
 	}
 }
@@ -303,7 +303,7 @@ func TestSpendRunwayRenderedTextHasNoFigure(t *testing.T) {
 	recordSessionSpend(t, tracker, "s1", 4.1)
 	mgr := spendRunwayMgr(t, tracker, 5, true)
 	sess := &api.Session{ID: "s1", ProjectID: "p1"}
-	msg := mgr.Nudges.SpendRunway(ctx, sess, 5)
+	msg := mgr.Coordinator.Nudges.SpendRunway(ctx, sess, 5)
 	if msg.Empty() {
 		t.Fatal("expected rendered message")
 	}
@@ -364,11 +364,11 @@ func TestSpendRunwayLatchReleasedOnForget(t *testing.T) {
 	mgr := spendRunwayMgr(t, tracker, 5, true)
 	sess := &api.Session{ID: "s1", ProjectID: "p1"}
 
-	if got := mgr.Nudges.SpendRunway(ctx, sess, 5); got.Empty() {
+	if got := mgr.Coordinator.Nudges.SpendRunway(ctx, sess, 5); got.Empty() {
 		t.Fatal("first fire")
 	}
 	mgr.Resources.Dispose(t.Context(), "s1")
-	if got := mgr.Nudges.SpendRunway(ctx, sess, 5); got.Empty() {
+	if got := mgr.Coordinator.Nudges.SpendRunway(ctx, sess, 5); got.Empty() {
 		t.Fatal("re-created session with same ceiling must arm again")
 	}
 }

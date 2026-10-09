@@ -345,7 +345,7 @@ func TestCreateSessionByProjectID(t *testing.T) {
 	store := store.NewMemory()
 	srv := NewServer(requiredTestDeps(t, Dependencies{
 		Store: store, Projects: reg,
-		Sessions: session.NewManager(store, llm.NewMockProvider(testMockConfig(t)), tools.NewStubRegistry(), settings.DefaultSessionLimits()),
+		Sessions: session.NewHost(store, session.Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry()),
 	}), nil, TestAPIToken)
 	body := `{"project_id":"` + opened.ID + `","posture":"spec"}`
 	req := newAuthedRequest(http.MethodPost, "/v1/sessions", strings.NewReader(body))

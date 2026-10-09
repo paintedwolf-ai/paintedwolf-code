@@ -63,9 +63,9 @@ func (b delegationWiring) wireWorkerServices() error {
 	b.workerQueue.SetProjectStore(b.registry)
 
 	b.workerCancelSvc = &worker.CancelService{
-		Queue:    b.workerQueue,
-		Sessions: b.mgr,
-		Reject:   b.rejectFmt,
+		Queue:  b.workerQueue,
+		Events: b.mgr.Coordinator.Workers,
+		Reject: b.rejectFmt,
 		Reports: worker.ChangeReportDeps{
 			Messages: func(ctx context.Context, childSessionID string) ([]wire.Message, error) {
 				return b.store.GetMessages(ctx, childSessionID)
@@ -311,14 +311,14 @@ func (b delegationWiring) onWorkflowPhaseEnter(ctx context.Context, rc *workflow
 		b.coordRuntime.CoordinatorLoop().ParkForHostObligation(ctx, rc.SessionID)
 	}
 	if mode := workflowdef.ForceExecutionMode(def.OnEnter.SetExecutionMode); mode != "" {
-		b.mgr.PushExecutionModeTransitionCause(rc.SessionID, surface.ModeTransitionCause{
+		b.mgr.Coordinator.Runtime.PushModeTransitionCause(rc.SessionID, surface.ModeTransitionCause{
 			Kind: surface.ModeTransitionCausePhaseHook,
 			Mode: mode,
 		})
 	} else if manifest, err := b.workflowMgr.Resolver.ForRunID(ctx, rc.RunID); err == nil {
 		if vars, err := b.workflowMgr.Policy.ScaffoldVarsForSession(ctx, rc.SessionID); err == nil {
 			if mode, ok := workflowdef.WorkflowDefaultForceMode(manifest, vars); ok {
-				b.mgr.PushExecutionModeTransitionCause(rc.SessionID, surface.ModeTransitionCause{
+				b.mgr.Coordinator.Runtime.PushModeTransitionCause(rc.SessionID, surface.ModeTransitionCause{
 					Kind: surface.ModeTransitionCauseWorkflowDefault,
 					Mode: mode,
 				})

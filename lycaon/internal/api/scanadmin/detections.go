@@ -24,7 +24,7 @@ type detectionPacksCtl struct {
 	configDir string
 	publish   func(*detectionpack.Matcher)
 	// sessions supplies extension-contributed packs, read per operation.
-	sessions *session.Manager
+	sessions *session.Host
 }
 
 // ReloadDetectionPacks rebuilds the process matcher from the current catalog.

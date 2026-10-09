@@ -16,17 +16,20 @@ import (
 )
 
 // SetInvocationRecorder wires durable invocation receipts.
-func (m *Manager) SetInvocationRecorder(recorder invocation.Recorder) {
-	m.invocations = recorder
-	m.Interruptions.SetRecorder(recorder)
+func (m *Host) SetInvocationRecorder(recorder invocation.Recorder) {
+	m.Coordinator.Tools.Invocations = recorder
+	m.Coordinator.Tools.Invocations = recorder
+
+	m.Stops.Recovery.SetRecorder(recorder)
 }
 
 // SetDoomLoopGuard wires identical tool-call repetition blocking.
-func (m *Manager) SetDoomLoopGuard(g loopguard.DoomLoopGuard) {
-	m.doomLoop = g
+func (m *Host) SetDoomLoopGuard(g loopguard.DoomLoopGuard) {
+	m.Coordinator.Nudging.DoomLoop = g
+
 	m.ToolPolicy.SetDoomLoopGuard(g)
-	if g != nil && m.pageRegistry != nil {
-		g.SetPageTargetResolver(m.pageRegistry.TargetURL)
+	if g != nil && m.Coordinator.Context.Pages != nil {
+		g.SetPageTargetResolver(m.Coordinator.Context.Pages.TargetURL)
 	}
 }
 
@@ -36,15 +39,17 @@ type ScanGuidanceHook interface {
 }
 
 // SetScanGuidance wires ephemeral scan guidance injection.
-func (m *Manager) SetScanGuidance(h ScanGuidanceHook) {
+func (m *Host) SetScanGuidance(h ScanGuidanceHook) {
 	if m != nil {
-		m.scanGuidance = h
+		m.Coordinator.Assembly.Scan = h
+
 	}
 }
 
 // SetGroundingHook wires grounding checks for delegation coordinator sessions.
-func (m *Manager) SetGroundingHook(h GroundingHook) {
-	m.grounding = h
+func (m *Host) SetGroundingHook(h GroundingHook) {
+	m.Coordinator.Loop.Grounding = h
+
 	m.Runner.SetGrounding(h)
 	m.Runner.PostTurn.SetGrounding(h)
 	m.Workers.Summaries.SetGrounding(h)
@@ -52,101 +57,106 @@ func (m *Manager) SetGroundingHook(h GroundingHook) {
 }
 
 // SetRejectFormatter wires structured tool reject formatting.
-func (m *Manager) SetRejectFormatter(f *guidance.StaticRejectFormatter) {
-	m.rejectFmt = f
-	m.Guards.SetRejects(f, m.toolRejectFormatter)
-	m.Guidance.SetRejectFormatter(f)
+func (m *Host) SetRejectFormatter(f *guidance.StaticRejectFormatter) {
+	m.Coordinator.Completion.Rejects = f
+
+	m.Coordinator.Guards.SetRejects(f, m.Coordinator.Feedback.Rejects)
+	m.Coordinator.Guidance.SetRejectFormatter(f)
 }
 
 // SetPageRegistry wires session-scoped held browser pages.
-func (m *Manager) SetPageRegistry(reg *pagesession.Registry) {
+func (m *Host) SetPageRegistry(reg *pagesession.Registry) {
 	if m != nil {
-		m.pageRegistry = reg
+		m.Coordinator.Context.Pages = reg
+
 		_ = m.Resources.RegisterCleanup("browser-pages", 30, func(ctx context.Context, sessionID string) error {
 			return reg.DisposeSession(ctx, sessionID)
 		})
-		if m.doomLoop != nil {
-			m.doomLoop.SetPageTargetResolver(reg.TargetURL)
+		if m.Coordinator.Nudging.DoomLoop != nil {
+			m.Coordinator.Nudging.DoomLoop.SetPageTargetResolver(reg.TargetURL)
 		}
 	}
 }
 
 // SetEventPublisher wires SSE publish hooks for session, LLM, and cost topics.
-func (m *Manager) SetEventPublisher(p *events.Publisher) {
-	m.events = p
+func (m *Host) SetEventPublisher(p *events.Publisher) {
+	m.Coordinator.Projection.Events = p
+	m.Coordinator.Loop.Events = p
+
 	m.Workers.Workspaces.SetPublisher(p)
 	m.Runner.Status.SetPublisher(p)
-	m.Loading.SetPublisher(p)
+	m.Coordinator.Loading.SetPublisher(p)
 	m.Chats.SetPublisher(p)
-	m.Naming.SetPublisher(p)
-	m.Drafts.SetPublisher(p)
+	m.Chats.Naming.SetPublisher(p)
+	m.Chats.Drafts.SetPublisher(p)
 	m.Runner.SubmissionState.SetPublisher(p)
-	m.Transcript.SetPublisher(p)
-	m.Rewinds.SetPublisher(p)
+	m.Runner.Transcript.SetPublisher(p)
+	m.Chats.Rewinds.SetPublisher(p)
 	m.Runner.Clocks.Publisher = p
 }
 
 // SetEffectiveCatalogDeps wires session-scoped extension catalog resolution.
-func (m *Manager) SetEffectiveCatalogDeps(moduleRoot string, boot *extpacks.EffectiveCatalog, surfaces *settings.TrustSurfacesStore) {
+func (m *Host) SetEffectiveCatalogDeps(moduleRoot string, boot *extpacks.EffectiveCatalog, surfaces *settings.TrustSurfacesStore) {
 	if m == nil {
 		return
 	}
-	m.trustSurfaces = surfaces
+
 	m.Profiles.SetTrustSurfaces(surfaces)
 	m.Workspace.SetTrust(surfaces)
 	m.Catalog.Configure(moduleRoot, boot, surfaces)
 }
 
 // SetSandboxPathGrantRuntime wires write-root guard state.
-func (m *Manager) SetSandboxPathGrantRuntime(runtime *approvalstate.SandboxPathGrantRuntime) {
+func (m *Host) SetSandboxPathGrantRuntime(runtime *approvalstate.SandboxPathGrantRuntime) {
 	if m != nil {
-		m.writeRootRuntime = runtime
 		m.Resources.Authority.Writes = runtime
-		m.Runner.Instructions.SetIntentBoundaries(m.toolApprovalCoalesce, m.gateRepeatLedger, m.writeRootRuntime, m.listenRuntime, m.loopbackRuntime)
+		m.Resources.Authority.Writes = runtime
+		m.Runner.Instructions.SetIntentBoundaries(m.Resources.Tools.Approvals, m.Resources.Tools.Repeat, m.Resources.Authority.Writes, m.Resources.Authority.Listen, m.Resources.Authority.Loopback)
 	}
 }
 
 // SetSandboxListenRuntime wires listener guard state.
-func (m *Manager) SetSandboxListenRuntime(runtime *approvalstate.SandboxPortGrantRuntime) {
+func (m *Host) SetSandboxListenRuntime(runtime *approvalstate.SandboxPortGrantRuntime) {
 	if m != nil {
-		m.listenRuntime = runtime
 		m.Resources.Authority.Listen = runtime
-		m.Runner.Instructions.SetIntentBoundaries(m.toolApprovalCoalesce, m.gateRepeatLedger, m.writeRootRuntime, m.listenRuntime, m.loopbackRuntime)
+		m.Resources.Authority.Listen = runtime
+		m.Runner.Instructions.SetIntentBoundaries(m.Resources.Tools.Approvals, m.Resources.Tools.Repeat, m.Resources.Authority.Writes, m.Resources.Authority.Listen, m.Resources.Authority.Loopback)
 	}
 }
 
-func (m *Manager) SetSandboxLoopbackRuntime(runtime *approvalstate.SandboxPortGrantRuntime) {
+func (m *Host) SetSandboxLoopbackRuntime(runtime *approvalstate.SandboxPortGrantRuntime) {
 	if m != nil {
-		m.loopbackRuntime = runtime
 		m.Resources.Authority.Loopback = runtime
-		m.Runner.Instructions.SetIntentBoundaries(m.toolApprovalCoalesce, m.gateRepeatLedger, m.writeRootRuntime, m.listenRuntime, m.loopbackRuntime)
+		m.Resources.Authority.Loopback = runtime
+		m.Runner.Instructions.SetIntentBoundaries(m.Resources.Tools.Approvals, m.Resources.Tools.Repeat, m.Resources.Authority.Writes, m.Resources.Authority.Listen, m.Resources.Authority.Loopback)
 	}
 }
 
 // SetToolApprovalCoalesce wires approval coalescing state.
-func (m *Manager) SetToolApprovalCoalesce(coalesce *approvalstate.ToolApprovalCoalesce) {
+func (m *Host) SetToolApprovalCoalesce(coalesce *approvalstate.ToolApprovalCoalesce) {
 	if m != nil {
-		m.toolApprovalCoalesce = coalesce
 		m.Resources.Tools.Approvals = coalesce
-		m.Runner.Instructions.SetIntentBoundaries(m.toolApprovalCoalesce, m.gateRepeatLedger, m.writeRootRuntime, m.listenRuntime, m.loopbackRuntime)
+		m.Resources.Tools.Approvals = coalesce
+		m.Runner.Instructions.SetIntentBoundaries(m.Resources.Tools.Approvals, m.Resources.Tools.Repeat, m.Resources.Authority.Writes, m.Resources.Authority.Listen, m.Resources.Authority.Loopback)
 	}
 }
 
 // SetGateRepeatLedger wires approval repeat state.
-func (m *Manager) SetGateRepeatLedger(ledger *approvalstate.GateRepeatLedger) {
+func (m *Host) SetGateRepeatLedger(ledger *approvalstate.GateRepeatLedger) {
 	if m != nil {
-		m.gateRepeatLedger = ledger
 		m.Resources.Tools.Repeat = ledger
-		m.Runner.Instructions.SetIntentBoundaries(m.toolApprovalCoalesce, m.gateRepeatLedger, m.writeRootRuntime, m.listenRuntime, m.loopbackRuntime)
+		m.Resources.Tools.Repeat = ledger
+		m.Runner.Instructions.SetIntentBoundaries(m.Resources.Tools.Approvals, m.Resources.Tools.Repeat, m.Resources.Authority.Writes, m.Resources.Authority.Listen, m.Resources.Authority.Loopback)
 	}
 }
 
 // SetVisualStore wires the session-tree visual artifact store.
-func (m *Manager) SetVisualStore(store visual.Store) {
+func (m *Host) SetVisualStore(store visual.Store) {
 	if m == nil {
 		return
 	}
-	m.visual = store
+	m.Coordinator.Tools.Visual = store
+
 }
 
 // GroundingHook runs grounding checks for delegation coordinator sessions.

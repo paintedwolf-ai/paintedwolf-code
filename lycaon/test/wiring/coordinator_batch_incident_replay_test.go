@@ -104,9 +104,9 @@ func TestInTurnLatchBlocksSecondSynthesis(t *testing.T) {
 	AttachDefaultAmbient(t, h, ctx, sess.ID)
 
 	h.SessionMgr.Runner.Settlement.Begin(sess.ID, anchor.InformRender(anchor.WorkerTaskFinished))
-	h.SessionMgr.Batch.AcceptSynthesis(ctx, sess.ID)
+	h.SessionMgr.Coordinator.Batch.AcceptSynthesis(ctx, sess.ID)
 
-	guard := h.SessionMgr.Batch.TurnGuard(sess.ID)
+	guard := h.SessionMgr.Coordinator.Batch.TurnGuard(sess.ID)
 	if !guard.SynthesisAcceptedThisTurn {
 		t.Fatal("first grounded synthesis should set in-turn latch")
 	}
@@ -152,7 +152,7 @@ func TestStaleBatchSeqWakeDroppedAfterNewUserMessage(t *testing.T) {
 		staleSeq = 1
 	}
 
-	msgsBefore, err := h.SessionMgr.Transcript.GetMessages(ctx, sess.ID)
+	msgsBefore, err := h.SessionMgr.Runner.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages before stale wake", err)
 
 	h.SessionMgr.Coordinator.Runtime.CoordinatorLoop().Nudge(
@@ -166,7 +166,7 @@ func TestStaleBatchSeqWakeDroppedAfterNewUserMessage(t *testing.T) {
 	h.SessionMgr.Runner.Coordinator.CoordinatorLoop().DrainPending(ctx, sess.ID)
 	h.SessionMgr.Coordinator.WaitForTurns(testutil.BoundedContext(t, 5*time.Second))
 
-	msgsAfter, err := h.SessionMgr.Transcript.GetMessages(ctx, sess.ID)
+	msgsAfter, err := h.SessionMgr.Runner.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages after stale wake", err)
 	if len(msgsAfter) != len(msgsBefore) {
 		t.Fatalf("stale batch_seq scheduled wake appended messages: before=%d after=%d", len(msgsBefore), len(msgsAfter))

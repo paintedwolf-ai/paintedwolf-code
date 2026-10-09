@@ -139,7 +139,7 @@ func (b serverWiring) wireRuntimeObservers() error {
 		emitProgressCompletion(ctx, b.store, b.eventPub, b.progressStore, activeRun, evt.SessionID)
 		// Progress closure releases the post-worker latch.
 		if b.mgr != nil {
-			b.mgr.ProgressClosure.AfterWrite(ctx, evt.SessionID)
+			b.mgr.Coordinator.ProgressClosure.AfterWrite(ctx, evt.SessionID)
 		}
 	})
 	return nil
@@ -338,7 +338,7 @@ func (b serverWiring) wireFileBriefings(deps *api.Dependencies) error {
 		return fmt.Errorf("maintain file briefings: %w", err)
 	}
 	deps.FileBriefings = filebriefing.NewService(b.ctx, filebriefing.Dependencies{
-		Store: fileBriefingStore, Config: fileBriefingConfig, Generator: filebriefing.NewModelGenerator(b.llmSvc, b.mgr.CostTracker()),
+		Store: fileBriefingStore, Config: fileBriefingConfig, Generator: filebriefing.NewModelGenerator(b.llmSvc, b.mgr.Coordinator.Model.Cost),
 		Events: b.hub, Settings: b.settingsSvc.FileSummaries, Logger: b.logger,
 	})
 	return nil
@@ -360,7 +360,7 @@ func (b serverWiring) wireSourceEditing(deps *api.Dependencies) error {
 	}
 	deps.SourceMutations = sourceMutations
 	deps.FileOperations = fileops.NewService(fileops.NewStore(b.db))
-	b.mgr.SetSourceMutations(sourceMutations)
+	b.mgr.ToolContext.SetSourceMutations(sourceMutations)
 	editorDocuments := editordoc.New(editordoc.NewStore(b.db), b.sourceLedger, b.registry)
 	if b.workerMergeSvc != nil {
 		b.workerMergeSvc.Documents = editorDocuments
@@ -398,8 +398,8 @@ func (b serverWiring) wireSourceEditing(deps *api.Dependencies) error {
 		editorDocuments.DisconnectClient(context.Background(), clientID)
 	})
 	// A file the person has open is the document, for reads and writes alike.
-	b.mgr.SetEditorDocuments(editorDocumentsAdapter{service: editorDocuments})
-	b.mgr.Rewinds.SetSourceRewinds(&sourcerewind.Service{Ledger: b.sourceLedger, Mutations: sourceMutations, Documents: editorDocuments})
+	b.mgr.ToolContext.SetEditorDocuments(editorDocumentsAdapter{service: editorDocuments})
+	b.mgr.Chats.Rewinds.SetSourceRewinds(&sourcerewind.Service{Ledger: b.sourceLedger, Mutations: sourceMutations, Documents: editorDocuments})
 	// Contribution dispatch uses durable receipts and policy-derived authority.
 	deps.Contributions = extensionadmin.ContributionRuntime{
 		Receipts: commandinvoke.SQLReceipts{DB: b.db},
@@ -447,7 +447,7 @@ func (b serverWiring) wireOrchestrator() error {
 	}
 	b.workflowMgr.Presentation.TopologyLegs = orchestration.TopologyLegView{Store: b.delegationStore, Catalog: extpacks.CatalogForConsumers}
 
-	workerOutcomes := &worker.SessionOutcomeBridge{Sessions: b.mgr, Results: b.mgr.Workers.Results, State: b.mgr.Workers.State, Closure: b.mgr.ProgressClosure, Inner: b.delegationMgr}
+	workerOutcomes := &worker.SessionOutcomeBridge{Workers: b.mgr.Coordinator.Workers, Loop: b.mgr.Coordinator.Runtime.CoordinatorLoop(), Results: b.mgr.Workers.Results, State: b.mgr.Workers.State, Closure: b.mgr.Coordinator.ProgressClosure, Inner: b.delegationMgr}
 	var executor worker.WorkerExecutor = b.workerExec
 	if configdir.IsHarnessChannel() {
 		scripted, err := harnessfixture.NewWorkers(b.dataDir, b.store, b.workerQueue, b.mgr.Workers.Harness.Verify, b.mgr.Workers.Harness.Read, b.decisionStore, b.workerExec)

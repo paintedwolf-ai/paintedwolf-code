@@ -60,7 +60,7 @@ func (b sessionWiring) wireExceptionalCapability() error {
 				Background:           ev.Background,
 			})
 		})
-		b.mgr.Protection.SetDirectIPReconstructHook(func(sessionID, _, _ string) {
+		b.mgr.Chats.Protection.SetDirectIPReconstructHook(func(sessionID, _, _ string) {
 			rec.AppendDirectIPLifecycle(context.Background(), authzledger.DirectIPLifecycleRecord{
 				SessionID:  sessionID,
 				Phase:      string(tools.DirectIPLifecycleReconstructed),

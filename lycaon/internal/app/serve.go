@@ -42,7 +42,7 @@ import (
 // ServeApp holds wired serve subsystems after Build.
 type ServeApp struct {
 	Server               *api.Server
-	SessionMgr           *session.Manager
+	SessionMgr           *session.Host
 	SessionStore         session.Store
 	ProjectLiveness      *projectliveness.Tracker
 	CoordinatorRuntime   *coordinator.Runtime

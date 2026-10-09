@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/lycaon/lycaon/internal/coordinator"
+	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/session/batchcontrol"
 	"github.com/lycaon/lycaon/internal/session/closeoutassembly"
 	"github.com/lycaon/lycaon/internal/session/guidancedelivery"
@@ -53,4 +54,11 @@ func (m *Service) WaitForTurns(ctx context.Context) {
 	}
 	m.Runtime.CoordinatorLoop().WaitForAsyncTurns(ctx)
 	m.Admission.WaitDrains(ctx)
+}
+
+func (m *Service) RuntimeDependencies() coordinator.RuntimeDeps {
+	c, t, control, inbox, model, projection, nudges, completion := m.Context, m.Tools, m.Control, m.Inbox, m.Model, m.Projection, m.Nudging, m.Completion
+	return coordinator.RuntimeDeps{LoopDeps: func() promptloop.PromptLoopDeps {
+		return promptloop.PromptLoopDeps{Context: c.Build(), Tools: t.Build(), Control: control.Build(), Inbox: inbox.Build(), Model: model.Build(), Projection: projection.Build(), Nudges: nudges.Build(), Closeout: completion.Build()}
+	}, AssemblyDeps: m.Assembly.Build, LoopWakeDeps: m.Loop.Build}
 }

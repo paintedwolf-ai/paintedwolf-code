@@ -31,7 +31,7 @@ func TestPromptHTTPReturnsSpendRejectionBeforeAcceptedReceipt(t *testing.T) {
 	limits.SessionSpendCeilingUSD = 5
 	srv := newTestServer(t, func(d *Dependencies) {
 		d.Store, d.Projects = fixture.sessionStore, fixture.projectRegistry
-		d.Sessions = session.NewManagerWithLLMService(d.Store, llm.NewMockProvider(nil), nil, tools.NewStubRegistry(), limits, tracker)
+		d.Sessions = session.NewHost(d.Store, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: limits, Cost: tracker}, tools.NewStubRegistry())
 	})
 
 	spent := int64(6_000_000_000)

@@ -27,7 +27,7 @@ func (allowAllWorkflowRuns) AssertWorkerTask(context.Context, *api.WorkerTask) e
 func TestRunStopServiceCancelProjectsWorkerCard(t *testing.T) {
 	ctx := context.Background()
 	store := store.NewMemory()
-	mgr := session.NewManager(store, llm.NewMockProvider(&llm.MockConfig{}), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
@@ -184,7 +184,7 @@ func TestRunStopServiceHoldContinuesPastPoisonTask(t *testing.T) {
 func TestRunStopServiceHoldPatchesCanonicalWorkerRow(t *testing.T) {
 	ctx := context.Background()
 	store := store.NewMemory()
-	mgr := session.NewManager(store, llm.NewMockProvider(&llm.MockConfig{}), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 

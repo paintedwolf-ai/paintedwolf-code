@@ -36,12 +36,12 @@ func TestQueueCoordinatorGuidanceNudgeUsesAdvisoryDisposition(t *testing.T) {
 	testutil.FailErr(t, "load hint registry", err)
 	mgr, _ := newTestManager(t)
 	mgr.SetRejectFormatter(guidance.NewStaticRejectFormatter(hints))
-	mgr.ensureCoordinatorRuntime()
-	mgr.Guidance.Queue(t.Context(), "sess-nudge", "COORDINATOR_HOST_TURN_REQUIRES_WAIT", nil, nil)
-	if id := mgr.ensureCoordinatorRuntime().Kicks().TakePendingKickID("sess-nudge"); id != "guidance:COORDINATOR_HOST_TURN_REQUIRES_WAIT:session:sess-nudge" {
+	mgr.Coordinator.Runtime
+	mgr.Coordinator.Guidance.Queue(t.Context(), "sess-nudge", "COORDINATOR_HOST_TURN_REQUIRES_WAIT", nil, nil)
+	if id := mgr.Coordinator.Runtime.Kicks().TakePendingKickID("sess-nudge"); id != "guidance:COORDINATOR_HOST_TURN_REQUIRES_WAIT:session:sess-nudge" {
 		t.Fatalf("kick id = %q", id)
 	}
-	text, _, ok, _ := mgr.ensureCoordinatorRuntime().Kicks().RenderPendingNudge(t.Context(), "sess-nudge", kick.CoordinatorKickRenderContext{})
+	text, _, ok, _ := mgr.Coordinator.Runtime.Kicks().RenderPendingNudge(t.Context(), "sess-nudge", kick.CoordinatorKickRenderContext{})
 	if !ok || strings.Contains(text, "Rejected:") || !strings.Contains(text, "Code: COORDINATOR_HOST_TURN_REQUIRES_WAIT") {
 		t.Fatalf("nudge = %q ok=%v", text, ok)
 	}

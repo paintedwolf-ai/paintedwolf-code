@@ -29,7 +29,7 @@ func TestReconcileCoordinatorBatch_skipsSynthesisReadyWithoutBatchReady(t *testi
 	sqlDB := testdbfixture.Open(t, "batch-reconcile-wrapup.db")
 
 	store := store.NewSQL(sqlDB)
-	mgr := session.NewManager(store, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	agents := orchestration.NewMemoryAgentRegistry()
 	testutil.FailErr(t, "LoadRequiredAgentRegistry", orchestration.LoadRequiredAgentRegistry(context.Background(), agents))
 	mgr.Profiles.SetAgentRegistry(agents)
@@ -71,7 +71,7 @@ func TestReconcileCoordinatorBatch_skipsSynthesisReadyWithoutBatchReady(t *testi
 	}
 	testutil.FailErr(t, "append messages", store.AppendMessages(ctx, sess.ID, inlineEdit...))
 
-	mgr.Batch.Reconcile(ctx, sess.ID)
+	mgr.Coordinator.Batch.Reconcile(ctx, sess.ID)
 
 	state := mgr.Workers.State.ForSession(ctx, sess)
 	if state.BatchPhase == batch.PhaseSynthesize {

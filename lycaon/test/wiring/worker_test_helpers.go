@@ -124,7 +124,7 @@ func DrainPendingWorkerJobs(ctx context.Context, h *Harness, projectID, parentSe
 	drainCtx, cancel := context.WithTimeout(ctx, testutil.Timeout(workerDrainQuiescenceTimeout))
 	defer cancel()
 	exec := wiringWorkerExecutor(h)
-	bridge := &worker.SessionOutcomeBridge{Sessions: h.SessionMgr, Results: h.SessionMgr.Workers.Results, State: h.SessionMgr.Workers.State, Closure: h.SessionMgr.ProgressClosure}
+	bridge := &worker.SessionOutcomeBridge{Workers: h.SessionMgr, Loop: h.SessionMgr, Results: h.SessionMgr.Workers.Results, State: h.SessionMgr.Workers.State, Closure: h.SessionMgr.Coordinator.ProgressClosure}
 	if h.DelegationMgr != nil {
 		bridge.Inner = h.DelegationMgr
 	}
@@ -139,7 +139,7 @@ func DrainPendingWorkerJobs(ctx context.Context, h *Harness, projectID, parentSe
 		if errors.Is(err, worker.ErrNoPendingJobs) {
 			if workerCycleQuiescent(drainCtx, h, projectID, parentSessionID) {
 				if parentSessionID != "" {
-					h.SessionMgr.Batch.Reconcile(drainCtx, parentSessionID)
+					h.SessionMgr.Coordinator.Batch.Reconcile(drainCtx, parentSessionID)
 					h.SessionMgr.Runner.Coordinator.CoordinatorLoop().DrainPending(drainCtx, parentSessionID)
 				}
 				return nil
@@ -157,7 +157,7 @@ func DrainPendingWorkerJobs(ctx context.Context, h *Harness, projectID, parentSe
 		if task == nil {
 			if workerCycleQuiescent(drainCtx, h, projectID, parentSessionID) {
 				if parentSessionID != "" {
-					h.SessionMgr.Batch.Reconcile(drainCtx, parentSessionID)
+					h.SessionMgr.Coordinator.Batch.Reconcile(drainCtx, parentSessionID)
 					h.SessionMgr.Runner.Coordinator.CoordinatorLoop().DrainPending(drainCtx, parentSessionID)
 				}
 				return nil

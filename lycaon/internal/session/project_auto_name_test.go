@@ -29,7 +29,7 @@ func TestAutoNameProjectIdempotentOnReplay(t *testing.T) {
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{
 		{Pattern: ".*", Text: "ok"},
 	}})
-	mgr := NewManager(store, mock, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(store, Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	mgr.SetProjectRegistry(reg)
 	hub := events.NewMemoryHub()
 	mgr.SetEventPublisher(&events.Publisher{Hub: hub, Lookup: project.ScopeLookup{Registry: reg}})
@@ -43,8 +43,8 @@ func TestAutoNameProjectIdempotentOnReplay(t *testing.T) {
 	testutil.FailErr(t, "subscribe", err)
 	defer unsubscribe()
 
-	mgr.Naming.ProjectFromPrompt(ctx, sess, userText)
-	mgr.Naming.ProjectFromPrompt(ctx, sess, userText)
+	mgr.Chats.Naming.ProjectFromPrompt(ctx, sess, userText)
+	mgr.Chats.Naming.ProjectFromPrompt(ctx, sess, userText)
 
 	got, err := reg.Get(ctx, p.ID)
 	testutil.FailErr(t, "get project", err)

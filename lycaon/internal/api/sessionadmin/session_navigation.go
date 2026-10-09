@@ -37,7 +37,7 @@ func (s *Handler) HandleResolveMessageNavigation(w http.ResponseWriter, r *http.
 		s.responses.InternalError(w, r, err)
 		return
 	}
-	result, err := s.Sessions.Transcript.ResolveNavigation(ctx, sessionID, req, s.ResolveNavigationWorkspace)
+	result, err := s.Sessions.Runner.Transcript.ResolveNavigation(ctx, sessionID, req, s.ResolveNavigationWorkspace)
 	switch {
 	case errors.Is(err, transcript.ErrNavigationCandidateInvalid):
 		s.responses.FailReason(w, wire.ApiErrorCodeInvalidRequest, "candidate_index must select a stored ambiguous reference")

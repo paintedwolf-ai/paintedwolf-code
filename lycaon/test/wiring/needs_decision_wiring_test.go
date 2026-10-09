@@ -106,7 +106,7 @@ func TestNeedsDecisionRoundTrip(t *testing.T) {
 	if !anyMessageContains(childMsgs, "write a new parser") {
 		t.Fatalf("child did not receive the decision")
 	}
-	if _, ok, err := h.SessionMgr.Decisions().Get(ctx, child.ID); err != nil || ok {
+	if _, ok, err := h.SessionMgr.Decisions.Get(ctx, child.ID); err != nil || ok {
 		t.Fatal("decision stash not cleared after answer")
 	}
 

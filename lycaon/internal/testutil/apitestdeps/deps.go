@@ -46,6 +46,7 @@ import (
 	scancadence "github.com/lycaon/lycaon/internal/scan/cadence"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/session"
+	sessiondecisions "github.com/lycaon/lycaon/internal/session/decisions"
 	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/sourceledger"
@@ -75,7 +76,7 @@ type Deps struct {
 	Database          db.Handle
 	Store             session.Store
 	Projects          project.Registry
-	Sessions          *session.Manager
+	Sessions          *session.Host
 	Settings          *settings.Service
 	Invocations       invocation.Recorder
 	MutationGate      *project.MutationGate
@@ -232,7 +233,7 @@ func fillEvents(t *testing.T, d *Deps) {
 func fillHost(t *testing.T, d *Deps) {
 	t.Helper()
 	if d.CostTracker == nil {
-		d.CostTracker = d.Sessions.CostTracker()
+		d.CostTracker = d.Sessions.Coordinator.Model.Cost
 	}
 	if d.CostTracker == nil {
 		d.CostTracker = cost.NewSQLTracker(d.Database, cost.NoopPricer{})
@@ -276,7 +277,7 @@ func fillWorkers(t *testing.T, d *Deps) {
 		d.Workers = worker.NewInMemoryQueue(2)
 	}
 	if d.WorkerCancel == nil {
-		d.WorkerCancel = &worker.CancelService{Queue: d.Workers, Sessions: d.Sessions, Graceful: d.Sessions.Workers.Cancel, Cancellations: d.Sessions.Workers.Cancellations}
+		d.WorkerCancel = &worker.CancelService{Queue: d.Workers, Events: d.Sessions, Graceful: d.Sessions.Workers.Cancel, Cancellations: d.Sessions.Workers.Cancellations}
 	}
 	if d.Delegations == nil {
 		d.Delegations = delegation.NewManager(delegation.NewMemoryStore(), d.Workers, nil, nil)
@@ -304,7 +305,7 @@ func fillHarness(t *testing.T, d *Deps) {
 	}
 	if d.HarnessWorkers == nil {
 		scripted, err := harnessfixture.NewWorkers(t.TempDir(), d.Store, d.Workers, d.Sessions.Workers.Harness.Verify,
-			d.Sessions.Workers.Harness.Read, session.NewSQLDecisionStore(d.Database), refusingExecutor{})
+			d.Sessions.Workers.Harness.Read, sessiondecisions.NewSQL(d.Database), refusingExecutor{})
 		testutil.FailErr(t, "scripted workers", err)
 		d.HarnessWorkers = scripted
 	}
@@ -337,10 +338,10 @@ func fillSessions(t *testing.T, d *Deps) {
 		return
 	}
 	registry := tools.NewStubRegistry()
-	d.Sessions = session.NewManager(d.Store, llm.NewMockProvider(nil), registry, settings.DefaultSessionLimits())
+	d.Sessions = session.NewHost(d.Store, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, registry)
 	d.Sessions.SetDataDir(t.TempDir())
 	d.Sessions.SetProjectRegistry(d.Projects)
-	d.Sessions.Guards.SetInvoker(testtool.RegistryInvoker{Registry: registry})
+	d.Sessions.Coordinator.Guards.SetInvoker(testtool.RegistryInvoker{Registry: registry})
 }
 
 func fillSettings(t *testing.T, d *Deps) {

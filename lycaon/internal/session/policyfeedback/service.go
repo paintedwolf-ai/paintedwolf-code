@@ -10,7 +10,10 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-type Service struct{ renderer *oar.Renderer }
+type Service struct {
+	renderer *oar.Renderer
+	Rejects  *guidance.ToolRejectFormatter
+}
 
 func New() *Service                                   { return &Service{} }
 func (m *Service) SetRenderer(renderer *oar.Renderer) { m.renderer = renderer }

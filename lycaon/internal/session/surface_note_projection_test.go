@@ -22,7 +22,7 @@ func TestAgentNotePairSSEAndHydration(t *testing.T) {
 	sqlStore := store.NewSQL(sqlDB)
 	hub := events.NewMemoryHub()
 	pub := &events.Publisher{Hub: hub}
-	mgr := NewManager(sqlStore, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(sqlStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	mgr.SetEventPublisher(pub)
 
 	ctx := context.Background()
@@ -59,7 +59,7 @@ func TestAgentNotePairSSEAndHydration(t *testing.T) {
 		Grounding:  &wire.CitationGrounding{Traced: true},
 	}
 
-	testutil.FailErr(t, "append pair", mgr.Transcript.Append(ctx, sess.ID, toolMsg, noteMsg))
+	testutil.FailErr(t, "append pair", mgr.Runner.Transcript.Append(ctx, sess.ID, toolMsg, noteMsg))
 
 	toolEv := waitParentMessageAppend(t, ch, sess.ID, toolID)
 	noteEv := waitParentMessageAppend(t, ch, sess.ID, noteID)

@@ -8,8 +8,8 @@ import (
 )
 
 func TestToolPolicyWithoutOptionalDependencies(t *testing.T) {
-	mgr := NewManager(sessionstore.NewMemory(), nil, nil, settings.DefaultSessionLimits())
-	if mgr.Guards.Policy() == nil {
+	mgr := NewHost(sessionstore.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	if mgr.Coordinator.Guards.Policy() == nil {
 		t.Fatal("expected policy without optional dependencies")
 	}
 }

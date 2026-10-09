@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/guidance"
-	"github.com/lycaon/lycaon/internal/session"
+	sessiondecisions "github.com/lycaon/lycaon/internal/session/decisions"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -22,7 +22,7 @@ const (
 // AnswerDecisionService resolves worker decisions.
 type AnswerDecisionService struct {
 	Queue     WorkerQueue
-	Decisions session.DecisionStore
+	Decisions sessiondecisions.Store
 	Resolver  DecisionResolver
 	Reject    *guidance.StaticRejectFormatter
 }

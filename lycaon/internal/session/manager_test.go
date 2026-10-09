@@ -34,30 +34,30 @@ func testMockConfig(t *testing.T) *llm.MockConfig {
 	return cfg
 }
 
-func newTestManager(t *testing.T) (*Manager, *store.Memory) {
+func newTestManager(t *testing.T) (*Host, *store.Memory) {
 	t.Helper()
 	memory := store.NewMemory()
 	return newTestManagerWithStore(t, memory), memory
 }
 
-func newTestManagerWithStore(t *testing.T, persistence Store) *Manager {
+func newTestManagerWithStore(t *testing.T, persistence Store) *Host {
 	t.Helper()
 	registry := tools.NewStubRegistry()
-	mgr := NewManager(persistence, llm.NewMockProvider(testMockConfig(t)), registry, settings.DefaultSessionLimits())
+	mgr := NewHost(persistence, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, registry)
 	oartest.InstallCloseoutPolicy(t, mgr)
-	mgr.Guards.SetInvoker(testtool.RegistryInvoker{Registry: registry})
+	mgr.Coordinator.Guards.SetInvoker(testtool.RegistryInvoker{Registry: registry})
 	// Rewind checkpoints use a state root separate from the project.
 	mgr.SetDataDir(t.TempDir())
 	return mgr
 }
 
-func newRootedTestManager(t *testing.T) (*Manager, *store.Memory, string) {
+func newRootedTestManager(t *testing.T) (*Host, *store.Memory, string) {
 	t.Helper()
 	mgr, store := newTestManager(t)
 	return mgr, store, attachTestProject(t, mgr)
 }
 
-func attachTestProject(t *testing.T, mgr *Manager) string {
+func attachTestProject(t *testing.T, mgr *Host) string {
 	t.Helper()
 	projects := project.NewMemoryRegistry()
 	created, err := projects.Create(context.Background(), project.CreateParams{Roots: []project.AttachRootParams{{
@@ -83,7 +83,7 @@ func TestPromptTextResponse(t *testing.T) {
 		t.Fatal("expected message id")
 	}
 
-	msgs, err := mgr.Transcript.GetMessages(ctx, sess.ID)
+	msgs, err := mgr.Runner.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "mgr.GetMessages failed", err)
 	if len(msgs) != 2 {
 		t.Fatalf("messages = %d, want 2", len(msgs))
@@ -114,7 +114,7 @@ func TestPromptWithToolCall(t *testing.T) {
 	_, err = mgr.Submissions.Prompt(ctx, sess.ID, "read the readme")
 	testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 
-	msgs, err := mgr.Transcript.GetMessages(ctx, sess.ID)
+	msgs, err := mgr.Runner.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "mgr.GetMessages failed", err)
 	if len(msgs) < 4 {
 		t.Fatalf("messages = %d, want tool exchange and closeout", len(msgs))
@@ -169,7 +169,7 @@ func TestMaxIterationCap(t *testing.T) {
 		t.Fatalf("model's miss attributed to the provider: %v", err)
 	}
 
-	msgs, err := mgr.Transcript.GetMessages(ctx, sess.ID)
+	msgs, err := mgr.Runner.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "mgr.GetMessages failed", err)
 	// The repeating fixture refuses the final prose request; no blank answer commits.
 	want := 7
@@ -204,7 +204,7 @@ func TestSessionHistoryAccumulation(t *testing.T) {
 		}
 	}
 
-	msgs, err := mgr.Transcript.GetMessages(ctx, sess.ID)
+	msgs, err := mgr.Runner.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "mgr.GetMessages failed", err)
 	if len(msgs) != 6 {
 		t.Fatalf("messages = %d, want 6", len(msgs))
@@ -227,9 +227,9 @@ func TestToolCallError(t *testing.T) {
 	store := store.NewMemory()
 	reg := tools.NewStubRegistry()
 	reg.SetFail("read", fmt.Errorf("read failed"))
-	mgr := NewManager(store, llm.NewMockProvider(testMockConfig(t)), reg, settings.DefaultSessionLimits())
+	mgr := NewHost(store, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, reg)
 	oartest.InstallCloseoutPolicy(t, mgr)
-	mgr.Guards.SetInvoker(testtool.RegistryInvoker{Registry: reg})
+	mgr.Coordinator.Guards.SetInvoker(testtool.RegistryInvoker{Registry: reg})
 	projectID := attachTestProject(t, mgr)
 	ctx := context.Background()
 
@@ -242,7 +242,7 @@ func TestToolCallError(t *testing.T) {
 		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 	}
 
-	msgs, err := mgr.Transcript.GetMessages(ctx, sess.ID)
+	msgs, err := mgr.Runner.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "mgr.GetMessages failed", err)
 	if len(msgs) < 3 {
 		t.Fatalf("messages = %d", len(msgs))
@@ -274,7 +274,7 @@ func TestConcurrentPrompts(t *testing.T) {
 		testutil.FailErr(t, "operation failed", err)
 	}
 
-	msgs, err := mgr.Transcript.GetMessages(ctx, sess.ID)
+	msgs, err := mgr.Runner.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "mgr.GetMessages failed", err)
 	if len(msgs) != 4 {
 		t.Fatalf("messages = %d, want 4", len(msgs))

@@ -173,7 +173,7 @@ type advanceParityRig struct {
 	srv          *api.Server
 	wfMgr        *workflow.RunManager
 	blueprintMgr *blueprint.Manager
-	sessionMgr   *session.Manager
+	sessionMgr   *session.Host
 	registry     *tools.DefaultRegistry
 	httpSession  wire.Session
 	toolSession  wire.Session

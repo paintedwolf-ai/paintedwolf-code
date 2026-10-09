@@ -133,10 +133,10 @@ func runGroundingAudits(t *testing.T, ctx context.Context, store Store, sessionI
 	}
 }
 
-func newSQLCompactionManager(t *testing.T, store Store, cfg compaction.CompactionConfig) *Manager {
+func newSQLCompactionManager(t *testing.T, store Store, cfg compaction.CompactionConfig) *Host {
 	t.Helper()
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
-	mgr := NewManager(store, llm.NewMockProvider(testMockConfig(t)), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(store, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	mgr.Runner.History.SetCompactor(compaction.NewSimpleCompactor(cfg, compaction.MockSummarizer{Text: "Continue from compacted context."}))
 	return mgr
 }

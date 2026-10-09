@@ -52,7 +52,7 @@ func (s *spyWorkflowRuns) AssertWorkerTask(ctx context.Context, task *api.Worker
 	return s.inner.Fanout.AssertWorkerTask(ctx, task)
 }
 
-func newWorkflowOrchestrator(t *testing.T, rec *recordingDelegation, spy *spyWorkflowRuns) (*orchestration.OrchestratorImpl, *workflow.RunManager, *session.Manager, *delegation.MemoryStore, db.Handle, string) {
+func newWorkflowOrchestrator(t *testing.T, rec *recordingDelegation, spy *spyWorkflowRuns) (*orchestration.OrchestratorImpl, *workflow.RunManager, *session.Host, *delegation.MemoryStore, db.Handle, string) {
 	t.Helper()
 	mockCfg, err := llm.LoadMockConfig()
 	testutil.FailErr(t, "llm.LoadMockConfig failed", err)
@@ -60,7 +60,7 @@ func newWorkflowOrchestrator(t *testing.T, rec *recordingDelegation, spy *spyWor
 	sqlDB := testdbfixture.Open(t, "wf.db")
 
 	sessStore := store.NewSQL(sqlDB)
-	sessMgr := session.NewManager(sessStore, llm.NewMockProvider(mockCfg), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	sessMgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(mockCfg), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	delStore := delegation.NewMemoryStore()
 	queue := worker.NewInMemoryQueue(10)
 
@@ -112,7 +112,7 @@ func newWorkflowOrchestrator(t *testing.T, rec *recordingDelegation, spy *spyWor
 	return orch, wfMgr, sessMgr, delStore, sqlDB, projectDir
 }
 
-func createOrchestrateSession(t *testing.T, sqlDB db.Handle, sessMgr *session.Manager, dir string) *api.Session {
+func createOrchestrateSession(t *testing.T, sqlDB db.Handle, sessMgr *session.Host, dir string) *api.Session {
 	t.Helper()
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 	sess, err := sessMgr.Chats.CreateForProject(context.Background(), testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)

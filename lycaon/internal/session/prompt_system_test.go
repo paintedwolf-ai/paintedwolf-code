@@ -35,12 +35,12 @@ func loadTestAgentRegistry(t *testing.T) *orchestration.MemoryAgentRegistry {
 	return reg
 }
 
-func newPromptTestManager(t *testing.T, llmClient modelcall.LLMClient) (*session.Manager, *store.Memory) {
+func newPromptTestManager(t *testing.T, llmClient modelcall.LLMClient) (*session.Host, *store.Memory) {
 	t.Helper()
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	store := store.NewMemory()
 	toolReg := tools.NewExecutorRegistry(nil, tools.NewDefaultRegistry())
-	mgr := session.NewManager(store, llmClient, toolReg, settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: llmClient, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolReg)
 	oartest.InstallCloseoutPolicy(t, mgr)
 	mgr.Profiles.SetAgentRegistry(loadTestAgentRegistry(t))
 	wirePromptTestManager(t, mgr)
@@ -110,13 +110,14 @@ func TestCoordinatorPromptIncludesPackBoardInject(t *testing.T) {
 	}
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
 	store := store.NewMemory()
-	mgr := session.NewManager(store, rec, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr)
 	wirePromptTestManager(t, mgr)
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
-	mgr.SetBoardInject(
+	mgr.Coordinator.ConfigureBoard(
 		&board.InjectBuilder{SnapshotBuilder: &board.SnapshotBuilder{Repo: repotest.NewProvider(t)}},
 		board.DefaultInjectFormatter(),
+		mgr.Promotion,
 	)
 	mgr.SetCoordinatorTurnFrameSource(planBoardContextStub{
 		ctx: api.CoordinatorRunContext{WorkflowID: "plan", CurrentPhase: "stub"},

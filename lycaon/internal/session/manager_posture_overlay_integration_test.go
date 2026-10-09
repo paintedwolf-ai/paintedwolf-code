@@ -34,7 +34,7 @@ postures:
 		testutil.FailErr(t, "write file", err)
 	}
 
-	mgr := NewManager(store.NewMemory(), llm.NewMockProvider(testMockConfig(t)), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(store.NewMemory(), Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	mgr.Profiles.SetPostureRegistry(reg)
 	if err := mgr.Profiles.WarmPostureOverlay(dir); err != nil {
 		testutil.FailErr(t, "mgr.Profiles.WarmPostureOverlay failed", err)
@@ -68,7 +68,7 @@ postures:
 `), 0o644); err != nil {
 		testutil.FailErr(t, "write file", err)
 	}
-	mgr := NewManager(store.NewMemory(), nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.Profiles.SetPostureRegistry(reg)
 	if err := mgr.Profiles.WarmPostureOverlay(dir); err == nil {
 		t.Fatal("expected unknown overlay posture error")

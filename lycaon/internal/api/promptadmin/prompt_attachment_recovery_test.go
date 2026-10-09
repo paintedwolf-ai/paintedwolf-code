@@ -21,7 +21,7 @@ func newPromptAttachmentRecoveryFixture(t *testing.T) (*Handler, *store.Memory, 
 	sessions := store.NewMemory()
 	sess, err := sessions.Create(t.Context(), wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, "project")
 	testutil.FailErr(t, "create session", err)
-	manager := session.NewManager(sessions, nil, nil, settings.SessionLimits{})
+	manager := session.NewHost(sessions, session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
 	manager.SetDataDir(t.TempDir())
 	server := &Handler{Deps: Deps{Store: sessions, Sessions: manager}}
 	attachmentStore, available := server.AttachmentStore(t.Context(), sess.ProjectID)

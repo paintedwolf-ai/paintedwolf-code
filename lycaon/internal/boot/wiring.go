@@ -14,7 +14,7 @@ type ServeWiring struct {
 	PostureRegistry *session.PostureRegistry
 	BundledRules    map[string]*rules.RulesConfig
 	RuleEngine      *rules.PostureRuleEngine
-	SessionManager  *session.Manager
+	SessionManager  *session.Host
 	WorkflowManager *workflow.RunManager
 }
 

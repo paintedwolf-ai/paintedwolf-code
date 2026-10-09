@@ -164,7 +164,7 @@ func (m *Service) Delete(ctx context.Context, id string) error {
 	if err := m.DisposeRuntime(ctx, id); err != nil {
 		return fmt.Errorf("dispose session runtime: %w", err)
 	}
-	checkpointStore, checkpointErr := m.captures.ForSession(ctx, id)
+	checkpointStore, checkpointErr := m.Captures.ForSession(ctx, id)
 	if errors.Is(checkpointErr, checkpointcontrol.ErrCheckpointRootUnset) {
 		checkpointErr = nil
 	}
@@ -181,7 +181,7 @@ func (m *Service) Delete(ctx context.Context, id string) error {
 		}
 	}
 	if checkpointErr == nil && checkpointStore != nil {
-		checkpointErr = m.captures.Capture.DropSession(ctx, checkpointStore, id)
+		checkpointErr = m.Captures.Capture.DropSession(ctx, checkpointStore, id)
 	}
 	if checkpointErr != nil {
 		slog.WarnContext(ctx, "remove deleted session checkpoints", "session_id", id, "error", checkpointErr)
@@ -190,7 +190,7 @@ func (m *Service) Delete(ctx context.Context, id string) error {
 	if m.loopbackProv != nil {
 		m.loopbackProv.ForgetSession(id)
 	}
-	m.gate.Forget(id)
+	m.Gate.Forget(id)
 	m.publishSessionDeleted(ctx, sess)
 	if m.events != nil {
 		m.events.PublishAttention(ctx)

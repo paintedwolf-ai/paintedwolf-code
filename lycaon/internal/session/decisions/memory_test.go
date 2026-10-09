@@ -1,17 +1,15 @@
-package session
+package decisions
 
 import (
 	"context"
-	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func TestMemoryDecisionStorePutGetClear(t *testing.T) {
+func TestMemoryPutGetClear(t *testing.T) {
 	ctx := context.Background()
-	s := NewMemoryDecisionStore()
+	s := NewMemory()
 	if _, ok, err := s.Get(ctx, "c1"); err != nil || ok {
 		t.Fatalf("empty store: ok=%v err=%v", ok, err)
 	}
@@ -40,24 +38,9 @@ func TestMemoryDecisionStorePutGetClear(t *testing.T) {
 	}
 }
 
-func TestFormatWorkerDecision(t *testing.T) {
-	sum, body := workeroutcomes.FormatWorkerDecision("implementer", api.WorkerDecisionRequest{
-		WorkerID: "job-9", Question: "Refactor the shared type or work around it?",
-		Options: []string{"refactor", "work around"},
-	})
-	if !strings.Contains(sum, "needs a decision") {
-		t.Fatalf("summary = %q", sum)
-	}
-	for _, w := range []string{"NEEDS DECISION", "Refactor the shared type", "1. refactor", "2. work around", `answer_decision(job_id="job-9"`} {
-		if !strings.Contains(body, w) {
-			t.Fatalf("body missing %q: %q", w, body)
-		}
-	}
-}
-
-func TestMemoryDecisionStoreDetachesValuesAndScopesValuesByJob(t *testing.T) {
+func TestMemoryDetachesValuesAndScopesValuesByJob(t *testing.T) {
 	ctx := context.Background()
-	store := NewMemoryDecisionStore()
+	store := NewMemory()
 	decision := api.WorkerDecisionRequest{
 		ChildSessionID: "child-1", WorkerID: "job-1", Question: "Choose", Options: []string{"A", "B"},
 	}

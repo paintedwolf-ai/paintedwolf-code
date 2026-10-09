@@ -19,7 +19,7 @@ func TestPromptExecutionAppliesCloseoutBoundaryBeforeModel(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			mgr, sessions := newTestManager(t)
 			stopped := &failure.ProviderEmptyCompletionError{ProviderID: "fixture"}
-			mgr.llm = failingTurnClient{failure: stopped}
+			mgr.Coordinator.Model.LLM = failingTurnClient{failure: stopped}
 			sess, err := sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 			testutil.FailErr(t, "create closeout session", err)
 			mgr.Runner.Closeouts.NoteCloseoutGroundingReject(t.Context(), sess.ID, "citation", "offender", "draft", nil)

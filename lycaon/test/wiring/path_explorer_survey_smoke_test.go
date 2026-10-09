@@ -31,7 +31,7 @@ func TestPathExplorerChildSchemaIsCommandFree(t *testing.T) {
 	testutil.FailErr(t, "SpawnChild", err)
 	prof, err := h.AgentRegistry.Get(orchestration.ProfilePathExplorer)
 	testutil.FailErr(t, "agents.Get", err)
-	policy := h.SessionMgr.Guards.Policy()
+	policy := h.SessionMgr.Coordinator.Guards.Policy()
 	var schema []string
 	for _, meta := range policy.ListForPrompt(ctx, child, prof.ToolProfile) {
 		schema = append(schema, meta.Name)

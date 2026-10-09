@@ -33,13 +33,13 @@ func TestFinishPromptExecutionQueuesOverlayIntegrateCompleteKick(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "overlay-integrate-kick.db")
 
 	store := store.NewSQL(sqlDB)
-	mgr := session.NewManager(store, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	agents := orchestration.NewMemoryAgentRegistry()
 	testutil.FailErr(t, "LoadRequiredAgentRegistry", orchestration.LoadRequiredAgentRegistry(context.Background(), agents))
 	mgr.Profiles.SetAgentRegistry(agents)
 	wirePromptTestManager(t, mgr)
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
-	testutil.FailErr(t, "install anchor registry", mgr.Guidance.InstallAnchorRegistry())
+	testutil.FailErr(t, "install anchor registry", mgr.Coordinator.Guidance.InstallAnchorRegistry())
 
 	wfStore := workflowpersistence.New(sqlDB)
 	bundledDir := filepath.Join(root, "config", "packs", "painted-wolf", "platform", "workflows")

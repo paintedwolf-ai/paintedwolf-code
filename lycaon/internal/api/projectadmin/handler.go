@@ -40,7 +40,7 @@ type Deps struct {
 	ProjectRules   *rules.ProjectRulesOverlay
 	ScanCadence    *scancadence.Service
 	Store          session.Store
-	Sessions       *session.Manager
+	Sessions       *session.Host
 	Settings       *settings.Service
 	// WorkerSeedRoot and WorkerBranchRoot hold host-only worker storage.
 	WorkerSeedRoot   string

@@ -31,7 +31,7 @@ type HeadSHAReader interface {
 type Manager struct {
 	Store             Store
 	Queue             worker.WorkerQueue
-	Sessions          *session.Manager
+	Sessions          *session.Host
 	Gate              DispatchGate
 	Grounding         *GroundingCoordinator
 	Plans             PlanReader
@@ -50,7 +50,7 @@ type Manager struct {
 type CloseoutHook func(ctx context.Context, delegationID, sessionID, workflowRunID string)
 
 // NewManager wires delegation dispatch to the worker queue and session prompt loop.
-func NewManager(store Store, queue worker.WorkerQueue, sessions *session.Manager, gate DispatchGate) *Manager {
+func NewManager(store Store, queue worker.WorkerQueue, sessions *session.Host, gate DispatchGate) *Manager {
 	if gate == nil {
 		gate = AllowGate{}
 	}

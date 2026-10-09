@@ -134,13 +134,13 @@ type AmbientGroundingCoordinator struct {
 	Gate     AmbientGroundingGate
 	Config   GroundingConfig
 	State    *grounding.StateStore
-	Sessions *session.Manager
+	Sessions *session.Host
 	Events   *events.Publisher
 	// Pipeline is required for ambient post-turn Decisions (coordinator.closeout_check).
 	Pipeline *oar.GuardPipeline
 }
 
-func NewAmbientGroundingCoordinator(store Store, queue ambientWorkerQueue, gate AmbientGroundingGate, cfg GroundingConfig, state *grounding.StateStore, sessions *session.Manager) *AmbientGroundingCoordinator {
+func NewAmbientGroundingCoordinator(store Store, queue ambientWorkerQueue, gate AmbientGroundingGate, cfg GroundingConfig, state *grounding.StateStore, sessions *session.Host) *AmbientGroundingCoordinator {
 	if gate == nil {
 		gate = NewSimpleAmbientGroundingGate(cfg)
 	}

@@ -27,7 +27,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func boardInjectManager(t *testing.T) (*session.Manager, *llm.RecordingClient, *store.Memory, repoinfo.Provider) {
+func boardInjectManager(t *testing.T) (*session.Host, *llm.RecordingClient, *store.Memory, repoinfo.Provider) {
 	t.Helper()
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	dir := t.TempDir()
@@ -36,7 +36,7 @@ func boardInjectManager(t *testing.T) (*session.Manager, *llm.RecordingClient, *
 	}
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
 	store := store.NewMemory()
-	mgr := session.NewManager(store, rec, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr)
 	wirePromptTestManager(t, mgr)
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
@@ -152,7 +152,7 @@ func TestInjectOmitsWorkflowWhenRunContext(t *testing.T) {
 	depStore := delegation.NewMemoryStore()
 	rec2 := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
 	store := store.NewMemory()
-	mgr2 := session.NewManager(store, rec2, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr2 := session.NewHost(store, session.Models{Client: rec2, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr2)
 	wirePromptTestManager(t, mgr2)
 	mgr2.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
@@ -198,16 +198,16 @@ func TestLegFinishedKickIncludesRelativeTime(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	store := store.NewMemory()
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
-	mgr := session.NewManager(store, rec, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr)
 	wirePromptTestManager(t, mgr)
-	testutil.FailErr(t, "install anchor registry", mgr.Guidance.InstallAnchorRegistry())
+	testutil.FailErr(t, "install anchor registry", mgr.Coordinator.Guidance.InstallAnchorRegistry())
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
 	ctx := context.Background()
 	sess, err := store.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	done := time.Now().UTC().Add(-2 * time.Minute)
-	mgr.Guidance.Emit(context.Background(), sess.ID, anchor.LegFinished, anchor.Envelope{CompletedAt: &done})
+	mgr.Coordinator.Guidance.Emit(context.Background(), sess.ID, anchor.LegFinished, anchor.Envelope{CompletedAt: &done})
 	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "next"); err != nil {
 		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 	}

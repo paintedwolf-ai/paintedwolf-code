@@ -23,7 +23,7 @@ func (unavailableWorkerEvidence) ReadAll(context.Context, string, string, string
 
 func TestWorkerValidationEvidenceUnavailablePreservesDelivery(t *testing.T) {
 	mem := store.NewMemory()
-	mgr := NewManager(mem, nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.Verification.SetEvidenceStore(unavailableWorkerEvidence{})
 	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, "")
 	testutil.FailErr(t, "create session", err)

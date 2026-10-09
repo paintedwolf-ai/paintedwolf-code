@@ -135,7 +135,7 @@ func TestDependencyFailureBlocksDownstream(t *testing.T) {
 
 	delStore := delegation.NewMemoryStore()
 	sessStore := store.NewMemory()
-	sessMgr := session.NewManager(sessStore, llm.NewMockProvider(mockCfg), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	sessMgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(mockCfg), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	queue := worker.NewInMemoryQueue(10)
 	delMgr := delegation.NewManager(delStore, queue, sessMgr, delegation.AllowGate{})
 	failDel := &failStageDelegation{inner: delMgr, store: delStore, failStage: "research"}

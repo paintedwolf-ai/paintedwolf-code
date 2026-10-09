@@ -105,10 +105,10 @@ func TestPromptAskWriteApproveRunsTool(t *testing.T) {
 
 	postureRegistry, err := profiles.LoadPostureRegistry()
 	testutil.FailErr(t, "profiles.LoadPostureRegistry failed", err)
-	mgr := session.NewManager(store, mock, toolReg, settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolReg)
 	oartest.InstallCloseoutPolicy(t, mgr)
 	mgr.SetProjectRegistry(project.NewSQLRegistry(sqlDB))
-	mgr.Guards.SetInvoker(exec)
+	mgr.Coordinator.Guards.SetInvoker(exec)
 	wirePromptApprovalRejectFmt(t, mgr, root)
 	mgr.Profiles.SetPostureRegistry(postureRegistry)
 	prog := progress.NewMemoryStore()
@@ -116,7 +116,7 @@ func TestPromptAskWriteApproveRunsTool(t *testing.T) {
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	recordRequestedLoad(t, store, sess.ID, "write")
-	mgr.Loading.SetLedger(turnload.NewLedger())
+	mgr.Coordinator.Loading.SetLedger(turnload.NewLedger())
 	// Keep progress terminal so the write runs once.
 	prog.Set(sess.ID, "## Progress\n- [x] write blueprint stub\n")
 
@@ -226,10 +226,10 @@ func TestPromptAskWriteRejectSurfacesApprovalDenied(t *testing.T) {
 
 	postureRegistry, err := profiles.LoadPostureRegistry()
 	testutil.FailErr(t, "profiles.LoadPostureRegistry failed", err)
-	mgr := session.NewManager(store, mock, toolReg, settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolReg)
 	oartest.InstallCloseoutPolicy(t, mgr)
 	mgr.SetProjectRegistry(project.NewSQLRegistry(sqlDB))
-	mgr.Guards.SetInvoker(exec)
+	mgr.Coordinator.Guards.SetInvoker(exec)
 	wirePromptApprovalRejectFmt(t, mgr, root)
 	mgr.Profiles.SetPostureRegistry(postureRegistry)
 	prog := progress.NewMemoryStore()
@@ -237,7 +237,7 @@ func TestPromptAskWriteRejectSurfacesApprovalDenied(t *testing.T) {
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	recordRequestedLoad(t, store, sess.ID, "write")
-	mgr.Loading.SetLedger(turnload.NewLedger())
+	mgr.Coordinator.Loading.SetLedger(turnload.NewLedger())
 	// Keep progress terminal so the write runs once.
 	prog.Set(sess.ID, "## Progress\n- [x] write blueprint stub\n")
 
@@ -306,7 +306,7 @@ func (o outcomeRenderer) ApprovalOutcome(code string, ctx map[string]any) string
 	return o.cat.Message(code, ctx)
 }
 
-func wirePromptApprovalRejectFmt(t *testing.T, mgr *session.Manager, root string) {
+func wirePromptApprovalRejectFmt(t *testing.T, mgr *session.Host, root string) {
 	t.Helper()
 	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
 	hintCfg, err := guidance.LoadHintConfigStock()

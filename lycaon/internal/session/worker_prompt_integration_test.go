@@ -35,7 +35,7 @@ func (s *stubWorkerContext) BuildWorkerPromptContext(_ string, _ *api.Session) (
 	return s.ctx, nil
 }
 
-func setupWorkerPromptFixture(t *testing.T) (*session.Manager, *store.Memory, *llm.RecordingClient) {
+func setupWorkerPromptFixture(t *testing.T) (*session.Host, *store.Memory, *llm.RecordingClient) {
 	t.Helper()
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{
@@ -43,7 +43,7 @@ func setupWorkerPromptFixture(t *testing.T) (*session.Manager, *store.Memory, *l
 		Text:    "ok",
 	}}}))
 	store := store.NewMemory()
-	mgr := session.NewManager(store, rec, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	agents := orchestration.NewMemoryAgentRegistry()
 	if err := orchestration.LoadRequiredAgentRegistry(context.Background(), agents); err != nil {
 		testutil.FailErr(t, "LoadRequiredAgentRegistry", err)
@@ -58,7 +58,7 @@ func setupWorkerPromptFixture(t *testing.T) (*session.Manager, *store.Memory, *l
 	return mgr, store, rec
 }
 
-func wireSkillsCatalogForPromptTest(t *testing.T, mgr *session.Manager) {
+func wireSkillsCatalogForPromptTest(t *testing.T, mgr *session.Host) {
 	t.Helper()
 	surfaces, err := settings.NewTrustSurfacesStoreAt(filepath.Join(t.TempDir(), "trust-surfaces.yaml"))
 	testutil.FailErr(t, "trust surfaces", err)

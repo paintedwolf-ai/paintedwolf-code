@@ -37,7 +37,7 @@ type Deps struct {
 	Projects      project.Registry
 	ProjectRules  *rules.ProjectRulesOverlay
 	Store         session.Store
-	Sessions      *session.Manager
+	Sessions      *session.Host
 	Workers       worker.WorkerQueue
 	Workflows     *workflow.RunManager
 	Settings      *settings.Service

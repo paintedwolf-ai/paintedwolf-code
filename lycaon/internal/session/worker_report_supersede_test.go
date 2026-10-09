@@ -19,7 +19,7 @@ import (
 func TestSupersedeWorkerReportPreservesRowInPlace(t *testing.T) {
 	ctx := context.Background()
 	store := store.NewMemory()
-	mgr := session.NewManager(store, llm.NewMockProvider(&llm.MockConfig{}), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
@@ -40,7 +40,7 @@ func TestSupersedeWorkerReportPreservesRowInPlace(t *testing.T) {
 		}
 	}
 
-	if err := mgr.Transcript.SupersedeWorkerReport(ctx, sess.ID, reportID); err != nil {
+	if err := mgr.Runner.Transcript.SupersedeWorkerReport(ctx, sess.ID, reportID); err != nil {
 		testutil.FailErr(t, "SupersedeWorkerReport", err)
 	}
 

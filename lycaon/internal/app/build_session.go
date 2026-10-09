@@ -49,7 +49,7 @@ func (b sessionWiring) wireSessionManager() error {
 		}
 		b.llmSvc.Preparation = preparation
 	}
-	b.mgr = session.NewManagerWithLLMService(b.store, b.mockLLM, b.llmSvc, b.toolReg, b.sessionCfg, b.costTracker)
+	b.mgr = session.NewHost(b.store, session.Models{Client: b.mockLLM, Provider: b.llmSvc, Limits: b.sessionCfg, Cost: b.costTracker}, b.toolReg)
 	b.mgr.ToolPolicy.SetMintedCredentialSource(b.detections.mintedCredentialSource)
 	invocations := invocation.NewSQLRecorder(b.db)
 	b.invocations = invocations
@@ -94,11 +94,11 @@ func (b sessionWiring) configureSessionManager() error {
 	}
 	b.mgr.SetDoomLoopGuard(loopguard.NewMemoryDoomLoopGuard())
 	b.mgr.SetRejectFormatter(b.rejectFmt)
-	b.mgr.Guards.SetRuntimeRules(loadProfileRuntimeRules())
+	b.mgr.Coordinator.Guards.SetRuntimeRules(loadProfileRuntimeRules())
 	if err := progress.InitProgressGatedTools(b.configRoot); err != nil {
 		return fmt.Errorf("init progress-gated tools: %w", err)
 	}
-	b.mgr.Guards.SetInvoker(b.toolRuntime.Executor)
+	b.mgr.Coordinator.Guards.SetInvoker(b.toolRuntime.Executor)
 	if b.settingsSvc != nil {
 		if b.cfg.TestSessionLimits == nil {
 			b.mgr.Limits.SetProvider(settings.ProjectLimitsAdapter{Store: b.settingsSvc.Limits})
@@ -134,7 +134,7 @@ func (b sessionWiring) wireSessionToolSources() {
 	}
 	if b.toolRuntime != nil {
 		mgr := b.mgr
-		b.toolRuntime.SetApprovalRuleSource(mgr)
+		b.toolRuntime.SetApprovalRuleSource(&mgr.Catalog)
 		b.toolRuntime.Executor.SetHostResourceConnectionSource(b.hostResources.ResolveAction)
 		b.toolRuntime.SetSkillsCatalog(func(ctx context.Context, tctx tools.ToolContext) []skills.Skill {
 			roots := make([]string, 0, len(tctx.Roots))
@@ -143,7 +143,7 @@ func (b sessionWiring) wireSessionToolSources() {
 					roots = append(roots, path)
 				}
 			}
-			sess, _ := mgr.SessionByID(ctx, tctx.SessionID)
+			sess, _ := mgr.Chats.Get(ctx, tctx.SessionID)
 			loaded, _ := mgr.Profiles.EffectiveSkillsForProfile(ctx, sess, tctx.Agent, roots)
 			return loaded
 		})
@@ -245,14 +245,14 @@ func (b sessionWiring) registerSessionCrashRecovery(invocations *invocation.SQLR
 	if err := delegationWiring(b).registerRecovery(bootrecovery.Entry{
 		Name: "session-turns", Kind: bootrecovery.KindReconcile, Phase: bootrecovery.PhaseBuild,
 		After: []string{"tool-invocations"},
-		Run:   b.mgr.Interruptions.RecoverOrphanedTurns,
+		Run:   b.mgr.Stops.Recovery.RecoverOrphanedTurns,
 	}); err != nil {
 		return err
 	}
 	return delegationWiring(b).registerRecovery(bootrecovery.Entry{
 		Name: "transcript-invocations", Kind: bootrecovery.KindReconcile, Phase: bootrecovery.PhaseServe,
 		After: []string{"tool-invocations", "session-turns"},
-		Run:   b.mgr.Interruptions.RecoverInterruptedToolResults,
+		Run:   b.mgr.Stops.Recovery.RecoverInterruptedToolResults,
 	})
 }
 
@@ -263,7 +263,7 @@ func (b sessionWiring) wireCheckpointRuntime() error {
 	checkpointStore := hitl.NewSQLStore(b.db)
 	checkpointStore.SetEventOutbox(b.eventOutbox)
 	checkpointMgr := hitl.NewManager(checkpointStore, b.eventPub, b.authzCapturer.Recorder)
-	checkpointMgr.SetSessionAdmission(b.mgr.Gate.WithSessionTreeAdmission)
+	checkpointMgr.SetSessionAdmission(b.mgr.Chats.Gate.WithSessionTreeAdmission)
 	checkpointMgr.SetVaultUnlock(b.presenceBroker, b.vaultUnlocks, unlockRecorder{})
 	b.toolRuntime.Executor.SetPresenceAvailable(checkpointMgr.PresenceAvailable)
 	checkpointMgr.SetCheckpointWaitObserver(b.mgr.Runner.Clocks.Wait)
@@ -279,7 +279,7 @@ func (b sessionWiring) wireCheckpointRuntime() error {
 		return err
 	}
 	if b.secretHarvest != nil {
-		b.mgr.SetCredentialFiles(b.newCredentialFiles())
+		b.mgr.ToolContext.SetCredentialFiles(b.newCredentialFiles())
 	}
 	b.wireCredentialObservations()
 	b.toolRuntime.Executor.SetSecretExposureSource(func(ctx context.Context, chatSessionID string) (bool, error) {

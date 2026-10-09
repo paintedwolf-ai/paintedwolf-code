@@ -15,7 +15,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func newClosureGuardManager(t *testing.T, store progress.RunScopedStore) *Manager {
+func newClosureGuardManager(t *testing.T, store progress.RunScopedStore) *Host {
 	t.Helper()
 	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
 	hints, err := guidance.LoadHintConfigStock()
@@ -24,7 +24,7 @@ func newClosureGuardManager(t *testing.T, store progress.RunScopedStore) *Manage
 	mgr, _ := newTestManager(t)
 	mgr.SetRejectFormatter(rejectFmt)
 	mgr.SetProgressStore(store)
-	mgr.ensureCoordinatorRuntime()
+	mgr.Coordinator.Runtime
 	mgr.SetOARPipeline(testCoordinatorPreInvokePipeline(t), oar.NewRenderer(rejectFmt, nil))
 	return mgr
 }
@@ -44,10 +44,10 @@ func testCoordinatorPreInvokePipeline(t *testing.T) *oar.GuardPipeline {
 }
 
 // closureGuardPreInvoke checks progress and clears a satisfied latch.
-func closureGuardPreInvoke(t *testing.T, mgr *Manager, sess *api.Session, rootID, tool string) (bool, error) {
+func closureGuardPreInvoke(t *testing.T, mgr *Host, sess *api.Session, rootID, tool string) (bool, error) {
 	t.Helper()
-	content := mgr.progress.Get(t.Context(), rootID)
-	baseline, armed := mgr.ProgressClosure.Baseline(rootID)
+	content := mgr.RewindRuntime.Progress.Get(t.Context(), rootID)
+	baseline, armed := mgr.Coordinator.ProgressClosure.Baseline(rootID)
 	reject, blocked, err := mgr.ToolPolicy.Block(t.Context(), oar.AnchorCoordinatorPreInvoke, sess, tool, nil, func(gc *oar.GuardContext) error {
 		guard.ObserveProgressItemNotClosedBeforeDispatch(sess, content, tool, baseline, armed, gc)
 		return nil
@@ -62,7 +62,7 @@ func closureGuardPreInvoke(t *testing.T, mgr *Manager, sess *api.Session, rootID
 		return true, nil
 	}
 	if armed {
-		mgr.ProgressClosure.ClearSatisfied(rootID, content, baseline)
+		mgr.Coordinator.ProgressClosure.ClearSatisfied(rootID, content, baseline)
 	}
 	return false, nil
 }
@@ -73,7 +73,7 @@ func TestProgressClosureRejectWhenArmedAndNothingClosed(t *testing.T) {
 	mgr := newClosureGuardManager(t, store)
 	sess := &api.Session{ID: "root-1"}
 
-	mgr.ProgressClosure.Arm(t.Context(), "root-1", "job-1")
+	mgr.Coordinator.ProgressClosure.Arm(t.Context(), "root-1", "job-1")
 	// A blocked pre-invoke travels as a refusal carrying its code; skipRun stays
 	// reserved for a hook that answered the call with a body.
 	skip, err := closureGuardPreInvoke(t, mgr, sess, "root-1", "task")
@@ -100,10 +100,10 @@ func TestProgressClosureAccumulatesCompletedWork(t *testing.T) {
 	store := progress.NewMemoryStore()
 	store.Set("root-1", "## Progress\n- [ ] step a\n- [ ] step b")
 	mgr := newClosureGuardManager(t, store)
-	mgr.ProgressClosure.Arm(t.Context(), "root-1", "job-1")
-	mgr.ProgressClosure.Arm(t.Context(), "root-1", "job-2")
-	mgr.ProgressClosure.Arm(t.Context(), "root-1", "job-1")
-	baseline, armed := mgr.ProgressClosure.Baseline("root-1")
+	mgr.Coordinator.ProgressClosure.Arm(t.Context(), "root-1", "job-1")
+	mgr.Coordinator.ProgressClosure.Arm(t.Context(), "root-1", "job-2")
+	mgr.Coordinator.ProgressClosure.Arm(t.Context(), "root-1", "job-1")
+	baseline, armed := mgr.Coordinator.ProgressClosure.Baseline("root-1")
 	if !armed || len(baseline.Settled) != 2 || baseline.Settled[0] != "job-1" || baseline.Settled[1] != "job-2" {
 		t.Fatalf("baseline = %+v armed=%v want job-1 then job-2 once each", baseline, armed)
 	}
@@ -117,7 +117,7 @@ func TestProgressClosureRejectAllowsWriteWhenArmed(t *testing.T) {
 	store.Set("root-1", "## Progress\n- [ ] step a")
 	mgr := newClosureGuardManager(t, store)
 	sess := &api.Session{ID: "root-1"}
-	mgr.ProgressClosure.Arm(t.Context(), "root-1", "job-1")
+	mgr.Coordinator.ProgressClosure.Arm(t.Context(), "root-1", "job-1")
 	skip, err := closureGuardPreInvoke(t, mgr, sess, "root-1", "write")
 	if err == nil || skip {
 		t.Fatalf("write should reject when armed; skip=%v err=%v", skip, err)
@@ -129,7 +129,7 @@ func TestProgressClosureRejectAllowsReadWhenArmed(t *testing.T) {
 	store.Set("root-1", "## Progress\n- [ ] step a")
 	mgr := newClosureGuardManager(t, store)
 	sess := &api.Session{ID: "root-1"}
-	mgr.ProgressClosure.Arm(t.Context(), "root-1", "job-1")
+	mgr.Coordinator.ProgressClosure.Arm(t.Context(), "root-1", "job-1")
 	block, err := closureGuardPreInvoke(t, mgr, sess, "root-1", "read")
 	if err != nil || block {
 		t.Fatalf("read must allow; block=%v err=%v", block, err)
@@ -141,13 +141,13 @@ func TestProgressClosureRejectClearsAfterClose(t *testing.T) {
 	store.Set("root-1", "## Progress\n- [x] step a\n- [ ] step b")
 	mgr := newClosureGuardManager(t, store)
 	sess := &api.Session{ID: "root-1"}
-	mgr.ProgressClosure.Arm(t.Context(), "root-1", "job-1")
+	mgr.Coordinator.ProgressClosure.Arm(t.Context(), "root-1", "job-1")
 	store.Set("root-1", "## Progress\n- [x] step a\n- [x] step b\n- [ ] step c")
 	block, err := closureGuardPreInvoke(t, mgr, sess, "root-1", "task")
 	if err != nil || block {
 		t.Fatalf("after close must allow; block=%v err=%v", block, err)
 	}
-	if _, armed := mgr.ProgressClosure.Baseline("root-1"); armed {
+	if _, armed := mgr.Coordinator.ProgressClosure.Baseline("root-1"); armed {
 		t.Fatal("latch should clear after closed count advances")
 	}
 }
@@ -158,13 +158,13 @@ func TestProgressClosureRejectClearsAfterRevision(t *testing.T) {
 	store.Set("root-1", "## Progress\n- [x] survey\n- [ ] challenge claims\n- [ ] report")
 	mgr := newClosureGuardManager(t, store)
 	sess := &api.Session{ID: "root-1"}
-	mgr.ProgressClosure.Arm(t.Context(), "root-1", "job-1")
+	mgr.Coordinator.ProgressClosure.Arm(t.Context(), "root-1", "job-1")
 	store.Set("root-1", "## Progress\n- [x] survey — re-run after provider failure\n- [ ] challenge claims\n- [ ] report")
 	block, err := closureGuardPreInvoke(t, mgr, sess, "root-1", "task")
 	if err != nil || block {
 		t.Fatalf("revision must allow; block=%v err=%v", block, err)
 	}
-	if _, armed := mgr.ProgressClosure.Baseline("root-1"); armed {
+	if _, armed := mgr.Coordinator.ProgressClosure.Baseline("root-1"); armed {
 		t.Fatal("latch should clear after a checklist revision")
 	}
 }
@@ -174,13 +174,13 @@ func TestProgressClosureRejectClearsWhenPendingZero(t *testing.T) {
 	store.Set("root-1", "## Progress\n- [ ] step a")
 	mgr := newClosureGuardManager(t, store)
 	sess := &api.Session{ID: "root-1"}
-	mgr.ProgressClosure.Arm(t.Context(), "root-1", "job-1")
+	mgr.Coordinator.ProgressClosure.Arm(t.Context(), "root-1", "job-1")
 	store.Set("root-1", "## Progress\n- [x] step a\n- [>] note")
 	block, err := closureGuardPreInvoke(t, mgr, sess, "root-1", "task")
 	if err != nil || block {
 		t.Fatalf("pending=0 must allow; block=%v err=%v", block, err)
 	}
-	if _, armed := mgr.ProgressClosure.Baseline("root-1"); armed {
+	if _, armed := mgr.Coordinator.ProgressClosure.Baseline("root-1"); armed {
 		t.Fatal("latch should clear when pending is zero")
 	}
 }
@@ -200,8 +200,8 @@ func TestProgressClosureArmSkipsWhenNothingPending(t *testing.T) {
 	store := progress.NewMemoryStore()
 	store.Set("root-1", "## Progress\n- [x] done\n- [>] note")
 	mgr := newClosureGuardManager(t, store)
-	mgr.ProgressClosure.Arm(t.Context(), "root-1", "job-1")
-	if _, armed := mgr.ProgressClosure.Baseline("root-1"); armed {
+	mgr.Coordinator.ProgressClosure.Arm(t.Context(), "root-1", "job-1")
+	if _, armed := mgr.Coordinator.ProgressClosure.Baseline("root-1"); armed {
 		t.Fatal("arm must no-op when pending is zero")
 	}
 }
@@ -211,7 +211,7 @@ func TestProgressClosureRejectSkipsWorkerChild(t *testing.T) {
 	store.Set("root-1", "## Progress\n- [ ] step a")
 	mgr := newClosureGuardManager(t, store)
 	sess := &api.Session{ID: "child-1", ParentSessionID: "root-1"}
-	mgr.ProgressClosure.Arm(t.Context(), "root-1", "job-1")
+	mgr.Coordinator.ProgressClosure.Arm(t.Context(), "root-1", "job-1")
 	block, err := closureGuardPreInvoke(t, mgr, sess, "root-1", "task")
 	if err != nil || block {
 		t.Fatalf("worker child must allow; block=%v err=%v", block, err)
@@ -223,13 +223,13 @@ func TestProgressClosureNAAdvancesClosedCount(t *testing.T) {
 	store.Set("root-1", "## Progress\n- [ ] step a\n- [ ] step b\n- [ ] step c")
 	mgr := newClosureGuardManager(t, store)
 	sess := &api.Session{ID: "root-1"}
-	mgr.ProgressClosure.Arm(t.Context(), "root-1", "job-1")
+	mgr.Coordinator.ProgressClosure.Arm(t.Context(), "root-1", "job-1")
 	store.Set("root-1", "## Progress\n- [~] step a\n- [ ] step b\n- [ ] step c")
 	block, err := closureGuardPreInvoke(t, mgr, sess, "root-1", "write")
 	if err != nil || block {
 		t.Fatalf("descope must advance closed count; block=%v err=%v", block, err)
 	}
-	if _, armed := mgr.ProgressClosure.Baseline("root-1"); armed {
+	if _, armed := mgr.Coordinator.ProgressClosure.Baseline("root-1"); armed {
 		t.Fatal("latch should clear after [~] advances closed count")
 	}
 }
@@ -239,15 +239,15 @@ func TestProgressClosureReArmKeepsOriginalBaseline(t *testing.T) {
 	store.Set("root-1", "## Progress\n- [ ] step a\n- [ ] step b\n- [ ] step c")
 	mgr := newClosureGuardManager(t, store)
 	sess := &api.Session{ID: "root-1"}
-	mgr.ProgressClosure.Arm(t.Context(), "root-1", "job-1")
+	mgr.Coordinator.ProgressClosure.Arm(t.Context(), "root-1", "job-1")
 	store.Set("root-1", "## Progress\n- [x] step a\n- [ ] step b\n- [ ] step c")
 	// Sibling finish must not replace the baseline and erase credit for the close.
-	mgr.ProgressClosure.Arm(t.Context(), "root-1", "job-1")
+	mgr.Coordinator.ProgressClosure.Arm(t.Context(), "root-1", "job-1")
 	block, err := closureGuardPreInvoke(t, mgr, sess, "root-1", "write")
 	if err != nil || block {
 		t.Fatalf("re-arm must keep original baseline; block=%v err=%v", block, err)
 	}
-	if _, armed := mgr.ProgressClosure.Baseline("root-1"); armed {
+	if _, armed := mgr.Coordinator.ProgressClosure.Baseline("root-1"); armed {
 		t.Fatal("latch should clear when closed count exceeds the original baseline")
 	}
 }
@@ -256,10 +256,10 @@ func TestProgressClosureClearsOnUpdateProgressWrite(t *testing.T) {
 	store := progress.NewMemoryStore()
 	store.Set("root-1", "## Progress\n- [ ] step a\n- [ ] step b")
 	mgr := newClosureGuardManager(t, store)
-	mgr.ProgressClosure.Arm(t.Context(), "root-1", "job-1")
+	mgr.Coordinator.ProgressClosure.Arm(t.Context(), "root-1", "job-1")
 	store.Set("root-1", "## Progress\n- [x] step a\n- [ ] step b")
-	mgr.ProgressClosure.AfterWrite(t.Context(), "root-1")
-	if _, armed := mgr.ProgressClosure.Baseline("root-1"); armed {
+	mgr.Coordinator.ProgressClosure.AfterWrite(t.Context(), "root-1")
+	if _, armed := mgr.Coordinator.ProgressClosure.Baseline("root-1"); armed {
 		t.Fatal("update_progress advance must disarm the latch without waiting for a gated tool")
 	}
 }
@@ -268,10 +268,10 @@ func TestProgressClosureRevisionWriteClears(t *testing.T) {
 	store := progress.NewMemoryStore()
 	store.Set("root-1", "## Progress\n- [x] step a\n- [ ] step b")
 	mgr := newClosureGuardManager(t, store)
-	mgr.ProgressClosure.Arm(t.Context(), "root-1", "job-1")
+	mgr.Coordinator.ProgressClosure.Arm(t.Context(), "root-1", "job-1")
 	store.Set("root-1", "## Progress\n- [x] step a\n- [ ] step b — waiting on rerun")
-	mgr.ProgressClosure.AfterWrite(t.Context(), "root-1")
-	if _, armed := mgr.ProgressClosure.Baseline("root-1"); armed {
+	mgr.Coordinator.ProgressClosure.AfterWrite(t.Context(), "root-1")
+	if _, armed := mgr.Coordinator.ProgressClosure.Baseline("root-1"); armed {
 		t.Fatal("a content revision must disarm the latch")
 	}
 }
@@ -280,10 +280,10 @@ func TestProgressClosureUnchangedDoesNotClear(t *testing.T) {
 	store := progress.NewMemoryStore()
 	store.Set("root-1", "## Progress\n- [ ] step a\n- [ ] step b")
 	mgr := newClosureGuardManager(t, store)
-	mgr.ProgressClosure.Arm(t.Context(), "root-1", "job-1")
+	mgr.Coordinator.ProgressClosure.Arm(t.Context(), "root-1", "job-1")
 	// Same content — nothing reconciled.
-	mgr.ProgressClosure.AfterWrite(t.Context(), "root-1")
-	if _, armed := mgr.ProgressClosure.Baseline("root-1"); !armed {
+	mgr.Coordinator.ProgressClosure.AfterWrite(t.Context(), "root-1")
+	if _, armed := mgr.Coordinator.ProgressClosure.Baseline("root-1"); !armed {
 		t.Fatal("unchanged checklist must leave the latch armed")
 	}
 }

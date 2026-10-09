@@ -23,7 +23,7 @@ func TestOneCanonicalWorkerCardAndSupersedeInPlace(t *testing.T) {
 
 	rapid.Check(t, func(t *rapid.T) {
 		store := store.NewMemory()
-		mgr := session.NewManager(store, llm.NewMockProvider(&llm.MockConfig{}), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+		mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 		sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 		failErr(t, "create session", err)
 
@@ -99,7 +99,7 @@ func TestOneCanonicalWorkerCardAndSupersedeInPlace(t *testing.T) {
 
 		preCount := len(all)
 		preContent := canonical.Content
-		failErr(t, "supersede", mgr.Transcript.SupersedeWorkerReport(ctx, sess.ID, canonicalID))
+		failErr(t, "supersede", mgr.Runner.Transcript.SupersedeWorkerReport(ctx, sess.ID, canonicalID))
 		after, err := store.GetMessages(ctx, sess.ID)
 		failErr(t, "get messages post-supersede", err)
 		if len(after) != preCount {

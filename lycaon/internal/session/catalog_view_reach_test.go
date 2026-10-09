@@ -37,9 +37,9 @@ func writeProjectExtensions(t *testing.T, projectDir string, body string) {
 	}
 }
 
-func newViewManager(t *testing.T, root string, surfaces *settings.TrustSurfacesStore) (*session.Manager, *catalogview.Cache) {
+func newViewManager(t *testing.T, root string, surfaces *settings.TrustSurfacesStore) (*session.Host, *catalogview.Cache) {
 	t.Helper()
-	m := session.NewManager(store.NewMemory(), nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	m := session.NewHost(store.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	boot := extpacks.Resolve(t.Context(), extpacks.ResolveInput{
 		Packs: func() []extpacks.PackContent {
 			c, err := extpacks.DiscoverStockContent()

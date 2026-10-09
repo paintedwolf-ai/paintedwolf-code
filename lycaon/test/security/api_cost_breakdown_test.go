@@ -74,7 +74,7 @@ func (u *usageMockLLM) Stream(ctx context.Context, req modelcall.CompletionReque
 	return ch, nil
 }
 
-func newCostBreakdownHarness(t *testing.T) (*wiring.Harness, *api.Server, *session.Manager, *events.MemoryHub) {
+func newCostBreakdownHarness(t *testing.T) (*wiring.Harness, *api.Server, *session.Host, *events.MemoryHub) {
 	t.Helper()
 	mock := &usageMockLLM{MockProvider: llm.NewMockProvider(loadMockConfig(t))}
 	h := wiring.BuildForTest(t, wiring.WithLLMClient(mock))

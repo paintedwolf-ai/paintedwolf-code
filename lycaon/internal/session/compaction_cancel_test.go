@@ -45,15 +45,15 @@ func TestManualCompactionDoesNotHoldSessionStopAdmission(t *testing.T) {
 		t.Fatal("summarizer did not start")
 	}
 	stopEntered := make(chan *lifecycle.Flight, 1)
-	go func() { flight, _ := mgr.Gate.Begin(sess.ID); stopEntered <- flight }()
+	go func() { flight, _ := mgr.Chats.Gate.Begin(sess.ID); stopEntered <- flight }()
 	select {
 	case flight := <-stopEntered:
 		mgr.Runner.History.Runner.CancelSession(sess.ID)
-		mgr.Gate.Finish(sess.ID, flight, nil)
+		mgr.Chats.Gate.Finish(sess.ID, flight, nil)
 	case <-time.After(5 * time.Second):
 		cancel()
 		flight := <-stopEntered
-		mgr.Gate.Finish(sess.ID, flight, nil)
+		mgr.Chats.Gate.Finish(sess.ID, flight, nil)
 		t.Fatal("manual compaction blocked stop admission")
 	}
 	if err := <-done; !errors.Is(err, context.Canceled) {

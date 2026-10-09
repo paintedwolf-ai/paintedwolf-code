@@ -31,7 +31,7 @@ func (r *reviewCheckpointRecorder) CreateStructuralCheckpoint(
 func TestReviewCheckpointOnlyOpensForRealUserIntent(t *testing.T) {
 	ctx := t.Context()
 	sessions := store.NewMemory()
-	mgr := NewManager(sessions, nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(sessions, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	recorder := &reviewCheckpointRecorder{}
 	mgr.SetSourceLedger(recorder)
 	sess, err := sessions.Create(ctx, api.CreateSessionRequest{

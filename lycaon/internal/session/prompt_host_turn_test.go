@@ -44,17 +44,17 @@ func (r *receiptRecorder) admitted() []string {
 	return append([]string(nil), r.ids...)
 }
 
-func newReceiptTestManager(t *testing.T) (*Manager, *receiptRecorder) {
+func newReceiptTestManager(t *testing.T) (*Host, *receiptRecorder) {
 	t.Helper()
 	recorder := &receiptRecorder{Memory: store.NewMemory()}
 	registry := tools.NewStubRegistry()
-	mgr := NewManager(recorder, llm.NewMockProvider(testMockConfig(t)), registry, settings.DefaultSessionLimits())
+	mgr := NewHost(recorder, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, registry)
 	oartest.InstallCloseoutPolicy(t, mgr)
-	mgr.Guards.SetInvoker(testtool.RegistryInvoker{Registry: registry})
+	mgr.Coordinator.Guards.SetInvoker(testtool.RegistryInvoker{Registry: registry})
 	return mgr, recorder
 }
 
-func newReceiptTestSession(t *testing.T, mgr *Manager, sessions *receiptRecorder) *api.Session {
+func newReceiptTestSession(t *testing.T, mgr *Host, sessions *receiptRecorder) *api.Session {
 	t.Helper()
 	sess, err := sessions.Create(context.Background(), api.CreateSessionRequest{
 		Posture: api.SessionPostureBuild,

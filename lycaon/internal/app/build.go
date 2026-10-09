@@ -66,6 +66,7 @@ import (
 	"github.com/lycaon/lycaon/internal/secretspan"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
+	"github.com/lycaon/lycaon/internal/session/decisions"
 	"github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -178,7 +179,7 @@ type serveBuilder struct {
 	toolProfiles     []sandbox.ToolProfile
 	postureRegistry  *profiles.PostureRegistry
 	promptEngine     *prompts.FileTemplateEngine
-	mgr              *session.Manager
+	mgr              *session.Host
 	projectLiveness  *projectliveness.Tracker
 	checkpointMgr    hitl.CheckpointManager
 	workersCfg       worker.WorkersConfig
@@ -232,7 +233,7 @@ type serveBuilder struct {
 	progressStore        *progress.SQLStore
 	visualStore          visual.Store
 	historyStorage       *historyretention.Service
-	decisionStore        session.DecisionStore
+	decisionStore        decisions.Store
 	callMgr              *call.SQLManager
 	parentWorkerWaiter   *worker.ParentWorkerWaiter
 	userNoticeCatalog    *usernotice.Catalog

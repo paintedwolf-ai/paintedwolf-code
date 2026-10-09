@@ -274,13 +274,13 @@ func (b *serveBuilder) wireToolRuntime() error {
 	b.turnLoads = turnload.NewLedger()
 	// The session manager does not exist yet; the resolver reaches it at call time.
 	resolve := func(ctx context.Context, tctx tools.ToolContext, need string, cards []turnload.ToolCard) turnload.RequestOutcome {
-		return b.mgr.Loading.ResolveToolRequest(ctx, tctx, need, cards)
+		return b.mgr.Coordinator.Loading.ResolveToolRequest(ctx, tctx, need, cards)
 	}
 	record := func(ctx context.Context, tctx tools.ToolContext, outcome turnload.RequestOutcome, result turnload.RequestToolsResult, elapsed time.Duration) {
-		b.mgr.Loading.RecordToolRequest(ctx, tctx, outcome, result, elapsed)
+		b.mgr.Coordinator.Loading.RecordToolRequest(ctx, tctx, outcome, result, elapsed)
 	}
 	lookup := func(ctx context.Context, tctx tools.ToolContext, need string, roster []skills.Skill) turnload.LookupOutcome {
-		return b.mgr.Loading.LookupSkills(ctx, tctx, need, roster)
+		return b.mgr.Coordinator.Loading.LookupSkills(ctx, tctx, need, roster)
 	}
 	b.toolRuntime, err = loadToolRuntime(b.settingsSvc, b.configRoot, b.effective, b.turnLoads, resolve, record, lookup, b.rerank)
 	if err != nil {
@@ -570,7 +570,7 @@ func (b *serveBuilder) wireEvents() error {
 	if err := (delegationWiring{b}).registerRecovery(bootrecovery.Entry{
 		Name: "rewind-operations", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseBuild,
 		After: []string{"tool-invocations", "source-mutations", "editor-documents"},
-		Run:   b.mgr.Rewinds.RecoverRewinds,
+		Run:   b.mgr.Chats.Rewinds.RecoverRewinds,
 	}); err != nil {
 		return err
 	}

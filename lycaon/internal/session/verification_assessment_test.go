@@ -26,7 +26,7 @@ func TestInspectionDoesNotRunSelectedProjectCheck(t *testing.T) {
 	mgr, sess, history := sourceEvidenceCloseoutHarness(t)
 	mgr.Verification.SetVerifyConfig(stubVerifyConfig{cmd: "project-check"})
 	history = assessedCloseout(t, history, verification.Inspection)
-	if reject, blocked := mgr.Guards.SourceEvidence(t.Context(), sess, history, "implement_investigate", true); blocked {
+	if reject, blocked := mgr.Coordinator.Guards.SourceEvidence(t.Context(), sess, history, "implement_investigate", true); blocked {
 		t.Fatalf("inspection incorrectly required a project check: %v", reject)
 	}
 	if passed, _, _ := mgr.Verification.GateState(t.Context(), sess, history); passed {
@@ -39,11 +39,11 @@ func TestInspectionCannotSatisfyExplicitWorkflowTestGate(t *testing.T) {
 	workflowFixture1 := verifyWorkflowStub{required: true}
 	mgr.SetWorkflowDomains(&WorkflowDomains{Runs: workflowFixture1, Policy: workflowFixture1, Ambient: workflowFixture1, Blueprints: workflowFixture1, Batch: workflowFixture1, Slash: workflowFixture1, Requests: workflowFixture1, Feedback: workflowFixture1, Transcript: workflowFixture1, Asks: workflowFixture1, Fanout: workflowFixture1, Phases: workflowFixture1, Reports: workflowFixture1, Recovery: workflowFixture1, Cleanup: workflowFixture1})
 	history = assessedCloseout(t, history, verification.Inspection)
-	if _, blocked := mgr.Guards.SourceEvidence(t.Context(), sess, history, "implement_investigate", true); !blocked {
+	if _, blocked := mgr.Coordinator.Guards.SourceEvidence(t.Context(), sess, history, "implement_investigate", true); !blocked {
 		t.Fatal("inspection waived an explicit workflow test gate")
 	}
 	history = assessedCloseout(t, history, verification.Blocked)
-	if _, blocked := mgr.Guards.SourceEvidence(t.Context(), sess, history, "implement_investigate", true); blocked {
+	if _, blocked := mgr.Coordinator.Guards.SourceEvidence(t.Context(), sess, history, "implement_investigate", true); blocked {
 		t.Fatal("reporting a validation blocker requires no failed-run quota")
 	}
 	if passed, _, _ := mgr.Verification.GateState(t.Context(), sess, history); passed {
@@ -56,7 +56,7 @@ func TestTargetedCheckDoesNotSatisfyDifferentProjectCheck(t *testing.T) {
 	mgr.Verification.SetVerifyConfig(stubVerifyConfig{cmd: "project-check"})
 	recordCommand(t, mgr, sess, "targeted-check", 0)
 	history = assessedCloseout(t, history, verification.Targeted)
-	if _, blocked := mgr.Guards.SourceEvidence(t.Context(), sess, history, "implement_investigate", true); blocked {
+	if _, blocked := mgr.Coordinator.Guards.SourceEvidence(t.Context(), sess, history, "implement_investigate", true); blocked {
 		t.Fatal("targeted passing check was ignored")
 	}
 	if passed, _, _ := mgr.Verification.GateState(t.Context(), sess, history); passed {

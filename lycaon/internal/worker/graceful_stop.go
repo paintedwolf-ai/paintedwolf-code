@@ -13,8 +13,8 @@ import (
 )
 
 // GracefulCancelSession supports graceful worker cancellation closeout.
-type GracefulCancelSession interface {
-	NotifyWorkerCycleTerminal(ctx context.Context, parentSessionID, jobID string)
+type TerminalNotice interface {
+	Terminal(ctx context.Context, parentSessionID, jobID string)
 }
 
 // completeGracefulStop records the child closeout and parent cancellation.

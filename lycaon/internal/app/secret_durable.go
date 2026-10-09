@@ -18,7 +18,7 @@ func (b sessionWiring) wireMessageSecretRedaction(matcher *secretmatch.Matcher) 
 	}
 	sessionstore.SetMessageRedactor(redact)
 	if b.mgr != nil {
-		b.mgr.Transcript.SetRedactor(redact)
+		b.mgr.Runner.Transcript.SetRedactor(redact)
 	}
 	if b.secretCaps != nil && b.mgr != nil {
 		b.secretCaps.AddScreeningInvalidationObserver(func(_ context.Context, projectID string) {

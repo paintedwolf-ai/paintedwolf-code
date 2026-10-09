@@ -37,7 +37,7 @@ type Deps struct {
 	Projects       project.Registry
 	Scans          scan.ScanCoordinator
 	Store          session.Store
-	Sessions       *session.Manager
+	Sessions       *session.Host
 	VisualStore    visual.Store
 	Workers        worker.WorkerQueue
 	SessionAdmin   *sessionadmin.Handler

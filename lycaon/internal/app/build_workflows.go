@@ -40,7 +40,7 @@ import (
 func (b boardWiring) wireWorkflows() error {
 	b.delegationStore = delegation.NewSQLStore(b.db)
 	b.delegationStore.SetEventOutbox(b.eventOutbox)
-	b.mgr.SetDelegationLegLookup(b.delegationStore)
+	b.mgr.Coordinator.Closeout.SetDelegations(b.delegationStore)
 	blueprintStore := blueprint.NewFileStore(func(ctx context.Context, projectID string) (string, error) {
 		p, err := b.registry.Get(ctx, projectID)
 		if err != nil {
@@ -98,7 +98,7 @@ func (b boardWiring) wireWorkflows() error {
 	}
 	b.workflowMgr.Children.ReviewSpawnFilter = b.workflowMgr.Phases.ReviewSpawnFilter
 	b.workflowMgr.Recovery.Before = time.Now().UTC()
-	b.workflowMgr.Verdicts.VerdictGrounding = b.mgr.Closeout.EvaluateVerdictGrounding
+	b.workflowMgr.Verdicts.VerdictGrounding = b.mgr.Coordinator.Closeout.EvaluateVerdictGrounding
 	b.workflowMgr.Resolver.SessionStore = b.manifestResolver.SessionStore
 	b.workflowMgr.Resolver.CatalogFor = b.manifestResolver.CatalogFor
 	b.workflowMgr.Resolver.ProjectTierApplies = b.manifestResolver.ProjectTierApplies
@@ -114,9 +114,9 @@ func (b boardWiring) wireWorkflows() error {
 		if err != nil || run == nil {
 			return
 		}
-		b.mgr.Captures.RecordPrimaryMutation(ctx, run.SessionID, from)
-		b.mgr.Captures.RecordPrimaryMutation(ctx, run.SessionID, to)
-		b.mgr.Captures.RecordBlueprintBinding(ctx, run.SessionID, from)
+		b.mgr.Chats.Captures.RecordPrimaryMutation(ctx, run.SessionID, from)
+		b.mgr.Chats.Captures.RecordPrimaryMutation(ctx, run.SessionID, to)
+		b.mgr.Chats.Captures.RecordBlueprintBinding(ctx, run.SessionID, from)
 	}
 	b.blueprintMgr.AfterRetarget = b.workflowMgr.Blueprints.RebindBlueprintPath
 	// A blueprint a live run executes cannot be deleted out from under it.
@@ -285,7 +285,7 @@ func (b boardWiring) wireWorkflowConditions() error {
 		},
 		DelegationCloseout:      delegation.CloseoutComplete(b.delegationStore),
 		SourceVerifyPassed:      b.mgr.WorkflowSourceVerifyPassed,
-		DeliveryReported:        b.mgr.Transcript.DeliveredWorkflowPhase,
+		DeliveryReported:        b.mgr.Runner.Transcript.DeliveredWorkflowPhase,
 		ScanLedger:              b.scanStore,
 		SourceSnapshots:         snapshotStore,
 		ScanProactiveCategories: proactiveCategories,

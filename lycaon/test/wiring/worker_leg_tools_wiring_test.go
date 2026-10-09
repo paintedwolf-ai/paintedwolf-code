@@ -28,7 +28,7 @@ func TestWorkerLegToolsMatchListForPrompt(t *testing.T) {
 	dir := t.TempDir()
 	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{}, dir)
 	testutil.FailErr(t, "create session", err)
-	policy := h.SessionMgr.Guards.Policy()
+	policy := h.SessionMgr.Coordinator.Guards.Policy()
 	builder := compositeWorkerWithPolicy(h.AgentRegistry, policy)
 
 	for _, agentType := range implementDefaultAgents {
@@ -86,7 +86,7 @@ func TestImplementerLegToolsMatchImplementProfile(t *testing.T) {
 		Prompt:    "implement scaffold",
 	})
 	testutil.FailErr(t, "SpawnChild", err)
-	policy := h.SessionMgr.Guards.Policy()
+	policy := h.SessionMgr.Coordinator.Guards.Policy()
 	schema := sortedToolNamesFromMeta(policy.ListForPrompt(ctx, child, fixture.ProfileID))
 	want := append([]string(nil), fixture.WantLegTools...)
 	sort.Strings(want)

@@ -19,7 +19,7 @@ func TestWorkerProjectionWaitsForOriginalDispatchResponse(t *testing.T) {
 		t.Run(tool, func(t *testing.T) {
 			ctx := context.Background()
 			messages := store.NewMemory()
-			mgr := session.NewManager(messages, nil, nil, settings.DefaultSessionLimits())
+			mgr := session.NewHost(messages, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 			queue := worker.NewInMemoryQueue(2)
 			mgr.SetWorkerQueue(queue)
 			parent, err := messages.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)

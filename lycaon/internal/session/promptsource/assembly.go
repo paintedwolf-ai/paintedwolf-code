@@ -31,7 +31,13 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
+type AssemblyWorkflow struct {
+	Manifests   assembly.WorkflowManifestSource
+	Orientation assembly.BoardOrientReadyRecorder
+}
+
 type Assembly struct {
+	Workflow      AssemblyWorkflow
 	Briefs        *sourcebrief.Service
 	Catalog       *sessioncatalog.Service
 	Closeout      *closeoutassembly.Service
@@ -58,7 +64,7 @@ type Assembly struct {
 	Workspaces    *workerworkspace.Service
 }
 
-func (m *Assembly) Build(manifests assembly.WorkflowManifestSource, orientation assembly.BoardOrientReadyRecorder) assembly.AssemblyDeps {
+func (m *Assembly) Build() assembly.AssemblyDeps {
 	rt := m.Runtime
 	var workerCtx assembly.WorkerContextBuilder
 	if m != nil {
@@ -69,7 +75,7 @@ func (m *Assembly) Build(manifests assembly.WorkflowManifestSource, orientation 
 		Injects:               prompts.NewInjectRenderer(m.Prompts),
 		Limits:                m.Limits.Effective,
 		Agents:                m.Profiles.Agents,
-		Workflows:             manifests,
+		Workflows:             m.Workflow.Manifests,
 		CoordinatorFrame:      m.Frame,
 		WorkerContext:         workerCtx,
 		SiblingNoteDelivery:   m.Notes,
@@ -88,7 +94,7 @@ func (m *Assembly) Build(manifests assembly.WorkflowManifestSource, orientation 
 			return repoinfo.MeasuredEmpty(ctx, m.Repository, workspacePath)
 		},
 		Board:            rt.Board(),
-		BoardOrientReady: orientation,
+		BoardOrientReady: m.Workflow.Orientation,
 		EnrichHistory: func(sessionID string, history []api.Message) []api.Message {
 			if m == nil || m.Stash == nil {
 				return history

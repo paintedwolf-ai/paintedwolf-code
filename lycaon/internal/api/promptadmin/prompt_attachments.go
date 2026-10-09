@@ -83,7 +83,7 @@ func (s *Handler) HandlePrompt(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	allowEmpty := s.Sessions.AcceptsEmptyWorkflowRequest(r.Context(), id)
+	allowEmpty := s.Sessions.Runner.AcceptsEmpty(r.Context(), id)
 	if req.Recovery == nil && text == "" && len(req.Attachments) == 0 && len(req.References) == 0 && len(req.Secrets) == 0 && !allowEmpty {
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "text, attachments, references, or an active workflow request required")
 		return

@@ -1,15 +1,16 @@
-package session
+package decisions
 
 import (
+	"testing"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
-	"time"
 )
 
-func TestSQLDecisionStoreSurvivesReconstruction(t *testing.T) {
+func TestSQLSurvivesReconstruction(t *testing.T) {
 	database := testdbfixture.Open(t, "store.db")
 	testdbseed.InsertSession(t, database, "child-1", testdbseed.DefaultProjectID)
 	_, err := database.ExecContext(t.Context(), `
@@ -18,13 +19,13 @@ func TestSQLDecisionStoreSurvivesReconstruction(t *testing.T) {
 		"job-1", testdbseed.DefaultProjectID, "child-1", time.Now().UTC().Format(time.RFC3339Nano))
 	testutil.FailErr(t, "insert worker job", err)
 
-	store := NewSQLDecisionStore(database)
+	store := NewSQL(database)
 	testutil.FailErr(t, "put decision", store.Put(t.Context(), api.WorkerDecisionRequest{
 		ChildSessionID: "child-1", WorkerID: "job-1", Question: "Choose one",
 		Options: []string{"A", "B"}, BlockerClass: api.WorkerBlockerDecision,
 	}))
 
-	reopened := NewSQLDecisionStore(database)
+	reopened := NewSQL(database)
 	decision, ok, err := reopened.Get(t.Context(), "child-1")
 	testutil.FailErr(t, "get decision", err)
 	if !ok || decision.WorkerID != "job-1" || len(decision.Options) != 2 {

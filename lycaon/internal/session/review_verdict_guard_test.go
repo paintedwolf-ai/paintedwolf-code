@@ -24,9 +24,9 @@ func (v verdictPendingView) ActivePhaseGuardState(context.Context, string) workf
 	return workflowfacts.WorkflowPhaseGuardState{}
 }
 
-func rejectVerdictCloseout(t *testing.T, mgr *Manager, sess *api.Session, workersIdle bool) (string, bool) {
+func rejectVerdictCloseout(t *testing.T, mgr *Host, sess *api.Session, workersIdle bool) (string, bool) {
 	t.Helper()
-	reject, blocked := mgr.Guards.MissingVerdict(context.Background(), sess, workersIdle, true)
+	reject, blocked := mgr.Coordinator.Guards.MissingVerdict(context.Background(), sess, workersIdle, true)
 	return reject.Error(), blocked
 }
 
@@ -34,7 +34,7 @@ func TestVerdictCloseoutSkipsWhenInvokeGated(t *testing.T) {
 	mgr, sess := newSynthesisDelayManager(t)
 	mgr.SetWorkflowDomains(workflowDomainFixture(verdictPendingView{pending: true}))
 
-	if _, block := mgr.Guards.MissingVerdict(
+	if _, block := mgr.Coordinator.Guards.MissingVerdict(
 		context.Background(), sess, true, false,
 	); block {
 		t.Fatal("expected no verdict hold when invokeAllowed=false")

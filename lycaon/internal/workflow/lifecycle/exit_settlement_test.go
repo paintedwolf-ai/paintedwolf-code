@@ -19,7 +19,7 @@ func TestRootWorkflowExitReleasesVisibleTurn(t *testing.T) {
 			t.Run(workflowID+map[bool]string{false: "/running", true: "/paused"}[paused], func(t *testing.T) {
 				ctx := t.Context()
 				mgr, st, _, _ := testManagerWithRegistry(t)
-				runtime := session.NewManager(st, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+				runtime := session.NewHost(st, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 				runtime.SetLoopWorkflowSource(&loopwake.WorkflowDomains{Runs: mgr.Store.Runs, Approvals: mgr.Policy, Obligations: mgr.Obligations})
 				runtime.SetSessionWorkflowStop(mgr.Controls)
 				mgr.Starts.Barrier = runtime

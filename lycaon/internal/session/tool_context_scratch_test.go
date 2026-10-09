@@ -17,7 +17,7 @@ import (
 )
 
 type scratchFixture struct {
-	mgr    *Manager
+	mgr    *Host
 	store  *store.Memory
 	root   *api.Session
 	worker *api.Session
@@ -29,7 +29,7 @@ func newScratchFixture(t *testing.T) scratchFixture {
 	ctx := t.Context()
 	stateRoot := t.TempDir()
 	sessions := store.NewMemory()
-	mgr := NewManager(sessions, nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(sessions, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetScratchFolders(scratch.New(stateRoot))
 	root, err := sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create root session", err)

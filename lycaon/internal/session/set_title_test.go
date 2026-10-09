@@ -26,7 +26,7 @@ func TestSetTitleOverwritesAndPublishes(t *testing.T) {
 	testutil.FailErr(t, "create project", err)
 
 	mem := store.NewMemory()
-	mgr := NewManager(mem, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	mgr.SetProjectRegistry(reg)
 	hub := events.NewMemoryHub()
 	mgr.SetEventPublisher(&events.Publisher{Hub: hub, Lookup: project.ScopeLookup{Registry: reg}})
@@ -38,7 +38,7 @@ func TestSetTitleOverwritesAndPublishes(t *testing.T) {
 	testutil.FailErr(t, "subscribe", err)
 	defer unsubscribe()
 
-	updated, err := mgr.Naming.SetTitle(ctx, sess.ID, "  Ship readiness checklist  ")
+	updated, err := mgr.Chats.Naming.SetTitle(ctx, sess.ID, "  Ship readiness checklist  ")
 	testutil.FailErr(t, "set title", err)
 	if updated.Title != "Ship readiness checklist" {
 		t.Fatalf("title = %q", updated.Title)
@@ -83,17 +83,17 @@ func TestUpdateTitleIfUnsetNoOpsAfterManualSet(t *testing.T) {
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{
 		{Pattern: ".*", Text: "ok"},
 	}})
-	mgr := NewManager(mem, mock, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(mem, Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	mgr.SetProjectRegistry(reg)
 
 	sess, err := mgr.Chats.CreateForProject(ctx, p.ID, api.SessionPostureBuild)
 	testutil.FailErr(t, "create session", err)
 
-	_, err = mgr.Naming.SetTitle(ctx, sess.ID, "Manual name")
+	_, err = mgr.Chats.Naming.SetTitle(ctx, sess.ID, "Manual name")
 	testutil.FailErr(t, "manual set", err)
 
 	// The auto-title path does not overwrite a manual title.
-	mgr.Naming.SessionFromPrompt(ctx, sess, "Build a completely different thing")
+	mgr.Chats.Naming.SessionFromPrompt(ctx, sess, "Build a completely different thing")
 	got, err := mem.Get(ctx, sess.ID)
 	testutil.FailErr(t, "get", err)
 	if got.Title != "Manual name" {
@@ -116,14 +116,14 @@ func TestSetTitleWinsRaceVsIfUnset(t *testing.T) {
 	testutil.FailErr(t, "create project", err)
 
 	mem := store.NewMemory()
-	mgr := NewManager(mem, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	mgr.SetProjectRegistry(reg)
 
 	sess, err := mgr.Chats.CreateForProject(ctx, p.ID, api.SessionPostureBuild)
 	testutil.FailErr(t, "create session", err)
 
 	// Concurrent-style: Set always writes; subsequent IfUnset no-ops.
-	_, err = mgr.Naming.SetTitle(ctx, sess.ID, "User wins")
+	_, err = mgr.Chats.Naming.SetTitle(ctx, sess.ID, "User wins")
 	testutil.FailErr(t, "set", err)
 	ok, err := mem.UpdateTitleIfUnset(ctx, sess.ID, "Auto late")
 	testutil.FailErr(t, "ifunset", err)

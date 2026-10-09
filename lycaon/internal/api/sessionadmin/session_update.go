@@ -47,7 +47,7 @@ func (s *Handler) HandleUpdateSession(w http.ResponseWriter, r *http.Request) {
 	}
 	switch {
 	case req.Title != nil:
-		sess, err = s.Sessions.Naming.SetTitle(r.Context(), id, *req.Title)
+		sess, err = s.Sessions.Chats.Naming.SetTitle(r.Context(), id, *req.Title)
 	case req.Archived != nil:
 		sess, err = s.Sessions.Chats.SetArchived(r.Context(), id, *req.Archived)
 	case req.Pinned != nil:

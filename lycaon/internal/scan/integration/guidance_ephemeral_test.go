@@ -40,7 +40,7 @@ func TestScanGuidancePrependDoesNotPersistMessages(t *testing.T) {
 	}
 
 	sessStore := store.NewMemory()
-	mgr := session.NewManager(sessStore, llm.NewMockProvider(nil), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	loader, err := oar.NewLoader(filepath.Join(configlayout.FindModuleRoot(), "..", "schemas"))
 	testutil.FailErr(t, "create policy loader", err)
 	rules, err := loader.LoadEffectivePolicy()
@@ -63,7 +63,7 @@ func TestScanGuidancePrependDoesNotPersistMessages(t *testing.T) {
 		t.Fatalf("role = %q", out[0].Role)
 	}
 
-	after, err := mgr.Transcript.GetMessages(ctx, sess.ID)
+	after, err := mgr.Runner.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "mgr.GetMessages failed", err)
 	if len(after) != 0 {
 		t.Fatalf("message store must stay empty before persist, got %d", len(after))
@@ -72,7 +72,7 @@ func TestScanGuidancePrependDoesNotPersistMessages(t *testing.T) {
 	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "hello"); err != nil {
 		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 	}
-	msgs, err := mgr.Transcript.GetMessages(ctx, sess.ID)
+	msgs, err := mgr.Runner.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "mgr.GetMessages failed", err)
 	for _, msg := range msgs {
 		if msg.Role == api.MessageRoleSystem {

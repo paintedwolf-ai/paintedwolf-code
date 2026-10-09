@@ -19,7 +19,7 @@ type GroundingCoordinator struct {
 	Gate              DelegationGroundingGate
 	Config            GroundingConfig
 	State             *grounding.StateStore
-	Sessions          *session.Manager
+	Sessions          *session.Host
 	InspectorCloseout *InspectorCloseoutGate
 	Events            *events.Publisher
 	// Pipeline evaluates closeout refusals and post-turn advisories.
@@ -30,7 +30,7 @@ type workerQueueSnapshot interface {
 	List(ctx context.Context, projectDir string, statuses ...api.WorkerStatus) ([]api.WorkerTask, error)
 }
 
-func NewGroundingCoordinator(store Store, queue workerQueueSnapshot, gate DelegationGroundingGate, cfg GroundingConfig, state *grounding.StateStore, sessions *session.Manager) *GroundingCoordinator {
+func NewGroundingCoordinator(store Store, queue workerQueueSnapshot, gate DelegationGroundingGate, cfg GroundingConfig, state *grounding.StateStore, sessions *session.Host) *GroundingCoordinator {
 	if gate == nil {
 		gate = NewSimpleDelegationGroundingGate(cfg)
 	}

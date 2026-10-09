@@ -15,7 +15,7 @@ import (
 type Projector struct {
 	Workflows *workflow.RunManager
 	Store     session.Store
-	Sessions  *session.Manager
+	Sessions  *session.Host
 	Projects  project.Registry
 }
 
@@ -40,7 +40,7 @@ func (s *Projector) EnrichSession(ctx context.Context, sess *wire.Session) {
 	if ui, err := s.Workflows.ComputeSessionUI(ctx, sess.ID); err == nil {
 		sess.UI = ui
 	}
-	if protection := s.Sessions.Protection.ProtectionStateForSession(sess.ID); protection != nil {
+	if protection := s.Sessions.Chats.Protection.ProtectionStateForSession(sess.ID); protection != nil {
 		if sess.UI == nil {
 			sess.UI = &wire.SessionUiState{}
 		}

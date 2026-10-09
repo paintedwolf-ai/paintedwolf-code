@@ -44,14 +44,14 @@ func TestQueuedPromptDispatchesWhenRoundCompletesAfterTurnEndCheck(t *testing.T)
 	if closed.Status != store.PromptSubmissionComplete {
 		t.Fatalf("receipt status = %s, want complete once the round completes", closed.Status)
 	}
-	if draft := mgr.queue.Snapshot(sess.ID); len(draft.QueueItems) != 0 {
+	if draft := mgr.Resources.Queue.Snapshot(sess.ID); len(draft.QueueItems) != 0 {
 		t.Fatalf("draft retained items after round-end drain: %+v", draft.QueueItems)
 	}
 
 	// A later quiescence finds nothing queued and does not replay the turn.
 	mgr.Runner.Coordinator.CoordinatorLoop().DrainPending(ctx, sess.ID)
 	mgr.Coordinator.WaitForTurns(ctx)
-	msgs, err := mgr.Transcript.GetMessages(ctx, sess.ID)
+	msgs, err := mgr.Runner.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "get messages", err)
 	userTurns := 0
 	for _, msg := range msgs {

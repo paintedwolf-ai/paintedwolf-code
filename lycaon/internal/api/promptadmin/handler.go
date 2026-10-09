@@ -21,7 +21,7 @@ type Deps struct {
 	ManagedSecrets *secretcap.Service
 	Projects       project.Registry
 	Store          session.Store
-	Sessions       *session.Manager
+	Sessions       *session.Host
 	VisualStore    visual.Store
 	Sources        *sourceapi.Handler
 	// Video decodes attached videos; nil refuses them.

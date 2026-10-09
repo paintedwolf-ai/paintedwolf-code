@@ -5,7 +5,7 @@ import (
 )
 
 // SetSessionWorkerAbort wires worker cancellation.
-func (m *Manager) SetSessionWorkerAbort(abort stopping.WorkerAbort) {
+func (m *Host) SetSessionWorkerAbort(abort stopping.WorkerAbort) {
 	if m != nil {
 		m.Stops.SetWorkers(abort)
 		m.ProjectControl.SetWorkerAbort(abort)

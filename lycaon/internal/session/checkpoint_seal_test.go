@@ -23,11 +23,11 @@ import (
 
 // checkpointPreImages is the engine's shared source content store, where a
 // checkpoint seals each path's pre-turn bytes.
-func checkpointPreImages(mgr *Manager) *sourceblob.Store {
-	return sourceblob.New(filepath.Join(mgr.dataDir, enginepaths.SourceContentDirName))
+func checkpointPreImages(mgr *Host) *sourceblob.Store {
+	return sourceblob.New(filepath.Join(mgr.Workspace.DataDir, enginepaths.SourceContentDirName))
 }
 
-func newCheckpointTestSession(t *testing.T) (*Manager, string, string) {
+func newCheckpointTestSession(t *testing.T) (*Host, string, string) {
 	t.Helper()
 	database := testdbfixture.Open(t, "session.db")
 	dir := t.TempDir()
@@ -35,11 +35,11 @@ func newCheckpointTestSession(t *testing.T) (*Manager, string, string) {
 	st := sessionstore.NewSQL(database)
 	mgr := newTestManagerWithStore(t, st)
 	mgr.SetProjectRegistry(project.NewSQLRegistry(database))
-	ledger := sourceledger.New(database, filepath.Join(mgr.dataDir, "source-content"))
+	ledger := sourceledger.New(database, filepath.Join(mgr.Workspace.DataDir, "source-content"))
 	mgr.SetSourceLedger(ledger)
 	mutations := project.NewSourceMutationService(database, ledger)
-	mgr.SetSourceMutations(mutations)
-	mgr.Rewinds.SetSourceRewinds(&sourcerewind.Service{Ledger: ledger, Mutations: mutations})
+	mgr.ToolContext.SetSourceMutations(mutations)
+	mgr.Chats.Rewinds.SetSourceRewinds(&sourcerewind.Service{Ledger: ledger, Mutations: mutations})
 	ctx := context.Background()
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
@@ -49,9 +49,9 @@ func newCheckpointTestSession(t *testing.T) (*Manager, string, string) {
 	return mgr, sess.ID, dir
 }
 
-func visibleUserMessageIDs(t *testing.T, mgr *Manager, sessionID string) []string {
+func visibleUserMessageIDs(t *testing.T, mgr *Host, sessionID string) []string {
 	t.Helper()
-	msgs, err := mgr.Transcript.GetMessages(context.Background(), sessionID)
+	msgs, err := mgr.Runner.Transcript.GetMessages(context.Background(), sessionID)
 	testutil.FailErr(t, "get messages", err)
 	var out []string
 	for _, m := range msgs {
@@ -74,7 +74,7 @@ func TestPromptOpensCheckpointForTheVisibleUserMessage(t *testing.T) {
 	if len(anchors) != 1 {
 		t.Fatalf("visible user messages = %d, want 1", len(anchors))
 	}
-	store := sessioncheckpoint.New(mgr.dataDir, dir, mgr.store)
+	store := sessioncheckpoint.New(mgr.Workspace.DataDir, dir, mgr.Coordinator.Context.Sessions.(Store))
 	man, err := store.Load(t.Context(), sessionID, anchors[0])
 	testutil.FailErr(t, "load checkpoint for the anchor", err)
 	if man.AnchorMessageID != anchors[0] {
@@ -95,10 +95,10 @@ func TestPrimaryMutationCapturesPreTurnBytesIntoTheOpenAnchor(t *testing.T) {
 	anchor := visibleUserMessageIDs(t, mgr, sessionID)[0]
 
 	// The mutation hook runs before the disk write.
-	mgr.Captures.RecordPrimaryMutation(ctx, sessionID, "foo.go")
+	mgr.Chats.Captures.RecordPrimaryMutation(ctx, sessionID, "foo.go")
 	testutil.FailErr(t, "simulate the write", os.WriteFile(filepath.Join(dir, "foo.go"), []byte("after"), 0o644))
 
-	store := sessioncheckpoint.New(mgr.dataDir, dir, mgr.store)
+	store := sessioncheckpoint.New(mgr.Workspace.DataDir, dir, mgr.Coordinator.Context.Sessions.(Store))
 	man, err := store.Load(t.Context(), sessionID, anchor)
 	testutil.FailErr(t, "load checkpoint", err)
 	entry, ok := man.Paths["foo.go"]
@@ -121,19 +121,19 @@ func TestEachPromptOpensItsOwnAnchorAndOlderAnchorsKeepTheirBytes(t *testing.T) 
 
 	_, err := mgr.Submissions.Prompt(ctx, sessionID, "first ask")
 	testutil.FailErr(t, "first prompt", err)
-	mgr.Captures.RecordPrimaryMutation(ctx, sessionID, "foo.go")
+	mgr.Chats.Captures.RecordPrimaryMutation(ctx, sessionID, "foo.go")
 	testutil.FailErr(t, "write v2", os.WriteFile(path, []byte("v2"), 0o644))
 
 	_, err = mgr.Submissions.Prompt(ctx, sessionID, "second ask")
 	testutil.FailErr(t, "second prompt", err)
-	mgr.Captures.RecordPrimaryMutation(ctx, sessionID, "foo.go")
+	mgr.Chats.Captures.RecordPrimaryMutation(ctx, sessionID, "foo.go")
 	testutil.FailErr(t, "write v3", os.WriteFile(path, []byte("v3"), 0o644))
 
 	anchors := visibleUserMessageIDs(t, mgr, sessionID)
 	if len(anchors) != 2 {
 		t.Fatalf("anchors = %d, want 2", len(anchors))
 	}
-	store := sessioncheckpoint.New(mgr.dataDir, dir, mgr.store)
+	store := sessioncheckpoint.New(mgr.Workspace.DataDir, dir, mgr.Coordinator.Context.Sessions.(Store))
 	for i, want := range []string{"v1", "v2"} {
 		man, err := store.Load(t.Context(), sessionID, anchors[i])
 		testutil.FailErr(t, "load anchor", err)
@@ -159,55 +159,55 @@ func TestUnderCapTurnLeavesTheCheckpointComplete(t *testing.T) {
 	_, err := mgr.Submissions.Prompt(ctx, sessionID, "touch one file")
 	testutil.FailErr(t, "prompt", err)
 	anchor := visibleUserMessageIDs(t, mgr, sessionID)[0]
-	mgr.Captures.RecordPrimaryMutation(ctx, sessionID, "foo.go")
+	mgr.Chats.Captures.RecordPrimaryMutation(ctx, sessionID, "foo.go")
 
-	man, err := sessioncheckpoint.New(mgr.dataDir, dir, mgr.store).Load(t.Context(), sessionID, anchor)
+	man, err := sessioncheckpoint.New(mgr.Workspace.DataDir, dir, mgr.Coordinator.Context.Sessions.(Store)).Load(t.Context(), sessionID, anchor)
 	testutil.FailErr(t, "load manifest", err)
 	if man.Truncated {
 		t.Fatal("an ordinary turn must not be reported as truncated")
 	}
 }
 
-func checkpointCaller(t *testing.T, mgr *Manager) context.Context {
+func checkpointCaller(t *testing.T, mgr *Host) context.Context {
 	t.Helper()
-	owner, err := mgr.store.HostOwner(t.Context())
+	owner, err := mgr.Coordinator.Context.Sessions.(Store).HostOwner(t.Context())
 	testutil.FailErr(t, "host owner", err)
 	return people.WithCaller(t.Context(), owner)
 }
 
-func rewindTest(t *testing.T, mgr *Manager, ctx context.Context, operationID, sessionID, anchor string) (*checkpointcontrol.RewindResult, error) {
+func rewindTest(t *testing.T, mgr *Host, ctx context.Context, operationID, sessionID, anchor string) (*checkpointcontrol.RewindResult, error) {
 	t.Helper()
 	if _, ok := people.Caller(ctx); !ok {
-		owner, err := mgr.store.HostOwner(ctx)
+		owner, err := mgr.Coordinator.Context.Sessions.(Store).HostOwner(ctx)
 		testutil.FailErr(t, "host owner", err)
 		ctx = people.WithCaller(ctx, owner)
 	}
-	preview, err := mgr.Rewinds.PreviewRewind(ctx, sessionID, anchor)
+	preview, err := mgr.Chats.Rewinds.PreviewRewind(ctx, sessionID, anchor)
 	digest := ""
 	if err == nil {
 		digest = preview.PlanDigest
 	}
-	return mgr.Rewinds.RewindToPrompt(ctx, operationID, sessionID, anchor, digest)
+	return mgr.Chats.Rewinds.RewindToPrompt(ctx, operationID, sessionID, anchor, digest)
 }
 
-func recordRewindTestEffect(t *testing.T, mgr *Manager, sessionID, path string, before, after []byte, op api.SourceChangeOp) {
+func recordRewindTestEffect(t *testing.T, mgr *Host, sessionID, path string, before, after []byte, op api.SourceChangeOp) {
 	t.Helper()
 	ctx := t.Context()
 	p, err := rewindFixtureProject(t, mgr, ctx, sessionID)
 	testutil.FailErr(t, "resolve project", err)
-	turn, err := mgr.store.UserTurnOrdinal(ctx, sessionID)
+	turn, err := mgr.Coordinator.Context.Sessions.(Store).UserTurnOrdinal(ctx, sessionID)
 	testutil.FailErr(t, "resolve turn", err)
-	testutil.FailErr(t, "record source effect", mgr.sourceLedger.Record(ctx, sourceledger.RecordInput{ProjectID: p.ID, RootID: p.Roots[0].ID, Path: path, Op: op,
+	testutil.FailErr(t, "record source effect", mgr.ToolContext.SourceLedger.Record(ctx, sourceledger.RecordInput{ProjectID: p.ID, RootID: p.Roots[0].ID, Path: path, Op: op,
 		Origin: api.SourceChangeOriginAgent, SessionID: sessionID, Turn: turn, Before: before, After: after}))
 }
 
-func rewindFixtureProject(t *testing.T, mgr *Manager, ctx context.Context, id string) (*project.Project, error) {
+func rewindFixtureProject(t *testing.T, mgr *Host, ctx context.Context, id string) (*project.Project, error) {
 	t.Helper()
-	sess, err := mgr.store.Get(ctx, id)
+	sess, err := mgr.Coordinator.Context.Sessions.(Store).Get(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	return mgr.projects.Get(ctx, sess.ProjectID)
+	return mgr.Coordinator.Tools.Projects.Get(ctx, sess.ProjectID)
 }
 
 func rewindFixtureHasMessage(messages []api.Message, id string) (api.Message, bool) {

@@ -17,32 +17,35 @@ type WorkerCycleLister interface {
 
 // workeradmission.CoordinatorTaskConcurrencyCap returns the max pending or running task() jobs for a parent session.
 // SetWorkerQueue wires the worker job ledger for coordinator worker-cycle guards.
-func (m *Manager) SetWorkerQueue(q WorkerCycleLister) {
+func (m *Host) SetWorkerQueue(q WorkerCycleLister) {
 	if m != nil {
-		m.workerQueue = q
+		m.Coordinator.Tools.Workers = q
+		m.Coordinator.Nudging.Workers = q
+		m.Coordinator.Loop.Workers = q
+
 		m.RewindRuntime.Workers = q
 		m.Observations.SetWorkers(q)
 		if projects, ok := q.(projectcontrol.Workers); ok {
 			m.ProjectControl.SetWorkers(projects)
 		}
-		m.Guards.SetWorkers(q)
+		m.Coordinator.Guards.SetWorkers(q)
 		m.Verification.Evidence.SetWorkers(q)
 		m.Runner.Settlement.SetWorkers(q)
-		m.Batch.SetWorkers(q)
-		m.Nudges.SetTasks(q)
+		m.Coordinator.Batch.SetWorkers(q)
+		m.Coordinator.Nudges.SetTasks(q)
 		m.Workers.State.SetWorkers(q)
 		m.Workers.Notes.SetWorkers(q)
 		m.Verification.SetWorkers(q)
 		if m.Workers.Rejections != nil {
-			m.Workers.Rejections.SetSources(m.store, q)
+			m.Workers.Rejections.SetSources(m.Coordinator.Context.Sessions, q)
 		}
 		m.Workers.Cards.SetQueue(q)
 		m.Workers.Summaries.SetTasks(q)
 		m.Workers.Results.SetWorkers(q)
 		m.Workers.Workspaces.SetTasks(q)
-		m.Guidance.SetWorkers(q)
-		m.ProgressClosure.SetTasks(q)
-		m.Loading.SetWorkers(q)
-		m.Transcript.SetWorkers(q)
+		m.Coordinator.Guidance.SetWorkers(q)
+		m.Coordinator.ProgressClosure.SetTasks(q)
+		m.Coordinator.Loading.SetWorkers(q)
+		m.Runner.Transcript.SetWorkers(q)
 	}
 }

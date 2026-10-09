@@ -27,7 +27,7 @@ type approvalHITLHarness struct {
 	ownerCtx      context.Context
 	store         session.Store
 	projectDir    string
-	mgr           *session.Manager
+	mgr           *session.Host
 	checkpointMgr hitl.CheckpointManager
 	hub           *events.MemoryHub
 	srv           *api.Server

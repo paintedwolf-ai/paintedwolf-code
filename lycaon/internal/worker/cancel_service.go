@@ -37,7 +37,7 @@ type CancelService struct {
 	Graceful      CancelRegistration
 	Cancellations WorkerCancellationProjection
 	Queue         WorkerQueue
-	Sessions      GracefulCancelSession
+	Events        TerminalNotice
 	Reports       ChangeReportDeps
 	Reject        *guidance.StaticRejectFormatter
 }
@@ -212,7 +212,7 @@ func (s *CancelService) cancelImmediate(ctx context.Context, task *api.WorkerTas
 		}); err != nil {
 			return api.WorkerCancelResult{}, err
 		}
-		s.Sessions.Coordinator.Workers.Terminal(ctx, sessionID, jobID)
+		s.Events.Terminal(ctx, sessionID, jobID)
 	}
 	got, ok := s.Queue.Get(jobID)
 	if !ok {

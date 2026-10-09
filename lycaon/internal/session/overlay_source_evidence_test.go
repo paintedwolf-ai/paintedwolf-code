@@ -53,7 +53,7 @@ func currentVerifyPassedMessage(root string) api.Message {
 func TestBuildImplementSessionStateListsLedgerPendingOverlays(t *testing.T) {
 	ctx := context.Background()
 	mem := store.NewMemory()
-	mgr := session.NewManager(mem, llm.NewMockProvider(&llm.MockConfig{}), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(mem, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	q := worker.NewInMemoryQueue(4)
 	mgr.SetWorkerQueue(q)
 	parent, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
@@ -96,7 +96,7 @@ func TestBuildImplementSessionStateListsLedgerPendingOverlays(t *testing.T) {
 func TestCompleteWriteWorkerThenHostCycleSelectsOverlayPromote(t *testing.T) {
 	ctx := context.Background()
 	mem := store.NewMemory()
-	mgr := session.NewManager(mem, llm.NewMockProvider(&llm.MockConfig{}), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(mem, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	q := worker.NewInMemoryQueue(4)
 	mgr.SetWorkerQueue(q)
 	parent, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)

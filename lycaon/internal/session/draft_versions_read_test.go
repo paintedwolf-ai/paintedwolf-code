@@ -70,7 +70,7 @@ func TestDraftNeverEmitsDeleteOpForCoordinatorDraftSlot(t *testing.T) {
 	store := store.NewMemory()
 	hub := events.NewMemoryHub()
 	pub := &events.Publisher{Hub: hub}
-	mgr := NewManager(store, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(store, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	mgr.SetEventPublisher(pub)
 	projectID := attachTestProject(t, mgr)
 
@@ -102,7 +102,7 @@ func TestDraftNeverEmitsDeleteOpForCoordinatorDraftSlot(t *testing.T) {
 	}
 	reset := placeholder
 	reset.Content = ""
-	if err := mgr.Transcript.Update(ctx, sess.ID, slotID, reset); err != nil {
+	if err := mgr.Runner.Transcript.Update(ctx, sess.ID, slotID, reset); err != nil {
 		testutil.FailErr(t, "updateMessage", err)
 	}
 

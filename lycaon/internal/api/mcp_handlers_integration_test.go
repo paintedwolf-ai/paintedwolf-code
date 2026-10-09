@@ -16,13 +16,12 @@ import (
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/config/configtest"
 	"github.com/lycaon/lycaon/internal/events"
-	"github.com/lycaon/lycaon/internal/session/store"
-	"github.com/lycaon/lycaon/internal/settings"
-	"github.com/lycaon/lycaon/internal/testutil"
-
 	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -110,7 +109,7 @@ func TestMCPSettingsSSEOnToggle(t *testing.T) {
 	store := store.NewMemory()
 	srv := NewServer(requiredTestDeps(t, Dependencies{
 		Store: store, Projects: project.NewMemoryRegistry(),
-		Sessions: session.NewManager(store, nil, toolReg, settings.DefaultSessionLimits()), Events: hub, MCP: reg,
+		Sessions: session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolReg), Events: hub, MCP: reg,
 	}), nil, TestAPIToken)
 
 	enabled := true
@@ -175,7 +174,7 @@ func newMCPProviderWithDistro(t *testing.T, distroBody string, projectMCP bool, 
 	store := store.NewMemory()
 	deps := Dependencies{
 		Store: store, Projects: project.NewMemoryRegistry(),
-		Sessions: session.NewManager(store, nil, toolReg, settings.DefaultSessionLimits()), MCP: reg,
+		Sessions: session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolReg), MCP: reg,
 	}
 	if projectMCP {
 		withProjectMCP(t, reg)(&deps)

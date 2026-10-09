@@ -22,7 +22,7 @@ import (
 func TestCanceledWorkerProjectionPreservesProofOnRetry(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "worker-cancellation.db")
 	s := store.NewSQL(sqlDB)
-	mgr := session.NewManager(s, llm.NewMockProvider(&llm.MockConfig{}), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(s, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, t.TempDir())
 	parent, err := s.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create cancellation parent", err)
@@ -58,7 +58,7 @@ func TestAppendWorkerSummarySQLStoreToolEnvelope(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "worker-summary.db")
 
 	store := store.NewSQL(sqlDB)
-	mgr := session.NewManager(store, llm.NewMockProvider(&llm.MockConfig{}), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	ctx := context.Background()
 	dir := t.TempDir()
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)

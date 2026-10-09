@@ -20,7 +20,7 @@ func TestSpawnChildStripsCoordinatorRejectMarkers(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	store := store.NewMemory()
-	mgr := session.NewManager(store, llm.NewMockProvider(nil), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 
 	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	contractcheck.FailErr(t, "store.Create failed", err)
@@ -40,7 +40,7 @@ func TestSpawnChildStripsCoordinatorRejectMarkers(t *testing.T) {
 	})
 	contractcheck.FailErr(t, "mgr.Workers.SpawnChild failed", err)
 
-	msgs, err := mgr.Transcript.GetMessages(ctx, child.ID)
+	msgs, err := mgr.Runner.Transcript.GetMessages(ctx, child.ID)
 	contractcheck.FailErr(t, "mgr.GetMessages failed", err)
 	if len(msgs) == 0 {
 		t.Fatal("expected initial user prompt on child session")

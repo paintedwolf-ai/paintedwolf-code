@@ -29,7 +29,7 @@ func TestValidateServeWiringAcceptsProductionShape(t *testing.T) {
 	}
 	engine, err := rules.NewPostureRuleEngine(postures, packs, reg)
 	testutil.FailErr(t, "rules.NewPostureRuleEngine failed", err)
-	mgr := session.NewManager(store.NewMemory(), nil, nil, settings.DefaultSessionLimits())
+	mgr := session.NewHost(store.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.Profiles.SetPostureRegistry(postures)
 	manifests, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "workflow.RegistryFromDirs failed", err)
