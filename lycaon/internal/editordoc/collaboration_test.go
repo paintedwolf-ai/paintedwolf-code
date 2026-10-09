@@ -12,7 +12,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/documentcore"
-	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
