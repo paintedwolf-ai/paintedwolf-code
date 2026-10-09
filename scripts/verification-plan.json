@@ -1020,7 +1020,8 @@
       "issue-stale.yml": 1,
       "issue-sweep.yml": 1,
       "issue-intake.yml": 1,
-      "verification-recovery.yml": 1
+      "verification-recovery.yml": 1,
+      "dco.yml": 1
     }
   }
 }
