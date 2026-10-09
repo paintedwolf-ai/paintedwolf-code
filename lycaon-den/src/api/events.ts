@@ -14,9 +14,9 @@ import {
 import { applyMessageEvent } from "../chat/transcript/projection/message-events.ts";
 import { sweepPendingOnIdle } from "../chat/send/pending-sends.ts";
 import {
-  createEventFrameQueue,
-  type EventFrameQueue,
-} from "./event-frame-queue.ts";
+  createEventDeliveryQueue,
+  type EventDeliveryQueue,
+} from "./event-delivery-queue.ts";
 import { applyBackgroundProcessEvent } from "../chat/tool/background-process-store.ts";
 import { applyPreviewEvent } from "../chat/visual/preview-store.ts";
 import { applyChatVault } from "../chat/vault/chat-vault-store.ts";
@@ -374,7 +374,7 @@ export function subscribeEvents(
   };
 
   const applyEnvelope = (envelope: EventEnvelope) => {
-    traceSourceViewDelivery(envelope, "applied");
+    traceSourceViewDelivery(envelope, "applying");
     if (envelope.topic === "session") {
       const session = envelope.data;
       // An error is independently useful even when its snapshot is superseded.
@@ -414,10 +414,11 @@ export function subscribeEvents(
       options.storeActions?.releasePromptSubmissionsThrough(envelope.data.id, envelope.entity_revision);
     }
     options.onInvalidate?.(TOPIC_STORE_INVALIDATION[envelope.topic], envelope.scope);
+    traceSourceViewDelivery(envelope, "applied");
   };
 
   // Rendering may coalesce and sort; replay follows the original arrival prefix.
-  const frameQueue: EventFrameQueue = createEventFrameQueue(applyEnvelope, {
+  const deliveryQueue: EventDeliveryQueue = createEventDeliveryQueue(applyEnvelope, {
     onApplied: (envelopes) => {
       for (const envelope of envelopes) markDelivered(envelope.event_id);
     },
@@ -489,7 +490,7 @@ export function subscribeEvents(
           if (!envelope) continue;
           traceSourceViewDelivery(envelope, "received");
           // Replay advances only through the fully applied arrival prefix.
-          frameQueue.enqueue(envelope, delivered(envelope.event_id));
+          deliveryQueue.enqueue(envelope, delivered(envelope.event_id));
         }
         if (closed || version !== runVersion) return;
         throw new Error("SSE stream ended");
@@ -503,7 +504,7 @@ export function subscribeEvents(
           try {
             await reconcile("replay_unavailable");
             if (closed || version !== runVersion || signal.aborted) return;
-            frameQueue.cancel();
+            deliveryQueue.cancel();
             sessionRevisions.clear();
             snapshotReads.clear();
             seenEventIds.clear();
@@ -535,7 +536,7 @@ export function subscribeEvents(
     err: unknown,
   ): void {
     if (closed) return;
-    frameQueue.cancel();
+    deliveryQueue.cancel();
     streamConnected = false;
     armFallback();
     options.onError?.(err);
@@ -554,7 +555,7 @@ export function subscribeEvents(
     if (closed || !cursor) return;
     // Apply buffered events before replacing the stream.
     const beforeFlush = runVersion;
-    frameQueue.flush();
+    deliveryQueue.flush();
     if (beforeFlush !== runVersion) return;
     afterCursor = cursor;
     attempt = 0;
@@ -584,7 +585,7 @@ export function subscribeEvents(
       stopFallback();
       wakeDelay?.();
       boardCoalescer?.cancel();
-      frameQueue.flush();
+      deliveryQueue.flush();
       controller.abort();
       return Promise.allSettled([...streams]).then(() => undefined);
     },
