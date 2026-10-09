@@ -636,7 +636,7 @@ capacity to work in this order, highest first:
 
 | Priority | Work | Gives up runners |
 |---|---|---|
-| 1 | Merge-queue CI, and release and verification-recovery workflows | Never; only CI of a merge group that no longer exists is cancelled |
+| 1 | Merge-queue CI and release workflows | Never; only CI of a merge group that no longer exists is cancelled |
 | 2 | CI of ready pull requests | Newest first, after everything below |
 | 3 | Main qualification | Before ready pull requests |
 | 4 | CI of draft pull requests, closed pull requests, and superseded heads | Before qualification |
@@ -648,8 +648,10 @@ The `runner_priority` table in
 each workflow's class; CI's class follows its event. Contract tests require
 every workflow with its own trigger, other than CI and the sweep, to declare
 one. Dispatched CI, often a release candidate's verification, is never
-cancelled, and neither is issue automation an issue event starts, since each
-such run handles one issue.
+cancelled, and neither is issue automation an issue event starts or a
+`one_shot` workflow such as verification recovery, since each such run handles
+the one event that started it. Those runs claim no priority either: they wait
+for a runner without preempting anything.
 
 Each sweep runs `python3 scripts/ci_verification.py schedule` and decides from
 structured facts only: run events, states, and attempts; job states and runner
