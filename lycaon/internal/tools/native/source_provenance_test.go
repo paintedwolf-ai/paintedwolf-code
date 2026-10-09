@@ -22,8 +22,7 @@ import (
 	surveytools "github.com/lycaon/lycaon/internal/tools/native/survey"
 )
 
-// fakeSourceLedger satisfies sourceledger.Recorder plus the provenance read
-// surface, so tests exercise the tool plumbing without a database.
+// fakeSourceLedger supplies recording and history fixtures without a database.
 type fakeSourceLedger struct {
 	heads        map[string]sourceledger.BranchHead
 	headErr      error
