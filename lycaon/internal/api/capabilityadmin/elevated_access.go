@@ -19,7 +19,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Handler) elevatedAccessChat(w http.ResponseWriter, r *http.Request) (*wire.Session, bool) {
+func (s *Access) elevatedAccessChat(w http.ResponseWriter, r *http.Request) (*wire.Session, bool) {
 	id := chi.URLParam(r, "id")
 	seen := make(map[string]bool)
 	for len(seen) < 64 && !seen[id] {
@@ -37,7 +37,7 @@ func (s *Handler) elevatedAccessChat(w http.ResponseWriter, r *http.Request) (*w
 	return nil, false
 }
 
-func (s *Handler) elevatedAccessSummary(ctx context.Context, chat *wire.Session) (wire.ElevatedAccessSummary, error) {
+func (s *Access) elevatedAccessSummary(ctx context.Context, chat *wire.Session) (wire.ElevatedAccessSummary, error) {
 	summary := wire.ElevatedAccessSummary{
 		RootSessionID: chat.ID, ApprovalsEnabled: true,
 		Records: []wire.ElevatedAccessRecord{}, SharedScopes: []wire.ApprovalGrantScope{},
@@ -53,7 +53,7 @@ func (s *Handler) elevatedAccessSummary(ctx context.Context, chat *wire.Session)
 	now := time.Now()
 	action := hitl.ProposedAction{SessionID: chat.ID, ProjectID: chat.ProjectID}
 	byID := make(map[string]int)
-	for _, grant := range s.approvalGrants(chat.ID) {
+	for _, grant := range s.Inventory.approvalGrants(chat.ID) {
 		// Runtime chat capabilities bind directly to the root chat, with no project
 		// field in their storage. Generic leases retain the shared scope predicate.
 		runtimeChat := grant.Scope == hitl.ApprovalGrantScopeChat && grant.ChatSessionID == chat.ID && grant.ProjectID == "" && (grant.Predicate.Category == hitl.ApprovalGrantCategoryDirectIP || grant.Predicate.Category == hitl.ApprovalGrantCategorySocketPath || grant.Predicate.Category == hitl.ApprovalGrantCategorySocketCapability)
@@ -98,7 +98,7 @@ func (s *Handler) elevatedAccessSummary(ctx context.Context, chat *wire.Session)
 	return summary, nil
 }
 
-func (s *Handler) HandleGetElevatedAccess(w http.ResponseWriter, r *http.Request) {
+func (s *Access) HandleGetElevatedAccess(w http.ResponseWriter, r *http.Request) {
 	chat, ok := s.elevatedAccessChat(w, r)
 	if !ok {
 		return
@@ -111,12 +111,12 @@ func (s *Handler) HandleGetElevatedAccess(w http.ResponseWriter, r *http.Request
 	httpio.WriteJSON(w, http.StatusOK, summary)
 }
 
-func (s *Handler) HandleRevokeElevatedAccess(w http.ResponseWriter, r *http.Request) {
+func (s *Access) HandleRevokeElevatedAccess(w http.ResponseWriter, r *http.Request) {
 	chat, ok := s.elevatedAccessChat(w, r)
 	if !ok {
 		return
 	}
-	release := s.lockApprovalRevocation()
+	release := s.Grants.lockApprovalRevocation()
 	defer release()
 	selected, err := s.elevatedAccessSummary(r.Context(), chat)
 	if err != nil {
@@ -125,7 +125,7 @@ func (s *Handler) HandleRevokeElevatedAccess(w http.ResponseWriter, r *http.Requ
 	}
 	results := make([]wire.ElevatedAccessRevokeResult, 0, selected.Total)
 	for _, row := range selected.Records {
-		results = append(results, s.revokeApprovalRecord(r.Context(), row.ID))
+		results = append(results, s.Grants.revokeApprovalRecord(r.Context(), row.ID))
 	}
 	if len(results) > 0 {
 		projectview.PublishSettings(s.Events, s.Projects, r.Context(), "approvals", string(llm.SettingsScopeGlobal), "", "updated")
@@ -138,7 +138,7 @@ func (s *Handler) HandleRevokeElevatedAccess(w http.ResponseWriter, r *http.Requ
 	httpio.WriteJSON(w, http.StatusOK, wire.RevokeElevatedAccessResponse{Results: results, Remaining: remaining})
 }
 
-func (s *Handler) elevatedApprovalsEnabled(ctx context.Context, chat *wire.Session) (bool, error) {
+func (s *Access) elevatedApprovalsEnabled(ctx context.Context, chat *wire.Session) (bool, error) {
 	ref := settings.ProjectRef{ID: chat.ProjectID}
 	if chat.ProjectID != "" {
 		p, err := s.Projects.Get(ctx, chat.ProjectID)

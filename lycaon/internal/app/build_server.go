@@ -149,49 +149,48 @@ func (b serverWiring) wireRuntimeObservers() error {
 // registers the recoveries and hooks that call into its handlers.
 func (b serverWiring) wireServer() error {
 	extensionJournal := extensionstate.NewSQLJournal(b.db)
-	deps := api.Dependencies{
-		Database: b.db, Store: b.store, PersonActions: personactions.New(b.db), Projects: b.registry, Sessions: b.mgr, LLM: b.llmSvc, CostTracker: b.costTracker, Settings: b.settingsSvc,
+	deps := api.Dependencies{Core: api.CoreDependencies{
+		Database: b.db, Store: b.store, PersonActions: personactions.New(b.db), Projects: b.registry, Sessions: b.mgr, Settings: b.settingsSvc,
+		Invocations: b.invocations, MutationGate: project.NewMutationGate()}, Providers: api.ProvidersDependencies{LLM: b.llmSvc, CostTracker: b.costTracker, Rerank: b.rerank}, Host: api.HostDependencies{
 		Events: b.hub, EventPublisher: b.eventPub, Presence: b.presence, HostIdentity: b.hostIdentity,
-		Invocations: b.invocations, MutationGate: project.NewMutationGate(),
+		HostResources: b.hostResources, HostPower: b.hostPower, Pricing: b.pricingHost, Preview: b.previewCtrl,
+		PreflightEnv: b.buildPreflightEnv()}, Storage: api.StorageDependencies{
 		DataDir: b.dataDir, StorePath: b.storePath, WorkerBranchRoot: b.workerBranchRoot, WorkerSeedRoot: b.workerSeedRoot,
-		ModuleRoot: b.configRoot, StoreRevision: b.storeRevision, MinDenVersion: os.Getenv("LYCAON_MIN_DEN_VERSION"),
+		ModuleRoot: b.configRoot, StoreRevision: b.storeRevision, MinDenVersion: os.Getenv("LYCAON_MIN_DEN_VERSION")}, Approvals: api.ApprovalsDependencies{
 		SecretIgnores: b.secretIgnores, ManagedSecrets: b.secretCaps, SecretSpans: b.secretSpans,
-		Checkpoints: b.checkpointMgr, ApprovalGate: b.toolRuntime.ApprovalGate(), Rerank: b.rerank,
+		Checkpoints: b.checkpointMgr, ApprovalGate: b.toolRuntime.ApprovalGate(),
 		Authority: capabilityadmin.Authority{
 			DirectIP: b.directIPCapabilityRT, GrantedPaths: b.grantedPathRT, Listen: b.sandboxListenRT,
 			Loopback: b.sandboxLoopbackRT, ReadPaths: b.sandboxReadPathRT, WriteRoots: b.sandboxWriteRootRT,
 			Sockets: b.socketCapabilityRT, ChatGrants: chatGrantLedger(b.checkpointMgr), Vault: b.vaultUnlocks,
-		},
+		}}, Scans: api.ScansDependencies{
 		ScanCoordinator: b.scanCoordinator, ScannerRegistry: b.scannerReg, ScanCadence: b.scanCadence,
-		GateRepeatLedger: b.gateRepeatRT, PublishDetections: b.detections.publish,
+		GateRepeatLedger: b.gateRepeatRT, PublishDetections: b.detections.publish}, Workflow: api.WorkflowDependencies{
 		Workflows: b.workflowMgr, WorkflowCatalog: b.manifestResolver,
 		WorkflowRuns: b.workflowStore, WorkflowComposer: b.workflowComposer, WorkflowPersister: b.workflowPersister,
 		Blueprints: b.blueprintMgr, Orchestrator: b.orch, Delegations: b.delegationMgr, Workers: b.workerQueue,
-		WorkerCancel: b.workerCancelSvc, Board: b.boardSnap, RepoSetCache: b.gitRepoSetCache,
+		WorkerCancel: b.workerCancelSvc, Board: b.boardSnap, RepoSetCache: b.gitRepoSetCache}, Source: api.SourceDependencies{
 		AgentPresence: b.agentPresence, ProjectRules: b.projectRulesOverlay, HintConfig: b.hintCfg,
 		FileAgeWarmer: b.toolRuntime.WarmFileAge, VisualStore: b.visualStore, ProgressStore: b.progressStore,
-		ExtensionViews: b.viewCache, ExtensionJournal: extensionJournal,
-		MCP: b.mcpReg, WebResearch: b.webResearchRuntime, WebDiscoverer: b.webDiscoverer, WebIndex: b.webIndex,
-		HostResources: b.hostResources, HostPower: b.hostPower, Pricing: b.pricingHost, Preview: b.previewCtrl,
-		Video:        toolWiring(b).videoDecoder(),
-		PreflightEnv: b.buildPreflightEnv(), ManualLLM: b.manualLLM, HarnessWorkers: b.harnessWorkers,
-	}
+		Video: toolWiring(b).videoDecoder()}, Extensions: api.ExtensionsDependencies{
+		ExtensionViews: b.viewCache, ExtensionJournal: extensionJournal}, External: api.ExternalDependencies{
+		MCP: b.mcpReg, WebResearch: b.webResearchRuntime, WebDiscoverer: b.webDiscoverer, WebIndex: b.webIndex}, Harness: api.HarnessDependencies{ManualLLM: b.manualLLM, HarnessWorkers: b.harnessWorkers}}
 	if b.authzCapturer != nil {
-		deps.Authority.AuthzRecorder = b.authzCapturer.Recorder
-		deps.Authority.ApprovalDecisions = b.authzCapturer.Store
+		deps.Approvals.Authority.AuthzRecorder = b.authzCapturer.Recorder
+		deps.Approvals.Authority.ApprovalDecisions = b.authzCapturer.Store
 	}
 	b.projectLiveness = projectliveness.New(projectliveness.Config{
 		Sessions: b.store,
 		Handler: appProjectLifecycleHandler{
 			activate: func(ctx context.Context, projectID string) error {
 				if b.srv != nil {
-					b.srv.Sources.ScheduleSourceWatch(ctx, projectID)
+					b.srv.Sources.Watch.ScheduleSourceWatch(ctx, projectID)
 				}
 				return nil
 			},
 			park: func(ctx context.Context, projectID string) error {
 				sourcefeed.StopProjectWatch(ctx, projectID)
-				sourcecatalog.Process().SuspendProjectStores(projectID)
+				sourcecatalog.Process().Trees.SuspendProjectStores(projectID)
 				return nil
 			},
 		},
@@ -200,38 +199,38 @@ func (b serverWiring) wireServer() error {
 		b.projectLiveness.Close()
 		return nil
 	})
-	deps.ProjectLiveness = b.projectLiveness
+	deps.Source.ProjectLiveness = b.projectLiveness
 	b.mgr.SetProjectLiveness(b.projectLiveness)
-	b.mgr.SetMutationGate(deps.MutationGate)
+	b.mgr.SetMutationGate(deps.Core.MutationGate)
 	prev, ok, err := db.ReadBootPreviousAppVersion(b.ctx, b.db)
 	if err != nil {
 		return fmt.Errorf("previous app version: %w", err)
 	} else if ok {
-		deps.PreviousAppVersion = prev
+		deps.Storage.PreviousAppVersion = prev
 	}
 	userNoticeCfg, err := usernotice.LoadEffectiveUserNotices(extpacks.Active())
 	if err != nil {
 		return fmt.Errorf("user notices: %w", err)
 	}
 	b.userNoticeCatalog = usernotice.NewCatalog(userNoticeCfg)
-	deps.UserNotices = b.userNoticeCatalog
+	deps.Core.UserNotices = b.userNoticeCatalog
 	b.workerQueue.SetFailureRenderer(workernotice.NewRenderer(b.userNoticeCatalog))
 	homeDir, err := configdir.UserConfigDir()
 	if err != nil {
 		return fmt.Errorf("extension subsystem owner: %w", err)
 	}
-	deps.ExtensionScanners = scan.RequirementChecker{ModuleRoot: b.configRoot, HomeDir: homeDir}
+	deps.Extensions.ExtensionScanners = scan.RequirementChecker{ModuleRoot: b.configRoot, HomeDir: homeDir}
 	b.historyStorage = historyretention.New(b.db, b.storePath, b.visualStore)
-	deps.HistoryStorage = b.historyStorage
+	deps.External.HistoryStorage = b.historyStorage
 	// HTTP and SSE share one attention source.
-	deps.Attention = &attention.Source{
+	deps.Host.Attention = &attention.Source{
 		Sessions:    b.store,
 		Checkpoints: b.checkpointMgr,
 		Asks:        b.workflowMgr,
 		Finishes:    b.store,
 		Projects:    attention.RegistryNamer{Registry: b.registry},
 	}
-	b.eventPub.Attention = deps.Attention
+	b.eventPub.Attention = deps.Host.Attention
 	if manager, ok := b.checkpointMgr.(*hitl.Manager); ok {
 		if err := delegationWiring(b).registerRecovery(bootrecovery.Entry{
 			Name: "approval-operations", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseBuild,
@@ -270,12 +269,12 @@ func chatGrantLedger(checkpoints hitl.CheckpointManager) capabilityadmin.ChatGra
 // into the constructed server's handlers.
 func (b serverWiring) registerServerHooks(extensionJournal *extensionstate.SQLJournal) error {
 	// Publish execution failures before queued follow-up work can delay the caller.
-	b.mgr.SetTurnFailureSink(b.srv.Prompt.PublishTurnFailure)
-	b.mgr.SetPromotionHook(b.srv.Project.TryRunPromotion)
-	b.mgr.SetProjectSandboxReconcile(b.srv.Project.ScheduleProjectSandboxReconcile)
+	b.mgr.SetTurnFailureSink(b.srv.Admin.Prompt.Execution.PublishTurnFailure)
+	b.mgr.SetPromotionHook(b.srv.Admin.Project.Promotion.TryRunPromotion)
+	b.mgr.SetProjectSandboxReconcile(b.srv.Admin.Project.Sandboxes.ScheduleProjectSandboxReconcile)
 	// Source views addressed by a chat end with it.
 	if err := b.mgr.RegisterSessionDisposal("source-views", 60, func(_ context.Context, sessionID string) error {
-		b.srv.Sources.ReleaseChatSourceViews(sessionID)
+		b.srv.Sources.Views.ReleaseChatSourceViews(sessionID)
 		return nil
 	}); err != nil {
 		return err
@@ -283,23 +282,23 @@ func (b serverWiring) registerServerHooks(extensionJournal *extensionstate.SQLJo
 	// Serve recovery begins after runtime gates are sealed.
 	if err := delegationWiring(b).registerRecovery(bootrecovery.Entry{
 		Name: "prompt-submissions", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseServe,
-		Run: b.srv.Prompt.RecoverPromptSubmissions,
+		Run: b.srv.Admin.Prompt.Execution.RecoverPromptSubmissions,
 	}); err != nil {
 		return err
 	}
 	if err := delegationWiring(b).registerRecovery(bootrecovery.Entry{
 		Name: "project-promotions", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseBuild,
-		Run: b.srv.Project.RecoverPromotions,
+		Run: b.srv.Admin.Project.Promotion.RecoverPromotions,
 	}); err != nil {
 		return err
 	}
 	if err := delegationWiring(b).registerRecovery(bootrecovery.Entry{
 		Name: "source-file-requests", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseBuild,
-		After: []string{"source-mutations", "editor-documents"}, Run: b.srv.Sources.RecoverFileOperations,
+		After: []string{"source-mutations", "editor-documents"}, Run: b.srv.Sources.Mutations.RecoverFileOperations,
 	}); err != nil {
 		return err
 	}
-	owner := b.srv.Extensions.Owner
+	owner := b.srv.Admin.Extensions.Mutations.Owner
 	if err := delegationWiring(b).registerRecovery(bootrecovery.Entry{
 		Name: "extension-operations", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseBuild,
 		Run: func(ctx context.Context) error {
@@ -313,11 +312,11 @@ func (b serverWiring) registerServerHooks(extensionJournal *extensionstate.SQLJo
 	}
 	if err := delegationWiring(b).registerRecovery(bootrecovery.Entry{
 		Name: "workflow-topologies", Kind: bootrecovery.KindReconcile, Phase: bootrecovery.PhaseServe,
-		After: []string{"workflow-child-terminals"}, Run: b.srv.Workflow.RecoverOrchestratedTopologies,
+		After: []string{"workflow-child-terminals"}, Run: b.srv.Admin.Workflow.Topology.RecoverOrchestratedTopologies,
 	}); err != nil {
 		return err
 	}
-	if err := b.srv.Extensions.WarmContributionFrame(b.ctx); err != nil {
+	if err := b.srv.Admin.Extensions.Contributions.WarmContributionFrame(b.ctx); err != nil {
 		b.logger.Warn("contribution frame warm failed", "err", err)
 	}
 	return nil
@@ -337,7 +336,7 @@ func (b serverWiring) wireFileBriefings(deps *api.Dependencies) error {
 	} else if err := fileBriefingStore.MaintainDevice(b.ctx, fileBriefingConfig.Retention); err != nil {
 		return fmt.Errorf("maintain file briefings: %w", err)
 	}
-	deps.FileBriefings = filebriefing.NewService(b.ctx, filebriefing.Dependencies{
+	deps.Source.FileBriefings = filebriefing.NewService(b.ctx, filebriefing.Dependencies{
 		Store: fileBriefingStore, Config: fileBriefingConfig, Generator: filebriefing.NewModelGenerator(b.llmSvc, b.mgr.CostTracker()),
 		Events: b.hub, Settings: b.settingsSvc.FileSummaries, Logger: b.logger,
 	})
@@ -349,7 +348,7 @@ func (b serverWiring) wireFileBriefings(deps *api.Dependencies) error {
 // and the contribution runtime that reads document revisions.
 func (b serverWiring) wireSourceEditing(deps *api.Dependencies) error {
 	if b.sourceLedger != nil {
-		deps.SourceLedger, deps.SourceInventory = b.sourceLedger, b.sourceLedger
+		deps.Source.SourceLedger, deps.Source.SourceInventory = b.sourceLedger, b.sourceLedger
 	}
 	sourceMutations := project.NewSourceMutationService(b.db, b.sourceLedger)
 	if err := delegationWiring(b).registerRecovery(bootrecovery.Entry{
@@ -358,8 +357,8 @@ func (b serverWiring) wireSourceEditing(deps *api.Dependencies) error {
 	}); err != nil {
 		return err
 	}
-	deps.SourceMutations = sourceMutations
-	deps.FileOperations = fileops.NewService(fileops.NewStore(b.db))
+	deps.Source.SourceMutations = sourceMutations
+	deps.Source.FileOperations = fileops.NewService(fileops.NewStore(b.db))
 	b.mgr.SetSourceMutations(sourceMutations)
 	editorDocuments := editordoc.New(editordoc.NewStore(b.db), b.sourceLedger, b.registry)
 	if b.workerMergeSvc != nil {
@@ -392,16 +391,16 @@ func (b serverWiring) wireSourceEditing(deps *api.Dependencies) error {
 	}); err != nil {
 		return err
 	}
-	deps.EditorDocuments = editorDocuments
+	deps.Source.EditorDocuments = editorDocuments
 	// Disconnected windows leave presence after a bounded reconnect grace.
-	deps.EditorClients = editordoc.NewClientLiveness(editordoc.PresenceGrace, func(clientID string) {
+	deps.Source.EditorClients = editordoc.NewClientLiveness(editordoc.PresenceGrace, func(clientID string) {
 		editorDocuments.DisconnectClient(context.Background(), clientID)
 	})
 	// A file the person has open is the document, for reads and writes alike.
 	b.mgr.SetEditorDocuments(editorDocumentsAdapter{service: editorDocuments})
 	b.mgr.SetSourceRewinds(&sourcerewind.Service{Ledger: b.sourceLedger, Mutations: sourceMutations, Documents: editorDocuments})
 	// Contribution dispatch uses durable receipts and policy-derived authority.
-	deps.Contributions = extensionadmin.ContributionRuntime{
+	deps.Extensions.Contributions = extensionadmin.ContributionRuntime{
 		Receipts: commandinvoke.SQLReceipts{DB: b.db},
 		Authority: commandinvoke.PolicyAuthority{
 			FindingNamesPath: func(ctx context.Context, sessionID, path string) (bool, error) {

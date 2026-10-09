@@ -12,7 +12,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Server) handleSessionFindings(w http.ResponseWriter, r *http.Request) {
+func (s *Conversation) handleSessionFindings(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	sess, err := s.sessionStore.Get(r.Context(), id)
 	if err != nil {

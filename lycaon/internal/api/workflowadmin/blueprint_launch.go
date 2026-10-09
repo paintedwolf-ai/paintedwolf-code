@@ -13,7 +13,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Handler) HandleApproveBlueprint(w http.ResponseWriter, r *http.Request) {
+func (s *BlueprintRoutes) HandleApproveBlueprint(w http.ResponseWriter, r *http.Request) {
 	projectID, path, ok := s.blueprintAddress(w, r)
 	if !ok {
 		return
@@ -63,7 +63,7 @@ func (s *Handler) HandleApproveBlueprint(w http.ResponseWriter, r *http.Request)
 	httpio.WriteJSON(w, http.StatusOK, out)
 }
 
-func (s *Handler) HandleLaunchBlueprint(w http.ResponseWriter, r *http.Request) {
+func (s *BlueprintRoutes) HandleLaunchBlueprint(w http.ResponseWriter, r *http.Request) {
 	rm := s.Workflows
 	projectID, path, ok := s.blueprintAddress(w, r)
 	if !ok {
@@ -150,7 +150,7 @@ func (s *Handler) HandleLaunchBlueprint(w http.ResponseWriter, r *http.Request) 
 		BlueprintID: seed.ID,
 	}
 	if run != nil {
-		s.StartOrchestratedTopologyForRun(r.Context(), sess.ID, run)
+		s.Topology.StartOrchestratedTopologyForRun(r.Context(), sess.ID, run)
 		resp.WorkflowRunID = run.ID
 	}
 	s.SessionAdmin.PublishSessionCreated(r.Context(), sess)
@@ -158,13 +158,13 @@ func (s *Handler) HandleLaunchBlueprint(w http.ResponseWriter, r *http.Request) 
 	httpio.WriteJSON(w, http.StatusCreated, resp)
 }
 
-func (s *Handler) writeBlueprintLaunchError(w http.ResponseWriter, r *http.Request, err error) {
+func (s *BlueprintRoutes) writeBlueprintLaunchError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, workflow.ErrBlueprintLaunchIncompatible):
 		s.responses.Fail(w, wire.ApiErrorCodeBlueprintLaunchIncompatible, "this blueprint cannot launch the selected workflow")
 	case errors.Is(err, workflow.ErrBlueprintLaunchUnsupported):
 		s.responses.Fail(w, wire.ApiErrorCodeBlueprintLaunchUnsupported, "this workflow cannot launch from a blueprint")
 	default:
-		s.WriteWorkflowError(w, r, err)
+		s.RunControl.WriteWorkflowError(w, r, err)
 	}
 }

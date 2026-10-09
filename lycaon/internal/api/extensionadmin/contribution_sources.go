@@ -23,7 +23,7 @@ import (
 const contributionProviderEnvelopeBytes = 256 << 10
 const contributionProviderTimeout = 20 * time.Second
 
-func (s *Handler) HandleContributionChoices(w http.ResponseWriter, r *http.Request) {
+func (s *Contributions) HandleContributionChoices(w http.ResponseWriter, r *http.Request) {
 	p, ok := requestscope.ProjectByURLID(s.Projects, s.responses, w, r)
 	if !ok {
 		return
@@ -97,7 +97,7 @@ func (s *Handler) HandleContributionChoices(w http.ResponseWriter, r *http.Reque
 	httpio.WriteJSON(w, http.StatusOK, wire.ContributionChoiceResponse{FrameRevision: frame.Revision, Provider: providerID, Choices: choices})
 }
 
-func (s *Handler) HandleContributionSearch(w http.ResponseWriter, r *http.Request) {
+func (s *Contributions) HandleContributionSearch(w http.ResponseWriter, r *http.Request) {
 	p, ok := requestscope.ProjectByURLID(s.Projects, s.responses, w, r)
 	if !ok {
 		return
@@ -153,7 +153,7 @@ func (s *Handler) HandleContributionSearch(w http.ResponseWriter, r *http.Reques
 // contributionSourceFrame captures the current frame. Callers resolve the
 // addressed contribution in it before comparing the caller's revision, so an
 // unknown address answers not found whatever revision the request carries.
-func (s *Handler) contributionSourceFrame(w http.ResponseWriter, r *http.Request, p *project.Project, revision string) (*contribframe.Frame, bool) {
+func (s *Contributions) contributionSourceFrame(w http.ResponseWriter, r *http.Request, p *project.Project, revision string) (*contribframe.Frame, bool) {
 	if strings.TrimSpace(revision) == "" {
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "frame_revision is required")
 		return nil, false
@@ -166,7 +166,7 @@ func (s *Handler) contributionSourceFrame(w http.ResponseWriter, r *http.Request
 	return frame, true
 }
 
-func (s *Handler) requireFrameRevision(w http.ResponseWriter, frame *contribframe.Frame, revision string) bool {
+func (s *Contributions) requireFrameRevision(w http.ResponseWriter, frame *contribframe.Frame, revision string) bool {
 	if frame.Revision != revision {
 		s.responses.Fail(w, wire.ApiErrorCodeContributionFrameChanged, "the contribution frame changed; refresh before requesting provider data")
 		return false
@@ -174,7 +174,7 @@ func (s *Handler) requireFrameRevision(w http.ResponseWriter, frame *contribfram
 	return true
 }
 
-func (s *Handler) runnableContributionTool(w http.ResponseWriter, frame *contribframe.Frame, requirementRaw, toolName string) (*contribution.MCPRequirement, string, bool) {
+func (s *Contributions) runnableContributionTool(w http.ResponseWriter, frame *contribframe.Frame, requirementRaw, toolName string) (*contribution.MCPRequirement, string, bool) {
 	requirementID, err := contribution.ParseID(requirementRaw)
 	if err != nil {
 		s.responses.Fail(w, wire.ApiErrorCodeContributionSourceUnavailable, "the source requirement id is invalid")

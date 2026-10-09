@@ -25,20 +25,21 @@ Headline: `db` is true bottom → `search` may use `db` → `session` stays thin
 
 ### HTTP route families
 
-[`build_server.go`](../lycaon/internal/app/build_server.go) fills one [`api.Dependencies`](../lycaon/internal/api/server.go) and calls `api.NewServer`. `NewServer` gives each route family a `Deps` struct holding only the fields it uses, then drops `Dependencies`. A family never receives the whole `Server`, and nothing copies dependencies in later through setters. When one family calls another, it holds a pointer to that family's handler inside the `Server`.
+[`build_server.go`](../lycaon/internal/app/build_server.go) fills one [`api.Dependencies`](../lycaon/internal/api/server_dependencies.go) and calls `api.NewServer`. `NewServer` gives each route family a `Deps` struct holding only the fields it uses, then drops `Dependencies`. Runtime handlers retain their named services and domain peers, rather than the construction bundle. A family never receives the whole `Server`, and nothing copies dependencies in later through setters. When one family calls another, it holds a pointer to that family's handler inside the `Server`.
 
 | Package | Serves |
 |---------|--------|
-| [`internal/api`](../lycaon/internal/api) | Router, middleware, auth, SSE, health, recovery, search, and the route table built from generated operations |
+| [`internal/api`](../lycaon/internal/api) | Router, middleware, auth, health, shutdown, and the generated operation route table; explicit activity, conversation, artifact, worker, storage, local-data, and harness domains |
 | [`api/sessionadmin`](../lycaon/internal/api/sessionadmin) · [`promptadmin`](../lycaon/internal/api/promptadmin) | Session lifecycle, navigation, export, rewind · prompts, queue, attachments, compaction |
-| [`api/projectadmin`](../lycaon/internal/api/projectadmin) · [`sourceapi`](../lycaon/internal/api/sourceapi) · [`gitadmin`](../lycaon/internal/api/gitadmin) | Projects, roots, trust, removal, promotion · source views, editor documents, comparisons, history, briefings · git status, mutations, worktrees |
+| [`api/projectadmin`](../lycaon/internal/api/projectadmin) · [`sourceapi`](../lycaon/internal/api/sourceapi) · [`gitadmin`](../lycaon/internal/api/gitadmin) | Projects, roots, trust, removal, promotion · source workspace, analysis, watch, mutation, review, history, comparison, view, tree, and presentation domains · git status, mutations, worktrees |
+| [`api/searchadmin`](../lycaon/internal/api/searchadmin) · [`editoradmin`](../lycaon/internal/api/editoradmin) · [`briefingadmin`](../lycaon/internal/api/briefingadmin) | Federated query/export/replacement · editor collaboration and secret screening · file briefings |
 | [`api/workflowadmin`](../lycaon/internal/api/workflowadmin) · [`scanadmin`](../lycaon/internal/api/scanadmin) | Workflows, blueprints, run reports · scans, scanners, detection packs |
 | [`api/settingsadmin`](../lycaon/internal/api/settingsadmin) · [`capabilityadmin`](../lycaon/internal/api/capabilityadmin) · [`extensionadmin`](../lycaon/internal/api/extensionadmin) | Settings, pricing, power · approvals, checkpoints, grants · extensions and contributions |
 | [`api/modeladmin`](../lycaon/internal/api/modeladmin) · [`mcpadmin`](../lycaon/internal/api/mcpadmin) · [`researchadmin`](../lycaon/internal/api/researchadmin) · [`historyadmin`](../lycaon/internal/api/historyadmin) | Providers and model policy · MCP providers · web research · history retention |
 | [`api/httpio`](../lycaon/internal/api/httpio) · [`requestscope`](../lycaon/internal/api/requestscope) · [`taskgroup`](../lycaon/internal/api/taskgroup) | Shared request and response contracts · the caller, project, session, and settings a request addresses · background work that drains on shutdown |
 | [`api/sessionview`](../lycaon/internal/api/sessionview) · [`projectview`](../lycaon/internal/api/projectview) · [`secretview`](../lycaon/internal/api/secretview) | Session projections · project and settings change events · managed-secret wire metadata and screens |
 
-Route families import the shared helper packages, never `internal/api`.
+Route families import the shared helper packages, never `internal/api`. Route tests live with their HTTP contract domains (`hostcontracts`, `sourcecontracts`, `sessioncontracts`, and `searchcontracts`) and use feature fixtures from `contractfixture`; transport and private algorithm tests stay with their implementations.
 
 ## Leaf-mint policy
 

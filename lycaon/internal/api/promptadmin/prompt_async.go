@@ -3,6 +3,7 @@ package promptadmin
 import (
 	"context"
 	"errors"
+
 	"github.com/lycaon/lycaon/internal/httpclient"
 	"github.com/lycaon/lycaon/internal/noticeerr"
 	"github.com/lycaon/lycaon/internal/observability"
@@ -68,9 +69,9 @@ func shouldPublishPromptHostError(err error) bool {
 }
 
 // Compile-time check for the host-turn failure callback.
-var _ session.TurnFailureSink = (*Handler)(nil).PublishTurnFailure
+var _ session.TurnFailureSink = (*Execution)(nil).PublishTurnFailure
 
-func (s *Handler) PublishTurnFailure(ctx context.Context, sessionID string, err error) {
+func (s *Execution) PublishTurnFailure(ctx context.Context, sessionID string, err error) {
 	err = session.UnreportedTurnFailure(err)
 	if !shouldPublishPromptHostError(err) {
 		return
@@ -109,21 +110,21 @@ func sessionMessagesHaveTurnProgress(msgs []wire.Message) bool {
 	return false
 }
 
-func (s *Handler) ResumePromptSubmission(parent context.Context, sessionID string, row *store.PromptSubmission) {
+func (s *Execution) ResumePromptSubmission(parent context.Context, sessionID string, row *store.PromptSubmission) {
 	if row == nil || row.Status != store.PromptSubmissionQueued {
 		return
 	}
 	s.runPromptAsync(parent, sessionID, row.ID)
 }
 
-func (s *Handler) runPromptAsync(parent context.Context, sessionID, submissionID string) {
+func (s *Execution) runPromptAsync(parent context.Context, sessionID, submissionID string) {
 	s.background.Go(parent, func(ctx context.Context) {
 		perf := observability.StartPerformanceOperation("prompt.run", map[string]string{
 			"session_id": sessionID, "operation_id": submissionID,
 		})
 		outcome := "error"
 		defer func() { perf.End(outcome) }()
-		retentions, retentionErr := s.capturePromptAttachmentRetentions(ctx, submissionID)
+		retentions, retentionErr := s.Attachments.capturePromptAttachmentRetentions(ctx, submissionID)
 		perf.Mark("retain_attachments")
 		var err error
 		if retentionErr == nil {
@@ -141,7 +142,7 @@ func (s *Handler) runPromptAsync(parent context.Context, sessionID, submissionID
 			if abandonErr := s.Sessions.AbandonPromptSubmission(cleanupCtx, submissionID, retentionErr); abandonErr != nil && s.responses.Logger != nil {
 				s.responses.Logger.WarnContext(cleanupCtx, "abandon unrunnable prompt submission", "operation_id", submissionID, "error", abandonErr)
 			}
-		} else if cleanupErr := s.reconcilePromptAttachmentRetentions(cleanupCtx, retentions); cleanupErr != nil && s.responses.Logger != nil {
+		} else if cleanupErr := s.Attachments.reconcilePromptAttachmentRetentions(cleanupCtx, retentions); cleanupErr != nil && s.responses.Logger != nil {
 			s.responses.Logger.WarnContext(cleanupCtx, "reconcile prompt attachment retentions", "operation_id", submissionID, "error", cleanupErr)
 		}
 		if err != nil {
@@ -156,7 +157,7 @@ func (s *Handler) runPromptAsync(parent context.Context, sessionID, submissionID
 }
 
 // RecoverPromptSubmissions requeues pending receipts in submission order.
-func (s *Handler) RecoverPromptSubmissions(ctx context.Context) error {
+func (s *Execution) RecoverPromptSubmissions(ctx context.Context) error {
 	ids, err := s.Sessions.RecoverPromptSubmissions(ctx)
 	if err != nil {
 		return err
@@ -169,7 +170,7 @@ func (s *Handler) RecoverPromptSubmissions(ctx context.Context) error {
 		if getErr != nil {
 			return getErr
 		}
-		retentions, retentionErr := s.capturePromptAttachmentRetentions(ctx, id)
+		retentions, retentionErr := s.Attachments.capturePromptAttachmentRetentions(ctx, id)
 		if retentionErr != nil {
 			return retentionErr
 		}
@@ -187,7 +188,7 @@ func (s *Handler) RecoverPromptSubmissions(ctx context.Context) error {
 			}
 			cleanupCtx := context.WithoutCancel(drainCtx)
 			for _, retentions := range retentionSets {
-				if err := s.reconcilePromptAttachmentRetentions(cleanupCtx, retentions); err != nil && s.responses.Logger != nil {
+				if err := s.Attachments.reconcilePromptAttachmentRetentions(cleanupCtx, retentions); err != nil && s.responses.Logger != nil {
 					s.responses.Logger.WarnContext(cleanupCtx, "reconcile recovered prompt attachments", "operation_id", retentions.operationID, "error", err)
 				}
 			}

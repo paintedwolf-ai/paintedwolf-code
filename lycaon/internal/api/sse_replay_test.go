@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -38,7 +39,7 @@ func TestStreamReplaysPersistedContentExactly(t *testing.T) {
 	sess := createSessionAtPathOnServer(t, srv, dir, wire.SessionPostureBuild)
 	content := "hello  world\n\n```go\nfmt.Println(\"x\")\n```"
 	msg := wire.Message{ID: "msg-evicted", Role: wire.MessageRoleAssistant, Content: content}
-	testutil.FailErr(t, "append persisted message", srv.sessionStore.AppendMessages(t.Context(), sess.ID, msg))
+	testutil.FailErr(t, "append persisted message", srv.Sources.Workspace.SessionStore.AppendMessages(t.Context(), sess.ID, msg))
 
 	req := newAuthedRequest(http.MethodGet, "/v1/sessions/"+sess.ID+"/stream?message="+msg.ID, nil)
 	rec := httptest.NewRecorder()
@@ -112,4 +113,15 @@ func TestReplayResetsFirstDeltaThenAppends(t *testing.T) {
 	if len(chunks) != 2 || !chunks[0].Reset || chunks[1].Reset {
 		t.Fatalf("replay reset sequence = %+v", chunks)
 	}
+}
+
+func TestSettledLiveSubscriptionRechecksTranscript(t *testing.T) {
+	srv := newTestServer(t)
+	sess := createSessionAtPathOnServer(t, srv, t.TempDir(), wire.SessionPostureBuild)
+	messageID := uuid.NewString()
+	srv.Admin.SessionAdmin.Lifecycle.Sessions.Streams().CacheReplay(messageID, "removed content", nil)
+	w := httptest.NewRecorder()
+	r := newAuthedRequest(http.MethodGet, "/v1/sessions/"+sess.ID+"/stream?message="+messageID, nil)
+	srv.Routes.Conversation.followLiveStream(r, w, w, sess.ID, messageID)
+	assertErrorResponse(t, w, http.StatusNotFound, "message_not_found")
 }

@@ -15,7 +15,7 @@ import (
 )
 
 // HandleRewindSession restores one human-selected turn boundary.
-func (s *Handler) HandleRewindSession(w http.ResponseWriter, r *http.Request) {
+func (s *Rewind) HandleRewindSession(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	var req wire.RewindSessionRequest
 	if err := httpio.DecodeJSON(w, r, &req); err != nil {
@@ -56,7 +56,7 @@ func (s *Handler) HandleRewindSession(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Handler) writeRewindError(w http.ResponseWriter, r *http.Request, err error) {
+func (s *Rewind) writeRewindError(w http.ResponseWriter, r *http.Request, err error) {
 	var blocked *sourceledger.RewindBlockedError
 	switch {
 	case errors.As(err, &blocked):
@@ -78,7 +78,7 @@ func (s *Handler) writeRewindError(w http.ResponseWriter, r *http.Request, err e
 	}
 }
 
-func (s *Handler) HandlePreviewSessionRewind(w http.ResponseWriter, r *http.Request) {
+func (s *Rewind) HandlePreviewSessionRewind(w http.ResponseWriter, r *http.Request) {
 	var req wire.RewindPreviewRequest
 	if err := httpio.DecodeJSON(w, r, &req); err != nil {
 		s.responses.DecodeError(w, r, err)

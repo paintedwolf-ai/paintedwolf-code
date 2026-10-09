@@ -252,7 +252,7 @@ func TestHealthEndpoint(t *testing.T) {
 }
 
 func TestHealthEndpointStoreRevision(t *testing.T) {
-	srv := newTestServer(t, func(d *Dependencies) { d.StoreRevision = 42 })
+	srv := newTestServer(t, func(d *Dependencies) { d.Storage.StoreRevision = 42 })
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/health", nil)
 	w := httptest.NewRecorder()
@@ -270,7 +270,7 @@ func TestHealthEndpointStoreRevision(t *testing.T) {
 }
 
 func TestHealthEndpointMinDenVersion(t *testing.T) {
-	srv := newTestServer(t, func(d *Dependencies) { d.MinDenVersion = "1.2.3" })
+	srv := newTestServer(t, func(d *Dependencies) { d.Storage.MinDenVersion = "1.2.3" })
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/health", nil)
 	w := httptest.NewRecorder()
@@ -305,7 +305,7 @@ func TestHealthEndpointPreviousAppVersion(t *testing.T) {
 		t.Fatal("previous_app_version must be omitted on an ordinary boot")
 	}
 
-	upgraded := newTestServer(t, func(d *Dependencies) { d.PreviousAppVersion = "0.0.1" })
+	upgraded := newTestServer(t, func(d *Dependencies) { d.Storage.PreviousAppVersion = "0.0.1" })
 	w = httptest.NewRecorder()
 	upgraded.ServeHTTP(w, req)
 	var upgrade struct {
@@ -343,10 +343,9 @@ func TestCreateSessionByProjectID(t *testing.T) {
 	}
 
 	store := store.NewMemory()
-	srv := NewServer(requiredTestDeps(t, Dependencies{
+	srv := NewServer(requiredTestDeps(t, Dependencies{Core: CoreDependencies{
 		Store: store, Projects: reg,
-		Sessions: session.NewManager(store, llm.NewMockProvider(testMockConfig(t)), tools.NewStubRegistry(), settings.DefaultSessionLimits()),
-	}), nil, TestAPIToken)
+		Sessions: session.NewManager(store, llm.NewMockProvider(testMockConfig(t)), tools.NewStubRegistry(), settings.DefaultSessionLimits())}}), nil, TestAPIToken)
 	body := `{"project_id":"` + opened.ID + `","posture":"spec"}`
 	req := newAuthedRequest(http.MethodPost, "/v1/sessions", strings.NewReader(body))
 	w := httptest.NewRecorder()
@@ -513,7 +512,7 @@ func TestGetSessionMessagesPositionsWindows(t *testing.T) {
 	srv := newTestServer(t)
 	created := createSessionAtPathOnServer(t, srv, t.TempDir(), wire.SessionPostureBuild)
 	for _, content := range []string{"one", "two", "three", "four", "five"} {
-		testutil.FailErr(t, "append message", srv.sessions.AppendAndPublishMessages(
+		testutil.FailErr(t, "append message", srv.Admin.SessionAdmin.Lifecycle.Sessions.AppendAndPublishMessages(
 			t.Context(), created.ID, wire.Message{Role: wire.MessageRoleAssistant, Content: content}))
 	}
 	read := func(query string, wantStatus int) wire.SessionTranscriptPage {
@@ -566,7 +565,7 @@ func TestGetSessionMessagesFiltersReusedChildByWorkerJob(t *testing.T) {
 	created := createSessionAtPathOnServer(t, srv, dir, wire.SessionPostureBuild)
 	firstJobID := "11111111-1111-4111-8111-111111111111"
 	secondJobID := "22222222-2222-4222-8222-222222222222"
-	testutil.FailErr(t, "append worker messages", srv.sessions.AppendAndPublishMessages(
+	testutil.FailErr(t, "append worker messages", srv.Admin.SessionAdmin.Lifecycle.Sessions.AppendAndPublishMessages(
 		t.Context(), created.ID,
 		wire.Message{Role: wire.MessageRoleAssistant, Content: "first", WorkerID: firstJobID},
 		wire.Message{Role: wire.MessageRoleAssistant, Content: "second", WorkerID: secondJobID},

@@ -19,7 +19,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Server) handleCreateDelegation(w http.ResponseWriter, r *http.Request) {
+func (s *Workers) handleCreateDelegation(w http.ResponseWriter, r *http.Request) {
 	var req wire.CreateDelegationRequest
 	if err := httpio.DecodeJSON(w, r, &req); err != nil {
 		s.responses.DecodeError(w, r, err)
@@ -36,7 +36,7 @@ func (s *Server) handleCreateDelegation(w http.ResponseWriter, r *http.Request) 
 		s.responses.FailDetails(w, wire.ApiErrorCodeInvalidRequest, map[string]any{"field": "operation_id"}, "operation_id must be a valid UUID")
 		return
 	}
-	if _, ok := requestscope.ProjectByID(s.projectRegistry, &s.responses, w, r, req.ProjectID); !ok {
+	if _, ok := requestscope.ProjectByID(s.projectRegistry, s.responses, w, r, req.ProjectID); !ok {
 		return
 	}
 	if req.Strategy != "" && !validHuntStrategy(req.Strategy) {
@@ -59,7 +59,7 @@ func (s *Server) handleCreateDelegation(w http.ResponseWriter, r *http.Request) 
 	httpio.WriteJSON(w, http.StatusCreated, out)
 }
 
-func (s *Server) handleGetDelegation(w http.ResponseWriter, r *http.Request) {
+func (s *Workers) handleGetDelegation(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	out, err := s.delegations.GetStatus(r.Context(), id)
 	if err != nil {
@@ -73,7 +73,7 @@ func (s *Server) handleGetDelegation(w http.ResponseWriter, r *http.Request) {
 	httpio.WriteJSON(w, http.StatusOK, out)
 }
 
-func (s *Server) handleListDelegationLegs(w http.ResponseWriter, r *http.Request) {
+func (s *Workers) handleListDelegationLegs(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	if _, err := s.delegations.GetStatus(r.Context(), id); err != nil {
 		if errors.Is(err, delegation.ErrDelegationNotFound) {
@@ -94,7 +94,7 @@ func (s *Server) handleListDelegationLegs(w http.ResponseWriter, r *http.Request
 	httpio.WriteJSON(w, http.StatusOK, wire.DelegationLegListResponse{Legs: legs})
 }
 
-func (s *Server) handleDispatchDelegationLeg(w http.ResponseWriter, r *http.Request) {
+func (s *Workers) handleDispatchDelegationLeg(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	if _, err := s.delegations.GetStatus(r.Context(), id); err != nil {
 		if errors.Is(err, delegation.ErrDelegationNotFound) {
@@ -161,7 +161,7 @@ func (s *Server) handleDispatchDelegationLeg(w http.ResponseWriter, r *http.Requ
 	httpio.WriteJSON(w, http.StatusOK, leg)
 }
 
-func (s *Server) handleAbortDelegation(w http.ResponseWriter, r *http.Request) {
+func (s *Workers) handleAbortDelegation(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	var req wire.AbortDelegationRequest
 	if _, err := httpio.DecodeOptionalJSON(w, r, &req); err != nil {
@@ -203,7 +203,7 @@ func validWorkerStatus(status wire.WorkerStatus) bool {
 	}
 }
 
-func (s *Server) handleWorkerCancel(w http.ResponseWriter, r *http.Request) {
+func (s *Workers) handleWorkerCancel(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	if _, err := s.workerCancel.CancelJob(r.Context(), id, ""); err != nil {
 		var reject *tools.ToolReject
@@ -227,13 +227,13 @@ func (s *Server) handleWorkerCancel(w http.ResponseWriter, r *http.Request) {
 	httpio.WriteJSON(w, http.StatusAccepted, task)
 }
 
-func (s *Server) handleGetBoard(w http.ResponseWriter, r *http.Request) {
+func (s *Workers) handleGetBoard(w http.ResponseWriter, r *http.Request) {
 	projectID := strings.TrimSpace(chi.URLParam(r, "id"))
 	if projectID == "" {
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "project id is required")
 		return
 	}
-	p, ok := requestscope.ProjectByID(s.projectRegistry, &s.responses, w, r, projectID)
+	p, ok := requestscope.ProjectByID(s.projectRegistry, s.responses, w, r, projectID)
 	if !ok {
 		return
 	}
