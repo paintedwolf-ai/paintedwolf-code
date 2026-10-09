@@ -262,7 +262,8 @@ func TestLoopAppendReportsReviewAccountingFailure(t *testing.T) {
 	st := store.NewMemory()
 	mgr := NewManager(st, nil, nil, settings.DefaultSessionLimits())
 	wantErr := errors.New("workflow state unavailable")
-	mgr.SetWorkflowSessionView(&recordingWorkflowView{reviewErr: wantErr})
+	workflowFixture3 := &recordingWorkflowView{reviewErr: wantErr}
+	mgr.SetWorkflowDomains(&WorkflowDomains{Runs: workflowFixture3, Policy: workflowFixture3, Ambient: workflowFixture3, Blueprints: workflowFixture3, Batch: workflowFixture3, Slash: workflowFixture3, Requests: workflowFixture3, Feedback: workflowFixture3, Transcript: workflowFixture3, Asks: workflowFixture3, Fanout: workflowFixture3, Phases: workflowFixture3, Reports: workflowFixture3, Recovery: workflowFixture3, Cleanup: workflowFixture3})
 	sess, err := st.Create(ctx, api.CreateSessionRequest{}, "project-1")
 	testutil.FailErr(t, "create session", err)
 
@@ -282,7 +283,8 @@ func TestKickGateObligationsFollowTheRunArchive(t *testing.T) {
 	satisfy := func(archive string) string {
 		mgr := NewManager(store.NewMemory(), nil, nil, settings.DefaultSessionLimits())
 		mgr.SetWorkflowHints(nil, gateFeedback)
-		mgr.SetWorkflowSessionView(&recordingWorkflowView{archive: archive})
+		workflowFixture4 := &recordingWorkflowView{archive: archive}
+		mgr.SetWorkflowDomains(&WorkflowDomains{Runs: workflowFixture4, Policy: workflowFixture4, Ambient: workflowFixture4, Blueprints: workflowFixture4, Batch: workflowFixture4, Slash: workflowFixture4, Requests: workflowFixture4, Feedback: workflowFixture4, Transcript: workflowFixture4, Asks: workflowFixture4, Fanout: workflowFixture4, Phases: workflowFixture4, Reports: workflowFixture4, Recovery: workflowFixture4, Cleanup: workflowFixture4})
 		rows := mgr.projectKickGateObligations(t.Context(), "session", frame)
 		if len(rows) != 1 {
 			t.Fatalf("obligations = %+v", rows)
@@ -303,7 +305,8 @@ func TestLoopAppendRecordsReviewResultsAfterCommit(t *testing.T) {
 	st := store.NewMemory()
 	mgr := NewManager(st, nil, nil, settings.DefaultSessionLimits())
 	view := &recordingWorkflowView{}
-	mgr.SetWorkflowSessionView(view)
+	workflowFixture5 := view
+	mgr.SetWorkflowDomains(&WorkflowDomains{Runs: workflowFixture5, Policy: workflowFixture5, Ambient: workflowFixture5, Blueprints: workflowFixture5, Batch: workflowFixture5, Slash: workflowFixture5, Requests: workflowFixture5, Feedback: workflowFixture5, Transcript: workflowFixture5, Asks: workflowFixture5, Fanout: workflowFixture5, Phases: workflowFixture5, Reports: workflowFixture5, Recovery: workflowFixture5, Cleanup: workflowFixture5})
 	sess, err := st.Create(ctx, api.CreateSessionRequest{}, "project-1")
 	testutil.FailErr(t, "create session", err)
 

@@ -227,7 +227,7 @@ func hostStringSliceVar(vars map[string]any, key string) []string {
 
 var _ inject.CoordinatorTurnFrameSource = (*CoordinatorFrames)(nil)
 
-// attachPhaseVerdictCall gives a review phase's exit the submit_verdict call it
+// reviewContractError identifies an invalid phase verdict contract.
 type reviewContractError struct{ error }
 
 // attachPhaseVerdictCall gives a review phase's exit the submit_verdict call it
