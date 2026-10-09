@@ -6,6 +6,7 @@ import {
   externalLinkOkLabel,
   isExternalLinkHref,
   openAppLink,
+  isAppLink,
   openInBrowser,
   setupWebviewNavigationGuards,
 } from "./external-link.ts";
@@ -13,6 +14,11 @@ import { REPOSITORY_URL, WEBSITE_URL } from "../../../shared/brand.ts";
 import { resetExternalOpenPrefsForTests } from "../../settings/editor/external-open-prefs.ts";
 
 describe("external-link", () => {
+  it("accepts site and repository descendants while refusing lookalikes", () => {
+    for (const url of [`${WEBSITE_URL}/news`, `${REPOSITORY_URL}/releases/tag/v1.0.1`]) expect(isAppLink(url)).toBe(true);
+    for (const url of ["https://paintedwolf.ai.evil.test", `${REPOSITORY_URL}-evil`, "http://paintedwolf.ai", "https://user@paintedwolf.ai", "https://paintedwolf.ai:444/news"]) expect(isAppLink(url)).toBe(false);
+  });
+
   beforeEach(() => {
     vi.restoreAllMocks();
     resetExternalOpenPrefsForTests();

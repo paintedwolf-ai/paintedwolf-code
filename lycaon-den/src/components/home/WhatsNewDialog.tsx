@@ -12,7 +12,7 @@ import { ChromeCloseButton } from "../shell/ChromeCloseButton.tsx";
 import { MarkdownBody } from "../transcript/MarkdownBody.tsx";
 import { chromeProps } from "../../styling/ui-chrome.ts";
 import { writeClipboardText } from "../../utils/clipboard.ts";
-import { openAppLink } from "../../platform/desktop/external-link.ts";
+import { openAppLink, isAppLink, confirmAndOpenExternalLink } from "../../platform/desktop/external-link.ts";
 import { REPOSITORY_URL, releasePageUrl } from "../../../shared/brand.ts";
 
 export type WhatsNewDialogProps = {
@@ -78,7 +78,9 @@ export function WhatsNewDialog(props: WhatsNewDialogProps): JSX.Element {
               contentClass="whats-new-dialog__body"
               data-testid="whats-new-dialog-notes"
             >
-              <MarkdownBody untrusted source={props.notes} />
+              <MarkdownBody untrusted source={props.notes} onExternalLink={(href) =>
+                isAppLink(href) ? openAppLink(href) : confirmAndOpenExternalLink(href)
+              } />
               <p class="whats-new-dialog__share" data-testid="whats-new-dialog-share">
                 If this release helps you, the best thanks is telling a colleague
                 who would use it, or starring the project on GitHub.
