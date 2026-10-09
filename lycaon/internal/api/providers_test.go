@@ -147,6 +147,7 @@ func newProviderTestServerWithCatalogs(t *testing.T, shipYAML, localYAML string,
 		opt(&deps)
 	}
 	srv := NewServer(requiredTestDeps(t, deps), nil, TestAPIToken)
+	stopBackgroundOnCleanup(t, srv)
 	return srv, startTestHTTPServer(t, srv)
 }
 

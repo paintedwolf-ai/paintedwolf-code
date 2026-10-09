@@ -611,7 +611,7 @@ Each Linux Go test process has a 3.5 GiB RSS ceiling, declared in
 [`resources.json`](../scripts/ci_policy/resources.json): hosted runners have
 16 GiB and run four packages at once, so the ceiling keeps one package from
 exhausting the runner while leaving room for the toolchain. A package that needs
-more declares its own ceiling with a tracking issue (`internal/api`, #382).
+more declares its own ceiling with a tracking issue.
 Unless a run sets `GOMEMLIMIT`, the test binary gets a soft limit at 80% of its
 ceiling, so the collector reclaims garbage before the ceiling instead of letting
 the heap reach twice its live size, and the guard measures retained memory
