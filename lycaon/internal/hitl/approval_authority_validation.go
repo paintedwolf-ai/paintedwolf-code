@@ -275,6 +275,9 @@ func (p *ApprovalPlan) validateDirectoryScopes() error {
 		}
 		bound := false
 		for _, delta := range option.Authority {
+			if delta.Grant != nil && delta.Grant.GrantedPath == nil {
+				return fmt.Errorf("option %q directory lease has no path authority", option.ID)
+			}
 			for _, access := range []*GrantedPathDelta{delta.GrantedPath, directoryLeasePath(delta.Grant)} {
 				if access != nil && (!access.Tree || access.Write || access.Path != option.DirectoryScope) {
 					return fmt.Errorf("option %q directory differs from its authority", option.ID)

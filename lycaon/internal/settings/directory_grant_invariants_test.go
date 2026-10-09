@@ -21,7 +21,7 @@ func TestDirectoryPlanRejectsLeaseAuthorityOutsideDisplayedScope(t *testing.T) {
 		Invocation: hitl.ActionInvocation{Tool: "read", Files: []string{file}},
 		Scope:      hitl.ActionScope{ProjectID: "project", ProjectDir: t.TempDir(), SessionID: "chat"},
 	}
-	for _, mutation := range []string{"broader lease", "write lease", "exact lease", "broader live grant"} {
+	for _, mutation := range []string{"broader lease", "write lease", "exact lease", "broader live grant", "missing lease path"} {
 		t.Run(mutation, func(t *testing.T) {
 			offers := settings.GrantedPathOffers(action, gate.FileTarget{Path: file, Mode: gate.ModeRead, OutsideRoots: true}, &gate.Decision{Primary: api.GateOutsideRootsRead}, nil)
 			options := []hitl.ApprovalOption{hitl.GrantOption(offers[0])}
@@ -40,6 +40,8 @@ func TestDirectoryPlanRejectsLeaseAuthorityOutsideDisplayedScope(t *testing.T) {
 				options[0].Authority[1].Grant.GrantedPath.Write = true
 			case "exact lease":
 				options[0].Authority[1].Grant.GrantedPath.Tree = false
+			case "missing lease path":
+				options[0].Authority[1].Grant.GrantedPath = nil
 			case "broader live grant":
 				options[0].Authority[0].GrantedPath.Path = filepath.Dir(folder)
 			}
