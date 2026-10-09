@@ -25697,6 +25697,7 @@ components:
         - blueprint_draft_required
         - workflow_not_found
         - workflow_not_runnable
+        - workflow_version_unavailable
         - workflow_run_not_found
         - report_not_found
         - managed_secret_revoked
@@ -27944,6 +27945,29 @@ components:
             Empty means "based on primary." Must be a non-terminal overlay
             (pending, applying, rebasing) on the same parent session, else
             spawn rejects with OVERLAY_BASE_MISSING or OVERLAY_BASE_NOT_PENDING.
+    WorkerCoverageGap:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - subject
+        - reason
+      properties:
+        id:
+          type: string
+          pattern: ^[A-Za-z0-9_.-]+$
+          description: Worker-local gap id; the host scopes it to the task.
+        subject:
+          type: string
+          minLength: 1
+        reason:
+          type: string
+          minLength: 1
+        paths:
+          type: array
+          items:
+            type: string
     CoverageAssessment:
       x-go-generate: true
       type: object
@@ -28039,6 +28063,10 @@ components:
       required:
         - leg_status
       properties:
+        coverage_gaps:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkerCoverageGap'
         coverage_review:
           x-go-pointer: true
           $ref: '#/components/schemas/CoverageReview'
@@ -40108,6 +40136,7 @@ components:
         - user_image_not_visible
         - workflow_active
         - workflow_not_runnable
+        - workflow_version_unavailable
         - worktree_stale
     SessionIdleDisposition:
       type: string

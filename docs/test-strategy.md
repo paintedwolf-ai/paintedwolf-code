@@ -693,6 +693,32 @@ request CI, and every ten minutes, because workflows cannot trigger on a merge
 group's removal or a job waiting for a runner. It is itself a short Linux job
 that waits for a runner like any other.
 
+## Released-version compatibility
+
+These suites hold the current host to what releases shipped:
+
+- **Sealed archive replay.** `lycaon/test/wiring/archived_workflow_replay_test.go`
+  replays the sealed security-survey 1.0.0 workflow against the current runtime:
+  its archived prompt bindings, real `submit_verdict` semantics under the sealed
+  verdict schemas, reviewer-roster enforcement, and host-driven phase advance.
+  Output drift fails unless the fixture's `changes.yaml` documents it as
+  `spec_fix` or `safety`.
+- **Frozen store resume.**
+  `lycaon/test/wiring/archived_run_state_resume_test.go` copies each frozen
+  release corpus database into a temp directory, upgrades the copy through the
+  registered route to the current baseline, and requires every preserved run
+  to resolve its pinned definition, live or sealed. Hand-mutating the schema is
+  never part of the contract, and a test that does it is wrong.
+- **Sealed archive integrity.** The `workflows` contract suite checks each
+  archive against its `SHA256SUMS`, loads sealed versions through the catalog,
+  and renders their guidance through the archive layer.
+
+Contract suites run in both gates; wiring suites run in the full gate. Upgrade
+corpus fixtures under `lycaon/testdata/upgrade-corpus/` are sealed at each
+release, and a release that changes a released schema ships a registered
+baseline and migration step in the same change
+([compatibility](compatibility.md)).
+
 ## Fixtures
 
 | Area | Location |

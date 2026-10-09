@@ -139,3 +139,84 @@ func (m *RunManager) recoverReportDelivery(ctx context.Context, run *api.Workflo
 	}
 	return false, nil
 }
+
+// MarkTopologyStageComplete records stage output for topology gates.
+func (m *RunManager) MarkTopologyStageComplete(ctx context.Context, runID, stage, output, designForkCriterion string) error {
+	if m == nil {
+		return fmt.Errorf("workflow manager not configured")
+	}
+	stage = strings.TrimSpace(stage)
+	if stage == "" {
+		return fmt.Errorf("empty topology stage")
+	}
+	if _, err := m.StampRunVars(ctx, runID, func(_ context.Context, _ *api.WorkflowRun, vars map[string]any) (map[string]any, bool, error) {
+		vars = markTopologyStage(vars, stage, output)
+		if c := strings.TrimSpace(designForkCriterion); c != "" {
+			vars = SetHostVar(vars, "options.criterion", c)
+			vars = SetHostVar(vars, "artifact.selection.criterion", c)
+		}
+		return vars, true, nil
+	}); err != nil {
+		return err
+	}
+	_, _ = m.TryAutoAdvance(ctx, runID)
+	_, _ = m.advanceTopologyBoundPhaseIfReady(ctx, runID, stage)
+	return nil
+}
+
+// advanceTopologyBoundPhaseIfReady advances a satisfied topology phase.
+func (m *RunManager) advanceTopologyBoundPhaseIfReady(ctx context.Context, runID, stage string) (*api.WorkflowRun, error) {
+	run, err := m.loadRun(ctx, runID)
+	if err != nil {
+		return nil, err
+	}
+	if IsTerminal(run.Status) || run.Status == api.WorkflowRunStatusPaused {
+		return run, nil
+	}
+	manifest, err := m.manifestForRun(ctx, run)
+	if err != nil {
+		return nil, err
+	}
+	def, ok := manifest.PhaseByID(run.CurrentPhase)
+	if !ok {
+		return run, nil
+	}
+	bound := strings.TrimSpace(def.BindTopologyStage) == stage
+	if !bound && len(def.BindParallelGroup) > 0 {
+		for _, name := range def.BindParallelGroup {
+			if strings.TrimSpace(name) == stage {
+				bound = true
+				break
+			}
+		}
+	}
+	if !bound {
+		return run, nil
+	}
+	vars, err := m.Store.GetScaffoldVars(ctx, runID)
+	if err != nil {
+		return nil, err
+	}
+	okGate, _, err := m.gateEvaluator().PhaseGateMet(ctx, manifest, run, vars)
+	if err != nil || !okGate {
+		return run, nil //nolint:nilerr // gate failure is not fatal for topology host advance hook
+	}
+	return m.Advance(ctx, runID)
+}
+
+func markTopologyStage(vars map[string]any, stage, output string) map[string]any {
+	vars = cloneVars(vars)
+	stages, _ := vars["topology_stages"].(map[string]any)
+	if stages == nil {
+		stages = map[string]any{}
+		vars["topology_stages"] = stages
+	}
+	entry := map[string]any{"complete": true}
+	output = strings.TrimSpace(output)
+	if output != "" {
+		entry["output"] = output
+		vars = SetHostVar(vars, "topology_outputs."+stage, output)
+	}
+	stages[stage] = entry
+	return vars
+}
