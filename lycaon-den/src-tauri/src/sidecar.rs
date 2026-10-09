@@ -8,6 +8,7 @@ use self::supervisor::{EngineState, ExitWatch};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use ed25519_dalek::{Signer, SigningKey};
 use rand::rngs::OsRng;
+use rand::TryRngCore;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
@@ -116,7 +117,7 @@ impl SidecarState {
             process: Mutex::new(None),
             port: Mutex::new(0),
             api_token: Mutex::new(String::new()),
-            presence_signing_key: SigningKey::generate(&mut OsRng),
+            presence_signing_key: generate_presence_signing_key(),
             presence_gate: Mutex::new(()),
             lifecycle: Mutex::new(()),
             starting: AtomicBool::new(false),
@@ -213,9 +214,17 @@ impl SidecarState {
     }
 }
 
+fn generate_presence_signing_key() -> SigningKey {
+    let mut secret = [0u8; 32];
+    OsRng
+        .try_fill_bytes(&mut secret)
+        .expect("operating system random source is unavailable");
+    SigningKey::from_bytes(&secret)
+}
+
 pub fn generate_api_token() -> String {
     let mut bytes = [0u8; 32];
-    rand::thread_rng().fill_bytes(&mut bytes);
+    rand::rng().fill_bytes(&mut bytes);
     URL_SAFE_NO_PAD.encode(bytes)
 }
 

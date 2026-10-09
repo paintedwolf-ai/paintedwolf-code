@@ -30,20 +30,20 @@ func TestToolContextForCallPreservesCompiledSurface(t *testing.T) {
 	}
 	got, err := loop.Batch.toolContextForCall(t.Context(), &api.Session{}, base, inject.Machine{})
 	testutil.FailErr(t, "toolContextForCall", err)
-	if got.EditorReadBases != base.EditorReadBases || got.TurnSurfaceID != base.TurnSurfaceID ||
-		!slices.Equal(got.TurnToolPlan.ImmediateNames(), base.TurnToolPlan.ImmediateNames()) ||
-		!slices.Equal(got.TurnToolPlan.DeferredNames(), base.TurnToolPlan.DeferredNames()) ||
-		!slices.Equal(got.TurnOfferedToolNames, base.TurnOfferedToolNames) ||
-		got.TurnWritePinRootID != base.TurnWritePinRootID ||
-		!slices.Equal(got.TurnWritePinGlobs, base.TurnWritePinGlobs) {
+	if got.Source.EditorReadBases != base.Source.EditorReadBases || got.Turn.TurnSurfaceID != base.Turn.TurnSurfaceID ||
+		!slices.Equal(got.Turn.TurnToolPlan.ImmediateNames(), base.Turn.TurnToolPlan.ImmediateNames()) ||
+		!slices.Equal(got.Turn.TurnToolPlan.DeferredNames(), base.Turn.TurnToolPlan.DeferredNames()) ||
+		!slices.Equal(got.Turn.TurnOfferedToolNames, base.Turn.TurnOfferedToolNames) ||
+		got.Turn.TurnWritePinRootID != base.Turn.TurnWritePinRootID ||
+		!slices.Equal(got.Turn.TurnWritePinGlobs, base.Turn.TurnWritePinGlobs) {
 		t.Fatalf("refreshed surface = %+v, want compile from %+v", got, base)
 	}
-	got.TurnWritePinGlobs[0] = "mutated"
-	got.TurnOfferedToolNames[0] = "mutated"
-	if !base.TurnToolPlan.Immediate("read") || !base.TurnToolPlan.Deferred("write") || base.TurnWritePinGlobs[0] != "src/**" {
+	got.Turn.TurnWritePinGlobs[0] = "mutated"
+	got.Turn.TurnOfferedToolNames[0] = "mutated"
+	if !base.Turn.TurnToolPlan.Immediate("read") || !base.Turn.TurnToolPlan.Deferred("write") || base.Turn.TurnWritePinGlobs[0] != "src/**" {
 		t.Fatal("refreshed turn slices alias the base context")
 	}
-	if base.TurnOfferedToolNames[0] != "read" {
+	if base.Turn.TurnOfferedToolNames[0] != "read" {
 		t.Fatal("refreshed offers alias the base context")
 	}
 }

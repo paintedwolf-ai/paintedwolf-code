@@ -80,8 +80,8 @@ pub fn prepared_path(target: &Path, candidate: &Candidate) -> Result<PathBuf, Up
 pub fn prepared_prefix(target: &Path) -> String {
     use sha2::{Digest, Sha256};
     format!(
-        ".paintedwolf-update-{:x}-uid-{}-",
-        Sha256::digest(target.as_os_str().as_encoded_bytes()),
+        ".paintedwolf-update-{}-uid-{}-",
+        hex::encode(Sha256::digest(target.as_os_str().as_encoded_bytes())),
         current_uid()
     )
 }

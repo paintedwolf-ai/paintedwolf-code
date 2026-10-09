@@ -18,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/rules"
 	"github.com/lycaon/lycaon/internal/session"
+	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
 	"github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -50,7 +51,7 @@ func wireManagerPromptPolicy(t *testing.T, mgr *session.Host, root string) {
 	testutil.FailErr(t, "LoadPostureRegistry", err)
 	packs, err := rules.LoadBundledRules()
 	testutil.FailErr(t, "LoadBundledRules", err)
-	if err := rules.ValidatePostureRules(postures, profiles.AllSessionPostures(), packs); err != nil {
+	if err := rules.ValidatePostureRules(postures, sessionposture.AllSessionPostures(), packs); err != nil {
 		testutil.FailErr(t, "ValidatePostureRules", err)
 	}
 	condReg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{})
