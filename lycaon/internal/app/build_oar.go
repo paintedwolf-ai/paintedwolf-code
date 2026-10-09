@@ -16,8 +16,8 @@ import (
 
 // wireOARBlockPlane loads OAR rules, enables catalog Anchors for active
 // families, and attaches the Emit/Binding block plane.
-func (b toolWiring) wireOARBlockPlane() error {
-	if b.execution.Host == nil || b.mgr == nil {
+func (b *serveBuilder) wireOARBlockPlane() error {
+	if b.execution.Host == nil || b.sessions == nil || b.sessions.Manager == nil {
 		return fmt.Errorf("oar: tool runtime and session manager required")
 	}
 	if b.catalog.DeviceView == nil || b.catalog.DeviceView.Rules == nil {
@@ -77,7 +77,7 @@ func (b toolWiring) wireOARBlockPlane() error {
 	pipeline.EnableAnchor(oar.AnchorContentOutput)
 	pipeline.EnableAnchor(oar.AnchorContentToolResult)
 
-	mgr := b.mgr
+	mgr := b.sessions.Manager
 	pipeline.SetRuleSetFor(func(ctx context.Context, sessionID string) *oar.RuleSet {
 		view := mgr.Catalog().ViewForSessionID(ctx, sessionID)
 		if view == nil {
@@ -96,7 +96,7 @@ func (b toolWiring) wireOARBlockPlane() error {
 	renderer := oar.NewRenderer(b.execution.Rejections, nudgeFormatter{f: b.execution.Rejections})
 	bp := &toolfeedback.BlockPlane{Pipeline: pipeline, Renderer: renderer}
 	b.execution.Host.Executor.Rejections.SetBlockPlane(bp)
-	b.mgr.SetOARPipeline(pipeline, renderer)
+	b.sessions.Manager.SetOARPipeline(pipeline, renderer)
 
 	pipeline.SetMCPBindingsFor(func(ctx context.Context, sessionID string) []bindings.Binding {
 		view := mgr.Catalog().ViewForSessionID(ctx, sessionID)

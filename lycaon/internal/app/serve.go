@@ -5,27 +5,23 @@ import (
 	"errors"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/api"
-	"github.com/lycaon/lycaon/internal/blueprint"
+	"github.com/lycaon/lycaon/internal/app/boards"
+	"github.com/lycaon/lycaon/internal/app/delegations"
+	"github.com/lycaon/lycaon/internal/app/sessions"
+	"github.com/lycaon/lycaon/internal/app/workflows"
 	"github.com/lycaon/lycaon/internal/clisocket"
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/coordinator"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/decide"
-	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/events"
-	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/hostlock"
 	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/projectliveness"
-	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/startupprotocol"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/visual"
-	"github.com/lycaon/lycaon/internal/worker"
-	"github.com/lycaon/lycaon/internal/workflow"
-	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
 	"io"
 	"log/slog"
 	"net"
@@ -38,23 +34,25 @@ import (
 	"time"
 )
 
+type runnerState struct {
+	runners   []backgroundRunner
+	cancel    context.CancelFunc
+	runnersWG sync.WaitGroup
+	profileWG sync.WaitGroup
+	active    bool
+}
+
 // ServeApp holds wired serve subsystems after Build.
 type ServeApp struct {
 	Server               *api.Server
-	SessionMgr           *session.Manager
-	SessionStore         session.Store
+	Sessions             *sessions.Runtime
+	Workflows            *workflows.Runtime
+	Delegations          *delegations.Runtime
+	Boards               *boards.Runtime
 	ProjectLiveness      *projectliveness.Tracker
 	CoordinatorRuntime   *coordinator.Runtime
-	WorkflowMgr          *workflow.RunManager
-	BlueprintMgr         *blueprint.Manager
-	DelegationMgr        *delegation.Manager
-	DelegationStore      orchestration.PipelineDelegationStore
 	AgentRegistry        *orchestration.MemoryAgentRegistry
-	WorkerQueue          worker.WorkerQueue
 	ToolRegistry         *tools.DefaultRegistry
-	SessionWorkflowStore workflowdrafts.Store
-	CheckpointMgr        hitl.CheckpointManager
-	VisualStore          visual.Store
 	DB                   db.ReadHandle
 	Events               events.ReplayHub
 	ConfigRoot           string
@@ -70,11 +68,7 @@ type ServeApp struct {
 	// decider is the local decision engine, closed at shutdown when it owns a process.
 	decider decide.Decider
 
-	runners       []backgroundRunner
-	runnersCancel context.CancelFunc
-	runnersWG     sync.WaitGroup
-	profileWG     sync.WaitGroup
-	runnersActive bool
+	runners runnerState
 
 	projects clisocket.Projects
 	eventPub *events.Publisher
@@ -123,7 +117,7 @@ func (a *ServeApp) Close() error {
 	}
 	// Store shutdown retains its reserved cleanup floor.
 	err := a.resources.Close(drainCtx)
-	a.profileWG.Wait()
+	a.runners.profileWG.Wait()
 	a.DB = nil
 	return err
 }
@@ -274,7 +268,9 @@ func (a *ServeApp) Run(ctx context.Context) error {
 	}
 
 	// Settle active turns before background cancellation.
-	a.SessionMgr.BeginEngineShutdown()
+	if a.Sessions != nil && a.Sessions.Manager != nil {
+		a.Sessions.Manager.BeginEngineShutdown()
+	}
 	if closer, ok := a.decider.(io.Closer); ok {
 		_ = closer.Close()
 	}

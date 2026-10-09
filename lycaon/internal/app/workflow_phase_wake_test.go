@@ -1,6 +1,9 @@
 package app
 
 import (
+	"github.com/lycaon/lycaon/internal/app/delegations"
+	"github.com/lycaon/lycaon/internal/app/sessions"
+	"github.com/lycaon/lycaon/internal/app/workflows"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/session"
@@ -10,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
@@ -43,10 +47,11 @@ func TestCrossPhaseHostAdvanceQueuesCoordinatorWake(t *testing.T) {
 
 	sessionMgr := session.NewManager(sessionStore, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
 	sessionMgr.SetLoopWorkflowSource(&loopwake.WorkflowDomains{Runs: wfMgr.Store.Runs, Approvals: wfMgr.Policy, Obligations: wfMgr.Obligations})
-	b := &serveBuilder{mgr: sessionMgr, workflowMgr: wfMgr}
+	delegationsRt := delegations.New(sqlDB, nil, worker.WorkersConfig{})
+	delegationsRt.SetDependencies(delegations.Dependencies{Workflows: &workflows.Runtime{Manager: wfMgr}, Sessions: &sessions.Runtime{Manager: sessionMgr}})
 	finishExecution := sessionMgr.BeginPromptExecutionForTest(t.Context(), sess.ID)
 	defer finishExecution()
-	delegationWiring{b}.onWorkflowPhaseAutoAdvanced(ctx, sess.ID, run.ID, "triage", "expand")
+	delegationsRt.OnWorkflowPhaseAutoAdvanced(ctx, sess.ID, run.ID, "triage", "expand")
 
 	got, ok := sessionMgr.PendingLoopNudgeForTest(sess.ID)
 	if !ok || got != anchor.PhaseAdvanced {
@@ -79,9 +84,10 @@ func TestTerminalCompletionSettlesWithoutAmbientWake(t *testing.T) {
 
 	sessionMgr := session.NewManager(sessionStore, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
 	sessionMgr.SetLoopWorkflowSource(&loopwake.WorkflowDomains{Runs: wfMgr.Store.Runs, Approvals: wfMgr.Policy, Obligations: wfMgr.Obligations})
-	b := &serveBuilder{mgr: sessionMgr, workflowMgr: wfMgr}
-	delegationWiring{b}.onWorkflowPhaseAutoAdvanced(ctx, sess.ID, run.ID, "select", "done")
-	delegationWiring{b}.onWorkflowRunCompleted(ctx, run)
+	delegationsRt := delegations.New(sqlDB, nil, worker.WorkersConfig{})
+	delegationsRt.SetDependencies(delegations.Dependencies{Workflows: &workflows.Runtime{Manager: wfMgr}, Sessions: &sessions.Runtime{Manager: sessionMgr}})
+	delegationsRt.OnWorkflowPhaseAutoAdvanced(ctx, sess.ID, run.ID, "select", "done")
+	delegationsRt.OnWorkflowRunCompleted(ctx, run)
 	settled, err := sessionStore.Get(ctx, sess.ID)
 	testutil.FailErr(t, "read completed session", err)
 	if settled.Status != api.SessionStatusIdle {
@@ -125,10 +131,11 @@ func TestHumanApprovalAdvanceQueuesWakeForRunningChild(t *testing.T) {
 
 	sessionMgr := session.NewManager(sessionStore, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
 	sessionMgr.SetLoopWorkflowSource(&loopwake.WorkflowDomains{Runs: wfMgr.Store.Runs, Approvals: wfMgr.Policy, Obligations: wfMgr.Obligations})
+	delegationsChildRt := delegations.New(sqlDB, nil, worker.WorkersConfig{})
+	delegationsChildRt.SetDependencies(delegations.Dependencies{Workflows: &workflows.Runtime{Manager: wfMgr}, Sessions: &sessions.Runtime{Manager: sessionMgr}})
 	finishExecution := sessionMgr.BeginPromptExecutionForTest(t.Context(), sess.ID)
 	defer finishExecution()
-	b := &serveBuilder{mgr: sessionMgr, workflowMgr: wfMgr}
-	delegationWiring{b}.onWorkflowHumanApprovalAdvanced(ctx, parent)
+	delegationsChildRt.OnWorkflowHumanApprovalAdvanced(ctx, parent)
 
 	got, ok := sessionMgr.PendingLoopNudgeForTest(sess.ID)
 	if !ok || got != anchor.PhaseAdvanced {

@@ -1,4 +1,4 @@
-package app
+package sessions
 
 import (
 	"context"
@@ -7,19 +7,35 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretharvest"
 	"github.com/lycaon/lycaon/internal/secretmatch"
+	"github.com/lycaon/lycaon/internal/secretmint"
+	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// credentialFiles records credential-file exposure and harvests bytes that are
-// neither managed nor model-authored.
 type credentialFiles struct {
 	harvest  *secretharvest.Runtime
 	fp       *secretmatch.Fingerprinter
 	queries  *db.Queries
 	managed  func(projectID string) []secretmatch.Remembered
 	exposure func(ctx context.Context, sessionID, path string) error
+}
+
+func newCredentialFiles(harvest *secretharvest.Runtime, fp *secretmatch.Fingerprinter, database *db.Store, capabilities *secretcap.Service, sessions *store.SQL) *credentialFiles {
+	return &credentialFiles{
+		harvest: harvest, fp: fp, queries: db.New(database),
+		managed: func(projectID string) []secretmatch.Remembered {
+			if capabilities == nil {
+				return nil
+			}
+			return capabilities.DurableScreeningValues(projectID)
+		},
+		exposure: sessions.MarkSecretExposureOnRead,
+	}
 }
 
 func (c *credentialFiles) Delivered(ctx context.Context, read tools.CredentialFileRead) error {
@@ -38,7 +54,6 @@ func (c *credentialFiles) Delivered(ctx context.Context, read tools.CredentialFi
 			ProjectID: read.ProjectID, RootID: read.RootID, Path: read.Path,
 		})
 		if err != nil {
-			// Without authorship every binding is harvested, which asks.
 			slog.WarnContext(ctx, "credential authorship unavailable",
 				"component", "secret_harvest", "error", err)
 		}
@@ -54,8 +69,6 @@ func (c *credentialFiles) Delivered(ctx context.Context, read tools.CredentialFi
 	return nil
 }
 
-// Authored skips values already held as evidence: the model copied those
-// rather than produced them.
 func (c *credentialFiles) Authored(ctx context.Context, written tools.AuthoredCredentialValues) error {
 	if c == nil || c.fp == nil || c.queries == nil {
 		return nil
@@ -87,4 +100,25 @@ func (c *credentialFiles) managedFingerprints(projectID string) map[secretmatch.
 		held[c.fp.Fingerprint(value.Secret)] = true
 	}
 	return held
+}
+
+func wireCredentialObservations(mgr *session.Manager, fp *secretmatch.Fingerprinter, matcher *secretmatch.Matcher, harvest *secretharvest.Runtime) {
+	if mgr == nil {
+		return
+	}
+	mgr.SetCredentialSlotProvider(func(ctx context.Context, sess *api.Session) *secretmint.Inspector {
+		if view := mgr.Catalog().ViewForSession(ctx, sess); view != nil {
+			return view.CredentialSlots
+		}
+		return nil
+	})
+	mgr.SetSecretFingerprinter(fp)
+	mgr.SetIgnoredCredentialCandidate(func(ctx context.Context, projectID, value string) bool {
+		return matcher.Ignored(secretmatch.WithAskAttribution(ctx, secretmatch.AskAttribution{ProjectID: projectID}), value)
+	})
+	if harvest != nil {
+		mgr.SetHarvestedFingerprint(func(root string, f secretmatch.SecretFingerprint) bool {
+			return harvest.Has(root, f)
+		})
+	}
 }

@@ -6,7 +6,7 @@ import (
 	workflowinputs "github.com/lycaon/lycaon/internal/workflow/inputs"
 )
 
-func (b sessionWiring) wireSecretCapabilities() error {
+func (b *serveBuilder) wireSecretCapabilities() error {
 	if b.security.Capabilities != nil {
 		return nil
 	}
@@ -14,8 +14,8 @@ func (b sessionWiring) wireSecretCapabilities() error {
 		return err
 	}
 	service := b.security.Capabilities
-	if b.workflowMgr != nil {
-		b.workflowMgr.Asks.SetSecretCapture(func(ctx context.Context, req workflowinputs.SecretCaptureRequest) (workflowinputs.SecretCaptureResult, error) {
+	if b.workflows != nil && b.workflows.Manager != nil {
+		b.workflows.Manager.Asks.SetSecretCapture(func(ctx context.Context, req workflowinputs.SecretCaptureRequest) (workflowinputs.SecretCaptureResult, error) {
 			put, err := service.Put(ctx, secretcap.PutRequest{
 				ProjectID: req.ProjectID, ChatSessionID: req.RootSessionID, SessionID: req.SessionID,
 				OperationID: req.OperationID, Name: req.Name, Purpose: req.Purpose, Scope: req.Scope,

@@ -70,7 +70,7 @@ func TestBuildRecoveryModeOnIntegrityFailure(t *testing.T) {
 	testutil.FailErr(t, "Build recovery", err)
 	t.Cleanup(func() { _ = app.Close() })
 
-	if app.SessionMgr != nil || app.CoordinatorRuntime != nil {
+	if app.Sessions != nil || app.CoordinatorRuntime != nil {
 		t.Fatal("recovery ServeApp must not wire session or coordinator")
 	}
 
@@ -103,7 +103,7 @@ func TestBuildEmptyStoreWithoutRecoveryArtifactsBootsNormally(t *testing.T) {
 	app, err := Build(t.Context(), cfg)
 	testutil.FailErr(t, "Build fresh store", err)
 	t.Cleanup(func() { _ = app.Close() })
-	if app.SessionMgr == nil || app.CoordinatorRuntime == nil {
+	if app.Sessions == nil || app.CoordinatorRuntime == nil {
 		t.Fatal("fresh store must build the normal app")
 	}
 	body := getHealth(t, app.Server)
@@ -310,7 +310,7 @@ func TestRecoveryRestoreRoundTrip(t *testing.T) {
 	app2, err := Build(t.Context(), cfg)
 	testutil.FailErr(t, "Build after restore", err)
 	t.Cleanup(func() { _ = app2.Close() })
-	if app2.SessionMgr == nil {
+	if app2.Sessions == nil {
 		t.Fatal("expected normal ServeApp after restore apply")
 	}
 	body := getHealth(t, app2.Server)

@@ -16,31 +16,9 @@ import (
 	sessioncheckpoint "github.com/lycaon/lycaon/internal/session/checkpoint"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/sourceledger"
-	"github.com/lycaon/lycaon/internal/worker"
-	"github.com/lycaon/lycaon/internal/workspace"
-	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-// branchRetentionDeps binds the sweep to this engine's branch root and queue.
-func (b delegationWiring) branchRetentionDeps() branchretention.Deps {
-	return branchretention.Deps{
-		BranchRoot: b.workerBranchRoot,
-		Jobs: func(ctx context.Context) (map[string]branchretention.JobState, error) {
-			jobs, err := b.workerQueue.ListBranchJobs(ctx)
-			if err != nil {
-				return nil, err
-			}
-			out := make(map[string]branchretention.JobState, len(jobs))
-			for _, job := range jobs {
-				out[job.ID] = branchretention.JobState{Sealed: job.Sealed}
-			}
-			return out, nil
-		},
-		Evict: workspace.EvictJobTree,
-	}
-}
-
-func (b delegationWiring) registerBackgroundRunners(app *ServeApp) {
+func registerBackgroundRunners(b *serveBuilder, app *ServeApp) {
 	type registration struct {
 		run     func(context.Context) error
 		oneShot bool
@@ -49,7 +27,7 @@ func (b delegationWiring) registerBackgroundRunners(app *ServeApp) {
 	byName["boot-recovery"] = registration{run: b.runServeRecovery, oneShot: true}
 	if b.storage.Projects != nil && b.storage.Directory != "" {
 		byName["store-coupled-reconcile"] = registration{run: func(ctx context.Context) error {
-			if err := b.reconcileStoreCoupledStorage(ctx); err != nil {
+			if err := reconcileStoreCoupledStorage(b, ctx); err != nil {
 				return err
 			}
 			ticker := time.NewTicker(24 * time.Hour)
@@ -59,7 +37,7 @@ func (b delegationWiring) registerBackgroundRunners(app *ServeApp) {
 				case <-ctx.Done():
 					return ctx.Err()
 				case <-ticker.C:
-					if err := b.reconcileStoreCoupledStorage(ctx); err != nil {
+					if err := reconcileStoreCoupledStorage(b, ctx); err != nil {
 						return err
 					}
 				}
@@ -87,17 +65,17 @@ func (b delegationWiring) registerBackgroundRunners(app *ServeApp) {
 	if b.security.Unlocks != nil {
 		byName["vault-unlock-sweep"] = registration{run: b.security.Unlocks.RunSweeper}
 	}
-	if b.workerPoller != nil {
-		byName["worker-poller"] = registration{run: b.workerPoller.Run}
+	if b.worker.poller != nil {
+		byName["worker-poller"] = registration{run: b.worker.poller.Run}
 	}
-	if b.scanRunner != nil {
-		byName["scan-runner"] = registration{run: b.scanRunner.Run}
+	if b.scanning != nil && b.scanning.Runner != nil {
+		byName["scan-runner"] = registration{run: b.scanning.Runner.Run}
 	}
-	if b.scanCadence != nil {
-		byName["scan-cadence"] = registration{run: b.scanCadence.Run}
+	if b.scanning != nil && b.scanning.Cadence != nil {
+		byName["scan-cadence"] = registration{run: b.scanning.Cadence.Run}
 	}
-	if b.warmRunner != nil {
-		byName["warm-runner"] = registration{run: b.warmRunner.Run}
+	if b.boards != nil && b.boards.WarmRunner != nil {
+		byName["warm-runner"] = registration{run: b.boards.WarmRunner.Run}
 	}
 	if _, ok := b.decisions.Warmer(); ok {
 		byName["decision-engine-warm"] = registration{run: b.decisions.Warm, oneShot: true}
@@ -111,8 +89,8 @@ func (b delegationWiring) registerBackgroundRunners(app *ServeApp) {
 		byName["content-blob-gc"] = registration{run: func(ctx context.Context) error {
 			return contentblob.RunGC(ctx, contentblob.GCDeps{Database: b.storage.Database, Queries: db.New(b.storage.Database), DataDir: b.storage.Directory, Guard: b.storage.Claim})
 		}}
-		byName["history-retention"] = registration{run: b.historyStorage.Run}
-		byName["prompt-attachment-maintenance"] = registration{run: b.srv.Admin.Prompt.Attachments.RunPromptAttachmentMaintenance}
+		byName["history-retention"] = registration{run: b.server.HistoryStorage.Run}
+		byName["prompt-attachment-maintenance"] = registration{run: b.server.Server.Admin.Prompt.Attachments.RunPromptAttachmentMaintenance}
 		byName["content-density"] = registration{run: func(ctx context.Context) error {
 			deps := contentblob.DensityDeps{Queries: db.New(b.storage.Database), DataDir: b.storage.Directory}
 			return contentblob.RunDensity(ctx, deps, contentblob.DefaultDensityConfig())
@@ -123,9 +101,9 @@ func (b delegationWiring) registerBackgroundRunners(app *ServeApp) {
 			return debugretention.Run(ctx, b.storage.Directory, debugretention.DefaultConfig())
 		}}
 	}
-	if b.workerQueue != nil && b.workerBranchRoot != "" {
+	if b.delegations != nil && b.delegations.Queue != nil && b.delegations.BranchRoot != "" {
 		byName["worker-branch-retention"] = registration{run: func(ctx context.Context) error {
-			return branchretention.Run(ctx, b.branchRetentionDeps(), branchretention.DefaultConfig())
+			return branchretention.Run(ctx, b.delegations.BranchRetentionDeps(), branchretention.DefaultConfig())
 		}}
 	}
 	for _, name := range serveRunnerOrder {
@@ -144,7 +122,7 @@ func (b delegationWiring) registerBackgroundRunners(app *ServeApp) {
 // reconcileStoreCoupledStorage removes host storage the registry no longer
 // names. It refuses once the store path is replaced: the registry then describes
 // another store and every tree would look orphaned.
-func (b delegationWiring) reconcileStoreCoupledStorage(ctx context.Context) error {
+func reconcileStoreCoupledStorage(b *serveBuilder, ctx context.Context) error {
 	if b.storage.Claim != nil {
 		if err := b.storage.Claim.Verify(); err != nil {
 			return err
@@ -165,8 +143,12 @@ func (b delegationWiring) reconcileStoreCoupledStorage(ctx context.Context) erro
 	removedHost, hostErr := project.ReconcileHostStorage(b.storage.Directory, ids)
 	removedCheckpoints, checkpointErr := sessioncheckpoint.ReconcileRoots(b.storage.Directory, roots)
 	removedCatalogs, catalogErr := sourcecatalog.Process().Trees.ReconcileTreeStores(ctx, sourcecatalog.TreeStoreRetention)
-	removedSandboxes, sandboxErr := b.reconcileWorkerSandboxes(ctx, roots)
-	removedSpills, spillErr := scan.ReconcileSpills(ctx, b.storage.Directory, b.scanStore)
+	var removedSandboxes int
+	var sandboxErr error
+	if b.delegations != nil {
+		removedSandboxes, sandboxErr = b.delegations.ReconcileWorkerSandboxes(ctx, roots)
+	}
+	removedSpills, spillErr := scan.ReconcileSpills(ctx, b.storage.Directory, b.scanning.Store)
 	if removedHost+removedCheckpoints+removedCatalogs+removedSandboxes+removedSpills > 0 {
 		slog.InfoContext(ctx, "reconciled orphan store-coupled storage",
 			"host_trees", removedHost, "checkpoint_roots", removedCheckpoints,
@@ -176,59 +158,22 @@ func (b delegationWiring) reconcileStoreCoupledStorage(ctx context.Context) erro
 	return errors.Join(hostErr, checkpointErr, catalogErr, sandboxErr, spillErr)
 }
 
-// reconcileWorkerSandboxes preserves durable job references even when their
-// captured project root is no longer attached.
-func (b delegationWiring) reconcileWorkerSandboxes(ctx context.Context, roots []string) (int, error) {
-	if b.workerBranchRoot == "" {
-		return 0, nil
-	}
-	if b.workerQueue == nil {
-		return 0, nil
-	}
-	loadRetainedJobs := func(ctx context.Context) (map[string]struct{}, error) {
-		jobs, err := b.workerQueue.ListBranchJobs(ctx)
-		if err != nil {
-			return nil, err
-		}
-		retained := make(map[string]struct{}, len(jobs))
-		for _, job := range jobs {
-			retained[job.ID] = struct{}{}
-		}
-		return retained, nil
-	}
-	removed, err := workspace.ReconcileSandboxRoots(ctx, b.workerBranchRoot, b.workerSeedRoot, roots, loadRetainedJobs)
-	var errs []error
-	if err != nil {
-		errs = append(errs, err)
-	}
-	for _, root := range roots {
-		removedJobs, jobErr := worker.ReconcileProjectSandboxes(ctx, b.workerBranchRoot, root, func(ctx context.Context) ([]wire.WorkerTask, error) {
-			return b.workerQueue.ListByWorkspacePath(ctx, root)
-		})
-		removed += removedJobs
-		if jobErr != nil {
-			errs = append(errs, jobErr)
-		}
-	}
-	return removed, errors.Join(errs...)
-}
-
-func (b delegationWiring) registerRecovery(e bootrecovery.Entry) error {
+func (b *serveBuilder) registerRecovery(e bootrecovery.Entry) error {
 	if b.startup.recovery == nil {
 		b.startup.recovery = bootrecovery.New()
 	}
 	return b.startup.recovery.Register(e)
 }
 
-func (b delegationWiring) runBuildRecovery() error {
+func (b *serveBuilder) runBuildRecovery() error {
 	return b.reportRecovery(b.startup.recovery.Run(b.startup.ctx, bootrecovery.PhaseBuild))
 }
 
-func (b delegationWiring) runServeRecovery(ctx context.Context) error {
+func (b *serveBuilder) runServeRecovery(ctx context.Context) error {
 	return b.reportRecovery(b.startup.recovery.Run(ctx, bootrecovery.PhaseServe))
 }
 
-func (b delegationWiring) reportRecovery(report bootrecovery.Report, err error) error {
+func (b *serveBuilder) reportRecovery(report bootrecovery.Report, err error) error {
 	if err != nil {
 		return err
 	}

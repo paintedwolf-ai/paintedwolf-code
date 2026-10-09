@@ -32,25 +32,25 @@ func (b *serveBuilder) wireToolRuntime() error {
 
 func (b *serveBuilder) wireEvents() error {
 	b.settings.BuildHostPower(b.startup.resources)
-	eventRuntime, err := eventing.Build(b.startup.ctx, b.storage.Database, b.storage.Sessions, b.storage.Projects, b.settings.Power, b.mgr, b.mgr, b.mgr, b.startup.resources)
+	eventRuntime, err := eventing.Build(b.startup.ctx, b.storage.Database, b.storage.Sessions, b.storage.Projects, b.settings.Power, b.sessions.Manager, b.sessions.Manager, b.sessions.Manager, b.startup.resources)
 	if err != nil {
 		return err
 	}
 	b.events = eventRuntime
-	b.mgr.OARPipeline().SetEventPublisher(oarHostEventPublisher{publisher: eventRuntime.Publisher})
-	b.mgr.SetAgentPresence(eventRuntime.Agents)
+	b.sessions.Manager.OARPipeline().SetEventPublisher(oarHostEventPublisher{publisher: eventRuntime.Publisher})
+	b.sessions.Manager.SetAgentPresence(eventRuntime.Agents)
 	publisher, vaultContext := eventRuntime.Publisher, b.startup.ctx
 	b.security.BindVaultPublisher(func(chat string, unlocks *presence.Unlocks) {
 		publisher.PublishChatVault(vaultContext, capabilityadmin.ChatVaultState(chat, unlocks))
 	})
-	if err := (delegationWiring{b}).registerRecovery(bootrecovery.Entry{
+	if err := b.registerRecovery(bootrecovery.Entry{
 		Name: "rewind-operations", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseBuild,
 		After: []string{"tool-invocations", "source-mutations", "editor-documents"},
-		Run:   b.mgr.RecoverRewinds,
+		Run:   b.sessions.Manager.RecoverRewinds,
 	}); err != nil {
 		return err
 	}
-	if err := (sessionWiring{b}).wireCheckpointRuntime(); err != nil {
+	if err := b.wireCheckpointRuntime(); err != nil {
 		return err
 	}
 
@@ -66,7 +66,7 @@ func (b *serveBuilder) wireEvents() error {
 		logFields = append(logFields, "file", path)
 	}
 	b.startup.logger.Info("logging configured", logFields...)
-	b.workersCfg, err = worker.LoadWorkersConfig()
+	b.worker.cfg, err = worker.LoadWorkersConfig()
 	if err != nil {
 		return fmt.Errorf("workers config: %w", err)
 	}

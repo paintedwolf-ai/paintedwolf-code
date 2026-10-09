@@ -4,9 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/api"
+	"github.com/lycaon/lycaon/internal/app/boards"
 	"github.com/lycaon/lycaon/internal/app/configuration"
 	"github.com/lycaon/lycaon/internal/app/decisions"
+	"github.com/lycaon/lycaon/internal/app/delegations"
 	"github.com/lycaon/lycaon/internal/app/deviceidentity"
 	"github.com/lycaon/lycaon/internal/app/eventing"
 	"github.com/lycaon/lycaon/internal/app/execution"
@@ -14,152 +15,55 @@ import (
 	"github.com/lycaon/lycaon/internal/app/persistence"
 	"github.com/lycaon/lycaon/internal/app/processes"
 	"github.com/lycaon/lycaon/internal/app/providers"
+	"github.com/lycaon/lycaon/internal/app/scanning"
 	"github.com/lycaon/lycaon/internal/app/security"
-	"github.com/lycaon/lycaon/internal/blueprint"
-	"github.com/lycaon/lycaon/internal/board"
+	"github.com/lycaon/lycaon/internal/app/server"
+	"github.com/lycaon/lycaon/internal/app/sessions"
+	"github.com/lycaon/lycaon/internal/app/workflows"
 	"github.com/lycaon/lycaon/internal/bootrecovery"
-	"github.com/lycaon/lycaon/internal/browser"
-	"github.com/lycaon/lycaon/internal/call"
-	"github.com/lycaon/lycaon/internal/conditions"
-	"github.com/lycaon/lycaon/internal/coordinator"
 	"github.com/lycaon/lycaon/internal/db"
-	"github.com/lycaon/lycaon/internal/delegation"
-	"github.com/lycaon/lycaon/internal/findings"
 	"github.com/lycaon/lycaon/internal/git"
-	"github.com/lycaon/lycaon/internal/grantedpath"
 	"github.com/lycaon/lycaon/internal/harnessfixture"
-	"github.com/lycaon/lycaon/internal/historyretention"
-	"github.com/lycaon/lycaon/internal/hitl"
-	"github.com/lycaon/lycaon/internal/inspector"
-	"github.com/lycaon/lycaon/internal/invocation"
-	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/observability"
-	"github.com/lycaon/lycaon/internal/orchestration"
-	"github.com/lycaon/lycaon/internal/progress"
-	"github.com/lycaon/lycaon/internal/projectliveness"
-	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/internal/repoinfo"
-	"github.com/lycaon/lycaon/internal/rules"
-	"github.com/lycaon/lycaon/internal/scan"
-	scancadence "github.com/lycaon/lycaon/internal/scan/cadence"
-	scancfg "github.com/lycaon/lycaon/internal/scan/configuration"
-	scanexecution "github.com/lycaon/lycaon/internal/scan/execution"
-	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/session/approvalstate"
-	"github.com/lycaon/lycaon/internal/sourcescope"
-	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/startupprotocol"
-	"github.com/lycaon/lycaon/internal/toolhost"
-	"github.com/lycaon/lycaon/internal/usernotice"
-	"github.com/lycaon/lycaon/internal/visual"
-	"github.com/lycaon/lycaon/internal/webresearch"
 	"github.com/lycaon/lycaon/internal/worker"
-	"github.com/lycaon/lycaon/internal/workflow"
-	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
-	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
-	"github.com/lycaon/lycaon/internal/workflow/runstate"
-	"github.com/lycaon/lycaon/internal/workspace"
 )
 
+type gitRuntime struct {
+	mgr      *git.Manager
+	status   *git.StatusCache
+	repoSets *git.RepoSetCache
+}
+
+type workerCoordination struct {
+	cfg            worker.WorkersConfig
+	merge          *worker.MergeService
+	poller         *worker.LocalWorkerPoller
+	harnessWorkers *harnessfixture.Workers
+}
+
 type serveBuilder struct {
-	execution           execution.Runtime
-	identity            deviceidentity.Credentials
-	interactions        interactions.Runtime
-	providers           providers.Runtime
-	catalog             configuration.Catalog
-	settings            configuration.Runtime
-	startup             startupBootstrap
-	storage             persistence.Runtime
-	decisions           decisions.Runtime
-	agents              configuration.Agents
-	workerBranchRoot    string
-	workerSeedRoot      string
-	bundledRules        map[string]*rules.RulesConfig
-	workerToolBudgetFor func(string) spawn.WorkerToolBudget
-
-	sourceScopes  *sourcescope.Provider
-	browserPool   *browser.Pool
-	browserRaster *browser.Rasterizer
-
-	webWarmer        *webresearch.Warmer
-	warmRunner       *webresearch.WarmRunner
-	invocations      invocation.Recorder
-	security         *security.Runtime
-	events           *eventing.Runtime
-	processes        *processes.Runtime
-	promptEngine     *prompts.FileTemplateEngine
-	mgr              *session.Manager
-	projectLiveness  *projectliveness.Tracker
-	checkpointMgr    hitl.CheckpointManager
-	workersCfg       worker.WorkersConfig
-	delegationStore  *delegation.SQLStore
-	blueprintMgr     *blueprint.Manager
-	manifestRegistry *workflowdef.Registry
-	// manifestResolver is the one workflow catalog seam: discovery and start
-	// read the same source.
-	manifestResolver     workflowcatalog.Resolver
-	sessionWorkflowStore *workflowdrafts.SQL
-	workflowStore        *runstate.Repository
-	workflowMgr          *workflow.RunManager
-	evidenceStore        inspector.EvidenceStore
-	simpleInspector      *inspector.SimpleInspector
-	gitMgr               *git.Manager
-	gitStatusCache       *git.StatusCache
-	gitRepoSetCache      *git.RepoSetCache
-	gatesCfg             scancfg.GatesConfig
-	scanStore            *scan.SQLStore
-	scanCoordinator      *scan.CoordinatorImpl
-	scanCadence          *scancadence.Service
-	securityCloseout     *scan.SecurityCloseoutChecker
-	workerQueue          *worker.SQLQueue
-	condReg              *conditions.ConditionRegistry
-	workflowComposer     *workflowcomposition.Composer
-	workflowPersister    *workflowcomposition.Persister
-	ruleEngine           *rules.PostureRuleEngine
-	projectRulesOverlay  *rules.ProjectRulesOverlay
-	criteriaChecker      delegation.CriteriaChecker
-	injectRenderer       *prompts.InjectRenderer
-	workerExec           *worker.LocalWorkerExecutor
-	wsMgr                *workspace.Manager
-	workerCancelSvc      *worker.CancelService
-	workerMergeSvc       *worker.MergeService
-	answerDecisionSvc    *worker.AnswerDecisionService
-	workerBudgetLedger   *worker.SQLBudgetLedger
-	delegationMgr        *delegation.Manager
-	playbookMatcher      *prompts.PlaybookMatcher
-	scannerReg           scan.CodeScannerRegistry
-	scanRunner           *scanexecution.Runner
-	scanTriggers         *scan.TriggerService
-	scanObligation       *scan.WorkflowObligation
-	scanGuidance         *scan.SessionGuidanceAdapter
-	repoProvider         repoinfo.Provider
-	boardSnap            *board.SnapshotBuilder
-	webResearchCreds     *webresearch.CredentialStore
-	webResearchRuntime   webresearch.Runtime
-	coordRuntime         *coordinator.Runtime
-	groundingSvc         *toolhost.GroundingService
-	findingsStore        *findings.SQLStore
-	progressStore        *progress.SQLStore
-	visualStore          visual.Store
-	historyStorage       *historyretention.Service
-	decisionStore        session.DecisionStore
-	callMgr              *call.SQLManager
-	parentWorkerWaiter   *worker.ParentWorkerWaiter
-	userNoticeCatalog    *usernotice.Catalog
-	srv                  *api.Server
-	mcpReg               *mcp.Runtime
-	orch                 orchestration.Orchestrator
-	workerPoller         *worker.LocalWorkerPoller
-	gateRepeatRT         *approvalstate.GateRepeatLedger
-	webDiscoverer        webresearch.DirectDiscovererFactory
-	harnessWorkers       *harnessfixture.Workers
-	sandboxWriteRootRT   *approvalstate.SandboxPathGrantRuntime
-	sandboxReadPathRT    *approvalstate.SandboxPathGrantRuntime
-	sandboxListenRT      *approvalstate.SandboxPortGrantRuntime
-	sandboxLoopbackRT    *approvalstate.SandboxPortGrantRuntime
-	grantedPathRT        *grantedpath.Runtime
+	execution    execution.Runtime
+	identity     deviceidentity.Credentials
+	interactions interactions.Runtime
+	providers    providers.Runtime
+	catalog      configuration.Catalog
+	settings     configuration.Runtime
+	startup      startupBootstrap
+	storage      persistence.Runtime
+	decisions    decisions.Runtime
+	agents       configuration.Agents
+	workflows    *workflows.Runtime
+	scanning     *scanning.Runtime
+	sessions     *sessions.Runtime
+	delegations  *delegations.Runtime
+	boards       *boards.Runtime
+	security     *security.Runtime
+	events       *eventing.Runtime
+	processes    *processes.Runtime
+	git          gitRuntime
+	worker       workerCoordination
+	server       server.Runtime
 }
 
 // Build wires all serve subsystems and validates boot configuration.
@@ -202,26 +106,26 @@ func Build(ctx context.Context, cfg configuration.Config) (*ServeApp, error) {
 		{"tool-runtime", startupprotocol.PhaseTools, b.wireToolRuntime},
 		{"presence", startupprotocol.PhaseTools, func() error { return b.security.BuildPresence(b.execution.Host.Executor.Secrets) }},
 		{"agents", startupprotocol.PhaseAgents, func() error { return b.agents.Load(ctx) }},
-		{"session-manager", startupprotocol.PhaseSessions, sessionWiring{b}.wireSessionManager},
-		{"oar-block-plane", startupprotocol.PhasePolicy, toolWiring{b}.wireOARBlockPlane},
+		{"session-manager", startupprotocol.PhaseSessions, b.wireSessionManager},
+		{"oar-block-plane", startupprotocol.PhasePolicy, b.wireOARBlockPlane},
 		{"events", startupprotocol.PhaseEvents, b.wireEvents},
-		{"authz-capturer", startupprotocol.PhasePolicy, sessionWiring{b}.assertAuthzCapturer},
-		{"workflows", startupprotocol.PhaseWorkflows, boardWiring{b}.wireWorkflows},
-		{"delegation-workers", startupprotocol.PhaseWorkers, delegationWiring{b}.wireDelegationWorkers},
-		{"scan", startupprotocol.PhaseScan, toolWiring{b}.wireScan},
-		{"board-research", startupprotocol.PhaseResearch, boardWiring{b}.wireBoardAndResearch},
-		{"grounding-findings", startupprotocol.PhaseGrounding, boardWiring{b}.wireGroundingAndFindings},
-		{"coordinator-runtime", startupprotocol.PhaseCoordinator, toolWiring{b}.wireCoordinatorRuntime},
-		{"coordinator-tools", startupprotocol.PhaseCoordinator, toolWiring{b}.registerCoordinatorTools},
-		{"orchestrator", startupprotocol.PhaseCoordinator, serverWiring{b}.wireOrchestrator},
-		{"runtime-services", startupprotocol.PhaseServer, serverWiring{b}.wireRuntimeServices},
-		{"mcp", startupprotocol.PhaseServer, toolWiring{b}.wireMCP},
+		{"authz-capturer", startupprotocol.PhasePolicy, b.assertAuthzCapturer},
+		{"workflows", startupprotocol.PhaseWorkflows, b.wireWorkflows},
+		{"delegation-workers", startupprotocol.PhaseWorkers, b.wireDelegationWorkers},
+		{"scan", startupprotocol.PhaseScan, b.wireScan},
+		{"board-research", startupprotocol.PhaseResearch, b.wireBoardAndResearch},
+		{"grounding-findings", startupprotocol.PhaseGrounding, b.wireGroundingAndFindings},
+		{"coordinator-runtime", startupprotocol.PhaseCoordinator, b.wireCoordinatorRuntime},
+		{"coordinator-tools", startupprotocol.PhaseCoordinator, b.registerCoordinatorTools},
+		{"orchestrator", startupprotocol.PhaseCoordinator, b.wireOrchestrator},
+		{"runtime-services", startupprotocol.PhaseServer, b.wireRuntimeServices},
+		{"mcp", startupprotocol.PhaseServer, b.wireMCP},
 		// The API is built once, after every service it serves exists.
-		{"server", startupprotocol.PhaseServices, serverWiring{b}.wireServer},
+		{"server", startupprotocol.PhaseServices, b.wireServer},
 		// The deferred gate stays closed until every producer is wired.
-		{"seal-approvals", startupprotocol.PhasePolicy, serverWiring{b}.sealApprovalGate},
+		{"seal-approvals", startupprotocol.PhasePolicy, b.sealApprovalGate},
 		// Run recovery after subsystem owners are constructed.
-		{"boot-recovery", startupprotocol.PhaseRecovery, delegationWiring{b}.runBuildRecovery},
+		{"boot-recovery", startupprotocol.PhaseRecovery, b.runBuildRecovery},
 	} {
 		if err := ctx.Err(); err != nil {
 			// Shutdown arrived mid-startup; stop before starting more children.
@@ -258,5 +162,5 @@ func Build(ctx context.Context, cfg configuration.Config) (*ServeApp, error) {
 		}
 	}
 	buildOutcome = "ok"
-	return serverWiring{b}.serveApp(), nil
+	return b.serveApp(), nil
 }

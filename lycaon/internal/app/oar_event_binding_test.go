@@ -20,13 +20,13 @@ func TestBuildPublishesDeclaredOAREventThroughAcquiredStream(t *testing.T) {
 	testutil.FailErr(t, "build host event graph", err)
 	t.Cleanup(func() { _ = app.Close() })
 	testdbseed.InsertProjectRoot(t, app.DB, testdbseed.DefaultProjectID, t.TempDir())
-	session, err := app.SessionMgr.CreateForProject(t.Context(), testdbseed.DefaultProjectID, wire.SessionPostureBuild)
+	session, err := app.Sessions.Manager.CreateForProject(t.Context(), testdbseed.DefaultProjectID, wire.SessionPostureBuild)
 	testutil.FailErr(t, "create event session", err)
 	stream, unsubscribe, err := app.Events.Subscribe(t.Context(), events.Subscription{Project: testdbseed.DefaultProjectID, Viewer: testutil.HostOwner()})
 	testutil.FailErr(t, "subscribe host stream", err)
 	defer unsubscribe()
 	rule := &oar.Rule{OAR: "1.0", Namespace: "bootstrap.test", ID: "PUBLISH_EVENT", Kind: oar.KindPolicy, Anchor: oar.AnchorCoordinatorPostTurn, When: "true", Effect: oar.EffectWarn, Enforcement: "enforce", OnError: "fail_closed", OnFire: []oar.OnFireAction{oar.OnFirePublishEvent}}
-	pipeline := app.SessionMgr.OARPipeline()
+	pipeline := app.Sessions.Manager.OARPipeline()
 	pipeline.SetRuleSetFor(func(_ context.Context, _ string) *oar.RuleSet { return oar.NewRuleSet([]*oar.Rule{rule}) })
 	facts := oar.NewGuardContext()
 	facts.Session.SessionID = session.ID

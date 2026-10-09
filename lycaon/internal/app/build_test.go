@@ -122,21 +122,21 @@ func TestBuildWithSeparateStoreDirectorySupportsWorkers(t *testing.T) {
 	testutil.FailErr(t, "Build failed", err)
 	t.Cleanup(func() { _ = app.Close() })
 
-	if app.Server == nil || app.DB == nil || app.SessionMgr == nil || app.WorkflowMgr == nil {
+	if app.Server == nil || app.DB == nil || app.Sessions == nil || app.Workflows == nil {
 		t.Fatalf("ServeApp = %+v", app)
 	}
 	projectDir := t.TempDir()
 	testdbseed.InsertProjectRoot(t, app.DB, testdbseed.DefaultProjectID, projectDir)
-	jobID, err := app.WorkerQueue.Enqueue(t.Context(), wire.WorkerTask{
+	jobID, err := app.Delegations.Queue.Enqueue(t.Context(), wire.WorkerTask{
 		Prompt: "fixture", Brief: "fixture", ProjectID: testdbseed.DefaultProjectID,
 		WorkspacePath: projectDir, Scope: &wire.TaskScope{Mode: wire.TaskScopeModeWrite, Paths: []string{"."}},
 	})
 	testutil.FailErr(t, "enqueue worker", err)
-	_, err = app.WorkerQueue.ClaimNext(t.Context(), worker.ClaimRequest{
+	_, err = app.Delegations.Queue.ClaimNext(t.Context(), worker.ClaimRequest{
 		ProjectID: testdbseed.DefaultProjectID, ClaimedBy: "store-root-test", ExecutionTarget: wire.ExecutionTargetLocal,
 	})
 	testutil.FailErr(t, "claim worker", err)
-	job, err := app.WorkerQueue.ClaimWorkerBranch(t.Context(), jobID)
+	job, err := app.Delegations.Queue.ClaimWorkerBranch(t.Context(), jobID)
 	testutil.FailErr(t, "claim worker branch under active store", err)
 	rel, err := filepath.Rel(filepath.Dir(cfg.DBPath), job.WorkspaceRoot)
 	testutil.FailErr(t, "resolve branch against active store", err)
@@ -158,7 +158,7 @@ func TestBuildPreservesExplicitSessionLimits(t *testing.T) {
 	testutil.FailErr(t, "build with explicit session limits", err)
 	t.Cleanup(func() { _ = app.Close() })
 	testdbseed.InsertProjectRoot(t, app.DB, testdbseed.DefaultProjectID, t.TempDir())
-	sess, err := app.SessionMgr.CreateForProject(t.Context(), testdbseed.DefaultProjectID, wire.SessionPostureBuild)
+	sess, err := app.Sessions.Manager.CreateForProject(t.Context(), testdbseed.DefaultProjectID, wire.SessionPostureBuild)
 	testutil.FailErr(t, "create session with explicit limits", err)
 	allowed, reason, err := app.CoordinatorRuntime.CoordinatorLoop().ShouldLoopWake(t.Context(), sess.ID, anchor.PhaseAdvanced)
 	testutil.FailErr(t, "evaluate workflow phase wake", err)

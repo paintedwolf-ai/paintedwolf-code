@@ -30,12 +30,9 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-// toolWiring wires the coordinator tools, scanning, detection packs, and the OAR block plane.
-type toolWiring struct{ *serveBuilder }
-
-func (b toolWiring) wireCoordinatorRuntime() error {
-	b.coordRuntime = coordinator.NewRuntime(b.mgr.CoordinatorRuntimeDeps())
-	b.mgr.SetCoordinatorRuntime(b.coordRuntime)
+func (b *serveBuilder) wireCoordinatorRuntime() error {
+	b.server.Coordinator = coordinator.NewRuntime(b.sessions.Manager.CoordinatorRuntimeDeps())
+	b.sessions.Manager.SetCoordinatorRuntime(b.server.Coordinator)
 	waitConditions := make(map[string]map[string]bool, len(b.agents.ToolProfiles))
 	for _, profile := range b.agents.ToolProfiles {
 		allowed := make(map[string]bool, len(profile.WaitConditions))
@@ -45,16 +42,16 @@ func (b toolWiring) wireCoordinatorRuntime() error {
 		waitConditions[profile.ID] = allowed
 	}
 	waitStore := &awaitstore.Store{DB: b.storage.Database}
-	if err := loopwake.RegisterWaitTool(b.execution.Host.Registry, b.coordRuntime.CoordinatorLoop(), loopwake.WaitToolDeps{
+	if err := loopwake.RegisterWaitTool(b.execution.Host.Registry, b.server.Coordinator.CoordinatorLoop(), loopwake.WaitToolDeps{
 		Store: waitStore, ProfileConditions: waitConditions,
 		SecretMatcher: b.security.Matcher, RuntimeContext: b.startup.ctx,
 	}); err != nil {
 		return fmt.Errorf("wait tool: %w", err)
 	}
-	if err := delegationWiring(b).registerRecovery(bootrecovery.Entry{
+	if err := b.registerRecovery(bootrecovery.Entry{
 		Name: "agent-wait-leases", Kind: bootrecovery.KindReconcile, Phase: bootrecovery.PhaseServe,
 		Run: func(ctx context.Context) error {
-			return loopwake.RecoverWaitLeases(ctx, b.coordRuntime.CoordinatorLoop(), waitStore)
+			return loopwake.RecoverWaitLeases(ctx, b.server.Coordinator.CoordinatorLoop(), waitStore)
 		},
 	}); err != nil {
 		return err
@@ -62,85 +59,85 @@ func (b toolWiring) wireCoordinatorRuntime() error {
 
 	if err := boot.ValidateServeWiring(boot.ServeWiring{
 		PostureRegistry: b.agents.Postures,
-		BundledRules:    b.bundledRules,
-		RuleEngine:      b.ruleEngine,
-		SessionManager:  b.mgr,
-		WorkflowManager: b.workflowMgr,
+		BundledRules:    b.workflows.BundledRules,
+		RuleEngine:      b.workflows.Rules,
+		SessionManager:  b.sessions.Manager,
+		WorkflowManager: b.workflows.Manager,
 	}); err != nil {
 		return fmt.Errorf("serve wiring: %w", err)
 	}
 	return nil
 }
 
-func (b toolWiring) registerCoordinatorTools() error {
-	if err := delegation.RegisterDelegationTools(b.execution.Host.Registry, b.delegationMgr); err != nil {
+func (b *serveBuilder) registerCoordinatorTools() error {
+	if err := delegation.RegisterDelegationTools(b.execution.Host.Registry, b.delegations.Manager); err != nil {
 		return fmt.Errorf("delegation tools: %w", err)
 	}
 	parseSvc := parse.NewDefaultService()
 	if err := parse.RegisterParseTools(b.execution.Host.Registry, parseSvc); err != nil {
 		return fmt.Errorf("parse tools: %w", err)
 	}
-	if err := workflowstatetools.RegisterStateTools(b.execution.Host.Registry, workflowstatetools.StateToolDeps{Runs: b.workflowMgr.Store.Runs, Vars: b.workflowMgr.Phases.Vars, Journal: b.workflowMgr.Phases.Journal, Resolver: &b.workflowMgr.Resolver, Starts: b.workflowMgr.Starts, Controls: b.workflowMgr.Controls, Scaffold: b.workflowMgr.Blueprints.Scaffold,
+	if err := workflowstatetools.RegisterStateTools(b.execution.Host.Registry, workflowstatetools.StateToolDeps{Runs: b.workflows.Store.Runs, Vars: b.workflows.Manager.Phases.Vars, Journal: b.workflows.Manager.Phases.Journal, Resolver: &b.workflows.Manager.Resolver, Starts: b.workflows.Manager.Starts, Controls: b.workflows.Manager.Controls, Scaffold: b.workflows.Manager.Blueprints.Scaffold,
 		Sessions: b.storage.Sessions,
 	}); err != nil {
 		return fmt.Errorf("state tools: %w", err)
 	}
-	if err := blueprint.RegisterPlanTools(b.execution.Host.Registry, b.blueprintMgr); err != nil {
+	if err := blueprint.RegisterPlanTools(b.execution.Host.Registry, b.workflows.Blueprints); err != nil {
 		return fmt.Errorf("plan tools: %w", err)
 	}
-	if err := worker.RegisterTaskTool(b.execution.Host.Registry, b.taskToolDeps()); err != nil {
+	if err := worker.RegisterTaskTool(b.execution.Host.Registry, taskToolDeps(b)); err != nil {
 		return fmt.Errorf("task tool: %w", err)
 	}
 	if err := worker.RegisterAnswerDecisionTool(b.execution.Host.Registry, worker.AnswerDecisionToolDeps{
-		Answer: b.answerDecisionSvc,
+		Answer: b.boards.AnswerDecision,
 	}); err != nil {
 		return fmt.Errorf("answer_decision tool: %w", err)
 	}
 	if err := worker.RegisterExtendWorkerBudgetTool(b.execution.Host.Registry, worker.ExtendBudgetToolDeps{
-		Queue:      b.workerQueue,
-		Ledger:     b.workerBudgetLedger,
-		ToolBudget: b.workerToolBudgetFor,
+		Queue:      b.delegations.Queue,
+		Ledger:     b.boards.BudgetLedger,
+		ToolBudget: b.sessions.WorkerToolBudgetFor,
 	}); err != nil {
 		return fmt.Errorf("extend_worker_budget tool: %w", err)
 	}
 	if err := worker.RegisterDeclineWorkerBudgetTool(b.execution.Host.Registry, worker.DeclineBudgetToolDeps{
-		Queue:  b.workerQueue,
-		Ledger: b.workerBudgetLedger,
+		Queue:  b.delegations.Queue,
+		Ledger: b.boards.BudgetLedger,
 	}); err != nil {
 		return fmt.Errorf("decline_worker_budget tool: %w", err)
 	}
-	b.execution.Host.Boundary.SetMergeReconcileAllowlister(b.mgr)
+	b.execution.Host.Boundary.SetMergeReconcileAllowlister(b.sessions.Manager)
 	workerMergeSvc := &worker.MergeService{
-		Queue:        b.workerQueue,
-		Store:        b.workerQueue,
-		Workspace:    b.wsMgr,
+		Queue:        b.delegations.Queue,
+		Store:        b.delegations.Queue,
+		Workspace:    b.delegations.Workspace,
 		Reject:       b.execution.Rejections,
-		Sessions:     b.workerQueue,
-		Reconcile:    b.mgr,
-		Coord:        b.mgr,
-		Closeout:     b.delegationMgr,
+		Sessions:     b.delegations.Queue,
+		Reconcile:    b.sessions.Manager,
+		Coord:        b.sessions.Manager,
+		Closeout:     b.delegations.Manager,
 		Projects:     b.storage.Projects,
-		Scans:        b.scanTriggers,
+		Scans:        b.scanning.Triggers,
 		SourceLedger: b.storage.SourceLedger,
 		DataDir:      b.storage.Directory,
 		Reports: worker.ChangeReportDeps{
-			SourceRuns: b.mgr.WorkerSourceRuns,
+			SourceRuns: b.sessions.Manager.WorkerSourceRuns,
 			Messages: func(ctx context.Context, childSessionID string) ([]wire.Message, error) {
 				return b.storage.Sessions.GetMessages(ctx, childSessionID)
 			},
 		},
 	}
 	workerMergeSvc.Evidence = worker.SourceEvidenceContext{
-		SourceRevision: b.mgr.WorkerVerificationRevision,
+		SourceRevision: b.sessions.Manager.WorkerVerificationRevision,
 		DeclaredCommand: func(ctx context.Context, task *wire.WorkerTask) string {
 			if task == nil {
 				return ""
 			}
-			return b.mgr.SourceVerifyCommand(ctx, task.WorkspacePath)
+			return b.sessions.Manager.SourceVerifyCommand(ctx, task.WorkspacePath)
 		},
 	}
-	b.workerMergeSvc = workerMergeSvc
-	if err := delegationWiring(b).registerRecovery(bootrecovery.Entry{
+	b.worker.merge = workerMergeSvc
+	if err := b.registerRecovery(bootrecovery.Entry{
 		// Reconcile database and worktree state under the lease after graph wiring.
 		Name: "worker-merge-applies", Kind: bootrecovery.KindReconcile, Phase: bootrecovery.PhaseServe,
 		Run: workerMergeSvc.RecoverOrphanedMergeApplies,
@@ -148,11 +145,11 @@ func (b toolWiring) registerCoordinatorTools() error {
 		return err
 	}
 	if err := worker.RegisterWorkerCancelTool(b.execution.Host.Registry, worker.CancelToolDeps{
-		Cancel: b.workerCancelSvc,
+		Cancel: b.delegations.Cancel,
 	}); err != nil {
 		return fmt.Errorf("worker_cancel tool: %w", err)
 	}
-	b.mgr.SetOverlayPromoter(workerMergeSvc)
+	b.sessions.Manager.SetOverlayPromoter(workerMergeSvc)
 	if err := worker.RegisterOverlayTools(b.execution.Host.Registry, worker.OverlayToolDeps{
 		Merge: workerMergeSvc,
 	}); err != nil {
@@ -173,21 +170,21 @@ func (b toolWiring) registerCoordinatorTools() error {
 
 // taskToolDeps wires the task tool to the queue, the workflow's planned legs,
 // and the worker assignment prompt.
-func (b toolWiring) taskToolDeps() worker.TaskToolDeps {
+func taskToolDeps(b *serveBuilder) worker.TaskToolDeps {
 	return worker.TaskToolDeps{
-		Sessions:         b.mgr,
-		Queue:            b.workerQueue,
+		Sessions:         b.sessions.Manager,
+		Queue:            b.delegations.Queue,
 		Agents:           b.agents.Registry,
-		Workers:          b.workersCfg,
-		ToolBudget:       b.workerToolBudgetFor,
-		BindWorkflowTask: b.workflowMgr.Fanout.BindWorkflowTask,
-		WorkflowWork:     b.workflowMgr.Fanout.WorkflowWork,
-		TaskReceipt:      b.workerQueue.TaskReceipt,
+		Workers:          b.worker.cfg,
+		ToolBudget:       b.sessions.WorkerToolBudgetFor,
+		BindWorkflowTask: b.workflows.Manager.Fanout.BindWorkflowTask,
+		WorkflowWork:     b.workflows.Manager.Fanout.WorkflowWork,
+		TaskReceipt:      b.delegations.Queue.TaskReceipt,
 		PendingDecision: func(ctx context.Context, childSessionID string) (string, bool, error) {
-			if b.mgr == nil || b.mgr.Decisions() == nil {
+			if b.sessions.Manager == nil || b.sessions.Manager.Decisions() == nil {
 				return "", false, nil
 			}
-			dec, ok, err := b.mgr.Decisions().Get(ctx, childSessionID)
+			dec, ok, err := b.sessions.Manager.Decisions().Get(ctx, childSessionID)
 			if err != nil {
 				return "", false, err
 			}
@@ -209,39 +206,39 @@ func (b toolWiring) taskToolDeps() worker.TaskToolDeps {
 				WorkerJobID:      workerJobID,
 				MaxToolLoops:     maxToolLoops,
 				Attachments:      surface.SessionForwardedAttachments(msgs),
-				RecordedVerdicts: recordedVerdictsForLeg(ctx, b.workflowMgr, tctx.Identity.SessionID),
+				RecordedVerdicts: recordedVerdictsForLeg(ctx, b.workflows.Manager, tctx.Identity.SessionID),
 			}
 			if scope != nil {
 				in.Scope = *scope
 			}
-			run, err := b.workflowMgr.Store.Runs.ActiveBySession(ctx, tctx.Identity.SessionID)
+			run, err := b.workflows.Store.Runs.ActiveBySession(ctx, tctx.Identity.SessionID)
 			if err != nil {
 				return "", err
 			}
 			if run != nil {
-				manifest, err := b.workflowMgr.Resolver.ForRunID(ctx, run.ID)
+				manifest, err := b.workflows.Manager.Resolver.ForRunID(ctx, run.ID)
 				if err != nil {
 					return "", err
 				}
-				in.CoverageAssignment, err = b.workflowMgr.Coverage.CoverageAssignment(ctx, run, manifest, agentType)
+				in.CoverageAssignment, err = b.workflows.Manager.Coverage.CoverageAssignment(ctx, run, manifest, agentType)
 				if err != nil {
 					return "", err
 				}
 				if def, ok := manifest.PhaseByID(run.CurrentPhase); ok && def.ReviewLoop != nil && def.ReviewLoop.IncludeScanInventory {
-					inventory, err := scan.WorkflowAdvisoryInventory(ctx, b.scanStore, run.ID)
+					inventory, err := scan.WorkflowAdvisoryInventory(ctx, b.scanning.Store, run.ID)
 					if err != nil {
 						return "", err
 					}
 					in.ScanInventory = inventory
 				}
 			}
-			return inject.RenderWorkerTaskAssignment(ctx, b.injectRenderer, in)
+			return inject.RenderWorkerTaskAssignment(ctx, b.delegations.InjectRenderer, in)
 		},
 		WebSearchEnabled: func() bool {
-			if b.webResearchRuntime.Config == nil {
+			if b.boards == nil || b.boards.WebRuntime.Config == nil {
 				return true
 			}
-			return b.webResearchRuntime.Config.SearchEnabled()
+			return b.boards.WebRuntime.Config.SearchEnabled()
 		},
 	}
 }
@@ -269,7 +266,7 @@ func recordedVerdictsForLeg(ctx context.Context, mgr *workflow.RunManager, sessi
 	return out
 }
 
-func (b toolWiring) wireMCP() error {
+func (b *serveBuilder) wireMCP() error {
 	mcpOpts := mcp.RuntimeOptions{
 		OnSettingsChange: func() {
 			if b.events.Hub != nil {
@@ -287,24 +284,27 @@ func (b toolWiring) wireMCP() error {
 		mcpOpts.GlobalOverridePath = b.startup.cfg.TestMCPGlobalOverridePath
 	}
 	var err error
-	b.mcpReg, err = mcp.NewRuntime(mcpOpts)
+	b.server.MCP, err = mcp.NewRuntime(mcpOpts)
 	if err != nil {
 		return fmt.Errorf("mcp registry: %w", err)
 	}
-	b.startup.resources.setMCP(b.mcpReg)
-	b.security.BindMCPInventory(b.mcpReg.Catalog)
-	b.mcpReg.Tools.SetToolRegistry(b.execution.Host.Registry)
-	b.mcpReg.Connections.SetAPIAccess(b.identity.Token)
+	b.startup.resources.setMCP(b.server.MCP)
+	b.security.BindMCPInventory(b.server.MCP.Catalog)
+	b.server.MCP.Tools.SetToolRegistry(b.execution.Host.Registry)
+	b.server.MCP.Connections.SetAPIAccess(b.identity.Token)
 	if b.execution.Host != nil {
-		b.execution.Host.Authority.SetMCPToolPinSource(b.mcpReg.Tools)
+		b.execution.Host.Authority.SetMCPToolPinSource(b.server.MCP.Tools)
 	}
-	b.mcpReg.Catalog.SetProjectOverlayGate(b.settings.ProjectSurfaceGate(projectcontrib.SurfaceProjectMCP, b.storage.Projects).AppliesPath)
-	if err := serverWiring(b).wireDestinationConfig(); err != nil {
+	b.server.MCP.Catalog.SetProjectOverlayGate(b.settings.ProjectSurfaceGate(projectcontrib.SurfaceProjectMCP, b.storage.Projects).AppliesPath)
+	if err := wireDestinationConfig(b); err != nil {
 		return err
 	}
 	// Device inspection may inspect every registered project root.
-	b.mcpReg.Connections.SetDeviceProbeRoots(func() []string {
-		paths, err := boardWiring(b).projectRootPaths(b.startup.ctx)
+	b.server.MCP.Connections.SetDeviceProbeRoots(func() []string {
+		if b.boards == nil {
+			return nil
+		}
+		paths, err := b.boards.ProjectRootPaths(b.startup.ctx)
 		if err != nil {
 			return nil
 		}
@@ -327,20 +327,20 @@ func (b toolWiring) wireMCP() error {
 		if b.interactions.Preview != nil {
 			b.interactions.Preview.SetCaptureProjector(captureProjector)
 		}
-		if b.browserPool != nil {
-			b.browserPool.SetCaptureProjector(captureProjector)
+		if b.boards != nil && b.boards.BrowserPool != nil {
+			b.boards.BrowserPool.SetCaptureProjector(captureProjector)
 		}
-		if b.browserRaster != nil {
-			b.browserRaster.SetCaptureProjector(captureProjector)
+		if b.boards != nil && b.boards.BrowserRaster != nil {
+			b.boards.BrowserRaster.SetCaptureProjector(captureProjector)
 		}
-		b.mcpReg.Calls.SetSecretScreen(matcher, b.security.Ask(b.execution.Host.Executor.Secrets, b.execution.Host.Authority.ApprovalsDisabled))
+		b.server.MCP.Calls.SetSecretScreen(matcher, b.security.Ask(b.execution.Host.Executor.Secrets, b.execution.Host.Authority.ApprovalsDisabled))
 		if b.execution.Host != nil && b.execution.Host.Executor != nil {
 			b.execution.Host.Executor.Secrets.SetSecretMatcher(matcher)
 			b.execution.Host.Executor.Secrets.SetSecretIgnores(b.security.Ignores)
 		}
 		// Editor spans preview outbound screening.
 		b.security.Spans = secretspan.New(matcher)
-		b.security.BindTranscript(matcher, b.mgr.SetMessageStorageRedactor, b.mgr.SweepSessionTree)
+		b.security.BindTranscript(matcher, b.sessions.Manager.SetMessageStorageRedactor, b.sessions.Manager.SweepSessionTree)
 		if b.providers.Service != nil && b.providers.Service.Registry != nil {
 			screen := llm.NewModelSecretScreen(matcher, b.security.Ask(b.execution.Host.Executor.Secrets, b.execution.Host.Authority.ApprovalsDisabled))
 			if b.security.Capabilities != nil {
@@ -357,14 +357,14 @@ func (b toolWiring) wireMCP() error {
 			b.providers.Service.Registry.SetOutboundSecretScreen(screen)
 		}
 	}
-	if err := b.mcpReg.Catalog.Load(b.startup.ctx); err != nil {
+	if err := b.server.MCP.Catalog.Load(b.startup.ctx); err != nil {
 		return fmt.Errorf("mcp registry: %w", err)
 	}
 	if b.execution.Host != nil && b.execution.Host.Executor != nil {
-		b.execution.Host.Executor.Rejections.SetMCPCatalog(b.mcpReg.Catalog)
+		b.execution.Host.Executor.Rejections.SetMCPCatalog(b.server.MCP.Catalog)
 	}
-	if b.mgr != nil {
-		b.mgr.SetMCPRuntime(b.mcpReg.Catalog)
+	if b.sessions != nil && b.sessions.Manager != nil {
+		b.sessions.Manager.SetMCPRuntime(b.server.MCP.Catalog)
 	}
 	return nil
 }
