@@ -1,10 +1,11 @@
-import { Show, createEffect, createSignal, on, onCleanup, onMount, untrack } from "solid-js";
+import { Show, createEffect, createSignal, on, onCleanup, untrack } from "solid-js";
 import { chromeProps } from "../../styling/ui-chrome.ts";
 import type { TurnClock } from "../../api/types.ts";
 import { turnClockElapsedMs } from "../../chat/session/turn-clock.ts";
 import { useNow } from "../../time/now.ts";
 import { formatElapsed } from "../../time/time-copy.ts";
 import { prefersReducedMotion } from "../../platform/interaction/reduced-motion.ts";
+import { createResidentActivity } from "../../ui/resident-activity.ts";
 import { driveActivitySpinner } from "./activity-spinner-motion.ts";
 import { HEIGHT_TOGGLE_TIMING } from "../../ui/height-toggle-motion.ts";
 
@@ -142,7 +143,7 @@ function ActivityLine(props: {
   turnClock?: TurnClock;
 }) {
   let spinner: HTMLSpanElement | undefined;
-  onMount(() => { if (spinner) onCleanup(driveActivitySpinner(spinner)); });
+  createResidentActivity(() => spinner ? driveActivitySpinner(spinner) : undefined);
   const activity = () => props.activityLabel?.trim() || "Thinking";
   const nowMs = useNow("second", () => props.turnClock?.running === true);
   const elapsed = () => turnClockElapsedMs(props.turnClock, nowMs());

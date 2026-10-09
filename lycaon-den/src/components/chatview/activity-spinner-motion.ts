@@ -11,6 +11,14 @@ export function driveActivitySpinner(element: HTMLElement): () => void {
     if (frame !== undefined) cancelAnimationFrame(frame);
     frame = undefined;
   };
+  const release = () => {
+    const animation = spin;
+    spin = undefined;
+    if (!animation) return;
+    // Removed CSS animations can be revived by play(), bypassing reduced motion.
+    if (element.getAnimations().includes(animation) && !prefersReducedMotion()) animation.play();
+    else animation.cancel();
+  };
   const tick = (now: number) => {
     frame = undefined;
     if (stopped || document.visibilityState !== "visible") return;
@@ -25,8 +33,7 @@ export function driveActivitySpinner(element: HTMLElement): () => void {
   };
   const arm = () => {
     cancel();
-    spin?.play();
-    spin = undefined;
+    release();
     origin = performance.now();
     if (!stopped && !prefersReducedMotion() && document.visibilityState === "visible") {
       frame = requestAnimationFrame(tick);
@@ -40,7 +47,7 @@ export function driveActivitySpinner(element: HTMLElement): () => void {
   return () => {
     stopped = true;
     cancel();
-    spin?.play();
+    release();
     document.removeEventListener("visibilitychange", arm);
     window.removeEventListener("focus", arm);
     media?.removeEventListener("change", arm);

@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
+import { ResidentPresenceProvider } from "../../ui/resident-presence-context.tsx";
+import type { ResidentPresence } from "../../ui/resident-surfaces.ts";
 import type { TurnClock } from "../../api/types.ts";
 import {
   COMPOSER_ACTIVITY_LEAVING_ATTR,
@@ -53,6 +55,38 @@ describe("ComposerActivityIndicator", () => {
     cleanup();
     vi.useRealTimers();
     delete (HTMLElement.prototype as { animate?: unknown }).animate;
+  });
+
+  it("releases spinner frames while its retained surface is idle", () => {
+    const original = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "getAnimations");
+    Object.defineProperty(HTMLElement.prototype, "getAnimations", { configurable: true, value: () => [] });
+    const request = vi.fn(() => 71);
+    const cancel = vi.fn();
+    vi.stubGlobal("requestAnimationFrame", request);
+    vi.stubGlobal("cancelAnimationFrame", cancel);
+    try {
+      const [presence, setPresence] = createSignal<ResidentPresence>("idle");
+      const view = render(() => (
+        <ResidentPresenceProvider presence={presence()}>
+          <ComposerActivityIndicator activityLabel="Reading files" />
+        </ResidentPresenceProvider>
+      ));
+      expect(request).not.toHaveBeenCalled();
+      setPresence("active");
+      expect(request).toHaveBeenCalledOnce();
+      setPresence("idle");
+      expect(cancel).toHaveBeenCalledWith(71);
+      window.dispatchEvent(new Event("focus"));
+      expect(request).toHaveBeenCalledOnce();
+      setPresence("active");
+      expect(request).toHaveBeenCalledTimes(2);
+      view.unmount();
+      expect(cancel).toHaveBeenCalledTimes(2);
+    } finally {
+      if (original) Object.defineProperty(HTMLElement.prototype, "getAnimations", original);
+      else delete (HTMLElement.prototype as { getAnimations?: unknown }).getAnimations;
+      vi.unstubAllGlobals();
+    }
   });
 
   it("ticks, pauses, resumes, and resets from host clock edges", () => {
