@@ -3,6 +3,7 @@ package promptloop
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"slices"
 	"strings"
 	"sync"
@@ -60,7 +61,7 @@ type toolCaptures struct {
 
 // toolResultProjection keeps result facts separate from display text.
 type toolResultProjection struct {
-	reject  *tools.ToolReject
+	reject  *toolrejection.ToolReject
 	content string
 	facts   guidance.ToolResultFacts
 	// limit records how session output limits cut what the model receives.
@@ -141,10 +142,10 @@ func ownerFailureFromError(err error, tool string, contract toolcontract.Contrac
 		ownerRef = strings.TrimSpace(contract.Owner)
 	}
 	if errors.Is(err, context.Canceled) {
-		return &api.InvocationFailure{Code: tools.ToolOwnerInterruptedCode, Class: "interrupted", Retryable: true, OwnerRef: ownerRef}
+		return &api.InvocationFailure{Code: toolrejection.ToolOwnerInterruptedCode, Class: "interrupted", Retryable: true, OwnerRef: ownerRef}
 	}
-	if reject := tools.AsToolReject(err); reject != nil {
-		reject = tools.CompleteFailureMetadata(reject, tool, ownerRef)
+	if reject := toolrejection.AsToolReject(err); reject != nil {
+		reject = toolrejection.CompleteFailureMetadata(reject, tool, ownerRef)
 		return &api.InvocationFailure{
 			Code: reject.Code, Class: reject.FailureClass,
 			Retryable: reject.Retryable, OwnerRef: reject.OwnerRef, Details: reject.Data,
@@ -154,7 +155,7 @@ func ownerFailureFromError(err error, tool string, contract toolcontract.Contrac
 	ownerFailureLog.Warn("tool subsystem owner failed without a structured reject",
 		"tool", tool, "owner_ref", ownerRef, "error", err)
 	return &api.InvocationFailure{
-		Code: tools.ToolOwnerFailedCode, Class: "owner_error", Retryable: false, OwnerRef: ownerRef,
+		Code: toolrejection.ToolOwnerFailedCode, Class: "owner_error", Retryable: false, OwnerRef: ownerRef,
 		Details: map[string]any{"reason": err.Error()},
 	}
 }
@@ -169,7 +170,7 @@ func statedOrOwnerFailure(facts guidance.ToolResultFacts, contract toolcontract.
 		}
 	}
 	return &api.InvocationFailure{
-		Code: tools.ToolOwnerFailedCode, Class: "owner_error", Retryable: false, OwnerRef: ownerRef,
+		Code: toolrejection.ToolOwnerFailedCode, Class: "owner_error", Retryable: false, OwnerRef: ownerRef,
 	}
 }
 
@@ -224,7 +225,7 @@ func (l *toolInvocations) executeToolCall(
 	assistantMessageID string,
 	_ api.CoordinatorRunContext,
 ) toolInvocation {
-	ctx = tools.WithRecoveryTools(ctx, toolCtx.TurnOfferedToolNames)
+	ctx = tools.WithRecoveryTools(ctx, toolCtx.Turn.TurnOfferedToolNames)
 	// A non-nil roster constrains task spawning.
 	if taskAllowlist != nil {
 		ctx = toolpolicy.WithTaskSpawnAllowlist(ctx, taskAllowlist)
@@ -235,34 +236,34 @@ func (l *toolInvocations) executeToolCall(
 		ProjectID:       sess.ProjectID,
 		OwnerPersonID:   sess.OwnerPersonID,
 		Posture:         string(sess.Posture),
-		Agent:           toolCtx.Agent,
-		ParentSessionID: toolCtx.ParentSessionID,
+		Agent:           toolCtx.Identity.Agent,
+		ParentSessionID: toolCtx.Identity.ParentSessionID,
 		ToolCallID:      tc.ID,
 		ProjectDir:      toolCtx.ActiveRootPath(),
 	})
-	toolCtx.Out = &tools.ToolInvocationOut{}
-	toolCtx.ArgsTruncated = tc.ArgsTruncated
-	toolCtx.ArgsMalformed = tc.ArgsMalformed
-	toolCtx.ToolCallID = tc.ID
-	if toolCtx.TurnOfferedToolNames != nil && !slices.Contains(toolCtx.TurnOfferedToolNames, tc.Name) {
+	toolCtx.Effects.Out = &tools.ToolInvocationOut{}
+	toolCtx.Effects.ArgsTruncated = tc.ArgsTruncated
+	toolCtx.Effects.ArgsMalformed = tc.ArgsMalformed
+	toolCtx.Identity.ToolCallID = tc.ID
+	if toolCtx.Turn.TurnOfferedToolNames != nil && !slices.Contains(toolCtx.Turn.TurnOfferedToolNames, tc.Name) {
 		return refusedInvocation(l.rejectToolOccurrence(ctx, sess, tc, toolCtx, "TOOL_NOT_OFFERED", nil))
 	}
 	// The active turn compile determines whether the definition is reachable.
-	if !surfaceAllowsTool(toolCtx.TurnToolPlan, toolCtx.TurnSurfaceID, tc.Name) {
+	if !surfaceAllowsTool(toolCtx.Turn.TurnToolPlan, toolCtx.Turn.TurnSurfaceID, tc.Name) {
 		return refusedInvocation(l.rejectToolOccurrence(ctx, sess, tc, toolCtx, offSurfaceCode(tc.Name), nil))
 	}
 	if l.Context.Deps.Tools == nil {
 		out := failedInvocation("", toolCaptures{})
-		out.facts = out.facts.WithCode(tools.ToolOwnerFailedCode)
+		out.facts = out.facts.WithCode(toolrejection.ToolOwnerFailedCode)
 		return out
 	}
 	def, ok := l.Context.Deps.Tools.Definition(tc.Name)
 	if !ok {
-		return refusedInvocation(l.rejectToolOccurrence(ctx, sess, tc, toolCtx, tools.ToolOwnerFailedCode, nil))
+		return refusedInvocation(l.rejectToolOccurrence(ctx, sess, tc, toolCtx, toolrejection.ToolOwnerFailedCode, nil))
 	}
 	argsDigest, err := invocation.ArgsDigest(tc.Args)
 	if err != nil {
-		return toolInvocation{content: err.Error(), facts: guidance.ToolResultFacts{Outcome: api.ToolResultOutcomeError}.WithCode(tools.ToolOwnerFailedCode)}
+		return toolInvocation{content: err.Error(), facts: guidance.ToolResultFacts{Outcome: api.ToolResultOutcomeError}.WithCode(toolrejection.ToolOwnerFailedCode)}
 	}
 	// Open the ledger row before any pre-invoke outcome.
 	invocationID := uuid.NewString()
@@ -276,12 +277,12 @@ func (l *toolInvocations) executeToolCall(
 			ToolName: tc.Name, Args: tc.Args, Contract: def.Contract,
 		})
 		if err != nil {
-			return toolInvocation{content: err.Error(), facts: guidance.ToolResultFacts{Outcome: api.ToolResultOutcomeError}.WithCode(tools.ToolOwnerFailedCode)}
+			return toolInvocation{content: err.Error(), facts: guidance.ToolResultFacts{Outcome: api.ToolResultOutcomeError}.WithCode(toolrejection.ToolOwnerFailedCode)}
 		}
 		invocationID = receipt.ID
 	}
 	schema := def.Meta.ArgsSchema
-	if offered, ok := toolCtx.TurnOfferedToolSchemas[tc.Name]; ok {
+	if offered, ok := toolCtx.Turn.TurnOfferedToolSchemas[tc.Name]; ok {
 		schema = offered
 	}
 	if reject := tools.ValidateCallArguments(tc.Name, tc.Args, schema, toolCtx); reject != nil {
@@ -308,7 +309,7 @@ func (l *toolInvocations) executeToolCall(
 	}
 	activity := l.Projection.beginActivity(ctx, sess, sessionID, api.ActivityKindRunningTool, tc.Name, tc.ID)
 	defer activity.finish()
-	toolCtx.ReportProgress = activity.report
+	toolCtx.Effects.ReportProgress = activity.report
 	// A held call keeps its presence until it settles, under its own context.
 	runTool := func(runCtx context.Context) toolInvocation {
 		runToolCtx := toolCtx
@@ -375,7 +376,7 @@ func (l *toolInvocations) finalizeToolRun(ctx context.Context, sess *api.Session
 			out.invoked = ownerInvoked
 			out.captures = captures
 			out.receipt, out.contract = run.receipt, run.contract
-			if tools.AsToolReject(run.runErr) != nil {
+			if toolrejection.AsToolReject(run.runErr) != nil {
 				out.failure = ownerFailureFromError(run.runErr, run.call.Name, run.contract, captures)
 				out.failure.Code = reject.Code()
 			} else {

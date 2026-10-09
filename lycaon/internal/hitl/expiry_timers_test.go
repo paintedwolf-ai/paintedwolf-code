@@ -39,6 +39,6 @@ func TestExpiryTimersFireUntilStopped(t *testing.T) {
 		t.Fatalf("expiry %q fired after stop", got)
 	case <-time.After(50 * time.Millisecond):
 	}
-	var manager *Manager
+	var manager *Checkpoints
 	manager.StopExpiryTimers()
 }

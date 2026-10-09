@@ -245,12 +245,12 @@ func (m *Service) ContentBlock(ctx context.Context, sess *api.Session, anchor st
 	if res == nil || !res.Enforced {
 		return nil, false, "", false, nil
 	}
-	content := gc.Content
+	content := gc.Content.Content
 	if res.ContentSet {
 		content = res.Content
 	}
 	if res.Decision == nil {
-		if res.ContentSet && res.Content != gc.Content {
+		if res.ContentSet && res.Content != gc.Content.Content {
 			return nil, false, content, true, nil
 		}
 		return nil, false, "", false, nil

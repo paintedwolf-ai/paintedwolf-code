@@ -20,7 +20,7 @@ func TestDispatchRejectionsPreserveIndependentPeersAndHistory(t *testing.T) {
 			testutil.FailErr(t, "register task", reg.Register("task", func(_ context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
 				index := args["index"].(int)
 				ran = append(ran, index)
-				tctx.Out.Dispatch = &api.WorkerDispatch{WorkerID: fmt.Sprint(index)}
+				tctx.Effects.Out.Dispatch = &api.WorkerDispatch{WorkerID: fmt.Sprint(index)}
 				return "queued", nil
 			}))
 			rejects := map[int]bool{}
@@ -60,7 +60,7 @@ func TestDispatchRejectionsPreserveIndependentPeersAndHistory(t *testing.T) {
 			state := &promptLoopTurnState{}
 			sess := &api.Session{ID: "session", Posture: api.SessionPostureBuild}
 			history, _, dispatched, count, _, stopped, err := loop.Batch.executeToolCallsInTurn(t.Context(), sess, sess.ID, calls,
-				tools.ToolContext{SessionID: sess.ID}, history, "build", "assistant", "", state)
+				tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID}}, history, "build", "assistant", "", state)
 			testutil.FailErr(t, "dispatch wave", err)
 			if stopped || !dispatched || count != 6-len(rejected) || len(ran) != count || len(inspected) != 6 {
 				t.Fatalf("stopped=%v dispatched=%v count=%d ran=%v inspected=%v", stopped, dispatched, count, ran, inspected)

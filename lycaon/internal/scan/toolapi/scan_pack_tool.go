@@ -66,14 +66,14 @@ func runScanPack(
 	}
 	completion, _ := args["completion"].(string)
 	waits := strings.TrimSpace(completion) == "summary"
-	sessionID := strings.TrimSpace(tctx.SessionID)
+	sessionID := strings.TrimSpace(tctx.Identity.SessionID)
 	if len(paths) > 0 {
 		ids, err := enqueuePathScanPack(ctx, coord, scannerReg, projectDir, categories, paths, sessionID)
 		if err != nil {
 			return "", err
 		}
-		if len(ids) > 0 && tctx.Out != nil {
-			tctx.Out.OwnerRef = ids[0]
+		if len(ids) > 0 && tctx.Effects.Out != nil {
+			tctx.Effects.Out.OwnerRef = ids[0]
 		}
 		if !waits {
 			return scanPackReceipt(ctx, coord, ids, ReceiptOptions{})
@@ -84,8 +84,8 @@ func runScanPack(
 	if err != nil {
 		return "", err
 	}
-	if tctx.Out != nil {
-		tctx.Out.OwnerRef = pass.ID
+	if tctx.Effects.Out != nil {
+		tctx.Effects.Out.OwnerRef = pass.ID
 	}
 	if !waits {
 		return FullPassReceipt(ctx, coord, pass, ReceiptOptions{})

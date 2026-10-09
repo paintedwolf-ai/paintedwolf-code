@@ -60,20 +60,20 @@ func TestHandoffReserveVisibleOnPackBoardAndPeerLegWiring(t *testing.T) {
 	_, err = h.ToolRegistry.Run(ctx, "handoff_reserve", map[string]any{
 		"paths": []string{"shellsim/builtins.py"},
 	}, tools.ToolContext{
-		Roots:            []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}},
-		ActiveRootID:     "r1",
-		SessionID:        childA.ID,
-		ParentSessionID:  parent.ID,
-		HandoffSessionID: parent.ID,
-		HandoffAgentID:   taskA.ID,
-		WorkerJobID:      taskA.ID,
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{SessionID: childA.ID,
+			ParentSessionID:  parent.ID,
+			HandoffSessionID: parent.ID,
+			HandoffAgentID:   taskA.ID,
+			WorkerJobID:      taskA.ID},
 	})
 	testutil.FailErr(t, "handoff_reserve", err)
 
 	out, err := h.ToolRegistry.Run(ctx, "pack_board", map[string]any{}, tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}},
-		ActiveRootID: "r1",
-		SessionID:    parent.ID,
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{SessionID: parent.ID},
 	})
 	testutil.FailErr(t, "pack_board", err)
 	if !strings.Contains(out, "shellsim/builtins.py") || !strings.Contains(out, "Reserved paths") {

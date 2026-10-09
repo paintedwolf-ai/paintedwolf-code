@@ -8,8 +8,9 @@ on:
 permissions:
   contents: read
 
+# Maintenance runs one workflow at a time; staggered schedules keep a pending run from being replaced.
 concurrency:
-  group: release-system-live-test
+  group: maintenance
   cancel-in-progress: false
 
 jobs:

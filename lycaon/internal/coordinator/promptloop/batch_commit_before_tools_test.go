@@ -58,7 +58,9 @@ func TestExecuteToolCallsInTurnCommitsAssistantBeforeFirstTool(t *testing.T) {
 		sess,
 		sess.ID,
 		history[0].ToolCalls,
-		tools.ToolContext{SessionID: sess.ID},
+		tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: sess.ID},
+		},
 		history,
 		"dispatch",
 		assistantID,

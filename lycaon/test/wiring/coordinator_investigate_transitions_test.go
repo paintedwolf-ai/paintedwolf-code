@@ -1,6 +1,8 @@
 package wiring
 
 import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+
 	"context"
 	"testing"
 	"time"
@@ -10,7 +12,6 @@ import (
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -86,7 +87,7 @@ func TestInvestigateTaskFanOutBlocksInvestigateUntilWorkersIdle(t *testing.T) {
 		routingTurnHistory(msgs, surface.HostLoopWakeSentinel),
 		state,
 	)
-	if wakeProfile.SurfaceID == tools.SurfaceImplementInvestigate {
+	if wakeProfile.SurfaceID == toolcontract.SurfaceImplementInvestigate {
 		t.Fatalf("loop wake with workers in flight must not select investigate, got %q", wakeProfile.SurfaceID)
 	}
 	if wakeProfile.SurfaceID != surface.SurfaceImplementPark {
@@ -169,7 +170,7 @@ func TestInvestigateReturnsAfterWorkersCompleteAndNoQueuedPromotion(t *testing.T
 				runCtx, rerr := h.SessionMgr.Coordinator.Context.RunContext(ctx, sess.ID)
 				if rerr == nil {
 					followProfile = surface.ResolveTurnProfile(runCtx, sess, routingTurnHistory(msgs, "summarize what changed"), state)
-					if followProfile.SurfaceID == tools.SurfaceImplementInvestigate {
+					if followProfile.SurfaceID == toolcontract.SurfaceImplementInvestigate {
 						return true
 					}
 				}

@@ -3,6 +3,7 @@ package review_test
 import (
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	workflow "github.com/lycaon/lycaon/internal/workflow"
 	workflowreview "github.com/lycaon/lycaon/internal/workflow/review"
 	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
@@ -10,7 +11,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -48,7 +48,7 @@ func TestReviewInventoryRefusalDoesNotAdvanceOrConsumeReviewRound(t *testing.T) 
 	testutil.FailErr(t, "register verdict", workflowreview.RegisterSubmitVerdictTool(reg, mgr.Verdicts))
 	verdict := map[string]any{"verdict": "SELECTED", "claims": []any{}, "set_asides": []any{}}
 	_, err := reg.Run(t.Context(), "submit_verdict", map[string]any{"verdict": verdict}, toolContext("coordinator", "sess-1", dir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != workflowreview.SubmitVerdictInventoryUnaccountedCode {
 		t.Fatalf("unaccounted verdict = %v, want inventory rejection", err)
 	}

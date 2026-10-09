@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/guidance"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 )
@@ -30,7 +30,7 @@ func TestVerdictRepairsRetainEveryStructuredCode(t *testing.T) {
 		MissingAgents:  []string{"skeptic"},
 		GroundingCode:  "SUBMIT_VERDICT_UNGROUNDED",
 		QuestionIssue:  tools.AsToolReject(rejectReviewQuestion("current_review_required", "question/c1")),
-		CoverageIssue:  &tools.ToolReject{Code: workflowvalidation.ReviewLoopVerdictInvalidCode, Data: map[string]any{"reason": "stale coverage revision"}},
+		CoverageIssue:  &toolrejection.ToolReject{Code: workflowvalidation.ReviewLoopVerdictInvalidCode, Data: map[string]any{"reason": "stale coverage revision"}},
 	}
 	repairs := verdictRepairs("", out)
 	want := []string{SubmitVerdictScansPendingCode, SubmitVerdictReviewerMissingCode, out.GroundingCode, submitVerdictQuestionInvalidCode, workflowvalidation.ReviewLoopVerdictInvalidCode}
@@ -53,7 +53,7 @@ func TestVerdictRepairsRetainEveryStructuredCode(t *testing.T) {
 func TestVerdictRepairsStateEachCodeOnce(t *testing.T) {
 	out := runstate.ReviewOutcome{
 		InventoryIssue: &runstate.InventoryIssue{ReportDocumentIssue: guidance.ReportDocumentIssue{Code: SubmitVerdictScansPendingCode}},
-		CoverageIssue:  &tools.ToolReject{Code: SubmitVerdictScansPendingCode, Data: map[string]any{}},
+		CoverageIssue:  &toolrejection.ToolReject{Code: SubmitVerdictScansPendingCode, Data: map[string]any{}},
 	}
 	repairs := verdictRepairs("", out)
 	if len(repairs) != 1 || repairs[0].Code != SubmitVerdictScansPendingCode {

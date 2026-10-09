@@ -196,8 +196,8 @@ func TestStatedSourceVerdictReachesTheLedger(t *testing.T) {
 	rec := newRecordingRecorder()
 	reg := tools.NewStubRegistry()
 	_ = reg.Register("command", func(_ context.Context, _ map[string]any, tctx tools.ToolContext) (string, error) {
-		if tctx.Out != nil {
-			tctx.Out.SourceRun = &tools.SourceRunCapture{
+		if tctx.Effects.Out != nil {
+			tctx.Effects.Out.SourceRun = &tools.SourceRunCapture{
 				Command: "./check.sh", ExitCode: 0, Verdict: api.SourceVerdictPassed,
 			}
 		}

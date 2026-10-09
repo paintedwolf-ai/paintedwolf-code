@@ -15,10 +15,10 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Handler) HandleGetWorkflowRunReport(w http.ResponseWriter, r *http.Request) {
+func (s *Reports) HandleGetWorkflowRunReport(w http.ResponseWriter, r *http.Request) {
 	input, ok, err := s.BuildRunReportInput(r.Context(), chi.URLParam(r, "id"))
 	if err != nil {
-		s.writeRunLookupError(w, r, err)
+		s.RunControl.writeRunLookupError(w, r, err)
 		return
 	}
 	if !ok {
@@ -30,7 +30,7 @@ func (s *Handler) HandleGetWorkflowRunReport(w http.ResponseWriter, r *http.Requ
 
 // BuildRunReportInput assembles a workflow run's declared deliverable from
 // run-scoped records only; the manifest control gates the document.
-func (s *Handler) BuildRunReportInput(ctx context.Context, runID string) (report.ReportInput, bool, error) {
+func (s *Reports) BuildRunReportInput(ctx context.Context, runID string) (report.ReportInput, bool, error) {
 	run, err := s.Workflows.Store.Runs.Get(ctx, runID)
 	if err != nil {
 		return report.ReportInput{}, false, err
@@ -144,7 +144,7 @@ func (s *Handler) BuildRunReportInput(ctx context.Context, runID string) (report
 	return input, true, nil
 }
 
-func (s *Handler) artifactsForRun(ctx context.Context, run *wire.WorkflowRun, msgs []wire.Message) []report.ReportArtifact {
+func (s *Reports) artifactsForRun(ctx context.Context, run *wire.WorkflowRun, msgs []wire.Message) []report.ReportArtifact {
 	if s.VisualStore == nil || run == nil {
 		return nil
 	}
@@ -221,8 +221,8 @@ func artifactIDsForRun(msgs []wire.Message, runID string) []string {
 	return out
 }
 
-func (s *Handler) reportManifest(ctx context.Context, run *wire.WorkflowRun) (workflowdef.Manifest, bool, error) {
-	m, err := s.Workflows.Resolver.ForRun(ctx, run)
+func (s *Reports) reportManifest(ctx context.Context, run *wire.WorkflowRun) (workflowdef.Manifest, bool, error) {
+	m, err := s.Workflows.ManifestForRunID(ctx, run.ID)
 	if err != nil {
 		return workflowdef.Manifest{}, false, err
 	}
@@ -230,7 +230,7 @@ func (s *Handler) reportManifest(ctx context.Context, run *wire.WorkflowRun) (wo
 	return m, available, err
 }
 
-func (s *Handler) reportProjectLabel(ctx context.Context, projectID string) string {
+func (s *Reports) reportProjectLabel(ctx context.Context, projectID string) string {
 	projectID = strings.TrimSpace(projectID)
 	if projectID == "" {
 		return projectID

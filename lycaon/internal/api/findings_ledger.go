@@ -19,7 +19,7 @@ import (
 
 const ledgerExportLimit = 5000
 
-func (s *Server) handleQueryProjectFindings(w http.ResponseWriter, r *http.Request) {
+func (s *Findings) handleQueryProjectFindings(w http.ResponseWriter, r *http.Request) {
 	p, root, ok := s.requireLedgerProject(w, r)
 	if !ok {
 		return
@@ -41,7 +41,7 @@ func (s *Server) handleQueryProjectFindings(w http.ResponseWriter, r *http.Reque
 	httpio.WriteJSON(w, http.StatusOK, out)
 }
 
-func (s *Server) handleListProjectFindingIgnores(w http.ResponseWriter, r *http.Request) {
+func (s *Findings) handleListProjectFindingIgnores(w http.ResponseWriter, r *http.Request) {
 	p, root, ok := s.requireLedgerProject(w, r)
 	if !ok {
 		return
@@ -55,7 +55,7 @@ func (s *Server) handleListProjectFindingIgnores(w http.ResponseWriter, r *http.
 	httpio.WriteJSON(w, http.StatusOK, out)
 }
 
-func (s *Server) handleCreateProjectFindingIgnore(w http.ResponseWriter, r *http.Request) {
+func (s *Findings) handleCreateProjectFindingIgnore(w http.ResponseWriter, r *http.Request) {
 	p, root, ok := s.requireLedgerProject(w, r)
 	if !ok {
 		return
@@ -74,7 +74,7 @@ func (s *Server) handleCreateProjectFindingIgnore(w http.ResponseWriter, r *http
 	httpio.WriteJSON(w, http.StatusCreated, out)
 }
 
-func (s *Server) handleDeleteProjectFindingIgnore(w http.ResponseWriter, r *http.Request) {
+func (s *Findings) handleDeleteProjectFindingIgnore(w http.ResponseWriter, r *http.Request) {
 	_, root, ok := s.requireLedgerProject(w, r)
 	if !ok {
 		return
@@ -86,7 +86,7 @@ func (s *Server) handleDeleteProjectFindingIgnore(w http.ResponseWriter, r *http
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) handleExportProjectFindings(w http.ResponseWriter, r *http.Request) {
+func (s *Findings) handleExportProjectFindings(w http.ResponseWriter, r *http.Request) {
 	p, root, ok := s.requireLedgerProject(w, r)
 	if !ok {
 		return
@@ -154,8 +154,8 @@ func exportFilename(name string) string {
 }
 
 // A project without a root returns a conflict.
-func (s *Server) requireLedgerProject(w http.ResponseWriter, r *http.Request) (*project.Project, string, bool) {
-	p, ok := requestscope.ProjectByURLID(s.projectRegistry, &s.responses, w, r)
+func (s *Findings) requireLedgerProject(w http.ResponseWriter, r *http.Request) (*project.Project, string, bool) {
+	p, ok := requestscope.ProjectByURLID(s.projectRegistry, s.responses, w, r)
 	if !ok {
 		return nil, "", false
 	}
@@ -166,11 +166,11 @@ func (s *Server) requireLedgerProject(w http.ResponseWriter, r *http.Request) (*
 	return p, roots[0], true
 }
 
-func (s *Server) ignoreFieldInvalid(w http.ResponseWriter, field, reason string) {
+func (s *Findings) ignoreFieldInvalid(w http.ResponseWriter, field, reason string) {
 	s.responses.FailDetails(w, wire.ApiErrorCodeInvalidRequest, map[string]any{"field": field, "reason": reason}, reason)
 }
 
-func (s *Server) writeIgnoreError(w http.ResponseWriter, r *http.Request, err error) {
+func (s *Findings) writeIgnoreError(w http.ResponseWriter, r *http.Request, err error) {
 	if s.responses.OverlayFormatError(w, err) {
 		return
 	}

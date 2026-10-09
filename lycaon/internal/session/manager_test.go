@@ -45,7 +45,7 @@ func newTestManagerWithStore(t *testing.T, persistence Store) *Host {
 	registry := tools.NewStubRegistry()
 	mgr := NewHost(persistence, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, registry)
 	oartest.InstallCloseoutPolicy(t, mgr)
-	mgr.Coordinator.Guards.SetInvoker(testtool.RegistryInvoker{Registry: registry})
+	mgr.Coordinator.Guards.SetToolMetadata(testtool.RegistryInvoker{Registry: registry})
 	// Rewind checkpoints use a state root separate from the project.
 	mgr.SetDataDir(t.TempDir())
 	return mgr
@@ -229,7 +229,7 @@ func TestToolCallError(t *testing.T) {
 	reg.SetFail("read", fmt.Errorf("read failed"))
 	mgr := NewHost(store, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, reg)
 	oartest.InstallCloseoutPolicy(t, mgr)
-	mgr.Coordinator.Guards.SetInvoker(testtool.RegistryInvoker{Registry: reg})
+	mgr.Coordinator.Guards.SetToolMetadata(testtool.RegistryInvoker{Registry: reg})
 	projectID := attachTestProject(t, mgr)
 	ctx := context.Background()
 

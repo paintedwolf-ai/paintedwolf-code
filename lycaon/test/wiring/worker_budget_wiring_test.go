@@ -82,7 +82,7 @@ func TestDeclineWorkerBudgetWiring(t *testing.T) {
 	testutil.FailErr(t, "set child", h.WorkerQueue.SetChildSessionID(ctx, jobID, child.ID))
 
 	childCtx := wiringToolContext(child.ID, dir, jobID)
-	childCtx.ParentSessionID = sess.ID
+	childCtx.Identity.ParentSessionID = sess.ID
 	_, err = h.ToolRegistry.Run(ctx, worker.RequestBudgetTool, map[string]any{
 		"rounds": 6, "remaining_work": []any{"trace the alternate callers"},
 	}, childCtx)

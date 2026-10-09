@@ -15,7 +15,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Handler) HandleExportSessionTranscript(w http.ResponseWriter, r *http.Request) {
+func (s *Transcript) HandleExportSessionTranscript(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	format := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("format")))
 	if format == "" {
@@ -76,7 +76,7 @@ func (s *Handler) HandleExportSessionTranscript(w http.ResponseWriter, r *http.R
 
 // loadFullTranscriptPage walks GetTranscriptPage windows until the full
 // ascending transcript is collected (same authority as GET .../messages).
-func (s *Handler) loadFullTranscriptPage(ctx context.Context, id string) (wire.SessionTranscriptPage, error) {
+func (s *Transcript) loadFullTranscriptPage(ctx context.Context, id string) (wire.SessionTranscriptPage, error) {
 	q := wire.TranscriptPageQuery{Limit: wire.MaxTranscriptPageLimit}
 	page, err := s.Sessions.Runner.Transcript.GetTranscriptPage(ctx, id, q)
 	if err != nil {

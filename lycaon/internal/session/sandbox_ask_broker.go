@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/authzledger"
@@ -78,11 +79,11 @@ func awaitSandboxAsk(ctx context.Context, req sandboxAskRequest) (sandboxAskReso
 		}
 		if final, ok := hitl.PreparedApprovalAnswer(ctx, &card.Action, card.Plan); ok {
 			if card.Plan.Subject.Kind == hitl.ApprovalSubjectReadPathSet || card.Plan.Subject.Kind == hitl.ApprovalSubjectWriteRootSet {
-				return out, &tools.ToolReject{Code: isolation.CodeApprovalUnavailable, Data: map[string]any{"reason": "approval did not install authority"}}
+				return out, &toolrejection.ToolReject{Code: isolation.CodeApprovalUnavailable, Data: map[string]any{"reason": "approval did not install authority"}}
 			}
 			return sandboxAskAnswer(final), nil
 		}
-		return out, &tools.ToolReject{Code: isolation.CodeApprovalUnavailable, Data: map[string]any{"reason": "reviewed capabilities changed before execution"}}
+		return out, &toolrejection.ToolReject{Code: isolation.CodeApprovalUnavailable, Data: map[string]any{"reason": "reviewed capabilities changed before execution"}}
 	}
 
 	begin, existing := req.Gate.Begin(req.InvokingSessionID, req.Key, req.ToolCallID)

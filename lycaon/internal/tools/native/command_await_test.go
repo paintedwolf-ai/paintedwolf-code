@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"runtime"
 	"strings"
 	"testing"
@@ -21,10 +22,10 @@ import (
 
 func commandToolContext(root, sessionID, workerJobID string) tools.ToolContext {
 	return tools.ToolContext{
-		SessionID:   sessionID,
-		WorkerJobID: workerJobID,
-		Agent:       "implement",
-		Roots:       []projectroot.RootRef{{ID: "primary", Path: root, IsPrimary: true}},
+		Identity: tools.InvocationIdentity{SessionID: sessionID,
+			WorkerJobID: workerJobID,
+			Agent:       "implement"},
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "primary", Path: root, IsPrimary: true}}},
 	}
 }
 
@@ -95,15 +96,15 @@ func TestDirectIPLifecycleDoesNotClaimUnavailableSubstrate(t *testing.T) {
 	tool, _ := newCommandTool(t)
 	root := t.TempDir()
 	tctx := commandToolContext(root, "sess-direct", "")
-	tctx.ToolCallID = "call-direct"
-	tctx.DirectIPRequested = true
-	tctx.DirectIPAuthorized = true
-	tctx.DirectIPActionDigest = "action"
-	tctx.DirectIPRequestDigest = "request"
-	tctx.DirectIPConfineDigest = "confinement"
-	tctx.DirectIPCapabilityRuntime = &oneShotDirectIPRuntime{}
+	tctx.Identity.ToolCallID = "call-direct"
+	tctx.Direct.DirectIPRequested = true
+	tctx.Direct.DirectIPAuthorized = true
+	tctx.Direct.DirectIPActionDigest = "action"
+	tctx.Direct.DirectIPRequestDigest = "request"
+	tctx.Direct.DirectIPConfineDigest = "confinement"
+	tctx.Direct.DirectIPCapabilityRuntime = &oneShotDirectIPRuntime{}
 	var phases []tools.DirectIPLifecyclePhase
-	tctx.DirectIPLifecycle = func(event tools.DirectIPLifecycleEvent) {
+	tctx.Direct.DirectIPLifecycle = func(event tools.DirectIPLifecycleEvent) {
 		phases = append(phases, event.Phase)
 	}
 
@@ -181,7 +182,7 @@ func TestCommandForegroundReturnsStructuredLiveJobConflicts(t *testing.T) {
 	_, err = tool.Run(context.Background(), map[string]any{
 		"command": "sleep 4", "wait_ms": float64(50),
 	}, tctx)
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "COMMAND_IN_FLIGHT" {
 		t.Fatalf("second awaited command error = %#v want COMMAND_IN_FLIGHT", err)
 	}

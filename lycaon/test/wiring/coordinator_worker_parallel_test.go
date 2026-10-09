@@ -46,8 +46,8 @@ func TestCoordinatorParallelTaskCapMixedAgents(t *testing.T) {
 	}
 
 	gc := observeReadScoutSpawn(t, ctx, deps, sess, []any{"internal/**"})
-	if !gc.WorkerSpawnBlocked || gc.ActiveWorkerCount != int64(cap) {
-		t.Fatalf("expected spawn blocked with %d mixed agents in flight; blocked=%v active=%d", cap, gc.WorkerSpawnBlocked, gc.ActiveWorkerCount)
+	if !gc.Workers.WorkerSpawnBlocked || gc.Workers.ActiveWorkerCount != int64(cap) {
+		t.Fatalf("expected spawn blocked with %d mixed agents in flight; blocked=%v active=%d", cap, gc.Workers.WorkerSpawnBlocked, gc.Workers.ActiveWorkerCount)
 	}
 	if _, observed := gc.RejectData[workeradmission.CoordinatorWorkerInFlightCode]; !observed {
 		t.Fatalf("guard did not stamp reject data at cap; reject data = %v", gc.RejectData)

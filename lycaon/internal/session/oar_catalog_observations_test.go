@@ -55,8 +55,8 @@ func TestCatalogReadCapacityDoesNotMeanWorkersIdle(t *testing.T) {
 	testutil.FailErr(t, "enqueue read worker", err)
 	for _, cap := range []int{1, 2} {
 		gc := observeTaskInFlight(t, ctx, workeradmission.WorkerCycleGuardDeps{Workers: q, MaxReadWorkers: func(context.Context, string) int { return cap }}, sess, map[string]any{"agent_type": "path-explorer", "scope": map[string]any{"mode": "read"}})
-		if gc.WorkersIdle || gc.ActiveReadCount != 1 || gc.ActiveWriteCount != 0 {
-			t.Fatalf("roster facts: idle=%v read=%d write=%d", gc.WorkersIdle, gc.ActiveReadCount, gc.ActiveWriteCount)
+		if gc.Workers.WorkersIdle || gc.Workers.ActiveReadCount != 1 || gc.Workers.ActiveWriteCount != 0 {
+			t.Fatalf("roster facts: idle=%v read=%d write=%d", gc.Workers.WorkersIdle, gc.Workers.ActiveReadCount, gc.Workers.ActiveWriteCount)
 		}
 		code := ""
 		if cap == 1 {
@@ -82,7 +82,7 @@ func TestCatalogArtifactProbeFailureIsNotAbsence(t *testing.T) {
 	}
 	gc := oar.NewGuardContext()
 	workercompletion.ObserveImplementerFinishWithoutWrite(context.Background(), sess, history, "Report", sess.WorkspacePath, failedArtifactProbe{}, gc)
-	if gc.WorkerArtifactMeasured {
+	if gc.Grounding.WorkerArtifactMeasured {
 		t.Fatal("failed probe claimed a measurement")
 	}
 	requireCatalogDecision(t, oar.AnchorWorkerReportCheck, gc, "")

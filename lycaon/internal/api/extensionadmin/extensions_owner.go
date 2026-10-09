@@ -15,7 +15,7 @@ import (
 )
 
 // extensionPublisher propagates committed generations to session consumers.
-type extensionPublisher struct{ s *Handler }
+type extensionPublisher struct{ s *Mutations }
 
 func (p extensionPublisher) InvalidateProjects(ctx context.Context, projectID string) {
 	p.s.InvalidateEffectiveCatalog(ctx, projectID)
@@ -26,7 +26,7 @@ func (p extensionPublisher) InvalidateProjects(ctx context.Context, projectID st
 }
 
 // extensionEmitter publishes committed extension settings changes.
-type extensionEmitter struct{ s *Handler }
+type extensionEmitter struct{ s *Mutations }
 
 func (e extensionEmitter) ExtensionsChanged(ctx context.Context, scope extensionstate.Scope) {
 	settingsScope := string(wire.SettingsScopeGlobal)
@@ -36,14 +36,8 @@ func (e extensionEmitter) ExtensionsChanged(ctx context.Context, scope extension
 	projectview.PublishSettings(e.s.Events, e.s.Projects, ctx, wire.SettingsAreaExtensions, settingsScope, scope.ProjectDir, "updated")
 }
 
-// OwnerSeams returns the publication seams the extension subsystem owner calls
-// after a commit. They read h only when called, so h may be filled after.
-func OwnerSeams(h *Handler) (extensionstate.Publisher, extensionstate.Emitter) {
-	return extensionPublisher{h}, extensionEmitter{h}
-}
-
 // submitExtensionIntent runs one mutation through the subsystem owner.
-func (s *Handler) submitExtensionIntent(r *http.Request, scope wire.ExtensionsDesiredScope, projectDir, expectedRevision string, op extensionstate.Op) (extensionstate.Result, error) {
+func (s *Mutations) submitExtensionIntent(r *http.Request, scope wire.ExtensionsDesiredScope, projectDir, expectedRevision string, op extensionstate.Op) (extensionstate.Result, error) {
 	return s.Owner.Apply(r.Context(), extensionstate.Intent{
 		Scope: extensionstate.Scope{
 			Kind:       string(scope),
@@ -56,7 +50,7 @@ func (s *Handler) submitExtensionIntent(r *http.Request, scope wire.ExtensionsDe
 }
 
 // writeExtensionMutationError maps typed subsystem-owner results onto the wire.
-func (s *Handler) writeExtensionMutationError(w http.ResponseWriter, r *http.Request, err error) {
+func (s *Mutations) writeExtensionMutationError(w http.ResponseWriter, r *http.Request, err error) {
 	var rejected *extensionstate.RejectedError
 	switch {
 	case errors.Is(err, extensionstate.ErrExpectedRevisionRequired):
@@ -90,24 +84,24 @@ func isStale(err error) bool {
 }
 
 // currentExtensionRevision reads the optimistic token for GET responses.
-func (s *Handler) currentExtensionRevision(projectDir string) (string, error) {
+func (s *Mutations) currentExtensionRevision(projectDir string) (string, error) {
 	return s.Owner.CurrentRevision(projectDir)
 }
 
-func (s *Handler) InvalidateEffectiveCatalog(ctx context.Context, projectID string) {
-	s.Sessions.Catalog.InvalidateEffectiveCatalog(projectID)
-	s.invalidateDeviceContributionFrame()
+func (s *Mutations) InvalidateEffectiveCatalog(ctx context.Context, projectID string) {
+	s.Sessions.Catalog().InvalidateEffectiveCatalog(projectID)
+	s.Contributions.invalidateDeviceContributionFrame()
 	// Complete trust invalidation after client disconnects.
 	detached := context.WithoutCancel(ctx)
 	s.WarmEffectiveCatalog(detached, projectID)
 	s.background.Go(detached, func(ctx context.Context) {
-		_ = s.WarmContributionFrame(ctx)
+		_ = s.Contributions.WarmContributionFrame(ctx)
 	})
 	s.dropProjectMCPSessions(detached, projectID)
 }
 
 // WarmEffectiveCatalog prepares the project catalog and committed view.
-func (s *Handler) WarmEffectiveCatalog(ctx context.Context, projectID string) {
+func (s *Mutations) WarmEffectiveCatalog(ctx context.Context, projectID string) {
 	if strings.TrimSpace(projectID) == "" {
 		return
 	}
@@ -118,19 +112,19 @@ func (s *Handler) WarmEffectiveCatalog(ctx context.Context, projectID string) {
 }
 
 // dropProjectMCPSessions reapplies changed trust to running MCP processes.
-func (s *Handler) dropProjectMCPSessions(ctx context.Context, projectID string) {
+func (s *Mutations) dropProjectMCPSessions(ctx context.Context, projectID string) {
 	if strings.TrimSpace(projectID) == "" {
 		return
 	}
 	slog.DebugContext(ctx, "dropping mcp sessions after trust change", "project_id", projectID)
-	s.MCPRegistry.CloseProjectSessions(projectID)
+	s.MCP.CloseProjectSessions(projectID)
 }
 
 // The require* checks resolve the resource a mutation addresses before the
 // owner compares revisions, so an unknown id answers not found whatever
 // revision the request carries.
 
-func (s *Handler) requireExtensionPack(w http.ResponseWriter, r *http.Request, packID string) bool {
+func (s *Mutations) requireExtensionPack(w http.ResponseWriter, r *http.Request, packID string) bool {
 	eff, _, err := s.resolveExtensionsCatalog(r)
 	if err != nil {
 		requestscope.ScopeError(s.responses, w, r, err)
@@ -145,7 +139,7 @@ func (s *Handler) requireExtensionPack(w http.ResponseWriter, r *http.Request, p
 	return false
 }
 
-func (s *Handler) requireExtensionProfile(w http.ResponseWriter, r *http.Request, packID, profileName string) bool {
+func (s *Mutations) requireExtensionProfile(w http.ResponseWriter, r *http.Request, packID, profileName string) bool {
 	if !s.requireExtensionPack(w, r, packID) {
 		return false
 	}
@@ -156,7 +150,7 @@ func (s *Handler) requireExtensionProfile(w http.ResponseWriter, r *http.Request
 	return true
 }
 
-func (s *Handler) requireExtensionUnit(w http.ResponseWriter, r *http.Request, unitID string) bool {
+func (s *Mutations) requireExtensionUnit(w http.ResponseWriter, r *http.Request, unitID string) bool {
 	eff, _, err := s.resolveExtensionsCatalog(r)
 	if err != nil {
 		requestscope.ScopeError(s.responses, w, r, err)
@@ -169,7 +163,7 @@ func (s *Handler) requireExtensionUnit(w http.ResponseWriter, r *http.Request, u
 	return true
 }
 
-func (s *Handler) requireExtensionMetaPack(w http.ResponseWriter, r *http.Request, metaPackID string) bool {
+func (s *Mutations) requireExtensionMetaPack(w http.ResponseWriter, r *http.Request, metaPackID string) bool {
 	metas, _, err := extpacks.DiscoverMetaPacks()
 	if err != nil {
 		s.responses.InternalError(w, r, err)

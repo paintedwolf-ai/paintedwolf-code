@@ -43,7 +43,7 @@ func TestWorkflowAdvanceHappyPath(t *testing.T) {
 	}
 
 	tctx := toolContext("coordinator", "sess-1", projectDir)
-	tctx.ToolCallID = "advance-call-1"
+	tctx.Identity.ToolCallID = "advance-call-1"
 	out, err := reg.Run(ctx, "workflow_advance", map[string]any{}, tctx)
 	testutil.FailErr(t, "reg.Run failed", err)
 	var result workflowphases.AdvanceToolResult

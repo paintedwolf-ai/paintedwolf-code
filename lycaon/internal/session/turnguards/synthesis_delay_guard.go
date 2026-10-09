@@ -39,10 +39,10 @@ func (m *Service) OpenProgress(ctx context.Context, sess *api.Session, history [
 	_, pending, _ := progress.CloseCounts(content)
 	delayCount, delayed := m.closeouts.Delay(sess.ID, root, closeouts.ProgressDelay, workersIdle && batchReady && pending > 0, synthesisDelayMaxPerPrompt)
 	return m.ToolPolicy.FinishBlock(ctx, sess, func(gc *oar.GuardContext) error {
-		gc.WorkersIdle = workersIdle
-		gc.ProgressOpenItems = int64(pending)
-		gc.BatchReadyIgnoringProgress = batchReady
-		gc.SynthesisDelayCount = int64(delayCount)
+		gc.Workers.WorkersIdle = workersIdle
+		gc.Progress.ProgressOpenItems = int64(pending)
+		gc.Workflow.BatchReadyIgnoringProgress = batchReady
+		gc.Workflow.SynthesisDelayCount = int64(delayCount)
 		if delayed {
 			gc.PutRejectData(progressOpenBeforeCloseoutCode, map[string]any{"pending": pending})
 		}

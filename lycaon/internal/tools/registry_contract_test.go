@@ -101,7 +101,9 @@ func TestRegistryMarksTheOwnerBoundary(t *testing.T) {
 		return "ok", nil
 	}))
 	out := &ToolInvocationOut{}
-	_, err := reg.Run(t.Context(), "read", nil, ToolContext{Out: out})
+	_, err := reg.Run(t.Context(), "read", nil, ToolContext{
+		Effects: InvocationEffects{Out: out},
+	})
 	testutil.FailErr(t, "run read", err)
 	if !out.OwnerInvoked {
 		t.Fatal("subsystem-owner boundary was not marked")

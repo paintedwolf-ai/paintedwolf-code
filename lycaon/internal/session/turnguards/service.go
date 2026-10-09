@@ -86,7 +86,7 @@ type Service struct {
 	workflows           *WorkflowDomains
 	workspaceCheck      workercompletion.WorkspaceChangeChecker
 	repoProvider        repoinfo.Provider
-	toolInvoker         tools.ToolInvoker
+	toolLister          tools.ToolProfileLister
 	rules               toolpolicy.RuleEvaluator
 	Profiles            *profiles.Service
 	Limits              *sessionlimits.Service
@@ -108,7 +108,7 @@ func (m *Service) SetWorkspaceCheck(check workercompletion.WorkspaceChangeChecke
 	m.workspaceCheck = check
 }
 func (m *Service) SetRepoProvider(provider repoinfo.Provider) { m.repoProvider = provider }
-func (m *Service) SetInvoker(invoker tools.ToolInvoker)       { m.toolInvoker = invoker }
+func (m *Service) SetToolMetadata(lister tools.ToolProfileLister) { m.toolLister = lister }
 func (m *Service) SetRules(rules toolpolicy.RuleEvaluator)    { m.rules = rules }
 func (m *Service) SetRejects(formatter *guidance.StaticRejectFormatter, toolFormatter *guidance.ToolRejectFormatter) {
 	m.Rejects = formatter

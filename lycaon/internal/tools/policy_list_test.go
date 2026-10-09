@@ -2,6 +2,7 @@ package tools_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/platform"
@@ -15,7 +16,7 @@ func TestProfilePolicyEngineEvaluateForListHidesRuntimeDenied(t *testing.T) {
 		ID:    "implement",
 		Tools: map[string]bool{"web_search": true, "fetch_url": true, "read": true},
 	}})
-	policy := tools.NewProfilePolicyEngine(boundary)
+	policy := toolprofiles.NewProfilePolicyEngine(boundary)
 	policy.SetRuntimeToolDeny(func(toolName string) bool {
 		return toolName == "web_search" || toolName == "fetch_url"
 	})
@@ -45,13 +46,13 @@ func TestListToolsForProfileOmitsRuntimeDeniedWebResearch(t *testing.T) {
 		ID:    "implement",
 		Tools: map[string]bool{"web_search": true, "fetch_url": true, "read": true},
 	}})
-	engine := tools.NewProfilePolicyEngine(boundary)
+	engine := toolprofiles.NewProfilePolicyEngine(boundary)
 	engine.SetRuntimeToolDeny(func(toolName string) bool {
 		return toolName == "web_search" || toolName == "fetch_url"
 	})
 	invoker := &listPolicyInvoker{
 		metas:  []tools.ToolMeta{{Name: "read"}, {Name: "web_search"}, {Name: "fetch_url"}},
-		policy: tools.NewGuidanceRejectPolicy(engine),
+		policy: toolprofiles.NewGuidanceRejectPolicy(engine),
 	}
 	got := tools.ListToolsForProfile(context.Background(), invoker, platform.ToolFilter{ProfileID: "implement"})
 	if len(got) != 1 || got[0].Name != "read" {

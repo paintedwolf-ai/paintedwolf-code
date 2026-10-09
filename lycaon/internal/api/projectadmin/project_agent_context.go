@@ -14,7 +14,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Handler) HandleGetProjectAgentContext(w http.ResponseWriter, r *http.Request) {
+func (s *Projects) HandleGetProjectAgentContext(w http.ResponseWriter, r *http.Request) {
 	p, ok := requestscope.ProjectByURLID(s.Registry, s.responses, w, r)
 	if !ok {
 		return

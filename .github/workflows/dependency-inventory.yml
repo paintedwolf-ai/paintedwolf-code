@@ -12,8 +12,9 @@ permissions:
   pull-requests: write
   actions: write
 
+# Maintenance runs one workflow at a time; staggered schedules keep a pending run from being replaced.
 concurrency:
-  group: dependency-inventory
+  group: maintenance
   cancel-in-progress: false
 
 jobs:

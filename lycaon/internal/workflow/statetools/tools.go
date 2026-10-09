@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
 	"github.com/lycaon/lycaon/internal/workflow/toolguard"
 	"strings"
@@ -47,14 +48,14 @@ func RegisterStateTools(reg *tools.DefaultRegistry, deps StateToolDeps) error {
 		if err := toolguard.RequireSessionProject(ctx, deps.Sessions, tctx); err != nil {
 			return "", err
 		}
-		active, err := deps.Runs.ActiveBySession(ctx, tctx.SessionID)
+		active, err := deps.Runs.ActiveBySession(ctx, tctx.Identity.SessionID)
 		if err != nil {
 			return "", err
 		}
 		if active == nil {
 			return "", runstate.ErrNoActiveRun
 		}
-		run, err := deps.Controls.Exit(ctx, tctx.SessionID, active.ID, active.Revision, toolguard.StringArg(args["reason"]))
+		run, err := deps.Controls.Exit(ctx, tctx.Identity.SessionID, active.ID, active.Revision, toolguard.StringArg(args["reason"]))
 		if err != nil {
 			return "", err
 		}
@@ -68,7 +69,7 @@ func RegisterStateTools(reg *tools.DefaultRegistry, deps StateToolDeps) error {
 		if err := toolguard.RequireSessionProject(ctx, deps.Sessions, tctx); err != nil {
 			return "", err
 		}
-		run, err := deps.Runs.ActiveBySession(ctx, tctx.SessionID)
+		run, err := deps.Runs.ActiveBySession(ctx, tctx.Identity.SessionID)
 		if err != nil {
 			return "", err
 		}
@@ -103,7 +104,7 @@ func RegisterStateTools(reg *tools.DefaultRegistry, deps StateToolDeps) error {
 			return "", fmt.Errorf("path required")
 		}
 		if hostWorkflowStatePath(path) {
-			return "", &tools.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"tool": "state_update", "field": "path", "reason": "host_managed_workflow_state", "path": path}}
+			return "", &toolrejection.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"tool": "state_update", "field": "path", "reason": "host_managed_workflow_state", "path": path}}
 		}
 		value, ok := args["value"]
 		if !ok {
@@ -113,14 +114,14 @@ func RegisterStateTools(reg *tools.DefaultRegistry, deps StateToolDeps) error {
 			Path  string `json:"path"`
 			Value any    `json:"value"`
 		}{Path: path, Value: value}
-		if _, replayed, replayErr := deps.Journal.ReplayOperation(ctx, tctx.ToolCallID, "state_update", payload); replayErr != nil || replayed {
+		if _, replayed, replayErr := deps.Journal.ReplayOperation(ctx, tctx.Identity.ToolCallID, "state_update", payload); replayErr != nil || replayed {
 			if replayErr != nil {
 				return "", replayErr
 			}
 			raw, _ := json.Marshal(map[string]any{"path": path, "value": value})
 			return string(raw), nil
 		}
-		run, err := deps.Runs.ActiveBySession(ctx, tctx.SessionID)
+		run, err := deps.Runs.ActiveBySession(ctx, tctx.Identity.SessionID)
 		if err != nil {
 			return "", err
 		}
@@ -134,7 +135,7 @@ func RegisterStateTools(reg *tools.DefaultRegistry, deps StateToolDeps) error {
 			return "", err
 		}
 		vars = runstate.SetHostVar(vars, path, value)
-		commandCtx := runstate.WithCommandOperation(runstate.WithExpectedRevision(ctx, run.Revision), tctx.ToolCallID)
+		commandCtx := runstate.WithCommandOperation(runstate.WithExpectedRevision(ctx, run.Revision), tctx.Identity.ToolCallID)
 		if err := deps.Journal.Commit(commandCtx, run, "state_update", payload, vars, nil, "", runstate.WorkerMutation{}, nil); err != nil {
 			return "", err
 		}
@@ -170,7 +171,7 @@ func runStateStartTool(ctx context.Context, deps StateToolDeps, args map[string]
 		return "", err
 	}
 	req := api.StartWorkflowRunRequest{
-		OperationID:     strings.TrimSpace(tctx.ToolCallID),
+		OperationID:     strings.TrimSpace(tctx.Identity.ToolCallID),
 		WorkflowID:      toolguard.StringArg(args["workflow_id"]),
 		WorkflowVersion: toolguard.StringArg(args["workflow_version"]),
 		BlueprintPath:   toolguard.StringArg(args["blueprint_path"]),
@@ -179,14 +180,14 @@ func runStateStartTool(ctx context.Context, deps StateToolDeps, args map[string]
 	if req.WorkflowID == "" || req.WorkflowVersion == "" {
 		return "", fmt.Errorf("workflow_id and workflow_version required")
 	}
-	if err := deps.Resolver.ValidateUserFacingStart(ctx, tctx.ActiveRootPath(), tctx.SessionID, req.WorkflowID, req.WorkflowVersion); err != nil {
+	if err := deps.Resolver.ValidateUserFacingStart(ctx, tctx.ActiveRootPath(), tctx.Identity.SessionID, req.WorkflowID, req.WorkflowVersion); err != nil {
 		return "", err
 	}
-	run, err := deps.Starts.Start(ctx, tctx.SessionID, req)
+	run, err := deps.Starts.Start(ctx, tctx.Identity.SessionID, req)
 	if err != nil {
 		if errors.Is(err, runstate.ErrWorkflowStartRequiresHumanApproval) {
-			_ = deps.Scaffold.NoteWorkflowStartProposal(ctx, tctx.SessionID, req.WorkflowID, req.WorkflowVersion)
-			return "", &tools.ToolReject{
+			_ = deps.Scaffold.NoteWorkflowStartProposal(ctx, tctx.Identity.SessionID, req.WorkflowID, req.WorkflowVersion)
+			return "", &toolrejection.ToolReject{
 				Code: "WORKFLOW_START_REQUIRES_HUMAN_APPROVAL",
 				Data: map[string]any{"workflow_id": req.WorkflowID},
 			}

@@ -40,26 +40,26 @@ func (m *Service) FillSessionFacts(ctx context.Context, gc *oar.GuardContext, se
 		return
 	}
 	if sess != nil {
-		gc.ProjectID = sess.ProjectID
-		gc.SessionID = sess.ID
-		gc.SessionPosture = string(sess.Posture)
-		gc.Principal = sess.OwnerPersonID
-		gc.WorkerLeg = sess.IsWorkerChild()
+		gc.Session.ProjectID = sess.ProjectID
+		gc.Session.SessionID = sess.ID
+		gc.Session.SessionPosture = string(sess.Posture)
+		gc.Session.Principal = sess.OwnerPersonID
+		gc.Session.WorkerLeg = sess.IsWorkerChild()
 		if sess.ParentSessionID == "" {
-			gc.Profile = "coordinator"
+			gc.Session.Profile = "coordinator"
 		}
 		gc.RegisterProvider("permission_profile", func(gc *oar.GuardContext) error {
 			profile, err := m.profiles.PromptToolProfile(ctx, sess)
 			if err != nil {
 				return err
 			}
-			gc.PermissionProfile = profile
+			gc.Session.PermissionProfile = profile
 			return nil
 		})
 	}
 	if caller, ok := people.Caller(ctx); ok {
-		gc.Principal = caller.ID
-		gc.PrincipalRoles = []string{string(caller.Role)}
+		gc.Session.Principal = caller.ID
+		gc.Session.PrincipalRoles = []string{string(caller.Role)}
 	}
 	tools.RegisterRecoveryFacts(ctx, gc)
 	gc.ObserveToolCall(tool, args)

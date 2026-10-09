@@ -21,14 +21,14 @@ type closeoutReportObservation struct {
 func (l *turnCloseout) observeCloseoutReport(ctx context.Context, sess *api.Session, history []api.Message, surfaceID string, report guidance.CoordinatorCompletionReport, unread []jsonshape.Issue, turnTools []string, deliversRunReport bool) (closeoutReportObservation, error) {
 	observation := closeoutReportObservation{facts: oar.NewGuardContext()}
 	gc := observation.facts
-	gc.Surface = strings.TrimSpace(surfaceID)
+	gc.Session.Surface = strings.TrimSpace(surfaceID)
 	var issues []guidance.ReportDocumentIssue
 	if issue, ok := guidance.ReportFenceUnreadable(unread); ok {
 		putReportFieldRefusals(gc, []guidance.ReportDocumentIssue{issue})
 		return observation, nil
 	}
 	if embeds := guidance.CloseoutMarkdownArtifactEmbedIDs(report.Synthesis); len(embeds) > 0 {
-		gc.RejectObservation = "present_markdown_embed"
+		gc.Rejection.RejectObservation = "present_markdown_embed"
 		gc.PutRejectData(guidance.PresentMarkdownEmbedCode, guidance.OffenderHintData(embeds))
 		return observation, nil
 	}
@@ -57,7 +57,7 @@ func (l *turnCloseout) observeCloseoutReport(ctx context.Context, sess *api.Sess
 		}
 	}
 	if hit, offenders := guidance.CloseoutCitationsSubsetOfPrior(history, report); hit {
-		gc.RejectObservation = "closeout_no_new_evidence"
+		gc.Rejection.RejectObservation = "closeout_no_new_evidence"
 		gc.PutRejectData(guidance.CloseoutNoNewEvidenceCode(surfaceID), guidance.OffenderHintData(offenders))
 	}
 	return observation, nil
@@ -66,7 +66,7 @@ func (l *turnCloseout) observeCloseoutReport(ctx context.Context, sess *api.Sess
 // The first defect selects policy; every defect accompanies the repair.
 func putReportFieldRefusals(gc *oar.GuardContext, issues []guidance.ReportDocumentIssue) {
 	issue := issues[0]
-	gc.RejectObservation = guidance.ReportDocumentObservation(issue.Code)
+	gc.Rejection.RejectObservation = guidance.ReportDocumentObservation(issue.Code)
 	data := guidance.OffenderHintData(issue.Offenders)
 	// The issue samples its subjects; the refusal counts every one of them.
 	if extra := issue.Count - len(issue.Offenders); extra > 0 {

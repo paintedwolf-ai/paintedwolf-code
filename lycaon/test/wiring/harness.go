@@ -73,7 +73,7 @@ func BuildForTest(t *testing.T, opts ...Option) *Harness {
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
-		testutil.FailErr(t, "clear source catalog", sourcecatalog.Process().ClearTreeStores(ctx, nil))
+		testutil.FailErr(t, "clear source catalog", sourcecatalog.Process().Trees.ClearTreeStores(ctx, nil))
 	})
 
 	o := defaultOptions()
@@ -241,7 +241,9 @@ func (h *Harness) SeedProgress(t *testing.T, ctx context.Context, sessionID stri
 	}
 	if _, err := h.ToolRegistry.Run(ctx, "update_progress", map[string]any{
 		"content": "## Progress\n- [ ] wiring test plan\n",
-	}, tools.ToolContext{SessionID: sessionID}); err != nil {
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: sessionID},
+	}); err != nil {
 		t.Fatalf("SeedProgress: %v", err)
 	}
 }

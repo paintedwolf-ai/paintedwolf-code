@@ -107,7 +107,7 @@ func TestBlockedLoopClosesOutInsteadOfSpinning(t *testing.T) {
 		Session:   sess,
 		History:   userHistory("go"),
 		ProfileID: "coordinator",
-		ToolCtx:   tools.ToolContext{SessionID: sess.ID},
+		ToolCtx:   tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID}},
 	})
 	testutil.FailErr(t, "loop.Run", err)
 	if result.LastAssistantContent != "Stopping: the same call keeps being blocked." {
@@ -176,7 +176,7 @@ func TestBlockedLoopFinalTurnToolCallIsReportedAsTheModelsMiss(t *testing.T) {
 	loop := promptloop.NewPromptLoopForTest(deps)
 	_, err = loop.Run(ctx, promptloop.PromptRunInput{
 		SessionID: sess.ID, Session: sess, History: userHistory("go"), ProfileID: "coordinator",
-		ToolCtx: tools.ToolContext{SessionID: sess.ID},
+		ToolCtx: tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID}},
 	})
 	var miss *promptloop.ProseTurnToolCallError
 	if !errors.As(err, &miss) {
@@ -246,7 +246,7 @@ func TestBlockedLoopEarlyCloseoutAssemblesWhenFinishBlocked(t *testing.T) {
 		Session:   sess,
 		History:   userHistory("go"),
 		ProfileID: "coordinator",
-		ToolCtx:   tools.ToolContext{SessionID: sess.ID},
+		ToolCtx:   tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID}},
 	})
 	testutil.FailErr(t, "loop.Run", err)
 	if res == nil || res.LastAssistantID == "" {
@@ -322,7 +322,7 @@ func TestBlockedLoopStreakResetsOnProgress(t *testing.T) {
 		Session:   sess,
 		History:   userHistory("go"),
 		ProfileID: "coordinator",
-		ToolCtx:   tools.ToolContext{SessionID: sess.ID},
+		ToolCtx:   tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID}},
 	})
 	testutil.FailErr(t, "loop.Run", err)
 	if res == nil {
@@ -362,7 +362,7 @@ func TestSchemaRejectsDoNotForceBlockedLoopCloseout(t *testing.T) {
 		Session:   sess,
 		History:   userHistory("fix the port"),
 		ProfileID: "coordinator",
-		ToolCtx:   tools.ToolContext{SessionID: sess.ID},
+		ToolCtx:   tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID}},
 	})
 	testutil.FailErr(t, "loop.Run", err)
 	if res == nil {
@@ -463,7 +463,7 @@ func TestPreInvokeRejectAccruesCodeTotalAndEscalates(t *testing.T) {
 		Session:   sess,
 		History:   userHistory("go"),
 		ProfileID: "coordinator",
-		ToolCtx:   tools.ToolContext{SessionID: sess.ID},
+		ToolCtx:   tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID}},
 	})
 	testutil.FailErr(t, "loop.Run", err)
 	if result.LastAssistantContent != "Stopping: the same call keeps being blocked." {

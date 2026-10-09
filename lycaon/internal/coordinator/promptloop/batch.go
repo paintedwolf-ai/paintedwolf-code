@@ -132,14 +132,14 @@ func (l *toolBatch) toolContextForCall(ctx context.Context, sess *api.Session, b
 	if err != nil {
 		return tools.ToolContext{}, err
 	}
-	refreshed.TurnSurfaceID = base.TurnSurfaceID
-	refreshed.TurnToolPlan = base.TurnToolPlan
-	refreshed.TurnOfferedToolNames = slices.Clone(base.TurnOfferedToolNames)
-	refreshed.TurnOfferedToolSchemas = base.TurnOfferedToolSchemas
-	refreshed.ModelSourceContext = base.ModelSourceContext
-	refreshed.EditorReadBases = base.EditorReadBases
-	refreshed.TurnWritePinRootID = base.TurnWritePinRootID
-	refreshed.TurnWritePinGlobs = append([]string(nil), base.TurnWritePinGlobs...)
+	refreshed.Turn.TurnSurfaceID = base.Turn.TurnSurfaceID
+	refreshed.Turn.TurnToolPlan = base.Turn.TurnToolPlan
+	refreshed.Turn.TurnOfferedToolNames = slices.Clone(base.Turn.TurnOfferedToolNames)
+	refreshed.Turn.TurnOfferedToolSchemas = base.Turn.TurnOfferedToolSchemas
+	refreshed.Source.ModelSourceContext = base.Source.ModelSourceContext
+	refreshed.Source.EditorReadBases = base.Source.EditorReadBases
+	refreshed.Turn.TurnWritePinRootID = base.Turn.TurnWritePinRootID
+	refreshed.Turn.TurnWritePinGlobs = append([]string(nil), base.Turn.TurnWritePinGlobs...)
 	return refreshed, nil
 }
 
@@ -173,10 +173,10 @@ func (l *toolBatch) executeToolCallsInTurn(
 			return history, nil, false, 0, "", false, err
 		}
 	}
-	if baseToolCtx.EditorDocuments != nil {
-		baseToolCtx.EditorReadBases = tools.NewAgentReadBases(baseToolCtx.EditorDocuments.FreezeAgentReads(baseToolCtx.ProjectID, baseToolCtx.SessionID))
+	if baseToolCtx.Source.EditorDocuments != nil {
+		baseToolCtx.Source.EditorReadBases = tools.NewAgentReadBases(baseToolCtx.Source.EditorDocuments.FreezeAgentReads(baseToolCtx.Identity.ProjectID, baseToolCtx.Identity.SessionID))
 	}
-	baseToolCtx.TurnSurfaceID = strings.TrimSpace(turnSurfaceID)
+	baseToolCtx.Turn.TurnSurfaceID = strings.TrimSpace(turnSurfaceID)
 	frame := inject.CoordinatorTurnFrame{}
 	machine := inject.Machine{}
 	if st != nil {
@@ -184,10 +184,10 @@ func (l *toolBatch) executeToolCallsInTurn(
 		machine = st.machine
 	}
 	if st != nil {
-		baseToolCtx.TurnToolPlan = st.turnToolPlan
-		baseToolCtx.TurnOfferedToolNames = slices.Clone(st.offeredToolNames)
-		baseToolCtx.TurnOfferedToolSchemas = st.offeredToolSchemas
-		baseToolCtx.ModelSourceContext = st.sourceContext
+		baseToolCtx.Turn.TurnToolPlan = st.turnToolPlan
+		baseToolCtx.Turn.TurnOfferedToolNames = slices.Clone(st.offeredToolNames)
+		baseToolCtx.Turn.TurnOfferedToolSchemas = st.offeredToolSchemas
+		baseToolCtx.Source.ModelSourceContext = st.sourceContext
 	}
 	taskAllowlist := taskSpawnAllowlistForTurn(frame)
 	var turnTools []string
@@ -295,7 +295,7 @@ func (l *turnControl) batchStartHolds(ctx context.Context, sessionID, turnSurfac
 	}
 	return batchHolds{
 		approval: l.Deps.HumanApprovalAwaiting != nil && l.Deps.HumanApprovalAwaiting(ctx, sessionID),
-		answeringUnderHost: strings.TrimSpace(turnSurfaceID) == tools.SurfaceAwaitHost &&
+		answeringUnderHost: strings.TrimSpace(turnSurfaceID) == toolcontract.SurfaceAwaitHost &&
 			l.Deps.HostObligationHeld != nil && l.Deps.HostObligationHeld(ctx, sessionID),
 	}
 }
@@ -355,7 +355,7 @@ func (l *toolBatch) runConcurrentToolBatch(
 				outcomes[i] = toolCallOutcome{index: i, err: refreshErr}
 				return
 			}
-			tctx.Out = &tools.ToolInvocationOut{}
+			tctx.Effects.Out = &tools.ToolInvocationOut{}
 			out := l.executeOneToolCall(ctx, sess, sessionID, userPrompt, history, call, tctx, taskAllowlist, assistantMessageID, runCtx, proseTurn)
 			outcomes[i] = toolCallOutcome{
 				index:          i,
@@ -462,7 +462,7 @@ func (l *toolBatch) executeOneToolCall(
 	runCtx api.CoordinatorRunContext,
 	proseTurn bool,
 ) singleToolOutcome {
-	ctx = tools.WithRecoveryTools(ctx, toolCtx.TurnOfferedToolNames)
+	ctx = tools.WithRecoveryTools(ctx, toolCtx.Turn.TurnOfferedToolNames)
 	if proseTurn && !workerProseAllowsTool(sess, tc.Name) {
 		return l.refuseToolCall(tc, assistantMessageID, l.Tools.rejectToolOccurrence(ctx, sess, tc, toolCtx, "TOOL_INVOKE_PROSE_TURN", nil))
 	}

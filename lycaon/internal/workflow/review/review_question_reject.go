@@ -2,7 +2,7 @@ package review
 
 import (
 	"github.com/lycaon/lycaon/internal/guidance"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -18,7 +18,7 @@ func rejectReviewQuestion(reason, id string) error {
 	data := guidance.OffenderHintData(subjects)
 	data["reason"] = reason
 	data["question_id"] = id
-	return &tools.ToolReject{Code: submitVerdictQuestionInvalidCode, Data: data}
+	return &toolrejection.ToolReject{Code: submitVerdictQuestionInvalidCode, Data: data}
 }
 
 // Follow-up requires an available investigation or review.

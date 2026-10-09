@@ -14,7 +14,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Handler) HandleAttachProjectRoot(w http.ResponseWriter, r *http.Request) {
+func (s *Roots) HandleAttachProjectRoot(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimSpace(chi.URLParam(r, "id"))
 	var req wire.AttachProjectRootRequest
 	if err := httpio.DecodeJSON(w, r, &req); err != nil {
@@ -25,10 +25,10 @@ func (s *Handler) HandleAttachProjectRoot(w http.ResponseWriter, r *http.Request
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "path is required")
 		return
 	}
-	if _, ok := s.requireProject(w, r, id); !ok {
+	if _, ok := s.Projects.requireProject(w, r, id); !ok {
 		return
 	}
-	release := s.beginProjectMutation(w, r, id)
+	release := s.Projects.beginProjectMutation(w, r, id)
 	if release == nil {
 		return
 	}
@@ -46,17 +46,17 @@ func (s *Handler) HandleAttachProjectRoot(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if change.Added != nil {
-		s.Sources.InvalidateProjectSourceViews(id)
+		s.sourceViews.InvalidateProjectSourceViews(id)
 		s.afterRootAttached(r.Context(), id, change.Added.Path)
 	}
-	s.detectVerifyAsync(r.Context(), id)
+	s.Verification.detectVerifyAsync(r.Context(), id)
 	s.Sessions.ProjectControl.EnqueueRootsChangedKick(r.Context(), id, project.RootRefsFrom(change.Before), project.RootRefsFrom(change.After))
-	s.Sessions.Chats.ReopenOrientation(r.Context(), id, s.Sessions.Coordinator.Runtime.Board())
-	s.publishProjectLifecycleEvent(r.Context(), wire.ProjectEventUpdated, change.After)
+	s.Sessions.ReopenBoardOrientationOnRootAttach(r.Context(), id)
+	s.Projects.publishProjectLifecycleEvent(r.Context(), wire.ProjectEventUpdated, change.After)
 	httpio.WriteJSON(w, http.StatusCreated, project.ToAPI(change.After))
 }
 
-func (s *Handler) HandleUpdateProjectRoot(w http.ResponseWriter, r *http.Request) {
+func (s *Roots) HandleUpdateProjectRoot(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimSpace(chi.URLParam(r, "id"))
 	rootID := strings.TrimSpace(chi.URLParam(r, "root_id"))
 	var req wire.UpdateProjectRootRequest
@@ -64,10 +64,10 @@ func (s *Handler) HandleUpdateProjectRoot(w http.ResponseWriter, r *http.Request
 		s.responses.DecodeError(w, r, err)
 		return
 	}
-	if _, ok := s.requireProject(w, r, id); !ok {
+	if _, ok := s.Projects.requireProject(w, r, id); !ok {
 		return
 	}
-	release := s.beginProjectMutation(w, r, id)
+	release := s.Projects.beginProjectMutation(w, r, id)
 	if release == nil {
 		return
 	}
@@ -83,19 +83,19 @@ func (s *Handler) HandleUpdateProjectRoot(w http.ResponseWriter, r *http.Request
 		s.responses.ProjectRegistryError(w, r, err)
 		return
 	}
-	s.Sources.InvalidateProjectSourceViews(id)
+	s.sourceViews.InvalidateProjectSourceViews(id)
 	s.Sessions.ProjectControl.InvalidateSessionWorkspacePaths(r.Context(), id)
 	if change.RootContextChanged {
 		s.Sessions.ProjectControl.EnqueueRootsChangedKick(r.Context(), id, project.RootRefsFrom(change.Before), project.RootRefsFrom(change.After))
 	}
 	if change.RootContextChanged {
-		s.Sources.ScheduleSourceInventory(r.Context(), id)
+		s.sourceWatch.ScheduleSourceInventory(r.Context(), id)
 	}
-	s.publishProjectLifecycleEvent(r.Context(), wire.ProjectEventUpdated, change.After)
+	s.Projects.publishProjectLifecycleEvent(r.Context(), wire.ProjectEventUpdated, change.After)
 	httpio.WriteJSON(w, http.StatusOK, project.ToAPI(change.After))
 }
 
-func (s *Handler) ensureProjectRootsMutable(w http.ResponseWriter, r *http.Request, projectID string) bool {
+func (s *Roots) ensureProjectRootsMutable(w http.ResponseWriter, r *http.Request, projectID string) bool {
 	if s.Sessions == nil {
 		return true
 	}
@@ -105,13 +105,13 @@ func (s *Handler) ensureProjectRootsMutable(w http.ResponseWriter, r *http.Reque
 		return false
 	}
 	if dependents.HasAny() {
-		s.writeRootBusy(w, dependents)
+		s.Projects.writeRootBusy(w, dependents)
 		return false
 	}
 	return true
 }
 
-func (s *Handler) afterRootAttached(ctx context.Context, projectID, workspacePath string) {
+func (s *Roots) afterRootAttached(ctx context.Context, projectID, workspacePath string) {
 	s.ScanCadence.RootAttached(workspacePath)
 	var overlayPaths []string
 	var p *project.Project
@@ -136,19 +136,19 @@ func (s *Handler) afterRootAttached(ctx context.Context, projectID, workspacePat
 		}
 	}
 	s.Git.WarmRepoBrief(workspacePath)
-	s.Sources.ScheduleSourceInventory(ctx, projectID)
+	s.sourceWatch.ScheduleSourceInventory(ctx, projectID)
 	s.background.Go(ctx, func(ctx context.Context) {
 		s.attachRootBackgroundWarm(ctx, projectID, workspacePath)
 	})
 }
 
 // attachRootBackgroundWarm performs whole-tree work outside the request.
-func (s *Handler) attachRootBackgroundWarm(ctx context.Context, projectID, workspacePath string) {
-	s.Sources.ScheduleSourceWatch(ctx, projectID)
-	if removed := s.reconcileProjectSandboxes(ctx, projectID, workspacePath); removed > 0 {
+func (s *Roots) attachRootBackgroundWarm(ctx context.Context, projectID, workspacePath string) {
+	s.sourceWatch.ScheduleSourceWatch(ctx, projectID)
+	if removed := s.Sandboxes.reconcileProjectSandboxes(ctx, projectID, workspacePath); removed > 0 {
 		slog.InfoContext(ctx, "reconciled stale worker sandboxes on root attach", "project_id", projectID, "workspace_path", workspacePath, "removed", removed)
 	}
-	if err := s.Sources.AwaitAttachedRootStructure(ctx, projectID, workspacePath); err != nil {
+	if err := s.sourceWatch.AwaitAttachedRootStructure(ctx, projectID, workspacePath); err != nil {
 		slog.WarnContext(ctx, "source structure before background warm-up", "path", workspacePath, "err", err)
 		return
 	}
@@ -160,7 +160,7 @@ func (s *Handler) attachRootBackgroundWarm(ctx context.Context, projectID, works
 
 // baselineSecurity records the attached root's generation as each scanner's
 // base. Nothing is scanned: automatic scanning covers what changes from here.
-func (s *Handler) baselineSecurity(ctx context.Context, projectDir string) error {
+func (s *Roots) baselineSecurity(ctx context.Context, projectDir string) error {
 	if s.ScanCadence == nil {
 		return nil
 	}

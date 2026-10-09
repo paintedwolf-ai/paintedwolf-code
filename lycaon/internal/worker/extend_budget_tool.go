@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/session/workeradmission"
@@ -47,21 +48,21 @@ func RegisterExtendWorkerBudgetTool(reg *tools.DefaultRegistry, deps ExtendBudge
 		}
 		task, ok := deps.Queue.Get(jobID)
 		if !ok || task == nil {
-			return "", &tools.ToolReject{Code: workerBudgetExtendNotRunningCode, Data: map[string]any{"job_id": jobID}}
+			return "", &toolrejection.ToolReject{Code: workerBudgetExtendNotRunningCode, Data: map[string]any{"job_id": jobID}}
 		}
-		if strings.TrimSpace(task.ParentSessionID) != strings.TrimSpace(tctx.SessionID) {
-			return "", &tools.ToolReject{Code: workerBudgetExtendSessionMismatchCode, Data: map[string]any{"job_id": jobID}}
+		if strings.TrimSpace(task.ParentSessionID) != strings.TrimSpace(tctx.Identity.SessionID) {
+			return "", &toolrejection.ToolReject{Code: workerBudgetExtendSessionMismatchCode, Data: map[string]any{"job_id": jobID}}
 		}
 		tctx.SetDisplaySubject(task.Brief)
 		if !workerBudgetLive(task) || strings.TrimSpace(task.ChildSessionID) == "" {
-			return "", &tools.ToolReject{Code: workerBudgetExtendNotRunningCode, Data: map[string]any{"job_id": jobID, "status": string(task.Status)}}
+			return "", &toolrejection.ToolReject{Code: workerBudgetExtendNotRunningCode, Data: map[string]any{"job_id": jobID, "status": string(task.Status)}}
 		}
 		budget := spawn.DefaultWorkerToolBudget()
 		if deps.ToolBudget != nil {
 			budget = deps.ToolBudget(tctx.ActiveRootPath())
 		}
 		if code := workeradmission.ValidateTaskMaxToolLoopsCode(newMax, budget); code != "" {
-			return "", &tools.ToolReject{
+			return "", &toolrejection.ToolReject{
 				Code: workerBudgetExtendInvalidCode,
 				Data: map[string]any{
 					"job_id":         jobID,
@@ -73,7 +74,7 @@ func RegisterExtendWorkerBudgetTool(reg *tools.DefaultRegistry, deps ExtendBudge
 		}
 		current := budget.Effective(task.MaxToolLoops)
 		if newMax <= current {
-			return "", &tools.ToolReject{
+			return "", &toolrejection.ToolReject{
 				Code: workerBudgetExtendNotIncreaseCode,
 				Data: map[string]any{
 					"job_id":               jobID,
@@ -86,7 +87,7 @@ func RegisterExtendWorkerBudgetTool(reg *tools.DefaultRegistry, deps ExtendBudge
 		}
 		if err := deps.Ledger.Grant(ctx, task.ChildSessionID, jobID, newMax); err != nil {
 			if errors.Is(err, ErrWorkerBudgetNotLive) {
-				return "", &tools.ToolReject{Code: workerBudgetExtendNotRunningCode, Data: map[string]any{"job_id": jobID}}
+				return "", &toolrejection.ToolReject{Code: workerBudgetExtendNotRunningCode, Data: map[string]any{"job_id": jobID}}
 			}
 			return "", err
 		}

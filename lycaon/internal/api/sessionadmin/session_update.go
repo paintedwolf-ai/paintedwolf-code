@@ -13,7 +13,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Handler) HandleUpdateSession(w http.ResponseWriter, r *http.Request) {
+func (s *Lifecycle) HandleUpdateSession(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimSpace(chi.URLParam(r, "id"))
 	var req wire.UpdateSessionRequest
 	if err := httpio.DecodeJSON(w, r, &req); err != nil {
@@ -64,7 +64,7 @@ func (s *Handler) HandleUpdateSession(w http.ResponseWriter, r *http.Request) {
 	httpio.WriteJSON(w, http.StatusOK, sess)
 }
 
-func (s *Handler) HandleDeleteSession(w http.ResponseWriter, r *http.Request) {
+func (s *Lifecycle) HandleDeleteSession(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimSpace(chi.URLParam(r, "id"))
 	if err := s.Sessions.Chats.Delete(r.Context(), id); err != nil {
 		s.writeSessionLifecycleError(w, r, err)
@@ -73,7 +73,7 @@ func (s *Handler) HandleDeleteSession(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Handler) writeSessionLifecycleError(w http.ResponseWriter, r *http.Request, err error) {
+func (s *Lifecycle) writeSessionLifecycleError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, naming.ErrInvalidDisplayTitle):
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "title must be 1–80 characters without control characters")

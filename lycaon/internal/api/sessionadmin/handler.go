@@ -23,7 +23,6 @@ import (
 	"github.com/lycaon/lycaon/internal/workflow"
 )
 
-// Deps are the session routes' dependencies, fixed at construction.
 type Deps struct {
 	Checkpoints    hitl.CheckpointManager
 	EventPublisher *events.Publisher
@@ -48,9 +47,71 @@ type Deps struct {
 }
 
 type Handler struct {
-	Deps
-	responses  *httpio.Responder
-	background *taskgroup.Group
+	Bootstrap  *Bootstrap
+	Lifecycle  *Lifecycle
+	Navigation *Navigation
+	Recovery   *Recovery
+	Rewind     *Rewind
+	Transcript *Transcript
+}
+
+type Bootstrap struct {
+	Checkpoints    hitl.CheckpointManager
+	EventPublisher *events.Publisher
+	Events         events.ReplayHub
+	Preview        *preview.Controller
+	ProgressStore  progress.Store
+	SessionView    *sessionview.Projector
+	Sessions       *session.Host
+	Store          session.Store
+	Workers        worker.WorkerQueue
+	responses      *httpio.Responder
+}
+
+type Lifecycle struct {
+	Events          events.ReplayHub
+	FileAgeWarmer   func(ctx context.Context, projectDir string)
+	Git             *gitadmin.Handler
+	LLMService      *llm.Service
+	ProjectRules    *rules.ProjectRulesOverlay
+	Projects        project.Registry
+	Prompt          *promptadmin.Queue
+	SessionView     *sessionview.Projector
+	Sessions        *session.Host
+	Settings        *settings.Service
+	Store           session.Store
+	Workflows       *workflow.RunManager
+	background      *taskgroup.Group
+	responses       *httpio.Responder
+	sourceWatch     *sourceapi.Watch
+	sourceWorkspace *sourceapi.Workspace
+}
+
+type Navigation struct {
+	Sessions        *session.Host
+	Store           session.Store
+	Workers         worker.WorkerQueue
+	responses       *httpio.Responder
+	sourceWorkspace *sourceapi.Workspace
+}
+
+type Recovery struct {
+	Sessions  *session.Host
+	responses *httpio.Responder
+}
+
+type Rewind struct {
+	Sessions  *session.Host
+	responses *httpio.Responder
+}
+
+type Transcript struct {
+	Events      events.ReplayHub
+	Invocations invocation.Recorder
+	Projects    project.Registry
+	Sessions    *session.Host
+	Store       session.Store
+	responses   *httpio.Responder
 }
 
 func New(responses *httpio.Responder, background *taskgroup.Group, deps Deps) Handler {
@@ -61,5 +122,12 @@ func New(responses *httpio.Responder, background *taskgroup.Group, deps Deps) Ha
 		httpio.Required{Name: "Store", Present: deps.Store != nil},
 		httpio.Required{Name: "Workflows", Present: deps.Workflows != nil},
 	)
-	return Handler{Deps: deps, responses: responses, background: background}
+	h := Handler{}
+	h.Bootstrap = &Bootstrap{Checkpoints: deps.Checkpoints, EventPublisher: deps.EventPublisher, Events: deps.Events, Preview: deps.Preview, ProgressStore: deps.ProgressStore, SessionView: deps.SessionView, Sessions: deps.Sessions, Store: deps.Store, Workers: deps.Workers, responses: responses}
+	h.Lifecycle = &Lifecycle{Events: deps.Events, FileAgeWarmer: deps.FileAgeWarmer, Git: deps.Git, LLMService: deps.LLMService, ProjectRules: deps.ProjectRules, Projects: deps.Projects, Prompt: deps.Prompt.Queue, SessionView: deps.SessionView, Sessions: deps.Sessions, Settings: deps.Settings, Store: deps.Store, Workflows: deps.Workflows, background: background, responses: responses, sourceWatch: deps.Sources.Watch, sourceWorkspace: deps.Sources.Workspace}
+	h.Navigation = &Navigation{Sessions: deps.Sessions, Store: deps.Store, Workers: deps.Workers, responses: responses, sourceWorkspace: deps.Sources.Workspace}
+	h.Recovery = &Recovery{Sessions: deps.Sessions, responses: responses}
+	h.Rewind = &Rewind{Sessions: deps.Sessions, responses: responses}
+	h.Transcript = &Transcript{Events: deps.Events, Invocations: deps.Invocations, Projects: deps.Projects, Sessions: deps.Sessions, Store: deps.Store, responses: responses}
+	return h
 }

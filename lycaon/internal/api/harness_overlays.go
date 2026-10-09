@@ -9,7 +9,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Server) handleHarnessOverlays(w http.ResponseWriter, r *http.Request) {
+func (s *HarnessPreparation) handleHarnessOverlays(w http.ResponseWriter, r *http.Request) {
 	var request harnessfixture.Request
 	if err := httpio.DecodeJSON(w, r, &request); err != nil {
 		s.responses.DecodeError(w, r, err)
@@ -19,7 +19,7 @@ func (s *Server) handleHarnessOverlays(w http.ResponseWriter, r *http.Request) {
 		s.harnessRequestRejected(w, r, "the fixture setup is not valid", err)
 		return
 	}
-	parent, ok := requestscope.Session(s.sessionStore, &s.responses, w, r, request.SessionID)
+	parent, ok := requestscope.Session(s.sessionStore, s.responses, w, r, request.SessionID)
 	if !ok {
 		return
 	}

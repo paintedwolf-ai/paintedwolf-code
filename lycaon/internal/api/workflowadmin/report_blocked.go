@@ -1,6 +1,8 @@
 package workflowadmin
 
 import (
+ workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
+ workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -14,8 +16,8 @@ import (
 )
 
 // blockedRunReport renders retained work without manufacturing a completion.
-func (s *Handler) blockedRunReport(ctx context.Context, run *wire.WorkflowRun, manifest workflowdef.Manifest) (report.ReportInput, bool, error) {
-	vars, err := s.Runs.GetScaffoldVars(ctx, run.ID)
+func (s *Reports) blockedRunReport(ctx context.Context, run *wire.WorkflowRun, manifest workflowdef.Manifest) (report.ReportInput, bool, error) {
+	vars, err := s.Runs.Runs.GetScaffoldVars(ctx, run.ID)
 	if err != nil {
 		return report.ReportInput{}, false, err
 	}
@@ -47,7 +49,7 @@ func (s *Handler) blockedRunReport(ctx context.Context, run *wire.WorkflowRun, m
 	}
 	snapshot := repair.Snapshot
 	phases := snapshot.Verdicts
-	claims := workflow.ReconcileClaims(phases)
+	claims := workflowpresentation.ReconcileClaims(phases)
 	input.Claims = reportClaims(claims)
 	input.Verdicts, _, _ = projectVerdicts(phases)
 	for _, claim := range claims {
@@ -96,14 +98,14 @@ func (s *Handler) blockedRunReport(ctx context.Context, run *wire.WorkflowRun, m
 	account.accountWorkers(manifest, snapshot.Vars, snapshot.Workers)
 	scans := snapshot.Scans
 	account.claimAccount(manifest, claims)
-	account.scanAccount(scans, nil, claims, workflow.RunSetAsides(phases))
+	account.scanAccount(scans, nil, claims, workflowpresentation.RunSetAsides(phases))
 	for _, phase := range manifest.PhaseDefs {
 		if phase.ReviewLoop == nil || len(phase.ReviewLoop.RequiredAgents) == 0 {
 			continue
 		}
 		status := "No terminal verdict recorded"
 		for _, verdict := range phases {
-			if verdict.Phase == phase.ID && workflow.ReviewLoopVerdictTerminal(verdict.Def, workflow.VerdictMembers(verdict.Record.Artifacts)) {
+			if verdict.Phase == phase.ID && workflowvalidation.ReviewLoopVerdictTerminal(verdict.Def, workflowpresentation.VerdictMembers(verdict.Record.Artifacts)) {
 				status = "Terminal verdict recorded"
 			}
 		}

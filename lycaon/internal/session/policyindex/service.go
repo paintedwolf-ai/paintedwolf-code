@@ -217,10 +217,15 @@ func (m *Service) message(ctx context.Context, sess *api.Session, block governan
 	if err != nil {
 		return msg
 	}
-	capture := tools.ToolContext{ProjectID: sess.ProjectID, Roots: roots, ActiveRootID: root.ID, Out: &tools.ToolInvocationOut{}}
+	capture := tools.ToolContext{
+		Identity: tools.InvocationIdentity{ProjectID: sess.ProjectID},
+		Source: tools.InvocationSource{Roots: roots,
+			ActiveRootID: root.ID},
+		Effects: tools.InvocationEffects{Out: &tools.ToolInvocationOut{}},
+	}
 	for _, path := range block.Paths {
 		capture.RecordSourcePath(path, api.NavigationEntryKindFile)
 	}
-	msg.SourceContext = sourceref.Mentioned(capture.Out.SourceContext, msg.Content)
+	msg.SourceContext = sourceref.Mentioned(capture.Effects.Out.SourceContext, msg.Content)
 	return msg
 }

@@ -8,7 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/lycaon/lycaon/internal/api/httpio"
-	"github.com/lycaon/lycaon/internal/api/sourceapi"
+	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/transcript"
@@ -16,7 +16,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Handler) HandleResolveMessageNavigation(w http.ResponseWriter, r *http.Request) {
+func (s *Navigation) HandleResolveMessageNavigation(w http.ResponseWriter, r *http.Request) {
 	var req wire.ResolveMessageNavigationRequest
 	if err := httpio.DecodeJSON(w, r, &req); err != nil {
 		s.responses.DecodeError(w, r, err)
@@ -58,7 +58,7 @@ func (s *Handler) HandleResolveMessageNavigation(w http.ResponseWriter, r *http.
 	httpio.WriteJSON(w, http.StatusOK, result)
 }
 
-func (s *Handler) ResolveNavigationWorkspace(ctx context.Context, p *project.Project, msg wire.Message, refs []wire.NavigationReference) []wire.NavigationReference {
+func (s *Navigation) ResolveNavigationWorkspace(ctx context.Context, p *project.Project, msg wire.Message, refs []wire.NavigationReference) []wire.NavigationReference {
 	out := append(make([]wire.NavigationReference, 0, len(refs)), refs...)
 	groups := map[string][]int{}
 	for i, ref := range refs {
@@ -84,9 +84,9 @@ func (s *Handler) ResolveNavigationWorkspace(ctx context.Context, p *project.Pro
 	return out
 }
 
-func (s *Handler) ResolveNavigationJob(ctx context.Context, p *project.Project, jobID string, refs []wire.NavigationReference) []wire.NavigationReference {
+func (s *Navigation) ResolveNavigationJob(ctx context.Context, p *project.Project, jobID string, refs []wire.NavigationReference) []wire.NavigationReference {
 	if jobID == "" {
-		return s.Sources.ResolveNavigationPaths(ctx, p, sourcebranch.Trunk, refs)
+		return s.sourceWorkspace.ResolveNavigationPaths(ctx, p, sourcebranch.Trunk, refs)
 	}
 	unavailable := func() []wire.NavigationReference {
 		out := append(make([]wire.NavigationReference, 0, len(refs)), refs...)
@@ -106,7 +106,7 @@ func (s *Handler) ResolveNavigationJob(ctx context.Context, p *project.Project, 
 		return unavailable()
 	}
 	if !task.EffectiveScope().IsWrite() {
-		out := s.Sources.ResolveNavigationPaths(ctx, p, sourcebranch.Trunk, refs)
+		out := s.sourceWorkspace.ResolveNavigationPaths(ctx, p, sourcebranch.Trunk, refs)
 		for i := range out {
 			out[i].WorkerID = ""
 			for j := range out[i].Candidates {
@@ -120,7 +120,7 @@ func (s *Handler) ResolveNavigationJob(ctx context.Context, p *project.Project, 
 		return unavailable()
 	}
 	defer lease.Release()
-	scoped, err := sourceapi.SourceProjectInBranch(p, lease.Root)
+	scoped, err := requestscope.SourceProjectInBranch(p, lease.Root)
 	if err != nil {
 		return unavailable()
 	}
@@ -128,7 +128,7 @@ func (s *Handler) ResolveNavigationJob(ctx context.Context, p *project.Project, 
 	if err != nil {
 		return unavailable()
 	}
-	out := s.Sources.ResolveNavigationPaths(ctx, scoped, branch, refs)
+	out := s.sourceWorkspace.ResolveNavigationPaths(ctx, scoped, branch, refs)
 	for i := range out {
 		out[i].WorkerID = jobID
 		for j := range out[i].Candidates {

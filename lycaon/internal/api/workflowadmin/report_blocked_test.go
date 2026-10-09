@@ -18,7 +18,7 @@ func TestBlockedReportUsesFrozenEvidenceWithoutCompletion(t *testing.T) {
 		Scans:     []wire.CodeScan{{ID: "scan", ScannerID: "sast", Status: wire.CodeScanStatusComplete, CoverageStatus: wire.ScanCoveragePartial, Warnings: []wire.ScanWarning{{Kind: wire.ScanWarningFilePartialSemantics, File: "src/core.go"}}}},
 		Candidate: map[string]any{"verdict": map[string]any{"claims": []any{map[string]any{"id": "candidate", "statement": "Unaccepted candidate observation"}}}},
 	}}
-	h := Handler{Deps: Deps{Runs: coverageRuns{vars: map[string]any{"review_repairs": []workflow.ReviewRepair{repair}}}}}
+	h := Reports{Runs: coverageRuns{vars: map[string]any{"review_repairs": []workflow.ReviewRepair{repair}}}}
 	run := &wire.WorkflowRun{ID: "run", CurrentPhase: "claims", Status: wire.WorkflowRunStatusPaused, PauseReason: workflow.ReviewBlockedReason}
 	input, ok, err := h.blockedRunReport(t.Context(), run, workflowdef.Manifest{Name: "Security review"})
 	testutil.FailErr(t, "build paused snapshot", err)
@@ -52,7 +52,7 @@ func TestBlockedReportLabelsWorkerWorkAndOpenReviews(t *testing.T) {
 	repair := workflow.ReviewRepair{State: "blocked", Phase: "claims", UpdatedAt: time.Now(), Diagnostics: []wire.ToolFeedback{{Code: "TOOL_ARGS_INVALID", Details: map[string]any{"reason": "coverage is not an object"}}},
 		Snapshot: &workflow.ReviewSnapshot{Vars: map[string]any{}, Workers: []wire.WorkerTask{worker}, Unavailable: []string{"scan ledger"}}}
 	manifest := workflowdef.Manifest{Name: "Security review", PhaseDefs: []workflowdef.PhaseDef{{ID: "claims", ActivityLabel: "Stating claims", ReviewLoop: &workflowdef.ReviewLoopDef{RequiredAgents: []string{"skeptic"}}}}}
-	h := Handler{Deps: Deps{Runs: coverageRuns{vars: map[string]any{"review_repairs": []workflow.ReviewRepair{repair}}}}}
+	h := Reports{Runs: coverageRuns{vars: map[string]any{"review_repairs": []workflow.ReviewRepair{repair}}}}
 	run := &wire.WorkflowRun{ID: "run", CurrentPhase: "claims", Status: wire.WorkflowRunStatusPaused, PauseReason: workflow.ReviewBlockedReason}
 	input, ok, err := h.blockedRunReport(t.Context(), run, manifest)
 	testutil.FailErr(t, "build snapshot", err)
@@ -85,7 +85,7 @@ func TestBlockedReportNeedsABlockedEpisodeForTheCurrentPhase(t *testing.T) {
 		"repairing":   {State: "repairing", Phase: "claims", Snapshot: &workflow.ReviewSnapshot{}},
 		"other phase": {State: "blocked", Phase: "challenge", Snapshot: &workflow.ReviewSnapshot{}},
 	} {
-		h := Handler{Deps: Deps{Runs: coverageRuns{vars: map[string]any{"review_repairs": []workflow.ReviewRepair{repair}}}}}
+		h := Reports{Runs: coverageRuns{vars: map[string]any{"review_repairs": []workflow.ReviewRepair{repair}}}}
 		if _, ok, err := h.blockedRunReport(t.Context(), run, workflowdef.Manifest{}); ok || err != nil {
 			t.Fatalf("%s: ok %v err %v", name, ok, err)
 		}

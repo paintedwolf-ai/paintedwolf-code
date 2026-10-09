@@ -1,6 +1,8 @@
 package wiring
 
 import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+
 	"context"
 	"errors"
 	"os"
@@ -111,7 +113,7 @@ func TestCustomDesignDocWorkflowLiveGolden(t *testing.T) {
 	}
 	waitWorkflowPhase(t, ctx, h.WorkflowMgr, child.ID, "work")
 
-	assertCoordinatorSurface(t, h, ctx, sess, "map the codebase", tools.SurfaceImplementInvestigate)
+	assertCoordinatorSurface(t, h, ctx, sess, "map the codebase", toolcontract.SurfaceImplementInvestigate)
 
 	for range 4 {
 		child, err = h.WorkflowMgr.Store.Runs.Get(ctx, child.ID)

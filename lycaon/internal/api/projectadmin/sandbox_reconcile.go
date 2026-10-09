@@ -15,7 +15,7 @@ const (
 	sandboxReconcileTimeout  = 2 * time.Minute
 )
 
-func (s *Handler) ScheduleProjectSandboxReconcile(projectID, workspacePath string) {
+func (s *Sandboxes) ScheduleProjectSandboxReconcile(projectID, workspacePath string) {
 	if s == nil {
 		return
 	}
@@ -58,7 +58,7 @@ func (s *Handler) ScheduleProjectSandboxReconcile(projectID, workspacePath strin
 	})
 }
 
-func (s *Handler) reconcileProjectSandboxes(ctx context.Context, projectID, workspacePath string) int {
+func (s *Sandboxes) reconcileProjectSandboxes(ctx context.Context, projectID, workspacePath string) int {
 	if s.Workers == nil {
 		return 0
 	}

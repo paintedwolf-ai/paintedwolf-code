@@ -17,13 +17,13 @@ func RequireSessionProject(ctx context.Context, store Sessions, tctx tools.ToolC
 	if strings.TrimSpace(tctx.ActiveRootPath()) == "" {
 		return fmt.Errorf("project_dir required")
 	}
-	if strings.TrimSpace(tctx.SessionID) == "" {
+	if strings.TrimSpace(tctx.Identity.SessionID) == "" {
 		return fmt.Errorf("session_id required")
 	}
 	if store == nil {
 		return nil
 	}
-	sess, err := store.Get(ctx, tctx.SessionID)
+	sess, err := store.Get(ctx, tctx.Identity.SessionID)
 	if err != nil {
 		return err
 	}

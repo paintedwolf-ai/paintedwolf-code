@@ -18,9 +18,21 @@ func TestRecursiveDisclosureKeepsGitAndIgnoredEntries(t *testing.T) {
 	testutil.FailErr(t, "write ignore rules", os.WriteFile(filepath.Join(root.Path, ".gitignore"), []byte(".task/\nignored/\n"), 0o644))
 	address := Address{Root: root.ID, Path: "."}
 	testutil.FailErr(t, "expand all", view.Disclose(t.Context(), nil, IntentEntry{Address: address, Disclosure: Disclosure{Open: true, Recursive: true}}))
-	testutil.FailErr(t, "await shared inventory", view.catalog.AwaitNavigation(t.Context(), view.scope.Project, root))
+	testutil.FailErr(t, "await shared inventory", view.catalog.Directories.AwaitNavigation(t.Context(), view.scope.Project, root))
 	<-view.Prepare()
 	presentation := captureForTest(t, view)
+	for _, rel := range []string{".git/objects/ab/entry", "nested/.git/HEAD"} {
+		location, _, err := presentation.Locate(t.Context(), Address{Root: root.ID, Path: rel})
+		testutil.FailErr(t, "locate lazy descendant", err)
+		if location.Visible {
+			t.Fatalf("root disclosure entered lazy subtree %q", rel)
+		}
+	}
+	for _, dir := range []string{".git", "nested", "nested/.git"} {
+		testutil.FailErr(t, "explicitly disclose lazy subtree", view.Disclose(t.Context(), nil,
+			IntentEntry{Address: Address{Root: root.ID, Path: dir}, Disclosure: Disclosure{Open: true, Recursive: true}}))
+	}
+	presentation = captureForTest(t, view)
 	for _, rel := range paths {
 		location, _, err := presentation.Locate(t.Context(), Address{Root: root.ID, Path: rel})
 		testutil.FailErr(t, "locate human-visible path", err)

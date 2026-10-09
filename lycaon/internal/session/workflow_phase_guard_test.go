@@ -71,7 +71,7 @@ func TestTaskObservationBlocksPendingPhaseObligation(t *testing.T) {
 	}, gc); err != nil {
 		t.Fatalf("workeradmission.ObserveCoordinatorTaskInFlight: %v", err)
 	}
-	if !gc.PhaseObligationPending || gc.PhaseObligationKinds != "scan" {
+	if !gc.Workflow.PhaseObligationPending || gc.Workflow.PhaseObligationKinds != "scan" {
 		t.Fatal("phase obligation facts were not published")
 	}
 	if _, ok := gc.RejectData["WORKFLOW_OBLIGATION_PENDING"]; !ok {

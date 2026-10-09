@@ -19,16 +19,16 @@ func TestGrepInvalidRegexStructuredReject(t *testing.T) {
 	schemas, err := toolschema.LoadSchemaDir(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
 	contractcheck.FailErr(t, "LoadSchemaDir failed", err)
 	exec := toolfixture.ContractToolExecutor(t)
-	exec.SetToolSchemas(schemas)
+	exec.Metadata.SetToolSchemas(schemas)
 
 	_, err = exec.Invoke(context.Background(), "grep", map[string]any{
 		"pattern": "[unclosed",
 	}, tools.ToolContext{
-		Roots:              []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
-		ActiveRootID:       "r1",
-		Agent:              "implement",
-		RepoFileCount:      100,
-		RepoFileCountKnown: true,
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
+			ActiveRootID:       "r1",
+			RepoFileCount:      100,
+			RepoFileCountKnown: true},
+		Identity: tools.InvocationIdentity{Agent: "implement"},
 	})
 	if err == nil {
 		t.Fatal("expected grep regex reject")
@@ -41,7 +41,7 @@ func TestGrepAlternationMatchesByDefault(t *testing.T) {
 	schemas, err := toolschema.LoadSchemaDir(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
 	contractcheck.FailErr(t, "LoadSchemaDir failed", err)
 	exec := toolfixture.ContractToolExecutor(t)
-	exec.SetToolSchemas(schemas)
+	exec.Metadata.SetToolSchemas(schemas)
 
 	tmp := t.TempDir()
 	if err := os.WriteFile(filepath.Join(tmp, "secrets.txt"), []byte("token=1\n"), 0o644); err != nil {
@@ -52,11 +52,11 @@ func TestGrepAlternationMatchesByDefault(t *testing.T) {
 		"pattern": "password|secret|token",
 		"path":    ".",
 	}, tools.ToolContext{
-		Roots:              []projectroot.RootRef{{ID: "r1", Label: "root", Path: tmp, IsPrimary: true}},
-		ActiveRootID:       "r1",
-		Agent:              "explore_readonly",
-		RepoFileCount:      100,
-		RepoFileCountKnown: true,
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: tmp, IsPrimary: true}},
+			ActiveRootID:       "r1",
+			RepoFileCount:      100,
+			RepoFileCountKnown: true},
+		Identity: tools.InvocationIdentity{Agent: "explore_readonly"},
 	})
 	contractcheck.FailErr(t, "grep alternation default regex", err)
 	if !strings.Contains(out, "token=1") {

@@ -104,13 +104,13 @@ func (b boardWiring) wireBoardAndResearch() error {
 		return fmt.Errorf("board tools: %w", err)
 	}
 	b.toolRuntime.SetListDirUnionBrief(func(ctx context.Context, tctx tools.ToolContext, subpath string) (string, error) {
-		if len(tctx.Roots) < 2 {
+		if len(tctx.Source.Roots) < 2 {
 			return "", nil
 		}
 		if subpath != "" && !projectroot.IsUnionDiscoveryPath(subpath) {
 			return "", nil
 		}
-		mrb, err := repoinfo.AnalyzeRoots(ctx, tctx.Roots, repoinfo.DefaultBriefBudget(), b.repoProvider)
+		mrb, err := repoinfo.AnalyzeRoots(ctx, tctx.Source.Roots, repoinfo.DefaultBriefBudget(), b.repoProvider)
 		if err != nil {
 			return "", err
 		}

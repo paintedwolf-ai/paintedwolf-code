@@ -1,6 +1,7 @@
 package session
 
 import (
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"testing"
 	"time"
 
@@ -41,26 +42,26 @@ func TestToolContextUserTurnTracksSessionCurrentTurn(t *testing.T) {
 
 	assertTurn := func(step string, want int) {
 		t.Helper()
-		tctx, err := mgr.ToolContext.Build(ctx, sess, tools.DefaultToolProfileID, inject.Machine{})
+		tctx, err := mgr.ToolContext.Build(ctx, sess, toolprofiles.DefaultToolProfileID, inject.Machine{})
 		if err != nil {
 			t.Fatalf("%s: buildToolContext: %v", step, err)
 		}
-		if tctx.UserTurn != want {
-			t.Fatalf("%s: ToolContext.UserTurn = %d, want %d", step, tctx.UserTurn, want)
+		if tctx.Identity.UserTurn != want {
+			t.Fatalf("%s: ToolContext.UserTurn = %d, want %d", step, tctx.Identity.UserTurn, want)
 		}
-		if tctx.SourceWorkspaceKind != api.SourceWorkspaceKindProject {
-			t.Fatalf("%s: workspace kind = %q, want project", step, tctx.SourceWorkspaceKind)
+		if tctx.Source.SourceWorkspaceKind != api.SourceWorkspaceKindProject {
+			t.Fatalf("%s: workspace kind = %q, want project", step, tctx.Source.SourceWorkspaceKind)
 		}
-		if tctx.MaxToolSpillBytes != mgr.Limits.Effective(ctx, sess).MaxToolSpillBytes {
+		if tctx.Host.MaxToolSpillBytes != mgr.Limits.Effective(ctx, sess).MaxToolSpillBytes {
 			t.Fatal("tool recovery reads must use the session's spill retention bound")
 		}
 		hydrated, err := sessions.Get(ctx, sess.ID)
 		if err != nil {
 			t.Fatalf("%s: get session: %v", step, err)
 		}
-		if hydrated.CurrentTurn != tctx.UserTurn {
+		if hydrated.CurrentTurn != tctx.Identity.UserTurn {
 			t.Fatalf("%s: Session.current_turn = %d, ToolContext.UserTurn = %d",
-				step, hydrated.CurrentTurn, tctx.UserTurn)
+				step, hydrated.CurrentTurn, tctx.Identity.UserTurn)
 		}
 	}
 

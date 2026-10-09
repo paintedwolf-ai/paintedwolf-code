@@ -111,7 +111,7 @@ func setupAskUserIntegration(t *testing.T) *askUserFixture {
 func (fx *askUserFixture) runAskUser(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
 	out, err := fx.toolReg.Run(ctx, "ask_user", args, tctx)
 	if err == nil {
-		fx.wfMgr.Asks.AnnouncePendingAsk(ctx, tctx.SessionID)
+		fx.wfMgr.Asks.AnnouncePendingAsk(ctx, tctx.Identity.SessionID)
 	}
 	return out, err
 }
@@ -126,7 +126,9 @@ func TestAskUserTextResolveAndKick(t *testing.T) {
 
 	out, err := fx.runAskUser(ctx, map[string]any{
 		"prompt": "REST or GraphQL?",
-	}, tools.ToolContext{SessionID: fx.sess.ID, Agent: orchestration.ProfileCoordinator, ToolCallID: "call_text"})
+	}, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: fx.sess.ID,
+		Agent:      orchestration.ProfileCoordinator,
+		ToolCallID: "call_text"}})
 	testutil.FailErr(t, "ask_user", err)
 	var body map[string]any
 	testutil.FailErr(t, "unmarshal", json.Unmarshal([]byte(out), &body))
@@ -213,7 +215,9 @@ func TestAskUserSecretNeverPersistsTheRawResponse(t *testing.T) {
 	out, err := fx.runAskUser(ctx, map[string]any{
 		"prompt": "Provide the registry token", "response_type": "secret",
 		"secret": map[string]any{"name": "Registry token", "purpose": "Authenticate publishing", "scope": "chat"},
-	}, tools.ToolContext{SessionID: fx.sess.ID, Agent: orchestration.ProfileCoordinator, ToolCallID: "call_secret"})
+	}, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: fx.sess.ID,
+		Agent:      orchestration.ProfileCoordinator,
+		ToolCallID: "call_secret"}})
 	testutil.FailErr(t, "ask_user secret", err)
 	var pending map[string]any
 	testutil.FailErr(t, "decode pending", json.Unmarshal([]byte(out), &pending))
@@ -254,7 +258,9 @@ func TestAskUserSecretDiscardsNewCapabilityWhenThePendingAskTurnsStale(t *testin
 	out, err := fx.runAskUser(ctx, map[string]any{
 		"prompt": "Provide the registry token", "response_type": "secret",
 		"secret": map[string]any{"name": "Registry token", "purpose": "Authenticate publishing", "scope": "chat"},
-	}, tools.ToolContext{SessionID: fx.sess.ID, Agent: orchestration.ProfileCoordinator, ToolCallID: "call_secret_stale"})
+	}, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: fx.sess.ID,
+		Agent:      orchestration.ProfileCoordinator,
+		ToolCallID: "call_secret_stale"}})
 	testutil.FailErr(t, "ask_user secret", err)
 	var pending map[string]any
 	testutil.FailErr(t, "decode pending", json.Unmarshal([]byte(out), &pending))
@@ -303,7 +309,8 @@ func TestAskUserSingleChoiceSyntheticResolve(t *testing.T) {
 		"prompt":        "Pick API",
 		"response_type": "single_choice",
 		"options":       []any{"REST", "GraphQL"},
-	}, tools.ToolContext{SessionID: fx.sess.ID, Agent: orchestration.ProfileCoordinator})
+	}, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: fx.sess.ID,
+		Agent: orchestration.ProfileCoordinator}})
 	testutil.FailErr(t, "ask_user", err)
 	var body map[string]any
 	testutil.FailErr(t, "unmarshal", json.Unmarshal([]byte(out), &body))
@@ -328,7 +335,9 @@ func TestAskUserCardOrdFollowsToolRow(t *testing.T) {
 
 	out, err := fx.toolReg.Run(ctx, "ask_user", map[string]any{
 		"prompt": "REST or GraphQL?",
-	}, tools.ToolContext{SessionID: fx.sess.ID, Agent: orchestration.ProfileCoordinator, ToolCallID: "call_ord"})
+	}, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: fx.sess.ID,
+		Agent:      orchestration.ProfileCoordinator,
+		ToolCallID: "call_ord"}})
 	testutil.FailErr(t, "ask_user", err)
 	var body map[string]any
 	testutil.FailErr(t, "unmarshal", json.Unmarshal([]byte(out), &body))
@@ -387,7 +396,8 @@ func TestAskUserCoordinatorOnly(t *testing.T) {
 	fx := setupAskUserIntegration(t)
 	_, err := fx.toolReg.Run(context.Background(), "ask_user", map[string]any{
 		"prompt": "x",
-	}, tools.ToolContext{SessionID: fx.sess.ID, Agent: "implementer"})
+	}, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: fx.sess.ID,
+		Agent: "implementer"}})
 	if err == nil || !strings.Contains(strings.ToLower(err.Error()), "coordinator") {
 		t.Fatalf("err = %v", err)
 	}

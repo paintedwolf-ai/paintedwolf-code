@@ -8,19 +8,19 @@ import (
 )
 
 func skipWorkerMutationHooks(tctx tools.ToolContext) bool {
-	return strings.TrimSpace(tctx.WorkerJobID) == ""
+	return strings.TrimSpace(tctx.Identity.WorkerJobID) == ""
 }
 
 func beforeWorkerMutation(ctx context.Context, tctx tools.ToolContext, relPath string) error {
-	if skipWorkerMutationHooks(tctx) || tctx.WorkerCoord == nil {
+	if skipWorkerMutationHooks(tctx) || tctx.Source.WorkerCoord == nil {
 		return nil
 	}
-	return tctx.WorkerCoord.BeforeWorkerWrite(ctx, tctx, relPath)
+	return tctx.Source.WorkerCoord.BeforeWorkerWrite(ctx, tctx, relPath)
 }
 
 func afterWorkerMutation(ctx context.Context, tctx tools.ToolContext, relPath string) {
-	if skipWorkerMutationHooks(tctx) || tctx.WorkerCoord == nil {
+	if skipWorkerMutationHooks(tctx) || tctx.Source.WorkerCoord == nil {
 		return
 	}
-	tctx.WorkerCoord.AfterWorkerWrite(ctx, tctx, relPath)
+	tctx.Source.WorkerCoord.AfterWorkerWrite(ctx, tctx, relPath)
 }

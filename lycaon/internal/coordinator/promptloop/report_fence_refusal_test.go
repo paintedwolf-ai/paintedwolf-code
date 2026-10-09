@@ -47,8 +47,8 @@ func TestUnreadReportFenceIsRefusedByName(t *testing.T) {
 			RejectFmt:  guidance.NewStaticRejectFormatter(hints),
 			EvaluateCloseoutBlock: func(_ context.Context, _ *api.Session, gc *oar.GuardContext) (*oar.Decision, error) {
 				code := guidance.ReportFenceUnreadableCode
-				if gc.RejectObservation != guidance.ReportDocumentObservation(code) {
-					t.Fatalf("observation = %q, want the unreadable fence first", gc.RejectObservation)
+				if gc.Rejection.RejectObservation != guidance.ReportDocumentObservation(code) {
+					t.Fatalf("observation = %q, want the unreadable fence first", gc.Rejection.RejectObservation)
 				}
 				return &oar.Decision{Code: code, Data: gc.RejectData[code]}, nil
 			},

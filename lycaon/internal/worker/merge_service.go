@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"log/slog"
 	"os"
 	"strings"
@@ -20,7 +21,6 @@ import (
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/sourceledger"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/workspace"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -552,7 +552,7 @@ func (s *MergeService) reject(code string, data map[string]any) error {
 	if s != nil {
 		formatter = s.Reject
 	}
-	return tools.FormatDecisionReject(code, data, formatter)
+	return toolrejection.FormatDecisionReject(code, data, formatter)
 }
 
 func normalizeMergePaths(ctx context.Context, paths []string, task api.WorkerTask, roots []projectroot.RootRef) []string {

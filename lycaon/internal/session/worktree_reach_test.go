@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"go/parser"
 	"go/token"
 	"os"
@@ -120,14 +121,14 @@ func writeBoundary(t *testing.T) *sandbox.Boundary {
 		ProjectRootRequired: true,
 		RejectSymlinkEscape: true,
 	}, []sandbox.ToolProfile{
-		{ID: tools.DefaultToolProfileID, Tools: map[string]bool{"write": true, "command": true}},
+		{ID: toolprofiles.DefaultToolProfileID, Tools: map[string]bool{"write": true, "command": true}},
 	})
 }
 
 func TestWorktreeReach_writeLandsInWorktree(t *testing.T) {
 	f := newReachFixture(t, initReachRepo(t))
 	f.bind(t)
-	tctx, err := f.mgr.ToolContext.Build(t.Context(), f.sess, tools.DefaultToolProfileID, inject.Machine{})
+	tctx, err := f.mgr.ToolContext.Build(t.Context(), f.sess, toolprofiles.DefaultToolProfileID, inject.Machine{})
 	testutil.FailErr(t, "buildToolContext", err)
 
 	tool := &native.WriteTool{Boundary: writeBoundary(t)}
@@ -188,7 +189,7 @@ func TestWorktreeReach_commandCwdFollows(t *testing.T) {
 	testutil.FailErr(t, "wt marker", os.WriteFile(filepath.Join(f.wtPath, "marker"), []byte("worktree"), 0o644))
 	testutil.FailErr(t, "proj marker", os.WriteFile(filepath.Join(f.repoDir, "marker"), []byte("project"), 0o644))
 
-	tctx, err := f.mgr.ToolContext.Build(t.Context(), f.sess, tools.DefaultToolProfileID, inject.Machine{})
+	tctx, err := f.mgr.ToolContext.Build(t.Context(), f.sess, toolprofiles.DefaultToolProfileID, inject.Machine{})
 	testutil.FailErr(t, "buildToolContext", err)
 
 	reg := bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{})
@@ -239,11 +240,11 @@ func TestWorktreeReach_foreignRootsUntouched(t *testing.T) {
 
 	tctx, err := f.mgr.ToolContext.Build(t.Context(), f.sess, "", inject.Machine{})
 	testutil.FailErr(t, "buildToolContext", err)
-	if len(tctx.Roots) != 2 {
-		t.Fatalf("roots = %d want 2", len(tctx.Roots))
+	if len(tctx.Source.Roots) != 2 {
+		t.Fatalf("roots = %d want 2", len(tctx.Source.Roots))
 	}
 	var foreignPath string
-	for _, r := range tctx.Roots {
+	for _, r := range tctx.Source.Roots {
 		if sameReachPath(r.Path, f.wtPath) {
 			continue
 		}
@@ -299,8 +300,8 @@ func TestWorktreeReach_workerInheritance(t *testing.T) {
 
 	tctx, err := f.mgr.ToolContext.Build(t.Context(), f.sess, "", inject.Machine{})
 	testutil.FailErr(t, "buildToolContext", err)
-	if !sameReachPath(tctx.Roots[0].Path, f.wtPath) {
-		t.Fatalf("substituted root = %q want %q", tctx.Roots[0].Path, f.wtPath)
+	if !sameReachPath(tctx.Source.Roots[0].Path, f.wtPath) {
+		t.Fatalf("substituted root = %q want %q", tctx.Source.Roots[0].Path, f.wtPath)
 	}
 	child, err := f.mem.CreateChild(t.Context(), f.sess, api.SpawnChildRequest{AgentType: "implementer", Prompt: "edit"})
 	testutil.FailErr(t, "CreateChild", err)
@@ -311,7 +312,7 @@ func TestWorktreeReach_workerInheritance(t *testing.T) {
 	}
 
 	ws := workspace.NewManager(filepath.Join(t.TempDir(), "branches"), filepath.Join(t.TempDir(), "seeds"))
-	binding, layout, err := ws.CreateWorkerWorkspaceFromSources(t.Context(), tctx.Roots, tctx.Roots, tctx.ActiveRootID, "job-reach")
+	binding, layout, err := ws.CreateWorkerWorkspaceFromSources(t.Context(), tctx.Source.Roots, tctx.Source.Roots, tctx.Source.ActiveRootID, "job-reach")
 	testutil.FailErr(t, "CreateWorkerWorkspaceFromSources", err)
 	if !sameReachPath(layout.Roots[0].Path, f.wtPath) {
 		t.Fatalf("overlay source = %q want worktree", layout.Roots[0].Path)

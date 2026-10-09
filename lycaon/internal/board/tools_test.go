@@ -27,9 +27,9 @@ func TestPackBoardToolReturnsSnapshot(t *testing.T) {
 
 	dir := t.TempDir()
 	raw, err := reg.Run(context.Background(), "pack_board", map[string]any{"detail_level": "full"}, tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}},
-		ActiveRootID: "r1",
-		SessionID:    "sess-1",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{SessionID: "sess-1"},
 	})
 	testutil.FailErr(t, "reg.Run failed", err)
 	var env map[string]any
@@ -51,7 +51,9 @@ func TestPackBoardToolRequiresProjectDir(t *testing.T) {
 		testutil.FailErr(t, "RegisterBoardTools failed", err)
 	}
 
-	_, err := reg.Run(context.Background(), "pack_board", nil, tools.ToolContext{SessionID: "sess-1"})
+	_, err := reg.Run(context.Background(), "pack_board", nil, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "sess-1"},
+	})
 	if err == nil {
 		t.Fatal("expected error for missing project_dir")
 	}

@@ -11,7 +11,7 @@ import (
 
 // WithSessionPanicRecovery repairs the affected session before writing a panic response.
 // Recovered panics stop here, avoiding a second response from router middleware.
-func (s *Handler) WithSessionPanicRecovery(next http.HandlerFunc) http.HandlerFunc {
+func (s *Recovery) WithSessionPanicRecovery(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		defer func(requestCtx context.Context) {
 			rec := recover()

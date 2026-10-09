@@ -38,10 +38,10 @@ func TestAgentWriteStampsUserTurnOnLedgerRow(t *testing.T) {
 	st := bindLedgerForWrites(t, dir)
 
 	tctx := nativefixture.Context(dir)
-	tctx.ProjectID = "p1"
-	tctx.SessionID = "s1"
-	tctx.UserTurn = 3
-	tctx.SourceLedger = st
+	tctx.Identity.ProjectID = "p1"
+	tctx.Identity.SessionID = "s1"
+	tctx.Identity.UserTurn = 3
+	tctx.Source.SourceLedger = st
 
 	tool := &WriteTool{Boundary: nativefixture.Boundary(t)}
 	_, err := tool.Run(context.Background(), map[string]any{

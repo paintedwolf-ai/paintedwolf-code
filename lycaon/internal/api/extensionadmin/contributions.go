@@ -24,10 +24,10 @@ type ContributionRuntime struct {
 	Authority commandinvoke.Authority
 }
 
-func (s *Handler) CaptureContributionFrame(ctx context.Context, projectID, projectDir string) (*contribframe.Frame, error) {
+func (s *Contributions) CaptureContributionFrame(ctx context.Context, projectID, projectDir string) (*contribframe.Frame, error) {
 	// Project scope affects provider readiness, not the device contribution set.
-	view := s.Sessions.Catalog.DeviceView(ctx)
-	gen := s.MCPRegistry.CurrentGeneration(ctx, mcp.CallScope{ProjectID: projectID, ProjectDir: projectDir})
+	view := s.Sessions.Catalog().DeviceView(ctx)
+	gen := s.MCP.CurrentGeneration(ctx, mcp.CallScope{ProjectID: projectID, ProjectDir: projectDir})
 	if frame, ok := s.cachedDeviceContributionFrame(view, gen); ok {
 		s.rememberContributionFrame(frame)
 		return frame, nil
@@ -41,7 +41,7 @@ func (s *Handler) CaptureContributionFrame(ctx context.Context, projectID, proje
 	return frame, nil
 }
 
-func (s *Handler) cachedDeviceContributionFrame(view *catalogview.View, gen *mcp.ResourceGeneration) (*contribframe.Frame, bool) {
+func (s *Contributions) cachedDeviceContributionFrame(view *catalogview.View, gen *mcp.ResourceGeneration) (*contribframe.Frame, bool) {
 	if view == nil || view.Catalog == nil || gen == nil {
 		return nil, false
 	}
@@ -57,25 +57,25 @@ func (s *Handler) cachedDeviceContributionFrame(view *catalogview.View, gen *mcp
 	return cached, true
 }
 
-func (s *Handler) storeDeviceContributionFrame(frame *contribframe.Frame) {
+func (s *Contributions) storeDeviceContributionFrame(frame *contribframe.Frame) {
 	s.contribFramesMu.Lock()
 	s.contribDeviceFrame = frame
 	s.contribFramesMu.Unlock()
 }
 
-func (s *Handler) invalidateDeviceContributionFrame() {
+func (s *Contributions) invalidateDeviceContributionFrame() {
 	s.contribFramesMu.Lock()
 	s.contribDeviceFrame = nil
 	s.contribFramesMu.Unlock()
 }
 
 // WarmContributionFrame compiles the published device catalog for first use.
-func (s *Handler) WarmContributionFrame(ctx context.Context) error {
-	view := s.Sessions.Catalog.PublishedDeviceView(ctx)
+func (s *Contributions) WarmContributionFrame(ctx context.Context) error {
+	view := s.Sessions.Catalog().PublishedDeviceView(ctx)
 	if view == nil {
 		return nil
 	}
-	gen := s.MCPRegistry.CurrentGeneration(ctx, mcp.CallScope{})
+	gen := s.MCP.CurrentGeneration(ctx, mcp.CallScope{})
 	if frame, ok := s.cachedDeviceContributionFrame(view, gen); ok {
 		s.rememberContributionFrame(frame)
 		return nil
@@ -90,7 +90,7 @@ func (s *Handler) WarmContributionFrame(ctx context.Context) error {
 }
 
 // rememberContributionFrame retains revisions for subgraph comparison.
-func (s *Handler) rememberContributionFrame(frame *contribframe.Frame) {
+func (s *Contributions) rememberContributionFrame(frame *contribframe.Frame) {
 	s.contribFramesMu.Lock()
 	defer s.contribFramesMu.Unlock()
 	if s.contribFrames == nil {
@@ -109,7 +109,7 @@ func (s *Handler) rememberContributionFrame(frame *contribframe.Frame) {
 	}
 }
 
-func (s *Handler) touchContributionFrameLocked(revision string) {
+func (s *Contributions) touchContributionFrameLocked(revision string) {
 	for index, current := range s.contribFrameOrder {
 		if current != revision {
 			continue
@@ -120,7 +120,7 @@ func (s *Handler) touchContributionFrameLocked(revision string) {
 	}
 }
 
-func (s *Handler) contributionFrameByRevision(revision string) (*contribframe.Frame, bool) {
+func (s *Contributions) contributionFrameByRevision(revision string) (*contribframe.Frame, bool) {
 	s.contribFramesMu.Lock()
 	defer s.contribFramesMu.Unlock()
 	frame, ok := s.contribFrames[revision]
@@ -131,7 +131,7 @@ func (s *Handler) contributionFrameByRevision(revision string) (*contribframe.Fr
 }
 
 // HandleGetContributions serves one complete projection of a captured frame.
-func (s *Handler) HandleGetContributions(w http.ResponseWriter, r *http.Request) {
+func (s *Contributions) HandleGetContributions(w http.ResponseWriter, r *http.Request) {
 	frame, err := s.CaptureContributionFrame(r.Context(), "", "")
 	if err != nil {
 		s.writeContributionFrameError(w, r, err)
@@ -212,7 +212,7 @@ func hostFactLookup(frame *contribframe.Frame, sess *wire.Session, invokeCtx wir
 
 // writeContributionFrameError answers a frame capture that had no catalog view
 // or MCP generation to read as unavailable, and any other failure as internal.
-func (s *Handler) writeContributionFrameError(w http.ResponseWriter, r *http.Request, err error) {
+func (s *Contributions) writeContributionFrameError(w http.ResponseWriter, r *http.Request, err error) {
 	if errors.Is(err, contribframe.ErrSourceUnavailable) {
 		s.responses.Fail(w, wire.ApiErrorCodeContributionsUnavailable, "contributions are not available yet")
 		return

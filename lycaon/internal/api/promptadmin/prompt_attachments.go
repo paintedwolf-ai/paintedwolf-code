@@ -27,7 +27,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Handler) HandlePrompt(w http.ResponseWriter, r *http.Request) {
+func (s *Submission) HandlePrompt(w http.ResponseWriter, r *http.Request) {
 	perf := observability.StartPerformanceOperation("prompt.admit", nil)
 	outcome := "rejected"
 	defer func() { perf.End(outcome) }()
@@ -64,7 +64,7 @@ func (s *Handler) HandlePrompt(w http.ResponseWriter, r *http.Request) {
 	}
 	if found {
 		revision := s.EventPublisher.NextSessionRevision()
-		s.ResumePromptSubmission(r.Context(), id, replayed)
+		s.Execution.ResumePromptSubmission(r.Context(), id, replayed)
 		httpio.WriteJSON(w, http.StatusAccepted, promptAccepted(replayed, revision))
 		perf.SetDimension("replayed", "true")
 		outcome = "accepted"
@@ -89,7 +89,7 @@ func (s *Handler) HandlePrompt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	attachStore, ok := s.AttachmentStore(r.Context(), sess.ProjectID)
+	attachStore, ok := s.Attachments.AttachmentStore(r.Context(), sess.ProjectID)
 	if !ok && len(req.Attachments) > 0 {
 		s.responses.Unavailable(w, wire.ApiErrorCodeAttachmentUnavailable, "attachment storage is not configured for this project")
 		return
@@ -140,7 +140,7 @@ func (s *Handler) HandlePrompt(w http.ResponseWriter, r *http.Request) {
 		s.publishAttachmentNotice(r.Context(), id, sess, ErrAttachmentScannedNoText)
 	}
 	revision := s.EventPublisher.NextSessionRevision()
-	s.ResumePromptSubmission(r.Context(), id, row)
+	s.Execution.ResumePromptSubmission(r.Context(), id, row)
 	httpio.WriteJSON(w, http.StatusAccepted, promptAccepted(row, revision))
 	perf.Mark("dispatch")
 	outcome = "accepted"
@@ -169,7 +169,7 @@ type promptAdmission struct {
 	scannedNoText      bool
 }
 
-func (s *Handler) preparePromptAdmission(
+func (s *Submission) preparePromptAdmission(
 	w http.ResponseWriter,
 	r *http.Request,
 	sessionID string,
@@ -200,7 +200,7 @@ func (s *Handler) preparePromptAdmission(
 		return promptAdmission{}, false
 	}
 	text = promptattach.JoinUserText(text, ingested.Fences())
-	refResult, err := promptattach.IngestReferences(s.ReferenceDeps(r.Context(), sess), previewBudget, req.References)
+	refResult, err := promptattach.IngestReferences(s.References.ReferenceDeps(r.Context(), sess), previewBudget, req.References)
 	if err != nil {
 		s.WriteAttachmentError(w, err)
 		return promptAdmission{}, false
@@ -249,7 +249,7 @@ func (s *Handler) preparePromptAdmission(
 	}, true
 }
 
-func (s *Handler) promptSessionForAdmission(w http.ResponseWriter, r *http.Request, id string) (*wire.Session, bool) {
+func (s *Submission) promptSessionForAdmission(w http.ResponseWriter, r *http.Request, id string) (*wire.Session, bool) {
 	sess, ok := requestscope.Session(s.Store, s.responses, w, r, id)
 	if !ok {
 		return nil, false
@@ -336,7 +336,7 @@ func PromptContentParts(prose string, attachments, references []promptattach.Fra
 	return parts
 }
 
-func (s *Handler) WriteAttachmentError(w http.ResponseWriter, err error) {
+func (s *Submission) WriteAttachmentError(w http.ResponseWriter, err error) {
 	if err == nil {
 		return
 	}
@@ -356,7 +356,7 @@ func (s *Handler) WriteAttachmentError(w http.ResponseWriter, err error) {
 	}
 }
 
-func (s *Handler) publishAttachmentNotice(ctx context.Context, sessionID string, sess *wire.Session, notice error) {
+func (s *Submission) publishAttachmentNotice(ctx context.Context, sessionID string, sess *wire.Session, notice error) {
 	if sess == nil || notice == nil {
 		return
 	}

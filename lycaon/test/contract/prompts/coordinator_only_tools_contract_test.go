@@ -54,10 +54,10 @@ func TestCoordinatorOnlyToolsRejectNonCoordinatorAgents(t *testing.T) {
 				args = a
 			}
 			_, err := reg.Run(context.Background(), tool, args, tools.ToolContext{
-				Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
-				ActiveRootID: "r1",
-				Agent:        "implementer",
-				SessionID:    "sess-1",
+				Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
+					ActiveRootID: "r1"},
+				Identity: tools.InvocationIdentity{Agent: "implementer",
+					SessionID: "sess-1"},
 			})
 			if err == nil {
 				t.Fatalf("tool %q accepted non-coordinator agent — guard missing", tool)

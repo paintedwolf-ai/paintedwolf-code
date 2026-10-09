@@ -50,7 +50,7 @@ func newReceiptTestManager(t *testing.T) (*Host, *receiptRecorder) {
 	registry := tools.NewStubRegistry()
 	mgr := NewHost(recorder, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, registry)
 	oartest.InstallCloseoutPolicy(t, mgr)
-	mgr.Coordinator.Guards.SetInvoker(testtool.RegistryInvoker{Registry: registry})
+	mgr.Coordinator.Guards.SetToolMetadata(testtool.RegistryInvoker{Registry: registry})
 	return mgr, recorder
 }
 

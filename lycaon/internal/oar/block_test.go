@@ -17,9 +17,9 @@ func TestEvaluateBlockSchemaObservation(t *testing.T) {
 	p.EnableAnchor(AnchorToolRejected)
 
 	gc := NewGuardContext()
-	gc.Tool = "grep"
+	gc.Invocation.Tool = "grep"
 	gc.ObservedRejectCode = "GREP_REGEX_INVALID"
-	gc.ArgValidationErrors = []string{"regex_invalid"}
+	gc.Invocation.ArgValidationErrors = []string{"regex_invalid"}
 	gc.PutRejectData("GREP_REGEX_INVALID", map[string]any{"detail": "bad", "pattern": "["})
 	res, err := p.EvaluateBlock(context.Background(), AnchorToolRejected, gc)
 	testutil.FailErr(t, "EvaluateBlock", err)
@@ -45,9 +45,9 @@ func TestEvaluateBlockRejectDataBeforeEval(t *testing.T) {
 	p.EnableAnchor(AnchorToolRejected)
 
 	gc := NewGuardContext()
-	gc.Tool = "read"
+	gc.Invocation.Tool = "read"
 	gc.ObservedRejectCode = "READ_PATH_NOT_FOUND"
-	gc.NotFound = true
+	gc.Rejection.NotFound = true
 	gc.PutRejectData("READ_PATH_NOT_FOUND", map[string]any{"path": "weather_cli/cli.py"})
 	res, err := p.EvaluateBlock(context.Background(), AnchorToolRejected, gc)
 	testutil.FailErr(t, "EvaluateBlock", err)

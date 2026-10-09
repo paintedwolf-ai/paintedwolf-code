@@ -15,8 +15,8 @@ func (m *Service) AfterTurn(ctx context.Context, sess *api.Session, content stri
 	}
 	gc := oar.NewGuardContext()
 	m.ToolPolicy.FillSessionFacts(ctx, gc, sess, "", nil)
-	gc.LastAssistant = content
-	gc.WorkersIdle = workersIdle
+	gc.Session.LastAssistant = content
+	gc.Workers.WorkersIdle = workersIdle
 	gc.SetContentSegments([]oar.ContentSegment{{Content: content, Role: "assistant", Origin: "model", Authority: "none", TrustTier: "trusted", Source: "agent_turn"}})
 	res, err := m.ToolPolicy.Pipeline.EvaluateBlock(ctx, oar.AnchorCoordinatorPostTurn, gc)
 	if err != nil {

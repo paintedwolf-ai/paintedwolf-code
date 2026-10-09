@@ -11,7 +11,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Handler) HandleAbortSession(w http.ResponseWriter, r *http.Request) {
+func (s *Lifecycle) HandleAbortSession(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	var req wire.AbortSessionRequest
 	if _, err := httpio.DecodeOptionalJSON(w, r, &req); err != nil {

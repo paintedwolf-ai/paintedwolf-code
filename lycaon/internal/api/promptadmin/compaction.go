@@ -10,7 +10,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Handler) HandleSessionCompact(w http.ResponseWriter, r *http.Request) {
+func (s *Content) HandleSessionCompact(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	report, err := s.Sessions.Runner.History.ForceCompact(r.Context(), id)
 	if err != nil {
@@ -37,7 +37,7 @@ func (s *Handler) HandleSessionCompact(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Handler) HandleSessionContext(w http.ResponseWriter, r *http.Request) {
+func (s *Content) HandleSessionContext(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	ctxInfo, err := s.Sessions.Runner.History.SessionContext(r.Context(), id)
 	if err != nil {

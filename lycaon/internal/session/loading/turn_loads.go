@@ -298,7 +298,7 @@ func (m *Service) ResolveToolRequest(ctx context.Context, tctx tools.ToolContext
 		return turnload.RequestOutcome{Need: need, Exact: turnload.ExactNames(need, cards), Abstained: true, Reason: "decision catalog unavailable", Failure: turnload.RankingUnavailable}
 	}
 	sess := m.toolSession(ctx, tctx)
-	finishDeciding := m.beginDeciding(ctx, sess, tctx.SessionID, api.TurnLoadTriggerRequest, tctx.ToolCallID)
+	finishDeciding := m.beginDeciding(ctx, sess, tctx.Identity.SessionID, api.TurnLoadTriggerRequest, tctx.Identity.ToolCallID)
 	outcome := turnload.ResolveRequest(ctx, m.Decider(), catalog.Request, need, cards)
 	finishDeciding()
 	return outcome
@@ -316,19 +316,19 @@ func (m *Service) RecordToolRequest(ctx context.Context, tctx tools.ToolContext,
 		userChars = catalog.State.UserTextChars
 	}
 	host := promptunit.HostWorker
-	if guard.IsCoordinatorProfile(tctx.Agent) {
+	if guard.IsCoordinatorProfile(tctx.Identity.Agent) {
 		host = promptunit.HostCoordinator
 	}
-	stateSurface := strings.TrimSpace(tctx.TurnSurfaceID)
+	stateSurface := strings.TrimSpace(tctx.Turn.TurnSurfaceID)
 	if stateSurface == "" {
-		stateSurface = strings.TrimSpace(tctx.Agent)
+		stateSurface = strings.TrimSpace(tctx.Identity.Agent)
 	}
 	state := turnload.State{Host: string(host), User: turnload.BoundUser(outcome.Need, userChars), Surface: stateSurface}
-	m.recordTurnLoad(ctx, sess, tctx.SessionID, store.TurnLoadReceipt{
+	m.recordTurnLoad(ctx, sess, tctx.Identity.SessionID, store.TurnLoadReceipt{
 		Trigger:    store.TurnLoadTriggerRequest,
-		ToolCallID: tctx.ToolCallID,
+		ToolCallID: tctx.Identity.ToolCallID,
 		SurfaceID:  stateSurface,
-		Standing:   marshalJSON(m.Ledger.Standing(tctx.SessionID)),
+		Standing:   marshalJSON(m.Ledger.Standing(tctx.Identity.SessionID)),
 		Engine:     transcript.EngineLabel(outcome.Engine),
 		StateJSON:  marshalJSON(state),
 		Decisions:  marshalJSON(map[string]any{"request": outcome, "activation": result}),
@@ -347,19 +347,19 @@ func (m *Service) LookupSkills(ctx context.Context, tctx tools.ToolContext, need
 	}
 	sess := m.toolSession(ctx, tctx)
 	started := time.Now()
-	finishDeciding := m.beginDeciding(ctx, sess, tctx.SessionID, api.TurnLoadTriggerLookup, tctx.ToolCallID)
+	finishDeciding := m.beginDeciding(ctx, sess, tctx.Identity.SessionID, api.TurnLoadTriggerLookup, tctx.Identity.ToolCallID)
 	outcome := turnload.LookupSkills(ctx, m.Decider(), catalog.Lookup, need, roster)
 	finishDeciding()
 	if sess == nil {
 		return outcome
 	}
-	stateSurface := strings.TrimSpace(tctx.TurnSurfaceID)
+	stateSurface := strings.TrimSpace(tctx.Turn.TurnSurfaceID)
 	if stateSurface == "" {
-		stateSurface = strings.TrimSpace(tctx.Agent)
+		stateSurface = strings.TrimSpace(tctx.Identity.Agent)
 	}
-	m.recordTurnLoad(ctx, sess, tctx.SessionID, store.TurnLoadReceipt{
+	m.recordTurnLoad(ctx, sess, tctx.Identity.SessionID, store.TurnLoadReceipt{
 		Trigger:    store.TurnLoadTriggerLookup,
-		ToolCallID: tctx.ToolCallID,
+		ToolCallID: tctx.Identity.ToolCallID,
 		SurfaceID:  stateSurface,
 		Engine:     transcript.EngineLabel(outcome.Engine),
 		StateJSON:  marshalJSON(map[string]any{"need": turnload.BoundUser(need, catalog.State.UserTextChars), "surface": stateSurface}),
@@ -374,10 +374,10 @@ func (m *Service) LookupSkills(ctx context.Context, tctx tools.ToolContext, need
 // toolSession is the session a decision tool call runs in, or nil when the
 // call has none the store knows.
 func (m *Service) toolSession(ctx context.Context, tctx tools.ToolContext) *api.Session {
-	if m == nil || m.store == nil || strings.TrimSpace(tctx.SessionID) == "" {
+	if m == nil || m.store == nil || strings.TrimSpace(tctx.Identity.SessionID) == "" {
 		return nil
 	}
-	sess, err := m.store.Get(ctx, tctx.SessionID)
+	sess, err := m.store.Get(ctx, tctx.Identity.SessionID)
 	if err != nil {
 		return nil
 	}

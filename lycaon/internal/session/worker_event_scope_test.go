@@ -28,7 +28,7 @@ func TestWorkerWritePublishesBoardByProjectIdentity(t *testing.T) {
 	board := &workerEventBoard{}
 	manager := NewHost(sessionstore.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	manager.SetEventPublisher(&events.Publisher{Hub: hub, Board: board})
-	manager.Workers.Workspaces.AfterWorkerWrite(t.Context(), tools.ToolContext{ProjectID: testdbseed.DefaultProjectID, HandoffSessionID: "session"}, "file.go")
+	manager.Workers.Workspaces.AfterWorkerWrite(t.Context(), tools.ToolContext{Identity: tools.InvocationIdentity{ProjectID: testdbseed.DefaultProjectID, HandoffSessionID: "session"}}, "file.go")
 	hub.FlushDebounced()
 	if board.projectID != testdbseed.DefaultProjectID {
 		t.Fatalf("board project = %q", board.projectID)

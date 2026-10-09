@@ -13,10 +13,10 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Handler) HandleResolveWorkflowDecision(w http.ResponseWriter, r *http.Request) {
+func (s *RunControl) HandleResolveWorkflowDecision(w http.ResponseWriter, r *http.Request) {
 	runID := chi.URLParam(r, "id")
 	phaseID := chi.URLParam(r, "phase_id")
-	currentRun, err := s.Workflows.Store.Runs.Get(r.Context(), runID)
+	currentRun, err := s.Workflows.Store.Runs.Store.Runs.Get(r.Context(), runID)
 	if err != nil {
 		s.WriteWorkflowError(w, r, err)
 		return
@@ -52,10 +52,10 @@ func (s *Handler) HandleResolveWorkflowDecision(w http.ResponseWriter, r *http.R
 	s.SessionView.WriteWorkflowRun(w, r, http.StatusOK, run)
 }
 
-func (s *Handler) HandleResolveWorkflowFeedback(w http.ResponseWriter, r *http.Request) {
+func (s *RunControl) HandleResolveWorkflowFeedback(w http.ResponseWriter, r *http.Request) {
 	runID := chi.URLParam(r, "id")
 	phaseID := chi.URLParam(r, "phase_id")
-	currentRun, err := s.Workflows.Store.Runs.Get(r.Context(), runID)
+	currentRun, err := s.Workflows.Store.Runs.Store.Runs.Get(r.Context(), runID)
 	if err != nil {
 		s.WriteWorkflowError(w, r, err)
 		return
@@ -87,10 +87,10 @@ func (s *Handler) HandleResolveWorkflowFeedback(w http.ResponseWriter, r *http.R
 	s.SessionView.WriteWorkflowRun(w, r, http.StatusOK, run)
 }
 
-func (s *Handler) HandleResolveWorkflowSecret(w http.ResponseWriter, r *http.Request) {
+func (s *RunControl) HandleResolveWorkflowSecret(w http.ResponseWriter, r *http.Request) {
 	runID := chi.URLParam(r, "id")
 	phaseID := chi.URLParam(r, "phase_id")
-	currentRun, err := s.Workflows.Store.Runs.Get(r.Context(), runID)
+	currentRun, err := s.Workflows.Store.Runs.Store.Runs.Get(r.Context(), runID)
 	if err != nil {
 		s.WriteWorkflowError(w, r, err)
 		return

@@ -69,8 +69,8 @@ func (b toolWiring) wireDetectionPacks() {
 		}
 	}
 	b.detections.semantics = semantics
-	b.toolRuntime.SetDetectionSource(b.detections.gateSource)
-	b.toolRuntime.SetEgressDetectionSource(egressDetectionAdapter{source: b.detections.egressSource})
+	b.toolRuntime.Authority.SetDetectionSource(b.detections.gateSource)
+	b.toolRuntime.Authority.SetEgressDetectionSource(egressDetectionAdapter{source: b.detections.egressSource})
 	cat, err := detectionpack.LoadCatalog(detectionpack.Input{
 		ConfigDir:   b.dataDir,
 		Contributed: b.contributedDetectionPacks(),

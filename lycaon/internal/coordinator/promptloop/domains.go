@@ -2,6 +2,7 @@ package promptloop
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolfeedback"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/agentpresence"
@@ -66,7 +67,7 @@ type ToolsDeps struct {
 	VisualStore                 visual.Store
 	AgentPresence               *agentpresence.Tracker
 	DesignateProjectCover       func(ctx context.Context, projectID, rootSessionID, artifactID string) error
-	BlockPlane                  *tools.BlockPlane
+	BlockPlane                  *toolfeedback.BlockPlane
 	BeforeToolRun               func(ctx context.Context, sess *api.Session, history []api.Message, userPrompt, tool string, args map[string]any) (output string, skipRun bool, err error)
 	AfterToolRun                func(ctx context.Context, sess *api.Session, tool string, args map[string]any, output string, succeeded bool, out *tools.ToolInvocationOut) string
 	EnrichToolOutput            func(ctx context.Context, sess *api.Session, tool string, args map[string]any, output string, raised guidance.ToolResultFacts, doomCompletionCountAfter int) (string, guidance.ToolResultFacts)

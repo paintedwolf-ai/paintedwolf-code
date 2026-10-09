@@ -107,7 +107,7 @@ func TestAuthzEventHookSites(t *testing.T) {
 	checkCalls(t, filepath.Join(root, "lycaon", "internal", "hitl", "approval_resolution.go"), "AppendApprovalGateTx")
 	checkCalls(t, filepath.Join(root, "lycaon", "internal", "workflow", "persistence", "blueprints.go"), "AppendHumanGateTx")
 	checkCalls(t, filepath.Join(root, "lycaon", "internal", "blueprint", "approval_store.go"), "AppendHumanGateTx")
-	checkCalls(t, filepath.Join(root, "lycaon", "internal", "tools", "executor_tool_approval.go"), "AppendToolDenied")
+	checkCalls(t, filepath.Join(root, "lycaon", "internal", "toolexecution", "executor_tool_approval.go"), "AppendToolDenied")
 }
 
 func checkCalls(t *testing.T, path string, want ...string) {

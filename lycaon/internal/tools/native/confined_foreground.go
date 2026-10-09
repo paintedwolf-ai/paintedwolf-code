@@ -2,6 +2,7 @@ package native
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"strings"
 
@@ -39,12 +40,12 @@ func (c confinedForeground) run(
 	case err != nil || outcome.Finished:
 		window.closeNow(ctx)
 	default:
-		window.closeOnExit(ctx, c.Background, tctx.SessionID, outcome.Handle)
+		window.closeOnExit(ctx, c.Background, tctx.Identity.SessionID, outcome.Handle)
 	}
 	if err != nil || !outcome.Finished {
 		return nil, outcome, err
 	}
-	res := commandResultFromOutcome(outcome, tools.LocalNetworkGrantOf(tctx), tctx.PackageExecution)
+	res := commandResultFromOutcome(outcome, tools.LocalNetworkGrantOf(tctx), tctx.Files.PackageExecution)
 
 	if err := rejectCommandNotFound(res, args); err != nil {
 		outcome.IndexWatch.Release()
@@ -55,16 +56,16 @@ func (c confinedForeground) run(
 		return nil, outcome, err
 	}
 
-	appendBoundaryNotes(c.ToolName, tctx.SessionID, outcome, res)
+	appendBoundaryNotes(c.ToolName, tctx.Identity.SessionID, outcome, res)
 	return res, outcome, nil
 }
 
 // stampBoundaryRefusal records a confinement refusal on the invocation.
 func stampBoundaryRefusal(tctx tools.ToolContext, res *hostcmd.Result) {
-	if tctx.Out == nil || res == nil {
+	if tctx.Effects.Out == nil || res == nil {
 		return
 	}
-	tctx.Out.Facts = tools.ApplyRefusalFacts(tctx.Out.Facts, confine.StampedRefusal{
+	tctx.Effects.Out.Facts = tools.ApplyRefusalFacts(tctx.Effects.Out.Facts, confine.StampedRefusal{
 		Attribution:   confine.FailureAttribution(res.BoundaryRefusal),
 		GuidanceCodes: res.GuidanceCodes,
 		Observation:   res.Observation,
@@ -102,7 +103,7 @@ func rejectDisallowedDesktopCapture(tctx tools.ToolContext, args map[string]any)
 		for _, stage := range plan.Stages {
 			base := strings.ToLower(filepath.Base(strings.TrimSpace(stage.Name)))
 			if base == "screencapture" || base == "scrot" || base == "xwd" {
-				return tools.RejectInvalidArguments("DESKTOP_CAPTURE_DISALLOWED", map[string]any{
+				return toolrejection.RejectInvalidArguments("DESKTOP_CAPTURE_DISALLOWED", map[string]any{
 					"command": canonicalCommandKey(tctx, args),
 					"reason":  "desktop_screen_capture_disallowed",
 					"instead": "Use command with snapshot_capture or APP_SNAPSHOT to render views offscreen in-process without OS permissions",
@@ -118,5 +119,5 @@ func (c confinedForeground) sessionWriteRoots(ctx context.Context, tctx tools.To
 	if c.WriteRootGate == nil {
 		return nil
 	}
-	return c.WriteRootGate.SessionWriteRoots(ctx, tctx.SessionID, tctx.ParentSessionID)
+	return c.WriteRootGate.SessionWriteRoots(ctx, tctx.Identity.SessionID, tctx.Identity.ParentSessionID)
 }

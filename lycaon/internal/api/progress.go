@@ -12,7 +12,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Server) handleSessionProgress(w http.ResponseWriter, r *http.Request) {
+func (s *Conversation) handleSessionProgress(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	if _, err := s.sessionStore.Get(r.Context(), id); err != nil {
 		if errors.Is(err, store.ErrSessionNotFound) {

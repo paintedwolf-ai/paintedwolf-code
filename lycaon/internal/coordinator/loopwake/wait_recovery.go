@@ -10,8 +10,8 @@ import (
 )
 
 func restoreWaitRequest(ctx context.Context, loop *LoopEngine, store *awaitstore.Store, tctx tools.ToolContext, request *waitRequest) error {
-	if strings.TrimSpace(tctx.WorkerJobID) == "" {
-		if subscription, complete := loop.runtimeWaitSubscription(tctx.SessionID); complete {
+	if strings.TrimSpace(tctx.Identity.WorkerJobID) == "" {
+		if subscription, complete := loop.runtimeWaitSubscription(tctx.Identity.SessionID); complete {
 			if !request.ExplicitConditions {
 				request.Conditions = subscription.Conditions
 				request.Triggers = subscription.Triggers
@@ -25,7 +25,7 @@ func restoreWaitRequest(ctx context.Context, loop *LoopEngine, store *awaitstore
 			return nil
 		}
 	}
-	lease, found, err := store.LatestResumeCandidate(ctx, tctx.SessionID)
+	lease, found, err := store.LatestResumeCandidate(ctx, tctx.Identity.SessionID)
 	if err != nil || !found {
 		return err
 	}

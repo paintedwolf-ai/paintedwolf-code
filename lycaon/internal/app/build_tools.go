@@ -197,24 +197,24 @@ func (b toolWiring) taskToolDeps() worker.TaskToolDeps {
 			return dec.WorkerID, true, nil
 		},
 		ComposePrompt: func(ctx context.Context, tctx tools.ToolContext, agentType string, brief wire.WorkerTaskCharter, workerJobID string, scope *wire.TaskScope, maxToolLoops int) (string, error) {
-			msgs, err := b.store.GetMessages(ctx, tctx.SessionID)
+			msgs, err := b.store.GetMessages(ctx, tctx.Identity.SessionID)
 			if err != nil {
 				return brief.Goal, err
 			}
 			in := inject.WorkerTaskAssignmentInput{
-				SessionID:        tctx.SessionID,
+				SessionID:        tctx.Identity.SessionID,
 				ProjectDir:       tctx.ActiveRootPath(),
 				Charter:          brief,
 				AgentType:        agentType,
 				WorkerJobID:      workerJobID,
 				MaxToolLoops:     maxToolLoops,
 				Attachments:      surface.SessionForwardedAttachments(msgs),
-				RecordedVerdicts: recordedVerdictsForLeg(ctx, b.workflowMgr, tctx.SessionID),
+				RecordedVerdicts: recordedVerdictsForLeg(ctx, b.workflowMgr, tctx.Identity.SessionID),
 			}
 			if scope != nil {
 				in.Scope = *scope
 			}
-			run, err := b.workflowMgr.Store.Runs.ActiveBySession(ctx, tctx.SessionID)
+			run, err := b.workflowMgr.Store.Runs.ActiveBySession(ctx, tctx.Identity.SessionID)
 			if err != nil {
 				return "", err
 			}

@@ -10,12 +10,12 @@ import (
 
 // SourceBranch is the line of source history this call's writes record against.
 func (tc ToolContext) SourceBranch(rootID string) (sourcebranch.ID, error) {
-	branch, err := sourcebranch.FromKindAndJob(tc.SourceWorkspaceKind, tc.WorkerJobID)
+	branch, err := sourcebranch.FromKindAndJob(tc.Source.SourceWorkspaceKind, tc.Identity.WorkerJobID)
 	if err == nil && !branch.IsWorker() {
-		if branch, ok := tc.ProjectRootBranches[rootID]; ok {
+		if branch, ok := tc.Source.ProjectRootBranches[rootID]; ok {
 			return branch, nil
 		}
-		return tc.ProjectSourceBranch, nil
+		return tc.Source.ProjectSourceBranch, nil
 	}
 	return branch, err
 }
@@ -24,14 +24,14 @@ func (tc ToolContext) SourceBranch(rootID string) (sourcebranch.ID, error) {
 // source history records. Absolute paths in a worker branch map back to the root
 // the branch mirrors; other absolute paths are outside that branch.
 func (tc ToolContext) SourceLocation(path string) (projectroot.RootRef, string, bool) {
-	if branch := strings.TrimSpace(tc.WorkerBranchRoot); branch != "" && filepath.IsAbs(path) {
+	if branch := strings.TrimSpace(tc.Source.WorkerBranchRoot); branch != "" && filepath.IsAbs(path) {
 		rel, ok := branchRel(branch, path)
 		if !ok {
 			return projectroot.RootRef{}, "", false
 		}
-		return branchSourceLocation(tc.Roots, rel)
+		return branchSourceLocation(tc.Source.Roots, rel)
 	}
-	abs, root, err := projectroot.ResolveAbs(tc.Roots, tc.ActiveRootID, path)
+	abs, root, err := projectroot.ResolveAbs(tc.Source.Roots, tc.Source.ActiveRootID, path)
 	if err != nil || root.ID == "" {
 		return projectroot.RootRef{}, "", false
 	}

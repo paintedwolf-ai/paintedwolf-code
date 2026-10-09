@@ -3,6 +3,7 @@ package session
 import (
 	"bytes"
 	"context"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -255,7 +256,7 @@ func TestPrintedBoundaryDenialDoesNotProduceGuidance(t *testing.T) {
 	if out != output {
 		t.Fatalf("diagnostic output acquired host guidance: %q", out)
 	}
-	for _, code := range []string{isolation.CodeBoundaryRefused, isolation.CodeRemotePackageDestinationDenied, tools.VerifyUnverifiableCode} {
+	for _, code := range []string{isolation.CodeBoundaryRefused, isolation.CodeRemotePackageDestinationDenied, toolrejection.VerifyUnverifiableCode} {
 		if facts.HasCode(code) {
 			t.Fatalf("diagnostic output acquired host code %q: %#v", code, facts)
 		}
@@ -268,7 +269,7 @@ func TestLoopbackHandlerGuidanceRequiresTypedRejection(t *testing.T) {
 			mgr := newPostToolGuidanceManager(t)
 			mgr.ToolPolicy.Pipeline.EnableAnchor(oar.AnchorToolRejected)
 			gc := oar.NewGuardContext()
-			gc.Tool = tool
+			gc.Invocation.Tool = tool
 			gc.PutRejectData(isolation.CodeTryLoopbackConnect, map[string]any{"port": "8080"})
 			result, err := mgr.ToolPolicy.Pipeline.EvaluateBlock(t.Context(), oar.AnchorToolRejected, gc)
 			testutil.FailErr(t, "evaluate without loopback rejection", err)

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	"slices"
 	"strings"
@@ -13,7 +14,6 @@ import (
 	"github.com/lycaon/lycaon/internal/reviewcoverage"
 	"github.com/lycaon/lycaon/internal/scan"
 	scancoverage "github.com/lycaon/lycaon/internal/scan/coverage"
-	"github.com/lycaon/lycaon/internal/tools"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -241,7 +241,7 @@ func coverageGap(kind, scanner string, paths, scans []string, evidence any) revi
 
 // ValidateReview admits a terminal verdict's coverage assessment. What the
 // model can repair comes back as a rejection; a host fault comes back as an error.
-func (m *Coverage) ValidateReview(ctx context.Context, run *api.WorkflowRun, def workflowdef.ReviewLoopDef, verdict map[string]string) (*tools.ToolReject, error) {
+func (m *Coverage) ValidateReview(ctx context.Context, run *api.WorkflowRun, def workflowdef.ReviewLoopDef, verdict map[string]string) (*toolrejection.ToolReject, error) {
 	review, err := workflowvalidation.ParseVerdictCoverage(def, verdict)
 	if err != nil {
 		return coverageReject(def, err), nil
@@ -255,7 +255,7 @@ func (m *Coverage) ValidateReview(ctx context.Context, run *api.WorkflowRun, def
 	}
 	facts, tasks, err := m.coverageFacts(ctx, run, manifest)
 	if errors.Is(err, runstate.ErrCoverageScansPending) {
-		return &tools.ToolReject{Code: SubmitVerdictScansPendingCode, Data: map[string]any{}}, nil
+		return &toolrejection.ToolReject{Code: SubmitVerdictScansPendingCode, Data: map[string]any{}}, nil
 	}
 	if err != nil {
 		return nil, err
@@ -279,13 +279,13 @@ func (m *Coverage) ValidateReview(ctx context.Context, run *api.WorkflowRun, def
 
 // coverageReject refuses a coverage review the model can repair. The
 // submit_verdict handler adds the call the phase accepts to every repair.
-func coverageReject(_ workflowdef.ReviewLoopDef, cause error) *tools.ToolReject {
+func coverageReject(_ workflowdef.ReviewLoopDef, cause error) *toolrejection.ToolReject {
 	data := map[string]any{"reason": cause.Error()}
 	var validation *reviewcoverage.ValidationError
 	if errors.As(cause, &validation) {
 		data["issues"] = validation.Issues
 	}
-	return &tools.ToolReject{Code: workflowvalidation.ReviewLoopVerdictInvalidCode, Data: data}
+	return &toolrejection.ToolReject{Code: workflowvalidation.ReviewLoopVerdictInvalidCode, Data: data}
 }
 
 // Coverage ends at the final assessment phase; report and follow-on work do not

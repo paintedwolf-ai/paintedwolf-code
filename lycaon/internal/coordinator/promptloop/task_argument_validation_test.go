@@ -81,7 +81,7 @@ func runTaskArgumentCall(t *testing.T, call api.ToolCall) (invocation.Settlement
 	reg := tools.NewStubRegistry()
 	testutil.FailErr(t, "register task", reg.Register("task", func(_ context.Context, _ map[string]any, tc tools.ToolContext) (string, error) {
 		ran = true
-		tc.Out.Dispatch = &api.WorkerDispatch{WorkerID: "engine"}
+		tc.Effects.Out.Dispatch = &api.WorkerDispatch{WorkerID: "engine"}
 		return "queued", nil
 	}))
 	def, _ := reg.Definition("task")
@@ -109,7 +109,9 @@ func runTaskArgumentCall(t *testing.T, call api.ToolCall) (invocation.Settlement
 	}
 	_, err = promptloop.NewPromptLoopForTest(deps).Run(t.Context(), promptloop.PromptRunInput{
 		SessionID: sess.ID, Session: sess, History: userHistory("Build an app"), ProfileID: "coordinator",
-		ToolCtx: tools.ToolContext{SessionID: sess.ID},
+		ToolCtx: tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: sess.ID},
+		},
 	})
 	testutil.FailErr(t, "run dispatch", err)
 	_, settlement := rec.only(t)

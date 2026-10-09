@@ -3,6 +3,7 @@ package promptsource
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolfeedback"
 	"log/slog"
 	"strings"
 
@@ -96,7 +97,7 @@ func (m *Tools) Build() promptloop.ToolsDeps {
 			return err
 		},
 		HeldCalls:     m.Processes,
-		BlockPlane:    &tools.BlockPlane{Pipeline: m.Policy.Pipeline, Renderer: m.Feedback.Renderer()},
+		BlockPlane:    &toolfeedback.BlockPlane{Pipeline: m.Policy.Pipeline, Renderer: m.Feedback.Renderer()},
 		BeforeToolRun: m.Guards.BeforeTool,
 		AfterToolRun: func(ctx context.Context, sess *api.Session, tool string, args map[string]any, output string, succeeded bool, out *tools.ToolInvocationOut) string {
 			return m.AfterTool(ctx, sess, tool, args, output, succeeded, out)

@@ -2,6 +2,7 @@ package projectpaths_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"io"
 	"os"
 	"path/filepath"
@@ -21,9 +22,9 @@ func readSessionContext(t *testing.T) (tools.ToolContext, string) {
 	testutil.FailErr(t, "write a.go", os.WriteFile(filepath.Join(ws, "a.go"), []byte("package a\n"), 0o600))
 	testutil.FailErr(t, "write pkg/b.go", os.WriteFile(filepath.Join(ws, "pkg", "b.go"), []byte("package pkg\n"), 0o600))
 	return tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "ws", Path: ws, IsPrimary: true}},
-		ActiveRootID: "r1",
-		Agent:        tools.DefaultToolProfileID,
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "ws", Path: ws, IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{Agent: toolprofiles.DefaultToolProfileID},
 	}, ws
 }
 
@@ -67,8 +68,8 @@ func TestReadSessionResolvesLikeResolveRead(t *testing.T) {
 // A root the host refuses is refused for every path, as ResolveRead does.
 func TestReadSessionRefusesAnUnsafeRoot(t *testing.T) {
 	tctx := tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "root", Label: "root", Path: string(filepath.Separator), IsPrimary: true}},
-		ActiveRootID: "root",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Label: "root", Path: string(filepath.Separator), IsPrimary: true}},
+			ActiveRootID: "root"},
 	}
 	session := projectpaths.NewReadSession(nil, tctx)
 	defer session.Close()
@@ -95,7 +96,7 @@ func TestReadSessionRefusesLinksLeavingTheRoot(t *testing.T) {
 func TestReadSessionEnforcesReadGlobs(t *testing.T) {
 	tctx, _ := readSessionContext(t)
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{
-		ID: tools.DefaultToolProfileID, Tools: map[string]bool{"read": true}, ReadGlobs: []string{"pkg/**"},
+		ID: toolprofiles.DefaultToolProfileID, Tools: map[string]bool{"read": true}, ReadGlobs: []string{"pkg/**"},
 	}})
 	session := projectpaths.NewReadSession(boundary, tctx)
 	defer session.Close()

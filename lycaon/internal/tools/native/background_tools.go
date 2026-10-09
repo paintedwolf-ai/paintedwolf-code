@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strconv"
 	"strings"
 	"time"
@@ -30,18 +31,18 @@ func (t *CommandOutputTool) Run(ctx context.Context, args map[string]any, tctx t
 	}
 	handle, _ := args["handle"].(string)
 	if handle == "" {
-		return "", &tools.ToolReject{Code: "BACKGROUND_HANDLE_REQUIRED", Data: map[string]any{}}
+		return "", &toolrejection.ToolReject{Code: "BACKGROUND_HANDLE_REQUIRED", Data: map[string]any{}}
 	}
-	subject, _ := t.Registry.CommandLine(tctx.SessionID, handle)
+	subject, _ := t.Registry.CommandLine(tctx.Identity.SessionID, handle)
 	tctx.SetDisplaySubject(subject)
 	cursor := int64(0)
 	if v, ok := args["cursor"].(float64); ok {
 		cursor = int64(v)
 	}
-	snapshot, err := t.Registry.ReadRawOutput(tctx.SessionID, handle, cursor)
+	snapshot, err := t.Registry.ReadRawOutput(tctx.Identity.SessionID, handle, cursor)
 	if err != nil {
 		if errors.Is(err, bgprocess.ErrProcessNotFound) {
-			return "", missingCommandHandleReject(t.Registry, tctx.SessionID, handle)
+			return "", missingCommandHandleReject(t.Registry, tctx.Identity.SessionID, handle)
 		}
 		return "", err
 	}
@@ -49,7 +50,7 @@ func (t *CommandOutputTool) Run(ctx context.Context, args map[string]any, tctx t
 	capBackgroundOutput(&out, 0)
 	payload := observeBackgroundOutput(tctx, out, snapshot.Boundary, snapshot.Facts)
 	payload.ExecFailure = snapshot.Failure
-	t.Registry.NoteRefusalsShown(tctx.SessionID, handle, len(payload.SandboxRefusals))
+	t.Registry.NoteRefusalsShown(tctx.Identity.SessionID, handle, len(payload.SandboxRefusals))
 	encoded, err := surveyjson.Marshal(payload)
 	if err != nil {
 		return "", fmt.Errorf("command_output encode: %w", err)
@@ -100,7 +101,7 @@ func observeBackgroundOutput(
 	refusals := facts.Refusals()
 	if boundary.Applied {
 		stamped := confine.StampRefusal(
-			"command_output", tctx.SessionID, boundary,
+			"command_output", tctx.Identity.SessionID, boundary,
 			confine.RefusalContext{
 				MediatedNetwork:        network,
 				RemotePackageExecution: report.RemotePackageExecution,
@@ -109,8 +110,8 @@ func observeBackgroundOutput(
 			},
 		)
 		report.BoundaryRefusal = string(stamped.Attribution)
-		if tctx.Out != nil {
-			tctx.Out.Facts = tools.ApplyRefusalFacts(tctx.Out.Facts, stamped)
+		if tctx.Effects.Out != nil {
+			tctx.Effects.Out.Facts = tools.ApplyRefusalFacts(tctx.Effects.Out.Facts, stamped)
 		}
 	}
 	return commandOutputResult{commandOutput: out, Network: network, Report: report.WithSandboxRefusals(refusals)}
@@ -126,14 +127,14 @@ func (t *CommandStopTool) Run(ctx context.Context, args map[string]any, tctx too
 	}
 	handle, _ := args["handle"].(string)
 	if handle == "" {
-		return "", &tools.ToolReject{Code: "BACKGROUND_HANDLE_REQUIRED", Data: map[string]any{}}
+		return "", &toolrejection.ToolReject{Code: "BACKGROUND_HANDLE_REQUIRED", Data: map[string]any{}}
 	}
-	subject, _ := t.Registry.CommandLine(tctx.SessionID, handle)
+	subject, _ := t.Registry.CommandLine(tctx.Identity.SessionID, handle)
 	tctx.SetDisplaySubject(subject)
-	out, err := t.Registry.Stop(tctx.SessionID, handle)
+	out, err := t.Registry.Stop(tctx.Identity.SessionID, handle)
 	if err != nil {
 		if errors.Is(err, bgprocess.ErrProcessNotFound) {
-			return "", missingCommandHandleReject(t.Registry, tctx.SessionID, handle)
+			return "", missingCommandHandleReject(t.Registry, tctx.Identity.SessionID, handle)
 		}
 		return "", err
 	}
@@ -150,16 +151,16 @@ func (t *CommandStopTool) Run(ctx context.Context, args map[string]any, tctx too
 func missingCommandHandleReject(reg *bgprocess.Registry, sessionID, handle string) error {
 	data := map[string]any{"handle": handle}
 	if reg == nil || !reg.HasRunning(sessionID) {
-		return &tools.ToolReject{Code: "COMMAND_OUTPUT_NO_LIVE_JOB", Data: data}
+		return &toolrejection.ToolReject{Code: "COMMAND_OUTPUT_NO_LIVE_JOB", Data: data}
 	}
-	return &tools.ToolReject{Code: "BACKGROUND_HANDLE_NOT_FOUND", Data: data}
+	return &toolrejection.ToolReject{Code: "BACKGROUND_HANDLE_NOT_FOUND", Data: data}
 }
 
 // rejectBackgroundCapture refuses capture modes that need a foreground run.
 func rejectBackgroundCapture(args map[string]any) error {
 	for _, capture := range []string{"terminal_capture", "snapshot_capture"} {
 		if _, ok := args[capture]; ok {
-			return tools.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": capture + "_incompatible", "field": "background"})
+			return toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": capture + "_incompatible", "field": "background"})
 		}
 	}
 	return nil
@@ -212,8 +213,8 @@ func runCommandBackground(
 	if err := confine.RequireApplied(applied); err != nil {
 		return "", err
 	}
-	confine.LogApplied("background", tctx.SessionID, confinement)
-	directIPApplied := tctx.DirectIPRequested && confinement != nil && confinement.Network == confine.NetworkDirectIP
+	confine.LogApplied("background", tctx.Identity.SessionID, confinement)
+	directIPApplied := tctx.Direct.DirectIPRequested && confinement != nil && confinement.Network == confine.NetworkDirectIP
 	commandLine := canonicalCommandKey(tctx, args)
 	egressLease, err := confine.BindAction(confinement, commandEgressIdentity(tctx, toolName, commandLine))
 	if err != nil {
@@ -226,29 +227,29 @@ func runCommandBackground(
 		ProfileID:  profile,
 		Stages:     stages,
 		IOParams:   ioParams,
-		PathExtra:  append([]string(nil), tctx.HostResourcePathExtra...),
+		PathExtra:  append([]string(nil), tctx.Host.HostResourcePathExtra...),
 	}
 	spawnFacts := confine.SpawnFacts{Report: commandConfinementReport(
 		confine.BoundaryOf(confinement), commandNetworkPosture(tctx, toolName, commandLine),
-		tools.LocalNetworkGrantOf(tctx), tctx.PackageExecution,
+		tools.LocalNetworkGrantOf(tctx), tctx.Files.PackageExecution,
 	), Action: egressLease, Network: egressLease.ObservedHosts}
-	if err := tctx.Secrets.HandOff(ctx, nil); err != nil {
-		return "", tools.HeldHandOffReject(toolName, err)
+	if err := tctx.Effects.Secrets.HandOff(ctx, nil); err != nil {
+		return "", toolrejection.HeldHandOffReject(toolName, err)
 	}
 	window := openCommandWindow(ctx, tctx, toolName, commandLine)
 	var sourceRevision, sourceRootDigest string
-	if tctx.VerificationCheck {
-		sourceRevision, sourceRootDigest = sourceledger.VerificationState(ctx, tctx.SourceLedger, tools.HostWriteRoot(tctx))
+	if tctx.Execution.VerificationCheck {
+		sourceRevision, sourceRootDigest = sourceledger.VerificationState(ctx, tctx.Source.SourceLedger, tools.HostWriteRoot(tctx))
 	}
 	index := watchIndex(tctx, confinement)
 	handle, err := registry.StartPipeline(ctx, bgprocess.PipelineSpec{
-		IsCheck:        tctx.VerificationCheck,
+		IsCheck:        tctx.Execution.VerificationCheck,
 		SourceRevision: sourceRevision, SourceRootDigest: sourceRootDigest, Cwd: cwdDisplay,
-		SessionID: tctx.SessionID, RootSessionID: tctx.ChatSessionID(),
-		ProjectID: tctx.ProjectID, Request: req,
+		SessionID: tctx.Identity.SessionID, RootSessionID: tctx.ChatSessionID(),
+		ProjectID: tctx.Identity.ProjectID, Request: req,
 		Runner: runner,
 		Mode:   bgprocess.JobModeBackground, OriginTool: toolName,
-		ToolCallID: tctx.ToolCallID, RunID: commandRunID(tctx),
+		ToolCallID: tctx.Identity.ToolCallID, RunID: commandRunID(tctx),
 		Timeout: commandTimeout(args, toolName), AllowConcurrent: true,
 		Facts: spawnFacts,
 	})
@@ -264,16 +265,16 @@ func runCommandBackground(
 		tools.EmitDirectIPLifecycle(tctx, tools.DirectIPLifecycleStarted)
 	}
 	networkLife := newCommandNetworkLifecycle(tctx, toolName, egressLease, directIPApplied)
-	registry.WatchIndex(tctx.SessionID, handle, index)
+	registry.WatchIndex(tctx.Identity.SessionID, handle, index)
 	// The exit hook fires after this call returns and its ctx is canceled.
 	exitCtx := context.WithoutCancel(ctx)
-	registry.OnExit(tctx.SessionID, handle, func() {
+	registry.OnExit(tctx.Identity.SessionID, handle, func() {
 		networkLife.complete(exitCtx)
-		if snap, snapErr := registry.Snapshot(exitCtx, tctx.SessionID, handle, bgprocess.DefaultTailBytes); snapErr == nil {
+		if snap, snapErr := registry.Snapshot(exitCtx, tctx.Identity.SessionID, handle, bgprocess.DefaultTailBytes); snapErr == nil {
 			recordContainerLaunch(tctx, snap)
 		}
 	})
-	window.closeOnExit(ctx, registry, tctx.SessionID, handle)
+	window.closeOnExit(ctx, registry, tctx.Identity.SessionID, handle)
 	result := hostcmd.BackgroundStartResult{
 		Background: true,
 		Handle:     handle,
@@ -283,7 +284,7 @@ func runCommandBackground(
 	var boundaryRefusal confine.FailureAttribution
 	refusals := egressLease.Refusals()
 	// Report fast exits inline instead of as running handles.
-	if settled, code, tail, exited := awaitBackgroundEarlyExit(ctx, registry, tctx.SessionID, handle); exited {
+	if settled, code, tail, exited := awaitBackgroundEarlyExit(ctx, registry, tctx.Identity.SessionID, handle); exited {
 		observedNetwork = networkLife.complete(ctx)
 		refusals = egressLease.SettledRefusals(ctx)
 		if len(settled) > 0 {
@@ -291,13 +292,13 @@ func runCommandBackground(
 		}
 		result.ExitedEarly = true
 		result.ExitCode = &code
-		if snap, snapErr := registry.Snapshot(ctx, tctx.SessionID, handle, bgprocess.DefaultTailBytes); snapErr == nil {
+		if snap, snapErr := registry.Snapshot(ctx, tctx.Identity.SessionID, handle, bgprocess.DefaultTailBytes); snapErr == nil {
 			recordContainerLaunch(tctx, snap)
 		} else {
 			recordContainerLaunch(tctx, bgprocess.Snapshot{Tail: tail, Output: tail})
 		}
 		if confinement != nil {
-			stamped := confine.StampRefusal(toolName, tctx.SessionID,
+			stamped := confine.StampRefusal(toolName, tctx.Identity.SessionID,
 				confine.BoundaryOf(confinement),
 				confine.RefusalContext{
 					MediatedNetwork:        observedNetwork,
@@ -306,19 +307,19 @@ func runCommandBackground(
 					Refusals:               refusals,
 				})
 			boundaryRefusal = stamped.Attribution
-			if tctx.Out != nil {
-				tctx.Out.Facts = tools.ApplyRefusalFacts(tctx.Out.Facts, stamped)
+			if tctx.Effects.Out != nil {
+				tctx.Effects.Out.Facts = tools.ApplyRefusalFacts(tctx.Effects.Out.Facts, stamped)
 			}
 		}
 		result.Tail = tail
 	}
 	result.Network = observedNetwork
 	result.Report = commandConfinementReport(confine.BoundaryOf(confinement),
-		commandNetworkPosture(tctx, toolName, commandLine), tools.LocalNetworkGrantOf(tctx), tctx.PackageExecution,
+		commandNetworkPosture(tctx, toolName, commandLine), tools.LocalNetworkGrantOf(tctx), tctx.Files.PackageExecution,
 	).WithSandboxRefusals(refusals)
 	result.BoundaryRefusal = string(boundaryRefusal)
 	if !result.ExitedEarly {
-		registry.NoteRefusalsShown(tctx.SessionID, handle, len(refusals.Refusals))
+		registry.NoteRefusalsShown(tctx.Identity.SessionID, handle, len(refusals.Refusals))
 	}
 	tools.CaptureExternalAccess(tctx, observedNetwork, directIPApplied)
 	// Only live handles keep the status indicator running.
@@ -376,14 +377,14 @@ func commandStartError(err error) error {
 	}
 	var backgroundCapacity *bgprocess.BackgroundCapacityError
 	if errors.As(err, &backgroundCapacity) {
-		return &tools.ToolReject{
+		return &toolrejection.ToolReject{
 			Code: "BACKGROUND_CAP_REACHED",
 			Data: map[string]any{"background_limit": backgroundCapacity.Limit, "live_terminal_ids": backgroundCapacity.TerminalIDs, "live_command_handles": backgroundCapacity.CommandHandles},
 		}
 	}
 	var capacity *bgprocess.AwaitedCapacityError
 	if errors.As(err, &capacity) {
-		return &tools.ToolReject{Code: "COMMAND_CONCURRENCY_CAP_REACHED", Data: map[string]any{
+		return &toolrejection.ToolReject{Code: "COMMAND_CONCURRENCY_CAP_REACHED", Data: map[string]any{
 			"max_awaited": capacity.Limit, "count": len(capacity.Handles),
 			"live_command_handles": capacity.Handles,
 		}}
@@ -396,7 +397,7 @@ func commandStartError(err error) error {
 	if errors.Is(conflict, bgprocess.ErrDuplicateRunning) {
 		code = "COMMAND_DUPLICATE_RUNNING"
 	}
-	return &tools.ToolReject{Code: code, Data: map[string]any{
+	return &toolrejection.ToolReject{Code: code, Data: map[string]any{
 		"handles": conflict.Handles, "handles_text": strings.Join(conflict.Handles, ", "),
 	}}
 }

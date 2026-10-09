@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/workflow/toolguard"
 	"strings"
 
@@ -25,7 +26,7 @@ func RegisterTransitionTool(reg *tools.DefaultRegistry, runs *Service) error {
 		return fmt.Errorf("registry and run manager required")
 	}
 	return reg.Register("workflow_transition", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-		if !toolguard.IsCoordinatorAgent(tctx.Agent) {
+		if !toolguard.IsCoordinatorAgent(tctx.Identity.Agent) {
 			return "", fmt.Errorf("workflow_transition requires coordinator role")
 		}
 		if err := toolguard.RequireSessionProject(ctx, runs.Sessions, tctx); err != nil {
@@ -34,7 +35,7 @@ func RegisterTransitionTool(reg *tools.DefaultRegistry, runs *Service) error {
 		transitionID, _ := args["transition_id"].(string)
 		transitionID = strings.TrimSpace(transitionID)
 		if transitionID == "" {
-			return "", &tools.ToolReject{
+			return "", &toolrejection.ToolReject{
 				Code: "WORKFLOW_TRANSITION_UNKNOWN",
 				Data: map[string]any{"detail": "transition_id required"},
 			}
@@ -43,23 +44,23 @@ func RegisterTransitionTool(reg *tools.DefaultRegistry, runs *Service) error {
 			TransitionID string `json:"transition_id"`
 			Actor        string `json:"actor"`
 		}{TransitionID: transitionID, Actor: workflowdef.TransitionActorCoordinator}
-		if replayed, ok, replayErr := runs.Journal.ReplayOperation(ctx, tctx.ToolCallID, "fire_transition", payload); replayErr != nil || ok {
+		if replayed, ok, replayErr := runs.Journal.ReplayOperation(ctx, tctx.Identity.ToolCallID, "fire_transition", payload); replayErr != nil || ok {
 			if replayErr != nil {
 				return "", replayErr
 			}
 			return marshalTransitionToolResult(TransitionToolResult{Run: replayed})
 		}
-		active, err := runs.Runs.ActiveBySession(ctx, tctx.SessionID)
+		active, err := runs.Runs.ActiveBySession(ctx, tctx.Identity.SessionID)
 		if err != nil {
 			return "", err
 		}
 		if active == nil {
-			return "", &tools.ToolReject{
+			return "", &toolrejection.ToolReject{
 				Code: "WORKFLOW_TRANSITION_INACTIVE",
 				Data: map[string]any{"detail": "no active workflow run"},
 			}
 		}
-		commandCtx := runstate.WithCommandOperation(runstate.WithExpectedRevision(ctx, active.Revision), tctx.ToolCallID)
+		commandCtx := runstate.WithCommandOperation(runstate.WithExpectedRevision(ctx, active.Revision), tctx.Identity.ToolCallID)
 		run, err := runs.FireTransition(commandCtx, active.ID, transitionID, workflowdef.TransitionActorCoordinator)
 		if err != nil {
 			return "", mapTransitionToolError(err, transitionID, active.CurrentPhase)
@@ -72,7 +73,7 @@ func mapTransitionToolError(err error, transitionID, phase string) error {
 	switch {
 	case errors.Is(err, runstate.ErrTransitionPendingInput):
 		// Pending input uses the shared workflow hint.
-		return &tools.ToolReject{
+		return &toolrejection.ToolReject{
 			Code: "WORKFLOW_FEEDBACK_PENDING",
 			Data: map[string]any{
 				"phase":         phase,
@@ -81,23 +82,23 @@ func mapTransitionToolError(err error, transitionID, phase string) error {
 			},
 		}
 	case errors.Is(err, runstate.ErrTransitionUnknown):
-		return &tools.ToolReject{
+		return &toolrejection.ToolReject{
 			Code: "WORKFLOW_TRANSITION_UNKNOWN",
 			Data: map[string]any{"transition_id": transitionID, "phase": phase},
 		}
 	case errors.Is(err, runstate.ErrTransitionActorDenied):
-		return &tools.ToolReject{
+		return &toolrejection.ToolReject{
 			Code: "WORKFLOW_TRANSITION_ACTOR_DENIED",
 			Data: map[string]any{"transition_id": transitionID, "phase": phase},
 		}
 	case errors.Is(err, runstate.ErrTransitionNotArmed):
-		return &tools.ToolReject{
+		return &toolrejection.ToolReject{
 			Code: "WORKFLOW_TRANSITION_NOT_ARMED",
 			Data: map[string]any{"transition_id": transitionID, "phase": phase},
 		}
 	default:
 		if nr, ok := runstate.IsNotRunnable(err); ok {
-			return &tools.ToolReject{
+			return &toolrejection.ToolReject{
 				Code: "WORKFLOW_TRANSITION_INACTIVE",
 				Data: map[string]any{"detail": nr.Error(), "phase": phase},
 			}

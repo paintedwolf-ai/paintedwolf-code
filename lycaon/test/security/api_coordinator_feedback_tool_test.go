@@ -32,7 +32,8 @@ func TestCoordinatorToolReturnsManifestPrompt(t *testing.T) {
 		t.Fatal(err)
 	}
 	out, err := toolReg.Run(ctx, "workflow_user_feedback", map[string]any{}, tools.ToolContext{
-		Agent: "coordinator", SessionID: sess.ID,
+		Identity: tools.InvocationIdentity{Agent: "coordinator",
+			SessionID: sess.ID},
 	})
 	testutil.FailErr(t, "toolReg.Run failed", err)
 	if !strings.Contains(out, "Which database engine?") || !strings.Contains(out, `"phase_id":"clarify"`) {

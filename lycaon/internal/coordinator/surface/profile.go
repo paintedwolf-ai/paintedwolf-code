@@ -1,13 +1,14 @@
 package surface
 
 import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+
 	"fmt"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/coordinator/surfacecatalog"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/spawn"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -74,7 +75,7 @@ func investigateProfileBlocksDefault(runCtx api.CoordinatorRunContext) bool {
 	if runCtx.WorkflowInvestigateEligible != nil && !*runCtx.WorkflowInvestigateEligible {
 		return true
 	}
-	if s := strings.TrimSpace(runCtx.PhaseCoordinatorSurface); s != "" && s != tools.SurfaceImplementInvestigate {
+	if s := strings.TrimSpace(runCtx.PhaseCoordinatorSurface); s != "" && s != toolcontract.SurfaceImplementInvestigate {
 		return true
 	}
 	return false
@@ -175,7 +176,7 @@ func workflowDeclaredExecutionMode(runCtx api.CoordinatorRunContext) string {
 }
 
 func postureSurfaceTemplate(posture api.SessionPosture, surfaceID string) string {
-	if surfaceID == tools.SurfaceImplementInvestigate {
+	if surfaceID == toolcontract.SurfaceImplementInvestigate {
 		return "agents/coordinator-surface-investigate.md"
 	}
 	if surfaceID == spawn.SurfaceImplementSynthesis {

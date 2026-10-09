@@ -14,72 +14,69 @@ import (
 )
 
 func (m *Service) Build(ctx context.Context, sess *api.Session, profileID string, machine inject.Machine) (tools.ToolContext, error) {
-	tctx := tools.ToolContext{
-		ProjectID:           "",
-		SessionID:           "",
-		Agent:               profileID,
-		ToolAccess:          m.profiles.ResolveToolAccess(ctx, sess),
-		ActiveRootID:        "",
-		SourceWorkspaceKind: api.SourceWorkspaceKindProject,
+	tctx := tools.ToolContext{Identity: tools.InvocationIdentity{ProjectID: "",
+		SessionID: "",
+		Agent:     profileID}, Source: tools.InvocationSource{ActiveRootID: "",
+		SourceWorkspaceKind: api.SourceWorkspaceKindProject}, Turn: tools.InvocationTurn{ToolAccess: m.profiles.ResolveToolAccess(ctx, sess)},
 	}
 	if sess != nil {
-		tctx.SessionID = sess.ID
-		tctx.ParentSessionID = sess.ParentSessionID
+		tctx.Identity.SessionID = sess.ID
+		tctx.Identity.ParentSessionID = sess.ParentSessionID
 		if m != nil && m.store != nil {
-			tctx.RootSessionID = sessiontree.RootID(ctx, m.store, sess.ID)
+			tctx.Identity.RootSessionID = sessiontree.RootID(ctx, m.store, sess.ID)
 		}
-		if tctx.RootSessionID == "" {
-			tctx.RootSessionID = sess.ID
+		if tctx.Identity.RootSessionID == "" {
+			tctx.Identity.RootSessionID = sess.ID
 		}
-		tctx.ProjectID = sess.ProjectID
-		tctx.ActiveRootID = sess.WorkspaceRootID
+		tctx.Identity.ProjectID = sess.ProjectID
+		tctx.Source.ActiveRootID = sess.WorkspaceRootID
 		// Context rebuilds read the same turn ordinal the ledger records.
 		if m != nil && m.store != nil {
 			if turn, err := m.store.UserTurnOrdinal(ctx, sess.ID); err == nil {
-				tctx.UserTurn = turn
+				tctx.Identity.UserTurn = turn
 			}
 		}
 	}
 	if m != nil && m.loopbackProv != nil {
-		tctx.ContainerRecorder = m.loopbackProv
+		tctx.Local.ContainerRecorder = m.loopbackProv
 	}
-	if m != nil && m.projects != nil && tctx.ProjectID != "" {
+	if m != nil && m.projects != nil && tctx.Identity.ProjectID != "" {
 		roots, err := m.workspace.Roots(ctx, sess)
 		if err != nil {
 			return tools.ToolContext{}, err
 		}
-		tctx.Roots = roots
+		tctx.Source.Roots = roots
 		binding, bound, err := m.workspace.Binding(ctx, sess)
 		if err != nil {
 			return tools.ToolContext{}, err
 		}
 		if bound {
-			base, err := m.projects.Get(ctx, tctx.ProjectID)
+			base, err := m.projects.Get(ctx, tctx.Identity.ProjectID)
 			if err != nil {
 				return tools.ToolContext{}, err
 			}
 			workspace := project.WithWorktree(base, binding)
-			tctx.ProjectSourceBranch = workspace.SourceBranch
-			tctx.ProjectRootBranches = workspace.RootBranches
+			tctx.Source.ProjectSourceBranch = workspace.SourceBranch
+			tctx.Source.ProjectRootBranches = workspace.RootBranches
 		}
 
 	}
-	if len(tctx.Roots) > 0 && tctx.ActiveRootID == "" {
-		if r, err := projectroot.PrimaryRoot(tctx.Roots); err == nil {
-			tctx.ActiveRootID = r.ID
+	if len(tctx.Source.Roots) > 0 && tctx.Source.ActiveRootID == "" {
+		if r, err := projectroot.PrimaryRoot(tctx.Source.Roots); err == nil {
+			tctx.Source.ActiveRootID = r.ID
 		}
 	}
-	if m != nil && tctx.ProjectID != "" {
-		tctx.HostDataDir = project.HostDataDir(m.dataDir, tctx.ProjectID)
+	if m != nil && tctx.Identity.ProjectID != "" {
+		tctx.Host.HostDataDir = project.HostDataDir(m.dataDir, tctx.Identity.ProjectID)
 	}
 	if m != nil {
-		tctx.MaxToolSpillBytes = m.limits.Effective(ctx, sess).MaxToolSpillBytes
-		tctx.MutationRecorder = m.captures
-		tctx.SourceLedger = m.SourceLedger
-		tctx.SourceMutations = m.sourceMutations
-		tctx.EditorDocuments = m.editorDocuments
-		tctx.CredentialFiles = m.credentialFiles
-		tctx.SessionScratchDir = m.execution.ScratchDir(ctx, sess)
+		tctx.Host.MaxToolSpillBytes = m.limits.Effective(ctx, sess).MaxToolSpillBytes
+		tctx.Source.MutationRecorder = m.captures
+		tctx.Source.SourceLedger = m.SourceLedger
+		tctx.Source.SourceMutations = m.sourceMutations
+		tctx.Source.EditorDocuments = m.editorDocuments
+		tctx.Effects.CredentialFiles = m.credentialFiles
+		tctx.Host.SessionScratchDir = m.execution.ScratchDir(ctx, sess)
 	}
 	m.attachRepoSizeFact(ctx, &tctx)
 	m.AttachSkillReadRoots(ctx, sess, profileID, machine, &tctx)
@@ -98,11 +95,11 @@ func (m *Service) AttachSkillReadRoots(
 		return
 	}
 	if machine.Compiled() {
-		tctx.ReadRoots = append([]string(nil), machine.ReadRoots...)
+		tctx.Files.ReadRoots = append([]string(nil), machine.ReadRoots...)
 		return
 	}
-	roots := make([]string, 0, len(tctx.Roots))
-	for _, r := range tctx.Roots {
+	roots := make([]string, 0, len(tctx.Source.Roots))
+	for _, r := range tctx.Source.Roots {
 		if path := strings.TrimSpace(r.Path); path != "" {
 			roots = append(roots, path)
 		}
@@ -111,7 +108,7 @@ func (m *Service) AttachSkillReadRoots(
 	if len(loaded) == 0 {
 		return
 	}
-	tctx.ReadRoots = profiles.SkillReadRoots(loaded)
+	tctx.Files.ReadRoots = profiles.SkillReadRoots(loaded)
 }
 
 // attachRepoSizeFact reads the progressive brief without waiting; unavailable counts stay unknown.
@@ -127,9 +124,9 @@ func (m *Service) attachRepoSizeFact(ctx context.Context, tctx *tools.ToolContex
 	if err != nil || brief == nil {
 		return
 	}
-	tctx.RepoFileCount = brief.FileCount
-	tctx.RepoFileCountKnown = true
+	tctx.Source.RepoFileCount = brief.FileCount
+	tctx.Source.RepoFileCountKnown = true
 	if len(brief.Layout.TopLevel) > 0 {
-		tctx.RepoTopLevel = append([]string(nil), brief.Layout.TopLevel...)
+		tctx.Source.RepoTopLevel = append([]string(nil), brief.Layout.TopLevel...)
 	}
 }

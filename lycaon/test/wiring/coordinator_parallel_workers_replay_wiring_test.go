@@ -87,9 +87,9 @@ func TestCoordinatorParallelWorkersReplayOverlayPathReadForbidden(t *testing.T) 
 		gc)
 
 	if _, observed := gc.RejectData[guard.CoordinatorOverlayPathReadForbiddenCode]; !observed {
-		t.Fatalf("guard did not stamp reject data; facts: worker_branch_path=%v", gc.PathIsWorkerBranch)
+		t.Fatalf("guard did not stamp reject data; facts: worker_branch_path=%v", gc.Workers.PathIsWorkerBranch)
 	}
-	if !gc.PathIsWorkerBranch {
+	if !gc.Workers.PathIsWorkerBranch {
 		t.Fatal("path_is_worker_branch fact is unset")
 	}
 	formatted, err := rejectFmt.Format(guard.CoordinatorOverlayPathReadForbiddenCode, gc.RejectData[guard.CoordinatorOverlayPathReadForbiddenCode])

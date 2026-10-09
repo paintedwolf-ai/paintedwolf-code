@@ -294,7 +294,7 @@ func (b *serveBuilder) wireToolRuntime() error {
 		})
 		b.synthesisCurator = curator
 	}
-	b.toolRuntime.SetReadEvidenceLedger(b.store)
+	b.toolRuntime.Survey.SetReadEvidenceLedger(b.store)
 	toolWiring{b}.wireDetectionPacks()
 	hintCfg, rejectFmt, err := loadStockHintRegistry()
 	if err != nil {
@@ -303,13 +303,13 @@ func (b *serveBuilder) wireToolRuntime() error {
 	b.hintCfg = hintCfg
 	b.rejectFmt = rejectFmt
 	if b.rejectFmt != nil {
-		b.toolRuntime.ApplyGuidanceRejects(b.rejectFmt)
+		b.toolRuntime.Authority.ApplyGuidanceRejects(b.rejectFmt)
 	}
 	schemaCfg, err := loadToolSchemas()
 	if err != nil {
 		return fmt.Errorf("tool schemas: %w", err)
 	}
-	b.toolRuntime.Executor.SetToolSchemas(schemaCfg)
+	b.toolRuntime.Executor.Metadata.SetToolSchemas(schemaCfg)
 	b.toolReg = tools.NewExecutorRegistry(b.toolRuntime.Executor, b.toolRuntime.Registry)
 	return nil
 }

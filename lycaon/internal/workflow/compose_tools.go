@@ -42,7 +42,7 @@ func RegisterComposeTool(reg *tools.DefaultRegistry, composer *workflowcompositi
 		return fmt.Errorf("registry and composer required")
 	}
 	if err := reg.Register("workflow_compose", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-		if !toolguard.IsCoordinatorAgent(tctx.Agent) {
+		if !toolguard.IsCoordinatorAgent(tctx.Identity.Agent) {
 			return "", fmt.Errorf("workflow_compose requires coordinator role")
 		}
 		manifestYAML, _ := args["manifest_yaml"].(string)
@@ -51,7 +51,7 @@ func RegisterComposeTool(reg *tools.DefaultRegistry, composer *workflowcompositi
 		}
 		dryRun, _ := args["dry_run"].(bool)
 		result, err := composer.Compose(ctx, workflowcomposition.ComposeRequest{
-			SessionID:    tctx.SessionID,
+			SessionID:    tctx.Identity.SessionID,
 			ProjectDir:   tctx.ActiveRootPath(),
 			ManifestYAML: []byte(manifestYAML),
 			CreatedBy:    workflowdrafts.Coordinator,
@@ -74,7 +74,7 @@ func RegisterComposeFromTemplateTool(reg *tools.DefaultRegistry, composer *workf
 		return fmt.Errorf("registry and composer required")
 	}
 	if err := reg.Register("workflow_compose_from_template", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-		if !toolguard.IsCoordinatorAgent(tctx.Agent) {
+		if !toolguard.IsCoordinatorAgent(tctx.Identity.Agent) {
 			return "", fmt.Errorf("workflow_compose_from_template requires coordinator role")
 		}
 		templateID, _ := args["template_id"].(string)
@@ -87,7 +87,7 @@ func RegisterComposeFromTemplateTool(reg *tools.DefaultRegistry, composer *workf
 		}
 		dryRun, _ := args["dry_run"].(bool)
 		result, err := composer.ComposeFromTemplate(ctx, workflowcomposition.ComposeFromTemplateRequest{
-			SessionID:  tctx.SessionID,
+			SessionID:  tctx.Identity.SessionID,
 			ProjectDir: tctx.ActiveRootPath(),
 			TemplateID: templateID,
 			Params:     params,

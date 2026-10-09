@@ -2,6 +2,7 @@ package turnguards
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolfeedback"
 
 	"github.com/lycaon/lycaon/internal/toolpolicy"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -31,7 +32,7 @@ func (m *Service) PolicyDependencies() toolpolicy.EngineDeps {
 		return reg, nil
 	}
 	return toolpolicy.EngineDeps{
-		ToolInvoker:      m.toolInvoker,
+		ToolLister:       m.toolLister,
 		Rules:            m.rules,
 		Workflows:        m.policyWorkflows(),
 		Postures:         posturesFn,
@@ -39,7 +40,7 @@ func (m *Service) PolicyDependencies() toolpolicy.EngineDeps {
 		HasComposeDraft:  m.HasComposeDraft,
 		ToolAccess:       m.Profiles.ResolveToolAccess,
 		RejectFormatter:  m.toolRejectFormatter,
-		BlockPlane:       &tools.BlockPlane{Pipeline: m.ToolPolicy.Pipeline, Renderer: m.Feedback.Renderer()},
+		BlockPlane:       &toolfeedback.BlockPlane{Pipeline: m.ToolPolicy.Pipeline, Renderer: m.Feedback.Renderer()},
 		PreInvoke:        m.BeforeInvoke,
 		ProjectRootCount: m.Workspace.RootCount,
 		OverlayRootPaths: m.Workspace.SettingsRoots,

@@ -4,6 +4,8 @@ package session_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolexecution"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -94,8 +96,8 @@ func TestPromptAskWriteApproveRunsTool(t *testing.T) {
 	}); err != nil {
 		testutil.FailErr(t, "register approval write fixture", err)
 	}
-	policy := tools.NewApprovalPolicyEngine(tools.NewProfilePolicyEngine(boundary), gate)
-	exec := tools.NewDefaultToolExecutor(policy, reg, "implement")
+	policy := toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), gate)
+	exec := toolexecution.NewExecutor(policy, reg, "implement")
 	hub := events.NewMemoryHub()
 	pub := &events.Publisher{Hub: hub}
 	hitlMgr := hitl.NewManager(hitl.NewSQLStore(sqlDB), pub, authzcontext.SQLRecorder(sqlDB))
@@ -108,7 +110,7 @@ func TestPromptAskWriteApproveRunsTool(t *testing.T) {
 	mgr := session.NewHost(store, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolReg)
 	oartest.InstallCloseoutPolicy(t, mgr)
 	mgr.SetProjectRegistry(project.NewSQLRegistry(sqlDB))
-	mgr.Coordinator.Guards.SetInvoker(exec)
+	mgr.Coordinator.Guards.SetToolMetadata(exec.Metadata)
 	wirePromptApprovalRejectFmt(t, mgr, root)
 	mgr.Profiles.SetPostureRegistry(postureRegistry)
 	prog := progress.NewMemoryStore()
@@ -212,8 +214,8 @@ func TestPromptAskWriteRejectSurfacesApprovalDenied(t *testing.T) {
 	}); err != nil {
 		testutil.FailErr(t, "register rejection write fixture", err)
 	}
-	policy := tools.NewApprovalPolicyEngine(tools.NewProfilePolicyEngine(boundary), gate)
-	exec := tools.NewDefaultToolExecutor(policy, reg, "implement")
+	policy := toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), gate)
+	exec := toolexecution.NewExecutor(policy, reg, "implement")
 	outcomeCfg, err := approvaloutcome.Load()
 	testutil.FailErr(t, "load approval-outcome catalog", err)
 	outcomes := outcomeRenderer{cat: approvaloutcome.NewCatalog(outcomeCfg)}
@@ -229,7 +231,7 @@ func TestPromptAskWriteRejectSurfacesApprovalDenied(t *testing.T) {
 	mgr := session.NewHost(store, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolReg)
 	oartest.InstallCloseoutPolicy(t, mgr)
 	mgr.SetProjectRegistry(project.NewSQLRegistry(sqlDB))
-	mgr.Coordinator.Guards.SetInvoker(exec)
+	mgr.Coordinator.Guards.SetToolMetadata(exec.Metadata)
 	wirePromptApprovalRejectFmt(t, mgr, root)
 	mgr.Profiles.SetPostureRegistry(postureRegistry)
 	prog := progress.NewMemoryStore()

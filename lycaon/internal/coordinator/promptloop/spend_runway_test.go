@@ -207,7 +207,9 @@ func TestPromptLoopSoftStopAllowsOneToolRoundThenClosesOut(t *testing.T) {
 		Session:   sess,
 		History:   []api.Message{{Role: api.MessageRoleUser, Content: "finish it"}},
 		ProfileID: "implement",
-		ToolCtx:   tools.ToolContext{SessionID: sess.ID},
+		ToolCtx: tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: sess.ID},
+		},
 	})
 	testutil.FailErr(t, "run prompt loop", err)
 	if admitted != 3 || result.Closeout == nil || result.Closeout.ID != result.LastAssistantID || result.Closeout.Content != result.LastAssistantContent {

@@ -11,7 +11,9 @@ import (
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 )
 
-type authoredRecorder struct{ authored []tools.AuthoredCredentialValues }
+type authoredRecorder struct {
+	authored []tools.AuthoredCredentialValues
+}
 
 func (r *authoredRecorder) Delivered(context.Context, tools.CredentialFileRead) error { return nil }
 
@@ -26,10 +28,10 @@ func TestWriteRecordsModelAuthoredCredentialValues(t *testing.T) {
 	dir := t.TempDir()
 	recorder := &authoredRecorder{}
 	tctx := nativefixture.Context(dir)
-	tctx.ProjectID = "project"
-	tctx.CredentialFiles = recorder
+	tctx.Identity.ProjectID = "project"
+	tctx.Effects.CredentialFiles = recorder
 	args := map[string]any{"path": ".env", "content": "OIDC_CLIENT_ID=todo-web-client\nWEB_PORT=3000\n"}
-	tctx.CanonicalArgs = args
+	tctx.Effects.CanonicalArgs = args
 	tool := &WriteTool{Boundary: nativefixture.Boundary(t)}
 	_, err := tool.Run(context.Background(), args, tctx)
 	testutil.FailErr(t, "write .env", err)

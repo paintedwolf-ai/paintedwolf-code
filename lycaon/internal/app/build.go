@@ -238,7 +238,7 @@ type serveBuilder struct {
 	parentWorkerWaiter   *worker.ParentWorkerWaiter
 	userNoticeCatalog    *usernotice.Catalog
 	srv                  *api.Server
-	mcpReg               *mcp.RegistryImpl
+	mcpReg               *mcp.Runtime
 	orch                 orchestration.Orchestrator
 	workerPoller         *worker.LocalWorkerPoller
 	authzCapturer        *authzcontext.Capturer

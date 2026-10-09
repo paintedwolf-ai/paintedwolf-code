@@ -3,6 +3,7 @@ package promptloop
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 	"time"
 
@@ -132,7 +133,7 @@ func (l *toolInvocations) truncateToolResultForSession(
 			"tool", tool,
 			"original_bytes", out.OriginalBytes,
 			"reason", rejectData["reason"])
-		return toolResultProjection{reject: &tools.ToolReject{Code: out.RejectCode, Data: rejectData}}
+		return toolResultProjection{reject: &toolrejection.ToolReject{Code: out.RejectCode, Data: rejectData}}
 	}
 	if !out.Truncated {
 		// Uncut output preserves the original one-request overlay.

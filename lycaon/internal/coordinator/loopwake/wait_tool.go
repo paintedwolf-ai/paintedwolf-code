@@ -3,6 +3,7 @@ package loopwake
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 	"time"
 
@@ -73,7 +74,7 @@ func RegisterWaitTool(reg *tools.DefaultRegistry, loop *LoopEngine, deps WaitToo
 			return "", err
 		}
 		if request.UntilComplete {
-			winner, ready := loop.processConditionOutcome(tctx.SessionID, awaitstore.Condition{
+			winner, ready := loop.processConditionOutcome(tctx.Identity.SessionID, awaitstore.Condition{
 				Kind: "process_done", Handles: request.ProcessHandles,
 			})
 			if ready {
@@ -98,45 +99,45 @@ func RegisterWaitTool(reg *tools.DefaultRegistry, loop *LoopEngine, deps WaitToo
 			triggerNames[i] = string(t)
 		}
 		// These states require a real wait even when workers are already idle.
-		batchPhase := loop.coordinatorBatchState(ctx, tctx.SessionID).Phase
+		batchPhase := loop.coordinatorBatchState(ctx, tctx.Identity.SessionID).Phase
 		batchClosed := batchPhase == batch.PhaseClosed
 		soloDurationWait := !explicitConditions && batchPhase == batch.PhasePreDispatch
-		pendingUserInput := loop.sessionHasPendingUserInput(ctx, tctx.SessionID)
+		pendingUserInput := loop.sessionHasPendingUserInput(ctx, tctx.Identity.SessionID)
 		if !batchClosed && !pendingUserInput && batchPhase != batch.PhasePreDispatch &&
-			waitSubscribesNextWorkerDone(triggers) && loop.WorkerCycleIsIdle(ctx, tctx.SessionID) {
+			waitSubscribesNextWorkerDone(triggers) && loop.WorkerCycleIsIdle(ctx, tctx.Identity.SessionID) {
 			return waitAlreadySatisfied(
 				"next_worker_done",
 				"The dispatched workers have finished.",
 				triggerNames,
 			)
 		}
-		if !batchClosed && !soloDurationWait && !pendingUserInput && waitSubscribesAllWorkersIdle(triggers) && loop.WorkerCycleIsIdle(ctx, tctx.SessionID) {
+		if !batchClosed && !soloDurationWait && !pendingUserInput && waitSubscribesAllWorkersIdle(triggers) && loop.WorkerCycleIsIdle(ctx, tctx.Identity.SessionID) {
 			return waitAlreadySatisfied(
 				"all_workers_idle",
 				"No workers are pending or running.",
 				triggerNames,
 			)
 		}
-		if !batchClosed && !pendingUserInput && waitSubscribesScanDone(triggers) && !loop.scanCycleOpen(ctx, tctx.SessionID) {
+		if !batchClosed && !pendingUserInput && waitSubscribesScanDone(triggers) && !loop.scanCycleOpen(ctx, tctx.Identity.SessionID) {
 			return waitAlreadySatisfied(
 				"scan_done",
 				"No security scans are pending or running for this project.",
 				triggerNames,
 			)
 		}
-		if !request.UntilComplete && !batchClosed && !pendingUserInput && waitSubscribesProcessDone(triggers) && !loop.processCycleOpen(tctx.SessionID, processHandles) {
+		if !request.UntilComplete && !batchClosed && !pendingUserInput && waitSubscribesProcessDone(triggers) && !loop.processCycleOpen(tctx.Identity.SessionID, processHandles) {
 			return waitAlreadySatisfied(
 				"process_done",
 				"No selected commands are running for this session.",
 				triggerNames,
 			)
 		}
-		until, resumed := loop.ResolveWaitUntil(ctx, tctx.SessionID, resume && !request.ExplicitMode, time.Duration(timeoutMS)*time.Millisecond)
+		until, resumed := loop.ResolveWaitUntil(ctx, tctx.Identity.SessionID, resume && !request.ExplicitMode, time.Duration(timeoutMS)*time.Millisecond)
 		if request.ResumeDeadline.After(time.Now().UTC()) {
 			until, resumed = request.ResumeDeadline, true
 		}
 		if pendingUserInput && args["timeout_ms"] == nil {
-			if pendingUntil := loop.pendingUserInputWaitDeadline(ctx, tctx.SessionID); pendingUntil.After(until) {
+			if pendingUntil := loop.pendingUserInputWaitDeadline(ctx, tctx.Identity.SessionID); pendingUntil.After(until) {
 				until = pendingUntil
 			}
 		}
@@ -146,7 +147,7 @@ func RegisterWaitTool(reg *tools.DefaultRegistry, loop *LoopEngine, deps WaitToo
 		}
 		// Coordinator bounded waits keep a timer backstop.
 		armedTriggers := triggers
-		if strings.TrimSpace(tctx.WorkerJobID) != "" {
+		if strings.TrimSpace(tctx.Identity.WorkerJobID) != "" {
 			// The durable worker queue schedules its own deadline.
 			armedTriggers = removeWaitTrigger(armedTriggers, WaitTriggerTimer)
 		}
@@ -154,27 +155,27 @@ func RegisterWaitTool(reg *tools.DefaultRegistry, loop *LoopEngine, deps WaitToo
 		var lease awaitstore.Lease
 		if deps.Store != nil {
 			lease, err = deps.Store.Arm(ctx, awaitstore.Lease{
-				SessionID: tctx.SessionID, RootSessionID: rootSessionID(tctx), ProjectID: tctx.ProjectID,
-				ProjectDir: tctx.ActiveRootPath(), ToolCallID: tctx.ToolCallID, WorkerJobID: tctx.WorkerJobID,
-				ProfileID: tctx.Agent, Deadline: until, UntilComplete: request.UntilComplete, Conditions: conditions,
-				LoopbackPorts: append([]uint16(nil), tctx.LoopbackConnectPorts...), Reason: reason,
+				SessionID: tctx.Identity.SessionID, RootSessionID: rootSessionID(tctx), ProjectID: tctx.Identity.ProjectID,
+				ProjectDir: tctx.ActiveRootPath(), ToolCallID: tctx.Identity.ToolCallID, WorkerJobID: tctx.Identity.WorkerJobID,
+				ProfileID: tctx.Identity.Agent, Deadline: until, UntilComplete: request.UntilComplete, Conditions: conditions,
+				LoopbackPorts: append([]uint16(nil), tctx.Local.LoopbackConnectPorts...), Reason: reason,
 			})
 			if err != nil {
 				return "", err
 			}
-			if strings.TrimSpace(tctx.WorkerJobID) == "" {
+			if strings.TrimSpace(tctx.Identity.WorkerJobID) == "" {
 				// Keep a result that settled this lease during registration.
-				if winner, ok := loop.waitWinner(tctx.SessionID); ok && winner.LeaseID != lease.ID {
-					loop.waitWinners.CompareAndDelete(strings.TrimSpace(tctx.SessionID), winner)
+				if winner, ok := loop.waitWinner(tctx.Identity.SessionID); ok && winner.LeaseID != lease.ID {
+					loop.waitWinners.CompareAndDelete(strings.TrimSpace(tctx.Identity.SessionID), winner)
 				}
 			}
 			leaseID = lease.ID
 		}
-		loop.enterSleep(ctx, tctx.SessionID, sleepArm{
+		loop.enterSleep(ctx, tctx.Identity.SessionID, sleepArm{
 			until: until, untilComplete: request.UntilComplete, reason: reason,
 			triggers: armedTriggers, processHandles: processHandles, workerHandles: request.WorkerHandles, mover: SleepMoverHost,
 		})
-		loop.MarkWaitCalled(tctx.SessionID)
+		loop.MarkWaitCalled(tctx.Identity.SessionID)
 		if deps.Store != nil {
 			monitorCtx := deps.RuntimeContext
 			if monitorCtx == nil {
@@ -182,9 +183,9 @@ func RegisterWaitTool(reg *tools.DefaultRegistry, loop *LoopEngine, deps WaitToo
 			}
 			startConditionMonitor(monitorCtx, loop, deps.Store, lease) //nolint:contextcheck // Monitor follows application lifetime.
 		}
-		if tctx.Out != nil {
-			tctx.Out.OwnerRef = leaseID
-			tctx.Out.Completion = &api.ToolCompletion{Operation: "wait", State: "parked", ResourceKind: "wait", ResourceID: leaseID}
+		if tctx.Effects.Out != nil {
+			tctx.Effects.Out.OwnerRef = leaseID
+			tctx.Effects.Out.Completion = &api.ToolCompletion{Operation: "wait", State: "parked", ResourceKind: "wait", ResourceID: leaseID}
 		}
 		result := WaitToolResult{
 			Status: "parked", LeaseID: leaseID, Reason: reason, UntilComplete: request.UntilComplete,
@@ -205,10 +206,10 @@ func RegisterWaitTool(reg *tools.DefaultRegistry, loop *LoopEngine, deps WaitToo
 }
 
 func waitRequestReject(err error) error {
-	if tools.AsToolReject(err) != nil {
+	if toolrejection.AsToolReject(err) != nil {
 		return err
 	}
-	return &tools.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{
+	return &toolrejection.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{
 		"tool": "wait", "reason": err.Error(),
 	}}
 }
@@ -223,7 +224,7 @@ func prepareWaitRequest(ctx context.Context, loop *LoopEngine, deps WaitToolDeps
 			return waitRequest{}, err
 		}
 	}
-	if err := validateProfileConditions(tctx.Agent, request.Conditions, deps.ProfileConditions); err != nil {
+	if err := validateProfileConditions(tctx.Identity.Agent, request.Conditions, deps.ProfileConditions); err != nil {
 		return waitRequest{}, err
 	}
 	if err := screenWaitURLs(ctx, deps, tctx, request.Conditions); err != nil {
@@ -233,7 +234,7 @@ func prepareWaitRequest(ctx context.Context, loop *LoopEngine, deps WaitToolDeps
 		return waitRequest{}, err
 	}
 	if request.UntilComplete {
-		if err := validateCompletionWait(loop, tctx.SessionID, request.Conditions); err != nil {
+		if err := validateCompletionWait(loop, tctx.Identity.SessionID, request.Conditions); err != nil {
 			return waitRequest{}, waitRequestReject(err)
 		}
 		if deps.Store == nil {

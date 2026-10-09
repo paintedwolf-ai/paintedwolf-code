@@ -14,7 +14,7 @@ import (
 func TestRecoveryAdmissionDoesNotConvertButtonTextIntoNewContent(t *testing.T) {
 	handler, sessions, attachments, sess := newPromptAttachmentRecoveryFixture(t)
 	ctx := t.Context()
-	original, _, err := handler.Sessions.Submissions.AdmitPrompt(ctx, sess.ID, uuid.NewString(), "review", promptinput.Input{Text: "Review"})
+	original, _, err := handler.Submission.Sessions.Submissions.AdmitPrompt(ctx, sess.ID, uuid.NewString(), "review", promptinput.Input{Text: "Review"})
 	testutil.FailErr(t, "admit original", err)
 	claimed, _, err := sessions.ClaimPromptSubmission(ctx, original.ID)
 	testutil.FailErr(t, "claim original", err)
@@ -24,11 +24,11 @@ func TestRecoveryAdmissionDoesNotConvertButtonTextIntoNewContent(t *testing.T) {
 		wire.Message{ID: progressID, Role: wire.MessageRoleAssistant, Content: "Reviewed", Visibility: wire.MessageVisibilityTranscript}))
 	testutil.FailErr(t, "fail provider", sessions.FinishPromptSubmission(ctx, original.ID, claimed.ClaimToken, store.PromptSubmissionFailed, "", store.PromptSubmissionFailure{Message: "provider disconnected"}))
 	req := wire.PromptRequest{OperationID: uuid.NewString(), Text: "Keep going", Recovery: &wire.PromptRecovery{Action: "continue", AfterMessageID: progressID}}
-	prepared, ok := handler.preparePromptAdmission(httptest.NewRecorder(), httptest.NewRequest("POST", "/", nil), sess.ID, sess, req, attachments, req.Text, req.Text, false)
+	prepared, ok := handler.Submission.preparePromptAdmission(httptest.NewRecorder(), httptest.NewRequest("POST", "/", nil), sess.ID, sess, req, attachments, req.Text, req.Text, false)
 	if !ok || len(prepared.input.ContentParts) != 0 {
 		t.Fatalf("recovery became a new content message: %+v", prepared)
 	}
-	admitted, _, err := handler.Sessions.Submissions.AdmitPrompt(ctx, sess.ID, req.OperationID, req, prepared.input)
+	admitted, _, err := handler.Submission.Sessions.Submissions.AdmitPrompt(ctx, sess.ID, req.OperationID, req, prepared.input)
 	testutil.FailErr(t, "admit button recovery", err)
 	if admitted == nil {
 		t.Fatal("recovery not persisted")

@@ -17,7 +17,7 @@ func RegisterPersistTool(reg *tools.DefaultRegistry, persister *workflowcomposit
 		return fmt.Errorf("registry and persister required")
 	}
 	if err := reg.Register("workflow_persist", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-		if !toolguard.IsCoordinatorAgent(tctx.Agent) {
+		if !toolguard.IsCoordinatorAgent(tctx.Identity.Agent) {
 			return "", fmt.Errorf("workflow_persist requires coordinator role")
 		}
 		workflowID, _ := args["workflow_id"].(string)
@@ -28,7 +28,7 @@ func RegisterPersistTool(reg *tools.DefaultRegistry, persister *workflowcomposit
 		}
 		trigger, _ := args["trigger"].(string)
 		result, err := persister.Persist(ctx, workflowcomposition.PersistRequest{
-			SessionID:  tctx.SessionID,
+			SessionID:  tctx.Identity.SessionID,
 			ProjectDir: tctx.ActiveRootPath(),
 			WorkflowID: workflowID,
 			Version:    version,

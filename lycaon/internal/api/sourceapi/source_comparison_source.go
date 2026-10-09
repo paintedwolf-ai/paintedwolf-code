@@ -14,7 +14,7 @@ import (
 // loadComparisonSource resolves exact endpoints independently of their display.
 // Retained view references are resolved by the view service before calling it.
 // A batch may pass pre-read commit trees; a single read passes none.
-func (s *Handler) loadComparisonSource(ctx context.Context, p *project.Project, sessionID string, source wire.SourceComparisonSelector, trees *commitTrees) (wire.SourceComparison, error) {
+func (s *Comparisons) loadComparisonSource(ctx context.Context, p *project.Project, sessionID string, source wire.SourceComparisonSelector, trees *commitTrees) (wire.SourceComparison, error) {
 	if err := source.Validate(); err != nil {
 		return wire.SourceComparison{}, &comparisonFailure{wire.ApiErrorCodeInvalidRequest, "The comparison selector must name exactly one source."}
 	}
@@ -25,7 +25,7 @@ func (s *Handler) loadComparisonSource(ctx context.Context, p *project.Project, 
 		return s.loadChatComparison(ctx, p.ID, sessionID, *source.Chat)
 	}
 	if source.GitRange != nil {
-		diff, err := s.loadGitRangeComparison(ctx, p, *source.GitRange)
+		diff, err := s.Review.loadGitRangeComparison(ctx, p, *source.GitRange)
 		if err != nil {
 			return wire.SourceComparison{}, err
 		}
@@ -74,7 +74,7 @@ func TextComparisonSide(path string, text *string) wire.SourceComparisonSide {
 	return readerTextSide(path, *text)
 }
 
-func (s *Handler) loadChatComparison(ctx context.Context, projectID, sessionID string, source wire.ChatComparisonSource) (wire.SourceComparison, error) {
+func (s *Comparisons) loadChatComparison(ctx context.Context, projectID, sessionID string, source wire.ChatComparisonSource) (wire.SourceComparison, error) {
 	if sessionID == "" {
 		return wire.SourceComparison{}, &comparisonFailure{wire.ApiErrorCodeInvalidRequest, "A chat comparison requires a session."}
 	}

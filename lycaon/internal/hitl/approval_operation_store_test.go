@@ -37,9 +37,9 @@ func TestRecoverApprovalOperationsRollsBackPreparedAuthority(t *testing.T) {
 	option := CurrentActionOption()
 	testutil.FailErr(t, "prepare operation", store.prepareApprovalOperation(t.Context(), checkpoint.ID, checkpoint.SessionID, option))
 	installer := &recoveryApprovalInstaller{}
-	manager := NewManager(store, nil, &fakeAuthzRecorder{})
-	manager.SetApprovalAuthorityInstaller(installer)
-	testutil.FailErr(t, "recover operations", manager.RecoverApprovalOperations(t.Context()))
+	manager := NewCheckpoints(store, nil, &fakeAuthzRecorder{})
+	manager.Authority.SetApprovalAuthorityInstaller(installer)
+	testutil.FailErr(t, "recover operations", manager.Authority.RecoverApprovalOperations(t.Context()))
 	if len(installer.rolledBack) != 1 || installer.rolledBack[0] != checkpoint.ID {
 		t.Fatalf("rolled back = %v", installer.rolledBack)
 	}

@@ -30,7 +30,7 @@ func startBugcommandRun(t *testing.T, h *orchestrationPipelineHarness) wire.Work
 	if err != nil {
 		t.Fatal(err)
 	}
-	h.srv.Workflow.StartOrchestratedTopologyForRun(context.Background(), h.sess.ID, run)
+	h.srv.Admin.Workflow.Topology.StartOrchestratedTopologyForRun(context.Background(), h.sess.ID, run)
 	return *run
 }
 

@@ -46,7 +46,11 @@ func TestWorkerTerminalTurnRecordsOnlyAcceptedStructuredCompletion(t *testing.T)
 			deps.Context.Policy = &fixedToolPolicy{metas: []tools.ToolMeta{{Name: "write"}, {Name: workertools.CompleteLegTool}}}
 			_, err = promptloop.NewPromptLoopForTest(deps).Run(t.Context(), promptloop.PromptRunInput{
 				SessionID: sess.ID, Session: sess, History: userHistory("finish"), ProfileID: "implementer", ProseFinish: true,
-				ToolCtx: tools.ToolContext{SessionID: sess.ID, ParentSessionID: sess.ParentSessionID, Agent: sess.AgentType},
+				ToolCtx: tools.ToolContext{
+					Identity: tools.InvocationIdentity{SessionID: sess.ID,
+						ParentSessionID: sess.ParentSessionID,
+						Agent:           sess.AgentType},
+				},
 			})
 			testutil.FailErr(t, "run terminal turn", err)
 			if len(client.requests) != 1 || len(client.requests[0].Tools) != 1 || client.requests[0].Tools[0].Name != workertools.CompleteLegTool {

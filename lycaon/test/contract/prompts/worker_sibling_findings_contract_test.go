@@ -62,7 +62,12 @@ func TestRootSessionKeyedFindingsAppendRecentParityContract(t *testing.T) {
 
 func toolContext(dir, sessionID, workerJobID string) tools.ToolContext {
 	roots := []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}}
-	return tools.ToolContext{Roots: roots, ActiveRootID: "r1", SessionID: sessionID, WorkerJobID: workerJobID}
+	return tools.ToolContext{
+		Source: tools.InvocationSource{Roots: roots,
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{SessionID: sessionID,
+			WorkerJobID: workerJobID},
+	}
 }
 
 func TestWorkerChildDelegationProjectDirInvariantContract(t *testing.T) {

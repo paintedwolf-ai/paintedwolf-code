@@ -20,8 +20,8 @@ func ReportTarget(tctx tools.ToolContext, resolved projectpaths.Resolved, kind a
 		return agentpresence.Target{}, false
 	}
 	target := agentpresence.Target{RootID: resolved.Root.ID, Path: filepath.ToSlash(resolved.ScopeRel)}
-	if tctx.Presence != nil {
-		tctx.Presence.Target(target, kind)
+	if tctx.Effects.Presence != nil {
+		tctx.Effects.Presence.Target(target, kind)
 	}
 	return target, true
 }

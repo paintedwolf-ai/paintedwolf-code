@@ -127,7 +127,9 @@ func TestPromptLoopOpenAIProviderTwoTurns(t *testing.T) {
 		Session:   sess,
 		History:   []api.Message{{Role: api.MessageRoleUser, Content: "read"}},
 		ProfileID: "coordinator",
-		ToolCtx:   tools.ToolContext{SessionID: "s1"},
+		ToolCtx: tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: "s1"},
+		},
 	})
 	testutil.FailErr(t, "loop.Run failed", err)
 	if result.LastAssistantContent != "done" {
@@ -223,7 +225,9 @@ func TestPromptLoopReassignsCollidingToolCallIDsAcrossTurns(t *testing.T) {
 		Session:   sess,
 		History:   []api.Message{{Role: api.MessageRoleUser, Content: "read both"}},
 		ProfileID: "coordinator",
-		ToolCtx:   tools.ToolContext{SessionID: "s1"},
+		ToolCtx: tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: "s1"},
+		},
 	})
 	testutil.FailErr(t, "loop.Run failed", err)
 

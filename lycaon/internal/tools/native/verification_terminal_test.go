@@ -21,7 +21,10 @@ func TestVerificationCanceledZeroExitIsNotPass(t *testing.T) {
 
 func TestVerificationReceiptRetainsLaunchIdentity(t *testing.T) {
 	out := &tools.ToolInvocationOut{}
-	ctx := tools.ToolContext{ToolCallID: "check-1", Out: out}
+	ctx := tools.ToolContext{
+		Identity: tools.InvocationIdentity{ToolCallID: "check-1"},
+		Effects:  tools.InvocationEffects{Out: out},
+	}
 	stampSourceRun(ctx, &hostcmd.Result{Stages: []hostcmd.StageResult{{Command: "project-check"}}, ExitCode: 0}, VerifyOutcomePassed,
 		commandRunOutcome{IsCheck: true, SourceRevision: "launch-content", SourceRootDigest: "launch-root", Cwd: "."})
 	if out.SourceRun == nil || out.SourceRun.SourceRevision != "launch-content" || out.SourceRun.CheckID != "check-1" || !out.SourceRun.IsCheck {

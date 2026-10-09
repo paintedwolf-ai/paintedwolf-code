@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/conditions"
@@ -124,10 +125,10 @@ func TestCandidateAccountLabelsCandidateDefects(t *testing.T) {
 		t.Fatalf("valid candidate did not link its group: %+v", account)
 	}
 	for name, args := range map[string]map[string]any{
-		"malformed arguments": {"verdict": "not an object"},
-		"undeclared decision": {"verdict": map[string]any{"verdict": "UNDECLARED", "claims": []any{}, "set_asides": []any{}}},
+		"malformed arguments":  {"verdict": "not an object"},
+		"undeclared decision":  {"verdict": map[string]any{"verdict": "UNDECLARED", "claims": []any{}, "set_asides": []any{}}},
 		"reasonless set-aside": candidate("group:a", []any{map[string]any{"scan_group_ids": []any{"group:a"}}}),
-		"unknown scan group":  candidate("group:missing", []any{}),
+		"unknown scan group":   candidate("group:missing", []any{}),
 	} {
 		if _, err := accounting.candidateAccount(t.Context(), run, *phase.ReviewLoop, args, groups); !errors.Is(err, errCandidateInvalid) {
 			t.Errorf("%s: err = %v, want candidate defect", name, err)

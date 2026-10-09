@@ -42,8 +42,8 @@ func (m *Service) SourceEvidence(
 		return nil, false
 	}
 	return m.ToolPolicy.FinishBlock(ctx, sess, func(gc *oar.GuardContext) error {
-		gc.VerifyRequired = true
-		gc.VerifierPass = false
+		gc.Progress.VerifyRequired = true
+		gc.Progress.VerifierPass = false
 		revision, _ := m.Verification.Revision(ctx, m.Verification.SourceEvidenceRoot(ctx, sess))
 		gc.PutRejectData(sourceEvidenceUnmetBeforeCloseoutCode, map[string]any{
 			"source_revision": revision,

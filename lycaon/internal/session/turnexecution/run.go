@@ -209,7 +209,7 @@ func (m *Service) executePromptRun(
 	if err != nil {
 		return execution, err
 	}
-	if err := m.Authorization.Seal(ctx, sess, assembly.ProfileID, assembly.ToolCtx.WorkerJobID); err != nil {
+	if err := m.Authorization.Seal(ctx, sess, assembly.ProfileID, assembly.ToolCtx.Identity.WorkerJobID); err != nil {
 		m.Guidance.Emit(ctx, sessionID, anchor.AuthzSealFailed, anchor.Envelope{})
 		execution.Response = nil
 		return execution, err

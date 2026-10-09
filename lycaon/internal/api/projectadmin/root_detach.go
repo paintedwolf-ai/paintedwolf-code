@@ -14,14 +14,14 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Handler) HandleDetachProjectRoot(w http.ResponseWriter, r *http.Request) {
+func (s *Roots) HandleDetachProjectRoot(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimSpace(chi.URLParam(r, "id"))
 	rootID := strings.TrimSpace(chi.URLParam(r, "root_id"))
-	force, ok := s.queryForce(w, r)
+	force, ok := s.Projects.queryForce(w, r)
 	if !ok {
 		return
 	}
-	if _, ok := s.requireProject(w, r, id); !ok {
+	if _, ok := s.Projects.requireProject(w, r, id); !ok {
 		return
 	}
 	release, waitForDrain := s.beginDestructiveProjectMutation(w, r, id)
@@ -52,7 +52,7 @@ func (s *Handler) HandleDetachProjectRoot(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if dependents.HasAny() && !force {
-		s.writeRootBusy(w, dependents)
+		s.Projects.writeRootBusy(w, dependents)
 		return
 	}
 	if force && dependents.HasAny() {
@@ -80,7 +80,7 @@ func (s *Handler) HandleDetachProjectRoot(w http.ResponseWriter, r *http.Request
 		return
 	}
 	s.forgetRemovedEditorDocuments(dependents)
-	s.Sources.InvalidateProjectSourceViews(id)
+	s.sourceViews.InvalidateProjectSourceViews(id)
 	sourcefeed.StopProjectWatch(r.Context(), id)
 	afterRoots := project.RootRefsFrom(change.After)
 	s.Sessions.ProjectControl.ReassignSessionsAfterRootDetach(r.Context(), id, rootID, afterRoots)
@@ -88,7 +88,7 @@ func (s *Handler) HandleDetachProjectRoot(w http.ResponseWriter, r *http.Request
 	s.Sessions.ProjectControl.EnqueueRootsChangedKick(r.Context(), id, project.RootRefsFrom(change.Before), afterRoots)
 	if detachedPath != "" {
 		s.releaseUnattachedSourceRoots(r.Context(), []string{detachedPath})
-		if removed := s.reconcileProjectSandboxes(r.Context(), id, detachedPath); removed > 0 {
+		if removed := s.Sandboxes.reconcileProjectSandboxes(r.Context(), id, detachedPath); removed > 0 {
 			slog.InfoContext(r.Context(), "reconciled stale worker sandboxes on root detach", "project_id", id, "workspace_path", detachedPath, "removed", removed)
 		}
 		s.Settings.Verify.ClearProposal(detachedPath)
@@ -102,25 +102,25 @@ func (s *Handler) HandleDetachProjectRoot(w http.ResponseWriter, r *http.Request
 		}
 	}
 	if len(afterRoots) > 0 {
-		s.detectVerifyAsync(r.Context(), id)
+		s.Verification.detectVerifyAsync(r.Context(), id)
 	}
-	s.Sources.ScheduleSourceInventory(r.Context(), id)
-	s.publishProjectLifecycleEvent(r.Context(), wire.ProjectEventUpdated, change.After)
+	s.sourceWatch.ScheduleSourceInventory(r.Context(), id)
+	s.Projects.publishProjectLifecycleEvent(r.Context(), wire.ProjectEventUpdated, change.After)
 	w.WriteHeader(http.StatusNoContent)
 }
 
 //nolint:contextcheck // Inventory resumes under the server lifetime after mutation cleanup.
-func (s *Handler) beginDestructiveProjectMutation(w http.ResponseWriter, r *http.Request, projectID string) (func(), func(context.Context) error) {
-	release, drain := s.beginDrainingProjectMutation(w, r, projectID)
-	if release == nil || s.Sources.SourceInventory == nil {
+func (s *Roots) beginDestructiveProjectMutation(w http.ResponseWriter, r *http.Request, projectID string) (func(), func(context.Context) error) {
+	release, drain := s.Projects.beginDrainingProjectMutation(w, r, projectID)
+	if release == nil || s.sourceWatch.SourceInventory == nil {
 		return release, drain
 	}
-	resume, err := s.Sources.SourceInventory.SuspendInventory(r.Context(), projectID)
+	resume, err := s.sourceWatch.SourceInventory.SuspendInventory(r.Context(), projectID)
 	finish := func() {
 		resume()
 		release()
 		// A surviving project resumes with its current root composition.
-		s.Sources.ScheduleSourceInventory(s.background.Context(), projectID)
+		s.sourceWatch.ScheduleSourceInventory(s.background.Context(), projectID)
 	}
 	if err != nil {
 		finish()
@@ -130,11 +130,11 @@ func (s *Handler) beginDestructiveProjectMutation(w http.ResponseWriter, r *http
 	return finish, drain
 }
 
-func (s *Handler) withEditorDocumentDependents(ctx context.Context, dependents projectcontrol.RootDependents, projectID, rootID string) (projectcontrol.RootDependents, error) {
-	if s.Sources.EditorDocuments == nil {
+func (s *Roots) withEditorDocumentDependents(ctx context.Context, dependents projectcontrol.RootDependents, projectID, rootID string) (projectcontrol.RootDependents, error) {
+	if s.sourceEditor.EditorDocuments == nil {
 		return dependents, nil
 	}
-	documents, err := s.Sources.EditorDocuments.LifecycleDependents(ctx, projectID, rootID)
+	documents, err := s.sourceEditor.EditorDocuments.LifecycleDependents(ctx, projectID, rootID)
 	if err != nil {
 		return projectcontrol.RootDependents{}, err
 	}
@@ -147,13 +147,13 @@ func (s *Handler) withEditorDocumentDependents(ctx context.Context, dependents p
 	return dependents, nil
 }
 
-func (s *Handler) forgetRemovedEditorDocuments(dependents projectcontrol.RootDependents) {
-	if s.Sources.EditorDocuments == nil || len(dependents.Documents) == 0 {
+func (s *Roots) forgetRemovedEditorDocuments(dependents projectcontrol.RootDependents) {
+	if s.sourceEditor.EditorDocuments == nil || len(dependents.Documents) == 0 {
 		return
 	}
 	ids := make([]string, 0, len(dependents.Documents))
 	for _, document := range dependents.Documents {
 		ids = append(ids, document.DocumentID)
 	}
-	s.Sources.EditorDocuments.ForgetRemoved(ids)
+	s.sourceEditor.EditorDocuments.ForgetRemoved(ids)
 }

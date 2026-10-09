@@ -46,17 +46,17 @@ var workflowFailures = []workflowFailure{
 }
 
 // writeRunLookupError answers a failed read of one workflow run.
-func (s *Handler) writeRunLookupError(w http.ResponseWriter, r *http.Request, err error) {
-	if errors.Is(err, runstate.ErrNotFound) {
+func (s *RunControl) writeRunLookupError(w http.ResponseWriter, r *http.Request, err error) {
+	if errors.Is(err, workflow.ErrRunNotFound) {
 		s.responses.Fail(w, wire.ApiErrorCodeWorkflowRunNotFound, "workflow run not found")
 		return
 	}
 	s.responses.InternalError(w, r, err)
 }
 
-func (s *Handler) WriteWorkflowError(w http.ResponseWriter, r *http.Request, err error) {
+func (s *RunControl) WriteWorkflowError(w http.ResponseWriter, r *http.Request, err error) {
 	// A run's missing pinned version is more specific than an unknown workflow.
-	var unavailable *workflow.WorkflowVersionUnavailableError
+	var unavailable *runstate.WorkflowVersionUnavailableError
 	if errors.As(err, &unavailable) {
 		s.responses.FailDetails(w, wire.ApiErrorCodeWorkflowVersionUnavailable,
 			map[string]any{"workflow_id": unavailable.WorkflowID, "version": unavailable.Version},

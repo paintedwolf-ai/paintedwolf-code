@@ -54,7 +54,9 @@ func TestLoopRespectsWorkerMaxToolLoopsOverride(t *testing.T) {
 		Session:   sess,
 		History:   userHistory("go"),
 		ProfileID: "explore_readonly",
-		ToolCtx:   tools.ToolContext{SessionID: sess.ID},
+		ToolCtx: tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: sess.ID},
+		},
 	})
 	testutil.FailErr(t, "loop.Run failed", err)
 	msgs, err := store.GetMessages(ctx, sess.ID)
@@ -114,7 +116,10 @@ func TestLoopPicksUpRaisedWorkerMaxToolLoopsMidFlight(t *testing.T) {
 		Session:   sess,
 		History:   userHistory("go"),
 		ProfileID: "explore_readonly",
-		ToolCtx:   tools.ToolContext{SessionID: sess.ID, WorkerJobID: "job-1"},
+		ToolCtx: tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: sess.ID,
+				WorkerJobID: "job-1"},
+		},
 	})
 	testutil.FailErr(t, "loop.Run failed", err)
 	msgs, err := mem.GetMessages(ctx, sess.ID)
@@ -174,7 +179,10 @@ func TestLoopTellsWorkerOnceWhenItsCeilingRises(t *testing.T) {
 		Session:   sess,
 		History:   userHistory("go"),
 		ProfileID: "explore_readonly",
-		ToolCtx:   tools.ToolContext{SessionID: sess.ID, WorkerJobID: "job-1"},
+		ToolCtx: tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: sess.ID,
+				WorkerJobID: "job-1"},
+		},
 	})
 	testutil.FailErr(t, "loop.Run failed", err)
 	if len(raised) != 1 || raised[0] != [2]int{1, 4} {
@@ -216,7 +224,9 @@ func TestLoopRespectsMaxIterations(t *testing.T) {
 	ctx := context.Background()
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
-	_, err = loop.Run(ctx, promptloop.PromptRunInput{SessionID: sess.ID, Session: sess, History: userHistory("go"), ProfileID: "explore_readonly", ToolCtx: tools.ToolContext{SessionID: sess.ID}})
+	_, err = loop.Run(ctx, promptloop.PromptRunInput{SessionID: sess.ID, Session: sess, History: userHistory("go"), ProfileID: "explore_readonly", ToolCtx: tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: sess.ID},
+	}})
 	testutil.FailErr(t, "loop.Run failed", err)
 	msgs, err := store.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "store.GetMessages failed", err)
@@ -271,7 +281,9 @@ func TestLoopHotReloadsWorkerMaxToolLoopsMidFlight(t *testing.T) {
 		Session:   sess,
 		History:   userHistory("go"),
 		ProfileID: "explore_readonly",
-		ToolCtx:   tools.ToolContext{SessionID: sess.ID},
+		ToolCtx: tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: sess.ID},
+		},
 	})
 	testutil.FailErr(t, "loop.Run failed", err)
 	msgs, err := store.GetMessages(ctx, sess.ID)
@@ -332,7 +344,10 @@ func TestLoopWarnsEveryWorkerAtItsRunway(t *testing.T) {
 				Session:   sess,
 				History:   userHistory("go"),
 				ProfileID: "explore_readonly",
-				ToolCtx:   tools.ToolContext{SessionID: sess.ID, WorkerJobID: "job-1"},
+				ToolCtx: tools.ToolContext{
+					Identity: tools.InvocationIdentity{SessionID: sess.ID,
+						WorkerJobID: "job-1"},
+				},
 			})
 			testutil.FailErr(t, "loop.Run failed", err)
 			if want := spawn.WorkerRunway(maxLoops); len(remaining) != 1 || remaining[0] != want {
@@ -367,7 +382,9 @@ func TestGroundingRetryAddsRepairRoundsPastTheCeiling(t *testing.T) {
 	_, err = loop.Run(ctx, promptloop.PromptRunInput{
 		SessionID: sess.ID, Session: sess, History: userHistory("repair"), ProfileID: "explore_readonly",
 		HostTurn: true, HostSignalID: string(anchor.WorkerCitationGrounding),
-		ToolCtx: tools.ToolContext{SessionID: sess.ID},
+		ToolCtx: tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: sess.ID},
+		},
 	})
 	testutil.FailErr(t, "loop.Run failed", err)
 	msgs, err := store.GetMessages(ctx, sess.ID)

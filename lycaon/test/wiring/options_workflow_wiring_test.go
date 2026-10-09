@@ -53,7 +53,7 @@ func TestOptionsWorkflowEndToEnd(t *testing.T) {
 	}
 
 	// Pending request input holds the initial topology phase.
-	h.Server.Workflow.StartOrchestratedTopologyForRun(ctx, sess.ID, run)
+	h.Server.Admin.Workflow.Topology.StartOrchestratedTopologyForRun(ctx, sess.ID, run)
 	if _, ok := h.DelegationStore.DelegationBySessionID(sess.ID); ok {
 		t.Fatal("research fan-out started before the request was answered")
 	}

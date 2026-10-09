@@ -15,7 +15,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Handler) HandleCreateComposerSecret(w http.ResponseWriter, r *http.Request) {
+func (s *Submission) HandleCreateComposerSecret(w http.ResponseWriter, r *http.Request) {
 	var body wire.CreateComposerSecretRequest
 	if err := httpio.DecodeJSON(w, r, &body); err != nil {
 		s.responses.DecodeError(w, r, err)

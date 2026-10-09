@@ -26,14 +26,14 @@ func (m *Service) Read(ctx context.Context, child *api.Session, job *api.WorkerT
 	if err != nil {
 		return "", "", err
 	}
-	tctx.WorkerJobID = job.ID
+	tctx.Identity.WorkerJobID = job.ID
 	tctx, err = m.Workspaces.Enrich(ctx, child, tctx)
 	if err != nil {
 		return "", "", err
 	}
-	tctx.ToolCallID = uuid.NewString()
-	tctx.MessageID = uuid.NewString()
-	tctx.Out = &tools.ToolInvocationOut{}
+	tctx.Identity.ToolCallID = uuid.NewString()
+	tctx.Identity.MessageID = uuid.NewString()
+	tctx.Effects.Out = &tools.ToolInvocationOut{}
 	args := map[string]any{"path": path}
 	content, err := m.tools.Run(ctx, "read", args, tctx)
 	if err != nil {
@@ -48,15 +48,15 @@ func (m *Service) Read(ctx context.Context, child *api.Session, job *api.WorkerT
 		return "", "", err
 	}
 	assistant := api.Message{
-		ID: tctx.MessageID, Role: api.MessageRoleAssistant, Origin: api.MessageOriginHost,
+		ID: tctx.Identity.MessageID, Role: api.MessageRoleAssistant, Origin: api.MessageOriginHost,
 		Authority: api.ContentAuthorityNone, TrustTier: api.ContentTrustTierTrusted,
-		ToolCalls: []api.ToolCall{{Name: "read", ID: tctx.ToolCallID, Args: args}},
+		ToolCalls: []api.ToolCall{{Name: "read", ID: tctx.Identity.ToolCallID, Args: args}},
 	}
 	result := api.Message{
 		ID: uuid.NewString(), Role: api.MessageRoleTool, Origin: api.MessageOriginTool,
 		Authority: api.ContentAuthorityNone, TrustTier: api.ContentTrustTierUntrusted, Content: patched,
 		EvidenceHandles: []string{handle},
-		ToolResult:      &api.ToolResult{Content: patched, Tool: "read", ToolCallID: tctx.ToolCallID, AssistantMessageID: assistant.ID, ToolArgs: args, Outcome: api.ToolResultOutcomeCompleted},
+		ToolResult:      &api.ToolResult{Content: patched, Tool: "read", ToolCallID: tctx.Identity.ToolCallID, AssistantMessageID: assistant.ID, ToolArgs: args, Outcome: api.ToolResultOutcomeCompleted},
 	}
 	if err := m.store.AppendMessages(ctx, child.ID, assistant, result); err != nil {
 		return "", "", err

@@ -58,8 +58,8 @@ func TestCoordinatorTaskScopeDispatchReadFanOutParallelWriteAllowed(t *testing.T
 		testutil.FailErr(t, "enqueue read scout", err)
 	}
 	gc := observeReadScoutSpawn(t, ctx, capDeps, sess, []any{readScopes[0].Paths[0]})
-	if !gc.WorkerSpawnBlocked || gc.MaxWorkers != 3 || gc.ActiveWorkerCount != 3 {
-		t.Fatalf("expected reject at total cap after three read scouts; blocked=%v active=%d max=%d", gc.WorkerSpawnBlocked, gc.ActiveWorkerCount, gc.MaxWorkers)
+	if !gc.Workers.WorkerSpawnBlocked || gc.Workers.MaxWorkers != 3 || gc.Workers.ActiveWorkerCount != 3 {
+		t.Fatalf("expected reject at total cap after three read scouts; blocked=%v active=%d max=%d", gc.Workers.WorkerSpawnBlocked, gc.Workers.ActiveWorkerCount, gc.Workers.MaxWorkers)
 	}
 	if _, observed := gc.RejectData[workeradmission.CoordinatorWorkerInFlightCode]; !observed {
 		t.Fatalf("guard did not stamp reject data at total cap; reject data = %v", gc.RejectData)
@@ -94,8 +94,8 @@ func TestCoordinatorTaskScopeDispatchReadFanOutParallelWriteAllowed(t *testing.T
 			"paths": []any{"internal/auth/x.go"},
 		},
 	}, gc))
-	if len(gc.ArgValidationErrors) > 0 {
-		t.Fatalf("expected overlapping write scope allowed: %v", gc.ArgValidationErrors)
+	if len(gc.Invocation.ArgValidationErrors) > 0 {
+		t.Fatalf("expected overlapping write scope allowed: %v", gc.Invocation.ArgValidationErrors)
 	}
 }
 

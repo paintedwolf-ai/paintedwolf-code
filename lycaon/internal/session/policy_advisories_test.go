@@ -71,7 +71,7 @@ func TestPolicyAdvisoryRoutingAtEveryHostBoundary(t *testing.T) {
 				pipeline.EnableAnchor(anchor)
 				mgr.SetOARPipeline(pipeline, mgr.Coordinator.Feedback.Renderer())
 				gc := oar.NewGuardContext()
-				gc.SessionID = "session"
+				gc.Session.SessionID = "session"
 				res, err := pipeline.EvaluateBlock(t.Context(), anchor, gc)
 				testutil.FailErr(t, "evaluate boundary", err)
 				if res.Decision == nil || res.Decision.Effect != effect {

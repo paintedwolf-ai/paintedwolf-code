@@ -340,7 +340,7 @@ func (l *PromptLoop) preparePromptLoop(ctx context.Context, in PromptRunInput) (
 		return nil, err
 	}
 	setup.maxIter = surface.EffectivePromptLoopIterations(setup.limits, setup.surfaceID)
-	setup.state.workerJobID = strings.TrimSpace(in.ToolCtx.WorkerJobID)
+	setup.state.workerJobID = strings.TrimSpace(in.ToolCtx.Identity.WorkerJobID)
 	setup.state.workerProgress = workerprogress.NewTracker(l.Nudges.seededWorkerProgress(ctx, setup.sess, setup.state.workerJobID))
 	setup.completed = setup.state.progress().ToolLoopsUsed()
 	setup.state.progress().SetMaxToolLoops(setup.maxIter)

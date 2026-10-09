@@ -51,7 +51,9 @@ func TestRepeatedProseRejectionEndsWithBoundedHandoff(t *testing.T) {
 	}
 	deps.Context.PromptTurnSurface = func(string) string { return "implement_investigate" }
 	loop := promptloop.NewPromptLoopForTest(deps)
-	result, err := loop.Run(t.Context(), promptloop.PromptRunInput{SessionID: sess.ID, Session: sess, History: userHistory("Make the edit"), ProfileID: "coordinator", ToolCtx: tools.ToolContext{SessionID: sess.ID}})
+	result, err := loop.Run(t.Context(), promptloop.PromptRunInput{SessionID: sess.ID, Session: sess, History: userHistory("Make the edit"), ProfileID: "coordinator", ToolCtx: tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: sess.ID},
+	}})
 	testutil.FailErr(t, "run rejected prose loop", err)
 	if client.calls < 2 || client.calls > promptloop.BlockedLoopRejectCap+2 {
 		t.Fatalf("model calls=%d; expected bounded recovery and a handoff", client.calls)

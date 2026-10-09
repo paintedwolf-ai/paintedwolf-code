@@ -14,7 +14,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *blueprintRoutes) HandleApproveBlueprint(w http.ResponseWriter, r *http.Request) {
+func (s *BlueprintRoutes) HandleApproveBlueprint(w http.ResponseWriter, r *http.Request) {
 	projectID, path, ok := s.blueprintAddress(w, r)
 	if !ok {
 		return
@@ -64,17 +64,7 @@ func (s *blueprintRoutes) HandleApproveBlueprint(w http.ResponseWriter, r *http.
 	httpio.WriteJSON(w, http.StatusOK, out)
 }
 
-func (s *Handler) HandleLaunchBlueprint(w http.ResponseWriter, r *http.Request) {
-	s.launchBlueprint(w, r, s.StartOrchestratedTopologyForRun, s.WriteWorkflowError)
-}
-
-// launchBlueprint materializes a session and starts the blueprint's run in it;
-// the workflow handler supplies topology start and its error mapping.
-func (s *blueprintRoutes) launchBlueprint(
-	w http.ResponseWriter, r *http.Request,
-	startTopology func(context.Context, string, *wire.WorkflowRun),
-	writeWorkflowError func(http.ResponseWriter, *http.Request, error),
-) {
+func (s *BlueprintRoutes) HandleLaunchBlueprint(w http.ResponseWriter, r *http.Request) {
 	rm := s.Workflows
 	projectID, path, ok := s.blueprintAddress(w, r)
 	if !ok {
@@ -114,7 +104,7 @@ func (s *blueprintRoutes) launchBlueprint(
 	}
 	target, err := workflowblueprints.ResolveLaunchTarget(source.Path, req.TargetWorkflowID, manifests)
 	if err != nil {
-		s.writeBlueprintLaunchError(w, r, err, writeWorkflowError)
+		s.writeBlueprintLaunchError(w, r, err)
 		return
 	}
 
@@ -144,7 +134,7 @@ func (s *blueprintRoutes) launchBlueprint(
 
 	run, seed, err := rm.Blueprints.LaunchFromBlueprint(r.Context(), sess.ID, source, target, s.Blueprints, projectDir, req.DeferStart)
 	if err != nil {
-		s.writeBlueprintLaunchError(w, r, err, writeWorkflowError)
+		s.writeBlueprintLaunchError(w, r, err)
 		return
 	}
 	reloaded, err := s.Blueprints.Get(r.Context(), source.ProjectID, sourcePath)
@@ -161,7 +151,7 @@ func (s *blueprintRoutes) launchBlueprint(
 		BlueprintID: seed.ID,
 	}
 	if run != nil {
-		startTopology(r.Context(), sess.ID, run)
+		s.Topology.StartOrchestratedTopologyForRun(r.Context(), sess.ID, run)
 		resp.WorkflowRunID = run.ID
 	}
 	s.SessionAdmin.PublishSessionCreated(r.Context(), sess)
@@ -169,15 +159,13 @@ func (s *blueprintRoutes) launchBlueprint(
 	httpio.WriteJSON(w, http.StatusCreated, resp)
 }
 
-func (s *blueprintRoutes) writeBlueprintLaunchError(
-	w http.ResponseWriter, r *http.Request, err error, writeWorkflowError func(http.ResponseWriter, *http.Request, error),
-) {
+func (s *BlueprintRoutes) writeBlueprintLaunchError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, runstate.ErrBlueprintLaunchIncompatible):
 		s.responses.Fail(w, wire.ApiErrorCodeBlueprintLaunchIncompatible, "this blueprint cannot launch the selected workflow")
 	case errors.Is(err, runstate.ErrBlueprintLaunchUnsupported):
 		s.responses.Fail(w, wire.ApiErrorCodeBlueprintLaunchUnsupported, "this workflow cannot launch from a blueprint")
 	default:
-		writeWorkflowError(w, r, err)
+		s.RunControl.WriteWorkflowError(w, r, err)
 	}
 }

@@ -35,7 +35,9 @@ func runHeldTestCall(loop *PromptLoop, call heldToolCall) toolInvocation {
 		context.Background(),
 		&api.Session{ID: "s1", ProjectID: "p1"},
 		api.ToolCall{ID: "tc1", Name: "find"},
-		tools.ToolContext{SessionID: "s1"},
+		tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: "s1"},
+		},
 		call,
 	)
 }

@@ -135,12 +135,12 @@ func TestObserveCoordinatorTaskInFlightParallelCap(t *testing.T) {
 		testutil.FailErr(t, "Observe after enqueue", workeradmission.ObserveCoordinatorTaskInFlight(ctx, deps, sess, "task", readScoutArgs, gc))
 		blocked := evaluateHasCode(t, gc, workeradmission.CoordinatorWorkerInFlightCode)
 		if i < cap-1 {
-			if blocked || gc.WorkerSpawnBlocked {
+			if blocked || gc.Workers.WorkerSpawnBlocked {
 				t.Fatalf("expected allow with %d in-flight jobs", i+1)
 			}
 			continue
 		}
-		if !blocked || !gc.WorkerSpawnBlocked {
+		if !blocked || !gc.Workers.WorkerSpawnBlocked {
 			t.Fatalf("expected reject at cap with %d in-flight jobs", cap)
 		}
 	}

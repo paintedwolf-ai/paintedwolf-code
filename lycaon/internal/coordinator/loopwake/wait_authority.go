@@ -2,6 +2,7 @@ package loopwake
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"net/url"
 	"sort"
 	"strconv"
@@ -19,8 +20,8 @@ func screenWaitURLs(ctx context.Context, deps WaitToolDeps, tctx tools.ToolConte
 		return nil
 	}
 	ctx = secretmatch.WithAskAttribution(ctx, secretmatch.AskAttribution{
-		SessionID: tctx.SessionID, RootSessionID: rootSessionID(tctx), ProjectID: tctx.ProjectID,
-		ProjectDir: tctx.ActiveRootPath(), ToolCallID: tctx.ToolCallID,
+		SessionID: tctx.Identity.SessionID, RootSessionID: rootSessionID(tctx), ProjectID: tctx.Identity.ProjectID,
+		ProjectDir: tctx.ActiveRootPath(), ToolCallID: tctx.Identity.ToolCallID,
 	})
 	for _, condition := range conditions {
 		if condition.Kind != "http_ready" {
@@ -31,7 +32,7 @@ func screenWaitURLs(ctx context.Context, deps WaitToolDeps, tctx tools.ToolConte
 			continue
 		}
 		match := matches[0]
-		return &tools.ToolReject{Code: "WAIT_PROBE_SECRET_UNSUPPORTED", Data: map[string]any{
+		return &toolrejection.ToolReject{Code: "WAIT_PROBE_SECRET_UNSUPPORTED", Data: map[string]any{
 			"surface": "wait_probe", "rule_id": match.RuleID, "shape": match.GenericShape,
 		}}
 	}
@@ -42,8 +43,8 @@ func validateConditionAuthority(conditions []awaitstore.Condition, tctx tools.To
 	for _, condition := range conditions {
 		switch condition.Kind {
 		case "port_ready":
-			if !tctx.LoopbackConnectGranted || !portCovered(tctx.LoopbackConnectPorts, condition.Port) {
-				return &tools.ToolReject{Code: isolation.CodeTryLoopbackConnect, Data: map[string]any{"port": condition.Port}}
+			if !tctx.Local.LoopbackConnectGranted || !portCovered(tctx.Local.LoopbackConnectPorts, condition.Port) {
+				return &toolrejection.ToolReject{Code: isolation.CodeTryLoopbackConnect, Data: map[string]any{"port": condition.Port}}
 			}
 		case "http_ready":
 			target, _ := url.Parse(condition.URL)
@@ -57,8 +58,8 @@ func validateConditionAuthority(conditions []awaitstore.Condition, tctx tools.To
 			if target.Port() != "" {
 				port, _ = strconv.Atoi(target.Port())
 			}
-			if !tctx.LoopbackConnectGranted || !portCovered(tctx.LoopbackConnectPorts, uint16(port)) {
-				return &tools.ToolReject{Code: isolation.CodeTryLoopbackConnect, Data: map[string]any{"port": port}}
+			if !tctx.Local.LoopbackConnectGranted || !portCovered(tctx.Local.LoopbackConnectPorts, uint16(port)) {
+				return &toolrejection.ToolReject{Code: isolation.CodeTryLoopbackConnect, Data: map[string]any{"port": port}}
 			}
 		}
 	}
@@ -66,10 +67,10 @@ func validateConditionAuthority(conditions []awaitstore.Condition, tctx tools.To
 }
 
 func rootSessionID(tctx tools.ToolContext) string {
-	if root := strings.TrimSpace(tctx.ParentSessionID); root != "" {
+	if root := strings.TrimSpace(tctx.Identity.ParentSessionID); root != "" {
 		return root
 	}
-	return strings.TrimSpace(tctx.SessionID)
+	return strings.TrimSpace(tctx.Identity.SessionID)
 }
 
 func validateProfileConditions(profile string, conditions []awaitstore.Condition, profiles map[string]map[string]bool) error {
@@ -86,7 +87,7 @@ func validateProfileConditions(profile string, conditions []awaitstore.Condition
 				}
 			}
 			sort.Strings(kinds)
-			return &tools.ToolReject{Code: "WAIT_CONDITION_NOT_ALLOWED", Data: map[string]any{"condition": condition.Kind, "profile": profile, "wait_allowed_conditions": kinds}}
+			return &toolrejection.ToolReject{Code: "WAIT_CONDITION_NOT_ALLOWED", Data: map[string]any{"condition": condition.Kind, "profile": profile, "wait_allowed_conditions": kinds}}
 		}
 	}
 	return nil

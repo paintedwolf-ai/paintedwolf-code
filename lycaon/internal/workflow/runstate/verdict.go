@@ -1,10 +1,10 @@
 package runstate
 
 import (
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/evidence"
-	"github.com/lycaon/lycaon/internal/tools"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -55,8 +55,8 @@ type ReviewOutcome struct {
 	MissingAgents  []string
 	InventoryIssue *InventoryIssue
 	// CoverageIssue is the structured refusal of a coverage assessment.
-	CoverageIssue *tools.ToolReject
-	QuestionIssue *tools.ToolReject
+	CoverageIssue *toolrejection.ToolReject
+	QuestionIssue *toolrejection.ToolReject
 	// IterationCapExceeded reports a non-terminal verdict rejected because the
 	// phase already reached iteration_cap on a prior attempt.
 	IterationCapExceeded bool

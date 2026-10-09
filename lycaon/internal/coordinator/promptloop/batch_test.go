@@ -18,17 +18,15 @@ func TestToolContextForCallPreservesCompiledSurface(t *testing.T) {
 	loop := NewPromptLoop(PromptLoopDeps{
 		Context: ContextDeps{
 			RefreshToolContext: func(context.Context, *api.Session, inject.Machine) (tools.ToolContext, error) {
-				return tools.ToolContext{Agent: "coordinator"}, nil
+				return tools.ToolContext{Identity: tools.InvocationIdentity{Agent: "coordinator"}}, nil
 			},
 		},
 	})
-	base := tools.ToolContext{
-		EditorReadBases:      tools.NewAgentReadBases(map[string]int64{"document": 7}),
-		TurnSurfaceID:        tools.SurfaceImplementInvestigate,
+	base := tools.ToolContext{Source: tools.InvocationSource{EditorReadBases: tools.NewAgentReadBases(map[string]int64{"document": 7})}, Turn: tools.InvocationTurn{TurnSurfaceID: toolcontract.SurfaceImplementInvestigate,
 		TurnToolPlan:         toolsurface.Compile([]string{"read"}, []string{"write", "verify"}),
 		TurnOfferedToolNames: []string{"read"},
 		TurnWritePinRootID:   "root-2",
-		TurnWritePinGlobs:    []string{"src/**", "README.md"},
+		TurnWritePinGlobs:    []string{"src/**", "README.md"}},
 	}
 	got, err := loop.Batch.toolContextForCall(t.Context(), &api.Session{}, base, inject.Machine{})
 	testutil.FailErr(t, "toolContextForCall", err)

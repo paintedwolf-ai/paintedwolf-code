@@ -87,7 +87,7 @@ func (l *turnCloseout) handleAcceptedCloseoutReport(
 		if err != nil {
 			return out, err
 		}
-		if observation.facts.RejectObservation == "closeout_no_new_evidence" && decision.Code == guidance.CloseoutNoNewEvidenceCode(surfaceID) {
+		if observation.facts.Rejection.RejectObservation == "closeout_no_new_evidence" && decision.Code == guidance.CloseoutNoNewEvidenceCode(surfaceID) {
 			out.retry = false
 			out.exhausted = false
 			out.endWithoutAssemble = true
@@ -262,7 +262,7 @@ func closeoutHasCitationIssues(gc *oar.GuardContext) bool {
 	if gc == nil {
 		return false
 	}
-	return gc.RejectObservation == "citations_required" || len(gc.UnobservedCitedHandles) > 0 || len(gc.UnobservedCitedURLs) > 0 || gc.CitationUnverifiable
+	return gc.Rejection.RejectObservation == "citations_required" || len(gc.Grounding.UnobservedCitedHandles) > 0 || len(gc.Grounding.UnobservedCitedURLs) > 0 || gc.Grounding.CitationUnverifiable
 }
 
 func (l *turnCloseout) completeCloseout(ctx context.Context, sessionID string, st *promptLoopTurnState) {

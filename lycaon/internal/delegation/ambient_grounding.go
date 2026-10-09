@@ -206,10 +206,10 @@ func (g *AmbientGroundingCoordinator) applyOARAmbientGrounding(ctx context.Conte
 		return nil
 	}
 	gc := oar.NewGuardContext()
-	gc.SessionID = sessionID
-	gc.Profile = "coordinator"
+	gc.Session.SessionID = sessionID
+	gc.Session.Profile = "coordinator"
 	ObserveDelegationGroundingVerdict(gc, verdict)
-	gc.GroundingEscalated = groundingFlagged(g.State.Get(key), g.Config)
+	gc.Grounding.GroundingEscalated = groundingFlagged(g.State.Get(key), g.Config)
 	missing := []string{}
 	for _, job := range in.Jobs {
 		if job.Status == api.WorkerStatusComplete && !hasSummaryForJob(in.SummaryTags, job.ID) {

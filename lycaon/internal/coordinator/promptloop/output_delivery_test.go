@@ -1,6 +1,7 @@
 package promptloop
 
 import (
+	"github.com/lycaon/lycaon/internal/toolfeedback"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -27,7 +28,7 @@ func TestOutputDeliveryRefusalRetainsExecutionAndEvaluatesOnce(t *testing.T) {
 	pipeline.EnableAnchor(oar.AnchorToolRejected)
 	loop := NewPromptLoopForTest(PromptLoopDeps{
 		Tools: ToolsDeps{
-			BlockPlane: &tools.BlockPlane{Pipeline: pipeline, Renderer: oar.NewRenderer(nil, nil)},
+			BlockPlane: &toolfeedback.BlockPlane{Pipeline: pipeline, Renderer: oar.NewRenderer(nil, nil)},
 		},
 	})
 	for _, code := range []string{tooloutput.ToolResultTooLargeCode, tooloutput.ToolOutputSpillCapExceededCode, tooloutput.ToolOutputSpillUnavailableCode} {
@@ -41,7 +42,7 @@ func TestOutputDeliveryRefusalRetainsExecutionAndEvaluatesOnce(t *testing.T) {
 					run.failure = &api.InvocationFailure{Code: "ORIGINAL_FAILURE", Class: api.FailureClassOwnerError}
 				}
 				data := map[string]any{"bytes": 2048, "cap": 1024}
-				got := loop.Tools.refuseOutputDelivery(t.Context(), sess, api.ToolCall{Name: "command"}, tools.ToolContext{Agent: "coordinator"}, run, code, data)
+				got := loop.Tools.refuseOutputDelivery(t.Context(), sess, api.ToolCall{Name: "command"}, tools.ToolContext{Identity: tools.InvocationIdentity{Agent: "coordinator"}}, run, code, data)
 				details := got.facts.FeedbackFor(code).Details
 				if got.facts.PrimaryCode() != code || !got.facts.HasCode("PRIOR_ADVISORY") {
 					t.Fatalf("settled refusal identity or prior advisory lost: %+v", got.facts)

@@ -98,7 +98,7 @@ func (b sessionWiring) configureSessionManager() error {
 	if err := progress.InitProgressGatedTools(b.configRoot); err != nil {
 		return fmt.Errorf("init progress-gated tools: %w", err)
 	}
-	b.mgr.Coordinator.Guards.SetInvoker(b.toolRuntime.Executor)
+	b.mgr.Coordinator.Guards.SetToolMetadata(b.toolRuntime.Executor.Metadata)
 	if b.settingsSvc != nil {
 		if b.cfg.TestSessionLimits == nil {
 			b.mgr.Limits.SetProvider(settings.ProjectLimitsAdapter{Store: b.settingsSvc.Limits})
@@ -137,14 +137,14 @@ func (b sessionWiring) wireSessionToolSources() {
 		b.toolRuntime.SetApprovalRuleSource(&mgr.Catalog)
 		b.toolRuntime.Executor.SetHostResourceConnectionSource(b.hostResources.ResolveAction)
 		b.toolRuntime.SetSkillsCatalog(func(ctx context.Context, tctx tools.ToolContext) []skills.Skill {
-			roots := make([]string, 0, len(tctx.Roots))
-			for _, r := range tctx.Roots {
+			roots := make([]string, 0, len(tctx.Source.Roots))
+			for _, r := range tctx.Source.Roots {
 				if path := strings.TrimSpace(r.Path); path != "" {
 					roots = append(roots, path)
 				}
 			}
-			sess, _ := mgr.Chats.Get(ctx, tctx.SessionID)
-			loaded, _ := mgr.Profiles.EffectiveSkillsForProfile(ctx, sess, tctx.Agent, roots)
+			sess, _ := mgr.Chats.Get(ctx, tctx.Identity.SessionID)
+			loaded, _ := mgr.Profiles.EffectiveSkillsForProfile(ctx, sess, tctx.Identity.Agent, roots)
 			return loaded
 		})
 		b.toolRuntime.SetSkillTemplateVars(func(_ context.Context, tctx tools.ToolContext) map[string]any {
@@ -156,7 +156,7 @@ func (b sessionWiring) wireSessionToolSources() {
 		})
 		b.toolRuntime.SetSkillPackConfiguration(
 			func(ctx context.Context, tctx tools.ToolContext, packID string) map[string]any {
-				view := mgr.Catalog.ViewForSessionID(ctx, tctx.SessionID)
+				view := mgr.Catalog.ViewForSessionID(ctx, tctx.Identity.SessionID)
 				if view == nil {
 					return nil
 				}

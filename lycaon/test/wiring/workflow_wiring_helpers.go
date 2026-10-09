@@ -237,7 +237,7 @@ func appendSucceededReviewAgent(t *testing.T, h *Harness, ctx context.Context, s
 		ParentSessionID: sess.ID, AgentType: agent, Prompt: "review " + agent, Brief: "review " + agent,
 		Status: api.WorkerStatusPending, SpawnReason: api.SpawnReasonHumanRequest, Scope: &api.TaskScope{Mode: "read"},
 	}
-	testutil.FailErr(t, "bind reviewer "+agent, h.WorkflowMgr.Fanout.BindWorkflowTask(ctx, tools.ToolContext{SessionID: sess.ID}, workID, &task))
+	testutil.FailErr(t, "bind reviewer "+agent, h.WorkflowMgr.Fanout.BindWorkflowTask(ctx, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID}}, workID, &task))
 	testutil.FailErr(t, "enqueue defaults "+agent, worker.ApplyEnqueueDefaults(&task,
 		project.ProjectScope{ProjectID: sess.ProjectID, WorkspacePath: sess.WorkspacePath}, worker.DefaultWorkersConfig()))
 	workerID, err := h.WorkerQueue.Enqueue(ctx, task)

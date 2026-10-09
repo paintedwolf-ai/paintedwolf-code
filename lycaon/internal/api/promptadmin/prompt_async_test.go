@@ -1,6 +1,7 @@
 package promptadmin
 
 import (
+ workflowrunstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	"context"
 	"errors"
 	"fmt"
@@ -55,9 +56,9 @@ func TestPromptHostErrorCode(t *testing.T) {
 		}{
 			{guidance.ErrGroundingEscalated, "grounding_escalated"},
 			{project.ErrMutationInProgress, "project_mutation_in_progress"},
-			{workflow.ErrActiveRunExists, "workflow_active"},
+			{workflowrunstate.ErrActiveRunExists, "workflow_active"},
 			{&spendguard.CeilingReached{CeilingUSD: 5, SpentUSD: 5.1}, "session_spend_ceiling_reached"},
-			{&workflow.NotRunnableError{Reason: "paused"}, "workflow_not_runnable"},
+			{&workflowrunstate.NotRunnableError{Reason: "paused"}, "workflow_not_runnable"},
 			{&failure.ProviderNotConfiguredError{ProviderID: "x"}, "provider_not_configured"},
 			{&failure.ProviderEmptyCompletionError{}, "provider_empty_completion"},
 			{&failure.ProviderContextTooSmallError{ProviderID: "desktop", Model: "qwen3.5:27b"}, "provider_context_too_small"},

@@ -3,6 +3,9 @@ package promptloop
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolcommand"
+	"github.com/lycaon/lycaon/internal/toolfeedback"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -101,7 +104,7 @@ func TestRunExecutesRegisteredTool(t *testing.T) {
 		Session:   sess,
 		History:   []api.Message{{Role: api.MessageRoleUser, Content: "go"}},
 		ProfileID: "explore_readonly",
-		ToolCtx:   tools.ToolContext{SessionID: "s1"},
+		ToolCtx:   tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "s1"}},
 	})
 	testutil.FailErr(t, "loop.Run failed", err)
 	foundTool := false
@@ -189,7 +192,7 @@ func TestPromptLoop_ToolMessageContainsSpecProgress(t *testing.T) {
 		Session:   sess,
 		History:   []api.Message{{Role: api.MessageRoleUser, Content: "go"}},
 		ProfileID: "explore_readonly",
-		ToolCtx:   tools.ToolContext{SessionID: "s1"},
+		ToolCtx:   tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "s1"}},
 	})
 	testutil.FailErr(t, "loop.Run failed", err)
 	hasProgress := false
@@ -231,7 +234,7 @@ func TestPromptLoop_PhaseGateUnmetJSONSkipsDoomLoopRecord(t *testing.T) {
 	_ = loop.Tools.executeToolCall(context.Background(), sess, "s1", "", nil, api.ToolCall{
 		Name: "workflow_advance",
 		Args: map[string]any{},
-	}, tools.ToolContext{SessionID: "s1"}, nil, 0, "", api.CoordinatorRunContext{})
+	}, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "s1"}}, nil, 0, "", api.CoordinatorRunContext{})
 	if got := guard.counts["s1"]; len(got) != 0 {
 		t.Fatalf("doom-loop count for gate-blocked advance = %v want empty", got)
 	}
@@ -251,7 +254,7 @@ func TestExecuteToolCallCarriesCompiledInvocationContract(t *testing.T) {
 	})
 	loop.Tools.executeToolCall(context.Background(), &api.Session{ID: "s1"}, "s1", "", nil, api.ToolCall{
 		ID: "call-1", Name: "read", Args: map[string]any{},
-	}, tools.ToolContext{SessionID: "s1"}, nil, 0, "", api.CoordinatorRunContext{})
+	}, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "s1"}}, nil, 0, "", api.CoordinatorRunContext{})
 	want, ok := toolcontract.Lookup("read")
 	if !ok {
 		t.Fatal("read contract is not declared")
@@ -274,7 +277,7 @@ func TestExecuteToolCallTracksWhetherTheSubsystemOwnerRan(t *testing.T) {
 	})
 	run := loop.Tools.executeToolCall(t.Context(), &api.Session{ID: "s1"}, "s1", "", nil, api.ToolCall{
 		ID: "call-1", Name: "read", Args: map[string]any{},
-	}, tools.ToolContext{SessionID: "s1"}, nil, 0, "", api.CoordinatorRunContext{})
+	}, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "s1"}}, nil, 0, "", api.CoordinatorRunContext{})
 	if run.invoked {
 		t.Fatal("pre-subsystem-owner rejection marked invoked")
 	}
@@ -290,7 +293,7 @@ func TestExecuteToolCallTracksWhetherTheSubsystemOwnerRan(t *testing.T) {
 	})
 	run = loop.Tools.executeToolCall(t.Context(), &api.Session{ID: "s1"}, "s1", "", nil, api.ToolCall{
 		ID: "call-2", Name: "read", Args: map[string]any{},
-	}, tools.ToolContext{SessionID: "s1"}, nil, 0, "", api.CoordinatorRunContext{})
+	}, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "s1"}}, nil, 0, "", api.CoordinatorRunContext{})
 	if !run.invoked {
 		t.Fatal("subsystem-owner failure was not marked invoked")
 	}
@@ -327,7 +330,7 @@ func TestPreExecutorRefusalsUseOneOccurrenceAndOfferedRecovery(t *testing.T) {
 	pipeline.EnableAnchor(oar.AnchorToolRejected)
 	loop := NewPromptLoopForTest(PromptLoopDeps{
 		Tools: ToolsDeps{
-			BlockPlane: &tools.BlockPlane{Pipeline: pipeline, Renderer: oar.NewRenderer(nil, nil)},
+			BlockPlane: &toolfeedback.BlockPlane{Pipeline: pipeline, Renderer: oar.NewRenderer(nil, nil)},
 		},
 	})
 	for _, code := range []string{"TOOL_NOT_OFFERED", "TOOL_INVOKE_PROSE_TURN"} {
@@ -354,21 +357,21 @@ func TestPreExecutorRefusalsUseOneOccurrenceAndOfferedRecovery(t *testing.T) {
 			if tc.loadable {
 				deferred = []string{"command"}
 			}
-			reject := loop.Tools.rejectToolOccurrence(t.Context(), sess, api.ToolCall{Name: "command"}, tools.ToolContext{Agent: "coordinator", TurnOfferedToolNames: tc.offered, TurnToolPlan: toolsurface.Compile(tc.offered, deferred)}, tc.code, nil)
-			if reject.Code() != tc.code || reject.Copy == nil || tools.AsToolReject(reject) == nil {
+			reject := loop.Tools.rejectToolOccurrence(t.Context(), sess, api.ToolCall{Name: "command"}, tools.ToolContext{Identity: tools.InvocationIdentity{Agent: "coordinator"}, Turn: tools.InvocationTurn{TurnOfferedToolNames: tc.offered, TurnToolPlan: toolsurface.Compile(tc.offered, deferred)}}, tc.code, nil)
+			if reject.Code() != tc.code || reject.Copy == nil || toolrejection.AsToolReject(reject) == nil {
 				t.Fatalf("pre-executor refusal lost decision: %+v", reject)
 			}
 			if strings.Contains(reject.Copy["fix"], tc.recovery) != tc.wantRecovery {
 				t.Fatalf("recovery disagrees with offered tools %v: %s", tc.offered, reject.Copy["fix"])
 			}
 			if tc.code == "TOOL_NOT_OFFERED" {
-				data := tools.AsToolReject(reject).Data
+				data := toolrejection.AsToolReject(reject).Data
 				wantLoad := tc.loadable && tc.wantRecovery
 				if data["tool_loadable"] != wantLoad {
 					t.Fatalf("loading fact = %v, want %v", data, wantLoad)
 				}
 				if wantLoad {
-					want := []tools.ReplacementCall{{Tool: "request_tools", Args: map[string]any{"need": "command"}}}
+					want := []toolcommand.ReplacementCall{{Tool: "request_tools", Args: map[string]any{"need": "command"}}}
 					if !reflect.DeepEqual(data["replacement_calls"], want) {
 						t.Fatalf("loading call = %#v", data["replacement_calls"])
 					}

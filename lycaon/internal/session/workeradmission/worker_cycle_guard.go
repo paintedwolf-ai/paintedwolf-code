@@ -35,17 +35,17 @@ func ObserveCoordinatorTaskInFlight(
 	if gc == nil || strings.TrimSpace(strings.ToLower(toolName)) != "task" || sess == nil || !surface.IsCoordinatorParent(sess) {
 		return nil
 	}
-	gc.Tool = "task"
+	gc.Invocation.Tool = "task"
 	gc.DeriveToolClassFacts()
 	if deps.PhaseGuardState != nil {
 		state := deps.PhaseGuardState(ctx, sess.ID)
 		if state.PhaseObligationPending {
-			gc.Phase = state.Phase
-			gc.PhaseObligationPending = true
-			gc.PhaseObligationKinds = strings.Join(state.PendingObligationKinds, ", ")
+			gc.Session.Phase = state.Phase
+			gc.Workflow.PhaseObligationPending = true
+			gc.Workflow.PhaseObligationKinds = strings.Join(state.PendingObligationKinds, ", ")
 			gc.PutRejectData("WORKFLOW_OBLIGATION_PENDING", map[string]any{
 				"phase":                  state.Phase,
-				"phase_obligation_kinds": gc.PhaseObligationKinds,
+				"phase_obligation_kinds": gc.Workflow.PhaseObligationKinds,
 			})
 			return nil
 		}
@@ -62,7 +62,7 @@ func ObserveCoordinatorTaskInFlight(
 		observeCoordinatorTaskScope(gc, code, scope, nil, caps, agentType, "")
 		return nil
 	}
-	if gc.RepoKnownEmpty && !gc.ProfileMutationCapable && gc.ProfileSurveysProjectTree {
+	if gc.Grounding.RepoKnownEmpty && !gc.Workers.ProfileMutationCapable && gc.Grounding.ProfileSurveysProjectTree {
 		observeCoordinatorTaskScope(gc, RepoEmptyReadOnlyWorkerCode, scope, nil, caps, agentType, "")
 		return nil
 	}
@@ -91,12 +91,12 @@ func ObserveCoordinatorTaskInFlight(
 	if err != nil {
 		return err
 	}
-	gc.ActiveWorkerCount = int64(len(active))
-	gc.WorkersIdle = len(active) == 0
+	gc.Workers.ActiveWorkerCount = int64(len(active))
+	gc.Workers.WorkersIdle = len(active) == 0
 	reads, writes := CountInFlightByMode(active)
-	gc.ActiveReadCount, gc.ActiveWriteCount = int64(reads), int64(writes)
-	gc.WorkerSpawnBlocked = len(active) >= caps.MaxTotal || TaskScopeCapExceeded(active, scope, caps)
-	if !gc.WorkerSpawnBlocked {
+	gc.Workers.ActiveReadCount, gc.Workers.ActiveWriteCount = int64(reads), int64(writes)
+	gc.Workers.WorkerSpawnBlocked = len(active) >= caps.MaxTotal || TaskScopeCapExceeded(active, scope, caps)
+	if !gc.Workers.WorkerSpawnBlocked {
 		return nil
 	}
 	observeCoordinatorTaskScope(gc, CoordinatorWorkerInFlightCode, scope, active, caps, agentType, "")
@@ -111,39 +111,39 @@ func publishRepoEmptyReadOnlyFacts(
 	gc *oar.GuardContext,
 ) {
 	if surveys, ok := prompts.AgentSurveysProjectTree(agentType); ok {
-		gc.ProfileSurveysProjectTree = surveys
+		gc.Grounding.ProfileSurveysProjectTree = surveys
 	}
 	if deps.RepoKnownEmpty == nil || sess == nil {
 		return
 	}
-	gc.RepoKnownEmpty = deps.RepoKnownEmpty(ctx, strings.TrimSpace(sess.WorkspacePath))
+	gc.Grounding.RepoKnownEmpty = deps.RepoKnownEmpty(ctx, strings.TrimSpace(sess.WorkspacePath))
 }
 
 func publishTaskScopeFacts(gc *oar.GuardContext, scope api.TaskScope, caps ParallelTaskCaps, agentType string) {
 	n := scope.Normalized()
-	gc.ScopeMode = string(n.Mode)
+	gc.Workers.ScopeMode = string(n.Mode)
 	if capable, ok := prompts.AgentMutationCapable(agentType); ok {
-		gc.ProfileMutationCapable = capable
+		gc.Workers.ProfileMutationCapable = capable
 	}
-	gc.MaxWorkers = int64(caps.MaxTotal)
-	gc.MaxReadWorkers = int64(caps.MaxRead)
-	gc.MaxWriteWorkers = int64(caps.MaxWrite)
-	gc.BaseOverlayID = strings.TrimSpace(n.BaseOverlayID)
+	gc.Workers.MaxWorkers = int64(caps.MaxTotal)
+	gc.Workers.MaxReadWorkers = int64(caps.MaxRead)
+	gc.Workers.MaxWriteWorkers = int64(caps.MaxWrite)
+	gc.Workers.BaseOverlayID = strings.TrimSpace(n.BaseOverlayID)
 }
 
 func publishOverlayBaseFacts(gc *oar.GuardContext, scope api.TaskScope, code string) {
-	gc.BaseOverlayChecked = true
-	gc.BaseOverlayID = strings.TrimSpace(scope.Normalized().BaseOverlayID)
+	gc.Workers.BaseOverlayChecked = true
+	gc.Workers.BaseOverlayID = strings.TrimSpace(scope.Normalized().BaseOverlayID)
 	switch code {
 	case "":
-		gc.BaseOverlayResolves = gc.BaseOverlayID != ""
-		gc.BaseOverlayPending = gc.BaseOverlayID != ""
+		gc.Workers.BaseOverlayResolves = gc.Workers.BaseOverlayID != ""
+		gc.Workers.BaseOverlayPending = gc.Workers.BaseOverlayID != ""
 	case OverlayBaseMissingCode:
-		gc.BaseOverlayResolves = false
-		gc.BaseOverlayPending = false
+		gc.Workers.BaseOverlayResolves = false
+		gc.Workers.BaseOverlayPending = false
 	case OverlayBaseNotPendingCode:
-		gc.BaseOverlayResolves = true
-		gc.BaseOverlayPending = false
+		gc.Workers.BaseOverlayResolves = true
+		gc.Workers.BaseOverlayPending = false
 	}
 }
 
@@ -167,13 +167,13 @@ func observeCoordinatorTaskScope(
 	}
 	if active != nil {
 		data["active_count"] = len(active)
-		gc.ActiveWorkerCount = int64(len(active))
-		gc.WorkersIdle = len(active) == 0
+		gc.Workers.ActiveWorkerCount = int64(len(active))
+		gc.Workers.WorkersIdle = len(active) == 0
 	}
 	if code == CoordinatorWorkerInFlightCode {
 		data["max_workers"] = caps.MaxTotal
-		data["active_read_count"] = gc.ActiveReadCount
-		data["active_write_count"] = gc.ActiveWriteCount
+		data["active_read_count"] = gc.Workers.ActiveReadCount
+		data["active_write_count"] = gc.Workers.ActiveWriteCount
 		data["max_read_workers"] = caps.MaxRead
 		data["max_write_workers"] = caps.MaxWrite
 	}

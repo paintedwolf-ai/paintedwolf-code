@@ -42,9 +42,9 @@ func openChoiceAsk(t *testing.T, fx *askUserFixture, ctx context.Context, toolCa
 		"response_type": "single_choice",
 		"options":       []any{"IOC reputation", "Log triage"},
 	}, tools.ToolContext{
-		SessionID:  fx.sess.ID,
-		Agent:      orchestration.ProfileCoordinator,
-		ToolCallID: toolCallID,
+		Identity: tools.InvocationIdentity{SessionID: fx.sess.ID,
+			Agent:      orchestration.ProfileCoordinator,
+			ToolCallID: toolCallID},
 	})
 	testutil.FailErr(t, "ask_user", err)
 	var body map[string]any

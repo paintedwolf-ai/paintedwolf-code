@@ -176,12 +176,12 @@ func claimName(c workflowpresentation.RunClaim) string {
 
 // workAccount accounts for the run's worker legs: every planned leg is a
 // check, and legs and helpers that stopped short are gaps.
-func (s *Handler) workAccount(ctx context.Context, a *runAccount, run *wire.WorkflowRun, manifest workflowdef.Manifest) error {
+func (s *Reports) workAccount(ctx context.Context, a *runAccount, run *wire.WorkflowRun, manifest workflowdef.Manifest) error {
 	if s.Workers == nil {
 		a.coverage = append(a.coverage, report.ReportCoverageItem{Subject: "Workers", Status: "Unavailable", Detail: "Worker accounting is unavailable."})
 		return nil
 	}
-	vars, err := s.Runs.Runs.GetScaffoldVars(ctx, run.ID)
+	vars, err := s.Runs.Runs.Runs.GetScaffoldVars(ctx, run.ID)
 	if err != nil {
 		return err
 	}

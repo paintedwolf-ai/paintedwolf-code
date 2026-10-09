@@ -3,8 +3,8 @@ package review
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 
-	"github.com/lycaon/lycaon/internal/tools"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
@@ -33,7 +33,7 @@ func (m *Verdicts) validateReviewSubmission(ctx context.Context, active *api.Wor
 		questionVars, err = m.Questions.Prepare(ctx, active, rl, verdict, vars)
 		if err != nil {
 			out.Valid = false
-			if rejection := tools.AsToolReject(err); rejection != nil {
+			if rejection := toolrejection.AsToolReject(err); rejection != nil {
 				out.QuestionIssue = rejection
 			} else {
 				return reviewValidation{}, err

@@ -99,22 +99,20 @@ func TestWorkerBranchEditRecordsAgainstWorkerBranch(t *testing.T) {
 			testutil.FailErr(t, "create worker branch", err)
 			branch, err := newBranchWorkspace(binding.Root)
 			testutil.FailErr(t, "new branch workspace", err)
-			tctx, err := workerworkspace.New(nil, nil, newBranchWorkspace).EnsureBranch(ctx, tools.ToolContext{
-				WorkerBranchRoot: binding.Root, BranchWorkspace: branch,
-			})
+			tctx, err := workerworkspace.New(nil, nil, newBranchWorkspace).EnsureBranch(ctx, tools.ToolContext{Source: tools.InvocationSource{WorkerBranchRoot: binding.Root, BranchWorkspace: branch}})
 			testutil.FailErr(t, "ensure worker branch", err)
 
 			ledger := &workerBranchLedgerCapture{}
 			feed := &workerBranchFeedCapture{}
 			t.Cleanup(sourcefeed.Bind(feed))
-			tctx.ProjectID = "project-worker-edit"
-			tctx.SessionID = "worker-session"
-			tctx.ActiveRootID = "primary"
-			tctx.WorkerJobID = jobID
-			tctx.SourceWorkspaceKind = api.SourceWorkspaceKindWorker
-			tctx.SourceLedger = ledger
-			tctx.Agent = "implementer"
-			tctx.ToolCallID = "call-edit"
+			tctx.Identity.ProjectID = "project-worker-edit"
+			tctx.Identity.SessionID = "worker-session"
+			tctx.Source.ActiveRootID = "primary"
+			tctx.Identity.WorkerJobID = jobID
+			tctx.Source.SourceWorkspaceKind = api.SourceWorkspaceKindWorker
+			tctx.Source.SourceLedger = ledger
+			tctx.Identity.Agent = "implementer"
+			tctx.Identity.ToolCallID = "call-edit"
 
 			boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true},
 				[]sandbox.ToolProfile{{ID: "implementer", Tools: map[string]bool{"edit": true}}})

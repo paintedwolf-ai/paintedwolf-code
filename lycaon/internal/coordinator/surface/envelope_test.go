@@ -1,13 +1,14 @@
 package surface_test
 
 import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/spawn"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -282,7 +283,7 @@ func TestResolveTurnProfilePartialEnvelopeUsesSynthesis(t *testing.T) {
 		&api.Session{Posture: api.SessionPostureBuild},
 		hostLoopHistory(history),
 	)
-	if profile.SurfaceID != tools.SurfaceImplementInvestigate {
+	if profile.SurfaceID != toolcontract.SurfaceImplementInvestigate {
 		t.Fatalf("surface = %q want implement_investigate for partial without batch readiness", profile.SurfaceID)
 	}
 }
@@ -298,7 +299,7 @@ func TestResolveTurnProfilePathExplorerUsesInvestigateWithoutBatchReady(t *testi
 		&api.Session{Posture: api.SessionPostureBuild},
 		hostLoopHistory(history),
 	)
-	if profile.SurfaceID != tools.SurfaceImplementInvestigate {
+	if profile.SurfaceID != toolcontract.SurfaceImplementInvestigate {
 		t.Fatalf("surface = %q want investigate without batch readiness", profile.SurfaceID)
 	}
 }

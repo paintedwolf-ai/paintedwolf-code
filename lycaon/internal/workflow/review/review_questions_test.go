@@ -1,6 +1,7 @@
 package review
 
 import (
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"testing"
 	"time"
 
@@ -84,7 +85,7 @@ func TestQuestionVerdictsCannotReplenishInvestigationBudget(t *testing.T) {
 	}
 	for range 3 {
 		err := checkQuestionContinuation(def, claims, questions, []api.WorkerTask{task, task}, "challenge")
-		reject := tools.AsToolReject(err)
+		reject := toolrejection.AsToolReject(err)
 		if reject == nil || reject.Data["reason"] != "investigations_exhausted" {
 			t.Fatalf("exhausted questions admitted another follow-up: %v", err)
 		}

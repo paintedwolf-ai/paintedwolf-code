@@ -31,11 +31,11 @@ func (m *Service) OpenGates(ctx context.Context, sess *api.Session, workersIdle 
 	leaves := strings.Join(state.OpenLeaves, ", ")
 	delayCount, delayed := m.closeouts.Delay(sess.ID, root, closeouts.GateDelay, workersIdle, closeoutGateDelayMaxPerPrompt)
 	return m.ToolPolicy.FinishBlock(ctx, sess, func(gc *oar.GuardContext) error {
-		gc.WorkersIdle = workersIdle
-		gc.Phase = state.Phase
-		gc.CloseoutGatesOpen = true
-		gc.CloseoutGateOpenLeaves = leaves
-		gc.CloseoutGateDelayCount = int64(delayCount)
+		gc.Workers.WorkersIdle = workersIdle
+		gc.Session.Phase = state.Phase
+		gc.Workflow.CloseoutGatesOpen = true
+		gc.Workflow.CloseoutGateOpenLeaves = leaves
+		gc.Workflow.CloseoutGateDelayCount = int64(delayCount)
 		if delayed {
 			gc.PutRejectData(workflowGatesOpenCode, map[string]any{
 				"phase":                     state.Phase,

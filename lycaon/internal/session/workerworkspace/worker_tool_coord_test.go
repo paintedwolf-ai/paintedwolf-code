@@ -1,6 +1,8 @@
 package workerworkspace
 
 import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+
 	"context"
 	"testing"
 
@@ -14,10 +16,10 @@ func TestBeforeWorkerWriteRecordsInvestigateSurface(t *testing.T) {
 	mgr.SetTouchLedger(touches)
 
 	tctx := tools.ToolContext{
-		WorkerJobID:      "job-1",
-		TurnSurfaceID:    tools.SurfaceImplementInvestigate,
-		HandoffSessionID: "parent",
-		HandoffAgentID:   "job-1",
+		Identity: tools.InvocationIdentity{WorkerJobID: "job-1",
+			HandoffSessionID: "parent",
+			HandoffAgentID:   "job-1"},
+		Turn: tools.InvocationTurn{TurnSurfaceID: toolcontract.SurfaceImplementInvestigate},
 	}
 	testutil.FailErr(t, "record worker write", mgr.BeforeWorkerWrite(context.Background(), tctx, "src/foo.go"))
 	if got := touches.Paths("job-1"); len(got) != 1 || got[0] != "src/foo.go" {
@@ -31,10 +33,10 @@ func TestBeforeWorkerWriteRecordsWorkerTouchOnOrchestrateSurface(t *testing.T) {
 	mgr.SetTouchLedger(touches)
 
 	tctx := tools.ToolContext{
-		WorkerJobID:      "job-1",
-		TurnSurfaceID:    "implement_dispatch",
-		HandoffSessionID: "parent",
-		HandoffAgentID:   "job-1",
+		Identity: tools.InvocationIdentity{WorkerJobID: "job-1",
+			HandoffSessionID: "parent",
+			HandoffAgentID:   "job-1"},
+		Turn: tools.InvocationTurn{TurnSurfaceID: "implement_dispatch"},
 	}
 	testutil.FailErr(t, "record worker write", mgr.BeforeWorkerWrite(context.Background(), tctx, "src/foo.go"))
 	if got := touches.Paths("job-1"); len(got) != 1 || got[0] != "src/foo.go" {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strconv"
 	"strings"
 
@@ -110,7 +111,7 @@ func (s *AnswerDecisionService) reject(code string, data map[string]any) error {
 	if s != nil {
 		formatter = s.Reject
 	}
-	return tools.FormatDecisionReject(code, data, formatter)
+	return toolrejection.FormatDecisionReject(code, data, formatter)
 }
 
 // resolveDecisionOption accepts an option's text or a one-based index. Text wins,

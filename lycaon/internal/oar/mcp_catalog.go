@@ -19,14 +19,14 @@ func ObserveMCPStructuralPre(gc *GuardContext, tool string, catalog MCPCatalogVi
 		return
 	}
 	gc.ClearMCPObservation()
-	gc.MCPCatalog = catalog
+	gc.MCP.MCPCatalog = catalog
 	if !strings.HasPrefix(tool, "mcp_") {
 		return
 	}
-	gc.MCPQualifiedTool = tool
-	gc.MCPCallOK = false
-	gc.MCPErrorCode = ""
-	gc.MCPSchemaMatched = false
+	gc.MCP.MCPQualifiedTool = tool
+	gc.MCP.MCPCallOK = false
+	gc.MCP.MCPErrorCode = ""
+	gc.MCP.MCPSchemaMatched = false
 	if catalog == nil {
 		return
 	}
@@ -34,10 +34,10 @@ func ObserveMCPStructuralPre(gc *GuardContext, tool string, catalog MCPCatalogVi
 	if !ok {
 		return
 	}
-	gc.MCPProviderID = providerID
-	gc.MCPToolName = toolName
-	gc.MCPProviderConfigured = catalog.ProviderConfigured(providerID)
-	gc.MCPProviderEnabled = catalog.ProviderEnabled(providerID)
+	gc.MCP.MCPProviderID = providerID
+	gc.MCP.MCPToolName = toolName
+	gc.MCP.MCPProviderConfigured = catalog.ProviderConfigured(providerID)
+	gc.MCP.MCPProviderEnabled = catalog.ProviderEnabled(providerID)
 }
 
 // ObserveMCPStructuralPost fills the structural MCP facts for tool.post_invoke.
@@ -48,27 +48,27 @@ func ObserveMCPStructuralPost(gc *GuardContext, tool string, catalog MCPCatalogV
 	if gc == nil || !strings.HasPrefix(tool, "mcp_") {
 		return
 	}
-	gc.MCPCallOK = callOK
-	gc.MCPErrorCode = errorCode
-	gc.MCPResultText = resultText
-	gc.MCPSchemaMatched = false
-	gc.MCPFields = nil
+	gc.MCP.MCPCallOK = callOK
+	gc.MCP.MCPErrorCode = errorCode
+	gc.MCP.MCPResultText = resultText
+	gc.MCP.MCPSchemaMatched = false
+	gc.MCP.MCPFields = nil
 }
 
 // EvalMCPProviderConfigured is the parameterized observation mcp_provider_configured_for(id).
 func EvalMCPProviderConfigured(gc *GuardContext, id string) bool {
-	if gc == nil || id == "" || gc.MCPCatalog == nil {
+	if gc == nil || id == "" || gc.MCP.MCPCatalog == nil {
 		return false
 	}
-	return gc.MCPCatalog.ProviderConfigured(id)
+	return gc.MCP.MCPCatalog.ProviderConfigured(id)
 }
 
 // EvalMCPProviderEnabled is the parameterized observation mcp_provider_enabled_for(id).
 func EvalMCPProviderEnabled(gc *GuardContext, id string) bool {
-	if gc == nil || id == "" || gc.MCPCatalog == nil {
+	if gc == nil || id == "" || gc.MCP.MCPCatalog == nil {
 		return false
 	}
-	return gc.MCPCatalog.ProviderEnabled(id)
+	return gc.MCP.MCPCatalog.ProviderEnabled(id)
 }
 
 // MCPMachineErrorCode returns the declared protocol code, or an empty string.

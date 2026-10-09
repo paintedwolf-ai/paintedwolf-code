@@ -54,7 +54,7 @@ func TestCloseoutReportUsesOnePolicyOccurrence(t *testing.T) {
 					EvidenceLedger: closeoutLedgerReader{ledger: evidence.AssembleLedger([]evidence.Record{{Handle: "command#1", Kind: "command", Shape: evidence.ShapeCommand, Body: []string{"prior"}}, {Handle: "command#2", Kind: "command", Shape: evidence.ShapeCommand, Body: []string{"new"}}})},
 					EvaluateCloseoutBlock: func(ctx context.Context, sess *api.Session, gc *oar.GuardContext) (*oar.Decision, error) {
 						calls++
-						gc.SessionID = sess.ID
+						gc.Session.SessionID = sess.ID
 						result, err := pipeline.EvaluateBlock(ctx, oar.AnchorCoordinatorCloseoutCheck, gc)
 						if err != nil {
 							return nil, err

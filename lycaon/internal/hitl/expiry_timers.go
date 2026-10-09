@@ -55,7 +55,7 @@ func (e *expiryTimers) stop() {
 
 // StopExpiryTimers disarms pending expiries at host shutdown. Rows stay
 // pending in the store; RestorePending re-arms them in the next host.
-func (m *Manager) StopExpiryTimers() {
+func (m *Checkpoints) StopExpiryTimers() {
 	if m == nil {
 		return
 	}

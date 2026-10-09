@@ -15,7 +15,7 @@ import (
 
 // detectVerifyAsync deduplicates detection by primary root and outlives the request.
 // Completed proposals are cached and published as settings changes.
-func (s *Handler) detectVerifyAsync(parent context.Context, projectID string) {
+func (s *Verification) detectVerifyAsync(parent context.Context, projectID string) {
 	if !llm.ProviderUtilityCallsEnabled() {
 		return
 	}

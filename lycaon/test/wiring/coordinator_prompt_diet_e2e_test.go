@@ -1,6 +1,8 @@
 package wiring
 
 import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+
 	"context"
 	"strings"
 	"testing"
@@ -8,7 +10,6 @@ import (
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -63,7 +64,7 @@ func TestCoordinatorPromptDietE2E(t *testing.T) {
 
 	// Debug.Surface is set only on coordinator turns (stream.go); workers leave it empty.
 	investigate := rec.RequestsWhere(func(req modelcall.CompletionRequest) bool {
-		return req.Debug.Surface == tools.SurfaceImplementInvestigate
+		return req.Debug.Surface == toolcontract.SurfaceImplementInvestigate
 	})
 	if len(investigate) == 0 {
 		t.Fatal("no investigate-surface coordinator turn recorded")

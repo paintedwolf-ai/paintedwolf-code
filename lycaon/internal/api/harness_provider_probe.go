@@ -20,7 +20,7 @@ type harnessProviderProbeRequest struct {
 	Role      string `json:"role"`
 }
 
-func (s *Server) handleHarnessProviderProbe(w http.ResponseWriter, r *http.Request) {
+func (s *HarnessProviders) handleHarnessProviderProbe(w http.ResponseWriter, r *http.Request) {
 	var req harnessProviderProbeRequest
 	if err := httpio.DecodeJSON(w, r, &req); err != nil {
 		s.responses.DecodeError(w, r, err)
@@ -42,7 +42,7 @@ func (s *Server) handleHarnessProviderProbe(w http.ResponseWriter, r *http.Reque
 	httpio.WriteJSON(w, http.StatusOK, s.probeProviderConversation(r.Context(), req))
 }
 
-func (s *Server) probeProviderConversation(ctx context.Context, req harnessProviderProbeRequest) map[string]any {
+func (s *HarnessProviders) probeProviderConversation(ctx context.Context, req harnessProviderProbeRequest) map[string]any {
 	result := map[string]any{"provider": req.Provider, "model": req.Model, "role": req.Role, "accepted": false, "stages": []llm.ConversationProbe{}}
 	ref := llm.ModelRef{ProviderID: req.Provider, Model: req.Model}
 	if err := s.llmSvc.ValidateModelRef(ctx, ref, req.Role); err != nil {
@@ -92,7 +92,7 @@ func recordProviderProbeFailure(result map[string]any, err error) {
 	}
 }
 
-func (s *Server) probeProviderRequests(ctx context.Context, req harnessProviderProbeRequest) ([]llm.ConversationProbe, error) {
+func (s *HarnessProviders) probeProviderRequests(ctx context.Context, req harnessProviderProbeRequest) ([]llm.ConversationProbe, error) {
 	if req.Role == llm.PolicySlotLite {
 		return llm.ProbeUtility(ctx, func(ctx context.Context, request modelcall.CompletionRequest) (*modelcall.Completion, error) {
 			provider, err := s.llmSvc.Registry.Get(req.Provider)

@@ -33,7 +33,7 @@ func TestPolicyWriteWaitsForReviewAndRetainsRejectedBytes(t *testing.T) {
 	tc := nativefixture.Context(dir)
 	refused := errors.New("review declined")
 	var reviews int
-	tc.FileChangeReview = func(_ context.Context, changes []tools.FileChange) error {
+	tc.Files.FileChangeReview = func(_ context.Context, changes []tools.FileChange) error {
 		reviews++
 		current, err := os.ReadFile(path)
 		testutil.FailErr(t, "read pending policy", err)
@@ -80,7 +80,7 @@ func TestFileReviewRechecksConcurrentChanges(t *testing.T) {
 	before := []byte("Original\n")
 	testutil.FailErr(t, "seed policy", os.WriteFile(path, before, 0o644))
 	tc := nativefixture.Context(dir)
-	tc.FileChangeReview = func(context.Context, []tools.FileChange) error {
+	tc.Files.FileChangeReview = func(context.Context, []tools.FileChange) error {
 		_, err := fseffect.Replace(fseffect.ReplaceRequest{Location: fseffect.PathLocation(path), Source: bytes.NewBufferString("Human edit\n"), Mode: 0o644})
 		return err
 	}
@@ -100,7 +100,7 @@ func TestArchivePolicyEntryUsesFileReview(t *testing.T) {
 	writeTestZip(t, filepath.Join(dir, "payload.zip"), map[string]string{"nested/AGENTS.md": "New instructions\n"})
 	tc := nativefixture.Context(dir)
 	reviewed := false
-	tc.FileChangeReview = func(_ context.Context, changes []tools.FileChange) error {
+	tc.Files.FileChangeReview = func(_ context.Context, changes []tools.FileChange) error {
 		for _, change := range changes {
 			if filepath.Base(change.Path) == "AGENTS.md" {
 				reviewed = true
