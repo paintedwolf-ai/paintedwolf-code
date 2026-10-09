@@ -14,16 +14,9 @@ import {
   vi,
 } from "vitest";
 import { OverlayScrollbars } from "overlayscrollbars";
-import {
-  DEN_SCROLL_DIRECTION_ATTR,
-  attachThemedViewportScrollbar,
-  readThemedScrollbarGeometry,
-  resetScrollMeasureQuietForTests,
-  setupThemedScrollbars,
-  syncThemedScrollbar,
-  updateThemedViewportScrollbar,
-} from "./themed-scrollbars.ts";
-import { DEN_SCROLLPORT_INPUT_EVENT } from "./scrollport-motion.ts";
+import { DEN_SCROLL_DIRECTION_ATTR, attachThemedViewportScrollbar, resetScrollMeasureQuietForTests, setupThemedScrollbars, syncThemedScrollbar, updateThemedViewportScrollbar } from "./themed-scrollbars.ts";
+import { scrollbarChrome } from "./scrollbar-chrome.ts";
+import { DEN_SCROLLPORT_INPUT_EVENT } from "./scrollport-motion-types.ts";
 import { bindOverlayScrollbarAutoHide } from "./overlay-scrollbar-autohide.ts";
 import { bindOverlayScrollbarInput } from "./overlay-scrollbar-input.ts";
 import { resetSharedResizeObserverForTests } from "../../layout/shared-resize-observer.ts";
@@ -124,7 +117,7 @@ describe("themed scrollbars", () => {
       clientWidth: { get: reads }, clientHeight: { get: reads }, scrollWidth: { get: reads },
       scrollHeight: { get: reads }, scrollLeft: { get: reads }, scrollTop: { get: reads },
     });
-    expect(readThemedScrollbarGeometry(host)).toEqual({
+    expect(scrollbarChrome.read(host)).toEqual({
       verticalPercent: "0.1154",
       verticalPosition: String(260 / 2_300),
       horizontalPercent: "1",
