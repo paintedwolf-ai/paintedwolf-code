@@ -26,6 +26,8 @@ type Props = {
   /** Tokens retain references resolved by whole-document lexing. */
   source: string | Token[];
   class?: string;
+  /** Compact labels accept inline formatting only. */
+  inline?: boolean;
   /** Surface link destinations and disable project-path opens. */
   untrusted?: boolean;
   /** Project context for project-path links. */
@@ -54,7 +56,7 @@ export function MarkdownBody(props: Props) {
 
   const html = createMemo(() => {
     const source = props.source;
-    const src = typeof source === "string" ? prepareMarkdownSource(source) : source;
+    const src = typeof source === "string" ? (props.inline ? source : prepareMarkdownSource(source)) : source;
     if (typeof src === "string" && !src.trim()) return "";
     return renderMarkdownHtml(src, {
       untrusted: props.untrusted === true,
@@ -63,6 +65,7 @@ export function MarkdownBody(props: Props) {
       navigation: props.navigation,
       requireValidatedProjectPaths: props.requireValidatedProjectPaths,
       literalHtml: props.literalHtml,
+      inline: props.inline,
     });
   });
 

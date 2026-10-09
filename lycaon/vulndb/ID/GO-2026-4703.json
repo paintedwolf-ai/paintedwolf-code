@@ -1,0 +1,119 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/centrifugal/centrifugo"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/centrifugal/centrifugo/v3"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/centrifugal/centrifugo/v4"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/centrifugal/centrifugo/v5"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/centrifugal/centrifugo/v6"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "6.7.0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "GHSA-q926-c743-49qj"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-4703"
+ },
+ "details": "Centrifugo's InsecureSkipTokenSignatureVerify flag silently disables JWT verification with no warning in github.com/centrifugal/centrifugo",
+ "id": "GO-2026-4703",
+ "modified": "2026-03-26T20:32:44Z",
+ "published": "2026-03-26T20:32:44Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/centrifugal/centrifugo/security/advisories/GHSA-q926-c743-49qj"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/centrifugal/centrifugo/commit/dab80fe3adfe0bbeca3bb3ea45e6d95df9f601a8"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/centrifugal/centrifugo/releases/tag/v6.7.0"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Centrifugo's InsecureSkipTokenSignatureVerify flag silently disables JWT verification with no warning in github.com/centrifugal/centrifugo"
+}

@@ -1,0 +1,182 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/mattermost/mattermost"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {
+    "custom_ranges": [
+     {
+      "events": [
+       {
+        "introduced": "0"
+       },
+       {
+        "fixed": "5.3.2-0.20250905150616-ba86dfc5876b"
+       }
+      ],
+      "type": "ECOSYSTEM"
+     }
+    ]
+   },
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/mattermost/mattermost/v5"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/mattermost/mattermost-server"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "10.5.0+incompatible"
+      },
+      {
+       "fixed": "10.5.12+incompatible"
+      },
+      {
+       "introduced": "10.11.0+incompatible"
+      },
+      {
+       "fixed": "10.11.4+incompatible"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {
+    "custom_ranges": [
+     {
+      "events": [
+       {
+        "introduced": "0"
+       },
+       {
+        "fixed": "5.3.2-0.20250905150616-ba86dfc5876b"
+       }
+      ],
+      "type": "ECOSYSTEM"
+     }
+    ]
+   },
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/mattermost/mattermost-server/v5"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/mattermost/mattermost-server/v6"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/mattermost/mattermost/server/v8"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "8.0.0-20251212204551-54f2e9b4afd5"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2025-11777",
+  "GHSA-mqcj-8c2g-h97q"
+ ],
+ "database_specific": {
+  "review_status": "REVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2025-4122"
+ },
+ "details": "Mattermost Incorrect Authorization vulnerability in github.com/mattermost/mattermost",
+ "id": "GO-2025-4122",
+ "modified": "2025-12-16T16:21:59Z",
+ "published": "2025-11-17T19:11:25Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-mqcj-8c2g-h97q"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/mattermost/mattermost/commit/98acefe911dd9de7edf47a7d825dd99f53141a52"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/mattermost/mattermost/commit/ba86dfc5876b354b9d3c20ff45c08ca6f8426149"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/mattermost/mattermost/commit/d72d437f1567ba0b639b6e4fd73bab06c51baab5"
+  },
+  {
+   "type": "WEB",
+   "url": "https://mattermost.com/security-updates"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Mattermost Incorrect Authorization vulnerability in github.com/mattermost/mattermost"
+}

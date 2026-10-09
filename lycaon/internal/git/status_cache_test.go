@@ -80,7 +80,7 @@ func TestStatusCache_NotifyInvalidates(t *testing.T) {
 	dir := initTestRepo(t)
 	loader := &countingLoader{inner: git.NewManager()}
 	cache := git.NewStatusCache(loader)
-	cache.RegisterRepochangeObserver()
+	t.Cleanup(cache.RegisterRepochangeObserver())
 
 	_, err := cache.GetOrLoad(context.Background(), dir, false)
 	testutil.FailErr(t, "load", err)
@@ -96,7 +96,7 @@ func TestStatusCache_WorktreeChangedInvalidates(t *testing.T) {
 	dir := initTestRepo(t)
 	loader := &countingLoader{inner: git.NewManager()}
 	cache := git.NewStatusCache(loader)
-	cache.RegisterRepochangeObserver()
+	t.Cleanup(cache.RegisterRepochangeObserver())
 
 	_, err := cache.GetOrLoad(context.Background(), dir, false)
 	testutil.FailErr(t, "load", err)
@@ -355,7 +355,7 @@ func TestStatusCache_RevalidateServesStaleWhileReloading(t *testing.T) {
 		release: make(chan struct{}),
 	}
 	cache := git.NewStatusCache(loader)
-	cache.RegisterRepochangeObserver()
+	t.Cleanup(cache.RegisterRepochangeObserver())
 
 	first, err := cache.GetOrRevalidate(t.Context(), dir)
 	testutil.FailErr(t, "first load", err)

@@ -1,0 +1,61 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "goshs.de/goshs"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "goshs.de/goshs/v2"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "2.1.0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-50139",
+  "GHSA-j48m-h7xq-2xpj"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5881"
+ },
+ "details": "goshs: Share-link ?token=\u2026 redemption races past download limit in goshs.de/goshs",
+ "id": "GO-2026-5881",
+ "modified": "2026-07-07T15:26:37Z",
+ "published": "2026-07-07T15:26:37Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/patrickhener/goshs/security/advisories/GHSA-j48m-h7xq-2xpj"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "goshs: Share-link ?token=\u2026 redemption races past download limit in goshs.de/goshs"
+}

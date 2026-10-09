@@ -6,6 +6,16 @@ import { placeAnchoredSurface } from "./AnchoredSurface.tsx";
 const viewport = { width: 800, height: 600 };
 
 describe("placeAnchoredSurface", () => {
+  it("keeps full-height resize tips below window chrome", () => {
+    const result = placeAnchoredSurface(
+      { top: 0, right: 280, bottom: 600, left: 276, width: 4, height: 600 },
+      { width: 320, height: 40 }, viewport,
+      { preferredSide: "top", height: "content", topInset: 30 },
+    );
+    expect(result.top).toBe(38);
+    expect(result.maxHeight).toBe(40);
+  });
+
   it("keeps the preferred side when the surface fits", () => {
     expect(
       placeAnchoredSurface(

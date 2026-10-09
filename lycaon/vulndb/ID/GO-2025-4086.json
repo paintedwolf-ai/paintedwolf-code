@@ -1,0 +1,47 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/TecharoHQ/anubis"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.23.0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "GHSA-cf57-c578-7jvv"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2025-4086"
+ },
+ "details": "Anubis vulnerable to possible XSS via redir parameter when using subrequest auth mode in github.com/TecharoHQ/anubis",
+ "id": "GO-2025-4086",
+ "modified": "2025-11-05T18:41:15Z",
+ "published": "2025-11-05T18:41:15Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/TecharoHQ/anubis/security/advisories/GHSA-cf57-c578-7jvv"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/TecharoHQ/anubis/commit/7ed1753fcced351c81961bf520a7bfb2caac6e88"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Anubis vulnerable to possible XSS via redir parameter when using subrequest auth mode in github.com/TecharoHQ/anubis"
+}
