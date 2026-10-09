@@ -175,7 +175,7 @@ func (r *Runtime) wireVisualAndRenderTools() error {
 		return res.Bytes(), res.Meta().Mime, true
 	})
 	if r.deps.Workflows != nil && r.deps.Workflows.Manager != nil {
-		r.deps.Workflows.Manager.SetVisualStore(r.Visual, r.rootSessionKey)
+		r.deps.Workflows.Manager.SetVisualArtifacts(r.Visual, r.rootSessionKey)
 	}
 	if err := visual.RegisterTestProducer(r.deps.Execution.Host.Registry); err != nil {
 		return fmt.Errorf("emit_visual_fixture tool: %w", err)
