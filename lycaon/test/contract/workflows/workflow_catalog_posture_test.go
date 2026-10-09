@@ -3,6 +3,7 @@ package contract
 import (
 	"testing"
 
+	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
 	"github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
@@ -19,11 +20,11 @@ func TestWorkflowCatalogSummaryPosturesValid(t *testing.T) {
 			if summary.InitialPosture != ip {
 				t.Errorf("%s: summary initial_posture = %q manifest = %q", key, summary.InitialPosture, ip)
 			}
-			if !profiles.ValidSessionPosture(ip) {
+			if !sessionposture.ValidSessionPosture(ip) {
 				t.Errorf("%s: invalid initial_posture %q", key, ip)
 			}
 		}
-		if summary.InitialPosture != "" && !profiles.ValidSessionPosture(summary.InitialPosture) {
+		if summary.InitialPosture != "" && !sessionposture.ValidSessionPosture(summary.InitialPosture) {
 			t.Errorf("%s: summary exposes invalid posture %q", key, summary.InitialPosture)
 		}
 	}
@@ -37,7 +38,7 @@ func TestDefaultRegistrySummariesExposeValidPostures(t *testing.T) {
 			t.Errorf("workflow %s@%s missing initial_posture in catalog summary", summary.ID, summary.Version)
 			continue
 		}
-		if !profiles.ValidSessionPosture(summary.InitialPosture) {
+		if !sessionposture.ValidSessionPosture(summary.InitialPosture) {
 			t.Errorf("workflow %s@%s summary posture = %q invalid", summary.ID, summary.Version, summary.InitialPosture)
 		}
 	}
