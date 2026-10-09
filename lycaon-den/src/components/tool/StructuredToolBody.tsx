@@ -5,7 +5,7 @@ import type {
   StructuredToolSection,
   ToolFact,
 } from "../../chat/tool/tool-presentation-contract.ts";
-import { resolveProjectFile, type ResolveProjectRoot } from "../../api/project-path.ts";
+import { projectFileResolvable, type ResolveProjectRoot } from "../../api/project-path.ts";
 import type { HostSecretRedactionMeta } from "../../api/types.ts";
 import { BackgroundProcessPanel } from "./BackgroundProcessPanel.tsx";
 import { RetainedToolContent } from "./RetainedToolContent.tsx";
@@ -75,10 +75,7 @@ function FactsGrid(props: {
     const target = fact.path;
     if (!target || !pid() || factSpans(fact).length > 0) return undefined;
     const roots = props.rootRefs;
-    if (roots?.length) {
-      const scoped = target.rootId ? roots.filter((root) => root.id === target.rootId) : roots;
-      if ("error" in resolveProjectFile({ roots: scoped }, target.path)) return undefined;
-    }
+    if (roots?.length && !projectFileResolvable(roots, target.path, target.rootId)) return undefined;
     return target;
   };
   return (
