@@ -45,8 +45,8 @@ func TestMockLLMRecoversPersistedToolSchemas(t *testing.T) {
 	})
 	testutil.FailErr(t, "record request receipt", err)
 	// A host restart drops the activation cache while retaining the store.
-	fixture.Mgr.Loading.SetLedger(turnload.NewLedger())
-	_, err = fixture.Mgr.Prompt(t.Context(), fixture.Sess.ID, "continue after restart")
+	fixture.Mgr.Coordinator.Loading.SetLedger(turnload.NewLedger())
+	_, err = fixture.Mgr.Submissions.Prompt(t.Context(), fixture.Sess.ID, "continue after restart")
 	testutil.FailErr(t, "resume persisted session", err)
 	for _, meta := range recorder.LastRequest().Tools {
 		if meta.Name == "command" {

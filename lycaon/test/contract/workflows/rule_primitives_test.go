@@ -8,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/rules"
+	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
 	"github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
@@ -48,7 +49,7 @@ func TestRuleYAMLWhenKeysAreImplemented(t *testing.T) {
 				}
 				if key == "posture_is" {
 					val, _ := raw.(string)
-					if !profiles.ValidSessionPosture(val) {
+					if !sessionposture.ValidSessionPosture(val) {
 						t.Errorf("%s rule %q: invalid posture_is %q", e.Name(), rule.ID, val)
 					}
 				}

@@ -18,7 +18,7 @@ func TestPromptLoopParitySpecPosture(t *testing.T) {
 	}))
 	fix := setupContextualToolsFixtureWithLLM(t, api.SessionPostureSpec, rec)
 	ctx := context.Background()
-	if _, err := fix.Mgr.Prompt(ctx, fix.Sess.ID, "hello"); err != nil {
+	if _, err := fix.Mgr.Submissions.Prompt(ctx, fix.Sess.ID, "hello"); err != nil {
 		testutil.FailErr(t, "fix.Mgr.Prompt failed", err)
 	}
 	for _, tool := range rec.LastRequest().Tools {
@@ -32,7 +32,7 @@ func TestWorkerAndCoordinatorSharePromptLoop(t *testing.T) {
 	fix := setupContextualToolsFixture(t, api.SessionPostureBuild)
 	coordLoop := fix.Mgr.Runner.Coordinator.PromptLoop()
 	ctx := context.Background()
-	child, err := fix.Mgr.SpawnChild(ctx, fix.Sess.ID, api.SpawnChildRequest{
+	child, err := fix.Mgr.Workers.SpawnChild(ctx, fix.Sess.ID, api.SpawnChildRequest{
 		AgentType: orchestration.ProfileImplementer,
 		Prompt:    "implement",
 	})
@@ -47,14 +47,14 @@ func TestWorkerChildPromptUsesToolPolicy(t *testing.T) {
 	fix := setupContextualToolsFixture(t, api.SessionPostureBuild)
 	ctx := context.Background()
 	parent := fix.Sess
-	child, err := fix.Mgr.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{
+	child, err := fix.Mgr.Workers.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{
 		AgentType: orchestration.ProfileImplementer,
 		Prompt:    "implement feature",
 	})
 	testutil.FailErr(t, "fix.Mgr.SpawnChild failed", err)
 	profile, err := fix.Mgr.Profiles.ResolvePromptToolProfile(ctx, child.ID)
 	testutil.FailErr(t, "fix.Mgr.Profiles.ResolvePromptToolProfile failed", err)
-	listed := fix.Mgr.Guards.Policy().ListForPrompt(ctx, child, profile)
+	listed := fix.Mgr.Coordinator.Guards.Policy().ListForPrompt(ctx, child, profile)
 	for _, meta := range listed {
 		if meta.Name == "delegate_dispatch" {
 			t.Fatal("worker child must not list delegate_dispatch")
