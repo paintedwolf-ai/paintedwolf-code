@@ -253,7 +253,7 @@ func prepareWaitRequest(ctx context.Context, loop *WaitSubscriptions, deps WaitT
 
 func restoreWaitRequest(ctx context.Context, loop *WaitSubscriptions, store *awaitstore.Store, tctx tools.ToolContext, request *waitRequest) error {
 	if strings.TrimSpace(tctx.WorkerJobID) == "" {
-		if subscription, complete := loop.runtimeWaitSubscription(tctx.SessionID); complete {
+		if subscription, complete := loop.Waits.runtimeWaitSubscription(tctx.SessionID); complete {
 			if !request.ExplicitConditions {
 				request.Conditions = subscription.Conditions
 				request.Triggers = subscription.Triggers

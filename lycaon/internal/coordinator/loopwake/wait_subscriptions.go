@@ -2,6 +2,7 @@ package loopwake
 
 import (
 	"context"
+	"fmt"
 	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -118,4 +119,187 @@ func (l *WaitSubscriptions) settleDurableWaitWake(
 		return true
 	}
 	return false
+}
+func (l *WaitSubscriptions) resolveSubscribedWorkerWait(ctx context.Context, sessionID, jobID string) {
+	store := l.durableWaitStore()
+	if store == nil || strings.TrimSpace(jobID) == "" {
+		return
+	}
+	lease, active, err := store.ForSession(ctx, sessionID)
+	if err != nil || !active || lease.WorkerJobID != "" {
+		return
+	}
+	triggers, _ := triggersFromConditions(lease.Conditions)
+	winner, matched := waitConditionForWake(triggers, waitMatchInput{
+		Wake: anchor.WorkerTaskFinished, CompletingJobID: jobID,
+		CycleIdle: l.Cycles.workerCycleIdle(ctx, sessionID, jobID),
+	})
+	if !matched {
+		return
+	}
+	winner.Outcome = "satisfied"
+	won, err := store.SettleLease(ctx, lease.ID, "resolved", winner)
+	if err != nil || !won {
+		return
+	}
+	l.Deliveries.rememberWaitWinner(sessionID, lease.ID, winner)
+	l.Waits.breakSleep(ctx, sessionID, string(anchor.WorkerTaskFinished), false)
+	l.Deliveries.runWaitResumeAsync(ctx, sessionID)
+}
+func (l *WaitSubscriptions) processConditionOutcome(sessionID string, condition awaitstore.Condition) (awaitstore.Condition, bool) {
+	deps := l.loopDeps()
+	for _, handle := range condition.Handles {
+		known, running := false, false
+		if deps.ProcessState != nil {
+			known, running = deps.ProcessState(sessionID, handle)
+		}
+		if known && running {
+			continue
+		}
+		condition.Handles = []string{handle}
+		if !known {
+			condition.Outcome = "unavailable"
+			return condition, true
+		}
+		if deps.ProcessReport != nil {
+			report, published := deps.ProcessReport(sessionID, handle)
+			if !published {
+				continue
+			}
+			condition.Report = report
+		}
+		condition.Outcome = "satisfied"
+		return condition, true
+	}
+	return awaitstore.Condition{}, false
+}
+func (l *WaitSubscriptions) scanCycleOpen(ctx context.Context, sessionID string) bool {
+	if l == nil {
+		return false
+	}
+	deps := l.loopDeps()
+	if deps.ScanCycleOpen == nil {
+		return false
+	}
+	return deps.ScanCycleOpen(ctx, sessionID)
+}
+func (l *WaitSubscriptions) processCycleOpen(sessionID string, handles []string) bool {
+	if l == nil {
+		return false
+	}
+	deps := l.loopDeps()
+	if deps.ProcessRunning == nil {
+		return false
+	}
+	return deps.ProcessRunning(sessionID, handles)
+}
+func (l *WaitSubscriptions) overlayPromoteDue(ctx context.Context, sessionID string, env anchor.Envelope) bool {
+	if env.HasPendingOverlayPromote() {
+		return true
+	}
+	deps := l.loopDeps()
+	if deps.HostWakeOverlayPromoteDue == nil {
+		return false
+	}
+	return deps.HostWakeOverlayPromoteDue(ctx, sessionID)
+}
+func (l *WaitSubscriptions) waitWakeAccepted(
+	ctx context.Context,
+	sessionID string,
+	wake, inform anchor.ID,
+	legID string,
+	completingJobID string,
+	env anchor.Envelope,
+) bool {
+	if isAlwaysWakeInform(inform) || isAlwaysWakeNudge(wake) {
+		return true
+	}
+	if !l.Waits.IsSleeping(sessionID) {
+		return true
+	}
+	triggers := l.Waits.Triggers(sessionID)
+	in := waitMatchInput{
+		Wake:              wake,
+		CompletingJobID:   completingJobID,
+		ProcessHandle:     legID,
+		ProcessHandles:    l.Waits.ActiveProcessHandles(sessionID),
+		WorkerHandles:     l.Waits.activeWorkerHandles(sessionID),
+		CycleIdle:         l.Cycles.workerCycleIdle(ctx, sessionID, completingJobID),
+		OverlayPromoteDue: l.overlayPromoteDue(ctx, sessionID, env),
+		NeedsDecision:     env.HasWorkerDecision(),
+	}
+	return waitEventMatches(triggers, in)
+}
+func (l *WaitSubscriptions) matchesActiveWait(ctx context.Context, sessionID string, pending pendingLoopWake) bool {
+	if !l.Waits.IsSleeping(sessionID) {
+		return false
+	}
+	_, matched := waitConditionForWake(l.Waits.Triggers(sessionID), waitMatchInput{
+		Wake: pending.wake, CompletingJobID: pending.completingJobID, ProcessHandle: pending.legID,
+		ProcessHandles: l.Waits.ActiveProcessHandles(sessionID), WorkerHandles: l.Waits.activeWorkerHandles(sessionID),
+		CycleIdle:         l.Cycles.workerCycleIdle(ctx, sessionID, pending.completingJobID),
+		OverlayPromoteDue: l.overlayPromoteDue(ctx, sessionID, pending.env), NeedsDecision: pending.env.HasWorkerDecision(),
+	})
+	return matched
+}
+func (l *WaitSubscriptions) routeWaitWake(ctx context.Context, sessionID string, pending pendingLoopWake) bool {
+	wake, inform, legID, completingJobID, env := pending.wake, pending.inform, pending.legID, pending.completingJobID, pending.env
+	if l.resumePendingWait(ctx, sessionID, wake) {
+		return true
+	}
+	triggers := l.Waits.Triggers(sessionID)
+	if !l.waitWakeAccepted(ctx, sessionID, wake, inform, legID, completingJobID, env) {
+		if shouldDeferForAllWorkersIdle(triggers, wake, completingJobID) && !l.Cycles.workerCycleIdle(ctx, sessionID, completingJobID) {
+			loopLogNudge(sessionID, wake, inform, legID, completingJobID, "defer_subscription_all_idle")
+			l.Nudges.deferNudge(ctx, sessionID, pending)
+		} else {
+			loopLogNudge(sessionID, wake, inform, legID, completingJobID, "subscription_filtered")
+		}
+		return true
+	}
+	if l.Waits.IsSleeping(sessionID) || alwaysBreaksSleep(wake, completingJobID) {
+		if l.settleDurableWaitWake(ctx, sessionID, wake, inform, legID, completingJobID, env) {
+			return true
+		}
+		l.Waits.breakSleep(ctx, sessionID, string(wake), true)
+	}
+	return false
+}
+func (l *WaitSubscriptions) resumePendingWait(ctx context.Context, sessionID string, wake anchor.ID) bool {
+	if _, ready := l.Deliveries.waitWinner(sessionID); !ready {
+		return false
+	}
+	l.Waits.breakSleep(ctx, sessionID, string(wake), false)
+	l.Deliveries.runWaitResumeAsync(ctx, sessionID)
+	return true
+}
+func (l *WaitSubscriptions) CloseCompletedWorkflowWait(ctx context.Context, sessionID string) (bool, error) {
+	deps := l.loopDeps()
+	if deps.WorkerCycleIdle != nil {
+		if deps.GetSession == nil {
+			return false, fmt.Errorf("session lookup not configured")
+		}
+		sess, err := deps.GetSession(ctx, sessionID)
+		if err != nil {
+			return false, err
+		}
+		if sess == nil {
+			return false, fmt.Errorf("session %q not found", sessionID)
+		}
+		idle, err := deps.WorkerCycleIdle(ctx, sess, "")
+		if err != nil || !idle {
+			return false, err
+		}
+	}
+	if l.Facts.sessionHasPendingUserInput(ctx, sessionID) {
+		return false, nil
+	}
+	if store := l.durableWaitStore(); store != nil {
+		_, armed, err := store.ForSession(ctx, sessionID)
+		if err != nil || armed {
+			return false, err
+		}
+	}
+	l.Waits.clearCompletedWorkflowWait(ctx, sessionID)
+	return true, nil
 }

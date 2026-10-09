@@ -4,6 +4,7 @@ import (
 	"context"
 	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
+	"github.com/lycaon/lycaon/internal/coordinator/batch"
 	"strings"
 	"sync"
 	"time"
@@ -280,11 +281,221 @@ func (l *Waits) IsSleeping(sessionID string) bool {
 	defer st.mu.Unlock()
 	return sleepArmedLocked(st, time.Now())
 }
-
 func (l *Waits) clearCompletedWorkflowWait(ctx context.Context, sessionID string) {
 	l.breakSleep(ctx, sessionID, "workflow_complete", false)
 	st := l.sleep.state(sessionID)
 	st.mu.Lock()
 	st.waitThisTurn = false
 	st.mu.Unlock()
+}
+func (l *Waits) DisarmTimerBackstop(ctx context.Context, sessionID string) {
+	if l == nil {
+		return
+	}
+	st := l.sleep.state(sessionID)
+	st.mu.Lock()
+	cancelSleepTimerLocked(st)
+	if len(st.waitTriggers) == 0 {
+		st.mu.Unlock()
+		return
+	}
+	var kept []WaitTrigger
+	for _, t := range st.waitTriggers {
+		if t == WaitTriggerTimer {
+			continue
+		}
+		kept = append(kept, t)
+	}
+	st.waitTriggers = kept
+	var closed WaitLease
+	var hadLease bool
+	if len(kept) == 0 {
+		st.armed = false
+		st.until = time.Time{}
+		st.reason = ""
+		closed, hadLease = closeWaitLeaseLocked(st, sessionID)
+	}
+	st.mu.Unlock()
+	if hadLease {
+		l.publishWaitLease(ctx, closed)
+	}
+}
+func (l *Waits) maybeDisarmTimerOnBatchTerminal(ctx context.Context, sessionID string) {
+	live := l.Policy.coordinatorBatchState(ctx, sessionID)
+	switch live.Phase {
+	case batch.PhaseSynthesize, batch.PhaseClosed:
+		l.DisarmTimerBackstop(ctx, sessionID)
+	}
+}
+func (l *Waits) disarmTimerOnClosedBatch(ctx context.Context, sessionID string, live batch.State) {
+	l.DisarmTimerBackstop(ctx, sessionID)
+	l.Policy.dropClosedBatchPendingKicks(ctx, sessionID, live)
+}
+func (l *Waits) runtimeWaitSubscription(sessionID string) (waitSubscription, bool) {
+	value, found := l.sleep.Load(sessionID)
+	if !found {
+		return waitSubscription{}, false
+	}
+	state := value.(*sessionSleep)
+	state.mu.Lock()
+	defer state.mu.Unlock()
+	if len(state.waitTriggers) == 0 {
+		return waitSubscription{}, false
+	}
+	for _, trigger := range state.waitTriggers {
+		// Readiness parameters are retained only in the durable lease.
+		if trigger == WaitTriggerHTTPReady || trigger == WaitTriggerPortReady {
+			return waitSubscription{}, false
+		}
+	}
+	_, bounded := waitTriggerSet(state.waitTriggers)[WaitTriggerTimer]
+	subscription := waitSubscription{
+		UntilComplete:  state.untilComplete,
+		Bounded:        bounded,
+		Triggers:       append([]WaitTrigger(nil), state.waitTriggers...),
+		ProcessHandles: append([]string(nil), state.processHandles...),
+		WorkerHandles:  append([]string(nil), state.workerHandles...),
+	}
+	subscription.Conditions = conditionsFromTriggers(subscription.Triggers, subscription.ProcessHandles, subscription.WorkerHandles)
+	return subscription, true
+}
+func (l *Waits) SessionsSleepingOn(trigger WaitTrigger) []string {
+	if l == nil {
+		return nil
+	}
+	now := time.Now()
+	var out []string
+	l.sleep.Range(func(key, value any) bool {
+		sessionID, ok := key.(string)
+		if !ok {
+			return true
+		}
+		st, ok := value.(*sessionSleep)
+		if !ok || st == nil {
+			return true
+		}
+		st.mu.Lock()
+		sleeping := sleepArmedLocked(st, now)
+		subscribed := false
+		for _, t := range st.waitTriggers {
+			if t == trigger {
+				subscribed = true
+				break
+			}
+		}
+		st.mu.Unlock()
+		if sleeping && subscribed {
+			out = append(out, sessionID)
+		}
+		return true
+	})
+	return out
+}
+func (l *Waits) SessionSleepingOnProcess(sessionID, handle string) bool {
+	if l == nil || !l.IsSleeping(sessionID) {
+		return false
+	}
+	triggers := l.Triggers(sessionID)
+	if !waitSubscribesProcessDone(triggers) {
+		return false
+	}
+	return handleMatches(l.ActiveProcessHandles(sessionID), handle)
+}
+func (l *Waits) Triggers(sessionID string) []WaitTrigger {
+	st := l.sleep.state(sessionID)
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	return append([]WaitTrigger(nil), st.waitTriggers...)
+}
+func (l *Waits) activeSleepMover(sessionID string) SleepMover {
+	st := l.sleep.state(sessionID)
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	if st.mover == SleepMoverUser {
+		return SleepMoverUser
+	}
+	return SleepMoverHost
+}
+func (l *Waits) activeUntilComplete(sessionID string) bool {
+	st := l.sleep.state(sessionID)
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	return st.untilComplete
+}
+func (l *Waits) ActiveProcessHandles(sessionID string) []string {
+	st := l.sleep.state(sessionID)
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	return append([]string(nil), st.processHandles...)
+}
+func (l *Waits) activeWorkerHandles(sessionID string) []string {
+	st := l.sleep.state(sessionID)
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	return append([]string(nil), st.workerHandles...)
+}
+func (l *Waits) StopSleepTimers() {
+	if l == nil {
+		return
+	}
+	l.sleep.stopTimers()
+}
+func (l *Waits) rearmSleepAfterSkip(ctx context.Context, sessionID string) {
+	if l == nil {
+		return
+	}
+	until, _ := l.ResolveWaitUntil(ctx, sessionID, true, 0)
+	// A re-arm continues the same wait, so it inherits who ends it and whether completion alone ends it.
+	l.enterSleep(ctx, sessionID, sleepArm{
+		until: until, untilComplete: l.activeUntilComplete(sessionID), reason: "skip:re-arm",
+		triggers: l.Triggers(sessionID), processHandles: l.ActiveProcessHandles(sessionID),
+		mover: l.activeSleepMover(sessionID),
+	})
+}
+func (l *Waits) publishWaitLease(ctx context.Context, lease WaitLease) {
+	if l == nil || strings.TrimSpace(lease.ActivityID) == "" {
+		return
+	}
+	publish := l.loopDeps().PublishWaitLease
+	if publish == nil {
+		return
+	}
+	publish(ctx, lease.SessionID, lease)
+}
+func (l *Waits) ParkForPendingUserInput(ctx context.Context, sessionID, reason string) {
+	if l == nil {
+		return
+	}
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" || !l.Facts.sessionHasPendingUserInput(ctx, sessionID) {
+		return
+	}
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		reason = "waiting for user ask"
+	}
+	until := l.Facts.pendingUserInputWaitDeadline(ctx, sessionID)
+	// The timer bounds the park; user input ends it.
+	l.EnterSleep(ctx, sessionID, until, reason, []WaitTrigger{WaitTriggerTimer}, nil, SleepMoverUser)
+	l.MarkWaitCalled(sessionID)
+}
+func (l *Waits) ParkForHostObligation(ctx context.Context, sessionID string) {
+	if l == nil {
+		return
+	}
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" || !l.Facts.sessionHostObligationHeld(ctx, sessionID) {
+		return
+	}
+	overlayPromoteDue := l.Subscriptions.overlayPromoteDue(ctx, sessionID, anchor.Envelope{})
+	l.EnterSleep(
+		ctx,
+		sessionID,
+		time.Now().UTC().Add(l.Facts.sessionLimits(ctx, sessionID).CoordinatorMaxSleep()),
+		l.Facts.hostObligationParkReason(ctx, sessionID),
+		HostObligationWaitTriggers(overlayPromoteDue),
+		nil,
+		SleepMoverHost,
+	)
+	l.MarkWaitCalled(sessionID)
 }

@@ -177,7 +177,6 @@ func (l *HostTurns) WaitForAsyncTurns(ctx context.Context) {
 	l.cancelAllAsyncTurns()
 	<-done
 }
-
 func (l *HostTurns) BeginUserTurnSettlement(ctx context.Context, sessionID string) (func(), bool) {
 	if l == nil || strings.TrimSpace(sessionID) == "" {
 		return func() {}, false
@@ -197,4 +196,8 @@ func (l *HostTurns) BeginUserTurnSettlement(ctx context.Context, sessionID strin
 func (l *HostTurns) Active(sessionID string) bool {
 	_, active := l.promptActive.Load(sessionID)
 	return active
+}
+func (l *HostTurns) hostTurnBlocked(ctx context.Context, sessionID string) bool {
+	blocked := l.loopDeps().HostTurnBlocked
+	return blocked != nil && blocked(ctx, sessionID)
 }

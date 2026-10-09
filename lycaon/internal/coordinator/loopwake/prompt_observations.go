@@ -5,6 +5,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"log/slog"
+	"sync"
 )
 
 func (l *PromptObservations) ObservePrompt(sessionID string) func(inject.CoordinatorTurnFrame) {
@@ -15,7 +16,6 @@ func (l *PromptObservations) ObservePrompt(sessionID string) func(inject.Coordin
 		slog.Debug("prompt wake observation", "component", loopLogComponent, "session_id", sessionID, "sequence", seq, "run_id", frame.RunContext.RunID, "workflow_revision", frame.WorkflowRevision)
 	}
 }
-
 func (l *PromptObservations) wakeConsumed(ctx context.Context, sessionID string, pending pendingLoopWake) bool {
 	if _, ready := l.Deliveries.waitWinner(sessionID); ready {
 		return false
@@ -49,4 +49,37 @@ func (l *PromptObservations) wakeConsumed(ctx context.Context, sessionID string,
 		loopLogNudge(sessionID, pending.wake, pending.inform, pending.legID, pending.completingJobID, "consumed_by_prompt")
 	}
 	return consumed
+}
+
+type PromptObservationsDeps struct {
+}
+type PromptObservations struct {
+	depsMu            sync.RWMutex
+	deps              PromptObservationsDeps
+	promptObservedSeq sync.Map
+	promptWorkflow    sync.Map
+	Nudges            *Nudges
+	Deliveries        *WaitDeliveries
+	Subscriptions     *WaitSubscriptions
+}
+
+func (l *PromptObservations) setDeps(deps PromptObservationsDeps) {
+	l.depsMu.Lock()
+	l.deps = deps
+	l.depsMu.Unlock()
+}
+func (l *PromptObservations) loopDeps() PromptObservationsDeps {
+	if l == nil {
+		return PromptObservationsDeps{}
+	}
+	l.depsMu.RLock()
+	defer l.depsMu.RUnlock()
+	return l.deps
+}
+func (l *PromptObservations) lastPromptObservedSeq(sessionID string) uint64 {
+	if v, ok := l.promptObservedSeq.Load(sessionID); ok {
+		seq, _ := v.(uint64)
+		return seq
+	}
+	return 0
 }
