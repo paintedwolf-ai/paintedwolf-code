@@ -103,7 +103,7 @@ func (s *BlueprintRoutes) HandleLaunchBlueprint(w http.ResponseWriter, r *http.R
 	}
 	target, err := workflow.ResolveLaunchTarget(source.Path, req.TargetWorkflowID, manifests)
 	if err != nil {
-		s.writeBlueprintLaunchError(w, r, err)
+		s.writeBlueprintLaunchError(w, r, err, writeWorkflowError)
 		return
 	}
 
@@ -133,7 +133,7 @@ func (s *BlueprintRoutes) HandleLaunchBlueprint(w http.ResponseWriter, r *http.R
 
 	run, seed, err := rm.LaunchFromBlueprint(r.Context(), sess.ID, source, target, s.Blueprints, projectDir, req.DeferStart)
 	if err != nil {
-		s.writeBlueprintLaunchError(w, r, err)
+		s.writeBlueprintLaunchError(w, r, err, writeWorkflowError)
 		return
 	}
 	reloaded, err := s.Blueprints.Get(r.Context(), source.ProjectID, sourcePath)

@@ -86,7 +86,7 @@ func TestCompletionWaitAllowsBoundedTimeout(t *testing.T) {
 	if !result.UntilComplete || result.WakeAt == "" || result.TimeoutMS != 15000 {
 		t.Fatalf("bounded completion wait invalid result: %+v", result)
 	}
-	state := loop.sleepState("s1")
+	state := loop.sleep.state("s1")
 	state.mu.Lock()
 	hasTimer := state.timer != nil
 	until := state.until
@@ -103,7 +103,7 @@ func TestCompletionWaitAllowsBoundedTimeout(t *testing.T) {
 }
 
 func completionSleepState(loop *LoopEngine, sessionID string) (untilComplete, hasTimer bool, until time.Time) {
-	state := loop.sleepState(sessionID)
+	state := loop.sleep.state(sessionID)
 	state.mu.Lock()
 	defer state.mu.Unlock()
 	return state.untilComplete, state.timer != nil, state.until
@@ -206,7 +206,7 @@ func TestCompletionWaitHasNoTimerAndResumesMode(t *testing.T) {
 	if !result.UntilComplete || result.WakeAt != "" || result.TimeoutMS != 0 {
 		t.Fatalf("completion wait has deadline: %+v", result)
 	}
-	state := loop.sleepState("s1")
+	state := loop.sleep.state("s1")
 	state.mu.Lock()
 	armedTomorrow := sleepArmedLocked(state, time.Now().Add(24*time.Hour))
 	hasTimer := state.timer != nil

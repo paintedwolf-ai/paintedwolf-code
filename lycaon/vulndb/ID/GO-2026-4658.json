@@ -1,0 +1,45 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/siyuan-note/siyuan/kernel"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-30926",
+  "GHSA-f9cq-v43p-v523"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-4658"
+ },
+ "details": "SiYuan: Authorization Bypass Allows Low-Privilege Publish User to Modify Notebook Content via /api/block/appendHeadingChildren in github.com/siyuan-note/siyuan/kernel",
+ "id": "GO-2026-4658",
+ "modified": "2026-03-11T16:00:40Z",
+ "published": "2026-03-11T16:00:40Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/siyuan-note/siyuan/security/advisories/GHSA-f9cq-v43p-v523"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-30926"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "SiYuan: Authorization Bypass Allows Low-Privilege Publish User to Modify Notebook Content via /api/block/appendHeadingChildren in github.com/siyuan-note/siyuan/kernel"
+}

@@ -13,6 +13,8 @@ type ActiveWorkflowManifest struct {
 	CoordinatorProfile string
 	Rules              []string
 	HostPhaseAdvance   bool
+	// Archive names the sealed version a retired run reads its guidance from.
+	Archive string
 }
 
 func (m *Manager) assertWorkflowRunnable(ctx context.Context, sessionID string) error {

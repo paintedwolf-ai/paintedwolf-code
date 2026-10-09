@@ -119,6 +119,7 @@ func ValidateCallArguments(qualifiedName string, args, schema map[string]any, tc
 				"tool":   qualifiedName,
 			}
 			diag.AddFacts(data)
+			data["schema_issues"] = argdiag.SchemaIssues(invalid)
 			if sibling := mutationRecoveryTool(qualifiedName, tc.Turn.TurnToolPlan.AddressableNames()); sibling != "" {
 				data["suggested_tool"] = sibling
 			}

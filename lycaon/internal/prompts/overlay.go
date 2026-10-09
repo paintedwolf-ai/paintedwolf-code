@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -20,11 +21,14 @@ import (
 	"github.com/lycaon/lycaon/internal/sandbox"
 )
 
-// PromptLayers resolves prompt assets with site > project > bundled precedence.
+// PromptLayers resolves prompt assets with archive > site > project > bundled precedence.
 type PromptLayers struct {
-	Site           string // distribution overlay
-	ProjectPrimary string // primary project overlay
-	ProjectActive  string // active project overlay
+	// WorkflowArchive is the archive key of a sealed workflow version whose
+	// guidance precedes every other layer.
+	WorkflowArchive string
+	Site            string // distribution overlay
+	ProjectPrimary  string // primary project overlay
+	ProjectActive   string // active project overlay
 	// ModuleRoot anchors host configuration reads.
 	ModuleRoot string
 	// Catalog selects effective bundled units.
@@ -50,7 +54,7 @@ func (l PromptLayers) Snapshot() (PromptLayers, error) {
 		}
 	}
 	l.overlaySnapshot = captured
-	l.revision = promptRevision(l.Catalog, captured)
+	l.revision = promptRevision(l.Catalog, l.WorkflowArchive, captured)
 	return l, nil
 }
 
@@ -94,10 +98,13 @@ func capturePromptRoot(root string, captured map[string][]byte) error {
 	})
 }
 
-func promptRevision(catalog *extpacks.EffectiveCatalog, captured map[string][]byte) string {
+func promptRevision(catalog *extpacks.EffectiveCatalog, archive string, captured map[string][]byte) string {
 	h := sha256.New()
 	if catalog != nil {
 		_, _ = io.WriteString(h, catalog.Revision)
+	}
+	if archive != "" {
+		_, _ = io.WriteString(h, "\x00archive\x00"+archive)
 	}
 	keys := make([]string, 0, len(captured))
 	for ref := range captured {
@@ -133,6 +140,9 @@ func (l PromptLayers) ReadFile(ref string) ([]byte, error) {
 	if ref == "" {
 		return nil, fmt.Errorf("empty template ref")
 	}
+	if data, ok, err := l.readArchived(ref); ok || err != nil {
+		return data, err
+	}
 	if l.overlaySnapshot != nil {
 		if data, ok := l.overlaySnapshot[ref]; ok {
 			return append([]byte(nil), data...), nil
@@ -163,6 +173,27 @@ func (l PromptLayers) ReadFile(ref string) ([]byte, error) {
 		return nil, fmt.Errorf("template %q not found in prompt overlay layers: %w", ref, lastErr)
 	}
 	return nil, fmt.Errorf("template %q not found", ref)
+}
+
+// readArchived returns a sealed workflow version's own guidance for ref.
+func (l PromptLayers) readArchived(ref string) ([]byte, bool, error) {
+	if l.WorkflowArchive == "" {
+		return nil, false, nil
+	}
+	kind, rel, ok := kindForRef(path.Clean(ref))
+	if !ok || kind != "guidance" {
+		return nil, false, nil
+	}
+	eff := l.Catalog
+	if eff == nil {
+		resolved, err := extpacks.CatalogForConsumers()
+		if err != nil {
+			return nil, false, err
+		}
+		eff = resolved
+	}
+	data, _, found := eff.UnitContent(extpacks.ArchiveGuidanceUnitID(l.WorkflowArchive, strings.TrimSuffix(rel, ".md")))
+	return data, found, nil
 }
 
 func (l PromptLayers) readBundled(ref string) ([]byte, error) {

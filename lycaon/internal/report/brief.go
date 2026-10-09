@@ -101,6 +101,9 @@ func defectLine(d ReportDefect) string {
 // answerRows is the opening line: the rating, then how complete the work is.
 func answerRows(ms *measurer, input ReportInput, completeness string) []measuredRow {
 	var runs []inlineRun
+	if input.Kind == BlockedReviewSnapshot {
+		return textRows(ms, []inlineRun{{Text: "Review incomplete"}}, labelProp())
+	}
 	if b := input.Brief; b != nil && len(b.Levels) > 0 {
 		runs = append(runs, inlineRun{Text: ratingAnswer(*b) + " ", Color: briefTone(b.Levels[b.Worst].Tone).ink})
 	}
@@ -123,17 +126,7 @@ func ratingAnswer(b ReportBrief) string {
 		return sentence(levelAnswer(best)) + "."
 	}
 	worst := b.Levels[b.Worst]
-	if ratingOpen(b) {
-		return "Not rated, possibly " + strings.ToLower(worst.Label) + "."
-	}
 	return sentence(levelAnswer(best)) + ", possibly " + strings.ToLower(worst.Label) + "."
-}
-
-// ratingOpen reports a rating nothing settled: only the scale's mildest level
-// is certain, and an open answer could decide a worse one. Stating that mild
-// level as the answer would read as a conclusion the review did not reach.
-func ratingOpen(b ReportBrief) bool {
-	return b.Worst != b.Best && b.Best == len(b.Levels)-1
 }
 
 func levelAnswer(l ReportLevel) string {
@@ -193,11 +186,7 @@ func ratingGauge(ms *measurer, width float64, input ReportInput, b ReportBrief) 
 
 	level := b.Levels[b.Best].Label
 	means := b.Levels[b.Best].Means
-	switch {
-	case ratingOpen(b):
-		level = "Not rated"
-		means = "Open answers leave it anywhere from " + strings.ToLower(b.Levels[b.Best].Label) + " to " + strings.ToLower(b.Levels[b.Worst].Label) + "."
-	case b.Worst != b.Best:
+	if b.Worst != b.Best {
 		level += " to " + strings.ToLower(b.Levels[b.Worst].Label)
 		means += " An open answer could make it " + strings.ToLower(b.Levels[b.Worst].Label) + "."
 	}
@@ -216,7 +205,12 @@ func ratingGauge(ms *measurer, width float64, input ReportInput, b ReportBrief) 
 
 // basisLine says which finding set the level and why, in the phrases the
 // workflow declared for its answers.
+// basisLine says what decided the level: the review's own reason when it
+// made the call, else the deciding finding's declared phrase.
 func basisLine(input ReportInput, b ReportBrief) string {
+	if call := strings.TrimRight(strings.TrimSpace(b.Call), "."); call != "" {
+		return sentence(call) + "."
+	}
 	basis := strings.TrimSpace(b.Basis)
 	if basis == "" || len(b.Rated) == 0 {
 		return ""

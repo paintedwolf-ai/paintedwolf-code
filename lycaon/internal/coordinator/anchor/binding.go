@@ -1,6 +1,34 @@
 package anchor
 
-import "strings"
+import (
+	"errors"
+	"fmt"
+	"strings"
+
+	"gopkg.in/yaml.v3"
+)
+
+// ErrWorkflowVersionMissing is returned when MatchContext names a workflow but lacks a workflow version.
+var ErrWorkflowVersionMissing = errors.New("anchor: match context specifies workflow without workflow version")
+
+// RunSource identifies an active run's workflow identity.
+type RunSource interface {
+	WorkflowIdentity() (workflowID, workflowVersion string)
+}
+
+// RunMatch creates a typed MatchContext for an active run.
+func RunMatch(run RunSource, surface, phase string) MatchContext {
+	if run == nil {
+		return MatchContext{Surface: surface, Phase: phase}
+	}
+	wf, ver := run.WorkflowIdentity()
+	return MatchContext{
+		Surface:         surface,
+		Phase:           phase,
+		Workflow:        strings.TrimSpace(wf),
+		WorkflowVersion: strings.TrimSpace(ver),
+	}
+}
 
 // Binding is one declarative inform/block/transform attachment on an Anchor.
 type Binding struct {
@@ -12,6 +40,35 @@ type Binding struct {
 	Tier     string
 	// Invariants define template guarantees.
 	Invariants BindingInvariants
+
+	workflowVersion string
+}
+
+// WorkflowVersion returns the bound workflow version, or empty for non-workflow bindings.
+func (b *Binding) WorkflowVersion() string {
+	if b == nil {
+		return ""
+	}
+	return b.workflowVersion
+}
+
+// IsWorkflowTier reports whether b is a workflow-tier binding.
+func (b *Binding) IsWorkflowTier() bool {
+	return b != nil && strings.EqualFold(strings.TrimSpace(b.Tier), "workflow")
+}
+
+// Matches reports whether b matches ctx, enforcing exact workflow version equality for workflow-tier bindings.
+func (b *Binding) Matches(ctx MatchContext) bool {
+	if b == nil {
+		return false
+	}
+	if !b.Selector.Matches(ctx) {
+		return false
+	}
+	if b.IsWorkflowTier() {
+		return strings.TrimSpace(b.workflowVersion) == strings.TrimSpace(ctx.WorkflowVersion)
+	}
+	return true
 }
 
 // BindingInvariants are per-Binding template guarantees.
@@ -35,15 +92,32 @@ type Selector struct {
 	SessionPosture []string `yaml:"session_posture,omitempty" json:"session_posture,omitempty"`
 }
 
+// UnmarshalYAML rejects selector.workflow_version so third-party YAML cannot author ad-hoc version selectors.
+func (s *Selector) UnmarshalYAML(value *yaml.Node) error {
+	type rawSelector Selector
+	var raw rawSelector
+	if err := value.Decode(&raw); err != nil {
+		return err
+	}
+	for i := 0; i < len(value.Content)-1; i += 2 {
+		if strings.TrimSpace(value.Content[i].Value) == "workflow_version" {
+			return fmt.Errorf("selector.workflow_version is forbidden; workflow versions are set by the host manifest")
+		}
+	}
+	*s = Selector(raw)
+	return nil
+}
+
 // MatchContext is the typed emit-time selector fact set.
 type MatchContext struct {
-	Surface        string
-	Phase          string
-	Workflow       string
-	Tool           string
-	Profile        string
-	SessionPosture string
-	SessionID      string
+	Surface         string
+	Phase           string
+	Workflow        string
+	WorkflowVersion string
+	Tool            string
+	Profile         string
+	SessionPosture  string
+	SessionID       string
 }
 
 // Matches reports whether sel accepts ctx.

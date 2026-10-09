@@ -68,19 +68,27 @@ func (m *Manager) kickPromptCuration(ctx context.Context, sess *wire.Session, us
 	}
 	var bg context.Context
 	var work *curationWork
+	var finish func()
 	if err := m.WithSessionTreeAdmission(ctx, sess.ID, func() error {
+		owned, done, err := m.engineWork.Begin(curationctx.WithoutLane(context.WithoutCancel(ctx)))
+		if err != nil {
+			return err
+		}
+		finish = done
 		var cancel context.CancelFunc
-		bg, cancel = context.WithCancel(curationctx.WithoutLane(context.WithoutCancel(ctx)))
+		bg, cancel = context.WithCancel(owned)
 		work = m.curation.Register(sess.ID, cancel)
 		return nil
 	}); err != nil {
 		return
 	}
-	//nolint:contextcheck // Session stop controls this context.
-	go m.runPromptCuration(bg, sess, userPrompt, work)
+	//nolint:contextcheck // Session and engine stop control this context.
+	go m.runPromptCuration(bg, sess, userPrompt, work, finish)
 }
 
-func (m *Manager) runPromptCuration(ctx context.Context, sess *wire.Session, userPrompt string, work *curationWork) {
+// runPromptCuration releases its engine lease only after the session registry.
+func (m *Manager) runPromptCuration(ctx context.Context, sess *wire.Session, userPrompt string, work *curationWork, releaseEngine func()) {
+	defer releaseEngine()
 	defer m.curation.Finish(sess.ID, work)
 	defer observability.GuardPanic("session.prompt_curation")
 	m.warmIndexForDeclaredURLs(ctx, sess.ID, sess.ProjectID, userPrompt, sess.WorkspacePath)
@@ -88,9 +96,9 @@ func (m *Manager) runPromptCuration(ctx context.Context, sess *wire.Session, use
 	m.autoNameProjectFromPrompt(ctx, sess, userPrompt)
 }
 
-func (m *Manager) WaitForPromptCuration() {
+func (m *Manager) WaitForPromptCuration(ctx context.Context) {
 	if m != nil {
-		m.curation.Wait()
+		m.curation.Wait(ctx)
 	}
 }
 
@@ -155,7 +163,7 @@ func (m *promptCurations) Cancel(sessionID string) {
 }
 
 // Wait drains in-flight prompt curation.
-func (m *promptCurations) Wait() {
+func (m *promptCurations) Wait(ctx context.Context) {
 	if m == nil {
 		return
 	}
@@ -165,6 +173,9 @@ func (m *promptCurations) Wait() {
 	m.mu.Unlock()
 	if !idle {
 		// A new busy interval cannot invalidate an earlier waiter's completion.
-		<-done
+		select {
+		case <-done:
+		case <-ctx.Done():
+		}
 	}
 }

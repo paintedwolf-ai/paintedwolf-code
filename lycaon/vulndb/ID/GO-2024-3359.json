@@ -1,0 +1,53 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/mayuresh82/gocast"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2024-28892",
+  "GHSA-5qww-56gc-f66c"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2024-3359"
+ },
+ "details": "GoCast OS Command Injection vulnerability in github.com/mayuresh82/gocast",
+ "id": "GO-2024-3359",
+ "modified": "2025-01-07T16:03:18Z",
+ "published": "2025-01-07T16:03:18Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-5qww-56gc-f66c"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2024-28892"
+  },
+  {
+   "type": "WEB",
+   "url": "https://talosintelligence.com/vulnerability_reports/TALOS-2024-1960"
+  },
+  {
+   "type": "WEB",
+   "url": "https://www.talosintelligence.com/vulnerability_reports/TALOS-2024-1960"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "GoCast OS Command Injection vulnerability in github.com/mayuresh82/gocast"
+}

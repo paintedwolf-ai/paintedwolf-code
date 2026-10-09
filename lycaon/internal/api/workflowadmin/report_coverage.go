@@ -188,6 +188,11 @@ func (s *Reports) workAccount(ctx context.Context, a *runAccount, run *wire.Work
 	if err != nil {
 		return err
 	}
+	a.accountWorkers(manifest, vars, tasks)
+	return nil
+}
+
+func (a *runAccount) accountWorkers(manifest workflowdef.Manifest, vars map[string]any, tasks []wire.WorkerTask) {
 	taskByID := make(map[string]wire.WorkerTask, len(tasks))
 	for _, task := range tasks {
 		taskByID[task.ID] = task
@@ -260,5 +265,4 @@ func (s *Reports) workAccount(ctx context.Context, a *runAccount, run *wire.Work
 		}
 	}
 	a.gap(helpers)
-	return nil
 }

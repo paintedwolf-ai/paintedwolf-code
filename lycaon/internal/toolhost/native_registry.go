@@ -2,7 +2,6 @@ package toolhost
 
 import (
 	"fmt"
-	"sync/atomic"
 
 	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/git"
@@ -24,7 +23,7 @@ import (
 type buildDeps struct {
 	boundary       *sandbox.Boundary
 	git            *git.Manager
-	statusCache    *atomic.Pointer[git.StatusCache]
+	statusCache    *statusCacheBinding
 	command        *hostcmd.Runner
 	nativeConfig   nativemanifest.Config
 	toolSchemas    *toolschema.Config

@@ -12,6 +12,7 @@ import (
 	scanbase "github.com/lycaon/lycaon/internal/scan"
 	scancfg "github.com/lycaon/lycaon/internal/scan/configuration"
 	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
+	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -130,6 +131,12 @@ func runScanQuery(ctx context.Context, args map[string]any, tctx tools.ToolConte
 	if len(scanIDs) == 0 {
 		return "", fmt.Errorf("scan_ids is required")
 	}
+	if _, present := args["selector"]; present {
+		return "", &tools.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"tool": "scan_query", "field": "selector", "reason": "requires_accounting_view"}}
+	}
+	if _, present := args["inventory_revision"]; present && drilldownStringArg(args, "view") != "groups" {
+		return "", &tools.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"tool": "scan_query", "field": "inventory_revision", "reason": "requires_inventory_view"}}
+	}
 	if drilldownStringArg(args, "view") == "coverage" {
 		out, err := queryCoverage(ctx, coord, scanIDs, args)
 		return out, scanbase.MapDrilldownReject(err, rejectFmt)
@@ -166,7 +173,7 @@ func runScanQuery(ctx context.Context, args map[string]any, tctx tools.ToolConte
 		*target = &at
 	}
 	if view := drilldownStringArg(args, "view"); view == "groups" {
-		out, err := queryFindingGroups(ctx, coord, scanIDs, req)
+		out, err := queryFindingGroups(ctx, coord, scanIDs, req, drilldownStringArg(args, "inventory_revision"))
 		return out, scanbase.MapDrilldownReject(err, rejectFmt)
 	} else if view != "" && view != "findings" {
 		return "", fmt.Errorf("view must be findings, groups, or coverage")
@@ -184,8 +191,9 @@ func runScanQuery(ctx context.Context, args map[string]any, tctx tools.ToolConte
 	return marshalDrilldownJSON(resp)
 }
 
-func queryFindingGroups(ctx context.Context, coord scanbase.ScanCoordinator, ids []string, req scanbase.QueryRequest) (string, error) {
+func queryFindingGroups(ctx context.Context, coord scanbase.ScanCoordinator, ids []string, req scanbase.QueryRequest, expected string) (string, error) {
 	var findings []api.SecurityFinding
+	var scans []api.CodeScan
 	for _, id := range ids {
 		rec, err := coord.Get(ctx, id)
 		if err != nil {
@@ -197,7 +205,15 @@ func queryFindingGroups(ctx context.Context, coord scanbase.ScanCoordinator, ids
 		if rec.Status != api.CodeScanStatusComplete {
 			return "", &scanbase.DrilldownReject{Code: scanbase.DrilldownRejectNotComplete, Data: map[string]any{"scan_id": id, "status": string(rec.Status)}}
 		}
-		findings = append(findings, scanbase.FilterFindings(rec.Findings, req)...)
+		scans = append(scans, *rec)
+		findings = append(findings, scanbase.FilterFindings(scanfindings.InventoryFindings([]api.CodeScan{*rec}), req)...)
+	}
+	revision, err := scanfindings.InventoryRevision(scans)
+	if err != nil {
+		return "", err
+	}
+	if expected != "" && expected != revision {
+		return "", &tools.ToolReject{Code: "SCAN_INVENTORY_STALE", Data: map[string]any{"inventory_revision": revision}}
 	}
 	groups := scanfindings.GroupFindings(findings, 10)
 	offset := min(max(req.Offset, 0), len(groups))
@@ -212,13 +228,15 @@ func queryFindingGroups(ctx context.Context, coord scanbase.ScanCoordinator, ids
 		next = &end
 	}
 	return marshalDrilldownJSON(struct {
-		ScanIDs    []string                    `json:"scan_ids"`
-		Groups     []scanfindings.FindingGroup `json:"groups"`
-		TotalMatch int                         `json:"total_match"`
-		Offset     int                         `json:"offset"`
-		NextOffset *int                        `json:"next_offset,omitempty"`
-		Truncated  bool                        `json:"truncated"`
-	}{ids, groups[offset:end], len(groups), offset, next, next != nil})
+		PageContract      tooloutput.PageContract     `json:"page_contract"`
+		InventoryRevision string                      `json:"inventory_revision"`
+		ScanIDs           []string                    `json:"scan_ids"`
+		Groups            []scanfindings.FindingGroup `json:"groups"`
+		TotalMatch        int                         `json:"total_match"`
+		Offset            int                         `json:"offset"`
+		NextOffset        *int                        `json:"next_offset,omitempty"`
+		Truncated         bool                        `json:"truncated"`
+	}{tooloutput.PageContract{Collection: "groups", Revision: revision}, revision, ids, groups[offset:end], len(groups), offset, next, next != nil})
 }
 
 func queryScanPack(ctx context.Context, store *scanbase.SQLStore, scanIDs []string, req scanbase.QueryRequest) (*api.ScanQueryResponse, error) {

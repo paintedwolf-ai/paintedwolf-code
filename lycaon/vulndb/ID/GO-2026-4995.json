@@ -1,0 +1,56 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/free5gc/smf"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.4.3"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-44329",
+  "GHSA-3258-qmv8-frp3"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-4995"
+ },
+ "details": "free5GC's SMF UPI management interface lacks auth middleware; unauthenticated topology read/write requests reach handlers in github.com/free5gc/smf",
+ "id": "GO-2026-4995",
+ "modified": "2026-05-20T19:07:16Z",
+ "published": "2026-05-20T19:07:16Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/free5gc/free5gc/security/advisories/GHSA-3258-qmv8-frp3"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/free5gc/smf/commit/e23ce97565f285eb99eed153743c62bf4c767c6e"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/free5gc/smf/pull/197"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/free5gc/free5gc/issues/887"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "free5GC's SMF UPI management interface lacks auth middleware; unauthenticated topology read/write requests reach handlers in github.com/free5gc/smf"
+}

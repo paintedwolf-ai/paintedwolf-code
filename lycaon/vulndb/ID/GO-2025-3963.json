@@ -1,0 +1,69 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "d7y.io/dragonfly/v2"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "2.1.0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/dragonflyoss/dragonfly"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2025-59348",
+  "GHSA-2qgr-gfvj-qpcr"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2025-3963"
+ },
+ "details": "Dragonfly incorrectly handles a task structure\u2019s usedTrac field in d7y.io/dragonfly",
+ "id": "GO-2025-3963",
+ "modified": "2025-09-24T19:21:37Z",
+ "published": "2025-09-24T19:21:37Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/dragonflyoss/dragonfly/security/advisories/GHSA-2qgr-gfvj-qpcr"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-59348"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/dragonflyoss/dragonfly/blob/main/docs/security/dragonfly-comprehensive-report-2023.pdf"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Dragonfly incorrectly handles a task structure\u2019s usedTrac field in d7y.io/dragonfly"
+}

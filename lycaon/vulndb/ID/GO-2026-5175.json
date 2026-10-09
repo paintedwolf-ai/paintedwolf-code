@@ -1,0 +1,48 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/bishopfox/sliver"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.7.4"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-34227",
+  "GHSA-6fpf-248c-m7wm"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5175"
+ },
+ "details": "Sliver One-Click Remote Access: Insecure CORS & Unauthenticated MCP Interface in github.com/bishopfox/sliver",
+ "id": "GO-2026-5175",
+ "modified": "2026-06-25T18:26:48Z",
+ "published": "2026-06-25T18:26:48Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/BishopFox/sliver/security/advisories/GHSA-6fpf-248c-m7wm"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-34227"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Sliver One-Click Remote Access: Insecure CORS & Unauthenticated MCP Interface in github.com/bishopfox/sliver"
+}

@@ -147,7 +147,7 @@ func hostWorkflowStatePath(path string) bool {
 	}
 	root, _, _ := strings.Cut(path, ".")
 	switch root {
-	case "fanout_plans", "fanout_coverage", "fanout_settled", "worker_cycle", "gates",
+	case reviewRepairsKey, "fanout_plans", "fanout_coverage", "fanout_settled", "worker_cycle", "gates",
 		"human_approval", "phase_skipped", "review_if_spawnable", "review_loop", "review_verdict", "review_questions",
 		"user_feedback", "user_decision", "topology_stages", "topology_outputs", "orchestration_complete", "content_review",
 		hostVarBaselinePosture, workflowdef.ScaffoldExecutionModeVar, workflowRequestFeedbackID, coordinatorAskVar, obligationsVarKey,

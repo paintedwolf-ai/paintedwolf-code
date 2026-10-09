@@ -5,7 +5,7 @@ import { ChatTabChromeProvider } from "../../chat/composer/chat-tab-chrome.tsx";
 import { createPreparation } from "../../ui/presentation.ts";
 import { PresentationProvider } from "../../ui/presentation-context.tsx";
 import { createAppStore } from "../../store/app-state.ts";
-import { gitStatusRefreshPending, refreshGitStatus } from "../../chat/actions/git-actions.ts";
+import { gitStatusRefreshPending, refreshGitStatus } from "../../chat/actions/git-status-reads.ts";
 import { stubClient } from "../../test/client-fixture.ts";
 import type { GitRepoEntry } from "../../api/types.ts";
 import type { GitWorkspaceStatus } from "../../chat/actions/git-workspace-status.ts";

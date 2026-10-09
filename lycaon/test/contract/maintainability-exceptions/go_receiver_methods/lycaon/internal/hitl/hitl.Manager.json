@@ -1,0 +1,6 @@
+{
+  "category": "go_receiver_methods",
+  "artifact": "lycaon/internal/hitl/hitl.Manager",
+  "cap": 48,
+  "reason": "Past the limit before #356, which moves expiry scheduling into its own type to stop timers without growing the manager; the split is tracked in #365."
+}
