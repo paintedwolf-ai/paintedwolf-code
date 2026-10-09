@@ -1,5 +1,5 @@
 id: security-survey
-version: 1.0.1
+version: 2.0.0
 name: Security
 description: Survey a project against its threat model.
 trigger: /security-survey
@@ -90,6 +90,7 @@ phases:
     gates: [fanout_planned]
     fanout:
       require_threat_model: true
+      require_task_charter: true
       max_attempts: 2
     advance:
       when_gate_met: coordinator
@@ -116,6 +117,7 @@ phases:
     surface_template: agents/coordinator-surface-vet.md
     review_loop:
       evidence_key: survey_claims
+      require_inventory_accounted: true
       iteration_cap: 1
       verdict_schema:
         verdict: CLAIMED
