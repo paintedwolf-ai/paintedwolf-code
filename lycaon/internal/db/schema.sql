@@ -3079,7 +3079,7 @@ CREATE INDEX IF NOT EXISTS idx_source_effects_file ON source_effects(file_id, or
 CREATE INDEX IF NOT EXISTS idx_source_effects_operation ON source_effects(operation_id, ordinal);
 CREATE INDEX IF NOT EXISTS idx_source_effects_session_lens ON source_effects(project_id, ordinal DESC, file_id);
 
--- Immutable workspace boundaries with sparse head deltas.
+-- Immutable workspace boundaries in the source-history clock.
 CREATE TABLE IF NOT EXISTS source_checkpoints (
     id TEXT PRIMARY KEY,
     project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
