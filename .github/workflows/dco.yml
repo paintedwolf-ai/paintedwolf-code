@@ -27,13 +27,5 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - name: Read trusted default branch source
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-        with:
-          ref: ${{ github.event.repository.default_branch }}
-          persist-credentials: false
       - name: Certify original PR commits
-        env:
-          GH_TOKEN: ${{ github.token }}
-          DCO_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: python3 scripts/dco_check.py
+        uses: paintedwolf-ai/dco-checker@6d9c097a7778472a7b4518dbdb083f5328909c6d
