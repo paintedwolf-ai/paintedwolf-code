@@ -25,10 +25,8 @@ func withOut(tctx tools.ToolContext) tools.ToolContext {
 
 func commandToolContext(root, sessionID, workerJobID string) tools.ToolContext {
 	return tools.ToolContext{
-		SessionID:   sessionID,
-		WorkerJobID: workerJobID,
-		Agent:       "implement",
-		Roots:       []projectroot.RootRef{{ID: "primary", Path: root, IsPrimary: true}},
+		Identity: tools.InvocationIdentity{SessionID: sessionID, WorkerJobID: workerJobID, Agent: "implement"},
+		Source:   tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "primary", Path: root, IsPrimary: true}}},
 	}
 }
 
