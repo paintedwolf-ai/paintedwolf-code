@@ -4,29 +4,21 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/lycaon/lycaon/internal/agentpresence"
 	"github.com/lycaon/lycaon/internal/approvals"
 	"github.com/lycaon/lycaon/internal/authzcontext"
 	"github.com/lycaon/lycaon/internal/authzledger"
 	"github.com/lycaon/lycaon/internal/bootrecovery"
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/confine"
-	"github.com/lycaon/lycaon/internal/eventoutbox"
-	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/grantedpath"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/harnessfixture"
 	"github.com/lycaon/lycaon/internal/hitl"
-	"github.com/lycaon/lycaon/internal/hostidentity"
-	"github.com/lycaon/lycaon/internal/hostpower"
 	"github.com/lycaon/lycaon/internal/invocation"
-	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/progress"
-	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/scratch"
@@ -34,22 +26,22 @@ import (
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
 	"github.com/lycaon/lycaon/internal/session/loopguard"
-	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/skills"
-	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/internal/toolschema"
-	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/pkg/api"
 )
+
+// sessionWiring wires the session manager, its authorization and checkpoints, and secret handling.
+type sessionWiring struct{ *serveBuilder }
 
 // A settled repository brief refreshes a bounded set of session boards.
 const boardRepublishSessionLimit = 64
 
-func (b *serveBuilder) wireSessionManager() error {
+func (b sessionWiring) wireSessionManager() error {
 	if configdir.IsHarnessChannel() && b.llmSvc != nil {
 		preparation, err := harnessfixture.NewPreludeController(b.dataDir, b.store)
 		if err != nil {
@@ -79,7 +71,7 @@ func (b *serveBuilder) wireSessionManager() error {
 	return nil
 }
 
-func (b *serveBuilder) configureSessionManager() error {
+func (b sessionWiring) configureSessionManager() error {
 	b.mgr.SetSourceLedger(b.sourceLedger)
 	b.mgr.SetAgentRegistry(b.agentRegistry)
 	b.mgr.SetHostResources(b.hostResources)
@@ -120,7 +112,7 @@ func (b *serveBuilder) configureSessionManager() error {
 	return nil
 }
 
-func (b *serveBuilder) wireSessionToolSources() {
+func (b sessionWiring) wireSessionToolSources() {
 	if b.toolRuntime != nil && b.toolRuntime.Boundary != nil {
 		mgr := b.mgr
 		b.toolRuntime.Boundary.SetProfileSource(func(ctx context.Context, sessionID string) []sandbox.ToolProfile {
@@ -173,7 +165,7 @@ func (b *serveBuilder) wireSessionToolSources() {
 	}
 }
 
-func (b *serveBuilder) wireWorkerToolBudget() {
+func (b sessionWiring) wireWorkerToolBudget() {
 	b.workerToolBudgetFor = func(projectDir string) spawn.WorkerToolBudget {
 		if b.settingsSvc == nil {
 			return b.sessionCfg.WorkerToolBudget()
@@ -186,7 +178,7 @@ func (b *serveBuilder) wireWorkerToolBudget() {
 	}
 }
 
-func (b *serveBuilder) wireSessionAuthorization() error {
+func (b sessionWiring) wireSessionAuthorization() error {
 	if b.db != nil {
 		auditCfg, err := authzcontext.LoadAuditConfig(b.configRoot)
 		if err != nil {
@@ -240,8 +232,8 @@ func (b *serveBuilder) wireSessionAuthorization() error {
 }
 
 // registerSessionCrashRecovery orders invocation and transcript repair.
-func (b *serveBuilder) registerSessionCrashRecovery(invocations *invocation.SQLRecorder) error {
-	if err := b.registerRecovery(bootrecovery.Entry{
+func (b sessionWiring) registerSessionCrashRecovery(invocations *invocation.SQLRecorder) error {
+	if err := delegationWiring(b).registerRecovery(bootrecovery.Entry{
 		Name: "tool-invocations", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseBuild,
 		Run: func(ctx context.Context) error {
 			_, err := invocations.InterruptRunning(ctx)
@@ -250,150 +242,21 @@ func (b *serveBuilder) registerSessionCrashRecovery(invocations *invocation.SQLR
 	}); err != nil {
 		return err
 	}
-	if err := b.registerRecovery(bootrecovery.Entry{
+	if err := delegationWiring(b).registerRecovery(bootrecovery.Entry{
 		Name: "session-turns", Kind: bootrecovery.KindReconcile, Phase: bootrecovery.PhaseBuild,
 		After: []string{"tool-invocations"},
 		Run:   b.mgr.RecoverOrphanedTurns,
 	}); err != nil {
 		return err
 	}
-	return b.registerRecovery(bootrecovery.Entry{
+	return delegationWiring(b).registerRecovery(bootrecovery.Entry{
 		Name: "transcript-invocations", Kind: bootrecovery.KindReconcile, Phase: bootrecovery.PhaseServe,
 		After: []string{"tool-invocations", "session-turns"},
 		Run:   b.mgr.RecoverInterruptedToolResults,
 	})
 }
 
-func (b *serveBuilder) wireEvents() error {
-	var err error
-	b.hub = events.WrapDebugHub(events.NewMemoryHub())
-	b.eventOutbox = eventoutbox.New(b.db, b.hub)
-	// An absent outbox would silently drop mutation events.
-	if b.eventOutbox == nil {
-		return fmt.Errorf("event outbox: nil after construction; every store wired below would drop its events")
-	}
-	b.store.SetEventOutbox(b.eventOutbox)
-	b.registry.SetEventOutbox(b.eventOutbox)
-	b.presence = events.NewPresence(b.hub, events.DefaultUserActionWindow)
-	keepAwake := true
-	if b.settingsSvc != nil && b.settingsSvc.Power != nil {
-		keepAwake = b.settingsSvc.Power.KeepAwakeWhileWorking()
-	}
-	b.hostPower = hostpower.New(keepAwake)
-	eventLookup := project.ScopeLookup{Registry: b.registry}
-	b.eventPub = &events.Publisher{
-		Hub:               b.hub,
-		Lookup:            eventLookup,
-		Untrusted:         b.store,
-		UserTurns:         b.store,
-		ActivityObserver:  b.hostPower,
-		TurnClockObserver: b.hostPower,
-		SessionProject: func(ctx context.Context, sessionID string) (string, bool) {
-			if b.store == nil {
-				return "", false
-			}
-			sess, err := b.store.Get(ctx, sessionID)
-			if err != nil || sess == nil || strings.TrimSpace(sess.ProjectID) == "" {
-				return "", false
-			}
-			return sess.ProjectID, true
-		},
-		SessionLister: events.FuncSessionLister(func(ctx context.Context, projectID string) ([]string, error) {
-			if b.mgr == nil {
-				return nil, nil
-			}
-			page, err := b.mgr.ListProjectSessions(ctx, store.SummaryQuery{ProjectID: projectID, Limit: boardRepublishSessionLimit})
-			if err != nil {
-				return nil, err
-			}
-			ids := make([]string, 0, len(page.Sessions))
-			for _, summary := range page.Sessions {
-				ids = append(ids, summary.ID)
-			}
-			return ids, nil
-		}),
-		SessionRoots: events.FuncSessionRoots(func(ctx context.Context, sessionID string) (string, bool) {
-			if b.store == nil {
-				return "", false
-			}
-			sess, err := b.store.Get(ctx, sessionID)
-			if err != nil || sess == nil {
-				return "", false
-			}
-			path := strings.TrimSpace(sess.WorkspacePath)
-			if path == "" {
-				return "", false
-			}
-			return path, true
-		}),
-	}
-	// Chats follow their turns from session events; documents arrive with the server.
-	b.agentPresence = agentpresence.New(&presenceChats{store: b.store, workerJobs: func(ctx context.Context, childSessionID string) (*api.WorkerTask, bool) {
-		if b.workerQueue == nil {
-			return nil, false
-		}
-		return b.workerQueue.GetLatestByChildSessionID(ctx, childSessionID)
-	}}, b.eventPub)
-	b.eventPub.SessionObserver = b.agentPresence
-	b.mgr.SetAgentPresence(b.agentPresence)
-	// One revision counter across the direct and outbox session-event paths.
-	b.store.SetSessionRevisions(b.eventPub)
-	// Both paths read prompt_pending from the manager.
-	b.store.SetPromptPending(b.mgr)
-	b.eventPub.SessionState = b.mgr
-	b.eventOutbox.OnDelivered = func(ctx context.Context, delivered eventoutbox.DeliveredEvent) {
-		if err := b.hostPower.ObserveDelivered(delivered.Topic, delivered.Data); err != nil {
-			slog.WarnContext(ctx, "observe host power activity", "topic", delivered.Topic, "error", err)
-		}
-		if err := b.agentPresence.ObserveDelivered(ctx, delivered.Topic, delivered.Data); err != nil {
-			slog.WarnContext(ctx, "observe agent presence", "topic", delivered.Topic, "error", err)
-		}
-		if events.AttentionLifecycleTopic(delivered.Topic) {
-			b.eventPub.PublishAttention(ctx)
-		}
-	}
-	b.eventOutbox.Start(b.ctx)
-	if err := b.registerRecovery(bootrecovery.Entry{
-		Name: "rewind-operations", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseBuild,
-		After: []string{"tool-invocations", "source-mutations", "editor-documents"},
-		Run:   b.mgr.RecoverRewinds,
-	}); err != nil {
-		return err
-	}
-	b.sourceFeedUnbinds = append(b.sourceFeedUnbinds,
-		sourcefeed.Bind(outboxSourceFeed{outbox: b.eventOutbox, lookup: eventLookup}))
-
-	if err := b.wireCheckpointRuntime(); err != nil {
-		return err
-	}
-
-	project.SetDefaultOpenPolicy(project.DefaultOpenPolicy())
-
-	b.apiToken, b.tokenGenerated, err = resolveServeAPIToken()
-	if err != nil {
-		return fmt.Errorf("api token: %w", err)
-	}
-	configDir, err := configdir.UserConfigDir()
-	if err != nil {
-		return fmt.Errorf("config dir: %w", err)
-	}
-	if b.hostIdentity, err = hostidentity.LoadOrCreate(configDir); err != nil {
-		return fmt.Errorf("host identity: %w", err)
-	}
-
-	logFields := []any{"level", os.Getenv("LYCAON_LOG_LEVEL")}
-	if path := observability.ActiveLogFilePath(); path != "" {
-		logFields = append(logFields, "file", path)
-	}
-	b.logger.Info("logging configured", logFields...)
-	b.workersCfg, err = worker.LoadWorkersConfig()
-	if err != nil {
-		return fmt.Errorf("workers config: %w", err)
-	}
-	return nil
-}
-
-func (b *serveBuilder) wireCheckpointRuntime() error {
+func (b sessionWiring) wireCheckpointRuntime() error {
 	if b.authzCapturer == nil {
 		return fmt.Errorf("authz: capturer required before checkpoint manager wiring")
 	}
@@ -409,6 +272,7 @@ func (b *serveBuilder) wireCheckpointRuntime() error {
 		b.toolRuntime.SetAuthzRecorder(authzRec)
 	}
 	b.checkpointMgr = checkpointMgr
+	b.resources.track("checkpoint-expiry", 65, func(context.Context) error { checkpointMgr.StopExpiryTimers(); return nil })
 	b.mgr.SetSessionCheckpointStop(checkpointMgr)
 	b.mgr.SetExecutionCheckpoints(checkpointMgr)
 	b.toolRuntime.SetCheckpointManager(b.checkpointMgr)
@@ -507,7 +371,7 @@ func (b *serveBuilder) wireCheckpointRuntime() error {
 	return b.wireToolApprovalCheckpointHooks(toolApprovalRT)
 }
 
-func (b *serveBuilder) assertAuthzCapturer() error {
+func (b sessionWiring) assertAuthzCapturer() error {
 	if b.db == nil {
 		return nil
 	}
@@ -524,7 +388,7 @@ func (b *serveBuilder) assertAuthzCapturer() error {
 }
 
 // wireAskSpamGuards installs per-chat approval counters.
-func (b *serveBuilder) wireAskSpamGuards() *approvalstate.ToolApprovalCoalesce {
+func (b sessionWiring) wireAskSpamGuards() *approvalstate.ToolApprovalCoalesce {
 	toolApprovalRT := approvalstate.NewToolApprovalCoalesce()
 	b.mgr.SetToolApprovalCoalesce(toolApprovalRT)
 	b.toolRuntime.SetToolApprovalCoalesce(toolApprovalRT)
@@ -537,7 +401,7 @@ func (b *serveBuilder) wireAskSpamGuards() *approvalstate.ToolApprovalCoalesce {
 }
 
 // wireToolApprovalCheckpointHooks restores pending approval joiners.
-func (b *serveBuilder) wireToolApprovalCheckpointHooks(toolApprovalRT *approvalstate.ToolApprovalCoalesce) error {
+func (b sessionWiring) wireToolApprovalCheckpointHooks(toolApprovalRT *approvalstate.ToolApprovalCoalesce) error {
 	mgr, ok := b.checkpointMgr.(*hitl.Manager)
 	if !ok {
 		return nil
@@ -595,7 +459,7 @@ func (b *serveBuilder) wireToolApprovalCheckpointHooks(toolApprovalRT *approvals
 }
 
 // wireGrantedAccess installs chat and durable filesystem grants.
-func (b *serveBuilder) wireGrantedAccess() error {
+func (b sessionWiring) wireGrantedAccess() error {
 	grantedRT := grantedpath.NewRuntime()
 	b.grantedPathRT = grantedRT
 	// Durable grants are read through their revocation source.

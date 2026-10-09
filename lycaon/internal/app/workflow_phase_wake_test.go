@@ -46,7 +46,7 @@ func TestCrossPhaseHostAdvanceQueuesCoordinatorWake(t *testing.T) {
 	b := &serveBuilder{mgr: sessionMgr, workflowMgr: wfMgr}
 	finishExecution := sessionMgr.BeginPromptExecutionForTest(t.Context(), sess.ID)
 	defer finishExecution()
-	b.onWorkflowPhaseAutoAdvanced(ctx, sess.ID, run.ID, "triage", "expand")
+	delegationWiring{b}.onWorkflowPhaseAutoAdvanced(ctx, sess.ID, run.ID, "triage", "expand")
 
 	got, ok := sessionMgr.PendingLoopNudgeForTest(sess.ID)
 	if !ok || got != anchor.PhaseAdvanced {
@@ -80,8 +80,8 @@ func TestTerminalCompletionSettlesWithoutAmbientWake(t *testing.T) {
 	sessionMgr := session.NewManager(sessionStore, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
 	sessionMgr.SetLoopWorkflowSource(wfMgr)
 	b := &serveBuilder{mgr: sessionMgr, workflowMgr: wfMgr}
-	b.onWorkflowPhaseAutoAdvanced(ctx, sess.ID, run.ID, "select", "done")
-	b.onWorkflowRunCompleted(ctx, run)
+	delegationWiring{b}.onWorkflowPhaseAutoAdvanced(ctx, sess.ID, run.ID, "select", "done")
+	delegationWiring{b}.onWorkflowRunCompleted(ctx, run)
 	settled, err := sessionStore.Get(ctx, sess.ID)
 	testutil.FailErr(t, "read completed session", err)
 	if settled.Status != api.SessionStatusIdle {
@@ -128,7 +128,7 @@ func TestHumanApprovalAdvanceQueuesWakeForRunningChild(t *testing.T) {
 	finishExecution := sessionMgr.BeginPromptExecutionForTest(t.Context(), sess.ID)
 	defer finishExecution()
 	b := &serveBuilder{mgr: sessionMgr, workflowMgr: wfMgr}
-	b.onWorkflowHumanApprovalAdvanced(ctx, parent)
+	delegationWiring{b}.onWorkflowHumanApprovalAdvanced(ctx, parent)
 
 	got, ok := sessionMgr.PendingLoopNudgeForTest(sess.ID)
 	if !ok || got != anchor.PhaseAdvanced {

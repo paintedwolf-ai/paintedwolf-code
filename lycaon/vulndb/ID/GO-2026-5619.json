@@ -1,0 +1,53 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/itang/gohttp"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2025-70950",
+  "GHSA-rg3p-p27c-2f39"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5619"
+ },
+ "details": "gohttp is vulnerable to directory traversal via a crafted request in github.com/itang/gohttp",
+ "id": "GO-2026-5619",
+ "modified": "2026-06-25T22:34:34Z",
+ "published": "2026-06-25T22:34:34Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-rg3p-p27c-2f39"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-70950"
+  },
+  {
+   "type": "REPORT",
+   "url": "https://github.com/itang/gohttp/issues/13"
+  },
+  {
+   "type": "WEB",
+   "url": "https://gist.github.com/Lime-Cocoa/202127ae5f4dcc4b39909ce7ac1c8466"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "gohttp is vulnerable to directory traversal via a crafted request in github.com/itang/gohttp"
+}

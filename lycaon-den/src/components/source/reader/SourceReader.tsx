@@ -299,7 +299,13 @@ export function SourceReader(props: {
       if (token !== generation) return;
       if (!reader.rows) { inlineWindows.delete(access); setRetainedHeight(undefined); publish([], true); props.onReady?.(true); return; }
       const restored = props.restoreViewState?.(reader.after.sha256 ?? "");
-      await loadWindow(Math.min(Math.max(0, reader.rows - 1), restored?.viewport?.rank ?? 0), true);
+      const offset = Math.min(Math.max(0, reader.rows - 1), restored?.viewport?.rank ?? 0);
+      // Nothing is painted to rescan yet, so a read cancelled by a coordinate change loads again in the current ones.
+      // A released session cancels every read; it stays a failure.
+      for (;;) {
+        try { await loadWindow(offset, true); break; }
+        catch (cause) { if (token !== generation || controller.signal.aborted || next.isReleased() || !superseded(cause)) throw cause; }
+      }
       if (token !== generation) return;
       for (const editor of editors) {
         if (restored?.selection) editor.restoreSelection(restored.selection);

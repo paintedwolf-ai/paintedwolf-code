@@ -22,11 +22,13 @@ type PhaseExitView struct {
 	OpenGates           []string
 	DormantGates        []string
 	CompleteWhen        string
-	VerdictShape        string
 	ReviewLoopKey       string
 	ReviewLoopCap       int
 	FollowupAttempts    int
-	VerdictExample      string
+	// VerdictOutline renders the verdict member of SubmitVerdictArgsSchema,
+	// the submit_verdict call a review phase accepts.
+	VerdictOutline          string
+	SubmitVerdictArgsSchema map[string]any
 	// ReviewAgents is the verdict-owed reviewer roster for a review_loop phase.
 	ReviewAgents      []string
 	HumanApproval     bool
@@ -110,6 +112,10 @@ type WorkflowRequestView struct {
 
 // ReportRatingView is a workflow's declared rating as a report fence answers it.
 type ReportRatingView struct {
+	// Question is what the report's rating answers.
+	Question string
+	// Levels names the declared levels, most severe first.
+	Levels string
 	// Dimensions are the answer keys, in declared order.
 	Dimensions []string
 	// Questions list each dimension with its question and allowed answers.
@@ -413,11 +419,10 @@ func ActiveWorkflowInjectToMap(data ActiveWorkflowInjectData, hints *guidance.Hi
 			"open_gates":           append([]string(nil), data.PhaseExit.OpenGates...),
 			"dormant_gates":        append([]string(nil), data.PhaseExit.DormantGates...),
 			"complete_when":        data.PhaseExit.CompleteWhen,
-			"verdict_shape":        data.PhaseExit.VerdictShape,
+			"verdict_outline":      data.PhaseExit.VerdictOutline,
 			"review_loop_key":      data.PhaseExit.ReviewLoopKey,
 			"review_loop_cap":      data.PhaseExit.ReviewLoopCap,
 			"followup_attempts":    data.PhaseExit.FollowupAttempts,
-			"verdict_example":      data.PhaseExit.VerdictExample,
 			"review_agents":        append([]string(nil), data.PhaseExit.ReviewAgents...),
 			"human_approval":       data.PhaseExit.HumanApproval,
 			"invoke_workflow_id":   data.PhaseExit.InvokeWorkflowID,
@@ -506,5 +511,5 @@ func reportRatingRow(r *ReportRatingView) map[string]any {
 	if r == nil {
 		return nil
 	}
-	return map[string]any{"dimensions": append([]string(nil), r.Dimensions...), "questions": r.Questions}
+	return map[string]any{"question": r.Question, "levels": r.Levels, "dimensions": append([]string(nil), r.Dimensions...), "questions": r.Questions}
 }

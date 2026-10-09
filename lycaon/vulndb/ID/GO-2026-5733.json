@@ -1,0 +1,56 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/0xJacky/Nginx-UI"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.9.10-0.20260314152518-7b66578adb47"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-33031",
+  "GHSA-x234-x5vq-cc2v"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5733"
+ },
+ "details": "Nginx-UI: Disabled users retain full API access through previously issued bearer tokens in github.com/0xJacky/Nginx-UI",
+ "id": "GO-2026-5733",
+ "modified": "2026-06-25T22:34:38Z",
+ "published": "2026-06-25T22:34:38Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/0xJacky/nginx-ui/security/advisories/GHSA-x234-x5vq-cc2v"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-33031"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/0xJacky/nginx-ui/commit/7b66578adb47bbec839b621a4666495249379174"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/0xJacky/nginx-ui/releases/tag/v2.3.4"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Nginx-UI: Disabled users retain full API access through previously issued bearer tokens in github.com/0xJacky/Nginx-UI"
+}

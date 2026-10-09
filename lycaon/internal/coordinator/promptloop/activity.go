@@ -8,6 +8,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/pkg/api"
+	"github.com/lycaon/lycaon/internal/coordinator/guard"
+	"github.com/lycaon/lycaon/internal/coordinator/surface"
 )
 
 type activityLease struct {
@@ -68,4 +70,30 @@ func (a *activityLease) finish() {
 	a.finished = true
 	a.event.Status = api.ActivityStatusDone
 	a.publish(a.event)
+}
+
+func coordinatorLLMLoopProgress(profileID, surfaceID, activityLabel string, hostTurn bool, iterIndex, maxIter int, proseFinish bool) *api.CoordinatorLoopProgress {
+	if !guard.IsCoordinatorProfile(profileID) {
+		return nil
+	}
+	loop := &api.CoordinatorLoopProgress{
+		Surface:           surfaceID,
+		ActivityLabel:     strings.TrimSpace(activityLabel),
+		Guarded:           true,
+		ProvisionalHidden: surface.SurfaceDeliversReport(surfaceID),
+		Iteration:         iterIndex + 1,
+		MaxIterations:     maxIter,
+		ProseFinish:       proseFinish,
+	}
+	if hostTurn {
+		loop.HostTurn = true
+	}
+	return loop
+}
+
+func (l modelTurn) coordinatorSurfaceActivityLabel(surfaceID string) string {
+	if l.PromptLoop == nil || l.Deps.CoordinatorSurfaceActivityLabel == nil {
+		return ""
+	}
+	return l.Deps.CoordinatorSurfaceActivityLabel(surfaceID)
 }

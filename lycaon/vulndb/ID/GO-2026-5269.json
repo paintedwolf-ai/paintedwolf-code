@@ -1,0 +1,60 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "volcano.sh/volcano"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.12.4"
+      },
+      {
+       "introduced": "1.13.0"
+      },
+      {
+       "fixed": "1.13.3"
+      },
+      {
+       "introduced": "1.14.0"
+      },
+      {
+       "fixed": "1.14.2"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-44247",
+  "GHSA-8wxp-xxp2-rcgx"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5269"
+ },
+ "details": "Volcano's webhook server vulnerable to OOM due to unbounded HTTP request body size in volcano.sh/volcano",
+ "id": "GO-2026-5269",
+ "modified": "2026-06-25T18:43:15Z",
+ "published": "2026-06-25T18:43:15Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/volcano-sh/volcano/security/advisories/GHSA-8wxp-xxp2-rcgx"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-44247"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Volcano's webhook server vulnerable to OOM due to unbounded HTTP request body size in volcano.sh/volcano"
+}

@@ -297,3 +297,35 @@ it("keeps loading the viewport after a projection rebase cancels its range read"
     await waitFor(() => expect(document.querySelector('[data-source-row="0"]')?.textContent).toBe("line 0"));
   } finally { restoreViewport(); }
 });
+
+it("loads the first window again when reopening its view cancels a read in the outgoing coordinates", async () => {
+  const lines = Array.from({ length: 2000 }, (_, i) => `line ${i}\n`);
+  const value = fixture(null, lines.join(""));
+  const rows = value.rows.getMockImplementation()!;
+  let arrived!: () => void;
+  const secondPage = new Promise<void>(resolve => { arrived = resolve; });
+  let expired = true, held = true;
+  value.rows.mockImplementation(async (...args) => {
+    if (held && args[2].offset === 200) { held = false; arrived(); return new Promise<never>(() => {}); }
+    if (expired && args[2].offset === 0) {
+      // The host dropped the view while both first pages were in flight.
+      await secondPage; expired = false;
+      throw Object.assign(new Error("Expired"), { code: "source_view_not_found" });
+    }
+    return rows(...args);
+  });
+  render(() => <SourceReader access={value.access} path="example.ts" />);
+  await waitFor(() => expect(screen.getByText("line 0")).toBeTruthy());
+  expect(value.rows.mock.calls.filter(call => call[2].offset === 200).length).toBeGreaterThan(1);
+});
+
+it("does not read a released view again after its first window is cancelled", async () => {
+  const value = fixture(null, Array.from({ length: 2000 }, (_, i) => `line ${i}\n`).join(""));
+  // The chat that addressed the view was deleted.
+  value.rows.mockRejectedValue(Object.assign(new Error("Chat deleted"), { code: "session_not_found" }));
+  const ready = vi.fn();
+  render(() => <SourceReader access={value.access} path="example.ts" onReady={ready} />);
+  // Reading the released view again would cancel at once and never settle the reader.
+  await waitFor(() => expect(ready).toHaveBeenLastCalledWith(true));
+  expect(screen.queryByText("line 0")).toBeNull();
+});

@@ -8,6 +8,8 @@ import (
 	"slices"
 	"sync/atomic"
 	"time"
+	"os"
+	"strings"
 
 	"github.com/lycaon/lycaon/internal/agentdef"
 	"github.com/lycaon/lycaon/internal/backup"
@@ -50,6 +52,14 @@ import (
 	"github.com/lycaon/lycaon/internal/tsparse"
 	"github.com/lycaon/lycaon/internal/version"
 	"github.com/lycaon/lycaon/internal/webindex"
+	"github.com/lycaon/lycaon/internal/agentpresence"
+	"github.com/lycaon/lycaon/internal/eventoutbox"
+	"github.com/lycaon/lycaon/internal/events"
+	"github.com/lycaon/lycaon/internal/hostidentity"
+	"github.com/lycaon/lycaon/internal/hostpower"
+	"github.com/lycaon/lycaon/internal/sourcefeed"
+	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func (b *serveBuilder) initObservability() error {
@@ -63,6 +73,7 @@ func (b *serveBuilder) initObservability() error {
 	}
 	return nil
 }
+
 func (b *serveBuilder) openStore() error {
 	var err error
 	dbPath, err := b.cfg.resolvedDBPath()
@@ -93,7 +104,7 @@ func (b *serveBuilder) openStore() error {
 		b.logger.Warn("LYCAON_DB_FRESH ignored on the production channel", "path", dbPath)
 	}
 	db.SetRunningAppVersion(version.Version)
-	b.db, err = b.openUpgradeableStore(dbPath)
+	b.db, err = serverWiring{b}.openUpgradeableStore(dbPath)
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
 	}
@@ -125,6 +136,7 @@ func (b *serveBuilder) openStore() error {
 	b.sourceLedger.SetGitReader(gitStateReader{mgr: git.NewManager()})
 	return nil
 }
+
 func (b *serveBuilder) loadConfig() error {
 	if _, err := tsparse.LoadConfig(); err != nil {
 		return fmt.Errorf("source parsing: %w", err)
@@ -174,6 +186,7 @@ func (b *serveBuilder) loadConfig() error {
 	})
 	return nil
 }
+
 func (b *serveBuilder) wireLLM() error {
 	var err error
 	mockEnabled := llm.MockEnabled(b.cfg.TestLLMClient)
@@ -211,7 +224,7 @@ func (b *serveBuilder) wireLLM() error {
 	if b.cfg.TestCostPricer != nil {
 		tracker = cost.NewSQLTracker(b.db, b.cfg.TestCostPricer)
 	}
-	if err := b.registerRecovery(bootrecovery.Entry{
+	if err := (delegationWiring{b}).registerRecovery(bootrecovery.Entry{
 		Name: "llm-call-receipts", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseBuild,
 		Run: tracker.RecoverStartedCalls,
 	}); err != nil {
@@ -252,6 +265,7 @@ func (b *serveBuilder) wireLLM() error {
 	b.pricingHost = host
 	return nil
 }
+
 func (b *serveBuilder) wireToolRuntime() error {
 	if err := b.wireDecider(); err != nil {
 		return err
@@ -281,7 +295,7 @@ func (b *serveBuilder) wireToolRuntime() error {
 		b.synthesisCurator = curator
 	}
 	b.toolRuntime.SetReadEvidenceLedger(b.store)
-	b.wireDetectionPacks()
+	toolWiring{b}.wireDetectionPacks()
 	hintCfg, rejectFmt, err := loadStockHintRegistry()
 	if err != nil {
 		return fmt.Errorf("hint registry: %w", err)
@@ -299,6 +313,7 @@ func (b *serveBuilder) wireToolRuntime() error {
 	b.toolReg = tools.NewExecutorRegistry(b.toolRuntime.Executor, b.toolRuntime.Registry)
 	return nil
 }
+
 func (b *serveBuilder) wireAgents() error {
 	var err error
 	b.agentRegistry = orchestration.NewMemoryAgentRegistry()
@@ -459,6 +474,135 @@ func (b *serveBuilder) warmDecider(ctx context.Context) error {
 	}
 	if err := warmer.Warm(ctx); err != nil && ctx.Err() == nil {
 		slog.WarnContext(ctx, "decision engine did not warm", "error", err)
+	}
+	return nil
+}
+
+func (b *serveBuilder) wireEvents() error {
+	var err error
+	b.hub = events.WrapDebugHub(events.NewMemoryHub())
+	b.eventOutbox = eventoutbox.New(b.db, b.hub)
+	// An absent outbox would silently drop mutation events.
+	if b.eventOutbox == nil {
+		return fmt.Errorf("event outbox: nil after construction; every store wired below would drop its events")
+	}
+	b.store.SetEventOutbox(b.eventOutbox)
+	b.registry.SetEventOutbox(b.eventOutbox)
+	b.presence = events.NewPresence(b.hub, events.DefaultUserActionWindow)
+	keepAwake := true
+	if b.settingsSvc != nil && b.settingsSvc.Power != nil {
+		keepAwake = b.settingsSvc.Power.KeepAwakeWhileWorking()
+	}
+	b.hostPower = hostpower.New(keepAwake)
+	eventLookup := project.ScopeLookup{Registry: b.registry}
+	b.eventPub = &events.Publisher{
+		Hub:               b.hub,
+		Lookup:            eventLookup,
+		Untrusted:         b.store,
+		UserTurns:         b.store,
+		ActivityObserver:  b.hostPower,
+		TurnClockObserver: b.hostPower,
+		SessionProject: func(ctx context.Context, sessionID string) (string, bool) {
+			if b.store == nil {
+				return "", false
+			}
+			sess, err := b.store.Get(ctx, sessionID)
+			if err != nil || sess == nil || strings.TrimSpace(sess.ProjectID) == "" {
+				return "", false
+			}
+			return sess.ProjectID, true
+		},
+		SessionLister: events.FuncSessionLister(func(ctx context.Context, projectID string) ([]string, error) {
+			if b.mgr == nil {
+				return nil, nil
+			}
+			page, err := b.mgr.ListProjectSessions(ctx, store.SummaryQuery{ProjectID: projectID, Limit: boardRepublishSessionLimit})
+			if err != nil {
+				return nil, err
+			}
+			ids := make([]string, 0, len(page.Sessions))
+			for _, summary := range page.Sessions {
+				ids = append(ids, summary.ID)
+			}
+			return ids, nil
+		}),
+		SessionRoots: events.FuncSessionRoots(func(ctx context.Context, sessionID string) (string, bool) {
+			if b.store == nil {
+				return "", false
+			}
+			sess, err := b.store.Get(ctx, sessionID)
+			if err != nil || sess == nil {
+				return "", false
+			}
+			path := strings.TrimSpace(sess.WorkspacePath)
+			if path == "" {
+				return "", false
+			}
+			return path, true
+		}),
+	}
+	// Chats follow their turns from session events; documents arrive with the server.
+	b.agentPresence = agentpresence.New(&presenceChats{store: b.store, workerJobs: func(ctx context.Context, childSessionID string) (*api.WorkerTask, bool) {
+		if b.workerQueue == nil {
+			return nil, false
+		}
+		return b.workerQueue.GetLatestByChildSessionID(ctx, childSessionID)
+	}}, b.eventPub)
+	b.eventPub.SessionObserver = b.agentPresence
+	b.mgr.SetAgentPresence(b.agentPresence)
+	// One revision counter across the direct and outbox session-event paths.
+	b.store.SetSessionRevisions(b.eventPub)
+	// Both paths read prompt_pending from the manager.
+	b.store.SetPromptPending(b.mgr)
+	b.eventPub.SessionState = b.mgr
+	b.eventOutbox.OnDelivered = func(ctx context.Context, delivered eventoutbox.DeliveredEvent) {
+		if err := b.hostPower.ObserveDelivered(delivered.Topic, delivered.Data); err != nil {
+			slog.WarnContext(ctx, "observe host power activity", "topic", delivered.Topic, "error", err)
+		}
+		if err := b.agentPresence.ObserveDelivered(ctx, delivered.Topic, delivered.Data); err != nil {
+			slog.WarnContext(ctx, "observe agent presence", "topic", delivered.Topic, "error", err)
+		}
+		if events.AttentionLifecycleTopic(delivered.Topic) {
+			b.eventPub.PublishAttention(ctx)
+		}
+	}
+	b.eventOutbox.Start(b.ctx)
+	if err := (delegationWiring{b}).registerRecovery(bootrecovery.Entry{
+		Name: "rewind-operations", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseBuild,
+		After: []string{"tool-invocations", "source-mutations", "editor-documents"},
+		Run:   b.mgr.RecoverRewinds,
+	}); err != nil {
+		return err
+	}
+	b.sourceFeedUnbinds = append(b.sourceFeedUnbinds,
+		sourcefeed.Bind(outboxSourceFeed{outbox: b.eventOutbox, lookup: eventLookup}))
+
+	if err := (sessionWiring{b}).wireCheckpointRuntime(); err != nil {
+		return err
+	}
+
+	project.SetDefaultOpenPolicy(project.DefaultOpenPolicy())
+
+	b.apiToken, b.tokenGenerated, err = resolveServeAPIToken()
+	if err != nil {
+		return fmt.Errorf("api token: %w", err)
+	}
+	configDir, err := configdir.UserConfigDir()
+	if err != nil {
+		return fmt.Errorf("config dir: %w", err)
+	}
+	if b.hostIdentity, err = hostidentity.LoadOrCreate(configDir); err != nil {
+		return fmt.Errorf("host identity: %w", err)
+	}
+
+	logFields := []any{"level", os.Getenv("LYCAON_LOG_LEVEL")}
+	if path := observability.ActiveLogFilePath(); path != "" {
+		logFields = append(logFields, "file", path)
+	}
+	b.logger.Info("logging configured", logFields...)
+	b.workersCfg, err = worker.LoadWorkersConfig()
+	if err != nil {
+		return fmt.Errorf("workers config: %w", err)
 	}
 	return nil
 }

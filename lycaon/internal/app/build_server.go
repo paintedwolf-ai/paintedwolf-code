@@ -15,13 +15,11 @@ import (
 	"github.com/lycaon/lycaon/internal/bootrecovery"
 	"github.com/lycaon/lycaon/internal/browser/pagesession"
 	"github.com/lycaon/lycaon/internal/browser/preview"
-	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/commandinvoke"
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/destconfig"
 	"github.com/lycaon/lycaon/internal/editordoc"
-	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/extensionstate"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/filebriefing"
@@ -32,7 +30,6 @@ import (
 	"github.com/lycaon/lycaon/internal/historyretention"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/llm"
-	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/people/personactions"
 	"github.com/lycaon/lycaon/internal/pkgregistry"
@@ -42,8 +39,6 @@ import (
 	"github.com/lycaon/lycaon/internal/projectliveness"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/scan"
-	"github.com/lycaon/lycaon/internal/secretcap"
-	"github.com/lycaon/lycaon/internal/secretspan"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/sourcerewind"
@@ -55,9 +50,12 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
+// serverWiring wires the HTTP server, runtime services, preflight, and store upgrade recovery.
+type serverWiring struct{ *serveBuilder }
+
 // wireRuntimeServices builds background processes, page sessions, and live
 // previews, registers their tools, and installs process-wide observers.
-func (b *serveBuilder) wireRuntimeServices() error {
+func (b serverWiring) wireRuntimeServices() error {
 	b.eventPub.Board = b.boardSnap
 	b.bgRegistry = bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{
 		Publish: func(ctx context.Context, projectID, sessionID string, ev wire.BackgroundProcessEvent) {
@@ -103,7 +101,7 @@ func (b *serveBuilder) wireRuntimeServices() error {
 	return b.wireRuntimeObservers()
 }
 
-func (b *serveBuilder) wireRuntimeObservers() error {
+func (b serverWiring) wireRuntimeObservers() error {
 	b.mgr.SetEventPublisher(b.eventPub)
 	b.workerQueue.SetEventPublisher(b.eventPub)
 	if b.llmSvc != nil && b.eventPub != nil {
@@ -114,24 +112,26 @@ func (b *serveBuilder) wireRuntimeObservers() error {
 			b.eventPub.PublishPreflight(context.Background(), preflight.ProbeLiteSlot)
 		})
 	}
-	findings.RegisterAppendObserver(func(ctx context.Context, evt findings.AppendEvent) {
+	// The observer registries are process-wide; each hook captures this
+	// host's services, so Close must release it.
+	b.resources.releaseObserver("findings-append", findings.RegisterAppendObserver(func(ctx context.Context, evt findings.AppendEvent) {
 		if strings.TrimSpace(evt.SessionID) == "" {
 			return
 		}
 		rev := findings.BumpRevision(evt.SessionID)
 		b.eventPub.PublishFindings(ctx, evt.SessionID, rev)
-	})
-	repochange.RegisterObserver(func(ctx context.Context, ev repochange.Event) {
+	}))
+	b.resources.releaseObserver("repo-change", repochange.RegisterObserver(func(ctx context.Context, ev repochange.Event) {
 		if b.repoProvider != nil {
 			b.repoProvider.Changed(ctx, ev.ProjectDir)
 		}
 		if ev.Kind == repochange.HeadMoved {
 			b.toolRuntime.InvalidateFileAge(ev.ProjectDir)
 		}
-	})
+	}))
 	activeRun := activeRunIDFromWorkflow(b.workflowMgr)
 	progressCoalescer := progress.NewCoalescer(progress.DefaultCoalesceWindow, newProgressChangeEmitter(b.store, b.eventPub, activeRun, b.progressStore))
-	progress.RegisterWriteObserver(func(ctx context.Context, evt progress.WriteEvent) {
+	b.resources.releaseObserver("progress-write", progress.RegisterWriteObserver(func(ctx context.Context, evt progress.WriteEvent) {
 		if strings.TrimSpace(evt.SessionID) == "" {
 			return
 		}
@@ -143,13 +143,13 @@ func (b *serveBuilder) wireRuntimeObservers() error {
 		if b.mgr != nil {
 			b.mgr.MaybeClearProgressClosureAfterWrite(ctx, evt.SessionID)
 		}
-	})
+	}))
 	return nil
 }
 
 // wireServer builds the API server once over the host's services, then
 // registers the recoveries and hooks that call into its handlers.
-func (b *serveBuilder) wireServer() error {
+func (b serverWiring) wireServer() error {
 	extensionJournal := extensionstate.NewSQLJournal(b.db)
 	deps := api.Dependencies{
 		Database: b.db, Store: b.store, PersonActions: personactions.New(b.db), Projects: b.registry, Sessions: b.mgr, LLM: b.llmSvc, CostTracker: b.costTracker, Settings: b.settingsSvc,
@@ -175,7 +175,7 @@ func (b *serveBuilder) wireServer() error {
 		ExtensionViews: b.viewCache, ExtensionJournal: extensionJournal,
 		MCP: b.mcpReg, WebResearch: b.webResearchRuntime, WebDiscoverer: b.webDiscoverer, WebIndex: b.webIndex,
 		HostResources: b.hostResources, HostPower: b.hostPower, Pricing: b.pricingHost, Preview: b.previewCtrl,
-		Video:        b.videoDecoder(),
+		Video:        toolWiring(b).videoDecoder(),
 		PreflightEnv: b.buildPreflightEnv(), ManualLLM: b.manualLLM, HarnessWorkers: b.harnessWorkers,
 	}
 	if b.authzCapturer != nil {
@@ -235,14 +235,14 @@ func (b *serveBuilder) wireServer() error {
 	}
 	b.eventPub.Attention = deps.Attention
 	if manager, ok := b.checkpointMgr.(*hitl.Manager); ok {
-		if err := b.registerRecovery(bootrecovery.Entry{
+		if err := delegationWiring(b).registerRecovery(bootrecovery.Entry{
 			Name: "approval-operations", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseBuild,
 			Run: manager.RecoverApprovalOperations,
 		}); err != nil {
 			return err
 		}
 		// Chat approvals outlive restart; they replay after unfinished approvals roll back.
-		if err := b.registerRecovery(bootrecovery.Entry{
+		if err := delegationWiring(b).registerRecovery(bootrecovery.Entry{
 			Name: "chat-grants", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseBuild,
 			After: []string{"approval-operations"},
 			Run:   manager.RestoreChatGrants,
@@ -257,6 +257,17 @@ func (b *serveBuilder) wireServer() error {
 		return err
 	}
 	b.srv = api.NewServer(deps, b.logger, b.apiToken)
+	registry := b.registry
+	// Project watches are process-wide and their observers call back into
+	// this host's services.
+	b.resources.track("source-watches", 79, func(ctx context.Context) error {
+		// The drain deadline may have passed; the store is still open here.
+		projects, err := registry.List(context.WithoutCancel(ctx))
+		for _, p := range projects {
+			sourcefeed.StopProjectWatch(ctx, p.ID)
+		}
+		return err
+	})
 	return b.registerServerHooks(extensionJournal)
 }
 
@@ -270,7 +281,7 @@ func chatGrantLedger(checkpoints hitl.CheckpointManager) capabilityadmin.ChatGra
 
 // registerServerHooks registers the recoveries and session hooks that call
 // into the constructed server's handlers.
-func (b *serveBuilder) registerServerHooks(extensionJournal *extensionstate.SQLJournal) error {
+func (b serverWiring) registerServerHooks(extensionJournal *extensionstate.SQLJournal) error {
 	// Publish execution failures before queued follow-up work can delay the caller.
 	b.mgr.SetTurnFailureSink(b.srv.Prompt.PublishTurnFailure)
 	b.mgr.SetPromotionHook(b.srv.Project.TryRunPromotion)
@@ -283,26 +294,26 @@ func (b *serveBuilder) registerServerHooks(extensionJournal *extensionstate.SQLJ
 		return err
 	}
 	// Serve recovery begins after runtime gates are sealed.
-	if err := b.registerRecovery(bootrecovery.Entry{
+	if err := delegationWiring(b).registerRecovery(bootrecovery.Entry{
 		Name: "prompt-submissions", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseServe,
 		Run: b.srv.Prompt.RecoverPromptSubmissions,
 	}); err != nil {
 		return err
 	}
-	if err := b.registerRecovery(bootrecovery.Entry{
+	if err := delegationWiring(b).registerRecovery(bootrecovery.Entry{
 		Name: "project-promotions", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseBuild,
 		Run: b.srv.Project.RecoverPromotions,
 	}); err != nil {
 		return err
 	}
-	if err := b.registerRecovery(bootrecovery.Entry{
+	if err := delegationWiring(b).registerRecovery(bootrecovery.Entry{
 		Name: "source-file-requests", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseBuild,
 		After: []string{"source-mutations", "editor-documents"}, Run: b.srv.Sources.RecoverFileOperations,
 	}); err != nil {
 		return err
 	}
 	owner := b.srv.Extensions.Owner
-	if err := b.registerRecovery(bootrecovery.Entry{
+	if err := delegationWiring(b).registerRecovery(bootrecovery.Entry{
 		Name: "extension-operations", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseBuild,
 		Run: func(ctx context.Context) error {
 			if err := extpacks.RecoverMetaPackTransactions(); err != nil {
@@ -313,7 +324,7 @@ func (b *serveBuilder) registerServerHooks(extensionJournal *extensionstate.SQLJ
 	}); err != nil {
 		return err
 	}
-	if err := b.registerRecovery(bootrecovery.Entry{
+	if err := delegationWiring(b).registerRecovery(bootrecovery.Entry{
 		Name: "workflow-topologies", Kind: bootrecovery.KindReconcile, Phase: bootrecovery.PhaseServe,
 		After: []string{"workflow-child-terminals"}, Run: b.srv.Workflow.RecoverOrchestratedTopologies,
 	}); err != nil {
@@ -326,7 +337,7 @@ func (b *serveBuilder) registerServerHooks(extensionJournal *extensionstate.SQLJ
 }
 
 // wireFileBriefings applies the briefing retention policy and builds the service.
-func (b *serveBuilder) wireFileBriefings(deps *api.Dependencies) error {
+func (b serverWiring) wireFileBriefings(deps *api.Dependencies) error {
 	fileBriefingConfig, err := filebriefing.LoadConfig()
 	if err != nil {
 		return fmt.Errorf("file briefing config: %w", err)
@@ -349,12 +360,12 @@ func (b *serveBuilder) wireFileBriefings(deps *api.Dependencies) error {
 // wireSourceEditing builds the source write path shared by the API and the
 // session runtime: source mutations, durable file requests, editor documents,
 // and the contribution runtime that reads document revisions.
-func (b *serveBuilder) wireSourceEditing(deps *api.Dependencies) error {
+func (b serverWiring) wireSourceEditing(deps *api.Dependencies) error {
 	if b.sourceLedger != nil {
 		deps.SourceLedger, deps.SourceInventory = b.sourceLedger, b.sourceLedger
 	}
 	sourceMutations := project.NewSourceMutationService(b.db, b.sourceLedger)
-	if err := b.registerRecovery(bootrecovery.Entry{
+	if err := delegationWiring(b).registerRecovery(bootrecovery.Entry{
 		Name: "source-mutations", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseBuild,
 		Run: sourceMutations.Recover,
 	}); err != nil {
@@ -368,7 +379,7 @@ func (b *serveBuilder) wireSourceEditing(deps *api.Dependencies) error {
 		b.workerMergeSvc.Documents = editorDocuments
 	}
 	b.resources.track("editor-documents", 86, editorDocuments.Close)
-	if err := b.registerRecovery(bootrecovery.Entry{
+	if err := delegationWiring(b).registerRecovery(bootrecovery.Entry{
 		Name: "editor-documents", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseBuild,
 		// Editor recovery follows settled source mutations.
 		After: []string{"source-mutations"},
@@ -386,7 +397,7 @@ func (b *serveBuilder) wireSourceEditing(deps *api.Dependencies) error {
 			}
 			return b.workerQueue.Get(jobID)
 		}})
-	if err := b.registerRecovery(bootrecovery.Entry{
+	if err := delegationWiring(b).registerRecovery(bootrecovery.Entry{
 		// Presence starts empty; drafts awaiting promotion outlive it.
 		Name: "agent-presence-worker-drafts", Kind: bootrecovery.KindReconcile, Phase: bootrecovery.PhaseServe,
 		After: []string{"worker-merge-applies"},
@@ -433,105 +444,7 @@ func (b *serveBuilder) wireSourceEditing(deps *api.Dependencies) error {
 	return nil
 }
 
-func (b *serveBuilder) wireMCP() error {
-	mcpOpts := mcp.RegistryOptions{
-		OnSettingsChange: func() {
-			if b.hub != nil {
-				_ = b.hub.Publish(b.ctx, wire.EventTopicSettings, events.PublishKey{Facet: string(wire.SettingsAreaMcp)}, wire.SettingsEvent{
-					Area:   wire.SettingsAreaMcp,
-					Action: "updated",
-				})
-			}
-		},
-	}
-	if b.cfg.TestMCPConnector != nil {
-		mcpOpts.Connector = b.cfg.TestMCPConnector
-	}
-	if b.cfg.TestMCPGlobalOverridePath != "" {
-		mcpOpts.GlobalOverridePath = b.cfg.TestMCPGlobalOverridePath
-	}
-	var err error
-	b.mcpReg, err = mcp.NewRegistryImpl(mcpOpts)
-	if err != nil {
-		return fmt.Errorf("mcp registry: %w", err)
-	}
-	b.mcpReg.SetToolRegistry(b.toolRuntime.Registry)
-	b.mcpReg.SetAPIAccess(b.apiToken)
-	if b.toolRuntime != nil {
-		b.toolRuntime.SetMCPToolPinSource(b.mcpReg)
-	}
-	b.mcpReg.SetProjectOverlayGate(b.projectMCPGate().AppliesPath)
-	if err := b.wireDestinationConfig(); err != nil {
-		return err
-	}
-	// Device inspection may inspect every registered project root.
-	b.mcpReg.SetDeviceProbeRoots(func() []string {
-		paths, err := b.projectRootPaths(b.ctx)
-		if err != nil {
-			return nil
-		}
-		return paths
-	})
-	if matcher, err := b.loadSecretMatcher(); err != nil {
-		return err
-	} else {
-		var capturePrimer captureprojection.ManagedSecretPrimer
-		if b.secretCaps != nil {
-			capturePrimer = b.secretCaps.RememberProjectValues
-		}
-		captureProjector := captureprojection.New(matcher, capturePrimer)
-		if b.secretCaps != nil {
-			captureProjector.SetManagedSecretGeneration(b.secretCaps.ScreeningGeneration)
-		}
-		if b.bgRegistry != nil {
-			b.bgRegistry.SetCaptureProjector(captureProjector)
-		}
-		if b.previewCtrl != nil {
-			b.previewCtrl.SetCaptureProjector(captureProjector)
-		}
-		if b.browserPool != nil {
-			b.browserPool.SetCaptureProjector(captureProjector)
-		}
-		if b.browserRaster != nil {
-			b.browserRaster.SetCaptureProjector(captureProjector)
-		}
-		b.mcpReg.SetSecretScreen(matcher, b.secretAskFunc())
-		if b.toolRuntime != nil && b.toolRuntime.Executor != nil {
-			b.toolRuntime.Executor.SetSecretMatcher(matcher)
-			b.toolRuntime.Executor.SetSecretIgnores(b.secretIgnores)
-		}
-		// Editor spans preview outbound screening.
-		b.secretSpans = secretspan.New(matcher)
-		b.wireMessageSecretRedaction(matcher)
-		if b.llmSvc != nil && b.llmSvc.Registry != nil {
-			screen := llm.NewModelSecretScreen(matcher, b.secretAskFunc())
-			if b.secretCaps != nil {
-				screen.SetManagedSecretEvidence(b.secretCaps.ScreeningValues)
-				screen.SetManagedSecretAdopter(func(ctx context.Context, req llm.ManagedSecretAdoptRequest) (string, error) {
-					put, putErr := b.secretCaps.Put(ctx, secretcap.PutRequest{
-						ProjectID: req.ProjectID, ChatSessionID: req.RootSessionID, SessionID: req.SessionID,
-						OperationID: req.OperationID, Name: req.Name, Purpose: req.Purpose,
-						Scope: secretcap.ScopeChat, Origin: secretcap.OriginDetected, Value: req.Value,
-					})
-					return put.Metadata.Reference, putErr
-				})
-			}
-			b.llmSvc.Registry.SetOutboundSecretScreen(screen)
-		}
-	}
-	if err := b.mcpReg.Load(b.ctx); err != nil {
-		return fmt.Errorf("mcp registry: %w", err)
-	}
-	if b.toolRuntime != nil && b.toolRuntime.Executor != nil {
-		b.toolRuntime.Executor.SetMCPCatalog(b.mcpReg)
-	}
-	if b.mgr != nil {
-		b.mgr.SetMCPRuntime(b.mcpReg)
-	}
-	return nil
-}
-
-func (b *serveBuilder) wireOrchestrator() error {
+func (b serverWiring) wireOrchestrator() error {
 	b.delegationMgr.ToolBudget = b.workerToolBudgetFor
 	orchDeps := orchestration.OrchestratorDeps{
 		Delegation: b.delegationMgr,
@@ -563,7 +476,7 @@ func (b *serveBuilder) wireOrchestrator() error {
 	return nil
 }
 
-func (b *serveBuilder) serveApp() *ServeApp {
+func (b serverWiring) serveApp() *ServeApp {
 	app := &ServeApp{
 		Server:               b.srv,
 		SessionMgr:           b.mgr,
@@ -594,12 +507,12 @@ func (b *serveBuilder) serveApp() *ServeApp {
 		projects:             b.registry,
 		eventPub:             b.eventPub,
 	}
-	b.registerBackgroundRunners(app)
+	delegationWiring(b).registerBackgroundRunners(app)
 	return app
 }
 
 // sealApprovalGate activates the fully wired approval gate.
-func (b *serveBuilder) sealApprovalGate() error {
+func (b serverWiring) sealApprovalGate() error {
 	if b.toolRuntime == nil {
 		return nil
 	}
@@ -612,7 +525,7 @@ func (b *serveBuilder) sealApprovalGate() error {
 
 // wireDestinationConfig registers user-configured destinations and the public
 // package registries the egress gate reads.
-func (b *serveBuilder) wireDestinationConfig() error {
+func (b serverWiring) wireDestinationConfig() error {
 	if b.toolRuntime == nil || b.toolRuntime.Executor == nil {
 		return nil
 	}
@@ -655,7 +568,7 @@ func (b *serveBuilder) wireDestinationConfig() error {
 	return nil
 }
 
-func (b *serveBuilder) restoreWorkerDrafts(ctx context.Context) error {
+func (b serverWiring) restoreWorkerDrafts(ctx context.Context) error {
 	if b.workerQueue == nil {
 		return nil
 	}

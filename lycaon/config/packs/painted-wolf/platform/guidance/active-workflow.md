@@ -55,7 +55,7 @@ When no phase work is required below, work the user's request directly.
 This is the last phase. There is no further advance to call.
 {% elif phase_exit.kind == "review_loop" %}{% if phase_exit.review_agents %}
 1. Dispatch every owed reviewer ({% for a in phase_exit.review_agents %}`{{ a }}`{% if not forloop.Last %}, {% endif %}{% endfor %}) as `task` legs in **one assistant message**, within user limits. Ask before conflicting review. A terminal verdict needs each successful envelope.
-{% endif %}{% if phase_exit.review_agents %}2{% else %}1{% endif %}. Weigh the critique, then call `submit_verdict`{% if phase_exit.verdict_shape %} with `verdict` shaped `{{ phase_exit.verdict_shape }}`; arrays may be empty when no entry exists{% endif %}. Only that call records a verdict.{% if phase_exit.verdict_example %} Nested argument shape: `{{ phase_exit.verdict_example }}`.{% endif %}{% if phase_exit.review_loop_key %}
+{% endif %}{% if phase_exit.review_agents %}2{% else %}1{% endif %}. Weigh the critique, then call `submit_verdict`{% if phase_exit.verdict_outline %} with `verdict` shaped `{{ phase_exit.verdict_outline }}` (the first `verdict` value is terminal; the tool schema gives each member's type); arrays may be empty when no entry exists{% endif %}. Only that call records a verdict.{% if phase_exit.review_loop_key %}
 {% if phase_exit.review_agents %}3{% else %}2{% endif %}. A terminal verdict satisfies `evidence_passed:{{ phase_exit.review_loop_key }}`. {% if phase_exit.followup_attempts %}A non-terminal verdict registers open questions; dispatch their `workflow_work_id` for focused investigation ({{ phase_exit.followup_attempts }} completed attempts each).{% else %}A non-terminal verdict runs the loop again{% if phase_exit.review_loop_cap %}, up to {{ phase_exit.review_loop_cap }} time(s){% endif %}.{% endif %}{% endif %}
 {% elif phase_exit.kind == "human_approval" %}
 End the turn. The user approves the bound document themselves — chat prose is not approval, and `workflow_advance` will not stand in for it. Treat any message they send meanwhile as revision feedback on that document.
@@ -107,7 +107,8 @@ Answer in Markdown, then end with one `json` fence of the report's fields, not a
 {
   "headline": "One-sentence conclusion.",
   "summary": "Scope, outcome, and first action.",
-  "findings": [
+{% if report_rating %}  "rating": {"level": "…", "why": "One line on what decided it."},
+{% endif %}  "findings": [
     {
       "id": "c1",
       "title": "The conclusion in one line.",
@@ -128,7 +129,8 @@ Answer in Markdown, then end with one `json` fence of the report's fields, not a
 ```
 
 - `findings` are your conclusions, most severe first; scanner rows are carried separately. Each has a one-line `title` stating the conclusion and a `disposition`, plus the claim's `id` when it carries one; its reasoning belongs in the Markdown answer, and a finding has no `statement`. `disposition` is `act` (needs work), `accept` (a risk kept on purpose), `held` (examined and sound), or `unresolved` (an unanswered question, without rating answers). {% if report_rating %}Leave out `severity`: the host states the level each rated finding's answers decide.{% else %}`severity` is critical, high, medium, low, or info; sound areas need none.{% endif %} A claim a review left open or overturned needs a finding with its `id`.
-{% if report_rating %}- `answers` rate each `act` or `accept` finding that no answered claim shares an id with:
+{% if report_rating %}- `rating` is your call on "{{ report_rating.question }}" from everything the review did, as one of {{ report_rating.levels }}. It may be worse than any single finding's level, never milder than the level a finding's answers decide.
+- `answers` rate each `act` or `accept` finding that no answered claim shares an id with:
 {{ report_rating.questions }}
 {% endif %}- `ask` is required when a finding is `act`, written for a reader who has never seen the work; `effort` is small, medium, or large.
 - When the run has bound scans, every scanner group is accounted for: a finding's `scan_group_ids` link the groups it assesses, and `set_asides`, each with a `reason`, account for the rest by `scanner` and `paths` or by `scan_group_ids`. Clean scans with zero findings need no set-asides.

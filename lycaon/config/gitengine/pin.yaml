@@ -16,7 +16,9 @@ platforms:
   linux-arm64:
     url: "https://github.com/desktop/dugite-native/releases/download/v2.53.0-3/dugite-native-v{git_version}-{build}-ubuntu-arm64.tar.gz"
     build: "f49d009"
-    reported_version: "2.53.0"
+    # Dugite's cross-compile rewrites STRIP in Git's tracked Makefile before
+    # building, so GIT-VERSION-GEN stamps every ubuntu-arm64 release dirty.
+    reported_version: "2.53.0.dirty"
     sha256: "d562ad433ed0dc1907f44a92fc701597bc577c48d07fe69ee7adddfee836ef4c"
   windows-amd64:
     url: "https://github.com/desktop/dugite-native/releases/download/v2.53.0-3/dugite-native-v{git_version}-{build}-windows-x64.tar.gz"

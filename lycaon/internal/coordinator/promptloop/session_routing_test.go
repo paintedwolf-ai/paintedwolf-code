@@ -31,7 +31,7 @@ func TestSessionRoutingClientHonorsWorkerPool(t *testing.T) {
 		{"override", api.Session{ParentSessionID: "parent", ProviderID: "override-provider", Model: "override-model"}, "override-provider"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := loop.sessionRoutingClient(&tc.session).Stream(t.Context(), modelcall.CompletionRequest{})
+			_, err := modelTurn{loop}.sessionRoutingClient(&tc.session).Stream(t.Context(), modelcall.CompletionRequest{})
 			var missing *failure.ProviderNotConfiguredError
 			if !errors.As(err, &missing) || missing.ProviderID != tc.provider {
 				t.Fatalf("selected provider error = %v, want %s", err, tc.provider)

@@ -395,7 +395,14 @@ func createTestSession(t *testing.T, baseURL, projectDir string) wire.Session {
 	if err := json.NewDecoder(resp.Body).Decode(&sess); err != nil {
 		t.Fatalf("decode session: %v", err)
 	}
-	deadline := time.Now().Add(10 * time.Second)
+	return waitSessionPrepared(t, baseURL, sess)
+}
+
+// waitSessionPrepared polls a newly created session until preparation ends;
+// creation answers 202 while the workspace is still being prepared.
+func waitSessionPrepared(t *testing.T, baseURL string, sess wire.Session) wire.Session {
+	t.Helper()
+	deadline := time.Now().Add(testutil.Timeout(10 * time.Second))
 	for sess.Status == wire.SessionStatusPreparing && time.Now().Before(deadline) {
 		readyResp, getErr := authedHTTPGet(baseURL + "/v1/sessions/" + sess.ID)
 		if getErr != nil {

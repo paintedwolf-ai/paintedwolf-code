@@ -4,13 +4,15 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DB_DIR="$ROOT/lycaon/internal/db"
-# shellcheck source=sqlc-version.sh
-source "$(dirname "$0")/sqlc-version.sh"
+# shellcheck source=artifact-paths.sh
+source "$(dirname "$0")/artifact-paths.sh"
 # shellcheck source=snapshot-publish.sh
 source "$(dirname "$0")/snapshot-publish.sh"
 
+python3 "$ROOT/scripts/analysis_tools.py" ensure sqlc
+
 sqlc_run() {
-  go run "github.com/sqlc-dev/sqlc/cmd/sqlc@v${SQLC_VERSION}" "$@"
+  "${PW_BIN_DIR}/sqlc" "$@"
 }
 
 run_generate() {

@@ -13,7 +13,7 @@ import (
 type browserVideoDecoder struct{ pool *browser.Pool }
 
 // videoDecoder is nil without a browser pool, so video attachments are refused.
-func (b *serveBuilder) videoDecoder() promptattach.VideoDecoder {
+func (b toolWiring) videoDecoder() promptattach.VideoDecoder {
 	if b.browserPool == nil {
 		return nil
 	}

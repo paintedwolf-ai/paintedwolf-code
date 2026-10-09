@@ -1,0 +1,86 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {
+    "imports": [
+     {
+      "path": "go.mongodb.org/mongo-driver/mongo",
+      "symbols": [
+       "Connect"
+      ]
+     }
+    ]
+   },
+   "package": {
+    "ecosystem": "Go",
+    "name": "go.mongodb.org/mongo-driver"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.17.7"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {
+    "imports": [
+     {
+      "path": "go.mongodb.org/mongo-driver/v2/mongo",
+      "symbols": [
+       "Connect"
+      ]
+     }
+    ]
+   },
+   "package": {
+    "ecosystem": "Go",
+    "name": "go.mongodb.org/mongo-driver/v2"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "2.4.2"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-2303",
+  "GHSA-cp6g-7hqx-qxhp"
+ ],
+ "database_specific": {
+  "review_status": "REVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5327"
+ },
+ "details": "Mongo-go-driver: Heap Out-of-Bounds Read in GSSAPI Error Handling in go.mongodb.org/mongo-driver",
+ "id": "GO-2026-5327",
+ "modified": "2026-07-24T18:35:55Z",
+ "published": "2026-07-24T18:35:55Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-cp6g-7hqx-qxhp"
+  },
+  {
+   "type": "WEB",
+   "url": "https://jira.mongodb.org/browse/GODRIVER-3770"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Mongo-go-driver: Heap Out-of-Bounds Read in GSSAPI Error Handling in go.mongodb.org/mongo-driver"
+}

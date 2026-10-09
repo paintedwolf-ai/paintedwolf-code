@@ -90,6 +90,7 @@ Do **not** mint another tool classification map under `prompts/`, `tools/`, or `
 |------|-------|
 | [`tools/readcaps`](../lycaon/internal/tools/readcaps) | Read pagination constants; nested under `tools/` without pulling the hub |
 | [`tools/surveyreceipt`](../lycaon/internal/tools/surveyreceipt) | Survey receipt types and clamp |
+| [`tools/argdiag`](../lycaon/internal/tools/argdiag) | Argument diagnosis against a tool schema: misplaced members, JSON text, the repaired call, and schema outlines |
 | [`toolscope`](../lycaon/internal/toolscope) | Root-scope tool guards read from the catalog: the structural-file threshold, and `NoFolderAllowlist`, which decides both what a coordinator surface offers at zero roots and what the `no_folder` posture rule denies. One list, because hiding a tool and refusing it are one policy |
 | [`fspath`](../lycaon/internal/fspath) | One spelling per file: `CanonicalPath` reduces every name the operating system accepts for a location to the one the kernel gives it, so a floor that compares paths is comparing files. On macOS that settles symlinks, the `/System/Volumes/Data` firmlink, and case on an insensitive volume through `F_GETPATH` on the deepest existing ancestor; a relative name stays relative. `confine` and `settingsoverlay` both need it and `confine` already imports `settingsoverlay`, so it is a leaf rather than a function on either. Its sibling `fsname` answers the same question for a basename and stays pure; this one has to ask the filesystem |
 | [`fssync`](../lycaon/internal/fssync) | The one flush to stable storage behind every durable write: the door, the database snapshot, backups, and the content stores call `fssync.File` after their bytes land. `db` may not import `fseffect`, so the policy sits below both. Test support relaxes it for the whole test binary, because a unit test never proves power-loss durability and one macOS full flush costs several milliseconds per file |
@@ -240,7 +241,7 @@ Move a symbol only when it is free of `Manager` internals and creates no back-im
 
 ## Workflow definitions
 
-[`workflow/definition`](../lycaon/internal/workflow/definition) parses, resolves, validates, and snapshots workflow manifests and their catalog, including the manifest vocabulary, phase configuration, presets, and the review-loop, brief, and claim schemas. It imports no other workflow package. [`internal/workflow`](../lycaon/internal/workflow) runs workflows over those definitions: the run manager, gates, workflow tools, blueprints, composition, and persistence.
+[`workflow/definition`](../lycaon/internal/workflow/definition) parses, resolves, validates, and snapshots workflow manifests and their catalog, including the manifest vocabulary, phase configuration, presets, and the review-loop, brief, and claim schemas. It imports no other workflow package. [`internal/workflow`](../lycaon/internal/workflow) runs workflows over those definitions: the run manager, gates, workflow tools, blueprints, composition, and persistence. [`workflow/verdictcall`](../lycaon/internal/workflow/verdictcall) composes the `submit_verdict` call a review phase accepts from a definition and the tool's catalog fragments; it imports `workflow/definition` but not `internal/workflow`.
 
 ## Scan packages
 

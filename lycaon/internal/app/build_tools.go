@@ -21,10 +21,21 @@ import (
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workflow"
 	wire "github.com/lycaon/lycaon/pkg/api"
+	"github.com/lycaon/lycaon/internal/captureprojection"
+	"github.com/lycaon/lycaon/internal/events"
+	"github.com/lycaon/lycaon/internal/llm"
+	"github.com/lycaon/lycaon/internal/mcp"
+	"github.com/lycaon/lycaon/internal/secretcap"
+	"github.com/lycaon/lycaon/internal/secretspan"
 )
 
-func (b *serveBuilder) wireCoordinatorRuntime() error {
+// toolWiring wires the coordinator tools, scanning, detection packs, and the OAR block plane.
+type toolWiring struct{ *serveBuilder }
+
+func (b toolWiring) wireCoordinatorRuntime() error {
 	b.coordRuntime = coordinator.NewRuntime(b.mgr.CoordinatorRuntimeDeps())
+	coordRuntime := b.coordRuntime
+	b.resources.track("coordinator-sleep-timers", 65, func(context.Context) error { coordRuntime.StopSleepTimers(); return nil })
 	b.mgr.SetCoordinatorRuntime(b.coordRuntime)
 	waitConditions := make(map[string]map[string]bool, len(b.toolProfiles))
 	for _, profile := range b.toolProfiles {
@@ -41,7 +52,7 @@ func (b *serveBuilder) wireCoordinatorRuntime() error {
 	}); err != nil {
 		return fmt.Errorf("wait tool: %w", err)
 	}
-	if err := b.registerRecovery(bootrecovery.Entry{
+	if err := delegationWiring(b).registerRecovery(bootrecovery.Entry{
 		Name: "agent-wait-leases", Kind: bootrecovery.KindReconcile, Phase: bootrecovery.PhaseServe,
 		Run: func(ctx context.Context) error {
 			return loopwake.RecoverWaitLeases(ctx, b.coordRuntime.CoordinatorLoop(), waitStore)
@@ -62,7 +73,7 @@ func (b *serveBuilder) wireCoordinatorRuntime() error {
 	return nil
 }
 
-func (b *serveBuilder) registerCoordinatorTools() error {
+func (b toolWiring) registerCoordinatorTools() error {
 	if err := delegation.RegisterDelegationTools(b.toolRuntime.Registry, b.delegationMgr); err != nil {
 		return fmt.Errorf("delegation tools: %w", err)
 	}
@@ -131,7 +142,7 @@ func (b *serveBuilder) registerCoordinatorTools() error {
 		},
 	}
 	b.workerMergeSvc = workerMergeSvc
-	if err := b.registerRecovery(bootrecovery.Entry{
+	if err := delegationWiring(b).registerRecovery(bootrecovery.Entry{
 		// Reconcile database and worktree state under the lease after graph wiring.
 		Name: "worker-merge-applies", Kind: bootrecovery.KindReconcile, Phase: bootrecovery.PhaseServe,
 		Run: workerMergeSvc.RecoverOrphanedMergeApplies,
@@ -164,7 +175,7 @@ func (b *serveBuilder) registerCoordinatorTools() error {
 
 // taskToolDeps wires the task tool to the queue, the workflow's planned legs,
 // and the worker assignment prompt.
-func (b *serveBuilder) taskToolDeps() worker.TaskToolDeps {
+func (b toolWiring) taskToolDeps() worker.TaskToolDeps {
 	return worker.TaskToolDeps{
 		Sessions:         b.mgr,
 		Queue:            b.workerQueue,
@@ -258,4 +269,102 @@ func recordedVerdictsForLeg(ctx context.Context, mgr *workflow.RunManager, sessi
 		})
 	}
 	return out
+}
+
+func (b toolWiring) wireMCP() error {
+	mcpOpts := mcp.RegistryOptions{
+		OnSettingsChange: func() {
+			if b.hub != nil {
+				_ = b.hub.Publish(b.ctx, wire.EventTopicSettings, events.PublishKey{Facet: string(wire.SettingsAreaMcp)}, wire.SettingsEvent{
+					Area:   wire.SettingsAreaMcp,
+					Action: "updated",
+				})
+			}
+		},
+	}
+	if b.cfg.TestMCPConnector != nil {
+		mcpOpts.Connector = b.cfg.TestMCPConnector
+	}
+	if b.cfg.TestMCPGlobalOverridePath != "" {
+		mcpOpts.GlobalOverridePath = b.cfg.TestMCPGlobalOverridePath
+	}
+	var err error
+	b.mcpReg, err = mcp.NewRegistryImpl(mcpOpts)
+	if err != nil {
+		return fmt.Errorf("mcp registry: %w", err)
+	}
+	b.mcpReg.SetToolRegistry(b.toolRuntime.Registry)
+	b.mcpReg.SetAPIAccess(b.apiToken)
+	if b.toolRuntime != nil {
+		b.toolRuntime.SetMCPToolPinSource(b.mcpReg)
+	}
+	b.mcpReg.SetProjectOverlayGate(b.projectMCPGate().AppliesPath)
+	if err := serverWiring(b).wireDestinationConfig(); err != nil {
+		return err
+	}
+	// Device inspection may inspect every registered project root.
+	b.mcpReg.SetDeviceProbeRoots(func() []string {
+		paths, err := boardWiring(b).projectRootPaths(b.ctx)
+		if err != nil {
+			return nil
+		}
+		return paths
+	})
+	if matcher, err := sessionWiring(b).loadSecretMatcher(); err != nil {
+		return err
+	} else {
+		var capturePrimer captureprojection.ManagedSecretPrimer
+		if b.secretCaps != nil {
+			capturePrimer = b.secretCaps.RememberProjectValues
+		}
+		captureProjector := captureprojection.New(matcher, capturePrimer)
+		if b.secretCaps != nil {
+			captureProjector.SetManagedSecretGeneration(b.secretCaps.ScreeningGeneration)
+		}
+		if b.bgRegistry != nil {
+			b.bgRegistry.SetCaptureProjector(captureProjector)
+		}
+		if b.previewCtrl != nil {
+			b.previewCtrl.SetCaptureProjector(captureProjector)
+		}
+		if b.browserPool != nil {
+			b.browserPool.SetCaptureProjector(captureProjector)
+		}
+		if b.browserRaster != nil {
+			b.browserRaster.SetCaptureProjector(captureProjector)
+		}
+		b.mcpReg.SetSecretScreen(matcher, sessionWiring(b).secretAskFunc())
+		if b.toolRuntime != nil && b.toolRuntime.Executor != nil {
+			b.toolRuntime.Executor.SetSecretMatcher(matcher)
+			b.toolRuntime.Executor.SetSecretIgnores(b.secretIgnores)
+		}
+		// Editor spans preview outbound screening.
+		b.secretSpans = secretspan.New(matcher)
+		sessionWiring(b).wireMessageSecretRedaction(matcher)
+		if b.llmSvc != nil && b.llmSvc.Registry != nil {
+			screen := llm.NewModelSecretScreen(matcher, sessionWiring(b).secretAskFunc())
+			if b.secretCaps != nil {
+				screen.SetManagedSecretEvidence(b.secretCaps.ScreeningValues)
+				screen.SetManagedSecretAdopter(func(ctx context.Context, req llm.ManagedSecretAdoptRequest) (string, error) {
+					put, putErr := b.secretCaps.Put(ctx, secretcap.PutRequest{
+						ProjectID: req.ProjectID, ChatSessionID: req.RootSessionID, SessionID: req.SessionID,
+						OperationID: req.OperationID, Name: req.Name, Purpose: req.Purpose,
+						Scope: secretcap.ScopeChat, Origin: secretcap.OriginDetected, Value: req.Value,
+					})
+					return put.Metadata.Reference, putErr
+				})
+			}
+			b.llmSvc.Registry.SetOutboundSecretScreen(screen)
+		}
+	}
+	if err := b.mcpReg.Load(b.ctx); err != nil {
+		return fmt.Errorf("mcp registry: %w", err)
+	}
+	if b.toolRuntime != nil && b.toolRuntime.Executor != nil {
+		b.toolRuntime.Executor.SetMCPCatalog(b.mcpReg)
+	}
+	if b.mgr != nil {
+		b.mgr.SetMCPRuntime(b.mcpReg)
+	}
+	return nil
 }

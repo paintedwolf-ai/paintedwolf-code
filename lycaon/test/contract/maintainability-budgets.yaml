@@ -1,11 +1,4 @@
-# Maintainability limits. Every artifact a change touches must be within its
-# category limit: a file it edits, a directory it adds files to or removes
-# files from, a Go type whose declaration or methods it edits. Artifacts the
-# change does not touch are counted, and meet the standard when next touched.
-#
-# An exception admits one artifact up to its cap. Write one only when the
-# artifact must be that large, give the cap room for ordinary edits, and say
-# why in terms a reviewer can weigh. No exception may be outgrown.
+# Category limits; artifact exceptions live in maintainability-exceptions/.
 limits:
     source_files: {warn: 400, limit: 600}
     test_files: {warn: 500, limit: 800}
@@ -15,16 +8,3 @@ limits:
     go_receiver_methods: {warn: 20, limit: 40}
     go_receiver_lines: {warn: 400, limit: 1000}
     ts_local_dependencies: {warn: 20, limit: 30}
-exceptions:
-    go_receiver_lines:
-        lycaon/internal/coordinator/assembly/assembly.AssemblyEngine:
-            cap: 1200
-            reason: Already past the limit before the boot-orientation fix, which adds one bounded loop; the split is tracked in #270.
-    go_receiver_methods:
-        lycaon/internal/coordinator/assembly/assembly.AssemblyEngine:
-            cap: 55
-            reason: Already past the limit before the boot-orientation fix; the split is tracked in #270.
-    source_directories:
-        scripts:
-            cap: 170
-            reason: Task and CI entry points are invoked by path and import sibling modules by name; the change-scoped budget and coverage reports joined them here.

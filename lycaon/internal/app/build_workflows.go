@@ -31,7 +31,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func (b *serveBuilder) wireWorkflows() error {
+func (b boardWiring) wireWorkflows() error {
 	b.delegationStore = delegation.NewSQLStore(b.db)
 	b.delegationStore.SetEventOutbox(b.eventOutbox)
 	b.mgr.SetDelegationLegLookup(b.delegationStore)
@@ -116,19 +116,19 @@ func (b *serveBuilder) wireWorkflows() error {
 		}
 		return run.ID, true, nil
 	}
-	if err := b.registerRecovery(bootrecovery.Entry{
+	if err := delegationWiring(b).registerRecovery(bootrecovery.Entry{
 		Name: "workflow-verdicts", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseServe,
 		Run: b.workflowMgr.RecoverVerdictOperations,
 	}); err != nil {
 		return err
 	}
-	if err := b.registerRecovery(bootrecovery.Entry{
+	if err := delegationWiring(b).registerRecovery(bootrecovery.Entry{
 		Name: "workflow-teardowns", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseServe,
 		Run: b.workflowMgr.RecoverTeardownOperations,
 	}); err != nil {
 		return err
 	}
-	if err := b.registerRecovery(bootrecovery.Entry{
+	if err := delegationWiring(b).registerRecovery(bootrecovery.Entry{
 		Name: "workflow-child-terminals", Kind: bootrecovery.KindReconcile, Phase: bootrecovery.PhaseServe,
 		After: []string{"workflow-teardowns"}, Run: b.workflowMgr.RecoverTerminalChildren,
 	}); err != nil {
@@ -137,7 +137,7 @@ func (b *serveBuilder) wireWorkflows() error {
 	return b.wireWorkflowEvidence()
 }
 
-func (b *serveBuilder) wireWorkflowEvidence() error {
+func (b boardWiring) wireWorkflowEvidence() error {
 	b.evidenceStore = inspector.NewJSONLStore(inspector.DefaultEvidenceDir)
 	b.simpleInspector = inspector.NewSimpleInspector(b.evidenceStore)
 	b.simpleInspector.ProjectDir = func(ctx context.Context, runID string) (string, error) {
@@ -189,11 +189,11 @@ func (b *serveBuilder) wireWorkflowEvidence() error {
 	return b.wireWorkflowScanServices()
 }
 
-func (b *serveBuilder) wireWorkflowScanServices() error {
+func (b boardWiring) wireWorkflowScanServices() error {
 	b.gitMgr = git.NewManager()
 	gitexec.SetHostConfig(gitexec.HostConfigResolver())
 	b.gitStatusCache = git.NewStatusCache(b.gitMgr)
-	b.gitStatusCache.RegisterRepochangeObserver()
+	b.resources.releaseObserver("git-status-repochange", b.gitStatusCache.RegisterRepochangeObserver())
 	b.gitRepoSetCache = git.NewRepoSetCache(git.DefaultStatusCacheTTL)
 	if b.toolRuntime != nil {
 		b.toolRuntime.SetGitStatusCache(b.gitStatusCache)
@@ -239,7 +239,7 @@ func (b *serveBuilder) wireWorkflowScanServices() error {
 	return b.wireWorkflowConditions()
 }
 
-func (b *serveBuilder) seedHostPowerWork() error {
+func (b boardWiring) seedHostPowerWork() error {
 	openWorkers, err := b.workerQueue.List(b.ctx, "", api.WorkerStatusPending, api.WorkerStatusRunning)
 	if err != nil {
 		return fmt.Errorf("seed host power from workers: %w", err)
@@ -257,7 +257,7 @@ func (b *serveBuilder) seedHostPowerWork() error {
 	return nil
 }
 
-func (b *serveBuilder) wireWorkflowConditions() error {
+func (b boardWiring) wireWorkflowConditions() error {
 	snapshotStore := b.sourceLedger.SnapshotStore()
 	proactiveCategories := b.gatesCfg.Gates.ProactiveCategories
 	if len(proactiveCategories) == 0 {
@@ -335,7 +335,7 @@ func (b *serveBuilder) wireWorkflowConditions() error {
 	return b.wireWorkflowComposition()
 }
 
-func (b *serveBuilder) wireWorkflowComposition() error {
+func (b boardWiring) wireWorkflowComposition() error {
 	obligationSpecs := workflow.ObligationSpecsFromKinds(b.workflowMgr.Obligations)
 	b.workflowComposer = &workflow.Composer{
 		ModuleRoot:   b.configRoot,

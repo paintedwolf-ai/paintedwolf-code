@@ -1,0 +1,56 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/hashicorp/consul"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.4.4"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2019-9764",
+  "GHSA-q7fx-wm2p-qfj8"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2023-1853"
+ },
+ "details": "HashiCorp Consul vulnerable to Origin Validation Error in github.com/hashicorp/consul",
+ "id": "GO-2023-1853",
+ "modified": "2024-08-20T20:31:32Z",
+ "published": "2024-08-20T20:31:32Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-q7fx-wm2p-qfj8"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2019-9764"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/hashicorp/consul/commit/7e11dd82aa8dae505b7307adcb68c9d3194b3b40"
+  },
+  {
+   "type": "REPORT",
+   "url": "https://github.com/hashicorp/consul/issues/5519"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "HashiCorp Consul vulnerable to Origin Validation Error in github.com/hashicorp/consul"
+}

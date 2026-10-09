@@ -442,6 +442,7 @@
     "worst": 0,
     "best": 0,
     "basis": "anyone who can reach it over the network could use it",
+    "call": "a remote caller reaches the flawed parser and nothing else in the tree limits it",
     "dimensions": [
       "Reachable",
       "Worst outcome",

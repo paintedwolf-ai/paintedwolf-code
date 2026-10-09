@@ -37,7 +37,7 @@ func TestSubmitVerdictSchemaRequiresEveryPhaseDiscriminant(t *testing.T) {
 							t.Fatalf("provider schema accepted missing/invalid discriminant: %v", invalid)
 						}
 					}
-					for _, value := range workflow.VerdictEnum(*phase.ReviewLoop) {
+					for _, value := range phase.ReviewLoop.Decisions() {
 						args := map[string]any{"verdict": map[string]any{
 							"verdict": value, "claims": []any{}, "threat_model": "fixture",
 						}}

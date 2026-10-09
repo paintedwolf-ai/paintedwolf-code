@@ -20,8 +20,8 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func (b *serveBuilder) wireScan() error {
-	if _, err := b.loadSecretMatcher(); err != nil {
+func (b toolWiring) wireScan() error {
+	if _, err := sessionWiring(b).loadSecretMatcher(); err != nil {
 		return err
 	}
 	if err := b.wireSourceScope(); err != nil {
@@ -33,6 +33,7 @@ func (b *serveBuilder) wireScan() error {
 	} else {
 		reg, err := scanregistry.New(scanregistry.Options{
 			ScannerFingerprintKey: b.secretFingerprinter.ScannerKey(),
+			AdvisoryDatabase:      b.cfg.TestAdvisoryDatabase,
 			ModuleRoot:            b.configRoot,
 			ProcessPriority:       runnerCfg.ExecProcessPriority(),
 			ProjectTierApplies:    b.projectScanConfigGate().AppliesPath,
@@ -41,6 +42,8 @@ func (b *serveBuilder) wireScan() error {
 			return fmt.Errorf("scan registry: %w", err)
 		}
 		b.scannerReg = reg
+		// Library scanners keep a worker process per adapter.
+		b.resources.track("scanner-workers", 52, func(context.Context) error { return reg.Close() })
 	}
 	b.scanCoordinator.Registry = b.scannerReg
 	b.scanStore.SecretIgnores = b.scanSecretIgnores
@@ -122,7 +125,7 @@ func (b *serveBuilder) wireScan() error {
 	b.scanCadence.OverlayRootsApply = b.projectScanConfigGate().FilterPaths
 	b.scanCadence.Preempt = b.scanRunner.Preempt
 	b.scanCadence.Scopes = b.sourceScopes
-	b.scanCadence.ObserveRepochange()
+	b.resources.releaseObserver("scan-cadence-repochange", b.scanCadence.ObserveRepochange())
 	if b.workerMergeSvc != nil {
 		b.workerMergeSvc.Scans = b.scanCadence
 	}
@@ -185,7 +188,7 @@ func (b *serveBuilder) wireScan() error {
 // wireSourceScope builds the one scope provider every host-initiated reader
 // of a project tree shares: the bundled scope, the device overlay, and each
 // trusted project's declarations.
-func (b *serveBuilder) wireSourceScope() error {
+func (b toolWiring) wireSourceScope() error {
 	cfg, err := sourcescope.LoadConfig(filepath.Join(b.dataDir, sourceScopeOverlayName))
 	if err != nil {
 		return fmt.Errorf("source scope: %w", err)
@@ -207,8 +210,8 @@ const sourceScopeOverlayName = "source-scope.yaml"
 
 // bindMovedFileRescans binds a finished scan into every running workflow run
 // whose moved-file gaps it closes, so its findings join the run's inventory.
-func (b *serveBuilder) bindMovedFileRescans(ctx context.Context, completed api.CodeScan) error {
-	if b == nil || b.scanStore == nil || b.workflowStore == nil || completed.Status != api.CodeScanStatusComplete {
+func (b toolWiring) bindMovedFileRescans(ctx context.Context, completed api.CodeScan) error {
+	if b.serveBuilder == nil || b.scanStore == nil || b.workflowStore == nil || completed.Status != api.CodeScanStatusComplete {
 		return nil
 	}
 	runs, err := b.workflowStore.ListRunning(ctx)
@@ -232,8 +235,8 @@ func (b *serveBuilder) bindMovedFileRescans(ctx context.Context, completed api.C
 	return errors.Join(errs...)
 }
 
-func (b *serveBuilder) reconcileScanWorkflowTerminals(ctx context.Context, scanID string) error {
-	if b == nil || b.scanStore == nil || b.workflowMgr == nil {
+func (b toolWiring) reconcileScanWorkflowTerminals(ctx context.Context, scanID string) error {
+	if b.serveBuilder == nil || b.scanStore == nil || b.workflowMgr == nil {
 		return nil
 	}
 	bindings, err := b.scanStore.PendingTerminalWorkflowBindings(ctx, scanID, 256)
