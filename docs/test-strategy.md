@@ -698,7 +698,7 @@ hold one runner each and a release two, five in all; the merge queue and the
 fast tier run on Linux. With its lanes started longest first, a full-scope
 group capped at four finishes in about 35 minutes of measured lane times,
 against about 26 uncapped; a cap of three would add about eight more, and a
-third group would leave no runner for pull requests.
+third group of four would not fit beside the other classes.
 
 Contract tests in
 [`hosted_capacity_contract_test.go`](../lycaon/test/contract/release/hosted_capacity_contract_test.go)
