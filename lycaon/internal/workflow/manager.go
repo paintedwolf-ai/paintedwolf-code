@@ -31,6 +31,7 @@ type RunManager struct {
 	Ambient      *Ambient
 	Coverage     *workflowreview.Coverage
 	Verdicts     *workflowreview.Verdicts
+	Repairs      *ReviewRepairs
 	Children     *Children
 	Reports      *Reports
 	Blueprints   *workflowblueprints.Service
@@ -47,6 +48,9 @@ type RunManager struct {
 	Controls     *workflowlifecycle.Commands
 	Recovery     *workflowlifecycle.Recovery
 	Store        *runstate.Repository
+	Vars         *runstate.Variables
+	Journal      *runstate.Journal
+	Sessions     session.Store
 	Resolver     workflowcatalog.Resolver
 	Obligations  *Obligations
 }
@@ -60,6 +64,8 @@ func NewManager(store *runstate.Repository, sessions session.Store, manifests *w
 	gates := workflowgates.FailClosedGateEvaluator{}
 	manager := &RunManager{
 		Store:    store,
+		Vars:     vars,
+		Sessions: sessions,
 		Resolver: workflowcatalog.Resolver{Overlay: manifests, Sessions: sessions, Runs: store.Runs},
 	}
 	manager.Publication = &workflowpublication.Runs{Events: pub, Sessions: sessions, Transactions: store.Transactions}
@@ -67,6 +73,7 @@ func NewManager(store *runstate.Repository, sessions session.Store, manifests *w
 	manager.Batch = &runstate.Batches{Runs: store.Runs, Vars: vars}
 
 	journal := &runstate.Journal{Commands: store.Commands, Vars: store.Runs, Directories: &manager.Resolver}
+	manager.Journal = journal
 	cleanup := &workflowlifecycle.Cleanup{Intents: store.Teardowns, Runs: store.Runs, Resolver: &manager.Resolver}
 	manager.Controls = &workflowlifecycle.Commands{Runs: store.Runs, Trees: store.Commands, Vars: vars, Journal: journal, Resolver: &manager.Resolver, Cleanup: cleanup}
 	manager.Starts = &workflowlifecycle.Admission{Runs: store.Runs, Starts: store.Starts, Sessions: sessions, Resolver: &manager.Resolver, Events: pub, Controls: manager.Controls, Cleanup: cleanup}
@@ -79,6 +86,7 @@ func NewManager(store *runstate.Repository, sessions session.Store, manifests *w
 	manager.Coverage = &workflowreview.Coverage{Runs: store.Runs, Resolver: &manager.Resolver}
 	questions := &workflowreview.Questions{Runs: store.Runs, Resolver: &manager.Resolver, Coverage: manager.Coverage}
 	manager.Verdicts = &workflowreview.Verdicts{Runs: store.Runs, Records: store.Verdicts, Vars: vars, Resolver: &manager.Resolver, Sessions: sessions, Coverage: manager.Coverage, Questions: questions}
+	manager.Repairs = &ReviewRepairs{RunManager: manager}
 	questions.Verdicts = manager.Verdicts
 	manager.Coverage.Reviews = manager.Verdicts
 	entries := &workflowphases.Entries{Obligations: manager.Obligations}

@@ -1,0 +1,82 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {
+    "imports": [
+     {
+      "path": "github.com/gofiber/fiber/v2",
+      "symbols": [
+       "Ctx.Format"
+      ]
+     }
+    ]
+   },
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/gofiber/fiber/v2"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "2.52.13"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {
+    "imports": [
+     {
+      "path": "github.com/gofiber/fiber/v3",
+      "symbols": [
+       "DefaultRes.AutoFormat"
+      ]
+     }
+    ]
+   },
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/gofiber/fiber/v3"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "3.2.0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-42554",
+  "GHSA-qjv7-627w-8qjv"
+ ],
+ "database_specific": {
+  "review_status": "REVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5585"
+ },
+ "details": "Fiber vulnerable to XSS in AutoFormat Content Negotiation in github.com/gofiber/fiber",
+ "id": "GO-2026-5585",
+ "modified": "2026-07-24T18:35:55Z",
+ "published": "2026-07-24T18:35:55Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/gofiber/fiber/security/advisories/GHSA-qjv7-627w-8qjv"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Fiber vulnerable to XSS in AutoFormat Content Negotiation in github.com/gofiber/fiber"
+}

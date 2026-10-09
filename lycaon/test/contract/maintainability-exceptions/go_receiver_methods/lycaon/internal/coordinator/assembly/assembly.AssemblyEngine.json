@@ -1,0 +1,6 @@
+{
+  "category": "go_receiver_methods",
+  "artifact": "lycaon/internal/coordinator/assembly/assembly.AssemblyEngine",
+  "cap": 55,
+  "reason": "Already past the limit before the boot-orientation fix; the split is tracked in #270."
+}

@@ -12,6 +12,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/app"
 	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/testutil/resourceguard"
 )
 
 // latestHostAllowance bounds the closed hosts that process-wide hooks keeping
@@ -39,7 +40,7 @@ func trackHost(test string, sa *app.ServeApp) {
 // the hosts they closed stay reachable. Each retained host holds tens of
 // megabytes, so a suite that leaks them grows until it exhausts the runner.
 func RunReleasingHosts(m *testing.M) int {
-	code := m.Run()
+	code := resourceguard.Run(m, resourceguard.Budget{HeapBytes: 256 << 20, Goroutines: 16})
 	if code != 0 {
 		return code
 	}

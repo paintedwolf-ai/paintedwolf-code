@@ -38,7 +38,7 @@ func (s *Handler) BuildRunReportInput(ctx context.Context, runID string) (report
 	if run == nil {
 		return report.ReportInput{}, false, nil
 	}
-	if !runstate.IsTerminal(run.Status) {
+	if !runstate.IsTerminal(run.Status) && run.PauseReason != runstate.ReviewBlockedReason {
 		return report.ReportInput{}, false, nil
 	}
 
@@ -50,6 +50,12 @@ func (s *Handler) BuildRunReportInput(ctx context.Context, runID string) (report
 		return report.ReportInput{}, false, nil
 	}
 
+	if run.PauseReason == runstate.ReviewBlockedReason || run.Status == wire.WorkflowRunStatusCanceled {
+		input, ok, err := s.blockedRunReport(ctx, run, manifest)
+		if err != nil || ok {
+			return input, ok, err
+		}
+	}
 	msgs, err := s.Store.GetMessages(ctx, run.SessionID)
 	if err != nil {
 		return report.ReportInput{}, false, err
@@ -68,7 +74,10 @@ func (s *Handler) BuildRunReportInput(ctx context.Context, runID string) (report
 		name = strings.TrimSpace(run.WorkflowID)
 	}
 
-	phaseVerdicts := workflowpresentation.ReviewVerdicts(ctx, s.Workflows.Verdicts, run, manifest)
+	phaseVerdicts, err := workflowpresentation.ReviewVerdicts(ctx, s.Workflows.Verdicts, run, manifest)
+	if err != nil {
+		return report.ReportInput{}, false, err
+	}
 	claims := workflowpresentation.ReconcileClaims(phaseVerdicts)
 	verdicts, channels, verdictURLs := projectVerdicts(phaseVerdicts)
 	cites := append(closeoutCitations(completion.Grounding), verdictCitations(verdicts, channels)...)
@@ -82,16 +91,18 @@ func (s *Handler) BuildRunReportInput(ctx context.Context, runID string) (report
 	unreported := reportUnreported(findings, claims)
 
 	input := report.ReportInput{
-		Title:            name,
-		Headline:         reportHeadline(completion),
-		RunID:            run.ID,
-		Project:          s.reportProjectLabel(ctx, run.ProjectID),
-		StartedAt:        reportStartedAt(run),
-		CompletedAt:      completedAt,
-		Workflow:         &report.ReportWorkflow{ID: strings.TrimSpace(run.WorkflowID), Version: strings.TrimSpace(run.WorkflowVersion)},
-		Workforce:        workforceFor(sess, msgs, inRun),
+		ReportHeader: report.ReportHeader{
+			Title:       name,
+			Headline:    reportHeadline(completion),
+			RunID:       run.ID,
+			Project:     s.reportProjectLabel(ctx, run.ProjectID),
+			StartedAt:   reportStartedAt(run),
+			CompletedAt: completedAt,
+			Workflow:    &report.ReportWorkflow{ID: strings.TrimSpace(run.WorkflowID), Version: strings.TrimSpace(run.WorkflowVersion)},
+			Workforce:   workforceFor(sess, msgs, inRun),
+			Summary:     reportSummary(completion),
+		},
 		Synthesis:        completion.Content,
-		Summary:          reportSummary(completion),
 		Findings:         findingRows(findings),
 		FindingsLabel:    manifest.ReportFindingsLabel(),
 		Limits:           reportLimits(completion),

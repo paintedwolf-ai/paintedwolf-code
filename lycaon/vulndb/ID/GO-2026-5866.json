@@ -1,0 +1,52 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/concourse/concourse"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.6.1-0.20260526150512-ac60be5f0435"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-49826",
+  "GHSA-8w27-c4vc-88q9"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5866"
+ },
+ "details": "Concourse login flow has an open redirect issue in github.com/concourse/concourse",
+ "id": "GO-2026-5866",
+ "modified": "2026-07-07T15:26:37Z",
+ "published": "2026-07-07T15:26:37Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/concourse/concourse/security/advisories/GHSA-8w27-c4vc-88q9"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/concourse/concourse/commit/ac60be5f0435b6592f5a4fcc089050d72ad2452c"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/concourse/concourse/releases/tag/v8.2.3"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Concourse login flow has an open redirect issue in github.com/concourse/concourse"
+}

@@ -1,0 +1,48 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "gitea.dev"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.27.0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-58437",
+  "GHSA-8p9h-49rc-qgxj"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6047"
+ },
+ "details": "Gitea: Repository Visibility Manipulation via Git Push Options in gitea.dev",
+ "id": "GO-2026-6047",
+ "modified": "2026-07-22T20:36:35Z",
+ "published": "2026-07-22T20:36:35Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/go-gitea/gitea/security/advisories/GHSA-8p9h-49rc-qgxj"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/go-gitea/gitea/releases/tag/v1.27.0"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Gitea: Repository Visibility Manipulation via Git Push Options in gitea.dev"
+}

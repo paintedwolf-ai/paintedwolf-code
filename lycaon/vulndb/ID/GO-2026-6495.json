@@ -1,0 +1,64 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/zalando/skipper"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "0.27.37"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-86043",
+  "GHSA-5gpm-rgj3-9q76"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6495"
+ },
+ "details": "Skipper has OPA body-authz bypass: truncated_body mitigation fails open on chunked/HTTP-2 (incomplete fix GHSA-8qqm-fp2q-v734) in github.com/zalando/skipper",
+ "id": "GO-2026-6495",
+ "modified": "2026-09-28T16:43:40Z",
+ "published": "2026-09-28T16:43:40Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/zalando/skipper/security/advisories/GHSA-5gpm-rgj3-9q76"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-86043"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/zalando/skipper/commit/2cfceabaa6ff0af65b312dcb9bcbe84691b9d507"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/zalando/skipper/releases/tag/v0.27.35"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/zalando/skipper/releases/tag/v0.27.37"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/zalando/skipper/tree/v0.27.35"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Skipper has OPA body-authz bypass: truncated_body mitigation fails open on chunked/HTTP-2 (incomplete fix GHSA-8qqm-fp2q-v734) in github.com/zalando/skipper"
+}

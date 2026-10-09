@@ -1,0 +1,52 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/pterodactyl/wings"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.13.0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-52857",
+  "GHSA-q6hh-gp44-4hcm"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6159"
+ },
+ "details": "Wings: Maliciously or erroneously created parsed config files can cause wings process to OOM in github.com/pterodactyl/wings",
+ "id": "GO-2026-6159",
+ "modified": "2026-08-18T14:32:29Z",
+ "published": "2026-08-18T14:32:29Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/pterodactyl/wings/security/advisories/GHSA-q6hh-gp44-4hcm"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/pterodactyl/wings/commit/5f71f65711b6b9e6f913bec94a7b36d9a5eaae49"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/pterodactyl/wings/releases/tag/v1.13.0"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Wings: Maliciously or erroneously created parsed config files can cause wings process to OOM in github.com/pterodactyl/wings"
+}

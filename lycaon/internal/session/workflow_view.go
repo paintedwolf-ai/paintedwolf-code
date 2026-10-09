@@ -30,6 +30,18 @@ type WorkflowDomains struct {
 	Reports    WorkflowReports
 	Recovery   WorkflowRecovery
 	Cleanup    WorkflowCleanup
+	Reviews    WorkflowReviews
+}
+
+func (d *WorkflowDomains) RecordReviewToolResult(ctx context.Context, sessionID string, msg api.Message) error {
+	if d == nil || d.Reviews == nil {
+		return nil
+	}
+	return d.Reviews.RecordReviewToolResult(ctx, sessionID, msg)
+}
+
+type WorkflowReviews interface {
+	RecordReviewToolResult(context.Context, string, api.Message) error
 }
 
 type WorkflowRuns interface {

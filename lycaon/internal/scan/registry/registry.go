@@ -26,7 +26,10 @@ import (
 // Options configures CodeScannerRegistry construction.
 type Options struct {
 	ScannerFingerprintKey []byte
-	ModuleRoot            string
+	// AdvisoryDatabase is a provisioned OSV export for dependency scanners;
+	// empty refreshes the host cache from the advisory endpoint.
+	AdvisoryDatabase string
+	ModuleRoot       string
 	// HomeDir is the scanner data root. Empty uses the user config directory.
 	HomeDir         string
 	ProcessPriority exec.ProcessPriority
@@ -236,12 +239,14 @@ func newScannerFromEntry(entry scancatalog.ScannerEntry, moduleRoot, home string
 		prio = exec.ProcessPriorityBelowNormal
 	}
 	return scannerFactories.Build(context.Background(), strings.TrimSpace(entry.Driver), scannerBuild{
-		fingerprintKey: opts.ScannerFingerprintKey, entry: entry, moduleRoot: moduleRoot, home: home, manifest: manifest, jobs: jobs, priority: prio,
+		fingerprintKey: opts.ScannerFingerprintKey, advisories: opts.AdvisoryDatabase, entry: entry, moduleRoot: moduleRoot,
+		home: home, manifest: manifest, jobs: jobs, priority: prio,
 	})
 }
 
 type scannerBuild struct {
 	fingerprintKey []byte
+	advisories     string
 	entry          scancatalog.ScannerEntry
 	moduleRoot     string
 	home           string
@@ -254,8 +259,8 @@ var scannerFactories = catalogruntime.NewFactorySet(
 	map[string]catalogruntime.Factory[scannerBuild, scan.CodeScanner]{
 		scancatalog.DriverLibrary: func(_ context.Context, build scannerBuild) (scan.CodeScanner, error) {
 			return libraryworker.New(libraryworker.Options{
-				FingerprintKey: build.fingerprintKey,
-				ID:             build.entry.ID, Impl: build.entry.Impl, Jobs: build.jobs,
+				FingerprintKey: build.fingerprintKey, AdvisoryDatabase: build.advisories,
+				ID: build.entry.ID, Impl: build.entry.Impl, Jobs: build.jobs,
 				Categories: build.entry.CategoriesAPI(), ProcessPriority: build.priority,
 			}), nil
 		},

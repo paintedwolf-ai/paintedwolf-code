@@ -1,0 +1,60 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "code.gitea.io/gitea"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.26.3"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-24451",
+  "GHSA-wrf9-r3h7-7x5v"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6081"
+ },
+ "details": "Gitea: Fork Synchronization Continues After Parent Repository Changes from Public to Private in code.gitea.io/gitea",
+ "id": "GO-2026-6081",
+ "modified": "2026-07-27T15:32:45Z",
+ "published": "2026-07-27T15:32:45Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/go-gitea/gitea/security/advisories/GHSA-wrf9-r3h7-7x5v"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-24451"
+  },
+  {
+   "type": "WEB",
+   "url": "https://blog.gitea.com/release-of-1.26.3-and-1.26.4"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/go-gitea/gitea/pull/38151"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/go-gitea/gitea/releases/tag/v1.26.3"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Gitea: Fork Synchronization Continues After Parent Repository Changes from Public to Private in code.gitea.io/gitea"
+}

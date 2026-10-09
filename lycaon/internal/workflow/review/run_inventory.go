@@ -2,7 +2,6 @@ package review
 
 import (
 	"context"
-	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
 	"sort"
 	"strings"
 
@@ -11,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/scan"
 	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -196,8 +196,12 @@ func (m *Coverage) checkReviewInventory(ctx context.Context, run *api.WorkflowRu
 	if err != nil {
 		return nil, err
 	}
+	priors, err := workflowpresentation.ReviewVerdicts(ctx, m.Reviews, run, manifest)
+	if err != nil {
+		return nil, err
+	}
 	var phases []workflowpresentation.PhaseVerdict
-	for _, prior := range workflowpresentation.ReviewVerdicts(ctx, m.Reviews, run, manifest) {
+	for _, prior := range priors {
 		if prior.Phase != run.CurrentPhase {
 			phases = append(phases, prior)
 		}

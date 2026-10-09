@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/workflow/toolguard"
 	"log/slog"
@@ -16,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
+
 
 // maxLegSubjectRunes keeps a leg subject to one short checklist line.
 const maxLegSubjectRunes = 60
@@ -39,6 +41,10 @@ func RegisterFanoutPlanTool(reg *tools.DefaultRegistry, runs *Fanout) error {
 		}
 		plan, err := parseFanoutPlanArgs(args)
 		if err != nil {
+			var reject *tools.ToolReject
+			if errors.As(err, &reject) {
+				return "", err
+			}
 			return marshalFanoutPlanResult(FanoutPlanToolResult{Error: "invalid_plan", Message: err.Error()})
 		}
 		result := FanoutPlanToolResult{
@@ -73,6 +79,13 @@ func RegisterFanoutPlanTool(reg *tools.DefaultRegistry, runs *Fanout) error {
 		roster := runs.Policy.RosterFor(active, manifest)
 		if err := validateFanoutPlan(plan, roster, runstate.ReviewLoopFanoutExcludedAgents(manifest), maxLegs, def.Fanout.RequireThreatModel); err != nil {
 			return marshalFanoutPlanResult(FanoutPlanToolResult{Error: "invalid_plan", Message: err.Error()})
+		}
+		if def.Fanout.RequireTaskCharter {
+			for _, leg := range plan.Legs {
+				if len(leg.DoneWhen) == 0 {
+					return "", &tools.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"tool": "fanout_plan", "field": "legs.done_when", "reason": "completion_criteria_required"}}
+				}
+			}
 		}
 		if err := validateFanoutLegBudgets(plan, runs.workerToolBudget(tctx.ActiveRootPath())); err != nil {
 			return marshalFanoutPlanResult(FanoutPlanToolResult{Error: "invalid_plan", Message: err.Error()})
@@ -143,9 +156,13 @@ func parseFanoutPlanArgs(args map[string]any) (runstate.FanoutPlan, error) {
 			AgentType: strings.TrimSpace(toolguard.StringArg(m["agent_type"])),
 			Subject:   strings.Join(strings.Fields(toolguard.StringArg(m["subject"])), " "),
 			Prompt:    strings.TrimSpace(toolguard.StringArg(m["prompt"])),
+			DoneWhen:  fanoutDoneWhen(m["done_when"]),
 		}
 		if leg.AgentType == "" || leg.Subject == "" || leg.Prompt == "" {
 			return runstate.FanoutPlan{}, fmt.Errorf("legs[%d] requires agent_type, subject, and prompt", i)
+		}
+		if len(leg.DoneWhen) > 0 && spawn.TaskCharterRunes(api.WorkerTaskCharter{Goal: leg.Prompt, DoneWhen: leg.DoneWhen}) > spawn.MaxTaskCharterRunes {
+			return runstate.FanoutPlan{}, &tools.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"tool": "fanout_plan", "field": fmt.Sprintf("legs[%d]", i), "reason": "brief_too_long", "max_runes": spawn.MaxTaskCharterRunes}}
 		}
 		if n := len([]rune(leg.Subject)); n > maxLegSubjectRunes {
 			return runstate.FanoutPlan{}, fmt.Errorf("legs[%d].subject is %d characters; name the area in at most %d", i, n, maxLegSubjectRunes)
@@ -287,4 +304,19 @@ func marshalFanoutPlanResult(result FanoutPlanToolResult) (string, error) {
 		return "", err
 	}
 	return string(raw), nil
+}
+
+func fanoutDoneWhen(raw any) []string {
+	var out []string
+	switch values := raw.(type) {
+	case []any:
+		for _, v := range values {
+			if s, ok := v.(string); ok && strings.TrimSpace(s) != "" {
+				out = append(out, strings.TrimSpace(s))
+			}
+		}
+	case []string:
+		out = append(out, values...)
+	}
+	return out
 }

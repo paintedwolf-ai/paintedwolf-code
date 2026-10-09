@@ -88,8 +88,13 @@ func TestRender_SectionsByDataPresence(t *testing.T) {
 func TestRender_BriefThenWorkingSummary(t *testing.T) {
 	ms := testMeasurer(t)
 	in := ReportInput{
-		Title: "Security survey", Headline: "The service is not safe to expose without two fixes.",
-		RunID: "run_1", Project: "acme/app", CompletedAt: "2026-07-08T15:04:05Z", Synthesis: "ok",
+		ReportHeader: ReportHeader{
+			Title:       "Security survey",
+			Headline:    "The service is not safe to expose without two fixes.",
+			RunID:       "run_1",
+			Project:     "acme/app",
+			CompletedAt: "2026-07-08T15:04:05Z",
+		}, Synthesis: "ok",
 	}
 	front, _ := buildBlocks(ms, in)
 	if len(front) < 2 || !front[0].breakAfter {
@@ -106,12 +111,14 @@ func TestRender_BriefThenWorkingSummary(t *testing.T) {
 
 func TestRender_MissingArtifactBytesShrinks(t *testing.T) {
 	input := ReportInput{
-		Title:       "No bytes",
-		RunID:       "run_nobbytes",
-		Project:     "acme/app",
-		CompletedAt: "2026-07-08T15:04:05Z",
-		HeadSHA:     "abc",
-		Synthesis:   "## Summary\n\nok",
+		ReportHeader: ReportHeader{
+			Title:       "No bytes",
+			RunID:       "run_nobbytes",
+			Project:     "acme/app",
+			CompletedAt: "2026-07-08T15:04:05Z",
+			HeadSHA:     "abc",
+		},
+		Synthesis: "## Summary\n\nok",
 		Artifacts: []ReportArtifact{
 			{ID: "gone", Caption: "Evicted mockup", Mime: "image/png"},
 			{ID: "gone", Caption: "Repeat cite", Mime: "image/png"},
@@ -131,12 +138,14 @@ func TestRender_MissingArtifactBytesShrinks(t *testing.T) {
 
 func TestRender_ScanRowsInSeverityOrder(t *testing.T) {
 	input := ReportInput{
-		Title:       "Sort",
-		RunID:       "run_sort",
-		Project:     "acme/app",
-		CompletedAt: "2026-07-08T15:04:05Z",
-		HeadSHA:     "abc",
-		Synthesis:   "## Summary\n\nok",
+		ReportHeader: ReportHeader{
+			Title:       "Sort",
+			RunID:       "run_sort",
+			Project:     "acme/app",
+			CompletedAt: "2026-07-08T15:04:05Z",
+			HeadSHA:     "abc",
+		},
+		Synthesis: "## Summary\n\nok",
 		ScanRows: []ReportScanRow{
 			{Severity: "low", RuleID: "z", File: "a.go", Line: 1, Message: "lowest message"},
 			{Severity: "high", RuleID: "a", File: "b.go", Line: 2, Message: "highest message"},
@@ -168,13 +177,15 @@ func TestRender_LongFindingsNoPanic(t *testing.T) {
 		}
 	}
 	input := ReportInput{
-		Title:       "Long",
-		RunID:       "run_long",
-		Project:     "acme/app",
-		CompletedAt: "2026-07-08T15:04:05Z",
-		HeadSHA:     "abc",
-		Synthesis:   "## Summary\n\nmany findings",
-		ScanRows:    findings,
+		ReportHeader: ReportHeader{
+			Title:       "Long",
+			RunID:       "run_long",
+			Project:     "acme/app",
+			CompletedAt: "2026-07-08T15:04:05Z",
+			HeadSHA:     "abc",
+		},
+		Synthesis: "## Summary\n\nmany findings",
+		ScanRows:  findings,
 	}
 	pdf, err := Render(input)
 	testutil.FailErr(t, "render long findings", err)

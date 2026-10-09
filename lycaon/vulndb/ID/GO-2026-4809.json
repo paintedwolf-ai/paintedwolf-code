@@ -1,0 +1,56 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/anchore/syft"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.42.3"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-33481",
+  "GHSA-rjcw-vg7j-m9rc"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-4809"
+ },
+ "details": "Syft improper temporary file cleanup in github.com/anchore/syft",
+ "id": "GO-2026-4809",
+ "modified": "2026-03-23T18:16:18Z",
+ "published": "2026-03-23T18:16:18Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/anchore/syft/security/advisories/GHSA-rjcw-vg7j-m9rc"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/anchore/syft/pull/4629"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/anchore/syft/pull/4668"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/anchore/stereoscope/pull/537"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Syft improper temporary file cleanup in github.com/anchore/syft"
+}

@@ -105,5 +105,40 @@ func parsePackManifestsWithCatalog(catalog *extpacks.EffectiveCatalog) (map[stri
 		entries[key] = m
 		sources[key] = ManifestSource{Key: key, Path: at.String(), Origin: origin}
 	}
+
+	if err := addArchivedManifests(catalog, entries, sources); err != nil {
+		return nil, nil, err
+	}
 	return entries, sources, nil
+}
+
+// addArchivedManifests compiles sealed workflow versions. A sealed version is
+// retired: existing runs resume on it and new runs cannot start it.
+func addArchivedManifests(catalog *extpacks.EffectiveCatalog, entries map[string]Manifest, sources map[string]ManifestSource) error {
+	for _, unitID := range catalog.LoadedUnitIDs() {
+		archiveKey, rest, ok := extpacks.SplitArchiveUnitID(unitID)
+		if !ok || rest != "workflow" {
+			continue
+		}
+		data, _, ok := catalog.UnitContent(unitID)
+		if !ok {
+			continue
+		}
+		at, _ := catalog.UnitPath(unitID)
+		m, err := ParseManifestYAML(data)
+		if err != nil {
+			return fmt.Errorf("%s: %w", at, err)
+		}
+		if extpacks.ArchiveKey(m.ID, m.Version) != archiveKey {
+			return fmt.Errorf("%s: sealed manifest %s@%s does not match its archive directory %s", at, m.ID, m.Version, archiveKey)
+		}
+		key := ManifestKey(m.ID, m.Version)
+		if _, dup := entries[key]; dup {
+			return fmt.Errorf("sealed workflow version %s is also defined outside its archive", key)
+		}
+		m.Retired = true
+		entries[key] = m
+		sources[key] = ManifestSource{Key: key, Path: at.String(), Origin: OriginArchive}
+	}
+	return nil
 }

@@ -215,6 +215,11 @@ func (m *Commands) Resume(ctx context.Context, runID string) (*api.WorkflowRun, 
 	if run.Status != api.WorkflowRunStatusPaused {
 		return nil, runstate.ErrInvalidTransition
 	}
+	if m.Resolver != nil {
+		if _, err := m.Resolver.ForRun(ctx, run); err != nil {
+			return nil, err
+		}
+	}
 	run.Status = api.WorkflowRunStatusRunning
 	run.PauseReason = ""
 	run.PausedAt = nil

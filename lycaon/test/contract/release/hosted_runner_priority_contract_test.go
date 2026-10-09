@@ -60,7 +60,7 @@ func TestEveryTriggeredWorkflowDeclaresItsRunnerPriority(t *testing.T) {
 	workflows := prioritizedWorkflows(t)
 	declared := map[string]string{}
 	for class, files := range runnerPriorityClasses(t) {
-		if !slices.Contains([]string{"release", "warming", "background"}, class) {
+		if !slices.Contains([]string{"release", "qualification", "warming", "background"}, class) {
 			t.Errorf("unknown runner priority class %q", class)
 		}
 		for _, file := range files {

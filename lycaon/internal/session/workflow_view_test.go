@@ -5,10 +5,14 @@ import (
 
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/promptresult"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/batch"
+	"github.com/lycaon/lycaon/internal/coordinator/inject"
+	"github.com/lycaon/lycaon/internal/guidance/feedback"
+	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -22,6 +26,8 @@ type recordingWorkflowView struct {
 	completionErr error
 	topologyErr   error
 	closeoutID    string
+	archive       string
+	reviewErr     error
 }
 
 func (r *recordingWorkflowView) record(name string) {
@@ -70,7 +76,7 @@ func (r *recordingWorkflowView) AllowedAgents(ctx context.Context, sessionID str
 
 func (r *recordingWorkflowView) ActiveManifest(ctx context.Context, sessionID string) (workflowfacts.ActiveWorkflowManifest, bool) {
 	r.record("ActiveManifest")
-	return workflowfacts.ActiveWorkflowManifest{Rules: []string{"manifest-rules.yaml"}}, true
+	return workflowfacts.ActiveWorkflowManifest{Rules: []string{"manifest-rules.yaml"}, Archive: r.archive}, true
 }
 
 func (r *recordingWorkflowView) ParallelTaskMaxWorkers(ctx context.Context, sessionID string) int {
@@ -241,5 +247,70 @@ func TestToolpolicyEngineDepsWiresWorkflowView(t *testing.T) {
 		if view.calls[i] != name {
 			t.Fatalf("call[%d] = %q want %q (all=%v)", i, view.calls[i], name, view.calls)
 		}
+	}
+}
+
+func (s *recordingWorkflowView) RecordReviewToolResult(context.Context, string, api.Message) error {
+	s.record("RecordReviewToolResult")
+	return s.reviewErr
+}
+
+// A failed accounting write fails the append so the turn does not continue as
+// if the repair attempt were counted; startup recovery replays the stored row.
+func TestLoopAppendReportsReviewAccountingFailure(t *testing.T) {
+	ctx := t.Context()
+	st := store.NewMemory()
+	mgr := NewManager(st, nil, nil, settings.DefaultSessionLimits())
+	wantErr := errors.New("workflow state unavailable")
+	mgr.SetWorkflowSessionView(&recordingWorkflowView{reviewErr: wantErr})
+	sess, err := st.Create(ctx, api.CreateSessionRequest{}, "project-1")
+	testutil.FailErr(t, "create session", err)
+
+	row := api.Message{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Tool: "submit_verdict"}}
+	if err := mgr.appendLoopMessages(ctx, sess.ID, row); !errors.Is(err, wantErr) {
+		t.Fatalf("append error = %v, want the accounting failure", err)
+	}
+}
+
+// Kick obligations for a run on a sealed version come from that version's
+// gate feedback, as its other guidance does.
+func TestKickGateObligationsFollowTheRunArchive(t *testing.T) {
+	gateFeedback, err := feedback.LoadGateFeedbackCatalog()
+	testutil.FailErr(t, "load gate feedback", err)
+	frame := inject.CoordinatorTurnFrame{}
+	frame.RunContext.FailedLeaves = []string{"evidence_passed:survey_challenged"}
+	satisfy := func(archive string) string {
+		mgr := NewManager(store.NewMemory(), nil, nil, settings.DefaultSessionLimits())
+		mgr.SetWorkflowHints(nil, gateFeedback)
+		mgr.SetWorkflowSessionView(&recordingWorkflowView{archive: archive})
+		rows := mgr.projectKickGateObligations(t.Context(), "session", frame)
+		if len(rows) != 1 {
+			t.Fatalf("obligations = %+v", rows)
+		}
+		return strings.Join(rows[0].Satisfy, "\n")
+	}
+	sealed, live := satisfy("security-survey/1.0.0"), satisfy("")
+	want := gateFeedback.WithWorkflowArchive("security-survey/1.0.0").ProjectObligations(t.Context(), frame.RunContext.FailedLeaves, "", nil)
+	if sealed == live || sealed != strings.Join(want[0].Satisfy, "\n") {
+		t.Fatalf("sealed run obligations = %q, live = %q", sealed, live)
+	}
+}
+
+// Review repair accounting reads the durable transcript, so it runs only after
+// the coordinator's rows are appended.
+func TestLoopAppendRecordsReviewResultsAfterCommit(t *testing.T) {
+	ctx := t.Context()
+	st := store.NewMemory()
+	mgr := NewManager(st, nil, nil, settings.DefaultSessionLimits())
+	view := &recordingWorkflowView{}
+	mgr.SetWorkflowSessionView(view)
+	sess, err := st.Create(ctx, api.CreateSessionRequest{}, "project-1")
+	testutil.FailErr(t, "create session", err)
+
+	row := api.Message{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Tool: "submit_verdict"}}
+	testutil.FailErr(t, "append loop rows", mgr.appendLoopMessages(ctx, sess.ID, row))
+	want := []string{"StampAndAppendMessages", "RecordReviewToolResult"}
+	if !slices.Equal(view.calls, want) {
+		t.Fatalf("calls = %v, want %v", view.calls, want)
 	}
 }

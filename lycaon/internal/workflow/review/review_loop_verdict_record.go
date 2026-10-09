@@ -97,6 +97,12 @@ func (m *Verdicts) RecordReviewLoopVerdict(
 		committedVars = bumpReviewLoopAttempt(vars, active.CurrentPhase)
 		out.Attempt = runstate.ReviewLoopAttempt(committedVars, active.CurrentPhase)
 	}
+	if out.Valid && committedVars != nil {
+		committedVars, err = runstate.ResolveReviewRepair(committedVars, active.CurrentPhase)
+		if err != nil {
+			return out, err
+		}
+	}
 	evidenceID := uuid.NewSHA1(uuid.NameSpaceOID, []byte("verdict-evidence:"+operationID)).String()
 	op := runstate.VerdictOperation{
 		ToolCallID: operationID, RunID: active.ID, SourceRevision: active.Revision,
