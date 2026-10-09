@@ -31,8 +31,9 @@ func TestBuildSourceInvocationRecordsAndReadsOneDurableHistory(t *testing.T) {
 	}
 	const path, content = "source-binding.txt", "retained source binding\n"
 	testutil.FailErr(t, "record external source observation", source.SourceLedger.Record(t.Context(), sourceledger.RecordInput{
-		ProjectID: sess.ProjectID, RootID: source.ActiveRootID, Path: path,
-		BranchID: source.ProjectSourceBranch, Op: wire.SourceChangeOpWrite,
+		RecordLocation: sourceledger.RecordLocation{RootID: source.ActiveRootID, Path: path},
+		ProjectID:      sess.ProjectID,
+		BranchID:       source.ProjectSourceBranch, Op: wire.SourceChangeOpWrite,
 		Origin: wire.SourceChangeOriginExternal, After: []byte(content),
 	}))
 	head, err := source.History.Files.ResolveHead(t.Context(), sess.ProjectID, source.ProjectSourceBranch, source.ActiveRootID, path)
@@ -49,8 +50,9 @@ func TestBuildSourceInvocationRecordsAndReadsOneDurableHistory(t *testing.T) {
 	manager.Runner.Instructions.ReviewCheckpoint(t.Context(), sess.ID, first)
 	testutil.FailErr(t, "open first source turn", manager.Runner.Transcript.AppendPlain(t.Context(), sess.ID, first))
 	testutil.FailErr(t, "record foreign change between turns", source.SourceLedger.Record(t.Context(), sourceledger.RecordInput{
-		ProjectID: sess.ProjectID, RootID: source.ActiveRootID, Path: path,
-		BranchID: source.ProjectSourceBranch, Op: wire.SourceChangeOpWrite,
+		RecordLocation: sourceledger.RecordLocation{RootID: source.ActiveRootID, Path: path},
+		ProjectID:      sess.ProjectID,
+		BranchID:       source.ProjectSourceBranch, Op: wire.SourceChangeOpWrite,
 		Origin: wire.SourceChangeOriginExternal, Before: []byte(content), After: []byte("outside change\n"),
 	}))
 	second := wire.Message{Role: wire.MessageRoleUser, Origin: wire.MessageOriginUser,
