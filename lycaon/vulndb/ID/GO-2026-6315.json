@@ -1,0 +1,52 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/klever-io/klever-go"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.7.19"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-54754",
+  "GHSA-p7gw-2pcp-5pf8"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6315"
+ },
+ "details": "Klever: Marketplace settlement mints KLV when referral % + royalty % exceed the bid (negative seller share silently skipped) in github.com/klever-io/klever-go",
+ "id": "GO-2026-6315",
+ "modified": "2026-09-02T18:37:27Z",
+ "published": "2026-09-02T18:37:27Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/klever-io/klever-go/security/advisories/GHSA-p7gw-2pcp-5pf8"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/klever-io/klever-go/commit/8bcc600b0ac88070740c63c7ce1c8a968dd85251"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/klever-io/klever-go/releases/tag/v1.7.19"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Klever: Marketplace settlement mints KLV when referral % + royalty % exceed the bid (negative seller share silently skipped) in github.com/klever-io/klever-go"
+}

@@ -1,0 +1,58 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/mattermost/mattermost-server"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "10.11.0+incompatible"
+      },
+      {
+       "fixed": "10.11.18+incompatible"
+      },
+      {
+       "introduced": "11.7.0+incompatible"
+      },
+      {
+       "fixed": "11.7.1+incompatible"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-8074",
+  "GHSA-g5vr-6pgg-74qv"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6481"
+ },
+ "details": "Mattermost doesn't enforce bot-specific permission checks on the user active status endpoint in github.com/mattermost/mattermost-server",
+ "id": "GO-2026-6481",
+ "modified": "2026-09-28T16:43:40Z",
+ "published": "2026-09-28T16:43:40Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-g5vr-6pgg-74qv"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-8074"
+  },
+  {
+   "type": "WEB",
+   "url": "https://mattermost.com/security-updates"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Mattermost doesn't enforce bot-specific permission checks on the user active status endpoint in github.com/mattermost/mattermost-server"
+}

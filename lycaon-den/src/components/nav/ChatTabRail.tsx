@@ -32,7 +32,7 @@ import { GitStrip } from "../GitStrip.tsx";
 import { WorkersTab } from "../worker/WorkersTab.tsx";
 import type { BlueprintSummary } from "../../api/types.ts";
 import { gitChangeBadgeCount } from "../../chat/actions/board-git-coalesce.ts";
-import { gitStatusRefreshPending } from "../../chat/actions/git-actions.ts";
+import { gitStatusRefreshPending } from "../../chat/actions/git-status-reads.ts";
 import { isResolved, valueOf } from "../../store/load-state.ts";
 import { usePresentationParticipant } from "../../ui/presentation-context.tsx";
 import { BrowseOverflowMenu } from "../browse/BrowseOverflowMenu.tsx";
