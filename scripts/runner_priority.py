@@ -122,7 +122,7 @@ def decide(runs, kinds, jobs, live_groups, now):
     if any(job["status"] == "queued" for job in protected):
         resumable = set()
     else:
-        resumable = {READY, WARMING} | (set() if live_groups else {BACKGROUND})
+        resumable = {READY, WARMING, QUALIFICATION} | (set() if live_groups else {BACKGROUND})
     return Plan(stale, [(run, kinds[run["id"]]) for run in preempted], resumable)
 
 
