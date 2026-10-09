@@ -1,0 +1,48 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/fleetdm/fleet/v4"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "4.81.0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-34386",
+  "GHSA-9p23-p2m4-2r4m"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-4913"
+ },
+ "details": "Fleet vulnerable to SQL Injection in MDM bootstrap package by authenticated team or global admin in github.com/fleetdm/fleet",
+ "id": "GO-2026-4913",
+ "modified": "2026-04-02T18:42:30Z",
+ "published": "2026-04-02T18:42:30Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/fleetdm/fleet/security/advisories/GHSA-9p23-p2m4-2r4m"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-34386"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Fleet vulnerable to SQL Injection in MDM bootstrap package by authenticated team or global admin in github.com/fleetdm/fleet"
+}

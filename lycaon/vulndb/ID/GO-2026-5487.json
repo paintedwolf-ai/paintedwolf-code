@@ -1,0 +1,49 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/hashicorp/vault"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0.10.0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-3605",
+  "GHSA-m2w4-8ggf-rj47"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5487"
+ },
+ "details": "HashiCorp Vault has a KVv2 Metadata and Secret Deletion Policy Bypass that leads to Denial-of-Service in github.com/hashicorp/vault",
+ "id": "GO-2026-5487",
+ "modified": "2026-06-25T22:34:31Z",
+ "published": "2026-06-25T22:34:31Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-m2w4-8ggf-rj47"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-3605"
+  },
+  {
+   "type": "WEB",
+   "url": "https://discuss.hashicorp.com/t/hcsec-2026-05-vault-kvv2-metadata-and-secret-deletion-policy-bypass-denial-of-service/77342"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "HashiCorp Vault has a KVv2 Metadata and Secret Deletion Policy Bypass that leads to Denial-of-Service in github.com/hashicorp/vault"
+}

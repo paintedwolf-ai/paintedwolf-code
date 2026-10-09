@@ -3,7 +3,8 @@ import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { WhatsNewDialog } from "./WhatsNewDialog.tsx";
 import { REPOSITORY_URL } from "../../../shared/brand.ts";
 
-const { writeClipboardText, openAppLink } = vi.hoisted(() => ({
+const { writeClipboardText, openAppLink, confirmAndOpenExternalLink } = vi.hoisted(() => ({
+  confirmAndOpenExternalLink: vi.fn(async (_href: string) => true),
   writeClipboardText: vi.fn(async (_text: string) => undefined),
   openAppLink: vi.fn(async (_href: string) => true),
 }));
@@ -16,9 +17,20 @@ vi.mock("../../utils/clipboard.ts", async (importOriginal) => ({
 vi.mock("../../platform/desktop/external-link.ts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../platform/desktop/external-link.ts")>()),
   openAppLink,
+  confirmAndOpenExternalLink,
 }));
 
 describe("WhatsNewDialog", () => {
+  it("opens first-party note links directly and confirms third-party destinations", async () => {
+    openAppLink.mockClear();
+    confirmAndOpenExternalLink.mockClear();
+    render(() => <WhatsNewDialog open version="1.0.1" notes={`[Release](${REPOSITORY_URL}/releases/tag/v1.0.1) [Other](https://example.com)`} onClose={() => {}} onGotIt={() => {}} />);
+    fireEvent.click(screen.getByRole("link", { name: /Release/ }));
+    fireEvent.click(screen.getByRole("link", { name: /Other/ }));
+    expect(openAppLink).toHaveBeenCalledWith(`${REPOSITORY_URL}/releases/tag/v1.0.1`);
+    expect(confirmAndOpenExternalLink).toHaveBeenCalledWith("https://example.com");
+  });
+
   it("renders the full release notes and lets the reader acknowledge them", () => {
     const onClose = vi.fn();
     const onGotIt = vi.fn();

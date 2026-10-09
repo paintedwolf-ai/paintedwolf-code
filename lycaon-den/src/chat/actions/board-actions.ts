@@ -4,7 +4,7 @@ import type { AppStore } from "../../store/app-state-model.ts";
 import { valueOf, loading, loadFailed } from "../../store/load-state.ts";
 import { loadPendingCheckpointsForSessionView } from "../checkpoint/checkpoint-session-scope.ts";
 import { projectIdForPath } from "../../store/app-state.ts";
-import { refreshGitStatus } from "./git-actions.ts";
+import { gitWriteInFlight, refreshGitStatus, settleGitWrites } from "./git-status-reads.ts";
 import { resolveScope } from "../../components/git-repo-scope.ts";
 import { createCoalescedAsyncScheduler } from "../../store/coalesced-async.ts";
 import {
@@ -180,9 +180,16 @@ export async function maybeRefreshGitAfterBoard(
   projectDir: string,
   projects: readonly Project[],
 ): Promise<"skipped" | "fetched" | "none"> {
+  // A pulse from a board that arrived mid-write can predate it; only a fresh read follows the write.
+  const followsWrite = gitWriteInFlight(appStore);
+  if (followsWrite) {
+    const epoch = appStore.state.sessionViewEpoch;
+    await settleGitWrites(appStore);
+    if (appStore.state.sessionViewEpoch !== epoch) return "none";
+  }
   const projectId = resolveProjectId(appStore, projectDir, projects);
   if (!projectId) return "none";
-  const board = appStore.state.board;
+  const board = followsWrite ? undefined : appStore.state.board;
   const prev = valueOf(appStore.state.gitStatus);
   const repos = appStore.state.gitRepos ?? [];
   if (repos.length > 0) {

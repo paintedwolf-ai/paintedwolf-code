@@ -18,7 +18,7 @@ function permittedTerm(path: string, line: string): boolean {
   if (/\bowner_person_id\b/.test(line)) return true;
   if (/\brole:\s*"owner"/.test(line)) return true;
   // Rust standard, tokio, and serde API names.
-  if (/\b(?:into_owned|to_owned|spawn_argv_owned|lock_owned|try_lock_owned|read_owned|DeserializeOwned)\b/.test(line)) return true;
+  if (/\b(?:into_owned|to_owned|spawn_argv_owned|lock_owned|try_lock_owned|read_owned|DeserializeOwned|OwnedMutexGuard)\b/.test(line)) return true;
   if (/\b(?:getOwnPropertyDescriptor|hasOwn|hasOwnProperty|ownerDocument)\b/.test(line)) {
     return true;
   }
