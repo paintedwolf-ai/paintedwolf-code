@@ -45,6 +45,9 @@ func (r *runtimeResources) capture(b *serveBuilder) {
 	if r == nil || b == nil {
 		return
 	}
+	if checkpoints, ok := b.checkpointMgr.(interface{ StopExpiryTimers() }); ok {
+		r.track("checkpoint-expiries", 25, func(context.Context) error { checkpoints.StopExpiryTimers(); return nil })
+	}
 	if b.egressBrokerBound {
 		// The front door closes after the processes that use it.
 		r.track("egress-broker", 55, func(context.Context) error { return confine.StopEgressBroker() })

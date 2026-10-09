@@ -87,7 +87,7 @@ func TestDetectionResolvedSurvivesRestart(t *testing.T) {
 	resp, err := requestExplicitApprovalCheckpoint(t, ctx, mgr, detectionCheckpointRequest(sessionID))
 	testutil.FailErr(t, "RequestCheckpoint", err)
 
-	restarted := hitl.NewManager(hitl.NewSQLStore(sqlDB), nil, authzcontext.SQLRecorder(sqlDB))
+	restarted := hitl.NewCheckpoints(hitl.NewSQLStore(sqlDB), nil, authzcontext.SQLRecorder(sqlDB))
 	restarted.SetCheckpointExpiry(func() time.Duration { return time.Nanosecond })
 	testutil.FailErr(t, "RestorePending", restarted.RestorePending(ctx))
 
@@ -142,7 +142,7 @@ func TestRejectFailsClosedWhenLedgerAppendFails(t *testing.T) {
 	ctx := testdbseed.OwnerCaller(t, context.Background(), sqlDB)
 	sessionID := "sess-hitl-1"
 	insertSession(t, sqlDB, sessionID)
-	mgr := hitl.NewManager(hitl.NewSQLStore(sqlDB), &events.Publisher{Hub: events.NewMemoryHub()},
+	mgr := hitl.NewCheckpoints(hitl.NewSQLStore(sqlDB), &events.Publisher{Hub: events.NewMemoryHub()},
 		authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.FailStore{}}})
 	resp, err := requestExplicitApprovalCheckpoint(t, ctx, mgr, hitl.CheckpointRequest{
 		SessionID:      sessionID,

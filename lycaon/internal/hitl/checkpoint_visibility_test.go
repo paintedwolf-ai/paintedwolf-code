@@ -32,7 +32,7 @@ func TestCheckpointCreationReadParity(t *testing.T) {
 			}
 			for _, restart := range []bool{false, true} {
 				if restart {
-					mgr = hitl.NewManager(hitl.NewSQLStore(database), nil, authzcontext.SQLRecorder(database))
+					mgr = hitl.NewCheckpoints(hitl.NewSQLStore(database), nil, authzcontext.SQLRecorder(database))
 					testutil.FailErr(t, "restore pending approvals", mgr.RestorePending(testdbseed.OwnerCaller(t, t.Context(), database)))
 				}
 				direct, err := mgr.ListPending(testdbseed.OwnerCaller(t, t.Context(), database), sid, nil)

@@ -2,10 +2,10 @@ package api
 
 import (
 	"context"
+	"github.com/go-chi/chi/v5"
 	"log/slog"
 	"strings"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/lycaon/lycaon/internal/api/capabilityadmin"
 	"github.com/lycaon/lycaon/internal/api/extensionadmin"
 	"github.com/lycaon/lycaon/internal/api/gitadmin"
@@ -172,8 +172,8 @@ func requireDependencies(deps Dependencies) {
 func (s *Server) observeDependencies(deps Dependencies) {
 	deps.Approvals.SecretIgnores.Changed = s.Sources.Editor.RefreshProjectSecretScreens
 	deps.Approvals.ManagedSecrets.AddScreeningInvalidationObserver(s.Sources.Editor.RefreshProjectSecretScreens)
-	if installer, ok := deps.Approvals.Checkpoints.(hitl.ApprovalAuthorityInstallerSetter); ok {
-		installer.SetApprovalAuthorityInstaller(s.Admin.Capabilities.Installation)
+	if checkpoints, ok := deps.Approvals.Checkpoints.(*hitl.Checkpoints); ok {
+		checkpoints.Authority.SetApprovalAuthorityInstaller(s.Admin.Capabilities.Installation)
 	}
 	deps.Source.EditorDocuments.SetOnChange(func(ctx context.Context, change editordoc.Change) {
 		s.Routes.Activity.EditorDocumentChanged(ctx, change)

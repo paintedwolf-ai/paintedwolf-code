@@ -82,6 +82,7 @@ type CheckpointActions struct {
 	Projects       project.Registry
 	Store          session.Store
 	options        hitl.ApprovalOptionResolver
+	presence       *hitl.VaultPresence
 	responses      *httpio.Responder
 }
 
@@ -137,7 +138,13 @@ type HeldValues struct {
 }
 
 func New(responses *httpio.Responder, deps Deps) Handler {
-	options, _ := deps.Checkpoints.(hitl.ApprovalOptionResolver)
+	checkpoints, _ := deps.Checkpoints.(*hitl.Checkpoints)
+	var options hitl.ApprovalOptionResolver
+	var presence *hitl.VaultPresence
+	if checkpoints != nil {
+		options = checkpoints.Authority
+		presence = checkpoints.Presence
+	}
 	httpio.RequireDependencies("capabilityadmin",
 		httpio.Required{Name: "responses", Present: responses != nil},
 		httpio.Required{Name: "Checkpoints", Present: options != nil},
@@ -150,7 +157,7 @@ func New(responses *httpio.Responder, deps Deps) Handler {
 	authorityMu := &sync.Mutex{}
 	h := Handler{}
 	h.Access = &Access{Gate: deps.Gate, Events: deps.Events, Projects: deps.Projects, Settings: deps.Settings, Store: deps.Store, responses: responses}
-	h.CheckpointActions = &CheckpointActions{Checkpoints: deps.Checkpoints, Events: deps.Events, ManagedSecrets: deps.ManagedSecrets, Projects: deps.Projects, Store: deps.Store, options: options, responses: responses}
+	h.CheckpointActions = &CheckpointActions{Checkpoints: deps.Checkpoints, Events: deps.Events, ManagedSecrets: deps.ManagedSecrets, Projects: deps.Projects, Store: deps.Store, options: options, presence: presence, responses: responses}
 	h.Grants = &Grants{Gate: deps.Gate, AuthzRecorder: deps.Authority.AuthzRecorder, ChatGrants: deps.Authority.ChatGrants, Events: deps.Events, GrantedPaths: deps.Authority.GrantedPaths, Listen: deps.Authority.Listen, Loopback: deps.Authority.Loopback, Projects: deps.Projects, ReadPaths: deps.Authority.ReadPaths, Settings: deps.Settings, Sockets: deps.Authority.Sockets, WriteRoots: deps.Authority.WriteRoots, authorityMu: authorityMu, responses: responses}
 	h.Installation = &Installation{Gate: deps.Gate, DirectIP: deps.Authority.DirectIP, GrantedPaths: deps.Authority.GrantedPaths, LLMService: deps.LLMService, Listen: deps.Authority.Listen, Loopback: deps.Authority.Loopback, ReadPaths: deps.Authority.ReadPaths, Sockets: deps.Authority.Sockets, WriteRoots: deps.Authority.WriteRoots, authorityMu: authorityMu}
 	h.Inventory = &Inventory{Gate: deps.Gate, ApprovalDecisions: deps.Authority.ApprovalDecisions, AuthzRecorder: deps.Authority.AuthzRecorder, DirectIP: deps.Authority.DirectIP, HostResources: deps.HostResources, Listen: deps.Authority.Listen, Loopback: deps.Authority.Loopback, Sockets: deps.Authority.Sockets, Store: deps.Store, WriteRoots: deps.Authority.WriteRoots, responses: responses}

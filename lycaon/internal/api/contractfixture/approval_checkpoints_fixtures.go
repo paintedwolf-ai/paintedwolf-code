@@ -47,7 +47,7 @@ func AssertCheckpointReadSurfaces(t *testing.T, server http.Handler, sessionID, 
 	}
 }
 
-func NewCheckpointHandlerFixture(t *testing.T) (*api.Server, *hitl.Manager, *wire.Session) {
+func NewCheckpointHandlerFixture(t *testing.T) (*api.Server, *hitl.Checkpoints, *wire.Session) {
 	t.Helper()
 	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	sqlDB := testdbfixture.Open(t, "chk-api.db")
@@ -66,7 +66,7 @@ func NewCheckpointHandlerFixture(t *testing.T) (*api.Server, *hitl.Manager, *wir
 
 	hub := events.NewMemoryHub()
 	pub := &events.Publisher{Hub: hub}
-	mgr := hitl.NewManager(hitl.NewSQLStore(sqlDB), pub, authzcontext.SQLRecorder(sqlDB))
+	mgr := hitl.NewCheckpoints(hitl.NewSQLStore(sqlDB), pub, authzcontext.SQLRecorder(sqlDB))
 
 	srv := api.NewServer(apitest.Dependencies(t, api.Dependencies{Core: api.CoreDependencies{
 		Store: store, Projects: reg, Sessions: session.NewManager(store, nil, nil, settings.DefaultSessionLimits())}, Approvals: api.ApprovalsDependencies{Checkpoints: mgr}}), nil, api.TestAPIToken)

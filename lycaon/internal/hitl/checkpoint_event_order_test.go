@@ -32,7 +32,7 @@ func TestCheckpointEventsFollowWorkerRegistration(t *testing.T) {
 	}))
 	store := hitl.NewSQLStore(database)
 	store.SetEventOutbox(outbox)
-	manager := hitl.NewManager(store, &events.Publisher{Hub: hub}, authzcontext.SQLRecorder(database))
+	manager := hitl.NewCheckpoints(store, &events.Publisher{Hub: hub}, authzcontext.SQLRecorder(database))
 	response, err := requestExplicitApprovalCheckpoint(t, testdbseed.OwnerCaller(t, t.Context(), database), manager, hitl.CheckpointRequest{
 		SessionID: "child", Kind: api.CheckpointKindToolApproval, ProposedAction: &hitl.ProposedAction{Tool: "command"},
 	})
@@ -78,7 +78,7 @@ func TestCheckpointMutationRollsBackWhenEventCannotBeCommitted(t *testing.T) {
 	insertSession(t, database, sid)
 	store := hitl.NewSQLStore(database)
 	store.SetEventOutbox(eventoutbox.New(database, events.NewMemoryHub()))
-	manager := hitl.NewManager(store, nil, authzcontext.SQLRecorder(database))
+	manager := hitl.NewCheckpoints(store, nil, authzcontext.SQLRecorder(database))
 	req := hitl.CheckpointRequest{SessionID: sid, Kind: api.CheckpointKindToolApproval, ProposedAction: &hitl.ProposedAction{Tool: "command"}}
 	response, err := requestExplicitApprovalCheckpoint(t, testdbseed.OwnerCaller(t, t.Context(), database), manager, req)
 	testutil.FailErr(t, "create initial checkpoint", err)
@@ -93,7 +93,7 @@ func TestCheckpointMutationRollsBackWhenEventCannotBeCommitted(t *testing.T) {
 	if _, err := manager.ResolveCheckpoint(testdbseed.OwnerCaller(t, t.Context(), database), sid, response.CheckpointID, api.CheckpointKindToolApproval, &hitl.DecisionResult{Approved: false}, nil); err == nil {
 		t.Fatal("checkpoint resolution survived failed event commit")
 	}
-	if _, err := manager.ResolveApprovalOption(testdbseed.OwnerCaller(t, t.Context(), database), sid, response.CheckpointID, hitl.CurrentActionOption().ID); err == nil {
+	if _, err := manager.Authority.ResolveApprovalOption(testdbseed.OwnerCaller(t, t.Context(), database), sid, response.CheckpointID, hitl.CurrentActionOption().ID); err == nil {
 		t.Fatal("checkpoint approval survived failed event commit")
 	}
 	pending, err := store.ListPending(testdbseed.OwnerCaller(t, t.Context(), database))

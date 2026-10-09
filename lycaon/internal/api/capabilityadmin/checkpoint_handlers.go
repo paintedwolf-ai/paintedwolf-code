@@ -2,10 +2,10 @@ package capabilityadmin
 
 import (
 	"errors"
+	"github.com/go-chi/chi/v5"
 	"net/http"
 	"strings"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/projectview"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
@@ -136,7 +136,7 @@ func (s *CheckpointActions) HandleBeginUnlockChallenge(w http.ResponseWriter, r 
 		s.responses.InvalidField(w, "window_label", "must be 1 to 120 characters without control characters")
 		return
 	}
-	challenge, err := s.options.BeginUnlockChallenge(r.Context(), sessionID, chi.URLParam(r, "checkpoint_id"),
+	challenge, err := s.presence.BeginUnlockChallenge(r.Context(), sessionID, chi.URLParam(r, "checkpoint_id"),
 		strings.TrimSpace(body.OptionID), strings.TrimSpace(body.WindowLabel))
 	if err != nil {
 		s.writeCheckpointResolveError(w, r, err)
