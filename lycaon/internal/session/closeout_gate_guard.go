@@ -2,11 +2,10 @@ package session
 
 import (
 	"context"
-	"strings"
-
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/pkg/api"
+	"strings"
 )
 
 const workflowGatesOpenCode = "WORKFLOW_GATES_OPEN_BEFORE_CLOSEOUT"
@@ -21,7 +20,7 @@ func (m *Manager) maybeRejectCloseoutForOpenGates(ctx context.Context, sess *api
 	if !invokeAllowed {
 		return nil, false
 	}
-	state := m.workflows.ActiveCloseoutGateState(ctx, sess.ID)
+	state := m.workflows.Policy.ActiveCloseoutGateState(ctx, sess.ID)
 	if !state.Gated || len(state.OpenLeaves) == 0 {
 		return nil, false
 	}

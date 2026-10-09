@@ -2,13 +2,12 @@ package wiring
 
 import (
 	"context"
-	"testing"
-	"time"
-
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	wire "github.com/lycaon/lycaon/pkg/api"
+	"testing"
+	"time"
 )
 
 func TestBuildForTestComposition(t *testing.T) {
@@ -31,8 +30,8 @@ func TestBuildForTestComposition(t *testing.T) {
 	if h.Recording == nil {
 		t.Fatal("recording client required")
 	}
-	got, err := h.WorkflowMgr.Manifests.Get(manifest.ID, manifest.Version)
-	testutil.FailErr(t, "h.WorkflowMgr.Manifests.Get failed", err)
+	got, err := h.WorkflowMgr.Resolver.Overlay.Get(manifest.ID, manifest.Version)
+	testutil.FailErr(t, "h.WorkflowMgr.Resolver.Overlay.Get failed", err)
 	if got.ID != manifest.ID {
 		t.Fatalf("manifest = %+v", got)
 	}

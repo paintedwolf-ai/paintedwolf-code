@@ -2,10 +2,10 @@ package toolpolicy
 
 import (
 	"context"
-	"testing"
-
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
+	workflowfacts "github.com/lycaon/lycaon/internal/session/workflowfacts"
 	"github.com/lycaon/lycaon/pkg/api"
+	"testing"
 )
 
 type recordingWorkflowView struct {
@@ -32,9 +32,9 @@ func (r *recordingWorkflowView) AllowedAgents(ctx context.Context, sessionID str
 	return []string{"coordinator"}
 }
 
-func (r *recordingWorkflowView) ActiveManifest(ctx context.Context, sessionID string) (ActiveWorkflowManifest, bool) {
+func (r *recordingWorkflowView) ActiveManifest(ctx context.Context, sessionID string) (workflowfacts.ActiveWorkflowManifest, bool) {
 	r.record("ActiveManifest")
-	return ActiveWorkflowManifest{Rules: []string{"manifest-rules.yaml"}}, true
+	return workflowfacts.ActiveWorkflowManifest{Rules: []string{"manifest-rules.yaml"}}, true
 }
 
 func (r *recordingWorkflowView) ScaffoldVarsForSession(ctx context.Context, sessionID string) (map[string]any, error) {
@@ -47,14 +47,14 @@ func (r *recordingWorkflowView) ActivePlan(ctx context.Context, sessionID string
 	return "plan-1", "plan body", true
 }
 
-func (r *recordingWorkflowView) GetActive(ctx context.Context, sessionID string) (*api.WorkflowRun, error) {
-	r.record("GetActive")
+func (r *recordingWorkflowView) ActiveBySession(ctx context.Context, sessionID string) (*api.WorkflowRun, error) {
+	r.record("ActiveBySession")
 	return r.activeRun, nil
 }
 
 func TestBuildEvalContextUsesWorkflowView(t *testing.T) {
 	view := &recordingWorkflowView{}
-	deps := EngineDeps{Workflows: view}
+	deps := EngineDeps{Workflows: &WorkflowDomains{Policy: view, Blueprints: view, Runs: view}}
 	sess := &api.Session{ID: "s1", Posture: api.SessionPostureSpec}
 	eval := BuildEvalContext(context.Background(), deps, sess, "read_file", map[string]any{"path": "x"})
 	if eval.Phase != "phase-a" {
@@ -92,7 +92,7 @@ func TestBuildEvalContextWiresActiveRunStatus(t *testing.T) {
 		ID: "run-1", WorkflowID: "plan", Status: api.WorkflowRunStatusRunning, CurrentPhase: "stub",
 	}
 	view := &recordingWorkflowView{activeRun: run}
-	deps := EngineDeps{Workflows: view}
+	deps := EngineDeps{Workflows: &WorkflowDomains{Policy: view, Blueprints: view, Runs: view}}
 	sess := &api.Session{ID: "s1", Posture: api.SessionPostureSpec}
 	eval := BuildEvalContext(context.Background(), deps, sess, "workflow_advance", nil)
 	if eval.WorkflowID != "plan" || eval.RunStatus != api.WorkflowRunStatusRunning {
@@ -102,7 +102,7 @@ func TestBuildEvalContextWiresActiveRunStatus(t *testing.T) {
 
 func TestBuildEvalContextUsesBoundCoordinatorTurnFrame(t *testing.T) {
 	view := &recordingWorkflowView{}
-	deps := EngineDeps{Workflows: view}
+	deps := EngineDeps{Workflows: &WorkflowDomains{Policy: view, Blueprints: view, Runs: view}}
 	sess := &api.Session{ID: "s1", WorkspacePath: "/project", Posture: api.SessionPostureSpec}
 	frame := &inject.CoordinatorTurnFrame{
 		WorkflowRevision: 41,
@@ -154,7 +154,7 @@ func TestBuildEvalContextUsesBoundCoordinatorTurnFrame(t *testing.T) {
 // declared workflow allowlist (the repoKnownEmpty fail-open).
 func TestBuildEvalContextEmptyAttachedRosterIsNotDeclaredFallback(t *testing.T) {
 	view := &recordingWorkflowView{}
-	deps := EngineDeps{Workflows: view}
+	deps := EngineDeps{Workflows: &WorkflowDomains{Policy: view, Blueprints: view, Runs: view}}
 	sess := &api.Session{ID: "s1", Posture: api.SessionPostureBuild}
 
 	ctx := WithTaskSpawnAllowlist(context.Background(), []string{})

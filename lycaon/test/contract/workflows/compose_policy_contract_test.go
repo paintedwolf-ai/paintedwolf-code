@@ -1,19 +1,18 @@
 package contract
 
 import (
-	"testing"
-
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/extpacks"
-	"github.com/lycaon/lycaon/internal/workflow"
+	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/wirespec"
+	"testing"
 )
 
 func TestComposePolicyYAMLLoads(t *testing.T) {
 	t.Parallel()
-	policy, err := workflow.LoadComposePolicy()
-	contractcheck.FailErr(t, "workflow.LoadComposePolicy failed", err)
+	policy, err := workflowcomposition.LoadComposePolicy()
+	contractcheck.FailErr(t, "workflowcomposition.LoadComposePolicy failed", err)
 	if !policy.RequireExtends {
 		t.Fatal("expected require_extends true")
 	}
@@ -24,7 +23,7 @@ func TestComposePolicyYAMLLoads(t *testing.T) {
 
 func TestBundledWorkflowTemplatesExpand(t *testing.T) {
 	t.Parallel()
-	catalog, err := workflow.LoadTemplatesFromDir(extpacks.Bundled(config.PlatformFlows.Join("_templates")))
+	catalog, err := workflowcomposition.LoadTemplatesFromDir(extpacks.Bundled(config.PlatformFlows.Join("_templates")))
 	contractcheck.FailErr(t, "load workflow templates", err)
 	if len(catalog) < 3 {
 		t.Fatalf("templates = %d want >= 3", len(catalog))

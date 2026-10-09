@@ -3,10 +3,6 @@ package app
 import (
 	"context"
 	"fmt"
-	"log/slog"
-	"path/filepath"
-	"strings"
-
 	"github.com/lycaon/lycaon/internal/approvals"
 	"github.com/lycaon/lycaon/internal/authzcontext"
 	"github.com/lycaon/lycaon/internal/authzledger"
@@ -33,6 +29,9 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/pkg/api"
+	"log/slog"
+	"path/filepath"
+	"strings"
 )
 
 // sessionWiring wires the session manager, its authorization and checkpoints, and secret handling.
@@ -218,7 +217,7 @@ func (b sessionWiring) wireSessionAuthorization() error {
 			// Workflows narrow the session's spawn set.
 			cap.Sealer.SpawnAllowlist = func(ctx context.Context, sess *api.Session) []string {
 				if b.workflowMgr != nil && sess != nil {
-					if roster := b.workflowMgr.AllowedAgents(ctx, sess.ID); len(roster) > 0 {
+					if roster := b.workflowMgr.Policy.AllowedAgents(ctx, sess.ID); len(roster) > 0 {
 						return roster
 					}
 				}

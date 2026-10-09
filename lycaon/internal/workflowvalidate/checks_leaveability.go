@@ -2,15 +2,14 @@ package workflowvalidate
 
 import (
 	"fmt"
-	"strings"
-
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/orchestration"
-	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"github.com/lycaon/lycaon/internal/workflowdiag"
 	"github.com/lycaon/lycaon/pkg/api"
+	"strings"
 )
 
 func checkLeaveability(opts CatalogValidateOptions, path string, m workflowdef.Manifest) []api.ComposeValidationError {
@@ -41,11 +40,11 @@ func checkLeaveability(opts CatalogValidateOptions, path string, m workflowdef.M
 		}
 		surfID := strings.TrimSpace(binding.CoordinatorSurface)
 		tools := surfaces[surfID].AddressableNames()
-		for _, d := range workflow.ValidateResolvedSurfaceTools(m, p, surfID, tools) {
+		for _, d := range workflowvalidation.ValidateResolvedSurfaceTools(m, p, surfID, tools) {
 			d.Field = path + ": " + d.Field
 			out = append(out, d)
 		}
-		for _, d := range workflow.ValidatePhaseSpawnRoster(m, p, surfID, fanOutProfile) {
+		for _, d := range workflowvalidation.ValidatePhaseSpawnRoster(m, p, surfID, fanOutProfile) {
 			d.Field = path + ": " + d.Field
 			out = append(out, d)
 		}

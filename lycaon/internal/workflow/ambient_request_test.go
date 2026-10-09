@@ -3,49 +3,49 @@ package workflow
 import (
 	"context"
 	"errors"
-	"sync"
-	"testing"
-	"time"
-
 	"github.com/lycaon/lycaon/internal/hostctx"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/lifecycle"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
+	"sync"
+	"testing"
+	"time"
 )
 
 func TestFollowUpRepairsPersistedWorkflowGap(t *testing.T) {
 	mgr, sessions, _, _ := testManagerWithRegistry(t)
-	original, err := mgr.StartAmbient(t.Context(), "sess-1", "implement", "1.0.0")
+	original, err := mgr.Ambient.StartAmbient(t.Context(), "sess-1", "implement", "1.0.0")
 	testutil.FailErr(t, "start original workflow", err)
 	original.Status = api.WorkflowRunStatusComplete
 	completedAt := time.Now().UTC()
 	original.CompletedAt = &completedAt
-	testutil.FailErr(t, "persist completed workflow", mgr.Store.Update(t.Context(), original))
+	testutil.FailErr(t, "persist completed workflow", mgr.Store.State.Update(t.Context(), original))
 	// The new manager reads only persisted workflow state.
-	recovered := NewManager(mgr.Store, sessions, mgr.Manifests, nil)
-	if !recovered.AcceptsEmptyRequest(t.Context(), "sess-1") {
+	recovered := NewManager(mgr.Store, sessions, mgr.Resolver.Overlay, nil)
+	if !recovered.Requests.AcceptsEmptyRequest(t.Context(), "sess-1") {
 		t.Fatal("empty follow-up should use the default request contract")
 	}
-	active, err := recovered.GetActive(t.Context(), "sess-1")
+	active, err := recovered.Store.Runs.ActiveBySession(t.Context(), "sess-1")
 	testutil.FailErr(t, "read after preflight", err)
 	if active != nil {
 		t.Fatal("preflight created a workflow")
 	}
-	if !errors.Is(recovered.AssertSessionRunnable(t.Context(), "sess-1"), ErrNoActiveRun) {
+	if !errors.Is(recovered.Policy.AssertSessionRunnable(t.Context(), "sess-1"), runstate.ErrNoActiveRun) {
 		t.Fatal("unbound coordinator execution must be rejected")
 	}
-	_, response, handled, err := recovered.PrepareUserRequest(t.Context(), "sess-1", "")
+	_, response, handled, err := recovered.Requests.PrepareUserRequest(t.Context(), "sess-1", "")
 	testutil.FailErr(t, "prepare empty follow-up", err)
 	if !handled || response == nil {
 		t.Fatal("empty follow-up must open the default workflow question")
 	}
-	active, err = recovered.GetActive(t.Context(), "sess-1")
+	active, err = recovered.Store.Runs.ActiveBySession(t.Context(), "sess-1")
 	testutil.FailErr(t, "read recovered workflow", err)
-	if active == nil || active.ID == original.ID || !recovered.IsAmbientRun(active) {
+	if active == nil || active.ID == original.ID || !runstate.IsAmbientRun(active) {
 		t.Fatalf("recovered workflow = %+v", active)
 	}
-	old, err := recovered.Get(t.Context(), original.ID)
+	old, err := recovered.Store.Runs.Get(t.Context(), original.ID)
 	testutil.FailErr(t, "read original history", err)
 	if old.Status != api.WorkflowRunStatusComplete {
 		t.Fatal("follow-up rewrote completed history")
@@ -62,7 +62,7 @@ func TestEnsureSessionWorkflowConcurrentRequestsShareRun(t *testing.T) {
 	for i := range count {
 		wg.Go(func() {
 			<-start
-			runs[i], errs[i] = mgr.EnsureSessionWorkflow(t.Context(), "sess-1")
+			runs[i], errs[i] = mgr.Ambient.EnsureSessionWorkflow(t.Context(), "sess-1")
 		})
 	}
 	close(start)
@@ -87,20 +87,25 @@ func (s workflowSessionReadStub) Get(context.Context, string) (*api.Session, err
 
 func TestEnsureSessionWorkflowWorkersAndReadFailures(t *testing.T) {
 	mgr, sessions, _, _ := testManager(t)
-	mgr.Sessions = workflowSessionReadStub{Store: sessions, sess: &api.Session{ID: "worker", ParentSessionID: "sess-1"}}
-	run, err := mgr.EnsureSessionWorkflow(t.Context(), "worker")
+	workerSessions := workflowSessionReadStub{Store: sessions, sess: &api.Session{ID: "worker", ParentSessionID: "sess-1"}}
+	mgr.Policy.Sessions = workerSessions
+	mgr.Ambient.Sessions = workerSessions
+	run, err := mgr.Ambient.EnsureSessionWorkflow(t.Context(), "worker")
 	testutil.FailErr(t, "worker execution scope", err)
 	if run != nil {
 		t.Fatal("worker received an independent ambient workflow")
 	}
-	testutil.FailErr(t, "worker runnable without ambient", mgr.AssertSessionRunnable(t.Context(), "worker"))
+	testutil.FailErr(t, "worker runnable without ambient", mgr.Policy.AssertSessionRunnable(t.Context(), "worker"))
 	failure := errors.New("session read failed")
-	mgr.Sessions = workflowSessionReadStub{Store: sessions, err: failure}
-	_, _, _, err = mgr.PrepareUserRequest(t.Context(), "sess-1", "follow up")
+	failedSessions := workflowSessionReadStub{Store: sessions, err: failure}
+	mgr.Policy.Sessions = failedSessions
+	mgr.Ambient.Sessions = failedSessions
+	mgr.Requests.Sessions = failedSessions
+	_, _, _, err = mgr.Requests.PrepareUserRequest(t.Context(), "sess-1", "follow up")
 	if !errors.Is(err, failure) {
 		t.Fatalf("prepare error = %v, want session read failure", err)
 	}
-	if mgr.AcceptsEmptyRequest(t.Context(), "sess-1") {
+	if mgr.Requests.AcceptsEmptyRequest(t.Context(), "sess-1") {
 		t.Fatal("failed request preflight must deny")
 	}
 }
@@ -109,11 +114,11 @@ func TestAmbientAttachmentNeverReplacesActiveCatalogRun(t *testing.T) {
 	mgr, _, _, _ := testManager(t)
 	run, err := startRun(t.Context(), mgr, "sess-1", "plan", "1.0.0")
 	testutil.FailErr(t, "start catalog workflow", err)
-	_, err = mgr.StartAmbient(hostctx.WithHumanWorkflowStart(t.Context()), run.SessionID, "implement", "1.0.0")
-	if !errors.Is(err, ErrActiveRunExists) {
+	_, err = mgr.Ambient.StartAmbient(hostctx.WithHumanWorkflowStart(t.Context()), run.SessionID, "implement", "1.0.0")
+	if !errors.Is(err, runstate.ErrActiveRunExists) {
 		t.Fatalf("ambient attachment = %v, want active conflict", err)
 	}
-	active, err := mgr.EnsureSessionWorkflow(t.Context(), run.SessionID)
+	active, err := mgr.Ambient.EnsureSessionWorkflow(t.Context(), run.SessionID)
 	testutil.FailErr(t, "retain active catalog run", err)
 	if active == nil || active.ID != run.ID {
 		t.Fatalf("active catalog run replaced: %+v", active)
@@ -122,14 +127,20 @@ func TestAmbientAttachmentNeverReplacesActiveCatalogRun(t *testing.T) {
 
 func TestWorkflowRepairRespectsSessionStopAdmission(t *testing.T) {
 	mgr, _, _, _ := testManager(t)
-	mgr.SessionAdmission = rejectingSessionAdmission{}
-	_, _, _, err := mgr.PrepareUserRequest(t.Context(), "sess-1", "follow up")
+	mgr.Starts.Barrier = rejectingSessionAdmission{}
+	_, _, _, err := mgr.Requests.PrepareUserRequest(t.Context(), "sess-1", "follow up")
 	if !errors.Is(err, lifecycle.ErrStopping) {
 		t.Fatalf("prepare = %v, want stop admission rejection", err)
 	}
-	run, err := mgr.GetActive(t.Context(), "sess-1")
+	run, err := mgr.Store.Runs.ActiveBySession(t.Context(), "sess-1")
 	testutil.FailErr(t, "read after rejected repair", err)
 	if run != nil {
 		t.Fatalf("rejected repair attached a workflow: %+v", run)
 	}
+}
+
+type rejectingSessionAdmission struct{}
+
+func (rejectingSessionAdmission) WithSessionTreeAdmission(context.Context, string, func() error) error {
+	return lifecycle.ErrStopping
 }

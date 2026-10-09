@@ -2,13 +2,12 @@ package session
 
 import (
 	"context"
-	"strings"
-
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/verification"
 	"github.com/lycaon/lycaon/pkg/api"
+	"strings"
 )
 
 const (
@@ -33,7 +32,7 @@ func (m *Manager) maybeRejectCloseoutBeforeReportPhase(
 	if !ok || report.Verification.Valid() && report.Verification.Method == verification.Blocked {
 		return nil, false
 	}
-	state := m.workflows.ActivePhaseGuardState(ctx, sess.ID)
+	state := m.workflows.Policy.ActivePhaseGuardState(ctx, sess.ID)
 	if !state.ReportCloseoutPending {
 		return nil, false
 	}

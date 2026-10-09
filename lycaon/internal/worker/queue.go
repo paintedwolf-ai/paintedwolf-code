@@ -4,7 +4,6 @@ package worker
 import (
 	"context"
 	"fmt"
-
 	"github.com/lycaon/lycaon/internal/workerprogress"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -77,8 +76,15 @@ func admitWorkerTransition(ctx context.Context, admission TaskAdmission, claimed
 	return won, err
 }
 
-// WorkflowRunChecker validates run and task eligibility before enqueue.
-type WorkflowRunChecker interface {
+// WorkflowDomains binds independent run and task admission resources.
+type WorkflowDomains struct {
+	Runs  WorkflowRunAdmission
+	Tasks WorkflowTaskAdmission
+}
+
+type WorkflowRunAdmission interface {
 	AssertRunnable(ctx context.Context, runID string) error
+}
+type WorkflowTaskAdmission interface {
 	AssertWorkerTask(ctx context.Context, task *api.WorkerTask) error
 }

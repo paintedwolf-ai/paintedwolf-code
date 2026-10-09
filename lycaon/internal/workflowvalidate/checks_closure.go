@@ -2,10 +2,6 @@ package workflowvalidate
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
-	"strings"
-
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/anchorcatalog"
 	"github.com/lycaon/lycaon/internal/conditions"
@@ -18,9 +14,14 @@ import (
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/workflow"
+	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"github.com/lycaon/lycaon/internal/workflowdiag"
 	"github.com/lycaon/lycaon/pkg/api"
+	"os"
+	"path/filepath"
+	"strings"
 )
 
 func checkClosure(
@@ -458,7 +459,7 @@ func checkGateFeedbackCoverage(opts CatalogValidateOptions, reg *workflowdef.Reg
 }
 
 func checkComposePolicy(opts CatalogValidateOptions, reg *workflowdef.Registry) []api.ComposeValidationError {
-	policy, err := workflow.LoadComposePolicy()
+	policy, err := workflowcomposition.LoadComposePolicy()
 	if err != nil {
 		return []api.ComposeValidationError{workflowdiag.EmitDefault(workflowdiag.MustCode("load_error"), "compose-policy",
 			map[string]any{"detail": err.Error()})}
@@ -470,7 +471,7 @@ func checkComposePolicy(opts CatalogValidateOptions, reg *workflowdef.Registry) 
 			// Posture/extends policy applies to composed overlays, not root recipes.
 			continue
 		}
-		errs := policy.Apply(workflow.ComposePolicyInput{
+		errs := policy.Apply(workflowcomposition.ComposePolicyInput{
 			Raw:         m,
 			Effective:   m,
 			ExtendsRef:  extends,
@@ -506,7 +507,7 @@ func checkTemplates(opts CatalogValidateOptions, condReg *conditions.ConditionRe
 			// Templates may not be full manifests — skip unparseable.
 			continue
 		}
-		for _, d := range workflow.ValidateComposeManifest(condReg, shippedObligationSpecs(), m) {
+		for _, d := range workflowvalidation.ValidateComposeManifest(condReg, shippedObligationSpecs(), m) {
 			d.Field = p + ": " + d.Field
 			out = append(out, d)
 		}

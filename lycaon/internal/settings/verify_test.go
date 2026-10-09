@@ -3,17 +3,16 @@ package settings
 import (
 	"context"
 	"errors"
-	"os"
-	"path/filepath"
-	"strings"
-	"testing"
-
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	wire "github.com/lycaon/lycaon/pkg/api"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
 )
 
 func TestVerifyStoreProjectOverlay(t *testing.T) {
@@ -35,7 +34,7 @@ func TestVerifyStoreProjectOverlay(t *testing.T) {
 		t.Fatalf("verify.yaml not written: %v", err)
 	}
 	fresh := &VerifyStore{projectCache: map[string]VerifyConfig{}}
-	if got := fresh.Get(llm.SettingsScopeProject, dir).Test; got != "./task check" {
+	if got := fresh.Store.Runs.Get(llm.SettingsScopeProject, dir).Test; got != "./task check" {
 		t.Fatalf("reload = %q want ./task check", got)
 	}
 }

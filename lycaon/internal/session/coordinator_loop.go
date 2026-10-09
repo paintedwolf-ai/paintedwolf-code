@@ -9,7 +9,7 @@ import (
 )
 
 // SetLoopWorkflowSource wires workflow run lookups for coordinator loop policy.
-func (m *Manager) SetLoopWorkflowSource(src loopwake.LoopWorkflowSource) {
+func (m *Manager) SetLoopWorkflowSource(src *loopwake.WorkflowDomains) {
 	if m == nil {
 		return
 	}

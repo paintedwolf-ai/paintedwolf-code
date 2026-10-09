@@ -19,9 +19,9 @@ func TestDrainPendingDoesNotBurnBudgetWhenPromptActive(t *testing.T) {
 	deps.GetSession = func(context.Context, string) (*api.Session, error) {
 		return &api.Session{ID: "s1", Status: api.SessionStatusIdle, WorkspacePath: workspaceDir}, nil
 	}
-	deps.WorkflowSource = StubLoopWF{
+	deps.WorkflowSource = workflowFixturePorts(StubLoopWF{
 		run: &api.WorkflowRun{ID: "run-1", Status: api.WorkflowRunStatusRunning, CurrentPhase: "work"},
-	}
+	})
 	deps.RunPrompt = func(context.Context, string) (*promptresult.Result, error) {
 		prompts.Add(1)
 		time.Sleep(50 * time.Millisecond)
@@ -71,9 +71,9 @@ func TestRunPromptSyncConsumesBudgetOnce(t *testing.T) {
 	deps.GetSession = func(context.Context, string) (*api.Session, error) {
 		return &api.Session{ID: "s1", Status: api.SessionStatusIdle, WorkspacePath: workspaceDir}, nil
 	}
-	deps.WorkflowSource = StubLoopWF{
+	deps.WorkflowSource = workflowFixturePorts(StubLoopWF{
 		run: &api.WorkflowRun{ID: "run-1", Status: api.WorkflowRunStatusRunning, CurrentPhase: "work"},
-	}
+	})
 	deps.RunPrompt = func(context.Context, string) (*promptresult.Result, error) {
 		prompts.Add(1)
 		return &promptresult.Result{}, nil
@@ -95,9 +95,9 @@ func TestDrainPendingWorkerWakeAfterCloseoutSkipsPrompt(t *testing.T) {
 	deps.GetSession = func(context.Context, string) (*api.Session, error) {
 		return &api.Session{ID: "s1", Status: api.SessionStatusIdle, WorkspacePath: workspaceDir}, nil
 	}
-	deps.WorkflowSource = StubLoopWF{
+	deps.WorkflowSource = workflowFixturePorts(StubLoopWF{
 		run: &api.WorkflowRun{ID: "run-1", Status: api.WorkflowRunStatusRunning, CurrentPhase: "work"},
-	}
+	})
 	deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) bool { return false }
 	deps.RunPrompt = func(context.Context, string) (*promptresult.Result, error) {
 		prompts.Add(1)
@@ -123,9 +123,9 @@ func TestWakeQueuedDuringHostTurnDrainsOnRelease(t *testing.T) {
 	deps.GetSession = func(context.Context, string) (*api.Session, error) {
 		return &api.Session{ID: "s1", Status: api.SessionStatusIdle, WorkspacePath: workspaceDir}, nil
 	}
-	deps.WorkflowSource = StubLoopWF{
+	deps.WorkflowSource = workflowFixturePorts(StubLoopWF{
 		run: &api.WorkflowRun{ID: "run-1", Status: api.WorkflowRunStatusRunning, CurrentPhase: "review"},
-	}
+	})
 	deps.RunPrompt = func(ctx context.Context, sessionID string) (*promptresult.Result, error) {
 		if prompts.Add(1) == 1 {
 			// Requeue a transition while the host prompt is active.
@@ -160,9 +160,9 @@ func TestWakeQueuedDuringPromptExecutionDrainsOnRelease(t *testing.T) {
 	deps.GetSession = func(context.Context, string) (*api.Session, error) {
 		return &api.Session{ID: "s1", Status: api.SessionStatusBusy, WorkspacePath: workspaceDir}, nil
 	}
-	deps.WorkflowSource = StubLoopWF{
+	deps.WorkflowSource = workflowFixturePorts(StubLoopWF{
 		run: &api.WorkflowRun{ID: "run-1", Status: api.WorkflowRunStatusRunning, CurrentPhase: "work"},
-	}
+	})
 	deps.RunPrompt = func(context.Context, string) (*promptresult.Result, error) {
 		prompts.Add(1)
 		return &promptresult.Result{}, nil

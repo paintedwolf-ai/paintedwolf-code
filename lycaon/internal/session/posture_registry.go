@@ -2,13 +2,13 @@ package session
 
 import (
 	"fmt"
+	"github.com/lycaon/lycaon/config"
+	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
+	"github.com/lycaon/lycaon/pkg/api"
 	"os"
 	"path/filepath"
 	"strings"
-
-	"github.com/lycaon/lycaon/config"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // PostureSpec is one entry from session-postures.yaml. A posture names a stage
@@ -52,7 +52,7 @@ func LoadPostureRegistry() (*PostureRegistry, error) {
 	entries := make(map[api.SessionPosture]PostureSpec, len(raw.Postures))
 	for id, entry := range raw.Postures {
 		id = strings.TrimSpace(id)
-		if !ValidSessionPosture(id) {
+		if !sessionposture.ValidSessionPosture(id) {
 			return nil, fmt.Errorf("session-postures: unknown posture %q", id)
 		}
 		posture := api.SessionPosture(id)
@@ -63,7 +63,7 @@ func LoadPostureRegistry() (*PostureRegistry, error) {
 			Label:       strings.TrimSpace(entry.Label),
 		}
 	}
-	for _, p := range AllSessionPostures() {
+	for _, p := range sessionposture.AllSessionPostures() {
 		if _, ok := entries[p]; !ok {
 			return nil, fmt.Errorf("session-postures: missing posture %q", p)
 		}
@@ -100,7 +100,7 @@ func mergePostureOverlay(base *PostureRegistry, projectDir string) (*PostureRegi
 	}
 	for id, entry := range raw.Postures {
 		id = strings.TrimSpace(id)
-		if !ValidSessionPosture(id) {
+		if !sessionposture.ValidSessionPosture(id) {
 			return nil, fmt.Errorf("project postures: unknown posture %q", id)
 		}
 		posture := api.SessionPosture(id)
@@ -176,27 +176,4 @@ func (r *PostureRegistry) List() []PostureSpec {
 		out = append(out, s)
 	}
 	return out
-}
-
-// AllSessionPostures is the closed posture enum.
-func AllSessionPostures() []api.SessionPosture {
-	return []api.SessionPosture{
-		api.SessionPostureSpec,
-		api.SessionPostureBuild,
-		api.SessionPostureOrchestrate,
-		api.SessionPostureVet,
-	}
-}
-
-// ValidSessionPosture reports whether s is a known SessionPosture value.
-func ValidSessionPosture(s string) bool {
-	switch api.SessionPosture(strings.TrimSpace(s)) {
-	case api.SessionPostureSpec,
-		api.SessionPostureBuild,
-		api.SessionPostureOrchestrate,
-		api.SessionPostureVet:
-		return true
-	default:
-		return false
-	}
 }

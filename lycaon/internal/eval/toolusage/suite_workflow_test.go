@@ -1,14 +1,13 @@
 package toolusage
 
 import (
+	"github.com/lycaon/lycaon/internal/settingsoverlay"
+	"github.com/lycaon/lycaon/internal/testutil"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"os"
 	"path/filepath"
 	"testing"
-
-	"github.com/lycaon/lycaon/internal/settingsoverlay"
-	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/workflow"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 )
 
 func TestWorkflowFixturesUseValidProjectManifests(t *testing.T) {
@@ -29,10 +28,10 @@ func TestWorkflowFixturesUseValidProjectManifests(t *testing.T) {
 			if manifest.ID != spec.WorkflowID || manifest.Version != spec.WorkflowVersion {
 				t.Fatalf("workflow identity: %q", manifest.ID)
 			}
-			if issues := workflow.ValidatePrimitiveManifest(manifest); len(issues) > 0 {
+			if issues := workflowvalidation.ValidatePrimitiveManifest(manifest); len(issues) > 0 {
 				t.Fatalf("workflow primitives: %+v", issues)
 			}
-			if issues := workflow.ValidatePhaseReachability(manifest); len(issues) > 0 {
+			if issues := workflowvalidation.ValidatePhaseReachability(manifest); len(issues) > 0 {
 				t.Fatalf("workflow reachability: %+v", issues)
 			}
 			for _, phase := range manifest.PhaseDefs {

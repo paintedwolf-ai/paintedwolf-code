@@ -24,9 +24,10 @@ func TestConsumedStartupWakeKeepsWaitingUserTurnBusy(t *testing.T) {
 	sess, err := memory.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	testutil.FailErr(t, "start visible turn", memory.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
-	mgr.SetLoopWorkflowSource(&settlementWorkflowSource{active: &api.WorkflowRun{
+	loopWorkflowFixture1 := &settlementWorkflowSource{active: &api.WorkflowRun{
 		ID: "run", Revision: 5, Status: api.WorkflowRunStatusRunning, CurrentPhase: "work",
-	}})
+	}}
+	mgr.SetLoopWorkflowSource(&loopwake.WorkflowDomains{Runs: loopWorkflowFixture1, Approvals: loopWorkflowFixture1, Obligations: loopWorkflowFixture1})
 	loop := mgr.ensureCoordinatorRuntime().CoordinatorLoop()
 	t.Cleanup(func() { loop.ForgetSession(context.Background(), sess.ID) })
 	finish := loop.Admission.BeginPromptExecution(ctx, sess.ID)

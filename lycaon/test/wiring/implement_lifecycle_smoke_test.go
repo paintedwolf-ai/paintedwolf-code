@@ -2,6 +2,11 @@ package wiring
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/llm"
+	"github.com/lycaon/lycaon/internal/llm/modelcall"
+	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/testutil"
+	wire "github.com/lycaon/lycaon/pkg/api"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,12 +14,6 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"github.com/lycaon/lycaon/internal/llm"
-	"github.com/lycaon/lycaon/internal/llm/modelcall"
-	"github.com/lycaon/lycaon/internal/settings"
-	"github.com/lycaon/lycaon/internal/testutil"
-	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 type implementLifecycleState struct {
@@ -137,7 +136,7 @@ func TestImplementLifecycleSmokePathsForward(t *testing.T) {
 		t.Fatalf("initial phase = %q want boot", run.CurrentPhase)
 	}
 	h.SeedProgress(t, ctx, sess.ID)
-	testutil.FailErr(t, "RecordBoardOrientReady", h.WorkflowMgr.RecordBoardOrientReady(ctx, sess.ID, "smoke-board"))
+	testutil.FailErr(t, "RecordBoardOrientReady", h.WorkflowMgr.Fanout.RecordBoardOrientReady(ctx, sess.ID, "smoke-board"))
 	run, err = h.WorkflowMgr.GetActive(ctx, sess.ID)
 	testutil.FailErr(t, "GetActive after orient", err)
 	if run.CurrentPhase != "work" {

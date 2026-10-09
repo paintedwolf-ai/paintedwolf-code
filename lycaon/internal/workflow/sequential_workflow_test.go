@@ -3,23 +3,23 @@ package workflow
 import (
 	"context"
 	"errors"
-	"testing"
-
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
+	"testing"
 )
 
 func TestStartRejectsUntilExit(t *testing.T) {
 	mgr, sessionID, _ := testWorkflowManager(t)
 	ctx := context.Background()
-	first, err := mgr.StartHuman(ctx, sessionID, api.StartWorkflowRunRequest{
+	first, err := mgr.Starts.StartHuman(ctx, sessionID, api.StartWorkflowRunRequest{
 		WorkflowID: "plan", WorkflowVersion: "1.0.0",
 	})
 	testutil.FailErr(t, "StartHuman", err)
-	if _, err := mgr.StartAmbient(ctx, sessionID, "plan", "1.0.0"); !errors.Is(err, ErrActiveRunExists) {
+	if _, err := mgr.Ambient.StartAmbient(ctx, sessionID, "plan", "1.0.0"); !errors.Is(err, runstate.ErrActiveRunExists) {
 		t.Fatalf("err = %v", err)
 	}
-	if _, err := mgr.Exit(ctx, sessionID, first.ID, first.Revision, "user_exit"); err != nil {
+	if _, err := mgr.Controls.Exit(ctx, sessionID, first.ID, first.Revision, "user_exit"); err != nil {
 		testutil.FailErr(t, "mgr.Exit failed", err)
 	}
 	second, err := startRun(ctx, mgr, sessionID, "plan", "1.0.0")
@@ -35,8 +35,8 @@ func TestMessageStampDuringRun(t *testing.T) {
 	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.0")
 	testutil.FailErr(t, "startRun failed", err)
 	msg := api.Message{Role: api.MessageRoleUser, Content: "hello"}
-	if err := mgr.StampAndAppendMessages(ctx, "sess-1", msg); err != nil {
-		testutil.FailErr(t, "mgr.StampAndAppendMessages failed", err)
+	if err := mgr.Transcript.StampAndAppendMessages(ctx, "sess-1", msg); err != nil {
+		testutil.FailErr(t, "mgr.Transcript.StampAndAppendMessages failed", err)
 	}
 	msgs, err := store.GetMessages(ctx, "sess-1")
 	testutil.FailErr(t, "store.GetMessages failed", err)
@@ -87,7 +87,7 @@ func TestExitEndBoundaryAndPostureRestore(t *testing.T) {
 	if sess.Posture != api.SessionPostureSpec {
 		t.Fatalf("posture during run = %q want spec", sess.Posture)
 	}
-	exited, err := mgr.Exit(ctx, "sess-1", run.ID, run.Revision, "user_exit")
+	exited, err := mgr.Controls.Exit(ctx, "sess-1", run.ID, run.Revision, "user_exit")
 	if err != nil {
 		testutil.FailErr(t, "mgr.Exit failed", err)
 	}

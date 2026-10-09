@@ -2,6 +2,10 @@ package security
 
 import (
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/testutil"
+	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
+	wire "github.com/lycaon/lycaon/pkg/api"
+	"github.com/lycaon/lycaon/test/wiring"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -9,11 +13,6 @@ import (
 	"runtime"
 	"strings"
 	"testing"
-
-	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/workflow"
-	wire "github.com/lycaon/lycaon/pkg/api"
-	"github.com/lycaon/lycaon/test/wiring"
 )
 
 func TestWorkflowPersistE2E(t *testing.T) {
@@ -123,7 +122,7 @@ phases:
       - child_run_complete
       - evidence_passed:verify
 `
-	if err := sessionWFStore.Upsert(t.Context(), sess.ID, []byte(manifest), workflow.ComposeActorCoordinator, nil); err != nil {
+	if err := sessionWFStore.Upsert(t.Context(), sess.ID, []byte(manifest), workflowdrafts.Coordinator, nil); err != nil {
 		testutil.FailErr(t, "sessionWFStore.Upsert failed", err)
 	}
 	body := `{"version":"1.0.0","confirm":true}`
@@ -170,7 +169,7 @@ phases:
       - child_run_complete
       - evidence_passed:verify
 `
-	if err := sessionWFStore.Upsert(t.Context(), sess.ID, []byte(manifest), workflow.ComposeActorCoordinator, nil); err != nil {
+	if err := sessionWFStore.Upsert(t.Context(), sess.ID, []byte(manifest), workflowdrafts.Coordinator, nil); err != nil {
 		testutil.FailErr(t, "sessionWFStore.Upsert failed", err)
 	}
 	body := `{"version":"1.0.0","confirm":true,"trigger":"/plan"}`

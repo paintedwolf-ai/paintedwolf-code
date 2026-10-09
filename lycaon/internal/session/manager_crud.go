@@ -2,13 +2,12 @@ package session
 
 import (
 	"context"
-	"strings"
-	"time"
-
 	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/internal/pagecursor"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/pkg/api"
+	"strings"
+	"time"
 )
 
 // CreateForProject opens a project-bound session.
@@ -124,7 +123,7 @@ func (m *Manager) reconcileOrphanedWorkflowRuns(ctx context.Context, sessionID s
 	if m == nil || m.workflows == nil {
 		return
 	}
-	_ = m.workflows.ReconcileOrphanedRuns(ctx, sessionID)
+	_ = m.workflows.Recovery.ReconcileOrphanedRuns(ctx, sessionID)
 }
 
 // HasActiveProjectSessions reports whether a project has unarchived active sessions.

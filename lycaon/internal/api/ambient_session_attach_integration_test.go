@@ -5,15 +5,6 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"net/http"
-	"net/http/httptest"
-	"os"
-	"path/filepath"
-	"runtime"
-	"strings"
-	"testing"
-	"time"
-
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session"
@@ -23,8 +14,18 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/workflow"
+	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	wire "github.com/lycaon/lycaon/pkg/api"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"testing"
+	"time"
 )
 
 func TestCreateSessionAttachesAmbientImplementRun(t *testing.T) {
@@ -39,9 +40,8 @@ func TestCreateSessionAttachesAmbientImplementRun(t *testing.T) {
 	store := store.NewSQL(sqlDB)
 	wfReg, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "RegistryFromDirs", err)
-	runStore := workflow.NewSQLStore(sqlDB)
+	runStore := workflowpersistence.New(sqlDB)
 	wfMgr := workflow.NewManager(runStore, store, wfReg, nil)
-	wfMgr.Resolver = workflow.ManifestResolver{}
 
 	dir := t.TempDir()
 	projReg := project.NewSQLRegistry(sqlDB)
@@ -49,7 +49,7 @@ func TestCreateSessionAttachesAmbientImplementRun(t *testing.T) {
 	testutil.FailErr(t, "reg.Create failed", err)
 	srv := NewServer(requiredTestDeps(t, Dependencies{
 		Store: store, Projects: projReg,
-		Workflows: wfMgr, WorkflowCatalog: workflow.ManifestResolver{}, WorkflowRuns: runStore, ModuleRoot: root,
+		Workflows: wfMgr, WorkflowCatalog: workflowcatalog.Resolver{}, WorkflowRuns: runStore, ModuleRoot: root,
 	}), nil, TestAPIToken)
 
 	body := `{"project_id":"` + p.ID + `","posture":"build"}`
@@ -100,9 +100,8 @@ func TestCreateSessionCatalogOmitsImplement(t *testing.T) {
 	store := store.NewSQL(sqlDB)
 	wfReg, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "RegistryFromDirs", err)
-	runStore := workflow.NewSQLStore(sqlDB)
+	runStore := workflowpersistence.New(sqlDB)
 	wfMgr := workflow.NewManager(runStore, store, wfReg, nil)
-	wfMgr.Resolver = workflow.ManifestResolver{}
 
 	dir := t.TempDir()
 	projReg := project.NewSQLRegistry(sqlDB)
@@ -110,7 +109,7 @@ func TestCreateSessionCatalogOmitsImplement(t *testing.T) {
 	testutil.FailErr(t, "reg.Create failed", err)
 	srv := NewServer(requiredTestDeps(t, Dependencies{
 		Store: store, Projects: projReg,
-		Workflows: wfMgr, WorkflowCatalog: workflow.ManifestResolver{}, WorkflowRuns: runStore,
+		Workflows: wfMgr, WorkflowCatalog: workflowcatalog.Resolver{}, WorkflowRuns: runStore,
 	}), nil, TestAPIToken)
 
 	body := `{"project_id":"` + p.ID + `","posture":"build"}`
@@ -155,7 +154,7 @@ func waitAmbientActiveRun(t *testing.T, wfMgr *workflow.RunManager, sessionID st
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		run, err := wfMgr.GetActive(context.Background(), sessionID)
+		run, err := wfMgr.Store.Runs.ActiveBySession(context.Background(), sessionID)
 		testutil.FailErr(t, "GetActive", err)
 		if run != nil {
 			return run
@@ -178,12 +177,12 @@ func TestCreateSessionWithInvalidProjectWorkflowAttachesAmbientImplement(t *test
 	store := store.NewSQL(sqlDB)
 	wfReg, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "RegistryFromDirs", err)
-	runStore := workflow.NewSQLStore(sqlDB)
-	resolver := workflow.ManifestResolver{
+	runStore := workflowpersistence.New(sqlDB)
+	resolver := workflowcatalog.Resolver{
 		ProjectTierApplies: func(context.Context, string) bool { return true },
 	}
 	wfMgr := workflow.NewManager(runStore, store, wfReg, nil)
-	wfMgr.Resolver = resolver
+	wfMgr.Resolver.ProjectTierApplies = resolver.ProjectTierApplies
 
 	dir := t.TempDir()
 	wfDir := filepath.Join(dir, settingsoverlay.DirName(), "workflows", "implement-dispatch")
@@ -231,12 +230,12 @@ func TestAbortSessionWithInvalidProjectWorkflowSucceeds(t *testing.T) {
 	store := store.NewSQL(sqlDB)
 	wfReg, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "RegistryFromDirs", err)
-	runStore := workflow.NewSQLStore(sqlDB)
-	resolver := workflow.ManifestResolver{
+	runStore := workflowpersistence.New(sqlDB)
+	resolver := workflowcatalog.Resolver{
 		ProjectTierApplies: func(context.Context, string) bool { return true },
 	}
 	wfMgr := workflow.NewManager(runStore, store, wfReg, nil)
-	wfMgr.Resolver = resolver
+	wfMgr.Resolver.ProjectTierApplies = resolver.ProjectTierApplies
 
 	dir := t.TempDir()
 	wfDir := filepath.Join(dir, settingsoverlay.DirName(), "workflows", "implement-dispatch")
@@ -256,7 +255,7 @@ attach:
 	testutil.FailErr(t, "reg.Create failed", err)
 
 	mgr := session.NewManager(store, nil, nil, settings.DefaultSessionLimits())
-	mgr.SetWorkflowSessionView(wfMgr)
+	mgr.SetWorkflowDomains(&session.WorkflowDomains{Runs: wfMgr.Store.Runs, Policy: wfMgr.Policy, Ambient: wfMgr.Ambient, Blueprints: wfMgr.Blueprints, Batch: wfMgr.Batch, Slash: wfMgr.Slash, Requests: wfMgr.Requests, Feedback: wfMgr.Feedback, Transcript: wfMgr.Transcript, Asks: wfMgr.Asks, Fanout: wfMgr.Fanout, Phases: wfMgr.Phases, Reports: wfMgr.Reports, Recovery: wfMgr.Recovery, Cleanup: wfMgr})
 	mgr.SetSessionWorkflowStop(wfMgr)
 
 	srv := NewServer(requiredTestDeps(t, Dependencies{

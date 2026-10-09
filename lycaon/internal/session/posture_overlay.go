@@ -3,7 +3,6 @@ package session
 import (
 	"context"
 	"fmt"
-
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectcontrib"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
@@ -87,7 +86,7 @@ func (m *Manager) loadPostureOverlays(dirs []string) (*PostureRegistry, error) {
 func (m *Manager) promptToolProfile(ctx context.Context, sess *api.Session) (string, error) {
 	coordinatorProfile := ""
 	if m.workflows != nil {
-		if manifest, ok := m.workflows.ActiveManifest(ctx, sess.ID); ok {
+		if manifest, ok := m.workflows.Policy.ActiveManifest(ctx, sess.ID); ok {
 			coordinatorProfile = manifest.CoordinatorProfile
 		}
 	}

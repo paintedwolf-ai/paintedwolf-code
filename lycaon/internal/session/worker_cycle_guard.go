@@ -2,11 +2,11 @@ package session
 
 import (
 	"context"
-	"strings"
-
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/prompts"
+	workflowfacts "github.com/lycaon/lycaon/internal/session/workflowfacts"
 	"github.com/lycaon/lycaon/pkg/api"
+	"strings"
 )
 
 // WorkerCycleGuardDeps wires in-flight worker checks for coordinator task().
@@ -15,7 +15,7 @@ type WorkerCycleGuardDeps struct {
 	MaxWorkers      func(ctx context.Context, sessionID string) int
 	MaxReadWorkers  func(ctx context.Context, sessionID string) int
 	MaxWriteWorkers func(ctx context.Context, sessionID string) int
-	PhaseGuardState func(ctx context.Context, sessionID string) WorkflowPhaseGuardState
+	PhaseGuardState func(ctx context.Context, sessionID string) workflowfacts.WorkflowPhaseGuardState
 	// RepoKnownEmpty reports whether the session workspace is empty.
 	RepoKnownEmpty func(ctx context.Context, workspacePath string) bool
 }

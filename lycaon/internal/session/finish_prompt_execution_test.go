@@ -4,12 +4,9 @@ package session_test
 
 import (
 	"context"
-	"path/filepath"
-	"testing"
-	"time"
-
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
+	loopwake "github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/orchestration"
@@ -23,7 +20,12 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
+	"path/filepath"
+	"testing"
+	"time"
 )
 
 func TestFinishPromptExecutionDrainsLoopPendingAfterCanceledRequestCtx(t *testing.T) {
@@ -40,14 +42,13 @@ func TestFinishPromptExecutionDrainsLoopPendingAfterCanceledRequestCtx(t *testin
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
 	testutil.FailErr(t, "install anchor registry", mgr.InstallAnchorRegistry())
 
-	wfStore := workflow.NewSQLStore(sqlDB)
+	wfStore := workflowpersistence.New(sqlDB)
 	bundledDir := filepath.Join(root, "config", "packs", "painted-wolf", "platform", "workflows")
 	manifestRegistry, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "RegistryFromDirs", err)
 	wfMgr := workflow.NewManager(wfStore, store, manifestRegistry, nil)
-	wfMgr.Resolver = workflow.ManifestResolver{}
-	mgr.SetWorkflowSessionView(wfMgr)
-	mgr.SetLoopWorkflowSource(wfMgr)
+	mgr.SetWorkflowDomains(&session.WorkflowDomains{Runs: wfMgr.Store.Runs, Policy: wfMgr.Policy, Ambient: wfMgr.Ambient, Blueprints: wfMgr.Blueprints, Batch: wfMgr.Batch, Slash: wfMgr.Slash, Requests: wfMgr.Requests, Feedback: wfMgr.Feedback, Transcript: wfMgr.Transcript, Asks: wfMgr.Asks, Fanout: wfMgr.Fanout, Phases: wfMgr.Phases, Reports: wfMgr.Reports, Recovery: wfMgr.Recovery, Cleanup: wfMgr})
+	mgr.SetLoopWorkflowSource(&loopwake.WorkflowDomains{Runs: wfMgr.Store.Runs, Approvals: wfMgr.Policy, Obligations: wfMgr.Obligations})
 
 	ctx := context.Background()
 	dir := t.TempDir()
@@ -58,7 +59,7 @@ func TestFinishPromptExecutionDrainsLoopPendingAfterCanceledRequestCtx(t *testin
 	testutil.FailErr(t, "create session in store", err)
 	ref, err := workflowdef.LoadRegistryConfig(extpacks.OnDisk(bundledDir))
 	testutil.FailErr(t, "LoadRegistryConfig", err)
-	run, err := wfMgr.StartAmbient(ctx, sess.ID, ref.ID, ref.Version)
+	run, err := wfMgr.Ambient.StartAmbient(ctx, sess.ID, ref.ID, ref.Version)
 	testutil.FailErr(t, "StartAmbient", err)
 	_ = run
 	if err := store.SetSessionStatus(ctx, sess.ID, wire.SessionStatusBusy); err != nil {
@@ -66,7 +67,7 @@ func TestFinishPromptExecutionDrainsLoopPendingAfterCanceledRequestCtx(t *testin
 	}
 
 	finishExecution := mgr.BeginPromptExecutionForTest(t.Context(), sess.ID)
-	mgr.NudgeCoordinatorLoop(ctx, sess.ID, anchor.LegFinished, anchor.LegFinished, workflow.ImplementWorkLegKey(sess.ID), anchor.Envelope{})
+	mgr.NudgeCoordinatorLoop(ctx, sess.ID, anchor.LegFinished, anchor.LegFinished, runstate.ImplementWorkLegKey(sess.ID), anchor.Envelope{})
 	if _, ok := mgr.PendingLoopNudgeForTest(sess.ID); !ok {
 		t.Fatal("expected deferred loop wake while prompt execution is active")
 	}

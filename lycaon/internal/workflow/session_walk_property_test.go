@@ -3,11 +3,11 @@ package workflow
 import (
 	"context"
 	"errors"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
+	"github.com/lycaon/lycaon/pkg/api"
 	"math/rand"
 	"testing"
-
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // TestSessionWalkPropertyInvariants checks run state after fixed-seed operations.
@@ -34,7 +34,7 @@ func TestSessionWalkPropertyInvariants(t *testing.T) {
 
 	for step := 0; step < steps; step++ {
 		choice := allOps[rng.Intn(len(allOps))]
-		active, err := mgr.Store.ActiveBySession(ctx, sessionID)
+		active, err := mgr.Store.Runs.ActiveBySession(ctx, sessionID)
 		if err != nil {
 			t.Fatalf("step %d: ActiveBySession err: %v", step, err)
 		}
@@ -45,7 +45,7 @@ func TestSessionWalkPropertyInvariants(t *testing.T) {
 
 		switch choice {
 		case opStart:
-			run, err := mgr.StartHuman(ctx, sessionID, api.StartWorkflowRunRequest{
+			run, err := mgr.Starts.StartHuman(ctx, sessionID, api.StartWorkflowRunRequest{
 				WorkflowID: "plan", WorkflowVersion: "1.0.0", Request: "test request",
 			})
 			if err != nil {
@@ -66,17 +66,17 @@ func TestSessionWalkPropertyInvariants(t *testing.T) {
 				// error path, not a property violation.
 				continue
 			}
-			_, err := mgr.Advance(ctx, active.ID)
+			_, err := mgr.Phases.Advance(ctx, active.ID)
 			if err == nil {
 				continue
 			}
-			if _, ok := IsPhaseGateUnmet(err); ok {
+			if _, ok := runstate.IsPhaseGateUnmet(err); ok {
 				continue // expected when the gate isn't satisfied yet
 			}
 			if errors.Is(err, workflowdef.ErrUnknownWorkflow) {
 				continue
 			}
-			if _, ok := IsNotRunnable(err); ok {
+			if _, ok := runstate.IsNotRunnable(err); ok {
 				continue
 			}
 			t.Fatalf("step %d Advance unexpected err: %v", step, err)
@@ -85,9 +85,9 @@ func TestSessionWalkPropertyInvariants(t *testing.T) {
 			if active == nil {
 				continue
 			}
-			run, err := mgr.Pause(ctx, active.ID, "test")
+			run, err := mgr.Controls.Pause(ctx, active.ID, "test")
 			if err != nil {
-				if _, ok := IsNotRunnable(err); ok {
+				if _, ok := runstate.IsNotRunnable(err); ok {
 					continue
 				}
 				t.Fatalf("step %d Pause unexpected err: %v", step, err)
@@ -100,9 +100,9 @@ func TestSessionWalkPropertyInvariants(t *testing.T) {
 			if active == nil {
 				continue
 			}
-			run, err := mgr.Resume(ctx, active.ID)
+			run, err := mgr.Controls.Resume(ctx, active.ID)
 			if err != nil {
-				if _, ok := IsNotRunnable(err); ok {
+				if _, ok := runstate.IsNotRunnable(err); ok {
 					continue
 				}
 				t.Fatalf("step %d Resume unexpected err: %v", step, err)
@@ -116,19 +116,19 @@ func TestSessionWalkPropertyInvariants(t *testing.T) {
 				continue
 			}
 			exitedCatalog := false
-			if m, merr := mgr.manifestForRun(ctx, active); merr == nil {
+			if m, merr := mgr.Resolver.ForRun(ctx, active); merr == nil {
 				exitedCatalog = m.IsCatalogVisible()
 			}
-			_, err := mgr.Exit(ctx, sessionID, active.ID, active.Revision, "test")
+			_, err := mgr.Controls.Exit(ctx, sessionID, active.ID, active.Revision, "test")
 			if err != nil {
 				t.Fatalf("step %d Exit unexpected err: %v", step, err)
 			}
-			af, err := mgr.Store.ActiveBySession(ctx, sessionID)
+			af, err := mgr.Store.Runs.ActiveBySession(ctx, sessionID)
 			if err != nil {
 				t.Fatalf("step %d post-Exit ActiveBySession err: %v", step, err)
 			}
 			if exitedCatalog {
-				if af == nil || af.WorkflowID != "implement" || IsTerminal(af.Status) {
+				if af == nil || af.WorkflowID != "implement" || runstate.IsTerminal(af.Status) {
 					t.Fatalf("step %d post-catalog-Exit want fresh ambient, got %+v", step, af)
 				}
 			} else if af != nil {
@@ -139,9 +139,9 @@ func TestSessionWalkPropertyInvariants(t *testing.T) {
 			if active == nil {
 				continue
 			}
-			run, err := mgr.Cancel(ctx, active.ID, "test")
+			run, err := mgr.Controls.Cancel(ctx, active.ID, "test")
 			if err != nil {
-				if _, ok := IsNotRunnable(err); ok {
+				if _, ok := runstate.IsNotRunnable(err); ok {
 					continue
 				}
 				t.Fatalf("step %d Cancel unexpected err: %v", step, err)
@@ -152,13 +152,13 @@ func TestSessionWalkPropertyInvariants(t *testing.T) {
 		}
 
 		// Post-step global invariants.
-		af, err := mgr.Store.ActiveBySession(ctx, sessionID)
+		af, err := mgr.Store.Runs.ActiveBySession(ctx, sessionID)
 		if err != nil {
 			t.Fatalf("step %d invariant probe err: %v", step, err)
 		}
 		if af != nil {
 			// Active runs are never terminal (ActiveBySession filters them).
-			if IsTerminal(af.Status) {
+			if runstate.IsTerminal(af.Status) {
 				t.Fatalf("step %d invariant: ActiveBySession returned terminal run %+v", step, af)
 			}
 		}

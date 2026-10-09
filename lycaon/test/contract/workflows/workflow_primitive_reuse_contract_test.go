@@ -2,15 +2,14 @@ package contract
 
 import (
 	"context"
+	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
+	"github.com/lycaon/lycaon/test/contract/internal/workflowfixture"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/lycaon/lycaon/internal/workflow"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
-	"github.com/lycaon/lycaon/test/contract/internal/workflowfixture"
 )
 
 // Workflow primitives stay independent of a specific workflow.
@@ -53,7 +52,7 @@ func TestOptionsWorkflowUsesGenericPrimitives(t *testing.T) {
 
 func TestHumanApprovalPrimitiveHasNonPlanConsumer(t *testing.T) {
 	t.Parallel()
-	resolver := workflow.ManifestResolver{}
+	resolver := workflowcatalog.Resolver{}
 	summaries, err := resolver.ListResolved(context.Background(), "", "")
 	contractcheck.FailErr(t, "ListResolved", err)
 

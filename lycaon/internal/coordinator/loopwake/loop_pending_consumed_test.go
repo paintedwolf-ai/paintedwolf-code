@@ -53,9 +53,9 @@ func TestDrainRetiresWakesConsumedByTheTurnItJustRan(t *testing.T) {
 		return &promptresult.Result{}, nil
 	}
 	deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) bool { return true }
-	deps.WorkflowSource = StubLoopWF{
+	deps.WorkflowSource = workflowFixturePorts(StubLoopWF{
 		run: &api.WorkflowRun{ID: "run-drain", Status: api.WorkflowRunStatusRunning},
-	}
+	})
 	engine.SetDeps(deps)
 
 	// One prompt observes both queued wakes.
@@ -84,9 +84,9 @@ func TestPostTurnDrainKeepsWakesNudgedDuringTurn(t *testing.T) {
 		return &promptresult.Result{}, nil
 	}
 	deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) bool { return true }
-	deps.WorkflowSource = StubLoopWF{
+	deps.WorkflowSource = workflowFixturePorts(StubLoopWF{
 		run: &api.WorkflowRun{ID: "run-fresh", Status: api.WorkflowRunStatusRunning},
-	}
+	})
 	engine.SetDeps(deps)
 
 	engine.Observations.promptObservedSeq.Store(id, engine.Nudges.nudgeSeq.Add(1))
@@ -107,9 +107,9 @@ func TestPostTurnDrainDropsDormantPhaseAdvanceAfterCloseout(t *testing.T) {
 	deps.GetSession = func(context.Context, string) (*api.Session, error) {
 		return &api.Session{ID: id}, nil
 	}
-	deps.WorkflowSource = StubLoopWF{
+	deps.WorkflowSource = workflowFixturePorts(StubLoopWF{
 		run: &api.WorkflowRun{ID: "run-settled", Status: api.WorkflowRunStatusRunning, CurrentPhase: "work"},
-	}
+	})
 	deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) bool { return false }
 	deps.RunPrompt = func(context.Context, string) (*promptresult.Result, error) {
 		prompts++
@@ -137,9 +137,9 @@ func TestPostTurnDrainKeepsActionablePhaseAdvance(t *testing.T) {
 	deps.GetSession = func(context.Context, string) (*api.Session, error) {
 		return &api.Session{ID: id}, nil
 	}
-	deps.WorkflowSource = StubLoopWF{
+	deps.WorkflowSource = workflowFixturePorts(StubLoopWF{
 		run: &api.WorkflowRun{ID: "run-actionable", Status: api.WorkflowRunStatusRunning, CurrentPhase: "review"},
-	}
+	})
 	deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) bool { return true }
 	deps.RunPrompt = func(context.Context, string) (*promptresult.Result, error) {
 		prompts++
@@ -165,9 +165,9 @@ func TestActivePromptPhaseAdvanceDefersActionabilityUntilDrain(t *testing.T) {
 	deps.GetSession = func(context.Context, string) (*api.Session, error) {
 		return &api.Session{ID: id, Status: api.SessionStatusBusy}, nil
 	}
-	deps.WorkflowSource = StubLoopWF{
+	deps.WorkflowSource = workflowFixturePorts(StubLoopWF{
 		run: &api.WorkflowRun{ID: "run-busy", Status: api.WorkflowRunStatusRunning, CurrentPhase: "work"},
-	}
+	})
 	deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) bool { return false }
 	deps.QueueInform = func(context.Context, string, anchor.ID, anchor.Envelope) { informs++ }
 	deps.RunPrompt = func(context.Context, string) (*promptresult.Result, error) {

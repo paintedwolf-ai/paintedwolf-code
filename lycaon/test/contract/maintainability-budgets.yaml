@@ -44,9 +44,6 @@ exceptions:
             cap: 145
             reason: Predates the limits; fixes still land here while the package is decomposed (#271).
     source_files:
-        lycaon/internal/coordinator/loopwake/engine.go:
-            cap: 1198
-            reason: Past the limit before #356, which moves the sleep table out of it; the split is tracked in #364.
         lycaon/internal/toolhost/runtime.go:
             cap: 962
             reason: Past the limit before #356, which only rewires the status cache binding; the split is tracked in #363.

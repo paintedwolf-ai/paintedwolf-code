@@ -3,11 +3,10 @@ package wiring
 import (
 	"context"
 	"errors"
-	"testing"
-
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	wire "github.com/lycaon/lycaon/pkg/api"
+	"testing"
 )
 
 func TestStateStartRequiresHumanApproval(t *testing.T) {
@@ -41,8 +40,8 @@ func TestStateStartAfterSlash(t *testing.T) {
 	}, dir)
 	testutil.FailErr(t, "create session in store", err)
 
-	_, handled, err := h.WorkflowMgr.TrySlashPrompt(context.Background(), sess.ID, "/plan", "")
-	testutil.FailErr(t, "h.WorkflowMgr.TrySlashPrompt failed", err)
+	_, handled, err := h.WorkflowMgr.Slash.TrySlashPrompt(context.Background(), sess.ID, "/plan", "")
+	testutil.FailErr(t, "h.WorkflowMgr.Slash.TrySlashPrompt failed", err)
 	if !handled {
 		t.Fatal("expected /plan handled")
 	}

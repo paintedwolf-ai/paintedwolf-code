@@ -3,15 +3,14 @@ package app
 import (
 	"context"
 	"errors"
-	"strings"
-	"time"
-
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/session/store"
-	"github.com/lycaon/lycaon/internal/workflow"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
+	"strings"
+	"time"
 )
 
 var errProgressStoreRequired = errors.New("progress transcript store not configured")
@@ -19,12 +18,12 @@ var errProgressStoreRequired = errors.New("progress transcript store not configu
 // ActiveRunID returns the leaf workflow run for a session.
 type ActiveRunID func(ctx context.Context, sessionID string) string
 
-func activeRunIDFromWorkflow(mgr *workflow.RunManager) ActiveRunID {
+func activeRunIDFromWorkflow(runs runstate.RunsRepository) ActiveRunID {
 	return func(ctx context.Context, sessionID string) string {
-		if mgr == nil {
+		if runs == nil {
 			return ""
 		}
-		run, err := mgr.GetActive(ctx, sessionID)
+		run, err := runs.ActiveBySession(ctx, sessionID)
 		if err != nil || run == nil {
 			return ""
 		}

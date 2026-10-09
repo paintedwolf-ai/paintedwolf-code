@@ -3,11 +3,11 @@ package workflowadmin
 import (
 	"context"
 	"errors"
-
 	"github.com/lycaon/lycaon/internal/report"
 	"github.com/lycaon/lycaon/internal/reviewcoverage"
-	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -19,7 +19,7 @@ type coverageFactsSource interface {
 // appendCoverageReview projects acceptance from the final declared review
 // phase. A run that ended before its scans settled has no facts to check an
 // assessment against; the report records that as a gap rather than failing.
-func appendCoverageReview(ctx context.Context, input *report.ReportInput, runs coverageFactsSource, run *wire.WorkflowRun, manifest workflowdef.Manifest, phaseVerdicts []workflow.PhaseVerdict) error {
+func appendCoverageReview(ctx context.Context, input *report.ReportInput, runs coverageFactsSource, run *wire.WorkflowRun, manifest workflowdef.Manifest, phaseVerdicts []workflowpresentation.PhaseVerdict) error {
 	last := ""
 	for _, phase := range manifest.PhaseDefs {
 		if phase.ReviewLoop != nil && phase.ReviewLoop.CarriesCoverage() {
@@ -30,7 +30,7 @@ func appendCoverageReview(ctx context.Context, input *report.ReportInput, runs c
 		return nil
 	}
 	facts, err := runs.CoverageFacts(ctx, run, manifest)
-	if errors.Is(err, workflow.ErrCoverageScansPending) {
+	if errors.Is(err, runstate.ErrCoverageScansPending) {
 		input.Gaps = append(input.Gaps, report.ReportGap{Kind: report.GapCoverageUnreviewed, Count: 1})
 		return nil
 	}
@@ -40,7 +40,7 @@ func appendCoverageReview(ctx context.Context, input *report.ReportInput, runs c
 	input.CoverageFacts, input.CoverageReview = &facts, nil
 	for _, verdict := range phaseVerdicts {
 		if verdict.Phase == last && verdict.Record.GateVerdict == "approved" {
-			input.CoverageReview = workflow.RunCoverageReview(phaseVerdicts)
+			input.CoverageReview = workflowpresentation.RunCoverageReview(phaseVerdicts)
 			break
 		}
 	}

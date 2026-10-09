@@ -5,18 +5,17 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/settingsoverlay"
+	"github.com/lycaon/lycaon/internal/testutil"
+	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
+	wire "github.com/lycaon/lycaon/pkg/api"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
-
-	"github.com/lycaon/lycaon/internal/project"
-	"github.com/lycaon/lycaon/internal/session/store"
-	"github.com/lycaon/lycaon/internal/settingsoverlay"
-	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/workflow"
-	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 // The pack tier is the resolved catalog only — there is no disk shadow to point
@@ -30,7 +29,7 @@ func TestListWorkflowsFromCatalogOnly(t *testing.T) {
 	store := store.NewMemory()
 	srv := NewServer(requiredTestDeps(t, Dependencies{
 		Store: store, Projects: reg,
-		WorkflowCatalog: workflow.ManifestResolver{
+		WorkflowCatalog: workflowcatalog.Resolver{
 			ProjectTierApplies: func(context.Context, string) bool {
 				return true
 			},
@@ -70,7 +69,7 @@ func TestListWorkflowsCatalogAndOverlay(t *testing.T) {
 	store := store.NewMemory()
 	srv := NewServer(requiredTestDeps(t, Dependencies{
 		Store: store, Projects: reg,
-		WorkflowCatalog: workflow.ManifestResolver{ProjectTierApplies: func(context.Context, string) bool { return true }},
+		WorkflowCatalog: workflowcatalog.Resolver{ProjectTierApplies: func(context.Context, string) bool { return true }},
 	}), nil, TestAPIToken)
 
 	req := newAuthedRequest(http.MethodGet, "/v1/workflows?project_id="+opened.ID, nil)
@@ -159,7 +158,7 @@ phases:
 	store := store.NewMemory()
 	srv := NewServer(requiredTestDeps(t, Dependencies{
 		Store: store, Projects: reg,
-		WorkflowCatalog: workflow.ManifestResolver{ProjectTierApplies: func(context.Context, string) bool { return true }},
+		WorkflowCatalog: workflowcatalog.Resolver{ProjectTierApplies: func(context.Context, string) bool { return true }},
 	}), nil, TestAPIToken)
 
 	req := newAuthedRequest(http.MethodGet, "/v1/workflows?project_id="+opened.ID, nil)

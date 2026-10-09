@@ -25,11 +25,11 @@ type StubLoopWF struct {
 	hostObligationKind string
 }
 
-func (s StubLoopWF) ActiveRun(context.Context, string) (*api.WorkflowRun, error) {
+func (s StubLoopWF) ActiveBySession(context.Context, string) (*api.WorkflowRun, error) {
 	return s.run, nil
 }
 
-func (s StubLoopWF) ScaffoldVars(context.Context, string) (map[string]any, error) {
+func (s StubLoopWF) GetScaffoldVars(context.Context, string) (map[string]any, error) {
 	if s.vars != nil {
 		return s.vars, nil
 	}

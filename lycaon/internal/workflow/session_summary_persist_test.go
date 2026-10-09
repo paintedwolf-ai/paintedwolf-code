@@ -2,16 +2,16 @@ package workflow_test
 
 import (
 	"context"
-	"testing"
-
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/workflow"
+	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
+	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
 	wire "github.com/lycaon/lycaon/pkg/api"
+	"testing"
 )
 
 func TestComposeUpsertPersistsEffectiveSummary(t *testing.T) {
@@ -31,10 +31,10 @@ func TestComposeUpsertPersistsEffectiveSummary(t *testing.T) {
 		Posture: wire.SessionPostureSpec,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "sessionStore.Create failed", err)
-	wfSessionStore := workflow.NewSessionWorkflowSQLStore(sqlDB)
-	policy, err := workflow.LoadComposePolicy()
-	testutil.FailErr(t, "workflow.LoadComposePolicy failed", err)
-	composer := &workflow.Composer{
+	wfSessionStore := workflowdrafts.NewSQL(sqlDB)
+	policy, err := workflowcomposition.LoadComposePolicy()
+	testutil.FailErr(t, "workflowcomposition.LoadComposePolicy failed", err)
+	composer := &workflowcomposition.Composer{
 		SessionStore: wfSessionStore,
 		Registry:     reg,
 		Agents:       agents,
@@ -53,7 +53,7 @@ phases:
       set_posture: build
     complete_when: delegation_closeout_complete
 `
-	result, err := composer.Compose(context.Background(), workflow.ComposeRequest{
+	result, err := composer.Compose(context.Background(), workflowcomposition.ComposeRequest{
 		SessionID: sess.ID, ManifestYAML: []byte(manifest), SessionPosture: sess.Posture, CreatedBy: "coordinator",
 	})
 	testutil.FailErr(t, "compose workflow manifest", err)

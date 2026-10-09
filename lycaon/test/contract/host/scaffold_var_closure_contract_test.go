@@ -1,14 +1,13 @@
 package contract
 
 import (
+	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
 	"testing"
-
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
 // hostVarProducers pairs each SetHostVar key with a regex proving a live
@@ -60,7 +59,7 @@ var hostVarProducers = []struct {
 	},
 	{
 		key:       "host_auto_advanced_from",
-		readerRE:  `vars\[HostAutoAdvancedFromKey\]`,
+		readerRE:  `vars\[workflowphases.HostAutoAdvancedFromKey\]`,
 		rationale: "marker consumed by workflow_advance tool already_advanced response",
 	},
 	{
@@ -157,7 +156,7 @@ func TestHostVarProducerConsumerClosure(t *testing.T) {
 
 	// Keys produced through a named const rather than a SetHostVar literal.
 	constProduced := map[string]bool{
-		"host_auto_advanced_from":       true, // HostAutoAdvancedFromKey
+		"host_auto_advanced_from":       true, // workflowphases.HostAutoAdvancedFromKey
 		"pre_workflow_posture":          true, // hostVarBaselinePosture
 		"human_approval.awaiting_since": true, // scaffoldvars.HumanApprovalAwaitingSincePath
 	}

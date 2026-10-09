@@ -175,7 +175,7 @@ func TestDeniedWakeRestoresTheParkItBroke(t *testing.T) {
 	loop := NewLoopEngine()
 	deps := leaseTestDeps(rec)
 	held := true
-	deps.WorkflowSource = holdingWorkflowSource{held: func() bool { return held }}
+	deps.WorkflowSource = workflowFixturePorts(holdingWorkflowSource{held: func() bool { return held }})
 	loop.SetDeps(deps)
 
 	// A host observer holds the phase.
@@ -209,7 +209,7 @@ type holdingWorkflowSource struct {
 	held func() bool
 }
 
-func (s holdingWorkflowSource) ActiveRun(context.Context, string) (*api.WorkflowRun, error) {
+func (s holdingWorkflowSource) ActiveBySession(context.Context, string) (*api.WorkflowRun, error) {
 	return &api.WorkflowRun{
 		ID:           "run-1",
 		Status:       api.WorkflowRunStatusRunning,
@@ -217,7 +217,7 @@ func (s holdingWorkflowSource) ActiveRun(context.Context, string) (*api.Workflow
 	}, nil
 }
 
-func (holdingWorkflowSource) ScaffoldVars(context.Context, string) (map[string]any, error) {
+func (holdingWorkflowSource) GetScaffoldVars(context.Context, string) (map[string]any, error) {
 	return map[string]any{}, nil
 }
 

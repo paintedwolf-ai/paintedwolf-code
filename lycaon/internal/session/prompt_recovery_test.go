@@ -4,18 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/promptresult"
-	"github.com/lycaon/lycaon/internal/settings"
-	"github.com/lycaon/lycaon/internal/tools"
-	"slices"
-	"testing"
-
-	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
+	"slices"
+	"testing"
 )
 
 func TestPromptRecoveryPreservesIntentAndRejectsStaleActions(t *testing.T) {
@@ -133,7 +132,8 @@ func TestPromptRoutingKeepsQueuedSlashCommands(t *testing.T) {
 			sess, err := st.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 			testutil.FailErr(t, "create chat", err)
 			view := &recoveryRoutingView{}
-			mgr.SetWorkflowSessionView(view)
+			workflowFixture1 := view
+			mgr.SetWorkflowDomains(&WorkflowDomains{Runs: workflowFixture1, Policy: workflowFixture1, Ambient: workflowFixture1, Blueprints: workflowFixture1, Batch: workflowFixture1, Slash: workflowFixture1, Requests: workflowFixture1, Feedback: workflowFixture1, Transcript: workflowFixture1, Asks: workflowFixture1, Fanout: workflowFixture1, Phases: workflowFixture1, Reports: workflowFixture1, Recovery: workflowFixture1, Cleanup: workflowFixture1})
 			_, err = mgr.runTurnLocked(t.Context(), sess.ID, tc.input)
 			if !errors.Is(err, errRoutingObserved) {
 				t.Fatalf("routing did not reach workflow boundary: %v", err)

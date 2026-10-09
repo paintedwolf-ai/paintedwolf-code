@@ -15,7 +15,7 @@ type SessionFactsDeps struct {
 	GetSession              func(ctx context.Context, sessionID string) (*api.Session, error)
 	Limits                  func(context.Context, *api.Session) settings.SessionLimits
 	WorkflowObligationsOpen func(ctx context.Context, sessionID string) bool
-	WorkflowSource          LoopWorkflowSource
+	WorkflowSource          *WorkflowDomains
 }
 type SessionFacts struct {
 	depsMu sync.RWMutex
@@ -53,7 +53,7 @@ func (l *SessionFacts) sessionHumanApprovalAwaiting(ctx context.Context, session
 	if deps.WorkflowSource == nil {
 		return false
 	}
-	awaiting, err := deps.WorkflowSource.HumanApprovalAwaiting(ctx, sessionID)
+	awaiting, err := deps.WorkflowSource.Approvals.HumanApprovalAwaiting(ctx, sessionID)
 	if err != nil {
 		slog.WarnContext(ctx, "human approval park unreadable; not inferring a park",
 			"component", "coordinator_loop", "session_id", sessionID, "error", err)
@@ -69,7 +69,7 @@ func (l *SessionFacts) sessionHostObligationHeld(ctx context.Context, sessionID 
 	if deps.WorkflowSource == nil {
 		return false
 	}
-	held, err := deps.WorkflowSource.HostObligationHeld(ctx, sessionID)
+	held, err := deps.WorkflowSource.Obligations.HostObligationHeld(ctx, sessionID)
 	if err != nil {
 		slog.WarnContext(ctx, "host obligation ledger unreadable; not inferring a hold",
 			"component", "coordinator_loop", "session_id", sessionID, "error", err)
@@ -86,7 +86,7 @@ func (l *SessionFacts) hostObligationParkReason(ctx context.Context, sessionID s
 	if deps.WorkflowSource == nil {
 		return base
 	}
-	kinds := deps.WorkflowSource.HostObligationHoldKinds(ctx, sessionID)
+	kinds := deps.WorkflowSource.Obligations.HostObligationHoldKinds(ctx, sessionID)
 	if len(kinds) == 0 {
 		return base
 	}
@@ -114,11 +114,11 @@ func (l *SessionFacts) activeRunAndVars(ctx context.Context, sessionID string) (
 	if deps.WorkflowSource == nil {
 		return nil, nil, false
 	}
-	run, err := deps.WorkflowSource.ActiveRun(ctx, sessionID)
+	run, err := deps.WorkflowSource.Runs.ActiveBySession(ctx, sessionID)
 	if err != nil || run == nil {
 		return nil, nil, false
 	}
-	vars, err := deps.WorkflowSource.ScaffoldVars(ctx, run.ID)
+	vars, err := deps.WorkflowSource.Runs.GetScaffoldVars(ctx, run.ID)
 	if err != nil {
 		return run, nil, true
 	}

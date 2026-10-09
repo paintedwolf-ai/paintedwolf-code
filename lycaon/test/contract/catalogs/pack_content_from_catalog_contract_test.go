@@ -1,6 +1,11 @@
 package contract
 
 import (
+	"github.com/lycaon/lycaon/internal/extpacks"
+	"github.com/lycaon/lycaon/internal/guidance/feedback"
+	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -9,12 +14,6 @@ import (
 	"sort"
 	"strings"
 	"testing"
-
-	"github.com/lycaon/lycaon/internal/extpacks"
-	"github.com/lycaon/lycaon/internal/guidance/feedback"
-	"github.com/lycaon/lycaon/internal/workflow"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
 // Catalog revisions bind the captured unit bytes used by loaders.
@@ -103,7 +102,7 @@ func TestWorkflowManifestsAndTemplatesLoadFromCatalogUnits(t *testing.T) {
 	if len(manifests) == 0 {
 		t.Fatal("no workflow manifests in the stock catalog")
 	}
-	templates, err := workflow.LoadTemplatesEffective(full)
+	templates, err := workflowcomposition.LoadTemplatesEffective(full)
 	contractcheck.FailErr(t, "LoadTemplatesEffective", err)
 	if len(templates) == 0 {
 		t.Fatal("no workflow templates in the stock catalog")
@@ -131,7 +130,7 @@ func TestWorkflowManifestsAndTemplatesLoadFromCatalogUnits(t *testing.T) {
 		t.Fatalf("disabling workflows/plan kept %d manifests (was %d) — the loader is reading pack directories",
 			len(afterManifests), len(manifests))
 	}
-	afterTemplates, err := workflow.LoadTemplatesEffective(reduced)
+	afterTemplates, err := workflowcomposition.LoadTemplatesEffective(reduced)
 	contractcheck.FailErr(t, "LoadTemplatesEffective disabled", err)
 	if len(afterTemplates) >= len(templates) {
 		t.Fatalf("disabling a template unit kept %d templates (was %d) — the loader is reading pack directories",
@@ -148,7 +147,7 @@ func TestContributionLoadersRefuseNilCatalog(t *testing.T) {
 	if _, _, err := workflowdef.LoadManifestsFromCatalog(nil); err == nil {
 		t.Error("LoadManifestsFromCatalog(nil) must fail closed")
 	}
-	if _, err := workflow.LoadTemplatesEffective(nil); err == nil {
+	if _, err := workflowcomposition.LoadTemplatesEffective(nil); err == nil {
 		t.Error("LoadTemplatesEffective(nil) must fail closed")
 	}
 }

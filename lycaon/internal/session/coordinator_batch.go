@@ -14,7 +14,7 @@ func (m *Manager) applyCoordinatorBatchEvent(ctx context.Context, sessionID stri
 	if m == nil || m.workflows == nil {
 		return
 	}
-	_ = m.workflows.ApplyCoordinatorBatchEvent(ctx, sessionID, ev, eventSeq)
+	_ = m.workflows.Batch.ApplyCoordinatorBatchEvent(ctx, sessionID, ev, eventSeq)
 }
 
 func (m *Manager) coordinatorBatchSeqFromState(state surface.ImplementSessionState) int {

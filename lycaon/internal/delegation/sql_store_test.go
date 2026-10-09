@@ -3,13 +3,12 @@ package delegation
 import (
 	"context"
 	"errors"
-	"path/filepath"
-	"testing"
-
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
+	"path/filepath"
+	"testing"
 )
 
 func TestSQLStoreDelegationPersistenceAcrossReopen(t *testing.T) {
@@ -33,7 +32,7 @@ func TestSQLStoreDelegationPersistenceAcrossReopen(t *testing.T) {
 	sqlDB2 := testdbfixture.OpenPath(t, dbPath)
 	store2 := NewSQLStore(sqlDB2)
 	got, err := store2.Get(context.Background(), created.ID)
-	testutil.FailErr(t, "store2.Get failed", err)
+	testutil.FailErr(t, "store2.Runs.Get failed", err)
 	if got.Task != "hunt" || len(got.Legs) != 1 {
 		t.Fatalf("delegation = %#v", got)
 	}

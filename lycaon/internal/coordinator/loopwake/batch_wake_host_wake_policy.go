@@ -13,7 +13,7 @@ type HostWakePolicyDeps struct {
 	DropPendingKicksBeforeBatchSeq func(sessionID string, liveSeq int)
 	DropPendingKicksForBatchSeq    func(sessionID string, batchSeq int)
 	HostWakeActionable             func(ctx context.Context, in HostWakeActionableInput) bool
-	WorkflowSource                 LoopWorkflowSource
+	WorkflowSource                 *WorkflowDomains
 }
 type HostWakePolicy struct {
 	depsMu        sync.RWMutex
@@ -137,7 +137,7 @@ func (l *HostWakePolicy) workflowRunFinished(ctx context.Context, sessionID stri
 	if deps.WorkflowSource == nil {
 		return false
 	}
-	run, err := deps.WorkflowSource.ActiveRun(ctx, sessionID)
+	run, err := deps.WorkflowSource.Runs.ActiveBySession(ctx, sessionID)
 	if err != nil {
 		return false
 	}

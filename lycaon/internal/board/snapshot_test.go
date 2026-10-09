@@ -3,11 +3,6 @@ package board
 import (
 	"context"
 	"errors"
-	repotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
-	"path/filepath"
-	"testing"
-	"time"
-
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/config/configtest"
 	"github.com/lycaon/lycaon/internal/delegation"
@@ -17,9 +12,13 @@ import (
 	"github.com/lycaon/lycaon/internal/scan"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
+	repotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/pkg/api"
+	"path/filepath"
+	"testing"
+	"time"
 )
 
 type progressiveRepoProvider struct {
@@ -251,7 +250,7 @@ type stubWorkflowRunSource struct {
 	active func(ctx context.Context, sessionID string) (*api.WorkflowRun, error)
 }
 
-func (s *stubWorkflowRunSource) GetActive(ctx context.Context, sessionID string) (*api.WorkflowRun, error) {
+func (s *stubWorkflowRunSource) ActiveBySession(ctx context.Context, sessionID string) (*api.WorkflowRun, error) {
 	if s.active != nil {
 		return s.active(ctx, sessionID)
 	}
@@ -271,7 +270,7 @@ func TestSnapshotBuilderBuild_WorkflowRunScopedToSession(t *testing.T) {
 			return nil, nil
 		},
 	}
-	b := &SnapshotBuilder{Workflow: workflow, Repo: repotest.NewProvider(t)}
+	b := &SnapshotBuilder{Workflow: &WorkflowRunSource{Runs: workflow, Presentation: workflow}, Repo: repotest.NewProvider(t)}
 	ctx := context.Background()
 	dir := t.TempDir()
 

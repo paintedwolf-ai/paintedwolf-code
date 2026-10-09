@@ -4,13 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"testing"
-
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/pkg/api"
+	"testing"
 )
 
 type receiptWorkflowChecker struct{}
@@ -23,7 +22,7 @@ func TestTaskToolReplaysReceiptAfterWorkflowMovedOn(t *testing.T) {
 	reg := tools.NewDefaultRegistry()
 	var enqueued api.WorkerTask
 	inner := worker.NewInMemoryQueue(2)
-	inner.SetWorkflowRunChecker(receiptWorkflowChecker{})
+	inner.SetWorkflowDomains(&worker.WorkflowDomains{Runs: receiptWorkflowChecker{}, Tasks: receiptWorkflowChecker{}})
 	queue := &captureQueue{WorkerQueue: inner, out: &enqueued}
 	bound := 0
 	deps := worker.TaskToolDeps{

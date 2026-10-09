@@ -2,13 +2,12 @@ package session
 
 import (
 	"context"
-	"testing"
-
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/verification"
 	"github.com/lycaon/lycaon/pkg/api"
+	"testing"
 )
 
 func assessedCloseout(t *testing.T, history []api.Message, method string) []api.Message {
@@ -35,7 +34,8 @@ func TestInspectionDoesNotRunSelectedProjectCheck(t *testing.T) {
 
 func TestInspectionCannotSatisfyExplicitWorkflowTestGate(t *testing.T) {
 	mgr, sess, history := sourceEvidenceCloseoutHarness(t)
-	mgr.SetWorkflowSessionView(verifyWorkflowStub{required: true})
+	workflowFixture1 := verifyWorkflowStub{required: true}
+	mgr.SetWorkflowDomains(&WorkflowDomains{Runs: workflowFixture1, Policy: workflowFixture1, Ambient: workflowFixture1, Blueprints: workflowFixture1, Batch: workflowFixture1, Slash: workflowFixture1, Requests: workflowFixture1, Feedback: workflowFixture1, Transcript: workflowFixture1, Asks: workflowFixture1, Fanout: workflowFixture1, Phases: workflowFixture1, Reports: workflowFixture1, Recovery: workflowFixture1, Cleanup: workflowFixture1})
 	history = assessedCloseout(t, history, verification.Inspection)
 	if _, blocked := mgr.maybeRejectCloseoutForSourceEvidence(t.Context(), sess, history, "implement_investigate", true); !blocked {
 		t.Fatal("inspection waived an explicit workflow test gate")

@@ -2,20 +2,19 @@ package session
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/coordinator/batch"
+	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/promptresult"
+	"github.com/lycaon/lycaon/internal/session/store"
+	workflowfacts "github.com/lycaon/lycaon/internal/session/workflowfacts"
+	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settingsoverlay"
+	"github.com/lycaon/lycaon/internal/testdbseed"
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/pkg/api"
 	"os"
 	"path/filepath"
 	"testing"
-
-	"github.com/lycaon/lycaon/internal/session/store"
-	"github.com/lycaon/lycaon/internal/settingsoverlay"
-	"github.com/lycaon/lycaon/internal/testdbseed"
-
-	"github.com/lycaon/lycaon/internal/coordinator/batch"
-	"github.com/lycaon/lycaon/internal/orchestration"
-	"github.com/lycaon/lycaon/internal/settings"
-	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestManifestCoordinatorProfileOverridesAgent(t *testing.T) {
@@ -60,10 +59,11 @@ func TestManagerPromptToolProfileUsesWorkflowManifest(t *testing.T) {
 	mgr := NewManager(store.NewMemory(), nil, nil, settings.DefaultSessionLimits())
 	mgr.SetPostureRegistry(reg)
 	mgr.SetAgentRegistry(loadAgentsForTest(t))
-	mgr.SetWorkflowSessionView(stubWorkflowManifest{
-		manifest: ActiveWorkflowManifest{CoordinatorProfile: "worker_readonly"},
+	workflowFixture1 := stubWorkflowManifest{
+		manifest: workflowfacts.ActiveWorkflowManifest{CoordinatorProfile: "worker_readonly"},
 		ok:       true,
-	})
+	}
+	mgr.SetWorkflowDomains(&WorkflowDomains{Runs: workflowFixture1, Policy: workflowFixture1, Ambient: workflowFixture1, Blueprints: workflowFixture1, Batch: workflowFixture1, Slash: workflowFixture1, Requests: workflowFixture1, Feedback: workflowFixture1, Transcript: workflowFixture1, Asks: workflowFixture1, Fanout: workflowFixture1, Phases: workflowFixture1, Reports: workflowFixture1, Recovery: workflowFixture1, Cleanup: workflowFixture1})
 	sess := &api.Session{ID: "s1", Posture: api.SessionPostureSpec, AgentType: orchestration.ProfileCoordinator}
 	got, err := mgr.promptToolProfile(context.Background(), sess)
 	testutil.FailErr(t, "mgr.promptToolProfile failed", err)
@@ -101,7 +101,7 @@ postures:
 }
 
 type stubWorkflowManifest struct {
-	manifest ActiveWorkflowManifest
+	manifest workflowfacts.ActiveWorkflowManifest
 	ok       bool
 }
 
@@ -111,22 +111,22 @@ func (s stubWorkflowManifest) ActiveReviewVerdictPending(context.Context, string
 	return false
 }
 
-func (s stubWorkflowManifest) ActiveCloseoutGateState(context.Context, string) WorkflowCloseoutGateState {
-	return WorkflowCloseoutGateState{}
+func (s stubWorkflowManifest) ActiveCloseoutGateState(context.Context, string) workflowfacts.WorkflowCloseoutGateState {
+	return workflowfacts.WorkflowCloseoutGateState{}
 }
 
 func (s stubWorkflowManifest) ActivePhaseHasReviewLoop(context.Context, string) bool {
 	return false
 }
-func (s stubWorkflowManifest) ActivePhaseGuardState(context.Context, string) WorkflowPhaseGuardState {
-	return WorkflowPhaseGuardState{}
+func (s stubWorkflowManifest) ActivePhaseGuardState(context.Context, string) workflowfacts.WorkflowPhaseGuardState {
+	return workflowfacts.WorkflowPhaseGuardState{}
 }
 func (s stubWorkflowManifest) AllowedAgents(context.Context, string) []string { return nil }
-func (s stubWorkflowManifest) ResolvedRequest(context.Context, string) ResolvedWorkflowRequest {
-	return ResolvedWorkflowRequest{}
+func (s stubWorkflowManifest) ResolvedRequest(context.Context, string) workflowfacts.ResolvedWorkflowRequest {
+	return workflowfacts.ResolvedWorkflowRequest{}
 }
 
-func (s stubWorkflowManifest) ActiveManifest(context.Context, string) (ActiveWorkflowManifest, bool) {
+func (s stubWorkflowManifest) ActiveManifest(context.Context, string) (workflowfacts.ActiveWorkflowManifest, bool) {
 	return s.manifest, s.ok
 }
 func (s stubWorkflowManifest) ParallelTaskMaxWorkers(context.Context, string) int      { return 0 }
@@ -142,7 +142,7 @@ func (s stubWorkflowManifest) ActivePlan(context.Context, string) (string, strin
 func (s stubWorkflowManifest) ActivePhaseRequiresEvidence(context.Context, string, string) bool {
 	return false
 }
-func (s stubWorkflowManifest) GetActive(context.Context, string) (*api.WorkflowRun, error) {
+func (s stubWorkflowManifest) ActiveBySession(context.Context, string) (*api.WorkflowRun, error) {
 	return nil, nil
 }
 func (s stubWorkflowManifest) IsAmbientRun(*api.WorkflowRun) bool {

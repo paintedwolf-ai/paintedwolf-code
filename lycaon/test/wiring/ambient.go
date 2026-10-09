@@ -2,12 +2,11 @@ package wiring
 
 import (
 	"context"
-	"testing"
-
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"testing"
 )
 
 // AttachDefaultAmbient uses the same ambient workflow as session creation.
@@ -18,6 +17,6 @@ func AttachDefaultAmbient(t *testing.T, h *Harness, ctx context.Context, session
 	}
 	ref, err := workflowdef.LoadRegistryConfig(extpacks.Bundled(config.PlatformFlows))
 	testutil.FailErr(t, "LoadRegistryConfig", err)
-	_, err = h.WorkflowMgr.StartAmbient(ctx, sessionID, ref.ID, ref.Version)
+	_, err = h.WorkflowMgr.Ambient.StartAmbient(ctx, sessionID, ref.ID, ref.Version)
 	testutil.FailErr(t, "StartAmbient", err)
 }

@@ -5,13 +5,6 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"net/http"
-	"net/http/httptest"
-	"os"
-	"path/filepath"
-	"strings"
-	"testing"
-
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/extpacks"
@@ -21,11 +14,19 @@ import (
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/workflow"
+	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
+	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
+	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
 	wire "github.com/lycaon/lycaon/pkg/api"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
 )
 
-func newPersistTestServer(t *testing.T) (*Server, wire.Session, workflow.SessionWorkflowStore) {
+func newPersistTestServer(t *testing.T) (*Server, wire.Session, workflowdrafts.Store) {
 	t.Helper()
 	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	store := store.NewMemory()
@@ -42,19 +43,19 @@ func newPersistTestServer(t *testing.T) (*Server, wire.Session, workflow.Session
 	testutil.FailErr(t, "build conditions registry", err)
 	agents := orchestration.NewMemoryAgentRegistry()
 	_ = orchestration.LoadRequiredAgentRegistry(t.Context(), agents)
-	sessionStore := workflow.NewMemorySessionWorkflowStore()
-	policy, err := workflow.LoadComposePolicy()
-	testutil.FailErr(t, "workflow.LoadComposePolicy failed", err)
-	templates, err := workflow.LoadTemplatesFromDir(extpacks.Bundled(config.PlatformFlows.Join("_templates")))
+	sessionStore := workflowdrafts.NewMemory()
+	policy, err := workflowcomposition.LoadComposePolicy()
+	testutil.FailErr(t, "workflowcomposition.LoadComposePolicy failed", err)
+	templates, err := workflowcomposition.LoadTemplatesFromDir(extpacks.Bundled(config.PlatformFlows.Join("_templates")))
 	testutil.FailErr(t, "load workflow templates", err)
-	composer := &workflow.Composer{
+	composer := &workflowcomposition.Composer{
 		SessionStore: sessionStore,
 		Registry:     reg,
 		Agents:       agents,
 		Policy:       policy,
 		Templates:    templates,
 	}
-	persister := &workflow.Persister{
+	persister := &workflowcomposition.Persister{
 		SessionStore: sessionStore,
 		Registry:     reg,
 		Agents:       agents,
@@ -62,7 +63,7 @@ func newPersistTestServer(t *testing.T) (*Server, wire.Session, workflow.Session
 	}
 	srv := NewServer(requiredTestDeps(t, Dependencies{
 		Store: store, Projects: projReg,
-		WorkflowCatalog: workflow.ManifestResolver{
+		WorkflowCatalog: workflowcatalog.Resolver{
 			SessionStore:       sessionStore,
 			ProjectTierApplies: func(context.Context, string) bool { return true },
 		},
@@ -166,7 +167,7 @@ phases:
       set_posture: build
     complete_when: delegation_closeout_complete
 `
-	if err := sessionStore.Upsert(t.Context(), sess.ID, []byte(manifest), workflow.ComposeActorCoordinator, nil); err != nil {
+	if err := sessionStore.Upsert(t.Context(), sess.ID, []byte(manifest), workflowdrafts.Coordinator, nil); err != nil {
 		testutil.FailErr(t, "sessionStore.Upsert failed", err)
 	}
 	body := `{"version":"1.0.0","confirm":false}`

@@ -2,10 +2,6 @@ package session
 
 import (
 	"context"
-	"os"
-	"path/filepath"
-	"testing"
-
 	"github.com/lycaon/lycaon/internal/inspector"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/session/workercontext"
@@ -13,6 +9,9 @@ import (
 	"github.com/lycaon/lycaon/internal/testbaseline"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
+	"os"
+	"path/filepath"
+	"testing"
 )
 
 func sourceEvidenceCloseoutHarness(t *testing.T) (*Manager, *api.Session, []api.Message) {
@@ -41,7 +40,8 @@ func TestSourceEvidenceCloseoutAllowsRoutineWorkWithoutAssessment(t *testing.T) 
 
 func TestSourceEvidenceCloseoutAcceptsCurrentPass(t *testing.T) {
 	mgr, sess, history := sourceEvidenceCloseoutHarness(t)
-	mgr.SetWorkflowSessionView(verifyWorkflowStub{required: true})
+	workflowFixture1 := verifyWorkflowStub{required: true}
+	mgr.SetWorkflowDomains(&WorkflowDomains{Runs: workflowFixture1, Policy: workflowFixture1, Ambient: workflowFixture1, Blueprints: workflowFixture1, Batch: workflowFixture1, Slash: workflowFixture1, Requests: workflowFixture1, Feedback: workflowFixture1, Transcript: workflowFixture1, Asks: workflowFixture1, Fanout: workflowFixture1, Phases: workflowFixture1, Reports: workflowFixture1, Recovery: workflowFixture1, Cleanup: workflowFixture1})
 	recordVerify(t, mgr, sess, "go test ./...", 0)
 	if _, blocked := mgr.maybeRejectCloseoutForSourceEvidence(
 		context.Background(), sess, history, "implement_investigate", true,
@@ -52,7 +52,8 @@ func TestSourceEvidenceCloseoutAcceptsCurrentPass(t *testing.T) {
 
 func TestSourceEvidenceCloseoutAcceptsCurrentCommand(t *testing.T) {
 	mgr, sess, history := sourceEvidenceCloseoutHarness(t)
-	mgr.SetWorkflowSessionView(verifyWorkflowStub{required: true})
+	workflowFixture2 := verifyWorkflowStub{required: true}
+	mgr.SetWorkflowDomains(&WorkflowDomains{Runs: workflowFixture2, Policy: workflowFixture2, Ambient: workflowFixture2, Blueprints: workflowFixture2, Batch: workflowFixture2, Slash: workflowFixture2, Requests: workflowFixture2, Feedback: workflowFixture2, Transcript: workflowFixture2, Asks: workflowFixture2, Fanout: workflowFixture2, Phases: workflowFixture2, Reports: workflowFixture2, Recovery: workflowFixture2, Cleanup: workflowFixture2})
 	recordCommand(t, mgr, sess, "./ntp_check.py --json", 0)
 	if _, blocked := mgr.maybeRejectCloseoutForSourceEvidence(
 		context.Background(), sess, history, "implement_investigate", true,
@@ -63,7 +64,8 @@ func TestSourceEvidenceCloseoutAcceptsCurrentCommand(t *testing.T) {
 
 func TestSourceEvidenceCloseoutAllowsExplicitUnverifiedAfterBoundedAttempts(t *testing.T) {
 	mgr, sess, history := sourceEvidenceCloseoutHarness(t)
-	mgr.SetWorkflowSessionView(verifyWorkflowStub{required: true})
+	workflowFixture3 := verifyWorkflowStub{required: true}
+	mgr.SetWorkflowDomains(&WorkflowDomains{Runs: workflowFixture3, Policy: workflowFixture3, Ambient: workflowFixture3, Blueprints: workflowFixture3, Batch: workflowFixture3, Slash: workflowFixture3, Requests: workflowFixture3, Feedback: workflowFixture3, Transcript: workflowFixture3, Asks: workflowFixture3, Fanout: workflowFixture3, Phases: workflowFixture3, Reports: workflowFixture3, Recovery: workflowFixture3, Cleanup: workflowFixture3})
 	for range maxVerifyAttemptsPerRun {
 		recordVerify(t, mgr, sess, "go test ./...", 1)
 	}
@@ -122,7 +124,8 @@ func TestWorkerSourceEvidenceCloseoutDoesNotGateOnValidation(t *testing.T) {
 			t.Run("selected="+selected+"/verdict="+verdict, func(t *testing.T) {
 				mgr, child, task, history := workerSourceEvidenceCloseoutHarness(t)
 				mgr.SetVerifyConfig(stubVerifyConfig{cmd: selected})
-				mgr.SetWorkflowSessionView(verifyWorkflowStub{required: true})
+				workflowFixture4 := verifyWorkflowStub{required: true}
+				mgr.SetWorkflowDomains(&WorkflowDomains{Runs: workflowFixture4, Policy: workflowFixture4, Ambient: workflowFixture4, Blueprints: workflowFixture4, Batch: workflowFixture4, Slash: workflowFixture4, Requests: workflowFixture4, Feedback: workflowFixture4, Transcript: workflowFixture4, Asks: workflowFixture4, Fanout: workflowFixture4, Phases: workflowFixture4, Reports: workflowFixture4, Recovery: workflowFixture4, Cleanup: workflowFixture4})
 				if verdict != "" {
 					history = append(history, api.Message{
 						Role: api.MessageRoleTool,

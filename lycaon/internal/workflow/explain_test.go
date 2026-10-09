@@ -2,12 +2,11 @@ package workflow
 
 import (
 	"context"
-	"testing"
-
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
+	"testing"
 )
 
 // progressObligation is a scan-like kind whose pending work has a pass to watch.
@@ -39,8 +38,8 @@ func TestPhaseEntryWritesExplainNoteWithProgress(t *testing.T) {
 		assessmentID:           "6f2c0c56-1f43-4a4e-9f55-1d1b2c3d4e5f",
 	}
 	wireTestObligation(t, mgr, &obligation.stubWorkflowObligation)
-	mgr.RegisterObligationKind(obligation)
-	mgr.Manifests = workflowdef.NewRegistry(map[string]workflowdef.Manifest{
+	mgr.Obligations.Register(obligation)
+	mgr.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{
 		"obligationtest@1.0.0": explainTestManifest(&workflowdef.PhaseExplain{Summary: "A full scan runs first", Body: "Why it runs."}),
 	})
 
@@ -68,7 +67,7 @@ func TestPhaseEntryWritesExplainNoteWithProgress(t *testing.T) {
 func TestPhaseEntryWritesExplainNoteWithoutProgress(t *testing.T) {
 	mgr, sessStore, _, _ := testManager(t)
 	wireTestObligation(t, mgr, &stubWorkflowObligation{status: api.WorkflowRunObligation{Kind: "scan", Status: api.ObligationStatusPending}})
-	mgr.Manifests = workflowdef.NewRegistry(map[string]workflowdef.Manifest{
+	mgr.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{
 		"obligationtest@1.0.0": explainTestManifest(&workflowdef.PhaseExplain{Summary: "A scan runs first", Body: "Why."}),
 	})
 	_, err := startRun(context.Background(), mgr, "sess-1", "obligationtest", "1.0.0")
@@ -81,7 +80,7 @@ func TestPhaseEntryWritesExplainNoteWithoutProgress(t *testing.T) {
 func TestPhaseEntryWithoutExplainWritesNoNote(t *testing.T) {
 	mgr, sessStore, _, _ := testManager(t)
 	wireTestObligation(t, mgr, &stubWorkflowObligation{status: api.WorkflowRunObligation{Kind: "scan", Status: api.ObligationStatusPending}})
-	mgr.Manifests = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"obligationtest@1.0.0": obligationTestManifest()})
+	mgr.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"obligationtest@1.0.0": obligationTestManifest()})
 	_, err := startRun(context.Background(), mgr, "sess-1", "obligationtest", "1.0.0")
 	testutil.FailErr(t, "start run", err)
 	msgs, err := sessStore.GetMessages(context.Background(), "sess-1")
@@ -124,7 +123,7 @@ func (s *stubTopologyLegs) RunTopologyLegs(_ context.Context, _ *api.WorkflowRun
 func TestTopologyPhaseExplainNamesItsStagesAndRunProjectsLegs(t *testing.T) {
 	mgr, sessStore, _, _ := testManagerWithRegistry(t)
 	legs := &stubTopologyLegs{}
-	mgr.TopologyLegs = legs
+	mgr.Presentation.TopologyLegs = legs
 	ctx := context.Background()
 	run, err := startRun(ctx, mgr, "sess-1", "bugbash", "1.0.0")
 	testutil.FailErr(t, "start bugbash run", err)
@@ -138,7 +137,7 @@ func TestTopologyPhaseExplainNamesItsStagesAndRunProjectsLegs(t *testing.T) {
 		t.Fatalf("stages = %v", got)
 	}
 
-	ui, err := mgr.ComputeRunUI(ctx, run)
+	ui, err := mgr.Presentation.ComputeRunUI(ctx, run)
 	testutil.FailErr(t, "ComputeRunUI", err)
 	if len(ui.TopologyLegs) != 1 || ui.TopologyLegs[0].ID != "hunt_edges" {
 		t.Fatalf("topology legs = %+v", ui.TopologyLegs)

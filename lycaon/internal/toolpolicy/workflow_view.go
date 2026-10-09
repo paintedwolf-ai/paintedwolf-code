@@ -2,26 +2,28 @@ package toolpolicy
 
 import (
 	"context"
-
+	workflowfacts "github.com/lycaon/lycaon/internal/session/workflowfacts"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// ActiveWorkflowManifest holds runtime fields from the active workflow manifest.
-type ActiveWorkflowManifest struct {
-	CoordinatorProfile string
-	Rules              []string
-	HostPhaseAdvance   bool
+// WorkflowDomains binds the workflow facts read during tool policy evaluation.
+type WorkflowDomains struct {
+	Policy     WorkflowPolicy
+	Blueprints WorkflowBlueprints
+	Runs       WorkflowRuns
 }
-
-// WorkflowView is the workflow dependency surface for tool policy.
-type WorkflowView interface {
-	CurrentPhase(ctx context.Context, sessionID string) string
-	ActivePhaseHasReviewLoop(ctx context.Context, sessionID string) bool
-	AllowedAgents(ctx context.Context, sessionID string) []string
-	ActiveManifest(ctx context.Context, sessionID string) (ActiveWorkflowManifest, bool)
-	ScaffoldVarsForSession(ctx context.Context, sessionID string) (map[string]any, error)
-	ActivePlan(ctx context.Context, sessionID string) (planID, content string, ok bool)
-	GetActive(ctx context.Context, sessionID string) (*api.WorkflowRun, error)
+type WorkflowPolicy interface {
+	CurrentPhase(context.Context, string) string
+	ActivePhaseHasReviewLoop(context.Context, string) bool
+	AllowedAgents(context.Context, string) []string
+	ActiveManifest(context.Context, string) (workflowfacts.ActiveWorkflowManifest, bool)
+	ScaffoldVarsForSession(context.Context, string) (map[string]any, error)
+}
+type WorkflowBlueprints interface {
+	ActivePlan(context.Context, string) (string, string, bool)
+}
+type WorkflowRuns interface {
+	ActiveBySession(context.Context, string) (*api.WorkflowRun, error)
 }
 
 // PostureRegistry resolves posture rule pack paths (session.PostureRegistry subset).

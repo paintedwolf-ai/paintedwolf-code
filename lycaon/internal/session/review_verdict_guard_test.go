@@ -2,15 +2,15 @@ package session
 
 import (
 	"context"
+	workflowfacts "github.com/lycaon/lycaon/internal/session/workflowfacts"
+	"github.com/lycaon/lycaon/pkg/api"
 	"strings"
 	"testing"
-
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // verdictPendingView reports a review_loop phase with an open evidence gate.
 type verdictPendingView struct {
-	WorkflowSessionView
+	WorkflowPolicy
 	pending bool
 }
 
@@ -18,8 +18,8 @@ func (v verdictPendingView) ActiveReviewVerdictPending(context.Context, string) 
 	return v.pending
 }
 
-func (v verdictPendingView) ActivePhaseGuardState(context.Context, string) WorkflowPhaseGuardState {
-	return WorkflowPhaseGuardState{}
+func (v verdictPendingView) ActivePhaseGuardState(context.Context, string) workflowfacts.WorkflowPhaseGuardState {
+	return workflowfacts.WorkflowPhaseGuardState{}
 }
 
 func rejectVerdictCloseout(t *testing.T, mgr *Manager, sess *api.Session, workersIdle bool) (string, bool) {
@@ -30,7 +30,8 @@ func rejectVerdictCloseout(t *testing.T, mgr *Manager, sess *api.Session, worker
 
 func TestVerdictCloseoutSkipsWhenInvokeGated(t *testing.T) {
 	mgr, sess := newSynthesisDelayManager(t)
-	mgr.workflows = verdictPendingView{pending: true}
+	workflowFixture1 := verdictPendingView{pending: true}
+	mgr.workflows = &WorkflowDomains{Policy: workflowFixture1}
 
 	if _, block := mgr.maybeRejectCloseoutForMissingVerdict(
 		context.Background(), sess, true, false,
@@ -41,7 +42,8 @@ func TestVerdictCloseoutSkipsWhenInvokeGated(t *testing.T) {
 
 func TestCloseoutBlocksOnMissingReviewVerdict(t *testing.T) {
 	mgr, sess := newSynthesisDelayManager(t)
-	mgr.workflows = verdictPendingView{pending: true}
+	workflowFixture2 := verdictPendingView{pending: true}
+	mgr.workflows = &WorkflowDomains{Policy: workflowFixture2}
 
 	reject, block := rejectVerdictCloseout(t, mgr, sess, true)
 	if !block {
@@ -57,7 +59,8 @@ func TestCloseoutBlocksOnMissingReviewVerdict(t *testing.T) {
 
 func TestCloseoutAllowsWhenVerdictRecorded(t *testing.T) {
 	mgr, sess := newSynthesisDelayManager(t)
-	mgr.workflows = verdictPendingView{pending: false}
+	workflowFixture3 := verdictPendingView{pending: false}
+	mgr.workflows = &WorkflowDomains{Policy: workflowFixture3}
 
 	if _, block := rejectVerdictCloseout(t, mgr, sess, true); block {
 		t.Fatal("a satisfied review gate must let the closeout through")
@@ -66,7 +69,8 @@ func TestCloseoutAllowsWhenVerdictRecorded(t *testing.T) {
 
 func TestVerdictCloseoutSkipsBusyWorkers(t *testing.T) {
 	mgr, sess := newSynthesisDelayManager(t)
-	mgr.workflows = verdictPendingView{pending: true}
+	workflowFixture4 := verdictPendingView{pending: true}
+	mgr.workflows = &WorkflowDomains{Policy: workflowFixture4}
 
 	if _, block := rejectVerdictCloseout(t, mgr, sess, false); block {
 		t.Fatal("the push must not apply while workers are still in flight")
@@ -75,7 +79,8 @@ func TestVerdictCloseoutSkipsBusyWorkers(t *testing.T) {
 
 func TestVerdictCloseoutHoldsRegardlessOfSurface(t *testing.T) {
 	mgr, sess := newSynthesisDelayManager(t)
-	mgr.workflows = verdictPendingView{pending: true}
+	workflowFixture5 := verdictPendingView{pending: true}
+	mgr.workflows = &WorkflowDomains{Policy: workflowFixture5}
 
 	if _, block := rejectVerdictCloseout(t, mgr, sess, true); !block {
 		t.Fatal("a pending review verdict must hold the closeout on any surface")
@@ -84,7 +89,8 @@ func TestVerdictCloseoutHoldsRegardlessOfSurface(t *testing.T) {
 
 func TestVerdictCloseoutBoundedPerPrompt(t *testing.T) {
 	mgr, sess := newSynthesisDelayManager(t)
-	mgr.workflows = verdictPendingView{pending: true}
+	workflowFixture6 := verdictPendingView{pending: true}
+	mgr.workflows = &WorkflowDomains{Policy: workflowFixture6}
 	ctx := context.Background()
 
 	for i := 0; i < verdictDelayMaxPerPrompt; i++ {

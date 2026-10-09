@@ -2,6 +2,9 @@ package security
 
 import (
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/testutil"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	wire "github.com/lycaon/lycaon/pkg/api"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -9,10 +12,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-
-	"github.com/lycaon/lycaon/internal/testutil"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 func loadChoiceTransitionsManifest(t *testing.T) workflowdef.Manifest {
@@ -28,7 +27,7 @@ func loadChoiceTransitionsManifest(t *testing.T) workflowdef.Manifest {
 func TestFireWorkflowTransitionHTTP(t *testing.T) {
 	manifest := loadChoiceTransitionsManifest(t)
 	h, sess := buildWorkflowHarnessWithManifest(t, manifest)
-	run, err := h.WorkflowMgr.StartHuman(t.Context(), sess.ID, wire.StartWorkflowRunRequest{
+	run, err := h.WorkflowMgr.Starts.StartHuman(t.Context(), sess.ID, wire.StartWorkflowRunRequest{
 		WorkflowID: "choice-transitions-fixture", WorkflowVersion: "1.0.0",
 		Request: "Review the fixture and choose the next step.",
 	})
@@ -52,7 +51,7 @@ func TestFireWorkflowTransitionHTTP(t *testing.T) {
 func TestFireWorkflowTransitionHTTPUnknown(t *testing.T) {
 	manifest := loadChoiceTransitionsManifest(t)
 	h, sess := buildWorkflowHarnessWithManifest(t, manifest)
-	run, err := h.WorkflowMgr.StartHuman(t.Context(), sess.ID, wire.StartWorkflowRunRequest{
+	run, err := h.WorkflowMgr.Starts.StartHuman(t.Context(), sess.ID, wire.StartWorkflowRunRequest{
 		WorkflowID: "choice-transitions-fixture", WorkflowVersion: "1.0.0",
 		Request: "Review the fixture and choose the next step.",
 	})
@@ -76,7 +75,7 @@ func TestFireWorkflowTransitionHTTPUnknown(t *testing.T) {
 func TestGetWorkflowRunChoiceTransitionsUI(t *testing.T) {
 	manifest := loadChoiceTransitionsManifest(t)
 	h, sess := buildWorkflowHarnessWithManifest(t, manifest)
-	run, err := h.WorkflowMgr.StartHuman(t.Context(), sess.ID, wire.StartWorkflowRunRequest{
+	run, err := h.WorkflowMgr.Starts.StartHuman(t.Context(), sess.ID, wire.StartWorkflowRunRequest{
 		WorkflowID: "choice-transitions-fixture", WorkflowVersion: "1.0.0",
 		Request: "Review the fixture and choose the next step.",
 	})

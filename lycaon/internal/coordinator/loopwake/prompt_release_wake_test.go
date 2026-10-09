@@ -19,9 +19,9 @@ func TestWakeQueuedAfterExecutionReleaseStartsWithoutAnotherEvent(t *testing.T) 
 	deps.GetSession = func(context.Context, string) (*api.Session, error) {
 		return &api.Session{ID: id, Status: api.SessionStatusBusy}, nil
 	}
-	deps.WorkflowSource = StubLoopWF{
+	deps.WorkflowSource = workflowFixturePorts(StubLoopWF{
 		run: &api.WorkflowRun{ID: "work", Status: api.WorkflowRunStatusRunning, CurrentPhase: "work"},
-	}
+	})
 	finish := engine.Admission.BeginPromptExecution(t.Context(), id)
 	defer finish()
 	deps.QueueInform = func(context.Context, string, anchor.ID, anchor.Envelope) {
@@ -63,9 +63,9 @@ func TestWorkerCycleTerminalDoesNotOccupyTheWorkerDuringHostPrompt(t *testing.T)
 	deps.GetSession = func(context.Context, string) (*api.Session, error) {
 		return &api.Session{ID: id, Status: api.SessionStatusBusy}, nil
 	}
-	deps.WorkflowSource = StubLoopWF{
+	deps.WorkflowSource = workflowFixturePorts(StubLoopWF{
 		run: &api.WorkflowRun{ID: "work", Status: api.WorkflowRunStatusRunning, CurrentPhase: "work"},
-	}
+	})
 	release := make(chan struct{})
 	started := make(chan struct{})
 	deps.RunPrompt = func(context.Context, string) (*promptresult.Result, error) {

@@ -31,7 +31,7 @@ func TestBoardReinjectionRequiresKnownRun(t *testing.T) {
 			sess := &api.Session{ID: "s1", Status: api.SessionStatusBusy, WorkspacePath: t.TempDir()}
 			deps := loopDepsForTest()
 			deps.GetSession = func(context.Context, string) (*api.Session, error) { return sess, nil }
-			deps.WorkflowSource = StubLoopWF{run: &api.WorkflowRun{ID: "run-1", Status: api.WorkflowRunStatusRunning, CurrentPhase: "work"}}
+			deps.WorkflowSource = workflowFixturePorts(StubLoopWF{run: &api.WorkflowRun{ID: "run-1", Status: api.WorkflowRunStatusRunning, CurrentPhase: "work"}})
 			deps.CoordinatorFrame = tc.source
 			informed, predicted := 0, 0
 			deps.QueueInform = func(context.Context, string, anchor.ID, anchor.Envelope) { informed++ }

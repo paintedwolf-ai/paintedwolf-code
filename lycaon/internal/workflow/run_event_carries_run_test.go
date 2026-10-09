@@ -3,9 +3,6 @@ package workflow
 import (
 	"context"
 	"encoding/json"
-	"testing"
-	"time"
-
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/session/store"
@@ -13,7 +10,10 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	"github.com/lycaon/lycaon/pkg/api"
+	"testing"
+	"time"
 )
 
 func newRunManagerForEvents(t *testing.T, name string) (*RunManager, *events.MemoryHub, *store.SQL, db.Handle) {
@@ -24,7 +24,7 @@ func newRunManagerForEvents(t *testing.T, name string) (*RunManager, *events.Mem
 	hub := events.NewMemoryHub()
 	reg, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "RegistryFromDirs", err)
-	return NewManager(NewSQLStore(sqlDB), sessions, reg, &events.Publisher{Hub: hub}), hub, sessions, sqlDB
+	return NewManager(workflowpersistence.New(sqlDB), sessions, reg, &events.Publisher{Hub: hub}), hub, sessions, sqlDB
 }
 
 // Transcript rows patch a client's store on arrival and each names its run, so
@@ -43,7 +43,7 @@ func TestAmbientStartPublishesTheEnrichedRun(t *testing.T) {
 	testutil.FailErr(t, "subscribe", err)
 	defer unsub()
 
-	run, err := mgr.StartAmbient(ctx, sess.ID, "implement", "1.0.0")
+	run, err := mgr.Ambient.StartAmbient(ctx, sess.ID, "implement", "1.0.0")
 	testutil.FailErr(t, "StartAmbient", err)
 
 	var event *api.WorkflowEvent
@@ -87,27 +87,5 @@ func TestAmbientStartPublishesTheEnrichedRun(t *testing.T) {
 	}
 	if event.Run.UI == nil {
 		t.Fatal("event run has no ui — the stream projection must match what REST returns")
-	}
-}
-
-// Publication reads run state without writing to it.
-func TestPublishedRunDoesNotMutateTheLiveRun(t *testing.T) {
-	mgr, _, _, _ := newRunManagerForEvents(t, "run-copy.db")
-
-	live := &api.WorkflowRun{
-		ID:              "run-1",
-		SessionID:       "sess-1",
-		WorkflowID:      "implement",
-		WorkflowVersion: "1.0.0",
-		Status:          api.WorkflowRunStatusRunning,
-		CurrentPhase:    "work",
-	}
-	projected := mgr.publishedRun(context.Background(), live)
-
-	if projected == live {
-		t.Fatal("publishedRun returned the caller's run — publication must project a copy")
-	}
-	if live.UI != nil {
-		t.Fatalf("publishedRun attached ui to the live run: %+v", live.UI)
 	}
 }

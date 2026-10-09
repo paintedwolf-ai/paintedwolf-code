@@ -3,14 +3,14 @@ package workflowadmin
 import (
 	"context"
 	"errors"
-	"net/http"
-	"strings"
-
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/project"
-	"github.com/lycaon/lycaon/internal/workflow"
+	workflowblueprints "github.com/lycaon/lycaon/internal/workflow/blueprints"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
+	"net/http"
+	"strings"
 )
 
 func (s *Handler) HandleApproveBlueprint(w http.ResponseWriter, r *http.Request) {
@@ -29,25 +29,25 @@ func (s *Handler) HandleApproveBlueprint(w http.ResponseWriter, r *http.Request)
 	if p, err := s.Projects.Get(r.Context(), projectID); err == nil {
 		projectPath = project.PrimaryRootPath(p)
 	}
-	_, err := rm.ApprovePlan(r.Context(), projectID, path, projectPath, req.WorkflowRunID, req.ExpectedRevision, req.ContentDigest)
+	_, err := rm.Approvals.ApprovePlan(r.Context(), projectID, path, projectPath, req.WorkflowRunID, req.ExpectedRevision, req.ContentDigest)
 	if err != nil {
 		if errors.Is(err, blueprint.ErrNotFound) {
 			s.responses.Fail(w, wire.ApiErrorCodeBlueprintNotFound, "blueprint not found")
 			return
 		}
-		if errors.Is(err, workflow.ErrHumanApprovalNotReady) {
+		if errors.Is(err, runstate.ErrHumanApprovalNotReady) {
 			s.responses.Fail(w, wire.ApiErrorCodeHumanApprovalNotReady, "human approval is not ready")
 			return
 		}
-		if errors.Is(err, workflow.ErrRunRevisionConflict) {
+		if errors.Is(err, runstate.ErrRevisionConflict) {
 			s.responses.Fail(w, wire.ApiErrorCodeWorkflowRevisionConflict, "workflow run changed; reload it")
 			return
 		}
-		if errors.Is(err, workflow.ErrBlueprintApprovalConflict) {
+		if errors.Is(err, runstate.ErrBlueprintApprovalConflict) {
 			s.responses.Fail(w, wire.ApiErrorCodeBlueprintContentConflict, "blueprint changed; reload it")
 			return
 		}
-		if errors.Is(err, workflow.ErrNoActiveRun) {
+		if errors.Is(err, runstate.ErrNoActiveRun) {
 			s.responses.Fail(w, wire.ApiErrorCodeWorkflowRunNotActive, "no active workflow run")
 			return
 		}
@@ -59,7 +59,7 @@ func (s *Handler) HandleApproveBlueprint(w http.ResponseWriter, r *http.Request)
 		s.responses.InternalError(w, r, err)
 		return
 	}
-	_ = rm.SyncBlueprintTranscript(r.Context(), projectID, out.Path, false)
+	_ = rm.Blueprints.SyncBlueprintTranscript(r.Context(), projectID, out.Path, false)
 	httpio.WriteJSON(w, http.StatusOK, out)
 }
 
@@ -101,7 +101,7 @@ func (s *Handler) HandleLaunchBlueprint(w http.ResponseWriter, r *http.Request) 
 		s.responses.InternalError(w, r, err)
 		return
 	}
-	target, err := workflow.ResolveLaunchTarget(source.Path, req.TargetWorkflowID, manifests)
+	target, err := workflowblueprints.ResolveLaunchTarget(source.Path, req.TargetWorkflowID, manifests)
 	if err != nil {
 		s.writeBlueprintLaunchError(w, r, err)
 		return
@@ -131,7 +131,7 @@ func (s *Handler) HandleLaunchBlueprint(w http.ResponseWriter, r *http.Request) 
 		projectDir = project.PrimaryRootPath(p)
 	}
 
-	run, seed, err := rm.LaunchFromBlueprint(r.Context(), sess.ID, source, target, s.Blueprints, projectDir, req.DeferStart)
+	run, seed, err := rm.Blueprints.LaunchFromBlueprint(r.Context(), sess.ID, source, target, s.Blueprints, projectDir, req.DeferStart)
 	if err != nil {
 		s.writeBlueprintLaunchError(w, r, err)
 		return
@@ -160,9 +160,9 @@ func (s *Handler) HandleLaunchBlueprint(w http.ResponseWriter, r *http.Request) 
 
 func (s *Handler) writeBlueprintLaunchError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
-	case errors.Is(err, workflow.ErrBlueprintLaunchIncompatible):
+	case errors.Is(err, runstate.ErrBlueprintLaunchIncompatible):
 		s.responses.Fail(w, wire.ApiErrorCodeBlueprintLaunchIncompatible, "this blueprint cannot launch the selected workflow")
-	case errors.Is(err, workflow.ErrBlueprintLaunchUnsupported):
+	case errors.Is(err, runstate.ErrBlueprintLaunchUnsupported):
 		s.responses.Fail(w, wire.ApiErrorCodeBlueprintLaunchUnsupported, "this workflow cannot launch from a blueprint")
 	default:
 		s.WriteWorkflowError(w, r, err)

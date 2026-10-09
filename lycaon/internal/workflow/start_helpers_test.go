@@ -2,14 +2,14 @@ package workflow
 
 import (
 	"context"
-	"testing"
-
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
+	"testing"
 )
 
 func startRun(ctx context.Context, mgr *RunManager, sessionID, workflowID, version string) (*api.WorkflowRun, error) {
-	return mgr.StartHuman(ctx, sessionID, api.StartWorkflowRunRequest{
+	return mgr.Starts.StartHuman(ctx, sessionID, api.StartWorkflowRunRequest{
 		WorkflowID:      workflowID,
 		WorkflowVersion: version,
 		Request:         "test request",
@@ -46,33 +46,33 @@ func completePlanReviewAtDepthNone(ctx context.Context, mgr *RunManager, run *ap
 }
 
 func completePlanDepthPhaseAtNone(ctx context.Context, mgr *RunManager, run *api.WorkflowRun, param string) (*api.WorkflowRun, error) {
-	manifest, err := mgr.manifestForRun(ctx, run)
+	manifest, err := mgr.Resolver.ForRun(ctx, run)
 	if err != nil {
 		return nil, err
 	}
-	vars, err := mgr.Store.GetScaffoldVars(ctx, run.ID)
+	vars, err := mgr.Store.Runs.GetScaffoldVars(ctx, run.ID)
 	if err != nil {
 		return nil, err
 	}
-	vars = SetHostVar(vars, "params."+param, "none")
-	vars = StampDepthParamSkips(vars, manifest)
+	vars = runstate.SetHostVar(vars, "params."+param, "none")
+	vars = runstate.StampDepthParamSkips(vars, manifest)
 	projectDir := ""
-	if mgr.Sessions != nil {
-		if sess, getErr := mgr.Sessions.Get(ctx, run.SessionID); getErr == nil && sess != nil {
+	if mgr.Policy.Sessions != nil {
+		if sess, getErr := mgr.Policy.Sessions.Get(ctx, run.SessionID); getErr == nil && sess != nil {
 			projectDir = sess.WorkspacePath
 		}
 	}
-	if err := mgr.Store.UpdateVars(ctx, run, projectDir, vars); err != nil {
+	if err := mgr.Store.State.UpdateVars(ctx, run, projectDir, vars); err != nil {
 		return nil, err
 	}
-	return mgr.Advance(ctx, run.ID)
+	return mgr.Phases.Advance(ctx, run.ID)
 }
 
 func advancePlanThroughExpand(ctx context.Context, mgr *RunManager, run *api.WorkflowRun) (*api.WorkflowRun, error) {
 	if run == nil || run.CurrentPhase != "expand" {
 		return run, nil
 	}
-	return mgr.Advance(ctx, run.ID)
+	return mgr.Phases.Advance(ctx, run.ID)
 }
 
 func advancePlanToApprovePhase(ctx context.Context, mgr *RunManager, run *api.WorkflowRun) (*api.WorkflowRun, error) {
@@ -93,7 +93,7 @@ func advancePlanToApprovePhase(ctx context.Context, mgr *RunManager, run *api.Wo
 	if err != nil {
 		return nil, err
 	}
-	if run, err = mgr.Get(ctx, run.ID); err != nil {
+	if run, err = mgr.Store.Runs.Get(ctx, run.ID); err != nil {
 		return nil, err
 	}
 	return run, nil

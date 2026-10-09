@@ -2,14 +2,13 @@ package worker
 
 import (
 	"errors"
-	"testing"
-	"time"
-
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
+	"testing"
+	"time"
 )
 
 func TestWorkflowCancellationPreservesClaimsUntilRuntimeSettlement(t *testing.T) {
@@ -18,7 +17,7 @@ func TestWorkflowCancellationPreservesClaimsUntilRuntimeSettlement(t *testing.T)
 			database := testdbfixture.Open(t, "store.db")
 			testdbseed.InsertWorkflowRun(t, database, "run", "parent", testdbseed.DefaultProjectID)
 			q := NewSQLQueue(database, 4)
-			q.SetWorkflowRunChecker(allowAllWorkflowRuns{})
+			q.SetWorkflowDomains(&WorkflowDomains{Runs: allowAllWorkflowRuns{}, Tasks: allowAllWorkflowRuns{}})
 			ids := make([]string, 4)
 			for i := range ids {
 				id, err := q.Enqueue(t.Context(), api.WorkerTask{

@@ -1,8 +1,6 @@
 package workflowadmin
 
 import (
-	"sync"
-
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/sessionadmin"
 	"github.com/lycaon/lycaon/internal/api/sessionview"
@@ -17,16 +15,20 @@ import (
 	"github.com/lycaon/lycaon/internal/visual"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workflow"
+	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
+	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
+	"sync"
 )
 
 // Deps are the workflow routes' dependencies, fixed at construction.
 type Deps struct {
 	Workflows *workflow.RunManager
 	// Catalog and Runs back workflow discovery and session run history.
-	Catalog        workflow.ManifestResolver
-	Runs           workflow.RunStore
-	Composer       *workflow.Composer
-	Persister      *workflow.Persister
+	Catalog        workflowcatalog.Resolver
+	Runs           *runstate.Repository
+	Composer       *workflowcomposition.Composer
+	Persister      *workflowcomposition.Persister
 	Blueprints     *blueprint.Manager
 	Orchestrator   orchestration.Orchestrator
 	EventPublisher *events.Publisher

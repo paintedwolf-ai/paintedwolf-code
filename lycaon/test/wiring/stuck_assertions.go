@@ -2,12 +2,11 @@ package wiring
 
 import (
 	"context"
-	"strings"
-	"testing"
-
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/workflow"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
+	"strings"
+	"testing"
 )
 
 // AssertSessionNotStuck fails when the session's active run is non-terminal and
@@ -77,7 +76,7 @@ func inspectSessionForwardProgress(ctx context.Context, h *Harness, sessionID st
 			st.runID = run.ID
 			st.phase = run.CurrentPhase
 			st.status = string(run.Status)
-			st.terminal = workflow.IsTerminal(run.Status)
+			st.terminal = runstate.IsTerminal(run.Status)
 		}
 	}
 	if h.SessionMgr != nil {

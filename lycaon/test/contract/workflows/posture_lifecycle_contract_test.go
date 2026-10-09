@@ -2,8 +2,6 @@ package contract
 
 import (
 	"context"
-	"testing"
-
 	"github.com/lycaon/lycaon/internal/authzcontext"
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/conditions"
@@ -13,15 +11,18 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/workflow"
+	workflowblueprintfiles "github.com/lycaon/lycaon/internal/workflow/blueprintfiles"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
+	"testing"
 )
 
 func TestPlanWorkflowPostureLifecycleContract(t *testing.T) {
 	ctx, mgr, sessStore, blueprintMgr := newBundledPlanWorkflowManager(t)
 
-	run, err := mgr.StartHuman(ctx, "sess-posture", api.StartWorkflowRunRequest{
+	run, err := mgr.Starts.StartHuman(ctx, "sess-posture", api.StartWorkflowRunRequest{
 		WorkflowID: "plan", WorkflowVersion: "1.0.0",
 		Request:    "test request",
 		Parameters: map[string]string{"research_depth": "none"},
@@ -49,7 +50,7 @@ func TestPlanWorkflowPostureLifecycleContract(t *testing.T) {
 
 	sess, err := sessStore.Get(ctx, "sess-posture")
 	contractcheck.FailErr(t, "store.Get failed", err)
-	run, err = mgr.ApprovePlan(
+	run, err = mgr.Approvals.ApprovePlan(
 		ctx, run.ProjectID, run.BlueprintPath, sess.WorkspacePath,
 		run.ID, run.Revision, workflowdef.HashBlueprintContent(bp.Content),
 	)
@@ -129,20 +130,22 @@ func newBundledPlanWorkflowManager(t *testing.T) (context.Context, *workflow.Run
 	contractcheck.FailErr(t, "workflow.RegistryFromDirs failed", err)
 	blueprintStore := blueprint.NewFileStoreForTest(projectDir)
 	blueprintMgr := blueprint.NewManager(blueprintStore)
-	runStore := workflow.NewSQLStore(sqlDB)
+	runStore := workflowpersistence.New(sqlDB)
 	// The seal is a precondition of the grant, so the run store carries the same
 	// recorder the sidecar wires.
-	runStore.SetAuthzRecorder(authzcontext.SQLRecorder(sqlDB))
+	runStore.Transactions.SetAuthzRecorder(authzcontext.SQLRecorder(sqlDB))
 	mgr := workflow.NewManager(runStore, sessStore, manifestRegistry, nil)
-	blueprintMgr.AfterRetarget = mgr.RebindBlueprintPath
-	mgr.BlueprintCreate = blueprint.WorkflowBlueprintCreator{Manager: blueprintMgr}
-	mgr.BlueprintGet = blueprintMgr
+	blueprintMgr.AfterRetarget = mgr.Blueprints.RebindBlueprintPath
+	mgr.Blueprints.Creator = blueprint.WorkflowBlueprintCreator{Manager: blueprintMgr}
+	mgr.Blueprints.Getter = blueprintMgr
+	mgr.Presentation.BlueprintGetter = blueprintMgr
+	mgr.Approvals.Getter = blueprintMgr
 	condReg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{
 		BlueprintGet: func(ctx context.Context, path string) (*api.Blueprint, error) {
 			return blueprintMgr.Get(ctx, testdbseed.DefaultProjectID, path)
 		},
 		BlueprintContent: func(_ context.Context, projectDir, relPath string) (string, error) {
-			return workflow.ReadBlueprintFile(projectDir, relPath)
+			return workflowblueprintfiles.ReadBlueprintFile(projectDir, relPath)
 		},
 	})
 	contractcheck.FailErr(t, "conditions.NewDefaultRegistry failed", err)

@@ -2,8 +2,6 @@ package session
 
 import (
 	"context"
-	"strings"
-
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/curationctx"
@@ -11,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/survey"
 	"github.com/lycaon/lycaon/pkg/api"
+	"strings"
 )
 
 // SetSynthesisCurator wires the lite curator for synthesis evidence.
@@ -49,8 +48,8 @@ func (m *Manager) synthesisEvidenceDigest(ctx context.Context, sessionID, surfac
 	var scaffold map[string]any
 	var workflowPhase string
 	if m.workflows != nil {
-		scaffold, _ = m.workflows.ScaffoldVarsForSession(ctx, sessionID)
-		workflowPhase = m.workflows.CurrentPhase(ctx, sessionID)
+		scaffold, _ = m.workflows.Policy.ScaffoldVarsForSession(ctx, sessionID)
+		workflowPhase = m.workflows.Policy.CurrentPhase(ctx, sessionID)
 	}
 	msgs, err := m.store.GetMessages(ctx, sessionID)
 	if err != nil || len(msgs) == 0 {

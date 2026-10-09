@@ -1,9 +1,9 @@
 package workflow
 
 import (
-	"testing"
-
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
+	"testing"
 )
 
 func TestSetWorkerCycleEvalVars(t *testing.T) {
@@ -48,7 +48,7 @@ func TestRegisteredGateLeafIDsIncludesDelegateLeaves(t *testing.T) {
 }
 
 func TestImplementWorkLegKey(t *testing.T) {
-	key := ImplementWorkLegKey("sess-abc")
+	key := runstate.ImplementWorkLegKey("sess-abc")
 	if key != "implement-work:sess-abc" {
 		t.Fatalf("leg key = %q", key)
 	}

@@ -3,9 +3,6 @@ package app
 import (
 	"context"
 	"fmt"
-	"os"
-	"strings"
-
 	"github.com/lycaon/lycaon/internal/agentpresence"
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/api/capabilityadmin"
@@ -48,6 +45,8 @@ import (
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workernotice"
 	wire "github.com/lycaon/lycaon/pkg/api"
+	"os"
+	"strings"
 )
 
 // serverWiring wires the HTTP server, runtime services, preflight, and store upgrade recovery.
@@ -129,7 +128,7 @@ func (b serverWiring) wireRuntimeObservers() error {
 			b.toolRuntime.InvalidateFileAge(ev.ProjectDir)
 		}
 	}))
-	activeRun := activeRunIDFromWorkflow(b.workflowMgr)
+	activeRun := activeRunIDFromWorkflow(b.workflowMgr.Store.Runs)
 	progressCoalescer := progress.NewCoalescer(progress.DefaultCoalesceWindow, newProgressChangeEmitter(b.store, b.eventPub, activeRun, b.progressStore))
 	b.resources.releaseObserver("progress-write", progress.RegisterWriteObserver(func(ctx context.Context, evt progress.WriteEvent) {
 		if strings.TrimSpace(evt.SessionID) == "" {
@@ -229,7 +228,7 @@ func (b serverWiring) wireServer() error {
 	deps.Attention = &attention.Source{
 		Sessions:    b.store,
 		Checkpoints: b.checkpointMgr,
-		Asks:        b.workflowMgr,
+		Asks:        b.workflowMgr.Asks,
 		Finishes:    b.store,
 		Projects:    attention.RegistryNamer{Registry: b.registry},
 	}
@@ -450,7 +449,7 @@ func (b serverWiring) wireOrchestrator() error {
 		Delegation: b.delegationMgr,
 		Store:      b.delegationStore,
 		Agents:     b.agentRegistry,
-		Workflows:  b.workflowMgr,
+		Workflows:  &orchestration.WorkflowRunLifecycle{Runs: b.workflowMgr.Store.Runs, Starts: b.workflowMgr.Starts, Controls: b.workflowMgr.Controls, Policy: b.workflowMgr.Policy, Topology: b.workflowMgr.Phases},
 		Catalog:    extpacks.CatalogForConsumers,
 	}
 	if b.cfg.TestOrchestrator != nil {
@@ -458,7 +457,7 @@ func (b serverWiring) wireOrchestrator() error {
 	} else {
 		b.orch = orchestration.NewOrchestratorImpl(orchDeps)
 	}
-	b.workflowMgr.TopologyLegs = orchestration.TopologyLegView{Store: b.delegationStore, Catalog: extpacks.CatalogForConsumers}
+	b.workflowMgr.Presentation.TopologyLegs = orchestration.TopologyLegView{Store: b.delegationStore, Catalog: extpacks.CatalogForConsumers}
 
 	workerOutcomes := &worker.SessionOutcomeBridge{Sessions: b.mgr, Inner: b.delegationMgr}
 	var executor worker.WorkerExecutor = b.workerExec

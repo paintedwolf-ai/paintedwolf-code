@@ -2,8 +2,6 @@ package workflow
 
 import (
 	"context"
-	"testing"
-
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -11,20 +9,24 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
+	workflowstatetools "github.com/lycaon/lycaon/internal/workflow/statetools"
 	"github.com/lycaon/lycaon/pkg/api"
+	"testing"
 )
 
 func TestStateQueryReturnsVars(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "wf.db")
 
-	wfStore := NewSQLStore(sqlDB)
+	wfStore := workflowpersistence.New(sqlDB)
 	sessStore := store.NewSQL(sqlDB)
 	manifestReg, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "RegistryFromDirs failed", err)
 	mgr := NewManager(wfStore, sessStore, manifestReg, nil)
 
 	toolReg := tools.NewDefaultRegistry()
-	if err := RegisterStateTools(toolReg, StateToolDeps{Runs: mgr, Sessions: sessStore}); err != nil {
+	if err := workflowstatetools.RegisterStateTools(toolReg, workflowstatetools.StateToolDeps{Runs: mgr.Store.Runs, Vars: mgr.Phases.Vars, Journal: mgr.Phases.Journal, Resolver: &mgr.Resolver, Starts: mgr.Starts, Controls: mgr.Controls, Scaffold: mgr.Blueprints.Scaffold, Sessions: sessStore}); err != nil {
 		testutil.FailErr(t, "RegisterStateTools failed", err)
 	}
 
@@ -37,10 +39,10 @@ func TestStateQueryReturnsVars(t *testing.T) {
 	testutil.FailErr(t, "sessStore.Create failed", err)
 	run, err := startRun(context.Background(), mgr, sess.ID, "implement", "1.0.0")
 	testutil.FailErr(t, "startRun failed", err)
-	vars, err := wfStore.GetScaffoldVars(context.Background(), run.ID)
+	vars, err := wfStore.Runs.GetScaffoldVars(context.Background(), run.ID)
 	testutil.FailErr(t, "store.GetScaffoldVars failed", err)
-	vars = SetHostVar(vars, "plan.status", "draft")
-	if err := wfStore.UpdateVars(context.Background(), run, dir, vars); err != nil {
+	vars = runstate.SetHostVar(vars, "plan.status", "draft")
+	if err := wfStore.State.UpdateVars(context.Background(), run, dir, vars); err != nil {
 		testutil.FailErr(t, "store.UpdateVars failed", err)
 	}
 

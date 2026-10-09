@@ -3,15 +3,14 @@ package catalog
 import (
 	"context"
 	"fmt"
-	"log/slog"
-	"strings"
-
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectcontrib"
 	"github.com/lycaon/lycaon/internal/scan"
 	"github.com/lycaon/lycaon/pkg/api"
+	"log/slog"
+	"strings"
 )
 
 type effectiveCatalogCacheEntry struct {
@@ -222,7 +221,7 @@ func (m *Service) reinstallActive(ctx context.Context) {
 	}
 }
 
-// CatalogForProjectDir returns a CatalogFor closure for workflow.ManifestResolver.
+// CatalogForProjectDir returns a CatalogFor closure for the workflow catalog resolver.
 func (m *Service) CatalogForProjectDir(projectID string) func(ctx context.Context, projectDir, sessionID string) *extpacks.EffectiveCatalog {
 	projectID = strings.TrimSpace(projectID)
 	return func(ctx context.Context, _ string, sessionID string) *extpacks.EffectiveCatalog {

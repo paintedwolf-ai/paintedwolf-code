@@ -2,14 +2,13 @@ package workflow
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/testutil"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/pkg/api"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/lycaon/lycaon/internal/testutil"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestPlanCritiqueLeaveSurvivesFinalize(t *testing.T) {
@@ -49,7 +48,7 @@ func TestPlanCritiqueLeaveSurvivesFinalize(t *testing.T) {
 func TestPlanCritiqueFireFromApprove(t *testing.T) {
 	mgr, _, blueprintMgr, _ := testManagerWithRegistry(t)
 	ctx := context.Background()
-	run, err := mgr.StartHuman(ctx, "sess-1", api.StartWorkflowRunRequest{
+	run, err := mgr.Starts.StartHuman(ctx, "sess-1", api.StartWorkflowRunRequest{
 		WorkflowID: "plan", WorkflowVersion: "1.0.0", Request: "test request",
 	})
 	testutil.FailErr(t, "StartHuman", err)
@@ -62,7 +61,7 @@ func TestPlanCritiqueFireFromApprove(t *testing.T) {
 	if run.CurrentPhase != "approve" {
 		t.Fatalf("phase = %q want approve", run.CurrentPhase)
 	}
-	ui, err := mgr.ComputeRunUI(ctx, run)
+	ui, err := mgr.Presentation.ComputeRunUI(ctx, run)
 	testutil.FailErr(t, "ComputeRunUI", err)
 	if ui == nil || !ui.HumanApprovalAwaiting {
 		t.Fatal("expected human_approval_awaiting before critique")
@@ -71,7 +70,7 @@ func TestPlanCritiqueFireFromApprove(t *testing.T) {
 		t.Fatalf("choice_transitions = %+v", ui.ChoiceTransitions)
 	}
 
-	out, err := mgr.FireTransition(ctx, run.ID, "critique", workflowdef.TransitionActorHuman)
+	out, err := mgr.Phases.FireTransition(ctx, run.ID, "critique", workflowdef.TransitionActorHuman)
 	testutil.FailErr(t, "FireTransition critique", err)
 	if out.CurrentPhase != "review" {
 		t.Fatalf("phase = %q want review", out.CurrentPhase)
@@ -79,7 +78,7 @@ func TestPlanCritiqueFireFromApprove(t *testing.T) {
 
 	// Off the approve phase the Approve chrome drops: the human_approval.*
 	// vars survive the critique leave, but awaiting follows the phase shape.
-	ui, err = mgr.ComputeRunUI(ctx, out)
+	ui, err = mgr.Presentation.ComputeRunUI(ctx, out)
 	testutil.FailErr(t, "ComputeRunUI in review", err)
 	if ui == nil || ui.HumanApprovalAwaiting {
 		t.Fatal("human_approval_awaiting must be false while the run is in review")

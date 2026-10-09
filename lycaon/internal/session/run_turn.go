@@ -61,11 +61,11 @@ func (m *Manager) runTurnLocked(ctx context.Context, id string, in PromptInput) 
 	text := promptUserInstruction(in)
 	hostTurn := in.HostSignal != nil
 	if !hostTurn && in.Recovery == nil && m.workflows != nil {
-		if resp, handled, err := m.workflows.TrySlashPrompt(ctx, id, text, in.SubmissionID); handled {
+		if resp, handled, err := m.workflows.Slash.TrySlashPrompt(ctx, id, text, in.SubmissionID); handled {
 			// A parked phase cancels the current turn.
 			return resp, mapPromptRunError(err)
 		}
-		prepared, workflowResp, handled, err := m.workflows.PrepareUserRequest(ctx, id, text)
+		prepared, workflowResp, handled, err := m.workflows.Requests.PrepareUserRequest(ctx, id, text)
 		if err != nil {
 			return nil, mapPromptRunError(err)
 		}

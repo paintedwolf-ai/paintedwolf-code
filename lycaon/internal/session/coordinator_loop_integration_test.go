@@ -4,24 +4,23 @@ package session_test
 
 import (
 	"context"
-	"strings"
-	"testing"
-	"time"
-
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
+	"strings"
+	"testing"
+	"time"
 )
 
 // Pending human approval suppresses the coordinator wake.
 func TestLoopSkippedInApprovePhase(t *testing.T) {
 	fix := setupLoopFixture(t, settings.DefaultSessionLimits())
 	ctx := context.Background()
-	run, err := fix.wfMgr.GetActive(ctx, fix.sess.ID)
+	run, err := fix.wfMgr.Store.Runs.ActiveBySession(ctx, fix.sess.ID)
 	if err != nil || run == nil {
 		t.Fatal("missing run")
 	}
@@ -29,10 +28,10 @@ func TestLoopSkippedInApprovePhase(t *testing.T) {
 	if err := fix.wfMgr.Store.Update(ctx, run); err != nil {
 		testutil.FailErr(t, "fix.wfMgr.Store.Update failed", err)
 	}
-	vars, err := fix.wfMgr.Store.GetScaffoldVars(ctx, run.ID)
+	vars, err := fix.wfMgr.Store.Runs.GetScaffoldVars(ctx, run.ID)
 	testutil.FailErr(t, "GetScaffoldVars", err)
-	vars = workflow.StampHumanApprovalPhase(vars, &workflowdef.HumanApprovalConfig{}, run.BlueprintPath)
-	vars = workflow.SetHumanApprovalReady(vars, true)
+	vars = runstate.StampHumanApprovalPhase(vars, &workflowdef.HumanApprovalConfig{}, run.BlueprintPath)
+	vars = runstate.SetHumanApprovalReady(vars, true)
 	testutil.FailErr(t, "UpdateVars", fix.wfMgr.Store.UpdateVars(ctx, run, t.TempDir(), vars))
 	before, _ := fix.store.GetMessages(ctx, fix.sess.ID)
 	fix.mgr.NudgeCoordinatorLoop(ctx, fix.sess.ID, anchor.LegFinished, anchor.LegFinished, "leg-1", anchor.Envelope{})

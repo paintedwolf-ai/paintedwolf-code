@@ -3,13 +3,6 @@ package security
 import (
 	"context"
 	"encoding/json"
-	"net/http"
-	"net/http/httptest"
-	"os"
-	"path/filepath"
-	"strings"
-	"testing"
-
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
@@ -18,8 +11,15 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/workflow"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/wiring"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
 )
 
 func TestAdvanceToolAndHTTPParity(t *testing.T) {
@@ -109,7 +109,7 @@ func TestAdvanceToolAndHTTPParity(t *testing.T) {
 		if exitW.Code != http.StatusOK {
 			t.Fatalf("exit ambient status = %d body = %s", exitW.Code, exitW.Body.String())
 		}
-		active, err := parity.wfMgr.GetActive(t.Context(), parity.toolSession.ID)
+		active, err := parity.wfMgr.Store.Runs.ActiveBySession(t.Context(), parity.toolSession.ID)
 		if err != nil || active != nil {
 			t.Fatalf("ambient exit left active workflow: %+v; error=%v", active, err)
 		}
@@ -326,11 +326,11 @@ func (p *advanceParityRig) advanceToolRaw(t *testing.T, sessionID string) (advan
 func (p *advanceParityRig) seedReady(t *testing.T, runID string) {
 	t.Helper()
 	ctx := context.Background()
-	run, err := p.wfMgr.Get(ctx, runID)
+	run, err := p.wfMgr.Store.Runs.Get(ctx, runID)
 	testutil.FailErr(t, "get run", err)
-	vars, err := p.wfMgr.Store.GetScaffoldVars(ctx, runID)
+	vars, err := p.wfMgr.Store.Runs.GetScaffoldVars(ctx, runID)
 	testutil.FailErr(t, "get scaffold vars", err)
-	vars = workflow.SetHostVar(vars, "ready", true)
+	vars = runstate.SetHostVar(vars, "ready", true)
 	testutil.FailErr(t, "upsert scaffold state",
 		p.wfMgr.Store.UpdateVars(ctx, run, "", vars))
 }

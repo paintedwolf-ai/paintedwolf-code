@@ -18,15 +18,22 @@ const (
 	defaultWorkflowObligationInterval = 2 * time.Minute
 )
 
-// LoopWorkflowSource supplies active run and scaffold state for loop policy checks.
-type LoopWorkflowSource interface {
-	ActiveRun(ctx context.Context, sessionID string) (*api.WorkflowRun, error)
-	ScaffoldVars(ctx context.Context, runID string) (map[string]any, error)
-	HumanApprovalAwaiting(ctx context.Context, sessionID string) (bool, error)
-	// HostObligationHeld reports a current-phase wait only the host can settle.
-	HostObligationHeld(ctx context.Context, sessionID string) (bool, error)
-	// HostObligationHoldKinds names the holding kinds for the park reason.
-	HostObligationHoldKinds(ctx context.Context, sessionID string) []string
+// WorkflowDomains binds the run state and wait policies used by coordinator loops.
+type WorkflowDomains struct {
+	Runs        WorkflowRuns
+	Approvals   WorkflowApprovals
+	Obligations WorkflowObligations
+}
+type WorkflowRuns interface {
+	ActiveBySession(context.Context, string) (*api.WorkflowRun, error)
+	GetScaffoldVars(context.Context, string) (map[string]any, error)
+}
+type WorkflowApprovals interface {
+	HumanApprovalAwaiting(context.Context, string) (bool, error)
+}
+type WorkflowObligations interface {
+	HostObligationHeld(context.Context, string) (bool, error)
+	HostObligationHoldKinds(context.Context, string) []string
 }
 
 // LoopDeps wires coordinator loop policy and prompt execution.
@@ -38,7 +45,7 @@ type LoopDeps struct {
 	GetSession                func(ctx context.Context, sessionID string) (*api.Session, error)
 	Limits                    func(context.Context, *api.Session) settings.SessionLimits
 	IsEscalated               func(sessionID string) bool
-	WorkflowSource            LoopWorkflowSource
+	WorkflowSource            *WorkflowDomains
 	CoordinatorFrame          inject.CoordinatorTurnFrameSource
 	BoardWillForceInject      func(ctx context.Context, sess *api.Session, run api.CoordinatorRunContext) bool
 	QueueInform               func(ctx context.Context, sessionID string, inform anchor.ID, env anchor.Envelope)
@@ -104,7 +111,6 @@ type sessionSleep struct {
 	activityStartedAt time.Time
 }
 
-// LoopEngine manages agent sleep/wake and coordinator host-initiated re-prompts.
 
 // UserTurnContinuation describes the next visible-turn transition.
 type UserTurnContinuation uint8

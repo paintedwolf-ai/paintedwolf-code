@@ -3,7 +3,6 @@ package sessionadmin
 import (
 	"context"
 	"fmt"
-
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
@@ -22,7 +21,7 @@ func (s *Handler) AttachAmbientOnSessionCreate(ctx context.Context, req wire.Cre
 	if err != nil {
 		return fmt.Errorf("attach ambient workflow: resolve default: %w", err)
 	}
-	run, err := s.Workflows.StartAmbient(ctx, sessionID, ref.ID, ref.Version)
+	run, err := s.Workflows.Ambient.StartAmbient(ctx, sessionID, ref.ID, ref.Version)
 	if err != nil {
 		return fmt.Errorf("attach ambient workflow %s@%s: %w", ref.ID, ref.Version, err)
 	}

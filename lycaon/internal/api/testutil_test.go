@@ -5,17 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net"
-	"net/http"
-	"net/http/httptest"
-	"path/filepath"
-	"runtime"
-	"strings"
-	"sync"
-	"testing"
-	"time"
-
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
@@ -36,7 +25,18 @@ import (
 	"github.com/lycaon/lycaon/internal/usernotice"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	wire "github.com/lycaon/lycaon/pkg/api"
+	"io"
+	"net"
+	"net/http"
+	"net/http/httptest"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"sync"
+	"testing"
+	"time"
 )
 
 func newAuthedRequest(method, target string, body io.Reader) *http.Request {
@@ -112,10 +112,9 @@ func newTestServerWithWorkflowRegistry(t *testing.T, reg tools.ToolRegistry, opt
 
 	registry, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "workflow.RegistryFromDirs", err)
-	runs := workflow.NewSQLStore(sqlDB)
+	runs := workflowpersistence.New(sqlDB)
 	workflows := workflow.NewManager(runs, sessions, registry, nil)
-	workflows.Resolver = workflow.ManifestResolver{}
-	mgr.SetWorkflowSessionView(workflows)
+	mgr.SetWorkflowDomains(&session.WorkflowDomains{Runs: workflows.Store.Runs, Policy: workflows.Policy, Ambient: workflows.Ambient, Blueprints: workflows.Blueprints, Batch: workflows.Batch, Slash: workflows.Slash, Requests: workflows.Requests, Feedback: workflows.Feedback, Transcript: workflows.Transcript, Asks: workflows.Asks, Fanout: workflows.Fanout, Phases: workflows.Phases, Reports: workflows.Reports, Recovery: workflows.Recovery, Cleanup: workflows})
 	return newServerForTest(t, Dependencies{
 		Store: sessions, PersonActions: personactions.New(sqlDB), Projects: project.NewSQLRegistry(sqlDB), Sessions: mgr,
 		Workflows: workflows, WorkflowRuns: runs,

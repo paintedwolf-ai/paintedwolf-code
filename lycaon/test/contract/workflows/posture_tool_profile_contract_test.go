@@ -1,12 +1,12 @@
 package contract
 
 import (
-	"testing"
-
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/session"
+	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
+	"testing"
 )
 
 // The coordinator surface machinery keys on the coordinator profile id, so a
@@ -15,7 +15,7 @@ func TestPostureNeverSelectsToolProfile(t *testing.T) {
 	t.Parallel()
 	agents := orchestration.NewMemoryAgentRegistry()
 	contractcheck.FailErr(t, "LoadRequiredAgentRegistry", orchestration.LoadRequiredAgentRegistry(t.Context(), agents))
-	for _, posture := range session.AllSessionPostures() {
+	for _, posture := range sessionposture.AllSessionPostures() {
 		sess := &api.Session{Posture: posture, AgentType: orchestration.ProfileCoordinator}
 		if got := session.ResolveToolProfile(sess, agents, ""); got != orchestration.ProfileCoordinator {
 			t.Fatalf("posture %q profile = %q want %q", posture, got, orchestration.ProfileCoordinator)

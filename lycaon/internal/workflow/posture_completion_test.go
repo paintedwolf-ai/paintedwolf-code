@@ -2,11 +2,11 @@ package workflow
 
 import (
 	"context"
-	"testing"
-
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
+	"testing"
 )
 
 func postureJourneyManifest(mode string) workflowdef.Manifest {
@@ -31,18 +31,18 @@ func finishPostureJourney(t *testing.T, mgr *RunManager, run *api.WorkflowRun, m
 	var err error
 	switch mode {
 	case "transition":
-		_, err = mgr.FireTransition(ctx, run.ID, "finish", workflowdef.TransitionActorHuman)
+		_, err = mgr.Phases.FireTransition(ctx, run.ID, "finish", workflowdef.TransitionActorHuman)
 	case "advance", "final advance":
-		vars, readErr := mgr.Store.GetScaffoldVars(ctx, run.ID)
+		vars, readErr := mgr.Store.Runs.GetScaffoldVars(ctx, run.ID)
 		testutil.FailErr(t, "read gate state", readErr)
-		testutil.FailErr(t, "satisfy gate", mgr.Store.UpdateVars(ctx, run, mgr.projectDirForRun(ctx, run), SatisfyGateInVars(vars, "ready")))
-		_, err = mgr.Advance(ctx, run.ID)
+		testutil.FailErr(t, "satisfy gate", mgr.Store.State.UpdateVars(ctx, run, mgr.Resolver.ProjectDirForRun(ctx, run), runstate.SatisfyGateInVars(vars, "ready")))
+		_, err = mgr.Phases.Advance(ctx, run.ID)
 	case "failed":
-		_, err = mgr.Fail(ctx, run.ID, api.WorkflowFailure{Code: "TOPOLOGY_STAGE_FAILED", Message: "Fixture failed."})
+		_, err = mgr.Controls.Fail(ctx, run.ID, api.WorkflowFailure{Code: "TOPOLOGY_STAGE_FAILED", Message: "Fixture failed."})
 	case "interrupted":
-		err = mgr.interruptRun(ctx, run)
+		err = mgr.Recovery.ReconcileOrphanedRuns(ctx, run.SessionID)
 	case "canceled":
-		_, err = mgr.Cancel(ctx, run.ID, "fixture canceled")
+		_, err = mgr.Controls.Cancel(ctx, run.ID, "fixture canceled")
 	}
 	testutil.FailErr(t, "finish workflow", err)
 }
@@ -54,7 +54,7 @@ func TestWorkflowTerminalRestoresSessionPosture(t *testing.T) {
 				mgr, sessions, _, _ := testManager(t)
 				testutil.FailErr(t, "set baseline", sessions.UpdateSession(t.Context(), "sess-1", func(s *api.Session) { s.Posture = baseline }))
 				manifest := postureJourneyManifest(mode)
-				mgr.Manifests = workflowdef.NewRegistry(map[string]workflowdef.Manifest{workflowdef.ManifestKey(manifest.ID, manifest.Version): manifest})
+				mgr.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{workflowdef.ManifestKey(manifest.ID, manifest.Version): manifest})
 				assertPosture := func(ctx context.Context, want api.SessionPosture) {
 					t.Helper()
 					sess, err := sessions.Get(ctx, "sess-1")
@@ -63,7 +63,7 @@ func TestWorkflowTerminalRestoresSessionPosture(t *testing.T) {
 						t.Fatalf("session posture = %q, want %q", sess.Posture, want)
 					}
 				}
-				mgr.OnRunCompleted = func(ctx context.Context, _ *api.WorkflowRun) { assertPosture(ctx, baseline) }
+				mgr.Children.OnRunCompleted = func(ctx context.Context, _ *api.WorkflowRun) { assertPosture(ctx, baseline) }
 				run, err := startRun(t.Context(), mgr, "sess-1", manifest.ID, manifest.Version)
 				testutil.FailErr(t, "start workflow", err)
 				if mode != "initial" {
@@ -71,9 +71,9 @@ func TestWorkflowTerminalRestoresSessionPosture(t *testing.T) {
 				}
 				finishPostureJourney(t, mgr, run, mode)
 				assertPosture(t.Context(), baseline)
-				stored, err := mgr.Get(t.Context(), run.ID)
+				stored, err := mgr.Store.Runs.Get(t.Context(), run.ID)
 				testutil.FailErr(t, "read terminal run", err)
-				if !IsTerminal(stored.Status) {
+				if !runstate.IsTerminal(stored.Status) {
 					t.Fatalf("workflow still %s", stored.Status)
 				}
 			})
@@ -90,13 +90,13 @@ func TestChildTerminalRestoresParentPosture(t *testing.T) {
 			parentManifest.ID = "parent-posture"
 			parentManifest.InitialPosture = "spec"
 			childManifest := postureJourneyManifest(mode)
-			mgr.Manifests = workflowdef.NewRegistry(map[string]workflowdef.Manifest{
+			mgr.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{
 				workflowdef.ManifestKey(parentManifest.ID, parentManifest.Version): parentManifest,
 				workflowdef.ManifestKey(childManifest.ID, childManifest.Version):   childManifest,
 			})
 			parent, err := startRun(t.Context(), mgr, "sess-1", parentManifest.ID, parentManifest.Version)
 			testutil.FailErr(t, "start parent", err)
-			child, err := mgr.InvokeChild(t.Context(), parent.ID, workflowdef.InvokeWorkflowSpec{WorkflowID: childManifest.ID, Version: childManifest.Version, Blueprint: workflowdef.ChildBlueprintNone})
+			child, err := mgr.Children.InvokeChild(t.Context(), parent.ID, workflowdef.InvokeWorkflowSpec{WorkflowID: childManifest.ID, Version: childManifest.Version, Blueprint: workflowdef.ChildBlueprintNone})
 			testutil.FailErr(t, "start child", err)
 			finishPostureJourney(t, mgr, child, mode)
 			sess, err := sessions.Get(t.Context(), "sess-1")
@@ -104,7 +104,7 @@ func TestChildTerminalRestoresParentPosture(t *testing.T) {
 			if sess.Posture != api.SessionPostureSpec {
 				t.Fatalf("resumed parent posture = %q, want spec", sess.Posture)
 			}
-			parent, err = mgr.Get(t.Context(), parent.ID)
+			parent, err = mgr.Store.Runs.Get(t.Context(), parent.ID)
 			testutil.FailErr(t, "read resumed parent", err)
 			if parent.Status != api.WorkflowRunStatusRunning {
 				t.Fatalf("parent status = %s", parent.Status)

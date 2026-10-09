@@ -1,13 +1,12 @@
 package contract
 
 import (
+	"github.com/lycaon/lycaon/internal/conditions"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
+	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"path/filepath"
 	"testing"
-
-	"github.com/lycaon/lycaon/internal/conditions"
-	"github.com/lycaon/lycaon/internal/workflow"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
 func TestWorkflowVocabularyDelegateLeavesRegistered(t *testing.T) {
@@ -44,7 +43,7 @@ func TestWorkflowVocabularyBundledManifestsOnlyRegisteredLeaves(t *testing.T) {
 
 func TestWorkflowVocabularyImplementWorkLegKey(t *testing.T) {
 	t.Parallel()
-	if workflow.ImplementWorkLegKey("s1") != "implement-work:s1" {
+	if runstate.ImplementWorkLegKey("s1") != "implement-work:s1" {
 		t.Fatal("ImplementWorkLegKey format drift")
 	}
 }

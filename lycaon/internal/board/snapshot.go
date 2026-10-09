@@ -4,12 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"hash/fnv"
-	"path/filepath"
-	"slices"
-	"strings"
-	"time"
-
 	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/git"
@@ -25,6 +19,11 @@ import (
 	"github.com/lycaon/lycaon/internal/standingpatterns"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/pkg/api"
+	"hash/fnv"
+	"path/filepath"
+	"slices"
+	"strings"
+	"time"
 )
 
 // MaxBoardGitOthers is the number of non-active repositories carried on BoardGitSlice.
@@ -38,10 +37,15 @@ type WorkerTouchEnricher interface {
 // ActiveReservationLister returns handoff_reserve holds for a coordinator session.
 type ActiveReservationLister func(sessionID string) []api.BoardReservationEntry
 
-// WorkflowRunSource resolves the active workflow run for a coordinator session.
-type WorkflowRunSource interface {
-	GetActive(ctx context.Context, sessionID string) (*api.WorkflowRun, error)
-	AttachRunUI(ctx context.Context, run *api.WorkflowRun) error
+type WorkflowRuns interface {
+	ActiveBySession(context.Context, string) (*api.WorkflowRun, error)
+}
+type WorkflowPresentation interface {
+	AttachRunUI(context.Context, *api.WorkflowRun) error
+}
+type WorkflowRunSource struct {
+	Runs         WorkflowRuns
+	Presentation WorkflowPresentation
 }
 
 // ScanSource returns assessment authority visible for canonical paths.
@@ -60,7 +64,7 @@ type SnapshotBuilder struct {
 	Workers            worker.WorkerQueue
 	Touches            WorkerTouchEnricher
 	ActiveReservations ActiveReservationLister
-	Workflow           WorkflowRunSource
+	Workflow           *WorkflowRunSource
 	Repo               repoinfo.Provider
 	Git                git.GitManager                  // optional; fail-soft
 	StatusCache        *git.StatusCache                // optional; shared with the Git status read
@@ -125,9 +129,9 @@ func (b *SnapshotBuilder) Build(ctx context.Context, projectID, workspacePath, s
 
 	var activeRun *api.WorkflowRun
 	if b.Workflow != nil && sessionID != "" {
-		activeRun, _ = b.Workflow.GetActive(ctx, sessionID)
+		activeRun, _ = b.Workflow.Runs.ActiveBySession(ctx, sessionID)
 		if activeRun != nil {
-			_ = b.Workflow.AttachRunUI(ctx, activeRun)
+			_ = b.Workflow.Presentation.AttachRunUI(ctx, activeRun)
 		}
 	}
 
