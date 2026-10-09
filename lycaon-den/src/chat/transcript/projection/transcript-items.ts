@@ -322,6 +322,7 @@ export function messagesToTranscriptItems(
         kind: "user",
         key: msg.id,
         text: msg.content,
+        contentParts: msg.content_parts,
         artifactIds: artifactIds.length > 0 ? artifactIds : undefined,
       });
       continue;
