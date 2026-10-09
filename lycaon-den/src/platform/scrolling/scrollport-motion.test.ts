@@ -817,3 +817,21 @@ describe("ScrollportMotion retained extent sizing", () => {
     unbindScrollportMotion(fixture.host);
   });
 });
+
+describe("ScrollportMotion landed commits", () => {
+  it.each([0, 375.5])("reports the actual position when the browser clamps an absolute write to %s", limit => {
+    stubAnimationFrames();
+    const { motion, viewport } = createScrollportFixture({ initialScrollTop: 0 });
+    let top = 0, left = 0;
+    Object.defineProperties(viewport, {
+      scrollTop: { configurable: true, get: () => top, set: (value: number) => { top = Math.min(limit, value); } },
+      scrollLeft: { configurable: true, get: () => left, set: (value: number) => { left = Math.min(limit, value); } },
+      scrollWidth: { configurable: true, value: 2_000 },
+    });
+    const committed = vi.fn();
+    motion.subscribeCommits(committed);
+    motion.commit(900, "reveal", { axis: "both" });
+    expect(motion.offsetY()).toBe(limit);
+    expect(committed).toHaveBeenLastCalledWith("reveal", { top: limit, left: limit });
+  });
+});
