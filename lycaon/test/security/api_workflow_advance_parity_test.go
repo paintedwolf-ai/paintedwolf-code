@@ -334,7 +334,7 @@ func (p *advanceParityRig) seedReady(t *testing.T, runID string) {
 	testutil.FailErr(t, "get scaffold vars", err)
 	vars = runstate.SetHostVar(vars, "ready", true)
 	testutil.FailErr(t, "upsert scaffold state",
-		p.wfMgr.Store.UpdateVars(ctx, run, "", vars))
+		p.wfMgr.Store.State.UpdateVars(ctx, run, "", vars))
 }
 
 func stringSliceDetail(v any) []string {
