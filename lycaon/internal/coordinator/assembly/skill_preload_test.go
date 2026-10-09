@@ -14,7 +14,7 @@ func TestSkillPreloadInjectUsesRenderedProcedureWithoutRoster(t *testing.T) {
 	selected := &turnload.SkillPreload{Name: "selected-skill", Score: 3.6, Body: "Run the targeted check."}
 	e.SetDeps(AssemblyDeps{Injects: promptstest.InjectRenderer(t), SkillPreload: func(string) *turnload.SkillPreload { return selected }})
 	for i := 0; i < 2; i++ {
-		message, ok := e.skillProcedureInject(t.Context(), &api.Session{ID: "s"}, "coordinator")
+		message, ok := testTurnContext(e).skillProcedureInject(t.Context(), &api.Session{ID: "s"}, "coordinator")
 		if !ok || !strings.Contains(message.Content, selected.Body) || !strings.Contains(message.Content, `"need":"selected-skill"`) {
 			t.Fatalf("procedure=%+v present=%v", message, ok)
 		}
@@ -23,7 +23,7 @@ func TestSkillPreloadInjectUsesRenderedProcedureWithoutRoster(t *testing.T) {
 		}
 	}
 	selected = nil
-	if _, ok := e.skillProcedureInject(t.Context(), &api.Session{ID: "s"}, "coordinator"); ok {
+	if _, ok := testTurnContext(e).skillProcedureInject(t.Context(), &api.Session{ID: "s"}, "coordinator"); ok {
 		t.Fatal("injected an unselected skill")
 	}
 }

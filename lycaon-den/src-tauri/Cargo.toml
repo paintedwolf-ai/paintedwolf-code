@@ -103,7 +103,8 @@ tauri-plugin-shell = "2"
 tokio = { version = "1", features = ["sync", "time", "fs", "io-util", "macros"] }
 reqwest = { version = "0.13", default-features = false, features = ["stream"] }
 rustls = { version = "0.23", default-features = false, features = ["ring"] }
-sha2 = "0.10"
+sha2 = "0.11"
+hex = "0.4"
 flate2 = "1"
 tar = "0.4"
 futures-util = "0.3"
@@ -112,8 +113,8 @@ serde_json.workspace = true
 semver = "1"
 base64 = "0.23"
 minisign-verify = "0.3.0"
-rand = "0.8"
-ed25519-dalek = { version = "2", features = ["rand_core"] }
+rand = "0.9"
+ed25519-dalek = "3"
 which = "8"
 ureq = "2"
 libc.workspace = true
@@ -137,7 +138,7 @@ windows-sys = { version = "0.61", features = [
   "Win32_UI_Shell",
   "Win32_UI_WindowsAndMessaging",
 ] }
-windows = { version = "0.61.3", features = [
+windows = { version = "0.62.2", features = [
   "Foundation",
   "Security_Credentials_UI",
   "Win32_Foundation",

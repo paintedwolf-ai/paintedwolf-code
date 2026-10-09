@@ -88,7 +88,7 @@ impl Header {
 }
 
 fn digest(value: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(value))
+    hex::encode(Sha256::digest(value))
 }
 fn now() -> u64 {
     SystemTime::now()
