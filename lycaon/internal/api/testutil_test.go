@@ -247,6 +247,7 @@ func wireTestBindingRegistry(t *testing.T) {
 func stopBackgroundOnCleanup(t *testing.T, srv *Server) {
 	t.Helper()
 	t.Cleanup(func() {
+		http.DefaultClient.CloseIdleConnections()
 		srv.StopBackground()
 		drainBackground(t, srv)
 		if _, released := sourcesReleased.LoadOrStore(srv, struct{}{}); !released {
@@ -317,7 +318,10 @@ func startTestHTTPServer(t *testing.T, srv *Server) string {
 	}
 	httpServer := &http.Server{Handler: srv}
 	go httpServer.Serve(listener)
-	t.Cleanup(func() { _ = httpServer.Close() })
+	t.Cleanup(func() {
+		_ = httpServer.Close()
+		http.DefaultClient.CloseIdleConnections()
+	})
 	return fmt.Sprintf("http://%s", listener.Addr().String())
 }
 
