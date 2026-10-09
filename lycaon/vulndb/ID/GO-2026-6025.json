@@ -1,0 +1,61 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/filebrowser/filebrowser"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/filebrowser/filebrowser/v2"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "2.63.17"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-62684",
+  "GHSA-833g-cqhp-h72j"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6025"
+ },
+ "details": "File Browser: Share API exposes the password hash and bypass token in github.com/filebrowser/filebrowser",
+ "id": "GO-2026-6025",
+ "modified": "2026-07-22T20:36:35Z",
+ "published": "2026-07-22T20:36:35Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/filebrowser/filebrowser/security/advisories/GHSA-833g-cqhp-h72j"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "File Browser: Share API exposes the password hash and bypass token in github.com/filebrowser/filebrowser"
+}

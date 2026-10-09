@@ -1,0 +1,56 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/authzed/spicedb"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "1.22.0"
+      },
+      {
+       "fixed": "1.22.2"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2023-35930",
+  "GHSA-m54h-5x5f-5m6r"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2023-1871"
+ },
+ "details": "SpiceDB's LookupResources may return partial results in github.com/authzed/spicedb",
+ "id": "GO-2023-1871",
+ "modified": "2024-08-20T20:31:35Z",
+ "published": "2024-08-20T20:31:35Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/authzed/spicedb/security/advisories/GHSA-m54h-5x5f-5m6r"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2023-35930"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/authzed/spicedb/pull/1397"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/authzed/spicedb/releases/tag/v1.22.2"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "SpiceDB's LookupResources may return partial results in github.com/authzed/spicedb"
+}

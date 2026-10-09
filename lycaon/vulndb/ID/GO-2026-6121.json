@@ -1,0 +1,52 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/gopacket/gopacket"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.6.1"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-54345",
+  "GHSA-6r28-9ppf-4hj5"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6121"
+ },
+ "details": "GoPacket's Diameter AVP decoder: uint32 underflow on vendor header size leads to unbounded ~4 GiB allocation (unauthenticated remote DoS) in github.com/gopacket/gopacket",
+ "id": "GO-2026-6121",
+ "modified": "2026-08-18T14:32:29Z",
+ "published": "2026-08-18T14:32:29Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/gopacket/gopacket/security/advisories/GHSA-6r28-9ppf-4hj5"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/gopacket/gopacket/commit/145859d0eaee1a6f5925ffb93851c976449c3311"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/gopacket/gopacket/releases/tag/v1.6.1"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "GoPacket's Diameter AVP decoder: uint32 underflow on vendor header size leads to unbounded ~4 GiB allocation (unauthenticated remote DoS) in github.com/gopacket/gopacket"
+}

@@ -1,0 +1,69 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/actiontech/sqle"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2025-15107",
+  "GHSA-43h9-hc38-qph5"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2025-4269"
+ },
+ "details": "SQLE's JWT Secret Handler can be manipulated to use hard-coded cryptographic key in github.com/actiontech/sqle",
+ "id": "GO-2025-4269",
+ "modified": "2026-01-12T17:39:39Z",
+ "published": "2026-01-12T17:39:39Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-43h9-hc38-qph5"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-15107"
+  },
+  {
+   "type": "REPORT",
+   "url": "https://github.com/actiontech/sqle/issues/3186"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/actiontech/sqle/blob/4714f83f33e0d7aa647036eb756e928aa4174014/sqle/utils/jwt.go#L9"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/actiontech/sqle/milestone/53"
+  },
+  {
+   "type": "WEB",
+   "url": "https://vuldb.com/?ctiid.338478"
+  },
+  {
+   "type": "WEB",
+   "url": "https://vuldb.com/?id.338478"
+  },
+  {
+   "type": "WEB",
+   "url": "https://vuldb.com/?submit.710380"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "SQLE's JWT Secret Handler can be manipulated to use hard-coded cryptographic key in github.com/actiontech/sqle"
+}

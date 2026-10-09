@@ -1,0 +1,52 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/sigstore/fulcio"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.8.3"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2025-66506",
+  "GHSA-f83f-xpx7-ffpw"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2025-4193"
+ },
+ "details": "Fulcio allocates excessive memory during token parsing in github.com/sigstore/fulcio",
+ "id": "GO-2025-4193",
+ "modified": "2025-12-08T21:31:36Z",
+ "published": "2025-12-08T21:31:36Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/sigstore/fulcio/security/advisories/GHSA-f83f-xpx7-ffpw"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-66506"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/sigstore/fulcio/commit/765a0e57608b9ef390e1eeeea8595b9054c63a5a"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Fulcio allocates excessive memory during token parsing in github.com/sigstore/fulcio"
+}

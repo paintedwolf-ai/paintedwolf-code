@@ -1,0 +1,58 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/gotenberg/gotenberg/v7"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/gotenberg/gotenberg/v8"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-45741",
+  "GHSA-86m8-88fq-xfxp"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5244"
+ },
+ "details": "Gotenberg has an SSRF deny-list bypass in IsPublicIP via IPv6 6to4 / NAT64 / site-local prefixes in github.com/gotenberg/gotenberg",
+ "id": "GO-2026-5244",
+ "modified": "2026-06-25T18:43:15Z",
+ "published": "2026-06-25T18:43:15Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/gotenberg/gotenberg/security/advisories/GHSA-86m8-88fq-xfxp"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Gotenberg has an SSRF deny-list bypass in IsPublicIP via IPv6 6to4 / NAT64 / site-local prefixes in github.com/gotenberg/gotenberg"
+}

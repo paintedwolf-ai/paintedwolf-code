@@ -1,0 +1,68 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {
+    "imports": [
+     {
+      "path": "github.com/containerd/containerd/contrib/apparmor",
+      "symbols": [
+       "DumpDefaultProfile",
+       "LoadDefaultProfile",
+       "generate"
+      ]
+     }
+    ]
+   },
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/containerd/containerd"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.6.26"
+      },
+      {
+       "introduced": "1.7.0"
+      },
+      {
+       "fixed": "1.7.11"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "GHSA-7ww5-4wqc-m92c"
+ ],
+ "database_specific": {
+  "review_status": "REVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2023-2412"
+ },
+ "details": "RAPL accessibility in github.com/containerd/containerd",
+ "id": "GO-2023-2412",
+ "modified": "2024-05-20T16:03:47Z",
+ "published": "2024-01-02T18:53:32Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/containerd/containerd/security/advisories/GHSA-7ww5-4wqc-m92c"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/containerd/containerd/commit/67d356cb3095f3e8f8ad7d36f9a733fea1e7e28c"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/containerd/containerd/commit/746b910f05855c8bfdb4415a1c0f958b234910e5"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "RAPL accessibility in github.com/containerd/containerd"
+}

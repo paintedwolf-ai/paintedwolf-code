@@ -1,0 +1,68 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/free5gc/free5gc"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "4.2.2+incompatible"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-55068",
+  "GHSA-x8mj-6p3q-g5pp"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6316"
+ },
+ "details": "free5GC NRF nnrf-nfm lacks NF Profile input validation \u2014 enables NF Registration Poisoning with arbitrary service endpoints in github.com/free5gc/free5gc",
+ "id": "GO-2026-6316",
+ "modified": "2026-09-02T18:37:27Z",
+ "published": "2026-09-02T18:37:27Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/free5gc/free5gc/security/advisories/GHSA-x8mj-6p3q-g5pp"
+  },
+  {
+   "type": "REPORT",
+   "url": "https://github.com/free5gc/free5gc/issues/1056"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/free5gc/free5gc/releases/tag/v4.2.3"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/free5gc/nrf/commit/bda0cf75be5556bb4c758c8b34710f3fe6bbe3ea"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/free5gc/nrf/commit/fcd3cfaa27cc4dc17172ee0c4c3e0a3a696297c6"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/free5gc/nrf/pull/90"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/free5gc/nrf/releases/tag/v1.4.5"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "free5GC NRF nnrf-nfm lacks NF Profile input validation \u2014 enables NF Registration Poisoning with arbitrary service endpoints in github.com/free5gc/free5gc"
+}

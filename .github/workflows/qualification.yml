@@ -1,0 +1,37 @@
+name: Qualification
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qualification-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verification:
+    uses: ./.github/workflows/verification.yml
+    with:
+      profile: check
+
+  platform:
+    uses: ./.github/workflows/platform-verification.yml
+
+  e2e:
+    uses: ./.github/workflows/e2e-verification.yml
+
+  qualification:
+    if: ${{ !cancelled() }}
+    needs: [verification, platform, e2e]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Require exact-commit qualification
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: python3 scripts/ci_verification.py gate

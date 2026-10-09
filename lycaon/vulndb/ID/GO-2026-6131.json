@@ -1,0 +1,60 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/fission/fission"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.25.0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-50569",
+  "GHSA-vchh-r53j-8mpw"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6131"
+ },
+ "details": "Fission: HTTPTrigger admission omits RelativeURL / Prefix validation; kubectl apply bypasses CLI checks in github.com/fission/fission",
+ "id": "GO-2026-6131",
+ "modified": "2026-08-18T14:32:29Z",
+ "published": "2026-08-18T14:32:29Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/fission/fission/security/advisories/GHSA-vchh-r53j-8mpw"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-50569"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/fission/fission/commit/0deed6bf3f26bc0f10e9130cd0d479b0b9f5f609"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/fission/fission/pull/3464"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/fission/fission/releases/tag/v1.25.0"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Fission: HTTPTrigger admission omits RelativeURL / Prefix validation; kubectl apply bypasses CLI checks in github.com/fission/fission"
+}

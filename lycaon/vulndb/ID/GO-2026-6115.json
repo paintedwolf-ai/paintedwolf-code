@@ -1,0 +1,139 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {
+    "imports": [
+     {
+      "path": "github.com/dslipak/pdf",
+      "symbols": [
+       "NewReader",
+       "NewReaderEncrypted",
+       "Open",
+       "Page.Content",
+       "Reader.Page"
+      ]
+     }
+    ]
+   },
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/dslipak/pdf"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {
+    "imports": [
+     {
+      "path": "github.com/ledongthuc/pdf",
+      "symbols": [
+       "NewReader",
+       "NewReaderEncrypted",
+       "Open",
+       "Page.Content",
+       "Page.GetTextByColumn",
+       "Page.GetTextByRow",
+       "Reader.GetPlainText",
+       "Reader.GetStyledTexts",
+       "Reader.Page"
+      ]
+     }
+    ]
+   },
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/ledongthuc/pdf"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {
+    "imports": [
+     {
+      "path": "rsc.io/pdf",
+      "symbols": [
+       "NewReader",
+       "NewReaderEncrypted",
+       "Open",
+       "Page.Content",
+       "Reader.Page"
+      ]
+     }
+    ]
+   },
+   "package": {
+    "ecosystem": "Go",
+    "name": "rsc.io/pdf"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-56867"
+ ],
+ "credits": [
+  {
+   "name": "Gage Marshall"
+  }
+ ],
+ "database_specific": {
+  "review_status": "REVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6115"
+ },
+ "details": "(This report has been withdrawn with reason: \"Report mistakenly added without having CVE / GHSA associated\"). The PDF parser in rsc.io/pdf and its downstream forks github.com/ledongthuc/pdf and github.com/dslipak/pdf contains multiple defects when parsing untrusted input:\n\n- Unchecked /Size, /Index, /W, and classic subsection header parameters in cross-reference tables allow crafted values to trigger fatal out-of-memory (OOM) panics.\n- Unterminated hexadecimal strings cause an infinite loop in readByte and readHexString.\n- Cyclic object references (/First, /Parent, /Kids, /Next) in document outlines cause unbounded recursion leading to uncatchable stack overflow.\n- Various malformed constructs trigger runtime panics in NewReader and Page.Content (such as empty graphics state pop 'Q', oversized CMap entries, odd-length UTF-16 strings, and newline buffer underflows).",
+ "id": "GO-2026-6115",
+ "modified": "2026-08-19T17:06:06Z",
+ "published": "2026-08-18T16:48:02Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-56867"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/ledongthuc/pdf/pull/78"
+  },
+  {
+   "type": "REPORT",
+   "url": "https://github.com/golang/vulndb/issues/6115"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/dslipak/pdf"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/rsc/pdf"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "WITHDRAWN: Multiple denial of service vulnerabilities in rsc.io/pdf and forks",
+ "withdrawn": "2026-08-18T20:22:32Z"
+}

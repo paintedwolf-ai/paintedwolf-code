@@ -1,0 +1,69 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/authelia/authelia"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/authelia/authelia/v4"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "4.38.19"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2025-24806",
+  "GHSA-m5mf-3963-4x26"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2025-3468"
+ },
+ "details": "Authelia applies regulation separately to Username-based logins to Email-based logins in github.com/authelia/authelia",
+ "id": "GO-2025-3468",
+ "modified": "2025-03-03T19:22:09Z",
+ "published": "2025-03-03T19:22:09Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/authelia/authelia/security/advisories/GHSA-m5mf-3963-4x26"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-24806"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/authelia/authelia/commit/d4a54189aa6563912f9427b96dcb01eacafa785c"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Authelia applies regulation separately to Username-based logins to Email-based logins in github.com/authelia/authelia"
+}

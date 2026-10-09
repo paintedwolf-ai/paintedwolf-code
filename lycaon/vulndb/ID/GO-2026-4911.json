@@ -1,0 +1,44 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/docker/model-runner"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.1.25"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-33990",
+  "GHSA-x2f5-332j-9xwq"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-4911"
+ },
+ "details": "Docker Model Runner OCI Registry Client Vulnerable to Server-Side Request Forgery (SSRF) in github.com/docker/model-runner",
+ "id": "GO-2026-4911",
+ "modified": "2026-04-02T18:42:30Z",
+ "published": "2026-04-02T18:42:30Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/docker/model-runner/security/advisories/GHSA-x2f5-332j-9xwq"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Docker Model Runner OCI Registry Client Vulnerable to Server-Side Request Forgery (SSRF) in github.com/docker/model-runner"
+}

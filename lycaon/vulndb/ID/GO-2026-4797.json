@@ -1,0 +1,45 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "code.vikunja.io/api"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-33313",
+  "GHSA-mr3j-p26x-72x4"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-4797"
+ },
+ "details": "Vikunja has an IDOR in Task Comments Allows Reading Arbitrary Comments in code.vikunja.io/api",
+ "id": "GO-2026-4797",
+ "modified": "2026-03-23T18:16:14Z",
+ "published": "2026-03-23T18:16:14Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/go-vikunja/vikunja/security/advisories/GHSA-mr3j-p26x-72x4"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/go-vikunja/vikunja/commit/bc6d843ed4df82a6c89f10aa676a7a33d27bf2fd"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Vikunja has an IDOR in Task Comments Allows Reading Arbitrary Comments in code.vikunja.io/api"
+}

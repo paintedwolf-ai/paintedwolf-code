@@ -1,0 +1,69 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {
+    "custom_ranges": [
+     {
+      "events": [
+       {
+        "introduced": "0"
+       },
+       {
+        "fixed": "1.13.7"
+       },
+       {
+        "introduced": "1.14.0"
+       },
+       {
+        "fixed": "1.14.3"
+       }
+      ],
+      "type": "ECOSYSTEM"
+     }
+    ]
+   },
+   "package": {
+    "ecosystem": "Go",
+    "name": "k8s.io/ingress-nginx"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-1580",
+  "GHSA-9h3p-52vh-959w"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-4423"
+ },
+ "details": "ingress-nginx's `nginx.ingress.kubernetes.io/auth-method` Ingress annotation can be used to inject configuration into nginx in k8s.io/ingress-nginx.\n\nNOTE: The source advisory for this report contains additional versions that could not be automatically mapped to standard Go module versions.\n\n(If this is causing false-positive reports from vulnerability scanners, please suggest an edit to the report.)\n\nThe additional affected modules and versions are: k8s.io/ingress-nginx before v1.13.7, from v1.14.0 before v1.14.3.",
+ "id": "GO-2026-4423",
+ "modified": "2026-02-05T03:20:48Z",
+ "published": "2026-02-05T03:20:48Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-9h3p-52vh-959w"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-1580"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/kubernetes/kubernetes/issues/136677"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "ingress-nginx's `nginx.ingress.kubernetes.io/auth-method` Ingress annotation can be used to inject configuration into nginx in k8s.io/ingress-nginx"
+}

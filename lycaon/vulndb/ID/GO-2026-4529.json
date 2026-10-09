@@ -1,0 +1,90 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/sigstore/cosign"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/sigstore/cosign/v2"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/sigstore/cosign/v3"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "3.0.5"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-24122",
+  "GHSA-wfqv-66vq-46rm"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-4529"
+ },
+ "details": "Cosign considered signatures valid with expired intermediate certificates when transparency log verification is skipped in github.com/sigstore/cosign",
+ "id": "GO-2026-4529",
+ "modified": "2026-02-23T18:23:15Z",
+ "published": "2026-02-23T18:23:15Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/sigstore/cosign/security/advisories/GHSA-wfqv-66vq-46rm"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-24122"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/sigstore/cosign/commit/3c9a7363f563db76d78e2de2cabd945450f3781e"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/sigstore/cosign/releases/tag/v3.0.5"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Cosign considered signatures valid with expired intermediate certificates when transparency log verification is skipped in github.com/sigstore/cosign"
+}

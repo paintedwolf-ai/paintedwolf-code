@@ -1,0 +1,56 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/bishopfox/sliver"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "1.5.26"
+      },
+      {
+       "fixed": "1.5.43"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2025-27090",
+  "GHSA-fh4v-v779-4g2w"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2025-3472"
+ },
+ "details": "SSRF in sliver teamserver in github.com/bishopfox/sliver",
+ "id": "GO-2025-3472",
+ "modified": "2025-03-03T19:22:09Z",
+ "published": "2025-03-03T19:22:09Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/BishopFox/sliver/security/advisories/GHSA-fh4v-v779-4g2w"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-27090"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/BishopFox/sliver/commit/0f340a25cf3d496ed870dae7da39eab4427bc16f"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/BishopFox/sliver/commit/10e245326070c6a5884a02e0790bb7e2baefb3a1"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "SSRF in sliver teamserver in github.com/bishopfox/sliver"
+}

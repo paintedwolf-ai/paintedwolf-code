@@ -1,0 +1,52 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/l3montree-dev/devguard"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.2.2"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-42300",
+  "GHSA-2g9v-7mr5-fgjg"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-4988"
+ },
+ "details": "DevGuard has an unauthenticated identity assertion via `X-Admin-Token` header in github.com/l3montree-dev/devguard",
+ "id": "GO-2026-4988",
+ "modified": "2026-05-20T19:07:16Z",
+ "published": "2026-05-20T19:07:16Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/l3montree-dev/devguard/security/advisories/GHSA-2g9v-7mr5-fgjg"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-42300"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/l3montree-dev/devguard/commit/6f38310bf93b2a63df3055038f4da82b1f4e6d9a"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "DevGuard has an unauthenticated identity assertion via `X-Admin-Token` header in github.com/l3montree-dev/devguard"
+}

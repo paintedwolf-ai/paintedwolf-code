@@ -1,0 +1,108 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/traefik/traefik"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/traefik/traefik/v2"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/traefik/traefik/v3"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "3.6.0"
+      },
+      {
+       "fixed": "3.6.23"
+      },
+      {
+       "introduced": "3.7.0"
+      },
+      {
+       "fixed": "3.7.7"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-65602",
+  "GHSA-42cj-m3vj-89wv"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6192"
+ },
+ "details": "Traefik CRD IngressRouteTCP ServersTransport Cross-Provider Namespace Bypass in github.com/traefik/traefik",
+ "id": "GO-2026-6192",
+ "modified": "2026-08-18T14:32:29Z",
+ "published": "2026-08-18T14:32:29Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/traefik/traefik/security/advisories/GHSA-42cj-m3vj-89wv"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-65602"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/traefik/traefik/commit/67501cbe7bc7774e26ecbd1c29af97f098e14b0b"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/traefik/traefik/pull/13458"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/traefik/traefik/releases/tag/v3.6.23"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/traefik/traefik/releases/tag/v3.7.7"
+  },
+  {
+   "type": "WEB",
+   "url": "https://www.vulncheck.com/advisories/traefik-before-ingressroutetcp-serverstransport-namespace-bypass"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Traefik CRD IngressRouteTCP ServersTransport Cross-Provider Namespace Bypass in github.com/traefik/traefik"
+}

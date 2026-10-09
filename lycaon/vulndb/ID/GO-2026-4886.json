@@ -1,0 +1,69 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/lxc/incus"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/lxc/incus/v6"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "6.23.0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-33743",
+  "GHSA-vg76-xmhg-j5x3"
+ ],
+ "database_specific": {
+  "review_status": "REVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-4886"
+ },
+ "details": "Incus vulnerable to denial of source through crafted bucket backup file in github.com/lxc/incus",
+ "id": "GO-2026-4886",
+ "modified": "2026-04-07T14:58:41Z",
+ "published": "2026-04-07T14:58:41Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/lxc/incus/security/advisories/GHSA-vg76-xmhg-j5x3"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/lxc/incus/commit/4bca6332e8227a5f25f74b51a66b7382e9133aaa"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/lxc/incus/releases/tag/v6.23.0"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Incus vulnerable to denial of source through crafted bucket backup file in github.com/lxc/incus"
+}

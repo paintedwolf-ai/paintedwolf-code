@@ -20,7 +20,7 @@ func TestForgetSessionReleasesAllSessionState(t *testing.T) {
 	loop.pendingDrain.Store(sessionID, struct{}{})
 	loop.budget.Store(loopBudgetKey{sessionID: sessionID, runID: "run-1"}, 3)
 	loop.kickDedup.Store(loopKickKey{sessionID: sessionID, runID: "run-1", wake: anchor.LegFinished}, loopKickStamp{at: time.Now()})
-	st := loop.sleepState(sessionID)
+	st := loop.sleep.state(sessionID)
 	st.timer = time.AfterFunc(time.Hour, func() {})
 
 	loop.ForgetSession(t.Context(), sessionID)
@@ -32,7 +32,7 @@ func TestForgetSessionReleasesAllSessionState(t *testing.T) {
 		"prompt sequence": &loop.promptObservedSeq,
 		"prompt workflow": &loop.promptWorkflow,
 		"pending drain":   &loop.pendingDrain,
-		"sleep":           &loop.sleep,
+		"sleep":           &loop.sleep.Map,
 	} {
 		if _, ok := state.Load(sessionID); ok {
 			t.Errorf("%s state survived cleanup", name)

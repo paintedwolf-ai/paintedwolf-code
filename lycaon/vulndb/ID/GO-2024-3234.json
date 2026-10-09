@@ -1,0 +1,103 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/mattermost/mattermost-server"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/mattermost/mattermost-server/v5"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/mattermost/mattermost-server/v6"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/mattermost/mattermost/server/v8"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "8.0.0-20240926115259-20ed58906adc"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2024-47401",
+  "GHSA-762v-rq7q-ff97"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2024-3234"
+ },
+ "details": "Mattermost Server vulnerable to application crash from attacker-generated large response in github.com/mattermost/mattermost-server",
+ "id": "GO-2024-3234",
+ "modified": "2024-11-04T15:44:16Z",
+ "published": "2024-11-04T15:44:16Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-762v-rq7q-ff97"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2024-47401"
+  },
+  {
+   "type": "WEB",
+   "url": "https://mattermost.com/security-updates"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Mattermost Server vulnerable to application crash from attacker-generated large response in github.com/mattermost/mattermost-server"
+}

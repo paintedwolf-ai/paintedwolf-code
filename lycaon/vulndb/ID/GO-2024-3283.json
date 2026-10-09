@@ -1,0 +1,72 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/drakkan/sftpgo"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/drakkan/sftpgo/v2"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "2.4.0"
+      },
+      {
+       "fixed": "2.6.3"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2024-52309"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2024-3283"
+ },
+ "details": "SFTPGo allows administrators to restrict command execution from the EventManager in github.com/drakkan/sftpgo",
+ "id": "GO-2024-3283",
+ "modified": "2024-11-21T19:52:49Z",
+ "published": "2024-11-21T19:52:49Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2024-52309"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/drakkan/sftpgo/commit/88b1850b5806eee81150873d4e565144b21021fb"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/drakkan/sftpgo/commit/b524da11e9466d05fe03304713ee1c61bb276ec4"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/drakkan/sftpgo/security/advisories/GHSA-49cc-xrjf-9qf7"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "SFTPGo allows administrators to restrict command execution from the EventManager in github.com/drakkan/sftpgo"
+}

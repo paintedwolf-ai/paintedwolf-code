@@ -1,0 +1,75 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/opencloud-eu/reva"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/opencloud-eu/reva/v2"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "2.40.3"
+      },
+      {
+       "introduced": "2.41.0"
+      },
+      {
+       "fixed": "2.42.3"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-23989",
+  "GHSA-9j2f-3rj3-wgpg"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-4444"
+ },
+ "details": "OpenCloud Reva has a Public Link Exploit in github.com/opencloud-eu/reva",
+ "id": "GO-2026-4444",
+ "modified": "2026-02-17T18:09:06Z",
+ "published": "2026-02-17T18:09:06Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/opencloud-eu/reva/security/advisories/GHSA-9j2f-3rj3-wgpg"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-23989"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/opencloud-eu/reva/commit/95aa2bc5d980eaf6cc134d75782b4f5ac7b36ae1"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "OpenCloud Reva has a Public Link Exploit in github.com/opencloud-eu/reva"
+}

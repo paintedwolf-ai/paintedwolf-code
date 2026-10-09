@@ -1,0 +1,82 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/patrickhener/goshs"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "goshs.de/goshs"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "goshs.de/goshs/v2"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "2.1.5-0.20260727065949-f3ef599e4091"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-66063",
+  "GHSA-wg2q-39h6-66x9"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6137"
+ },
+ "details": "goshs has a Path Traversal issue in github.com/patrickhener/goshs",
+ "id": "GO-2026-6137",
+ "modified": "2026-08-18T14:32:29Z",
+ "published": "2026-08-18T14:32:29Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/goshs-labs/goshs/security/advisories/GHSA-wg2q-39h6-66x9"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/goshs-labs/goshs/commit/f3ef599e409151d1380866e47de8b1afb0bb54fa"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "goshs has a Path Traversal issue in github.com/patrickhener/goshs"
+}

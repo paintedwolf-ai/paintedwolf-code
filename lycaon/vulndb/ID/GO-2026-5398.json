@@ -1,0 +1,53 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/NietThijmen/ShoppingCart"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2024-53412",
+  "GHSA-ggmw-mjhv-75rm"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5398"
+ },
+ "details": "NietThijmen ShoppingCart: Command injection in the connect function in github.com/NietThijmen/ShoppingCart",
+ "id": "GO-2026-5398",
+ "modified": "2026-06-25T22:34:31Z",
+ "published": "2026-06-25T22:34:31Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-ggmw-mjhv-75rm"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2024-53412"
+  },
+  {
+   "type": "REPORT",
+   "url": "https://github.com/NietThijmen/ShoppingCart/issues/1"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/Buckdray/vulnerability-research/blob/main/CVE-2024-53412/README.md"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "NietThijmen ShoppingCart: Command injection in the connect function in github.com/NietThijmen/ShoppingCart"
+}

@@ -1,0 +1,61 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/kedacore/keda"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/kedacore/keda/v2"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "2.20.0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-53572",
+  "GHSA-6w3m-4hhp-775q"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5940"
+ },
+ "details": "KEDA has PostgreSQL connection string parameter injection via incomplete whitespace escaping in github.com/kedacore/keda",
+ "id": "GO-2026-5940",
+ "modified": "2026-07-17T19:42:05Z",
+ "published": "2026-07-17T19:42:05Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/kedacore/keda/security/advisories/GHSA-6w3m-4hhp-775q"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "KEDA has PostgreSQL connection string parameter injection via incomplete whitespace escaping in github.com/kedacore/keda"
+}

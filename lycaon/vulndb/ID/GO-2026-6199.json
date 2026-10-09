@@ -1,0 +1,61 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {
+    "imports": [
+     {
+      "path": "github.com/rclone/rclone/lib/proxy",
+      "symbols": [
+       "HTTPConnectDial"
+      ]
+     }
+    ]
+   },
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/rclone/rclone"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.75.0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-71310",
+  "GHSA-xhf4-832v-7xcr"
+ ],
+ "database_specific": {
+  "review_status": "REVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6199"
+ },
+ "details": "Resource exhaustion via unbounded HTTP CONNECT response in github.com/rclone/rclone",
+ "id": "GO-2026-6199",
+ "modified": "2026-08-18T16:38:10Z",
+ "published": "2026-08-18T16:38:10Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/rclone/rclone/security/advisories/GHSA-xhf4-832v-7xcr"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/rclone/rclone/commit/21d8cd3b92cd81d987f485051d454ea675d91a2b"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/rclone/rclone/releases/tag/v1.75.0"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Resource exhaustion via unbounded HTTP CONNECT response in github.com/rclone/rclone"
+}

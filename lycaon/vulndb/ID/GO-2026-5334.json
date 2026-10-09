@@ -1,0 +1,44 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "code.gitea.io/gitea"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.26.2"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-20706",
+  "GHSA-cr4g-f395-h25h"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5334"
+ },
+ "details": "Gitea: Token scope bypass on web archive download endpoint in code.gitea.io/gitea",
+ "id": "GO-2026-5334",
+ "modified": "2026-06-25T18:43:19Z",
+ "published": "2026-06-25T18:43:19Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/go-gitea/gitea/security/advisories/GHSA-cr4g-f395-h25h"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Gitea: Token scope bypass on web archive download endpoint in code.gitea.io/gitea"
+}

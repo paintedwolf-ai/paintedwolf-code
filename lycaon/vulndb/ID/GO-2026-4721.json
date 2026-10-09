@@ -1,0 +1,57 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/siyuan-note/siyuan"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-32940",
+  "GHSA-4mx9-3c2h-hwhg"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-4721"
+ },
+ "details": "SiYuan has a SanitizeSVG bypass via data:text/xml in getDynamicIcon (incomplete fix for CVE-2026-29183) in github.com/siyuan-note/siyuan",
+ "id": "GO-2026-4721",
+ "modified": "2026-03-26T20:33:02Z",
+ "published": "2026-03-26T20:33:02Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/siyuan-note/siyuan/security/advisories/GHSA-4mx9-3c2h-hwhg"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-32940"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/siyuan-note/siyuan/commit/d01d561875d4f744e9f6232f1d4831e3642b8696"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/advisories/GHSA-6865-qjcf-286f"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/siyuan-note/siyuan/releases/tag/v3.6.1"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "SiYuan has a SanitizeSVG bypass via data:text/xml in getDynamicIcon (incomplete fix for CVE-2026-29183) in github.com/siyuan-note/siyuan"
+}

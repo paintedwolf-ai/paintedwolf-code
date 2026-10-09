@@ -1,0 +1,52 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/lf-edge/ekuiper"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.14.2"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2024-43406",
+  "GHSA-r5ph-4jxm-6j9p"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2024-3078"
+ },
+ "details": "LF Edge eKuiper has a SQL Injection in sqlKvStore in github.com/lf-edge/ekuiper",
+ "id": "GO-2024-3078",
+ "modified": "2024-08-22T20:03:04Z",
+ "published": "2024-08-22T20:03:04Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/lf-edge/ekuiper/security/advisories/GHSA-r5ph-4jxm-6j9p"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2024-43406"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/lf-edge/ekuiper/commit/1a9c745649438feaac357d282959687012b65503"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "LF Edge eKuiper has a SQL Injection in sqlKvStore in github.com/lf-edge/ekuiper"
+}

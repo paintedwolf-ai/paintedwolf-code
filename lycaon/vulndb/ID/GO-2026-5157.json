@@ -1,0 +1,89 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/hjson/hjson-go"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/hjson/hjson-go/v4"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "4.5.0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2023-34620",
+  "GHSA-5wfc-hjrc-gq87"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5157"
+ },
+ "details": "hjson stack exhaustion vulnerability in github.com/hjson/hjson-go",
+ "id": "GO-2026-5157",
+ "modified": "2026-06-25T18:26:48Z",
+ "published": "2026-06-25T18:26:48Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-5wfc-hjrc-gq87"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2023-34620"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/hjson/hjson-go/commit/326599cebc6ef759892f473bf1439b98466a99fa"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/hjson/hjson-go/pull/67"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/hjson/hjson-cpp/pull/54"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/hjson/hjson-java/issues/24"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/hjson/hjson-php/commit/2d1b8b4b158a8d841f3a228f267c7cd84fe5a4fa"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/hjson/hjson-php/pull/45"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "hjson stack exhaustion vulnerability in github.com/hjson/hjson-go"
+}

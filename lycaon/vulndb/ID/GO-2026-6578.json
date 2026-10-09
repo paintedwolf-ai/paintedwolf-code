@@ -1,0 +1,90 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/cloudreve/Cloudreve"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/cloudreve/Cloudreve/v3"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/cloudreve/Cloudreve/v4"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "4.0.0-20260715025621-7329602751c0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-77633",
+  "GHSA-xj3h-wwxq-gfcj"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6578"
+ },
+ "details": "Cloudreve: Storage-quota TOCTOU race allows quota bypass and storage-based denial of service in github.com/cloudreve/Cloudreve",
+ "id": "GO-2026-6578",
+ "modified": "2026-10-01T20:23:38Z",
+ "published": "2026-10-01T20:23:38Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/cloudreve/cloudreve/security/advisories/GHSA-xj3h-wwxq-gfcj"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-77633"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/cloudreve/cloudreve/commit/7329602751c00bb4136fe9ad8b364d0df70773df"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/cloudreve/cloudreve/releases/tag/4.18.0"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Cloudreve: Storage-quota TOCTOU race allows quota bypass and storage-based denial of service in github.com/cloudreve/Cloudreve"
+}

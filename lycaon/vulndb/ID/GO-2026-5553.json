@@ -1,0 +1,47 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/teslamotors/fleet-telemetry"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "0.9.0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "GHSA-prxj-3gcv-cqrh"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5553"
+ },
+ "details": "Tesla Fleet Telemetry allows spoofing telemetry for arbitrary vehicles via compromised vehicle credentials in github.com/teslamotors/fleet-telemetry",
+ "id": "GO-2026-5553",
+ "modified": "2026-06-25T22:34:34Z",
+ "published": "2026-06-25T22:34:34Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/teslamotors/fleet-telemetry/security/advisories/GHSA-prxj-3gcv-cqrh"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/teslamotors/fleet-telemetry/commit/d5ca0dab55812029fd38eb77f079f74ce4f47286"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Tesla Fleet Telemetry allows spoofing telemetry for arbitrary vehicles via compromised vehicle credentials in github.com/teslamotors/fleet-telemetry"
+}

@@ -1,0 +1,56 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/treeverse/lakefs"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.75.0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2025-68671",
+  "GHSA-f2ph-gc9m-q55f"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-4321"
+ },
+ "details": "lakeFS is Missing Timestamp Validation in S3 Gateway Authentication in github.com/treeverse/lakefs",
+ "id": "GO-2026-4321",
+ "modified": "2026-01-23T02:28:11Z",
+ "published": "2026-01-23T02:28:11Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/treeverse/lakeFS/security/advisories/GHSA-f2ph-gc9m-q55f"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/treeverse/lakeFS/commit/92966ae611d7f1a2bbe7fd56f9568c975aab2bd8"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/treeverse/lakeFS/issues/9599"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/treeverse/lakeFS/pull/9710"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "lakeFS is Missing Timestamp Validation in S3 Gateway Authentication in github.com/treeverse/lakefs"
+}

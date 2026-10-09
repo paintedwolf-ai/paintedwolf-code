@@ -1,0 +1,60 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "code.gitea.io/gitea"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.21.8"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2025-68943",
+  "GHSA-jhx5-4vr4-f327"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2025-4266"
+ },
+ "details": "Gitea inadvertently discloses users' login times by allowing (for example) the lastlogintime explore/users sort order in code.gitea.io/gitea",
+ "id": "GO-2025-4266",
+ "modified": "2025-12-30T01:49:57Z",
+ "published": "2025-12-30T01:49:57Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-jhx5-4vr4-f327"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-68943"
+  },
+  {
+   "type": "WEB",
+   "url": "https://blog.gitea.com/release-of-1.21.8-and-1.21.9-and-1.21.10"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/go-gitea/gitea/pull/29430"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/go-gitea/gitea/releases/tag/v1.21.8"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Gitea inadvertently discloses users' login times by allowing (for example) the lastlogintime explore/users sort order in code.gitea.io/gitea"
+}

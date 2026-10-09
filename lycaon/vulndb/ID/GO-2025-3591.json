@@ -1,0 +1,69 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "miniflux.app"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "miniflux.app/v2"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "2.2.7"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2025-31483",
+  "GHSA-cq88-842x-2jhp"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2025-3591"
+ },
+ "details": "Miniflux Media Proxy vulnerable to Stored Cross-site Scripting due to improper Content-Security-Policy configuration in miniflux.app",
+ "id": "GO-2025-3591",
+ "modified": "2025-04-09T17:05:36Z",
+ "published": "2025-04-09T17:05:36Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/miniflux/v2/security/advisories/GHSA-cq88-842x-2jhp"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-31483"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/miniflux/v2/commit/cb695e653a08af4cabcb277c271ce74bd0c746e6"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Miniflux Media Proxy vulnerable to Stored Cross-site Scripting due to improper Content-Security-Policy configuration in miniflux.app"
+}

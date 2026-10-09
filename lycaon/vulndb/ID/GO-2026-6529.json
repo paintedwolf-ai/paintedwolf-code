@@ -1,0 +1,63 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {
+    "custom_ranges": [
+     {
+      "events": [
+       {
+        "introduced": "0"
+       },
+       {
+        "fixed": "1.6.15"
+       }
+      ],
+      "type": "ECOSYSTEM"
+     }
+    ]
+   },
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/anycable/anycable-go"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-63406",
+  "GHSA-w72w-9qmj-c9qm"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6529"
+ },
+ "details": "AnyCable: Telemetry Subsystem Contains Hardcoded Authentication Token and Transmits CLI Arguments Including Secrets in github.com/anycable/anycable-go.\n\nNOTE: The source advisory for this report contains additional versions that could not be automatically mapped to standard Go module versions.\n\n(If this is causing false-positive reports from vulnerability scanners, please suggest an edit to the report.)\n\nThe additional affected modules and versions are: github.com/anycable/anycable-go before v1.6.15.",
+ "id": "GO-2026-6529",
+ "modified": "2026-09-28T16:43:40Z",
+ "published": "2026-09-28T16:43:40Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/anycable/anycable/security/advisories/GHSA-w72w-9qmj-c9qm"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/anycable/anycable/commit/201c67e99e463ed63bd6b345562f4c458385fcee"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/anycable/anycable/releases/tag/v1.6.15"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "AnyCable: Telemetry Subsystem Contains Hardcoded Authentication Token and Transmits CLI Arguments Including Secrets in github.com/anycable/anycable-go"
+}

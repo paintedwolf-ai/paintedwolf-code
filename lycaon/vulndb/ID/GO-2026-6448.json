@@ -1,0 +1,52 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/identrail/identrail"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.0.2"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-59185",
+  "GHSA-cp3j-m783-3ph5"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6448"
+ },
+ "details": "Identrail Cross-tenant IDOR: Client-supplied GitHub App installation_id is bound to the caller's workspace without ownership verification in github.com/identrail/identrail",
+ "id": "GO-2026-6448",
+ "modified": "2026-09-16T16:56:22Z",
+ "published": "2026-09-16T16:56:22Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/identrail/identrail/security/advisories/GHSA-cp3j-m783-3ph5"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/identrail/identrail/commit/835e40517509d6ef5405c27fbf14f579bedff0e7"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/identrail/identrail/releases/tag/v1.0.2"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Identrail Cross-tenant IDOR: Client-supplied GitHub App installation_id is bound to the caller's workspace without ownership verification in github.com/identrail/identrail"
+}

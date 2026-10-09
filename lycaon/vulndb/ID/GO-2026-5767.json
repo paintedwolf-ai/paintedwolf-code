@@ -1,0 +1,72 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/free5gc/amf"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.4.3-0.20260306074636-52e9386401ce"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-4531",
+  "GHSA-xq44-64rg-8g3h"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5767"
+ },
+ "details": "Free5GC AMF is vulnerable to DoS through its HandleRegistrationComplete function in github.com/free5gc/amf",
+ "id": "GO-2026-5767",
+ "modified": "2026-06-25T22:34:41Z",
+ "published": "2026-06-25T22:34:41Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-xq44-64rg-8g3h"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-4531"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/free5gc/amf/commit/52e9386401ce56ea773c5aa587d4cdf7d53da799"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/free5gc/amf/pull/198"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/free5gc/free5gc/issues/792"
+  },
+  {
+   "type": "WEB",
+   "url": "https://vuldb.com/?ctiid.352319"
+  },
+  {
+   "type": "WEB",
+   "url": "https://vuldb.com/?id.352319"
+  },
+  {
+   "type": "WEB",
+   "url": "https://vuldb.com/?submit.774073"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Free5GC AMF is vulnerable to DoS through its HandleRegistrationComplete function in github.com/free5gc/amf"
+}

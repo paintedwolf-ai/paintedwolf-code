@@ -1,0 +1,66 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {
+    "custom_ranges": [
+     {
+      "events": [
+       {
+        "introduced": "0"
+       },
+       {
+        "fixed": "0.0.0-20260110031614"
+       }
+      ],
+      "type": "ECOSYSTEM"
+     }
+    ]
+   },
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/axllent/mailpit"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "1.2.6"
+      },
+      {
+       "fixed": "1.28.2"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-22689",
+  "GHSA-524m-q5m7-79mm"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-4310"
+ },
+ "details": "Mailpit is vulnerable to Cross-Site WebSocket Hijacking (CSWSH) allowing unauthenticated access to emails in github.com/axllent/mailpit.\n\nNOTE: The source advisory for this report contains additional versions that could not be automatically mapped to standard Go module versions.\n\n(If this is causing false-positive reports from vulnerability scanners, please suggest an edit to the report.)\n\nThe additional affected modules and versions are: github.com/axllent/mailpit before v0.0.0-20260110031614.",
+ "id": "GO-2026-4310",
+ "modified": "2026-01-23T02:28:11Z",
+ "published": "2026-01-23T02:28:11Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/axllent/mailpit/security/advisories/GHSA-524m-q5m7-79mm"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-22689"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/axllent/mailpit/commit/6f1f4f34c98989fd873261018fb73830b30aec3f"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Mailpit is vulnerable to Cross-Site WebSocket Hijacking (CSWSH) allowing unauthenticated access to emails in github.com/axllent/mailpit"
+}

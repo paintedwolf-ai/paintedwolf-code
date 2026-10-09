@@ -1,0 +1,44 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/sigstore/fulcio"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.8.6"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-49478",
+  "GHSA-f5mr-q85p-6hh6"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5853"
+ },
+ "details": "Fulcio has OIDC Discovery Redirect Following Allows SSRF and JWKS Substitution for Meta-Issuer Paths, with Kubernetes Service-Account Token Leakage in github.com/sigstore/fulcio",
+ "id": "GO-2026-5853",
+ "modified": "2026-07-07T15:26:32Z",
+ "published": "2026-07-07T15:26:32Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/sigstore/fulcio/security/advisories/GHSA-f5mr-q85p-6hh6"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Fulcio has OIDC Discovery Redirect Following Allows SSRF and JWKS Substitution for Meta-Issuer Paths, with Kubernetes Service-Account Token Leakage in github.com/sigstore/fulcio"
+}

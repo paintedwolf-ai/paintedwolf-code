@@ -1,0 +1,6 @@
+{
+  "category": "go_receiver_methods",
+  "artifact": "lycaon/internal/toolhost/toolhost.Runtime",
+  "cap": 42,
+  "reason": "Past the limit before #356, which releases the default status cache through a binding without adding methods; the split is tracked in #363."
+}

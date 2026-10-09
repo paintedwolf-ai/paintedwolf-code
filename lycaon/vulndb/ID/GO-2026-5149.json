@@ -1,0 +1,103 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/traefik/traefik"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/traefik/traefik/v2"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "2.11.43"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/traefik/traefik/v3"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "3.0.0-beta1"
+      },
+      {
+       "fixed": "3.6.14"
+      },
+      {
+       "introduced": "3.7.0-ea.1"
+      },
+      {
+       "fixed": "3.7.0-rc.2"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-39858",
+  "GHSA-5m6w-wvh7-57vm"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5149"
+ },
+ "details": "Traefik: Pre-authentication decision bypass due to forwarded alias spoofing in github.com/traefik/traefik",
+ "id": "GO-2026-5149",
+ "modified": "2026-06-25T18:26:48Z",
+ "published": "2026-06-25T18:26:48Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/traefik/traefik/security/advisories/GHSA-5m6w-wvh7-57vm"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-39858"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/traefik/traefik/releases/tag/v2.11.43"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/traefik/traefik/releases/tag/v3.6.14"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/traefik/traefik/releases/tag/v3.7.0-rc.2"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Traefik: Pre-authentication decision bypass due to forwarded alias spoofing in github.com/traefik/traefik"
+}

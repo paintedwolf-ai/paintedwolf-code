@@ -1,0 +1,56 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/mattermost/mattermost-server"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "3.0.0+incompatible"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2016-11077",
+  "GHSA-mj8v-773w-5qhj"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2025-4060"
+ },
+ "details": "Mattermost Server allows System Admin to modify LDAP account names and email addresses in github.com/mattermost/mattermost-server",
+ "id": "GO-2025-4060",
+ "modified": "2025-10-30T15:02:33Z",
+ "published": "2025-10-30T15:02:33Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-mj8v-773w-5qhj"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2016-11077"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/mattermost/mattermost/commit/5d7e34c94b56c4b0abb0c3d1702f2b5feb8d2904"
+  },
+  {
+   "type": "WEB",
+   "url": "https://mattermost.com/security-updates"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Mattermost Server allows System Admin to modify LDAP account names and email addresses in github.com/mattermost/mattermost-server"
+}

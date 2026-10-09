@@ -1,0 +1,75 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/kedacore/keda"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/kedacore/keda/v2"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "2.17.3"
+      },
+      {
+       "introduced": "2.18.0"
+      },
+      {
+       "fixed": "2.18.3"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2025-68476",
+  "GHSA-c4p6-qg4m-9jmr"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2025-4257"
+ },
+ "details": "KEDA has Arbitrary File Read via Insufficient Path Validation in HashiCorp Vault Service Account Credential in github.com/kedacore/keda",
+ "id": "GO-2025-4257",
+ "modified": "2025-12-30T01:49:57Z",
+ "published": "2025-12-30T01:49:57Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/kedacore/keda/security/advisories/GHSA-c4p6-qg4m-9jmr"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-68476"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/kedacore/keda/commit/15c5677f65f809b9b6b59a52f4cf793db0a510fd"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "KEDA has Arbitrary File Read via Insufficient Path Validation in HashiCorp Vault Service Account Credential in github.com/kedacore/keda"
+}

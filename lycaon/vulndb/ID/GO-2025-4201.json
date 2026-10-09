@@ -1,0 +1,64 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/mattermost/mattermost-server"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "4.1.2+incompatible"
+      },
+      {
+       "introduced": "4.2.0-rc1+incompatible"
+      },
+      {
+       "fixed": "4.2.1+incompatible"
+      },
+      {
+       "introduced": "4.3.0-rc1+incompatible"
+      },
+      {
+       "fixed": "4.3.0+incompatible"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2017-18889",
+  "GHSA-jp57-4x34-5v94"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2025-4201"
+ },
+ "details": "Mattermost Server is vulnerable to webhook and slash command manipulation in github.com/mattermost/mattermost-server",
+ "id": "GO-2025-4201",
+ "modified": "2025-12-15T19:37:35Z",
+ "published": "2025-12-15T19:37:35Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-jp57-4x34-5v94"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2017-18889"
+  },
+  {
+   "type": "WEB",
+   "url": "https://mattermost.com/security-updates"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Mattermost Server is vulnerable to webhook and slash command manipulation in github.com/mattermost/mattermost-server"
+}

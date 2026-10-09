@@ -1,0 +1,71 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {
+    "imports": [
+     {
+      "path": "github.com/refraction-networking/utls",
+      "symbols": [
+       "BoringGREASEECH",
+       "Roller.Dial",
+       "UConn.BuildHandshakeState",
+       "UConn.BuildHandshakeStateWithoutSession",
+       "UConn.Handshake",
+       "UConn.HandshakeContext",
+       "UConn.Read",
+       "UConn.Write",
+       "UQUICConn.HandleData",
+       "UQUICConn.Start",
+       "UTLSIdToSpec"
+      ]
+     }
+    ]
+   },
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/refraction-networking/utls"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "1.6.0"
+      },
+      {
+       "fixed": "1.8.1"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-27017",
+  "GHSA-7m29-f4hw-g2vx"
+ ],
+ "database_specific": {
+  "review_status": "REVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-4509"
+ },
+ "details": "Fingerprint vulnerability in uTLS from GREASE ECH mismatch for Chrome parrots in github.com/refraction-networking/utls",
+ "id": "GO-2026-4509",
+ "modified": "2026-02-24T23:10:26Z",
+ "published": "2026-02-24T23:10:26Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/refraction-networking/utls/security/advisories/GHSA-7m29-f4hw-g2vx"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/refraction-networking/utls/commit/24bd1e05a788c1add7f3037f4532ea552b2cee07"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/refraction-networking/utls/releases/tag/v1.8.1"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Fingerprint vulnerability in uTLS from GREASE ECH mismatch for Chrome parrots in github.com/refraction-networking/utls"
+}

@@ -1,0 +1,60 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/fission/fission"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.25.0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-50570",
+  "GHSA-qf5v-m7p4-95rp"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6129"
+ },
+ "details": "Fission: Incomplete capability denylist in Environment/Function PodSpec validation allows tenant-added CAP_SYS_TIME and cross-tenant node wall-clock corruption in github.com/fission/fission",
+ "id": "GO-2026-6129",
+ "modified": "2026-08-18T14:32:29Z",
+ "published": "2026-08-18T14:32:29Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/fission/fission/security/advisories/GHSA-qf5v-m7p4-95rp"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-50570"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/fission/fission/commit/2569b42bfadbcb7d78b55a00a60f77937e522699"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/fission/fission/pull/3465"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/fission/fission/releases/tag/v1.25.0"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Fission: Incomplete capability denylist in Environment/Function PodSpec validation allows tenant-added CAP_SYS_TIME and cross-tenant node wall-clock corruption in github.com/fission/fission"
+}

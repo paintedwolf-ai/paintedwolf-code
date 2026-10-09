@@ -1,0 +1,6 @@
+{
+  "category": "go_receiver_lines",
+  "artifact": "lycaon/internal/coordinator/assembly/assembly.AssemblyEngine",
+  "cap": 1200,
+  "reason": "Already past the limit before the boot-orientation fix, which adds one bounded loop; the split is tracked in #270."
+}

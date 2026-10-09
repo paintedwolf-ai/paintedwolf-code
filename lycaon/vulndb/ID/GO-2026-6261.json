@@ -1,0 +1,87 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {
+    "imports": [
+     {
+      "path": "github.com/dgraph-io/dgraph"
+     }
+    ]
+   },
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/dgraph-io/dgraph"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {
+    "imports": [
+     {
+      "path": "github.com/dgraph-io/dgraph/v25/edgraph",
+      "symbols": [
+       "Server.StreamExtSnapshot",
+       "Server.UpdateExtSnapshotStreamingState"
+      ]
+     },
+     {
+      "path": "github.com/dgraph-io/dgraph/v25/worker",
+      "symbols": [
+       "InStream"
+      ]
+     }
+    ]
+   },
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/dgraph-io/dgraph/v25"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "25.3.5"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-54061",
+  "GHSA-rrwh-6jrq-wp5v"
+ ],
+ "database_specific": {
+  "review_status": "REVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6261"
+ },
+ "details": "Dgraph Alpha exposes the RPCs used for external snapshot import on the public gRPC port without authentication or authorization. An unauthenticated network client can call StreamExtSnapshot and send Badger stream data to replace a target group's store, which drops and replaces the existing database data.",
+ "id": "GO-2026-6261",
+ "modified": "2026-08-25T19:43:14Z",
+ "published": "2026-08-25T19:43:14Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/dgraph-io/dgraph/security/advisories/GHSA-rrwh-6jrq-wp5v"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/dgraph-io/dgraph/releases/tag/v25.3.5"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Dgraph Alpha group stores can be replaced via unauthenticated external snapshot import in github.com/dgraph-io/dgraph"
+}

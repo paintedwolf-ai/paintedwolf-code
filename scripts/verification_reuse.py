@@ -307,6 +307,7 @@ def result_key(arguments, package, environment):
     if selected is None or not isinstance(identity, str):
         return None
     return digest({"format": FORMAT, "package": package, "build": identity, "arguments": selected,
+                   "resource_policy": environment.get("PW_PACKAGE_RESOURCE_IDENTITY", ""),
                    "runtime": {name: environment.get(name) for name in RUNTIME_ENV},
                    "environment": environment.get("PW_TEST_ENVIRONMENT_IDENTITY", "")})
 

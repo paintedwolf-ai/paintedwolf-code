@@ -1,0 +1,45 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/libp2p/go-libp2p-kad-dht"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2023-26248",
+  "GHSA-mqr9-hjr8-2m9w"
+ ],
+ "database_specific": {
+  "review_status": "REVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2024-3218"
+ },
+ "details": "Content Censorship in the InterPlanetary File System (IPFS) via Kademlia DHT abuse in github.com/libp2p/go-libp2p-kad-dht",
+ "id": "GO-2024-3218",
+ "modified": "2024-12-12T15:16:20Z",
+ "published": "2024-12-12T15:16:20Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-mqr9-hjr8-2m9w"
+  },
+  {
+   "type": "WEB",
+   "url": "https://arxiv.org/abs/2307.12212"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Content Censorship in the InterPlanetary File System (IPFS) via Kademlia DHT abuse in github.com/libp2p/go-libp2p-kad-dht"
+}

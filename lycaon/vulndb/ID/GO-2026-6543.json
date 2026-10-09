@@ -1,0 +1,71 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {
+    "custom_ranges": [
+     {
+      "events": [
+       {
+        "introduced": "0"
+       },
+       {
+        "fixed": "0.16.3-0.20250318112551-8b1939f96d38"
+       }
+      ],
+      "type": "ECOSYSTEM"
+     }
+    ]
+   },
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/ubuntu/adsys"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-12249",
+  "GHSA-crm4-q7v4-c2r2"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6543"
+ },
+ "details": "Canonical ADSys Uses a Less Trusted Source in github.com/ubuntu/adsys.\n\nNOTE: The source advisory for this report contains additional versions that could not be automatically mapped to standard Go module versions.\n\n(If this is causing false-positive reports from vulnerability scanners, please suggest an edit to the report.)\n\nThe additional affected modules and versions are: github.com/ubuntu/adsys before v0.16.3-0.20250318112551-8b1939f96d38.",
+ "id": "GO-2026-6543",
+ "modified": "2026-09-28T16:43:40Z",
+ "published": "2026-09-28T16:43:40Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-crm4-q7v4-c2r2"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-12249"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/ubuntu/adsys/commit/8b1939f96d3827b4426eb06c1ced5bf317b0a99d"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/ubuntu/adsys/releases/tag/v0.16.3"
+  },
+  {
+   "type": "WEB",
+   "url": "https://ubuntu.com/security/CVE-2026-12249"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Canonical ADSys Uses a Less Trusted Source in github.com/ubuntu/adsys"
+}

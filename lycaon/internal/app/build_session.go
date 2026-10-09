@@ -272,6 +272,7 @@ func (b sessionWiring) wireCheckpointRuntime() error {
 		b.toolRuntime.SetAuthzRecorder(authzRec)
 	}
 	b.checkpointMgr = checkpointMgr
+	b.resources.track("checkpoint-expiry", 65, func(context.Context) error { checkpointMgr.StopExpiryTimers(); return nil })
 	b.mgr.SetSessionCheckpointStop(checkpointMgr)
 	b.mgr.SetExecutionCheckpoints(checkpointMgr)
 	b.toolRuntime.SetCheckpointManager(b.checkpointMgr)

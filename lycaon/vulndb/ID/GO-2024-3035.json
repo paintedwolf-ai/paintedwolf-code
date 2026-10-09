@@ -1,0 +1,57 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/mickael-kerjean/filestash"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2024-41256",
+  "GHSA-mpvx-whpp-99xj"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2024-3035"
+ },
+ "details": "Filestash skips TLS certificate verification process when sending out email verification codes in github.com/mickael-kerjean/filestash",
+ "id": "GO-2024-3035",
+ "modified": "2024-08-06T22:03:16Z",
+ "published": "2024-08-06T22:03:16Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-mpvx-whpp-99xj"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2024-41256"
+  },
+  {
+   "type": "REPORT",
+   "url": "https://github.com/mickael-kerjean/filestash/issues/709"
+  },
+  {
+   "type": "WEB",
+   "url": "https://gist.github.com/nyxfqq/a6da3fe6128b978ea1aaa5df639d5f98"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/mickael-kerjean/filestash/blob/master/server/model/share.go#L132"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Filestash skips TLS certificate verification process when sending out email verification codes in github.com/mickael-kerjean/filestash"
+}

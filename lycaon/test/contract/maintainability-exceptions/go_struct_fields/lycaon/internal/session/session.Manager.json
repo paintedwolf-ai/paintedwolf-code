@@ -1,0 +1,6 @@
+{
+  "category": "go_struct_fields",
+  "artifact": "lycaon/internal/session/session.Manager",
+  "cap": 145,
+  "reason": "Predates the limits; fixes still land here while the package is decomposed (#271)."
+}

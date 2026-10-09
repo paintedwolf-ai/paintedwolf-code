@@ -1,0 +1,69 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/patrickhener/goshs"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/patrickhener/goshs/v2"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "2.0.0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-40876",
+  "GHSA-5h6h-7rc9-3824"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5146"
+ },
+ "details": "SFTP root escape via prefix-based path validation in goshs in github.com/patrickhener/goshs",
+ "id": "GO-2026-5146",
+ "modified": "2026-06-25T18:26:48Z",
+ "published": "2026-06-25T18:26:48Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/patrickhener/goshs/security/advisories/GHSA-5h6h-7rc9-3824"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-40876"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/patrickhener/goshs/releases/tag/v2.0.0"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "SFTP root escape via prefix-based path validation in goshs in github.com/patrickhener/goshs"
+}

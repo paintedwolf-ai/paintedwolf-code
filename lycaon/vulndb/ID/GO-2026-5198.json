@@ -1,0 +1,59 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {
+    "imports": [
+     {
+      "path": "github.com/osrg/gobgp/v4/pkg/server",
+      "symbols": [
+       "BgpServer.AddPeer",
+       "NewBgpServer",
+       "server.AddPeer"
+      ]
+     }
+    ]
+   },
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/osrg/gobgp/v4"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "4.3.0"
+      },
+      {
+       "fixed": "4.4.0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-41642",
+  "GHSA-7235-89m6-f4px"
+ ],
+ "database_specific": {
+  "review_status": "REVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5198"
+ },
+ "details": "GoBGP: Remote Denial of Service (Panic) via Malformed Well-known Path Attribute in github.com/osrg/gobgp",
+ "id": "GO-2026-5198",
+ "modified": "2026-07-24T18:35:55Z",
+ "published": "2026-07-24T18:35:55Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/osrg/gobgp/security/advisories/GHSA-7235-89m6-f4px"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/osrg/gobgp/releases/tag/v4.4.0"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "GoBGP: Remote Denial of Service (Panic) via Malformed Well-known Path Attribute in github.com/osrg/gobgp"
+}

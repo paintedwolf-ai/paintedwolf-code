@@ -1,0 +1,51 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/openfga/openfga"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "1.8.0"
+      },
+      {
+       "fixed": "1.8.13"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2025-48371"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2025-3707"
+ },
+ "details": "OpenFGA Authorization Bypass in github.com/openfga/openfga",
+ "id": "GO-2025-3707",
+ "modified": "2025-05-27T20:47:04Z",
+ "published": "2025-05-27T20:47:04Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-48371"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/openfga/openfga/commit/e5960d4eba92b723de8ff3a5346a07f50c1379ca"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/openfga/openfga/security/advisories/GHSA-c72g-53hw-82q7"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "OpenFGA Authorization Bypass in github.com/openfga/openfga"
+}

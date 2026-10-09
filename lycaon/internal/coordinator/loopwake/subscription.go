@@ -356,7 +356,7 @@ func (l *LoopEngine) WaitSubscriptionForTest(sessionID string) []WaitTrigger {
 	if l == nil {
 		return nil
 	}
-	st := l.sleepState(sessionID)
+	st := l.sleep.state(sessionID)
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	return append([]WaitTrigger(nil), st.waitTriggers...)
@@ -435,7 +435,7 @@ func (l *LoopEngine) processCycleOpen(sessionID string, handles []string) bool {
 }
 
 func (l *LoopEngine) activeWaitTriggers(sessionID string) []WaitTrigger {
-	st := l.sleepState(sessionID)
+	st := l.sleep.state(sessionID)
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	return append([]WaitTrigger(nil), st.waitTriggers...)
@@ -443,7 +443,7 @@ func (l *LoopEngine) activeWaitTriggers(sessionID string) []WaitTrigger {
 
 // Unarmed slots use host-driven sleep.
 func (l *LoopEngine) activeSleepMover(sessionID string) SleepMover {
-	st := l.sleepState(sessionID)
+	st := l.sleep.state(sessionID)
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	if st.mover == SleepMoverUser {
@@ -453,7 +453,7 @@ func (l *LoopEngine) activeSleepMover(sessionID string) SleepMover {
 }
 
 func (l *LoopEngine) activeUntilComplete(sessionID string) bool {
-	st := l.sleepState(sessionID)
+	st := l.sleep.state(sessionID)
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	return st.untilComplete
@@ -461,7 +461,7 @@ func (l *LoopEngine) activeUntilComplete(sessionID string) bool {
 
 // ActiveProcessHandles copies the process selection under the sleep lock.
 func (l *LoopEngine) ActiveProcessHandles(sessionID string) []string {
-	st := l.sleepState(sessionID)
+	st := l.sleep.state(sessionID)
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	return append([]string(nil), st.processHandles...)
@@ -469,7 +469,7 @@ func (l *LoopEngine) ActiveProcessHandles(sessionID string) []string {
 
 // activeWorkerHandles copies the task selection under the sleep lock.
 func (l *LoopEngine) activeWorkerHandles(sessionID string) []string {
-	st := l.sleepState(sessionID)
+	st := l.sleep.state(sessionID)
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	return append([]string(nil), st.workerHandles...)

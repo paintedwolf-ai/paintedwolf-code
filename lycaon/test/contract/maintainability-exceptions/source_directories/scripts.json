@@ -1,0 +1,6 @@
+{
+  "category": "source_directories",
+  "artifact": "scripts",
+  "cap": 170,
+  "reason": "Task and CI entry points are invoked by path and import sibling modules by name; the change-scoped budget and coverage reports joined them here."
+}

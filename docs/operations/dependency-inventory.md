@@ -117,7 +117,7 @@ Pin, fetch, prune, and signing details live in
 | Task (`task`) | `v3.51.1` | `v3.54.0` | **Moderate** | **Moderate** | **Urgency:** Runs every repository target behind the verification queue.<br>**Friction:** Pinned in `scripts/task.sh`, which reinstalls when the pin changes. Check the queue with `./task test:runner` after a bump. |
 | golangci-lint | `v2.12.2` | `v2.14.0` | **Moderate** | **Moderate** | Pinned in `scripts/lint-go.sh` and configured in `lycaon/.golangci.yml`. New linters and checks usually need code fixes. |
 | deadcode | `v0.33.0` | `v0.51.0` | **Moderate** | **Low** | Pinned in `scripts/deadcode-check.sh`, with exclusions in `lycaon/.deadcode-exclude`. |
-| sqlc | `1.29.0` | `v1.31.1` | **Low** | **Moderate** | Codegen only. Review regenerated queries from `./task db:sqlc`, then run `db:sqlc:check` and `db:sqlc:vet`. |
+| sqlc | `v1.29.0` | `v1.31.1` | **Low** | **Moderate** | Codegen only. Review regenerated queries from `./task db:sqlc`, then run `db:sqlc:check` and `db:sqlc:vet`. |
 | oasdiff | `v1.26.1` | `v1.33.0` | **Low** | **Low** | Reports breaking wire changes for release review (`./task openapi:diff`). |
 | go-licenses | `v2.0.1` | current | **Moderate** | **Low** | `./task licenses:notices` generates `THIRD-PARTY-NOTICES.md` and fails closed on unknown licenses. |
 | cargo-about | `0.9.1` | `0.9.2` | **Moderate** | **Low** | Rust half of `./task licenses:notices`. |

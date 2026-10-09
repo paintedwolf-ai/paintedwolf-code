@@ -1,0 +1,60 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "code.gitea.io/gitea"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.22.2"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2025-68944",
+  "GHSA-f85h-c7m6-cfpm"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2025-4264"
+ },
+ "details": "Gitea sometimes mishandles propagation of token scope for access control within one of its own package registries in code.gitea.io/gitea",
+ "id": "GO-2025-4264",
+ "modified": "2025-12-30T01:49:57Z",
+ "published": "2025-12-30T01:49:57Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-f85h-c7m6-cfpm"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-68944"
+  },
+  {
+   "type": "WEB",
+   "url": "https://blog.gitea.com/release-of-1.22.2"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/go-gitea/gitea/pull/31967"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/go-gitea/gitea/releases/tag/v1.22.2"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Gitea sometimes mishandles propagation of token scope for access control within one of its own package registries in code.gitea.io/gitea"
+}

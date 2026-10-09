@@ -1,0 +1,48 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "gitea.dev"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.27.0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-58507",
+  "GHSA-p4mj-98mv-xq26"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6066"
+ },
+ "details": "Gitea: Private Repository Existence Disclosure via go-get Meta Endpoint in gitea.dev",
+ "id": "GO-2026-6066",
+ "modified": "2026-07-27T15:32:45Z",
+ "published": "2026-07-27T15:32:45Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/go-gitea/gitea/security/advisories/GHSA-p4mj-98mv-xq26"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/go-gitea/gitea/releases/tag/v1.27.0"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Gitea: Private Repository Existence Disclosure via go-get Meta Endpoint in gitea.dev"
+}

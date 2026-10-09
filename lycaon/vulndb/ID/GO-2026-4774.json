@@ -1,0 +1,49 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/autobrr/qui"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-30924",
+  "GHSA-h8vw-ph9r-xpch"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-4774"
+ },
+ "details": "qui CORS Misconfiguration: Arbitrary Origins Trusted in github.com/autobrr/qui",
+ "id": "GO-2026-4774",
+ "modified": "2026-03-23T18:14:51Z",
+ "published": "2026-03-23T18:14:51Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/autobrr/qui/security/advisories/GHSA-h8vw-ph9r-xpch"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-30924"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/autobrr/qui/commit/424f7a0de089dce881e8bbecd220163a78e0295f"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "qui CORS Misconfiguration: Arbitrary Origins Trusted in github.com/autobrr/qui"
+}

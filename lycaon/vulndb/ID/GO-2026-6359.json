@@ -1,0 +1,56 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/axllent/mailpit"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.30.4"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-67446",
+  "GHSA-75mr-qw9x-3r39"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6359"
+ },
+ "details": "Mailpit: Thumbnail generation decodes unbounded image dimensions before scaling in github.com/axllent/mailpit",
+ "id": "GO-2026-6359",
+ "modified": "2026-09-10T14:48:42Z",
+ "published": "2026-09-10T14:48:42Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/axllent/mailpit/security/advisories/GHSA-75mr-qw9x-3r39"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-67446"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/axllent/mailpit/commit/6bcb6337838b542d53c348e38c7977f569b6db35"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/axllent/mailpit/releases/tag/v1.30.4"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Mailpit: Thumbnail generation decodes unbounded image dimensions before scaling in github.com/axllent/mailpit"
+}

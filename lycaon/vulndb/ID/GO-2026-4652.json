@@ -1,0 +1,56 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/kubewarden/kubewarden-controller"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.33.0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-29773",
+  "GHSA-6r7f-3fwq-hq74"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-4652"
+ },
+ "details": "Kubewarden: Cross-namespace data exfiltration via deprecated host callback binding in github.com/kubewarden/kubewarden-controller",
+ "id": "GO-2026-4652",
+ "modified": "2026-03-11T16:00:40Z",
+ "published": "2026-03-11T16:00:40Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/kubewarden/kubewarden-controller/security/advisories/GHSA-6r7f-3fwq-hq74"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-29773"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/kubewarden/kubewarden-controller/commit/4e41b60ae44902d82d94101bac93fb77cae65651"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/kubewarden/kubewarden-controller/pull/1519"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Kubewarden: Cross-namespace data exfiltration via deprecated host callback binding in github.com/kubewarden/kubewarden-controller"
+}

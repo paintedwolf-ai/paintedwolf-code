@@ -1,0 +1,41 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/zhenorzz/goploy"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-53553",
+  "GHSA-4g5x-hcwm-82jw"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5938"
+ },
+ "details": "Goploy: Arbitrary File Read via Path Traversal in /deploy/fileDiff allows Remote Server Compromise in github.com/zhenorzz/goploy",
+ "id": "GO-2026-5938",
+ "modified": "2026-07-17T19:42:05Z",
+ "published": "2026-07-17T19:42:05Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/zhenorzz/goploy/security/advisories/GHSA-4g5x-hcwm-82jw"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Goploy: Arbitrary File Read via Path Traversal in /deploy/fileDiff allows Remote Server Compromise in github.com/zhenorzz/goploy"
+}

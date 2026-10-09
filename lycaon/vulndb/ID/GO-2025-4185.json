@@ -1,0 +1,64 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/mattermost/mattermost-server"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "3.10.3+incompatible"
+      },
+      {
+       "introduced": "4.0.0+incompatible"
+      },
+      {
+       "fixed": "4.0.4+incompatible"
+      },
+      {
+       "introduced": "4.0.5-rc1+incompatible"
+      },
+      {
+       "fixed": "4.1.0+incompatible"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2017-18902",
+  "GHSA-jwfv-5hwq-f97r"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2025-4185"
+ },
+ "details": "Mattermost Server exposes team invite IDs through API endpoints in github.com/mattermost/mattermost-server",
+ "id": "GO-2025-4185",
+ "modified": "2025-12-08T21:31:36Z",
+ "published": "2025-12-08T21:31:36Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-jwfv-5hwq-f97r"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2017-18902"
+  },
+  {
+   "type": "WEB",
+   "url": "https://mattermost.com/security-updates"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Mattermost Server exposes team invite IDs through API endpoints in github.com/mattermost/mattermost-server"
+}

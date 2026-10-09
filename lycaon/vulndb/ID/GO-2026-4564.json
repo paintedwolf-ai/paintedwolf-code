@@ -1,0 +1,52 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/fleetdm/fleet/v4"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "4.80.1"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-23999",
+  "GHSA-ppwx-5jq7-px2w"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-4564"
+ },
+ "details": "Fleet: Device lock PIN can be predicted if lock time is known in github.com/fleetdm/fleet",
+ "id": "GO-2026-4564",
+ "modified": "2026-02-27T02:17:00Z",
+ "published": "2026-02-27T02:17:00Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/fleetdm/fleet/security/advisories/GHSA-ppwx-5jq7-px2w"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-23999"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/fleetdm/fleet/commit/05ca0693621e6671fb95dfc5437b9f9ee6dd7047"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Fleet: Device lock PIN can be predicted if lock time is known in github.com/fleetdm/fleet"
+}

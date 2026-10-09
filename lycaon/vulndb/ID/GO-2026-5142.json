@@ -1,0 +1,53 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/free5gc/nef"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-44315",
+  "GHSA-5f62-53r8-qrqf"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5142"
+ },
+ "details": "free5GC's NEF 3gpp-pfd-management API is unauthenticated; forged bearer tokens can create, read, and delete PFD transactions in github.com/free5gc/nef",
+ "id": "GO-2026-5142",
+ "modified": "2026-06-25T18:26:48Z",
+ "published": "2026-06-25T18:26:48Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/free5gc/free5gc/security/advisories/GHSA-5f62-53r8-qrqf"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-44315"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/free5gc/nef/pull/23"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/free5gc/free5gc/issues/858"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "free5GC's NEF 3gpp-pfd-management API is unauthenticated; forged bearer tokens can create, read, and delete PFD transactions in github.com/free5gc/nef"
+}

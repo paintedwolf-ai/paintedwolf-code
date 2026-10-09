@@ -69,6 +69,13 @@ func EnsureProjectWatch(ctx context.Context, projectID, scopeID string, roots []
 		return false
 	}
 	watchRegMu.Lock()
+	// A canceled caller, such as a host that is shutting down, binds nothing:
+	// its observer would outlive the host that releases the watches it bound.
+	// The check holds the registry lock, so it orders against StopProjectWatch.
+	if ctx.Err() != nil {
+		watchRegMu.Unlock()
+		return false
+	}
 	key := watchKey{projectID, scopeID}
 	previous := watchers[key]
 	if previous != nil && sameWatchRoots(previous.roots, cleaned) {

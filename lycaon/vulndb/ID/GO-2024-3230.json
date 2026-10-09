@@ -1,0 +1,48 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/kyverno/kyverno"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.13.0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2024-48921",
+  "GHSA-qjvc-p88j-j9rm"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2024-3230"
+ },
+ "details": "Kyverno's PolicyException objects can be created in any namespace by default in github.com/kyverno/kyverno",
+ "id": "GO-2024-3230",
+ "modified": "2024-10-30T21:22:08Z",
+ "published": "2024-10-30T21:22:08Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/kyverno/kyverno/security/advisories/GHSA-qjvc-p88j-j9rm"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2024-48921"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Kyverno's PolicyException objects can be created in any namespace by default in github.com/kyverno/kyverno"
+}

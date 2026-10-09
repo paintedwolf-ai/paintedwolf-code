@@ -4,7 +4,6 @@ package egress
 import (
 	"context"
 	"fmt"
-	"net"
 	"net/netip"
 )
 
@@ -93,7 +92,7 @@ func ResolvePublicIPs(ctx context.Context, host string) ([]netip.Addr, error) {
 
 // ResolveIPsWithPolicy rejects the host if any resolved address is disallowed.
 func ResolveIPsWithPolicy(ctx context.Context, host string, allow func(netip.Addr) bool) ([]netip.Addr, error) {
-	return resolveIPsWithPolicy(ctx, host, allow, net.DefaultResolver.LookupNetIP)
+	return resolveIPsWithPolicy(ctx, host, allow, currentLookup())
 }
 
 func resolveIPsWithPolicy(ctx context.Context, host string, allow func(netip.Addr) bool, lookup func(context.Context, string, string) ([]netip.Addr, error)) ([]netip.Addr, error) {

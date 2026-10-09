@@ -1,0 +1,69 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/filebrowser/filebrowser"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/filebrowser/filebrowser/v2"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "2.63.1"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-35607",
+  "GHSA-7526-j432-6ppp"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5205"
+ },
+ "details": "File Browser: Proxy auth auto-provisioned users inherit Execute permission and Commands in github.com/filebrowser/filebrowser",
+ "id": "GO-2026-5205",
+ "modified": "2026-06-25T18:43:15Z",
+ "published": "2026-06-25T18:43:15Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/filebrowser/filebrowser/security/advisories/GHSA-7526-j432-6ppp"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-35607"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/filebrowser/filebrowser/pull/5890"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "File Browser: Proxy auth auto-provisioned users inherit Execute permission and Commands in github.com/filebrowser/filebrowser"
+}

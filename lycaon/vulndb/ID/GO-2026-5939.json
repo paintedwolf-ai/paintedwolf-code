@@ -1,0 +1,53 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/quay/claircore"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-10517",
+  "GHSA-698x-9w2p-7vvp"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5939"
+ },
+ "details": "Claircore: Unauthenticated attackers can submit manifests with URIs pointing to internal services or cloud metadata endpoints in github.com/quay/claircore",
+ "id": "GO-2026-5939",
+ "modified": "2026-07-17T19:42:05Z",
+ "published": "2026-07-17T19:42:05Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-698x-9w2p-7vvp"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-10517"
+  },
+  {
+   "type": "WEB",
+   "url": "https://access.redhat.com/security/cve/CVE-2026-10517"
+  },
+  {
+   "type": "WEB",
+   "url": "https://bugzilla.redhat.com/show_bug.cgi?id=2486779"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Claircore: Unauthenticated attackers can submit manifests with URIs pointing to internal services or cloud metadata endpoints in github.com/quay/claircore"
+}

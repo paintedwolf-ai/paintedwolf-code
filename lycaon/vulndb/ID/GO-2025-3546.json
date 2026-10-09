@@ -1,0 +1,53 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/pipe-cd/pipecd"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2024-53351",
+  "GHSA-4jhw-c53w-w5r7"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2025-3546"
+ },
+ "details": "PipeCD Vulnerable to Privilege Escalation in github.com/pipe-cd/pipecd",
+ "id": "GO-2025-3546",
+ "modified": "2025-03-25T19:38:11Z",
+ "published": "2025-03-25T19:38:11Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-4jhw-c53w-w5r7"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2024-53351"
+  },
+  {
+   "type": "WEB",
+   "url": "https://gist.github.com/HouqiyuA/948a808b8bd48b17b37a4d5e0b6fb005"
+  },
+  {
+   "type": "WEB",
+   "url": "https://pipecd.dev"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "PipeCD Vulnerable to Privilege Escalation in github.com/pipe-cd/pipecd"
+}

@@ -1,9 +1,7 @@
 """Size budgets for prompts and code, reported for the change being made.
 
-Every artifact a change touches must be within its category limit, or within
-the cap of an exception that says why it must be larger; no exception may be
-outgrown. The report also warns about touched artifacts past their warning
-line, so the limit is never a surprise.
+New or growing maintained code must fit its category limit or explicit cap.
+Unchanged legacy excess is reported for tracking. Prompt limits remain absolute.
 
 `PW_BUDGETS_INSPECT="<path> ..." ./task budgets` reports the standing of
 those files and directories as if the change had touched them: look before
@@ -66,6 +64,9 @@ def suite_findings(name, report):
             failed = True
             out.append(Finding("error", name, f"{label}: {size(f)}, past its limit of {limit:,}. Bring it within the "
                                "limit, or add an exception that says why it must be this large", source))
+        elif kind == "legacy_debt":
+            out.append(Finding("warning", name, f"{label}: {size(f)}, unchanged or smaller than "
+                               f"{f['previous']:,} at the base; legacy debt needs a tracking issue", source))
         elif kind == "over_cap":
             failed = True
             out.append(Finding("error", name, f'{label}: {size(f)}, past its exception cap of {f["bound"]:,}. Make it '
@@ -87,8 +88,7 @@ def suite_findings(name, report):
             out.append(Finding("notice", name, f"{label}: exception {change}; reason: {f['reason']}", report["policy"]))
     untouched = sum(report["untouched"].values())
     if untouched:
-        out.append(Finding("info", name, f"{untouched} artifact(s) past their limit were not touched; each must meet "
-                           "its limit, or gain an exception, when a change next touches it"))
+        out.append(Finding("info", name, f"{untouched} artifact(s) past their limit were not touched; growth past the limit fails; unchanged excess is tracked"))
     out += [Finding("warning", name, text) for text in report["warnings"]]
     out += [Finding("info", name, text) for text in report["notes"]]
     return out, failed

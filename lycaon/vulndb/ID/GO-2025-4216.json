@@ -1,0 +1,68 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/usememos/memos"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "0.25.3"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2025-65798",
+  "GHSA-8p44-g572-557h"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2025-4216"
+ },
+ "details": "memos vulnerability allows arbitrarily modification or deletion of attachments in github.com/usememos/memos",
+ "id": "GO-2025-4216",
+ "modified": "2025-12-15T19:37:35Z",
+ "published": "2025-12-15T19:37:35Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-8p44-g572-557h"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-65798"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/usememos/memos/commit/769dcd0cf9be83d472829f6e7903b201e42f6b3c"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/usememos/memos/pull/5217"
+  },
+  {
+   "type": "WEB",
+   "url": "http://memos.com"
+  },
+  {
+   "type": "WEB",
+   "url": "http://usememos.com"
+  },
+  {
+   "type": "WEB",
+   "url": "https://herolab.usd.de/security-advisories/usd-2025-0059"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "memos vulnerability allows arbitrarily modification or deletion of attachments in github.com/usememos/memos"
+}

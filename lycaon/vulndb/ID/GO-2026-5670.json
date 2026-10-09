@@ -1,0 +1,45 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/mattermost/focalboard"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-28736",
+  "GHSA-vph7-r229-qxpf"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5670"
+ },
+ "details": "Focalboard doesn't validate file ownership when serving uploaded files in github.com/mattermost/focalboard",
+ "id": "GO-2026-5670",
+ "modified": "2026-06-25T22:34:38Z",
+ "published": "2026-06-25T22:34:38Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-vph7-r229-qxpf"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-28736"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Focalboard doesn't validate file ownership when serving uploaded files in github.com/mattermost/focalboard"
+}

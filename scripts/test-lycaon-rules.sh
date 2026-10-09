@@ -14,9 +14,6 @@ printf 'opengrep-conformance: host load %s on %s CPUs; workers=1, timeout scale=
 export LANG="${LANG:-C.UTF-8}"
 export PYTHONUTF8=1
 OPENGREP="$(bash "${ROOT}/scripts/resolve-opengrep.sh")"
-export GOCACHE="${GOCACHE:-$(go env GOCACHE)}"
-export GOMODCACHE="${GOMODCACHE:-$(go env GOMODCACHE)}"
-export GOPATH="${GOPATH:-$(go env GOPATH)}"
 test_run_create_isolation "opengrep"
 RUN_DIR="${TEST_RUN_DIR}"
 trap 'test_run_remove_isolation "${RUN_DIR}"' EXIT

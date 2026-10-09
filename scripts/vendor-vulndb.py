@@ -2,8 +2,8 @@
 """Materialize the Go vulnerability database `lint:vuln` reads.
 
 The database is pinned so one source gives one verdict and a passing stage can
-be replayed; it is pruned to the modules this module builds so the diff stays
-readable. Freshness against upstream is `lint:vuln:fresh`.
+be replayed; it contains the complete upstream snapshot, so dependency changes do not
+refresh advisories or omit modules newly entering the build graph. Freshness against upstream is `lint:vuln:fresh`.
 
 `go list -m all` never names the Go distribution, which govulncheck looks up
 under the pseudo-modules `stdlib` and `toolchain`; without their index rows no
@@ -17,7 +17,6 @@ import gzip
 import hashlib
 import json
 import shutil
-import subprocess
 import sys
 import time
 import urllib.error
@@ -32,24 +31,6 @@ UPSTREAM = "https://vuln.go.dev"
 FETCH_TIMEOUT = 60
 FETCH_ATTEMPTS = 4
 GO_PSEUDO_MODULES = ("stdlib", "toolchain")
-
-
-def module_paths() -> list[str]:
-    """Every module in the build graph; the database is pruned to these."""
-    out = subprocess.run(
-        ["go", "list", "-m", "-f", "{{.Path}}", "all"],
-        cwd=GO_DIR,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if out.returncode != 0:
-        raise SystemExit(f"vendor-vulndb: go list -m all failed:\n{out.stderr.strip()}")
-    return sorted({line.strip() for line in out.stdout.splitlines() if line.strip()})
-
-
-def module_digest(paths: list[str]) -> str:
-    return hashlib.sha256("\n".join(paths).encode()).hexdigest()
 
 
 def transient(error: Exception) -> bool:
@@ -87,11 +68,7 @@ def write_json(path: Path, value: object) -> None:
 
 
 def refresh() -> int:
-    paths = module_paths()
-    wanted = set(paths) | set(GO_PSEUDO_MODULES)
-
-    modules = json.loads(fetch("index/modules"))
-    kept = [entry for entry in modules if entry.get("path") in wanted]
+    kept = json.loads(fetch("index/modules"))
     absent = missing_pseudo_modules(kept)
     if absent:
         raise SystemExit(f"vendor-vulndb: upstream index has no rows for {', '.join(absent)}")
@@ -100,7 +77,9 @@ def refresh() -> int:
     vulns = json.loads(fetch("index/vulns"))
     # Fetch everything before replacing the vendored tree so a failed refresh
     # leaves the previous pin intact.
-    entries = {vuln_id: json.loads(fetch(f"ID/{vuln_id}")) for vuln_id in ids}
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        entries = dict(zip(ids, pool.map(lambda ident: json.loads(fetch(f"ID/{ident}")), ids)))
 
     if VENDOR.exists():
         shutil.rmtree(VENDOR)
@@ -115,15 +94,14 @@ def refresh() -> int:
         {
             "source": UPSTREAM,
             "database_modified": db.get("modified", ""),
-            "module_digest": module_digest(paths),
-            "module_count": len(paths),
+            "coverage": "complete",
             "covered_modules": len(kept),
             "entries": len(ids),
             "tree_sha256": tree_digest(VENDOR),
         },
     )
     print(
-        f"vendor-vulndb: {len(ids)} entries covering {len(kept)} of {len(paths)} modules "
+        f"vendor-vulndb: {len(ids)} entries covering all {len(kept)} indexed modules "
         f"(database modified {db.get('modified', 'unknown')})",
         file=sys.stderr,
     )
@@ -136,7 +114,7 @@ def missing_pseudo_modules(index: list[dict]) -> list[str]:
 
 
 def check() -> int:
-    """Offline: the vendored bytes match their pin, and the pin matches this module."""
+    """Offline: verify snapshot integrity, coverage, and every referenced advisory."""
     if not PROVENANCE.is_file() or not VENDOR.is_dir():
         print("vendor-vulndb: no vendored database; run ./task lint:vuln:vendor", file=sys.stderr)
         return 1
@@ -151,13 +129,8 @@ def check() -> int:
         )
         return 1
 
-    paths = module_paths()
-    if module_digest(paths) != pin.get("module_digest"):
-        print(
-            "vendor-vulndb: this module's dependencies changed since the database was pinned, "
-            "so the gate no longer covers them; run ./task lint:vuln:vendor",
-            file=sys.stderr,
-        )
+    if pin.get("coverage") != "complete":
+        print("vendor-vulndb: a complete snapshot is required; run ./task lint:vuln:vendor", file=sys.stderr)
         return 1
 
     index = VENDOR / "index" / "modules.json"

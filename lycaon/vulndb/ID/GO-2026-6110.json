@@ -1,0 +1,86 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/OpenListTeam/OpenList"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/OpenListTeam/OpenList/v3"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/OpenListTeam/OpenList/v4"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "4.2.4"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-73509",
+  "GHSA-95cv-r8x4-vh75"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6110"
+ },
+ "details": "OpenList: Authenticated users can rename files outside their base path via batch rename `src_name` traversal in github.com/OpenListTeam/OpenList",
+ "id": "GO-2026-6110",
+ "modified": "2026-08-18T14:32:29Z",
+ "published": "2026-08-18T14:32:29Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/OpenListTeam/OpenList/security/advisories/GHSA-95cv-r8x4-vh75"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/OpenListTeam/OpenList/commit/651da18da4c647d96648d4bb64462baac1c37e04"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/OpenListTeam/OpenList/releases/tag/v4.2.4"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "OpenList: Authenticated users can rename files outside their base path via batch rename `src_name` traversal in github.com/OpenListTeam/OpenList"
+}

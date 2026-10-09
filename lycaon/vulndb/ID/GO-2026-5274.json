@@ -1,0 +1,103 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {
+    "imports": [
+     {
+      "path": "github.com/dgraph-io/dgraph"
+     }
+    ]
+   },
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/dgraph-io/dgraph"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {
+    "imports": [
+     {
+      "path": "github.com/dgraph-io/dgraph/v25"
+     }
+    ]
+   },
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/dgraph-io/dgraph/v25"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "25.3.2"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {
+    "imports": [
+     {
+      "path": "github.com/hypermodeinc/dgraph/v24"
+     }
+    ]
+   },
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/hypermodeinc/dgraph/v24"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "24.1.9"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-40173",
+  "GHSA-95mq-xwj4-r47p"
+ ],
+ "database_specific": {
+  "review_status": "REVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5274"
+ },
+ "details": "The /debug/pprof/cmdline endpoint in Dgraph Alpha discloses the command-line arguments used to start the process, which may include the administrator's authentication token if provided via the --auth_token flag. This allows an unauthenticated remote attacker to obtain the token and gain full administrative access to the Dgraph cluster.",
+ "id": "GO-2026-5274",
+ "modified": "2026-08-11T20:19:48Z",
+ "published": "2026-08-11T20:19:48Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/dgraph-io/dgraph/security/advisories/GHSA-95mq-xwj4-r47p"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/dgraph-io/dgraph/releases/tag/v25.3.2"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Dgraph: Unauthenticated admin token disclosure via /debug/pprof/cmdline in github.com/dgraph-io/dgraph"
+}

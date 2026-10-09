@@ -1,0 +1,93 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/traefik/traefik"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/traefik/traefik/v2"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "2.11.35"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/traefik/traefik/v3"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "3.6.7"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-22045",
+  "GHSA-cwjm-3f7h-9hwq"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-4322"
+ },
+ "details": "Traefik's ACME TLS-ALPN fast path lacks timeouts and close on handshake stall in github.com/traefik/traefik",
+ "id": "GO-2026-4322",
+ "modified": "2026-01-23T02:28:11Z",
+ "published": "2026-01-23T02:28:11Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/traefik/traefik/security/advisories/GHSA-cwjm-3f7h-9hwq"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/traefik/traefik/commit/e9f3089e9045812bcf1b410a9d40568917b26c3d"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/traefik/traefik/releases/tag/v2.11.35"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/traefik/traefik/releases/tag/v3.6.7"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Traefik's ACME TLS-ALPN fast path lacks timeouts and close on handshake stall in github.com/traefik/traefik"
+}

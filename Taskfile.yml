@@ -197,12 +197,12 @@ tasks:
       - bash {{.SCRIPTS_DIR}}/lint-vuln.sh
 
   lint:vuln:vendor:
-    desc: Re-materialize the pinned Go vulnerability database, pruned to this module's dependencies
+    desc: Re-materialize the complete pinned Go vulnerability database
     cmds:
       - python3 {{.SCRIPTS_DIR}}/vendor-vulndb.py
 
   lint:vuln:vendor:check:
-    desc: Offline — verify the vendored vulnerability database against its pin and this module's dependencies
+    desc: Offline — verify the complete vulnerability snapshot against its pin
     sources:
       - lycaon/vulndb/**/*
       - lycaon/vulndb-provenance.json

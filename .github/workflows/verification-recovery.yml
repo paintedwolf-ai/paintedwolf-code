@@ -1,0 +1,28 @@
+name: Verification recovery
+on:
+  workflow_run:
+    workflows: [CI, Qualification]
+    types: [completed]
+permissions:
+  actions: write
+  contents: write
+  issues: write
+  pull-requests: write
+concurrency:
+  group: verification-recovery-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # Never check out a PR head or execute downloaded artifacts with this token.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Attribute and recover the completed run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PYTHONPATH: scripts
+        run: python3 -m ci_policy.recovery

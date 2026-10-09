@@ -1,0 +1,45 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/mattermost/mattermost-server"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2017-18901",
+  "GHSA-c253-8hr4-r8v9"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-4304"
+ },
+ "details": "CVE-2017-18901 in github.com/mattermost/mattermost-server",
+ "id": "GO-2026-4304",
+ "modified": "2026-01-13T16:42:40Z",
+ "published": "2026-01-13T16:42:40Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2017-18901"
+  },
+  {
+   "type": "WEB",
+   "url": "https://mattermost.com/security-updates/"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "CVE-2017-18901 in github.com/mattermost/mattermost-server"
+}

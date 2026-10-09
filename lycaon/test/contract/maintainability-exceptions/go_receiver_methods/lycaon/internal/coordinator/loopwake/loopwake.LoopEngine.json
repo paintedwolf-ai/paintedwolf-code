@@ -1,0 +1,6 @@
+{
+  "category": "go_receiver_methods",
+  "artifact": "lycaon/internal/coordinator/loopwake/loopwake.LoopEngine",
+  "cap": 121,
+  "reason": "Past the limit before #356, which moves the sleep table into its own type to stop wait timers without growing the engine; the split is tracked in #364."
+}

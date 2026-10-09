@@ -44,6 +44,10 @@ const (
 // ScalibrScanner reports known vulnerabilities in project dependencies.
 type ScalibrScanner struct {
 	id string
+	// advisories holds a provisioned OSV export cache
+	// (osv-scalibr/<ecosystem>/all.zip). When empty, the host cache refreshes
+	// from the bundled advisory endpoint.
+	advisories string
 }
 
 // NewScalibrScanner returns a dependency scanner with driver id id.
@@ -52,6 +56,14 @@ func NewScalibrScanner(id string) *ScalibrScanner {
 		id = "lycaon-sca"
 	}
 	return &ScalibrScanner{id: id}
+}
+
+// NewProvisionedScalibrScanner matches against the OSV export already under
+// dir and never contacts the advisory endpoint.
+func NewProvisionedScalibrScanner(id, dir string) *ScalibrScanner {
+	scanner := NewScalibrScanner(id)
+	scanner.advisories = dir
+	return scanner
 }
 
 func (s *ScalibrScanner) ID() string { return s.id }
@@ -69,9 +81,13 @@ func (s *ScalibrScanner) Run(ctx context.Context, req scan.ScanRequest) (*scanou
 		return nil, err
 	}
 
-	cacheDir, err := project.EnsureOSVCacheDir("")
-	if err != nil {
-		return nil, err
+	cacheDir, download := s.advisories, false
+	if cacheDir == "" {
+		dir, err := project.EnsureOSVCacheDir("")
+		if err != nil {
+			return nil, err
+		}
+		cacheDir, download = dir, true
 	}
 	if _, err := severity.Default(); err != nil {
 		return nil, err
@@ -84,7 +100,7 @@ func (s *ScalibrScanner) Run(ctx context.Context, req scan.ScanRequest) (*scanou
 					Config: &cpb.PluginSpecificConfig_Osvlocal{
 						Osvlocal: &cpb.OSVLocalConfig{
 							LocalPath: cacheDir,
-							Download:  true,
+							Download:  download,
 							RemoteHost: egressclass.RequireSingleFixedEndpoint(
 								egressclass.OSVAdvisoryDownload,
 								egressclass.LibraryDownload,

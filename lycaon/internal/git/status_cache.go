@@ -103,12 +103,13 @@ func NewStatusCache(loader statusLoader, opts ...StatusCacheOption) *StatusCache
 	return c
 }
 
-// RegisterRepochangeObserver invalidates when refs, index, or working files change.
-func (c *StatusCache) RegisterRepochangeObserver() {
+// RegisterRepochangeObserver invalidates when refs, index, or working files
+// change, until the returned release runs.
+func (c *StatusCache) RegisterRepochangeObserver() (release func()) {
 	if c == nil {
-		return
+		return func() {}
 	}
-	repochange.RegisterObserver(func(_ context.Context, ev repochange.Event) {
+	return repochange.RegisterObserver(func(_ context.Context, ev repochange.Event) {
 		if ev.Kind != repochange.HeadMoved && ev.Kind != repochange.WorktreeChanged && ev.Kind != repochange.IndexChanged {
 			return
 		}

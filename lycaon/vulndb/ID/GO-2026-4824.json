@@ -1,0 +1,41 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/pinchtab/pinchtab"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0.8.3"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-33622",
+  "GHSA-w5pc-m664-r62v"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-4824"
+ },
+ "details": "A PinchTab Security Policy Bypass in /wait Allows Arbitrary JavaScript Execution in github.com/pinchtab/pinchtab",
+ "id": "GO-2026-4824",
+ "modified": "2026-03-26T20:33:02Z",
+ "published": "2026-03-26T20:33:02Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/pinchtab/pinchtab/security/advisories/GHSA-w5pc-m664-r62v"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "A PinchTab Security Policy Bypass in /wait Allows Arbitrary JavaScript Execution in github.com/pinchtab/pinchtab"
+}

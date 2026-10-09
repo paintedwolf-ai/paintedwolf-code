@@ -1,0 +1,45 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/free5gc/udr"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-40247",
+  "GHSA-x5r2-r74c-3w28"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5741"
+ },
+ "details": "free5gc UDR improper path validation allows unauthenticated access to Traffic Influence Subscriptions in github.com/free5gc/udr",
+ "id": "GO-2026-5741",
+ "modified": "2026-06-25T22:34:38Z",
+ "published": "2026-06-25T22:34:38Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/free5gc/free5gc/security/advisories/GHSA-x5r2-r74c-3w28"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-40247"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "free5gc UDR improper path validation allows unauthenticated access to Traffic Influence Subscriptions in github.com/free5gc/udr"
+}

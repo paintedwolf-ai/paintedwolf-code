@@ -1,0 +1,118 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/mattermost/mattermost-server"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "9.11.0+incompatible"
+      },
+      {
+       "fixed": "9.11.10+incompatible"
+      },
+      {
+       "introduced": "10.4.0+incompatible"
+      },
+      {
+       "fixed": "10.4.4+incompatible"
+      },
+      {
+       "introduced": "10.5.0+incompatible"
+      },
+      {
+       "fixed": "10.5.2+incompatible"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/mattermost/mattermost-server/v5"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/mattermost/mattermost-server/v6"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/mattermost/mattermost/server/v8"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "8.0.0-20250314142426-c049748b8863"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2025-2564",
+  "GHSA-mj2p-v2c2-vh4v"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2025-3623"
+ },
+ "details": "Mattermost Incorrect Authorization vulnerability in github.com/mattermost/mattermost-server",
+ "id": "GO-2025-3623",
+ "modified": "2025-04-22T18:14:45Z",
+ "published": "2025-04-22T18:14:45Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-mj2p-v2c2-vh4v"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-2564"
+  },
+  {
+   "type": "WEB",
+   "url": "https://mattermost.com/security-updates"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Mattermost Incorrect Authorization vulnerability in github.com/mattermost/mattermost-server"
+}

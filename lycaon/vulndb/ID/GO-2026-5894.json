@@ -1,0 +1,49 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/casdoor/casdoor"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-9093",
+  "GHSA-3w4h-g9f5-j84p"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5894"
+ },
+ "details": "Casdoor does not validate the AudienceRestriction element in SAML assertions in github.com/casdoor/casdoor",
+ "id": "GO-2026-5894",
+ "modified": "2026-07-07T15:26:37Z",
+ "published": "2026-07-07T15:26:37Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-3w4h-g9f5-j84p"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-9093"
+  },
+  {
+   "type": "WEB",
+   "url": "https://kb.cert.org/vuls/id/780781"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Casdoor does not validate the AudienceRestriction element in SAML assertions in github.com/casdoor/casdoor"
+}

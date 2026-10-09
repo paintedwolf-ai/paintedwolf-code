@@ -59,8 +59,8 @@ owner's engine you stop and why.
 ## Testing
 
 **Use GitHub CI by default.** Push work in progress to its draft PR; local tests
-are not a prerequisite. PRs run `check-fast` stages; the merge queue runs `check`
-and platform verification on the landing commit. Do not run these gates locally
+are not a prerequisite. PRs and merge groups share the affected-scope integration gate. Main receives
+full qualification separately; releases require qualification on the exact commit. Do not run these gates locally
 first or repeat checks CI passed for the same commit. Report the PR without
 waiting on or polling CI.
 
@@ -81,8 +81,9 @@ failures to get green. Test conventions: [backend](lycaon/AGENTS.md#testing) and
 [frontend](lycaon-den/AGENTS.md#testing).
 
 **Both gates enforce size budgets and changed-statement coverage.** Files,
-directories, Go types, and prompts must meet category limits or justified
-exceptions. Before editing large code, run
+directories, and Go types must not grow above category limits without justified
+exceptions. Unchanged legacy excess is tracked; explicit caps and prompt limits
+remain absolute. Before editing large code, run
 `PW_BUDGETS_INSPECT="<path>" ./task budgets`. Above the warning line, put new
 behavior in a new file/package; resolve failures by reshaping or trimming.
 `coverage:changes` and `den:coverage:changes` require tests for added statements.

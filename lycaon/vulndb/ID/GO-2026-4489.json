@@ -1,0 +1,56 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/dunglas/frankenphp"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.11.2"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-24894",
+  "GHSA-r3xh-3r3w-47gp"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-4489"
+ },
+ "details": "FrankenPHP leaks session data between requests in worker mode in github.com/dunglas/frankenphp",
+ "id": "GO-2026-4489",
+ "modified": "2026-02-17T18:09:06Z",
+ "published": "2026-02-17T18:09:06Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/php/frankenphp/security/advisories/GHSA-r3xh-3r3w-47gp"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-24894"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/php/frankenphp/commit/24d6c991a7761b638190eb081deae258143e9735"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/php/frankenphp/releases/tag/v1.11.2"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "FrankenPHP leaks session data between requests in worker mode in github.com/dunglas/frankenphp"
+}

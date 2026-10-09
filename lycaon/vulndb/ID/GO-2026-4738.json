@@ -1,0 +1,81 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/filebrowser/filebrowser"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {
+    "imports": [
+     {
+      "path": "github.com/filebrowser/filebrowser/v2/http",
+      "symbols": [
+       "ifPathWithName",
+       "setContentDisposition",
+       "withHashFile",
+       "withPermShare"
+      ]
+     }
+    ]
+   },
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/filebrowser/filebrowser/v2"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "2.62.0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-32761",
+  "GHSA-68j5-4m99-w9w9"
+ ],
+ "database_specific": {
+  "review_status": "REVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-4738"
+ },
+ "details": "File Browser has an Authorization Policy Bypass in Public Share Download Flow in github.com/filebrowser/filebrowser",
+ "id": "GO-2026-4738",
+ "modified": "2026-04-07T14:58:41Z",
+ "published": "2026-04-07T14:58:41Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/filebrowser/filebrowser/security/advisories/GHSA-68j5-4m99-w9w9"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/filebrowser/filebrowser/commit/09a26166b4f79446e7174c017380f6db45444e32"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/filebrowser/filebrowser/releases/tag/v2.62.0"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "File Browser has an Authorization Policy Bypass in Public Share Download Flow in github.com/filebrowser/filebrowser"
+}

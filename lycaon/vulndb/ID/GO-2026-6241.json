@@ -1,0 +1,48 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/gruntwork-io/terragrunt"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.0.4"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-45099",
+  "GHSA-8394-6f8r-whxg"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6241"
+ },
+ "details": "Terragrunt: Arbitrary File Deletion via Malicious Module Manifest in github.com/gruntwork-io/terragrunt",
+ "id": "GO-2026-6241",
+ "modified": "2026-08-18T14:32:29Z",
+ "published": "2026-08-18T14:32:29Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/gruntwork-io/terragrunt/security/advisories/GHSA-8394-6f8r-whxg"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/gruntwork-io/terragrunt/releases/tag/v1.0.4"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Terragrunt: Arbitrary File Deletion via Malicious Module Manifest in github.com/gruntwork-io/terragrunt"
+}

@@ -1,0 +1,48 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/l3montree-dev/devguard"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.4.2"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-48089",
+  "GHSA-6p54-fw2f-q7gf"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5183"
+ },
+ "details": "DevGuard has improper authorization on public assets in github.com/l3montree-dev/devguard",
+ "id": "GO-2026-5183",
+ "modified": "2026-06-25T18:43:15Z",
+ "published": "2026-06-25T18:43:15Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/l3montree-dev/devguard/security/advisories/GHSA-6p54-fw2f-q7gf"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/l3montree-dev/devguard/commit/1be88ec1309a5dc0566e35a23bdc4ea3ecd11417"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "DevGuard has improper authorization on public assets in github.com/l3montree-dev/devguard"
+}

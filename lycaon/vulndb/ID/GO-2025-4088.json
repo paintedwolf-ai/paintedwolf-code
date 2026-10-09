@@ -1,0 +1,57 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/sqls-server/sqls"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2025-61141",
+  "GHSA-f9f4-5859-29mf"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2025-4088"
+ },
+ "details": "sqls-server/sqls is vulnerable to command injection in the config command in github.com/sqls-server/sqls",
+ "id": "GO-2025-4088",
+ "modified": "2025-11-05T18:41:15Z",
+ "published": "2025-11-05T18:41:15Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-f9f4-5859-29mf"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-61141"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/sqls-server/sqls/commit/468a23fc89af89f632cc023a10c031e4bc781797"
+  },
+  {
+   "type": "WEB",
+   "url": "https://advisory.dw1.io/54"
+  },
+  {
+   "type": "WEB",
+   "url": "https://lukmanern.github.io/CVE-2025-61141.html"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "sqls-server/sqls is vulnerable to command injection in the config command in github.com/sqls-server/sqls"
+}

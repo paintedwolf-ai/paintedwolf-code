@@ -1,0 +1,45 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/ollama/ollama"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2025-1975",
+  "GHSA-wrh5-cmwx-q2qr"
+ ],
+ "database_specific": {
+  "review_status": "REVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2025-3695"
+ },
+ "details": "Ollama Server Vulnerable to Denial of Service (DoS) Attack in github.com/ollama/ollama",
+ "id": "GO-2025-3695",
+ "modified": "2025-05-22T16:50:31Z",
+ "published": "2025-05-22T16:50:31Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-wrh5-cmwx-q2qr"
+  },
+  {
+   "type": "WEB",
+   "url": "https://huntr.com/bounties/921ba5d4-f1d0-4c66-9764-4f72dffe7acd"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Ollama Server Vulnerable to Denial of Service (DoS) Attack in github.com/ollama/ollama"
+}

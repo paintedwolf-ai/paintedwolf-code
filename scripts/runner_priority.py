@@ -24,11 +24,12 @@ QUEUE_BRANCHES = "gh-readonly-queue/"
 UNFINISHED_RUNS = ("requested", "waiting", "pending", "queued", "in_progress")
 PLATFORMS = ("macos", "linux")
 QUEUE, RELEASE, READY, DRAFT, WARMING, BACKGROUND = "queue", "release", "ready", "draft", "warming", "background"
+QUALIFICATION = "qualification"
 PROTECTED = {QUEUE, RELEASE}
 # Lowest priority first: the order in which runs give up runners.
-YIELD_ORDER = (BACKGROUND, WARMING, DRAFT, READY)
+YIELD_ORDER = (BACKGROUND, WARMING, DRAFT, READY, QUALIFICATION)
 # The event whose newest run resumes; runs started by hand are re-run by whoever started them.
-RESUMED_EVENTS = {WARMING: "push", BACKGROUND: "schedule"}
+RESUMED_EVENTS = {WARMING: "push", QUALIFICATION: "push", BACKGROUND: "schedule"}
 
 Plan = namedtuple("Plan", "stale preempted resumable")
 
@@ -36,8 +37,8 @@ Plan = namedtuple("Plan", "stale preempted resumable")
 def workflow_classes():
     """Workflow file to priority class, from the catalog; CI's class follows each run's event."""
     declared = catalog()["runner_priority"]
-    if set(declared) - {RELEASE, WARMING, BACKGROUND}:
-        raise ValueError("runner priority classes are release, warming, and background")
+    if set(declared) - {RELEASE, QUALIFICATION, WARMING, BACKGROUND}:
+        raise ValueError("runner priority classes are release, qualification, warming, and background")
     files = [name for names in declared.values() for name in names]
     if len(files) != len(set(files)) or "ci.yml" in files:
         raise ValueError("each workflow declares one runner priority, and CI's follows its event")
@@ -132,7 +133,7 @@ def decide(runs, kinds, jobs, live_groups, now):
     if any(job["status"] == "queued" for job in protected):
         resumable = set()
     else:
-        resumable = {READY, WARMING} | (set() if live_groups else {BACKGROUND})
+        resumable = {READY, WARMING, QUALIFICATION} | (set() if live_groups else {BACKGROUND})
     return Plan(stale, [(run, kinds[run["id"]]) for run in preempted], resumable)
 
 

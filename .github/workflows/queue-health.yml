@@ -1,0 +1,29 @@
+name: Queue health
+on:
+  schedule:
+    - cron: '25 */4 * * *'
+  workflow_dispatch:
+permissions:
+  actions: read
+  contents: read
+  pull-requests: read
+  issues: write
+concurrency:
+  group: queue-health
+  cancel-in-progress: false
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Report queue health and recurring failures
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PYTHONPATH: scripts
+        run: python3 -m ci_policy.health
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: queue-health-${{ github.run_id }}
+          path: queue-health.json
+          retention-days: 30

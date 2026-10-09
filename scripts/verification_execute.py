@@ -203,7 +203,7 @@ class StageEvents:
         found = {}
         for event in self.lines("events"):
             if isinstance(event.get("package"), str) and type(event.get("exit_code")) is int and event["exit_code"] > 0:
-                found[event["package"]] = {key: event[key] for key in ("output", "tests") if key in event}
+                found[event["package"]] = {key: event[key] for key in ("output", "tests", "resource_limit") if key in event}
         for event in self.lines("raw"):
             if event.get("Action") == "fail" and isinstance(event.get("Package"), str) and not event.get("Test"):
                 found.setdefault(event["Package"], {})

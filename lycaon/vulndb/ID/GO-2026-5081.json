@@ -1,0 +1,44 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "code.gitea.io/gitea"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.26.2"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-27783",
+  "GHSA-3fwp-p5rj-2pxf"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5081"
+ },
+ "details": "Gitea: Missing repository-unit authorization on issue-template API endpoints in code.gitea.io/gitea",
+ "id": "GO-2026-5081",
+ "modified": "2026-06-25T18:26:48Z",
+ "published": "2026-06-25T18:26:48Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/go-gitea/gitea/security/advisories/GHSA-3fwp-p5rj-2pxf"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Gitea: Missing repository-unit authorization on issue-template API endpoints in code.gitea.io/gitea"
+}

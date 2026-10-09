@@ -1,0 +1,52 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/hashicorp/vault"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0.3.0"
+      },
+      {
+       "fixed": "1.19.3"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2025-4166",
+  "GHSA-gcqf-f89c-68hv"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2025-3663"
+ },
+ "details": "Hashicorp Vault Community vulnerable to Generation of Error Message Containing Sensitive Information in github.com/hashicorp/vault",
+ "id": "GO-2025-3663",
+ "modified": "2025-05-06T15:37:19Z",
+ "published": "2025-05-06T15:37:19Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-gcqf-f89c-68hv"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-4166"
+  },
+  {
+   "type": "WEB",
+   "url": "https://discuss.hashicorp.com/t/hcsec-2025-09-vault-may-expose-sensitive-information-in-error-logs-when-processing-malformed-data-with-the-kv-v2-plugin"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Hashicorp Vault Community vulnerable to Generation of Error Message Containing Sensitive Information in github.com/hashicorp/vault"
+}

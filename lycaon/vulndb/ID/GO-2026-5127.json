@@ -1,0 +1,86 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/lxc/incus"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/lxc/incus/v6"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/lxc/incus/v7"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "7.0.0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-40251",
+  "GHSA-4m88-wxj4-9qj6"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5127"
+ },
+ "details": "Incus Vulnerable to Panic via Snapshot Bounds Check in github.com/lxc/incus",
+ "id": "GO-2026-5127",
+ "modified": "2026-06-25T18:26:48Z",
+ "published": "2026-06-25T18:26:48Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/lxc/incus/security/advisories/GHSA-4m88-wxj4-9qj6"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-40251"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/lxc/incus/blob/v6.22.0/internal/server/storage/backend.go"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Incus Vulnerable to Panic via Snapshot Bounds Check in github.com/lxc/incus"
+}

@@ -1,0 +1,6 @@
+{
+  "category": "go_receiver_lines",
+  "artifact": "lycaon/internal/workflow/workflow.RunManager",
+  "cap": 6500,
+  "reason": "The workflow run lifecycle (advance, gates, topology settlement, closeout, report delivery, runtime snapshots) shares one manager's run locks and ledger; it is split into services in #351."
+}

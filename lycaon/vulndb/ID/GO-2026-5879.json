@@ -1,0 +1,58 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {
+    "imports": [
+     {
+      "path": "oras.land/oras-go/v2/content/file",
+      "symbols": [
+       "New",
+       "Store.Add"
+      ]
+     }
+    ]
+   },
+   "package": {
+    "ecosystem": "Go",
+    "name": "oras.land/oras-go/v2"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "2.6.1"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-50162",
+  "GHSA-8xwf-rjm4-xvhv"
+ ],
+ "database_specific": {
+  "review_status": "REVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5879"
+ },
+ "details": "Oras-go: File store write outside workingDir via symlink traversal in oras.land/oras-go",
+ "id": "GO-2026-5879",
+ "modified": "2026-07-24T18:35:55Z",
+ "published": "2026-07-24T18:35:55Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/oras-project/oras-go/security/advisories/GHSA-8xwf-rjm4-xvhv"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/oras-project/oras-go/commit/cc323e564d90c6b5b4bdd71d3c8d2ee2713b37e5"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Oras-go: File store write outside workingDir via symlink traversal in oras.land/oras-go"
+}

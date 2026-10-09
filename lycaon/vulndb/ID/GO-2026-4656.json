@@ -1,0 +1,48 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/pocket-id/pocket-id/backend"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "0.0.0-20260307173642-b59e35cb59ae"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-28513",
+  "GHSA-qh6q-598w-w6m2"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-4656"
+ },
+ "details": "Pocket ID: OIDC authorization code validation uses AND instead of OR, allowing cross-client token exchange in github.com/pocket-id/pocket-id/backend",
+ "id": "GO-2026-4656",
+ "modified": "2026-03-11T16:00:40Z",
+ "published": "2026-03-11T16:00:40Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/pocket-id/pocket-id/security/advisories/GHSA-qh6q-598w-w6m2"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-28513"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Pocket ID: OIDC authorization code validation uses AND instead of OR, allowing cross-client token exchange in github.com/pocket-id/pocket-id/backend"
+}

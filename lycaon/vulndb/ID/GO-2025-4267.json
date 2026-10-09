@@ -1,0 +1,60 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "code.gitea.io/gitea"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.22.5"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2025-68940",
+  "GHSA-rrcw-5rjv-vj26"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2025-4267"
+ },
+ "details": "Gitea doesn't adequately enforce branch deletion permissions after merging a pull request. in code.gitea.io/gitea",
+ "id": "GO-2025-4267",
+ "modified": "2025-12-30T01:49:57Z",
+ "published": "2025-12-30T01:49:57Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-rrcw-5rjv-vj26"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-68940"
+  },
+  {
+   "type": "WEB",
+   "url": "https://blog.gitea.com/release-of-1.22.5"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/go-gitea/gitea/pull/32654"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/go-gitea/gitea/releases/tag/v1.22.5"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Gitea doesn't adequately enforce branch deletion permissions after merging a pull request. in code.gitea.io/gitea"
+}

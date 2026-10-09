@@ -1,0 +1,73 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "go.etcd.io/etcd"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "go.etcd.io/etcd/v3"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "3.4.42"
+      },
+      {
+       "introduced": "3.5.0-alpha.0"
+      },
+      {
+       "fixed": "3.5.28"
+      },
+      {
+       "introduced": "3.6.0-alpha.0"
+      },
+      {
+       "fixed": "3.6.9"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-33343",
+  "GHSA-rfx7-8w68-q57q"
+ ],
+ "database_specific": {
+  "review_status": "REVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-4808"
+ },
+ "details": "Nested etcd transactions bypass RBAC authorization checks in go.etcd.io/etcd",
+ "id": "GO-2026-4808",
+ "modified": "2026-04-07T14:58:41Z",
+ "published": "2026-04-07T14:58:41Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/etcd-io/etcd/security/advisories/GHSA-rfx7-8w68-q57q"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Nested etcd transactions bypass RBAC authorization checks in go.etcd.io/etcd"
+}

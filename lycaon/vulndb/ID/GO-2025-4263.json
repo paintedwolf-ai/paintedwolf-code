@@ -1,0 +1,60 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "code.gitea.io/gitea"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.22.2"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2025-68942",
+  "GHSA-898p-hh3p-hf9r"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2025-4263"
+ },
+ "details": "Gitea allows XSS because the search input box (for creating tags and branches) is v-html instead of v-text in code.gitea.io/gitea",
+ "id": "GO-2025-4263",
+ "modified": "2025-12-30T01:49:57Z",
+ "published": "2025-12-30T01:49:57Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-898p-hh3p-hf9r"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-68942"
+  },
+  {
+   "type": "WEB",
+   "url": "https://blog.gitea.com/release-of-1.22.2"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/go-gitea/gitea/pull/31966"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/go-gitea/gitea/releases/tag/v1.22.2"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Gitea allows XSS because the search input box (for creating tags and branches) is v-html instead of v-text in code.gitea.io/gitea"
+}

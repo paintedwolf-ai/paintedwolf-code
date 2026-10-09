@@ -32,6 +32,10 @@ type hostedJob struct {
 }
 
 type hostedWorkflow struct {
+	Concurrency struct {
+		Group  string
+		Cancel yaml.Node `yaml:"cancel-in-progress"`
+	}
 	On   map[string]yaml.Node
 	Jobs map[string]hostedJob
 }
@@ -76,13 +80,13 @@ func requireHostedGate(t *testing.T, jobs map[string]hostedJob, gate string, dep
 	t.Fatalf("%s does not require successful structured dependency results", gate)
 }
 
-func TestHostedVerificationAggregatesRequireEveryJob(t *testing.T) {
+func TestHostedVerificationAggregatesRequireEveryBlockingJob(t *testing.T) {
 	t.Parallel()
-	for workflow, gate := range map[string]string{"ci": "check", "nightly": "nightly"} {
+	for workflow, gate := range map[string]string{"ci": "check", "nightly": "nightly", "qualification": "qualification"} {
 		jobs := hostedJobs(t, workflow)
 		var dependencies []string
 		for name := range jobs {
-			if name != gate {
+			if name != gate && !(workflow == "nightly" && name == "quarantine") {
 				dependencies = append(dependencies, name)
 			}
 		}
@@ -114,9 +118,8 @@ func TestReusableVerificationFailsWithItsPlanOrAnyMatrixJob(t *testing.T) {
 	}
 }
 
-// Pull requests get the fast tier; main advances only through the merge queue,
-// whose single required check judges the full tier on the commit that lands.
-func TestCIRunsTheFastTierOnPullRequestsAndTheFullTierBeforeMain(t *testing.T) {
+// Pull requests and queue commits share admission; qualification follows main.
+func TestCIUsesSharedAdmissionAndSeparateQualification(t *testing.T) {
 	t.Parallel()
 	workflow := hostedWorkflowFile(t, "ci")
 	for _, event := range []string{"pull_request", "merge_group", "workflow_dispatch"} {
@@ -137,19 +140,19 @@ func TestCIRunsTheFastTierOnPullRequestsAndTheFullTierBeforeMain(t *testing.T) {
 		t.Error("the required check must report on every pull request")
 	}
 	jobs := workflow.Jobs
-	if jobs["verification"].With["profile"] != "${{ github.event_name == 'pull_request' && 'fast' || 'check' }}" {
-		t.Error("pull requests must run the fast profile and every other event the check profile")
+	if jobs["verification"].With["profile"] != "${{ github.event_name == 'workflow_dispatch' && 'check' || 'integration' }}" {
+		t.Error("pull requests and merge groups must share the integration profile")
 	}
 	if platform := jobs["platform"]; platform.Uses != "./.github/workflows/platform-verification.yml" ||
-		platform.If != "github.event_name != 'pull_request'" {
-		t.Error("platform verification must run in every full-tier event and only there")
+		platform.If != "github.event_name == 'workflow_dispatch'" {
+		t.Error("manual CI dispatch must include platform qualification")
 	}
 	requireHostedGate(t, jobs, "check", []string{"verification", "platform"})
 	for _, step := range jobs["check"].Steps {
 		if strings.HasPrefix(step.Run, "python3 scripts/ci_verification.py gate") &&
-			(step.Env["SKIPPED"] != "${{ github.event_name == 'pull_request' && 'platform' || '' }}" ||
+			(step.Env["SKIPPED"] != "${{ github.event_name != 'workflow_dispatch' && 'platform' || '' }}" ||
 				!strings.Contains(step.Run, `--skipped "$SKIPPED"`)) {
-			t.Error("the gate may excuse only the platform job, and only on pull requests")
+			t.Error("admission may excuse only the separate platform qualification job")
 		}
 	}
 }
@@ -230,7 +233,7 @@ func TestHostedVerificationBudgetsAndEvidence(t *testing.T) {
 	}
 	for _, workflow := range []string{"ci", "nightly", "verification", "platform-verification", "e2e-verification"} {
 		for name, job := range hostedJobs(t, workflow) {
-			if job.Continue || job.Uses == "" && job.Timeout == "" {
+			if job.Continue && !(workflow == "nightly" && name == "quarantine") || job.Uses == "" && job.Timeout == "" {
 				t.Errorf("%s/%s must be blocking and have an explicit deadline", workflow, name)
 			}
 			for _, step := range job.Steps {
@@ -242,11 +245,11 @@ func TestHostedVerificationBudgetsAndEvidence(t *testing.T) {
 	}
 }
 
-func TestEndToEndVerificationRunsOnlyInTheSelectedNightlyTier(t *testing.T) {
+func TestEndToEndVerificationRunsInQualificationAndSelectedNightly(t *testing.T) {
 	t.Parallel()
 	platform := hostedJobs(t, "platform-verification")
 	if len(platform) != 2 || platform["confinement"].Timeout == "" || platform["upgrade-corpus"].Timeout == "" {
-		t.Fatal("merge admission must retain confinement and upgrade gates without browser journeys")
+		t.Fatal("platform qualification must retain confinement and upgrade gates")
 	}
 	e2e := hostedJobs(t, "e2e-verification")
 	if len(e2e) != 2 || e2e["playwright-desktop"].Timeout == "" {
@@ -257,7 +260,14 @@ func TestEndToEndVerificationRunsOnlyInTheSelectedNightlyTier(t *testing.T) {
 		t.Fatal("each web shard must run independently and contribute to the verdict")
 	}
 	const selected = "github.event_name == 'schedule' || inputs.suite == 'all' || inputs.suite == 'e2e'"
+	qualification := hostedJobs(t, "qualification")
+	if qualification["e2e"].Uses != "./.github/workflows/e2e-verification.yml" {
+		t.Fatal("main qualification must include browser verification")
+	}
 	nightly := hostedJobs(t, "nightly")
+	if !nightly["quarantine"].Continue {
+		t.Fatal("quarantine observation must not block nightly qualification")
+	}
 	if nightly["e2e"].Uses != "./.github/workflows/e2e-verification.yml" || nightly["e2e"].If != selected {
 		t.Fatal("scheduled, full, and explicit E2E nightly runs must include browser verification")
 	}
@@ -322,5 +332,13 @@ func TestHostedProfilesAndSetupAreReachable(t *testing.T) {
 		if !setup {
 			t.Errorf("%s/%s has no shared verification setup", workflow, job)
 		}
+	}
+}
+
+func TestRecoveryConcurrencyPreservesDistinctCompletedRuns(t *testing.T) {
+	t.Parallel()
+	workflow := hostedWorkflowFile(t, "verification-recovery")
+	if workflow.Concurrency.Group != "verification-recovery-${{ github.event.workflow_run.id }}" || workflow.Concurrency.Cancel.Value != "false" {
+		t.Fatal("recovery must retain each completed run independently")
 	}
 }

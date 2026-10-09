@@ -1,0 +1,69 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/filebrowser/filebrowser"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/filebrowser/filebrowser/v2"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "2.63.14"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-54094",
+  "GHSA-239w-m3h6-ch8v"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5055"
+ },
+ "details": "File Browser: Symlink following lets scoped users read, overwrite, and share files outside their filebrowser scope in github.com/filebrowser/filebrowser",
+ "id": "GO-2026-5055",
+ "modified": "2026-06-16T23:55:18Z",
+ "published": "2026-06-16T23:55:18Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/filebrowser/filebrowser/security/advisories/GHSA-239w-m3h6-ch8v"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/filebrowser/filebrowser/commit/7c2c0a11b31b2bb214d741005a0b02b1764208b3"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/filebrowser/filebrowser/releases/tag/v2.63.14"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "File Browser: Symlink following lets scoped users read, overwrite, and share files outside their filebrowser scope in github.com/filebrowser/filebrowser"
+}

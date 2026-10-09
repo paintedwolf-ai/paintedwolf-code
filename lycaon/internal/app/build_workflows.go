@@ -193,7 +193,7 @@ func (b boardWiring) wireWorkflowScanServices() error {
 	b.gitMgr = git.NewManager()
 	gitexec.SetHostConfig(gitexec.HostConfigResolver())
 	b.gitStatusCache = git.NewStatusCache(b.gitMgr)
-	b.gitStatusCache.RegisterRepochangeObserver()
+	b.resources.releaseObserver("git-status-repochange", b.gitStatusCache.RegisterRepochangeObserver())
 	b.gitRepoSetCache = git.NewRepoSetCache(git.DefaultStatusCacheTTL)
 	if b.toolRuntime != nil {
 		b.toolRuntime.SetGitStatusCache(b.gitStatusCache)

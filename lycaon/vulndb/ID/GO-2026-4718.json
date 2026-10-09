@@ -1,0 +1,76 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/ctfer-io/chall-manager/deploy"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "0.6.5"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/ctfer-io/chall-manager/sdk"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "0.6.5"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-32768",
+  "GHSA-mw24-f3xh-j3qv"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-4718"
+ },
+ "details": "Chall-Manager's invalid NetworkPolicy enables a malicious actor to pivot into another namespace in github.com/ctfer-io/chall-manager/deploy",
+ "id": "GO-2026-4718",
+ "modified": "2026-03-26T20:32:44Z",
+ "published": "2026-03-26T20:32:44Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/ctfer-io/chall-manager/security/advisories/GHSA-mw24-f3xh-j3qv"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-32768"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/ctfer-io/chall-manager/commit/dc5ef27dfed2befef7f506ab8ca14d062b0d79c5"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/ctfer-io/chall-manager/releases/tag/v0.6.5"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Chall-Manager's invalid NetworkPolicy enables a malicious actor to pivot into another namespace in github.com/ctfer-io/chall-manager/deploy"
+}

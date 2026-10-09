@@ -74,6 +74,24 @@ jobs:
           name: nightly-upgrade-${{ github.run_attempt }}
           status: ${{ job.status }}
 
+  quarantine:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-verification
+      - name: Observe quarantined tests
+        env:
+          PYTHONPATH: scripts
+          LYCAON_LLM_MOCK: '1'
+        run: python3 -m ci_policy.quarantine
+      - uses: ./.github/actions/verification-evidence
+        if: always()
+        with:
+          name: quarantine-${{ github.run_attempt }}
+          status: ${{ job.status }}
+
   nightly:
     # Judges failed and timed-out jobs, but a cancelled run must not wait for a runner to do so.
     if: ${{ !cancelled() }}

@@ -1,0 +1,52 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/slackhq/nebula"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "1.7.0"
+      },
+      {
+       "fixed": "1.10.3"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-25793",
+  "GHSA-69x3-g4r3-p962"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-4458"
+ },
+ "details": "Blocklist Bypass possible via ECDSA Signature Malleability in github.com/slackhq/nebula",
+ "id": "GO-2026-4458",
+ "modified": "2026-02-17T18:09:06Z",
+ "published": "2026-02-17T18:09:06Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/slackhq/nebula/security/advisories/GHSA-69x3-g4r3-p962"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-25793"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/slackhq/nebula/commit/f573e8a26695278f9d71587390fbfe0d0933aa21"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Blocklist Bypass possible via ECDSA Signature Malleability in github.com/slackhq/nebula"
+}

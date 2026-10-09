@@ -1,0 +1,75 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/tomwright/dasel"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/tomwright/dasel/v2"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/tomwright/dasel/v3"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "3.0.0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-46377",
+  "GHSA-m5j3-4634-c2vq"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5491"
+ },
+ "details": "Dasel: Index-out-of-range panic in dasel selector lexer on trailing backslash in quoted string in github.com/tomwright/dasel",
+ "id": "GO-2026-5491",
+ "modified": "2026-06-25T22:34:31Z",
+ "published": "2026-06-25T22:34:31Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/TomWright/dasel/security/advisories/GHSA-m5j3-4634-c2vq"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Dasel: Index-out-of-range panic in dasel selector lexer on trailing backslash in quoted string in github.com/tomwright/dasel"
+}

@@ -1,0 +1,69 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/hahwul/dalfox"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/hahwul/dalfox/v2"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "2.13.0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-45088",
+  "GHSA-35wr-x7v6-9fv2"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5070"
+ },
+ "details": "Dalfox Server Mode has an Unauthenticated Arbitrary File Read with Out-of-Band Exfiltration via `custom-payload-file` in github.com/hahwul/dalfox",
+ "id": "GO-2026-5070",
+ "modified": "2026-06-25T18:26:48Z",
+ "published": "2026-06-25T18:26:48Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/hahwul/dalfox/security/advisories/GHSA-35wr-x7v6-9fv2"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-45088"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/hahwul/dalfox/releases/tag/v2.13.0"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Dalfox Server Mode has an Unauthenticated Arbitrary File Read with Out-of-Band Exfiltration via `custom-payload-file` in github.com/hahwul/dalfox"
+}

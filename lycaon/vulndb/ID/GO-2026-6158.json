@@ -1,0 +1,52 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/pterodactyl/wings"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.12.3"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-52855",
+  "GHSA-pfvc-3p5h-x7h6"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6158"
+ },
+ "details": "Wings exposes node configuration secrets through egg configuration-file templating in github.com/pterodactyl/wings",
+ "id": "GO-2026-6158",
+ "modified": "2026-08-18T14:32:29Z",
+ "published": "2026-08-18T14:32:29Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/pterodactyl/wings/security/advisories/GHSA-pfvc-3p5h-x7h6"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/pterodactyl/wings/commit/eb65e27ae077a63e38518c490768486af1cd86a9"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/pterodactyl/wings/releases/tag/v1.12.3"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Wings exposes node configuration secrets through egg configuration-file templating in github.com/pterodactyl/wings"
+}

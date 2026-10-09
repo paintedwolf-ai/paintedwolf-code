@@ -1,0 +1,62 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/gotenberg/gotenberg/v7"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/gotenberg/gotenberg/v8"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-42593",
+  "GHSA-3cv5-q585-h563"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5080"
+ },
+ "details": "Gotenberg has arbitrary PDF read via stampExpression and watermarkExpression in merge, split, and convert routes in github.com/gotenberg/gotenberg",
+ "id": "GO-2026-5080",
+ "modified": "2026-06-25T18:26:48Z",
+ "published": "2026-06-25T18:26:48Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/gotenberg/gotenberg/security/advisories/GHSA-3cv5-q585-h563"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-42593"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Gotenberg has arbitrary PDF read via stampExpression and watermarkExpression in merge, split, and convert routes in github.com/gotenberg/gotenberg"
+}

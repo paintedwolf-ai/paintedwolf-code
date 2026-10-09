@@ -1,0 +1,59 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {
+    "imports": [
+     {
+      "path": "github.com/jackc/pgproto3/v2",
+      "symbols": [
+       "DataRow.Decode",
+       "Frontend.Receive"
+      ]
+     }
+    ]
+   },
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/jackc/pgproto3/v2"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "2.0.0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-32286",
+  "GHSA-jqcq-xjh3-6g23"
+ ],
+ "database_specific": {
+  "review_status": "REVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-4518"
+ },
+ "details": "The DataRow.Decode function fails to properly validate field lengths. A malicious or compromised PostgreSQL server can send a DataRow message with a negative field length, causing a slice bounds out of range panic.",
+ "id": "GO-2026-4518",
+ "modified": "2026-04-02T18:42:58Z",
+ "published": "2026-03-16T20:27:13Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-jqcq-xjh3-6g23"
+  },
+  {
+   "type": "REPORT",
+   "url": "https://github.com/jackc/pgx/issues/2507"
+  },
+  {
+   "type": "REPORT",
+   "url": "https://github.com/golang/vulndb/issues/4518"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Denial of service in github.com/jackc/pgproto3/v2"
+}

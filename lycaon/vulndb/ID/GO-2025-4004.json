@@ -1,0 +1,95 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {
+    "custom_ranges": [
+     {
+      "events": [
+       {
+        "introduced": "0"
+       },
+       {
+        "fixed": "5.21.4"
+       },
+       {
+        "introduced": "4.0.0"
+       },
+       {
+        "introduced": "0.0.0-20200331193331-03aab09f5b5c"
+       },
+       {
+        "fixed": "0.0.0-20250827065555-0494f5d47e41"
+       }
+      ],
+      "type": "ECOSYSTEM"
+     }
+    ]
+   },
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/lxc/lxd"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {
+    "custom_ranges": [
+     {
+      "events": [
+       {
+        "introduced": "6.0.0"
+       },
+       {
+        "fixed": "6.5.0"
+       }
+      ],
+      "type": "ECOSYSTEM"
+     }
+    ]
+   },
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/lxc/lxd/v6"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2025-54287",
+  "GHSA-w2hg-2v4p-vmh6"
+ ],
+ "database_specific": {
+  "review_status": "REVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2025-4004"
+ },
+ "details": "Canonical LXD Arbitrary File Read via Template Injection in Snapshot Patterns in github.com/lxc/lxd",
+ "id": "GO-2025-4004",
+ "modified": "2025-11-05T18:41:15Z",
+ "published": "2025-11-05T18:41:15Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/canonical/lxd/security/advisories/GHSA-w2hg-2v4p-vmh6"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Canonical LXD Arbitrary File Read via Template Injection in Snapshot Patterns in github.com/lxc/lxd"
+}

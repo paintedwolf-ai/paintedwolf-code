@@ -34,7 +34,7 @@ func (l *LoopEngine) CloseCompletedWorkflowWait(ctx context.Context, sessionID s
 		}
 	}
 	l.breakSleep(ctx, sessionID, "workflow_complete", false)
-	st := l.sleepState(sessionID)
+	st := l.sleep.state(sessionID)
 	st.mu.Lock()
 	st.waitThisTurn = false
 	st.mu.Unlock()

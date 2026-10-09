@@ -4,9 +4,13 @@ on:
   workflow_call:
     inputs:
       profile:
-        description: Catalog profile (fast, check, nightly, or release)
+        description: Catalog profile (fast, integration, check, nightly, or release)
         required: true
         type: string
+      affected:
+        description: Resolve the event change base and narrow integration lanes
+        default: false
+        type: boolean
       suite:
         description: Nightly suite selection
         default: all
@@ -27,13 +31,18 @@ jobs:
       matrix: ${{ steps.plan.outputs.matrix }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
       - name: Resolve verification jobs
         id: plan
         env:
           PROFILE: ${{ inputs.profile }}
           SUITE: ${{ inputs.suite }}
+          AFFECTED: ${{ inputs.affected }}
         run: |
-          matrix="$(python3 scripts/ci_verification.py matrix "$PROFILE" --suite "$SUITE")"
+          args=()
+          if [[ "$AFFECTED" == true ]]; then args+=(--affected); fi
+          matrix="$(python3 scripts/ci_verification.py matrix "$PROFILE" --suite "$SUITE" "${args[@]}")"
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
 
   verify:
@@ -50,6 +59,7 @@ jobs:
       # Hosted runners run one lane each, so admission may use every CPU.
       PW_TEST_HOST: dedicated
       SOAK: 10m
+      PW_CI_AFFECTED: ${{ inputs.affected && '1' || '0' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -70,7 +80,14 @@ jobs:
         env:
           LANE: ${{ matrix.lane }}
           SHARD: ${{ matrix.shard }}
-        run: python3 scripts/ci_verification.py run "$LANE" --shard "$SHARD"
+          OFFLINE: ${{ inputs.profile == 'integration' }}
+          PYTHONPATH: scripts
+        run: |
+          if [[ "$OFFLINE" == true ]]; then
+            python3 -m ci_policy.offline "$LANE" --shard "$SHARD"
+          else
+            python3 scripts/ci_verification.py run "$LANE" --shard "$SHARD"
+          fi
 
       - uses: ./.github/actions/verification-evidence
         if: always()

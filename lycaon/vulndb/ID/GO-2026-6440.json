@@ -1,0 +1,60 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/amir20/dozzle"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.29.1-0.20260804193351-8cf7ccd5ee04"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-73087",
+  "GHSA-p2w3-6x73-2f6x"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6440"
+ },
+ "details": "Dozzle: SSRF guard bypass via IPv6 transition addresses (6to4/NAT64/Teredo) in webhook notification dispatcher in github.com/amir20/dozzle",
+ "id": "GO-2026-6440",
+ "modified": "2026-09-10T14:48:42Z",
+ "published": "2026-09-10T14:48:42Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/amir20/dozzle/security/advisories/GHSA-p2w3-6x73-2f6x"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-73087"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/amir20/dozzle/commit/8cf7ccd5ee041ecaea92b49951793d4d2393761f"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/amir20/dozzle/pull/4887"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/amir20/dozzle/releases/tag/v10.6.15"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Dozzle: SSRF guard bypass via IPv6 transition addresses (6to4/NAT64/Teredo) in webhook notification dispatcher in github.com/amir20/dozzle"
+}

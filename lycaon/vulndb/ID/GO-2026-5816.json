@@ -1,0 +1,41 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/juev/nebula-mesh"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-49258",
+  "GHSA-c6v2-3ffm-vcmc"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5816"
+ },
+ "details": "Nebula Mesh: Web UI lacks ownership checks, enabling cross-operator access to hosts and networks (read, block, delete) in github.com/juev/nebula-mesh",
+ "id": "GO-2026-5816",
+ "modified": "2026-07-07T15:26:32Z",
+ "published": "2026-07-07T15:26:32Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/juev/nebula-mesh/security/advisories/GHSA-c6v2-3ffm-vcmc"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Nebula Mesh: Web UI lacks ownership checks, enabling cross-operator access to hosts and networks (read, block, delete) in github.com/juev/nebula-mesh"
+}

@@ -1,0 +1,6 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/toolhost/runtime.go",
+  "cap": 962,
+  "reason": "Past the limit before #356, which only rewires the status cache binding; the split is tracked in #363."
+}

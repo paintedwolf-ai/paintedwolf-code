@@ -1,0 +1,48 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/authzed/spicedb"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.47.1"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2025-65111",
+  "GHSA-9m7r-g8hg-x3vr"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2025-4151"
+ },
+ "details": "SpiceDB: LookupResources with Multiple Entrypoints across Different Definitions Can Return Incomplete Results in github.com/authzed/spicedb",
+ "id": "GO-2025-4151",
+ "modified": "2025-11-25T18:12:18Z",
+ "published": "2025-11-25T18:12:18Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/authzed/spicedb/security/advisories/GHSA-9m7r-g8hg-x3vr"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/authzed/spicedb/commit/8c2edbe1e7bd3851fa2138f4cc344bfde986dcf2"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "SpiceDB: LookupResources with Multiple Entrypoints across Different Definitions Can Return Incomplete Results in github.com/authzed/spicedb"
+}

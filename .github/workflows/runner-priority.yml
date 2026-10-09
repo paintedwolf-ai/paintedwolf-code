@@ -9,7 +9,7 @@ name: Runner priority
 on:
   # Merge groups and releases claim runners; finished groups free them.
   workflow_run:
-    workflows: [CI, release, release-halt, nightly, dependency inventory, release-system-live-test]
+    workflows: [CI, Qualification, release, release-halt, nightly, dependency inventory, release-system-live-test]
     types: [requested, completed]
   # Workflows cannot trigger on a merge group's removal or a job waiting for a
   # runner, so a periodic sweep covers what the events miss.

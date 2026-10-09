@@ -1,0 +1,49 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/free5gc/amf"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-42081",
+  "GHSA-77x9-rf64-92gv"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5209"
+ },
+ "details": "Free5GC AMF Bypasses UE Security Capabilities on NGAP PathSwitchRequest in github.com/free5gc/amf",
+ "id": "GO-2026-5209",
+ "modified": "2026-06-25T18:43:15Z",
+ "published": "2026-06-25T18:43:15Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/free5gc/free5gc/security/advisories/GHSA-77x9-rf64-92gv"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-42081"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/free5gc/amf/blame/v1.4.3/internal/ngap/handler.go"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Free5GC AMF Bypasses UE Security Capabilities on NGAP PathSwitchRequest in github.com/free5gc/amf"
+}

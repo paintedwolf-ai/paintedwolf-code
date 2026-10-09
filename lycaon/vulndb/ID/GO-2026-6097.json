@@ -1,0 +1,86 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/cloudreve/Cloudreve"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/cloudreve/Cloudreve/v3"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/cloudreve/Cloudreve/v4"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "4.0.0-20260613023150-7968e50429ef"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-55495",
+  "GHSA-49h3-cwhj-4737"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6097"
+ },
+ "details": "Cloudreve: Path Traversal in WOPI PUT_RELATIVE Allows Arbitrary File Creation in Owner Account in github.com/cloudreve/Cloudreve",
+ "id": "GO-2026-6097",
+ "modified": "2026-08-18T14:32:29Z",
+ "published": "2026-08-18T14:32:29Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/cloudreve/cloudreve/security/advisories/GHSA-49h3-cwhj-4737"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/cloudreve/cloudreve/commit/7968e50429efab40ffa8f57fecdfbd5a73d23630"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/cloudreve/cloudreve/releases/tag/4.17.0"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Cloudreve: Path Traversal in WOPI PUT_RELATIVE Allows Arbitrary File Creation in Owner Account in github.com/cloudreve/Cloudreve"
+}

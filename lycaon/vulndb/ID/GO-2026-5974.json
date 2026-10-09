@@ -1,0 +1,44 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/opencost/opencost"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.119.1"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-44300",
+  "GHSA-wmj8-9953-vff5"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5974"
+ },
+ "details": "OpenCost ServiceKey Endpoint Unauthorized Credential Overwrite/Injection in github.com/opencost/opencost",
+ "id": "GO-2026-5974",
+ "modified": "2026-07-17T19:42:05Z",
+ "published": "2026-07-17T19:42:05Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/opencost/opencost/security/advisories/GHSA-wmj8-9953-vff5"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "OpenCost ServiceKey Endpoint Unauthorized Credential Overwrite/Injection in github.com/opencost/opencost"
+}

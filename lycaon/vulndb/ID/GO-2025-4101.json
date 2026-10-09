@@ -1,0 +1,83 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/opentofu/opentofu"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.10.7"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "GHSA-w2jf-268q-mrvh"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2025-4101"
+ },
+ "details": "OpenTofu affected denials of service in \"tofu init\" with maliciously-crafted module package responses in github.com/opentofu/opentofu",
+ "id": "GO-2025-4101",
+ "modified": "2025-11-17T19:11:23Z",
+ "published": "2025-11-17T19:11:23Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/opentofu/opentofu/security/advisories/GHSA-w2jf-268q-mrvh"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/opentofu/opentofu/pull/3467"
+  },
+  {
+   "type": "REPORT",
+   "url": "https://github.com/opentofu/opentofu/issues/3458"
+  },
+  {
+   "type": "REPORT",
+   "url": "https://github.com/opentofu/opentofu/issues/3462"
+  },
+  {
+   "type": "REPORT",
+   "url": "https://github.com/opentofu/opentofu/issues/3464"
+  },
+  {
+   "type": "REPORT",
+   "url": "https://github.com/opentofu/opentofu/issues/3465"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/opentofu/opentofu/releases/tag/v1.10.7"
+  },
+  {
+   "type": "WEB",
+   "url": "https://www.cve.org/CVERecord?id=CVE-2025-58183"
+  },
+  {
+   "type": "WEB",
+   "url": "https://www.cve.org/CVERecord?id=CVE-2025-58185"
+  },
+  {
+   "type": "WEB",
+   "url": "https://www.cve.org/CVERecord?id=CVE-2025-58187"
+  },
+  {
+   "type": "WEB",
+   "url": "https://www.cve.org/CVERecord?id=CVE-2025-58188"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "OpenTofu affected denials of service in \"tofu init\" with maliciously-crafted module package responses in github.com/opentofu/opentofu"
+}

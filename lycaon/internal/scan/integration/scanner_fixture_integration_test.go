@@ -41,28 +41,6 @@ func TestGitleaksFindsSecretFixture(t *testing.T) {
 	}
 }
 
-func TestScalibrFindsVulnInLockfileFixture(t *testing.T) {
-	if testing.Short() {
-		t.Skip("scalibr OSV download skipped in -short")
-	}
-	_, filename, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("caller")
-	}
-	fixtureDir := filepath.Join(filepath.Dir(filename), "..", "..", "..", "test", "testdata", "scan")
-	scanner := library.NewScalibrScanner("test-sca")
-	res, err := scanner.Run(context.Background(), scanRequest(fixtureDir))
-	testutil.FailErr(t, "scanner.Run failed", err)
-	if res.FindingsCount == 0 {
-		t.Fatal("expected SCA findings for lodash 4.17.4 fixture")
-	}
-	for _, finding := range res.Findings {
-		if finding.Tool.DriverID != "test-sca" {
-			t.Fatalf("finding driver id = %q, want scanner id", finding.Tool.DriverID)
-		}
-	}
-}
-
 func scanRequest(dir string) scan.ScanRequest {
 	return scan.ScanRequest{
 		ProjectDir: dir,

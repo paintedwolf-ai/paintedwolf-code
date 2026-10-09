@@ -102,6 +102,9 @@ cleanup() {
 trap cleanup EXIT
 trap 'reap_test_group; exit 130' INT TERM
 
+# The document core builds into the user cache, which the run's isolated home would hide.
+# shellcheck source=document-core-env.sh
+source "${ROOT}/scripts/document-core-env.sh"
 test_run_create_isolation "den-test"
 RUN_DIR="${TEST_RUN_DIR}"
 export LAST_RUN_DIR="${RUN_DIR}"
@@ -113,8 +116,6 @@ TMP_OUT="${TMP_RAW%.json}.out"
 OUT_LOG="${RAW%.json}.out"
 TMP_OUTCOME="${TMP_RAW%.json}.outcome.json"
 OUTCOME_LOG="${RAW%.json}.outcome.json"
-# shellcheck source=document-core-env.sh
-source "${ROOT}/scripts/document-core-env.sh"
 
 cd "${DEN_DIR}"
 NCPU="$(test_host_cpu_count)"

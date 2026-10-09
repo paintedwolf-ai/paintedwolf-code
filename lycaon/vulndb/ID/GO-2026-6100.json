@@ -1,0 +1,86 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/cloudreve/Cloudreve"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/cloudreve/Cloudreve/v3"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/cloudreve/Cloudreve/v4"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "4.0.0-20260613024411-3607f79bb44c"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-55497",
+  "GHSA-g9j2-8w95-3vwv"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6100"
+ },
+ "details": "Cloudreve: Denial of Service - Image decompression / pixel bomb in thumbnail & avatar decoding crashes the server in github.com/cloudreve/Cloudreve",
+ "id": "GO-2026-6100",
+ "modified": "2026-08-18T14:32:29Z",
+ "published": "2026-08-18T14:32:29Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/cloudreve/cloudreve/security/advisories/GHSA-g9j2-8w95-3vwv"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/cloudreve/cloudreve/commit/3607f79bb44c35d0be4fa8b6e24c0502b51415a9"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/cloudreve/cloudreve/releases/tag/4.17.0"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Cloudreve: Denial of Service - Image decompression / pixel bomb in thumbnail & avatar decoding crashes the server in github.com/cloudreve/Cloudreve"
+}
