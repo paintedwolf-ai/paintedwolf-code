@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strconv"
 	"strings"
 	"time"
@@ -98,13 +99,23 @@ func (b *LoopbackCheckpointBroker) buildCard(in tools.LoopbackConnectAsk, invoki
 	summary := sandboxAskCommandSummary(in.Command)
 	label := loopbackGrantLabel(ports)
 	action := hitl.ProposedAction{
-		Tool: "loopback_connect", Args: map[string]any{"connect_ports": listenPortInts(ports)},
-		ProjectID: in.ProjectID, ProjectDir: in.ProjectDir, SessionID: invokingSessionID, RootSessionID: rootSessionID,
-		Contained: hitl.ContainedForAction(hitl.ActionConfineInputs{
+Invocation: hitl.ActionInvocation{
+Tool: "loopback_connect",
+Args: map[string]any{"connect_ports": listenPortInts(ports)},
+},
+Scope: hitl.ActionScope{
+ProjectID: in.ProjectID,
+ProjectDir: in.ProjectDir,
+SessionID: invokingSessionID,
+RootSessionID: rootSessionID,
+},
+Execution: hitl.ActionExecution{
+Contained: hitl.ContainedForAction(hitl.ActionConfineInputs{
 			ProjectID: in.ProjectID, Roots: projectRoots(in.ProjectDir),
 			LoopbackConnect: true, LoopbackConnectPorts: ports,
 		}),
-	}
+},
+}
 	grant := loopbackChatGrant(action)
 	options := portAuthorityLadder(
 		"approve_loopback_connect_once",
@@ -117,7 +128,7 @@ func (b *LoopbackCheckpointBroker) buildCard(in tools.LoopbackConnectAsk, invoki
 		if b.Authority == nil {
 			return false
 		}
-		_, live := b.Authority.AskQuietLive(action.ChatSession(), key)
+		_, live := b.Authority.AskQuietLive(action.Scope.ChatSession(), key)
 		return live
 	})...)
 	title := "Allow a local service connection"
@@ -134,7 +145,7 @@ func (b *LoopbackCheckpointBroker) buildCard(in tools.LoopbackConnectAsk, invoki
 		ConsequenceCode: string(api.ConsequenceCodeLoopbackConnect),
 	}, reasons, options, hitl.FaceContext{})
 	if err != nil {
-		return sandboxAskCard{}, tools.ApprovalPlanInvalid()
+		return sandboxAskCard{}, toolrejection.ApprovalPlanInvalid()
 	}
 	return composeSandboxSecretCard(sandboxAskCard{Action: action, Title: title, Plan: plan, Decision: decision}, in.SecretPermission)
 }
@@ -153,12 +164,12 @@ func loopbackGrantLabel(ports []uint16) string {
 func loopbackChatGrant(action hitl.ProposedAction) hitl.ApprovalGrant {
 	key := loopbackAxisKey
 	raw := strings.Join([]string{string(hitl.ApprovalGrantScopeChat), hitl.ApprovalGrantCategoryLoopbackConnect,
-		key, action.ChatSession()}, "\x00")
+		key, action.Scope.ChatSession()}, "\x00")
 	sum := sha256.Sum256([]byte(raw))
 	return hitl.ApprovalGrant{
 		ID: "grant_" + hex.EncodeToString(sum[:8]), Scope: hitl.ApprovalGrantScopeChat,
 		Predicate:     hitl.ApprovalGrantPredicate{Category: hitl.ApprovalGrantCategoryLoopbackConnect, Pattern: key},
-		ChatSessionID: action.ChatSession(), ProjectID: action.ProjectID, ProjectDir: action.ProjectDir,
+		ChatSessionID: action.Scope.ChatSession(), ProjectID: action.Scope.ProjectID, ProjectDir: action.Scope.ProjectDir,
 		Title: hitl.TitleAllowForThisChat, Coverage: "connections to local services in this chat",
 		GrantedAt: time.Now().UTC(), ExpiresWhen: hitl.ExpiresWhenChatDeleted,
 		ReaskWhen: "this chat is deleted", Source: "checkpoint",

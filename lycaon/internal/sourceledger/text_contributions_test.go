@@ -13,7 +13,7 @@ import (
 func TestContributionSelectionUsesIdentityKindAndRevision(t *testing.T) {
 	store, ctx := openLedger(t)
 	mustRecord(t, store, ctx, RecordInput{ProjectID: "p1", RootID: "r1", Path: "a.txt", Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser, OperationID: "create", After: []byte("base")})
-	head, err := store.ResolveHead(ctx, "p1", sourcebranch.Trunk, "r1", "a.txt")
+	head, err := store.History.ResolveHead(ctx, "p1", sourcebranch.Trunk, "r1", "a.txt")
 	testutil.FailErr(t, "resolve file", err)
 	person, err := store.people.HostOwner(ctx)
 	testutil.FailErr(t, "read contributing person", err)
@@ -26,7 +26,7 @@ func TestContributionSelectionUsesIdentityKindAndRevision(t *testing.T) {
 		testutil.FailErr(t, "record contribution", RecordTextContributionTx(ctx, tx, c))
 	}
 	testutil.FailErr(t, "commit contributions", tx.Commit())
-	selected, err := store.DocumentContributions(ctx, "document", 1, ContributionSelection{ThroughRevision: 500, Inserted: []TextSpan{{Client: 7, Clock: 42, Length: 1}, {Client: 7, Clock: 900, Length: 1}, {Client: 8, Clock: 42, Length: 1}}})
+	selected, err := store.Comparisons.DocumentContributions(ctx, "document", 1, ContributionSelection{ThroughRevision: 500, Inserted: []TextSpan{{Client: 7, Clock: 42, Length: 1}, {Client: 7, Clock: 900, Length: 1}, {Client: 8, Clock: 42, Length: 1}}})
 	testutil.FailErr(t, "select visible identity", err)
 	if len(selected) != 1 || selected[0].OperationID != "42" {
 		t.Fatalf("selected unrelated history: %+v", selected)

@@ -11,7 +11,7 @@ import (
 
 // WithSessionPanicRecovery repairs the affected session before writing a panic response.
 // Recovered panics stop here, avoiding a second response from router middleware.
-func (s *Handler) WithSessionPanicRecovery(next http.HandlerFunc) http.HandlerFunc {
+func (s *Recovery) WithSessionPanicRecovery(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		defer func(requestCtx context.Context) {
 			rec := recover()
@@ -21,7 +21,7 @@ func (s *Handler) WithSessionPanicRecovery(next http.HandlerFunc) http.HandlerFu
 			sessionID := strings.TrimSpace(chi.URLParam(r, "id"))
 			if sessionID != "" {
 				recoverCtx := context.WithoutCancel(requestCtx)
-				if err := s.Sessions.RecoverSession(recoverCtx, sessionID); err != nil {
+				if err := s.Sessions.Stops.Recovery.RecoverSession(recoverCtx, sessionID); err != nil {
 					s.responses.Logger.ErrorContext(recoverCtx, "scoped session recovery after panic failed",
 						"session_id", sessionID, "error", err)
 				}

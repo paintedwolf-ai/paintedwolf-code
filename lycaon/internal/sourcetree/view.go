@@ -47,7 +47,7 @@ func New(ctx context.Context, scope pagedview.Scope, roots []Root, catalog *sour
 		view.roots[root.ID] = root.Root
 		// An open view keeps its roots resident until its lifetime ends. A root
 		// that cannot be held fails the catalog reads the view makes instead.
-		if release, err := catalog.HoldRoot(lifetime, scope.Project, root.Root); err == nil {
+		if release, err := catalog.Trees.HoldRoot(lifetime, scope.Project, root.Root); err == nil {
 			context.AfterFunc(lifetime, release)
 		}
 	}
@@ -180,7 +180,7 @@ func (v *View) deriveBoundaries(ctx context.Context, rules *Rules) (bool, error)
 		if !ok {
 			continue
 		}
-		boundaries, ready, err := v.catalog.CollapseBoundaries(ctx, v.scope.Project, root, anchor.Path)
+		boundaries, ready, err := v.catalog.Directories.CollapseBoundaries(ctx, v.scope.Project, root, anchor.Path)
 		if err != nil {
 			return false, err
 		}
@@ -257,7 +257,7 @@ func (v *View) loadLocked(root sourcecatalog.Root, dir string) <-chan struct{} {
 func (v *View) load(root sourcecatalog.Root, dir string, done chan struct{}) {
 	defer v.workers.Done()
 	defer close(done)
-	_, _ = v.catalog.ObserveDirectory(v.ctx, v.scope.Project, root, dir, sourcecatalog.DirectoryRead{Priority: backgroundwork.PriorityInteractive})
+	_, _ = v.catalog.Directories.ObserveDirectory(v.ctx, v.scope.Project, root, dir, sourcecatalog.DirectoryRead{Priority: backgroundwork.PriorityInteractive})
 	v.mu.Lock()
 	delete(v.loading, Address{Root: root.ID, Path: dir})
 	v.mu.Unlock()

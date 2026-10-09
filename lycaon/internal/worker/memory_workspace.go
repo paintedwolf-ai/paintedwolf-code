@@ -58,7 +58,7 @@ func (q *InMemoryQueue) ClaimWorkerBranch(ctx context.Context, jobID string) (*a
 	if len(roots) == 0 {
 		return nil, ErrWorkerBranchClaimFailed
 	}
-	baseLease, err := q.holdBaseOverlay(ctx, &task)
+	baseLease, err := holdBaseOverlay(ctx, q, &task)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrWorkerBranchClaimFailed, err)
 	}
@@ -118,7 +118,7 @@ func transientBaselines(branchRoot string) *workspacebaseline.Store {
 	return workspacebaseline.New(nil, sourceblob.New(filepath.Join(baselineRoot, "source-content")), filepath.Join(baselineRoot, "worker-baselines"))
 }
 
-func (q *InMemoryQueue) captureOverlay(ctx context.Context, task *api.WorkerTask, projects ProjectStore) (string, error) {
+func captureOverlay(ctx context.Context, task *api.WorkerTask, projects ProjectStore) (string, error) {
 	// A branch with no recorded topology is a single-root tree.
 	roots := TaskRootRefs(ctx, task, projects)
 	captured, err := transientBaselines(task.WorkspaceRoot).CaptureOverlay(ctx, task.ID, task.WorkspaceBaselinePath, roots, task.WorkspaceRoot)
@@ -145,7 +145,7 @@ func (q *InMemoryQueue) EnsureWorkerBranch(ctx context.Context, jobID string) (*
 	return task, lease, nil
 }
 
-func (q *InMemoryQueue) holdBaseOverlay(ctx context.Context, task *api.WorkerTask) (*BranchLease, error) {
+func holdBaseOverlay(ctx context.Context, q *InMemoryQueue, task *api.WorkerTask) (*BranchLease, error) {
 	baseID := strings.TrimSpace(task.EffectiveScope().BaseOverlayID)
 	if baseID == "" {
 		return nil, nil
@@ -163,7 +163,7 @@ func (q *InMemoryQueue) holdBaseOverlay(ctx context.Context, task *api.WorkerTas
 
 // destroyWorkspaceRoot removes an isolated sandbox copy after a terminal
 // transition; a queue without a workspace manager leaves the path alone.
-func (q *InMemoryQueue) destroyWorkspaceRoot(jobID, root string) {
+func destroyWorkspaceRoot(q *InMemoryQueue, jobID, root string) {
 	if strings.TrimSpace(root) == "" {
 		return
 	}

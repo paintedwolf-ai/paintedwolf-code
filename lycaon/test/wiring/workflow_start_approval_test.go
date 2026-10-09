@@ -3,10 +3,10 @@ package wiring
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -20,11 +20,11 @@ func TestStateStartRequiresHumanApproval(t *testing.T) {
 	ctx := context.Background()
 
 	tctx := wiringToolContext(sess.ID, sess.WorkspacePath)
-	tctx.Agent = "coordinator"
+	tctx.Identity.Agent = "coordinator"
 	_, err = h.ToolRegistry.Run(ctx, "state_start", map[string]any{
 		"workflow_id": "plan", "workflow_version": "1.0.0",
 	}, tctx)
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "WORKFLOW_START_REQUIRES_HUMAN_APPROVAL" {
 		t.Fatalf("state_start err = %v, want WORKFLOW_START_REQUIRES_HUMAN_APPROVAL reject", err)
 	}
@@ -41,13 +41,13 @@ func TestStateStartAfterSlash(t *testing.T) {
 	}, dir)
 	testutil.FailErr(t, "create session in store", err)
 
-	_, handled, err := h.WorkflowMgr.TrySlashPrompt(context.Background(), sess.ID, "/plan", "")
-	testutil.FailErr(t, "h.WorkflowMgr.TrySlashPrompt failed", err)
+	_, handled, err := h.Workflows.Manager.Slash.TrySlashPrompt(context.Background(), sess.ID, "/plan", "")
+	testutil.FailErr(t, "h.Workflows.Manager.Slash.TrySlashPrompt failed", err)
 	if !handled {
 		t.Fatal("expected /plan handled")
 	}
-	active, err := h.WorkflowMgr.GetActive(context.Background(), sess.ID)
-	testutil.FailErr(t, "h.WorkflowMgr.GetActive failed", err)
+	active, err := h.Workflows.Manager.Store.Runs.ActiveBySession(context.Background(), sess.ID)
+	testutil.FailErr(t, "h.Workflows.Manager.GetActive failed", err)
 	if active.WorkflowID != "plan" {
 		t.Fatalf("workflow_id = %q", active.WorkflowID)
 	}

@@ -95,7 +95,7 @@ func contributionRanges(selection ContributionSelection) (string, error) {
 	return string(raw), err
 }
 
-func (s *Store) DocumentContributions(ctx context.Context, documentID string, epoch int64, selection ContributionSelection) ([]TextContribution, error) {
+func (s *Comparisons) DocumentContributions(ctx context.Context, documentID string, epoch int64, selection ContributionSelection) ([]TextContribution, error) {
 	raw, err := contributionRanges(selection)
 	if err != nil {
 		return nil, err

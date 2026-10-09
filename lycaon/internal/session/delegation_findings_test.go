@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/findings"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/workercontext"
+	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -55,15 +56,7 @@ func TestRecentSiblingNotesExcludesPriorRunFindings(t *testing.T) {
 	_, err = sqlDB.ExecContext(t.Context(), `INSERT INTO findings(session_id,agent,summary,ref,created_at) VALUES (?,?,?,?,?)`, root, "job-before", "contract before spawn", "module.go", time.Now().UTC().Add(-time.Minute).Format(time.RFC3339))
 	testutil.FailErr(t, "insert current batch contract", err)
 	spawnAt := time.Now().UTC()
-	m := &Manager{
-		store: transcript,
-		workerQueue: &stubSiblingTaskQueue{
-			byChild: map[string]*api.WorkerTask{
-				root: {ID: "job-b", CreatedAt: spawnAt},
-			},
-		},
-		findings: findingsStore,
-	}
+	m := workeroutcomes.NewNotes(transcript, findingsStore, &stubSiblingTaskQueue{byChild: map[string]*api.WorkerTask{root: {ID: "job-b", CreatedAt: spawnAt}}}, nil)
 
 	ctx := workercontext.WithJob(context.Background(), "job-b")
 	notes, _, err := m.RecentSiblingNotes(ctx, root, 0, 5)

@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/workerworkspace"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -37,10 +38,10 @@ func TestRewindResetsCoordinatorBatchAtTheNewBoundary(t *testing.T) {
 	testutil.FailErr(t, "create session", err)
 	AttachDefaultAmbient(t, h, ctx, sess.ID)
 
-	if _, err := h.SessionMgr.Prompt(ctx, sess.ID, "first ask"); err != nil {
+	if _, err := h.Sessions.Manager.Submissions.Prompt(ctx, sess.ID, "first ask"); err != nil {
 		testutil.FailErr(t, "first prompt", err)
 	}
-	if _, err := h.SessionMgr.Prompt(ctx, sess.ID, "second ask"); err != nil {
+	if _, err := h.Sessions.Manager.Submissions.Prompt(ctx, sess.ID, "second ask"); err != nil {
 		testutil.FailErr(t, "second prompt", err)
 	}
 
@@ -53,7 +54,7 @@ func TestRewindResetsCoordinatorBatchAtTheNewBoundary(t *testing.T) {
 
 	seqBefore := implementBatchSeq(t, h, ctx, sess.ID)
 
-	if _, err := h.SessionMgr.RewindToPrompt(ctx, uuid.NewString(), sess.ID, anchors[1], rewindDigest(t, h.SessionMgr, ctx, sess.ID, anchors[1])); err != nil {
+	if _, err := h.Sessions.Manager.Chats.Rewinds.RewindToPrompt(ctx, uuid.NewString(), sess.ID, anchors[1], rewindDigest(t, h.Sessions.Manager, ctx, sess.ID, anchors[1])); err != nil {
 		testutil.FailErr(t, "rewind to the second ask", err)
 	}
 
@@ -88,7 +89,7 @@ func TestRewindToFirstAskDropsSuffixCheckpoints(t *testing.T) {
 	AttachDefaultAmbient(t, h, ctx, sess.ID)
 
 	for _, prompt := range []string{"first ask", "second ask"} {
-		if _, err := h.SessionMgr.Prompt(ctx, sess.ID, prompt); err != nil {
+		if _, err := h.Sessions.Manager.Submissions.Prompt(ctx, sess.ID, prompt); err != nil {
 			testutil.FailErr(t, "prompt "+prompt, err)
 		}
 	}
@@ -96,7 +97,7 @@ func TestRewindToFirstAskDropsSuffixCheckpoints(t *testing.T) {
 	testutil.FailErr(t, "get messages", err)
 	anchors := visibleUserMessageIDs(t, msgs)
 
-	if _, err := h.SessionMgr.RewindToPrompt(ctx, uuid.NewString(), sess.ID, anchors[0], rewindDigest(t, h.SessionMgr, ctx, sess.ID, anchors[0])); err != nil {
+	if _, err := h.Sessions.Manager.Chats.Rewinds.RewindToPrompt(ctx, uuid.NewString(), sess.ID, anchors[0], rewindDigest(t, h.Sessions.Manager, ctx, sess.ID, anchors[0])); err != nil {
 		testutil.FailErr(t, "rewind to the first ask", err)
 	}
 
@@ -124,7 +125,7 @@ func implementState(t *testing.T, h *Harness, ctx context.Context, sessionID str
 	t.Helper()
 	sess, err := h.Store.Get(ctx, sessionID)
 	testutil.FailErr(t, "get session", err)
-	return h.SessionMgr.BuildImplementSessionState(ctx, sess)
+	return h.Sessions.Manager.Workers.State.ForSession(ctx, sess)
 }
 
 func implementBatchSeq(t *testing.T, h *Harness, ctx context.Context, sessionID string) int {
@@ -148,11 +149,11 @@ func TestRewindPastAWorkerDispatchLeavesNoGhostState(t *testing.T) {
 	testutil.FailErr(t, "create session", err)
 	AttachDefaultAmbient(t, h, ctx, sess.ID)
 
-	_, err = h.SessionMgr.Prompt(ctx, sess.ID, "first ask")
+	_, err = h.Sessions.Manager.Submissions.Prompt(ctx, sess.ID, "first ask")
 	testutil.FailErr(t, "prompt", err)
 	anchor := visibleUserMessageIDs(t, mustMessages(t, h, ctx, sess.ID))[0]
 
-	jobID, err := h.WorkerQueue.Enqueue(ctx, api.WorkerTask{
+	jobID, err := h.Delegations.Queue.Enqueue(ctx, api.WorkerTask{
 		ParentSessionID: sess.ID,
 		ProjectID:       sess.ProjectID,
 		WorkspacePath:   projectDir,
@@ -162,18 +163,18 @@ func TestRewindPastAWorkerDispatchLeavesNoGhostState(t *testing.T) {
 		Status:          api.WorkerStatusComplete,
 	})
 	testutil.FailErr(t, "enqueue worker", err)
-	touches := session.NewWorkerTouchLedger()
-	h.SessionMgr.SetWorkerTouchLedger(touches)
+	touches := workerworkspace.NewTouchLedger()
+	h.Sessions.Manager.Workers.Workspaces.SetTouchLedger(touches)
 	touches.RecordTouch(jobID, "src/leg.go")
-	if len(h.SessionMgr.WorkerTouchedPaths(jobID)) == 0 {
+	if len(h.Sessions.Manager.Workers.Workspaces.Touches.Paths(jobID)) == 0 {
 		t.Fatal("touch-ledger setup failed")
 	}
 
-	if _, err := h.SessionMgr.RewindToPrompt(ctx, uuid.NewString(), sess.ID, anchor, rewindDigest(t, h.SessionMgr, ctx, sess.ID, anchor)); err != nil {
+	if _, err := h.Sessions.Manager.Chats.Rewinds.RewindToPrompt(ctx, uuid.NewString(), sess.ID, anchor, rewindDigest(t, h.Sessions.Manager, ctx, sess.ID, anchor)); err != nil {
 		testutil.FailErr(t, "rewind past the dispatch", err)
 	}
 
-	if paths := h.SessionMgr.WorkerTouchedPaths(jobID); len(paths) != 0 {
+	if paths := h.Sessions.Manager.Workers.Workspaces.Touches.Paths(jobID); len(paths) != 0 {
 		t.Fatalf("touch ledger still holds %v for a job whose dispatch was rewound", paths)
 	}
 	// Pending-overlay state is derived from the transcript, so the truncate is
@@ -195,9 +196,9 @@ func mustMessages(t *testing.T, h *Harness, ctx context.Context, sessionID strin
 	return msgs
 }
 
-func rewindDigest(t *testing.T, mgr *session.Manager, ctx context.Context, sessionID, anchor string) string {
+func rewindDigest(t *testing.T, mgr *session.Host, ctx context.Context, sessionID, anchor string) string {
 	t.Helper()
-	preview, err := mgr.PreviewRewind(ctx, sessionID, anchor)
+	preview, err := mgr.Chats.Rewinds.PreviewRewind(ctx, sessionID, anchor)
 	testutil.FailErr(t, "preview rewind", err)
 	if len(preview.Issues) > 0 {
 		t.Fatalf("rewind issues: %+v", preview.Issues)

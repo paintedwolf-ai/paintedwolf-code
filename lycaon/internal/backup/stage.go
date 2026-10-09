@@ -223,7 +223,7 @@ func writeRecoveryCopy(ctx context.Context, opts StageOpts, recoveryDir string, 
 
 	for _, dir := range replaceRelDirs {
 		if dir == editoroutbox.Directory() {
-			if err := captureEditorOutbox(ctx, opts.ConfigDir, recoveryDir); err != nil {
+			if err := captureEditorOutbox(ctx, opts.ConfigDir, recoveryDir, nil); err != nil {
 				return err
 			}
 		}
@@ -624,7 +624,7 @@ func copyDurableRestoreFile(ctx context.Context, root, dest, src string) error {
 		}
 		return syncDirectoryTree(root, filepath.Dir(dest))
 	}
-	if err := copySnapshotRegular(ctx, src, dest, info.Mode().Perm()); err != nil {
+	if _, err := copySnapshotRegular(ctx, src, dest, info.Mode().Perm()); err != nil {
 		return err
 	}
 

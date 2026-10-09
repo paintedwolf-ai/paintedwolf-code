@@ -29,9 +29,13 @@ func credentialFilesContext(t *testing.T, files CredentialFiles) (ToolContext, s
 	t.Helper()
 	root := t.TempDir()
 	return ToolContext{
-		ProjectID: "project", SessionID: "session", RootSessionID: "root-session", ToolCallID: "call",
-		Roots:        []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}},
-		ActiveRootID: "root", CredentialFiles: files,
+		Identity: InvocationIdentity{ProjectID: "project",
+			SessionID:     "session",
+			RootSessionID: "root-session",
+			ToolCallID:    "call"},
+		Source: InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}},
+			ActiveRootID: "root"},
+		Effects: InvocationEffects{CredentialFiles: files},
 	}, root
 }
 
@@ -41,11 +45,11 @@ func TestRecordModelAuthoredCredentialsKeepsOnlyArgumentBytes(t *testing.T) {
 	files := &recordedCredentialFiles{}
 	tc, root := credentialFilesContext(t, files)
 	const reference = "{{paintedwolf-secret:6f0c7f3e-0d59-4a55-9d64-1b2a3c4d5e6f}}"
-	tc.CanonicalArgs = map[string]any{
+	tc.Effects.CanonicalArgs = map[string]any{
 		"path":    ".env",
 		"content": "OIDC_CLIENT_ID=todo-web-client\nSESSION_SECRET=" + reference + "\n",
 	}
-	tc.Secrets = secretcap.NewResolutionForTest(tc.CanonicalArgs, []secretcap.TestResolvedValue{
+	tc.Effects.Secrets = secretcap.NewResolutionForTest(tc.Effects.CanonicalArgs, []secretcap.TestResolvedValue{
 		{ID: "6f0c7f3e-0d59-4a55-9d64-1b2a3c4d5e6f", Name: "session secret", Value: "a0VBKPXTbWzsjo2Il49ko0ng", Path: "/content"},
 	})
 	landed := "OIDC_CLIENT_ID=todo-web-client\nSESSION_SECRET=a0VBKPXTbWzsjo2Il49ko0ng\n"
@@ -65,7 +69,7 @@ func TestRecordModelAuthoredCredentialsKeepsOnlyArgumentBytes(t *testing.T) {
 func TestRecordModelAuthoredCredentialsIgnoresOrdinaryFiles(t *testing.T) {
 	files := &recordedCredentialFiles{}
 	tc, root := credentialFilesContext(t, files)
-	tc.CanonicalArgs = map[string]any{"path": "config.txt", "content": "CLIENT_ID=todo-web-client\n"}
+	tc.Effects.CanonicalArgs = map[string]any{"path": "config.txt", "content": "CLIENT_ID=todo-web-client\n"}
 	tc.RecordModelAuthoredCredentials(context.Background(), filepath.Join(root, "config.txt"), []byte("CLIENT_ID=todo-web-client\n"))
 	if len(files.authored) != 0 {
 		t.Fatalf("a non-credential file recorded authorship: %+v", files.authored)

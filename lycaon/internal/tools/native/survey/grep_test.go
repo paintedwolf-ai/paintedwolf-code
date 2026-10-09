@@ -5,13 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 	"github.com/lycaon/lycaon/internal/tools/safecmd"
 )
@@ -165,7 +165,7 @@ func TestGrepToolStructuralInvalidPatternRejects(t *testing.T) {
 		"pattern":    "func (",
 		"structural": true,
 	}, nativefixture.Context(tmpDir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "STRUCTURAL_PATTERN_INVALID" {
 		t.Fatalf("want STRUCTURAL_PATTERN_INVALID reject, got %v", err)
 	}
@@ -179,7 +179,7 @@ func TestGrepToolStructuralUnknownLangRejects(t *testing.T) {
 		"structural": true,
 		"lang":       "klingon",
 	}, nativefixture.Context(tmpDir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "STRUCTURAL_LANG_UNKNOWN" {
 		t.Fatalf("want STRUCTURAL_LANG_UNKNOWN reject, got %v", err)
 	}
@@ -502,7 +502,7 @@ func TestGrepToolPathEscape(t *testing.T) {
 		"pattern": "x",
 		"path":    "../etc/passwd",
 	}, nativefixture.Context(t.TempDir()))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if err == nil || !errors.As(err, &reject) || reject.Code != "SURVEY_PATH_ESCAPE" {
 		t.Fatalf("err = %v want SURVEY_PATH_ESCAPE", err)
 	}
@@ -513,7 +513,7 @@ func TestGrepToolInvalidRegex(t *testing.T) {
 	_, err := tool.Run(context.Background(), map[string]any{
 		"pattern": "[unclosed",
 	}, nativefixture.Context(t.TempDir()))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if err == nil {
 		t.Fatal("expected regex invalid error")
 	}
@@ -527,7 +527,7 @@ func TestGrepToolPatternTooLong(t *testing.T) {
 	_, err := tool.Run(context.Background(), map[string]any{
 		"pattern": strings.Repeat("a", safecmd.GrepMaxPatternLen+1),
 	}, nativefixture.Context(t.TempDir()))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if err == nil {
 		t.Fatal("expected pattern budget error")
 	}
@@ -541,7 +541,7 @@ func TestGrepToolNestedQuantifierRejected(t *testing.T) {
 	_, err := tool.Run(context.Background(), map[string]any{
 		"pattern": `(a+)+`,
 	}, nativefixture.Context(t.TempDir()))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if err == nil {
 		t.Fatal("expected nested quantifier reject")
 	}

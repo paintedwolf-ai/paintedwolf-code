@@ -92,3 +92,12 @@ describe("SearchFilterMenu", () => {
     expect(screen.getByText("File patterns")).toBeTruthy();
   });
 });
+
+it("offers explicit dependency discovery and clears the option with filters", () => {
+ const change = vi.fn();
+ render(() => <SearchFilterMenu query="needle" facets={[]} onQueryChange={() => {}} include="" exclude="" onIncludeChange={() => {}} onExcludeChange={() => {}} includeDependencies={true} onIncludeDependenciesChange={change} />);
+ fireEvent.click(screen.getByTestId("search-include-dependencies"));
+ expect(change).toHaveBeenCalledWith(false);
+ fireEvent.click(screen.getByTestId("search-filter-clear"));
+ expect(change).toHaveBeenCalledTimes(2);
+});

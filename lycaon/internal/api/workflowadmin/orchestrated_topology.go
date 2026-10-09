@@ -11,7 +11,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Handler) StartOrchestratedTopologyForRun(ctx context.Context, sessionID string, run *wire.WorkflowRun) {
+func (s *Topology) StartOrchestratedTopologyForRun(ctx context.Context, sessionID string, run *wire.WorkflowRun) {
 	if s == nil || s.Orchestrator == nil || run == nil {
 		return
 	}
@@ -57,11 +57,11 @@ func (s *Handler) StartOrchestratedTopologyForRun(ctx context.Context, sessionID
 }
 
 // RecoverOrchestratedTopologies restarts settlement for durable running runs.
-func (s *Handler) RecoverOrchestratedTopologies(ctx context.Context) error {
+func (s *Topology) RecoverOrchestratedTopologies(ctx context.Context) error {
 	if s.Orchestrator == nil {
 		return nil
 	}
-	runs, err := s.Runs.ListRunning(ctx)
+	runs, err := s.Runs.Runs.ListRunning(ctx)
 	if err != nil {
 		return fmt.Errorf("list running workflow topologies: %w", err)
 	}

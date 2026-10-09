@@ -2,6 +2,8 @@ package contract
 
 import (
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/toolexecution"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -18,6 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
+	"github.com/lycaon/lycaon/internal/tools/native/command"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -34,12 +37,12 @@ func TestApprovedCommandPlanIsTheExecutedPlan(t *testing.T) {
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, profiles)
 	registry := tools.NewDefaultRegistry()
 	background := bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{})
-	command := &native.CommandTool{Runner: hostcmd.NewRunner(), Boundary: boundary, Background: background}
+	command := &command.CommandTool{Runner: hostcmd.NewRunner(), Boundary: boundary, Background: background}
 	verify := &native.VerifyTool{Runner: hostcmd.NewRunner(), Boundary: boundary, Background: background}
 	contractcheck.FailErr(t, "register command", registry.Register("command", command.Run))
 	contractcheck.FailErr(t, "register verify", registry.Register("verify", verify.Run))
 	gate := &recordingGate{}
-	executor := tools.NewDefaultToolExecutor(tools.NewApprovalPolicyEngine(tools.NewProfilePolicyEngine(boundary), gate), registry, "implement")
+	executor := toolexecution.NewExecutor(toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), gate), registry, "implement")
 
 	for _, tool := range []string{"command", "verify"} {
 		for _, tc := range commandPlanCorpus() {
@@ -52,10 +55,14 @@ func TestApprovedCommandPlanIsTheExecutedPlan(t *testing.T) {
 				contractcheck.FailErr(t, "resolve scratch", err)
 				before := snapshotTree(t, root)
 				ctx := tools.ToolContext{
-					Roots:        []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}},
-					ActiveRootID: "root", ProjectID: "project", SourceWorkspaceKind: api.SourceWorkspaceKindProject,
-					SessionID: "chat", ToolCallID: "call-" + tool, Agent: "implement",
-					SessionScratchDir: scratchDir,
+					Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}},
+						ActiveRootID:        "root",
+						SourceWorkspaceKind: api.SourceWorkspaceKindProject},
+					Identity: tools.InvocationIdentity{ProjectID: "project",
+						SessionID:  "chat",
+						ToolCallID: "call-" + tool,
+						Agent:      "implement"},
+					Host: tools.InvocationHost{SessionScratchDir: scratchDir},
 				}
 				gate.reset()
 				args := cloneArgs(tc.args).(map[string]any)

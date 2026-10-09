@@ -3,6 +3,7 @@ package httpaction
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolexecution"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -85,25 +86,29 @@ func TestSetupPermissionCoversRepeatedAuthenticatedServiceUse(t *testing.T) {
 	authority := settings.NewRuleApprovalGate(store, settings.NoSources())
 	review := &servicePermissionReview{t: t, authority: authority}
 	registry := tools.NewDefaultRegistry()
-	executor := tools.NewDefaultToolExecutor(nil, registry, "implement")
-	executor.SetCheckpointManager(review, authority)
+	executor := toolexecution.NewExecutor(nil, registry, "implement")
+	executor.Approvals.SetCheckpointManager(review, authority)
 	t.Cleanup(func() { confine.SetEgressResolver(nil) })
-	executor.SetSecretResolver(service)
+	executor.Secrets.SetSecretResolver(service)
 	matcher := testSecretMatcher(t)
-	executor.SetSecretMatcher(matcher)
-	executor.SetLoopbackConnectGate(review)
-	executor.SetSessionLoopbackGrant(review.SessionLoopbackGrant)
+	executor.Secrets.SetSecretMatcher(matcher)
+	executor.Capabilities.SetLoopbackConnectGate(review)
+	executor.Boundary.SetSessionLoopbackGrant(review.SessionLoopbackGrant)
 	testutil.FailErr(t, "register setup consumer", registry.Register("command", func(_ context.Context, args map[string]any, tc tools.ToolContext) (string, error) {
 		if !strings.Contains(args["command"].(string), value) {
 			t.Fatal("setup did not receive value")
 		}
-		if strings.Contains(tc.CanonicalArgs["command"].(string), value) {
+		if strings.Contains(tc.Effects.CanonicalArgs["command"].(string), value) {
 			t.Fatal("canonical setup leaked value")
 		}
 		return "service configured", nil
 	}))
 	testutil.FailErr(t, "register HTTP consumer", Register(registry, Deps{Boundary: testBoundary(), SecretMatcher: matcher, SecretAsk: executor.AskSecretScreen, Secrets: service}))
-	tc := tools.ToolContext{ProjectID: testdbseed.DefaultProjectID, SessionID: "task", ToolCallID: "setup"}
+	tc := tools.ToolContext{
+		Identity: tools.InvocationIdentity{ProjectID: testdbseed.DefaultProjectID,
+			SessionID:  "task",
+			ToolCallID: "setup"},
+	}
 	_, err = executor.Invoke(t.Context(), "command", map[string]any{
 		"command":    "setup --password " + meta.Reference,
 		"secret_use": map[string]any{"services": []any{server.URL}},
@@ -114,7 +119,7 @@ func TestSetupPermissionCoversRepeatedAuthenticatedServiceUse(t *testing.T) {
 	}
 	request := map[string]any{"method": "GET", "url": server.URL, "auth": map[string]any{"scheme": "basic", "username": "user", "password": meta.Reference}, "capability_request": loopbackCapability(t, server.URL)}
 	for i := range 3 {
-		tc.ToolCallID = fmt.Sprintf("request-%d", i)
+		tc.Identity.ToolCallID = fmt.Sprintf("request-%d", i)
 		_, err = executor.Invoke(t.Context(), "http_request", request, tc)
 		testutil.FailErr(t, "reuse service permission", err)
 	}
@@ -126,7 +131,7 @@ func TestSetupPermissionCoversRepeatedAuthenticatedServiceUse(t *testing.T) {
 	if !removed {
 		t.Fatal("secret permission missing from revocation inventory")
 	}
-	tc.ToolCallID = "after-revocation"
+	tc.Identity.ToolCallID = "after-revocation"
 	_, err = executor.Invoke(t.Context(), "http_request", request, tc)
 	testutil.FailErr(t, "review after revocation", err)
 	if review.cards != 2 {

@@ -2,14 +2,14 @@ package delegation
 
 import (
 	"context"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"testing"
-
-	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -19,7 +19,7 @@ func TestDelegateInitCreatesDelegation(t *testing.T) {
 	delStore := NewMemoryStore()
 	queue := worker.NewInMemoryQueue(2)
 	sessStore := store.NewMemory()
-	mgr := session.NewManager(sessStore, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(sessStore, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	delegationMgr := NewManager(delStore, queue, mgr, nil)
 	regProj := project.NewMemoryRegistry()
 	delegationMgr.Projects = regProj
@@ -36,10 +36,10 @@ func TestDelegateInitCreatesDelegation(t *testing.T) {
 	testutil.FailErr(t, "sessStore.Create failed", err)
 
 	raw, err := reg.Run(context.Background(), "delegate_init", map[string]any{"task": "ship it"}, tools.ToolContext{
-		ProjectID:    p.ID,
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}},
-		ActiveRootID: "r1",
-		SessionID:    sess.ID,
+		Identity: tools.InvocationIdentity{ProjectID: p.ID,
+			SessionID: sess.ID},
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}},
+			ActiveRootID: "r1"},
 	})
 	testutil.FailErr(t, "reg.Run failed", err)
 	if raw == "" {

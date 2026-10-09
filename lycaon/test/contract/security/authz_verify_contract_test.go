@@ -23,7 +23,7 @@ func TestBuildSessionWiresAuthzCapturer(t *testing.T) {
 	body := string(src)
 	for _, want := range []string{
 		"authzcontext.NewSQLCapturer",
-		"SetAuthzSealer",
+		"Authorization.SetSealer",
 		"SetAuthzRecorder",
 		"assertAuthzCapturer",
 	} {
@@ -36,7 +36,7 @@ func TestBuildSessionWiresAuthzCapturer(t *testing.T) {
 func TestAuthzSealNoSilentNilSkip(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	path := filepath.Join(root, "lycaon", "internal", "session", "authz_seal.go")
+	path := filepath.Join(root, "lycaon", "internal", "session", "authorization", "service.go")
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, path, nil, 0)
 	if err != nil {

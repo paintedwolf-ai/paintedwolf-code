@@ -3,11 +3,11 @@ package sourceview
 import (
 	"bytes"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/readcaps"
 	"github.com/lycaon/lycaon/internal/zstdcodec"
 )
@@ -40,7 +40,7 @@ func TestContentIngestionEnforcesObservedBytes(t *testing.T) {
 					}
 					continue
 				}
-				var reject *tools.ToolReject
+				var reject *toolrejection.ToolReject
 				if out != nil || !errors.As(err, &reject) || reject.Code != tc.code {
 					t.Fatalf("%s compressed=%v: partial/oversized content accepted: len=%d err=%v", tc.code, compressed, len(out), err)
 				}
@@ -57,11 +57,11 @@ func TestAccessBudgets(t *testing.T) {
 	if AccessRead.MaxBytes() != readcaps.MaxFileBytes || AccessMutate.MaxBytes() != readcaps.MaxMutationBytes {
 		t.Fatalf("budgets = %d/%d", AccessRead.MaxBytes(), AccessMutate.MaxBytes())
 	}
-	reject := tools.AsToolReject(MutationSizeReject("edit", "a.txt", 9))
+	reject := toolrejection.AsToolReject(MutationSizeReject("edit", "a.txt", 9))
 	if reject == nil || reject.Code != "EDIT_FILE_TOO_LARGE" || reject.Data["size"] != int64(9) || reject.Data["max_file_bytes"] != int64(readcaps.MaxMutationBytes) {
 		t.Fatalf("mutation reject = %#v", reject)
 	}
-	if _, measured := tools.AsToolReject(AccessRead.SizeReject("read", "a.txt", 0, 1)).Data["size"]; measured {
+	if _, measured := toolrejection.AsToolReject(AccessRead.SizeReject("read", "a.txt", 0, 1)).Data["size"]; measured {
 		t.Fatal("an unmeasured size must be omitted, not reported as zero")
 	}
 }

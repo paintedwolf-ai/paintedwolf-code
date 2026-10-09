@@ -4,8 +4,8 @@ package session_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/coordinator/turnload"
-	"github.com/lycaon/lycaon/internal/testutil/oartest"
+	"github.com/lycaon/lycaon/internal/toolexecution"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -13,15 +13,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/session/store"
-	"github.com/lycaon/lycaon/internal/settingsoverlay"
-	"github.com/lycaon/lycaon/internal/testdbfixture"
-	"github.com/lycaon/lycaon/internal/testdbseed"
-
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/config/configtest"
 	"github.com/lycaon/lycaon/internal/approvaloutcome"
 	"github.com/lycaon/lycaon/internal/authzcontext"
+	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/guidance"
@@ -33,8 +29,14 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/profiles"
+	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settingsoverlay"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/oartest"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -94,8 +96,8 @@ func TestPromptAskWriteApproveRunsTool(t *testing.T) {
 	}); err != nil {
 		testutil.FailErr(t, "register approval write fixture", err)
 	}
-	policy := tools.NewApprovalPolicyEngine(tools.NewProfilePolicyEngine(boundary), gate)
-	exec := tools.NewDefaultToolExecutor(policy, reg, "implement")
+	policy := toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), gate)
+	exec := toolexecution.NewExecutor(policy, reg, "implement")
 	hub := events.NewMemoryHub()
 	pub := &events.Publisher{Hub: hub}
 	hitlMgr := hitl.NewManager(hitl.NewSQLStore(sqlDB), pub, authzcontext.SQLRecorder(sqlDB))
@@ -103,26 +105,26 @@ func TestPromptAskWriteApproveRunsTool(t *testing.T) {
 	exec.SetCheckpointManager(hitlMgr, gate)
 	toolReg := tools.NewExecutorRegistry(exec, reg)
 
-	postureRegistry, err := session.LoadPostureRegistry()
-	testutil.FailErr(t, "session.LoadPostureRegistry failed", err)
-	mgr := session.NewManager(store, mock, toolReg, settings.DefaultSessionLimits())
+	postureRegistry, err := profiles.LoadPostureRegistry()
+	testutil.FailErr(t, "profiles.LoadPostureRegistry failed", err)
+	mgr := session.NewHost(store, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolReg)
 	oartest.InstallCloseoutPolicy(t, mgr)
 	mgr.SetProjectRegistry(project.NewSQLRegistry(sqlDB))
-	mgr.SetToolInvoker(exec)
+	mgr.Coordinator.Guards.SetToolMetadata(exec.Metadata)
 	wirePromptApprovalRejectFmt(t, mgr, root)
-	mgr.SetPostureRegistry(postureRegistry)
+	mgr.Profiles.SetPostureRegistry(postureRegistry)
 	prog := progress.NewMemoryStore()
 	mgr.SetProgressStore(prog)
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	recordRequestedLoad(t, store, sess.ID, "write")
-	mgr.SetTurnLoads(turnload.NewLedger())
+	mgr.Coordinator.Loading.SetLedger(turnload.NewLedger())
 	// Keep progress terminal so the write runs once.
 	prog.Set(sess.ID, "## Progress\n- [x] write blueprint stub\n")
 
 	done := make(chan error, 1)
 	go func() {
-		_, err := mgr.Prompt(ctx, sess.ID, "please write file")
+		_, err := mgr.Submissions.Prompt(ctx, sess.ID, "please write file")
 		done <- err
 	}()
 
@@ -212,8 +214,8 @@ func TestPromptAskWriteRejectSurfacesApprovalDenied(t *testing.T) {
 	}); err != nil {
 		testutil.FailErr(t, "register rejection write fixture", err)
 	}
-	policy := tools.NewApprovalPolicyEngine(tools.NewProfilePolicyEngine(boundary), gate)
-	exec := tools.NewDefaultToolExecutor(policy, reg, "implement")
+	policy := toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), gate)
+	exec := toolexecution.NewExecutor(policy, reg, "implement")
 	outcomeCfg, err := approvaloutcome.Load()
 	testutil.FailErr(t, "load approval-outcome catalog", err)
 	outcomes := outcomeRenderer{cat: approvaloutcome.NewCatalog(outcomeCfg)}
@@ -224,26 +226,26 @@ func TestPromptAskWriteRejectSurfacesApprovalDenied(t *testing.T) {
 	exec.SetCheckpointManager(hitlMgr, gate)
 	toolReg := tools.NewExecutorRegistry(exec, reg)
 
-	postureRegistry, err := session.LoadPostureRegistry()
-	testutil.FailErr(t, "session.LoadPostureRegistry failed", err)
-	mgr := session.NewManager(store, mock, toolReg, settings.DefaultSessionLimits())
+	postureRegistry, err := profiles.LoadPostureRegistry()
+	testutil.FailErr(t, "profiles.LoadPostureRegistry failed", err)
+	mgr := session.NewHost(store, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolReg)
 	oartest.InstallCloseoutPolicy(t, mgr)
 	mgr.SetProjectRegistry(project.NewSQLRegistry(sqlDB))
-	mgr.SetToolInvoker(exec)
+	mgr.Coordinator.Guards.SetToolMetadata(exec.Metadata)
 	wirePromptApprovalRejectFmt(t, mgr, root)
-	mgr.SetPostureRegistry(postureRegistry)
+	mgr.Profiles.SetPostureRegistry(postureRegistry)
 	prog := progress.NewMemoryStore()
 	mgr.SetProgressStore(prog)
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	recordRequestedLoad(t, store, sess.ID, "write")
-	mgr.SetTurnLoads(turnload.NewLedger())
+	mgr.Coordinator.Loading.SetLedger(turnload.NewLedger())
 	// Keep progress terminal so the write runs once.
 	prog.Set(sess.ID, "## Progress\n- [x] write blueprint stub\n")
 
 	done := make(chan error, 1)
 	go func() {
-		_, err := mgr.Prompt(ctx, sess.ID, "please write file")
+		_, err := mgr.Submissions.Prompt(ctx, sess.ID, "please write file")
 		done <- err
 	}()
 
@@ -306,7 +308,7 @@ func (o outcomeRenderer) ApprovalOutcome(code string, ctx map[string]any) string
 	return o.cat.Message(code, ctx)
 }
 
-func wirePromptApprovalRejectFmt(t *testing.T, mgr *session.Manager, root string) {
+func wirePromptApprovalRejectFmt(t *testing.T, mgr *session.Host, root string) {
 	t.Helper()
 	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
 	hintCfg, err := guidance.LoadHintConfigStock()

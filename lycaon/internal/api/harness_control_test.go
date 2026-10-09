@@ -5,11 +5,15 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/hitl"
+	"github.com/lycaon/lycaon/internal/llm"
+	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/session/store"
@@ -20,7 +24,7 @@ import (
 func TestHarnessControlsRegisterWithoutManualLLM(t *testing.T) {
 	t.Setenv(configdir.EnvDev, "1")
 	t.Setenv(configdir.EnvHarness, "1")
-	srv := NewServer(requiredTestDeps(t, Dependencies{Store: store.NewMemory()}), nil, "harness-test-token")
+	srv := NewServer(requiredTestDeps(t, Dependencies{Core: CoreDependencies{Store: store.NewMemory()}}), nil, "harness-test-token")
 
 	for _, path := range []string{"/harness/overlays", "/harness/upgrade-history"} {
 		fixture := httptest.NewRecorder()
@@ -53,7 +57,7 @@ func TestHarnessPreviewPublishesThroughProjectEventHub(t *testing.T) {
 	testutil.FailErr(t, "subscribe project events", err)
 	defer unsubscribe()
 
-	srv := NewServer(requiredTestDeps(t, Dependencies{Projects: projects, Store: sessions, EventPublisher: &events.Publisher{Hub: hub}}), nil, "harness-test-token")
+	srv := NewServer(requiredTestDeps(t, Dependencies{Core: CoreDependencies{Projects: projects, Store: sessions}, Host: HostDependencies{EventPublisher: &events.Publisher{Hub: hub}}}), nil, "harness-test-token")
 	payload, err := json.Marshal(wire.PreviewEvent{
 		Op: wire.PreviewEventOpAttach, SessionID: sess.ID, PageID: "page-1", Seq: 1,
 	})
@@ -75,7 +79,7 @@ func TestHarnessPreviewPublishesThroughProjectEventHub(t *testing.T) {
 func TestHarnessControlsStayAbsentWithoutExplicitHarness(t *testing.T) {
 	t.Setenv(configdir.EnvDev, "1")
 	t.Setenv(configdir.EnvHarness, "")
-	srv := NewServer(requiredTestDeps(t, Dependencies{Store: store.NewMemory()}), nil, TestAPIToken)
+	srv := NewServer(requiredTestDeps(t, Dependencies{Core: CoreDependencies{Store: store.NewMemory()}}), nil, TestAPIToken)
 
 	for _, path := range []string{"/harness/overlays", "/harness/upgrade-history"} {
 		recorder := httptest.NewRecorder()
@@ -123,5 +127,49 @@ func TestHarnessSecretSeedDerivesFactsFromTheSurface(t *testing.T) {
 		if cpReq.Explanation == nil || cpReq.Explanation.What == "" {
 			t.Errorf("%s: seeded card has no impact sentence", tc.surface)
 		}
+	}
+}
+
+func TestHarnessResponsePreservesProviderStreamFailure(t *testing.T) {
+	provider := llm.NewManualProvider()
+	provider.SetAuto(false, "")
+	stream, err := provider.Stream(t.Context(), modelcall.CompletionRequest{})
+	testutil.FailErr(t, "start manual stream", err)
+	pending, ok := provider.Pending(t.Context(), "", time.Second)
+	if !ok {
+		t.Fatal("manual request was not pending")
+	}
+	body, err := json.Marshal(map[string]any{
+		"id": pending.ID,
+		"stream_chunks": []map[string]any{
+			{"content": "partial response"},
+			{"error": "fixture provider disconnected", "done": true},
+		},
+	})
+	testutil.FailErr(t, "encode failed response", err)
+	server := NewServer(requiredTestDeps(t, Dependencies{Core: CoreDependencies{Store: store.NewMemory()}, Harness: HarnessDependencies{ManualLLM: provider}}), nil, "harness-test-token")
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/harness/llm/respond", strings.NewReader(string(body)))
+	request.Header.Set("Content-Type", "application/json")
+	server.Routes.HarnessControl.handleHarnessLLMRespond(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("response = %d: %s", response.Code, response.Body.String())
+	}
+	first := <-stream
+	if first.Content != "partial response" || first.Err != nil || first.Done {
+		t.Fatalf("partial chunk = %+v", first)
+	}
+	last := <-stream
+	if last.Err == nil || last.Err.Error() != "fixture provider disconnected" || !last.Done {
+		t.Fatalf("terminal chunk = %+v", last)
+	}
+	if _, open := <-stream; open {
+		t.Fatal("failed stream stayed open")
+	}
+	if _, pending := provider.Pending(t.Context(), "", 0); pending {
+		t.Fatal("failed stream retained its pending request")
+	}
+	if err := provider.RespondWithChunks(pending.ID, "duplicate", nil, nil); err == nil {
+		t.Fatal("settled failure accepted a second response")
 	}
 }

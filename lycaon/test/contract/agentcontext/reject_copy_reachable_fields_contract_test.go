@@ -1,6 +1,8 @@
 package contract
 
 import (
+	"github.com/lycaon/lycaon/internal/toolrejection"
+
 	"fmt"
 	"path/filepath"
 	"regexp"
@@ -11,7 +13,6 @@ import (
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolschema"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -210,7 +211,7 @@ func TestCommandSurfaceRejectRoutesStayInsideTheirSelector(t *testing.T) {
 	routed := 0
 	for _, tool := range toolNames {
 		for label, surfaceErr := range surfaceErrors {
-			rej := tools.CommandSurfaceObservation(tool, "implement",
+			rej := toolrejection.CommandSurfaceObservation(tool, "implement",
 				"go test ./... | head", map[string]any{"command": "go test ./... | head"}, idx.fieldsFor(tool), surfaceErr)
 			if rej == nil {
 				continue

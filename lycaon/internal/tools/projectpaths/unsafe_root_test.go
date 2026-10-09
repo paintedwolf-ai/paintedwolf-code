@@ -3,6 +3,7 @@ package projectpaths_test
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"testing"
 
@@ -14,10 +15,10 @@ import (
 
 func TestProjectPathBoundariesRefuseUnsafeAttachedRoot(t *testing.T) {
 	tctx := tools.ToolContext{
-		Roots: []projectroot.RootRef{{
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{
 			ID: "root", Label: "root", Path: string(filepath.Separator), IsPrimary: true,
 		}},
-		ActiveRootID: "root",
+			ActiveRootID: "root"},
 	}
 	checks := map[string]func() error{
 		"read": func() error {
@@ -40,7 +41,7 @@ func TestProjectPathBoundariesRefuseUnsafeAttachedRoot(t *testing.T) {
 	for name, check := range checks {
 		t.Run(name, func(t *testing.T) {
 			err := check()
-			var reject *tools.ToolReject
+			var reject *toolrejection.ToolReject
 			if !errors.As(err, &reject) || reject.Code != "SANDBOX_CAPABILITY_REQUEST_INVALID" {
 				t.Fatalf("error = %v, want SANDBOX_CAPABILITY_REQUEST_INVALID ToolReject", err)
 			}

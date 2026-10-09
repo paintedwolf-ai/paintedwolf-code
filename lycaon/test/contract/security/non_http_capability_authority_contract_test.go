@@ -2,6 +2,7 @@ package contract
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -36,7 +37,7 @@ func TestNonHTTPContractRawCapabilityRequestCannotReachConfineWithoutPermit(t *t
 func TestNonHTTPContractSocketAndDirectToolBoundaries(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	sock := contractcheck.ReadRepoFile(t, root, "lycaon/internal/tools/socket_capability.go")
+	sock := contractcheck.ReadRepoFile(t, root, "lycaon/internal/toolexecution/socket_capability.go")
 	fn := mustFindFunc(t, sock, "socket_capability.go", "preflightSocketCapability")
 	body := sock[fn.Body.Pos()-1 : fn.Body.End()]
 	if !strings.Contains(body, "toolcontract.CapabilitySocket") || !strings.Contains(body, "toolcontract.CapabilityDirectIP") {
@@ -45,14 +46,14 @@ func TestNonHTTPContractSocketAndDirectToolBoundaries(t *testing.T) {
 	if !strings.Contains(body, "isolation.CodeDirectIPRequestInvalid") {
 		t.Fatal("socket-only invocations must reject direct_ip capability_request")
 	}
-	boundarySource := contractcheck.ReadRepoFile(t, root, "lycaon/internal/tools/invocation_boundary.go")
+	boundarySource := contractcheck.ReadRepoFile(t, root, "lycaon/internal/toolexecution/invocation_boundary.go")
 	boundary := mustFindFunc(t, boundarySource, "invocation_boundary.go", "applyPreInvokeBoundary")
 	boundaryBody := boundarySource[boundary.Body.Pos()-1 : boundary.Body.End()]
 	if !strings.Contains(boundaryBody, "preflightSocketCapability") {
 		t.Fatal("pre-invoke boundary must run socket capability preflight")
 	}
 
-	direct := contractcheck.ReadRepoFile(t, root, "lycaon/internal/tools/direct_ip_capability.go")
+	direct := contractcheck.ReadRepoFile(t, root, "lycaon/internal/toolexecution/direct_ip_capability.go")
 	dfn := mustFindFunc(t, direct, "direct_ip_capability.go", "preflightDirectIPCapability")
 	dbody := direct[dfn.Body.Pos()-1 : dfn.Body.End()]
 	if !strings.Contains(dbody, "toolcontract.CapabilityDirectIP") {
@@ -96,7 +97,7 @@ func TestNonHTTPContractCurrentPermitsNonserializableAndCallBound(t *testing.T) 
 	if strings.Contains(socketRT, "type SocketPermit struct") || strings.Contains(directRT, "type DirectIPPermit struct") {
 		t.Fatal("runtime must not retain dead exported permit DTOs")
 	}
-	finalize := contractcheck.ReadRepoFile(t, root, "lycaon/internal/tools/direct_ip_capability.go")
+	finalize := contractcheck.ReadRepoFile(t, root, "lycaon/internal/tools/direct_ip_spawn.go")
 	if !strings.Contains(finalize, "FinalizeDirectIPForSpawn") || !strings.Contains(finalize, "ConsumePermit") {
 		t.Fatal("direct spawn must consume current-call permit")
 	}
@@ -113,15 +114,23 @@ func TestNonHTTPContractTypedAuthResolvesOnlyMatchingSubstrate(t *testing.T) {
 	approvals := settings.NewRuleApprovalGate(store, settings.NoSources())
 
 	socketOnly := hitl.ProposedAction{
-		Tool:       "command",
-		ProjectDir: proj,
-		Args:       map[string]any{"command": "true"},
-		Contained: hitl.Contained{
-			FSJailed: true, Egress: hitl.ContainedEgressProxy, Roots: []string{proj},
-			SocketPathsDigest: digest, SocketCount: 1,
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+			Args: map[string]any{"command": "true"},
 		},
-		SocketGrants:            []confine.SocketGrant{g},
-		AuthorizedSocketDigests: []string{digest},
+		Scope: hitl.ActionScope{
+			ProjectDir: proj,
+		},
+		Execution: hitl.ActionExecution{
+			Contained: hitl.Contained{
+				FSJailed: true, Egress: hitl.ContainedEgressProxy, Roots: []string{proj},
+				SocketPathsDigest: digest, SocketCount: 1,
+			},
+		},
+		Sockets: hitl.ActionSockets{
+			SocketGrants:            []confine.SocketGrant{g},
+			AuthorizedSocketDigests: []string{digest},
+		},
 	}
 	res, err := approvals.Evaluate(context.Background(), socketOnly)
 	contractcheck.FailErr(t, "evaluate authorized socket", err)
@@ -130,7 +139,7 @@ func TestNonHTTPContractTypedAuthResolvesOnlyMatchingSubstrate(t *testing.T) {
 	}
 
 	unauthSocket := socketOnly
-	unauthSocket.AuthorizedSocketDigests = nil
+	unauthSocket.Sockets.AuthorizedSocketDigests = nil
 	res, err = approvals.Evaluate(context.Background(), unauthSocket)
 	contractcheck.FailErr(t, "evaluate unauthorized socket", err)
 	if res.Gate() != api.GateUnobservedChannel {
@@ -138,11 +147,17 @@ func TestNonHTTPContractTypedAuthResolvesOnlyMatchingSubstrate(t *testing.T) {
 	}
 
 	direct := hitl.ProposedAction{
-		Tool:       "command",
-		ProjectDir: proj,
-		Args:       map[string]any{"command": "true"},
-		Contained: hitl.Contained{
-			FSJailed: true, Egress: hitl.ContainedEgressDirectIP, DirectIP: true, Roots: []string{proj},
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+			Args: map[string]any{"command": "true"},
+		},
+		Scope: hitl.ActionScope{
+			ProjectDir: proj,
+		},
+		Execution: hitl.ActionExecution{
+			Contained: hitl.Contained{
+				FSJailed: true, Egress: hitl.ContainedEgressDirectIP, DirectIP: true, Roots: []string{proj},
+			},
 		},
 	}
 	res, err = approvals.Evaluate(context.Background(), direct)
@@ -152,7 +167,7 @@ func TestNonHTTPContractTypedAuthResolvesOnlyMatchingSubstrate(t *testing.T) {
 	}
 
 	directWithSocketAuth := direct
-	directWithSocketAuth.AuthorizedSocketDigests = []string{digest}
+	directWithSocketAuth.Sockets.AuthorizedSocketDigests = []string{digest}
 	res, err = approvals.Evaluate(context.Background(), directWithSocketAuth)
 	contractcheck.FailErr(t, "evaluate direct ip with socket auth", err)
 	if res.Gate() != api.GateUnobservedChannel {
@@ -160,7 +175,7 @@ func TestNonHTTPContractTypedAuthResolvesOnlyMatchingSubstrate(t *testing.T) {
 	}
 
 	authorizedDirect := direct
-	authorizedDirect.AuthorizedDirectIP = true
+	authorizedDirect.Egress.AuthorizedDirectIP = true
 	res, err = approvals.Evaluate(context.Background(), authorizedDirect)
 	contractcheck.FailErr(t, "evaluate authorized direct ip", err)
 	if !res.AutoApproved() {
@@ -172,7 +187,7 @@ func TestNonHTTPContractDirectAndExecutionSocketOfferScopes(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
 	// Direct IP does not offer reusable approval scopes.
-	direct := contractcheck.ReadRepoFile(t, root, "lycaon/internal/tools/direct_ip_capability.go")
+	direct := contractcheck.ReadRepoFile(t, root, "lycaon/internal/toolexecution/direct_ip_capability.go")
 	for _, banned := range []string{
 		"ApprovalGrantScopeChat", "ApprovalGrantScopeProject", "ApprovalGrantScopeDevice",
 		"ApprovalGrantOffer{", "capability_scope_choices",
@@ -226,7 +241,7 @@ func TestNonHTTPContractSettingsDurableSocketUsesSharedResolver(t *testing.T) {
 
 func TestNonHTTPContractNeverAskStandsDownAsksKeepsValidationAndRecords(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
-	sock := contractcheck.ReadRepoFile(t, root, "lycaon/internal/tools/socket_capability.go")
+	sock := contractcheck.ReadRepoFile(t, root, "lycaon/internal/toolexecution/socket_capability.go")
 	fn := mustFindFunc(t, sock, "socket_capability.go", "preflightSocketCapability")
 	body := sock[fn.Body.Pos()-1 : fn.Body.End()]
 	if !strings.Contains(body, "approvalsDisabled") || !strings.Contains(body, "IssuePermit") {
@@ -239,7 +254,7 @@ func TestNonHTTPContractNeverAskStandsDownAsksKeepsValidationAndRecords(t *testi
 		t.Fatal("never_ask must not skip socket path validation/resolution")
 	}
 
-	direct := contractcheck.ReadRepoFile(t, root, "lycaon/internal/tools/direct_ip_capability.go")
+	direct := contractcheck.ReadRepoFile(t, root, "lycaon/internal/toolexecution/direct_ip_capability.go")
 	dfn := mustFindFunc(t, direct, "direct_ip_capability.go", "preflightDirectIPCapability")
 	dbody := direct[dfn.Body.Pos()-1 : dfn.Body.End()]
 	if !strings.Contains(dbody, "approvalsDisabled") || !strings.Contains(dbody, "IssuePermit") {
@@ -258,7 +273,7 @@ func TestNonHTTPContractNeverAskStandsDownAsksKeepsValidationAndRecords(t *testi
 		t.Fatal("egress deny rules must run before approval stand-down")
 	}
 
-	parse := contractcheck.ReadRepoFile(t, root, "lycaon/internal/tools/capability_request.go")
+	parse := contractcheck.ReadRepoFile(t, root, "lycaon/internal/capabilityrequest/capability_request.go")
 	if !strings.Contains(parse, "ParseCapabilityRequest") || !strings.Contains(parse, "unsupported capability_request field") {
 		t.Fatal("structured validation must remain independent of never_ask")
 	}
@@ -268,6 +283,9 @@ func TestNonHTTPContractNoStderrProseProgramSocketNameInference(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
 	dirs := []string{
 		filepath.Join(root, "lycaon", "internal", "tools"),
+		filepath.Join(root, "lycaon", "internal", "toolexecution"),
+		filepath.Join(root, "lycaon", "internal", "capabilityrequest"),
+		filepath.Join(root, "lycaon", "internal", "capabilitygrants"),
 		filepath.Join(root, "lycaon", "internal", "session"),
 		filepath.Join(root, "lycaon", "internal", "confine"),
 	}

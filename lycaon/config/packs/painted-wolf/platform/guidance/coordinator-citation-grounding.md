@@ -5,6 +5,8 @@ Emit only the citations fence; the host keeps the pinned body. Attempt {{ attemp
 Rejected: {{ offenders_sample }}
 Observed handles: {{ observed_handles_sample }}
 Observed paths: {{ observed_paths_sample }}
+Observed URLs: {{ observed_urls_sample }}
+URLs printed by commands are output, not observed web pages. Cite the command handle for its recorded outcome; do not put output URLs in `cited_urls`.
 
 Keep accepted citations. Copy exact handles; do not construct a handle from a tool name or call count. An explicit handle cites the captured observation, even when `superseded_by` names newer file evidence. Use the newer observation for current file contents. Git and command receipts remain evidence of their recorded outcomes after files change.
 {% if repair_observations %}

@@ -1,6 +1,8 @@
 package contract
 
 import (
+	"github.com/lycaon/lycaon/internal/toolexecution"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"path/filepath"
 	"slices"
 	"testing"
@@ -14,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
+	"github.com/lycaon/lycaon/internal/tools/native/command"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -28,15 +31,15 @@ func TestCommandRedirectTargetsAreReviewedLikeNativeWrites(t *testing.T) {
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, profiles)
 	registry := tools.NewDefaultRegistry()
 	background := bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{})
-	command := &native.CommandTool{Runner: hostcmd.NewRunner(), Boundary: boundary, Background: background}
+	command := &command.CommandTool{Runner: hostcmd.NewRunner(), Boundary: boundary, Background: background}
 	verify := &native.VerifyTool{Runner: hostcmd.NewRunner(), Boundary: boundary, Background: background}
 	contractcheck.FailErr(t, "register command", registry.Register("command", command.Run))
 	contractcheck.FailErr(t, "register verify", registry.Register("verify", verify.Run))
 	recorder := &recordingGate{}
-	executor := tools.NewDefaultToolExecutor(tools.NewApprovalPolicyEngine(tools.NewProfilePolicyEngine(boundary), recorder), registry, "implement")
+	executor := toolexecution.NewExecutor(toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), recorder), registry, "implement")
 	// Prepared changes reach the gate the executor was given; the recorder
 	// never asks, so no checkpoint manager is needed.
-	executor.SetCheckpointManager(nil, recorder)
+	executor.Approvals.SetCheckpointManager(nil, recorder)
 	store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "approvals.yaml"))
 	contractcheck.FailErr(t, "approval store", err)
 	realGate := settings.NewRuleApprovalGate(store, settings.NoSources())
@@ -51,9 +54,14 @@ func TestCommandRedirectTargetsAreReviewedLikeNativeWrites(t *testing.T) {
 			before := snapshotTree(t, root)
 			recorder.reset()
 			_, err = executor.Invoke(t.Context(), tool, cloneArgs(tc.args).(map[string]any), tools.ToolContext{
-				Roots:        []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}},
-				ActiveRootID: "root", ProjectID: "project", SourceWorkspaceKind: api.SourceWorkspaceKindProject,
-				SessionID: "chat", ToolCallID: "call-" + tool, Agent: "implement", SessionScratchDir: t.TempDir(),
+				Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}},
+					ActiveRootID:        "root",
+					SourceWorkspaceKind: api.SourceWorkspaceKindProject},
+				Identity: tools.InvocationIdentity{ProjectID: "project",
+					SessionID:  "chat",
+					ToolCallID: "call-" + tool,
+					Agent:      "implement"},
+				Host: tools.InvocationHost{SessionScratchDir: t.TempDir()},
 			})
 			contractcheck.FailErr(t, tool+" "+tc.name, err)
 
@@ -67,7 +75,7 @@ func TestCommandRedirectTargetsAreReviewedLikeNativeWrites(t *testing.T) {
 				credential := filepath.Join(filepath.Dir(written), ".env")
 				asCommand := retarget(review, credential)
 				asWrite := retarget(review, credential)
-				asWrite.Tool, asWrite.Args = "write", map[string]any{"path": credential, "content": ""}
+				asWrite.Invocation.Tool, asWrite.Invocation.Args = "write", map[string]any{"path": credential, "content": ""}
 				commandResult, err := realGate.Evaluate(t.Context(), asCommand)
 				contractcheck.FailErr(t, "evaluate command review", err)
 				writeResult, err := realGate.Evaluate(t.Context(), asWrite)
@@ -100,15 +108,16 @@ func changeReviewFor(g *recordingGate, tool, path string) (hitl.ProposedAction, 
 			return action, true
 		}
 	}
-	return hitl.ProposedAction{}, false
+	return hitl.ProposedAction{
+}, false
 }
 
 // retarget points a recorded review at another file of the same root.
 func retarget(action hitl.ProposedAction, path string) hitl.ProposedAction {
 	out := action
-	out.Files, out.ResolvedFiles = []string{path}, []string{fspath.CanonicalPath(path)}
-	out.FileChanges = []api.ApprovalFileChange{{Path: path, Operation: "write"}}
-	out.AgentPolicy = nil
+	out.Invocation.Files, out.Invocation.ResolvedFiles = []string{path}, []string{fspath.CanonicalPath(path)}
+	out.Mutations.FileChanges = []api.ApprovalFileChange{{Path: path, Operation: "write"}}
+	out.Mutations.AgentPolicy = nil
 	return out
 }
 

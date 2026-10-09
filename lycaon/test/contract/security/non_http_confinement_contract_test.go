@@ -225,44 +225,50 @@ func shortUnixTempDir(t *testing.T) string {
 func TestNonHTTPContractWitnessAndGrantKeyVaryWithBoundary(t *testing.T) {
 	t.Parallel()
 	base := hitl.ProposedAction{
-		Tool:       "command",
-		ProjectDir: "/proj",
-		Args:       map[string]any{"command": "true"},
-		Contained: hitl.Contained{
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": "true"},
+},
+Scope: hitl.ActionScope{
+ProjectDir: "/proj",
+},
+Execution: hitl.ActionExecution{
+Contained: hitl.Contained{
 			FSJailed: true,
 			Egress:   hitl.ContainedEgressProxy,
 			Roots:    []string{"/proj"},
 		},
-	}
+},
+}
 	k0 := hitl.GrantKey(base)
 
 	withRoot := base
-	withRoot.Contained.Roots = []string{"/proj", "/other"}
+	withRoot.Execution.Contained.Roots = []string{"/proj", "/other"}
 	if hitl.GrantKey(withRoot) == k0 {
 		t.Fatal("roots must change GrantKey")
 	}
 
 	withSock := base
-	withSock.Contained.SocketPathsDigest = "sock-a"
-	withSock.Contained.SocketCount = 1
+	withSock.Execution.Contained.SocketPathsDigest = "sock-a"
+	withSock.Execution.Contained.SocketCount = 1
 	if hitl.GrantKey(withSock) != k0 {
 		t.Fatal("socket overlay changed GrantKey")
 	}
 
 	direct := base
-	direct.Contained.Egress = hitl.ContainedEgressDirectIP
-	direct.Contained.DirectIP = true
+	direct.Execution.Contained.Egress = hitl.ContainedEgressDirectIP
+	direct.Execution.Contained.DirectIP = true
 	if hitl.GrantKey(direct) == k0 {
 		t.Fatal("direct IP must change GrantKey")
 	}
 
 	mediated := base
-	mediated.Contained.Egress = hitl.ContainedEgressDeny
+	mediated.Execution.Contained.Egress = hitl.ContainedEgressDeny
 	if hitl.GrantKey(mediated) == k0 {
 		t.Fatal("mediated egress label must change GrantKey")
 	}
 
-	witnessSrc := contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), "lycaon/internal/tools/socket_execution_grants.go")
+	witnessSrc := contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), "lycaon/internal/capabilitygrants/socket_execution_grants.go")
 	wfn := mustFindFunc(t, witnessSrc, "socket_execution_grants.go", "socketChatGrantOffer")
 	wbody := witnessSrc[wfn.Body.Pos()-1 : wfn.Body.End()]
 	if !strings.Contains(wbody, "BoundaryWitness") {

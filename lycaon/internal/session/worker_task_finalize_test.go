@@ -5,22 +5,24 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/session/store"
-	"github.com/lycaon/lycaon/internal/testdbseed"
-
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/workercompletion"
+	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
+	"github.com/lycaon/lycaon/internal/session/workerresults"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/spawn"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func workerSummaryFixture(jobID, childSessionID, agentType string, status api.WorkerSummaryStatus) *api.WorkerSummaryMeta {
-	envelope := session.FormatWorkerCompletionEnvelope(session.WorkerCompletionEnvelope{
+	envelope := workercompletion.FormatWorkerCompletionEnvelope(workercompletion.WorkerCompletionEnvelope{
 		JobID:          jobID,
 		ChildSessionID: childSessionID,
 		AgentType:      agentType,
@@ -38,23 +40,23 @@ func workerSummaryFixture(jobID, childSessionID, agentType string, status api.Wo
 func TestEnsureWorkerCardProjectionMintsEnqueuePair(t *testing.T) {
 	ctx := context.Background()
 	store := store.NewMemory()
-	mgr := session.NewManager(store, llm.NewMockProvider(&llm.MockConfig{}), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	jobID := "550e8400-e29b-41d4-a716-446655440000"
-	if err := mgr.EnsureWorkerCardProjection(ctx, parent.ID, session.WorkerDispatchRowInput{
+	if err := mgr.Workers.Cards.Ensure(ctx, parent.ID, workerresults.WorkerDispatchRowInput{
 		JobID:      jobID,
 		AgentType:  "path-explorer",
 		Brief:      "Map how the affected area is implemented today",
-		ToolCallID: session.HostTaskCallPrefix + "leg-1",
+		ToolCallID: workerresults.HostTaskCallPrefix + "leg-1",
 	}); err != nil {
 		testutil.FailErr(t, "EnsureWorkerCardProjection", err)
 	}
-	if err := mgr.EnsureWorkerCardProjection(ctx, parent.ID, session.WorkerDispatchRowInput{
+	if err := mgr.Workers.Cards.Ensure(ctx, parent.ID, workerresults.WorkerDispatchRowInput{
 		JobID:      jobID,
 		AgentType:  "path-explorer",
 		Brief:      "Map how the affected area is implemented today",
-		ToolCallID: session.HostTaskCallPrefix + "leg-1",
+		ToolCallID: workerresults.HostTaskCallPrefix + "leg-1",
 	}); err != nil {
 		testutil.FailErr(t, "EnsureWorkerCardProjection retry", err)
 	}
@@ -84,7 +86,7 @@ func TestEnsureWorkerCardProjectionMintsEnqueuePair(t *testing.T) {
 func TestEnsureWorkerCardProjectionSkipsExistingToolCall(t *testing.T) {
 	ctx := context.Background()
 	store := store.NewMemory()
-	mgr := session.NewManager(store, llm.NewMockProvider(&llm.MockConfig{}), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	if err := store.AppendMessages(ctx, parent.ID, api.Message{
@@ -99,7 +101,7 @@ func TestEnsureWorkerCardProjectionSkipsExistingToolCall(t *testing.T) {
 	}); err != nil {
 		testutil.FailErr(t, "AppendMessages", err)
 	}
-	if err := mgr.EnsureWorkerCardProjection(ctx, parent.ID, session.WorkerDispatchRowInput{
+	if err := mgr.Workers.Cards.Ensure(ctx, parent.ID, workerresults.WorkerDispatchRowInput{
 		JobID:      "550e8400-e29b-41d4-a716-446655440000",
 		AgentType:  "path-explorer",
 		ToolCallID: "tc-delegate",
@@ -116,7 +118,7 @@ func TestEnsureWorkerCardProjectionSkipsExistingToolCall(t *testing.T) {
 func TestCoordinatorDelegateDispatchOneCardThroughPatch(t *testing.T) {
 	ctx := context.Background()
 	store := store.NewMemory()
-	mgr := session.NewManager(store, llm.NewMockProvider(&llm.MockConfig{}), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	jobID := "550e8400-e29b-41d4-a716-446655440000"
@@ -132,7 +134,7 @@ func TestCoordinatorDelegateDispatchOneCardThroughPatch(t *testing.T) {
 	}); err != nil {
 		testutil.FailErr(t, "AppendMessages assistant", err)
 	}
-	if err := mgr.EnsureWorkerCardProjection(ctx, parent.ID, session.WorkerDispatchRowInput{
+	if err := mgr.Workers.Cards.Ensure(ctx, parent.ID, workerresults.WorkerDispatchRowInput{
 		JobID:      jobID,
 		AgentType:  "path-explorer",
 		ToolCallID: "tc-delegate",
@@ -152,7 +154,7 @@ func TestCoordinatorDelegateDispatchOneCardThroughPatch(t *testing.T) {
 	}); err != nil {
 		testutil.FailErr(t, "AppendMessages tool", err)
 	}
-	if err := mgr.ProjectWorkerCard(ctx, parent.ID, jobID,
+	if err := mgr.Workers.Cards.Project(ctx, parent.ID, jobID,
 		workerSummaryFixture(jobID, "child-1", "path-explorer", api.WorkerSummaryStatusComplete)); err != nil {
 		testutil.FailErr(t, "ProjectWorkerCard", err)
 	}
@@ -184,13 +186,13 @@ func TestCoordinatorDelegateDispatchOneCardThroughPatch(t *testing.T) {
 func TestAppendWorkerSummaryWiresJobIDOnMeta(t *testing.T) {
 	ctx := context.Background()
 	store := store.NewMemory()
-	mgr := session.NewManager(store, llm.NewMockProvider(&llm.MockConfig{}), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	child, err := store.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "create child session", err)
 	jobID := "550e8400-e29b-41d4-a716-446655440000"
-	if _, err := mgr.AppendWorkerSummary(ctx, parent.ID, session.WorkerSummaryInput{
+	if _, err := mgr.Workers.Summaries.Append(ctx, parent.ID, workeroutcomes.SummaryInput{
 		Summary:        "done",
 		JobID:          jobID,
 		ChildSessionID: child.ID,
@@ -224,7 +226,7 @@ func TestAppendWorkerSummaryWiresJobIDOnMeta(t *testing.T) {
 func TestProjectWorkerCardPreservesDispatchJobID(t *testing.T) {
 	ctx := context.Background()
 	store := store.NewMemory()
-	mgr := session.NewManager(store, llm.NewMockProvider(&llm.MockConfig{}), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	jobID := "550e8400-e29b-41d4-a716-446655440000"
@@ -240,7 +242,7 @@ func TestProjectWorkerCardPreservesDispatchJobID(t *testing.T) {
 	if err := store.AppendMessages(ctx, parent.ID, toolMsg); err != nil {
 		testutil.FailErr(t, "AppendMessages", err)
 	}
-	if err := mgr.ProjectWorkerCard(ctx, parent.ID, jobID,
+	if err := mgr.Workers.Cards.Project(ctx, parent.ID, jobID,
 		workerSummaryFixture(jobID, "child-1", "implementer", api.WorkerSummaryStatusComplete)); err != nil {
 		testutil.FailErr(t, "ProjectWorkerCard", err)
 	}
@@ -263,24 +265,24 @@ func TestProjectWorkerCardPreservesDispatchJobID(t *testing.T) {
 func TestProjectWorkerCardRejectsInvalidSummaryContract(t *testing.T) {
 	ctx := context.Background()
 	store := store.NewMemory()
-	mgr := session.NewManager(store, llm.NewMockProvider(&llm.MockConfig{}), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	jobID := "550e8400-e29b-41d4-a716-446655440000"
 
-	if err := mgr.ProjectWorkerCard(ctx, parent.ID, jobID, nil); err == nil {
+	if err := mgr.Workers.Cards.Project(ctx, parent.ID, jobID, nil); err == nil {
 		t.Fatal("nil worker summary accepted")
 	}
 
 	missingIdentity := workerSummaryFixture(jobID, "child-1", "implementer", api.WorkerSummaryStatusComplete)
 	missingIdentity.ChildSessionID = ""
-	if err := mgr.ProjectWorkerCard(ctx, parent.ID, jobID, missingIdentity); err == nil {
+	if err := mgr.Workers.Cards.Project(ctx, parent.ID, jobID, missingIdentity); err == nil {
 		t.Fatal("missing child_session_id accepted")
 	}
 
 	mismatchedEnvelope := workerSummaryFixture(jobID, "child-1", "implementer", api.WorkerSummaryStatusComplete)
 	mismatchedEnvelope.ChildSessionID = "child-2"
-	if err := mgr.ProjectWorkerCard(ctx, parent.ID, jobID, mismatchedEnvelope); err == nil {
+	if err := mgr.Workers.Cards.Project(ctx, parent.ID, jobID, mismatchedEnvelope); err == nil {
 		t.Fatal("mismatched envelope identity accepted")
 	}
 }
@@ -288,7 +290,7 @@ func TestProjectWorkerCardRejectsInvalidSummaryContract(t *testing.T) {
 func TestProjectWorkerCardWithTaskQueuedBanner(t *testing.T) {
 	ctx := context.Background()
 	store := store.NewMemory()
-	mgr := session.NewManager(store, llm.NewMockProvider(&llm.MockConfig{}), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	jobID := "550e8400-e29b-41d4-a716-446655440000"
@@ -311,7 +313,7 @@ func TestProjectWorkerCardWithTaskQueuedBanner(t *testing.T) {
 	if err := store.AppendMessages(ctx, parent.ID, toolMsg); err != nil {
 		testutil.FailErr(t, "AppendMessages", err)
 	}
-	if err := mgr.ProjectWorkerCard(ctx, parent.ID, jobID,
+	if err := mgr.Workers.Cards.Project(ctx, parent.ID, jobID,
 		workerSummaryFixture(jobID, "child-1", "implementer", api.WorkerSummaryStatusComplete)); err != nil {
 		testutil.FailErr(t, "ProjectWorkerCard", err)
 	}
@@ -325,7 +327,7 @@ func TestProjectWorkerCardWithTaskQueuedBanner(t *testing.T) {
 func TestProjectWorkerCardAfterDecisionResume(t *testing.T) {
 	ctx := context.Background()
 	store := store.NewMemory()
-	mgr := session.NewManager(store, llm.NewMockProvider(&llm.MockConfig{}), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
@@ -352,7 +354,7 @@ func TestProjectWorkerCardAfterDecisionResume(t *testing.T) {
 		testutil.FailErr(t, "AppendMessages answer_decision", err)
 	}
 
-	if err := mgr.ProjectWorkerCard(ctx, parent.ID, jobID,
+	if err := mgr.Workers.Cards.Project(ctx, parent.ID, jobID,
 		workerSummaryFixture(jobID, "child-1", "implementer", api.WorkerSummaryStatusOpen)); err != nil {
 		testutil.FailErr(t, "ProjectWorkerCard", err)
 	}

@@ -1,6 +1,7 @@
 package contract
 
 import (
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 	"testing"
 
@@ -19,8 +20,8 @@ func assertOutboundSecretAskOnly(t *testing.T, root string) {
 	for _, want := range []string{
 		"SecretDeniedError",
 		// Refusals and ask faults use distinct shared codes.
-		"tools.OutboundSecretDeniedCode",
-		"tools.OutboundSecretScreenFailedCode",
+		"toolrejection.OutboundSecretDeniedCode",
+		"toolrejection.OutboundSecretScreenFailedCode",
 		"SecretScreenFaultError",
 		"st.ask",
 	} {
@@ -29,17 +30,17 @@ func assertOutboundSecretAskOnly(t *testing.T, root string) {
 		}
 	}
 	if strings.Contains(screen, `"OUTBOUND_SECRET_DENIED"`) {
-		t.Fatal("secret_screen.go spells the deny code inline; use tools.OutboundSecretDeniedCode")
+		t.Fatal("secret_screen.go spells the deny code inline; use toolrejection.OutboundSecretDeniedCode")
 	}
 	if strings.Contains(screen, "AutoApproved") {
 		t.Fatal("webresearch secret screen must not set AutoApproved")
 	}
-	ask := contractcheck.ReadRepoFile(t, root, "lycaon/internal/tools/outbound_secret_screen.go")
-	chunk := sourceFuncChunk(t, ask, "func (e *DefaultToolExecutor) AskSecretScreen")
+	ask := contractcheck.ReadRepoFile(t, root, "lycaon/internal/toolexecution/outbound_secret_screen.go")
+	chunk := sourceFuncChunk(t, ask, "func (e *Secrets) AskSecretScreen")
 	// Card answers are resolved after the raise.
-	chunk += sourceFuncChunk(t, ask, "func (e *DefaultToolExecutor) resolveSecretScreenDecision")
-	payload := contractcheck.ReadRepoFile(t, root, "lycaon/internal/tools/secret_screen_payload.go")
-	if !strings.Contains(chunk, "payload := secretReviewPayload(finding, recipients, standingRedaction)") ||
+	chunk += sourceFuncChunk(t, ask, "func (e *Secrets) resolveSecretScreenDecision")
+	payload := contractcheck.ReadRepoFile(t, root, "lycaon/internal/toolsecrets/secret_screen_payload.go")
+	if !strings.Contains(chunk, "payload := toolsecrets.SecretReviewPayload(finding, recipients, standingRedaction)") ||
 		!strings.Contains(payload, "strings.TrimSpace(finding.GenericShape)") {
 		t.Fatal("AskSecretScreen must project GenericShape into the review payload")
 	}
@@ -91,7 +92,7 @@ func assertSecretScreenNeverBlocksWithoutAsking(t *testing.T, chunk string) {
 
 func assertDirectionalSecretGateSSOT(t *testing.T, root string) {
 	t.Helper()
-	screen := contractcheck.ReadRepoFile(t, root, "lycaon/internal/tools/outbound_secret_screen.go")
+	screen := contractcheck.ReadRepoFile(t, root, "lycaon/internal/toolexecution/outbound_secret_screen.go")
 	if !strings.Contains(screen, "evaluateSecretScreen(finding, ") {
 		t.Fatal("a matcher hit must be evaluated before any card is raised")
 	}
@@ -134,7 +135,7 @@ func assertTrustedDestinationIsAFactNotADecision(t *testing.T, root, modelScreen
 	if !strings.Contains(handler, "resolved.SecretDestinationID()") {
 		t.Fatal("the provider update must bind trust to the destination the catalog resolves")
 	}
-	screen := contractcheck.ReadRepoFile(t, root, "lycaon/internal/tools/outbound_secret_screen.go")
+	screen := contractcheck.ReadRepoFile(t, root, "lycaon/internal/toolexecution/outbound_secret_screen.go")
 	if !strings.Contains(screen, "DestinationTrusted: finding.DestinationTrusted") {
 		t.Fatal("the secret screen must project destination trust into the gate facts")
 	}

@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/app/configuration"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -22,13 +23,13 @@ import (
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-func testBuildConfig(t *testing.T, configRoot string) Config {
+func testBuildConfig(t *testing.T, configRoot string) configuration.Config {
 	t.Helper()
 	t.Setenv(configdir.EnvConfigDir, t.TempDir())
 	configtest.Overlay(t, map[config.Rel]string{
 		config.DistroMCP: "providers:\n  - id: svca\n    command: \"true\"\n    args: []\n    enabled: false\n",
 	})
-	return Config{
+	return configuration.Config{
 		DBPath:                    filepath.Join(t.TempDir(), "app-test.db"),
 		ListenAddr:                "127.0.0.1:0",
 		ConfigRoot:                configRoot,
@@ -121,21 +122,21 @@ func TestBuildWithSeparateStoreDirectorySupportsWorkers(t *testing.T) {
 	testutil.FailErr(t, "Build failed", err)
 	t.Cleanup(func() { _ = app.Close() })
 
-	if app.Server == nil || app.DB == nil || app.SessionMgr == nil || app.WorkflowMgr == nil {
+	if app.Server == nil || app.DB == nil || app.Sessions == nil || app.Workflows == nil {
 		t.Fatalf("ServeApp = %+v", app)
 	}
 	projectDir := t.TempDir()
 	testdbseed.InsertProjectRoot(t, app.DB, testdbseed.DefaultProjectID, projectDir)
-	jobID, err := app.WorkerQueue.Enqueue(t.Context(), wire.WorkerTask{
+	jobID, err := app.Delegations.Queue.Enqueue(t.Context(), wire.WorkerTask{
 		Prompt: "fixture", Brief: "fixture", ProjectID: testdbseed.DefaultProjectID,
 		WorkspacePath: projectDir, Scope: &wire.TaskScope{Mode: wire.TaskScopeModeWrite, Paths: []string{"."}},
 	})
 	testutil.FailErr(t, "enqueue worker", err)
-	_, err = app.WorkerQueue.ClaimNext(t.Context(), worker.ClaimRequest{
+	_, err = app.Delegations.Queue.ClaimNext(t.Context(), worker.ClaimRequest{
 		ProjectID: testdbseed.DefaultProjectID, ClaimedBy: "store-root-test", ExecutionTarget: wire.ExecutionTargetLocal,
 	})
 	testutil.FailErr(t, "claim worker", err)
-	job, err := app.WorkerQueue.ClaimWorkerBranch(t.Context(), jobID)
+	job, err := app.Delegations.Queue.ClaimWorkerBranch(t.Context(), jobID)
 	testutil.FailErr(t, "claim worker branch under active store", err)
 	rel, err := filepath.Rel(filepath.Dir(cfg.DBPath), job.WorkspaceRoot)
 	testutil.FailErr(t, "resolve branch against active store", err)
@@ -157,9 +158,9 @@ func TestBuildPreservesExplicitSessionLimits(t *testing.T) {
 	testutil.FailErr(t, "build with explicit session limits", err)
 	t.Cleanup(func() { _ = app.Close() })
 	testdbseed.InsertProjectRoot(t, app.DB, testdbseed.DefaultProjectID, t.TempDir())
-	sess, err := app.SessionMgr.CreateForProject(t.Context(), testdbseed.DefaultProjectID, wire.SessionPostureBuild)
+	sess, err := app.Sessions.Manager.Chats.CreateForProject(t.Context(), testdbseed.DefaultProjectID, wire.SessionPostureBuild)
 	testutil.FailErr(t, "create session with explicit limits", err)
-	allowed, reason, err := app.CoordinatorRuntime.CoordinatorLoop().ShouldLoopWake(t.Context(), sess.ID, anchor.PhaseAdvanced)
+	allowed, reason, err := app.CoordinatorRuntime.CoordinatorLoop().Admission.ShouldLoopWake(t.Context(), sess.ID, anchor.PhaseAdvanced)
 	testutil.FailErr(t, "evaluate workflow phase wake", err)
 	if allowed || reason != "feature_disabled" {
 		t.Fatalf("workflow wake allowed=%v reason=%q; explicit disabled loop was replaced by live settings", allowed, reason)

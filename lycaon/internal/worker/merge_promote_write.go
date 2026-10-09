@@ -8,7 +8,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/repochange"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/promotionstate"
 	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -30,7 +30,7 @@ func (s *MergeService) recordPromoteOutput(sessionID, jobID string, out *api.Wor
 	if s == nil || s.Reconcile == nil || out == nil {
 		return
 	}
-	if rows := session.NormalizePromotePathStatusRows(out.PathStatus); len(rows) > 0 {
+	if rows := promotionstate.NormalizePromotePathStatusRows(out.PathStatus); len(rows) > 0 {
 		s.Reconcile.RecordPromotePathStatus(sessionID, jobID, rows)
 	}
 	s.Reconcile.RecordOverlayPreviewSummary(sessionID, jobID, out)

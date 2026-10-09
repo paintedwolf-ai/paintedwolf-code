@@ -57,7 +57,7 @@ func benchmarkRecursivePreparation(b *testing.B, directory string, inventory boo
 	defer view.Close()
 	started := time.Now()
 	if inventory {
-		testutil.FailErr(b, "start inventory", catalog.WarmNavigation(b.Context(), "project", root))
+		testutil.FailErr(b, "start inventory", catalog.Directories.WarmNavigation(b.Context(), "project", root))
 	}
 	testutil.FailErr(b, "expand root", view.Disclose(b.Context(), nil, IntentEntry{
 		Address: Address{Root: root.ID, Path: "."}, Disclosure: Disclosure{Open: true, Recursive: true}}))

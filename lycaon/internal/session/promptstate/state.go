@@ -1,26 +1,8 @@
 package promptstate
 
 import (
-	"context"
-	"strings"
 	"sync"
 )
-
-// State keeps prompt exclusion, durable submission ordering, and cancellation scopes.
-// Its zero value is ready for use and must not be copied after use.
-type State struct {
-	// Prompt serializes one session's prompt turns.
-	Prompt MutexRegistry
-	// Clock serializes one root session's turn clock.
-	Clock MutexRegistry
-	// Submission orders one session's durable prompt submissions.
-	Submission     MutexRegistry
-	operationMu    sync.Mutex
-	operationLocks map[string]*operationLock
-	promptCancelMu sync.Mutex
-	promptCancel   map[string]context.CancelFunc
-	stopped        bool
-}
 
 // MutexRegistry holds one reference-counted mutex per id, dropped when the
 // last holder releases it.
@@ -92,93 +74,4 @@ func (r *MutexRegistry) len() int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return len(r.entries)
-}
-
-type operationLock struct {
-	mu   sync.Mutex
-	refs int
-}
-
-// LockOperation serializes one idempotency key.
-func (m *State) LockOperation(operationID string) func() {
-	operationID = strings.TrimSpace(operationID)
-	m.operationMu.Lock()
-	if m.operationLocks == nil {
-		m.operationLocks = make(map[string]*operationLock)
-	}
-	entry := m.operationLocks[operationID]
-	if entry == nil {
-		entry = &operationLock{}
-		m.operationLocks[operationID] = entry
-	}
-	entry.refs++
-	m.operationMu.Unlock()
-
-	entry.mu.Lock()
-	return func() {
-		entry.mu.Unlock()
-		m.operationMu.Lock()
-		entry.refs--
-		if entry.refs == 0 {
-			delete(m.operationLocks, operationID)
-		}
-		m.operationMu.Unlock()
-	}
-}
-
-func (m *State) Cancel(sessionID string) {
-	if m == nil {
-		return
-	}
-	m.promptCancelMu.Lock()
-	cancel, ok := m.promptCancel[sessionID]
-	if ok {
-		delete(m.promptCancel, sessionID)
-	}
-	m.promptCancelMu.Unlock()
-	if ok && cancel != nil {
-		cancel()
-	}
-}
-
-func (m *State) RegisterCancel(sessionID string, cancel context.CancelFunc) {
-	if m == nil || cancel == nil {
-		return
-	}
-	m.promptCancelMu.Lock()
-	if m.stopped {
-		m.promptCancelMu.Unlock()
-		cancel()
-		return
-	}
-	defer m.promptCancelMu.Unlock()
-	if m.promptCancel == nil {
-		m.promptCancel = make(map[string]context.CancelFunc)
-	}
-	if prev, ok := m.promptCancel[sessionID]; ok {
-		prev()
-	}
-	m.promptCancel[sessionID] = cancel
-}
-
-func (m *State) Running(sessionID string) bool {
-	if m == nil {
-		return false
-	}
-	m.promptCancelMu.Lock()
-	defer m.promptCancelMu.Unlock()
-	_, ok := m.promptCancel[sessionID]
-	return ok
-}
-
-// Stop seals registration and cancels every prompt's independent stop context.
-func (m *State) Stop() {
-	m.promptCancelMu.Lock()
-	m.stopped = true
-	cancels := m.promptCancel
-	m.promptCancel = nil
-	m.promptCancelMu.Unlock()
-	for _, cancel := range cancels {
-		cancel()
-	}
 }

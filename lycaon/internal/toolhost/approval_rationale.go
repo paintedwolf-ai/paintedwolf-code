@@ -1,6 +1,8 @@
 package toolhost
 
 import (
+	"github.com/lycaon/lycaon/internal/toolapproval"
+
 	"context"
 	"strings"
 
@@ -11,7 +13,6 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/progress"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -58,9 +59,9 @@ type approvalRationaleAttacher struct {
 	deps ApprovalRationaleDeps
 }
 
-// NewApprovalRationaleAttacher builds a tools.AIRationaleAttacher that fire-and-patches
+// NewApprovalRationaleAttacher constructs asynchronous checkpoint rationale
 // ai_rationale onto pending tool_approval checkpoints.
-func NewApprovalRationaleAttacher(deps ApprovalRationaleDeps) tools.AIRationaleAttacher {
+func NewApprovalRationaleAttacher(deps ApprovalRationaleDeps) toolapproval.AIRationaleAttacher {
 	if deps.Checkpoints == nil || deps.Messages == nil || deps.Summarizer == nil {
 		return nil
 	}
@@ -78,7 +79,7 @@ func (a *approvalRationaleAttacher) Enabled() bool {
 	return a.deps.EnabledFn()
 }
 
-func (a *approvalRationaleAttacher) AttachAsync(ctx context.Context, req tools.AIRationaleAttachRequest) {
+func (a *approvalRationaleAttacher) AttachAsync(ctx context.Context, req toolapproval.AIRationaleAttachRequest) {
 	if a == nil || strings.TrimSpace(req.CheckpointID) == "" {
 		return
 	}
@@ -90,13 +91,13 @@ func (a *approvalRationaleAttacher) AttachAsync(ctx context.Context, req tools.A
 }
 
 // The provider controls the timeout, including model loading.
-func (a *approvalRationaleAttacher) run(parent context.Context, req tools.AIRationaleAttachRequest) {
+func (a *approvalRationaleAttacher) run(parent context.Context, req toolapproval.AIRationaleAttachRequest) {
 	ctx := curationctx.WithSession(parent, curationctx.Session{
-		SessionID:       req.ToolContext.SessionID,
-		ProjectID:       req.ToolContext.ProjectID,
-		Agent:           req.ToolContext.Agent,
-		ParentSessionID: req.ToolContext.ParentSessionID,
-		ToolCallID:      req.ToolContext.ToolCallID,
+		SessionID:       req.ToolContext.Identity.SessionID,
+		ProjectID:       req.ToolContext.Identity.ProjectID,
+		Agent:           req.ToolContext.Identity.Agent,
+		ParentSessionID: req.ToolContext.Identity.ParentSessionID,
+		ToolCallID:      req.ToolContext.Identity.ToolCallID,
 		ProjectDir:      req.ToolContext.ActiveRootPath(),
 	})
 
@@ -126,7 +127,7 @@ func (a *approvalRationaleAttacher) run(parent context.Context, req tools.AIRati
 	_ = a.deps.Checkpoints.PatchPendingToolApprovalAIRationale(ctx, req.CheckpointID, text)
 }
 
-func (a *approvalRationaleAttacher) loadInputs(ctx context.Context, req tools.AIRationaleAttachRequest) approvals.RationaleInputs {
+func (a *approvalRationaleAttacher) loadInputs(ctx context.Context, req toolapproval.AIRationaleAttachRequest) approvals.RationaleInputs {
 	tc := req.ToolContext
 	args, _ := observability.RedactCaptureValue(req.Args).(map[string]any)
 	in := approvals.RationaleInputs{
@@ -141,24 +142,24 @@ func (a *approvalRationaleAttacher) loadInputs(ctx context.Context, req tools.AI
 		in.ExplanationIfWrong = req.Explanation.IfWrong
 	}
 
-	if a.deps.Workers != nil && strings.TrimSpace(tc.WorkerJobID) != "" {
-		if task, ok := a.deps.Workers.Get(tc.WorkerJobID); ok && task != nil {
+	if a.deps.Workers != nil && strings.TrimSpace(tc.Identity.WorkerJobID) != "" {
+		if task, ok := a.deps.Workers.Get(tc.Identity.WorkerJobID); ok && task != nil {
 			in.WorkerBrief = strings.TrimSpace(task.Brief)
 		}
 	}
 
-	sessionID := strings.TrimSpace(tc.SessionID)
+	sessionID := strings.TrimSpace(tc.Identity.SessionID)
 	if sessionID != "" && a.deps.Messages != nil {
 		msgs, err := a.deps.Messages.GetMessages(ctx, sessionID)
 		if err == nil {
-			msgs = rationaleMessagesThroughAction(msgs, tc.ToolCallID)
+			msgs = rationaleMessagesThroughAction(msgs, tc.Identity.ToolCallID)
 			boundary := api.UserIntentBoundary(msgs)
 			if boundary > 0 && boundary <= len(msgs) {
 				userMsg := msgs[boundary-1]
 				in.UserIntent = strings.TrimSpace(userMsg.Content)
 			}
-			in.AssistantProse = assistantProseForToolCall(msgs, tc.ToolCallID)
-			in.RecentResults = recentRationaleResults(msgs, boundary, tc.ToolCallID)
+			in.AssistantProse = assistantProseForToolCall(msgs, tc.Identity.ToolCallID)
+			in.RecentResults = recentRationaleResults(msgs, boundary, tc.Identity.ToolCallID)
 		}
 	}
 

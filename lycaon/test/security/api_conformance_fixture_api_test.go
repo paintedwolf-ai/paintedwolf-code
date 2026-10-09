@@ -16,8 +16,8 @@ import (
 	"github.com/lycaon/lycaon/internal/pagecursor"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/usernotice"
-	wire "github.com/lycaon/lycaon/pkg/api"
 	openapi "github.com/lycaon/lycaon/test/openapi"
+	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 // widgetSpec is a small API the sweep's own tests drive: a paged collection,
@@ -282,7 +282,7 @@ func newWidgetSweep(t *testing.T, faults widgetFaults) *conformanceSweep {
 	notices := widgetNotices(t)
 	api := &widgetAPI{faults: faults, responses: httpio.Responder{Logger: slog.New(slog.DiscardHandler), Notices: notices}}
 	sweep := newConformanceSweep(doc, validator, api.routes(), notices)
-	sweep.effects = counterEffects{writes: &api.writes}
+	sweep.Effects = counterEffects{writes: &api.writes}
 	sweep.values.bind("/v1/widgets/{id}/parts/{part_id}", "part_id", fixturePartID)
 	return sweep
 }

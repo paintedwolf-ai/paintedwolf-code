@@ -22,19 +22,6 @@ type credentialFiles struct {
 	exposure func(ctx context.Context, sessionID, path string) error
 }
 
-func (b sessionWiring) newCredentialFiles() *credentialFiles {
-	return &credentialFiles{
-		harvest: b.secretHarvest, fp: b.secretFingerprinter, queries: db.New(b.db),
-		managed: func(projectID string) []secretmatch.Remembered {
-			if b.secretCaps == nil {
-				return nil
-			}
-			return b.secretCaps.DurableScreeningValues(projectID)
-		},
-		exposure: b.store.MarkSecretExposureOnRead,
-	}
-}
-
 func (c *credentialFiles) Delivered(ctx context.Context, read tools.CredentialFileRead) error {
 	if c == nil || c.exposure == nil {
 		return errors.New("secret exposure recorder unavailable")

@@ -22,7 +22,7 @@ func (allowAllRuns) AssertWorkerTask(context.Context, *api.WorkerTask) error { r
 var matrixQueueBackends = map[string]func(t *testing.T) worker.WorkerQueue{
 	"memory": func(*testing.T) worker.WorkerQueue {
 		q := worker.NewInMemoryQueue(1)
-		q.SetWorkflowRunChecker(allowAllRuns{})
+		q.SetWorkflowDomains(&worker.WorkflowDomains{Runs: allowAllRuns{}, Tasks: allowAllRuns{}})
 		return q
 	},
 	"sql": func(t *testing.T) worker.WorkerQueue {

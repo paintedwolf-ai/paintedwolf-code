@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/orchestration"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -15,9 +15,9 @@ func TestPostureNeverSelectsToolProfile(t *testing.T) {
 	t.Parallel()
 	agents := orchestration.NewMemoryAgentRegistry()
 	contractcheck.FailErr(t, "LoadRequiredAgentRegistry", orchestration.LoadRequiredAgentRegistry(t.Context(), agents))
-	for _, posture := range session.AllSessionPostures() {
+	for _, posture := range profiles.AllSessionPostures() {
 		sess := &api.Session{Posture: posture, AgentType: orchestration.ProfileCoordinator}
-		if got := session.ResolveToolProfile(sess, agents, ""); got != orchestration.ProfileCoordinator {
+		if got := profiles.ResolveToolProfile(sess, agents, ""); got != orchestration.ProfileCoordinator {
 			t.Fatalf("posture %q profile = %q want %q", posture, got, orchestration.ProfileCoordinator)
 		}
 	}
@@ -28,7 +28,7 @@ func TestAgentTypeSelectsToolProfile(t *testing.T) {
 	agents := orchestration.NewMemoryAgentRegistry()
 	contractcheck.FailErr(t, "LoadRequiredAgentRegistry", orchestration.LoadRequiredAgentRegistry(t.Context(), agents))
 	sess := &api.Session{Posture: api.SessionPostureSpec, AgentType: "implementer"}
-	got := session.ResolveToolProfile(sess, agents, "")
+	got := profiles.ResolveToolProfile(sess, agents, "")
 	if got != "implement" {
 		t.Fatalf("agent profile = %q want implement", got)
 	}
@@ -39,7 +39,7 @@ func TestWorkflowCoordinatorProfileOverridesAgent(t *testing.T) {
 	agents := orchestration.NewMemoryAgentRegistry()
 	contractcheck.FailErr(t, "LoadRequiredAgentRegistry", orchestration.LoadRequiredAgentRegistry(t.Context(), agents))
 	sess := &api.Session{Posture: api.SessionPostureVet, AgentType: orchestration.ProfileCoordinator}
-	got := session.ResolveToolProfile(sess, agents, "explore_readonly")
+	got := profiles.ResolveToolProfile(sess, agents, "explore_readonly")
 	if got != "explore_readonly" {
 		t.Fatalf("manifest profile = %q want explore_readonly", got)
 	}
@@ -47,8 +47,8 @@ func TestWorkflowCoordinatorProfileOverridesAgent(t *testing.T) {
 
 func TestPostureRegistryRulesMatchBundledPaths(t *testing.T) {
 	t.Parallel()
-	reg, err := session.LoadPostureRegistry()
-	contractcheck.FailErr(t, "session.LoadPostureRegistry failed", err)
+	reg, err := profiles.LoadPostureRegistry()
+	contractcheck.FailErr(t, "profiles.LoadPostureRegistry failed", err)
 	wantFiles := map[api.SessionPosture]string{
 		api.SessionPostureSpec:        "config/packs/painted-wolf/platform/host/posture-rules/spec.yaml",
 		api.SessionPostureBuild:       "config/packs/painted-wolf/platform/host/posture-rules/build.yaml",

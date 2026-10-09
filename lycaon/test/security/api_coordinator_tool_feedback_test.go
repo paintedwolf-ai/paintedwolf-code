@@ -82,7 +82,7 @@ func TestCoordinatorPromptRejectsOffSurfaceDelegate(t *testing.T) {
 	h := wiring.BuildForTest(t, wiring.WithLLMClient(mock), wiring.WithoutCoordinatorLoop())
 	srv := h.Server
 	store := h.Store
-	blueprintMgr := h.BlueprintMgr
+	blueprintMgr := h.Workflows.Blueprints
 	sess := createSessionHTTP(t, srv, t.TempDir())
 	ctx := t.Context()
 
@@ -100,7 +100,7 @@ func TestCoordinatorPromptRejectsOffSurfaceDelegate(t *testing.T) {
 	}
 	seedPlanStub(t, blueprintMgr, run.ProjectID, run.BlueprintPath)
 
-	if _, err := h.SessionMgr.Prompt(ctx, sess.ID, "delegate now"); err != nil {
+	if _, err := h.Sessions.Manager.Submissions.Prompt(ctx, sess.ID, "delegate now"); err != nil {
 		testutil.FailErr(t, "run coordinator prompt", err)
 	}
 

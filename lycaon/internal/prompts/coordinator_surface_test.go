@@ -1,6 +1,8 @@
 package prompts_test
 
 import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+
 	"context"
 	"path/filepath"
 	"runtime"
@@ -11,12 +13,11 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/promptunit"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolschema"
 )
 
 func TestLoadCoordinatorSurfaceFloor_implementInvestigate(t *testing.T) {
-	got, err := prompts.LoadCoordinatorSurfaceFloor(tools.SurfaceImplementInvestigate)
+	got, err := prompts.LoadCoordinatorSurfaceFloor(toolcontract.SurfaceImplementInvestigate)
 	if err != nil {
 		t.Fatalf("LoadCoordinatorSurfaceFloor: %v", err)
 	}
@@ -38,7 +39,7 @@ func TestRenderInvestigateSurfaceRoutesSummarizeFirst(t *testing.T) {
 		"execution_mode": "investigate",
 		"has_file_tools": true,
 	}
-	if err := prompts.MergeCoordinatorSurfacePathVars(tools.SurfaceImplementInvestigate, nil, vars, prompts.SurfaceTurn{}); err != nil {
+	if err := prompts.MergeCoordinatorSurfacePathVars(toolcontract.SurfaceImplementInvestigate, nil, vars, prompts.SurfaceTurn{}); err != nil {
 		t.Fatalf("MergeCoordinatorSurfacePathVars: %v", err)
 	}
 	mergeUnits(t, engine, vars, promptunit.HostCoordinator, "investigate", nil)
@@ -61,7 +62,7 @@ func TestRenderInvestigateSurfaceRoutesSummarizeFirst(t *testing.T) {
 
 func TestMergeCoordinatorSurfacePathVarsHasListDirOnInvestigate(t *testing.T) {
 	vars := map[string]any{}
-	if err := prompts.MergeCoordinatorSurfacePathVars(tools.SurfaceImplementInvestigate, nil, vars, prompts.SurfaceTurn{}); err != nil {
+	if err := prompts.MergeCoordinatorSurfacePathVars(toolcontract.SurfaceImplementInvestigate, nil, vars, prompts.SurfaceTurn{}); err != nil {
 		t.Fatalf("MergeCoordinatorSurfacePathVars: %v", err)
 	}
 	if !vars["profile_has_list_dir"].(bool) {
@@ -71,7 +72,7 @@ func TestMergeCoordinatorSurfacePathVarsHasListDirOnInvestigate(t *testing.T) {
 
 func TestMergeCoordinatorSurfacePathVarsTeachesLoadedHTTPRequest(t *testing.T) {
 	vars := map[string]any{}
-	if err := prompts.MergeCoordinatorSurfacePathVars(tools.SurfaceImplementInvestigate, nil, vars, prompts.SurfaceTurn{}); err != nil {
+	if err := prompts.MergeCoordinatorSurfacePathVars(toolcontract.SurfaceImplementInvestigate, nil, vars, prompts.SurfaceTurn{}); err != nil {
 		t.Fatalf("MergeCoordinatorSurfacePathVars: %v", err)
 	}
 	if vars["profile_has_http_request"] != false || vars["more_tools_loadable"] != true {
@@ -79,7 +80,7 @@ func TestMergeCoordinatorSurfacePathVarsTeachesLoadedHTTPRequest(t *testing.T) {
 			vars["profile_has_http_request"], vars["more_tools_loadable"])
 	}
 	vars = map[string]any{}
-	if err := prompts.MergeCoordinatorSurfacePathVars(tools.SurfaceImplementInvestigate, nil, vars, prompts.SurfaceTurn{Loaded: map[string]bool{"http_request": true}}); err != nil {
+	if err := prompts.MergeCoordinatorSurfacePathVars(toolcontract.SurfaceImplementInvestigate, nil, vars, prompts.SurfaceTurn{Loaded: map[string]bool{"http_request": true}}); err != nil {
 		t.Fatalf("MergeCoordinatorSurfacePathVars: %v", err)
 	}
 	if vars["profile_has_http_request"] != true {
@@ -109,7 +110,7 @@ func TestMergeCoordinatorSurfacePathVarsListsRequestableToolsWithSummaries(t *te
 	schemas, err := toolschema.LoadSchemaDir(filepath.Join(root, "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
 	testutil.FailErr(t, "LoadSchemaDir", err)
 	vars := map[string]any{}
-	testutil.FailErr(t, "MergeCoordinatorSurfacePathVars", prompts.MergeCoordinatorSurfacePathVars(tools.SurfaceImplementInvestigate, nil, vars, prompts.SurfaceTurn{Schemas: schemas}))
+	testutil.FailErr(t, "MergeCoordinatorSurfacePathVars", prompts.MergeCoordinatorSurfacePathVars(toolcontract.SurfaceImplementInvestigate, nil, vars, prompts.SurfaceTurn{Schemas: schemas}))
 	rows, _ := vars["requestable_tools"].([]map[string]any)
 	byName := map[string]string{}
 	for _, row := range rows {
@@ -122,7 +123,7 @@ func TestMergeCoordinatorSurfacePathVarsListsRequestableToolsWithSummaries(t *te
 		t.Fatalf("a floor tool is offered, not requestable: %+v", rows)
 	}
 	vars = map[string]any{}
-	testutil.FailErr(t, "MergeCoordinatorSurfacePathVars loaded", prompts.MergeCoordinatorSurfacePathVars(tools.SurfaceImplementInvestigate, nil, vars, prompts.SurfaceTurn{Loaded: map[string]bool{"http_request": true}, Schemas: schemas}))
+	testutil.FailErr(t, "MergeCoordinatorSurfacePathVars loaded", prompts.MergeCoordinatorSurfacePathVars(toolcontract.SurfaceImplementInvestigate, nil, vars, prompts.SurfaceTurn{Loaded: map[string]bool{"http_request": true}, Schemas: schemas}))
 	for _, row := range vars["requestable_tools"].([]map[string]any) {
 		if row["name"] == "http_request" {
 			t.Fatal("a loaded tool leaves the requestable roster")

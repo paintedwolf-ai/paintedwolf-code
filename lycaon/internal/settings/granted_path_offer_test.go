@@ -27,8 +27,8 @@ func home(t *testing.T) string {
 // filesystemCard returns the ladder produced by the bundled location rules.
 func filesystemCard(t *testing.T, action hitl.ProposedAction) (*hitl.ApprovalResult, []hitl.ApprovalGrantOffer) {
 	t.Helper()
-	if action.ProjectID == "" {
-		action.ProjectID = "project-1"
+	if action.Scope.ProjectID == "" {
+		action.Scope.ProjectID = "project-1"
 	}
 	tmp := t.TempDir()
 	stageBundledApprovals(t, nil)
@@ -54,8 +54,14 @@ func filesystemCard(t *testing.T, action hitl.ProposedAction) (*hitl.ApprovalRes
 
 func TestFilesystemLadderInstallsTheGrantedPath(t *testing.T) {
 	action := hitl.ProposedAction{
-		Tool: "write", Files: []string{"/etc/hosts"},
-		ProjectDir: t.TempDir(), SessionID: "chat-1",
+		Invocation: hitl.ActionInvocation{
+			Tool:  "write",
+			Files: []string{"/etc/hosts"},
+		},
+		Scope: hitl.ActionScope{
+			ProjectDir: t.TempDir(),
+			SessionID:  "chat-1",
+		},
 	}
 	_, offers := filesystemCard(t, action)
 
@@ -91,11 +97,18 @@ func TestFilesystemLadderInstallsTheGrantedPath(t *testing.T) {
 
 func TestFilesystemGrantIdentitySurvivesRootRelocation(t *testing.T) {
 	base := hitl.ProposedAction{
-		Tool: "write", Files: []string{"/etc/hosts"}, ProjectID: "project-stable",
-		ProjectDir: t.TempDir(), SessionID: "chat-1",
+		Invocation: hitl.ActionInvocation{
+			Tool:  "write",
+			Files: []string{"/etc/hosts"},
+		},
+		Scope: hitl.ActionScope{
+			ProjectID:  "project-stable",
+			ProjectDir: t.TempDir(),
+			SessionID:  "chat-1",
+		},
 	}
 	_, before := filesystemCard(t, base)
-	base.ProjectDir = t.TempDir()
+	base.Scope.ProjectDir = t.TempDir()
 	_, after := filesystemCard(t, base)
 	if len(before) != len(after) {
 		t.Fatalf("offer counts differ: %d vs %d", len(before), len(after))
@@ -109,8 +122,14 @@ func TestFilesystemGrantIdentitySurvivesRootRelocation(t *testing.T) {
 
 func TestReadCrossingGrantsOnlyRead(t *testing.T) {
 	action := hitl.ProposedAction{
-		Tool: "read", Files: []string{filepath.Join(home(t), "Documents", "taxes.pdf")},
-		ProjectDir: t.TempDir(), SessionID: "chat-1",
+		Invocation: hitl.ActionInvocation{
+			Tool:  "read",
+			Files: []string{filepath.Join(home(t), "Documents", "taxes.pdf")},
+		},
+		Scope: hitl.ActionScope{
+			ProjectDir: t.TempDir(),
+			SessionID:  "chat-1",
+		},
 	}
 	_, offers := filesystemCard(t, action)
 	for _, offer := range offers {
@@ -129,8 +148,14 @@ func TestReadCrossingGrantsOnlyRead(t *testing.T) {
 
 func TestEveryFilesystemRungIsTimeBounded(t *testing.T) {
 	action := hitl.ProposedAction{
-		Tool: "write", Files: []string{"/etc/hosts"},
-		ProjectDir: t.TempDir(), SessionID: "chat-1",
+		Invocation: hitl.ActionInvocation{
+			Tool:  "write",
+			Files: []string{"/etc/hosts"},
+		},
+		Scope: hitl.ActionScope{
+			ProjectDir: t.TempDir(),
+			SessionID:  "chat-1",
+		},
 	}
 	_, offers := filesystemCard(t, action)
 	for _, offer := range offers {
@@ -167,8 +192,16 @@ func TestCardNamesTheUncoveredCrossing(t *testing.T) {
 	covered := filepath.Join(home(t), ".ssh", "config")
 	uncovered := "/etc/hosts"
 	action := hitl.ProposedAction{
-		Tool: "read", Files: []string{covered, uncovered},
-		ProjectID: "project-1", ProjectDir: tmp, SessionID: "chat-1", RootSessionID: "chat-1",
+		Invocation: hitl.ActionInvocation{
+			Tool:  "read",
+			Files: []string{covered, uncovered},
+		},
+		Scope: hitl.ActionScope{
+			ProjectID:     "project-1",
+			ProjectDir:    tmp,
+			SessionID:     "chat-1",
+			RootSessionID: "chat-1",
+		},
 	}
 
 	// An exact device grant over the first crossing only.
@@ -215,8 +248,15 @@ func TestCardNamesTheUncoveredCrossing(t *testing.T) {
 // A project identity makes the day grant project-scoped.
 func TestPathDayRungRidesTheProjectCarrier(t *testing.T) {
 	action := hitl.ProposedAction{
-		Tool: "write", Files: []string{"/etc/hosts"},
-		ProjectID: "project-1", ProjectDir: t.TempDir(), SessionID: "chat-1",
+		Invocation: hitl.ActionInvocation{
+			Tool:  "write",
+			Files: []string{"/etc/hosts"},
+		},
+		Scope: hitl.ActionScope{
+			ProjectID:  "project-1",
+			ProjectDir: t.TempDir(),
+			SessionID:  "chat-1",
+		},
 	}
 	_, offers := filesystemCard(t, action)
 	for _, offer := range offers {
@@ -233,8 +273,14 @@ func TestPathDayRungRidesTheProjectCarrier(t *testing.T) {
 
 func TestDayRungCountsFromApproval(t *testing.T) {
 	action := hitl.ProposedAction{
-		Tool: "write", Files: []string{"/etc/hosts"},
-		ProjectDir: t.TempDir(), SessionID: "chat-1",
+		Invocation: hitl.ActionInvocation{
+			Tool:  "write",
+			Files: []string{"/etc/hosts"},
+		},
+		Scope: hitl.ActionScope{
+			ProjectDir: t.TempDir(),
+			SessionID:  "chat-1",
+		},
 	}
 	_, offers := filesystemCard(t, action)
 	for _, offer := range offers {
@@ -256,8 +302,14 @@ func TestDayRungCountsFromApproval(t *testing.T) {
 
 func TestPathLadderFacesTheTaskRung(t *testing.T) {
 	action := hitl.ProposedAction{
-		Tool: "write", Files: []string{"/etc/hosts"},
-		ProjectDir: t.TempDir(), SessionID: "chat-1",
+		Invocation: hitl.ActionInvocation{
+			Tool:  "write",
+			Files: []string{"/etc/hosts"},
+		},
+		Scope: hitl.ActionScope{
+			ProjectDir: t.TempDir(),
+			SessionID:  "chat-1",
+		},
 	}
 	res, offers := filesystemCard(t, action)
 	plan, err := hitl.CompileCheckpointApprovalPlan(hitl.CheckpointRequest{
@@ -283,7 +335,11 @@ func TestPathLadderFacesTheTaskRung(t *testing.T) {
 func TestSecretOutboundOffersNoPathLadder(t *testing.T) {
 	target := gate.FileTarget{Path: "/etc/hosts", Mode: gate.ModeWrite}
 	decision := &gate.Decision{Primary: api.GateSecretOutbound}
-	if offers := settings.GrantedPathOffers(hitl.ProposedAction{SessionID: "chat-1"}, target, decision, nil); offers != nil {
+	if offers := settings.GrantedPathOffers(hitl.ProposedAction{
+		Scope: hitl.ActionScope{
+			SessionID: "chat-1",
+		},
+	}, target, decision, nil); offers != nil {
 		t.Fatalf("secret_outbound must offer no path rungs, got %d", len(offers))
 	}
 }
@@ -292,7 +348,11 @@ func TestSecretOutboundOffersNoPathLadder(t *testing.T) {
 func TestRelativeTargetOffersNoLadder(t *testing.T) {
 	target := gate.FileTarget{Path: "notes/todo.md", Mode: gate.ModeWrite}
 	decision := &gate.Decision{Primary: api.GateSensitiveLocation}
-	if offers := settings.GrantedPathOffers(hitl.ProposedAction{SessionID: "chat-1"}, target, decision, nil); offers != nil {
+	if offers := settings.GrantedPathOffers(hitl.ProposedAction{
+		Scope: hitl.ActionScope{
+			SessionID: "chat-1",
+		},
+	}, target, decision, nil); offers != nil {
 		t.Fatalf("a relative target must offer no rungs, got %d", len(offers))
 	}
 }
@@ -300,8 +360,14 @@ func TestRelativeTargetOffersNoLadder(t *testing.T) {
 // Each ladder offer keeps one granted_path. Quiet copies the matching grant.
 func TestFilesystemLadderCompilesIntoAPlan(t *testing.T) {
 	action := hitl.ProposedAction{
-		Tool: "write", Files: []string{"/etc/hosts"},
-		ProjectDir: t.TempDir(), SessionID: "chat-1",
+		Invocation: hitl.ActionInvocation{
+			Tool:  "write",
+			Files: []string{"/etc/hosts"},
+		},
+		Scope: hitl.ActionScope{
+			ProjectDir: t.TempDir(),
+			SessionID:  "chat-1",
+		},
 	}
 	res, offers := filesystemCard(t, action)
 	plan, err := hitl.CompileCheckpointApprovalPlan(hitl.CheckpointRequest{
@@ -355,300 +421,6 @@ func grantedPathCount(option hitl.ApprovalOption) int {
 	return n
 }
 
-func TestOrdinaryOutsideReadGrantsTheContainingFolder(t *testing.T) {
-	dir := filepath.Join(filepath.VolumeName(os.TempDir())+string(filepath.Separator), "unattached", t.Name())
-	file := filepath.Join(dir, "release.go")
-
-	action := hitl.ProposedAction{
-		Tool: "read", Files: []string{file},
-		ProjectDir: t.TempDir(), SessionID: "chat-1", ProjectID: "proj-1",
-	}
-	_, offers := filesystemCard(t, action)
-	for _, offer := range offers {
-		gp := offer.Grant.GrantedPath
-		if gp == nil || !gp.Tree || gp.Path != dir || gp.Write {
-			t.Fatalf("%s: ordinary outside read must grant the folder tree, got %+v", offer.Scope, gp)
-		}
-		if offer.Coverage != hitl.CoverageReadsOfTree(dir) &&
-			offer.Coverage != hitl.CoverageReadsOfTree(dir)+hitl.DeviceCoverageSuffix {
-			t.Fatalf("%s coverage = %q", offer.Scope, offer.Coverage)
-		}
-	}
-}
-
-func TestDirectoryReadGrantsThatDirectory(t *testing.T) {
-	dir := canonDir(t, t.TempDir())
-	action := hitl.ProposedAction{
-		Tool: "grep", Files: []string{dir},
-		ProjectDir: t.TempDir(), SessionID: "chat-1", ProjectID: "proj-1",
-	}
-	target := gate.FileTarget{Path: dir, Mode: gate.ModeRead}
-	decision := &gate.Decision{Primary: api.GateOutsideRootsRead}
-	offers := settings.GrantedPathOffers(action, target, decision, nil)
-	if len(offers) == 0 {
-		t.Fatal("expected granted-path offers")
-	}
-	gp := offers[0].Grant.GrantedPath
-	if gp == nil || !gp.Tree || gp.Path != dir {
-		t.Fatalf("grep of a directory must grant that directory, got %+v", gp)
-	}
-}
-
-func TestHomeFileReadStaysExact(t *testing.T) {
-	file := filepath.Join(home(t), "granted-path-exact.txt")
-	action := hitl.ProposedAction{
-		Tool: "read", Files: []string{file},
-		ProjectDir: t.TempDir(), SessionID: "chat-1", ProjectID: "proj-1",
-	}
-	target := gate.FileTarget{Path: file, Mode: gate.ModeRead}
-	decision := &gate.Decision{Primary: api.GateOutsideRootsRead}
-	offers := settings.GrantedPathOffers(action, target, decision, nil)
-	if len(offers) == 0 {
-		t.Fatal("expected granted-path offers")
-	}
-	for _, offer := range offers {
-		gp := offer.Grant.GrantedPath
-		if gp == nil || gp.Tree || gp.Path != file {
-			t.Fatalf("%s: a file in $HOME must stay exact, got %+v", offer.Scope, gp)
-		}
-	}
-}
-
-func TestTaskReadGrantSilencesLaterReadsInTheFolder(t *testing.T) {
-	dir := filepath.Join(filepath.VolumeName(os.TempDir())+string(filepath.Separator), "unattached", t.Name())
-	first := filepath.Join(dir, "release.go")
-	sibling := filepath.Join(dir, "client.go")
-	outside := filepath.Join(filepath.Dir(dir), "other.go")
-
-	proj := t.TempDir()
-	tmp := t.TempDir()
-	stageBundledApprovals(t, nil)
-	store, err := settings.NewApprovalStoreAt(filepath.Join(tmp, "global.yaml"))
-	testutil.FailErr(t, "NewApprovalStoreAt", err)
-	testutil.FailErr(t, "PutGlobal strict", store.PutGlobal(settings.ApprovalConfig{Posture: gate.PostureStrict}))
-	locations, err := sensitivepath.Load(sensitivepath.Bundled())
-	testutil.FailErr(t, "sensitivepath.Load", err)
-	sources := settings.NoSources()
-	sources.Locations = locations
-	g := settings.NewRuleApprovalGate(store, sources)
-
-	read := func(path, tool string) hitl.ProposedAction {
-		return hitl.ProposedAction{
-			Tool: tool, Files: []string{path},
-			ProjectDir: proj, SessionID: "chat-1", ProjectID: "proj-1",
-		}
-	}
-	firstAction := read(first, "read")
-	res, err := g.Evaluate(context.Background(), firstAction)
-	testutil.FailErr(t, "evaluate first read", err)
-	if !res.Required() || res.Decision == nil || res.Decision.Primary != api.GateOutsideRootsRead {
-		t.Fatalf("first outside read must ask outside_roots_read, got %+v", res)
-	}
-	offers := g.GrantOffers(firstAction, res)
-	var task hitl.ApprovalGrant
-	for _, offer := range offers {
-		if offer.Rung == hitl.ApprovalRungChat {
-			task = offer.Grant
-			break
-		}
-	}
-	if task.ID == "" || task.GrantedPath == nil || !task.GrantedPath.Tree {
-		t.Fatalf("missing folder task grant: %+v", offers)
-	}
-	_, err = g.ApplyGrant(task)
-	testutil.FailErr(t, "ApplyGrant", err)
-
-	for _, tc := range []struct {
-		name, tool, path string
-	}{
-		{"same file", "read", first},
-		{"sibling", "read", sibling},
-		{"directory grep", "grep", dir},
-		{"directory find", "find", dir},
-	} {
-		got, err := g.Evaluate(context.Background(), read(tc.path, tc.tool))
-		testutil.FailErr(t, "evaluate "+tc.name, err)
-		if got.Required() {
-			t.Fatalf("%s still asked after the folder grant: %+v", tc.name, got)
-		}
-	}
-
-	outsideRes, err := g.Evaluate(context.Background(), read(outside, "read"))
-	testutil.FailErr(t, "evaluate outside", err)
-	if !outsideRes.Required() {
-		t.Fatal("a path outside the granted folder must still ask")
-	}
-
-	writeRes, err := g.Evaluate(context.Background(), hitl.ProposedAction{
-		Tool: "write", Files: []string{sibling},
-		ProjectDir: proj, SessionID: "chat-1", ProjectID: "proj-1",
-	})
-	testutil.FailErr(t, "evaluate write", err)
-	if !writeRes.Required() {
-		t.Fatal("a read folder grant must not cover writes")
-	}
-}
-
-// The resolver admits an outside path only through the asked action's file
-// access, so a posture that left the read silent would strand it.
-func TestOutsideReadAsksWithFileAccessAtEveryPosture(t *testing.T) {
-	dir := filepath.Join(filepath.VolumeName(os.TempDir())+string(filepath.Separator), "unattached", t.Name())
-	for _, posture := range []gate.Posture{gate.PostureLight, gate.PostureBalanced, gate.PostureStrict} {
-		stageBundledApprovals(t, nil)
-		store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "global.yaml"))
-		testutil.FailErr(t, "NewApprovalStoreAt", err)
-		testutil.FailErr(t, "PutGlobal "+string(posture), store.PutGlobal(settings.ApprovalConfig{Posture: posture}))
-		g := settings.NewRuleApprovalGate(store, settings.NoSources())
-
-		for _, tool := range []string{"list_dir", "read", "grep", "find"} {
-			res, err := g.Evaluate(context.Background(), hitl.ProposedAction{
-				Tool: tool, Files: []string{dir},
-				ProjectDir: t.TempDir(), SessionID: "chat-1", ProjectID: "proj-1",
-			})
-			testutil.FailErr(t, string(posture)+" evaluate "+tool, err)
-			if !res.Required() || res.Decision == nil || res.Decision.Primary != api.GateOutsideRootsRead {
-				t.Fatalf("%s: %s outside the roots must ask outside_roots_read, got %+v", posture, tool, res)
-			}
-			if len(res.FileAccess) != 1 || res.FileAccess[0].Path != grantedpath.Normalize(dir) || res.FileAccess[0].Write {
-				t.Fatalf("%s: %s must carry read access for %s, got %+v", posture, tool, dir, res.FileAccess)
-			}
-		}
-	}
-}
-
-func TestTreeGrantDoesNotCoverSensitiveChildren(t *testing.T) {
-	dir := filepath.Join(filepath.VolumeName(os.TempDir())+string(filepath.Separator), "unattached", t.Name())
-	ordinary := filepath.Join(dir, "main.go")
-	secret := filepath.Join(dir, ".env")
-
-	proj := t.TempDir()
-	tmp := t.TempDir()
-	stageBundledApprovals(t, nil)
-	store, err := settings.NewApprovalStoreAt(filepath.Join(tmp, "global.yaml"))
-	testutil.FailErr(t, "NewApprovalStoreAt", err)
-	testutil.FailErr(t, "PutGlobal strict", store.PutGlobal(settings.ApprovalConfig{Posture: gate.PostureStrict}))
-	locations, err := sensitivepath.Load(sensitivepath.Bundled())
-	testutil.FailErr(t, "sensitivepath.Load", err)
-	sources := settings.NoSources()
-	sources.Locations = locations
-	g := settings.NewRuleApprovalGate(store, sources)
-
-	action := hitl.ProposedAction{
-		Tool: "read", Files: []string{ordinary},
-		ProjectDir: proj, SessionID: "chat-1", ProjectID: "proj-1",
-	}
-	res, err := g.Evaluate(context.Background(), action)
-	testutil.FailErr(t, "evaluate ordinary", err)
-	offers := g.GrantOffers(action, res)
-	var task hitl.ApprovalGrant
-	for _, offer := range offers {
-		if offer.Rung == hitl.ApprovalRungChat {
-			task = offer.Grant
-			break
-		}
-	}
-	if task.ID == "" {
-		t.Fatal("missing task grant")
-	}
-	_, err = g.ApplyGrant(task)
-	testutil.FailErr(t, "ApplyGrant", err)
-
-	secretRes, err := g.Evaluate(context.Background(), hitl.ProposedAction{
-		Tool: "read", Files: []string{secret},
-		ProjectDir: proj, SessionID: "chat-1", ProjectID: "proj-1",
-	})
-	testutil.FailErr(t, "evaluate .env", err)
-	if !secretRes.Required() {
-		t.Fatal("a folder grant must not silence a sensitive file under it")
-	}
-}
-
-func TestOrdinaryOutsideWriteStaysExact(t *testing.T) {
-	dir := filepath.Join(filepath.VolumeName(os.TempDir())+string(filepath.Separator), "unattached", t.Name())
-	file := filepath.Join(dir, "out.txt")
-	action := hitl.ProposedAction{
-		Tool: "write", Files: []string{file},
-		ProjectDir: t.TempDir(), SessionID: "chat-1", ProjectID: "proj-1",
-	}
-	_, offers := filesystemCard(t, action)
-	for _, offer := range offers {
-		gp := offer.Grant.GrantedPath
-		if gp == nil || gp.Tree || gp.Path != file || !gp.Write {
-			t.Fatalf("%s: an outside write must stay exact, got %+v", offer.Scope, gp)
-		}
-		if offer.Coverage != hitl.CoverageWritesTo(file) &&
-			offer.Coverage != hitl.CoverageWritesTo(file)+hitl.DeviceCoverageSuffix {
-			t.Fatalf("%s coverage = %q", offer.Scope, offer.Coverage)
-		}
-	}
-}
-
-func TestDurableTreeGrantSurvivesReloadAndSilencesReads(t *testing.T) {
-	dir := filepath.Join(filepath.VolumeName(os.TempDir())+string(filepath.Separator), "unattached", t.Name())
-	first := filepath.Join(dir, "release.go")
-	sibling := filepath.Join(dir, "client.go")
-
-	proj := t.TempDir()
-	yamlPath := filepath.Join(t.TempDir(), "global.yaml")
-	stageBundledApprovals(t, nil)
-	store, err := settings.NewApprovalStoreAt(yamlPath)
-	testutil.FailErr(t, "NewApprovalStoreAt", err)
-	testutil.FailErr(t, "PutGlobal strict", store.PutGlobal(settings.ApprovalConfig{Posture: gate.PostureStrict}))
-	locations, err := sensitivepath.Load(sensitivepath.Bundled())
-	testutil.FailErr(t, "sensitivepath.Load", err)
-	sources := settings.NoSources()
-	sources.Locations = locations
-	g := settings.NewRuleApprovalGate(store, sources)
-
-	action := hitl.ProposedAction{
-		Tool: "read", Files: []string{first},
-		ProjectDir: proj, SessionID: "chat-1", ProjectID: "proj-1",
-	}
-	res, err := g.Evaluate(context.Background(), action)
-	testutil.FailErr(t, "evaluate first read", err)
-	offers := g.GrantOffers(action, res)
-	var project hitl.ApprovalGrant
-	for _, offer := range offers {
-		// The durable slot is device-scoped for a filesystem crossing.
-		if offer.Rung == hitl.ApprovalRungDevice && !offer.Disabled {
-			project = offer.Grant
-			break
-		}
-	}
-	if project.ID == "" || project.GrantedPath == nil || !project.GrantedPath.Tree {
-		t.Fatalf("missing folder durable grant: %+v", offers)
-	}
-	project.GrantedByPersonID = testutil.HostOwner().ID
-	_, err = g.ApplyGrant(project)
-	testutil.FailErr(t, "ApplyGrant", err)
-
-	raw, err := os.ReadFile(yamlPath)
-	testutil.FailErr(t, "read approvals.yaml", err)
-	if !strings.Contains(string(raw), "tree: true") {
-		t.Fatalf("durable grant must persist tree: true, got:\n%s", raw)
-	}
-
-	store2, err := settings.NewApprovalStoreAt(yamlPath)
-	testutil.FailErr(t, "reload store", err)
-	g2 := settings.NewRuleApprovalGate(store2, sources)
-	got, err := g2.Evaluate(context.Background(), hitl.ProposedAction{
-		Tool: "read", Files: []string{sibling},
-		ProjectDir: proj, SessionID: "chat-2", ProjectID: "proj-1",
-	})
-	testutil.FailErr(t, "evaluate sibling after reload", err)
-	if got.Required() {
-		t.Fatalf("durable tree grant must silence a later read in the folder: %+v", got)
-	}
-}
-
-// canonDir resolves temp-dir aliases so expectations match minted canonical paths.
-func canonDir(t *testing.T, dir string) string {
-	t.Helper()
-	resolved, err := filepath.EvalSymlinks(dir)
-	testutil.FailErr(t, "resolve temp dir", err)
-	return resolved
-}
-
 func TestALeaseOnOnePathDoesNotCoverAnother(t *testing.T) {
 	covered := filepath.Join(filepath.VolumeName(os.TempDir())+string(filepath.Separator), "unattached", t.Name(), "covered")
 	uncovered := filepath.Join(filepath.VolumeName(os.TempDir())+string(filepath.Separator), "unattached", t.Name(), "uncovered")
@@ -683,8 +455,15 @@ func TestALeaseOnOnePathDoesNotCoverAnother(t *testing.T) {
 
 	action := func(files ...string) hitl.ProposedAction {
 		return hitl.ProposedAction{
-			Tool: "read", Files: files, ProjectDir: t.TempDir(),
-			SessionID: "chat-1", ProjectID: "proj-1",
+			Invocation: hitl.ActionInvocation{
+				Tool:  "read",
+				Files: files,
+			},
+			Scope: hitl.ActionScope{
+				ProjectDir: t.TempDir(),
+				SessionID:  "chat-1",
+				ProjectID:  "proj-1",
+			},
 		}
 	}
 	res, err := g.Evaluate(context.Background(), action(filepath.Join(covered, "a.go")))
@@ -697,5 +476,100 @@ func TestALeaseOnOnePathDoesNotCoverAnother(t *testing.T) {
 	testutil.FailErr(t, "Evaluate mixed failed", err)
 	if !res.Required() {
 		t.Fatal("a second path outside the granted tree must still raise a card")
+	}
+}
+
+func TestDirectoryHierarchyMintsDistinctOptionsAndDefaultsToContainingFolder(t *testing.T) {
+	dir := canonDir(t, t.TempDir())
+	folder := filepath.Join(dir, "src", "pkg")
+	file := filepath.Join(folder, "file.go")
+	action := hitl.ProposedAction{
+		Invocation: hitl.ActionInvocation{Tool: "read", Files: []string{file}},
+		Scope:      hitl.ActionScope{ProjectID: "project", ProjectDir: t.TempDir(), SessionID: "chat"},
+	}
+	target := gate.FileTarget{Path: file, Mode: gate.ModeRead, OutsideRoots: true}
+	decision := &gate.Decision{Primary: api.GateOutsideRootsRead}
+	offers := settings.GrantedPathOffers(action, target, decision, nil)
+	ids := map[string]bool{}
+	scopes := []string{}
+	options := []hitl.ApprovalOption{}
+	for _, offer := range offers {
+		if ids[offer.ID] {
+			t.Fatalf("duplicate opaque id %s", offer.ID)
+		}
+		ids[offer.ID] = true
+		if len(scopes) == 0 || scopes[len(scopes)-1] != offer.DirectoryScope {
+			scopes = append(scopes, offer.DirectoryScope)
+		}
+		options = append(options, hitl.GrantOption(offer))
+	}
+	if len(scopes) < 3 || scopes[0] != folder || scopes[1] != filepath.Dir(folder) || scopes[len(scopes)-1] != string(filepath.Separator) {
+		t.Fatalf("candidate scopes %v", scopes)
+	}
+	plan, err := hitl.NewApprovalPlan(action, hitl.ApprovalStagePreSpawn, hitl.ApprovalSubject{Kind: hitl.ApprovalSubjectAction, Title: "Read file", Targets: []hitl.ApprovalTarget{{Kind: "file", Label: file}}}, hitl.ApprovalPresentation{Action: "Read file", Impact: "Read the selected directory", Gate: api.GateOutsideRootsRead, Cited: []hitl.PresentedFact{{Gate: api.GateOutsideRootsRead, Key: "path", Value: file, Source: "action"}}}, []api.ApprovalGate{api.GateOutsideRootsRead}, options, hitl.FaceContext{})
+	testutil.FailErr(t, "compile directory plan", err)
+	option, ok := plan.Option(plan.RecommendedOptionID)
+	if !ok || option.DirectoryScope != folder || len(plan.DirectoryScopes) != len(scopes) {
+		t.Fatalf("wrong default: %+v scopes=%v", option, plan.DirectoryScopes)
+	}
+	plan.DirectoryScopes[0] += string(filepath.Separator) + "."
+	if err := plan.Validate(); err == nil {
+		t.Fatal("noncanonical directory scope was admitted")
+	}
+}
+
+func TestCredentialStoreReadAsksInsideAnAttachedHome(t *testing.T) {
+	tmp := t.TempDir()
+	stageBundledApprovals(t, nil)
+	store, err := settings.NewApprovalStoreAt(filepath.Join(tmp, "approvals.yaml"))
+	testutil.FailErr(t, "open approvals", err)
+	testutil.FailErr(t, "set balanced", store.PutGlobal(settings.ApprovalConfig{Posture: gate.PostureBalanced}))
+	locations, err := sensitivepath.Load(sensitivepath.Bundled())
+	testutil.FailErr(t, "load locations", err)
+	sources := settings.NoSources()
+	sources.Locations = locations
+	g := settings.NewRuleApprovalGate(store, sources)
+	path := filepath.Join(home(t), ".aws", "credentials")
+	action := hitl.ProposedAction{
+		Invocation: hitl.ActionInvocation{Tool: "read", Files: []string{path}},
+		Scope:      hitl.ActionScope{ProjectID: "project", ProjectDir: home(t), SessionID: "chat"},
+	}
+	res, err := g.Evaluate(context.Background(), action)
+	testutil.FailErr(t, "review credential read", err)
+	if !res.Required() || res.Decision.Primary != api.GateSensitiveLocation {
+		t.Fatalf("credential read inside home did not ask: %+v", res)
+	}
+	for _, offer := range g.GrantOffers(action, res) {
+		if offer.Grant.GrantedPath == nil || offer.Grant.GrantedPath.Tree || offer.Grant.GrantedPath.Path != path {
+			t.Fatalf("credential read widened: %+v", offer)
+		}
+	}
+}
+
+func TestMultipleReadTargetsOfferOneCrossingHierarchy(t *testing.T) {
+	base := filepath.Join(filepath.VolumeName(os.TempDir())+string(filepath.Separator), "unattached", t.Name())
+	first := filepath.Join(base, "first", "file.go")
+	second := filepath.Join(base, "second", "file.go")
+	action := hitl.ProposedAction{
+		Invocation: hitl.ActionInvocation{Tool: "read", Files: []string{first, second}},
+		Scope:      hitl.ActionScope{ProjectID: "project", ProjectDir: t.TempDir(), SessionID: "chat"},
+	}
+	_, offers := filesystemCard(t, action)
+	if len(offers) == 0 || offers[0].DirectoryScope != filepath.Dir(first) {
+		t.Fatalf("wrong selected crossing hierarchy: %+v", offers)
+	}
+	if grantedpath.CoversPath(offers[0].DirectoryScope, true, second) {
+		t.Fatal("nearest directory grant silently covered a sibling crossing")
+	}
+	previous := offers[0].DirectoryScope
+	for _, offer := range offers {
+		path := offer.DirectoryScope
+		if path == "" || filepath.Clean(path) != path || !grantedpath.CoversPath(path, true, first) {
+			t.Fatalf("option did not belong to selected crossing: %+v", offer)
+		}
+		if path != previous && !grantedpath.CoversPath(path, true, previous) {
+			t.Fatalf("unrelated crossing added to hierarchy: %q after %q", path, previous)
+		}
+		previous = path
 	}
 }

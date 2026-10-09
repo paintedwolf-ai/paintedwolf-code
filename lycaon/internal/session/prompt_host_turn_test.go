@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/llm"
+	"github.com/lycaon/lycaon/internal/session/promptinput"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/workercontext"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -43,17 +44,17 @@ func (r *receiptRecorder) admitted() []string {
 	return append([]string(nil), r.ids...)
 }
 
-func newReceiptTestManager(t *testing.T) (*Manager, *receiptRecorder) {
+func newReceiptTestManager(t *testing.T) (*Host, *receiptRecorder) {
 	t.Helper()
 	recorder := &receiptRecorder{Memory: store.NewMemory()}
 	registry := tools.NewStubRegistry()
-	mgr := NewManager(recorder, llm.NewMockProvider(testMockConfig(t)), registry, settings.DefaultSessionLimits())
+	mgr := NewHost(recorder, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, registry)
 	oartest.InstallCloseoutPolicy(t, mgr)
-	mgr.SetToolInvoker(testtool.RegistryInvoker{Registry: registry})
+	mgr.Coordinator.Guards.SetToolMetadata(testtool.RegistryInvoker{Registry: registry})
 	return mgr, recorder
 }
 
-func newReceiptTestSession(t *testing.T, mgr *Manager, sessions *receiptRecorder) *api.Session {
+func newReceiptTestSession(t *testing.T, mgr *Host, sessions *receiptRecorder) *api.Session {
 	t.Helper()
 	sess, err := sessions.Create(context.Background(), api.CreateSessionRequest{
 		Posture: api.SessionPostureBuild,
@@ -68,14 +69,14 @@ func TestHostTurnWritesReceipt(t *testing.T) {
 	ctx := workercontext.WithJob(context.Background(), "worker-job-1")
 	sess := newReceiptTestSession(t, mgr, sessions)
 
-	_, err := mgr.PromptHostTurn(ctx, sess.ID, store.PromptSubmissionOriginWorkerCloseout, "closeout kick")
+	_, err := mgr.Submissions.PromptHostTurn(ctx, sess.ID, store.PromptSubmissionOriginWorkerCloseout, "closeout kick")
 	testutil.FailErr(t, "run host turn", err)
 
 	ids := sessions.admitted()
 	if len(ids) != 1 {
 		t.Fatalf("host turn admitted %d receipts, want 1", len(ids))
 	}
-	row, err := mgr.GetPromptSubmission(ctx, ids[0])
+	row, err := mgr.Submissions.GetPromptSubmission(ctx, ids[0])
 	testutil.FailErr(t, "get host receipt", err)
 	if row.Origin != store.PromptSubmissionOriginWorkerCloseout {
 		t.Fatalf("receipt origin = %q, want worker_closeout", row.Origin)
@@ -83,7 +84,7 @@ func TestHostTurnWritesReceipt(t *testing.T) {
 	if row.Status != store.PromptSubmissionComplete {
 		t.Fatalf("receipt status = %q, want complete", row.Status)
 	}
-	var stored PromptInput
+	var stored promptinput.Input
 	testutil.FailErr(t, "decode stored input", json.Unmarshal([]byte(row.InputJSON), &stored))
 	if stored.Text != "closeout kick" {
 		t.Fatalf("stored input text = %q, want the kick text", stored.Text)
@@ -127,16 +128,16 @@ func TestHostTurnGroundingRetryKeepsTools(t *testing.T) {
 	ctx := context.Background()
 	sess := newReceiptTestSession(t, mgr, sessions)
 
-	_, err := mgr.PromptHostTurn(ctx, sess.ID, store.PromptSubmissionOriginGroundingRetry, "retry kick")
+	_, err := mgr.Submissions.PromptHostTurn(ctx, sess.ID, store.PromptSubmissionOriginGroundingRetry, "retry kick")
 	testutil.FailErr(t, "run grounding retry", err)
 
 	ids := sessions.admitted()
 	if len(ids) != 1 {
 		t.Fatalf("grounding retry admitted %d receipts, want 1", len(ids))
 	}
-	row, err := mgr.GetPromptSubmission(ctx, ids[0])
+	row, err := mgr.Submissions.GetPromptSubmission(ctx, ids[0])
 	testutil.FailErr(t, "get grounding receipt", err)
-	var stored PromptInput
+	var stored promptinput.Input
 	testutil.FailErr(t, "decode stored input", json.Unmarshal([]byte(row.InputJSON), &stored))
 	if stored.ProseFinish {
 		t.Fatal("grounding retry must keep tools")
@@ -152,19 +153,19 @@ func TestHostLoopWakeReceiptCarriesHostSignal(t *testing.T) {
 	ctx := context.Background()
 	sess := newReceiptTestSession(t, mgr, sessions)
 
-	_, err := mgr.promptHostLoopWake(ctx, sess.ID)
+	_, err := mgr.Submissions.LoopWake(ctx, sess.ID)
 	testutil.FailErr(t, "run loop wake", err)
 
 	ids := sessions.admitted()
 	if len(ids) != 1 {
 		t.Fatalf("loop wake admitted %d receipts, want 1", len(ids))
 	}
-	row, err := mgr.GetPromptSubmission(ctx, ids[0])
+	row, err := mgr.Submissions.GetPromptSubmission(ctx, ids[0])
 	testutil.FailErr(t, "get loop wake receipt", err)
 	if row.Origin != store.PromptSubmissionOriginLoopWake {
 		t.Fatalf("receipt origin = %q, want loop_wake", row.Origin)
 	}
-	var stored PromptInput
+	var stored promptinput.Input
 	testutil.FailErr(t, "decode stored input", json.Unmarshal([]byte(row.InputJSON), &stored))
 	if stored.HostSignal == nil || stored.HostSignal.Kind != api.MessageKindHostLoopWake {
 		t.Fatalf("stored host signal = %+v, want a loop-wake signal", stored.HostSignal)
@@ -176,19 +177,20 @@ func TestRecoveryResolvesHostReceiptsWithoutReplay(t *testing.T) {
 	ctx := context.Background()
 	sess := newReceiptTestSession(t, mgr, sessions)
 
-	userRow, _, err := mgr.AdmitPrompt(ctx, sess.ID, uuid.NewString(), "user work", PromptInput{Text: "user work"})
+	userRow, _, err := mgr.Submissions.AdmitPrompt(ctx, sess.ID, uuid.NewString(), "user work", promptinput.Input{Text: "user work"})
 	testutil.FailErr(t, "admit user prompt", err)
-	hostRow, _, err := mgr.admitPrompt(ctx, sess.ID, uuid.NewString(),
-		store.PromptSubmissionOriginGroundingRetry, "retry kick", PromptInput{Text: "retry kick"})
+	hostInput, err := json.Marshal(promptinput.Input{Text: "retry kick"})
+	testutil.FailErr(t, "encode host receipt fixture", err)
+	hostRow, _, err := sessions.PutPromptSubmission(ctx, store.PromptSubmission{ID: uuid.NewString(), SessionID: sess.ID, ProjectID: sess.ProjectID, Origin: store.PromptSubmissionOriginGroundingRetry, InputJSON: string(hostInput)})
 	testutil.FailErr(t, "admit host prompt", err)
 
-	recovered, err := mgr.RecoverPromptSubmissions(ctx)
+	recovered, err := mgr.Submissions.RecoverPromptSubmissions(ctx)
 	testutil.FailErr(t, "recover submissions", err)
 	if len(recovered) != 1 || recovered[0] != userRow.ID {
 		t.Fatalf("recovered = %v, want only the user receipt %s", recovered, userRow.ID)
 	}
 
-	resolved, err := mgr.GetPromptSubmission(ctx, hostRow.ID)
+	resolved, err := mgr.Submissions.GetPromptSubmission(ctx, hostRow.ID)
 	testutil.FailErr(t, "get host receipt", err)
 	if resolved.Status != store.PromptSubmissionInterrupted {
 		t.Fatalf("host receipt status = %q, want interrupted", resolved.Status)

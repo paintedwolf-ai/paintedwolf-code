@@ -54,24 +54,28 @@ func TestRejectEmitsNoDeleteForCoordinatorDraftSlot(t *testing.T) {
 	st.draftSlotID = "slot-1"
 	st.draftSlotAppended = true
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		HintConfig: loadCoordinatorTestHintConfig(t),
-		AppendDraftVersion: func(_ context.Context, _, slotID, body, code string) (int, error) {
-			if slotID != "slot-1" || body != "bad synthesis" {
-				t.Fatalf("snapshot slot=%q body=%q code=%q", slotID, body, code)
-			}
-			snapshotted++
-			return 1, nil
+		Closeout: CloseoutDeps{
+			HintConfig: loadCoordinatorTestHintConfig(t),
 		},
-		UpdateMessage: func(_ context.Context, _, _ string, _ api.Message) error { return nil },
-		AppendMessages: func(_ context.Context, _ string, msgs ...api.Message) error {
-			return nil
+		Projection: ProjectionDeps{
+			AppendDraftVersion: func(_ context.Context, _, slotID, body, code string) (int, error) {
+				if slotID != "slot-1" || body != "bad synthesis" {
+					t.Fatalf("snapshot slot=%q body=%q code=%q", slotID, body, code)
+				}
+				snapshotted++
+				return 1, nil
+			},
+			UpdateMessage: func(_ context.Context, _, _ string, _ api.Message) error { return nil },
+			AppendMessages: func(_ context.Context, _ string, msgs ...api.Message) error {
+				return nil
+			},
 		},
 	})
 	history := []api.Message{
 		{ID: "u1", Role: api.MessageRoleUser, Content: "go"},
 		{ID: "slot-1", Role: api.MessageRoleAssistant, Content: "bad synthesis", Visibility: api.MessageVisibilityInternal},
 	}
-	_, err := toolInvocations{loop}.rejectBlockedAssistantTurn(
+	_, err := loop.Tools.rejectBlockedAssistantTurn(
 		context.Background(), "s1", history, "slot-1", "slot-1",
 		refusalForTest("Rejected: test\nCode: SYNTH_HANDLE_NOT_IN_LEGS"),
 		nil,
@@ -84,15 +88,17 @@ func TestRejectEmitsNoDeleteForCoordinatorDraftSlot(t *testing.T) {
 
 func TestRetryPromptExcludesRejectedProse(t *testing.T) {
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		AppendDraftVersion: func(_ context.Context, _, _, _, _ string) (int, error) { return 1, nil },
-		UpdateMessage:      func(_ context.Context, _, _ string, _ api.Message) error { return nil },
-		AppendMessages:     func(_ context.Context, _ string, _ ...api.Message) error { return nil },
+		Projection: ProjectionDeps{
+			AppendDraftVersion: func(_ context.Context, _, _, _, _ string) (int, error) { return 1, nil },
+			UpdateMessage:      func(_ context.Context, _, _ string, _ api.Message) error { return nil },
+			AppendMessages:     func(_ context.Context, _ string, _ ...api.Message) error { return nil },
+		},
 	})
 	history := []api.Message{
 		{ID: "u1", Role: api.MessageRoleUser, Content: "go"},
 		{ID: "slot-1", Role: api.MessageRoleAssistant, Content: "rejected prose", Visibility: api.MessageVisibilityInternal},
 	}
-	out, err := toolInvocations{loop}.retractRejectedAssistantTurn(context.Background(), "s1", history, "slot-1", "slot-1", refusalForTest("Code: TEST"))
+	out, err := loop.Tools.retractRejectedAssistantTurn(context.Background(), "s1", history, "slot-1", "slot-1", refusalForTest("Code: TEST"))
 	testutil.FailErr(t, "retractRejectedAssistantTurn", err)
 	if len(out) != 1 {
 		t.Fatalf("history len = %d want 1", len(out))
@@ -107,14 +113,16 @@ func TestRetryPromptExcludesRejectedProse(t *testing.T) {
 func TestRejectSnapshotsVersionsWithOutcomeCode(t *testing.T) {
 	var code string
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		AppendDraftVersion: func(_ context.Context, _, _, _, outcomeCode string) (int, error) {
-			code = outcomeCode
-			return 1, nil
+		Projection: ProjectionDeps{
+			AppendDraftVersion: func(_ context.Context, _, _, _, outcomeCode string) (int, error) {
+				code = outcomeCode
+				return 1, nil
+			},
+			UpdateMessage: func(_ context.Context, _, _ string, _ api.Message) error { return nil },
 		},
-		UpdateMessage: func(_ context.Context, _, _ string, _ api.Message) error { return nil },
 	})
 	history := []api.Message{{ID: "slot-1", Role: api.MessageRoleAssistant, Content: "v1"}}
-	_, err := toolInvocations{loop}.retractRejectedAssistantTurn(
+	_, err := loop.Tools.retractRejectedAssistantTurn(
 		context.Background(), "s1", history, "slot-1", "slot-1",
 		refusalForTest("Rejected: x\nCode: COORDINATOR_UNGROUNDED_CLAIM"),
 	)
@@ -127,18 +135,20 @@ func TestRejectSnapshotsVersionsWithOutcomeCode(t *testing.T) {
 func TestRetractKeepsRejectedBodyOnWireRow(t *testing.T) {
 	var patched api.Message
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		AppendDraftVersion: func(_ context.Context, _, _, _, _ string) (int, error) { return 1, nil },
-		CountDraftVersions: func(_ context.Context, _, _ string) (int, error) { return 1, nil },
-		UpdateMessage: func(_ context.Context, _, _ string, msg api.Message) error {
-			patched = msg
-			return nil
+		Projection: ProjectionDeps{
+			AppendDraftVersion: func(_ context.Context, _, _, _, _ string) (int, error) { return 1, nil },
+			CountDraftVersions: func(_ context.Context, _, _ string) (int, error) { return 1, nil },
+			UpdateMessage: func(_ context.Context, _, _ string, msg api.Message) error {
+				patched = msg
+				return nil
+			},
+			AppendMessages: func(_ context.Context, _ string, _ ...api.Message) error { return nil },
 		},
-		AppendMessages: func(_ context.Context, _ string, _ ...api.Message) error { return nil },
 	})
 	history := []api.Message{
 		{ID: "slot-1", Role: api.MessageRoleAssistant, Content: "rejected prose", Visibility: api.MessageVisibilityInternal},
 	}
-	_, err := toolInvocations{loop}.retractRejectedAssistantTurn(context.Background(), "s1", history, "slot-1", "slot-1", refusalForTest("Code: TEST"))
+	_, err := loop.Tools.retractRejectedAssistantTurn(context.Background(), "s1", history, "slot-1", "slot-1", refusalForTest("Code: TEST"))
 	testutil.FailErr(t, "retractRejectedAssistantTurn", err)
 	if patched.Content != "rejected prose" {
 		t.Fatalf("wire content = %q want rejected body kept (no blank draft rail)", patched.Content)
@@ -154,10 +164,12 @@ func TestRetractKeepsRejectedBodyOnWireRow(t *testing.T) {
 func TestFinalSynthesisCommitSettlesLiveDraftSlot(t *testing.T) {
 	var patched api.Message
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		CountDraftVersions: func(_ context.Context, _, _ string) (int, error) { return 1, nil },
-		UpdateMessage: func(_ context.Context, _, _ string, msg api.Message) error {
-			patched = msg
-			return nil
+		Projection: ProjectionDeps{
+			CountDraftVersions: func(_ context.Context, _, _ string) (int, error) { return 1, nil },
+			UpdateMessage: func(_ context.Context, _, _ string, msg api.Message) error {
+				patched = msg
+				return nil
+			},
 		},
 	})
 	msg := api.Message{
@@ -167,7 +179,7 @@ func TestFinalSynthesisCommitSettlesLiveDraftSlot(t *testing.T) {
 		Grounding:   &api.CitationGrounding{},
 		DraftStatus: api.DraftStatusLive,
 	}
-	committed, err := loop.commitGuardedAssistantTurn(
+	committed, err := loop.Projection.commitGuardedAssistantTurn(
 		context.Background(), &api.Session{ID: "s1"}, "s1", nil, "go", "implement_synthesis", msg,
 	)
 	testutil.FailErr(t, "commitGuardedAssistantTurn", err)
@@ -185,10 +197,12 @@ func TestFinalSynthesisCommitSettlesLiveDraftSlot(t *testing.T) {
 func TestToolBatchPromoteSettlesLiveMidRunStep(t *testing.T) {
 	var patched api.Message
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		CountDraftVersions: func(_ context.Context, _, _ string) (int, error) { return 0, nil },
-		UpdateMessage: func(_ context.Context, _, _ string, msg api.Message) error {
-			patched = msg
-			return nil
+		Projection: ProjectionDeps{
+			CountDraftVersions: func(_ context.Context, _, _ string) (int, error) { return 0, nil },
+			UpdateMessage: func(_ context.Context, _, _ string, msg api.Message) error {
+				patched = msg
+				return nil
+			},
 		},
 	})
 	msg := api.Message{
@@ -197,7 +211,7 @@ func TestToolBatchPromoteSettlesLiveMidRunStep(t *testing.T) {
 		DraftStatus: api.DraftStatusLive,
 		ToolCalls:   []api.ToolCall{{ID: "call_1", Name: "read"}},
 	}
-	committed, err := loop.commitGuardedAssistantTurn(
+	committed, err := loop.Projection.commitGuardedAssistantTurn(
 		context.Background(), &api.Session{ID: "s1"}, "s1", nil, "go", "", msg,
 	)
 	testutil.FailErr(t, "commitGuardedAssistantTurn", err)
@@ -211,8 +225,10 @@ func TestToolBatchPromoteSettlesLiveMidRunStep(t *testing.T) {
 
 func TestToolCallOnlyEmptyProseSettlesLiveMidRunStep(t *testing.T) {
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		CountDraftVersions: func(_ context.Context, _, _ string) (int, error) { return 0, nil },
-		UpdateMessage:      func(_ context.Context, _, _ string, _ api.Message) error { return nil },
+		Projection: ProjectionDeps{
+			CountDraftVersions: func(_ context.Context, _, _ string) (int, error) { return 0, nil },
+			UpdateMessage:      func(_ context.Context, _, _ string, _ api.Message) error { return nil },
+		},
 	})
 	msg := api.Message{
 		ID:          "slot-1",
@@ -221,7 +237,7 @@ func TestToolCallOnlyEmptyProseSettlesLiveMidRunStep(t *testing.T) {
 		DraftStatus: api.DraftStatusLive,
 		ToolCalls:   []api.ToolCall{{ID: "call_1", Name: "grep"}},
 	}
-	committed, err := loop.commitGuardedAssistantTurn(
+	committed, err := loop.Projection.commitGuardedAssistantTurn(
 		context.Background(), &api.Session{ID: "s1"}, "s1", nil, "go", "", msg,
 	)
 	testutil.FailErr(t, "commitGuardedAssistantTurn", err)
@@ -238,8 +254,10 @@ func TestToolCallOnlyEmptyProseKeepsDraftKindWithRejectedVersions(t *testing.T) 
 	// rejected (draft_version_count > 1) must keep kind=draft, so Den renders the
 	// rejected draft's version rail instead of collapsing the row to bare tool chips.
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		CountDraftVersions: func(_ context.Context, _, _ string) (int, error) { return 1, nil },
-		UpdateMessage:      func(_ context.Context, _, _ string, _ api.Message) error { return nil },
+		Projection: ProjectionDeps{
+			CountDraftVersions: func(_ context.Context, _, _ string) (int, error) { return 1, nil },
+			UpdateMessage:      func(_ context.Context, _, _ string, _ api.Message) error { return nil },
+		},
 	})
 	msg := api.Message{
 		ID:          "slot-1",
@@ -248,7 +266,7 @@ func TestToolCallOnlyEmptyProseKeepsDraftKindWithRejectedVersions(t *testing.T) 
 		DraftStatus: api.DraftStatusLive,
 		ToolCalls:   []api.ToolCall{{ID: "call_1", Name: "grep"}},
 	}
-	committed, err := loop.commitGuardedAssistantTurn(
+	committed, err := loop.Projection.commitGuardedAssistantTurn(
 		context.Background(), &api.Session{ID: "s1"}, "s1", nil, "go", "", msg,
 	)
 	testutil.FailErr(t, "commitGuardedAssistantTurn", err)
@@ -271,13 +289,15 @@ func TestWithdrawnTerminalState(t *testing.T) {
 		lastAssistantContent: "never committed",
 	}
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		CountDraftVersions: func(_ context.Context, _, _ string) (int, error) { return 0, nil },
-		UpdateMessage: func(_ context.Context, _, _ string, msg api.Message) error {
-			patched = msg
-			return nil
+		Projection: ProjectionDeps{
+			CountDraftVersions: func(_ context.Context, _, _ string) (int, error) { return 0, nil },
+			UpdateMessage: func(_ context.Context, _, _ string, msg api.Message) error {
+				patched = msg
+				return nil
+			},
 		},
 	})
-	err := turnNudges{loop}.maybeWithdrawCoordinatorDraft(context.Background(), &api.Session{ID: "s1"}, "s1", st)
+	err := loop.Nudges.maybeWithdrawCoordinatorDraft(context.Background(), &api.Session{ID: "s1"}, "s1", st)
 	testutil.FailErr(t, "maybeWithdrawCoordinatorDraft", err)
 	if patched.Kind != api.MessageKindDraft || patched.DraftStatus != api.DraftStatusWithdrawn {
 		t.Fatalf("patched = %+v want withdrawn draft", patched)
@@ -290,14 +310,16 @@ func TestWithdrawnTerminalState(t *testing.T) {
 func TestVersionCountPopulatedOnCommit(t *testing.T) {
 	var patched api.Message
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		CountDraftVersions: func(_ context.Context, _, _ string) (int, error) { return 2, nil },
-		UpdateMessage: func(_ context.Context, _, _ string, msg api.Message) error {
-			patched = msg
-			return nil
+		Projection: ProjectionDeps{
+			CountDraftVersions: func(_ context.Context, _, _ string) (int, error) { return 2, nil },
+			UpdateMessage: func(_ context.Context, _, _ string, msg api.Message) error {
+				patched = msg
+				return nil
+			},
 		},
 	})
 	msg := api.Message{ID: "slot-1", Content: "final", Role: api.MessageRoleAssistant}
-	committed, err := loop.commitGuardedAssistantTurn(
+	committed, err := loop.Projection.commitGuardedAssistantTurn(
 		context.Background(), &api.Session{ID: "s1"}, "s1", nil, "go", "implement_dispatch", msg,
 	)
 	testutil.FailErr(t, "commitGuardedAssistantTurn", err)
@@ -312,15 +334,17 @@ func TestVersionCountPopulatedOnCommit(t *testing.T) {
 func TestNonSlotRejectSupersedesInPlace(t *testing.T) {
 	var patched api.Message
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		UpdateMessage: func(_ context.Context, _, _ string, msg api.Message) error {
-			patched = msg
-			return nil
+		Projection: ProjectionDeps{
+			UpdateMessage: func(_ context.Context, _, _ string, msg api.Message) error {
+				patched = msg
+				return nil
+			},
+			AppendMessages:     func(_ context.Context, _ string, _ ...api.Message) error { return nil },
+			AppendDraftVersion: func(context.Context, string, string, string, string) (int, error) { return 1, nil },
 		},
-		AppendMessages:     func(_ context.Context, _ string, _ ...api.Message) error { return nil },
-		AppendDraftVersion: func(context.Context, string, string, string, string) (int, error) { return 1, nil },
 	})
 	history := []api.Message{{ID: "a1", Role: api.MessageRoleAssistant, Content: "worker bad", Ord: 3}}
-	_, err := toolInvocations{loop}.rejectBlockedAssistantTurn(context.Background(), "s1", history, "a1", "", refusalForTest("Code: TEST"), nil)
+	_, err := loop.Tools.rejectBlockedAssistantTurn(context.Background(), "s1", history, "a1", "", refusalForTest("Code: TEST"), nil)
 	testutil.FailErr(t, "rejectBlockedAssistantTurn", err)
 	if patched.ID != "a1" {
 		t.Fatalf("patched id = %q want a1", patched.ID)

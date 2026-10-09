@@ -20,9 +20,11 @@ func TestRuntimeConcurrentPromptTurnSafe(t *testing.T) {
 	rt := coordinator.NewRuntime(coordinator.RuntimeDeps{
 		LoopDeps: func() promptloop.PromptLoopDeps {
 			return promptloop.PromptLoopDeps{
-				Limits: func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
-				BuildMessages: func(_ context.Context, _ *api.Session, history []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
-					return history, nil
+				Context: promptloop.ContextDeps{
+					Limits: func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
+					BuildMessages: func(_ context.Context, _ *api.Session, history []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
+						return history, nil
+					},
 				},
 			}
 		},

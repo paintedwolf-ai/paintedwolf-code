@@ -17,7 +17,7 @@ type cycleDeliverySessions struct {
 	readError        error
 }
 
-func (s *cycleDeliverySessions) NotifyWorkerCycleTerminal(ctx context.Context, _, _ string) {
+func (s *cycleDeliverySessions) Terminal(ctx context.Context, _, _ string) {
 	items, err := s.queue.ListPendingOutcomes(ctx)
 	s.pendingAtRelease, s.readError = len(items), err
 	s.notified = true
@@ -44,7 +44,7 @@ func TestWorkerBridgeReleasesParentAfterQueueAcknowledgement(t *testing.T) {
 		t.Fatal("completed worker missing")
 	}
 	sessions := &cycleDeliverySessions{proofCountSessions: &proofCountSessions{}, queue: queue}
-	bridge := &SessionOutcomeBridge{Sessions: sessions}
+	bridge := &SessionOutcomeBridge{Workers: sessions, Loop: sessions, Results: sessions, State: sessions, Closure: sessions}
 	poller := NewLocalWorkerPoller(queue, panicExecutor{}, DefaultWorkersConfig(), bridge)
 	testutil.FailErr(t, "deliver committed outcome", poller.deliverOutcome(t.Context(), *task))
 	testutil.FailErr(t, "read outcomes during parent release", sessions.readError)

@@ -1,6 +1,8 @@
 package guard_test
 
 import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+
 	"strings"
 	"testing"
 
@@ -8,7 +10,6 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/orchestration"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -20,7 +21,7 @@ var implementHostSurfaceContract = []struct {
 }{
 	{"implement_routing", true, false},
 	{"implement_synthesis", true, true},
-	{tools.SurfaceImplementInvestigate, true, true},
+	{toolcontract.SurfaceImplementInvestigate, true, true},
 	{surface.SurfaceImplementDispatch, false, false},
 	{surface.SurfaceImplementOverlayPromote, false, false},
 	{surface.SurfaceImplementPark, false, false},
@@ -151,7 +152,7 @@ func TestHostTurnGuard_hostCycleOpenPlanBlocksProse(t *testing.T) {
 		sess, hostLoopHistory(
 			history),
 		prose,
-		nil, tools.SurfaceImplementInvestigate, true, state, rejectFmt, guard.BatchTurnGuard{})
+		nil, toolcontract.SurfaceImplementInvestigate, true, state, rejectFmt, guard.BatchTurnGuard{})
 
 	if !block || !strings.Contains(reject, guard.CoordinatorHostTurnRequiresWaitCode) {
 		t.Fatalf("host cycle with open plan must block investigate prose, got reject=%q block=%v", reject, block)

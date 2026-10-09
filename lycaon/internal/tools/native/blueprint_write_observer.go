@@ -33,7 +33,7 @@ func notifyBlueprintWrite(ctx context.Context, tctx tools.ToolContext, paths ...
 	if o == nil {
 		return
 	}
-	sessionID := strings.TrimSpace(tctx.SessionID)
+	sessionID := strings.TrimSpace(tctx.Identity.SessionID)
 	for _, p := range paths {
 		p = filepath.ToSlash(strings.TrimSpace(p))
 		if p == "" || p == "." {

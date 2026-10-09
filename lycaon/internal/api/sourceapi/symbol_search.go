@@ -9,7 +9,9 @@ import (
 
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/search"
+	"github.com/lycaon/lycaon/internal/sourcecatalog"
 )
 
 // symbolProjectWorkers bounds projects searched at once on one symbol leg.
@@ -118,14 +120,14 @@ func (e *SymbolExecutor) searchProject(ctx context.Context, leg *search.SymbolPl
 		return symbolProjectResult{err: err}
 	}
 	started := time.Now()
-	result, err := project.SearchProjectSourceSymbols(ctx, p, project.SourceSymbolSearchRequest{
+	result, err := projectsource.SearchProjectSourceSymbols(ctx, p, projectsource.SourceSymbolSearchRequest{
 		Query:         leg.Name,
 		RootIDs:       target.rootIDs,
 		Limit:         leg.Cap,
 		CaseSensitive: leg.Flags.CaseSensitive,
 		Exact:         leg.Flags.WholeWord,
 		ExcludeDirs:   leg.ExcludeDirs,
-	}, declarationSearchIn(leg.DiscoveryScope(), leg.Flags.Include, leg.Flags.Exclude))
+	}, declarationSearchIn(leg.DiscoveryScope(), leg.Flags.Include, leg.Flags.Exclude, leg.IncludeDependencies))
 	if err != nil {
 		return symbolProjectResult{err: err}
 	}
@@ -134,8 +136,13 @@ func (e *SymbolExecutor) searchProject(ctx context.Context, leg *search.SymbolPl
 	for _, pass := range result.Passes {
 		out.filesOutlined += pass.Files
 	}
+	rootFilters := make(map[string]search.SymbolFilter, len(p.Roots))
+	for _, root := range p.Roots {
+		rootFilters[root.ID] = filter.ForRoot(ctx, sourcecatalog.Process(), root.Path, leg.IncludeDependencies)
+	}
 	for _, match := range result.Symbols {
-		if !filter.Admits(match.Path, match.Name) {
+		rootFilter, knownRoot := rootFilters[match.RootID]
+		if !knownRoot || !rootFilter.Admits(match.Path, match.Name) {
 			continue
 		}
 		highlights := make([]search.TextRange, 0, len(match.Highlights))
@@ -180,7 +187,7 @@ func symbolProjects(roots []search.CodeRoot) []symbolProject {
 
 // logSymbolSearchDone is the one line per project symbol search that says
 // where its time went.
-func logSymbolSearchDone(projectID string, result project.SourceSymbolSearchResult, started time.Time) {
+func logSymbolSearchDone(projectID string, result projectsource.SourceSymbolSearchResult, started time.Time) {
 	passes := make([]string, 0, len(result.Passes))
 	for _, pass := range result.Passes {
 		passes = append(passes, fmt.Sprintf("%s:hits=%d,files=%d,partial=%t,discover_ms=%d,outline_ms=%d",

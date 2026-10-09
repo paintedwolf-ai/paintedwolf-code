@@ -4,12 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strconv"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/guidance"
-	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/tools"
+	sessiondecisions "github.com/lycaon/lycaon/internal/session/decisions"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -22,7 +22,7 @@ const (
 // AnswerDecisionService resolves worker decisions.
 type AnswerDecisionService struct {
 	Queue     WorkerQueue
-	Decisions session.DecisionStore
+	Decisions sessiondecisions.Store
 	Resolver  DecisionResolver
 	Reject    *guidance.StaticRejectFormatter
 }
@@ -110,7 +110,7 @@ func (s *AnswerDecisionService) reject(code string, data map[string]any) error {
 	if s != nil {
 		formatter = s.Reject
 	}
-	return tools.FormatDecisionReject(code, data, formatter)
+	return toolrejection.FormatDecisionReject(code, data, formatter)
 }
 
 // resolveDecisionOption accepts an option's text or a one-based index. Text wins,

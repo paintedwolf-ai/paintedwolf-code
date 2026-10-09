@@ -10,7 +10,7 @@ import (
 )
 
 type emptinessIndex struct {
-	*sourcecatalog.Catalog
+	*sourcecatalog.TreeStores
 	files sourcecatalog.RootFiles
 }
 

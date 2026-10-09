@@ -4,11 +4,8 @@ import {
   onMount,
   type ComponentProps,
 } from "solid-js";
-import {
-  TranscriptViewportProvider,
-  createTranscriptViewportController,
-  type TranscriptViewportController,
-} from "../../chat/stream/transcript-viewport.tsx";
+import { TranscriptViewportProvider, createTranscriptViewportController } from "../../chat/stream/transcript-viewport.tsx";
+import { type TranscriptViewportController } from "../../chat/stream/transcript-viewport-types.ts";
 import {
   bindScrollportMotion,
   unbindScrollportMotion,

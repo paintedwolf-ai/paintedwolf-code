@@ -3,15 +3,14 @@ package loopwake
 import (
 	"context"
 	"encoding/json"
-	"testing"
-	"time"
-
 	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/isolation"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
+	"testing"
+	"time"
 )
 
 func TestDurableWaitResumePreservesWorkerSubscription(t *testing.T) {
@@ -32,22 +31,20 @@ func TestDurableWaitResumePreservesWorkerSubscription(t *testing.T) {
 			loop.SetDeps(busyWaitLoopDeps())
 			t.Cleanup(func() { loop.ForgetSession(context.Background(), id) })
 			deadline := time.Now().UTC().Add(7 * time.Minute)
-			loop.EnterSleep(t.Context(), id, deadline, "waiting for workers", DefaultCoordinatorWaitTriggers(false), nil, SleepMoverHost)
-			loop.breakSleep(t.Context(), id, "worker.budget.requested", !expired)
+			loop.Waits.EnterSleep(t.Context(), id, deadline, "waiting for workers", DefaultCoordinatorWaitTriggers(false), nil, SleepMoverHost)
+			loop.Waits.breakSleep(t.Context(), id, "worker.budget.requested", !expired)
 			registry := tools.NewDefaultRegistry()
-			testutil.FailErr(t, "register durable wait", RegisterWaitTool(registry, loop, WaitToolDeps{Store: store, RuntimeContext: t.Context()}))
+			testutil.FailErr(t, "register durable wait", RegisterWaitTool(registry, loop.Subscriptions, WaitToolDeps{Store: store, RuntimeContext: t.Context()}))
 			before := time.Now().UTC()
 			args := map[string]any{"resume": true}
 			if expired {
 				args["timeout_ms"] = 300_000
 			}
-			out, err := registry.Run(t.Context(), "wait", args, tools.ToolContext{
-				SessionID: id, ProjectID: testdbseed.DefaultProjectID, ToolCallID: "resume-call", Agent: "coordinator",
-			})
+			out, err := registry.Run(t.Context(), "wait", args, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: id, ProjectID: testdbseed.DefaultProjectID, ToolCallID: "resume-call", Agent: "coordinator"}})
 			testutil.FailErr(t, "resume worker wait", err)
 			var result WaitToolResult
 			testutil.FailErr(t, "decode wait", json.Unmarshal([]byte(out), &result))
-			if !hasWaitTrigger(loop.WaitSubscriptionForTest(id), WaitTriggerNextWorkerDone) {
+			if !hasWaitTrigger(waitSubscriptionForTest(loop.Subscriptions, id), WaitTriggerNextWorkerDone) {
 				t.Fatal("durable resume lost the worker subscription")
 			}
 			lease, ok, err := store.ForSession(t.Context(), id)
@@ -84,15 +81,13 @@ func TestWaitResumeRechecksLoopbackAuthority(t *testing.T) {
 			loop.SetDeps(busyWaitLoopDeps())
 			t.Cleanup(func() { loop.ForgetSession(context.Background(), id) })
 			registry := tools.NewDefaultRegistry()
-			testutil.FailErr(t, "register wait", RegisterWaitTool(registry, loop, WaitToolDeps{Store: store, RuntimeContext: t.Context()}))
-			_, err = registry.Run(t.Context(), "wait", map[string]any{"resume": true}, tools.ToolContext{
-				SessionID: id, ProjectID: testdbseed.DefaultProjectID, Agent: "coordinator", ToolCallID: "resume-call",
-			})
+			testutil.FailErr(t, "register wait", RegisterWaitTool(registry, loop.Subscriptions, WaitToolDeps{Store: store, RuntimeContext: t.Context()}))
+			_, err = registry.Run(t.Context(), "wait", map[string]any{"resume": true}, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: id, ProjectID: testdbseed.DefaultProjectID, Agent: "coordinator", ToolCallID: "resume-call"}})
 			reject := tools.AsToolReject(err)
 			if reject == nil || reject.Code != isolation.CodeTryLoopbackConnect {
 				t.Fatalf("resume must review restored local access: %v", err)
 			}
-			if loop.IsSleeping(id) {
+			if loop.Waits.IsSleeping(id) {
 				t.Fatal("rejected resume armed a new wait")
 			}
 		})

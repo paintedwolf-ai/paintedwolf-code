@@ -36,15 +36,15 @@ func TestObserveGitStateSeedsSilentlyThenMintsTransitions(t *testing.T) {
 	reader := &fakeGitReader{states: map[string]gitstate.State{
 		"/tmp/source-ledger-test": {Repo: gitstate.RepoPresent, HeadCommit: "aaa", HeadRef: "main"},
 	}}
-	store.SetGitReader(reader)
+	store.Git.SetGitReader(reader)
 
 	// First observation records a baseline, not an event.
-	terminal, err := store.ObserveGitState(ctx, "p1", testRoots)
+	terminal, err := store.Git.ObserveGitState(ctx, "p1", testRoots)
 	testutil.FailErr(t, "seed git state", err)
 	if len(terminal) != 0 {
 		t.Fatalf("seeding minted transitions: %+v", terminal)
 	}
-	transitions, err := store.GitTransitionsBetween(ctx, "p1", 0, 0, 10)
+	transitions, err := store.Git.GitTransitionsBetween(ctx, "p1", 0, 0, 10)
 	testutil.FailErr(t, "list transitions after seed", err)
 	if len(transitions) != 0 {
 		t.Fatalf("transitions after seed = %+v", transitions)
@@ -60,12 +60,12 @@ func TestObserveGitStateSeedsSilentlyThenMintsTransitions(t *testing.T) {
 			{Commit: "aaa", Subject: "commit: earlier"},
 		},
 	}
-	terminal, err = store.ObserveGitState(ctx, "p1", testRoots)
+	terminal, err = store.Git.ObserveGitState(ctx, "p1", testRoots)
 	testutil.FailErr(t, "observe commit", err)
 	if terminal["r1"] == "" {
 		t.Fatalf("terminal transitions = %+v", terminal)
 	}
-	transitions, err = store.GitTransitionsBetween(ctx, "p1", 0, 0, 10)
+	transitions, err = store.Git.GitTransitionsBetween(ctx, "p1", 0, 0, 10)
 	testutil.FailErr(t, "list transitions", err)
 	if len(transitions) != 1 {
 		t.Fatalf("transitions = %+v", transitions)
@@ -80,7 +80,7 @@ func TestObserveGitStateSeedsSilentlyThenMintsTransitions(t *testing.T) {
 	}
 
 	// An unmoved position stays silent.
-	terminal, err = store.ObserveGitState(ctx, "p1", testRoots)
+	terminal, err = store.Git.ObserveGitState(ctx, "p1", testRoots)
 	testutil.FailErr(t, "re-observe", err)
 	if len(terminal) != 0 {
 		t.Fatalf("unmoved position minted transitions: %+v", terminal)
@@ -92,8 +92,8 @@ func TestEffectsCarryTheirGitTransition(t *testing.T) {
 	reader := &fakeGitReader{states: map[string]gitstate.State{
 		"/tmp/source-ledger-test": {Repo: gitstate.RepoPresent, HeadCommit: "aaa", HeadRef: "main"},
 	}}
-	store.SetGitReader(reader)
-	_, err := store.ObserveGitState(ctx, "p1", testRoots)
+	store.Git.SetGitReader(reader)
+	_, err := store.Git.ObserveGitState(ctx, "p1", testRoots)
 	testutil.FailErr(t, "seed git state", err)
 
 	reader.states["/tmp/source-ledger-test"] = gitstate.State{
@@ -105,7 +105,7 @@ func TestEffectsCarryTheirGitTransition(t *testing.T) {
 			{Commit: "aaa", Subject: "commit: earlier"},
 		},
 	}
-	terminal, err := store.ObserveGitState(ctx, "p1", testRoots)
+	terminal, err := store.Git.ObserveGitState(ctx, "p1", testRoots)
 	testutil.FailErr(t, "observe checkout", err)
 
 	mustRecord(t, store, ctx, RecordInput{
@@ -116,7 +116,7 @@ func TestEffectsCarryTheirGitTransition(t *testing.T) {
 		GitTransitionID: terminal["r1"],
 	})
 
-	walk, err := store.QueryWalk(ctx, "p1", Baseline{}, 10, 0, CommitLens{})
+	walk, err := store.Walk.QueryWalk(ctx, "p1", Baseline{}, 10, 0, CommitLens{})
 	testutil.FailErr(t, "query walk", err)
 	if len(walk.Files) != 1 || len(walk.Files[0].Effects) != 1 {
 		t.Fatalf("walk = %+v", walk.Files)
@@ -148,8 +148,8 @@ func TestWalkReportsBareGitTransitionsOnItsSpan(t *testing.T) {
 	reader := &fakeGitReader{states: map[string]gitstate.State{
 		"/tmp/source-ledger-test": {Repo: gitstate.RepoPresent, HeadCommit: "aaa", HeadRef: "main"},
 	}}
-	store.SetGitReader(reader)
-	_, err := store.ObserveGitState(ctx, "p1", testRoots)
+	store.Git.SetGitReader(reader)
+	_, err := store.Git.ObserveGitState(ctx, "p1", testRoots)
 	testutil.FailErr(t, "seed git state", err)
 
 	mustRecord(t, store, ctx, RecordInput{
@@ -169,12 +169,12 @@ func TestWalkReportsBareGitTransitionsOnItsSpan(t *testing.T) {
 			{Commit: "aaa", Subject: "commit: earlier"},
 		},
 	}
-	terminal, err := store.ObserveGitState(ctx, "p1", testRoots)
+	terminal, err := store.Git.ObserveGitState(ctx, "p1", testRoots)
 	testutil.FailErr(t, "observe bare commit", err)
 
 	// The first page is open above its newest effect, so the trailing bare
 	// movement appears without any effect referencing it.
-	walk, err := store.QueryWalk(ctx, "p1", Baseline{}, 10, 0, CommitLens{})
+	walk, err := store.Walk.QueryWalk(ctx, "p1", Baseline{}, 10, 0, CommitLens{})
 	testutil.FailErr(t, "query walk", err)
 	transition, ok := walkGitChangeByID(walk, terminal["r1"])
 	if !ok || transition.Kind != string(api.SourceGitChangeCommit) ||
@@ -190,7 +190,7 @@ func TestWalkReportsBareGitTransitionsOnItsSpan(t *testing.T) {
 	}
 
 	// A page with no effects anchors no span and reports nothing.
-	empty, err := store.QueryWalk(ctx, "p1", Baseline{
+	empty, err := store.Walk.QueryWalk(ctx, "p1", Baseline{
 		Kind: BaselineSession, SessionID: "no-such-session",
 	}, 10, 0, CommitLens{})
 	testutil.FailErr(t, "query empty walk", err)
@@ -204,8 +204,8 @@ func TestFileVersionsCarryTheirGitTransition(t *testing.T) {
 	reader := &fakeGitReader{states: map[string]gitstate.State{
 		"/tmp/source-ledger-test": {Repo: gitstate.RepoPresent, HeadCommit: "aaa", HeadRef: "main"},
 	}}
-	store.SetGitReader(reader)
-	_, err := store.ObserveGitState(ctx, "p1", testRoots)
+	store.Git.SetGitReader(reader)
+	_, err := store.Git.ObserveGitState(ctx, "p1", testRoots)
 	testutil.FailErr(t, "seed git state", err)
 
 	mustRecord(t, store, ctx, RecordInput{
@@ -223,7 +223,7 @@ func TestFileVersionsCarryTheirGitTransition(t *testing.T) {
 			{Commit: "aaa", Subject: "commit: earlier"},
 		},
 	}
-	terminal, err := store.ObserveGitState(ctx, "p1", testRoots)
+	terminal, err := store.Git.ObserveGitState(ctx, "p1", testRoots)
 	testutil.FailErr(t, "observe checkout", err)
 	mustRecord(t, store, ctx, RecordInput{
 		ProjectID: "p1", RootID: "r1", Path: "swapped.txt",
@@ -234,7 +234,7 @@ func TestFileVersionsCarryTheirGitTransition(t *testing.T) {
 	})
 
 	fileID, _ := mustResolve(t, store, ctx, "swapped.txt")
-	history, err := store.QueryFileVersions(ctx, "p1", fileID, 10, 0)
+	history, err := store.History.QueryFileVersions(ctx, "p1", fileID, 10, 0)
 	testutil.FailErr(t, "query versions", err)
 	var gitCaused, plain int
 	for _, version := range history.Versions {
@@ -259,8 +259,8 @@ func TestReadVersionGitSourceNamesTheCommit(t *testing.T) {
 	reader := &fakeGitReader{states: map[string]gitstate.State{
 		"/tmp/source-ledger-test": {Repo: gitstate.RepoPresent, HeadCommit: "aaa", HeadRef: "main"},
 	}}
-	store.SetGitReader(reader)
-	_, err := store.ObserveGitState(ctx, "p1", testRoots)
+	store.Git.SetGitReader(reader)
+	_, err := store.Git.ObserveGitState(ctx, "p1", testRoots)
 	testutil.FailErr(t, "seed git state", err)
 
 	mustRecord(t, store, ctx, RecordInput{
@@ -277,7 +277,7 @@ func TestReadVersionGitSourceNamesTheCommit(t *testing.T) {
 			{Commit: "aaa", Subject: "commit: earlier"},
 		},
 	}
-	terminal, err := store.ObserveGitState(ctx, "p1", testRoots)
+	terminal, err := store.Git.ObserveGitState(ctx, "p1", testRoots)
 	testutil.FailErr(t, "observe checkout", err)
 	mustRecord(t, store, ctx, RecordInput{
 		ProjectID: "p1", RootID: "r1", Path: "swapped.txt",
@@ -288,7 +288,7 @@ func TestReadVersionGitSourceNamesTheCommit(t *testing.T) {
 	})
 
 	fileID, gitVersionID := mustResolve(t, store, ctx, "swapped.txt")
-	src, err := store.ReadVersionGitSource(ctx, "p1", gitVersionID)
+	src, err := store.History.ReadVersionGitSource(ctx, "p1", gitVersionID)
 	testutil.FailErr(t, "read git source", err)
 	if src.Commit != "bbb" || src.RootID != "r1" || src.Path != "swapped.txt" ||
 		src.State != "content" || src.FileID != fileID || src.SHA256 == "" {
@@ -296,13 +296,13 @@ func TestReadVersionGitSourceNamesTheCommit(t *testing.T) {
 	}
 
 	// The agent-authored earlier state has no git cause.
-	history, err := store.QueryFileVersions(ctx, "p1", fileID, 10, 0)
+	history, err := store.History.QueryFileVersions(ctx, "p1", fileID, 10, 0)
 	testutil.FailErr(t, "query versions", err)
 	for _, version := range history.Versions {
 		if version.GitTransitionID != "" {
 			continue
 		}
-		if _, err := store.ReadVersionGitSource(ctx, "p1", version.ID); !errors.Is(err, ErrHistoryNotFound) {
+		if _, err := store.History.ReadVersionGitSource(ctx, "p1", version.ID); !errors.Is(err, ErrHistoryNotFound) {
 			t.Fatalf("plain version git source err = %v", err)
 		}
 	}
@@ -310,20 +310,20 @@ func TestReadVersionGitSourceNamesTheCommit(t *testing.T) {
 
 func TestCheckpointsCarryRecordedGitPositions(t *testing.T) {
 	store, ctx := openLedger(t)
-	store.SetGitReader(&fakeGitReader{states: map[string]gitstate.State{
+	store.Git.SetGitReader(&fakeGitReader{states: map[string]gitstate.State{
 		"/tmp/source-ledger-test": {Repo: gitstate.RepoPresent, HeadCommit: "aaa", HeadRef: "main"},
 	}})
-	_, err := store.ObserveGitState(ctx, "p1", testRoots)
+	_, err := store.Git.ObserveGitState(ctx, "p1", testRoots)
 	testutil.FailErr(t, "seed git state", err)
 
-	pin, err := store.CreatePin(ctx, "p1", "before the rewrite")
+	pin, err := store.Checkpoints.CreatePin(ctx, "p1", "before the rewrite")
 	testutil.FailErr(t, "create pin", err)
 	if len(pin.GitHeads) != 1 || pin.GitHeads[0].HeadCommit != "aaa" ||
 		pin.GitHeads[0].HeadRef != "main" ||
 		pin.GitHeads[0].RepoState != string(gitstate.RepoPresent) {
 		t.Fatalf("pin git heads = %+v", pin.GitHeads)
 	}
-	page, err := store.ListPinsPage(ctx, "p1", PinPageQuery{})
+	page, err := store.Checkpoints.ListPinsPage(ctx, "p1", PinPageQuery{})
 	testutil.FailErr(t, "list pins", err)
 	if len(page.Pins) != 1 || len(page.Pins[0].GitHeads) != 1 ||
 		page.Pins[0].GitHeads[0].HeadCommit != "aaa" {
@@ -354,7 +354,7 @@ func TestWalkHeadMatchComparesDerivedOIDs(t *testing.T) {
 		"/tmp/source-ledger-test/same.txt":    oids.SHA1,
 		"/tmp/source-ledger-test/differs.txt": "1111111111111111111111111111111111111111",
 	}}
-	walk, err := store.QueryWalk(ctx, "p1", Baseline{}, 10, 0, commitLensFor(tree))
+	walk, err := store.Walk.QueryWalk(ctx, "p1", Baseline{}, 10, 0, commitLensFor(tree))
 	testutil.FailErr(t, "query walk", err)
 	byPath := map[string]api.SourceHeadMatch{}
 	for _, file := range walk.Files {
@@ -367,7 +367,7 @@ func TestWalkHeadMatchComparesDerivedOIDs(t *testing.T) {
 	}
 
 	// A missing lens leaves HEAD matches unknown.
-	walk, err = store.QueryWalk(ctx, "p1", Baseline{}, 10, 0, CommitLens{})
+	walk, err = store.Walk.QueryWalk(ctx, "p1", Baseline{}, 10, 0, CommitLens{})
 	testutil.FailErr(t, "query walk without lens", err)
 	for _, file := range walk.Files {
 		if file.HeadMatch != api.SourceHeadMatchUnknown {

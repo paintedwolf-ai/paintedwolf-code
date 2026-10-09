@@ -2,7 +2,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { ReaderEditor } from "./source-reader-editor.ts";
 import { ReaderSplit } from "./source-reader-split.ts";
-import { DEN_SCROLLPORT_INPUT_EVENT } from "../../../platform/scrolling/scrollport-motion.ts";
+import { DEN_SCROLLPORT_INPUT_EVENT } from "../../../platform/scrolling/scrollport-motion-types.ts";
 import { readerGap, type ReaderSlot, MAIN_SECTION } from "./source-reader-document.ts";
 import { editorDisplayPrefs } from "../editor/editor-display-prefs.ts";
 import { clearEditorViewportPool } from "../editor/editor-viewport-pool.ts";

@@ -3,6 +3,7 @@ package promptloop
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"testing"
 	"time"
 
@@ -21,14 +22,16 @@ func TestCanceledToolRunKeepsInterruptionFactsAndOutput(t *testing.T) {
 			ctx, cancel := context.WithCancel(t.Context())
 			cancel()
 			loop := NewPromptLoopForTest(PromptLoopDeps{})
-			run := toolInvocations{loop}.finalizeToolRun(ctx, &api.Session{ID: "session"}, completedToolRun{
+			run := loop.Tools.finalizeToolRun(ctx, &api.Session{ID: "session"}, completedToolRun{
 				sessionID: "session", call: api.ToolCall{ID: "call", Name: tool}, contract: contract,
-				toolCtx: tools.ToolContext{Out: &tools.ToolInvocationOut{OwnerInvoked: true}},
-				output:  "partial output", runErr: fmt.Errorf("waiting for result: %w", context.Canceled), startedAt: time.Now(),
+				toolCtx: tools.ToolContext{
+					Effects: tools.InvocationEffects{Out: &tools.ToolInvocationOut{OwnerInvoked: true}},
+				},
+				output: "partial output", runErr: fmt.Errorf("waiting for result: %w", context.Canceled), startedAt: time.Now(),
 			})
-			if run.reject != nil || run.failure == nil || run.failure.Code != tools.ToolOwnerInterruptedCode ||
+			if run.reject != nil || run.failure == nil || run.failure.Code != toolrejection.ToolOwnerInterruptedCode ||
 				run.failure.Class != "interrupted" || !run.failure.Retryable || !run.invoked ||
-				run.facts.Resolution() != api.ToolResultOutcomeError || run.facts.PrimaryCode() != tools.ToolOwnerInterruptedCode {
+				run.facts.Resolution() != api.ToolResultOutcomeError || run.facts.PrimaryCode() != toolrejection.ToolOwnerInterruptedCode {
 				t.Fatalf("canceled result lost interruption: failure=%+v facts=%+v", run.failure, run.facts)
 			}
 			if run.content != "partial output\nwaiting for result: context canceled" {

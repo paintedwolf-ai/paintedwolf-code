@@ -1,9 +1,10 @@
 package contract
 
 import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/orchestration"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -33,7 +34,7 @@ var ContextDietMatrix = []ContextDietMatrixRow{
 	{
 		Name:       "implement_investigate_first_user",
 		UserPrompt: "Research this repo",
-		SurfaceID:  tools.SurfaceImplementInvestigate,
+		SurfaceID:  toolcontract.SurfaceImplementInvestigate,
 		ModeRefs:   []string{"implement-investigate"},
 		MaxModes:   2,
 		// First-user investigate is the plan-authoring window where both verify steers can
@@ -81,7 +82,7 @@ var ContextDietMatrix = []ContextDietMatrixRow{
 		Name:       "implement_investigate_follow_up",
 		History:    []api.Message{{Role: api.MessageRoleUser, Content: "Hi"}, {Role: api.MessageRoleAssistant, Content: "Hello"}},
 		UserPrompt: "Explain auth",
-		SurfaceID:  tools.SurfaceImplementInvestigate,
+		SurfaceID:  toolcontract.SurfaceImplementInvestigate,
 		ModeRefs:   []string{"implement-investigate"},
 		MaxModes:   2,
 	},
@@ -121,7 +122,7 @@ var ContextDietMatrix = []ContextDietMatrixRow{
 	{
 		Name:       "implement_investigate_idle",
 		UserPrompt: "fix the auth bug in src/auth.go",
-		SurfaceID:  tools.SurfaceImplementInvestigate,
+		SurfaceID:  toolcontract.SurfaceImplementInvestigate,
 		ModeRefs:   []string{"implement-investigate"},
 		MaxModes:   2,
 	},

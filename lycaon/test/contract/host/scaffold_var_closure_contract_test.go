@@ -65,7 +65,7 @@ var hostVarProducers = []struct {
 	},
 	{
 		key:       "pre_workflow_posture",
-		readerRE:  `vars\[hostVarBaselinePosture\]`,
+		readerRE:  `vars\[(?:runstate\.)?BaselinePostureKey\]`,
 		rationale: "boundary code restores posture on workflow end",
 	},
 	{
@@ -157,7 +157,7 @@ func TestHostVarProducerConsumerClosure(t *testing.T) {
 
 	// Keys produced through a named const rather than a SetHostVar literal.
 	constProduced := map[string]bool{
-		"host_auto_advanced_from":       true, // HostAutoAdvancedFromKey
+		"host_auto_advanced_from":       true, // workflowphases.HostAutoAdvancedFromKey
 		"pre_workflow_posture":          true, // hostVarBaselinePosture
 		"human_approval.awaiting_since": true, // scaffoldvars.HumanApprovalAwaitingSincePath
 	}

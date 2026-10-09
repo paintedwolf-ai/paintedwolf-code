@@ -13,7 +13,19 @@ import (
 
 func TestTaskExecutionPermissionCoversDifferentCommandsAndRevokes(t *testing.T) {
 	approvals := ladderGate(t)
-	action := hitl.ProposedAction{Tool: "command", Args: map[string]any{"command": "sudo -n id"}, SessionID: "task", ProjectID: "project", Contained: hitl.Contained{HostExecution: true}}
+	action := hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": "sudo -n id"},
+},
+Scope: hitl.ActionScope{
+SessionID: "task",
+ProjectID: "project",
+},
+Execution: hitl.ActionExecution{
+Contained: hitl.Contained{HostExecution: true},
+},
+}
 	decision := &gate.Decision{Posture: gate.PostureBalanced, Primary: api.GateUnobservedChannel, ReasonKey: "unobserved_channel:host_execution", Cited: []gate.Fact{{Gate: api.GateUnobservedChannel, Key: "boundary.execution", Value: "host_execution", Source: "host"}}}
 	offers := approvals.GrantOffers(action, &hitl.ApprovalResult{Decision: decision})
 	if len(offers) != 3 {
@@ -40,7 +52,7 @@ func TestTaskExecutionPermissionCoversDifferentCommandsAndRevokes(t *testing.T) 
 	_, err = approvals.ApplyGrant(task.Grant)
 	testutil.FailErr(t, "install task permission", err)
 	for i := range 15 {
-		action.Args = map[string]any{"command": fmt.Sprintf("sudo -n example-operation-%d", i)}
+		action.Invocation.Args = map[string]any{"command": fmt.Sprintf("sudo -n example-operation-%d", i)}
 		if !approvals.executionCapabilityCovers(action) {
 			t.Fatalf("command %d asks again", i)
 		}
@@ -64,12 +76,12 @@ func TestTaskExecutionPermissionCoversDifferentCommandsAndRevokes(t *testing.T) 
 		t.Fatalf("task capability suppressed independent rule: %+v", independent)
 	}
 	foreign := action
-	foreign.SessionID = "other"
+	foreign.Scope.SessionID = "other"
 	if approvals.executionCapabilityCovers(foreign) {
 		t.Fatal("permission crossed tasks")
 	}
 	foreign = action
-	foreign.Contained = hitl.Contained{ProcessControl: true}
+	foreign.Execution.Contained = hitl.Contained{ProcessControl: true}
 	if approvals.executionCapabilityCovers(foreign) {
 		t.Fatal("permission changed capability")
 	}

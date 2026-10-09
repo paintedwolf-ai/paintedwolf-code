@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/session"
+	sessionobservation "github.com/lycaon/lycaon/internal/session/observation"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -46,7 +46,7 @@ func seedExecutionCapture(t *testing.T, capture, sessionID string) {
 	testutil.FailErr(t, "seal closeout", err)
 	directory := filepath.Join(capture, "settlements", sessionID)
 	testutil.FailErr(t, "create settlement receipt directory", os.MkdirAll(directory, 0o700))
-	body, err = json.Marshal(session.ExecutionObservation{SessionID: sessionID, SubmissionID: "submission", SubmissionStatus: store.PromptSubmissionComplete, Settled: true})
+	body, err = json.Marshal(sessionobservation.ExecutionObservation{SessionID: sessionID, SubmissionID: "submission", SubmissionStatus: store.PromptSubmissionComplete, Settled: true})
 	testutil.FailErr(t, "encode settlement receipt", err)
 	testutil.FailErr(t, "retain settlement receipt", os.WriteFile(filepath.Join(directory, "submission.json"), body, 0o600))
 }
@@ -134,7 +134,7 @@ func TestCollectionRejectsUnboundSettlement(t *testing.T) {
 		t.Run(mutation, func(t *testing.T) {
 			capture := t.TempDir()
 			seedExecutionCapture(t, capture, "root")
-			observation := session.ExecutionObservation{SessionID: "root", SubmissionID: "submission", SubmissionStatus: store.PromptSubmissionComplete, Settled: true}
+			observation := sessionobservation.ExecutionObservation{SessionID: "root", SubmissionID: "submission", SubmissionStatus: store.PromptSubmissionComplete, Settled: true}
 			switch mutation {
 			case "session":
 				observation.SessionID = "other"
@@ -143,7 +143,7 @@ func TestCollectionRejectsUnboundSettlement(t *testing.T) {
 			case "status":
 				observation.SubmissionStatus = store.PromptSubmissionCanceled
 			case "blocker":
-				observation.Blockers = []session.ExecutionBlocker{{SessionID: "root", Kind: "continuation"}}
+				observation.Blockers = []sessionobservation.ExecutionBlocker{{SessionID: "root", Kind: "continuation"}}
 			case "unsettled":
 				observation.Settled = false
 			}

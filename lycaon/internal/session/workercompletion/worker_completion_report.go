@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"sort"
 	"strconv"
 	"strings"
@@ -120,12 +121,12 @@ func ReportFromCompleteLegArgs(args map[string]any) (WorkerCompletionReport, boo
 func CompleteLegDecoder(_ context.Context, args map[string]any, _ tools.ToolContext) (workertools.CompleteLegRecord, error) {
 	report, ok := ReportFromCompleteLegArgs(args)
 	if !ok {
-		return workertools.CompleteLegRecord{}, &tools.ToolReject{Code: "COMPLETE_LEG_STATUS_REQUIRED", Data: map[string]any{"tool": workertools.CompleteLegTool}}
+		return workertools.CompleteLegRecord{}, &toolrejection.ToolReject{Code: "COMPLETE_LEG_STATUS_REQUIRED", Data: map[string]any{"tool": workertools.CompleteLegTool}}
 	}
 	seen := map[string]bool{}
 	for i, gap := range report.CoverageGaps {
 		if strings.TrimSpace(gap.ID) == "" || strings.TrimSpace(gap.Subject) == "" || strings.TrimSpace(gap.Reason) == "" || seen[gap.ID] {
-			return workertools.CompleteLegRecord{}, &tools.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"tool": workertools.CompleteLegTool, "field": fmt.Sprintf("coverage_gaps[%d]", i), "reason": "unique_gap_id_subject_and_reason_required"}}
+			return workertools.CompleteLegRecord{}, &toolrejection.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"tool": workertools.CompleteLegTool, "field": fmt.Sprintf("coverage_gaps[%d]", i), "reason": "unique_gap_id_subject_and_reason_required"}}
 		}
 		seen[gap.ID] = true
 	}
