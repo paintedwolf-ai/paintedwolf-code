@@ -277,7 +277,7 @@ func fillWorkers(t *testing.T, d *Deps) {
 		d.Workers = worker.NewInMemoryQueue(2)
 	}
 	if d.WorkerCancel == nil {
-		d.WorkerCancel = &worker.CancelService{Queue: d.Workers, Events: d.Sessions.Observations, Graceful: d.Sessions.Workers.Cancel, Cancellations: d.Sessions.Workers.Cancellations}
+		d.WorkerCancel = &worker.CancelService{Queue: d.Workers, Events: d.Sessions.Coordinator.Workers, Graceful: d.Sessions.Workers.Cancel, Cancellations: d.Sessions.Workers.Cancellations}
 	}
 	if d.Delegations == nil {
 		d.Delegations = delegation.NewManager(delegation.NewMemoryStore(), d.Workers, nil, nil)
