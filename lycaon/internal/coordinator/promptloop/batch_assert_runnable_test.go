@@ -59,7 +59,7 @@ func TestExecuteToolCallsInTurnRunsFullSerialTaskBatch(t *testing.T) {
 		return nil
 	}
 
-	history, turnTools, anyTask, taskCount, _, breakLoop, err := loop.executeToolCallsInTurn(
+	history, turnTools, anyTask, taskCount, _, breakLoop, err := toolBatch{loop}.executeToolCallsInTurn(
 		context.Background(),
 		sess,
 		sess.ID,

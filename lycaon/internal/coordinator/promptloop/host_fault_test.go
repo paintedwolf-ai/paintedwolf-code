@@ -82,7 +82,7 @@ func TestRefusedSettlementEndsTurnAsHostFault(t *testing.T) {
 	sess := &api.Session{ID: "session"}
 	history := []api.Message{{ID: "assistant", Role: api.MessageRoleAssistant, ToolCalls: calls}}
 
-	history, _, _, _, _, stopped, err := loop.executeToolCallsInTurn(t.Context(), sess, sess.ID, calls, tools.ToolContext{}, history, "implement", "assistant", "", nil)
+	history, _, _, _, _, stopped, err := toolBatch{loop}.executeToolCallsInTurn(t.Context(), sess, sess.ID, calls, tools.ToolContext{}, history, "implement", "assistant", "", nil)
 
 	var fault *HostFaultError
 	if !errors.As(err, &fault) || fault.Tool != "write" || !fault.CallRan {

@@ -51,7 +51,7 @@ func TestStoppedPromptStreamPreservesCancellation(t *testing.T) {
 			defer cancel()
 			client := stoppedStreamClient{cancel: cancel, beforeStart: tc.beforeStart, content: tc.content, err: tc.err}
 			loop := NewPromptLoopForTest(PromptLoopDeps{LLM: client})
-			_, err := loop.collectPromptStream(ctx, &api.Session{ID: "worker"}, client, modelcall.CompletionRequest{}, nil, "", "provider", "model")
+			_, err := modelTurn{loop}.collectPromptStream(ctx, &api.Session{ID: "worker"}, client, modelcall.CompletionRequest{}, nil, "", "provider", "model")
 			if !errors.Is(err, context.Canceled) {
 				t.Fatalf("stopped stream error=%v want cancellation", err)
 			}

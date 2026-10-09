@@ -500,8 +500,9 @@ required check, `check`:
 
 | Event | Tier | Work |
 |---|---|---|
-| Pull request | Fast | The `fast` profile: the stages of `./task check-fast`, split into build and lint, Go (two shards), and frontend jobs on `ubuntu-latest`. |
-| Merge queue | Full | The `check` profile, every stage of `./task check`, plus [`platform-verification.yml`](../.github/workflows/platform-verification.yml): the upgrade corpus on Linux; applied Seatbelt, browser confinement, and Git parity in one `macos-15` job; Playwright web E2E in three shards; and desktop E2E. |
+| Ready pull request | Fast | The `fast` profile: the stages of `./task check-fast`, split into build and lint, Go (two shards), and frontend jobs on `ubuntu-latest`. |
+| Draft pull request | None | No verification runs, and `check` fails, so a draft never shows a passing required check. Marking it ready for review runs the fast tier. |
+| Merge queue | Full | The `check` profile, every stage of `./task check`, plus [`platform-verification.yml`](../.github/workflows/platform-verification.yml): the upgrade corpus on Linux; applied Seatbelt, browser confinement, and Git parity in one `macos-15` job. |
 | Manual dispatch | Full | The merge-queue tier on any branch, to try a change before queueing or to reproduce a queue failure. |
 
 The merge queue squashes each pull request onto main and tests the resulting
@@ -529,8 +530,8 @@ gates cannot drift apart.
 | Profile | Work and required result |
 |---|---|
 | Fast | Build and fast lint, Go (unit/component suite and repository contracts), frontend (Den typecheck, lint, seam canaries), and limits (size budgets and changed coverage). `CI/check` requires all four and excuses only the platform workflow, which a pull request skips. |
-| Check | Build, limits, contracts and drift, lint, vulnerabilities, runner tests, full Go behavior, frontend, native Rust, and WebKit each have their own budget. `CI/check` requires these and every platform job. |
-| Nightly | Full behavior, race, fuzz, Go and Den coverage, stress, transcript scale, benchmarks, sidecar budgets, and a ten-minute soak run independently. Manual selection filters jobs before matrix expansion; vulnerability freshness and upgrade rehearsal always run. The terminal `nightly` job requires every selected job. |
+| Check | Build, limits, contracts and drift, lint, vulnerabilities, runner tests, full Go behavior (two shards), frontend, and native Rust each have their own budget. `CI/check` requires these and every platform job. |
+| Nightly | Full behavior (two shards), race, fuzz, Go and Den coverage, stress, transcript scale, benchmarks, sidecar budgets, and a ten-minute soak run independently. The same scheduled run includes web E2E (three shards), desktop E2E, and the WebKit harness build/capability probe. Manual selection filters jobs before matrix expansion; `e2e` selects browser verification, while vulnerability freshness and upgrade rehearsal always run. The terminal `nightly` job requires every selected result and excuses browser jobs only when deliberately unselected. |
 | Release | The tagged commit must carry a passing full-tier `CI/check`, which every commit the queue lands has, so a release runs no verification lanes. The signed build starts after source classification, in parallel with preflight and the upgrade rehearsal; `ship-gates` requires both before anything publishes. |
 
 The release profile is the subset of `check` that decides whether the product
@@ -551,11 +552,20 @@ the harness stack. A lane may declare `shards`: the race lane runs as three jobs
 verifying every third package of the planner's sorted selection
 (`PW_GO_SHARD=k/N`), so its longest package starts early instead of behind
 three hundred others. The pull request tier's Go lane runs as two, because its
-unit suite is the longest job a pull request waits for. A lane may also cap `workers` below the CPU count when
-its peak memory outgrows the runner. WebKit runs on macOS to compile its harness and probe the host; hosted runners
-are virtual machines without a scrolling thread, so its scenarios end there with a
-skip notice in the job summary. Desktop E2E shares one reusable workflow across
-the merge queue and the nightly run, with separate staging and test deadlines.
+unit suite is the longest job a pull request waits for. Full behavior also runs
+in two shards, retaining every package and its bundled-scanner recipe while
+keeping the three-worker memory cap per runner. A lane may also cap `workers`
+below the CPU count when its peak memory outgrows the runner.
+
+WebKit runs on macOS to compile its harness and probe the host; hosted runners
+are virtual machines without a scrolling thread, so its scenarios end there
+with a skip notice in the job summary. That pass proves compilation and host
+probing, not scroll behavior; run `./task den:webkit:scroll` on a physical Mac
+for the scenarios. Browser journeys have one reusable implementation in
+[`e2e-verification.yml`](../.github/workflows/e2e-verification.yml), invoked by
+nightly with separate preparation and test deadlines. They are intentionally
+outside merge admission: a green merge gate does not establish E2E coverage.
+
 The reusable verification workflow's result covers its plan and every selected
 matrix job. The caller's required gate judges that result and the platform tier,
 without scheduling an intermediate verdict job. Aggregates reject failed,

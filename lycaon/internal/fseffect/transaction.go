@@ -53,16 +53,14 @@ type ReplaceRequest struct {
 	// ReviewStaged may await user input without holding the destination lock.
 	ReviewStaged func(Target, Result) error
 	// BeforeCommit revalidates the destination under the lock.
-	BeforeCommit       func(Target, Result) error
-	ObserveStagingPath func(string)
+	BeforeCommit func(Target, Result) error
 }
 
 // RemoveRequest describes a descriptor-relative deletion.
 // BeforeCommit verifies the selected regular file.
 type RemoveRequest struct {
 	Location
-	BeforeCommit          func(Target) error
-	ObserveQuarantinePath func(string)
+	BeforeCommit func(Target) error
 }
 
 // ModeUpdateRequest describes a guarded permission change on one held file.

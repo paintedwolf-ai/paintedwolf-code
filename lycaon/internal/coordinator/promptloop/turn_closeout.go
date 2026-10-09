@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
@@ -13,7 +14,11 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	workertools "github.com/lycaon/lycaon/internal/tools/native/workercontrol"
 	"github.com/lycaon/lycaon/pkg/api"
+	"github.com/google/uuid"
 )
+
+// turnCloseout ends a turn: closeout nudges, early closeouts, and the grounded closeout report.
+type turnCloseout struct{ *PromptLoop }
 
 var ErrLLMTurnTimeout = errors.New("llm turn timed out")
 
@@ -112,7 +117,7 @@ type IterationRunwayNudge func(ctx context.Context, sess *api.Session, profileID
 // coordinator turns; a worker's runway follows spawn.WorkerRunway.
 const IterationRunwayThreshold = 10
 
-func (l *PromptLoop) maybeTurnCloseout(
+func (l turnCloseout) maybeTurnCloseout(
 	ctx context.Context,
 	sess *api.Session,
 	sessionID, profileID string,
@@ -138,7 +143,7 @@ func iterationRunwayFires(sess *api.Session, iterIndex, maxIter int) bool {
 	return maxIter-iterIndex == IterationRunwayThreshold
 }
 
-func (l *PromptLoop) maybeIterationRunwayNudge(
+func (l turnCloseout) maybeIterationRunwayNudge(
 	ctx context.Context,
 	sess *api.Session,
 	sessionID, profileID string,
@@ -146,7 +151,7 @@ func (l *PromptLoop) maybeIterationRunwayNudge(
 	iterIndex, maxIter int,
 	st *promptLoopTurnState,
 ) ([]api.Message, error) {
-	if l == nil || l.Deps.IterationRunwayNudge == nil || sess == nil {
+	if l.PromptLoop == nil || l.Deps.IterationRunwayNudge == nil || sess == nil {
 		return history, nil
 	}
 	if !iterationRunwayFires(sess, iterIndex, maxIter) {
@@ -156,11 +161,11 @@ func (l *PromptLoop) maybeIterationRunwayNudge(
 	if nudge.Empty() {
 		return history, nil
 	}
-	return l.appendHostNudge(ctx, sessionID, history, nudge, "", st)
+	return turnNudges(l).appendHostNudge(ctx, sessionID, history, nudge, "", st)
 }
 
 // applyLandingAdvisories appends closeout and runway guidance in order.
-func (l *PromptLoop) applyLandingAdvisories(
+func (l turnCloseout) applyLandingAdvisories(
 	ctx context.Context,
 	sess *api.Session,
 	sessionID, profileID string,
@@ -178,7 +183,7 @@ func (l *PromptLoop) applyLandingAdvisories(
 	}
 	st.history = updated
 
-	st.history, err = l.maybeWorkerBudgetAnswerNudge(ctx, sess, sessionID, st.history, step, maxIter, st)
+	st.history, err = turnNudges(l).maybeWorkerBudgetAnswerNudge(ctx, sess, sessionID, st.history, step, maxIter, st)
 	if err != nil {
 		return closeoutNudgeSent, err
 	}
@@ -186,19 +191,19 @@ func (l *PromptLoop) applyLandingAdvisories(
 	if err != nil {
 		return closeoutNudgeSent, err
 	}
-	st.history, err = l.maybeSurveyStreakNudge(ctx, sess, sessionID, st.history, st)
+	st.history, err = turnNudges(l).maybeSurveyStreakNudge(ctx, sess, sessionID, st.history, st)
 	if err != nil {
 		return closeoutNudgeSent, err
 	}
-	st.history, err = l.maybeSpendRunwayNudge(ctx, sess, sessionID, st.history, spendRunway, st)
+	st.history, err = turnNudges(l).maybeSpendRunwayNudge(ctx, sess, sessionID, st.history, spendRunway, st)
 	if err != nil {
 		return closeoutNudgeSent, err
 	}
-	st.history, err = l.maybeSpendSoftStopNudge(ctx, sess, sessionID, st.history, spendWindDown, st)
+	st.history, err = turnNudges(l).maybeSpendSoftStopNudge(ctx, sess, sessionID, st.history, spendWindDown, st)
 	return closeoutNudgeSent, err
 }
 
-func (l *PromptLoop) appendTurnCloseoutNudge(
+func (l turnCloseout) appendTurnCloseoutNudge(
 	ctx context.Context,
 	sess *api.Session,
 	sessionID, profileID string,
@@ -217,7 +222,7 @@ func (l *PromptLoop) appendTurnCloseoutNudge(
 	if cause.Reason == TurnCloseoutIterationCap {
 		kind = api.MessageKindIterationCapCloseout
 	}
-	return l.appendHostNudge(ctx, sessionID, history, nudge, kind, st)
+	return turnNudges(l).appendHostNudge(ctx, sessionID, history, nudge, kind, st)
 }
 
 func historyHasInternalNudge(history []api.Message, content string) bool {
@@ -233,13 +238,13 @@ func historyHasInternalNudge(history []api.Message, content string) bool {
 	return false
 }
 
-func (l *PromptLoop) turnCloseoutNudge(
+func (l turnCloseout) turnCloseoutNudge(
 	ctx context.Context,
 	sess *api.Session,
 	profileID string,
 	cause TurnCloseoutCause,
 ) HostNudge {
-	if l == nil || l.Deps.TurnCloseoutNudge == nil {
+	if l.PromptLoop == nil || l.Deps.TurnCloseoutNudge == nil {
 		return HostNudge{}
 	}
 	nudge := l.Deps.TurnCloseoutNudge(ctx, sess, profileID, cause)
@@ -247,7 +252,7 @@ func (l *PromptLoop) turnCloseoutNudge(
 	return nudge
 }
 
-func (l *PromptLoop) runEarlyTurnCloseout(
+func (l turnCloseout) runEarlyTurnCloseout(
 	ctx context.Context,
 	sess *api.Session,
 	sessionID, profileID, userPrompt string,
@@ -277,7 +282,7 @@ func (l *PromptLoop) runEarlyTurnCloseout(
 	closeoutState.proseFinish = true
 	closeoutState.closeoutCauseText = cause.Text()
 	iterIndex := closeoutState.turnsRanThisRun
-	assistantMsg, completion, _, err := l.runAssistantStreamTurn(ctx, sessionID, sess, history, closeoutState, profileID, userPrompt, iterIndex, maxIter, in.HostTurn)
+	assistantMsg, completion, _, err := modelTurn(l).runAssistantStreamTurn(ctx, sessionID, sess, history, closeoutState, profileID, userPrompt, iterIndex, maxIter, in.HostTurn)
 	if err != nil {
 		return history, "", "", err
 	}
@@ -295,7 +300,7 @@ func (l *PromptLoop) runEarlyTurnCloseout(
 	if completion != nil && len(completion.ToolCalls) > 0 && sess.IsWorkerChild() {
 		calls := retainOfferedToolCalls(history, assistantMsg.ID, completion.ToolCalls, workerProseOfferedTools(sess))
 		var batchTools []string
-		history, batchTools, _, _, _, _, err = l.executeToolCallsInTurn(
+		history, batchTools, _, _, _, _, err = toolBatch(l).executeToolCallsInTurn(
 			ctx, sess, sessionID, calls, in.ToolCtx, history, userPrompt, assistantMsg.ID, surfaceID, closeoutState,
 		)
 		if err != nil {
@@ -307,7 +312,7 @@ func (l *PromptLoop) runEarlyTurnCloseout(
 		assistantMsg.ToolCalls = answeredToolCalls(history, assistantMsg.ID, calls)
 		history = patchAssistantToolCalls(history, assistantMsg.ID, assistantMsg.ToolCalls)
 		if workerCompletionAccepted(history, assistantMsg.ID) {
-			if err := l.closeCoordinatorDraftSlot(ctx, sessionID, st, assistantMsg.ID); err != nil {
+			if err := turnNudges(l).closeCoordinatorDraftSlot(ctx, sessionID, st, assistantMsg.ID); err != nil {
 				return history, "", "", err
 			}
 			return history, assistantMsg.ID, assistantMsg.Content, nil
@@ -323,9 +328,9 @@ func (l *PromptLoop) runEarlyTurnCloseout(
 		}
 	}
 
-	coercedContent, unread := l.maybeCoerceCloseoutContent(ctx, history, sessionID, surfaceID, assistantMsg.Content, assistantMsg.ID)
+	coercedContent, unread := toolInvocations(l).maybeCoerceCloseoutContent(ctx, history, sessionID, surfaceID, assistantMsg.Content, assistantMsg.ID)
 	assistantMsg.Content = coercedContent
-	history, reject, blocked, err := l.tryRejectNoToolTurn(
+	history, reject, blocked, err := toolInvocations(l).tryRejectNoToolTurn(
 		ctx, sess, history, userPrompt, coercedContent, surfaceID, turnTools, sessionID, assistantMsg.ID, st, false,
 	)
 	if err != nil {
@@ -366,7 +371,7 @@ func (l *PromptLoop) runEarlyTurnCloseout(
 		return history, "", "", err
 	}
 	history[len(history)-1] = committed
-	if err := l.closeCoordinatorDraftSlot(ctx, sessionID, st, committed.ID); err != nil {
+	if err := turnNudges(l).closeCoordinatorDraftSlot(ctx, sessionID, st, committed.ID); err != nil {
 		return history, "", "", err
 	}
 	return history, committed.ID, committed.Content, nil
@@ -386,7 +391,7 @@ func workerCompletionAccepted(history []api.Message, assistantMessageID string) 
 	return false
 }
 
-func (l *PromptLoop) emitEarlyCloseoutAfterFinishBlock(
+func (l turnCloseout) emitEarlyCloseoutAfterFinishBlock(
 	ctx context.Context,
 	sess *api.Session,
 	sessionID, userPrompt, surfaceID, coercedContent string,
@@ -408,7 +413,7 @@ func (l *PromptLoop) emitEarlyCloseoutAfterFinishBlock(
 	)
 }
 
-func (l *PromptLoop) returnAssembledEarlyCloseout(
+func (l turnCloseout) returnAssembledEarlyCloseout(
 	ctx context.Context,
 	sess *api.Session,
 	sessionID, userPrompt, surfaceID, draftedContent string,
@@ -427,9 +432,167 @@ func (l *PromptLoop) returnAssembledEarlyCloseout(
 	}
 	if st != nil {
 		st.turnEndedGuidanceReject = true
-		if err := l.closeCoordinatorDraftSlot(ctx, sessionID, st, st.draftSlotID); err != nil {
+		if err := turnNudges(l).closeCoordinatorDraftSlot(ctx, sessionID, st, st.draftSlotID); err != nil {
 			return emitOut.history, "", "", err
 		}
 	}
 	return emitOut.history, "", "", nil
+}
+
+// turnNudges keeps the host's in-turn guidance: nudges, spend and budget runways, and repeat-call fuses.
+type turnNudges struct{ *PromptLoop }
+
+// appendUserNudge defers persistence during an open draft slot.
+func (l turnNudges) appendUserNudge(
+	ctx context.Context,
+	sessionID string,
+	history []api.Message,
+	content string,
+	st *promptLoopTurnState,
+) ([]api.Message, error) {
+	return l.appendHostNudge(ctx, sessionID, history, HostNudge{Content: content}, "", st)
+}
+
+func newHostNudge(nudge HostNudge, kind api.MessageKind) api.Message {
+	signalID := strings.TrimSpace(nudge.SignalID)
+	if nudge.Feedback != nil {
+		signalID = feedbackSignalID(*nudge.Feedback)
+	}
+	return api.Message{
+		ID:        uuid.NewString(),
+		Role:      api.MessageRoleUser,
+		Content:   nudge.Content,
+		Origin:    api.MessageOriginHost,
+		Authority: api.ContentAuthoritySystem, TrustTier: api.ContentTrustTierTrusted,
+		Kind:         kind,
+		HostSignalID: signalID,
+		Visibility:   api.MessageVisibilityInternal,
+		CreatedAt:    time.Now().UTC(),
+	}
+}
+
+func (l turnNudges) appendHostNudge(
+	ctx context.Context,
+	sessionID string,
+	history []api.Message,
+	hostNudge HostNudge,
+	kind api.MessageKind,
+	st *promptLoopTurnState,
+) ([]api.Message, error) {
+	hostNudge.Content = strings.TrimSpace(hostNudge.Content)
+	if hostNudge.Content == "" {
+		return history, nil
+	}
+	if i := lastHostNudgeWithSignal(history, hostNudge); i >= 0 {
+		history[i].Content = hostNudge.Content
+		history[i].CreatedAt = time.Now().UTC()
+		if replaceDeferredUserNudge(st, history[i]) {
+			return history, nil
+		}
+		if l.Deps.UpdateMessage != nil {
+			if err := l.Deps.UpdateMessage(ctx, sessionID, history[i].ID, history[i]); err != nil {
+				return nil, err
+			}
+		}
+		return history, nil
+	}
+	nudge := newHostNudge(hostNudge, kind)
+	history = append(history, nudge)
+	if deferUserNudgeStore(st) {
+		st.deferredUserNudges = append(st.deferredUserNudges, nudge)
+		return history, nil
+	}
+	if l.Deps.AppendMessages == nil {
+		return nil, fmt.Errorf("append messages not configured")
+	}
+	if err := l.Deps.AppendMessages(ctx, sessionID, nudge); err != nil {
+		return nil, err
+	}
+	return history, nil
+}
+
+func lastHostNudgeWithSignal(history []api.Message, nudge HostNudge) int {
+	signalID := strings.TrimSpace(nudge.SignalID)
+	if nudge.Feedback != nil {
+		signalID = feedbackSignalID(*nudge.Feedback)
+	}
+	if signalID == "" {
+		return -1
+	}
+	for i := len(history) - 1; i >= 0; i-- {
+		msg := history[i]
+		if msg.Origin != api.MessageOriginHost {
+			continue
+		}
+		if strings.TrimSpace(msg.HostSignalID) == signalID {
+			return i
+		}
+	}
+	return -1
+}
+
+func feedbackSignalID(feedback api.ToolFeedback) string {
+	code := strings.TrimSpace(feedback.Code)
+	if code == "" {
+		return ""
+	}
+	if feedback.Subject == nil {
+		return "guidance:" + code
+	}
+	kind := strings.TrimSpace(feedback.Subject.Kind)
+	id := strings.TrimSpace(feedback.Subject.ID)
+	if kind == "" || id == "" {
+		return "guidance:" + code
+	}
+	return "guidance:" + code + ":" + kind + ":" + id
+}
+
+func replaceDeferredUserNudge(st *promptLoopTurnState, msg api.Message) bool {
+	if st == nil {
+		return false
+	}
+	for i := range st.deferredUserNudges {
+		if st.deferredUserNudges[i].ID == msg.ID {
+			st.deferredUserNudges[i] = msg
+			return true
+		}
+	}
+	return false
+}
+
+func deferUserNudgeStore(st *promptLoopTurnState) bool {
+	return st != nil && st.draftSlotID != "" && st.draftSlotAppended
+}
+
+func (l turnNudges) flushDeferredUserNudges(ctx context.Context, sessionID string, st *promptLoopTurnState) error {
+	if l.PromptLoop == nil || st == nil || len(st.deferredUserNudges) == 0 {
+		return nil
+	}
+	if l.Deps.AppendMessages == nil {
+		return fmt.Errorf("append messages not configured")
+	}
+	pending := make([]api.Message, 0, len(st.deferredUserNudges))
+	for _, nudge := range st.deferredUserNudges {
+		nudge.Content = strings.TrimSpace(nudge.Content)
+		if nudge.Content == "" {
+			continue
+		}
+		pending = append(pending, nudge)
+	}
+	if len(pending) == 0 {
+		st.deferredUserNudges = nil
+		return nil
+	}
+	if err := l.Deps.AppendMessages(ctx, sessionID, pending...); err != nil {
+		return err
+	}
+	st.deferredUserNudges = nil
+	return nil
+}
+
+func (l turnNudges) closeCoordinatorDraftSlot(ctx context.Context, sessionID string, st *promptLoopTurnState, messageID string) error {
+	if st != nil {
+		st.closeCoordinatorDraftSlot(messageID)
+	}
+	return l.flushDeferredUserNudges(ctx, sessionID, st)
 }

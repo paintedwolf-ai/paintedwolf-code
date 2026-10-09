@@ -354,6 +354,10 @@ it, and a later regression can warn again. No alert changes host decisions.
 Local KV routes report evaluation duration without claiming a cache hit from
 latency alone.
 
+### Prose-only requests
+
+A request can forbid tool use while keeping its tool definitions: a coordinator's final closeout turn, or a report-document repair that asks for one fence. Transports validate tool-call history against the declared tools, so dropping them would break a conversation that already used tools. Each adapter maps the restriction onto its own control: OpenAI-compatible endpoints receive `tool_choice: "none"`, Anthropic `tool_choice: {"type": "none"}`, and Vertex express `functionCallingConfig.mode: NONE`. Ollama has no such control and renders tool history without definitions, so its request omits them. Bedrock Converse has neither a no-call choice nor tolerance for tool history without its tool configuration; its requests keep the tools, and the host refuses any call such a turn returns. A worker's final turn is not prose-only: it offers only its completion tool.
+
 ### Fallback tool-call grammar
 
 Some hosts answer a tools-offered request by writing the call into assistant text instead of the structured field. `DriverProfile.TextToolCallGrammars` declares, per profile, which such grammars that transport may recover from. It is a closed set of two: a bounded envelope (declared `<tool_call>` tags, a `[TOOL_CALLS]` prefix, or a fenced JSON object naming a tool and its arguments) and the Harmony channel transcript. The OpenAI-shaped base profile declares both; the Ollama, Anthropic, and Vertex express profiles declare the envelope only.
@@ -361,7 +365,7 @@ Some hosts answer a tools-offered request by writing the call into assistant tex
 This is protocol parsing inside a declared grammar, not intent classification ([`../AGENTS.md` § No heuristics](../AGENTS.md#no-heuristics)):
 
 - **Only the declared grammar.** A profile that declares neither recovers nothing; prose is never scanned for something that resembles a call.
-- **Only when tools were offered.** With no tools on the request, the content stands as text.
+- **Only when a call is allowed.** With no tools on the request, or a request that forbids tool use, the content stands as text.
 - **Only against the offered schemas.** A recovered call must name an offered tool and validate against its argument schema. A recovery that fails either check is neither downgraded to text nor executed; the attempt fails as a structured provider error.
 
 ### Completion recovery

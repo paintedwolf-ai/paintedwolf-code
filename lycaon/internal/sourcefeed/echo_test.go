@@ -48,13 +48,3 @@ func TestPublishedDigestDoesNotAdoptAnOutsideWriteBeforeDelivery(t *testing.T) {
 		t.Fatal("published host digest adopted different live bytes")
 	}
 }
-
-func TestPrivateStagingPathStaysSuppressedAfterRemoval(t *testing.T) {
-	file := filepath.Join(t.TempDir(), "staging")
-	testutil.FailErr(t, "create staging", os.WriteFile(file, nil, 0o600))
-	NoteHostTemporaryPath(file)
-	testutil.FailErr(t, "finish staging", os.Remove(file))
-	if !isRecentHostWrite(file) {
-		t.Fatal("private staging removal leaked into source changes")
-	}
-}

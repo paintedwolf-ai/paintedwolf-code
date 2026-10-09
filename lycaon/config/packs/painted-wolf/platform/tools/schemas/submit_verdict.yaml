@@ -8,9 +8,7 @@ schema:
   type: object
   properties:
     verdict:
-      description: >-
-        Phase schema fields. Claims/challenges: arrays of {id, statement, status,
-        cited_evidence, scan_group_ids}. Group links alone establish no evidence.
+      description: This phase's verdict members; an active review phase publishes their schema.
       type: object
       properties:
         verdict:
@@ -55,3 +53,137 @@ schema:
       uniqueItems: true
   required: [verdict]
   additionalProperties: false
+  # One fragment per verdict_schema type word. The host composes the active
+  # phase's verdict from them; $defs never reaches a provider.
+  $defs:
+    decision:
+      description: The first listed value is terminal; any other re-runs the loop.
+      type: string
+    text:
+      description: Free text for this member.
+      type: string
+      minLength: 1
+    claims:
+      description: Claims this phase records.
+      type: array
+      items:
+        type: object
+        additionalProperties: false
+        required: [id, statement]
+        properties:
+          id:
+            description: Stable claim id, reused across phases.
+            type: string
+            minLength: 1
+          title:
+            description: One line; required when the id is new in this phase.
+            type: string
+            minLength: 1
+            maxLength: 120
+          statement:
+            description: Names the adversary, the surface, and the precondition.
+            type: string
+            minLength: 1
+          status:
+            description: This phase's status word for the claim.
+            type: string
+          cited_evidence:
+            description: Observations that support the claim, each shaped like a call-level cited_evidence entry.
+            type: array
+          answers:
+            description: Every rating question, answered for a flaw claim.
+            type: object
+            additionalProperties: false
+          scan_group_ids:
+            description: Scanner groups this claim assesses; a link alone establishes no evidence.
+            type: array
+            items:
+              type: string
+              pattern: '^group:'
+            uniqueItems: true
+          question:
+            description: For an open claim, the fact investigation must establish.
+            type: object
+            additionalProperties: false
+            required: [missing_fact, obligations]
+            properties:
+              missing_fact:
+                description: What investigation must establish.
+                type: string
+                minLength: 1
+              obligations:
+                description: Obligation ids the answer affects.
+                type: array
+                items:
+                  type: string
+                minItems: 1
+    set_asides:
+      description: Scanner groups the review accounts for without assessing each one.
+      type: array
+      items:
+        type: object
+        additionalProperties: false
+        required: [reason]
+        properties:
+          reason:
+            description: Holds for every group the entry selects.
+            type: string
+            minLength: 1
+          scan_group_ids:
+            description: Groups selected by id.
+            type: array
+            items:
+              type: string
+              pattern: '^group:'
+            minItems: 1
+          scanner:
+            description: Scanner whose groups the paths select.
+            type: string
+            minLength: 1
+          paths:
+            description: Globs each selected group lies wholly inside.
+            type: array
+            items:
+              type: string
+            minItems: 1
+        anyOf:
+          - required: [scan_group_ids]
+          - required: [scanner, paths]
+    coverage_review:
+      description: Assess every obligation and gap in the current coverage facts, at their revision.
+      type: object
+      additionalProperties: false
+      required: [revision, assessments]
+      properties:
+        revision:
+          description: The coverage facts revision assessed.
+          type: string
+          minLength: 1
+        assessments:
+          description: One assessment per obligation and gap.
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, disposition, reason, cited_evidence]
+            properties:
+              id:
+                description: The obligation or gap id.
+                type: string
+                pattern: '^[a-zA-Z0-9_.-]+$'
+              disposition:
+                description: satisfied answers an obligation; covered or immaterial settles a gap; material_open or essential_open leaves work open.
+                type: string
+                enum: [satisfied, covered, immaterial, material_open, essential_open]
+              reason:
+                description: Why the disposition holds.
+                type: string
+                minLength: 1
+              obligations:
+                description: The obligation ids this assessment affects.
+                type: array
+                items:
+                  type: string
+              cited_evidence:
+                description: Observations behind the assessment, each shaped like a call-level cited_evidence entry.
+                type: array

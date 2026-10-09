@@ -117,6 +117,32 @@ jobs:
         if: steps.setup.outputs.rust-cache-hit != 'true'
         run: ./task setup-dev -- --workspace-cache
 
+      # Resolve paths at publication time instead of relying on nested post-job contexts.
+      - name: Publish prepared Go caches
+        if: github.ref == 'refs/heads/main' && steps.setup.outputs.go-cache-hit != 'true'
+        uses: ./.github/actions/cache-go
+        with:
+          save: 'true'
+
+      - name: Publish prepared decision engine
+        if: runner.os == 'macOS' && github.ref == 'refs/heads/main' && steps.setup.outputs.decide-cache-hit != 'true'
+        uses: ./.github/actions/cache-decide
+        with:
+          save: 'true'
+
+      - name: Publish prepared notices tools
+        if: github.ref == 'refs/heads/main'
+        uses: ./.github/actions/cache-notices-tools
+        with:
+          save: 'true'
+
+      - name: Publish prepared analysis tools
+        if: github.ref == 'refs/heads/main'
+        uses: ./.github/actions/cache-analysis-tools
+        with:
+          tools: all
+          save: 'true'
+
   usage:
     if: always()
     needs: [release, verification]

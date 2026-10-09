@@ -31,8 +31,14 @@ func renderSurfaceCardFor(t *testing.T, surfaceID string, sticky, deferred []str
 // renderPhaseExitBlock renders one projected phase exit.
 func renderPhaseExitBlock(t *testing.T, view workflow.PhaseExitView) string {
 	t.Helper()
+	return renderPhaseExitView(t, view.InjectView())
+}
+
+// renderPhaseExitView renders the phase-exit block for a projected view.
+func renderPhaseExitView(t *testing.T, view *inject.PhaseExitView) string {
+	t.Helper()
 	vars := inject.ActiveWorkflowInjectToMap(inject.ActiveWorkflowInjectData{
-		WorkflowID: "contract", CurrentPhase: "p", PhaseExit: view.InjectView(),
+		WorkflowID: "contract", CurrentPhase: "p", PhaseExit: view,
 		Phases: []inject.ActiveWorkflowPhaseView{{ID: "p", IsCurrent: true}},
 	}, nil, nil)
 	out, err := bundledPromptEngine().Render(context.Background(), "guidance/active-workflow.md",
