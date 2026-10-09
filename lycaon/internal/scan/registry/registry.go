@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"strings"
 	"sync"
@@ -190,7 +191,11 @@ func (r *Impl) Reload() error {
 	previous := r.adapters()
 	r.scannerRegistry().Replace(values)
 	// Replaced adapters finish in-flight scans before their workers stop.
-	go closeScanners(previous)
+	go func() {
+		if err := closeScanners(previous); err != nil {
+			slog.Warn("stop replaced scanner adapters", "error", err)
+		}
+	}()
 	return nil
 }
 

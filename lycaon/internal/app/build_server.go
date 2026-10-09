@@ -261,7 +261,8 @@ func (b serverWiring) wireServer() error {
 	// Project watches are process-wide and their observers call back into
 	// this host's services.
 	b.resources.track("source-watches", 79, func(ctx context.Context) error {
-		projects, err := registry.List(ctx)
+		// The drain deadline may have passed; the store is still open here.
+		projects, err := registry.List(context.WithoutCancel(ctx))
 		for _, p := range projects {
 			sourcefeed.StopProjectWatch(ctx, p.ID)
 		}
