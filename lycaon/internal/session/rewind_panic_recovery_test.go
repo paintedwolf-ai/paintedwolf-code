@@ -10,7 +10,6 @@ import (
 	"github.com/google/uuid"
 	sessioncheckpoint "github.com/lycaon/lycaon/internal/session/checkpoint"
 	"github.com/lycaon/lycaon/internal/sourceeffect"
-	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/sourcerewind"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -44,7 +43,8 @@ func TestRewindApplyPanicRollsBackInPlace(t *testing.T) {
 	recordRewindTestEffect(t, mgr, sessionID, "b.txt", []byte("before-b"), []byte("after-b"), api.SourceChangeOpWrite)
 
 	// Apply a.txt before injecting a panic on b.txt.
-	faultSource := &sourcerewind.Service{Ledger: mgr.ToolContext.SourceLedger.(*sourceledger.Store), Mutations: &rewindFaultJournal{delegate: mgr.sourceMutations, before: func(entryIndex int) {
+	originalSource := mgr.Chats.Rewinds.SourceRewinds()
+	faultSource := &sourcerewind.Service{Ledger: originalSource.Ledger, Mutations: &rewindFaultJournal{delegate: originalSource.Mutations, before: func(entryIndex int) {
 		if entryIndex == 1 {
 			panic("boom: injected rewind apply panic")
 		}
@@ -85,7 +85,7 @@ func TestRewindApplyPanicRollsBackInPlace(t *testing.T) {
 	}
 
 	// Retry in the same process after rollback.
-	mgr.Chats.Rewinds.SetSourceRewinds(&sourcerewind.Service{Ledger: mgr.ToolContext.SourceLedger.(*sourceledger.Store), Mutations: mgr.sourceMutations})
+	mgr.Chats.Rewinds.SetSourceRewinds(originalSource)
 	result, err := rewindTest(t, mgr, ctx, uuid.NewString(), sessionID, anchor.ID)
 	testutil.FailErr(t, "rewind after recovery", err)
 	if result == nil {

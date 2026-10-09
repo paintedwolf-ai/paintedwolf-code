@@ -63,16 +63,22 @@ func (c *countingCostTracker) ClearSpendWarning(ctx context.Context, sessionID s
 }
 
 func spendRunwayMgr(t *testing.T, tracker cost.CostTracker, ceilingUSD float64, enabled bool) *Host {
+	mgr, _ := spendRunwayHost(t, tracker, ceilingUSD, enabled)
+	return mgr
+}
+
+func spendRunwayHost(t *testing.T, tracker cost.CostTracker, ceilingUSD float64, enabled bool) (*Host, *store.Memory) {
 	t.Helper()
 	lim := settings.DefaultSessionLimits()
 	lim.SpendCeilingEnabled = enabled
 	lim.SessionSpendCeilingUSD = ceilingUSD
-	mgr := NewHost(store.NewMemory(), Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: lim, Cost: tracker}, tools.NewStubRegistry())
+	mem := store.NewMemory()
+	mgr := NewHost(mem, Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: lim, Cost: tracker}, tools.NewStubRegistry())
 	hints, err := guidance.LoadHintConfigStock()
 	testutil.FailErr(t, "LoadHintConfigStock", err)
 	mgr.SetWorkflowHints(hints, nil)
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
-	return mgr
+	return mgr, mem
 }
 
 func recordSessionSpend(t *testing.T, tracker cost.CostTracker, sessionID string, usd float64) {
@@ -197,7 +203,7 @@ func TestSpendRunwayNudgeRearmsOnChangedCeiling(t *testing.T) {
 	recordSessionSpend(t, tracker2, "s2", 2.5)
 	mgr2 := spendRunwayMgr(t, tracker2, 5, true)
 	sess2 := &api.Session{ID: "s2", ProjectID: "p1"}
-	if got := mgr2.Nudges.SpendRunway(ctx, sess2, 5); got.Empty() {
+	if got := mgr2.Coordinator.Nudges.SpendRunway(ctx, sess2, 5); got.Empty() {
 		t.Fatal("fire at $5 on s2")
 	}
 	defaults2 := mgr2.Limits.Defaults()
@@ -208,7 +214,7 @@ func TestSpendRunwayNudgeRearmsOnChangedCeiling(t *testing.T) {
 	if !st.Low || st.Reached || st.CeilingUSD != 3 {
 		t.Fatalf("state at lower ceiling = %+v", st)
 	}
-	if got := mgr2.Nudges.SpendRunway(ctx, sess2, st.CeilingUSD); got.Empty() {
+	if got := mgr2.Coordinator.Nudges.SpendRunway(ctx, sess2, st.CeilingUSD); got.Empty() {
 		t.Fatal("lower positive ceiling must re-arm")
 	}
 }

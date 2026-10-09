@@ -36,7 +36,6 @@ func TestQueueCoordinatorGuidanceNudgeUsesAdvisoryDisposition(t *testing.T) {
 	testutil.FailErr(t, "load hint registry", err)
 	mgr, _ := newTestManager(t)
 	mgr.SetRejectFormatter(guidance.NewStaticRejectFormatter(hints))
-	mgr.Coordinator.Runtime
 	mgr.Coordinator.Guidance.Queue(t.Context(), "sess-nudge", "COORDINATOR_HOST_TURN_REQUIRES_WAIT", nil, nil)
 	if id := mgr.Coordinator.Runtime.Kicks().TakePendingKickID("sess-nudge"); id != "guidance:COORDINATOR_HOST_TURN_REQUIRES_WAIT:session:sess-nudge" {
 		t.Fatalf("kick id = %q", id)

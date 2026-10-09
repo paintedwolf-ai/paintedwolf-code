@@ -2,10 +2,6 @@ package workflowfixture
 
 import (
 	"context"
-	"path/filepath"
-	"strings"
-	"testing"
-
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/extpacks"
@@ -15,6 +11,9 @@ import (
 	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
+	"path/filepath"
+	"strings"
+	"testing"
 )
 
 func ContractWorkflowComposer(t *testing.T) *workflowcomposition.Composer {

@@ -110,19 +110,19 @@ func TestSweepRevisitsRowsStampedByAnEarlierRun(t *testing.T) {
 
 	blind := &growingRedactor{}
 	first := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
-	first.Transcript.SetRedactor(blind.redact)
-	testutil.FailErr(t, "append mint row", first.Transcript.Append(ctx, sess.ID, api.Message{
+	first.Runner.Transcript.SetRedactor(blind.redact)
+	testutil.FailErr(t, "append mint row", first.Runner.Transcript.Append(ctx, sess.ID, api.Message{
 		ID: "tool-1", Role: api.MessageRoleTool, Content: "token " + sweepSecret,
 	}))
 	// Build a persisted floor without recognizing this value.
 	for revision := uint64(1); revision <= 3; revision++ {
-		first.Transcript.SweepSessionTree(ctx, sess.ID, revision)
+		first.Runner.Transcript.SweepSessionTree(ctx, sess.ID, revision)
 	}
 
 	// Restart with an empty revision counter.
 	second := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
-	second.Transcript.SetRedactor((&growingRedactor{known: true}).redact)
-	second.Transcript.SweepSessionTree(ctx, sess.ID, 1)
+	second.Runner.Transcript.SetRedactor((&growingRedactor{known: true}).redact)
+	second.Runner.Transcript.SweepSessionTree(ctx, sess.ID, 1)
 
 	swept, err := mem.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "read swept messages", err)

@@ -41,9 +41,10 @@ func TestForgetSessionClearsEveryReleasedStore(t *testing.T) {
 	m.Promotion.SetMergeReconcilePaths(sid, []string{"a.go"})
 	m.Runner.History.ObserveTokens(sid, 150, 100)
 	m.Promotion.RecordPromotePathStatus(sid, "job", []api.WorkerPromotePathStatus{{Path: "a.go"}})
-	m.Resources.Authority.Writes = approvalstate.NewSandboxPathGrantRuntime()
+	writeRootRuntime := approvalstate.NewSandboxPathGrantRuntime()
+	m.Resources.Authority.Writes = writeRootRuntime
 
-	m.Resources.Authority.Writes.GrantChat(sid, "/opt/cache", "grant-1", "cp-1", nil)
+	writeRootRuntime.GrantChat(sid, "/opt/cache", "grant-1", "cp-1", nil)
 
 	m.Resources.Queue.AppendOrdered(sid, "", testutil.HostOwner().ID, "queued follow-up", 0, time.Time{})
 	progress.TurnStarted(sid)
@@ -77,7 +78,7 @@ func TestForgetSessionClearsEveryReleasedStore(t *testing.T) {
 	if len(forgot) != 1 || forgot[0] != sid {
 		t.Fatalf("approval gate release = %v, want [%s]", forgot, sid)
 	}
-	if len(m.Resources.Authority.Writes.ListChatGrants(sid)) != 0 {
+	if len(writeRootRuntime.ListChatGrants(sid)) != 0 {
 		t.Fatal("write-root runtime survived ForgetSession")
 	}
 
@@ -102,13 +103,14 @@ func TestStopKeepsTheChatsApprovedSandboxGrants(t *testing.T) {
 		return nil
 	}))
 	const sid = "sess-stop"
-	m.Resources.Authority.Writes = approvalstate.NewSandboxPathGrantRuntime()
+	writeRootRuntime := approvalstate.NewSandboxPathGrantRuntime()
+	m.Resources.Authority.Writes = writeRootRuntime
 
-	m.Resources.Authority.Writes.GrantChat(sid, "/opt/cache", "grant-1", "cp-1", nil)
-	m.Resources.Authority.Writes.GrantSessionWriteRoot(sid, "/opt/derived")
+	writeRootRuntime.GrantChat(sid, "/opt/cache", "grant-1", "cp-1", nil)
+	writeRootRuntime.GrantSessionWriteRoot(sid, "/opt/derived")
 
 	testutil.FailErr(t, "stop", m.Chats.ReleaseRuntime(t.Context(), sid))
-	if roots := m.Resources.Authority.Writes.SessionWriteRoots(sid); len(roots) != 1 || roots[0] != "/opt/cache" {
+	if roots := writeRootRuntime.SessionWriteRoots(sid); len(roots) != 1 || roots[0] != "/opt/cache" {
 		t.Fatalf("roots after Stop = %v, want only the approved grant", roots)
 	}
 	if len(released) != 1 || len(disposed) != 0 {
@@ -116,7 +118,7 @@ func TestStopKeepsTheChatsApprovedSandboxGrants(t *testing.T) {
 	}
 
 	m.Resources.Dispose(t.Context(), sid)
-	if roots := m.Resources.Authority.Writes.SessionWriteRoots(sid); len(roots) != 0 {
+	if roots := writeRootRuntime.SessionWriteRoots(sid); len(roots) != 0 {
 		t.Fatalf("roots after delete = %v", roots)
 	}
 	if len(disposed) != 1 || disposed[0] != sid {

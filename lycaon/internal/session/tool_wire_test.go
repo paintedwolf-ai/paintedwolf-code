@@ -25,7 +25,7 @@ func TestPrepareToolWireContentRetainsLargeFilesWithoutCompactor(t *testing.T) {
 	}
 	raw, err := json.Marshal(map[string]any{"files": files, "dirty": true})
 	testutil.FailErr(t, "json.Marshal failed", err)
-	mgr := NewHost(sessionstore.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	sess := &api.Session{ID: "s1", Posture: api.SessionPostureBuild}
 	out, meta := mgr.Runner.History.ToolWire(context.Background(), sess, "git_status", string(raw), compaction.CompactToolWireOpts{})
 	if meta != nil {

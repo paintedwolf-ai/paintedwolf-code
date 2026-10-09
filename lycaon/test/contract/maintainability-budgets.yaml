@@ -16,36 +16,17 @@ limits:
     go_receiver_lines: {warn: 400, limit: 1000}
     ts_local_dependencies: {warn: 20, limit: 30}
 exceptions:
-    go_receiver_lines:
-        lycaon/internal/session/session.Manager:
-            cap: 12700
-            reason: Predates the limits; fixes still land here while the package is decomposed (#271).
-        lycaon/internal/workflow/workflow.RunManager:
-            cap: 6500
-            reason: The workflow run lifecycle (advance, gates, topology settlement, closeout, report delivery, runtime snapshots) shares one manager's run locks and ledger; splitting it needs its own change with a lifecycle and locking review.
-    go_receiver_methods:
-        lycaon/internal/session/session.Manager:
-            cap: 720
-            reason: Predates the limits; fixes still land here while the package is decomposed (#271).
-        lycaon/internal/workflow/workflow.RunManager:
-            cap: 250
-            reason: The workflow run lifecycle (advance, gates, topology settlement, closeout, report delivery, runtime snapshots) shares one manager's run locks and ledger; splitting it needs its own change with a lifecycle and locking review.
-    go_struct_fields:
-        lycaon/internal/session/session.Manager:
-            cap: 145
-            reason: Predates the limits; fixes still land here while the package is decomposed (#271).
-    source_files:
-        lycaon/internal/session/coordinator_wire.go:
-            cap: 1100
-            reason: Predates the limits; fixes still land here while the package is decomposed (#271).
     test_directories:
         lycaon/internal/session:
             cap: 265
             reason: Predates the limits; fixes still land here while the package is decomposed (#271).
+        lycaon/internal/coordinator/promptloop:
+            cap: 110
+            reason: Prompt loop testing covers coordinator turn stages, streaming, tools, and closeouts; decomposed from session (#271).
+        lycaon/internal/worker:
+            cap: 100
+            reason: Worker execution, outcomes, and peer contract invariants decomposed from session (#271).
     source_directories:
-        lycaon/internal/session:
-            cap: 210
-            reason: Predates the limits; fixes still land here while the package is decomposed (#271).
         scripts:
             cap: 170
             reason: Task and CI entry points are invoked by path and import sibling modules by name; the change-scoped budget and coverage reports joined them here.

@@ -135,3 +135,17 @@ type WorkerTerminalEvents interface {
 type WorkerLegWakes interface {
 	NudgeLegFinished(context.Context, string, time.Time, string)
 }
+
+type WorkerCycleWakeState interface {
+	ShouldNudge(context.Context, string, string, string) bool
+}
+type WorkerResultProjection interface {
+	TaskByID(string) (workeroutcomes.SummaryInput, bool)
+	ProjectResult(context.Context, workeroutcomes.SummaryInput, api.WorkerResult) (string, error)
+	ProjectFailure(context.Context, workeroutcomes.SummaryInput, error) error
+	RecordTerminalProof(context.Context, string, string, string) error
+	EnvelopeForTerminal(context.Context, string, string) anchor.Envelope
+}
+type ProgressClosureArm interface {
+	Arm(context.Context, string, string)
+}

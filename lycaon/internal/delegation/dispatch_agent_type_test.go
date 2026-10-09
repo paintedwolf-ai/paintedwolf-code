@@ -69,7 +69,7 @@ func TestDispatchLegMintsParentTaskCard(t *testing.T) {
 	if !ok {
 		t.Fatal("expected delegation session")
 	}
-	msgs, err := mgr.Transcript.GetMessages(ctx, sessionID)
+	msgs, err := mgr.Runner.Transcript.GetMessages(ctx, sessionID)
 	testutil.FailErr(t, "GetMessages", err)
 	var tool *api.Message
 	for i := range msgs {
@@ -103,7 +103,7 @@ func TestDispatchLegCoordinatorToolCallRecordsOneCard(t *testing.T) {
 	if !ok {
 		t.Fatal("expected delegation session")
 	}
-	msgs, err := mgr.Transcript.GetMessages(ctx, sessionID)
+	msgs, err := mgr.Runner.Transcript.GetMessages(ctx, sessionID)
 	testutil.FailErr(t, "GetMessages", err)
 	cards := 0
 	for _, msg := range msgs {

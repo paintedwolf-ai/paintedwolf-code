@@ -12,6 +12,7 @@ import (
 )
 
 func (m *Rewinds) SetSourceRewinds(service *sourcerewind.Service) { m.sourceRewinds = service }
+func (m *Rewinds) SourceRewinds() *sourcerewind.Service           { return m.sourceRewinds }
 
 func (m *Rewinds) rewindProject(ctx context.Context, sessionID string) (*project.Project, error) {
 	sess, err := m.store.Get(ctx, sessionID)

@@ -35,9 +35,9 @@ func TestInterruptedToolProjectionRetainsIdentityAcrossRecoveryPaths(t *testing.
 			testutil.FailErr(t, "interrupt tool owners", err)
 			for range 2 {
 				if scoped {
-					err = manager.Interruptions.RecoverInterruptedToolResultPagesForSession(t.Context(), recorder, sess.ID)
+					err = manager.Stops.Recovery.RecoverInterruptedToolResultPagesForSession(t.Context(), recorder, sess.ID)
 				} else {
-					err = manager.Interruptions.RecoverInterruptedToolResults(t.Context())
+					err = manager.Stops.Recovery.RecoverInterruptedToolResults(t.Context())
 				}
 				testutil.FailErr(t, "recover tool projections", err)
 			}

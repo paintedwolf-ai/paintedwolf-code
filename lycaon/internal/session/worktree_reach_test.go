@@ -50,7 +50,7 @@ type reachFixture struct {
 	sess    *api.Session
 	repoDir string
 	wtPath  string
-	gm      *git.Host
+	gm      *git.Manager
 }
 
 func newReachFixture(t *testing.T, rootPath string) *reachFixture {

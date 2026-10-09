@@ -22,7 +22,6 @@ func advisoryTestManager(t *testing.T) *Host {
 	rejectFmt := guidance.NewStaticRejectFormatter(hints)
 	mgr, _ := newTestManager(t)
 	mgr.SetRejectFormatter(rejectFmt)
-	mgr.Coordinator.Runtime
 	mgr.SetOARPipeline(nil, oar.NewRenderer(rejectFmt, nil))
 	return mgr
 }

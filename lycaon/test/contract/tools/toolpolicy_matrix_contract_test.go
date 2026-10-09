@@ -200,7 +200,7 @@ func wireToolpolicyMatrixContract(
 	if err := delegation.RegisterDelegationTools(reg, delegMgr); err != nil {
 		contractcheck.FailErr(t, "delegation.RegisterDelegationTools failed", err)
 	}
-	if err := worker.RegisterTaskTool(reg, worker.TaskToolDeps{Sessions: mgr, Queue: queue, Agents: agents, Workers: worker.DefaultWorkersConfig()}); err != nil {
+	if err := worker.RegisterTaskTool(reg, worker.TaskToolDeps{Queue: queue, Agents: agents, Workers: worker.DefaultWorkersConfig()}); err != nil {
 		contractcheck.FailErr(t, "worker.RegisterTaskTool failed", err)
 	}
 	policy, err := workflowcomposition.LoadComposePolicy()

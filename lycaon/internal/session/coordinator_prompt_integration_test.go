@@ -71,7 +71,7 @@ func setupCoordinatorPromptFixture(t *testing.T) coordinatorPromptFixture {
 	dir := t.TempDir()
 	blueprintStore := blueprint.NewFileStoreForTest(dir)
 	blueprintMgr := blueprint.NewManager(blueprintStore)
-	wfMgr.Blueprints.Creator = blueprint.WorkflowBlueprintCreator{Host: blueprintMgr}
+	wfMgr.Blueprints.Creator = blueprint.WorkflowBlueprintCreator{Manager: blueprintMgr}
 	wfMgr.Blueprints.Getter = blueprintMgr
 	wfMgr.Presentation.BlueprintGetter = blueprintMgr
 	wfMgr.Approvals.Getter = blueprintMgr

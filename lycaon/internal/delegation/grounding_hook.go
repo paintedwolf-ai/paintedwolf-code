@@ -224,7 +224,7 @@ func (g *GroundingCoordinator) summaryTags(ctx context.Context, sessionID string
 	if g.Sessions == nil {
 		return nil
 	}
-	msgs, err := g.Sessions.Transcript.GetMessages(ctx, sessionID)
+	msgs, err := g.Sessions.Runner.Transcript.GetMessages(ctx, sessionID)
 	if err != nil {
 		return nil
 	}

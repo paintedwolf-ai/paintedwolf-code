@@ -186,7 +186,7 @@ func NewHost(store Store, modelSources Models, registry tools.ToolRegistry) *Hos
 	m.ToolContext = toolcontext.New(store, m.Workspace, m.Limits, m.Profiles, captures, turnExecution)
 
 	m.RewindRuntime = &rewindruntime.Service{Promotion: m.Promotion, Closeouts: turnCloseouts, ProgressClosure: m.Coordinator.ProgressClosure, History: turnHistory, Queue: queueStore, Drafts: drafts, Submissions: turnSubmissionState}
-	rewinds := checkpointcontrol.NewRewinds(store, captures, &turnExecution.Prompt, m.Workspace, m.Coordinator.Tools.Projects, nil, m.Coordinator.Projection.Events, checkpointcontrol.Runtime{
+	rewinds := checkpointcontrol.NewRewinds(store, captures, &turnExecution.Prompt, m.Workspace, nil, nil, nil, checkpointcontrol.Runtime{
 		WorkersInFlight: func(ctx context.Context, sess *api.Session) int {
 			return workerState.ForSession(ctx, sess).WorkersInFlight
 		},

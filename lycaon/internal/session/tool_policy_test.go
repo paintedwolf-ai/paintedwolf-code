@@ -10,7 +10,7 @@ import (
 func TestListToolsForPromptSpecHidesDelegation(t *testing.T) {
 	fix := setupContextualToolsFixture(t, api.SessionPostureSpec)
 	ctx := context.Background()
-	listed := fix.Mgr.Guards.Policy().ListForPrompt(ctx, fix.Sess, fix.ProfileID)
+	listed := fix.Mgr.Coordinator.Guards.Policy().ListForPrompt(ctx, fix.Sess, fix.ProfileID)
 	if hasTool(listed, "delegate_dispatch") {
 		t.Fatalf("spec posture must hide delegate_dispatch, got %v", toolNames(listed))
 	}
@@ -25,7 +25,7 @@ func TestListToolsForPromptSpecHidesDelegation(t *testing.T) {
 func TestListToolsForPromptBuildShowsDelegation(t *testing.T) {
 	fix := setupContextualToolsFixture(t, api.SessionPostureBuild)
 	ctx := context.Background()
-	listed := fix.Mgr.Guards.Policy().ListForPrompt(ctx, fix.Sess, fix.ProfileID)
+	listed := fix.Mgr.Coordinator.Guards.Policy().ListForPrompt(ctx, fix.Sess, fix.ProfileID)
 	if !hasTool(listed, "delegate_dispatch") {
 		t.Fatalf("build posture must show delegate_dispatch, got %v", toolNames(listed))
 	}
@@ -37,7 +37,7 @@ func TestListToolsForPromptBuildShowsDelegation(t *testing.T) {
 func TestListToolsForPromptCoordinatorCeiling(t *testing.T) {
 	fix := setupContextualToolsFixture(t, api.SessionPostureBuild)
 	ctx := context.Background()
-	listed := fix.Mgr.Guards.Policy().ListForPrompt(ctx, fix.Sess, fix.ProfileID)
+	listed := fix.Mgr.Coordinator.Guards.Policy().ListForPrompt(ctx, fix.Sess, fix.ProfileID)
 	// Profile grant; the turn surface gates invoke.
 	for _, name := range []string{"grep", "read", "command"} {
 		if !hasTool(listed, name) {

@@ -40,8 +40,10 @@ func TestCancelServiceReturnsChangeReportAndEnvelope(t *testing.T) {
 	}
 
 	svc := &CancelService{
-		Queue:  queue,
-		Events: mgr.Coordinator.Workers, Graceful: mgr.Workers.Cancel,
+		Queue:         queue,
+		Events:        mgr.Coordinator.Workers,
+		Graceful:      mgr.Workers.Cancel,
+		Cancellations: mgr.Workers.Cancellations,
 		Reports: ChangeReportDeps{
 			Messages: func(context.Context, string) ([]api.Message, error) { return nil, nil },
 		},
@@ -52,7 +54,7 @@ func TestCancelServiceReturnsChangeReportAndEnvelope(t *testing.T) {
 		t.Fatalf("status = %q", out.Status)
 	}
 
-	msgs, err := mgr.Transcript.GetMessages(ctx, parent.ID)
+	msgs, err := mgr.Runner.Transcript.GetMessages(ctx, parent.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	if len(msgs) != 2 {
 		t.Fatalf("messages = %d want canonical assistant-call/result pair", len(msgs))

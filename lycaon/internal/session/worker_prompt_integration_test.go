@@ -51,10 +51,10 @@ func setupWorkerPromptFixture(t *testing.T) (*session.Host, *store.Memory, *llm.
 	mgr.Profiles.SetAgentRegistry(agents)
 	wirePromptTestManager(t, mgr)
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
-	mgr.SetBoardInject(&board.InjectBuilder{SnapshotBuilder: &board.SnapshotBuilder{
+	mgr.Coordinator.ConfigureBoard(&board.InjectBuilder{SnapshotBuilder: &board.SnapshotBuilder{
 		Repo: repotest.NewProvider(t),
 		Git:  git.NewManager(),
-	}}, board.DefaultInjectFormatter())
+	}}, board.DefaultInjectFormatter(), mgr.Promotion)
 	return mgr, store, rec
 }
 

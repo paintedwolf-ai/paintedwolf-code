@@ -18,8 +18,8 @@ import (
 
 func TestSpendingBlockedInputPreservesAttachmentAuthorityAndSkipsHostTurns(t *testing.T) {
 	tracker := costtest.NewTracker(t, stubSpendPricer{})
-	manager := spendRunwayMgr(t, tracker, 5, true)
-	sess, err := manager.store.Create(t.Context(), api.CreateSessionRequest{}, "project")
+	manager, mem := spendRunwayHost(t, tracker, 5, true)
+	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, "project")
 	testutil.FailErr(t, "create session", err)
 	parts := []api.MessageContentPart{
 		{Content: "Explain this attachment", Origin: api.MessageOriginUser, Authority: api.ContentAuthorityUser, TrustTier: api.ContentTrustTierTrusted},
@@ -40,7 +40,7 @@ func TestSpendingBlockedInputPreservesAttachmentAuthorityAndSkipsHostTurns(t *te
 	if !errors.Is(err, spendguard.ErrCeiling) {
 		t.Fatalf("direct execution after ceiling = %v", err)
 	}
-	msgs, err := manager.store.GetMessages(t.Context(), sess.ID)
+	msgs, err := mem.GetMessages(t.Context(), sess.ID)
 	testutil.FailErr(t, "read retained attachment", err)
 	if len(msgs) != 1 || !reflect.DeepEqual(msgs[0].ContentParts, parts) {
 		t.Fatalf("blocked attachment authority changed or host prompt became visible: %+v", msgs)
@@ -51,8 +51,8 @@ func TestAcceptedPromptsSurviveCeilingReachedBeforeExecution(t *testing.T) {
 	for _, mode := range []string{"direct", "queued", "linked"} {
 		t.Run(mode, func(t *testing.T) {
 			tracker := costtest.NewTracker(t, stubSpendPricer{})
-			manager := spendRunwayMgr(t, tracker, 5, true)
-			sess, err := manager.store.Create(t.Context(), api.CreateSessionRequest{}, "project")
+			manager, mem := spendRunwayHost(t, tracker, 5, true)
+			sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, "project")
 			testutil.FailErr(t, "create session", err)
 			texts := []string{"Keep the café water log.\nSummarize only the requested checks."}
 			if mode == "linked" {
@@ -64,11 +64,11 @@ func TestAcceptedPromptsSurviveCeilingReachedBeforeExecution(t *testing.T) {
 				testutil.FailErr(t, "admit before ceiling", err)
 				rows = append(rows, row)
 				if mode != "direct" {
-					manager.queue.AppendOrdered(sess.ID, row.ID, row.SubmittedBy, text, row.AdmissionSeq, row.CreatedAt)
+					manager.Resources.Queue.AppendOrdered(sess.ID, row.ID, row.SubmittedBy, text, row.AdmissionSeq, row.CreatedAt)
 				}
 			}
 			if mode == "linked" {
-				_, err := manager.Drafts.Link(t.Context(), sess.ID, manager.Drafts.Snapshot(sess.ID).Revision, []string{rows[0].ID, rows[1].ID})
+				_, err := manager.Chats.Drafts.Link(t.Context(), sess.ID, manager.Chats.Drafts.Snapshot(sess.ID).Revision, []string{rows[0].ID, rows[1].ID})
 				testutil.FailErr(t, "link queued messages", err)
 			}
 			recordSessionSpend(t, tracker, sess.ID, 6)
@@ -85,14 +85,14 @@ func TestAcceptedPromptsSurviveCeilingReachedBeforeExecution(t *testing.T) {
 				}
 			}
 			for _, row := range rows {
-				stored, err := manager.store.GetPromptSubmission(t.Context(), row.ID)
+				stored, err := mem.GetPromptSubmission(t.Context(), row.ID)
 				testutil.FailErr(t, "read blocked receipt", err)
 				if stored.Status != store.PromptSubmissionFailed {
 					t.Fatalf("blocked receipt status = %s", stored.Status)
 				}
 				_, _ = manager.Submissions.RunPromptSubmission(t.Context(), row.ID)
 			}
-			messages, err := manager.store.GetMessages(t.Context(), sess.ID)
+			messages, err := mem.GetMessages(t.Context(), sess.ID)
 			testutil.FailErr(t, "read retained input", err)
 			if len(messages) != 1 || messages[0].ID != rows[0].ID || messages[0].Content != strings.Join(texts, "\n\n") {
 				t.Fatalf("accepted input lost, duplicated, or changed: %+v", messages)
@@ -118,8 +118,8 @@ func TestPromptAdmissionRejectsReachedCeilingBeforeTakingDraftOwnership(t *testi
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			tracker := costtest.NewTracker(t, stubSpendPricer{unpriced: tc.unpriced})
-			manager := spendRunwayMgr(t, tracker, 5, tc.enabled)
-			sess, err := manager.store.Create(t.Context(), api.CreateSessionRequest{}, "project")
+			manager, mem := spendRunwayHost(t, tracker, 5, tc.enabled)
+			sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, "project")
 			testutil.FailErr(t, "create session", err)
 			testutil.FailErr(t, "record usage", tracker.RecordUsage(t.Context(), cost.UsageEvent{
 				SessionID: sess.ID, Caller: cost.CallerCoordinator, PromptTokens: 10,
@@ -131,7 +131,7 @@ func TestPromptAdmissionRejectsReachedCeilingBeforeTakingDraftOwnership(t *testi
 				if !errors.Is(err, spendguard.ErrCeiling) || row != nil || created {
 					t.Fatalf("reached ceiling admission = row=%+v created=%v error=%v", row, created, err)
 				}
-				if _, err := manager.store.GetPromptSubmission(t.Context(), id); !errors.Is(err, store.ErrPromptSubmissionNotFound) {
+				if _, err := mem.GetPromptSubmission(t.Context(), id); !errors.Is(err, store.ErrPromptSubmissionNotFound) {
 					t.Fatalf("rejected draft left an accepted receipt: %v", err)
 				}
 			} else {
@@ -146,8 +146,8 @@ func TestPromptAdmissionRejectsReachedCeilingBeforeTakingDraftOwnership(t *testi
 
 func TestPromptReplaySurvivesLaterSpendCeiling(t *testing.T) {
 	tracker := costtest.NewTracker(t, stubSpendPricer{})
-	manager := spendRunwayMgr(t, tracker, 5, true)
-	sess, err := manager.store.Create(t.Context(), api.CreateSessionRequest{}, "project")
+	manager, mem := spendRunwayHost(t, tracker, 5, true)
+	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, "project")
 	testutil.FailErr(t, "create session", err)
 	id := uuid.NewString()
 	first, created, err := manager.Submissions.AdmitPrompt(t.Context(), sess.ID, id, "original", promptinput.Input{Text: "original"})

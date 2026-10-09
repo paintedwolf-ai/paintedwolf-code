@@ -250,7 +250,7 @@ func TestSettleDeferredUserTurnDropsSettlementDuringStop(t *testing.T) {
 }
 
 func TestTurnEndDispositionDistinguishesFailure(t *testing.T) {
-	mgr := NewHost(sessionstore.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	if got := mgr.Runner.Settlement.Disposition(true); got != api.SessionIdleDispositionTurnError {
 		t.Fatalf("failed turn disposition = %q", got)
 	}
@@ -260,7 +260,7 @@ func TestTurnEndDispositionDistinguishesFailure(t *testing.T) {
 }
 
 func TestTurnEndDispositionReportsShutdownAsInterrupted(t *testing.T) {
-	mgr := NewHost(sessionstore.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.Runner.Settlement.BeginShutdown()
 	if got := mgr.Runner.Settlement.Disposition(true); got != api.SessionIdleDispositionInterrupted {
 		t.Fatalf("failed turn during shutdown = %q, want interrupted", got)

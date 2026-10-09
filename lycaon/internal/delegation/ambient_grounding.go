@@ -281,7 +281,7 @@ func (g *AmbientGroundingCoordinator) buildInput(ctx context.Context, sessionID 
 		jobs, _ := g.Queue.ListBySession(ctx, sess.ProjectID, sessionID)
 		in.Jobs = append([]api.WorkerTask(nil), jobs...)
 	}
-	msgs, _ := g.Sessions.Transcript.GetMessages(ctx, sessionID)
+	msgs, _ := g.Sessions.Runner.Transcript.GetMessages(ctx, sessionID)
 	in.SummaryTags = summaryTagsFromMessages(msgs)
 	if audit := lastAssistantAudit(msgs); audit != nil && !audit.Traced {
 		in.LastAuditUngrounded = true

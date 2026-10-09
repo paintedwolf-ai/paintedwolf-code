@@ -24,7 +24,6 @@ func newPostHookManager(t *testing.T) *Host {
 	testutil.FailErr(t, "load hint registry", err)
 	mgr, _ := newTestManager(t)
 	mgr.SetRejectFormatter(guidance.NewStaticRejectFormatter(hints))
-	mgr.Coordinator.Runtime
 	return mgr
 }
 
@@ -86,7 +85,7 @@ func TestProgressMissingSkipsWorkerChild(t *testing.T) {
 	testutil.FailErr(t, "Create parent", err)
 	child, err := mem.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "CreateChild", err)
-	mgr.Coordinator.Context.Sessions.(Store) = mem
+	mgr.Coordinator.Context.Sessions = mem
 	mgr.Runner.PostTurn = postturn.New(mem, mgr.Coordinator.Guidance)
 	mgr.SetProgressStore(progress.NewMemoryStore())
 
@@ -107,7 +106,7 @@ func TestProgressMissingSkipsSpecWorkflowArtifacts(t *testing.T) {
 	mem := store.NewMemory()
 	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureSpec}, "proj-1")
 	testutil.FailErr(t, "Create session", err)
-	mgr.Coordinator.Context.Sessions.(Store) = mem
+	mgr.Coordinator.Context.Sessions = mem
 	mgr.Runner.PostTurn = postturn.New(mem, mgr.Coordinator.Guidance)
 	mgr.SetProgressStore(progress.NewMemoryStore())
 
@@ -122,7 +121,7 @@ func TestWorkflowPhaseExitNudgesAfterUnrelatedToolArc(t *testing.T) {
 	mem := store.NewMemory()
 	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, "proj-1")
 	testutil.FailErr(t, "Create session", err)
-	mgr.Coordinator.Context.Sessions.(Store) = mem
+	mgr.Coordinator.Context.Sessions = mem
 	mgr.Runner.PostTurn = postturn.New(mem, mgr.Coordinator.Guidance)
 	mgr.SetCoordinatorTurnFrameSource(postHookWorkflowContext{wf: feedback.WorkflowEvaluationContext{
 		WorkflowID:         "example",
@@ -147,7 +146,7 @@ func TestWorkflowPhaseExitAllowsAnotherAsk(t *testing.T) {
 	mem := store.NewMemory()
 	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, "proj-1")
 	testutil.FailErr(t, "Create session", err)
-	mgr.Coordinator.Context.Sessions.(Store) = mem
+	mgr.Coordinator.Context.Sessions = mem
 	mgr.Runner.PostTurn = postturn.New(mem, mgr.Coordinator.Guidance)
 	mgr.SetCoordinatorTurnFrameSource(postHookWorkflowContext{wf: feedback.WorkflowEvaluationContext{
 		WorkflowID:         "example",

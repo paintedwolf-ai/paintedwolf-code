@@ -163,7 +163,7 @@ func (s *CancelService) cancelTask(ctx context.Context, task *api.WorkerTask, se
 		})
 	}
 
-	if task.Status == api.WorkerStatusRunning && mode == CancelGraceful && strings.TrimSpace(task.ChildSessionID) != "" && s.Sessions != nil && s.Graceful != nil {
+	if task.Status == api.WorkerStatusRunning && mode == CancelGraceful && strings.TrimSpace(task.ChildSessionID) != "" && s.Graceful != nil {
 		return s.cancelRunningGraceful(ctx, task, sessionID, reason)
 	}
 	return s.cancelImmediate(ctx, task, sessionID, reason)

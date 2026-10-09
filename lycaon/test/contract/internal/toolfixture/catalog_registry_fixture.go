@@ -199,12 +199,10 @@ func ContractServeBootRegistry(t *testing.T) *tools.DefaultRegistry {
 
 	agents := orchestration.NewMemoryAgentRegistry()
 	contractcheck.FailErr(t, "LoadRequiredAgentRegistry", orchestration.LoadRequiredAgentRegistry(context.Background(), agents))
-	sessMgr := session.NewHost(store.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	if err := worker.RegisterTaskTool(rt.Registry, worker.TaskToolDeps{
-		Sessions: sessMgr,
-		Queue:    worker.NewInMemoryQueue(2),
-		Agents:   agents,
-		Workers:  worker.DefaultWorkersConfig(),
+		Queue:   worker.NewInMemoryQueue(2),
+		Agents:  agents,
+		Workers: worker.DefaultWorkersConfig(),
 	}); err != nil {
 		t.Fatal(err)
 	}

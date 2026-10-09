@@ -40,7 +40,7 @@ func TestQueuedReceiptClaimDoesNotDeadlockSessionSeenPublication(t *testing.T) {
 	testutil.FailErr(t, "create session", err)
 	row, _, err := manager.Submissions.AdmitPrompt(t.Context(), sess.ID, uuid.NewString(), "queued", promptinput.Input{Text: "queued"})
 	testutil.FailErr(t, "admit queued prompt", err)
-	manager.queue.AppendOrdered(sess.ID, row.ID, row.SubmittedBy, "queued", row.AdmissionSeq, row.CreatedAt)
+	manager.Resources.Queue.AppendOrdered(sess.ID, row.ID, row.SubmittedBy, "queued", row.AdmissionSeq, row.CreatedAt)
 	pending := &gatedPromptPending{manager: manager, writerHeld: make(chan struct{}), queueHeld: make(chan struct{})}
 	st.SetPromptPending(pending)
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
@@ -54,7 +54,7 @@ func TestQueuedReceiptClaimDoesNotDeadlockSessionSeenPublication(t *testing.T) {
 	case <-ctx.Done():
 		t.Fatal("seen update never acquired writer")
 	}
-	_, taken, claimErr := manager.queue.TakeNextTurn(sess.ID, func(items []api.QueueItem) error {
+	_, taken, claimErr := manager.Resources.Queue.TakeNextTurn(sess.ID, func(items []api.QueueItem) error {
 		close(pending.queueHeld)
 		_, claimed, err := st.ClaimPromptSubmission(ctx, items[0].ID)
 		if err == nil && !claimed {

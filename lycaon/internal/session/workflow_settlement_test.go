@@ -73,7 +73,7 @@ func TestWorkflowCompletionSettlesAfterExecutionDrains(t *testing.T) {
 			loop := mgr.Coordinator.Runtime.CoordinatorLoop()
 			workers := &settlementWorkerQueue{}
 			workers.idle.Store(blocker != "workers")
-			mgr.Coordinator.Tools.Workers = workers
+			mgr.SetWorkerQueue(workers)
 			loop.EnterSleep(ctx, sess.ID, time.Now().Add(time.Hour), "phase wait", loopwake.HostObligationWaitTriggers(false), nil, loopwake.SleepMoverHost)
 			unblock := func() {}
 			switch blocker {

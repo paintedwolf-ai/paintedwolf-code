@@ -24,7 +24,6 @@ func newClosureGuardManager(t *testing.T, store progress.RunScopedStore) *Host {
 	mgr, _ := newTestManager(t)
 	mgr.SetRejectFormatter(rejectFmt)
 	mgr.SetProgressStore(store)
-	mgr.Coordinator.Runtime
 	mgr.SetOARPipeline(testCoordinatorPreInvokePipeline(t), oar.NewRenderer(rejectFmt, nil))
 	return mgr
 }

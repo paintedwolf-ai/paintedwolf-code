@@ -46,7 +46,7 @@ func boardInjectManager(t *testing.T) (*session.Host, *llm.RecordingClient, *sto
 		Delegations: delegation.NewMemoryStore(),
 		Workers:     worker.NewInMemoryQueue(10),
 	}
-	mgr.SetBoardInject(&board.InjectBuilder{SnapshotBuilder: builder}, board.DefaultInjectFormatter())
+	mgr.Coordinator.ConfigureBoard(&board.InjectBuilder{SnapshotBuilder: builder}, board.DefaultInjectFormatter(), mgr.Promotion)
 	return mgr, rec, store, reconP
 }
 
@@ -157,7 +157,7 @@ func TestInjectOmitsWorkflowWhenRunContext(t *testing.T) {
 	wirePromptTestManager(t, mgr2)
 	mgr2.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
 	builder := &board.SnapshotBuilder{Repo: repotest.NewProvider(t), Delegations: depStore, Workers: worker.NewInMemoryQueue(10)}
-	mgr2.SetBoardInject(&board.InjectBuilder{SnapshotBuilder: builder}, board.DefaultInjectFormatter())
+	mgr2.Coordinator.ConfigureBoard(&board.InjectBuilder{SnapshotBuilder: builder}, board.DefaultInjectFormatter(), mgr2.Promotion)
 	mgr2.SetCoordinatorTurnFrameSource(&phaseStubCoordinator{phase: "implement"})
 
 	sess, err := store.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
