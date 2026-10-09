@@ -73,9 +73,13 @@ func TestHarnessManualRoutesProtectAndPreservePendingRequest(t *testing.T) {
 	if absent.Code != http.StatusOK || strings.TrimSpace(absent.Body.String()) != `{"pending":false}` {
 		t.Fatalf("foreign session pending = %d %s", absent.Code, absent.Body.String())
 	}
-	for _, body := range []string{`{`, `{}`, `{"id":"unknown"}`} {
+	for _, invalid := range []struct {
+		body   string
+		status int
+	}{{`{`, http.StatusBadRequest}, {`{}`, http.StatusBadRequest}, {`{"id":"unknown"}`, http.StatusNotFound}} {
+		body := invalid.body
 		rejected := manualHarnessRequest(server, http.MethodPost, "/harness/llm/respond", body, true)
-		if rejected.Code != http.StatusBadRequest {
+		if rejected.Code != invalid.status {
 			t.Fatalf("invalid response %q = %d %s", body, rejected.Code, rejected.Body.String())
 		}
 		if current, ok := provider.Pending(t.Context(), "session-1", 0); !ok || current.ID != pending.ID {
@@ -95,7 +99,7 @@ func TestHarnessManualRoutesProtectAndPreservePendingRequest(t *testing.T) {
 		t.Fatal("settled response stream remained open")
 	}
 	duplicate := manualHarnessRequest(server, http.MethodPost, "/harness/llm/respond", body, true)
-	if duplicate.Code != http.StatusBadRequest {
+	if duplicate.Code != http.StatusNotFound {
 		t.Fatalf("duplicate response = %d", duplicate.Code)
 	}
 }
