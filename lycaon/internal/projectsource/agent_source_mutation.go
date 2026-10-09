@@ -75,7 +75,7 @@ func (s *SourceMutationService) PrepareEffect(ctx context.Context, effect source
 	if err != nil {
 		return nil, err
 	}
-	// Stable IDs recover attribution if the parent progress marker is interrupted.
+	// The operation ID identifies one admitted filesystem effect.
 	effect.Record.OperationID = id
 	digestEffect := effect
 	digestEffect.Record.TS = time.Time{}
@@ -93,10 +93,7 @@ func (s *SourceMutationService) PrepareEffect(ctx context.Context, effect source
 		if existing.InputDigest != hex.EncodeToString(digest[:]) {
 			return nil, ErrSourceMutationConflict
 		}
-		sourcefeed.NoteHostWrite(effect.Change.AbsPath)
-		sourcefeed.NoteHostWrite(effect.Change.FromAbsPath)
-		retained = true
-		return &agentSourceMutation{service: s, row: existing, release: release}, nil
+		return nil, fmt.Errorf("%w: operation %s already admitted", ErrSourceMutationConflict, id)
 	}
 	effect.Record.OperationID = id
 	effect.Record.TS = now

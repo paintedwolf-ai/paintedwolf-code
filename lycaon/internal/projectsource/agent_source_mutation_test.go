@@ -112,7 +112,7 @@ func TestAgentEffectRecordingFailureRecoversOriginalBytesAfterLaterEdit(t *testi
 	}
 }
 
-func TestSourceEffectStableIdentityReplaysAttributionWithoutOverwritingLaterText(t *testing.T) {
+func TestSourceEffectReadmissionRefusesFilesystemReplay(t *testing.T) {
 	service, pending, path := preparedAgentWrite(t)
 	row, _, err := service.Journal.load(t.Context(), pending.ID())
 	testutil.FailErr(t, "read prepared effect", err)
@@ -120,9 +120,16 @@ func TestSourceEffectStableIdentityReplaysAttributionWithoutOverwritingLaterText
 	testutil.FailErr(t, "apply prepared bytes", os.WriteFile(path, original.Record.After, 0o600))
 	testutil.FailErr(t, "finish first effect", pending.Finish(t.Context(), nil))
 	testutil.FailErr(t, "human edits after completion", os.WriteFile(path, []byte("human"), 0o600))
-	replay, err := service.PrepareEffect(t.Context(), original)
-	testutil.FailErr(t, "replay original effect", err)
-	testutil.FailErr(t, "finish replay", replay.Finish(t.Context(), nil))
+	apply := func() error {
+		pending, err := service.PrepareEffect(t.Context(), original)
+		if err != nil {
+			return err
+		}
+		return pending.Finish(t.Context(), os.WriteFile(path, original.Record.After, 0o600))
+	}
+	if err := apply(); !errors.Is(err, ErrSourceMutationConflict) {
+		t.Fatalf("readmission error=%v", err)
+	}
 	var count int
 	testutil.FailErr(t, "count source receipts", service.Journal.db.QueryRowContext(t.Context(), `SELECT count(*) FROM source_operations WHERE operation_key=?`, pending.ID()).Scan(&count))
 	if count != 1 {
