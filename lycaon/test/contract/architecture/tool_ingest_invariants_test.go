@@ -2,6 +2,7 @@ package contract
 
 import (
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"go/ast"
 	"go/token"
 	"os"
@@ -13,7 +14,6 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/oarcopy"
-	"github.com/lycaon/lycaon/internal/tools"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -82,7 +82,7 @@ func rejectionCopyFacts(keys map[string]bool) map[string]any {
 	for key := range keys {
 		data[key] = "observed"
 	}
-	reject := tools.CompleteFailureMetadata(&tools.ToolReject{Data: data}, "invoked_tool", "native")
+	reject := toolrejection.CompleteFailureMetadata(&toolrejection.ToolReject{Data: data}, "invoked_tool", "native")
 	return oarcopy.FactsFromData(reject.Data)
 }
 

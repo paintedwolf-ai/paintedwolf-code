@@ -3,6 +3,7 @@ package tools_test
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolexecution"
 	"strings"
 	"testing"
 	"time"
@@ -64,9 +65,9 @@ func TestAskSecretScreenMapsThreeWayDecision(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			exec := tools.NewDefaultToolExecutor(nil, tools.NewDefaultRegistry(), "implement")
-			exec.SetCheckpointManager(tc.mgr, nil)
-			got, askErr := exec.AskSecretScreen(context.Background(), finding)
+			exec := toolexecution.NewExecutor(nil, tools.NewDefaultRegistry(), "implement")
+			exec.Approvals.SetCheckpointManager(tc.mgr, nil)
+			got, askErr := exec.Secrets.AskSecretScreen(context.Background(), finding)
 			testutil.FailErr(t, "ask secret screen", askErr)
 			if got.Decision != tc.want {
 				t.Fatalf("decision = %q want %q", got.Decision, tc.want)
@@ -98,9 +99,9 @@ func TestAskSecretScreenRedactDecisionOnUnrewritableSurfaceFaults(t *testing.T) 
 		status: hitl.DecisionStatusApproved,
 		result: &hitl.DecisionResult{Approved: true, RedactSecrets: true},
 	}
-	exec := tools.NewDefaultToolExecutor(nil, tools.NewDefaultRegistry(), "implement")
-	exec.SetCheckpointManager(mgr, nil)
-	got, askErr := exec.AskSecretScreen(context.Background(), secretmatch.Alert{
+	exec := toolexecution.NewExecutor(nil, tools.NewDefaultRegistry(), "implement")
+	exec.Approvals.SetCheckpointManager(mgr, nil)
+	got, askErr := exec.Secrets.AskSecretScreen(context.Background(), secretmatch.Alert{
 		SessionID: "sess-1", ProjectID: "proj-1", Surface: secretmatch.SurfaceCommand, DestinationID: "process",
 		RuleID: "gitleaks:github-pat", RuleTitle: "GitHub Personal Access Token",
 		GenericShape: "a1b2c3a1b2c3a1b2c3a1 (20 characters)",
@@ -151,11 +152,11 @@ func TestAskSecretScreenPreCardExitsFaultRatherThanBlockSilently(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			exec := tools.NewDefaultToolExecutor(nil, tools.NewDefaultRegistry(), "implement")
+			exec := toolexecution.NewExecutor(nil, tools.NewDefaultRegistry(), "implement")
 			if tc.mgr != nil {
-				exec.SetCheckpointManager(tc.mgr, nil)
+				exec.Approvals.SetCheckpointManager(tc.mgr, nil)
 			}
-			got, askErr := exec.AskSecretScreen(context.Background(), tc.alert)
+			got, askErr := exec.Secrets.AskSecretScreen(context.Background(), tc.alert)
 			fault, ok := secretmatch.Faulted(askErr)
 			if !ok {
 				t.Fatalf("err = %v, want an AskFault", askErr)
@@ -174,8 +175,8 @@ func TestAskSecretScreenPreCardExitsFaultRatherThanBlockSilently(t *testing.T) {
 }
 
 func TestAskSecretScreenPublicInboundIsSilentWithoutCheckpoint(t *testing.T) {
-	exec := tools.NewDefaultToolExecutor(nil, tools.NewDefaultRegistry(), "implement")
-	got, askErr := exec.AskSecretScreen(context.Background(), secretmatch.Alert{
+	exec := toolexecution.NewExecutor(nil, tools.NewDefaultRegistry(), "implement")
+	got, askErr := exec.Secrets.AskSecretScreen(context.Background(), secretmatch.Alert{
 		Surface: secretmatch.SurfaceModel,
 		RuleID:  "gitleaks:github-pat", RuleTitle: "GitHub Personal Access Token",
 		SourceKind: secretmatch.SourceToolResult, SourceTool: "fetch_url",
@@ -224,9 +225,9 @@ func TestAskSecretScreenUsesAttributionAndNeverStoresValue(t *testing.T) {
 	})
 
 	mgr := &secretScreenHITL{status: hitl.DecisionStatusApproved}
-	exec := tools.NewDefaultToolExecutor(nil, tools.NewDefaultRegistry(), "implement")
-	exec.SetCheckpointManager(mgr, nil)
-	decision, askErr := exec.AskSecretScreen(ctx, secretmatch.Alert{
+	exec := toolexecution.NewExecutor(nil, tools.NewDefaultRegistry(), "implement")
+	exec.Approvals.SetCheckpointManager(mgr, nil)
+	decision, askErr := exec.Secrets.AskSecretScreen(ctx, secretmatch.Alert{
 		Surface:       secretmatch.SurfaceWebSearch,
 		DestinationID: "web_search", DestinationLabel: "web search providers",
 		RuleID: match.RuleID, RuleTitle: match.Title, GenericShape: match.GenericShape,
@@ -240,7 +241,7 @@ func TestAskSecretScreenUsesAttributionAndNeverStoresValue(t *testing.T) {
 	if mgr.req.ProposedAction == nil {
 		t.Fatal("missing proposed action")
 	}
-	args := mgr.req.ProposedAction.Args
+	args := mgr.req.ProposedAction.Invocation.Args
 	blob := strings.Join([]string{
 		mgr.req.Title,
 		stringifyAny(args["surface"]),

@@ -2,18 +2,18 @@ package session
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/guidance"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestEditorConfigMismatchCardAnnotatesTheLandedWrite(t *testing.T) {
 	mgr := newPostToolGuidanceManager(t)
 	sess := &api.Session{ID: "sess-editorconfig"}
-	raised := guidance.ToolResultFacts{}.WithFeedback(tools.EditorConfigMismatchCode, map[string]any{
+	raised := guidance.ToolResultFacts{}.WithFeedback(toolrejection.EditorConfigMismatchCode, map[string]any{
 		"path":               "tests/test_image.py",
 		"editorconfig_rules": []string{"trim_trailing_whitespace", "indent_style"},
 		"editorconfig_lines": "tests/test_image.py:16,28 trim_trailing_whitespace; tests/test_image.py:16,28 indent_style",
@@ -31,7 +31,7 @@ func TestEditorConfigMismatchCardAnnotatesTheLandedWrite(t *testing.T) {
 			t.Fatalf("output missing %q:\n%s", want, out)
 		}
 	}
-	if !facts.HasCode(tools.EditorConfigMismatchCode) {
+	if !facts.HasCode(toolrejection.EditorConfigMismatchCode) {
 		t.Fatalf("facts = %#v, want the mismatch code", facts)
 	}
 

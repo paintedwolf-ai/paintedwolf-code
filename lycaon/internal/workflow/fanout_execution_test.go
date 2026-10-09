@@ -27,7 +27,9 @@ func TestPlannedFanoutDoesNotAdvancePastMissingOrPartialWork(t *testing.T) {
 		return tasks, nil
 	}
 	first := api.WorkerTask{ID: "one", AgentType: "security-reviewer", ParentSessionID: "sess-1", CreatedAt: time.Unix(1, 0)}
-	testutil.FailErr(t, "bind first leg", mgr.BindWorkflowTask(ctx, tools.ToolContext{SessionID: "sess-1"}, "leg-1", &first))
+	testutil.FailErr(t, "bind first leg", mgr.BindWorkflowTask(ctx, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "sess-1"},
+	}, "leg-1", &first))
 	if first.WorkflowRunID != run.ID || first.WorkflowPhase != "execute" {
 		t.Fatalf("task binding=%#v", first)
 	}

@@ -126,7 +126,10 @@ func TestLoopPublishesWorkerProgress(t *testing.T) {
 		Session:   sess,
 		History:   userHistory("go"),
 		ProfileID: "explore_readonly",
-		ToolCtx:   tools.ToolContext{SessionID: sess.ID, WorkerJobID: "job-1"},
+		ToolCtx: tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: sess.ID,
+				WorkerJobID: "job-1"},
+		},
 	})
 	testutil.FailErr(t, "loop.Run failed", err)
 	if len(published) == 0 {
@@ -193,7 +196,10 @@ func TestLoopPublishesAnEdgePerSettledToolCall(t *testing.T) {
 		Session:   sess,
 		History:   userHistory("go"),
 		ProfileID: "explore_readonly",
-		ToolCtx:   tools.ToolContext{SessionID: sess.ID, WorkerJobID: "job-1"},
+		ToolCtx: tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: sess.ID,
+				WorkerJobID: "job-1"},
+		},
 	})
 	testutil.FailErr(t, "loop.Run failed", err)
 

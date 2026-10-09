@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/lycaon/lycaon/internal/sourcescope"
 	"github.com/lycaon/lycaon/internal/watchfd"
 )
 
@@ -65,7 +66,9 @@ type WatchCoverage struct {
 	Watched  int
 	// Truncated counts unregistered directories.
 	Truncated int
-	Complete  bool
+	// PolicyUnwatched counts lazy boundary roots, not unknown missing registrations.
+	PolicyUnwatched int
+	Complete        bool
 	// Faulted means the platform stream reported an error; events since then
 	// may be missing.
 	Faulted bool
@@ -180,7 +183,22 @@ func (r *WatcherRegistry) Seed(ctx context.Context, root string, directories []W
 	if w == nil {
 		return
 	}
-	eligible := watchOrder(key, directories)
+	policyUnwatched := 0
+	filtered := make([]WatchDirectory, 0, len(directories))
+	for _, directory := range directories {
+		rel, err := filepath.Rel(key, directory.Path)
+		if err == nil && w.scope.BoundaryPath(filepath.ToSlash(rel), true) != "" {
+			if w.scope.BoundaryDir(filepath.ToSlash(rel)) != "" {
+				policyUnwatched++
+			}
+			continue
+		}
+		filtered = append(filtered, directory)
+	}
+	w.mu.Lock()
+	w.policyUnwatched = policyUnwatched
+	w.mu.Unlock()
+	eligible := watchOrder(key, filtered)
 	// An empty catalog cannot resolve an existing coverage shortfall.
 	if len(eligible) == 0 {
 		return
@@ -322,11 +340,13 @@ type worktreeWatcher struct {
 	// mu guards registration state.
 	mu sync.Mutex
 	// Registered costs prevent double-charging during reseeding.
-	watched   map[string]int
-	spent     int
-	truncated int
-	reported  bool
-	faulted   bool
+	watched         map[string]int
+	spent           int
+	truncated       int
+	policyUnwatched int
+	scope           *sourcescope.Scope
+	reported        bool
+	faulted         bool
 	// Repository metadata also emits ref and index signals.
 	refDirs        map[string]struct{}
 	refState       map[string]refFileState
@@ -336,6 +356,10 @@ type worktreeWatcher struct {
 }
 
 func newWorktreeWatcher(ctx context.Context, root string, maxDirs int, budget *watchfd.Budget) (*worktreeWatcher, error) {
+	cfg, err := sourcescope.DefaultConfig()
+	if err != nil {
+		return nil, err
+	}
 	fw, err := newPlatformWatcher(root)
 	if err != nil {
 		return nil, err
@@ -346,6 +370,7 @@ func newWorktreeWatcher(ctx context.Context, root string, maxDirs int, budget *w
 	}
 	w := &worktreeWatcher{
 		physicalRoot: physicalRoot,
+		scope:        sourcescope.New(root, sourcescope.Options{Plane: cfg.Catalog}),
 		root:         root,
 		watcher:      fw,
 		budget:       budget,
@@ -496,6 +521,12 @@ func (w *worktreeWatcher) watchesDir(path string) bool {
 	if w == nil {
 		return false
 	}
+	if w.scope != nil {
+		rel, err := filepath.Rel(w.root, path)
+		if err == nil && w.scope.BoundaryPath(filepath.ToSlash(rel), true) != "" {
+			return false
+		}
+	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.recursive {
@@ -523,7 +554,7 @@ func (w *worktreeWatcher) coveredByRootLocked(path string) bool {
 func (w *worktreeWatcher) coverageLocked() WatchCoverage {
 	return WatchCoverage{
 		Root: w.root, Watching: true, Watched: len(w.watched),
-		Truncated: w.truncated, Complete: w.truncated == 0 && !w.faulted,
+		Truncated: w.truncated, PolicyUnwatched: w.policyUnwatched, Complete: w.truncated == 0 && !w.faulted,
 		Recursive: w.recursive, Faulted: w.faulted,
 	}
 }
@@ -583,6 +614,15 @@ func (w *worktreeWatcher) loop(ctx context.Context) {
 				continue
 			}
 			relSlash := filepath.ToSlash(rel)
+			if filepath.Base(relSlash) == ".git" && filepath.Dir(relSlash) != "." && ev.Op&(fsnotify.Create|fsnotify.Remove|fsnotify.Rename) != 0 {
+				checkout := filepath.ToSlash(filepath.Dir(relSlash))
+				w.forgetRemovedTree(filepath.Join(w.root, filepath.FromSlash(checkout)))
+				NotifyWorktreeChangesDebounced(ctx, w.root, []WorktreeChange{{Path: checkout, Kind: WorktreeChangeStructural}}, SourceWatcher)
+				continue
+			}
+			if w.scope.BoundaryPath(relSlash, false) != "" {
+				continue
+			}
 			info, statErr := os.Stat(ev.Name)
 			isDir := statErr == nil && info.IsDir()
 			if ev.Op&fsnotify.Create != 0 && isDir && relSlash == ".git" {
@@ -590,7 +630,7 @@ func (w *worktreeWatcher) loop(ctx context.Context) {
 				// its ref surfaces.
 				w.armRefWatch()
 			}
-			if ev.Op&fsnotify.Create != 0 && isDir && !w.recursive {
+			if ev.Op&fsnotify.Create != 0 && isDir && !w.recursive && w.scope.BoundaryDir(relSlash) == "" {
 				if w.addMeasuredDir(ev.Name) != addRegistered {
 					w.noteUnwatchedDir()
 				}

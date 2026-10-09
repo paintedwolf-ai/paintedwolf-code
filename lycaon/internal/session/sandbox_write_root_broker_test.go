@@ -494,3 +494,17 @@ func TestReadPathApprovalUsesProtectedCatalogEntries(t *testing.T) {
 		})
 	}
 }
+
+func TestReadPathOwnScratchNeedsNoApprovalEvenUnderConfiguredReadDeny(t *testing.T) {
+	cfg := t.TempDir()
+	t.Setenv("LYCAON_CONFIG_DIR", cfg)
+	scratch := filepath.Join(cfg, "scratch", "own")
+	broker := &WriteRootCheckpointBroker{Checkpoints: unusedWriteRootCheckpoints{t: t}, ReadRuntime: approvalstate.NewSandboxPathGrantRuntime()}
+	for _, path := range []string{filepath.Join(scratch, "file"), filepath.Join(cfg, "scratch", "other", "file"), filepath.Join(cfg, "store.db")} {
+		got, err := broker.AuthorizeRead(t.Context(), native.SandboxReadPathAsk{SessionID: "own", ProposedReadPath: path, SessionScratchRoot: scratch, ReadDenyPaths: []string{cfg}})
+		testutil.FailErr(t, "authorize session scratch", err)
+		if got.Authorized != (path == filepath.Join(scratch, "file")) || got.Raised {
+			t.Fatalf("path=%s result=%+v", path, got)
+		}
+	}
+}

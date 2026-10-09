@@ -29,7 +29,7 @@ const (
 )
 
 // fileGitLane joins one lineage page to retained versions and arrivals.
-func (s *Handler) fileGitLane(
+func (s *Review) fileGitLane(
 	ctx context.Context,
 	p *project.Project,
 	fileID string,
@@ -54,7 +54,7 @@ func (s *Handler) fileGitLane(
 	if head.RootID == "" || head.Path == "" {
 		return commits, arrivals, wire.SourceGitHistoryStateNotTracked, 0
 	}
-	rootAbs, _, ok := s.resolveRootRepoPosition(ctx, p, head.RootID)
+	rootAbs, _, ok := s.Comparisons.resolveRootRepoPosition(ctx, p, head.RootID)
 	if !ok {
 		return commits, arrivals, wire.SourceGitHistoryStateNoRepository, 0
 	}
@@ -130,7 +130,7 @@ type arrivalAnchor struct {
 	budget  int
 }
 
-func (s *Handler) newArrivalAnchor(
+func (s *Review) newArrivalAnchor(
 	ctx context.Context,
 	mgr git.GitManager,
 	rootAbs, projectID, rootID string,
@@ -207,20 +207,20 @@ func (a *arrivalAnchor) boundedStart() (int, string, bool) {
 }
 
 // writeSourceBlobComparison compares verified repository objects.
-func (s *Handler) writeSourceBlobComparison(
+func (s *Review) writeSourceBlobComparison(
 	w http.ResponseWriter,
 	r *http.Request,
 	p *project.Project,
 	rootID, afterOID, beforeOID string,
 ) {
-	diff, err := s.loadBlobComparison(r.Context(), p, wire.BlobComparisonSource{
+	diff, err := s.Comparisons.loadBlobComparison(r.Context(), p, wire.BlobComparisonSource{
 		RootID: rootID, BlobOid: afterOID, BeforeBlobOid: beforeOID, DisplayPath: r.URL.Query().Get("display_path"),
 	})
 	if err != nil {
-		s.writeComparisonError(w, r, err)
+		s.Comparisons.writeComparisonError(w, r, err)
 		return
 	}
-	s.writeSourceComparison(w, r, p.ID, diff)
+	s.Comparisons.writeSourceComparison(w, r, p.ID, diff)
 }
 
 func gitBlobComparisonSide(
@@ -271,7 +271,7 @@ func fetchVerifiedGitBlob(
 var commitSHAPattern = regexp.MustCompile(`^[0-9a-f]{7,64}$`)
 
 // HandleRestoreProjectSourceCommitState restores a verified commit blob.
-func (s *Handler) HandleRestoreProjectSourceCommitState(w http.ResponseWriter, r *http.Request) {
+func (s *Mutations) HandleRestoreProjectSourceCommitState(w http.ResponseWriter, r *http.Request) {
 	p, release, ok := s.beginProjectSourceMutation(w, r)
 	if !ok {
 		return
@@ -301,7 +301,7 @@ func (s *Handler) HandleRestoreProjectSourceCommitState(w http.ResponseWriter, r
 		return
 	}
 	mgr := s.Git.Manager()
-	rootAbs, prefix, mapped := s.resolveRootRepoPosition(r.Context(), p, strings.TrimSpace(req.RootID))
+	rootAbs, prefix, mapped := s.Comparisons.resolveRootRepoPosition(r.Context(), p, strings.TrimSpace(req.RootID))
 	if !mapped {
 		s.responses.Fail(w, wire.ApiErrorCodeSourceCommitNotFound, "no git repository serves this root")
 		return
@@ -335,7 +335,7 @@ func (s *Handler) HandleRestoreProjectSourceCommitState(w http.ResponseWriter, r
 			"the commit's bytes are unreachable or no longer match the listing")
 		return
 	}
-	sessionID, turn := s.UserSourceChatAffiliation(r)
+	sessionID, turn := s.Workspace.UserSourceChatAffiliation(r)
 	result, err := s.SourceMutations.RestoreVersion(r.Context(), operationID.String(), p, project.SourceVersionRestoreRequest{
 		Version: sourceledger.RestorableVersion{
 			FileID: strings.TrimSpace(req.FileID), ProjectID: p.ID,
@@ -356,7 +356,7 @@ func (s *Handler) HandleRestoreProjectSourceCommitState(w http.ResponseWriter, r
 			"the commit's bytes are unreachable or no longer match the listing")
 		return
 	case err != nil:
-		s.WriteProjectSourceError(w, r, err)
+		s.Workspace.WriteProjectSourceError(w, r, err)
 		return
 	}
 	httpio.WriteJSON(w, http.StatusOK, wire.SourceCommitRestoreResponse{

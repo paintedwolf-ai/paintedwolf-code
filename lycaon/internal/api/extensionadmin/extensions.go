@@ -20,7 +20,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func (s *Handler) extensionsModuleRoot() (string, error) {
+func (s *Mutations) extensionsModuleRoot() (string, error) {
 	if configlayout.IsModuleRoot(s.ModuleRoot) {
 		return s.ModuleRoot, nil
 	}
@@ -43,7 +43,7 @@ func (s *Handler) extensionsModuleRoot() (string, error) {
 }
 
 // optionalExtensionsProjectDir resolves project_id when present; empty means device-only.
-func (s *Handler) optionalExtensionsProjectDir(r *http.Request) (string, error) {
+func (s *Mutations) optionalExtensionsProjectDir(r *http.Request) (string, error) {
 	if strings.TrimSpace(r.URL.Query().Get("project_id")) == "" {
 		return "", nil
 	}
@@ -51,7 +51,7 @@ func (s *Handler) optionalExtensionsProjectDir(r *http.Request) (string, error) 
 }
 
 // extensionUnitWriteTarget resolves unit-disable scope.
-func (s *Handler) extensionUnitWriteTarget(r *http.Request) (wire.ExtensionsDesiredScope, string, error) {
+func (s *Mutations) extensionUnitWriteTarget(r *http.Request) (wire.ExtensionsDesiredScope, string, error) {
 	scope := wire.ExtensionsDesiredScope(strings.TrimSpace(r.URL.Query().Get("scope")))
 	dir, err := s.extensionsScopeProjectDir(r, scope)
 	if err != nil {
@@ -63,7 +63,7 @@ func (s *Handler) extensionUnitWriteTarget(r *http.Request) (wire.ExtensionsDesi
 	return scope, dir, nil
 }
 
-func (s *Handler) extensionsScopeProjectDir(r *http.Request, scope wire.ExtensionsDesiredScope) (string, error) {
+func (s *Mutations) extensionsScopeProjectDir(r *http.Request, scope wire.ExtensionsDesiredScope) (string, error) {
 	switch scope {
 	case wire.ExtensionsScopeDevice, "":
 		return "", nil
@@ -75,7 +75,7 @@ func (s *Handler) extensionsScopeProjectDir(r *http.Request, scope wire.Extensio
 }
 
 // gatedExtensionsProjectDir applies the project Trust switch.
-func (s *Handler) gatedExtensionsProjectDir(r *http.Request, projectID, projectDir string) (dir string, withheld bool) {
+func (s *Mutations) gatedExtensionsProjectDir(r *http.Request, projectID, projectDir string) (dir string, withheld bool) {
 	if projectID == "" {
 		return "", true
 	}
@@ -91,7 +91,7 @@ func (s *Handler) gatedExtensionsProjectDir(r *http.Request, projectID, projectD
 
 // resolveExtensionsCatalog only reads: journal recovery runs at boot and ahead
 // of every owner mutation.
-func (s *Handler) resolveExtensionsCatalog(r *http.Request) (*extpacks.EffectiveCatalog, string, error) {
+func (s *Mutations) resolveExtensionsCatalog(r *http.Request) (*extpacks.EffectiveCatalog, string, error) {
 	root, err := s.extensionsModuleRoot()
 	if err != nil {
 		return nil, "", err
@@ -199,7 +199,7 @@ func sortedUnitIDs(eff *extpacks.EffectiveCatalog) []string {
 	return ids
 }
 
-func (s *Handler) HandleGetExtensionUnit(w http.ResponseWriter, r *http.Request) {
+func (s *Mutations) HandleGetExtensionUnit(w http.ResponseWriter, r *http.Request) {
 	id := httpio.EncodedPathID(r, "unit_id")
 	if id == "" {
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "unit_id required")
@@ -225,7 +225,7 @@ func (s *Handler) HandleGetExtensionUnit(w http.ResponseWriter, r *http.Request)
 	httpio.WriteJSON(w, http.StatusOK, detail)
 }
 
-func (s *Handler) HandleInstallExtensionPack(w http.ResponseWriter, r *http.Request) {
+func (s *Mutations) HandleInstallExtensionPack(w http.ResponseWriter, r *http.Request) {
 	var req wire.ExtensionInstallRequest
 	if err := httpio.DecodeJSON(w, r, &req); err != nil {
 		s.responses.DecodeError(w, r, err)
@@ -237,7 +237,7 @@ func (s *Handler) HandleInstallExtensionPack(w http.ResponseWriter, r *http.Requ
 		s.writeExtensionMutationError(w, r, err)
 		return
 	}
-	view, err := s.buildExtensionsCatalogViewFresh(r)
+	view, err := s.Catalog.buildExtensionsCatalogViewFresh(r)
 	if err != nil {
 		s.responses.InternalError(w, r, err)
 		return
@@ -252,7 +252,7 @@ func (s *Handler) HandleInstallExtensionPack(w http.ResponseWriter, r *http.Requ
 	httpio.WriteJSON(w, http.StatusCreated, out)
 }
 
-func (s *Handler) HandleDeleteExtensionPack(w http.ResponseWriter, r *http.Request) {
+func (s *Mutations) HandleDeleteExtensionPack(w http.ResponseWriter, r *http.Request) {
 	packID := httpio.EncodedPathID(r, "pack_id")
 	if packID == "" {
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "pack_id required")
@@ -280,8 +280,8 @@ func (s *Handler) HandleDeleteExtensionPack(w http.ResponseWriter, r *http.Reque
 }
 
 // writeExtensionMutation returns the committed catalog view.
-func (s *Handler) writeExtensionMutation(w http.ResponseWriter, r *http.Request, res extensionstate.Result) {
-	view, err := s.buildExtensionsCatalogViewFresh(r)
+func (s *Mutations) writeExtensionMutation(w http.ResponseWriter, r *http.Request, res extensionstate.Result) {
+	view, err := s.Catalog.buildExtensionsCatalogViewFresh(r)
 	if err != nil {
 		s.responses.InternalError(w, r, err)
 		return
@@ -289,7 +289,7 @@ func (s *Handler) writeExtensionMutation(w http.ResponseWriter, r *http.Request,
 	httpio.WriteJSON(w, http.StatusOK, wire.ExtensionMutationResponse{View: view, Warnings: res.Warnings})
 }
 
-func (s *Handler) HandleUpdateExtensionPack(w http.ResponseWriter, r *http.Request) {
+func (s *Mutations) HandleUpdateExtensionPack(w http.ResponseWriter, r *http.Request) {
 	packID := httpio.EncodedPathID(r, "pack_id")
 	if packID == "" {
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "pack_id required")
@@ -320,7 +320,7 @@ func (s *Handler) HandleUpdateExtensionPack(w http.ResponseWriter, r *http.Reque
 	s.writeExtensionMutation(w, r, res)
 }
 
-func (s *Handler) HandleUpdateExtensionUnit(w http.ResponseWriter, r *http.Request) {
+func (s *Mutations) HandleUpdateExtensionUnit(w http.ResponseWriter, r *http.Request) {
 	unitID := httpio.EncodedPathID(r, "unit_id")
 	if unitID == "" {
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "unit_id required")
@@ -365,7 +365,7 @@ func (s *Handler) HandleUpdateExtensionUnit(w http.ResponseWriter, r *http.Reque
 
 // checkUnitOwnChoice answers whether own_pack_id may be applied to unitID in
 // scope, writing the refusal when it may not.
-func (s *Handler) checkUnitOwnChoice(w http.ResponseWriter, r *http.Request, scope wire.ExtensionsDesiredScope, unitID, ownPackID string) bool {
+func (s *Mutations) checkUnitOwnChoice(w http.ResponseWriter, r *http.Request, scope wire.ExtensionsDesiredScope, unitID, ownPackID string) bool {
 	if scope == wire.ExtensionsScopeProject {
 		s.writeExtensionMutationError(w, r, extensionstate.ErrProjectMutationUnsupported)
 		return false
@@ -399,7 +399,7 @@ func (s *Handler) checkUnitOwnChoice(w http.ResponseWriter, r *http.Request, sco
 	return false
 }
 
-func (s *Handler) HandleUpdateExtensionConfiguration(w http.ResponseWriter, r *http.Request) {
+func (s *Mutations) HandleUpdateExtensionConfiguration(w http.ResponseWriter, r *http.Request) {
 	var req wire.ExtensionConfigurationRequest
 	if err := httpio.DecodeJSON(w, r, &req); err != nil {
 		s.responses.DecodeError(w, r, err)
@@ -414,7 +414,7 @@ func (s *Handler) HandleUpdateExtensionConfiguration(w http.ResponseWriter, r *h
 	s.writeExtensionMutation(w, r, res)
 }
 
-func (s *Handler) HandleApplyExtensionPackProfile(w http.ResponseWriter, r *http.Request) {
+func (s *Mutations) HandleApplyExtensionPackProfile(w http.ResponseWriter, r *http.Request) {
 	packID := httpio.EncodedPathID(r, "pack_id")
 	if packID == "" {
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "pack_id required")
@@ -442,7 +442,7 @@ func (s *Handler) HandleApplyExtensionPackProfile(w http.ResponseWriter, r *http
 	s.writeExtensionMutation(w, r, res)
 }
 
-func (s *Handler) HandleGetExtensionPackUpdate(w http.ResponseWriter, r *http.Request) {
+func (s *Mutations) HandleGetExtensionPackUpdate(w http.ResponseWriter, r *http.Request) {
 	packID := httpio.EncodedPathID(r, "pack_id")
 	if packID == "" {
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "pack_id required")
@@ -482,7 +482,7 @@ func (s *Handler) HandleGetExtensionPackUpdate(w http.ResponseWriter, r *http.Re
 	})
 }
 
-func (s *Handler) HandleApplyExtensionPackUpdate(w http.ResponseWriter, r *http.Request) {
+func (s *Mutations) HandleApplyExtensionPackUpdate(w http.ResponseWriter, r *http.Request) {
 	packID := httpio.EncodedPathID(r, "pack_id")
 	if packID == "" {
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "pack_id required")
@@ -502,7 +502,7 @@ func (s *Handler) HandleApplyExtensionPackUpdate(w http.ResponseWriter, r *http.
 		s.writeExtensionMutationError(w, r, err)
 		return
 	}
-	view, err := s.buildExtensionsCatalogViewFresh(r)
+	view, err := s.Catalog.buildExtensionsCatalogViewFresh(r)
 	if err != nil {
 		s.responses.InternalError(w, r, err)
 		return
@@ -515,7 +515,7 @@ func (s *Handler) HandleApplyExtensionPackUpdate(w http.ResponseWriter, r *http.
 	httpio.WriteJSON(w, http.StatusOK, out)
 }
 
-func (s *Handler) HandleReloadExtensionPack(w http.ResponseWriter, r *http.Request) {
+func (s *Mutations) HandleReloadExtensionPack(w http.ResponseWriter, r *http.Request) {
 	packID := httpio.EncodedPathID(r, "pack_id")
 	if packID == "" {
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "pack_id required")
@@ -535,7 +535,7 @@ func (s *Handler) HandleReloadExtensionPack(w http.ResponseWriter, r *http.Reque
 		s.writeExtensionMutationError(w, r, err)
 		return
 	}
-	view, err := s.buildExtensionsCatalogViewFresh(r)
+	view, err := s.Catalog.buildExtensionsCatalogViewFresh(r)
 	if err != nil {
 		s.responses.InternalError(w, r, err)
 		return

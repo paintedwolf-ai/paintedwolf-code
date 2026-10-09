@@ -165,7 +165,7 @@ func newRealServerWithSession(t *testing.T, root string) (*api.Server, string) {
 	}
 	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	mgr := session.NewManager(store, llm.NewMockProvider(mockCfg), tools.NewStubRegistry(), settings.DefaultSessionLimits())
-	srv := api.NewServer(apitest.Dependencies(t, api.Dependencies{Store: store, Projects: project.NewMemoryRegistry(), Sessions: mgr}), nil, api.TestAPIToken)
+	srv := api.NewServer(apitest.Dependencies(t, api.Dependencies{Core:api.CoreDependencies{Store: store, Projects: project.NewMemoryRegistry(), Sessions: mgr,},}), nil, api.TestAPIToken)
 
 	// Wait for detached prompt work before temporary-directory cleanup.
 	t.Cleanup(func() {

@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 	"testing"
 
@@ -35,11 +36,11 @@ func TestComposeProposalHumanStartAdvanceToolPath(t *testing.T) {
 	_, err = reg.Run(ctx, "state_start", map[string]any{
 		"workflow_id": "plan", "workflow_version": "1.0.0",
 	}, tctx)
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "WORKFLOW_START_REQUIRES_HUMAN_APPROVAL" {
 		t.Fatalf("state_start err = %v, want WORKFLOW_START_REQUIRES_HUMAN_APPROVAL reject", err)
 	}
-	rendered := tools.RenderReject(&tools.ToolReject{Code: reject.Code, Data: map[string]any{"tool": "state_start"}}, guidance.NewStaticRejectFormatter(hints))
+	rendered := toolrejection.RenderReject(&toolrejection.ToolReject{Code: reject.Code, Data: map[string]any{"tool": "state_start"}}, guidance.NewStaticRejectFormatter(hints))
 	for _, want := range []string{"Rejected:", "Code: WORKFLOW_START_REQUIRES_HUMAN_APPROVAL", "Wait for the user"} {
 		if !strings.Contains(rendered.Error(), want) {
 			t.Fatalf("rendered reject missing %q:\n%s", want, rendered)

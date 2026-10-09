@@ -36,9 +36,10 @@ func TestTerminalSnapshotAltScreenGrid(t *testing.T) {
 	}
 	out := &tools.ToolInvocationOut{}
 	tctx := tools.ToolContext{
-		SessionID: "sess", ProjectID: "proj",
-		Roots: []projectroot.RootRef{{ID: "main", Path: dir, IsPrimary: true}},
-		Out:   out,
+		Identity: tools.InvocationIdentity{SessionID: "sess",
+			ProjectID: "proj"},
+		Source:  tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "main", Path: dir, IsPrimary: true}}},
+		Effects: tools.InvocationEffects{Out: out},
 	}
 	openRaw, err := reg.Run(context.Background(), terminal.OpenToolName, map[string]any{
 		"command": script,

@@ -11,11 +11,21 @@ import (
 
 func registeredMCPAction() hitl.ProposedAction {
 	return hitl.ProposedAction{
-		Tool:             "mcp_protected_validation_credential_present",
-		ApprovalCategory: "mcp", ApprovalSubject: "Protected validation.credential_present",
-		SessionID: "chat-a", ProjectID: "project-a",
-		Contained: hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressProxy, Roots: []string{"/tmp/project-a"}},
-	}
+Invocation: hitl.ActionInvocation{
+Tool: "mcp_protected_validation_credential_present",
+},
+Resources: hitl.ActionResources{
+ApprovalCategory: "mcp",
+ApprovalSubject: "Protected validation.credential_present",
+},
+Scope: hitl.ActionScope{
+SessionID: "chat-a",
+ProjectID: "project-a",
+},
+Execution: hitl.ActionExecution{
+Contained: hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressProxy, Roots: []string{"/tmp/project-a"}},
+},
+}
 }
 
 func TestRegisteredMCPGrantScopeBoundaries(t *testing.T) {
@@ -56,7 +66,7 @@ func (pin changedMCPPin) ToolDefinitionChanged(tool string) bool { return string
 
 func assertMCPDriftRequiresConsent(t *testing.T, approvals *RuleApprovalGate, action hitl.ProposedAction) {
 	t.Helper()
-	approvals.sources.Pins = changedMCPPin(action.Tool)
+	approvals.sources.Pins = changedMCPPin(action.Invocation.Tool)
 	result, err := approvals.Evaluate(t.Context(), action)
 	testutil.FailErr(t, "evaluate leased MCP definition drift", err)
 	if !result.Required() || result.Decision.Primary != api.GateConsentDrift {
@@ -68,7 +78,7 @@ func assertMCPDriftRequiresConsent(t *testing.T, approvals *RuleApprovalGate, ac
 func assertMCPDenyOverridesGrant(t *testing.T, approvals *RuleApprovalGate, action hitl.ProposedAction) {
 	t.Helper()
 	config := approvals.effectiveConfig(action)
-	config.Rules = []ApprovalRule{{Category: ApprovalCategoryMCP, Pattern: action.ApprovalSubject, Effect: ApprovalEffectDeny}}
+	config.Rules = []ApprovalRule{{Category: ApprovalCategoryMCP, Pattern: action.Resources.ApprovalSubject, Effect: ApprovalEffectDeny}}
 	testutil.FailErr(t, "install canonical MCP deny rule", approvals.store.PutGlobal(config))
 	result, err := approvals.Evaluate(t.Context(), action)
 	testutil.FailErr(t, "evaluate denied leased MCP action", err)
@@ -85,20 +95,20 @@ func assertMCPGrantBoundaries(t *testing.T, approvals *RuleApprovalGate, action 
 		covered bool
 	}{
 		{"same action", func(*hitl.ProposedAction) {}, true},
-		{"other chat", func(a *hitl.ProposedAction) { a.SessionID = "chat-b" }, scope == hitl.ApprovalGrantScopeProject},
+		{"other chat", func(a *hitl.ProposedAction) { a.Scope.SessionID = "chat-b" }, scope == hitl.ApprovalGrantScopeProject},
 		{"child task", func(a *hitl.ProposedAction) {
-			a.SessionID, a.RootSessionID = "worker", action.SessionID
+			a.Scope.SessionID, a.Scope.RootSessionID = "worker", action.Scope.SessionID
 		}, true},
 		{"explicit task target", func(a *hitl.ProposedAction) {
-			a.SessionID, a.RootSessionID = "worker", action.SessionID
+			a.Scope.SessionID, a.Scope.RootSessionID = "worker", action.Scope.SessionID
 		}, true},
-		{"other project", func(a *hitl.ProposedAction) { a.ProjectID = "project-b" }, false},
-		{"other roots", func(a *hitl.ProposedAction) { a.Contained.Roots = []string{"/tmp/project-b"} }, false},
-		{"other tool", func(a *hitl.ProposedAction) { a.ApprovalSubject = "Protected validation.write" }, false},
-		{"colliding public name", func(a *hitl.ProposedAction) { a.ApprovalSubject = "Protected-validation.credential_present" }, false},
+		{"other project", func(a *hitl.ProposedAction) { a.Scope.ProjectID = "project-b" }, false},
+		{"other roots", func(a *hitl.ProposedAction) { a.Execution.Contained.Roots = []string{"/tmp/project-b"} }, false},
+		{"other tool", func(a *hitl.ProposedAction) { a.Resources.ApprovalSubject = "Protected validation.write" }, false},
+		{"colliding public name", func(a *hitl.ProposedAction) { a.Resources.ApprovalSubject = "Protected-validation.credential_present" }, false},
 		{"argument identity spoof", func(a *hitl.ProposedAction) {
-			a.ApprovalSubject = "Other provider.credential_present"
-			a.Args = map[string]any{"approval_subject": action.ApprovalSubject}
+			a.Resources.ApprovalSubject = "Other provider.credential_present"
+			a.Invocation.Args = map[string]any{"approval_subject": action.Resources.ApprovalSubject}
 		}, false},
 	}
 	for _, tc := range cases {
@@ -116,15 +126,15 @@ func assertMCPGrantBoundaries(t *testing.T, approvals *RuleApprovalGate, action 
 
 func TestMCPRulesUseCanonicalIdentity(t *testing.T) {
 	action := registeredMCPAction()
-	for _, pattern := range []string{action.ApprovalSubject, "Protected validation.*", "*"} {
+	for _, pattern := range []string{action.Resources.ApprovalSubject, "Protected validation.*", "*"} {
 		if !ruleMatches(ApprovalRule{Category: ApprovalCategoryMCP, Pattern: pattern}, action) {
 			t.Fatalf("canonical MCP rule %q did not match", pattern)
 		}
 	}
-	if ruleMatches(ApprovalRule{Category: ApprovalCategoryMCP, Pattern: action.Tool}, action) {
+	if ruleMatches(ApprovalRule{Category: ApprovalCategoryMCP, Pattern: action.Invocation.Tool}, action) {
 		t.Fatal("public alias replaced a supplied canonical identity")
 	}
-	action.Tool = "command"
+	action.Invocation.Tool = "command"
 	if ruleMatches(ApprovalRule{Category: ApprovalCategoryMCP, Pattern: "*"}, action) {
 		t.Fatal("MCP predicate covered a native command")
 	}
@@ -136,17 +146,17 @@ func TestMCPGrantIdentityTreatsPatternSyntaxLiterally(t *testing.T) {
 	} {
 		t.Run(subject, func(t *testing.T) {
 			action := registeredMCPAction()
-			action.ApprovalSubject = subject
+			action.Resources.ApprovalSubject = subject
 			predicate := GrantPredicateForAction(action)
 			grant := hitl.ApprovalGrant{
-				ProjectID: action.ProjectID,
+				ProjectID: action.Scope.ProjectID,
 				Predicate: hitl.ApprovalGrantPredicate{Category: string(predicate.Category), Pattern: predicate.Pattern},
 			}
 			if !grantMatchesAction(grant, action) {
 				t.Fatal("literal MCP identity did not cover itself")
 			}
 			for _, other := range []string{"providerA.read", "providera.read", "providerXYZ.read", "providername.read"} {
-				action.ApprovalSubject = other
+				action.Resources.ApprovalSubject = other
 				if grantMatchesAction(grant, action) {
 					t.Fatalf("grant for %q covered distinct identity %q", subject, other)
 				}
@@ -161,14 +171,14 @@ func TestMCPAuthorityRequiresRegisteredIdentity(t *testing.T) {
 			for _, subject := range []string{"", " ", "docs.search"} {
 				t.Run(tool+"/"+category+"/"+subject, func(t *testing.T) {
 					action := registeredMCPAction()
-					action.Tool, action.ApprovalCategory, action.ApprovalSubject = tool, category, subject
+					action.Invocation.Tool, action.Resources.ApprovalCategory, action.Resources.ApprovalSubject = tool, category, subject
 					want := tool == "mcp_docs_search" && category == "mcp" && subject == "docs.search"
 					if got := ruleMatches(ApprovalRule{Category: ApprovalCategoryMCP, Pattern: "*"}, action); got != want {
 						t.Fatalf("MCP rule match=%t, want %t", got, want)
 					}
 					for _, pattern := range []string{"", " ", "docs.search", tool} {
 						grant := hitl.ApprovalGrant{
-							ProjectID: action.ProjectID,
+							ProjectID: action.Scope.ProjectID,
 							Predicate: hitl.ApprovalGrantPredicate{Category: "mcp", Pattern: pattern},
 						}
 						if got := grantMatchesAction(grant, action); got != (want && pattern == subject) {

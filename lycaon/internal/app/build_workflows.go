@@ -192,7 +192,7 @@ func (b boardWiring) wireWorkflowEvidence() error {
 		b.mgr.SetVerifyConfig(b.settingsSvc.Verify)
 		if b.toolRuntime != nil {
 			// The tool and gate share one declared-command resolver.
-			b.toolRuntime.SetVerifyDeclaredCommand(b.settingsSvc.Verify.VerifyTestCommand)
+			b.toolRuntime.Commands.SetVerifyDeclaredCommand(b.settingsSvc.Verify.VerifyTestCommand)
 		}
 	}
 	return b.wireWorkflowScanServices()
@@ -205,7 +205,7 @@ func (b boardWiring) wireWorkflowScanServices() error {
 	b.resources.releaseObserver("git-status-repochange", b.gitStatusCache.RegisterRepochangeObserver())
 	b.gitRepoSetCache = git.NewRepoSetCache(git.DefaultStatusCacheTTL)
 	if b.toolRuntime != nil {
-		b.toolRuntime.SetGitStatusCache(b.gitStatusCache)
+		b.toolRuntime.Survey.SetGitStatusCache(b.gitStatusCache)
 	}
 
 	b.gatesCfg = scancfg.DefaultGatesConfig()
@@ -330,10 +330,10 @@ func (b boardWiring) wireWorkflowConditions() error {
 				Runs: b.workflowMgr,
 			},
 		}
-		b.toolRuntime.SetContentApply(contentApply)
+		b.toolRuntime.Mutations.SetContentApply(contentApply)
 	}
 	if b.toolRuntime != nil && b.workflowMgr != nil {
-		b.toolRuntime.SetBlueprintWriteObserver(b.workflowMgr)
+		b.toolRuntime.Mutations.SetBlueprintWriteObserver(b.workflowMgr)
 	}
 	b.workflowMgr.RegisterObligationKind(b.scanObligation)
 	b.workflowMgr.WorkerTasks = func(ctx context.Context, runID string) ([]api.WorkerTask, error) {

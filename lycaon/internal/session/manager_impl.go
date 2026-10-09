@@ -84,6 +84,7 @@ type Manager struct {
 	tools                      tools.ToolRegistry
 	invocations                invocation.Recorder
 	toolInvoker                tools.ToolInvoker
+	toolLister                 tools.ToolProfileLister
 	sourceLedger               sourceledger.Recorder
 	sourceMutations            sourceeffect.Journal
 	sourceRewinds              *sourcerewind.Service

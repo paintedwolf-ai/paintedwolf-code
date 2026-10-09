@@ -15,7 +15,7 @@ import (
 // A run whose pinned version left the catalog answers with its own code, not
 // the unknown-workflow code its error also satisfies.
 func TestMissingRunVersionAnswersWorkflowVersionUnavailable(t *testing.T) {
-	h := &Handler{responses: &httpio.Responder{Logger: slog.Default()}}
+	h := &RunControl{responses: &httpio.Responder{Logger: slog.Default()}}
 	rec := httptest.NewRecorder()
 	err := fmt.Errorf("resume: %w", &workflow.WorkflowVersionUnavailableError{WorkflowID: "security-survey", Version: "1.0.0"})
 	h.WriteWorkflowError(rec, httptest.NewRequest(http.MethodPost, "/v1/workflow-runs/run/resume", nil), err)

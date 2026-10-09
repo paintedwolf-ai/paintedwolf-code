@@ -15,11 +15,11 @@ import (
 func (b sessionWiring) wireExceptionalCapability() error {
 	socketCapabilityRT := approvalstate.NewSocketCapabilityRuntime()
 	b.socketCapabilityRT = socketCapabilityRT
-	b.toolRuntime.Executor.SetSocketCapabilityRuntime(socketCapabilityAdapter{rt: socketCapabilityRT})
+	b.toolRuntime.Executor.Capabilities.SetSocketCapabilityRuntime(socketCapabilityAdapter{rt: socketCapabilityRT})
 	if b.settingsSvc != nil && b.settingsSvc.Approvals != nil {
-		b.toolRuntime.Executor.SetDurableSocketSource(b.settingsSvc.Approvals.SocketPathsForProject)
+		b.toolRuntime.Executor.Capabilities.SetDurableSocketSource(b.settingsSvc.Approvals.SocketPathsForProject)
 	}
-	b.toolRuntime.Executor.SetApprovalsDisabled(b.toolRuntime.ApprovalsDisabled)
+	b.toolRuntime.Executor.Capabilities.SetApprovalsDisabled(b.toolRuntime.Authority.ApprovalsDisabled)
 	if err := b.mgr.RegisterSessionCleanup("socket-capabilities", 51, func(_ context.Context, sessionID string) error {
 		socketCapabilityRT.ReleaseRun(sessionID)
 		return nil
@@ -35,7 +35,7 @@ func (b sessionWiring) wireExceptionalCapability() error {
 
 	directIPCapabilityRT := approvalstate.NewDirectIPCapabilityRuntime()
 	b.directIPCapabilityRT = directIPCapabilityRT
-	b.toolRuntime.Executor.SetDirectIPCapabilityRuntime(directIPCapabilityAdapter{rt: directIPCapabilityRT})
+	b.toolRuntime.Executor.Capabilities.SetDirectIPCapabilityRuntime(directIPCapabilityAdapter{rt: directIPCapabilityRT})
 	if err := b.mgr.RegisterSessionCleanup("direct-ip-capabilities", 52, func(_ context.Context, sessionID string) error {
 		directIPCapabilityRT.ReleaseRun(sessionID)
 		return nil
@@ -50,7 +50,7 @@ func (b sessionWiring) wireExceptionalCapability() error {
 	}
 	if b.authzCapturer != nil {
 		rec := b.authzCapturer.Recorder
-		b.toolRuntime.Executor.SetDirectIPLifecycleHook(func(ev tools.DirectIPLifecycleEvent) {
+		b.toolRuntime.Executor.Capabilities.SetDirectIPLifecycleHook(func(ev tools.DirectIPLifecycleEvent) {
 			rec.AppendDirectIPLifecycle(context.Background(), authzledger.DirectIPLifecycleRecord{
 				SessionID:            ev.SessionID,
 				Phase:                string(ev.Phase),

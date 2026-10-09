@@ -23,7 +23,7 @@ func TestCommandOutputReviewsActualBytesBeforeReplacingInstructions(t *testing.T
 			tc := testToolContext(root)
 			refused := errors.New("user declined change")
 			reviewed := false
-			tc.FileChangeReview = func(_ context.Context, changes []tools.FileChange) error {
+			tc.Files.FileChangeReview = func(_ context.Context, changes []tools.FileChange) error {
 				reviewed = true
 				current, err := os.ReadFile(path)
 				testutil.FailErr(t, "read while output awaits review", err)

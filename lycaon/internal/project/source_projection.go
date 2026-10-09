@@ -15,7 +15,6 @@ import (
 const (
 	sourceProjectionDirCap   = 10_000
 	sourceProjectionChildCap = 100_000
-	sourceProjectionTTL      = 2 * time.Second
 )
 
 type sourceProjectionKey struct {
@@ -28,7 +27,6 @@ type sourceProjectionKey struct {
 type projectedSourceListing struct {
 	listing  SourceDirListing
 	epoch    repochange.Epoch
-	loadedAt time.Time
 	lastUsed time.Time
 	stale    bool
 }
@@ -86,7 +84,7 @@ func (p *sourceDirectoryProjection) get(
 	for {
 		now := time.Now()
 		p.mu.Lock()
-		if cached, ok := p.listings[key]; ok && projectedListingFresh(cached, key, now) {
+		if cached, ok := p.listings[key]; ok && projectedListingFresh(cached, key) {
 			cached.lastUsed = now
 			p.listings[key] = cached
 			listing := cloneSourceDirListing(cached.listing)
@@ -107,10 +105,10 @@ func (p *sourceDirectoryProjection) get(
 		p.mu.Lock()
 		delete(p.flights, key)
 		completedAt := time.Now()
-		if err == nil && cacheable {
+		if err == nil && cacheable && listing.WatchComplete {
 			p.storeLocked(key, projectedSourceListing{
 				listing: cloneSourceDirListing(listing), epoch: epoch,
-				loadedAt: completedAt, lastUsed: completedAt,
+				lastUsed: completedAt,
 			})
 			p.evictLocked()
 		}
@@ -143,11 +141,10 @@ func observeSourceListing(
 	return SourceDirListing{}, repochange.Epoch{}, false, ErrSourceNotFound
 }
 
-// projectedListingFresh uses the TTL when the directory is not watched.
+// Only live directory watches can establish cached membership freshness.
 func projectedListingFresh(
 	entry projectedSourceListing,
 	key sourceProjectionKey,
-	now time.Time,
 ) bool {
 	if entry.stale {
 		return false
@@ -155,10 +152,7 @@ func projectedListingFresh(
 	if !repochange.EpochCurrent(key.rootPath, entry.epoch) {
 		return false
 	}
-	if repochange.DirWatched(key.rootPath, key.dir) {
-		return true
-	}
-	return now.Sub(entry.loadedAt) < sourceProjectionTTL
+	return repochange.DirWatched(key.rootPath, key.dir)
 }
 
 func (p *sourceDirectoryProjection) invalidate(event repochange.Event) {

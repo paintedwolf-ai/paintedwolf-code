@@ -19,14 +19,14 @@ func TestExecuteToolCallsInTurnRunsFullSerialTaskBatch(t *testing.T) {
 	_ = reg.Register("task", func(_ context.Context, _ map[string]any, tctx tools.ToolContext) (string, error) {
 		atomic.AddInt32(&taskCalls, 1)
 		n := atomic.LoadInt32(&taskCalls)
-		if tctx.Out != nil {
-			tctx.Out.Dispatch = &api.WorkerDispatch{WorkerID: fmt.Sprintf("job-%d", n)}
+		if tctx.Effects.Out != nil {
+			tctx.Effects.Out.Dispatch = &api.WorkerDispatch{WorkerID: fmt.Sprintf("job-%d", n)}
 		}
 		return fmt.Sprintf(`{"job_id":"job-%d","status":"enqueued"}`, n), nil
 	})
 	_ = reg.Register("wait", func(_ context.Context, _ map[string]any, tctx tools.ToolContext) (string, error) {
-		if tctx.Out != nil {
-			tctx.Out.Completion = &api.ToolCompletion{Operation: "wait", State: "parked"}
+		if tctx.Effects.Out != nil {
+			tctx.Effects.Out.Completion = &api.ToolCompletion{Operation: "wait", State: "parked"}
 		}
 		return `{"status":"sleeping","wake_at":"2099-01-01T00:00:00Z"}`, nil
 	})
@@ -64,7 +64,9 @@ func TestExecuteToolCallsInTurnRunsFullSerialTaskBatch(t *testing.T) {
 		sess,
 		sess.ID,
 		history[0].ToolCalls,
-		tools.ToolContext{SessionID: sess.ID},
+		tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: sess.ID},
+		},
 		history,
 		"dispatch",
 		assistantID,

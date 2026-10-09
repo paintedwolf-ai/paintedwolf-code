@@ -85,7 +85,7 @@ func TestObserveCoordinatorBatchPhaseTool_synthesizePackBoard(t *testing.T) {
 		gc,
 	)
 	if !observeHasCode(gc, guard.CoordinatorBatchWrongPhaseCode) {
-		t.Fatalf("want %s in %v", guard.CoordinatorBatchWrongPhaseCode, gc.ArgValidationErrors)
+		t.Fatalf("want %s in %v", guard.CoordinatorBatchWrongPhaseCode, gc.Invocation.ArgValidationErrors)
 	}
 }
 
@@ -100,7 +100,7 @@ func TestObserveCoordinatorBatchPhaseTool_closedPackBoard(t *testing.T) {
 		gc,
 	)
 	if !observeHasCode(gc, guard.CoordinatorBatchAlreadyClosedCode) {
-		t.Fatalf("want %s in %v", guard.CoordinatorBatchAlreadyClosedCode, gc.ArgValidationErrors)
+		t.Fatalf("want %s in %v", guard.CoordinatorBatchAlreadyClosedCode, gc.Invocation.ArgValidationErrors)
 	}
 }
 
@@ -115,7 +115,7 @@ func TestObserveCoordinatorBatchPhaseTool_latchBlocksPackBoard(t *testing.T) {
 		gc,
 	)
 	if !observeHasCode(gc, guard.CoordinatorBatchAlreadyClosedCode) {
-		t.Fatalf("want %s in %v", guard.CoordinatorBatchAlreadyClosedCode, gc.ArgValidationErrors)
+		t.Fatalf("want %s in %v", guard.CoordinatorBatchAlreadyClosedCode, gc.Invocation.ArgValidationErrors)
 	}
 }
 

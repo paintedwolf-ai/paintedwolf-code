@@ -13,7 +13,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Handler) HandleComposeWorkflow(w http.ResponseWriter, r *http.Request) {
+func (s *Composition) HandleComposeWorkflow(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "id")
 	sess, ok := requestscope.Session(s.Store, s.responses, w, r, sessionID)
 	if !ok {
@@ -64,11 +64,11 @@ func (s *Handler) HandleComposeWorkflow(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
-func (s *Handler) queueComposeKick(ctx context.Context, sessionID string) {
+func (s *Composition) queueComposeKick(ctx context.Context, sessionID string) {
 	s.Sessions.Emit(ctx, sessionID, anchor.ComposeDone, anchor.Envelope{})
 }
 
-func (s *Handler) HandleListWorkflowTemplates(w http.ResponseWriter, r *http.Request) {
+func (s *Composition) HandleListWorkflowTemplates(w http.ResponseWriter, r *http.Request) {
 	if s.Composer.Templates == nil {
 		httpio.WriteJSON(w, http.StatusOK, wire.WorkflowTemplateListResponse{Templates: []wire.WorkflowTemplateSummary{}})
 		return
@@ -80,7 +80,7 @@ func (s *Handler) HandleListWorkflowTemplates(w http.ResponseWriter, r *http.Req
 	httpio.WriteJSON(w, http.StatusOK, wire.WorkflowTemplateListResponse{Templates: templates})
 }
 
-func (s *Handler) HandleComposeFromTemplate(w http.ResponseWriter, r *http.Request) {
+func (s *Composition) HandleComposeFromTemplate(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "id")
 	sess, ok := requestscope.Session(s.Store, s.responses, w, r, sessionID)
 	if !ok {

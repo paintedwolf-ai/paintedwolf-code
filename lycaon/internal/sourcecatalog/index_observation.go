@@ -16,6 +16,12 @@ import (
 
 // Filesystem waits release the writer transaction.
 func (w *indexWalk) visitDir(ctx context.Context, dir string) error {
+	if reason := w.store.policy.boundaryPath(dir, true); reason != "" {
+		if err := w.begin(ctx); err != nil {
+			return err
+		}
+		return w.cut(ctx, indexCut{Dir: dir, Reason: sandbox.BoundaryLazy})
+	}
 	if err := w.begin(ctx); err != nil {
 		return err
 	}
@@ -30,7 +36,7 @@ func (w *indexWalk) visitDir(ctx context.Context, dir string) error {
 	if err != nil {
 		if errors.Is(err, os.ErrInvalid) || errors.Is(err, os.ErrNotExist) {
 			if dir != "." {
-				if _, parentErr := w.store.catalog.observeUntil(ctx, w.store, normalizeDir(path.Dir(dir)), 0, backgroundwork.PriorityProactive); parentErr != nil {
+				if _, parentErr := w.store.stores.Directories.observeUntil(ctx, w.store, normalizeDir(path.Dir(dir)), 0, backgroundwork.PriorityProactive); parentErr != nil {
 					return w.faultDir(ctx, dir, parentErr)
 				}
 			}
@@ -128,7 +134,7 @@ func (w *indexWalk) directoryObservation(ctx context.Context, dir string, limit 
 	if err != nil && !errors.Is(err, pagedview.ErrMissing) {
 		return DirectoryObservation{}, err
 	}
-	return w.store.catalog.observeUntil(ctx, w.store, dir, limit, backgroundwork.PriorityProactive)
+	return w.store.stores.Directories.observeUntil(ctx, w.store, dir, limit, backgroundwork.PriorityProactive)
 }
 
 // Each page reads one structural snapshot, then releases it before metadata I/O.
@@ -161,7 +167,7 @@ func (w *indexWalk) readObservedIndexNodes(ctx context.Context, dir string, sequ
 	if err != nil || len(nodes) == 0 {
 		return nodes, next, err
 	}
-	finishMetadata, err := w.store.catalog.broker.Acquire(ctx, backgroundwork.Request{
+	finishMetadata, err := w.store.stores.broker.Acquire(ctx, backgroundwork.Request{
 		Lane: w.store.root.Path, Priority: backgroundwork.PriorityProactive,
 		Resources: []backgroundwork.Resource{backgroundwork.ResourceMetadata},
 	})
@@ -202,6 +208,12 @@ func (w *indexWalk) admitObservedNodes(ctx context.Context, nodes []indexNode, s
 	var directories []any
 	var directoryValues []string
 	for _, node := range nodes {
+		if !w.store.policy.selects(node.path, node.isDir) {
+			continue
+		}
+		if node.isDir && w.store.policy.boundaryDir(node.path) != "" {
+			node.refused = sandbox.BoundaryLazy
+		}
 		if node.name == "" {
 			continue
 		}
@@ -211,7 +223,7 @@ func (w *indexWalk) admitObservedNodes(ctx context.Context, nodes []indexNode, s
 		if _, err := w.tx.ExecContext(ctx, "UPDATE nodes SET first_listed=? WHERE path=?", sequence, node.path); err != nil {
 			return err
 		}
-		if node.isDir && !node.isSymlink {
+		if node.isDir && !node.isSymlink && node.refused != sandbox.BoundaryLazy {
 			directoryValues = append(directoryValues, "(?,?)")
 			directories = append(directories, node.path, w.store.policy.deferDir(node.path))
 		}

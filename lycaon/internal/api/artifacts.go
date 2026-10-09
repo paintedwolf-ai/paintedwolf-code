@@ -21,7 +21,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Server) handleListSessionArtifacts(w http.ResponseWriter, r *http.Request) {
+func (s *Artifacts) HandleListSessionArtifacts(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "id")
 	if _, err := s.sessionStore.Get(r.Context(), sessionID); err != nil {
 		if errors.Is(err, store.ErrSessionNotFound) {
@@ -107,7 +107,7 @@ func sessionArtifactPage(items []wire.ArtifactListItem, after *sessionArtifactCu
 	return page, &sessionArtifactCursor{CreatedAt: last.CreatedAt, ID: last.ID}
 }
 
-func (s *Server) handleCreateSessionArtifact(w http.ResponseWriter, r *http.Request) {
+func (s *Artifacts) HandleCreateSessionArtifact(w http.ResponseWriter, r *http.Request) {
 	pageID := strings.TrimSpace(r.URL.Query().Get("page_id"))
 	if pageID == "" {
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "live tool recording page_id required")
@@ -236,8 +236,8 @@ func parseRecordingStart(raw string) (time.Time, bool) {
 	return recordedAt.UTC(), err == nil
 }
 
-func (s *Server) handleListProjectArtifacts(w http.ResponseWriter, r *http.Request) {
-	p, ok := requestscope.ProjectByURLID(s.projectRegistry, &s.responses, w, r)
+func (s *Artifacts) HandleListProjectArtifacts(w http.ResponseWriter, r *http.Request) {
+	p, ok := requestscope.ProjectByURLID(s.projectRegistry, s.responses, w, r)
 	if !ok {
 		return
 	}
@@ -303,13 +303,13 @@ func encodeArtifactCursor(projectID, createdAt, id string) (string, error) {
 }
 
 // Deletion preserves durable references after removing artifact bytes.
-func (s *Server) handleDeleteProjectArtifact(w http.ResponseWriter, r *http.Request) {
+func (s *Artifacts) HandleDeleteProjectArtifact(w http.ResponseWriter, r *http.Request) {
 	artifactID := strings.TrimSpace(chi.URLParam(r, "artifact_id"))
 	if artifactID == "" {
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "artifact id required")
 		return
 	}
-	p, ok := requestscope.ProjectByURLID(s.projectRegistry, &s.responses, w, r)
+	p, ok := requestscope.ProjectByURLID(s.projectRegistry, s.responses, w, r)
 	if !ok {
 		return
 	}
@@ -325,7 +325,7 @@ func (s *Server) handleDeleteProjectArtifact(w http.ResponseWriter, r *http.Requ
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) handleSessionArtifact(w http.ResponseWriter, r *http.Request) {
+func (s *Artifacts) HandleSessionArtifact(w http.ResponseWriter, r *http.Request) {
 	// Artifact identities survive deletion; bytes must be resolved on each fetch.
 	w.Header().Set("Cache-Control", "private, no-store")
 	sessionID := chi.URLParam(r, "id")

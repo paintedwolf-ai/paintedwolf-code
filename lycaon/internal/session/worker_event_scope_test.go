@@ -25,7 +25,10 @@ func TestWorkerWritePublishesBoardByProjectIdentity(t *testing.T) {
 	defer unsubscribe()
 	board := &workerEventBoard{}
 	manager := &Manager{events: &events.Publisher{Hub: hub, Board: board}}
-	manager.AfterWorkerWrite(t.Context(), tools.ToolContext{ProjectID: testdbseed.DefaultProjectID, HandoffSessionID: "session"}, "file.go")
+	manager.AfterWorkerWrite(t.Context(), tools.ToolContext{
+		Identity: tools.InvocationIdentity{ProjectID: testdbseed.DefaultProjectID,
+			HandoffSessionID: "session"},
+	}, "file.go")
 	hub.FlushDebounced()
 	if board.projectID != testdbseed.DefaultProjectID {
 		t.Fatalf("board project = %q", board.projectID)

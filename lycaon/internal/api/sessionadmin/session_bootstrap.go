@@ -14,7 +14,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Handler) HandleSessionBootstrap(w http.ResponseWriter, r *http.Request) {
+func (s *Bootstrap) HandleSessionBootstrap(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	// The hub is optional; without one there is no cursor to resume from.
 	eventCursor := ""
@@ -78,7 +78,7 @@ func (s *Handler) HandleSessionBootstrap(w http.ResponseWriter, r *http.Request)
 	})
 }
 
-func (s *Handler) sessionBootstrapWorkersAndCheckpoints(
+func (s *Bootstrap) sessionBootstrapWorkersAndCheckpoints(
 	ctx context.Context,
 	projectID string,
 	sessionID string,
@@ -101,7 +101,7 @@ func (s *Handler) sessionBootstrapWorkersAndCheckpoints(
 	return workers, checkpoints, nil
 }
 
-func (s *Handler) sessionBackgroundOutputs(ctx context.Context, sessionID string) []wire.BackgroundProcessOutput {
+func (s *Bootstrap) sessionBackgroundOutputs(ctx context.Context, sessionID string) []wire.BackgroundProcessOutput {
 	processes := s.Sessions.ListBackgroundProcesses(ctx, sessionID)
 	out := make([]wire.BackgroundProcessOutput, 0, len(processes))
 	for _, process := range processes {

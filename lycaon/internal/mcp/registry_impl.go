@@ -25,8 +25,8 @@ type registeredTool struct {
 	ToolName   string
 }
 
-// RegistryOptions configures RegistryImpl.
-type RegistryOptions struct {
+// RuntimeOptions configures Runtime.
+type RuntimeOptions struct {
 	// StatePath overrides the user config directory that holds device-level MCP
 	// state (tool pins). Empty resolves configdir.UserConfigDir.
 	StatePath          string
@@ -39,65 +39,18 @@ type RegistryOptions struct {
 	OAuthRedirectURI   string
 }
 
-// RegistryImpl merges provider catalogs, connects providers, and registers tools.
-type RegistryImpl struct {
-	mu        sync.RWMutex
-	sessionMu sync.Mutex
-	// syncMu serializes catalog reload and discovery publication.
-	syncMu sync.Mutex
-
-	globalPath string
-	statePath  string
-
-	// pins detects remote HTTP tool-definition substitution after approval.
-	pins *toolPins
-
-	distro *DistroMCPConfig
-	user   *UserMCPConfig
-	// deviceCatalog is the distro+user merge consulted by the agent surface.
-	deviceCatalog  []MergedMCPProviderEntry
-	deviceRejected []RejectedRow
-
-	sessions     map[sessionRef]*pooledSession
-	breakers     map[string]*gobreaker.CircuitBreaker
-	syncErrors   map[string]string // providerID -> catalog code ("" if healthy)
-	syncOK       map[string]bool   // providerID -> last sync listed tools successfully
-	authRequired map[string]bool   // providerID -> peer asked for MCP Authorization
-	toolRefs     map[string]registeredTool
-	// toolDefs retains sanitized definitions from the last sync per provider.
-	toolDefs map[string][]sanitizedToolDefinition
-
-	// overlayApplies gates the project layer on Applies("project_mcp", dir). Nil is
-	// closed: distro + user layers only.
-	overlayApplies func(ctx context.Context, projectDir string) bool
-
-	connector    SessionConnector
-	toolRegistry *tools.DefaultRegistry
-	onSettings   func()
-	breakerTh    uint32
-	apiToken     string
-	oauthStore   *OAuthTokenStore
-	oauth        *OAuthClient
-	recipes      *RecipeCatalog
-
-	// deviceProbeRootsFn supplies roots for host-initiated inspection with no project.
-	deviceProbeRootsFn func() []string
-
-	// secretMatcher / secretAsk screen CallTool args before the RPC (nil ⇒ inert).
-	secretMatcher *secretmatch.Matcher
-	secretAsk     secretmatch.AskFunc
-
-	// resync carries provider ids whose tool list changed; drained off the session reader.
-	resync chan string
-
-	// lifeCtx controls MCP session lifetimes (and stdio subprocesses). Canceled by Close.
-	lifeCtx    context.Context
-	lifeCancel context.CancelFunc
-	closed     bool
+// Runtime composes provider catalogs, connections, credentials and tools.
+type Runtime struct {
+	Catalog        *ProviderCatalog
+	Administration *ProviderAdministration
+	Credentials    *ProviderCredentials
+	Connections    *ConnectionPool
+	Tools          *ToolDiscovery
+	Calls          *ToolCalls
 }
 
-// NewRegistryImpl constructs an MCP registry. Call Load before use.
-func NewRegistryImpl(opts RegistryOptions) (*RegistryImpl, error) {
+// NewRuntime constructs an MCP registry. Call Load before use.
+func NewRuntime(opts RuntimeOptions) (*Runtime, error) {
 	th := opts.BreakerThreshold
 	if th == 0 {
 		th = defaultBreakerThreshold
@@ -127,61 +80,81 @@ func NewRegistryImpl(opts RegistryOptions) (*RegistryImpl, error) {
 		return nil, fmt.Errorf("mcp recipe catalog: %w", err)
 	}
 	lifeCtx, lifeCancel := context.WithCancel(context.Background())
-	r := &RegistryImpl{
-		statePath:    statePath,
-		pins:         newToolPins(statePath),
-		globalPath:   globalPath,
-		lifeCtx:      lifeCtx,
-		lifeCancel:   lifeCancel,
-		sessions:     map[sessionRef]*pooledSession{},
-		breakers:     map[string]*gobreaker.CircuitBreaker{},
-		syncErrors:   map[string]string{},
-		syncOK:       map[string]bool{},
-		authRequired: map[string]bool{},
-		toolRefs:     map[string]registeredTool{},
-		onSettings:   opts.OnSettingsChange,
-		breakerTh:    th,
-		oauthStore:   oauthStore,
-		oauth:        opts.OAuthClient,
-		recipes:      recipes,
-		resync:       make(chan string, 16),
+	coordination := &sync.RWMutex{}
+	r := &Runtime{
+		Catalog:        &ProviderCatalog{mu: coordination},
+		Administration: &ProviderAdministration{mu: coordination},
+		Credentials:    &ProviderCredentials{mu: coordination},
+		Connections:    &ConnectionPool{mu: coordination},
+		Tools:          &ToolDiscovery{mu: coordination},
+		Calls:          &ToolCalls{mu: coordination},
 	}
-	if r.oauth == nil {
-		r.oauth = NewOAuthClient(oauthStore, opts.OAuthRedirectURI, nil)
+	r.Catalog.statePath = statePath
+	r.Tools.pins = newToolPins(statePath)
+	r.Catalog.globalPath = globalPath
+	r.Connections.lifeCtx = lifeCtx
+	r.Connections.lifeCancel = lifeCancel
+	r.Connections.sessions = map[sessionRef]*pooledSession{}
+	r.Calls.breakers = map[string]*gobreaker.CircuitBreaker{}
+	r.Tools.syncErrors = map[string]string{}
+	r.Tools.syncOK = map[string]bool{}
+	r.Credentials.authRequired = map[string]bool{}
+	r.Tools.toolRefs = map[string]registeredTool{}
+	r.Administration.onSettings = opts.OnSettingsChange
+	r.Calls.breakerTh = th
+	r.Credentials.oauthStore = oauthStore
+	r.Credentials.oauth = opts.OAuthClient
+	r.Credentials.recipes = recipes
+	r.Tools.resync = make(chan string, 16)
+
+	r.Catalog.Connections = r.Connections
+	r.Catalog.Credentials = r.Credentials
+	r.Catalog.Tools = r.Tools
+	r.Administration.Calls = r.Calls
+	r.Administration.Catalog = r.Catalog
+	r.Administration.Connections = r.Connections
+	r.Administration.Credentials = r.Credentials
+	r.Administration.Tools = r.Tools
+	r.Credentials.Administration = r.Administration
+	r.Credentials.Catalog = r.Catalog
+	r.Credentials.Connections = r.Connections
+	r.Credentials.Tools = r.Tools
+	r.Connections.Credentials = r.Credentials
+	r.Connections.Tools = r.Tools
+	r.Tools.Calls = r.Calls
+	r.Tools.Catalog = r.Catalog
+	r.Tools.Connections = r.Connections
+	r.Calls.Catalog = r.Catalog
+	r.Calls.Connections = r.Connections
+	r.Calls.Tools = r.Tools
+	if r.Credentials.oauth == nil {
+		r.Credentials.oauth = NewOAuthClient(oauthStore, opts.OAuthRedirectURI, nil)
 	}
 	conn := opts.Connector
 	if conn == nil {
-		conn = SDKConnector{AccessToken: r.accessTokenFor}
+		conn = SDKConnector{AccessToken: r.Credentials.accessTokenFor}
 	}
-	r.connector = conn
-	go r.drainResync()
+	r.Connections.connector = conn
+	go r.Tools.drainResync()
 	return r, nil
 }
 
-// accessTokenFor supplies the OAuth bearer for an HTTP MCP provider from the device catalog.
-func (r *RegistryImpl) accessTokenFor(providerID string) string {
-	if _, ok := r.deviceEntry(providerID); !ok {
-		return ""
-	}
-	return r.oauthStore.AccessToken(providerID)
-}
-
 // SetToolRegistry wires the host tool registry for dynamic mcp_* registration.
-func (r *RegistryImpl) SetToolRegistry(reg *tools.DefaultRegistry) {
+func (r *ToolDiscovery) SetToolRegistry(reg *tools.DefaultRegistry) {
 	r.mu.Lock()
 	r.toolRegistry = reg
 	r.mu.Unlock()
 }
 
 // SetAPIAccess configures the bearer token passed to first-party MCP subprocesses.
-func (r *RegistryImpl) SetAPIAccess(token string) {
+func (r *ConnectionPool) SetAPIAccess(token string) {
 	r.mu.Lock()
 	r.apiToken = strings.TrimSpace(token)
 	r.mu.Unlock()
 }
 
 // SetDeviceProbeRoots installs roots for host-initiated inspection with no project selected.
-func (r *RegistryImpl) SetDeviceProbeRoots(fn func() []string) {
+func (r *ConnectionPool) SetDeviceProbeRoots(fn func() []string) {
 	r.mu.Lock()
 	r.deviceProbeRootsFn = fn
 	r.mu.Unlock()
@@ -189,7 +162,7 @@ func (r *RegistryImpl) SetDeviceProbeRoots(fn func() []string) {
 
 // SetProjectOverlayGate installs the Applies("project_mcp", dir) predicate consulted
 // before any project MCP layer is read.
-func (r *RegistryImpl) SetProjectOverlayGate(fn func(ctx context.Context, projectDir string) bool) {
+func (r *ProviderCatalog) SetProjectOverlayGate(fn func(ctx context.Context, projectDir string) bool) {
 	if r == nil {
 		return
 	}
@@ -200,7 +173,7 @@ func (r *RegistryImpl) SetProjectOverlayGate(fn func(ctx context.Context, projec
 
 // SetSecretScreen wires outbound secret screening for CallTool args.
 // A nil or Inert() matcher leaves the seam inert.
-func (r *RegistryImpl) SetSecretScreen(matcher *secretmatch.Matcher, ask secretmatch.AskFunc) {
+func (r *ToolCalls) SetSecretScreen(matcher *secretmatch.Matcher, ask secretmatch.AskFunc) {
 	if r == nil {
 		return
 	}
@@ -210,7 +183,7 @@ func (r *RegistryImpl) SetSecretScreen(matcher *secretmatch.Matcher, ask secretm
 	r.mu.Unlock()
 }
 
-func (r *RegistryImpl) deviceProbeRoots() []string {
+func (r *ConnectionPool) deviceProbeRoots() []string {
 	r.mu.RLock()
 	fn := r.deviceProbeRootsFn
 	r.mu.RUnlock()
@@ -222,13 +195,13 @@ func (r *RegistryImpl) deviceProbeRoots() []string {
 
 // Load reads distro + user overlays into the device catalog and re-syncs tools.
 // An unreadable user overlay is dropped as a rejected row; an unreadable distro catalog is fatal.
-func (r *RegistryImpl) Load(ctx context.Context) error {
-	r.syncMu.Lock()
-	defer r.syncMu.Unlock()
+func (r *ProviderCatalog) Load(ctx context.Context) error {
+	r.Tools.syncMu.Lock()
+	defer r.Tools.syncMu.Unlock()
 	return r.loadLocked(ctx)
 }
 
-func (r *RegistryImpl) loadLocked(ctx context.Context) error {
+func (r *ProviderCatalog) loadLocked(ctx context.Context) error {
 	distro, err := LoadDistroMCPConfig()
 	if err != nil {
 		return fmt.Errorf("mcp distro catalog: %w", err)
@@ -259,8 +232,8 @@ func (r *RegistryImpl) loadLocked(ctx context.Context) error {
 	r.deviceRejected = append(append([]RejectedRow(nil), layerRejected...), rejected...)
 	r.mu.Unlock()
 
-	r.closeSessionsNotRunnable(catalog)
-	return r.syncToolsLocked(ctx)
+	r.Connections.closeSessionsNotRunnable(catalog)
+	return r.Tools.syncToolsLocked(ctx)
 }
 
 // unreadableLayerReason maps a layer read failure to a closed-set rejection reason.
@@ -277,7 +250,7 @@ func unreadableLayerReason(err error) string {
 }
 
 // deviceEntry returns the device-catalog row for id.
-func (r *RegistryImpl) deviceEntry(id string) (MCPProviderEntry, bool) {
+func (r *ProviderCatalog) deviceEntry(id string) (MCPProviderEntry, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	for _, s := range r.deviceCatalog {
@@ -289,13 +262,13 @@ func (r *RegistryImpl) deviceEntry(id string) (MCPProviderEntry, bool) {
 }
 
 // deviceEnabled reports whether id is present and enabled in the device catalog.
-func (r *RegistryImpl) deviceEnabled(id string) bool {
+func (r *ProviderCatalog) deviceEnabled(id string) bool {
 	entry, ok := r.deviceEntry(id)
 	return ok && entry.Enabled
 }
 
 // ProviderConfigured reports whether id exists in the device catalog.
-func (r *RegistryImpl) ProviderConfigured(id string) bool {
+func (r *ProviderCatalog) ProviderConfigured(id string) bool {
 	if r == nil || id == "" {
 		return false
 	}
@@ -304,7 +277,7 @@ func (r *RegistryImpl) ProviderConfigured(id string) bool {
 }
 
 // ProviderEnabled reports whether id is configured and enabled at device level.
-func (r *RegistryImpl) ProviderEnabled(id string) bool {
+func (r *ProviderCatalog) ProviderEnabled(id string) bool {
 	if r == nil || id == "" {
 		return false
 	}
@@ -315,7 +288,7 @@ func (r *RegistryImpl) ProviderEnabled(id string) bool {
 //
 // Device level is the whole answer for callers describing what a session may reach: a
 // project overlay can only take a provider away for its own tree, never add one.
-func (r *RegistryImpl) EnabledProviderIDs() []string {
+func (r *ProviderCatalog) EnabledProviderIDs() []string {
 	if r == nil {
 		return nil
 	}
@@ -332,12 +305,12 @@ func (r *RegistryImpl) EnabledProviderIDs() []string {
 }
 
 // ResolveQualifiedTool maps a host mcp_* name to catalog provider id + tool name.
-func (r *RegistryImpl) ResolveQualifiedTool(qualified string) (providerID, toolName string, ok bool) {
+func (r *ProviderCatalog) ResolveQualifiedTool(qualified string) (providerID, toolName string, ok bool) {
 	if r == nil || qualified == "" {
 		return "", "", false
 	}
 	r.mu.RLock()
-	ref, found := r.toolRefs[strings.TrimSpace(qualified)]
+	ref, found := r.Tools.toolRefs[strings.TrimSpace(qualified)]
 	r.mu.RUnlock()
 	if found {
 		return ref.ProviderID, ref.ToolName, true
@@ -346,11 +319,11 @@ func (r *RegistryImpl) ResolveQualifiedTool(qualified string) (providerID, toolN
 }
 
 // RegisteredMCPTools returns qualified tool names currently registered.
-func (r *RegistryImpl) RegisteredMCPTools() []string {
+func (r *ProviderCatalog) RegisteredMCPTools() []string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	out := make([]string, 0, len(r.toolRefs))
-	for name := range r.toolRefs {
+	out := make([]string, 0, len(r.Tools.toolRefs))
+	for name := range r.Tools.toolRefs {
 		out = append(out, name)
 	}
 	return out
@@ -358,15 +331,15 @@ func (r *RegistryImpl) RegisteredMCPTools() []string {
 
 // LastSyncError returns the catalog code for the most recent sync failure, or
 // "" when the last sync saw it healthy or it is disabled.
-func (r *RegistryImpl) LastSyncError(providerID string) string {
+func (r *ProviderCatalog) LastSyncError(providerID string) string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.syncErrors[providerID]
+	return r.Tools.syncErrors[providerID]
 }
 
 // projectView merges the device layer with one project's overlay for display and call-time narrowing.
 // The project file is read fresh each time (not cached).
-func (r *RegistryImpl) projectView(ctx context.Context, projectDir string) projectCatalogView {
+func (r *ProviderCatalog) projectView(ctx context.Context, projectDir string) projectCatalogView {
 	r.mu.RLock()
 	distro := r.distro
 	user := r.user
@@ -443,7 +416,7 @@ func (v projectCatalogView) entry(id string) (MergedMCPProviderEntry, bool) {
 }
 
 // ToolLoadingModes resolves provider loading modes for one project view.
-func (r *RegistryImpl) ToolLoadingModes(ctx context.Context, projectDir string) map[string]bool {
+func (r *ProviderCatalog) ToolLoadingModes(ctx context.Context, projectDir string) map[string]bool {
 	if r == nil {
 		return nil
 	}
@@ -468,7 +441,7 @@ func (v projectCatalogView) known(id string) bool {
 	return false
 }
 
-func (r *RegistryImpl) projectOverlayApplies(ctx context.Context, projectDir string) bool {
+func (r *ProviderCatalog) projectOverlayApplies(ctx context.Context, projectDir string) bool {
 	r.mu.RLock()
 	fn := r.overlayApplies
 	r.mu.RUnlock()
@@ -480,24 +453,11 @@ func (r *RegistryImpl) projectOverlayApplies(ctx context.Context, projectDir str
 
 // Close shuts down all MCP sessions and the subprocesses behind them. It is terminal:
 // the lifetime context every future spawn would inherit is canceled.
-func (r *RegistryImpl) Close() error {
-	r.mu.Lock()
-	if r.closed {
-		r.mu.Unlock()
+func (r *Runtime) Close() error {
+	if r == nil {
 		return nil
 	}
-	r.closed = true
-	refs := make([]sessionRef, 0, len(r.sessions))
-	for ref := range r.sessions {
-		refs = append(refs, ref)
-	}
-	r.mu.Unlock()
-	for _, ref := range refs {
-		r.closeSessionRef(ref)
-	}
-	// An abandoned sign-in still holds a loopback port; shutting the registry down
-	// releases it rather than leaving it bound until the process exits.
-	r.oauth.Close()
-	r.lifeCancel()
-	return nil
+	err := r.Connections.Close()
+	r.Credentials.oauth.Close()
+	return err
 }

@@ -3,10 +3,10 @@ package wiring
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -20,11 +20,11 @@ func TestStateStartRequiresHumanApproval(t *testing.T) {
 	ctx := context.Background()
 
 	tctx := wiringToolContext(sess.ID, sess.WorkspacePath)
-	tctx.Agent = "coordinator"
+	tctx.Identity.Agent = "coordinator"
 	_, err = h.ToolRegistry.Run(ctx, "state_start", map[string]any{
 		"workflow_id": "plan", "workflow_version": "1.0.0",
 	}, tctx)
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "WORKFLOW_START_REQUIRES_HUMAN_APPROVAL" {
 		t.Fatalf("state_start err = %v, want WORKFLOW_START_REQUIRES_HUMAN_APPROVAL reject", err)
 	}

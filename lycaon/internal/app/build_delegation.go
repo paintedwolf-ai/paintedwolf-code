@@ -231,7 +231,7 @@ func (b delegationWiring) onWorkflowPhaseEnter(ctx context.Context, rc *workflow
 	if !rc.IsRunStart() && (strings.TrimSpace(def.BindTopologyStage) != "" || len(def.BindParallelGroup) > 0) {
 		if run, err := b.workflowMgr.Get(ctx, rc.RunID); err == nil && run != nil {
 			run.CurrentPhase = rc.Phase
-			b.srv.Workflow.StartOrchestratedTopologyForRun(ctx, rc.SessionID, run)
+			b.srv.Admin.Workflow.Topology.StartOrchestratedTopologyForRun(ctx, rc.SessionID, run)
 		}
 	}
 	// Resolve phase-entry guidance through workflow bindings.
@@ -352,7 +352,7 @@ func (b delegationWiring) onWorkflowPhaseAutoAdvanced(ctx context.Context, sessi
 	if strings.TrimSpace(previousPhase) == "" && strings.TrimSpace(newPhase) != "" {
 		postStartCtx := context.WithoutCancel(ctx)
 		if run, getErr := b.workflowMgr.Get(postStartCtx, runID); getErr == nil && run != nil {
-			b.srv.Workflow.StartOrchestratedTopologyForRun(postStartCtx, sessionID, run)
+			b.srv.Admin.Workflow.Topology.StartOrchestratedTopologyForRun(postStartCtx, sessionID, run)
 		}
 		if held, heldErr := b.workflowMgr.HostObligationHeld(postStartCtx, sessionID); heldErr == nil && held {
 			b.mgr.CancelInFlightPrompt(sessionID)

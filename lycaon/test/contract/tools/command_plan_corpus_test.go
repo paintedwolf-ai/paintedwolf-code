@@ -104,7 +104,8 @@ func (g *recordingGate) reviewed(tool string) (hitl.ProposedAction, bool) {
 			return g.actions[i], true
 		}
 	}
-	return hitl.ProposedAction{}, false
+	return hitl.ProposedAction{
+}, false
 }
 
 func (g *recordingGate) reset() {

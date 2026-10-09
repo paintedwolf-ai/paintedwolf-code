@@ -2,6 +2,7 @@ package toolfixture
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolexecution"
 	"path/filepath"
 	"sort"
 	"testing"
@@ -16,7 +17,7 @@ import (
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
-func ContractToolExecutor(t *testing.T) *tools.DefaultToolExecutor {
+func ContractToolExecutor(t *testing.T) *toolexecution.Executor {
 	t.Helper()
 	root := contractcheck.RepoRoot(t)
 	configRoot := filepath.Join(root, "lycaon")
@@ -26,7 +27,7 @@ func ContractToolExecutor(t *testing.T) *tools.DefaultToolExecutor {
 	hints, err := guidance.LoadHintConfigStock()
 	contractcheck.FailErr(t, "load hint registry", err)
 	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
-	rt.ApplyGuidanceRejects(guidance.NewStaticRejectFormatter(hints))
+	rt.Authority.ApplyGuidanceRejects(guidance.NewStaticRejectFormatter(hints))
 	WireContractBlockPlane(t, rt, guidance.NewStaticRejectFormatter(hints))
 	registerCatalogToolsOnto(t, rt.Registry)
 	return rt.Executor
@@ -36,7 +37,7 @@ func applyStockToolSchemas(t *testing.T, rt *toolhost.Runtime) {
 	t.Helper()
 	schemas, _, err := extpacks.LoadEffectiveToolSchemas(contractcheck.StockCatalog(t))
 	contractcheck.FailErr(t, "LoadEffectiveToolSchemas", err)
-	rt.Executor.SetToolSchemas(schemas)
+	rt.Executor.Metadata.SetToolSchemas(schemas)
 }
 
 func LoadBundledAgentRegistry(t *testing.T) orchestration.AgentRegistry {
@@ -49,7 +50,7 @@ func LoadBundledAgentRegistry(t *testing.T) orchestration.AgentRegistry {
 	return reg
 }
 
-func SortedToolNames(ctx context.Context, exec tools.ToolInvoker, profileID string) []string {
+func SortedToolNames(ctx context.Context, exec tools.ToolProfileLister, profileID string) []string {
 	metas := tools.ListToolsForProfile(ctx, exec, platform.ToolFilter{ProfileID: profileID})
 	names := make([]string, 0, len(metas))
 	for _, meta := range metas {

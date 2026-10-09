@@ -213,7 +213,7 @@ func (m *Manager) executePromptRun(
 	if err != nil {
 		return execution, err
 	}
-	if err := m.sealAuthorizationContext(ctx, sess, assembly.ProfileID, assembly.ToolCtx.WorkerJobID); err != nil {
+	if err := m.sealAuthorizationContext(ctx, sess, assembly.ProfileID, assembly.ToolCtx.Identity.WorkerJobID); err != nil {
 		execution.Response, err = m.sealFailureResponse(ctx, sessionID, err)
 		return execution, err
 	}
@@ -311,8 +311,8 @@ func (m *Manager) assemblePromptRun(ctx context.Context, sess *api.Session, id s
 	if err != nil {
 		return zero, err
 	}
-	tctx.TurnWritePinRootID = strings.TrimSpace(in.WritePinRootID)
-	tctx.TurnWritePinGlobs = append([]string(nil), in.WritePinGlobs...)
+	tctx.Turn.TurnWritePinRootID = strings.TrimSpace(in.WritePinRootID)
+	tctx.Turn.TurnWritePinGlobs = append([]string(nil), in.WritePinGlobs...)
 	tctx, err = m.EnrichWorkerToolContext(ctx, sess, tctx)
 	if err != nil {
 		return zero, err

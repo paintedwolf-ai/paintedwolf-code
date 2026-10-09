@@ -39,9 +39,9 @@ func (m *Manager) readSkillForTool(ctx context.Context, sess *api.Session, tctx 
 	if err != nil {
 		return
 	}
-	roster, _ := m.EffectiveSkillsForProfile(ctx, sess, tctx.Agent, roots)
-	card := turnload.ToolCard{Name: tool, Description: m.toolDescription(ctx, sess, tctx.Agent, tool)}
-	finishDeciding := m.beginDeciding(ctx, sess, sess.ID, api.TurnLoadTriggerToolEvent, tctx.ToolCallID)
+	roster, _ := m.EffectiveSkillsForProfile(ctx, sess, tctx.Identity.Agent, roots)
+	card := turnload.ToolCard{Name: tool, Description: m.toolDescription(ctx, sess, tctx.Identity.Agent, tool)}
+	finishDeciding := m.beginDeciding(ctx, sess, sess.ID, api.TurnLoadTriggerToolEvent, tctx.Identity.ToolCallID)
 	outcome := turnload.RankToolEvent(ctx, m.turnDecider(), catalog.ToolEvent, request, card, roster)
 	finishDeciding()
 	var preload *turnload.SkillPreload
@@ -51,13 +51,13 @@ func (m *Manager) readSkillForTool(ctx context.Context, sess *api.Session, tctx 
 	case outcome.Pointer != nil:
 		m.turnLoads.SetPointer(sess.ID, outcome.Pointer)
 	}
-	stateSurface := strings.TrimSpace(tctx.TurnSurfaceID)
+	stateSurface := strings.TrimSpace(tctx.Turn.TurnSurfaceID)
 	if stateSurface == "" {
-		stateSurface = strings.TrimSpace(tctx.Agent)
+		stateSurface = strings.TrimSpace(tctx.Identity.Agent)
 	}
 	m.recordTurnLoad(ctx, sess, sess.ID, store.TurnLoadReceipt{
 		Trigger:    store.TurnLoadTriggerToolEvent,
-		ToolCallID: tctx.ToolCallID,
+		ToolCallID: tctx.Identity.ToolCallID,
 		SurfaceID:  stateSurface,
 		Engine:     engineLabel(outcome.Engine),
 		StateJSON:  marshalJSON(map[string]any{"need": turnload.BoundUser(outcome.Need, catalog.State.UserTextChars), "surface": stateSurface, "tool": tool}),

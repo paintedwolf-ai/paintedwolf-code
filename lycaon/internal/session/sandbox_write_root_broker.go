@@ -1,9 +1,12 @@
 package session
 
 import (
+	"github.com/lycaon/lycaon/internal/toolapproval"
+
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 	"time"
 
@@ -14,7 +17,6 @@ import (
 	"github.com/lycaon/lycaon/internal/sensitivepath"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
 	"github.com/lycaon/lycaon/internal/settings"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -27,7 +29,7 @@ type WriteRootCheckpointBroker struct {
 	// ReadRuntime holds chat read-path leases, a separate namespace from
 	// write roots: a grant in one never covers the other.
 	ReadRuntime *approvalstate.SandboxPathGrantRuntime
-	Consequence tools.ConsequenceDeriver
+	Consequence toolapproval.ConsequenceDeriver
 	Authority   hitl.ApprovalGate
 	// ApprovalsDisabled authorizes the request without a prompt.
 	ApprovalsDisabled func(projectDir string) bool
@@ -241,14 +243,24 @@ func (b *WriteRootCheckpointBroker) buildWriteRootCard(
 		band, code = b.Consequence.WriteRoot(proposed)
 	}
 	grantAction := hitl.ProposedAction{
-		Tool: "write_root", Args: map[string]any{"proposed_write_root": proposed},
-		ProjectID: in.ProjectID, ProjectDir: projectDir, SessionID: invokingSessionID, RootSessionID: rootSessionID,
-		Contained: hitl.ContainedForAction(hitl.ActionConfineInputs{
+Invocation: hitl.ActionInvocation{
+Tool: "write_root",
+Args: map[string]any{"proposed_write_root": proposed},
+},
+Scope: hitl.ActionScope{
+ProjectID: in.ProjectID,
+ProjectDir: projectDir,
+SessionID: invokingSessionID,
+RootSessionID: rootSessionID,
+},
+Execution: hitl.ActionExecution{
+Contained: hitl.ContainedForAction(hitl.ActionConfineInputs{
 			ProjectID:         in.ProjectID,
 			Roots:             projectRoots(projectDir),
 			OverlayWriteRoots: b.Runtime.SessionWriteRoots(rootSessionID),
 		}),
-	}
+},
+}
 	var grantOffers []hitl.ApprovalGrantOffer
 	if b.Authority != nil && subject.Kind == confine.WriteSubjectOrdinary {
 		grantOffers = b.Authority.GrantOffers(grantAction, &hitl.ApprovalResult{Decision: decision})
@@ -291,7 +303,7 @@ func (b *WriteRootCheckpointBroker) buildWriteRootCard(
 		if b.Authority == nil {
 			return false
 		}
-		_, live := b.Authority.AskQuietLive(grantAction.ChatSession(), key)
+		_, live := b.Authority.AskQuietLive(grantAction.Scope.ChatSession(), key)
 		return live
 	})...)
 	primaryGate, cited, reasons := hitl.PresentDecision(decision)
@@ -309,7 +321,7 @@ func (b *WriteRootCheckpointBroker) buildWriteRootCard(
 		ConsequenceBand: string(band), ConsequenceCode: string(code),
 	}, reasons, options, hitl.FaceContext{})
 	if err != nil {
-		return sandboxAskCard{}, tools.ApprovalPlanInvalid()
+		return sandboxAskCard{}, toolrejection.ApprovalPlanInvalid()
 	}
 	return sandboxAskCard{
 		Action: grantAction, Title: card.subjectTitle, Plan: plan,
@@ -350,13 +362,13 @@ func writeRootChatGrant(action hitl.ProposedAction, root string) hitl.ApprovalGr
 	root = confine.NormalizeWriteRootKey(root)
 	raw := strings.Join([]string{
 		string(hitl.ApprovalGrantScopeChat), hitl.ApprovalGrantCategoryWriteRoot,
-		root, action.ChatSession(),
+		root, action.Scope.ChatSession(),
 	}, "\x00")
 	sum := sha256.Sum256([]byte(raw))
 	return hitl.ApprovalGrant{
 		ID: "grant_" + hex.EncodeToString(sum[:8]), Scope: hitl.ApprovalGrantScopeChat,
 		Predicate:     hitl.ApprovalGrantPredicate{Category: hitl.ApprovalGrantCategoryWriteRoot, Pattern: root},
-		ChatSessionID: action.ChatSession(), ProjectID: action.ProjectID, ProjectDir: action.ProjectDir,
+		ChatSessionID: action.Scope.ChatSession(), ProjectID: action.Scope.ProjectID, ProjectDir: action.Scope.ProjectDir,
 		Title: hitl.TitleAllowForThisChat, Coverage: "writes within `" + root + "`",
 		GrantedAt: time.Now().UTC(), ExpiresWhen: hitl.ExpiresWhenChatDeleted,
 		ReaskWhen: "a different write root is needed", Source: "checkpoint",

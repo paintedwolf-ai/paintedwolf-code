@@ -13,9 +13,17 @@ import (
 func TestDetectionOnlyCardFacesTaskAcknowledgement(t *testing.T) {
 	t.Parallel()
 	action := hitl.ProposedAction{
-		Tool: "command", SessionID: "chat-1", RootSessionID: "chat-1",
-		Command: "aws s3 rb s3://x --force",
-	}
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+},
+Scope: hitl.ActionScope{
+SessionID: "chat-1",
+RootSessionID: "chat-1",
+},
+Presentation: hitl.ActionPresentation{
+Command: "aws s3 rb s3://x --force",
+},
+}
 	decision := &gate.Decision{
 		Primary:   api.GateAuthorityMisuse,
 		ReasonKey: "authority_misuse:aws-cli/s3-remove-bucket",
@@ -30,7 +38,7 @@ func TestDetectionOnlyCardFacesTaskAcknowledgement(t *testing.T) {
 		action, hitl.ApprovalStagePreSpawn,
 		hitl.ApprovalSubject{
 			Kind: hitl.ApprovalSubjectAction, Title: "Approve command",
-			Targets: []hitl.ApprovalTarget{{Kind: "action", Label: action.Command}},
+			Targets: []hitl.ApprovalTarget{{Kind: "action", Label: action.Presentation.Command}},
 		},
 		hitl.ApprovalPresentation{
 			Action: "Run command", Impact: "Deletes a bucket.",
@@ -74,8 +82,16 @@ func TestDetectionOnlyCardFacesTaskAcknowledgement(t *testing.T) {
 func TestDetectionAcknowledgementDoesNotFaceCoFiringGate(t *testing.T) {
 	t.Parallel()
 	action := hitl.ProposedAction{
-		Tool: "command", SessionID: "chat-1", Command: "rm -rf /etc/example",
-	}
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+},
+Scope: hitl.ActionScope{
+SessionID: "chat-1",
+},
+Presentation: hitl.ActionPresentation{
+Command: "rm -rf /etc/example",
+},
+}
 	decision := &gate.Decision{
 		Primary: api.GateAuthorityMisuse,
 		Also:    []api.ApprovalGate{api.GateOutsideRootsWrite},
@@ -92,7 +108,7 @@ func TestDetectionAcknowledgementDoesNotFaceCoFiringGate(t *testing.T) {
 		action, hitl.ApprovalStagePreSpawn,
 		hitl.ApprovalSubject{
 			Kind: hitl.ApprovalSubjectAction, Title: "Approve command",
-			Targets: []hitl.ApprovalTarget{{Kind: "action", Label: action.Command}},
+			Targets: []hitl.ApprovalTarget{{Kind: "action", Label: action.Presentation.Command}},
 		},
 		hitl.ApprovalPresentation{
 			Action: "Run command", Impact: "Delete a path.", Gate: api.GateAuthorityMisuse,
@@ -113,9 +129,17 @@ func TestDetectionAcknowledgementDoesNotFaceCoFiringGate(t *testing.T) {
 func TestQuietOptionCopyIsDurationPlusSubject(t *testing.T) {
 	t.Parallel()
 	action := hitl.ProposedAction{
-		Tool: "command", SessionID: "chat-1", RootSessionID: "chat-1",
-		Command: "aws s3 rb s3://x --force",
-	}
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+},
+Scope: hitl.ActionScope{
+SessionID: "chat-1",
+RootSessionID: "chat-1",
+},
+Presentation: hitl.ActionPresentation{
+Command: "aws s3 rb s3://x --force",
+},
+}
 	decision := &gate.Decision{
 		Primary:   api.GateAuthorityMisuse,
 		ReasonKey: "authority_misuse:aws-cli/s3-remove-bucket",
@@ -136,9 +160,17 @@ func TestQuietOptionCopyIsDurationPlusSubject(t *testing.T) {
 func TestQuietInstallsMatchingGrant(t *testing.T) {
 	t.Parallel()
 	action := hitl.ProposedAction{
-		Tool: "command", SessionID: "chat-1", RootSessionID: "chat-1",
-		Command: "curl https://example.com",
-	}
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+},
+Scope: hitl.ActionScope{
+SessionID: "chat-1",
+RootSessionID: "chat-1",
+},
+Presentation: hitl.ActionPresentation{
+Command: "curl https://example.com",
+},
+}
 	decision := &gate.Decision{
 		Primary:   api.GateUnobservedChannel,
 		ReasonKey: "unobserved_channel:direct_ip",
@@ -160,7 +192,7 @@ func TestQuietInstallsMatchingGrant(t *testing.T) {
 		action, hitl.ApprovalStagePreSpawn,
 		hitl.ApprovalSubject{
 			Kind: hitl.ApprovalSubjectAction, Title: "Approve command",
-			Targets: []hitl.ApprovalTarget{{Kind: "action", Label: action.Command}},
+			Targets: []hitl.ApprovalTarget{{Kind: "action", Label: action.Presentation.Command}},
 		},
 		hitl.ApprovalPresentation{
 			Action: "Run command", Impact: "Reach the network.",
@@ -207,7 +239,7 @@ func TestQuietInstallsMatchingGrant(t *testing.T) {
 		action, hitl.ApprovalStagePreSpawn,
 		hitl.ApprovalSubject{
 			Kind: hitl.ApprovalSubjectAction, Title: "Approve command",
-			Targets: []hitl.ApprovalTarget{{Kind: "action", Label: action.Command}},
+			Targets: []hitl.ApprovalTarget{{Kind: "action", Label: action.Presentation.Command}},
 		},
 		hitl.ApprovalPresentation{
 			Action: "Run command", Impact: "Reach the network.",
@@ -231,9 +263,17 @@ func TestQuietInstallsMatchingGrant(t *testing.T) {
 func TestQuietNeverCarriesDurableAuthority(t *testing.T) {
 	t.Parallel()
 	action := hitl.ProposedAction{
-		Tool: "read", SessionID: "chat-1", RootSessionID: "chat-1",
-		ProjectID: "proj-1", ProjectDir: "/proj", Files: []string{"/etc/hosts"},
-	}
+Invocation: hitl.ActionInvocation{
+Tool: "read",
+Files: []string{"/etc/hosts"},
+},
+Scope: hitl.ActionScope{
+SessionID: "chat-1",
+RootSessionID: "chat-1",
+ProjectID: "proj-1",
+ProjectDir: "/proj",
+},
+}
 	decision := &gate.Decision{
 		Primary:   api.GateSensitiveLocation,
 		ReasonKey: "sensitive_location:hosts",
@@ -293,9 +333,17 @@ func TestQuietNeverCarriesDurableAuthority(t *testing.T) {
 func TestQuietCarryingDurableGrantIsRejected(t *testing.T) {
 	t.Parallel()
 	action := hitl.ProposedAction{
-		Tool: "command", SessionID: "chat-1", RootSessionID: "chat-1",
-		Command: "curl https://example.com",
-	}
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+},
+Scope: hitl.ActionScope{
+SessionID: "chat-1",
+RootSessionID: "chat-1",
+},
+Presentation: hitl.ActionPresentation{
+Command: "curl https://example.com",
+},
+}
 	durable := hitl.ApprovalGrant{
 		ID: "grant_device", Scope: hitl.ApprovalGrantScopeDevice, Title: hitl.TitleAllowOnThisDevice,
 	}
@@ -316,7 +364,7 @@ func TestQuietCarryingDurableGrantIsRejected(t *testing.T) {
 		action, hitl.ApprovalStagePreSpawn,
 		hitl.ApprovalSubject{
 			Kind: hitl.ApprovalSubjectAction, Title: "Approve command",
-			Targets: []hitl.ApprovalTarget{{Kind: "action", Label: action.Command}},
+			Targets: []hitl.ApprovalTarget{{Kind: "action", Label: action.Presentation.Command}},
 		},
 		hitl.ApprovalPresentation{
 			Action: "Run command", Impact: "Reach the network.",
@@ -357,9 +405,17 @@ func quietCarriesAskQuiet(opt hitl.ApprovalOption) bool {
 func TestDiscretionaryGatesCarryAQuietRung(t *testing.T) {
 	t.Parallel()
 	action := hitl.ProposedAction{
-		Tool: "command", SessionID: "chat-1", RootSessionID: "chat-1",
-		Command: "curl https://example.com",
-	}
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+},
+Scope: hitl.ActionScope{
+SessionID: "chat-1",
+RootSessionID: "chat-1",
+},
+Presentation: hitl.ActionPresentation{
+Command: "curl https://example.com",
+},
+}
 	for _, g := range gate.All() {
 		decision := &gate.Decision{
 			Primary:   g,
@@ -481,9 +537,19 @@ func TestOrdinaryCardHasNoOptionNote(t *testing.T) {
 		Cited:     []gate.Fact{{Gate: api.GateUnobservedChannel, Key: "k", Value: "v", Source: "t"}},
 	}
 	action := hitl.ProposedAction{
-		Tool: "command", SessionID: "chat-1", RootSessionID: "chat-1",
-		Command: "curl https://example.com", ProjectID: "proj-1", ProjectDir: "/tmp/proj",
-	}
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+},
+Scope: hitl.ActionScope{
+SessionID: "chat-1",
+RootSessionID: "chat-1",
+ProjectID: "proj-1",
+ProjectDir: "/tmp/proj",
+},
+Presentation: hitl.ActionPresentation{
+Command: "curl https://example.com",
+},
+}
 	plan, err := hitl.CompileCheckpointApprovalPlan(hitl.CheckpointRequest{
 		SessionID: "chat-1", Kind: api.CheckpointKindToolApproval,
 		ProposedAction: &action, Decision: decision,

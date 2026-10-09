@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 	"testing"
 
@@ -168,7 +169,7 @@ func TestSubmitVerdictRejectsNonTerminalPastIterationCap(t *testing.T) {
 	}
 	tctxFor := func(callID string) tools.ToolContext {
 		tctx := toolContext("coordinator", "sess-1", projectDir)
-		tctx.ToolCallID = callID
+		tctx.Identity.ToolCallID = callID
 		return tctx
 	}
 	// plan.review's iteration_cap is 3 — three non-terminal rounds reach it.
@@ -210,7 +211,7 @@ func TestSubmitVerdictExactToolReplayDoesNotConsumeAnotherAttempt(t *testing.T) 
 		"verdict": map[string]any{"verdict": "NEEDS_REVISION", "bullets": "verify section is missing"},
 	}
 	tctx := toolContext("coordinator", "sess-1", projectDir)
-	tctx.ToolCallID = "submit-verdict-call-1"
+	tctx.Identity.ToolCallID = "submit-verdict-call-1"
 	first, err := reg.Run(ctx, "submit_verdict", args, tctx)
 	testutil.FailErr(t, "submit first verdict", err)
 	replayed, err := reg.Run(ctx, "submit_verdict", args, tctx)
@@ -274,7 +275,7 @@ func TestSubmitVerdictInvalidEchoesSchema(t *testing.T) {
 	run := walkPlanRunToReview(ctx, t, mgr, blueprintMgr, "sess-1")
 
 	tctx := toolContext("coordinator", "sess-1", projectDir)
-	tctx.Out = &tools.ToolInvocationOut{}
+	tctx.Effects.Out = &tools.ToolInvocationOut{}
 	out, err := reg.Run(ctx, "submit_verdict", map[string]any{
 		"verdict": map[string]any{"verdict": "SHIP_IT"},
 	}, tctx)
@@ -283,8 +284,8 @@ func TestSubmitVerdictInvalidEchoesSchema(t *testing.T) {
 	if !strings.Contains(expected, "APPROVED|NEEDS_REVISION") || !strings.Contains(expected, "bullets") {
 		t.Fatalf("expected_call must echo the expected schema, got %q", expected)
 	}
-	if tctx.Out.Facts.Resolution() != api.ToolResultOutcomeRejected || tctx.Out.Facts.PrimaryCode() != ReviewLoopVerdictInvalidCode {
-		t.Fatalf("facts = %+v", tctx.Out.Facts)
+	if tctx.Effects.Out.Facts.Resolution() != api.ToolResultOutcomeRejected || tctx.Effects.Out.Facts.PrimaryCode() != ReviewLoopVerdictInvalidCode {
+		t.Fatalf("facts = %+v", tctx.Effects.Out.Facts)
 	}
 
 	out, err = reg.Run(ctx, "submit_verdict", map[string]any{
@@ -319,7 +320,7 @@ func TestSubmitVerdictGroundingRejectReturnsRecoverableCode(t *testing.T) {
 	ctx := context.Background()
 	run := walkPlanRunToReview(ctx, t, mgr, blueprintMgr, "sess-1")
 	tctx := toolContext("coordinator", "sess-1", projectDir)
-	tctx.Out = &tools.ToolInvocationOut{}
+	tctx.Effects.Out = &tools.ToolInvocationOut{}
 
 	out, err := reg.Run(ctx, "submit_verdict", map[string]any{
 		"verdict": map[string]any{"verdict": "APPROVED", "bullets": "scope matches the goal"},
@@ -329,8 +330,8 @@ func TestSubmitVerdictGroundingRejectReturnsRecoverableCode(t *testing.T) {
 	if !strings.Contains(expected, `"handle":"<observed-handle>"`) {
 		t.Fatalf("expected_call = %q, want handle citation contract", expected)
 	}
-	if tctx.Out.Facts.Resolution() != api.ToolResultOutcomeRejected || tctx.Out.Facts.PrimaryCode() != guidance.VerdictCitationsRequiredCode {
-		t.Fatalf("facts = %+v", tctx.Out.Facts)
+	if tctx.Effects.Out.Facts.Resolution() != api.ToolResultOutcomeRejected || tctx.Effects.Out.Facts.PrimaryCode() != guidance.VerdictCitationsRequiredCode {
+		t.Fatalf("facts = %+v", tctx.Effects.Out.Facts)
 	}
 	after, err := mgr.Get(ctx, run.ID)
 	testutil.FailErr(t, "Get run", err)
@@ -443,9 +444,9 @@ func TestRecoverVerdictOperationUndecodableInputResolves(t *testing.T) {
 	}
 }
 
-func requireVerdictRejection(t *testing.T, output string, err error, code string) *tools.ToolReject {
+func requireVerdictRejection(t *testing.T, output string, err error, code string) *toolrejection.ToolReject {
 	t.Helper()
-	reject := tools.AsToolReject(err)
+	reject := toolrejection.AsToolReject(err)
 	if output != "" || reject == nil || reject.Code != code {
 		t.Fatalf("verdict refusal: output=%q error=%v want %s", output, err, code)
 	}

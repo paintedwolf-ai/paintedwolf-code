@@ -6,6 +6,8 @@ import (
 	"context"
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/testutil/oartest"
+	"github.com/lycaon/lycaon/internal/toolexecution"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -94,13 +96,13 @@ func TestPromptAskWriteApproveRunsTool(t *testing.T) {
 	}); err != nil {
 		testutil.FailErr(t, "register approval write fixture", err)
 	}
-	policy := tools.NewApprovalPolicyEngine(tools.NewProfilePolicyEngine(boundary), gate)
-	exec := tools.NewDefaultToolExecutor(policy, reg, "implement")
+	policy := toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), gate)
+	exec := toolexecution.NewExecutor(policy, reg, "implement")
 	hub := events.NewMemoryHub()
 	pub := &events.Publisher{Hub: hub}
-	hitlMgr := hitl.NewManager(hitl.NewSQLStore(sqlDB), pub, authzcontext.SQLRecorder(sqlDB))
-	hitlMgr.SetApprovalAuthorityInstaller(promptApprovalInstaller{})
-	exec.SetCheckpointManager(hitlMgr, gate)
+	hitlMgr := hitl.NewCheckpoints(hitl.NewSQLStore(sqlDB), pub, authzcontext.SQLRecorder(sqlDB))
+	hitlMgr.Authority.SetApprovalAuthorityInstaller(promptApprovalInstaller{})
+	exec.Approvals.SetCheckpointManager(hitlMgr, gate)
 	toolReg := tools.NewExecutorRegistry(exec, reg)
 
 	postureRegistry, err := session.LoadPostureRegistry()
@@ -108,7 +110,7 @@ func TestPromptAskWriteApproveRunsTool(t *testing.T) {
 	mgr := session.NewManager(store, mock, toolReg, settings.DefaultSessionLimits())
 	oartest.InstallCloseoutPolicy(t, mgr)
 	mgr.SetProjectRegistry(project.NewSQLRegistry(sqlDB))
-	mgr.SetToolInvoker(exec)
+	mgr.SetToolInvoker(exec, exec.Metadata)
 	wirePromptApprovalRejectFmt(t, mgr, root)
 	mgr.SetPostureRegistry(postureRegistry)
 	prog := progress.NewMemoryStore()
@@ -135,7 +137,7 @@ func TestPromptAskWriteApproveRunsTool(t *testing.T) {
 		}
 		return false
 	})
-	if _, err := hitlMgr.ResolveApprovalOption(promptApprovalDecider(ctx, t, sqlDB), sess.ID, decisionID, "approve_current_action"); err != nil {
+	if _, err := hitlMgr.Authority.ResolveApprovalOption(promptApprovalDecider(ctx, t, sqlDB), sess.ID, decisionID, "approve_current_action"); err != nil {
 		testutil.FailErr(t, "hitlMgr.ResolveApprovalOption failed", err)
 	}
 	if err := <-done; err != nil {
@@ -212,16 +214,16 @@ func TestPromptAskWriteRejectSurfacesApprovalDenied(t *testing.T) {
 	}); err != nil {
 		testutil.FailErr(t, "register rejection write fixture", err)
 	}
-	policy := tools.NewApprovalPolicyEngine(tools.NewProfilePolicyEngine(boundary), gate)
-	exec := tools.NewDefaultToolExecutor(policy, reg, "implement")
+	policy := toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), gate)
+	exec := toolexecution.NewExecutor(policy, reg, "implement")
 	outcomeCfg, err := approvaloutcome.Load()
 	testutil.FailErr(t, "load approval-outcome catalog", err)
 	outcomes := outcomeRenderer{cat: approvaloutcome.NewCatalog(outcomeCfg)}
-	exec.SetApprovalOutcomeRenderer(outcomes)
+	exec.Approvals.SetApprovalOutcomeRenderer(outcomes)
 	hub := events.NewMemoryHub()
 	pub := &events.Publisher{Hub: hub}
-	hitlMgr := hitl.NewManager(hitl.NewSQLStore(sqlDB), pub, authzcontext.SQLRecorder(sqlDB))
-	exec.SetCheckpointManager(hitlMgr, gate)
+	hitlMgr := hitl.NewCheckpoints(hitl.NewSQLStore(sqlDB), pub, authzcontext.SQLRecorder(sqlDB))
+	exec.Approvals.SetCheckpointManager(hitlMgr, gate)
 	toolReg := tools.NewExecutorRegistry(exec, reg)
 
 	postureRegistry, err := session.LoadPostureRegistry()
@@ -229,7 +231,7 @@ func TestPromptAskWriteRejectSurfacesApprovalDenied(t *testing.T) {
 	mgr := session.NewManager(store, mock, toolReg, settings.DefaultSessionLimits())
 	oartest.InstallCloseoutPolicy(t, mgr)
 	mgr.SetProjectRegistry(project.NewSQLRegistry(sqlDB))
-	mgr.SetToolInvoker(exec)
+	mgr.SetToolInvoker(exec, exec.Metadata)
 	wirePromptApprovalRejectFmt(t, mgr, root)
 	mgr.SetPostureRegistry(postureRegistry)
 	prog := progress.NewMemoryStore()

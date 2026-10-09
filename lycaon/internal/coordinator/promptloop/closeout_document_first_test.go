@@ -41,8 +41,8 @@ func TestCloseoutDocumentDefectRefusedBeforeCitations(t *testing.T) {
 		},
 		EvaluateCloseoutBlock: func(_ context.Context, _ *api.Session, gc *oar.GuardContext) (*oar.Decision, error) {
 			code := guidance.ReportClaimUnreportedCode
-			if gc.RejectObservation != guidance.ReportDocumentObservation(code) {
-				t.Fatalf("observation = %q, want the document defect refused before the citation check", gc.RejectObservation)
+			if gc.Rejection.RejectObservation != guidance.ReportDocumentObservation(code) {
+				t.Fatalf("observation = %q, want the document defect refused before the citation check", gc.Rejection.RejectObservation)
 			}
 			return &oar.Decision{Code: code, Data: gc.RejectData[code]}, nil
 		},

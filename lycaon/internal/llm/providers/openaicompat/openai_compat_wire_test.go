@@ -1,6 +1,8 @@
 package openaicompat
 
 import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+
 	"encoding/json"
 	"strings"
 	"testing"
@@ -27,7 +29,7 @@ func TestEncodeThinkingTypeOrchestration(t *testing.T) {
 	req := modelcall.CompletionRequest{
 		Model: "accounts/fireworks/models/kimi-k2p6",
 		Tools: []tools.ToolMeta{{Name: "update_progress"}},
-		Debug: modelcall.RequestDebug{Surface: tools.SurfaceImplementDispatch, SessionID: "s1"},
+		Debug: modelcall.RequestDebug{Surface: toolcontract.SurfaceImplementDispatch, SessionID: "s1"},
 	}
 	body, err := encodeChatCompletionRequest(req, provider, true, controlOpts{})
 	if err != nil {
@@ -76,7 +78,7 @@ func TestEncodeThinkingTypeAlwaysOnSkipsDisabled(t *testing.T) {
 		Think: modelcall.ThinkOff,
 		Model: "accounts/fireworks/models/kimi-k2p7-code",
 		Tools: []tools.ToolMeta{{Name: "task"}},
-		Debug: modelcall.RequestDebug{Surface: tools.SurfaceImplementDispatch},
+		Debug: modelcall.RequestDebug{Surface: toolcontract.SurfaceImplementDispatch},
 	}
 	body, err := encodeChatCompletionRequest(req, provider, true, controlOpts{})
 	if err != nil {
@@ -133,7 +135,7 @@ func TestEncodeThinkingTypeAllowsTemperatureWhenThinkingDisabled(t *testing.T) {
 		Think: modelcall.ThinkOff,
 		Model: "accounts/fireworks/models/kimi-k2p6",
 		Tools: []tools.ToolMeta{{Name: "task"}},
-		Debug: modelcall.RequestDebug{Surface: tools.SurfaceImplementDispatch},
+		Debug: modelcall.RequestDebug{Surface: toolcontract.SurfaceImplementDispatch},
 	}
 	body, err := encodeChatCompletionRequest(req, provider, true, controlOpts{})
 	if err != nil {

@@ -267,7 +267,7 @@ func TestLoopbackHandlerGuidanceRequiresTypedRejection(t *testing.T) {
 			mgr := newPostToolGuidanceManager(t)
 			mgr.oarPipeline.EnableAnchor(oar.AnchorToolRejected)
 			gc := oar.NewGuardContext()
-			gc.Tool = tool
+			gc.Invocation.Tool = tool
 			gc.PutRejectData(isolation.CodeTryLoopbackConnect, map[string]any{"port": "8080"})
 			result, err := mgr.oarPipeline.EvaluateBlock(t.Context(), oar.AnchorToolRejected, gc)
 			testutil.FailErr(t, "evaluate without loopback rejection", err)

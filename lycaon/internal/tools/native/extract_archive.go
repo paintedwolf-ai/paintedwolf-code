@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
@@ -51,7 +52,7 @@ func (t *ExtractArchiveTool) Run(ctx context.Context, args map[string]any, tctx 
 	case "tar.gz":
 		err = extractTarGzFile(sink, archive.EffectLocation(), budget, guard)
 	default:
-		err = &tools.ToolReject{
+		err = &toolrejection.ToolReject{
 			Code: "EXTRACT_FORMAT_UNSUPPORTED",
 			Data: map[string]any{"path": relArchive},
 		}
@@ -84,8 +85,8 @@ func (t *ExtractArchiveTool) Run(ctx context.Context, args map[string]any, tctx 
 
 // Failed extraction retains the paths and byte counts already committed.
 func extractionFailure(cause error, archive, dest string, budget *extractBudget) error {
-	reject := tools.ToolReject{Code: tools.ToolOwnerFailedCode}
-	var original *tools.ToolReject
+	reject := toolrejection.ToolReject{Code: toolrejection.ToolOwnerFailedCode}
+	var original *toolrejection.ToolReject
 	if errors.As(cause, &original) {
 		reject = *original
 	}
@@ -155,7 +156,7 @@ func (t *ExtractArchiveTool) loadArchive(ctx context.Context, tctx tools.ToolCon
 	f, err := fseffect.OpenRead(resolved.EffectLocation())
 	if err != nil {
 		if os.IsNotExist(err) {
-			return projectpaths.Resolved{}, "", &tools.ToolReject{
+			return projectpaths.Resolved{}, "", &toolrejection.ToolReject{
 				Code: "EXTRACT_NOT_FOUND",
 				Data: map[string]any{"path": relSlash},
 			}
@@ -168,7 +169,7 @@ func (t *ExtractArchiveTool) loadArchive(ctx context.Context, tctx tools.ToolCon
 		return projectpaths.Resolved{}, "", err
 	}
 	if info.IsDir() {
-		return projectpaths.Resolved{}, "", &tools.ToolReject{
+		return projectpaths.Resolved{}, "", &toolrejection.ToolReject{
 			Code: "EXTRACT_IS_DIRECTORY",
 			Data: map[string]any{"path": relSlash},
 		}
@@ -197,7 +198,7 @@ func (t *ExtractArchiveTool) prepareDest(ctx context.Context, tctx tools.ToolCon
 		return projectpaths.Resolved{}, "", fmt.Errorf("extract dest %s: %w", relPath, err)
 	}
 	if !info.IsDir() {
-		return projectpaths.Resolved{}, "", &tools.ToolReject{
+		return projectpaths.Resolved{}, "", &toolrejection.ToolReject{
 			Code: "EXTRACT_DEST_NOT_DIR",
 			Data: map[string]any{"dest": relSlash},
 		}
@@ -208,7 +209,7 @@ func (t *ExtractArchiveTool) prepareDest(ctx context.Context, tctx tools.ToolCon
 // protectedEntryGuard rejects governed archive destinations.
 func protectedEntryGuard(relEntry, absTarget string) error {
 	if class, denied := tools.IsGitInternalsWritePath(relEntry); denied {
-		return &tools.ToolReject{
+		return &toolrejection.ToolReject{
 			Code: "GIT_INTERNALS_WRITE_DENIED",
 			Data: map[string]any{
 				"path":  filepath.ToSlash(relEntry),
@@ -226,6 +227,6 @@ func assertExtractWritePath(
 	relPath, profileID string,
 ) (projectpaths.Resolved, error) {
 	return assertWritePath(ctx, boundary, tctx, relPath, profileID, "extract_archive", func(path string) error {
-		return &tools.ToolReject{Code: "EXTRACT_PATH_DENIED", Data: map[string]any{"path": path}}
+		return &toolrejection.ToolReject{Code: "EXTRACT_PATH_DENIED", Data: map[string]any{"path": path}}
 	})
 }

@@ -1,18 +1,18 @@
 package promptloop
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
-	"context"
-	"errors"
 
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/jsonvalue"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/pkg/api"
-	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/tools/surveyreceipt"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func sanitizeToolCallsForExecution(calls []api.ToolCall) []api.ToolCall {

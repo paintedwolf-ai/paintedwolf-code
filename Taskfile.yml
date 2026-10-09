@@ -1058,7 +1058,7 @@ tasks:
       - cmd/codegen-tool-command-equivalence/**/*
       - config/packs/painted-wolf/platform/tools/schemas/**/*
     generates:
-      - internal/tools/command_equivalence_gen.go
+      - internal/toolcommand/command_equivalence_gen.go
       - internal/confine/read_habit_catalog_gen.go
     cmds:
       - go run ./cmd/codegen-tool-command-equivalence --root .
@@ -1070,7 +1070,7 @@ tasks:
       - config/packs/painted-wolf/platform/tools/tool-command-equivalence.yaml
       - cmd/codegen-tool-command-equivalence/**/*
       - config/packs/painted-wolf/platform/tools/schemas/**/*
-      - internal/tools/command_equivalence_gen.go
+      - internal/toolcommand/command_equivalence_gen.go
       - internal/confine/read_habit_catalog_gen.go
     cmds:
       - go run ./cmd/codegen-tool-command-equivalence --root . --check

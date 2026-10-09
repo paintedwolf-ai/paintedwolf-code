@@ -13,7 +13,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Handler) HandleGetProjectSourceHistory(w http.ResponseWriter, r *http.Request) {
+func (s *Mutations) HandleGetProjectSourceHistory(w http.ResponseWriter, r *http.Request) {
 	p, ok := requestscope.ProjectByURLID(s.ProjectRegistry, s.responses, w, r)
 	if !ok {
 		return
@@ -24,21 +24,21 @@ func (s *Handler) HandleGetProjectSourceHistory(w http.ResponseWriter, r *http.R
 	}
 	state, err := s.SourceMutations.History(r.Context(), p.ID)
 	if err != nil {
-		s.writeSourceReadError(w, r, err)
+		s.Workspace.writeSourceReadError(w, r, err)
 		return
 	}
 	httpio.WriteJSON(w, http.StatusOK, toSourceHistoryStateDTO(state))
 }
 
-func (s *Handler) HandleUndoProjectSourceHistory(w http.ResponseWriter, r *http.Request) {
+func (s *Mutations) HandleUndoProjectSourceHistory(w http.ResponseWriter, r *http.Request) {
 	s.handleProjectSourceHistoryMutation(w, r, "undo")
 }
 
-func (s *Handler) HandleRedoProjectSourceHistory(w http.ResponseWriter, r *http.Request) {
+func (s *Mutations) HandleRedoProjectSourceHistory(w http.ResponseWriter, r *http.Request) {
 	s.handleProjectSourceHistoryMutation(w, r, "redo")
 }
 
-func (s *Handler) handleProjectSourceHistoryMutation(w http.ResponseWriter, r *http.Request, direction string) {
+func (s *Mutations) handleProjectSourceHistoryMutation(w http.ResponseWriter, r *http.Request, direction string) {
 	p, release, ok := s.beginProjectSourceMutation(w, r)
 	if !ok {
 		return
@@ -58,7 +58,7 @@ func (s *Handler) handleProjectSourceHistoryMutation(w http.ResponseWriter, r *h
 		s.responses.FailReason(w, wire.ApiErrorCodeInvalidRequest, "expected_entry_id must be a UUID")
 		return
 	}
-	sessionID, turn := s.UserSourceChatAffiliation(r)
+	sessionID, turn := s.Workspace.UserSourceChatAffiliation(r)
 	var retargetID string
 	historyReq := project.SourceHistoryMutationRequest{
 		ExpectedEntryID: strings.TrimSpace(req.ExpectedEntryID),
@@ -81,7 +81,7 @@ func (s *Handler) handleProjectSourceHistoryMutation(w http.ResponseWriter, r *h
 		if retargetErr != nil {
 			s.responses.Logger.ErrorContext(r.Context(), "reconcile editor documents after source history failure", "error", retargetErr)
 		}
-		s.WriteProjectSourceError(w, r, err)
+		s.Workspace.WriteProjectSourceError(w, r, err)
 		return
 	}
 	if retargetErr != nil {
@@ -94,7 +94,7 @@ func (s *Handler) handleProjectSourceHistoryMutation(w http.ResponseWriter, r *h
 	})
 }
 
-func (s *Handler) reconcileSourceHistoryRetarget(ctx context.Context, retargetID string, committed bool) error {
+func (s *Mutations) reconcileSourceHistoryRetarget(ctx context.Context, retargetID string, committed bool) error {
 	var err error
 	if retargetID != "" {
 		err = s.EditorDocuments.ReconcileRetarget(ctx, retargetID)

@@ -93,7 +93,7 @@ type Deps struct {
 	PublishDetections func(*detectionpack.Matcher)
 	DataDir           string
 	ModuleRoot        string
-	MCP               *mcp.RegistryImpl
+	MCP               *mcp.Runtime
 	ExtensionViews    *catalogview.Cache
 	// ContributionReceipts and ContributionAuthority back contributed command dispatch.
 	ContributionReceipts  commandinvoke.Receipts
@@ -240,7 +240,7 @@ func fillHost(t *testing.T, d *Deps) {
 		d.HostIdentity = identity
 	}
 	if d.Checkpoints == nil {
-		d.Checkpoints = hitl.NewManager(hitl.NewSQLStore(d.Database), d.EventPublisher, authzcontext.SQLRecorder(d.Database))
+		d.Checkpoints = hitl.NewCheckpoints(hitl.NewSQLStore(d.Database), d.EventPublisher, authzcontext.SQLRecorder(d.Database))
 	}
 	if d.ProgressStore == nil {
 		d.ProgressStore = progress.NewSQLStore(d.Database)
@@ -337,7 +337,7 @@ func fillSessions(t *testing.T, d *Deps) {
 	d.Sessions = session.NewManager(d.Store, llm.NewMockProvider(nil), registry, settings.DefaultSessionLimits())
 	d.Sessions.SetDataDir(t.TempDir())
 	d.Sessions.SetProjectRegistry(d.Projects)
-	d.Sessions.SetToolInvoker(testtool.RegistryInvoker{Registry: registry})
+	d.Sessions.SetToolInvoker(testtool.RegistryInvoker{Registry: registry}, testtool.RegistryInvoker{Registry: registry})
 }
 
 func fillSettings(t *testing.T, d *Deps) {
@@ -489,7 +489,7 @@ func fillScans(t *testing.T, d *Deps) {
 func fillExtensions(t *testing.T, d *Deps) {
 	t.Helper()
 	if d.MCP == nil {
-		registry, err := mcp.NewRegistryImpl(mcp.RegistryOptions{
+		registry, err := mcp.NewRuntime(mcp.RuntimeOptions{
 			StatePath:          t.TempDir(),
 			GlobalOverridePath: filepath.Join(t.TempDir(), "mcp.yaml"),
 			OAuthStore:         mcp.NewOAuthTokenStoreAt(filepath.Join(t.TempDir(), "mcp-oauth.vault")),

@@ -13,7 +13,7 @@ import (
 
 var invocationLimitBounds = httpio.MustPageLimit(50, 1, 500)
 
-func (s *Handler) HandleListSessionInvocations(w http.ResponseWriter, r *http.Request) {
+func (s *Transcript) HandleListSessionInvocations(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "id")
 	if _, err := s.Store.Get(r.Context(), sessionID); err != nil {
 		if errors.Is(err, store.ErrSessionNotFound) {

@@ -6,51 +6,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"sync"
 
 	"github.com/lycaon/lycaon/internal/authzledger"
 	"github.com/lycaon/lycaon/internal/people"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// keyedMutex retains each mutex until its holders and waiters have released it.
-type keyedMutex struct {
-	mu      sync.Mutex
-	entries map[string]*keyedMutexEntry
-}
-
-type keyedMutexEntry struct {
-	refs int
-	mu   sync.Mutex
-}
-
-// Lock blocks until the key is held and returns the matching unlock.
-func (k *keyedMutex) Lock(key string) (unlock func()) {
-	k.mu.Lock()
-	if k.entries == nil {
-		k.entries = map[string]*keyedMutexEntry{}
-	}
-	e := k.entries[key]
-	if e == nil {
-		e = &keyedMutexEntry{}
-		k.entries[key] = e
-	}
-	e.refs++
-	k.mu.Unlock()
-	e.mu.Lock()
-	return func() {
-		e.mu.Unlock()
-		k.mu.Lock()
-		e.refs--
-		if e.refs == 0 {
-			delete(k.entries, key)
-		}
-		k.mu.Unlock()
-	}
-}
-
 // resolutionSeal records the outcome in the checkpoint's resolving transaction.
-func (m *Manager) resolutionSeal(ctx context.Context, status DecisionStatus) func(*sql.Tx, StoredCheckpoint) error {
+func (m *ApprovalAuthority) resolutionSeal(ctx context.Context, status DecisionStatus) func(*sql.Tx, StoredCheckpoint) error {
 	return func(tx *sql.Tx, committed StoredCheckpoint) error {
 		switch committed.Kind {
 		case api.CheckpointKindToolApproval:
@@ -148,9 +111,9 @@ func seedPayloadDetection(row *StoredCheckpoint, req CheckpointRequest) {
 		RuleID:               req.Detection.RuleID,
 		RuleTitle:            req.Detection.RuleTitle,
 		Level:                req.Detection.Level,
-		ActionID:             strings.TrimSpace(req.ProposedAction.ActionID),
-		Direct:               req.ProposedAction.DirectIPRequested,
-		DeclaredDestinations: append([]string(nil), req.ProposedAction.DeclaredDestinations...),
+		ActionID:             strings.TrimSpace(req.ProposedAction.Invocation.ActionID),
+		Direct:               req.ProposedAction.Egress.DirectIPRequested,
+		DeclaredDestinations: append([]string(nil), req.ProposedAction.Egress.DeclaredDestinations...),
 	}
 	if det.ActionID == "" {
 		det.ActionID = strings.TrimSpace(req.ToolCallID)
@@ -160,7 +123,7 @@ func seedPayloadDetection(row *StoredCheckpoint, req CheckpointRequest) {
 			Host: ep.Host, Port: ep.Port, Transport: ep.Transport, Attempts: ep.Attempts,
 		})
 	}
-	for _, grant := range req.ProposedAction.SocketGrants {
+	for _, grant := range req.ProposedAction.Sockets.SocketGrants {
 		det.Sockets = append(det.Sockets, storedDetectionSocket{
 			ApprovedPath: grant.ApprovedPath, ResolvedPath: grant.ResolvedPath,
 		})
@@ -196,7 +159,7 @@ func detectionFromPayload(row StoredCheckpoint) (storedDetection, bool) {
 
 // sealDetectionResolvedTx appends detection_resolved from the citation stored
 // with the checkpoint, in the same transaction as the decision.
-func (m *Manager) sealDetectionResolvedTx(ctx context.Context, tx *sql.Tx, committed StoredCheckpoint, status DecisionStatus) error {
+func (m *ApprovalAuthority) sealDetectionResolvedTx(ctx context.Context, tx *sql.Tx, committed StoredCheckpoint, status DecisionStatus) error {
 	det, ok := detectionFromPayload(committed)
 	if !ok {
 		return nil

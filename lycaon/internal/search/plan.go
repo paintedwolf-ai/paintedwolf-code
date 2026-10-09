@@ -51,9 +51,10 @@ type CodeRoot struct {
 
 // CodePlanLeg is the live code executor arm.
 type CodePlanLeg struct {
-	Query     Node
-	PathRoots []CodeRoot
-	Cap       int
+	IncludeDependencies bool
+	Query               Node
+	PathRoots           []CodeRoot
+	Cap                 int
 	// Lines emits content matches; Files emits path matches.
 	Lines bool
 	Files bool
@@ -74,6 +75,7 @@ type CodePlanLeg struct {
 // SymbolPlanLeg is the declaration-name arm: declarations whose names match
 // Name, found by content discovery and confirmed by outline analysis.
 type SymbolPlanLeg struct {
+	IncludeDependencies bool
 	// Query carries the filters and negated terms each declaration must satisfy.
 	Query Node
 	// Name is the query's one positive term.
@@ -102,6 +104,7 @@ type RoutedPlan struct {
 
 // CompileContext supplies origin bias and project scope resolution at compile time.
 type CompileContext struct {
+	IncludeDependencies  bool
 	OriginProjectID      string
 	ResolveProjectBySlug func(slug string) (projectID string, err error)
 	RootsForProject      func(projectID string) ([]CodeRoot, error)

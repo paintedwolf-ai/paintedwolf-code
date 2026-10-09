@@ -4,10 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"slices"
 
 	"github.com/lycaon/lycaon/internal/reviewcoverage"
-	"github.com/lycaon/lycaon/internal/tools"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -113,5 +113,5 @@ func (m *RunManager) ValidateCoverageCompletion(ctx context.Context, task *api.W
 	if err != nil {
 		return err
 	}
-	return &tools.ToolReject{Code: "COMPLETE_LEG_COVERAGE_INVALID", Data: map[string]any{"detail": detail, "assignment": string(raw)}}
+	return &toolrejection.ToolReject{Code: "COMPLETE_LEG_COVERAGE_INVALID", Data: map[string]any{"detail": detail, "assignment": string(raw)}}
 }

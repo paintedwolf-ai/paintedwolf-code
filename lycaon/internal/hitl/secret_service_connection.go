@@ -33,10 +33,10 @@ func secretServiceConnection(action ProposedAction, permission *SecretPermission
 		parts = append(parts, strconv.Itoa(int(port)))
 	}
 	ports := strings.Join(parts, ", ")
-	key := strings.Join([]string{action.ProjectID, action.ChatSession(), ports, string(option.Rung)}, "\x00")
+	key := strings.Join([]string{action.Scope.ProjectID, action.Scope.ChatSession(), ports, string(option.Rung)}, "\x00")
 	grant := ApprovalGrant{
-		ID: serviceConnectionID(key), Scope: ApprovalGrantScopeChat, ChatSessionID: action.ChatSession(),
-		ProjectID: action.ProjectID, ProjectDir: action.ProjectDir,
+		ID: serviceConnectionID(key), Scope: ApprovalGrantScopeChat, ChatSessionID: action.Scope.ChatSession(),
+		ProjectID: action.Scope.ProjectID, ProjectDir: action.Scope.ProjectDir,
 		Predicate: ApprovalGrantPredicate{Category: ApprovalGrantCategoryLoopbackConnect, Pattern: ports},
 		Title:     "Connect to approved local services", Coverage: "local connections on ports " + ports,
 		GrantedAt: time.Now().UTC(), ExpiresWhen: ExpiresWhenChatDeleted, ReaskWhen: "a different local port is needed",
@@ -46,7 +46,7 @@ func secretServiceConnection(action ProposedAction, permission *SecretPermission
 	if option.Rung == ApprovalRungDay {
 		ttl = DayRungTTLSeconds
 	}
-	return ApprovalAuthorityDelta{Kind: AuthorityLoopbackConnectChat, ChatSessionID: action.ChatSession(),
+	return ApprovalAuthorityDelta{Kind: AuthorityLoopbackConnectChat, ChatSessionID: action.Scope.ChatSession(),
 		Grant: &grant, ConnectPorts: append([]uint16(nil), permission.ConnectPorts...), TTLSeconds: ttl}
 }
 

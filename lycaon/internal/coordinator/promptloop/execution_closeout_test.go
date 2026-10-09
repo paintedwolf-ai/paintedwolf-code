@@ -32,7 +32,9 @@ func TestPromptLoopResponseAdmissionStopsBeforeAnotherRequest(t *testing.T) {
 	_, err = NewPromptLoopForTest(deps).Run(ctx, PromptRunInput{
 		SessionID: session.ID, Session: session, TurnID: execution.Turn.ID, AttemptID: execution.Attempt.ID,
 		History: []api.Message{{Role: api.MessageRoleUser, Content: "Read a."}}, ProfileID: "implement",
-		ToolCtx: tools.ToolContext{SessionID: session.ID},
+		ToolCtx: tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: session.ID},
+		},
 	})
 	if !errors.Is(err, store.ErrModelResponseLimit) || client.index != 1 {
 		t.Fatalf("response limit: calls=%d error=%v", client.index, err)

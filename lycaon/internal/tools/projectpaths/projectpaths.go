@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
@@ -68,9 +69,9 @@ func resolveGranted(tctx tools.ToolContext, modelPath string, op sandbox.PathOp)
 	}
 	// Canonical paths keep aliases within the granted tree.
 	abs = filepath.Clean(filepath.FromSlash(fspath.CanonicalPath(abs)))
-	rootSession := strings.TrimSpace(tctx.ParentSessionID)
+	rootSession := strings.TrimSpace(tctx.Identity.ParentSessionID)
 	if rootSession == "" {
-		rootSession = strings.TrimSpace(tctx.SessionID)
+		rootSession = strings.TrimSpace(tctx.Identity.SessionID)
 	}
 	access, ok := approvedAccess(tctx, rootSession, abs, op != sandbox.PathOpRead)
 	if !ok {
@@ -98,9 +99,9 @@ func resolveGranted(tctx tools.ToolContext, modelPath string, op sandbox.PathOp)
 }
 
 func approvedAccess(tctx tools.ToolContext, rootSession, abs string, write bool) (Access, bool) {
-	accesses := append([]hitl.GrantedPathDelta(nil), tctx.ApprovedFileAccess...)
-	if tctx.FileChangeReview != nil {
-		accesses = append(accesses, tctx.PreparedFileAccess...)
+	accesses := append([]hitl.GrantedPathDelta(nil), tctx.Files.ApprovedFileAccess...)
+	if tctx.Files.FileChangeReview != nil {
+		accesses = append(accesses, tctx.Files.PreparedFileAccess...)
 	}
 	for _, access := range accesses {
 		// The frozen canonical path prevents symlink retargeting from redirecting approval.
@@ -109,27 +110,27 @@ func approvedAccess(tctx tools.ToolContext, rootSession, abs string, write bool)
 		}
 	}
 	if fn := grantedAccess.Load(); fn != nil {
-		return (*fn)(rootSession, tctx.ProjectID, abs, write)
+		return (*fn)(rootSession, tctx.Identity.ProjectID, abs, write)
 	}
 	return Access{}, false
 }
 
 // controlPlaneReject refuses an absolute path inside the host's own state tree
 // with the approval gate's code. Relative paths are answered by root resolution.
-func controlPlaneReject(tctx tools.ToolContext, modelPath string, op sandbox.PathOp) *tools.ToolReject {
+func controlPlaneReject(tctx tools.ToolContext, modelPath string, op sandbox.PathOp) *toolrejection.ToolReject {
 	abs := strings.TrimSpace(modelPath)
 	if abs == "" || !filepath.IsAbs(abs) {
 		return nil
 	}
 	abs = filepath.Clean(filepath.FromSlash(fspath.CanonicalPath(abs)))
-	if !confine.ControlPlanePathDenied(abs, op != sandbox.PathOpRead, tctx.SessionScratchDir) {
+	if !confine.ControlPlanePathDenied(abs, op != sandbox.PathOpRead, tctx.Host.SessionScratchDir) {
 		return nil
 	}
 	mode := "read"
 	if op != sandbox.PathOpRead {
 		mode = "write"
 	}
-	return &tools.ToolReject{
+	return &toolrejection.ToolReject{
 		Code: isolation.CodeControlPlaneDenied,
 		Data: map[string]any{"path": filepath.ToSlash(abs), "mode": mode},
 	}
@@ -183,14 +184,14 @@ func resolveMutationScope(ctx context.Context, b *sandbox.Boundary, tctx tools.T
 // recordPrimaryMutation records a primary-tree write for the open rewind checkpoint.
 // Worker-branch writes are skipped; promote records those touches.
 func recordPrimaryMutation(ctx context.Context, tctx tools.ToolContext, resolved Resolved) {
-	if tctx.MutationRecorder == nil || resolved.External || strings.TrimSpace(tctx.WorkerBranchRoot) != "" {
+	if tctx.Source.MutationRecorder == nil || resolved.External || strings.TrimSpace(tctx.Source.WorkerBranchRoot) != "" {
 		return
 	}
 	rel := strings.TrimSpace(resolved.ScopeRel)
 	if rel == "" {
 		return
 	}
-	tctx.MutationRecorder.RecordPrimaryMutation(ctx, tctx.SessionID, rel)
+	tctx.Source.MutationRecorder.RecordPrimaryMutation(ctx, tctx.Identity.SessionID, rel)
 }
 
 // repositoryMetadataClass names the .git content native tools never write;
@@ -207,7 +208,7 @@ func repositoryMetadataClass(path string) (string, bool) {
 }
 
 func gitInternalsWriteReject(path, class string) error {
-	return &tools.ToolReject{
+	return &toolrejection.ToolReject{
 		Code: "GIT_INTERNALS_WRITE_DENIED",
 		Data: map[string]any{
 			"path":  filepath.ToSlash(strings.TrimSpace(path)),
@@ -217,8 +218,8 @@ func gitInternalsWriteReject(path, class string) error {
 }
 
 func workspaceRoots(tctx tools.ToolContext) []string {
-	out := make([]string, 0, len(tctx.Roots))
-	for _, r := range tctx.Roots {
+	out := make([]string, 0, len(tctx.Source.Roots))
+	for _, r := range tctx.Source.Roots {
 		if p := strings.TrimSpace(r.Path); p != "" {
 			out = append(out, p)
 		}
@@ -250,20 +251,20 @@ func resolveUnderAdmittedRoots(ctx context.Context, b *sandbox.Boundary, tctx to
 		return scratchResolved, nil
 	}
 	// WorkerJobID without WorkerBranchRoot: reject non-reads (no mutation).
-	if op != sandbox.PathOpRead && strings.TrimSpace(tctx.WorkerJobID) != "" && strings.TrimSpace(tctx.WorkerBranchRoot) == "" {
+	if op != sandbox.PathOpRead && strings.TrimSpace(tctx.Identity.WorkerJobID) != "" && strings.TrimSpace(tctx.Source.WorkerBranchRoot) == "" {
 		return Resolved{}, workerWriteWithoutBranchReject(modelPath)
 	}
 	// No root, branch, or grant may answer for the control plane.
 	if reject := controlPlaneReject(tctx, modelPath, op); reject != nil {
 		return Resolved{}, reject
 	}
-	if branch := strings.TrimSpace(tctx.WorkerBranchRoot); branch != "" {
+	if branch := strings.TrimSpace(tctx.Source.WorkerBranchRoot); branch != "" {
 		return resolveUnderBranch(ctx, b, tctx, branch, modelPath, op)
 	}
-	if len(tctx.Roots) == 0 {
+	if len(tctx.Source.Roots) == 0 {
 		return Resolved{}, noRootsReject()
 	}
-	abs, root, err := projectroot.ResolveAbs(tctx.Roots, tctx.ActiveRootID, modelPath)
+	abs, root, err := projectroot.ResolveAbs(tctx.Source.Roots, tctx.Source.ActiveRootID, modelPath)
 	if err != nil {
 		// Grants are consulted only after attached roots decline the path.
 		if granted, ok := resolveGranted(tctx, modelPath, op); ok {
@@ -274,7 +275,7 @@ func resolveUnderAdmittedRoots(ctx context.Context, b *sandbox.Boundary, tctx to
 		}
 		return Resolved{}, mapResolveErr(err, modelPath)
 	}
-	primary, err := projectroot.PrimaryRoot(tctx.Roots)
+	primary, err := projectroot.PrimaryRoot(tctx.Source.Roots)
 	if err != nil {
 		return Resolved{}, noRootsReject()
 	}
@@ -304,126 +305,10 @@ func resolveUnderAdmittedRoots(ctx context.Context, b *sandbox.Boundary, tctx to
 }
 
 func actionRootPaths(tctx tools.ToolContext) []string {
-	if branch := strings.TrimSpace(tctx.WorkerBranchRoot); branch != "" {
+	if branch := strings.TrimSpace(tctx.Source.WorkerBranchRoot); branch != "" {
 		return []string{branch}
 	}
 	return workspaceRoots(tctx)
-}
-
-func resolveUnderBranch(ctx context.Context, b *sandbox.Boundary, tctx tools.ToolContext, branch, modelPath string, op sandbox.PathOp) (Resolved, error) {
-	modelPath = strings.TrimSpace(modelPath)
-	if modelPath == "" {
-		return Resolved{}, fmt.Errorf("path required")
-	}
-	if tctx.BranchWorkspace == nil {
-		return Resolved{}, fmt.Errorf("worker branch workspace not configured")
-	}
-	var branchRel, displayPath string
-	if filepath.IsAbs(modelPath) {
-		var err error
-		branchRel, err = filepath.Rel(filepath.Clean(branch), filepath.Clean(modelPath))
-		if err != nil || branchRel == ".." || strings.HasPrefix(branchRel, ".."+string(filepath.Separator)) {
-			return Resolved{}, mapResolveErr(fmt.Errorf("%w: %q", projectroot.ErrPathEscape, modelPath), modelPath)
-		}
-		displayPath = workerBranchDisplayPath(tctx, branchRel)
-	} else {
-		var err error
-		branchRel, displayPath, err = projectroot.WorkerBranchRelative(tctx.Roots, tctx.ActiveRootID, modelPath)
-		if err != nil {
-			return Resolved{}, mapResolveErr(err, modelPath)
-		}
-	}
-	scopeRel := filepath.ToSlash(filepath.Clean(branchRel))
-	if scopeRel == "." {
-		scopeRel = ""
-	}
-	if err := prepareBranchPath(ctx, tctx, scopeRel, op); err != nil {
-		return Resolved{}, err
-	}
-	var abs string
-	var err error
-	if b != nil {
-		abs, err = b.ResolveAbs(branch, branchRel)
-	} else {
-		abs, _, err = projectroot.ResolveAbs([]projectroot.RootRef{{
-			ID: "worker-branch", Path: branch, IsPrimary: true,
-		}}, "worker-branch", branchRel)
-	}
-	if err != nil {
-		return Resolved{}, mapResolveErr(err, modelPath)
-	}
-	var root projectroot.RootRef
-	if len(tctx.Roots) > 1 {
-		if _, _, resolveErr := projectroot.ResolveAbs(tctx.Roots, tctx.ActiveRootID, displayPath); resolveErr != nil {
-			return Resolved{}, mapResolveErr(resolveErr, modelPath)
-		}
-	}
-	root = projectroot.RootRef{ID: "worker-branch", Path: branch, IsPrimary: true}
-	if b != nil {
-		switch op {
-		case sandbox.PathOpRead:
-			if err := b.AssertReadScope(ctx, branch, scopeRel, tctx.ProfileID()); err != nil {
-				return Resolved{}, err
-			}
-		case sandbox.PathOpWrite:
-			if err := b.AssertPathAllowed(ctx, branch, scopeRel, sandbox.PathOpWrite); err != nil {
-				return Resolved{}, err
-			}
-		default:
-			if err := b.AssertPathAllowed(ctx, branch, scopeRel, op); err != nil {
-				return Resolved{}, err
-			}
-		}
-	}
-	display := displayPath
-	if display == "" {
-		display = scopeRel
-		if primary, err := projectroot.PrimaryRoot(tctx.Roots); err == nil {
-			display = projectroot.Qualify(primary, root, abs)
-		}
-	}
-	return Resolved{
-		Abs:         abs,
-		DisplayPath: display,
-		ScopeRel:    scopeRel,
-		Root:        root,
-	}, nil
-}
-
-func workerBranchDisplayPath(tctx tools.ToolContext, branchRel string) string {
-	rel := filepath.ToSlash(filepath.Clean(branchRel))
-	if len(tctx.Roots) <= 1 {
-		return rel
-	}
-	branchDir, rest, _ := strings.Cut(rel, "/")
-	for _, root := range tctx.Roots {
-		dir, err := projectroot.BranchDirForID(root.ID)
-		if err == nil && dir == branchDir {
-			if rest == "" {
-				return "@" + root.Label
-			}
-			return "@" + root.Label + "/" + rest
-		}
-	}
-	return rel
-}
-
-func prepareBranchPath(ctx context.Context, tctx tools.ToolContext, scopeRel string, op sandbox.PathOp) error {
-	branch := tctx.BranchWorkspace
-	if branch == nil {
-		return fmt.Errorf("worker branch workspace not configured")
-	}
-	if err := branch.ValidateMeta(ctx); err != nil {
-		return err
-	}
-	rel := strings.TrimSpace(scopeRel)
-	if rel == "" || rel == "." {
-		return nil
-	}
-	if op == sandbox.PathOpWrite {
-		return branch.EnsureParents(ctx, rel)
-	}
-	return nil
 }
 
 // ResolveMisplacedSpill resolves a read path that embeds one exact
@@ -444,7 +329,7 @@ func ResolveMisplacedSpill(tctx tools.ToolContext, modelPath string) (Resolved, 
 
 // resolveHostDataRead exposes allowlisted host spill paths.
 func resolveHostDataRead(tctx tools.ToolContext, modelPath string) (Resolved, bool, error) {
-	host := strings.TrimSpace(tctx.HostDataDir)
+	host := strings.TrimSpace(tctx.Host.HostDataDir)
 	if host == "" {
 		return Resolved{}, false, nil
 	}
@@ -465,16 +350,20 @@ func resolveHostDataRead(tctx tools.ToolContext, modelPath string) (Resolved, bo
 }
 
 func mapResolveErr(err error, modelPath string) error {
+	var scope *sandbox.ScopeError
+	if errors.As(err, &scope) || errors.Is(err, sandbox.ErrPathEscape) {
+		return &toolrejection.ToolReject{Code: "SURVEY_PATH_ESCAPE", Data: map[string]any{"path": modelPath, "reason": err.Error()}}
+	}
 	switch {
 	case errors.Is(err, projectroot.ErrNoProjectRoots):
 		return noRootsReject()
 	case errors.Is(err, projectroot.ErrUnknownRootLabel):
-		return &tools.ToolReject{
+		return &toolrejection.ToolReject{
 			Code: "UNKNOWN_ROOT_LABEL",
 			Data: map[string]any{"path": modelPath, "reason": err.Error()},
 		}
 	case errors.Is(err, projectroot.ErrPathEscape):
-		return &tools.ToolReject{
+		return &toolrejection.ToolReject{
 			Code: "SURVEY_PATH_ESCAPE",
 			Data: map[string]any{"path": modelPath, "reason": err.Error()},
 		}
@@ -484,11 +373,11 @@ func mapResolveErr(err error, modelPath string) error {
 }
 
 func noRootsReject() error {
-	return &tools.ToolReject{Code: "PROJECT_HAS_NO_ROOTS", Data: map[string]any{}}
+	return &toolrejection.ToolReject{Code: "PROJECT_HAS_NO_ROOTS", Data: map[string]any{}}
 }
 
 func workerWriteWithoutBranchReject(path string) error {
-	return &tools.ToolReject{Code: "WORKER_WRITE_WITHOUT_BRANCH", Data: map[string]any{"path": filepath.ToSlash(strings.TrimSpace(path))}}
+	return &toolrejection.ToolReject{Code: "WORKER_WRITE_WITHOUT_BRANCH", Data: map[string]any{"path": filepath.ToSlash(strings.TrimSpace(path))}}
 }
 
 // UnionDiscoveryRoots returns roots for a union walk when modelPath is a union sentinel.
@@ -496,14 +385,14 @@ func UnionDiscoveryRoots(ctx context.Context, tctx tools.ToolContext, modelPath 
 	if reject := tools.ValidateAttachedRootsForAction(actionRootPaths(tctx)); reject != nil {
 		return nil, reject
 	}
-	if len(tctx.Roots) == 0 {
+	if len(tctx.Source.Roots) == 0 {
 		return nil, noRootsReject()
 	}
 	if projectroot.IsUnionDiscoveryPath(modelPath) {
-		if branch := strings.TrimSpace(tctx.WorkerBranchRoot); branch != "" {
-			if len(tctx.Roots) > 1 {
-				refs := make([]projectroot.RootRef, 0, len(tctx.Roots))
-				for _, r := range tctx.Roots {
+		if branch := strings.TrimSpace(tctx.Source.WorkerBranchRoot); branch != "" {
+			if len(tctx.Source.Roots) > 1 {
+				refs := make([]projectroot.RootRef, 0, len(tctx.Source.Roots))
+				for _, r := range tctx.Source.Roots {
 					dir, err := projectroot.BranchDirForID(r.ID)
 					if err != nil {
 						continue
@@ -518,7 +407,7 @@ func UnionDiscoveryRoots(ctx context.Context, tctx tools.ToolContext, modelPath 
 			}
 			return []projectroot.RootRef{{ID: "worker-branch", Path: branch, IsPrimary: true}}, nil
 		}
-		return tctx.Roots, nil
+		return tctx.Source.Roots, nil
 	}
 	res, err := ResolveRead(ctx, nil, tctx, modelPath)
 	if err != nil {
@@ -529,7 +418,7 @@ func UnionDiscoveryRoots(ctx context.Context, tctx tools.ToolContext, modelPath 
 
 // QualifyAbs formats an absolute path with multi-root display qualifiers.
 func QualifyAbs(tctx tools.ToolContext, root projectroot.RootRef, abs string) string {
-	primary, err := projectroot.PrimaryRoot(tctx.Roots)
+	primary, err := projectroot.PrimaryRoot(tctx.Source.Roots)
 	if err != nil {
 		return abs
 	}
@@ -545,25 +434,25 @@ func CommandCwd(ctx context.Context, tctx tools.ToolContext, cwdArg string) (abs
 	if _, scratch := scratchRel(tctx, cwdClean); scratch {
 		return commandCwdInScratch(ctx, tctx, cwdClean)
 	}
-	if branch := strings.TrimSpace(tctx.WorkerBranchRoot); branch != "" {
+	if branch := strings.TrimSpace(tctx.Source.WorkerBranchRoot); branch != "" {
 		return commandCwdUnderBranch(ctx, tctx, branch, cwdArg)
 	}
-	if len(tctx.Roots) == 0 {
+	if len(tctx.Source.Roots) == 0 {
 		return "", "", noRootsReject()
 	}
 	if cwdClean == "" {
 		return tctx.ActiveRootPath(), ".", nil
 	}
-	resolved, _, resolveErr := projectroot.ResolveAbs(tctx.Roots, tctx.ActiveRootID, cwdClean)
+	resolved, _, resolveErr := projectroot.ResolveAbs(tctx.Source.Roots, tctx.Source.ActiveRootID, cwdClean)
 	if resolveErr != nil {
-		return "", "", &tools.ToolReject{
+		return "", "", &toolrejection.ToolReject{
 			Code: "CWD_OUT_OF_SCOPE",
 			Data: map[string]any{"cwd": cwdArg},
 		}
 	}
 	info, statErr := os.Stat(resolved)
 	if statErr != nil || !info.IsDir() {
-		return "", "", &tools.ToolReject{
+		return "", "", &toolrejection.ToolReject{
 			Code: "CWD_NOT_DIRECTORY",
 			Data: map[string]any{"cwd": cwdArg},
 		}
@@ -574,95 +463,31 @@ func CommandCwd(ctx context.Context, tctx tools.ToolContext, cwdArg string) (abs
 // commandCwdInScratch runs a process in the session's scratch folder. A
 // verification check never does: its receipt describes the project.
 func commandCwdInScratch(ctx context.Context, tctx tools.ToolContext, cwdArg string) (abs, display string, err error) {
-	if tctx.VerificationCheck {
-		return "", "", &tools.ToolReject{
+	if tctx.Execution.VerificationCheck {
+		return "", "", &toolrejection.ToolReject{
 			Code: "CWD_SCRATCH_NOT_VERIFICATION",
 			Data: map[string]any{"cwd": cwdArg},
 		}
 	}
 	res, _, err := resolveSessionScratch(ctx, nil, tctx, cwdArg, sandbox.PathOpRead)
 	if err != nil {
-		var reject *tools.ToolReject
+		var reject *toolrejection.ToolReject
 		if errors.As(err, &reject) && reject.Code == tools.SessionScratchUnavailableCode {
 			return "", "", reject
 		}
-		return "", "", &tools.ToolReject{
+		return "", "", &toolrejection.ToolReject{
 			Code: "CWD_OUT_OF_SCOPE",
 			Data: map[string]any{"cwd": cwdArg},
 		}
 	}
 	info, statErr := os.Stat(res.Abs)
 	if statErr != nil || !info.IsDir() {
-		return "", "", &tools.ToolReject{
+		return "", "", &toolrejection.ToolReject{
 			Code: "CWD_NOT_DIRECTORY",
 			Data: map[string]any{"cwd": cwdArg},
 		}
 	}
 	return res.Abs, res.DisplayPath, nil
-}
-
-func commandCwdUnderBranch(ctx context.Context, tctx tools.ToolContext, branch, cwdArg string) (abs, display string, err error) {
-	cwdArg = strings.TrimSpace(cwdArg)
-	if cwdArg == "" {
-		return branch, ".", nil
-	}
-	if filepath.IsAbs(cwdArg) {
-		return "", "", &tools.ToolReject{
-			Code: "CWD_OUT_OF_SCOPE",
-			Data: map[string]any{"cwd": cwdArg},
-		}
-	}
-	if tctx.BranchWorkspace == nil {
-		return "", "", fmt.Errorf("worker branch workspace not configured")
-	}
-	branchRel, displayPath, mapErr := projectroot.WorkerBranchRelative(tctx.Roots, tctx.ActiveRootID, cwdArg)
-	if mapErr != nil {
-		return "", "", &tools.ToolReject{
-			Code: "CWD_OUT_OF_SCOPE",
-			Data: map[string]any{"cwd": cwdArg},
-		}
-	}
-	scopeRel := filepath.ToSlash(filepath.Clean(branchRel))
-	if scopeRel == ".." || strings.HasPrefix(scopeRel, "../") {
-		return "", "", &tools.ToolReject{
-			Code: "CWD_OUT_OF_SCOPE",
-			Data: map[string]any{"cwd": cwdArg},
-		}
-	}
-	if scopeRel == "." {
-		scopeRel = ""
-	}
-	if branchErr := prepareBranchPath(ctx, tctx, scopeRel, sandbox.PathOpRead); branchErr != nil {
-		if os.IsNotExist(branchErr) || errors.Is(branchErr, os.ErrNotExist) {
-			return "", "", &tools.ToolReject{
-				Code: "CWD_NOT_DIRECTORY",
-				Data: map[string]any{"cwd": cwdArg},
-			}
-		}
-		return "", "", branchErr
-	}
-	abs = filepath.Join(branch, filepath.FromSlash(scopeRel))
-	rel, relErr := filepath.Rel(branch, abs)
-	if relErr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return "", "", &tools.ToolReject{
-			Code: "CWD_OUT_OF_SCOPE",
-			Data: map[string]any{"cwd": cwdArg},
-		}
-	}
-	info, statErr := os.Stat(abs)
-	if statErr != nil || !info.IsDir() {
-		return "", "", &tools.ToolReject{
-			Code: "CWD_NOT_DIRECTORY",
-			Data: map[string]any{"cwd": cwdArg},
-		}
-	}
-	display = displayPath
-	if scopeRel == "" {
-		display = "."
-	} else if display == "" {
-		display = scopeRel
-	}
-	return abs, display, nil
 }
 
 // resolveSessionScratch answers a path in the invoking session's own scratch
@@ -673,7 +498,7 @@ func resolveSessionScratch(ctx context.Context, b *sandbox.Boundary, tctx tools.
 	if !addressed {
 		return Resolved{}, false, nil
 	}
-	dir := strings.TrimSpace(tctx.SessionScratchDir)
+	dir := strings.TrimSpace(tctx.Host.SessionScratchDir)
 	if dir == "" {
 		return Resolved{}, false, sessionScratchUnavailableReject(modelPath)
 	}
@@ -720,7 +545,7 @@ func scratchRel(tctx tools.ToolContext, path string) (string, bool) {
 	if rel, ok := projectroot.ScratchAddress(path); ok {
 		return rel, true
 	}
-	return scratchRelOfAbs(strings.TrimSpace(tctx.SessionScratchDir), path)
+	return scratchRelOfAbs(strings.TrimSpace(tctx.Host.SessionScratchDir), path)
 }
 
 // scratchRelOfAbs returns an absolute path's place inside the scratch folder,
@@ -738,7 +563,7 @@ func scratchRelOfAbs(dir, raw string) (string, bool) {
 }
 
 func sessionScratchUnavailableReject(path string) error {
-	return &tools.ToolReject{
+	return &toolrejection.ToolReject{
 		Code: tools.SessionScratchUnavailableCode,
 		Data: map[string]any{"path": filepath.ToSlash(strings.TrimSpace(path))},
 	}

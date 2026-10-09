@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/call"
@@ -31,7 +32,7 @@ func (m *Manager) EnrichWorkerToolContext(ctx context.Context, sess *api.Session
 	if parentID == "" || m.workerQueue == nil {
 		return tctx, nil
 	}
-	jobID := strings.TrimSpace(tctx.WorkerJobID)
+	jobID := strings.TrimSpace(tctx.Identity.WorkerJobID)
 	if jobID == "" {
 		jobID = workercontext.Job(ctx)
 	}
@@ -52,35 +53,35 @@ func (m *Manager) EnrichWorkerToolContext(ctx context.Context, sess *api.Session
 		}
 		task = claimed
 	}
-	tctx.WorkerJobID = task.ID
+	tctx.Identity.WorkerJobID = task.ID
 	// A worker addresses its own workspace only once it has a private branch;
 	// a read-scoped worker reads the project tree and its open documents.
-	tctx.SourceWorkspaceKind = api.SourceWorkspaceKindProject
-	tctx.ParentSessionID = parentID
-	if tctx.RootSessionID == "" && m.store != nil {
-		tctx.RootSessionID = RootSessionID(ctx, m.store, sess.ID)
+	tctx.Source.SourceWorkspaceKind = api.SourceWorkspaceKindProject
+	tctx.Identity.ParentSessionID = parentID
+	if tctx.Identity.RootSessionID == "" && m.store != nil {
+		tctx.Identity.RootSessionID = RootSessionID(ctx, m.store, sess.ID)
 	}
-	if tctx.RootSessionID == "" {
-		tctx.RootSessionID = parentID
+	if tctx.Identity.RootSessionID == "" {
+		tctx.Identity.RootSessionID = parentID
 	}
-	tctx.HandoffSessionID = parentID
-	tctx.HandoffAgentID = task.ID
-	tctx.WorkerCoord = m
+	tctx.Identity.HandoffSessionID = parentID
+	tctx.Identity.HandoffAgentID = task.ID
+	tctx.Source.WorkerCoord = m
 	if root := strings.TrimSpace(task.WorkspaceRoot); root != "" && task.EffectiveScope().IsWrite() {
 		layout, err := workspace.LoadBranchLayout(root)
 		if err != nil {
-			tctx.BranchWorkspace = nil
+			tctx.Source.BranchWorkspace = nil
 			return tctx, err
 		}
-		tctx.SourceWorkspaceKind = api.SourceWorkspaceKindWorker
-		tctx.WorkerSourceRoots = workerSourceRootPaths(layout.Roots)
-		tctx.Roots = layout.Roots
-		tctx.WorkerBranchRoot = root
+		tctx.Source.SourceWorkspaceKind = api.SourceWorkspaceKindWorker
+		tctx.Source.WorkerSourceRoots = workerSourceRootPaths(layout.Roots)
+		tctx.Source.Roots = layout.Roots
+		tctx.Source.WorkerBranchRoot = root
 		branchState, err := newBranchWorkspace(root)
 		if err != nil {
 			return tctx, err
 		}
-		tctx.BranchWorkspace = branchState
+		tctx.Source.BranchWorkspace = branchState
 	}
 	return tctx, nil
 }
@@ -90,16 +91,19 @@ func (m *Manager) workerBoardRoots(ctx context.Context, sess *api.Session) ([]pr
 	if err != nil {
 		return nil, err
 	}
-	tctx, err := m.EnrichWorkerToolContext(ctx, sess, tools.ToolContext{Roots: roots, ActiveRootID: sess.WorkspaceRootID})
+	tctx, err := m.EnrichWorkerToolContext(ctx, sess, tools.ToolContext{
+		Source: tools.InvocationSource{Roots: roots,
+			ActiveRootID: sess.WorkspaceRootID},
+	})
 	if err != nil {
 		return nil, err
 	}
-	return tctx.Roots, nil
+	return tctx.Source.Roots, nil
 }
 
 // BeforeWorkerWrite rejects read-scoped worker file mutations and records live touches.
 func (m *Manager) BeforeWorkerWrite(ctx context.Context, tctx tools.ToolContext, relPath string) error {
-	if m == nil || strings.TrimSpace(tctx.WorkerJobID) == "" {
+	if m == nil || strings.TrimSpace(tctx.Identity.WorkerJobID) == "" {
 		return nil
 	}
 	relPath = sessioncheckpoint.NormalizePath(relPath)
@@ -107,9 +111,9 @@ func (m *Manager) BeforeWorkerWrite(ctx context.Context, tctx tools.ToolContext,
 		return nil
 	}
 	if m.workerQueue != nil {
-		if task, ok := m.workerQueue.Get(tctx.WorkerJobID); ok && task != nil {
+		if task, ok := m.workerQueue.Get(tctx.Identity.WorkerJobID); ok && task != nil {
 			if scope := task.EffectiveScope(); !scope.IsWrite() {
-				return &tools.ToolReject{
+				return &toolrejection.ToolReject{
 					Code: TaskScopeReadMutationDeniedCode,
 					Data: map[string]any{
 						"path":       relPath,
@@ -122,10 +126,10 @@ func (m *Manager) BeforeWorkerWrite(ctx context.Context, tctx tools.ToolContext,
 		}
 	}
 	if m.workerTouches != nil {
-		m.workerTouches.RecordTouch(tctx.WorkerJobID, relPath)
+		m.workerTouches.RecordTouch(tctx.Identity.WorkerJobID, relPath)
 	}
-	sessionID := strings.TrimSpace(tctx.HandoffSessionID)
-	agent := strings.TrimSpace(tctx.HandoffAgentID)
+	sessionID := strings.TrimSpace(tctx.Identity.HandoffSessionID)
+	agent := strings.TrimSpace(tctx.Identity.HandoffAgentID)
 	if sessionID == "" || agent == "" || m.callManager == nil {
 		return nil
 	}
@@ -135,10 +139,10 @@ func (m *Manager) BeforeWorkerWrite(ctx context.Context, tctx tools.ToolContext,
 
 // AfterWorkerWrite refreshes the board so pulse lines show live touches.
 func (m *Manager) AfterWorkerWrite(ctx context.Context, tctx tools.ToolContext, _ string) {
-	if m == nil || m.events == nil || strings.TrimSpace(tctx.ProjectID) == "" {
+	if m == nil || m.events == nil || strings.TrimSpace(tctx.Identity.ProjectID) == "" {
 		return
 	}
-	m.events.PublishBoard(ctx, strings.TrimSpace(tctx.ProjectID), strings.TrimSpace(tctx.HandoffSessionID))
+	m.events.PublishBoard(ctx, strings.TrimSpace(tctx.Identity.ProjectID), strings.TrimSpace(tctx.Identity.HandoffSessionID))
 }
 
 // EnsureWorkerBranch ensures a write worker has an isolated branch.
@@ -146,15 +150,15 @@ func (m *Manager) EnsureWorkerBranch(ctx context.Context, tctx tools.ToolContext
 	if m == nil {
 		return tctx, nil
 	}
-	if strings.TrimSpace(tctx.WorkerBranchRoot) != "" {
-		if len(tctx.WorkerSourceRoots) == 0 {
-			layout, err := workspace.LoadBranchLayout(tctx.WorkerBranchRoot)
+	if strings.TrimSpace(tctx.Source.WorkerBranchRoot) != "" {
+		if len(tctx.Source.WorkerSourceRoots) == 0 {
+			layout, err := workspace.LoadBranchLayout(tctx.Source.WorkerBranchRoot)
 			if err != nil {
 				return tctx, err
 			}
-			tctx.WorkerSourceRoots = workerSourceRootPaths(layout.Roots)
-			if len(tctx.Roots) == 0 {
-				tctx.Roots = layout.Roots
+			tctx.Source.WorkerSourceRoots = workerSourceRootPaths(layout.Roots)
+			if len(tctx.Source.Roots) == 0 {
+				tctx.Source.Roots = layout.Roots
 			}
 		}
 		if err := tools.RequireBranchWorkspace(tctx); err != nil {
@@ -162,7 +166,7 @@ func (m *Manager) EnsureWorkerBranch(ctx context.Context, tctx tools.ToolContext
 		}
 		return tctx, nil
 	}
-	jobID := strings.TrimSpace(tctx.WorkerJobID)
+	jobID := strings.TrimSpace(tctx.Identity.WorkerJobID)
 	if jobID == "" {
 		return tctx, nil
 	}
@@ -178,26 +182,26 @@ func (m *Manager) EnsureWorkerBranch(ctx context.Context, tctx tools.ToolContext
 	}
 	if !task.EffectiveScope().IsWrite() {
 		// A read-scoped worker stays on the project tree and its documents.
-		tctx.SourceWorkspaceKind = api.SourceWorkspaceKindProject
+		tctx.Source.SourceWorkspaceKind = api.SourceWorkspaceKindProject
 		return tctx, nil
 	}
 	root := strings.TrimSpace(task.WorkspaceRoot)
 	if root == "" {
 		return tctx, fmt.Errorf("worker branch claim returned empty root")
 	}
-	tctx.SourceWorkspaceKind = api.SourceWorkspaceKindWorker
-	tctx.WorkerBranchRoot = root
+	tctx.Source.SourceWorkspaceKind = api.SourceWorkspaceKindWorker
+	tctx.Source.WorkerBranchRoot = root
 	layout, err := workspace.LoadBranchLayout(root)
 	if err != nil {
 		return tctx, err
 	}
-	tctx.WorkerSourceRoots = workerSourceRootPaths(layout.Roots)
-	tctx.Roots = layout.Roots
+	tctx.Source.WorkerSourceRoots = workerSourceRootPaths(layout.Roots)
+	tctx.Source.Roots = layout.Roots
 	branchState, err := newBranchWorkspace(root)
 	if err != nil {
 		return tctx, err
 	}
-	tctx.BranchWorkspace = branchState
+	tctx.Source.BranchWorkspace = branchState
 	return tctx, nil
 }
 

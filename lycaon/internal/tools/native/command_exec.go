@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -58,8 +59,8 @@ type commandRunOutcome struct {
 
 // canonicalToolArgs returns reference-bearing arguments when available.
 func canonicalToolArgs(tctx tools.ToolContext, args map[string]any) map[string]any {
-	if tctx.CanonicalArgs != nil {
-		return tctx.CanonicalArgs
+	if tctx.Effects.CanonicalArgs != nil {
+		return tctx.Effects.CanonicalArgs
 	}
 	return args
 }
@@ -72,16 +73,16 @@ func canonicalCommandKey(tctx tools.ToolContext, args map[string]any) string {
 // commandEgressIdentity supplies the shared subject for posture, leases, and attribution.
 func commandEgressIdentity(tctx tools.ToolContext, toolName, commandLine string) confine.EgressCommand {
 	identity := confine.EgressCommand{
-		SessionID:     tctx.SessionID,
+		SessionID:     tctx.Identity.SessionID,
 		RootSessionID: tctx.ChatSessionID(),
-		ProjectID:     tctx.ProjectID,
+		ProjectID:     tctx.Identity.ProjectID,
 		ProjectDir:    tctx.ActiveRootPath(),
-		ToolCallID:    tctx.ToolCallID,
+		ToolCallID:    tctx.Identity.ToolCallID,
 		ToolName:      toolName,
 		CommandLine:   commandLine,
 	}
-	if tctx.PackageExecution != nil {
-		identity.DeclaredHosts = append([]string(nil), tctx.PackageExecution.AllowedHosts...)
+	if tctx.Files.PackageExecution != nil {
+		identity.DeclaredHosts = append([]string(nil), tctx.Files.PackageExecution.AllowedHosts...)
 		identity.ReducedPackageExecution = true
 	}
 	return identity
@@ -124,10 +125,10 @@ func commandTimeout(args map[string]any, toolName string) time.Duration {
 }
 
 func commandRunID(tctx tools.ToolContext) string {
-	if tctx.ParentSessionID != "" {
-		return tctx.ParentSessionID
+	if tctx.Identity.ParentSessionID != "" {
+		return tctx.Identity.ParentSessionID
 	}
-	return tctx.SessionID
+	return tctx.Identity.SessionID
 }
 
 func allowConcurrent(args map[string]any) bool {
@@ -174,7 +175,7 @@ func runCommandForeground(
 	}
 	cmdKey := canonicalCommandKey(tctx, args)
 	approach := commandFailureApproachKey(canonicalToolArgs(tctx, args))
-	if tr := ft.rejectLoop(tctx.SessionID, approach, cmdKey); tr != nil {
+	if tr := ft.rejectLoop(tctx.Identity.SessionID, approach, cmdKey); tr != nil {
 		return commandRunOutcome{}, tr
 	}
 	// Validate stages before acquiring confinement resources.
@@ -198,31 +199,31 @@ func runCommandForeground(
 		ProfileID:  profile,
 		Stages:     stages,
 		IOParams:   ioParams,
-		PathExtra:  append([]string(nil), tctx.HostResourcePathExtra...),
+		PathExtra:  append([]string(nil), tctx.Host.HostResourcePathExtra...),
 	}
 	spawnFacts := confine.SpawnFacts{Report: commandConfinementReport(
 		confine.BoundaryOf(confinement), commandNetworkPosture(tctx, toolName, cmdKey),
-		tools.LocalNetworkGrantOf(tctx), tctx.PackageExecution,
+		tools.LocalNetworkGrantOf(tctx), tctx.Files.PackageExecution,
 	), Action: bound.lease}
 	if bound.lease != nil {
 		spawnFacts.Network = bound.lease.ObservedHosts
 	}
 	var sourceRevision, sourceRootDigest string
-	if tctx.VerificationCheck {
-		sourceRevision, sourceRootDigest = sourceledger.VerificationState(ctx, tctx.SourceLedger, tools.HostWriteRoot(tctx))
+	if tctx.Execution.VerificationCheck {
+		sourceRevision, sourceRootDigest = sourceledger.VerificationState(ctx, tctx.Source.SourceLedger, tools.HostWriteRoot(tctx))
 	}
-	if err := tctx.Secrets.HandOff(ctx, nil); err != nil {
-		return commandRunOutcome{}, tools.HeldHandOffReject(toolName, err)
+	if err := tctx.Effects.Secrets.HandOff(ctx, nil); err != nil {
+		return commandRunOutcome{}, toolrejection.HeldHandOffReject(toolName, err)
 	}
 	index := watchIndex(tctx, confinement)
 	handle, err := registry.StartPipeline(ctx, bgprocess.PipelineSpec{
-		IsCheck:        tctx.VerificationCheck,
+		IsCheck:        tctx.Execution.VerificationCheck,
 		SourceRevision: sourceRevision, SourceRootDigest: sourceRootDigest, Cwd: cwdDisplay,
-		SessionID: tctx.SessionID, RootSessionID: tctx.ChatSessionID(),
-		ProjectID: tctx.ProjectID, Request: req,
+		SessionID: tctx.Identity.SessionID, RootSessionID: tctx.ChatSessionID(),
+		ProjectID: tctx.Identity.ProjectID, Request: req,
 		Runner: runner,
 		Mode:   bgprocess.JobModeAwaited, OriginTool: toolName,
-		ToolCallID: tctx.ToolCallID, RunID: commandRunID(tctx),
+		ToolCallID: tctx.Identity.ToolCallID, RunID: commandRunID(tctx),
 		Timeout: commandTimeout(args, toolName), AllowConcurrent: allowConcurrent(args),
 		Facts: spawnFacts,
 	})
@@ -234,21 +235,21 @@ func runCommandForeground(
 	if directIPApplied {
 		tools.EmitDirectIPLifecycle(tctx, tools.DirectIPLifecycleStarted)
 	}
-	registry.WatchIndex(tctx.SessionID, handle, index)
+	registry.WatchIndex(tctx.Identity.SessionID, handle, index)
 	networkLife := newCommandNetworkLifecycle(tctx, toolName, bound.lease, directIPApplied)
-	registry.OnExit(tctx.SessionID, handle, func() { networkLife.complete(ctx) })
+	registry.OnExit(tctx.Identity.SessionID, handle, func() { networkLife.complete(ctx) })
 
-	finished, awaitErr := registry.Await(ctx, tctx.SessionID, handle, budget)
+	finished, awaitErr := registry.Await(ctx, tctx.Identity.SessionID, handle, budget)
 	if awaitErr != nil {
-		return commandRunOutcome{}, errors.Join(awaitErr, stopAwaitedCommand(ctx, registry, tctx.SessionID, handle))
+		return commandRunOutcome{}, errors.Join(awaitErr, stopAwaitedCommand(ctx, registry, tctx.Identity.SessionID, handle))
 	}
-	snap, err := registry.Snapshot(ctx, tctx.SessionID, handle, bgprocess.DefaultTailBytes)
+	snap, err := registry.Snapshot(ctx, tctx.Identity.SessionID, handle, bgprocess.DefaultTailBytes)
 	if err != nil {
-		return commandRunOutcome{}, errors.Join(err, stopAwaitedCommand(ctx, registry, tctx.SessionID, handle))
+		return commandRunOutcome{}, errors.Join(err, stopAwaitedCommand(ctx, registry, tctx.Identity.SessionID, handle))
 	}
 
 	out := commandRunOutcome{
-		IsCheck:        tctx.VerificationCheck,
+		IsCheck:        tctx.Execution.VerificationCheck,
 		SourceRevision: sourceRevision, SourceRootDigest: sourceRootDigest,
 		Finished: finished,
 		Handle:   handle,
@@ -265,17 +266,17 @@ func runCommandForeground(
 		out.Refusals = bound.lease.SettledRefusals(ctx)
 		out.LeftRunning = networkLife.leftBehind()
 		out.SpillPath = spillCommandOutput(tctx, snap)
-		ft.record(tctx.SessionID, approach, out.Snapshot.ExitCode == 0)
-		out.IndexWatch = registry.TakeIndexWatch(tctx.SessionID, handle)
-		registry.Discard(tctx.SessionID, handle)
+		ft.record(tctx.Identity.SessionID, approach, out.Snapshot.ExitCode == 0)
+		out.IndexWatch = registry.TakeIndexWatch(tctx.Identity.SessionID, handle)
+		registry.Discard(tctx.Identity.SessionID, handle)
 		recordContainerLaunch(tctx, snap)
 	} else {
 		// The running result shows these; only later refusals send a notice.
 		out.Refusals = bound.lease.Refusals()
-		registry.NoteRefusalsShown(tctx.SessionID, handle, len(out.Refusals.Refusals))
+		registry.NoteRefusalsShown(tctx.Identity.SessionID, handle, len(out.Refusals.Refusals))
 		// Promoted commands retain egress attribution after the tool call.
-		if err := registry.Promote(ctx, tctx.SessionID, handle); err != nil {
-			return commandRunOutcome{}, errors.Join(err, stopAwaitedCommand(ctx, registry, tctx.SessionID, handle))
+		if err := registry.Promote(ctx, tctx.Identity.SessionID, handle); err != nil {
+			return commandRunOutcome{}, errors.Join(err, stopAwaitedCommand(ctx, registry, tctx.Identity.SessionID, handle))
 		}
 	}
 	tools.CaptureExternalAccess(tctx, out.Network, directIPApplied)
@@ -283,11 +284,11 @@ func runCommandForeground(
 }
 
 func recordContainerLaunch(tctx tools.ToolContext, snap bgprocess.Snapshot) {
-	if tctx.ContainerRecorder == nil || len(tctx.SocketGrants) == 0 {
+	if tctx.Local.ContainerRecorder == nil || len(tctx.Socket.SocketGrants) == 0 {
 		return
 	}
 	engineSocket := ""
-	for _, g := range tctx.SocketGrants {
+	for _, g := range tctx.Socket.SocketGrants {
 		p := g.ResolvedPath
 		if p == "" {
 			p = g.ApprovedPath
@@ -305,14 +306,14 @@ func recordContainerLaunch(tctx tools.ToolContext, snap bgprocess.Snapshot) {
 		outStr = strings.TrimSpace(string(snap.Output))
 	}
 	if len(outStr) == 64 && isHex64(outStr) {
-		rootSession := tctx.RootSessionID
+		rootSession := tctx.Identity.RootSessionID
 		if rootSession == "" {
-			rootSession = tctx.ParentSessionID
+			rootSession = tctx.Identity.ParentSessionID
 		}
 		if rootSession == "" {
-			rootSession = tctx.SessionID
+			rootSession = tctx.Identity.SessionID
 		}
-		tctx.ContainerRecorder.RecordSessionContainer(rootSession, outStr, engineSocket)
+		tctx.Local.ContainerRecorder.RecordSessionContainer(rootSession, outStr, engineSocket)
 	}
 }
 
@@ -335,11 +336,11 @@ func spillCommandOutput(tctx tools.ToolContext, snap bgprocess.Snapshot) string 
 	if !snap.OutputScreened || len(snap.Output) <= len(snap.Tail) {
 		return ""
 	}
-	host := strings.TrimSpace(tctx.HostDataDir)
+	host := strings.TrimSpace(tctx.Host.HostDataDir)
 	if host == "" {
 		return ""
 	}
-	return tooloutput.SpillWholeRaw(host, tooloutput.Screened(snap.Output), tctx.MaxToolSpillBytes).SpillPath
+	return tooloutput.SpillWholeRaw(host, tooloutput.Screened(snap.Output), tctx.Host.MaxToolSpillBytes).SpillPath
 }
 
 func stopAwaitedCommand(ctx context.Context, registry *bgprocess.Registry, sessionID, handle string) error {
@@ -393,9 +394,9 @@ func bindCommandForegroundConfine(
 		if err := confine.RequireApplied(applied); err != nil {
 			return commandForegroundConfine{}, err
 		}
-		confine.LogApplied("command", tctx.SessionID, bound.confinement)
+		confine.LogApplied("command", tctx.Identity.SessionID, bound.confinement)
 	}
-	bound.directIPApplied = tctx.DirectIPRequested &&
+	bound.directIPApplied = tctx.Direct.DirectIPRequested &&
 		bound.confinement != nil &&
 		bound.confinement.Network == confine.NetworkDirectIP
 	// One lease keeps both descendant accountability and egress attribution
@@ -448,7 +449,7 @@ func commandFailureApproachKey(args map[string]any) string {
 
 // rejectLoop blocks a command/verify invocation that has already failed with
 // the same approach 3 or more times in a row.
-func (ft *CommandFailureTracker) rejectLoop(sessionID, approach, command string) *tools.ToolReject {
+func (ft *CommandFailureTracker) rejectLoop(sessionID, approach, command string) *toolrejection.ToolReject {
 	if ft == nil || approach == "" {
 		return nil
 	}
@@ -461,7 +462,7 @@ func (ft *CommandFailureTracker) rejectLoop(sessionID, approach, command string)
 	if st.Count < 3 {
 		return nil
 	}
-	return &tools.ToolReject{
+	return &toolrejection.ToolReject{
 		Code: "COMMAND_FAILURE_LOOP",
 		Data: map[string]any{
 			"command": command,
@@ -490,7 +491,7 @@ func (ft *CommandFailureTracker) record(sessionID, approach string, ok bool) {
 }
 
 // rejectPwdEnvMismatch rejects conflicting working-directory inputs.
-func rejectPwdEnvMismatch(args map[string]any, canonicalCommand, cwd string) *tools.ToolReject {
+func rejectPwdEnvMismatch(args map[string]any, canonicalCommand, cwd string) *toolrejection.ToolReject {
 	env, ok := args["env"].(map[string]any)
 	if !ok {
 		return nil
@@ -510,7 +511,7 @@ func rejectPwdEnvMismatch(args map[string]any, canonicalCommand, cwd string) *to
 	if pwd == filepath.Clean(cwd) {
 		return nil
 	}
-	return &tools.ToolReject{
+	return &toolrejection.ToolReject{
 		Code: "COMMAND_PWD_NOT_CWD",
 		Data: map[string]any{
 			"command": canonicalCommand,

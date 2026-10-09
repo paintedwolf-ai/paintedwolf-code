@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"slices"
 	"sort"
 	"strings"
@@ -14,7 +15,6 @@ import (
 	"github.com/lycaon/lycaon/internal/scan"
 	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
 	"github.com/lycaon/lycaon/internal/tooloutput"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -255,7 +255,7 @@ func (m InventoryAccounting) QueryWorkflowInventory(ctx context.Context, session
 		switch key {
 		case "scan_ids", "view", "inventory_revision", "selector", "offset", "limit", "project_dir":
 		default:
-			return "", &tools.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"tool": "scan_query", "field": key, "reason": "accounting_requires_complete_inventory"}}
+			return "", &toolrejection.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"tool": "scan_query", "field": key, "reason": "accounting_requires_complete_inventory"}}
 		}
 	}
 	run, err := m.Store.ActiveBySession(ctx, sessionID)
@@ -263,7 +263,7 @@ func (m InventoryAccounting) QueryWorkflowInventory(ctx context.Context, session
 		return "", err
 	}
 	if run == nil {
-		return "", &tools.ToolReject{Code: SubmitVerdictUnavailableCode, Data: map[string]any{"reason": "no_active_workflow_run"}}
+		return "", &toolrejection.ToolReject{Code: SubmitVerdictUnavailableCode, Data: map[string]any{"reason": "no_active_workflow_run"}}
 	}
 	unlock := m.lockRunVars(run.ID)
 	defer unlock()
@@ -283,7 +283,7 @@ func (m InventoryAccounting) QueryWorkflowInventory(ctx context.Context, session
 		return "", err
 	}
 	if !inventory.Settled {
-		return "", &tools.ToolReject{Code: SubmitVerdictScansPendingCode}
+		return "", &toolrejection.ToolReject{Code: SubmitVerdictScansPendingCode}
 	}
 	var ids []string
 	for _, scan := range inventory.Scans {
@@ -304,14 +304,14 @@ func (m InventoryAccounting) QueryWorkflowInventory(ctx context.Context, session
 	slices.Sort(requested)
 	requested = slices.Compact(requested)
 	if !slices.Equal(ids, requested) {
-		return "", &tools.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"field": "scan_ids", "reason": "run_bound_scan_set_required"}}
+		return "", &toolrejection.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"field": "scan_ids", "reason": "run_bound_scan_set_required"}}
 	}
 	revision, err := scanfindings.InventoryRevision(inventory.Scans)
 	if err != nil {
 		return "", err
 	}
 	if expected, _ := args["inventory_revision"].(string); expected != "" && expected != revision {
-		return "", &tools.ToolReject{Code: "SCAN_INVENTORY_STALE", Data: map[string]any{"inventory_revision": revision}}
+		return "", &toolrejection.ToolReject{Code: "SCAN_INVENTORY_STALE", Data: map[string]any{"inventory_revision": revision}}
 	}
 	verdicts, err := ReviewVerdicts(ctx, m.RunManager, run, manifest)
 	if err != nil {

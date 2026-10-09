@@ -12,7 +12,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Handler) HandleGetProjectSourceEditorConfig(w http.ResponseWriter, r *http.Request) {
+func (s *Workspace) HandleGetProjectSourceEditorConfig(w http.ResponseWriter, r *http.Request) {
 	p, ok := requestscope.ProjectByURLID(s.ProjectRegistry, s.responses, w, r)
 	if !ok {
 		return

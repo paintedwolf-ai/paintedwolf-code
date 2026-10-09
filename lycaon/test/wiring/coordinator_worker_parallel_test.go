@@ -3,12 +3,12 @@ package wiring
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/testdbseed"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/spawn"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -31,7 +31,7 @@ func TestCoordinatorParallelTaskCapMixedAgents(t *testing.T) {
 	for i := 0; i < cap; i++ {
 		agentType := agents[i%len(agents)]
 		gc := observeReadScoutSpawn(t, ctx, deps, sess, []any{"internal/**"})
-		if _, rejected := gc.RejectData[session.CoordinatorWorkerInFlightCode]; rejected || gc.WorkerSpawnBlocked {
+		if _, rejected := gc.RejectData[session.CoordinatorWorkerInFlightCode]; rejected || gc.Workers.WorkerSpawnBlocked {
 			t.Fatalf("expected allow before enqueuing %s at %d in flight", agentType, i)
 		}
 		_, err = q.Enqueue(ctx, api.WorkerTask{
@@ -46,8 +46,8 @@ func TestCoordinatorParallelTaskCapMixedAgents(t *testing.T) {
 	}
 
 	gc := observeReadScoutSpawn(t, ctx, deps, sess, []any{"internal/**"})
-	if !gc.WorkerSpawnBlocked || gc.ActiveWorkerCount != int64(cap) {
-		t.Fatalf("expected spawn blocked with %d mixed agents in flight; blocked=%v active=%d", cap, gc.WorkerSpawnBlocked, gc.ActiveWorkerCount)
+	if !gc.Workers.WorkerSpawnBlocked || gc.Workers.ActiveWorkerCount != int64(cap) {
+		t.Fatalf("expected spawn blocked with %d mixed agents in flight; blocked=%v active=%d", cap, gc.Workers.WorkerSpawnBlocked, gc.Workers.ActiveWorkerCount)
 	}
 	if _, observed := gc.RejectData[session.CoordinatorWorkerInFlightCode]; !observed {
 		t.Fatalf("guard did not stamp reject data at cap; reject data = %v", gc.RejectData)

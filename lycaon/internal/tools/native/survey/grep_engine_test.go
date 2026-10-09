@@ -137,7 +137,7 @@ func TestGrepEngine_BloomFilterPrunesNonMatchingFiles(t *testing.T) {
 	opener := func(entry sourcecatalog.Entry) (io.ReadCloser, error) {
 		return os.Open(filepath.Join(dir, filepath.FromSlash(entry.Path)))
 	}
-	_, err = catalog.LiteralCandidates(context.Background(), snapshot, sourcecatalog.LiteralQuery{
+	_, err = catalog.Literals.LiteralCandidates(context.Background(), snapshot, sourcecatalog.LiteralQuery{
 		RootID: "r1", Base: ".", Require: litprefilter.AnyOf("TargetNeedleToken"), Open: opener,
 	})
 	testutil.FailErr(t, "populate blooms", err)
@@ -185,7 +185,7 @@ func TestGrepEngine_UncachedFileScannedDirectly(t *testing.T) {
 	opener := func(entry sourcecatalog.Entry) (io.ReadCloser, error) {
 		return os.Open(filepath.Join(dir, filepath.FromSlash(entry.Path)))
 	}
-	_, err = catalog.LiteralCandidates(context.Background(), snapshot, sourcecatalog.LiteralQuery{
+	_, err = catalog.Literals.LiteralCandidates(context.Background(), snapshot, sourcecatalog.LiteralQuery{
 		RootID: "r1", Base: ".", Require: litprefilter.AnyOf("fresh_token"), Open: opener,
 	})
 	testutil.FailErr(t, "populate blooms", err)
@@ -220,7 +220,7 @@ func TestGrepEngine_BloomFilterPrunesAlternations(t *testing.T) {
 	opener := func(entry sourcecatalog.Entry) (io.ReadCloser, error) {
 		return os.Open(filepath.Join(dir, filepath.FromSlash(entry.Path)))
 	}
-	_, err = catalog.LiteralCandidates(context.Background(), snapshot, sourcecatalog.LiteralQuery{
+	_, err = catalog.Literals.LiteralCandidates(context.Background(), snapshot, sourcecatalog.LiteralQuery{
 		RootID: "r1", Base: ".", Require: litprefilter.AnyOf("projection_marker"), Open: opener,
 	})
 	testutil.FailErr(t, "populate blooms", err)

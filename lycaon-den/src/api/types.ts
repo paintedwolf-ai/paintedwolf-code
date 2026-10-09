@@ -7055,6 +7055,8 @@ export interface components {
             cursor?: string;
             limit?: number;
             budget?: components["schemas"]["SearchBudget"];
+            /** @description Walk dependency, build and nested checkout directories on demand for this request. Omitted means false. */
+            include_dependencies?: boolean;
             /** @description When true, treat the code pattern as a Go regexp */
             regex?: boolean;
             case_sensitive?: boolean;
@@ -7193,6 +7195,8 @@ export interface components {
             /** Format: uuid */
             origin_project_id?: string;
             format: components["schemas"]["SearchExportFormat"];
+            /** @description Walk dependency, build and nested checkout directories on demand for this request. Omitted means false. */
+            include_dependencies?: boolean;
             regex?: boolean;
             case_sensitive?: boolean;
             whole_word?: boolean;
@@ -12069,6 +12073,8 @@ export interface components {
             state: components["schemas"]["SourceWatchState"];
             /** @description One root registration observes every descendant. */
             recursive: boolean;
+            /** @description Lazy boundary roots intentionally refreshed on demand, distinct from failed watcher registrations. */
+            policy_unwatched?: number;
             /** @description Directories a per-directory watcher could not register. */
             unwatched_directories: number;
         };
@@ -12982,6 +12988,8 @@ export interface components {
          *     hits to AST-confirmed declarations. Empty symbol is a client no-op.
          */
         SourceDefinitionRequest: {
+            /** @description Walk dependency, build and nested checkout directories on demand for this request. Omitted means false. */
+            include_dependencies?: boolean;
             /**
              * Format: uuid
              * @description Pin resolution to one attached root (active root)
@@ -14190,6 +14198,8 @@ export interface components {
             replacement: string;
             /** Format: uuid */
             origin_project_id?: string;
+            /** @description Walk dependency, build and nested checkout directories on demand for this preview. Omitted means false. */
+            include_dependencies?: boolean;
             regex?: boolean;
             case_sensitive?: boolean;
             whole_word?: boolean;

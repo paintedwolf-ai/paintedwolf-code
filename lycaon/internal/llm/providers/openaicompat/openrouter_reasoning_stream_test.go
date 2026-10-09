@@ -1,6 +1,8 @@
 package openaicompat
 
 import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+
 	"encoding/json"
 	"fmt"
 	"io"
@@ -65,7 +67,7 @@ func TestOpenRouterStreamKeepsReasoningAndReplaysIt(t *testing.T) {
 		Model:    openrouterKimi,
 		Messages: []api.Message{{Role: api.MessageRoleUser, Content: "Yes update it."}},
 		Tools:    []tools.ToolMeta{{Name: "write"}},
-		Debug:    modelcall.RequestDebug{Surface: tools.SurfaceImplementInvestigate, SessionID: "s1"},
+		Debug:    modelcall.RequestDebug{Surface: toolcontract.SurfaceImplementInvestigate, SessionID: "s1"},
 	}
 	ch, err := p.Stream(t.Context(), req)
 	if err != nil {
@@ -161,7 +163,7 @@ func TestOpenRouterStreamSendsGatewayControlsOnTheWire(t *testing.T) {
 		Model:    openrouterKimi,
 		Messages: []api.Message{{Role: api.MessageRoleUser, Content: "go"}},
 		Tools:    []tools.ToolMeta{{Name: "write"}},
-		Debug:    modelcall.RequestDebug{Surface: tools.SurfaceImplementInvestigate},
+		Debug:    modelcall.RequestDebug{Surface: toolcontract.SurfaceImplementInvestigate},
 	})
 	if err != nil {
 		t.Fatalf("stream: %v", err)

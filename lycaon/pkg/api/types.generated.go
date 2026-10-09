@@ -5539,11 +5539,13 @@ type SearchExportRequest struct {
 	Query           string             `json:"query"`
 	OriginProjectID string             `json:"origin_project_id,omitempty"`
 	Format          SearchExportFormat `json:"format"`
-	Regex           bool               `json:"regex,omitempty"`
-	CaseSensitive   bool               `json:"case_sensitive,omitempty"`
-	WholeWord       bool               `json:"whole_word,omitempty"`
-	Include         []string           `json:"include,omitempty"`
-	Exclude         []string           `json:"exclude,omitempty"`
+	// Walk dependency, build and nested checkout directories on demand for this request. Omitted means false.
+	IncludeDependencies bool     `json:"include_dependencies,omitempty"`
+	Regex               bool     `json:"regex,omitempty"`
+	CaseSensitive       bool     `json:"case_sensitive,omitempty"`
+	WholeWord           bool     `json:"whole_word,omitempty"`
+	Include             []string `json:"include,omitempty"`
+	Exclude             []string `json:"exclude,omitempty"`
 }
 
 // SearchFacet
@@ -5693,14 +5695,16 @@ type SearchReplaceHunk struct {
 
 // SearchReplacePreviewRequest
 type SearchReplacePreviewRequest struct {
-	Query           string   `json:"query"`
-	Replacement     string   `json:"replacement"`
-	OriginProjectID string   `json:"origin_project_id,omitempty"`
-	Regex           bool     `json:"regex,omitempty"`
-	CaseSensitive   bool     `json:"case_sensitive,omitempty"`
-	WholeWord       bool     `json:"whole_word,omitempty"`
-	Include         []string `json:"include,omitempty"`
-	Exclude         []string `json:"exclude,omitempty"`
+	Query           string `json:"query"`
+	Replacement     string `json:"replacement"`
+	OriginProjectID string `json:"origin_project_id,omitempty"`
+	// Walk dependency, build and nested checkout directories on demand for this preview. Omitted means false.
+	IncludeDependencies bool     `json:"include_dependencies,omitempty"`
+	Regex               bool     `json:"regex,omitempty"`
+	CaseSensitive       bool     `json:"case_sensitive,omitempty"`
+	WholeWord           bool     `json:"whole_word,omitempty"`
+	Include             []string `json:"include,omitempty"`
+	Exclude             []string `json:"exclude,omitempty"`
 }
 
 // SearchReplacePreviewResponse
@@ -5719,6 +5723,8 @@ type SearchRequest struct {
 	Cursor          string       `json:"cursor,omitempty"`
 	Limit           int          `json:"limit,omitempty"`
 	Budget          SearchBudget `json:"budget,omitempty"`
+	// Walk dependency, build and nested checkout directories on demand for this request. Omitted means false.
+	IncludeDependencies bool `json:"include_dependencies,omitempty"`
 	// When true, treat the code pattern as a Go regexp
 	Regex         bool `json:"regex,omitempty"`
 	CaseSensitive bool `json:"case_sensitive,omitempty"`
@@ -6697,6 +6703,8 @@ type SourceDefinitionCandidate struct {
 // sends the word under the caret; the host narrows whole-word search
 // hits to AST-confirmed declarations. Empty symbol is a client no-op.
 type SourceDefinitionRequest struct {
+	// Walk dependency, build and nested checkout directories on demand for this request. Omitted means false.
+	IncludeDependencies bool `json:"include_dependencies,omitempty"`
 	// Pin resolution to one attached root (active root)
 	RootID string `json:"root_id,omitempty"`
 	// Root-relative path of the buffer that issued the request
@@ -7669,6 +7677,8 @@ type SourceWatchCoverage struct {
 	State SourceWatchState `json:"state"`
 	// One root registration observes every descendant.
 	Recursive bool `json:"recursive"`
+	// Lazy boundary roots intentionally refreshed on demand, distinct from failed watcher registrations.
+	PolicyUnwatched int `json:"policy_unwatched,omitempty"`
 	// Directories a per-directory watcher could not register.
 	UnwatchedDirectories int `json:"unwatched_directories"`
 }

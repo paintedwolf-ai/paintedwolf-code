@@ -25,15 +25,15 @@ type commandWindow struct {
 // branch commands write an overlay the promote records, so they open none.
 // A failure never blocks the command; it runs unobserved.
 func openCommandWindow(ctx context.Context, tctx tools.ToolContext, toolName, commandLine string) commandWindow {
-	opener, ok := tctx.SourceLedger.(sourceledger.CommandWindowOpener)
-	if !ok || tctx.ProjectID == "" || len(tctx.Roots) == 0 {
+	opener, ok := tctx.Source.SourceLedger.(sourceledger.CommandWindowOpener)
+	if !ok || tctx.Identity.ProjectID == "" || len(tctx.Source.Roots) == 0 {
 		return commandWindow{}
 	}
-	if tctx.SourceWorkspaceKind != "" && tctx.SourceWorkspaceKind != api.SourceWorkspaceKindProject {
+	if tctx.Source.SourceWorkspaceKind != "" && tctx.Source.SourceWorkspaceKind != api.SourceWorkspaceKindProject {
 		return commandWindow{}
 	}
-	roots := make([]sourceledger.RootSpec, 0, len(tctx.Roots))
-	for _, root := range tctx.Roots {
+	roots := make([]sourceledger.RootSpec, 0, len(tctx.Source.Roots))
+	for _, root := range tctx.Source.Roots {
 		branch, err := tctx.SourceBranch(root.ID)
 		if err != nil {
 			return commandWindow{}
@@ -41,12 +41,12 @@ func openCommandWindow(ctx context.Context, tctx tools.ToolContext, toolName, co
 		roots = append(roots, sourceledger.RootSpec{ID: root.ID, BranchID: branch, Path: root.Path})
 	}
 	open, err := opener.OpenCommandWindow(ctx, sourceledger.CommandWindowInput{
-		ProjectID: tctx.ProjectID, Roots: roots,
-		SessionID: tctx.SessionID, Turn: tctx.UserTurn, ToolCallID: tctx.ToolCallID,
+		ProjectID: tctx.Identity.ProjectID, Roots: roots,
+		SessionID: tctx.Identity.SessionID, Turn: tctx.Identity.UserTurn, ToolCallID: tctx.Identity.ToolCallID,
 		ToolName: toolName, CommandLine: commandLine,
 	})
 	if err != nil {
-		slog.WarnContext(ctx, "command window open", "tool", toolName, "session_id", tctx.SessionID, "err", err)
+		slog.WarnContext(ctx, "command window open", "tool", toolName, "session_id", tctx.Identity.SessionID, "err", err)
 		return commandWindow{}
 	}
 	return commandWindow{open: open}

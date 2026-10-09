@@ -43,7 +43,7 @@ func RegisterBoardTools(reg *tools.DefaultRegistry, deps ToolDeps) error {
 		if sessionID == "" {
 			return "", fmt.Errorf("session_id required")
 		}
-		snap, err := deps.Builder.Build(ctx, tctx.ProjectID, tctx.ActiveRootPath(), sessionID, level, tctx.Roots)
+		snap, err := deps.Builder.Build(ctx, tctx.Identity.ProjectID, tctx.ActiveRootPath(), sessionID, level, tctx.Source.Roots)
 		if err != nil {
 			return "", err
 		}

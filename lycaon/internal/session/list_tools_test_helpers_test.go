@@ -2,6 +2,7 @@ package session_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolexecution"
 	"path/filepath"
 	"testing"
 
@@ -34,7 +35,7 @@ type contextualToolsFixture struct {
 	Mgr        *session.Manager
 	Store      session.Store
 	Workflow   *workflow.RunManager
-	Executor   *tools.DefaultToolExecutor
+	Executor   *toolexecution.Executor
 	Sess       *api.Session
 	ProfileID  string
 	ProjectDir string
@@ -61,7 +62,7 @@ func setupContextualToolsFixtureFull(t *testing.T, posture api.SessionPosture, c
 	mgr := session.NewManager(store, client, tools.NewStubRegistry(), cfg)
 	oartest.InstallCloseoutPolicy(t, mgr)
 	mgr.SetProjectRegistry(project.NewSQLRegistry(sqlDB))
-	mgr.SetToolInvoker(rt.Executor)
+	mgr.SetToolInvoker(rt.Executor, rt.Executor.Metadata)
 	wireBundledToolPolicyForTest(t, mgr)
 
 	agents := orchestration.NewMemoryAgentRegistry()
@@ -147,7 +148,7 @@ func wirePromptTestManager(t *testing.T, mgr *session.Manager) {
 	oartest.InstallCloseoutPolicy(t, mgr)
 	configRoot := configlayout.FindModuleRoot()
 	rt := newContextualToolsRuntime(t, configRoot)
-	mgr.SetToolInvoker(rt.Executor)
+	mgr.SetToolInvoker(rt.Executor, rt.Executor.Metadata)
 	wireBundledToolPolicyForTest(t, mgr)
 }
 

@@ -18,7 +18,7 @@ import (
 func withTestUserNotices(t *testing.T) testDeps {
 	t.Helper()
 	notices := testUserNotices(t)
-	return func(d *Dependencies) { d.UserNotices = notices }
+	return func(d *Dependencies) { d.Core.UserNotices = notices }
 }
 
 func TestModelPolicyCatalogFailureAndRecovery(t *testing.T) {
@@ -39,7 +39,7 @@ func TestModelPolicyCatalogFailureAndRecovery(t *testing.T) {
 	}))
 	t.Cleanup(upstream.Close)
 	server, base := newProviderTestServerAt(t, upstream.URL, withTestUserNotices(t))
-	before, err := server.llmSvc.Policy.Overlay(llm.SettingsScopeGlobal, "")
+	before, err := server.Admin.Project.Verification.LLMService.Policy.Overlay(llm.SettingsScopeGlobal, "")
 	testutil.FailErr(t, "read initial policy", err)
 	apply := func(model string) *httptest.ResponseRecorder {
 		request := httptest.NewRequest(http.MethodPatch, base+"/v1/settings/model-policy", strings.NewReader(`{"coordinator":{"provider_id":"prov-a","model":"`+model+`"}}`))
@@ -61,12 +61,12 @@ func TestModelPolicyCatalogFailureAndRecovery(t *testing.T) {
 	if strings.Contains(response.Body.String(), "private provider diagnostic") {
 		t.Fatal("provider diagnostic leaked into response")
 	}
-	after, err := server.llmSvc.Policy.Overlay(llm.SettingsScopeGlobal, "")
+	after, err := server.Admin.Project.Verification.LLMService.Policy.Overlay(llm.SettingsScopeGlobal, "")
 	testutil.FailErr(t, "read policy after rejection", err)
 	if !reflect.DeepEqual(before, after) {
 		t.Fatal("failed validation changed policy")
 	}
-	probe := server.probeProviderConversation(t.Context(), harnessProviderProbeRequest{Provider: testProviderID, Model: "model-x", Role: llm.PolicySlotCoordinator})
+	probe := server.Routes.HarnessProviders.probeProviderConversation(t.Context(), harnessProviderProbeRequest{Provider: testProviderID, Model: "model-x", Role: llm.PolicySlotCoordinator})
 	if probe["code"] != wire.ApiErrorCodeProviderCatalogUnavailable || probe["failure_kind"] != "provider" || probe["retryable"] != true {
 		t.Fatalf("preflight failure = %+v", probe)
 	}
@@ -80,7 +80,7 @@ func TestModelPolicyCatalogFailureAndRecovery(t *testing.T) {
 		t.Fatalf("session assignment = %d %s", sessionResponse.Code, sessionResponse.Body.String())
 	}
 	ready.Store(true)
-	server.llmSvc.Registry.RefreshDiscovery(testProviderID)
+	server.Admin.Project.Verification.LLMService.Registry.RefreshDiscovery(testProviderID)
 	if response = apply("model-x"); response.Code != http.StatusOK {
 		t.Fatalf("recovered assignment = %d %s", response.Code, response.Body.String())
 	}

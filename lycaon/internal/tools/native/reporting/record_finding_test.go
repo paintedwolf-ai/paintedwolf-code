@@ -3,6 +3,8 @@ package reporting_test
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -32,8 +34,8 @@ func TestRecordFindingAppendsToStore(t *testing.T) {
 	scopeKey := testFindingsScopeKey(dir)
 	testutil.FailErr(t, "register", native.RegisterRecordFindingTool(reg, reporttools.RecordFindingGates{}, store, scopeKey))
 	tctx := findingContext(dir)
-	tctx.WorkerJobID = "job-7"
-	tctx.Agent = "implementer"
+	tctx.Identity.WorkerJobID = "job-7"
+	tctx.Identity.Agent = "implementer"
 	out, err := reg.Run(context.Background(), "record_finding", map[string]any{
 		"summary": "config resolver lives in internal/config/resolve.go:40",
 		"ref":     "internal/config/resolve.go:40",
@@ -55,7 +57,7 @@ func TestRecordFindingDuplicateIsIdempotent(t *testing.T) {
 	scopeKey := testFindingsScopeKey(dir)
 	testutil.FailErr(t, "register", native.RegisterRecordFindingTool(reg, reporttools.RecordFindingGates{}, store, scopeKey))
 	tctx := findingContext(dir)
-	tctx.WorkerJobID = "job-7"
+	tctx.Identity.WorkerJobID = "job-7"
 	args := map[string]any{
 		"summary": "OverlayScrollbars wraps chat stream viewport",
 		"ref":     "lycaon-den/src/platform/scrolling/themed-scrollbars.ts",
@@ -92,7 +94,7 @@ func TestRecordFindingRequiresReference(t *testing.T) {
 	dir := t.TempDir()
 	testutil.FailErr(t, "register", native.RegisterRecordFindingTool(reg, reporttools.RecordFindingGates{}, findings.NewMemoryStore(), testFindingsScopeKey(dir)))
 	_, err := reg.Run(context.Background(), "record_finding", map[string]any{"summary": "A useful observation"}, findingContext(dir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "FINDING_UNGROUNDED" {
 		t.Fatalf("err = %v", err)
 	}
@@ -112,17 +114,17 @@ func TestRecordFindingRejectsOversizeSummary(t *testing.T) {
 
 func TestRecordFindingGroundingBlockNotStored(t *testing.T) {
 	reg := tools.NewDefaultRegistry()
-	gate := &fakeFindingGate{findingErr: &tools.ToolReject{Code: "FINDING_UNGROUNDED"}}
+	gate := &fakeFindingGate{findingErr: &toolrejection.ToolReject{Code: "FINDING_UNGROUNDED"}}
 	store := findings.NewMemoryStore()
 	dir := t.TempDir()
 	testutil.FailErr(t, "register", native.RegisterRecordFindingTool(reg, reporttools.RecordFindingGates{Grounding: gate}, store, testFindingsScopeKey(dir)))
 	tctx := findingContext(dir)
-	tctx.SessionID = "s1"
-	tctx.Agent = "implementer"
+	tctx.Identity.SessionID = "s1"
+	tctx.Identity.Agent = "implementer"
 	_, err := reg.Run(context.Background(), "record_finding",
 		map[string]any{"summary": "ungrounded claim about something"},
 		tctx)
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "FINDING_UNGROUNDED" {
 		t.Fatalf("err = %v", err)
 	}
@@ -147,8 +149,8 @@ func TestRecordFindingAppendUsesDelegationKeyNotOverlay(t *testing.T) {
 	scopeKey := func(_ context.Context, _ string) string { return delegationDir }
 	testutil.FailErr(t, "register", native.RegisterRecordFindingTool(reg, reporttools.RecordFindingGates{}, store, scopeKey))
 	tctx := findingContext(overlay)
-	tctx.SessionID = "child-a"
-	tctx.WorkerJobID = "job-a"
+	tctx.Identity.SessionID = "child-a"
+	tctx.Identity.WorkerJobID = "job-a"
 	_, err := reg.Run(context.Background(), "record_finding", map[string]any{
 		"summary": "peer-visible note",
 		"ref":     "pkg/foo.go",
@@ -178,13 +180,13 @@ func findingContext(dir string) tools.ToolContext {
 	roots := []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}}
 	// Publish a below-threshold count for open-root tool tests.
 	return tools.ToolContext{
-		Roots:               roots,
-		ActiveRootID:        "r1",
-		SourceWorkspaceKind: api.SourceWorkspaceKindProject,
-		Agent:               tools.DefaultToolProfileID,
-		SessionID:           "test-session",
-		RepoFileCount:       100,
-		RepoFileCountKnown:  true,
+		Source: tools.InvocationSource{Roots: roots,
+			ActiveRootID:        "r1",
+			SourceWorkspaceKind: api.SourceWorkspaceKindProject,
+			RepoFileCount:       100,
+			RepoFileCountKnown:  true},
+		Identity: tools.InvocationIdentity{Agent: toolprofiles.DefaultToolProfileID,
+			SessionID: "test-session"},
 	}
 }
 
@@ -203,7 +205,7 @@ func TestRecordFindingUnicodeDetailAndCorrections(t *testing.T) {
 		t.Fatalf("findings: %+v", rows)
 	}
 	_, err := reg.Run(t.Context(), "record_finding", map[string]any{"summary": "detail too large", "ref": "source.go:2", "body": strings.Repeat("界", 3000)}, ctx)
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "TOOL_ARGS_INVALID" {
 		t.Fatalf("oversize body error: %v", err)
 	}

@@ -3,6 +3,7 @@ package promptloop_test
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"sync"
 	"testing"
 
@@ -33,7 +34,7 @@ func TestBatchRejectionsEscalateOnlyAcrossResponses(t *testing.T) {
 			deps := promptloop.StoreDeps(messages)
 			deps.LLM, deps.Tools, deps.Policy, deps.DoomLoop = client, tools.NewStubRegistry(), &recordingToolPolicy{}, guard
 			refusal := func() error {
-				return guidance.NewRefusal("TOOL_NOT_OFFERED", "schema not loaded").WithCause(&tools.ToolReject{Code: "TOOL_NOT_OFFERED", FailureClass: api.FailureClassPolicyRejection})
+				return guidance.NewRefusal("TOOL_NOT_OFFERED", "schema not loaded").WithCause(&toolrejection.ToolReject{Code: "TOOL_NOT_OFFERED", FailureClass: api.FailureClassPolicyRejection})
 			}
 			if beforeInvoke {
 				deps.BeforeToolRun = func(context.Context, *api.Session, []api.Message, string, string, map[string]any) (string, bool, error) {
@@ -51,7 +52,9 @@ func TestBatchRejectionsEscalateOnlyAcrossResponses(t *testing.T) {
 				mu.Unlock()
 				return nil
 			}
-			_, err = promptloop.NewPromptLoopForTest(deps).Run(ctx, promptloop.PromptRunInput{SessionID: sess.ID, Session: sess, History: userHistory("inspect portraits"), ProfileID: "coordinator", ToolCtx: tools.ToolContext{SessionID: sess.ID}})
+			_, err = promptloop.NewPromptLoopForTest(deps).Run(ctx, promptloop.PromptRunInput{SessionID: sess.ID, Session: sess, History: userHistory("inspect portraits"), ProfileID: "coordinator", ToolCtx: tools.ToolContext{
+				Identity: tools.InvocationIdentity{SessionID: sess.ID},
+			}})
 			testutil.FailErr(t, "run batched rejections", err)
 			if len(counts) != 15 {
 				t.Fatalf("recorded counts = %v, want 15 rejected calls", counts)
@@ -83,7 +86,9 @@ func TestOfferedSchemaResolvesEarlierLoadingRejections(t *testing.T) {
 		return "SVG source", nil
 	}))
 	deps.LLM = llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".*", FollowUpText: "Inspected.", ToolCalls: []llm.MockToolCall{{ID: "read-svg", Name: "read", Args: args}}}}})
-	_, err = promptloop.NewPromptLoopForTest(deps).Run(ctx, promptloop.PromptRunInput{SessionID: sess.ID, Session: sess, History: userHistory("inspect"), ProfileID: "coordinator", ToolCtx: tools.ToolContext{SessionID: sess.ID}})
+	_, err = promptloop.NewPromptLoopForTest(deps).Run(ctx, promptloop.PromptRunInput{SessionID: sess.ID, Session: sess, History: userHistory("inspect"), ProfileID: "coordinator", ToolCtx: tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: sess.ID},
+	}})
 	testutil.FailErr(t, "run after loading", err)
 	if invoked != 1 {
 		t.Fatalf("loaded tool invoked %d times, want once", invoked)

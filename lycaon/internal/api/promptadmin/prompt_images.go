@@ -3,6 +3,7 @@ package promptadmin
 import (
 	"context"
 	"fmt"
+
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/noticeerr"
 	"github.com/lycaon/lycaon/internal/promptattach"
@@ -13,7 +14,7 @@ import (
 )
 
 // ingestPromptImages stores attached rasters in the visual plane.
-func (s *Handler) ingestPromptImages(ctx context.Context, sessionID, operationID, group string, images []promptattach.InlineImage) ([]string, error) {
+func (s *Submission) ingestPromptImages(ctx context.Context, sessionID, operationID, group string, images []promptattach.InlineImage) ([]string, error) {
 	if len(images) == 0 {
 		return nil, nil
 	}
@@ -47,7 +48,7 @@ func (s *Handler) ingestPromptImages(ctx context.Context, sessionID, operationID
 	return ids, nil
 }
 
-func (s *Handler) discardPromptImages(ctx context.Context, projectID string, artifactIDs []string) {
+func (s *Submission) discardPromptImages(ctx context.Context, projectID string, artifactIDs []string) {
 	for _, artifactID := range artifactIDs {
 		if err := s.VisualStore.Discard(ctx, projectID, artifactID); err != nil && s.responses.Logger != nil {
 			s.responses.Logger.WarnContext(ctx, "discard unadmitted prompt image", "artifact_id", artifactID, "error", err)
@@ -55,7 +56,7 @@ func (s *Handler) discardPromptImages(ctx context.Context, projectID string, art
 	}
 }
 
-func (s *Handler) publishUserImageNotVisible(ctx context.Context, sessionID string, sess *wire.Session) {
+func (s *Submission) publishUserImageNotVisible(ctx context.Context, sessionID string, sess *wire.Session) {
 	if sess == nil {
 		return
 	}

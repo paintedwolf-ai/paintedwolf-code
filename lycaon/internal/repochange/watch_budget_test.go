@@ -437,3 +437,21 @@ func TestCoverageShortfallDoesNotPublishMutation(t *testing.T) {
 		t.Fatal("coverage change published a filesystem mutation")
 	}
 }
+
+func TestWatchCoverageSeparatesLazyPolicyFromTruncation(t *testing.T) {
+	root := t.TempDir()
+	reg := NewWatcherRegistry()
+	t.Cleanup(reg.CloseAll)
+	if err := os.MkdirAll(filepath.Join(root, "node_modules", "library"), 0700); err != nil {
+		t.Fatalf("create lazy library: %v", err)
+	}
+	reg.Seed(t.Context(), root, []WatchDirectory{{Path: root}, {Path: filepath.Join(root, "node_modules")}, {Path: filepath.Join(root, "node_modules", "library")}})
+	coverage := reg.Coverage(root)
+	if coverage.PolicyUnwatched != 1 {
+		t.Fatalf("policy boundary count: %+v", coverage)
+	}
+	if coverage.Truncated != 0 {
+		t.Fatalf("lazy policy reported as missing registrations: %+v", coverage)
+
+	}
+}

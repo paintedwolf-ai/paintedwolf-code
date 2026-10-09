@@ -1,5 +1,5 @@
 tags: [edit, filesystem]
-description: "Replace an exact span of text in an existing file: a line, a block, or a name, in place. Batch independent edits to distinct files. Read in an earlier response (same-batch read+edit rejects: EDITOR_DOCUMENT_READ_REQUIRED). Copy old_string after line-number tab; unique unless replace_all. Parse-breaking splices: MUTATION_BROKE_PARSE. Replaces command: sed -i / perl -pi in-place edit."
+description: "Paths accept @scratch/<path> for this chat or worker’s private working files. Replace an exact span of text in an existing file: a line, a block, or a name, in place. Batch independent edits to distinct files. Read in an earlier response (same-batch read+edit rejects: EDITOR_DOCUMENT_READ_REQUIRED). Copy old_string after line-number tab; unique unless replace_all. Parse-breaking splices: MUTATION_BROKE_PARSE. Replaces command: sed -i / perl -pi in-place edit."
 schema:
   type: object
   properties:

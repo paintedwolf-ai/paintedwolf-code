@@ -2,14 +2,13 @@ package webresearch
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"math"
 	"net"
 	"net/url"
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/lycaon/lycaon/internal/tools"
 )
 
 // FetchBudget tracks soft session and per-host caps for fetch_url network fetches.
@@ -162,7 +161,7 @@ func (b *FetchBudget) reserveSession(sessionID string) (*fetchReservation, error
 				firstExpiry = expiry
 			}
 		}
-		return nil, &tools.ToolReject{
+		return nil, &toolrejection.ToolReject{
 			Code: "FETCH_URL_BUDGET_EXCEEDED",
 			Data: map[string]any{
 				"kind":                             "session",

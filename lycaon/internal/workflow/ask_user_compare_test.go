@@ -44,7 +44,11 @@ func TestAskUserComparePreference(t *testing.T) {
 		"prompt":    "Which layout?",
 		"purpose":   "compare",
 		"artifacts": []any{idA, idB},
-	}, tools.ToolContext{SessionID: fx.sess.ID, Agent: orchestration.ProfileCoordinator, ToolCallID: "call_compare"})
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: fx.sess.ID,
+			Agent:      orchestration.ProfileCoordinator,
+			ToolCallID: "call_compare"},
+	})
 	testutil.FailErr(t, "ask_user", err)
 	var body map[string]any
 	testutil.FailErr(t, "unmarshal", json.Unmarshal([]byte(out), &body))
@@ -147,7 +151,10 @@ func TestAskUserCompareOtherEscape(t *testing.T) {
 		"prompt":    "Which?",
 		"purpose":   "compare",
 		"artifacts": []any{idA, idB},
-	}, tools.ToolContext{SessionID: fx.sess.ID, Agent: orchestration.ProfileCoordinator})
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: fx.sess.ID,
+			Agent: orchestration.ProfileCoordinator},
+	})
 	testutil.FailErr(t, "ask_user", err)
 	var body map[string]any
 	testutil.FailErr(t, "unmarshal", json.Unmarshal([]byte(out), &body))
@@ -197,7 +204,11 @@ func TestAskUserCompareResolvesEvidenceHandles(t *testing.T) {
 	_, err = fx.runAskUser(ctx, map[string]any{
 		"prompt":    "Which?",
 		"artifacts": []any{"render#9"},
-	}, tools.ToolContext{SessionID: fx.sess.ID, Agent: orchestration.ProfileCoordinator, ToolCallID: "call_unknown"})
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: fx.sess.ID,
+			Agent:      orchestration.ProfileCoordinator,
+			ToolCallID: "call_unknown"},
+	})
 	if err == nil || !strings.Contains(err.Error(), "ASK_USER_ARTIFACT_NOT_FOUND") {
 		t.Fatalf("unknown handle error = %v", err)
 	}
@@ -205,7 +216,11 @@ func TestAskUserCompareResolvesEvidenceHandles(t *testing.T) {
 		"prompt":    "Which?",
 		"purpose":   "compare",
 		"artifacts": []any{"render#1", "render#2"},
-	}, tools.ToolContext{SessionID: fx.sess.ID, Agent: orchestration.ProfileCoordinator, ToolCallID: "call_handles"})
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: fx.sess.ID,
+			Agent:      orchestration.ProfileCoordinator,
+			ToolCallID: "call_handles"},
+	})
 	testutil.FailErr(t, "ask_user by handle", err)
 	msgs, err := fx.wfMgr.Sessions.GetMessages(ctx, fx.sess.ID)
 	testutil.FailErr(t, "GetMessages", err)

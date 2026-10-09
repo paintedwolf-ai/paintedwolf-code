@@ -18,7 +18,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Handler) ReferenceDeps(ctx context.Context, sess *wire.Session) promptattach.ReferenceDeps {
+func (s *References) ReferenceDeps(ctx context.Context, sess *wire.Session) promptattach.ReferenceDeps {
 	sessionID := ""
 	projectID := ""
 	if sess != nil {
@@ -43,7 +43,7 @@ func (s *Handler) ReferenceDeps(ctx context.Context, sess *wire.Session) prompta
 }
 
 // readReferenceLines prefers the open document containing the selection.
-func (s *Handler) readReferenceLines(ctx context.Context, projectID, rootID, path string, startLine, endLine int) (string, error) {
+func (s *References) readReferenceLines(ctx context.Context, projectID, rootID, path string, startLine, endLine int) (string, error) {
 	p, err := s.Projects.Get(ctx, strings.TrimSpace(projectID))
 	if err != nil || p == nil {
 		return "", fmt.Errorf("project not found")
@@ -62,8 +62,8 @@ func (s *Handler) readReferenceLines(ctx context.Context, projectID, rootID, pat
 		return "", err
 	}
 	rel = filepath.ToSlash(rel)
-	if s.Sources.EditorDocuments != nil {
-		document, open, draftErr := s.Sources.EditorDocuments.OpenText(ctx, p.ID, p.SourceBranch, root.ID, rel)
+	if s.sourceEditor.EditorDocuments != nil {
+		document, open, draftErr := s.sourceEditor.EditorDocuments.OpenText(ctx, p.ID, p.SourceBranch, root.ID, rel)
 		if draftErr == nil && open {
 			return promptattach.SliceLines(document.Draft, startLine, endLine)
 		}
@@ -80,7 +80,7 @@ func (s *Handler) readReferenceLines(ctx context.Context, projectID, rootID, pat
 
 // resolveReferencePath jails a reference and names the root it landed in, so
 // the stored part carries identity a client can resolve without guessing.
-func (s *Handler) resolveReferencePath(ctx context.Context, projectID, rootID, path string) (string, wire.NavigationTarget, error) {
+func (s *References) resolveReferencePath(ctx context.Context, projectID, rootID, path string) (string, wire.NavigationTarget, error) {
 	p, err := s.Projects.Get(ctx, strings.TrimSpace(projectID))
 	if err != nil || p == nil {
 		return "", wire.NavigationTarget{}, fmt.Errorf("project not found")
@@ -102,7 +102,7 @@ func (s *Handler) resolveReferencePath(ctx context.Context, projectID, rootID, p
 }
 
 // lookupReferenceArtifact validates reused artifacts before they become provider image blocks.
-func (s *Handler) lookupReferenceArtifact(ctx context.Context, sessionID, artifactID string) (string, error) {
+func (s *References) lookupReferenceArtifact(ctx context.Context, sessionID, artifactID string) (string, error) {
 	root := session.RootSessionID(ctx, s.Store, sessionID)
 	id, res := visual.ResolveRef(ctx, s.VisualStore, root, artifactID)
 	if !res.IsPresent() {
@@ -114,7 +114,7 @@ func (s *Handler) lookupReferenceArtifact(ctx context.Context, sessionID, artifa
 	return id, nil
 }
 
-func (s *Handler) lookupReferenceEvidence(ctx context.Context, projectID, sourceRef, hitKind, sessionID string) (promptattach.ReferenceEvidence, error) {
+func (s *References) lookupReferenceEvidence(ctx context.Context, projectID, sourceRef, hitKind, sessionID string) (promptattach.ReferenceEvidence, error) {
 	sqlStore, ok := s.Store.(*store.SQL)
 	if !ok || sqlStore == nil || sqlStore.DB() == nil {
 		return promptattach.ReferenceEvidence{}, search.ErrEvidenceNotFound
