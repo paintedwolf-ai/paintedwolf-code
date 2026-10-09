@@ -273,7 +273,7 @@ func ReviewLoopVerdictEvidenceVerdict(def workflowdef.ReviewLoopDef, verdict map
 
 // Stamped claim identity is a verdict contract, independent of question follow-up.
 func validateStampedClaimOutcomes(def workflowdef.ReviewLoopDef, verdict map[string]string, byField map[string][]VerdictClaim, rules VerdictRules) error {
-	if !ReviewLoopVerdictTerminal(def, verdict) {
+	if (def.ReconcilesPhase == "" && def.FollowupAttempts == 0) || !ReviewLoopVerdictTerminal(def, verdict) {
 		return nil
 	}
 	present := make(map[string]bool)

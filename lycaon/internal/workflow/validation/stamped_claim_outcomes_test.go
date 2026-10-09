@@ -11,7 +11,7 @@ import (
 )
 
 func TestTerminalVerdictRequiresExactStampedClaimIDs(t *testing.T) {
-	def := workflowdef.ReviewLoopDef{VerdictSchema: map[string]string{"verdict": "CHALLENGED|NEEDS_INVESTIGATION", "challenges": workflowdef.VerdictClaimsType}, ClaimStatuses: map[string]workflowdef.ClaimClass{"survives": workflowdef.ClaimHeld}}
+	def := workflowdef.ReviewLoopDef{ReconcilesPhase: "claims", VerdictSchema: map[string]string{"verdict": "CHALLENGED|NEEDS_INVESTIGATION", "challenges": workflowdef.VerdictClaimsType}, ClaimStatuses: map[string]workflowdef.ClaimClass{"survives": workflowdef.ClaimHeld}}
 	rules := VerdictRules{KnownClaims: map[string]bool{"secret-gates-hold": true, "api-auth-holds": true}}
 	for _, followups := range []int{0, 2} {
 		def.FollowupAttempts = followups
@@ -37,7 +37,7 @@ func TestTerminalVerdictRequiresExactStampedClaimIDs(t *testing.T) {
 }
 
 func TestTerminalVerdictAcceptsCorrectedClaimsAcrossFields(t *testing.T) {
-	def := workflowdef.ReviewLoopDef{VerdictSchema: map[string]string{"verdict": "CHALLENGED", "challenges": workflowdef.VerdictClaimsType, "advisories": workflowdef.VerdictClaimsType}, ClaimStatuses: map[string]workflowdef.ClaimClass{"survives": workflowdef.ClaimHeld}}
+	def := workflowdef.ReviewLoopDef{ReconcilesPhase: "claims", VerdictSchema: map[string]string{"verdict": "CHALLENGED", "challenges": workflowdef.VerdictClaimsType, "advisories": workflowdef.VerdictClaimsType}, ClaimStatuses: map[string]workflowdef.ClaimClass{"survives": workflowdef.ClaimHeld}}
 	rules := VerdictRules{KnownClaims: map[string]bool{"secret-gates-hold": true, "api-auth-holds": true}}
 	verdict := map[string]string{"verdict": "CHALLENGED", "challenges": `[{"id":"secret-gates-hold","statement":"Gates verified","status":"survives"}]`, "advisories": `[{"id":"api-auth-holds","statement":"Auth verified","status":"survives"}]`}
 	testutil.FailErr(t, "accept exact stamped identities across claim fields", ValidateReviewLoopVerdict(def, verdict, rules))
@@ -46,4 +46,10 @@ func TestTerminalVerdictAcceptsCorrectedClaimsAcrossFields(t *testing.T) {
 	if rejection == nil || !slices.Equal(rejection.Data["missing_claim_ids"].([]string), []string{"api-auth-holds"}) {
 		t.Fatalf("missing outcome = %+v", rejection)
 	}
+}
+
+func TestIndependentReviewDoesNotRequireRepeatingPriorClaims(t *testing.T) {
+	def := workflowdef.ReviewLoopDef{VerdictSchema: map[string]string{"verdict": "ACCEPTED", "claims": workflowdef.VerdictClaimsType}}
+	rules := VerdictRules{KnownClaims: map[string]bool{"prior-claim": true}}
+	testutil.FailErr(t, "independent review may introduce different claims", ValidateReviewLoopVerdict(def, map[string]string{"verdict": "ACCEPTED", "claims": "[]"}, rules))
 }
