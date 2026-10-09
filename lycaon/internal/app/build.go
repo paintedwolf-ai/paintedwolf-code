@@ -13,7 +13,6 @@ import (
 	"github.com/lycaon/lycaon/internal/app/security"
 
 	"github.com/lycaon/lycaon/internal/api"
-	"github.com/lycaon/lycaon/internal/authzcontext"
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/board"
@@ -168,12 +167,9 @@ type serveBuilder struct {
 	mcpReg               *mcp.Runtime
 	orch                 orchestration.Orchestrator
 	workerPoller         *worker.LocalWorkerPoller
-	authzCapturer        *authzcontext.Capturer
-	socketCapabilityRT   *approvalstate.SocketCapabilityRuntime
 	gateRepeatRT         *approvalstate.GateRepeatLedger
 	webDiscoverer        webresearch.DirectDiscovererFactory
 	harnessWorkers       *harnessfixture.Workers
-	directIPCapabilityRT *approvalstate.DirectIPCapabilityRuntime
 	sandboxWriteRootRT   *approvalstate.SandboxPathGrantRuntime
 	sandboxReadPathRT    *approvalstate.SandboxPathGrantRuntime
 	sandboxListenRT      *approvalstate.SandboxPortGrantRuntime

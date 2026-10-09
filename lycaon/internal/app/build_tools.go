@@ -292,6 +292,7 @@ func (b toolWiring) wireMCP() error {
 	if err != nil {
 		return fmt.Errorf("mcp registry: %w", err)
 	}
+	b.security.BindMCPInventory(b.mcpReg.Catalog)
 	b.mcpReg.Tools.SetToolRegistry(b.toolRuntime.Registry)
 	b.mcpReg.Connections.SetAPIAccess(b.apiToken)
 	if b.toolRuntime != nil {

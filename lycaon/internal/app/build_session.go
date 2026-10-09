@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/approvals"
-	"github.com/lycaon/lycaon/internal/authzcontext"
 	"github.com/lycaon/lycaon/internal/authzledger"
 	"github.com/lycaon/lycaon/internal/bootrecovery"
 	"github.com/lycaon/lycaon/internal/configdir"
@@ -34,7 +33,6 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/internal/toolschema"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // sessionWiring wires the session manager, its authorization and checkpoints, and secret handling.
@@ -66,9 +64,10 @@ func (b sessionWiring) wireSessionManager() error {
 	}
 	b.wireSessionToolSources()
 	b.wireWorkerToolBudget()
-	if err := b.wireSessionAuthorization(); err != nil {
+	if err := b.security.BuildAuthorization(b.catalog.ModuleRoot, b.agents.ToolProfiles, b.settings.Service.Approvals, b.toolRuntime.Authority.ApprovalGate, b.toolRuntime.Registry.List, b.mgr.ResolveToolAccess, b.workerToolBudgetFor); err != nil {
 		return err
 	}
+	b.mgr.SetAuthzSealer(b.security.Authority.Sealer)
 	if compactor, err := loadCompactor(b.providers.Service, b.catalog.ModuleRoot, b.providers.Costs); err == nil && compactor != nil {
 		b.mgr.SetCompactor(compactor)
 	}
@@ -182,59 +181,6 @@ func (b sessionWiring) wireWorkerToolBudget() {
 	}
 }
 
-func (b sessionWiring) wireSessionAuthorization() error {
-	if b.storage.Database != nil {
-		auditCfg, err := authzcontext.LoadAuditConfig(b.catalog.ModuleRoot)
-		if err != nil {
-			return fmt.Errorf("audit config: %w", err)
-		}
-		b.authzCapturer = authzcontext.NewSQLCapturer(b.storage.Database, auditCfg, authzcontext.ProfileMap(b.agents.ToolProfiles))
-		cap := b.authzCapturer
-		if cap != nil && cap.Sealer != nil {
-			if b.settings.Service != nil {
-				cap.Sealer.Perms = b.settings.Service.Approvals
-			}
-			if b.toolRuntime != nil {
-				cap.Sealer.ChatGrants = func(chatSessionID string) []hitl.ApprovalGrant {
-					gate := b.toolRuntime.Authority.ApprovalGate()
-					if gate == nil {
-						return nil
-					}
-					return gate.ListGrants(chatSessionID)
-				}
-			}
-			if b.mcpReg != nil {
-				cap.Sealer.MCPInventory = func(context.Context) authzcontext.MCPInventory {
-					return authzcontext.MCPInventory{ProviderIDs: b.mcpReg.Catalog.EnabledProviderIDs()}
-				}
-			}
-			cap.Sealer.ToolAccess = b.mgr.ResolveToolAccess
-			if b.toolRuntime != nil && b.toolRuntime.Registry != nil {
-				cap.Sealer.RegisteredTools = func() []string {
-					metas := b.toolRuntime.Registry.List()
-					out := make([]string, 0, len(metas))
-					for _, meta := range metas {
-						out = append(out, meta.Name)
-					}
-					return out
-				}
-			}
-			// Workflows narrow the session's spawn set.
-			cap.Sealer.SpawnAllowlist = func(ctx context.Context, sess *api.Session) []string {
-				if b.workflowMgr != nil && sess != nil {
-					if roster := b.workflowMgr.AllowedAgents(ctx, sess.ID); len(roster) > 0 {
-						return roster
-					}
-				}
-				return spawn.AmbientAllowedAgents()
-			}
-			cap.Sealer.WorkerToolBudget = b.workerToolBudgetFor
-			b.mgr.SetAuthzSealer(cap.Sealer)
-		}
-	}
-	return nil
-}
-
 // registerSessionCrashRecovery orders invocation and transcript repair.
 func (b sessionWiring) registerSessionCrashRecovery(invocations *invocation.SQLRecorder) error {
 	if err := delegationWiring(b).registerRecovery(bootrecovery.Entry{
@@ -261,18 +207,18 @@ func (b sessionWiring) registerSessionCrashRecovery(invocations *invocation.SQLR
 }
 
 func (b sessionWiring) wireCheckpointRuntime() error {
-	if b.authzCapturer == nil {
+	if b.security.Authority == nil {
 		return fmt.Errorf("authz: capturer required before checkpoint manager wiring")
 	}
 	checkpointStore := hitl.NewSQLStore(b.storage.Database)
 	checkpointStore.SetEventOutbox(b.events.Outbox)
-	checkpointMgr := hitl.NewCheckpoints(checkpointStore, b.events.Publisher, b.authzCapturer.Recorder)
+	checkpointMgr := hitl.NewCheckpoints(checkpointStore, b.events.Publisher, b.security.Authority.Recorder)
 	b.startup.resources.Track("checkpoint-expiries", 25, func(context.Context) error { checkpointMgr.StopExpiryTimers(); return nil })
 	checkpointMgr.Sessions.SetSessionAdmission(b.mgr.WithSessionTreeAdmission)
 	checkpointMgr.Presence.SetVaultUnlock(b.security.Presence, b.security.Unlocks, unlockRecorder{})
 	b.toolRuntime.Executor.Secrets.SetPresenceAvailable(checkpointMgr.Presence.PresenceAvailable)
 	checkpointMgr.Sessions.SetCheckpointWaitObserver(b.mgr.BeginCheckpointWait)
-	var authzRec authzledger.Recorder = b.authzCapturer.Recorder
+	var authzRec authzledger.Recorder = b.security.Authority.Recorder
 	if b.toolRuntime != nil {
 		b.toolRuntime.Authority.SetAuthzRecorder(authzRec)
 	}
@@ -369,7 +315,7 @@ func (b sessionWiring) wireCheckpointRuntime() error {
 		Authz:             authzRec,
 	})
 	toolApprovalRT := b.wireAskSpamGuards()
-	if err := b.wireExceptionalCapability(); err != nil {
+	if err := b.security.BuildExceptional(b.toolRuntime.Executor.Capabilities, b.settings.Service.Approvals, b.toolRuntime.Authority.ApprovalsDisabled, b.mgr, b.security.Authority.Recorder, b.mgr.SetDirectIPReconstructHook); err != nil {
 		return err
 	}
 	return b.wireToolApprovalCheckpointHooks(toolApprovalRT)
@@ -379,10 +325,10 @@ func (b sessionWiring) assertAuthzCapturer() error {
 	if b.storage.Database == nil {
 		return nil
 	}
-	if b.authzCapturer == nil {
+	if b.security.Authority == nil {
 		return fmt.Errorf("authz: capturer must be wired when database is configured")
 	}
-	if b.authzCapturer.Store == nil || b.authzCapturer.Sealer == nil || b.authzCapturer.Ledger == nil {
+	if b.security.Authority.Store == nil || b.security.Authority.Sealer == nil || b.security.Authority.Ledger == nil {
 		return fmt.Errorf("authz: capturer incomplete")
 	}
 	if b.mgr == nil || !b.mgr.AuthzSealWired() {

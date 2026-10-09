@@ -44,12 +44,12 @@ func (b boardWiring) wireWorkflows() error {
 		return project.PrimaryRootPath(p), nil
 	})
 	// Blueprint grants must not begin or end unledgered.
-	if b.authzCapturer == nil {
+	if b.security.Authority == nil {
 		return fmt.Errorf("authz: capturer required before blueprint approval store wiring")
 	}
 	b.blueprintMgr = blueprint.NewManager(blueprintStore)
 	b.blueprintMgr.SetProjects(b.storage.Projects)
-	b.blueprintMgr.Approvals = blueprint.NewApprovalStore(b.storage.Database, b.authzCapturer.Recorder)
+	b.blueprintMgr.Approvals = blueprint.NewApprovalStore(b.storage.Database, b.security.Authority.Recorder)
 
 	manifestRegistry, err := workflowdef.RegistryFromDirs("")
 	if err != nil {
@@ -81,8 +81,8 @@ func (b boardWiring) wireWorkflows() error {
 	b.workflowStore = workflow.NewSQLStore(b.storage.Database)
 	b.workflowStore.SetEventOutbox(b.events.Outbox)
 	b.workflowStore.SetSessionMutations(b.storage.Sessions)
-	if b.authzCapturer != nil {
-		b.workflowStore.SetAuthzRecorder(b.authzCapturer.Recorder)
+	if b.security.Authority != nil {
+		b.workflowStore.SetAuthzRecorder(b.security.Authority.Recorder)
 	}
 	b.workflowMgr = workflow.NewManager(b.workflowStore, b.storage.Sessions, b.manifestRegistry, b.events.Publisher)
 	b.workflowMgr.ReviewSpawnFilter = func(_ context.Context, _, _ string, candidates []string) []string {
@@ -333,6 +333,7 @@ func (b boardWiring) wireWorkflowConditions() error {
 		return b.workerQueue.ListByWorkflowRunID(ctx, runID)
 	}
 	b.workflowMgr.WorkerToolBudget = b.workerToolBudgetFor
+	b.security.BindSpawnAgents(b.workflowMgr.AllowedAgents)
 	b.workflowMgr.EvidenceDigests = append(b.workflowMgr.EvidenceDigests, scan.WorkflowEvidenceDigest(b.scanStore))
 	return b.wireWorkflowComposition()
 }

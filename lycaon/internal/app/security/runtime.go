@@ -2,6 +2,7 @@ package security
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/authzcontext"
 	"github.com/lycaon/lycaon/internal/curationctx"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/presence"
@@ -11,11 +12,16 @@ import (
 	"github.com/lycaon/lycaon/internal/secretharvest"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/secretspan"
+	"github.com/lycaon/lycaon/internal/session/approvalstate"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 )
 
 type Runtime struct {
+	Authority     *authzcontext.Capturer
+	spawnAgents   func(context.Context, string) []string
+	Sockets       *approvalstate.SocketCapabilityRuntime
+	DirectIP      *approvalstate.DirectIPCapabilityRuntime
 	Detections    Detections
 	Presence      *presence.Broker
 	Unlocks       *presence.Unlocks

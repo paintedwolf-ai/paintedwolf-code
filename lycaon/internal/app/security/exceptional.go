@@ -1,32 +1,41 @@
-package app
+package security
 
 import (
 	"context"
 
 	"github.com/lycaon/lycaon/internal/authzcontext"
 	"github.com/lycaon/lycaon/internal/authzledger"
+	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
+	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// wireExceptionalCapability installs AF_UNIX / direct-IP runtimes, ledger hooks,
-// and the ExternalAccess builder used by tool results and protection chrome.
-func (b sessionWiring) wireExceptionalCapability() error {
+type SessionLifetime interface {
+	RegisterSessionCleanup(string, int, func(context.Context, string) error) error
+	RegisterSessionDisposal(string, int, func(context.Context, string) error) error
+}
+type DirectIPRecorder interface {
+	AppendDirectIPLifecycle(context.Context, authzledger.DirectIPLifecycleRecord)
+}
+
+func (b *Runtime) BuildExceptional(control *toolexecution.Capabilities, approvals *settings.ApprovalStore, disabled func(string) bool, lifetime SessionLifetime, recorder DirectIPRecorder, reconstruct func(session.DirectIPReconstructHook)) error {
 	socketCapabilityRT := approvalstate.NewSocketCapabilityRuntime()
-	b.socketCapabilityRT = socketCapabilityRT
-	b.toolRuntime.Executor.Capabilities.SetSocketCapabilityRuntime(socketCapabilityAdapter{rt: socketCapabilityRT})
-	if b.settings.Service != nil && b.settings.Service.Approvals != nil {
-		b.toolRuntime.Executor.Capabilities.SetDurableSocketSource(b.settings.Service.Approvals.SocketPathsForProject)
+	b.Sockets = socketCapabilityRT
+	control.SetSocketCapabilityRuntime(socketCapabilityRT)
+	if approvals != nil {
+		control.SetDurableSocketSource(approvals.SocketPathsForProject)
 	}
-	b.toolRuntime.Executor.Capabilities.SetApprovalsDisabled(b.toolRuntime.Authority.ApprovalsDisabled)
-	if err := b.mgr.RegisterSessionCleanup("socket-capabilities", 51, func(_ context.Context, sessionID string) error {
+	control.SetApprovalsDisabled(disabled)
+	if err := lifetime.RegisterSessionCleanup("socket-capabilities", 51, func(_ context.Context, sessionID string) error {
 		socketCapabilityRT.ReleaseRun(sessionID)
 		return nil
 	}); err != nil {
 		return err
 	}
-	if err := b.mgr.RegisterSessionDisposal("socket-capability-grants", 51, func(_ context.Context, sessionID string) error {
+	if err := lifetime.RegisterSessionDisposal("socket-capability-grants", 51, func(_ context.Context, sessionID string) error {
 		socketCapabilityRT.ForgetSession(sessionID)
 		return nil
 	}); err != nil {
@@ -34,23 +43,23 @@ func (b sessionWiring) wireExceptionalCapability() error {
 	}
 
 	directIPCapabilityRT := approvalstate.NewDirectIPCapabilityRuntime()
-	b.directIPCapabilityRT = directIPCapabilityRT
-	b.toolRuntime.Executor.Capabilities.SetDirectIPCapabilityRuntime(directIPCapabilityAdapter{rt: directIPCapabilityRT})
-	if err := b.mgr.RegisterSessionCleanup("direct-ip-capabilities", 52, func(_ context.Context, sessionID string) error {
+	b.DirectIP = directIPCapabilityRT
+	control.SetDirectIPCapabilityRuntime(directIPCapabilityRT)
+	if err := lifetime.RegisterSessionCleanup("direct-ip-capabilities", 52, func(_ context.Context, sessionID string) error {
 		directIPCapabilityRT.ReleaseRun(sessionID)
 		return nil
 	}); err != nil {
 		return err
 	}
-	if err := b.mgr.RegisterSessionDisposal("direct-ip-grants", 52, func(_ context.Context, sessionID string) error {
+	if err := lifetime.RegisterSessionDisposal("direct-ip-grants", 52, func(_ context.Context, sessionID string) error {
 		directIPCapabilityRT.ForgetSession(sessionID)
 		return nil
 	}); err != nil {
 		return err
 	}
-	if b.authzCapturer != nil {
-		rec := b.authzCapturer.Recorder
-		b.toolRuntime.Executor.Capabilities.SetDirectIPLifecycleHook(func(ev tools.DirectIPLifecycleEvent) {
+	if recorder != nil {
+		rec := recorder
+		control.SetDirectIPLifecycleHook(func(ev tools.DirectIPLifecycleEvent) {
 			rec.AppendDirectIPLifecycle(context.Background(), authzledger.DirectIPLifecycleRecord{
 				SessionID:            ev.SessionID,
 				Phase:                string(ev.Phase),
@@ -60,7 +69,7 @@ func (b sessionWiring) wireExceptionalCapability() error {
 				Background:           ev.Background,
 			})
 		})
-		b.mgr.SetDirectIPReconstructHook(func(sessionID, _, _ string) {
+		reconstruct(func(sessionID, _, _ string) {
 			rec.AppendDirectIPLifecycle(context.Background(), authzledger.DirectIPLifecycleRecord{
 				SessionID:  sessionID,
 				Phase:      string(tools.DirectIPLifecycleReconstructed),

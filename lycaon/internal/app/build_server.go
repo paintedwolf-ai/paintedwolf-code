@@ -160,9 +160,9 @@ func (b serverWiring) wireServer() error {
 		SecretIgnores: b.security.Ignores, ManagedSecrets: b.security.Capabilities, SecretSpans: b.security.Spans,
 		Checkpoints: b.checkpointMgr, ApprovalGate: b.toolRuntime.Authority.ApprovalGate(),
 		Authority: capabilityadmin.Authority{
-			DirectIP: b.directIPCapabilityRT, GrantedPaths: b.grantedPathRT, Listen: b.sandboxListenRT,
+			DirectIP: b.security.DirectIP, GrantedPaths: b.grantedPathRT, Listen: b.sandboxListenRT,
 			Loopback: b.sandboxLoopbackRT, ReadPaths: b.sandboxReadPathRT, WriteRoots: b.sandboxWriteRootRT,
-			Sockets: b.socketCapabilityRT, ChatGrants: chatGrantLedger(b.checkpointMgr), Vault: b.security.Unlocks,
+			Sockets: b.security.Sockets, ChatGrants: chatGrantLedger(b.checkpointMgr), Vault: b.security.Unlocks,
 		}}, Scans: api.ScansDependencies{
 		ScanCoordinator: b.scanCoordinator, ScannerRegistry: b.scannerReg, ScanCadence: b.scanCadence,
 		GateRepeatLedger: b.gateRepeatRT, PublishDetections: b.security.Detections.Publish}, Workflow: api.WorkflowDependencies{
@@ -175,9 +175,9 @@ func (b serverWiring) wireServer() error {
 		Video: toolWiring(b).videoDecoder()}, Extensions: api.ExtensionsDependencies{
 		ExtensionViews: b.catalog.ViewCache, ExtensionJournal: extensionJournal}, External: api.ExternalDependencies{
 		MCP: b.mcpReg, WebResearch: b.webResearchRuntime, WebDiscoverer: b.webDiscoverer, WebIndex: b.storage.WebIndex}, Harness: api.HarnessDependencies{ManualLLM: b.providers.Manual, HarnessWorkers: b.harnessWorkers}}
-	if b.authzCapturer != nil {
-		deps.Approvals.Authority.AuthzRecorder = b.authzCapturer.Recorder
-		deps.Approvals.Authority.ApprovalDecisions = b.authzCapturer.Store
+	if b.security.Authority != nil {
+		deps.Approvals.Authority.AuthzRecorder = b.security.Authority.Recorder
+		deps.Approvals.Authority.ApprovalDecisions = b.security.Authority.Store
 	}
 	b.projectLiveness = projectliveness.New(projectliveness.Config{
 		Sessions: b.storage.Sessions,
