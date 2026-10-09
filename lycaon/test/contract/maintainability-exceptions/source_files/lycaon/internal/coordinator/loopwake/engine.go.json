@@ -1,0 +1,6 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/coordinator/loopwake/engine.go",
+  "cap": 1198,
+  "reason": "Past the limit before #356, which moves the sleep table out of it; the split is tracked in #364."
+}

@@ -1,0 +1,56 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/QuantumNous/new-api"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.0.0-rc.11"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-64868",
+  "GHSA-v828-m3pf-vq9q"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6245"
+ },
+ "details": "New API: Unauthenticated payment webhooks allow memory and disk DoS via unbounded body reads and full-body logging in github.com/QuantumNous/new-api",
+ "id": "GO-2026-6245",
+ "modified": "2026-08-18T14:32:29Z",
+ "published": "2026-08-18T14:32:29Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/QuantumNous/new-api/security/advisories/GHSA-v828-m3pf-vq9q"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/QuantumNous/new-api/commit/d2f7f9ee3adf3ef66798783a60d7bc712451c85c"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/QuantumNous/new-api/pull/5244"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/QuantumNous/new-api/releases/tag/v1.0.0-rc.11"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "New API: Unauthenticated payment webhooks allow memory and disk DoS via unbounded body reads and full-body logging in github.com/QuantumNous/new-api"
+}

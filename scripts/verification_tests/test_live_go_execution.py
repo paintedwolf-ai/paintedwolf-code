@@ -23,6 +23,8 @@ class LiveGoBatchTests(support.BatchFixture):
         for name in ["task.sh", "go-test-digest.sh", "go-test-exec.py", "test-digest.py", "test-run-manifest.py",
                      "test-host-capacity.sh", "process-group-watchdog.py", "verification_timings.py"]:
             shutil.copy2(SCRIPT.with_name(name), self.scripts / name)
+        shutil.copytree(SCRIPT.parent / "ci_policy", self.scripts / "ci_policy",
+                        ignore=shutil.ignore_patterns("__pycache__"))
         # The fixture has no document core to build; digests only need the export.
         (self.scripts / "document-core-env.sh").write_text(
             "#!/usr/bin/env bash\nexport LYCAON_DOCUMENT_CORE_BINARY=/nonexistent/document-core\n")

@@ -44,6 +44,12 @@ test_run_export_isolation() {
 
   # Browser tests reuse the pinned browser already provisioned under the real home.
   export PW_TEST_HOST_HOME="${PW_TEST_HOST_HOME:-${HOME}}"
+  # Toolchains and dependency stores are provisioned host inputs, not test state.
+  export RUSTUP_HOME="${RUSTUP_HOME:-${HOME}/.rustup}"
+  export CARGO_HOME="${CARGO_HOME:-${HOME}/.cargo}"
+  export GOCACHE="${GOCACHE:-$(go env GOCACHE)}"
+  export GOMODCACHE="${GOMODCACHE:-$(go env GOMODCACHE)}"
+  export GOPATH="${GOPATH:-$(go env GOPATH)}"
   export HOME="${run_dir}/home"
   export TMPDIR="${run_dir}/tmp"
   export XDG_CACHE_HOME="${run_dir}/xdg-cache"
