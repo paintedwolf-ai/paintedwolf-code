@@ -7,10 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
-	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
+	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -108,7 +108,7 @@ func TestGitReviewSpecialFileComparisons(t *testing.T) {
 	contractfixture.MirrorLedgerProject(t, database, p)
 	before := strings.TrimSpace(gittest.Run(t, repo, "rev-parse", "HEAD"))
 	testutil.FailErr(t, "write binary", os.WriteFile(filepath.Join(root, "binary"), []byte{0, 1, 2}, 0o644))
-	testutil.FailErr(t, "write large blob", os.WriteFile(filepath.Join(root, "large"), []byte(strings.Repeat("x", project.SourceReadMaxBytes+1)), 0o644))
+	testutil.FailErr(t, "write large blob", os.WriteFile(filepath.Join(root, "large"), []byte(strings.Repeat("x", projectsource.SourceReadMaxBytes+1)), 0o644))
 	testutil.FailErr(t, "write symlink", os.Symlink("../outside-secret", filepath.Join(root, "link")))
 	gittest.Run(t, root, "mv", "src/app.ts", "src/renamed.ts")
 	gittest.CommitAll(t, repo, "special files")

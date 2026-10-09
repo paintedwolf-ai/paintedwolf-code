@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/sourcecomparison"
 	"github.com/lycaon/lycaon/internal/sourceledger"
@@ -117,7 +118,7 @@ func (s *Comparisons) loadChatComparison(ctx context.Context, projectID, session
 }
 
 func comparisonText(before, after wire.SourceComparisonSide) (wire.SourceComparison, error) {
-	if len(before.Content) > project.SourceReadMaxBytes || len(after.Content) > project.SourceReadMaxBytes {
+	if len(before.Content) > projectsource.SourceReadMaxBytes || len(after.Content) > projectsource.SourceReadMaxBytes {
 		return wire.SourceComparison{}, &comparisonFailure{wire.ApiErrorCodeSourceTextTooLarge, "The source exceeds the supported text size."}
 	}
 	return wire.SourceComparison{InRange: true, Before: &before, After: &after}, nil

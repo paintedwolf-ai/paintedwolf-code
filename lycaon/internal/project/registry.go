@@ -14,9 +14,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/gitexec"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -779,7 +779,7 @@ func gitRemoteHash(ctx context.Context, dir string) string {
 		return ""
 	}
 	url := strings.TrimSpace(string(out))
-	if repo := SourceRemoteRepo(url); repo != "" {
+	if repo := projectsource.SourceRemoteRepo(url); repo != "" {
 		url = repo
 	}
 	if url == "" {

@@ -37,6 +37,7 @@ import (
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectliveness"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/scan"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
@@ -363,7 +364,7 @@ func (b serverWiring) wireSourceEditing(deps *api.Dependencies) error {
 	if b.sourceLedger != nil {
 		deps.Source.SourceLedger, deps.Source.SourceInventory = b.sourceLedger, b.sourceLedger.Inventory
 	}
-	sourceMutations := project.NewSourceMutationService(b.db, b.sourceLedger)
+	sourceMutations := projectsource.NewSourceMutationService(b.db, b.sourceLedger)
 	if err := delegationWiring(b).registerRecovery(bootrecovery.Entry{
 		Name: "source-mutations", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseBuild,
 		Run: sourceMutations.Recover,

@@ -7,11 +7,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/project"
-	sessionstore "github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/sourcerewind"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 )
 
 func TestSourceRewindSelectivelyUndoesAgentTextAndPreservesSavedHumanText(t *testing.T) {
@@ -35,7 +36,7 @@ func TestSourceRewindSelectivelyUndoesAgentTextAndPreservesSavedHumanText(t *tes
 	testutil.FailErr(t, "human edit", err)
 	d, err = f.service.Save(ctx, f.project, d.ID, "window", uuid.NewString(), "", 0, d.Revision)
 	testutil.FailErr(t, "save human edit", err)
-	service := &sourcerewind.Service{Ledger: ledger, Mutations: project.NewSourceMutationService(f.store.db, ledger), Documents: f.service}
+	service := &sourcerewind.Service{Ledger: ledger, Mutations: projectsource.NewSourceMutationService(f.store.db, ledger), Documents: f.service}
 	plan, err := service.Prepare(ctx, f.project, sessionID, []string{anchor})
 	testutil.FailErr(t, "preview selective rewind", err)
 	if len(plan.Files) != 1 || string(plan.Files[0].Target.Content) != "one\ntwo human\n" {

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 )
@@ -128,7 +129,7 @@ func (s *Service) reconcileRewoundDocument(ctx context.Context, p *project.Proje
 	}
 	read, err := readDocumentSource(p, d)
 	if err != nil {
-		if errors.Is(err, project.ErrSourceNotFound) || errors.Is(err, os.ErrNotExist) {
+		if errors.Is(err, projectsource.ErrSourceNotFound) || errors.Is(err, os.ErrNotExist) {
 			return s.markAbsent(ctx, d)
 		}
 		return err

@@ -23,9 +23,9 @@ import (
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/usernotice"
-	wire "github.com/lycaon/lycaon/pkg/api"
-	openapi "github.com/lycaon/lycaon/test/openapi"
 	"github.com/lycaon/lycaon/test/wiring"
+	openapi "github.com/lycaon/lycaon/test/openapi"
+	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 // conformanceRule names one runtime invariant of the sweep.
@@ -86,7 +86,7 @@ func TestAPIConformance(t *testing.T) {
 
 	sweep := newConformanceSweep(doc, validator, h.Server, usernotice.NewCatalog(noticeCfg))
 	settleSourceWatcher(t, hub, projectDir)
-	sweep.effects = openConformanceEffects(t, h, hub)
+	sweep.Effects = openConformanceEffects(t, h, hub)
 	bindConformanceFixtures(sweep.values, project, sess, "README.md")
 	sweep.values.bind("/v1/providers/{provider_id}", "", provider)
 	// A keyed web research provider.

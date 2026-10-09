@@ -9,7 +9,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -101,7 +101,7 @@ func TestAgentMutationCommitsAttributionAndEventTogether(t *testing.T) {
 	tctx.Source.Commands = st.Commands
 	tctx.Source.Observations = st.Inventory
 	tctx.Source.GitMutations = st.Git
-	tctx.Source.SourceMutations = project.NewSourceMutationService(st.LedgerDB(), st)
+	tctx.Source.SourceMutations = projectsource.NewSourceMutationService(st.LedgerDB(), st)
 
 	path := filepath.Join(dir, "one.txt")
 	testutil.FailErr(t, "write", applyAgentFile(t.Context(), tctx, testMutationTarget(path), []byte("after\n"), nil, ""))
@@ -131,7 +131,7 @@ func TestAgentMutationEventFailureRollsBackTheLedgerRow(t *testing.T) {
 	tctx.Source.Commands = st.Commands
 	tctx.Source.Observations = st.Inventory
 	tctx.Source.GitMutations = st.Git
-	tctx.Source.SourceMutations = project.NewSourceMutationService(st.LedgerDB(), st)
+	tctx.Source.SourceMutations = projectsource.NewSourceMutationService(st.LedgerDB(), st)
 
 	path := filepath.Join(dir, "torn.txt")
 	err := applyAgentFile(t.Context(), tctx, testMutationTarget(path), []byte("after\n"), nil, "")
@@ -189,7 +189,8 @@ func TestAgentMutationPreparationFailureLeavesFileUntouched(t *testing.T) {
 	tctx.Source.Commands = st.Commands
 	tctx.Source.Observations = st.Inventory
 	tctx.Source.GitMutations = st.Git
-	tctx.Source.SourceMutations = project.NewSourceMutationService(st.LedgerDB(), st)
+	tctx.Source.SourceMutations = projectsource.NewSourceMutationService(st.LedgerDB(), st)
+
 	_, err := st.LedgerDB().ExecContext(t.Context(), `CREATE TRIGGER reject_effect_preparation BEFORE INSERT ON source_mutations BEGIN SELECT RAISE(ABORT,'journal unavailable'); END`)
 	testutil.FailErr(t, "inject journal failure", err)
 	path := filepath.Join(dir, "not-created.txt")

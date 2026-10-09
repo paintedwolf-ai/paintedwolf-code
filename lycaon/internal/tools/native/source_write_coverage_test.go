@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -121,7 +121,7 @@ func TestEveryMutatingToolRecordsAnAttributedRow(t *testing.T) {
 			tctx.Source.Commands = st.Commands
 			tctx.Source.Observations = st.Inventory
 			tctx.Source.GitMutations = st.Git
-			tctx.Source.SourceMutations = project.NewSourceMutationService(st.LedgerDB(), st)
+			tctx.Source.SourceMutations = projectsource.NewSourceMutationService(st.LedgerDB(), st)
 
 			testutil.FailErr(t, tc.tool+" tool failed", tc.run(t, dir, tctx))
 

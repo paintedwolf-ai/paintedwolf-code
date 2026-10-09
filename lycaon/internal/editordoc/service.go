@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/sourceledger"
@@ -36,7 +37,8 @@ type Service struct {
 	store           *Store
 	ledger          Ledger
 	history         *sourceledger.History
-	sourceMutations *project.SourceMutationService
+	sourceMutations *projectsource.SourceMutationService
+
 	// roots resolves stable root identities to live paths.
 	roots RootSource
 	// ops lets recovery and retargets quiesce document operations.
@@ -53,7 +55,7 @@ type Service struct {
 	onChange     func(context.Context, Change)
 }
 
-func (s *Service) SetSourceMutations(mutations *project.SourceMutationService) {
+func (s *Service) SetSourceMutations(mutations *projectsource.SourceMutationService) {
 	s.sourceMutations = mutations
 }
 
@@ -64,9 +66,9 @@ func (s *Service) reserveDocumentSource(ctx context.Context, p *project.Project,
 		return nil, err
 	}
 	if pending {
-		return nil, project.ErrSourceBusy
+		return nil, projectsource.ErrSourceBusy
 	}
-	return s.sourceMutations.ReserveSourcePath(rootPath(p, d.RootID), d.Path)
+	return s.sourceMutations.Paths.ReserveSourcePath(rootPath(p, d.RootID), d.Path)
 }
 
 // Change describes the projection needed after one document transition.
@@ -224,11 +226,11 @@ func (s *Service) CurrentSnapshot(ctx context.Context, projectID, documentID str
 func (s *Service) Open(ctx context.Context, p *project.Project, path, rootID, decodeAs, clientID string, retained *Retained) (*Document, error) {
 	options := documentOpenOptions{join: true, retained: retained}
 	for attempt := 0; ; attempt++ {
-		observation, err := project.ObserveProjectSource(p, project.SourceReadRequest{Path: path, RootID: rootID, DecodeAs: decodeAs})
-		if errors.Is(err, project.ErrSourceNotFound) {
+		observation, err := projectsource.ObserveProjectSource(p, projectsource.SourceReadRequest{Path: path, RootID: rootID, DecodeAs: decodeAs})
+		if errors.Is(err, projectsource.ErrSourceNotFound) {
 			d, absentErr := s.openAbsentDocument(ctx, p, path, rootID, clientID, options)
 			// The file came back between the two looks; read it instead.
-			if errors.Is(absentErr, project.ErrSourceExists) && attempt == 0 {
+			if errors.Is(absentErr, projectsource.ErrSourceExists) && attempt == 0 {
 				continue
 			}
 			return d, absentErr
@@ -250,7 +252,7 @@ func (s *Service) Open(ctx context.Context, p *project.Project, path, rootID, de
 // openAbsentDocument resumes the document a deleted path still has. A path
 // without a document is simply not found.
 func (s *Service) openAbsentDocument(ctx context.Context, p *project.Project, path, rootID, clientID string, options documentOpenOptions) (*Document, error) {
-	rel, err := project.ResolveAbsentSourcePath(p, rootID, path)
+	rel, err := projectsource.ResolveAbsentSourcePath(p, rootID, path)
 	if err != nil {
 		return nil, err
 	}
@@ -261,7 +263,7 @@ func (s *Service) openAbsentDocument(ctx context.Context, p *project.Project, pa
 	defer unlockIdentity()
 	d, err := s.store.GetByIdentity(ctx, p.ID, branch, rootID, rel)
 	if errors.Is(err, ErrNotFound) {
-		return nil, project.ErrSourceNotFound
+		return nil, projectsource.ErrSourceNotFound
 	}
 	if err != nil {
 		return nil, err
@@ -276,7 +278,7 @@ func (s *Service) openAbsentDocument(ctx context.Context, p *project.Project, pa
 
 // OpenedSource pairs the saved observation with the authoritative live draft.
 type OpenedSource struct {
-	Source   *project.SourceReadResult
+	Source   *projectsource.SourceReadResult
 	Document *Document
 }
 
@@ -288,7 +290,7 @@ type Retained struct {
 }
 
 // OpenObserved projects an observed source and opens its live document when the text is editable.
-func (s *Service) OpenObserved(ctx context.Context, p *project.Project, observation *project.SourceReadObservation, decodeAs, clientID string, retained *Retained) (*OpenedSource, error) {
+func (s *Service) OpenObserved(ctx context.Context, p *project.Project, observation *projectsource.SourceReadObservation, decodeAs, clientID string, retained *Retained) (*OpenedSource, error) {
 	read, err := observation.Project()
 	if err != nil {
 		return nil, err
@@ -317,7 +319,7 @@ func (o documentOpenOptions) projectionVector(d *Document) func(head *ReplicaHea
 	}
 }
 
-func (s *Service) openObservedDocument(ctx context.Context, p *project.Project, observation *project.SourceReadObservation, read *project.SourceReadResult, decodeAs, clientID string, options documentOpenOptions) (*Document, error) {
+func (s *Service) openObservedDocument(ctx context.Context, p *project.Project, observation *projectsource.SourceReadObservation, read *projectsource.SourceReadResult, decodeAs, clientID string, options documentOpenOptions) (*Document, error) {
 	// Path identity prevents duplicate documents before the document lock exists.
 	branch := p.BranchForRoot(read.RootID)
 	s.ops.RLock()
@@ -332,8 +334,8 @@ func (s *Service) openObservedDocument(ctx context.Context, p *project.Project, 
 		// Observed again under the document lock, after the latest transition.
 		unlockDoc := s.docLocks.lock(documentLockKey(d.ID))
 		defer unlockDoc()
-		observation, err = project.ObserveProjectSource(p, project.SourceReadRequest{Path: read.Path, RootID: read.RootID, DecodeAs: decodeAs})
-		if errors.Is(err, project.ErrSourceNotFound) {
+		observation, err = projectsource.ObserveProjectSource(p, projectsource.SourceReadRequest{Path: read.Path, RootID: read.RootID, DecodeAs: decodeAs})
+		if errors.Is(err, projectsource.ErrSourceNotFound) {
 			if err := s.markAbsent(ctx, d); err != nil {
 				return nil, err
 			}
@@ -382,7 +384,7 @@ func (s *Service) openObservedDocument(ctx context.Context, p *project.Project, 
 }
 
 // trackInput describes an observed file to the ledger the way an open does.
-func trackInput(p *project.Project, observation *project.SourceReadObservation) sourceledger.TrackInput {
+func trackInput(p *project.Project, observation *projectsource.SourceReadObservation) sourceledger.TrackInput {
 	return sourceledger.TrackInput{
 		ProjectID: p.ID, BranchID: p.BranchForRoot(observation.RootID),
 		RootID: observation.RootID, Path: observation.Path, EntryKind: sourceledger.EntryKindFile,
@@ -571,7 +573,7 @@ func (s *Service) prepareSaveMutation(ctx context.Context, d *Document, operatio
 		return nil, err
 	}
 	content := serializeEOL(d.Draft, d.EOL)
-	after, err := textfile.EncodeBounded(content, d.Encoding, textfile.LimitsForRaw(project.SourceWriteMaxBytes))
+	after, err := textfile.EncodeBounded(content, d.Encoding, textfile.LimitsForRaw(projectsource.SourceWriteMaxBytes))
 	if err != nil {
 		return nil, err
 	}
@@ -615,7 +617,7 @@ func (s *Service) finishMutation(ctx context.Context, p *project.Project, d *Doc
 		result, err := publishMutation(p, m)
 		if err != nil {
 			status := "failed"
-			if errors.Is(err, project.ErrSourceWriteConflict) {
+			if errors.Is(err, projectsource.ErrSourceWriteConflict) {
 				status = "conflict"
 			}
 			if settleErr := s.settlePublicationFailure(ctx, d, m, status, err); settleErr != nil {
@@ -642,12 +644,12 @@ func (s *Service) finishMutation(ctx context.Context, p *project.Project, d *Doc
 
 // publishMutation lands the journaled bytes: an exclusive create when the
 // document expected no file, a guarded replacement otherwise.
-func publishMutation(p *project.Project, m *Mutation) (*project.SourceWriteResult, error) {
-	req := project.SourceWriteRequest{Path: m.Path, RootID: m.RootID, Content: m.Content, Encoding: m.Encoding, BaseSHA256: m.ExpectedSHA256}
+func publishMutation(p *project.Project, m *Mutation) (*projectsource.SourceWriteResult, error) {
+	req := projectsource.SourceWriteRequest{Path: m.Path, RootID: m.RootID, Content: m.Content, Encoding: m.Encoding, BaseSHA256: m.ExpectedSHA256}
 	if m.Creates() {
-		return project.ApplySourceWriteCreate(p, req)
+		return projectsource.ApplySourceWriteCreate(p, req)
 	}
-	return project.ApplySourceWriteCAS(p, req)
+	return projectsource.ApplySourceWriteCAS(p, req)
 }
 
 // Creates reports a publication that expects no file at its path.
@@ -777,19 +779,19 @@ func decodeMutationResponse(m *Mutation) (*Document, error) {
 }
 
 // A remembered byte order applies only while the bytes need explicit decoding.
-func readDocumentSource(p *project.Project, d *Document) (*project.SourceReadResult, error) {
+func readDocumentSource(p *project.Project, d *Document) (*projectsource.SourceReadResult, error) {
 	_, read, err := observeDocumentSource(p, d)
 	return read, err
 }
 
 // observeDocumentSource reads the document's file and keeps the observation
 // for the ledger. An undecodable file answers its observation beside the error.
-func observeDocumentSource(p *project.Project, d *Document) (*project.SourceReadObservation, *project.SourceReadResult, error) {
+func observeDocumentSource(p *project.Project, d *Document) (*projectsource.SourceReadObservation, *projectsource.SourceReadResult, error) {
 	if err := checkWorkspace(p, d); err != nil {
 		return nil, nil, err
 	}
-	req := project.SourceReadRequest{Path: d.Path, RootID: d.RootID}
-	observation, err := project.ObserveProjectSource(p, req)
+	req := projectsource.SourceReadRequest{Path: d.Path, RootID: d.RootID}
+	observation, err := projectsource.ObserveProjectSource(p, req)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -798,7 +800,7 @@ func observeDocumentSource(p *project.Project, d *Document) (*project.SourceRead
 	if decodeAs == "" {
 		return observation, read, err
 	}
-	var unsupported *project.SourceUnsupportedEncodingError
+	var unsupported *projectsource.SourceUnsupportedEncodingError
 	if err != nil && !errors.As(err, &unsupported) {
 		return observation, nil, err
 	}
@@ -806,7 +808,7 @@ func observeDocumentSource(p *project.Project, d *Document) (*project.SourceRead
 		return observation, read, nil
 	}
 	req.DecodeAs = decodeAs
-	observation, err = project.ObserveProjectSource(p, req)
+	observation, err = projectsource.ObserveProjectSource(p, req)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -823,7 +825,7 @@ func documentDecodeAs(d *Document) string {
 	}
 }
 
-func validateDocumentAdmission(read *project.SourceReadResult) error {
+func validateDocumentAdmission(read *projectsource.SourceReadResult) error {
 	if err := validateEditableSource(read); err != nil {
 		return err
 	}
@@ -833,12 +835,12 @@ func validateDocumentAdmission(read *project.SourceReadResult) error {
 	return nil
 }
 
-func validateEditableSource(read *project.SourceReadResult) error {
+func validateEditableSource(read *projectsource.SourceReadResult) error {
 	if read.OverLimit {
-		return project.ErrSourceWriteTooLarge
+		return projectsource.ErrSourceWriteTooLarge
 	}
 	if read.Binary || read.Encoding == "" {
-		return project.ErrSourceBinary
+		return projectsource.ErrSourceBinary
 	}
 	return nil
 }

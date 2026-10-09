@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"testing"
@@ -15,11 +14,12 @@ import (
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/textfile"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
-	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
-	surveytools "github.com/lycaon/lycaon/internal/tools/native/survey"
 	"github.com/lycaon/lycaon/pkg/api"
+	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
+	surveytools "github.com/lycaon/lycaon/internal/tools/native/survey"
 )
 
 // fakeSourceLedger satisfies sourceledger.Recorder plus the provenance read
@@ -96,7 +96,7 @@ func (f *fakeSourceLedger) ResolveHead(_ context.Context, _ string, _ sourcebran
 }
 
 func (f *fakeSourceLedger) LatestFileEffect(_ context.Context, _, fileID string) (sourceledger.Effect, bool, error) {
-	effects := f.effects[fileID]
+	effects := f.Effects[fileID]
 	if len(effects) == 0 {
 		return sourceledger.Effect{}, false, nil
 	}
@@ -113,7 +113,7 @@ func (f *fakeSourceLedger) GitTransitionsByIDs(context.Context, []string) (map[s
 
 func (f *fakeSourceLedger) QueryFileEffects(_ context.Context, _, fileID string, afterOrdinal, _ int64, limit int) (sourceledger.FileEffectsResult, error) {
 	out := sourceledger.FileEffectsResult{}
-	for _, effect := range f.effects[fileID] {
+	for _, effect := range f.Effects[fileID] {
 		if effect.Ordinal <= afterOrdinal || len(out.Effects) >= limit {
 			continue
 		}

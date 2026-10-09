@@ -37,20 +37,17 @@ import (
 	"github.com/lycaon/lycaon/internal/hostresources"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/llm"
-	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
 	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectignore"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/scan"
-	scancadence "github.com/lycaon/lycaon/internal/scan/cadence"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/session"
-	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
-	repoinfotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
 	"github.com/lycaon/lycaon/internal/testtool"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/scantest"
@@ -59,8 +56,12 @@ import (
 	"github.com/lycaon/lycaon/internal/webresearch"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workflow"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
+	repoinfotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
+	scancadence "github.com/lycaon/lycaon/internal/scan/cadence"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	wire "github.com/lycaon/lycaon/pkg/api"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 )
 
 // Deps mirrors the API dependencies a server cannot be built without.
@@ -79,7 +80,7 @@ type Deps struct {
 	ManagedSecrets    *secretcap.Service
 	SecretIgnores     *projectignore.SecretService
 	SourceLedger      *sourceledger.Store
-	SourceMutations   *project.SourceMutationService
+	SourceMutations   *projectsource.SourceMutationService
 	FileOperations    *fileops.Service
 	EditorDocuments   *editordoc.Service
 	FileBriefings     *filebriefing.Service
@@ -423,7 +424,7 @@ func fillSources(t *testing.T, d *Deps) {
 		d.SourceLedger = sourceledger.New(d.Database, t.TempDir())
 	}
 	if d.SourceMutations == nil {
-		d.SourceMutations = project.NewSourceMutationService(d.Database, d.SourceLedger)
+		d.SourceMutations = projectsource.NewSourceMutationService(d.Database, d.SourceLedger)
 	}
 	if d.FileOperations == nil {
 		d.FileOperations = fileops.NewService(fileops.NewStore(d.Database))

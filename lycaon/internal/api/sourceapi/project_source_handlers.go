@@ -10,11 +10,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/filekind"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/repomap"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
@@ -61,8 +61,8 @@ func (s *Workspace) HandleGetProjectSource(w http.ResponseWriter, r *http.Reques
 		branch = p.BranchForRoot(rootID)
 	}
 	scope := sourceViewerWorkspace{id: workspaceID, kind: workspaceKind, branch: branch}
-	observation, err := project.ObserveProjectSource(p, req)
-	if errors.Is(err, project.ErrSourceNotFound) && includeDeleted && (workerID == "" || branch.IsWorker()) {
+	observation, err := projectsource.ObserveProjectSource(p, req)
+	if errors.Is(err, projectsource.ErrSourceNotFound) && includeDeleted && (workerID == "" || branch.IsWorker()) {
 		var deleted *wire.ProjectSourceReadResponse
 		deleted, err = s.readDeletedSource(r.Context(), p, req, scope)
 		if err == nil {
@@ -70,8 +70,8 @@ func (s *Workspace) HandleGetProjectSource(w http.ResponseWriter, r *http.Reques
 			return
 		}
 		// A replacement that arrived during history lookup takes the current read path.
-		if errors.Is(err, project.ErrSourceExists) {
-			observation, err = project.ObserveProjectSource(p, req)
+		if errors.Is(err, projectsource.ErrSourceExists) {
+			observation, err = projectsource.ObserveProjectSource(p, req)
 		}
 	}
 	if err != nil {
@@ -86,8 +86,8 @@ func (s *Workspace) HandleGetProjectSource(w http.ResponseWriter, r *http.Reques
 	httpio.WriteJSON(w, http.StatusOK, result)
 }
 
-func sourceViewerRequest(r *http.Request) (project.SourceReadRequest, bool, error) {
-	req := project.SourceReadRequest{
+func sourceViewerRequest(r *http.Request) (projectsource.SourceReadRequest, bool, error) {
+	req := projectsource.SourceReadRequest{
 		Path:     strings.TrimSpace(r.URL.Query().Get("path")),
 		RootID:   strings.TrimSpace(r.URL.Query().Get("root_id")),
 		DecodeAs: strings.TrimSpace(r.URL.Query().Get("decode_as")),
@@ -104,7 +104,7 @@ func sourceViewerRequest(r *http.Request) (project.SourceReadRequest, bool, erro
 
 // projectSourceObservation answers the read with the ledger's recorded
 // identity for it; a read records nothing.
-func (s *Workspace) projectSourceObservation(ctx context.Context, projectID string, observation *project.SourceReadObservation, scope sourceViewerWorkspace) (wire.ProjectSourceReadResponse, error) {
+func (s *Workspace) projectSourceObservation(ctx context.Context, projectID string, observation *projectsource.SourceReadObservation, scope sourceViewerWorkspace) (wire.ProjectSourceReadResponse, error) {
 	recorded, err := s.recordedSourceObservation(ctx, projectID, observation, scope)
 	if err != nil {
 		return wire.ProjectSourceReadResponse{}, err
@@ -117,7 +117,7 @@ func (s *Workspace) projectSourceObservation(ctx context.Context, projectID stri
 	return ToProjectSourceReadDTO(result, scope.id, scope.kind), nil
 }
 
-func (s *Workspace) recordedSourceObservation(ctx context.Context, projectID string, observation *project.SourceReadObservation, scope sourceViewerWorkspace) (sourceledger.TrackedFile, error) {
+func (s *Workspace) recordedSourceObservation(ctx context.Context, projectID string, observation *projectsource.SourceReadObservation, scope sourceViewerWorkspace) (sourceledger.TrackedFile, error) {
 	return s.SourceLedger.LookupFile(ctx, sourceledger.TrackInput{
 		ProjectID: projectID, BranchID: scope.branch,
 		RootID: observation.RootID, Path: observation.Path, EntryKind: sourceledger.EntryKindFile,
@@ -264,7 +264,7 @@ func (s *Workspace) HandleGetProjectSourceRaw(w http.ResponseWriter, r *http.Req
 		s.writeSourceReadError(w, r, err)
 		return
 	}
-	result, err := project.ReadProjectSourceRaw(p, project.SourceReadRequest{
+	result, err := projectsource.ReadProjectSourceRaw(p, projectsource.SourceReadRequest{
 		Path:   strings.TrimSpace(q.Get("path")),
 		RootID: strings.TrimSpace(q.Get("root_id")),
 	})
@@ -315,7 +315,7 @@ func (s *Workspace) HandleBrowseProjectSource(w http.ResponseWriter, r *http.Req
 	}
 	q := r.URL.Query()
 	workspaceID := p.WorkspaceID()
-	listing, err := project.BrowseProjectSource(p, q.Get("root_id"), q.Get("dir"))
+	listing, err := projectsource.BrowseProjectSource(p, q.Get("root_id"), q.Get("dir"))
 	if err != nil {
 		s.writeSourceReadError(w, r, err)
 		return
@@ -338,38 +338,38 @@ func (s *Workspace) WriteProjectSourceError(w http.ResponseWriter, r *http.Reque
 	if s.writeSourceAddressError(w, err) || httpio.WriteSourceEncodingError(s.responses, w, err) {
 		return
 	}
-	var incomplete *project.SourceMoveIncompleteError
+	var incomplete *projectsource.SourceMoveIncompleteError
 	switch {
 	case errors.As(err, &incomplete):
 		s.responses.Logger.WarnContext(r.Context(), "source move needs recovery", "held_path", incomplete.HeldPath, "err", incomplete.Cause)
 		s.responses.FailDetails(w, wire.ApiErrorCodeSourceMoveIncomplete,
 			map[string]any{"held_path": incomplete.HeldPath, "reason": "The source is retained at " + incomplete.HeldPath + "."},
 			"the move needs recovery")
-	case errors.Is(err, project.ErrSourceBusy):
+	case errors.Is(err, projectsource.ErrSourceBusy):
 		s.responses.Fail(w, wire.ApiErrorCodeSourcePathBusy, "a file operation is using this path; try again after it completes")
-	case errors.Is(err, project.ErrSourceMutationConflict):
+	case errors.Is(err, projectsource.ErrSourceMutationConflict):
 		s.responses.Fail(w, wire.ApiErrorCodeIdempotencyConflict, "operation_id was already used for different source input")
-	case errors.Is(err, project.ErrSourceMutationDiverged):
+	case errors.Is(err, projectsource.ErrSourceMutationDiverged):
 		s.responses.Fail(w, wire.ApiErrorCodeSourceMutationDiverged, "source changed while the operation was being recovered")
-	case errors.Is(err, project.ErrSourceHistoryChanged):
+	case errors.Is(err, projectsource.ErrSourceHistoryChanged):
 		s.responses.Fail(w, wire.ApiErrorCodeSourceHistoryChanged, "file history changed; review the current files before trying again")
-	case errors.Is(err, project.ErrSourceRecoveryFailed):
+	case errors.Is(err, projectsource.ErrSourceRecoveryFailed):
 		s.responses.Logger.WarnContext(r.Context(), "source recovery data unavailable", "err", err)
 		s.responses.Fail(w, wire.ApiErrorCodeSourceRecoveryFailed, "could not preserve file recovery data")
-	case errors.Is(err, project.ErrSourceKindInvalid):
+	case errors.Is(err, projectsource.ErrSourceKindInvalid):
 		s.responses.FailReason(w, wire.ApiErrorCodeInvalidRequest, "kind must be file or folder")
-	case errors.Is(err, project.ErrSourceExists):
+	case errors.Is(err, projectsource.ErrSourceExists):
 		s.responses.Fail(w, wire.ApiErrorCodeSourceAlreadyExists, "a file or folder already exists at that path")
-	case errors.Is(err, project.ErrSourceNotEmpty):
+	case errors.Is(err, projectsource.ErrSourceNotEmpty):
 		s.responses.Fail(w, wire.ApiErrorCodeSourceNotEmpty, "directory is not empty")
-	case errors.Is(err, project.ErrSourceTrashFailed):
+	case errors.Is(err, projectsource.ErrSourceTrashFailed):
 		s.responses.Logger.WarnContext(r.Context(), "source trash failed", "err", err)
 		s.responses.Fail(w, wire.ApiErrorCodeSourceTrashFailed, "could not move to Trash")
-	case errors.Is(err, project.ErrSourceWriteConflict):
+	case errors.Is(err, projectsource.ErrSourceWriteConflict):
 		s.responses.Fail(w, wire.ApiErrorCodeSourceWriteConflict, "file changed on disk since it was loaded")
-	case errors.Is(err, project.ErrSourceWriteTooLarge):
+	case errors.Is(err, projectsource.ErrSourceWriteTooLarge):
 		s.responses.Fail(w, wire.ApiErrorCodeSourceContentTooLarge, "content exceeds the 4 MiB editor cap")
-	case errors.Is(err, project.ErrSourcePermissionChange):
+	case errors.Is(err, projectsource.ErrSourcePermissionChange):
 		s.responses.Fail(w, wire.ApiErrorCodeSourcePermissionChangeFailed, "host filesystem refused the permission change")
 	default:
 		s.responses.InternalError(w, r, err)
@@ -383,11 +383,11 @@ func (s *Workspace) writeSourceReadError(w http.ResponseWriter, r *http.Request,
 		return
 	}
 	switch {
-	case errors.Is(err, project.ErrSourceBinary):
+	case errors.Is(err, projectsource.ErrSourceBinary):
 		s.responses.Fail(w, wire.ApiErrorCodeSourceBinaryDenied, "binary files are not supported")
-	case errors.Is(err, project.ErrSourceRawNotImage):
+	case errors.Is(err, projectsource.ErrSourceRawNotImage):
 		s.responses.Fail(w, wire.ApiErrorCodeSourceRawNotImage, "raw source serves sniffed images only")
-	case errors.Is(err, project.ErrSourceRawTooLarge):
+	case errors.Is(err, projectsource.ErrSourceRawTooLarge):
 		s.responses.Fail(w, wire.ApiErrorCodeSourceRawTooLarge, "image exceeds the 8 MiB raw cap")
 	default:
 		s.responses.InternalError(w, r, err)
@@ -412,17 +412,17 @@ func (s *Analysis) writeSourceAnalysisError(w http.ResponseWriter, r *http.Reque
 // writeSourceAddressError answers the errors of resolving a project path.
 func (s *Workspace) writeSourceAddressError(w http.ResponseWriter, err error) bool {
 	switch {
-	case errors.Is(err, project.ErrSourcePathInvalid):
+	case errors.Is(err, projectsource.ErrSourcePathInvalid):
 		s.responses.FailReason(w, wire.ApiErrorCodeInvalidRequest, "path is required")
-	case errors.Is(err, project.ErrSourceNoRoot):
+	case errors.Is(err, projectsource.ErrSourceNoRoot):
 		s.responses.Fail(w, wire.ApiErrorCodeNoProjectRoot, "project has no attached folder")
-	case errors.Is(err, project.ErrSourceCrossRoot):
+	case errors.Is(err, projectsource.ErrSourceCrossRoot):
 		s.responses.Fail(w, wire.ApiErrorCodeSourceCrossRoot, "source paths must stay in the same project root")
-	case errors.Is(err, project.ErrSourcePathProtected):
+	case errors.Is(err, projectsource.ErrSourcePathProtected):
 		s.responses.Fail(w, wire.ApiErrorCodeSourcePathProtected, "path is protected project metadata")
-	case errors.Is(err, project.ErrSourcePathDenied):
+	case errors.Is(err, projectsource.ErrSourcePathDenied):
 		s.responses.Fail(w, wire.ApiErrorCodeSourcePathDenied, "path is outside the project sandbox")
-	case errors.Is(err, project.ErrSourceNotFound):
+	case errors.Is(err, projectsource.ErrSourceNotFound):
 		s.responses.Fail(w, wire.ApiErrorCodeSourceNotFound, "file not found")
 	default:
 		return false
@@ -433,7 +433,7 @@ func (s *Workspace) writeSourceAddressError(w http.ResponseWriter, err error) bo
 // writeSourceEncodingError answers a text encoding the host cannot decode or
 // a requested encoding it does not support.
 
-func toSourceDirListingDTO(l project.SourceDirListing) wire.SourceDirListing {
+func toSourceDirListingDTO(l projectsource.SourceDirListing) wire.SourceDirListing {
 	entries := make([]wire.SourceDirEntry, 0, len(l.Entries))
 	for _, e := range l.Entries {
 		entries = append(entries, wire.SourceDirEntry{Name: e.Name, IsDir: e.IsDir})
@@ -445,7 +445,7 @@ func toSourceDirListingDTO(l project.SourceDirListing) wire.SourceDirListing {
 }
 
 func ToProjectSourceReadDTO(
-	r *project.SourceReadResult,
+	r *projectsource.SourceReadResult,
 	workspaceID string,
 	workspaceKind wire.SourceWorkspaceKind,
 ) wire.ProjectSourceReadResponse {

@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
-	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/textfile"
@@ -40,7 +40,8 @@ func TestStreamOverwriteRecordsAddressableEvidence(t *testing.T) {
 	tctx.Source.Commands = st.Commands
 	tctx.Source.Observations = st.Inventory
 	tctx.Source.GitMutations = st.Git
-	tctx.Source.SourceMutations = project.NewSourceMutationService(st.LedgerDB(), st)
+	tctx.Source.SourceMutations = projectsource.NewSourceMutationService(st.LedgerDB(), st)
+
 	path := filepath.Join(dir, "copy.txt")
 	testutil.FailErr(t, "seed destination", os.WriteFile(path, []byte("before\n"), 0o644))
 
@@ -75,7 +76,8 @@ func TestLargeStreamRecordsDigestAndSizeWithoutRetainingBody(t *testing.T) {
 	tctx.Source.Commands = ledger.Commands
 	tctx.Source.Observations = ledger.Inventory
 	tctx.Source.GitMutations = ledger.Git
-	tctx.Source.SourceMutations = project.NewSourceMutationService(ledger.LedgerDB(), ledger)
+	tctx.Source.SourceMutations = projectsource.NewSourceMutationService(ledger.LedgerDB(), ledger)
+
 	body := bytes.Repeat([]byte("x"), sourceledger.MaxRevisionContentBytes+1)
 	path := filepath.Join(dir, "large.txt")
 	_, err := applyAgentStream(t.Context(), tctx, agentStreamRequest{
@@ -106,7 +108,7 @@ func TestDeleteRecordsPreImageAndRenameRecordsTip(t *testing.T) {
 	tctx.Source.Commands = st.Commands
 	tctx.Source.Observations = st.Inventory
 	tctx.Source.GitMutations = st.Git
-	tctx.Source.SourceMutations = project.NewSourceMutationService(st.LedgerDB(), st)
+	tctx.Source.SourceMutations = projectsource.NewSourceMutationService(st.LedgerDB(), st)
 
 	deleted := filepath.Join(dir, "deleted.txt")
 	testutil.FailErr(t, "seed deletion", os.WriteFile(deleted, []byte("gone\n"), 0o644))
@@ -152,7 +154,8 @@ func TestExternalMutationDoorDoesNotCreateProjectSource(t *testing.T) {
 	tctx.Source.Commands = st.Commands
 	tctx.Source.Observations = st.Inventory
 	tctx.Source.GitMutations = st.Git
-	tctx.Source.SourceMutations = project.NewSourceMutationService(st.LedgerDB(), st)
+	tctx.Source.SourceMutations = projectsource.NewSourceMutationService(st.LedgerDB(), st)
+
 	external := filepath.Join(t.TempDir(), "host-data.txt")
 
 	testutil.FailErr(t, "external write", applyAgentFile(

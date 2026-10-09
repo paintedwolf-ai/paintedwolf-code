@@ -157,14 +157,14 @@ func assembleSourceChangeBrief(in sourceChangeBriefInputs) inject.SourceChangeBr
 			order = append(order, effect.FileID)
 			continue
 		}
-		group.effects++
+		group.Effects++
 	}
 	for _, fileID := range order {
 		group := groups[fileID]
 		display := displaySourcePath(in.Roots, group.newest.RootID, group.newest.Path)
 		if (!in.Touched[group.newest.Path] && !in.Touched[display]) || len(brief.Files) >= sourceChangeBriefFileCap {
 			brief.OtherFiles++
-			brief.OtherEffects += group.effects
+			brief.OtherEffects += group.Effects
 			continue
 		}
 		brief.Files = append(brief.Files, inject.SourceChangeFile{
@@ -173,7 +173,7 @@ func assembleSourceChangeBrief(in sourceChangeBriefInputs) inject.SourceChangeBr
 			Detail:  group.newest.ActorDisplay(in.SessionID),
 			Op:      string(group.newest.Op),
 			At:      group.newest.TS.UTC().Format("15:04") + " UTC",
-			Effects: group.effects,
+			Effects: group.Effects,
 		})
 	}
 	return brief

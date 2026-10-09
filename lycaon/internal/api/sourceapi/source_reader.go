@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/editordoc"
 	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/sourcecomparison"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -50,8 +51,8 @@ func (s *Comparisons) readChatFileEdit(ctx context.Context, sessionID string, re
 }
 
 func (s *Comparisons) readerCurrentSide(ctx context.Context, p *project.Project, rootID, path string) (wire.SourceComparisonSide, error) {
-	snapshot, err := s.EditorDocuments.ResolveSourceSnapshot(ctx, p, project.SourceReadRequest{RootID: rootID, Path: path}, editordoc.ObserveCurrent)
-	if errors.Is(err, project.ErrSourceNotFound) {
+	snapshot, err := s.EditorDocuments.ResolveSourceSnapshot(ctx, p, projectsource.SourceReadRequest{RootID: rootID, Path: path}, editordoc.ObserveCurrent)
+	if errors.Is(err, projectsource.ErrSourceNotFound) {
 		return wire.SourceComparisonSide{Path: path, State: "absent", Availability: "absent"}, nil
 	}
 	if err != nil {

@@ -9,6 +9,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/search"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 )
@@ -119,7 +120,7 @@ func (e *SymbolExecutor) searchProject(ctx context.Context, leg *search.SymbolPl
 		return symbolProjectResult{err: err}
 	}
 	started := time.Now()
-	result, err := project.SearchProjectSourceSymbols(ctx, p, project.SourceSymbolSearchRequest{
+	result, err := projectsource.SearchProjectSourceSymbols(ctx, p, projectsource.SourceSymbolSearchRequest{
 		Query:         leg.Name,
 		RootIDs:       target.rootIDs,
 		Limit:         leg.Cap,
@@ -186,7 +187,7 @@ func symbolProjects(roots []search.CodeRoot) []symbolProject {
 
 // logSymbolSearchDone is the one line per project symbol search that says
 // where its time went.
-func logSymbolSearchDone(projectID string, result project.SourceSymbolSearchResult, started time.Time) {
+func logSymbolSearchDone(projectID string, result projectsource.SourceSymbolSearchResult, started time.Time) {
 	passes := make([]string, 0, len(result.Passes))
 	for _, pass := range result.Passes {
 		passes = append(passes, fmt.Sprintf("%s:hits=%d,files=%d,partial=%t,discover_ms=%d,outline_ms=%d",
