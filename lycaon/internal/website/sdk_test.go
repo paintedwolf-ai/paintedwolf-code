@@ -1,6 +1,7 @@
 package website
 
 import (
+	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
 	"os"
 	"path/filepath"
 	"strings"
@@ -8,7 +9,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/oar"
-	"github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"gopkg.in/yaml.v3"
@@ -399,7 +399,7 @@ func TestMergeSDK_PosturesMatchRegistry(t *testing.T) {
 	if err != nil {
 		t.Fatalf("MergeSDK: %v", err)
 	}
-	want := profiles.AllSessionPostures()
+	want := sessionposture.AllSessionPostures()
 	if len(out.Postures) != len(want) {
 		t.Fatalf("postures = %d want %d", len(out.Postures), len(want))
 	}
