@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -11,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/people"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -142,5 +145,50 @@ func TestMutationObservationScopeIncludesRenameAndBatchDescendants(t *testing.T)
 	}
 	if pendingMutationObservations(plan.observationPaths()).Pending(sourcebranch.ForWorktree("other"), "root", "new/file") || pendingMutationObservations(plan.observationPaths()).Pending(sourcebranch.Trunk, "other-root", "new/file") {
 		t.Fatal("pending mutation crossed branch or root")
+	}
+}
+
+func TestRecoveryKeepsAdmissionIdentityAndRefusesDivergedBytes(t *testing.T) {
+	for _, diverged := range []bool{false, true} {
+		t.Run(fmt.Sprintf("diverged=%v", diverged), func(t *testing.T) {
+			service, p, row := pendingObservationWrite(t, sourceMutationFileApplied)
+			personID := row.Plan.PersonID
+			if personID == "" {
+				t.Fatal("admission did not capture a person")
+			}
+			if diverged {
+				testutil.FailErr(t, "replace pending bytes", os.WriteFile(row.Plan.AbsPath, []byte("later outside edit"), 0o600))
+			}
+			restarted := NewSourceMutationService(service.Journal.db, service.settlement.recorder.(*sourceledger.Store))
+			ctx := people.WithCaller(t.Context(), people.Person{ID: uuid.NewString(), Role: api.PersonRoleOwner})
+			recoveryErr := restarted.Recover(ctx)
+			if diverged {
+				if !errors.Is(recoveryErr, ErrSourceMutationDiverged) {
+					t.Fatalf("recovery error=%v", recoveryErr)
+				}
+			} else {
+				testutil.FailErr(t, "recover with different caller", recoveryErr)
+			}
+			loaded, found, err := restarted.Journal.load(t.Context(), row.ID)
+			testutil.FailErr(t, "load recovered receipt", err)
+			if !found || loaded.Plan.PersonID != personID {
+				t.Fatal("recovery changed admission identity")
+			}
+			if diverged {
+				if loaded.Status != sourceMutationDiverged {
+					t.Fatalf("diverged status=%s", loaded.Status)
+				}
+				assertSourceHistoryFile(t, p.Roots[0].Path, "a.txt", "later outside edit")
+			} else {
+				if loaded.Status != sourceMutationCommitted {
+					t.Fatalf("settlement status=%s: %s", loaded.Status, loaded.Error)
+				}
+				var recordedPerson string
+				testutil.FailErr(t, "read attribution", service.Journal.db.QueryRowContext(t.Context(), `SELECT person_id FROM source_operations WHERE operation_key = ?`, row.ID).Scan(&recordedPerson))
+				if recordedPerson != personID {
+					t.Fatalf("attribution person=%s want=%s", recordedPerson, personID)
+				}
+			}
+		})
 	}
 }

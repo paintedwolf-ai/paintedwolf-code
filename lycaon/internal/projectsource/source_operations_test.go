@@ -108,6 +108,13 @@ func TestSourceRecoveryAllowsUnrelatedSave(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("capture did not start")
 	}
+	if releasePath, err := service.Paths.ReserveSourcePath(root, "large"); !errors.Is(err, ErrSourceBusy) {
+		if releasePath != nil {
+			releasePath()
+		}
+		close(release)
+		t.Fatalf("document publication entered recovery reservation: %v", err)
+	}
 	var once sync.Once
 	unblock := func() { once.Do(func() { close(release) }) }
 	defer unblock()
@@ -129,6 +136,9 @@ func TestSourceRecoveryAllowsUnrelatedSave(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("capture did not finish")
 	}
+	releasePath, err := service.Paths.ReserveSourcePath(root, "large")
+	testutil.FailErr(t, "reservation released after settlement", err)
+	releasePath()
 }
 
 func TestSourceCrossVolumeMoveUndoRedoPreservesEdits(t *testing.T) {
