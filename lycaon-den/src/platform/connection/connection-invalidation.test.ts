@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { stubClient } from "../../test/client-fixture.ts";
 import type { LycaonClient } from "../../api/client.ts";
 import type { Project, SettingsArea, SettingsPricingResponse } from "../../api/types.ts";
 import { createAppStore } from "../../store/app-state.ts";
@@ -62,7 +63,13 @@ vi.mock("../../chat/session/session-invalidation.ts", () => ({
 }));
 vi.mock("../../chat/session/session-reconcile.ts", () => ({ refreshCodeScanCache: mocks.refreshCodeScanCache }));
 
-const client = { id: "client" } as unknown as LycaonClient;
+const client = stubClient();
+
+/** The typed stub throws on deep inspection, so calls match the client by identity. */
+function expectCall(fn: { mock: { calls: unknown[][] } }, ...expected: unknown[]) {
+  const label = (args: readonly unknown[]) => args.map((arg) => (arg === client ? "<client>" : arg));
+  expect(fn.mock.calls.map(label)).toContainEqual(label(expected));
+}
 const projects: readonly Project[] = [];
 const foreground = { kind: "session", project_id: "proj-1", session_id: "session-a" } as const;
 
@@ -184,7 +191,7 @@ describe("connection invalidation", () => {
     expect(mocks.invalidateContributionFrame).toHaveBeenCalledTimes(2);
 
     event("file_summaries");
-    expect(mocks.refreshFileSummariesSetting).toHaveBeenCalledWith(client);
+    expectCall(mocks.refreshFileSummariesSetting, client);
 
     event("project_trust");
     expect(appStore.state.projectTrustRevision).toBe(1);
@@ -233,10 +240,10 @@ describe("connection invalidation", () => {
     invalidation.invalidate(appStore, ["workers", "workflows", "session", "board", "scan"], foreground);
 
     expect(mocks.sessionSchedulers.scheduleWorkers).toHaveBeenCalledWith("/tmp/p", "session-a");
-    expect(mocks.refreshWorkflowState).toHaveBeenCalledWith(appStore, client, "session-a", "/tmp/p", projects);
-    expect(mocks.refreshProgress).toHaveBeenCalledWith(appStore, client, "session-a");
+    expectCall(mocks.refreshWorkflowState, appStore, client, "session-a", "/tmp/p", projects);
+    expectCall(mocks.refreshProgress, appStore, client, "session-a");
     expect(mocks.sessionSchedulers.scheduleBoard).toHaveBeenCalledWith("/tmp/p", "session-a", false);
-    expect(mocks.refreshCodeScanCache).toHaveBeenCalledWith(appStore, client);
+    expectCall(mocks.refreshCodeScanCache, appStore, client);
     expect(mocks.sessionSchedulers.scheduleCost).not.toHaveBeenCalled();
   });
 
@@ -271,7 +278,7 @@ describe("connection invalidation", () => {
     settings.actions.setPricing(pricing(true));
     invalidation.invalidate(appStore, ["cost"], foreground);
     await vi.waitFor(() => expect(invalidated).toHaveBeenCalledTimes(1));
-    expect(refreshSession).toHaveBeenCalledWith(client, "session-a");
+    expectCall(refreshSession, client, "session-a");
   });
 
   it("applies device keys but not session keys from a background session", () => {
@@ -306,10 +313,10 @@ describe("connection invalidation", () => {
     mocks.refreshPricing.mockRejectedValueOnce(new Error("offline"));
 
     await expect(invalidation.hydrate(client, shouldApply)).resolves.toBeUndefined();
-    expect(mocks.refreshProviders).toHaveBeenCalledWith(settings, client, shouldApply);
-    expect(mocks.refreshProviderKinds).toHaveBeenCalledWith(settings, client, shouldApply);
-    expect(mocks.refreshModelPolicy).toHaveBeenCalledWith(settings, client, projects, shouldApply);
-    expect(mocks.refreshPricing).toHaveBeenCalledWith(settings, client, shouldApply);
+    expectCall(mocks.refreshProviders, settings, client, shouldApply);
+    expectCall(mocks.refreshProviderKinds, settings, client, shouldApply);
+    expectCall(mocks.refreshModelPolicy, settings, client, projects, shouldApply);
+    expectCall(mocks.refreshPricing, settings, client, shouldApply);
   });
 
   it("does not hydrate or schedule settings without a settings store", async () => {

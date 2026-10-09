@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { stubClient } from "../../test/client-fixture.ts";
 import type { LycaonClient } from "../../api/client.ts";
 import type { EventScope } from "../../api/types.ts";
 import type { AppStore } from "../../store/app-state-model.ts";
@@ -14,7 +15,13 @@ vi.mock("../../chat/actions/findings-actions.ts", () => ({ refreshFindings }));
 vi.mock("../../chat/progress/progress-actions.ts", () => ({ refreshProgress }));
 vi.mock("../../chat/actions/queue-actions.ts", () => ({ refreshQueue }));
 
-const client = { id: "client" } as unknown as LycaonClient;
+const client = stubClient();
+
+/** The typed stub throws on deep inspection, so calls match the client by identity. */
+function expectCall(fn: { mock: { calls: unknown[][] } }, ...expected: unknown[]) {
+  const label = (args: readonly unknown[]) => args.map((arg) => (arg === client ? "<client>" : arg));
+  expect(fn.mock.calls.map(label)).toContainEqual(label(expected));
+}
 const foreground: EventScope = { kind: "session", project_id: "proj-1", session_id: "session-a" };
 const background: EventScope = { kind: "session", project_id: "proj-1", session_id: "session-b" };
 
@@ -32,7 +39,13 @@ function store(revision: number, sessionId: string | undefined = "session-a"): A
 type Topic = "findings" | "progress" | "queue";
 const refreshers = { findings: refreshFindings, progress: refreshProgress, queue: refreshQueue };
 
-function deliver(appStore: AppStore, topic: Topic, revision: number, scope: EventScope, getClient = () => client) {
+function deliver(
+  appStore: AppStore,
+  topic: Topic,
+  revision: number,
+  scope: EventScope,
+  getClient: () => LycaonClient | null = () => client,
+) {
   const handlers = connectionSessionEvents(appStore, getClient);
   const handler = handlers[topic] as (ev: { revision: number }, scope: EventScope) => void;
   handler({ revision }, scope);
@@ -46,13 +59,13 @@ describe.each<Topic>(["findings", "progress", "queue"])("connection %s events", 
   it("refreshes the foreground session to a newer revision", () => {
     const appStore = store(2);
     deliver(appStore, topic, 3, foreground);
-    expect(refresh).toHaveBeenCalledWith(appStore, client, "session-a", 3);
+    expectCall(refresh, appStore, client, "session-a", 3);
   });
 
   it("refreshes from an empty projection", () => {
     const appStore = store(0);
     deliver(appStore, topic, 1, foreground);
-    expect(refresh).toHaveBeenCalledWith(appStore, client, "session-a", 1);
+    expectCall(refresh, appStore, client, "session-a", 1);
   });
 
   it("ignores a revision the foreground projection already holds", () => {
@@ -73,7 +86,7 @@ describe.each<Topic>(["findings", "progress", "queue"])("connection %s events", 
   });
 
   it("waits for a connected client", () => {
-    deliver(store(1), topic, 5, foreground, () => null as unknown as LycaonClient);
+    deliver(store(1), topic, 5, foreground, () => null);
     expect(refresh).not.toHaveBeenCalled();
   });
 });
