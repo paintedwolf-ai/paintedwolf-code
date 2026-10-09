@@ -80,10 +80,6 @@ func (m *Manager) buildCompletionMessages(
 	return m.ensureCoordinatorRuntime().BuildCompletionMessages(ctx, sess, history, frame)
 }
 
-func (m *Manager) renderToolProcedures(ctx context.Context, sess *api.Session, profileID string, offered []string) (string, error) {
-	return inject.RenderToolProceduresBlock(ctx, prompts.NewInjectRenderer(m.prompts), sess.ID, profileID, offered, m.Loading.Ledger.Omitted(sess.ID))
-}
-
 // CoordinatorRunContext returns the same block exposed on Prompt prepend (optional GET).
 func (m *Manager) CoordinatorRunContext(ctx context.Context, sessionID string) (api.CoordinatorRunContext, error) {
 	if m == nil || m.store == nil {

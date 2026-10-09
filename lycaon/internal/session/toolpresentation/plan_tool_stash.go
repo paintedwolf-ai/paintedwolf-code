@@ -1,15 +1,15 @@
-package session
+package toolpresentation
 
 import (
-	"github.com/lycaon/lycaon/internal/scopedstore"
 	"strings"
 	"sync"
 
+	"github.com/lycaon/lycaon/internal/scopedstore"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// PlanToolStash stores compact spec-plan reject blocks keyed by tool_call_id for LLM replay.
-type PlanToolStash struct {
+// Stash stores compact spec-plan reject blocks keyed by tool_call_id for LLM replay.
+type Stash struct {
 	mu sync.Mutex
 	// Bounded: sessionID -> toolCallID -> block. The stash only ever re-inflates
 	// a reject block the model already saw, so eviction costs one replayed tool
@@ -17,13 +17,13 @@ type PlanToolStash struct {
 	blocks scopedstore.LRU[map[string]string]
 }
 
-// NewPlanToolStash constructs an empty per-session stash.
-func NewPlanToolStash() *PlanToolStash {
-	return &PlanToolStash{}
+// NewStash constructs an empty per-session stash.
+func NewStash() *Stash {
+	return &Stash{}
 }
 
 // Put records a reject block when a spec posture deny is surfaced to the model.
-func (s *PlanToolStash) Put(sessionID, toolCallID, code, block string) {
+func (s *Stash) Put(sessionID, toolCallID, code, block string) {
 	sessionID = strings.TrimSpace(sessionID)
 	toolCallID = strings.TrimSpace(toolCallID)
 	block = strings.TrimSpace(block)
@@ -45,7 +45,7 @@ func (s *PlanToolStash) Put(sessionID, toolCallID, code, block string) {
 }
 
 // Get returns a stashed block for the session and tool call id.
-func (s *PlanToolStash) Get(sessionID, toolCallID string) (string, bool) {
+func (s *Stash) Get(sessionID, toolCallID string) (string, bool) {
 	sessionID = strings.TrimSpace(sessionID)
 	toolCallID = strings.TrimSpace(toolCallID)
 	if s == nil || sessionID == "" || toolCallID == "" {
@@ -61,8 +61,8 @@ func (s *PlanToolStash) Get(sessionID, toolCallID string) (string, bool) {
 	return block, ok && strings.TrimSpace(block) != ""
 }
 
-// EnrichHistoryToolPartsForAgent reinjects stashed compact blocks when tool content was dropped.
-func EnrichHistoryToolPartsForAgent(sessionID string, history []api.Message, stash *PlanToolStash) []api.Message {
+// EnrichHistory reinjects stashed compact blocks when tool content was dropped.
+func EnrichHistory(sessionID string, history []api.Message, stash *Stash) []api.Message {
 	if stash == nil || len(history) == 0 {
 		return history
 	}

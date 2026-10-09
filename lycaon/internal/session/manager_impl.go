@@ -65,6 +65,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/submissions"
 	"github.com/lycaon/lycaon/internal/session/submissionstate"
 	"github.com/lycaon/lycaon/internal/session/toolcontext"
+	"github.com/lycaon/lycaon/internal/session/toolpresentation"
 	"github.com/lycaon/lycaon/internal/session/transcript"
 	"github.com/lycaon/lycaon/internal/session/turnadmission"
 	"github.com/lycaon/lycaon/internal/session/turnclock"
@@ -159,7 +160,7 @@ type Manager struct {
 	coordinatorRuntime     *coordinator.Runtime
 	coordinatorRuntimeOnce sync.Once
 	delegations            DelegationLegLookup
-	planToolStash          *PlanToolStash
+	planToolStash          *toolpresentation.Stash
 	workerQueue            WorkerCycleLister
 
 	progress             progress.RunScopedStore
@@ -221,7 +222,7 @@ func NewManagerWithLLMService(store Store, client modelcall.LLMClient, svc *llm.
 		llmSvc:        svc,
 		cost:          tracker,
 		tools:         registry,
-		planToolStash: NewPlanToolStash(),
+		planToolStash: toolpresentation.NewStash(),
 		queue:         queue.New(),
 	}
 	var namers naming.Namers

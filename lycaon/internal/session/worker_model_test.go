@@ -26,11 +26,10 @@ func (s *failingWorkerModelStore) UpdateSession(context.Context, string, func(*a
 
 func TestWorkerModelSaveFailureRemovesPartialChild(t *testing.T) {
 	st := &failingWorkerModelStore{Memory: store.NewMemory(), err: errors.New("model save failed")}
-	manager := NewManager(st, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
 	policy := llm.NewInMemoryPolicyStore(llm.ModelPolicy{
 		Coordinator: llm.ModelRef{ProviderID: "fixture", Model: "fixture"},
 	})
-	manager.llmSvc = &llm.Service{Router: llm.NewStaticModelRouter(policy)}
+	manager := NewManagerWithLLMService(st, nil, &llm.Service{Router: llm.NewStaticModelRouter(policy)}, tools.NewStubRegistry(), settings.DefaultSessionLimits(), nil)
 	parent, err := st.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create worker parent", err)
 	child, err := manager.Workers.SpawnChild(t.Context(), parent.ID, api.SpawnChildRequest{AgentType: "implement"})
@@ -55,8 +54,7 @@ func TestSpawnedWorkerKeepsPoolAssignmentAfterReload(t *testing.T) {
 			{ProviderID: "second-provider", Model: "second-model"},
 		}},
 	})
-	manager := NewManager(st, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
-	manager.llmSvc = &llm.Service{Policy: policy, Router: llm.NewStaticModelRouter(policy)}
+	manager := NewManagerWithLLMService(st, nil, &llm.Service{Policy: policy, Router: llm.NewStaticModelRouter(policy)}, tools.NewStubRegistry(), settings.DefaultSessionLimits(), nil)
 	parent, err := st.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create worker parent", err)
 	for i, provider := range []string{"first-provider", "second-provider", "first-provider"} {

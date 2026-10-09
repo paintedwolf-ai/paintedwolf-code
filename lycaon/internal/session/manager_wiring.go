@@ -74,6 +74,7 @@ func (m *Manager) SetPageRegistry(reg *pagesession.Registry) {
 // SetEventPublisher wires SSE publish hooks for session, LLM, and cost topics.
 func (m *Manager) SetEventPublisher(p *events.Publisher) {
 	m.events = p
+	m.Workers.Workspaces.SetPublisher(p)
 	m.Runner.Status.SetPublisher(p)
 	m.Loading.SetPublisher(p)
 	m.Chats.SetPublisher(p)

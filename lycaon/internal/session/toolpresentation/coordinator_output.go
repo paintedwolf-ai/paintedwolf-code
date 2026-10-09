@@ -1,4 +1,4 @@
-package session
+package toolpresentation
 
 import (
 	"strings"
@@ -8,8 +8,8 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// SanitizeToolOutputForCoordinator optionally cleans coordinator-visible tool results.
-func SanitizeToolOutputForCoordinator(sess *api.Session, toolName, output string) string {
+// SanitizeForCoordinator optionally cleans coordinator-visible tool results.
+func SanitizeForCoordinator(sess *api.Session, toolName, output string) string {
 	if !surface.IsCoordinatorParent(sess) {
 		return output
 	}

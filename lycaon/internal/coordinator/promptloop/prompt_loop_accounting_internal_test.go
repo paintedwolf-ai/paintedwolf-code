@@ -273,7 +273,7 @@ func TestWorkerContextUsage(t *testing.T) {
 		t.Fatalf("CompactionThreshold = %d want > 0", usage.CompactionThreshold)
 	}
 
-	noCfg := (NewPromptLoop(PromptLoopDeps{})).workerContextUsage(context.Background(), nil, 50)
+	noCfg := (NewPromptLoop(PromptLoopDeps{})).Nudges.workerContextUsage(context.Background(), nil, 50)
 	if noCfg == nil || noCfg.PromptTokens != 50 || noCfg.Window != 0 {
 		t.Fatalf("workerContextUsage without compaction config = %+v want prompt 50, window 0", noCfg)
 	}

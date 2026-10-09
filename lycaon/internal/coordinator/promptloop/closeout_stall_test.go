@@ -31,7 +31,7 @@ func TestCloseoutFuseTrippedGuards(t *testing.T) {
 	}
 
 	nofuse := NewPromptLoopForTest(PromptLoopDeps{})
-	if (turnCloseout{nofuse}).closeoutFuseTripped(ctx, &api.Session{ID: "s1"}, "s1", "implement_investigate") {
+	if nofuse.Closeout.closeoutFuseTripped(ctx, &api.Session{ID: "s1"}, "s1", "implement_investigate") {
 		t.Fatal("no fuse dep wired → must never trip")
 	}
 }
@@ -111,7 +111,7 @@ func TestCitationOnlyRetryStitchesPersistedCloseoutDraftBeforeGuard(t *testing.T
 			},
 		},
 	})
-	if got, _ := (toolInvocations{inactive}).maybeCoerceCloseoutContent(context.Background(), nil, "session-1", "implement_synthesis", trailer, ""); got != trailer {
+	if got, _ := inactive.Tools.maybeCoerceCloseoutContent(context.Background(), nil, "session-1", "implement_synthesis", trailer, ""); got != trailer {
 		t.Fatalf("inactive stall stitched stale draft: %q", got)
 	}
 }

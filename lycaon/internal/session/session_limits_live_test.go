@@ -8,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/config/configtest"
 	"github.com/lycaon/lycaon/internal/llm"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -40,7 +41,7 @@ agent_pool:
 	limStore, err := settings.NewLimitsStoreAt(globalLimits)
 	testutil.FailErr(t, "NewLimitsStoreAt", err)
 
-	mgr := NewManagerWithLLMService(nil, nil, &llm.Service{Policy: policy}, nil, settings.SessionLimits{}, nil)
+	mgr := NewManagerWithLLMService(sessionstore.NewMemory(), nil, &llm.Service{Policy: policy}, nil, settings.SessionLimits{}, nil)
 	mgr.Limits.SetProvider(settings.ProjectLimitsAdapter{Store: limStore})
 
 	sess := &api.Session{WorkspacePath: tmp}

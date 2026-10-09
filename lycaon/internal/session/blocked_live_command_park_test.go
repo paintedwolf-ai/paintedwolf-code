@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	hostexec "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/hostcmd"
+	"github.com/lycaon/lycaon/internal/session/promptsource"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -42,7 +43,7 @@ func TestParkBlockedLiveCommandsArmsExactProcessSubscription(t *testing.T) {
 	})
 	testutil.FailErr(t, "start process", err)
 
-	if !mgr.parkBlockedLiveCommands(ctx, "session-1") {
+	if !(&promptsource.Control{Processes: mgr.Processes, Runtime: mgr.ensureCoordinatorRuntime()}).ParkBlockedLiveCommands(ctx, "session-1") {
 		t.Fatal("running visible command was not parked")
 	}
 	loop := mgr.ensureCoordinatorRuntime().CoordinatorLoop()
@@ -62,7 +63,7 @@ func TestParkBlockedLiveCommandsArmsExactProcessSubscription(t *testing.T) {
 func TestParkBlockedLiveCommandsDoesNothingWithoutVisibleJob(t *testing.T) {
 	mgr := NewManager(store.NewMemory(), nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
 	mgr.SetBackgroundRegistry(bgprocess.NewRegistry(bgprocess.Config{}, bgprocess.Hooks{}))
-	if mgr.parkBlockedLiveCommands(context.Background(), "session-1") {
+	if (&promptsource.Control{Processes: mgr.Processes, Runtime: mgr.ensureCoordinatorRuntime()}).ParkBlockedLiveCommands(context.Background(), "session-1") {
 		t.Fatal("empty process registry must not arm a wait")
 	}
 }

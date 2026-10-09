@@ -68,37 +68,3 @@ func (m *Manager) WaitForCoordinatorAsyncTurns(ctx context.Context) {
 }
 
 // parkBlockedLiveCommands waits for command completion after a repetition limit.
-func (m *Manager) parkBlockedLiveCommands(ctx context.Context, sessionID string) bool {
-	if m == nil || m.Processes.Background == nil || strings.TrimSpace(sessionID) == "" {
-		return false
-	}
-	jobs := m.Processes.Background.ActiveJobs(sessionID)
-	if len(jobs) == 0 {
-		return false
-	}
-	handles := make([]string, 0, len(jobs))
-	for _, job := range jobs {
-		if handle := strings.TrimSpace(job.Handle); handle != "" {
-			handles = append(handles, handle)
-		}
-	}
-	if len(handles) == 0 {
-		return false
-	}
-	loop := m.ensureCoordinatorRuntime().CoordinatorLoop()
-	loop.EnterSleep(
-		ctx,
-		sessionID,
-		time.Now().UTC().Add(time.Duration(loopwake.DefaultWaitSeconds)*time.Second),
-		"waiting for active command after blocked turn",
-		[]loopwake.WaitTrigger{loopwake.WaitTriggerTimer, loopwake.WaitTriggerProcessDone},
-		handles,
-		loopwake.SleepMoverHost,
-	)
-	loop.MarkWaitCalled(sessionID)
-	// Completion between the job snapshot and EnterSleep needs an explicit wake.
-	if !m.Processes.Background.HasRunningHandles(sessionID, handles) {
-		loop.NudgeProcessFinished(ctx, sessionID, handles[0], anchor.Envelope{})
-	}
-	return true
-}
