@@ -162,7 +162,7 @@ var sourcesReleased sync.Map
 // and keep retrying inventory for the rest of the test binary.
 func releaseProjectSources(t *testing.T, srv *Server) {
 	t.Helper()
-	if srv.Sources == nil || srv.Sources.Workspace.ProjectRegistry == nil {
+	if srv.Sources.Workspace == nil || srv.Sources.Workspace.ProjectRegistry == nil {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
