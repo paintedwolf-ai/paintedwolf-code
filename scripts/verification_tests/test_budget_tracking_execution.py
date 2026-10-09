@@ -6,7 +6,7 @@ from ci_policy import budget_snapshot as snapshot, budget_issues as issues
 
 def row(artifact='pkg/server.go', category='source_files', measured=350):
     return dict(category=category, id=artifact, measured=measured, warn=300, limit=900,
-                touched=True, effective_cap=900, exception_reason='', sources=['pkg/server.go'])
+                touched=True, spans=[], effective_cap=900, exception_reason='', sources=['pkg/server.go'])
 
 
 def report(rows=None):
@@ -136,7 +136,21 @@ class IssueLifecycleTests(unittest.TestCase):
         self.assertEqual(issues.plan([], untouched, observation()), ([], 0))
         operations, _ = issues.plan([], untouched, observation(), backfill=True)
         self.assertEqual(operations[0]['action'], 'create')
-        operations, _ = issues.plan([issue()], untouched, observation('e' * 40))
+        operations, _ = issues.plan([issue()], untouched, observation('e' * 40), intake_keys=set(untouched))
         self.assertEqual(operations[0]['action'], 'update')
         operations, _ = issues.plan([], untouched, observation(), intake_keys=set(untouched))
         self.assertEqual(operations[0]['action'], 'create')
+
+    def test_untouched_unchanged_issue_does_not_receive_per_merge_updates(self):
+        untouched = {identity: {**entry, 'touched': False} for identity, entry in self.artifacts.items()}
+        self.assertEqual(issues.plan([issue()], untouched, observation('e' * 40)), ([], 0))
+        changed = {identity: {**entry, 'warn': 250} for identity, entry in untouched.items()}
+        operations, _ = issues.plan([issue()], changed, observation('e' * 40))
+        self.assertEqual(operations[0]['action'], 'update')
+
+    def test_long_artifact_identity_survives_a_bounded_title(self):
+        entry = row('pkg/' + 'a' * 300 + '.go')
+        identity = snapshot.key(entry['category'], entry['id'])
+        operations, _ = issues.plan([], {identity: entry}, observation())
+        self.assertEqual(len(operations[0]['body']['title']), 240)
+        self.assertEqual(issues.tracked(issue(body=operations[0]['body']['body']))['key'], identity)

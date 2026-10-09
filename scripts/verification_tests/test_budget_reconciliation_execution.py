@@ -6,7 +6,7 @@ import zipfile
 from unittest.mock import patch
 
 from ci_policy import budget_evidence as evidence, maintainability_issues as tracker
-from verification_tests.test_budget_tracking_execution import report
+from verification_tests.test_budget_tracking_execution import report, row, issue
 from ci_policy.budget_snapshot import validate
 from ci_policy import budget_history as history
 
@@ -79,13 +79,17 @@ class ReconciliationTests(unittest.TestCase):
                 return {'object': {'sha': 'a' * 40}}
             if '/git/commits/' in path:
                 return {'tree': {'sha': 'b' * 40}}
+            if method == 'GET' and '/issues/' in path:
+                return next(item for item in existing or [] if str(item['number']) == path.rsplit('/', 1)[-1])
             return {'number': 99}
         with patch.dict('os.environ', GITHUB_REPOSITORY='owner/repo'), \
                 patch.object(tracker, 'api', side_effect=api) as calls, \
                 patch.object(history, 'pages', return_value=pulls if pulls is not None else [self.pull]), \
                 patch.object(tracker, 'pages', return_value=existing or []), \
                 patch.object(tracker, 'read_snapshot', return_value=parsed) as read, \
-                patch.object(tracker, 'checkpoint', return_value=None):
+                patch.object(tracker, 'checkpoint', return_value=None), \
+                patch.object(tracker, 'intake', return_value=set(parsed[1])), \
+                patch.object(tracker.time, 'sleep'):
             result = tracker.reconcile(current or run(), dry_run)
         return result, calls, read
 
@@ -131,7 +135,8 @@ class ReconciliationTests(unittest.TestCase):
                     patch.object(tracker, 'merged_pulls', return_value=[self.pull]), \
                     patch.object(tracker, 'pages', return_value=[]), \
                     patch.object(tracker, 'read_snapshot', return_value=validate(report(), 'a' * 40, 'b' * 40)), \
-                    patch.object(tracker, 'checkpoint', return_value=None):
+                    patch.object(tracker, 'checkpoint', return_value=None), \
+                    patch.object(tracker, 'intake', return_value=set()):
                 result = tracker.reconcile(run())
             self.assertTrue('skipped' in result or 'stopped' in result)
             self.assertFalse(any(len(call.args) > 1 for call in api.call_args_list))
@@ -142,5 +147,43 @@ class ReconciliationTests(unittest.TestCase):
                 patch.object(tracker, 'api', return_value={'tree': {'sha': 'b' * 40}}) as api, \
                 patch.object(tracker, 'merged_pulls', return_value=[self.pull]), \
                 patch.object(tracker, 'read_snapshot', side_effect=ValueError('missing receipt')), self.assertRaises(ValueError):
+            tracker.reconcile(run())
+        self.assertFalse(any(len(call.args) > 1 for call in api.call_args_list))
+
+    def test_applied_create_is_idempotent_on_repeated_run(self):
+        first, _, _ = self.invoke()
+        current = issue(body=first['operations'][0]['body']['body'])
+        repeated, calls, _ = self.invoke(existing=[current])
+        self.assertEqual(repeated['operations'], [])
+        self.assertEqual(repeated['applied_operations'], 0)
+        self.assertIn('checkpoint', repeated)
+        self.assertFalse(any(len(call.args) > 1 for call in calls.call_args_list))
+
+    def test_resolve_updates_only_managed_body_and_state(self):
+        result, calls, _ = self.invoke(existing=[issue()], snapshot=report([]))
+        writes = [call for call in calls.call_args_list if len(call.args) > 1]
+        self.assertEqual(result['actions'], {'resolve': 1})
+        self.assertEqual(writes[0].args[:2], ('repos/owner/repo/issues/1', 'PATCH'))
+        self.assertEqual(set(writes[0].args[2]), {'body', 'state', 'state_reason'})
+
+    def test_large_intake_is_bounded_and_defers_checkpoint_until_complete(self):
+        result, calls, _ = self.invoke(snapshot=report([row(f'pkg/{index}.go') for index in range(27)]))
+        self.assertEqual(result['applied_operations'], 25)
+        self.assertEqual(result['deferred_creations'], 2)
+        self.assertNotIn('checkpoint', result)
+        self.assertEqual(len([call for call in calls.call_args_list if len(call.args) > 1]), 25)
+
+    def test_concurrent_issue_body_edit_stops_before_patch(self):
+        current = issue()
+        from ci_policy.budget_snapshot import validate
+        with patch.dict('os.environ', GITHUB_REPOSITORY='owner/repo'), \
+                patch.object(tracker, 'current_main', return_value=True), \
+                patch.object(tracker, 'merged_pulls', return_value=[self.pull]), \
+                patch.object(tracker, 'read_snapshot', return_value=validate(report([]), 'a' * 40, 'b' * 40)), \
+                patch.object(tracker, 'checkpoint', return_value=None), \
+                patch.object(tracker, 'intake', return_value=set()), \
+                patch.object(tracker, 'pages', return_value=[current]), \
+                patch.object(tracker, 'api', side_effect=[{'tree': {'sha': 'b' * 40}}, {**current, 'body': 'Human edit'}]) as api, \
+                patch.object(tracker.time, 'sleep'), self.assertRaises(ValueError):
             tracker.reconcile(run())
         self.assertFalse(any(len(call.args) > 1 for call in api.call_args_list))

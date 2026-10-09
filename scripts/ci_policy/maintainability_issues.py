@@ -2,6 +2,9 @@
 from collections import Counter
 import json
 import os
+import subprocess
+import time
+import zipfile
 from pathlib import Path
 
 from .budget_evidence import read_snapshot
@@ -23,7 +26,7 @@ def current_main(sha):
     return api(f'{repository()}/git/ref/heads/main')['object']['sha'] == sha
 
 
-def reconcile(run, dry_run=False, backfill=False):
+def reconcile(run, dry_run=False, backfill=False, save_plan=None):
     repo = os.environ['GITHUB_REPOSITORY']
     if not eligible(run, repo) or not current_main(run['head_sha']):
         return {'skipped': 'not a current post-merge qualification push'}
@@ -37,20 +40,32 @@ def reconcile(run, dry_run=False, backfill=False):
                        run_url=f"https://github.com/{repo}/actions/runs/{run['id']}",
                        merged_prs=sorted(p['number'] for p in pulls))
     prior = None if backfill else checkpoint()
-    intake_keys = intake(run, artifacts, prior, repo)
+    intake_keys = set(artifacts) if backfill else intake(run, artifacts, prior)
     operations, suppressed = plan(list(pages(f'{repository()}/issues?state=all')), artifacts, observation, backfill, intake_keys)
+    creations = 0
+    selected = []
+    for operation in operations:
+        if operation['action'] == 'create':
+            creations += 1
+            if creations > 25:
+                continue
+        selected.append(operation)
+    deferred = max(0, creations - 25)
     report = {'run_id': run['id'], 'source_sha': run['head_sha'], 'dry_run': dry_run,
               'backfill': backfill, 'intake_base_sha': prior['source_sha'] if prior else None, 'above_threshold': dict(Counter(row['category'] for row in artifacts.values())),
-              'suppressed': suppressed, 'actions': dict(Counter(op['action'] for op in operations)),
-              'operations': operations}
+              'suppressed': suppressed, 'deferred_creations': deferred, 'applied_operations': 0, 'actions': dict(Counter(op['action'] for op in operations)),
+              'operations': selected}
     if not current_main(run['head_sha']):
         return {'skipped': 'main advanced during planning'}
+    if save_plan:
+        save_plan(report)
     if not dry_run:
-        for operation in operations:
+        for operation in selected:
             # A full later snapshot converges state; do not write older evidence once main advances.
             if not current_main(run['head_sha']):
                 report['stopped'] = 'main advanced during reconciliation'
                 break
+            time.sleep(1)
             path = f'{repository()}/issues'
             if operation['action'] == 'create':
                 api(path, 'POST', operation['body'])
@@ -59,9 +74,11 @@ def reconcile(run, dry_run=False, backfill=False):
                 if expected(api(target)) != operation['expected']:
                     raise ValueError('an issue changed during reconciliation; replay to preserve the concurrent edit')
                 api(target, 'PATCH', operation['body'])
-    if not dry_run and 'stopped' not in report and current_main(run['head_sha']):
-        report['checkpoint'] = {'schema_version': 1, 'source_sha': run['head_sha'],
-                                'qualification_created_at': run['created_at']}
+            report['applied_operations'] += 1
+            if save_plan:
+                save_plan(report)
+    if not dry_run and not deferred and 'stopped' not in report and current_main(run['head_sha']):
+        report['checkpoint'] = {'schema_version': 1, 'source_sha': run['head_sha']}
     return report
 
 
@@ -71,15 +88,28 @@ def main():
     identity = inputs.get('run_id') if os.environ.get('GITHUB_EVENT_NAME') == 'workflow_dispatch' else event['workflow_run']['id']
     if not str(identity).isdigit() or int(identity) <= 0:
         raise ValueError('run_id must be a positive integer')
-    report = reconcile(api(f'{repository()}/actions/runs/{identity}'), str(inputs.get('dry_run', 'false')).lower() == 'true',
-                       str(inputs.get('backfill', 'false')).lower() == 'true')
-    Path('maintainability-issues.json').write_text(json.dumps(report, indent=2) + '\n')
+    def save_plan(report):
+        Path('maintainability-issues.json').write_text(json.dumps(report, indent=2) + '\n')
+
+    failure = None
+    try:
+        report = reconcile(api(f'{repository()}/actions/runs/{identity}'),
+                           str(inputs.get('dry_run', 'false')).lower() == 'true',
+                           str(inputs.get('backfill', 'false')).lower() == 'true', save_plan)
+    except (ValueError, subprocess.CalledProcessError, zipfile.BadZipFile) as error:
+        failure = error
+        path = Path('maintainability-issues.json')
+        report = json.loads(path.read_text()) if path.exists() else {}
+        report['error'] = str(error)
+    save_plan(report)
     if 'checkpoint' in report:
         Path('maintainability-checkpoint.json').write_text(json.dumps(report['checkpoint']) + '\n')
     compact = {k: v for k, v in report.items() if k != 'operations'}
     print(json.dumps(compact, indent=2))
     with Path(os.environ['GITHUB_STEP_SUMMARY']).open('a') as summary:
         summary.write('### Maintainability cleanup\n\n```json\n' + json.dumps(compact, indent=2) + '\n```\n')
+    if failure:
+        raise SystemExit(1)
 
 
 if __name__ == '__main__':

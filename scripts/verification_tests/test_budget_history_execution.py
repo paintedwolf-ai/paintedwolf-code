@@ -12,45 +12,66 @@ from verification_tests.test_budget_reconciliation_execution import run
 
 
 class HistoryTests(unittest.TestCase):
-    def test_intake_replays_skipped_merges_against_latest_inventory(self):
+    def test_intake_uses_cumulative_diff_with_exact_type_and_directory_scope(self):
+        source = {**row(), 'touched': False}
+        directory = {**row('pkg', 'source_directories'), 'touched': False, 'sources': ['pkg']}
+        receiver = {**row('pkg/pkg.Server', 'go_receiver_lines'), 'touched': False,
+                    'spans': [{'file': 'pkg/server.go', 'first': 20, 'last': 30}]}
+        _, latest = validate(report([source, directory, receiver]), 'a' * 40, 'b' * 40)
+        prior = dict(source_sha='c' * 40)
+        for changed, additions, expected in [
+            ({'pkg/server.go': {5}}, [], {'source_files'}),
+            ({'pkg/server.go': {25}}, [], {'source_files', 'go_receiver_lines'}),
+            ({'pkg/new.go': {1}}, ['pkg/new.go'], {'source_directories'}),
+        ]:
+            with self.subTest(changed=changed), patch.object(history, 'ancestor', return_value=True), \
+                    patch.object(history.change_report, 'git') as git, \
+                    patch.object(history.change_report, 'changed_paths', return_value=list(changed)), \
+                    patch.object(history.change_report, 'changed_lines', return_value=changed), \
+                    patch.object(history.change_report, 'added_and_removed', return_value=(additions, [])):
+                git.return_value.stdout = 'a' * 40
+                identities = history.intake(run(), latest, prior)
+            self.assertEqual({latest[identity]['category'] for identity in identities}, expected)
+
+    def test_initial_intake_uses_installation_baseline_without_backfilling_untouched_debt(self):
         _, latest = validate(report([{**row(), 'touched': False}]), 'a' * 40, 'b' * 40)
-        _, earlier = validate(report(), 'a' * 40, 'b' * 40)
-        historical = {**run(), 'head_sha': 'e' * 40, 'id': 41}
-        prior = dict(source_sha='c' * 40, qualification_created_at='2026-10-09T10:00:00Z')
-        with patch.dict('os.environ', GITHUB_REPOSITORY='owner/repo'), \
+        with patch.object(history, 'initial_base', return_value='c' * 40), \
                 patch.object(history, 'ancestor', return_value=True), \
-                patch.object(history, 'pages', return_value=[historical, {**historical, 'run_attempt': 2}]), \
-                patch.object(history, 'merged_pulls', return_value=[{'number': 7}]), \
-                patch.object(history, 'api', return_value={'tree': {'sha': 'b' * 40}}), \
-                patch.object(history, 'read_snapshot', return_value=({}, earlier)) as read:
-            self.assertEqual(history.intake(run(), latest, prior, 'owner/repo'), set(earlier))
-        self.assertEqual(read.call_count, 1)
-        self.assertEqual(read.call_args.args[0]['run_attempt'], 2)
+                patch.object(history.change_report, 'git') as git, \
+                patch.object(history.change_report, 'changed_paths', return_value=[]), \
+                patch.object(history.change_report, 'changed_lines', return_value={}), \
+                patch.object(history.change_report, 'added_and_removed', return_value=([], [])):
+            git.return_value.stdout = 'a' * 40
+            self.assertEqual(history.intake(run(), latest, None), set())
+        with patch.object(history.change_report, 'git') as git:
+            self.assertEqual(history.intake(run(), latest, {'source_sha': 'a' * 40}), set())
+        git.assert_not_called()
 
-    def test_initial_checkpoint_does_not_backfill_untouched_baseline(self):
-        _, latest = validate(report([{**row(), 'touched': False}]), 'a' * 40, 'b' * 40)
-        with patch.object(history, 'pages') as pages:
-            self.assertEqual(history.intake(run(), latest, None, 'owner/repo'), set())
-            self.assertEqual(history.intake(run(), latest, {'source_sha': 'a' * 40}, 'owner/repo'), set())
-        pages.assert_not_called()
+    def test_installation_baseline_is_the_first_tracking_commit_parent(self):
+        from subprocess import CompletedProcess
+        with patch.object(history.change_report, 'git', side_effect=[
+            CompletedProcess([], 0, 'b' * 40 + '\n' + 'c' * 40 + '\n'), CompletedProcess([], 0, 'd' * 40 + '\n')
+        ]) as git:
+            self.assertEqual(history.initial_base('root'), 'd' * 40)
+        self.assertEqual(git.call_args.args[-1], 'c' * 40 + '^')
+        with patch.object(history.change_report, 'git') as git, self.assertRaises(ValueError):
+            git.return_value.stdout = ''
+            history.initial_base('root')
 
-    def test_history_gaps_and_rewritten_main_require_explicit_recovery(self):
+    def test_missing_history_and_mismatched_checkout_require_explicit_recovery(self):
         _, latest = validate(report(), 'a' * 40, 'b' * 40)
-        prior = dict(source_sha='c' * 40, qualification_created_at='2026-10-09T10:00:00Z')
+        prior = dict(source_sha='c' * 40)
         with patch.object(history, 'ancestor', return_value=False), self.assertRaises(ValueError):
-            history.intake(run(), latest, prior, 'owner/repo')
-        with patch.dict('os.environ', GITHUB_REPOSITORY='owner/repo'), \
-                patch.object(history, 'ancestor', return_value=True), \
-                patch.object(history, 'pages', return_value=[{**run(), 'head_sha': 'e' * 40}]), \
-                patch.object(history, 'merged_pulls', return_value=[{'number': 7}]), \
-                patch.object(history, 'api', return_value={'tree': {'sha': 'b' * 40}}), \
-                patch.object(history, 'read_snapshot', side_effect=ValueError('missing report')), self.assertRaises(ValueError):
-            history.intake(run(), latest, prior, 'owner/repo')
+            history.intake(run(), latest, prior)
+        with patch.object(history, 'ancestor', return_value=True), \
+                patch.object(history.change_report, 'git') as git, self.assertRaises(ValueError):
+            git.return_value.stdout = 'wrong-checkout'
+            history.intake(run(), latest, prior)
 
     def test_checkpoint_ignores_preview_artifacts_and_reads_applied_state(self):
         previous = dict(id=1, run_attempt=1)
         applied = dict(id=2, run_attempt=1)
-        state = dict(schema_version=1, source_sha='c' * 40, qualification_created_at='2026-10-09T10:00:00Z')
+        state = dict(schema_version=1, source_sha='c' * 40)
         archives = []
         for payload in [None, state]:
             raw = io.BytesIO()

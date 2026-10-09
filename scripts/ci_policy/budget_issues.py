@@ -43,7 +43,7 @@ def legacy(issue, artifacts):
 
 
 def block(row, observation, active):
-    state = {**row, 'sources': row['sources'][:20], **observation, 'key': key(row['category'], row['id']), 'active': active}
+    state = {**{k: v for k, v in row.items() if k != 'spans'}, 'sources': row['sources'][:20], **observation, 'key': key(row['category'], row['id']), 'active': active}
     encoded = json.dumps(state, sort_keys=True, separators=(',', ':')).replace('<', '\\u003c').replace('>', '\\u003e')
     status = 'Above the cleanup threshold' if active else 'Within the cleanup threshold or removed'
     lines = [START, '<!-- state:' + encoded + ' -->',
@@ -72,6 +72,11 @@ def body_for(issue, row, observation, active):
     return body.rstrip() + ('\n\n' if body.strip() else '') + managed
 
 
+def title(row):
+    text = f"Maintainability debt: {row['category']} {row['id']}"
+    return text if len(text) <= 240 else text[:237] + '...'
+
+
 def expected(issue):
     return {name: issue.get(name) for name in ['body', 'state', 'state_reason']}
 
@@ -93,7 +98,7 @@ def plan(issues, artifacts, observation, backfill=False, intake_keys=None):
             if not backfill and identity not in intake_keys:
                 continue
             operations.append({'action': 'create', 'key': identity, 'body': {
-                'title': f"Maintainability debt: {row['category']} {row['id']}",
+                'title': title(row),
                 'body': block(row, observation, True)}})
             continue
         issue, previous = matches[0]
@@ -106,6 +111,11 @@ def plan(issues, artifacts, observation, backfill=False, intake_keys=None):
             suppressed += int(row is not None)
             continue
         active = row is not None
+        measured_fields = ['category', 'id', 'measured', 'warn', 'limit', 'effective_cap', 'exception_reason']
+        if (active and issue['state'] == 'open' and START in (issue.get('body') or '')
+                and identity not in intake_keys and all(row.get(k) == previous.get(k) for k in measured_fields)
+                and row['sources'][:20] == previous.get('sources')):
+            continue
         if not active:
             # Already resolved issues retain the observation that resolved them.
             if issue['state'] == 'closed':

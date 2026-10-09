@@ -60,6 +60,16 @@ def validate(report, sha, tree):
             raise ValueError('invalid exception reason')
         if not isinstance(sources, list) or not sources or len(sources) > 1000 or not all(relative(s) for s in sources):
             raise ValueError('invalid artifact sources')
+        spans = row.get('spans')
+        if not isinstance(spans, list) or len(spans) > 10000:
+            raise ValueError('invalid source spans')
+        if row['category'].startswith('go_') and not spans:
+            raise ValueError('missing Go artifact source spans')
+        for span in spans:
+            if (not isinstance(span, dict) or span.get('file') not in sources
+                    or type(span.get('first')) is not int or type(span.get('last')) is not int
+                    or not 0 < span['first'] <= span['last']):
+                raise ValueError('invalid source span')
         identity = key(row['category'], row['id'])
         if identity in out:
             raise ValueError('duplicate tracking artifact')

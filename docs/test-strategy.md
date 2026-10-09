@@ -185,7 +185,7 @@ failure in another lane does not hide maintainability debt already merged.
 The maintainability report contains a complete inventory of every artifact above
 `warn`, including untouched artifacts and artifacts admitted by an exception.
 Each entry records its category, artifact ID, measurement, cleanup threshold,
-hard limit, effective exception cap, touch status, and source paths. Source commit,
+hard limit, effective exception cap, touch status, source paths, and Go declaration/method spans. Source commit,
 tree, change base, and a content digest bind the report to the measured source.
 Admission still uses change-scoped findings; a complete tracking inventory does
 not turn untouched debt into a gate failure.
@@ -193,16 +193,18 @@ not turn untouched debt into a gate failure.
 Ordinary intake creates issues for artifacts touched by merged changes. The
 complete inventory updates existing issues and closes them when they fall to the
 cleanup threshold or disappear. This avoids dumping the entire legacy inventory
-into GitHub on rollout. A persisted checkpoint and replay of intervening merged
-qualification receipts carry warning intake across superseded workflow runs.
-Missing history stops reconciliation; it never silently treats missing evidence
+into GitHub on rollout. A persisted checkpoint and cumulative source diff carry warning intake across
+superseded workflow runs, using the measured Go spans to preserve type-level
+touch semantics. First intake starts at the parent of the commit that introduced
+the tracking workflow, so rapid merges during rollout are covered. Missing commit history stops reconciliation; it never silently treats missing evidence
 as completed cleanup.
 
 Identity is the SHA-256 of the canonical JSON array
 `["maintainability", category, artifact_id]`. A machine-owned issue-body block
 stores that identity and the latest observation. The reconciler enumerates open
 and closed issues without GitHub search, preserves titles and human prose outside
-the block, and updates evidence without adding a comment on every run. Completed
+the block, and updates evidence without adding a comment on every run. Untouched issues
+whose measurements and thresholds are unchanged retain their previous evidence. Completed
 issues reopen when the same debt returns. Closing an issue as **not planned**
 suppresses future reopening for that identity. Renames create new identities.
 Only automation-authored issues can be adopted or mutated; exact older automatic
@@ -214,14 +216,16 @@ attempt limits receipt, validates the entire snapshot and plan before writing,
 and checks main before each mutation. A concurrently edited issue stops the run
 rather than overwriting the edit. Repeated observations produce no writes. A later
 complete snapshot converges a partially applied run. Checkpoints are retained for
-90 days; expiration or unavailable receipts requires explicit replay/backfill.
+90 days; expiration or an unavailable current receipt requires explicit replay/backfill.
 
 To preview or recover, dispatch **Maintainability cleanup** with `run_id` set to
 a completed Qualification push for the current main tip. `dry_run` defaults to
 true. `backfill` defaults to false; setting it true includes untouched baseline
 debt and establishes a fresh checkpoint after a successful apply. Review the
 retained `maintainability-issues.json` plan and category counts before applying a
-backfill. The workflow never runs downloaded code or changes admission limits.
+backfill. Each apply creates at most 25 new issues, spaces mutations one second
+apart, and records applied/deferred counts. Deferred intake does not advance the
+checkpoint; later runs or another explicit backfill dispatch continue it. The workflow never runs downloaded code or changes admission limits.
 
 The host assembles a prompt per turn: instruction units render only while
 their tools are offered, requestable tool schemas load on demand, and the

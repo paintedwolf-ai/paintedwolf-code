@@ -21,7 +21,7 @@ func trackingReport(policy sizebudget.Policy, inv *inventory, touched sizebudget
 			slices.Sort(files)
 			report.Artifacts = append(report.Artifacts, sizebudget.TrackingArtifact{
 				Category: category, ID: id, Touched: touched(category, id), Measured: value, Warn: limit.Warn, Limit: limit.Limit,
-				EffectiveCap: cap, ExceptionReason: policy.Exceptions[category][id].Reason, Sources: files,
+				Spans: trackingSpans(inv, category, id), EffectiveCap: cap, ExceptionReason: policy.Exceptions[category][id].Reason, Sources: files,
 			})
 		}
 	}
@@ -29,4 +29,21 @@ func trackingReport(policy sizebudget.Policy, inv *inventory, touched sizebudget
 		return cmp.Or(cmp.Compare(a.Category, b.Category), cmp.Compare(a.ID, b.ID))
 	})
 	return report
+}
+
+func trackingSpans(inv *inventory, category, id string) []sizebudget.TrackingSpan {
+	spans := inv.methodSpans[id]
+	if category == "go_struct_fields" {
+		spans = inv.declarations[id]
+	} else if category != "go_receiver_lines" && category != "go_receiver_methods" {
+		spans = nil
+	}
+	out := make([]sizebudget.TrackingSpan, 0, len(spans))
+	for _, s := range spans {
+		out = append(out, sizebudget.TrackingSpan{File: s.file, First: s.first, Last: s.last})
+	}
+	slices.SortFunc(out, func(a, b sizebudget.TrackingSpan) int {
+		return cmp.Or(cmp.Compare(a.File, b.File), cmp.Compare(a.First, b.First), cmp.Compare(a.Last, b.Last))
+	})
+	return out
 }
