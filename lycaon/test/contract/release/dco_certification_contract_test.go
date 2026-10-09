@@ -34,7 +34,7 @@ func TestDCOCertificationUsesTrustedBoundedSerializedCaller(t *testing.T) {
 	}
 	data := contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), ".github/workflows/dco.yml")
 	contractcheck.FailErr(t, "decode DCO caller", yaml.Unmarshal([]byte(data), &workflow))
-	want := map[string]string{"contents": "read", "pull-requests": "read", "actions": "read", "checks": "write"}
+	want := map[string]string{"contents": "read", "pull-requests": "read", "actions": "read", "checks": "write", "statuses": "write"}
 	if !maps.Equal(workflow.Permissions, want) {
 		t.Errorf("certification needs exactly %v, got %v", want, workflow.Permissions)
 	}

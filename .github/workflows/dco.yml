@@ -18,6 +18,7 @@ permissions:
   pull-requests: read
   actions: read
   checks: write
+  statuses: write
 concurrency:
   group: dco-certification
   queue: max

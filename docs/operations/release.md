@@ -55,8 +55,8 @@ reuse the public bucket and domain or point at a scratch bucket.
 - [ ] Enable **Private vulnerability reporting** in repository settings. Configure
   repository-owned [DCO certification](#dco-certification).
 - [ ] Protect `main` with the `main-protection` ruleset: pull requests merged by
-  squash through a merge queue, the required checks `check` (GitHub Actions) and
-  `DCO-owned` (GitHub Actions), no force-pushes or deletions, and the dependency-inventory deploy key
+  squash through a merge queue, the required contexts `check` (GitHub Actions check) and
+  `DCO-owned` (GitHub Actions commit status), no force-pushes or deletions, and the dependency-inventory deploy key
   as the only bypass actor. `check` is the aggregate of each CI tier, so no
   individual job is listed: a pull request's fast tier admits it to the queue,
   and its merge group's integration gate admits it to main. Apply the reviewed
@@ -70,20 +70,20 @@ reuse the public bucket and domain or point at a scratch bucket.
 
 ## DCO certification
 
-[Original commit certification](../../.github/workflows/dco.yml) is the sole DCO publisher. The action is pinned to a reviewed full commit SHA in `paintedwolf-ai/dco-checker`; policy and certification behavior belong there. This repository owns the event routing, least-privilege token scopes, and required-check configuration. The runner is Ubuntu 24.04. The verification catalog classifies certification as `one_shot`, so runner-priority sweeps do not cancel it. Every writer uses the repository-wide `dco-certification` concurrency group with `cancel-in-progress: false` and `queue: max`. Pending events queue in order instead of replacing another pull request’s pending certification.
+[Original commit certification](../../.github/workflows/dco.yml) is the sole DCO publisher. The required `DCO-owned` commit status is the admission gate; the distinct `DCO audit` check holds full evidence and diagnostics and is not a required context. The action is pinned to a reviewed full commit SHA in `paintedwolf-ai/dco-checker`; policy and certification behavior belong there. This repository owns the event routing, least-privilege token scopes, and required-check configuration. The runner is Ubuntu 24.04. The verification catalog classifies certification as `one_shot`, so runner-priority sweeps do not cancel it. Every writer uses the repository-wide `dco-certification` concurrency group with `cancel-in-progress: false` and `queue: max`. Pending events queue in order instead of replacing another pull request’s pending certification.
 
-GitHub Actions attribution identifies the publishing app, not the action's reviewed implementation. Review changes to the caller, action pin, permissions, and other workflows capable of writing checks as certification policy changes. A same-named check from another trusted workflow is within this trust boundary. The workflow never checks out contributor code or reads build artifacts with its write-capable token.
+GitHub Actions attribution identifies the publishing app, not the action's reviewed implementation. Review changes to the caller, action pin, permissions, and other workflows capable of writing commit statuses or checks as certification policy changes. A same-named result from another trusted workflow is within this trust boundary. The workflow never checks out contributor code or reads build artifacts with its write-capable token.
 
 ### Adoption and upgrades
 
 1. Select an immutable checker commit from a reviewed, qualified release. Review policy changes and the shared checker's hosted qualification evidence. Update the single action pin through a pull request; do not copy the checker into this repository.
 2. Keep the migration or upgrade pull request draft while implementing it. Confirm parsed caller contracts cover triggers, CI identity, permissions, action pin, runner, and serialization. Mark it ready when complete; use hosted CI for the integration gate.
-3. After the caller is available on `main`, dispatch certification for a ready pull request and confirm `DCO-owned` reports the expected base/head, checker revision, policy version, and exemptions. Verify certification on a real merge group too. An obsolete event cannot certify a newer generation.
-4. Require exactly `check` and `DCO-owned`, both from GitHub Actions, preserving all other ruleset protections and queue configuration. Remove the old `DCO` requirement and remove this repository from the external DCO App installation. Verify the resulting ruleset and app selection. Do not remove an installation shared by other repositories.
+3. After the caller is available on `main`, dispatch certification for a ready pull request and confirm the `DCO-owned` commit status succeeds and its linked `DCO audit` reports the expected base/head, checker revision, policy version, exemptions, and source workflow run/attempt. Verify certification on a real merge group too. An obsolete event cannot certify a newer generation.
+4. Require exactly the `check` check and `DCO-owned` commit status, both bound to GitHub Actions (integration ID `15368`), preserving all other ruleset protections and queue configuration. Remove the old `DCO` requirement and remove this repository from the external DCO App installation. Verify the resulting ruleset and app selection. Do not remove an installation shared by other repositories.
 
 ### Recovery and rollback
 
-For transient API failures or an interrupted publication, dispatch **Original commit certification** from `main` with the ready pull request number. The checker resolves current evidence itself. Inspect the resulting check's evidence identity; do not rely on an old success for changed base/head evidence. Correct policy failures in the original commits as described in [Contributing](../../CONTRIBUTING.md#developer-certificate-of-origin).
+For transient API failures or an interrupted publication, dispatch **Original commit certification** from `main` with the ready pull request number. The checker resolves current evidence itself. Certification makes the required status pending before evaluating evidence and records a failure when evidence is unavailable. Inspect the linked `DCO audit` evidence identity and require the current `DCO-owned` status to succeed; do not rely on an old success for changed base/head evidence. Correct policy failures in the original commits as described in [Contributing](../../CONTRIBUTING.md#developer-certificate-of-origin).
 
 If a checker release is defective, prepare a pull request returning the action pin to the last qualified immutable revision. Keep `DCO-owned` required and recertify affected ready pull requests after the rollback lands. If the required check prevents that repair from merging, the repository administrator must explicitly authorize a temporary protection change, record its exact scope, restore the requirement immediately after the repair, and verify certification. Never change check conclusions manually or broaden bypass actors as recovery.
 
