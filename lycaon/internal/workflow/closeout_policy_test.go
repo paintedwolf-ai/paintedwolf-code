@@ -1,12 +1,12 @@
 package workflow
 
 import (
+	"github.com/lycaon/lycaon/internal/testutil"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/lycaon/lycaon/internal/testutil"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 )
 
 func TestParseManifestYAMLCloseoutGated(t *testing.T) {
@@ -133,20 +133,20 @@ func TestMergePhaseDefCloseoutOverride(t *testing.T) {
 
 func TestValidateGatedCloseoutAsk(t *testing.T) {
 	gated := workflowdef.PhaseDef{ID: "execute", Closeout: workflowdef.CloseoutGated}
-	if diags := ValidateGatedCloseoutAsk(gated, "survey_execute", []string{"task", "ask_user"}); len(diags) != 0 {
+	if diags := workflowvalidation.ValidateGatedCloseoutAsk(gated, "survey_execute", []string{"task", "ask_user"}); len(diags) != 0 {
 		t.Fatalf("surface offering ask_user must validate clean, got %v", diags)
 	}
-	diags := ValidateGatedCloseoutAsk(gated, "survey_execute", []string{"task"})
+	diags := workflowvalidation.ValidateGatedCloseoutAsk(gated, "survey_execute", []string{"task"})
 	if len(diags) != 1 || diags[0].Code != "missing_gated_closeout_ask" {
 		t.Fatalf("diags = %+v want missing_gated_closeout_ask", diags)
 	}
 	// A phase without the control never needs the channel.
 	free := workflowdef.PhaseDef{ID: "execute"}
-	if diags := ValidateGatedCloseoutAsk(free, "survey_execute", []string{"task"}); len(diags) != 0 {
+	if diags := workflowvalidation.ValidateGatedCloseoutAsk(free, "survey_execute", []string{"task"}); len(diags) != 0 {
 		t.Fatalf("ungated phase must not require ask_user, got %v", diags)
 	}
 	// Unresolved surface binding defers to turn time.
-	if diags := ValidateGatedCloseoutAsk(gated, "", nil); len(diags) != 0 {
+	if diags := workflowvalidation.ValidateGatedCloseoutAsk(gated, "", nil); len(diags) != 0 {
 		t.Fatalf("empty surface must defer, got %v", diags)
 	}
 }

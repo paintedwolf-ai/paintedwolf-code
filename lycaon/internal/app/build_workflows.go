@@ -3,10 +3,6 @@ package app
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/projectcontrib"
-	"strings"
-	"time"
-
 	"github.com/lycaon/lycaon/internal/agentdef"
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/bootrecovery"
@@ -18,18 +14,27 @@ import (
 	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/inspector"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectcontrib"
 	"github.com/lycaon/lycaon/internal/rules"
 	"github.com/lycaon/lycaon/internal/scan"
 	scancfg "github.com/lycaon/lycaon/internal/scan/configuration"
 	"github.com/lycaon/lycaon/internal/search"
 	"github.com/lycaon/lycaon/internal/session"
+	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
 	"github.com/lycaon/lycaon/internal/toolhost"
 	"github.com/lycaon/lycaon/internal/vocabulary"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workflow"
+	workflowblueprintfiles "github.com/lycaon/lycaon/internal/workflow/blueprintfiles"
+	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
+	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
+	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	"github.com/lycaon/lycaon/internal/workflowdiag"
 	"github.com/lycaon/lycaon/pkg/api"
+	"strings"
+	"time"
 )
 
 func (b boardWiring) wireWorkflows() error {
@@ -56,8 +61,8 @@ func (b boardWiring) wireWorkflows() error {
 		return fmt.Errorf("workflow manifests: %w", err)
 	}
 	b.manifestRegistry = manifestRegistry
-	b.sessionWorkflowStore = workflow.NewSessionWorkflowSQLStore(b.storage.Database)
-	b.manifestResolver = workflow.ManifestResolver{
+	b.sessionWorkflowStore = workflowdrafts.NewSQL(b.storage.Database)
+	b.manifestResolver = workflowcatalog.Resolver{
 		SessionStore: b.sessionWorkflowStore,
 		CatalogFor: func(ctx context.Context, _ string, sessionID string) *extpacks.EffectiveCatalog {
 			if b.mgr != nil && b.storage.Sessions != nil && strings.TrimSpace(sessionID) != "" {
@@ -78,29 +83,34 @@ func (b boardWiring) wireWorkflows() error {
 			return b.settings.ProjectSurfaceGate(projectcontrib.SurfaceProjectSettings, b.storage.Projects).AppliesPath(ctx, projectDir)
 		},
 	}
-	b.workflowStore = workflow.NewSQLStore(b.storage.Database)
-	b.workflowStore.SetEventOutbox(b.events.Outbox)
-	b.workflowStore.SetSessionMutations(b.storage.Sessions)
+	b.workflowStore = workflowpersistence.New(b.storage.Database)
+	b.workflowStore.Transactions.SetEventOutbox(b.events.Outbox)
+	b.workflowStore.Transactions.SetSessionMutations(b.storage.Sessions)
 	if b.security.Authority != nil {
-		b.workflowStore.SetAuthzRecorder(b.security.Authority.Recorder)
+		b.workflowStore.Transactions.SetAuthzRecorder(b.security.Authority.Recorder)
 	}
 	b.workflowMgr = workflow.NewManager(b.workflowStore, b.storage.Sessions, b.manifestRegistry, b.events.Publisher)
-	b.workflowMgr.ReviewSpawnFilter = func(_ context.Context, _, _ string, candidates []string) []string {
+	b.workflowMgr.Phases.ReviewSpawnFilter = func(_ context.Context, _, _ string, candidates []string) []string {
 		if b.webResearchRuntime.Config != nil && !b.webResearchRuntime.Config.SearchEnabled() {
 			return agentdef.FilterExternalSourceAgents(candidates)
 		}
 		return candidates
 	}
-	b.workflowMgr.OrphanReconcileBefore = time.Now().UTC()
-	b.workflowMgr.VerdictGrounding = b.mgr.EvaluateVerdictGrounding
-	b.workflowMgr.Resolver = b.manifestResolver
-	b.workflowMgr.SessionScaffold = workflow.NewSessionScaffoldSQLStore(b.storage.Database)
-	b.events.Publisher.SessionUI = session.UIWithProtection{Inner: b.workflowMgr, Mgr: b.mgr}
-	b.workflowMgr.BlueprintCreate = blueprint.WorkflowBlueprintCreator{Manager: b.blueprintMgr}
-	b.workflowMgr.BlueprintGet = b.blueprintMgr
+	b.workflowMgr.Children.ReviewSpawnFilter = b.workflowMgr.Phases.ReviewSpawnFilter
+	b.workflowMgr.Recovery.Before = time.Now().UTC()
+	b.workflowMgr.Verdicts.VerdictGrounding = b.mgr.EvaluateVerdictGrounding
+	b.workflowMgr.Resolver.SessionStore = b.manifestResolver.SessionStore
+	b.workflowMgr.Resolver.CatalogFor = b.manifestResolver.CatalogFor
+	b.workflowMgr.Resolver.ProjectTierApplies = b.manifestResolver.ProjectTierApplies
+	b.workflowMgr.Blueprints.Scaffold.Store = workflowpersistence.NewSessionScaffoldSQLStore(b.storage.Database)
+	b.events.Publisher.SessionUI = session.UIWithProtection{Inner: b.workflowMgr.Presentation, Mgr: b.mgr}
+	b.workflowMgr.Blueprints.Creator = blueprint.WorkflowBlueprintCreator{Manager: b.blueprintMgr}
+	b.workflowMgr.Blueprints.Getter = b.blueprintMgr
+	b.workflowMgr.Presentation.BlueprintGetter = b.blueprintMgr
+	b.workflowMgr.Approvals.Getter = b.blueprintMgr
 	workflowStore := b.workflowStore
 	b.blueprintMgr.BeforeRetarget = func(ctx context.Context, projectID, from, to string) {
-		run, err := workflowStore.ActiveByProjectForBlueprint(ctx, strings.TrimSpace(projectID), strings.TrimSpace(from))
+		run, err := workflowStore.Runs.ActiveByProjectForBlueprint(ctx, strings.TrimSpace(projectID), strings.TrimSpace(from))
 		if err != nil || run == nil {
 			return
 		}
@@ -108,10 +118,10 @@ func (b boardWiring) wireWorkflows() error {
 		b.mgr.RecordPrimaryMutation(ctx, run.SessionID, to)
 		b.mgr.RecordBlueprintBinding(ctx, run.SessionID, from)
 	}
-	b.blueprintMgr.AfterRetarget = b.workflowMgr.RebindBlueprintPath
+	b.blueprintMgr.AfterRetarget = b.workflowMgr.Blueprints.RebindBlueprintPath
 	// A blueprint a live run executes cannot be deleted out from under it.
 	b.blueprintMgr.ActiveRun = func(ctx context.Context, projectID, path string) (string, bool, error) {
-		run, err := workflowStore.ActiveByProjectForBlueprint(ctx, strings.TrimSpace(projectID), strings.TrimSpace(path))
+		run, err := workflowStore.Runs.ActiveByProjectForBlueprint(ctx, strings.TrimSpace(projectID), strings.TrimSpace(path))
 		if err != nil || run == nil {
 			return "", false, err
 		}
@@ -119,19 +129,19 @@ func (b boardWiring) wireWorkflows() error {
 	}
 	if err := delegationWiring(b).registerRecovery(bootrecovery.Entry{
 		Name: "workflow-verdicts", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseServe,
-		Run: b.workflowMgr.RecoverVerdictOperations,
+		Run: b.workflowMgr.Verdicts.RecoverVerdictOperations,
 	}); err != nil {
 		return err
 	}
 	if err := delegationWiring(b).registerRecovery(bootrecovery.Entry{
 		Name: "workflow-teardowns", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseServe,
-		Run: b.workflowMgr.RecoverTeardownOperations,
+		Run: b.workflowMgr.Controls.Cleanup.Recover,
 	}); err != nil {
 		return err
 	}
 	if err := delegationWiring(b).registerRecovery(bootrecovery.Entry{
 		Name: "workflow-child-terminals", Kind: bootrecovery.KindReconcile, Phase: bootrecovery.PhaseServe,
-		After: []string{"workflow-teardowns"}, Run: b.workflowMgr.RecoverTerminalChildren,
+		After: []string{"workflow-teardowns"}, Run: b.workflowMgr.Children.RecoverTerminalChildren,
 	}); err != nil {
 		return err
 	}
@@ -152,8 +162,8 @@ func (b boardWiring) wireWorkflowEvidence() error {
 		}
 		return dir, nil
 	}
-	b.workflowMgr.EvidenceStore = b.evidenceStore
-	b.workflowMgr.EvidenceProjectDir = func(ctx context.Context, sessionID string) (string, error) {
+	b.workflowMgr.Verdicts.EvidenceStore = b.evidenceStore
+	b.workflowMgr.SetEvidenceProjectDir(func(ctx context.Context, sessionID string) (string, error) {
 		sess, err := b.storage.Sessions.Get(ctx, sessionID)
 		if err != nil || sess == nil {
 			return "", err
@@ -162,8 +172,8 @@ func (b boardWiring) wireWorkflowEvidence() error {
 			return "", nil
 		}
 		return project.EnsureHostDataDir(b.storage.Directory, sess.ProjectID)
-	}
-	b.workflowMgr.OnGateEvidencePersisted = func(ctx context.Context, sessionID, workflowRunID string, rec evidence.Record) {
+	})
+	b.workflowMgr.Verdicts.OnGateEvidencePersisted = func(ctx context.Context, sessionID, workflowRunID string, rec evidence.Record) {
 		projectID, err := search.ResolveProjectIDForSession(ctx, b.storage.Database, sessionID)
 		if err != nil || projectID == "" {
 			return
@@ -203,9 +213,9 @@ func (b boardWiring) wireWorkflowScanServices() error {
 	b.gatesCfg = scancfg.DefaultGatesConfig()
 	b.scanStore = scan.NewSQLStore(b.storage.Database)
 	b.scanStore.SetEventOutbox(b.events.Outbox)
-	b.workflowMgr.Inventory = workflowScanInventory{store: b.scanStore}
-	b.mgr.SetReportDocumentChecker(b.workflowMgr)
-	b.mgr.SetScanEvidenceRuns(b.workflowMgr)
+	b.workflowMgr.Coverage.Inventory = workflowScanInventory{store: b.scanStore}
+	b.mgr.SetReportDocumentChecker(b.workflowMgr.Reports)
+	b.mgr.SetScanEvidenceRuns(b.workflowMgr.Coverage)
 	snapshotStore := b.storage.SourceLedger.SnapshotStore()
 	b.scanCoordinator = scan.NewCoordinator(b.scanStore, b.gitMgr, snapshotStore)
 	b.scanCoordinator.Settings = b.settings.Service.SecurityScanners
@@ -219,8 +229,8 @@ func (b boardWiring) wireWorkflowScanServices() error {
 	b.events.BindWorkers(b.workerQueue)
 	b.workerQueue.SetEventOutbox(b.events.Outbox)
 	b.workerQueue.SetWorkersConfig(b.workersCfg)
-	b.workerQueue.SetWorkflowRunChecker(b.workflowMgr)
-	b.workflowStore.SetWorkerRunnableNotifier(b.workerQueue)
+	b.workerQueue.SetWorkflowDomains(&worker.WorkflowDomains{Runs: b.workflowMgr.Policy, Tasks: b.workflowMgr.Fanout})
+	b.workflowStore.Transactions.SetWorkerRunnableNotifier(b.workerQueue)
 	if err := b.seedHostPowerWork(); err != nil {
 		return err
 	}
@@ -228,8 +238,8 @@ func (b boardWiring) wireWorkflowScanServices() error {
 		Ledger:   b.scanStore,
 		Settings: b.settings.Service.SecurityScanners,
 		History:  b.scanStore,
-		Runs:     b.workflowStore.Get,
-		Params:   b.workflowMgr.ObligationParams,
+		Runs:     b.workflowStore.Runs.Get,
+		Params:   b.workflowMgr.Obligations.ObligationParams,
 		Projects: func(ctx context.Context, projectID string) (string, error) {
 			p, err := b.storage.Projects.Get(ctx, projectID)
 			if err != nil {
@@ -272,7 +282,7 @@ func (b boardWiring) wireWorkflowConditions() error {
 			scan.WorkflowObligationKind: b.scanObligation,
 		},
 		BlueprintContent: func(_ context.Context, projectDir, relPath string) (string, error) {
-			return workflow.ReadBlueprintFile(projectDir, relPath)
+			return workflowblueprintfiles.ReadBlueprintFile(projectDir, relPath)
 		},
 		DelegationCloseout:      delegation.CloseoutComplete(b.delegationStore),
 		SourceVerifyPassed:      b.mgr.WorkflowSourceVerifyPassed,
@@ -286,7 +296,7 @@ func (b boardWiring) wireWorkflowConditions() error {
 			return session.ParentSessionWorkerCycleIdle(b.startup.ctx, b.workerQueue, projectID, sessionID, completingJobID)
 		},
 		ChildRunStatus: func(parentRunID string) (string, bool) {
-			child, err := b.workflowStore.LatestChildByParentRunID(b.startup.ctx, parentRunID)
+			child, err := b.workflowStore.Runs.LatestChildByParentRunID(b.startup.ctx, parentRunID)
 			if err != nil || child == nil {
 				return "", false
 			}
@@ -304,7 +314,7 @@ func (b boardWiring) wireWorkflowConditions() error {
 	if err != nil {
 		return fmt.Errorf("rules config: %w", err)
 	}
-	if err := rules.ValidatePostureRules(b.agents.Postures, session.AllSessionPostures(), b.bundledRules); err != nil {
+	if err := rules.ValidatePostureRules(b.agents.Postures, sessionposture.AllSessionPostures(), b.bundledRules); err != nil {
 		return fmt.Errorf("posture rules: %w", err)
 	}
 	ruleConfigs := make([]*rules.RulesConfig, 0, len(b.bundledRules))
@@ -320,51 +330,55 @@ func (b boardWiring) wireWorkflowConditions() error {
 			Mgr:    b.checkpointMgr,
 			Review: b.settings.Service.Review,
 			PhaseSrc: &workflow.PhaseContentReviewSource{
-				Runs: b.workflowMgr,
+				Runs: b.workflowMgr.Policy,
 			},
 		}
 		b.toolRuntime.Mutations.SetContentApply(contentApply)
 	}
 	if b.toolRuntime != nil && b.workflowMgr != nil {
-		b.toolRuntime.Mutations.SetBlueprintWriteObserver(b.workflowMgr)
+		b.toolRuntime.Mutations.SetBlueprintWriteObserver(b.workflowMgr.Blueprints)
 	}
-	b.workflowMgr.RegisterObligationKind(b.scanObligation)
-	b.workflowMgr.WorkerTasks = func(ctx context.Context, runID string) ([]api.WorkerTask, error) {
+	b.workflowMgr.Obligations.Register(b.scanObligation)
+	workflowTaskQuery1 := func(ctx context.Context, runID string) ([]api.WorkerTask, error) {
 		return b.workerQueue.ListByWorkflowRunID(ctx, runID)
 	}
-	b.workflowMgr.WorkerToolBudget = b.workerToolBudgetFor
-	b.security.BindSpawnAgents(b.workflowMgr.AllowedAgents)
-	b.workflowMgr.EvidenceDigests = append(b.workflowMgr.EvidenceDigests, scan.WorkflowEvidenceDigest(b.scanStore))
+	b.workflowMgr.Fanout.WorkerTasks = workflowTaskQuery1
+	b.workflowMgr.Coverage.WorkerTasks = workflowTaskQuery1
+	b.workflowMgr.Verdicts.Questions.WorkerTasks = workflowTaskQuery1
+	b.workflowMgr.Verdicts.WorkerTasks = workflowTaskQuery1
+	b.workflowMgr.Fanout.WorkerToolBudget = b.workerToolBudgetFor
+	b.security.BindSpawnAgents(b.workflowMgr.Policy.AllowedAgents)
+	b.workflowMgr.Verdicts.Evidence.EvidenceDigests = append(b.workflowMgr.Verdicts.Evidence.EvidenceDigests, scan.WorkflowEvidenceDigest(b.scanStore))
 	return b.wireWorkflowComposition()
 }
 
 func (b boardWiring) wireWorkflowComposition() error {
-	obligationSpecs := workflow.ObligationSpecsFromKinds(b.workflowMgr.Obligations)
-	b.workflowComposer = &workflow.Composer{
+	obligationSpecs := workflow.ObligationSpecsFromKinds(b.workflowMgr.Obligations.Kinds)
+	b.workflowComposer = &workflowcomposition.Composer{
 		ModuleRoot:   b.catalog.ModuleRoot,
 		SessionStore: b.sessionWorkflowStore,
 		Registry:     b.condReg,
 		Obligations:  obligationSpecs,
 		Agents:       b.agents.Registry,
 	}
-	if composePolicy, err := workflow.LoadComposePolicy(); err != nil {
+	if composePolicy, err := workflowcomposition.LoadComposePolicy(); err != nil {
 		return fmt.Errorf("compose policy: %w", err)
 	} else {
 		b.workflowComposer.Policy = composePolicy
 	}
 	// Tests may replace the effective template catalog with fixtures.
-	loadTemplates := func() (workflow.TemplateCatalog, error) {
+	loadTemplates := func() (workflowcomposition.TemplateCatalog, error) {
 		if b.startup.cfg.TestWorkflowTemplatesDir != "" {
-			return workflow.LoadTemplatesFromDir(extpacks.OnDisk(b.startup.cfg.TestWorkflowTemplatesDir))
+			return workflowcomposition.LoadTemplatesFromDir(extpacks.OnDisk(b.startup.cfg.TestWorkflowTemplatesDir))
 		}
-		return workflow.LoadTemplatesEffective(b.catalog.Effective)
+		return workflowcomposition.LoadTemplatesEffective(b.catalog.Effective)
 	}
 	if templates, err := loadTemplates(); err != nil {
 		return fmt.Errorf("workflow templates: %w", err)
 	} else {
 		b.workflowComposer.Templates = templates
 	}
-	b.workflowPersister = &workflow.Persister{
+	b.workflowPersister = &workflowcomposition.Persister{
 		ModuleRoot:   b.catalog.ModuleRoot,
 		SessionStore: b.sessionWorkflowStore,
 		Registry:     b.condReg,

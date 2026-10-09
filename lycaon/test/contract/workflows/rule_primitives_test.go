@@ -2,15 +2,15 @@ package contract
 
 import (
 	"context"
-	"strings"
-	"testing"
-
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/rules"
 	"github.com/lycaon/lycaon/internal/session"
+	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
+	"strings"
+	"testing"
 )
 
 func knownRuleWhenKeys() map[string]struct{} {
@@ -48,7 +48,7 @@ func TestRuleYAMLWhenKeysAreImplemented(t *testing.T) {
 				}
 				if key == "posture_is" {
 					val, _ := raw.(string)
-					if !session.ValidSessionPosture(val) {
+					if !sessionposture.ValidSessionPosture(val) {
 						t.Errorf("%s rule %q: invalid posture_is %q", e.Name(), rule.ID, val)
 					}
 				}

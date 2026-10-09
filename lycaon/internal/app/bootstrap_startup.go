@@ -3,10 +3,9 @@ package app
 import (
 	"context"
 	"github.com/lycaon/lycaon/internal/app/configuration"
-	"log/slog"
-
 	"github.com/lycaon/lycaon/internal/bootrecovery"
 	"github.com/lycaon/lycaon/internal/observability"
+	"log/slog"
 )
 
 type startupBootstrap struct {

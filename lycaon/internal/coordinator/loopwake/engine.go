@@ -2,20 +2,19 @@ package loopwake
 
 import (
 	"context"
+	awaitstore "github.com/lycaon/lycaon/internal/await"
+	"github.com/lycaon/lycaon/internal/coordinator/anchor"
+	"github.com/lycaon/lycaon/internal/coordinator/inject"
+	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/promptresult"
+	"github.com/lycaon/lycaon/internal/scaffoldvars"
+	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/pkg/api"
 	"log/slog"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
-
-	awaitstore "github.com/lycaon/lycaon/internal/await"
-	"github.com/lycaon/lycaon/internal/coordinator/anchor"
-	"github.com/lycaon/lycaon/internal/coordinator/inject"
-	"github.com/lycaon/lycaon/internal/observability"
-	"github.com/lycaon/lycaon/internal/scaffoldvars"
-	"github.com/lycaon/lycaon/internal/settings"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 const (
@@ -24,15 +23,22 @@ const (
 	defaultWorkflowObligationInterval = 2 * time.Minute
 )
 
-// LoopWorkflowSource supplies active run and scaffold state for loop policy checks.
-type LoopWorkflowSource interface {
-	ActiveRun(ctx context.Context, sessionID string) (*api.WorkflowRun, error)
-	ScaffoldVars(ctx context.Context, runID string) (map[string]any, error)
-	HumanApprovalAwaiting(ctx context.Context, sessionID string) (bool, error)
-	// HostObligationHeld reports a current-phase wait only the host can settle.
-	HostObligationHeld(ctx context.Context, sessionID string) (bool, error)
-	// HostObligationHoldKinds names the holding kinds for the park reason.
-	HostObligationHoldKinds(ctx context.Context, sessionID string) []string
+// WorkflowDomains binds the run state and wait policies used by coordinator loops.
+type WorkflowDomains struct {
+	Runs        WorkflowRuns
+	Approvals   WorkflowApprovals
+	Obligations WorkflowObligations
+}
+type WorkflowRuns interface {
+	ActiveBySession(context.Context, string) (*api.WorkflowRun, error)
+	GetScaffoldVars(context.Context, string) (map[string]any, error)
+}
+type WorkflowApprovals interface {
+	HumanApprovalAwaiting(context.Context, string) (bool, error)
+}
+type WorkflowObligations interface {
+	HostObligationHeld(context.Context, string) (bool, error)
+	HostObligationHoldKinds(context.Context, string) []string
 }
 
 // LoopDeps wires coordinator loop policy and prompt execution.
@@ -44,7 +50,7 @@ type LoopDeps struct {
 	GetSession                func(ctx context.Context, sessionID string) (*api.Session, error)
 	Limits                    func(context.Context, *api.Session) settings.SessionLimits
 	IsEscalated               func(sessionID string) bool
-	WorkflowSource            LoopWorkflowSource
+	WorkflowSource            *WorkflowDomains
 	CoordinatorFrame          inject.CoordinatorTurnFrameSource
 	BoardWillForceInject      func(ctx context.Context, sess *api.Session, run api.CoordinatorRunContext) bool
 	QueueInform               func(ctx context.Context, sessionID string, inform anchor.ID, env anchor.Envelope)
@@ -1038,7 +1044,7 @@ func (l *LoopEngine) sessionHumanApprovalAwaiting(ctx context.Context, sessionID
 	if deps.WorkflowSource == nil {
 		return false
 	}
-	awaiting, err := deps.WorkflowSource.HumanApprovalAwaiting(ctx, sessionID)
+	awaiting, err := deps.WorkflowSource.Approvals.HumanApprovalAwaiting(ctx, sessionID)
 	if err != nil {
 		slog.WarnContext(ctx, "human approval park unreadable; not inferring a park",
 			"component", "coordinator_loop", "session_id", sessionID, "error", err)
@@ -1056,7 +1062,7 @@ func (l *LoopEngine) sessionHostObligationHeld(ctx context.Context, sessionID st
 	if deps.WorkflowSource == nil {
 		return false
 	}
-	held, err := deps.WorkflowSource.HostObligationHeld(ctx, sessionID)
+	held, err := deps.WorkflowSource.Obligations.HostObligationHeld(ctx, sessionID)
 	if err != nil {
 		slog.WarnContext(ctx, "host obligation ledger unreadable; not inferring a hold",
 			"component", "coordinator_loop", "session_id", sessionID, "error", err)
@@ -1075,7 +1081,7 @@ func (l *LoopEngine) hostObligationParkReason(ctx context.Context, sessionID str
 	if deps.WorkflowSource == nil {
 		return base
 	}
-	kinds := deps.WorkflowSource.HostObligationHoldKinds(ctx, sessionID)
+	kinds := deps.WorkflowSource.Obligations.HostObligationHoldKinds(ctx, sessionID)
 	if len(kinds) == 0 {
 		return base
 	}
@@ -1286,11 +1292,11 @@ func (l *LoopEngine) activeRunAndVars(ctx context.Context, sessionID string) (*a
 	if deps.WorkflowSource == nil {
 		return nil, nil, false
 	}
-	run, err := deps.WorkflowSource.ActiveRun(ctx, sessionID)
+	run, err := deps.WorkflowSource.Runs.ActiveBySession(ctx, sessionID)
 	if err != nil || run == nil {
 		return nil, nil, false
 	}
-	vars, err := deps.WorkflowSource.ScaffoldVars(ctx, run.ID)
+	vars, err := deps.WorkflowSource.Runs.GetScaffoldVars(ctx, run.ID)
 	if err != nil {
 		return run, nil, true
 	}

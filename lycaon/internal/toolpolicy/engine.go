@@ -1,14 +1,8 @@
 package toolpolicy
 
 import (
-	"github.com/lycaon/lycaon/internal/toolfeedback"
-
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/toolrejection"
-	"path/filepath"
-	"strings"
-
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/rules"
@@ -16,8 +10,12 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolfeedback"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
+	"path/filepath"
+	"strings"
 )
 
 // Engine answers whether a tool may appear in the LLM schema and whether it may run.
@@ -38,7 +36,7 @@ type PreInvokeGuard func(ctx context.Context, sess *api.Session, toolName string
 type EngineDeps struct {
 	ToolLister       tools.ToolProfileLister
 	Rules            RuleEvaluator
-	Workflows        WorkflowView
+	Workflows        *WorkflowDomains
 	Postures         func(context.Context, *api.Session) (PostureRegistry, error)
 	Limits           func(context.Context, *api.Session) settings.SessionLimits
 	HasComposeDraft  func(context.Context, *api.Session) bool

@@ -192,11 +192,11 @@ Everything else stays in `native`: the write tools, `command` and `verify`, the 
 
 The invariant is the **direction**, not a fixed roster of consumers: a package that assembles *into* a view may not import the view, and a package that consumes a built view may. Every forbidden edge above is enforced in [`TestImportGraphLayering`](../lycaon/test/contract/host/import_graph_layering_contract_test.go), including all ten loader hubs.
 
-## WorkflowSessionView (session ↔ workflow)
+## Workflow resource ports (session ↔ workflow)
 
-[`WorkflowSessionView`](../lycaon/internal/session/workflow_view.go) is the sole workflow dependency type on `session.Manager`; the production implementer is [`workflow.RunManager`](../lycaon/internal/workflow/boundary.go) (checked by the compiler at the implementation).
+[`session.WorkflowDomains`](../lycaon/internal/session/workflow_view.go) binds the named workflow resources consumed by session execution. Each port describes one domain: run queries, phase policy, ambient admission, blueprints, batch facts, slash commands, requests, feedback, transcript publication, asks, fanout, phase progression, reports, recovery, or cleanup. The app binds each port directly to its actual workflow service or persistence owner.
 
-**It is frozen.** A new session↔workflow capability becomes a new small port wired beside it, never another method on the view.
+Coordinator wake decisions and tool policy use their own narrow resource sets in [`loopwake.WorkflowDomains`](../lycaon/internal/coordinator/loopwake/engine.go) and [`toolpolicy.WorkflowDomains`](../lycaon/internal/toolpolicy/workflow_view.go). Workflow services never receive the session orchestration manager or a whole workflow dependency bundle. Shared persisted posture and workflow facts live in `session/posture` and `session/workflowfacts`; consumers import the canonical definitions directly.
 
 ### Supporting dependency rules
 
@@ -246,9 +246,31 @@ Move a symbol only when it is free of `Manager` internals and creates no back-im
 | [`llm/failure`](../lycaon/internal/llm/failure) · [`transcript`](../lycaon/internal/llm/transcript) | Typed provider failures · message authority and host feedback projected into provider content |
 | [`llm/compaction`](../lycaon/internal/llm/compaction) | Context fitting, token measurement, and summaries through an explicit summarizer contract |
 
-## Workflow definitions
+## Workflow packages
 
-[`workflow/definition`](../lycaon/internal/workflow/definition) parses, resolves, validates, and snapshots workflow manifests and their catalog, including the manifest vocabulary, phase configuration, presets, and the review-loop, brief, and claim schemas. It imports no other workflow package. [`internal/workflow`](../lycaon/internal/workflow) runs workflows over those definitions: the run manager, gates, workflow tools, blueprints, composition, and persistence. [`workflow/verdictcall`](../lycaon/internal/workflow/verdictcall) composes the `submit_verdict` call a review phase accepts from a definition and the tool's catalog fragments; it imports `workflow/definition` but not `internal/workflow`.
+[`workflow/definition`](../lycaon/internal/workflow/definition) parses, validates, and snapshots manifest vocabulary, phase configuration, presets, review loops, briefs, and claim schemas. It imports no other workflow package. [`workflow/verdictcall`](../lycaon/internal/workflow/verdictcall) composes the review phase's `submit_verdict` schema from definitions and catalog fragments.
+
+[`workflow.RunManager`](../lycaon/internal/workflow/manager.go) constructs the service graph and binds shared configuration and disposal. Behavior belongs to the named services and callers select the resource they consume; no service retains the manager or a complete dependency bundle.
+
+| Package | Responsibility |
+|---------|----------------|
+| [`workflow/catalog`](../lycaon/internal/workflow/catalog) | Effective manifest resolution across bundled, project, and session catalogs |
+| [`workflow/composition`](../lycaon/internal/workflow/composition) · [`drafts`](../lycaon/internal/workflow/drafts) | Composition, publication, and session-authored manifest persistence |
+| [`workflow/runstate`](../lycaon/internal/workflow/runstate) | Run facts, commands, mutation records, and serialized scaffold-variable updates |
+| [`workflow/persistence`](../lycaon/internal/workflow/persistence) | SQL run queries, state, starts, commands, blueprint approvals, teardown intents, and verdict receipts over one transaction resource |
+| [`workflow/lifecycle`](../lycaon/internal/workflow/lifecycle) | Reviewed admission, pause/resume/cancel, committed teardown recovery, and boot reconciliation |
+| [`workflow/phases`](../lycaon/internal/workflow/phases) · [`gates`](../lycaon/internal/workflow/gates) | Phase progression, transition authority, entry effects, and fail-closed gate evaluation |
+| [`workflow/inputs`](../lycaon/internal/workflow/inputs) | Requests, feedback, asks, slash commands, announcement cards, and scaffold input |
+| [`workflow/runtime`](../lycaon/internal/workflow/runtime) · [`presentation`](../lycaon/internal/workflow/presentation) | Session policy, coordinator snapshots, and run/phase/ask/report projections |
+| [`workflow/review`](../lycaon/internal/workflow/review) | Coverage admission, reviewer questions, evidence assembly, verdict records, and recovery |
+| [`workflow/blueprints`](../lycaon/internal/workflow/blueprints) | Blueprint launch, binding, retargeting, and transcript state |
+| [`workflow/review`](../lycaon/internal/workflow/review) | Coverage admission, reviewer questions, evidence assembly, verdict records, and recovery |
+| [`workflow/blueprints`](../lycaon/internal/workflow/blueprints) | Blueprint launch, binding, retargeting, and transcript state |
+| [`workflow/publication`](../lycaon/internal/workflow/publication) | Committed run events and workflow-bound transcript messages |
+| [`workflow/statetools`](../lycaon/internal/workflow/statetools) · [`toolguard`](../lycaon/internal/workflow/toolguard) | State tool handlers and their session/run authorization boundary |
+| [`workflow/validation`](../lycaon/internal/workflow/validation) · [`intake`](../lycaon/internal/workflow/intake) · [`blueprintfiles`](../lycaon/internal/workflow/blueprintfiles) | Evidence validation, intake grammars, and confined blueprint file access |
+
+The root workflow package owns cross-domain fanout, children, reports, approvals, ambient runs, and obligations as concrete services. Phase entry consumes narrow peer contracts for these effects. Persistence domains share the actual transaction resource, preserving revision checks, authorization records, session mutations, and outbox publication within their existing commit boundaries.
 
 ## Scan packages
 

@@ -3,13 +3,13 @@ package workflow
 import (
 	"context"
 	"errors"
-	"testing"
-
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
+	"testing"
 )
 
 func TestMergeStartParamsRequestOverridesDefaultsAndPreset(t *testing.T) {
@@ -38,15 +38,15 @@ func TestMergeStartParamsRequestOverridesDefaultsAndPreset(t *testing.T) {
 
 func TestStartHumanAppliesRequestParameters(t *testing.T) {
 	mgr, _, _, _ := testManagerWithRegistry(t)
-	run, err := mgr.StartHuman(context.Background(), "sess-1", api.StartWorkflowRunRequest{
+	run, err := mgr.Starts.StartHuman(context.Background(), "sess-1", api.StartWorkflowRunRequest{
 		WorkflowID:      "plan",
 		WorkflowVersion: "1.0.0",
 		Parameters:      map[string]string{"research_depth": "none"},
 	})
 	testutil.FailErr(t, "start workflow with parameters", err)
-	vars, err := mgr.Store.GetScaffoldVars(context.Background(), run.ID)
+	vars, err := mgr.Store.Runs.GetScaffoldVars(context.Background(), run.ID)
 	testutil.FailErr(t, "load workflow vars", err)
-	if got, _ := DotPathString(vars, "params.research_depth"); got != "none" {
+	if got, _ := runstate.DotPathString(vars, "params.research_depth"); got != "none" {
 		t.Fatalf("params.research_depth = %q, want none", got)
 	}
 	if !conditions.DotPathTruthy(vars, "phase_skipped.research") {
@@ -59,7 +59,7 @@ func TestInvalidStartParameterDoesNotCreateBlueprint(t *testing.T) {
 	ctx := context.Background()
 	before, _, err := blueprintMgr.List(ctx, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "list blueprints before invalid start", err)
-	_, err = mgr.StartHuman(ctx, "sess-1", api.StartWorkflowRunRequest{
+	_, err = mgr.Starts.StartHuman(ctx, "sess-1", api.StartWorkflowRunRequest{
 		WorkflowID:      "plan",
 		WorkflowVersion: "1.0.0",
 		Parameters:      map[string]string{"research_depth": "impossible"},

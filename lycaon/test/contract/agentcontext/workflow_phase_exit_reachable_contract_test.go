@@ -1,16 +1,15 @@
 package contract
 
 import (
+	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
+	"github.com/lycaon/lycaon/pkg/api"
+	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"regexp"
 	"sort"
 	"strings"
 	"testing"
-
-	"github.com/lycaon/lycaon/internal/coordinator/surface"
-	"github.com/lycaon/lycaon/internal/workflow"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	"github.com/lycaon/lycaon/pkg/api"
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
 // phaseExitChannel names a tool required to leave a phase.
@@ -130,7 +129,7 @@ func TestWorkflowPhaseExitStepsOnlyNameCallableTools(t *testing.T) {
 				continue
 			}
 			wire := plan.AddressableNames()
-			view := workflow.ProjectPhaseExit(m, phase, nil, nil)
+			view := workflowpresentation.ProjectPhaseExit(m, phase, nil, nil)
 			seen := map[string]bool{}
 			for _, step := range strings.Split(renderPhaseExitBlock(t, view), "\n") {
 				for _, match := range phaseExitImperativeRE.FindAllStringSubmatch(step, -1) {

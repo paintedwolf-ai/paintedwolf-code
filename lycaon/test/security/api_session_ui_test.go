@@ -3,13 +3,12 @@ package security
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/pkg/api"
+	"github.com/lycaon/lycaon/test/wiring"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"github.com/lycaon/lycaon/pkg/api"
-	"github.com/lycaon/lycaon/test/wiring"
 )
 
 func TestGetSessionPendingWorkflowStartOpenAPI(t *testing.T) {
@@ -24,7 +23,7 @@ func TestGetSessionPendingWorkflowStartOpenAPI(t *testing.T) {
 		t.Fatalf("ambient exit left active workflow: %+v; error=%v", active, err)
 	}
 
-	if err := h.WorkflowMgr.NoteWorkflowStartProposal(context.Background(), sess.ID, "plan", "1.0.0"); err != nil {
+	if err := h.WorkflowMgr.Blueprints.Scaffold.NoteWorkflowStartProposal(context.Background(), sess.ID, "plan", "1.0.0"); err != nil {
 		t.Fatalf("NoteWorkflowStartProposal: %v", err)
 	}
 

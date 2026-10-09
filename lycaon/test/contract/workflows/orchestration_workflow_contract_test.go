@@ -2,19 +2,19 @@ package contract
 
 import (
 	"context"
-	"os"
-	"path/filepath"
-	"testing"
-
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/workflow"
+	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/wirespec"
 	"github.com/lycaon/lycaon/test/contract/internal/workflowfixture"
+	"os"
+	"path/filepath"
+	"testing"
 )
 
 func TestBugbashInWorkflowCatalog(t *testing.T) {
@@ -39,7 +39,7 @@ func TestBugbashInWorkflowCatalog(t *testing.T) {
 		t.Fatalf("summary trigger = %q want /bugbash", summary.Trigger)
 	}
 
-	resolver := workflow.ManifestResolver{}
+	resolver := workflowcatalog.Resolver{}
 	summaries, err := resolver.ListResolved(context.Background(), "", "")
 	contractcheck.FailErr(t, "resolver.ListResolved failed", err)
 	hasBugbash, hasOptions := false, false
@@ -98,7 +98,7 @@ func TestWorkflowManifestTopologyFieldSync(t *testing.T) {
 
 func TestProductCatalogDemoSKUs(t *testing.T) {
 	t.Parallel()
-	resolver := workflow.ManifestResolver{}
+	resolver := workflowcatalog.Resolver{}
 	summaries, err := resolver.ListResolved(context.Background(), "", "")
 	contractcheck.FailErr(t, "resolver.ListResolved failed", err)
 

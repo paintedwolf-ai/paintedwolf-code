@@ -2,14 +2,13 @@ package loopwake
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/promptresult"
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/pkg/api"
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"github.com/lycaon/lycaon/internal/coordinator/anchor"
-	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestWakeQueuedAfterExecutionReleaseStartsWithoutAnotherEvent(t *testing.T) {
@@ -20,9 +19,9 @@ func TestWakeQueuedAfterExecutionReleaseStartsWithoutAnotherEvent(t *testing.T) 
 	deps.GetSession = func(context.Context, string) (*api.Session, error) {
 		return &api.Session{ID: id, Status: api.SessionStatusBusy}, nil
 	}
-	deps.WorkflowSource = StubLoopWF{
+	deps.WorkflowSource = workflowFixturePorts(StubLoopWF{
 		run: &api.WorkflowRun{ID: "work", Status: api.WorkflowRunStatusRunning, CurrentPhase: "work"},
-	}
+	})
 	finish := engine.BeginPromptExecution(t.Context(), id)
 	defer finish()
 	deps.QueueInform = func(context.Context, string, anchor.ID, anchor.Envelope) {
@@ -64,9 +63,9 @@ func TestWorkerCycleTerminalDoesNotOccupyTheWorkerDuringHostPrompt(t *testing.T)
 	deps.GetSession = func(context.Context, string) (*api.Session, error) {
 		return &api.Session{ID: id, Status: api.SessionStatusBusy}, nil
 	}
-	deps.WorkflowSource = StubLoopWF{
+	deps.WorkflowSource = workflowFixturePorts(StubLoopWF{
 		run: &api.WorkflowRun{ID: "work", Status: api.WorkflowRunStatusRunning, CurrentPhase: "work"},
-	}
+	})
 	release := make(chan struct{})
 	started := make(chan struct{})
 	deps.RunPrompt = func(context.Context, string) (*promptresult.Result, error) {

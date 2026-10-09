@@ -3,21 +3,20 @@ package sessioncontracts
 import (
 	"bytes"
 	"context"
-	"net/http"
-	"os"
-	"path/filepath"
-	"strings"
-	"testing"
-	"time"
-
 	hostapi "github.com/lycaon/lycaon/internal/api"
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/eventoutbox"
 	"github.com/lycaon/lycaon/internal/report/reporttest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/visual"
-	"github.com/lycaon/lycaon/internal/workflow"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
 )
 
 func TestGetWorkflowRunReport_Integration(t *testing.T) {
@@ -143,7 +142,7 @@ func TestGetWorkflowRunReport_NotAvailable(t *testing.T) {
 	running := h.CreateCompletedRun(t, "run_still_running", "security-survey", "done", now)
 	running.Status = wire.WorkflowRunStatusRunning
 	running.CompletedAt = nil
-	testutil.FailErr(t, "update running run", h.RunStore.Update(t.Context(), running))
+	testutil.FailErr(t, "update running run", h.RunStore.State.Update(t.Context(), running))
 	h.SeedRunReport(t, running)
 	rec = h.GetReport(t, running.ID)
 	if rec.Code != http.StatusNotFound {
@@ -262,8 +261,8 @@ func TestReportDownloadRequiresRecordedDelivery(t *testing.T) {
 	h := contractfixture.NewReportTestHarness(t)
 	run := h.SeedSecuritySurveyRun(t, "run_no_delivery")
 	h.SeedRunReport(t, run)
-	_, err := h.WfMgr.StampRunVars(t.Context(), run.ID, func(_ context.Context, _ *wire.WorkflowRun, vars map[string]any) (map[string]any, bool, error) {
-		return workflow.SetGateSatisfied(vars, "topology_report_delivered", false), true, nil
+	_, err := h.WfMgr.Phases.Vars.Stamp(t.Context(), run.ID, func(_ context.Context, _ *wire.WorkflowRun, vars map[string]any) (map[string]any, bool, error) {
+		return runstate.SetGateSatisfied(vars, "topology_report_delivered", false), true, nil
 	})
 	testutil.FailErr(t, "clear delivery", err)
 	rec := h.GetReport(t, run.ID)

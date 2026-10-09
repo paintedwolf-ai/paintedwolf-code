@@ -2,17 +2,16 @@ package loopwake
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/coordinator/anchor"
+	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/promptresult"
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/pkg/api"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"github.com/lycaon/lycaon/internal/coordinator/anchor"
-	"github.com/lycaon/lycaon/internal/coordinator/surface"
-	"github.com/lycaon/lycaon/internal/orchestration"
-	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func synthesisSiblingHistory() []api.Message {
@@ -34,9 +33,9 @@ func TestLoopSkipTurnRearmsWithoutKickOrPrompt(t *testing.T) {
 	deps.GetSession = func(context.Context, string) (*api.Session, error) {
 		return &api.Session{ID: "s1", Status: api.SessionStatusIdle, WorkspacePath: workspaceDir}, nil
 	}
-	deps.WorkflowSource = StubLoopWF{
+	deps.WorkflowSource = workflowFixturePorts(StubLoopWF{
 		run: &api.WorkflowRun{ID: "run-1", Status: api.WorkflowRunStatusRunning, CurrentPhase: "work"},
-	}
+	})
 	deps.WorkerCycleIdle = func(_ context.Context, _ *api.Session, completingJobID string) (bool, error) {
 		if strings.TrimSpace(completingJobID) == "job-1" {
 			return false, nil // siblings still in flight
@@ -101,9 +100,9 @@ func TestLoopSkipTurnDoesNotApplyToDispatchWake(t *testing.T) {
 	deps.GetSession = func(context.Context, string) (*api.Session, error) {
 		return &api.Session{ID: "s1", Status: api.SessionStatusIdle, WorkspacePath: workspaceDir}, nil
 	}
-	deps.WorkflowSource = StubLoopWF{
+	deps.WorkflowSource = workflowFixturePorts(StubLoopWF{
 		run: &api.WorkflowRun{ID: "run-1", Status: api.WorkflowRunStatusRunning, CurrentPhase: "work"},
-	}
+	})
 	deps.WorkerCycleIdle = func(_ context.Context, _ *api.Session, completingJobID string) (bool, error) {
 		return strings.TrimSpace(completingJobID) == "job-2", nil
 	}

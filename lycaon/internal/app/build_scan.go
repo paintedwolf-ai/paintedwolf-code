@@ -5,9 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/projectcontrib"
-	"log/slog"
-	"path/filepath"
-
 	"github.com/lycaon/lycaon/internal/scan"
 	scancadence "github.com/lycaon/lycaon/internal/scan/cadence"
 	scancfg "github.com/lycaon/lycaon/internal/scan/configuration"
@@ -18,7 +15,13 @@ import (
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/sourcescope"
 	"github.com/lycaon/lycaon/internal/workflow"
+	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
+	workflowinputs "github.com/lycaon/lycaon/internal/workflow/inputs"
+	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
+	workflowreview "github.com/lycaon/lycaon/internal/workflow/review"
 	"github.com/lycaon/lycaon/pkg/api"
+	"log/slog"
+	"path/filepath"
 )
 
 func (b toolWiring) wireScan() error {
@@ -152,7 +155,7 @@ func (b toolWiring) wireScan() error {
 	if err := workflow.RegisterComposeFromTemplateTool(b.toolRuntime.Registry, b.workflowComposer); err != nil {
 		return fmt.Errorf("workflow_compose_from_template tool: %w", err)
 	}
-	catalogResolver := workflow.ManifestResolver{
+	catalogResolver := workflowcatalog.Resolver{
 		SessionStore:       b.sessionWorkflowStore,
 		ProjectTierApplies: b.settings.ProjectSurfaceGate(projectcontrib.SurfaceScanConfig, b.storage.Projects).AppliesPath,
 	}
@@ -162,22 +165,22 @@ func (b toolWiring) wireScan() error {
 	if err := workflow.RegisterPersistTool(b.toolRuntime.Registry, b.workflowPersister); err != nil {
 		return fmt.Errorf("workflow_persist tool: %w", err)
 	}
-	if err := workflow.RegisterFeedbackTool(b.toolRuntime.Registry, b.workflowMgr); err != nil {
+	if err := workflowinputs.RegisterFeedbackTool(b.toolRuntime.Registry, b.workflowMgr.Feedback); err != nil {
 		return fmt.Errorf("workflow_user_feedback tool: %w", err)
 	}
-	if err := workflow.RegisterAskUserTool(b.toolRuntime.Registry, b.workflowMgr, b.toolRuntime.Boundary); err != nil {
+	if err := workflowinputs.RegisterAskUserTool(b.toolRuntime.Registry, b.workflowMgr.Asks, b.toolRuntime.Boundary); err != nil {
 		return fmt.Errorf("ask_user tool: %w", err)
 	}
-	if err := workflow.RegisterAdvanceTool(b.toolRuntime.Registry, b.workflowMgr); err != nil {
+	if err := workflowphases.RegisterAdvanceTool(b.toolRuntime.Registry, b.workflowMgr.Phases); err != nil {
 		return fmt.Errorf("workflow_advance tool: %w", err)
 	}
-	if err := workflow.RegisterTransitionTool(b.toolRuntime.Registry, b.workflowMgr); err != nil {
+	if err := workflowphases.RegisterTransitionTool(b.toolRuntime.Registry, b.workflowMgr.Phases); err != nil {
 		return fmt.Errorf("workflow_transition tool: %w", err)
 	}
-	if err := workflow.RegisterFanoutPlanTool(b.toolRuntime.Registry, b.workflowMgr); err != nil {
+	if err := workflow.RegisterFanoutPlanTool(b.toolRuntime.Registry, b.workflowMgr.Fanout); err != nil {
 		return fmt.Errorf("fanout_plan tool: %w", err)
 	}
-	if err := workflow.RegisterSubmitVerdictTool(b.toolRuntime.Registry, b.workflowMgr); err != nil {
+	if err := workflowreview.RegisterSubmitVerdictTool(b.toolRuntime.Registry, b.workflowMgr.Verdicts); err != nil {
 		return fmt.Errorf("submit_verdict tool: %w", err)
 	}
 	return nil
@@ -212,7 +215,7 @@ func (b toolWiring) bindMovedFileRescans(ctx context.Context, completed api.Code
 	if b.serveBuilder == nil || b.scanStore == nil || b.workflowStore == nil || completed.Status != api.CodeScanStatusComplete {
 		return nil
 	}
-	runs, err := b.workflowStore.ListRunning(ctx)
+	runs, err := b.workflowStore.Runs.ListRunning(ctx)
 	if err != nil {
 		return err
 	}
@@ -243,7 +246,7 @@ func (b toolWiring) reconcileScanWorkflowTerminals(ctx context.Context, scanID s
 	}
 	var errs []error
 	for _, binding := range bindings {
-		if err := b.workflowMgr.RecordObligationTerminal(ctx, binding.WorkflowRunID, scan.WorkflowObligationKind); err != nil {
+		if err := b.workflowMgr.Obligations.RecordObligationTerminal(ctx, binding.WorkflowRunID, scan.WorkflowObligationKind); err != nil {
 			errs = append(errs, fmt.Errorf("scan %s workflow %s: %w", binding.ScanID, binding.WorkflowRunID, err))
 			continue
 		}

@@ -3,18 +3,17 @@ package security
 import (
 	"context"
 	"encoding/json"
-	"io"
-	"net/http"
-	"net/http/httptest"
-	"strings"
-	"testing"
-
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/wiring"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
 )
 
 func TestWorkflowJourneyE2E(t *testing.T) {
@@ -153,7 +152,7 @@ func finishPlanWorkflow(
 	if superseded.ID == run.ID {
 		t.Fatal("expected a new run id after human supersede")
 	}
-	prior, err := h.WorkflowMgr.Get(ctx, run.ID)
+	prior, err := h.WorkflowMgr.Store.Runs.Get(ctx, run.ID)
 	testutil.FailErr(t, "Get prior run after supersede", err)
 	if prior.Status != wire.WorkflowRunStatusCanceled {
 		t.Fatalf("prior status = %q want canceled after supersede", prior.Status)

@@ -2,6 +2,7 @@ package contract
 
 import (
 	"fmt"
+	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -9,8 +10,6 @@ import (
 	"sort"
 	"strings"
 	"testing"
-
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
 // Vars writes load the run after locking so their CAS revision belongs to the critical section.
@@ -20,10 +19,10 @@ var runVarsWriterExemptions = map[string]string{
 }
 
 // runVarsWriterHome is the primitive's own file.
-const runVarsWriterHome = "lycaon/internal/workflow/run_vars.go"
+const runVarsWriterHome = "lycaon/internal/workflow/runstate/variables.go"
 
 // runVarsCallerHoldsLock participates in a wider caller-managed critical section.
-const runVarsCallerHoldsLock = "stampRunVarsLocked"
+const runVarsCallerHoldsLock = "stampLocked"
 
 func TestRunVarsWritesGoThroughStampRunVars(t *testing.T) {
 	t.Parallel()
@@ -145,11 +144,11 @@ func runVarsWritingFuncs(fset *token.FileSet, file *ast.File) []runVarsWriter {
 				if !w.writePos.IsValid() {
 					w.writePos = sel.Pos()
 				}
-			case "loadRun", "ActiveBySession":
+			case "loadRun", "ActiveBySession", "Get":
 				if !w.hasLoad {
 					w.hasLoad, w.loadPos = true, sel.Pos()
 				}
-			case "lockRunVars":
+			case "Lock":
 				if !w.hasLock {
 					w.hasLock, w.lockPos = true, sel.Pos()
 				}

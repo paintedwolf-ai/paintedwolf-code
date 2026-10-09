@@ -2,12 +2,12 @@ package session
 
 import (
 	"context"
-	"strings"
-	"time"
-
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
+	"strings"
+	"time"
 )
 
 // CloseoutEvidence reads what a session's closeout may cite: its own ledger
@@ -47,11 +47,11 @@ func (m *Manager) reviewEvidenceTasks(ctx context.Context, sessionID string, sin
 	}
 	runID := ""
 	if m.workflows != nil {
-		run, err := m.workflows.GetActive(ctx, sessionID)
+		run, err := m.workflows.Runs.ActiveBySession(ctx, sessionID)
 		if err != nil {
 			return nil, err
 		}
-		if run != nil && !m.workflows.IsAmbientRun(run) {
+		if run != nil && !runstate.IsAmbientRun(run) {
 			runID = run.ID
 		}
 	}

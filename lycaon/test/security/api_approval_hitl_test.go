@@ -2,14 +2,6 @@ package security
 
 import (
 	"context"
-	"net/http"
-	"net/http/httptest"
-	"os"
-	"path/filepath"
-	"strings"
-	"testing"
-	"time"
-
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/approvaloutcome"
 	"github.com/lycaon/lycaon/internal/events"
@@ -20,6 +12,13 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/wiring"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
 )
 
 type approvalHITLHarness struct {
@@ -56,7 +55,7 @@ func newApprovalHITLHarness(t *testing.T) *approvalHITLHarness {
 	}}})
 	h := wiring.BuildForTest(t, wiring.WithLLMClient(mock))
 	// Tool authorization is independent of workflow content review.
-	manifest, err := h.WorkflowMgr.Manifests.Get("implement", "1.0.0")
+	manifest, err := h.WorkflowMgr.Resolver.Overlay.Get("implement", "1.0.0")
 	testutil.FailErr(t, "load approval fixture workflow", err)
 	manifest.Controls.ContentReview = nil
 	for i := range manifest.PhaseDefs {

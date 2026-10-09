@@ -3,14 +3,13 @@ package loopwake
 import (
 	"context"
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/toolrejection"
-	"testing"
-	"time"
-
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/orchestration"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
+	"testing"
+	"time"
 )
 
 func TestWaitCompletionEndsCycleUsesHostLifecycle(t *testing.T) {
@@ -437,11 +436,11 @@ func busyWaitLoopDeps() LoopDeps {
 
 func pendingAskIdleWaitLoopDeps() LoopDeps {
 	deps := idleWaitLoopDeps()
-	deps.WorkflowSource = StubLoopWF{
+	deps.WorkflowSource = workflowFixturePorts(StubLoopWF{
 		run: &api.WorkflowRun{ID: "run-1", SessionID: "s1", Status: api.WorkflowRunStatusRunning},
 		vars: map[string]any{"user_feedback": map[string]any{
 			"ask-1": map[string]any{"pending": true, "source": "coordinator_tool", "blocking": true},
 		}},
-	}
+	})
 	return deps
 }

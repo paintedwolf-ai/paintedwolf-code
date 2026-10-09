@@ -3,17 +3,16 @@ package workflowadmin
 import (
 	"context"
 	"errors"
-	"net/http"
-	"strings"
-
 	"github.com/go-chi/chi/v5"
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/project"
-	"github.com/lycaon/lycaon/internal/workflow"
+	workflowblueprints "github.com/lycaon/lycaon/internal/workflow/blueprints"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	wire "github.com/lycaon/lycaon/pkg/api"
+	"net/http"
+	"strings"
 )
 
 func (s *BlueprintRoutes) HandleCreateBlueprint(w http.ResponseWriter, r *http.Request) {
@@ -180,7 +179,7 @@ func (s *BlueprintRoutes) HandleUpdateBlueprint(w http.ResponseWriter, r *http.R
 	}
 	httpio.WriteJSON(w, http.StatusOK, out)
 	if out != nil {
-		s.Workflows.NotifyBlueprintPathWritten(r.Context(), "", projectID, out.Path)
+		s.Workflows.Blueprints.NotifyBlueprintPathWritten(r.Context(), "", projectID, out.Path)
 	}
 }
 
@@ -230,7 +229,7 @@ func (s *BlueprintRoutes) compatibleWorkflowsFor(ctx context.Context, projectID,
 	if err != nil {
 		return nil
 	}
-	return workflow.CompatibleWorkflowIDs(path, manifests)
+	return workflowblueprints.CompatibleWorkflowIDs(path, manifests)
 }
 
 func (s *BlueprintRoutes) blueprintCatalogManifests(ctx context.Context, projectDir string) ([]workflowdef.Manifest, error) {

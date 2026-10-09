@@ -1,10 +1,10 @@
 package contract
 
 import (
+	"github.com/lycaon/lycaon/internal/toolrejection"
+	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"strings"
 	"testing"
-
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
 // TestDirectionalSecretGateSSOT checks the authorization decision independently.

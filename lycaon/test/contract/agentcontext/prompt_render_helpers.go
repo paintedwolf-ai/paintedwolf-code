@@ -2,12 +2,12 @@ package contract
 
 import (
 	"context"
-	"testing"
-
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/workflow"
+	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
+	"testing"
 )
 
 // Surface cards and phase exits render catalog templates over host facts.
@@ -29,7 +29,7 @@ func renderSurfaceCardFor(t *testing.T, surfaceID string, sticky, deferred []str
 }
 
 // renderPhaseExitBlock renders one projected phase exit.
-func renderPhaseExitBlock(t *testing.T, view workflow.PhaseExitView) string {
+func renderPhaseExitBlock(t *testing.T, view workflowpresentation.PhaseExitView) string {
 	t.Helper()
 	return renderPhaseExitView(t, view.InjectView())
 }

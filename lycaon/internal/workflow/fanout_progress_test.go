@@ -1,16 +1,16 @@
 package workflow
 
 import (
-	"strings"
-	"testing"
-
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
+	"strings"
+	"testing"
 )
 
 func TestFanoutPlanSeedsAnEmptyChecklistOnly(t *testing.T) {
 	store := progress.NewMemoryStore()
-	plan := FanoutPlan{Legs: []FanoutPlanLeg{{ID: "leg-1", Subject: "Auth boundary"}, {ID: "leg-2", Subject: "Parser"}}}
+	plan := runstate.FanoutPlan{Legs: []runstate.FanoutPlanLeg{{ID: "leg-1", Subject: "Auth boundary"}, {ID: "leg-2", Subject: "Parser"}}}
 	seedFanoutProgress(t.Context(), store, "sess", "run", plan)
 	content := store.Get(t.Context(), "sess")
 	if _, pending, _ := progress.CloseCounts(content); pending != 2 || !strings.Contains(content, "- [ ] leg-1 Auth boundary") {

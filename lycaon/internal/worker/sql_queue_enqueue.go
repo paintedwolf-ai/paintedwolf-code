@@ -3,10 +3,9 @@ package worker
 import (
 	"context"
 	"fmt"
-	"strings"
-
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/pkg/api"
+	"strings"
 )
 
 // Enqueue adds a worker task.
@@ -89,14 +88,17 @@ func (q *SQLQueue) PrepareEnqueue(ctx context.Context, projectID string, task *a
 	}
 	if task.WorkflowRunID != "" {
 		// Workflow tasks require a runnable-state source.
-		if q.workflowRuns == nil {
+		if q.workflowRuns == nil || q.workflowRuns.Runs == nil {
 			return fmt.Errorf("worker queue: workflow run checker required for workflow-bound task %s", task.WorkflowRunID)
 		}
-		if err := q.workflowRuns.AssertRunnable(ctx, task.WorkflowRunID); err != nil {
+		if err := q.workflowRuns.Runs.AssertRunnable(ctx, task.WorkflowRunID); err != nil {
 			return err
 		}
 		if task.WorkflowPhase != "" {
-			if err := q.workflowRuns.AssertWorkerTask(ctx, task); err != nil {
+			if q.workflowRuns.Tasks == nil {
+				return fmt.Errorf("worker queue: workflow task admission required for phase-bound task %s", task.WorkflowPhase)
+			}
+			if err := q.workflowRuns.Tasks.AssertWorkerTask(ctx, task); err != nil {
 				return err
 			}
 		}

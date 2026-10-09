@@ -2,18 +2,17 @@ package loopwake
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/coordinator/anchor"
+	"github.com/lycaon/lycaon/internal/coordinator/kick"
 	"github.com/lycaon/lycaon/internal/promptresult"
+	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/pkg/api"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"github.com/lycaon/lycaon/internal/coordinator/anchor"
-	"github.com/lycaon/lycaon/internal/coordinator/kick"
-	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // drainAsyncTurns waits for host turns before temporary resources close.
@@ -34,9 +33,9 @@ func TestBudgetRequestRunsWhileWorkerInFlight(t *testing.T) {
 	deps.GetSession = func(context.Context, string) (*api.Session, error) {
 		return &api.Session{ID: "s1", Status: api.SessionStatusIdle, WorkspacePath: ws}, nil
 	}
-	deps.WorkflowSource = StubLoopWF{
+	deps.WorkflowSource = workflowFixturePorts(StubLoopWF{
 		run: &api.WorkflowRun{ID: "run-1", Status: api.WorkflowRunStatusRunning, CurrentPhase: "work"},
-	}
+	})
 	deps.WorkerCycleIdle = func(context.Context, *api.Session, string) (bool, error) {
 		return false, nil
 	}
@@ -77,9 +76,9 @@ func TestBudgetRequestKickCarriesRequestWhileBusy(t *testing.T) {
 	deps.GetSession = func(context.Context, string) (*api.Session, error) {
 		return &api.Session{ID: "s1", Status: api.SessionStatusIdle, WorkspacePath: ws}, nil
 	}
-	deps.WorkflowSource = StubLoopWF{
+	deps.WorkflowSource = workflowFixturePorts(StubLoopWF{
 		run: &api.WorkflowRun{ID: "run-1", Status: api.WorkflowRunStatusRunning, CurrentPhase: "work"},
-	}
+	})
 	deps.WorkerCycleIdle = func(context.Context, *api.Session, string) (bool, error) {
 		return false, nil
 	}
@@ -138,9 +137,9 @@ func TestDrainPendingSkipsNonActionable(t *testing.T) {
 	deps.GetSession = func(context.Context, string) (*api.Session, error) {
 		return &api.Session{ID: "s1", Status: api.SessionStatusIdle, WorkspacePath: ws}, nil
 	}
-	deps.WorkflowSource = StubLoopWF{
+	deps.WorkflowSource = workflowFixturePorts(StubLoopWF{
 		run: &api.WorkflowRun{ID: "run-1", Status: api.WorkflowRunStatusRunning, CurrentPhase: "work"},
-	}
+	})
 	deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) bool { return false }
 	deps.RunPrompt = func(context.Context, string) (*promptresult.Result, error) {
 		prompts.Add(1)

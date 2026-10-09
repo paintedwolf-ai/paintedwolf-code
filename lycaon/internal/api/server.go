@@ -1,11 +1,6 @@
 package api
 
 import (
-	"net/http"
-	"os"
-	"strings"
-	"sync/atomic"
-
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
@@ -36,6 +31,10 @@ import (
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/version"
 	wire "github.com/lycaon/lycaon/pkg/api"
+	"net/http"
+	"os"
+	"strings"
+	"sync/atomic"
 )
 
 type administrativeHandlers struct {

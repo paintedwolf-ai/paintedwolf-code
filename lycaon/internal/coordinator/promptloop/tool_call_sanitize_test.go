@@ -1,11 +1,10 @@
 package promptloop
 
 import (
-	"strings"
-	"testing"
-
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
+	"strings"
+	"testing"
 )
 
 func TestSanitizeToolCallsForExecutionDropsEmptyArgPhantom(t *testing.T) {

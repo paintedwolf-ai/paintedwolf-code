@@ -4,16 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
-	"testing"
-	"time"
-
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/session/lifecycle"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
+	"sync"
+	"testing"
+	"time"
 )
 
 func cancellationQueue(t *testing.T, backend string) WorkerQueue {
@@ -119,7 +118,7 @@ func TestBatchStopFencesEveryWorkerBeforeJoining(t *testing.T) {
 	for _, scope := range []string{"session", "workflow"} {
 		t.Run(scope, func(t *testing.T) {
 			q := NewInMemoryQueue(2)
-			q.SetWorkflowRunChecker(allowAllWorkflowRuns{})
+			q.SetWorkflowDomains(&WorkflowDomains{Runs: allowAllWorkflowRuns{}, Tasks: allowAllWorkflowRuns{}})
 			for range 2 {
 				_, err := q.Enqueue(t.Context(), api.WorkerTask{
 					ParentSessionID: "parent", ProjectID: testdbseed.DefaultProjectID,

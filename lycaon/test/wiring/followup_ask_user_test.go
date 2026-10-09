@@ -3,15 +3,15 @@ package wiring
 import (
 	"context"
 	"encoding/json"
-	"sync/atomic"
-	"testing"
-	"time"
-
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/scaffoldvars"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
+	"sync/atomic"
+	"testing"
+	"time"
 )
 
 func TestFollowUpAfterCompletedWorkflowCanAskAndReceiveAnswer(t *testing.T) {
@@ -59,10 +59,10 @@ func TestFollowUpAfterCompletedWorkflowCanAskAndReceiveAnswer(t *testing.T) {
 	}
 	active, err = h.WorkflowMgr.GetActive(ctx, sess.ID)
 	testutil.FailErr(t, "load follow-up workflow", err)
-	if active == nil || active.ID == original.ID || !h.WorkflowMgr.IsAmbientRun(active) {
+	if active == nil || active.ID == original.ID || !runstate.IsAmbientRun(active) {
 		t.Fatalf("follow-up workflow = %+v, want a fresh ambient run", active)
 	}
-	ui, err := h.WorkflowMgr.ComputeRunUI(ctx, active)
+	ui, err := h.WorkflowMgr.Presentation.ComputeRunUI(ctx, active)
 	testutil.FailErr(t, "project question card", err)
 	if ui.PendingFeedback == nil || ui.PendingFeedback.Prompt != "Which platform should I build for?" {
 		t.Fatalf("pending question = %+v", ui.PendingFeedback)
@@ -71,16 +71,16 @@ func TestFollowUpAfterCompletedWorkflowCanAskAndReceiveAnswer(t *testing.T) {
 	assertFollowUpAskResult(t, h, sess.ID, "pending", "")
 	assertFollowUpAskCard(t, h, sess.ID, active.ID, phaseID)
 
-	_, err = h.WorkflowMgr.ResolveUserDecision(ctx, sess.ID, active.ID, phaseID, []string{"macOS"}, "")
+	_, err = h.WorkflowMgr.Feedback.ResolveUserDecision(ctx, sess.ID, active.ID, phaseID, []string{"macOS"}, "")
 	testutil.FailErr(t, "answer follow-up question", err)
 	assertFollowUpAskResult(t, h, sess.ID, "answered", "macOS")
-	vars, err := h.WorkflowMgr.Store.GetScaffoldVars(ctx, active.ID)
+	vars, err := h.WorkflowMgr.Store.Runs.GetScaffoldVars(ctx, active.ID)
 	testutil.FailErr(t, "load answered workflow", err)
 	if scaffoldvars.HasPendingUserInput(vars) {
 		t.Fatal("answered question still blocks the workflow")
 	}
-	testutil.FailErr(t, "answered workflow runnable", h.WorkflowMgr.AssertSessionRunnable(ctx, sess.ID))
-	old, err := h.WorkflowMgr.Get(ctx, original.ID)
+	testutil.FailErr(t, "answered workflow runnable", h.WorkflowMgr.Policy.AssertSessionRunnable(ctx, sess.ID))
+	old, err := h.WorkflowMgr.Store.Runs.Get(ctx, original.ID)
 	testutil.FailErr(t, "load original history", err)
 	if old.Status != api.WorkflowRunStatusComplete || !old.CompletedAt.Equal(completedAt) {
 		t.Fatalf("follow-up changed completed history: %+v", old)

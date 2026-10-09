@@ -1,17 +1,16 @@
 package website
 
 import (
+	"github.com/lycaon/lycaon/internal/extpacks"
+	"github.com/lycaon/lycaon/internal/oar"
+	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
+	"github.com/lycaon/lycaon/internal/workflow"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"gopkg.in/yaml.v3"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/lycaon/lycaon/internal/extpacks"
-	"github.com/lycaon/lycaon/internal/oar"
-	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/workflow"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	"gopkg.in/yaml.v3"
 )
 
 // completeSDKOverlay builds an overlay with prose for every engine id so the
@@ -399,7 +398,7 @@ func TestMergeSDK_PosturesMatchRegistry(t *testing.T) {
 	if err != nil {
 		t.Fatalf("MergeSDK: %v", err)
 	}
-	want := session.AllSessionPostures()
+	want := sessionposture.AllSessionPostures()
 	if len(out.Postures) != len(want) {
 		t.Fatalf("postures = %d want %d", len(out.Postures), len(want))
 	}

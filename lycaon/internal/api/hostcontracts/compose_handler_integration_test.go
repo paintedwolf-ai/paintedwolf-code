@@ -2,16 +2,15 @@ package hostcontracts
 
 import (
 	"encoding/json"
+	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
+	"github.com/lycaon/lycaon/internal/api/httpio"
+	"github.com/lycaon/lycaon/internal/testutil"
+	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
+	wire "github.com/lycaon/lycaon/pkg/api"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
-	"github.com/lycaon/lycaon/internal/api/httpio"
-	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/workflow"
-	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestComposeHandler201AndCatalog(t *testing.T) {
@@ -49,7 +48,7 @@ phases:
 	if len(rows) != 1 {
 		t.Fatalf("rows = %d", len(rows))
 	}
-	if rows[0].CreatedBy != workflow.ComposeActorUser {
+	if rows[0].CreatedBy != workflowdrafts.User {
 		t.Fatalf("created_by = %q, want user", rows[0].CreatedBy)
 	}
 

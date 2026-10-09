@@ -2,11 +2,6 @@ package contractfixture
 
 import (
 	"context"
-	"io"
-	"net/http"
-	"path/filepath"
-	"testing"
-
 	hostapi "github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/llm"
@@ -24,7 +19,12 @@ import (
 	"github.com/lycaon/lycaon/internal/usernotice"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	wire "github.com/lycaon/lycaon/pkg/api"
+	"io"
+	"net/http"
+	"path/filepath"
+	"testing"
 )
 
 func NewServerForTest(t *testing.T, deps hostapi.Dependencies, opts ...TestDeps) *hostapi.Server {
@@ -75,10 +75,10 @@ func NewTestServerWithWorkflowRegistry(t *testing.T, reg tools.ToolRegistry, opt
 
 	registry, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "workflow.RegistryFromDirs", err)
-	runs := workflow.NewSQLStore(sqlDB)
+	runs := workflowpersistence.New(sqlDB)
 	workflows := workflow.NewManager(runs, sessions, registry, nil)
-	workflows.Resolver = workflow.ManifestResolver{}
-	mgr.SetWorkflowSessionView(workflows)
+
+	mgr.SetWorkflowDomains(&session.WorkflowDomains{Runs: workflows.Store.Runs, Policy: workflows.Policy, Ambient: workflows.Ambient, Blueprints: workflows.Blueprints, Batch: workflows.Batch, Slash: workflows.Slash, Requests: workflows.Requests, Feedback: workflows.Feedback, Transcript: workflows.Transcript, Asks: workflows.Asks, Fanout: workflows.Fanout, Phases: workflows.Phases, Reports: workflows.Reports, Recovery: workflows.Recovery, Cleanup: workflows})
 	return NewServerForTest(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
 		Store: sessions, PersonActions: personactions.New(sqlDB), Projects: project.NewSQLRegistry(sqlDB), Sessions: mgr}, Workflow: hostapi.WorkflowDependencies{
 		Workflows: workflows, WorkflowRuns: runs}}, opts...)

@@ -1,16 +1,16 @@
 package contract
 
 import (
-	"testing"
-
-	"github.com/lycaon/lycaon/internal/workflow"
+	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
+	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"github.com/lycaon/lycaon/test/contract/internal/workflowfixture"
+	"testing"
 )
 
 func TestBundledManifestsUserInteractionGatesAligned(t *testing.T) {
 	t.Parallel()
 	for key, m := range workflowfixture.ContractAllResolvedManifests(t) {
-		errs := workflow.ValidateUserInteractionGates(m)
+		errs := workflowvalidation.ValidateUserInteractionGates(m)
 		if len(errs) > 0 {
 			t.Fatalf("manifest %q: %+v", key, errs)
 		}
@@ -37,7 +37,7 @@ phases:
       set_posture: build
     complete_when: delegation_closeout_complete
 `
-	_, err := c.Compose(t.Context(), workflow.ComposeRequest{
+	_, err := c.Compose(t.Context(), workflowcomposition.ComposeRequest{
 		SessionID:    "contract-mismatch",
 		ManifestYAML: []byte(manifest),
 		CreatedBy:    "coordinator",

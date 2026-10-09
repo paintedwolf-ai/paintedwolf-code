@@ -2,15 +2,15 @@ package worker
 
 import (
 	"context"
-	"strings"
-	"sync"
-	"time"
-
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/keylock"
+	"github.com/lycaon/lycaon/internal/worker/jobstate"
 	"github.com/lycaon/lycaon/internal/workspacebaseline"
 	"github.com/lycaon/lycaon/pkg/api"
+	"strings"
+	"sync"
+	"time"
 )
 
 // sqlQueueGetTimeout bounds lookups without caller contexts.
@@ -29,7 +29,7 @@ type SQLQueue struct {
 	workerWorkspace  WorkerWorkspaceManager
 	projects         ProjectStore
 	events           *events.Publisher
-	workflowRuns     WorkflowRunChecker
+	workflowRuns     *WorkflowDomains
 	sessionAdmission func(ctx context.Context, sessionID string, fn func() error) error
 	failureCatalog   ExecuteFailureRenderer
 	cancelReports    ChangeReportDeps
@@ -135,15 +135,15 @@ func (q *SQLQueue) SetEventPublisher(p *events.Publisher) {
 }
 
 // SetEventOutbox makes each job transition and its wire event one commit.
-func (q *SQLQueue) SetEventOutbox(outbox JobEventOutbox) {
+func (q *SQLQueue) SetEventOutbox(outbox jobstate.JobEventOutbox) {
 	if q != nil && q.store != nil {
 		q.store.SetEventOutbox(outbox)
 	}
 }
 
-// SetWorkflowRunChecker gates enqueue when a workflow run is paused or terminal.
-func (q *SQLQueue) SetWorkflowRunChecker(c WorkflowRunChecker) {
-	q.workflowRuns = c
+// SetWorkflowDomains gates enqueue when a workflow run is paused or terminal.
+func (q *SQLQueue) SetWorkflowDomains(domains *WorkflowDomains) {
+	q.workflowRuns = domains
 }
 
 func (q *SQLQueue) SetBaselineStore(store *workspacebaseline.Store) {

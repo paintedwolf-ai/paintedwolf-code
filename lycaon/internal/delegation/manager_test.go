@@ -3,10 +3,6 @@ package delegation
 import (
 	"context"
 	"errors"
-	"strings"
-	"testing"
-	"time"
-
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
@@ -17,6 +13,9 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/pkg/api"
+	"strings"
+	"testing"
+	"time"
 )
 
 type allowWorkflowRuns struct{}
@@ -215,7 +214,7 @@ func TestBudgetExhaustedLegResumesPreservedChild(t *testing.T) {
 	_, store, queue, manager, reg := newDelegationTestManager(t)
 	ctx := t.Context()
 	projectID := seedDelegationProject(t, reg, t.TempDir())
-	queue.SetWorkflowRunChecker(allowWorkflowRuns{})
+	queue.SetWorkflowDomains(&worker.WorkflowDomains{Runs: allowWorkflowRuns{}, Tasks: allowWorkflowRuns{}})
 	delegation, err := manager.Create(ctx, api.CreateDelegationRequest{
 		ProjectID: projectID, Task: "inspect the implementation", WorkflowRunID: "workflow-run",
 	})

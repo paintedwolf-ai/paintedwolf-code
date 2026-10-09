@@ -2,16 +2,15 @@ package workflow
 
 import (
 	"context"
-	"testing"
-
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
+	"testing"
 )
 
 func TestComposedWorkflowStartLinksPlanDraft(t *testing.T) {
 	mgr, sessionID, _ := testWorkflowManager(t)
-	run, err := mgr.StartHuman(context.Background(), sessionID, api.StartWorkflowRunRequest{
+	run, err := mgr.Starts.StartHuman(context.Background(), sessionID, api.StartWorkflowRunRequest{
 		WorkflowID:      "plan",
 		WorkflowVersion: "1.0.0",
 	})
@@ -19,8 +18,8 @@ func TestComposedWorkflowStartLinksPlanDraft(t *testing.T) {
 	if run.BlueprintPath == "" {
 		t.Fatal("expected draft plan id on plan workflow run")
 	}
-	p, err := mgr.BlueprintGet.Get(context.Background(), run.ProjectID, run.BlueprintPath)
-	testutil.FailErr(t, "mgr.BlueprintGet.Get failed", err)
+	p, err := mgr.Blueprints.Getter.Get(context.Background(), run.ProjectID, run.BlueprintPath)
+	testutil.FailErr(t, "mgr.Blueprints.Getter.Get failed", err)
 	if p.Title != "blueprint" {
 		t.Fatalf("plan title = %q want blueprint", p.Title)
 	}

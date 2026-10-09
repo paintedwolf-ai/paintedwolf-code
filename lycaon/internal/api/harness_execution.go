@@ -1,13 +1,12 @@
 package api
 
 import (
-	"net/http"
-
 	"github.com/go-chi/chi/v5"
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/session"
 	wire "github.com/lycaon/lycaon/pkg/api"
+	"net/http"
 )
 
 // harnessRequestRejected refuses a harness request with host copy; the cause
@@ -52,7 +51,7 @@ func (s *HarnessPreparation) handleHarnessModelLimit(w http.ResponseWriter, r *h
 
 func (s *HarnessPreparation) handleHarnessWorkflowExecution(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "sessionID")
-	run, err := s.Workflow.Get(r.Context(), chi.URLParam(r, "runID"))
+	run, err := s.Workflow.Store.Runs.Get(r.Context(), chi.URLParam(r, "runID"))
 	if err != nil || run == nil || run.SessionID != sessionID {
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "workflow does not belong to session")
 		return

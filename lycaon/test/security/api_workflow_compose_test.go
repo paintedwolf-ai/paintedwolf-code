@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolrejection"
+	wire "github.com/lycaon/lycaon/pkg/api"
+	"github.com/lycaon/lycaon/test/wiring"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -12,10 +15,6 @@ import (
 	"runtime"
 	"strings"
 	"testing"
-
-	"github.com/lycaon/lycaon/internal/testutil"
-	wire "github.com/lycaon/lycaon/pkg/api"
-	"github.com/lycaon/lycaon/test/wiring"
 )
 
 func TestStartPlanHTTPMatchesOpenAPI(t *testing.T) {
@@ -48,7 +47,7 @@ func TestCoordinatorProposesRunBeforeHumanStart(t *testing.T) {
 		t.Fatalf("state_start without approval err = %v, want WORKFLOW_START_REQUIRES_HUMAN_APPROVAL reject", err)
 	}
 
-	run, err := h.WorkflowMgr.StartHuman(ctx, sess.ID, wire.StartWorkflowRunRequest{
+	run, err := h.WorkflowMgr.Starts.StartHuman(ctx, sess.ID, wire.StartWorkflowRunRequest{
 		WorkflowID: "plan", WorkflowVersion: "1.0.0",
 	})
 	testutil.FailErr(t, "StartHuman", err)

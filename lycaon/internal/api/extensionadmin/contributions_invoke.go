@@ -4,9 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
-	"strings"
-
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/api/httpio"
@@ -26,6 +23,8 @@ import (
 	"github.com/lycaon/lycaon/internal/usernotice"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	wire "github.com/lycaon/lycaon/pkg/api"
+	"net/http"
+	"strings"
 )
 
 // invokeScope is one invocation, resolved from its route.
@@ -292,12 +291,12 @@ func (s *Execution) executeWorkflowStart(
 			break
 		}
 	}
-	if err := s.Workflow.Workflows.ValidateUserFacingStart(r.Context(), scope.projectDir, in.SessionID, workflowID, version); err != nil {
+	if err := s.Workflow.Workflows.Resolver.ValidateUserFacingStart(r.Context(), scope.projectDir, in.SessionID, workflowID, version); err != nil {
 		s.Workflow.WriteWorkflowError(w, r, err)
 		return 0, wire.CommandInvokeResponse{}, false
 	}
 	// The invoke route carries human start authorization.
-	run, err := s.Workflow.Workflows.Start(hostctx.WithHumanWorkflowStart(r.Context()), in.SessionID, wire.StartWorkflowRunRequest{
+	run, err := s.Workflow.Workflows.Starts.Start(hostctx.WithHumanWorkflowStart(r.Context()), in.SessionID, wire.StartWorkflowRunRequest{
 		OperationID:     req.OperationID,
 		WorkflowID:      workflowID,
 		WorkflowVersion: version,

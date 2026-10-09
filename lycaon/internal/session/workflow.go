@@ -3,30 +3,24 @@ package session
 import (
 	"context"
 	"fmt"
-	"strings"
-
 	"github.com/lycaon/lycaon/pkg/api"
+	"strings"
 )
 
-// ActiveWorkflowManifest holds runtime fields from the active workflow manifest.
-type ActiveWorkflowManifest struct {
-	CoordinatorProfile string
-	Rules              []string
-	HostPhaseAdvance   bool
-}
+// workflowfacts.ActiveWorkflowManifest holds runtime fields from the active workflow manifest.
 
 func (m *Manager) assertWorkflowRunnable(ctx context.Context, sessionID string) error {
 	if m == nil || m.workflows == nil {
 		return nil
 	}
-	return m.workflows.AssertSessionRunnable(ctx, sessionID)
+	return m.workflows.Policy.AssertSessionRunnable(ctx, sessionID)
 }
 
 func (m *Manager) hasActiveWorkflowRun(ctx context.Context, sessionID string) bool {
 	if m == nil || m.workflows == nil {
 		return false
 	}
-	run, err := m.workflows.GetActive(ctx, sessionID)
+	run, err := m.workflows.Runs.ActiveBySession(ctx, sessionID)
 	return err == nil && run != nil
 }
 
@@ -42,7 +36,7 @@ func (m *Manager) appendMessages(ctx context.Context, sessionID string, msgs ...
 		return err
 	}
 	if m.workflows != nil {
-		err = m.workflows.StampAndAppendMessages(ctx, sessionID, stamped...)
+		err = m.workflows.Transcript.StampAndAppendMessages(ctx, sessionID, stamped...)
 	} else {
 		err = m.store.AppendMessages(ctx, sessionID, stamped...)
 	}

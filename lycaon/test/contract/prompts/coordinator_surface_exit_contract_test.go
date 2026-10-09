@@ -1,14 +1,13 @@
 package contract
 
 import (
-	"strings"
-	"testing"
-
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
-	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/workflowfixture"
+	"strings"
+	"testing"
 )
 
 // Every coordinator surface declares one exit class.
@@ -54,7 +53,7 @@ func TestShippedWorkflowReportPhasesBindReportExitSurfaces(t *testing.T) {
 				continue
 			}
 			checked++
-			if diags := workflow.ValidateReportPhaseSurfaceExit(m, p); len(diags) > 0 {
+			if diags := workflowvalidation.ValidateReportPhaseSurfaceExit(m, p); len(diags) > 0 {
 				t.Errorf("%s phases[%s]: %s", m.ID, p.ID, diags[0].Message)
 			}
 		}

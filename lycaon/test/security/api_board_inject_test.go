@@ -2,14 +2,13 @@ package security
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/pkg/api"
+	"github.com/lycaon/lycaon/test/wiring"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/pkg/api"
-	"github.com/lycaon/lycaon/test/wiring"
 )
 
 func TestCoordinatorPromptInjectWithoutToolCall(t *testing.T) {
@@ -23,7 +22,7 @@ func TestCoordinatorPromptInjectWithoutToolCall(t *testing.T) {
 		testutil.FailErr(t, "write file", err)
 	}
 	sess := createSessionHTTP(t, srv, dir)
-	if _, err := h.WorkflowMgr.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{
+	if _, err := h.WorkflowMgr.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{
 		WorkflowID: "plan", WorkflowVersion: "1.0.0",
 	}); err != nil {
 		t.Fatal(err)

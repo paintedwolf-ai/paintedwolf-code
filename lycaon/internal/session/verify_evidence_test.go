@@ -2,10 +2,6 @@ package session
 
 import (
 	"context"
-	"strings"
-	"testing"
-	"time"
-
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/hostcmd"
@@ -17,6 +13,9 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
+	"strings"
+	"testing"
+	"time"
 )
 
 type stubVerifyConfig struct{ cmd string }
@@ -98,7 +97,9 @@ func TestWorkflowVerifyGateStateRequiresExplicitWorkflowEvidence(t *testing.T) {
 		t.Fatalf("changed source invented a workflow gate: (%v,%v,%v,%v)", required, passed, repair, unverified)
 	}
 
-	mgr.SetWorkflowSessionView(verifyWorkflowStub{required: true})
+	workflowFixture1 := verifyWorkflowStub{required: true}
+
+	mgr.SetWorkflowDomains(&WorkflowDomains{Runs: workflowFixture1, Policy: workflowFixture1, Ambient: workflowFixture1, Blueprints: workflowFixture1, Batch: workflowFixture1, Slash: workflowFixture1, Requests: workflowFixture1, Feedback: workflowFixture1, Transcript: workflowFixture1, Asks: workflowFixture1, Fanout: workflowFixture1, Phases: workflowFixture1, Reports: workflowFixture1, Recovery: workflowFixture1, Cleanup: workflowFixture1})
 	if required, passed, repair, unverified := mgr.workflowVerifyGateState(context.Background(), sess, history); !required || passed || repair || unverified {
 		t.Fatalf("required workflow gate = (%v,%v,%v,%v) want (true,false,false,false)", required, passed, repair, unverified)
 	}

@@ -4,14 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
-	"sync"
-	"time"
-
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/hostctx"
 	"github.com/lycaon/lycaon/pkg/api"
+	"strings"
+	"sync"
+	"time"
 )
 
 // CatalogResolver hands back the effective catalog whose captured bytes back
@@ -24,7 +23,7 @@ type OrchestratorDeps struct {
 	Store      PipelineDelegationStore
 	Agents     AgentRegistry
 	Models     ModelGroupSelector
-	Workflows  WorkflowRunLifecycle
+	Workflows  *WorkflowRunLifecycle
 	// Catalog is required for workflow-id runs: the manifest and its topology are
 	// provide units, and there is no directory to fall back to.
 	Catalog    CatalogResolver
@@ -37,7 +36,7 @@ type OrchestratorImpl struct {
 	store        PipelineDelegationStore
 	agents       AgentRegistry
 	models       ModelGroupSelector
-	workflows    WorkflowRunLifecycle
+	workflows    *WorkflowRunLifecycle
 	catalog      CatalogResolver
 	workspaces   WorkspaceBinder
 	iterationCap *InMemoryIterationCap
@@ -209,7 +208,7 @@ func (o *OrchestratorImpl) settleRunFailure(ctx context.Context, wf *workflowRun
 	if runErr == nil || wf == nil || o.workflows == nil || errors.Is(runErr, context.Canceled) || errors.Is(runErr, context.DeadlineExceeded) {
 		return runErr
 	}
-	if _, err := o.workflows.Fail(ctx, wf.runID, workflowFailureFor(runErr, phase)); err != nil {
+	if _, err := o.workflows.Controls.Fail(ctx, wf.runID, workflowFailureFor(runErr, phase)); err != nil {
 		return errors.Join(runErr, fmt.Errorf("settle workflow failure: %w", err))
 	}
 	return runErr
@@ -219,7 +218,7 @@ func (o *OrchestratorImpl) workflowPhase(ctx context.Context, runID string) stri
 	if o == nil || o.workflows == nil || strings.TrimSpace(runID) == "" {
 		return ""
 	}
-	run, err := o.workflows.Get(ctx, runID)
+	run, err := o.workflows.Runs.Get(ctx, runID)
 	if err != nil || run == nil {
 		return ""
 	}
@@ -283,7 +282,7 @@ func (o *OrchestratorImpl) resolveRunRequest(ctx context.Context, req RunRequest
 		if sessionID == "" {
 			return RunRequest{}, nil, fmt.Errorf("session_id required for workflow run")
 		}
-		run, err := o.workflows.Start(hostctx.WithHumanWorkflowStart(ctx), sessionID, api.StartWorkflowRunRequest{
+		run, err := o.workflows.Starts.Start(hostctx.WithHumanWorkflowStart(ctx), sessionID, api.StartWorkflowRunRequest{
 			WorkflowID:      manifest.ID,
 			WorkflowVersion: manifest.Version,
 		})
@@ -344,7 +343,7 @@ func (o *OrchestratorImpl) Status(ctx context.Context, runID string) (*RunStatus
 		return nil, fmt.Errorf("run %q not found", runID)
 	}
 	if o.workflows != nil && workflowRunID != "" {
-		if run, err := o.workflows.Get(ctx, workflowRunID); err == nil && run != nil {
+		if run, err := o.workflows.Runs.Get(ctx, workflowRunID); err == nil && run != nil {
 			workflowPhase, terminal := workflowStatusPhase(run)
 			if workflowPhase != "" {
 				phase = workflowPhase
@@ -433,7 +432,7 @@ func (o *OrchestratorImpl) runPipeline(ctx context.Context, req RunRequest, wf *
 		if !state.completed[stage.Name] || o.workflows == nil || state.workflowRunID == "" {
 			continue
 		}
-		if err := o.workflows.MarkTopologyStageComplete(ctx, state.workflowRunID, stage.Name, state.outputs[stage.Name], ""); err != nil {
+		if err := o.workflows.Topology.MarkTopologyStageComplete(ctx, state.workflowRunID, stage.Name, state.outputs[stage.Name], ""); err != nil {
 			return nil, err
 		}
 	}
@@ -451,7 +450,7 @@ func (o *OrchestratorImpl) runPipeline(ctx context.Context, req RunRequest, wf *
 			state.outputs[result.stage] = result.output
 			state.completed[result.stage] = true
 			if o.workflows != nil && state.workflowRunID != "" {
-				if err := o.workflows.MarkTopologyStageComplete(ctx, state.workflowRunID, result.stage, result.output, ""); err != nil {
+				if err := o.workflows.Topology.MarkTopologyStageComplete(ctx, state.workflowRunID, result.stage, result.output, ""); err != nil {
 					return nil, err
 				}
 			}
@@ -714,7 +713,7 @@ func (o *OrchestratorImpl) beforePipelineDispatch(ctx context.Context, req RunRe
 		return err
 	}
 	if o.workflows != nil && state.workflowRunID != "" {
-		return o.workflows.AssertRunnable(ctx, state.workflowRunID)
+		return o.workflows.Policy.AssertRunnable(ctx, state.workflowRunID)
 	}
 	return nil
 }
@@ -723,7 +722,7 @@ func (o *OrchestratorImpl) refreshRunPhase(ctx context.Context, state *runState)
 	if o == nil || o.workflows == nil || state == nil || state.workflowRunID == "" {
 		return
 	}
-	run, err := o.workflows.Get(ctx, state.workflowRunID)
+	run, err := o.workflows.Runs.Get(ctx, state.workflowRunID)
 	if err != nil || run == nil || strings.TrimSpace(run.CurrentPhase) == "" {
 		return
 	}
@@ -745,10 +744,10 @@ func (o *OrchestratorImpl) waitForWorkflowStagePhase(ctx context.Context, state 
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 	for {
-		if err := o.workflows.AssertRunnable(ctx, state.workflowRunID); err != nil {
+		if err := o.workflows.Policy.AssertRunnable(ctx, state.workflowRunID); err != nil {
 			return err
 		}
-		run, err := o.workflows.Get(ctx, state.workflowRunID)
+		run, err := o.workflows.Runs.Get(ctx, state.workflowRunID)
 		if err != nil {
 			return err
 		}

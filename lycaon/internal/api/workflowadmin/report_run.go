@@ -3,15 +3,15 @@ package workflowadmin
 import (
 	"context"
 	"fmt"
+	"github.com/go-chi/chi/v5"
+	"github.com/lycaon/lycaon/internal/report"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
+	wire "github.com/lycaon/lycaon/pkg/api"
 	"net/http"
 	"strings"
 	"time"
-
-	"github.com/go-chi/chi/v5"
-	"github.com/lycaon/lycaon/internal/report"
-	"github.com/lycaon/lycaon/internal/workflow"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 func (s *Reports) HandleGetWorkflowRunReport(w http.ResponseWriter, r *http.Request) {
@@ -30,14 +30,14 @@ func (s *Reports) HandleGetWorkflowRunReport(w http.ResponseWriter, r *http.Requ
 // BuildRunReportInput assembles a workflow run's declared deliverable from
 // run-scoped records only; the manifest control gates the document.
 func (s *Reports) BuildRunReportInput(ctx context.Context, runID string) (report.ReportInput, bool, error) {
-	run, err := s.Workflows.Get(ctx, runID)
+	run, err := s.Runs.Get(ctx, runID)
 	if err != nil {
 		return report.ReportInput{}, false, err
 	}
 	if run == nil {
 		return report.ReportInput{}, false, nil
 	}
-	if !workflow.IsTerminal(run.Status) {
+	if !runstate.IsTerminal(run.Status) {
 		return report.ReportInput{}, false, nil
 	}
 
@@ -67,8 +67,8 @@ func (s *Reports) BuildRunReportInput(ctx context.Context, runID string) (report
 		name = strings.TrimSpace(run.WorkflowID)
 	}
 
-	phaseVerdicts := workflow.ReviewVerdicts(ctx, s.Workflows, run, manifest)
-	claims := workflow.ReconcileClaims(phaseVerdicts)
+	phaseVerdicts := workflowpresentation.ReviewVerdicts(ctx, s.Workflows.Verdicts, run, manifest)
+	claims := workflowpresentation.ReconcileClaims(phaseVerdicts)
 	verdicts, channels, verdictURLs := projectVerdicts(phaseVerdicts)
 	cites := append(closeoutCitations(completion.Grounding), verdictCitations(verdicts, channels)...)
 	evidenceRows, evidenceTotal := evidenceFromGrounding(completion.Grounding, cites)
@@ -123,12 +123,12 @@ func (s *Reports) BuildRunReportInput(ctx context.Context, runID string) (report
 		return report.ReportInput{}, false, err
 	}
 	account.claimAccount(manifest, claims)
-	account.scanAccount(scans, completion.CompletionReport, claims, workflow.RunSetAsides(phaseVerdicts))
+	account.scanAccount(scans, completion.CompletionReport, claims, workflowpresentation.RunSetAsides(phaseVerdicts))
 	input.Coverage = account.coverage
 	input.Gaps = account.gaps
 	input.Checks = account.checks
 	input.Inventory = account.inventory
-	if err := appendCoverageReview(ctx, &input, s.Workflows, run, manifest, phaseVerdicts); err != nil {
+	if err := appendCoverageReview(ctx, &input, s.Workflows.Coverage, run, manifest, phaseVerdicts); err != nil {
 		return report.ReportInput{}, false, err
 	}
 	input.Artifacts = s.artifactsForRun(ctx, run, msgs)
@@ -213,11 +213,11 @@ func artifactIDsForRun(msgs []wire.Message, runID string) []string {
 }
 
 func (s *Reports) reportManifest(ctx context.Context, run *wire.WorkflowRun) (workflowdef.Manifest, bool, error) {
-	m, err := s.Workflows.ManifestForRunID(ctx, run.ID)
+	m, err := s.Workflows.Resolver.ForRunID(ctx, run.ID)
 	if err != nil {
 		return workflowdef.Manifest{}, false, err
 	}
-	available, err := s.Workflows.ReportAvailable(ctx, run.ID)
+	available, err := s.Workflows.Presentation.ReportAvailable(ctx, run.ID)
 	return m, available, err
 }
 

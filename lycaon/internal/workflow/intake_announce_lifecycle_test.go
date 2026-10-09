@@ -2,11 +2,11 @@ package workflow
 
 import (
 	"context"
-	"testing"
-
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
+	"testing"
 )
 
 // Declared intake announces its pending choice card.
@@ -27,7 +27,7 @@ func TestDeclaredIntakeStartAnnouncesChoiceCard(t *testing.T) {
 			{ID: "done", Terminal: true, CompleteWhen: "orchestration_complete"},
 		},
 	})
-	mgr.Manifests = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"intake-announce@1.0.0": manifest})
+	mgr.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"intake-announce@1.0.0": manifest})
 	ctx := workflowCaller(t, mgr)
 	run, err := startRun(ctx, mgr, "sess-1", "intake-announce", "1.0.0")
 	testutil.FailErr(t, "startRun", err)
@@ -49,18 +49,18 @@ func TestDeclaredIntakeStartAnnouncesChoiceCard(t *testing.T) {
 		t.Fatalf("options = %v want catalog values", meta.Options)
 	}
 
-	vars, err := mgr.Store.GetScaffoldVars(ctx, run.ID)
+	vars, err := mgr.Store.Runs.GetScaffoldVars(ctx, run.ID)
 	testutil.FailErr(t, "GetScaffoldVars", err)
 	if announced, _ := vars["feedback_announced:change_size"].(bool); !announced {
 		t.Fatal("expected per-key feedback_announced:change_size marker")
 	}
 
-	run, err = mgr.ResolveUserDecision(ctx, "sess-1", run.ID, "change_size", []string{"medium"}, "")
+	run, err = mgr.Feedback.ResolveUserDecision(ctx, "sess-1", run.ID, "change_size", []string{"medium"}, "")
 	testutil.FailErr(t, "ResolveUserDecision", err)
 	if run.CurrentPhase != "done" {
 		t.Fatalf("phase = %q want done", run.CurrentPhase)
 	}
-	if got, _ := DotPathString(varsAfter(t, mgr, run.ID), "intake.change_size"); got != "medium" {
+	if got, _ := runstate.DotPathString(varsAfter(t, mgr, run.ID), "intake.change_size"); got != "medium" {
 		t.Fatalf("intake.change_size = %q want medium", got)
 	}
 }
@@ -86,7 +86,7 @@ func TestDeclaredMultiKeyIntakeSequentialCards(t *testing.T) {
 			{ID: "done", Terminal: true, CompleteWhen: "orchestration_complete"},
 		},
 	})
-	mgr.Manifests = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"intake-multi@1.0.0": manifest})
+	mgr.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"intake-multi@1.0.0": manifest})
 	ctx := workflowCaller(t, mgr)
 	run, err := startRun(ctx, mgr, "sess-1", "intake-multi", "1.0.0")
 	testutil.FailErr(t, "startRun", err)
@@ -98,7 +98,7 @@ func TestDeclaredMultiKeyIntakeSequentialCards(t *testing.T) {
 		t.Fatalf("first card = %#v want change_size", feedback)
 	}
 
-	run, err = mgr.ResolveUserDecision(ctx, "sess-1", run.ID, "change_size", []string{"small"}, "")
+	run, err = mgr.Feedback.ResolveUserDecision(ctx, "sess-1", run.ID, "change_size", []string{"small"}, "")
 	testutil.FailErr(t, "ResolveUserDecision change_size", err)
 	if run.CurrentPhase != "intake" {
 		t.Fatalf("phase after first key = %q want intake", run.CurrentPhase)
@@ -114,13 +114,13 @@ func TestDeclaredMultiKeyIntakeSequentialCards(t *testing.T) {
 		t.Fatalf("second card = %#v want breaking_change", feedback[1].WorkflowFeedback)
 	}
 
-	vars, err := mgr.Store.GetScaffoldVars(ctx, run.ID)
+	vars, err := mgr.Store.Runs.GetScaffoldVars(ctx, run.ID)
 	testutil.FailErr(t, "GetScaffoldVars", err)
 	if announced, _ := vars["feedback_announced:breaking_change"].(bool); !announced {
 		t.Fatal("expected per-key feedback_announced:breaking_change marker")
 	}
 
-	run, err = mgr.ResolveUserDecision(ctx, "sess-1", run.ID, "breaking_change", []string{"none"}, "")
+	run, err = mgr.Feedback.ResolveUserDecision(ctx, "sess-1", run.ID, "breaking_change", []string{"none"}, "")
 	testutil.FailErr(t, "ResolveUserDecision breaking_change", err)
 	if run.CurrentPhase != "done" {
 		t.Fatalf("phase = %q want done", run.CurrentPhase)
@@ -129,7 +129,17 @@ func TestDeclaredMultiKeyIntakeSequentialCards(t *testing.T) {
 
 func varsAfter(t *testing.T, mgr *RunManager, runID string) map[string]any {
 	t.Helper()
-	vars, err := mgr.Store.GetScaffoldVars(context.Background(), runID)
+	vars, err := mgr.Store.Runs.GetScaffoldVars(context.Background(), runID)
 	testutil.FailErr(t, "GetScaffoldVars", err)
 	return vars
+}
+
+func feedbackMessages(msgs []api.Message) []api.Message {
+	var out []api.Message
+	for _, m := range msgs {
+		if m.Kind == api.MessageKindWorkflowFeedback {
+			out = append(out, m)
+		}
+	}
+	return out
 }

@@ -5,15 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/promptresult"
-	"sort"
-	"strings"
-	"testing"
-
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/guidance/ledgertest"
 	"github.com/lycaon/lycaon/internal/limits"
+	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
@@ -22,6 +18,9 @@ import (
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
+	"sort"
+	"strings"
+	"testing"
 )
 
 type stubSummaryResolver struct {
@@ -872,4 +871,3 @@ func TestWorkerGroundingBudgetIsPerLeg(t *testing.T) {
 		t.Fatalf("leg 2 out = %+v, want host-assembled partial after retries", out2)
 	}
 }
-

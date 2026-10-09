@@ -2,16 +2,16 @@ package workflowadmin
 
 import (
 	"context"
-	"strings"
-	"testing"
-
 	"github.com/lycaon/lycaon/internal/report"
 	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/worker"
-	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
+	"strings"
+	"testing"
 )
 
 // The scan account counts only the run's own inventory: a group is used when a
@@ -25,7 +25,7 @@ func TestScanAccountCountsTheRunsInventory(t *testing.T) {
 		{ID: "findings", ScannerID: "one", Status: wire.CodeScanStatusComplete, CoverageStatus: wire.ScanCoverageComplete, Findings: []wire.SecurityFinding{finding, fixture}},
 		{ID: "empty", ScannerID: "two", Status: wire.CodeScanStatusComplete, CoverageStatus: wire.ScanCoverageComplete},
 	}
-	claims := []workflow.RunClaim{{ID: "claim", ScanGroupIDs: []string{"group:invented"}}}
+	claims := []workflowpresentation.RunClaim{{ID: "claim", ScanGroupIDs: []string{"group:invented"}}}
 	var a runAccount
 	a.scanAccount(scans, nil, claims, nil)
 	if a.inventory == nil || a.inventory.Total != 2 || a.inventory.Unaccounted != 2 {
@@ -91,7 +91,7 @@ func TestClaimAccount(t *testing.T) {
 		{ID: "claims", ReviewLoop: &workflowdef.ReviewLoopDef{}},
 		{ID: "challenge", ReviewLoop: &workflowdef.ReviewLoopDef{ReconcilesPhase: "claims", BriefLabel: "Second opinion"}},
 	}}
-	claims := []workflow.RunClaim{
+	claims := []workflowpresentation.RunClaim{
 		{ID: "a", Phase: "challenge", Class: workflowdef.ClaimHeld},
 		{ID: "b", Phase: "challenge", Class: workflowdef.ClaimFailed},
 		{ID: "c", Phase: "claims", Class: workflowdef.ClaimOpen, Dropped: true, Title: "Stale"},
@@ -171,7 +171,7 @@ func TestWorkAccountListsEachAttemptOnce(t *testing.T) {
 	if phase == "" {
 		t.Fatal("security survey has no fan-out phase")
 	}
-	plan := workflow.FanoutPlan{Phase: phase, MaxAttempts: 2, Legs: []workflow.FanoutPlanLeg{{ID: "leg-1", AgentType: "security-reviewer", Subject: "Desktop app"}}}
+	plan := runstate.FanoutPlan{Phase: phase, MaxAttempts: 2, Legs: []runstate.FanoutPlanLeg{{ID: "leg-1", AgentType: "security-reviewer", Subject: "Desktop app"}}}
 	tasks := []wire.WorkerTask{
 		{ID: "t1", AgentType: "security-reviewer", WorkflowPhase: phase, WorkflowWorkID: "leg-1", Status: wire.WorkerStatusFailed},
 		{ID: "t2", AgentType: "security-reviewer", WorkflowPhase: phase, WorkflowWorkID: "leg-1", Status: wire.WorkerStatusComplete},
@@ -200,7 +200,7 @@ func TestWorkAccountListsEachAttemptOnce(t *testing.T) {
 }
 
 type coverageRuns struct {
-	workflow.RunStore
+	runstate.RunsRepository
 	vars map[string]any
 }
 
@@ -243,10 +243,10 @@ func TestReportCoverageShowsHostCheckForPartialLeg(t *testing.T) {
 			Gates: []string{"worker_cycle_ready"},
 		},
 	}}
-	plan := workflow.FanoutPlan{
+	plan := runstate.FanoutPlan{
 		Phase:       phase,
 		MaxAttempts: 2,
-		Legs: []workflow.FanoutPlanLeg{
+		Legs: []runstate.FanoutPlanLeg{
 			{ID: "leg-1", AgentType: "security-reviewer", Subject: "Review auth"},
 		},
 	}

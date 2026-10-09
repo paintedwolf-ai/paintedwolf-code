@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-
 	"github.com/lycaon/lycaon/internal/agentpresence"
 	"github.com/lycaon/lycaon/internal/api/capabilityadmin"
 	"github.com/lycaon/lycaon/internal/api/extensionadmin"
@@ -58,6 +57,9 @@ import (
 	"github.com/lycaon/lycaon/internal/webresearch"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workflow"
+	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
+	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
+	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 )
 
 // Dependencies are the host-supplied services the API routes over.
@@ -137,10 +139,10 @@ type ScansDependencies struct {
 
 type WorkflowDependencies struct {
 	Workflows         *workflow.RunManager
-	WorkflowCatalog   workflow.ManifestResolver
-	WorkflowRuns      workflow.RunStore
-	WorkflowComposer  *workflow.Composer
-	WorkflowPersister *workflow.Persister
+	WorkflowCatalog   workflowcatalog.Resolver
+	WorkflowRuns      *runstate.Repository
+	WorkflowComposer  *workflowcomposition.Composer
+	WorkflowPersister *workflowcomposition.Persister
 	Blueprints        *blueprint.Manager
 	Orchestrator      orchestration.Orchestrator
 	Delegations       *delegation.Manager

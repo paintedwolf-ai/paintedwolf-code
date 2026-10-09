@@ -1,21 +1,21 @@
 package contract
 
 import (
-	"maps"
-	"path/filepath"
-	"strings"
-	"testing"
-
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolschema"
-	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
+	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"github.com/lycaon/lycaon/internal/workflow/verdictcall"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/workflowfixture"
+	"maps"
+	"path/filepath"
+	"strings"
+	"testing"
 )
 
 // Submissions are generated from the projected schemas, so every projected
@@ -70,7 +70,7 @@ func assertVerdictProjection(t *testing.T, manifest workflowdef.Manifest, phase 
 	phase.ReviewLoop = &def
 	catalog := catalogVerdictCall(t)
 	project := func() *inject.PhaseExitView {
-		view := workflow.ProjectPhaseExit(manifest, phase, nil, nil).InjectView()
+		view := workflowpresentation.ProjectPhaseExit(manifest, phase, nil, nil).InjectView()
 		contractcheck.FailErr(t, "attach verdict call", verdictcall.Attach(view, catalog, *phase.ReviewLoop, manifest.ReportBrief()))
 		return view
 	}
@@ -115,15 +115,15 @@ func assertVerdictProjection(t *testing.T, manifest workflowdef.Manifest, phase 
 				call[key] = []any{}
 			}
 		}
-		contractcheck.FailErr(t, "admit schema-derived verdict", workflow.ValidateReviewLoopVerdict(*phase.ReviewLoop, verdict, workflow.VerdictRules{}))
+		contractcheck.FailErr(t, "admit schema-derived verdict", workflowvalidation.ValidateReviewLoopVerdict(*phase.ReviewLoop, verdict, workflowvalidation.VerdictRules{}))
 		contractcheck.FailErr(t, "offered schema accepts the admitted verdict", tools.ValidateToolArgs(offered, map[string]any{"verdict": call}))
-		if workflow.ReviewLoopVerdictTerminal(*phase.ReviewLoop, verdict) != (i == 0) {
+		if workflowvalidation.ReviewLoopVerdictTerminal(*phase.ReviewLoop, verdict) != (i == 0) {
 			t.Fatal("projected enum order disagrees with terminal admission")
 		}
 		for key := range schema {
 			missing := maps.Clone(verdict)
 			delete(missing, key)
-			if workflow.ValidateReviewLoopVerdict(*phase.ReviewLoop, missing, workflow.VerdictRules{}) == nil {
+			if workflowvalidation.ValidateReviewLoopVerdict(*phase.ReviewLoop, missing, workflowvalidation.VerdictRules{}) == nil {
 				t.Fatalf("omitted required field %q accepted", key)
 			}
 			missingCall := maps.Clone(call)

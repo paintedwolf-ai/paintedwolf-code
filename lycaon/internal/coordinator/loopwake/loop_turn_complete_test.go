@@ -2,15 +2,14 @@ package loopwake_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/promptresult"
-	"testing"
-	"time"
-
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
+	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
+	"testing"
+	"time"
 )
 
 func TestOnTurnCompleteHostProseOnlyDoesNotAutoPark(t *testing.T) {
@@ -78,9 +77,9 @@ func TestOnTurnCompleteParksForHumanApproval(t *testing.T) {
 		WorkerCycleIdle: func(context.Context, *api.Session, string) (bool, error) {
 			return true, nil
 		},
-		WorkflowSource: humanApprovalParkWF{
+		WorkflowSource: workflowFixturePorts(humanApprovalParkWF{
 			run: &api.WorkflowRun{ID: "run-1", Status: api.WorkflowRunStatusRunning, CurrentPhase: "decide"},
-		},
+		}),
 	})
 	continuation := loop.OnTurnComplete(context.Background(), "sess-hitl", false)
 	if continuation != loopwake.UserTurnContinues {
@@ -102,11 +101,11 @@ type humanApprovalParkWF struct {
 	run *api.WorkflowRun
 }
 
-func (s humanApprovalParkWF) ActiveRun(context.Context, string) (*api.WorkflowRun, error) {
+func (s humanApprovalParkWF) ActiveBySession(context.Context, string) (*api.WorkflowRun, error) {
 	return s.run, nil
 }
 
-func (s humanApprovalParkWF) ScaffoldVars(context.Context, string) (map[string]any, error) {
+func (s humanApprovalParkWF) GetScaffoldVars(context.Context, string) (map[string]any, error) {
 	return map[string]any{"human_approval": map[string]any{"active": true, "ready": true}}, nil
 }
 
@@ -131,9 +130,9 @@ func TestOnTurnCompleteParksForHostObligation(t *testing.T) {
 		},
 		// Host holds outrank workflow retry timers.
 		WorkflowObligationsOpen: func(context.Context, string) bool { return true },
-		WorkflowSource: hostObligationParkWF{
+		WorkflowSource: workflowFixturePorts(hostObligationParkWF{
 			run: &api.WorkflowRun{ID: "run-1", Status: api.WorkflowRunStatusRunning, CurrentPhase: "ingest"},
-		},
+		}),
 	})
 	continuation := loop.OnTurnComplete(context.Background(), "sess-ob", true)
 	if continuation != loopwake.UserTurnContinues {
@@ -164,9 +163,9 @@ func TestLoopWakeDeniedWhileHostObligationHeld(t *testing.T) {
 		WorkerCycleIdle: func(context.Context, *api.Session, string) (bool, error) {
 			return true, nil
 		},
-		WorkflowSource: hostObligationParkWF{
+		WorkflowSource: workflowFixturePorts(hostObligationParkWF{
 			run: &api.WorkflowRun{ID: "run-1", Status: api.WorkflowRunStatusRunning, CurrentPhase: "ingest"},
-		},
+		}),
 	})
 	allow, reason, err := loop.ShouldLoopWake(context.Background(), "sess-ob", anchor.PhaseAdvanced)
 	if err != nil {
@@ -184,11 +183,11 @@ type hostObligationParkWF struct {
 	run *api.WorkflowRun
 }
 
-func (s hostObligationParkWF) ActiveRun(context.Context, string) (*api.WorkflowRun, error) {
+func (s hostObligationParkWF) ActiveBySession(context.Context, string) (*api.WorkflowRun, error) {
 	return s.run, nil
 }
 
-func (hostObligationParkWF) ScaffoldVars(context.Context, string) (map[string]any, error) {
+func (hostObligationParkWF) GetScaffoldVars(context.Context, string) (map[string]any, error) {
 	return map[string]any{}, nil
 }
 
@@ -312,7 +311,7 @@ func TestLoopWakeBusyUsesPromptExecutionNotVisibleTurnStatus(t *testing.T) {
 		WorkerCycleIdle: func(context.Context, *api.Session, string) (bool, error) {
 			return true, nil
 		},
-		WorkflowSource: activeLoopWorkflow{},
+		WorkflowSource: workflowFixturePorts(activeLoopWorkflow{}),
 	})
 
 	allow, busy := loop.EvaluateForTest(context.Background(), "sess-live", anchor.PhaseAdvanced)
@@ -345,7 +344,7 @@ func TestUserTurnSettlementClaimOrdersLaterWakeAfterBoundary(t *testing.T) {
 		WorkerCycleIdle: func(context.Context, *api.Session, string) (bool, error) {
 			return true, nil
 		},
-		WorkflowSource:     activeLoopWorkflow{},
+		WorkflowSource:     workflowFixturePorts(activeLoopWorkflow{}),
 		HostWakeActionable: func(context.Context, loopwake.HostWakeActionableInput) bool { return true },
 		RunPrompt: func(context.Context, string) (*promptresult.Result, error) {
 			prompts++
@@ -370,11 +369,11 @@ func TestUserTurnSettlementClaimOrdersLaterWakeAfterBoundary(t *testing.T) {
 
 type activeLoopWorkflow struct{}
 
-func (activeLoopWorkflow) ActiveRun(context.Context, string) (*api.WorkflowRun, error) {
+func (activeLoopWorkflow) ActiveBySession(context.Context, string) (*api.WorkflowRun, error) {
 	return &api.WorkflowRun{ID: "run-live", Status: api.WorkflowRunStatusRunning}, nil
 }
 
-func (activeLoopWorkflow) ScaffoldVars(context.Context, string) (map[string]any, error) {
+func (activeLoopWorkflow) GetScaffoldVars(context.Context, string) (map[string]any, error) {
 	return map[string]any{}, nil
 }
 

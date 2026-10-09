@@ -1,11 +1,10 @@
 package contract
 
 import (
-	"strings"
-	"testing"
-
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"gopkg.in/yaml.v3"
+	"strings"
+	"testing"
 )
 
 func TestHostedCacheWritesRequireTheTrustedMainRef(t *testing.T) {
@@ -60,5 +59,45 @@ func TestMainCacheWarmingCompletesBeforeTheNextPush(t *testing.T) {
 	contractcheck.FailErr(t, "decode cache warmer concurrency", yaml.Unmarshal([]byte(data), &workflow))
 	if workflow.Concurrency.Group == "" || workflow.Concurrency.Cancel == nil || *workflow.Concurrency.Cancel {
 		t.Fatal("main pushes must serialize cache warming without cancelling cold preparation")
+	}
+}
+
+func TestNestedCachePublicationRunsAfterPreparation(t *testing.T) {
+	t.Parallel()
+	root := contractcheck.RepoRoot(t)
+	for _, name := range []string{"cache-go", "cache-decide", "cache-notices-tools", "cache-analysis-tools"} {
+		data := contractcheck.ReadRepoFile(t, root, ".github/actions/"+name+"/action.yml")
+		if strings.Contains(data, "uses: actions/cache@") || !strings.Contains(data, "uses: actions/cache/save@") {
+			t.Errorf("%s must publish in its current action scope, not a nested post-job hook", name)
+		}
+	}
+	var workflow struct {
+		Jobs map[string]struct {
+			Steps []struct {
+				Uses string
+				Run  string
+				With map[string]string
+			}
+		}
+	}
+	data := contractcheck.ReadRepoFile(t, root, ".github/workflows/build-caches.yml")
+	contractcheck.FailErr(t, "decode cache publication stages", yaml.Unmarshal([]byte(data), &workflow))
+	prepared := false
+	published := map[string]bool{}
+	for _, step := range workflow.Jobs["verification"].Steps {
+		if step.Run == "./task setup-dev -- --workspace-cache" {
+			prepared = true
+		}
+		if step.With["save"] == "true" {
+			if !prepared {
+				t.Fatalf("%s publishes before preparation", step.Uses)
+			}
+			published[step.Uses] = true
+		}
+	}
+	for _, name := range []string{"cache-go", "cache-decide", "cache-notices-tools", "cache-analysis-tools"} {
+		if !published["./.github/actions/"+name] {
+			t.Errorf("prepared %s has no publication stage", name)
+		}
 	}
 }

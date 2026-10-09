@@ -2,20 +2,19 @@ package session
 
 import (
 	"context"
-	"strings"
-
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/batch"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/pkg/api"
+	"strings"
 )
 
 func (m *Manager) applyCoordinatorBatchEvent(ctx context.Context, sessionID string, ev batch.Event, eventSeq int) {
 	if m == nil || m.workflows == nil {
 		return
 	}
-	_ = m.workflows.ApplyCoordinatorBatchEvent(ctx, sessionID, ev, eventSeq)
+	_ = m.workflows.Batch.ApplyCoordinatorBatchEvent(ctx, sessionID, ev, eventSeq)
 }
 
 func (m *Manager) coordinatorBatchSeqFromState(state surface.ImplementSessionState) int {

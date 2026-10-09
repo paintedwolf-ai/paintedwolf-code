@@ -2,13 +2,12 @@ package toolpolicy
 
 import (
 	"context"
-	"strings"
-
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/rules"
 	"github.com/lycaon/lycaon/pkg/api"
+	"strings"
 )
 
 // BuildEvalContext assembles rule evaluation context for a tool invoke.
@@ -25,9 +24,9 @@ func buildEvalContextFromLiveState(ctx context.Context, deps EngineDeps, sess *a
 	manifestRules := []string(nil)
 	if deps.Workflows != nil && sess != nil {
 		w := deps.Workflows
-		phase = w.CurrentPhase(ctx, sess.ID)
-		allowed = w.AllowedAgents(ctx, sess.ID)
-		if manifest, ok := w.ActiveManifest(ctx, sess.ID); ok {
+		phase = w.Policy.CurrentPhase(ctx, sess.ID)
+		allowed = w.Policy.AllowedAgents(ctx, sess.ID)
+		if manifest, ok := w.Policy.ActiveManifest(ctx, sess.ID); ok {
 			manifestRules = manifest.Rules
 		}
 	}
@@ -45,17 +44,17 @@ func buildEvalContextFromLiveState(ctx context.Context, deps EngineDeps, sess *a
 	eval.ManifestRules = manifestRules
 	if deps.Workflows != nil && sess != nil {
 		w := deps.Workflows
-		eval.ReviewLoopActive = w.ActivePhaseHasReviewLoop(ctx, sess.ID)
-		if run, err := w.GetActive(ctx, sess.ID); err == nil && run != nil {
+		eval.ReviewLoopActive = w.Policy.ActivePhaseHasReviewLoop(ctx, sess.ID)
+		if run, err := w.Runs.ActiveBySession(ctx, sess.ID); err == nil && run != nil {
 			eval.WorkflowID = run.WorkflowID
 			eval.WorkflowRunID = run.ID
 			eval.RunStatus = run.Status
 		}
-		if blueprintPath, content, okPlan := w.ActivePlan(ctx, sess.ID); okPlan {
+		if blueprintPath, content, okPlan := w.Blueprints.ActivePlan(ctx, sess.ID); okPlan {
 			eval.BlueprintPath = blueprintPath
 			eval.PlanContent = content
 		}
-		if vars, err := w.ScaffoldVarsForSession(ctx, sess.ID); err == nil {
+		if vars, err := w.Policy.ScaffoldVarsForSession(ctx, sess.ID); err == nil {
 			eval.Vars = vars
 		}
 	}

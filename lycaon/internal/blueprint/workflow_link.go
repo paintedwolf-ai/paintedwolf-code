@@ -3,11 +3,10 @@ package blueprint
 import (
 	"context"
 	"errors"
-
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// WorkflowBlueprintCreator adapts Manager for workflow RunManager.BlueprintCreate.
+// WorkflowBlueprintCreator adapts Manager for workflow RunManager.Blueprints.Creator.
 type WorkflowBlueprintCreator struct {
 	Manager *Manager
 }

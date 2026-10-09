@@ -2,13 +2,13 @@ package session
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/evidence"
+	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
+	"github.com/lycaon/lycaon/pkg/api"
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/lycaon/lycaon/internal/evidence"
-	"github.com/lycaon/lycaon/internal/guidance"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // EvaluateVerdictGrounding checks citations against coordinator and required-reviewer evidence.
@@ -264,11 +264,11 @@ func (m *Manager) reviewerEvidence(ctx context.Context, sessionID string, histor
 	}
 	phase := ""
 	if m.workflows != nil {
-		run, err := m.workflows.GetActive(ctx, sessionID)
+		run, err := m.workflows.Runs.ActiveBySession(ctx, sessionID)
 		if err != nil {
 			return nil, err
 		}
-		if run != nil && !m.workflows.IsAmbientRun(run) {
+		if run != nil && !runstate.IsAmbientRun(run) {
 			phase = run.CurrentPhase
 		}
 	}

@@ -2,13 +2,12 @@ package session
 
 import (
 	"context"
-	"testing"
-	"time"
-
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
+	"testing"
+	"time"
 )
 
 // jobLister serves fixed worker jobs for one parent session.
@@ -63,7 +62,7 @@ type evidenceWorkflowView struct {
 	run *api.WorkflowRun
 }
 
-func (v *evidenceWorkflowView) GetActive(context.Context, string) (*api.WorkflowRun, error) {
+func (v *evidenceWorkflowView) ActiveBySession(context.Context, string) (*api.WorkflowRun, error) {
 	return v.run, nil
 }
 
@@ -74,7 +73,8 @@ func TestWorkflowEvidenceSurvivesLaterUserMessagesAndCompaction(t *testing.T) {
 	child, err := st.CreateChild(t.Context(), parent, api.SpawnChildRequest{AgentType: "skeptic", Prompt: "Review"})
 	testutil.FailErr(t, "create reviewer", err)
 	run := &api.WorkflowRun{ID: "review-run", CurrentPhase: "challenge"}
-	mgr.workflows = &evidenceWorkflowView{run: run}
+	workflowFixture1 := &evidenceWorkflowView{run: run}
+	mgr.workflows = &WorkflowDomains{Runs: workflowFixture1, Policy: workflowFixture1, Ambient: workflowFixture1, Blueprints: workflowFixture1, Batch: workflowFixture1, Slash: workflowFixture1, Requests: workflowFixture1, Feedback: workflowFixture1, Transcript: workflowFixture1, Asks: workflowFixture1, Fanout: workflowFixture1, Phases: workflowFixture1, Reports: workflowFixture1, Recovery: workflowFixture1, Cleanup: workflowFixture1}
 	before := time.Unix(100, 0)
 	mgr.SetWorkerQueue(jobLister{tasks: []api.WorkerTask{
 		{ID: "original", ParentSessionID: parent.ID, ChildSessionID: child.ID, AgentType: "skeptic", Status: api.WorkerStatusComplete, Result: &api.WorkerResult{CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"}}, WorkflowRunID: run.ID, WorkflowPhase: run.CurrentPhase, CreatedAt: before},

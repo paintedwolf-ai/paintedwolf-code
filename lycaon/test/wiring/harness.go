@@ -2,18 +2,11 @@ package wiring
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/app/configuration"
-	"io/fs"
-	"os"
-	"path/filepath"
-	"strings"
-	"testing"
-	"time"
-
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/config/configtest"
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/app"
+	"github.com/lycaon/lycaon/internal/app/configuration"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/db"
@@ -35,6 +28,12 @@ import (
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
 )
 
 // Each test supplies its own server catalog.
@@ -144,7 +143,7 @@ func BuildForTest(t *testing.T, opts ...Option) *Harness {
 	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 
 	if o.replaceManifests != nil {
-		sa.WorkflowMgr.Manifests = workflowdef.NewRegistry(o.replaceManifests)
+		sa.WorkflowMgr.Resolver.Overlay = workflowdef.NewRegistry(o.replaceManifests)
 	}
 
 	applyTestHarnessRelaxations(sa)
@@ -196,12 +195,12 @@ func (h *Harness) RegisterManifest(manifest workflowdef.Manifest) {
 	}
 	m := workflowdef.FinalizeManifest(manifest)
 	key := m.ID + "@" + m.Version
-	all := h.WorkflowMgr.Manifests.All()
+	all := h.WorkflowMgr.Resolver.Overlay.All()
 	if all == nil {
 		all = map[string]workflowdef.Manifest{}
 	}
 	all[key] = m
-	h.WorkflowMgr.Manifests = workflowdef.NewRegistry(all)
+	h.WorkflowMgr.Resolver.Overlay = workflowdef.NewRegistry(all)
 }
 
 // CreateHarnessSession seeds project registry rows and creates a SQL-backed session for wiring tests.

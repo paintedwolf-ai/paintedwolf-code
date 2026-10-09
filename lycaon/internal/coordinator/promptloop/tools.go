@@ -3,12 +3,6 @@ package promptloop
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/toolrejection"
-	"slices"
-	"strings"
-	"sync"
-	"time"
-
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/agentpresence"
 	"github.com/lycaon/lycaon/internal/curationctx"
@@ -19,9 +13,14 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/toolpolicy"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/visual"
 	"github.com/lycaon/lycaon/pkg/api"
+	"slices"
+	"strings"
+	"sync"
+	"time"
 )
 
 // toolInvocations invokes one tool call and turns its result or refusal into transcript rows.

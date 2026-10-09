@@ -2,6 +2,10 @@ package security
 
 import (
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/conditions"
+	"github.com/lycaon/lycaon/internal/events"
+	"github.com/lycaon/lycaon/internal/testutil"
+	wire "github.com/lycaon/lycaon/pkg/api"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -9,11 +13,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/lycaon/lycaon/internal/conditions"
-	"github.com/lycaon/lycaon/internal/events"
-	"github.com/lycaon/lycaon/internal/testutil"
-	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestStartBugbashViaOrchestrator(t *testing.T) {
@@ -34,18 +33,18 @@ func TestStartBugbashViaOrchestrator(t *testing.T) {
 	blueprintPath := filepath.Join(h.projectDir, filepath.FromSlash(run.BlueprintPath))
 	testutil.FailErr(t, "create Bugbash blueprint dir", os.MkdirAll(filepath.Dir(blueprintPath), 0o755))
 	testutil.FailErr(t, "write Bugbash blueprint", os.WriteFile(blueprintPath, []byte(conditions.TestPlanContentStubOnly), 0o644))
-	_, err := h.workflowMgr.TryAutoAdvanceThroughCommittedGates(t.Context(), run.ID, 8)
+	_, err := h.workflowMgr.Phases.TryAutoAdvanceThroughCommittedGates(t.Context(), run.ID, 8)
 	testutil.FailErr(t, "advance Bugbash blueprint gate", err)
 	waitWorkflowPhase(t, h.workflowMgr, run.ID, "approve")
 
-	_, err = h.workflowMgr.SyncHumanApproval(h.ownerCtx, run.ID, h.projectDir)
+	_, err = h.workflowMgr.Approvals.SyncHumanApproval(h.ownerCtx, run.ID, h.projectDir)
 	testutil.FailErr(t, "SyncHumanApproval approve", err)
 	completeActiveChildRun(t, h)
 
 	waitWorkflowPhase(t, h.workflowMgr, run.ID, "closeout")
 
-	updated, err := h.workflowMgr.Get(t.Context(), run.ID)
-	testutil.FailErr(t, "h.workflowMgr.Get failed", err)
+	updated, err := h.workflowMgr.Store.Runs.Get(t.Context(), run.ID)
+	testutil.FailErr(t, "h.workflowMgr.Presentation.Get failed", err)
 	run = *updated
 	if run.CurrentPhase != "closeout" {
 		t.Fatalf("phase = %q want closeout after child completion", run.CurrentPhase)

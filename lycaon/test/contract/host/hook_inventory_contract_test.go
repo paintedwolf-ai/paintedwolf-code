@@ -1,19 +1,18 @@
 package contract
 
 import (
+	"github.com/lycaon/lycaon/internal/testutil"
+	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"gopkg.in/yaml.v3"
 	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 	"testing"
-
-	"github.com/lycaon/lycaon/internal/testutil"
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
-	"gopkg.in/yaml.v3"
 )
 
 // TestHookInventoryCoversWireBindings checks callback coverage and lock notes.
@@ -97,8 +96,16 @@ func parseWireHookBindings(t *testing.T, path string) []wireHookBinding {
 
 	// Map build variables to their inventory type names.
 	managerTypeForVar := map[string]string{
-		"workflowMgr":   "workflow.RunManager",
-		"delegationMgr": "delegation.Manager",
+		"workflowMgr.Requests":    "workflow/inputs.Requests",
+		"workflowMgr.Phases":      "workflow/phases.Service",
+		"workflowMgr.Publication": "workflow/publication.Runs",
+		"workflowMgr.Controls":    "workflow/lifecycle.Commands",
+		"workflowMgr.Children":    "workflow.Children",
+		"workflowMgr.Approvals":   "workflow.Approvals",
+		"workflowMgr.Feedback":    "workflow/inputs.Feedback",
+		"workflowMgr.Asks":        "workflow/inputs.Asks",
+		"workflowMgr.Verdicts":    "workflow/review.Verdicts",
+		"delegationMgr":           "delegation.Manager",
 	}
 
 	isHookField := func(name string) bool {
@@ -115,20 +122,15 @@ func parseWireHookBindings(t *testing.T, path string) []wireHookBinding {
 		if !ok {
 			return true
 		}
-		managerVar := ""
-		switch recv := sel.X.(type) {
-		case *ast.Ident:
-			managerVar = recv.Name
-		case *ast.SelectorExpr:
-			if id, ok := recv.X.(*ast.Ident); ok && id.Name == "b" {
-				managerVar = recv.Sel.Name
-			}
+		managerVar := strings.TrimPrefix(hookReceiverPath(sel.X), "b.")
+		if !isHookField(sel.Sel.Name) {
+			return true
 		}
 		managerType, ok := managerTypeForVar[managerVar]
 		if !ok {
-			return true
-		}
-		if !isHookField(sel.Sel.Name) {
+			if managerVar == "workflowMgr" || strings.HasPrefix(managerVar, "workflowMgr.") {
+				t.Fatalf("unclassified workflow callback resource %s at %s", managerVar, fset.Position(assign.Pos()))
+			}
 			return true
 		}
 		out = append(out, wireHookBinding{
@@ -181,4 +183,17 @@ func loadHookInventory(t *testing.T, path string) map[string]inventoryHook {
 		}
 	}
 	return out
+}
+
+func hookReceiverPath(expr ast.Expr) string {
+	switch value := expr.(type) {
+	case *ast.Ident:
+		return value.Name
+	case *ast.SelectorExpr:
+		prefix := hookReceiverPath(value.X)
+		if prefix != "" {
+			return prefix + "." + value.Sel.Name
+		}
+	}
+	return ""
 }

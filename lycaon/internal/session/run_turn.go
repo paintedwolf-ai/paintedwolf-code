@@ -4,13 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/promptresult"
-	"log/slog"
-	"runtime/debug"
-	"strings"
-	"sync"
-	"time"
-
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
@@ -18,10 +11,16 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/curationctx"
 	"github.com/lycaon/lycaon/internal/llm"
+	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/workercontext"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
+	"log/slog"
+	"runtime/debug"
+	"strings"
+	"sync"
+	"time"
 )
 
 // RunTurnBusyWindowFaultForTest injects a panic after the busy transition.
@@ -62,11 +61,11 @@ func (m *Manager) runTurnLocked(ctx context.Context, id string, in PromptInput) 
 	text := promptUserInstruction(in)
 	hostTurn := in.HostSignal != nil
 	if !hostTurn && in.Recovery == nil && m.workflows != nil {
-		if resp, handled, err := m.workflows.TrySlashPrompt(ctx, id, text, in.SubmissionID); handled {
+		if resp, handled, err := m.workflows.Slash.TrySlashPrompt(ctx, id, text, in.SubmissionID); handled {
 			// A parked phase cancels the current turn.
 			return resp, mapPromptRunError(err)
 		}
-		prepared, workflowResp, handled, err := m.workflows.PrepareUserRequest(ctx, id, text)
+		prepared, workflowResp, handled, err := m.workflows.Requests.PrepareUserRequest(ctx, id, text)
 		if err != nil {
 			return nil, mapPromptRunError(err)
 		}

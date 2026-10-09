@@ -2,11 +2,12 @@ package workflow
 
 import (
 	"context"
-	"testing"
-
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowgates "github.com/lycaon/lycaon/internal/workflow/gates"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
+	"testing"
 )
 
 func TestParseManifestGatesSchema(t *testing.T) {
@@ -50,7 +51,7 @@ phases:
 }
 
 func TestFailClosedGateEvaluatorBlocksUnmetGates(t *testing.T) {
-	eval := FailClosedGateEvaluator{}
+	eval := workflowgates.FailClosedGateEvaluator{}
 	manifest := workflowdef.Manifest{
 		PhaseDefs: []workflowdef.PhaseDef{
 			{ID: "verify", CompleteWhen: workflowdef.CompleteWhenGatesSatisfied, Gates: []string{"human_approval"}},
@@ -65,7 +66,7 @@ func TestFailClosedGateEvaluatorBlocksUnmetGates(t *testing.T) {
 	if result.Reason != workflowdef.CompleteWhenGatesSatisfied {
 		t.Fatalf("reason = %q", result.Reason)
 	}
-	vars := SetGateSatisfied(map[string]any{}, "human_approval", true)
+	vars := runstate.SetGateSatisfied(map[string]any{}, "human_approval", true)
 	ok, _, err = eval.PhaseGateMet(context.Background(), manifest, run, vars)
 	if err != nil || !ok {
 		t.Fatalf("expected gate open: ok=%v err=%v", ok, err)

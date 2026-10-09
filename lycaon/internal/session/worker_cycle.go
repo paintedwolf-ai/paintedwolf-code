@@ -2,16 +2,16 @@ package session
 
 import (
 	"context"
-	"sort"
-	"strings"
-
 	"github.com/lycaon/lycaon/internal/coordinator/batch"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/scaffoldvars"
+	workflowfacts "github.com/lycaon/lycaon/internal/session/workflowfacts"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/pkg/api"
+	"sort"
+	"strings"
 )
 
 var workerCycleLog = observability.LazyComponent("worker_cycle")
@@ -140,25 +140,25 @@ func (m *Manager) workerCycleGuardDeps() WorkerCycleGuardDeps {
 			if m.workflows == nil {
 				return 0
 			}
-			return m.workflows.ParallelTaskMaxWorkers(ctx, sessionID)
+			return m.workflows.Ambient.ParallelTaskMaxWorkers(ctx, sessionID)
 		},
 		MaxReadWorkers: func(ctx context.Context, sessionID string) int {
 			if m.workflows == nil {
 				return 0
 			}
-			return m.workflows.ParallelTaskMaxReadWorkers(ctx, sessionID)
+			return m.workflows.Ambient.ParallelTaskMaxReadWorkers(ctx, sessionID)
 		},
 		MaxWriteWorkers: func(ctx context.Context, sessionID string) int {
 			if m.workflows == nil {
 				return 0
 			}
-			return m.workflows.ParallelTaskMaxWriteWorkers(ctx, sessionID)
+			return m.workflows.Ambient.ParallelTaskMaxWriteWorkers(ctx, sessionID)
 		},
-		PhaseGuardState: func(ctx context.Context, sessionID string) WorkflowPhaseGuardState {
+		PhaseGuardState: func(ctx context.Context, sessionID string) workflowfacts.WorkflowPhaseGuardState {
 			if m.workflows == nil {
-				return WorkflowPhaseGuardState{}
+				return workflowfacts.WorkflowPhaseGuardState{}
 			}
-			return m.workflows.ActivePhaseGuardState(ctx, sessionID)
+			return m.workflows.Policy.ActivePhaseGuardState(ctx, sessionID)
 		},
 		RepoKnownEmpty: func(ctx context.Context, workspacePath string) bool {
 			return sessionWorkspaceKnownEmpty(ctx, m.repoProvider, workspacePath)
@@ -266,7 +266,7 @@ func (m *Manager) BuildImplementSessionState(ctx context.Context, sess *api.Sess
 		}
 	}
 	if m.workflows != nil {
-		if vars, err := m.workflows.ScaffoldVarsForSession(ctx, sess.ID); err == nil {
+		if vars, err := m.workflows.Policy.ScaffoldVarsForSession(ctx, sess.ID); err == nil {
 			b := batch.Read(vars)
 			state.BatchPhase = b.Phase
 			state.BatchSeq = b.Seq

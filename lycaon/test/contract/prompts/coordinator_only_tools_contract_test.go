@@ -2,17 +2,16 @@ package contract
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/tools"
+	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
+	"github.com/lycaon/lycaon/test/contract/internal/toolfixture"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
 	"testing"
-
-	"github.com/lycaon/lycaon/internal/projectroot"
-	"github.com/lycaon/lycaon/internal/tools"
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
-	"github.com/lycaon/lycaon/test/contract/internal/toolfixture"
 )
 
 // coordinatorOnlyTools is the set of tools whose handler bodies guard
@@ -81,7 +80,7 @@ func TestCoordinatorOnlyGuardInventory(t *testing.T) {
 	// A tool is guarded when the guard call appears between its Register("X",
 	// and the next Register( call.
 	registerRE := regexp.MustCompile(`reg\.Register\("([a-z_][a-z0-9_]*)",`)
-	const guard = "isCoordinatorAgent(tctx.Agent)"
+	const guard = "toolguard.IsCoordinatorAgent(tctx.Agent)"
 
 	guarded := map[string]bool{}
 	for _, ent := range entries {

@@ -2,12 +2,11 @@ package contract
 
 import (
 	"fmt"
+	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
-
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
 // outboxTableFloor covers event tables not discovered through direct writes.
@@ -76,7 +75,7 @@ var outboxSilentMutators = map[string]string{
 	"lycaon/internal/worker/sql_merge_lease.go:RenewMergeApply":            "extends a worker job's merge-apply lease deadline",
 	"lycaon/internal/worker/sql_query.go:MarkOutcomeDelivered":             "records that a worker outcome reached its parent; the parent's transcript append announces the delivery",
 	"lycaon/internal/worker/sql_queue_cancellation.go:RequestCancellation": "fences a job's claims and outcomes before its runtime stops; the job announces when cancellation settles",
-	"lycaon/internal/workflow/verdict_operation.go:rebaseVerdictOperation": "moves a prepared verdict operation, an internal recovery receipt, onto a newer phase revision; the verdict announces when it commits",
+	"lycaon/internal/workflow/verdict_operation.go:RebaseVerdictOperation": "moves a prepared verdict operation, an internal recovery receipt, onto a newer phase revision; the verdict announces when it commits",
 }
 
 func TestNoSQLTriggerWritesTheEventOutbox(t *testing.T) {

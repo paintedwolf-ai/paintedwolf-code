@@ -1,15 +1,15 @@
 package contract
 
 import (
+	"github.com/lycaon/lycaon/internal/guidance/feedback"
+	"github.com/lycaon/lycaon/internal/workflow"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
+	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/lycaon/lycaon/internal/guidance/feedback"
-	"github.com/lycaon/lycaon/internal/workflow"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
 func TestManifestAdvancePolicyEnumsParseAndRejectNever(t *testing.T) {
@@ -139,16 +139,16 @@ func TestPhaseExitProjectorPlanContract(t *testing.T) {
 		kind  string
 		auth  workflowdef.AdvanceWhenGateMet
 	}{
-		{"research", workflow.PhaseExitKindProof, workflowdef.AdvanceWhenGateMetCoordinator},
-		{"expand", workflow.PhaseExitKindProof, workflowdef.AdvanceWhenGateMetAuto},
-		{"approve", workflow.PhaseExitKindHumanApproval, workflowdef.AdvanceWhenGateMetAuto},
+		{"research", workflowpresentation.PhaseExitKindProof, workflowdef.AdvanceWhenGateMetCoordinator},
+		{"expand", workflowpresentation.PhaseExitKindProof, workflowdef.AdvanceWhenGateMetAuto},
+		{"approve", workflowpresentation.PhaseExitKindHumanApproval, workflowdef.AdvanceWhenGateMetAuto},
 	}
 	for _, tc := range cases {
 		def, ok := m.PhaseByID(tc.phase)
 		if !ok {
 			t.Fatalf("missing phase %q", tc.phase)
 		}
-		exit := workflow.ProjectPhaseExit(m, def, nil, nil)
+		exit := workflowpresentation.ProjectPhaseExit(m, def, nil, nil)
 		if exit.Kind != tc.kind {
 			t.Fatalf("%s kind = %q want %q", tc.phase, exit.Kind, tc.kind)
 		}

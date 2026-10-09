@@ -3,12 +3,13 @@ package workflow
 import (
 	"context"
 	"errors"
-	"testing"
-
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
+	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
+	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
+	"testing"
 )
 
 func TestPersistToolRejectsConfirmFalse(t *testing.T) {
@@ -30,7 +31,7 @@ phases:
       set_posture: build
     complete_when: delegation_closeout_complete
 `
-	if err := store.Upsert(context.Background(), "sess-1", []byte(manifest), ComposeActorCoordinator, nil); err != nil {
+	if err := store.Upsert(context.Background(), "sess-1", []byte(manifest), workflowdrafts.Coordinator, nil); err != nil {
 		testutil.FailErr(t, "store.Upsert failed", err)
 	}
 	_, err := reg.Run(context.Background(), "workflow_persist", map[string]any{
@@ -38,7 +39,7 @@ phases:
 		"version":     "1.0.0",
 		"confirm":     false,
 	}, toolContext(orchestration.ProfileCoordinator, "sess-1", t.TempDir()))
-	var notConfirmed *PersistNotConfirmedError
+	var notConfirmed *workflowcomposition.PersistNotConfirmedError
 	if !errors.As(err, &notConfirmed) {
 		t.Fatalf("err = %v", err)
 	}

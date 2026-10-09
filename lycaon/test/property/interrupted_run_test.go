@@ -8,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/workflow"
+	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	"github.com/lycaon/lycaon/pkg/api"
 	"pgregory.net/rapid"
 	"testing"
@@ -19,9 +20,9 @@ func TestInterruptedRunReconcileEmitsTerminalBoundary(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "interrupted.db")
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, t.TempDir())
 	sessStore := store.NewSQL(sqlDB)
-	wfStore := workflow.NewSQLStore(sqlDB)
+	wfStore := workflowpersistence.New(sqlDB)
 	runMgr := workflow.NewManager(wfStore, sessStore, nil, nil)
-	runMgr.SessionCoordinatorBusy = func(context.Context, string) bool { return false }
+	runMgr.Recovery.Busy = func(context.Context, string) bool { return false }
 
 	rapid.Check(t, func(rt *rapid.T) {
 		sess, err := sessStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
@@ -29,7 +30,7 @@ func TestInterruptedRunReconcileEmitsTerminalBoundary(t *testing.T) {
 
 		runID := "run-" + rapid.StringMatching(`[a-z0-9]{6,10}`).Draw(rt, "run")
 		phase := rapid.SampledFrom([]string{"boot", "review", "closeout"}).Draw(rt, "phase")
-		failErr(rt, "create run", wfStore.CreateState(ctx, &api.WorkflowRun{
+		failErr(rt, "create run", wfStore.State.CreateState(ctx, &api.WorkflowRun{
 			ID:              runID,
 			SessionID:       sess.ID,
 			WorkflowID:      "plan",
@@ -38,9 +39,9 @@ func TestInterruptedRunReconcileEmitsTerminalBoundary(t *testing.T) {
 			CurrentPhase:    phase,
 		}, sess.WorkspacePath, nil))
 
-		failErr(rt, "reconcile", runMgr.ReconcileOrphanedRuns(ctx, sess.ID))
+		failErr(rt, "reconcile", runMgr.Recovery.ReconcileOrphanedRuns(ctx, sess.ID))
 
-		got, err := wfStore.Get(ctx, runID)
+		got, err := wfStore.Runs.Get(ctx, runID)
 		failErr(rt, "get run", err)
 		if got.Status != api.WorkflowRunStatusInterrupted {
 			rt.Fatalf("status = %q want interrupted", got.Status)

@@ -3,11 +3,6 @@ package api
 import (
 	"encoding/json"
 	"errors"
-	"net/http"
-	"strconv"
-	"strings"
-	"time"
-
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/api/httpio"
@@ -15,9 +10,13 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/visual"
-	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowinputs "github.com/lycaon/lycaon/internal/workflow/inputs"
 	wire "github.com/lycaon/lycaon/pkg/api"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
 )
 
 // registerHarnessRoutes registers authenticated controls for an isolated harness.
@@ -135,7 +134,7 @@ func (s *HarnessControl) handleHarnessTranscript(w http.ResponseWriter, r *http.
 
 // stampActiveRun assigns seeded messages to the active workflow span.
 func (s *HarnessControl) stampActiveRun(r *http.Request, sessionID string, msgs []wire.Message) []wire.Message {
-	run, err := s.Workflow.GetActive(r.Context(), sessionID)
+	run, err := s.Workflow.Store.Runs.ActiveBySession(r.Context(), sessionID)
 	if err != nil || run == nil {
 		return msgs
 	}
@@ -297,7 +296,7 @@ func (s *HarnessControl) handleHarnessAskUser(w http.ResponseWriter, r *http.Req
 		s.responses.InternalError(w, r, err)
 		return
 	}
-	handle, err := mgr.RequestUserInput(r.Context(), sessionID, workflow.UserInputRequest{
+	handle, err := mgr.Asks.RequestUserInput(r.Context(), sessionID, workflowinputs.UserInputRequest{
 		Prompt:       prompt,
 		ResponseType: rt,
 		Purpose:      req.Purpose,
@@ -306,7 +305,7 @@ func (s *HarnessControl) handleHarnessAskUser(w http.ResponseWriter, r *http.Req
 		ToolCallID:   toolCallID,
 	})
 	if err != nil {
-		reject := &workflow.AskUserReject{}
+		reject := &workflowinputs.AskUserReject{}
 		if errors.As(err, &reject) {
 			s.responses.FailDetails(w, wire.ApiErrorCodeAskUserRejected, map[string]any{"reject_code": reject.Code}, reject.Error())
 			return
@@ -315,7 +314,7 @@ func (s *HarnessControl) handleHarnessAskUser(w http.ResponseWriter, r *http.Req
 		return
 	}
 	// Announce the card after its transcript rows are durable.
-	mgr.AnnouncePendingAsk(r.Context(), sessionID)
+	mgr.Asks.AnnouncePendingAsk(r.Context(), sessionID)
 	// Publish the card to late SSE subscribers.
 	if msgs, err := s.sessionStore.GetMessages(r.Context(), sessionID); err == nil {
 		for _, msg := range msgs {
@@ -388,11 +387,11 @@ func (s *HarnessControl) handleHarnessReviewLoopVerdict(w http.ResponseWriter, r
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "verdict is required")
 		return
 	}
-	if _, err := mgr.RecordReviewLoopVerdict(r.Context(), sessionID, req.Verdict, nil, nil); err != nil {
+	if _, err := mgr.Verdicts.RecordReviewLoopVerdict(r.Context(), sessionID, req.Verdict, nil, nil); err != nil {
 		s.responses.InternalError(w, r, err)
 		return
 	}
-	run, err := mgr.GetActive(r.Context(), sessionID)
+	run, err := mgr.Store.Runs.ActiveBySession(r.Context(), sessionID)
 	if err != nil {
 		s.responses.InternalError(w, r, err)
 		return
@@ -431,7 +430,7 @@ func (s *HarnessControl) handleHarnessAskUserLastResponse(w http.ResponseWriter,
 		if strings.TrimSpace(msg.ToolResult.Tool) != "ask_user" {
 			continue
 		}
-		var body workflow.AskUserAnswerBody
+		var body workflowinputs.AskUserAnswerBody
 		if err := json.Unmarshal([]byte(msg.ToolResult.Content), &body); err != nil || body.Status != "answered" {
 			continue
 		}

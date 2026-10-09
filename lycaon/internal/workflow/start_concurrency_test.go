@@ -3,11 +3,11 @@ package workflow
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"sync"
 	"sync/atomic"
 	"testing"
-
-	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 // TestStartIsSerializedPerSession permits one concurrent start per session.
@@ -28,12 +28,12 @@ func TestStartIsSerializedPerSession(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			<-start
-			run, err := mgr.StartAmbient(context.Background(), sessionID, "plan", "1.0.0")
+			run, err := mgr.Ambient.StartAmbient(context.Background(), sessionID, "plan", "1.0.0")
 			switch {
 			case err == nil && run != nil:
 				successes.Add(1)
 				successRunID.Store(run.ID)
-			case errors.Is(err, ErrActiveRunExists):
+			case errors.Is(err, runstate.ErrActiveRunExists):
 				conflicts.Add(1)
 			default:
 				other.Add(1)
@@ -48,12 +48,12 @@ func TestStartIsSerializedPerSession(t *testing.T) {
 		t.Fatalf("concurrent Start: %d successes, want exactly 1 (conflicts=%d other=%d) — likely a TOCTOU race in Start", got, conflicts.Load(), other.Load())
 	}
 	if got := conflicts.Load(); got != N-1 {
-		t.Fatalf("concurrent Start: %d ErrActiveRunExists, want %d (the losing N-1)", got, N-1)
+		t.Fatalf("concurrent Start: %d runstate.ErrActiveRunExists, want %d (the losing N-1)", got, N-1)
 	}
 
 	// The winner remains the active run.
-	active, err := mgr.Store.ActiveBySession(context.Background(), sessionID)
-	testutil.FailErr(t, "mgr.Store.ActiveBySession failed", err)
+	active, err := mgr.Store.Runs.ActiveBySession(context.Background(), sessionID)
+	testutil.FailErr(t, "mgr.Store.Runs.ActiveBySession failed", err)
 	if active == nil {
 		t.Fatal("no active run after winning Start")
 	}
@@ -70,7 +70,7 @@ func TestTryAutoAdvanceIdempotentUnderConcurrency(t *testing.T) {
 	testutil.FailErr(t, "startRun failed", err)
 	run = completePlanIntakeT(ctx, t, mgr, run)
 	seedValidPlanContent(t, blueprintMgr, run.BlueprintPath)
-	run, err = mgr.Advance(ctx, run.ID)
+	run, err = mgr.Phases.Advance(ctx, run.ID)
 	testutil.FailErr(t, "Advance research", err)
 	startPhase := run.CurrentPhase
 	if startPhase != "expand" {
@@ -86,7 +86,7 @@ func TestTryAutoAdvanceIdempotentUnderConcurrency(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			<-gate
-			advanced, err := mgr.TryAutoAdvance(ctx, run.ID)
+			advanced, err := mgr.Phases.TryAutoAdvance(ctx, run.ID)
 			if err != nil {
 				results[i] = "err:" + err.Error()
 				return
@@ -113,8 +113,8 @@ func TestTryAutoAdvanceIdempotentUnderConcurrency(t *testing.T) {
 	}
 
 	// At least one caller advances the valid plan.
-	final, err := mgr.Get(ctx, run.ID)
-	testutil.FailErr(t, "mgr.Get failed", err)
+	final, err := mgr.Store.Runs.Get(ctx, run.ID)
+	testutil.FailErr(t, "mgr.Store.Runs.Get failed", err)
 	if final.CurrentPhase == startPhase {
 		t.Fatalf("expected at least one auto-advance to land; still on %q", startPhase)
 	}

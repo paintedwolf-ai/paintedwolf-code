@@ -52,7 +52,7 @@ func TestRecoverApprovalOperationsRollsBackPreparedAuthority(t *testing.T) {
 	if status != "prepared" {
 		t.Fatalf("retried status = %q", status)
 	}
-	stored, err := store.Get(t.Context(), checkpoint.ID)
+	stored, err := store.Runs.Get(t.Context(), checkpoint.ID)
 	testutil.FailErr(t, "get checkpoint", err)
 	if stored.Status != DecisionStatusPending {
 		t.Fatalf("checkpoint status = %q", stored.Status)

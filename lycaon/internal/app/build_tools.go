@@ -3,8 +3,6 @@ package app
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/projectcontrib"
-
 	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/boot"
@@ -20,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/parse"
+	"github.com/lycaon/lycaon/internal/projectcontrib"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/scan"
 	"github.com/lycaon/lycaon/internal/secretcap"
@@ -27,6 +26,7 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workflow"
+	workflowstatetools "github.com/lycaon/lycaon/internal/workflow/statetools"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -80,8 +80,7 @@ func (b toolWiring) registerCoordinatorTools() error {
 	if err := parse.RegisterParseTools(b.toolRuntime.Registry, parseSvc); err != nil {
 		return fmt.Errorf("parse tools: %w", err)
 	}
-	if err := workflow.RegisterStateTools(b.toolRuntime.Registry, workflow.StateToolDeps{
-		Runs:     b.workflowMgr,
+	if err := workflowstatetools.RegisterStateTools(b.toolRuntime.Registry, workflowstatetools.StateToolDeps{Runs: b.workflowMgr.Store.Runs, Vars: b.workflowMgr.Phases.Vars, Journal: b.workflowMgr.Phases.Journal, Resolver: &b.workflowMgr.Resolver, Starts: b.workflowMgr.Starts, Controls: b.workflowMgr.Controls, Scaffold: b.workflowMgr.Blueprints.Scaffold,
 		Sessions: b.storage.Sessions,
 	}); err != nil {
 		return fmt.Errorf("state tools: %w", err)
@@ -181,8 +180,8 @@ func (b toolWiring) taskToolDeps() worker.TaskToolDeps {
 		Agents:           b.agents.Registry,
 		Workers:          b.workersCfg,
 		ToolBudget:       b.workerToolBudgetFor,
-		BindWorkflowTask: b.workflowMgr.BindWorkflowTask,
-		WorkflowWork:     b.workflowMgr.WorkflowWork,
+		BindWorkflowTask: b.workflowMgr.Fanout.BindWorkflowTask,
+		WorkflowWork:     b.workflowMgr.Fanout.WorkflowWork,
 		TaskReceipt:      b.workerQueue.TaskReceipt,
 		PendingDecision: func(ctx context.Context, childSessionID string) (string, bool, error) {
 			if b.mgr == nil || b.mgr.Decisions() == nil {
@@ -215,16 +214,16 @@ func (b toolWiring) taskToolDeps() worker.TaskToolDeps {
 			if scope != nil {
 				in.Scope = *scope
 			}
-			run, err := b.workflowMgr.GetActive(ctx, tctx.Identity.SessionID)
+			run, err := b.workflowMgr.Store.Runs.ActiveBySession(ctx, tctx.Identity.SessionID)
 			if err != nil {
 				return "", err
 			}
 			if run != nil {
-				manifest, err := b.workflowMgr.ManifestForRunID(ctx, run.ID)
+				manifest, err := b.workflowMgr.Resolver.ForRunID(ctx, run.ID)
 				if err != nil {
 					return "", err
 				}
-				in.CoverageAssignment, err = b.workflowMgr.CoverageAssignment(ctx, run, manifest, agentType)
+				in.CoverageAssignment, err = b.workflowMgr.Coverage.CoverageAssignment(ctx, run, manifest, agentType)
 				if err != nil {
 					return "", err
 				}
@@ -251,7 +250,7 @@ func (b toolWiring) taskToolDeps() worker.TaskToolDeps {
 // The mapping lives here because inject cannot import workflow — workflow
 // already imports inject.
 func recordedVerdictsForLeg(ctx context.Context, mgr *workflow.RunManager, sessionID string) []inject.RecordedVerdict {
-	stamped := mgr.StampedReviewVerdicts(ctx, sessionID)
+	stamped := mgr.Verdicts.StampedReviewVerdicts(ctx, sessionID)
 	if len(stamped) == 0 {
 		return nil
 	}

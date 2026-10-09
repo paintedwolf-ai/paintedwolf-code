@@ -1,8 +1,6 @@
 package boot_test
 
 import (
-	"testing"
-
 	"github.com/lycaon/lycaon/internal/boot"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/rules"
@@ -13,6 +11,8 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
+	"testing"
 )
 
 func TestValidateServeWiringAcceptsProductionShape(t *testing.T) {
@@ -33,7 +33,7 @@ func TestValidateServeWiringAcceptsProductionShape(t *testing.T) {
 	testutil.FailErr(t, "workflow.RegistryFromDirs failed", err)
 	sqlDB := testdbfixture.Open(t, "wiring.db")
 	sessStore := store.NewSQL(sqlDB)
-	workflowMgr := workflow.NewManager(workflow.NewSQLStore(sqlDB), sessStore, manifests, nil)
+	workflowMgr := workflow.NewManager(workflowpersistence.New(sqlDB), sessStore, manifests, nil)
 	workflowMgr.SetConditionRegistry(reg)
 	if err := boot.ValidateServeWiring(boot.ServeWiring{
 		PostureRegistry: postures,

@@ -4,10 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"strings"
-
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/worker/jobstate"
 	"github.com/lycaon/lycaon/pkg/api"
+	"strings"
 )
 
 // GetLatestByChildSessionID returns the newest run for a child session.
@@ -111,5 +111,5 @@ func (q *SQLQueue) TaskReceipt(ctx context.Context, sessionID, callID string) (*
 	if err != nil {
 		return nil, err
 	}
-	return workerTaskFromRow(ctx, q.store.db, row)
+	return jobstate.FromRow(ctx, q.store.db, row)
 }

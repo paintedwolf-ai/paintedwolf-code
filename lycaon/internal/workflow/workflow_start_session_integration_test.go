@@ -4,16 +4,18 @@ package workflow
 
 import (
 	"context"
-	"testing"
-
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
+	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	"github.com/lycaon/lycaon/pkg/api"
+	"testing"
 )
 
 func TestStartSessionTierWorkflow(t *testing.T) {
@@ -29,12 +31,12 @@ func TestStartSessionTierWorkflow(t *testing.T) {
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "sessStore.Create failed", err)
 
-	sessionWFStore := NewSessionWorkflowSQLStore(sqlDB)
+	sessionWFStore := workflowdrafts.NewSQL(sqlDB)
 	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{})
 	testutil.FailErr(t, "build conditions registry", err)
 	agents := orchestration.NewMemoryAgentRegistry()
 	_ = orchestration.LoadRequiredAgentRegistry(context.Background(), agents)
-	composer := &Composer{
+	composer := &workflowcomposition.Composer{
 		SessionStore: sessionWFStore,
 		Registry:     reg,
 		Agents:       agents,
@@ -53,7 +55,7 @@ phases:
       set_posture: build
     complete_when: delegation_closeout_complete
 `
-	if _, err := composer.Compose(context.Background(), ComposeRequest{
+	if _, err := composer.Compose(context.Background(), workflowcomposition.ComposeRequest{
 		SessionID: sess.ID, ManifestYAML: []byte(manifestYAML), SessionPosture: sess.Posture, CreatedBy: "coordinator",
 	}); err != nil {
 		t.Fatal(err)
@@ -61,9 +63,9 @@ phases:
 
 	bundledReg, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "RegistryFromDirs failed", err)
-	runStore := NewSQLStore(sqlDB)
+	runStore := workflowpersistence.New(sqlDB)
 	mgr := NewManager(runStore, sessStore, bundledReg, nil)
-	mgr.Resolver = ManifestResolver{SessionStore: sessionWFStore}
+	mgr.Resolver.SessionStore = sessionWFStore
 	WireBlueprintDepsForTest(mgr, dir)
 
 	run, err := startRun(context.Background(), mgr, sess.ID, "hotfix-session", "1.0.0")

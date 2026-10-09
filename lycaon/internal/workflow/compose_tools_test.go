@@ -3,15 +3,16 @@ package workflow_test
 import (
 	"context"
 	"encoding/json"
-	"strings"
-	"testing"
-
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/workflow"
+	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
+	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
+	"strings"
+	"testing"
 )
 
 func TestComposeToolOmitsEffectiveYAML(t *testing.T) {
@@ -20,10 +21,10 @@ func TestComposeToolOmitsEffectiveYAML(t *testing.T) {
 	_ = orchestration.LoadRequiredAgentRegistry(context.Background(), agents)
 	condReg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{})
 	testutil.FailErr(t, "build conditions registry", err)
-	policy, err := workflow.LoadComposePolicy()
-	testutil.FailErr(t, "workflow.LoadComposePolicy failed", err)
-	composer := &workflow.Composer{
-		SessionStore: workflow.NewMemorySessionWorkflowStore(),
+	policy, err := workflowcomposition.LoadComposePolicy()
+	testutil.FailErr(t, "workflowcomposition.LoadComposePolicy failed", err)
+	composer := &workflowcomposition.Composer{
+		SessionStore: workflowdrafts.NewMemory(),
 		Registry:     condReg,
 		Agents:       agents,
 		Policy:       policy,

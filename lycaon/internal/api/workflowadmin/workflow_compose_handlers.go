@@ -3,14 +3,14 @@ package workflowadmin
 import (
 	"context"
 	"errors"
-	"net/http"
-
 	"github.com/go-chi/chi/v5"
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
-	"github.com/lycaon/lycaon/internal/workflow"
+	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
+	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
 	wire "github.com/lycaon/lycaon/pkg/api"
+	"net/http"
 )
 
 func (s *Composition) HandleComposeWorkflow(w http.ResponseWriter, r *http.Request) {
@@ -33,16 +33,16 @@ func (s *Composition) HandleComposeWorkflow(w http.ResponseWriter, r *http.Reque
 		s.responses.InvalidQuery(w, err)
 		return
 	}
-	result, err := s.Composer.Compose(r.Context(), workflow.ComposeRequest{
+	result, err := s.Composer.Compose(r.Context(), workflowcomposition.ComposeRequest{
 		SessionID:      sessionID,
 		ProjectDir:     sess.WorkspacePath,
 		ManifestYAML:   body,
 		SessionPosture: sess.Posture,
-		CreatedBy:      workflow.ComposeActorUser,
+		CreatedBy:      workflowdrafts.User,
 		DryRun:         dryRun,
 	})
 	if err != nil {
-		var vf *workflow.ComposeValidationFailed
+		var vf *workflowcomposition.ComposeValidationFailed
 		if errors.As(err, &vf) {
 			s.responses.FailDetails(w, wire.ApiErrorCodeWorkflowValidationFailed, map[string]any{"errors": vf.Errors}, "workflow validation failed")
 			return
@@ -96,17 +96,17 @@ func (s *Composition) HandleComposeFromTemplate(w http.ResponseWriter, r *http.R
 		s.responses.InvalidQuery(w, err)
 		return
 	}
-	result, err := s.Composer.ComposeFromTemplate(r.Context(), workflow.ComposeFromTemplateRequest{
+	result, err := s.Composer.ComposeFromTemplate(r.Context(), workflowcomposition.ComposeFromTemplateRequest{
 		SessionID:      sessionID,
 		ProjectDir:     sess.WorkspacePath,
 		TemplateID:     req.TemplateID,
 		Params:         req.Params,
 		SessionPosture: sess.Posture,
-		CreatedBy:      workflow.ComposeActorUser,
+		CreatedBy:      workflowdrafts.User,
 		DryRun:         dryRun,
 	})
 	if err != nil {
-		var vf *workflow.ComposeValidationFailed
+		var vf *workflowcomposition.ComposeValidationFailed
 		if errors.As(err, &vf) {
 			s.responses.FailDetails(w, wire.ApiErrorCodeWorkflowValidationFailed, map[string]any{"errors": vf.Errors}, "workflow validation failed")
 			return

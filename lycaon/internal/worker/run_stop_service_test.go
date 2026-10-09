@@ -3,8 +3,6 @@ package worker
 import (
 	"context"
 	"errors"
-	"testing"
-
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/session"
@@ -14,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
+	"testing"
 )
 
 type allowAllWorkflowRuns struct{}
@@ -32,7 +31,7 @@ func TestRunStopServiceCancelProjectsWorkerCard(t *testing.T) {
 	runID := uuid.NewString()
 	jobID := uuid.NewString()
 	queue := NewInMemoryQueue(2)
-	queue.SetWorkflowRunChecker(allowAllWorkflowRuns{})
+	queue.SetWorkflowDomains(&WorkflowDomains{Runs: allowAllWorkflowRuns{}, Tasks: allowAllWorkflowRuns{}})
 	_, err = queue.EnqueueWithProjectID(ctx, testdbseed.DefaultProjectID, api.WorkerTask{
 		Prompt:          "fixture",
 		Brief:           "fixture",
@@ -109,7 +108,7 @@ func TestRunStopServiceCancelSettlesRemainingTasksPastPoisonTask(t *testing.T) {
 	poisonID := uuid.NewString()
 	victimID := uuid.NewString()
 	queue := NewInMemoryQueue(2)
-	queue.SetWorkflowRunChecker(allowAllWorkflowRuns{})
+	queue.SetWorkflowDomains(&WorkflowDomains{Runs: allowAllWorkflowRuns{}, Tasks: allowAllWorkflowRuns{}})
 	for _, jobID := range []string{poisonID, victimID} {
 		_, err := queue.EnqueueWithProjectID(ctx, testdbseed.DefaultProjectID, api.WorkerTask{
 			Prompt:          "fixture",
@@ -147,7 +146,7 @@ func TestRunStopServiceHoldContinuesPastPoisonTask(t *testing.T) {
 	poisonID := uuid.NewString()
 	victimID := uuid.NewString()
 	queue := NewInMemoryQueue(2)
-	queue.SetWorkflowRunChecker(allowAllWorkflowRuns{})
+	queue.SetWorkflowDomains(&WorkflowDomains{Runs: allowAllWorkflowRuns{}, Tasks: allowAllWorkflowRuns{}})
 	for _, jobID := range []string{poisonID, victimID} {
 		_, err := queue.EnqueueWithProjectID(ctx, testdbseed.DefaultProjectID, api.WorkerTask{
 			Prompt:          "fixture",
@@ -189,7 +188,7 @@ func TestRunStopServiceHoldPatchesCanonicalWorkerRow(t *testing.T) {
 	runID := uuid.NewString()
 	jobID := uuid.NewString()
 	queue := NewInMemoryQueue(2)
-	queue.SetWorkflowRunChecker(allowAllWorkflowRuns{})
+	queue.SetWorkflowDomains(&WorkflowDomains{Runs: allowAllWorkflowRuns{}, Tasks: allowAllWorkflowRuns{}})
 	_, err = queue.EnqueueWithProjectID(ctx, testdbseed.DefaultProjectID, api.WorkerTask{
 		Prompt:          "fixture",
 		Brief:           "fixture",

@@ -2,12 +2,11 @@ package loopwake
 
 import (
 	"context"
-	"strings"
-	"time"
-
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/batch"
 	"github.com/lycaon/lycaon/pkg/api"
+	"strings"
+	"time"
 )
 
 func (l *LoopEngine) coordinatorBatchState(ctx context.Context, sessionID string) batch.State {
@@ -173,7 +172,7 @@ func (l *LoopEngine) workflowRunFinished(ctx context.Context, sessionID string) 
 	if deps.WorkflowSource == nil {
 		return false
 	}
-	run, err := deps.WorkflowSource.ActiveRun(ctx, sessionID)
+	run, err := deps.WorkflowSource.Runs.ActiveBySession(ctx, sessionID)
 	if err != nil {
 		return false
 	}

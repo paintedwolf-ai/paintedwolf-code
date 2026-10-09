@@ -2,11 +2,10 @@ package session
 
 import (
 	"context"
-	"log/slog"
-	"strings"
-
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/resourcelifecycle"
+	"log/slog"
+	"strings"
 )
 
 // RegisterSessionCleanup adds one session-scoped cleanup rule.
@@ -79,7 +78,7 @@ func (m *Manager) releaseSessionMemory(ctx context.Context, sessionID string) {
 		m.coordinatorRuntime.ForgetSession(ctx, sessionID)
 	}
 	if m.workflows != nil {
-		m.workflows.ForgetSession(sessionID)
+		m.workflows.Cleanup.ForgetSession(sessionID)
 	}
 	m.checkpointCapture.Reset(sessionID)
 	m.Streams().Finish(ctx, sessionID)

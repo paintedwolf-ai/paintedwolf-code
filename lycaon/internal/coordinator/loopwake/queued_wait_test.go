@@ -2,18 +2,17 @@ package loopwake
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/promptresult"
-	"sync/atomic"
-	"testing"
-	"time"
-
 	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
+	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
+	"sync/atomic"
+	"testing"
+	"time"
 )
 
 type queuedWaitFixture struct {
@@ -31,7 +30,7 @@ func newQueuedWaitFixture(t *testing.T) *queuedWaitFixture {
 	f := &queuedWaitFixture{loop: NewLoopEngine(), store: &awaitstore.Store{DB: database}, deps: loopDepsForTest()}
 	f.loop.SetWaitStore(f.store)
 	f.deps.GetSession = func(context.Context, string) (*api.Session, error) { return &api.Session{ID: "session"}, nil }
-	f.deps.WorkflowSource = StubLoopWF{run: &api.WorkflowRun{ID: "run", Revision: 5, CurrentPhase: "work", Status: api.WorkflowRunStatusRunning}}
+	f.deps.WorkflowSource = workflowFixturePorts(StubLoopWF{run: &api.WorkflowRun{ID: "run", Revision: 5, CurrentPhase: "work", Status: api.WorkflowRunStatusRunning}})
 	f.deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) bool { return true }
 	f.deps.RunPrompt = func(context.Context, string) (*promptresult.Result, error) {
 		f.prompts.Add(1)
@@ -121,7 +120,7 @@ func TestQueuedProcessEventsRetainHandlesAndSettleOnlyMatchingWait(t *testing.T)
 	f.loop.ObservePrompt("session")(inject.CoordinatorTurnFrame{})
 	f.arm(t)
 	f.deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) bool { return false }
-	f.deps.WorkflowSource = closedBatchLoopWF(3)
+	f.deps.WorkflowSource = workflowFixturePorts(closedBatchLoopWF(3))
 	f.deps.WorkerCycleIdle = func(context.Context, *api.Session, string) (bool, error) { return false, nil }
 	var resumes atomic.Int32
 	f.deps.RunWaitResume = func(_ context.Context, _ string, delivery WaitDelivery) (*promptresult.Result, error) {
@@ -245,7 +244,7 @@ func TestQueueAdmissionPreventsPrematureUserTurnSettlement(t *testing.T) {
 func TestMatchingWaitResultBypassesStaleBatchFilter(t *testing.T) {
 	f := newQueuedWaitFixture(t)
 	f.arm(t)
-	f.deps.WorkflowSource = closedBatchLoopWF(3)
+	f.deps.WorkflowSource = workflowFixturePorts(closedBatchLoopWF(3))
 	f.deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) bool { return false }
 	var resumes atomic.Int32
 	f.deps.RunWaitResume = func(_ context.Context, _ string, delivery WaitDelivery) (*promptresult.Result, error) {

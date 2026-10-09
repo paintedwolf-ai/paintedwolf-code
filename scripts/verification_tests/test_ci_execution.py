@@ -48,7 +48,7 @@ class HostedVerificationTests(unittest.TestCase):
         nightly = {target for row in ci.matrix("nightly")["include"] for target in lanes[row["lane"]]["targets"]}
         self.assertEqual(nightly, {"test:full", "test:race", "test:fuzz", "test:stress", "check:coverage",
                                    "den:coverage-check", "den:test:transcript-scale", "lint:vuln:fresh",
-                                   "perf:bench", "perf:sidecar", "perf:soak"})
+                                   "perf:bench", "perf:sidecar", "perf:soak", "den:webkit:scroll"})
         for suite in ci.SUITES - {"all"}:
             with self.subTest(suite=suite):
                 names = {row["lane"] for row in ci.matrix("nightly", suite)["include"]}
@@ -73,7 +73,8 @@ class HostedVerificationTests(unittest.TestCase):
         setups = {row["lane"]: row["setup"] for row in ci.matrix("check")["include"]}
         self.assertEqual(setups["native"], "shell")
         # The WebKit harness builds without the shell, so the lane skips its packaging inputs.
-        self.assertEqual(setups["webkit"], "harness")
+        nightly = {row["lane"]: row["setup"] for row in ci.matrix("nightly", "e2e")["include"]}
+        self.assertEqual(nightly["webkit"], "harness")
         self.assertEqual({setup for lane, setup in setups.items() if lane not in {"native", "webkit"}},
                          {"verification"})
         for mutation in ("unknown", "missing", "boolean"):
@@ -89,6 +90,29 @@ class HostedVerificationTests(unittest.TestCase):
                     lane["native"] = True
                 with patch.object(ci, "catalog", return_value=data), self.assertRaises(ValueError):
                     ci.matrix("check")
+
+    def test_e2e_leaves_merge_admission_and_has_an_explicit_nightly_selection(self):
+        self.assertNotIn("den:webkit:scroll", [stage["name"] for stage in planning.expand(["check"])])
+        self.assertNotIn("webkit", {row["lane"] for row in ci.matrix("check")["include"]})
+        self.assertEqual({row["lane"] for row in ci.matrix("nightly", "e2e")["include"]},
+                         {"webkit", "vulnerability-freshness"})
+
+    def test_behavior_shards_preserve_the_full_recipe_and_memory_cap(self):
+        lane = ci.lanes()["behavior"]
+        for profile in ["check", "nightly", "release"]:
+            rows = [row for row in ci.matrix(profile)["include"] if row["lane"] == "behavior"]
+            self.assertEqual([row["shard"] for row in rows], ["1/2", "2/2"])
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(ci, "artifact_root", return_value=Path(directory)), \
+                patch.object(ci.subprocess, "call", return_value=0) as run:
+            for shard in ["1/2", "2/2"]:
+                ci.run_lane("behavior", shard)
+                self.assertEqual(run.call_args.args[0], ["./task", "test:full"])
+                environment = run.call_args.kwargs["env"]
+                self.assertEqual(environment["PW_GO_SHARD"], shard)
+                self.assertEqual(environment["PW_TEST_WORKERS"], str(lane["workers"]))
+            with self.assertRaises(ValueError):
+                ci.run_lane("behavior")
 
     def test_combined_analysis_targets_restore_both_tool_sets(self):
         self.assertEqual(ci.analysis_set(["lint:full", "lint:vuln"]), "all")
@@ -128,6 +152,13 @@ class HostedVerificationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             ci.require_success({"verification": {"result": "success"}}, ["platform"])
 
+    def test_draft_pull_requests_never_pass_the_required_check(self):
+        # Drafts skip verification, and a skipped required check would otherwise read as passing.
+        for results in [{"verification": {"result": "skipped"}, "platform": {"result": "skipped"}},
+                        {"verification": {"result": "success"}, "platform": {"result": "skipped"}}]:
+            with self.subTest(results=results), self.assertRaisesRegex(ValueError, "ready for review"):
+                ci.require_success(results, ["platform"], draft=True)
+
     def test_lane_uses_task_admission_and_preserves_the_verdict(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -146,7 +177,7 @@ class HostedVerificationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory, \
                 patch.object(ci, "artifact_root", return_value=Path(directory)), \
                 patch.object(ci.subprocess, "call", return_value=0) as run:
-            ci.run_lane("behavior")
+            ci.run_lane("behavior", "1/2")
             self.assertEqual(run.call_args.kwargs["env"]["PW_TEST_WORKERS"], str(ci.lanes()["behavior"]["workers"]))
             ci.run_lane("frontend")
             self.assertEqual(run.call_args.kwargs["env"].get("PW_TEST_WORKERS"), ci.os.environ.get("PW_TEST_WORKERS"))
@@ -166,7 +197,7 @@ class HostedVerificationTests(unittest.TestCase):
                 patch.object(ci.subprocess, "call", return_value=0) as run:
             ci.run_lane("race", f"2/{count}")
             self.assertEqual(run.call_args.kwargs["env"]["PW_GO_SHARD"], f"2/{count}")
-            for lane, shard in [("race", ""), ("race", f"{count + 1}/{count}"), ("behavior", "1/2")]:
+            for lane, shard in [("race", ""), ("race", f"{count + 1}/{count}"), ("frontend", "1/2")]:
                 with self.subTest(lane=lane, shard=shard), self.assertRaises(ValueError):
                     ci.run_lane(lane, shard)
 
@@ -191,7 +222,7 @@ class HostedVerificationTests(unittest.TestCase):
                         patch.object(ci.subprocess, "call", return_value=0) as run:
                     if not inherited:
                         ci.os.environ.pop("PW_GO_TEST_TIMEOUT_SECONDS", None)
-                    ci.run_lane("behavior")
+                    ci.run_lane("behavior", "1/2")
                     self.assertEqual(run.call_args.kwargs["env"]["PW_GO_TEST_TIMEOUT_SECONDS"], expected)
 
     def test_release_commit_needs_a_passing_full_tier_check(self):

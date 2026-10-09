@@ -3,13 +3,13 @@ package delegation
 import (
 	"context"
 	"database/sql"
-	"strings"
-	"time"
-
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/worker/jobstate"
 	"github.com/lycaon/lycaon/pkg/api"
+	"strings"
+	"time"
 )
 
 // SQLStore persists delegations and legs in SQLite.
@@ -184,7 +184,7 @@ func (s *SQLStore) dispatchLegWithJob(ctx context.Context, leg api.Leg, delegati
 		return err
 	}
 	// Commit the leg and worker atomically.
-	if err := worker.EnqueueJobEventTx(ctx, tx, s.outbox, task.ID); err != nil {
+	if err := jobstate.EnqueueJobEventTx(ctx, tx, s.outbox, task.ID); err != nil {
 		return err
 	}
 	n, err := qtx.UpdateDelegation(ctx, db.UpdateDelegationParams{

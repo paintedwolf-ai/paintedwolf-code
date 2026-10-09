@@ -4,13 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"strings"
-	"time"
-
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/worker/jobstate"
 	"github.com/lycaon/lycaon/internal/workspacebaseline"
 	"github.com/lycaon/lycaon/pkg/api"
+	"strings"
+	"time"
 )
 
 // JobCompletion records the durable outcome of settling one worker claim.
@@ -118,7 +118,7 @@ func (s *SQLStore) CompleteJob(ctx context.Context, id string, result api.Worker
 			return JobCompletion{}, err
 		}
 	}
-	if err := EnqueueJobEventTx(ctx, tx, s.outbox, id); err != nil {
+	if err := jobstate.EnqueueJobEventTx(ctx, tx, s.outbox, id); err != nil {
 		return JobCompletion{}, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -172,7 +172,7 @@ func (s *SQLStore) FailJob(ctx context.Context, claimed *api.WorkerTask, errMsg 
 	}); err != nil {
 		return false, err
 	}
-	if err := EnqueueJobEventTx(ctx, tx, s.outbox, claimed.ID); err != nil {
+	if err := jobstate.EnqueueJobEventTx(ctx, tx, s.outbox, claimed.ID); err != nil {
 		return false, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -216,7 +216,7 @@ func (s *SQLStore) RetryJob(ctx context.Context, claimed *api.WorkerTask, errMsg
 	if attemptRows != 1 {
 		return false, fmt.Errorf("running worker %s missing active attempt", claimed.ID)
 	}
-	if err := EnqueueJobEventTx(ctx, tx, s.outbox, claimed.ID); err != nil {
+	if err := jobstate.EnqueueJobEventTx(ctx, tx, s.outbox, claimed.ID); err != nil {
 		return false, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -257,7 +257,7 @@ func (s *SQLStore) ParkJob(ctx context.Context, claimed *api.WorkerTask) (bool, 
 	if attemptRows != 1 {
 		return false, fmt.Errorf("running worker %s missing active attempt", claimed.ID)
 	}
-	if err := EnqueueJobEventTx(ctx, tx, s.outbox, claimed.ID); err != nil {
+	if err := jobstate.EnqueueJobEventTx(ctx, tx, s.outbox, claimed.ID); err != nil {
 		return false, err
 	}
 	if err := tx.Commit(); err != nil {

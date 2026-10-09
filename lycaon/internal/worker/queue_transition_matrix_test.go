@@ -3,14 +3,13 @@ package worker_test
 import (
 	"context"
 	"errors"
-	"reflect"
-	"testing"
-
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/pkg/api"
+	"reflect"
+	"testing"
 )
 
 type allowAllRuns struct{}
@@ -22,7 +21,7 @@ func (allowAllRuns) AssertWorkerTask(context.Context, *api.WorkerTask) error { r
 var matrixQueueBackends = map[string]func(t *testing.T) worker.WorkerQueue{
 	"memory": func(*testing.T) worker.WorkerQueue {
 		q := worker.NewInMemoryQueue(1)
-		q.SetWorkflowRunChecker(allowAllRuns{})
+		q.SetWorkflowDomains(&worker.WorkflowDomains{Runs: allowAllRuns{}, Tasks: allowAllRuns{}})
 		return q
 	},
 	"sql": func(t *testing.T) worker.WorkerQueue {

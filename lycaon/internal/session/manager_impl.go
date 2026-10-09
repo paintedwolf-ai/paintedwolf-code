@@ -3,10 +3,6 @@ package session
 import (
 	"context"
 	"fmt"
-	"sync"
-	"sync/atomic"
-	"time"
-
 	"github.com/lycaon/lycaon/internal/agentpresence"
 	"github.com/lycaon/lycaon/internal/authzcontext"
 	"github.com/lycaon/lycaon/internal/bgprocess"
@@ -63,6 +59,9 @@ import (
 	"github.com/lycaon/lycaon/internal/webresearch"
 	"github.com/lycaon/lycaon/pkg/api"
 	"golang.org/x/sync/singleflight"
+	"sync"
+	"sync/atomic"
+	"time"
 )
 
 type Manager struct {
@@ -103,7 +102,7 @@ type Manager struct {
 	oarPipeline             *oar.GuardPipeline
 	oarRenderer             *oar.Renderer
 	mcpRuntime              MCPRuntimeView
-	workflows               WorkflowSessionView
+	workflows               *WorkflowDomains
 	reportDocuments         ReportDocumentChecker
 	scanEvidenceRuns        ScanEvidenceRuns
 	workflowToolAccess      WorkflowToolAccessView
@@ -140,7 +139,7 @@ type Manager struct {
 	boardBuilder            assembly.BoardSnapshotBuilder
 	boardFormatter          assembly.BoardPackFormatter
 	includeScanLegend       func() bool
-	loopWorkflowSource      loopwake.LoopWorkflowSource
+	loopWorkflowSource      *loopwake.WorkflowDomains
 	coordinatorRuntime      *coordinator.Runtime
 	coordinatorRuntimeOnce  sync.Once
 	delegations             DelegationLegLookup
