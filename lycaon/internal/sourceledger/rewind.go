@@ -174,6 +174,10 @@ func (s *Comparisons) checkRewindHead(ctx context.Context, projectID string, out
 	if err != nil {
 		return err
 	}
+	if head.Path != file.Expected.Path || head.RootID != file.Expected.RootID || head.State != file.Expected.State {
+		out.Issues = append(out.Issues, RewindIssue{RootID: file.Expected.RootID, Path: file.Expected.Path, Code: "later_change"})
+		return nil
+	}
 	equivalent := false
 	if head.VersionID != file.Expected.ID {
 		var derived, cause string

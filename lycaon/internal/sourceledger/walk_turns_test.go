@@ -32,10 +32,10 @@ func TestWalkChaptersUseCompleteTranscriptOrdinals(t *testing.T) {
 	insertWalkMessage(t, store, "second", "s1", "", "transcript", "Fix\n the editor", 5)
 	for i := 1; i <= 2; i++ {
 		mustRecord(t, store, ctx, RecordInput{
-			ProjectID: "p1", RootID: "r1", Path: fmt.Sprintf("file-%d", i),
-			SessionID: "s1", Turn: i, OperationID: fmt.Sprintf("op-%d", i),
-			Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginAgent, After: []byte("hello"),
-		})
+			RecordLocation: RecordLocation{RootID: "r1", Path: fmt.Sprintf("file-%d", i)},
+			ProjectID:      "p1",
+			SessionID:      "s1", Turn: i, OperationID: fmt.Sprintf("op-%d", i),
+			Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginAgent, After: []byte("hello")})
 	}
 	page, err := store.Walk.QueryWalk(ctx, "p1", Baseline{Kind: BaselineSession, SessionID: "s1"}, 1, 0, CommitLens{})
 	testutil.FailErr(t, "load newest walk page", err)

@@ -191,10 +191,10 @@ func TestDriftIsAttributedToTheOpenWindowAndOutsideAppOtherwise(t *testing.T) {
 	store, ctx, root := openLedgerOnDisk(t)
 	writeRootFile(t, root, "config.toml", "a = 1\n")
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "config.toml",
-		Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginAgent,
-		SessionID: "s1", Turn: 1, After: []byte("a = 1\n"),
-	})
+		RecordLocation: RecordLocation{RootID: "r1", Path: "config.toml"},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpCreate, Origin: api.SourceChangeOriginAgent,
+		SessionID: "s1", Turn: 1, After: []byte("a = 1\n")})
 
 	// The first pass only seeds tracking; drift with no window open is
 	// outside the app.

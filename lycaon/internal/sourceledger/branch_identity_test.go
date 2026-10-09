@@ -15,15 +15,15 @@ func TestFileHistorySurvivesTheRootFolderMoving(t *testing.T) {
 	store, ctx := openLedger(t)
 
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "notes/hello.txt",
-		Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
-		After: []byte("first\n"),
-	})
+		RecordLocation: RecordLocation{RootID: "r1", Path: "notes/hello.txt"},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
+		After: []byte("first\n")})
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "notes/hello.txt",
-		Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginUser,
-		Before: []byte("first\n"), After: []byte("second\n"),
-	})
+		RecordLocation: RecordLocation{RootID: "r1", Path: "notes/hello.txt"},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpWrite, Origin: api.SourceChangeOriginUser,
+		Before: []byte("first\n"), After: []byte("second\n")})
 	fileID, _ := mustResolve(t, store, ctx, "notes/hello.txt")
 	before, err := store.History.QueryFileVersions(ctx, "p1", fileID, 50, 0)
 	testutil.FailErr(t, "list versions before the move", err)
@@ -53,10 +53,10 @@ func TestFileHistorySurvivesAnUnrelatedRootAttaching(t *testing.T) {
 	store, ctx := openLedger(t)
 
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "a.txt",
-		Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
-		After: []byte("v1\n"),
-	})
+		RecordLocation: RecordLocation{RootID: "r1", Path: "a.txt"},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
+		After: []byte("v1\n")})
 	fileID, _ := mustResolve(t, store, ctx, "a.txt")
 
 	_, err := store.sqlDB.ExecContext(ctx, `
@@ -89,19 +89,19 @@ func TestWorkerBranchExtendsTrunkFileIdentity(t *testing.T) {
 	store, ctx := openLedger(t)
 
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "shared.txt",
-		Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
-		After: []byte("trunk\n"),
-	})
+		RecordLocation: RecordLocation{RootID: "r1", Path: "shared.txt"},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
+		After: []byte("trunk\n")})
 	trunkFileID, trunkVersionID := mustResolve(t, store, ctx, "shared.txt")
 
 	worker, err := sourcebranch.ForWorker("job-1")
 	testutil.FailErr(t, "resolve the worker branch", err)
 	testutil.FailErr(t, "record the worker write", store.Record(ctx, RecordInput{
-		ProjectID: "p1", BranchID: worker, RootID: "r1", Path: "shared.txt",
+		RecordLocation: RecordLocation{RootID: "r1", Path: "shared.txt"},
+		ProjectID:      "p1", BranchID: worker,
 		JobID: "job-1", Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginAgent,
-		Before: []byte("trunk\n"), After: []byte("overlay\n"),
-	}))
+		Before: []byte("trunk\n"), After: []byte("overlay\n")}))
 
 	workerHead, err := store.History.ResolveHead(ctx, "p1", worker, "r1", "shared.txt")
 	testutil.FailErr(t, "resolve the worker head", err)
@@ -119,43 +119,35 @@ func TestWorkerBranchExtendsTrunkFileIdentity(t *testing.T) {
 	}
 }
 
-// Project checkpoints contain trunk heads only.
-func TestCheckpointHoldsOneEntryPerTrunkFile(t *testing.T) {
+// Pins retain their boundary without copying per-file state.
+func TestPinRetainsTrunkComparisonBoundary(t *testing.T) {
 	store, ctx := openLedger(t)
 
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "shared.txt",
-		Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
-		After: []byte("trunk\n"),
-	})
+		RecordLocation: RecordLocation{RootID: "r1", Path: "shared.txt"},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
+		After: []byte("trunk\n")})
 	worker, err := sourcebranch.ForWorker("job-1")
 	testutil.FailErr(t, "resolve the worker branch", err)
 	testutil.FailErr(t, "record the worker write", store.Record(ctx, RecordInput{
-		ProjectID: "p1", BranchID: worker, RootID: "r1", Path: "shared.txt",
+		RecordLocation: RecordLocation{RootID: "r1", Path: "shared.txt"},
+		ProjectID:      "p1", BranchID: worker,
 		JobID: "job-1", Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginAgent,
-		Before: []byte("trunk\n"), After: []byte("overlay\n"),
-	}))
+		Before: []byte("trunk\n"), After: []byte("overlay\n")}))
 
 	pin, err := store.Checkpoints.CreatePin(ctx, "p1", "boundary")
 	testutil.FailErr(t, "create the pin", err)
 
-	rows, err := store.sqlDB.QueryContext(ctx,
-		`SELECT file_id FROM source_checkpoint_entries WHERE checkpoint_id = ?`, pin.ID)
-	testutil.FailErr(t, "read the checkpoint entries", err)
-	defer func() { _ = rows.Close() }()
-	seen := map[string]int{}
-	for rows.Next() {
-		var fileID string
-		testutil.FailErr(t, "scan the entry", rows.Scan(&fileID))
-		seen[fileID]++
-	}
-	testutil.FailErr(t, "iterate the entries", rows.Err())
-	if len(seen) != 1 {
-		t.Fatalf("checkpoint holds %d files for one path: %v", len(seen), seen)
-	}
-	for fileID, count := range seen {
-		if count != 1 {
-			t.Fatalf("checkpoint holds %d entries for file %s", count, fileID)
-		}
+	fileID, _ := mustResolve(t, store, ctx, "shared.txt")
+	mustRecord(t, store, ctx, RecordInput{
+		RecordLocation: RecordLocation{RootID: "r1", Path: "shared.txt"},
+		ProjectID:      "p1", Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginUser,
+		Before: []byte("trunk\n"), After: []byte("later\n"),
+	})
+	comparison, err := store.Comparisons.CompareScope(ctx, "p1", sourcebranch.Trunk, Baseline{Kind: BaselinePin, PinID: pin.ID}, fileID, ScopeComparisonOptions{})
+	testutil.FailErr(t, "compare retained pin", err)
+	if !comparison.InRange || comparison.Before.Content != "trunk\n" || comparison.After.Content != "later\n" {
+		t.Fatalf("pin lost its trunk boundary: %+v", comparison)
 	}
 }

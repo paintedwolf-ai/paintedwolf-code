@@ -29,7 +29,7 @@ func NewDelegationTestFixture(t *testing.T) (*hostapi.Server, project.Registry, 
 	workersCfg := worker.DefaultWorkersConfig()
 	queue := worker.NewInMemoryQueue(workersCfg.Poller.MaxConcurrency)
 	queue.SetWorkersConfig(workersCfg)
-	exec := worker.NewLocalWorkerExecutor(mgr, queue)
+	exec := worker.NewLocalWorkerExecutor(mgr.Workers, queue, mgr.Workspace, mgr.Submissions, mgr.Runner.Transcript, mgr.Runner.Execution, mgr.Workers.Cancel, mgr.Workers.Cancellations)
 	exec.SetPromptInjects(promptstest.InjectRenderer(t))
 	reg := project.NewMemoryRegistry()
 	delegationMgr := delegation.NewManager(delegationStore, queue, mgr, nil)

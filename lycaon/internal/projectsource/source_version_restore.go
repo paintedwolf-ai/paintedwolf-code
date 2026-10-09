@@ -176,12 +176,10 @@ func (s *SourceVersions) captureRestoreBaseVersion(
 		}
 		if head.State != string(api.SourceTipStateAbsent) {
 			if err := s.recorder.Record(ctx, sourceledger.RecordInput{
-				ProjectID: p.SourceID(),
-				RootID:    plan.RootID, Path: plan.Path, FileID: req.FileID,
-				EntryKind: sourceledger.EntryKindFile,
-				Op:        api.SourceChangeOpDelete, Origin: api.SourceChangeOriginExternal,
-				BeforeSHA256: head.SHA256, Cause: sourceledger.CauseVersionRestoreBase,
-			}); err != nil {
+				RecordLocation: sourceledger.RecordLocation{RootID: plan.RootID, Path: plan.Path, EntryKind: sourceledger.EntryKindFile},
+				ProjectID:      p.SourceID(), FileID: req.FileID,
+				Op: api.SourceChangeOpDelete, Origin: api.SourceChangeOriginExternal,
+				BeforeSHA256: head.SHA256, Cause: sourceledger.CauseVersionRestoreBase}); err != nil {
 				return "", err
 			}
 			head, err = s.heads.ResolveHeadByFile(ctx, p.SourceID(), sourcebranch.Trunk, req.FileID)
@@ -209,14 +207,12 @@ func (s *SourceVersions) captureRestoreBaseVersion(
 		beforeSHA = head.SHA256
 	}
 	if err := s.recorder.Record(ctx, sourceledger.RecordInput{
-		ProjectID: p.SourceID(),
-		RootID:    plan.RootID, Path: plan.Path, FileID: req.FileID,
-		EntryKind: sourceledger.EntryKindFile,
-		Op:        api.SourceChangeOpWrite, Origin: api.SourceChangeOriginExternal,
+		RecordLocation: sourceledger.RecordLocation{RootID: plan.RootID, Path: plan.Path, EntryKind: sourceledger.EntryKindFile},
+		ProjectID:      p.SourceID(), FileID: req.FileID,
+		Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginExternal,
 		BeforeSHA256: beforeSHA,
 		AfterSHA256:  plan.BaseSHA256, After: plan.Before, AfterSize: plan.BeforeSize,
-		Cause: sourceledger.CauseVersionRestoreBase,
-	}); err != nil {
+		Cause: sourceledger.CauseVersionRestoreBase}); err != nil {
 		return "", err
 	}
 	head, err = s.heads.ResolveHeadByFile(ctx, p.SourceID(), sourcebranch.Trunk, req.FileID)

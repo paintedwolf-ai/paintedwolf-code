@@ -23,10 +23,10 @@ func TestProjectSourceSeenListsALookAndMarkUnseenWithdrawsIt(t *testing.T) {
 	rootID := p.Roots[0].ID
 
 	testutil.FailErr(t, "record outside change", ledger.Record(t.Context(), sourceledger.RecordInput{
-		ProjectID: p.ID, RootID: rootID, Path: "a.go",
-		Op: wire.SourceChangeOpCreate, Origin: wire.SourceChangeOriginExternal,
-		After: []byte("first\n"),
-	}))
+		RecordLocation: sourceledger.RecordLocation{RootID: rootID, Path: "a.go"},
+		ProjectID:      p.ID,
+		Op:             wire.SourceChangeOpCreate, Origin: wire.SourceChangeOriginExternal,
+		After: []byte("first\n")}))
 	var effectID, fileID string
 	var ordinal int64
 	testutil.FailErr(t, "read outside change", ledgerDB.QueryRowContext(t.Context(), `
@@ -102,9 +102,9 @@ func TestProjectSourceSeenPagesEveryLookOnce(t *testing.T) {
 
 	for _, path := range []string{"a.go", "b.go", "c.go"} {
 		testutil.FailErr(t, "record "+path, ledger.Record(t.Context(), sourceledger.RecordInput{
-			ProjectID: p.ID, RootID: p.Roots[0].ID, Path: path,
-			Op: wire.SourceChangeOpCreate, Origin: wire.SourceChangeOriginExternal, After: []byte(path),
-		}))
+			RecordLocation: sourceledger.RecordLocation{RootID: p.Roots[0].ID, Path: path},
+			ProjectID:      p.ID,
+			Op:             wire.SourceChangeOpCreate, Origin: wire.SourceChangeOriginExternal, After: []byte(path)}))
 		var look wire.SourcePresentationCompletion
 		testutil.FailErr(t, "read "+path, ledgerDB.QueryRowContext(t.Context(), `
 			SELECT id, file_id, ordinal FROM source_effects WHERE project_id = ?

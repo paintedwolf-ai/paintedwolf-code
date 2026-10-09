@@ -68,10 +68,10 @@ func TestSourceComparisonScreensEachReadableHistoricalEndpoint(t *testing.T) {
 	after := contractfixture.DiffReadmeV3 + "\naws_key = " + plantedAWS + "\n"
 	testutil.FailErr(t, "record secret-bearing version", srv.Sources.Workspace.SourceLedger.Record(
 		t.Context(), sourceledger.RecordInput{
-			ProjectID: p.ID, RootID: rootID, Path: "README.md",
-			Op: wire.SourceChangeOpWrite, Origin: wire.SourceChangeOriginAgent,
-			SessionID: "s1", Turn: 2, Before: []byte(contractfixture.DiffReadmeV3), After: []byte(after),
-		},
+			RecordLocation: sourceledger.RecordLocation{RootID: rootID, Path: "README.md"},
+			ProjectID:      p.ID,
+			Op:             wire.SourceChangeOpWrite, Origin: wire.SourceChangeOriginAgent,
+			SessionID: "s1", Turn: 2, Before: []byte(contractfixture.DiffReadmeV3), After: []byte(after)},
 	))
 
 	code, comparison := contractfixture.GetSourceComparison(t, srv, p.ID, url.Values{

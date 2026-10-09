@@ -18,9 +18,9 @@ func TestDeletedPathDoesNotResurrectAnObservedReplacement(t *testing.T) {
 		ID: oldID, ProjectID: "p1", EntryKind: EntryKindFile, CreatedTs: "2026-09-12T10:00:00Z",
 	}))
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "same.go", FileID: oldID,
-		Op: api.SourceChangeOpDelete, Origin: api.SourceChangeOriginUser, Before: []byte("old\n"),
-	})
+		RecordLocation: RecordLocation{RootID: "r1", Path: "same.go"},
+		ProjectID:      "p1", FileID: oldID,
+		Op: api.SourceChangeOpDelete, Origin: api.SourceChangeOriginUser, Before: []byte("old\n")})
 	_, err := store.TrackFile(ctx, TrackInput{
 		ProjectID: "p1", RootID: "r1", Path: "same.go", Content: []byte("replacement\n"),
 	})
@@ -34,7 +34,8 @@ func TestDeletedPathTracksLatestOccupantAndBranch(t *testing.T) {
 	store, ctx := openLedger(t)
 	record := func(branch sourcebranch.ID, op api.SourceChangeOp, before, after string) {
 		t.Helper()
-		mustRecord(t, store, ctx, RecordInput{ProjectID: "p1", BranchID: branch, RootID: "r1", Path: "same.go", Op: op, Origin: api.SourceChangeOriginUser, Before: []byte(before), After: []byte(after)})
+		mustRecord(t, store, ctx, RecordInput{
+			RecordLocation: RecordLocation{RootID: "r1", Path: "same.go"}, ProjectID: "p1", BranchID: branch, Op: op, Origin: api.SourceChangeOriginUser, Before: []byte(before), After: []byte(after)})
 	}
 	record(sourcebranch.Trunk, api.SourceChangeOpCreate, "", "first\n")
 	record(sourcebranch.Trunk, api.SourceChangeOpDelete, "first\n", "")
@@ -93,9 +94,9 @@ func TestDeletedPathDoesNotResurrectAfterReplacementMoves(t *testing.T) {
 			record := func(op api.SourceChangeOp, path, from, before, after string) {
 				t.Helper()
 				mustRecord(t, store, ctx, RecordInput{
-					ProjectID: "p1", BranchID: branch, RootID: "r1", Path: path, FromPath: from,
-					Op: op, Origin: api.SourceChangeOriginUser, Before: []byte(before), After: []byte(after),
-				})
+					RecordLocation: RecordLocation{RootID: "r1", Path: path, FromPath: from},
+					ProjectID:      "p1", BranchID: branch,
+					Op: op, Origin: api.SourceChangeOriginUser, Before: []byte(before), After: []byte(after)})
 			}
 			record(api.SourceChangeOpCreate, "same.go", "", "", "old\n")
 			record(api.SourceChangeOpDelete, "same.go", "", "old\n", "")
@@ -115,9 +116,9 @@ func TestDeletedPathDoesNotResurrectAfterReplacementMoves(t *testing.T) {
 func TestDeletedPathIgnoresUnsavedDocumentVersions(t *testing.T) {
 	store, ctx := openLedger(t)
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "same.go", Op: api.SourceChangeOpDelete,
-		Origin: api.SourceChangeOriginUser, Before: []byte("on disk\n"),
-	})
+		RecordLocation: RecordLocation{RootID: "r1", Path: "same.go"},
+		ProjectID:      "p1", Op: api.SourceChangeOpDelete,
+		Origin: api.SourceChangeOriginUser, Before: []byte("on disk\n")})
 	deleted, err := store.History.ResolveDeletedPath(ctx, "p1", sourcebranch.Trunk, "r1", "same.go")
 	testutil.FailErr(t, "resolve deletion", err)
 	tx, err := store.sqlDB.BeginTx(ctx, nil)

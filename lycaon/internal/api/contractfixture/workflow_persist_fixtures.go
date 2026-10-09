@@ -15,11 +15,11 @@ import (
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/workflow"
+	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func NewPersistTestServer(t *testing.T) (*api.Server, wire.Session, workflow.SessionWorkflowStore) {
+func NewPersistTestServer(t *testing.T) (*api.Server, wire.Session, workflowdrafts.Store) {
 	t.Helper()
 	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	store := store.NewMemory()
@@ -36,7 +36,7 @@ func NewPersistTestServer(t *testing.T) (*api.Server, wire.Session, workflow.Ses
 	testutil.FailErr(t, "build conditions registry", err)
 	agents := orchestration.NewMemoryAgentRegistry()
 	_ = orchestration.LoadRequiredAgentRegistry(t.Context(), agents)
-	sessionStore := workflow.NewMemorySessionWorkflowStore()
+	sessionStore := workflowdrafts.NewMemory()
 	policy, err := workflowcomposition.LoadComposePolicy()
 	testutil.FailErr(t, "workflowcomposition.LoadComposePolicy failed", err)
 	templates, err := workflowcomposition.LoadTemplatesFromDir(extpacks.Bundled(config.PlatformFlows.Join("_templates")))

@@ -2942,29 +2942,119 @@ CREATE INDEX IF NOT EXISTS idx_source_versions_working_path
 CREATE INDEX IF NOT EXISTS idx_source_versions_operation ON source_versions(operation_id) WHERE operation_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_source_versions_content ON source_versions(content_sha256) WHERE content_sha256 != '';
 
--- Current file state on each branch: the project's trunk ('') and one branch
--- per write worker. The branch names no path, so a root set that changes moves
--- the tree without forking any logical file's identity.
-CREATE TABLE IF NOT EXISTS source_branch_heads (
+-- Directory identity is independent of its current parent and name.
+CREATE TABLE IF NOT EXISTS source_directories (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    branch_id TEXT NOT NULL DEFAULT '',
+    root_id TEXT NOT NULL,
+    parent_id TEXT REFERENCES source_directories(id),
+    name TEXT NOT NULL,
+    present INTEGER NOT NULL CHECK (present IN (0, 1)),
+    ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+    observed_ts TEXT NOT NULL,
+    recovery_key TEXT NOT NULL DEFAULT ''
+) STRICT;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_source_directories_root ON source_directories(project_id, branch_id, root_id) WHERE parent_id IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_source_directories_name ON source_directories(parent_id, name) WHERE present = 1;
+CREATE INDEX IF NOT EXISTS idx_source_directories_recovery ON source_directories(project_id, branch_id, root_id, recovery_key) WHERE recovery_key != '';
+CREATE INDEX IF NOT EXISTS idx_source_directories_parent ON source_directories(parent_id, name);
+
+CREATE TABLE IF NOT EXISTS source_head_entries (
     project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     branch_id TEXT NOT NULL DEFAULT '',
     file_id TEXT NOT NULL REFERENCES source_files(id) ON DELETE CASCADE,
     version_id TEXT NOT NULL REFERENCES source_versions(id),
     root_id TEXT NOT NULL,
-    path TEXT NOT NULL,
+    directory_id TEXT NOT NULL REFERENCES source_directories(id),
+    name TEXT NOT NULL,
     state TEXT NOT NULL CHECK (state IN ('content', 'directory', 'absent', 'unresolved')),
     content_sha256 TEXT NOT NULL DEFAULT '',
     ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
     observed_ts TEXT NOT NULL,
     PRIMARY KEY (project_id, branch_id, file_id)
 ) STRICT, WITHOUT ROWID;
-CREATE UNIQUE INDEX IF NOT EXISTS idx_source_branch_heads_live_path
-    ON source_branch_heads(project_id, branch_id, root_id, path) WHERE state != 'absent';
-CREATE INDEX IF NOT EXISTS idx_source_branch_heads_trunk_path
-    ON source_branch_heads(project_id, root_id, path) WHERE branch_id = '';
-CREATE INDEX IF NOT EXISTS idx_source_branch_heads_changed ON source_branch_heads(project_id, ordinal DESC, file_id);
-CREATE INDEX IF NOT EXISTS idx_source_branch_heads_content
-    ON source_branch_heads(content_sha256) WHERE state = 'content';
+CREATE UNIQUE INDEX IF NOT EXISTS idx_source_head_entries_live_name ON source_head_entries(directory_id, name) WHERE state != 'absent';
+CREATE INDEX IF NOT EXISTS idx_source_head_entries_changed ON source_head_entries(project_id, ordinal DESC, file_id);
+CREATE INDEX IF NOT EXISTS idx_source_head_entries_content ON source_head_entries(content_sha256) WHERE state = 'content';
+CREATE INDEX IF NOT EXISTS idx_source_head_entries_version ON source_head_entries(version_id);
+CREATE INDEX IF NOT EXISTS idx_source_head_entries_file ON source_head_entries(file_id);
+
+-- Point reads walk only the selected entry's ancestry. Enumerations choose their own scope.
+CREATE VIEW IF NOT EXISTS source_branch_heads AS
+SELECT h.project_id, h.branch_id, h.file_id, h.version_id, h.root_id,
+    COALESCE((WITH RECURSIVE lineage(id, parent_id, path, present, ordinal, observed_ts) AS (
+        SELECT d.id, d.parent_id,
+            CASE WHEN d.name = '' THEN h.name ELSE d.name || '/' || h.name END,
+            d.present, d.ordinal, d.observed_ts
+        FROM source_directories d WHERE d.id = h.directory_id
+        UNION ALL
+        SELECT d.id, d.parent_id,
+            CASE WHEN d.name = '' THEN l.path ELSE d.name || '/' || l.path END,
+            min(d.present, l.present), max(d.ordinal, l.ordinal),
+            CASE WHEN d.ordinal > l.ordinal THEN d.observed_ts ELSE l.observed_ts END
+        FROM source_directories d JOIN lineage l ON d.id = l.parent_id
+    ) SELECT path FROM lineage WHERE parent_id IS NULL), '') AS path,
+    CASE WHEN (WITH RECURSIVE lineage(id, parent_id, path, present, ordinal, observed_ts) AS (
+        SELECT d.id, d.parent_id,
+            CASE WHEN d.name = '' THEN h.name ELSE d.name || '/' || h.name END,
+            d.present, d.ordinal, d.observed_ts
+        FROM source_directories d WHERE d.id = h.directory_id
+        UNION ALL
+        SELECT d.id, d.parent_id,
+            CASE WHEN d.name = '' THEN l.path ELSE d.name || '/' || l.path END,
+            min(d.present, l.present), max(d.ordinal, l.ordinal),
+            CASE WHEN d.ordinal > l.ordinal THEN d.observed_ts ELSE l.observed_ts END
+        FROM source_directories d JOIN lineage l ON d.id = l.parent_id
+    ) SELECT present FROM lineage WHERE parent_id IS NULL) = 0 THEN 'absent' ELSE h.state END AS state,
+    CASE WHEN (WITH RECURSIVE lineage(id, parent_id, path, present, ordinal, observed_ts) AS (
+        SELECT d.id, d.parent_id,
+            CASE WHEN d.name = '' THEN h.name ELSE d.name || '/' || h.name END,
+            d.present, d.ordinal, d.observed_ts
+        FROM source_directories d WHERE d.id = h.directory_id
+        UNION ALL
+        SELECT d.id, d.parent_id,
+            CASE WHEN d.name = '' THEN l.path ELSE d.name || '/' || l.path END,
+            min(d.present, l.present), max(d.ordinal, l.ordinal),
+            CASE WHEN d.ordinal > l.ordinal THEN d.observed_ts ELSE l.observed_ts END
+        FROM source_directories d JOIN lineage l ON d.id = l.parent_id
+    ) SELECT present FROM lineage WHERE parent_id IS NULL) = 0 THEN '' ELSE h.content_sha256 END AS content_sha256,
+    max(h.ordinal, COALESCE((WITH RECURSIVE lineage(id, parent_id, path, present, ordinal, observed_ts) AS (
+        SELECT d.id, d.parent_id,
+            CASE WHEN d.name = '' THEN h.name ELSE d.name || '/' || h.name END,
+            d.present, d.ordinal, d.observed_ts
+        FROM source_directories d WHERE d.id = h.directory_id
+        UNION ALL
+        SELECT d.id, d.parent_id,
+            CASE WHEN d.name = '' THEN l.path ELSE d.name || '/' || l.path END,
+            min(d.present, l.present), max(d.ordinal, l.ordinal),
+            CASE WHEN d.ordinal > l.ordinal THEN d.observed_ts ELSE l.observed_ts END
+        FROM source_directories d JOIN lineage l ON d.id = l.parent_id
+    ) SELECT ordinal FROM lineage WHERE parent_id IS NULL), 0)) AS ordinal,
+    CASE WHEN (WITH RECURSIVE lineage(id, parent_id, path, present, ordinal, observed_ts) AS (
+        SELECT d.id, d.parent_id,
+            CASE WHEN d.name = '' THEN h.name ELSE d.name || '/' || h.name END,
+            d.present, d.ordinal, d.observed_ts
+        FROM source_directories d WHERE d.id = h.directory_id
+        UNION ALL
+        SELECT d.id, d.parent_id,
+            CASE WHEN d.name = '' THEN l.path ELSE d.name || '/' || l.path END,
+            min(d.present, l.present), max(d.ordinal, l.ordinal),
+            CASE WHEN d.ordinal > l.ordinal THEN d.observed_ts ELSE l.observed_ts END
+        FROM source_directories d JOIN lineage l ON d.id = l.parent_id
+    ) SELECT ordinal FROM lineage WHERE parent_id IS NULL) > h.ordinal THEN (WITH RECURSIVE lineage(id, parent_id, path, present, ordinal, observed_ts) AS (
+        SELECT d.id, d.parent_id,
+            CASE WHEN d.name = '' THEN h.name ELSE d.name || '/' || h.name END,
+            d.present, d.ordinal, d.observed_ts
+        FROM source_directories d WHERE d.id = h.directory_id
+        UNION ALL
+        SELECT d.id, d.parent_id,
+            CASE WHEN d.name = '' THEN l.path ELSE d.name || '/' || l.path END,
+            min(d.present, l.present), max(d.ordinal, l.ordinal),
+            CASE WHEN d.ordinal > l.ordinal THEN d.observed_ts ELSE l.observed_ts END
+        FROM source_directories d JOIN lineage l ON d.id = l.parent_id
+    ) SELECT observed_ts FROM lineage WHERE parent_id IS NULL) ELSE h.observed_ts END AS observed_ts
+FROM source_head_entries h;
 
 -- Ordered effects with exact version endpoints.
 CREATE TABLE IF NOT EXISTS source_effects (
@@ -3011,14 +3101,6 @@ CREATE TABLE IF NOT EXISTS source_checkpoints (
 CREATE INDEX IF NOT EXISTS idx_source_checkpoints_project_kind_ts
     ON source_checkpoints(project_id, kind, created_ts, id);
 CREATE INDEX IF NOT EXISTS idx_source_checkpoints_session ON source_checkpoints(session_id, turn) WHERE session_id != '';
-
-CREATE TABLE IF NOT EXISTS source_checkpoint_entries (
-    checkpoint_id TEXT NOT NULL REFERENCES source_checkpoints(id) ON DELETE CASCADE,
-    file_id TEXT NOT NULL REFERENCES source_files(id) ON DELETE CASCADE,
-    version_id TEXT NOT NULL REFERENCES source_versions(id),
-    ordinal INTEGER NOT NULL DEFAULT 0,
-    PRIMARY KEY (checkpoint_id, file_id)
-) STRICT, WITHOUT ROWID;
 
 -- The git position each root held when a checkpoint was taken, copied from
 -- source_git_heads at creation.
@@ -3835,11 +3917,7 @@ CREATE INDEX IF NOT EXISTS idx_prompt_attachment_admissions_project_blob ON prom
 CREATE INDEX IF NOT EXISTS idx_prompt_submissions_project_fk ON prompt_submissions(project_id);
 CREATE INDEX IF NOT EXISTS idx_rewind_operations_session_fk ON rewind_operations(session_id);
 CREATE INDEX IF NOT EXISTS idx_source_agent_presentations_file_fk ON source_agent_presentations(file_id);
-CREATE INDEX IF NOT EXISTS idx_source_branch_heads_version_fk ON source_branch_heads(version_id);
-CREATE INDEX IF NOT EXISTS idx_source_branch_heads_file_fk ON source_branch_heads(file_id);
 CREATE INDEX IF NOT EXISTS idx_source_git_heads_root_fk ON source_git_heads(root_id);
-CREATE INDEX IF NOT EXISTS idx_source_checkpoint_entries_version_fk ON source_checkpoint_entries(version_id);
-CREATE INDEX IF NOT EXISTS idx_source_checkpoint_entries_file_fk ON source_checkpoint_entries(file_id);
 CREATE INDEX IF NOT EXISTS idx_source_effects_after_version_fk ON source_effects(after_version_id);
 CREATE INDEX IF NOT EXISTS idx_source_effects_before_version_fk ON source_effects(before_version_id);
 CREATE INDEX IF NOT EXISTS idx_source_line_attr_file_fk ON source_line_attr(file_id);
@@ -3967,9 +4045,6 @@ CREATE TRIGGER IF NOT EXISTS history_clock_artifact_refs_delete AFTER DELETE ON 
 CREATE TRIGGER IF NOT EXISTS history_clock_source_versions_insert AFTER INSERT ON source_versions BEGIN UPDATE history_storage_clock SET generation = generation + 1 WHERE id = 1; END;
 CREATE TRIGGER IF NOT EXISTS history_clock_source_versions_update AFTER UPDATE ON source_versions BEGIN UPDATE history_storage_clock SET generation = generation + 1 WHERE id = 1; END;
 CREATE TRIGGER IF NOT EXISTS history_clock_source_versions_delete AFTER DELETE ON source_versions BEGIN UPDATE history_storage_clock SET generation = generation + 1 WHERE id = 1; END;
-CREATE TRIGGER IF NOT EXISTS history_clock_source_branch_heads_insert AFTER INSERT ON source_branch_heads BEGIN UPDATE history_storage_clock SET generation = generation + 1 WHERE id = 1; END;
-CREATE TRIGGER IF NOT EXISTS history_clock_source_branch_heads_update AFTER UPDATE ON source_branch_heads BEGIN UPDATE history_storage_clock SET generation = generation + 1 WHERE id = 1; END;
-CREATE TRIGGER IF NOT EXISTS history_clock_source_branch_heads_delete AFTER DELETE ON source_branch_heads BEGIN UPDATE history_storage_clock SET generation = generation + 1 WHERE id = 1; END;
 CREATE TRIGGER IF NOT EXISTS history_clock_sessions_insert AFTER INSERT ON sessions BEGIN UPDATE history_storage_clock SET generation = generation + 1 WHERE id = 1; END;
 CREATE TRIGGER IF NOT EXISTS history_clock_sessions_update AFTER UPDATE ON sessions BEGIN UPDATE history_storage_clock SET generation = generation + 1 WHERE id = 1; END;
 CREATE TRIGGER IF NOT EXISTS history_clock_sessions_delete AFTER DELETE ON sessions BEGIN UPDATE history_storage_clock SET generation = generation + 1 WHERE id = 1; END;
@@ -4148,3 +4223,12 @@ CREATE TABLE worker_prerequisites (
 ) STRICT, WITHOUT ROWID;
 
 CREATE INDEX idx_worker_prerequisites_upstream ON worker_prerequisites(prerequisite_id);
+CREATE TRIGGER IF NOT EXISTS history_clock_source_directories_insert AFTER INSERT ON source_directories BEGIN UPDATE history_storage_clock SET generation = generation + 1 WHERE id = 1; END;
+CREATE TRIGGER IF NOT EXISTS history_clock_source_directories_update AFTER UPDATE ON source_directories BEGIN UPDATE history_storage_clock SET generation = generation + 1 WHERE id = 1; END;
+CREATE TRIGGER IF NOT EXISTS history_clock_source_directories_delete AFTER DELETE ON source_directories BEGIN UPDATE history_storage_clock SET generation = generation + 1 WHERE id = 1; END;
+CREATE TRIGGER IF NOT EXISTS history_clock_source_head_entries_insert AFTER INSERT ON source_head_entries BEGIN UPDATE history_storage_clock SET generation = generation + 1 WHERE id = 1; END;
+CREATE TRIGGER IF NOT EXISTS history_clock_source_head_entries_update AFTER UPDATE ON source_head_entries BEGIN UPDATE history_storage_clock SET generation = generation + 1 WHERE id = 1; END;
+CREATE TRIGGER IF NOT EXISTS history_clock_source_head_entries_delete AFTER DELETE ON source_head_entries BEGIN UPDATE history_storage_clock SET generation = generation + 1 WHERE id = 1; END;
+
+CREATE INDEX IF NOT EXISTS idx_source_directories_project ON source_directories(project_id);
+CREATE INDEX IF NOT EXISTS idx_source_head_entries_directory ON source_head_entries(directory_id, name);

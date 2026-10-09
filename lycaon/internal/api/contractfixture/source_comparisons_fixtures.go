@@ -75,13 +75,12 @@ func SeedRewrittenReadme(t *testing.T, srv *hostapi.Server) (wire.Project, strin
 		{DiffReadmeV2, DiffReadmeV3},
 	} {
 		err := ledger.Record(t.Context(), sourceledger.RecordInput{
-			ProjectID: p.ID,
-			RootID:    rootID, Path: "README.md",
-			Op: wire.SourceChangeOpWrite, Origin: wire.SourceChangeOriginAgent,
+			RecordLocation: sourceledger.RecordLocation{RootID: rootID, Path: "README.md"},
+			ProjectID:      p.ID,
+			Op:             wire.SourceChangeOpWrite, Origin: wire.SourceChangeOriginAgent,
 			SessionID: "s1", Turn: 1,
 			Before: []byte(step[0]), After: []byte(step[1]),
-			TS: base.Add(time.Duration(i) * time.Minute),
-		})
+			TS: base.Add(time.Duration(i) * time.Minute)})
 		testutil.FailErr(t, "record README change", err)
 	}
 	walk, err := ledger.Walk.QueryWalk(t.Context(), p.ID,

@@ -30,9 +30,9 @@ func TestDeletedSourceNavigationAndReadPreferCurrentPath(t *testing.T) {
 	contractfixture.MirrorLedgerProject(t, ledgerDB, p)
 	rootID := p.Roots[0].ID
 	testutil.FailErr(t, "record deletion", ledger.Record(t.Context(), sourceledger.RecordInput{
-		ProjectID: p.ID, RootID: rootID, Path: "gone.go", Op: wire.SourceChangeOpDelete,
-		Origin: wire.SourceChangeOriginUser, Before: []byte("retained\n"),
-	}))
+		RecordLocation: sourceledger.RecordLocation{RootID: rootID, Path: "gone.go"},
+		ProjectID:      p.ID, Op: wire.SourceChangeOpDelete,
+		Origin: wire.SourceChangeOriginUser, Before: []byte("retained\n")}))
 	project, err := srv.Sources.Workspace.ProjectRegistry.Get(t.Context(), p.ID)
 	testutil.FailErr(t, "get project", err)
 	refs := []wire.NavigationReference{{ID: "r", ProjectID: p.ID, RootID: rootID, Path: "gone.go", Status: wire.NavigationResolved, EntryKind: "file"}}
@@ -97,9 +97,9 @@ func TestDeletedSourceKeepsContentAvailabilityAndScreening(t *testing.T) {
 			p := contractfixture.CreateProjectForTest(t, srv, t.TempDir())
 			contractfixture.MirrorLedgerProject(t, ledgerDB, p)
 			testutil.FailErr(t, "record deletion", ledger.Record(t.Context(), sourceledger.RecordInput{
-				ProjectID: p.ID, RootID: p.Roots[0].ID, Path: "gone", Op: wire.SourceChangeOpDelete,
-				Origin: wire.SourceChangeOriginUser, Before: tc.before, BeforeSHA256: tc.sha, BeforeSize: 30,
-			}))
+				RecordLocation: sourceledger.RecordLocation{RootID: p.Roots[0].ID, Path: "gone"},
+				ProjectID:      p.ID, Op: wire.SourceChangeOpDelete,
+				Origin: wire.SourceChangeOriginUser, Before: tc.before, BeforeSHA256: tc.sha, BeforeSize: 30}))
 			q := url.Values{"path": {"gone"}, "root_id": {p.Roots[0].ID}, "include_deleted": {"true"}}
 			rec := httptest.NewRecorder()
 			srv.ServeHTTP(rec, contractfixture.NewAuthedRequest(http.MethodGet, "/v1/projects/"+p.ID+"/source?"+q.Encode(), nil))
@@ -142,9 +142,9 @@ func TestDeletedWorkerSourceDoesNotOpenThePrimaryReplacement(t *testing.T) {
 	branch, err := sourcebranch.ForWorker(workerID)
 	testutil.FailErr(t, "worker identity", err)
 	testutil.FailErr(t, "record worker deletion", ledger.Record(t.Context(), sourceledger.RecordInput{
-		ProjectID: p.ID, BranchID: branch, RootID: rootID, Path: "gone.go", Op: wire.SourceChangeOpDelete,
-		Origin: wire.SourceChangeOriginAgent, Before: []byte("worker before deletion\n"),
-	}))
+		RecordLocation: sourceledger.RecordLocation{RootID: rootID, Path: "gone.go"},
+		ProjectID:      p.ID, BranchID: branch, Op: wire.SourceChangeOpDelete,
+		Origin: wire.SourceChangeOriginAgent, Before: []byte("worker before deletion\n")}))
 	project, err := srv.Sources.Workspace.ProjectRegistry.Get(t.Context(), p.ID)
 	testutil.FailErr(t, "get project", err)
 	resolved := srv.Admin.SessionAdmin.Navigation.ResolveNavigationJob(t.Context(), project, workerID, []wire.NavigationReference{{

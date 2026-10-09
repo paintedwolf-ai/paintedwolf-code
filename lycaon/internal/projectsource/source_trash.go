@@ -47,7 +47,7 @@ func (s *SourceEffects) applyMutation(ctx context.Context, row *sourceMutationRo
 	}
 }
 
-// applySourceDelete disposes of an entry whose recovery copy is already kept.
+// applySourceDelete selects native recovery or the retained recovery promised by the plan.
 func (s *SourceEffects) applySourceDelete(ctx context.Context, row *sourceMutationRow) error {
 	plan := &row.Plan
 	if plan.NativeTrash != nil {
@@ -153,7 +153,8 @@ var ErrSourceTrashUnavailable = errors.New("the item is no longer available in T
 
 // Presence selects native recovery. Absence preserves shipped retained recovery.
 type sourceTrashRecovery struct {
-	Receipt desktoptrash.Receipt `json:"receipt"`
+	Receipt     desktoptrash.Receipt `json:"receipt"`
+	RecoveryKey string               `json:"recovery_key,omitempty"`
 }
 
 func (s *SourceEffects) applyNativeTrash(ctx context.Context, row *sourceMutationRow) error {
@@ -179,6 +180,7 @@ func (s *SourceEffects) applyNativeTrash(ctx context.Context, row *sourceMutatio
 		return err
 	}
 	plan.DeleteStarted, plan.DeleteIdentity = true, identity
+	plan.NativeTrash.RecoveryKey = row.ID
 	if err := s.Journal.update(ctx, row); err != nil {
 		return err
 	}

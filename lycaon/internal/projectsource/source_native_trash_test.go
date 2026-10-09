@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -20,6 +21,9 @@ func TestNativeTrashRestoresReceiptAcrossRestartAndRedo(t *testing.T) {
 	testutil.FailErr(t, "create sparse file", err)
 	testutil.FailErr(t, "size sparse file", file.Truncate(3<<30))
 	testutil.FailErr(t, "close sparse file", file.Close())
+	ledger := service.settlement.recorder.(*sourceledger.Store)
+	tracked, err := ledger.TrackFile(t.Context(), sourceledger.TrackInput{ProjectID: p.ID, RootID: p.Roots[0].ID, Path: "tree/large", Size: 3 << 30})
+	testutil.FailErr(t, "track sparse child identity", err)
 	id := uuid.NewString()
 	var work lifecycleWork
 	ctx := WithSourceProgress(t.Context(), work.observe)
@@ -37,6 +41,11 @@ func TestNativeTrashRestoresReceiptAcrossRestartAndRedo(t *testing.T) {
 	restarted := NewSourceMutationService(service.Journal.db, service.settlement.recorder.(*sourceledger.Store))
 	installTestTrash(t, restarted)
 	undoHistoryHead(t, restarted, p, id)
+	restored, err := ledger.History.ResolveHead(t.Context(), p.ID, sourcebranch.Trunk, p.Roots[0].ID, "tree/large")
+	testutil.FailErr(t, "resolve restored child identity", err)
+	if restored.FileID != tracked.FileID || restored.VersionID != tracked.VersionID {
+		t.Fatalf("native restore rewrote child history: %+v", restored)
+	}
 	testutil.FailErr(t, "edit restored tree", os.WriteFile(filepath.Join(path, "later"), []byte("preserved"), 0600))
 	redoHistoryHead(t, restarted, p, id)
 	undoHistoryHead(t, restarted, p, id)
@@ -102,5 +111,22 @@ func TestRevisionBufferBoundsGrowingInput(t *testing.T) {
 	}
 	if buffer.Len() != sourceledger.MaxRevisionContentBytes {
 		t.Fatalf("retained %d bytes", buffer.Len())
+	}
+}
+
+func TestNativeTrashRestoresLogicalFileIdentity(t *testing.T) {
+	service, p, _, _ := sourceMutationFixture(t)
+	_, err := service.Create(t.Context(), uuid.NewString(), p, SourceEntryCreateRequest{RootID: p.Roots[0].ID, Path: "file", Kind: SourceEntryFile})
+	testutil.FailErr(t, "create tracked file", err)
+	ledger := service.settlement.recorder.(*sourceledger.Store)
+	original, err := ledger.History.ResolveHead(t.Context(), p.ID, sourcebranch.Trunk, p.Roots[0].ID, "file")
+	testutil.FailErr(t, "resolve file before Trash", err)
+	id := uuid.NewString()
+	testutil.FailErr(t, "trash tracked file", service.Delete(t.Context(), id, p, SourceDeleteRequest{RootID: p.Roots[0].ID, Path: "file"}))
+	undoHistoryHead(t, service, p, id)
+	restored, err := ledger.History.ResolveHead(t.Context(), p.ID, sourcebranch.Trunk, p.Roots[0].ID, "file")
+	testutil.FailErr(t, "resolve restored file", err)
+	if restored.FileID != original.FileID {
+		t.Fatalf("native recovery forked file identity: %s to %s", original.FileID, restored.FileID)
 	}
 }

@@ -27,10 +27,10 @@ func TestSourceWalkResolvesTheChatsCurrentTurn(t *testing.T) {
 	rootID := p.Roots[0].ID
 	for turn, path := range map[int]string{1: "first.go", 2: "second.go"} {
 		testutil.FailErr(t, "record "+path, ledger.Record(t.Context(), sourceledger.RecordInput{
-			ProjectID: p.ID, RootID: rootID, Path: path,
-			Op: wire.SourceChangeOpCreate, Origin: wire.SourceChangeOriginAgent,
-			SessionID: sess.ID, Turn: turn, OperationID: "turn-write-" + path, After: []byte(path),
-		}))
+			RecordLocation: sourceledger.RecordLocation{RootID: rootID, Path: path},
+			ProjectID:      p.ID,
+			Op:             wire.SourceChangeOpCreate, Origin: wire.SourceChangeOriginAgent,
+			SessionID: sess.ID, Turn: turn, OperationID: "turn-write-" + path, After: []byte(path)}))
 	}
 
 	w, page := contractfixture.GetSourceWalk(t, srv, p.ID, url.Values{"baseline": {"turn:" + sess.ID}})

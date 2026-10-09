@@ -37,11 +37,10 @@ func TestCommitBaselineReadsTheNestedRootsOwnFile(t *testing.T) {
 	testutil.FailErr(t, "edit working file",
 		os.WriteFile(filepath.Join(nested, "src", "app.ts"), []byte("working\n"), 0o644))
 	testutil.FailErr(t, "record edit", ledger.Record(t.Context(), sourceledger.RecordInput{
-		ProjectID: p.ID,
-		RootID:    rootID, Path: "src/app.ts",
-		Op: wire.SourceChangeOpWrite, Origin: wire.SourceChangeOriginUser,
-		Before: []byte("committed\n"), After: []byte("working\n"),
-	}))
+		RecordLocation: sourceledger.RecordLocation{RootID: rootID, Path: "src/app.ts"},
+		ProjectID:      p.ID,
+		Op:             wire.SourceChangeOpWrite, Origin: wire.SourceChangeOriginUser,
+		Before: []byte("committed\n"), After: []byte("working\n")}))
 
 	code, comparison := contractfixture.GetSourceComparison(t, srv, p.ID, url.Values{
 		"root_id":  {rootID},
@@ -120,13 +119,12 @@ func TestRestoreGitCausedVersionUsesGitObjectStore(t *testing.T) {
 	}
 
 	testutil.FailErr(t, "record git-caused state", ledger.Record(t.Context(), sourceledger.RecordInput{
-		ProjectID: p.ID,
-		RootID:    rootID, Path: "src/app.ts", Op: wire.SourceChangeOpWrite,
+		RecordLocation: sourceledger.RecordLocation{RootID: rootID, Path: "src/app.ts"},
+		ProjectID:      p.ID, Op: wire.SourceChangeOpWrite,
 		Origin: wire.SourceChangeOriginExternal,
 		Cause:  "filesystem_reconcile", CaptureQuality: "reconciled",
 		AfterSHA256: textfile.SHA256(gitBytes), AfterSize: int64(len(gitBytes)),
-		GitTransitionID: terminal[rootID],
-	}))
+		GitTransitionID: terminal[rootID]}))
 	fileID, gitVersionID, err := ledger.History.ResolveFile(t.Context(), p.ID, sourcebranch.Trunk, rootID, "src/app.ts")
 	testutil.FailErr(t, "resolve git-caused version", err)
 
@@ -134,11 +132,10 @@ func TestRestoreGitCausedVersionUsesGitObjectStore(t *testing.T) {
 	testutil.FailErr(t, "write working bytes",
 		os.WriteFile(filepath.Join(nested, "src", "app.ts"), workingBytes, 0o644))
 	testutil.FailErr(t, "record working edit", ledger.Record(t.Context(), sourceledger.RecordInput{
-		ProjectID: p.ID,
-		RootID:    rootID, Path: "src/app.ts", Op: wire.SourceChangeOpWrite,
+		RecordLocation: sourceledger.RecordLocation{RootID: rootID, Path: "src/app.ts"},
+		ProjectID:      p.ID, Op: wire.SourceChangeOpWrite,
 		Origin: wire.SourceChangeOriginUser,
-		Before: gitBytes, After: workingBytes,
-	}))
+		Before: gitBytes, After: workingBytes}))
 
 	body, err := json.Marshal(wire.SourceVersionRestoreRequest{
 		OperationID: uuid.NewString(), FileID: fileID, RootID: rootID, Path: "src/app.ts",
@@ -198,13 +195,12 @@ func TestRestoreGitCausedVersionRefusesDriftedGitBytes(t *testing.T) {
 
 	// Point the record at unavailable bytes.
 	testutil.FailErr(t, "record drifted state", ledger.Record(t.Context(), sourceledger.RecordInput{
-		ProjectID: p.ID,
-		RootID:    rootID, Path: "src/app.ts", Op: wire.SourceChangeOpWrite,
+		RecordLocation: sourceledger.RecordLocation{RootID: rootID, Path: "src/app.ts"},
+		ProjectID:      p.ID, Op: wire.SourceChangeOpWrite,
 		Origin: wire.SourceChangeOriginExternal,
 		Cause:  "filesystem_reconcile", CaptureQuality: "reconciled",
 		AfterSHA256: strings.Repeat("a", 64), AfterSize: 9,
-		GitTransitionID: terminal[rootID],
-	}))
+		GitTransitionID: terminal[rootID]}))
 	fileID, versionID, err := ledger.History.ResolveFile(t.Context(), p.ID, sourcebranch.Trunk, rootID, "src/app.ts")
 	testutil.FailErr(t, "resolve drifted version", err)
 
@@ -396,11 +392,10 @@ func TestCommitRestoreRefusesADriftedObject(t *testing.T) {
 	testutil.FailErr(t, "write working bytes",
 		os.WriteFile(filepath.Join(nested, "src", "app.ts"), []byte("working\n"), 0o644))
 	testutil.FailErr(t, "record tracked state", ledger.Record(t.Context(), sourceledger.RecordInput{
-		ProjectID: p.ID,
-		RootID:    rootID, Path: "src/app.ts", Op: wire.SourceChangeOpWrite,
+		RecordLocation: sourceledger.RecordLocation{RootID: rootID, Path: "src/app.ts"},
+		ProjectID:      p.ID, Op: wire.SourceChangeOpWrite,
 		Origin: wire.SourceChangeOriginUser,
-		Before: []byte("committed\n"), After: []byte("working\n"),
-	}))
+		Before: []byte("committed\n"), After: []byte("working\n")}))
 	fileID, _, err := ledger.History.ResolveFile(t.Context(), p.ID, sourcebranch.Trunk, rootID, "src/app.ts")
 	testutil.FailErr(t, "resolve file", err)
 
@@ -443,11 +438,10 @@ func TestCommitBaselineTreatsADirectoryInHeadAsAbsent(t *testing.T) {
 	testutil.FailErr(t, "write file over directory path",
 		os.WriteFile(filepath.Join(nested, "src"), []byte("now a file\n"), 0o644))
 	testutil.FailErr(t, "record conversion", ledger.Record(t.Context(), sourceledger.RecordInput{
-		ProjectID: p.ID,
-		RootID:    rootID, Path: "src",
-		Op: wire.SourceChangeOpCreate, Origin: wire.SourceChangeOriginUser,
-		After: []byte("now a file\n"),
-	}))
+		RecordLocation: sourceledger.RecordLocation{RootID: rootID, Path: "src"},
+		ProjectID:      p.ID,
+		Op:             wire.SourceChangeOpCreate, Origin: wire.SourceChangeOriginUser,
+		After: []byte("now a file\n")}))
 
 	code, comparison := contractfixture.GetSourceComparison(t, srv, p.ID, url.Values{
 		"root_id":  {rootID},
@@ -484,11 +478,10 @@ func TestCommitBaselineReportsAnUncommittedFileAsAbsent(t *testing.T) {
 	testutil.FailErr(t, "write new file",
 		os.WriteFile(filepath.Join(nested, "src", "fresh.ts"), []byte("brand new\n"), 0o644))
 	testutil.FailErr(t, "record create", ledger.Record(t.Context(), sourceledger.RecordInput{
-		ProjectID: p.ID,
-		RootID:    rootID, Path: "src/fresh.ts",
-		Op: wire.SourceChangeOpCreate, Origin: wire.SourceChangeOriginUser,
-		After: []byte("brand new\n"),
-	}))
+		RecordLocation: sourceledger.RecordLocation{RootID: rootID, Path: "src/fresh.ts"},
+		ProjectID:      p.ID,
+		Op:             wire.SourceChangeOpCreate, Origin: wire.SourceChangeOriginUser,
+		After: []byte("brand new\n")}))
 
 	code, comparison := contractfixture.GetSourceComparison(t, srv, p.ID, url.Values{
 		"root_id":  {rootID},
@@ -520,11 +513,10 @@ func TestCommitBaselineWithoutAWorkingTreeReportsUnavailable(t *testing.T) {
 	rootID := p.Roots[0].ID
 
 	testutil.FailErr(t, "record edit", ledger.Record(t.Context(), sourceledger.RecordInput{
-		ProjectID: p.ID,
-		RootID:    rootID, Path: "note.txt",
-		Op: wire.SourceChangeOpCreate, Origin: wire.SourceChangeOriginUser,
-		After: []byte("only\n"),
-	}))
+		RecordLocation: sourceledger.RecordLocation{RootID: rootID, Path: "note.txt"},
+		ProjectID:      p.ID,
+		Op:             wire.SourceChangeOpCreate, Origin: wire.SourceChangeOriginUser,
+		After: []byte("only\n")}))
 
 	code, _ := contractfixture.GetSourceComparison(t, srv, p.ID, url.Values{
 		"root_id":  {rootID},

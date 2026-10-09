@@ -23,10 +23,11 @@ func preparedAgentWrite(t *testing.T) (*SourceMutationService, sourceeffect.Pend
 	before, after := []byte("before"), []byte("after")
 	testutil.FailErr(t, "seed source", os.WriteFile(path, before, 0o600))
 	effect := sourceeffect.Plan{
-		Record: sourceledger.RecordInput{ProjectID: p.ID, RootID: p.Roots[0].ID, Path: "note.txt",
+		Record: sourceledger.RecordInput{
+			RecordLocation: sourceledger.RecordLocation{RootID: p.Roots[0].ID, Path: "note.txt", EntryKind: sourceledger.EntryKindFile}, ProjectID: p.ID,
 			Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginAgent,
 			Before: before, After: after, BeforeSHA256: textfile.SHA256(before), AfterSHA256: textfile.SHA256(after),
-			ToolName: "write", ToolCallID: "call-1", EntryKind: sourceledger.EntryKindFile},
+			ToolName: "write", ToolCallID: "call-1"},
 		Change: sourcefeed.Change{ProjectID: p.ID, RootID: p.Roots[0].ID, Path: "note.txt",
 			WorkspaceID: p.WorkspaceID(), WorkspaceKind: api.SourceWorkspaceKindProject,
 			Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginAgent, AbsPath: path},

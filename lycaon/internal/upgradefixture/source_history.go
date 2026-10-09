@@ -59,10 +59,10 @@ func SeedSourceHistory(ctx context.Context, database db.Handle, dataDir, project
 	ledger := sourceledger.New(database, filepath.Join(dataDir, enginepaths.SourceContentDirName))
 	defer func() { _ = ledger.Snapshots.Close() }()
 	if err := ledger.Record(ctx, sourceledger.RecordInput{
-		ProjectID: projectID, RootID: rootID, Path: sourceHistoryPath,
-		Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
-		SessionID: sessionID, OperationID: uuid.NewString(), After: body,
-	}); err != nil {
+		RecordLocation: sourceledger.RecordLocation{RootID: rootID, Path: sourceHistoryPath},
+		ProjectID:      projectID,
+		Op:             api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
+		SessionID: sessionID, OperationID: uuid.NewString(), After: body}); err != nil {
 		return SourceEvidence{}, fmt.Errorf("record fixture source body: %w", err)
 	}
 	fileID, versionID, err := ledger.History.ResolveFile(ctx, projectID, sourcebranch.Trunk, rootID, sourceHistoryPath)
@@ -85,10 +85,10 @@ func SeedSourceHistory(ctx context.Context, database db.Handle, dataDir, project
 		return SourceEvidence{}, err
 	}
 	if err := ledger.Record(ctx, sourceledger.RecordInput{
-		ProjectID: projectID, RootID: rootID, Path: sourceHistoryPath,
-		Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginUser,
-		SessionID: sessionID, OperationID: uuid.NewString(), Before: body, After: changed,
-	}); err != nil {
+		RecordLocation: sourceledger.RecordLocation{RootID: rootID, Path: sourceHistoryPath},
+		ProjectID:      projectID,
+		Op:             api.SourceChangeOpWrite, Origin: api.SourceChangeOriginUser,
+		SessionID: sessionID, OperationID: uuid.NewString(), Before: body, After: changed}); err != nil {
 		return SourceEvidence{}, fmt.Errorf("record changed fixture source body: %w", err)
 	}
 	_, evidence.CurrentVersionID, err = ledger.History.ResolveFile(ctx, projectID, sourcebranch.Trunk, rootID, sourceHistoryPath)

@@ -293,9 +293,8 @@ func seedSourceChange(t *testing.T, sqlDB db.Handle, path, op string, at time.Ti
 		`SELECT id FROM project_roots WHERE project_id = ? LIMIT 1`, projectID).Scan(&rootID))
 	store := sourceledger.New(sqlDB, t.TempDir())
 	testutil.FailErr(t, "record source effect", store.Record(t.Context(), sourceledger.RecordInput{
-		ProjectID: projectID,
-		RootID:    rootID, Path: path, Op: api.SourceChangeOp(op),
+		RecordLocation: sourceledger.RecordLocation{RootID: rootID, Path: path},
+		ProjectID:      projectID, Op: api.SourceChangeOp(op),
 		Origin: api.SourceChangeOriginAgent, OperationID: "sc-" + path + op,
-		Before: []byte("before"), After: []byte("after"), TS: at,
-	}))
+		Before: []byte("before"), After: []byte("after"), TS: at}))
 }

@@ -2655,7 +2655,7 @@ dependencies = [
 
 [[package]]
 name = "painted-wolf-code"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "arboard",
  "base64 0.23.1",

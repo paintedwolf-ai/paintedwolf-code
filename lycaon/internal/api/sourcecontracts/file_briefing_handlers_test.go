@@ -11,7 +11,9 @@ import (
 	"testing"
 	"time"
 
+	hostapi "github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/api/briefingadmin"
+	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/filebriefing"
 	"github.com/lycaon/lycaon/internal/project"
@@ -20,8 +22,6 @@ import (
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
-	hostapi "github.com/lycaon/lycaon/internal/api"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -131,9 +131,9 @@ func TestFileBriefingReadsImmutableRetainedVersion(t *testing.T) {
 	currentSource := []byte("package main\n\nfunc Current() {}\n")
 	testutil.FailErr(t, "write current source", os.WriteFile(filepath.Join(root, "main.go"), currentSource, 0o600))
 	testutil.FailErr(t, "record source versions", ledger.Record(t.Context(), sourceledger.RecordInput{
-		ProjectID: p.ID, RootID: p.Roots[0].ID, Path: "main.go", Op: wire.SourceChangeOpWrite,
-		Origin: wire.SourceChangeOriginUser, SessionID: "briefing-version", Before: oldSource, After: currentSource,
-	}))
+		RecordLocation: sourceledger.RecordLocation{RootID: p.Roots[0].ID, Path: "main.go"},
+		ProjectID:      p.ID, Op: wire.SourceChangeOpWrite,
+		Origin: wire.SourceChangeOriginUser, SessionID: "briefing-version", Before: oldSource, After: currentSource}))
 	walk, err := ledger.Walk.QueryWalk(t.Context(), p.ID,
 		sourceledger.Baseline{Kind: sourceledger.BaselineSession, SessionID: "briefing-version"},
 		10, 0, sourceledger.CommitLens{})

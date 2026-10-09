@@ -1429,13 +1429,6 @@ type SourceBranchHeads struct {
 	ObservedTs    string `json:"observed_ts"`
 }
 
-type SourceCheckpointEntries struct {
-	CheckpointID string `json:"checkpoint_id"`
-	FileID       string `json:"file_id"`
-	VersionID    string `json:"version_id"`
-	Ordinal      int64  `json:"ordinal"`
-}
-
 type SourceCheckpointGitStates struct {
 	CheckpointID string `json:"checkpoint_id"`
 	RootID       string `json:"root_id"`
@@ -1474,6 +1467,19 @@ type SourceCommandWindows struct {
 	Ordinal       int64  `json:"ordinal"`
 	StartedTs     string `json:"started_ts"`
 	EndedTs       string `json:"ended_ts"`
+}
+
+type SourceDirectories struct {
+	ID          string         `json:"id"`
+	ProjectID   string         `json:"project_id"`
+	BranchID    string         `json:"branch_id"`
+	RootID      string         `json:"root_id"`
+	ParentID    sql.NullString `json:"parent_id"`
+	Name        string         `json:"name"`
+	Present     int64          `json:"present"`
+	Ordinal     int64          `json:"ordinal"`
+	ObservedTs  string         `json:"observed_ts"`
+	RecoveryKey string         `json:"recovery_key"`
 }
 
 type SourceEffectAuthors struct {
@@ -1573,6 +1579,20 @@ type SourceGitTransitions struct {
 	CommandWindowID sql.NullString `json:"command_window_id"`
 	Ordinal         int64          `json:"ordinal"`
 	ObservedTs      string         `json:"observed_ts"`
+}
+
+type SourceHeadEntries struct {
+	ProjectID     string `json:"project_id"`
+	BranchID      string `json:"branch_id"`
+	FileID        string `json:"file_id"`
+	VersionID     string `json:"version_id"`
+	RootID        string `json:"root_id"`
+	DirectoryID   string `json:"directory_id"`
+	Name          string `json:"name"`
+	State         string `json:"state"`
+	ContentSha256 string `json:"content_sha256"`
+	Ordinal       int64  `json:"ordinal"`
+	ObservedTs    string `json:"observed_ts"`
 }
 
 type SourceHistoryEntries struct {

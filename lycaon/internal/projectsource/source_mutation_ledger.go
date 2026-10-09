@@ -12,9 +12,9 @@ import (
 func (p sourceMutationPlan) ledgerInput(operationID string) sourceledger.RecordInput {
 	in := sourceledger.RecordInput{
 		ProjectID: p.ProjectID, BranchID: p.BranchID,
-		RootID: p.RootID, Path: p.Path, Origin: api.SourceChangeOriginUser, PersonID: p.PersonID,
+		RecordLocation: sourceledger.RecordLocation{RootID: p.RootID, Path: p.Path, EntryKind: sourceledger.EntryKindFile}, Origin: api.SourceChangeOriginUser, PersonID: p.PersonID,
 		SessionID: strings.TrimSpace(p.SessionID), Turn: p.Turn, OperationID: operationID,
-		EntryKind: sourceledger.EntryKindFile, FileID: p.FileID,
+		FileID:               p.FileID,
 		DerivedFromVersionID: p.DerivedFromVersionID, Cause: p.Cause,
 	}
 	if p.Agent != nil {
@@ -23,6 +23,9 @@ func (p sourceMutationPlan) ledgerInput(operationID string) sourceledger.RecordI
 	}
 	if p.EntryKind == SourceEntryFolder {
 		in.EntryKind = sourceledger.EntryKindDirectory
+	}
+	if p.NativeTrash != nil && (p.Kind == "delete" || p.Kind == "restore") {
+		in.NativeRecovery = &sourceledger.NativeRecoveryBinding{Key: p.NativeTrash.RecoveryKey, Restore: p.Kind == "restore"}
 	}
 	switch p.Kind {
 	case "write":

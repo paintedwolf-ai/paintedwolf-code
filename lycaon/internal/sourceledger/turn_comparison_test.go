@@ -12,20 +12,20 @@ import (
 func TestCompareTurnNetsEveryWriteInTheTurn(t *testing.T) {
 	store, ctx := openLedger(t)
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "load.go",
-		Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
-		OperationID: "before-turn", After: []byte("one\n"),
-	})
+		RecordLocation: RecordLocation{RootID: "r1", Path: "load.go"},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
+		OperationID: "before-turn", After: []byte("one\n")})
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "load.go",
-		Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginAgent,
-		SessionID: "s1", Turn: 2, OperationID: "turn-2-first", After: []byte("two\n"),
-	})
+		RecordLocation: RecordLocation{RootID: "r1", Path: "load.go"},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpWrite, Origin: api.SourceChangeOriginAgent,
+		SessionID: "s1", Turn: 2, OperationID: "turn-2-first", After: []byte("two\n")})
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "load.go",
-		Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginAgent,
-		SessionID: "s1", Turn: 2, OperationID: "turn-2-second", After: []byte("three\n"),
-	})
+		RecordLocation: RecordLocation{RootID: "r1", Path: "load.go"},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpWrite, Origin: api.SourceChangeOriginAgent,
+		SessionID: "s1", Turn: 2, OperationID: "turn-2-second", After: []byte("three\n")})
 	fileID, _ := mustResolve(t, store, ctx, "load.go")
 
 	turn, err := store.Comparisons.CompareTurn(ctx, "p1", "s1", 2, fileID, ScopeComparisonOptions{})
@@ -45,15 +45,15 @@ func TestCompareTurnNetsEveryWriteInTheTurn(t *testing.T) {
 func TestCompareTurnIgnoresLaterTurns(t *testing.T) {
 	store, ctx := openLedger(t)
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "load.go",
-		Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginAgent,
-		SessionID: "s1", Turn: 1, OperationID: "turn-1", After: []byte("first\n"),
-	})
+		RecordLocation: RecordLocation{RootID: "r1", Path: "load.go"},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpCreate, Origin: api.SourceChangeOriginAgent,
+		SessionID: "s1", Turn: 1, OperationID: "turn-1", After: []byte("first\n")})
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "load.go",
-		Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginAgent,
-		SessionID: "s1", Turn: 2, OperationID: "turn-2", After: []byte("second\n"),
-	})
+		RecordLocation: RecordLocation{RootID: "r1", Path: "load.go"},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpWrite, Origin: api.SourceChangeOriginAgent,
+		SessionID: "s1", Turn: 2, OperationID: "turn-2", After: []byte("second\n")})
 	fileID, _ := mustResolve(t, store, ctx, "load.go")
 
 	turn, err := store.Comparisons.CompareTurn(ctx, "p1", "s1", 1, fileID, ScopeComparisonOptions{})
@@ -77,10 +77,10 @@ func TestCompareTurnIgnoresLaterTurns(t *testing.T) {
 func TestCompareTurnSkipsUntouchedFiles(t *testing.T) {
 	store, ctx := openLedger(t)
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "other.go",
-		Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginAgent,
-		SessionID: "s1", Turn: 1, OperationID: "turn-1", After: []byte("only\n"),
-	})
+		RecordLocation: RecordLocation{RootID: "r1", Path: "other.go"},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpCreate, Origin: api.SourceChangeOriginAgent,
+		SessionID: "s1", Turn: 1, OperationID: "turn-1", After: []byte("only\n")})
 	fileID, _ := mustResolve(t, store, ctx, "other.go")
 
 	out, err := store.Comparisons.CompareTurn(ctx, "p1", "s1", 2, fileID, ScopeComparisonOptions{})
@@ -94,10 +94,10 @@ func TestCompareTurnSkipsUntouchedFiles(t *testing.T) {
 func TestCompareTurnNamesTheEffectForASingleWrite(t *testing.T) {
 	store, ctx := openLedger(t)
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "once.go",
-		Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginAgent,
-		SessionID: "s1", Turn: 4, OperationID: "turn-4", After: []byte("once\n"),
-	})
+		RecordLocation: RecordLocation{RootID: "r1", Path: "once.go"},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpCreate, Origin: api.SourceChangeOriginAgent,
+		SessionID: "s1", Turn: 4, OperationID: "turn-4", After: []byte("once\n")})
 	fileID, _ := mustResolve(t, store, ctx, "once.go")
 
 	out, err := store.Comparisons.CompareTurn(ctx, "p1", "s1", 4, fileID, ScopeComparisonOptions{})
