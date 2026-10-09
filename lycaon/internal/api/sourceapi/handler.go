@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/fileops"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectsource"
+	scancadence "github.com/lycaon/lycaon/internal/scan/cadence"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretspan"
 	"github.com/lycaon/lycaon/internal/session"
@@ -23,7 +24,6 @@ import (
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/visual"
 	"github.com/lycaon/lycaon/internal/worker"
-	scancadence "github.com/lycaon/lycaon/internal/scan/cadence"
 )
 
 type Deps struct {
@@ -227,7 +227,7 @@ func New(responses *httpio.Responder, background *taskgroup.Group, operations Op
 	hub := deps.Events
 	deps.FileOperations.Observe(func(request fileops.Request) { publishSourceRequest(hub, request) })
 	// Editor saves apply through the same mutation service as other writes.
-	deps.EditorDocuments.SetSourceMutations(deps.SourceMutations)
+	deps.EditorDocuments.SetSourcePaths(deps.SourceMutations.Paths)
 
 	editor := editoradmin.New(responses, background, editoradmin.Dependencies{EditorClients: deps.EditorClients, EditorDocuments: deps.EditorDocuments, Events: deps.Events, ManagedSecrets: deps.ManagedSecrets, MutationGate: deps.MutationGate, ProjectRegistry: deps.ProjectRegistry, SecretSpans: deps.SecretSpans, SessionStore: deps.SessionStore, TryRunPromotion: deps.TryRunPromotion})
 	sourceViews := &sourceViewService{}

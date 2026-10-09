@@ -26,12 +26,12 @@ type Ledger interface {
 }
 
 type Service struct {
-	agentReads      agentReadCache
-	replicas        replicaRuntime
-	store           *Store
-	ledger          Ledger
-	history         *sourceledger.History
-	sourceMutations *projectsource.SourceMutationService
+	agentReads  agentReadCache
+	replicas    replicaRuntime
+	store       *Store
+	ledger      Ledger
+	history     *sourceledger.History
+	sourcePaths *projectsource.SourcePaths
 
 	// roots resolves stable root identities to live paths.
 	roots RootSource
@@ -49,8 +49,8 @@ type Service struct {
 	onChange     func(context.Context, Change)
 }
 
-func (s *Service) SetSourceMutations(mutations *projectsource.SourceMutationService) {
-	s.sourceMutations = mutations
+func (s *Service) SetSourcePaths(paths *projectsource.SourcePaths) {
+	s.sourcePaths = paths
 }
 
 func (s *Service) reserveDocumentSource(ctx context.Context, p *project.Project, d *Document) (func(), error) {
@@ -62,7 +62,7 @@ func (s *Service) reserveDocumentSource(ctx context.Context, p *project.Project,
 	if pending {
 		return nil, projectsource.ErrSourceBusy
 	}
-	return s.sourceMutations.Paths.ReserveSourcePath(rootPath(p, d.RootID), d.Path)
+	return s.sourcePaths.ReserveSourcePath(rootPath(p, d.RootID), d.Path)
 }
 
 // Change describes the projection needed after one document transition.

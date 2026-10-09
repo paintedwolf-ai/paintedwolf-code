@@ -44,7 +44,7 @@ func (f fixedRoots) Get(context.Context, string) (*project.Project, error) { ret
 func TestSourceLifecycleReservationKeepsUnrelatedEditorSavesAvailable(t *testing.T) {
 	f := newAgentFixture(t, map[string]string{"a.txt": "before", "b.txt": "before"})
 	mutations := projectsource.NewSourceMutationService(f.store.db, f.recorder.Store)
-	f.service.SetSourceMutations(mutations)
+	f.service.SetSourcePaths(mutations.Paths)
 	documents := make(map[string]*Document)
 	for _, name := range []string{"a.txt", "b.txt"} {
 		d, err := f.service.Open(t.Context(), f.project, name, f.rootID, "", "window", nil)
