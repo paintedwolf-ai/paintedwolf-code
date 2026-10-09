@@ -9,9 +9,9 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
-func restoreWaitRequest(ctx context.Context, loop *LoopEngine, store *awaitstore.Store, tctx tools.ToolContext, request *waitRequest) error {
+func restoreWaitRequest(ctx context.Context, loop *WaitSubscriptions, store *awaitstore.Store, tctx tools.ToolContext, request *waitRequest) error {
 	if strings.TrimSpace(tctx.Identity.WorkerJobID) == "" {
-		if subscription, complete := loop.runtimeWaitSubscription(tctx.Identity.SessionID); complete {
+		if subscription, complete := loop.Waits.runtimeWaitSubscription(tctx.Identity.SessionID); complete {
 			if !request.ExplicitConditions {
 				request.Conditions = subscription.Conditions
 				request.Triggers = subscription.Triggers
@@ -42,38 +42,8 @@ func restoreWaitRequest(ctx context.Context, loop *LoopEngine, store *awaitstore
 	return nil
 }
 
-func (l *LoopEngine) runtimeWaitSubscription(sessionID string) (waitSubscription, bool) {
-	value, found := l.sleep.Load(sessionID)
-	if !found {
-		return waitSubscription{}, false
-	}
-	state := value.(*sessionSleep)
-	state.mu.Lock()
-	defer state.mu.Unlock()
-	if len(state.waitTriggers) == 0 {
-		return waitSubscription{}, false
-	}
-	for _, trigger := range state.waitTriggers {
-		// Readiness parameters are retained only in the durable lease.
-		if trigger == WaitTriggerHTTPReady || trigger == WaitTriggerPortReady {
-			return waitSubscription{}, false
-		}
-	}
-	_, bounded := waitTriggerSet(state.waitTriggers)[WaitTriggerTimer]
-	subscription := waitSubscription{
-		UntilComplete:  state.untilComplete,
-		Bounded:        bounded,
-		Triggers:       append([]WaitTrigger(nil), state.waitTriggers...),
-		ProcessHandles: append([]string(nil), state.processHandles...),
-		WorkerHandles:  append([]string(nil), state.workerHandles...),
-	}
-	subscription.Conditions = conditionsFromTriggers(subscription.Triggers, subscription.ProcessHandles, subscription.WorkerHandles)
-	return subscription, true
-}
-
-// RecoverWaitLeases reconstructs timers, subscriptions, and active probes after boot.
 // Worker deadlines and runnable transitions remain owned by the worker queue transaction.
-func RecoverWaitLeases(ctx context.Context, loop *LoopEngine, store *awaitstore.Store) error {
+func RecoverWaitLeases(ctx context.Context, loop *WaitSubscriptions, store *awaitstore.Store) error {
 	if loop == nil || store == nil {
 		return nil
 	}
@@ -93,7 +63,7 @@ func RecoverWaitLeases(ctx context.Context, loop *LoopEngine, store *awaitstore.
 		if lease.Deadline.IsZero() || strings.TrimSpace(lease.WorkerJobID) != "" {
 			triggers = removeWaitTrigger(triggers, WaitTriggerTimer)
 		}
-		loop.enterSleep(ctx, lease.SessionID, sleepArm{
+		loop.Waits.enterSleep(ctx, lease.SessionID, sleepArm{
 			until: lease.Deadline, untilComplete: lease.UntilComplete, reason: lease.Reason,
 			triggers: triggers, processHandles: handles, workerHandles: workerHandlesFromConditions(lease.Conditions), mover: SleepMoverHost,
 		})
@@ -104,8 +74,8 @@ func RecoverWaitLeases(ctx context.Context, loop *LoopEngine, store *awaitstore.
 		return err
 	}
 	for _, lease := range pending {
-		loop.rememberWaitWinner(lease.SessionID, lease.ID, lease.Winner)
-		loop.Nudge(ctx, lease.SessionID, anchor.LoopWake, anchor.LoopWake, lease.ID, anchor.Envelope{})
+		loop.Deliveries.rememberWaitWinner(lease.SessionID, lease.ID, lease.Winner)
+		loop.Nudges.Nudge(ctx, lease.SessionID, anchor.LoopWake, anchor.LoopWake, lease.ID, anchor.Envelope{})
 	}
 	return nil
 }

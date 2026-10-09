@@ -1,8 +1,6 @@
 package runstate
 
-import (
-	"errors"
-)
+import "errors"
 
 var (
 	ErrNotFound         = errors.New("workflow run not found")

@@ -1,8 +1,6 @@
 package runstate
 
-import (
-	"context"
-)
+import "context"
 
 type ScaffoldRepository interface {
 	GetVars(ctx context.Context, sessionID string) (map[string]any, error)

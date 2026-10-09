@@ -2,8 +2,9 @@ package runtime
 
 import (
 	"context"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"strings"
+
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 )
 
 // workflowdef.PhaseEvidenceRequirements lists the evidence types a phase declares through

@@ -1,10 +1,11 @@
 package definition_test
 
 import (
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/guidance/feedback"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	"testing"
 )
 
 func TestWorkflowGateFeedbackCatalogMatchesReferences(t *testing.T) {

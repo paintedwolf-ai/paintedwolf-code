@@ -3,6 +3,9 @@ package composition_test
 import (
 	"context"
 	"errors"
+	"strings"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -10,8 +13,6 @@ import (
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
 	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
-	"strings"
-	"testing"
 )
 
 func testComposer(t *testing.T) *workflowcomposition.Composer {

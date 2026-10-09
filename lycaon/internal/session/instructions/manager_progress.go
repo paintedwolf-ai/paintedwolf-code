@@ -2,6 +2,7 @@ package instructions
 
 import (
 	"context"
+
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/session/promptinput"
 	"github.com/lycaon/lycaon/pkg/api"

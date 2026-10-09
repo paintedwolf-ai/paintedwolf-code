@@ -50,7 +50,7 @@ func (s *Conversation) handleStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if s.sessions.Transcript.Streams.ActiveMessageID(id) == messageID {
+	if s.sessions.Runner.Transcript.Streams.ActiveMessageID(id) == messageID {
 		s.followLiveStream(r, w, flusher, id, messageID)
 		return
 	}
@@ -69,9 +69,9 @@ func (s *Conversation) replayStream(w http.ResponseWriter, r *http.Request, flus
 		}
 		return
 	}
-	tokens, found := s.sessions.Transcript.Streams.Tokens(messageID)
+	tokens, found := s.sessions.Runner.Transcript.Streams.Tokens(messageID)
 	if !found {
-		if cached, cachedOK := s.sessions.Transcript.Streams.Content(messageID); cachedOK {
+		if cached, cachedOK := s.sessions.Runner.Transcript.Streams.Content(messageID); cachedOK {
 			content = cached
 		}
 		if !writePromptChunk(w, flusher, wire.PromptStreamChunk{Token: content, Reset: true}) {
@@ -87,10 +87,10 @@ func (s *Conversation) replayStream(w http.ResponseWriter, r *http.Request, flus
 }
 
 func (s *Conversation) followLiveStream(r *http.Request, w http.ResponseWriter, flusher http.Flusher, sessionID, messageID string) {
-	ch, unsub := s.sessions.Streams().Subscribe(messageID)
+	ch, unsub := s.sessions.Runner.Transcript.Streams.Subscribe(messageID)
 	defer unsub()
 
-	if s.sessions.Transcript.Streams.ActiveMessageID(sessionID) != messageID {
+	if s.sessions.Runner.Transcript.Streams.ActiveMessageID(sessionID) != messageID {
 		s.replayStream(w, r, flusher, sessionID, messageID)
 		return
 	}

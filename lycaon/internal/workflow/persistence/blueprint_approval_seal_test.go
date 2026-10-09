@@ -1,17 +1,19 @@
 package persistence_test
 
 import (
+	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
+
 	"context"
 	"database/sql"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/authzcontext"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
-	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
 // A blueprint approval commits its blueprint_approved ledger row in the same

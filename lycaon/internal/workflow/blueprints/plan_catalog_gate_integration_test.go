@@ -4,9 +4,10 @@ package blueprints_test
 
 import (
 	"context"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"testing"
 )
 
 func TestResearchDepthNoneSetsResearchPhaseSkippedPredicate(t *testing.T) {

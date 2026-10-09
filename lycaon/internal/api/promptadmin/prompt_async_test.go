@@ -1,10 +1,16 @@
 package promptadmin
 
 import (
- workflowrunstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	"context"
 	"errors"
 	"fmt"
+	workflowrunstate "github.com/lycaon/lycaon/internal/workflow/runstate"
+	"net/url"
+	"path/filepath"
+	"strings"
+	"syscall"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm/failure"
@@ -16,11 +22,6 @@ import (
 	"github.com/lycaon/lycaon/internal/usernotice"
 	"github.com/lycaon/lycaon/internal/workflow"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"net/url"
-	"path/filepath"
-	"strings"
-	"syscall"
-	"testing"
 )
 
 func testUserNoticeCatalog(t *testing.T) *usernotice.Catalog {

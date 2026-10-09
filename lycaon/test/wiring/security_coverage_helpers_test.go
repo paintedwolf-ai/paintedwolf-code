@@ -3,8 +3,9 @@ package wiring
 import (
 	"context"
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/testutil"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func securityCoverageFixture(t *testing.T, h *Harness, ctx context.Context, runID string) string {

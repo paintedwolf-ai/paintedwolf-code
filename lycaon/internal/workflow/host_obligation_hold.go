@@ -2,11 +2,12 @@ package workflow
 
 import (
 	"context"
+	"sort"
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/conditions"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
-	"sort"
-	"strings"
 )
 
 const topologyHostHoldKind = "topology"

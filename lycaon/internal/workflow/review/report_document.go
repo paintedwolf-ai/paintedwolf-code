@@ -2,14 +2,15 @@ package review
 
 import (
 	"fmt"
-	"github.com/lycaon/lycaon/internal/guidance"
-	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
-	"github.com/lycaon/lycaon/pkg/api"
 	"slices"
 	"sort"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/guidance"
+	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // ReportDocumentFacts are what the document is checked against.

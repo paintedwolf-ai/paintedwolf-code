@@ -2,8 +2,9 @@ package presentation
 
 import (
 	"context"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowgates "github.com/lycaon/lycaon/internal/workflow/gates"
+
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )

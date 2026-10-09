@@ -2,16 +2,18 @@ package contract
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/projectroot"
-	"github.com/lycaon/lycaon/internal/tools"
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
-	"github.com/lycaon/lycaon/test/contract/internal/toolfixture"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/tools"
+	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
+	"github.com/lycaon/lycaon/test/contract/internal/toolfixture"
 )
 
 // coordinatorOnlyTools is the set of tools whose handler bodies guard
@@ -74,8 +76,17 @@ func TestCoordinatorOnlyGuardInventory(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
 	workflowDir := filepath.Join(root, "lycaon", "internal", "workflow")
-	entries, err := os.ReadDir(workflowDir)
-	contractcheck.FailErr(t, "read directory entries", err)
+	var sources []string
+	err := filepath.WalkDir(workflowDir, func(path string, ent fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !ent.IsDir() && strings.HasSuffix(ent.Name(), ".go") && !strings.HasSuffix(ent.Name(), "_test.go") {
+			sources = append(sources, path)
+		}
+		return nil
+	})
+	contractcheck.FailErr(t, "enumerate workflow sources", err)
 
 	// A tool is guarded when the guard call appears between its Register("X",
 	// and the next Register( call.
@@ -83,12 +94,8 @@ func TestCoordinatorOnlyGuardInventory(t *testing.T) {
 	const guard = "toolguard.IsCoordinatorAgent(tctx.Agent)"
 
 	guarded := map[string]bool{}
-	for _, ent := range entries {
-		name := ent.Name()
-		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
-			continue
-		}
-		data, err := os.ReadFile(filepath.Join(workflowDir, name))
+	for _, path := range sources {
+		data, err := os.ReadFile(path)
 		contractcheck.FailErr(t, "read file", err)
 		text := string(data)
 		matches := registerRE.FindAllStringSubmatchIndex(text, -1)

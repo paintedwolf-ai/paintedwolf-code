@@ -3,12 +3,13 @@ package orchestration
 import (
 	"context"
 	"fmt"
-	"github.com/google/uuid"
-	"github.com/lycaon/lycaon/internal/observability"
-	"github.com/lycaon/lycaon/pkg/api"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/observability"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func (o *OrchestratorImpl) runFanOut(ctx context.Context, req RunRequest, wf *workflowRunContext) (*RunResult, error) {

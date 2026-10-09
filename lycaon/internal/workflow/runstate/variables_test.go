@@ -1,8 +1,6 @@
 package runstate
 
-import (
-	"testing"
-)
+import "testing"
 
 func TestForgetReleasesTerminalRunGuard(t *testing.T) {
 	vars := NewVariables(nil, nil, nil)

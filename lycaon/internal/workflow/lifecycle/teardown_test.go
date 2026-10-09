@@ -3,11 +3,12 @@ package lifecycle_test
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/testutil"
 	workflow "github.com/lycaon/lycaon/internal/workflow"
+	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
 type teardownStopStub struct {

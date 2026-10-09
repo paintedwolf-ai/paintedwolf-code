@@ -2,6 +2,10 @@ package workflow
 
 import (
 	"context"
+	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
+	"path/filepath"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/session"
@@ -12,10 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/worker"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
-	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
 	"github.com/lycaon/lycaon/pkg/api"
-	"path/filepath"
-	"testing"
 )
 
 func TestRecordWorkerTerminalProofReentersBuildPhase(t *testing.T) {

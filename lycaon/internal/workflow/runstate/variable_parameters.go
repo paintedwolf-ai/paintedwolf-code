@@ -1,9 +1,10 @@
 package runstate
 
 import (
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/conditions"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	"strings"
 )
 
 func ApplyAutoApproveEffects(vars map[string]any, manifest workflowdef.Manifest) map[string]any {

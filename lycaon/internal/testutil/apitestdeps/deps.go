@@ -5,6 +5,10 @@ package apitestdeps
 import (
 	"context"
 	"errors"
+	"path/filepath"
+	"testing"
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/agentpresence"
 	"github.com/lycaon/lycaon/internal/authzcontext"
@@ -61,9 +65,6 @@ import (
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"path/filepath"
-	"testing"
-	"time"
 )
 
 // Deps mirrors the API dependencies a server cannot be built without.

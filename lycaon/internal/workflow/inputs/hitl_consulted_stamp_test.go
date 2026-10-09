@@ -4,11 +4,12 @@ package inputs_test
 
 import (
 	"encoding/json"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
 func TestAskUserTextResolveStampsHitlConsultedCurrentPhase(t *testing.T) {
@@ -21,10 +22,8 @@ func TestAskUserTextResolveStampsHitlConsultedCurrentPhase(t *testing.T) {
 
 	out, err := fx.runAskUser(ctx, map[string]any{
 		"prompt": "Scope?",
-	}, tools.ToolContext{
-		Identity: tools.InvocationIdentity{SessionID: fx.sess.ID,
-			Agent: orchestration.ProfileCoordinator},
-	})
+	}, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: fx.sess.ID,
+		Agent: orchestration.ProfileCoordinator}})
 	testutil.FailErr(t, "ask_user", err)
 	var body map[string]any
 	testutil.FailErr(t, "unmarshal", json.Unmarshal([]byte(out), &body))
@@ -52,10 +51,8 @@ func TestAskUserChoiceResolveStampsHitlConsultedCurrentPhase(t *testing.T) {
 		"prompt":        "Pick size",
 		"response_type": "single_choice",
 		"options":       []any{"small", "medium"},
-	}, tools.ToolContext{
-		Identity: tools.InvocationIdentity{SessionID: fx.sess.ID,
-			Agent: orchestration.ProfileCoordinator},
-	})
+	}, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: fx.sess.ID,
+		Agent: orchestration.ProfileCoordinator}})
 	testutil.FailErr(t, "ask_user", err)
 	var body map[string]any
 	testutil.FailErr(t, "unmarshal", json.Unmarshal([]byte(out), &body))

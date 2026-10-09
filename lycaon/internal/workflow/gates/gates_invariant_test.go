@@ -2,11 +2,12 @@ package gates_test
 
 import (
 	"context"
+	workflowgates "github.com/lycaon/lycaon/internal/workflow/gates"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	workflowgates "github.com/lycaon/lycaon/internal/workflow/gates"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
 func TestFailClosedGateEvaluatorBlocksPackPredicate(t *testing.T) {

@@ -3,6 +3,9 @@ package workflow
 import (
 	"context"
 	"encoding/json"
+	"testing"
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/eventoutbox"
@@ -14,8 +17,6 @@ import (
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
-	"time"
 )
 
 // outboxRow is one queued event, in the order delivery will take it.

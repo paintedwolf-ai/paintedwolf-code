@@ -1,8 +1,8 @@
 package workflowadmin
 
 import (
- workflowrunstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	"fmt"
+	workflowrunstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/api/httpio"
-	"github.com/lycaon/lycaon/internal/workflow"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 )
 
 // A run whose pinned version left the catalog answers with its own code, not

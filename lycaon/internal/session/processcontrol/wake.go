@@ -22,14 +22,14 @@ func (m *Service) nudgeProcessWait(ctx context.Context, sessionID, handle string
 	if m == nil || strings.TrimSpace(sessionID) == "" {
 		return false
 	}
-	loop := m.loop
-	if loop == nil || !loop.SessionSleepingOnProcess(sessionID, handle) {
+	waits, nudges := m.waits, m.nudges
+	if waits == nil || nudges == nil || !waits.SessionSleepingOnProcess(sessionID, handle) {
 		return false
 	}
 	if wake == anchor.ProcessRefused {
-		loop.NudgeProcessRefused(ctx, sessionID, handle, env)
+		nudges.NudgeProcessRefused(ctx, sessionID, handle, env)
 	} else {
-		loop.NudgeProcessFinished(ctx, sessionID, handle, env)
+		nudges.NudgeProcessFinished(ctx, sessionID, handle, env)
 	}
 	return true
 }

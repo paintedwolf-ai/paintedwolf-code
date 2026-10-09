@@ -2,11 +2,12 @@ package workflow
 
 import (
 	"context"
+	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
 func TestInitialTerminalPhaseCompletesWithoutCoordinatorHooks(t *testing.T) {

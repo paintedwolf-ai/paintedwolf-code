@@ -1,8 +1,9 @@
 package runtime
 
 import (
-	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/coordinator/inject"
 )
 
 func TestFilterPersistedFailedLeavesUsesCurrentLiveGates(t *testing.T) {

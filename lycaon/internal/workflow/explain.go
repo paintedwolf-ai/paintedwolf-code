@@ -3,14 +3,15 @@ package workflow
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"strings"
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/session"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/publication"
 	"github.com/lycaon/lycaon/pkg/api"
-	"log/slog"
-	"strings"
-	"time"
 )
 
 type Explanations struct {

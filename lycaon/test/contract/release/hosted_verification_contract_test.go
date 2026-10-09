@@ -1,11 +1,12 @@
 package contract
 
 import (
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
-	"gopkg.in/yaml.v3"
 	"slices"
 	"strings"
 	"testing"
+
+	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
+	"gopkg.in/yaml.v3"
 )
 
 type hostedStep struct {

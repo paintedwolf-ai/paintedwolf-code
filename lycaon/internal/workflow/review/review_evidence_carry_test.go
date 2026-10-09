@@ -2,13 +2,14 @@ package review_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/testdbseed"
-	"github.com/lycaon/lycaon/internal/testutil"
 	workflow "github.com/lycaon/lycaon/internal/workflow"
 	workflowreview "github.com/lycaon/lycaon/internal/workflow/review"
 	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
-	"github.com/lycaon/lycaon/pkg/api"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testdbseed"
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // startSecuritySurveyRun boots a workflow with two review_loop phases.

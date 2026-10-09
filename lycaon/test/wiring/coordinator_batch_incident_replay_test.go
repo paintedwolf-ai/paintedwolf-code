@@ -2,10 +2,6 @@ package wiring
 
 import (
 	"context"
-	"sync/atomic"
-	"testing"
-	"time"
-
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/batch"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
@@ -16,6 +12,9 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
+	"sync/atomic"
+	"testing"
+	"time"
 )
 
 type batchRunLoopWF struct {
@@ -67,27 +66,27 @@ func TestStackedWakeFactsAreConsumedByOneObservedPrompt(t *testing.T) {
 	deps.GetSession = func(context.Context, string) (*api.Session, error) { return sess, nil }
 	deps.WorkflowSource = &loopwake.WorkflowDomains{Runs: synthesizeWF, Approvals: synthesizeWF, Obligations: synthesizeWF}
 	deps.RunPrompt = func(context.Context, string) (*promptresult.Result, error) {
-		engine.ObservePrompt("s1")(inject.CoordinatorTurnFrame{})
+		engine.Observations.ObservePrompt("s1")(inject.CoordinatorTurnFrame{})
 		prompts.Add(1)
 		return &promptresult.Result{}, nil
 	}
 	engine.SetDeps(deps)
-	finishExecution := engine.BeginPromptExecution(t.Context(), "s1")
+	finishExecution := engine.Admission.BeginPromptExecution(t.Context(), "s1")
 	// Distinct terminal events arrive while synthesis is still in flight.
 	for _, jobID := range []string{"implementation-job", "verifier-job"} {
-		engine.NudgeAfterWorkerJobTerminal(
+		engine.Nudges.NudgeAfterWorkerJobTerminal(
 			t.Context(), "s1", jobID, anchor.WorkerTaskFinished, anchor.WorkerTaskFinished, "", anchor.Envelope{},
 		)
 	}
-	engine.Nudge(context.Background(), "s1", anchor.WaitTimerFired, anchor.WaitTimerFired, "", anchor.Envelope{})
+	engine.Nudges.Nudge(context.Background(), "s1", anchor.WaitTimerFired, anchor.WaitTimerFired, "", anchor.Envelope{})
 	if prompts.Load() != 0 {
 		t.Fatalf("prompts = %d want 0 while session busy", prompts.Load())
 	}
-	if _, ok := engine.PendingForTest("s1"); !ok {
+	if _, ok := engine.Nudges.Pending("s1"); !ok {
 		t.Fatal("worker wake should defer while session busy")
 	}
 	finishExecution()
-	engine.WaitForAsyncTurns(testutil.BoundedContext(t, time.Second))
+	engine.Turns.WaitForAsyncTurns(testutil.BoundedContext(t, time.Second))
 	if got := prompts.Load(); got != 1 {
 		t.Fatalf("deferred worker wake prompts = %d want 1 after idle drain", got)
 	}
@@ -103,14 +102,14 @@ func TestInTurnLatchBlocksSecondSynthesis(t *testing.T) {
 	testutil.FailErr(t, "create session", err)
 	AttachDefaultAmbient(t, h, ctx, sess.ID)
 
-	h.SessionMgr.Runner.Settlement.Begin(sess.ID, anchor.InformRender(anchor.WorkerTaskFinished))
-	h.SessionMgr.Coordinator.Batch.AcceptSynthesis(ctx, sess.ID)
+	h.SessionMgr.BeginPromptTurnForTest(sess.ID, anchor.InformRender(anchor.WorkerTaskFinished))
+	h.SessionMgr.AcceptCoordinatorGroundedSynthesisForTest(ctx, sess.ID)
 
-	guard := h.SessionMgr.Coordinator.Batch.TurnGuard(sess.ID)
+	guard := h.SessionMgr.CoordinatorBatchTurnGuardForTest(sess.ID)
 	if !guard.SynthesisAcceptedThisTurn {
 		t.Fatal("first grounded synthesis should set in-turn latch")
 	}
-	state := h.SessionMgr.Workers.State.ForSession(ctx, sess)
+	state := h.SessionMgr.BuildImplementSessionState(ctx, sess)
 	if state.BatchPhase != batch.PhaseClosed {
 		t.Fatalf("batch_phase = %q want closed after synthesis", state.BatchPhase)
 	}
@@ -134,16 +133,16 @@ func TestStaleBatchSeqWakeDroppedAfterNewUserMessage(t *testing.T) {
 	testutil.FailErr(t, "create session", err)
 	AttachDefaultAmbient(t, h, ctx, sess.ID)
 
-	if _, err := h.SessionMgr.Submissions.Prompt(ctx, sess.ID, "first batch experiment"); err != nil {
+	if _, err := h.SessionMgr.Prompt(ctx, sess.ID, "first batch experiment"); err != nil {
 		testutil.FailErr(t, "Prompt first batch", err)
 	}
-	state := h.SessionMgr.Workers.State.ForSession(ctx, sess)
+	state := h.SessionMgr.BuildImplementSessionState(ctx, sess)
 	seqBefore := state.BatchSeq
 
-	if _, err := h.SessionMgr.Submissions.Prompt(ctx, sess.ID, "second batch after closed synthesis window"); err != nil {
+	if _, err := h.SessionMgr.Prompt(ctx, sess.ID, "second batch after closed synthesis window"); err != nil {
 		testutil.FailErr(t, "Prompt second batch", err)
 	}
-	state = h.SessionMgr.Workers.State.ForSession(ctx, sess)
+	state = h.SessionMgr.BuildImplementSessionState(ctx, sess)
 	if state.BatchSeq <= seqBefore {
 		t.Fatalf("batch_seq = %d want > %d after visible user message", state.BatchSeq, seqBefore)
 	}
@@ -152,10 +151,10 @@ func TestStaleBatchSeqWakeDroppedAfterNewUserMessage(t *testing.T) {
 		staleSeq = 1
 	}
 
-	msgsBefore, err := h.SessionMgr.Runner.Transcript.GetMessages(ctx, sess.ID)
+	msgsBefore, err := h.SessionMgr.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages before stale wake", err)
 
-	h.SessionMgr.Coordinator.Runtime.CoordinatorLoop().Nudge(
+	h.SessionMgr.NudgeCoordinatorLoop(
 		ctx,
 		sess.ID,
 		anchor.WaitTimerFired,
@@ -163,15 +162,15 @@ func TestStaleBatchSeqWakeDroppedAfterNewUserMessage(t *testing.T) {
 		"",
 		anchor.Envelope{BatchSeq: staleSeq, BatchSeqSet: true},
 	)
-	h.SessionMgr.Runner.Coordinator.CoordinatorLoop().DrainPending(ctx, sess.ID)
-	h.SessionMgr.Coordinator.WaitForTurns(testutil.BoundedContext(t, 5*time.Second))
+	h.SessionMgr.DrainLoopPendingForTest(ctx, sess.ID)
+	h.SessionMgr.WaitForCoordinatorAsyncTurns(testutil.BoundedContext(t, 5*time.Second))
 
-	msgsAfter, err := h.SessionMgr.Runner.Transcript.GetMessages(ctx, sess.ID)
+	msgsAfter, err := h.SessionMgr.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages after stale wake", err)
 	if len(msgsAfter) != len(msgsBefore) {
 		t.Fatalf("stale batch_seq scheduled wake appended messages: before=%d after=%d", len(msgsBefore), len(msgsAfter))
 	}
-	if id, ok := h.SessionMgr.Runner.Coordinator.Kicks().PeekPendingKickID(sess.ID); ok && id == anchor.InformRender(anchor.WaitTimerFired) {
+	if id, ok := h.SessionMgr.PendingKickIDForTest(sess.ID); ok && id == anchor.InformRender(anchor.WaitTimerFired) {
 		t.Fatal("stale batch_seq wake must not leave scheduled kick queued")
 	}
 }

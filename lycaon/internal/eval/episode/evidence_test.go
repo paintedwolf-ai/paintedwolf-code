@@ -2,6 +2,11 @@ package episode
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -9,10 +14,6 @@ import (
 	"github.com/lycaon/lycaon/internal/worker"
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	"github.com/lycaon/lycaon/pkg/api"
-	"os"
-	"path/filepath"
-	"testing"
-	"time"
 )
 
 func TestEvidenceUsesApplicationRepositoriesAndSessionIdentity(t *testing.T) {

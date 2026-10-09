@@ -2,13 +2,14 @@ package catalog
 
 import (
 	"context"
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/extpacks"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
 	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"github.com/lycaon/lycaon/internal/workflowdiag"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
 )
 
 // Resolver merges the pack, project, and session workflow tiers.

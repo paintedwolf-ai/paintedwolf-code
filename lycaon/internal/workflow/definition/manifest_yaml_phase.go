@@ -2,10 +2,11 @@ package definition
 
 import (
 	"fmt"
-	"github.com/lycaon/lycaon/internal/blueprint"
 	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
 	"slices"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/blueprint"
 )
 
 func parsePhaseYAML(p phaseYAML) (PhaseDef, error) {

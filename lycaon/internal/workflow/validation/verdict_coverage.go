@@ -3,11 +3,12 @@ package validation
 import (
 	"encoding/json"
 	"fmt"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	"github.com/lycaon/lycaon/pkg/api"
 	"io"
 	"sort"
 	"strings"
+
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // ParseVerdictCoverage reads the single coverage_review field declared by a phase.

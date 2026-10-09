@@ -3,9 +3,10 @@ package turnsettlement
 import (
 	"context"
 	"fmt"
+	"sync"
+
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/pkg/api"
-	"sync"
 )
 
 type deferredTurnSettlementStore struct {
@@ -60,7 +61,7 @@ func (m *Service) Finish(ctx context.Context, sessionID string, promptFailed, ho
 	m.End(sessionID)
 	if m.gate.InProgress(hostCtx, sessionID) {
 		m.deferredTurnSettlement.remove(sessionID)
-		rt.CoordinatorLoop().ClearPending(sessionID)
+		rt.CoordinatorLoop().Nudges.ClearPending(sessionID)
 		rt.Kicks().ClearPending(sessionID)
 		return nil
 	}
@@ -73,7 +74,7 @@ func (m *Service) Finish(ctx context.Context, sessionID string, promptFailed, ho
 			return m.Failure(sessionID, fmt.Errorf("reconcile workflow turn completion: %w", err))
 		}
 	}
-	continuation := rt.CoordinatorLoop().OnTurnComplete(
+	continuation := rt.CoordinatorLoop().Waits.OnTurnComplete(
 		hostCtx, sessionID, hostTurn,
 	)
 	m.batch.Reconcile(hostCtx, sessionID)
@@ -137,7 +138,7 @@ func (m *Service) SettlePending(ctx context.Context, sessionID string) error {
 		return nil
 	}
 	loop := m.runtime.CoordinatorLoop()
-	release, claimed := loop.BeginUserTurnSettlement(ctx, sessionID)
+	release, claimed := loop.Turns.BeginUserTurnSettlement(ctx, sessionID)
 	if !claimed {
 		if hadDeferred {
 			m.deferredTurnSettlement.put(sessionID, disposition)
@@ -145,7 +146,7 @@ func (m *Service) SettlePending(ctx context.Context, sessionID string) error {
 		return nil
 	}
 	if completed {
-		ready, err := loop.CloseCompletedWorkflowWait(ctx, sessionID)
+		ready, err := loop.Subscriptions.CloseCompletedWorkflowWait(ctx, sessionID)
 		if err != nil || !ready {
 			release()
 			if hadDeferred {
@@ -190,7 +191,7 @@ func (m *Service) DisarmInactiveWorkflow(ctx context.Context, sessionID string) 
 	if m.workflows.Policy.CurrentPhase(ctx, sessionID) != "" {
 		return
 	}
-	m.runtime.CoordinatorLoop().DisarmTimerBackstop(ctx, sessionID)
+	m.runtime.CoordinatorLoop().Waits.DisarmTimerBackstop(ctx, sessionID)
 }
 
 // Drain re-enters prompts after releasing the session lock.

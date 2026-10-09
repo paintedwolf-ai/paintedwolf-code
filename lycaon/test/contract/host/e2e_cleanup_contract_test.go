@@ -1,12 +1,13 @@
 package contract
 
 import (
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
+
+	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
 // TestE2EScriptsTearDownVolumes requires complete end-to-end cleanup.

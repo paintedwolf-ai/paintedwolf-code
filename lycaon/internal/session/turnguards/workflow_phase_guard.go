@@ -2,12 +2,13 @@ package turnguards
 
 import (
 	"context"
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/verification"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
 )
 
 const (

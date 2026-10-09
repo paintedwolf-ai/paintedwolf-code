@@ -53,7 +53,7 @@ func WithRecordingLLM() Option {
 	}
 }
 
-// WithLLMClient injects a custom LLM client via configuration.Config.TestLLMClient.
+// WithLLMClient injects a custom LLM client via app.Config.TestLLMClient.
 func WithLLMClient(client modelcall.LLMClient) Option {
 	return func(o *options) {
 		o.llmClient = client

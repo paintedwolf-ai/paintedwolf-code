@@ -37,11 +37,11 @@ func (m *Scans) Finished(ctx context.Context, scan api.CodeScan) {
 		return
 	}
 	loop := m.Runtime.CoordinatorLoop()
-	for _, sessionID := range loop.SessionsSleepingOn(loopwake.WaitTriggerScanDone) {
+	for _, sessionID := range loop.Waits.SessionsSleepingOn(loopwake.WaitTriggerScanDone) {
 		if !m.Wait.Requested(ctx, sessionID, scan.ID) {
 			continue
 		}
-		loop.NudgeScanFinished(ctx, sessionID, scan.ID, anchor.Envelope{
+		loop.Nudges.NudgeScanFinished(ctx, sessionID, scan.ID, anchor.Envelope{
 			ScanID:            scan.ID,
 			ScanStatus:        string(scan.Status),
 			ScanCategories:    scanCategoriesLabel(scan.Categories),

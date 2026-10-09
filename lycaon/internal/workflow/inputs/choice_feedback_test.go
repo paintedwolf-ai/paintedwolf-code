@@ -3,11 +3,12 @@ package inputs_test
 import (
 	"context"
 	"errors"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
-	"testing"
 )
 
 // A multi_choice phase: the choice-branch gate (user_decision:pick,blue) is satisfied by

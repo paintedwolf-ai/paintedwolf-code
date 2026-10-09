@@ -3,6 +3,11 @@ package workflow
 import (
 	"context"
 	"errors"
+	workflowblueprintfiles "github.com/lycaon/lycaon/internal/workflow/blueprintfiles"
+	workflowinputs "github.com/lycaon/lycaon/internal/workflow/inputs"
+	workflowlifecycle "github.com/lycaon/lycaon/internal/workflow/lifecycle"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/authzcontext"
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/conditions"
@@ -13,14 +18,10 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	workflowblueprintfiles "github.com/lycaon/lycaon/internal/workflow/blueprintfiles"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	workflowinputs "github.com/lycaon/lycaon/internal/workflow/inputs"
-	workflowlifecycle "github.com/lycaon/lycaon/internal/workflow/lifecycle"
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
 // testRunStore wires the authorization recorder required for blueprint approvals.

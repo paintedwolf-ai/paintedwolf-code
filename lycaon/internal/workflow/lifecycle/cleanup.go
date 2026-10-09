@@ -4,10 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
+
 	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
-	"log/slog"
 )
 
 // Cleanup settles durable worker and delegation cleanup intents.

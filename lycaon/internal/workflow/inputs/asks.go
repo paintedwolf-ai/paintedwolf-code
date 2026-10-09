@@ -3,17 +3,18 @@ package inputs
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/workflow/publication"
+	"strings"
+	"sync"
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/scaffoldvars"
 	"github.com/lycaon/lycaon/internal/visual"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	"github.com/lycaon/lycaon/internal/workflow/publication"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"strings"
-	"sync"
-	"time"
 )
 
 // MaxAskUserPromptRunes caps ask_user prompt length.

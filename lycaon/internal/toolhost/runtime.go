@@ -115,11 +115,15 @@ func NewRuntime(cfg RuntimeConfig) (*Runtime, error) {
 	runtime.Skills = mutationTools.Skills
 	runtime.Skills.skillsReadTool.Lookup = cfg.SkillLookup
 	if nativeCfg.HasTool("request_tools") {
-		discovery := tools.NewRequestTools(registry, tools.RequestToolsDeps{Activation: activation, Boundary: boundary, Resolve: cfg.RequestResolver, Record: cfg.RequestObserver, RejectFmt: func() *guidance.StaticRejectFormatter { return runtime.Authority.rejectFmt }})
-		if err := discovery.Register(); err != nil {
+		if err := tools.RegisterRequestTools(registry, tools.RequestToolsDeps{
+			Activation: activation,
+			Boundary:   boundary,
+			Resolve:    cfg.RequestResolver,
+			Record:     cfg.RequestObserver,
+			RejectFmt:  func() *guidance.StaticRejectFormatter { return runtime.Authority.rejectFmt },
+		}); err != nil {
 			return nil, fmt.Errorf("request_tools: %w", err)
 		}
-		runtime.Skills.discovery = discovery
 	}
 
 	profilePolicy := toolprofiles.NewProfilePolicyEngine(boundary)

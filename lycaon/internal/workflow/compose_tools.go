@@ -4,12 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/workflow/toolguard"
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/tools"
 	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
 	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
-	"github.com/lycaon/lycaon/internal/workflow/toolguard"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
 )
 
 // composeToolResponse is the slim tool JSON envelope (no effective_yaml).

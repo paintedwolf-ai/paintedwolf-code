@@ -167,9 +167,9 @@ func (m *Service) cancelTreeTurns(ctx context.Context, tree []store.SessionTreeM
 		if rt == nil {
 			continue
 		}
-		rt.CoordinatorLoop().ClearPending(sess.ID)
+		rt.CoordinatorLoop().Nudges.ClearPending(sess.ID)
 		rt.Kicks().ClearPending(sess.ID)
-		rt.CoordinatorLoop().InterruptSleep(ctx, sess.ID)
+		rt.CoordinatorLoop().Waits.InterruptSleep(ctx, sess.ID)
 	}
 }
 

@@ -1,8 +1,9 @@
 package phases
 
 import (
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"testing"
+
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 )
 
 func TestStampPhaseGatesOnLeave(t *testing.T) {

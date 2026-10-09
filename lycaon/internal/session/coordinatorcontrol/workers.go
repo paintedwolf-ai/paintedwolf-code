@@ -26,7 +26,7 @@ func (m *Workers) Terminal(ctx context.Context, parentID, completingJobID string
 	if m == nil {
 		return
 	}
-	m.Runtime.CoordinatorLoop().OnWorkerCycleTerminal(ctx, parentID, completingJobID)
+	m.Runtime.CoordinatorLoop().Cycles.OnWorkerCycleTerminal(ctx, parentID, completingJobID)
 	m.Batch.Reconcile(ctx, parentID)
 	m.Batch.DisarmTerminal(ctx, parentID)
 	m.Settlement.ReconcileSandbox(ctx, parentID)
@@ -39,7 +39,7 @@ func (m *Workers) BudgetRequested(ctx context.Context, task api.WorkerTask) {
 		return
 	}
 	facts := workeroutcomes.BudgetFacts(&task, m.Results.BudgetForTask(ctx, &task))
-	m.Runtime.CoordinatorLoop().NudgeWorkerBudgetRequested(ctx, parentID, task.ID, anchor.Envelope{WorkerBudget: &facts})
+	m.Runtime.CoordinatorLoop().Nudges.NudgeWorkerBudgetRequested(ctx, parentID, task.ID, anchor.Envelope{WorkerBudget: &facts})
 }
 
 func (m *Workers) AfterTerminal(
@@ -50,7 +50,7 @@ func (m *Workers) AfterTerminal(
 	if m == nil || strings.TrimSpace(parentID) == "" || strings.TrimSpace(completingJobID) == "" {
 		return
 	}
-	m.Runtime.CoordinatorLoop().NudgeAfterWorkerJobTerminal(
+	m.Runtime.CoordinatorLoop().Nudges.NudgeAfterWorkerJobTerminal(
 		ctx,
 		parentID,
 		completingJobID,

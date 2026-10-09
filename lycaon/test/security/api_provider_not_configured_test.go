@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/config/configtest"
-	"github.com/lycaon/lycaon/internal/app/configuration"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"net/http"
 	"net/http/httptest"
@@ -47,7 +46,7 @@ func buildNoMockServeApp(t *testing.T) *app.ServeApp {
 		config.DistroMCP: "providers:\n  - id: svca\n    command: \"true\"\n    args: []\n    enabled: false\n",
 	})
 
-	cfg := configuration.Config{
+	cfg := app.Config{
 		ConfigRoot:                configlayout.FindModuleRoot(),
 		DBPath:                    filepath.Join(t.TempDir(), "no-mock.db"),
 		ListenAddr:                "127.0.0.1:0",

@@ -3,15 +3,16 @@ package lifecycle_test
 import (
 	"context"
 	"github.com/lycaon/lycaon/internal/configlayout"
+	"path/filepath"
+	"testing"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/extpacks"
 	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
-	"path/filepath"
-	"testing"
-	"time"
 )
 
 func TestReconcileOrphanedRunEmitsInterruptedBoundary(t *testing.T) {

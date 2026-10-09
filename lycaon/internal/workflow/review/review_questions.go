@@ -4,16 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/url"
+	"slices"
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/reviewcoverage"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"github.com/lycaon/lycaon/pkg/api"
-	"io"
-	"net/url"
-	"slices"
-	"strings"
 )
 
 type reviewQuestionWork struct {
@@ -79,17 +80,6 @@ func (m *Questions) Prepare(ctx context.Context, run *api.WorkflowRun, def workf
 		return vars, err
 	}
 	terminal := workflowvalidation.ReviewLoopVerdictTerminal(def, verdict)
-	if terminal {
-		rules, err := m.Verdicts.VerdictRulesFor(ctx, run)
-		if err != nil {
-			return vars, err
-		}
-		for id := range rules.KnownClaims {
-			if !slices.ContainsFunc(claims, func(c workflowvalidation.VerdictClaim) bool { return c.ID == id }) {
-				return vars, rejectReviewQuestion("claim_outcome_required", "question/"+url.PathEscape(id))
-			}
-		}
-	}
 	known, err = registerReviewQuestions(def, claims, known, facts, terminal)
 	if err != nil {
 		return vars, err

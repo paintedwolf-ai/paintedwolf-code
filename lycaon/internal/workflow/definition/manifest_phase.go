@@ -1,8 +1,9 @@
 package definition
 
 import (
-	"github.com/lycaon/lycaon/pkg/api"
 	"strings"
+
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 const maxExtendsDepth = 3

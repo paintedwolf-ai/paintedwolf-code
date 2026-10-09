@@ -1,10 +1,11 @@
 package contract
 
 import (
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
-	"gopkg.in/yaml.v3"
 	"strings"
 	"testing"
+
+	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
+	"gopkg.in/yaml.v3"
 )
 
 func TestHostedCacheWritesRequireTheTrustedMainRef(t *testing.T) {

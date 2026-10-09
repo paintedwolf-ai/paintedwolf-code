@@ -2,10 +2,11 @@ package phases
 
 import (
 	"context"
+	"time"
+
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
-	"time"
 )
 
 func (m *Service) ActivateInitial(ctx context.Context, run *api.WorkflowRun, manifest workflowdef.Manifest, projectDir string, wake bool) (*api.WorkflowRun, error) {

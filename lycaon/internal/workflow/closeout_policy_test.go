@@ -1,12 +1,13 @@
 package workflow
 
 import (
-	"github.com/lycaon/lycaon/internal/testutil"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 )
 
 func TestParseManifestYAMLCloseoutGated(t *testing.T) {

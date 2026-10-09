@@ -2,8 +2,6 @@ package promptloop_test
 
 import (
 	"context"
-	"testing"
-
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
@@ -13,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
+	"testing"
 )
 
 func TestDispatchContinuesUntilExplicitWait(t *testing.T) {
@@ -41,7 +40,7 @@ func TestDispatchContinuesUntilExplicitWait(t *testing.T) {
 			}
 			accepted := map[string]int{}
 			testutil.FailErr(t, "register task", reg.Register("task", func(_ context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-				if wakes.IsSleeping(sess.ID) {
+				if wakes.Waits.IsSleeping(sess.ID) {
 					t.Error("dispatch parked the coordinator before independent work was started")
 				}
 				role := args["agent_type"].(string)
@@ -49,7 +48,7 @@ func TestDispatchContinuesUntilExplicitWait(t *testing.T) {
 				tctx.Effects.Out.Dispatch = &api.WorkerDispatch{WorkerID: role}
 				return "accepted", nil
 			}))
-			testutil.FailErr(t, "register wait", loopwake.RegisterWaitTool(reg, wakes, loopwake.WaitToolDeps{}))
+			testutil.FailErr(t, "register wait", loopwake.RegisterWaitTool(reg, wakes.Subscriptions, loopwake.WaitToolDeps{}))
 			calls := []api.ToolCall{
 				{ID: "comparison", Name: "task", Args: taskCallArgs("web-researcher", "Compare codebase sizes using current external sources")},
 				{ID: "composition", Name: "task", Args: taskCallArgs("repo-researcher", "Explain the local codebase composition and growth")},
@@ -80,7 +79,7 @@ func TestDispatchContinuesUntilExplicitWait(t *testing.T) {
 			if result.TasksDispatchedCount != tc.workers || accepted["web-researcher"] != 1 || accepted["repo-researcher"] != tc.workers-1 || len(client.requests) != len(responses) {
 				t.Fatalf("dispatches=%d accepted=%v requests=%d want %d unfinished workers followed by wait", result.TasksDispatchedCount, accepted, len(client.requests), tc.workers)
 			}
-			if !wakes.IsSleeping(sess.ID) {
+			if !wakes.Waits.IsSleeping(sess.ID) {
 				t.Fatal("explicit wait did not suspend the coordinator")
 			}
 			for _, request := range client.requests[1:] {

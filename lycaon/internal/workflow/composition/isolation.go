@@ -1,10 +1,11 @@
 package composition
 
 import (
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	"strings"
 )
 
 // manifestRequiresIsolation detects competing parallel writers.

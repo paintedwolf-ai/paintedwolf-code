@@ -2,11 +2,12 @@ package session
 
 import (
 	"fmt"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/tools"
-	"testing"
 )
 
 func TestReviewGuidanceFollowsLiveVerdictGate(t *testing.T) {

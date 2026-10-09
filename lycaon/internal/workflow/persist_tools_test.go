@@ -3,13 +3,14 @@ package workflow
 import (
 	"context"
 	"errors"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
 	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
-	"testing"
 )
 
 func TestPersistToolRejectsConfirmFalse(t *testing.T) {
@@ -47,10 +48,8 @@ phases:
 
 func toolContext(agent, sessionID, dir string) tools.ToolContext {
 	roots := []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}}
-	return tools.ToolContext{
-		Identity: tools.InvocationIdentity{Agent: agent,
-			SessionID: sessionID},
+	return tools.ToolContext{Identity: tools.InvocationIdentity{Agent: agent,
+		SessionID: sessionID},
 		Source: tools.InvocationSource{Roots: roots,
-			ActiveRootID: "r1"},
-	}
+			ActiveRootID: "r1"}}
 }

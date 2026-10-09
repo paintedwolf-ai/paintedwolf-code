@@ -2,6 +2,7 @@ package phases
 
 import (
 	"fmt"
+
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 )

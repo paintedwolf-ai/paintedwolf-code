@@ -4,9 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/db"
 	"strings"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/db"
 )
 
 // SessionScaffoldSQLStore implements SessionScaffoldStore against SQLite.

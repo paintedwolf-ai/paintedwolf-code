@@ -1,17 +1,19 @@
 package workflowadmin
 
 import (
- workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
- workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
 	"context"
 	"encoding/json"
 	"fmt"
+	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
+	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"strings"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/report"
-	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
+	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -21,7 +23,7 @@ func (s *Reports) blockedRunReport(ctx context.Context, run *wire.WorkflowRun, m
 	if err != nil {
 		return report.ReportInput{}, false, err
 	}
-	repair, err := workflow.CurrentReviewRepair(vars, run.CurrentPhase)
+	repair, err := runstate.CurrentReviewRepair(vars, run.CurrentPhase)
 	if err != nil || repair == nil || repair.State != "blocked" || repair.Snapshot == nil {
 		return report.ReportInput{}, false, err
 	}

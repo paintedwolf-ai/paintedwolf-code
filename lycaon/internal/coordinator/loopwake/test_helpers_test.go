@@ -50,3 +50,32 @@ func (s StubLoopWF) HostObligationHoldKinds(context.Context, string) []string {
 	}
 	return []string{s.hostObligationKind}
 }
+
+func loopDepsSnapshotForTest(l *LoopEngine) LoopDeps {
+	var deps LoopDeps
+	deps.GetSession = l.Subscriptions.loopDeps().GetSession
+	deps.HostWakeOverlayPromoteDue = l.Subscriptions.loopDeps().HostWakeOverlayPromoteDue
+	deps.ProcessReport = l.Subscriptions.loopDeps().ProcessReport
+	deps.ProcessRunning = l.Subscriptions.loopDeps().ProcessRunning
+	deps.ProcessState = l.Subscriptions.loopDeps().ProcessState
+	deps.ScanCycleOpen = l.Subscriptions.loopDeps().ScanCycleOpen
+	deps.WorkerCycleIdle = l.Subscriptions.loopDeps().WorkerCycleIdle
+	deps.RunWaitResume = l.Deliveries.loopDeps().RunWaitResume
+	deps.DropPendingKicksBeforeBatchSeq = l.Policy.loopDeps().DropPendingKicksBeforeBatchSeq
+	deps.DropPendingKicksForBatchSeq = l.Policy.loopDeps().DropPendingKicksForBatchSeq
+	deps.HostWakeActionable = l.Policy.loopDeps().HostWakeActionable
+	deps.WorkflowSource = l.Policy.loopDeps().WorkflowSource
+	deps.Limits = l.Facts.loopDeps().Limits
+	deps.WorkflowObligationsOpen = l.Facts.loopDeps().WorkflowObligationsOpen
+	deps.HostTurnBlocked = l.Turns.loopDeps().HostTurnBlocked
+	deps.RunPrompt = l.Turns.loopDeps().RunPrompt
+	deps.PublishWaitLease = l.Waits.loopDeps().PublishWaitLease
+	deps.BoardWillForceInject = l.Nudges.loopDeps().BoardWillForceInject
+	deps.CoordinatorFrame = l.Nudges.loopDeps().CoordinatorFrame
+	deps.HasQueuedKick = l.Nudges.loopDeps().HasQueuedKick
+	deps.OnLoopQuiescent = l.Nudges.loopDeps().OnLoopQuiescent
+	deps.QueueInform = l.Nudges.loopDeps().QueueInform
+	deps.IsCoordinatorSession = l.Admission.loopDeps().IsCoordinatorSession
+	deps.IsEscalated = l.Admission.loopDeps().IsEscalated
+	return deps
+}

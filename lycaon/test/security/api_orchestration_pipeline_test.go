@@ -2,10 +2,6 @@ package security
 
 import (
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/conditions"
-	"github.com/lycaon/lycaon/internal/events"
-	"github.com/lycaon/lycaon/internal/testutil"
-	wire "github.com/lycaon/lycaon/pkg/api"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -13,6 +9,11 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/conditions"
+	"github.com/lycaon/lycaon/internal/events"
+	"github.com/lycaon/lycaon/internal/testutil"
+	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestStartBugbashViaOrchestrator(t *testing.T) {

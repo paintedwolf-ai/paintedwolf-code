@@ -31,8 +31,8 @@ type Settlement interface {
 type Submissions interface {
 	DrainPromptSubmissions(context.Context, string) error
 }
-type Loop interface {
-	HasPendingLoopWakes(string) bool
+type Nudges interface{ HasPendingLoopWakes(string) bool }
+type Cycles interface {
 	WorkerCycleIsIdle(context.Context, string) bool
 }
 type Service struct {
@@ -44,7 +44,8 @@ type Service struct {
 	Submissions    Submissions
 	store          Sessions
 	queue          *queue.Store
-	loop           Loop
+	nudges         Nudges
+	cycles         Cycles
 	promotionHook  promotionHook
 	roundEndDrains roundEndDrains
 }
@@ -57,5 +58,5 @@ func (s *Service) Bind(runner Runner, settlement Settlement, submissions Submiss
 	s.Settlement = settlement
 	s.Submissions = submissions
 }
-func (s *Service) SetLoop(loop Loop)              { s.loop = loop }
-func (s *Service) WaitDrains(ctx context.Context) { s.roundEndDrains.wait(ctx) }
+func (s *Service) SetLoop(nudges Nudges, cycles Cycles) { s.nudges, s.cycles = nudges, cycles }
+func (s *Service) WaitDrains(ctx context.Context)       { s.roundEndDrains.wait(ctx) }

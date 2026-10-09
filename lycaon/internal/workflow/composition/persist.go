@@ -4,6 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/fseffect"
@@ -13,9 +17,6 @@ import (
 	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
 	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"github.com/lycaon/lycaon/pkg/api"
-	"os"
-	"path/filepath"
-	"strings"
 )
 
 // PersistNotConfirmedError is returned when confirm is false without HITL approval.

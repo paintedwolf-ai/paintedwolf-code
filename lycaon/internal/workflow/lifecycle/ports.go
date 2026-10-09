@@ -2,10 +2,11 @@ package lifecycle
 
 import (
 	"context"
+	"time"
+
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
-	"time"
 )
 
 type RunReader interface {

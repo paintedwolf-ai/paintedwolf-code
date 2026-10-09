@@ -1,15 +1,17 @@
 package phases_test
 
 import (
+	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
+
 	"context"
 	"encoding/json"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
-	"testing"
 )
 
 // TestAutoAdvanceMarkerLifecycle covers the host-auto-advance marker
@@ -152,12 +154,10 @@ func TestAutoAdvanceMarkerLifecycle(t *testing.T) {
 
 func runAdvanceTool(t *testing.T, reg *tools.DefaultRegistry, projectDir string) workflowphases.AdvanceToolResult {
 	t.Helper()
-	out, err := reg.Run(context.Background(), "workflow_advance", map[string]any{}, tools.ToolContext{
-		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: projectDir, IsPrimary: true}},
-			ActiveRootID: "r1"},
+	out, err := reg.Run(context.Background(), "workflow_advance", map[string]any{}, tools.ToolContext{Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: projectDir, IsPrimary: true}},
+		ActiveRootID: "r1"},
 		Identity: tools.InvocationIdentity{Agent: "coordinator",
-			SessionID: "sess-1"},
-	})
+			SessionID: "sess-1"}})
 	if err != nil {
 		t.Fatalf("workflow_advance returned bare error: %v", err)
 	}
@@ -230,13 +230,11 @@ func TestAdvanceMarkerConsumeReplaysThroughCommandJournal(t *testing.T) {
 
 func runAdvanceToolWithCallID(t *testing.T, reg *tools.DefaultRegistry, projectDir, toolCallID string) workflowphases.AdvanceToolResult {
 	t.Helper()
-	out, err := reg.Run(context.Background(), "workflow_advance", map[string]any{}, tools.ToolContext{
-		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: projectDir, IsPrimary: true}},
-			ActiveRootID: "r1"},
+	out, err := reg.Run(context.Background(), "workflow_advance", map[string]any{}, tools.ToolContext{Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: projectDir, IsPrimary: true}},
+		ActiveRootID: "r1"},
 		Identity: tools.InvocationIdentity{Agent: "coordinator",
 			SessionID:  "sess-1",
-			ToolCallID: toolCallID},
-	})
+			ToolCallID: toolCallID}})
 	if err != nil {
 		t.Fatalf("workflow_advance returned bare error: %v", err)
 	}

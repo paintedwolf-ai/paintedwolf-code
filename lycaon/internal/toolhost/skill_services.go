@@ -12,7 +12,6 @@ import (
 // SkillServices owns skill catalog and rendering.
 type SkillServices struct {
 	skillsReadTool *skilltools.SkillsReadTool
-	discovery      *tools.RequestTools
 }
 
 func (r *SkillServices) RenderSkillBody(ctx context.Context, tctx tools.ToolContext, sk skills.Skill) (string, error) {
@@ -43,14 +42,4 @@ func (r *SkillServices) SetSkillPackConfiguration(
 		return
 	}
 	r.skillsReadTool.PackConfiguration = fn
-}
-
-// BindTurnSources installs session decision producers before tool serving starts.
-func (r *SkillServices) BindTurnSources(resolve tools.RequestResolver, record tools.RequestObserver, lookup tools.SkillLookup) {
-	if r.discovery != nil {
-		r.discovery.BindResolvers(resolve, record)
-	}
-	if r.skillsReadTool != nil {
-		r.skillsReadTool.Lookup = lookup
-	}
 }

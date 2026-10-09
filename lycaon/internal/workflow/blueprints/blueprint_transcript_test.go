@@ -1,11 +1,12 @@
 package blueprints_test
 
 import (
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
 func TestSyncBlueprintTranscriptPreservesOrdOnPatch(t *testing.T) {

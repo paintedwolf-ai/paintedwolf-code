@@ -2,6 +2,10 @@ package session
 
 import (
 	"context"
+	"strings"
+	"testing"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/hostcmd"
@@ -14,9 +18,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
-	"testing"
-	"time"
 )
 
 type stubVerifyConfig struct{ cmd string }

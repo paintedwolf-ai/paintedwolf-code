@@ -3,11 +3,12 @@ package workflow
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"sync"
 	"sync/atomic"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 )
 
 // TestStartIsSerializedPerSession permits one concurrent start per session.

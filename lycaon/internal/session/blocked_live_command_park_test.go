@@ -47,14 +47,14 @@ func TestParkBlockedLiveCommandsArmsExactProcessSubscription(t *testing.T) {
 		t.Fatal("running visible command was not parked")
 	}
 	loop := mgr.Coordinator.Runtime.CoordinatorLoop()
-	if !loop.IsSleeping("session-1") {
+	if !loop.Waits.IsSleeping("session-1") {
 		t.Fatal("coordinator loop is not sleeping")
 	}
 	triggers := loop.WaitSubscriptionForTest("session-1")
 	if len(triggers) != 2 || triggers[0] != loopwake.WaitTriggerTimer || triggers[1] != loopwake.WaitTriggerProcessDone {
 		t.Fatalf("wait triggers = %v want [timer process_done]", triggers)
 	}
-	handles := loop.ActiveProcessHandles("session-1")
+	handles := loop.Waits.ActiveProcessHandles("session-1")
 	if len(handles) != 1 || handles[0] != handle {
 		t.Fatalf("wait handles = %v want [%s]", handles, handle)
 	}

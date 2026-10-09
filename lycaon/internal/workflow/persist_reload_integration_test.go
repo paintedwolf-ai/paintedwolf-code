@@ -4,6 +4,8 @@ package workflow
 
 import (
 	"context"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -12,7 +14,6 @@ import (
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
 func TestPersistReloadIntegration(t *testing.T) {

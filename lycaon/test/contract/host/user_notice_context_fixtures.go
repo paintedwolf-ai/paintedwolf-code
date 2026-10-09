@@ -3,6 +3,12 @@ package contract
 import (
 	"context"
 	"errors"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"syscall"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/gitengine"
 	"github.com/lycaon/lycaon/internal/guidance"
@@ -14,11 +20,6 @@ import (
 	"github.com/lycaon/lycaon/internal/usernotice"
 	"github.com/lycaon/lycaon/internal/workflow"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"io/fs"
-	"os"
-	"path/filepath"
-	"syscall"
-	"time"
 )
 
 // Forces every probe down its failure path. This non-test file cannot use
@@ -159,7 +160,7 @@ func contextFromPromptErrorFixtures() map[string]map[string]any {
 			&workflow.NotRunnableError{RunID: "11111111-2222-4333-8444-555555555555", Reason: "paused", Status: wire.WorkflowRunStatusPaused},
 		),
 		"workflow_version_unavailable": usernotice.ContextFromPromptError(
-			&workflow.WorkflowVersionUnavailableError{WorkflowID: "security-survey", Version: "1.0.0"},
+			&runstate.WorkflowVersionUnavailableError{WorkflowID: "security-survey", Version: "1.0.0"},
 		),
 		"grounding_escalated": usernotice.ContextFromPromptError(guidance.ErrGroundingEscalated),
 		"workflow_active":     usernotice.ContextFromPromptError(workflow.ErrActiveRunExists),

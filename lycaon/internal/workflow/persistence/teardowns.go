@@ -2,9 +2,10 @@ package persistence
 
 import (
 	"context"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
-	"time"
 )
 
 type Teardowns struct {

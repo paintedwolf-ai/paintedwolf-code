@@ -4,9 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/pkg/api"
-	"time"
 )
 
 type State struct {

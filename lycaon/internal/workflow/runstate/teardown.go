@@ -2,8 +2,9 @@ package runstate
 
 import (
 	"fmt"
-	"github.com/google/uuid"
 	"strings"
+
+	"github.com/google/uuid"
 )
 
 type WorkerCancelScope string

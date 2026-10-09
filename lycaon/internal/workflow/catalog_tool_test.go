@@ -3,6 +3,8 @@ package workflow_test
 import (
 	"context"
 	"encoding/json"
+	"testing"
+
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/projectroot"
@@ -12,7 +14,6 @@ import (
 	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
 	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
-	"testing"
 )
 
 func TestWorkflowCatalogSummariesTool(t *testing.T) {
@@ -26,12 +27,10 @@ func TestWorkflowCatalogSummariesTool(t *testing.T) {
 	}
 	dir := t.TempDir()
 	roots := []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}}
-	out, err := reg.Run(context.Background(), "workflow_catalog_summaries", map[string]any{}, tools.ToolContext{
-		Identity: tools.InvocationIdentity{SessionID: "sess-1",
-			Agent: "coordinator"},
+	out, err := reg.Run(context.Background(), "workflow_catalog_summaries", map[string]any{}, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "sess-1",
+		Agent: "coordinator"},
 		Source: tools.InvocationSource{Roots: roots,
-			ActiveRootID: "r1"},
-	})
+			ActiveRootID: "r1"}})
 	testutil.FailErr(t, "reg.Run failed", err)
 	var payload map[string]any
 	if err := json.Unmarshal([]byte(out), &payload); err != nil {

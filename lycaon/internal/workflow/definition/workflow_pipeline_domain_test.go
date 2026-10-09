@@ -1,13 +1,14 @@
 package definition_test
 
 import (
+	"regexp"
+	"testing"
+
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/rules"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	"regexp"
-	"testing"
 )
 
 func TestBugbashManifestVocabularyRegistered(t *testing.T) {

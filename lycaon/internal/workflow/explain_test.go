@@ -2,11 +2,12 @@ package workflow
 
 import (
 	"context"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
 // progressObligation is a scan-like kind whose pending work has a pass to watch.

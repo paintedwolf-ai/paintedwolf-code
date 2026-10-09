@@ -2,10 +2,11 @@ package workflow
 
 import (
 	"context"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
 func startRun(ctx context.Context, mgr *RunManager, sessionID, workflowID, version string) (*api.WorkflowRun, error) {

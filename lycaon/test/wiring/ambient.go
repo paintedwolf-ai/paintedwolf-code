@@ -2,11 +2,12 @@ package wiring
 
 import (
 	"context"
+	"testing"
+
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	"testing"
 )
 
 // AttachDefaultAmbient uses the same ambient workflow as session creation.

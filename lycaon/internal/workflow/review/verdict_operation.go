@@ -4,8 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"log/slog"
+
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 )
 
 // RecoverVerdictOperations replays pending verdicts; transient failures stay

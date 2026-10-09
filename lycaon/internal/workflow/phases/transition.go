@@ -3,14 +3,15 @@ package phases
 import (
 	"context"
 	"fmt"
+	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
+	"strings"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/scaffoldvars"
-	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
-	"time"
 )
 
 // FireTransition applies an authenticated choice edge.

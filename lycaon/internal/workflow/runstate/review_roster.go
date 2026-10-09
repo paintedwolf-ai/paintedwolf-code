@@ -1,8 +1,9 @@
 package runstate
 
 import (
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"strings"
+
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 )
 
 // ReviewLoopDeclaredAgents is required_agents ∪ if_spawnable, first-seen order.

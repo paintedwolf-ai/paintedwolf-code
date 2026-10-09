@@ -2,11 +2,12 @@ package composition
 
 import (
 	"fmt"
-	"github.com/lycaon/lycaon/config"
-	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/lycaon/lycaon/config"
+	"github.com/lycaon/lycaon/internal/settingsoverlay"
 )
 
 func projectWorkflowsDir() string { return settingsoverlay.Rel("workflows") }

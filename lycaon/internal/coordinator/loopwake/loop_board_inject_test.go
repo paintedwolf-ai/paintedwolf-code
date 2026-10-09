@@ -43,7 +43,7 @@ func TestBoardReinjectionRequiresKnownRun(t *testing.T) {
 				return true
 			}
 			engine.SetDeps(deps)
-			engine.Nudge(t.Context(), sess.ID, anchor.LegFinished, anchor.LegFinished, "leg-1", anchor.Envelope{})
+			engine.Nudges.Nudge(t.Context(), sess.ID, anchor.LegFinished, anchor.LegFinished, "leg-1", anchor.Envelope{})
 			if informed != tc.wantInform || predicted != tc.wantPrediction {
 				t.Fatalf("inform calls=%d prediction calls=%d, want %d and %d", informed, predicted, tc.wantInform, tc.wantPrediction)
 			}

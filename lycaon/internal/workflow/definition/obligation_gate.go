@@ -1,8 +1,9 @@
 package definition
 
 import (
-	"github.com/lycaon/lycaon/internal/conditions"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/conditions"
 )
 
 // ObligationKindFromGateLeaf extracts the kind from obligation_settled:<kind>.

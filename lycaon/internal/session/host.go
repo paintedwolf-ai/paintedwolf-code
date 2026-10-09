@@ -237,13 +237,13 @@ func NewHost(store Store, modelSources Models, registry tools.ToolRegistry) *Hos
 	m.Coordinator.Loop.Runtime = runtime
 	m.Resources.Work.Coordinator = runtime
 	m.RewindRuntime.Coordinator = runtime
-	m.Observations = sessionobservation.New(store, runtime.CoordinatorLoop(), m.Runner.Turns)
-	m.Processes.SetLoop(runtime.CoordinatorLoop())
-	m.Admission.SetLoop(runtime.CoordinatorLoop())
+	m.Observations = sessionobservation.New(store, runtime.CoordinatorLoop().Admission, runtime.CoordinatorLoop().Nudges, m.Runner.Turns)
+	m.Processes.SetLoop(runtime.CoordinatorLoop().Waits, runtime.CoordinatorLoop().Nudges)
+	m.Admission.SetLoop(runtime.CoordinatorLoop().Nudges, runtime.CoordinatorLoop().Cycles)
 	m.ProjectControl.SetAnchors(runtime.Anchors())
 	m.Coordinator.Nudges.SetSurface(runtime)
 	m.Coordinator.Guards.SetSurface(runtime)
-	m.Coordinator.Batch.SetLoop(runtime.CoordinatorLoop())
+	m.Coordinator.Batch.SetLoop(runtime.CoordinatorLoop().Waits)
 	turnSettlement.SetRuntime(runtime)
 	m.Runner.SetRuntime(runtime)
 

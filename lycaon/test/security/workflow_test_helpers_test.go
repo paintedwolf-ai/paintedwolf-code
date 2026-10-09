@@ -3,6 +3,11 @@ package security
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/conditions"
@@ -11,10 +16,6 @@ import (
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/wiring"
-	"net/http"
-	"net/http/httptest"
-	"strings"
-	"testing"
 )
 
 const planStartBody = `{"workflow_id":"plan","workflow_version":"1.0.0","request":"Plan the fixture change"}`
@@ -69,7 +70,7 @@ func completePlanIntakeHTTP(t *testing.T, h *wiring.Harness, runID string) wire.
 	if sess, err := h.WorkflowMgr.Policy.Sessions.Get(ctx, run.SessionID); err == nil && sess != nil {
 		projectDir = sess.WorkspacePath
 	}
-	if err := h.WorkflowMgr.Store.UpdateVars(ctx, run, projectDir, vars); err != nil {
+	if err := h.WorkflowMgr.Store.State.UpdateVars(ctx, run, projectDir, vars); err != nil {
 		testutil.FailErr(t, "update scaffold vars", err)
 	}
 	out, err := h.WorkflowMgr.Phases.Advance(ctx, run.ID)
@@ -102,7 +103,7 @@ func completePlanDepthAtNoneHTTP(t *testing.T, h *wiring.Harness, runID, phaseID
 	if sess, getErr := h.WorkflowMgr.Policy.Sessions.Get(ctx, run.SessionID); getErr == nil && sess != nil {
 		projectDir = sess.WorkspacePath
 	}
-	if err := h.WorkflowMgr.Store.UpdateVars(ctx, run, projectDir, vars); err != nil {
+	if err := h.WorkflowMgr.Store.State.UpdateVars(ctx, run, projectDir, vars); err != nil {
 		testutil.FailErr(t, "persist depth parameter", err)
 	}
 	return advancePlanRunHTTP(t, h.Server, runID)

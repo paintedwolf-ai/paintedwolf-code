@@ -1,8 +1,6 @@
 package definition
 
-import (
-	"strings"
-)
+import "strings"
 
 const evidenceLeafPrefix = "evidence_passed:"
 

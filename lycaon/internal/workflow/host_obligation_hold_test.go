@@ -2,11 +2,12 @@ package workflow
 
 import (
 	"context"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
 // A phase whose gate only the host can settle is held while its ledger is

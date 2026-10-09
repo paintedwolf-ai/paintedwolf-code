@@ -24,8 +24,8 @@ type ToolPolicy interface {
 type Guidance interface {
 	Emit(context.Context, string, anchor.ID, anchor.Envelope)
 }
-type Loop interface {
-	SessionSleepingOnProcess(string, string) bool
+type Waits interface{ SessionSleepingOnProcess(string, string) bool }
+type Nudges interface {
 	NudgeProcessRefused(context.Context, string, string, anchor.Envelope)
 	NudgeProcessFinished(context.Context, string, string, anchor.Envelope)
 }
@@ -36,14 +36,15 @@ type Service struct {
 	ToolPolicy     ToolPolicy
 	Guidance       Guidance
 	store          Sessions
-	loop           Loop
+	waits          Waits
+	nudges         Nudges
 	processReports processReports
 }
 
 func New(sessions Sessions, verification Verification, policy ToolPolicy, guidance Guidance) *Service {
 	return &Service{store: sessions, Verification: verification, ToolPolicy: policy, Guidance: guidance}
 }
-func (s *Service) SetLoop(loop Loop) { s.loop = loop }
+func (s *Service) SetLoop(waits Waits, nudges Nudges) { s.waits, s.nudges = waits, nudges }
 func (s *Service) Run(ctx context.Context, spec heldcall.Spec, fn heldcall.Func) (heldcall.Outcome, error) {
 	if s.Held == nil {
 		settled := fn(ctx)

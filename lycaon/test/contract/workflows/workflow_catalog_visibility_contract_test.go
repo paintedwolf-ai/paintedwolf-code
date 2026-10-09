@@ -2,6 +2,8 @@ package contract
 
 import (
 	"context"
+	"testing"
+
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
@@ -10,7 +12,6 @@ import (
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/wirespec"
 	"github.com/lycaon/lycaon/test/contract/internal/workflowfixture"
-	"testing"
 )
 
 func TestWorkflowCatalogOmitsSystemTier(t *testing.T) {

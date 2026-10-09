@@ -2,13 +2,14 @@ package lifecycle_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/testutil"
 	workflow "github.com/lycaon/lycaon/internal/workflow"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
+	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
 func TestResumeReconcilesTopologyCompletedWhilePaused(t *testing.T) {

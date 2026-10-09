@@ -5,6 +5,12 @@ package hostcontracts
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"testing"
+
 	hostapi "github.com/lycaon/lycaon/internal/api"
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/project"
@@ -13,11 +19,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"net/http"
-	"net/http/httptest"
-	"os"
-	"path/filepath"
-	"testing"
 )
 
 func TestListWorkflowsFromCatalogOnly(t *testing.T) {

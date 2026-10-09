@@ -4,6 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"hash/fnv"
+	"path/filepath"
+	"slices"
+	"strings"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/git"
@@ -19,11 +25,6 @@ import (
 	"github.com/lycaon/lycaon/internal/standingpatterns"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/pkg/api"
-	"hash/fnv"
-	"path/filepath"
-	"slices"
-	"strings"
-	"time"
 )
 
 // MaxBoardGitOthers is the number of non-active repositories carried on BoardGitSlice.

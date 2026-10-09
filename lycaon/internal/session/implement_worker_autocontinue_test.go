@@ -3,6 +3,10 @@ package session_test
 import (
 	"context"
 	"fmt"
+	"strings"
+	"testing"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/session"
@@ -18,9 +22,6 @@ import (
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"strings"
-	"testing"
-	"time"
 )
 
 func TestImplementModeWorkerSummaryUsesCompletionEnvelope(t *testing.T) {

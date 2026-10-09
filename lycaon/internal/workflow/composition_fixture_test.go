@@ -2,12 +2,13 @@ package workflow
 
 import (
 	"context"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
 	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
-	"testing"
 )
 
 func testComposer(t *testing.T) *workflowcomposition.Composer {

@@ -4,6 +4,8 @@ package workflow
 
 import (
 	"context"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/session/store"
@@ -15,7 +17,6 @@ import (
 	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
 func TestStartSessionTierWorkflow(t *testing.T) {

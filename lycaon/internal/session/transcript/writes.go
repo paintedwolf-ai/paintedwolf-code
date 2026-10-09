@@ -3,8 +3,9 @@ package transcript
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/pkg/api"
 	"strings"
+
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func (m *Service) Append(ctx context.Context, sessionID string, msgs ...api.Message) error {

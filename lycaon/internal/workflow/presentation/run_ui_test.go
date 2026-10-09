@@ -2,14 +2,15 @@ package presentation_test
 
 import (
 	"context"
+	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
 func TestPendingWorkflowStartFromScaffold(t *testing.T) {

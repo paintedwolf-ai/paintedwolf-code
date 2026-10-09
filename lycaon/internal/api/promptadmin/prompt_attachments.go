@@ -99,7 +99,7 @@ func (s *Submission) HandlePrompt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	perf.Mark("prepare_attachments")
-	vision := s.Sessions.SessionModelVision(r.Context(), sess)
+	vision := s.Sessions.Coordinator.Model.Vision(r.Context(), sess)
 	acquired, err := attachStore.Retain(req.OperationID, prepared.retainedBlobIDs)
 	if err != nil {
 		s.discardPromptImages(r.Context(), sess.ProjectID, prepared.createdArtifactIDs)

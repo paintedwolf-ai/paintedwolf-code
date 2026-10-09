@@ -4,10 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/workflow/toolguard"
+
 	"github.com/lycaon/lycaon/internal/tools"
 	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
 	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
-	"github.com/lycaon/lycaon/internal/workflow/toolguard"
 )
 
 // RegisterPersistTool registers workflow_persist for coordinator sessions.

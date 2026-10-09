@@ -1,10 +1,11 @@
 package inputs
 
 import (
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"strings"
 	"unicode/utf8"
+
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 )
 
 func askUserInputDigest(norm normalizedAskUser) (string, error) {

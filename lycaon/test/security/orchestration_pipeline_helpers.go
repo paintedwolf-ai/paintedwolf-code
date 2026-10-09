@@ -2,14 +2,15 @@ package security
 
 import (
 	"context"
+	"testing"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/workflow"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/wiring"
-	"testing"
-	"time"
 )
 
 type orchestrationPipelineHarness struct {
@@ -59,7 +60,7 @@ func completeActiveChildRun(t *testing.T, h *orchestrationPipelineHarness) {
 	child.Status = wire.WorkflowRunStatusComplete
 	child.CompletedAt = &now
 	child.UpdatedAt = now
-	testutil.FailErr(t, "complete child run", h.workflowMgr.Store.Update(ctx, child))
+	testutil.FailErr(t, "complete child run", h.workflowMgr.Store.State.Update(ctx, child))
 	testutil.FailErr(t, "resume parent run", h.workflowMgr.Children.ReconcileTerminalRun(ctx, child))
 }
 

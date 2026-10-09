@@ -106,7 +106,7 @@ func (s *Queue) writeQueueError(w http.ResponseWriter, r *http.Request, err erro
 
 // MaybeDrainQueue drains only when no prompt loop can consume Send.
 func (s *Queue) MaybeDrainQueue(parent context.Context, id string) {
-	if s.Sessions.PromptState().Running(id) {
+	if s.Sessions.Runner.Execution.Running(id) {
 		return
 	}
 	s.background.Go(parent, func(ctx context.Context) {

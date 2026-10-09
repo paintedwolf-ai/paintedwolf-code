@@ -1,7 +1,5 @@
 package drafts
 
-import (
-	"errors"
-)
+import "errors"
 
 var ErrNotFound = errors.New("session workflow not found")

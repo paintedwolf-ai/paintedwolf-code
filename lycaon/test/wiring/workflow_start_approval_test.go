@@ -3,10 +3,11 @@ package wiring
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolrejection"
-	wire "github.com/lycaon/lycaon/pkg/api"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
+	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestStateStartRequiresHumanApproval(t *testing.T) {

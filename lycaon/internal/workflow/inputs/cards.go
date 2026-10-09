@@ -4,10 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/lycaon/lycaon/internal/workflow/publication"
-	"github.com/lycaon/lycaon/internal/workflow/runstate"
-	"github.com/lycaon/lycaon/pkg/api"
 	"strings"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // AskUserAnswerBody is the resolved ask_user result.

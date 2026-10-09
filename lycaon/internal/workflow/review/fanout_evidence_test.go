@@ -2,12 +2,13 @@ package review
 
 import (
 	"context"
+	"strings"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
-	"testing"
 )
 
 type fanoutMessageStore struct {

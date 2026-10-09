@@ -1,9 +1,10 @@
 package composition
 
 import (
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/testutil/extpackstest"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	"testing"
 )
 
 func TestManifestRequiresIsolationPackTopology(t *testing.T) {

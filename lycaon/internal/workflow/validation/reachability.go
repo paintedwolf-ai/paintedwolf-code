@@ -2,10 +2,11 @@ package validation
 
 import (
 	"fmt"
+	"strings"
+
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflowdiag"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
 )
 
 // ValidatePhaseReachability checks next-links, orphans, and cycles.

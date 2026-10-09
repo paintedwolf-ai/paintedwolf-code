@@ -1,9 +1,10 @@
 package review
 
 import (
-	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
 	"slices"
 	"sync"
+
+	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
 )
 
 // inventoryShortfalls remembers each phase's last unaccounted ids so the next

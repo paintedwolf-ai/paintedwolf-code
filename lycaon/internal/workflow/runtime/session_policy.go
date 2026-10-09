@@ -1,19 +1,21 @@
 package runtime
 
 import (
+	workflowfacts "github.com/lycaon/lycaon/internal/session/workflowfacts"
+
 	"context"
+	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
+	workflowgates "github.com/lycaon/lycaon/internal/workflow/gates"
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/scaffoldvars"
-	workflowfacts "github.com/lycaon/lycaon/internal/session/workflowfacts"
 	"github.com/lycaon/lycaon/internal/spawn"
-	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	workflowgates "github.com/lycaon/lycaon/internal/workflow/gates"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
 )
 
 // runArchive names the sealed version a retired run reads its guidance from.
@@ -310,13 +312,18 @@ func (m *SessionPolicy) AssertRunnable(ctx context.Context, runID string) error 
 	}
 }
 
+type PolicyBlueprints interface {
+	PolicyContent(context.Context, string, string) (string, error)
+}
+
 type SessionPolicy struct {
-	Runs      runstate.RunsRepository
-	Resolver  *workflowcatalog.Resolver
-	Sessions  Sessions
-	Registry  *conditions.ConditionRegistry
-	Gates     workflowgates.GateEvaluator
-	Approvals ApprovalState
+	Blueprints PolicyBlueprints
+	Runs       runstate.RunsRepository
+	Resolver   *workflowcatalog.Resolver
+	Sessions   Sessions
+	Registry   *conditions.ConditionRegistry
+	Gates      workflowgates.GateEvaluator
+	Approvals  ApprovalState
 }
 
 func (m *SessionPolicy) gateEvaluator() workflowgates.GateEvaluator {

@@ -2,10 +2,11 @@ package intake
 
 import (
 	"fmt"
-	"github.com/lycaon/lycaon/config"
-	"github.com/lycaon/lycaon/internal/extpacks"
 	"strings"
 	"sync"
+
+	"github.com/lycaon/lycaon/config"
+	"github.com/lycaon/lycaon/internal/extpacks"
 )
 
 // IntakeQuestion is a catalog intake entry.

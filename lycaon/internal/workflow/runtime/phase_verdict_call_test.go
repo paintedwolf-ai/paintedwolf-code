@@ -1,15 +1,17 @@
 package runtime_test
 
 import (
+	workflowruntime "github.com/lycaon/lycaon/internal/workflow/runtime"
+
 	"context"
+	"path/filepath"
+	"strings"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolschema"
-	workflowruntime "github.com/lycaon/lycaon/internal/workflow/runtime"
-	"path/filepath"
-	"strings"
-	"testing"
 )
 
 func TestFrameLoaderAttachesTheSessionVerdictCall(t *testing.T) {

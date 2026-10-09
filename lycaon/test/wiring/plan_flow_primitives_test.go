@@ -2,16 +2,16 @@ package wiring
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/configlayout"
-	"github.com/lycaon/lycaon/internal/settingsoverlay"
-	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/workflow"
-	"github.com/lycaon/lycaon/internal/workflow/runstate"
-	"github.com/lycaon/lycaon/pkg/api"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/configlayout"
+	"github.com/lycaon/lycaon/internal/settingsoverlay"
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func installPlanFlowPrimitivesFixture(t *testing.T, projectDir string) {

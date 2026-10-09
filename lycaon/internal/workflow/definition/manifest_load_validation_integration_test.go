@@ -3,12 +3,13 @@
 package definition_test
 
 import (
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/rules"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/vocabulary"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	"testing"
 )
 
 func TestBundledPlanManifestLoadValidation(t *testing.T) {

@@ -3,15 +3,16 @@ package workflow
 import (
 	"context"
 	"errors"
+	"sync"
+	"testing"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/hostctx"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/lifecycle"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
-	"sync"
-	"testing"
-	"time"
 )
 
 func TestFollowUpRepairsPersistedWorkflowGap(t *testing.T) {

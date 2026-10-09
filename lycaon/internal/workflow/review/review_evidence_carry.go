@@ -2,10 +2,11 @@ package review
 
 import (
 	"context"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	"sort"
 	"strings"
+
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 )
 
 // StampedReviewVerdict is one terminal review_loop verdict the run has recorded.

@@ -2,14 +2,15 @@ package contractfixture
 
 import (
 	"context"
+	"testing"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/repoinfo"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/workflow"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"testing"
-	"time"
 )
 
 func MustOpenWorkflowTestDB(t *testing.T) db.ReadHandle {
@@ -22,7 +23,7 @@ func WaitAmbientActiveRun(t *testing.T, wfMgr *workflow.RunManager, sessionID st
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		run, err := wfMgr.Store.Runs.ActiveBySession(context.Background(), sessionID)
+		run, err := wfMgr.GetActive(context.Background(), sessionID)
 		testutil.FailErr(t, "GetActive", err)
 		if run != nil {
 			return run

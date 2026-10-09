@@ -3,11 +3,12 @@ package composition_test
 import (
 	"context"
 	"errors"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
-	"testing"
 )
 
 func TestComposeExtendsUnknownParent422(t *testing.T) {

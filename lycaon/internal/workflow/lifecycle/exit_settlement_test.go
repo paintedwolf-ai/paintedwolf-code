@@ -3,13 +3,14 @@ package lifecycle_test
 import (
 	"errors"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
 func TestRootWorkflowExitReleasesVisibleTurn(t *testing.T) {

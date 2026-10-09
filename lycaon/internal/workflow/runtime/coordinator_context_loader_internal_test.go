@@ -1,8 +1,9 @@
 package runtime
 
 import (
-	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
 	"testing"
+
+	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
 )
 
 func TestHostStringSliceVarReadsSliceAny(t *testing.T) {

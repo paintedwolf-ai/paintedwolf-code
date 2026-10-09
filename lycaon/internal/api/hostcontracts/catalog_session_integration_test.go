@@ -4,6 +4,10 @@ package hostcontracts
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
 	hostapi "github.com/lycaon/lycaon/internal/api"
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/project"
@@ -12,9 +16,6 @@ import (
 	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"net/http"
-	"net/http/httptest"
-	"testing"
 )
 
 func TestListWorkflowsIncludesSessionScope(t *testing.T) {

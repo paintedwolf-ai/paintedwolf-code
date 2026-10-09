@@ -22,11 +22,11 @@ func TestStreamReplayRequiresTranscriptMembership(t *testing.T) {
 			testutil.FailErr(t, "append message", srv.Sources.Workspace.SessionStore.AppendMessages(t.Context(), a.ID, msg))
 			switch mode {
 			case "tokens":
-				srv.Admin.SessionAdmin.Lifecycle.Sessions.Streams().CacheReplay(msg.ID, msg.Content, []string{msg.Content})
+				srv.Admin.SessionAdmin.Lifecycle.Sessions.Runner.Transcript.Streams.CacheReplay(msg.ID, msg.Content, []string{msg.Content})
 			case "content":
-				srv.Admin.SessionAdmin.Lifecycle.Sessions.Streams().CacheReplay(msg.ID, msg.Content, nil)
+				srv.Admin.SessionAdmin.Lifecycle.Sessions.Runner.Transcript.Streams.CacheReplay(msg.ID, msg.Content, nil)
 			case "active":
-				srv.Admin.SessionAdmin.Lifecycle.Sessions.Streams().CacheLive(a.ID, msg.ID, msg.Content, nil, 1)
+				srv.Admin.SessionAdmin.Lifecycle.Sessions.Runner.Transcript.Streams.CacheLive(a.ID, msg.ID, msg.Content, nil, 1)
 			}
 			request := func(sessionID string) *httptest.ResponseRecorder {
 				w := httptest.NewRecorder()
@@ -35,7 +35,7 @@ func TestStreamReplayRequiresTranscriptMembership(t *testing.T) {
 			}
 			contractfixture.AssertErrorResponse(t, request(b.ID), http.StatusNotFound, "message_not_found")
 			if mode == "active" {
-				srv.Admin.SessionAdmin.Lifecycle.Sessions.Streams().Finish(t.Context(), a.ID)
+				srv.Admin.SessionAdmin.Lifecycle.Sessions.Runner.Transcript.Streams.Finish(t.Context(), a.ID)
 			}
 			if w := request(a.ID); w.Code != http.StatusOK || !strings.Contains(w.Body.String(), msg.Content) {
 				t.Fatalf("owner replay status=%d body=%s", w.Code, w.Body.String())

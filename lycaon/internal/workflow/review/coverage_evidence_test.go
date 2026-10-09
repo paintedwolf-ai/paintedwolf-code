@@ -2,10 +2,11 @@ package review
 
 import (
 	"encoding/json"
+	"testing"
+
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
 func TestCoverageVerdictCitationsJoinGrounding(t *testing.T) {

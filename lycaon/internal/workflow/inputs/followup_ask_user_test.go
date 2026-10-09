@@ -1,14 +1,15 @@
 package inputs_test
 
 import (
-	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/workflow"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowinputs "github.com/lycaon/lycaon/internal/workflow/inputs"
-	"github.com/lycaon/lycaon/internal/workflow/runstate"
-	"github.com/lycaon/lycaon/pkg/api"
 	"testing"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/testutil"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestFollowUpQuestionSurvivesWorkflowManagerRestart(t *testing.T) {

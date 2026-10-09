@@ -1,6 +1,8 @@
 package tools
 
 import (
+	"time"
+
 	"github.com/lycaon/lycaon/internal/confine"
 )
 
@@ -8,6 +10,7 @@ import (
 type SocketCapabilityRuntime interface {
 	AppliedGrants(rootSessionID string) []confine.SocketGrant
 	AuthorizedGrants(rootSessionID, sessionID, toolCallID, actionDigest string, requested []confine.SocketGrant) []confine.SocketGrant
+	GrantChat(rootSessionID string, g confine.SocketGrant, grantID, checkpointID, actionDigest string, expiresAt *time.Time)
 	IssuePermit(sessionID, toolCallID, actionDigest string, g confine.SocketGrant)
 	ConsumePermit(sessionID, toolCallID, actionDigest string, g confine.SocketGrant) (bool, error)
 }

@@ -1,12 +1,13 @@
 package runstate
 
 import (
-	"github.com/lycaon/lycaon/internal/conditions"
-	"github.com/lycaon/lycaon/internal/scaffoldvars"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/conditions"
+	"github.com/lycaon/lycaon/internal/scaffoldvars"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 )
 
 // SetHostVar writes one host-managed workflow variable.

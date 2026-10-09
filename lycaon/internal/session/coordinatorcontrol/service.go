@@ -52,7 +52,7 @@ func (m *Service) WaitForTurns(ctx context.Context) {
 	if m == nil {
 		return
 	}
-	m.Runtime.CoordinatorLoop().WaitForAsyncTurns(ctx)
+	m.Runtime.CoordinatorLoop().Turns.WaitForAsyncTurns(ctx)
 	m.Admission.WaitDrains(ctx)
 }
 

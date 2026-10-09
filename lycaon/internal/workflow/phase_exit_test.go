@@ -1,16 +1,16 @@
 package workflow
 
 import (
+	"path/filepath"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolschema"
-	"path/filepath"
-	"testing"
 )
 
 // Prompt tests cover each projected exit kind.
-
 
 // The frame loader composes a review phase's call from the session's catalog;
 // without a catalog source the phase offers the stock schema unchanged.

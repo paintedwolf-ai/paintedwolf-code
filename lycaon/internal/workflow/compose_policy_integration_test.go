@@ -5,6 +5,8 @@ package workflow
 import (
 	"context"
 	"errors"
+	"testing"
+
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/extpacks"
@@ -18,7 +20,6 @@ import (
 	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
 func TestComposePolicyBlocksVetWithoutSecurityGate(t *testing.T) {

@@ -59,9 +59,9 @@ func (m *Service) BeforeInvoke(_ context.Context, sess *api.Session, toolName st
 	return nil
 }
 
-func (m *Service) policyWorkflows() *toolpolicy.WorkflowDomains {
-	if m.workflows == nil {
+func (m *Service) policyWorkflows() toolpolicy.WorkflowSource {
+	if m.workflows == nil || m.workflows.Policy == nil {
 		return nil
 	}
-	return &toolpolicy.WorkflowDomains{Policy: m.workflows.Policy, Blueprints: m.workflows.Blueprints, Runs: m.workflows.Runs}
+	return m.workflows.Policy.PolicySnapshot
 }

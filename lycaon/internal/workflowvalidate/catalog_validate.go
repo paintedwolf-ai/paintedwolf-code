@@ -3,6 +3,8 @@ package workflowvalidate
 import (
 	"context"
 	"fmt"
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/orchestration"
@@ -12,7 +14,6 @@ import (
 	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"github.com/lycaon/lycaon/internal/workflowdiag"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
 )
 
 // CatalogValidateMode selects which catalog slice to validate.

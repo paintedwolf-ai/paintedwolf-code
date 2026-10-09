@@ -3,12 +3,13 @@ package security
 import (
 	"context"
 	"encoding/json"
-	"github.com/lycaon/lycaon/pkg/api"
-	"github.com/lycaon/lycaon/test/wiring"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/pkg/api"
+	"github.com/lycaon/lycaon/test/wiring"
 )
 
 func TestGetSessionPendingWorkflowStartOpenAPI(t *testing.T) {
@@ -18,7 +19,7 @@ func TestGetSessionPendingWorkflowStartOpenAPI(t *testing.T) {
 	sess := createSessionHTTP(t, srv, dir)
 
 	exitAmbientRunHTTP(t, srv, sess.ID)
-	active, err := h.WorkflowMgr.GetActive(t.Context(), sess.ID)
+	active, err := h.WorkflowMgr.Store.Runs.ActiveBySession(t.Context(), sess.ID)
 	if err != nil || active != nil {
 		t.Fatalf("ambient exit left active workflow: %+v; error=%v", active, err)
 	}

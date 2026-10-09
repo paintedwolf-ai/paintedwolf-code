@@ -1,11 +1,12 @@
 package runstate
 
 import (
+	"strings"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/conditions"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
-	"time"
 )
 
 func SetHostVar(vars map[string]any, path string, value any) map[string]any {

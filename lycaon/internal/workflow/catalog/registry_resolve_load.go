@@ -1,13 +1,14 @@
 package catalog
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflowdiag"
 	"github.com/lycaon/lycaon/pkg/api"
-	"os"
-	"path/filepath"
-	"strings"
 )
 
 func collectProjectManifests(projectDir string, candidates manifestCandidates, excluded *[]api.ExcludedWorkflow) error {

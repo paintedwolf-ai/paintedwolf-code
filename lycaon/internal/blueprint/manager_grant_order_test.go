@@ -2,6 +2,8 @@ package blueprint
 
 import (
 	"context"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/authzcontext"
 	"github.com/lycaon/lycaon/internal/authzledger"
 	"github.com/lycaon/lycaon/internal/db"
@@ -9,7 +11,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
 // approvedManager returns a manager whose blueprint is approved for its current

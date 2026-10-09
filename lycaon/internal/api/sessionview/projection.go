@@ -2,13 +2,14 @@ package sessionview
 
 import (
 	"context"
+	"net/http"
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/workflow"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"net/http"
-	"strings"
 )
 
 type Projector struct {
@@ -36,7 +37,7 @@ func (s *Projector) EnrichSession(ctx context.Context, sess *wire.Session) {
 	s.HydrateSessionWorkspace(ctx, sess)
 	sess.UntrustedContent = s.Store.SessionUntrustedContent(sess.ID)
 	sess.PromptPending = s.Sessions.Runner.SubmissionState.PromptPending(ctx, sess.ID)
-	if ui, err := s.Workflows.ComputeSessionUI(ctx, sess.ID); err == nil {
+	if ui, err := s.Workflows.Presentation.ComputeSessionUI(ctx, sess.ID); err == nil {
 		sess.UI = ui
 	}
 	if protection := s.Sessions.Chats.Protection.ProtectionStateForSession(sess.ID); protection != nil {
@@ -69,12 +70,12 @@ func (s *Projector) EnrichWorkflowRun(ctx context.Context, run *wire.WorkflowRun
 	if run == nil {
 		return
 	}
-	_ = s.Workflows.AttachRunUI(ctx, run)
+	_ = s.Workflows.Presentation.AttachRunUI(ctx, run)
 }
 
 func (s *Projector) EnrichWorkflowRuns(ctx context.Context, runs []*wire.WorkflowRun) {
 	for _, run := range runs {
-		_ = s.Workflows.AttachRunUI(ctx, run)
+		_ = s.Workflows.Presentation.AttachRunUI(ctx, run)
 	}
 }
 

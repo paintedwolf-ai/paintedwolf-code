@@ -2,6 +2,7 @@ package phases
 
 import (
 	"context"
+
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 )
 

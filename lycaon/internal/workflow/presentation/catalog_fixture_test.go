@@ -1,12 +1,13 @@
 package presentation_test
 
 import (
+	"path/filepath"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolschema"
-	"path/filepath"
-	"testing"
 )
 
 // Prompt tests cover each projected exit kind.

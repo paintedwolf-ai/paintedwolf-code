@@ -83,8 +83,8 @@ func TestFailedTurnBlocksAutomaticAdmissionButAllowsExplicitRetry(t *testing.T) 
 			t.Fatalf("turn status=%s", status)
 		}
 		loop := mgr.Coordinator.Runtime.CoordinatorLoop()
-		loop.Nudge(t.Context(), sess.ID, anchor.PhaseAdvanced, "", "", anchor.Envelope{})
-		if !loop.HasPendingLoopWakes(sess.ID) {
+		loop.Nudges.Nudge(t.Context(), sess.ID, anchor.PhaseAdvanced, "", "", anchor.Envelope{})
+		if !loop.Nudges.HasPendingLoopWakes(sess.ID) {
 			t.Fatal("failed turn discarded a new wake")
 		}
 		if !mgr.Admission.RoundComplete(t.Context(), sess.ID) {

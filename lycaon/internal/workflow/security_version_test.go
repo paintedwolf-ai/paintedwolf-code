@@ -1,11 +1,12 @@
 package workflow
 
 import (
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
 func TestCurrentSecurityVersionStartsAndReleasedVersionRemainsResolvable(t *testing.T) {

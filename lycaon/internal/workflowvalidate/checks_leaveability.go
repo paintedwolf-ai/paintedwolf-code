@@ -2,6 +2,8 @@ package workflowvalidate
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/orchestration"
@@ -9,7 +11,6 @@ import (
 	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"github.com/lycaon/lycaon/internal/workflowdiag"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
 )
 
 func checkLeaveability(opts CatalogValidateOptions, path string, m workflowdef.Manifest) []api.ComposeValidationError {

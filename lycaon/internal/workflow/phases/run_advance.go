@@ -3,15 +3,16 @@ package phases
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/conditions"
 	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowgates "github.com/lycaon/lycaon/internal/workflow/gates"
-	"github.com/lycaon/lycaon/internal/workflow/runstate"
-	"github.com/lycaon/lycaon/pkg/api"
 	"log/slog"
 	"strings"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/conditions"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // Advance moves to the next manifest phase or completes the run.

@@ -2,6 +2,12 @@ package contract
 
 import (
 	"context"
+	"go/parser"
+	"go/token"
+	"path/filepath"
+	"strings"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
@@ -22,11 +28,6 @@ import (
 	workflowruntime "github.com/lycaon/lycaon/internal/workflow/runtime"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
-	"go/parser"
-	"go/token"
-	"path/filepath"
-	"strings"
-	"testing"
 )
 
 func TestInjectBuildersDoNotImportBlueprints(t *testing.T) {

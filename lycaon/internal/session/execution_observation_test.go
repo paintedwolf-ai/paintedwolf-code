@@ -69,7 +69,7 @@ func TestExecutionObservationUsesApplicationOwners(t *testing.T) {
 			check(false)
 			checkpoints.pending = nil
 			check(true)
-			release := manager.Runner.Coordinator.CoordinatorLoop().BeginPromptExecution(t.Context(), child.ID)
+			release := manager.Runner.Coordinator.CoordinatorLoop().Admission.BeginPromptExecution(t.Context(), child.ID)
 			check(false)
 			release()
 			check(true)
@@ -132,7 +132,7 @@ func TestExecutionTreeSupportsWorkflowStartsWithoutPromptAdmission(t *testing.T)
 	if !observation.Settled || observation.SubmissionID != "" {
 		t.Fatalf("workflow tree observation: %+v", observation)
 	}
-	release := manager.Runner.Coordinator.CoordinatorLoop().BeginPromptExecution(t.Context(), root.ID)
+	release := manager.Runner.Coordinator.CoordinatorLoop().Admission.BeginPromptExecution(t.Context(), root.ID)
 	defer release()
 	observation, err = manager.Observations.Tree(t.Context(), root.ID)
 	testutil.FailErr(t, "observe active workflow", err)

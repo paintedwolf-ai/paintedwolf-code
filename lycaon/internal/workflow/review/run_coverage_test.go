@@ -4,16 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/lycaon/lycaon/internal/conditions"
-	"github.com/lycaon/lycaon/internal/testutil"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowreview "github.com/lycaon/lycaon/internal/workflow/review"
 	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	workflowruntime "github.com/lycaon/lycaon/internal/workflow/runtime"
-	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
-	"github.com/lycaon/lycaon/pkg/api"
 	"testing"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/conditions"
+	"github.com/lycaon/lycaon/internal/testutil"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestCoverageFactsDeduplicateMovedFilesAndFenceRescans(t *testing.T) {

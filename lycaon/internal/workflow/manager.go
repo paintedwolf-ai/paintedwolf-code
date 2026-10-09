@@ -2,13 +2,7 @@ package workflow
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/conditions"
-	"github.com/lycaon/lycaon/internal/events"
-	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/visual"
 	workflowblueprints "github.com/lycaon/lycaon/internal/workflow/blueprints"
-	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowgates "github.com/lycaon/lycaon/internal/workflow/gates"
 	workflowinputs "github.com/lycaon/lycaon/internal/workflow/inputs"
 	workflowlifecycle "github.com/lycaon/lycaon/internal/workflow/lifecycle"
@@ -19,6 +13,13 @@ import (
 	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	workflowruntime "github.com/lycaon/lycaon/internal/workflow/runtime"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/conditions"
+	"github.com/lycaon/lycaon/internal/events"
+	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/visual"
+	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 )
 
 // RunManager composes workflow services against the persistence domains.
@@ -146,6 +147,7 @@ func NewManager(store *runstate.Repository, sessions session.Store, manifests *w
 		store.Transactions.SetSessionMutations(mutations)
 	}
 
+	manager.Policy.Blueprints = manager.Blueprints
 	return manager
 }
 

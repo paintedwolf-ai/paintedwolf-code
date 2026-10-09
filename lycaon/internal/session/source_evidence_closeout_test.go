@@ -2,6 +2,10 @@ package session
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/inspector"
 	"github.com/lycaon/lycaon/internal/invocation"
 	sessiondecisions "github.com/lycaon/lycaon/internal/session/decisions"
@@ -11,9 +15,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testbaseline"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
-	"os"
-	"path/filepath"
-	"testing"
 )
 
 func sourceEvidenceCloseoutHarness(t *testing.T) (*Host, *api.Session, []api.Message) {

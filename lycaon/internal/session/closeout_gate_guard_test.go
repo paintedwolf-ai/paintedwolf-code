@@ -2,7 +2,6 @@ package session
 
 import (
 	"context"
-	workflowfacts "github.com/lycaon/lycaon/internal/session/workflowfacts"
 	"strings"
 	"testing"
 

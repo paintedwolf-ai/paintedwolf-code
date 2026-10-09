@@ -2,13 +2,14 @@ package validation
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/agentdef"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/spawn"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflowdiag"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
 )
 
 // Tool IDs required by host leaveability rules.

@@ -47,7 +47,7 @@ Those literals are a write floor, not a matcher. A path a bundled rule names is 
 
 | Property | Why |
 |---|---|
-| Load failure is a boot failure | A pack that failed to parse must not quietly make `~/.ssh` writable. `Detections.LoadFloors` in [`internal/app/security/floors.go`](../lycaon/internal/app/security/floors.go) returns an error and the sidecar does not start. A matcher pack that fails to load only costs coverage; these cost the floor. |
+| Load failure is a boot failure | A pack that failed to parse must not quietly make `~/.ssh` writable. `wireCredentialFloors` in [`internal/app/build_credential_stores.go`](../lycaon/internal/app/build_credential_stores.go) returns an error and the sidecar does not start. A matcher pack that fails to load only costs coverage; these cost the floor. |
 | Severity bands do not apply | The posture ladder below decides when a *match* may ask. A floor input is not a match, so every supported rule in `credential-stores` contributes its `TargetFile` paths at any level, `informational` included (`Matcher.CredentialStorePaths`). |
 | Extension only, outward from the shipped set | `credential-stores` unions the bundled paths with overlay rules that same pack carries; it never replaces them, and a matcher that failed to build leaves the shipped set standing. `key-material` reads the bundled pack alone. A project can neither add nor remove a path in either. |
 

@@ -1,11 +1,12 @@
 package composition_test
 
 import (
+	"strings"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
-	"strings"
-	"testing"
 )
 
 func TestResolvePersistFeatureDirUsesWorkflowID(t *testing.T) {

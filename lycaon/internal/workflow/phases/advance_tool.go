@@ -4,13 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/workflow/toolguard"
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/scaffoldvars"
 	"github.com/lycaon/lycaon/internal/tools"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
-	"github.com/lycaon/lycaon/internal/workflow/toolguard"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
 )
 
 // HostAutoAdvancedFromKey is set when the host auto-advances a workflow phase.

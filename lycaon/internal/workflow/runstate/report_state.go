@@ -1,8 +1,6 @@
 package runstate
 
-import (
-	"github.com/lycaon/lycaon/pkg/api"
-)
+import "github.com/lycaon/lycaon/pkg/api"
 
 const ReportNotAcceptedFailureCode = "REPORT_NOT_ACCEPTED"
 

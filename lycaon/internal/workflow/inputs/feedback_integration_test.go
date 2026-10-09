@@ -4,6 +4,11 @@ package inputs_test
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/configlayout"
@@ -22,10 +27,6 @@ import (
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"os"
-	"path/filepath"
-	"strings"
-	"testing"
 )
 
 func feedbackFlowManifest() workflowdef.Manifest {

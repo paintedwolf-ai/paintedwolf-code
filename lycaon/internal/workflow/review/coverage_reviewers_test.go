@@ -3,12 +3,13 @@ package review_test
 import (
 	"context"
 	"encoding/json"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
 func TestCoverageCompletionRepairsAgainstCurrentHostAssignment(t *testing.T) {
@@ -51,14 +52,14 @@ func TestCoverageCompletionRepairsAgainstCurrentHostAssignment(t *testing.T) {
 	testutil.FailErr(t, "load independent assignment", err)
 	task := &api.WorkerTask{WorkflowRunID: run.ID, WorkflowPhase: "judge", AgentType: "auditor"}
 	err = mgr.Coverage.ValidateCoverageCompletion(t.Context(), task, nil)
-	rejected := toolrejection.AsToolReject(err)
+	rejected := tools.AsToolReject(err)
 	if rejected == nil || rejected.Code != "COMPLETE_LEG_COVERAGE_INVALID" || rejected.Data["assignment"] == nil {
 		t.Fatalf("missing structured repair: %v", err)
 	}
 	review := &api.CoverageReview{Revision: assignment.Facts.Revision, Assessments: []api.CoverageAssessment{}}
 	testutil.FailErr(t, "accept current worker assessment", mgr.Coverage.ValidateCoverageCompletion(t.Context(), task, review))
 	mgr.Coverage.Inventory = fakeInventory{run: []api.CodeScan{{ID: "changed", Status: api.CodeScanStatusComplete, Warnings: []api.ScanWarning{{Kind: "file_partial_semantics", File: "service/main.go"}}}}}
-	if err := mgr.Coverage.ValidateCoverageCompletion(t.Context(), task, review); toolrejection.AsToolReject(err) == nil {
+	if err := mgr.Coverage.ValidateCoverageCompletion(t.Context(), task, review); tools.AsToolReject(err) == nil {
 		t.Fatalf("changed scope not repaired: %v", err)
 	}
 	task.AgentType = "other"

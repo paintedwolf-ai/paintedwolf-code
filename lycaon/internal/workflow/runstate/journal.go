@@ -7,12 +7,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/google/uuid"
 	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	"github.com/lycaon/lycaon/pkg/api"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 type CommandReceipts interface {

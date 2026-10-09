@@ -1,13 +1,14 @@
 package presentation_test
 
 import (
-	"github.com/lycaon/lycaon/internal/testutil"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
-	"github.com/lycaon/lycaon/internal/workflow/verdictcall"
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/internal/workflow/verdictcall"
 )
 
 func TestProjectPhaseExit_PlanPhases(t *testing.T) {

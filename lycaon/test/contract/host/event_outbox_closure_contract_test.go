@@ -2,11 +2,12 @@ package contract
 
 import (
 	"fmt"
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
+
+	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
 // outboxTableFloor covers event tables not discovered through direct writes.

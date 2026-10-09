@@ -59,7 +59,7 @@ func TestRequestToolsRequiresLiveRegistration(t *testing.T) {
 				store.Activate(tctx.Identity.SessionID, []string{name}, name)
 				testutil.FailErr(t, "remove tool provider", reg.ReplacePrefix("mcp_fixture_", nil, nil))
 			}
-			testutil.FailErr(t, "register request tools", tools.NewRequestTools(reg, tools.RequestToolsDeps{Activation: store, Boundary: policy}).Register())
+			testutil.FailErr(t, "register request tools", tools.RegisterRequestTools(reg, tools.RequestToolsDeps{Activation: store, Boundary: policy}))
 			before := store.Active(tctx.Identity.SessionID)
 			_, err := reg.Run(t.Context(), "request_tools", map[string]any{"need": name}, tctx)
 			reject := requireUnmatchedToolRequest(t, err)
@@ -78,7 +78,7 @@ func TestRequestToolsSkipsUnregisteredNamesInMixedRequest(t *testing.T) {
 	store := tools.NewMemoryActivation()
 	registerRequestFixtureTools(t, reg, "read")
 	boundary := fakeRequestBoundary{allowed: map[string]bool{"read": true, "deliver_report": true}}
-	testutil.FailErr(t, "register request tools", tools.NewRequestTools(reg, tools.RequestToolsDeps{Activation: store, Boundary: boundary}).Register())
+	testutil.FailErr(t, "register request tools", tools.RegisterRequestTools(reg, tools.RequestToolsDeps{Activation: store, Boundary: boundary}))
 	out, err := reg.Run(t.Context(), "request_tools", map[string]any{"need": "deliver_report and read"}, tools.ToolContext{
 		Identity: tools.InvocationIdentity{SessionID: "mixed"},
 	})
@@ -96,7 +96,7 @@ func TestRequestToolsRecoveryListsOnlyLoadableTools(t *testing.T) {
 			reg := tools.NewDefaultRegistry()
 			store := tools.NewMemoryActivation()
 			boundary := fakeRequestBoundary{deferred: map[string]bool{"record_finding": true, "mcp_fixture_lookup": true}}
-			testutil.FailErr(t, "register request tools", tools.NewRequestTools(reg, tools.RequestToolsDeps{Activation: store, Boundary: boundary}).Register())
+			testutil.FailErr(t, "register request tools", tools.RegisterRequestTools(reg, tools.RequestToolsDeps{Activation: store, Boundary: boundary}))
 			handler := func(context.Context, map[string]any, tools.ToolContext) (string, error) { return "", nil }
 			testutil.FailErr(t, "register stock tool", reg.Register("record_finding", handler))
 			testutil.FailErr(t, "register external tool", reg.RegisterDefinition(tools.Definition{
@@ -163,11 +163,11 @@ func TestRequestToolsActivatesDeclaredCompanionsOnly(t *testing.T) {
 	reg := tools.NewDefaultRegistry()
 	store := tools.NewMemoryActivation()
 	boundary := fakeRequestBoundary{deferred: map[string]bool{"write": true, "edit": true, "diff": true}}
-	testutil.FailErr(t, "register request tools", tools.NewRequestTools(reg, tools.RequestToolsDeps{Activation: store, Boundary: boundary,
+	testutil.FailErr(t, "register request tools", tools.RegisterRequestTools(reg, tools.RequestToolsDeps{Activation: store, Boundary: boundary,
 		Resolve: func(_ context.Context, _ tools.ToolContext, need string, cards []turnload.ToolCard) turnload.RequestOutcome {
 			return turnload.RequestOutcome{Need: need, Exact: turnload.ExactNames(need, cards)}
 		},
-	}).Register())
+	}))
 	handler := func(context.Context, map[string]any, tools.ToolContext) (string, error) { return "", nil }
 	testutil.FailErr(t, "register write", reg.Register("write", handler))
 	testutil.FailErr(t, "register edit", reg.Register("edit", handler))
@@ -210,9 +210,9 @@ func TestRequestCommandLoadsOnlyTheSelectedTool(t *testing.T) {
 			}
 		}
 	}
-	testutil.FailErr(t, "register request tools", tools.NewRequestTools(reg, tools.RequestToolsDeps{
+	testutil.FailErr(t, "register request tools", tools.RegisterRequestTools(reg, tools.RequestToolsDeps{
 		Activation: activation, Boundary: fakeRequestBoundary{}, Resolve: resolve, Record: record,
-	}).Register())
+	}))
 	tctx := tools.ToolContext{
 		Identity: tools.InvocationIdentity{SessionID: "command-family",
 			Agent: "coordinator"},
@@ -252,7 +252,7 @@ func TestRequestToolsUsesTheWiredResolver(t *testing.T) {
 		}
 		return turnload.RequestOutcome{Need: need, Ranked: map[string]float64{"git_compare": 3.5}}
 	}
-	testutil.FailErr(t, "register request tools", tools.NewRequestTools(reg, tools.RequestToolsDeps{Activation: store, Boundary: fakeRequestBoundary{}, Resolve: resolve}).Register())
+	testutil.FailErr(t, "register request tools", tools.RegisterRequestTools(reg, tools.RequestToolsDeps{Activation: store, Boundary: fakeRequestBoundary{}, Resolve: resolve}))
 	tctx := tools.ToolContext{
 		Identity: tools.InvocationIdentity{SessionID: "resolver",
 			Agent: "coordinator"},
@@ -283,9 +283,9 @@ func TestRequestReceiptRecordsOnlyFinalActivation(t *testing.T) {
 	record := func(_ context.Context, _ tools.ToolContext, _ turnload.RequestOutcome, result turnload.RequestToolsResult, _ time.Duration) {
 		recorded = result
 	}
-	testutil.FailErr(t, "register request tools", tools.NewRequestTools(reg, tools.RequestToolsDeps{
+	testutil.FailErr(t, "register request tools", tools.RegisterRequestTools(reg, tools.RequestToolsDeps{
 		Activation: activation, Boundary: fakeRequestBoundary{}, Resolve: resolve, Record: record,
-	}).Register())
+	}))
 	tctx := tools.ToolContext{
 		Identity: tools.InvocationIdentity{SessionID: "filtered-receipt",
 			Agent: "coordinator"},
@@ -300,38 +300,5 @@ func TestRequestReceiptRecordsOnlyFinalActivation(t *testing.T) {
 	testutil.FailErr(t, "request already active tool", err)
 	if len(recorded.Loaded) != 0 || !slices.Equal(recorded.AlreadyLoaded, []string{"command"}) {
 		t.Fatalf("repeat receipt = %+v", recorded)
-	}
-}
-
-func TestRequestDiscoveryBindsLateProducersWithoutWideningTurnSurface(t *testing.T) {
-	reg := tools.NewDefaultRegistry()
-	activation := tools.NewMemoryActivation()
-	registerRequestFixtureTools(t, reg, "git_compare", "http_request")
-	discovery := tools.NewRequestTools(reg, tools.RequestToolsDeps{Activation: activation, Boundary: fakeRequestBoundary{}})
-	testutil.FailErr(t, "register discovery before session construction", discovery.Register())
-	tctx := tools.ToolContext{
-		Identity: tools.InvocationIdentity{SessionID: "late-producer", Agent: "coordinator"},
-		Turn:     tools.InvocationTurn{TurnToolPlan: toolsurface.Compile([]string{"request_tools"}, []string{"git_compare"})},
-	}
-	_, err := reg.Run(t.Context(), "request_tools", map[string]any{"need": "compare revisions"}, tctx)
-	testutil.FailErr(t, "unbound discovery", err)
-	if len(activation.Active(tctx.Identity.SessionID)) != 0 {
-		t.Fatal("unbound discovery activated an unnamed schema")
-	}
-	var recorded turnload.RequestToolsResult
-	discovery.BindResolvers(func(_ context.Context, _ tools.ToolContext, need string, _ []turnload.ToolCard) turnload.RequestOutcome {
-		return turnload.RequestOutcome{Need: need, Exact: []string{"git_compare", "http_request"}}
-	}, func(_ context.Context, _ tools.ToolContext, _ turnload.RequestOutcome, result turnload.RequestToolsResult, _ time.Duration) {
-		recorded = result
-	})
-	out, err := reg.Run(t.Context(), "request_tools", map[string]any{"need": "compare revisions"}, tctx)
-	testutil.FailErr(t, "invoke the registered handler after producer binding", err)
-	var result turnload.RequestToolsResult
-	testutil.FailErr(t, "decode activated surface", json.Unmarshal([]byte(out), &result))
-	if !slices.Equal(result.Loaded, []string{"git_compare"}) || !slices.Equal(recorded.Loaded, result.Loaded) {
-		t.Fatalf("late producer result = %#v, recorded = %#v", result, recorded)
-	}
-	if activation.Active(tctx.Identity.SessionID)["http_request"] {
-		t.Fatal("late producer widened the compiled turn surface")
 	}
 }

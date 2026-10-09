@@ -4,12 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/workflow/toolguard"
+
 	"github.com/lycaon/lycaon/internal/tools"
 	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
-	"github.com/lycaon/lycaon/internal/workflow/toolguard"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 

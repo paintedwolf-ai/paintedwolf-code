@@ -3,6 +3,7 @@ package runstate
 import (
 	"context"
 	"database/sql"
+
 	"github.com/lycaon/lycaon/internal/authzledger"
 	"github.com/lycaon/lycaon/internal/eventoutbox"
 	"github.com/lycaon/lycaon/pkg/api"

@@ -1,11 +1,12 @@
 package definition_test
 
 import (
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/extpackstest"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	"testing"
 )
 
 func catalogWorkflowIDs(t *testing.T) map[string]bool {

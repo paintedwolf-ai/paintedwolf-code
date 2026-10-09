@@ -1,11 +1,12 @@
 package runstate_test
 
 import (
+	"testing"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/scaffoldvars"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
-	"testing"
-	"time"
 )
 
 // The approval wait is stamped when it opens, kept while it stays open, dropped

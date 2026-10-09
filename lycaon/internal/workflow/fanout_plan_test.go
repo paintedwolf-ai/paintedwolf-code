@@ -2,13 +2,14 @@ package workflow
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/spawn"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	workflowruntime "github.com/lycaon/lycaon/internal/workflow/runtime"
-	"github.com/lycaon/lycaon/pkg/api"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/spawn"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestValidateFanoutPlan(t *testing.T) {

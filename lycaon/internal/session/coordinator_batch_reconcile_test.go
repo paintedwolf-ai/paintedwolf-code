@@ -4,6 +4,9 @@ package session_test
 
 import (
 	"context"
+	"path/filepath"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/batch"
@@ -23,8 +26,6 @@ import (
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"path/filepath"
-	"testing"
 )
 
 func TestFinishPromptExecutionQueuesOverlayIntegrateCompleteKick(t *testing.T) {

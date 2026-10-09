@@ -1,12 +1,13 @@
 package validation_test
 
 import (
+	"strings"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/progress"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"github.com/lycaon/lycaon/internal/workflowdiag"
-	"strings"
-	"testing"
 )
 
 func TestPhaseImpliesHITLToolsFromGateFacts(t *testing.T) {

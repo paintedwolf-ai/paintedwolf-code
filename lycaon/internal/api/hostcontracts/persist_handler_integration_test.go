@@ -4,17 +4,20 @@ package hostcontracts
 
 import (
 	"encoding/json"
-	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
-	"github.com/lycaon/lycaon/internal/settingsoverlay"
-	"github.com/lycaon/lycaon/internal/testutil"
-	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
-	wire "github.com/lycaon/lycaon/pkg/api"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
+	"github.com/lycaon/lycaon/internal/settingsoverlay"
+	"github.com/lycaon/lycaon/internal/testutil"
+	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
+	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
+	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
+	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestPersistHandler201AndCatalog(t *testing.T) {

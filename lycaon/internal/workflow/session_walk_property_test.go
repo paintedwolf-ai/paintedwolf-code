@@ -3,11 +3,12 @@ package workflow
 import (
 	"context"
 	"errors"
+	"math/rand"
+	"testing"
+
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
-	"math/rand"
-	"testing"
 )
 
 // TestSessionWalkPropertyInvariants checks run state after fixed-seed operations.

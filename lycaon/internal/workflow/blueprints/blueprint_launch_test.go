@@ -2,12 +2,13 @@ package blueprints_test
 
 import (
 	"context"
+	workflowblueprints "github.com/lycaon/lycaon/internal/workflow/blueprints"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
-	workflowblueprints "github.com/lycaon/lycaon/internal/workflow/blueprints"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
 func TestLaunchSourceCompatible(t *testing.T) {

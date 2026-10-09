@@ -4,6 +4,9 @@ package session_test
 
 import (
 	"context"
+	"strings"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/configlayout"
@@ -26,8 +29,6 @@ import (
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	workflowruntime "github.com/lycaon/lycaon/internal/workflow/runtime"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"strings"
-	"testing"
 )
 
 type coordinatorPromptFixture struct {

@@ -2,10 +2,11 @@ package workflow
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/pkg/api"
 	"testing"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // TerminalChildRunForTest completes a child and resumes its parent.

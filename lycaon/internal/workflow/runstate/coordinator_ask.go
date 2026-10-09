@@ -2,10 +2,11 @@ package runstate
 
 import (
 	"fmt"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	"github.com/lycaon/lycaon/pkg/api"
 	"strings"
 	"time"
+
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // CoordinatorAskVar stores the durable coordinator ask.

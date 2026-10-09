@@ -2,12 +2,13 @@ package security
 
 import (
 	"context"
+	"strings"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"strings"
-	"testing"
 )
 
 func TestCoordinatorToolReturnsManifestPrompt(t *testing.T) {
