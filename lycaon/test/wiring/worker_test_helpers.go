@@ -106,7 +106,7 @@ func PromotePendingWriteOverlays(ctx context.Context, h *Harness, projectID, par
 		if strings.TrimSpace(job.WorkspaceRoot) == "" {
 			continue
 		}
-		if _, err := h.Sessions.Manager.Promotion.PromoteOverlay(ctx, parentSessionID, job.ID, api.PromoteOverlayInput{Detail: "hunks"}); err != nil {
+		if _, err := h.Sessions.Manager.ProjectControl.PromoteOverlay(ctx, parentSessionID, job.ID, api.PromoteOverlayInput{Detail: "hunks"}); err != nil {
 			return err
 		}
 	}
