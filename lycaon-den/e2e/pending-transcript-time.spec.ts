@@ -250,7 +250,7 @@ webE2e.describe("pending transcript time", () => {
       await expect.poll(() => stage.locator(".den-chat-stream").evaluate(async (host) => {
         const url = "/src/platform/scrolling/scrollport-motion.ts";
         const { scrollportMotionForViewport } = await import(/* @vite-ignore */ url);
-        return scrollportMotionForViewport(host)?.isDirectInputActive();
+        return scrollportMotionForViewport(host)?.input.isDirectInputActive();
       })).toBe(false);
       before = await readerPosition(page);
     } finally {
@@ -299,7 +299,7 @@ webE2e.describe("pending transcript time", () => {
     await expect.poll(() => stage.locator(".den-chat-stream").evaluate(async (host) => {
       const url = "/src/platform/scrolling/scrollport-motion.ts";
       const { scrollportMotionForViewport } = await import(/* @vite-ignore */ url);
-      return scrollportMotionForViewport(host)?.isDirectInputActive();
+      return scrollportMotionForViewport(host)?.input.isDirectInputActive();
     })).toBe(false);
     const before = await readerPosition(page);
     await openNewChatSession(page);
