@@ -5,13 +5,14 @@ import (
 
 	"github.com/lycaon/lycaon/internal/rules"
 	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/profiles"
 	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
 	"github.com/lycaon/lycaon/internal/workflow"
 )
 
 // ServeWiring is the production Prompt/gate configuration validated at serve start.
 type ServeWiring struct {
-	PostureRegistry *session.PostureRegistry
+	PostureRegistry *profiles.PostureRegistry
 	BundledRules    map[string]*rules.RulesConfig
 	RuleEngine      *rules.PostureRuleEngine
 	SessionManager  *session.Host

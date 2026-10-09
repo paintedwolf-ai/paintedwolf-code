@@ -175,7 +175,7 @@ func wireSessionToolSources(mgr *session.Host, host *toolhost.Runtime, hostResou
 		}
 	}
 	if host != nil {
-		host.Authority.SetApprovalRuleSource(mgr)
+		host.Authority.SetApprovalRuleSource(&mgr.Catalog)
 		if hostResources != nil {
 			host.Executor.Network.SetHostResourceConnectionSource(hostResources.ResolveAction)
 		}
