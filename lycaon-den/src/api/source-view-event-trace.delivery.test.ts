@@ -15,7 +15,9 @@ it.each(["handler", "invalidation", "success"])("records completion only after s
   vi.stubGlobal("cancelAnimationFrame", () => { frame = undefined; });
   const apply = (phase: string) => {
     phases.push(phase);
-    if (failure === phase) throw new Error("Fixture apply failure");
+    if (failure === phase) {
+      throw new Error("Fixture apply failure");
+    }
   };
   const errors = vi.fn();
   const subscription = subscribeEvents({ baseUrl: "http://fixture", apiToken: "fixture" }, "project", {
