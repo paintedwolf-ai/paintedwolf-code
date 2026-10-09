@@ -21,7 +21,7 @@ func GitHistoryContext(ctx context.Context, tc ToolContext) (context.Context, er
 		}
 		roots = append(roots, sourceledger.RootSpec{ID: root.ID, Path: root.Path, BranchID: branch})
 	}
-	return ledger.Git.GitMutationContext(ctx, tc.Identity.ProjectID, roots, sourceledger.Contributor{
+	return ledger.GitMutationContext(ctx, tc.Identity.ProjectID, roots, sourceledger.Contributor{
 		Origin: api.SourceChangeOriginAgent, SessionID: tc.Identity.SessionID, Turn: tc.Identity.UserTurn,
 		ToolCallID: tc.Identity.ToolCallID, ToolName: tc.Invocation.ToolName, JobID: tc.Identity.WorkerJobID,
 	}), nil

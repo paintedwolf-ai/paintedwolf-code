@@ -126,7 +126,7 @@ func (t *SourceHistoryTool) Run(ctx context.Context, args map[string]any, tctx t
 // History availability is checked after path admission.
 func historyLedger(tctx tools.ToolContext) (tools.SourceHistory, error) {
 	ledger := tctx.Source.History
-	if ledger.Files == nil || ledger.Comparisons == nil || ledger.Git == nil || ledger.Authorship == nil {
+	if ledger.Files == nil || ledger.Comparison == nil || ledger.Git == nil || ledger.Authorship == nil {
 		return tools.SourceHistory{}, &toolrejection.ToolReject{
 			Code: "SOURCE_HISTORY_UNAVAILABLE",
 			Data: map[string]any{"detail": "the source ledger is not configured for this session"},
@@ -171,7 +171,7 @@ func (t *SourceHistoryTool) runEffects(
 		return "", err
 	}
 	resp := sourceHistoryResponse{Mode: "effects", Path: display}
-	head, err := ledger.History.ResolveHead(ctx, tctx.Identity.ProjectID, branch, rootID, rel)
+	head, err := ledger.Files.ResolveHead(ctx, tctx.Identity.ProjectID, branch, rootID, rel)
 	if errors.Is(err, sourceledger.ErrHistoryNotFound) {
 		resp.Note = sourceHistoryNoRecordNote
 		return marshalSourceHistory(display, resp)
@@ -183,7 +183,7 @@ func (t *SourceHistoryTool) runEffects(
 	resp.Tip = &sourceHistoryTip{State: head.State, SHA256Short: sourceview.ShortSHA(head.SHA256), VersionID: head.VersionID}
 	limit := toolkit.BoundedIntArg(args, "limit", sourceHistoryDefaultLimit, 1, sourceHistoryMaxLimit).Effective
 	beforeOrdinal := int64(toolkit.BoundedIntArg(args, "before_ordinal", 0, 0, 1<<62).Effective)
-	page, err := ledger.History.QueryFileEffects(ctx, tctx.Identity.ProjectID, head.FileID, 0, beforeOrdinal, limit)
+	page, err := ledger.Files.QueryFileEffects(ctx, tctx.Identity.ProjectID, head.FileID, 0, beforeOrdinal, limit)
 	if err != nil {
 		return "", fmt.Errorf("source history effects: %w", err)
 	}
@@ -228,7 +228,7 @@ func (t *SourceHistoryTool) runLines(
 	if err != nil {
 		return "", err
 	}
-	res, err := ledger.History.QueryAttribution(ctx, tctx.Identity.ProjectID, branch, rootID, rel)
+	res, err := ledger.Files.QueryAttribution(ctx, tctx.Identity.ProjectID, branch, rootID, rel)
 	if err != nil {
 		return "", fmt.Errorf("source history lines: %w", err)
 	}
@@ -276,7 +276,7 @@ func (t *SourceHistoryTool) runMine(
 	resp := sourceHistoryResponse{Mode: "mine", Recorded: true}
 	seen := make(map[string]struct{})
 	for _, root := range tctx.Source.Roots {
-		authored, err := ledger.Walk.SessionAuthoredPaths(ctx, tctx.Identity.ProjectID, tctx.Identity.SessionID, root.ID)
+		authored, err := ledger.Authorship.SessionAuthoredPaths(ctx, tctx.Identity.ProjectID, tctx.Identity.SessionID, root.ID)
 		if err != nil {
 			return "", fmt.Errorf("source history mine: %w", err)
 		}
@@ -357,7 +357,7 @@ func (t *SourceHistoryTool) runVersion(
 	if err != nil {
 		return "", err
 	}
-	ver, err := ledger.History.ReadRestorableVersion(ctx, tctx.Identity.ProjectID, versionID)
+	ver, err := ledger.Files.ReadRestorableVersion(ctx, tctx.Identity.ProjectID, versionID)
 	if errors.Is(err, sourceledger.ErrHistoryNotFound) {
 		return "", &toolrejection.ToolReject{
 			Code: "SOURCE_VERSION_NOT_FOUND",
@@ -470,7 +470,7 @@ func (t *SourceHistoryTool) runDiff(
 
 	var comp sourceledger.Comparison
 	if baseVersionID == "current" || baseVersionID == "head" {
-		head, err := ledger.History.ResolveHead(ctx, tctx.Identity.ProjectID, branch, rootID, rel)
+		head, err := ledger.Files.ResolveHead(ctx, tctx.Identity.ProjectID, branch, rootID, rel)
 		if err != nil {
 			return "", &toolrejection.ToolReject{
 				Code: "SOURCE_VERSION_NOT_FOUND",
@@ -484,9 +484,9 @@ func (t *SourceHistoryTool) runDiff(
 	}
 
 	if baseVersionID != "" {
-		comp, err = ledger.Comparisons.CompareVersionPair(ctx, tctx.Identity.ProjectID, baseVersionID, versionID)
+		comp, err = ledger.Comparison.CompareVersionPair(ctx, tctx.Identity.ProjectID, baseVersionID, versionID)
 	} else {
-		comp, err = ledger.Comparisons.CompareVersions(ctx, tctx.Identity.ProjectID, versionID)
+		comp, err = ledger.Comparison.CompareVersions(ctx, tctx.Identity.ProjectID, versionID)
 	}
 
 	if errors.Is(err, sourceledger.ErrHistoryNotFound) {
