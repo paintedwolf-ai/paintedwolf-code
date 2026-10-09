@@ -26,7 +26,7 @@ func ComparisonTextForTest(t *testing.T, srv *hostapi.Server, projectID string, 
 	for offset := 0; int64(offset) < view.Extent.Rows; {
 		frame := ComparisonRowsForTest(t, srv, projectID, view, offset)
 		for _, row := range frame.Rows {
-			text.WriteString(row.text)
+			text.WriteString(row.Text)
 		}
 		if frame.Span.End <= int64(offset) {
 			t.Fatal("comparison frame did not advance")

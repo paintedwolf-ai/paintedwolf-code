@@ -173,7 +173,7 @@ func NewGitTestServer(t *testing.T, opts ...TestDeps) (*hostapi.Server, string) 
 	testutil.FailErr(t, "reg.Open", err)
 
 	drafter := func(d *hostapi.Dependencies) {
-		d.Providers.CommitDrafter = compaction.MockSummarizer{text: "feat: drafted subject"}
+		d.Providers.CommitDrafter = compaction.MockSummarizer{Text: "feat: drafted subject"}
 	}
 	srv := NewGitServer(t, reg, append([]TestDeps{drafter}, opts...)...)
 	return srv, p.ID

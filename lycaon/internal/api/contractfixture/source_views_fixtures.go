@@ -78,7 +78,7 @@ func DeletedSourceTextForTest(t *testing.T, server *hostapi.Server, projectID st
 	t.Helper()
 	var text strings.Builder
 	for _, row := range DeletedSourceRowsForTest(t, server, projectID, deleted) {
-		text.WriteString(row.text)
+		text.WriteString(row.Text)
 	}
 	return text.String()
 }
