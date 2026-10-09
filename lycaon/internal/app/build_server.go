@@ -367,7 +367,7 @@ func (b *serveBuilder) wireOrchestrator() error {
 	}
 	b.workflows.Manager.Presentation.TopologyLegs = orchestration.TopologyLegView{Store: b.delegations.Store, Catalog: extpacks.CatalogForConsumers}
 
-	workerOutcomes := &worker.SessionOutcomeBridge{Sessions: b.sessions.Manager, Inner: b.delegations.Manager}
+	workerOutcomes := &worker.SessionOutcomeBridge{Workers: b.sessions.Manager.Coordinator.Workers, Loop: b.sessions.Manager.Coordinator.Runtime.CoordinatorLoop(), Results: b.sessions.Manager.Workers.Results, State: b.sessions.Manager.Workers.State, Closure: b.sessions.Manager.Coordinator.ProgressClosure, Inner: b.delegations.Manager}
 	var executor worker.WorkerExecutor = b.delegations.Executor
 	if configdir.IsHarnessChannel() {
 		scripted, err := harnessfixture.NewWorkers(b.storage.Directory, b.storage.Sessions, b.delegations.Queue, b.sessions.Manager.Workers.Harness.Verify, b.sessions.Manager.Workers.Harness.Read, b.sessions.Decisions, b.delegations.Executor)
@@ -444,8 +444,10 @@ func wireDestinationConfig(b *serveBuilder) error {
 	}
 	if b.server.MCP != nil {
 		reg.Add(destconfig.Source{
-			Name:  "mcp_servers",
-			Hosts: func(projectDir string) []string { return b.server.MCP.Catalog.ConfiguredHosts(b.startup.ctx, projectDir) },
+			Name: "mcp_servers",
+			Hosts: func(projectDir string) []string {
+				return b.server.MCP.Catalog.ConfiguredHosts(b.startup.ctx, projectDir)
+			},
 		})
 	}
 	reg.Add(destconfig.Source{

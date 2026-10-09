@@ -104,15 +104,16 @@ func (b *serveBuilder) registerCoordinatorTools() error {
 	}); err != nil {
 		return fmt.Errorf("decline_worker_budget tool: %w", err)
 	}
-	b.execution.Host.Boundary.SetMergeReconcileAllowlister(b.sessions.Manager)
+	b.execution.Host.Boundary.SetMergeReconcileAllowlister(b.sessions.Manager.Promotion)
 	workerMergeSvc := &worker.MergeService{
 		Queue:        b.delegations.Queue,
 		Store:        b.delegations.Queue,
 		Workspace:    b.delegations.Workspace,
 		Reject:       b.execution.Rejections,
 		Sessions:     b.delegations.Queue,
-		Reconcile:    b.sessions.Manager,
-		Coord:        b.sessions.Manager,
+		Reconcile:    b.sessions.Manager.Promotion,
+		Captures:     b.sessions.Manager.Chats.Captures,
+		Coord:        b.sessions.Manager.Workers.Workspaces,
 		Closeout:     b.delegations.Manager,
 		Projects:     b.storage.Projects,
 		Scans:        b.scanning.Triggers,
@@ -170,7 +171,6 @@ func (b *serveBuilder) registerCoordinatorTools() error {
 // and the worker assignment prompt.
 func taskToolDeps(b *serveBuilder) worker.TaskToolDeps {
 	return worker.TaskToolDeps{
-		Sessions:         b.sessions.Manager,
 		Queue:            b.delegations.Queue,
 		Agents:           b.agents.Registry,
 		Workers:          b.worker.cfg,
