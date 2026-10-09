@@ -37,7 +37,7 @@ class BatchFixture(unittest.TestCase):
                      "digest-run-lock.sh", "repo-snapshot-lock.sh", "snapshot-publish.sh",
                      "artifact-paths.sh", "artifact_paths.py"]:
             shutil.copy2(SCRIPT.with_name(name), self.scripts / name)
-        self.catalog = {"resources": {}, "private": [], "ci": {}, "runner_priority": {},
+        self.catalog = {"resources": {}, "private": [], "ci": {}, "runner_priority": {}, "capacity": {},
             "environment": {"names": ["PATH", "HOME", "TMPDIR", "USER", "LANG"],
                             "prefixes": ["LC_", "GO", "PW_", "FIXTURE_", "XDG_"]},
             "selection": {"test:digest": "go", "den:harness:test": "playwright"},

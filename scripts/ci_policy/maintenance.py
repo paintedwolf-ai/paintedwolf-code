@@ -29,8 +29,9 @@ def publish():
     pull = api(f'{repository()}/pulls', 'POST', {'title': 'Refresh pinned dependency evidence',
                'head': branch, 'base': 'main', 'body': 'Scheduled complete advisory snapshot and informational dependency inventory. '
                'Review new advisories independently of feature changes. This PR uses the ordinary merge queue.'})
-    # GITHUB_TOKEN-created PRs do not trigger CI. workflow_dispatch does, on this exact immutable branch.
-    api(f'{repository()}/actions/workflows/ci.yml/dispatches', 'POST', {'ref': branch})
+    # GITHUB_TOKEN-created PRs do not trigger CI. workflow_dispatch does, on this exact immutable branch;
+    # like any ready pull request, it runs the fast tier, and the merge queue runs the gate.
+    api(f'{repository()}/actions/workflows/ci.yml/dispatches', 'POST', {'ref': branch, 'inputs': {'profile': 'fast'}})
     print(pull['html_url'])
 
 

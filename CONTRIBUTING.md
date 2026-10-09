@@ -24,14 +24,15 @@ Run everything through the repo-local runner:
 
 ```bash
 ./task setup-dev    # one-time setup
-./task check-fast   # the gate a pull request runs
-./task check        # the gate the merge queue runs
+./task check-fast   # the local handoff gate
+./task check        # the full gate
 ```
 
-Pull requests must reference an `accepting-work` issue. CI runs `check-fast` on
-every pull request. A maintainer merges through the merge queue, which runs
-`check` and the platform suites on the exact commit that lands. You do not need to run
-either gate yourself before pushing.
+Pull requests must reference an `accepting-work` issue. CI runs a fast tier of
+`check-fast`'s quicker stages on every ready pull request. A maintainer merges
+through the merge queue, which runs the integration gate, `check` scoped to the
+change, on the exact commit that lands. You do not need to run either gate
+yourself before pushing.
 
 ## Developer Certificate of Origin
 

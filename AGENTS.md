@@ -17,7 +17,7 @@ policy before editing. Start unfamiliar work at [docs](docs/README.md) and
   to sibling repos, tags, force pushes, releases, deployments, or merging.
 - **Keep PRs draft until we believe the work is complete**, independently of CI
   results. Return to draft if more implementation is needed. Merge only on
-  request, through the merge queue; never bypass its required checks.
+  request: auto-merge on a ready PR enqueues it; never bypass required checks.
 - **Use root `./task` for repository dev and verification targets.** Use digest
   targets for test output; never truncate raw results with `tail` or `grep FAIL`.
 - **Ask first** for destructive Git/shared-state operations, discarding others'
@@ -58,11 +58,13 @@ owner's engine you stop and why.
 
 ## Testing
 
-**Use GitHub CI by default.** Push work in progress to its draft PR; local tests
-are not a prerequisite. PRs and merge groups share the affected-scope integration gate. Main receives
-full qualification separately; releases require qualification on the exact commit. Do not run these gates locally
-first or repeat checks CI passed for the same commit. Report the PR without
-waiting on or polling CI.
+**Use GitHub CI by default.** Push work in progress to its draft PR; drafts run
+no CI, and local tests are not a prerequisite. A ready PR runs the fast tier;
+once its `check` passes, auto-merge adds it to the merge queue, which runs the
+affected-scope integration gate on the exact landing commit. Main receives full
+qualification separately; releases require qualification on the exact commit.
+Do not run these gates locally first or repeat checks CI passed for the same
+commit. Report the PR without waiting on or polling CI.
 
 **Run specific local tests when needed and the machine is free.** Check
 `./task test:status`, then use the smallest relevant target or scoped digest.

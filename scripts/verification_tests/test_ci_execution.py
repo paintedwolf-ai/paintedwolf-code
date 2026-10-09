@@ -13,27 +13,40 @@ from verification_execute import shard_packages
 class HostedVerificationTests(unittest.TestCase):
     def test_tier_partitions_cover_every_local_gate_stage_once(self):
         lanes = ci.lanes()
-        self.assertEqual(ci.GATES, {"fast": "check-fast", "check": "check"})
-        for profile, gate in ci.GATES.items():
-            with self.subTest(profile=profile):
-                expected = sorted(stage["name"] for stage in planning.expand([gate]))
-                actual = sorted(stage["name"] for lane in lanes.values() if profile in lane["profiles"]
-                                for stage in planning.expand(lane["targets"]))
-                self.assertEqual(actual, expected)
+        expected = sorted(stage["name"] for stage in planning.expand(["check"]))
+        actual = sorted(stage["name"] for lane in lanes.values() if "check" in lane["profiles"]
+                        for stage in planning.expand(lane["targets"]))
+        self.assertEqual(actual, expected)
         check = {row["lane"] for row in ci.matrix("check")["include"]}
         release = {row["lane"] for row in ci.matrix("release")["include"]}
         # Releases gate on whether the product works; style, tooling, and the deep tiers run elsewhere.
         self.assertLessEqual(release, check)
         self.assertEqual(release, {"build", "contracts", "behavior", "frontend", "native", "vulnerabilities"})
 
+    def test_ready_tier_is_one_short_static_job_from_the_handoff_gate(self):
+        handoff = {stage["name"] for stage in planning.expand(["check-fast"])}
+        rows = ci.matrix("fast")["include"]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(ci.max_parallel("fast"), 1)
+        stages = [stage["name"] for stage in planning.expand(ci.lanes()[rows[0]["lane"]]["targets"])]
+        self.assertEqual(sorted(stages), sorted(set(stages)))
+        self.assertLessEqual(set(stages), handoff)
+        self.assertLessEqual({"lint:fast", "budgets", "den:typecheck", "den:lint"}, set(stages))
+        # Anything that runs tests waits for the merge queue.
+        self.assertFalse(set(stages) & {"test:short", "test:contract", "den:test:fast", "coverage:changes",
+                                         "den:coverage:changes"})
+        self.assertLessEqual(rows[0]["minutes"], 15)
+
     def test_partition_drift_refuses_to_plan_before_any_tests_run(self):
-        for mutation in ("missing", "fast-missing", "duplicate", "unknown", "unbounded"):
+        for mutation in ("missing", "fast-outside", "fast-twice", "duplicate", "unknown", "unbounded"):
             with self.subTest(mutation=mutation):
                 data = copy.deepcopy(planning.catalog())
                 if mutation == "missing":
                     del data["ci"]["frontend"]
-                elif mutation == "fast-missing":
-                    data["ci"]["fast-go"]["targets"].remove("test:contract")
+                elif mutation == "fast-outside":
+                    data["ci"]["ready"]["targets"].append("test:full")
+                elif mutation == "fast-twice":
+                    data["ci"]["ready"]["targets"].append("budgets")
                 elif mutation == "duplicate":
                     data["ci"]["duplicate"] = data["ci"]["frontend"]
                 elif mutation == "unknown":
@@ -114,6 +127,37 @@ class HostedVerificationTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 ci.run_lane("behavior")
 
+    def test_each_profile_caps_the_runners_its_matrix_holds(self):
+        caps = planning.catalog()["capacity"]["max_parallel"]
+        for profile in ci.PROFILES:
+            with self.subTest(profile=profile):
+                self.assertEqual(ci.max_parallel(profile), caps[profile])
+        with self.assertRaises(ValueError):
+            ci.max_parallel("unknown")
+        for mutation in ("missing", "zero", "fraction"):
+            with self.subTest(mutation=mutation):
+                data = copy.deepcopy(planning.catalog())
+                if mutation == "missing":
+                    del data["capacity"]["max_parallel"]["nightly"]
+                else:
+                    data["capacity"]["max_parallel"]["nightly"] = 0 if mutation == "zero" else 1.5
+                with patch.object(ci, "catalog", return_value=data), self.assertRaises(ValueError):
+                    ci.max_parallel("check")
+
+    def test_capped_matrix_starts_cheap_frequent_failures_then_its_longest_lanes(self):
+        lanes = ci.lanes()
+        rows = ci.matrix("integration")["include"]
+        self.assertEqual({row["lane"] for row in rows[:2]}, {"limits", "lint"})
+        self.assertEqual([row["lane"] for row in rows[2:4]], ["behavior", "behavior"])
+        for profile in ci.PROFILES:
+            with self.subTest(profile=profile):
+                order = [(not lanes[row["lane"]].get("first"), -row["minutes"]) for row in ci.matrix(profile)["include"]]
+                self.assertEqual(order, sorted(order))
+        data = copy.deepcopy(planning.catalog())
+        data["ci"]["limits"]["first"] = False
+        with patch.object(ci, "catalog", return_value=data), self.assertRaises(ValueError):
+            ci.matrix("integration")
+
     def test_combined_analysis_targets_restore_both_tool_sets(self):
         self.assertEqual(ci.analysis_set(["lint:full", "lint:vuln"]), "all")
 
@@ -128,9 +172,9 @@ class HostedVerificationTests(unittest.TestCase):
                     self.assertTrue(set(targets) & {"lint:vuln", "lint:vuln:fresh"})
                 else:
                     self.assertEqual(row["analysis"], "none")
-        for profile in ["fast", "check"]:
-            jobs = [row for row in ci.matrix(profile)["include"] if row["notices"]]
-            self.assertEqual(len(jobs), 1)
+        self.assertEqual(len([row for row in ci.matrix("check")["include"] if row["notices"]]), 1)
+        # Notices run in the merge queue, not the ready pull request tier.
+        self.assertFalse([row for row in ci.matrix("fast")["include"] if row["notices"]])
 
     def test_aggregate_rejects_failure_cancellation_skip_and_missing_results(self):
         ci.require_success({"a": {"result": "success"}, "b": {"result": "success"}})

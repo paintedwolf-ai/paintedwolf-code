@@ -77,6 +77,8 @@ jobs:
   verification:
     strategy:
       fail-fast: false
+      # With the release job after it, warming holds one runner at a time.
+      max-parallel: 1
       matrix:
         runner: [ubuntu-latest, macos-15]
     runs-on: ${{ matrix.runner }}

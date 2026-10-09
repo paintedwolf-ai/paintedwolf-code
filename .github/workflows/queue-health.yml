@@ -8,8 +8,9 @@ permissions:
   contents: read
   pull-requests: read
   issues: write
+# Maintenance runs one workflow at a time; staggered schedules keep a pending run from being replaced.
 concurrency:
-  group: queue-health
+  group: maintenance
   cancel-in-progress: false
 jobs:
   report:

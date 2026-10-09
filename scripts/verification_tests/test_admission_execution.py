@@ -129,8 +129,9 @@ class AdmissionTests(unittest.TestCase):
                                                 {'type': 'merge_queue', 'parameters': {'max_entries_to_build': 3}}]}
         result = proposed(current)
         self.assertEqual(result['rules'][0], current['rules'][0])
-        self.assertEqual(result['rules'][1]['parameters']['max_entries_to_build'], 1)
-        self.assertEqual(current['rules'][1]['parameters']['max_entries_to_build'], 3)
+        reviewed = json.loads((Path(__file__).resolve().parents[1] / 'ci_policy' / 'queue-settings.json').read_text())
+        self.assertEqual(result['rules'][1]['parameters'], reviewed)
+        self.assertEqual(current['rules'][1]['parameters'], {'max_entries_to_build': 3})
 
     def test_dependency_snapshot_does_not_depend_on_the_current_module_graph(self):
         import importlib.util
