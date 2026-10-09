@@ -282,7 +282,7 @@ func newWidgetSweep(t *testing.T, faults widgetFaults) *conformanceSweep {
 	notices := widgetNotices(t)
 	api := &widgetAPI{faults: faults, responses: httpio.Responder{Logger: slog.New(slog.DiscardHandler), Notices: notices}}
 	sweep := newConformanceSweep(doc, validator, api.routes(), notices)
-	sweep.Effects = counterEffects{writes: &api.writes}
+	sweep.effects = counterEffects{writes: &api.writes}
 	sweep.values.bind("/v1/widgets/{id}/parts/{part_id}", "part_id", fixturePartID)
 	return sweep
 }
