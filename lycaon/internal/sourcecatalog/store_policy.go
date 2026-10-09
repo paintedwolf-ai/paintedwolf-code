@@ -2,9 +2,10 @@ package sourcecatalog
 
 import (
 	"fmt"
-	"github.com/lycaon/lycaon/config"
 	"sync"
 	"time"
+
+	"github.com/lycaon/lycaon/config"
 )
 
 type treeStorePolicy struct {
