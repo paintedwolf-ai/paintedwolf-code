@@ -2,25 +2,9 @@ import { batch } from "solid-js";
 import { latestMessageSnapshot } from "../chat/transcript/projection/messages-equal.ts";
 import type { EventEnvelope } from "./types.ts";
 
-/** Frame scheduler used by the queue. */
-export type EventFrameScheduler = {
-  request: (cb: () => void) => number;
-  cancel: (handle: number) => void;
-};
+import { createEventDeliveryScheduler, type EventDeliveryScheduler } from "./event-delivery-scheduler.ts";
 
-/** Falls back to a task where the platform has no frames. */
-const defaultScheduler: EventFrameScheduler = {
-  request: (cb) =>
-    typeof requestAnimationFrame === "function"
-      ? requestAnimationFrame(cb)
-      : (setTimeout(cb, 0) as unknown as number),
-  cancel: (handle) => {
-    if (typeof cancelAnimationFrame === "function") cancelAnimationFrame(handle);
-    else clearTimeout(handle);
-  },
-};
-
-export type EventFrameQueue = {
+export type EventDeliveryQueue = {
   /** Buffer a delivery; applied retries participate only in checkpoint ordering. */
   enqueue: (envelope: EventEnvelope, alreadyApplied?: boolean) => void;
   /** Apply buffered envelopes now, in arrival order. */
@@ -33,8 +17,8 @@ export type EventFrameQueue = {
 
 export type EventReceipt = Pick<EventEnvelope, "event_id" | "cursor">;
 
-type EventFrameQueueOptions = {
-  scheduler?: EventFrameScheduler;
+type EventDeliveryQueueOptions = {
+  scheduler?: EventDeliveryScheduler;
   /** Original deliveries represented by a successfully applied snapshot. */
   onApplied?: (receipts: readonly EventReceipt[]) => void;
   /** Last cursor in the fully applied arrival-order prefix, never render order. */
@@ -43,15 +27,15 @@ type EventFrameQueueOptions = {
   onApplyError?: (err: unknown, abandoned: readonly EventReceipt[]) => void;
 };
 
-type FrameEntry = {
+type DeliveryEntry = {
   envelope: EventEnvelope;
   deliveries: EventReceipt[];
   applied: boolean;
 };
 
-type Delivery = { receipt: EventReceipt; entry: FrameEntry };
+type Delivery = { receipt: EventReceipt; entry: DeliveryEntry };
 
-/** Row identity for same-frame message collapse. */
+/** Row identity for same-batch message collapse. */
 function messageRowKey(envelope: EventEnvelope): string | undefined {
   if (envelope.topic !== "message") return undefined;
   return `${envelope.data.session_id}:${envelope.data.message.id}`;
@@ -59,7 +43,7 @@ function messageRowKey(envelope: EventEnvelope): string | undefined {
 
 // Message rows apply in sequence order to respect the transcript watermark.
 // Other topics retain their arrival order.
-function sortMessagesInPlace(entries: FrameEntry[]): void {
+function sortMessagesInPlace(entries: DeliveryEntry[]): void {
   const slots: number[] = [];
   for (let i = 0; i < entries.length; i += 1) {
     if (entries[i]?.envelope.topic === "message") slots.push(i);
@@ -77,16 +61,16 @@ function sortMessagesInPlace(entries: FrameEntry[]): void {
   });
 }
 
-/** Applies a frame in arrival order, sorting message slots by sequence. */
-export function createEventFrameQueue(
+/** Applies a batch in arrival order, sorting message slots by sequence. */
+export function createEventDeliveryQueue(
   apply: (envelope: EventEnvelope) => void,
-  options: EventFrameQueueOptions = {},
-): EventFrameQueue {
-  const scheduler = options.scheduler ?? defaultScheduler;
-  const pending: FrameEntry[] = [];
+  options: EventDeliveryQueueOptions = {},
+): EventDeliveryQueue {
+  const scheduler = options.scheduler ?? createEventDeliveryScheduler();
+  const pending: DeliveryEntry[] = [];
   const arrivals: Delivery[] = [];
-  const rowEntries = new Map<string, FrameEntry>();
-  const bufferedIds = new Map<string, FrameEntry>();
+  const rowEntries = new Map<string, DeliveryEntry>();
+  const bufferedIds = new Map<string, DeliveryEntry>();
   let handle: number | undefined;
 
   const clearBuffer = () => {
@@ -102,7 +86,7 @@ export function createEventFrameQueue(
       handle = undefined;
     }
     if (pending.length === 0) return;
-    // Drain before applying: a handler that enqueues lands in the next frame.
+    // Drain before applying: a handler that enqueues lands in the next batch.
     const draining = pending.splice(0);
     const deliveries = arrivals.splice(0);
     rowEntries.clear();

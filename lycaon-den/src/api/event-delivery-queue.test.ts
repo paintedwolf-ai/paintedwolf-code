@@ -1,12 +1,12 @@
+import type { EventDeliveryScheduler } from "./event-delivery-scheduler.ts";
 import { describe, expect, it } from "vitest";
 import { createAppStore } from "../store/app-state.ts";
 import { applyMessageEvent } from "../chat/transcript/projection/message-events.ts";
 import type { EventEnvelope, EventEnvelopeBase, Message, MessageEvent } from "./types.ts";
 import {
-  createEventFrameQueue,
-  type EventFrameScheduler,
+  createEventDeliveryQueue,
   type EventReceipt,
-} from "./event-frame-queue.ts";
+} from "./event-delivery-queue.ts";
 
 function sessionStore() {
   const appStore = createAppStore();
@@ -24,7 +24,7 @@ function sessionStore() {
   return appStore;
 }
 
-function manualScheduler(): EventFrameScheduler & { run: () => void } {
+function manualScheduler(): EventDeliveryScheduler & { run: () => void } {
   let cb: (() => void) | undefined;
   return {
     request(fn) {
@@ -99,7 +99,7 @@ function storeApplier(appStore: ReturnType<typeof sessionStore>) {
   };
 }
 
-describe("createEventFrameQueue", () => {
+describe("createEventDeliveryQueue", () => {
   it("checkpoints arrival order when a coalesced message crosses a failed event", () => {
     const scheduler = manualScheduler();
     const first = messageEnvelope(row("m", "first", 1));
@@ -109,7 +109,7 @@ describe("createEventFrameQueue", () => {
     const applied: string[] = [];
     const abandoned: string[] = [];
     const rendered: string[] = [];
-    const queue = createEventFrameQueue((env) => {
+    const queue = createEventDeliveryQueue((env) => {
       if (env === middle) throw new Error("settings failed");
       rendered.push(env.event_id);
     }, {
@@ -133,7 +133,7 @@ describe("createEventFrameQueue", () => {
     const last = messageEnvelope(row("early", "early", 10));
     const checkpoints: string[] = [];
     const abandoned: string[] = [];
-    const queue = createEventFrameQueue((env) => {
+    const queue = createEventDeliveryQueue((env) => {
       if (env === middle) throw new Error("settings failed");
     }, {
       scheduler,
@@ -149,7 +149,7 @@ describe("createEventFrameQueue", () => {
   it("does not let applied retries advance past buffered failures", () => {
     const scheduler = manualScheduler();
     const checkpoints: string[] = [];
-    const queue = createEventFrameQueue(() => {
+    const queue = createEventDeliveryQueue(() => {
       throw new Error("failed");
     }, {
       scheduler,
@@ -166,7 +166,7 @@ describe("createEventFrameQueue", () => {
     const checkpoints: string[] = [];
     const first = envelope("activity", {});
     const middle = envelope("settings", {});
-    const queue = createEventFrameQueue((env) => {
+    const queue = createEventDeliveryQueue((env) => {
       if (env === middle) throw new Error("failed");
     }, { scheduler, onCheckpoint: (cursor) => checkpoints.push(cursor) });
     queue.enqueue(first);
@@ -180,7 +180,7 @@ describe("createEventFrameQueue", () => {
     const appStore = sessionStore();
     const sched = manualScheduler();
     const applier = storeApplier(appStore);
-    const queue = createEventFrameQueue(applier.apply, { scheduler: sched });
+    const queue = createEventDeliveryQueue(applier.apply, { scheduler: sched });
 
     queue.enqueue(messageEnvelope(row("a1", "He")));
     expect(appStore.state.messages).toHaveLength(0);
@@ -195,7 +195,7 @@ describe("createEventFrameQueue", () => {
     const appStore = sessionStore();
     const sched = manualScheduler();
     const applier = storeApplier(appStore);
-    const queue = createEventFrameQueue(applier.apply, { scheduler: sched });
+    const queue = createEventDeliveryQueue(applier.apply, { scheduler: sched });
 
     queue.enqueue(messageEnvelope(row("a1", "H")));
     queue.enqueue(messageEnvelope(row("a1", "He")));
@@ -212,7 +212,7 @@ describe("createEventFrameQueue", () => {
     const appStore = sessionStore();
     const sched = manualScheduler();
     const applier = storeApplier(appStore);
-    const queue = createEventFrameQueue(applier.apply, { scheduler: sched });
+    const queue = createEventDeliveryQueue(applier.apply, { scheduler: sched });
 
     queue.enqueue(
       messageEnvelope(
@@ -236,7 +236,7 @@ describe("createEventFrameQueue", () => {
     const appStore = sessionStore();
     const sched = manualScheduler();
     const applier = storeApplier(appStore);
-    const queue = createEventFrameQueue(applier.apply, { scheduler: sched });
+    const queue = createEventDeliveryQueue(applier.apply, { scheduler: sched });
 
     queue.enqueue(
       messageEnvelope(
@@ -254,7 +254,7 @@ describe("createEventFrameQueue", () => {
     const appStore = sessionStore();
     const sched = manualScheduler();
     const applier = storeApplier(appStore);
-    const queue = createEventFrameQueue(applier.apply, { scheduler: sched });
+    const queue = createEventDeliveryQueue(applier.apply, { scheduler: sched });
 
     queue.enqueue(envelope("workflow", { workflow_run_id: "run-1" }));
     queue.enqueue(messageEnvelope(row("a1", "first", 1), "append"));
@@ -274,7 +274,7 @@ describe("createEventFrameQueue", () => {
     const appStore = sessionStore();
     const sched = manualScheduler();
     const applier = storeApplier(appStore);
-    const queue = createEventFrameQueue(applier.apply, { scheduler: sched });
+    const queue = createEventDeliveryQueue(applier.apply, { scheduler: sched });
 
     queue.enqueue(messageEnvelope(row("b", "b", 20), "append"));
     queue.enqueue(envelope("activity", { session_id: "s1" }));
@@ -290,7 +290,7 @@ describe("createEventFrameQueue", () => {
     const appStore = sessionStore();
     const sched = manualScheduler();
     const applier = storeApplier(appStore);
-    const queue = createEventFrameQueue(applier.apply, { scheduler: sched });
+    const queue = createEventDeliveryQueue(applier.apply, { scheduler: sched });
 
     queue.enqueue(messageEnvelope(row("a1", "Hello")));
     queue.flush();
@@ -305,7 +305,7 @@ describe("createEventFrameQueue", () => {
     const appStore = sessionStore();
     const sched = manualScheduler();
     const applier = storeApplier(appStore);
-    const queue = createEventFrameQueue(applier.apply, { scheduler: sched });
+    const queue = createEventDeliveryQueue(applier.apply, { scheduler: sched });
 
     queue.enqueue(messageEnvelope(row("a1", "answer")));
     sched.run();
@@ -330,7 +330,7 @@ describe("createEventFrameQueue", () => {
     const appStore = sessionStore();
     const sched = manualScheduler();
     const applier = storeApplier(appStore);
-    const queue = createEventFrameQueue(applier.apply, { scheduler: sched });
+    const queue = createEventDeliveryQueue(applier.apply, { scheduler: sched });
 
     queue.enqueue(messageEnvelope(row("a1", "newer", 5)));
     queue.enqueue(messageEnvelope(row("a1", "stale", 4)));
@@ -345,7 +345,7 @@ describe("createEventFrameQueue", () => {
     const appStore = sessionStore();
     const sched = manualScheduler();
     const applier = storeApplier(appStore);
-    const queue = createEventFrameQueue(applier.apply, { scheduler: sched });
+    const queue = createEventDeliveryQueue(applier.apply, { scheduler: sched });
 
     queue.enqueue(messageEnvelope(row("a1", "Hello")));
     queue.cancel();
@@ -357,7 +357,7 @@ describe("createEventFrameQueue", () => {
   it("drops a redelivery of an envelope already buffered", () => {
     const sched = manualScheduler();
     const seen: string[] = [];
-    const queue = createEventFrameQueue((env) => seen.push(env.event_id), {
+    const queue = createEventDeliveryQueue((env) => seen.push(env.event_id), {
       scheduler: sched,
     });
 
@@ -375,7 +375,7 @@ describe("createEventFrameQueue", () => {
     let failure: { err: unknown; abandoned: readonly EventReceipt[] } | undefined;
     const boom = envelope("cost", {});
     const trailing = envelope("scan", {});
-    const queue = createEventFrameQueue(
+    const queue = createEventDeliveryQueue(
       (env) => {
         if (env.event_id === boom.event_id) throw new Error("apply failed");
         seen.push(env.topic);
@@ -406,7 +406,7 @@ describe("createEventFrameQueue", () => {
     const sched = manualScheduler();
     const seen: string[] = [];
     let reentered = false;
-    const queue = createEventFrameQueue(
+    const queue = createEventDeliveryQueue(
       (env) => {
         seen.push(env.topic);
         if (!reentered) {
