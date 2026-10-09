@@ -26,11 +26,11 @@ type Props = {
   /** Tokens retain references resolved by whole-document lexing. */
   source: string | Token[];
   class?: string;
-  onExternalLink?: (href: string) => void | Promise<unknown>;
   /** Surface link destinations and disable project-path opens. */
   untrusted?: boolean;
   /** Project context for project-path links. */
   projectId?: string;
+  onExternalLink?: (href: string) => void | Promise<unknown>;
   /** Cited-path index — citation layer for prose path opens. */
   citations?: ProseCitationIndex;
   /** Durable host-validated targets, independent of grounding. */
