@@ -147,9 +147,11 @@ func TestHarnessResponsePreservesProviderStreamFailure(t *testing.T) {
 		},
 	})
 	testutil.FailErr(t, "encode failed response", err)
-	server := &Server{manualLLM: provider}
+	server := NewServer(requiredTestDeps(t, Dependencies{Store: store.NewMemory(), ManualLLM: provider}), nil, "harness-test-token")
 	response := httptest.NewRecorder()
-	server.handleHarnessLLMRespond(response, httptest.NewRequest(http.MethodPost, "/harness/llm/respond", strings.NewReader(string(body))))
+	request := httptest.NewRequest(http.MethodPost, "/harness/llm/respond", strings.NewReader(string(body)))
+	request.Header.Set("Content-Type", "application/json")
+	server.handleHarnessLLMRespond(response, request)
 	if response.Code != http.StatusOK {
 		t.Fatalf("response = %d: %s", response.Code, response.Body.String())
 	}
