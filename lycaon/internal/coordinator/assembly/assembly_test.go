@@ -52,7 +52,7 @@ func TestMergeWorkerVisibleToolsSetsVisibleTools(t *testing.T) {
 		AgentType:       "repo-researcher",
 		WorkspacePath:   t.TempDir(),
 	}
-	engine.mergeVisibleTools(context.Background(), sess, inject.CoordinatorTurnFrame{}, vars)
+	testPromptSurface(engine).mergeVisibleTools(context.Background(), sess, inject.CoordinatorTurnFrame{}, vars)
 	visible, ok := vars["visible_tools"].([]string)
 	if !ok || len(visible) != 2 || visible[0] != "read" || visible[1] != "grep" {
 		t.Fatalf("visible_tools = %v", vars["visible_tools"])
@@ -77,7 +77,7 @@ func TestSessionViewAgentProfileDrivesTemplateAndToolSurface(t *testing.T) {
 		},
 	})
 	sess := &api.Session{ID: "child", ParentSessionID: "parent", AgentType: agentID}
-	ref, err := engine.resolveSystemPromptRef(context.Background(), sess)
+	ref, err := testPromptSurface(engine).resolveSystemPromptRef(context.Background(), sess)
 	if err != nil {
 		t.Fatalf("resolveSystemPromptRef: %v", err)
 	}
@@ -85,7 +85,7 @@ func TestSessionViewAgentProfileDrivesTemplateAndToolSurface(t *testing.T) {
 		t.Fatalf("template ref = %q", ref)
 	}
 	vars := map[string]any{}
-	engine.mergeVisibleTools(context.Background(), sess, inject.CoordinatorTurnFrame{}, vars)
+	testPromptSurface(engine).mergeVisibleTools(context.Background(), sess, inject.CoordinatorTurnFrame{}, vars)
 	if got, ok := vars["visible_tools"].([]string); !ok || len(got) != 1 || got[0] != "read" {
 		t.Fatalf("visible_tools = %v", vars["visible_tools"])
 	}
@@ -101,7 +101,7 @@ func TestMergeEffectivePromptSurfacePrefersMachine(t *testing.T) {
 		},
 	})
 	vars := map[string]any{}
-	engine.mergeEffectivePromptSurface(context.Background(), &api.Session{ID: "s1"}, inject.CoordinatorTurnFrame{
+	testPromptSurface(engine).mergeEffectivePromptSurface(context.Background(), &api.Session{ID: "s1"}, inject.CoordinatorTurnFrame{
 		Machine: inject.Machine{
 			ProfileID: "coordinator",
 			Surface:   prompts.AgentPromptSurface{Fingerprint: "machine"},
@@ -126,7 +126,7 @@ func TestMergeWorkerVisibleToolsHidesSkillsReadFromMachine(t *testing.T) {
 	})
 	sess := &api.Session{ID: "child", ParentSessionID: "parent", AgentType: "repo-researcher"}
 	vars := map[string]any{}
-	engine.mergeVisibleTools(context.Background(), sess, inject.CoordinatorTurnFrame{
+	testPromptSurface(engine).mergeVisibleTools(context.Background(), sess, inject.CoordinatorTurnFrame{
 		Machine: inject.Machine{ProfileID: "implement", SkillCount: 0},
 	}, vars)
 	got, _ := vars["visible_tools"].([]string)
