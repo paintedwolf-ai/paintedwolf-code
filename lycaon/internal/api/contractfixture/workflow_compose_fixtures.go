@@ -13,7 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/workflow"
+	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -31,7 +31,7 @@ func NewComposeTestServer(t *testing.T) (*api.Server, wire.Session, *workflowcom
 	testutil.FailErr(t, "build conditions registry", err)
 	agents := orchestration.NewMemoryAgentRegistry()
 	_ = orchestration.LoadRequiredAgentRegistry(t.Context(), agents)
-	sessionStore := workflow.NewMemorySessionWorkflowStore()
+	sessionStore := workflowdrafts.NewMemory()
 	policy, err := workflowcomposition.LoadComposePolicy()
 	testutil.FailErr(t, "workflowcomposition.LoadComposePolicy failed", err)
 	templates, err := workflowcomposition.LoadTemplatesFromDir(extpacks.Bundled(config.PlatformFlows.Join("_templates")))

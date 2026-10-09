@@ -23,7 +23,7 @@ func WaitAmbientActiveRun(t *testing.T, wfMgr *workflow.RunManager, sessionID st
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		run, err := wfMgr.GetActive(context.Background(), sessionID)
+		run, err := wfMgr.Store.Runs.ActiveBySession(context.Background(), sessionID)
 		testutil.FailErr(t, "GetActive", err)
 		if run != nil {
 			return run

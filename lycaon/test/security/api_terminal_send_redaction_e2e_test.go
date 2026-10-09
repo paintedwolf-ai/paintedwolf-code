@@ -30,14 +30,14 @@ func TestTerminalSendInputRedactedInPersistedTranscript(t *testing.T) {
 
 	sess, err := h.CreateHarnessSession(t, wire.CreateSessionRequest{}, dir)
 	testutil.FailErr(t, "create session", err)
-	if err := h.SessionMgr.Chats.SetAgentType(ctx, sess.ID, "implementer"); err != nil {
+	if err := h.Sessions.Manager.Chats.SetAgentType(ctx, sess.ID, "implementer"); err != nil {
 		testutil.FailErr(t, "SetAgentType", err)
 	}
 	activation := turnload.NewLedger()
 	activation.Activate(sess.ID, []string{"terminal_send"}, "type into the terminal")
-	h.SessionMgr.SetTurnLoads(activation)
+	h.Sessions.Manager.SetTurnLoads(activation)
 
-	if _, err := h.SessionMgr.Submissions.Prompt(ctx, sess.ID, "drive the menu"); err != nil {
+	if _, err := h.Sessions.Manager.Submissions.Prompt(ctx, sess.ID, "drive the menu"); err != nil {
 		testutil.FailErr(t, "Prompt", err)
 	}
 
@@ -65,7 +65,7 @@ func TestTerminalSendInputRedactedInPersistedTranscript(t *testing.T) {
 	}
 
 	// Transcript projection redacts by tool identity.
-	page, err := h.SessionMgr.Runner.Transcript.GetTranscriptPage(ctx, sess.ID, wire.TranscriptPageQuery{})
+	page, err := h.Sessions.Manager.Runner.Transcript.GetTranscriptPage(ctx, sess.ID, wire.TranscriptPageQuery{})
 	testutil.FailErr(t, "GetTranscriptPage", err)
 	foundTranscript := false
 	for _, m := range page.Messages {

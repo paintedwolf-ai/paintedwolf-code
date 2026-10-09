@@ -6,6 +6,7 @@ import (
 	"github.com/lycaon/lycaon/config/configtest"
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/app"
+	"github.com/lycaon/lycaon/internal/app/configuration"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/db"
@@ -75,7 +76,7 @@ func BuildForTest(t *testing.T, opts ...Option) *Harness {
 		opt(&o)
 	}
 
-	cfg := app.DefaultConfig()
+	cfg := configuration.Config{}
 	cfg.ConfigRoot = configlayout.FindModuleRoot()
 	// Install packs before the builder resolves the catalog.
 	installHarnessPacks(t, o.installedPackDirs)
@@ -142,7 +143,7 @@ func BuildForTest(t *testing.T, opts ...Option) *Harness {
 	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 
 	if o.replaceManifests != nil {
-		sa.WorkflowMgr.Resolver.Overlay = workflowdef.NewRegistry(o.replaceManifests)
+		sa.Workflows.Manager.Resolver.Overlay = workflowdef.NewRegistry(o.replaceManifests)
 	}
 
 	applyTestHarnessRelaxations(sa)
@@ -191,17 +192,17 @@ func (h *Harness) HostProjectDir(t *testing.T, projectID string) string {
 
 // RegisterManifest adds or overrides a workflow manifest on the built registry.
 func (h *Harness) RegisterManifest(manifest workflowdef.Manifest) {
-	if h == nil || h.WorkflowMgr == nil {
+	if h == nil || h.Workflows.Manager == nil {
 		return
 	}
 	m := workflowdef.FinalizeManifest(manifest)
 	key := m.ID + "@" + m.Version
-	all := h.WorkflowMgr.Resolver.Overlay.All()
+	all := h.Workflows.Manager.Resolver.Overlay.All()
 	if all == nil {
 		all = map[string]workflowdef.Manifest{}
 	}
 	all[key] = m
-	h.WorkflowMgr.Resolver.Overlay = workflowdef.NewRegistry(all)
+	h.Workflows.Manager.Resolver.Overlay = workflowdef.NewRegistry(all)
 }
 
 // CreateHarnessSession seeds project registry rows and creates a SQL-backed session for wiring tests.
@@ -292,10 +293,10 @@ func (testCostPricer) EstimateCost(_, _ string, usage cost.TokenUsage) (cost.Cos
 }
 
 func applyTestHarnessRelaxations(sa *app.ServeApp) {
-	if sa == nil || sa.DelegationMgr == nil {
+	if sa == nil || sa.Delegations.Manager == nil {
 		return
 	}
-	if g := sa.DelegationMgr.Grounding; g != nil {
+	if g := sa.Delegations.Manager.Grounding; g != nil {
 		cfg := g.Config
 		cfg.Closeout.Mode = "off"
 		g.Config = cfg

@@ -15,7 +15,7 @@ func TestPlanWorkflowJourneyE2E(t *testing.T) {
 	httpSrv := httptest.NewServer(srv)
 	t.Cleanup(httpSrv.Close)
 	base := httpSrv.URL
-	blueprintMgr := h.BlueprintMgr
+	blueprintMgr := h.Workflows.Blueprints
 
 	projectDir := t.TempDir()
 	project := createAPIProjectAtPath(t, base, projectDir)

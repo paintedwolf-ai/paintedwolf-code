@@ -28,7 +28,7 @@ func TestCoordinatorTaskScopeDispatchReadFanOutParallelWriteAllowed(t *testing.T
 	}, dir)
 	testutil.FailErr(t, "create session", err)
 
-	q := h.WorkerQueue
+	q := h.Delegations.Queue
 	capDeps := workeradmission.WorkerCycleGuardDeps{
 		Workers:         q,
 		MaxWorkers:      func(context.Context, string) int { return 3 },

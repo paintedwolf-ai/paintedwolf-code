@@ -107,16 +107,16 @@ func TestArchivedWorkflowReplay_100(t *testing.T) {
 		UpdatedAt:       now,
 		Revision:        1,
 	}
-	err = h.WorkflowMgr.Store.State.CreateState(ctx, run, dir, map[string]any{})
+	err = h.Workflows.Manager.Store.State.CreateState(ctx, run, dir, map[string]any{})
 	testutil.FailErr(t, "create state for 1.0.0 replay run", err)
 
 	// Manifest resolution must resolve exact archived version.
-	manifest, err := h.WorkflowMgr.Resolver.ForRunID(ctx, runID)
+	manifest, err := h.Workflows.Manager.Resolver.ForRunID(ctx, runID)
 	testutil.FailErr(t, "ManifestForRunID", err)
 	if manifest.Version != fixture.WorkflowVersion {
 		t.Fatalf("expected manifest version %s, got %s", fixture.WorkflowVersion, manifest.Version)
 	}
-	if active, ok := h.WorkflowMgr.Policy.ActiveManifest(ctx, sess.ID); !ok || !manifest.Retired || active.Archive != "security-survey/"+fixture.WorkflowVersion {
+	if active, ok := h.Workflows.Manager.Policy.ActiveManifest(ctx, sess.ID); !ok || !manifest.Retired || active.Archive != "security-survey/"+fixture.WorkflowVersion {
 		t.Fatalf("expected the run to resolve its sealed archive, got retired=%v active=%+v", manifest.Retired, active)
 	}
 
@@ -139,12 +139,12 @@ func TestArchivedWorkflowReplay_100(t *testing.T) {
 			if len(p.ReviewerAgents) > 0 {
 				// Stamp the phase-enter reviewer roster the live host would
 				// have recorded, then land each reviewer's succeeded envelope.
-				run, err = h.WorkflowMgr.Store.Runs.Get(ctx, runID)
+				run, err = h.Workflows.Manager.Store.Runs.Get(ctx, runID)
 				testutil.FailErr(t, "get run for roster in "+p.Phase, err)
-				vars, err := h.WorkflowMgr.Store.Runs.GetScaffoldVars(ctx, runID)
+				vars, err := h.Workflows.Manager.Store.Runs.GetScaffoldVars(ctx, runID)
 				testutil.FailErr(t, "GetScaffoldVars roster in "+p.Phase, err)
 				vars = runstate.StampReviewIfSpawnable(vars, p.Phase, p.ReviewerAgents)
-				testutil.FailErr(t, "UpdateVars roster in "+p.Phase, h.WorkflowMgr.Store.State.UpdateVars(ctx, run, dir, vars))
+				testutil.FailErr(t, "UpdateVars roster in "+p.Phase, h.Workflows.Manager.Store.State.UpdateVars(ctx, run, dir, vars))
 				for _, agent := range p.ReviewerAgents {
 					child := appendSucceededReviewAgent(t, h, ctx, sess, agent, "")
 					citations = append(citations, reviewerCitation(child, agent))
@@ -159,7 +159,7 @@ func TestArchivedWorkflowReplay_100(t *testing.T) {
 					}
 					verdict[k] = s
 				}
-				out, err := h.WorkflowMgr.Verdicts.RecordReviewLoopVerdict(ctx, sess.ID, verdict, citations, nil)
+				out, err := h.Workflows.Manager.Verdicts.RecordReviewLoopVerdict(ctx, sess.ID, verdict, citations, nil)
 				testutil.FailErr(t, "RecordReviewLoopVerdict in "+p.Phase, err)
 				if sub.ExpectRejection {
 					if sub.RejectionReason == "" {
@@ -175,15 +175,15 @@ func TestArchivedWorkflowReplay_100(t *testing.T) {
 				}
 			}
 			if i+1 < len(fixture.Phases) {
-				waitWorkflowPhase(t, ctx, h.WorkflowMgr, runID, fixture.Phases[i+1].Phase)
-				run, err = h.WorkflowMgr.Store.Runs.Get(ctx, runID)
+				waitWorkflowPhase(t, ctx, h.Workflows.Manager, runID, fixture.Phases[i+1].Phase)
+				run, err = h.Workflows.Manager.Store.Runs.Get(ctx, runID)
 				testutil.FailErr(t, "get run after verdict in "+p.Phase, err)
 			}
 			continue
 		}
 
 		// 3. Non-review phases replay through their declared gates.
-		vars, err := h.WorkflowMgr.Store.Runs.GetScaffoldVars(ctx, runID)
+		vars, err := h.Workflows.Manager.Store.Runs.GetScaffoldVars(ctx, runID)
 		testutil.FailErr(t, "GetScaffoldVars in "+p.Phase, err)
 		for gate, satisfied := range p.GateOutcomes {
 			vars = runstate.SetGateSatisfied(vars, gate, satisfied)
@@ -191,16 +191,16 @@ func TestArchivedWorkflowReplay_100(t *testing.T) {
 		if p.Phase == "execute" {
 			vars["worker_cycle"] = map[string]any{"evaluating": true, "summary_status": "complete"}
 		}
-		run, err = h.WorkflowMgr.Store.Runs.Get(ctx, runID)
+		run, err = h.Workflows.Manager.Store.Runs.Get(ctx, runID)
 		testutil.FailErr(t, "get run before UpdateVars in "+p.Phase, err)
-		err = h.WorkflowMgr.Store.State.UpdateVars(ctx, run, dir, vars)
+		err = h.Workflows.Manager.Store.State.UpdateVars(ctx, run, dir, vars)
 		testutil.FailErr(t, "UpdateVars in "+p.Phase, err)
 
-		run, err = h.WorkflowMgr.Phases.Advance(ctx, runID)
+		run, err = h.Workflows.Manager.Phases.Advance(ctx, runID)
 		testutil.FailErr(t, "Advance from "+p.Phase, err)
 	}
 
-	run, err = h.WorkflowMgr.Store.Runs.Get(ctx, runID)
+	run, err = h.Workflows.Manager.Store.Runs.Get(ctx, runID)
 	testutil.FailErr(t, "get run after replay", err)
 	if fixture.TerminalStatus == "complete" && run.Status != api.WorkflowRunStatusComplete {
 		t.Fatalf("expected run status %s, got %s", api.WorkflowRunStatusComplete, run.Status)

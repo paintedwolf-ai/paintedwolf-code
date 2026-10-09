@@ -40,24 +40,24 @@ func TestImplementModeTaskEnqueue(t *testing.T) {
 	if sess.AgentType != orchestration.ProfileCoordinator {
 		t.Fatalf("agent_type = %q want coordinator", sess.AgentType)
 	}
-	if _, err := h.SessionMgr.Submissions.Prompt(ctx, sess.ID, "add handler for health check"); err != nil {
-		testutil.FailErr(t, "h.SessionMgr.Submissions.Prompt failed", err)
+	if _, err := h.Sessions.Manager.Submissions.Prompt(ctx, sess.ID, "add handler for health check"); err != nil {
+		testutil.FailErr(t, "h.Sessions.Manager.Submissions.Prompt failed", err)
 	}
 	if err := DrainPendingWorkerJobs(ctx, h, sess.ProjectID, sess.ID); err != nil {
 		testutil.FailErr(t, "DrainPendingWorkerJobs", err)
 	}
-	run, err := h.WorkflowMgr.Store.Runs.ActiveBySession(ctx, sess.ID)
-	testutil.FailErr(t, "h.WorkflowMgr.GetActive failed", err)
+	run, err := h.Workflows.Manager.Store.Runs.ActiveBySession(ctx, sess.ID)
+	testutil.FailErr(t, "h.Workflows.Manager.GetActive failed", err)
 	if run == nil || run.WorkflowID != "implement" {
 		t.Fatalf("expected ambient implement run, got %+v", run)
 	}
-	if dep, ok := h.DelegationMgr.Store.DelegationBySessionID(sess.ID); ok && dep != "" {
+	if dep, ok := h.Delegations.Manager.Store.DelegationBySessionID(sess.ID); ok && dep != "" {
 		t.Fatalf("expected no delegation, got %q", dep)
 	}
 	foundTask := false
 	testutil.WaitFor(t, 8*time.Second, func() bool {
-		msgs, err := h.SessionMgr.Runner.Transcript.GetMessages(ctx, sess.ID)
-		testutil.FailErr(t, "h.SessionMgr.GetMessages failed", err)
+		msgs, err := h.Sessions.Manager.Runner.Transcript.GetMessages(ctx, sess.ID)
+		testutil.FailErr(t, "h.Sessions.Manager.GetMessages failed", err)
 		for _, msg := range msgs {
 			if msg.WorkerSummary != nil || strings.Contains(msg.Content, `<task job_id="`) {
 				foundTask = true

@@ -56,7 +56,7 @@ func newApprovalHITLHarness(t *testing.T) *approvalHITLHarness {
 	}}})
 	h := wiring.BuildForTest(t, wiring.WithLLMClient(mock))
 	// Tool authorization is independent of workflow content review.
-	manifest, err := h.WorkflowMgr.Resolver.Overlay.Get("implement", "1.0.0")
+	manifest, err := h.Workflows.Manager.Resolver.Overlay.Get("implement", "1.0.0")
 	testutil.FailErr(t, "load approval fixture workflow", err)
 	manifest.Controls.ContentReview = nil
 	for i := range manifest.PhaseDefs {
@@ -68,8 +68,8 @@ func newApprovalHITLHarness(t *testing.T) *approvalHITLHarness {
 	forceWriteAsk(t, projectDir)
 	sess, err := h.CreateHarnessSession(t, wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, projectDir)
 	testutil.FailErr(t, "create session in store", err)
-	if err := h.SessionMgr.Chats.SetAgentType(ctx, sess.ID, "implementer"); err != nil {
-		testutil.FailErr(t, "h.SessionMgr.Chats.SetAgentType failed", err)
+	if err := h.Sessions.Manager.Chats.SetAgentType(ctx, sess.ID, "implementer"); err != nil {
+		testutil.FailErr(t, "h.Sessions.Manager.Chats.SetAgentType failed", err)
 	}
 	sess.AgentType = "implementer"
 	// Progress lets write reach the approval gate.
@@ -79,8 +79,8 @@ func newApprovalHITLHarness(t *testing.T) *approvalHITLHarness {
 		ownerCtx:      h.OwnerCtx(t, ctx),
 		store:         h.Store,
 		projectDir:    projectDir,
-		mgr:           h.SessionMgr,
-		checkpointMgr: h.CheckpointMgr,
+		mgr:           h.Sessions.Manager,
+		checkpointMgr: h.Sessions.Checkpoints,
 		hub:           h.MemoryHub(),
 		srv:           h.Server,
 		sess:          sess,

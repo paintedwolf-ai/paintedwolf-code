@@ -228,9 +228,9 @@ func newAdvanceParityRig(t *testing.T) *advanceParityRig {
 	toolSession := createSessionForProjectHTTP(t, h.Server, toolProj.ID, wire.SessionPostureBuild)
 	return &advanceParityRig{
 		srv:          h.Server,
-		wfMgr:        h.WorkflowMgr,
-		blueprintMgr: h.BlueprintMgr,
-		sessionMgr:   h.SessionMgr,
+		wfMgr:        h.Workflows.Manager,
+		blueprintMgr: h.Workflows.Blueprints,
+		sessionMgr:   h.Sessions.Manager,
 		registry:     h.ToolRegistry,
 		httpSession:  httpSession,
 		toolSession:  toolSession,

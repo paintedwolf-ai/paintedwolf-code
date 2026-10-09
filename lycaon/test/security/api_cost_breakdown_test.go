@@ -81,7 +81,7 @@ func newCostBreakdownHarness(t *testing.T) (*wiring.Harness, *api.Server, *sessi
 	cancel := h.StartBackgroundWorkers(t, context.Background())
 	t.Cleanup(cancel)
 	hub := h.MemoryHub()
-	return h, h.Server, h.SessionMgr, hub
+	return h, h.Server, h.Sessions.Manager, hub
 }
 
 func TestCostSummaryWorkerSplitAfterDelegation(t *testing.T) {
@@ -92,24 +92,24 @@ func TestCostSummaryWorkerSplitAfterDelegation(t *testing.T) {
 
 	postPromptAndWaitIdle(t, srv, parent.ID, "plan the work")
 
-	r, err := h.DelegationMgr.Init(ctx, parent.ID, wire.CreateDelegationRequest{
+	r, err := h.Delegations.Manager.Init(ctx, parent.ID, wire.CreateDelegationRequest{
 		ProjectID: testdbseed.DefaultProjectID,
 		Task:      "implement feature",
 		Strategy:  wire.HuntStrategyFileBased,
 	})
-	testutil.FailErr(t, "h.DelegationMgr.Init failed", err)
-	if _, err := h.DelegationMgr.DispatchLeg(ctx, r.ID, r.Legs[0].ID, ""); err != nil {
-		testutil.FailErr(t, "h.DelegationMgr.DispatchLeg failed", err)
+	testutil.FailErr(t, "h.Delegations.Manager.Init failed", err)
+	if _, err := h.Delegations.Manager.DispatchLeg(ctx, r.ID, r.Legs[0].ID, ""); err != nil {
+		testutil.FailErr(t, "h.Delegations.Manager.DispatchLeg failed", err)
 	}
 
 	if !testutil.WaitForNoFatal(promptIdleBudget, func() bool {
-		st, err := h.DelegationMgr.GetStatus(ctx, r.ID)
+		st, err := h.Delegations.Manager.GetStatus(ctx, r.ID)
 		if err != nil || st == nil {
 			return false
 		}
 		return st.Phase == wire.DelegationPhaseDone
 	}) {
-		status, err := h.DelegationMgr.GetStatus(ctx, r.ID)
+		status, err := h.Delegations.Manager.GetStatus(ctx, r.ID)
 		t.Fatalf("worker delegation did not finish within %s: status=%+v error=%v", promptIdleBudget, status, err)
 	}
 

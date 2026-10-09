@@ -40,7 +40,7 @@ func newOrchestrationPipelineServer(t *testing.T, projectDir string) *orchestrat
 	sess := createSessionHTTP(t, h.Server, projectDir)
 	return &orchestrationPipelineHarness{
 		srv:         h.Server,
-		workflowMgr: h.WorkflowMgr,
+		workflowMgr: h.Workflows.Manager,
 		ownerCtx:    h.OwnerCtx(t, context.Background()),
 		hub:         h.MemoryHub(),
 		sess:        sess,
