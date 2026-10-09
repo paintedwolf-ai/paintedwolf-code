@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  DEN_SCROLLPORT_INPUT_EVENT,
   bindScrollportNativeInput,
   requireScrollportMotionForViewport,
   unbindScrollportMotion,
 } from "./scrollport-motion.ts";
+import { DEN_SCROLLPORT_INPUT_EVENT } from "./scrollport-motion-types.ts";
 import {
   bindScrollportMotion,
   createScrollportFixture,
@@ -61,7 +61,7 @@ describe("ScrollportMotion native input", () => {
 
     expect(event.defaultPrevented).toBe(false);
     expect(viewport.scrollTop).toBe(1200);
-    expect(motion.isDirectInputActive()).toBe(true);
+    expect(motion.input.isDirectInputActive()).toBe(true);
     expect(claims).toBe(1);
     stop();
   });
@@ -79,8 +79,8 @@ describe("ScrollportMotion native input", () => {
 
     nestedViewport.dispatchEvent(wheel({ deltaY: 40 }));
 
-    expect(nested.isDirectInputActive()).toBe(true);
-    expect(outer.motion.isDirectInputActive()).toBe(false);
+    expect(nested.input.isDirectInputActive()).toBe(true);
+    expect(outer.motion.input.isDirectInputActive()).toBe(false);
     stopNested();
     stopOuter();
   });
@@ -104,8 +104,8 @@ describe("ScrollportMotion native input", () => {
     rail.dispatchEvent(event);
 
     expect(event.defaultPrevented).toBe(false);
-    expect(nested.isDirectInputActive()).toBe(railReceivesInput);
-    expect(outer.motion.isDirectInputActive()).toBe(!railReceivesInput);
+    expect(nested.input.isDirectInputActive()).toBe(railReceivesInput);
+    expect(outer.motion.input.isDirectInputActive()).toBe(!railReceivesInput);
     stopNested();
     stopOuter();
   });
@@ -117,7 +117,7 @@ describe("ScrollportMotion native input", () => {
 
     viewport.dispatchEvent(wheel({ deltaY: 3, ctrlKey: true }));
 
-    expect(motion.isDirectInputActive()).toBe(false);
+    expect(motion.input.isDirectInputActive()).toBe(false);
     stop();
   });
 
@@ -126,11 +126,11 @@ describe("ScrollportMotion native input", () => {
     now.mockReturnValue(1_000);
     const { motion } = createScrollportFixture();
 
-    motion.noteNativeInput("wheel");
-    expect(motion.isDirectInputActive()).toBe(true);
+    motion.input.noteNativeInput("wheel");
+    expect(motion.input.isDirectInputActive()).toBe(true);
 
     now.mockReturnValue(1_601);
-    expect(motion.isDirectInputActive()).toBe(false);
+    expect(motion.input.isDirectInputActive()).toBe(false);
   });
 
   it("notifies settlement after the last input even when the offset never changes", () => {
@@ -138,22 +138,22 @@ describe("ScrollportMotion native input", () => {
     stubAnimationFrames();
     const { motion, host } = createScrollportFixture();
     const settled = vi.fn();
-    const stop = motion.subscribeInputSettled(settled);
+    const stop = motion.input.subscribeInputSettled(settled);
     try {
-      motion.noteNativeInput("wheel");
+      motion.input.noteNativeInput("wheel");
       vi.advanceTimersByTime(400);
-      motion.noteNativeInput("wheel");
+      motion.input.noteNativeInput("wheel");
       vi.advanceTimersByTime(599);
       expect(settled).not.toHaveBeenCalled();
       vi.advanceTimersByTime(1);
       expect(settled).toHaveBeenCalledOnce();
-      motion.beginThumbGesture();
+      motion.input.beginThumbGesture();
       vi.advanceTimersByTime(1_000);
       expect(settled).toHaveBeenCalledOnce();
-      motion.endThumbGesture();
+      motion.input.endThumbGesture();
       vi.advanceTimersByTime(600);
       expect(settled).toHaveBeenCalledTimes(2);
-      motion.noteNativeInput("wheel");
+      motion.input.noteNativeInput("wheel");
       stop();
       vi.advanceTimersByTime(600);
       expect(settled).toHaveBeenCalledTimes(2);
@@ -168,7 +168,7 @@ describe("ScrollportMotion native input", () => {
 
     stop();
 
-    expect(motion.isDirectInputActive()).toBe(false);
+    expect(motion.input.isDirectInputActive()).toBe(false);
   });
 
   it("keeps a scrolling reader's offset addressable while content contracts", () => {
@@ -179,7 +179,7 @@ describe("ScrollportMotion native input", () => {
       initialScrollTop: 650,
     });
 
-    motion.noteNativeInput("wheel");
+    motion.input.noteNativeInput("wheel");
     setNaturalScrollHeight(800);
     motion.notifyLayoutMutated();
 
@@ -198,7 +198,7 @@ describe("ScrollportMotion extent", () => {
     expect(viewport.scrollTop).toBe(650);
     await flushRetainedExtentReclaim(viewport);
     expect(viewport.scrollTop).toBe(600);
-    if (intent === "wheel") motion.noteNativeInput("wheel");
+    if (intent === "wheel") motion.input.noteNativeInput("wheel");
     if (intent === "restore") motion.commit(600, "restore_anchor");
     const observed: number[] = [];
     for (const height of [800, 700]) {
@@ -216,7 +216,7 @@ describe("ScrollportMotion extent", () => {
       clientHeight: 300, initialScrollHeight: 1_000, initialScrollTop: 700,
     });
     let tail = 500;
-    fixture.motion.setTailOffsetResolver(() => tail);
+    fixture.motion.tail.setTailOffsetResolver(() => tail);
     fixture.resetScrollHeightReads();
 
     tail = 480;
@@ -234,7 +234,7 @@ describe("ScrollportMotion extent", () => {
     const { viewport, motion, setNaturalScrollHeight } = createScrollportFixture({
       clientHeight: 300, initialScrollHeight: 1_000, initialScrollTop: 650,
     });
-    motion.releaseTailRange();
+    motion.tail.releaseTailRange();
     for (const height of [900, 800, 700]) {
       setNaturalScrollHeight(height);
       motion.notifyLayoutMutated();
@@ -267,7 +267,7 @@ describe("ScrollportMotion extent", () => {
     motion.commit(750, "layout_compensation");
     expect(extentHoldPx(viewport)).toBe(50);
 
-    motion.commit(motion.tailOffsetY(), "repin_tail");
+    motion.commit(motion.extent.tailOffsetY(), "repin_tail");
     expect(viewport.scrollTop).toBe(700);
     expect(extentHoldPx(viewport)).toBe(0);
   });
@@ -279,13 +279,13 @@ describe("ScrollportMotion extent", () => {
       initialScrollTop: 650,
     });
     const changed = vi.fn();
-    motion.subscribeExtent(changed);
+    motion.extent.subscribeExtent(changed);
 
     motion.commit(750, "layout_compensation");
     expect(extentHoldPx(viewport)).toBe(50);
     expect(changed).toHaveBeenCalledTimes(1);
 
-    motion.commit(motion.tailOffsetY(), "repin_tail");
+    motion.commit(motion.extent.tailOffsetY(), "repin_tail");
     expect(extentHoldPx(viewport)).toBe(0);
     expect(changed.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
@@ -296,18 +296,18 @@ describe("ScrollportMotion extent", () => {
       initialScrollHeight: 1000,
       initialScrollTop: 400,
     });
-    motion.beginThumbGesture();
+    motion.input.beginThumbGesture();
     setNaturalScrollHeight(700);
     motion.commit(500, "thumb_drag");
     expect(viewport.scrollTop).toBe(400);
-    motion.endThumbGesture();
+    motion.input.endThumbGesture();
     await flushRetainedExtentReclaim();
     expect(extentHoldPx(viewport)).toBe(0);
     expect(viewport.scrollTop).toBe(400);
 
-    motion.beginThumbGesture();
+    motion.input.beginThumbGesture();
     motion.commit(350, "thumb_drag");
-    motion.endThumbGesture();
+    motion.input.endThumbGesture();
     await flushRetainedExtentReclaim();
     expect(extentHoldPx(viewport)).toBe(0);
   });
@@ -344,7 +344,7 @@ describe("ScrollportMotion extent", () => {
     });
     const motion = bindScrollportMotion(host, viewport, content);
 
-    motion.beginThumbGesture();
+    motion.input.beginThumbGesture();
     // Offset 400 requires retained range.
     naturalScrollHeight = 600;
     motion.notifyLayoutMutated();
@@ -412,7 +412,7 @@ describe("ScrollportMotion extent", () => {
       initialScrollHeight: 1_000,
       initialScrollTop: 700,
     });
-    motion.setTailPin(() => true);
+    motion.tail.setTailPin(() => true);
 
     setNaturalScrollHeight(602);
     motion.notifyLayoutMutated();
@@ -438,7 +438,7 @@ describe("ScrollportMotion extent", () => {
       offsetHeight: { get: () => Math.round(box), configurable: true },
     });
     viewport.getBoundingClientRect = () => ({ height: box }) as DOMRect;
-    motion.setTailPin(() => true);
+    motion.tail.setTailPin(() => true);
 
     // A dock easing open shrinks the viewport by fractions of a pixel per frame.
     for (const height of [299.6, 298.7, 297.35, 296.2]) {
@@ -526,31 +526,31 @@ describe("ScrollportMotion extent spacer", () => {
     stubAnimationFrames();
     // A row flex scroller lays the spacer beside taller content.
     const f = contentFixture(() => 0);
-    f.motion.noteNativeInput("wheel");
+    f.motion.input.noteNativeInput("wheel");
 
     for (const height of [1_950, 1_900, 1_800, 1_700, 1_600, 1_500]) {
       f.contract(height);
       expect(f.spacerHeight()).toBeLessThanOrEqual(f.overrun());
-      expect(f.motion.contentHeight()).toBe(height);
+      expect(f.motion.extent.contentHeight()).toBe(height);
     }
     expect(f.spacerHeight()).toBe(0);
-    expect(f.motion.maxOffsetY()).toBe(1_400);
+    expect(f.motion.extent.maxOffsetY()).toBe(1_400);
   });
 
   it("retains range through a spacer that adds its height plus a layout gap", () => {
     stubAnimationFrames();
     const f = contentFixture((height) => height + 8);
-    f.motion.noteNativeInput("wheel");
+    f.motion.input.noteNativeInput("wheel");
 
     // The gap counts toward the held range, so the range ends at the held offset.
     f.contract(1_700);
     expect(f.spacerHeight()).toBe(292);
-    expect(f.motion.contentHeight()).toBe(1_700);
+    expect(f.motion.extent.contentHeight()).toBe(1_700);
     expect(f.viewport.scrollHeight - 600).toBe(1_400);
 
     f.contract(1_600);
     expect(f.spacerHeight()).toBe(392);
-    expect(f.motion.contentHeight()).toBe(1_600);
+    expect(f.motion.extent.contentHeight()).toBe(1_600);
     expect(f.viewport.scrollHeight - 600).toBe(1_400);
   });
 
@@ -561,13 +561,13 @@ describe("ScrollportMotion extent spacer", () => {
       configurable: true,
       get: () => 600 + f.spacerHeight(),
     });
-    f.motion.noteNativeInput("wheel");
+    f.motion.input.noteNativeInput("wheel");
 
     for (const height of [1_700, 1_600, 1_500]) {
       f.contract(height);
       expect(f.spacerHeight()).toBe(0);
       expect(f.viewport.clientHeight).toBe(600);
-      expect(f.motion.contentHeight()).toBe(height);
+      expect(f.motion.extent.contentHeight()).toBe(height);
     }
   });
 });
@@ -576,7 +576,7 @@ describe("ScrollportMotion content shift", () => {
   it.each([false, true])("counts a one-pixel native tail clamp only once during content compensation (input=%s)", (input) => {
     const fixture = createScrollportFixture({ initialScrollTop: 1_200, initialScrollHeight: 1_875 });
     const { motion, viewport } = fixture;
-    if (input) motion.noteNativeInput("wheel");
+    if (input) motion.input.noteNativeInput("wheel");
     const fromOffset = viewport.scrollTop;
     fixture.setNaturalScrollHeight(1_874, { notify: false });
     expect(viewport.scrollTop).toBe(1_199);
@@ -647,10 +647,10 @@ describe("ScrollportMotion content shift", () => {
       set: (value: number) => { offset = Math.round(value); },
     });
     motion.shiftContent(0.4, viewport.scrollTop);
-    if (input === "thumb") motion.beginThumbGesture();
-    else motion.noteNativeInput(input);
+    if (input === "thumb") motion.input.beginThumbGesture();
+    else motion.input.noteNativeInput(input);
     viewport.scrollTop = 800;
-    if (input === "thumb") motion.endThumbGesture();
+    if (input === "thumb") motion.input.endThumbGesture();
     motion.shiftContent(0.4, viewport.scrollTop);
     expect(offset).toBe(800);
   });
@@ -690,11 +690,11 @@ describe("ScrollportMotion content shift", () => {
       initialScrollHeight: 4_000,
     });
 
-    motion.noteNativeInput("wheel");
+    motion.input.noteNativeInput("wheel");
     expect(motion.shiftContent(400, viewport.scrollTop)).toBe(400);
 
     expect(viewport.scrollTop).toBe(1_600);
-    expect(motion.isDirectInputActive()).toBe(true);
+    expect(motion.input.isDirectInputActive()).toBe(true);
   });
 
   it("publishes range for a shift ahead of runway geometry", () => {
@@ -716,11 +716,11 @@ describe("ScrollportMotion content shift", () => {
       initialScrollHeight: 8_000,
     });
 
-    motion.beginThumbGesture();
+    motion.input.beginThumbGesture();
     expect(motion.shiftContent(-1_340, viewport.scrollTop)).toBe(0);
     expect(viewport.scrollTop).toBe(2_175);
 
-    motion.endThumbGesture();
+    motion.input.endThumbGesture();
     expect(motion.shiftContent(-1_340, viewport.scrollTop)).toBe(-1_340);
     expect(viewport.scrollTop).toBe(835);
   });
@@ -732,7 +732,7 @@ describe("ScrollportMotion content shift", () => {
       initialScrollTop: 1_400,
     });
     const { viewport, motion } = fixture;
-    motion.setTailPin(() => true);
+    motion.tail.setTailPin(() => true);
 
     // A row above grew by 300 and the pin already reached the new tail.
     fixture.setNaturalScrollHeight(2_300);

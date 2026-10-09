@@ -1,6 +1,7 @@
 import { render, screen } from "@solidjs/testing-library";
 import { describe, expect, it, vi } from "vitest";
-import { scrollportFrameParts, syncThemedScrollbar } from "../../platform/scrolling/themed-scrollbars.ts";
+import { syncThemedScrollbar } from "../../platform/scrolling/themed-scrollbars.ts";
+import { scrollportFrameParts } from "../../platform/scrolling/scrollport-frame-dom.ts";
 import { Scrollport } from "./Scrollport.tsx";
 
 vi.mock("../../platform/scrolling/themed-scrollbars.ts", async (importOriginal) => ({

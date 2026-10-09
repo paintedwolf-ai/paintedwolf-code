@@ -1,10 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createSignal } from "solid-js";
-import {
-  createTranscriptViewportController,
-  registerTranscriptViewport,
-} from "../../stream/transcript-viewport.tsx";
+import { createTranscriptViewportController } from "../../stream/transcript-viewport.tsx";
+import { registerTranscriptViewport } from "../../stream/transcript-viewport.tsx";
 import { revealChicklet } from "./transcript-reveal.ts";
 import { transcriptDisclosureKey } from "./transcript-disclosure-key.ts";
 
