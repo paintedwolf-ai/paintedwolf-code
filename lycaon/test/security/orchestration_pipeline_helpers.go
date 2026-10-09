@@ -60,7 +60,7 @@ func completeActiveChildRun(t *testing.T, h *orchestrationPipelineHarness) {
 	child.Status = wire.WorkflowRunStatusComplete
 	child.CompletedAt = &now
 	child.UpdatedAt = now
-	testutil.FailErr(t, "complete child run", h.workflowMgr.Store.Update(ctx, child))
+	testutil.FailErr(t, "complete child run", h.workflowMgr.Store.State.Update(ctx, child))
 	testutil.FailErr(t, "resume parent run", h.workflowMgr.Children.ReconcileTerminalRun(ctx, child))
 }
 
