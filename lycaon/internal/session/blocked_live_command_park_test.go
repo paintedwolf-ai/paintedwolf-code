@@ -50,7 +50,7 @@ func TestParkBlockedLiveCommandsArmsExactProcessSubscription(t *testing.T) {
 	if !loop.Waits.IsSleeping("session-1") {
 		t.Fatal("coordinator loop is not sleeping")
 	}
-	triggers := loop.WaitSubscriptionForTest("session-1")
+	triggers := loop.Waits.Triggers("session-1")
 	if len(triggers) != 2 || triggers[0] != loopwake.WaitTriggerTimer || triggers[1] != loopwake.WaitTriggerProcessDone {
 		t.Fatalf("wait triggers = %v want [timer process_done]", triggers)
 	}
