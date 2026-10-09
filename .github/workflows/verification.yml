@@ -51,7 +51,9 @@ jobs:
     name: ${{ matrix.lane }}${{ matrix.shard != '' && format(' ({0})', matrix.shard) || '' }}
     needs: plan
     strategy:
-      fail-fast: false
+      # A merge group stops at its first failure and frees its runners; every other run keeps
+      # each lane's evidence.
+      fail-fast: ${{ github.event_name == 'merge_group' }}
       # The catalog's capacity table bounds how many runners each profile holds at once.
       max-parallel: ${{ fromJSON(needs.plan.outputs.max-parallel) }}
       matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}

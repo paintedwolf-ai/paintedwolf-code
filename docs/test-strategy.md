@@ -498,13 +498,15 @@ allocation before claiming an end-to-end speedup.
 
 A ready pull request runs the `fast` profile; the merge queue runs the
 `integration` profile on the exact commit that lands. Both report the required
-`check` from [`ci.yml`](../.github/workflows/ci.yml). The fast tier is two jobs
-that start together: `fast-static` compiles the host and runs `lint:fast`, Den
-typecheck, and Den lint; `fast-tests` runs repository contracts, size budgets,
-and changed coverage, which runs the Go and Den tests of what the change
-touches. The planner requires its stages to be a subset of `./task check-fast`.
-It catches most failures in minutes, and the gate catches the rest before the
-commit lands.
+`check` from [`ci.yml`](../.github/workflows/ci.yml). The fast tier is one
+static job, `ready`: it compiles the host and runs `lint:fast`, size budgets,
+Den typecheck, and Den lint, in about ten minutes with setup, `lint:fast` being
+the longest stage at about seven. The planner requires its stages to be a subset
+of `./task check-fast`. Nothing that runs tests runs here: repository
+contracts, changed coverage, and every suite wait for the merge queue, which
+starts each group with its cheapest, most frequently failing lanes (`limits`,
+for budgets and changed coverage, and `lint`) and stops the group at its first
+failure, freeing its runners for the next.
 
 Pull requests no longer run the integration gate themselves. Running it for
 the pull request and again for its merge group doubled demand on twenty
@@ -667,8 +669,10 @@ gate's cap. The `capacity` table in
 [`verification-plan.json`](../scripts/verification-plan.json) declares each
 triggered workflow's footprint and each verification profile's
 `max_parallel`. The reusable verification workflow's plan job reads that cap
-from the catalog and orders the matrix longest budget first, so a capped matrix
-starts its slowest lanes first.
+from the catalog and orders the matrix: lanes the catalog marks `first`, the
+cheap ones that fail most often, then the rest longest budget first, so a
+capped matrix neither finishes on its slowest lane nor runs long before a
+cheap failure.
 
 | Class | Workflows | One run at a time | Runners (macOS) |
 |---|---|---|---|
@@ -678,7 +682,7 @@ starts its slowest lanes first.
 | Releases | `release.yml`, `release-halt.yml` | `release-static-update` | 2 (2): preflight or the upgrade rehearsal beside one signed build |
 | Maintenance | dependency inventory, release-system live test, queue health, issue staleness, the issue sweep, release secrets check | `maintenance`, shared | 1 |
 | Merge queue | CI of merge groups | one run per group, two groups at once | 8: two groups × the `integration` cap of four |
-| Ready pull requests | CI of pull requests | one run per pull request; a newer push cancels it | 2 per pull request, for minutes |
+| Ready pull requests | CI of pull requests | one run per pull request; a newer push cancels it | 1 per pull request, for about ten minutes |
 
 A newer run replaces a pending one in its group and a started run finishes, so
 a long nightly or qualification never multiplies. The maintenance workflows
@@ -688,24 +692,37 @@ its next schedule. Issue intake, an issue's lifecycle nudge, and verification
 recovery handle one event per run instead: each run is a single job bounded to
 fifteen minutes.
 
+These caps are maxima, not reservations. Hosted runners start waiting jobs in
+the order they were queued, so a merge-queue job waits behind every job queued
+before it, whatever its class. What bounds that wait is that every class's
+footprint is small and each pull request's is a single job of about ten
+minutes. Nothing reorders or preempts runs.
+
 At their widest the bounded classes hold 3 + 1 + 2 + 2 + 1 = 9 runners and the
-merge queue 8, so 17 of the twenty are spoken for and three, one fast tier and
-a spare, are never claimed by long work. More ready pull requests than that
-wait first come, first served, but their jobs last minutes, so a merge-queue
-job waits at most for one of them to finish. Nothing reorders or preempts
-runs: no priority is needed when every long class fits. On macOS,
+merge queue 8, leaving three that long work never claims; a pull request's CI
+run holds one. Under a burst of ten pull request pushes at once, their ten jobs
+queue ahead of a merge-queue job. With every bounded class at its widest, the
+three spare runners serve them four rounds of about ten minutes, so the
+merge-queue job starts after at most about 40 minutes. That worst case needs
+qualification, nightly, a release, warming, maintenance, and both groups all at
+their widest together. With the queue's two groups, qualification, and nightly
+running (13 runners), the ten jobs take seven runners at once and the
+merge-queue job starts with the last three, after about ten minutes. On macOS,
 qualification, warming, and nightly hold one runner each and a release two,
-five in all; the merge queue and the fast tier run on Linux. With its lanes started longest first, a full-scope
-group capped at four finishes in about 35 minutes of measured lane times,
-against about 26 uncapped; a cap of three would add about eight more, and a
-third group of four would not fit beside the other classes.
+five in all; the merge queue and the fast tier run on Linux. With `limits`,
+`lint`, and both behavior shards in its first wave, a full-scope group capped
+at four finishes in about 32 minutes of measured lane times, against about 26
+uncapped and about 44 at a cap of three; a group whose budgets or changed
+coverage fail stops after about six. A third group of four would not fit
+beside the other classes.
 
 Contract tests in
 [`hosted_capacity_contract_test.go`](../lycaon/test/contract/release/hosted_capacity_contract_test.go)
 compute each workflow's widest set of jobs that can run at once, following
 `needs`, event conditions, matrix caps, and reusable workflows, and require it
 within the declared footprint. They also require the classes, the merge queue
-at its queue settings, and one fast tier to fit the plan together.
+at its queue settings, and one pull request's CI run to fit the plan together,
+and a pull request's run to hold one runner.
 
 ## Released-version compatibility
 

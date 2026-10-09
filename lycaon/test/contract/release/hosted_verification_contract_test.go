@@ -18,6 +18,8 @@ type hostedStep struct {
 	Env      map[string]string
 }
 
+const mergeGroupFailFast = "${{ github.event_name == 'merge_group' }}"
+
 type hostedJob struct {
 	Uses        string
 	Permissions map[string]string
@@ -28,7 +30,7 @@ type hostedJob struct {
 	With        map[string]string
 	Steps       []hostedStep
 	Strategy    struct {
-		FailFast *bool `yaml:"fail-fast"`
+		FailFast string `yaml:"fail-fast"`
 	}
 }
 
@@ -110,8 +112,9 @@ func TestReusableVerificationFailsWithItsPlanOrAnyMatrixJob(t *testing.T) {
 	if !slices.Equal(hostedNeeds(t, verify), []string{"plan"}) {
 		t.Fatal("matrix execution must depend on successful planning")
 	}
-	if verify.Strategy.FailFast == nil || *verify.Strategy.FailFast {
-		t.Fatal("each selected matrix job must run and retain its own evidence")
+	// A merge group stops at its first failure to free its runners; other runs keep every lane's evidence.
+	if verify.Strategy.FailFast != mergeGroupFailFast {
+		t.Fatalf("only a merge group may stop its other lanes at the first failure, got fail-fast %q", verify.Strategy.FailFast)
 	}
 	for _, step := range verify.Steps {
 		if strings.HasPrefix(step.Run, "python3 scripts/ci_verification.py run") && step.Continue {
@@ -150,8 +153,8 @@ func TestHostedVerificationBudgetsAndEvidence(t *testing.T) {
 	t.Parallel()
 	jobs := hostedJobs(t, "verification")
 	verify := jobs["verify"]
-	if verify.Strategy.FailFast == nil || *verify.Strategy.FailFast {
-		t.Fatal("one verification failure must not cancel independent matrix jobs")
+	if verify.Strategy.FailFast != mergeGroupFailFast {
+		t.Fatal("outside a merge group, one verification failure must not cancel independent matrix jobs")
 	}
 	if verify.Timeout != "${{ matrix.job_minutes }}" {
 		t.Fatal("verification jobs must consume the catalog job budget")
@@ -193,7 +196,7 @@ func TestEndToEndVerificationRunsInQualificationAndSelectedNightly(t *testing.T)
 		t.Fatal("end-to-end verification must run web and desktop suites")
 	}
 	web := e2e["playwright-web"]
-	if web.Strategy.FailFast == nil || *web.Strategy.FailFast || web.Continue {
+	if web.Strategy.FailFast != "false" || web.Continue {
 		t.Fatal("each web shard must run independently and contribute to the verdict")
 	}
 	// Nightly stages run in turn, and each runs whatever an earlier stage concluded.

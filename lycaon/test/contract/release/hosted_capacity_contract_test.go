@@ -119,10 +119,13 @@ func (p capacityPlan) group(t *testing.T, name string) string {
 		Group  string
 		Cancel string `yaml:"cancel-in-progress"`
 	}
-	if node.Kind == yaml.ScalarNode {
+	switch node.Kind {
+	case yaml.ScalarNode:
 		settings.Group = node.Value
-	} else if node.Kind == yaml.MappingNode {
+	case yaml.MappingNode:
 		contractcheck.FailErr(t, "decode concurrency of "+name, node.Decode(&settings))
+	default:
+		// No group at all is refused below.
 	}
 	if settings.Group == "" {
 		t.Fatalf("%s must run one at a time in a concurrency group", name)
@@ -361,7 +364,7 @@ func TestTriggeredWorkflowsHoldBoundedRunners(t *testing.T) {
 	plan := loadCapacityPlan(t)
 	triggered := plan.triggered()
 	for name := range plan.capacity.Footprints {
-		if !slices.Contains(triggered, name) {
+		if name != "ci.yml" && !slices.Contains(triggered, name) {
 			t.Errorf("capacity declares %s, which is not a triggered workflow", name)
 		}
 	}
@@ -389,8 +392,23 @@ func TestTriggeredWorkflowsHoldBoundedRunners(t *testing.T) {
 	}
 }
 
+// A ready pull request's CI run holds one runner at a time: plan, its one fast job, then the check.
+// Its merge-group and dispatch jobs never run for a pull request (see the admission contract).
+func TestPullRequestCIHoldsOneRunner(t *testing.T) {
+	t.Parallel()
+	plan := loadCapacityPlan(t)
+	jobs := plan.workflows["ci.yml"].Jobs
+	fast := plan.jobFootprint(t, "ci.yml", "fast", "pull_request", jobs["fast"], nil)
+	if needs := capacityNeeds(t, jobs["check"].Needs); !slices.Contains(needs, "fast") {
+		t.Fatalf("the check aggregate must follow the fast tier, got needs %v", needs)
+	}
+	if declared := plan.capacity.Footprints["ci.yml"]; fast.total > declared || declared != 1 {
+		t.Errorf("a pull request's CI run must hold one runner, declared %d, can hold %d", declared, fast.total)
+	}
+}
+
 // Every bounded class at its widest, together with the merge queue's groups at their cap, fits the plan's
-// runners and leaves a ready pull request's fast tier a runner per job.
+// runners and leaves one pull request's CI run a runner.
 func TestBoundedClassesFitTheHostedRunners(t *testing.T) {
 	t.Parallel()
 	plan := loadCapacityPlan(t)
@@ -411,9 +429,9 @@ func TestBoundedClassesFitTheHostedRunners(t *testing.T) {
 		total += count
 		macTotal += macos[group]
 	}
-	if fast := plan.capacity.MaxParallel["fast"]; total+fast > plan.capacity.Runners {
-		t.Errorf("bounded classes %v, %d merge-queue jobs, and a %d-job fast tier need %d runners; the plan runs %d",
-			runners, queue, fast, total+fast, plan.capacity.Runners)
+	if pull := plan.capacity.Footprints["ci.yml"]; total+pull > plan.capacity.Runners {
+		t.Errorf("bounded classes %v, %d merge-queue jobs, and a %d-runner pull request run need %d runners; the plan runs %d",
+			runners, queue, pull, total+pull, plan.capacity.Runners)
 	}
 	if macTotal > plan.capacity.MacOSRunners {
 		t.Errorf("bounded classes %v need %d macOS runners; the plan runs %d", macos, macTotal, plan.capacity.MacOSRunners)

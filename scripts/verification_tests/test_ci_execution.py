@@ -17,24 +17,25 @@ class HostedVerificationTests(unittest.TestCase):
         actual = sorted(stage["name"] for lane in lanes.values() if "check" in lane["profiles"]
                         for stage in planning.expand(lane["targets"]))
         self.assertEqual(actual, expected)
-
-    def test_ready_tier_is_a_quick_subset_of_the_handoff_gate_in_one_round_of_jobs(self):
-        handoff = {stage["name"] for stage in planning.expand(["check-fast"])}
-        rows = ci.matrix("fast")["include"]
-        stages = [stage["name"] for row in rows for stage in planning.expand(ci.lanes()[row["lane"]]["targets"])]
-        self.assertEqual(sorted(stages), sorted(set(stages)))
-        self.assertLessEqual(set(stages), handoff)
-        # Lint, size budgets, typecheck, and the tests of what the change touches.
-        self.assertLessEqual({"lint:fast", "budgets", "den:typecheck", "coverage:changes", "den:coverage:changes"},
-                             set(stages))
-        # Every job starts at once, and none runs a full suite.
-        self.assertEqual(ci.max_parallel("fast"), len(rows))
-        self.assertTrue(all(row["minutes"] <= 30 for row in rows))
         check = {row["lane"] for row in ci.matrix("check")["include"]}
         release = {row["lane"] for row in ci.matrix("release")["include"]}
         # Releases gate on whether the product works; style, tooling, and the deep tiers run elsewhere.
         self.assertLessEqual(release, check)
         self.assertEqual(release, {"build", "contracts", "behavior", "frontend", "native", "vulnerabilities"})
+
+    def test_ready_tier_is_one_short_static_job_from_the_handoff_gate(self):
+        handoff = {stage["name"] for stage in planning.expand(["check-fast"])}
+        rows = ci.matrix("fast")["include"]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(ci.max_parallel("fast"), 1)
+        stages = [stage["name"] for stage in planning.expand(ci.lanes()[rows[0]["lane"]]["targets"])]
+        self.assertEqual(sorted(stages), sorted(set(stages)))
+        self.assertLessEqual(set(stages), handoff)
+        self.assertLessEqual({"lint:fast", "budgets", "den:typecheck", "den:lint"}, set(stages))
+        # Anything that runs tests waits for the merge queue.
+        self.assertFalse(set(stages) & {"test:short", "test:contract", "den:test:fast", "coverage:changes",
+                                         "den:coverage:changes"})
+        self.assertLessEqual(rows[0]["minutes"], 15)
 
     def test_partition_drift_refuses_to_plan_before_any_tests_run(self):
         for mutation in ("missing", "fast-outside", "fast-twice", "duplicate", "unknown", "unbounded"):
@@ -43,9 +44,9 @@ class HostedVerificationTests(unittest.TestCase):
                 if mutation == "missing":
                     del data["ci"]["frontend"]
                 elif mutation == "fast-outside":
-                    data["ci"]["fast-tests"]["targets"].append("test:full")
+                    data["ci"]["ready"]["targets"].append("test:full")
                 elif mutation == "fast-twice":
-                    data["ci"]["fast-static"]["targets"].append("budgets")
+                    data["ci"]["ready"]["targets"].append("budgets")
                 elif mutation == "duplicate":
                     data["ci"]["duplicate"] = data["ci"]["frontend"]
                 elif mutation == "unknown":
@@ -143,11 +144,19 @@ class HostedVerificationTests(unittest.TestCase):
                 with patch.object(ci, "catalog", return_value=data), self.assertRaises(ValueError):
                     ci.max_parallel("check")
 
-    def test_capped_matrix_starts_its_longest_lanes_first(self):
+    def test_capped_matrix_starts_cheap_frequent_failures_then_its_longest_lanes(self):
+        lanes = ci.lanes()
+        rows = ci.matrix("integration")["include"]
+        self.assertEqual({row["lane"] for row in rows[:2]}, {"limits", "lint"})
+        self.assertEqual([row["lane"] for row in rows[2:4]], ["behavior", "behavior"])
         for profile in ci.PROFILES:
             with self.subTest(profile=profile):
-                minutes = [row["minutes"] for row in ci.matrix(profile)["include"]]
-                self.assertEqual(minutes, sorted(minutes, reverse=True))
+                order = [(not lanes[row["lane"]].get("first"), -row["minutes"]) for row in ci.matrix(profile)["include"]]
+                self.assertEqual(order, sorted(order))
+        data = copy.deepcopy(planning.catalog())
+        data["ci"]["limits"]["first"] = False
+        with patch.object(ci, "catalog", return_value=data), self.assertRaises(ValueError):
+            ci.matrix("integration")
 
     def test_combined_analysis_targets_restore_both_tool_sets(self):
         self.assertEqual(ci.analysis_set(["lint:full", "lint:vuln"]), "all")
