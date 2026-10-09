@@ -413,3 +413,16 @@ func TestOpenReadOnlyRejectsWrites(t *testing.T) {
 		t.Fatal("read-only database accepted a schema write")
 	}
 }
+
+func TestFastTestSyncWriterCacheSizeInvariant(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "fastsync.db")
+	store, err := OpenWithOptions(t.Context(), dbPath, UpgradeHooks{}, StoreOptions{FastTestSync: true})
+	testutil.FailErr(t, "OpenWithOptions with FastTestSync", err)
+	t.Cleanup(func() { _ = store.Close() })
+
+	var cacheSize int
+	testutil.FailErr(t, "query cache_size", store.writer.QueryRowContext(t.Context(), `PRAGMA cache_size`).Scan(&cacheSize))
+	if cacheSize != -2000 {
+		t.Fatalf("FastTestSync cache_size = %d, want -2000 (2 MiB budget)", cacheSize)
+	}
+}

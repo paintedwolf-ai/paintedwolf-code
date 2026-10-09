@@ -347,6 +347,7 @@ func TestCreateSessionByProjectID(t *testing.T) {
 		Store: store, Projects: reg,
 		Sessions: session.NewManager(store, llm.NewMockProvider(testMockConfig(t)), tools.NewStubRegistry(), settings.DefaultSessionLimits()),
 	}), nil, TestAPIToken)
+	stopBackgroundOnCleanup(t, srv)
 	body := `{"project_id":"` + opened.ID + `","posture":"spec"}`
 	req := newAuthedRequest(http.MethodPost, "/v1/sessions", strings.NewReader(body))
 	w := httptest.NewRecorder()

@@ -1,6 +1,4 @@
 {
   "default": {"rss_mib": 3584},
-  "packages": {
-    "github.com/lycaon/lycaon/internal/api": {"rss_mib": 4096}
-  }
+  "packages": {}
 }

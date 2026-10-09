@@ -8,9 +8,13 @@ import (
 )
 
 func TestServerConstructorsNeverDefaultToTestCredential(t *testing.T) {
+	normalSrv := NewServer(requiredTestDeps(t, Dependencies{}), nil, "")
+	stopBackgroundOnCleanup(t, normalSrv)
+	recoverySrv := NewRecoveryServer(context.Background(), RecoveryServerOpts{DBPath: t.TempDir() + "/store.db"})
+	stopBackgroundOnCleanup(t, recoverySrv)
 	servers := map[string]*Server{
-		"normal":   NewServer(requiredTestDeps(t, Dependencies{}), nil, ""),
-		"recovery": NewRecoveryServer(context.Background(), RecoveryServerOpts{DBPath: t.TempDir() + "/store.db"}),
+		"normal":   normalSrv,
+		"recovery": recoverySrv,
 	}
 	for name, srv := range servers {
 		t.Run(name, func(t *testing.T) {
