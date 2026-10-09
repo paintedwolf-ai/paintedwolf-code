@@ -492,6 +492,38 @@ allocation before claiming an end-to-end speedup.
 | `./task perf:sidecar` | Sidecar service-level objectives and integrity invariants |
 | `./task perf:soak` | Steady-state resource growth and restart/replay recovery |
 
+### Queue redesign under development
+
+The queue redesign separates admission from qualification. Pull requests and
+merge groups use the same affected-scope integration gate. A change to shared
+contracts, build inputs, verification policy, or dependency pins expands to the
+full integration tier. Unknown scope also expands; missing evidence never
+means an empty test selection. Platform and long-running qualification follows
+main and blocks release eligibility on the exact commit being released.
+
+The integration plan must retain its base and head identities, selection reasons,
+and receipts. A test failure is terminal. Only structured infrastructure evidence
+can authorize one retry; an absent report is unknown, not a presumed runner fault.
+Automated recovery proposes a revert only when a failing main commit has a
+passing qualified parent and an unambiguous introducing pull request.
+
+Serial, single-entry merge groups prevent a failed speculative predecessor from
+invalidating later builds. Hosted runner priority remains the responsibility of
+the runner-priority scheduler. Dedicated execution requires explicitly configured
+runner groups restricted to trusted events; pull request code stays on hosted
+runners. Timing objectives must be measured from queue and job timestamps rather
+than inferred from configured timeouts.
+
+Dependency provisioning and offline verification have separate outcomes.
+Vulnerability snapshots and informational dependency inventories are maintained
+by scheduled pull requests. Feature changes consume pinned advisory evidence;
+new dependency paths must have coverage in that snapshot before admission.
+Maintainability compares measured growth with the change base, preserving hard
+caps while tracking unchanged legacy excess separately from new debt.
+
+The following section describes the current implementation until the redesign
+lands.
+
 ### Hosted verification
 
 Every change is verified once at each tier, and main only advances to a commit
