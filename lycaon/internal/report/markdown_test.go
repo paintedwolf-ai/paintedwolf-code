@@ -59,12 +59,14 @@ func TestMdToBlocks_EmptySafe(t *testing.T) {
 
 func TestRender_EmptySynthesisSafe(t *testing.T) {
 	input := ReportInput{
-		Title:       "Empty synth",
-		RunID:       "run_empty",
-		Project:     "acme/app",
-		CompletedAt: "2026-07-08T15:04:05Z",
-		HeadSHA:     "abc",
-		Synthesis:   "",
+		ReportHeader: ReportHeader{
+			Title:       "Empty synth",
+			RunID:       "run_empty",
+			Project:     "acme/app",
+			CompletedAt: "2026-07-08T15:04:05Z",
+			HeadSHA:     "abc",
+		},
+		Synthesis: "",
 	}
 	pdf, err := Render(input)
 	testutil.FailErr(t, "render empty synthesis", err)

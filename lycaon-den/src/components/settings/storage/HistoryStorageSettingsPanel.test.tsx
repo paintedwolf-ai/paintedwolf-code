@@ -34,6 +34,19 @@ async function preview() {
 }
 
 describe("HistoryStorageSettingsPanel", () => {
+  it("places the host’s class measurements beside each existing retention control", async () => {
+    const client = clientFixture();
+    const status = await client.getHistoryStorage();
+    client.getHistoryStorage = vi.fn(async () => ({ ...status, classes: HISTORY_CLASSES.map(({ id }, index) => ({ class: id, content_bytes: (index + 1) * 1024 })) }));
+    render(() => <HistoryStorageSettingsPanel client={client} />);
+    for (const [index, row] of HISTORY_CLASSES.entries()) {
+      const usage = await screen.findByTestId(`history-${row.id}-usage`);
+      expect(usage.textContent).toContain(`${(index + 1).toFixed(1)} KiB`);
+      expect(screen.getByTestId(`history-${row.id}-mode`)).toBeTruthy();
+    }
+    expect(client.updateHistoryStorage).not.toHaveBeenCalled();
+  });
+
   afterEach(() => { cleanup(); confirm.mockClear(); });
   it.each(HISTORY_CLASSES.flatMap((row) => ["save", "prune"].map((action) => ({ ...row, action }))))("separates preserved data from $id losses when choosing $action", async ({ id, loss, action }) => {
     const client = clientFixture({ [id]: { mode: "max_age", max_age_days: 30 } });

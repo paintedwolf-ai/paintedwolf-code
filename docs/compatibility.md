@@ -59,9 +59,37 @@ Deleting bytes must produce an explainable unavailable state, not make a durable
 
 ## Workflow definitions
 
-A workflow run pins its definition by id and version (`durable-db` state), and the host resolves that exact manifest for the run's whole life. A bundled definition is therefore released the moment a run can select it: changing a phase, verdict schema, gate, or report control changes the contract of every run already in flight on that version.
+A run pins its definition by id and version (`durable-db` state). Released
+workflow definitions are contracts for existing runs. An unreleased candidate
+can be corrected under its current version; the security workflow remains
+`2.0.0` until that candidate ships.
 
-A change to released behaviour ships as a new version beside the old one. The prior version stays in the bundle marked `retired: true`, which removes it from the start catalog and refuses new starts while keeping it resolvable for existing runs and their history. A retired file is frozen at the bytes its release shipped plus that one line; [`retired-definitions.yaml`](../lycaon/test/contract/testdata/workflows/retired-definitions.yaml) pins each retired manifest's digest and the contract suite holds the bundle to it. Engine-level tightening still applies to retired runs where the engine, not the manifest, defines it; the manifest's own contract does not move. Version selection and ordering: [Workflows](workflows.md#review_loop).
+Released workflow content changes receive a new workflow version. The prior
+version is stored byte-for-byte under its pack's `archive/<workflow>/<version>/`,
+with `SHA256SUMS` sealing the manifest, phase guidance, and gate feedback. The
+archive is catalog content like any other unit, so a revision pins its bytes.
+Runs on a sealed version render that version's guidance and gate feedback
+before project or site overlays; sealed and `retired: true` versions refuse new
+starts but let existing runs resume and finish. A run whose pinned version the
+catalog no longer defines refuses to continue with `WORKFLOW_VERSION_UNAVAILABLE`.
+See [Workflows](workflows.md#review_loop).
+
+The manifest format is the engine contract, governed by `extension_api`. It
+grows additively: absent or zero fields retain their prior meaning. Engine
+implementation bugs can be fixed directly without inventing a new workflow
+version. The optional `fanout.require_task_charter` field, for example, adds
+requirements only to manifests that declare it.
+
+Surface templates, posture rules, worker personas, and rating questions remain
+shared host presentation and are not sealed with phase guidance.
+
+Review repair episodes and blocked report snapshots are durable workflow
+variables committed through the existing workflow command journal. Their new
+reserved key is additive; existing runs without it have no repair episode.
+
+Worker `coverage_gaps` is an additive completion-report field. Co-shipped Go and
+Den wire types move together, and archived workflows do not acquire the new
+plan-charter requirement.
 
 ## Bundle wire and generated code
 
@@ -111,6 +139,8 @@ The host identity key (`host-identity.pem`) is device configuration too. A store
 Native update preferences are device configuration too. The unversioned `{checks_enabled, channel, rollout_bucket}` record that 1.0.x clients wrote has one explicit migration to `updates/preferences.json` format 2: `checks_enabled` becomes `automatic_updates_enabled`, which governs discovery, background download, and lifecycle installation, so an existing opt-out remains off; channel and bucket are unchanged. Unknown versions and malformed records are refused without overwriting them. Per-installation operational records live under `updates/installations/<path-sha256>/`, keyed by the canonical application path, and the device-wide `updates/feed-state.json` records the newest signed pointer timestamp accepted per feed. Unknown ephemeral records (`ready.json`, `rejected.json`, `feed-state.json`) are quarantined unchanged and rebuilt; an unreadable preference file disables automatic updating for that run without being rewritten. Update archives are ephemeral, but an unresolved activation journal is recovery-critical operational state and cannot be cleared as a cache. An `update-state.json` journal written by a 1.0.x client is reconciled against the running product version: it completes only when its target or a newer version runs, and it never manufactures staged bytes or missing artifacts.
 
 Security-sensitive grants remain exact. A socket-path grant must not widen to its containing directory during evolution. Credentials stay outside backups and diagnostics regardless of format version.
+
+Native update `ready.json` format 2 records the exact prepared bundle path and a nullable offer confirmation. Its strict format-1 decoder retains the legacy prepared path and confirmation. `transaction.json` format 2 also names the prepared path; its strict format-1 conversion first saves the original record under `receipts/<id>-format-1.json`, then atomically publishes the converted journal. Unknown journals remain untouched. New preparation names include the account UID, so accounts sharing an application cannot remove each other's preparation. The installed bundle and its parent directory provide cross-account inode locks; private journals never cross account boundaries. The permanent profile-wide `feed-state.lock` serializes replay-state reads, quarantine, and writes. `records.lock` serializes ready, rejection, and journal mutations. Lock files are never replaced or removed during normal operation.
 
 Secret-release leases use `secret_recipients` and a witness bound to that exact recipient set; a destination-only lease cannot establish recipient authority. Startup refuses incompatible entries, including expired ones, and leaves the entire approvals file unchanged. Its error identifies the file and either the invalid YAML line or the invalid grant ID.
 

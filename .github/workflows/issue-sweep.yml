@@ -21,6 +21,11 @@ permissions:
   contents: read
   issues: write
 
+# A label's nudge runs per issue; the sweep joins scheduled maintenance, one workflow at a time.
+concurrency:
+  group: ${{ github.event_name == 'issues' && format('issue-sweep-{0}', github.event.issue.number) || 'maintenance' }}
+  cancel-in-progress: false
+
 env:
   ISSUE_AUTOMATION_EXEMPT_USERS: ${{ vars.ISSUE_AUTOMATION_EXEMPT_USERS }}
   LOCK_CLOSED_AFTER_DAYS: "14"

@@ -1,0 +1,73 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/filebrowser/filebrowser"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/filebrowser/filebrowser/v2"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "2.63.16"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-55668",
+  "GHSA-8wc8-hf36-mjh9"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6020"
+ },
+ "details": "File Browser: ScopedFs follows a dangling symlink on write, letting a scoped user create files outside their scope in github.com/filebrowser/filebrowser",
+ "id": "GO-2026-6020",
+ "modified": "2026-07-22T20:36:35Z",
+ "published": "2026-07-22T20:36:35Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/filebrowser/filebrowser/security/advisories/GHSA-8wc8-hf36-mjh9"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-55668"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/filebrowser/filebrowser/commit/64511ce45e3be379e965f7f4fb0929a068d5bb81"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/filebrowser/filebrowser/releases/tag/v2.63.16"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "File Browser: ScopedFs follows a dangling symlink on write, letting a scoped user create files outside their scope in github.com/filebrowser/filebrowser"
+}

@@ -5,6 +5,16 @@ import { ProgressStrip } from "./ProgressStrip.tsx";
 import type { ProgressStep } from "../api/types.ts";
 
 describe("ProgressStrip", () => {
+  it("renders block-looking labels with inline formatting at row size", () => {
+    const { container } = render(() => <ProgressStrip steps={[
+      { state: "pending", label: "## **Synthesis**" },
+      { state: "pending", label: "1. Survey dependencies" },
+      { state: "pending", label: "> Check the result" },
+    ]} />);
+    expect(container.querySelector(".markdown-body h2, .markdown-body ol, .markdown-body ul, .markdown-body blockquote")).toBeNull();
+    expect(container.querySelector("strong")?.textContent).toBe("Synthesis");
+  });
+
   it("marks only the live checklist as a scrollbar host", () => {
     const { container } = render(() => (
       <ProgressStrip

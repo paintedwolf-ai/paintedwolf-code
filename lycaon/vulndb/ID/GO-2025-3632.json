@@ -1,0 +1,78 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/osrg/gobgp"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {
+    "imports": [
+     {
+      "path": "github.com/osrg/gobgp/v3/pkg/packet/bgp",
+      "symbols": [
+       "parseGenericTransitiveExperimentalExtended"
+      ]
+     }
+    ]
+   },
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/osrg/gobgp/v3"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "3.35.0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2025-43972",
+  "GHSA-mfvv-mgf6-q25r"
+ ],
+ "database_specific": {
+  "review_status": "REVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2025-3632"
+ },
+ "details": "GoBGP crashes in the flowspec parser in github.com/osrg/gobgp",
+ "id": "GO-2025-3632",
+ "modified": "2025-04-22T18:16:40Z",
+ "published": "2025-04-22T18:16:40Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-mfvv-mgf6-q25r"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/osrg/gobgp/commit/ca7383f450f7b296c5389feceef2467de5ab6e5a"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/osrg/gobgp/compare/v3.34.0...v3.35.0"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "GoBGP crashes in the flowspec parser in github.com/osrg/gobgp"
+}

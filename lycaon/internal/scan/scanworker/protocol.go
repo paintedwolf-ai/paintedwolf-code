@@ -22,11 +22,13 @@ import (
 
 // Request is one scanner invocation carried over stdin.
 type Request struct {
-	FingerprintKey []byte           `json:"fingerprint_key,omitempty"`
-	Impl           string           `json:"impl"`
-	ID             string           `json:"id"`
-	Jobs           int              `json:"jobs"`
-	Scan           scan.ScanRequest `json:"scan"`
+	FingerprintKey []byte `json:"fingerprint_key,omitempty"`
+	// AdvisoryDatabase is a provisioned OSV export; empty refreshes the host cache.
+	AdvisoryDatabase string           `json:"advisory_database,omitempty"`
+	Impl             string           `json:"impl"`
+	ID               string           `json:"id"`
+	Jobs             int              `json:"jobs"`
+	Scan             scan.ScanRequest `json:"scan"`
 }
 
 // Response is the only stdout shape emitted by a worker.
@@ -121,6 +123,9 @@ func writeResponse(output io.Writer, response Response) error {
 func scanner(req Request) (scan.CodeScanner, error) {
 	switch strings.TrimSpace(req.Impl) {
 	case library.ImplOSVScalibr:
+		if req.AdvisoryDatabase != "" {
+			return library.NewProvisionedScalibrScanner(req.ID, req.AdvisoryDatabase), nil
+		}
 		return library.NewScalibrScanner(req.ID), nil
 	case library.ImplGitleaks:
 		var fp *secretmatch.Fingerprinter

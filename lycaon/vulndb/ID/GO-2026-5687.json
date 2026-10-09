@@ -1,0 +1,48 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/nezhahq/nezha"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "1.4.0"
+      },
+      {
+       "fixed": "1.14.15-0.20260517022419-d06d539d34c1"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-46717",
+  "GHSA-w4g9-mxgg-j532"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5687"
+ },
+ "details": "Nezha Monitoring: RoleMember-reachable SSRF with full response-body reflection via POST /api/v1/notification in github.com/nezhahq/nezha",
+ "id": "GO-2026-5687",
+ "modified": "2026-06-25T22:34:38Z",
+ "published": "2026-06-25T22:34:38Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/nezhahq/nezha/security/advisories/GHSA-w4g9-mxgg-j532"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/nezhahq/nezha/commit/d06d539d34c143d842b91e2a64326e8c8f9bc405"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Nezha Monitoring: RoleMember-reachable SSRF with full response-body reflection via POST /api/v1/notification in github.com/nezhahq/nezha"
+}

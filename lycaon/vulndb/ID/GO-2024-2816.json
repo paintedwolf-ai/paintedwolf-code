@@ -1,0 +1,49 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "kubevirt.io/kubevirt"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2024-33394",
+  "GHSA-4q63-mr2m-57hf"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2024-2816"
+ },
+ "details": "kubevirt allows a local attacker to execute arbitrary code via a crafted command in kubevirt.io/kubevirt",
+ "id": "GO-2024-2816",
+ "modified": "2024-06-05T15:10:42Z",
+ "published": "2024-06-05T15:10:42Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-4q63-mr2m-57hf"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2024-33394"
+  },
+  {
+   "type": "WEB",
+   "url": "https://gist.github.com/HouqiyuA/1b75e23ece7ad98490aec1c887bdf49b"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "kubevirt allows a local attacker to execute arbitrary code via a crafted command in kubevirt.io/kubevirt"
+}
