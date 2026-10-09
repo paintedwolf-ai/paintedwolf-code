@@ -67,8 +67,8 @@ func (t *RestoreVersionTool) Run(ctx context.Context, args map[string]any, tctx 
 	}
 	path = resolved.DisplayPath
 
-	ledger, ok := tctx.Source.SourceLedger.(restoreVersionLedger)
-	if !ok || ledger == nil {
+	ledger := tctx.Source.History.Files
+	if ledger == nil {
 		return "", &toolrejection.ToolReject{
 			Code: "SOURCE_VERSION_UNAVAILABLE",
 			Data: map[string]any{
@@ -115,7 +115,7 @@ func resolveRestorableVersion(
 	rootID, rel, path string,
 	versionID, baseVersionID string,
 ) (sourceledger.RestorableVersion, string, error) {
-	head, err := ledger.History.ResolveHead(ctx, projectID, branch, rootID, rel)
+	head, err := ledger.ResolveHead(ctx, projectID, branch, rootID, rel)
 	if err != nil && !errors.Is(err, sourceledger.ErrHistoryNotFound) {
 		return sourceledger.RestorableVersion{}, "", fmt.Errorf("resolve file head: %w", err)
 	}
@@ -131,7 +131,7 @@ func resolveRestorableVersion(
 				},
 			}
 		}
-		versionsResult, qErr := ledger.History.QueryFileVersions(ctx, projectID, head.FileID, 2, 0)
+		versionsResult, qErr := ledger.QueryFileVersions(ctx, projectID, head.FileID, 2, 0)
 		if qErr != nil {
 			return sourceledger.RestorableVersion{}, "", fmt.Errorf("query file versions: %w", qErr)
 		}
@@ -165,7 +165,7 @@ func resolveRestorableVersion(
 		}
 	}
 
-	targetVer, err := ledger.History.ReadRestorableVersion(ctx, projectID, targetVersionID)
+	targetVer, err := ledger.ReadRestorableVersion(ctx, projectID, targetVersionID)
 	if err != nil {
 		if errors.Is(err, sourceledger.ErrHistoryNotFound) {
 			return sourceledger.RestorableVersion{}, "", &toolrejection.ToolReject{

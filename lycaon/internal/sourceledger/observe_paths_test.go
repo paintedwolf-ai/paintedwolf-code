@@ -271,3 +271,70 @@ func TestWorktreeObservationNeverMovesBaseHeads(t *testing.T) {
 		}
 	}
 }
+
+func TestFailedObservationKeepsHistoryViewsAndCheckpointClockAtomic(t *testing.T) {
+	store, ctx, root := openLedgerOnDisk(t)
+	paths := []string{"a.txt", "b.txt"}
+	heads := make(map[string]BranchHead)
+	for _, path := range paths {
+		trackRootFile(t, store, ctx, root, path, "before\n")
+		head, err := store.History.ResolveHead(ctx, "p1", sourcebranch.Trunk, "r1", path)
+		testutil.FailErr(t, "read tracked head", err)
+		heads[path] = head
+		writeRootFile(t, root, path, "after\n")
+	}
+	before, err := store.queries.LatestSourceOrdinal(ctx, "p1")
+	testutil.FailErr(t, "read committed clock", err)
+	_, err = store.sqlDB.ExecContext(ctx, `CREATE TRIGGER reject_observed_path BEFORE INSERT ON source_effects WHEN NEW.path='b.txt' BEGIN SELECT RAISE(ABORT,'injected observation failure'); END`)
+	testutil.FailErr(t, "inject observation failure", err)
+	refs := []PathRef{{RootID: "r1", Path: "a.txt"}, {RootID: "r1", Path: "b.txt"}}
+	if recorded, err := store.Inventory.ObservePaths(ctx, "p1", onDiskRoots(root), refs); err == nil || recorded != 0 {
+		t.Fatalf("failed observation recorded=%d err=%v", recorded, err)
+	}
+	for _, path := range paths {
+		head, err := store.History.ResolveHead(ctx, "p1", sourcebranch.Trunk, "r1", path)
+		testutil.FailErr(t, "read head after rollback", err)
+		if head.FileID != heads[path].FileID || head.VersionID != heads[path].VersionID {
+			t.Fatalf("rolled-back head changed for %s: %+v", path, head)
+		}
+		version, err := store.History.ReadRestorableVersion(ctx, "p1", head.VersionID)
+		testutil.FailErr(t, "read retained committed bytes", err)
+		if string(version.Content) != "before\n" {
+			t.Fatalf("rolled-back version for %s = %q", path, version.Content)
+		}
+		_, err = store.History.QueryFileVersions(ctx, "p1", head.FileID, 20, 0)
+		testutil.FailErr(t, "query history after rollback", err)
+		_, err = store.Comparisons.CompareVersionPair(ctx, "p1", head.VersionID, head.VersionID)
+		testutil.FailErr(t, "compare committed version", err)
+	}
+	if effects := trunkEffects(t, store, ctx); len(effects) != 0 {
+		t.Fatalf("rolled-back walk retained effects: %+v", effects)
+	}
+	afterReads, err := store.queries.LatestSourceOrdinal(ctx, "p1")
+	testutil.FailErr(t, "read clock after history queries", err)
+	if afterReads != before {
+		t.Fatalf("failed observation or read services changed clock: before=%d after=%d", before, afterReads)
+	}
+	pin, err := store.Checkpoints.CreatePin(ctx, "p1", "committed state")
+	testutil.FailErr(t, "pin committed history", err)
+	if pin.CreatedOrdinal != before {
+		t.Fatalf("checkpoint clock=%d, want committed %d", pin.CreatedOrdinal, before)
+	}
+	_, err = store.sqlDB.ExecContext(ctx, `DROP TRIGGER reject_observed_path`)
+	testutil.FailErr(t, "remove observation failure", err)
+	recorded, err := store.Inventory.ObservePaths(ctx, "p1", onDiskRoots(root), refs)
+	testutil.FailErr(t, "retry observation", err)
+	if recorded != 2 {
+		t.Fatalf("retry recorded=%d, want two complete effects", recorded)
+	}
+	for _, path := range paths {
+		head, err := store.History.ResolveHead(ctx, "p1", sourcebranch.Trunk, "r1", path)
+		testutil.FailErr(t, "read retried head", err)
+		if head.FileID != heads[path].FileID || head.VersionID == heads[path].VersionID {
+			t.Fatalf("retry lost stable identity or version advancement for %s: %+v", path, head)
+		}
+	}
+	if effects := trunkEffects(t, store, ctx); len(effects) != 2 {
+		t.Fatalf("retried walk effects=%d, want 2", len(effects))
+	}
+}
