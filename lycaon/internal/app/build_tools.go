@@ -338,7 +338,9 @@ func (b *serveBuilder) wireMCP() error {
 		}
 		// Editor spans preview outbound screening.
 		b.security.Spans = secretspan.New(matcher)
-		b.security.BindTranscript(matcher, b.sessions.Manager.Runner.Transcript.SetRedactor, b.sessions.Manager.Runner.Transcript.SweepSessionTree)
+		b.security.BindTranscript(matcher, func(redactor func(context.Context, wire.Message) (wire.Message, bool)) {
+			b.sessions.Manager.Runner.Transcript.SetRedactor(redactor)
+		}, b.sessions.Manager.Runner.Transcript.SweepSessionTree)
 		if b.providers.Service != nil && b.providers.Service.Registry != nil {
 			screen := llm.NewModelSecretScreen(matcher, b.security.Ask(b.execution.Host.Executor.Secrets, b.execution.Host.Authority.ApprovalsDisabled))
 			if b.security.Capabilities != nil {
