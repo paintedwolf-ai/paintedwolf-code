@@ -307,7 +307,7 @@ func TestModelSecretScreenWithoutAskFaults(t *testing.T) {
 
 func TestModelSecretScreenRelaysCompletedPublicFetchWithoutApproval(t *testing.T) {
 	exec := toolexecution.NewExecutor(nil, tools.NewDefaultRegistry(), "implement")
-	screen := NewModelSecretScreen(modelScreenMatcher(t), exec.AskSecretScreen)
+	screen := NewModelSecretScreen(modelScreenMatcher(t), exec.Secrets.AskSecretScreen)
 	req := modelcall.CompletionRequest{
 		Messages: []api.Message{{
 			Role:    api.MessageRoleTool,
@@ -348,7 +348,7 @@ func TestModelSecretScreenCarriesDestinationTrustOnTheAlert(t *testing.T) {
 // Trusted destinations bypass the approval card.
 func TestModelSecretScreenTrustedDestinationSendsUnchangedWithoutACard(t *testing.T) {
 	exec := toolexecution.NewExecutor(nil, tools.NewDefaultRegistry(), "implement")
-	screen := NewModelSecretScreen(modelScreenMatcher(t), exec.AskSecretScreen)
+	screen := NewModelSecretScreen(modelScreenMatcher(t), exec.Secrets.AskSecretScreen)
 	req := modelSecretRequest()
 
 	got, err := screen.Screen(context.Background(), ScreenDestination{ID: "ollama-1", Trusted: true}, req)
@@ -377,7 +377,7 @@ func TestModelSecretScreenTrustedDestinationStillWithholdsNonDisclosableValues(t
 		}}
 	})
 	exec := toolexecution.NewExecutor(nil, tools.NewDefaultRegistry(), "implement")
-	screen := NewModelSecretScreen(m, exec.AskSecretScreen)
+	screen := NewModelSecretScreen(m, exec.Secrets.AskSecretScreen)
 	req := modelcall.CompletionRequest{
 		Messages: []api.Message{{
 			Role:    api.MessageRoleTool,
