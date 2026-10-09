@@ -30,6 +30,7 @@ type PlacementOptions = {
   preferredSide?: AnchoredSide;
   align?: AnchoredAlign;
   gap?: number;
+  topInset?: number;
   /** `viewport` bounds height; `content` allows viewport overflow. */
   height?: "content" | "viewport";
 };
@@ -148,6 +149,7 @@ export function placeAnchoredSurface(
   options: PlacementOptions = {},
 ): AnchoredPlacement {
   const padding = DEFAULT_PADDING;
+  const topPadding = padding + Math.max(0, options.topInset ?? 0);
   const gap = options.gap ?? DEFAULT_GAP;
   const preferred = options.preferredSide ?? "bottom";
   const alternate = opposite(preferred);
@@ -157,11 +159,11 @@ export function placeAnchoredSurface(
       : surface.width;
   const preferredRoom = Math.max(
     0,
-    available(preferred, anchor, viewport, gap, padding),
+    available(preferred, anchor, viewport, gap, preferred === "top" ? topPadding : padding),
   );
   const alternateRoom = Math.max(
     0,
-    available(alternate, anchor, viewport, gap, padding),
+    available(alternate, anchor, viewport, gap, alternate === "top" ? topPadding : padding),
   );
   const side =
     primarySize > preferredRoom && alternateRoom > preferredRoom
@@ -169,7 +171,7 @@ export function placeAnchoredSurface(
       : preferred;
   const room = side === preferred ? preferredRoom : alternateRoom;
   const viewportWidth = Math.max(0, viewport.width - padding * 2);
-  const viewportHeight = Math.max(0, viewport.height - padding * 2);
+  const viewportHeight = Math.max(0, viewport.height - topPadding - padding);
   // Rounding size up and available space down prevents subpixel overflow.
   const maxWidth = Math.min(
     Math.ceil(surface.width),
@@ -193,14 +195,14 @@ export function placeAnchoredSurface(
     top = side === "bottom" ? anchor.bottom + gap : anchor.top - gap - maxHeight;
   } else {
     top = alignedStart(align, anchor.top, anchor.bottom, maxHeight);
-    top = clamp(top, padding, viewport.height - padding - maxHeight);
+    top = clamp(top, topPadding, viewport.height - padding - maxHeight);
     left = side === "right" ? anchor.right + gap : anchor.left - gap - maxWidth;
   }
 
   return {
     side,
     left: Math.round(clamp(left, padding, viewport.width - padding - maxWidth)),
-    top: Math.round(clamp(top, padding, viewport.height - padding - maxHeight)),
+    top: Math.round(clamp(top, topPadding, viewport.height - padding - maxHeight)),
     maxWidth: Math.max(0, maxWidth),
     maxHeight: Math.max(0, maxHeight),
   };
@@ -316,7 +318,8 @@ export function AnchoredSurface(props: Props) {
       anchor,
       { width: measured.width, height: measured.height },
       { width: window.innerWidth, height: window.innerHeight },
-      props,
+      { preferredSide: props.preferredSide, align: props.align, gap: props.gap, height: props.height,
+        topInset: Number.parseFloat(getComputedStyle(element).getPropertyValue("--den-titlebar-inset")) || 0 },
     );
     element.style.left = `${placement.left}px`;
     element.style.top = `${placement.top}px`;
