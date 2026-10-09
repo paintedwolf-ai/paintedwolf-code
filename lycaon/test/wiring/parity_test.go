@@ -19,13 +19,13 @@ func TestHarnessPostureToolFilterParity(t *testing.T) {
 		Posture: wire.SessionPostureSpec,
 	}, dir)
 	testutil.FailErr(t, "create session in store", err)
-	listed := h.SessionMgr.Coordinator.Guards.Policy().ListForPrompt(ctx, sess, orchestration.ProfileCoordinator)
+	listed := h.Sessions.Manager.Coordinator.Guards.Policy().ListForPrompt(ctx, sess, orchestration.ProfileCoordinator)
 	for _, meta := range listed {
 		if meta.Name == "delegate_dispatch" {
 			t.Fatal("spec coordinator must omit delegate_dispatch from listed tools")
 		}
 	}
-	if err := h.SessionMgr.Coordinator.Guards.Policy().EvaluateInvoke(ctx, sess, "delegate_dispatch", nil); err == nil {
+	if err := h.Sessions.Manager.Coordinator.Guards.Policy().EvaluateInvoke(ctx, sess, "delegate_dispatch", nil); err == nil {
 		t.Fatal("invoke-time rules must deny delegate_dispatch in spec posture")
 	}
 }

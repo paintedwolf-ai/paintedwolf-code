@@ -56,16 +56,16 @@ func TestCommandApprovalWildcardDenyE2E(t *testing.T) {
 
 	sess, err := h.CreateHarnessSession(t, wire.CreateSessionRequest{}, dir)
 	testutil.FailErr(t, "create session", err)
-	if err := h.SessionMgr.Chats.SetAgentType(ctx, sess.ID, "implementer"); err != nil {
+	if err := h.Sessions.Manager.Chats.SetAgentType(ctx, sess.ID, "implementer"); err != nil {
 		testutil.FailErr(t, "SetAgentType", err)
 	}
 
-	if _, err := h.SessionMgr.Submissions.Prompt(ctx, sess.ID, "remove stale container"); err != nil {
+	if _, err := h.Sessions.Manager.Submissions.Prompt(ctx, sess.ID, "remove stale container"); err != nil {
 		testutil.FailErr(t, "Prompt", err)
 	}
 
 	kind := wire.CheckpointKindToolApproval
-	pending, err := h.CheckpointMgr.ListPending(ctx, sess.ID, &kind)
+	pending, err := h.Sessions.Checkpoints.ListPending(ctx, sess.ID, &kind)
 	testutil.FailErr(t, "ListPending", err)
 	if len(pending) != 0 {
 		t.Fatalf("denied command wildcard should not create checkpoint; pending=%+v", pending)
@@ -99,7 +99,7 @@ func TestCommandApprovalWildcardAskSSEMetadataE2E(t *testing.T) {
 
 	sess, err := h.CreateHarnessSession(t, wire.CreateSessionRequest{}, dir)
 	testutil.FailErr(t, "create session", err)
-	if err := h.SessionMgr.Chats.SetAgentType(ctx, sess.ID, "implementer"); err != nil {
+	if err := h.Sessions.Manager.Chats.SetAgentType(ctx, sess.ID, "implementer"); err != nil {
 		testutil.FailErr(t, "SetAgentType", err)
 	}
 
@@ -110,14 +110,14 @@ func TestCommandApprovalWildcardAskSSEMetadataE2E(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() {
-		_, err := h.SessionMgr.Submissions.Prompt(ctx, sess.ID, "sort output file")
+		_, err := h.Sessions.Manager.Submissions.Prompt(ctx, sess.ID, "sort output file")
 		done <- err
 	}()
 
 	var checkpointID string
 	testutil.WaitFor(t, 15*time.Second, func() bool {
 		kind := wire.CheckpointKindToolApproval
-		pending, err := h.CheckpointMgr.ListPending(ctx, sess.ID, &kind)
+		pending, err := h.Sessions.Checkpoints.ListPending(ctx, sess.ID, &kind)
 		if err == nil && len(pending) == 1 {
 			checkpointID = pending[0].ID
 			return true
@@ -158,7 +158,7 @@ func TestCommandApprovalWildcardAskSSEMetadataE2E(t *testing.T) {
 		t.Fatal("expected checkpoint SSE with command wildcard matched_rule")
 	}
 
-	if _, err := h.CheckpointMgr.ResolveCheckpoint(h.OwnerCtx(t, ctx), sess.ID, checkpointID, wire.CheckpointKindToolApproval, &hitl.DecisionResult{Approved: false}, nil); err != nil {
+	if _, err := h.Sessions.Checkpoints.ResolveCheckpoint(h.OwnerCtx(t, ctx), sess.ID, checkpointID, wire.CheckpointKindToolApproval, &hitl.DecisionResult{Approved: false}, nil); err != nil {
 		testutil.FailErr(t, "ResolveCheckpoint", err)
 	}
 	if err := <-done; err != nil && !strings.Contains(err.Error(), deniedCopy(t)) {

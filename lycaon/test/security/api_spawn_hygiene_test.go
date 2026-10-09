@@ -31,14 +31,14 @@ func TestDelegationSpawnWorkerPromptHygiene(t *testing.T) {
 	}, "\n")
 
 	testdbseed.InsertProjectRoot(t, h.DB, testdbseed.DefaultProjectID, t.TempDir())
-	r, err := h.DelegationMgr.Create(ctx, api.CreateDelegationRequest{
+	r, err := h.Delegations.Manager.Create(ctx, api.CreateDelegationRequest{
 		ProjectID: testdbseed.DefaultProjectID,
 		Task:      dirtyTask,
 		Strategy:  api.HuntStrategyFileBased,
 	})
-	testutil.FailErr(t, "h.DelegationMgr.Create failed", err)
-	if _, err := h.DelegationMgr.DispatchLeg(ctx, r.ID, r.Legs[0].ID, ""); err != nil {
-		testutil.FailErr(t, "h.DelegationMgr.DispatchLeg failed", err)
+	testutil.FailErr(t, "h.Delegations.Manager.Create failed", err)
+	if _, err := h.Delegations.Manager.DispatchLeg(ctx, r.ID, r.Legs[0].ID, ""); err != nil {
+		testutil.FailErr(t, "h.Delegations.Manager.DispatchLeg failed", err)
 	}
 
 	testutil.WaitFor(t, 10*time.Second, func() bool {

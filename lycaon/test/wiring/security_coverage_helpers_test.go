@@ -10,11 +10,11 @@ import (
 
 func securityCoverageFixture(t *testing.T, h *Harness, ctx context.Context, runID string) string {
 	t.Helper()
-	run, err := h.WorkflowMgr.Store.Runs.Get(ctx, runID)
+	run, err := h.Workflows.Manager.Store.Runs.Get(ctx, runID)
 	testutil.FailErr(t, "load coverage run", err)
-	manifest, err := h.WorkflowMgr.Resolver.ForRunID(ctx, runID)
+	manifest, err := h.Workflows.Manager.Resolver.ForRunID(ctx, runID)
 	testutil.FailErr(t, "load coverage manifest", err)
-	facts, err := h.WorkflowMgr.Coverage.CoverageFacts(ctx, run, manifest)
+	facts, err := h.Workflows.Manager.Coverage.CoverageFacts(ctx, run, manifest)
 	testutil.FailErr(t, "load coverage facts", err)
 	review := coverageReviewFixture(facts)
 	raw, err := json.Marshal(review)

@@ -56,7 +56,7 @@ func TestHTTPCoordinatorBatchThreeTasksAndFollowUpE2E(t *testing.T) {
 		t.Fatalf("coordinator requests = %d want 2 (batch and follow-up)", len(recording.AllRequests()))
 	}
 
-	inFlight, err := h.WorkerQueue.ListBySession(ctx, sess.ProjectID, sess.ID, api.WorkerStatusPending, api.WorkerStatusRunning)
+	inFlight, err := h.Delegations.Queue.ListBySession(ctx, sess.ProjectID, sess.ID, api.WorkerStatusPending, api.WorkerStatusRunning)
 	testutil.FailErr(t, "ListBySession", err)
 	if len(inFlight) != 3 {
 		t.Fatalf("in-flight jobs = %d want 3", len(inFlight))
@@ -85,7 +85,7 @@ func TestHTTPCoordinatorBatchCapRejectE2E(t *testing.T) {
 	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{}, dir)
 	testutil.FailErr(t, "create session", err)
 	h.SeedProgress(t, ctx, sess.ID)
-	if _, err := h.SessionMgr.Submissions.Prompt(ctx, sess.ID, "HTTP_OVER_CAP"); err != nil {
+	if _, err := h.Sessions.Manager.Submissions.Prompt(ctx, sess.ID, "HTTP_OVER_CAP"); err != nil {
 		testutil.FailErr(t, "Prompt", err)
 	}
 

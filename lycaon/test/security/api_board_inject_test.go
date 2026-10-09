@@ -15,7 +15,7 @@ import (
 func TestCoordinatorPromptInjectWithoutToolCall(t *testing.T) {
 	h := wiring.BuildForTest(t, wiring.WithRecordingLLM())
 	rec := h.Recording
-	mgr := h.SessionMgr
+	mgr := h.Sessions.Manager
 	srv := h.Server
 	ctx := context.Background()
 	dir := t.TempDir()
@@ -23,7 +23,7 @@ func TestCoordinatorPromptInjectWithoutToolCall(t *testing.T) {
 		testutil.FailErr(t, "write file", err)
 	}
 	sess := createSessionHTTP(t, srv, dir)
-	if _, err := h.WorkflowMgr.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{
+	if _, err := h.Workflows.Manager.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{
 		WorkflowID: "plan", WorkflowVersion: "1.0.0",
 	}); err != nil {
 		t.Fatal(err)
@@ -47,7 +47,7 @@ func TestCoordinatorPromptInjectWithoutToolCall(t *testing.T) {
 func TestCoordinatorPromptInjectDedup(t *testing.T) {
 	h := wiring.BuildForTest(t, wiring.WithRecordingLLM())
 	rec := h.Recording
-	mgr := h.SessionMgr
+	mgr := h.Sessions.Manager
 	srv := h.Server
 	ctx := context.Background()
 	dir := t.TempDir()

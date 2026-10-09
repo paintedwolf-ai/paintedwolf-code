@@ -27,7 +27,7 @@ func TestSpecCoordinatorPromptOmitsDelegateDispatch(t *testing.T) {
 func TestInvokeStillDeniesWhenToolNotListed(t *testing.T) {
 	h := wiring.BuildForTest(t, wiring.WithRecordingLLM())
 	srv := h.Server
-	mgr := h.SessionMgr
+	mgr := h.Sessions.Manager
 	store := h.Store
 	projectDir := t.TempDir()
 	sess := createSessionWithPostureHTTP(t, srv, projectDir, wire.SessionPostureSpec)

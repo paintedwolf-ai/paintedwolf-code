@@ -27,13 +27,13 @@ var builtHosts struct {
 
 type builtHost struct {
 	test    string
-	manager weak.Pointer[session.Manager]
+	manager weak.Pointer[session.Host]
 }
 
 func trackHost(test string, sa *app.ServeApp) {
 	builtHosts.Lock()
 	defer builtHosts.Unlock()
-	builtHosts.hosts = append(builtHosts.hosts, builtHost{test: test, manager: weak.Make(sa.SessionMgr)})
+	builtHosts.hosts = append(builtHosts.hosts, builtHost{test: test, manager: weak.Make(sa.Sessions.Manager)})
 }
 
 // RunReleasingHosts runs a package's tests and then fails the package when

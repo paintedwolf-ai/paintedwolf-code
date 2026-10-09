@@ -100,7 +100,7 @@ func TestWorkflowPersistMissingTriggerInheritsAndCollides(t *testing.T) {
 	h := wiring.BuildForTest(t)
 	srv := h.Server
 	sess := createSessionHTTP(t, srv, t.TempDir())
-	sessionWFStore := h.SessionWorkflowStore
+	sessionWFStore := h.Workflows.Drafts
 	manifest := `id: hotfix
 version: 1.0.0
 extends: plan@1.0.0
@@ -147,7 +147,7 @@ func TestWorkflowPersistDuplicateTrigger422(t *testing.T) {
 	h := wiring.BuildForTest(t)
 	srv := h.Server
 	sess := createSessionHTTP(t, srv, t.TempDir())
-	sessionWFStore := h.SessionWorkflowStore
+	sessionWFStore := h.Workflows.Drafts
 	manifest := `id: hotfix
 version: 1.0.0
 extends: plan@1.0.0

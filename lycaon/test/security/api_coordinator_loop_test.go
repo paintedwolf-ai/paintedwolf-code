@@ -18,8 +18,8 @@ import (
 func TestPlanImplementLegLoopWakesCoordinator(t *testing.T) {
 	h := wiring.BuildForTest(t, wiring.WithRecordingLLM())
 	srv := h.Server
-	mgr := h.SessionMgr
-	blueprintMgr := h.BlueprintMgr
+	mgr := h.Sessions.Manager
+	blueprintMgr := h.Workflows.Blueprints
 	ctx := context.Background()
 	sess := createSessionHTTP(t, srv, t.TempDir())
 
@@ -69,7 +69,7 @@ func TestPlanImplementLegLoopWakesCoordinator(t *testing.T) {
 	mgr.Coordinator.Runtime.CoordinatorLoop().Nudge(ctx, sess.ID, anchor.LegFinished, anchor.LegFinished, "leg-e2e", anchor.Envelope{})
 
 	testutil.WaitFor(t, promptIdleBudget, func() bool {
-		mgr.Runner.Coordinator.CoordinatorLoop().DrainPending(ctx, sess.ID)
+		mgr.Runner.Coordinator.CoordinatorLoop().Nudges.DrainPending(ctx, sess.ID)
 		msgs, err := mgr.Transcript.GetMessages(ctx, sess.ID)
 		if err != nil {
 			return false

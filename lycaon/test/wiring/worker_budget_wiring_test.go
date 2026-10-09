@@ -33,11 +33,11 @@ func TestExtendWorkerBudgetWiring(t *testing.T) {
 		ToolLoopsUsed:   30,
 	}
 	testutil.FailErr(t, "enqueue defaults", worker.ApplyEnqueueDefaults(&task, project.ProjectScope{ProjectID: testdbseed.DefaultProjectID, WorkspacePath: dir}, worker.DefaultWorkersConfig()))
-	jobID, err := h.WorkerQueue.Enqueue(ctx, task)
+	jobID, err := h.Delegations.Queue.Enqueue(ctx, task)
 	testutil.FailErr(t, "enqueue", err)
 	child, err := h.Store.CreateChild(ctx, sess, wire.SpawnChildRequest{AgentType: "implementer", Prompt: "long leg"})
 	testutil.FailErr(t, "create child", err)
-	testutil.FailErr(t, "set child", h.WorkerQueue.SetChildSessionID(ctx, jobID, child.ID))
+	testutil.FailErr(t, "set child", h.Delegations.Queue.SetChildSessionID(ctx, jobID, child.ID))
 
 	out, err := h.ToolRegistry.Run(ctx, "extend_worker_budget", map[string]any{
 		"job_id":         jobID,
@@ -47,7 +47,7 @@ func TestExtendWorkerBudgetWiring(t *testing.T) {
 	if !strings.Contains(out, `"new_max":80`) {
 		t.Fatalf("extend out = %q", out)
 	}
-	updated, ok := h.WorkerQueue.Get(jobID)
+	updated, ok := h.Delegations.Queue.Get(jobID)
 	if !ok || updated.MaxToolLoops != 80 {
 		t.Fatalf("queue max = %d want 80", updated.MaxToolLoops)
 	}
@@ -75,11 +75,11 @@ func TestDeclineWorkerBudgetWiring(t *testing.T) {
 		ToolLoopsUsed:   14,
 	}
 	testutil.FailErr(t, "enqueue defaults", worker.ApplyEnqueueDefaults(&task, project.ProjectScope{ProjectID: testdbseed.DefaultProjectID, WorkspacePath: dir}, worker.DefaultWorkersConfig()))
-	jobID, err := h.WorkerQueue.Enqueue(ctx, task)
+	jobID, err := h.Delegations.Queue.Enqueue(ctx, task)
 	testutil.FailErr(t, "enqueue", err)
 	child, err := h.Store.CreateChild(ctx, sess, wire.SpawnChildRequest{AgentType: "security-reviewer", Prompt: "trace the entry points"})
 	testutil.FailErr(t, "create child", err)
-	testutil.FailErr(t, "set child", h.WorkerQueue.SetChildSessionID(ctx, jobID, child.ID))
+	testutil.FailErr(t, "set child", h.Delegations.Queue.SetChildSessionID(ctx, jobID, child.ID))
 
 	childCtx := wiringToolContext(child.ID, dir, jobID)
 	childCtx.Identity.ParentSessionID = sess.ID
@@ -87,13 +87,13 @@ func TestDeclineWorkerBudgetWiring(t *testing.T) {
 		"rounds": 6, "remaining_work": []any{"trace the alternate callers"},
 	}, childCtx)
 	testutil.FailErr(t, "request_budget", err)
-	if asked, ok := h.WorkerQueue.Get(jobID); !ok || asked.BudgetRequest == nil {
+	if asked, ok := h.Delegations.Queue.Get(jobID); !ok || asked.BudgetRequest == nil {
 		t.Fatalf("job after request = %+v, want an open request", asked)
 	}
 
 	_, err = h.ToolRegistry.Run(ctx, "decline_worker_budget", map[string]any{"job_id": jobID}, wiringToolContext(sess.ID, dir))
 	testutil.FailErr(t, "decline_worker_budget", err)
-	declined, ok := h.WorkerQueue.Get(jobID)
+	declined, ok := h.Delegations.Queue.Get(jobID)
 	if !ok || declined.BudgetRequest != nil || declined.MaxToolLoops != 20 {
 		t.Fatalf("job after decline = %+v, want the request closed at a ceiling of 20", declined)
 	}
@@ -118,11 +118,11 @@ func TestWorkerBudgetExhaustedEnvelopeWiring(t *testing.T) {
 		MaxToolLoops:  40,
 		ToolLoopsUsed: 39,
 	}
-	_, err = h.WorkerQueue.Enqueue(ctx, task)
+	_, err = h.Delegations.Queue.Enqueue(ctx, task)
 	testutil.FailErr(t, "enqueue", err)
 	child, err := h.Store.CreateChild(ctx, sess, wire.SpawnChildRequest{AgentType: "implementer", Prompt: "work"})
 	testutil.FailErr(t, "create child", err)
-	testutil.FailErr(t, "set child", h.WorkerQueue.SetChildSessionID(ctx, task.ID, child.ID))
+	testutil.FailErr(t, "set child", h.Delegations.Queue.SetChildSessionID(ctx, task.ID, child.ID))
 
 	// The message kind records the iteration-cap closeout.
 	closeout := "forced final turn — " + promptloop.TurnCloseoutReasonText(promptloop.TurnCloseoutIterationCap)
@@ -134,7 +134,7 @@ func TestWorkerBudgetExhaustedEnvelopeWiring(t *testing.T) {
 		Content:    closeout,
 	}))
 
-	status, err := h.SessionMgr.Workers.Summaries.Append(ctx, sess.ID, workeroutcomes.SummaryInput{
+	status, err := h.Sessions.Manager.Workers.Summaries.Append(ctx, sess.ID, workeroutcomes.SummaryInput{
 		JobID:          task.ID,
 		ChildSessionID: child.ID,
 		AgentType:      "implementer",
