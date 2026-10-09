@@ -24,6 +24,6 @@ func TestStopSleepTimersDisarmsArmedWaits(t *testing.T) {
 	if st.timerGeneration == generation {
 		t.Fatal("shutdown left the timer generation unchanged, so a firing timer would still act")
 	}
-	var stopped *LoopEngine
-	stopped.Waits.StopSleepTimers()
+	var stopped *Waits
+	stopped.StopSleepTimers()
 }

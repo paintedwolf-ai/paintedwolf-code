@@ -59,7 +59,7 @@ func TestCompletionWaitRejectsUnownedOrUnboundedConditions(t *testing.T) {
 			if reject := tools.AsToolReject(err); reject == nil || reject.Code != "TOOL_ARGS_INVALID" {
 				t.Fatalf("invalid completion wait = %v", err)
 			}
-			if loop.IsSleeping("s1") {
+			if loop.Waits.IsSleeping("s1") {
 				t.Fatal("rejected wait armed sleep")
 			}
 		})
@@ -78,7 +78,7 @@ func TestCompletionWaitAllowsBoundedTimeout(t *testing.T) {
 	if !result.UntilComplete || result.WakeAt == "" || result.TimeoutMS != 15000 {
 		t.Fatalf("bounded completion wait invalid result: %+v", result)
 	}
-	state := loop.sleep.state("s1")
+	state := loop.Waits.sleep.state("s1")
 	state.mu.Lock()
 	hasTimer := state.timer != nil
 	until := state.until
@@ -108,7 +108,7 @@ func TestBoundedCompletionWaitResumesFromDurableLease(t *testing.T) {
 	args["timeout_ms"] = 600000
 	_, err := reg.Run(t.Context(), "wait", args, tctx)
 	testutil.FailErr(t, "park bounded completion wait", err)
-	loop.InterruptSleep(t.Context(), "s1")
+	loop.Waits.InterruptSleep(t.Context(), "s1")
 
 	// A fresh engine has no runtime subscription, so resume reads the durable lease.
 	restarted := NewLoopEngine()
@@ -141,7 +141,7 @@ func TestBoundedCompletionWaitResumesFromRuntimeSubscription(t *testing.T) {
 	args["timeout_ms"] = 600000
 	_, err := reg.Run(t.Context(), "wait", args, tctx)
 	testutil.FailErr(t, "park bounded completion wait", err)
-	loop.breakSleep(t.Context(), "s1", "nudge", true)
+	loop.Waits.breakSleep(t.Context(), "s1", "nudge", true)
 	out, err := reg.Run(t.Context(), "wait", map[string]any{"resume": true}, tctx)
 	testutil.FailErr(t, "resume bounded completion wait", err)
 	var result WaitToolResult
@@ -160,7 +160,7 @@ func TestRecoveredBoundedCompletionWaitKeepsMode(t *testing.T) {
 		UntilComplete: true, Deadline: time.Now().UTC().Add(10 * time.Minute),
 		Conditions: []awaitstore.Condition{{Kind: "process_done", Handles: []string{"command-1"}}}})
 	testutil.FailErr(t, "persist bounded completion wait", err)
-	testutil.FailErr(t, "recover bounded completion wait", RecoverWaitLeases(t.Context(), loop, store))
+	testutil.FailErr(t, "recover bounded completion wait", RecoverWaitLeases(t.Context(), loop.Subscriptions, store))
 	if untilComplete, hasTimer, until := completionSleepState(loop, "s1"); !untilComplete || !hasTimer || until.IsZero() {
 		t.Fatalf("recovered state: untilComplete=%v timer=%v until=%v", untilComplete, hasTimer, until)
 	}
@@ -170,7 +170,7 @@ func TestSkipRearmKeepsCompletionMode(t *testing.T) {
 	loop, _, reg := completionWaitFixture(t)
 	_, err := reg.Run(t.Context(), "wait", completionWaitArgs(), tools.ToolContext{SessionID: "s1", ProjectID: testdbseed.DefaultProjectID})
 	testutil.FailErr(t, "park completion wait", err)
-	loop.rearmSleepAfterSkip(t.Context(), "s1")
+	loop.Waits.rearmSleepAfterSkip(t.Context(), "s1")
 	if untilComplete, hasTimer, _ := completionSleepState(loop, "s1"); !untilComplete || hasTimer {
 		t.Fatalf("skip re-arm changed completion mode: untilComplete=%v timer=%v", untilComplete, hasTimer)
 	}
@@ -186,7 +186,7 @@ func TestCompletionWaitHasNoTimerAndResumesMode(t *testing.T) {
 	if !result.UntilComplete || result.WakeAt != "" || result.TimeoutMS != 0 {
 		t.Fatalf("completion wait has deadline: %+v", result)
 	}
-	state := loop.sleep.state("s1")
+	state := loop.Waits.sleep.state("s1")
 	state.mu.Lock()
 	armedTomorrow := sleepArmedLocked(state, time.Now().Add(24*time.Hour))
 	hasTimer := state.timer != nil
@@ -199,8 +199,8 @@ func TestCompletionWaitHasNoTimerAndResumesMode(t *testing.T) {
 	if !found || !lease.Deadline.IsZero() {
 		t.Fatalf("completion wait deadline persisted: %+v", lease)
 	}
-	loop.InterruptSleep(t.Context(), "s1")
-	if loop.IsSleeping("s1") {
+	loop.Waits.InterruptSleep(t.Context(), "s1")
+	if loop.Waits.IsSleeping("s1") {
 		t.Fatal("user interruption left completion wait armed")
 	}
 	out, err = reg.Run(t.Context(), "wait", map[string]any{"resume": true}, tctx)
@@ -210,7 +210,7 @@ func TestCompletionWaitHasNoTimerAndResumesMode(t *testing.T) {
 	if !result.UntilComplete || !result.Resumed || len(result.Conditions) != 1 || result.Conditions[0].Handles[0] != "command-1" {
 		t.Fatalf("resume lost completion mode: %+v", result)
 	}
-	loop.InterruptSleep(t.Context(), "s1")
+	loop.Waits.InterruptSleep(t.Context(), "s1")
 	out, err = reg.Run(t.Context(), "wait", map[string]any{"resume": true, "timeout_ms": 60000}, tctx)
 	testutil.FailErr(t, "replace completion mode", err)
 	result = WaitToolResult{}
@@ -256,23 +256,23 @@ func TestCompletionWaitDeliversTerminalOrLostProcessOnce(t *testing.T) {
 			}
 			switch event {
 			case "exit":
-				loop.NudgeProcessFinished(t.Context(), "s1", "unrelated", anchor.Envelope{})
-				if !loop.IsSleeping("s1") {
+				loop.Nudges.NudgeProcessFinished(t.Context(), "s1", "unrelated", anchor.Envelope{})
+				if !loop.Waits.IsSleeping("s1") {
 					t.Fatal("unrelated process ended wait")
 				}
-				loop.NudgeProcessFinished(t.Context(), "s1", "command-1", anchor.Envelope{})
+				loop.Nudges.NudgeProcessFinished(t.Context(), "s1", "command-1", anchor.Envelope{})
 			case "recovery":
 				deps.ProcessState = func(string, string) (bool, bool) { return false, false }
 				loop.SetDeps(deps)
-				testutil.FailErr(t, "recover lost process wait", RecoverWaitLeases(t.Context(), loop, store))
+				testutil.FailErr(t, "recover lost process wait", RecoverWaitLeases(t.Context(), loop.Subscriptions, store))
 			}
 			testutil.WaitFor(t, time.Second, func() bool { return deliveries.Load() == 1 })
-			loop.WaitForAsyncTurns(testutil.BoundedContext(t, time.Second))
-			if loop.IsSleeping("s1") {
+			loop.Turns.WaitForAsyncTurns(testutil.BoundedContext(t, time.Second))
+			if loop.Waits.IsSleeping("s1") {
 				t.Fatal("terminal process left agent sleeping")
 			}
-			testutil.FailErr(t, "recover delivered completion", RecoverWaitLeases(t.Context(), loop, store))
-			loop.WaitForAsyncTurns(testutil.BoundedContext(t, time.Second))
+			testutil.FailErr(t, "recover delivered completion", RecoverWaitLeases(t.Context(), loop.Subscriptions, store))
+			loop.Turns.WaitForAsyncTurns(testutil.BoundedContext(t, time.Second))
 			if deliveries.Load() != 1 {
 				t.Fatalf("completion delivered %d times", deliveries.Load())
 			}
@@ -289,14 +289,14 @@ func TestCompletionWaitReconciliationKeepsLiveProcessParked(t *testing.T) {
 	if !found {
 		t.Fatal("live process wait missing")
 	}
-	if done := reconcileWaitConditions(t.Context(), loop, store, lease); done || !loop.IsSleeping("s1") {
+	if done := reconcileWaitConditions(t.Context(), loop, store, lease); done || !loop.Waits.IsSleeping("s1") {
 		t.Fatal("host liveness check ended a live process wait")
 	}
-	loop.InterruptSleep(t.Context(), "s1")
+	loop.Waits.InterruptSleep(t.Context(), "s1")
 	if done := reconcileWaitConditions(t.Context(), loop, store, lease); !done {
 		t.Fatal("interrupted wait left its host monitor active")
 	}
-	if loop.HasPendingLoopWakes("s1") {
+	if loop.Nudges.HasPendingLoopWakes("s1") {
 		t.Fatal("liveness check or interruption scheduled a model wake")
 	}
 }
@@ -315,7 +315,7 @@ func TestCompletionWaitReturnsAlreadyFinishedWithoutParking(t *testing.T) {
 	}
 	active, err := store.Active(t.Context())
 	testutil.FailErr(t, "read finished process leases", err)
-	if len(active) != 0 || loop.IsSleeping("s1") || loop.HasPendingLoopWakes("s1") {
+	if len(active) != 0 || loop.Waits.IsSleeping("s1") || loop.Nudges.HasPendingLoopWakes("s1") {
 		t.Fatal("finished process created a parked wait or model wake")
 	}
 }

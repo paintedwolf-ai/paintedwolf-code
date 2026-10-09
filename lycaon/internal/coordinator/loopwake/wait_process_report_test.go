@@ -43,19 +43,19 @@ func TestRefusalEndsTheProcessWaitWithItsReport(t *testing.T) {
 	_, err := reg.Run(t.Context(), "wait", completionWaitArgs(), tools.ToolContext{SessionID: "s1", ProjectID: testdbseed.DefaultProjectID})
 	testutil.FailErr(t, "park process wait", err)
 
-	loop.NudgeProcessRefused(t.Context(), "s1", "unrelated", anchor.Envelope{CommandRefusalDigest: "other job"})
-	if !loop.IsSleeping("s1") {
+	loop.Nudges.NudgeProcessRefused(t.Context(), "s1", "unrelated", anchor.Envelope{CommandRefusalDigest: "other job"})
+	if !loop.Waits.IsSleeping("s1") {
 		t.Fatal("another job's refusal ended the wait")
 	}
 	report := "handle=command-1 state=running\nsandbox_refusals:\n- network-bind /tmp/u.sock (limactl) count=1 recovery=host_execution"
-	loop.NudgeProcessRefused(t.Context(), "s1", "command-1", anchor.Envelope{CommandRefusalDigest: report})
+	loop.Nudges.NudgeProcessRefused(t.Context(), "s1", "command-1", anchor.Envelope{CommandRefusalDigest: report})
 	testutil.WaitFor(t, time.Second, func() bool { return len(delivered()) == 1 })
-	loop.WaitForAsyncTurns(testutil.BoundedContext(t, time.Second))
+	loop.Turns.WaitForAsyncTurns(testutil.BoundedContext(t, time.Second))
 	winner := delivered()[0]
 	if winner.Outcome != "refused" || winner.Report != report || winner.Handles[0] != "command-1" {
 		t.Fatalf("refusal winner = %+v", winner)
 	}
-	if loop.IsSleeping("s1") {
+	if loop.Waits.IsSleeping("s1") {
 		t.Fatal("refusal left the agent sleeping")
 	}
 }
@@ -66,9 +66,9 @@ func TestCompletionWakeCarriesTheCompletionReport(t *testing.T) {
 	_, err := reg.Run(t.Context(), "wait", completionWaitArgs(), tools.ToolContext{SessionID: "s1", ProjectID: testdbseed.DefaultProjectID})
 	testutil.FailErr(t, "park process wait", err)
 	report := "handle=command-1 termination=timed_out exit_code=-1"
-	loop.NudgeProcessFinished(t.Context(), "s1", "command-1", anchor.Envelope{CommandCompletionDigest: report})
+	loop.Nudges.NudgeProcessFinished(t.Context(), "s1", "command-1", anchor.Envelope{CommandCompletionDigest: report})
 	testutil.WaitFor(t, time.Second, func() bool { return len(delivered()) == 1 })
-	loop.WaitForAsyncTurns(testutil.BoundedContext(t, time.Second))
+	loop.Turns.WaitForAsyncTurns(testutil.BoundedContext(t, time.Second))
 	if winner := delivered()[0]; winner.Outcome != "satisfied" || winner.Report != report {
 		t.Fatalf("completion winner = %+v", winner)
 	}
@@ -99,7 +99,7 @@ func TestReconciliationWaitsForThePublishedCompletion(t *testing.T) {
 		t.Fatal("reconciliation did not settle the published completion")
 	}
 	testutil.WaitFor(t, time.Second, func() bool { return len(delivered()) == 1 })
-	loop.WaitForAsyncTurns(testutil.BoundedContext(t, time.Second))
+	loop.Turns.WaitForAsyncTurns(testutil.BoundedContext(t, time.Second))
 	if winner := delivered()[0]; winner.Report == "" || winner.Outcome != "satisfied" {
 		t.Fatalf("reconciled winner = %+v", winner)
 	}
