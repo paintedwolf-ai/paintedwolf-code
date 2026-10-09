@@ -116,4 +116,6 @@ schema:
         base_overlay_id:
           type: string
           description: Optional. Stacked-overlay base — names another pending write overlay to dispatch on top of (instead of primary). Empty means based on primary.
-  required: [brief]
+  anyOf:
+    - required: [brief]
+    - required: [workflow_work_id]

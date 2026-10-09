@@ -103,7 +103,7 @@ func WorkflowWorkerScanDigest(ctx context.Context, list WorkflowRunScanLister, w
 		s := scans[i]
 		ids = append(ids, strings.TrimSpace(s.ID))
 		if i < rowLimit {
-			lines = append(lines, fmt.Sprintf("- `%s` · %s", s.ID, ledgerFacts(s)))
+			lines = append(lines, fmt.Sprintf("- `%s` · execution_status=%s; coverage_status=%s; result_available=%t; findings_count=%d", s.ID, s.Status, s.CoverageStatus, s.Status == api.CodeScanStatusComplete || s.FindingsStored > 0 || s.FindingsCount > 0, s.FindingsCount))
 		}
 		if !StatusTerminal(s.Status) {
 			allTerminal = false

@@ -1,0 +1,60 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "blitiri.com.ar/go/chasquid"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.13.0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2023-52354",
+  "GHSA-g4x3-mfpj-f335"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2024-2478"
+ },
+ "details": "chasquid HTTP Request/Response Smuggling vulnerability in github.com/albertito/chasquid in blitiri.com.ar/go/chasquid",
+ "id": "GO-2024-2478",
+ "modified": "2024-06-28T15:28:53Z",
+ "published": "2024-06-28T15:28:53Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-g4x3-mfpj-f335"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2023-52354"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/albertito/chasquid/commit/a996106eeebe81a292ecba838c7503cac7493e74"
+  },
+  {
+   "type": "REPORT",
+   "url": "https://github.com/albertito/chasquid/issues/47"
+  },
+  {
+   "type": "WEB",
+   "url": "https://blitiri.com.ar/p/chasquid/relnotes/#113-2023-12-24"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "chasquid HTTP Request/Response Smuggling vulnerability in github.com/albertito/chasquid in blitiri.com.ar/go/chasquid"
+}

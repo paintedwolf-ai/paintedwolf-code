@@ -249,6 +249,12 @@ class ExecutionLifecycleTests(unittest.TestCase):
             self.assertEqual(output.call_count, 2)
         self.assertEqual(self.queue.status()["runs"], [])
 
+    def test_admission_granted_after_its_requesters_were_answered_is_declined(self):
+        interest = iter([True, False])
+        with execution.Reservation(self.queue, execution.lock_file, "fixture", "fixture",
+                                   {"locks": ["rust"], "workers": 1}, 1) as reservation:
+            self.assertFalse(reservation.acquire(lambda: next(interest)))
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)

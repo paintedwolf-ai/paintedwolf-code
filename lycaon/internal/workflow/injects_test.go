@@ -12,23 +12,33 @@ func TestEffectiveAnchorRegistryIncludesWorkflowInjects(t *testing.T) {
 	reg, err := anchor.LoadRegistryFromConfigRoot()
 	testutil.FailErr(t, "LoadRegistryFromConfigRoot", err)
 
-	b, ok := reg.ResolveInform(anchor.PhaseEntered, anchor.MatchContext{
-		Surface:  "phase",
-		Phase:    "plan",
-		Workflow: "recon-pack",
+	b, err := reg.ResolveInform(anchor.PhaseEntered, anchor.MatchContext{
+		Surface:         "phase",
+		Phase:           "plan",
+		Workflow:        "recon-pack",
+		WorkflowVersion: "1.0.0",
 	})
-	if !ok || b == nil || b.Render != "coordinator-recon-pack-plan" {
-		t.Fatalf("recon-pack plan inject: ok=%v render=%q tier=%q", ok, bindingRender(b), bindingTier(b))
+	if err != nil || b == nil || b.Render != "coordinator-recon-pack-plan" {
+		t.Fatalf("recon-pack plan inject: err=%v render=%q tier=%q", err, bindingRender(b), bindingTier(b))
 	}
 	if b.Tier != "workflow" {
 		t.Fatalf("tier = %q want workflow", b.Tier)
 	}
 
-	challenge, found := reg.ResolveInform(anchor.PhaseEntered, anchor.MatchContext{
-		Surface: "phase", Phase: "challenge", Workflow: "security-survey",
+	// 1.0.0 run gets 1.0.0 prompt
+	challenge100, err := reg.ResolveInform(anchor.PhaseEntered, anchor.MatchContext{
+		Surface: "phase", Phase: "challenge", Workflow: "security-survey", WorkflowVersion: "1.0.0",
 	})
-	if !found || challenge == nil || challenge.Render != "coordinator-security-challenge" {
-		t.Fatalf("security challenge inject: found=%v render=%q", found, bindingRender(challenge))
+	if err != nil || challenge100 == nil || challenge100.Render != "coordinator-security-challenge" {
+		t.Fatalf("security challenge 1.0.0 inject: err=%v render=%q", err, bindingRender(challenge100))
+	}
+
+	// 2.0.0 run gets 2.0.0 prompt
+	challenge200, err := reg.ResolveInform(anchor.PhaseEntered, anchor.MatchContext{
+		Surface: "phase", Phase: "challenge", Workflow: "security-survey", WorkflowVersion: "2.0.0",
+	})
+	if err != nil || challenge200 == nil || challenge200.Render != "coordinator-security-challenge" {
+		t.Fatalf("security challenge 2.0.0 inject: err=%v render=%q", err, bindingRender(challenge200))
 	}
 
 	for phase, render := range map[string]string{
@@ -38,23 +48,28 @@ func TestEffectiveAnchorRegistryIncludesWorkflowInjects(t *testing.T) {
 		"drill":      "coordinator-fanout-execute",
 		"report":     "coordinator-topology-synthesis",
 	} {
-		binding, found := reg.ResolveInform(anchor.PhaseEntered, anchor.MatchContext{
-			Surface:  "phase",
-			Phase:    phase,
-			Workflow: "recon-pack",
+		binding, err := reg.ResolveInform(anchor.PhaseEntered, anchor.MatchContext{
+			Surface:         "phase",
+			Phase:           phase,
+			Workflow:        "recon-pack",
+			WorkflowVersion: "1.0.0",
 		})
-		if !found || binding == nil || binding.Render != render {
-			t.Fatalf("recon-pack %s inject: found=%v render=%q want %q", phase, found, bindingRender(binding), render)
+		if err != nil || binding == nil || binding.Render != render {
+			t.Fatalf("recon-pack %s inject: err=%v render=%q want %q", phase, err, bindingRender(binding), render)
 		}
 	}
 
 	// Isolation: options does not see recon-pack's plan inject.
-	b, ok = reg.ResolveInform(anchor.PhaseEntered, anchor.MatchContext{
-		Surface:  "phase",
-		Phase:    "plan",
-		Workflow: "options",
+	b, err = reg.ResolveInform(anchor.PhaseEntered, anchor.MatchContext{
+		Surface:         "phase",
+		Phase:           "plan",
+		Workflow:        "options",
+		WorkflowVersion: "1.0.0",
 	})
-	if ok && b != nil && b.Render == "coordinator-fanout-plan" {
+	if err != nil {
+		t.Fatalf("resolve options inject: %v", err)
+	}
+	if b != nil && b.Render == "coordinator-fanout-plan" {
 		t.Fatal("recon-pack inject leaked into options session")
 	}
 }

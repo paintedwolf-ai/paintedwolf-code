@@ -1,0 +1,52 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/mattermost/mattermost-server"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "3.1.0+incompatible"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2016-11071",
+  "GHSA-h3qg-w9j5-wh3m"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2025-4058"
+ },
+ "details": "Mattermost Server is vulnerable to XSS through lack of link relationship attributes `noreferrer` and `noopener` in github.com/mattermost/mattermost-server",
+ "id": "GO-2025-4058",
+ "modified": "2025-10-30T15:02:33Z",
+ "published": "2025-10-30T15:02:33Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-h3qg-w9j5-wh3m"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2016-11071"
+  },
+  {
+   "type": "WEB",
+   "url": "https://mattermost.com/security-updates"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Mattermost Server is vulnerable to XSS through lack of link relationship attributes `noreferrer` and `noopener` in github.com/mattermost/mattermost-server"
+}

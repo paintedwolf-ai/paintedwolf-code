@@ -1,0 +1,6 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/session/coordinator_wire.go",
+  "cap": 1100,
+  "reason": "Predates the limits; fixes still land here while the package is decomposed (#271)."
+}

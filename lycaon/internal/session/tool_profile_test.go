@@ -177,3 +177,7 @@ func (s stubWorkflowManifest) ApplyCoordinatorBatchEvent(context.Context, string
 	return nil
 }
 func (s stubWorkflowManifest) ForgetSession(string) {}
+
+func (s stubWorkflowManifest) RecordReviewToolResult(context.Context, string, api.Message) error {
+	return nil
+}

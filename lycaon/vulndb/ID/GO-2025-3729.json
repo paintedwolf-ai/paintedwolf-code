@@ -1,0 +1,128 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/mattermost/mattermost-server"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "9.0.0-rc1+incompatible"
+      },
+      {
+       "fixed": "9.11.13+incompatible"
+      },
+      {
+       "introduced": "10.0.0-rc1+incompatible"
+      },
+      {
+       "fixed": "10.5.4+incompatible"
+      },
+      {
+       "introduced": "10.6.0-rc1+incompatible"
+      },
+      {
+       "fixed": "10.6.3+incompatible"
+      },
+      {
+       "introduced": "10.7.0-rc1+incompatible"
+      },
+      {
+       "fixed": "10.7.1+incompatible"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/mattermost/mattermost-server/v5"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/mattermost/mattermost-server/v6"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/mattermost/mattermost/server/v8"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "8.0.0-20250414095146-04676582cdd2"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2025-2571",
+  "GHSA-8cgx-9ccj-3gwr"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2025-3729"
+ },
+ "details": "Mattermost fails to clear Google OAuth credentials in github.com/mattermost/mattermost-server",
+ "id": "GO-2025-3729",
+ "modified": "2025-06-03T17:58:02Z",
+ "published": "2025-06-03T17:58:02Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-8cgx-9ccj-3gwr"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-2571"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/mattermost/mattermost/commit/04676582cdd26f4fdfa78fcf60a7f8745e6b27f5"
+  },
+  {
+   "type": "WEB",
+   "url": "https://mattermost.com/security-updates"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Mattermost fails to clear Google OAuth credentials in github.com/mattermost/mattermost-server"
+}

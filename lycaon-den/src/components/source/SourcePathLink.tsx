@@ -119,7 +119,9 @@ export function SourcePathLink(props: SourcePathLinkProps) {
     if (!p || !projectId() || props.openable === false) return;
     if (rootRefs()?.length && !resolvedPath()) {
       beginSourceNavigation();
-      notices.reportError(new Error("This path is unavailable in the attached project folders."));
+      notices.reportError(new Error(resolutionError() === "outside_roots"
+        ? `${p} is outside the attached project folders. Attach its folder to this project to open it here.`
+        : "This path is unavailable in the attached project folders."));
       return;
     }
     void openTargetLocation(openTarget());
@@ -135,16 +137,23 @@ export function SourcePathLink(props: SourcePathLinkProps) {
     } catch (error) { notices.reportError(error); }
   };
 
-  const resolvedPath = createMemo(() => {
+  const resolution = createMemo(() => {
     const p = path();
     const availableRoots = rootRefs() ?? [];
     const roots = props.rootId
       ? availableRoots.filter((root) => root.id === props.rootId)
       : availableRoots;
     if (!p || !roots.length) return undefined;
-    const resolved = resolveProjectFile({ roots }, p);
-    return "error" in resolved ? undefined : resolved;
+    return resolveProjectFile({ roots }, p);
   });
+  const resolutionError = () => {
+    const resolved = resolution();
+    return resolved && "error" in resolved ? resolved.error : undefined;
+  };
+  const resolvedPath = () => {
+    const resolved = resolution();
+    return resolved && !("error" in resolved) ? resolved : undefined;
+  };
   const absolutePath = () => resolvedPath()?.absolutePath;
   const relativePath = () => {
     const resolved = resolvedPath();

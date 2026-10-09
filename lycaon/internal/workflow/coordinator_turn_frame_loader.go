@@ -2,7 +2,8 @@ package workflow
 
 import (
 	"context"
-	"log/slog"
+	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
@@ -64,7 +65,16 @@ func (l *CoordinatorTurnFrameLoader) BuildCoordinatorTurnFrame(
 		return inject.CoordinatorTurnFrame{RunContext: out}, nil
 	}
 	runtime := l.Runs.workflowRuntimeSnapshot(ctx, active, manifest, vars)
-	l.attachPhaseVerdictCall(ctx, sessionID, active, manifest, runtime.PhaseExit)
+	if err := l.attachPhaseVerdictCall(ctx, sessionID, active, manifest, runtime.PhaseExit); err != nil {
+		var invalid *reviewContractError
+		if !errors.As(err, &invalid) {
+			return inject.CoordinatorTurnFrame{}, err
+		}
+		if blockErr := (ReviewRepairs{l.Runs}).blockContract(ctx, active.ID, err); blockErr != nil {
+			return inject.CoordinatorTurnFrame{}, blockErr
+		}
+		return inject.CoordinatorTurnFrame{}, &NotRunnableError{RunID: active.ID, Status: api.WorkflowRunStatusPaused, Reason: ReviewBlockedReason}
+	}
 	out.WorkflowID = active.WorkflowID
 	out.WorkflowVersion = active.WorkflowVersion
 	out.CurrentPhase = active.CurrentPhase
@@ -205,19 +215,29 @@ var _ inject.CoordinatorTurnFrameSource = (*CoordinatorTurnFrameLoader)(nil)
 
 // attachPhaseVerdictCall gives a review phase's exit the submit_verdict call it
 // accepts, composed from the session's effective catalog.
-func (l *CoordinatorTurnFrameLoader) attachPhaseVerdictCall(ctx context.Context, sessionID string, active *api.WorkflowRun, manifest workflowdef.Manifest, exit *inject.PhaseExitView) {
+func (l *CoordinatorTurnFrameLoader) attachPhaseVerdictCall(ctx context.Context, sessionID string, active *api.WorkflowRun, manifest workflowdef.Manifest, exit *inject.PhaseExitView) error {
 	if exit == nil || l.VerdictCatalog == nil {
-		return
+		return nil
 	}
 	def, ok := manifest.PhaseForRun(active, active.CurrentPhase)
 	if !ok || def.ReviewLoop == nil {
-		return
+		return nil
 	}
 	catalog := l.VerdictCatalog(ctx, sessionID)
 	if catalog == nil {
-		return
+		return nil
 	}
 	if err := verdictcall.Attach(exit, catalog, *def.ReviewLoop, manifest.ReportBrief()); err != nil {
-		slog.ErrorContext(ctx, "compose phase verdict call", "run_id", active.ID, "phase", def.ID, "error", err)
+		return &reviewContractError{err}
 	}
+	if def.ReviewLoop.CarriesCoverage() {
+		facts, err := l.Runs.CoverageFacts(ctx, active, manifest)
+		if err != nil {
+			return fmt.Errorf("load coverage contract facts: %w", err)
+		}
+		if err = verdictcall.CheckCoverageIDs(exit.SubmitVerdictArgsSchema, *def.ReviewLoop, facts); err != nil {
+			return &reviewContractError{err}
+		}
+	}
+	return nil
 }

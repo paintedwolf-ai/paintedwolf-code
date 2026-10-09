@@ -1,0 +1,56 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/projectcapsule/capsule"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "0.13.7"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-61672",
+  "GHSA-gjw4-3v3v-rqxg"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6520"
+ },
+ "details": "Capsule: Tenant owner bypasses Capsule's forbidden namespace/service/node label and annotation enforcement in github.com/projectcapsule/capsule",
+ "id": "GO-2026-6520",
+ "modified": "2026-09-28T16:43:40Z",
+ "published": "2026-09-28T16:43:40Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/projectcapsule/capsule/security/advisories/GHSA-gjw4-3v3v-rqxg"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/projectcapsule/capsule/commit/755cef54bf4a1bc56d6692130132bc70755bef46"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/projectcapsule/capsule/pull/1982"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/projectcapsule/capsule/releases/tag/v0.13.7"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Capsule: Tenant owner bypasses Capsule's forbidden namespace/service/node label and annotation enforcement in github.com/projectcapsule/capsule"
+}

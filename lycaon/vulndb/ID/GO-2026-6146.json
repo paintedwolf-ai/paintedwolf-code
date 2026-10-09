@@ -1,0 +1,56 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/OliveTin/OliveTin"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0.0.0-20251024001301-45f9c18bc3ee"
+      },
+      {
+       "fixed": "0.0.0-20260708075951-ec114e95d297"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-67437",
+  "GHSA-xpxj-f2fm-rqch"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6146"
+ },
+ "details": "OliveTin: Unauthenticated DoS via OAuth2 State Memory Exhaustion (Unbounded Map Growth) in github.com/OliveTin/OliveTin",
+ "id": "GO-2026-6146",
+ "modified": "2026-08-18T14:32:29Z",
+ "published": "2026-08-18T14:32:29Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/OliveTin/OliveTin/security/advisories/GHSA-xpxj-f2fm-rqch"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-67437"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/OliveTin/OliveTin/commit/ec114e95d297b806c3ca0c37bc139b3c9c517b3f"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/OliveTin/OliveTin/releases/tag/3000.17.0"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "OliveTin: Unauthenticated DoS via OAuth2 State Memory Exhaustion (Unbounded Map Growth) in github.com/OliveTin/OliveTin"
+}
