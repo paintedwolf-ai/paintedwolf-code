@@ -30,7 +30,7 @@ func (t *GitOperationTool) Run(ctx context.Context, args map[string]any, tc tool
 	}
 	req.IncludeUntracked, _ = args["include_untracked"].(bool)
 	req.ReinstateIndex, _ = args["reinstate_index"].(bool)
-	if tc.WorkerJobID != "" {
+	if tc.Identity.WorkerJobID != "" {
 		return "", &toolrejection.ToolReject{Code: "GIT_OPERATION_PRECONDITION", Data: map[string]any{"reason": "addressed_session_required", "git_addressed_session_required": true}}
 	}
 	tool := "git_" + t.Kind

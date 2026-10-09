@@ -46,7 +46,7 @@ func TestDispatchContinuesUntilExplicitWait(t *testing.T) {
 				}
 				role := args["agent_type"].(string)
 				accepted[role]++
-				tctx.Out.Dispatch = &api.WorkerDispatch{WorkerID: role}
+				tctx.Effects.Out.Dispatch = &api.WorkerDispatch{WorkerID: role}
 				return "accepted", nil
 			}))
 			testutil.FailErr(t, "register wait", loopwake.RegisterWaitTool(reg, wakes, loopwake.WaitToolDeps{}))
@@ -71,7 +71,9 @@ func TestDispatchContinuesUntilExplicitWait(t *testing.T) {
 				return surface.ImplementSessionState{WorkersInFlight: len(accepted)}
 			}
 			result, err := promptloop.NewPromptLoopForTest(deps).Run(t.Context(), promptloop.PromptRunInput{
-				SessionID: sess.ID, Session: sess, ProfileID: "coordinator", ToolCtx: tools.ToolContext{SessionID: sess.ID},
+				SessionID: sess.ID, Session: sess, ProfileID: "coordinator", ToolCtx: tools.ToolContext{
+					Identity: tools.InvocationIdentity{SessionID: sess.ID},
+				},
 				History: userHistory("Compare this repo with similar tools and investigate why it contains so much code."),
 			})
 			testutil.FailErr(t, "coordinate research", err)

@@ -46,7 +46,7 @@ var workflowFailures = []workflowFailure{
 }
 
 // writeRunLookupError answers a failed read of one workflow run.
-func (s *Handler) writeRunLookupError(w http.ResponseWriter, r *http.Request, err error) {
+func (s *RunControl) writeRunLookupError(w http.ResponseWriter, r *http.Request, err error) {
 	if errors.Is(err, workflow.ErrRunNotFound) {
 		s.responses.Fail(w, wire.ApiErrorCodeWorkflowRunNotFound, "workflow run not found")
 		return
@@ -54,7 +54,7 @@ func (s *Handler) writeRunLookupError(w http.ResponseWriter, r *http.Request, er
 	s.responses.InternalError(w, r, err)
 }
 
-func (s *Handler) WriteWorkflowError(w http.ResponseWriter, r *http.Request, err error) {
+func (s *RunControl) WriteWorkflowError(w http.ResponseWriter, r *http.Request, err error) {
 	for _, failure := range workflowFailures {
 		if errors.Is(err, failure.sentinel) {
 			s.responses.Fail(w, failure.code, failure.message)

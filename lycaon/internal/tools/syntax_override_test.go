@@ -33,12 +33,14 @@ func TestSyntaxOverrideIsExplicitAndInvocationScoped(t *testing.T) {
 
 func TestSyntaxOverrideReportsReasonAndPaths(t *testing.T) {
 	ctx := syntaxhealth.WithOverride(context.Background(), "compiler accepts this source")
-	tc := ToolContext{Out: &ToolInvocationOut{}}
+	tc := ToolContext{
+		Effects: InvocationEffects{Out: &ToolInvocationOut{}},
+	}
 	ReportSyntaxOverride(ctx, tc, "a.swift", "b.swift")
-	if !tc.Out.Facts.HasCode(SyntaxCheckOverriddenCode) {
+	if !tc.Effects.Out.Facts.HasCode(SyntaxCheckOverriddenCode) {
 		t.Fatal("successful override was not recorded")
 	}
-	details := tc.Out.Facts.FeedbackFor(SyntaxCheckOverriddenCode).Details
+	details := tc.Effects.Out.Facts.FeedbackFor(SyntaxCheckOverriddenCode).Details
 	if details["syntax_override_reason"] != "compiler accepts this source" || details["path"] != "a.swift" {
 		t.Fatalf("override facts incomplete: %+v", details)
 	}

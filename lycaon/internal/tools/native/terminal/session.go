@@ -37,7 +37,7 @@ const (
 
 func terminalReceipt(tool string, tctx tools.ToolContext, id string, cursor int64, bytesReturned int) surveyreceipt.Receipt {
 	r := surveyreceipt.New(tool, id, 1, bytesReturned, false)
-	sum := sha256.Sum256([]byte(strings.Join([]string{tctx.SessionID, tctx.ProjectID, id, tool, strconv.FormatInt(cursor, 10)}, "\x00")))
+	sum := sha256.Sum256([]byte(strings.Join([]string{tctx.Identity.SessionID, tctx.Identity.ProjectID, id, tool, strconv.FormatInt(cursor, 10)}, "\x00")))
 	r.ScopeHash = hex.EncodeToString(sum[:16])
 	return r
 }

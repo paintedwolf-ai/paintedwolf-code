@@ -42,15 +42,15 @@ func (t *ResultTool) Run(ctx context.Context, args map[string]any, tctx tools.To
 	handle, _ := args["handle"].(string)
 	handle = strings.TrimSpace(handle)
 	wait := time.Duration(toolkit.ClampIntArg(args, "wait_ms", 0, 0, int(MaxAwait/time.Millisecond))) * time.Millisecond
-	status, err := t.Registry.Await(ctx, tctx.SessionID, handle, wait)
+	status, err := t.Registry.Await(ctx, tctx.Identity.SessionID, handle, wait)
 	if errors.Is(err, heldcall.ErrNotFound) {
 		return "", notFound(handle)
 	}
 	if err != nil {
 		return "", err
 	}
-	if tctx.Out != nil {
-		tctx.Out.OwnerRef = handle
+	if tctx.Effects.Out != nil {
+		tctx.Effects.Out.OwnerRef = handle
 	}
 	tctx.SetDisplaySubject(heldSubject(status))
 	payload := resultPayload{
@@ -93,18 +93,18 @@ func (t *StopTool) Run(_ context.Context, args map[string]any, tctx tools.ToolCo
 	}
 	handle, _ := args["handle"].(string)
 	handle = strings.TrimSpace(handle)
-	if status, err := t.Registry.Status(tctx.SessionID, handle); err == nil {
+	if status, err := t.Registry.Status(tctx.Identity.SessionID, handle); err == nil {
 		tctx.SetDisplaySubject(heldSubject(status))
 	}
-	result, err := t.Registry.Stop(tctx.SessionID, handle)
+	result, err := t.Registry.Stop(tctx.Identity.SessionID, handle)
 	if errors.Is(err, heldcall.ErrNotFound) {
 		return "", notFound(handle)
 	}
 	if err != nil {
 		return "", err
 	}
-	if tctx.Out != nil {
-		tctx.Out.OwnerRef = handle
+	if tctx.Effects.Out != nil {
+		tctx.Effects.Out.OwnerRef = handle
 	}
 	encoded, err := surveyjson.Marshal(toolkit.ProcessStopResult{
 		Handle: result.Handle, StopRequested: result.Running, Running: result.Running,

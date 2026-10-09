@@ -61,7 +61,10 @@ func TestWorkflowInventoryPaginationUsesTheSameGroupsAsScanQuery(t *testing.T) {
 	if len(first.Groups) != 50 || first.TotalGroups != 53 || first.NextOffset != 50 || len(first.ScanIDs) != 2 {
 		t.Fatalf("inventory=%s", raw)
 	}
-	tctx := tools.ToolContext{Roots: []projectroot.RootRef{{ID: "root", Path: t.TempDir(), IsPrimary: true}}, ActiveRootID: "root"}
+	tctx := tools.ToolContext{
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: t.TempDir(), IsPrimary: true}},
+			ActiveRootID: "root"},
+	}
 	raw, err = runScanQuery(t.Context(), map[string]any{"scan_ids": first.ScanIDs, "view": "groups", "kind": "sca", "level": "unknown", "offset": first.NextOffset}, tctx, ledger, nil)
 	testutil.FailErr(t, "next page", err)
 	var page struct {

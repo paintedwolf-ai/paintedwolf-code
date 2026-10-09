@@ -17,8 +17,9 @@ import (
 
 func responsePathContext(root string) tools.ToolContext {
 	return tools.ToolContext{
-		Agent: toolprofiles.DefaultToolProfileID,
-		Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}}, ActiveRootID: "root",
+		Identity: tools.InvocationIdentity{Agent: toolprofiles.DefaultToolProfileID},
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}},
+			ActiveRootID: "root"},
 	}
 }
 

@@ -28,33 +28,33 @@ func UniqueRoots(in []string) []string {
 
 func ActionConfineInputsForContext(tctx ToolContext, overlayWriteRoots []string) hitl.ActionConfineInputs {
 	var readDenyPaths []string
-	if strings.TrimSpace(tctx.WorkerBranchRoot) != "" {
-		readDenyPaths = append(readDenyPaths, tctx.WorkerSourceRoots...)
+	if strings.TrimSpace(tctx.Source.WorkerBranchRoot) != "" {
+		readDenyPaths = append(readDenyPaths, tctx.Source.WorkerSourceRoots...)
 	}
-	overlayReadPaths := tctx.SessionReadPaths
-	if tctx.PackageExecution != nil {
-		readDenyPaths = append(readDenyPaths, tctx.PackageExecution.SensitiveReads...)
+	overlayReadPaths := tctx.Files.SessionReadPaths
+	if tctx.Files.PackageExecution != nil {
+		readDenyPaths = append(readDenyPaths, tctx.Files.PackageExecution.SensitiveReads...)
 		// Package actions use only the read access explicitly requested for this invocation.
-		overlayReadPaths = tctx.PackageExecution.ApprovedReadPaths
+		overlayReadPaths = tctx.Files.PackageExecution.ApprovedReadPaths
 	}
 	return hitl.ActionConfineInputs{
-		ProcessControl: tctx.ProcessControl, HostExecution: tctx.HostExecution,
-		ProjectID:            tctx.ProjectID,
+		ProcessControl: tctx.Execution.ProcessControl, HostExecution: tctx.Execution.HostExecution,
+		ProjectID:            tctx.Identity.ProjectID,
 		Roots:                ConfineRootsForAction(tctx),
-		SessionScratchRoot:   tctx.SessionScratchDir,
+		SessionScratchRoot:   tctx.Host.SessionScratchDir,
 		OverlayWriteRoots:    overlayWriteRoots,
-		PolicyWriteGrants:    tctx.PolicyWriteGrants,
+		PolicyWriteGrants:    tctx.Files.PolicyWriteGrants,
 		OverlayReadPaths:     overlayReadPaths,
 		ReadDenyPaths:        readDenyPaths,
 		ReadRoots:            ConfineReadRootsForAction(tctx),
-		SocketGrants:         tctx.SocketGrants,
-		SocksProxyEnv:        tctx.SocksProxyEnv,
-		DirectIP:             tctx.DirectIPRequested,
-		DirectIPDeclared:     tctx.DirectIPDeclared,
-		LocalListen:          tctx.LocalListenGranted,
-		LocalListenPorts:     tctx.LocalListenPorts,
-		LoopbackConnect:      tctx.LoopbackConnectGranted,
-		LoopbackConnectPorts: tctx.LoopbackConnectPorts,
+		SocketGrants:         tctx.Socket.SocketGrants,
+		SocksProxyEnv:        tctx.Local.SocksProxyEnv,
+		DirectIP:             tctx.Direct.DirectIPRequested,
+		DirectIPDeclared:     tctx.Direct.DirectIPDeclared,
+		LocalListen:          tctx.Local.LocalListenGranted,
+		LocalListenPorts:     tctx.Local.LocalListenPorts,
+		LoopbackConnect:      tctx.Local.LoopbackConnectGranted,
+		LoopbackConnectPorts: tctx.Local.LoopbackConnectPorts,
 	}
 }
 
@@ -63,15 +63,15 @@ type SessionLoopbackGrant func(ctx context.Context, sessionID, parentSessionID s
 
 // SandboxScopeContext attaches session id and scope template tokens for path-scope checks.
 func SandboxScopeContext(ctx context.Context, tc ToolContext) context.Context {
-	ctx = sandbox.WithSessionID(ctx, tc.SessionID)
+	ctx = sandbox.WithSessionID(ctx, tc.Identity.SessionID)
 	ctx = sandbox.WithScopeTokens(ctx, sandbox.ScopeTokens{
-		Self: tc.Agent,
-		Job:  tc.WorkerJobID,
+		Self: tc.Identity.Agent,
+		Job:  tc.Identity.WorkerJobID,
 	})
-	if len(tc.TurnWritePinGlobs) > 0 {
-		pin := sandbox.TurnWritePin{Globs: append([]string(nil), tc.TurnWritePinGlobs...)}
-		for _, root := range tc.Roots {
-			if root.ID == tc.TurnWritePinRootID {
+	if len(tc.Turn.TurnWritePinGlobs) > 0 {
+		pin := sandbox.TurnWritePin{Globs: append([]string(nil), tc.Turn.TurnWritePinGlobs...)}
+		for _, root := range tc.Source.Roots {
+			if root.ID == tc.Turn.TurnWritePinRootID {
 				pin.RootPath = root.Path
 				break
 			}

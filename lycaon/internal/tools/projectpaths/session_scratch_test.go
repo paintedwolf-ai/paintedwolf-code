@@ -30,11 +30,11 @@ func scratchToolContext(t *testing.T) (tools.ToolContext, string, *mockMutationR
 	scratchDir := fspath.CanonicalPath(t.TempDir())
 	rec := &mockMutationRecorder{}
 	return tools.ToolContext{
-		Roots:             []projectroot.RootRef{{ID: "r1", Path: ws, IsPrimary: true}},
-		ActiveRootID:      "r1",
-		SessionScratchDir: scratchDir,
-		MutationRecorder:  rec,
-		Agent:             toolprofiles.DefaultToolProfileID,
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Path: ws, IsPrimary: true}},
+			ActiveRootID:     "r1",
+			MutationRecorder: rec},
+		Host:     tools.InvocationHost{SessionScratchDir: scratchDir},
+		Identity: tools.InvocationIdentity{Agent: toolprofiles.DefaultToolProfileID},
 	}, scratchDir, rec
 }
 
@@ -112,7 +112,7 @@ func TestResolveSessionScratchRefusesEscapes(t *testing.T) {
 
 func TestResolveSessionScratchUnavailable(t *testing.T) {
 	tctx, _, _ := scratchToolContext(t)
-	tctx.SessionScratchDir = ""
+	tctx.Host.SessionScratchDir = ""
 	_, err := projectpaths.ResolveRead(context.Background(), nil, tctx, "@scratch/file.txt")
 	requireReject(t, err, tools.SessionScratchUnavailableCode)
 }
@@ -121,7 +121,7 @@ func TestResolveSessionScratchUnavailable(t *testing.T) {
 // scratch is not project state.
 func TestReadOnlyWorkerWritesItsOwnScratch(t *testing.T) {
 	tctx, scratchDir, rec := scratchToolContext(t)
-	tctx.WorkerJobID = "worker-1"
+	tctx.Identity.WorkerJobID = "worker-1"
 	ctx := context.Background()
 
 	res, err := projectpaths.ResolveWrite(ctx, nil, tctx, "@scratch/findings.md")
@@ -146,9 +146,9 @@ func TestWorkerScratchIsSiblingNotShared(t *testing.T) {
 		testutil.FailErr(t, "mkdir "+dir, os.MkdirAll(dir, 0o700))
 	}
 	worker1, _, _ := scratchToolContext(t)
-	worker1.SessionScratchDir = worker1Dir
-	worker1.WorkerJobID = "job-1"
-	worker1.WorkerBranchRoot = t.TempDir()
+	worker1.Host.SessionScratchDir = worker1Dir
+	worker1.Identity.WorkerJobID = "job-1"
+	worker1.Source.WorkerBranchRoot = t.TempDir()
 	ctx := context.Background()
 
 	_, err := projectpaths.ResolveRead(ctx, nil, worker1, "@scratch/../worker-2/secret.txt")
@@ -190,18 +190,18 @@ func TestCommandCwdSessionScratch(t *testing.T) {
 	requireReject(t, err, "CWD_OUT_OF_SCOPE")
 
 	verify := tctx
-	verify.VerificationCheck = true
+	verify.Execution.VerificationCheck = true
 	_, _, err = projectpaths.CommandCwd(ctx, verify, "@scratch")
 	requireReject(t, err, "CWD_SCRATCH_NOT_VERIFICATION")
 
 	unavailable := tctx
-	unavailable.SessionScratchDir = ""
+	unavailable.Host.SessionScratchDir = ""
 	_, _, err = projectpaths.CommandCwd(ctx, unavailable, "@scratch")
 	requireReject(t, err, tools.SessionScratchUnavailableCode)
 
 	worker := tctx
-	worker.WorkerJobID = "w1"
-	worker.WorkerBranchRoot = t.TempDir()
+	worker.Identity.WorkerJobID = "w1"
+	worker.Source.WorkerBranchRoot = t.TempDir()
 	abs, _, err := projectpaths.CommandCwd(ctx, worker, "@scratch")
 	testutil.FailErr(t, "worker CommandCwd @scratch", err)
 	if abs != scratchDir {

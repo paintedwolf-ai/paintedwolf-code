@@ -18,15 +18,15 @@ func TestCoordinatorScopeRejectWrite(t *testing.T) {
 	reg := tools.NewDefaultRegistry()
 	_ = reg.Register("write", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
 		path, _ := args["path"].(string)
-		return "", boundary.AssertWriteScope(ctx, tctx.ActiveRootPath(), path, tctx.Agent)
+		return "", boundary.AssertWriteScope(ctx, tctx.ActiveRootPath(), path, tctx.Identity.Agent)
 	})
 	exec := NewExecutor(profilePolicy, reg, "implement")
 
 	// On investigate the coordinator may write product paths but not engine-internal
 	// ones; an out-of-scope path still gets the investigate-denied observation.
 	tctx := fixtureToolContext(t.TempDir())
-	tctx.Agent = "coordinator"
-	tctx.TurnSurfaceID = toolcontract.SurfaceImplementInvestigate
+	tctx.Identity.Agent = "coordinator"
+	tctx.Turn.TurnSurfaceID = toolcontract.SurfaceImplementInvestigate
 	_, err := exec.Invoke(context.Background(), "write", map[string]any{
 		"path":    settingsoverlay.Rel("secrets.yaml"),
 		"content": "x",
@@ -50,13 +50,13 @@ func TestCoordinatorOrchestrateWriteBlockedByScope(t *testing.T) {
 	reg := tools.NewDefaultRegistry()
 	_ = reg.Register("write", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
 		path, _ := args["path"].(string)
-		return "", boundary.AssertWriteScope(ctx, tctx.ActiveRootPath(), path, tctx.Agent)
+		return "", boundary.AssertWriteScope(ctx, tctx.ActiveRootPath(), path, tctx.Identity.Agent)
 	})
 	exec := NewExecutor(toolprofiles.NewProfilePolicyEngine(boundary), reg, "implement")
 
 	tctx := fixtureToolContext(t.TempDir())
-	tctx.Agent = "coordinator"
-	tctx.TurnSurfaceID = toolcontract.SurfaceImplementDispatch
+	tctx.Identity.Agent = "coordinator"
+	tctx.Turn.TurnSurfaceID = toolcontract.SurfaceImplementDispatch
 	if _, err := exec.Invoke(context.Background(), "write", map[string]any{"path": "src/main.go", "content": "x"}, tctx); err == nil {
 		t.Fatal("expected coordinator product write outside investigate to be blocked by scope")
 	}
@@ -68,7 +68,7 @@ func TestCoordinatorProductReadInScope(t *testing.T) {
 	reg := tools.NewDefaultRegistry()
 	_ = reg.Register("read", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
 		path, _ := args["path"].(string)
-		if err := boundary.AssertReadScope(ctx, tctx.ActiveRootPath(), path, tctx.Agent); err != nil {
+		if err := boundary.AssertReadScope(ctx, tctx.ActiveRootPath(), path, tctx.Identity.Agent); err != nil {
 			return "", err
 		}
 		return "ok", nil
@@ -76,7 +76,7 @@ func TestCoordinatorProductReadInScope(t *testing.T) {
 	exec := NewExecutor(profilePolicy, reg, "implement")
 
 	tctx := fixtureToolContext(t.TempDir())
-	tctx.Agent = "coordinator"
+	tctx.Identity.Agent = "coordinator"
 	out, err := exec.Invoke(context.Background(), "read", map[string]any{
 		"path": "src/main.go",
 	}, tctx)

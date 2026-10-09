@@ -26,12 +26,12 @@ func TestCallToolAppliesOutputCap(t *testing.T) {
 	t.Setenv("LYCAON_SANDBOX", "off")
 	bin := buildFakeStdioServer(t)
 	conn := SDKConnector{}
-	reg, err := NewRegistryImpl(RegistryOptions{Connector: conn})
-	testutil.FailErr(t, "NewRegistryImpl", err)
-	reg.deviceCatalog = []MergedMCPProviderEntry{{
+	reg, err := NewRuntime(RuntimeOptions{Connector: conn})
+	testutil.FailErr(t, "NewRuntime", err)
+	reg.Catalog.deviceCatalog = []MergedMCPProviderEntry{{
 		MCPProviderEntry: MCPProviderEntry{ID: "fixture", Command: bin, Enabled: true},
 	}}
-	out, err := reg.CallTool(context.Background(), CallScope{}, "fixture", "huge", nil)
+	out, err := reg.Calls.CallTool(context.Background(), CallScope{}, "fixture", "huge", nil)
 	testutil.FailErr(t, "call", err)
 	if !strings.Contains(out, `"truncated":true`) {
 		t.Fatalf("expected truncated MCP output, got prefix %q", out[:min(120, len(out))])
@@ -42,12 +42,12 @@ func TestCallToolBridgesDeclaredCode(t *testing.T) {
 	t.Setenv("LYCAON_SANDBOX", "off")
 	bin := buildFakeStdioServer(t)
 	conn := SDKConnector{}
-	reg, err := NewRegistryImpl(RegistryOptions{Connector: conn})
-	testutil.FailErr(t, "NewRegistryImpl", err)
-	reg.deviceCatalog = []MergedMCPProviderEntry{{
+	reg, err := NewRuntime(RuntimeOptions{Connector: conn})
+	testutil.FailErr(t, "NewRuntime", err)
+	reg.Catalog.deviceCatalog = []MergedMCPProviderEntry{{
 		MCPProviderEntry: MCPProviderEntry{ID: "fixture", Command: bin, Enabled: true},
 	}}
-	_, err = reg.CallTool(context.Background(), CallScope{}, "fixture", "fail_coded", nil)
+	_, err = reg.Calls.CallTool(context.Background(), CallScope{}, "fixture", "fail_coded", nil)
 	tr := toolrejection.AsToolReject(err)
 	want := MCPServerCodePrefix + "FIXTURE_MCP_DENIED"
 	if tr == nil || tr.Code != want {
@@ -62,12 +62,12 @@ func TestCallToolGenericCodeWhenAbsent(t *testing.T) {
 	t.Setenv("LYCAON_SANDBOX", "off")
 	bin := buildFakeStdioServer(t)
 	conn := SDKConnector{}
-	reg, err := NewRegistryImpl(RegistryOptions{Connector: conn})
-	testutil.FailErr(t, "NewRegistryImpl", err)
-	reg.deviceCatalog = []MergedMCPProviderEntry{{
+	reg, err := NewRuntime(RuntimeOptions{Connector: conn})
+	testutil.FailErr(t, "NewRuntime", err)
+	reg.Catalog.deviceCatalog = []MergedMCPProviderEntry{{
 		MCPProviderEntry: MCPProviderEntry{ID: "fixture", Command: bin, Enabled: true},
 	}}
-	_, err = reg.CallTool(context.Background(), CallScope{}, "fixture", "fail_plain", nil)
+	_, err = reg.Calls.CallTool(context.Background(), CallScope{}, "fixture", "fail_plain", nil)
 	tr := toolrejection.AsToolReject(err)
 	if tr == nil || tr.Code != GenericMCPRejectCode {
 		t.Fatalf("err = %v want ToolReject %s", err, GenericMCPRejectCode)

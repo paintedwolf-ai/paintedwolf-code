@@ -2,7 +2,6 @@ package toolexecution
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/toolcommand"
 	"github.com/lycaon/lycaon/internal/tools"
 	"strings"
@@ -116,12 +115,6 @@ func pruneWaitConditionSchema(schema map[string]any, allowed []string) map[strin
 	}
 	kind["enum"] = values
 	return cloned
-}
-
-func (e *Metadata) SetMCPCatalog(c oar.MCPCatalogView) {
-	if e != nil && e.Rejections.blockPlane != nil {
-		e.Rejections.blockPlane.MCPCatalog = c
-	}
 }
 
 func (e *Metadata) SetPolicy(policy platform.PolicyEngine) {

@@ -76,8 +76,8 @@ func TestIsolationOutcomesAreApprovalTripwires(t *testing.T) {
 		}
 	}
 	sort.Strings(terminal)
-	if len(terminal) != 1 || terminal[0] != isolation.CodeControlPlaneDenied {
-		t.Fatalf("system-terminal isolation outcomes = %v, want only %s", terminal, isolation.CodeControlPlaneDenied)
+	if len(terminal) != 2 || terminal[0] != isolation.CodeControlPlaneDenied || terminal[1] != isolation.CodeTerminalPathRefused {
+		t.Fatalf("system-terminal isolation outcomes = %v, want preflight and observed control-plane refusals", terminal)
 	}
 }
 
@@ -296,14 +296,20 @@ func TestIsolationBypassReachesEffectsButNotControlPlane(t *testing.T) {
 
 	configDir := t.TempDir()
 	t.Setenv("LYCAON_CONFIG_DIR", configDir)
-	for _, capability := range []string{"read_path", "write_root"} {
-		_, reject := capabilityrequest.ParseCapabilityRequest(map[string]any{"capability_request": map[string]any{
-			capability: filepath.Join(configDir, "approvals.yaml"),
-		}})
-		if reject == nil || reject.Code != isolation.CodeControlPlaneDenied {
-			t.Errorf("%s control-plane request reject = %+v, want %s", capability, reject, isolation.CodeControlPlaneDenied)
+	for _, write := range []bool{false, true} {
+		path := filepath.Join(configDir, "approvals.yaml")
+		if !confine.ControlPlanePathDenied(path, write, "") {
+			t.Errorf("write=%t: approval bypass opened the host control plane", write)
+		}
+		scratch := filepath.Join(configDir, "debug", "sessions", "mine")
+		if confine.ControlPlanePathDenied(filepath.Join(scratch, "output.txt"), write, scratch) {
+			t.Errorf("write=%t: own invocation scratch was refused", write)
+		}
+		if !confine.ControlPlanePathDenied(filepath.Join(configDir, "debug", "sessions", "other", "output.txt"), write, scratch) {
+			t.Errorf("write=%t: another invocation scratch was admitted", write)
 		}
 	}
+
 }
 
 // Isolation settlement preserves the selected owner and receipt.

@@ -47,9 +47,9 @@ func TestWriteToolPlanWriterScopeAllowedAndDenied(t *testing.T) {
 		testutil.FailErr(t, "mkdir blueprints", err)
 	}
 	tctx := tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: tmpDir, IsPrimary: true}},
-		ActiveRootID: "r1",
-		Agent:        "plan_write_only",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: tmpDir, IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{Agent: "plan_write_only"},
 	}
 
 	_, err := exec.Invoke(context.Background(), "write", map[string]any{

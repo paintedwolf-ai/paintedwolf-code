@@ -25,9 +25,9 @@ func mcpDestinationID(t *testing.T, catalog string) string {
 		Tools: map[string][]*sdkmcp.Tool{"fixture": {{Name: "query", Description: "query"}}},
 		Calls: map[string]map[string]int{},
 	}
-	reg, err := mcp.NewRegistryImpl(mcp.RegistryOptions{GlobalOverridePath: globalPath, Connector: conn})
-	testutil.FailErr(t, "NewRegistryImpl", err)
-	reg.SetToolRegistry(tools.NewDefaultRegistry())
+	reg, err := mcp.NewRuntime(mcp.RuntimeOptions{GlobalOverridePath: globalPath, Connector: conn})
+	testutil.FailErr(t, "NewRuntime", err)
+	reg.Tools.SetToolRegistry(tools.NewDefaultRegistry())
 
 	matcher, err := secretmatch.BuildMatcher(secretmatch.Bundled())
 	testutil.FailErr(t, "BuildMatcher patterns", err)
@@ -36,13 +36,13 @@ func mcpDestinationID(t *testing.T, catalog string) string {
 	matcher.SetFingerprinter(fingerprinter)
 
 	destination := ""
-	reg.SetSecretScreen(matcher, func(_ context.Context, finding secretmatch.Alert) (secretmatch.Resolution, error) {
+	reg.Calls.SetSecretScreen(matcher, func(_ context.Context, finding secretmatch.Alert) (secretmatch.Resolution, error) {
 		destination = finding.DestinationID
 		return secretmatch.Resolution{Decision: secretmatch.Unanswered}, nil
 	})
-	testutil.FailErr(t, "Load", reg.Load(context.Background()))
+	testutil.FailErr(t, "Load", reg.Catalog.Load(context.Background()))
 
-	_, err = reg.CallTool(context.Background(), mcp.CallScope{}, "fixture", "query", map[string]any{
+	_, err = reg.Calls.CallTool(context.Background(), mcp.CallScope{}, "fixture", "query", map[string]any{
 		"message": plantedAWS,
 	})
 	if toolrejection.AsToolReject(err) == nil {

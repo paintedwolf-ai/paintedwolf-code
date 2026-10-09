@@ -112,7 +112,10 @@ func TestMultiRootZeroRootsStructuredReject(t *testing.T) {
 	reg := toolfixture.ContractServeBootRegistry(t)
 	schemas := contractToolSchemas(t)
 	ctx := context.Background()
-	tctx := tools.ToolContext{Agent: "implement", SessionID: "s1"}
+	tctx := tools.ToolContext{
+		Identity: tools.InvocationIdentity{Agent: "implement",
+			SessionID: "s1"},
+	}
 	registered := toolfixture.BootRegisteredToolSet(t, reg)
 	for name := range registered {
 		cap := multiRootCapabilityOf(name)

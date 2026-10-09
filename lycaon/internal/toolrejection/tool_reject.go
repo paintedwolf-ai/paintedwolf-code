@@ -155,7 +155,7 @@ func RenderReject(rej *ToolReject, formatter *guidance.StaticRejectFormatter) er
 	return RenderRejectBlock(code, rej.Data, rej, formatter)
 }
 
-// renderRejectBlock falls back to the code and subsystem owner's reason.
+// RenderRejectBlock falls back to the code and subsystem owner's reason.
 func RenderRejectBlock(
 	code string,
 	data map[string]any,

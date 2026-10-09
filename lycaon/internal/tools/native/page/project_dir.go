@@ -15,7 +15,7 @@ func resolveCaptureProjectDir(ctx context.Context, tctx tools.ToolContext, model
 	if modelPath == "" {
 		return "", nil
 	}
-	if len(tctx.Roots) == 0 {
+	if len(tctx.Source.Roots) == 0 {
 		return "", &toolrejection.ToolReject{Code: "CAPTURE_PROJECT_DIR_MISSING", Data: map[string]any{"path": modelPath}}
 	}
 	resolved, err := projectpaths.ResolveRead(ctx, nil, tctx, modelPath)

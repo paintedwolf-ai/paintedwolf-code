@@ -211,23 +211,23 @@ func TestExecutorCoalesceIdenticalPendingSharesCheckpoint(t *testing.T) {
 
 	args := map[string]any{"path": "a.txt", "content": "x"}
 	tcBase := tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: tmp, IsPrimary: true}},
-		ActiveRootID: "r1",
-		SessionID:    "chat-1",
-		Agent:        "implement",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: tmp, IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{SessionID: "chat-1",
+			Agent: "implement"},
 	}
 
 	type result struct{ err error }
 	ch := make(chan result, 2)
 	go func() {
 		tc := tcBase
-		tc.ToolCallID = "tc-a"
+		tc.Identity.ToolCallID = "tc-a"
 		_, err := exec.Invoke(ctx, "write", args, tc)
 		ch <- result{err}
 	}()
 	go func() {
 		tc := tcBase
-		tc.ToolCallID = "tc-b"
+		tc.Identity.ToolCallID = "tc-b"
 		_, err := exec.Invoke(ctx, "write", args, tc)
 		ch <- result{err}
 	}()
@@ -286,22 +286,22 @@ func TestExecutorCoalesceDifferentArgsMintTwo(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	tcBase := tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: tmp, IsPrimary: true}},
-		ActiveRootID: "r1",
-		SessionID:    "chat-1",
-		Agent:        "implement",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: tmp, IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{SessionID: "chat-1",
+			Agent: "implement"},
 	}
 
 	done := make(chan struct{}, 2)
 	go func() {
 		tc := tcBase
-		tc.ToolCallID = "tc-1"
+		tc.Identity.ToolCallID = "tc-1"
 		_, _ = exec.Invoke(ctx, "write", map[string]any{"path": "a.txt", "content": "x"}, tc)
 		done <- struct{}{}
 	}()
 	go func() {
 		tc := tcBase
-		tc.ToolCallID = "tc-2"
+		tc.Identity.ToolCallID = "tc-2"
 		_, _ = exec.Invoke(ctx, "write", map[string]any{"path": "b.txt", "content": "x"}, tc)
 		done <- struct{}{}
 	}()
@@ -349,11 +349,11 @@ func TestExecutorCoalesceAbortMintAllowsRetry(t *testing.T) {
 	exec.Approvals.SetToolApprovalCoalesce(coalesceAdapter{rt: rt})
 
 	tc := tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: tmp, IsPrimary: true}},
-		ActiveRootID: "r1",
-		SessionID:    "chat-1",
-		ToolCallID:   "tc-abort",
-		Agent:        "implement",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: tmp, IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{SessionID: "chat-1",
+			ToolCallID: "tc-abort",
+			Agent:      "implement"},
 	}
 	args := map[string]any{"path": "a.txt", "content": "x"}
 	_, err = exec.Invoke(context.Background(), "write", args, tc)
@@ -366,7 +366,7 @@ func TestExecutorCoalesceAbortMintAllowsRetry(t *testing.T) {
 	done := make(chan error, 1)
 	go func() {
 		tc2 := tc
-		tc2.ToolCallID = "tc-retry"
+		tc2.Identity.ToolCallID = "tc-retry"
 		_, err := exec.Invoke(ctx, "write", args, tc2)
 		done <- err
 	}()

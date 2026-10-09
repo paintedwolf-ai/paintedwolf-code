@@ -38,8 +38,8 @@ func TestCoordinatorGuardStructuredReject(t *testing.T) {
 
 	root := t.TempDir()
 	tctx := fixtureToolContext(root)
-	tctx.Agent = "coordinator"
-	tctx.TurnSurfaceID = toolcontract.SurfaceImplementDispatch
+	tctx.Identity.Agent = "coordinator"
+	tctx.Turn.TurnSurfaceID = toolcontract.SurfaceImplementDispatch
 	// The write scope blocks off-investigate product writes; orchestrate-write
 	// guidance comes from the promptloop surface check.
 	_, err := exec.Invoke(context.Background(), "write", map[string]any{"path": "main.go", "content": "x"}, tctx)
@@ -66,8 +66,8 @@ func TestCoordinatorInvestigateProductWriteAllowed(t *testing.T) {
 		testutil.FailErr(t, "create directory", err)
 	}
 	tctx := fixtureToolContext(root)
-	tctx.Agent = "coordinator"
-	tctx.TurnSurfaceID = toolcontract.SurfaceImplementInvestigate
+	tctx.Identity.Agent = "coordinator"
+	tctx.Turn.TurnSurfaceID = toolcontract.SurfaceImplementInvestigate
 	out, err := exec.Invoke(context.Background(), "write", map[string]any{
 		"path":    "src/foo.go",
 		"content": "package foo",
@@ -93,8 +93,8 @@ func TestCoordinatorInvestigateAllowsProductAndOverlayWrites(t *testing.T) {
 	exec := NewExecutor(profilePolicy, reg, "implement")
 
 	tctx := fixtureToolContext(t.TempDir())
-	tctx.Agent = "coordinator"
-	tctx.TurnSurfaceID = toolcontract.SurfaceImplementInvestigate
+	tctx.Identity.Agent = "coordinator"
+	tctx.Turn.TurnSurfaceID = toolcontract.SurfaceImplementInvestigate
 	for _, p := range []string{
 		"node_modules/pkg/index.js",
 		"vendor/pkg/foo.go",
@@ -129,8 +129,8 @@ func TestCoordinatorInvestigateAllowsPlanNotes(t *testing.T) {
 		testutil.FailErr(t, "create directory", err)
 	}
 	tctx := fixtureToolContext(root)
-	tctx.Agent = "coordinator"
-	tctx.TurnSurfaceID = toolcontract.SurfaceImplementInvestigate
+	tctx.Identity.Agent = "coordinator"
+	tctx.Turn.TurnSurfaceID = toolcontract.SurfaceImplementInvestigate
 	out, err := exec.Invoke(context.Background(), "write", map[string]any{
 		"path":    settingsoverlay.Rel("blueprints/foo.md"),
 		"content": "# notes",
@@ -158,8 +158,8 @@ func TestCoordinatorInvestigateRejectsShadowBoardPath(t *testing.T) {
 
 	for _, path := range []string{settingsoverlay.Rel("plans/board.md"), settingsoverlay.Rel("plans/board.plan.md")} {
 		tctx := fixtureToolContext(t.TempDir())
-		tctx.Agent = "coordinator"
-		tctx.TurnSurfaceID = toolcontract.SurfaceImplementInvestigate
+		tctx.Identity.Agent = "coordinator"
+		tctx.Turn.TurnSurfaceID = toolcontract.SurfaceImplementInvestigate
 		_, err := exec.Invoke(context.Background(), "write", map[string]any{
 			"path":    path,
 			"content": "# shadow board",
@@ -174,7 +174,7 @@ func TestCoordinatorInvestigateRejectsShadowBoardPath(t *testing.T) {
 }
 
 func assertProfileWriteScopeForTest(ctx context.Context, boundary *sandbox.Boundary, tctx tools.ToolContext, path string) error {
-	if tctx.Agent == "coordinator" && tctx.TurnSurfaceID == toolcontract.SurfaceImplementInvestigate {
+	if tctx.Identity.Agent == "coordinator" && tctx.Turn.TurnSurfaceID == toolcontract.SurfaceImplementInvestigate {
 		if progress.IsShadowBoardPath(path) {
 			return &toolrejection.ToolReject{
 				Code: "COORDINATOR_PROGRESS_SHADOW_BOARD",
@@ -184,9 +184,9 @@ func assertProfileWriteScopeForTest(ctx context.Context, boundary *sandbox.Bound
 				},
 			}
 		}
-		return boundary.AssertNamedWriteScope(sandbox.WithSessionID(ctx, tctx.SessionID), tctx.ActiveRootPath(), path, toolcontract.CoordinatorProductWriteScope)
+		return boundary.AssertNamedWriteScope(sandbox.WithSessionID(ctx, tctx.Identity.SessionID), tctx.ActiveRootPath(), path, toolcontract.CoordinatorProductWriteScope)
 	}
-	profile := tctx.Agent
+	profile := tctx.Identity.Agent
 	if profile == "" {
 		profile = "implement"
 	}

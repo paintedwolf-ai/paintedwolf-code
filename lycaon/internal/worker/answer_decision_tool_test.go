@@ -68,7 +68,10 @@ func TestAnswerDecisionResumesWorker(t *testing.T) {
 	capture := &tools.ToolInvocationOut{}
 	out, err := reg.Run(context.Background(), "answer_decision",
 		map[string]any{"job_id": "job-1", "option": "2"},
-		tools.ToolContext{SessionID: "parent-1", Out: capture})
+		tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: "parent-1"},
+			Effects:  tools.InvocationEffects{Out: capture},
+		})
 	testutil.FailErr(t, "run", err)
 	if capture.DisplaySubject != "Refactor the project · do B" {
 		t.Fatalf("decision subject = %q", capture.DisplaySubject)
@@ -94,11 +97,15 @@ func TestAnswerDecisionValidation(t *testing.T) {
 	svc, _ := answerDecisionService(t, q, decisions)
 	testutil.FailErr(t, "register", RegisterAnswerDecisionTool(reg, AnswerDecisionToolDeps{Answer: svc}))
 	if _, err := reg.Run(context.Background(), "answer_decision",
-		map[string]any{"job_id": "job-1", "option": "a"}, tools.ToolContext{SessionID: "other"}); err == nil || !strings.Contains(err.Error(), DecisionSessionMismatchCode) {
+		map[string]any{"job_id": "job-1", "option": "a"}, tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: "other"},
+		}); err == nil || !strings.Contains(err.Error(), DecisionSessionMismatchCode) {
 		t.Fatalf("wrong-session err = %v", err)
 	}
 	if _, err := reg.Run(context.Background(), "answer_decision",
-		map[string]any{"job_id": "job-1", "option": "zzz"}, tools.ToolContext{SessionID: "parent-1"}); err == nil || !strings.Contains(err.Error(), "not one of") {
+		map[string]any{"job_id": "job-1", "option": "zzz"}, tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: "parent-1"},
+		}); err == nil || !strings.Contains(err.Error(), "not one of") {
 		t.Fatalf("bad-option err = %v", err)
 	}
 }
@@ -150,7 +157,10 @@ func TestWorkerSubjectRespectsSessionOwnership(t *testing.T) {
 	q := &answerStubQueue{task: &api.WorkerTask{ID: "worker", ParentSessionID: "parent", Brief: "Repair login"}}
 	for _, sessionID := range []string{"parent", "other"} {
 		out := &tools.ToolInvocationOut{}
-		captureWorkerSubject(tools.ToolContext{SessionID: sessionID, Out: out}, q, "worker")
+		captureWorkerSubject(tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: sessionID},
+			Effects:  tools.InvocationEffects{Out: out},
+		}, q, "worker")
 		expected := ""
 		if sessionID == "parent" {
 			expected = "Repair login"

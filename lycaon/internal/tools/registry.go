@@ -127,65 +127,54 @@ type ContainerRecorder interface {
 
 // ToolContext is per-invocation context for a tool handler.
 type ToolContext struct {
+	// Invocation is fixed before the handler runs.
+	Invocation Invocation
+	Identity   InvocationIdentity
+	Source     InvocationSource
+	Turn       InvocationTurn
+	Files      InvocationFiles
+	Host       InvocationHost
+	Socket     InvocationSocket
+	Direct     InvocationDirect
+	Execution  InvocationExecution
+	Local      InvocationLocal
+	Effects    InvocationEffects
+}
+
+// InvocationIdentity carries call attribution.
+type InvocationIdentity struct {
+	ProjectID  string
+	SessionID  string
+	MessageID  string
+	ToolCallID string
+	Agent      string
+	// UserTurn attributes writes to a user-turn ordinal.
+	UserTurn         int
+	WorkerJobID      string
+	ParentSessionID  string
+	RootSessionID    string
+	HandoffSessionID string
+	HandoffAgentID   string
+}
+
+// InvocationSource carries the source workspace and mutation services.
+type InvocationSource struct {
 	ProjectSourceBranch sourcebranch.ID
 	ProjectRootBranches map[string]sourcebranch.ID
 	// ModelSourceContext is the source context of the request that proposed this call.
 	ModelSourceContext *api.SourceContext
 	// EditorReadBases freezes reads known before this response executes tools;
 	// the response's own accepted writes advance it.
-	EditorReadBases *AgentReadBases
-	// VerificationCheck is host-resolved check intent for command execution.
-	VerificationCheck bool
-	// ReportProgress publishes host-measured work on this invocation's activity.
-	ReportProgress func(api.ToolProgress)
-	ProjectID      string
-	Roots          []projectroot.RootRef
-	ActiveRootID   string
-	SessionID      string
-	MessageID      string
-	ToolCallID     string
-	// Invocation is fixed before the handler runs.
-	Invocation Invocation
-	// ApprovedFileAccess is exact path authority for this invocation only.
-	ApprovedFileAccess []hitl.GrantedPathDelta
-	// PreparedFileAccess permits staging; FileChangeReview authorizes the mutation.
-	PreparedFileAccess []hitl.GrantedPathDelta
-	// GrantedWriteRoots holds this invocation’s reviewed write roots.
-	GrantedWriteRoots []string
-	PolicyWriteGrants []confine.ProtectedPathGrant
-	ProcessReview     ProcessReviewer
-	FileChangeReview  FileChangeReviewer
-	contentReviews    *contentReviews
-	Agent             string
-	ToolAccess        sandbox.ToolAccess
-	TurnSurfaceID     string
-	// TurnOfferedToolNames binds execution to the schemas on this model request.
-	// Nil leaves non-model callers unconstrained; empty permits no tools.
-	TurnOfferedToolNames []string
-	// TurnOfferedToolSchemas freezes argument shapes from the model request.
-	TurnOfferedToolSchemas map[string]map[string]any
-	// TurnToolPlan freezes availability for this model turn.
-	// Zero indicates a caller without a compiled model surface.
-	TurnToolPlan toolsurface.Plan
-	// UserTurn attributes writes to a user-turn ordinal.
-	UserTurn int
-	// TurnWritePinRootID and Globs constrain writes to one root.
-	TurnWritePinRootID  string
-	TurnWritePinGlobs   []string
+	EditorReadBases     *AgentReadBases
+	Roots               []projectroot.RootRef
+	ActiveRootID        string
 	SourceWorkspaceKind api.SourceWorkspaceKind
-	WorkerJobID         string
 	WorkerBranchRoot    string
 	// WorkerSourceRoots are primary roots captured into the private branch.
 	WorkerSourceRoots []string
 	// BranchWorkspace validates and prepares the branch.
-	BranchWorkspace  BranchWorkspace
-	ParentSessionID  string
-	RootSessionID    string
-	HandoffSessionID string
-	HandoffAgentID   string
-	WorkerCoord      WorkerWriteCoordinator
-	// ContainerRecorder records container launches for session loopback provenance.
-	ContainerRecorder ContainerRecorder
+	BranchWorkspace BranchWorkspace
+	WorkerCoord     WorkerWriteCoordinator
 	// MutationRecorder accrues writes for the next rewind checkpoint.
 	MutationRecorder PrimaryMutationRecorder
 	// SourceLedger records project mutations in this app instance.
@@ -194,22 +183,58 @@ type ToolContext struct {
 	// EditorDocuments serves and lands text for files the person has open.
 	// Nil when the app runs without an editor host; tools then use the file.
 	EditorDocuments EditorDocuments
-	// HostDataDir contains readable project-scoped host data.
-	HostDataDir string
-	// SessionScratchDir contains writable session-scoped scratch data.
-	SessionScratchDir string
-	// MaxToolSpillBytes shares the retention bound with recovery reads.
-	MaxToolSpillBytes int
 	// RepoFileCount is the active root's observed file count.
 	RepoFileCount int
 	// RepoFileCountKnown distinguishes zero from unknown.
 	RepoFileCountKnown bool
 	// RepoTopLevel is the observed top-level layout.
 	RepoTopLevel []string
-	// ArgsTruncated marks arguments cut before parsing.
-	ArgsTruncated bool
-	// ArgsMalformed marks invalid JSON arguments.
-	ArgsMalformed bool
+}
+
+// InvocationTurn carries the compiled model turn.
+type InvocationTurn struct {
+	ToolAccess    sandbox.ToolAccess
+	TurnSurfaceID string
+	// TurnOfferedToolNames binds execution to the schemas on this model request.
+	// Nil leaves non-model callers unconstrained; empty permits no tools.
+	TurnOfferedToolNames []string
+	// TurnOfferedToolSchemas freezes argument shapes from the model request.
+	TurnOfferedToolSchemas map[string]map[string]any
+	// TurnToolPlan freezes availability for this model turn.
+	// Zero indicates a caller without a compiled model surface.
+	TurnToolPlan toolsurface.Plan
+	// TurnWritePinRootID and Globs constrain writes to one root.
+	TurnWritePinRootID string
+	TurnWritePinGlobs  []string
+}
+
+// InvocationFiles carries reviewed file authority.
+type InvocationFiles struct {
+	// ApprovedFileAccess is exact path authority for this invocation only.
+	ApprovedFileAccess []hitl.GrantedPathDelta
+	// PreparedFileAccess permits staging; FileChangeReview authorizes the mutation.
+	PreparedFileAccess []hitl.GrantedPathDelta
+	// GrantedWriteRoots holds this invocation’s reviewed write roots.
+	GrantedWriteRoots []string
+	PolicyWriteGrants []confine.ProtectedPathGrant
+	FileChangeReview  FileChangeReviewer
+	contentReviews    *contentReviews
+	// SessionReadPaths are exact protected-read grants.
+	SessionReadPaths []string
+	// ReadRoots are host-selected read-only confinement exceptions.
+	ReadRoots []string
+	// PackageExecution carries the host-resolved package action.
+	PackageExecution *packageexec.Execution
+}
+
+// InvocationHost carries host realization and scratch paths.
+type InvocationHost struct {
+	// HostDataDir contains readable project-scoped host data.
+	HostDataDir string
+	// SessionScratchDir contains writable session-scoped scratch data.
+	SessionScratchDir string
+	// MaxToolSpillBytes shares the retention bound with recovery reads.
+	MaxToolSpillBytes int
 	// HostResources are exact catalog ids attached to the structured action.
 	HostResources        []string
 	HostResourceFamilies []string
@@ -221,6 +246,10 @@ type ToolContext struct {
 	RealizationWriteRoots []string
 	// RealizationSockets are AF_UNIX targets from host resources.
 	RealizationSockets []string
+}
+
+// InvocationSocket carries socket permits.
+type InvocationSocket struct {
 	// SocketGrants are host-authorized AF_UNIX literals for this invocation (set by executor preflight).
 	SocketGrants []confine.SocketGrant
 	// SocketScopes and SocketGrantStates share indexes.
@@ -234,13 +263,14 @@ type ToolContext struct {
 	SocketActionDigest string
 	// SocketCapabilityRuntime is wired by the executor for spawn-time permit consumption.
 	SocketCapabilityRuntime SocketCapabilityRuntime
+	// SocketAuthorizationSource is human|never_ask when socket authority was freshly authorized.
+	SocketAuthorizationSource string
+}
+
+// InvocationDirect carries direct network permits.
+type InvocationDirect struct {
 	// DirectIPRequested is true when command asked for one-action direct outbound IP.
 	DirectIPRequested bool
-	ProcessControl    bool
-	HostExecution     bool
-	executionPermit   *executionPermit
-	// SocksProxyEnv is true when the invocation asked for ALL_PROXY (mediated SOCKS).
-	SocksProxyEnv bool
 	// DirectIPDeclared are optional declared destination strings (audit context only).
 	DirectIPDeclared []string
 	// DirectIPActionDigest binds the current-call direct-IP permit for spawn consumption.
@@ -257,8 +287,24 @@ type ToolContext struct {
 	DirectIPLifecycle DirectIPLifecycleHook
 	// DirectIPBackground is true when the approved direct action is a background command job.
 	DirectIPBackground bool
-	// SessionReadPaths are exact protected-read grants.
-	SessionReadPaths []string
+}
+
+// InvocationExecution carries process authority.
+type InvocationExecution struct {
+	// VerificationCheck is host-resolved check intent for command execution.
+	VerificationCheck bool
+	ProcessReview     ProcessReviewer
+	ProcessControl    bool
+	HostExecution     bool
+	executionPermit   *executionPermit
+}
+
+// InvocationLocal carries local network grants and audit.
+type InvocationLocal struct {
+	// ContainerRecorder records container launches for session loopback provenance.
+	ContainerRecorder ContainerRecorder
+	// SocksProxyEnv is true when the invocation asked for ALL_PROXY (mediated SOCKS).
+	SocksProxyEnv bool
 	// LocalListenGranted covers this invocation's local listener.
 	LocalListenGranted bool
 	// LocalListenPorts narrows the applied listener grant; empty means any local port.
@@ -269,12 +315,16 @@ type ToolContext struct {
 	LoopbackConnectPorts []uint16
 	// AuthzRecorder optionally records capability / mediated / direct lifecycle audit rows.
 	AuthzRecorder authzledger.Recorder
-	// SocketAuthorizationSource is human|never_ask when socket authority was freshly authorized.
-	SocketAuthorizationSource string
-	// ReadRoots are host-selected read-only confinement exceptions.
-	ReadRoots []string
-	// PackageExecution carries the host-resolved package action.
-	PackageExecution *packageexec.Execution
+}
+
+// InvocationEffects carries invocation results and observations.
+type InvocationEffects struct {
+	// ReportProgress publishes host-measured work on this invocation's activity.
+	ReportProgress func(api.ToolProgress)
+	// ArgsTruncated marks arguments cut before parsing.
+	ArgsTruncated bool
+	// ArgsMalformed marks invalid JSON arguments.
+	ArgsMalformed bool
 	// CanonicalArgs preserve reference-bearing arguments for display.
 	CanonicalArgs map[string]any
 	// RequestedArgs are the arguments as sent, before the host expanded command
@@ -292,20 +342,20 @@ type ToolContext struct {
 // ChatSessionID returns the chat's root session, the identity chat-lifetime
 // authority is keyed on, falling back to ParentSessionID, then SessionID.
 func (tc ToolContext) ChatSessionID() string {
-	if root := strings.TrimSpace(tc.RootSessionID); root != "" {
+	if root := strings.TrimSpace(tc.Identity.RootSessionID); root != "" {
 		return root
 	}
-	if parent := strings.TrimSpace(tc.ParentSessionID); parent != "" {
+	if parent := strings.TrimSpace(tc.Identity.ParentSessionID); parent != "" {
 		return parent
 	}
-	return strings.TrimSpace(tc.SessionID)
+	return strings.TrimSpace(tc.Identity.SessionID)
 }
 
 // ProfileID is the calling agent's tool profile, defaulting an unspecified
 // agent to the shared tool profile.
 func (c ToolContext) ProfileID() string {
-	if c.Agent != "" {
-		return c.Agent
+	if c.Identity.Agent != "" {
+		return c.Identity.Agent
 	}
 	return toolprofiles.DefaultToolProfileID
 }
@@ -340,10 +390,10 @@ type PresenceReporter interface {
 
 // ActiveRootPath returns the on-disk path for the session's active workspace root.
 func (c ToolContext) ActiveRootPath() string {
-	if len(c.Roots) == 0 {
+	if len(c.Source.Roots) == 0 {
 		return ""
 	}
-	if r, err := projectroot.ActiveRoot(c.Roots, c.ActiveRootID); err == nil {
+	if r, err := projectroot.ActiveRoot(c.Source.Roots, c.Source.ActiveRootID); err == nil {
 		return r.Path
 	}
 	return ""
@@ -419,8 +469,8 @@ type ProcessReviewer func(context.Context, string, []hostprocess.Process) error
 
 // SetDisplaySubject retains the readable target for durable screening and presentation.
 func (c ToolContext) SetDisplaySubject(subject string) {
-	if c.Out != nil {
-		c.Out.DisplaySubject = subject
+	if c.Effects.Out != nil {
+		c.Effects.Out.DisplaySubject = subject
 	}
 }
 
@@ -460,7 +510,7 @@ func SetExternalAccessBuilder(fn func(ExternalAccessBuildInput) *api.ExternalAcc
 // CaptureExternalAccess builds ToolResult.external_access from applied machine
 // facts on this invocation and stamps it on Out when present.
 func CaptureExternalAccess(tctx ToolContext, hosts []confine.EgressHost, directApplied bool) {
-	if tctx.Out == nil || ExternalAccessBuilder == nil {
+	if tctx.Effects.Out == nil || ExternalAccessBuilder == nil {
 		return
 	}
 	in := ExternalAccessBuildInput{
@@ -468,7 +518,7 @@ func CaptureExternalAccess(tctx ToolContext, hosts []confine.EgressHost, directA
 		FullBypass: confine.BypassEnabled() || confine.SandboxDisabled(),
 	}
 	if directApplied {
-		in.DeclaredDestinations = append([]string(nil), tctx.DirectIPDeclared...)
+		in.DeclaredDestinations = append([]string(nil), tctx.Direct.DirectIPDeclared...)
 	}
 	for _, h := range hosts {
 		in.Endpoints = append(in.Endpoints, ExternalAccessEndpointFact{
@@ -479,10 +529,10 @@ func CaptureExternalAccess(tctx ToolContext, hosts []confine.EgressHost, directA
 			Attempts:  h.Attempts,
 		})
 	}
-	for _, g := range tctx.SocketGrants {
+	for _, g := range tctx.Socket.SocketGrants {
 		scope := "current_action"
-		if tctx.SocketCapabilityRuntime != nil {
-			for _, chat := range tctx.SocketCapabilityRuntime.AppliedGrants(tctx.ChatSessionID()) {
+		if tctx.Socket.SocketCapabilityRuntime != nil {
+			for _, chat := range tctx.Socket.SocketCapabilityRuntime.AppliedGrants(tctx.ChatSessionID()) {
 				if chat.ApprovedPath == g.ApprovedPath && chat.ResolvedPath == g.ResolvedPath {
 					scope = "chat"
 					break
@@ -502,7 +552,7 @@ func CaptureExternalAccess(tctx ToolContext, hosts []confine.EgressHost, directA
 	if ea == nil {
 		return
 	}
-	tctx.Out.ExternalAccess = ea
+	tctx.Effects.Out.ExternalAccess = ea
 }
 
 // ExternalAccessFromCapture returns a copy for ToolResult stamping.

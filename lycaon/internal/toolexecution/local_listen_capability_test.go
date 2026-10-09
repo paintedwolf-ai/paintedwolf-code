@@ -77,9 +77,11 @@ func TestLocalListenRequestRequiresApprovalBroker(t *testing.T) {
 	args := map[string]any{"capability_request": map[string]any{
 		"local_listen": map[string]any{"ports": []any{float64(8000)}},
 	}}
-	tc := tools.ToolContext{Invocation: tools.Invocation{Contract: toolcontract.Contract{
-		Capabilities: toolcontract.CapabilityLocalListen,
-	}}}
+	tc := tools.ToolContext{
+		Invocation: tools.Invocation{Contract: toolcontract.Contract{
+			Capabilities: toolcontract.CapabilityLocalListen,
+		}},
+	}
 
 	result, err := executor.Capabilities.preflightLocalListenCapability(context.Background(), "command", args, tc)
 	var reject *toolrejection.ToolReject

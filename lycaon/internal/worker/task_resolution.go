@@ -106,7 +106,7 @@ func (id *taskIdentity) workflowWork(ctx context.Context, deps TaskToolDeps, tct
 	if id.WorkflowWorkID == "" || deps.WorkflowWork == nil {
 		return spawn.WorkflowWork{}, false, nil
 	}
-	leg, ok, err := deps.WorkflowWork(ctx, tctx.SessionID, id.WorkflowWorkID)
+	leg, ok, err := deps.WorkflowWork(ctx, tctx.Identity.SessionID, id.WorkflowWorkID)
 	if err != nil {
 		return spawn.WorkflowWork{}, false, err
 	}

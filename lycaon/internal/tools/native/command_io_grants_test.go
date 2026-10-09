@@ -24,13 +24,13 @@ func TestCommandIORedirectUsesReviewedWriteRoots(t *testing.T) {
 				if _, err := commandIOFor(t.Context(), boundary, tc, args, tool); err == nil {
 					t.Fatal("unapproved external redirect was accepted")
 				}
-				tc.GrantedWriteRoots = []string{root}
+				tc.Files.GrantedWriteRoots = []string{root}
 				params, err := commandIOFor(t.Context(), boundary, tc, args, tool)
 				testutil.FailErr(t, "resolve redirect inside reviewed write root", err)
 				if params.Redirect == nil {
 					t.Fatal("approved redirect was not resolved")
 				}
-				if len(tc.Roots) != 1 || tc.Roots[0].ID != "primary" {
+				if len(tc.Source.Roots) != 1 || tc.Source.Roots[0].ID != "primary" {
 					t.Fatal("write grant changed attached project roots")
 				}
 				for _, rejected := range []string{
@@ -43,7 +43,7 @@ func TestCommandIORedirectUsesReviewedWriteRoots(t *testing.T) {
 				}
 				_, err = commandIOFor(t.Context(), boundary, tc, map[string]any{field: filepath.Join(root, ".paintedwolf", "approvals.yaml")}, tool)
 				testutil.FailErr(t, "resolve policy output for commit-time diff review", err)
-				tc.GrantedWriteRoots = nil
+				tc.Files.GrantedWriteRoots = nil
 				if _, err := commandIOFor(t.Context(), boundary, tc, args, tool); err == nil {
 					t.Fatal("redirect retained authority after grant removal")
 				}

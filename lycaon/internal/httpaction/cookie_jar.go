@@ -70,8 +70,8 @@ func openCookieJar(ctx context.Context, deps Deps, tctx tools.ToolContext, args 
 		}
 	}
 	req := secretcap.CookieJarRequest{
-		ProjectID: strings.TrimSpace(tctx.ProjectID), ChatSessionID: tctx.ChatSessionID(),
-		SessionID: strings.TrimSpace(tctx.SessionID), OperationID: strings.TrimSpace(tctx.ToolCallID), Name: name,
+		ProjectID: strings.TrimSpace(tctx.Identity.ProjectID), ChatSessionID: tctx.ChatSessionID(),
+		SessionID: strings.TrimSpace(tctx.Identity.SessionID), OperationID: strings.TrimSpace(tctx.Identity.ToolCallID), Name: name,
 	}
 	jar, err := deps.Secrets.OpenCookieJar(ctx, req)
 	if err != nil {

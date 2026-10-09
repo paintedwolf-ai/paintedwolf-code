@@ -16,12 +16,12 @@ import (
 
 // FinalizeSocketGrantsForSpawn consumes validated current-call permits.
 func FinalizeSocketGrantsForSpawn(tctx ToolContext) ([]confine.SocketGrant, *toolrejection.ToolReject) {
-	rt := tctx.SocketCapabilityRuntime
-	grants := tctx.SocketGrants
+	rt := tctx.Socket.SocketCapabilityRuntime
+	grants := tctx.Socket.SocketGrants
 	if len(grants) == 0 {
 		return nil, nil
 	}
-	overlayByPair := capabilitygrants.SocketGrantPairSet(tctx.DurableSocketGrants)
+	overlayByPair := capabilitygrants.SocketGrantPairSet(tctx.Socket.DurableSocketGrants)
 	if rt != nil {
 		for k := range capabilitygrants.SocketGrantPairSet(rt.AppliedGrants(tctx.ChatSessionID())) {
 			overlayByPair[k] = struct{}{}
@@ -40,7 +40,7 @@ func FinalizeSocketGrantsForSpawn(tctx ToolContext) ([]confine.SocketGrant, *too
 					"reason": "missing current-call socket permit",
 				}}
 			}
-			ok, err := rt.ConsumePermit(tctx.SessionID, tctx.ToolCallID, tctx.SocketActionDigest, g)
+			ok, err := rt.ConsumePermit(tctx.Identity.SessionID, tctx.Identity.ToolCallID, tctx.Socket.SocketActionDigest, g)
 			if err != nil {
 				return nil, &toolrejection.ToolReject{Code: isolation.CodeSocketPathChanged, Data: map[string]any{
 					"path":   g.ApprovedPath,
@@ -95,7 +95,7 @@ func ConfineRequestForSpawn(ctx context.Context, tctx ToolContext, overlayWriteR
 		return confine.Request{}, reject
 	}
 	req.SocketGrants = grants
-	if tctx.DirectIPRequested {
+	if tctx.Direct.DirectIPRequested {
 		if reject := FinalizeDirectIPForSpawn(tctx); reject != nil {
 			return confine.Request{}, reject
 		}

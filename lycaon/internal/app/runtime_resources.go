@@ -23,7 +23,7 @@ type runtimeResources struct {
 	cliSocket     *clisocket.Server
 	httpServer    *http.Server
 	profileServer *http.Server
-	mcpRegistry   *mcp.RegistryImpl
+	mcpRegistry   *mcp.Runtime
 	db            *db.Store
 }
 

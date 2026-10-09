@@ -40,12 +40,12 @@ func TestMCPCallToolScreenStdio(t *testing.T) {
 		},
 		Calls: calls,
 	}
-	reg, err := mcp.NewRegistryImpl(mcp.RegistryOptions{
+	reg, err := mcp.NewRuntime(mcp.RuntimeOptions{
 		GlobalOverridePath: globalPath,
 		Connector:          conn,
 	})
-	testutil.FailErr(t, "NewRegistryImpl", err)
-	reg.SetToolRegistry(tools.NewDefaultRegistry())
+	testutil.FailErr(t, "NewRuntime", err)
+	reg.Tools.SetToolRegistry(tools.NewDefaultRegistry())
 
 	matcher, err := secretmatch.BuildMatcher(secretmatch.Bundled())
 	testutil.FailErr(t, "BuildMatcher patterns", err)
@@ -57,7 +57,7 @@ func TestMCPCallToolScreenStdio(t *testing.T) {
 	var sourcePath string
 	var destinationID, destinationLabel string
 	var fingerprints []secretmatch.SecretFingerprint
-	reg.SetSecretScreen(matcher, func(_ context.Context, finding secretmatch.Alert) (secretmatch.Resolution, error) {
+	reg.Calls.SetSecretScreen(matcher, func(_ context.Context, finding secretmatch.Alert) (secretmatch.Resolution, error) {
 		askCalls.Add(1)
 		lastRule = finding.RuleID
 		sourcePath = finding.SourcePath
@@ -65,9 +65,9 @@ func TestMCPCallToolScreenStdio(t *testing.T) {
 		fingerprints = append([]secretmatch.SecretFingerprint(nil), finding.Fingerprints...)
 		return secretmatch.Resolution{Decision: secretmatch.Unanswered}, nil
 	})
-	testutil.FailErr(t, "Load", reg.Load(context.Background()))
+	testutil.FailErr(t, "Load", reg.Catalog.Load(context.Background()))
 
-	_, err = reg.CallTool(context.Background(), mcp.CallScope{}, "fixture", "query", map[string]any{
+	_, err = reg.Calls.CallTool(context.Background(), mcp.CallScope{}, "fixture", "query", map[string]any{
 		"message": plantedAWS,
 	})
 	rej := toolrejection.AsToolReject(err)
@@ -110,7 +110,7 @@ func TestMCPCallToolScreenStdio(t *testing.T) {
 	}
 
 	conn.CallArgs = map[string]map[string]map[string]any{}
-	reg.SetSecretScreen(matcher, func(_ context.Context, finding secretmatch.Alert) (secretmatch.Resolution, error) {
+	reg.Calls.SetSecretScreen(matcher, func(_ context.Context, finding secretmatch.Alert) (secretmatch.Resolution, error) {
 		if !finding.Surface.CanRedact() || finding.SourceTool != "query" {
 			t.Errorf("finding = %+v", finding)
 		}
@@ -119,7 +119,7 @@ func TestMCPCallToolScreenStdio(t *testing.T) {
 	original := map[string]any{
 		"message": plantedAWS, "Authorization": "Bearer " + plantedJWT, plantedAWS: "public",
 	}
-	_, err = reg.CallTool(context.Background(), mcp.CallScope{}, "fixture", "query", original)
+	_, err = reg.Calls.CallTool(context.Background(), mcp.CallScope{}, "fixture", "query", original)
 	testutil.FailErr(t, "redacted CallTool", err)
 	sent := conn.CallArgs["fixture"]["query"]
 	if value, _ := sent["message"].(string); value != "[REDACTED]" {

@@ -30,9 +30,13 @@ func TestSavedSocketAuthorityRequiresInvocationDeclaration(t *testing.T) {
 		e.Capabilities.durableSockets = func(string) []confine.SocketGrant { return grants[1:] }
 		return e
 	}()
-	tc := tools.ToolContext{SessionID: "task", ToolCallID: "call", ProjectID: "project",
-		Roots: []projectroot.RootRef{{ID: "root", Path: dir, IsPrimary: true}}, ActiveRootID: "root",
+	tc := tools.ToolContext{
 		Invocation: tools.Invocation{Contract: toolcontract.Contract{Capabilities: toolcontract.CapabilitySocket}},
+		Identity: tools.InvocationIdentity{SessionID: "task",
+			ToolCallID: "call",
+			ProjectID:  "project"},
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: dir, IsPrimary: true}},
+			ActiveRootID: "root"},
 	}
 	result, err := executor.Capabilities.preflightSocketCapability(t.Context(), "command", map[string]any{"command": "pwd"}, tc)
 	testutil.FailErr(t, "preflight unrelated command", err)

@@ -79,8 +79,12 @@ func runInvariant1Case1A(t *testing.T, m *secretmatch.Matcher, chatSecretRef, ch
 			exec.Metadata.registry = reg
 
 			tc := tools.ToolContext{
-				ProjectID: "proj-1", SessionID: "sess-1", ParentSessionID: "root-1", ToolCallID: "tc-1",
-				Roots: []projectroot.RootRef{{ID: "r1", Path: "/workspace", IsPrimary: true}}, ActiveRootID: "r1",
+				Identity: tools.InvocationIdentity{ProjectID: "proj-1",
+					SessionID:       "sess-1",
+					ParentSessionID: "root-1",
+					ToolCallID:      "tc-1"},
+				Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Path: "/workspace", IsPrimary: true}},
+					ActiveRootID: "r1"},
 			}
 			args := map[string]any{"path": ".env", "content": "TOKEN=" + chatSecretRef + "\n"}
 
@@ -162,8 +166,12 @@ func runInvariant1Case1B(t *testing.T, m *secretmatch.Matcher, chatSecretRef, ch
 				exec.Metadata.registry = reg
 
 				tc := tools.ToolContext{
-					ProjectID: "proj-1", SessionID: "sess-1", ParentSessionID: "root-1", ToolCallID: "tc-1",
-					Roots: []projectroot.RootRef{{ID: "r1", Path: "/workspace", IsPrimary: true}}, ActiveRootID: "r1",
+					Identity: tools.InvocationIdentity{ProjectID: "proj-1",
+						SessionID:       "sess-1",
+						ParentSessionID: "root-1",
+						ToolCallID:      "tc-1"},
+					Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Path: "/workspace", IsPrimary: true}},
+						ActiveRootID: "r1"},
 				}
 				args := map[string]any{"path": ".env", "content": "TOKEN=" + tcCase.ref + "\n"}
 
@@ -223,8 +231,12 @@ func runInvariant1Case1B(t *testing.T, m *secretmatch.Matcher, chatSecretRef, ch
 				exec.Metadata.registry = reg
 
 				tc := tools.ToolContext{
-					ProjectID: "proj-1", SessionID: "sess-1", ParentSessionID: "root-1", ToolCallID: "tc-1",
-					Roots: []projectroot.RootRef{{ID: "r1", Path: "/workspace", IsPrimary: true}}, ActiveRootID: "r1",
+					Identity: tools.InvocationIdentity{ProjectID: "proj-1",
+						SessionID:       "sess-1",
+						ParentSessionID: "root-1",
+						ToolCallID:      "tc-1"},
+					Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Path: "/workspace", IsPrimary: true}},
+						ActiveRootID: "r1"},
 				}
 				args := map[string]any{"path": ".env", "content": "TOKEN=" + tcCase.ref + "\n"}
 
@@ -278,8 +290,12 @@ func runInvariant1Case1C(t *testing.T, m *secretmatch.Matcher, projSecretRef, pr
 		exec.Metadata.registry = reg
 
 		tc := tools.ToolContext{
-			ProjectID: "proj-1", SessionID: "sess-1", ParentSessionID: "root-1", ToolCallID: "tc-1",
-			Roots: []projectroot.RootRef{{ID: "r1", Path: "/workspace", IsPrimary: true}}, ActiveRootID: "r1",
+			Identity: tools.InvocationIdentity{ProjectID: "proj-1",
+				SessionID:       "sess-1",
+				ParentSessionID: "root-1",
+				ToolCallID:      "tc-1"},
+			Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Path: "/workspace", IsPrimary: true}},
+				ActiveRootID: "r1"},
 		}
 		args := map[string]any{"path": ".env", "content": "TOKEN=" + projSecretRef + "\n"}
 
@@ -545,9 +561,9 @@ func TestInvariant5_ExplicitLiteralTokenOptOut(t *testing.T) {
 		// 3. screenFileSecrets returns nil immediately
 		tc := tools.ToolContext{
 			Invocation: tools.Invocation{Contract: contract},
-			Secrets: secretcap.NewResolutionForTest(map[string]any{}, []secretcap.TestResolvedValue{
+			Effects: tools.InvocationEffects{Secrets: secretcap.NewResolutionForTest(map[string]any{}, []secretcap.TestResolvedValue{
 				{ID: "77777777-7777-7777-7777-777777777777", Value: "secret-value"},
-			}),
+			})},
 		}
 		if err := exec.Secrets.screenFileSecrets(context.Background(), tool, args, tc); err != nil {
 			t.Fatalf("%s: screenFileSecrets failed with opt-out: %v", tool, err)

@@ -43,10 +43,10 @@ func TestStructuredRegistryIdentityReachesProductionDetection(t *testing.T) {
 	_, err := executor.Invoke(context.Background(), tool, map[string]any{
 		"amount": 2500, "customer_id": "cus_123",
 	}, tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "root", Label: "root", Path: projectDir, IsPrimary: true}},
-		ActiveRootID: "root",
-		SessionID:    "session",
-		ToolCallID:   "action",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Label: "root", Path: projectDir, IsPrimary: true}},
+			ActiveRootID: "root"},
+		Identity: tools.InvocationIdentity{SessionID: "session",
+			ToolCallID: "action"},
 	})
 	testutil.FailErr(t, "Invoke", err)
 	if policy.eval.ApprovalCategory != "mcp" || policy.eval.ApprovalSubject != "payments.create_charge" {

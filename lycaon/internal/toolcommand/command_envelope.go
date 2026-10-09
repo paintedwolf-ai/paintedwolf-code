@@ -14,7 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
-// commandArgsWithoutDefaults omits known neutral runner defaults from the matching copy.
+// ArgsWithoutDefaults omits known neutral runner defaults from the matching copy.
 func ArgsWithoutDefaults(args, schema map[string]any) map[string]any {
 	properties, _ := schema["properties"].(map[string]any)
 	out := maps.Clone(args)
@@ -60,7 +60,7 @@ type Envelope struct {
 	capability map[string]any
 }
 
-// parseCommandEnvelope rejects remaining options with no native representation.
+// ParseEnvelope rejects remaining options with no native representation.
 func ParseEnvelope(args map[string]any) (Envelope, bool) {
 	command, ok := args["command"].(string)
 	if !ok || strings.TrimSpace(command) == "" {

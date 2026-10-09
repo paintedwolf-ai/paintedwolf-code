@@ -27,7 +27,7 @@ func TestProfileDenialLeavesInvokeAsTypedReject(t *testing.T) {
 	exec := NewExecutor(toolprofiles.NewGuidanceRejectPolicy(toolprofiles.NewProfilePolicyEngine(boundary)), reg, "implement")
 
 	tctx := fixtureToolContext(t.TempDir())
-	tctx.Agent = "no-such-profile"
+	tctx.Identity.Agent = "no-such-profile"
 	_, err := exec.Invoke(context.Background(), "write", map[string]any{
 		"path": "main.go", "content": "x",
 	}, tctx)

@@ -33,19 +33,19 @@ func Context(dir string) tools.ToolContext {
 	roots := []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}}
 	// Publish a below-threshold count for open-root tool tests.
 	return tools.ToolContext{
-		Roots:               roots,
-		ActiveRootID:        "r1",
-		SourceWorkspaceKind: api.SourceWorkspaceKindProject,
-		Agent:               toolprofiles.DefaultToolProfileID,
-		SessionID:           "test-session",
-		RepoFileCount:       100,
-		RepoFileCountKnown:  true,
+		Source: tools.InvocationSource{Roots: roots,
+			ActiveRootID:        "r1",
+			SourceWorkspaceKind: api.SourceWorkspaceKindProject,
+			RepoFileCount:       100,
+			RepoFileCountKnown:  true},
+		Identity: tools.InvocationIdentity{Agent: toolprofiles.DefaultToolProfileID,
+			SessionID: "test-session"},
 	}
 }
 
 func AgentContext(dir, agent string) tools.ToolContext {
 	ctx := Context(dir)
-	ctx.Agent = agent
+	ctx.Identity.Agent = agent
 	return ctx
 }
 

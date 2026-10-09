@@ -48,8 +48,8 @@ func generateSecret(ctx context.Context, service *secretcap.Service, args map[st
 		return "", err
 	}
 	meta, err := service.Generate(ctx, secretcap.GenerateRequest{
-		ProjectID: tctx.ProjectID, ChatSessionID: tctx.ChatSessionID(), SessionID: tctx.SessionID,
-		OperationID: tctx.ToolCallID, Name: name, Purpose: purpose, Scope: scope, Format: format,
+		ProjectID: tctx.Identity.ProjectID, ChatSessionID: tctx.ChatSessionID(), SessionID: tctx.Identity.SessionID,
+		OperationID: tctx.Identity.ToolCallID, Name: name, Purpose: purpose, Scope: scope, Format: format,
 		Bytes: byteCount, AgentUseTTL: time.Duration(agentUseTTLSeconds) * time.Second,
 	})
 	if err != nil {
@@ -138,7 +138,7 @@ func GenerateHandler(service *secretcap.Service) tools.ToolHandler {
 
 func ListHandler(service *secretcap.Service) tools.ToolHandler {
 	return func(ctx context.Context, _ map[string]any, tctx tools.ToolContext) (string, error) {
-		items, err := service.List(ctx, tctx.ProjectID, tctx.ChatSessionID())
+		items, err := service.List(ctx, tctx.Identity.ProjectID, tctx.ChatSessionID())
 		if err != nil {
 			return "", secretCapabilityFailure(err)
 		}
@@ -150,7 +150,7 @@ func ListHandler(service *secretcap.Service) tools.ToolHandler {
 func RevokeHandler(service *secretcap.Service) tools.ToolHandler {
 	return func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
 		reference, _ := args["reference"].(string)
-		meta, err := service.RevokeByAgent(ctx, tctx.ProjectID, tctx.ChatSessionID(), reference)
+		meta, err := service.RevokeByAgent(ctx, tctx.Identity.ProjectID, tctx.ChatSessionID(), reference)
 		if err != nil {
 			return "", secretCapabilityFailure(err)
 		}

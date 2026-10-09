@@ -74,7 +74,7 @@ func TestEveryToolApprovalMintSiteOffersQuiet(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
 	sites := []string{
-		"lycaon/internal/tools/socket_approval.go",
+		"lycaon/internal/toolexecution/socket_approval.go",
 		"lycaon/internal/tools/direct_ip_capability.go",
 		"lycaon/internal/session/sandbox_write_root_broker.go",
 		"lycaon/internal/session/sandbox_listen_broker.go",

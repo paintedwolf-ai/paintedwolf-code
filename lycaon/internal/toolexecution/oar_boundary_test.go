@@ -48,7 +48,10 @@ func TestProf10HandlerRulePreventsActualToolExecution(t *testing.T) {
 	executor := toolexecution.NewExecutor(stubPolicy{decision: &platform.PolicyDecision{Allowed: true}}, registry, "implement")
 	executor.Rejections.SetBlockPlane(&toolfeedback.BlockPlane{Pipeline: pipeline})
 	ctx := curationctx.WithSession(t.Context(), curationctx.Session{SessionID: "handler-boundary", OwnerPersonID: "owner", Posture: "build"})
-	output, err := executor.Invoke(ctx, "read", map[string]any{"path": "foo.go"}, tools.ToolContext{SessionID: "handler-boundary", Agent: "implement"})
+	output, err := executor.Invoke(ctx, "read", map[string]any{"path": "foo.go"}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "handler-boundary",
+			Agent: "implement"},
+	})
 	if err == nil || output != "" || calls != 0 {
 		t.Fatalf("[OAR-PROF-10] output=%q err=%v calls=%d", output, err, calls)
 	}

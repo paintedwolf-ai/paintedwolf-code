@@ -183,11 +183,11 @@ func TestFindToolMultiRootCountsMatchesAfterPageFills(t *testing.T) {
 		testutil.FailErr(t, "write secondary", os.WriteFile(filepath.Join(secondary, name), []byte("x"), 0o644))
 	}
 	tctx := nativefixture.Context(primary)
-	tctx.Roots = []projectroot.RootRef{
+	tctx.Source.Roots = []projectroot.RootRef{
 		{ID: "p", Label: "primary", Path: primary, IsPrimary: true},
 		{ID: "s", Label: "secondary", Path: secondary},
 	}
-	tctx.ActiveRootID = "p"
+	tctx.Source.ActiveRootID = "p"
 	tool := &FindTool{Boundary: nativefixture.Boundary(t)}
 	out, err := tool.Run(context.Background(), map[string]any{"max_results": 500, "type": "file"}, tctx)
 	testutil.FailErr(t, "find multi-root", err)

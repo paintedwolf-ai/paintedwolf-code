@@ -60,7 +60,15 @@ func TestExecutionCapabilityAsksBeforeSpawnAndConsumesOnce(t *testing.T) {
 			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 			defer cancel()
 			done := make(chan error, 1)
-			tc := tools.ToolContext{Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}}, ActiveRootID: "root", WorkerJobID: "worker", WorkerCoord: executionWorkerBranch{root: branch}, SessionID: "task", ToolCallID: "call", Agent: "implement"}
+			tc := tools.ToolContext{
+				Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}},
+					ActiveRootID: "root",
+					WorkerCoord:  executionWorkerBranch{root: branch}},
+				Identity: tools.InvocationIdentity{WorkerJobID: "worker",
+					SessionID:  "task",
+					ToolCallID: "call",
+					Agent:      "implement"},
+			}
 			go func() {
 				_, err := executor.Invoke(ctx, "command", map[string]any{"command": "sudo -n /usr/bin/id", "capability_request": map[string]any{capability: true}}, tc)
 				done <- err
@@ -105,7 +113,7 @@ func TestExecutionCapabilityAsksBeforeSpawnAndConsumesOnce(t *testing.T) {
 				t.Fatal("primary option did not offer task capability")
 			}
 			for i := range 15 {
-				tc.ToolCallID = fmt.Sprintf("next-%d", i)
+				tc.Identity.ToolCallID = fmt.Sprintf("next-%d", i)
 				_, err := executor.Invoke(ctx, "command", map[string]any{"command": fmt.Sprintf("sudo -n /usr/bin/printf %d", i), "capability_request": map[string]any{capability: true}}, tc)
 				testutil.FailErr(t, "run different command under task permission", err)
 			}
@@ -123,7 +131,7 @@ type executionWorkerBranch struct {
 }
 
 func (b executionWorkerBranch) EnsureWorkerBranch(_ context.Context, tc tools.ToolContext) (tools.ToolContext, error) {
-	tc.WorkerBranchRoot = b.root
+	tc.Source.WorkerBranchRoot = b.root
 	return tc, nil
 }
 
@@ -155,7 +163,15 @@ func TestCapabilityCardAndExecutionShareTheBranchExpandedArgv(t *testing.T) {
 	executor.Approvals.SetCheckpointManager(manager, gate)
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
-	tc := tools.ToolContext{Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}}, ActiveRootID: "root", WorkerJobID: "worker", WorkerCoord: executionWorkerBranch{root: branch}, SessionID: "task", ToolCallID: "call", Agent: "implement"}
+	tc := tools.ToolContext{
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}},
+			ActiveRootID: "root",
+			WorkerCoord:  executionWorkerBranch{root: branch}},
+		Identity: tools.InvocationIdentity{WorkerJobID: "worker",
+			SessionID:  "task",
+			ToolCallID: "call",
+			Agent:      "implement"},
+	}
 	done := make(chan error, 1)
 	go func() {
 		_, err := executor.Invoke(ctx, "command", map[string]any{"command": "ls *.txt", "capability_request": map[string]any{"host_execution": true}}, tc)

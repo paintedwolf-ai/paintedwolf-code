@@ -61,7 +61,7 @@ func (e *Capabilities) awaitSocketCapabilities(
 	grantOffers := append(append([]hitl.ApprovalGrantOffer(nil), axisOffers...), absorbed...)
 	permit := socketPermitDelta(action, actionDigest, tc, authorityTargets)
 	options := socketCapabilityOptions(permit, axisOffers, absorbed)
-	options = attachRealizationWriteRoots(options, action, tc.RealizationWriteRoots)
+	options = attachRealizationWriteRoots(options, action, tc.Host.RealizationWriteRoots)
 	planAction := action
 	subjectKind := hitl.ApprovalSubjectSocketSet
 	presentationAction := "Connect to local services"
@@ -111,8 +111,8 @@ func (e *Capabilities) awaitSocketCapabilities(
 		Plan:                   plan,
 		SecretScreenHit:        permission != nil,
 		Title:                  title,
-		ToolCallID:             tc.ToolCallID,
-		ProjectID:              tc.ProjectID,
+		ToolCallID:             tc.Identity.ToolCallID,
+		ProjectID:              tc.Identity.ProjectID,
 		Explanation:            explanation,
 		GrantOffers:            grantOffers,
 		CoalesceKey:            coalesceKey,

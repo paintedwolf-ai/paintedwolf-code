@@ -10,10 +10,13 @@ import (
 
 func TestApprovalResolutionPreservesUnresolvedTargets(t *testing.T) {
 	root := t.TempDir()
-	tc := tools.ToolContext{Roots: []projectroot.RootRef{{ID: "root", Label: "folder", Path: root, IsPrimary: true}}, ActiveRootID: "root"}
+	tc := tools.ToolContext{
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Label: "folder", Path: root, IsPrimary: true}},
+			ActiveRootID: "root"},
+	}
 	for _, worker := range []bool{false, true} {
 		if worker {
-			tc.WorkerBranchRoot = t.TempDir()
+			tc.Source.WorkerBranchRoot = t.TempDir()
 		}
 		for _, invalid := range []string{"../escape.txt", "@missing/file.txt", "nul\x00path"} {
 			args := map[string]any{"paths": []string{"valid.txt", invalid}}

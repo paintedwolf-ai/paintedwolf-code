@@ -30,6 +30,7 @@ type Executor struct {
 	Approvals      *Approvals
 	Boundary       *Boundary
 	Capabilities   *Capabilities
+	Process        *ProcessAuthority
 	Metadata       *Metadata
 	Network        *Network
 	Rejections     *Rejections
@@ -39,7 +40,6 @@ type Executor struct {
 
 // Metadata owns tool definitions and schema presentation.
 type Metadata struct {
-	Rejections   *Rejections
 	policy       platform.PolicyEngine
 	registry     *tools.DefaultRegistry
 	toolSchemas  *toolschema.Config
@@ -79,7 +79,7 @@ type Network struct {
 	registries         *pkgregistry.Catalog
 }
 
-// Capabilities owns pre-spawn network and process authority.
+// Capabilities owns pre-spawn network authority.
 type Capabilities struct {
 	Approvals           *Approvals
 	Boundary            *Boundary
@@ -93,6 +93,13 @@ type Capabilities struct {
 	localListenGate     tools.LocalListenGate
 	loopbackConnectGate tools.LoopbackConnectGate
 	localNetworkGate    tools.LocalNetworkGate
+}
+
+// ProcessAuthority reviews execution privilege and host process access.
+type ProcessAuthority struct {
+	Approvals *Approvals
+	Boundary  *Boundary
+	Secrets   *Secrets
 }
 
 // Boundary owns the confinement request and path review.
@@ -145,6 +152,7 @@ func NewExecutor(policy platform.PolicyEngine, registry *tools.DefaultRegistry, 
 	approvals := &Approvals{}
 	network := &Network{}
 	capabilities := &Capabilities{}
+	process := &ProcessAuthority{}
 	boundary := &Boundary{}
 	secrets := &Secrets{}
 	rejections := &Rejections{}
@@ -158,8 +166,11 @@ func NewExecutor(policy platform.PolicyEngine, registry *tools.DefaultRegistry, 
 	executor.Network = network
 	executor.Boundary = boundary
 	executor.Capabilities = capabilities
+	executor.Process = process
+	process.Approvals = approvals
+	process.Boundary = boundary
+	process.Secrets = secrets
 	executor.Approvals = approvals
-	metadata.Rejections = rejections
 	approvals.Network = network
 	approvals.Metadata = metadata
 	approvals.Secrets = secrets

@@ -11,10 +11,10 @@ import (
 func directIPLeaseFor(t *testing.T, args map[string]any, declared []string) hitl.DirectIPLease {
 	t.Helper()
 	tctx := tools.ToolContext{
-		ProjectID:    "proj-1",
-		SessionID:    "chat-a",
-		Roots:        []projectroot.RootRef{{ID: "root-1", Path: "/tmp/proj", IsPrimary: true}},
-		ActiveRootID: "root-1",
+		Identity: tools.InvocationIdentity{ProjectID: "proj-1",
+			SessionID: "chat-a"},
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root-1", Path: "/tmp/proj", IsPrimary: true}},
+			ActiveRootID: "root-1"},
 	}
 	_, lease := DirectIPReview("command", args, tctx, declared, nil)
 	return lease

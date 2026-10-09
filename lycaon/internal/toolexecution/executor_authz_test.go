@@ -43,8 +43,8 @@ func TestExecutorSilentAutoAllowEmitsNoAuthzEvent(t *testing.T) {
 	exec := toolexecution.NewExecutor(stubPolicy{decision: &platform.PolicyDecision{Allowed: true}}, reg, "implement")
 	exec.Approvals.SetAuthzRecorder(rec)
 	_, err := exec.Invoke(context.Background(), "read", map[string]any{"path": "foo.go"}, tools.ToolContext{
-		SessionID: "sess-auto",
-		Agent:     "implement",
+		Identity: tools.InvocationIdentity{SessionID: "sess-auto",
+			Agent: "implement"},
 	})
 	if err != nil {
 		testutil.FailErr(t, "invoke", err)
@@ -70,8 +70,8 @@ func TestExecutorPolicyBlockEmitsToolDenied(t *testing.T) {
 	}}, reg, "implement")
 	exec.Approvals.SetAuthzRecorder(rec)
 	_, err := exec.Invoke(context.Background(), "write", map[string]any{"path": "x.go", "content": "x"}, tools.ToolContext{
-		SessionID: "sess-deny",
-		Agent:     "implement",
+		Identity: tools.InvocationIdentity{SessionID: "sess-deny",
+			Agent: "implement"},
 	})
 	if err == nil {
 		t.Fatal("expected policy block")

@@ -27,24 +27,24 @@ func (e *Approvals) awaitApproval(
 		Args:                    args,
 		Files:                   append(filesFromArgs(tool, args), policyWritePaths(confReq)...),
 		ResolvedFiles:           append(ResolvedApprovalFiles(tool, args, tc), policyWritePaths(confReq)...),
-		HostResources:           append([]string(nil), tc.HostResources...),
-		HostResourceFamilies:    append([]string(nil), tc.HostResourceFamilies...),
-		ProjectID:               tc.ProjectID,
+		HostResources:           append([]string(nil), tc.Host.HostResources...),
+		HostResourceFamilies:    append([]string(nil), tc.Host.HostResourceFamilies...),
+		ProjectID:               tc.Identity.ProjectID,
 		ProjectDir:              tc.ActiveRootPath(),
-		SessionID:               tc.SessionID,
+		SessionID:               tc.Identity.SessionID,
 		RootSessionID:           tc.ChatSessionID(),
-		SessionScratchRoot:      tc.SessionScratchDir,
-		SocketGrants:            append([]confine.SocketGrant(nil), tc.SocketGrants...),
-		SocketScopes:            append([]string(nil), tc.SocketScopes...),
-		SocketGrantStates:       append([]string(nil), tc.SocketGrantStates...),
-		AuthorizedSocketDigests: append([]string(nil), tc.AuthorizedSocketDigests...),
-		AuthorizedDirectIP:      tc.DirectIPAuthorized,
+		SessionScratchRoot:      tc.Host.SessionScratchDir,
+		SocketGrants:            append([]confine.SocketGrant(nil), tc.Socket.SocketGrants...),
+		SocketScopes:            append([]string(nil), tc.Socket.SocketScopes...),
+		SocketGrantStates:       append([]string(nil), tc.Socket.SocketGrantStates...),
+		AuthorizedSocketDigests: append([]string(nil), tc.Socket.AuthorizedSocketDigests...),
+		AuthorizedDirectIP:      tc.Direct.DirectIPAuthorized,
 		Contained:               hitl.ContainedForRequest(confReq),
-		ActionID:                tc.ToolCallID,
-		DirectIPRequested:       tc.DirectIPRequested,
-		Visibility:              directIPVisibility(tc.DirectIPRequested),
-		DeclaredDestinations:    append([]string(nil), tc.DirectIPDeclared...),
-		PackageExecution:        tc.PackageExecution,
+		ActionID:                tc.Identity.ToolCallID,
+		DirectIPRequested:       tc.Direct.DirectIPRequested,
+		Visibility:              directIPVisibility(tc.Direct.DirectIPRequested),
+		DeclaredDestinations:    append([]string(nil), tc.Direct.DirectIPDeclared...),
+		PackageExecution:        tc.Files.PackageExecution,
 	}
 	if meta, ok := e.Metadata.registry.Meta(tool); ok {
 		action.ApprovalCategory = meta.ApprovalCategory
@@ -55,7 +55,7 @@ func (e *Approvals) awaitApproval(
 	}
 	if tool == "command_stop" && e.backgroundCommand != nil {
 		handle, _ := args["handle"].(string)
-		action.Command = e.backgroundCommand(tc.SessionID, handle)
+		action.Command = e.backgroundCommand(tc.Identity.SessionID, handle)
 	}
 	return e.awaitActionApproval(ctx, action, args, tc, approvalResult)
 }
@@ -95,20 +95,18 @@ func (e *Approvals) awaitActionApproval(ctx context.Context, action hitl.Propose
 	review := toolApprovalRaise{
 		Action:             action,
 		Title:              title,
-		ToolCallID:         tc.ToolCallID,
-		ProjectID:          tc.ProjectID,
+		ToolCallID:         tc.Identity.ToolCallID,
+		ProjectID:          tc.Identity.ProjectID,
 		ApprovalMatches:    approvalMatches,
 		Explanation:        explanation,
 		Decision:           decision,
 		Detection:          detection,
 		AIRationalePending: rationaleComing,
 		AttachRationale:    rationaleComing,
-		RationaleTC:        tc,
-		RationaleTool:      tool,
-		RationaleArgs:      args,
+		Rationale:          toolapproval.AIRationaleAttachRequest{ToolContext: tc, Tool: tool, Args: args},
 		GrantOffers:        e.grantOffers(action, approvalResult),
 		GrantDelta:         grantDelta,
-		Presence:           tc.Presence,
+		Presence:           tc.Effects.Presence,
 	}
 	permission, err := e.Secrets.composeToolSecretReview(ctx, &review, tc)
 	if err != nil {
@@ -120,7 +118,7 @@ func (e *Approvals) awaitActionApproval(ctx context.Context, action hitl.Propose
 	}
 	switch {
 	case hitl.CheckpointAuthorizes(final):
-		approveSecretPermission(tc.Secrets, permission)
+		approveSecretPermission(tc.Effects.Secrets, permission)
 		return args, nil
 	case final.Status == hitl.DecisionStatusRejected || final.Status == hitl.DecisionStatusApproved:
 		return nil, e.approvalRefusal(approvaloutcome.CodeApprovalDenied)

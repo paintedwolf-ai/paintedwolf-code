@@ -89,7 +89,7 @@ func (a *ServeApp) StartBackgroundWorkers(ctx context.Context) (context.CancelFu
 }
 
 // MCPRegistry returns the MCP registry when wired.
-func (a *ServeApp) MCPRegistry() *mcp.RegistryImpl {
+func (a *ServeApp) MCPRegistry() *mcp.Runtime {
 	if a == nil || a.resources == nil {
 		return nil
 	}
@@ -218,8 +218,8 @@ func (a *ServeApp) Run(ctx context.Context) error {
 		}
 	}
 	if a.resources != nil && a.resources.mcpRegistry != nil {
-		a.resources.mcpRegistry.SetAPIAccess(a.APIToken)
-		if err := a.resources.mcpRegistry.Resync(ctx); err != nil {
+		a.resources.mcpRegistry.Connections.SetAPIAccess(a.APIToken)
+		if err := a.resources.mcpRegistry.Tools.Resync(ctx); err != nil {
 			slog.WarnContext(ctx, "mcp resync after listen", "err", err)
 		}
 	}

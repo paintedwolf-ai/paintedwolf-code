@@ -179,9 +179,12 @@ func TestApprovalRationale_clipsToOneSentence(t *testing.T) {
 	}}
 	rationaleAttacher(t, sum, caps).AttachAsync(context.Background(), toolapproval.AIRationaleAttachRequest{
 		CheckpointID: "chk-clip",
-		ToolContext:  tools.ToolContext{SessionID: "s1", ToolCallID: "tc1"},
-		Tool:         "command",
-		Args:         map[string]any{"command": "git push"},
+		ToolContext: tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: "s1",
+				ToolCallID: "tc1"},
+		},
+		Tool: "command",
+		Args: map[string]any{"command": "git push"},
 	})
 	if got := awaitPatch(t, caps); got != "Pushes the branch the user asked to ship." {
 		t.Fatalf("got %q", got)
@@ -209,9 +212,12 @@ func TestApprovalRationale_attemptsOneShot(t *testing.T) {
 	})
 	attacher.AttachAsync(context.Background(), toolapproval.AIRationaleAttachRequest{
 		CheckpointID: "chk-1",
-		ToolContext:  tools.ToolContext{SessionID: "s1", ToolCallID: "tc1"},
-		Tool:         "command",
-		Args:         map[string]any{"command": "git push"},
+		ToolContext: tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: "s1",
+				ToolCallID: "tc1"},
+		},
+		Tool: "command",
+		Args: map[string]any{"command": "git push"},
 	})
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
@@ -245,9 +251,12 @@ func TestApprovalRationale_clearsPendingOnEmpty(t *testing.T) {
 	})
 	attacher.AttachAsync(context.Background(), toolapproval.AIRationaleAttachRequest{
 		CheckpointID: "chk-1",
-		ToolContext:  tools.ToolContext{SessionID: "s1", ToolCallID: "tc1"},
-		Tool:         "command",
-		Args:         map[string]any{"command": "git push"},
+		ToolContext: tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: "s1",
+				ToolCallID: "tc1"},
+		},
+		Tool: "command",
+		Args: map[string]any{"command": "git push"},
 	})
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
@@ -285,8 +294,11 @@ func TestApprovalRationale_disabledDoesNothing(t *testing.T) {
 	}
 	attacher.AttachAsync(context.Background(), toolapproval.AIRationaleAttachRequest{
 		CheckpointID: "chk-1",
-		ToolContext:  tools.ToolContext{SessionID: "s1", ToolCallID: "tc1"},
-		Tool:         "command",
+		ToolContext: tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: "s1",
+				ToolCallID: "tc1"},
+		},
+		Tool: "command",
 	})
 	caps.mu.Lock()
 	defer caps.mu.Unlock()
@@ -317,9 +329,12 @@ func TestApprovalRationale_mockStub(t *testing.T) {
 	})
 	attacher.AttachAsync(context.Background(), toolapproval.AIRationaleAttachRequest{
 		CheckpointID: "chk-2",
-		ToolContext:  tools.ToolContext{SessionID: "s1", ToolCallID: "tc1"},
-		Tool:         "command",
-		Args:         map[string]any{"command": "git push"},
+		ToolContext: tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: "s1",
+				ToolCallID: "tc1"},
+		},
+		Tool: "command",
+		Args: map[string]any{"command": "git push"},
 	})
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {

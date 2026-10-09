@@ -61,21 +61,29 @@ func newBudgetFixture(t *testing.T, maxToolLoops int, budget spawn.WorkerToolBud
 
 func (f *budgetFixture) decline(t *testing.T, sessionID string) (string, error) {
 	t.Helper()
-	return f.reg.Run(t.Context(), "decline_worker_budget", map[string]any{"job_id": "job-1"}, tools.ToolContext{SessionID: sessionID})
+	return f.reg.Run(t.Context(), "decline_worker_budget", map[string]any{"job_id": "job-1"}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: sessionID},
+	})
 }
 
 func (f *budgetFixture) request(t *testing.T, rounds int) (string, error) {
 	t.Helper()
 	return f.reg.Run(t.Context(), worker.RequestBudgetTool, map[string]any{
 		"rounds": rounds, "remaining_work": []any{"trace the remaining spawn sites"},
-	}, tools.ToolContext{SessionID: "child-1", ParentSessionID: "parent-1", WorkerJobID: "job-1"})
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "child-1",
+			ParentSessionID: "parent-1",
+			WorkerJobID:     "job-1"},
+	})
 }
 
 func (f *budgetFixture) extend(t *testing.T, max int) (string, error) {
 	t.Helper()
 	return f.reg.Run(t.Context(), "extend_worker_budget", map[string]any{
 		"job_id": "job-1", "max_tool_loops": max,
-	}, tools.ToolContext{SessionID: "parent-1"})
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "parent-1"},
+	})
 }
 
 func (f *budgetFixture) job(t *testing.T) *api.WorkerTask {
@@ -155,7 +163,9 @@ func TestRequestOutsideAWorkerLegRejects(t *testing.T) {
 	f := newBudgetFixture(t, 20, spawn.WorkerToolBudget{Default: 20, Min: 2, Max: 120})
 	_, err := f.reg.Run(t.Context(), worker.RequestBudgetTool, map[string]any{
 		"rounds": 4, "remaining_work": []any{"more"},
-	}, tools.ToolContext{SessionID: "parent-1"})
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "parent-1"},
+	})
 	if reject := toolrejection.AsToolReject(err); reject == nil || reject.Code != "REQUEST_BUDGET_ADDRESSED_SESSION" {
 		t.Fatalf("err = %v want REQUEST_BUDGET_ADDRESSED_SESSION", err)
 	}

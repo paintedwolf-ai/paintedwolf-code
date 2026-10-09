@@ -151,7 +151,7 @@ func assertOutboundSecretBoundary(t *testing.T, root string) {
 	}
 	coverage := contractcheck.ReadRepoFile(t, root, "lycaon/internal/toolexecution/secret_permission.go")
 	if !strings.Contains(screen, "e.secretRecipientsCovered(finding, recipients, fingerprintValues)") ||
-		!strings.Contains(coverage, ".approvals.approvalGate.SecretFingerprintsCovered") {
+		!strings.Contains(coverage, ".Approvals.approvalGate.SecretFingerprintsCovered") {
 		t.Fatal("secret release coverage must use the approval gate")
 	}
 	approval := contractcheck.ReadRepoFile(t, root, "lycaon/internal/hitl/approval.go")

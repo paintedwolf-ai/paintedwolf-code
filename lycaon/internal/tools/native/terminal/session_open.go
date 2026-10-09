@@ -91,18 +91,18 @@ func OpenHandler(bg *bgprocess.Registry) tools.ToolHandler {
 		if err := confine.RequireApplied(applied); err != nil {
 			return "", err
 		}
-		confine.LogApplied(OpenToolName, tctx.SessionID, confinement)
+		confine.LogApplied(OpenToolName, tctx.Identity.SessionID, confinement)
 		egress := confine.EgressCommand{
-			SessionID:     tctx.SessionID,
+			SessionID:     tctx.Identity.SessionID,
 			RootSessionID: tctx.ChatSessionID(),
-			ProjectID:     tctx.ProjectID,
+			ProjectID:     tctx.Identity.ProjectID,
 			ProjectDir:    tctx.ActiveRootPath(),
-			ToolCallID:    tctx.ToolCallID,
+			ToolCallID:    tctx.Identity.ToolCallID,
 			ToolName:      OpenToolName,
 			CommandLine:   in.Command,
 		}
-		if tctx.PackageExecution != nil {
-			egress.DeclaredHosts = append([]string(nil), tctx.PackageExecution.AllowedHosts...)
+		if tctx.Files.PackageExecution != nil {
+			egress.DeclaredHosts = append([]string(nil), tctx.Files.PackageExecution.AllowedHosts...)
 			egress.ReducedPackageExecution = true
 		}
 		// A terminal session outlives its call, so the lease keeps its
@@ -114,8 +114,8 @@ func OpenHandler(bg *bgprocess.Registry) tools.ToolHandler {
 		// Every observation reuses this spawn report.
 		report := confine.ReportOf(confine.BoundaryOf(confinement)).
 			WithLocalNetwork(tools.LocalNetworkGrantOf(tctx))
-		if tctx.PackageExecution != nil {
-			report = report.WithRemotePackageExecution(tctx.PackageExecution.AllowedHosts, tctx.PackageExecution.ApprovedReadPaths)
+		if tctx.Files.PackageExecution != nil {
+			report = report.WithRemotePackageExecution(tctx.Files.PackageExecution.AllowedHosts, tctx.Files.PackageExecution.ApprovedReadPaths)
 		}
 		if confinement != nil {
 			report.NetworkPosture = confine.PostureString(confine.EffectivePosture(egress))
@@ -123,7 +123,7 @@ func OpenHandler(bg *bgprocess.Registry) tools.ToolHandler {
 		profile := tctx.ProfileID()
 		hostRunner := hostcmd.NewRunner()
 		launch := lycexec.AgentLaunch(lycexec.LaunchAgentCommand, "terminal_open", confinement)
-		if tctx.PackageExecution != nil {
+		if tctx.Files.PackageExecution != nil {
 			launch = launch.WithReducedEnvironment()
 		}
 		req := hostcmd.Request{
@@ -134,11 +134,11 @@ func OpenHandler(bg *bgprocess.Registry) tools.ToolHandler {
 			IOParams:   hostcmd.IOParams{InlineEnv: in.Env},
 		}
 		facts := confine.SpawnFacts{Report: report, Network: egressLease.ObservedHosts}
-		if err := tctx.Secrets.HandOff(ctx, nil); err != nil {
+		if err := tctx.Effects.Secrets.HandOff(ctx, nil); err != nil {
 			return "", toolrejection.HeldHandOffReject("terminal_open", err)
 		}
 		handle, err := bg.StartPTY(
-			ctx, tctx.SessionID, tctx.ParentSessionID, tctx.ProjectID,
+			ctx, tctx.Identity.SessionID, tctx.Identity.ParentSessionID, tctx.Identity.ProjectID,
 			req, hostRunner, in.WinSize, facts,
 		)
 		if err != nil {
@@ -146,7 +146,7 @@ func OpenHandler(bg *bgprocess.Registry) tools.ToolHandler {
 			return "", mapTerminalLifecycleReject(err, "")
 		}
 		ledgerCtx := context.WithoutCancel(ctx)
-		bg.OnExit(tctx.SessionID, handle, func() {
+		bg.OnExit(tctx.Identity.SessionID, handle, func() {
 			hosts := egressLease.Close(ledgerCtx)
 			tools.RecordMediatedEgress(ledgerCtx, tctx, OpenToolName, hosts)
 		})
@@ -178,7 +178,7 @@ func OpenHandler(bg *bgprocess.Registry) tools.ToolHandler {
 
 // canonicalCommandEcho returns the reference-bearing command line.
 func canonicalCommandEcho(tctx tools.ToolContext) string {
-	command, _ := tctx.CanonicalArgs["command"].(string)
+	command, _ := tctx.Effects.CanonicalArgs["command"].(string)
 	return strings.TrimSpace(command)
 }
 

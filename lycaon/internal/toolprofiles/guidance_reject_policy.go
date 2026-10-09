@@ -55,7 +55,7 @@ func (p *GuidanceRejectPolicy) Evaluate(ctx context.Context, eval platform.Polic
 	return decision, nil
 }
 
-// policyBlockReject is the refusal a blocked decision hands the executor.
+// PolicyBlockReject is the refusal a blocked decision hands the executor.
 func PolicyBlockReject(decision *platform.PolicyDecision, tool, profileID string) *toolrejection.ToolReject {
 	code := ""
 	var data map[string]any

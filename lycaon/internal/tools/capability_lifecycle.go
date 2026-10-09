@@ -11,17 +11,17 @@ import (
 )
 
 func recordSocketCapabilityApplied(ctx context.Context, tctx ToolContext, grants []confine.SocketGrant) {
-	if tctx.AuthzRecorder == nil || len(grants) == 0 {
+	if tctx.Local.AuthzRecorder == nil || len(grants) == 0 {
 		return
 	}
-	durableByPair := capabilitygrants.SocketGrantPairSet(tctx.DurableSocketGrants)
+	durableByPair := capabilitygrants.SocketGrantPairSet(tctx.Socket.DurableSocketGrants)
 	sockets := make([]authzledger.CapabilitySocket, 0, len(grants))
 	for _, g := range grants {
 		scope := "current_action"
 		if _, ok := durableByPair[capabilitygrants.SocketGrantPairKey(g)]; ok {
 			scope = "project"
-		} else if tctx.SocketCapabilityRuntime != nil {
-			for _, chat := range tctx.SocketCapabilityRuntime.AppliedGrants(tctx.ChatSessionID()) {
+		} else if tctx.Socket.SocketCapabilityRuntime != nil {
+			for _, chat := range tctx.Socket.SocketCapabilityRuntime.AppliedGrants(tctx.ChatSessionID()) {
 				if capabilitygrants.SocketGrantPairKey(chat) == capabilitygrants.SocketGrantPairKey(g) {
 					scope = "chat"
 					break
@@ -34,30 +34,30 @@ func recordSocketCapabilityApplied(ctx context.Context, tctx ToolContext, grants
 			Scope:        scope,
 		})
 	}
-	_ = tctx.AuthzRecorder.AppendCapabilityRecord(ctx, authzledger.CapabilityRecord{
-		SessionID:            tctx.SessionID,
+	_ = tctx.Local.AuthzRecorder.AppendCapabilityRecord(ctx, authzledger.CapabilityRecord{
+		SessionID:            tctx.Identity.SessionID,
 		Action:               authzledger.ActionCapabilityApplied,
 		Outcome:              authzledger.OutcomeAllowed,
 		ResolvedBy:           authzledger.ResolvedByHuman,
 		Tool:                 "command",
-		AuthorizationSource:  tctx.SocketAuthorizationSource,
+		AuthorizationSource:  tctx.Socket.SocketAuthorizationSource,
 		Sockets:              sockets,
-		Direct:               tctx.DirectIPRequested,
-		DeclaredDestinations: append([]string(nil), tctx.DirectIPDeclared...),
+		Direct:               tctx.Direct.DirectIPRequested,
+		DeclaredDestinations: append([]string(nil), tctx.Direct.DirectIPDeclared...),
 	})
 }
 
 func EmitDirectIPLifecycle(tctx ToolContext, phase DirectIPLifecyclePhase) {
-	if tctx.DirectIPLifecycle == nil || !tctx.DirectIPRequested {
+	if tctx.Direct.DirectIPLifecycle == nil || !tctx.Direct.DirectIPRequested {
 		return
 	}
-	tctx.DirectIPLifecycle(DirectIPLifecycleEvent{
+	tctx.Direct.DirectIPLifecycle(DirectIPLifecycleEvent{
 		Phase:                phase,
-		SessionID:            tctx.SessionID,
-		ToolCallID:           tctx.ToolCallID,
-		ActionDigest:         tctx.DirectIPActionDigest,
+		SessionID:            tctx.Identity.SessionID,
+		ToolCallID:           tctx.Identity.ToolCallID,
+		ActionDigest:         tctx.Direct.DirectIPActionDigest,
 		Visibility:           hitl.DirectIPVisibilityUnobserved,
-		DeclaredDestinations: append([]string(nil), tctx.DirectIPDeclared...),
-		Background:           tctx.DirectIPBackground,
+		DeclaredDestinations: append([]string(nil), tctx.Direct.DirectIPDeclared...),
+		Background:           tctx.Direct.DirectIPBackground,
 	})
 }

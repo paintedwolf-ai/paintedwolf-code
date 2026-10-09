@@ -198,7 +198,9 @@ func TestFetchURLToolHonorsSessionBudget(t *testing.T) {
 		SessionWindow:     time.Hour,
 		HostMaxInFlight:   4,
 	})
-	tctx := tools.ToolContext{SessionID: "budget-sess"}
+	tctx := tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "budget-sess"},
+	}
 	_, _, err := fetchURLTool(context.Background(), fetchURLToolArgs{
 		URL:    srv.URL + "/a",
 		Budget: budget,
@@ -232,7 +234,9 @@ func TestFetchURLToolCacheHitSkipsBudget(t *testing.T) {
 		SessionWindow:     time.Hour,
 		HostMaxInFlight:   4,
 	})
-	tctx := tools.ToolContext{SessionID: "cache-sess"}
+	tctx := tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "cache-sess"},
+	}
 	url := srv.URL + "/once"
 	_, _, err := fetchURLTool(context.Background(), fetchURLToolArgs{
 		URL: url, Budget: budget, Tctx: tctx,

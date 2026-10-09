@@ -33,15 +33,15 @@ func (e *Capabilities) preflightLocalNetworkCapability(
 	}
 	capReq, reject := capabilityrequest.ParseCapabilityRequest(args)
 	if reject != nil {
-		return nil, nil, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Agent, args, reject)
+		return nil, nil, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Identity.Agent, args, reject)
 	}
 	if capReq == nil {
 		return nil, nil, nil
 	}
-	listenWiden := capReq.LocalListen != nil && !tc.DirectIPRequested &&
-		!(tc.LocalListenGranted && axisPortsCovered(tc.LocalListenPorts, capReq.LocalListen.Ports))
-	connectWiden := capReq.LoopbackConnect != nil && !tc.DirectIPRequested &&
-		!(tc.LoopbackConnectGranted && axisPortsCovered(tc.LoopbackConnectPorts, capReq.LoopbackConnect.Ports))
+	listenWiden := capReq.LocalListen != nil && !tc.Direct.DirectIPRequested &&
+		!(tc.Local.LocalListenGranted && axisPortsCovered(tc.Local.LocalListenPorts, capReq.LocalListen.Ports))
+	connectWiden := capReq.LoopbackConnect != nil && !tc.Direct.DirectIPRequested &&
+		!(tc.Local.LoopbackConnectGranted && axisPortsCovered(tc.Local.LoopbackConnectPorts, capReq.LoopbackConnect.Ports))
 	if listenWiden && connectWiden && e.localNetworkGate != nil {
 		permission, prepareErr := e.Secrets.prepareSecretPermission(ctx, tool, args, tc)
 		if prepareErr != nil {
@@ -49,27 +49,27 @@ func (e *Capabilities) preflightLocalNetworkCapability(
 		}
 		result, waitErr := e.localNetworkGate.AwaitCombined(ctx, tools.LocalNetworkAsk{
 			SecretPermission: permission,
-			SessionID:        tc.SessionID, ParentSessionID: tc.ParentSessionID,
-			ProjectID: tc.ProjectID, ToolCallID: tc.ToolCallID,
+			SessionID:        tc.Identity.SessionID, ParentSessionID: tc.Identity.ParentSessionID,
+			ProjectID: tc.Identity.ProjectID, ToolCallID: tc.Identity.ToolCallID,
 			ProjectDir: tc.ActiveRootPath(), ToolName: tool,
 			Command:      commandsurface.PrimaryCommandLine(args, nil),
 			ListenPorts:  append([]uint16(nil), capReq.LocalListen.Ports...),
 			ConnectPorts: append([]uint16(nil), capReq.LoopbackConnect.Ports...),
 		})
 		if waitErr != nil {
-			return nil, nil, e.Approvals.rejectApprovalErr(ctx, tool, tc.Agent, args, waitErr)
+			return nil, nil, e.Approvals.rejectApprovalErr(ctx, tool, tc.Identity.Agent, args, waitErr)
 		}
 		if result.Denied {
 			data := map[string]any{}
 			if result.UserGuidance != "" {
 				data[toolrejection.UserGuidanceKey] = result.UserGuidance
 			}
-			return nil, nil, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Agent, args, &toolrejection.ToolReject{
+			return nil, nil, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Identity.Agent, args, &toolrejection.ToolReject{
 				Code: isolation.CodeLocalNetworkDenied, Data: data,
 			})
 		}
 		if !result.Authorized {
-			return nil, nil, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Agent, args, &toolrejection.ToolReject{
+			return nil, nil, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Identity.Agent, args, &toolrejection.ToolReject{
 				Code: isolation.CodeApprovalUnavailable,
 				Data: map[string]any{"reason": string(approvaloutcome.CodeApprovalExpired)},
 			})

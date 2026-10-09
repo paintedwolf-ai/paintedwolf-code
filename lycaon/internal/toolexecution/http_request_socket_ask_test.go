@@ -47,8 +47,13 @@ func TestHTTPRequestUnixSocketAsksForExactSocketAuthority(t *testing.T) {
 	executor.Approvals.SetCheckpointManager(manager, gate)
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
-	tc := tools.ToolContext{Roots: []projectroot.RootRef{{ID: "root", Path: dir, IsPrimary: true}}, ActiveRootID: "root",
-		SessionID: "task", ToolCallID: "call", Agent: "implement"}
+	tc := tools.ToolContext{
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: dir, IsPrimary: true}},
+			ActiveRootID: "root"},
+		Identity: tools.InvocationIdentity{SessionID: "task",
+			ToolCallID: "call",
+			Agent:      "implement"},
+	}
 	done := make(chan error, 1)
 	go func() {
 		_, err := executor.Invoke(ctx, "http_request", map[string]any{"url": "http://docker.invalid/info", "unix_socket": "daemon.sock"}, tc)

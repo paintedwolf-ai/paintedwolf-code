@@ -32,10 +32,10 @@ func TestContentApplyDefaultOffParity(t *testing.T) {
 		Review: review,
 	}
 	after, err := gate.GateApply(ctx, "write", "a.txt", nil, "hello", tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: projectDir, IsPrimary: true}},
-		ActiveRootID: "r1",
-		SessionID:    sess.ID,
-		ProjectID:    testdbseed.DefaultProjectID,
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: projectDir, IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{SessionID: sess.ID,
+			ProjectID: testdbseed.DefaultProjectID},
 	})
 	if err != nil {
 		testutil.FailErr(t, "content_apply gate should passthrough when review policy off", err)
@@ -65,10 +65,10 @@ func TestContentApplyEmittedWhenPolicyOn(t *testing.T) {
 	done := make(chan error, 1)
 	go func() {
 		_, err := gate.GateApply(ctx, "write", "review.txt", nil, "pending bytes", tools.ToolContext{
-			Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: projectDir, IsPrimary: true}},
-			ActiveRootID: "r1",
-			SessionID:    sess.ID,
-			ProjectID:    testdbseed.DefaultProjectID,
+			Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: projectDir, IsPrimary: true}},
+				ActiveRootID: "r1"},
+			Identity: tools.InvocationIdentity{SessionID: sess.ID,
+				ProjectID: testdbseed.DefaultProjectID},
 		})
 		done <- err
 	}()
@@ -110,10 +110,10 @@ func TestContentApplyAppliesWhenPathNotReviewed(t *testing.T) {
 		Review: mustReviewStore(t, h.ConfigRoot),
 	}
 	after, err := gate.GateApply(ctx, "write", "docs/readme.md", nil, "instant", tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: projectDir, IsPrimary: true}},
-		ActiveRootID: "r1",
-		SessionID:    sess.ID,
-		ProjectID:    testdbseed.DefaultProjectID,
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: projectDir, IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{SessionID: sess.ID,
+			ProjectID: testdbseed.DefaultProjectID},
 	})
 	if err != nil {
 		testutil.FailErr(t, "content_apply gate should pass through a path outside review_paths", err)
@@ -142,10 +142,10 @@ func TestContentApplyRejectStructuredError(t *testing.T) {
 	done := make(chan error, 1)
 	go func() {
 		_, err := gate.GateApply(ctx, "write", "x.txt", nil, "nope", tools.ToolContext{
-			Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: projectDir, IsPrimary: true}},
-			ActiveRootID: "r1",
-			SessionID:    sess.ID,
-			ProjectID:    testdbseed.DefaultProjectID,
+			Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: projectDir, IsPrimary: true}},
+				ActiveRootID: "r1"},
+			Identity: tools.InvocationIdentity{SessionID: sess.ID,
+				ProjectID: testdbseed.DefaultProjectID},
 		})
 		done <- err
 	}()
@@ -212,10 +212,10 @@ func TestContentApplyHoldsEveryContentMutatingTool(t *testing.T) {
 			done := make(chan error, 1)
 			go func() {
 				_, err := gate.GateApply(ctx, tool, "reviewed.txt", nil, "authored bytes", tools.ToolContext{
-					Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: projectDir, IsPrimary: true}},
-					ActiveRootID: "r1",
-					SessionID:    sess.ID,
-					ProjectID:    testdbseed.DefaultProjectID,
+					Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: projectDir, IsPrimary: true}},
+						ActiveRootID: "r1"},
+					Identity: tools.InvocationIdentity{SessionID: sess.ID,
+						ProjectID: testdbseed.DefaultProjectID},
 				})
 				done <- err
 			}()
@@ -265,10 +265,10 @@ func TestContentApplyPassesThroughNonAuthoringTools(t *testing.T) {
 
 	for _, tool := range []string{"copy", "move", "extract_archive", "mkdir", "chmod"} {
 		after, err := gate.GateApply(ctx, tool, "reviewed.txt", nil, "bytes", tools.ToolContext{
-			Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: projectDir, IsPrimary: true}},
-			ActiveRootID: "r1",
-			SessionID:    sess.ID,
-			ProjectID:    testdbseed.DefaultProjectID,
+			Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: projectDir, IsPrimary: true}},
+				ActiveRootID: "r1"},
+			Identity: tools.InvocationIdentity{SessionID: sess.ID,
+				ProjectID: testdbseed.DefaultProjectID},
 		})
 		testutil.FailErr(t, "gate "+tool, err)
 		if after != "bytes" {

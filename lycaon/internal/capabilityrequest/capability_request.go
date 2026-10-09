@@ -511,7 +511,7 @@ type ErrString string
 
 func (e ErrString) Error() string { return string(e) }
 
-// parseSocksProxyArg validates the top-level proxy-environment switch.
+// ParseSocksProxyArg validates the top-level proxy-environment switch.
 func ParseSocksProxyArg(args map[string]any) (bool, *toolrejection.ToolReject) {
 	if args == nil {
 		return false, nil

@@ -29,9 +29,9 @@ func testScope(t *testing.T, dir string) survey.Scope {
 	return survey.Scope{
 		Boundary: boundary,
 		ToolCtx: tools.ToolContext{
-			Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}},
-			ActiveRootID: "r1",
-			Agent:        toolprofiles.DefaultToolProfileID,
+			Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}},
+				ActiveRootID: "r1"},
+			Identity: tools.InvocationIdentity{Agent: toolprofiles.DefaultToolProfileID},
 		},
 	}
 }

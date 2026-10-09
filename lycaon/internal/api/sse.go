@@ -16,7 +16,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Server) streamReplayMessage(w http.ResponseWriter, r *http.Request, sessionID, messageID string) (wire.Message, bool) {
+func (s *Conversation) streamReplayMessage(w http.ResponseWriter, r *http.Request, sessionID, messageID string) (wire.Message, bool) {
 	// The transcript owns message membership, including removals by rewind.
 	msg, err := s.sessionStore.GetMessage(r.Context(), sessionID, messageID)
 	if errors.Is(err, store.ErrMessageNotFound) || errors.Is(err, store.ErrSessionNotFound) {
@@ -30,10 +30,10 @@ func (s *Server) streamReplayMessage(w http.ResponseWriter, r *http.Request, ses
 	return messageview.TranscriptMessage(msg), true
 }
 
-func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
+func (s *Conversation) handleStream(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	messageID := strings.TrimSpace(r.URL.Query().Get("message"))
-	if !requestscope.SessionExists(s.sessionStore, &s.responses, w, r, id) {
+	if !requestscope.SessionExists(s.sessionStore, s.responses, w, r, id) {
 		return
 	}
 	flusher, ok := w.(http.Flusher)
@@ -57,7 +57,7 @@ func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
 	s.replayStream(w, r, flusher, id, messageID)
 }
 
-func (s *Server) replayStream(w http.ResponseWriter, r *http.Request, flusher http.Flusher, sessionID, messageID string) {
+func (s *Conversation) replayStream(w http.ResponseWriter, r *http.Request, flusher http.Flusher, sessionID, messageID string) {
 	msg, ok := s.streamReplayMessage(w, r, sessionID, messageID)
 	if !ok {
 		return
@@ -86,7 +86,7 @@ func (s *Server) replayStream(w http.ResponseWriter, r *http.Request, flusher ht
 	writePromptChunk(w, flusher, wire.PromptStreamChunk{Done: true})
 }
 
-func (s *Server) followLiveStream(r *http.Request, w http.ResponseWriter, flusher http.Flusher, sessionID, messageID string) {
+func (s *Conversation) followLiveStream(r *http.Request, w http.ResponseWriter, flusher http.Flusher, sessionID, messageID string) {
 	ch, unsub := s.sessions.Streams().Subscribe(messageID)
 	defer unsub()
 

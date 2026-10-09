@@ -24,7 +24,9 @@ func catalogContract(t *testing.T, tool string) toolcontract.Contract {
 }
 
 func invokedAs(contract toolcontract.Contract) tools.ToolContext {
-	return tools.ToolContext{Invocation: tools.Invocation{Contract: contract}}
+	return tools.ToolContext{
+		Invocation: tools.Invocation{Contract: contract},
+	}
 }
 
 func TestSecretReferenceResolutionFollowsTheDeclaredSurface(t *testing.T) {
@@ -185,7 +187,7 @@ func TestOutboundReferenceResolutionKeepsPolicyAndExecutionCopiesSeparate(t *tes
 			if execution["body"] != "Bearer protected-value" {
 				t.Fatal("handler did not receive resolved execution arguments")
 			}
-			if tc.CanonicalArgs["body"] != args["body"] || policy.eval.ToolArgs["body"] != args["body"] {
+			if tc.Effects.CanonicalArgs["body"] != args["body"] || policy.eval.ToolArgs["body"] != args["body"] {
 				t.Fatal("protected bytes reached canonical or policy arguments")
 			}
 			return "ok", nil
@@ -201,7 +203,12 @@ func TestOutboundReferenceResolutionKeepsPolicyAndExecutionCopiesSeparate(t *tes
 		}
 		return &secretcap.Resolution{Arguments: map[string]any{"body": "Bearer protected-value"}}, nil
 	}
-	_, err := executor.Invoke(t.Context(), name, args, tools.ToolContext{ProjectID: "project", SessionID: "worker", ParentSessionID: "root-chat", ToolCallID: "call"})
+	_, err := executor.Invoke(t.Context(), name, args, tools.ToolContext{
+		Identity: tools.InvocationIdentity{ProjectID: "project",
+			SessionID:       "worker",
+			ParentSessionID: "root-chat",
+			ToolCallID:      "call"},
+	})
 	testutil.FailErr(t, "invoke outbound tool", err)
 	if !handled {
 		t.Fatal("outbound handler was not invoked")

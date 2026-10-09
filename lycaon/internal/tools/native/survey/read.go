@@ -82,7 +82,7 @@ func (t *ReadTool) referencesFor(ctx context.Context, tctx tools.ToolContext, se
 		}
 		isRegular := false
 		if t.Catalog != nil {
-			current := catalogOrProcess(t.Catalog).Current(ctx, tctx.ProjectID, []sourcecatalog.Root{{ID: resolved.Root.ID, Path: resolved.Root.Path}})
+			current := catalogOrProcess(t.Catalog).Current(ctx, tctx.Identity.ProjectID, []sourcecatalog.Root{{ID: resolved.Root.ID, Path: resolved.Root.Path}})
 			if current.State == sourcecatalog.StateReady {
 				rel := projectroot.ScopeRel(resolved.Root, resolved.Abs)
 				if entry, ok := current.Entry(resolved.Root.ID, rel); ok {
@@ -141,7 +141,7 @@ func (t *ReadTool) sessionLedger(ctx context.Context, tctx tools.ToolContext) (e
 	if t == nil || t.Ledger == nil {
 		return evidence.Ledger{}, false
 	}
-	sessionID := strings.TrimSpace(tctx.SessionID)
+	sessionID := strings.TrimSpace(tctx.Identity.SessionID)
 	if sessionID == "" {
 		return evidence.Ledger{}, false
 	}
@@ -244,7 +244,7 @@ func (t *ReadTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 		}
 		if st.Editor != nil {
 			if documents, ok := sourceview.DocumentsFor(tctx, resolved); ok {
-				documents.RememberAgentRead(tctx.ProjectID, tctx.SessionID, *st.Editor)
+				documents.RememberAgentRead(tctx.Identity.ProjectID, tctx.Identity.SessionID, *st.Editor)
 			}
 		}
 		if isTarget {
@@ -272,7 +272,7 @@ func (t *ReadTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 	if readWantsOutline(mode, args, totalLines) {
 		strike := 1
 		if t.Escalation != nil {
-			strike = t.Escalation.BumpUnboundedRead(tctx.SessionID, path)
+			strike = t.Escalation.BumpUnboundedRead(tctx.Identity.SessionID, path)
 		}
 		if strike >= 2 {
 			capture.whole = true

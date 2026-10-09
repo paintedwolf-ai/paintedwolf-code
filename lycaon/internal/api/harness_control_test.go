@@ -20,7 +20,7 @@ import (
 func TestHarnessControlsRegisterWithoutManualLLM(t *testing.T) {
 	t.Setenv(configdir.EnvDev, "1")
 	t.Setenv(configdir.EnvHarness, "1")
-	srv := NewServer(requiredTestDeps(t, Dependencies{Store: store.NewMemory()}), nil, "harness-test-token")
+	srv := NewServer(requiredTestDeps(t, Dependencies{Core: CoreDependencies{Store: store.NewMemory()}}), nil, "harness-test-token")
 
 	for _, path := range []string{"/harness/overlays", "/harness/upgrade-history"} {
 		fixture := httptest.NewRecorder()
@@ -53,7 +53,7 @@ func TestHarnessPreviewPublishesThroughProjectEventHub(t *testing.T) {
 	testutil.FailErr(t, "subscribe project events", err)
 	defer unsubscribe()
 
-	srv := NewServer(requiredTestDeps(t, Dependencies{Projects: projects, Store: sessions, EventPublisher: &events.Publisher{Hub: hub}}), nil, "harness-test-token")
+	srv := NewServer(requiredTestDeps(t, Dependencies{Core: CoreDependencies{Projects: projects, Store: sessions}, Host: HostDependencies{EventPublisher: &events.Publisher{Hub: hub}}}), nil, "harness-test-token")
 	payload, err := json.Marshal(wire.PreviewEvent{
 		Op: wire.PreviewEventOpAttach, SessionID: sess.ID, PageID: "page-1", Seq: 1,
 	})
@@ -75,7 +75,7 @@ func TestHarnessPreviewPublishesThroughProjectEventHub(t *testing.T) {
 func TestHarnessControlsStayAbsentWithoutExplicitHarness(t *testing.T) {
 	t.Setenv(configdir.EnvDev, "1")
 	t.Setenv(configdir.EnvHarness, "")
-	srv := NewServer(requiredTestDeps(t, Dependencies{Store: store.NewMemory()}), nil, TestAPIToken)
+	srv := NewServer(requiredTestDeps(t, Dependencies{Core: CoreDependencies{Store: store.NewMemory()}}), nil, TestAPIToken)
 
 	for _, path := range []string{"/harness/overlays", "/harness/upgrade-history"} {
 		recorder := httptest.NewRecorder()

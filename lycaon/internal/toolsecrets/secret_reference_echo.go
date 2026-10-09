@@ -5,7 +5,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolrejection"
 )
 
-// referenceEchoesInError rewrites resolved values a failing consumer echoed
+// ReferenceEchoesInError rewrites resolved values a failing consumer echoed
 // into its reject data or error text.
 func ReferenceEchoesInError(secrets *secretcap.Resolution, err error) error {
 	if err == nil {

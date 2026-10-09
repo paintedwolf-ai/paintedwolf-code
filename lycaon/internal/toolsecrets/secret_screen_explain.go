@@ -8,7 +8,7 @@ import (
 
 const OutboundSecretExplainTool = "outbound_secret"
 
-// fallbackSecretExplanation builds approval copy without a catalog entry.
+// FallbackSecretExplanation builds approval copy without a catalog entry.
 func FallbackSecretExplanation(screen *hitl.SecretScreen) toolapproval.ApprovalExplanation {
 	return toolapproval.ApprovalExplanation{
 		What:      hitl.SecretImpact(screen),

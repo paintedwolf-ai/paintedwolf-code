@@ -130,7 +130,9 @@ func TestLoopCoordinatorReadsGetHandlesAcrossSurfaces(t *testing.T) {
 				History:    userHistory("review the code"),
 				UserPrompt: "review the code",
 				ProfileID:  "coordinator",
-				ToolCtx:    tools.ToolContext{TurnSurfaceID: surface},
+				ToolCtx: tools.ToolContext{
+					Turn: tools.InvocationTurn{TurnSurfaceID: surface},
+				},
 			})
 			testutil.FailErr(t, "loop.Run", err)
 
@@ -392,7 +394,9 @@ func TestLoopPublishesClassifiedResultBeforeEvidence(t *testing.T) {
 		History:    userHistory("review"),
 		UserPrompt: "review",
 		ProfileID:  "coordinator",
-		ToolCtx:    tools.ToolContext{TurnSurfaceID: toolcontract.SurfaceImplementInvestigate},
+		ToolCtx: tools.ToolContext{
+			Turn: tools.InvocationTurn{TurnSurfaceID: toolcontract.SurfaceImplementInvestigate},
+		},
 	})
 	testutil.FailErr(t, "loop.Run", err)
 	if len(order) < 2 || order[0] != "append" || order[1] != "evidence" {

@@ -84,12 +84,12 @@ func TestHostileRepoGitJourney(t *testing.T) {
 		Tools: map[string]bool{"write": true, "edit": true},
 	}})
 	tctx := tools.ToolContext{
-		Roots:              []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}},
-		ActiveRootID:       "r1",
-		Agent:              toolprofiles.DefaultToolProfileID,
-		SessionID:          "hostile-repo",
-		RepoFileCount:      10,
-		RepoFileCountKnown: true,
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}},
+			ActiveRootID:       "r1",
+			RepoFileCount:      10,
+			RepoFileCountKnown: true},
+		Identity: tools.InvocationIdentity{Agent: toolprofiles.DefaultToolProfileID,
+			SessionID: "hostile-repo"},
 	}
 	_, err = projectpaths.ResolveWrite(ctx, boundary, tctx, ".git/hooks/pre-commit")
 	var reject *toolrejection.ToolReject

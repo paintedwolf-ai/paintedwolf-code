@@ -48,8 +48,11 @@ func TestAllowOnceWritesExternalFileWithoutReusableAccess(t *testing.T) {
 	executor := toolexecution.NewExecutor(toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), gate), reg, "implement")
 	target := filepath.Join(outside, "new", "nested", "notes.txt")
 	tc := tools.ToolContext{
-		Roots: []projectroot.RootRef{{ID: "root", Path: project, IsPrimary: true}}, ActiveRootID: "root",
-		SessionID: "chat-file-once", ToolCallID: "write-once", Agent: "implement",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: project, IsPrimary: true}},
+			ActiveRootID: "root"},
+		Identity: tools.InvocationIdentity{SessionID: "chat-file-once",
+			ToolCallID: "write-once",
+			Agent:      "implement"},
 	}
 	for _, content := range []string{"first approved write", "second approved write"} {
 		mgr := &asyncHITL{requested: make(chan struct{}, 1)}
@@ -73,23 +76,23 @@ func TestAllowOnceWritesExternalFileWithoutReusableAccess(t *testing.T) {
 		if string(data) != content {
 			t.Fatalf("written content = %q, want %q", data, content)
 		}
-		if len(gate.ListGrants(tc.SessionID)) != 0 {
+		if len(gate.ListGrants(tc.Identity.SessionID)) != 0 {
 			t.Fatal("allow once installed reusable authority")
 		}
 		if _, resolveErr := projectpaths.ResolveWrite(t.Context(), nil, executed, filepath.Join(outside, "sibling.txt")); resolveErr == nil {
 			t.Fatal("exact approval authorized a sibling")
 		}
 		fresh := tc
-		fresh.ApprovedFileAccess = nil
-		fresh.PreparedFileAccess = nil
-		fresh.FileChangeReview = nil
+		fresh.Files.ApprovedFileAccess = nil
+		fresh.Files.PreparedFileAccess = nil
+		fresh.Files.FileChangeReview = nil
 		if _, resolveErr := projectpaths.ResolveWrite(t.Context(), nil, fresh, target); resolveErr == nil {
 			t.Fatal("approval escaped its invocation context")
 		}
 		// Context reuse exercises the invocation-boundary approval reset.
 		tc = executed
-		tc.ToolCallID = "write-again"
-		tc.ApprovedFileAccess = []hitl.GrantedPathDelta{{Path: target, Write: true}}
+		tc.Identity.ToolCallID = "write-again"
+		tc.Files.ApprovedFileAccess = []hitl.GrantedPathDelta{{Path: target, Write: true}}
 	}
 }
 
@@ -111,9 +114,12 @@ func TestWriteToSessionScratchPassesFileChangeReview(t *testing.T) {
 	mgr := &asyncHITL{requested: make(chan struct{}, 1)}
 	executor.Approvals.SetCheckpointManager(mgr, gate)
 	tc := tools.ToolContext{
-		Roots: []projectroot.RootRef{{ID: "root", Path: project, IsPrimary: true}}, ActiveRootID: "root",
-		SessionID: "chat-scratch", ToolCallID: "write-scratch", Agent: "implement",
-		SessionScratchDir: scratch,
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: project, IsPrimary: true}},
+			ActiveRootID: "root"},
+		Identity: tools.InvocationIdentity{SessionID: "chat-scratch",
+			ToolCallID: "write-scratch",
+			Agent:      "implement"},
+		Host: tools.InvocationHost{SessionScratchDir: scratch},
 	}
 	// An unexpected card would wait for a decision; the deadline turns that into a failure.
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
@@ -153,8 +159,11 @@ func TestControlPlanePathDeniedBeforeAnyCheckpoint(t *testing.T) {
 	mgr := &asyncHITL{requested: make(chan struct{}, 1)}
 	executor.Approvals.SetCheckpointManager(mgr, gate)
 	tc := tools.ToolContext{
-		Roots: []projectroot.RootRef{{ID: "root", Path: project, IsPrimary: true}}, ActiveRootID: "root",
-		SessionID: "chat-control-plane", ToolCallID: "list-sessions", Agent: "implement",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: project, IsPrimary: true}},
+			ActiveRootID: "root"},
+		Identity: tools.InvocationIdentity{SessionID: "chat-control-plane",
+			ToolCallID: "list-sessions",
+			Agent:      "implement"},
 	}
 	sessions := filepath.Join(cfg, "debug", "sessions")
 	_, err = executor.Invoke(t.Context(), "list_dir", map[string]any{"path": sessions}, tc)

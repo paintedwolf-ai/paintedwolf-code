@@ -1,8 +1,10 @@
-// Package sourcecatalog maintains the process-wide, rebuildable view of project trees.
 package sourcecatalog
 
 import (
 	"context"
+	"errors"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -54,26 +56,18 @@ type ScopeProvider interface {
 
 // Catalog coalesces source scans and atomically publishes immutable snapshots.
 type Catalog struct {
-	structurePages      structurePageCache
-	presentations       presentationStore
-	navigationObservers navigationObservers
-	trees               map[string]projectionStore
-	treeDir             string
-	treeLifecycle       sync.RWMutex
-	mu                  sync.Mutex
-	records             map[string]*record
-	revision            uint64
+	Directories *Directories
+	Trees       *TreeStores
+	mu          sync.Mutex
+	records     map[string]*record
+	revision    uint64
 	// rootLimit and scopedLimit bound each pool's record count.
 	rootLimit   int
 	scopedLimit int
 	byteBudget  int64
 	now         func() time.Time
 	build       func(context.Context, []Root, walkPolicy) (Snapshot, error)
-	broker      *backgroundwork.Broker
-	literals    *literalIndexCache
-	// scopesMu guards scopes on its own: policyFor runs under c.mu.
-	scopesMu sync.RWMutex
-	scopes   ScopeProvider
+	Literals    *LiteralSearch
 }
 
 // SetScopes replaces bundled budgets and traversal priority with a provider.
@@ -81,20 +75,24 @@ func (c *Catalog) SetScopes(scopes ScopeProvider) {
 	if c == nil || scopes == nil {
 		return
 	}
-	c.scopesMu.Lock()
-	c.scopes = scopes
-	c.scopesMu.Unlock()
+	c.Trees.scopesMu.Lock()
+	c.Trees.scopes = scopes
+	c.Trees.scopesMu.Unlock()
 }
 
 func New() *Catalog {
-	return &Catalog{
+	catalog := &Catalog{
 		records:     make(map[string]*record),
 		rootLimit:   defaultRootRecordLimit,
 		scopedLimit: defaultScopedRecordLimit,
 		byteBudget:  defaultByteBudget,
-		now:         time.Now, build: buildSnapshot, broker: backgroundwork.Process(),
-		literals: newLiteralIndexCache(),
+		now:         time.Now, build: buildSnapshot,
+		Literals: &LiteralSearch{cache: newLiteralIndexCache(), broker: backgroundwork.Process()},
 	}
+	catalog.Trees = &TreeStores{broker: backgroundwork.Process(), limit: defaultRootRecordLimit + defaultScopedRecordLimit}
+	catalog.Directories = &Directories{trees: catalog.Trees}
+	catalog.Trees.Directories = catalog.Directories
+	return catalog
 }
 
 var (
@@ -124,4 +122,71 @@ func Process() *Catalog {
 		})
 	})
 	return process
+}
+
+// OpenDependencyIndex builds a fresh request-owned index without expanding the eager catalog.
+// Closing its reader joins its preparation and removes the private index files.
+func (c *TreeStores) OpenDependencyIndex(ctx context.Context, projectID string, root Root, selectedPaths ...string) (*IndexReader, error) {
+	for _, selected := range selectedPaths {
+		clean := filepath.ToSlash(filepath.Clean(selected))
+		if filepath.IsAbs(selected) || clean != selected || clean == "." || clean == ".." || hasParentPrefix(clean) {
+			return nil, os.ErrPermission
+		}
+	}
+	dir, err := os.MkdirTemp("", "paintedwolf-dependency-search-*")
+	if err != nil {
+		return nil, err
+	}
+	temporary := New()
+	temporary.Trees.treeDir = dir
+	temporary.Trees.broker = c.broker
+	var once sync.Once
+	var cleanupErr error
+	cleanup := func() error {
+		once.Do(func() { cleanupErr = errors.Join(temporary.Drain(context.Background()), os.RemoveAll(dir)) })
+		return cleanupErr
+	}
+	store, err := temporary.Trees.indexStore(ctx, projectID, root)
+	if err != nil {
+		_ = cleanup()
+		return nil, err
+	}
+	store.policy = c.policyFor(ctx, root.Path)
+	store.policy.includeDependencies = true
+	store.policy.selectedPaths = append([]string(nil), selectedPaths...)
+	if err = store.reconcile(ctx, repochange.CurrentEpoch(root.Path)); err != nil {
+		_ = cleanup()
+		return nil, err
+	}
+	database, transaction, status, err := store.readTx(ctx, store.status)
+	if err != nil {
+		_ = cleanup()
+		return nil, err
+	}
+	return &IndexReader{db: database, tx: transaction, Status: status, store: store, cleanup: cleanup}, nil
+}
+
+// BoundaryPath identifies lazy indexing policy without changing read admission.
+func (c *Catalog) BoundaryPath(ctx context.Context, root, rel string, isDir bool) string {
+	return c.Trees.policyFor(ctx, root).boundaryPath(rel, isDir)
+}
+
+// ObserveDependencyScope walks an explicitly named lazy subtree afresh without retaining it.
+func (c *Catalog) ObserveDependencyScope(ctx context.Context, root Root) (Snapshot, error) {
+	roots, err := cleanRoots([]Root{root})
+	if err != nil {
+		return Snapshot{}, err
+	}
+	root = roots[0]
+	within := root.Path
+	if root.Within != "" {
+		within = root.Within
+	}
+	base, err := filepath.Rel(within, root.Path)
+	if err != nil || base == ".." || hasParentPrefix(base) {
+		return Snapshot{}, os.ErrPermission
+	}
+	policy := c.Trees.policyFor(ctx, within).under(filepath.ToSlash(base))
+	policy.includeDependencies = true
+	return buildSnapshot(ctx, roots, policy)
 }

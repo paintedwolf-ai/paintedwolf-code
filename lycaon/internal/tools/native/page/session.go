@@ -112,7 +112,7 @@ func OpenHandler(pool *browser.Pool, pages *pagesession.Registry, bg *bgprocess.
 		if err != nil {
 			return "", err
 		}
-		if err := requireCaptureProcess(bg, tctx.SessionID, in.URL, in.ProcessHandle); err != nil {
+		if err := requireCaptureProcess(bg, tctx.Identity.SessionID, in.URL, in.ProcessHandle); err != nil {
 			return "", err
 		}
 		if err := requireLoopbackAuthority(in.URL, tctx); err != nil {
@@ -138,24 +138,24 @@ func OpenHandler(pool *browser.Pool, pages *pagesession.Registry, bg *bgprocess.
 			if err != nil {
 				return "", mapBrowserReject(err)
 			}
-			if entry, err = pages.Open(ctx, tctx.SessionID, held); err != nil {
-				return "", capacityReject(err, tctx.SessionID)
+			if entry, err = pages.Open(ctx, tctx.Identity.SessionID, held); err != nil {
+				return "", capacityReject(err, tctx.Identity.SessionID)
 			}
 		}
 		if live != nil {
 			live.Attach(ctx, preview.AttachOpts{
-				ProjectID:          tctx.ProjectID,
-				SessionID:          tctx.SessionID,
-				ParentSessionID:    tctx.ParentSessionID,
+				ProjectID:          tctx.Identity.ProjectID,
+				SessionID:          tctx.Identity.SessionID,
+				ParentSessionID:    tctx.Identity.ParentSessionID,
 				PageID:             entry.ID,
 				AssistantMessageID: tctx.Invocation.MessageID,
-				ToolCallID:         tctx.ToolCallID,
+				ToolCallID:         tctx.Identity.ToolCallID,
 				Held:               entry.Held,
 			})
 		}
 		payload, _ := surveyjson.Marshal(OpenResult{
 			ID: entry.ID, FinalURL: entry.TargetURL, RoutesActive: len(in.Routes),
-			LivePages: pages.List(tctx.SessionID), MaxPages: pages.MaxPages(),
+			LivePages: pages.List(tctx.Identity.SessionID), MaxPages: pages.MaxPages(),
 		})
 		return string(payload), nil
 	}
@@ -167,11 +167,11 @@ func reopenHeld(ctx context.Context, pages *pagesession.Registry, tctx tools.Too
 	if err != nil {
 		return nil, nil //nolint:nilerr // An unresolvable target opens fresh and reports its own rejection.
 	}
-	liveID, ok := pages.FindByTarget(tctx.SessionID, target)
+	liveID, ok := pages.FindByTarget(tctx.Identity.SessionID, target)
 	if !ok {
 		return nil, nil
 	}
-	entry, err := pages.RequireRunning(tctx.SessionID, liveID)
+	entry, err := pages.RequireRunning(tctx.Identity.SessionID, liveID)
 	if err != nil || entry == nil || entry.Held == nil {
 		return nil, nil //nolint:nilerr // A page that stopped running is replaced by a fresh one.
 	}
@@ -218,10 +218,10 @@ func mapPageLifecycleReject(err error, id string) error {
 // attachPageVisual makes a page result's raster or recording the tool's visual. A timeline
 // is perceived as its contact sheet.
 func attachPageVisual(tctx tools.ToolContext, out browser.CaptureResult) {
-	if tctx.Out == nil {
+	if tctx.Effects.Out == nil {
 		return
 	}
-	tctx.Out.Visual = &tools.VisualCapture{
+	tctx.Effects.Out.Visual = &tools.VisualCapture{
 		Mime:      out.Mime,
 		Bytes:     append([]byte(nil), out.Bytes...),
 		Source:    api.VisualArtifactSourceCapture,

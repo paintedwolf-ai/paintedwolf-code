@@ -57,7 +57,10 @@ func TestCompletionWaitRejectsUnownedOrUnboundedConditions(t *testing.T) {
 			case "boolean":
 				args["until_complete"] = "true"
 			}
-			_, err := reg.Run(t.Context(), "wait", args, tools.ToolContext{SessionID: "s1", ProjectID: testdbseed.DefaultProjectID})
+			_, err := reg.Run(t.Context(), "wait", args, tools.ToolContext{
+				Identity: tools.InvocationIdentity{SessionID: "s1",
+					ProjectID: testdbseed.DefaultProjectID},
+			})
 			if reject := toolrejection.AsToolReject(err); reject == nil || reject.Code != "TOOL_ARGS_INVALID" {
 				t.Fatalf("invalid completion wait = %v", err)
 			}
@@ -70,7 +73,10 @@ func TestCompletionWaitRejectsUnownedOrUnboundedConditions(t *testing.T) {
 
 func TestCompletionWaitAllowsBoundedTimeout(t *testing.T) {
 	loop, store, reg := completionWaitFixture(t)
-	tctx := tools.ToolContext{SessionID: "s1", ProjectID: testdbseed.DefaultProjectID}
+	tctx := tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "s1",
+			ProjectID: testdbseed.DefaultProjectID},
+	}
 	args := completionWaitArgs()
 	args["timeout_ms"] = 15000
 	out, err := reg.Run(t.Context(), "wait", args, tctx)
@@ -105,7 +111,10 @@ func completionSleepState(loop *LoopEngine, sessionID string) (untilComplete, ha
 
 func TestBoundedCompletionWaitResumesFromDurableLease(t *testing.T) {
 	loop, store, reg := completionWaitFixture(t)
-	tctx := tools.ToolContext{SessionID: "s1", ProjectID: testdbseed.DefaultProjectID}
+	tctx := tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "s1",
+			ProjectID: testdbseed.DefaultProjectID},
+	}
 	args := completionWaitArgs()
 	args["timeout_ms"] = 600000
 	_, err := reg.Run(t.Context(), "wait", args, tctx)
@@ -138,7 +147,10 @@ func TestBoundedCompletionWaitResumesFromDurableLease(t *testing.T) {
 
 func TestBoundedCompletionWaitResumesFromRuntimeSubscription(t *testing.T) {
 	loop, _, reg := completionWaitFixture(t)
-	tctx := tools.ToolContext{SessionID: "s1", ProjectID: testdbseed.DefaultProjectID}
+	tctx := tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "s1",
+			ProjectID: testdbseed.DefaultProjectID},
+	}
 	args := completionWaitArgs()
 	args["timeout_ms"] = 600000
 	_, err := reg.Run(t.Context(), "wait", args, tctx)
@@ -170,7 +182,10 @@ func TestRecoveredBoundedCompletionWaitKeepsMode(t *testing.T) {
 
 func TestSkipRearmKeepsCompletionMode(t *testing.T) {
 	loop, _, reg := completionWaitFixture(t)
-	_, err := reg.Run(t.Context(), "wait", completionWaitArgs(), tools.ToolContext{SessionID: "s1", ProjectID: testdbseed.DefaultProjectID})
+	_, err := reg.Run(t.Context(), "wait", completionWaitArgs(), tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "s1",
+			ProjectID: testdbseed.DefaultProjectID},
+	})
 	testutil.FailErr(t, "park completion wait", err)
 	loop.rearmSleepAfterSkip(t.Context(), "s1")
 	if untilComplete, hasTimer, _ := completionSleepState(loop, "s1"); !untilComplete || hasTimer {
@@ -180,7 +195,10 @@ func TestSkipRearmKeepsCompletionMode(t *testing.T) {
 
 func TestCompletionWaitHasNoTimerAndResumesMode(t *testing.T) {
 	loop, store, reg := completionWaitFixture(t)
-	tctx := tools.ToolContext{SessionID: "s1", ProjectID: testdbseed.DefaultProjectID}
+	tctx := tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "s1",
+			ProjectID: testdbseed.DefaultProjectID},
+	}
 	out, err := reg.Run(t.Context(), "wait", completionWaitArgs(), tctx)
 	testutil.FailErr(t, "park completion wait", err)
 	var result WaitToolResult
@@ -253,7 +271,10 @@ func TestCompletionWaitDeliversTerminalOrLostProcessOnce(t *testing.T) {
 					Conditions: []awaitstore.Condition{{Kind: "process_done", Handles: []string{"command-1"}}}})
 				testutil.FailErr(t, "persist wait before restart", err)
 			} else {
-				_, err := reg.Run(t.Context(), "wait", completionWaitArgs(), tools.ToolContext{SessionID: "s1", ProjectID: testdbseed.DefaultProjectID})
+				_, err := reg.Run(t.Context(), "wait", completionWaitArgs(), tools.ToolContext{
+					Identity: tools.InvocationIdentity{SessionID: "s1",
+						ProjectID: testdbseed.DefaultProjectID},
+				})
 				testutil.FailErr(t, "park terminal process wait", err)
 			}
 			switch event {
@@ -284,7 +305,10 @@ func TestCompletionWaitDeliversTerminalOrLostProcessOnce(t *testing.T) {
 
 func TestCompletionWaitReconciliationKeepsLiveProcessParked(t *testing.T) {
 	loop, store, reg := completionWaitFixture(t)
-	_, err := reg.Run(t.Context(), "wait", completionWaitArgs(), tools.ToolContext{SessionID: "s1", ProjectID: testdbseed.DefaultProjectID})
+	_, err := reg.Run(t.Context(), "wait", completionWaitArgs(), tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "s1",
+			ProjectID: testdbseed.DefaultProjectID},
+	})
 	testutil.FailErr(t, "park live process wait", err)
 	lease, found, err := store.ForSession(t.Context(), "s1")
 	testutil.FailErr(t, "read live process wait", err)
@@ -308,7 +332,10 @@ func TestCompletionWaitReturnsAlreadyFinishedWithoutParking(t *testing.T) {
 	deps := loop.loopDeps()
 	deps.ProcessState = func(string, string) (bool, bool) { return true, false }
 	loop.SetDeps(deps)
-	out, err := reg.Run(t.Context(), "wait", completionWaitArgs(), tools.ToolContext{SessionID: "s1", ProjectID: testdbseed.DefaultProjectID})
+	out, err := reg.Run(t.Context(), "wait", completionWaitArgs(), tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "s1",
+			ProjectID: testdbseed.DefaultProjectID},
+	})
 	testutil.FailErr(t, "wait on finished process", err)
 	var result WaitToolResult
 	testutil.FailErr(t, "decode finished process", json.Unmarshal([]byte(out), &result))

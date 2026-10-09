@@ -20,7 +20,11 @@ func TestStateUpdateCannotForgeHostWorkflowProof(t *testing.T) {
 	testutil.FailErr(t, "register state tools", RegisterStateTools(reg, StateToolDeps{Runs: mgr, Sessions: sessions}))
 	before, err := mgr.Store.GetScaffoldVars(t.Context(), run.ID)
 	testutil.FailErr(t, "read initial variables", err)
-	tctx := tools.ToolContext{SessionID: "sess-1", Roots: []projectroot.RootRef{{ID: "root", Path: dir, IsPrimary: true}}, ActiveRootID: "root"}
+	tctx := tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "sess-1"},
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: dir, IsPrimary: true}},
+			ActiveRootID: "root"},
+	}
 	for _, path := range []string{
 		"fanout_plans.execute", "fanout_coverage", "fanout_settled", "worker_cycle.evaluating", "gates.worker_cycle_ready",
 		"human_approval", "human_approval.issued", "human_approval.blueprint_hash", "phase_skipped.approve",
@@ -44,7 +48,7 @@ func TestStateUpdateCannotForgeHostWorkflowProof(t *testing.T) {
 	if !reflect.DeepEqual(before, after) {
 		t.Fatal("rejected state mutation changed host proof")
 	}
-	tctx.ToolCallID = "model-artifact"
+	tctx.Identity.ToolCallID = "model-artifact"
 	_, err = reg.Run(t.Context(), "state_update", map[string]any{"path": "artifact.summary", "value": "draft"}, tctx)
 	testutil.FailErr(t, "update model-authored artifact", err)
 }

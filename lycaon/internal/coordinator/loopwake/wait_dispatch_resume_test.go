@@ -43,7 +43,10 @@ func TestDurableWaitResumePreservesWorkerSubscription(t *testing.T) {
 				args["timeout_ms"] = 300_000
 			}
 			out, err := registry.Run(t.Context(), "wait", args, tools.ToolContext{
-				SessionID: id, ProjectID: testdbseed.DefaultProjectID, ToolCallID: "resume-call", Agent: "coordinator",
+				Identity: tools.InvocationIdentity{SessionID: id,
+					ProjectID:  testdbseed.DefaultProjectID,
+					ToolCallID: "resume-call",
+					Agent:      "coordinator"},
 			})
 			testutil.FailErr(t, "resume worker wait", err)
 			var result WaitToolResult
@@ -87,7 +90,10 @@ func TestWaitResumeRechecksLoopbackAuthority(t *testing.T) {
 			registry := tools.NewDefaultRegistry()
 			testutil.FailErr(t, "register wait", RegisterWaitTool(registry, loop, WaitToolDeps{Store: store, RuntimeContext: t.Context()}))
 			_, err = registry.Run(t.Context(), "wait", map[string]any{"resume": true}, tools.ToolContext{
-				SessionID: id, ProjectID: testdbseed.DefaultProjectID, Agent: "coordinator", ToolCallID: "resume-call",
+				Identity: tools.InvocationIdentity{SessionID: id,
+					ProjectID:  testdbseed.DefaultProjectID,
+					Agent:      "coordinator",
+					ToolCallID: "resume-call"},
 			})
 			reject := toolrejection.AsToolReject(err)
 			if reject == nil || reject.Code != isolation.CodeTryLoopbackConnect {

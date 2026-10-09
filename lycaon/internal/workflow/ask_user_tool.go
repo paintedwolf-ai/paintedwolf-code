@@ -24,16 +24,16 @@ func RegisterAskUserTool(reg *tools.DefaultRegistry, runs *RunManager, boundary 
 		return fmt.Errorf("workflow run manager required")
 	}
 	return reg.Register("ask_user", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-		if !isCoordinatorAgent(tctx.Agent) {
+		if !isCoordinatorAgent(tctx.Identity.Agent) {
 			return "", fmt.Errorf("ask_user requires coordinator role")
 		}
 		req, err := parseAskUserArgs(args)
 		if err != nil {
 			return "", err
 		}
-		req.ToolCallID = strings.TrimSpace(tctx.ToolCallID)
+		req.ToolCallID = strings.TrimSpace(tctx.Identity.ToolCallID)
 		req.WorkspaceImages = workspaceImageReader(boundary, tctx)
-		handle, err := runs.RequestUserInput(ctx, tctx.SessionID, req)
+		handle, err := runs.RequestUserInput(ctx, tctx.Identity.SessionID, req)
 		if err != nil {
 			reject := &AskUserReject{}
 			if errors.As(err, &reject) {

@@ -43,7 +43,7 @@ func (e *Secrets) prepareSecretPermission(ctx context.Context, tool string, args
 		destination, label = argvSecretDestination(tc)
 		if request, _ := capabilityrequest.ParseCapabilityRequest(args); request != nil && request.DirectIP != nil {
 			predicted := tc
-			predicted.DirectIPAuthorized = true
+			predicted.Direct.DirectIPAuthorized = true
 			destination, label = argvSecretDestination(predicted)
 		}
 		local = argvSecretRecipientsLocal(ctx)
@@ -64,7 +64,7 @@ func (e *Secrets) prepareSecretPermission(ctx context.Context, tool string, args
 	default:
 		return nil, nil
 	}
-	known, err := tc.Secrets.Matches(e.secretMatcher, included)
+	known, err := tc.Effects.Secrets.Matches(e.secretMatcher, included)
 	if err != nil || len(known) == 0 {
 		return nil, err
 	}
@@ -75,8 +75,8 @@ func (e *Secrets) prepareSecretPermission(ctx context.Context, tool string, args
 	if err != nil {
 		return nil, err
 	}
-	custody := tc.Secrets.Custody(finding.Fingerprints)
-	if secretInvocationCovered(tc.Secrets, finding.Fingerprints, recipients) {
+	custody := tc.Effects.Secrets.Custody(finding.Fingerprints)
+	if secretInvocationCovered(tc.Effects.Secrets, finding.Fingerprints, recipients) {
 		return nil, nil
 	}
 	// A covered held value still needs its chat unlocked; the final payload
@@ -85,7 +85,7 @@ func (e *Secrets) prepareSecretPermission(ctx context.Context, tool string, args
 		return nil, nil
 	}
 	// Standing redaction is applied by the final payload screen.
-	if e.Approvals.approvalGate != nil && e.Approvals.approvalGate.SecretRedactionStanding(tc.ProjectID, secretFingerprintValues(finding.Fingerprints)) {
+	if e.Approvals.approvalGate != nil && e.Approvals.approvalGate.SecretRedactionStanding(tc.Identity.ProjectID, secretFingerprintValues(finding.Fingerprints)) {
 		return nil, nil
 	}
 	// A release the gate makes silently joins no card; the final payload
@@ -98,7 +98,7 @@ func (e *Secrets) prepareSecretPermission(ctx context.Context, tool string, args
 	if len(custody.Held) > 0 && !e.presenceAvailable() {
 		return nil, secretmatch.NewAskFault(secretmatch.FaultStagePresenceUnavailable, nil)
 	}
-	offers := secretReleaseLadder(secretScreenChatSession(finding), tc.ProjectID, tc.ActiveRootPath(), recipients,
+	offers := secretReleaseLadder(secretScreenChatSession(finding), tc.Identity.ProjectID, tc.ActiveRootPath(), recipients,
 		finding.SecretNames, true, finding.Fingerprints)
 	if len(offers) == 0 {
 		return nil, nil
@@ -108,7 +108,7 @@ func (e *Secrets) prepareSecretPermission(ctx context.Context, tool string, args
 			Surface: string(surface), SurfaceLabel: surface.Label(), Managed: true,
 			DestinationID: destination, DestinationLabel: label, DestinationKind: surface.DestinationKind(),
 			Recipients: recipients, SecretNames: finding.SecretNames,
-			SourcePath: "arguments", OriginKind: secretmatch.OriginField, ToolCallID: tc.ToolCallID,
+			SourcePath: "arguments", OriginKind: secretmatch.OriginField, ToolCallID: tc.Identity.ToolCallID,
 			Held: heldRelease(finding, custody, recipients),
 		},
 		Offers: offers, Fingerprints: finding.Fingerprints,

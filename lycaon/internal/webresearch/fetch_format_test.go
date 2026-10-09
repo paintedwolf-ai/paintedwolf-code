@@ -158,8 +158,10 @@ func TestFetchURLToolCacheHitPreservesResponseMetadata(t *testing.T) {
 
 	invocation := &tools.ToolInvocationOut{}
 	out, fetched, err := fetchURLTool(context.Background(), fetchURLToolArgs{
-		URL:  requestedURL,
-		Tctx: tools.ToolContext{Out: invocation},
+		URL: requestedURL,
+		Tctx: tools.ToolContext{
+			Effects: tools.InvocationEffects{Out: invocation},
+		},
 	})
 	testutil.FailErr(t, "cached fetch_url", err)
 	if fetched != nil {

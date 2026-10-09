@@ -15,7 +15,7 @@ import (
 
 var schemaCache sync.Map // string(cache key) -> *jsonschema.Schema
 
-// schemaRequiresValidation reports whether ArgsSchema imposes constraints beyond a bare object type.
+// SchemaRequiresValidation reports whether ArgsSchema imposes constraints beyond a bare object type.
 func SchemaRequiresValidation(schema map[string]any) bool {
 	if len(schema) == 0 {
 		return false
@@ -96,10 +96,10 @@ func mutationRecoveryTool(tool string, addressable []string) string {
 
 // ValidateCallArguments checks transport integrity and argument shape before policy reads them.
 func ValidateCallArguments(qualifiedName string, args, schema map[string]any, tc ToolContext) *toolrejection.ToolReject {
-	if tc.ArgsTruncated {
+	if tc.Effects.ArgsTruncated {
 		return toolrejection.RejectInvalidArguments("TOOL_ARGS_TRUNCATED", map[string]any{"tool": qualifiedName})
 	}
-	if tc.ArgsMalformed {
+	if tc.Effects.ArgsMalformed {
 		return toolrejection.RejectInvalidArguments("TOOL_ARGS_MALFORMED", map[string]any{"tool": qualifiedName})
 	}
 	if _, err := json.Marshal(args); err != nil {
@@ -119,7 +119,7 @@ func ValidateCallArguments(qualifiedName string, args, schema map[string]any, tc
 				"tool":   qualifiedName,
 			}
 			diag.AddFacts(data)
-			if sibling := mutationRecoveryTool(qualifiedName, tc.TurnToolPlan.AddressableNames()); sibling != "" {
+			if sibling := mutationRecoveryTool(qualifiedName, tc.Turn.TurnToolPlan.AddressableNames()); sibling != "" {
 				data["suggested_tool"] = sibling
 			}
 			return toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", data)

@@ -98,17 +98,17 @@ func TestExecutorSettledJoinReviewsItsOwnAction(t *testing.T) {
 	defer cancel()
 	args := map[string]any{"path": "a.txt", "content": "x"}
 	tc := tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: tmp, IsPrimary: true}},
-		ActiveRootID: "r1",
-		SessionID:    "chat-1",
-		Agent:        "implement",
-		ToolCallID:   "tc-first",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: tmp, IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{SessionID: "chat-1",
+			Agent:      "implement",
+			ToolCallID: "tc-first"},
 	}
 	_, err = exec.Invoke(ctx, "write", args, tc)
 	testutil.FailErr(t, "first invocation", err)
 	// The first card's entry is still registered as pending: the terminal hook
 	// that clears it has not run for this fake manager, so the second call joins.
-	tc.ToolCallID = "tc-late"
+	tc.Identity.ToolCallID = "tc-late"
 	_, err = exec.Invoke(ctx, "write", args, tc)
 	testutil.FailErr(t, "late invocation", err)
 	mgr.mu.Lock()

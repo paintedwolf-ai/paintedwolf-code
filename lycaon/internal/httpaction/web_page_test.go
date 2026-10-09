@@ -100,15 +100,18 @@ func TestReportWebPageStatesFetchURLAvailability(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			tctx := tools.ToolContext{TurnToolPlan: tc.plan, Out: &tools.ToolInvocationOut{}}
+			tctx := tools.ToolContext{
+				Turn:    tools.InvocationTurn{TurnToolPlan: tc.plan},
+				Effects: tools.InvocationEffects{Out: &tools.ToolInvocationOut{}},
+			}
 			reportWebPage(tctx, remoteGET(t), htmlResponse(), inline, "https://www.example.test/guide/")
-			if got := tctx.Out.Facts.HasCode(toolrejection.HTTPRequestWebPageCode); got != tc.wantRaised {
-				t.Fatalf("raised = %v want %v: %+v", got, tc.wantRaised, tctx.Out.Facts)
+			if got := tctx.Effects.Out.Facts.HasCode(toolrejection.HTTPRequestWebPageCode); got != tc.wantRaised {
+				t.Fatalf("raised = %v want %v: %+v", got, tc.wantRaised, tctx.Effects.Out.Facts)
 			}
 			if !tc.wantRaised {
 				return
 			}
-			feedback := tctx.Out.Facts.FeedbackFor(toolrejection.HTTPRequestWebPageCode)
+			feedback := tctx.Effects.Out.Facts.FeedbackFor(toolrejection.HTTPRequestWebPageCode)
 			if feedback.Details["host"] != "www.example.test" || feedback.Details["bytes"] != "612480" {
 				t.Fatalf("details = %+v want the redirected host and byte count", feedback.Details)
 			}
@@ -135,9 +138,9 @@ func TestHTTPRequestToLoopbackPageStaysSilent(t *testing.T) {
 		"url":                server.URL,
 		"capability_request": loopbackCapability(t, server.URL),
 	}, tools.ToolContext{
-		Agent:        toolprofiles.DefaultToolProfileID,
-		TurnToolPlan: toolsurface.Compile([]string{"http_request", "fetch_url"}, nil),
-		Out:          outcome,
+		Identity: tools.InvocationIdentity{Agent: toolprofiles.DefaultToolProfileID},
+		Turn:     tools.InvocationTurn{TurnToolPlan: toolsurface.Compile([]string{"http_request", "fetch_url"}, nil)},
+		Effects:  tools.InvocationEffects{Out: outcome},
 	}); err != nil {
 		t.Fatalf("run http_request: %v", err)
 	}

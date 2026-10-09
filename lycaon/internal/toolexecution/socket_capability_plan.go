@@ -20,7 +20,7 @@ func socketPermitDelta(
 	targets []hitl.ApprovalSocketTarget,
 ) hitl.ApprovalAuthorityDelta {
 	return hitl.ApprovalAuthorityDelta{
-		Kind: hitl.AuthoritySocketPermit, SessionID: action.SessionID, ToolCallID: tc.ToolCallID,
+		Kind: hitl.AuthoritySocketPermit, SessionID: action.SessionID, ToolCallID: tc.Identity.ToolCallID,
 		ActionDigest: actionDigest, Sockets: targets,
 	}
 }
@@ -53,7 +53,7 @@ func socketCapabilityOptions(
 
 func combinedDirectIPAuthority(option hitl.ApprovalOption, direct directIPApprovalReview, tc tools.ToolContext) []hitl.ApprovalAuthorityDelta {
 	permit := hitl.ApprovalAuthorityDelta{
-		Kind: hitl.AuthorityDirectIPPermit, SessionID: direct.Action.SessionID, ToolCallID: tc.ToolCallID,
+		Kind: hitl.AuthorityDirectIPPermit, SessionID: direct.Action.SessionID, ToolCallID: tc.Identity.ToolCallID,
 		ActionDigest: direct.Lease.ActionDigest, DirectIPLease: &direct.Lease,
 	}
 	// Absorbed second-subject options and once: current-call only.

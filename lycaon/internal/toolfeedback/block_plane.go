@@ -149,7 +149,7 @@ func (bp *BlockPlane) RejectFromObservation(ctx context.Context, anchor, tool, p
 	return nil
 }
 
-// applyToolRejectObservations publishes ToolReject as GuardContext facts.
+// ApplyToolRejectObservations publishes ToolReject as GuardContext facts.
 func ApplyToolRejectObservations(gc *oar.GuardContext, tr *toolrejection.ToolReject) {
 	if gc == nil || tr == nil {
 		return

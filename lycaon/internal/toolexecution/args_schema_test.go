@@ -251,7 +251,9 @@ func TestInvokeTruncatedArgsRejectsBeforeHandler(t *testing.T) {
 		return "ok", nil
 	})
 	exec := NewExecutor(nil, reg, "implement")
-	_, err := exec.Invoke(t.Context(), "write", nil, tools.ToolContext{ArgsTruncated: true})
+	_, err := exec.Invoke(t.Context(), "write", nil, tools.ToolContext{
+		Effects: tools.InvocationEffects{ArgsTruncated: true},
+	})
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -275,7 +277,9 @@ func TestInvokeMalformedArgsRejectsBeforeHandler(t *testing.T) {
 		return "ok", nil
 	})
 	exec := NewExecutor(nil, reg, "implement")
-	_, err := exec.Invoke(t.Context(), "summarize", nil, tools.ToolContext{ArgsMalformed: true})
+	_, err := exec.Invoke(t.Context(), "summarize", nil, tools.ToolContext{
+		Effects: tools.InvocationEffects{ArgsMalformed: true},
+	})
 	if err == nil {
 		t.Fatal("expected error")
 	}

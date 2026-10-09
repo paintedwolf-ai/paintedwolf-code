@@ -10,12 +10,12 @@ import (
 var socketCapabilityPaths = []string{
 	"lycaon/internal/toolexecution/socket_capability.go",
 	"lycaon/internal/toolexecution/invocation_boundary.go",
-	"lycaon/internal/tools/package_execution_boundary.go",
-	"lycaon/internal/tools/socket_realization.go",
-	"lycaon/internal/tools/socket_approval.go",
+	"lycaon/internal/toolexecution/package_execution_boundary.go",
+	"lycaon/internal/toolexecution/socket_realization.go",
+	"lycaon/internal/toolexecution/socket_approval.go",
 	"lycaon/internal/tools/socket_spawn.go",
-	"lycaon/internal/tools/socket_execution_grants.go",
-	"lycaon/internal/tools/socket_authorization_ledger.go",
+	"lycaon/internal/capabilitygrants/socket_execution_grants.go",
+	"lycaon/internal/tools/capability_lifecycle.go",
 }
 
 func socketCapabilitySources(t *testing.T, root string) string {

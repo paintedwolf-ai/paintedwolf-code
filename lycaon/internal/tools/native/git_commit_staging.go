@@ -65,11 +65,11 @@ func commitBulkDenied(max, got int) error {
 
 // sessionAuthoredPaths returns no paths when the ledger cannot establish authorship.
 func sessionAuthoredPaths(ctx context.Context, tctx tools.ToolContext) ([]string, error) {
-	reader, ok := tctx.SourceLedger.(sourceledger.AuthorshipReader)
+	reader, ok := tctx.Source.SourceLedger.(sourceledger.AuthorshipReader)
 	if !ok {
 		return nil, nil
 	}
-	return reader.SessionAuthoredPaths(ctx, tctx.ProjectID, tctx.SessionID, tctx.ActiveRootID)
+	return reader.SessionAuthoredPaths(ctx, tctx.Identity.ProjectID, tctx.Identity.SessionID, tctx.Source.ActiveRootID)
 }
 
 // splitAuthored keeps authored paths that still differ from HEAD, in authored

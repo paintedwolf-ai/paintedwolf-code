@@ -20,7 +20,7 @@ func TestStateStartRequiresHumanApproval(t *testing.T) {
 	ctx := context.Background()
 
 	tctx := wiringToolContext(sess.ID, sess.WorkspacePath)
-	tctx.Agent = "coordinator"
+	tctx.Identity.Agent = "coordinator"
 	_, err = h.ToolRegistry.Run(ctx, "state_start", map[string]any{
 		"workflow_id": "plan", "workflow_version": "1.0.0",
 	}, tctx)

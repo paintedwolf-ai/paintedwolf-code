@@ -39,7 +39,9 @@ func TestActHandlerRetainsOriginalIndexAndCompletedEffects(t *testing.T) {
 			map[string]any{"type": "click", "selector": "#save"},
 			map[string]any{"type": "click", "selector": "#missing"},
 		},
-	}, tools.ToolContext{SessionID: "batch"})
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "batch"},
+	})
 	var rejection *toolrejection.ToolReject
 	if !errors.As(err, &rejection) || rejection.Code != "CAPTURE_ACTION_FAILED" {
 		t.Fatalf("tool rejection = %v", err)

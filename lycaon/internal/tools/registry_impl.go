@@ -195,8 +195,8 @@ func (r *DefaultRegistry) Run(ctx context.Context, name string, args map[string]
 	if !ok {
 		return "", fmt.Errorf("unknown tool: %s", name)
 	}
-	if tctx.Out != nil {
-		tctx.Out.OwnerInvoked = true
+	if tctx.Effects.Out != nil {
+		tctx.Effects.Out.OwnerInvoked = true
 	}
 	return def.Handler(ctx, args, tctx)
 }

@@ -32,9 +32,9 @@ func surveyRepoBoundary(t *testing.T) *sandbox.Boundary {
 
 func surveyRepoCtx(dir string) tools.ToolContext {
 	return tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}},
-		ActiveRootID: "r1",
-		Agent:        toolprofiles.DefaultToolProfileID,
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{Agent: toolprofiles.DefaultToolProfileID},
 	}
 }
 
@@ -104,12 +104,13 @@ func TestSurveyRepoLayoutUsesQualifiedSecondaryRoot(t *testing.T) {
 		Caps: survey.DefaultCaps(), SourceCatalog: catalog,
 	}
 	tctx := tools.ToolContext{
-		ProjectID: "project",
-		Roots: []projectroot.RootRef{
+		Identity: tools.InvocationIdentity{ProjectID: "project",
+			Agent: toolprofiles.DefaultToolProfileID},
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{
 			{ID: "primary", Label: "primary", Path: primary, IsPrimary: true},
 			{ID: "secondary", Label: "secondary", Path: secondary},
 		},
-		ActiveRootID: "primary", Agent: toolprofiles.DefaultToolProfileID,
+			ActiveRootID: "primary"},
 	}
 	out, err := tool.Run(context.Background(), map[string]any{
 		"bundle": "layout_overview", "path": "@secondary",

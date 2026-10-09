@@ -77,8 +77,13 @@ func newCommandPlanFixture(t *testing.T) commandPlanFixture {
 	gate := &recordingApprovalGate{}
 	executor := toolexecution.NewExecutor(toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), gate), registry, "implement")
 	return commandPlanFixture{root: root, gate: gate, executor: executor, tc: tools.ToolContext{
-		Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}}, ActiveRootID: "root",
-		ProjectID: "project", SourceWorkspaceKind: api.SourceWorkspaceKindProject, SessionID: "chat", ToolCallID: "call", Agent: "implement",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}},
+			ActiveRootID:        "root",
+			SourceWorkspaceKind: api.SourceWorkspaceKindProject},
+		Identity: tools.InvocationIdentity{ProjectID: "project",
+			SessionID:  "chat",
+			ToolCallID: "call",
+			Agent:      "implement"},
 	}}
 }
 

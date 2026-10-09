@@ -230,11 +230,11 @@ func TestSecretCanaryNeverEchoedByHTTPRequestResult(t *testing.T) {
 			tctx := sessionContext(root, call)
 			if tc.prime != nil {
 				tc.prime["capability_request"] = capability
-				tctx.ToolCallID = call + "-prime"
+				tctx.Identity.ToolCallID = call + "-prime"
 				primed, err := executor.Invoke(t.Context(), "http_request", tc.prime, tctx)
 				testutil.FailErr(t, "prime cookie jar", err)
 				assertNoCanary(t, "http_request", tc.scheme+" (prime)", primed)
-				tctx.ToolCallID = call
+				tctx.Identity.ToolCallID = call
 			}
 			tc.args["capability_request"] = capability
 			sent := len(wire)

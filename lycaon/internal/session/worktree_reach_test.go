@@ -208,15 +208,15 @@ func TestWorktreeReach_rootIdentityStable(t *testing.T) {
 	f := newReachFixture(t, initReachRepo(t))
 	unbound, err := f.mgr.buildToolContext(t.Context(), f.sess, "", inject.Machine{})
 	testutil.FailErr(t, "unbound context", err)
-	activeID := unbound.ActiveRootID
+	activeID := unbound.Source.ActiveRootID
 	if activeID == "" {
 		t.Fatal("expected active root id")
 	}
 	f.bind(t)
 	bound, err := f.mgr.buildToolContext(t.Context(), f.sess, "", inject.Machine{})
 	testutil.FailErr(t, "bound context", err)
-	if bound.ActiveRootID != activeID {
-		t.Fatalf("ActiveRootID changed: %q -> %q", activeID, bound.ActiveRootID)
+	if bound.Source.ActiveRootID != activeID {
+		t.Fatalf("ActiveRootID changed: %q -> %q", activeID, bound.Source.ActiveRootID)
 	}
 	if !sameReachPath(bound.ActiveRootPath(), f.wtPath) {
 		t.Fatalf("ActiveRootPath = %q want %q", bound.ActiveRootPath(), f.wtPath)
@@ -239,11 +239,11 @@ func TestWorktreeReach_foreignRootsUntouched(t *testing.T) {
 
 	tctx, err := f.mgr.buildToolContext(t.Context(), f.sess, "", inject.Machine{})
 	testutil.FailErr(t, "buildToolContext", err)
-	if len(tctx.Roots) != 2 {
-		t.Fatalf("roots = %d want 2", len(tctx.Roots))
+	if len(tctx.Source.Roots) != 2 {
+		t.Fatalf("roots = %d want 2", len(tctx.Source.Roots))
 	}
 	var foreignPath string
-	for _, r := range tctx.Roots {
+	for _, r := range tctx.Source.Roots {
 		if sameReachPath(r.Path, f.wtPath) {
 			continue
 		}
@@ -299,19 +299,19 @@ func TestWorktreeReach_workerInheritance(t *testing.T) {
 
 	tctx, err := f.mgr.buildToolContext(t.Context(), f.sess, "", inject.Machine{})
 	testutil.FailErr(t, "buildToolContext", err)
-	if !sameReachPath(tctx.Roots[0].Path, f.wtPath) {
-		t.Fatalf("substituted root = %q want %q", tctx.Roots[0].Path, f.wtPath)
+	if !sameReachPath(tctx.Source.Roots[0].Path, f.wtPath) {
+		t.Fatalf("substituted root = %q want %q", tctx.Source.Roots[0].Path, f.wtPath)
 	}
 	child, err := f.mem.CreateChild(t.Context(), f.sess, api.SpawnChildRequest{AgentType: "implementer", Prompt: "edit"})
 	testutil.FailErr(t, "CreateChild", err)
 	childCtx, err := f.mgr.buildToolContext(t.Context(), child, "", inject.Machine{})
 	testutil.FailErr(t, "build child ToolContext", err)
-	if !sameReachPath(childCtx.Roots[0].Path, f.wtPath) {
-		t.Fatalf("child root = %q want inherited worktree %q", childCtx.Roots[0].Path, f.wtPath)
+	if !sameReachPath(childCtx.Source.Roots[0].Path, f.wtPath) {
+		t.Fatalf("child root = %q want inherited worktree %q", childCtx.Source.Roots[0].Path, f.wtPath)
 	}
 
 	ws := workspace.NewManager(filepath.Join(t.TempDir(), "branches"), filepath.Join(t.TempDir(), "seeds"))
-	binding, layout, err := ws.CreateWorkerWorkspaceFromSources(t.Context(), tctx.Roots, tctx.Roots, tctx.ActiveRootID, "job-reach")
+	binding, layout, err := ws.CreateWorkerWorkspaceFromSources(t.Context(), tctx.Source.Roots, tctx.Source.Roots, tctx.Source.ActiveRootID, "job-reach")
 	testutil.FailErr(t, "CreateWorkerWorkspaceFromSources", err)
 	if !sameReachPath(layout.Roots[0].Path, f.wtPath) {
 		t.Fatalf("overlay source = %q want worktree", layout.Roots[0].Path)

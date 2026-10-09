@@ -11,7 +11,6 @@ import (
 	"io"
 	"log/slog"
 	"net"
-	"net/http"
 	"os"
 	"strings"
 	"syscall"
@@ -33,12 +32,12 @@ type pooledSession struct {
 }
 
 // ensureSession returns the pooled session for entry under scope, connecting if needed.
-func (r *RegistryImpl) ensureSession(ctx context.Context, scope CallScope, entry MCPProviderEntry) (ProviderSession, error) {
+func (r *ConnectionPool) ensureSession(ctx context.Context, scope CallScope, entry MCPProviderEntry) (ProviderSession, error) {
 	r.sessionMu.Lock()
 	defer r.sessionMu.Unlock()
 
 	ref := sessionRef{scope: scope.sessionKey(), providerID: entry.ID}
-	entry = r.stampRecipeCredential(entry)
+	entry = r.Credentials.stampRecipeCredential(entry)
 	wantFingerprint, err := providerConnectionFingerprint(entry)
 	if err != nil {
 		return nil, err
@@ -58,7 +57,7 @@ func (r *RegistryImpl) ensureSession(ctx context.Context, scope CallScope, entry
 		return nil, errors.New("mcp registry is closed")
 	}
 
-	if err := r.refreshHTTPAuth(ctx, entry); err != nil {
+	if err := r.Credentials.refreshHTTPAuth(ctx, entry); err != nil {
 		return nil, err
 	}
 
@@ -68,8 +67,8 @@ func (r *RegistryImpl) ensureSession(ctx context.Context, scope CallScope, entry
 		ExtraEnv:          r.spawnEnv(entry),
 		Roots:             r.rootsFor(scope),
 		Lifetime:          lifetime,
-		OnToolListChanged: r.toolListChangedNotifier(entry.ID),
-		OnHTTPStatus:      r.httpStatusObserver(entry.ID),
+		OnToolListChanged: r.Tools.toolListChangedNotifier(entry.ID),
+		OnHTTPStatus:      r.Credentials.httpStatusObserver(entry.ID),
 	})
 	if err != nil {
 		stop()
@@ -91,7 +90,7 @@ func (r *RegistryImpl) ensureSession(ctx context.Context, scope CallScope, entry
 		return nil, errors.New("mcp registry is closed")
 	}
 	r.sessions[ref] = &pooledSession{sess: sess, stop: stop, connectionFingerprint: wantFingerprint}
-	delete(r.authRequired, entry.ID)
+	delete(r.Credentials.authRequired, entry.ID)
 	r.mu.Unlock()
 	return sess, nil
 }
@@ -106,59 +105,16 @@ func providerConnectionFingerprint(entry MCPProviderEntry) (string, error) {
 }
 
 // rootsFor resolves project roots or device inspection roots.
-func (r *RegistryImpl) rootsFor(scope CallScope) []string {
+func (r *ConnectionPool) rootsFor(scope CallScope) []string {
 	if scope.isDevice() {
 		return r.deviceProbeRoots()
 	}
 	return cleanRootPaths(scope.Roots)
 }
 
-// refreshHTTPAuth renews an OAuth access token before a connect that would otherwise
-// present an expired one.
-func (r *RegistryImpl) refreshHTTPAuth(ctx context.Context, entry MCPProviderEntry) error {
-	tr, err := entry.Transport()
-	if err != nil {
-		return err
-	}
-	if tr != TransportHTTP {
-		return nil
-	}
-	if entry.HasStaticHTTPAuth() {
-		return nil
-	}
-	if !r.oauthStore.SignedIn(entry.ID) {
-		return nil
-	}
-	if _, err := r.oauth.RefreshAccessToken(ctx, entry.ID); err != nil {
-		// Only an authorization failure invalidates the stored grant.
-		if !isOAuthAuthFailure(err) {
-			return fmt.Errorf("mcp provider %q: token refresh failed: %w", entry.ID, err)
-		}
-		r.markAuthRequired(entry.ID)
-		return fmt.Errorf("mcp provider %q: needs_auth: %w", entry.ID, err)
-	}
-	return nil
-}
-
-// httpStatusObserver records authorization failures from wire status codes.
-func (r *RegistryImpl) httpStatusObserver(providerID string) func(int) {
-	return func(code int) {
-		switch code {
-		case http.StatusUnauthorized, http.StatusForbidden:
-			r.markAuthRequired(providerID)
-		}
-	}
-}
-
-func (r *RegistryImpl) markAuthRequired(providerID string) {
-	r.mu.Lock()
-	r.authRequired[providerID] = true
-	r.mu.Unlock()
-}
-
 // toolListChangedNotifier hands the session a callback for
 // notifications/tools/list_changed.
-func (r *RegistryImpl) toolListChangedNotifier(providerID string) func() {
+func (r *ToolDiscovery) toolListChangedNotifier(providerID string) func() {
 	return func() {
 		select {
 		case r.resync <- providerID:
@@ -169,15 +125,15 @@ func (r *RegistryImpl) toolListChangedNotifier(providerID string) func() {
 }
 
 // drainResync handles tool-list changes outside the session reader.
-func (r *RegistryImpl) drainResync() {
+func (r *ToolDiscovery) drainResync() {
 	for {
 		select {
-		case <-r.lifeCtx.Done():
+		case <-r.Connections.lifeCtx.Done():
 			return
 		case providerID := <-r.resync:
 			slog.Info("mcp server reported a tool-list change; re-syncing",
 				"provider_id", providerID)
-			if err := r.SyncTools(r.lifeCtx); err != nil {
+			if err := r.SyncTools(r.Connections.lifeCtx); err != nil {
 				slog.Warn("mcp resync after tool-list change failed",
 					"provider_id", providerID, "error", err)
 			}
@@ -185,7 +141,7 @@ func (r *RegistryImpl) drainResync() {
 	}
 }
 
-func (r *RegistryImpl) spawnEnv(entry MCPProviderEntry) []string {
+func (r *ConnectionPool) spawnEnv(entry MCPProviderEntry) []string {
 	if strings.TrimSpace(entry.Command) != DistroCommandSelf {
 		return nil
 	}
@@ -203,25 +159,17 @@ func (r *RegistryImpl) spawnEnv(entry MCPProviderEntry) []string {
 // httpStatusObserver has already marked authRequired during the failing round
 // trip, so the next ensureSession re-authenticates rather than replaying the
 // stale bearer. Eviction spans every scope because the bearer is provider-wide.
-func (r *RegistryImpl) evictDeadSession(scope CallScope, providerID string, err error) {
+func (r *ConnectionPool) evictDeadSession(scope CallScope, providerID string, err error) {
 	switch {
 	case transportDead(err):
 		slog.Warn("mcp session transport closed; evicting so the next call reconnects",
 			"provider_id", providerID, "error", err)
 		r.closeSessionRef(sessionRef{scope: scope.sessionKey(), providerID: providerID})
-	case r.authRequiredNow(providerID):
+	case r.Credentials.authRequiredNow(providerID):
 		slog.Warn("mcp provider rejected its bearer with 401/403; evicting pooled sessions so the next call re-authenticates",
 			"provider_id", providerID, "error", err)
 		r.closeProviderSessions(providerID)
 	}
-}
-
-// authRequiredNow reports whether providerID's most recent HTTP round trip
-// came back 401/403 and the flag has not yet been cleared by a fresh connect.
-func (r *RegistryImpl) authRequiredNow(providerID string) bool {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.authRequired[providerID]
 }
 
 // transportDead distinguishes closed transports from declared tool errors.
@@ -240,7 +188,7 @@ func transportDead(err error) bool {
 }
 
 // closeSessionRef tears down one pooled session.
-func (r *RegistryImpl) closeSessionRef(ref sessionRef) {
+func (r *ConnectionPool) closeSessionRef(ref sessionRef) {
 	r.mu.Lock()
 	pooled, ok := r.sessions[ref]
 	delete(r.sessions, ref)
@@ -258,7 +206,7 @@ func (r *RegistryImpl) closeSessionRef(ref sessionRef) {
 }
 
 // closeProviderSessions tears down every scope's session for one provider.
-func (r *RegistryImpl) closeProviderSessions(providerID string) {
+func (r *ConnectionPool) closeProviderSessions(providerID string) {
 	r.mu.RLock()
 	refs := make([]sessionRef, 0)
 	for ref := range r.sessions {
@@ -273,7 +221,7 @@ func (r *RegistryImpl) closeProviderSessions(providerID string) {
 }
 
 // CloseProjectSessions tears down every provider session for one project.
-func (r *RegistryImpl) CloseProjectSessions(projectID string) {
+func (r *ConnectionPool) CloseProjectSessions(projectID string) {
 	if r == nil {
 		return
 	}
@@ -295,7 +243,7 @@ func (r *RegistryImpl) CloseProjectSessions(projectID string) {
 }
 
 // closeSessionsNotRunnable drops sessions absent from the runnable catalog.
-func (r *RegistryImpl) closeSessionsNotRunnable(catalog []MergedMCPProviderEntry) {
+func (r *ConnectionPool) closeSessionsNotRunnable(catalog []MergedMCPProviderEntry) {
 	allowed := map[string]struct{}{}
 	for _, s := range catalog {
 		if s.Enabled {
@@ -313,4 +261,23 @@ func (r *RegistryImpl) closeSessionsNotRunnable(catalog []MergedMCPProviderEntry
 	for _, ref := range refs {
 		r.closeSessionRef(ref)
 	}
+}
+
+func (r *ConnectionPool) Close() error {
+	r.mu.Lock()
+	if r.closed {
+		r.mu.Unlock()
+		return nil
+	}
+	r.closed = true
+	refs := make([]sessionRef, 0, len(r.sessions))
+	for ref := range r.sessions {
+		refs = append(refs, ref)
+	}
+	r.mu.Unlock()
+	for _, ref := range refs {
+		r.closeSessionRef(ref)
+	}
+	r.lifeCancel()
+	return nil
 }

@@ -37,7 +37,7 @@ func (s *GroundingService) AuditFinding(ctx context.Context, summary, ref string
 	if mode == "off" {
 		return nil
 	}
-	sessionID := strings.TrimSpace(tctx.SessionID)
+	sessionID := strings.TrimSpace(tctx.Identity.SessionID)
 	if sessionID == "" {
 		return nil
 	}

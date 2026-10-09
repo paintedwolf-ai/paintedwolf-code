@@ -107,8 +107,13 @@ func TestCommandRedirectIntoCredentialFileAsksAsProtectedWrite(t *testing.T) {
 			ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 			defer cancel()
 			_, _ = executor.Invoke(ctx, "command", map[string]any{"command": tc.line}, tools.ToolContext{
-				Roots: []projectroot.RootRef{{ID: "root", Path: project, IsPrimary: true}}, ActiveRootID: "root", ProjectID: "project",
-				SourceWorkspaceKind: api.SourceWorkspaceKindProject, SessionID: "chat", ToolCallID: "redirect-" + tc.name, Agent: "implement",
+				Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: project, IsPrimary: true}},
+					ActiveRootID:        "root",
+					SourceWorkspaceKind: api.SourceWorkspaceKindProject},
+				Identity: tools.InvocationIdentity{ProjectID: "project",
+					SessionID:  "chat",
+					ToolCallID: "redirect-" + tc.name,
+					Agent:      "implement"},
 			})
 
 			asks := manager.sensitiveAsks()

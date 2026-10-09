@@ -177,7 +177,9 @@ func TestLoopbackApprovalAskRejection(t *testing.T) {
 	// 1. Without grant: should reject with isolation.CodeTryLoopbackConnect
 	_, err := registry.Run(t.Context(), "http_request", map[string]any{
 		"url": server.URL,
-	}, tools.ToolContext{Agent: toolprofiles.DefaultToolProfileID})
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{Agent: toolprofiles.DefaultToolProfileID},
+	})
 
 	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != isolation.CodeTryLoopbackConnect {
@@ -191,9 +193,9 @@ func TestLoopbackApprovalAskRejection(t *testing.T) {
 	out, err := registry.Run(t.Context(), "http_request", map[string]any{
 		"url": server.URL,
 	}, tools.ToolContext{
-		Agent:                  toolprofiles.DefaultToolProfileID,
-		LoopbackConnectGranted: true,
-		LoopbackConnectPorts:   []uint16{uint16(port)},
+		Identity: tools.InvocationIdentity{Agent: toolprofiles.DefaultToolProfileID},
+		Local: tools.InvocationLocal{LoopbackConnectGranted: true,
+			LoopbackConnectPorts: []uint16{uint16(port)}},
 	})
 	testutil.FailErr(t, "granted loopback request", err)
 

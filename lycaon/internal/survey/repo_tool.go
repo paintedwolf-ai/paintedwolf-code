@@ -94,7 +94,7 @@ func (t *RepoTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 	}
 	runner := NewRunner(cat, t.Caps)
 	started := time.Now()
-	profileID := strings.TrimSpace(tctx.Agent)
+	profileID := strings.TrimSpace(tctx.Identity.Agent)
 	if profileID == "" {
 		profileID = toolprofiles.DefaultToolProfileID
 	}

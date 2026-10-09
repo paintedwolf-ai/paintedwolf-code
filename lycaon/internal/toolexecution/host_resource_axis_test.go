@@ -55,15 +55,15 @@ func TestHostResourceAskSurvivesNetworkApproval(t *testing.T) {
 		Families: []string{"containers.local"},
 		Ask:      []string{"docker"},
 	}
-	tc.HostResources = sortedHostResourceIDs(resolution.States)
-	tc.HostResourceFamilies = append([]string(nil), resolution.Families...)
-	tc.HostResourceAsk = append([]string(nil), resolution.Ask...)
+	tc.Host.HostResources = sortedHostResourceIDs(resolution.States)
+	tc.Host.HostResourceFamilies = append([]string(nil), resolution.Families...)
+	tc.Host.HostResourceAsk = append([]string(nil), resolution.Ask...)
 
 	// A socket approval landing on the same action changes the network axes only.
-	tc.SocketGrants = nil
-	tc.DirectIPAuthorized = true
+	tc.Socket.SocketGrants = nil
+	tc.Direct.DirectIPAuthorized = true
 
-	if len(tc.HostResourceAsk) != 1 || tc.HostResourceAsk[0] != "docker" {
-		t.Fatalf("HostResourceAsk = %v, want the resource ask untouched by a network approval", tc.HostResourceAsk)
+	if len(tc.Host.HostResourceAsk) != 1 || tc.Host.HostResourceAsk[0] != "docker" {
+		t.Fatalf("HostResourceAsk = %v, want the resource ask untouched by a network approval", tc.Host.HostResourceAsk)
 	}
 }

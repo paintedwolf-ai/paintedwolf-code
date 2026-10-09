@@ -31,7 +31,9 @@ func TestDispatchNoDuplicateNextStep(t *testing.T) {
 	if _, err := store.Create(ctx, delegation, sess.ID, []api.Leg{leg}); err != nil {
 		testutil.FailErr(t, "create session in store", err)
 	}
-	out, err := reg.Run(ctx, "delegate_dispatch", map[string]any{"leg_id": leg.ID}, tools.ToolContext{SessionID: sess.ID})
+	out, err := reg.Run(ctx, "delegate_dispatch", map[string]any{"leg_id": leg.ID}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: sess.ID},
+	})
 	testutil.FailErr(t, "reg.Run failed", err)
 	if strings.Contains(out, ">>> NEXT:") {
 		t.Fatalf("dispatch output must not duplicate next_step suffix: %q", out)
@@ -57,7 +59,9 @@ func TestDispatchRejectWhenNoDelegation(t *testing.T) {
 	if err := RegisterDispatchTool(reg, &Manager{Store: NewMemoryStore()}); err != nil {
 		testutil.FailErr(t, "RegisterDispatchTool failed", err)
 	}
-	_, err := reg.Run(context.Background(), "delegate_dispatch", map[string]any{"leg_id": "leg-1"}, tools.ToolContext{SessionID: "orphan-session"})
+	_, err := reg.Run(context.Background(), "delegate_dispatch", map[string]any{"leg_id": "leg-1"}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "orphan-session"},
+	})
 	if err == nil {
 		t.Fatal("expected reject when session has no delegation")
 	}

@@ -93,7 +93,7 @@ func TestAgentPolicyResolvesForReview(t *testing.T) {
 	proj := t.TempDir()
 	testutil.FailErr(t, "mkdir overlay", os.MkdirAll(filepath.Join(proj, settingsoverlay.DirName()), 0o700))
 	tctx := tools.ToolContext{
-		Roots: []projectroot.RootRef{{ID: "primary", Path: proj, IsPrimary: true}},
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "primary", Path: proj, IsPrimary: true}}},
 	}
 	for _, rel := range []string{settingsoverlay.Rel(settingsoverlay.BasenameApprovals), ".env", "docs/AGENTS.md"} {
 		if _, err := projectpaths.ResolveWrite(context.Background(), nil, tctx, rel); err != nil {

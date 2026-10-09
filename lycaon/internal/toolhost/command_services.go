@@ -57,21 +57,21 @@ func (r *CommandServices) SetSandboxWriteRootGate(writeRoot native.SandboxWriteR
 		r.paths.SetSessionWriteRootOverlay(writeRoot.SessionWriteRoots)
 		r.paths.SetWriteRootPreflight(func(ctx context.Context, tool string, args map[string]any, tc tools.ToolContext, root string) (bool, bool, string, error) {
 			result, err := writeRoot.Authorize(ctx, native.SandboxWriteRootAsk{
-				SessionID: tc.SessionID, ParentSessionID: tc.ParentSessionID,
-				ProjectID: tc.ProjectID, ToolCallID: tc.ToolCallID, ProjectDir: tc.ActiveRootPath(),
+				SessionID: tc.Identity.SessionID, ParentSessionID: tc.Identity.ParentSessionID,
+				ProjectID: tc.Identity.ProjectID, ToolCallID: tc.Identity.ToolCallID, ProjectDir: tc.ActiveRootPath(),
 				ToolName: tool, Command: commandsurface.PrimaryCommandLine(args, nil), ProposedWriteRoot: root,
-				SessionScratchRoot: tc.SessionScratchDir,
+				SessionScratchRoot: tc.Host.SessionScratchDir,
 			})
 			return result.Authorized, result.Denied, result.UserGuidance, err
 		})
 		r.paths.SetSessionReadPathOverlay(writeRoot.SessionReadPaths)
 		r.paths.SetReadPathPreflight(func(ctx context.Context, tool string, args map[string]any, tc tools.ToolContext, path string) (bool, bool, string, error) {
 			result, err := writeRoot.AuthorizeRead(ctx, native.SandboxReadPathAsk{
-				SessionID: tc.SessionID, ParentSessionID: tc.ParentSessionID,
-				ProjectID: tc.ProjectID, ToolCallID: tc.ToolCallID, ProjectDir: tc.ActiveRootPath(),
+				SessionID: tc.Identity.SessionID, ParentSessionID: tc.Identity.ParentSessionID,
+				ProjectID: tc.Identity.ProjectID, ToolCallID: tc.Identity.ToolCallID, ProjectDir: tc.ActiveRootPath(),
 				ToolName: tool, Command: commandsurface.PrimaryCommandLine(args, nil), ProposedReadPath: path,
 				ReadDenyPaths:      tools.ActionConfineInputsForContext(tc, nil).ReadDenyPaths,
-				SessionScratchRoot: tc.SessionScratchDir,
+				SessionScratchRoot: tc.Host.SessionScratchDir,
 			})
 			return result.Authorized, result.Denied, result.UserGuidance, err
 		})

@@ -16,10 +16,10 @@ import (
 // sandbox capability brokers share awaitSandboxAsk, so only it appears here;
 // another broker entry would be a second copy of that lifecycle.
 var mintSeamFiles = map[string]string{
-	"lycaon/internal/tools/executor_tool_approval.go":       "the executor's raise-and-wait seam",
-	"lycaon/internal/session/sandbox_ask_broker.go":         "the sandbox capability ask lifecycle",
-	"lycaon/internal/tools/socket_approval.go":              "the local-socket capability card",
-	"lycaon/internal/toolexecution/direct_ip_capability.go": "the direct-network capability card",
+	"lycaon/internal/toolexecution/executor_tool_approval.go": "the executor's raise-and-wait seam",
+	"lycaon/internal/session/sandbox_ask_broker.go":           "the sandbox capability ask lifecycle",
+	"lycaon/internal/toolexecution/socket_approval.go":        "the local-socket capability card",
+	"lycaon/internal/toolexecution/direct_ip_capability.go":   "the direct-network capability card",
 }
 
 // TestApprovalsHaveOneMintSeam keeps approval creation on reviewed seams.

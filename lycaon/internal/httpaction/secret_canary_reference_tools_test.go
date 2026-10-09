@@ -147,13 +147,13 @@ func TestSecretCanaryNeverEchoedByAnyReferenceTool(t *testing.T) {
 	global := filepath.Join(t.TempDir(), "mcp.yaml")
 	testutil.FailErr(t, "write mcp config", os.WriteFile(global, []byte("providers:\n  - id: canary\n    url: http://127.0.0.1:8765/mcp\n    enabled: true\n"), 0o600))
 	var received []string
-	providers, err := mcp.NewRegistryImpl(mcp.RegistryOptions{
+	providers, err := mcp.NewRuntime(mcp.RuntimeOptions{
 		StatePath: t.TempDir(), GlobalOverridePath: global, Connector: canaryEchoConnector{received: &received},
 	})
 	testutil.FailErr(t, "open mcp registry", err)
-	providers.SetToolRegistry(registry)
-	providers.SetSecretScreen(matcher, executor.AskSecretScreen)
-	testutil.FailErr(t, "load mcp providers", providers.Load(t.Context()))
+	providers.Tools.SetToolRegistry(registry)
+	providers.Calls.SetSecretScreen(matcher, executor.AskSecretScreen)
+	testutil.FailErr(t, "load mcp providers", providers.Catalog.Load(t.Context()))
 	mcpReceived := func() string {
 		if len(received) == 0 {
 			return ""
@@ -215,7 +215,7 @@ func TestSecretCanaryNeverEchoedByAnyReferenceTool(t *testing.T) {
 		for i, call := range calls {
 			t.Run(tool+"/"+call.scheme, func(t *testing.T) {
 				tctx := sessionContext(root, strings.ReplaceAll(tool+"-"+call.scheme, " ", "-"))
-				tctx.ToolCallID += "-" + string(rune('a'+i))
+				tctx.Identity.ToolCallID += "-" + string(rune('a'+i))
 				if tool == "terminal_send" {
 					terminal = openCanaryShell(t, executor, root)
 					call.args["id"] = terminal

@@ -35,12 +35,12 @@ func (e *Capabilities) permitCoveredHostResourceSockets(
 		return false, missing
 	}
 	for _, grant := range missing {
-		if !socketMatchesRealization(grant, tc.RealizationSockets) {
+		if !socketMatchesRealization(grant, tc.Host.RealizationSockets) {
 			extras = append(extras, grant)
 			continue
 		}
 		if e.socketRuntime != nil {
-			e.socketRuntime.IssuePermit(tc.SessionID, tc.ToolCallID, actionDigest, grant)
+			e.socketRuntime.IssuePermit(tc.Identity.SessionID, tc.Identity.ToolCallID, actionDigest, grant)
 		}
 		e.recordCapabilityDecision(ctx, tc, action.Tool, grant, true, authzledger.AuthorizationSourceLease)
 	}
@@ -82,7 +82,7 @@ func (e *Capabilities) durableSocketGrants(tc tools.ToolContext) []confine.Socke
 	if e == nil || e.durableSockets == nil {
 		return nil
 	}
-	return e.durableSockets(tc.ProjectID)
+	return e.durableSockets(tc.Identity.ProjectID)
 }
 
 func mergeAuthorizedWithOverlay(authorized, requested, overlay []confine.SocketGrant) []confine.SocketGrant {

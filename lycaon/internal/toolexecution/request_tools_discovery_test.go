@@ -50,7 +50,10 @@ func TestRequestDiscoveryOutageToExactActivation(t *testing.T) {
 					receipt = result
 				},
 			}))
-			tctx := tools.ToolContext{SessionID: "s", TurnToolPlan: toolsurface.Compile([]string{"request_tools"}, names[:42])}
+			tctx := tools.ToolContext{
+				Identity: tools.InvocationIdentity{SessionID: "s"},
+				Turn:     tools.InvocationTurn{TurnToolPlan: toolsurface.Compile([]string{"request_tools"}, names[:42])},
+			}
 			args := map[string]any{"need": "inspect the operation"}
 			count := 0
 			for {
@@ -108,7 +111,10 @@ func TestRequestDiscoveryPartialSelectionAndCancellation(t *testing.T) {
 		return turnload.ResolveRequest(t.Context(), nil, turnload.RequestSpec{}, need, cards)
 	}
 	testutil.FailErr(t, "register discovery", tools.RegisterRequestTools(reg, tools.RequestToolsDeps{Activation: activation, Boundary: fakeRequestBoundary{}, Resolve: resolve}))
-	tctx := tools.ToolContext{SessionID: "partial", TurnToolPlan: toolsurface.Compile([]string{"read", "request_tools"}, []string{"write", "edit"})}
+	tctx := tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "partial"},
+		Turn:     tools.InvocationTurn{TurnToolPlan: toolsurface.Compile([]string{"read", "request_tools"}, []string{"write", "edit"})},
+	}
 	raw, err := reg.Run(t.Context(), "request_tools", map[string]any{"need": "write and inspect more"}, tctx)
 	testutil.FailErr(t, "partial selection", err)
 	var result turnload.RequestToolsResult
@@ -137,7 +143,10 @@ func TestRequestDiscoveryCursorSurvivesPartialActivation(t *testing.T) {
 	}
 	registerRequestFixtureTools(t, reg, names...)
 	testutil.FailErr(t, "register discovery", tools.RegisterRequestTools(reg, tools.RequestToolsDeps{Activation: activation, Boundary: fakeRequestBoundary{}}))
-	tctx := tools.ToolContext{SessionID: "partial-page", TurnToolPlan: toolsurface.Compile([]string{"request_tools"}, names)}
+	tctx := tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "partial-page"},
+		Turn:     tools.InvocationTurn{TurnToolPlan: toolsurface.Compile([]string{"request_tools"}, names)},
+	}
 	need := names[0] + " and another operation"
 	raw, err := reg.Run(t.Context(), "request_tools", map[string]any{"need": need}, tctx)
 	testutil.FailErr(t, "partial discovery", err)
@@ -146,11 +155,11 @@ func TestRequestDiscoveryCursorSurvivesPartialActivation(t *testing.T) {
 	if result.Discovery == nil || result.Discovery.Total != 43 || result.Discovery.Entries[0].Name != names[1] || result.Discovery.NextNeed == "" {
 		t.Fatalf("partial page=%s", raw)
 	}
-	tctx.TurnToolPlan = toolsurface.Compile([]string{"request_tools", names[0]}, names[1:])
+	tctx.Turn.TurnToolPlan = toolsurface.Compile([]string{"request_tools", names[0]}, names[1:])
 	next, err := reg.Run(t.Context(), "request_tools", map[string]any{"need": result.Discovery.NextNeed}, tctx)
 	testutil.FailErr(t, "continue after activation", err)
 	testutil.FailErr(t, "decode continuation", json.Unmarshal([]byte(next), &result))
-	if result.Discovery.Entries[0].Name != names[21] || len(activation.Active(tctx.SessionID)) != 1 {
+	if result.Discovery.Entries[0].Name != names[21] || len(activation.Active(tctx.Identity.SessionID)) != 1 {
 		t.Fatalf("continuation=%s", next)
 	}
 }
@@ -175,7 +184,10 @@ func TestRequestHealthyRankingHasNoDiscovery(t *testing.T) {
 					return turnload.ResolveRequest(ctx, d, turnload.RequestSpec{DeadlineMS: 1000, LoadAt: 2, MaxLoads: 1, NearestLoads: tc.nearest}, need, cards)
 				},
 			}))
-			raw, err := reg.Run(t.Context(), "request_tools", map[string]any{"need": "inspect content"}, tools.ToolContext{SessionID: "healthy", TurnToolPlan: toolsurface.Compile([]string{"request_tools"}, []string{"read"})})
+			raw, err := reg.Run(t.Context(), "request_tools", map[string]any{"need": "inspect content"}, tools.ToolContext{
+				Identity: tools.InvocationIdentity{SessionID: "healthy"},
+				Turn:     tools.InvocationTurn{TurnToolPlan: toolsurface.Compile([]string{"request_tools"}, []string{"read"})},
+			})
 			if tc.selected {
 				testutil.FailErr(t, "healthy selection", err)
 				var result turnload.RequestToolsResult

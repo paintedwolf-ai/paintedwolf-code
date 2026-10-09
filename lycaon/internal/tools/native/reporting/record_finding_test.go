@@ -34,8 +34,8 @@ func TestRecordFindingAppendsToStore(t *testing.T) {
 	scopeKey := testFindingsScopeKey(dir)
 	testutil.FailErr(t, "register", native.RegisterRecordFindingTool(reg, reporttools.RecordFindingGates{}, store, scopeKey))
 	tctx := findingContext(dir)
-	tctx.WorkerJobID = "job-7"
-	tctx.Agent = "implementer"
+	tctx.Identity.WorkerJobID = "job-7"
+	tctx.Identity.Agent = "implementer"
 	out, err := reg.Run(context.Background(), "record_finding", map[string]any{
 		"summary": "config resolver lives in internal/config/resolve.go:40",
 		"ref":     "internal/config/resolve.go:40",
@@ -57,7 +57,7 @@ func TestRecordFindingDuplicateIsIdempotent(t *testing.T) {
 	scopeKey := testFindingsScopeKey(dir)
 	testutil.FailErr(t, "register", native.RegisterRecordFindingTool(reg, reporttools.RecordFindingGates{}, store, scopeKey))
 	tctx := findingContext(dir)
-	tctx.WorkerJobID = "job-7"
+	tctx.Identity.WorkerJobID = "job-7"
 	args := map[string]any{
 		"summary": "OverlayScrollbars wraps chat stream viewport",
 		"ref":     "lycaon-den/src/platform/scrolling/themed-scrollbars.ts",
@@ -119,8 +119,8 @@ func TestRecordFindingGroundingBlockNotStored(t *testing.T) {
 	dir := t.TempDir()
 	testutil.FailErr(t, "register", native.RegisterRecordFindingTool(reg, reporttools.RecordFindingGates{Grounding: gate}, store, testFindingsScopeKey(dir)))
 	tctx := findingContext(dir)
-	tctx.SessionID = "s1"
-	tctx.Agent = "implementer"
+	tctx.Identity.SessionID = "s1"
+	tctx.Identity.Agent = "implementer"
 	_, err := reg.Run(context.Background(), "record_finding",
 		map[string]any{"summary": "ungrounded claim about something"},
 		tctx)
@@ -149,8 +149,8 @@ func TestRecordFindingAppendUsesDelegationKeyNotOverlay(t *testing.T) {
 	scopeKey := func(_ context.Context, _ string) string { return delegationDir }
 	testutil.FailErr(t, "register", native.RegisterRecordFindingTool(reg, reporttools.RecordFindingGates{}, store, scopeKey))
 	tctx := findingContext(overlay)
-	tctx.SessionID = "child-a"
-	tctx.WorkerJobID = "job-a"
+	tctx.Identity.SessionID = "child-a"
+	tctx.Identity.WorkerJobID = "job-a"
 	_, err := reg.Run(context.Background(), "record_finding", map[string]any{
 		"summary": "peer-visible note",
 		"ref":     "pkg/foo.go",
@@ -180,13 +180,13 @@ func findingContext(dir string) tools.ToolContext {
 	roots := []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}}
 	// Publish a below-threshold count for open-root tool tests.
 	return tools.ToolContext{
-		Roots:               roots,
-		ActiveRootID:        "r1",
-		SourceWorkspaceKind: api.SourceWorkspaceKindProject,
-		Agent:               toolprofiles.DefaultToolProfileID,
-		SessionID:           "test-session",
-		RepoFileCount:       100,
-		RepoFileCountKnown:  true,
+		Source: tools.InvocationSource{Roots: roots,
+			ActiveRootID:        "r1",
+			SourceWorkspaceKind: api.SourceWorkspaceKindProject,
+			RepoFileCount:       100,
+			RepoFileCountKnown:  true},
+		Identity: tools.InvocationIdentity{Agent: toolprofiles.DefaultToolProfileID,
+			SessionID: "test-session"},
 	}
 }
 

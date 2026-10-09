@@ -80,7 +80,9 @@ func TestRenderedOwnerFailureKeepsOwnershipClassification(t *testing.T) {
 	loop := NewPromptLoopForTest(PromptLoopDeps{Tools: registry})
 	run := toolInvocations{loop}.executeToolCall(t.Context(), &api.Session{ID: "s1"}, "s1", "", nil, api.ToolCall{
 		ID: "call-1", Name: "read", Args: map[string]any{},
-	}, tools.ToolContext{SessionID: "s1"}, nil, 0, "", api.CoordinatorRunContext{})
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "s1"},
+	}, nil, 0, "", api.CoordinatorRunContext{})
 	failure := run.failure
 	if failure == nil {
 		t.Fatal("rendered tool rejection has no invocation failure")

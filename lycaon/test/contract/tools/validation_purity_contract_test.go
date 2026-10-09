@@ -48,9 +48,13 @@ func TestPreInvokePipelineNeverMutatesCallerArguments(t *testing.T) {
 			}
 		}
 		ctx := tools.ToolContext{
-			Roots:        []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}},
-			ActiveRootID: "root", ProjectID: "project", SourceWorkspaceKind: api.SourceWorkspaceKindProject,
-			SessionID: "chat", ToolCallID: "call-" + name, Agent: profileAllowing(profiles, name),
+			Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}},
+				ActiveRootID:        "root",
+				SourceWorkspaceKind: api.SourceWorkspaceKindProject},
+			Identity: tools.InvocationIdentity{ProjectID: "project",
+				SessionID:  "chat",
+				ToolCallID: "call-" + name,
+				Agent:      profileAllowing(profiles, name)},
 		}
 		for _, sample := range samples {
 			args := cloneArgs(sample).(map[string]any)
@@ -97,7 +101,7 @@ func stubbedContractExecutor(t *testing.T) (*toolexecution.Executor, []tools.Def
 
 	boot := toolfixture.ContractServeBootRegistry(t)
 	var defs []tools.Definition
-	for _, meta := range boot.Metadata.List() {
+	for _, meta := range boot.List() {
 		def, ok := boot.Definition(meta.Name)
 		if !ok {
 			continue

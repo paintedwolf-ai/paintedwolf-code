@@ -36,11 +36,15 @@ func altitudeBoundary(t *testing.T) *sandbox.Boundary {
 
 func altitudeCtx(dir, sessionID string) tools.ToolContext {
 	roots := []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}}
-	ctx := tools.ToolContext{Roots: roots, ActiveRootID: "r1", Agent: toolprofiles.DefaultToolProfileID}
-	ctx.SessionID = sessionID
+	ctx := tools.ToolContext{
+		Source: tools.InvocationSource{Roots: roots,
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{Agent: toolprofiles.DefaultToolProfileID},
+	}
+	ctx.Identity.SessionID = sessionID
 	// Publish a below-threshold count for open-root altitude tests.
-	ctx.RepoFileCount = 100
-	ctx.RepoFileCountKnown = true
+	ctx.Source.RepoFileCount = 100
+	ctx.Source.RepoFileCountKnown = true
 	return ctx
 }
 

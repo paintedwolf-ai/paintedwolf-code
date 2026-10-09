@@ -42,11 +42,15 @@ func TestExecutionCapabilityGrammar(t *testing.T) {
 
 func TestExecutionPermitBindsBoundaryAndIsSingleUse(t *testing.T) {
 	req := confine.Request{ProcessControl: true, Roots: []string{"/tmp/project"}}
-	tc := ToolContext{SessionID: "task", ToolCallID: "call", ProcessControl: true}
-	permit := func() *executionPermit {
-		return &executionPermit{session: tc.SessionID, call: tc.ToolCallID, processControl: true, boundary: ExecutionBoundaryDigest(req), arguments: executionArgumentsDigest(tc.CanonicalArgs)}
+	tc := ToolContext{
+		Identity: InvocationIdentity{SessionID: "task",
+			ToolCallID: "call"},
+		Execution: InvocationExecution{ProcessControl: true},
 	}
-	tc.executionPermit = permit()
+	permit := func() *executionPermit {
+		return &executionPermit{session: tc.Identity.SessionID, call: tc.Identity.ToolCallID, processControl: true, boundary: ExecutionBoundaryDigest(req), arguments: executionArgumentsDigest(tc.Effects.CanonicalArgs)}
+	}
+	tc.Execution.executionPermit = permit()
 	changed := req
 	changed.Roots = []string{"/tmp/other"}
 	if reject := finalizeExecutionCapability(tc, changed); reject == nil {
@@ -58,12 +62,12 @@ func TestExecutionPermitBindsBoundaryAndIsSingleUse(t *testing.T) {
 	if reject := finalizeExecutionCapability(tc, req); reject == nil {
 		t.Fatal("permit reused")
 	}
-	tc.executionPermit = permit()
-	tc.ToolCallID = "other"
+	tc.Execution.executionPermit = permit()
+	tc.Identity.ToolCallID = "other"
 	if reject := finalizeExecutionCapability(tc, req); reject == nil {
 		t.Fatal("cross-call permit accepted")
 	}
-	tc.executionPermit = nil
+	tc.Execution.executionPermit = nil
 	if reject := finalizeExecutionCapability(tc, req); reject == nil {
 		t.Fatal("missing permit accepted")
 	}

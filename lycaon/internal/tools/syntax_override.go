@@ -28,10 +28,10 @@ func WithSyntaxOverride(ctx context.Context, args map[string]any) (context.Conte
 // ReportSyntaxOverride records the reason alongside the successful mutation.
 func ReportSyntaxOverride(ctx context.Context, tc ToolContext, paths ...string) {
 	reason := syntaxhealth.OverrideReason(ctx)
-	if reason == "" || tc.Out == nil || len(paths) == 0 {
+	if reason == "" || tc.Effects.Out == nil || len(paths) == 0 {
 		return
 	}
-	tc.Out.Facts = tc.Out.Facts.WithFeedback(SyntaxCheckOverriddenCode, map[string]any{
+	tc.Effects.Out.Facts = tc.Effects.Out.Facts.WithFeedback(SyntaxCheckOverriddenCode, map[string]any{
 		"path": paths[0], "paths": paths, "syntax_override_reason": reason,
 	}, &api.FeedbackSubject{Kind: "path", ID: paths[0]})
 }

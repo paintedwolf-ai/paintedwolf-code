@@ -36,7 +36,7 @@ func TestWorkflowTransitionHappyPath(t *testing.T) {
 	testutil.FailErr(t, "StartHuman", err)
 
 	tctx := toolContext("coordinator", sess.ID, sess.WorkspacePath)
-	tctx.ToolCallID = "transition-call-1"
+	tctx.Identity.ToolCallID = "transition-call-1"
 	out, err := reg.Run(ctx, "workflow_transition", map[string]any{"transition_id": "critique"}, tctx)
 	testutil.FailErr(t, "workflow_transition critique", err)
 	var result TransitionToolResult

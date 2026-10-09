@@ -103,48 +103,48 @@ func reviewGlobMatch(pattern, path string) bool {
 // GateApply blocks until the user resolves content_apply, then returns the one
 // host-composed byte sequence the native tool may write.
 func (s *ContentApplyService) GateApply(ctx context.Context, tool, path string, before *string, after string, tctx tools.ToolContext) (string, error) {
-	if !s.RequiresReview(ctx, tctx.SessionID, tctx.ActiveRootPath(), tool, path) {
+	if !s.RequiresReview(ctx, tctx.Identity.SessionID, tctx.ActiveRootPath(), tool, path) {
 		return after, nil
 	}
 	// The invocation's content decisions key on the resolved destination.
 	reviewedPath := ""
 	if resolved, err := projectpaths.ResolveWrite(ctx, nil, tctx, path); err == nil {
 		reviewedPath = resolved.Abs
-	} else if tctx.FileChangeReview != nil {
+	} else if tctx.Files.FileChangeReview != nil {
 		return "", err
 	}
 	// The person reviews the change with managed values echoed as their
 	// references; that same text keys the decision and the gate coverage.
-	maskedAfter := tctx.Secrets.ReferenceEchoes(after)
+	maskedAfter := tctx.Effects.Secrets.ReferenceEchoes(after)
 	var maskedBefore *string
 	if before != nil {
-		mb := tctx.Secrets.ReferenceEchoes(*before)
+		mb := tctx.Effects.Secrets.ReferenceEchoes(*before)
 		maskedBefore = &mb
 	}
 	if reviewedPath != "" {
 		if final, ok := tctx.ContentDecision(reviewedPath, stringOrEmpty(maskedBefore), maskedAfter); ok {
-			return tctx.Secrets.Substitute(final)
+			return tctx.Effects.Secrets.Substitute(final)
 		}
 	}
 
 	payload := &hitl.ContentApplyPayload{
 		Tool:       tool,
-		ToolCallID: tctx.ToolCallID,
+		ToolCallID: tctx.Identity.ToolCallID,
 		Path:       path,
 		Before:     maskedBefore,
 		After:      maskedAfter,
 	}
 	resp, err := s.Mgr.RequestCheckpoint(ctx, hitl.CheckpointRequest{
-		SessionID:    tctx.SessionID,
+		SessionID:    tctx.Identity.SessionID,
 		Kind:         api.CheckpointKindContentApply,
 		Title:        fmt.Sprintf("Review edit: %s", path),
-		ProjectID:    tctx.ProjectID,
+		ProjectID:    tctx.Identity.ProjectID,
 		ContentApply: payload,
 	})
 	if err != nil {
 		return "", err
 	}
-	release := tools.HoldForApproval(tctx.Presence, resp.CheckpointID)
+	release := tools.HoldForApproval(tctx.Effects.Presence, resp.CheckpointID)
 	final, err := hitl.WaitForCheckpoint(ctx, s.Mgr, resp.CheckpointID)
 	release()
 	if err != nil {
@@ -172,7 +172,7 @@ func (s *ContentApplyService) GateApply(ctx context.Context, tool, path string, 
 		if reviewedPath != "" {
 			tctx.RecordContentApproval(reviewedPath, stringOrEmpty(maskedBefore), maskedAfter, final.ContentResult.FinalAfter)
 		}
-		return tctx.Secrets.Substitute(final.ContentResult.FinalAfter)
+		return tctx.Effects.Secrets.Substitute(final.ContentResult.FinalAfter)
 	default:
 		return "", fmt.Errorf("%s", hitl.ErrContentApplyUnresolved)
 	}

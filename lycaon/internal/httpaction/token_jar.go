@@ -135,8 +135,8 @@ func openTokenJar(ctx context.Context, deps Deps, tctx tools.ToolContext, args m
 		}
 	}
 	req := secretcap.TokenJarRequest{
-		ProjectID: strings.TrimSpace(tctx.ProjectID), ChatSessionID: tctx.ChatSessionID(),
-		SessionID: strings.TrimSpace(tctx.SessionID), OperationID: strings.TrimSpace(tctx.ToolCallID), Name: name,
+		ProjectID: strings.TrimSpace(tctx.Identity.ProjectID), ChatSessionID: tctx.ChatSessionID(),
+		SessionID: strings.TrimSpace(tctx.Identity.SessionID), OperationID: strings.TrimSpace(tctx.Identity.ToolCallID), Name: name,
 	}
 	jar, err := deps.Secrets.OpenTokenJar(ctx, req)
 	if err != nil {

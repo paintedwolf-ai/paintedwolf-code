@@ -398,10 +398,10 @@ func TestTaskToolDraftScratchSpawnsImplementerWithWorkspacePath(t *testing.T) {
 		"brief":      taskBrief("ship core module"),
 		"scope":      map[string]any{"mode": "write", "paths": []any{"src"}},
 	}, tools.ToolContext{
-		SessionID:    "parent-draft",
-		ProjectID:    p.ID,
-		Roots:        roots,
-		ActiveRootID: roots[0].ID,
+		Identity: tools.InvocationIdentity{SessionID: "parent-draft",
+			ProjectID: p.ID},
+		Source: tools.InvocationSource{Roots: roots,
+			ActiveRootID: roots[0].ID},
 	})
 	testutil.FailErr(t, "task implementer on draft scratch", err)
 	if enqueued.WorkspacePath != scratch {
@@ -459,7 +459,12 @@ var _ session.PromptRunner = (*fakeTaskSessions)(nil)
 
 func toolContext(sessionID, dir string) tools.ToolContext {
 	roots := []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}}
-	return tools.ToolContext{SessionID: sessionID, ProjectID: testdbseed.DefaultProjectID, Roots: roots, ActiveRootID: "r1"}
+	return tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: sessionID,
+			ProjectID: testdbseed.DefaultProjectID},
+		Source: tools.InvocationSource{Roots: roots,
+			ActiveRootID: "r1"},
+	}
 }
 
 func (f *fakeTaskSessions) PromptHostTurn(context.Context, string, store.PromptSubmissionOrigin, string) (*promptresult.Result, error) {

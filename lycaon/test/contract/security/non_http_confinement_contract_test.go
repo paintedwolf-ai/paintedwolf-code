@@ -262,7 +262,7 @@ func TestNonHTTPContractWitnessAndGrantKeyVaryWithBoundary(t *testing.T) {
 		t.Fatal("mediated egress label must change GrantKey")
 	}
 
-	witnessSrc := contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), "lycaon/internal/tools/socket_execution_grants.go")
+	witnessSrc := contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), "lycaon/internal/capabilitygrants/socket_execution_grants.go")
 	wfn := mustFindFunc(t, witnessSrc, "socket_execution_grants.go", "socketChatGrantOffer")
 	wbody := witnessSrc[wfn.Body.Pos()-1 : wfn.Body.End()]
 	if !strings.Contains(wbody, "BoundaryWitness") {

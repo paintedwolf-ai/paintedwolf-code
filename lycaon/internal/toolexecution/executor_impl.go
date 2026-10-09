@@ -32,35 +32,35 @@ const networkEgressTool = "network"
 // Invoke runs policy checks then delegates to the tool registry.
 func (e *Executor) Invoke(ctx context.Context, qualifiedName string, args map[string]any, tc tools.ToolContext) (out string, err error) {
 	tc.BeginInvocation()
-	defer func() { tc.Secrets.Finish(ctx) }()
+	defer func() { tc.Effects.Secrets.Finish(ctx) }()
 	// Exits render their own rejects; this is the backstop for one that does not.
 	defer func() {
 		err = e.Rejections.renderUnrenderedReject(qualifiedName, err)
-		if tc.Out != nil && strings.HasPrefix(qualifiedName, "mcp_") {
-			tc.Out.Facts.ProviderErrorCode = oar.MCPMachineErrorCode(err)
+		if tc.Effects.Out != nil && strings.HasPrefix(qualifiedName, "mcp_") {
+			tc.Effects.Out.Facts.ProviderErrorCode = oar.MCPMachineErrorCode(err)
 		}
 	}()
 	// Hold one MCP generation through approval and dispatch.
 	releaseDefinition := e.Metadata.registry.LeasePrefix(qualifiedName, "mcp_")
 	defer releaseDefinition()
-	profileID := tc.Agent
+	profileID := tc.Identity.Agent
 	if profileID == "" {
 		profileID = e.defaultProfile
 	}
-	tc.Agent = profileID
+	tc.Identity.Agent = profileID
 	ctx = people.WithoutCaller(ctx)
-	ctx = tools.WithRecoveryTools(ctx, tc.TurnOfferedToolNames)
+	ctx = tools.WithRecoveryTools(ctx, tc.Turn.TurnOfferedToolNames)
 	ctx = tools.SandboxScopeContext(ctx, tc)
-	ctx = authzledger.WithInvocation(ctx, tc.SessionID, tc.ParentSessionID, tc.ToolCallID)
+	ctx = authzledger.WithInvocation(ctx, tc.Identity.SessionID, tc.Identity.ParentSessionID, tc.Identity.ToolCallID)
 	sessionFacts := curationctx.SessionFrom(ctx)
 	ctx = curationctx.WithSession(ctx, curationctx.Session{
-		SessionID:       tc.SessionID,
+		SessionID:       tc.Identity.SessionID,
 		OwnerPersonID:   sessionFacts.OwnerPersonID,
 		Posture:         sessionFacts.Posture,
-		ProjectID:       tc.ProjectID,
-		Agent:           tc.Agent,
-		ParentSessionID: tc.ParentSessionID,
-		ToolCallID:      tc.ToolCallID,
+		ProjectID:       tc.Identity.ProjectID,
+		Agent:           tc.Identity.Agent,
+		ParentSessionID: tc.Identity.ParentSessionID,
+		ToolCallID:      tc.Identity.ToolCallID,
 		ProjectDir:      tc.ActiveRootPath(),
 	})
 	if reject := e.validateInvocation(ctx, qualifiedName, profileID, args, &tc); reject != nil {
@@ -81,9 +81,9 @@ func (e *Executor) Invoke(ctx context.Context, qualifiedName string, args map[st
 	}
 	canonicalArgs := args
 	// Handlers execute against resolved arguments and echo against these.
-	tc.CanonicalArgs = canonicalArgs
-	ctx = secretcap.WithResolution(ctx, tc.Secrets)
-	executionArgs := tc.Secrets.Arguments
+	tc.Effects.CanonicalArgs = canonicalArgs
+	ctx = secretcap.WithResolution(ctx, tc.Effects.Secrets)
+	executionArgs := tc.Effects.Secrets.Arguments
 	if err := e.Secrets.screenArgvSecrets(ctx, qualifiedName, executionArgs, tc); err != nil {
 		return "", err
 	}
@@ -92,12 +92,12 @@ func (e *Executor) Invoke(ctx context.Context, qualifiedName string, args map[st
 	}
 	// The screened save is a file tool's transport.
 	if tc.Invocation.Contract.SecretReferenceSurface.IsFile() {
-		if err := tc.Secrets.HandOff(ctx, nil); err != nil {
+		if err := tc.Effects.Secrets.HandOff(ctx, nil); err != nil {
 			return "", e.Rejections.rejectBeforeInvoke(ctx, qualifiedName, profileID, args, toolrejection.HeldHandOffReject(string(secretmatch.SurfaceFile), err))
 		}
 	}
-	tc.ProcessReview = e.Capabilities.processReviewer(qualifiedName, canonicalArgs, tc)
-	tc.FileChangeReview = e.Boundary.fileChangeReviewer(qualifiedName, canonicalArgs, tc)
+	tc.Execution.ProcessReview = e.Process.processReviewer(qualifiedName, canonicalArgs, tc)
+	tc.Files.FileChangeReview = e.Boundary.fileChangeReviewer(qualifiedName, canonicalArgs, tc)
 	if e.Rejections.blockPlane != nil {
 		if err := e.Rejections.blockPlane.Evaluate(ctx, oar.AnchorToolPreInvoke, qualifiedName, profileID, canonicalArgs, nil); err != nil {
 			return "", err
@@ -108,12 +108,12 @@ func (e *Executor) Invoke(ctx context.Context, qualifiedName string, args map[st
 	}
 	out, err = e.Metadata.registry.Run(ctx, qualifiedName, executionArgs, tc)
 	// A consumer may echo what it received; results carry references, never resolved values.
-	out = tc.Secrets.ReferenceEchoes(out)
-	err = toolsecrets.ReferenceEchoesInError(tc.Secrets, err)
+	out = tc.Effects.Secrets.ReferenceEchoes(out)
+	err = toolsecrets.ReferenceEchoesInError(tc.Effects.Secrets, err)
 	if errors.Is(err, context.Canceled) {
 		return out, err
 	}
-	capabilityDenied := e.Rejections.takeCapabilityDenial(tc.SessionID, tc.ToolCallID)
+	capabilityDenied := e.Rejections.takeCapabilityDenial(tc.Identity.SessionID, tc.Identity.ToolCallID)
 
 	if err != nil {
 		if capabilityDenied && toolrejection.AsToolReject(err) == nil {
@@ -136,17 +136,17 @@ func (e *Executor) Invoke(ctx context.Context, qualifiedName string, args map[st
 				toolrejection.CompleteFailureMetadata(tr, qualifiedName, owner))
 		}
 		if tr := toolrejection.CommandSurfaceObservation(qualifiedName, profileID, displayCmd, canonicalArgs,
-			toolschema.ArgFieldPaths(e.Metadata.argsSchemaFor(ctx, tc.SessionID, qualifiedName)), err); tr != nil {
+			toolschema.ArgFieldPaths(e.Metadata.argsSchemaFor(ctx, tc.Identity.SessionID, qualifiedName)), err); tr != nil {
 			return "", e.Rejections.settleReject(ctx, qualifiedName, profileID, canonicalArgs,
 				toolrejection.CompleteFailureMetadata(tr, qualifiedName, owner))
 		}
-		if tr := toolrejection.ScopeObservation(profileID, tc.TurnSurfaceID, qualifiedName, toolrejection.PathFromToolArgs(canonicalArgs), err); tr != nil {
+		if tr := toolrejection.ScopeObservation(profileID, tc.Turn.TurnSurfaceID, qualifiedName, toolrejection.PathFromToolArgs(canonicalArgs), err); tr != nil {
 			return "", e.Rejections.settleReject(ctx, qualifiedName, profileID, canonicalArgs,
 				toolrejection.CompleteFailureMetadata(tr, qualifiedName, owner))
 		}
 		ownerRef := tc.Invocation.Contract.Owner
-		if tc.Out != nil && strings.TrimSpace(tc.Out.OwnerRef) != "" {
-			ownerRef = tc.Out.OwnerRef
+		if tc.Effects.Out != nil && strings.TrimSpace(tc.Effects.Out.OwnerRef) != "" {
+			ownerRef = tc.Effects.Out.OwnerRef
 		}
 		tr := toolrejection.OwnerFailure(qualifiedName, ownerRef, err)
 		if e.Rejections.blockPlane != nil {
@@ -166,7 +166,7 @@ func (e *Executor) validateInvocation(
 	args map[string]any,
 	tc *tools.ToolContext,
 ) *toolrejection.ToolReject {
-	if reject := tools.ValidateCallArguments(qualifiedName, args, e.Metadata.argsSchemaFor(ctx, tc.SessionID, qualifiedName), *tc); reject != nil {
+	if reject := tools.ValidateCallArguments(qualifiedName, args, e.Metadata.argsSchemaFor(ctx, tc.Identity.SessionID, qualifiedName), *tc); reject != nil {
 		return reject
 	}
 	if reject := e.exactCommandReplacementReject(ctx, qualifiedName, profileID, args, *tc); reject != nil {
@@ -177,11 +177,11 @@ func (e *Executor) validateInvocation(
 	}
 	if qualifiedName == "command" || qualifiedName == "verify" {
 		_, parseErr := commandsurface.ParsePlan(args)
-		if reject := toolrejection.CommandSurfaceObservation(qualifiedName, profileID, commandsurface.PrimaryCommandLine(args, nil), args, toolschema.ArgFieldPaths(e.Metadata.argsSchemaFor(ctx, tc.SessionID, qualifiedName)), parseErr); reject != nil {
+		if reject := toolrejection.CommandSurfaceObservation(qualifiedName, profileID, commandsurface.PrimaryCommandLine(args, nil), args, toolschema.ArgFieldPaths(e.Metadata.argsSchemaFor(ctx, tc.Identity.SessionID, qualifiedName)), parseErr); reject != nil {
 			return reject
 		}
 	}
-	if reject := tools.ValidateCapabilityPathAuthority(args, tc.SessionScratchDir); reject != nil {
+	if reject := tools.ValidateCapabilityPathAuthority(args, tc.Host.SessionScratchDir); reject != nil {
 		return reject
 	}
 
@@ -213,12 +213,12 @@ func (e *Executor) exactCommandReplacementReject(
 	if !toolcommand.IsCommandEquivalenceRunner(toolName) {
 		return nil
 	}
-	schema := e.Metadata.argsSchemaFor(ctx, tc.SessionID, toolName)
+	schema := e.Metadata.argsSchemaFor(ctx, tc.Identity.SessionID, toolName)
 	envelope, ok := toolcommand.ParseEnvelope(toolcommand.ArgsWithoutDefaults(args, schema))
 	if !ok {
 		return nil
 	}
-	calls, ok := envelope.Replacements(ctx, tc.ActiveRootPath(), tc.SessionScratchDir)
+	calls, ok := envelope.Replacements(ctx, tc.ActiveRootPath(), tc.Host.SessionScratchDir)
 	if !ok {
 		return nil
 	}
@@ -227,12 +227,12 @@ func (e *Executor) exactCommandReplacementReject(
 			return nil
 		}
 		decision, _ := tools.EvaluateListVisible(ctx, e.Metadata.policy, platform.PolicyContext{
-			ProfileID: profileID, ToolAccess: tc.ToolAccess, ToolName: call.Tool,
+			ProfileID: profileID, ToolAccess: tc.Turn.ToolAccess, ToolName: call.Tool,
 		})
 		if decision == nil || !decision.Allowed {
 			return nil
 		}
-		schema := e.Metadata.argsSchemaFor(ctx, tc.SessionID, call.Tool)
+		schema := e.Metadata.argsSchemaFor(ctx, tc.Identity.SessionID, call.Tool)
 		if schema == nil {
 			return nil
 		}
@@ -269,14 +269,14 @@ func (e *Executor) ensureWorkerBranchIfNeeded(ctx context.Context, tool string, 
 	if !tools.RequiresWorkerBranch(tool) {
 		return tc, nil
 	}
-	if strings.TrimSpace(tc.WorkerJobID) == "" || strings.TrimSpace(tc.WorkerBranchRoot) != "" {
+	if strings.TrimSpace(tc.Identity.WorkerJobID) == "" || strings.TrimSpace(tc.Source.WorkerBranchRoot) != "" {
 		return tc, nil
 	}
-	if tc.WorkerCoord == nil {
+	if tc.Source.WorkerCoord == nil {
 		return tc, &toolrejection.ToolReject{
 			Code: "WORKER_BRANCH_CLAIM_FAILED",
 			Data: map[string]any{"tool": tool, "reason": "worker branch coordinator not configured"},
 		}
 	}
-	return tc.WorkerCoord.EnsureWorkerBranch(ctx, tc)
+	return tc.Source.WorkerCoord.EnsureWorkerBranch(ctx, tc)
 }

@@ -24,7 +24,10 @@ func rootsCtx(paths ...string) tools.ToolContext {
 			IsPrimary: i == 0,
 		})
 	}
-	return tools.ToolContext{Roots: roots, ActiveRootID: "r1"}
+	return tools.ToolContext{
+		Source: tools.InvocationSource{Roots: roots,
+			ActiveRootID: "r1"},
+	}
 }
 
 func TestHostWriteRootPrefersWorkerBranch(t *testing.T) {
@@ -32,7 +35,7 @@ func TestHostWriteRootPrefersWorkerBranch(t *testing.T) {
 	if got := tools.HostWriteRoot(tctx); got != "/proj/a" {
 		t.Fatalf("HostWriteRoot without branch = %q, want the active root", got)
 	}
-	tctx.WorkerBranchRoot = "/branches/job1"
+	tctx.Source.WorkerBranchRoot = "/branches/job1"
 	if got := tools.HostWriteRoot(tctx); got != "/branches/job1" {
 		t.Fatalf("HostWriteRoot with branch = %q, want the worker branch", got)
 	}
@@ -42,7 +45,7 @@ func TestHostWriteRootPrefersWorkerBranch(t *testing.T) {
 // into the user's live roots.
 func TestConfineRootsWorkerBranchIsExclusive(t *testing.T) {
 	tctx := rootsCtx("/proj/a")
-	tctx.WorkerBranchRoot = "/branches/job1"
+	tctx.Source.WorkerBranchRoot = "/branches/job1"
 	got := tools.ConfineRootsForAction(tctx)
 	if !slices.Equal(got, []string{"/branches/job1"}) {
 		t.Fatalf("roots = %v, want only the worker branch", got)
@@ -51,18 +54,18 @@ func TestConfineRootsWorkerBranchIsExclusive(t *testing.T) {
 
 func TestWorkerConfineDeniesPrimarySourceReads(t *testing.T) {
 	tctx := rootsCtx("/proj/a", "/proj/b")
-	tctx.WorkerBranchRoot = "/proj/a/.paintedwolf/overlays/job1"
-	tctx.WorkerSourceRoots = []string{"/proj/a", "/proj/b"}
-	tctx.ReadRoots = []string{"/managed/skill"}
+	tctx.Source.WorkerBranchRoot = "/proj/a/.paintedwolf/overlays/job1"
+	tctx.Source.WorkerSourceRoots = []string{"/proj/a", "/proj/b"}
+	tctx.Files.ReadRoots = []string{"/managed/skill"}
 	inputs := tools.ActionConfineInputsForContext(tctx, nil)
-	if !slices.Equal(inputs.ReadDenyPaths, tctx.WorkerSourceRoots) {
-		t.Fatalf("read deny paths = %v, want source roots %v", inputs.ReadDenyPaths, tctx.WorkerSourceRoots)
+	if !slices.Equal(inputs.ReadDenyPaths, tctx.Source.WorkerSourceRoots) {
+		t.Fatalf("read deny paths = %v, want source roots %v", inputs.ReadDenyPaths, tctx.Source.WorkerSourceRoots)
 	}
 	request := hitl.ActionConfineRequest(inputs)
-	if !slices.Equal(request.ReadDenyPaths, tctx.WorkerSourceRoots) {
-		t.Fatalf("request read deny paths = %v, want source roots %v", request.ReadDenyPaths, tctx.WorkerSourceRoots)
+	if !slices.Equal(request.ReadDenyPaths, tctx.Source.WorkerSourceRoots) {
+		t.Fatalf("request read deny paths = %v, want source roots %v", request.ReadDenyPaths, tctx.Source.WorkerSourceRoots)
 	}
-	wantReadRoots := []string{"/managed/skill", tctx.WorkerBranchRoot}
+	wantReadRoots := []string{"/managed/skill", tctx.Source.WorkerBranchRoot}
 	if !slices.Equal(inputs.ReadRoots, wantReadRoots) || !slices.Equal(request.ReadRoots, wantReadRoots) {
 		t.Fatalf("read allow-backs inputs=%v request=%v want=%v", inputs.ReadRoots, request.ReadRoots, wantReadRoots)
 	}
@@ -85,7 +88,7 @@ func TestConfineRootsUnaffectedByModelCwdSymlink(t *testing.T) {
 	testutil.FailErr(t, "symlink", os.Symlink(outside, link))
 
 	tctx := rootsCtx(proj)
-	writeRoots := confine.WriteRootsForProject(tctx.ProjectID, tools.ConfineRootsForAction(tctx))
+	writeRoots := confine.WriteRootsForProject(tctx.Identity.ProjectID, tools.ConfineRootsForAction(tctx))
 
 	resolvedOutside, err := filepath.EvalSymlinks(outside)
 	testutil.FailErr(t, "eval outside", err)
@@ -97,7 +100,7 @@ func TestConfineRootsUnaffectedByModelCwdSymlink(t *testing.T) {
 
 	// The union ignores tool arguments, so it is identical without the symlink.
 	testutil.FailErr(t, "remove link", os.Remove(link))
-	if after := confine.WriteRootsForProject(tctx.ProjectID, tools.ConfineRootsForAction(tctx)); !slices.Equal(writeRoots, after) {
+	if after := confine.WriteRootsForProject(tctx.Identity.ProjectID, tools.ConfineRootsForAction(tctx)); !slices.Equal(writeRoots, after) {
 		t.Fatalf("write roots changed with the symlink removed: %v vs %v", writeRoots, after)
 	}
 }
@@ -137,7 +140,7 @@ func mustEval(t *testing.T, p string) string {
 // union, so one ToolContext yields one set.
 func TestConfineRootsDeterministicForSameContext(t *testing.T) {
 	tctx := rootsCtx("/proj/a", "/proj/b")
-	tctx.WorkerBranchRoot = "/branches/job1"
+	tctx.Source.WorkerBranchRoot = "/branches/job1"
 	if a, b := tools.ConfineRootsForAction(tctx), tools.ConfineRootsForAction(tctx); !slices.Equal(a, b) {
 		t.Fatalf("not deterministic: %v vs %v", a, b)
 	}

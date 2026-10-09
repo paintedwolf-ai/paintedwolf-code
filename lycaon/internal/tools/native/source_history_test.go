@@ -116,8 +116,8 @@ func TestSourceHistoryMineQualifiesNonPrimaryRoots(t *testing.T) {
 		},
 	}
 	tctx := provenanceCtx(dir, ledger)
-	tctx.Roots = append(tctx.Roots, tctx.Roots[0])
-	tctx.Roots[1].ID, tctx.Roots[1].Label, tctx.Roots[1].IsPrimary = "r2", "docs", false
+	tctx.Source.Roots = append(tctx.Source.Roots, tctx.Source.Roots[0])
+	tctx.Source.Roots[1].ID, tctx.Source.Roots[1].Label, tctx.Source.Roots[1].IsPrimary = "r2", "docs", false
 	tool := &surveytools.SourceHistoryTool{Boundary: nativefixture.Boundary(t)}
 	out, err := tool.Run(context.Background(), map[string]any{"mode": "mine"}, tctx)
 	testutil.FailErr(t, "source_history mine", err)
@@ -140,7 +140,7 @@ func TestSourceHistoryRejectsUnknownModeAndMissingLedger(t *testing.T) {
 	}
 
 	noLedger := nativefixture.Context(dir)
-	noLedger.ProjectID = "p1"
+	noLedger.Identity.ProjectID = "p1"
 	_, err = tool.Run(context.Background(), map[string]any{"path": "main.go"}, noLedger)
 	if !errors.As(err, &reject) || reject.Code != "SOURCE_HISTORY_UNAVAILABLE" {
 		t.Fatalf("missing ledger = %v, want SOURCE_HISTORY_UNAVAILABLE", err)
@@ -165,7 +165,7 @@ func TestSourceHistoryVersionReadsExactBytes(t *testing.T) {
 		},
 	}
 	tctx := provenanceCtx(dir, ledger)
-	tctx.ProjectID = "p1"
+	tctx.Identity.ProjectID = "p1"
 	tool := &surveytools.SourceHistoryTool{Boundary: nativefixture.Boundary(t)}
 
 	out, err := tool.Run(context.Background(), map[string]any{
@@ -217,7 +217,7 @@ func TestSourceHistoryVersionHandlesAbsentState(t *testing.T) {
 		},
 	}
 	tctx := provenanceCtx(dir, ledger)
-	tctx.ProjectID = "p1"
+	tctx.Identity.ProjectID = "p1"
 	tool := &surveytools.SourceHistoryTool{Boundary: nativefixture.Boundary(t)}
 
 	out, err := tool.Run(context.Background(), map[string]any{
@@ -253,7 +253,7 @@ func TestSourceHistoryVersionRejections(t *testing.T) {
 		},
 	}
 	tctx := provenanceCtx(dir, ledger)
-	tctx.ProjectID = "p1"
+	tctx.Identity.ProjectID = "p1"
 	tool := &surveytools.SourceHistoryTool{Boundary: nativefixture.Boundary(t)}
 
 	// 1. Missing version_id
@@ -317,7 +317,7 @@ func TestSourceHistoryDiff(t *testing.T) {
 		},
 	}
 	tctx := provenanceCtx(dir, ledger)
-	tctx.ProjectID = "p1"
+	tctx.Identity.ProjectID = "p1"
 	tool := &surveytools.SourceHistoryTool{Boundary: nativefixture.Boundary(t)}
 
 	// 1. Diff against parent (omitting base_version_id)

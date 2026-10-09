@@ -163,15 +163,15 @@ func (l toolInvocations) retractRejectedAssistantTurn(
 
 // Intrinsic refusals retain occurrence identity and the offered recovery surface.
 func (l toolInvocations) rejectToolOccurrence(ctx context.Context, sess *api.Session, tc api.ToolCall, toolCtx tools.ToolContext, code string, data map[string]any) *guidance.Refusal {
-	ctx = tools.WithRecoveryTools(ctx, toolCtx.TurnOfferedToolNames)
-	ctx = curationctx.WithSession(ctx, curationctx.Session{SessionID: sess.ID, ProjectID: sess.ProjectID, OwnerPersonID: sess.OwnerPersonID, Posture: string(sess.Posture), Agent: toolCtx.Agent})
+	ctx = tools.WithRecoveryTools(ctx, toolCtx.Turn.TurnOfferedToolNames)
+	ctx = curationctx.WithSession(ctx, curationctx.Session{SessionID: sess.ID, ProjectID: sess.ProjectID, OwnerPersonID: sess.OwnerPersonID, Posture: string(sess.Posture), Agent: toolCtx.Identity.Agent})
 	data = maps.Clone(data)
 	if data == nil {
 		data = map[string]any{}
 	}
-	data["tool"], data["profile"], data["turn_surface"] = tc.Name, toolCtx.Agent, toolCtx.TurnSurfaceID
+	data["tool"], data["profile"], data["turn_surface"] = tc.Name, toolCtx.Identity.Agent, toolCtx.Turn.TurnSurfaceID
 	if code == "TOOL_NOT_OFFERED" {
-		loadable := toolCtx.TurnToolPlan.Deferred(tc.Name) && tools.ToolOffered(ctx, "request_tools")
+		loadable := toolCtx.Turn.TurnToolPlan.Deferred(tc.Name) && tools.ToolOffered(ctx, "request_tools")
 		data["tool_loadable"] = loadable
 		if loadable {
 			data["replacement_calls"] = []toolcommand.ReplacementCall{{Tool: "request_tools", Args: map[string]any{"need": tc.Name}}}
@@ -182,7 +182,7 @@ func (l toolInvocations) rejectToolOccurrence(ctx context.Context, sess *api.Ses
 		tr.FailureClass = api.FailureClassOwnerError
 		tr.Data["reason"] = "tool definition unavailable"
 	}
-	err := l.Deps.BlockPlane.RejectObservation(ctx, tc.Name, toolCtx.Agent, tc.Args, tr)
+	err := l.Deps.BlockPlane.RejectObservation(ctx, tc.Name, toolCtx.Identity.Agent, tc.Args, tr)
 	if err == nil {
 		err = toolrejection.RenderReject(tr, l.Deps.RejectFmt)
 	}

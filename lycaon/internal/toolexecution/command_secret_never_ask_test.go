@@ -45,7 +45,12 @@ func TestArgvScreenHoldsAStandingRedactionUnderNeverAsk(t *testing.T) {
 		context.Background(),
 		"command",
 		argvWithCredential(),
-		tools.ToolContext{Invocation: tools.Invocation{Contract: catalogContract(t, "command")}, SessionID: "s1", ToolCallID: "tc1", ProjectID: "project-id"},
+		tools.ToolContext{
+			Invocation: tools.Invocation{Contract: catalogContract(t, "command")},
+			Identity: tools.InvocationIdentity{SessionID: "s1",
+				ToolCallID: "tc1",
+				ProjectID:  "project-id"},
+		},
 	)
 	if err == nil {
 		t.Fatal("a standing redaction must not be silently ignored under never-ask")
@@ -74,7 +79,12 @@ func TestArgvScreenProceedsUnderNeverAskWithoutAStandingRedaction(t *testing.T) 
 		context.Background(),
 		"command",
 		argvWithCredential(),
-		tools.ToolContext{Invocation: tools.Invocation{Contract: catalogContract(t, "command")}, SessionID: "s1", ToolCallID: "tc1", ProjectID: "project-id"},
+		tools.ToolContext{
+			Invocation: tools.Invocation{Contract: catalogContract(t, "command")},
+			Identity: tools.InvocationIdentity{SessionID: "s1",
+				ToolCallID: "tc1",
+				ProjectID:  "project-id"},
+		},
 	)
 	if err != nil {
 		t.Fatalf("never-ask without a standing instruction must proceed: %v", err)

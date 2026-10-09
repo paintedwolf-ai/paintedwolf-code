@@ -280,7 +280,7 @@ func TestReplaceLinesSyntaxOverride(t *testing.T) {
 	}
 	tool := &ReplaceLinesTool{Boundary: nativefixture.Boundary(t)}
 	tc := nativefixture.Context(tmpDir)
-	tc.Out = &tools.ToolInvocationOut{}
+	tc.Effects.Out = &tools.ToolInvocationOut{}
 	_, err := tool.Run(context.Background(), map[string]any{
 		"path":                   "greet.py",
 		"syntax_override_reason": "intentional incomplete function header",

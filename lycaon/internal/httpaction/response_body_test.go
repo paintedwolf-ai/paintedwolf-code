@@ -44,7 +44,7 @@ func TestOversizeTextBodyLandsWholeUnderHostData(t *testing.T) {
 	server := bodyServer(t, "application/json", []byte(payload))
 	hostData := t.TempDir()
 	tctx := sessionContext(t.TempDir(), "call-1")
-	tctx.HostDataDir = hostData
+	tctx.Host.HostDataDir = hostData
 
 	got, err := runRequest(t, Deps{Boundary: testBoundary()}, map[string]any{
 		"url": server.URL, "capability_request": loopbackCapability(t, server.URL),
@@ -92,7 +92,7 @@ func TestOversizeBodyWithoutHostDataSaysItIsUnavailable(t *testing.T) {
 func TestBinaryBodyIsOmittedRatherThanLanded(t *testing.T) {
 	server := bodyServer(t, "application/octet-stream", []byte{0x00, 0x01, 0x02})
 	tctx := sessionContext(t.TempDir(), "call-1")
-	tctx.HostDataDir = t.TempDir()
+	tctx.Host.HostDataDir = t.TempDir()
 	got, err := runRequest(t, Deps{Boundary: testBoundary()}, map[string]any{
 		"url": server.URL, "capability_request": loopbackCapability(t, server.URL),
 	}, tctx)

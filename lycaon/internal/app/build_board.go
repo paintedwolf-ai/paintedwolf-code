@@ -49,7 +49,7 @@ type boardWiring struct{ *serveBuilder }
 
 func (b boardWiring) wireBoardAndResearch() error {
 	var err error
-	b.repoProvider = repoinfo.NewProvider(sourcecatalog.Process(), b.repoCatalogRoot, filepath.Join(enginepaths.RepoOrientationRootUnder(b.dataDir), "v1"))
+	b.repoProvider = repoinfo.NewProvider(sourcecatalog.Process().Trees, b.repoCatalogRoot, filepath.Join(enginepaths.RepoOrientationRootUnder(b.dataDir), "v1"))
 	b.resources.track("source-catalog", 86, sourcecatalog.Process().Drain)
 	b.mgr.SetRepoProvider(b.repoProvider)
 	// Background brief completion publishes its own board update.
@@ -101,13 +101,13 @@ func (b boardWiring) wireBoardAndResearch() error {
 		return fmt.Errorf("board tools: %w", err)
 	}
 	b.toolRuntime.Survey.SetListDirUnionBrief(func(ctx context.Context, tctx tools.ToolContext, subpath string) (string, error) {
-		if len(tctx.Roots) < 2 {
+		if len(tctx.Source.Roots) < 2 {
 			return "", nil
 		}
 		if subpath != "" && !projectroot.IsUnionDiscoveryPath(subpath) {
 			return "", nil
 		}
-		mrb, err := repoinfo.AnalyzeRoots(ctx, tctx.Roots, repoinfo.DefaultBriefBudget(), b.repoProvider)
+		mrb, err := repoinfo.AnalyzeRoots(ctx, tctx.Source.Roots, repoinfo.DefaultBriefBudget(), b.repoProvider)
 		if err != nil {
 			return "", err
 		}

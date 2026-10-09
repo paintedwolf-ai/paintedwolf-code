@@ -46,9 +46,9 @@ func TestGrantedAccessCannotReachProtectedSinks(t *testing.T) {
 	grantEverything(t, outside)
 
 	tctx := tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "p", Label: "proj", Path: proj, IsPrimary: true}},
-		ActiveRootID: "p",
-		SessionID:    "chat-1",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "p", Label: "proj", Path: proj, IsPrimary: true}},
+			ActiveRootID: "p"},
+		Identity: tools.InvocationIdentity{SessionID: "chat-1"},
 	}
 
 	for name, path := range map[string]string{
@@ -69,9 +69,9 @@ func TestGrantedAccessStillResolvesOrdinaryPaths(t *testing.T) {
 	grantEverything(t, outside)
 
 	tctx := tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "p", Label: "proj", Path: proj, IsPrimary: true}},
-		ActiveRootID: "p",
-		SessionID:    "chat-1",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "p", Label: "proj", Path: proj, IsPrimary: true}},
+			ActiveRootID: "p"},
+		Identity: tools.InvocationIdentity{SessionID: "chat-1"},
 	}
 	target := filepath.Join(outside, "notes", "todo.md")
 	want := filepath.Join(canon(t, outside), "notes", "todo.md")
@@ -108,9 +108,9 @@ func TestTreeGrantResolvesDescendantsAndExactDoesNot(t *testing.T) {
 	t.Cleanup(func() { projectpaths.SetGrantedAccessSource(nil) })
 
 	tctx := tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "p", Label: "proj", Path: proj, IsPrimary: true}},
-		ActiveRootID: "p",
-		SessionID:    "chat-1",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "p", Label: "proj", Path: proj, IsPrimary: true}},
+			ActiveRootID: "p"},
+		Identity: tools.InvocationIdentity{SessionID: "chat-1"},
 	}
 	for _, path := range []string{folder, child, nested} {
 		res, err := projectpaths.ResolveRead(context.Background(), nil, tctx, path)
@@ -145,9 +145,9 @@ func TestGrantedAccessKeepsGovernanceReadable(t *testing.T) {
 	proj := t.TempDir()
 	grantEverything(t, outside)
 	tctx := tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "p", Label: "proj", Path: proj, IsPrimary: true}},
-		ActiveRootID: "p",
-		SessionID:    "chat-1",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "p", Label: "proj", Path: proj, IsPrimary: true}},
+			ActiveRootID: "p"},
+		Identity: tools.InvocationIdentity{SessionID: "chat-1"},
 	}
 	// Policy files remain readable.
 	if _, err := projectpaths.ResolveRead(context.Background(), nil, tctx,
@@ -166,9 +166,9 @@ func TestControlPlanePathsRefuseGrantsWithTheGateCode(t *testing.T) {
 	grantEverything(t, cfg)
 
 	tctx := tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "p", Label: "proj", Path: proj, IsPrimary: true}},
-		ActiveRootID: "p",
-		SessionID:    "chat-1",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "p", Label: "proj", Path: proj, IsPrimary: true}},
+			ActiveRootID: "p"},
+		Identity: tools.InvocationIdentity{SessionID: "chat-1"},
 	}
 	expectCode := func(t *testing.T, err error, code string) {
 		t.Helper()

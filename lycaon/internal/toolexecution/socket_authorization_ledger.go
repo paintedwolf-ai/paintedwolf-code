@@ -21,7 +21,7 @@ func (e *Capabilities) recordCapabilityRequested(ctx context.Context, tc tools.T
 		})
 	}
 	_ = e.Approvals.authzRecorder.AppendCapabilityRecord(ctx, authzledger.CapabilityRecord{
-		SessionID: tc.SessionID,
+		SessionID: tc.Identity.SessionID,
 		Action:    authzledger.ActionCapabilityRequested,
 		Outcome:   authzledger.OutcomeAllowed,
 		Tool:      tool,
@@ -40,7 +40,7 @@ func (e *Capabilities) recordCapabilityDecision(ctx context.Context, tc tools.To
 		outcome = authzledger.OutcomeDenied
 	}
 	_ = e.Approvals.authzRecorder.AppendCapabilityRecord(ctx, authzledger.CapabilityRecord{
-		SessionID:           tc.SessionID,
+		SessionID:           tc.Identity.SessionID,
 		Action:              action,
 		Outcome:             outcome,
 		ResolvedBy:          authzledger.ResolvedByHuman,

@@ -93,7 +93,7 @@ type Deps struct {
 	PublishDetections func(*detectionpack.Matcher)
 	DataDir           string
 	ModuleRoot        string
-	MCP               *mcp.RegistryImpl
+	MCP               *mcp.Runtime
 	ExtensionViews    *catalogview.Cache
 	// ContributionReceipts and ContributionAuthority back contributed command dispatch.
 	ContributionReceipts  commandinvoke.Receipts
@@ -489,7 +489,7 @@ func fillScans(t *testing.T, d *Deps) {
 func fillExtensions(t *testing.T, d *Deps) {
 	t.Helper()
 	if d.MCP == nil {
-		registry, err := mcp.NewRegistryImpl(mcp.RegistryOptions{
+		registry, err := mcp.NewRuntime(mcp.RuntimeOptions{
 			StatePath:          t.TempDir(),
 			GlobalOverridePath: filepath.Join(t.TempDir(), "mcp.yaml"),
 			OAuthStore:         mcp.NewOAuthTokenStoreAt(filepath.Join(t.TempDir(), "mcp-oauth.vault")),

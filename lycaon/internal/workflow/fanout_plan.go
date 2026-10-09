@@ -54,7 +54,7 @@ func RegisterFanoutPlanTool(reg *tools.DefaultRegistry, runs *RunManager) error 
 		return fmt.Errorf("registry and run manager required")
 	}
 	return reg.Register("fanout_plan", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-		if !isCoordinatorAgent(tctx.Agent) {
+		if !isCoordinatorAgent(tctx.Identity.Agent) {
 			return "", fmt.Errorf("fanout_plan requires coordinator role")
 		}
 		plan, err := parseFanoutPlanArgs(args)
@@ -65,13 +65,13 @@ func RegisterFanoutPlanTool(reg *tools.DefaultRegistry, runs *RunManager) error 
 			OK: true, Legs: len(plan.Legs),
 			Message: fmt.Sprintf("fanout plan stamped (%d leg(s)); no workers were dispatched — call workflow_advance when ready to execute", len(plan.Legs)),
 		}
-		if _, ok, replayErr := runs.replayCommandOperation(ctx, tctx.ToolCallID, "fanout_plan", args); replayErr != nil || ok {
+		if _, ok, replayErr := runs.replayCommandOperation(ctx, tctx.Identity.ToolCallID, "fanout_plan", args); replayErr != nil || ok {
 			if replayErr != nil {
 				return "", replayErr
 			}
 			return marshalFanoutPlanResult(result)
 		}
-		active, err := runs.Store.ActiveBySession(ctx, tctx.SessionID)
+		active, err := runs.Store.ActiveBySession(ctx, tctx.Identity.SessionID)
 		if err != nil {
 			return "", err
 		}
@@ -107,11 +107,11 @@ func RegisterFanoutPlanTool(reg *tools.DefaultRegistry, runs *RunManager) error 
 		}
 		vars = stampFanoutPlan(vars, plan)
 		vars = SetGateSatisfied(vars, "fanout_planned", true)
-		commandCtx := withWorkflowCommandOperation(WithExpectedRevision(ctx, active.Revision), tctx.ToolCallID)
+		commandCtx := withWorkflowCommandOperation(WithExpectedRevision(ctx, active.Revision), tctx.Identity.ToolCallID)
 		if err := runs.commitCommand(commandCtx, active, "fanout_plan", args, vars, nil, "", workflowWorkerMutation{}, nil); err != nil {
 			return "", err
 		}
-		seedFanoutProgress(ctx, runs.Progress, tctx.SessionID, active.ID, plan)
+		seedFanoutProgress(ctx, runs.Progress, tctx.Identity.SessionID, active.ID, plan)
 		return marshalFanoutPlanResult(result)
 	})
 }

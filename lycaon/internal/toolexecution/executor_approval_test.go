@@ -215,10 +215,10 @@ func TestExecutorAskRuleSuspendsNotHardError(t *testing.T) {
 	ch := make(chan result, 1)
 	go func() {
 		out, err := exec.Invoke(ctx, "write", map[string]any{"path": "a.txt", "content": "x"}, tools.ToolContext{
-			Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: tmp, IsPrimary: true}},
-			ActiveRootID: "r1",
-			SessionID:    "sess-1",
-			Agent:        "implement",
+			Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: tmp, IsPrimary: true}},
+				ActiveRootID: "r1"},
+			Identity: tools.InvocationIdentity{SessionID: "sess-1",
+				Agent: "implement"},
 		})
 		ch <- result{out, err}
 	}()
@@ -257,10 +257,10 @@ func TestExecutorCarriesSingleApprovalEvaluationToCheckpoint(t *testing.T) {
 	done := make(chan error, 1)
 	go func() {
 		_, err := exec.Invoke(context.Background(), "read", map[string]any{"path": "a.txt"}, tools.ToolContext{
-			Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: tmp, IsPrimary: true}},
-			ActiveRootID: "r1",
-			SessionID:    "sess-1",
-			Agent:        "implement",
+			Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: tmp, IsPrimary: true}},
+				ActiveRootID: "r1"},
+			Identity: tools.InvocationIdentity{SessionID: "sess-1",
+				Agent: "implement"},
 		})
 		done <- err
 	}()
@@ -311,8 +311,8 @@ func TestExecutorCommandStopApprovalShowsRecordedCommand(t *testing.T) {
 	done := make(chan result, 1)
 	go func() {
 		out, err := executor.Invoke(context.Background(), "command_stop", map[string]any{"handle": "process-123"}, tools.ToolContext{
-			SessionID: "session-123",
-			Agent:     "implement",
+			Identity: tools.InvocationIdentity{SessionID: "session-123",
+				Agent: "implement"},
 		})
 		done <- result{out: out, err: err}
 	}()
@@ -365,10 +365,10 @@ func TestExecutorRejectReturnsApprovalDenied(t *testing.T) {
 	exec.Approvals.SetApprovalOutcomeRenderer(outcomes)
 
 	_, err = exec.Invoke(context.Background(), "write", map[string]any{"path": "a.txt", "content": "x"}, tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: tmp, IsPrimary: true}},
-		ActiveRootID: "r1",
-		SessionID:    "sess-1",
-		Agent:        "implement",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: tmp, IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{SessionID: "sess-1",
+			Agent: "implement"},
 	})
 	if err == nil {
 		t.Fatal("expected error after reject")
@@ -421,10 +421,10 @@ func TestExecutorExpiryReturnsTimeoutNotDenial(t *testing.T) {
 	exec.Approvals.SetApprovalOutcomeRenderer(outcomes)
 
 	_, err = exec.Invoke(context.Background(), "write", map[string]any{"path": "a.txt", "content": "x"}, tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: tmp, IsPrimary: true}},
-		ActiveRootID: "r1",
-		SessionID:    "sess-1",
-		Agent:        "implement",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: tmp, IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{SessionID: "sess-1",
+			Agent: "implement"},
 	})
 	if err == nil {
 		t.Fatal("expected error after expiry")
@@ -498,10 +498,10 @@ func TestExecutorCheckpointManagerNotConfigured(t *testing.T) {
 	exec := toolexecution.NewExecutor(policy, reg, "implement")
 
 	_, err = exec.Invoke(context.Background(), "write", map[string]any{"path": "a.txt"}, tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: tmp, IsPrimary: true}},
-		ActiveRootID: "r1",
-		SessionID:    "sess-1",
-		Agent:        "implement",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: tmp, IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{SessionID: "sess-1",
+			Agent: "implement"},
 	})
 	if err == nil || !strings.Contains(err.Error(), "checkpoints not configured") {
 		t.Fatalf("err = %v want checkpoints not configured", err)

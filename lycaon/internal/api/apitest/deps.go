@@ -14,44 +14,44 @@ import (
 func Dependencies(t *testing.T, deps api.Dependencies) api.Dependencies {
 	t.Helper()
 	fill := apitestdeps.Deps{
-		ApprovalGate:      deps.ApprovalGate,
-		ApprovalDecisions: deps.Authority.ApprovalDecisions,
-		Database:          deps.Database, Store: deps.Store, Projects: deps.Projects, Sessions: deps.Sessions,
-		Settings: deps.Settings, Invocations: deps.Invocations, MutationGate: deps.MutationGate,
-		ManagedSecrets: deps.ManagedSecrets, SecretIgnores: deps.SecretIgnores, SourceLedger: deps.SourceLedger,
-		SourceMutations: deps.SourceMutations, FileOperations: deps.FileOperations,
-		EditorDocuments: deps.EditorDocuments, FileBriefings: deps.FileBriefings, Workflows: deps.Workflows,
-		WorkflowRuns: deps.WorkflowRuns, WorkflowComposer: deps.WorkflowComposer, WorkflowPersister: deps.WorkflowPersister,
-		Blueprints: deps.Blueprints, ScanCoordinator: deps.ScanCoordinator, ScanCadence: deps.ScanCadence,
-		PublishDetections: deps.PublishDetections, DataDir: deps.DataDir, ModuleRoot: deps.ModuleRoot,
-		MCP: deps.MCP, ExtensionViews: deps.ExtensionViews,
-		ContributionReceipts: deps.Contributions.Receipts, ContributionAuthority: deps.Contributions.Authority,
-		LLM: deps.LLM, CostTracker: deps.CostTracker, Events: deps.Events, EventPublisher: deps.EventPublisher,
-		HostIdentity: deps.HostIdentity, Checkpoints: deps.Checkpoints, ProgressStore: deps.ProgressStore,
-		VisualStore: deps.VisualStore, HistoryStorage: deps.HistoryStorage, HostResources: deps.HostResources,
-		HostPower: deps.HostPower, Pricing: deps.Pricing, AgentPresence: deps.AgentPresence, Workers: deps.Workers,
-		WorkerCancel: deps.WorkerCancel, Delegations: deps.Delegations, Board: deps.Board,
-		HarnessWorkers: deps.HarnessWorkers, WebResearch: deps.WebResearch, WebDiscoverer: deps.WebDiscoverer,
+		ApprovalGate:      deps.Approvals.ApprovalGate,
+		ApprovalDecisions: deps.Approvals.Authority.ApprovalDecisions,
+		Database:          deps.Core.Database, Store: deps.Core.Store, Projects: deps.Core.Projects, Sessions: deps.Core.Sessions,
+		Settings: deps.Core.Settings, Invocations: deps.Core.Invocations, MutationGate: deps.Core.MutationGate,
+		ManagedSecrets: deps.Approvals.ManagedSecrets, SecretIgnores: deps.Approvals.SecretIgnores, SourceLedger: deps.Source.SourceLedger,
+		SourceMutations: deps.Source.SourceMutations, FileOperations: deps.Source.FileOperations,
+		EditorDocuments: deps.Source.EditorDocuments, FileBriefings: deps.Source.FileBriefings, Workflows: deps.Workflow.Workflows,
+		WorkflowRuns: deps.Workflow.WorkflowRuns, WorkflowComposer: deps.Workflow.WorkflowComposer, WorkflowPersister: deps.Workflow.WorkflowPersister,
+		Blueprints: deps.Workflow.Blueprints, ScanCoordinator: deps.Scans.ScanCoordinator, ScanCadence: deps.Scans.ScanCadence,
+		PublishDetections: deps.Scans.PublishDetections, DataDir: deps.Storage.DataDir, ModuleRoot: deps.Storage.ModuleRoot,
+		MCP: deps.External.MCP, ExtensionViews: deps.Extensions.ExtensionViews,
+		ContributionReceipts: deps.Extensions.Contributions.Receipts, ContributionAuthority: deps.Extensions.Contributions.Authority,
+		LLM: deps.Providers.LLM, CostTracker: deps.Providers.CostTracker, Events: deps.Host.Events, EventPublisher: deps.Host.EventPublisher,
+		HostIdentity: deps.Host.HostIdentity, Checkpoints: deps.Approvals.Checkpoints, ProgressStore: deps.Source.ProgressStore,
+		VisualStore: deps.Source.VisualStore, HistoryStorage: deps.External.HistoryStorage, HostResources: deps.Host.HostResources,
+		HostPower: deps.Host.HostPower, Pricing: deps.Host.Pricing, AgentPresence: deps.Source.AgentPresence, Workers: deps.Workflow.Workers,
+		WorkerCancel: deps.Workflow.WorkerCancel, Delegations: deps.Workflow.Delegations, Board: deps.Workflow.Board,
+		HarnessWorkers: deps.Harness.HarnessWorkers, WebResearch: deps.External.WebResearch, WebDiscoverer: deps.External.WebDiscoverer,
 	}
 	apitestdeps.Fill(t, &fill)
-	deps.ApprovalGate = fill.ApprovalGate
-	deps.Authority.ApprovalDecisions = fill.ApprovalDecisions
-	deps.Database, deps.Store, deps.Projects, deps.Sessions = fill.Database, fill.Store, fill.Projects, fill.Sessions
-	deps.Settings, deps.Invocations, deps.MutationGate = fill.Settings, fill.Invocations, fill.MutationGate
-	deps.ManagedSecrets, deps.SecretIgnores, deps.SourceLedger = fill.ManagedSecrets, fill.SecretIgnores, fill.SourceLedger
-	deps.SourceMutations, deps.FileOperations = fill.SourceMutations, fill.FileOperations
-	deps.EditorDocuments, deps.FileBriefings, deps.Workflows = fill.EditorDocuments, fill.FileBriefings, fill.Workflows
-	deps.WorkflowRuns, deps.WorkflowComposer, deps.WorkflowPersister = fill.WorkflowRuns, fill.WorkflowComposer, fill.WorkflowPersister
-	deps.Blueprints, deps.ScanCoordinator, deps.ScanCadence = fill.Blueprints, fill.ScanCoordinator, fill.ScanCadence
-	deps.PublishDetections, deps.DataDir, deps.ModuleRoot = fill.PublishDetections, fill.DataDir, fill.ModuleRoot
-	deps.MCP, deps.ExtensionViews = fill.MCP, fill.ExtensionViews
-	deps.Contributions.Receipts, deps.Contributions.Authority = fill.ContributionReceipts, fill.ContributionAuthority
-	deps.LLM, deps.CostTracker, deps.Events, deps.EventPublisher = fill.LLM, fill.CostTracker, fill.Events, fill.EventPublisher
-	deps.HostIdentity, deps.Checkpoints, deps.ProgressStore = fill.HostIdentity, fill.Checkpoints, fill.ProgressStore
-	deps.VisualStore, deps.HistoryStorage, deps.HostResources = fill.VisualStore, fill.HistoryStorage, fill.HostResources
-	deps.HostPower, deps.Pricing, deps.AgentPresence = fill.HostPower, fill.Pricing, fill.AgentPresence
-	deps.Workers, deps.WorkerCancel, deps.Delegations, deps.Board = fill.Workers, fill.WorkerCancel, fill.Delegations, fill.Board
-	deps.HarnessWorkers = fill.HarnessWorkers
-	deps.WebResearch, deps.WebDiscoverer = fill.WebResearch, fill.WebDiscoverer
+	deps.Approvals.ApprovalGate = fill.ApprovalGate
+	deps.Approvals.Authority.ApprovalDecisions = fill.ApprovalDecisions
+	deps.Core.Database, deps.Core.Store, deps.Core.Projects, deps.Core.Sessions = fill.Database, fill.Store, fill.Projects, fill.Sessions
+	deps.Core.Settings, deps.Core.Invocations, deps.Core.MutationGate = fill.Settings, fill.Invocations, fill.MutationGate
+	deps.Approvals.ManagedSecrets, deps.Approvals.SecretIgnores, deps.Source.SourceLedger = fill.ManagedSecrets, fill.SecretIgnores, fill.SourceLedger
+	deps.Source.SourceMutations, deps.Source.FileOperations = fill.SourceMutations, fill.FileOperations
+	deps.Source.EditorDocuments, deps.Source.FileBriefings, deps.Workflow.Workflows = fill.EditorDocuments, fill.FileBriefings, fill.Workflows
+	deps.Workflow.WorkflowRuns, deps.Workflow.WorkflowComposer, deps.Workflow.WorkflowPersister = fill.WorkflowRuns, fill.WorkflowComposer, fill.WorkflowPersister
+	deps.Workflow.Blueprints, deps.Scans.ScanCoordinator, deps.Scans.ScanCadence = fill.Blueprints, fill.ScanCoordinator, fill.ScanCadence
+	deps.Scans.PublishDetections, deps.Storage.DataDir, deps.Storage.ModuleRoot = fill.PublishDetections, fill.DataDir, fill.ModuleRoot
+	deps.External.MCP, deps.Extensions.ExtensionViews = fill.MCP, fill.ExtensionViews
+	deps.Extensions.Contributions.Receipts, deps.Extensions.Contributions.Authority = fill.ContributionReceipts, fill.ContributionAuthority
+	deps.Providers.LLM, deps.Providers.CostTracker, deps.Host.Events, deps.Host.EventPublisher = fill.LLM, fill.CostTracker, fill.Events, fill.EventPublisher
+	deps.Host.HostIdentity, deps.Approvals.Checkpoints, deps.Source.ProgressStore = fill.HostIdentity, fill.Checkpoints, fill.ProgressStore
+	deps.Source.VisualStore, deps.External.HistoryStorage, deps.Host.HostResources = fill.VisualStore, fill.HistoryStorage, fill.HostResources
+	deps.Host.HostPower, deps.Host.Pricing, deps.Source.AgentPresence = fill.HostPower, fill.Pricing, fill.AgentPresence
+	deps.Workflow.Workers, deps.Workflow.WorkerCancel, deps.Workflow.Delegations, deps.Workflow.Board = fill.Workers, fill.WorkerCancel, fill.Delegations, fill.Board
+	deps.Harness.HarnessWorkers = fill.HarnessWorkers
+	deps.External.WebResearch, deps.External.WebDiscoverer = fill.WebResearch, fill.WebDiscoverer
 	return deps
 }

@@ -62,7 +62,7 @@ func runLayoutProbe(
 	root := resolved.Root
 	readFilter := scope.ReadFilter
 	if readFilter == nil && scope.Boundary != nil {
-		profileID := strings.TrimSpace(scope.ToolCtx.Agent)
+		profileID := strings.TrimSpace(scope.ToolCtx.Identity.Agent)
 		if profileID == "" {
 			profileID = toolprofiles.DefaultToolProfileID
 		}
@@ -89,7 +89,7 @@ func runLayoutProbe(
 	}
 	roots := []sourcecatalog.Root{{ID: root.ID, Path: root.Path}}
 	joinCtx, cancel := context.WithTimeout(ctx, layoutCatalogJoinBudget)
-	snapshot, joinErr := catalog.Observe(joinCtx, scope.ToolCtx.ProjectID, roots)
+	snapshot, joinErr := catalog.Observe(joinCtx, scope.ToolCtx.Identity.ProjectID, roots)
 	cancel()
 	if joinErr != nil && ctx.Err() != nil {
 		return nil, 0, ProbeCoverage{}, ctx.Err()

@@ -137,14 +137,14 @@ func (b sessionWiring) wireSessionToolSources() {
 		b.toolRuntime.Authority.SetApprovalRuleSource(mgr)
 		b.toolRuntime.Executor.Network.SetHostResourceConnectionSource(b.hostResources.ResolveAction)
 		b.toolRuntime.Skills.SetSkillsCatalog(func(ctx context.Context, tctx tools.ToolContext) []skills.Skill {
-			roots := make([]string, 0, len(tctx.Roots))
-			for _, r := range tctx.Roots {
+			roots := make([]string, 0, len(tctx.Source.Roots))
+			for _, r := range tctx.Source.Roots {
 				if path := strings.TrimSpace(r.Path); path != "" {
 					roots = append(roots, path)
 				}
 			}
-			sess, _ := mgr.SessionByID(ctx, tctx.SessionID)
-			loaded, _ := mgr.EffectiveSkillsForProfile(ctx, sess, tctx.Agent, roots)
+			sess, _ := mgr.SessionByID(ctx, tctx.Identity.SessionID)
+			loaded, _ := mgr.EffectiveSkillsForProfile(ctx, sess, tctx.Identity.Agent, roots)
 			return loaded
 		})
 		b.toolRuntime.Skills.SetSkillTemplateVars(func(_ context.Context, tctx tools.ToolContext) map[string]any {
@@ -156,7 +156,7 @@ func (b sessionWiring) wireSessionToolSources() {
 		})
 		b.toolRuntime.Skills.SetSkillPackConfiguration(
 			func(ctx context.Context, tctx tools.ToolContext, packID string) map[string]any {
-				view := mgr.Catalog().ViewForSessionID(ctx, tctx.SessionID)
+				view := mgr.Catalog().ViewForSessionID(ctx, tctx.Identity.SessionID)
 				if view == nil {
 					return nil
 				}
@@ -201,7 +201,7 @@ func (b sessionWiring) wireSessionAuthorization() error {
 			}
 			if b.mcpReg != nil {
 				cap.Sealer.MCPInventory = func(context.Context) authzcontext.MCPInventory {
-					return authzcontext.MCPInventory{ProviderIDs: b.mcpReg.EnabledProviderIDs()}
+					return authzcontext.MCPInventory{ProviderIDs: b.mcpReg.Catalog.EnabledProviderIDs()}
 				}
 			}
 			cap.Sealer.ToolAccess = b.mgr.ResolveToolAccess

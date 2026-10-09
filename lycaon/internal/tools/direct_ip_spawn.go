@@ -7,15 +7,15 @@ import (
 )
 
 func FinalizeDirectIPForSpawn(tctx ToolContext) *toolrejection.ToolReject {
-	if !tctx.DirectIPRequested {
+	if !tctx.Direct.DirectIPRequested {
 		return nil
 	}
-	if tctx.DirectIPCapabilityRuntime == nil {
+	if tctx.Direct.DirectIPCapabilityRuntime == nil {
 		return &toolrejection.ToolReject{Code: isolation.CodeDirectIPAuthorizationChanged, Data: map[string]any{
 			"reason": "missing direct IP capability runtime",
 		}}
 	}
-	ok, err := tctx.DirectIPCapabilityRuntime.ConsumePermit(tctx.SessionID, tctx.ToolCallID, tctx.DirectIPActionDigest, tctx.DirectIPRequestDigest, tctx.DirectIPConfineDigest)
+	ok, err := tctx.Direct.DirectIPCapabilityRuntime.ConsumePermit(tctx.Identity.SessionID, tctx.Identity.ToolCallID, tctx.Direct.DirectIPActionDigest, tctx.Direct.DirectIPRequestDigest, tctx.Direct.DirectIPConfineDigest)
 	if err != nil {
 		return &toolrejection.ToolReject{Code: isolation.CodeDirectIPAuthorizationChanged, Data: map[string]any{
 			"reason": err.Error(),

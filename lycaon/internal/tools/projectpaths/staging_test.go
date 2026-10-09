@@ -17,8 +17,9 @@ func TestStagingPolicyDoesNotAuthorizeContentMutation(t *testing.T) {
 	root := t.TempDir()
 	recorder := &mutationRecorder{}
 	tc := tools.ToolContext{
-		Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}}, ActiveRootID: "root",
-		MutationRecorder: recorder,
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}},
+			ActiveRootID:     "root",
+			MutationRecorder: recorder},
 	}
 	// Agent policy resolves for review; the approval gate, not the resolver, decides.
 	for _, path := range []string{
@@ -46,13 +47,16 @@ func TestStagingPolicyDoesNotAuthorizeContentMutation(t *testing.T) {
 
 func TestStagingRetainsRepositoryAndWorkerBoundaries(t *testing.T) {
 	root := t.TempDir()
-	tc := tools.ToolContext{Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}}, ActiveRootID: "root"}
+	tc := tools.ToolContext{
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}},
+			ActiveRootID: "root"},
+	}
 	for _, path := range []string{".git/config", ".git/hooks/pre-commit", filepath.Join(t.TempDir(), "AGENTS.md")} {
 		if _, err := projectpaths.ResolveGitStage(t.Context(), nil, tc, path); err == nil {
 			t.Errorf("staging accepted protected path %s", path)
 		}
 	}
-	tc.WorkerJobID = "unclaimed-worker"
+	tc.Identity.WorkerJobID = "unclaimed-worker"
 	_, err := projectpaths.ResolveGitStage(t.Context(), nil, tc, "AGENTS.md")
 	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "WORKER_WRITE_WITHOUT_BRANCH" {

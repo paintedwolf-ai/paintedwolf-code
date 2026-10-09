@@ -18,7 +18,7 @@ func TestCapturePageToolRejectsMissingTarget(t *testing.T) {
 		testutil.FailErr(t, "RegisterCapturePageTool failed", err)
 	}
 	_, err := reg.Run(context.Background(), page.CaptureToolName, map[string]any{}, tools.ToolContext{
-		Out: &tools.ToolInvocationOut{},
+		Effects: tools.InvocationEffects{Out: &tools.ToolInvocationOut{}},
 	})
 	if err == nil {
 		t.Fatal("expected reject")

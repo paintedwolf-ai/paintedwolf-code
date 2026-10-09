@@ -130,8 +130,8 @@ func Register(reg *tools.DefaultRegistry, deps Deps) error {
 			spec.socket = grant.ResolvedPath
 		}
 		ctx = secretmatch.WithAskAttribution(ctx, secretmatch.AskAttribution{
-			SessionID: tctx.SessionID, RootSessionID: tctx.ChatSessionID(), ProjectID: tctx.ProjectID,
-			ProjectDir: tctx.ActiveRootPath(), ToolCallID: tctx.ToolCallID,
+			SessionID: tctx.Identity.SessionID, RootSessionID: tctx.ChatSessionID(), ProjectID: tctx.Identity.ProjectID,
+			ProjectDir: tctx.ActiveRootPath(), ToolCallID: tctx.Identity.ToolCallID,
 		})
 		screened, err := screenRequest(ctx, deps, spec, args, tctx)
 		if err != nil {
@@ -158,10 +158,10 @@ func Register(reg *tools.DefaultRegistry, deps Deps) error {
 			return "", reject
 		}
 		ctx = egressgate.WithAttribution(ctx, confine.EgressCommand{
-			SessionID: tctx.SessionID, RootSessionID: tctx.ChatSessionID(), ProjectID: tctx.ProjectID,
-			ProjectDir: tctx.ActiveRootPath(), ToolCallID: tctx.ToolCallID, Image: "http_request", ToolName: "http_request",
+			SessionID: tctx.Identity.SessionID, RootSessionID: tctx.ChatSessionID(), ProjectID: tctx.Identity.ProjectID,
+			ProjectDir: tctx.ActiveRootPath(), ToolCallID: tctx.Identity.ToolCallID, Image: "http_request", ToolName: "http_request",
 		})
-		defer confine.ForgetEgressAction(tctx.SessionID, tctx.ToolCallID)
+		defer confine.ForgetEgressAction(tctx.Identity.SessionID, tctx.Identity.ToolCallID)
 		resp, landed, bufferedBody, err := send(ctx, deps, tctx, spec, outbound, jar, tokenJar, tokenJarReq, allowAddress, durationArg(args["timeout_ms"]))
 		if err != nil {
 			return "", sendReject(ctx, deps, jarReq, jar, tokenJarReq, tokenJar, err)
@@ -175,7 +175,7 @@ func Register(reg *tools.DefaultRegistry, deps Deps) error {
 			return "", tokenReject
 		}
 		// The response is scrubbed before it is placed, landed, or spilled.
-		resp, bodyRedacted := scrubResponse(resp, tokenJar, tctx.Secrets)
+		resp, bodyRedacted := scrubResponse(resp, tokenJar, tctx.Effects.Secrets)
 		if bufferedBody != nil {
 			receipt, err := inboundwrite.Write(ctx, deps.Boundary, tctx, spec.disposition.path, resp.Body, "HTTP_REQUEST_RESPONSE_PATH_DENIED")
 			if err != nil {
@@ -183,7 +183,7 @@ func Register(reg *tools.DefaultRegistry, deps Deps) error {
 			}
 			landed = &receipt
 		}
-		finalURL, redirects := observedURLs(tctx.Secrets, resp.FinalURL, resp.Redirects)
+		finalURL, redirects := observedURLs(tctx.Effects.Secrets, resp.FinalURL, resp.Redirects)
 		out := result{
 			Status: resp.Status, FinalURL: finalURL, Headers: resp.Headers, Redirects: redirects,
 			SentHeaders: sentHeaders(spec, statedHeaders(tctx, args, screened)),
@@ -201,8 +201,8 @@ func Register(reg *tools.DefaultRegistry, deps Deps) error {
 		}
 		out.Cookies = saveCookieJar(ctx, deps, jarReq, jar)
 		reportWebPage(tctx, spec, resp, placement, finalURL)
-		if tctx.Out != nil {
-			tctx.Out.RetrievedFrom = retrievedFrom(spec, resp.FinalURL)
+		if tctx.Effects.Out != nil {
+			tctx.Effects.Out.RetrievedFrom = retrievedFrom(spec, resp.FinalURL)
 		}
 		encoded, err := surveyjson.MarshalIndent(out, "", "  ")
 		return string(encoded), err
@@ -317,7 +317,7 @@ func send(
 		req.StreamBody = func(body io.Reader) error {
 			// A body that could echo a held token or a resolved value is
 			// buffered so it can be scrubbed before it lands.
-			if tokenJar != nil || len(spec.captureTokens) > 0 || tctx.Secrets.Resolved() {
+			if tokenJar != nil || len(spec.captureTokens) > 0 || tctx.Effects.Secrets.Resolved() {
 				data, err := io.ReadAll(io.LimitReader(body, maxResponseFile+1))
 				if err != nil {
 					return err
@@ -336,7 +336,7 @@ func send(
 			return nil
 		}
 	}
-	if err := tctx.Secrets.HandOff(ctx, spec.outgoing); err != nil {
+	if err := tctx.Effects.Secrets.HandOff(ctx, spec.outgoing); err != nil {
 		return outboundhttp.Response{}, nil, nil, toolrejection.HeldHandOffReject("http_request", err)
 	}
 	resp, err := outboundhttp.Do(ctx, req)
@@ -470,11 +470,11 @@ func checkLoopbackAuthority(spec requestSpec, allowAddress func(netip.Addr, uint
 func loopbackPolicy(request *capabilityrequest.CapabilityRequest, tctx tools.ToolContext) (func(netip.Addr, uint16) bool, *toolrejection.ToolReject) {
 	ports := make(map[uint16]bool)
 	allLoopback := false
-	if tctx.LoopbackConnectGranted {
-		if len(tctx.LoopbackConnectPorts) == 0 {
+	if tctx.Local.LoopbackConnectGranted {
+		if len(tctx.Local.LoopbackConnectPorts) == 0 {
 			allLoopback = true
 		} else {
-			for _, p := range tctx.LoopbackConnectPorts {
+			for _, p := range tctx.Local.LoopbackConnectPorts {
 				ports[p] = true
 			}
 		}

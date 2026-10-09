@@ -53,10 +53,14 @@ func TestTerminalWriteRootCannotAuthorizeInstructionChanges(t *testing.T) {
 		return e
 	}()
 	project := t.TempDir()
+	contract, ok := toolcontract.Lookup("terminal_open")
+	if !ok {
+		t.Fatal("compiled terminal contract unavailable")
+	}
 	tc := tools.ToolContext{
-		Invocation:   tools.Invocation{Contract: toolcontract.Contract{Capabilities: toolcontract.CapabilityWriteRoot}},
-		Roots:        []projectroot.RootRef{{ID: "root", Path: project, IsPrimary: true}},
-		ActiveRootID: "root",
+		Invocation: tools.Invocation{Contract: contract},
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: project, IsPrimary: true}},
+			ActiveRootID: "root"},
 	}
 	err := executor.Boundary.preflightWriteRoot(t.Context(), "terminal_open", map[string]any{
 		"capability_request": map[string]any{"write_root": filepath.Join(project, "AGENTS.md")},
@@ -64,7 +68,7 @@ func TestTerminalWriteRootCannotAuthorizeInstructionChanges(t *testing.T) {
 	if reject := toolrejection.AsToolReject(err); reject == nil || reject.Code != "POLICY_WRITE_REQUIRES_COMMAND" {
 		t.Fatalf("terminal policy write = %v, want policy-write refusal", err)
 	}
-	if len(tc.PolicyWriteGrants) != 0 {
+	if len(tc.Files.PolicyWriteGrants) != 0 {
 		t.Fatal("refused terminal received policy-write authority")
 	}
 }

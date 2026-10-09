@@ -21,7 +21,7 @@ type capabilityReviewSecretKey struct{}
 // Secret targets remain available until every capability replays the held subject.
 func approveCapabilitySecretPermission(ctx context.Context, tc tools.ToolContext, permission *hitl.SecretPermission) {
 	if !hitl.HasPreparedApprovalAnswers(ctx) {
-		approveSecretPermission(tc.Secrets, permission)
+		approveSecretPermission(tc.Effects.Secrets, permission)
 	}
 }
 
@@ -29,7 +29,7 @@ func approveCapabilitySecretPermission(ctx context.Context, tc tools.ToolContext
 func (e *Executor) reviewInvocationCapabilities(ctx context.Context, tool string, args map[string]any, tc tools.ToolContext) (context.Context, error) {
 	request, reject := capabilityrequest.ParseCapabilityRequest(args)
 	if reject != nil {
-		return ctx, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Agent, args, reject)
+		return ctx, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Identity.Agent, args, reject)
 	}
 	if !multipleCapabilityFamilies(request) {
 		return ctx, nil
@@ -44,11 +44,11 @@ func (e *Executor) reviewInvocationCapabilities(ctx context.Context, tool string
 	}
 	action := hitl.ProposedAction{
 		Tool: tool, Args: args, Command: commandsurface.PrimaryCommandLine(args, nil),
-		ProjectID: tc.ProjectID, ProjectDir: tc.ActiveRootPath(),
-		SessionID: tc.SessionID, RootSessionID: tc.ChatSessionID(), ActionID: tc.ToolCallID,
+		ProjectID: tc.Identity.ProjectID, ProjectDir: tc.ActiveRootPath(),
+		SessionID: tc.Identity.SessionID, RootSessionID: tc.ChatSessionID(), ActionID: tc.Identity.ToolCallID,
 		Contained:            hitl.ContainedForRequest(e.Boundary.actionConfineRequest(ctx, tc)),
-		HostResources:        append([]string(nil), tc.HostResources...),
-		HostResourceFamilies: append([]string(nil), tc.HostResourceFamilies...),
+		HostResources:        append([]string(nil), tc.Host.HostResources...),
+		HostResourceFamilies: append([]string(nil), tc.Host.HostResourceFamilies...),
 	}
 	plan, decision, err := hitl.ComposeCapabilityApprovals(action, reviews)
 	if len(reviews) == 1 {
@@ -59,12 +59,12 @@ func (e *Executor) reviewInvocationCapabilities(ctx context.Context, tool string
 		if errors.Is(err, hitl.ErrNoCommonApprovalDuration) {
 			return ctx, nil
 		}
-		return ctx, e.Approvals.rejectApprovalErr(ctx, tool, tc.Agent, args, toolrejection.ApprovalPlanInvalid())
+		return ctx, e.Approvals.rejectApprovalErr(ctx, tool, tc.Identity.Agent, args, toolrejection.ApprovalPlanInvalid())
 	}
 	secretIncluded := slices.ContainsFunc(plan.Subject.Targets, func(target hitl.ApprovalTarget) bool { return target.Kind == "secret" })
 	final, err := e.Approvals.raiseAndWaitToolApproval(ctx, toolApprovalRaise{
 		Action: action, Plan: plan, Decision: decision, Title: plan.Subject.Title,
-		ToolCallID: tc.ToolCallID, ProjectID: tc.ProjectID,
+		ToolCallID: tc.Identity.ToolCallID, ProjectID: tc.Identity.ProjectID,
 		SkipGrantOfferAutofill: true,
 		ApprovalMatches:        plan.Presentation.ApprovalRules, Detection: plan.Presentation.Detection,
 		ConsequenceBand: api.ConsequenceBand(plan.Presentation.ConsequenceBand),
@@ -77,7 +77,7 @@ func (e *Executor) reviewInvocationCapabilities(ctx context.Context, tool string
 	}
 	ctx = hitl.WithPreparedApprovalAnswer(ctx, reviews, final)
 	if !hitl.CheckpointAuthorizes(final) {
-		return ctx, e.Approvals.rejectApprovalErr(ctx, tool, tc.Agent, args, isolationCheckpointReject(capabilityReviewDenialCode(plan), final))
+		return ctx, e.Approvals.rejectApprovalErr(ctx, tool, tc.Identity.Agent, args, isolationCheckpointReject(capabilityReviewDenialCode(plan), final))
 	}
 	if secretIncluded {
 		ctx = context.WithValue(ctx, capabilityReviewSecretKey{}, permission)
@@ -142,18 +142,18 @@ func (e *Executor) prepareInvocationCapabilities(ctx context.Context, tool strin
 		return nil, err
 	}
 	if e.Boundary.sessionReadOverlay != nil {
-		tc.SessionReadPaths = append([]string(nil), e.Boundary.sessionReadOverlay(ctx, tc.SessionID, tc.ParentSessionID)...)
+		tc.Files.SessionReadPaths = append([]string(nil), e.Boundary.sessionReadOverlay(ctx, tc.Identity.SessionID, tc.Identity.ParentSessionID)...)
 	}
 	if request.ReadPath != "" {
-		tc.SessionReadPaths = append(tc.SessionReadPaths, request.ReadPath)
+		tc.Files.SessionReadPaths = append(tc.Files.SessionReadPaths, request.ReadPath)
 	}
 	sockets, err := e.Capabilities.preflightSocketCapability(ctx, tool, args, tc)
 	if err := collect(err); err != nil {
 		return nil, err
 	}
 	if sockets != nil {
-		tc.SocketGrants = sockets.SocketGrants
-		tc.AuthorizedSocketDigests = sockets.AuthorizedSocketDigests
+		tc.Socket.SocketGrants = sockets.SocketGrants
+		tc.Socket.AuthorizedSocketDigests = sockets.AuthorizedSocketDigests
 	}
 	// Socket reviews can also cover the requested direct-IP authority.
 	if !reviewsCoverDirectIP(reviews) {
@@ -162,9 +162,9 @@ func (e *Executor) prepareInvocationCapabilities(ctx context.Context, tool strin
 			return nil, err
 		}
 	}
-	tc.DirectIPRequested = request.DirectIP != nil
+	tc.Direct.DirectIPRequested = request.DirectIP != nil
 	if request.DirectIP != nil {
-		tc.DirectIPDeclared = append([]string(nil), request.DirectIP.DeclaredDestinations...)
+		tc.Direct.DirectIPDeclared = append([]string(nil), request.DirectIP.DeclaredDestinations...)
 	}
 	e.Boundary.applySessionListenGrant(ctx, &tc)
 	e.Boundary.applySessionLoopbackGrant(ctx, &tc)
@@ -178,7 +178,7 @@ func (e *Executor) prepareInvocationCapabilities(ctx context.Context, tool strin
 			return nil, err
 		}
 		predictExecutionReviewCapabilities(&tc, request)
-		if err := collect(e.Capabilities.preflightExecutionCapability(ctx, tool, args, &tc)); err != nil {
+		if err := collect(e.Process.preflightExecutionCapability(ctx, tool, args, &tc)); err != nil {
 			return nil, err
 		}
 		return reviews, nil
@@ -188,7 +188,7 @@ func (e *Executor) prepareInvocationCapabilities(ctx context.Context, tool strin
 		return nil, err
 	}
 	predictExecutionReviewCapabilities(&tc, request)
-	if err := collect(e.Capabilities.preflightExecutionCapability(ctx, tool, args, &tc)); err != nil {
+	if err := collect(e.Process.preflightExecutionCapability(ctx, tool, args, &tc)); err != nil {
 		return nil, err
 	}
 	return reviews, nil
@@ -208,27 +208,27 @@ func reviewsCoverDirectIP(reviews []*hitl.PreparedApproval) bool {
 // These facts exist only while preparing a combined card, never as launch authority.
 func predictExecutionReviewCapabilities(tc *tools.ToolContext, request *capabilityrequest.CapabilityRequest) {
 	if request.LocalListen != nil {
-		tc.LocalListenGranted = true
+		tc.Local.LocalListenGranted = true
 		if len(request.LocalListen.Ports) > 0 {
-			tc.LocalListenPorts = request.LocalListen.Ports
+			tc.Local.LocalListenPorts = request.LocalListen.Ports
 		}
 		if request.DirectIP != nil {
-			tc.LocalListenPorts = nil
+			tc.Local.LocalListenPorts = nil
 		}
 	}
 	if request.LoopbackConnect != nil {
-		tc.LoopbackConnectGranted = true
+		tc.Local.LoopbackConnectGranted = true
 		if len(request.LoopbackConnect.Ports) > 0 {
-			tc.LoopbackConnectPorts = request.LoopbackConnect.Ports
+			tc.Local.LoopbackConnectPorts = request.LoopbackConnect.Ports
 		}
 		if request.DirectIP != nil {
-			tc.LoopbackConnectPorts = nil
+			tc.Local.LoopbackConnectPorts = nil
 		}
 	}
-	if len(request.SocketPaths) > 0 && len(tc.SocketGrants) == 0 {
+	if len(request.SocketPaths) > 0 && len(tc.Socket.SocketGrants) == 0 {
 		grants, reject := capabilityrequest.ResolveCapabilitySockets(request)
 		if reject == nil {
-			tc.SocketGrants = grants
+			tc.Socket.SocketGrants = grants
 		}
 	}
 }

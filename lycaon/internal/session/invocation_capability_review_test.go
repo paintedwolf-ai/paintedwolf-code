@@ -134,8 +134,12 @@ func newCapabilityReviewFixture(t *testing.T, approve bool) *capabilityReviewFix
 	}
 	broker := &WriteRootCheckpointBroker{Checkpoints: c, Runtime: c.write, ReadRuntime: c.read, Authority: authority}
 	f := &capabilityReviewFixture{checkpoints: c, wantPaths: true, context: tools.ToolContext{
-		SessionID: "cap-session", ProjectID: "cap-project", ToolCallID: "cap-call", Agent: "implement",
-		Roots: []projectroot.RootRef{{ID: "root", Path: t.TempDir(), IsPrimary: true}}, ActiveRootID: "root",
+		Identity: tools.InvocationIdentity{SessionID: "cap-session",
+			ProjectID:  "cap-project",
+			ToolCallID: "cap-call",
+			Agent:      "implement"},
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: t.TempDir(), IsPrimary: true}},
+			ActiveRootID: "root"},
 	}, args: map[string]any{"command": "true", "capability_request": map[string]any{
 		"write_root": write, "read_path": read, "socket_paths": []any{socket},
 		"local_listen":     map[string]any{"ports": []any{8080}},
@@ -144,7 +148,7 @@ func newCapabilityReviewFixture(t *testing.T, approve bool) *capabilityReviewFix
 	registry := tools.NewDefaultRegistry()
 	testutil.FailErr(t, "register fixture command", registry.Register("command", func(ctx context.Context, _ map[string]any, tc tools.ToolContext) (string, error) {
 		f.invocations++
-		request, reject := tools.ConfineRequestForSpawn(ctx, tc, broker.SessionWriteRoots(ctx, tc.SessionID, tc.ParentSessionID))
+		request, reject := tools.ConfineRequestForSpawn(ctx, tc, broker.SessionWriteRoots(ctx, tc.Identity.SessionID, tc.Identity.ParentSessionID))
 		if reject != nil {
 			return "", reject
 		}
@@ -162,11 +166,11 @@ func newCapabilityReviewFixture(t *testing.T, approve bool) *capabilityReviewFix
 	f.executor.Boundary.SetSessionWriteRootOverlay(broker.SessionWriteRoots)
 	f.executor.Boundary.SetSessionReadPathOverlay(broker.SessionReadPaths)
 	f.executor.Boundary.SetWriteRootPreflight(func(ctx context.Context, tool string, _ map[string]any, tc tools.ToolContext, path string) (bool, bool, string, error) {
-		result, err := broker.Authorize(ctx, native.SandboxWriteRootAsk{SessionID: tc.SessionID, ProjectID: tc.ProjectID, ToolCallID: tc.ToolCallID, ProjectDir: tc.ActiveRootPath(), ToolName: tool, ProposedWriteRoot: path})
+		result, err := broker.Authorize(ctx, native.SandboxWriteRootAsk{SessionID: tc.Identity.SessionID, ProjectID: tc.Identity.ProjectID, ToolCallID: tc.Identity.ToolCallID, ProjectDir: tc.ActiveRootPath(), ToolName: tool, ProposedWriteRoot: path})
 		return result.Authorized, result.Denied, result.UserGuidance, err
 	})
 	f.executor.Boundary.SetReadPathPreflight(func(ctx context.Context, tool string, _ map[string]any, tc tools.ToolContext, path string) (bool, bool, string, error) {
-		result, err := broker.AuthorizeRead(ctx, native.SandboxReadPathAsk{SessionID: tc.SessionID, ProjectID: tc.ProjectID, ToolCallID: tc.ToolCallID, ProjectDir: tc.ActiveRootPath(), ToolName: tool, ProposedReadPath: path, ReadDenyPaths: []string{read}})
+		result, err := broker.AuthorizeRead(ctx, native.SandboxReadPathAsk{SessionID: tc.Identity.SessionID, ProjectID: tc.Identity.ProjectID, ToolCallID: tc.Identity.ToolCallID, ProjectDir: tc.ActiveRootPath(), ToolName: tool, ProposedReadPath: path, ReadDenyPaths: []string{read}})
 		return result.Authorized, result.Denied, result.UserGuidance, err
 	})
 	f.executor.Boundary.SetSessionListenGrant(func(_ context.Context, session, _ string) (bool, []uint16) {
@@ -192,7 +196,7 @@ func TestInvocationCapabilitiesShareOneReviewAndReuseAuthority(t *testing.T) {
 			t.Errorf("combined review omitted %s", kind)
 		}
 	}
-	f.context.ToolCallID = "next-call"
+	f.context.Identity.ToolCallID = "next-call"
 	_, err = f.executor.Invoke(t.Context(), "command", f.args, f.context)
 	testutil.FailErr(t, "reuse combined authority", err)
 	if len(f.checkpoints.requests) != 1 || f.invocations != 2 {
@@ -206,7 +210,7 @@ func TestInvocationCapabilityRejectionNeverExecutesOrInstalls(t *testing.T) {
 	if err == nil || f.invocations != 0 || len(f.checkpoints.requests) != 1 {
 		t.Fatalf("denied review: err=%v executions=%d reviews=%d", err, f.invocations, len(f.checkpoints.requests))
 	}
-	if len(f.checkpoints.write.SessionWriteRoots(f.context.SessionID)) != 0 || len(f.checkpoints.read.SessionWriteRoots(f.context.SessionID)) != 0 || len(f.checkpoints.sockets.AppliedGrants(f.context.SessionID)) != 0 {
+	if len(f.checkpoints.write.SessionWriteRoots(f.context.Identity.SessionID)) != 0 || len(f.checkpoints.read.SessionWriteRoots(f.context.Identity.SessionID)) != 0 || len(f.checkpoints.sockets.AppliedGrants(f.context.Identity.SessionID)) != 0 {
 		t.Fatal("denied review installed authority")
 	}
 }
@@ -227,14 +231,14 @@ func TestInvocationCapabilityOnceDoesNotAuthorizeLaterCalls(t *testing.T) {
 	delete(request, "write_root")
 	delete(request, "read_path")
 	for i := range 2 {
-		f.context.ToolCallID = fmt.Sprintf("once-call-%d", i)
+		f.context.Identity.ToolCallID = fmt.Sprintf("once-call-%d", i)
 		_, err := f.executor.Invoke(t.Context(), "command", f.args, f.context)
 		testutil.FailErr(t, "invoke with one-action authority", err)
 		if len(f.checkpoints.requests) != i+1 || f.invocations != i+1 {
 			t.Fatalf("one-action permission leaked or split: reviews=%d executions=%d", len(f.checkpoints.requests), f.invocations)
 		}
 	}
-	if len(f.checkpoints.sockets.AppliedGrants(f.context.SessionID)) != 0 {
+	if len(f.checkpoints.sockets.AppliedGrants(f.context.Identity.SessionID)) != 0 {
 		t.Fatal("once installed a reusable socket grant")
 	}
 }
@@ -246,7 +250,7 @@ func TestInvocationCapabilityInvalidSocketDoesNotPromptForPaths(t *testing.T) {
 	if err == nil || f.invocations != 0 || len(f.checkpoints.requests) != 0 {
 		t.Fatalf("invalid socket: err=%v executions=%d reviews=%d", err, f.invocations, len(f.checkpoints.requests))
 	}
-	if len(f.checkpoints.write.SessionWriteRoots(f.context.SessionID)) != 0 || len(f.checkpoints.read.SessionWriteRoots(f.context.SessionID)) != 0 {
+	if len(f.checkpoints.write.SessionWriteRoots(f.context.Identity.SessionID)) != 0 || len(f.checkpoints.read.SessionWriteRoots(f.context.Identity.SessionID)) != 0 {
 		t.Fatal("failed preparation installed path grants")
 	}
 }
@@ -295,15 +299,15 @@ func TestInvocationCapabilityOnceKeepsSecretReviewStable(t *testing.T) {
 	delete(request, "write_root")
 	delete(request, "read_path")
 	database := testdbfixture.Open(t, "store.db")
-	testdbseed.InsertProject(t, database, f.context.ProjectID)
-	testdbseed.InsertSession(t, database, f.context.SessionID, f.context.ProjectID)
+	testdbseed.InsertProject(t, database, f.context.Identity.ProjectID)
+	testdbseed.InsertSession(t, database, f.context.Identity.SessionID, f.context.Identity.ProjectID)
 	values := credentialstore.NewEmpty(credentialstore.Slot{
 		Path:      filepath.Join(t.TempDir(), credentialstore.VaultBasename),
 		Namespace: credentialstore.NamespaceManagedSecrets, Context: "capability review test",
 	}, func(string) bool { return true })
 	service := secretcap.NewWithStore(database, values, nil)
 	meta, err := service.CreateSettingsSecret(t.Context(), secretcap.CreateSettingsSecretRequest{
-		ProjectID: f.context.ProjectID, PersonID: testdbseed.OwnerID(t, database), OperationID: "fixture-secret", Name: "Service password",
+		ProjectID: f.context.Identity.ProjectID, PersonID: testdbseed.OwnerID(t, database), OperationID: "fixture-secret", Name: "Service password",
 		Purpose: "local service", Value: "capability-review-fixture-password",
 	})
 	testutil.FailErr(t, "create protected fixture value", err)

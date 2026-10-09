@@ -23,27 +23,27 @@ func TestConfinedMCPSeamConformance(t *testing.T) {
 	bin := buildFakeStdioServer(t)
 	wantRoot := fileRootURI(mustAbs(t, root))
 
-	reg, err := NewRegistryImpl(RegistryOptions{Connector: SDKConnector{}})
-	testutil.FailErr(t, "NewRegistryImpl", err)
-	reg.deviceCatalog = []MergedMCPProviderEntry{{
+	reg, err := NewRuntime(RuntimeOptions{Connector: SDKConnector{}})
+	testutil.FailErr(t, "NewRuntime", err)
+	reg.Catalog.deviceCatalog = []MergedMCPProviderEntry{{
 		MCPProviderEntry: MCPProviderEntry{ID: "fixture", Command: bin, Args: legacyRootsFixtureArgs, Enabled: true},
 	}}
-	reg.SetDeviceProbeRoots(func() []string { return []string{root} })
+	reg.Connections.SetDeviceProbeRoots(func() []string { return []string{root} })
 	t.Cleanup(func() { _ = reg.Close() })
 
-	out, err := reg.CallTool(context.Background(), CallScope{}, "fixture", "list_roots", nil)
+	out, err := reg.Calls.CallTool(context.Background(), CallScope{}, "fixture", "list_roots", nil)
 	testutil.FailErr(t, "list_roots", err)
 	if !strings.Contains(out, wantRoot) {
 		t.Fatalf("roots text %q missing %s", out, wantRoot)
 	}
 
-	out, err = reg.CallTool(context.Background(), CallScope{}, "fixture", "huge", nil)
+	out, err = reg.Calls.CallTool(context.Background(), CallScope{}, "fixture", "huge", nil)
 	testutil.FailErr(t, "huge", err)
 	if !strings.Contains(out, `"truncated":true`) {
 		t.Fatalf("expected truncated output, got prefix %q", out[:min(80, len(out))])
 	}
 
-	_, err = reg.CallTool(context.Background(), CallScope{}, "fixture", "fail_coded", nil)
+	_, err = reg.Calls.CallTool(context.Background(), CallScope{}, "fixture", "fail_coded", nil)
 	tr := toolrejection.AsToolReject(err)
 	if tr == nil || tr.Code != MCPServerCodePrefix+"FIXTURE_MCP_DENIED" {
 		t.Fatalf("err = %v want %sFIXTURE_MCP_DENIED", err, MCPServerCodePrefix)
@@ -52,7 +52,7 @@ func TestConfinedMCPSeamConformance(t *testing.T) {
 		t.Fatalf("mcp_error_code = %q", got)
 	}
 
-	_, err = reg.CallTool(context.Background(), CallScope{}, "fixture", "fail_plain", nil)
+	_, err = reg.Calls.CallTool(context.Background(), CallScope{}, "fixture", "fail_plain", nil)
 	tr = toolrejection.AsToolReject(err)
 	if tr == nil || tr.Code != GenericMCPRejectCode {
 		t.Fatalf("err = %v want %s", err, GenericMCPRejectCode)
@@ -69,18 +69,18 @@ func TestStdioServerSurvivesTheCallThatSpawnedIt(t *testing.T) {
 	t.Setenv("LYCAON_SANDBOX", "off")
 	reg := newFixtureRegistry(t, buildFakeStdioServer(t))
 
-	first, err := reg.CallTool(context.Background(), CallScope{}, "fixture", "echo", map[string]any{"message": "one"})
+	first, err := reg.Calls.CallTool(context.Background(), CallScope{}, "fixture", "echo", map[string]any{"message": "one"})
 	testutil.FailErr(t, "first call", err)
 	if !strings.Contains(first, "one") {
 		t.Fatalf("first call = %q", first)
 	}
-	second, err := reg.CallTool(context.Background(), CallScope{}, "fixture", "echo", map[string]any{"message": "two"})
+	second, err := reg.Calls.CallTool(context.Background(), CallScope{}, "fixture", "echo", map[string]any{"message": "two"})
 	testutil.FailErr(t, "second call", err)
 	if !strings.Contains(second, "two") {
 		t.Fatalf("second call = %q", second)
 	}
 	// Same session both times — a reconnect would mean the first call killed it.
-	if sessions := reg.sessionCount(); sessions != 1 {
+	if sessions := reg.Connections.sessionCount(); sessions != 1 {
 		t.Fatalf("registry holds %d sessions, want the one it spawned", sessions)
 	}
 }
@@ -90,13 +90,13 @@ func TestStdioServerSurvivesTheCallThatSpawnedIt(t *testing.T) {
 func TestCallToolAfterSyncToolsUsesLiveSession(t *testing.T) {
 	t.Setenv("LYCAON_SANDBOX", "off")
 	reg := newFixtureRegistry(t, buildFakeStdioServer(t))
-	reg.SetToolRegistry(tools.NewDefaultRegistry())
+	reg.Tools.SetToolRegistry(tools.NewDefaultRegistry())
 
-	testutil.FailErr(t, "sync", reg.SyncTools(context.Background()))
-	if got := reg.LastSyncError("fixture"); got != "" {
+	testutil.FailErr(t, "sync", reg.Tools.SyncTools(context.Background()))
+	if got := reg.Catalog.LastSyncError("fixture"); got != "" {
 		t.Fatalf("sync error = %q", got)
 	}
-	out, err := reg.CallTool(context.Background(), CallScope{}, "fixture", "echo", map[string]any{"message": "after-sync"})
+	out, err := reg.Calls.CallTool(context.Background(), CallScope{}, "fixture", "echo", map[string]any{"message": "after-sync"})
 	testutil.FailErr(t, "call after sync", err)
 	if !strings.Contains(out, "after-sync") {
 		t.Fatalf("call after sync = %q", out)
@@ -110,27 +110,27 @@ func TestDeadTransportEvictsCachedSession(t *testing.T) {
 	reg := newFixtureRegistry(t, buildFakeStdioServer(t))
 
 	testutil.FailErr(t, "warm", func() error {
-		_, err := reg.CallTool(context.Background(), CallScope{}, "fixture", "echo", map[string]any{"message": "warm"})
+		_, err := reg.Calls.CallTool(context.Background(), CallScope{}, "fixture", "echo", map[string]any{"message": "warm"})
 		return err
 	}())
 
 	// Take the server down behind the registry's back, the way a crashing or
 	// externally killed server does — the entry stays in r.sessions.
-	dead, ok := reg.sessionFor("fixture").(*sdkSession)
+	dead, ok := reg.Connections.sessionFor("fixture").(*sdkSession)
 	if !ok {
-		t.Fatalf("session type %T", reg.sessionFor("fixture"))
+		t.Fatalf("session type %T", reg.Connections.sessionFor("fixture"))
 	}
 	_ = dead.Close()
 
-	if _, err := reg.CallTool(context.Background(), CallScope{}, "fixture", "echo", map[string]any{"message": "dead"}); err == nil {
+	if _, err := reg.Calls.CallTool(context.Background(), CallScope{}, "fixture", "echo", map[string]any{"message": "dead"}); err == nil {
 		t.Fatal("expected the call against the dead server to fail")
 	}
-	if reg.sessionFor("fixture") != nil {
+	if reg.Connections.sessionFor("fixture") != nil {
 		t.Fatal("dead session stayed cached; later calls would fail against a corpse")
 	}
 
 	// The next call re-establishes rather than failing forever.
-	out, err := reg.CallTool(context.Background(), CallScope{}, "fixture", "echo", map[string]any{"message": "revived"})
+	out, err := reg.Calls.CallTool(context.Background(), CallScope{}, "fixture", "echo", map[string]any{"message": "revived"})
 	testutil.FailErr(t, "call after eviction", err)
 	if !strings.Contains(out, "revived") {
 		t.Fatalf("call after eviction = %q", out)
@@ -144,11 +144,11 @@ func TestDeclaredServerErrorKeepsSession(t *testing.T) {
 	reg := newFixtureRegistry(t, buildFakeStdioServer(t))
 
 	for i := 0; i < 3; i++ {
-		if _, err := reg.CallTool(context.Background(), CallScope{}, "fixture", "fail_coded", nil); toolrejection.AsToolReject(err) == nil {
+		if _, err := reg.Calls.CallTool(context.Background(), CallScope{}, "fixture", "fail_coded", nil); toolrejection.AsToolReject(err) == nil {
 			t.Fatalf("call %d: err = %v want ToolReject", i, err)
 		}
 	}
-	if got := reg.sessionCount(); got != 1 {
+	if got := reg.Connections.sessionCount(); got != 1 {
 		t.Fatalf("registry holds %d sessions, want the one it spawned", got)
 	}
 }
@@ -157,16 +157,16 @@ func TestDeclaredServerErrorKeepsSession(t *testing.T) {
 func TestCloseTerminatesSpawnedServer(t *testing.T) {
 	t.Setenv("LYCAON_SANDBOX", "off")
 	reg := newFixtureRegistry(t, buildFakeStdioServer(t))
-	_, err := reg.CallTool(context.Background(), CallScope{}, "fixture", "echo", map[string]any{"message": "hi"})
+	_, err := reg.Calls.CallTool(context.Background(), CallScope{}, "fixture", "echo", map[string]any{"message": "hi"})
 	testutil.FailErr(t, "call", err)
 
-	sess, _ := reg.sessionFor("fixture").(*sdkSession)
+	sess, _ := reg.Connections.sessionFor("fixture").(*sdkSession)
 	if sess == nil || sess.cmd == nil || sess.cmd.Process == nil {
 		t.Fatal("no spawned process to reap")
 	}
 
 	testutil.FailErr(t, "close", reg.Close())
-	if reg.sessionCount() != 0 {
+	if reg.Connections.sessionCount() != 0 {
 		t.Fatal("Close left sessions cached")
 	}
 	if sess.cmd.ProcessState == nil {
@@ -174,26 +174,26 @@ func TestCloseTerminatesSpawnedServer(t *testing.T) {
 	}
 }
 
-func newFixtureRegistry(t *testing.T, bin string) *RegistryImpl {
+func newFixtureRegistry(t *testing.T, bin string) *Runtime {
 	t.Helper()
-	reg, err := NewRegistryImpl(RegistryOptions{Connector: SDKConnector{}})
-	testutil.FailErr(t, "NewRegistryImpl", err)
-	reg.deviceCatalog = []MergedMCPProviderEntry{{
+	reg, err := NewRuntime(RuntimeOptions{Connector: SDKConnector{}})
+	testutil.FailErr(t, "NewRuntime", err)
+	reg.Catalog.deviceCatalog = []MergedMCPProviderEntry{{
 		MCPProviderEntry: MCPProviderEntry{ID: "fixture", Command: bin, Enabled: true},
 	}}
-	reg.SetDeviceProbeRoots(func() []string { return []string{t.TempDir()} })
+	reg.Connections.SetDeviceProbeRoots(func() []string { return []string{t.TempDir()} })
 	t.Cleanup(func() { _ = reg.Close() })
 	return reg
 }
 
-func (r *RegistryImpl) sessionCount() int {
+func (r *ConnectionPool) sessionCount() int {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return len(r.sessions)
 }
 
 // sessionFor returns the pooled session for providerID in any scope, or nil.
-func (r *RegistryImpl) sessionFor(providerID string) ProviderSession {
+func (r *ConnectionPool) sessionFor(providerID string) ProviderSession {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	for ref, pooled := range r.sessions {

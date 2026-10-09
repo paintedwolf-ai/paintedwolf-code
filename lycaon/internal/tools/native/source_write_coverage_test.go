@@ -112,12 +112,12 @@ func TestEveryMutatingToolRecordsAnAttributedRow(t *testing.T) {
 			}
 			st := bindLedgerForWrites(t, dir)
 			tctx := nativefixture.Context(dir)
-			tctx.ProjectID = "p1"
-			tctx.SessionID = "s1"
-			tctx.UserTurn = 4
-			tctx.ToolCallID = "call_" + tc.tool
-			tctx.SourceLedger = st
-			tctx.SourceMutations = project.NewSourceMutationService(st.LedgerDB(), st)
+			tctx.Identity.ProjectID = "p1"
+			tctx.Identity.SessionID = "s1"
+			tctx.Identity.UserTurn = 4
+			tctx.Identity.ToolCallID = "call_" + tc.tool
+			tctx.Source.SourceLedger = st
+			tctx.Source.SourceMutations = project.NewSourceMutationService(st.LedgerDB(), st)
 
 			testutil.FailErr(t, tc.tool+" tool failed", tc.run(t, dir, tctx))
 

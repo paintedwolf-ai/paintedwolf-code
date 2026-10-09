@@ -84,7 +84,9 @@ func TestStampUnverifiableFactsPrependsVerifyCode(t *testing.T) {
 	t.Parallel()
 	out := &tools.ToolInvocationOut{}
 	out.Facts = out.Facts.WithCode(isolation.CodeBoundaryRefused)
-	tctx := tools.ToolContext{Out: out}
+	tctx := tools.ToolContext{
+		Effects: tools.InvocationEffects{Out: out},
+	}
 	stampUnverifiableFacts(tctx, VerifyOutcomeUnverifiable)
 	if out.Facts.PrimaryCode() != toolrejection.VerifyUnverifiableCode {
 		t.Fatalf("primary = %q want %q", out.Facts.PrimaryCode(), toolrejection.VerifyUnverifiableCode)
@@ -93,7 +95,9 @@ func TestStampUnverifiableFactsPrependsVerifyCode(t *testing.T) {
 		t.Fatal("confine code was dropped")
 	}
 	failed := &tools.ToolInvocationOut{}
-	stampUnverifiableFacts(tools.ToolContext{Out: failed}, VerifyOutcomeFailed)
+	stampUnverifiableFacts(tools.ToolContext{
+		Effects: tools.InvocationEffects{Out: failed},
+	}, VerifyOutcomeFailed)
 	if failed.Facts.PrimaryCode() != "" {
 		t.Fatalf("failed verdict must not stamp: %q", failed.Facts.PrimaryCode())
 	}
@@ -106,7 +110,9 @@ func TestBrokerDeniedVerifyReceiptStaysCompleted(t *testing.T) {
 	}, confine.RefusalContext{MediatedNetwork: []confine.EgressHost{{Host: "blocked.test", Allowed: false}}})
 	out := &tools.ToolInvocationOut{}
 	out.Facts = tools.ApplyRefusalFacts(out.Facts, stamped)
-	stampUnverifiableFacts(tools.ToolContext{Out: out}, VerifyOutcomeUnverifiable)
+	stampUnverifiableFacts(tools.ToolContext{
+		Effects: tools.InvocationEffects{Out: out},
+	}, VerifyOutcomeUnverifiable)
 	if out.Facts.Resolution() != api.ToolResultOutcomeCompleted {
 		t.Fatalf("outcome = %q want completed", out.Facts.Resolution())
 	}

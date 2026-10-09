@@ -52,8 +52,8 @@ func (w *inventoryWork) invalidate(paths []string) {
 }
 
 // WarmNavigation prepares shared structure independently of search enrichment.
-func (c *Catalog) WarmNavigation(ctx context.Context, project string, root Root) error {
-	s, err := c.indexStore(ctx, project, root)
+func (c *Directories) WarmNavigation(ctx context.Context, project string, root Root) error {
+	s, err := c.trees.indexStore(ctx, project, root)
 	if err != nil {
 		return err
 	}
@@ -77,8 +77,8 @@ func (s *indexStore) startInventory(ctx context.Context) error {
 }
 
 // AwaitNavigation waits for initial structural coverage without waiting for enrichment.
-func (c *Catalog) AwaitNavigation(ctx context.Context, project string, root Root) error {
-	s, err := c.indexStore(ctx, project, root)
+func (c *Directories) AwaitNavigation(ctx context.Context, project string, root Root) error {
+	s, err := c.trees.indexStore(ctx, project, root)
 	if err != nil {
 		return err
 	}

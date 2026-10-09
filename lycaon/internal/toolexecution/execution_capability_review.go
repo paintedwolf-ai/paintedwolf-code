@@ -12,7 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/isolation"
 )
 
-func (e *Capabilities) preflightExecutionCapability(ctx context.Context, tool string, args map[string]any, tc *tools.ToolContext) error {
+func (e *ProcessAuthority) preflightExecutionCapability(ctx context.Context, tool string, args map[string]any, tc *tools.ToolContext) error {
 	request, reject := capabilityrequest.ParseCapabilityRequest(args)
 	if reject != nil {
 		return reject
@@ -20,7 +20,7 @@ func (e *Capabilities) preflightExecutionCapability(ctx context.Context, tool st
 	if request == nil || (!request.ProcessControl && !request.HostExecution) {
 		return nil
 	}
-	tc.ProcessControl, tc.HostExecution = request.ProcessControl, request.HostExecution
+	tc.Execution.ProcessControl, tc.Execution.HostExecution = request.ProcessControl, request.HostExecution
 	action := e.executionCapabilityAction(ctx, tool, args, *tc)
 	if request.ProcessControl && !action.Contained.FSJailed {
 		return &toolrejection.ToolReject{Code: isolation.CodeExecutionBoundaryUnavailable}
@@ -44,7 +44,7 @@ func (e *Capabilities) preflightExecutionCapability(ctx context.Context, tool st
 	return nil
 }
 
-func (e *Capabilities) executionCapabilityAction(ctx context.Context, tool string, args map[string]any, tc tools.ToolContext) hitl.ProposedAction {
+func (e *ProcessAuthority) executionCapabilityAction(ctx context.Context, tool string, args map[string]any, tc tools.ToolContext) hitl.ProposedAction {
 	request := e.Boundary.actionConfineRequest(ctx, tc)
 	action := proposedActionFromPolicy(e.Boundary.preInvokePolicyContext(tool, tc.ProfileID(), args, tc, request))
 	action.ExecutionBoundaryDigest = tools.ExecutionBoundaryDigest(request)
@@ -52,8 +52,8 @@ func (e *Capabilities) executionCapabilityAction(ctx context.Context, tool strin
 	return action
 }
 
-func (e *Capabilities) awaitExecutionCapability(ctx context.Context, action hitl.ProposedAction, tc tools.ToolContext, result *hitl.ApprovalResult) error {
-	subject, title, impact, consequence := executionCapabilityCopy(tc.HostExecution)
+func (e *ProcessAuthority) awaitExecutionCapability(ctx context.Context, action hitl.ProposedAction, tc tools.ToolContext, result *hitl.ApprovalResult) error {
+	subject, title, impact, consequence := executionCapabilityCopy(tc.Execution.HostExecution)
 	targets := []hitl.ApprovalTarget{{Kind: string(subject), Label: action.Command}}
 	who := hitl.WhoAgentCommand
 	if action.ProcessAccess != "" {
@@ -94,7 +94,7 @@ func (e *Capabilities) awaitExecutionCapability(ctx context.Context, action hitl
 		return toolrejection.ApprovalPlanInvalid()
 	}
 	final, err := e.Approvals.raiseAndWaitToolApproval(ctx, toolApprovalRaise{
-		Action: action, Plan: plan, Title: title, ToolCallID: tc.ToolCallID, ProjectID: tc.ProjectID,
+		Action: action, Plan: plan, Title: title, ToolCallID: tc.Identity.ToolCallID, ProjectID: tc.Identity.ProjectID,
 		Decision: result.Decision, Detection: detectionOf(result), ApprovalMatches: approvalRuleMatches(result),
 		SkipGrantOfferAutofill: true, SecretScreenHit: permission != nil,
 		CoalesceKey: permission.Key(hitl.GrantKey(action)),

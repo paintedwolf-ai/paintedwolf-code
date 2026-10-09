@@ -280,6 +280,9 @@ func TestNonHTTPContractNoNewSigmaEngineInCapabilityPackages(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
 	dirs := []string{
 		filepath.Join(root, "lycaon", "internal", "tools"),
+		filepath.Join(root, "lycaon", "internal", "toolexecution"),
+		filepath.Join(root, "lycaon", "internal", "capabilityrequest"),
+		filepath.Join(root, "lycaon", "internal", "capabilitygrants"),
 		filepath.Join(root, "lycaon", "internal", "session"),
 	}
 	bannedIdents := []string{

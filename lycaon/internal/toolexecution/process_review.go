@@ -13,7 +13,7 @@ import (
 
 // ProcessReviewer reviews host-resolved process identities before observation or mutation.
 
-func (e *Capabilities) processReviewer(tool string, args map[string]any, tc tools.ToolContext) tools.ProcessReviewer {
+func (e *ProcessAuthority) processReviewer(tool string, args map[string]any, tc tools.ToolContext) tools.ProcessReviewer {
 	return func(ctx context.Context, operation string, processes []hostprocess.Process) error {
 		action := e.executionCapabilityAction(ctx, tool, args, tc)
 		action.ProcessAccess = operation

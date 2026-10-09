@@ -89,9 +89,9 @@ func TestCoordinatorReadProductPathAllowed(t *testing.T) {
 	out, err := read.Run(context.Background(), map[string]any{
 		"path": "src/main.go",
 	}, tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
-		ActiveRootID: "r1",
-		Agent:        "coordinator",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{Agent: "coordinator"},
 	})
 	if err != nil {
 		t.Fatalf("coordinator read product path: %v", err)
@@ -121,9 +121,9 @@ func TestCoordinatorReadPlanPathAllowed(t *testing.T) {
 	out, err := read.Run(context.Background(), map[string]any{
 		"path": settingsoverlay.Rel("blueprints/game.md"),
 	}, tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
-		ActiveRootID: "r1",
-		Agent:        "coordinator",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{Agent: "coordinator"},
 	})
 	if err != nil {
 		t.Fatalf("coordinator read plan path: %v", err)

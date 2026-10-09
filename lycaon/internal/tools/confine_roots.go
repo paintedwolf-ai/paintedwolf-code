@@ -11,7 +11,7 @@ import (
 
 // HostWriteRoot prefers a worker's isolated branch.
 func HostWriteRoot(tctx ToolContext) string {
-	if branch := strings.TrimSpace(tctx.WorkerBranchRoot); branch != "" {
+	if branch := strings.TrimSpace(tctx.Source.WorkerBranchRoot); branch != "" {
 		return branch
 	}
 	return strings.TrimSpace(tctx.ActiveRootPath())
@@ -19,14 +19,14 @@ func HostWriteRoot(tctx ToolContext) string {
 
 // ConfineRootsForAction shares write authority between policy and confinement.
 func ConfineRootsForAction(tctx ToolContext) []string {
-	if branch := strings.TrimSpace(tctx.WorkerBranchRoot); branch != "" {
+	if branch := strings.TrimSpace(tctx.Source.WorkerBranchRoot); branch != "" {
 		return []string{branch}
 	}
-	out := make([]string, 0, len(tctx.Roots)+1)
+	out := make([]string, 0, len(tctx.Source.Roots)+1)
 	if s := HostWriteRoot(tctx); s != "" {
 		out = append(out, s)
 	}
-	for _, r := range tctx.Roots {
+	for _, r := range tctx.Source.Roots {
 		if s := strings.TrimSpace(r.Path); s != "" {
 			out = append(out, s)
 		}
@@ -37,8 +37,8 @@ func ConfineRootsForAction(tctx ToolContext) []string {
 // ConfineReadRootsForAction returns host-managed read allow-backs. A worker
 // branch may sit below a denied primary ancestor, so its exact branch is added.
 func ConfineReadRootsForAction(tctx ToolContext) []string {
-	out := append([]string(nil), tctx.ReadRoots...)
-	if branch := strings.TrimSpace(tctx.WorkerBranchRoot); branch != "" {
+	out := append([]string(nil), tctx.Files.ReadRoots...)
+	if branch := strings.TrimSpace(tctx.Source.WorkerBranchRoot); branch != "" {
 		out = append(out, branch)
 	}
 	return UniqueRoots(out)

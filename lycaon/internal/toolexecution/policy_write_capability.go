@@ -17,7 +17,7 @@ func (e *Boundary) preparePolicyWrite(tc *tools.ToolContext, path string) error 
 	if _, err := confine.ValidatePolicyWriteGrants([]confine.ProtectedPathGrant{grant}, tools.ConfineRootsForAction(*tc)); err != nil {
 		return err
 	}
-	tc.PolicyWriteGrants = append(tc.PolicyWriteGrants, grant)
+	tc.Files.PolicyWriteGrants = append(tc.Files.PolicyWriteGrants, grant)
 	return nil
 }
 

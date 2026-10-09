@@ -76,8 +76,9 @@ func TestTerminalOpenRejectsShellStringAndPipeline(t *testing.T) {
 	contractcheck.FailErr(t, "register", native.RegisterTerminalSessionTools(reg, bg))
 	dir := t.TempDir()
 	tctx := tools.ToolContext{
-		SessionID: "s", ProjectID: "p",
-		Roots: []projectroot.RootRef{{ID: "main", Path: dir, IsPrimary: true}},
+		Identity: tools.InvocationIdentity{SessionID: "s",
+			ProjectID: "p"},
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "main", Path: dir, IsPrimary: true}}},
 	}
 	// Substitution never expands, so it stays a metacharacter rejection.
 	_, err := reg.Run(context.Background(), "terminal_open", map[string]any{
@@ -118,11 +119,11 @@ func TestTerminalOpenNotArgvRejectObservation(t *testing.T) {
 	exec := toolexecution.NewExecutor(nil, reg, "implement")
 
 	_, err := exec.Invoke(context.Background(), "terminal_open", map[string]any{"command": "go test; rm -rf /"}, tools.ToolContext{
-		SessionID:    "sess",
-		ProjectID:    "proj",
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
-		ActiveRootID: "r1",
-		Agent:        "implement",
+		Identity: tools.InvocationIdentity{SessionID: "sess",
+			ProjectID: "proj",
+			Agent:     "implement"},
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
+			ActiveRootID: "r1"},
 	})
 	if err == nil {
 		t.Fatal("expected argv deny")

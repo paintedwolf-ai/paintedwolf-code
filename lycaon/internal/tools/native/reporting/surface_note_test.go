@@ -81,10 +81,10 @@ func TestSurfaceNoteGroundedEmit(t *testing.T) {
 		"summary":        "Found the handler.",
 		"cited_evidence": []any{"src/a.go:1"},
 	}, tools.ToolContext{
-		SessionID: "sess-1",
-		Agent:     orchestration.ProfileCoordinator,
-		Roots:     nil,
-		Out:       out,
+		Identity: tools.InvocationIdentity{SessionID: "sess-1",
+			Agent: orchestration.ProfileCoordinator},
+		Source:  tools.InvocationSource{Roots: nil},
+		Effects: tools.InvocationEffects{Out: out},
 	})
 	testutil.FailErr(t, "surface_note", err)
 	var ack map[string]any
@@ -124,9 +124,9 @@ func TestSurfaceNoteRequiresExplicitCitation(t *testing.T) {
 	_, err := reg.Run(context.Background(), "surface_note", map[string]any{
 		"summary": "Ledger already observed this.",
 	}, tools.ToolContext{
-		SessionID: "sess-1",
-		Agent:     orchestration.ProfileCoordinator,
-		Out:       out,
+		Identity: tools.InvocationIdentity{SessionID: "sess-1",
+			Agent: orchestration.ProfileCoordinator},
+		Effects: tools.InvocationEffects{Out: out},
 	})
 	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "SURFACE_NOTE_UNGROUNDED" {
@@ -151,7 +151,10 @@ func TestSurfaceNoteRequiresToolOutput(t *testing.T) {
 	_, err := reg.Run(context.Background(), "surface_note", map[string]any{
 		"summary":        "Found the handler.",
 		"cited_evidence": []any{"src/a.go:1"},
-	}, tools.ToolContext{SessionID: "sess-1", Agent: orchestration.ProfileCoordinator})
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "sess-1",
+			Agent: orchestration.ProfileCoordinator},
+	})
 	if err == nil || !strings.Contains(err.Error(), "tool output required") {
 		t.Fatalf("err = %v want tool output required", err)
 	}
@@ -173,9 +176,9 @@ func TestSurfaceNoteUngrounded(t *testing.T) {
 	_, err := reg.Run(context.Background(), "surface_note", map[string]any{
 		"summary": "Nothing observed yet.",
 	}, tools.ToolContext{
-		SessionID: "sess-1",
-		Agent:     orchestration.ProfileCoordinator,
-		Out:       out,
+		Identity: tools.InvocationIdentity{SessionID: "sess-1",
+			Agent: orchestration.ProfileCoordinator},
+		Effects: tools.InvocationEffects{Out: out},
 	})
 	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "SURFACE_NOTE_UNGROUNDED" {
@@ -206,9 +209,9 @@ func TestSurfaceNoteURLOnlyWithEmptyLedger(t *testing.T) {
 		"summary":    "The upstream docs describe a different default.",
 		"cited_urls": []any{"https://example.com/docs"},
 	}, tools.ToolContext{
-		SessionID: "sess-1",
-		Agent:     orchestration.ProfileCoordinator,
-		Out:       out,
+		Identity: tools.InvocationIdentity{SessionID: "sess-1",
+			Agent: orchestration.ProfileCoordinator},
+		Effects: tools.InvocationEffects{Out: out},
 	})
 	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "SURFACE_NOTE_URL_ONLY_UNGROUND" {
@@ -235,9 +238,9 @@ func TestSurfaceNoteHandleUngroundNamesOffender(t *testing.T) {
 		"summary":        "Line range and unseen ordinal.",
 		"cited_evidence": []any{"src/a.go:37-50", "command#12"},
 	}, tools.ToolContext{
-		SessionID: "sess-1",
-		Agent:     orchestration.ProfileCoordinator,
-		Out:       &tools.ToolInvocationOut{},
+		Identity: tools.InvocationIdentity{SessionID: "sess-1",
+			Agent: orchestration.ProfileCoordinator},
+		Effects: tools.InvocationEffects{Out: &tools.ToolInvocationOut{}},
 	})
 	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "SURFACE_NOTE_HANDLE_UNGROUND" {
@@ -285,9 +288,9 @@ func TestSurfaceNoteHandleMembershipIsChecked(t *testing.T) {
 				"summary":        "Handle membership.",
 				"cited_evidence": []any{tc.handle},
 			}, tools.ToolContext{
-				SessionID: "sess-1",
-				Agent:     orchestration.ProfileCoordinator,
-				Out:       out,
+				Identity: tools.InvocationIdentity{SessionID: "sess-1",
+					Agent: orchestration.ProfileCoordinator},
+				Effects: tools.InvocationEffects{Out: out},
 			})
 			if !tc.wantErr {
 				testutil.FailErr(t, "surface_note", err)
@@ -326,9 +329,9 @@ func TestSurfaceNoteHandleUngroundRendersOffender(t *testing.T) {
 		"summary":        "Unresolvable cite.",
 		"cited_evidence": []any{"src/nope.go:7"},
 	}, tools.ToolContext{
-		SessionID: "sess-1",
-		Agent:     orchestration.ProfileCoordinator,
-		Out:       &tools.ToolInvocationOut{},
+		Identity: tools.InvocationIdentity{SessionID: "sess-1",
+			Agent: orchestration.ProfileCoordinator},
+		Effects: tools.InvocationEffects{Out: &tools.ToolInvocationOut{}},
 	})
 	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) {
@@ -370,9 +373,9 @@ func TestSurfaceNoteHandleUnground(t *testing.T) {
 		"summary":        "Bad cite.",
 		"cited_evidence": []any{"src/missing.go:1"},
 	}, tools.ToolContext{
-		SessionID: "sess-1",
-		Agent:     orchestration.ProfileCoordinator,
-		Out:       out,
+		Identity: tools.InvocationIdentity{SessionID: "sess-1",
+			Agent: orchestration.ProfileCoordinator},
+		Effects: tools.InvocationEffects{Out: out},
 	})
 	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "SURFACE_NOTE_HANDLE_UNGROUND" {
@@ -400,9 +403,9 @@ func TestSurfaceNoteUnobservedURLIsStrict(t *testing.T) {
 		"summary":    "Bad URL cite.",
 		"cited_urls": []any{"https://unobserved.example/docs"},
 	}, tools.ToolContext{
-		SessionID: "sess-1",
-		Agent:     orchestration.ProfileCoordinator,
-		Out:       out,
+		Identity: tools.InvocationIdentity{SessionID: "sess-1",
+			Agent: orchestration.ProfileCoordinator},
+		Effects: tools.InvocationEffects{Out: out},
 	})
 	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "SURFACE_NOTE_HANDLE_UNGROUND" {
@@ -427,9 +430,9 @@ func TestSurfaceNoteSurveyOnlyEvidenceIsStrict(t *testing.T) {
 		"summary":        "Survey cite is too weak.",
 		"cited_evidence": []any{"src/a.go"},
 	}, tools.ToolContext{
-		SessionID: "sess-1",
-		Agent:     orchestration.ProfileCoordinator,
-		Out:       out,
+		Identity: tools.InvocationIdentity{SessionID: "sess-1",
+			Agent: orchestration.ProfileCoordinator},
+		Effects: tools.InvocationEffects{Out: out},
 	})
 	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "SURFACE_NOTE_HANDLE_UNGROUND" {
@@ -454,10 +457,10 @@ func TestSurfaceNoteRejectedInWorkerSession(t *testing.T) {
 		"summary":        "The migration touches a shared table.",
 		"cited_evidence": []any{"src/a.go:1"},
 	}, tools.ToolContext{
-		SessionID:       "sess-1",
-		ParentSessionID: "parent-1",
-		Agent:           orchestration.ProfileImplementer,
-		Out:             out,
+		Identity: tools.InvocationIdentity{SessionID: "sess-1",
+			ParentSessionID: "parent-1",
+			Agent:           orchestration.ProfileImplementer},
+		Effects: tools.InvocationEffects{Out: out},
 	})
 	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "SURFACE_NOTE_WORKER_SESSION" {
@@ -488,9 +491,9 @@ func TestSurfaceNoteInvalidArgs(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := reg.Run(context.Background(), "surface_note", tc.args, tools.ToolContext{
-				SessionID: "sess-1",
-				Agent:     orchestration.ProfileCoordinator,
-				Out:       &tools.ToolInvocationOut{},
+				Identity: tools.InvocationIdentity{SessionID: "sess-1",
+					Agent: orchestration.ProfileCoordinator},
+				Effects: tools.InvocationEffects{Out: &tools.ToolInvocationOut{}},
 			})
 			var reject *toolrejection.ToolReject
 			if !errors.As(err, &reject) || reject.Code != "SURFACE_NOTE_INVALID_ARGS" {
@@ -553,9 +556,9 @@ func TestSurfaceNotePresentsStillFromThisTurn(t *testing.T) {
 		"cited_evidence": []any{"src/a.go:1"},
 		"artifact_ids":   []any{"art-still"},
 	}, tools.ToolContext{
-		SessionID: "sess-present",
-		Agent:     orchestration.ProfileCoordinator,
-		Out:       out,
+		Identity: tools.InvocationIdentity{SessionID: "sess-present",
+			Agent: orchestration.ProfileCoordinator},
+		Effects: tools.InvocationEffects{Out: out},
 	})
 	testutil.FailErr(t, "surface_note", err)
 	if out.AgentNote == nil {
@@ -575,9 +578,9 @@ func TestSurfaceNoteRejectsArtifactThisTurnNeverProduced(t *testing.T) {
 			"cited_evidence": []any{"src/a.go:1"},
 			"artifact_ids":   []any{id},
 		}, tools.ToolContext{
-			SessionID: "sess-present",
-			Agent:     orchestration.ProfileCoordinator,
-			Out:       out,
+			Identity: tools.InvocationIdentity{SessionID: "sess-present",
+				Agent: orchestration.ProfileCoordinator},
+			Effects: tools.InvocationEffects{Out: out},
 		})
 		rej := &toolrejection.ToolReject{}
 		if !errors.As(err, &rej) || rej.Code != "SURFACE_NOTE_ARTIFACT_UNKNOWN" {

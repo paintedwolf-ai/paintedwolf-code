@@ -102,7 +102,7 @@ func (m *RunManager) WorkflowWork(ctx context.Context, sessionID, workID string)
 
 // BindWorkflowTask stamps provenance before the native task enters the queue.
 func (m *RunManager) BindWorkflowTask(ctx context.Context, tctx tools.ToolContext, workID string, task *api.WorkerTask) error {
-	run, err := m.Store.ActiveBySession(ctx, tctx.SessionID)
+	run, err := m.Store.ActiveBySession(ctx, tctx.Identity.SessionID)
 	if err != nil {
 		return err
 	}

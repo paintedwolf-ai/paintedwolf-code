@@ -50,7 +50,7 @@ func RegisterExtendWorkerBudgetTool(reg *tools.DefaultRegistry, deps ExtendBudge
 		if !ok || task == nil {
 			return "", &toolrejection.ToolReject{Code: workerBudgetExtendNotRunningCode, Data: map[string]any{"job_id": jobID}}
 		}
-		if strings.TrimSpace(task.ParentSessionID) != strings.TrimSpace(tctx.SessionID) {
+		if strings.TrimSpace(task.ParentSessionID) != strings.TrimSpace(tctx.Identity.SessionID) {
 			return "", &toolrejection.ToolReject{Code: workerBudgetExtendSessionMismatchCode, Data: map[string]any{"job_id": jobID}}
 		}
 		tctx.SetDisplaySubject(task.Brief)

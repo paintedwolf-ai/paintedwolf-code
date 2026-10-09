@@ -96,7 +96,7 @@ func TestNonHTTPContractCurrentPermitsNonserializableAndCallBound(t *testing.T) 
 	if strings.Contains(socketRT, "type SocketPermit struct") || strings.Contains(directRT, "type DirectIPPermit struct") {
 		t.Fatal("runtime must not retain dead exported permit DTOs")
 	}
-	finalize := contractcheck.ReadRepoFile(t, root, "lycaon/internal/toolexecution/direct_ip_capability.go")
+	finalize := contractcheck.ReadRepoFile(t, root, "lycaon/internal/tools/direct_ip_spawn.go")
 	if !strings.Contains(finalize, "FinalizeDirectIPForSpawn") || !strings.Contains(finalize, "ConsumePermit") {
 		t.Fatal("direct spawn must consume current-call permit")
 	}
@@ -258,7 +258,7 @@ func TestNonHTTPContractNeverAskStandsDownAsksKeepsValidationAndRecords(t *testi
 		t.Fatal("egress deny rules must run before approval stand-down")
 	}
 
-	parse := contractcheck.ReadRepoFile(t, root, "lycaon/internal/tools/capability_request.go")
+	parse := contractcheck.ReadRepoFile(t, root, "lycaon/internal/capabilityrequest/capability_request.go")
 	if !strings.Contains(parse, "ParseCapabilityRequest") || !strings.Contains(parse, "unsupported capability_request field") {
 		t.Fatal("structured validation must remain independent of never_ask")
 	}
@@ -268,6 +268,9 @@ func TestNonHTTPContractNoStderrProseProgramSocketNameInference(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
 	dirs := []string{
 		filepath.Join(root, "lycaon", "internal", "tools"),
+		filepath.Join(root, "lycaon", "internal", "toolexecution"),
+		filepath.Join(root, "lycaon", "internal", "capabilityrequest"),
+		filepath.Join(root, "lycaon", "internal", "capabilitygrants"),
 		filepath.Join(root, "lycaon", "internal", "session"),
 		filepath.Join(root, "lycaon", "internal", "confine"),
 	}

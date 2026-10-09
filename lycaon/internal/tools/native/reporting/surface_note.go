@@ -57,7 +57,7 @@ func RunSurfaceNote(ctx context.Context, args map[string]any, tctx tools.ToolCon
 	if tools.OutOfSessionScope(SurfaceNoteTool, tctx) {
 		return "", &toolrejection.ToolReject{Code: surfaceNoteWorkerSession, Data: map[string]any{}}
 	}
-	if tctx.Out == nil {
+	if tctx.Effects.Out == nil {
 		return "", fmt.Errorf("tool output required")
 	}
 	summary, citedEvidence, citedURLs, artifactIDs, err := parseSurfaceNoteArgs(args)
@@ -65,7 +65,7 @@ func RunSurfaceNote(ctx context.Context, args map[string]any, tctx tools.ToolCon
 		return "", err
 	}
 
-	sessionID := strings.TrimSpace(tctx.SessionID)
+	sessionID := strings.TrimSpace(tctx.Identity.SessionID)
 	if sessionID == "" {
 		return "", fmt.Errorf("session required")
 	}
@@ -80,10 +80,10 @@ func RunSurfaceNote(ctx context.Context, args map[string]any, tctx tools.ToolCon
 
 	roots := evidence.CitationRoots{
 		ProjectDir:   tctx.ActiveRootPath(),
-		Roots:        tctx.Roots,
-		ActiveRootID: tctx.ActiveRootID,
+		Roots:        tctx.Source.Roots,
+		ActiveRootID: tctx.Source.ActiveRootID,
 	}
-	surfaceID := strings.TrimSpace(tctx.TurnSurfaceID)
+	surfaceID := strings.TrimSpace(tctx.Turn.TurnSurfaceID)
 	report := guidance.CoordinatorCompletionReport{
 		Synthesis:     summary,
 		CitedEvidence: citedEvidence,
@@ -108,8 +108,8 @@ func RunSurfaceNote(ctx context.Context, args map[string]any, tctx tools.ToolCon
 	}
 
 	noteID := uuid.NewString()
-	tctx.Out.AgentNote = &tools.AgentNoteCapture{
-		SourceContext: sourceref.Mentioned(tctx.ModelSourceContext, summary),
+	tctx.Effects.Out.AgentNote = &tools.AgentNoteCapture{
+		SourceContext: sourceref.Mentioned(tctx.Source.ModelSourceContext, summary),
 		MessageID:     noteID,
 		Content:       summary,
 		Grounding:     grounding,

@@ -64,7 +64,11 @@ func TestRegisterWaitToolParksWithHostCompletion(t *testing.T) {
 	out, err := reg.Run(context.Background(), "wait", map[string]any{
 		"timeout_ms": 300_000,
 		"reason":     "scouts running",
-	}, tools.ToolContext{SessionID: "s1", Agent: orchestration.ProfileCoordinator, Out: outcome})
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "s1",
+			Agent: orchestration.ProfileCoordinator},
+		Effects: tools.InvocationEffects{Out: outcome},
+	})
 	if err != nil {
 		t.Fatalf("wait tool: %v", err)
 	}
@@ -107,8 +111,11 @@ func TestWaitParksEveryPublishedAgentRole(t *testing.T) {
 			"timeout_ms": 1_000,
 			"conditions": []any{map[string]any{"kind": "port_ready", "host": "localhost", "port": 19000 + i}},
 		}, tools.ToolContext{
-			SessionID: sessionID, Agent: profile, Out: outcome,
-			LoopbackConnectGranted: true, LoopbackConnectPorts: []uint16{uint16(19000 + i)},
+			Identity: tools.InvocationIdentity{SessionID: sessionID,
+				Agent: profile},
+			Effects: tools.InvocationEffects{Out: outcome},
+			Local: tools.InvocationLocal{LoopbackConnectGranted: true,
+				LoopbackConnectPorts: []uint16{uint16(19000 + i)}},
 		})
 		if err != nil {
 			t.Fatalf("profile %s wait: %v", profile, err)
@@ -130,7 +137,10 @@ func TestWaitRejectsConditionShapeWithStructuredCode(t *testing.T) {
 	}
 	_, err := registry.Run(t.Context(), "wait", map[string]any{
 		"conditions": []any{map[string]any{"kind": "next_worker_done", "url": "https://example.test"}},
-	}, tools.ToolContext{SessionID: "s1", Agent: orchestration.ProfileCoordinator})
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "s1",
+			Agent: orchestration.ProfileCoordinator},
+	})
 	reject := toolrejection.AsToolReject(err)
 	if reject == nil || reject.Code != "TOOL_ARGS_INVALID" {
 		t.Fatalf("error = %#v, want TOOL_ARGS_INVALID", err)
@@ -152,7 +162,10 @@ func TestWaitResumeRearmsInterruptedSleep(t *testing.T) {
 	out, err := reg.Run(context.Background(), "wait", map[string]any{
 		"resume": true,
 		"reason": "siblings in flight",
-	}, tools.ToolContext{SessionID: "s1", Agent: orchestration.ProfileCoordinator})
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "s1",
+			Agent: orchestration.ProfileCoordinator},
+	})
 	if err != nil {
 		t.Fatalf("wait resume: %v", err)
 	}
@@ -189,7 +202,11 @@ func TestWaitResumeUsesExplicitConditions(t *testing.T) {
 		"conditions": []any{
 			map[string]any{"kind": "all_workers_idle"},
 		},
-	}, tools.ToolContext{SessionID: "s1", Agent: orchestration.ProfileCoordinator, Out: outcome})
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "s1",
+			Agent: orchestration.ProfileCoordinator},
+		Effects: tools.InvocationEffects{Out: outcome},
+	})
 	if err != nil {
 		t.Fatalf("wait resume with conditions: %v", err)
 	}
@@ -215,7 +232,8 @@ func TestWaitResumeFallsBackWithoutInterruptedSleep(t *testing.T) {
 	}
 	before := time.Now().UTC()
 	out, err := reg.Run(context.Background(), "wait", map[string]any{"resume": true, "timeout_ms": 300_000}, tools.ToolContext{
-		SessionID: "s1", Agent: orchestration.ProfileCoordinator,
+		Identity: tools.InvocationIdentity{SessionID: "s1",
+			Agent: orchestration.ProfileCoordinator},
 	})
 	if err != nil {
 		t.Fatalf("wait resume: %v", err)
@@ -314,7 +332,11 @@ func TestWaitAllWorkersIdleAlreadySatisfied(t *testing.T) {
 	outcome := &tools.ToolInvocationOut{}
 	out, err := reg.Run(context.Background(), "wait", map[string]any{
 		"conditions": []any{map[string]any{"kind": "all_workers_idle"}},
-	}, tools.ToolContext{SessionID: "s1", Agent: orchestration.ProfileCoordinator, Out: outcome})
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "s1",
+			Agent: orchestration.ProfileCoordinator},
+		Effects: tools.InvocationEffects{Out: outcome},
+	})
 	if err != nil {
 		t.Fatalf("wait all_workers_idle: %v", err)
 	}
@@ -341,7 +363,11 @@ func TestWaitTimerOnlyParksWhenCycleIdle(t *testing.T) {
 	outcome := &tools.ToolInvocationOut{}
 	out, err := reg.Run(context.Background(), "wait", map[string]any{
 		"timeout_ms": 5_000,
-	}, tools.ToolContext{SessionID: "s1", Agent: orchestration.ProfileCoordinator, Out: outcome})
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "s1",
+			Agent: orchestration.ProfileCoordinator},
+		Effects: tools.InvocationEffects{Out: outcome},
+	})
 	if err != nil {
 		t.Fatalf("timer wait: %v", err)
 	}
@@ -360,7 +386,9 @@ func TestWaitParksWhileUserInputPending(t *testing.T) {
 	}
 	outcome := &tools.ToolInvocationOut{}
 	out, err := reg.Run(context.Background(), "wait", map[string]any{"resume": true}, tools.ToolContext{
-		SessionID: "s1", Agent: orchestration.ProfileCoordinator, Out: outcome,
+		Identity: tools.InvocationIdentity{SessionID: "s1",
+			Agent: orchestration.ProfileCoordinator},
+		Effects: tools.InvocationEffects{Out: outcome},
 	})
 	if err != nil {
 		t.Fatalf("wait with pending user input: %v", err)

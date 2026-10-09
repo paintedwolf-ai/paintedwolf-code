@@ -28,10 +28,10 @@ func TestControlPlaneFloorGateAndResolverAgree(t *testing.T) {
 		testutil.FailErr(t, "create session scratch", os.MkdirAll(dir, 0o700))
 	}
 	tctx := tools.ToolContext{
-		Roots:             []projectroot.RootRef{{ID: "primary", Path: proj, IsPrimary: true}},
-		ActiveRootID:      "primary",
-		SessionID:         "chat-floor",
-		SessionScratchDir: scratch,
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "primary", Path: proj, IsPrimary: true}},
+			ActiveRootID: "primary"},
+		Identity: tools.InvocationIdentity{SessionID: "chat-floor"},
+		Host:     tools.InvocationHost{SessionScratchDir: scratch},
 	}
 
 	cases := []struct {

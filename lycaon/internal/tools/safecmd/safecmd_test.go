@@ -22,7 +22,7 @@ func TestRejectReturnsToolReject(t *testing.T) {
 	err := Reject("JQ_TIMEOUT", map[string]any{"query": "."})
 	var rej *toolrejection.ToolReject
 	if !errors.As(err, &rej) {
-		t.Fatalf("got %T, want *tools.ToolReject", err)
+		t.Fatalf("got %T, want *toolrejection.ToolReject", err)
 	}
 	if rej.Code != "JQ_TIMEOUT" {
 		t.Fatalf("Code = %q", rej.Code)
@@ -170,11 +170,11 @@ func testBoundary(t *testing.T) *sandbox.Boundary {
 
 func testCtx(dir string) tools.ToolContext {
 	return tools.ToolContext{
-		Roots:              []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}},
-		ActiveRootID:       "r1",
-		Agent:              toolprofiles.DefaultToolProfileID,
-		SessionID:          "test-session",
-		RepoFileCount:      100,
-		RepoFileCountKnown: true,
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}},
+			ActiveRootID:       "r1",
+			RepoFileCount:      100,
+			RepoFileCountKnown: true},
+		Identity: tools.InvocationIdentity{Agent: toolprofiles.DefaultToolProfileID,
+			SessionID: "test-session"},
 	}
 }

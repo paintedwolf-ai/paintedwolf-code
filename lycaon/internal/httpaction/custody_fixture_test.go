@@ -75,7 +75,10 @@ func TestHeldValueLeavesOnlyWhileItsChatIsUnlocked(t *testing.T) {
 			testutil.FailErr(t, "resolve request", err)
 			resolved.InChatForTest("chat-1", unlocks)
 			ctx := secretcap.WithResolution(t.Context(), resolved)
-			_, runErr := registry.Run(ctx, "http_request", resolved.Arguments, tools.ToolContext{CanonicalArgs: args, Secrets: resolved})
+			_, runErr := registry.Run(ctx, "http_request", resolved.Arguments, tools.ToolContext{
+				Effects: tools.InvocationEffects{CanonicalArgs: args,
+					Secrets: resolved},
+			})
 			resolved.Finish(t.Context())
 			if !unlocked {
 				reject := toolrejection.AsToolReject(runErr)

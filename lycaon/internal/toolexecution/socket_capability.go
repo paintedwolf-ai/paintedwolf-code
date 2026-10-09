@@ -63,14 +63,14 @@ func (e *Capabilities) preflightSocketCapability(
 	}
 	capReq, reject := capabilityrequest.ParseCapabilityRequest(args)
 	if reject != nil {
-		return nil, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Agent, args, reject)
+		return nil, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Identity.Agent, args, reject)
 	}
 	if capReq == nil {
 		capReq = &capabilityrequest.CapabilityRequest{}
 	}
 	// Held sessions cannot outlive one-action direct-IP review.
 	if capReq.DirectIP != nil && !contract.Supports(toolcontract.CapabilityDirectIP) {
-		return nil, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Agent, args, &toolrejection.ToolReject{
+		return nil, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Identity.Agent, args, &toolrejection.ToolReject{
 			Code: isolation.CodeDirectIPRequestInvalid,
 			Data: map[string]any{
 				"reason":                     "a held session cannot hold one-action direct network authority",
@@ -83,7 +83,7 @@ func (e *Capabilities) preflightSocketCapability(
 	if len(socketPaths) == 0 {
 		return nil, nil
 	}
-	if tc.PackageExecution != nil {
+	if tc.Files.PackageExecution != nil {
 		return nil, nil
 	}
 	chatSession := tc.ChatSessionID()
@@ -94,7 +94,7 @@ func (e *Capabilities) preflightSocketCapability(
 	durableGrants := e.durableSocketGrants(tc)
 	requested, reject := capabilityrequest.ResolveCapabilitySockets(&capabilityrequest.CapabilityRequest{SocketPaths: socketPaths})
 	if reject != nil {
-		return nil, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Agent, args, reject)
+		return nil, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Identity.Agent, args, reject)
 	}
 	// A saved grant authorizes use; the invocation still selects its boundary.
 	saved := append(append([]confine.SocketGrant(nil), chatGrants...), durableGrants...)
@@ -112,11 +112,11 @@ func (e *Capabilities) preflightSocketCapability(
 	action := socketCapabilityProposedAction(tool, args, tc, chatSession, merged, confReq)
 	actionDigest := hitl.GrantKey(action)
 	if actionDigest == "" {
-		return nil, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Agent, args, toolrejection.ApprovalPlanInvalid())
+		return nil, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Identity.Agent, args, toolrejection.ApprovalPlanInvalid())
 	}
 	authorized := []confine.SocketGrant{}
 	if e.socketRuntime != nil {
-		authorized = e.socketRuntime.AuthorizedGrants(chatSession, tc.SessionID, tc.ToolCallID, actionDigest, requested)
+		authorized = e.socketRuntime.AuthorizedGrants(chatSession, tc.Identity.SessionID, tc.Identity.ToolCallID, actionDigest, requested)
 	}
 	authorized = mergeAuthorizedWithOverlay(authorized, requested, overlay)
 	observation := socketObservationFields(merged, requested, chatGrants, durableGrants, authorized)
@@ -133,7 +133,7 @@ func (e *Capabilities) preflightSocketCapability(
 		}
 		if e.approvalsDisabled != nil && e.approvalsDisabled(tc.ActiveRootPath()) {
 			if e.socketRuntime != nil {
-				e.socketRuntime.IssuePermit(tc.SessionID, tc.ToolCallID, actionDigest, grant)
+				e.socketRuntime.IssuePermit(tc.Identity.SessionID, tc.Identity.ToolCallID, actionDigest, grant)
 			}
 			authSource = authzledger.AuthorizationSourceNeverAsk
 			e.recordCapabilityDecision(ctx, tc, tool, grant, true, authSource)
@@ -153,12 +153,12 @@ func (e *Capabilities) preflightSocketCapability(
 		authSource = source
 	}
 	if e.socketRuntime != nil {
-		authorized = e.socketRuntime.AuthorizedGrants(chatSession, tc.SessionID, tc.ToolCallID, actionDigest, requested)
+		authorized = e.socketRuntime.AuthorizedGrants(chatSession, tc.Identity.SessionID, tc.Identity.ToolCallID, actionDigest, requested)
 	}
 	authorized = mergeAuthorizedWithOverlay(authorized, requested, overlay)
 	for _, grant := range requested {
 		if !capabilitygrants.GrantAuthorized(grant, authorized) {
-			return nil, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Agent, args, &toolrejection.ToolReject{
+			return nil, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Identity.Agent, args, &toolrejection.ToolReject{
 				Code: isolation.CodeSocketPathChanged,
 				Data: map[string]any{"reason": "approval did not install current-call socket authority"},
 			})
@@ -212,17 +212,17 @@ func socketCapabilityProposedAction(
 		Files:                filesFromArgs(tool, args),
 		ResolvedFiles:        ResolvedApprovalFiles(tool, args, tc),
 		Command:              commandsurface.PrimaryCommandLine(args, nil),
-		ProjectID:            tc.ProjectID,
+		ProjectID:            tc.Identity.ProjectID,
 		ProjectDir:           tc.ActiveRootPath(),
-		SessionID:            tc.SessionID,
+		SessionID:            tc.Identity.SessionID,
 		RootSessionID:        chatSession,
-		SessionScratchRoot:   tc.SessionScratchDir,
+		SessionScratchRoot:   tc.Host.SessionScratchDir,
 		SocketGrants:         append([]confine.SocketGrant(nil), merged...),
 		Contained:            contained,
-		ActionID:             tc.ToolCallID,
+		ActionID:             tc.Identity.ToolCallID,
 		Visibility:           "unobserved",
-		HostResources:        append([]string(nil), tc.HostResources...),
-		HostResourceFamilies: append([]string(nil), tc.HostResourceFamilies...),
+		HostResources:        append([]string(nil), tc.Host.HostResources...),
+		HostResourceFamilies: append([]string(nil), tc.Host.HostResourceFamilies...),
 	}
 }
 
@@ -251,14 +251,14 @@ func (e *Capabilities) authorizeMissingSocketGrants(
 	var direct *directIPApprovalReview
 	if capReq.DirectIP != nil {
 		predicted := tc
-		predicted.SocketGrants = append([]confine.SocketGrant(nil), merged...)
-		predicted.DurableSocketGrants = append([]confine.SocketGrant(nil), durableGrants...)
-		predicted.AuthorizedSocketDigests = capabilitygrants.SocketGrantDigests(merged)
-		predicted.SocketActionDigest = actionDigest
-		predicted.SocketScopes = append([]string(nil), observation.scopes...)
-		predicted.SocketGrantStates = append([]string(nil), observation.states...)
+		predicted.Socket.SocketGrants = append([]confine.SocketGrant(nil), merged...)
+		predicted.Socket.DurableSocketGrants = append([]confine.SocketGrant(nil), durableGrants...)
+		predicted.Socket.AuthorizedSocketDigests = capabilitygrants.SocketGrantDigests(merged)
+		predicted.Socket.SocketActionDigest = actionDigest
+		predicted.Socket.SocketScopes = append([]string(nil), observation.scopes...)
+		predicted.Socket.SocketGrantStates = append([]string(nil), observation.states...)
 		review := e.buildDirectIPApprovalReview(ctx, tool, args, predicted, capReq.DirectIP.DeclaredDestinations)
-		if e.directIPRuntime == nil || !e.directIPRuntime.Authorized(tc.SessionID, tc.ToolCallID, review.Lease.ActionDigest) {
+		if e.directIPRuntime == nil || !e.directIPRuntime.Authorized(tc.Identity.SessionID, tc.Identity.ToolCallID, review.Lease.ActionDigest) {
 			if !e.directIPLeaseAuthorizes(review.Action, predicted, review.Lease) {
 				direct = &review
 			}
@@ -279,7 +279,7 @@ func (e *Capabilities) authorizeMissingSocketGrants(
 		for _, grant := range missing {
 			e.recordCapabilityDecision(ctx, tc, tool, grant, false, authzledger.AuthorizationSourceHuman)
 		}
-		return "", e.Approvals.rejectApprovalErr(ctx, tool, tc.Agent, args, err)
+		return "", e.Approvals.rejectApprovalErr(ctx, tool, tc.Identity.Agent, args, err)
 	}
 	authSource = authzledger.AuthorizationSourceHuman
 	for _, grant := range missing {

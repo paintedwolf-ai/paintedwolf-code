@@ -47,8 +47,8 @@ func (e *Secrets) resolveSecretReferences(
 		return nil, errSecretReferenceUnavailable
 	}
 	return e.secretResolver(ctx, args, secretcap.ResolveContext{
-		ProjectID: strings.TrimSpace(tc.ProjectID), ChatSessionID: tc.ChatSessionID(),
-		SessionID: strings.TrimSpace(tc.SessionID), ToolName: strings.TrimSpace(tool), ToolCallID: tc.ToolCallID,
+		ProjectID: strings.TrimSpace(tc.Identity.ProjectID), ChatSessionID: tc.ChatSessionID(),
+		SessionID: strings.TrimSpace(tc.Identity.SessionID), ToolName: strings.TrimSpace(tool), ToolCallID: tc.Identity.ToolCallID,
 		Slots: tc.Invocation.Contract.SecretReferenceArgs,
 	})
 }

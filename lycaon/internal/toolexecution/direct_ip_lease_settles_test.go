@@ -72,10 +72,11 @@ func TestDirectIPChatLeaseSettlesOnlyTheDirectNetworkReason(t *testing.T) {
 			executor.Approvals.approvalGate = decisionGate{decision: tc.decision}
 			executor.Capabilities.SetDirectIPCapabilityRuntime(runtime)
 			toolCtx := tools.ToolContext{
-				SessionID: "chat", ToolCallID: "call-1",
-				Roots:        []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}},
-				ActiveRootID: "root",
-				Invocation:   tools.Invocation{Contract: contract},
+				Invocation: tools.Invocation{Contract: contract},
+				Identity: tools.InvocationIdentity{SessionID: "chat",
+					ToolCallID: "call-1"},
+				Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}},
+					ActiveRootID: "root"},
 			}
 			args := map[string]any{"command": "ntpdate time.example", "capability_request": map[string]any{"direct_ip": true}}
 			result, err := executor.Capabilities.preflightDirectIPCapability(t.Context(), "command", args, toolCtx, false)

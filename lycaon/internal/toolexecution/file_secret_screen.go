@@ -23,10 +23,10 @@ func (e *Secrets) screenFileSecrets(
 	if resolveRef, ok := args["resolve_secret_references"].(bool); ok && !resolveRef {
 		return nil
 	}
-	if tc.Secrets == nil {
+	if tc.Effects.Secrets == nil {
 		return nil
 	}
-	known, err := tc.Secrets.Matches(e.secretMatcher, func(string) bool { return true })
+	known, err := tc.Effects.Secrets.Matches(e.secretMatcher, func(string) bool { return true })
 	if err != nil {
 		return argvSecretFaultReject(ctx, e, tool, tc, secretmatch.SurfaceFile, secretmatch.Match{}, secretmatch.NewAskFault(secretmatch.FaultStageScreenUnwired, err))
 	}
@@ -41,9 +41,9 @@ func (e *Secrets) screenFileSecrets(
 	finding.RecipientsLocal = true
 
 	attribution := secretmatch.AskAttributionFrom(ctx)
-	attribution.ProjectID = tc.ProjectID
-	attribution.SessionID = tc.SessionID
-	attribution.ToolCallID = tc.ToolCallID
+	attribution.ProjectID = tc.Identity.ProjectID
+	attribution.SessionID = tc.Identity.SessionID
+	attribution.ToolCallID = tc.Identity.ToolCallID
 	ctx = secretmatch.WithAskAttribution(ctx, attribution)
 
 	return e.resolveArgumentSecretFinding(ctx, tool, tc, secretmatch.SurfaceFile, known[0], finding)

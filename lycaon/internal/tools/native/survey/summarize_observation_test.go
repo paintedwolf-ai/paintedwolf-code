@@ -4,12 +4,11 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/summarize"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"io"
 	"reflect"
 	"testing"
-
-	"github.com/lycaon/lycaon/internal/summarize"
 )
 
 func TestSummarizeNoMaterialRetainsScopeAndOmissions(t *testing.T) {
@@ -34,11 +33,11 @@ func TestSummarizeNoMaterialRetainsScopeAndOmissions(t *testing.T) {
 func TestSummarizeOmissionObservationIsBoundedAndCoverageIsIncomplete(t *testing.T) {
 	g := testSummarizeGatherer(t, t.TempDir(), summarize.DefaultCaps())
 	for i := 14; i >= 0; i-- {
-		g.noteSkippedPath(fmt.Sprintf("path-%02d", i))
+		g.sources.noteSkippedPath(fmt.Sprintf("path-%02d", i))
 	}
-	g.noteSkippedPath("path-00")
-	g.sourceLimited = true
-	data := g.noMaterialData(summarize.Request{Path: "scope"})
+	g.sources.noteSkippedPath("path-00")
+	g.sources.sourceLimited = true
+	data := g.sources.noMaterialData(summarize.Request{Path: "scope"})
 	paths := data["summary_skipped_paths"].([]string)
 	if data["summary_skipped_count"] != 15 || len(paths) != 10 || paths[0] != "path-00" || data["summary_source_limited"] != true {
 		t.Fatalf("unbounded or inaccurate omission: %+v", data)

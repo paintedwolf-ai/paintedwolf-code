@@ -35,11 +35,11 @@ func TestResolveWriteUnderMultiRootWorkerBranch(t *testing.T) {
 		{ID: "s", Label: "b", Path: secondary, IsPrimary: false},
 	}
 	tctx := tools.ToolContext{
-		Roots:            roots,
-		ActiveRootID:     "p",
-		WorkerBranchRoot: branch,
-		BranchWorkspace:  testutil.CompleteBranchWorkspace{},
-		Agent:            "implementer",
+		Source: tools.InvocationSource{Roots: roots,
+			ActiveRootID:     "p",
+			WorkerBranchRoot: branch,
+			BranchWorkspace:  testutil.CompleteBranchWorkspace{}},
+		Identity: tools.InvocationIdentity{Agent: "implementer"},
 	}
 	res, err := projectpaths.ResolveWrite(context.Background(), nil, tctx, "@b/"+rel)
 	testutil.FailErr(t, "ResolveWrite", err)
@@ -62,10 +62,10 @@ func TestUnionDiscoveryRootsPrefersWorkerBranch(t *testing.T) {
 	testutil.FailErr(t, "mkdir primary", os.MkdirAll(primary, 0o755))
 	testutil.FailErr(t, "mkdir branch", os.MkdirAll(branch, 0o755))
 	tctx := tools.ToolContext{
-		Roots:            []projectroot.RootRef{{ID: "p", Path: primary, IsPrimary: true}},
-		ActiveRootID:     "p",
-		WorkerBranchRoot: branch,
-		BranchWorkspace:  testutil.CompleteBranchWorkspace{},
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "p", Path: primary, IsPrimary: true}},
+			ActiveRootID:     "p",
+			WorkerBranchRoot: branch,
+			BranchWorkspace:  testutil.CompleteBranchWorkspace{}},
 	}
 	roots, err := projectpaths.UnionDiscoveryRoots(context.Background(), tctx, ".")
 	testutil.FailErr(t, "UnionDiscoveryRoots", err)
@@ -84,10 +84,10 @@ func TestResolveReadAcceptsWorkerBranchAbsolutePath(t *testing.T) {
 	testutil.FailErr(t, "mkdir target", os.MkdirAll(filepath.Dir(target), 0o755))
 	testutil.FailErr(t, "write target", os.WriteFile(target, []byte("package pkg\n"), 0o644))
 	tctx := tools.ToolContext{
-		Roots:            []projectroot.RootRef{{ID: "p", Path: primary, IsPrimary: true}},
-		ActiveRootID:     "p",
-		WorkerBranchRoot: branch,
-		BranchWorkspace:  testutil.CompleteBranchWorkspace{},
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "p", Path: primary, IsPrimary: true}},
+			ActiveRootID:     "p",
+			WorkerBranchRoot: branch,
+			BranchWorkspace:  testutil.CompleteBranchWorkspace{}},
 	}
 	resolved, err := projectpaths.ResolveRead(context.Background(), nil, tctx, target)
 	testutil.FailErr(t, "ResolveRead", err)
@@ -100,10 +100,10 @@ func TestResolveReadRejectsRelativeWorkerBranchEscapeWithoutBoundary(t *testing.
 	primary := t.TempDir()
 	branch := t.TempDir()
 	tctx := tools.ToolContext{
-		Roots:            []projectroot.RootRef{{ID: "p", Path: primary, IsPrimary: true}},
-		ActiveRootID:     "p",
-		WorkerBranchRoot: branch,
-		BranchWorkspace:  testutil.CompleteBranchWorkspace{},
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "p", Path: primary, IsPrimary: true}},
+			ActiveRootID:     "p",
+			WorkerBranchRoot: branch,
+			BranchWorkspace:  testutil.CompleteBranchWorkspace{}},
 	}
 	_, err := projectpaths.ResolveRead(t.Context(), nil, tctx, "../outside")
 	var reject *toolrejection.ToolReject
@@ -125,13 +125,13 @@ func TestResolveReadDisplaysStableMultiRootBranchPathByLabel(t *testing.T) {
 	testutil.FailErr(t, "mkdir target", os.MkdirAll(filepath.Dir(target), 0o755))
 	testutil.FailErr(t, "write target", os.WriteFile(target, []byte("draft\n"), 0o644))
 	tctx := tools.ToolContext{
-		Roots: []projectroot.RootRef{
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{
 			{ID: "primary-id", Label: "app", Path: primary, IsPrimary: true},
 			{ID: "secondary-id", Label: "docs", Path: secondary},
 		},
-		ActiveRootID:     "primary-id",
-		WorkerBranchRoot: branch,
-		BranchWorkspace:  testutil.CompleteBranchWorkspace{},
+			ActiveRootID:     "primary-id",
+			WorkerBranchRoot: branch,
+			BranchWorkspace:  testutil.CompleteBranchWorkspace{}},
 	}
 	resolved, err := projectpaths.ResolveRead(context.Background(), nil, tctx, target)
 	testutil.FailErr(t, "resolve multi-root absolute path", err)
@@ -145,10 +145,10 @@ func TestResolveWriteWorkerWithoutBranchRejected(t *testing.T) {
 	testutil.FailErr(t, "mkdir pkg", os.MkdirAll(filepath.Join(base, "pkg"), 0o755))
 	roots := []projectroot.RootRef{{ID: "p", Label: "a", Path: base, IsPrimary: true}}
 	tctx := tools.ToolContext{
-		Roots:        roots,
-		ActiveRootID: "p",
-		Agent:        "implementer",
-		WorkerJobID:  "job-1",
+		Source: tools.InvocationSource{Roots: roots,
+			ActiveRootID: "p"},
+		Identity: tools.InvocationIdentity{Agent: "implementer",
+			WorkerJobID: "job-1"},
 	}
 
 	_, err := projectpaths.ResolveWrite(context.Background(), nil, tctx, "pkg/x.go")

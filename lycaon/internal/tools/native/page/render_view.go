@@ -229,7 +229,7 @@ func RenderViewHandler(raster *browser.Rasterizer, destWriter DestWriter, handle
 			return "", err
 		}
 
-		eff, err := resolveEffectiveRender(in, tctx.SessionID, handleStore)
+		eff, err := resolveEffectiveRender(in, tctx.Identity.SessionID, handleStore)
 		if err != nil {
 			return "", err
 		}
@@ -256,9 +256,9 @@ func RenderViewHandler(raster *browser.Rasterizer, destWriter DestWriter, handle
 		}
 		revision := 0
 		if in.Handle != "" && handleStore != nil {
-			stored, err := handleStore.Put(tctx.SessionID, &renderhandle.RenderHandle{
+			stored, err := handleStore.Put(tctx.Identity.SessionID, &renderhandle.RenderHandle{
 				ID:        in.Handle,
-				SessionID: tctx.SessionID,
+				SessionID: tctx.Identity.SessionID,
 				Markup:    eff.markup,
 				Mime:      eff.mime,
 				Theme:     eff.theme,
@@ -291,14 +291,14 @@ func RenderViewHandler(raster *browser.Rasterizer, destWriter DestWriter, handle
 			}
 		}
 
-		if tctx.Out == nil {
-			tctx.Out = &tools.ToolInvocationOut{}
+		if tctx.Effects.Out == nil {
+			tctx.Effects.Out = &tools.ToolInvocationOut{}
 		}
 		caption, err := raster.ProjectCaption(ctx, captureScope(tctx), strings.TrimSpace(in.Caption))
 		if err != nil {
 			return "", err
 		}
-		tctx.Out.Visual = &tools.VisualCapture{
+		tctx.Effects.Out.Visual = &tools.VisualCapture{
 			Mime:      out.Mime,
 			Bytes:     append([]byte(nil), out.Bytes...),
 			Source:    api.VisualArtifactSourceRender,

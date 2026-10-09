@@ -68,7 +68,7 @@ func TestGrepCancellationJoinsReaders(t *testing.T) {
 	}()
 	ctx, cancel := context.WithCancel(t.Context())
 	tctx := nativefixture.Context(dir)
-	tctx.ReportProgress = func(progress api.ToolProgress) {
+	tctx.Effects.ReportProgress = func(progress api.ToolProgress) {
 		if progress.Phase == "searching" {
 			cancel()
 		}

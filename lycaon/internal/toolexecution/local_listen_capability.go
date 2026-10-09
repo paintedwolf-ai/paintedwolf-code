@@ -32,21 +32,21 @@ func (e *Capabilities) preflightLocalListenCapability(
 	}
 	capReq, reject := capabilityrequest.ParseCapabilityRequest(args)
 	if reject != nil {
-		return nil, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Agent, args, reject)
+		return nil, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Identity.Agent, args, reject)
 	}
 	if capReq == nil || capReq.LocalListen == nil {
 		return nil, nil
 	}
 	ports := append([]uint16(nil), capReq.LocalListen.Ports...)
 	// Direct IP includes listener authority.
-	if tc.DirectIPRequested {
+	if tc.Direct.DirectIPRequested {
 		return &tools.LocalListenResult{Authorized: true, Ports: nil}, nil
 	}
-	if tc.LocalListenGranted && axisPortsCovered(tc.LocalListenPorts, ports) {
-		return &tools.LocalListenResult{Authorized: true, Ports: spawnPortNarrowing(tc.LocalListenPorts, ports)}, nil
+	if tc.Local.LocalListenGranted && axisPortsCovered(tc.Local.LocalListenPorts, ports) {
+		return &tools.LocalListenResult{Authorized: true, Ports: spawnPortNarrowing(tc.Local.LocalListenPorts, ports)}, nil
 	}
 	if e.localListenGate == nil {
-		return nil, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Agent, args, &toolrejection.ToolReject{
+		return nil, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Identity.Agent, args, &toolrejection.ToolReject{
 			Code: isolation.CodeApprovalUnavailable,
 			Data: map[string]any{"reason": "local-listen approval is not configured"},
 		})
@@ -57,30 +57,30 @@ func (e *Capabilities) preflightLocalListenCapability(
 	}
 	result, err := e.localListenGate.Await(ctx, tools.LocalListenAsk{
 		SecretPermission: permission,
-		SessionID:        tc.SessionID,
-		ParentSessionID:  tc.ParentSessionID,
-		ProjectID:        tc.ProjectID,
-		ToolCallID:       tc.ToolCallID,
+		SessionID:        tc.Identity.SessionID,
+		ParentSessionID:  tc.Identity.ParentSessionID,
+		ProjectID:        tc.Identity.ProjectID,
+		ToolCallID:       tc.Identity.ToolCallID,
 		ProjectDir:       tc.ActiveRootPath(),
 		ToolName:         tool,
 		Command:          commandsurface.PrimaryCommandLine(args, nil),
 		Ports:            ports,
 	})
 	if err != nil {
-		return nil, e.Approvals.rejectApprovalErr(ctx, tool, tc.Agent, args, err)
+		return nil, e.Approvals.rejectApprovalErr(ctx, tool, tc.Identity.Agent, args, err)
 	}
 	if result.Denied {
 		context := map[string]any{}
 		if result.UserGuidance != "" {
 			context[toolrejection.UserGuidanceKey] = result.UserGuidance
 		}
-		return nil, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Agent, args, &toolrejection.ToolReject{
+		return nil, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Identity.Agent, args, &toolrejection.ToolReject{
 			Code: isolation.CodeLocalListenDenied,
 			Data: context,
 		})
 	}
 	if !result.Authorized {
-		return nil, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Agent, args, &toolrejection.ToolReject{
+		return nil, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Identity.Agent, args, &toolrejection.ToolReject{
 			Code: isolation.CodeApprovalUnavailable,
 			Data: map[string]any{"reason": string(approvaloutcome.CodeApprovalExpired)},
 		})

@@ -44,9 +44,9 @@ func runRecall(ctx context.Context, args map[string]any, tctx tools.ToolContext,
 		Widen: widen,
 		Limit: intArgOrZero(args, "limit"),
 		Caller: recall.Caller{
-			SessionID:       tctx.SessionID,
-			ParentSessionID: tctx.ParentSessionID,
-			ProjectID:       tctx.ProjectID,
+			SessionID:       tctx.Identity.SessionID,
+			ParentSessionID: tctx.Identity.ParentSessionID,
+			ProjectID:       tctx.Identity.ProjectID,
 		},
 	})
 	if err != nil {

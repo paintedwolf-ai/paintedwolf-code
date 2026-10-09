@@ -34,8 +34,10 @@ func TestContentApplyPartialReturnsOneHostComposedResult(t *testing.T) {
 	done := make(chan gateResult, 1)
 	go func() {
 		content, gateErr := gate.GateApply(ctx, "edit", "notes.txt", &before, "ONE\nkeep a\nkeep b\nTHREE\n", tools.ToolContext{
-			Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: projectDir, IsPrimary: true}},
-			ActiveRootID: "r1", SessionID: sess.ID, ProjectID: testdbseed.DefaultProjectID,
+			Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: projectDir, IsPrimary: true}},
+				ActiveRootID: "r1"},
+			Identity: tools.InvocationIdentity{SessionID: sess.ID,
+				ProjectID: testdbseed.DefaultProjectID},
 		})
 		done <- gateResult{content: content, err: gateErr}
 	}()

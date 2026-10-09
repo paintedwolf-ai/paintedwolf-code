@@ -103,7 +103,10 @@ func TestRequestToolsLoadsNamedDeferredTools(t *testing.T) {
 
 	out, err := reg.Run(context.Background(), "request_tools",
 		map[string]any{"need": "wc and read the file"},
-		tools.ToolContext{SessionID: "s1", Agent: "implement"})
+		tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: "s1",
+				Agent: "implement"},
+		})
 	testutil.FailErr(t, "request_tools run", err)
 
 	var result turnload.RequestToolsResult
@@ -143,7 +146,10 @@ func TestRequestToolsWithoutResolverNeedsExactName(t *testing.T) {
 
 	discovery, err := reg.Run(context.Background(), "request_tools",
 		map[string]any{"need": "search the tracker issues"},
-		tools.ToolContext{SessionID: "s1", Agent: "implement"})
+		tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: "s1",
+				Agent: "implement"},
+		})
 	testutil.FailErr(t, "discover without resolver", err)
 	var page turnload.RequestToolsResult
 	testutil.FailErr(t, "decode discovery", json.Unmarshal([]byte(discovery), &page))
@@ -152,7 +158,10 @@ func TestRequestToolsWithoutResolverNeedsExactName(t *testing.T) {
 	}
 	out, err := reg.Run(context.Background(), "request_tools",
 		map[string]any{"need": "mcp_tracker_search_issues"},
-		tools.ToolContext{SessionID: "s1", Agent: "implement"})
+		tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: "s1",
+				Agent: "implement"},
+		})
 	testutil.FailErr(t, "request_tools exact name", err)
 	var result turnload.RequestToolsResult
 	testutil.FailErr(t, "unmarshal result", json.Unmarshal([]byte(out), &result))
@@ -176,10 +185,10 @@ func TestRequestToolsLoadsSurfaceDeferred(t *testing.T) {
 	out, err := reg.Run(context.Background(), "request_tools",
 		map[string]any{"need": "page_open then read"},
 		tools.ToolContext{
-			SessionID:     "s1",
-			Agent:         "coordinator",
-			TurnSurfaceID: "implement_investigate",
-			TurnToolPlan:  toolsurface.Compile([]string{"read", "request_tools"}, []string{"page_open"}),
+			Identity: tools.InvocationIdentity{SessionID: "s1",
+				Agent: "coordinator"},
+			Turn: tools.InvocationTurn{TurnSurfaceID: "implement_investigate",
+				TurnToolPlan: toolsurface.Compile([]string{"read", "request_tools"}, []string{"page_open"})},
 		})
 	testutil.FailErr(t, "request_tools run", err)
 
@@ -207,10 +216,10 @@ func TestRequestToolsLoadsExplicitControlFamily(t *testing.T) {
 	out, err := reg.Run(context.Background(), "request_tools",
 		map[string]any{"need": "command command_output command_stop"},
 		tools.ToolContext{
-			SessionID:     "s1",
-			Agent:         "coordinator",
-			TurnSurfaceID: "implement_investigate",
-			TurnToolPlan:  toolsurface.Compile([]string{"request_tools"}, family),
+			Identity: tools.InvocationIdentity{SessionID: "s1",
+				Agent: "coordinator"},
+			Turn: tools.InvocationTurn{TurnSurfaceID: "implement_investigate",
+				TurnToolPlan: toolsurface.Compile([]string{"request_tools"}, family)},
 		})
 	testutil.FailErr(t, "request_tools run", err)
 

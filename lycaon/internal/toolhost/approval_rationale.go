@@ -93,11 +93,11 @@ func (a *approvalRationaleAttacher) AttachAsync(ctx context.Context, req toolapp
 // The provider controls the timeout, including model loading.
 func (a *approvalRationaleAttacher) run(parent context.Context, req toolapproval.AIRationaleAttachRequest) {
 	ctx := curationctx.WithSession(parent, curationctx.Session{
-		SessionID:       req.ToolContext.SessionID,
-		ProjectID:       req.ToolContext.ProjectID,
-		Agent:           req.ToolContext.Agent,
-		ParentSessionID: req.ToolContext.ParentSessionID,
-		ToolCallID:      req.ToolContext.ToolCallID,
+		SessionID:       req.ToolContext.Identity.SessionID,
+		ProjectID:       req.ToolContext.Identity.ProjectID,
+		Agent:           req.ToolContext.Identity.Agent,
+		ParentSessionID: req.ToolContext.Identity.ParentSessionID,
+		ToolCallID:      req.ToolContext.Identity.ToolCallID,
 		ProjectDir:      req.ToolContext.ActiveRootPath(),
 	})
 
@@ -142,24 +142,24 @@ func (a *approvalRationaleAttacher) loadInputs(ctx context.Context, req toolappr
 		in.ExplanationIfWrong = req.Explanation.IfWrong
 	}
 
-	if a.deps.Workers != nil && strings.TrimSpace(tc.WorkerJobID) != "" {
-		if task, ok := a.deps.Workers.Get(tc.WorkerJobID); ok && task != nil {
+	if a.deps.Workers != nil && strings.TrimSpace(tc.Identity.WorkerJobID) != "" {
+		if task, ok := a.deps.Workers.Get(tc.Identity.WorkerJobID); ok && task != nil {
 			in.WorkerBrief = strings.TrimSpace(task.Brief)
 		}
 	}
 
-	sessionID := strings.TrimSpace(tc.SessionID)
+	sessionID := strings.TrimSpace(tc.Identity.SessionID)
 	if sessionID != "" && a.deps.Messages != nil {
 		msgs, err := a.deps.Messages.GetMessages(ctx, sessionID)
 		if err == nil {
-			msgs = rationaleMessagesThroughAction(msgs, tc.ToolCallID)
+			msgs = rationaleMessagesThroughAction(msgs, tc.Identity.ToolCallID)
 			boundary := api.UserIntentBoundary(msgs)
 			if boundary > 0 && boundary <= len(msgs) {
 				userMsg := msgs[boundary-1]
 				in.UserIntent = strings.TrimSpace(userMsg.Content)
 			}
-			in.AssistantProse = assistantProseForToolCall(msgs, tc.ToolCallID)
-			in.RecentResults = recentRationaleResults(msgs, boundary, tc.ToolCallID)
+			in.AssistantProse = assistantProseForToolCall(msgs, tc.Identity.ToolCallID)
+			in.RecentResults = recentRationaleResults(msgs, boundary, tc.Identity.ToolCallID)
 		}
 	}
 

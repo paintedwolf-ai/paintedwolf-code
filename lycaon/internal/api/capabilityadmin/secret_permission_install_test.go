@@ -2,6 +2,7 @@ package capabilityadmin
 
 import (
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/hitl"
@@ -16,7 +17,7 @@ type secretInstallRecorder struct {
 }
 
 func (r *secretInstallRecorder) ApplyGrant(grant hitl.ApprovalGrant) (bool, error) {
-	created, err := r.Authority.ApprovalGate.ApplyGrant(grant)
+	created, err := r.ApprovalGate.ApplyGrant(grant)
 	if err == nil && created && grant.Predicate.Category == hitl.ApprovalGrantCategorySecret {
 		r.installed = true
 	}
@@ -37,7 +38,7 @@ func TestServicePermissionFailureRollsBackSecretAuthority(t *testing.T) {
 		{Kind: hitl.AuthorityLoopbackConnectChat, Grant: &connection, ChatSessionID: "task", ConnectPorts: []uint16{8080}},
 	}}
 	recorder := &secretInstallRecorder{ApprovalGate: authority}
-	server := &Handler{Deps: Deps{Gate: recorder}}
+	server := &Installation{Gate: recorder, authorityMu: &sync.Mutex{}}
 	if _, err := server.InstallApprovalOption(t.Context(), "checkpoint", option); err == nil {
 		t.Fatal("missing connection runtime unexpectedly installed authority")
 	}

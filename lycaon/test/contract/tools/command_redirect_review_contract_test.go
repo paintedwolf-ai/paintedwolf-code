@@ -53,9 +53,14 @@ func TestCommandRedirectTargetsAreReviewedLikeNativeWrites(t *testing.T) {
 			before := snapshotTree(t, root)
 			recorder.reset()
 			_, err = executor.Invoke(t.Context(), tool, cloneArgs(tc.args).(map[string]any), tools.ToolContext{
-				Roots:        []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}},
-				ActiveRootID: "root", ProjectID: "project", SourceWorkspaceKind: api.SourceWorkspaceKindProject,
-				SessionID: "chat", ToolCallID: "call-" + tool, Agent: "implement", SessionScratchDir: t.TempDir(),
+				Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}},
+					ActiveRootID:        "root",
+					SourceWorkspaceKind: api.SourceWorkspaceKindProject},
+				Identity: tools.InvocationIdentity{ProjectID: "project",
+					SessionID:  "chat",
+					ToolCallID: "call-" + tool,
+					Agent:      "implement"},
+				Host: tools.InvocationHost{SessionScratchDir: t.TempDir()},
 			})
 			contractcheck.FailErr(t, tool+" "+tc.name, err)
 

@@ -43,7 +43,7 @@ func DecisionHandler(deps RequestDecisionDeps) tools.ToolHandler {
 				Data: map[string]any{"tool": RequestDecisionTool},
 			}
 		}
-		child := strings.TrimSpace(tctx.SessionID)
+		child := strings.TrimSpace(tctx.Identity.SessionID)
 		if child == "" {
 			return "", fmt.Errorf("session required")
 		}
@@ -109,7 +109,7 @@ func DecisionHandler(deps RequestDecisionDeps) tools.ToolHandler {
 				return "", err
 			}
 		}
-		jobID := strings.TrimSpace(tctx.WorkerJobID)
+		jobID := strings.TrimSpace(tctx.Identity.WorkerJobID)
 		if jobID == "" {
 			return "", fmt.Errorf("request_decision requires an active worker job")
 		}

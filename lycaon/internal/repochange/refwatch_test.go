@@ -69,8 +69,8 @@ func TestRefWatchEmitsHeadMovedForOutsideCommit(t *testing.T) {
 		t.Fatal("expected HeadMoved for a ref-surface write")
 	}
 	repochange.ResetDebouncerForTest(t.Context())
-	if worktree.Load() == 0 {
-		t.Fatal("ref metadata did not notify filesystem consumers")
+	if worktree.Load() != 0 {
+		t.Fatal("lazy Git metadata triggered source filesystem reconciliation")
 	}
 }
 

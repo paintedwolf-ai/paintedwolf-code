@@ -42,7 +42,7 @@ func (c *rootRecordingConnector) snapshot() ([][]string, int) {
 	return append([][]string(nil), c.roots...), c.connects
 }
 
-func newScopedRegistry(t *testing.T, conn SessionConnector) *RegistryImpl {
+func newScopedRegistry(t *testing.T, conn SessionConnector) *Runtime {
 	t.Helper()
 	dir := t.TempDir()
 	configtest.Overlay(t, map[config.Rel]string{config.DistroMCP: `providers:
@@ -50,16 +50,16 @@ func newScopedRegistry(t *testing.T, conn SessionConnector) *RegistryImpl {
     url: http://127.0.0.1:8765/mcp
     enabled: true
 `})
-	reg, err := NewRegistryImpl(RegistryOptions{
+	reg, err := NewRuntime(RuntimeOptions{
 		StatePath:          dir,
 		GlobalOverridePath: filepath.Join(dir, "mcp.yaml"),
 		Connector:          conn,
 	})
-	testutil.FailErr(t, "NewRegistryImpl", err)
-	reg.SetToolRegistry(tools.NewDefaultRegistry())
-	reg.SetDeviceProbeRoots(func() []string { return []string{filepath.Join(dir, "probe")} })
+	testutil.FailErr(t, "NewRuntime", err)
+	reg.Tools.SetToolRegistry(tools.NewDefaultRegistry())
+	reg.Connections.SetDeviceProbeRoots(func() []string { return []string{filepath.Join(dir, "probe")} })
 	t.Cleanup(func() { _ = reg.Close() })
-	testutil.FailErr(t, "load", reg.Load(context.Background()))
+	testutil.FailErr(t, "load", reg.Catalog.Load(context.Background()))
 	return reg
 }
 
@@ -97,7 +97,7 @@ func TestSessionsAreNotSharedAcrossProjects(t *testing.T) {
 		t.Fatalf("roots per connect = %v want one connect confined to each project", roots)
 	}
 	// Two projects, one server: exactly one session each, plus the sync-time probe.
-	if got := reg.sessionCount(); got != 3 {
+	if got := reg.Connections.sessionCount(); got != 3 {
 		t.Fatalf("sessions = %d want one per project plus the discovery probe", got)
 	}
 }
@@ -142,7 +142,7 @@ func TestBreakerOpenSurfacesStructuredReject(t *testing.T) {
 	scope := ProjectScope("proj-a", "/tmp/a", []string{"/tmp/a"})
 	var last error
 	for i := 0; i < int(defaultBreakerThreshold)+2; i++ {
-		_, last = reg.CallTool(context.Background(), scope, "svc", "query", nil)
+		_, last = reg.Calls.CallTool(context.Background(), scope, "svc", "query", nil)
 	}
 	reject := toolrejection.AsToolReject(last)
 	if reject == nil || reject.Code != MCPTransportUnavailableCode {
@@ -163,8 +163,8 @@ func TestToolListChangedTriggersResync(t *testing.T) {
 	conn := &rootRecordingConnector{inner: inner}
 	reg := newScopedRegistry(t, conn)
 
-	if !hasTool(reg.RegisteredMCPTools(), "mcp_svc_query") {
-		t.Fatalf("initial tools = %v", reg.RegisteredMCPTools())
+	if !hasTool(reg.Catalog.RegisteredMCPTools(), "mcp_svc_query") {
+		t.Fatalf("initial tools = %v", reg.Catalog.RegisteredMCPTools())
 	}
 
 	// The server now presents a different tool.
@@ -178,18 +178,18 @@ func TestToolListChangedTriggersResync(t *testing.T) {
 	// Drive the sync directly: the notifier hands work to a background drain, and this
 	// asserts the re-list itself rather than the goroutine's timing.
 	notifiers[0]()
-	testutil.FailErr(t, "resync", reg.SyncTools(context.Background()))
+	testutil.FailErr(t, "resync", reg.Tools.SyncTools(context.Background()))
 
-	if hasTool(reg.RegisteredMCPTools(), "mcp_svc_query") {
-		t.Fatalf("withdrawn tool still registered: %v", reg.RegisteredMCPTools())
+	if hasTool(reg.Catalog.RegisteredMCPTools(), "mcp_svc_query") {
+		t.Fatalf("withdrawn tool still registered: %v", reg.Catalog.RegisteredMCPTools())
 	}
-	if !hasTool(reg.RegisteredMCPTools(), "mcp_svc_search") {
-		t.Fatalf("new tool not registered: %v", reg.RegisteredMCPTools())
+	if !hasTool(reg.Catalog.RegisteredMCPTools(), "mcp_svc_search") {
+		t.Fatalf("new tool not registered: %v", reg.Catalog.RegisteredMCPTools())
 	}
 }
 
-func callErr(reg *RegistryImpl, scope CallScope) error {
-	_, err := reg.CallTool(context.Background(), scope, "svc", "query", nil)
+func callErr(reg *Runtime, scope CallScope) error {
+	_, err := reg.Calls.CallTool(context.Background(), scope, "svc", "query", nil)
 	return err
 }
 

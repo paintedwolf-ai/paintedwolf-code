@@ -34,9 +34,7 @@ type toolApprovalRaise struct {
 	SecretScreenHit        bool
 	AIRationalePending     bool
 	AttachRationale        bool
-	RationaleTC            tools.ToolContext
-	RationaleTool          string
-	RationaleArgs          map[string]any
+	Rationale              toolapproval.AIRationaleAttachRequest
 	GrantOffers            []hitl.ApprovalGrantOffer
 	GrantDelta             string
 	CoalesceKey            string
@@ -218,9 +216,9 @@ func (e *Approvals) raiseAndWaitToolApproval(ctx context.Context, in toolApprova
 	if in.AttachRationale && e.aiRationale != nil {
 		e.aiRationale.AttachAsync(ctx, toolapproval.AIRationaleAttachRequest{
 			CheckpointID: resp.CheckpointID,
-			ToolContext:  in.RationaleTC,
-			Tool:         in.RationaleTool,
-			Args:         in.RationaleArgs,
+			ToolContext:  in.Rationale.ToolContext,
+			Tool:         in.Rationale.Tool,
+			Args:         in.Rationale.Args,
 			Files:        in.Action.Files,
 			Explanation:  in.Explanation,
 		})

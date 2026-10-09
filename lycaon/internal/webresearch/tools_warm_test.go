@@ -37,7 +37,9 @@ func TestWebSearchFiresSearchWarmHook(t *testing.T) {
 	if err := RegisterToolsWithFactory(reg, deps, func() DirectDiscovererFactory { return factory }); err != nil {
 		testutil.FailErr(t, "RegisterToolsWithFactory failed", err)
 	}
-	out, err := reg.Run(context.Background(), "web_search", map[string]any{"query": "widget guide"}, tools.ToolContext{SessionID: "sess-1"})
+	out, err := reg.Run(context.Background(), "web_search", map[string]any{"query": "widget guide"}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "sess-1"},
+	})
 	testutil.FailErr(t, "reg.Run failed", err)
 	if out == "" {
 		t.Fatal("want tool output")
@@ -176,14 +178,18 @@ func TestFetchURLFiresFetchWarmHookOnFreshFetchOnly(t *testing.T) {
 		testutil.FailErr(t, "RegisterToolsWithFactory failed", err)
 	}
 	args := map[string]any{"url": srv.URL + "/guide.md"}
-	if _, err := reg.Run(context.Background(), "fetch_url", args, tools.ToolContext{SessionID: "sess-f"}); err != nil {
+	if _, err := reg.Run(context.Background(), "fetch_url", args, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "sess-f"},
+	}); err != nil {
 		testutil.FailErr(t, "reg.Run failed", err)
 	}
 	if calls.Load() != 1 || gotURL != srv.URL+"/guide.md" || gotTitle != "Widget frobnicator guide" {
 		t.Fatalf("calls=%d url=%q title=%q", calls.Load(), gotURL, gotTitle)
 	}
 	// Cache hit: no network fetch, no warm.
-	if _, err := reg.Run(context.Background(), "fetch_url", args, tools.ToolContext{SessionID: "sess-f"}); err != nil {
+	if _, err := reg.Run(context.Background(), "fetch_url", args, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "sess-f"},
+	}); err != nil {
 		testutil.FailErr(t, "reg.Run failed", err)
 	}
 	if calls.Load() != 1 {

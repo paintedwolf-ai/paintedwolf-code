@@ -7,7 +7,7 @@ import (
 	"github.com/lycaon/lycaon/internal/secretmatch"
 )
 
-// secretReviewPayload is the value-free location and evidence shown on a card.
+// SecretReviewPayload is the value-free location and evidence shown on a card.
 func SecretReviewPayload(finding secretmatch.Alert, recipients []secretmatch.Recipient, standingRedaction bool) *hitl.SecretScreen {
 	surface := strings.TrimSpace(string(finding.Surface))
 	if surface == "" {

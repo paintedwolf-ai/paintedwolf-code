@@ -26,9 +26,10 @@ func TestApprovedExternalWriteDoesNotRecordAProjectRewindPath(t *testing.T) {
 	target := filepath.Join(outside, "notes.txt")
 	recorder := &mutationRecorder{}
 	tc := tools.ToolContext{
-		Roots: []projectroot.RootRef{{ID: "root", Path: project, IsPrimary: true}}, ActiveRootID: "root",
-		MutationRecorder:   recorder,
-		ApprovedFileAccess: []hitl.GrantedPathDelta{{Path: grantedpath.Normalize(target), Write: true}},
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: project, IsPrimary: true}},
+			ActiveRootID:     "root",
+			MutationRecorder: recorder},
+		Files: tools.InvocationFiles{ApprovedFileAccess: []hitl.GrantedPathDelta{{Path: grantedpath.Normalize(target), Write: true}}},
 	}
 	_, err := projectpaths.ResolveWrite(t.Context(), nil, tc, target)
 	testutil.FailErr(t, "resolve external write", err)
@@ -47,8 +48,9 @@ func TestCurrentActionFileAccessIsExactAndDirectional(t *testing.T) {
 	outside := filepath.Join(filepath.VolumeName(project)+string(filepath.Separator), "unattached", t.Name())
 	target := filepath.Join(outside, "notes.txt")
 	tc := tools.ToolContext{
-		Roots: []projectroot.RootRef{{ID: "root", Path: project, IsPrimary: true}}, ActiveRootID: "root",
-		ApprovedFileAccess: []hitl.GrantedPathDelta{{Path: grantedpath.Normalize(target)}},
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: project, IsPrimary: true}},
+			ActiveRootID: "root"},
+		Files: tools.InvocationFiles{ApprovedFileAccess: []hitl.GrantedPathDelta{{Path: grantedpath.Normalize(target)}}},
 	}
 	_, err := projectpaths.ResolveRead(t.Context(), nil, tc, target)
 	testutil.FailErr(t, "read approved path", err)
@@ -70,8 +72,9 @@ func TestCurrentActionFileAccessRejectsRetargetedSymlink(t *testing.T) {
 	testutil.FailErr(t, "create reviewed alias", os.Symlink(first, alias))
 	target := filepath.Join(alias, "notes.txt")
 	tc := tools.ToolContext{
-		Roots: []projectroot.RootRef{{ID: "root", Path: project, IsPrimary: true}}, ActiveRootID: "root",
-		ApprovedFileAccess: []hitl.GrantedPathDelta{{Path: grantedpath.Normalize(target), Write: true}},
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: project, IsPrimary: true}},
+			ActiveRootID: "root"},
+		Files: tools.InvocationFiles{ApprovedFileAccess: []hitl.GrantedPathDelta{{Path: grantedpath.Normalize(target), Write: true}}},
 	}
 	testutil.FailErr(t, "remove reviewed alias", os.Remove(alias))
 	testutil.FailErr(t, "retarget alias", os.Symlink(second, alias))

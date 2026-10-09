@@ -288,7 +288,7 @@ func (t *CodeRewriteTool) prepareRewriteFile(ctx context.Context, tctx tools.Too
 // so the open-document lookup and the write door see the same identity.
 func walkFileResolved(tctx tools.ToolContext, walkRoot, relSlash, absPath string) projectpaths.Resolved {
 	root := projectroot.RootRef{Path: walkRoot}
-	for _, candidate := range tctx.Roots {
+	for _, candidate := range tctx.Source.Roots {
 		if filepath.Clean(candidate.Path) == filepath.Clean(walkRoot) {
 			root = candidate
 			break
@@ -428,7 +428,7 @@ func multiUnsupportedNote(paths []string) string {
 }
 
 func publishRewriteBlocked(tctx tools.ToolContext, blocked []rewriteBlocked) {
-	if tctx.Out == nil {
+	if tctx.Effects.Out == nil {
 		return
 	}
 	for _, item := range blocked {
@@ -437,7 +437,7 @@ func publishRewriteBlocked(tctx tools.ToolContext, blocked []rewriteBlocked) {
 			details[key] = value
 		}
 		details["path"] = item.Path
-		tctx.Out.Facts = tctx.Out.Facts.WithFeedback(item.Code, details, &api.FeedbackSubject{Kind: "path", ID: item.Path})
+		tctx.Effects.Out.Facts = tctx.Effects.Out.Facts.WithFeedback(item.Code, details, &api.FeedbackSubject{Kind: "path", ID: item.Path})
 	}
 }
 

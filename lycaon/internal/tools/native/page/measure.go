@@ -62,10 +62,10 @@ func MeasureHandler(pool *browser.Pool, pages *pagesession.Registry, bg *bgproce
 			return "", err
 		}
 		if in.Annotate && len(out.Bytes) > 0 {
-			if tctx.Out == nil {
-				tctx.Out = &tools.ToolInvocationOut{}
+			if tctx.Effects.Out == nil {
+				tctx.Effects.Out = &tools.ToolInvocationOut{}
 			}
-			tctx.Out.Visual = &tools.VisualCapture{
+			tctx.Effects.Out.Visual = &tools.VisualCapture{
 				Mime:      out.Mime,
 				Bytes:     append([]byte(nil), out.Bytes...),
 				Source:    api.VisualArtifactSourceCapture,
@@ -92,13 +92,13 @@ func measurePage(ctx context.Context, mp *browser.MeasurePool, pages *pagesessio
 		req.Width, req.Height = in.Viewport.Width, in.Viewport.Height
 	}
 	if in.ID != "" {
-		entry, err := requirePage(pages, tctx.SessionID, in.ID)
+		entry, err := requirePage(pages, tctx.Identity.SessionID, in.ID)
 		if err != nil {
 			return browser.MeasureResult{}, err
 		}
 		return browser.MeasureHeld(ctx, entry.Held, in.ID, req)
 	}
-	if err := requireCaptureProcess(bg, tctx.SessionID, in.URL, in.ProcessHandle); err != nil {
+	if err := requireCaptureProcess(bg, tctx.Identity.SessionID, in.URL, in.ProcessHandle); err != nil {
 		return browser.MeasureResult{}, err
 	}
 	return mp.Measure(ctx, req)

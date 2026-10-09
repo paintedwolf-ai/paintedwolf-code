@@ -43,7 +43,7 @@ func (e *Boundary) expandPlanOperands(
 	plan commandsurface.Plan,
 	tc *tools.ToolContext,
 ) (map[string]any, error) {
-	stages, addressed, err := commandsurface.ResolveScratchOperands(plan.Stages, tc.SessionScratchDir)
+	stages, addressed, err := commandsurface.ResolveScratchOperands(plan.Stages, tc.Host.SessionScratchDir)
 	if err != nil {
 		if reject := scratchOperandReject(err); reject != nil {
 			return nil, e.Rejections.rejectBeforeInvoke(ctx, tool, profileID, args, reject)
@@ -66,7 +66,7 @@ func (e *Boundary) expandPlanOperands(
 	if !addressed && !expanded {
 		return args, nil
 	}
-	tc.RequestedArgs = args
+	tc.Effects.RequestedArgs = args
 	return withStages(args, stages), nil
 }
 

@@ -22,10 +22,10 @@ func TestResolveReadAllowsHostDataDir(t *testing.T) {
 	testutil.FailErr(t, "write", os.WriteFile(spill, []byte("full"), 0o600))
 
 	tctx := tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Path: ws, IsPrimary: true}},
-		ActiveRootID: "r1",
-		HostDataDir:  host,
-		Agent:        toolprofiles.DefaultToolProfileID,
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Path: ws, IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Host:     tools.InvocationHost{HostDataDir: host},
+		Identity: tools.InvocationIdentity{Agent: toolprofiles.DefaultToolProfileID},
 	}
 	// Absolute spill leftovers resolve (durable seatbelt); DisplayPath is relative.
 	resolved, err := projectpaths.ResolveRead(context.Background(), nil, tctx, spill)
@@ -65,10 +65,10 @@ func TestResolveReadMarksBlobstoreManagedDirsCompressed(t *testing.T) {
 	}
 
 	tctx := tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Path: ws, IsPrimary: true}},
-		ActiveRootID: "r1",
-		HostDataDir:  host,
-		Agent:        toolprofiles.DefaultToolProfileID,
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Path: ws, IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Host:     tools.InvocationHost{HostDataDir: host},
+		Identity: tools.InvocationIdentity{Agent: toolprofiles.DefaultToolProfileID},
 	}
 
 	cases := []struct {
@@ -97,10 +97,10 @@ func TestResolveReadRejectsNonSpillUnderHostDataDir(t *testing.T) {
 	testutil.FailErr(t, "write", os.WriteFile(evidence, []byte("{}"), 0o600))
 
 	tctx := tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Path: ws, IsPrimary: true}},
-		ActiveRootID: "r1",
-		HostDataDir:  host,
-		Agent:        toolprofiles.DefaultToolProfileID,
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Path: ws, IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Host:     tools.InvocationHost{HostDataDir: host},
+		Identity: tools.InvocationIdentity{Agent: toolprofiles.DefaultToolProfileID},
 	}
 	_, err := projectpaths.ResolveRead(context.Background(), nil, tctx, evidence)
 	if err == nil {
@@ -112,10 +112,10 @@ func TestResolveReadRejectsAbsoluteOutsideHostAndWorkspace(t *testing.T) {
 	ws := t.TempDir()
 	host := t.TempDir()
 	tctx := tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Path: ws, IsPrimary: true}},
-		ActiveRootID: "r1",
-		HostDataDir:  host,
-		Agent:        toolprofiles.DefaultToolProfileID,
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Path: ws, IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Host:     tools.InvocationHost{HostDataDir: host},
+		Identity: tools.InvocationIdentity{Agent: toolprofiles.DefaultToolProfileID},
 	}
 	outside := filepath.Join(filepath.VolumeName(ws)+string(filepath.Separator), "unattached", t.Name(), "secret.txt")
 	_, err := projectpaths.ResolveRead(context.Background(), nil, tctx, outside)
@@ -140,10 +140,10 @@ func TestResolveMisplacedSpillFindsTheReferencedSpill(t *testing.T) {
 	host := t.TempDir()
 	rel := tooloutput.ToolOutputSpillRelPath("observation")
 	tctx := tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Path: t.TempDir(), IsPrimary: true}},
-		ActiveRootID: "r1",
-		HostDataDir:  host,
-		Agent:        toolprofiles.DefaultToolProfileID,
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Path: t.TempDir(), IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Host:     tools.InvocationHost{HostDataDir: host},
+		Identity: tools.InvocationIdentity{Agent: toolprofiles.DefaultToolProfileID},
 	}
 	resolved, ok := projectpaths.ResolveMisplacedSpill(tctx, "@scratch/"+rel)
 	if !ok || resolved.DisplayPath != rel || resolved.Abs != filepath.Join(host, filepath.FromSlash(rel)) {

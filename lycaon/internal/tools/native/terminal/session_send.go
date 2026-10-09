@@ -44,10 +44,10 @@ func SendHandler(bg *bgprocess.Registry) tools.ToolHandler {
 		if err != nil {
 			return "", err
 		}
-		if err := requireTerminalRunning(bg, tctx.SessionID, in.ID); err != nil {
+		if err := requireTerminalRunning(bg, tctx.Identity.SessionID, in.ID); err != nil {
 			return "", err
 		}
-		subject, _ := bg.CommandLine(tctx.SessionID, in.ID)
+		subject, _ := bg.CommandLine(tctx.Identity.SessionID, in.ID)
 		tctx.SetDisplaySubject(subject)
 		payload, err := ptyinput.ExpandControlInput(in.Input)
 		if err != nil {
@@ -56,15 +56,15 @@ func SendHandler(bg *bgprocess.Registry) tools.ToolHandler {
 				Data: map[string]any{"reason": err.Error()},
 			}
 		}
-		if err := tctx.Secrets.HandOff(ctx, nil); err != nil {
+		if err := tctx.Effects.Secrets.HandOff(ctx, nil); err != nil {
 			return "", toolrejection.HeldHandOffReject("terminal_send", err)
 		}
-		if err := bg.WritePTY(tctx.SessionID, in.ID, payload); err != nil {
+		if err := bg.WritePTY(tctx.Identity.SessionID, in.ID, payload); err != nil {
 			return "", mapTerminalLifecycleReject(err, in.ID)
 		}
-		running := bg.RequireRunning(tctx.SessionID, in.ID) == nil
+		running := bg.RequireRunning(tctx.Identity.SessionID, in.ID) == nil
 		outPayload := SendResult{ID: in.ID, Running: running, Observe: in.Observe}
-		if report, reportErr := bg.PTYReport(tctx.SessionID, in.ID); reportErr == nil {
+		if report, reportErr := bg.PTYReport(tctx.Identity.SessionID, in.ID); reportErr == nil {
 			outPayload.Report = report
 		}
 		switch in.Observe {

@@ -112,7 +112,7 @@ func TestCodeRewriteMultiFilePartialWriteScopeBlock(t *testing.T) {
 	}})
 	tool := &CodeRewriteTool{Boundary: boundary}
 	tctx := nativefixture.Context(tmpDir)
-	tctx.Out = &tools.ToolInvocationOut{}
+	tctx.Effects.Out = &tools.ToolInvocationOut{}
 	out, err := tool.Run(context.Background(), map[string]any{
 		"paths":     []any{"."},
 		"recursive": true,
@@ -128,8 +128,8 @@ func TestCodeRewriteMultiFilePartialWriteScopeBlock(t *testing.T) {
 	if len(result.Blocked) != 1 || result.Blocked[0].Details["patterns_list"] != "- `allowed/**`" {
 		t.Fatalf("partial rewrite lost scope details: %+v", result.Blocked)
 	}
-	if !tctx.Out.Facts.Succeeded() || len(tctx.Out.Facts.Feedback) != 1 || tctx.Out.Facts.Feedback[0].Subject.ID != "denied/b.go" {
-		t.Fatalf("partial result became a whole-call rejection or lost its subject: %+v", tctx.Out.Facts)
+	if !tctx.Effects.Out.Facts.Succeeded() || len(tctx.Effects.Out.Facts.Feedback) != 1 || tctx.Effects.Out.Facts.Feedback[0].Subject.ID != "denied/b.go" {
+		t.Fatalf("partial result became a whole-call rejection or lost its subject: %+v", tctx.Effects.Out.Facts)
 	}
 
 	got, err := os.ReadFile(filepath.Join(tmpDir, "allowed/a.go"))

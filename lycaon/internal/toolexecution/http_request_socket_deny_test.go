@@ -128,8 +128,14 @@ func TestHTTPRequestUnixSocketDenialRecordsNoGrantAndRetryAsksAgain(t *testing.T
 	defer cancel()
 	args := map[string]any{"url": "http://docker.invalid/info", "unix_socket": "daemon.sock"}
 	for attempt, call := range []string{"call-1", "call-2"} {
-		tc := tools.ToolContext{Roots: []projectroot.RootRef{{ID: "root", Path: dir, IsPrimary: true}}, ActiveRootID: "root",
-			SessionID: "task", ToolCallID: call, ProjectID: "project", Agent: "implement"}
+		tc := tools.ToolContext{
+			Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: dir, IsPrimary: true}},
+				ActiveRootID: "root"},
+			Identity: tools.InvocationIdentity{SessionID: "task",
+				ToolCallID: call,
+				ProjectID:  "project",
+				Agent:      "implement"},
+		}
 		_, err := executor.Invoke(ctx, "http_request", args, tc)
 		reject := toolrejection.AsToolReject(err)
 		if reject == nil || reject.Code != isolation.CodeSocketPathDenied {

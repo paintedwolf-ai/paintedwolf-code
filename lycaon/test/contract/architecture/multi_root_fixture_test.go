@@ -106,13 +106,13 @@ func newMultiRootFixture(t *testing.T) multiRootFixture {
 
 func (f multiRootFixture) tctx(sessionID string) tools.ToolContext {
 	return tools.ToolContext{
-		ProjectID:          "proj-1",
-		SessionID:          sessionID,
-		Roots:              f.roots,
-		ActiveRootID:       f.activeID,
-		Agent:              "implement",
-		RepoFileCount:      100,
-		RepoFileCountKnown: true,
+		Identity: tools.InvocationIdentity{ProjectID: "proj-1",
+			SessionID: sessionID,
+			Agent:     "implement"},
+		Source: tools.InvocationSource{Roots: f.roots,
+			ActiveRootID:       f.activeID,
+			RepoFileCount:      100,
+			RepoFileCountKnown: true},
 	}
 }
 

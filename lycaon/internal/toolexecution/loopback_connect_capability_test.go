@@ -48,9 +48,11 @@ func TestLoopbackConnectRequestRequiresApprovalBroker(t *testing.T) {
 	args := map[string]any{"capability_request": map[string]any{
 		"loopback_connect": map[string]any{"ports": []any{float64(8000)}},
 	}}
-	tc := tools.ToolContext{Invocation: tools.Invocation{Contract: toolcontract.Contract{
-		Capabilities: toolcontract.CapabilityLoopbackConnect,
-	}}}
+	tc := tools.ToolContext{
+		Invocation: tools.Invocation{Contract: toolcontract.Contract{
+			Capabilities: toolcontract.CapabilityLoopbackConnect,
+		}},
+	}
 
 	result, err := executor.Capabilities.preflightLoopbackConnectCapability(context.Background(), "command", args, tc)
 	var reject *toolrejection.ToolReject

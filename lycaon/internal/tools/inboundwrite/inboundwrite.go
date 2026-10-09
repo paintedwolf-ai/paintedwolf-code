@@ -146,15 +146,15 @@ func DestDenied(rel string) bool {
 // Worker writes are recorded against the private branch; the investigate
 // surface writes into the live tree and records nothing.
 func beforeWorkerWrite(ctx context.Context, tctx tools.ToolContext, relPath string) error {
-	if strings.TrimSpace(tctx.WorkerJobID) == "" || tctx.WorkerCoord == nil || tctx.TurnSurfaceID == toolcontract.SurfaceImplementInvestigate {
+	if strings.TrimSpace(tctx.Identity.WorkerJobID) == "" || tctx.Source.WorkerCoord == nil || tctx.Turn.TurnSurfaceID == toolcontract.SurfaceImplementInvestigate {
 		return nil
 	}
-	return tctx.WorkerCoord.BeforeWorkerWrite(ctx, tctx, relPath)
+	return tctx.Source.WorkerCoord.BeforeWorkerWrite(ctx, tctx, relPath)
 }
 
 func afterWorkerWrite(ctx context.Context, tctx tools.ToolContext, relPath string) {
-	if strings.TrimSpace(tctx.WorkerJobID) == "" || tctx.WorkerCoord == nil || tctx.TurnSurfaceID == toolcontract.SurfaceImplementInvestigate {
+	if strings.TrimSpace(tctx.Identity.WorkerJobID) == "" || tctx.Source.WorkerCoord == nil || tctx.Turn.TurnSurfaceID == toolcontract.SurfaceImplementInvestigate {
 		return
 	}
-	tctx.WorkerCoord.AfterWorkerWrite(ctx, tctx, relPath)
+	tctx.Source.WorkerCoord.AfterWorkerWrite(ctx, tctx, relPath)
 }

@@ -147,8 +147,8 @@ func writeProvenanceFile(t *testing.T, dir, name, content string) (abs, sha stri
 
 func provenanceCtx(dir string, ledger sourceledger.Recorder) tools.ToolContext {
 	tctx := nativefixture.Context(dir)
-	tctx.ProjectID = "p1"
-	tctx.SourceLedger = ledger
+	tctx.Identity.ProjectID = "p1"
+	tctx.Source.SourceLedger = ledger
 	return tctx
 }
 
@@ -252,7 +252,7 @@ func TestReadReceiptWithoutLedgerMakesNoClaim(t *testing.T) {
 	writeProvenanceFile(t, dir, "main.go", "package main\n")
 	read := &surveytools.ReadTool{Boundary: nativefixture.Boundary(t)}
 	tctx := nativefixture.Context(dir)
-	tctx.ProjectID = "p1"
+	tctx.Identity.ProjectID = "p1"
 	out, err := read.Run(context.Background(), map[string]any{"path": "main.go"}, tctx)
 	testutil.FailErr(t, "read", err)
 	if source := receiptSource(t, out); source != nil {
@@ -340,9 +340,9 @@ func TestReadSourceStampPreservesWorkerDestination(t *testing.T) {
 	dir := t.TempDir()
 	abs, sha := writeProvenanceFile(t, dir, "a #b.go", "file")
 	ctx := provenanceCtx(dir, &fakeSourceLedger{})
-	ctx.WorkerJobID = "worker-1"
-	ctx.WorkerBranchRoot = dir
-	ctx.SourceWorkspaceKind = api.SourceWorkspaceKindWorker
+	ctx.Identity.WorkerJobID = "worker-1"
+	ctx.Source.WorkerBranchRoot = dir
+	ctx.Source.SourceWorkspaceKind = api.SourceWorkspaceKindWorker
 	stamp := sourceview.ReadStamp(t.Context(), ctx, abs, sha)
 	if stamp == nil || stamp.Navigation != "source://r1/a%20%23b.go?job_id=worker-1" {
 		t.Fatalf("worker source stamp=%+v", stamp)

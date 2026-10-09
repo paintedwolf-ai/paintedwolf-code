@@ -16,10 +16,10 @@ func TestBeforeWorkerWriteRecordsInvestigateSurface(t *testing.T) {
 	mgr.workerTouches = touches
 
 	tctx := tools.ToolContext{
-		WorkerJobID:      "job-1",
-		TurnSurfaceID:    toolcontract.SurfaceImplementInvestigate,
-		HandoffSessionID: "parent",
-		HandoffAgentID:   "job-1",
+		Identity: tools.InvocationIdentity{WorkerJobID: "job-1",
+			HandoffSessionID: "parent",
+			HandoffAgentID:   "job-1"},
+		Turn: tools.InvocationTurn{TurnSurfaceID: toolcontract.SurfaceImplementInvestigate},
 	}
 	if err := mgr.BeforeWorkerWrite(context.Background(), tctx, "src/foo.go"); err != nil {
 		t.Fatalf("BeforeWorkerWrite: %v", err)
@@ -35,10 +35,10 @@ func TestBeforeWorkerWriteRecordsWorkerTouchOnOrchestrateSurface(t *testing.T) {
 	mgr.workerTouches = touches
 
 	tctx := tools.ToolContext{
-		WorkerJobID:      "job-1",
-		TurnSurfaceID:    "implement_dispatch",
-		HandoffSessionID: "parent",
-		HandoffAgentID:   "job-1",
+		Identity: tools.InvocationIdentity{WorkerJobID: "job-1",
+			HandoffSessionID: "parent",
+			HandoffAgentID:   "job-1"},
+		Turn: tools.InvocationTurn{TurnSurfaceID: "implement_dispatch"},
 	}
 	if err := mgr.BeforeWorkerWrite(context.Background(), tctx, "src/foo.go"); err != nil {
 		t.Fatalf("BeforeWorkerWrite: %v", err)

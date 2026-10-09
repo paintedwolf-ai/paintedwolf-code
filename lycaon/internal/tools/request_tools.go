@@ -73,15 +73,15 @@ func (t requestTools) run(ctx context.Context, args map[string]any, tctx ToolCon
 	}
 	browsing := cursor != ""
 	started := time.Now()
-	profileID := strings.TrimSpace(tctx.Agent)
+	profileID := strings.TrimSpace(tctx.Identity.Agent)
 	if profileID == "" {
 		profileID = toolprofiles.DefaultToolProfileID
 	}
-	plan := tctx.TurnToolPlan
-	constrained := strings.TrimSpace(tctx.TurnSurfaceID) != "" || plan.Compiled()
-	requestable := liveRequestableMetas(t.deps, t.reg, profileID, tctx.ToolAccess, plan, constrained)
+	plan := tctx.Turn.TurnToolPlan
+	constrained := strings.TrimSpace(tctx.Turn.TurnSurfaceID) != "" || plan.Compiled()
+	requestable := liveRequestableMetas(t.deps, t.reg, profileID, tctx.Turn.ToolAccess, plan, constrained)
 	cards := make([]turnload.ToolCard, 0, len(requestable))
-	active := t.deps.Activation.Active(tctx.SessionID)
+	active := t.deps.Activation.Active(tctx.Identity.SessionID)
 	for _, meta := range requestable {
 		if active[meta.Name] {
 			continue
@@ -131,7 +131,7 @@ func (t requestTools) run(ctx context.Context, args map[string]any, tctx ToolCon
 		return "", err
 	}
 	if !browsing && len(result.Loaded)+len(result.AlreadyLoaded) > 0 {
-		t.deps.Activation.Activate(tctx.SessionID, result.Loaded, need)
+		t.deps.Activation.Activate(tctx.Identity.SessionID, result.Loaded, need)
 		result.Note = "Loaded schemas are on the next model call; this turn continues automatically."
 	}
 	if t.deps.Record != nil {
@@ -162,7 +162,7 @@ func (t requestTools) activationResult(ctx context.Context, tctx ToolContext, pr
 		registered = append(registered, turnload.ToolCard{Name: meta.Name})
 	}
 	names = append(names, turnload.ExactNames(outcome.Need, registered)...)
-	active := t.deps.Activation.Active(tctx.SessionID)
+	active := t.deps.Activation.Active(tctx.Identity.SessionID)
 	result := turnload.RequestToolsResult{Need: outcome.Need}
 	seen := make(map[string]bool, len(names))
 	for _, name := range names {
@@ -182,9 +182,9 @@ func (t requestTools) activationResult(ctx context.Context, tctx ToolContext, pr
 			continue
 		case active[name]:
 			result.AlreadyLoaded = append(result.AlreadyLoaded, name)
-		case t.deps.Boundary.ToolDeferred(profileID, name, tctx.ToolAccess):
+		case t.deps.Boundary.ToolDeferred(profileID, name, tctx.Turn.ToolAccess):
 			result.Loaded = append(result.Loaded, name)
-		case t.deps.Boundary.AssertToolAllowed(ctx, profileID, name, tctx.ToolAccess) == nil:
+		case t.deps.Boundary.AssertToolAllowed(ctx, profileID, name, tctx.Turn.ToolAccess) == nil:
 			result.AlreadyLoaded = append(result.AlreadyLoaded, name)
 		}
 	}

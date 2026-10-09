@@ -197,7 +197,7 @@ func TestMoveToolRejectsCrossRootRename(t *testing.T) {
 		testutil.FailErr(t, "write source", err)
 	}
 	tctx := nativefixture.Context(primary)
-	tctx.Roots = append(tctx.Roots, projectroot.RootRef{ID: "r2", Label: "other", Path: other})
+	tctx.Source.Roots = append(tctx.Source.Roots, projectroot.RootRef{ID: "r2", Label: "other", Path: other})
 	tool := &MoveTool{Boundary: nativefixture.Boundary(t)}
 	_, err := tool.Run(context.Background(), map[string]any{
 		"moves": []any{map[string]any{"from": "old.go", "to": "@other/new.go"}},

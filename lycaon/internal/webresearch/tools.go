@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/toolrejection"
-	"net/url"
 	"path"
 	"strings"
 	"time"
@@ -110,7 +109,7 @@ func RegisterToolsWithFactory(reg *tools.DefaultRegistry, deps ToolDeps, getFact
 		contest, _ := args["unredact"].(string)
 		ctx = withToolEgressGate(ctx, deps, tctx, "web_search", DeclaredEndpointHosts(settings, deps.Registry), contest,
 			webSearchDestination(settings, deps.Registry))
-		defer confine.ForgetEgressAction(tctx.SessionID, tctx.ToolCallID)
+		defer confine.ForgetEgressAction(tctx.Identity.SessionID, tctx.Identity.ToolCallID)
 		var discoverer DirectDiscoverer
 		if getFactory != nil {
 			if factory := getFactory(); factory != nil {
@@ -128,7 +127,7 @@ func RegisterToolsWithFactory(reg *tools.DefaultRegistry, deps ToolDeps, getFact
 			Registry:   deps.Registry,
 			Index:      deps.Index,
 			Rerank:     deps.Rerank.WithLedger(rerankLedger),
-			SessionID:  tctx.SessionID,
+			SessionID:  tctx.Identity.SessionID,
 		})
 		result.Rerank = rerankLedger.Receipt()
 		if host, denied := egressgate.Denied(ctx); denied {
@@ -169,15 +168,15 @@ func RegisterToolsWithFactory(reg *tools.DefaultRegistry, deps ToolDeps, getFact
 		underfilled := directPart && maxR > 0 && strongHits*2 < maxR
 		shouldWarm := result.OK && (len(hitURLs) > 0 || len(result.residualURLs) > 0 || underfilled)
 		if deps.SearchWarmHook != nil && shouldWarm {
-			deps.SearchWarmHook(ctx, tctx.SessionID, tctx.ToolCallID, strings.TrimSpace(query), projectDirFrom(tctx), hitURLs, result.residualURLs, strongHits, maxR, directPart)
+			deps.SearchWarmHook(ctx, tctx.Identity.SessionID, tctx.Identity.ToolCallID, strings.TrimSpace(query), projectDirFrom(tctx), hitURLs, result.residualURLs, strongHits, maxR, directPart)
 		}
 		out, err := surveyjson.MarshalIndent(result, "", "  ")
 		if err != nil {
 			return "", err
 		}
-		if tctx.Out != nil {
+		if tctx.Effects.Out != nil {
 			// The query identifies a search result spanning multiple hosts.
-			tctx.Out.RetrievedFrom = strings.Join(strings.Fields(query), " ")
+			tctx.Effects.Out.RetrievedFrom = strings.Join(strings.Fields(query), " ")
 		}
 		return appendPeriodHint(appendSecretReceipt(ctx, string(out)), query, period), nil
 	}); err != nil {
@@ -193,7 +192,7 @@ func RegisterToolsWithFactory(reg *tools.DefaultRegistry, deps ToolDeps, getFact
 		// Model-supplied destinations retain per-host approval checks.
 		contest, _ := args["unredact"].(string)
 		ctx = withToolEgressGate(ctx, deps, tctx, "fetch_url", nil, contest, screenDestination{})
-		defer confine.ForgetEgressAction(tctx.SessionID, tctx.ToolCallID)
+		defer confine.ForgetEgressAction(tctx.Identity.SessionID, tctx.Identity.ToolCallID)
 		out, fetched, err := fetchURLTool(ctx, fetchURLToolArgs{
 			URL:          rawURL,
 			Mode:         mode,
@@ -220,7 +219,7 @@ func RegisterToolsWithFactory(reg *tools.DefaultRegistry, deps ToolDeps, getFact
 			return "", secretScreenRejectFromErr(denied)
 		}
 		if deps.FetchWarmHook != nil && fetched != nil {
-			deps.FetchWarmHook(ctx, tctx.SessionID, tctx.ToolCallID, fetched.URL, fetched.Title, projectDirFrom(tctx))
+			deps.FetchWarmHook(ctx, tctx.Identity.SessionID, tctx.Identity.ToolCallID, fetched.URL, fetched.Title, projectDirFrom(tctx))
 		}
 		return appendSecretReceipt(ctx, out), nil
 	}); err != nil {
@@ -232,19 +231,19 @@ func RegisterToolsWithFactory(reg *tools.DefaultRegistry, deps ToolDeps, getFact
 // withToolEgressGate attaches declared destinations and secret fanout.
 func withToolEgressGate(ctx context.Context, deps ToolDeps, tctx tools.ToolContext, image string, declaredHosts []string, contestToken string, fanout screenDestination) context.Context {
 	attr := secretmatch.AskAttribution{
-		SessionID:     tctx.SessionID,
+		SessionID:     tctx.Identity.SessionID,
 		RootSessionID: tctx.ChatSessionID(),
-		ProjectID:     tctx.ProjectID,
+		ProjectID:     tctx.Identity.ProjectID,
 		ProjectDir:    tctx.ActiveRootPath(),
-		ToolCallID:    tctx.ToolCallID,
+		ToolCallID:    tctx.Identity.ToolCallID,
 	}
 	ctx = secretmatch.WithAskAttribution(ctx, attr)
 	ctx = egressgate.WithAttribution(ctx, confine.EgressCommand{
-		SessionID:     tctx.SessionID,
+		SessionID:     tctx.Identity.SessionID,
 		RootSessionID: tctx.ChatSessionID(),
-		ProjectID:     tctx.ProjectID,
+		ProjectID:     tctx.Identity.ProjectID,
 		ProjectDir:    tctx.ActiveRootPath(),
-		ToolCallID:    tctx.ToolCallID,
+		ToolCallID:    tctx.Identity.ToolCallID,
 		Image:         image,
 		DeclaredHosts: declaredHosts,
 	})
@@ -427,113 +426,6 @@ func fetchURLTextTool(ctx context.Context, a fetchURLToolArgs, rawURL string) (s
 	return FormatFetchResult(res, outline, hit), fetched, nil
 }
 
-func fetchURLRawTool(ctx context.Context, a fetchURLToolArgs, rawURL, dest string) (string, *FetchURLResult, error) {
-	// Raw text can reuse cached bytes; binary assets are fetched directly.
-	if dest == "" {
-		if entry, hit := tooloutput.ReadFetchCache("raw:" + rawURL); hit {
-			res := fetchResultFromCache(entry)
-			if a.Offset > 0 && a.Limit > 0 {
-				noteRetrievedFrom(a.Tctx, res.URL)
-				return FormatFetchRange(res.URL, res.Text, a.Offset, a.Limit), nil, nil
-			}
-			var outline fileoutline.Result
-			if len(res.Text) > inlineFullMaxBytes {
-				outline = fileoutline.AnalyzeText(ctx, "page."+entry.Ext, []byte(res.Text))
-			}
-			noteRetrievedFrom(a.Tctx, res.URL)
-			return FormatFetchResult(res, outline, true), nil, nil
-		}
-	}
-
-	release, err := acquireFetchBudget(ctx, a, rawURL)
-	if err != nil {
-		return "", nil, err
-	}
-	live, err := FetchRaw(ctx, FetchOptions{URL: rawURL})
-	release()
-	if err != nil {
-		return "", nil, err
-	}
-
-	urlPath := ""
-	if u, err := url.Parse(live.URL); err == nil {
-		urlPath = u.Path
-	}
-	class, reason := classifyFetchMIME(live.ContentType, urlPath, live.Body)
-	switch class {
-	case mimeUnsupported:
-		return "", nil, &toolrejection.ToolReject{
-			Code: "FETCH_URL_TYPE_UNSUPPORTED",
-			Data: map[string]any{
-				"content_type": mediaTypeOnly(live.ContentType),
-				"reason":       reason,
-			},
-		}
-	case mimeBinary:
-		if dest == "" {
-			if isImageMIME(live.ContentType) || isImageExtension(urlPath) {
-				return handleFetchVisual(ctx, a, live)
-			}
-			return "", nil, &toolrejection.ToolReject{
-				Code: "FETCH_URL_DEST_REQUIRED",
-				Data: map[string]any{"content_type": mediaTypeOnly(live.ContentType)},
-			}
-		}
-		written, n, werr := writeFetchAsset(ctx, a.Boundary, a.Tctx, dest, live.Body)
-		if werr != nil {
-			return "", nil, werr
-		}
-		out, err := formatAssetReceipt(live, written, n)
-		return out, nil, err
-	default:
-		if (isImageMIME(live.ContentType) || strings.HasSuffix(strings.ToLower(urlPath), ".svg")) && dest == "" {
-			return handleFetchVisual(ctx, a, live)
-		}
-		text := string(live.Body)
-		res := FetchURLResult{
-			URL:         live.URL,
-			Status:      live.Status,
-			ContentType: live.ContentType,
-			Text:        text,
-			Markdown:    false,
-		}
-		if dest != "" {
-			written, n, werr := writeFetchAsset(ctx, a.Boundary, a.Tctx, dest, live.Body)
-			if werr != nil {
-				return "", nil, werr
-			}
-			receipt, err := formatAssetReceipt(live, written, n)
-			if err != nil {
-				return "", nil, err
-			}
-			// Prefetch still needs the body pageable — cache under raw: key and
-			// append a short write notice above the text view.
-			_ = tooloutput.WriteFetchCache("raw:"+rawURL, rawResultCacheEntry(live, text))
-			if a.Offset > 0 && a.Limit > 0 {
-				noteRetrievedFrom(a.Tctx, res.URL)
-				return receipt + "\n\n" + FormatFetchRange(res.URL, res.Text, a.Offset, a.Limit), &res, nil
-			}
-			var outline fileoutline.Result
-			if len(res.Text) > inlineFullMaxBytes {
-				outline = fileoutline.AnalyzeText(ctx, "page."+fetchRawCacheExt(live), []byte(res.Text))
-			}
-			noteRetrievedFrom(a.Tctx, res.URL)
-			return receipt + "\n\n" + FormatFetchResult(res, outline, false), &res, nil
-		}
-		_ = tooloutput.WriteFetchCache("raw:"+rawURL, rawResultCacheEntry(live, text))
-		ingestFetchedPage(ctx, a.Index, res)
-		if a.Offset > 0 && a.Limit > 0 {
-			return FormatFetchRange(res.URL, res.Text, a.Offset, a.Limit), &res, nil
-		}
-		var outline fileoutline.Result
-		if len(res.Text) > inlineFullMaxBytes {
-			outline = fileoutline.AnalyzeText(ctx, "page."+fetchRawCacheExt(live), []byte(res.Text))
-		}
-		noteRetrievedFrom(a.Tctx, res.URL)
-		return FormatFetchResult(res, outline, false), &res, nil
-	}
-}
-
 func isImageMIME(contentType string) bool {
 	ct := strings.ToLower(strings.TrimSpace(strings.Split(contentType, ";")[0]))
 	return strings.HasPrefix(ct, "image/") || ct == "image/svg+xml"
@@ -572,10 +464,10 @@ func handleFetchVisual(ctx context.Context, a fetchURLToolArgs, live FetchRawRes
 	perceive := true
 	if a.VisualScreen != nil {
 		outcome, err := a.VisualScreen.Screen(ctx, visualscreen.VisualScreenInput{
-			SessionID:     a.Tctx.SessionID,
-			ProjectID:     a.Tctx.ProjectID,
+			SessionID:     a.Tctx.Identity.SessionID,
+			ProjectID:     a.Tctx.Identity.ProjectID,
 			ToolName:      "fetch_url",
-			ToolCallID:    a.Tctx.ToolCallID,
+			ToolCallID:    a.Tctx.Identity.ToolCallID,
 			Mime:          ct,
 			RawBytes:      live.Body,
 			PublicInbound: true,
@@ -608,10 +500,10 @@ func handleFetchVisual(ctx context.Context, a fetchURLToolArgs, live FetchRawRes
 	}
 
 	if perceive {
-		if a.Tctx.Out == nil {
-			a.Tctx.Out = &tools.ToolInvocationOut{}
+		if a.Tctx.Effects.Out == nil {
+			a.Tctx.Effects.Out = &tools.ToolInvocationOut{}
 		}
-		a.Tctx.Out.Visual = &tools.VisualCapture{
+		a.Tctx.Effects.Out.Visual = &tools.VisualCapture{
 			Mime:      perceiveMime,
 			Bytes:     append([]byte(nil), perceiveBytes...),
 			Source:    api.VisualArtifactSourceFetch,
@@ -642,79 +534,6 @@ func fetchImageReject(err error, data map[string]any) error {
 		return &toolrejection.ToolReject{Code: "IMAGE_CORRUPTED", Data: out}
 	}
 	return err
-}
-
-func fetchResultCacheEntry(res FetchURLResult, ext string) tooloutput.FetchCacheEntry {
-	return tooloutput.FetchCacheEntry{
-		URL:         res.URL,
-		Status:      res.Status,
-		ContentType: res.ContentType,
-		Title:       res.Title,
-		Body:        res.Text,
-		Ext:         ext,
-		Markdown:    res.Markdown,
-	}
-}
-
-func rawResultCacheEntry(res FetchRawResult, body string) tooloutput.FetchCacheEntry {
-	return tooloutput.FetchCacheEntry{
-		URL:         res.URL,
-		Status:      res.Status,
-		ContentType: res.ContentType,
-		Body:        body,
-		Ext:         fetchRawCacheExt(res),
-	}
-}
-
-func fetchResultFromCache(entry tooloutput.FetchCacheEntry) FetchURLResult {
-	return FetchURLResult{
-		URL:         entry.URL,
-		Status:      entry.Status,
-		ContentType: entry.ContentType,
-		Title:       entry.Title,
-		Text:        entry.Body,
-		Markdown:    entry.Markdown,
-	}
-}
-
-func fetchCacheExt(res FetchURLResult) string {
-	if res.Markdown {
-		return "md"
-	}
-	// The declared media type selects the outline grammar for extensionless URLs.
-	if jsonMediaType(res.ContentType) {
-		return "json"
-	}
-	if u, err := url.Parse(res.URL); err == nil {
-		if e := path.Ext(u.Path); len(e) > 1 {
-			return e[1:]
-		}
-	}
-	return "txt"
-}
-
-func fetchRawCacheExt(res FetchRawResult) string {
-	if u, err := url.Parse(res.URL); err == nil {
-		if e := path.Ext(u.Path); len(e) > 1 {
-			return e[1:]
-		}
-	}
-	ct := mediaTypeOnly(res.ContentType)
-	switch {
-	case strings.Contains(ct, "javascript"):
-		return "js"
-	case strings.Contains(ct, "json"):
-		return "json"
-	case strings.Contains(ct, "css"):
-		return "css"
-	case strings.Contains(ct, "svg"):
-		return "svg"
-	case strings.Contains(ct, "html"):
-		return "html"
-	case strings.Contains(ct, "xml"):
-		return "xml"
-	}
-	return "txt"
 }
 
 func mapFetchToolErr(err error) error {
@@ -770,14 +589,14 @@ func acquireFetchBudget(ctx context.Context, a fetchURLToolArgs, rawURL string) 
 	if b == nil {
 		b = GlobalFetchBudget()
 	}
-	return b.Acquire(ctx, a.Tctx.SessionID, rawURL)
+	return b.Acquire(ctx, a.Tctx.Identity.SessionID, rawURL)
 }
 
 func projectDirFrom(tctx tools.ToolContext) string {
-	if root, err := projectroot.ActiveRoot(tctx.Roots, tctx.ActiveRootID); err == nil {
+	if root, err := projectroot.ActiveRoot(tctx.Source.Roots, tctx.Source.ActiveRootID); err == nil {
 		return root.Path
 	}
-	if root, err := projectroot.PrimaryRoot(tctx.Roots); err == nil {
+	if root, err := projectroot.PrimaryRoot(tctx.Source.Roots); err == nil {
 		return root.Path
 	}
 	return ""
@@ -785,10 +604,10 @@ func projectDirFrom(tctx tools.ToolContext) string {
 
 // noteRetrievedFrom records source attribution for live and cached results.
 func noteRetrievedFrom(tctx tools.ToolContext, observedURL string) {
-	if tctx.Out == nil {
+	if tctx.Effects.Out == nil {
 		return
 	}
 	if host := fetchProvenanceHost(observedURL); host != "" && host != "unknown" {
-		tctx.Out.RetrievedFrom = host
+		tctx.Effects.Out.RetrievedFrom = host
 	}
 }

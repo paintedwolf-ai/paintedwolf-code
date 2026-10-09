@@ -34,9 +34,9 @@ func (s *workerCoordSpy) EnsureWorkerBranch(_ context.Context, tctx tools.ToolCo
 func TestWorkerMutationHooksRunOnInvestigateSurface(t *testing.T) {
 	spy := &workerCoordSpy{}
 	tctx := tools.ToolContext{
-		WorkerJobID:   "job-1",
-		TurnSurfaceID: toolcontract.SurfaceImplementInvestigate,
-		WorkerCoord:   spy,
+		Identity: tools.InvocationIdentity{WorkerJobID: "job-1"},
+		Turn:     tools.InvocationTurn{TurnSurfaceID: toolcontract.SurfaceImplementInvestigate},
+		Source:   tools.InvocationSource{WorkerCoord: spy},
 	}
 	if err := beforeWorkerMutation(context.Background(), tctx, "src/foo.go"); err != nil {
 		t.Fatalf("beforeWorkerMutation: %v", err)
@@ -50,8 +50,8 @@ func TestWorkerMutationHooksRunOnInvestigateSurface(t *testing.T) {
 func TestSkipWorkerMutationHooksWithoutWorkerJobID(t *testing.T) {
 	spy := &workerCoordSpy{}
 	tctx := tools.ToolContext{
-		TurnSurfaceID: "implement_dispatch",
-		WorkerCoord:   spy,
+		Turn:   tools.InvocationTurn{TurnSurfaceID: "implement_dispatch"},
+		Source: tools.InvocationSource{WorkerCoord: spy},
 	}
 	if err := beforeWorkerMutation(context.Background(), tctx, "src/foo.go"); err != nil {
 		t.Fatalf("beforeWorkerMutation: %v", err)
@@ -65,9 +65,9 @@ func TestSkipWorkerMutationHooksWithoutWorkerJobID(t *testing.T) {
 func TestWorkerMutationHooksRunForWorkerJob(t *testing.T) {
 	spy := &workerCoordSpy{}
 	tctx := tools.ToolContext{
-		WorkerJobID:   "job-1",
-		TurnSurfaceID: "implement_dispatch",
-		WorkerCoord:   spy,
+		Identity: tools.InvocationIdentity{WorkerJobID: "job-1"},
+		Turn:     tools.InvocationTurn{TurnSurfaceID: "implement_dispatch"},
+		Source:   tools.InvocationSource{WorkerCoord: spy},
 	}
 	if err := beforeWorkerMutation(context.Background(), tctx, "src/foo.go"); err != nil {
 		t.Fatalf("beforeWorkerMutation: %v", err)

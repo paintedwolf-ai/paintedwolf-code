@@ -31,24 +31,24 @@ func (e *Capabilities) preflightLoopbackConnectCapability(
 	}
 	capReq, reject := capabilityrequest.ParseCapabilityRequest(args)
 	if reject != nil {
-		return nil, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Agent, args, reject)
+		return nil, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Identity.Agent, args, reject)
 	}
 	if capReq == nil || capReq.LoopbackConnect == nil {
 		return nil, nil
 	}
 	ports := append([]uint16(nil), capReq.LoopbackConnect.Ports...)
-	if tc.Secrets.LocalConnectionsCovered(ports) {
+	if tc.Effects.Secrets.LocalConnectionsCovered(ports) {
 		return &tools.LoopbackConnectResult{Authorized: true, Ports: ports}, nil
 	}
 	// Direct IP already carries local outbound authority.
-	if tc.DirectIPRequested {
+	if tc.Direct.DirectIPRequested {
 		return &tools.LoopbackConnectResult{Authorized: true}, nil
 	}
-	if tc.LoopbackConnectGranted && axisPortsCovered(tc.LoopbackConnectPorts, ports) {
-		return &tools.LoopbackConnectResult{Authorized: true, Ports: spawnPortNarrowing(tc.LoopbackConnectPorts, ports)}, nil
+	if tc.Local.LoopbackConnectGranted && axisPortsCovered(tc.Local.LoopbackConnectPorts, ports) {
+		return &tools.LoopbackConnectResult{Authorized: true, Ports: spawnPortNarrowing(tc.Local.LoopbackConnectPorts, ports)}, nil
 	}
 	if e.loopbackConnectGate == nil {
-		return nil, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Agent, args, &toolrejection.ToolReject{
+		return nil, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Identity.Agent, args, &toolrejection.ToolReject{
 			Code: isolation.CodeApprovalUnavailable,
 			Data: map[string]any{"reason": "loopback-connect approval is not configured"},
 		})
@@ -59,25 +59,25 @@ func (e *Capabilities) preflightLoopbackConnectCapability(
 	}
 	result, err := e.loopbackConnectGate.Await(ctx, tools.LoopbackConnectAsk{
 		SecretPermission: permission,
-		SessionID:        tc.SessionID, ParentSessionID: tc.ParentSessionID,
-		ProjectID: tc.ProjectID, ToolCallID: tc.ToolCallID,
+		SessionID:        tc.Identity.SessionID, ParentSessionID: tc.Identity.ParentSessionID,
+		ProjectID: tc.Identity.ProjectID, ToolCallID: tc.Identity.ToolCallID,
 		ProjectDir: tc.ActiveRootPath(), ToolName: tool,
 		Command: commandsurface.PrimaryCommandLine(args, nil), Ports: ports,
 	})
 	if err != nil {
-		return nil, e.Approvals.rejectApprovalErr(ctx, tool, tc.Agent, args, err)
+		return nil, e.Approvals.rejectApprovalErr(ctx, tool, tc.Identity.Agent, args, err)
 	}
 	if result.Denied {
 		data := map[string]any{}
 		if result.UserGuidance != "" {
 			data[toolrejection.UserGuidanceKey] = result.UserGuidance
 		}
-		return nil, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Agent, args, &toolrejection.ToolReject{
+		return nil, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Identity.Agent, args, &toolrejection.ToolReject{
 			Code: isolation.CodeLoopbackConnectDenied, Data: data,
 		})
 	}
 	if !result.Authorized {
-		return nil, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Agent, args, &toolrejection.ToolReject{
+		return nil, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Identity.Agent, args, &toolrejection.ToolReject{
 			Code: isolation.CodeApprovalUnavailable,
 			Data: map[string]any{"reason": string(approvaloutcome.CodeApprovalExpired)},
 		})

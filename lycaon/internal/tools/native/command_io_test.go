@@ -22,8 +22,8 @@ import (
 
 func testToolContext(root string) tools.ToolContext {
 	return tools.ToolContext{
-		Agent: "implement",
-		Roots: []projectroot.RootRef{{ID: "primary", Path: root, IsPrimary: true}},
+		Identity: tools.InvocationIdentity{Agent: "implement"},
+		Source:   tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "primary", Path: root, IsPrimary: true}}},
 	}
 }
 
@@ -88,7 +88,7 @@ func TestCommandIORedirectRejectsOutOfScope(t *testing.T) {
 		{ID: "plan_writer", Tools: map[string]bool{"write": true, "command": true}, WriteGlobs: []string{settingsoverlay.Rel("blueprints/**")}},
 	})
 	tctx := testToolContext(root)
-	tctx.Agent = "plan_writer"
+	tctx.Identity.Agent = "plan_writer"
 	_, err := commandIOFor(context.Background(), b, tctx, map[string]any{
 		"stdout_to": "src/out.log",
 	}, "command")
@@ -113,7 +113,7 @@ func TestCommandIORedirectRejectsOutOfScopeVerify(t *testing.T) {
 		{ID: "plan_writer", Tools: map[string]bool{"write": true, "verify": true}, WriteGlobs: []string{settingsoverlay.Rel("blueprints/**")}},
 	})
 	tctx := testToolContext(root)
-	tctx.Agent = "plan_writer"
+	tctx.Identity.Agent = "plan_writer"
 	_, err := commandIOFor(context.Background(), b, tctx, map[string]any{
 		"stdout_to": "src/out.log",
 	}, "verify")
@@ -135,7 +135,7 @@ func TestCommandIORedirectRejectsCoordinator(t *testing.T) {
 		{ID: "coordinator", Tools: map[string]bool{"command": true}, WriteGlobs: []string{settingsoverlay.Rel("blueprints/**")}},
 	})
 	tctx := testToolContext(root)
-	tctx.Agent = "coordinator"
+	tctx.Identity.Agent = "coordinator"
 	_, err := commandIOFor(context.Background(), b, tctx, map[string]any{
 		"stdout_to": "src/out.log",
 	}, "command")
@@ -174,8 +174,8 @@ func TestCommandIORedirectSharesInvestigateWriteScope(t *testing.T) {
 	}
 	b.SetPathScopes(scopes)
 	tctx := testToolContext(root)
-	tctx.Agent = "coordinator"
-	tctx.TurnSurfaceID = toolcontract.SurfaceImplementInvestigate
+	tctx.Identity.Agent = "coordinator"
+	tctx.Turn.TurnSurfaceID = toolcontract.SurfaceImplementInvestigate
 
 	io, err := commandIOFor(context.Background(), b, tctx, map[string]any{
 		"stdout_to": "scratch/git-status.txt",

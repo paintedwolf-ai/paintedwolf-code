@@ -29,8 +29,8 @@ func TestApprovalIdentityMatchesNativeFileResolution(t *testing.T) {
 		for _, worker := range []bool{false, true} {
 			t.Run(fmt.Sprintf("roots=%d/worker=%t", count, worker), func(t *testing.T) {
 				tc, targets := approvalIdentityWorkspace(t, count, worker)
-				for i, root := range tc.Roots {
-					tc.ActiveRootID = root.ID
+				for i, root := range tc.Source.Roots {
+					tc.Source.ActiveRootID = root.ID
 					paths := []string{"file[ab].txt", "./file[ab].txt", targets[i], "link.txt"}
 					paths = append(paths, "@"+root.Label+"/file[ab].txt")
 					for _, path := range paths {
@@ -46,18 +46,21 @@ func TestApprovalIdentityMatchesNativeFileResolution(t *testing.T) {
 
 func approvalIdentityWorkspace(t *testing.T, count int, worker bool) (tools.ToolContext, []string) {
 	t.Helper()
-	tc := tools.ToolContext{ProjectID: "project", SessionID: "session"}
+	tc := tools.ToolContext{
+		Identity: tools.InvocationIdentity{ProjectID: "project",
+			SessionID: "session"},
+	}
 	if worker {
-		tc.WorkerBranchRoot = t.TempDir()
-		tc.BranchWorkspace = testutil.CompleteBranchWorkspace{}
+		tc.Source.WorkerBranchRoot = t.TempDir()
+		tc.Source.BranchWorkspace = testutil.CompleteBranchWorkspace{}
 	}
 	var targets []string
 	for i := range count {
 		root := projectroot.RootRef{ID: fmt.Sprintf("id-%d", i), Label: fmt.Sprintf("folder-%d", i), Path: t.TempDir(), IsPrimary: i == 0}
-		tc.Roots = append(tc.Roots, root)
+		tc.Source.Roots = append(tc.Source.Roots, root)
 		dir := root.Path
 		if worker {
-			dir = tc.WorkerBranchRoot
+			dir = tc.Source.WorkerBranchRoot
 			if count > 1 {
 				branchDir, err := projectroot.BranchDirForID(root.ID)
 				testutil.FailErr(t, "resolve branch directory", err)
@@ -103,8 +106,8 @@ func TestWorkerCommandDirectoriesResolveRootLabels(t *testing.T) {
 	for _, count := range []int{1, 2} {
 		t.Run(fmt.Sprintf("roots=%d", count), func(t *testing.T) {
 			tc, targets := approvalIdentityWorkspace(t, count, true)
-			for i, root := range tc.Roots {
-				tc.ActiveRootID = root.ID
+			for i, root := range tc.Source.Roots {
+				tc.Source.ActiveRootID = root.ID
 				for _, path := range []string{".", "@" + root.Label} {
 					abs, _, err := projectpaths.CommandCwd(t.Context(), tc, path)
 					testutil.FailErr(t, "resolve worker directory", err)

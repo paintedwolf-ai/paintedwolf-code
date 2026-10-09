@@ -114,7 +114,7 @@ func decliningReview(t *testing.T, dir, rel string) tools.ToolContext {
 	tctx := nativefixture.Context(dir)
 	want := fspath.CanonicalPath(filepath.Join(dir, filepath.FromSlash(rel)))
 	reviewed := false
-	tctx.FileChangeReview = func(_ context.Context, changes []tools.FileChange) error {
+	tctx.Files.FileChangeReview = func(_ context.Context, changes []tools.FileChange) error {
 		for _, change := range changes {
 			if fspath.CanonicalPath(change.Path) == want {
 				reviewed = true

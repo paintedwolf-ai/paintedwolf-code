@@ -33,7 +33,7 @@ func TestWriteToolAtomic(t *testing.T) {
 	tool := &WriteTool{Boundary: nativefixture.Boundary(t)}
 	out := &tools.ToolInvocationOut{}
 	ctx := nativefixture.AgentContext(tmpDir, "implement")
-	ctx.Out = out
+	ctx.Effects.Out = out
 	_, err := tool.Run(context.Background(), map[string]any{
 		"path":    "test.txt",
 		"content": "test content",
@@ -84,7 +84,7 @@ func TestWriteToolAppend(t *testing.T) {
 	tool := &WriteTool{Boundary: nativefixture.Boundary(t)}
 	out := &tools.ToolInvocationOut{}
 	ctx := nativefixture.AgentContext(tmpDir, "implement")
-	ctx.Out = out
+	ctx.Effects.Out = out
 	receipt, err := tool.Run(context.Background(), map[string]any{
 		"path":    "big.html",
 		"content": "<body></body>\n",
@@ -128,7 +128,7 @@ func TestWriteToolCaptureOverwrite(t *testing.T) {
 	tool := &WriteTool{Boundary: nativefixture.Boundary(t)}
 	out := &tools.ToolInvocationOut{}
 	ctx := nativefixture.AgentContext(tmpDir, "implement")
-	ctx.Out = out
+	ctx.Effects.Out = out
 	_, err := tool.Run(context.Background(), map[string]any{
 		"path":    "a.txt",
 		"content": "new",

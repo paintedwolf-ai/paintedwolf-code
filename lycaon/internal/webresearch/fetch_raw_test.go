@@ -111,8 +111,8 @@ func TestFetchURLRawBinaryWritesDest(t *testing.T) {
 		Dest:     "assets/logo.png",
 		Boundary: rawTestBoundary(t),
 		Tctx: tools.ToolContext{
-			Roots:        []projectroot.RootRef{{ID: "primary", Path: root, IsPrimary: true}},
-			ActiveRootID: "primary",
+			Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "primary", Path: root, IsPrimary: true}},
+				ActiveRootID: "primary"},
 		},
 	})
 	testutil.FailErr(t, "raw write", err)
@@ -147,8 +147,8 @@ func TestFetchURLRawOversizeDoesNotWritePartialDest(t *testing.T) {
 		Dest:     "assets/large.png",
 		Boundary: rawTestBoundary(t),
 		Tctx: tools.ToolContext{
-			Roots:        []projectroot.RootRef{{ID: "primary", Path: root, IsPrimary: true}},
-			ActiveRootID: "primary",
+			Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "primary", Path: root, IsPrimary: true}},
+				ActiveRootID: "primary"},
 		},
 	})
 	var tooLarge FetchBodyTooLargeError

@@ -34,8 +34,8 @@ func TestBeforeWorkerWriteRejectsReadScopedMutation(t *testing.T) {
 	})
 	testutil.FailErr(t, "enqueue read worker", err)
 	tctx := tools.ToolContext{
-		WorkerJobID:   "job-read",
-		TurnSurfaceID: "implement_dispatch",
+		Identity: tools.InvocationIdentity{WorkerJobID: "job-read"},
+		Turn:     tools.InvocationTurn{TurnSurfaceID: "implement_dispatch"},
 	}
 	err = mgr.BeforeWorkerWrite(context.Background(), tctx, "src/foo.go")
 	if err == nil {
@@ -61,28 +61,34 @@ func TestBeforeWorkerWriteAllowsPathOutsideSuggestion(t *testing.T) {
 		Scope: &writeScope, Status: api.WorkerStatusRunning,
 	})
 	testutil.FailErr(t, "enqueue write worker", err)
-	err = mgr.BeforeWorkerWrite(context.Background(), tools.ToolContext{WorkerJobID: "job-write"}, "src/outside.go")
+	err = mgr.BeforeWorkerWrite(context.Background(), tools.ToolContext{
+		Identity: tools.InvocationIdentity{WorkerJobID: "job-write"},
+	}, "src/outside.go")
 	testutil.FailErr(t, "write outside suggested path", err)
 }
 
 func TestEnsureWorkerBranchLeavesReadScopedWorkerAttached(t *testing.T) {
 	mgr, ctx := readScopedWorkerManager(t, "job-read-branch", api.TaskScopeModeRead)
-	tctx, err := mgr.EnsureWorkerBranch(ctx, tools.ToolContext{WorkerJobID: "job-read-branch"})
+	tctx, err := mgr.EnsureWorkerBranch(ctx, tools.ToolContext{
+		Identity: tools.InvocationIdentity{WorkerJobID: "job-read-branch"},
+	})
 	testutil.FailErr(t, "ensure read worker branch", err)
-	if tctx.WorkerBranchRoot != "" {
-		t.Fatalf("WorkerBranchRoot = %q, want source-attached", tctx.WorkerBranchRoot)
+	if tctx.Source.WorkerBranchRoot != "" {
+		t.Fatalf("WorkerBranchRoot = %q, want source-attached", tctx.Source.WorkerBranchRoot)
 	}
-	if tctx.BranchWorkspace != nil {
+	if tctx.Source.BranchWorkspace != nil {
 		t.Fatal("read worker must not carry a branch workspace")
 	}
-	if tctx.SourceWorkspaceKind != api.SourceWorkspaceKindProject {
-		t.Fatalf("workspace kind = %q, want project: a read worker reads the project tree and its open documents", tctx.SourceWorkspaceKind)
+	if tctx.Source.SourceWorkspaceKind != api.SourceWorkspaceKindProject {
+		t.Fatalf("workspace kind = %q, want project: a read worker reads the project tree and its open documents", tctx.Source.SourceWorkspaceKind)
 	}
 }
 
 func TestEnsureWorkerBranchFailsWriteScopeWithoutWorkspace(t *testing.T) {
 	mgr, ctx := readScopedWorkerManager(t, "job-write-branch", api.TaskScopeModeWrite)
-	if _, err := mgr.EnsureWorkerBranch(ctx, tools.ToolContext{WorkerJobID: "job-write-branch"}); err == nil {
+	if _, err := mgr.EnsureWorkerBranch(ctx, tools.ToolContext{
+		Identity: tools.InvocationIdentity{WorkerJobID: "job-write-branch"},
+	}); err == nil {
 		t.Fatal("expected claim failure for a write worker with no workspace manager")
 	}
 }
@@ -103,7 +109,9 @@ func TestWorkerReadToolsIgnoreSuggestedPaths(t *testing.T) {
 	})
 	testutil.FailErr(t, "enqueue discovery worker", err)
 
-	tctx, err := mgr.EnrichWorkerToolContext(ctx, &child, tools.ToolContext{WorkerJobID: "job-read-discovery"})
+	tctx, err := mgr.EnrichWorkerToolContext(ctx, &child, tools.ToolContext{
+		Identity: tools.InvocationIdentity{WorkerJobID: "job-read-discovery"},
+	})
 	testutil.FailErr(t, "enrich worker context", err)
 	registry := tools.NewDefaultRegistry()
 	for _, name := range []string{"list_dir", "read"} {

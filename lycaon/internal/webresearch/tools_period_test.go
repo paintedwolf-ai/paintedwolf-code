@@ -23,7 +23,9 @@ func periodToolRegistry(t *testing.T, fake *FakeDirectDiscoverer) *tools.Default
 
 func runWebSearch(t *testing.T, reg *tools.DefaultRegistry, args map[string]any) (string, error) {
 	t.Helper()
-	return reg.Run(context.Background(), "web_search", args, tools.ToolContext{SessionID: "sess-period"})
+	return reg.Run(context.Background(), "web_search", args, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "sess-period"},
+	})
 }
 
 func fakeHits() []WebHit {

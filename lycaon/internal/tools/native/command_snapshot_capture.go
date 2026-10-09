@@ -70,7 +70,7 @@ func runCommandSnapshotCapture(
 		caption = "Native app snapshot"
 	}
 
-	scratchDir := strings.TrimSpace(tctx.SessionScratchDir)
+	scratchDir := strings.TrimSpace(tctx.Host.SessionScratchDir)
 	if scratchDir == "" {
 		scratchDir = os.TempDir()
 	}
@@ -151,10 +151,10 @@ func runCommandSnapshotCapture(
 		}
 	}
 
-	if tctx.Out == nil {
-		tctx.Out = &tools.ToolInvocationOut{}
+	if tctx.Effects.Out == nil {
+		tctx.Effects.Out = &tools.ToolInvocationOut{}
 	}
-	tctx.Out.Visual = &tools.VisualCapture{
+	tctx.Effects.Out.Visual = &tools.VisualCapture{
 		Mime:      norm.Mime,
 		Bytes:     norm.Bytes,
 		Source:    api.VisualArtifactSourceCapture,

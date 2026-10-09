@@ -19,10 +19,10 @@ import (
 type ProcessTools struct{ Service *hostprocess.Service }
 
 func (t *ProcessTools) List(ctx context.Context, args map[string]any, tc tools.ToolContext) (string, error) {
-	if t.Service == nil || tc.ProcessReview == nil {
+	if t.Service == nil || tc.Execution.ProcessReview == nil {
 		return "", safecmd.Reject(isolation.CodeApprovalUnavailable, nil)
 	}
-	if err := tc.ProcessReview(ctx, "list", nil); err != nil {
+	if err := tc.Execution.ProcessReview(ctx, "list", nil); err != nil {
 		return "", err
 	}
 	pid := toolkit.ClampIntArg(args, "pid", 0, 0, 1<<30)
@@ -37,7 +37,7 @@ func (t *ProcessTools) List(ctx context.Context, args map[string]any, tc tools.T
 }
 
 func (t *ProcessTools) Signal(ctx context.Context, args map[string]any, tc tools.ToolContext) (string, error) {
-	if t.Service == nil || tc.ProcessReview == nil {
+	if t.Service == nil || tc.Execution.ProcessReview == nil {
 		return "", safecmd.Reject(isolation.CodeApprovalUnavailable, nil)
 	}
 	refs, err := toolkit.ParseStringSliceArg(args, "references", 33)
@@ -69,7 +69,7 @@ func (t *ProcessTools) Signal(ctx context.Context, args map[string]any, tc tools
 		seen[process.PID] = true
 		processes = append(processes, process)
 	}
-	if err := tc.ProcessReview(ctx, "signal", processes); err != nil {
+	if err := tc.Execution.ProcessReview(ctx, "signal", processes); err != nil {
 		return "", err
 	}
 	results := make([]map[string]any, 0, len(processes))
@@ -98,8 +98,8 @@ func processError(err error) error {
 }
 
 func processTaskSession(tc tools.ToolContext) string {
-	if root := strings.TrimSpace(tc.ParentSessionID); root != "" {
+	if root := strings.TrimSpace(tc.Identity.ParentSessionID); root != "" {
 		return root
 	}
-	return strings.TrimSpace(tc.SessionID)
+	return strings.TrimSpace(tc.Identity.SessionID)
 }

@@ -98,7 +98,7 @@ func verdictFor(res *hostcmd.Result) (VerifyOutcome, string) {
 }
 
 func (t *VerifyTool) Run(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-	tctx.VerificationCheck = true
+	tctx.Execution.VerificationCheck = true
 	if t.Runner == nil {
 		return "", fmt.Errorf("verify runner not configured")
 	}
@@ -107,7 +107,7 @@ func (t *VerifyTool) Run(ctx context.Context, args map[string]any, tctx tools.To
 	}
 	declared := t.declaredFor(tctx)
 	// The declared check is compared as written, before the host expanded its globs.
-	requested := tctx.RequestedArgs
+	requested := tctx.Effects.RequestedArgs
 	if requested == nil {
 		requested = canonicalToolArgs(tctx, args)
 	}
@@ -181,11 +181,11 @@ func rejectDeclaredCommandOverride(declared string, args map[string]any) error {
 
 // stampSourceRun attaches terminal evidence to the invocation receipt.
 func stampSourceRun(tctx tools.ToolContext, res *hostcmd.Result, verdict VerifyOutcome, outcome commandRunOutcome) {
-	if tctx.Out == nil || res == nil {
+	if tctx.Effects.Out == nil || res == nil {
 		return
 	}
-	tctx.Out.SourceRun = &tools.SourceRunCapture{
-		CheckID: tctx.ToolCallID, IsCheck: outcome.IsCheck,
+	tctx.Effects.Out.SourceRun = &tools.SourceRunCapture{
+		CheckID: tctx.Identity.ToolCallID, IsCheck: outcome.IsCheck,
 		Command:        hostcmd.CommandLine(res.Stages),
 		ExitCode:       res.ExitCode,
 		Verdict:        string(verdict),
@@ -200,10 +200,10 @@ func verificationRequested(args map[string]any) bool {
 
 // stampUnverifiableFacts records an unverifiable receipt.
 func stampUnverifiableFacts(tctx tools.ToolContext, verdict VerifyOutcome) {
-	if tctx.Out == nil || verdict != VerifyOutcomeUnverifiable {
+	if tctx.Effects.Out == nil || verdict != VerifyOutcomeUnverifiable {
 		return
 	}
-	tctx.Out.Facts = guidance.ToolResultFacts{}.WithCode(toolrejection.VerifyUnverifiableCode).Merge(tctx.Out.Facts)
+	tctx.Effects.Out.Facts = guidance.ToolResultFacts{}.WithCode(toolrejection.VerifyUnverifiableCode).Merge(tctx.Effects.Out.Facts)
 }
 
 // confined binds this tool's wiring to the shared confined-foreground path.

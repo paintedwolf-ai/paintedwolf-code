@@ -66,9 +66,9 @@ func TestPermitCoveredHostResourceSocketsIssuesRealizationOnly(t *testing.T) {
 		"digest-1",
 		[]confine.SocketGrant{docker, other},
 		tools.ToolContext{
-			SessionID:          "sess",
-			ToolCallID:         "tc-1",
-			RealizationSockets: []string{sock},
+			Identity: tools.InvocationIdentity{SessionID: "sess",
+				ToolCallID: "tc-1"},
+			Host: tools.InvocationHost{RealizationSockets: []string{sock}},
 		},
 	)
 	if !covered {

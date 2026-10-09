@@ -33,13 +33,13 @@ func currentSourceChanged() error {
 	return &comparisonFailure{wire.ApiErrorCodeSourceVersionChanged, "The file changed. Reload it to read the current version."}
 }
 
-func (s *Handler) prepareCurrentSource(view *sourceView, p *project.Project) error {
-	source := view.comparisonSource.Current
+func (s *ComparisonViews) prepareCurrentSource(view *sourceView, p *project.Project) error {
+	source := view.comparisonData.comparisonSource.Current
 	stream, err := project.OpenProjectSourceStream(p, project.SourceReadRequest{Path: source.Path, RootID: source.RootID, DecodeAs: source.DecodeAs})
 	if err != nil {
 		return currentSourceReadError(err)
 	}
-	document, err := sourcecomparison.NewCurrent(view.ctx, stream.File, stream.Encoding, stream.Path, view.comparisonBudget, s.sourceViews.snapshotDisk)
+	document, err := sourcecomparison.NewCurrent(view.ctx, stream.File, stream.Encoding, stream.Path, view.comparisonData.comparisonBudget, s.sourceViews.snapshotDisk)
 	if err != nil {
 		stream.Close()
 		return currentSourceReadError(err)
@@ -52,19 +52,19 @@ func (s *Handler) prepareCurrentSource(view *sourceView, p *project.Project) err
 	snapshot := &currentSourceSnapshot{document: document, stream: stream}
 	snapshot.users.Store(1)
 	s.installCurrentSource(view, snapshot)
-	s.background.Go(view.ctx, func(ctx context.Context) { s.ensureWorkspaceWatch(ctx, p) })
+	s.background.Go(view.ctx, func(ctx context.Context) { s.Watch.ensureWorkspaceWatch(ctx, p) })
 	return nil
 }
 
-func (s *Handler) installCurrentSource(view *sourceView, snapshot *currentSourceSnapshot) {
+func (s *ComparisonViews) installCurrentSource(view *sourceView, snapshot *currentSourceSnapshot) {
 	projection := &sourceViewProjection{comparisonProjection: snapshot.document, closeSource: snapshot.close}
 	projection.users.Store(1)
 	endpoint := &wire.SourceReaderEndpoint{RootID: snapshot.stream.RootID, Path: snapshot.stream.Path,
 		State: "content", Availability: "available", Sha256: snapshot.document.RawSHA256, SizeBytes: snapshot.stream.SizeBytes,
 		SecretScreen: &wire.SecretScreen{Truncated: true}}
 	view.mu.Lock()
-	view.current, view.projection = snapshot, projection
-	view.details = &wire.SourceComparisonDetails{InRange: true, Before: endpoint, After: endpoint, Summary: &snapshot.document.Summary}
+	view.comparisonData.current, view.comparisonData.projection = snapshot, projection
+	view.comparisonData.details = &wire.SourceComparisonDetails{InRange: true, Before: endpoint, After: endpoint, Summary: &snapshot.document.Summary}
 	view.state, view.projectionRevision = "ready", uuid.NewString()
 	view.mu.Unlock()
 	stop := sourcefeed.Subscribe(view.scope.Project, view.workspaceID, func(sourcefeed.Notice) {

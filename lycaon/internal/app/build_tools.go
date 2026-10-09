@@ -197,24 +197,24 @@ func (b toolWiring) taskToolDeps() worker.TaskToolDeps {
 			return dec.WorkerID, true, nil
 		},
 		ComposePrompt: func(ctx context.Context, tctx tools.ToolContext, agentType string, brief wire.WorkerTaskCharter, workerJobID string, scope *wire.TaskScope, maxToolLoops int) (string, error) {
-			msgs, err := b.store.GetMessages(ctx, tctx.SessionID)
+			msgs, err := b.store.GetMessages(ctx, tctx.Identity.SessionID)
 			if err != nil {
 				return brief.Goal, err
 			}
 			in := inject.WorkerTaskAssignmentInput{
-				SessionID:        tctx.SessionID,
+				SessionID:        tctx.Identity.SessionID,
 				ProjectDir:       tctx.ActiveRootPath(),
 				Charter:          brief,
 				AgentType:        agentType,
 				WorkerJobID:      workerJobID,
 				MaxToolLoops:     maxToolLoops,
 				Attachments:      surface.SessionForwardedAttachments(msgs),
-				RecordedVerdicts: recordedVerdictsForLeg(ctx, b.workflowMgr, tctx.SessionID),
+				RecordedVerdicts: recordedVerdictsForLeg(ctx, b.workflowMgr, tctx.Identity.SessionID),
 			}
 			if scope != nil {
 				in.Scope = *scope
 			}
-			run, err := b.workflowMgr.GetActive(ctx, tctx.SessionID)
+			run, err := b.workflowMgr.GetActive(ctx, tctx.Identity.SessionID)
 			if err != nil {
 				return "", err
 			}
@@ -270,7 +270,7 @@ func recordedVerdictsForLeg(ctx context.Context, mgr *workflow.RunManager, sessi
 }
 
 func (b toolWiring) wireMCP() error {
-	mcpOpts := mcp.RegistryOptions{
+	mcpOpts := mcp.RuntimeOptions{
 		OnSettingsChange: func() {
 			if b.hub != nil {
 				_ = b.hub.Publish(b.ctx, wire.EventTopicSettings, events.PublishKey{Facet: string(wire.SettingsAreaMcp)}, wire.SettingsEvent{
@@ -287,21 +287,21 @@ func (b toolWiring) wireMCP() error {
 		mcpOpts.GlobalOverridePath = b.cfg.TestMCPGlobalOverridePath
 	}
 	var err error
-	b.mcpReg, err = mcp.NewRegistryImpl(mcpOpts)
+	b.mcpReg, err = mcp.NewRuntime(mcpOpts)
 	if err != nil {
 		return fmt.Errorf("mcp registry: %w", err)
 	}
-	b.mcpReg.SetToolRegistry(b.toolRuntime.Registry)
-	b.mcpReg.SetAPIAccess(b.apiToken)
+	b.mcpReg.Tools.SetToolRegistry(b.toolRuntime.Registry)
+	b.mcpReg.Connections.SetAPIAccess(b.apiToken)
 	if b.toolRuntime != nil {
-		b.toolRuntime.Authority.SetMCPToolPinSource(b.mcpReg)
+		b.toolRuntime.Authority.SetMCPToolPinSource(b.mcpReg.Tools)
 	}
-	b.mcpReg.SetProjectOverlayGate(b.projectMCPGate().AppliesPath)
+	b.mcpReg.Catalog.SetProjectOverlayGate(b.projectMCPGate().AppliesPath)
 	if err := serverWiring(b).wireDestinationConfig(); err != nil {
 		return err
 	}
 	// Device inspection may inspect every registered project root.
-	b.mcpReg.SetDeviceProbeRoots(func() []string {
+	b.mcpReg.Connections.SetDeviceProbeRoots(func() []string {
 		paths, err := boardWiring(b).projectRootPaths(b.ctx)
 		if err != nil {
 			return nil
@@ -331,7 +331,7 @@ func (b toolWiring) wireMCP() error {
 		if b.browserRaster != nil {
 			b.browserRaster.SetCaptureProjector(captureProjector)
 		}
-		b.mcpReg.SetSecretScreen(matcher, sessionWiring(b).secretAskFunc())
+		b.mcpReg.Calls.SetSecretScreen(matcher, sessionWiring(b).secretAskFunc())
 		if b.toolRuntime != nil && b.toolRuntime.Executor != nil {
 			b.toolRuntime.Executor.Secrets.SetSecretMatcher(matcher)
 			b.toolRuntime.Executor.Secrets.SetSecretIgnores(b.secretIgnores)
@@ -355,14 +355,14 @@ func (b toolWiring) wireMCP() error {
 			b.llmSvc.Registry.SetOutboundSecretScreen(screen)
 		}
 	}
-	if err := b.mcpReg.Load(b.ctx); err != nil {
+	if err := b.mcpReg.Catalog.Load(b.ctx); err != nil {
 		return fmt.Errorf("mcp registry: %w", err)
 	}
 	if b.toolRuntime != nil && b.toolRuntime.Executor != nil {
-		b.toolRuntime.Executor.Metadata.SetMCPCatalog(b.mcpReg)
+		b.toolRuntime.Executor.Rejections.SetMCPCatalog(b.mcpReg.Catalog)
 	}
 	if b.mgr != nil {
-		b.mgr.SetMCPRuntime(b.mcpReg)
+		b.mgr.SetMCPRuntime(b.mcpReg.Catalog)
 	}
 	return nil
 }

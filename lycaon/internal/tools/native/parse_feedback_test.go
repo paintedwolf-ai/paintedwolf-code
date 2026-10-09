@@ -82,7 +82,7 @@ func TestWriteSyntaxOverrideStillChecksContentAndRecordsReason(t *testing.T) {
 	dir := t.TempDir()
 	tool := &WriteTool{Boundary: nativefixture.Boundary(t)}
 	tc := nativefixture.Context(dir)
-	tc.Out = &tools.ToolInvocationOut{}
+	tc.Effects.Out = &tools.ToolInvocationOut{}
 	content := "package broken\nfunc ("
 	_, err := tool.Run(context.Background(), map[string]any{
 		"path": "a.go", "content": content, "syntax_override_reason": "intentional incomplete edit",
@@ -90,8 +90,8 @@ func TestWriteSyntaxOverrideStillChecksContentAndRecordsReason(t *testing.T) {
 	testutil.FailErr(t, "write with explicit override", err)
 	got, err := os.ReadFile(filepath.Join(dir, "a.go"))
 	testutil.FailErr(t, "read overridden mutation", err)
-	if string(got) != content || !tc.Out.Facts.HasCode(tools.SyntaxCheckOverriddenCode) {
-		t.Fatalf("mutation or override record missing: %q %+v", got, tc.Out.Facts)
+	if string(got) != content || !tc.Effects.Out.Facts.HasCode(tools.SyntaxCheckOverriddenCode) {
+		t.Fatalf("mutation or override record missing: %q %+v", got, tc.Effects.Out.Facts)
 	}
 	_, err = tool.Run(context.Background(), map[string]any{
 		"path": "binary.go", "content": "package broken\x00", "syntax_override_reason": "intentional incomplete edit",

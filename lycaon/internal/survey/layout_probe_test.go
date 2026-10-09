@@ -77,8 +77,9 @@ func TestLayoutProbeFileAltitudeDoesNotBuildInventory(t *testing.T) {
 		ProjectRootRequired: true, RejectSymlinkEscape: true,
 	}, []sandbox.ToolProfile{{ID: toolprofiles.DefaultToolProfileID, Tools: map[string]bool{"read": true}}})
 	scope := Scope{Boundary: boundary, ToolCtx: tools.ToolContext{
-		Roots: []projectroot.RootRef{{ID: "r1", Path: root, IsPrimary: true}}, ActiveRootID: "r1",
-		Agent: toolprofiles.DefaultToolProfileID,
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Path: root, IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{Agent: toolprofiles.DefaultToolProfileID},
 	}}
 	records, total, coverage, err := runLayoutProbe(context.Background(), Probe{Label: "layout"}, "main.go", scope, 96)
 	testutil.FailErr(t, "file layout", err)

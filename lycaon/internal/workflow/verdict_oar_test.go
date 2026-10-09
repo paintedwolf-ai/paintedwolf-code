@@ -50,7 +50,9 @@ func TestWorkflowVerdictRefusalsRetainPolicyOccurrenceAndStructuredCause(t *test
 				"missing_reviewers": []string{"reviewer-1"}, "uncited_reviewers": []string{"reviewer-2"},
 				"ungrounded_sample": []string{"missing#3"}, "observed_handles": []string{"observed#4"},
 			}
-			body, original := rejectSubmitVerdict(tools.ToolContext{Out: out}, code, "review-phase", details)
+			body, original := rejectSubmitVerdict(tools.ToolContext{
+				Effects: tools.InvocationEffects{Out: out},
+			}, code, "review-phase", details)
 			reject := requireVerdictRejection(t, body, original, code)
 			failure := plane.RejectObservation(ctx, "submit_verdict", "coordinator", nil, reject)
 			refusal, ok := guidance.RefusalFromError(failure)

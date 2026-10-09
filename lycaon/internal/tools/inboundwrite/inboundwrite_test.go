@@ -22,8 +22,9 @@ func testBoundary() *sandbox.Boundary {
 
 func projectContext(root string) tools.ToolContext {
 	return tools.ToolContext{
-		Agent: toolprofiles.DefaultToolProfileID,
-		Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}}, ActiveRootID: "root",
+		Identity: tools.InvocationIdentity{Agent: toolprofiles.DefaultToolProfileID},
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}},
+			ActiveRootID: "root"},
 	}
 }
 
@@ -75,7 +76,7 @@ func TestFetchedInstructionsRequireReviewOfActualResponse(t *testing.T) {
 	target := filepath.Join(root, "AGENTS.md")
 	declined := errors.New("declined")
 	calls := 0
-	tc.FileChangeReview = func(_ context.Context, changes []tools.FileChange) error {
+	tc.Files.FileChangeReview = func(_ context.Context, changes []tools.FileChange) error {
 		calls++
 		if len(changes) != 1 || changes[0].Preview.After != "fetched instructions\n" {
 			t.Fatalf("response preview = %+v", changes)

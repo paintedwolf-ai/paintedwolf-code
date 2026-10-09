@@ -28,9 +28,9 @@ func TestGitShowPathEscapeSecurity(t *testing.T) {
 	_, err := show.Run(context.Background(), map[string]any{
 		"path": "/etc/passwd",
 	}, tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
-		ActiveRootID: "r1",
-		Agent:        "implement",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{Agent: "implement"},
 	})
 	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "SURVEY_PATH_ESCAPE" {
@@ -45,9 +45,9 @@ func TestGitRestoreOutsideScopeSecurity(t *testing.T) {
 	_, err := restore.Run(context.Background(), map[string]any{
 		"paths": []any{".git/HEAD"},
 	}, tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
-		ActiveRootID: "r1",
-		Agent:        "implement",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{Agent: "implement"},
 	})
 	if err == nil {
 		t.Fatal("expected restore path denial")
@@ -66,9 +66,9 @@ func TestGitCommitOutsideScopeSecurity(t *testing.T) {
 		"message": "nope",
 		"paths":   []any{".git/HEAD"},
 	}, tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
-		ActiveRootID: "r1",
-		Agent:        "implement",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{Agent: "implement"},
 	})
 	if err == nil {
 		t.Fatal("expected commit path denial")
@@ -91,9 +91,9 @@ func TestGitBlameBinarySkipSecurity(t *testing.T) {
 	b := contractcheck.ProdToolBoundary(t)
 	blame := &native.GitBlameTool{Git: git.NewManager(), Boundary: b}
 	out, err := blame.Run(ctx, map[string]any{"path": "blob.bin"}, tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}},
-		ActiveRootID: "r1",
-		Agent:        "explore_readonly",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{Agent: "explore_readonly"},
 	})
 	if err == nil || !strings.Contains(err.Error(), "binary") {
 		t.Fatalf("binary blame should fail without fabricated attribution: output=%q err=%v", out, err)

@@ -14,13 +14,13 @@ func (e *Boundary) fileChangeReviewer(tool string, args map[string]any, tc tools
 	return func(ctx context.Context, changes []tools.FileChange) error {
 		if e.Approvals.approvalGate == nil {
 			unwired := tc
-			unwired.FileChangeReview = nil
+			unwired.Files.FileChangeReview = nil
 			return unwired.ReviewFileChanges(ctx, changes...)
 		}
 		action := hitl.ProposedAction{
-			Tool: tool, Args: args, ProjectID: tc.ProjectID, ProjectDir: tc.ActiveRootPath(),
-			SessionID: tc.SessionID, RootSessionID: tc.ChatSessionID(), ActionID: tc.ToolCallID,
-			SessionScratchRoot: tc.SessionScratchDir,
+			Tool: tool, Args: args, ProjectID: tc.Identity.ProjectID, ProjectDir: tc.ActiveRootPath(),
+			SessionID: tc.Identity.SessionID, RootSessionID: tc.ChatSessionID(), ActionID: tc.Identity.ToolCallID,
+			SessionScratchRoot: tc.Host.SessionScratchDir,
 			Contained:          hitl.ContainedForRequest(e.actionConfineRequest(ctx, tc)),
 		}
 		files, policies := map[string]bool{}, map[string]bool{}

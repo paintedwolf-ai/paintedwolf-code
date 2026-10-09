@@ -55,5 +55,8 @@ func moduleHintConfig(t *testing.T) *guidance.HintConfig {
 
 func fixtureToolContext(dir string) tools.ToolContext {
 	roots := []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}}
-	return tools.ToolContext{Roots: roots, ActiveRootID: "r1"}
+	return tools.ToolContext{
+		Source: tools.InvocationSource{Roots: roots,
+			ActiveRootID: "r1"},
+	}
 }

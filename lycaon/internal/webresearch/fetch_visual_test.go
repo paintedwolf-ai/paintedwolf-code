@@ -45,13 +45,13 @@ func TestFetchURLImageWithoutDest(t *testing.T) {
 	testutil.FailErr(t, "RegisterToolsWithFactory", RegisterToolsWithFactory(reg, deps, nil))
 
 	tctx := tools.ToolContext{
-		Roots: []projectroot.RootRef{
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{
 			{ID: "r1", Path: tempDir, IsPrimary: true},
 		},
-		ActiveRootID: "r1",
-		SessionID:    "s1",
-		ToolCallID:   "call1",
-		Out:          &tools.ToolInvocationOut{},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{SessionID: "s1",
+			ToolCallID: "call1"},
+		Effects: tools.InvocationEffects{Out: &tools.ToolInvocationOut{}},
 	}
 
 	out, err := reg.Run(context.Background(), "fetch_url", map[string]any{
@@ -66,14 +66,14 @@ func TestFetchURLImageWithoutDest(t *testing.T) {
 		t.Fatalf("expected 0 files in workspace, got %d", len(entries))
 	}
 
-	if tctx.Out.Visual == nil {
+	if tctx.Effects.Out.Visual == nil {
 		t.Fatal("expected tctx.Out.Visual to be populated")
 	}
-	if !tctx.Out.Visual.Perceive {
+	if !tctx.Effects.Out.Visual.Perceive {
 		t.Error("expected Perceive = true")
 	}
-	if tctx.Out.Visual.Source != api.VisualArtifactSourceFetch {
-		t.Errorf("fetched image source = %q, want fetch", tctx.Out.Visual.Source)
+	if tctx.Effects.Out.Visual.Source != api.VisualArtifactSourceFetch {
+		t.Errorf("fetched image source = %q, want fetch", tctx.Effects.Out.Visual.Source)
 	}
 
 	var parsed map[string]any
@@ -110,10 +110,14 @@ func TestFetchURLTextModeImageKeepsRawBytes(t *testing.T) {
 
 	reg := tools.NewDefaultRegistry()
 	testutil.FailErr(t, "RegisterToolsWithFactory", RegisterToolsWithFactory(reg, ToolDeps{Boundary: rawTestBoundary(t)}, nil))
-	tctx := tools.ToolContext{SessionID: "s1", ToolCallID: "call1", Out: &tools.ToolInvocationOut{}}
+	tctx := tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "s1",
+			ToolCallID: "call1"},
+		Effects: tools.InvocationEffects{Out: &tools.ToolInvocationOut{}},
+	}
 	_, err := reg.Run(context.Background(), "fetch_url", map[string]any{"url": srv.URL + "/render"}, tctx)
 	testutil.FailErr(t, "fetch_url", err)
-	if tctx.Out.Visual == nil || !bytes.Equal(tctx.Out.Visual.Bytes, body) {
+	if tctx.Effects.Out.Visual == nil || !bytes.Equal(tctx.Effects.Out.Visual.Bytes, body) {
 		t.Fatal("fetched image bytes changed before perception")
 	}
 }
@@ -154,13 +158,13 @@ func TestFetchURLNonImageBinaryRequiresDest(t *testing.T) {
 	testutil.FailErr(t, "RegisterToolsWithFactory", RegisterToolsWithFactory(reg, deps, nil))
 
 	tctx := tools.ToolContext{
-		Roots: []projectroot.RootRef{
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{
 			{ID: "r1", Path: tempDir, IsPrimary: true},
 		},
-		ActiveRootID: "r1",
-		SessionID:    "s1",
-		ToolCallID:   "call1",
-		Out:          &tools.ToolInvocationOut{},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{SessionID: "s1",
+			ToolCallID: "call1"},
+		Effects: tools.InvocationEffects{Out: &tools.ToolInvocationOut{}},
 	}
 
 	_, err := reg.Run(context.Background(), "fetch_url", map[string]any{
@@ -203,13 +207,13 @@ func TestFetchURLImageSecretScreeningWithheld(t *testing.T) {
 	testutil.FailErr(t, "RegisterToolsWithFactory", RegisterToolsWithFactory(reg, deps, nil))
 
 	tctx := tools.ToolContext{
-		Roots: []projectroot.RootRef{
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{
 			{ID: "r1", Path: tempDir, IsPrimary: true},
 		},
-		ActiveRootID: "r1",
-		SessionID:    "s1",
-		ToolCallID:   "call1",
-		Out:          &tools.ToolInvocationOut{},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{SessionID: "s1",
+			ToolCallID: "call1"},
+		Effects: tools.InvocationEffects{Out: &tools.ToolInvocationOut{}},
 	}
 
 	_, err = reg.Run(context.Background(), "fetch_url", map[string]any{

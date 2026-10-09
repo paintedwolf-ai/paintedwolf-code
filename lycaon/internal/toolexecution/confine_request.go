@@ -66,27 +66,27 @@ func (e *Boundary) SetSessionLoopbackGrant(fn tools.SessionLoopbackGrant) {
 
 // Copy live listener authority before constructing the spawn boundary.
 func (e *Boundary) applySessionListenGrant(ctx context.Context, tctx *tools.ToolContext) {
-	if e == nil || e.sessionListenGrant == nil || tctx == nil || tctx.PackageExecution != nil {
+	if e == nil || e.sessionListenGrant == nil || tctx == nil || tctx.Files.PackageExecution != nil {
 		return
 	}
-	granted, ports := e.sessionListenGrant(ctx, tctx.SessionID, tctx.ParentSessionID)
+	granted, ports := e.sessionListenGrant(ctx, tctx.Identity.SessionID, tctx.Identity.ParentSessionID)
 	if !granted {
 		return
 	}
-	tctx.LocalListenGranted = true
-	tctx.LocalListenPorts = ports
+	tctx.Local.LocalListenGranted = true
+	tctx.Local.LocalListenPorts = ports
 }
 
 func (e *Boundary) applySessionLoopbackGrant(ctx context.Context, tctx *tools.ToolContext) {
-	if e == nil || e.sessionLoopbackGrant == nil || tctx == nil || tctx.PackageExecution != nil {
+	if e == nil || e.sessionLoopbackGrant == nil || tctx == nil || tctx.Files.PackageExecution != nil {
 		return
 	}
-	granted, ports := e.sessionLoopbackGrant(ctx, tctx.SessionID, tctx.ParentSessionID)
+	granted, ports := e.sessionLoopbackGrant(ctx, tctx.Identity.SessionID, tctx.Identity.ParentSessionID)
 	if !granted {
 		return
 	}
-	tctx.LoopbackConnectGranted = true
-	tctx.LoopbackConnectPorts = ports
+	tctx.Local.LoopbackConnectGranted = true
+	tctx.Local.LoopbackConnectPorts = ports
 }
 
 func (e *Boundary) overlayWriteRoots(ctx context.Context, tctx tools.ToolContext) []string {
@@ -95,9 +95,9 @@ func (e *Boundary) overlayWriteRoots(ctx context.Context, tctx tools.ToolContext
 		roots = append(roots, planned...)
 	}
 	if e != nil && e.sessionOverlay != nil {
-		roots = append(roots, e.sessionOverlay(ctx, tctx.SessionID, tctx.ParentSessionID)...)
+		roots = append(roots, e.sessionOverlay(ctx, tctx.Identity.SessionID, tctx.Identity.ParentSessionID)...)
 	}
-	roots = append(roots, tctx.RealizationWriteRoots...)
+	roots = append(roots, tctx.Host.RealizationWriteRoots...)
 	return tools.UniqueRoots(roots)
 }
 

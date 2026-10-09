@@ -74,7 +74,7 @@ func ParseReject(path, phase string, err error) *toolrejection.ToolReject {
 }
 
 func ReportParseFailures(tctx tools.ToolContext, failures []tsparse.FileFailure, total int) {
-	if tctx.Out == nil || len(failures) == 0 {
+	if tctx.Effects.Out == nil || len(failures) == 0 {
 		return
 	}
 	first := failures[0]
@@ -85,5 +85,5 @@ func ReportParseFailures(tctx tools.ToolContext, failures []tsparse.FileFailure,
 		paths[i] = failure.Path
 	}
 	data["parse_paths"] = paths
-	tctx.Out.Facts = tctx.Out.Facts.WithFeedback(toolrejection.SourceAnalysisUnavailableCode, data, &api.FeedbackSubject{Kind: "path", ID: first.Path})
+	tctx.Effects.Out.Facts = tctx.Effects.Out.Facts.WithFeedback(toolrejection.SourceAnalysisUnavailableCode, data, &api.FeedbackSubject{Kind: "path", ID: first.Path})
 }

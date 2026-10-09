@@ -74,15 +74,15 @@ func TestConfineRequestForSpawnSelectsDirectIP(t *testing.T) {
 	rt.IssuePermit("sess", "call-1", digest, reqDigest, confDigest)
 
 	tctx := tools.ToolContext{
-		SessionID:                 "sess",
-		ToolCallID:                "call-1",
-		DirectIPRequested:         true,
-		DirectIPAuthorized:        true,
-		DirectIPActionDigest:      digest,
-		DirectIPRequestDigest:     reqDigest,
-		DirectIPConfineDigest:     confDigest,
-		DirectIPCapabilityRuntime: rt,
-		SocksProxyEnv:             true, // cleared under direct IP
+		Identity: tools.InvocationIdentity{SessionID: "sess",
+			ToolCallID: "call-1"},
+		Direct: tools.InvocationDirect{DirectIPRequested: true,
+			DirectIPAuthorized:        true,
+			DirectIPActionDigest:      digest,
+			DirectIPRequestDigest:     reqDigest,
+			DirectIPConfineDigest:     confDigest,
+			DirectIPCapabilityRuntime: rt},
+		Local: tools.InvocationLocal{SocksProxyEnv: true},
 	}
 	req, reject := tools.ConfineRequestForSpawn(t.Context(), tctx, []string{dir})
 	if reject != nil {
@@ -102,7 +102,9 @@ func TestConfineRequestForSpawnSelectsDirectIP(t *testing.T) {
 
 func TestConfineRequestForSpawnSocksProxyEnv(t *testing.T) {
 	dir := shortTempDir(t)
-	req, reject := tools.ConfineRequestForSpawn(t.Context(), tools.ToolContext{SocksProxyEnv: true}, []string{dir})
+	req, reject := tools.ConfineRequestForSpawn(t.Context(), tools.ToolContext{
+		Local: tools.InvocationLocal{SocksProxyEnv: true},
+	}, []string{dir})
 	if reject != nil {
 		t.Fatalf("unexpected reject: %+v", reject)
 	}
@@ -145,13 +147,13 @@ func TestFinalizeDirectIPForSpawnMismatch(t *testing.T) {
 	rt := &memoryDirectIPRuntime{}
 	rt.IssuePermit("sess", "call-1", "action", "req", "conf")
 	tctx := tools.ToolContext{
-		SessionID:                 "sess",
-		ToolCallID:                "call-1",
-		DirectIPRequested:         true,
-		DirectIPActionDigest:      "action",
-		DirectIPRequestDigest:     "req-OTHER",
-		DirectIPConfineDigest:     "conf",
-		DirectIPCapabilityRuntime: rt,
+		Identity: tools.InvocationIdentity{SessionID: "sess",
+			ToolCallID: "call-1"},
+		Direct: tools.InvocationDirect{DirectIPRequested: true,
+			DirectIPActionDigest:      "action",
+			DirectIPRequestDigest:     "req-OTHER",
+			DirectIPConfineDigest:     "conf",
+			DirectIPCapabilityRuntime: rt},
 	}
 	reject := tools.FinalizeDirectIPForSpawn(tctx)
 	if reject == nil {
@@ -194,9 +196,9 @@ func TestExternalAccessRequiresAppliedDirectIP(t *testing.T) {
 	}
 	out := &tools.ToolInvocationOut{}
 	tctx := tools.ToolContext{
-		DirectIPRequested: true,
-		DirectIPDeclared:  []string{"api.example"},
-		Out:               out,
+		Direct: tools.InvocationDirect{DirectIPRequested: true,
+			DirectIPDeclared: []string{"api.example"}},
+		Effects: tools.InvocationEffects{Out: out},
 	}
 
 	tools.CaptureExternalAccess(tctx, nil, false)

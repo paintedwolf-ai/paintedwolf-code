@@ -13,7 +13,7 @@ import (
 
 func TestRecursiveWaitRetainsCompletionSupersededBeforeHandoff(t *testing.T) {
 	catalog, root := indexFixture(t)
-	store, err := catalog.indexStore(t.Context(), "p", root)
+	store, err := catalog.Trees.indexStore(t.Context(), "p", root)
 	testutil.FailErr(t, "get completion handoff store", err)
 	done := make(chan struct{})
 	var stop sync.Once
@@ -42,7 +42,7 @@ func TestRecursiveWaitRetainsCompletionSupersededBeforeHandoff(t *testing.T) {
 		testutil.FailErr(t, "publish handoff structure", store.publishStructure(t.Context(), builder, pin.Generation))
 	}
 	publish([]string{"known.txt"}, false)
-	completed, err := catalog.OpenCompletedNavigation(t.Context(), "p", root)
+	completed, err := catalog.Directories.OpenCompletedNavigation(t.Context(), "p", root)
 	testutil.FailErr(t, "retain completed result", err)
 	defer func() { _ = completed.Close() }()
 	publish([]string{"unknown"}, true)
@@ -58,7 +58,7 @@ func TestRecursiveWaitRetainsCompletionSupersededBeforeHandoff(t *testing.T) {
 	continued, err := completed.pin.OpenNavigation(t.Context())
 	testutil.FailErr(t, "continue retained completion after drain", err)
 	_ = continued.Close()
-	_, err = catalog.OpenCompletedNavigation(t.Context(), "p", root)
+	_, err = catalog.Directories.OpenCompletedNavigation(t.Context(), "p", root)
 	if !errors.Is(err, pagedview.ErrExpired) {
 		t.Fatalf("drained completed lookup=%v", err)
 	}

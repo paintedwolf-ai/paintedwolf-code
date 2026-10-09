@@ -3,40 +3,14 @@ package survey
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 
-	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/summarize"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
-
-func (g *summarizeGatherer) surveyPruneOpts(base sandbox.SurveyOptions) sandbox.SurveyOptions {
-	if g != nil && g.caps.Gather.PruneNestedVCS {
-		base.PruneNestedVCS = true
-		if g.nestedPruneCount != nil {
-			base.OnNestedRepoPruned = g.noteNestedRepoPruned
-		}
-	}
-	return base
-}
-
-func (g *summarizeGatherer) noteNestedRepoPruned(abs string) {
-	if g == nil || g.nestedPruneCount == nil {
-		return
-	}
-	g.memoMu.Lock()
-	defer g.memoMu.Unlock()
-	if g.nestedPruneSeen == nil {
-		g.nestedPruneSeen = map[string]struct{}{}
-	}
-	if _, ok := g.nestedPruneSeen[abs]; ok {
-		return
-	}
-	g.nestedPruneSeen[abs] = struct{}{}
-	*g.nestedPruneCount++
-}
 
 type repoGather struct {
 	structure     []summarize.StructureCandidate
@@ -69,7 +43,7 @@ func (g *summarizeGatherer) gatherRepo(ctx context.Context, req summarize.Reques
 	var out repoGather
 	var missing []string
 	for _, target := range targets {
-		resolved, rerr := projectpaths.ResolveRead(ctx, g.boundary, g.tctx, target)
+		resolved, rerr := g.access.reads.Resolve(ctx, target)
 		if rerr != nil {
 			var reject *toolrejection.ToolReject
 			if errors.As(rerr, &reject) {
@@ -100,7 +74,7 @@ func (g *summarizeGatherer) gatherRepo(ctx context.Context, req summarize.Reques
 		if budget.full() {
 			continue
 		}
-		if sc, n, ok := g.structureFromAbs(ctx, resolved.Abs, resolved.DisplayPath); ok {
+		if sc, n, ok := g.sources.structureFromAbs(ctx, resolved.Abs, resolved.DisplayPath); ok {
 			out.structure = append(out.structure, sc)
 			budget.spend(n)
 		}
@@ -141,20 +115,20 @@ func (g *summarizeGatherer) gatherPatternRepo(
 	if g.caps.Gather.MaxFilesRead > 0 && (pageSize <= 0 || g.caps.Gather.MaxFilesRead < pageSize) {
 		pageSize = g.caps.Gather.MaxFilesRead
 	}
-	probe, err := g.probePatternPage(ctx, req, roots, pageSize)
+	probe, err := g.patterns.probePatternPage(ctx, req, roots, pageSize)
 	if err != nil {
 		return patternGather{}, err
 	}
-	if probe.MatchCount == 0 && req.Cursor == "" && probe.NextPath == "" && g.treeState != sourcecatalog.StateWarming && !g.sourceLimited {
-		return patternGather{}, patternNoMaterialReject(ctx, g, roots, req.Pattern, probe.SkippedPaths)
+	if probe.MatchCount == 0 && req.Cursor == "" && probe.NextPath == "" && g.trees.treeState != sourcecatalog.StateWarming && !g.sources.sourceLimited {
+		return patternGather{}, patternNoMaterialReject(ctx, g.patterns, roots, req.Pattern, probe.SkippedPaths)
 	}
 	for _, path := range probe.SkippedPaths {
-		g.noteSkippedPath(path)
+		g.sources.noteSkippedPath(path)
 	}
-	g.patternFilesTotal = probe.MatchingFiles
-	g.catalogRevision = probe.Revision
-	g.patternNextPath = probe.NextPath
-	g.patternCursorFound = probe.CursorFound
+	g.patterns.patternFilesTotal = probe.MatchingFiles
+	g.trees.catalogRevision = probe.Revision
+	g.patterns.patternNextPath = probe.NextPath
+	g.patterns.patternCursorFound = probe.CursorFound
 	samples := patternMatchSamples(probe.Matches, g.caps.Gather.PatternMatchSampleMax)
 	byPath := map[string][]grepMatch{}
 	var paths []string
@@ -169,7 +143,7 @@ func (g *summarizeGatherer) gatherPatternRepo(
 		if budget.full() {
 			break
 		}
-		sc, n, err := g.structureFromPathPattern(ctx, display, req.Pattern, byPath[display])
+		sc, n, err := g.patterns.structureFromPathPattern(ctx, display, req.Pattern, byPath[display])
 		if errors.Is(err, errSummaryReadBudget) {
 			break
 		}
@@ -204,22 +178,12 @@ func (b *structureBudget) spend(n int) {
 	b.bytes += n
 }
 
-// Outline builds one drilled-leaf structure.
-func (g *summarizeGatherer) Outline(ctx context.Context, relPath string) (summarize.StructureCandidate, bool) {
-	resolved, err := projectpaths.ResolveRead(ctx, g.boundary, g.tctx, relPath)
-	if err != nil {
-		return summarize.StructureCandidate{}, false
-	}
-	sc, _, ok := g.structureFromAbs(ctx, resolved.Abs, resolved.DisplayPath)
-	return sc, ok
-}
-
 func (g *summarizeGatherer) gatherStructureDir(ctx context.Context, resolved projectpaths.Resolved, out *[]summarize.StructureCandidate) {
 	target := resolved.DisplayPath
 	if target == "" {
 		target = "."
 	}
-	root := g.buildSubtreeForTarget(ctx, target)
+	root := g.trees.buildSubtreeForTarget(ctx, target)
 	if dm := sourceDirMapCandidate(root); dm.RelPath != "" {
 		*out = append(*out, dm)
 	}

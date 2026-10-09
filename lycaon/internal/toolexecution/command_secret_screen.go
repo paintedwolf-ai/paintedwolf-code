@@ -46,17 +46,17 @@ func (e *Secrets) screenArgvSecrets(
 	}
 	// A value a person holds is screened wherever it goes, since the handoff
 	// refuses it without a reviewed release.
-	if !e.actionCanEgress(ctx, tc) && len(secretUseFrom(ctx)) == 0 && !tc.Secrets.HoldsPersonValues() {
+	if !e.actionCanEgress(ctx, tc) && len(secretUseFrom(ctx)) == 0 && !tc.Effects.Secrets.HoldsPersonValues() {
 		return nil
 	}
-	known, err := tc.Secrets.Matches(e.secretMatcher, func(string) bool { return true })
+	known, err := tc.Effects.Secrets.Matches(e.secretMatcher, func(string) bool { return true })
 	if err != nil {
 		return argvSecretFaultReject(ctx, e, tool, tc, surface, secretmatch.Match{}, secretmatch.NewAskFault(secretmatch.FaultStageScreenUnwired, err))
 	}
 	attribution := secretmatch.AskAttributionFrom(ctx)
-	attribution.ProjectID = tc.ProjectID
-	attribution.SessionID = tc.SessionID
-	attribution.ToolCallID = tc.ToolCallID
+	attribution.ProjectID = tc.Identity.ProjectID
+	attribution.SessionID = tc.Identity.SessionID
+	attribution.ToolCallID = tc.Identity.ToolCallID
 	ctx = secretmatch.WithAskAttribution(ctx, attribution)
 	classification := e.secretMatcher.ClassificationSnapshot(ctx)
 	ctx = e.secretMatcher.WithClassifications(ctx, classification)
@@ -162,7 +162,7 @@ func visitArgvStrings(ctx context.Context, value any, label string, visit func(l
 // actionCanEgress uses the executor's confinement request.
 func (e *Secrets) actionCanEgress(ctx context.Context, tc tools.ToolContext) bool {
 	req := e.Boundary.actionConfineRequest(ctx, tc)
-	if tc.DirectIPAuthorized && req.Egress != confine.EgressDirectIP {
+	if tc.Direct.DirectIPAuthorized && req.Egress != confine.EgressDirectIP {
 		req.Egress = confine.EgressDirectIP
 		req.SocksProxyEnv = false
 	}
@@ -178,11 +178,11 @@ func argvSecretFinding(
 ) secretmatch.Alert {
 	destination, label := argvSecretDestination(tc)
 	return secretmatch.Alert{
-		SessionID:        tc.SessionID,
+		SessionID:        tc.Identity.SessionID,
 		RootSessionID:    tc.ChatSessionID(),
-		ProjectID:        tc.ProjectID,
+		ProjectID:        tc.Identity.ProjectID,
 		ProjectDir:       tc.ActiveRootPath(),
-		ToolCallID:       tc.ToolCallID,
+		ToolCallID:       tc.Identity.ToolCallID,
 		Surface:          surface,
 		DestinationID:    destination,
 		DestinationLabel: label,
@@ -202,7 +202,7 @@ func argvSecretFinding(
 
 // argvSecretDestination describes the observable egress boundary.
 func argvSecretDestination(tc tools.ToolContext) (string, string) {
-	if tc.DirectIPAuthorized {
+	if tc.Direct.DirectIPAuthorized {
 		return string(hitl.ContainedEgressDirectIP), "processes in this chat with direct network access"
 	}
 	return string(hitl.ContainedEgressProxy), "processes in this chat with mediated network access"
@@ -225,8 +225,8 @@ func argvSecretReject(
 	match secretmatch.Match,
 	resolution secretmatch.Resolution,
 ) error {
-	tc.Secrets.Withhold(ctx)
-	_, destination := fileSecretDestination(stringArgOrEmpty(tc.CanonicalArgs, "path"))
+	tc.Effects.Secrets.Withhold(ctx)
+	_, destination := fileSecretDestination(stringArgOrEmpty(tc.Effects.CanonicalArgs, "path"))
 	if surface != secretmatch.SurfaceFile {
 		_, destination = argvSecretDestination(tc)
 	}
@@ -240,7 +240,7 @@ func argvSecretReject(
 		},
 	}
 	toolrejection.AttachUserGuidance(reject, resolution.Guidance)
-	return e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Agent, nil, reject)
+	return e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Identity.Agent, nil, reject)
 }
 
 // argvSecretFaultReject distinguishes host faults from human decisions.
@@ -257,7 +257,7 @@ func argvSecretFaultReject(
 	if fault, ok := secretmatch.Faulted(err); ok {
 		stage = fault.Stage
 	}
-	return e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Agent, nil, &toolrejection.ToolReject{
+	return e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Identity.Agent, nil, &toolrejection.ToolReject{
 		Code: toolrejection.OutboundSecretScreenFailedCode,
 		Data: map[string]any{
 			"surface":     string(surface),

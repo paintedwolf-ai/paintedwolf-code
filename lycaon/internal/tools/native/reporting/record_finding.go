@@ -28,7 +28,7 @@ type FindingsScopeKey func(ctx context.Context, sessionID string) string
 
 func FindingsHandler(gates RecordFindingGates, store findings.Store, scopeKey FindingsScopeKey) tools.ToolHandler {
 	return func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-		rootSession := strings.TrimSpace(scopeKey(ctx, tctx.SessionID))
+		rootSession := strings.TrimSpace(scopeKey(ctx, tctx.Identity.SessionID))
 		if rootSession == "" {
 			return "", fmt.Errorf("session required")
 		}
@@ -53,9 +53,9 @@ func FindingsHandler(gates RecordFindingGates, store findings.Store, scopeKey Fi
 			return "", &toolrejection.ToolReject{Code: "FINDING_UNGROUNDED", Data: map[string]any{"reason": "reference_required"}}
 		}
 
-		agent := strings.TrimSpace(tctx.WorkerJobID)
+		agent := strings.TrimSpace(tctx.Identity.WorkerJobID)
 		if agent == "" {
-			agent = strings.TrimSpace(tctx.Agent)
+			agent = strings.TrimSpace(tctx.Identity.Agent)
 		}
 		if agent == "" {
 			agent = findingAgentCoordinator

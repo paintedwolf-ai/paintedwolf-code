@@ -43,7 +43,15 @@ func TestInstructionWriteUsesOrdinaryApprovalWithExactDiff(t *testing.T) {
 		return writer.Run(ctx, args, tc)
 	}))
 	executor := toolexecution.NewExecutor(toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), approvalGate), registry, "implement")
-	tc := tools.ToolContext{Roots: []projectroot.RootRef{{ID: "root", Path: project, IsPrimary: true}}, ActiveRootID: "root", ProjectID: "project", SourceWorkspaceKind: api.SourceWorkspaceKindProject, SessionID: "chat", ToolCallID: "first", Agent: "implement"}
+	tc := tools.ToolContext{
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: project, IsPrimary: true}},
+			ActiveRootID:        "root",
+			SourceWorkspaceKind: api.SourceWorkspaceKindProject},
+		Identity: tools.InvocationIdentity{ProjectID: "project",
+			SessionID:  "chat",
+			ToolCallID: "first",
+			Agent:      "implement"},
+	}
 	for _, after := range []string{"First approved instructions\n", "Second approved instructions\n"} {
 		manager := &asyncHITL{requested: make(chan struct{}, 1)}
 		executor.Approvals.SetCheckpointManager(manager, approvalGate)
@@ -92,7 +100,7 @@ func TestInstructionWriteUsesOrdinaryApprovalWithExactDiff(t *testing.T) {
 			t.Fatalf("approved bytes did not land: %q", current)
 		}
 		before, tc = after, executed
-		tc.ToolCallID = "next"
+		tc.Identity.ToolCallID = "next"
 	}
 }
 
@@ -129,7 +137,11 @@ func TestInstructionContentReviewAuthorizesOnlyComposedBytes(t *testing.T) {
 	executor := toolexecution.NewExecutor(toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), approvalGate), registry, "implement")
 	executor.Approvals.SetCheckpointManager(manager, approvalGate)
 	_, err = executor.Invoke(t.Context(), "write", map[string]any{"path": "AGENTS.md", "content": "proposed change\n"}, tools.ToolContext{
-		Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}}, ActiveRootID: "root", SessionID: "chat", ToolCallID: "content-write", Agent: "implement",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}},
+			ActiveRootID: "root"},
+		Identity: tools.InvocationIdentity{SessionID: "chat",
+			ToolCallID: "content-write",
+			Agent:      "implement"},
 	})
 	testutil.FailErr(t, "apply reviewed instructions", err)
 	if len(manager.requests) != 1 || manager.requests[0].Kind != api.CheckpointKindContentApply {
@@ -171,7 +183,13 @@ func TestFileChangeApprovalDeduplicatesPathsAndRetainsIndexPreviews(t *testing.T
 	done := make(chan error, 1)
 	go func() {
 		_, err := executor.Invoke(ctx, "write", map[string]any{"path": "AGENTS.md", "content": "after"}, tools.ToolContext{
-			Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}}, ActiveRootID: "root", ProjectID: "project", SourceWorkspaceKind: api.SourceWorkspaceKindProject, SessionID: "chat", ToolCallID: "review", Agent: "implement",
+			Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}},
+				ActiveRootID:        "root",
+				SourceWorkspaceKind: api.SourceWorkspaceKindProject},
+			Identity: tools.InvocationIdentity{ProjectID: "project",
+				SessionID:  "chat",
+				ToolCallID: "review",
+				Agent:      "implement"},
 		})
 		done <- err
 	}()
@@ -212,7 +230,11 @@ func TestCommandInstructionGrantUsesOneOrdinaryApproval(t *testing.T) {
 	done := make(chan error, 1)
 	go func() {
 		_, err := executor.Invoke(ctx, "command", map[string]any{"command": "touch AGENTS.md", "capability_request": map[string]any{"write_root": path}}, tools.ToolContext{
-			Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}}, ActiveRootID: "root", SessionID: "chat", ToolCallID: "policy-command", Agent: "implement",
+			Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}},
+				ActiveRootID: "root"},
+			Identity: tools.InvocationIdentity{SessionID: "chat",
+				ToolCallID: "policy-command",
+				Agent:      "implement"},
 		})
 		done <- err
 	}()
@@ -229,8 +251,8 @@ func TestCommandInstructionGrantUsesOneOrdinaryApproval(t *testing.T) {
 	if len(manager.requested) != 0 {
 		t.Fatal("command required duplicate approvals")
 	}
-	if len(executed.PolicyWriteGrants) != 1 || executed.PolicyWriteGrants[0].Subtree {
-		t.Fatalf("incorrect instruction authority: %+v", executed.PolicyWriteGrants)
+	if len(executed.Files.PolicyWriteGrants) != 1 || executed.Files.PolicyWriteGrants[0].Subtree {
+		t.Fatalf("incorrect instruction authority: %+v", executed.Files.PolicyWriteGrants)
 	}
 	if len(approvalGate.ListGrants("chat")) != 0 {
 		t.Fatal("instruction command installed a reusable grant")
@@ -262,14 +284,14 @@ func TestCoordinatorInvestigateOverlayWriteReachesAgentPolicyApproval(t *testing
 
 	after := "version: 1\nfindings:\n  - id: canary-ignore\n    path: test.go\n"
 	tc := tools.ToolContext{
-		Roots:               []projectroot.RootRef{{ID: "root", Path: project, IsPrimary: true}},
-		ActiveRootID:        "root",
-		ProjectID:           "project",
-		SourceWorkspaceKind: api.SourceWorkspaceKindProject,
-		SessionID:           "chat",
-		ToolCallID:          "coord-write-ignore",
-		Agent:               "coordinator",
-		TurnSurfaceID:       toolcontract.SurfaceImplementInvestigate,
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: project, IsPrimary: true}},
+			ActiveRootID:        "root",
+			SourceWorkspaceKind: api.SourceWorkspaceKindProject},
+		Identity: tools.InvocationIdentity{ProjectID: "project",
+			SessionID:  "chat",
+			ToolCallID: "coord-write-ignore",
+			Agent:      "coordinator"},
+		Turn: tools.InvocationTurn{TurnSurfaceID: toolcontract.SurfaceImplementInvestigate},
 	}
 
 	manager := &asyncHITL{requested: make(chan struct{}, 1)}

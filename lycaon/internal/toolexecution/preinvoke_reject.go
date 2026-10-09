@@ -1,6 +1,7 @@
 package toolexecution
 
 import (
+	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/toolfeedback"
 
 	"context"
@@ -80,5 +81,11 @@ func (e *Rejections) renderReject(rej *toolrejection.ToolReject) error {
 func (e *Rejections) SetBlockPlane(bp *toolfeedback.BlockPlane) {
 	if e != nil {
 		e.blockPlane = bp
+	}
+}
+
+func (e *Rejections) SetMCPCatalog(c oar.MCPCatalogView) {
+	if e != nil && e.blockPlane != nil {
+		e.blockPlane.MCPCatalog = c
 	}
 }

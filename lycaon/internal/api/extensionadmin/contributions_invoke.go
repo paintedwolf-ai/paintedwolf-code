@@ -38,7 +38,7 @@ type invokeScope struct {
 	project    *project.Project
 }
 
-func (s *Handler) HandleInvokeProjectCommand(w http.ResponseWriter, r *http.Request) {
+func (s *Execution) HandleInvokeProjectCommand(w http.ResponseWriter, r *http.Request) {
 	p, ok := requestscope.ProjectByURLID(s.Projects, s.responses, w, r)
 	if !ok {
 		return
@@ -52,7 +52,7 @@ func (s *Handler) HandleInvokeProjectCommand(w http.ResponseWriter, r *http.Requ
 	})
 }
 
-func (s *Handler) HandleInvokeSessionCommand(w http.ResponseWriter, r *http.Request) {
+func (s *Execution) HandleInvokeSessionCommand(w http.ResponseWriter, r *http.Request) {
 	sess, ok := requestscope.Session(s.Store, s.responses, w, r, chi.URLParam(r, "id"))
 	if !ok {
 		return
@@ -69,7 +69,7 @@ func (s *Handler) HandleInvokeSessionCommand(w http.ResponseWriter, r *http.Requ
 }
 
 // invokeCommand admits one captured command before execution.
-func (s *Handler) invokeCommand(w http.ResponseWriter, r *http.Request, scope invokeScope) {
+func (s *Execution) invokeCommand(w http.ResponseWriter, r *http.Request, scope invokeScope) {
 	var req wire.CommandInvokeRequest
 	if err := httpio.DecodeJSON(w, r, &req); err != nil {
 		s.responses.DecodeError(w, r, err)
@@ -119,9 +119,9 @@ func (s *Handler) invokeCommand(w http.ResponseWriter, r *http.Request, scope in
 		return
 	}
 
-	frame, err := s.CaptureContributionFrame(r.Context(), scope.projectID, scope.projectDir)
+	frame, err := s.Contributions.CaptureContributionFrame(r.Context(), scope.projectID, scope.projectDir)
 	if err != nil {
-		s.writeContributionFrameError(w, r, err)
+		s.Contributions.writeContributionFrameError(w, r, err)
 		return
 	}
 	command, ok := frame.Command(commandID)
@@ -219,7 +219,7 @@ func (s *Handler) invokeCommand(w http.ResponseWriter, r *http.Request, scope in
 
 // Failed receipts retain command state internally, while HTTP failures use the
 // same notice envelope on initial delivery and idempotent replay.
-func (s *Handler) WriteCommandResponse(w http.ResponseWriter, status int, body wire.CommandInvokeResponse) {
+func (s *Execution) WriteCommandResponse(w http.ResponseWriter, status int, body wire.CommandInvokeResponse) {
 	if status >= http.StatusBadRequest && body.Error != nil {
 		s.responses.Fail(w, body.Error.Code, body.Error.Message)
 		return
@@ -228,8 +228,8 @@ func (s *Handler) WriteCommandResponse(w http.ResponseWriter, status int, body w
 }
 
 // subgraphUnchanged compares retained execution dependencies.
-func (s *Handler) subgraphUnchanged(callerRevision string, current *contribframe.Frame, id contribution.ID) bool {
-	prior, ok := s.contributionFrameByRevision(callerRevision)
+func (s *Execution) subgraphUnchanged(callerRevision string, current *contribframe.Frame, id contribution.ID) bool {
+	prior, ok := s.Contributions.contributionFrameByRevision(callerRevision)
 	if !ok {
 		return false
 	}
@@ -242,7 +242,7 @@ func (s *Handler) subgraphUnchanged(callerRevision string, current *contribframe
 }
 
 // executeCommand dispatches one compiled action.
-func (s *Handler) executeCommand(
+func (s *Execution) executeCommand(
 	w http.ResponseWriter, r *http.Request,
 	scope invokeScope, req wire.CommandInvokeRequest, in commandinvoke.Input,
 ) (int, wire.CommandInvokeResponse, bool) {
@@ -275,7 +275,7 @@ func (s *Handler) executeCommand(
 	}
 }
 
-func (s *Handler) executeWorkflowStart(
+func (s *Execution) executeWorkflowStart(
 	w http.ResponseWriter, r *http.Request,
 	scope invokeScope, req wire.CommandInvokeRequest, in commandinvoke.Input,
 ) (int, wire.CommandInvokeResponse, bool) {
@@ -310,7 +310,7 @@ func (s *Handler) executeWorkflowStart(
 }
 
 // ExecuteEditorAction admits a prompt under its preset boundary.
-func (s *Handler) ExecuteEditorAction(
+func (s *Execution) ExecuteEditorAction(
 	w http.ResponseWriter, r *http.Request,
 	sess *wire.Session, req wire.CommandInvokeRequest, in commandinvoke.Input,
 ) (int, wire.CommandInvokeResponse, bool) {
@@ -355,10 +355,10 @@ func (s *Handler) ExecuteEditorAction(
 			StartLine: in.Context.StartLine,
 			EndLine:   in.Context.EndLine,
 		}}
-		previewBudget := promptattach.NewTurnPreviewBudget(s.Prompt.Caps)
-		refResult, err := promptattach.IngestReferences(s.Prompt.ReferenceDeps(r.Context(), sess), previewBudget, []wire.PromptReferencePart{refPart})
+		previewBudget := promptattach.NewTurnPreviewBudget(s.PromptSubmission.Caps)
+		refResult, err := promptattach.IngestReferences(s.PromptReferences.ReferenceDeps(r.Context(), sess), previewBudget, []wire.PromptReferencePart{refPart})
 		if err != nil {
-			s.Prompt.WriteAttachmentError(w, err)
+			s.PromptSubmission.WriteAttachmentError(w, err)
 			return 0, wire.CommandInvokeResponse{}, false
 		}
 		input.Text = promptattach.JoinUserText(text, refResult.Fences())
@@ -384,11 +384,11 @@ func (s *Handler) ExecuteEditorAction(
 		s.responses.InternalError(w, r, err)
 		return 0, wire.CommandInvokeResponse{}, false
 	}
-	s.Prompt.ResumePromptSubmission(r.Context(), in.SessionID, row)
+	s.PromptExecution.ResumePromptSubmission(r.Context(), in.SessionID, row)
 	return http.StatusAccepted, wire.CommandInvokeResponse{Status: "accepted", MessageID: row.ID}, true
 }
 
-func (s *Handler) executeMCPTool(
+func (s *Execution) executeMCPTool(
 	w http.ResponseWriter, r *http.Request,
 	scope invokeScope, in commandinvoke.Input,
 ) (int, wire.CommandInvokeResponse, bool) {
@@ -404,7 +404,7 @@ func (s *Handler) executeMCPTool(
 		return 0, wire.CommandInvokeResponse{}, false
 	}
 	requirement, _ := in.Frame.View.Contributions.MCPRequirement(requirementID)
-	output, err := s.MCPRegistry.CallTool(r.Context(),
+	output, err := s.MCP.CallTool(r.Context(),
 		mcp.ProjectScope(scope.projectID, scope.projectDir, scope.roots),
 		requirement.ProviderID, in.Resolved.Action.Tool, in.Args)
 	if err != nil {

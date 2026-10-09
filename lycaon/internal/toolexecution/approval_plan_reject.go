@@ -58,9 +58,9 @@ func (e *Approvals) rejectBoundaryPolicyDeny(
 	approval *hitl.ApprovalResult,
 ) error {
 	eval := platform.PolicyContext{
-		ToolName: tool, ProfileID: tc.Agent, ToolArgs: args,
-		ProjectID: tc.ProjectID, ProjectDir: tc.ActiveRootPath(),
-		SessionID: tc.SessionID, ParentSessionID: tc.ParentSessionID,
+		ToolName: tool, ProfileID: tc.Identity.Agent, ToolArgs: args,
+		ProjectID: tc.Identity.ProjectID, ProjectDir: tc.ActiveRootPath(),
+		SessionID: tc.Identity.SessionID, ParentSessionID: tc.Identity.ParentSessionID,
 	}
 	decision := &platform.PolicyDecision{
 		Blocked: true, RejectCode: approval.DenyCode,
@@ -68,5 +68,5 @@ func (e *Approvals) rejectBoundaryPolicyDeny(
 		Approval: approval,
 	}
 	e.recordToolDenied(ctx, eval, decision, approval)
-	return e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Agent, args, toolprofiles.PolicyBlockReject(decision, tool, tc.Agent))
+	return e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Identity.Agent, args, toolprofiles.PolicyBlockReject(decision, tool, tc.Identity.Agent))
 }

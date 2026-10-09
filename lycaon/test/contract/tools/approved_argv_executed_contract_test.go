@@ -54,10 +54,14 @@ func TestApprovedCommandPlanIsTheExecutedPlan(t *testing.T) {
 				contractcheck.FailErr(t, "resolve scratch", err)
 				before := snapshotTree(t, root)
 				ctx := tools.ToolContext{
-					Roots:        []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}},
-					ActiveRootID: "root", ProjectID: "project", SourceWorkspaceKind: api.SourceWorkspaceKindProject,
-					SessionID: "chat", ToolCallID: "call-" + tool, Agent: "implement",
-					SessionScratchDir: scratchDir,
+					Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}},
+						ActiveRootID:        "root",
+						SourceWorkspaceKind: api.SourceWorkspaceKindProject},
+					Identity: tools.InvocationIdentity{ProjectID: "project",
+						SessionID:  "chat",
+						ToolCallID: "call-" + tool,
+						Agent:      "implement"},
+					Host: tools.InvocationHost{SessionScratchDir: scratchDir},
 				}
 				gate.reset()
 				args := cloneArgs(tc.args).(map[string]any)

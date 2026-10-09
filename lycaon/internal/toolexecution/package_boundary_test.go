@@ -61,9 +61,9 @@ func TestPackageReadAccessRequiresSuccessfulExplicitPreflight(t *testing.T) {
 					return e
 				}()
 				tc := tools.ToolContext{
-					Invocation:       tools.Invocation{Contract: toolcontract.Contract{Capabilities: toolcontract.CapabilityReadPath}},
-					PackageExecution: &packageexec.Execution{SensitiveReads: []string{path, other}},
-					SessionReadPaths: []string{other},
+					Invocation: tools.Invocation{Contract: toolcontract.Contract{Capabilities: toolcontract.CapabilityReadPath}},
+					Files: tools.InvocationFiles{PackageExecution: &packageexec.Execution{SensitiveReads: []string{path, other}},
+						SessionReadPaths: []string{other}},
 				}
 				args := map[string]any{"capability_request": map[string]any{"read_path": path}}
 				testutil.FailErr(t, "route package read to approval", executor.Boundary.rejectPackageBoundaryWidening(t.Context(), tool, "", args, tc))
@@ -98,10 +98,12 @@ func TestPackageBoundaryDoesNotInheritSessionLocalNetworkLeases(t *testing.T) {
 		}
 		return e
 	}()
-	tc := tools.ToolContext{PackageExecution: &packageexec.Execution{Manager: "npm"}}
+	tc := tools.ToolContext{
+		Files: tools.InvocationFiles{PackageExecution: &packageexec.Execution{Manager: "npm"}},
+	}
 	executor.Boundary.applySessionListenGrant(t.Context(), &tc)
 	executor.Boundary.applySessionLoopbackGrant(t.Context(), &tc)
-	if tc.LocalListenGranted || tc.LoopbackConnectGranted {
+	if tc.Local.LocalListenGranted || tc.Local.LoopbackConnectGranted {
 		t.Fatalf("remote package execution inherited local network grants: %+v", tc)
 	}
 }

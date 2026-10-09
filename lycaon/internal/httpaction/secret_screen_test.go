@@ -51,7 +51,9 @@ func runTokenRequest(t *testing.T, deps Deps, serverURL string) (result, error) 
 		"url":                serverURL + "/res/v1/web/search?q=test",
 		"headers":            []any{map[string]any{"name": "X-Subscription-Token", "value": plantedBraveKey}},
 		"capability_request": loopbackCapability(t, serverURL),
-	}, tools.ToolContext{Agent: toolprofiles.DefaultToolProfileID})
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{Agent: toolprofiles.DefaultToolProfileID},
+	})
 	if err != nil {
 		return result{}, err
 	}

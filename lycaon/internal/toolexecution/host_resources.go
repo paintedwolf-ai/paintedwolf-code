@@ -36,13 +36,13 @@ func (e *Network) expandHostResourceConnections(
 ) (map[string]any, *hostresources.ActionResolution, error) {
 	request, reject := capabilityrequest.ParseCapabilityRequest(args)
 	if reject != nil {
-		return nil, nil, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Agent, args, reject)
+		return nil, nil, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Identity.Agent, args, reject)
 	}
 	if request == nil || len(request.HostResources) == 0 {
 		return args, nil, nil
 	}
 	if e.hostResourceSource == nil {
-		return nil, nil, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Agent, args, &toolrejection.ToolReject{
+		return nil, nil, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Identity.Agent, args, &toolrejection.ToolReject{
 			Code: isolation.CodeCapabilityRequestInvalid,
 			Data: map[string]any{
 				"reason":         "host resource catalog is unavailable",
@@ -53,11 +53,11 @@ func (e *Network) expandHostResourceConnections(
 	resolution, unmet := e.hostResourceSource(
 		ctx,
 		request.HostResources,
-		hostresources.ProjectContext{ID: tc.ProjectID, Dir: tc.ActiveRootPath()},
+		hostresources.ProjectContext{ID: tc.Identity.ProjectID, Dir: tc.ActiveRootPath()},
 		[]hostresources.ExecutionSurface{hostresources.SurfaceProcessExec},
 	)
 	if len(unmet) > 0 {
-		return nil, nil, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Agent, args, &toolrejection.ToolReject{
+		return nil, nil, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Identity.Agent, args, &toolrejection.ToolReject{
 			Code: isolation.CodeCapabilityRequestInvalid,
 			Data: map[string]any{
 				"reason":         "requested host resources are unavailable",
@@ -67,7 +67,7 @@ func (e *Network) expandHostResourceConnections(
 	}
 	if len(resolution.Deny) > 0 {
 		if e.Rejections.blockPlane != nil && e.Rejections.blockPlane.Enforces(oar.AnchorToolRejected) {
-			if err := e.Rejections.blockPlane.Evaluate(ctx, oar.AnchorToolRejected, tool, tc.Agent, args, func(gc *oar.GuardContext) error {
+			if err := e.Rejections.blockPlane.Evaluate(ctx, oar.AnchorToolRejected, tool, tc.Identity.Agent, args, func(gc *oar.GuardContext) error {
 				observeHostResourceResolution(gc, resolution)
 				gc.PutRejectData("HOST_RESOURCE_POLICY_DENIED", map[string]any{"host_resources": resolution.Deny})
 				return nil
@@ -83,7 +83,7 @@ func (e *Network) expandHostResourceConnections(
 	}
 	merged, reject := mergeHostResourceConnections(args, resolution.Connections)
 	if reject != nil {
-		return nil, &resolution, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Agent, args, reject)
+		return nil, &resolution, e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Identity.Agent, args, reject)
 	}
 	return merged, &resolution, nil
 }

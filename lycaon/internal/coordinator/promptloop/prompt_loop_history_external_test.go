@@ -49,7 +49,10 @@ func TestLoopProseFinishTurnOmitsTools(t *testing.T) {
 		Session:   sess,
 		History:   userHistory("implement"),
 		ProfileID: "implementer",
-		ToolCtx:   tools.ToolContext{SessionID: sess.ID, Agent: "implementer"},
+		ToolCtx: tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: sess.ID,
+				Agent: "implementer"},
+		},
 	})
 	testutil.FailErr(t, "loop.Run failed", err)
 	if closeoutReason != promptloop.TurnCloseoutIterationCap {
@@ -97,7 +100,10 @@ func TestLoopProseFinishInputOmitsToolsOnFirstTurn(t *testing.T) {
 		History:     userHistory("closeout"),
 		ProfileID:   "implementer",
 		ProseFinish: true,
-		ToolCtx:     tools.ToolContext{SessionID: sess.ID, Agent: "implementer"},
+		ToolCtx: tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: sess.ID,
+				Agent: "implementer"},
+		},
 	})
 	testutil.FailErr(t, "loop.Run failed", err)
 	if len(client.toolsPerRequest) != 1 || client.toolsPerRequest[0] != 1 {

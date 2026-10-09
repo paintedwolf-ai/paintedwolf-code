@@ -17,7 +17,7 @@ type ProgressScopeKey func(ctx context.Context, sessionID string) string
 // ProgressHandler returns the update_progress handler.
 func ProgressHandler(store progress.Store, scopeKey ProgressScopeKey) tools.ToolHandler {
 	return func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-		root := strings.TrimSpace(scopeKey(ctx, tctx.SessionID))
+		root := strings.TrimSpace(scopeKey(ctx, tctx.Identity.SessionID))
 		if root == "" {
 			return "", fmt.Errorf("session required")
 		}

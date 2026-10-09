@@ -313,5 +313,5 @@ func wirePromptApprovalRejectFmt(t *testing.T, mgr *session.Manager, root string
 	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
 	hintCfg, err := guidance.LoadHintConfigStock()
 	testutil.FailErr(t, "load hint registry", err)
-	mgr.Rejections.SetRejectFormatter(guidance.NewStaticRejectFormatter(hintCfg))
+	mgr.SetRejectFormatter(guidance.NewStaticRejectFormatter(hintCfg))
 }

@@ -179,8 +179,8 @@ func TestConfineRequestForSpawnIgnoresForgedRawRequest(t *testing.T) {
 	_ = listenUnixSocket(t, filepath.Join(dir, "s.sock"))
 
 	tctx := ToolContext{
-		SessionID:  "sess",
-		ToolCallID: "call-1",
+		Identity: InvocationIdentity{SessionID: "sess",
+			ToolCallID: "call-1"},
 	}
 	req, reject := ConfineRequestForSpawn(t.Context(), tctx, []string{dir})
 	if reject != nil {
@@ -208,11 +208,11 @@ func TestConfineRequestForSpawnConsumesPermit(t *testing.T) {
 	rt.IssuePermit("sess", "call-1", digest, g)
 
 	tctx := ToolContext{
-		SessionID:               "sess",
-		ToolCallID:              "call-1",
-		SocketGrants:            []confine.SocketGrant{g},
-		SocketActionDigest:      digest,
-		SocketCapabilityRuntime: rt,
+		Identity: InvocationIdentity{SessionID: "sess",
+			ToolCallID: "call-1"},
+		Socket: InvocationSocket{SocketGrants: []confine.SocketGrant{g},
+			SocketActionDigest:      digest,
+			SocketCapabilityRuntime: rt},
 	}
 	req, reject := ConfineRequestForSpawn(t.Context(), tctx, []string{dir})
 	if reject != nil {

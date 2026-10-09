@@ -20,13 +20,13 @@ func ApprovalFilePath(tc ToolContext, path string) (string, error) {
 		return path, nil
 	}
 	if rel, ok := projectroot.ScratchAddress(path); ok {
-		if strings.TrimSpace(tc.SessionScratchDir) == "" {
+		if strings.TrimSpace(tc.Host.SessionScratchDir) == "" {
 			return "", ErrSessionScratchUnavailable
 		}
-		return projectroot.ScratchPath(tc.SessionScratchDir, rel)
+		return projectroot.ScratchPath(tc.Host.SessionScratchDir, rel)
 	}
-	roots, active := tc.Roots, tc.ActiveRootID
-	if branch := strings.TrimSpace(tc.WorkerBranchRoot); branch != "" {
+	roots, active := tc.Source.Roots, tc.Source.ActiveRootID
+	if branch := strings.TrimSpace(tc.Source.WorkerBranchRoot); branch != "" {
 		rel, _, err := projectroot.WorkerBranchRelative(roots, active, path)
 		if err != nil {
 			return "", err

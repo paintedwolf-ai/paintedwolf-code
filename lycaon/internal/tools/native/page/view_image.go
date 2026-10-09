@@ -131,8 +131,8 @@ func screenVisual(ctx context.Context, gate *visualscreen.Gate, tool string, tct
 		}
 		return out, nil
 	}
-	in.SessionID, in.ProjectID = tctx.SessionID, tctx.ProjectID
-	in.ToolName, in.ToolCallID = tool, tctx.ToolCallID
+	in.SessionID, in.ProjectID = tctx.Identity.SessionID, tctx.Identity.ProjectID
+	in.ToolName, in.ToolCallID = tool, tctx.Identity.ToolCallID
 	outcome, err := gate.Screen(ctx, in)
 	if err != nil {
 		if errors.Is(err, visualscreen.ErrVisualSecretWithheld) {
@@ -179,7 +179,7 @@ func withImageFacts(base, extra map[string]any) map[string]any {
 // artifact recorded as not perceived is screened again.
 func handleViewImageByHandle(ctx context.Context, deps ViewImageDeps, tctx tools.ToolContext, in viewImageArgs) (string, error) {
 	if deps.HandleStore != nil {
-		if h, ok := deps.HandleStore.Get(tctx.SessionID, in.Handle); ok && len(h.Bytes) > 0 {
+		if h, ok := deps.HandleStore.Get(tctx.Identity.SessionID, in.Handle); ok && len(h.Bytes) > 0 {
 			return emitHandleView(tctx, in.Handle, "", h.Bytes, "image/png", api.VisualArtifactSourceRender, h.Caption,
 				h.Canvas.Width, h.Canvas.Height, h.Revision, screened{bytes: h.Bytes, mime: "image/png", perception: visualscreen.PerceptionOriginal})
 		}
@@ -187,9 +187,9 @@ func handleViewImageByHandle(ctx context.Context, deps ViewImageDeps, tctx tools
 	if deps.VisualStore == nil {
 		return "", renderHandleNotFound(in.Handle)
 	}
-	root := tctx.SessionID
+	root := tctx.Identity.SessionID
 	if deps.RootSessionID != nil {
-		if r := strings.TrimSpace(deps.RootSessionID(ctx, tctx.SessionID)); r != "" {
+		if r := strings.TrimSpace(deps.RootSessionID(ctx, tctx.Identity.SessionID)); r != "" {
 			root = r
 		}
 	}
@@ -238,8 +238,8 @@ func renderHandleNotFound(handle string) error {
 func emitHandleView(tctx tools.ToolContext, renderHandle, storedID string, raw []byte, mime string, source api.VisualArtifactSource,
 	caption string, width, height, revision int, view screened,
 ) (string, error) {
-	if tctx.Out == nil {
-		tctx.Out = &tools.ToolInvocationOut{}
+	if tctx.Effects.Out == nil {
+		tctx.Effects.Out = &tools.ToolInvocationOut{}
 	}
 	format := strings.TrimPrefix(mime, "image/")
 	if strings.Contains(mime, "svg") {
@@ -247,7 +247,7 @@ func emitHandleView(tctx tools.ToolContext, renderHandle, storedID string, raw [
 	}
 	switch {
 	case view.perceive() && storedID != "":
-		tctx.Out.Visual = &tools.VisualCapture{
+		tctx.Effects.Out.Visual = &tools.VisualCapture{
 			Mime:       view.mime,
 			Source:     source,
 			Caption:    caption,
@@ -256,7 +256,7 @@ func emitHandleView(tctx tools.ToolContext, renderHandle, storedID string, raw [
 			ArtifactID: storedID,
 		}
 	case view.perceive():
-		tctx.Out.Visual = &tools.VisualCapture{
+		tctx.Effects.Out.Visual = &tools.VisualCapture{
 			Mime:      view.mime,
 			Bytes:     append([]byte(nil), view.bytes...),
 			Source:    source,
@@ -401,14 +401,14 @@ func renderSVGView(
 		}
 		return "", err
 	}
-	if tctx.Out == nil {
-		tctx.Out = &tools.ToolInvocationOut{}
+	if tctx.Effects.Out == nil {
+		tctx.Effects.Out = &tools.ToolInvocationOut{}
 	}
 	caption, err := raster.ProjectCaption(ctx, captureScope(tctx), displayPath)
 	if err != nil {
 		caption = displayPath
 	}
-	tctx.Out.Visual = &tools.VisualCapture{
+	tctx.Effects.Out.Visual = &tools.VisualCapture{
 		Mime:      out.Mime,
 		Bytes:     append([]byte(nil), out.Bytes...),
 		Source:    api.VisualArtifactSourceRender,
@@ -446,10 +446,10 @@ func renderRasterView(tctx tools.ToolContext, rawBytes []byte, displayPath strin
 				"rejection_reason": err.Error(),
 			})}
 		}
-		if tctx.Out == nil {
-			tctx.Out = &tools.ToolInvocationOut{}
+		if tctx.Effects.Out == nil {
+			tctx.Effects.Out = &tools.ToolInvocationOut{}
 		}
-		tctx.Out.Visual = &tools.VisualCapture{
+		tctx.Effects.Out.Visual = &tools.VisualCapture{
 			Mime:      norm.Mime,
 			Bytes:     norm.Bytes,
 			Source:    api.VisualArtifactSourceWorkspace,

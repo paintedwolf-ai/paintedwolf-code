@@ -154,10 +154,10 @@ func renderVideoView(ctx context.Context, deps ViewVideoDeps, tctx tools.ToolCon
 			if err != nil {
 				return "", fmt.Errorf("normalize video sheet: %w", err)
 			}
-			if tctx.Out == nil {
-				tctx.Out = &tools.ToolInvocationOut{}
+			if tctx.Effects.Out == nil {
+				tctx.Effects.Out = &tools.ToolInvocationOut{}
 			}
-			tctx.Out.Visual = &tools.VisualCapture{
+			tctx.Effects.Out.Visual = &tools.VisualCapture{
 				Mime:      norm.Mime,
 				Bytes:     norm.Bytes,
 				Source:    api.VisualArtifactSourceWorkspace,

@@ -160,10 +160,10 @@ func (t *SkillsReadTool) policyVars(ctx context.Context, tctx tools.ToolContext)
 
 // stampSkillActivation copies catalog fields onto the tool result for the skill card.
 func stampSkillActivation(tctx tools.ToolContext, sk skills.Skill) {
-	if tctx.Out == nil {
+	if tctx.Effects.Out == nil {
 		return
 	}
-	tctx.Out.Skill = &api.SkillActivation{
+	tctx.Effects.Out.Skill = &api.SkillActivation{
 		Name:             sk.Name,
 		Description:      sk.Description,
 		Instructions:     sk.Body,

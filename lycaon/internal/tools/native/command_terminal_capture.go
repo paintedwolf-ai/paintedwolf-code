@@ -67,7 +67,7 @@ func runCommandTerminalCapture(
 	}
 	commandLine := canonicalCommandKey(tctx, args)
 	approach := commandFailureApproachKey(canonicalToolArgs(tctx, args))
-	if reject := tracker.rejectLoop(tctx.SessionID, approach, commandLine); reject != nil {
+	if reject := tracker.rejectLoop(tctx.Identity.SessionID, approach, commandLine); reject != nil {
 		return commandRunOutcome{}, reject
 	}
 	if err := runner.ValidateStages(ctx, stages); err != nil {
@@ -88,28 +88,28 @@ func runCommandTerminalCapture(
 	request := hostcmd.Request{
 		Launch:     agentCommandLaunch(tctx, toolName, bound.confinement),
 		ProjectDir: cwd, ProfileID: tctx.ProfileID(), Stages: stages, IOParams: ioParams,
-		PathExtra: append([]string(nil), tctx.HostResourcePathExtra...),
+		PathExtra: append([]string(nil), tctx.Host.HostResourcePathExtra...),
 	}
 	facts := confine.SpawnFacts{
 		Report: confine.ReportOf(confine.BoundaryOf(bound.confinement)).
 			WithLocalNetwork(tools.LocalNetworkGrantOf(tctx)),
 		Action: bound.lease,
 	}
-	if tctx.PackageExecution != nil {
-		facts.Report = facts.Report.WithRemotePackageExecution(tctx.PackageExecution.AllowedHosts, tctx.PackageExecution.ApprovedReadPaths)
+	if tctx.Files.PackageExecution != nil {
+		facts.Report = facts.Report.WithRemotePackageExecution(tctx.Files.PackageExecution.AllowedHosts, tctx.Files.PackageExecution.ApprovedReadPaths)
 	}
 	if bound.lease != nil {
 		facts.Network = bound.lease.ObservedHosts
 	}
-	if err := tctx.Secrets.HandOff(ctx, nil); err != nil {
+	if err := tctx.Effects.Secrets.HandOff(ctx, nil); err != nil {
 		return commandRunOutcome{}, toolrejection.HeldHandOffReject(toolName, err)
 	}
 	var sourceRevision, sourceRootDigest string
-	if tctx.VerificationCheck {
-		sourceRevision, sourceRootDigest = sourceledger.VerificationState(ctx, tctx.SourceLedger, tools.HostWriteRoot(tctx))
+	if tctx.Execution.VerificationCheck {
+		sourceRevision, sourceRootDigest = sourceledger.VerificationState(ctx, tctx.Source.SourceLedger, tools.HostWriteRoot(tctx))
 	}
 	captured, runErr := registry.RunPTYCapture(
-		ctx, tctx.SessionID, tctx.ParentSessionID, tctx.ProjectID, request, runner,
+		ctx, tctx.Identity.SessionID, tctx.Identity.ParentSessionID, tctx.Identity.ProjectID, request, runner,
 		terminalCaptureWinSize(args), facts,
 		commandTimeout(args, toolName),
 	)
@@ -127,9 +127,9 @@ func runCommandTerminalCapture(
 	}
 	tools.CaptureExternalAccess(tctx, network, directIPApplied)
 	tail := terminalScreenText(captured.Screen)
-	tracker.record(tctx.SessionID, approach, captured.ExitCode == 0 && !captured.TimedOut)
+	tracker.record(tctx.Identity.SessionID, approach, captured.ExitCode == 0 && !captured.TimedOut)
 	return commandRunOutcome{
-		IsCheck:        tctx.VerificationCheck,
+		IsCheck:        tctx.Execution.VerificationCheck,
 		SourceRevision: sourceRevision, SourceRootDigest: sourceRootDigest,
 		Finished: true,
 		Snapshot: terminalCaptureSnapshot(captured, stages[0].EchoLine(), tail),

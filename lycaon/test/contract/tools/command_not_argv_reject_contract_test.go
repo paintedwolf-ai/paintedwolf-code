@@ -27,9 +27,9 @@ func TestCommandNotArgvRejectObservation(t *testing.T) {
 	exec := commandRejectExecutor(t)
 	// Substitution is rejected because expanded values are not visible in the command line.
 	_, err := exec.Invoke(context.Background(), "command", map[string]any{"command": "go test $(id -u)"}, tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
-		ActiveRootID: "r1",
-		Agent:        "implement",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{Agent: "implement"},
 	})
 	if err == nil {
 		t.Fatal("expected error")
@@ -75,9 +75,9 @@ func TestCommandNotArgvRejectsShellPipeline(t *testing.T) {
 		"command":          "git log --oneline | head -20",
 		"terminal_capture": true,
 	}, tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
-		ActiveRootID: "r1",
-		Agent:        "implement",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{Agent: "implement"},
 	})
 	if err == nil {
 		t.Fatal("expected error")
@@ -97,9 +97,9 @@ func TestCommandNotArgvRejectsInlineEnvironment(t *testing.T) {
 	_, err := exec.Invoke(context.Background(), "command", map[string]any{
 		"command": "TOKEN=value",
 	}, tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
-		ActiveRootID: "r1",
-		Agent:        "implement",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{Agent: "implement"},
 	})
 	tr := toolrejection.AsToolReject(err)
 	if tr == nil || tr.Code != "COMMAND_NOT_ARGV" {
@@ -139,9 +139,9 @@ func TestCommandArgvRequiredRejectObservation(t *testing.T) {
 	_, err := exec.Invoke(context.Background(), "command", map[string]any{
 		"cwd": ".", "timeout_ms": 120000, "wait_ms": 30000,
 	}, tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
-		ActiveRootID: "r1",
-		Agent:        "implement",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{Agent: "implement"},
 	})
 	if err == nil {
 		t.Fatal("expected error")
@@ -159,9 +159,9 @@ func TestCommandArgvConflictRejectObservation(t *testing.T) {
 		"command":  "go version",
 		"pipeline": []any{"echo hi"},
 	}, tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
-		ActiveRootID: "r1",
-		Agent:        "implement",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{Agent: "implement"},
 	})
 	if err == nil {
 		t.Fatal("expected error")

@@ -41,7 +41,9 @@ func TestLoopBeforeToolRunSkipsRegistryRun(t *testing.T) {
 	loop := promptloop.NewPromptLoopForTest(deps)
 	_, err = loop.Run(ctx, promptloop.PromptRunInput{
 		SessionID: sess.ID, Session: sess, History: userHistory("go"), ProfileID: "explore_readonly",
-		ToolCtx: tools.ToolContext{SessionID: sess.ID},
+		ToolCtx: tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: sess.ID},
+		},
 	})
 	testutil.FailErr(t, "loop.Run failed", err)
 	msgs, err := store.GetMessages(ctx, sess.ID)
@@ -82,7 +84,9 @@ func TestLoopAfterToolRunMutatesSuccessOutput(t *testing.T) {
 	loop := promptloop.NewPromptLoopForTest(deps)
 	_, err = loop.Run(ctx, promptloop.PromptRunInput{
 		SessionID: sess.ID, Session: sess, History: userHistory("go"), ProfileID: "explore_readonly",
-		ToolCtx: tools.ToolContext{SessionID: sess.ID},
+		ToolCtx: tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: sess.ID},
+		},
 	})
 	testutil.FailErr(t, "loop.Run failed", err)
 	msgs, err := store.GetMessages(ctx, sess.ID)
@@ -120,7 +124,9 @@ func TestLoopBeforeToolRunRejectDoesNotInvokeTool(t *testing.T) {
 	loop := promptloop.NewPromptLoopForTest(deps)
 	_, err = loop.Run(ctx, promptloop.PromptRunInput{
 		SessionID: sess.ID, Session: sess, History: userHistory("go"), ProfileID: "coordinator",
-		ToolCtx: tools.ToolContext{SessionID: sess.ID},
+		ToolCtx: tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: sess.ID},
+		},
 	})
 	testutil.FailErr(t, "loop.Run failed", err)
 	msgs, err := store.GetMessages(ctx, sess.ID)

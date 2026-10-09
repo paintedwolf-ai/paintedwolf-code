@@ -67,7 +67,7 @@ func (t *RestoreVersionTool) Run(ctx context.Context, args map[string]any, tctx 
 	}
 	path = resolved.DisplayPath
 
-	ledger, ok := tctx.SourceLedger.(restoreVersionLedger)
+	ledger, ok := tctx.Source.SourceLedger.(restoreVersionLedger)
 	if !ok || ledger == nil {
 		return "", &toolrejection.ToolReject{
 			Code: "SOURCE_VERSION_UNAVAILABLE",
@@ -83,7 +83,7 @@ func (t *RestoreVersionTool) Run(ctx context.Context, args map[string]any, tctx 
 	branch := restoreBranch(tctx, rootID)
 
 	targetVer, targetVersionID, err := resolveRestorableVersion(
-		ctx, ledger, tctx.ProjectID, branch, rootID, rel, path, versionID, baseVersionID,
+		ctx, ledger, tctx.Identity.ProjectID, branch, rootID, rel, path, versionID, baseVersionID,
 	)
 	if err != nil {
 		return "", err

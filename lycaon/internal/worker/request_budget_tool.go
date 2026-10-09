@@ -42,7 +42,7 @@ func RegisterRequestBudgetTool(reg *tools.DefaultRegistry, deps RequestBudgetToo
 		deps.Now = time.Now
 	}
 	return reg.Register(RequestBudgetTool, func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-		jobID := strings.TrimSpace(tctx.WorkerJobID)
+		jobID := strings.TrimSpace(tctx.Identity.WorkerJobID)
 		if tools.OutOfSessionScope(RequestBudgetTool, tctx) || jobID == "" {
 			return "", &toolrejection.ToolReject{Code: requestBudgetAddressedSessionCode, Data: map[string]any{"tool": RequestBudgetTool}}
 		}

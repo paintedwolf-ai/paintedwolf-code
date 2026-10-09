@@ -13,28 +13,28 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func newRoundTripRegistry(t *testing.T) (*mcp.RegistryImpl, string) {
+func newRoundTripRegistry(t *testing.T) (*mcp.Runtime, string) {
 	t.Helper()
 	dir := t.TempDir()
 	stageDistro(t, "providers: []\nprofiles: {}\n")
 	globalPath := filepath.Join(dir, "mcp.yaml")
 
-	reg, err := mcp.NewRegistryImpl(mcp.RegistryOptions{
+	reg, err := mcp.NewRuntime(mcp.RuntimeOptions{
 		StatePath:          dir,
 		GlobalOverridePath: globalPath,
 		Connector:          &mcp.MockConnector{},
 	})
-	testutil.FailErr(t, "NewRegistryImpl", err)
-	reg.SetToolRegistry(tools.NewDefaultRegistry())
+	testutil.FailErr(t, "NewRuntime", err)
+	reg.Tools.SetToolRegistry(tools.NewDefaultRegistry())
 	t.Cleanup(func() { _ = reg.Close() })
-	testutil.FailErr(t, "load", reg.Load(context.Background()))
+	testutil.FailErr(t, "load", reg.Catalog.Load(context.Background()))
 	return reg, globalPath
 }
 
-func createRemote(t *testing.T, reg *mcp.RegistryImpl, id, url string) api.McpProvider {
+func createRemote(t *testing.T, reg *mcp.Runtime, id, url string) api.McpProvider {
 	t.Helper()
 	yes := true
-	row, err := reg.CreateProvider(context.Background(), mcp.CallScope{}, api.CreateMcpProviderRequest{
+	row, err := reg.Administration.CreateProvider(context.Background(), mcp.CallScope{}, api.CreateMcpProviderRequest{
 		Source:  "custom",
 		ID:      id,
 		URL:     url,
@@ -50,7 +50,7 @@ func TestUpdateProviderURLSurvivesRoundTrip(t *testing.T) {
 	createRemote(t, reg, "probe", "https://a.example.com/mcp")
 
 	next := "https://b.example.com/mcp"
-	row, err := reg.UpdateProvider(context.Background(), mcp.CallScope{}, "probe",
+	row, err := reg.Administration.UpdateProvider(context.Background(), mcp.CallScope{}, "probe",
 		api.UpdateMcpProviderRequest{URL: &next}, "")
 	testutil.FailErr(t, "update url", err)
 
@@ -64,8 +64,8 @@ func TestUpdateProviderURLSurvivesRoundTrip(t *testing.T) {
 		t.Fatalf("command = %q want cleared", row.Command)
 	}
 
-	testutil.FailErr(t, "reload", reg.Load(context.Background()))
-	reloaded, ok := reg.GetProvider(context.Background(), mcp.CallScope{}, "probe")
+	testutil.FailErr(t, "reload", reg.Catalog.Load(context.Background()))
+	reloaded, ok := reg.Catalog.GetProvider(context.Background(), mcp.CallScope{}, "probe")
 	if !ok {
 		t.Fatal("row missing after reload")
 	}
@@ -88,18 +88,18 @@ func TestUpdateProviderToolLoadingSurvivesRoundTrip(t *testing.T) {
 	}
 
 	mode := api.McpToolLoadingAlways
-	row, err := reg.UpdateProvider(context.Background(), mcp.CallScope{}, "probe",
+	row, err := reg.Administration.UpdateProvider(context.Background(), mcp.CallScope{}, "probe",
 		api.UpdateMcpProviderRequest{ToolLoading: &mode}, "")
 	testutil.FailErr(t, "update tool loading", err)
 	if row.ToolLoading != api.McpToolLoadingAlways {
 		t.Fatalf("tool_loading = %q", row.ToolLoading)
 	}
-	if modes := reg.ToolLoadingModes(context.Background(), ""); !modes["probe"] {
+	if modes := reg.Catalog.ToolLoadingModes(context.Background(), ""); !modes["probe"] {
 		t.Fatalf("tool loading modes = %v", modes)
 	}
 
-	testutil.FailErr(t, "reload", reg.Load(context.Background()))
-	reloaded, ok := reg.GetProvider(context.Background(), mcp.CallScope{}, "probe")
+	testutil.FailErr(t, "reload", reg.Catalog.Load(context.Background()))
+	reloaded, ok := reg.Catalog.GetProvider(context.Background(), mcp.CallScope{}, "probe")
 	if !ok || reloaded.ToolLoading != api.McpToolLoadingAlways {
 		t.Fatalf("reloaded = %+v ok=%v", reloaded, ok)
 	}
@@ -115,7 +115,7 @@ func TestUpdateProviderRejectsEmptyToolLoading(t *testing.T) {
 	createRemote(t, reg, "probe", "https://a.example.com/mcp")
 
 	empty := api.McpToolLoading("")
-	_, err := reg.UpdateProvider(context.Background(), mcp.CallScope{}, "probe",
+	_, err := reg.Administration.UpdateProvider(context.Background(), mcp.CallScope{}, "probe",
 		api.UpdateMcpProviderRequest{ToolLoading: &empty}, "")
 	if err == nil {
 		t.Fatal("empty tool_loading accepted")
@@ -127,7 +127,7 @@ func TestUpdateProviderCommandSurvivesRoundTrip(t *testing.T) {
 	createRemote(t, reg, "probe", "https://a.example.com/mcp")
 
 	cmd := "/usr/local/bin/some-mcp"
-	row, err := reg.UpdateProvider(context.Background(), mcp.CallScope{}, "probe",
+	row, err := reg.Administration.UpdateProvider(context.Background(), mcp.CallScope{}, "probe",
 		api.UpdateMcpProviderRequest{Command: &cmd}, "")
 	testutil.FailErr(t, "update command", err)
 	if row.Status == api.McpStatusRejected {
@@ -146,9 +146,9 @@ func TestRejectedRowRemainsEditable(t *testing.T) {
     url: http://intel.example/mcp
     enabled: true
 `), 0o600))
-	testutil.FailErr(t, "load", reg.Load(context.Background()))
+	testutil.FailErr(t, "load", reg.Catalog.Load(context.Background()))
 
-	row, ok := reg.GetProvider(context.Background(), mcp.CallScope{}, "team")
+	row, ok := reg.Catalog.GetProvider(context.Background(), mcp.CallScope{}, "team")
 	if !ok || row.Status != api.McpStatusRejected {
 		t.Fatalf("fixture must start rejected: %+v ok=%v", row, ok)
 	}
@@ -157,7 +157,7 @@ func TestRejectedRowRemainsEditable(t *testing.T) {
 	}
 
 	httpsURL := "https://intel.example/mcp"
-	fixed, err := reg.UpdateProvider(context.Background(), mcp.CallScope{}, "team",
+	fixed, err := reg.Administration.UpdateProvider(context.Background(), mcp.CallScope{}, "team",
 		api.UpdateMcpProviderRequest{URL: &httpsURL}, "")
 	testutil.FailErr(t, "correct rejected row", err)
 	if fixed.Status == api.McpStatusRejected {
@@ -165,12 +165,12 @@ func TestRejectedRowRemainsEditable(t *testing.T) {
 	}
 
 	// Enable/disable must reach it too.
-	testutil.FailErr(t, "toggle", reg.SetProviderEnabled(context.Background(), mcp.CallScope{}, "team", false, ""))
+	testutil.FailErr(t, "toggle", reg.Administration.SetProviderEnabled(context.Background(), mcp.CallScope{}, "team", false, ""))
 }
 
 func TestCreateProviderPersistsTokenTokenWire(t *testing.T) {
 	reg, globalPath := newRoundTripRegistry(t)
-	row, err := reg.CreateProvider(context.Background(), mcp.CallScope{}, api.CreateMcpProviderRequest{
+	row, err := reg.Administration.CreateProvider(context.Background(), mcp.CallScope{}, api.CreateMcpProviderRequest{
 		Source:         "custom",
 		ID:             "pd-eu",
 		URL:            "https://mcp.eu.pagerduty.com/mcp",
@@ -186,8 +186,8 @@ func TestCreateProviderPersistsTokenTokenWire(t *testing.T) {
 	if !strings.Contains(string(data), "token_token") {
 		t.Fatalf("overlay missing credential_wire:\n%s", data)
 	}
-	testutil.FailErr(t, "reload", reg.Load(context.Background()))
-	reloaded, ok := reg.GetProvider(context.Background(), mcp.CallScope{}, "pd-eu")
+	testutil.FailErr(t, "reload", reg.Catalog.Load(context.Background()))
+	reloaded, ok := reg.Catalog.GetProvider(context.Background(), mcp.CallScope{}, "pd-eu")
 	if !ok || reloaded.CredentialWire != api.McpCredentialWireTokenToken {
 		t.Fatalf("after reload: ok=%v wire=%q", ok, reloaded.CredentialWire)
 	}
@@ -201,9 +201,9 @@ func TestCreateOverRejectedIDCollides(t *testing.T) {
     url: http://intel.example/mcp
     enabled: true
 `), 0o600))
-	testutil.FailErr(t, "load", reg.Load(context.Background()))
+	testutil.FailErr(t, "load", reg.Catalog.Load(context.Background()))
 
-	_, err := reg.CreateProvider(context.Background(), mcp.CallScope{}, api.CreateMcpProviderRequest{
+	_, err := reg.Administration.CreateProvider(context.Background(), mcp.CallScope{}, api.CreateMcpProviderRequest{
 		Source: "custom",
 		ID:     "team",
 		URL:    "http://127.0.0.1:8765/mcp",
@@ -218,10 +218,10 @@ func TestUnreadableUserOverlayDegradesInsteadOfFailingLoad(t *testing.T) {
 	reg, globalPath := newRoundTripRegistry(t)
 	testutil.FailErr(t, "write junk", os.WriteFile(globalPath, []byte("providers: [[[not yaml"), 0o600))
 
-	if err := reg.Load(context.Background()); err != nil {
+	if err := reg.Catalog.Load(context.Background()); err != nil {
 		t.Fatalf("Load must not fail on an unreadable user overlay: %v", err)
 	}
-	rows := reg.ListProviders(context.Background(), mcp.CallScope{})
+	rows := reg.Catalog.ListProviders(context.Background(), mcp.CallScope{})
 	var found bool
 	for _, row := range rows {
 		if row.Status == api.McpStatusRejected && row.LastError == mcp.RejectUnreadableLayer {
@@ -237,10 +237,10 @@ func TestServersKeyIsUnknownField(t *testing.T) {
 	reg, globalPath := newRoundTripRegistry(t)
 	testutil.FailErr(t, "write unknown key", os.WriteFile(globalPath, []byte("servers: []\n"), 0o600))
 
-	if err := reg.Load(context.Background()); err != nil {
+	if err := reg.Catalog.Load(context.Background()); err != nil {
 		t.Fatalf("Load must surface an invalid overlay as a rejected row: %v", err)
 	}
-	for _, row := range reg.ListProviders(context.Background(), mcp.CallScope{}) {
+	for _, row := range reg.Catalog.ListProviders(context.Background(), mcp.CallScope{}) {
 		if row.Status == api.McpStatusRejected && row.LastError == mcp.RejectOverlayUnknownField {
 			return
 		}
@@ -257,9 +257,9 @@ func TestDuplicateUserOverlayIDIsReported(t *testing.T) {
     url: http://127.0.0.1:2/mcp
 `), 0o600))
 
-	testutil.FailErr(t, "load", reg.Load(context.Background()))
+	testutil.FailErr(t, "load", reg.Catalog.Load(context.Background()))
 	var found bool
-	for _, row := range reg.ListProviders(context.Background(), mcp.CallScope{}) {
+	for _, row := range reg.Catalog.ListProviders(context.Background(), mcp.CallScope{}) {
 		if row.Status == api.McpStatusRejected && row.LastError == mcp.RejectDuplicateID {
 			found = true
 		}

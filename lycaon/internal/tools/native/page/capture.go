@@ -21,7 +21,7 @@ const CaptureToolName = "capture_page"
 
 // captureScope identifies the task tree used for secret matching.
 func captureScope(tctx tools.ToolContext) captureprojection.Scope {
-	return captureprojection.ScopeFor(tctx.ProjectID, tctx.ParentSessionID, tctx.SessionID)
+	return captureprojection.ScopeFor(tctx.Identity.ProjectID, tctx.Identity.ParentSessionID, tctx.Identity.SessionID)
 }
 
 type capturePageArgs struct {
@@ -83,7 +83,7 @@ func CaptureHandler(pool *browser.Pool, bg *bgprocess.Registry, live LivePreview
 		if err != nil {
 			return "", err
 		}
-		if err := requireCaptureProcess(bg, tctx.SessionID, in.URL, in.ProcessHandle); err != nil {
+		if err := requireCaptureProcess(bg, tctx.Identity.SessionID, in.URL, in.ProcessHandle); err != nil {
 			return "", err
 		}
 		if err := requireLoopbackAuthority(in.URL, tctx); err != nil {
@@ -115,30 +115,30 @@ func CaptureHandler(pool *browser.Pool, bg *bgprocess.Registry, live LivePreview
 			req.Record = *in.Record
 		}
 		if live != nil {
-			driveID := "drive:" + tctx.ToolCallID
-			if strings.TrimSpace(tctx.ToolCallID) == "" {
+			driveID := "drive:" + tctx.Identity.ToolCallID
+			if strings.TrimSpace(tctx.Identity.ToolCallID) == "" {
 				driveID = "drive:oneshot"
 			}
 			req.Preview = &browser.CapturePreview{
 				Attach: func(held *browser.HeldPage) {
 					live.Attach(ctx, preview.AttachOpts{
-						ProjectID:          tctx.ProjectID,
-						SessionID:          tctx.SessionID,
-						ParentSessionID:    tctx.ParentSessionID,
+						ProjectID:          tctx.Identity.ProjectID,
+						SessionID:          tctx.Identity.SessionID,
+						ParentSessionID:    tctx.Identity.ParentSessionID,
 						PageID:             driveID,
 						AssistantMessageID: tctx.Invocation.MessageID,
-						ToolCallID:         tctx.ToolCallID,
+						ToolCallID:         tctx.Identity.ToolCallID,
 						Held:               held,
 					})
 				},
 				Action: func(act browser.CaptureAction, result json.RawMessage) {
-					live.PublishAction(ctx, tctx.SessionID, driveID, act, result)
+					live.PublishAction(ctx, tctx.Identity.SessionID, driveID, act, result)
 				},
 				Driving: func(driving bool) {
-					live.PublishDriving(ctx, tctx.SessionID, driveID, driving)
+					live.PublishDriving(ctx, tctx.Identity.SessionID, driveID, driving)
 				},
 				Detach: func() {
-					live.Detach(ctx, tctx.SessionID, driveID)
+					live.Detach(ctx, tctx.Identity.SessionID, driveID)
 				},
 			}
 		}

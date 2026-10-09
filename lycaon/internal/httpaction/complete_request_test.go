@@ -57,9 +57,12 @@ func newTestSecrets(t *testing.T) (*secretcap.Service, *[]secretmatch.Remembered
 
 func sessionContext(root, call string) tools.ToolContext {
 	return tools.ToolContext{
-		Agent: toolprofiles.DefaultToolProfileID, ProjectID: testdbseed.DefaultProjectID,
-		SessionID: "root-1", ToolCallID: call,
-		Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}}, ActiveRootID: "root",
+		Identity: tools.InvocationIdentity{Agent: toolprofiles.DefaultToolProfileID,
+			ProjectID:  testdbseed.DefaultProjectID,
+			SessionID:  "root-1",
+			ToolCallID: call},
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}},
+			ActiveRootID: "root"},
 	}
 }
 

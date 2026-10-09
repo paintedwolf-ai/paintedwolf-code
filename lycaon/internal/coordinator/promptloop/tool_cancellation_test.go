@@ -24,8 +24,10 @@ func TestCanceledToolRunKeepsInterruptionFactsAndOutput(t *testing.T) {
 			loop := NewPromptLoopForTest(PromptLoopDeps{})
 			run := toolInvocations{loop}.finalizeToolRun(ctx, &api.Session{ID: "session"}, completedToolRun{
 				sessionID: "session", call: api.ToolCall{ID: "call", Name: tool}, contract: contract,
-				toolCtx: tools.ToolContext{Out: &tools.ToolInvocationOut{OwnerInvoked: true}},
-				output:  "partial output", runErr: fmt.Errorf("waiting for result: %w", context.Canceled), startedAt: time.Now(),
+				toolCtx: tools.ToolContext{
+					Effects: tools.InvocationEffects{Out: &tools.ToolInvocationOut{OwnerInvoked: true}},
+				},
+				output: "partial output", runErr: fmt.Errorf("waiting for result: %w", context.Canceled), startedAt: time.Now(),
 			})
 			if run.reject != nil || run.failure == nil || run.failure.Code != toolrejection.ToolOwnerInterruptedCode ||
 				run.failure.Class != "interrupted" || !run.failure.Retryable || !run.invoked ||

@@ -26,7 +26,7 @@ func (e *Boundary) preflightPackageExecution(
 		return reject
 	}
 	if request != nil && request.HostExecution {
-		tc.PackageExecution = nil
+		tc.Files.PackageExecution = nil
 		return nil
 	}
 	if tc.Invocation.Contract.Supports(toolcontract.CapabilityHeldTerminalInput) && e.packageExecution != nil {
@@ -54,7 +54,7 @@ func (e *Boundary) preflightPackageExecution(
 	if err != nil {
 		return fmt.Errorf("package execution preflight: %w", err)
 	}
-	tc.PackageExecution = packageExecution
+	tc.Files.PackageExecution = packageExecution
 	return nil
 }
 
@@ -64,21 +64,21 @@ func (e *Boundary) rejectPackageBoundaryWidening(
 	args map[string]any,
 	tc tools.ToolContext,
 ) error {
-	if tc.PackageExecution == nil {
+	if tc.Files.PackageExecution == nil {
 		return nil
 	}
 	request, reject := capabilityrequest.ParseCapabilityRequest(args)
 	if reject != nil {
 		return e.Rejections.rejectBeforeInvoke(ctx, tool, profileID, args, reject)
 	}
-	blocked := packageBoundaryWidening(request, tc.SocksProxyEnv)
+	blocked := packageBoundaryWidening(request, tc.Local.SocksProxyEnv)
 	if len(blocked) == 0 {
 		return nil
 	}
 	return e.Rejections.rejectBeforeInvoke(ctx, tool, profileID, args, &toolrejection.ToolReject{
 		Code: isolation.CodeRemotePackageCapabilityDenied,
 		Data: map[string]any{
-			"manager":      tc.PackageExecution.Manager,
+			"manager":      tc.Files.PackageExecution.Manager,
 			"command":      commandsurface.PrimaryCommandLine(args, nil),
 			"capabilities": blocked,
 		},

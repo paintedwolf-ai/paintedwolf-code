@@ -53,7 +53,7 @@ func releaseForeignTokens(
 		return secretmatch.Resolution{}, screenFaultReject(stage)
 	}
 	if resolution.Decision.Blocks() {
-		tc.Secrets.Withhold(ctx)
+		tc.Effects.Secrets.Withhold(ctx)
 		reject := &toolrejection.ToolReject{Code: toolrejection.OutboundSecretDeniedCode, Data: map[string]any{
 			"surface": "http_request", "rule_id": secretmatch.ManagedRuleID, "host": destinationLabel,
 			"shape": secretmatch.GenericShape(foreign[0].token.Value), "tokens": names, "issuers": issuers,

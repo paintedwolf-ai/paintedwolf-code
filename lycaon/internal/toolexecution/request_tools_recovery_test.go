@@ -39,31 +39,34 @@ func TestRequestToolsRequiresLiveRegistration(t *testing.T) {
 			store := tools.NewMemoryActivation()
 			name := "deliver_report"
 			policy := fakeRequestBoundary{allowed: map[string]bool{name: true}}
-			tctx := tools.ToolContext{SessionID: "unregistered-" + mode, Agent: "coordinator"}
+			tctx := tools.ToolContext{
+				Identity: tools.InvocationIdentity{SessionID: "unregistered-" + mode,
+					Agent: "coordinator"},
+			}
 			switch mode {
 			case "wildcard":
 				policy = fakeRequestBoundary{deferred: map[string]bool{"deliver_*": true}}
 			case "all access":
 				policy = fakeRequestBoundary{allowed: map[string]bool{name: true}, deferred: map[string]bool{name: true}}
-				tctx.ToolAccess = sandbox.ToolAccessAll
+				tctx.Turn.ToolAccess = sandbox.ToolAccessAll
 			case "immediate":
-				tctx.TurnToolPlan = toolsurface.Compile([]string{"request_tools", name}, nil)
+				tctx.Turn.TurnToolPlan = toolsurface.Compile([]string{"request_tools", name}, nil)
 			case "deferred":
-				tctx.TurnToolPlan = toolsurface.Compile([]string{"request_tools"}, []string{name})
+				tctx.Turn.TurnToolPlan = toolsurface.Compile([]string{"request_tools"}, []string{name})
 			case "removed":
 				name = "mcp_fixture_removed"
 				registerRequestFixtureTools(t, reg, name)
-				store.Activate(tctx.SessionID, []string{name}, name)
+				store.Activate(tctx.Identity.SessionID, []string{name}, name)
 				testutil.FailErr(t, "remove tool provider", reg.ReplacePrefix("mcp_fixture_", nil, nil))
 			}
 			testutil.FailErr(t, "register request tools", tools.RegisterRequestTools(reg, tools.RequestToolsDeps{Activation: store, Boundary: policy}))
-			before := store.Active(tctx.SessionID)
+			before := store.Active(tctx.Identity.SessionID)
 			_, err := reg.Run(t.Context(), "request_tools", map[string]any{"need": name}, tctx)
 			reject := requireUnmatchedToolRequest(t, err)
 			if reject.Data["need"] != name {
 				t.Fatalf("need = %v, want %s", reject.Data["need"], name)
 			}
-			if !reflect.DeepEqual(before, store.Active(tctx.SessionID)) {
+			if !reflect.DeepEqual(before, store.Active(tctx.Identity.SessionID)) {
 				t.Fatal("rejection changed activation state")
 			}
 		})
@@ -76,7 +79,9 @@ func TestRequestToolsSkipsUnregisteredNamesInMixedRequest(t *testing.T) {
 	registerRequestFixtureTools(t, reg, "read")
 	boundary := fakeRequestBoundary{allowed: map[string]bool{"read": true, "deliver_report": true}}
 	testutil.FailErr(t, "register request tools", tools.RegisterRequestTools(reg, tools.RequestToolsDeps{Activation: store, Boundary: boundary}))
-	out, err := reg.Run(t.Context(), "request_tools", map[string]any{"need": "deliver_report and read"}, tools.ToolContext{SessionID: "mixed"})
+	out, err := reg.Run(t.Context(), "request_tools", map[string]any{"need": "deliver_report and read"}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "mixed"},
+	})
 	testutil.FailErr(t, "request mixed tools", err)
 	var result turnload.RequestToolsResult
 	testutil.FailErr(t, "decode request result", json.Unmarshal([]byte(out), &result))
@@ -98,17 +103,20 @@ func TestRequestToolsRecoveryListsOnlyLoadableTools(t *testing.T) {
 				Meta:     tools.ToolMeta{Name: "mcp_fixture_lookup", Source: tools.ToolSourceMCP, SourceID: "fixture", ArgsSchema: map[string]any{"type": "object"}},
 				Contract: toolcontract.External("mcp:fixture"), Handler: handler,
 			}))
-			tctx := tools.ToolContext{SessionID: "recovery", Agent: "coordinator"}
+			tctx := tools.ToolContext{
+				Identity: tools.InvocationIdentity{SessionID: "recovery",
+					Agent: "coordinator"},
+			}
 			want := []string{"mcp_fixture_lookup"}
 			switch mode {
 			case "profile":
 				want = append(want, "record_finding")
 			case "compiled":
-				tctx.TurnToolPlan = toolsurface.Compile([]string{"request_tools"}, want)
+				tctx.Turn.TurnToolPlan = toolsurface.Compile([]string{"request_tools"}, want)
 			case "uncompiled surface":
-				tctx.TurnSurfaceID = "report"
+				tctx.Turn.TurnSurfaceID = "report"
 			case "no deferred tools":
-				tctx.TurnToolPlan = toolsurface.Compile([]string{"request_tools"}, nil)
+				tctx.Turn.TurnToolPlan = toolsurface.Compile([]string{"request_tools"}, nil)
 				want = nil
 			}
 			output, err := reg.Run(t.Context(), "request_tools", map[string]any{"need": "frobnicate the widget"}, tctx)
@@ -128,13 +136,13 @@ func TestRequestToolsRecoveryListsOnlyLoadableTools(t *testing.T) {
 					t.Fatalf("recovery roster = %v, want %v", available, want)
 				}
 			}
-			if store.Active(tctx.SessionID) != nil {
+			if store.Active(tctx.Identity.SessionID) != nil {
 				t.Fatal("rejection changed activation state")
 			}
 			for _, name := range want {
 				_, err := reg.Run(t.Context(), "request_tools", map[string]any{"need": name}, tctx)
 				testutil.FailErr(t, "load advertised recovery tool "+name, err)
-				if !store.Active(tctx.SessionID)[name] {
+				if !store.Active(tctx.Identity.SessionID)[name] {
 					t.Fatalf("advertised tool %s was not activated", name)
 				}
 			}
@@ -166,16 +174,16 @@ func TestRequestToolsActivatesDeclaredCompanionsOnly(t *testing.T) {
 	testutil.FailErr(t, "register diff", reg.Register("diff", handler))
 
 	tctx := tools.ToolContext{
-		SessionID:    "companions",
-		Agent:        "coordinator",
-		TurnToolPlan: toolsurface.Compile([]string{"request_tools"}, []string{"write", "edit", "diff"}),
+		Identity: tools.InvocationIdentity{SessionID: "companions",
+			Agent: "coordinator"},
+		Turn: tools.InvocationTurn{TurnToolPlan: toolsurface.Compile([]string{"request_tools"}, []string{"write", "edit", "diff"})},
 	}
 	_, err := reg.Run(t.Context(), "request_tools", map[string]any{"need": "write the new file"}, tctx)
 	testutil.FailErr(t, "request write", err)
 
 	// write declares edit as a companion; diff is neither selected nor declared.
 	// replace_lines is a companion too, but this plan does not offer it.
-	active := store.Active(tctx.SessionID)
+	active := store.Active(tctx.Identity.SessionID)
 	for _, tool := range []string{"write", "edit", "diff", "replace_lines"} {
 		if active[tool] != (tool == "write" || tool == "edit") {
 			t.Errorf("active %s = %v, want the selected tool and its offered companions", tool, active[tool])
@@ -197,7 +205,7 @@ func TestRequestCommandLoadsOnlyTheSelectedTool(t *testing.T) {
 	record := func(_ context.Context, tctx tools.ToolContext, _ turnload.RequestOutcome, result turnload.RequestToolsResult, _ time.Duration) {
 		recorded = append([]string(nil), result.Loaded...)
 		for _, name := range result.Loaded {
-			if !activation.Active(tctx.SessionID)[name] {
+			if !activation.Active(tctx.Identity.SessionID)[name] {
 				t.Errorf("recorded %s before activation", name)
 			}
 		}
@@ -205,14 +213,17 @@ func TestRequestCommandLoadsOnlyTheSelectedTool(t *testing.T) {
 	testutil.FailErr(t, "register request tools", tools.RegisterRequestTools(reg, tools.RequestToolsDeps{
 		Activation: activation, Boundary: fakeRequestBoundary{}, Resolve: resolve, Record: record,
 	}))
-	tctx := tools.ToolContext{SessionID: "command-family", Agent: "coordinator",
-		TurnToolPlan: toolsurface.Compile([]string{"request_tools"}, names)}
+	tctx := tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "command-family",
+			Agent: "coordinator"},
+		Turn: tools.InvocationTurn{TurnToolPlan: toolsurface.Compile([]string{"request_tools"}, names)},
+	}
 	_, err := reg.Run(t.Context(), "request_tools", map[string]any{"need": "command"}, tctx)
 	testutil.FailErr(t, "request command", err)
 	if !slices.Equal(recorded, []string{"command"}) {
 		t.Fatalf("recorded tools = %v, want only the selected command", recorded)
 	}
-	active := activation.Active(tctx.SessionID)
+	active := activation.Active(tctx.Identity.SessionID)
 	for _, name := range names {
 		want := name == "command"
 		if active[name] != want {
@@ -221,7 +232,7 @@ func TestRequestCommandLoadsOnlyTheSelectedTool(t *testing.T) {
 	}
 	_, err = reg.Run(t.Context(), "request_tools", map[string]any{"need": "git_checkout"}, tctx)
 	testutil.FailErr(t, "request Git separately", err)
-	if !activation.Active(tctx.SessionID)["git_checkout"] {
+	if !activation.Active(tctx.Identity.SessionID)["git_checkout"] {
 		t.Fatal("removing a companion made the tool unrequestable")
 	}
 }
@@ -242,7 +253,11 @@ func TestRequestToolsUsesTheWiredResolver(t *testing.T) {
 		return turnload.RequestOutcome{Need: need, Ranked: map[string]float64{"git_compare": 3.5}}
 	}
 	testutil.FailErr(t, "register request tools", tools.RegisterRequestTools(reg, tools.RequestToolsDeps{Activation: store, Boundary: fakeRequestBoundary{}, Resolve: resolve}))
-	tctx := tools.ToolContext{SessionID: "resolver", Agent: "coordinator", TurnToolPlan: toolsurface.Compile([]string{"request_tools"}, []string{"git_compare", "http_request"})}
+	tctx := tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "resolver",
+			Agent: "coordinator"},
+		Turn: tools.InvocationTurn{TurnToolPlan: toolsurface.Compile([]string{"request_tools"}, []string{"git_compare", "http_request"})},
+	}
 	out, err := reg.Run(t.Context(), "request_tools", map[string]any{"need": "compare the two branches"}, tctx)
 	testutil.FailErr(t, "request", err)
 	if seenNeed != "compare the two branches" || !slices.Equal(seenCards, []string{"git_compare", "http_request"}) {
@@ -271,11 +286,14 @@ func TestRequestReceiptRecordsOnlyFinalActivation(t *testing.T) {
 	testutil.FailErr(t, "register request tools", tools.RegisterRequestTools(reg, tools.RequestToolsDeps{
 		Activation: activation, Boundary: fakeRequestBoundary{}, Resolve: resolve, Record: record,
 	}))
-	tctx := tools.ToolContext{SessionID: "filtered-receipt", Agent: "coordinator",
-		TurnToolPlan: toolsurface.Compile([]string{"request_tools"}, []string{"command"})}
+	tctx := tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "filtered-receipt",
+			Agent: "coordinator"},
+		Turn: tools.InvocationTurn{TurnToolPlan: toolsurface.Compile([]string{"request_tools"}, []string{"command"})},
+	}
 	_, err := reg.Run(t.Context(), "request_tools", map[string]any{"need": "run this"}, tctx)
 	testutil.FailErr(t, "request with an out-of-surface result", err)
-	if !slices.Equal(recorded.Loaded, []string{"command"}) || activation.Active(tctx.SessionID)["git_commit"] {
+	if !slices.Equal(recorded.Loaded, []string{"command"}) || activation.Active(tctx.Identity.SessionID)["git_commit"] {
 		t.Fatalf("receipt or activation included a filtered prediction: %+v", recorded)
 	}
 	_, err = reg.Run(t.Context(), "request_tools", map[string]any{"need": "run this again"}, tctx)

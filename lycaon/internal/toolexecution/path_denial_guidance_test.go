@@ -20,7 +20,9 @@ func TestPathDenialsPreserveUserDirection(t *testing.T) {
 		e.Boundary.writeRootPreflight = decline
 		return e
 	}()
-	tc := tools.ToolContext{Invocation: tools.Invocation{Contract: toolcontract.Contract{Capabilities: toolcontract.CapabilityReadPath | toolcontract.CapabilityWriteRoot}}}
+	tc := tools.ToolContext{
+		Invocation: tools.Invocation{Contract: toolcontract.Contract{Capabilities: toolcontract.CapabilityReadPath | toolcontract.CapabilityWriteRoot}},
+	}
 	for _, field := range []string{"read_path", "write_root"} {
 		path := filepath.Join(t.TempDir(), "intended")
 		args := map[string]any{"capability_request": map[string]any{field: path}}

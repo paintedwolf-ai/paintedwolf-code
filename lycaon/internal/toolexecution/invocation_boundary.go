@@ -29,7 +29,7 @@ func (e *Executor) applyPreInvokeBoundary(
 	if socks, reject := capabilityrequest.ParseSocksProxyArg(args); reject != nil {
 		return nil, tc, e.Rejections.rejectBeforeInvoke(ctx, tool, profileID, args, reject)
 	} else if socks {
-		tc.SocksProxyEnv = true
+		tc.Local.SocksProxyEnv = true
 	}
 	var hostResourceResolution *hostresources.ActionResolution
 	args, hostResourceResolution, err = e.Network.expandHostResourceConnections(ctx, tool, args, tc)
@@ -37,12 +37,12 @@ func (e *Executor) applyPreInvokeBoundary(
 		return nil, tc, err
 	}
 	if hostResourceResolution != nil {
-		tc.HostResources = sortedHostResourceIDs(hostResourceResolution.States)
-		tc.HostResourceFamilies = append([]string(nil), hostResourceResolution.Families...)
-		tc.HostResourceAsk = append([]string(nil), hostResourceResolution.Ask...)
-		tc.HostResourcePathExtra = append([]string(nil), hostResourceResolution.PathExtra...)
-		tc.RealizationWriteRoots = append([]string(nil), hostResourceResolution.WriteRoots...)
-		tc.RealizationSockets = realizationSocketTargets(hostResourceResolution)
+		tc.Host.HostResources = sortedHostResourceIDs(hostResourceResolution.States)
+		tc.Host.HostResourceFamilies = append([]string(nil), hostResourceResolution.Families...)
+		tc.Host.HostResourceAsk = append([]string(nil), hostResourceResolution.Ask...)
+		tc.Host.HostResourcePathExtra = append([]string(nil), hostResourceResolution.PathExtra...)
+		tc.Host.RealizationWriteRoots = append([]string(nil), hostResourceResolution.WriteRoots...)
+		tc.Host.RealizationSockets = realizationSocketTargets(hostResourceResolution)
 	}
 	if err := e.Boundary.preflightPackageExecution(ctx, tool, profileID, args, &tc); err != nil {
 		return nil, tc, err
@@ -67,7 +67,7 @@ func (e *Executor) applyPreInvokeBoundary(
 	if resolveErr != nil {
 		return nil, tc, e.Rejections.rejectBeforeInvoke(ctx, tool, profileID, args, secretReferenceReject(resolveErr))
 	}
-	tc.Secrets = secrets
+	tc.Effects.Secrets = secrets
 	ctx = secretcap.WithResolution(ctx, secrets)
 	if tc.Invocation.Contract.SecretReferenceSurface.IsFile() && tool != "jq_edit" && secrets != nil && secrets.HasUnsafeFileBytes() {
 		return nil, tc, e.Rejections.rejectBeforeInvoke(ctx, tool, profileID, args, &toolrejection.ToolReject{
@@ -80,7 +80,7 @@ func (e *Executor) applyPreInvokeBoundary(
 		return nil, tc, reject
 	}
 	if request != nil {
-		tc.ProcessControl, tc.HostExecution = request.ProcessControl, request.HostExecution
+		tc.Execution.ProcessControl, tc.Execution.HostExecution = request.ProcessControl, request.HostExecution
 	}
 	ctx, err = e.reviewInvocationCapabilities(ctx, tool, args, tc)
 	if err != nil {
@@ -93,23 +93,23 @@ func (e *Executor) applyPreInvokeBoundary(
 		return nil, tc, err
 	}
 	if e.Boundary.sessionReadOverlay != nil {
-		tc.SessionReadPaths = append([]string(nil), e.Boundary.sessionReadOverlay(ctx, tc.SessionID, tc.ParentSessionID)...)
+		tc.Files.SessionReadPaths = append([]string(nil), e.Boundary.sessionReadOverlay(ctx, tc.Identity.SessionID, tc.Identity.ParentSessionID)...)
 	}
 	socketPreflight, err := e.Capabilities.preflightSocketCapability(ctx, tool, args, tc)
 	if err != nil {
 		return nil, tc, err
 	}
 	if socketPreflight != nil {
-		tc.SocketGrants = append([]confine.SocketGrant(nil), socketPreflight.SocketGrants...)
-		tc.DurableSocketGrants = append([]confine.SocketGrant(nil), socketPreflight.DurableSocketGrants...)
-		tc.AuthorizedSocketDigests = append([]string(nil), socketPreflight.AuthorizedSocketDigests...)
-		tc.SocketActionDigest = socketPreflight.ActionDigest
-		tc.SocketCapabilityRuntime = e.Capabilities.socketRuntime
-		tc.SocketAuthorizationSource = socketPreflight.AuthorizationSource
-		tc.SocketScopes = append([]string(nil), socketPreflight.SocketScopes...)
-		tc.SocketGrantStates = append([]string(nil), socketPreflight.SocketGrantStates...)
+		tc.Socket.SocketGrants = append([]confine.SocketGrant(nil), socketPreflight.SocketGrants...)
+		tc.Socket.DurableSocketGrants = append([]confine.SocketGrant(nil), socketPreflight.DurableSocketGrants...)
+		tc.Socket.AuthorizedSocketDigests = append([]string(nil), socketPreflight.AuthorizedSocketDigests...)
+		tc.Socket.SocketActionDigest = socketPreflight.ActionDigest
+		tc.Socket.SocketCapabilityRuntime = e.Capabilities.socketRuntime
+		tc.Socket.SocketAuthorizationSource = socketPreflight.AuthorizationSource
+		tc.Socket.SocketScopes = append([]string(nil), socketPreflight.SocketScopes...)
+		tc.Socket.SocketGrantStates = append([]string(nil), socketPreflight.SocketGrantStates...)
 	}
-	tc.AuthzRecorder = e.Approvals.authzRecorder
+	tc.Local.AuthzRecorder = e.Approvals.authzRecorder
 	directPreflight, err := e.Capabilities.preflightDirectIPCapability(
 		ctx,
 		tool,
@@ -121,15 +121,15 @@ func (e *Executor) applyPreInvokeBoundary(
 		return nil, tc, err
 	}
 	if directPreflight != nil {
-		tc.DirectIPRequested = directPreflight.Requested
-		tc.DirectIPDeclared = append([]string(nil), directPreflight.Declared...)
-		tc.DirectIPActionDigest = directPreflight.ActionDigest
-		tc.DirectIPRequestDigest = directPreflight.RequestDigest
-		tc.DirectIPConfineDigest = directPreflight.ConfineDigest
-		tc.DirectIPAuthorized = directPreflight.Authorized
-		tc.DirectIPCapabilityRuntime = e.Capabilities.directIPRuntime
-		tc.DirectIPLifecycle = e.Capabilities.directIPLifecycle
-		tc.DirectIPBackground = capabilityrequest.BoolArg(args, "background")
+		tc.Direct.DirectIPRequested = directPreflight.Requested
+		tc.Direct.DirectIPDeclared = append([]string(nil), directPreflight.Declared...)
+		tc.Direct.DirectIPActionDigest = directPreflight.ActionDigest
+		tc.Direct.DirectIPRequestDigest = directPreflight.RequestDigest
+		tc.Direct.DirectIPConfineDigest = directPreflight.ConfineDigest
+		tc.Direct.DirectIPAuthorized = directPreflight.Authorized
+		tc.Direct.DirectIPCapabilityRuntime = e.Capabilities.directIPRuntime
+		tc.Direct.DirectIPLifecycle = e.Capabilities.directIPLifecycle
+		tc.Direct.DirectIPBackground = capabilityrequest.BoolArg(args, "background")
 	}
 	// Live leases first, then combined or single-axis preflight.
 	e.Boundary.applySessionListenGrant(ctx, &tc)
@@ -139,22 +139,22 @@ func (e *Executor) applyPreInvokeBoundary(
 		return nil, tc, err
 	}
 	if listenPreflight != nil && listenPreflight.Authorized {
-		tc.LocalListenGranted = true
-		tc.LocalListenPorts = append([]uint16(nil), listenPreflight.Ports...)
+		tc.Local.LocalListenGranted = true
+		tc.Local.LocalListenPorts = append([]uint16(nil), listenPreflight.Ports...)
 	}
 	if connectPreflight != nil && connectPreflight.Authorized {
-		tc.LoopbackConnectGranted = true
-		tc.LoopbackConnectPorts = append([]uint16(nil), connectPreflight.Ports...)
+		tc.Local.LoopbackConnectGranted = true
+		tc.Local.LoopbackConnectPorts = append([]uint16(nil), connectPreflight.Ports...)
 	}
-	if err := e.Capabilities.preflightExecutionCapability(ctx, tool, args, &tc); err != nil {
+	if err := e.Process.preflightExecutionCapability(ctx, tool, args, &tc); err != nil {
 		return nil, tc, err
 	}
 	if permission, ok := ctx.Value(capabilityReviewSecretKey{}).(*hitl.SecretPermission); ok {
-		approveSecretPermission(tc.Secrets, permission)
+		approveSecretPermission(tc.Effects.Secrets, permission)
 	}
 	// Policy, native path resolution, and execution share one request.
 	confReq := e.Boundary.actionConfineRequest(ctx, tc)
-	tc.GrantedWriteRoots = append([]string(nil), confReq.GrantedWriteRoots...)
+	tc.Files.GrantedWriteRoots = append([]string(nil), confReq.GrantedWriteRoots...)
 	boundaryApproved := (socketPreflight != nil && socketPreflight.ApprovalSatisfied) ||
 		(directPreflight != nil && directPreflight.ApprovalSatisfied) || tc.HasExecutionApproval()
 	// Socket/direct outer actions reach profile policy.Evaluate with BoundaryApprovalSatisfied via applyPreInvokePolicy.
@@ -188,7 +188,7 @@ func (e *Executor) applyPreInvokePolicy(
 		e.Approvals.recordToolDenied(ctx, policyEval, decision, decision.Approval)
 		return nil, e.Rejections.rejectBeforeInvoke(ctx, tool, profileID, args, toolprofiles.PolicyBlockReject(decision, tool, profileID))
 	}
-	if len(tc.PolicyWriteGrants) != 0 && (e.Approvals.approvalGate == nil || e.Approvals.checkpointMgr == nil) {
+	if len(tc.Files.PolicyWriteGrants) != 0 && (e.Approvals.approvalGate == nil || e.Approvals.checkpointMgr == nil) {
 		return nil, fmt.Errorf("agent policy write requires the approval gate")
 	}
 	if tc.Invocation.Contract.Supports(toolcontract.CapabilityFileChange) {
@@ -196,7 +196,7 @@ func (e *Executor) applyPreInvokePolicy(
 			return nil, fmt.Errorf("file change approval checkpoints not configured")
 		}
 		if decision.Approval != nil {
-			tc.PreparedFileAccess = append([]hitl.GrantedPathDelta(nil), decision.Approval.FileAccess...)
+			tc.Files.PreparedFileAccess = append([]hitl.GrantedPathDelta(nil), decision.Approval.FileAccess...)
 		}
 		return args, nil
 	}
@@ -214,7 +214,7 @@ func (e *Executor) applyPreInvokePolicy(
 		}
 		args = runArgs
 		if decision.Approval != nil {
-			tc.ApprovedFileAccess = append([]hitl.GrantedPathDelta(nil), decision.Approval.FileAccess...)
+			tc.Files.ApprovedFileAccess = append([]hitl.GrantedPathDelta(nil), decision.Approval.FileAccess...)
 		}
 	}
 	return args, nil

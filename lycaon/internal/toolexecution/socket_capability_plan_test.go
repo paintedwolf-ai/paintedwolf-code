@@ -40,7 +40,9 @@ func TestSocketProjectDayPlanContinuesHeldSubject(t *testing.T) {
 	if len(offers) != 3 || offers[0].Rung != hitl.ApprovalRungDay || offers[0].Scope != hitl.ApprovalGrantScopeProject || offers[2].Rung != hitl.ApprovalRungProject {
 		t.Fatalf("project-backed socket offers = %+v", offers)
 	}
-	permit := socketPermitDelta(action, "digest", tools.ToolContext{ToolCallID: "call-1"}, []hitl.ApprovalSocketTarget{
+	permit := socketPermitDelta(action, "digest", tools.ToolContext{
+		Identity: tools.InvocationIdentity{ToolCallID: "call-1"},
+	}, []hitl.ApprovalSocketTarget{
 		{ApprovedPath: grant.ApprovedPath, ResolvedPath: grant.ResolvedPath},
 	})
 	options := socketCapabilityOptions(permit, offers, nil)
@@ -101,7 +103,9 @@ func TestCombinedDirectIPAuthorityMatchesPrimaryRung(t *testing.T) {
 	direct := directIPApprovalReview{Action: action, Lease: hitl.DirectIPLease{
 		ActionDigest: "action", RequestDigest: "request", ConfinementDigest: "confine",
 	}}
-	tc := tools.ToolContext{ToolCallID: "call"}
+	tc := tools.ToolContext{
+		Identity: tools.InvocationIdentity{ToolCallID: "call"},
+	}
 
 	once := hitl.ApprovalOption{Kind: hitl.ApprovalOptionCurrentAction, Rung: hitl.ApprovalRungOnce}
 	assertDirectAuthorityKinds(t, combinedDirectIPAuthority(once, direct, tc), hitl.AuthorityDirectIPPermit)
@@ -128,7 +132,9 @@ func TestCombinedDirectIPAuthorityMatchesPrimaryRung(t *testing.T) {
 
 func TestAttachRealizationWriteRootsSkipsOnce(t *testing.T) {
 	action := socketPlanAction()
-	permit := socketPermitDelta(action, "digest", tools.ToolContext{ToolCallID: "call-1"}, []hitl.ApprovalSocketTarget{
+	permit := socketPermitDelta(action, "digest", tools.ToolContext{
+		Identity: tools.InvocationIdentity{ToolCallID: "call-1"},
+	}, []hitl.ApprovalSocketTarget{
 		{ApprovedPath: "/var/run/docker.sock", ResolvedPath: "/var/run/docker.sock"},
 	})
 	offers := capabilitygrants.SocketExecutionGrantOffers(action, []confine.SocketGrant{{

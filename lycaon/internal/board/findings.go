@@ -24,7 +24,7 @@ func readFindings(ctx context.Context, args map[string]any, tctx tools.ToolConte
 		return "", &toolrejection.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"field": "detail_level", "reason": "choose_board_or_findings_view"}}
 	}
 	store := deps.Findings()
-	root := deps.RootSession(ctx, tctx.SessionID)
+	root := deps.RootSession(ctx, tctx.Identity.SessionID)
 	if root == "" {
 		return "", fmt.Errorf("findings session required")
 	}

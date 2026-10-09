@@ -26,8 +26,8 @@ func (tc ToolContext) ReviewFileChanges(ctx context.Context, changes ...FileChan
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if tc.FileChangeReview != nil {
-		if err := tc.FileChangeReview(ctx, changes); err != nil {
+	if tc.Files.FileChangeReview != nil {
+		if err := tc.Files.FileChangeReview(ctx, changes); err != nil {
 			return err
 		}
 		return ctx.Err()
@@ -45,7 +45,7 @@ func (tc ToolContext) ReviewFileChanges(ctx context.Context, changes ...FileChan
 	return nil
 }
 
-// agentPolicyTarget classifies a change against this invocation's project roots.
+// AgentPolicyTarget classifies a change against this invocation's project roots.
 func (tc ToolContext) AgentPolicyTarget(path string) (hitl.AgentPolicyTarget, bool) {
 	return hitl.AgentPolicyTargetFor(path, HostWriteRoot(tc), ConfineRootsForAction(tc)...)
 }
@@ -73,7 +73,7 @@ func contentReview(path, before, after string) contentReviewKey {
 // ContentDecision returns the final bytes already approved for this exact
 // proposal in the invocation and covers them at the gate again.
 func (tc ToolContext) ContentDecision(path, before, proposed string) (string, bool) {
-	r := tc.contentReviews
+	r := tc.Files.contentReviews
 	if r == nil {
 		return "", false
 	}
@@ -90,7 +90,7 @@ func (tc ToolContext) ContentDecision(path, before, proposed string) (string, bo
 // RecordContentApproval records the final bytes a content checkpoint approved
 // for a proposal. The gate releases exactly those bytes once.
 func (tc ToolContext) RecordContentApproval(path, before, proposed, final string) {
-	r := tc.contentReviews
+	r := tc.Files.contentReviews
 	if r == nil {
 		return
 	}
@@ -136,5 +136,5 @@ func (r *contentReviews) consume(changes []FileChange) bool {
 
 // ConsumeContentApproval releases the exact bytes reviewed in this invocation once.
 func (tc ToolContext) ConsumeContentApproval(changes []FileChange) bool {
-	return tc.contentReviews.consume(changes)
+	return tc.Files.contentReviews.consume(changes)
 }

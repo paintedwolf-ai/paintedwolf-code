@@ -56,7 +56,7 @@ func checkEditorConfig(ctx context.Context, resolved projectpaths.Resolved, st s
 
 // reportLandedEditorConfig checks and states one landed file.
 func reportLandedEditorConfig(ctx context.Context, tctx tools.ToolContext, resolved projectpaths.Resolved, st sourceview.Text, written string) {
-	if tctx.Out == nil {
+	if tctx.Effects.Out == nil {
 		return
 	}
 	if m, ok := checkEditorConfig(ctx, resolved, st, written); ok {
@@ -67,11 +67,11 @@ func reportLandedEditorConfig(ctx context.Context, tctx tools.ToolContext, resol
 // reportEditorConfigMismatch states the mismatch on the invocation, joining
 // files already reported by the same call.
 func reportEditorConfigMismatch(tctx tools.ToolContext, m editorConfigMismatch) {
-	if tctx.Out == nil || len(m.violations) == 0 {
+	if tctx.Effects.Out == nil || len(m.violations) == 0 {
 		return
 	}
 	code := toolrejection.EditorConfigMismatchCode
-	previous := tctx.Out.Facts.FeedbackFor(code)
+	previous := tctx.Effects.Out.Facts.FeedbackFor(code)
 	paths, _ := previous.Details["path"].(string)
 	rules, _ := previous.Details["editorconfig_rules"].([]string)
 	lines, _ := previous.Details["editorconfig_lines"].(string)
@@ -84,7 +84,7 @@ func reportEditorConfigMismatch(tctx tools.ToolContext, m editorConfigMismatch) 
 	if subject == nil {
 		subject = &api.FeedbackSubject{Kind: "file", ID: m.path}
 	}
-	tctx.Out.Facts = replaceFeedback(tctx.Out.Facts, code, details, subject)
+	tctx.Effects.Out.Facts = replaceFeedback(tctx.Effects.Out.Facts, code, details, subject)
 }
 
 func joinDetail(previous, sep, next string) string {

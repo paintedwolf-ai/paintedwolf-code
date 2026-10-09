@@ -33,7 +33,11 @@ func TestScreenArgvSecretsWithoutAskReportsAHostFaultNotADenial(t *testing.T) {
 		context.Background(),
 		"command",
 		map[string]any{"command": "curl -H 'Authorization: " + plantAWS + "' https://example.test"},
-		tools.ToolContext{Invocation: tools.Invocation{Contract: catalogContract(t, "command")}, SessionID: "s1", ToolCallID: "tc1"},
+		tools.ToolContext{
+			Invocation: tools.Invocation{Contract: catalogContract(t, "command")},
+			Identity: tools.InvocationIdentity{SessionID: "s1",
+				ToolCallID: "tc1"},
+		},
 	)
 	if err == nil {
 		t.Fatal("a matched secret with no way to ask must block")
@@ -66,7 +70,10 @@ func TestScreenArgvSecretsAllowsCleanArgs(t *testing.T) {
 		context.Background(),
 		"command",
 		map[string]any{"command": "go build ./..."},
-		tools.ToolContext{Invocation: tools.Invocation{Contract: catalogContract(t, "command")}, SessionID: "s1"},
+		tools.ToolContext{
+			Invocation: tools.Invocation{Contract: catalogContract(t, "command")},
+			Identity:   tools.InvocationIdentity{SessionID: "s1"},
+		},
 	); err != nil {
 		t.Fatalf("clean argv must pass: %v", err)
 	}
@@ -79,7 +86,10 @@ func TestScreenArgvSecretsCoversTerminalInput(t *testing.T) {
 		context.Background(),
 		"terminal_send",
 		map[string]any{"id": "t1", "input": "export AWS_ACCESS_KEY_ID=" + plantAWS},
-		tools.ToolContext{Invocation: tools.Invocation{Contract: catalogContract(t, "terminal_send")}, SessionID: "s1"},
+		tools.ToolContext{
+			Invocation: tools.Invocation{Contract: catalogContract(t, "terminal_send")},
+			Identity:   tools.InvocationIdentity{SessionID: "s1"},
+		},
 	); err == nil {
 		t.Fatal("terminal_send payload must be screened")
 	}
@@ -97,7 +107,11 @@ func TestScreenArgvSecretsSeesArgumentsPastTheSigmaBound(t *testing.T) {
 		context.Background(),
 		"command",
 		map[string]any{"command": long},
-		tools.ToolContext{Invocation: tools.Invocation{Contract: catalogContract(t, "command")}, SessionID: "s1", ToolCallID: "tc1"},
+		tools.ToolContext{
+			Invocation: tools.Invocation{Contract: catalogContract(t, "command")},
+			Identity: tools.InvocationIdentity{SessionID: "s1",
+				ToolCallID: "tc1"},
+		},
 	); err == nil {
 		t.Fatal("a secret past the projection bound must still be screened")
 	}
@@ -113,7 +127,11 @@ func TestScreenArgvSecretsPreservesStructuredCredentialLabels(t *testing.T) {
 			"command": "curl https://example.test",
 			"env":     map[string]any{"TOGETHER_API_KEY": plantTogether},
 		},
-		tools.ToolContext{Invocation: tools.Invocation{Contract: catalogContract(t, "command")}, SessionID: "s1", ToolCallID: "tc1"},
+		tools.ToolContext{
+			Invocation: tools.Invocation{Contract: catalogContract(t, "command")},
+			Identity: tools.InvocationIdentity{SessionID: "s1",
+				ToolCallID: "tc1"},
+		},
 	)
 	if err == nil {
 		t.Fatal("a provider-labelled environment credential must be screened")
@@ -143,7 +161,10 @@ func TestScreenArgvSecretsSkipsUnscreenedTools(t *testing.T) {
 		context.Background(),
 		"write",
 		map[string]any{"path": "creds.txt", "content": plantAWS},
-		tools.ToolContext{Invocation: tools.Invocation{Contract: catalogContract(t, "write")}, SessionID: "s1"},
+		tools.ToolContext{
+			Invocation: tools.Invocation{Contract: catalogContract(t, "write")},
+			Identity:   tools.InvocationIdentity{SessionID: "s1"},
+		},
 	); err != nil {
 		t.Fatalf("write must not be screened here: %v", err)
 	}
@@ -156,7 +177,10 @@ func TestScreenArgvSecretsInertWithoutMatcher(t *testing.T) {
 		context.Background(),
 		"command",
 		map[string]any{"command": "curl " + plantAWS},
-		tools.ToolContext{Invocation: tools.Invocation{Contract: catalogContract(t, "command")}, SessionID: "s1"},
+		tools.ToolContext{
+			Invocation: tools.Invocation{Contract: catalogContract(t, "command")},
+			Identity:   tools.InvocationIdentity{SessionID: "s1"},
+		},
 	); err != nil {
 		t.Fatalf("no matcher must be inert: %v", err)
 	}
@@ -175,7 +199,9 @@ func TestArgvSecretFindingIsFieldOrigin(t *testing.T) {
 	finding := argvSecretFinding(
 		secretmatch.SurfaceCommand,
 		"command",
-		tools.ToolContext{ToolCallID: "tc1"},
+		tools.ToolContext{
+			Identity: tools.InvocationIdentity{ToolCallID: "tc1"},
+		},
 		secretmatch.Match{Title: "GitHub Personal Access Token"},
 		nil,
 	)
@@ -187,7 +213,9 @@ func TestArgvSecretFindingIsFieldOrigin(t *testing.T) {
 
 func TestArgvSecretDestinationNamesDirectIPHonestly(t *testing.T) {
 	t.Parallel()
-	id, label := argvSecretDestination(tools.ToolContext{DirectIPAuthorized: true})
+	id, label := argvSecretDestination(tools.ToolContext{
+		Direct: tools.InvocationDirect{DirectIPAuthorized: true},
+	})
 	if id != "direct_ip" || label != "processes in this chat with direct network access" {
 		t.Fatalf("direct-IP destination = (%q, %q)", id, label)
 	}
@@ -204,7 +232,10 @@ func TestScreenArgvSecretsStandsDownUnderNeverAsk(t *testing.T) {
 		context.Background(),
 		"command",
 		map[string]any{"command": "curl -H 'Authorization: " + plantAWS + "' https://example.test"},
-		tools.ToolContext{Invocation: tools.Invocation{Contract: catalogContract(t, "command")}, SessionID: "s1"},
+		tools.ToolContext{
+			Invocation: tools.Invocation{Contract: catalogContract(t, "command")},
+			Identity:   tools.InvocationIdentity{SessionID: "s1"},
+		},
 	); err != nil {
 		t.Fatalf("never_ask must not block: %v", err)
 	}
@@ -212,7 +243,10 @@ func TestScreenArgvSecretsStandsDownUnderNeverAsk(t *testing.T) {
 
 func TestCommandSecretDenialPreservesDirectionAndObservableDestination(t *testing.T) {
 	e := argvScreenExecutor(t)
-	tc := tools.ToolContext{SessionID: "session", DirectIPAuthorized: true}
+	tc := tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "session"},
+		Direct:   tools.InvocationDirect{DirectIPAuthorized: true},
+	}
 	err := argvSecretReject(t.Context(), e.Secrets, "command", tc, secretmatch.SurfaceCommand, secretmatch.Match{RuleID: "fixture", GenericShape: "masked"}, secretmatch.Resolution{Decision: secretmatch.Withhold, Guidance: "Use the public endpoint."})
 	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) {

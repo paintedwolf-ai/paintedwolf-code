@@ -64,10 +64,10 @@ func TestPackBoardToolReturnsEnvelope(t *testing.T) {
 		testutil.FailErr(t, "write file", err)
 	}
 	raw, err := reg.Run(context.Background(), "pack_board", map[string]any{"detail_level": "compact"}, tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}},
-		ActiveRootID: "r1",
-		SessionID:    "sess-1",
-		Agent:        "coordinator",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{SessionID: "sess-1",
+			Agent: "coordinator"},
 	})
 	testutil.FailErr(t, "reg.Run failed", err)
 	if !strings.Contains(raw, `"board"`) || !strings.Contains(raw, `"now_line"`) {

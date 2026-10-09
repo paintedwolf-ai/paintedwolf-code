@@ -33,12 +33,12 @@ func testBoundary(t *testing.T) *sandbox.Boundary {
 
 func testCtx(dir string) tools.ToolContext {
 	return tools.ToolContext{
-		Roots:              []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}},
-		ActiveRootID:       "r1",
-		Agent:              toolprofiles.DefaultToolProfileID,
-		SessionID:          "test-session",
-		RepoFileCount:      100,
-		RepoFileCountKnown: true,
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}},
+			ActiveRootID:       "r1",
+			RepoFileCount:      100,
+			RepoFileCountKnown: true},
+		Identity: tools.InvocationIdentity{Agent: toolprofiles.DefaultToolProfileID,
+			SessionID: "test-session"},
 	}
 }
 

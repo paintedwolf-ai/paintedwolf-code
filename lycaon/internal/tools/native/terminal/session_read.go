@@ -45,10 +45,10 @@ func ReadHandler(bg *bgprocess.Registry) tools.ToolHandler {
 		if err != nil {
 			return "", err
 		}
-		if err := bg.LookupPTY(tctx.SessionID, in.ID); err != nil {
+		if err := bg.LookupPTY(tctx.Identity.SessionID, in.ID); err != nil {
 			return "", mapTerminalLifecycleReject(err, in.ID)
 		}
-		subject, _ := bg.CommandLine(tctx.SessionID, in.ID)
+		subject, _ := bg.CommandLine(tctx.Identity.SessionID, in.ID)
 		tctx.SetDisplaySubject(subject)
 		payload, err := readTerminal(bg, tctx, ReadToolName, in.ID, in.IdleMS, in.TimeoutMS, in.MaxBytes, false)
 		if err != nil {
@@ -70,7 +70,7 @@ func readTerminal(bg *bgprocess.Registry, tctx tools.ToolContext, tool, id strin
 	if timeoutMS > 0 {
 		opts.Timeout = time.Duration(timeoutMS) * time.Millisecond
 	}
-	res, err := bg.ReadPTY(tctx.SessionID, id, opts)
+	res, err := bg.ReadPTY(tctx.Identity.SessionID, id, opts)
 	if err != nil {
 		return TerminalReadResult{}, mapTerminalLifecycleReject(err, id)
 	}

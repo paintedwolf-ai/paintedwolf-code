@@ -15,10 +15,10 @@ import (
 
 func TestProjectPathBoundariesRefuseUnsafeAttachedRoot(t *testing.T) {
 	tctx := tools.ToolContext{
-		Roots: []projectroot.RootRef{{
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{
 			ID: "root", Label: "root", Path: string(filepath.Separator), IsPrimary: true,
 		}},
-		ActiveRootID: "root",
+			ActiveRootID: "root"},
 	}
 	checks := map[string]func() error{
 		"read": func() error {

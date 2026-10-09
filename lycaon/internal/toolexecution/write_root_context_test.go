@@ -34,17 +34,21 @@ func TestNativeContextReceivesCurrentConfinementWriteGrants(t *testing.T) {
 		return nil
 	})
 	for _, session := range []string{"approved", "other", "approved"} {
-		tc := tools.ToolContext{ProjectID: "project", SessionID: session,
-			Roots: []projectroot.RootRef{{ID: "root", Path: project, IsPrimary: true}}, ActiveRootID: "root"}
+		tc := tools.ToolContext{
+			Identity: tools.InvocationIdentity{ProjectID: "project",
+				SessionID: session},
+			Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: project, IsPrimary: true}},
+				ActiveRootID: "root"},
+		}
 		_, err := executor.Invoke(t.Context(), tool, map[string]any{}, tc)
 		testutil.FailErr(t, "invoke context probe", err)
-		if !slices.Equal(received.GrantedWriteRoots, policy.eval.ConfineRequest.GrantedWriteRoots) {
+		if !slices.Equal(received.Files.GrantedWriteRoots, policy.eval.ConfineRequest.GrantedWriteRoots) {
 			t.Fatal("native context diverged from the approved process boundary")
 		}
-		if got := len(received.GrantedWriteRoots) > 0; got != (session == "approved" && active) {
-			t.Fatalf("session %q active=%t: received roots %v", session, active, received.GrantedWriteRoots)
+		if got := len(received.Files.GrantedWriteRoots) > 0; got != (session == "approved" && active) {
+			t.Fatalf("session %q active=%t: received roots %v", session, active, received.Files.GrantedWriteRoots)
 		}
-		if len(received.Roots) != 1 || received.Roots[0].ID != "root" {
+		if len(received.Source.Roots) != 1 || received.Source.Roots[0].ID != "root" {
 			t.Fatal("write grant became an attached root")
 		}
 		if session == "other" {

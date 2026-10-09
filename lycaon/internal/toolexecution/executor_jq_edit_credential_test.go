@@ -41,8 +41,13 @@ func TestJqEditIntoACredentialFileAsksAsASensitiveWrite(t *testing.T) {
 	done := make(chan error, 1)
 	go func() {
 		_, err := executor.Invoke(ctx, "jq_edit", map[string]any{"path": "config.json", "dest": ".env", "query": ".port = 9090"}, tools.ToolContext{
-			Roots: []projectroot.RootRef{{ID: "root", Path: project, IsPrimary: true}}, ActiveRootID: "root", ProjectID: "project",
-			SourceWorkspaceKind: api.SourceWorkspaceKindProject, SessionID: "chat", ToolCallID: "jq-edit-env", Agent: "implement",
+			Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: project, IsPrimary: true}},
+				ActiveRootID:        "root",
+				SourceWorkspaceKind: api.SourceWorkspaceKindProject},
+			Identity: tools.InvocationIdentity{ProjectID: "project",
+				SessionID:  "chat",
+				ToolCallID: "jq-edit-env",
+				Agent:      "implement"},
 		})
 		done <- err
 	}()

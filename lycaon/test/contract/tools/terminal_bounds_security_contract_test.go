@@ -24,7 +24,10 @@ func TestTerminalOpenRequiresProjectRoot(t *testing.T) {
 	contractcheck.FailErr(t, "register", native.RegisterTerminalSessionTools(reg, bg))
 	_, err := reg.Run(context.Background(), "terminal_open", map[string]any{
 		"command": "true",
-	}, tools.ToolContext{SessionID: "s", ProjectID: "p"})
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "s",
+			ProjectID: "p"},
+	})
 	if err == nil {
 		t.Fatal("expected PROJECT_HAS_NO_ROOTS reject")
 	}
@@ -114,8 +117,9 @@ func TestTerminalUnsupportedMapsOnWindowsCI(t *testing.T) {
 	contractcheck.FailErr(t, "register", native.RegisterTerminalSessionTools(reg, bg))
 	dir := t.TempDir()
 	_, err := reg.Run(context.Background(), "terminal_open", map[string]any{"command": "true"}, tools.ToolContext{
-		SessionID: "s", ProjectID: "p",
-		Roots: []projectroot.RootRef{{ID: "main", Path: dir, IsPrimary: true}},
+		Identity: tools.InvocationIdentity{SessionID: "s",
+			ProjectID: "p"},
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "main", Path: dir, IsPrimary: true}}},
 	})
 	if err == nil {
 		t.Fatal("expected TERMINAL_UNSUPPORTED on windows")

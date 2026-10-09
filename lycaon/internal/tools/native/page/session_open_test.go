@@ -36,9 +36,10 @@ func TestOpenHandlerIdempotentReopen(t *testing.T) {
 
 	handler := OpenHandler(pool, pages, nil, nil)
 	tctx := tools.ToolContext{
-		SessionID: "sess-idempotent", ProjectID: "proj-1",
-		Roots:        []projectroot.RootRef{{ID: "project", Path: workspace, IsPrimary: true}},
-		ActiveRootID: "project",
+		Identity: tools.InvocationIdentity{SessionID: "sess-idempotent",
+			ProjectID: "proj-1"},
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "project", Path: workspace, IsPrimary: true}},
+			ActiveRootID: "project"},
 	}
 
 	// The first open holds a new page.

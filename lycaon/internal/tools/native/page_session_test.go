@@ -21,7 +21,8 @@ func TestPageOpenMissingTarget(t *testing.T) {
 	defer pages.Close(t.Context())
 	testutil.FailErr(t, "register", RegisterPageSessionTools(reg, pool, pages, nil, nil))
 	_, err := reg.Run(context.Background(), page.OpenToolName, map[string]any{}, tools.ToolContext{
-		SessionID: "s", Out: &tools.ToolInvocationOut{},
+		Identity: tools.InvocationIdentity{SessionID: "s"},
+		Effects:  tools.InvocationEffects{Out: &tools.ToolInvocationOut{}},
 	})
 	rej := &toolrejection.ToolReject{}
 	ok := errors.As(err, &rej)

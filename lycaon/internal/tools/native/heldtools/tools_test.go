@@ -31,7 +31,10 @@ func run(t *testing.T, tool interface {
 	Run(context.Context, map[string]any, tools.ToolContext) (string, error)
 }, args map[string]any) (map[string]any, error) {
 	t.Helper()
-	out, err := tool.Run(t.Context(), args, tools.ToolContext{SessionID: "s1", Out: &tools.ToolInvocationOut{}})
+	out, err := tool.Run(t.Context(), args, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "s1"},
+		Effects:  tools.InvocationEffects{Out: &tools.ToolInvocationOut{}},
+	})
 	if err != nil {
 		return nil, err
 	}

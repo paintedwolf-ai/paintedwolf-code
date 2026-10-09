@@ -98,13 +98,17 @@ func TestSetupPermissionCoversRepeatedAuthenticatedServiceUse(t *testing.T) {
 		if !strings.Contains(args["command"].(string), value) {
 			t.Fatal("setup did not receive value")
 		}
-		if strings.Contains(tc.CanonicalArgs["command"].(string), value) {
+		if strings.Contains(tc.Effects.CanonicalArgs["command"].(string), value) {
 			t.Fatal("canonical setup leaked value")
 		}
 		return "service configured", nil
 	}))
 	testutil.FailErr(t, "register HTTP consumer", Register(registry, Deps{Boundary: testBoundary(), SecretMatcher: matcher, SecretAsk: executor.AskSecretScreen, Secrets: service}))
-	tc := tools.ToolContext{ProjectID: testdbseed.DefaultProjectID, SessionID: "task", ToolCallID: "setup"}
+	tc := tools.ToolContext{
+		Identity: tools.InvocationIdentity{ProjectID: testdbseed.DefaultProjectID,
+			SessionID:  "task",
+			ToolCallID: "setup"},
+	}
 	_, err = executor.Invoke(t.Context(), "command", map[string]any{
 		"command":    "setup --password " + meta.Reference,
 		"secret_use": map[string]any{"services": []any{server.URL}},
@@ -115,7 +119,7 @@ func TestSetupPermissionCoversRepeatedAuthenticatedServiceUse(t *testing.T) {
 	}
 	request := map[string]any{"method": "GET", "url": server.URL, "auth": map[string]any{"scheme": "basic", "username": "user", "password": meta.Reference}, "capability_request": loopbackCapability(t, server.URL)}
 	for i := range 3 {
-		tc.ToolCallID = fmt.Sprintf("request-%d", i)
+		tc.Identity.ToolCallID = fmt.Sprintf("request-%d", i)
 		_, err = executor.Invoke(t.Context(), "http_request", request, tc)
 		testutil.FailErr(t, "reuse service permission", err)
 	}
@@ -127,7 +131,7 @@ func TestSetupPermissionCoversRepeatedAuthenticatedServiceUse(t *testing.T) {
 	if !removed {
 		t.Fatal("secret permission missing from revocation inventory")
 	}
-	tc.ToolCallID = "after-revocation"
+	tc.Identity.ToolCallID = "after-revocation"
 	_, err = executor.Invoke(t.Context(), "http_request", request, tc)
 	testutil.FailErr(t, "review after revocation", err)
 	if review.cards != 2 {

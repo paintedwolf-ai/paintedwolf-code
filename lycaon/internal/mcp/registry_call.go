@@ -27,7 +27,7 @@ const MCPTransportUnavailableCode = "MCP_TRANSPORT_UNAVAILABLE"
 const MCPConsentStateUnavailableCode = "MCP_CONSENT_STATE_UNAVAILABLE"
 
 // resolveRunnable selects the enabled project-scoped connection for invocation.
-func (r *RegistryImpl) resolveRunnable(ctx context.Context, scope CallScope, providerID string) (MCPProviderEntry, error) {
+func (r *ProviderCatalog) resolveRunnable(ctx context.Context, scope CallScope, providerID string) (MCPProviderEntry, error) {
 	_, ok := r.deviceEntry(providerID)
 	if !ok {
 		return MCPProviderEntry{}, fmt.Errorf("unknown mcp provider: %s", providerID)
@@ -47,7 +47,7 @@ func (r *RegistryImpl) resolveRunnable(ctx context.Context, scope CallScope, pro
 }
 
 // resolveForInspection selects the visible project catalog entry.
-func (r *RegistryImpl) resolveForInspection(ctx context.Context, scope CallScope, providerID string) (MCPProviderEntry, error) {
+func (r *ProviderCatalog) resolveForInspection(ctx context.Context, scope CallScope, providerID string) (MCPProviderEntry, error) {
 	view := r.projectView(ctx, scope.ProjectDir)
 	merged, ok := view.entry(providerID)
 	if !ok {
@@ -60,18 +60,18 @@ func (r *RegistryImpl) resolveForInspection(ctx context.Context, scope CallScope
 }
 
 // ListTools returns the qualified tool metadata a provider exposes, for inspection.
-func (r *RegistryImpl) ListTools(ctx context.Context, scope CallScope, providerID string) ([]tools.ToolMeta, error) {
-	entry, err := r.resolveForInspection(ctx, scope, providerID)
+func (r *ToolCalls) ListTools(ctx context.Context, scope CallScope, providerID string) ([]tools.ToolMeta, error) {
+	entry, err := r.Catalog.resolveForInspection(ctx, scope, providerID)
 	if err != nil {
 		return nil, err
 	}
-	sess, err := r.ensureSession(ctx, scope, entry)
+	sess, err := r.Connections.ensureSession(ctx, scope, entry)
 	if err != nil {
 		return nil, err
 	}
 	toolsList, err := sess.ListTools(ctx)
 	if err != nil {
-		r.evictDeadSession(scope, providerID, err)
+		r.Connections.evictDeadSession(scope, providerID, err)
 		return nil, err
 	}
 	out := make([]tools.ToolMeta, 0, len(toolsList))
@@ -91,8 +91,8 @@ func (r *RegistryImpl) ListTools(ctx context.Context, scope CallScope, providerI
 }
 
 // CallTool invokes one MCP tool on behalf of scope.
-func (r *RegistryImpl) CallTool(ctx context.Context, scope CallScope, providerID, toolName string, args map[string]any) (string, error) {
-	entry, err := r.resolveRunnable(ctx, scope, providerID)
+func (r *ToolCalls) CallTool(ctx context.Context, scope CallScope, providerID, toolName string, args map[string]any) (string, error) {
+	entry, err := r.Catalog.resolveRunnable(ctx, scope, providerID)
 	if err != nil {
 		return "", err
 	}
@@ -117,7 +117,7 @@ func (r *RegistryImpl) CallTool(ctx context.Context, scope CallScope, providerID
 	ctx, cancel := safecmd.MCPCaps().WithTimeout(ctx)
 	defer cancel()
 	// Pin the approved definition immediately before invocation.
-	if err := r.acceptToolDefinition(providerID, toolName); err != nil {
+	if err := r.Tools.acceptToolDefinition(providerID, toolName); err != nil {
 		return "", &toolrejection.ToolReject{
 			Code: MCPConsentStateUnavailableCode,
 			Data: map[string]any{"provider": providerID, "tool": toolName},
@@ -131,14 +131,14 @@ func (r *RegistryImpl) CallTool(ctx context.Context, scope CallScope, providerID
 	}
 	br := r.breakerFor(providerID)
 	raw, err := br.Execute(func() (any, error) {
-		sess, err := r.ensureSession(ctx, scope, entry)
+		sess, err := r.Connections.ensureSession(ctx, scope, entry)
 		if err != nil {
 			return "", err
 		}
 		res, err := sess.CallTool(ctx, toolName, args)
 		if err != nil {
 			// Evict failed transports before the next call.
-			r.evictDeadSession(scope, providerID, err)
+			r.Connections.evictDeadSession(scope, providerID, err)
 			return "", err
 		}
 		if res.IsError {
@@ -195,7 +195,7 @@ type mcpRedactionReceipt struct {
 	count int
 }
 
-func (r *RegistryImpl) screenCallToolArgs(ctx context.Context, entry MCPProviderEntry, toolName string, args map[string]any, contestToken string) (map[string]any, mcpRedactionReceipt, error) {
+func (r *ToolCalls) screenCallToolArgs(ctx context.Context, entry MCPProviderEntry, toolName string, args map[string]any, contestToken string) (map[string]any, mcpRedactionReceipt, error) {
 	r.mu.RLock()
 	matcher := r.secretMatcher
 	ask := r.secretAsk
@@ -410,7 +410,7 @@ func redactMCPArgValue(ctx context.Context, matcher *secretmatch.Matcher, label 
 	}
 }
 
-func (r *RegistryImpl) breakerFor(providerID string) *gobreaker.CircuitBreaker {
+func (r *ToolCalls) breakerFor(providerID string) *gobreaker.CircuitBreaker {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if br, ok := r.breakers[providerID]; ok {
