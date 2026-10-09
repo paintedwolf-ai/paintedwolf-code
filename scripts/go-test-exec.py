@@ -16,7 +16,7 @@ import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import verification_reuse as reuse  # noqa: E402
-from ci_policy.resources import Monitor, budget  # noqa: E402
+from ci_policy.resources import Monitor, budget, runtime_environment  # noqa: E402
 from ci_policy.quarantine import arguments as quarantine_arguments  # noqa: E402
 
 CONTROL_ENV = ("PW_TEST_STAGE_EVENTS", "PW_TEST_REUSE_STORE", "PW_TEST_ENVIRONMENT_IDENTITY", "PW_TEST_PACKAGE_IDENTITIES",
@@ -150,7 +150,9 @@ def main():
         log = Path(environment["PW_TEST_SCRATCH_ROOT"]) / "test-logs" / f"{os.getpid()}.log"
         log.parent.mkdir(exist_ok=True)
         arguments = [f"-test.testlogfile={log}", *arguments]
-    status, output, forked, resource_limit = execute(binary, arguments, child_environment, reuse.fork_observable(), budget(package))
+    limit = budget(package)
+    status, output, forked, resource_limit = execute(binary, arguments, runtime_environment(child_environment, limit),
+                                                     reuse.fork_observable(), limit)
     elapsed = time.monotonic() - started
     code = os.waitstatus_to_exitcode(status)
     if resource_limit:

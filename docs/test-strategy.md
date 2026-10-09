@@ -584,6 +584,10 @@ Each Linux Go test process has a 3.5 GiB RSS ceiling, declared in
 16 GiB and run four packages at once, so the ceiling keeps one package from
 exhausting the runner while leaving room for the toolchain. A package that needs
 more declares its own ceiling with a tracking issue (`internal/api`, #382).
+Unless a run sets `GOMEMLIMIT`, the test binary gets a soft limit at 80% of its
+ceiling, so the collector reclaims garbage before the ceiling instead of letting
+the heap reach twice its live size, and the guard measures retained memory
+rather than collector slack.
 Failure identifies the package, measured bytes, and bound. Security and wiring suites additionally
 check retained heap and goroutine growth after cleanup through
 `internal/testutil/resourceguard`. These guards detect resource regressions;
