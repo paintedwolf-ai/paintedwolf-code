@@ -14,8 +14,6 @@ import (
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
-	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
-	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
 	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )

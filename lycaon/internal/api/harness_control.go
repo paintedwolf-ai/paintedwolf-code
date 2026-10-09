@@ -10,7 +10,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
-	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/visual"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowinputs "github.com/lycaon/lycaon/internal/workflow/inputs"

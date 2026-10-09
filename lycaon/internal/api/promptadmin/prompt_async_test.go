@@ -20,7 +20,6 @@ import (
 	"github.com/lycaon/lycaon/internal/session/lifecycle"
 	"github.com/lycaon/lycaon/internal/session/spendguard"
 	"github.com/lycaon/lycaon/internal/usernotice"
-	"github.com/lycaon/lycaon/internal/workflow"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
