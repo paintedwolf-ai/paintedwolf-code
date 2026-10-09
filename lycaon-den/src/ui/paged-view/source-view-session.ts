@@ -427,7 +427,8 @@ export class SourceViewSession<K extends Kind> {
         this.validateFrame(frame as FrameOf<K>);
         if (query.follow && this.value?.intent_revision !== retained.intent_revision) throw new DOMException("The presentation was superseded.", "AbortError");
         return frame as FrameOf<K>;
-      }, signal, { identity: frame => ({ viewId: frame.view_id, intentRevision: frame.intent_revision, projectionRevision: frame.projection_revision }),
+      }, signal, { basis: { viewId: retained.id, intentRevision: retained.intent_revision, projectionRevision: basis },
+        identity: frame => ({ viewId: frame.view_id, intentRevision: frame.intent_revision, projectionRevision: frame.projection_revision }),
         follow: true, retain: retention.frames, accept: () => this.acceptPresentation(presentation) });
       return result;
     }, signal, options.foreground ?? query.follow === "latest");

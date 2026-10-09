@@ -342,16 +342,17 @@ class ScrollportMotion {
       } else {
         this.viewport.scrollTop = nextY;
       }
-      const landedY = relative ? this.viewport.scrollTop : nextY;
       // Synchronize scroller geometry after programmatic offset changes.
       void this.viewport.offsetHeight;
+      // Native layout can clamp or reject an absolute write without emitting a scroll event.
+      const landedY = this.viewport.scrollTop;
       // Restore point for native clamps during contraction.
       if (axis !== "x") this.lastObservedOffsetY = landedY;
       // Recompute retained extent after every offset change.
       if (this.extentHoldAppliedPx > 0) {
         this.measureGeometry(() => this.publishRetainedExtent());
       }
-      const position = { top: landedY, left: nextX };
+      const position = { top: landedY, left: this.viewport.scrollLeft };
       for (const [handler, subscription] of [...this.commitHandlers]) {
         if (this.commitHandlers.get(handler) === subscription) handler(source, position);
       }

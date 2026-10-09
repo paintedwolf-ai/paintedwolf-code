@@ -48,6 +48,7 @@ func ReportSetAsides(report guidance.CoordinatorCompletionReport) []scanfindings
 func CheckReportDocument(report guidance.CoordinatorCompletionReport, facts ReportDocumentFacts) []guidance.ReportDocumentIssue {
 	out := checkReportFindings(report, facts)
 	for _, issue := range []guidance.ReportDocumentIssue{
+		checkReportRating(report, facts),
 		checkReportAsk(report),
 		checkReportSetAsides(report),
 		checkClaimsCarried(report, facts.Claims),
@@ -182,6 +183,57 @@ func checkRatedSeverity(name, severity string, brief *workflowdef.Brief, answers
 		return guidance.ReportDocumentIssue{}
 	}
 	return invalid("finding %s severity %q contradicts the level its answers decide (%s); omit severity, the host states the level", name, severity, level.Label)
+}
+
+// checkReportRating requires the report's own call on the brief question: a
+// declared level with its reason, no milder than the level the findings'
+// answers already decide. Judgment may rate worse than the table; it may not
+// clear what the facts established.
+func checkReportRating(report guidance.CoordinatorCompletionReport, facts ReportDocumentFacts) guidance.ReportDocumentIssue {
+	brief := facts.Brief
+	if brief == nil {
+		if report.Rating != nil {
+			return invalid("rating is stated, but this workflow asks no rating question; remove it")
+		}
+		return guidance.ReportDocumentIssue{}
+	}
+	labels := strings.Join(brief.LevelLabels(), ", ")
+	if report.Rating == nil {
+		return invalid("the report needs rating: {level, why}: your call on %q from everything the review did, as one of %s", brief.Question, labels)
+	}
+	call, ok := brief.LevelIndex(report.Rating.Level)
+	if !ok {
+		return invalid("rating.level %q is not a declared level (want one of %s)", report.Rating.Level, labels)
+	}
+	if strings.TrimSpace(report.Rating.Why) == "" {
+		return invalid("rating.why is empty; say in one line what decided %s", brief.Levels[call].Label)
+	}
+	certain := decidedLevel(report, facts)
+	if call > certain {
+		return invalid("rating %q is milder than %s, the level the findings' answers already decide; rate at least %s, or correct the answers that decide it",
+			brief.Levels[call].Label, brief.Levels[certain].Label, brief.Levels[certain].Label)
+	}
+	return guidance.ReportDocumentIssue{}
+}
+
+// decidedLevel is the most severe level the attention findings' answers are
+// certain to reach, by review answers where a claim shares the id.
+func decidedLevel(report guidance.CoordinatorCompletionReport, facts ReportDocumentFacts) int {
+	adjudicated := ClaimAnswers(facts.Claims)
+	var items []map[string]string
+	for _, f := range report.Findings {
+		switch api.CompletionReportFindingDisposition(f.Disposition) {
+		case api.CompletionReportFindingDispositionHeld, api.CompletionReportFindingDispositionUnresolved:
+			continue
+		case api.CompletionReportFindingDispositionAct, api.CompletionReportFindingDispositionAccept:
+		}
+		answers, ok := adjudicated[strings.TrimSpace(f.ID)]
+		if !ok {
+			answers = f.Answers
+		}
+		items = append(items, facts.Brief.Rateable(answers))
+	}
+	return facts.Brief.Rate(items).Best
 }
 
 func findingName(f guidance.CoordinatorFinding) string {

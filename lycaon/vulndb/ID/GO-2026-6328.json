@@ -1,0 +1,48 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/free5gc/ausf"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.4.5"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-55785",
+  "GHSA-fp46-6vfw-gc9c"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6328"
+ },
+ "details": "free5GC AUSF uses non-constant-time authentication comparisons and logs XRES* in 5G-AKA in github.com/free5gc/ausf",
+ "id": "GO-2026-6328",
+ "modified": "2026-09-02T18:37:27Z",
+ "published": "2026-09-02T18:37:27Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/free5gc/free5gc/security/advisories/GHSA-fp46-6vfw-gc9c"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/free5gc/ausf/commit/7a5a4aa1ec6cd0e1febebf333911c3104968edf0"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "free5GC AUSF uses non-constant-time authentication comparisons and logs XRES* in 5G-AKA in github.com/free5gc/ausf"
+}

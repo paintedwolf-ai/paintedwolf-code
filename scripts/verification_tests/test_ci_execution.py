@@ -48,7 +48,7 @@ class HostedVerificationTests(unittest.TestCase):
         nightly = {target for row in ci.matrix("nightly")["include"] for target in lanes[row["lane"]]["targets"]}
         self.assertEqual(nightly, {"test:full", "test:race", "test:fuzz", "test:stress", "check:coverage",
                                    "den:coverage-check", "den:test:transcript-scale", "lint:vuln:fresh",
-                                   "perf:bench", "perf:sidecar", "perf:soak"})
+                                   "perf:bench", "perf:sidecar", "perf:soak", "den:webkit:scroll"})
         for suite in ci.SUITES - {"all"}:
             with self.subTest(suite=suite):
                 names = {row["lane"] for row in ci.matrix("nightly", suite)["include"]}
@@ -73,7 +73,8 @@ class HostedVerificationTests(unittest.TestCase):
         setups = {row["lane"]: row["setup"] for row in ci.matrix("check")["include"]}
         self.assertEqual(setups["native"], "shell")
         # The WebKit harness builds without the shell, so the lane skips its packaging inputs.
-        self.assertEqual(setups["webkit"], "harness")
+        nightly = {row["lane"]: row["setup"] for row in ci.matrix("nightly", "e2e")["include"]}
+        self.assertEqual(nightly["webkit"], "harness")
         self.assertEqual({setup for lane, setup in setups.items() if lane not in {"native", "webkit"}},
                          {"verification"})
         for mutation in ("unknown", "missing", "boolean"):
@@ -89,6 +90,29 @@ class HostedVerificationTests(unittest.TestCase):
                     lane["native"] = True
                 with patch.object(ci, "catalog", return_value=data), self.assertRaises(ValueError):
                     ci.matrix("check")
+
+    def test_e2e_leaves_merge_admission_and_has_an_explicit_nightly_selection(self):
+        self.assertNotIn("den:webkit:scroll", [stage["name"] for stage in planning.expand(["check"])])
+        self.assertNotIn("webkit", {row["lane"] for row in ci.matrix("check")["include"]})
+        self.assertEqual({row["lane"] for row in ci.matrix("nightly", "e2e")["include"]},
+                         {"webkit", "vulnerability-freshness"})
+
+    def test_behavior_shards_preserve_the_full_recipe_and_memory_cap(self):
+        lane = ci.lanes()["behavior"]
+        for profile in ["check", "nightly", "release"]:
+            rows = [row for row in ci.matrix(profile)["include"] if row["lane"] == "behavior"]
+            self.assertEqual([row["shard"] for row in rows], ["1/2", "2/2"])
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(ci, "artifact_root", return_value=Path(directory)), \
+                patch.object(ci.subprocess, "call", return_value=0) as run:
+            for shard in ["1/2", "2/2"]:
+                ci.run_lane("behavior", shard)
+                self.assertEqual(run.call_args.args[0], ["./task", "test:full"])
+                environment = run.call_args.kwargs["env"]
+                self.assertEqual(environment["PW_GO_SHARD"], shard)
+                self.assertEqual(environment["PW_TEST_WORKERS"], str(lane["workers"]))
+            with self.assertRaises(ValueError):
+                ci.run_lane("behavior")
 
     def test_combined_analysis_targets_restore_both_tool_sets(self):
         self.assertEqual(ci.analysis_set(["lint:full", "lint:vuln"]), "all")
@@ -128,6 +152,13 @@ class HostedVerificationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             ci.require_success({"verification": {"result": "success"}}, ["platform"])
 
+    def test_draft_pull_requests_never_pass_the_required_check(self):
+        # Drafts skip verification, and a skipped required check would otherwise read as passing.
+        for results in [{"verification": {"result": "skipped"}, "platform": {"result": "skipped"}},
+                        {"verification": {"result": "success"}, "platform": {"result": "skipped"}}]:
+            with self.subTest(results=results), self.assertRaisesRegex(ValueError, "ready for review"):
+                ci.require_success(results, ["platform"], draft=True)
+
     def test_lane_uses_task_admission_and_preserves_the_verdict(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -146,7 +177,7 @@ class HostedVerificationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory, \
                 patch.object(ci, "artifact_root", return_value=Path(directory)), \
                 patch.object(ci.subprocess, "call", return_value=0) as run:
-            ci.run_lane("behavior")
+            ci.run_lane("behavior", "1/2")
             self.assertEqual(run.call_args.kwargs["env"]["PW_TEST_WORKERS"], str(ci.lanes()["behavior"]["workers"]))
             ci.run_lane("frontend")
             self.assertEqual(run.call_args.kwargs["env"].get("PW_TEST_WORKERS"), ci.os.environ.get("PW_TEST_WORKERS"))
@@ -166,7 +197,7 @@ class HostedVerificationTests(unittest.TestCase):
                 patch.object(ci.subprocess, "call", return_value=0) as run:
             ci.run_lane("race", f"2/{count}")
             self.assertEqual(run.call_args.kwargs["env"]["PW_GO_SHARD"], f"2/{count}")
-            for lane, shard in [("race", ""), ("race", f"{count + 1}/{count}"), ("behavior", "1/2")]:
+            for lane, shard in [("race", ""), ("race", f"{count + 1}/{count}"), ("frontend", "1/2")]:
                 with self.subTest(lane=lane, shard=shard), self.assertRaises(ValueError):
                     ci.run_lane(lane, shard)
 
@@ -191,55 +222,17 @@ class HostedVerificationTests(unittest.TestCase):
                         patch.object(ci.subprocess, "call", return_value=0) as run:
                     if not inherited:
                         ci.os.environ.pop("PW_GO_TEST_TIMEOUT_SECONDS", None)
-                    ci.run_lane("behavior")
+                    ci.run_lane("behavior", "1/2")
                     self.assertEqual(run.call_args.kwargs["env"]["PW_GO_TEST_TIMEOUT_SECONDS"], expected)
 
-    def test_release_commit_needs_a_passing_full_tier_check(self):
-        def fake(runs, events):
-            def github(path, **query):
-                if path.endswith("/check-runs"):
-                    self.assertEqual(query, {"check_name": "check", "filter": "all"})
-                    return {"check_runs": [{"app": {"slug": slug}, "conclusion": conclusion, "check_suite": {"id": suite}}
-                                           for slug, conclusion, suite in runs]}
-                return {"workflow_runs": [{"event": events[query["check_suite_id"]]}]}
-            return github
-        actions = "github-actions"
-        for runs, events in [([(actions, "success", 1)], {1: "merge_group"}),
-                             ([(actions, "failure", 1), (actions, "success", 2)], {1: "merge_group", 2: "workflow_dispatch"})]:
-            with patch.object(ci, "github", fake(runs, events)):
-                ci.require_full_tier("owner/repo", "abc")
-        for runs, events in [([], {}),
-                             ([(actions, "success", 1)], {1: "pull_request"}),
-                             ([(actions, "success", 1)], {1: "push"}),
-                             ([(actions, "failure", 1)], {1: "merge_group"}),
-                             ([("impostor", "success", 1)], {1: "merge_group"})]:
-            with self.subTest(runs=runs, events=events), patch.object(ci, "github", fake(runs, events)), \
-                    self.assertRaises(ValueError):
-                ci.require_full_tier("owner/repo", "abc")
-
-    def test_prune_cancels_only_runs_whose_merge_group_is_gone(self):
-        live, gone = "gh-readonly-queue/main/pr-2-b", "gh-readonly-queue/main/pr-1-a"
-        calls = []
-
-        def github(path, method="GET", **query):
-            calls.append((method, path, query.get("status")))
-            if path.endswith("/runs"):
-                self.assertEqual((query["event"], query["per_page"]), ("merge_group", 100))
-                runs = {"queued": [{"id": 1, "head_branch": gone}], "in_progress": [{"id": 2, "head_branch": live}]}
-                return {"workflow_runs": runs.get(query["status"], [])}
-            if "matching-refs" in path:
-                return [{"ref": f"refs/heads/{live}"}]
-            return None
-
-        with patch.object(ci, "github", github), patch("builtins.print"):
-            self.assertEqual(ci.prune_merge_queue("owner/repo"), [1])
-        self.assertEqual([call for call in calls if call[0] == "POST"],
-                         [("POST", "repos/owner/repo/actions/runs/1/force-cancel", None)])
-        # Runs are listed before branches, so a group created in between is treated as live.
-        listed = [index for index, call in enumerate(calls) if call[1].endswith("/runs")]
-        branches = next(index for index, call in enumerate(calls) if "matching-refs" in call[1])
-        self.assertLess(max(listed), branches)
-        self.assertEqual({call[2] for call in calls if call[1].endswith("/runs")}, set(ci.UNFINISHED_RUNS))
+    def test_release_commit_needs_exact_main_qualification(self):
+        good = {"head_sha": "abc", "head_branch": "main", "conclusion": "success", "event": "push"}
+        with patch.object(ci, "github", return_value={"workflow_runs": [good]}):
+            ci.require_qualification("owner/repo", "abc")
+        for changed in ({"head_sha": "other"}, {"head_branch": "feature"}, {"conclusion": "failure"},
+                        {"event": "merge_group"}, {"event": "pull_request"}):
+            with patch.object(ci, "github", return_value={"workflow_runs": [{**good, **changed}]}), self.assertRaises(ValueError):
+                ci.require_qualification("owner/repo", "abc")
 
     def test_report_names_what_did_not_pass_in_the_summary_and_annotations(self):
         with tempfile.TemporaryDirectory() as directory:

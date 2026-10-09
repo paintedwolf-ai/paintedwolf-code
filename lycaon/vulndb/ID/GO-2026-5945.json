@@ -1,0 +1,53 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/casdoor/casdoor"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-6815",
+  "GHSA-rmxx-v9rj-vpvg"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5945"
+ },
+ "details": "Casdoor: Arbitrary file write possible through Local File System storage provider in github.com/casdoor/casdoor",
+ "id": "GO-2026-5945",
+ "modified": "2026-07-17T19:42:05Z",
+ "published": "2026-07-17T19:42:05Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-rmxx-v9rj-vpvg"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-6815"
+  },
+  {
+   "type": "WEB",
+   "url": "https://kb.cert.org/vuls/id/937808"
+  },
+  {
+   "type": "WEB",
+   "url": "https://www.kb.cert.org/vuls/id/937808"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Casdoor: Arbitrary file write possible through Local File System storage provider in github.com/casdoor/casdoor"
+}

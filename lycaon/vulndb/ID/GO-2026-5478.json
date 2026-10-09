@@ -1,0 +1,60 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/free5gc/udr"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.4.3"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-44324",
+  "GHSA-jqfc-gwj5-3w63"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5478"
+ },
+ "details": "free5GC's UDR nudr-dr DELETE amf-subscriptions panics on missing UE state via nil interface type assertion (single authenticated request) in github.com/free5gc/udr",
+ "id": "GO-2026-5478",
+ "modified": "2026-06-25T22:34:31Z",
+ "published": "2026-06-25T22:34:31Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/free5gc/free5gc/security/advisories/GHSA-jqfc-gwj5-3w63"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-44324"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/free5gc/udr/commit/8a1d3c63be99d378806d771f086ff32f1867da99"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/free5gc/udr/pull/60"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/free5gc/free5gc/issues/920"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "free5GC's UDR nudr-dr DELETE amf-subscriptions panics on missing UE state via nil interface type assertion (single authenticated request) in github.com/free5gc/udr"
+}

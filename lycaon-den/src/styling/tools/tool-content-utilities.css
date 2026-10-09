@@ -14,6 +14,9 @@
     max-width: none;
     white-space: normal;
   }
+  &[open] .den-tool-part-progress-state {
+    white-space: nowrap;
+  }
   &[open] > .den-tool-part-body {
     padding-top: 8px;
   }
@@ -264,7 +267,7 @@ display: flex;
   max-width: 100%;
   /* The summary's disclosure seam sits below the chicklet. */
   min-height: calc(var(--den-transcript-card-row-h) - 1px);
-  padding: 0 var(--den-transcript-card-inset-x);
+  padding: 7px var(--den-transcript-card-inset-x);
   border-radius: 0;
   background: transparent;
   box-shadow: none;
@@ -321,3 +324,8 @@ font-size: var(--text-den-compact);
   max-width: 14rem;
 }
 
+
+@utility den-tool-part-progress-state {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
