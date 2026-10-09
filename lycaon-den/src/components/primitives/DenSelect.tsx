@@ -9,7 +9,7 @@ import {
 } from "solid-js";
 import { cn } from "../../shared/cn.ts";
 import { AnchoredSurface } from "./AnchoredSurface.tsx";
-import { DEN_SCROLLPORT_AXIS_ATTR, DEN_SCROLLPORT_CLASS, DEN_SCROLLPORT_CONTENT_CLASS, DEN_SCROLLPORT_VIEWPORT_CLASS } from "../../platform/scrolling/themed-scrollbars.ts";
+import { DEN_SCROLLPORT_AXIS_ATTR, DEN_SCROLLPORT_CLASS, DEN_SCROLLPORT_CONTENT_CLASS, DEN_SCROLLPORT_VIEWPORT_CLASS } from "../../platform/scrolling/scrollport-frame-dom.ts";
 
 type DenSelectOption = {
   value: string;

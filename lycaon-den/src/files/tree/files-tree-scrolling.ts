@@ -7,10 +7,10 @@ import { SegmentedScroll } from "../../ui/paged-view/geometry.ts";
 import { observeScrollportOffset } from "../../platform/scrolling/scrollport-offset.ts";
 import { batch, createEffect, createMemo, createSignal, onCleanup, onMount, untrack } from "solid-js";
 import {
-  DEN_SCROLLPORT_INPUT_EVENT,
   scrollportMotionForHost,
   scrollportMotionForViewport,
 } from "../../platform/scrolling/scrollport-motion.ts";
+import { DEN_SCROLLPORT_INPUT_EVENT } from "../../platform/scrolling/scrollport-motion-types.ts";
 import { attachThemedViewportScrollbar, updateThemedViewportScrollbar } from "../../platform/scrolling/themed-scrollbars.ts";
 import { FILES_TREE_ROW_HEIGHT_PX } from "./project-files-tree-flat.ts";
 import { type FixedVirtualWindow, fixedVirtualWindow, observeVirtualScrollOffset, windowCoversRows } from "./files-tree-virtual-scroll.ts";

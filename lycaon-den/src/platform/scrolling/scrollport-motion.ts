@@ -11,8 +11,6 @@ import { ScrollportInput } from "./scrollport-input.ts";
 import { ScrollportExtent } from "./scrollport-extent.ts";
 import { ScrollportTail } from "./scrollport-tail.ts";
 import { SCROLL_EPSILON_PX, TAIL_BOUND_CONFIRM_FRAMES, type CommitHandler, type ScrollportCommitSource, type ScrollportTailPolicy } from "./scrollport-motion-types.ts";
-export { SCROLL_EPSILON_PX, DEN_SCROLLPORT_INPUT_EVENT, SCROLLPORT_EXTENT_HOLD_ATTR, scrollportClientHeight } from "./scrollport-motion-types.ts";
-export type { ScrollportCommitSource, ScrollportCommitPosition, ScrollportTailPolicy } from "./scrollport-motion-types.ts";
 const ANCHOR_ENDING_SOURCES: ReadonlySet<ScrollportCommitSource> = new Set(["thumb_drag", "track_click", "restore_anchor", "reveal", "jump"]);
 const motionByHost = new WeakMap<HTMLElement, ScrollportMotion>();
 const motionByViewport = new WeakMap<HTMLElement, ScrollportMotion>();

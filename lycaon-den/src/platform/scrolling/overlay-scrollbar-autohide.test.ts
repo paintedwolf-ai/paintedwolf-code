@@ -7,10 +7,10 @@ import {
   bindOverlayScrollbarAutoHide,
 } from "./overlay-scrollbar-autohide.ts";
 import {
-  DEN_SCROLLPORT_INPUT_EVENT,
   bindScrollportMotion,
   unbindScrollportMotion,
 } from "./scrollport-motion.ts";
+import { DEN_SCROLLPORT_INPUT_EVENT } from "./scrollport-motion-types.ts";
 
 function setSize(element: HTMLElement, name: string, value: number): void {
   Object.defineProperty(element, name, { value, configurable: true });

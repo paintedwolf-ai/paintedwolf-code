@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  DEN_SCROLLPORT_INPUT_EVENT,
   bindScrollportNativeInput,
   requireScrollportMotionForViewport,
   unbindScrollportMotion,
 } from "./scrollport-motion.ts";
+import { DEN_SCROLLPORT_INPUT_EVENT } from "./scrollport-motion-types.ts";
 import {
   bindScrollportMotion,
   createScrollportFixture,

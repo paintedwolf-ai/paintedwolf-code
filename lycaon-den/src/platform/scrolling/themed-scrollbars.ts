@@ -1,11 +1,9 @@
-import { type ScrollportAxis, scrollportFrameParts } from "./scrollport-frame-dom.ts";
-export const DEN_SCROLLPORT_CLASS = "den-scrollport";
-export const DEN_SCROLLPORT_VIEWPORT_CLASS = "den-scrollport__viewport";
-export const DEN_SCROLLPORT_CONTENT_CLASS = "den-scrollport__content";
-/** Marks a frame and names the axes its viewport scrolls. */
-export const DEN_SCROLLPORT_AXIS_ATTR = "data-den-scrollport";
-/** Frames repeated through long documents attach only once they approach view. */
-export const DEN_SCROLLPORT_DEFER_ATTR = "data-den-scrollport-defer";
+import {
+  type ScrollportAxis,
+  scrollportFrameParts,
+  DEN_SCROLLPORT_AXIS_ATTR,
+  DEN_SCROLLPORT_DEFER_ATTR,
+} from "./scrollport-frame-dom.ts";
 
 import { scrollbarChrome, type ScrollbarGeometry } from "./scrollbar-chrome.ts";
 import { measureSync } from "../../chat/stream/den-main-thread-perf.ts";
@@ -22,12 +20,12 @@ import { bindOverlayScrollbarAutoHide } from "./overlay-scrollbar-autohide.ts";
 import { bindOverlayScrollbarInput, type ScrollbarAxisModel } from "./overlay-scrollbar-input.ts";
 import { ScrollbarUpdates } from "./scrollbar-updates.ts";
 import {
-  DEN_SCROLLPORT_INPUT_EVENT,
   bindScrollportMotion,
   bindScrollportNativeInput,
   scrollportMotionForHost,
   unbindScrollportMotion,
 } from "./scrollport-motion.ts";
+import { DEN_SCROLLPORT_INPUT_EVENT } from "./scrollport-motion-types.ts";
 
 const SCROLLPORT_FRAME_SELECTOR = `[${DEN_SCROLLPORT_AXIS_ATTR}]`;
 const EDITOR_SCROLL_BOUNDARY_SELECTOR = ".cm-editor";
