@@ -38,7 +38,7 @@ func TestSessionTranscriptWorkflowRunIdHTTP(t *testing.T) {
 	dir := t.TempDir()
 	sess := createSessionHTTP(t, h.Server, dir)
 
-	run, err := h.WorkflowMgr.GetActive(ctx, sess.ID)
+	run, err := h.WorkflowMgr.Store.Runs.ActiveBySession(ctx, sess.ID)
 	testutil.FailErr(t, "GetActive", err)
 	if run == nil {
 		t.Fatal("expected ambient run")
