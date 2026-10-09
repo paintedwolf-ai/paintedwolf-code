@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BackendTransportError } from "../platform/connection/request-connectivity.ts";
 import { LycaonApiError, lycaonFetch, lycaonJson } from "./http.ts";
 import { sourceOperation, sourceOperationResult, SourceOperationStoppedError } from "./source-operation.ts";
+import { deliverSourceOperationCompletion } from "./source-operation-completion.ts";
 import type { SourceOperationStatus } from "./types.ts";
 
 vi.mock("./http.ts", async (original) => ({
@@ -24,7 +25,7 @@ describe("durable source operations", () => {
     await vi.advanceTimersByTimeAsync(1600);
     await expect(result).resolves.toBeUndefined();
     expect(lycaonFetch).toHaveBeenCalledOnce();
-    expect(lycaonJson).toHaveBeenCalledWith(connection, `/v1/projects/project/source/operations/${id}`);
+    expect(lycaonJson).toHaveBeenCalledWith(connection, `/v1/projects/project/source/operations/${id}`, { signal: expect.any(AbortSignal) });
   });
 
   it("preserves the host error and recovery guidance after acceptance", async () => {
@@ -50,4 +51,41 @@ describe("durable source operations", () => {
   it.each(["canceled", "interrupted"] as const)("stops on a %s receipt even without an HTTP result", async (state) => {
     await expect(sourceOperationResult(status({ complete: true, state }))).rejects.toBeInstanceOf(SourceOperationStoppedError);
   });
+});
+
+it("settles from an authenticated completion before HTTP admission returns", async () => {
+  vi.mocked(lycaonFetch).mockReturnValueOnce(new Promise(() => {}));
+  const result = sourceOperation(connection, "project", id, path, { method: "DELETE" });
+  deliverSourceOperationCompletion(connection, { project_id: "project", operation: status({ complete: true, state: "completed", result: { path: "moved" } }) });
+  await expect(result).resolves.toEqual({ path: "moved" });
+  expect(lycaonJson).not.toHaveBeenCalled();
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+it("delivers completion without advancing the polling clock and releases its timer", async () => {
+  vi.mocked(lycaonFetch).mockResolvedValueOnce(Response.json(status(), { status: 202 }));
+  const result = sourceOperation(connection, "project", id, path, { method: "DELETE" });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(vi.getTimerCount()).toBe(1);
+  deliverSourceOperationCompletion(connection, { project_id: "project", operation: status({ complete: true, state: "completed" }) });
+  await expect(result).resolves.toBeUndefined();
+  expect(lycaonJson).not.toHaveBeenCalled();
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+it("refuses completion from another host, project, request, or engine generation", async () => {
+  vi.mocked(lycaonFetch).mockResolvedValueOnce(Response.json(status(), { status: 202 }));
+  const result = sourceOperation(connection, "project", id, path, { method: "DELETE" });
+  const event = { project_id: "project", operation: status({ complete: true, state: "completed" }) };
+  for (const other of [{ ...connection, baseUrl: "http://elsewhere" }, { ...connection, apiToken: "other" }, { ...connection, engineGeneration: 2 }]) {
+    deliverSourceOperationCompletion(other, event);
+  }
+  deliverSourceOperationCompletion(connection, { ...event, project_id: "other" });
+  deliverSourceOperationCompletion(connection, { ...event, operation: { ...event.operation, operation_id: "other" } });
+  deliverSourceOperationCompletion(connection, { ...event, operation: status() });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(vi.getTimerCount()).toBe(1);
+  deliverSourceOperationCompletion(connection, event);
+  await expect(result).resolves.toBeUndefined();
+  expect(vi.getTimerCount()).toBe(0);
 });
