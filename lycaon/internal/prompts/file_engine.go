@@ -62,6 +62,19 @@ func (e *FileTemplateEngine) WithProjectOverlays(rootPaths []string) *FileTempla
 	return &derived
 }
 
+// WithWorkflowArchive returns an engine that resolves guidance from the sealed
+// workflow version named by archiveKey before any other layer.
+func (e *FileTemplateEngine) WithWorkflowArchive(archiveKey string) *FileTemplateEngine {
+	if e == nil || strings.TrimSpace(archiveKey) == "" {
+		return e
+	}
+	derived := *e
+	derived.layers.WorkflowArchive = strings.TrimSpace(archiveKey)
+	derived.layers.overlaySnapshot = nil
+	derived.layers.revision = ""
+	return &derived
+}
+
 // WithEffectiveCatalog returns an engine bound to eff.
 func (e *FileTemplateEngine) WithEffectiveCatalog(eff *extpacks.EffectiveCatalog) *FileTemplateEngine {
 	if e == nil {

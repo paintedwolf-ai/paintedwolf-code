@@ -1,0 +1,15 @@
+id: obligation_settled:scan
+kind: obligation
+purpose: |
+  The host is collecting run-bound security scan results; the survey continues when they settle.
+missing_signals:
+  - id: scans_pending
+    when: "true"
+    detail: "The host is still collecting run-bound scan results."
+    fix: "Nothing to do here — the host advances the phase when the ledger settles."
+satisfy_auto:
+  - "Nothing to do. The host handles this wait: it settles the gate and advances the phase automatically."
+  - "Reading the scan ledger does not move this gate. The host parks the session until the settle wakes it."
+satisfy:
+  - "Nothing to do. The host handles this wait: it settles the gate and advances the phase automatically."
+  - "Reading the scan ledger does not move this gate. The host parks the session until the settle wakes it."

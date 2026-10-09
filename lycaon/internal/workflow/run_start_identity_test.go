@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -27,5 +28,27 @@ func TestStartHumanRequiresExactWorkflowIdentity(t *testing.T) {
 				t.Fatalf("invalid identity created run %s", active.ID)
 			}
 		})
+	}
+}
+
+// A run pinned to a version the catalog no longer holds stays an unknown
+// workflow to callers while naming the exact version it cannot resume.
+func TestWorkflowVersionUnavailableNamesThePinnedVersion(t *testing.T) {
+	var err error = &WorkflowVersionUnavailableError{WorkflowID: "security-survey", Version: "1.0.0"}
+	if !errors.Is(err, workflowdef.ErrUnknownWorkflow) {
+		t.Fatalf("%v must remain an unknown workflow", err)
+	}
+	if !strings.Contains(err.Error(), "security-survey@1.0.0") {
+		t.Fatalf("message %q must name the pinned version", err.Error())
+	}
+	var unavailable *WorkflowVersionUnavailableError
+	if !errors.As(err, &unavailable) {
+		t.Fatal("the version error must be recoverable from the chain")
+	}
+	if got := unavailable.RejectionCode(); got != "WORKFLOW_VERSION_UNAVAILABLE" {
+		t.Fatalf("rejection code = %q", got)
+	}
+	if got := unavailable.NoticeCode(); got != api.NoticeCodeWorkflowVersionUnavailable {
+		t.Fatalf("notice code = %q", got)
 	}
 }

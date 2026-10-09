@@ -1,4 +1,0 @@
-# SHA-256 of each retired bundled workflow manifest. A run pins its definition
-# by id and version, so a retired file stays as released plus `retired: true`;
-# behaviour changes ship as a new version.
-security-survey@1.0.0: f2f0f65177a656d26bbd73c04163556670a1bbef8306dca9cd56da7b234e9ab3
