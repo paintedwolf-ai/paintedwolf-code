@@ -1,9 +1,9 @@
-import { focusRegion, registerFocusRegion, releaseFocusRegion } from "../../shortcuts/focus-region.ts";
+import { registerFocusRegion, releaseFocusRegion } from "../../shortcuts/focus-region.ts";
 import { createFilesTreeSource } from "./files-tree-source.ts";
 import { createFilesTreeScrolling, type FilesTreeScrollRestoration } from "./files-tree-scrolling.ts";
 import { createFilesTreeEditing } from "./files-tree-editing.ts";
-import { createFilesTreeDrag, parentDir } from "./files-tree-drag.ts";
-import { findTreePrefix } from "./tree-typeahead.ts";
+import { createFilesTreeDrag } from "./files-tree-drag.ts";
+import { createFilesTreeKeyboard } from "./files-tree-keyboard.ts";
 import { editorTreeVisibleLevelsPref } from "../../settings/editor/editor-prefs.ts";
 
 import { FilesTreeViewport, treeViewportAnchor, treeViewportLeadingRows } from "./files-tree-viewport.ts";
@@ -18,8 +18,7 @@ import {
 
 import { beginSourceNavigation } from "../../platform/navigation/source-navigation-intent.ts";
 
-import { For, Show, batch, createEffect, createMemo, createSignal, onCleanup, onMount, untrack } from "solid-js";
-import { ShowLatest } from "../../components/primitives/ShowLatest.tsx";
+import { batch, createEffect, createMemo, createSignal, onCleanup, onMount, untrack } from "solid-js";
 import type { SourceChange } from "../../api/types.ts";
 import { scrollportMotionForHost } from "../../platform/scrolling/scrollport-motion.ts";
 import { type ContextMenuAnchor } from "../../components/ContextMenu.tsx";
@@ -29,13 +28,12 @@ import type { DisplayRow } from "./files-tree-display-model.ts";
 import { splitFilesTreeDirKey } from "./files-tree-keys.ts";
 import { type RenderedRow, fixedVirtualRows, renderWindowRows, scrollTopToAlignRowAtStart, scrollTopToRevealRow } from "./files-tree-virtual-scroll.ts";
 import { stickyStackFromIndex, treeLayoutRange } from "./files-tree-sticky.ts";
-import { FilesTreeStickyOverlay } from "./FilesTreeStickyOverlay.tsx";
 import { claimFilesTreeNavigation } from "./files-tree-view-state.ts";
 
 import { useResidentPresence } from "../../ui/resident-presence-context.tsx";
 
-import { TreeContext, type TreeOps, type FilesTreeProps, type FilesTreeSelection, type FilesTreeFolderScope } from "./files-tree-context.ts";
-import { StickySlotBox, SwitchDisplayRow } from "./FilesTreeRows.tsx";
+import { type TreeOps, type FilesTreeProps, type FilesTreeSelection, type FilesTreeFolderScope } from "./files-tree-context.ts";
+import { FilesTreeSurface } from "./FilesTreeSurface.tsx";
 
 function displayRowIdentity(row: DisplayRow): string {
   return `${row.key}:${row.kind}:${row.kind === "entry" ? row.entry.isDir : ""}`;
@@ -43,6 +41,7 @@ function displayRowIdentity(row: DisplayRow): string {
 
 export function FilesTree(props: FilesTreeProps) {
   let navEl: HTMLElement | undefined;
+  const keyboardBinding: { current?: ReturnType<typeof createFilesTreeKeyboard> } = {};
   let filterEl: HTMLInputElement | undefined;
   let scrollEl: HTMLElement | undefined;
   const [scrollEpoch, setScrollEpoch] = createSignal(0);
@@ -126,7 +125,7 @@ export function FilesTree(props: FilesTreeProps) {
     navElement: () => navEl, surfaceLive, restoration,
     virtualViewportHeight, virtualScrollTop, setVirtualScrollTop, setDirStates,
     presentedTree: () => presentedTree(), navigationAim, hasNewReaderNavigation,
-    cancelFocusNavigation: () => focusNavigation?.abort(),
+    cancelFocusNavigation: () => keyboardBinding.current?.cancelNavigation(),
     revealTreePath: (...args) => revealTreePath(...args),
   });
   const { sourceView, viewVersion, state,
@@ -270,8 +269,7 @@ export function FilesTree(props: FilesTreeProps) {
       el.addEventListener("focus", () => el.querySelector<HTMLElement>('.den-files-tree__label[tabindex="0"]')?.focus());
       el.addEventListener("focusout", event => {
         if (!(event.relatedTarget instanceof Node) || !el.contains(event.relatedTarget)) {
-          typeaheadRequest?.abort();
-          typeahead = "";
+          keyboardBinding.current?.clearTypeahead();
         }
       });
       registerFocusRegion("filesTree", el, treeFocusClaim);
@@ -547,211 +545,24 @@ export function FilesTree(props: FilesTreeProps) {
     cancelDrag();
   });
 
-  let focusNavigation: AbortController | undefined;
-  onCleanup(() => focusNavigation?.abort());
-  createEffect(() => { if (!surfaceLive()) focusNavigation?.abort(); });
-  const focusEntryByDisplayIndex = async (
-    displayIndex: number,
-    align: "nearest" | "start" = "nearest",
-    end = false,
-  ) => {
-    // Capture the navigation root before the scroll completes.
-    const nav = navEl;
-    if (displayIndex < 0 || !nav) return;
-    const view = sourceView();
-    if (!view) return;
-    cancelTreeReveal();
-    cancelScrollbarNavigation();
-    const abort = new AbortController(); focusNavigation = abort;
-    const navigation = treeSource.advanceNavigation();
-    setNavigatingViewport(true);
-    cancelRebase();
-    viewportReader()?.clear();
-    try {
-    let row = displayModel().rowAt(displayIndex);
-    if (end) {
-      const root = props.roots.at(-1);
-      if (!root) return;
-      const frame = await view.frameAt({ root_id: root.id, path: "." }, abort.signal, 199, Number.MAX_SAFE_INTEGER);
-      displayIndex = displayModel().displayIndex(frame.span.end - 1);
-    } else if (row?.kind !== "entry") {
-      const at = displayModel().sourceIndex(displayIndex);
-      await view.range(at, at + 1, abort.signal);
-    }
-    if (abort.signal.aborted || navigation !== treeSource.navigationGeneration() || view !== sourceView() || nav !== navEl || !surfaceLive()) return;
-    row = displayModel().rowAt(displayIndex);
-    if (row?.kind !== "entry") {
-      displayIndex = displayModel().nextEntryIndex(displayIndex, displayIndex === displayModel().length - 1 ? -1 : 1);
-      row = displayModel().rowAt(displayIndex);
-    }
-    if (!row || row.kind !== "entry") return;
-    const entry = row.entry;
-    const visibleRows = Math.min(99, Math.ceil(virtualViewportHeight() / FILES_TREE_ROW_HEIGHT_PX) + 8);
-    const before = align === "start" ? 0 : visibleRows;
-    const model = displayModel();
-    const first = Math.max(0, displayIndex - before);
-    const last = Math.min(model.length, displayIndex + visibleRows + 1);
-    const context = treeLayoutRange(first, last, model.length);
-    let missing = false;
-    for (let index = context.start; index < context.end; index++) {
-      if (!model.rowAt(index)) { missing = true; break; }
-    }
-    if (missing) {
-      // Destination context uses the displayed coordinates.
-      await view.range(model.sourceIndex(first), model.sourceIndex(last), abort.signal);
-      if (abort.signal.aborted || navigation !== treeSource.navigationGeneration() || view !== sourceView() || nav !== navEl || !surfaceLive()) return;
-      displayIndex = displayModel().indexOfEntry(entry.rootId, entry.path);
-      if (displayIndex < 0) return;
-    }
-    const selector = row.entry.isDir ? ".den-files-tree__label--dir" : ".den-files-tree__label--file";
-    const focus = () => queueMicrotask(() => {
-      const button = [...nav.querySelectorAll<HTMLButtonElement>(selector)].find(
-        (candidate) => candidate.dataset.root === entry.rootId && candidate.dataset.path === entry.path,
-      );
-      button?.focus({ preventScroll: true });
-    });
-    if (!scrollToDisplayIndex(displayIndex, align, focus)) focus();
-    } finally { if (focusNavigation === abort) setNavigatingViewport(false); }
-  };
-
-  const focusEntryOffset = (target: HTMLButtonElement, delta: number) => {
-    const rootId = target.dataset.root ?? "";
-    const path = target.dataset.path ?? ".";
-    const model = displayModel();
-    const displayIndex = model.indexOfEntry(rootId, path);
-    if (displayIndex < 0) return;
-    const next = model.nextEntryIndex(displayIndex, delta < 0 ? -1 : 1);
-    if (next < 0) return;
-    void focusEntryByDisplayIndex(next).catch(reportTreeError);
-  };
-
-  let typeahead = "";
-  let typedAt = 0;
-  let typeaheadRequest: AbortController | undefined;
-  onCleanup(() => typeaheadRequest?.abort());
-  const onKeyDown = (e: KeyboardEvent) => {
-    if (props.filterOpen && e.key === "Escape") {
-      props.onFilterQueryChange?.("");
-      props.onFilterClose?.();
-      e.preventDefault();
-      e.stopPropagation();
-      return;
-    }
-    if (!navEl) return;
-    const target =
-      e.target instanceof HTMLElement
-        ? e.target.closest<HTMLButtonElement>(".den-files-tree__label")
-        : null;
-    if (!target) return;
-    const isDir = target.classList.contains("den-files-tree__label--dir");
-    const expanded = target.getAttribute("aria-expanded") === "true";
-    const rootId = target.dataset.root ?? "";
-    const path = target.dataset.path ?? ".";
-    const model = displayModel();
-    typeaheadRequest?.abort();
-    if (e.key.length === 1 && e.key !== " " && !e.ctrlKey && !e.metaKey && !e.altKey && !e.isComposing) {
-      e.preventDefault();
-      const now = performance.now();
-      typeahead = now - typedAt < 750 ? typeahead + e.key : e.key;
-      typedAt = now;
-      let repeated = true;
-      for (const key of typeahead) {
-        if (key.toLocaleLowerCase() !== e.key.toLocaleLowerCase()) {
-          repeated = false;
-          break;
-        }
-      }
-      const prefix = repeated ? e.key : typeahead;
-      const view = sourceView();
-      if (!view) return;
-      const abort = new AbortController(); typeaheadRequest = abort;
-      const current = model.sourceIndex(model.indexOfEntry(rootId, path));
-      void findTreePrefix({ prefix, from: current + (prefix.length === 1 ? 1 : 0),
-        count: view.presentation().state?.extent.rows ?? 0, signal: abort.signal,
-        frame: (offset, limit, signal) => view.frame(offset, limit, signal),
-      }).then(index => {
-        if (index == null || abort.signal.aborted || view !== sourceView() || document.activeElement !== target) return;
-        return focusEntryByDisplayIndex(displayModel().displayIndex(index));
-      }).catch(error => { if (!abort.signal.aborted) reportTreeError(error); });
-      return;
-    }
-    if (
-      (e.key === "F10" && e.shiftKey) ||
-      e.key === "ContextMenu"
-    ) {
-      const row = target.closest<HTMLElement>("[data-files-ctx='tree-row']");
-      if (!row) return;
-      e.preventDefault();
-      e.stopPropagation();
-      const rect = target.getBoundingClientRect();
-      openRowMenuAt(
-        { x: rect.left, y: rect.bottom },
-        {
-          surface: "tree-row",
-          rootId,
-          path,
-          name: row.dataset.name ?? path,
-          isDir,
-          isRoot: row.dataset.isroot === "true",
-          deleted: row.dataset.deleted === "true",
-        },
-      );
-      return;
-    }
-    switch (e.key) {
-      case "ArrowDown":
-        e.preventDefault();
-        focusEntryOffset(target, 1);
-        break;
-      case "ArrowUp":
-        e.preventDefault();
-        focusEntryOffset(target, -1);
-        break;
-      case "Home":
-        e.preventDefault();
-        void focusEntryByDisplayIndex(model.firstEntryIndex()).catch(reportTreeError);
-        break;
-      case "End":
-        e.preventDefault();
-        void focusEntryByDisplayIndex(model.lastEntryIndex(), "nearest", true).catch(reportTreeError);
-        break;
-      case "Enter":
-        if (!isDir) {
-          e.preventDefault();
-          target.click();
-          focusRegion("files");
-        }
-        break;
-      case "ArrowRight":
-        e.preventDefault();
-        if (isDir && !expanded) target.click();
-        else if (isDir) focusEntryOffset(target, 1);
-        else focusRegion("files");
-        break;
-      case "ArrowLeft":
-        e.preventDefault();
-        if (isDir && expanded) {
-          target.click();
-          break;
-        }
-        if (rootId) {
-          const parent = parentDir(path);
-          const view = sourceView();
-          if (view) void view.locate({ root_id: rootId, path: parent }).then(index => {
-            if (view === sourceView() && surfaceLive() && index >= 0) return focusEntryByDisplayIndex(index);
-          }).catch(reportTreeError);
-        }
-        break;
-    }
-  };
-
+  const keyboard = createFilesTreeKeyboard({
+    navElement: () => navEl, roots: () => props.roots, surfaceLive,
+    displayModel, sourceView, virtualViewportHeight,
+    advanceNavigation: () => treeSource.advanceNavigation(),
+    navigationGeneration: () => treeSource.navigationGeneration(),
+    cancelTreeReveal, cancelScrollbarNavigation, setNavigatingViewport, cancelRebase,
+    clearViewport: () => viewportReader()?.clear(), scrollToDisplayIndex, reportTreeError,
+    filterOpen: () => props.filterOpen ?? false,
+    clearFilter: () => { props.onFilterQueryChange?.(""); props.onFilterClose?.(); },
+    openRowMenuAt,
+  });
   const activateStickyFolder = (
     displayIndex: number,
     rootId: string,
     dir: string,
   ) => {
     void selectFolder(rootId, dir).catch(reportTreeError);
-    void focusEntryByDisplayIndex(displayIndex).catch(reportTreeError);
+    void keyboard?.focusEntryByDisplayIndex(displayIndex).catch(reportTreeError);
   };
 
   const ops: TreeOps = {
@@ -781,122 +592,29 @@ export function FilesTree(props: FilesTreeProps) {
     activateStickyFolder,
   };
 
+  keyboardBinding.current = keyboard;
   return (
-    <>
-      <Show when={props.filterOpen}>
-        <div class="den-files-tree-pane-header">
-          <input
-            ref={filterEl}
-            type="search"
-            class="den-files-tree__filter"
-            data-testid="files-tree-filter"
-            data-files-ctx="no-menu"
-            placeholder="Filter files"
-            value={props.filterQuery ?? ""}
-            onInput={(e) => props.onFilterQueryChange?.(e.currentTarget.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Escape") {
-                props.onFilterQueryChange?.("");
-                props.onFilterClose?.();
-                e.preventDefault();
-                e.stopPropagation();
-              }
-            }}
-          />
-        </div>
-      </Show>
-      <TreeContext.Provider value={ops}>
-        <FilesTreeStickyOverlay
-          host={stickyHostEl()}
-          height={stickyHeight()}
-          onKeyDown={onKeyDown}
-          onWheel={forwardStickyWheel}
-        >
-          <For each={stickyKeys()}>
-            {key => <StickySlotBox slotKey={key} slots={stickySlots} tops={stickyTops} />}
-          </For>
-        </FilesTreeStickyOverlay>
-      <nav
-        ref={bindNavEl}
-        class="den-files-tree"
-        data-testid="files-tree"
-        data-files-ctx="tree-background"
-        aria-label="Project files"
-        data-fold-levels={stickyFold().levels}
-        data-fold-floor={stickyFold().floor}
-        onKeyDown={onKeyDown}
-      >
-          <div
-            class="den-files-tree-virtual"
-            style={{ height: `${geometry.extent(displayModel().length)}px` }}
-          >
-            <div class="den-files-tree-virtual__inner" style={{ transform: paintOffset() ? `translateY(${paintOffset()}px)` : undefined }}>
-              <For each={[...renderedRows().keys()]}>
-                {key => (
-                  <ShowLatest when={renderedRows().get(key)}>
-                    {item => (
-                      <div
-                        class="den-files-tree-virtual__row"
-                        classList={{
-                          "den-files-tree-virtual__row--lead":
-                            item().position.index === 0 && editorTreeVisibleLevelsPref() !== 0 &&
-                            stickySlots().length === 0 && paintOffset() === 0,
-                        }}
-                        data-display-key={item().row.key}
-                        data-row-kind={item().row.kind}
-                        style={{
-                          height: `${item().position.size}px`,
-                          transform: `translateY(${(geometryVersion(), geometry.physicalOffset(item().position.start))}px)`,
-                        }}
-                      >
-                        <SwitchDisplayRow row={item().row} />
-                      </div>
-                    )}
-                  </ShowLatest>
-                )}
-              </For>
-            </div>
-          </div>
-          <Show when={showFilterEmpty()}>
-            <p
-              class="den-files-tree__hint"
-              data-testid="files-tree-filter-empty"
-            >
-              No files match "{(props.filterQuery ?? "").trim()}"
-            </p>
-          </Show>
-      </nav>
-      </TreeContext.Provider>
-      <Show when={dragGhost()} keyed>
-        {(g) => (
-          <div
-            class="den-files-tree__drag-ghost"
-            classList={{
-              "den-files-tree__drag-ghost--invalid": dropAssessment()?.valid === false,
-            }}
-            style={{ left: `${g.x}px`, top: `${g.y}px` }}
-            role="status"
-          >
-            <strong class="den-files-tree__drag-ghost-title">{g.label}</strong>
-            <Show when={dropAssessment()} keyed>
-              {(assessment) => (
-                <span>
-                  {assessment.valid ? `Move to ${assessment.destination}` : assessment.reason}
-                </span>
-              )}
-            </Show>
-          </div>
-        )}
-      </Show>
-      <Show when={movePending()} keyed>
-        {(move) => (
-          <div class="den-files-tree__move-status" role="status">
-            Moving {move.source.name} to {move.target.dir === "." ? `@${rootLabel(move.target.rootId)}` : move.target.dir}…
-          </div>
-        )}
-      </Show>
-    </>
+    <FilesTreeSurface
+      ops={ops}
+      bindNavEl={bindNavEl}
+      bindFilterEl={element => { filterEl = element; }}
+      onKeyDown={keyboard.onKeyDown}
+      forwardStickyWheel={forwardStickyWheel}
+      stickyHost={stickyHostEl}
+      stickyHeight={stickyHeight}
+      stickyKeys={stickyKeys}
+      stickySlots={stickySlots}
+      stickyTops={stickyTops}
+      stickyFold={stickyFold}
+      physicalRowOffset={offset => (geometryVersion(), geometry.physicalOffset(offset))}
+      extentHeight={() => geometry.extent(displayModel().length)}
+      paintOffset={paintOffset}
+      renderedRows={renderedRows}
+      showFilterEmpty={showFilterEmpty}
+      dragGhost={dragGhost}
+      dropAssessment={dropAssessment}
+      movePending={movePending}
+      rootLabel={rootLabel}
+    />
   );
 }
-
-/** Row affordances mount on hover or focus; scrolled-in rows stay light. */

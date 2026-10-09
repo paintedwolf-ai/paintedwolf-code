@@ -1,14 +1,8 @@
 import { onMount, splitProps, type JSX } from "solid-js";
 import { Dynamic } from "solid-js/web";
-import {
-  DEN_SCROLLPORT_AXIS_ATTR,
-  DEN_SCROLLPORT_CLASS,
-  DEN_SCROLLPORT_CONTENT_CLASS,
-  DEN_SCROLLPORT_DEFER_ATTR,
-  DEN_SCROLLPORT_VIEWPORT_CLASS,
-  syncThemedScrollbar,
-  type ScrollportAxis,
-} from "../../platform/scrolling/themed-scrollbars.ts";
+import { syncThemedScrollbar } from "../../platform/scrolling/themed-scrollbars.ts";
+import { type ScrollportAxis } from "../../platform/scrolling/scrollport-frame-dom.ts";
+import { DEN_SCROLLPORT_AXIS_ATTR, DEN_SCROLLPORT_CLASS, DEN_SCROLLPORT_CONTENT_CLASS, DEN_SCROLLPORT_DEFER_ATTR, DEN_SCROLLPORT_VIEWPORT_CLASS } from "../../platform/scrolling/themed-scrollbars.ts";
 
 type ContentTag = "div" | "ul" | "ol" | "dl" | "section" | "nav" | "footer" | "pre" | "form";
 

@@ -3,10 +3,8 @@ import {
   parseTranscriptDisclosureKey,
   type TranscriptDisclosureKey,
 } from "./transcript-disclosure-key.ts";
-import {
-  transcriptViewportForSession,
-  type TranscriptViewportController,
-} from "../../stream/transcript-viewport.tsx";
+import { transcriptViewportForSession } from "../../stream/transcript-viewport.tsx";
+import { type TranscriptViewportController } from "../../stream/transcript-viewport-types.ts";
 import { REVEAL_FLASH_MS, flashRevealTarget } from "../../../ui/reveal-flash.ts";
 import { bindRevealHighlightCleanup, paintRevealHighlight } from "./reveal-highlight.ts";
 import { focusWithoutScroll } from "../../../platform/interaction/focus.ts";

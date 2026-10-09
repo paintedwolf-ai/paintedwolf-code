@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { watchStreamReaderIntent } from "./reader-intent/reader-intent.ts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("overlayscrollbars", () => ({
@@ -9,7 +10,6 @@ import { flushScrollportFrameForTests } from "../../platform/scrolling/scrollpor
 import {
   setStreamTailPin,
   streamTailOffset,
-  watchStreamReaderIntent,
 } from "./stream-scroll.ts";
 import {
   bindScrollportMotion,

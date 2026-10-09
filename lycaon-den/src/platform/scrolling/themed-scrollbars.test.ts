@@ -14,17 +14,9 @@ import {
   vi,
 } from "vitest";
 import { OverlayScrollbars } from "overlayscrollbars";
-import {
-  DEN_SCROLL_DIRECTION_ATTR,
-  DEN_SCROLLPORT_AXIS_ATTR,
-  attachThemedViewportScrollbar,
-  beginScrollMeasureQuiet,
-  resetScrollMeasureQuietForTests,
-  scrollportFrameParts,
-  setupThemedScrollbars,
-  syncThemedScrollbar,
-  wrapInScrollportFrame,
-} from "./themed-scrollbars.ts";
+import { DEN_SCROLL_DIRECTION_ATTR, attachThemedViewportScrollbar, beginScrollMeasureQuiet, resetScrollMeasureQuietForTests, setupThemedScrollbars, syncThemedScrollbar } from "./themed-scrollbars.ts";
+import { scrollportFrameParts, wrapInScrollportFrame } from "./scrollport-frame-dom.ts";
+import { DEN_SCROLLPORT_AXIS_ATTR } from "./themed-scrollbars.ts";
 import { bindOverlayScrollbarAutoHide } from "./overlay-scrollbar-autohide.ts";
 import { bindOverlayScrollbarInput } from "./overlay-scrollbar-input.ts";
 

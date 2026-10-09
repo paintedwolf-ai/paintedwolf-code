@@ -48,7 +48,7 @@ class ScrollportMotion {
       scheduleTailBoundReconcile: (attempts) => this.tail.scheduleTailBoundReconcile(attempts),
       claimsInput: (event) => claimedInputEvents.get(event) === this,
     });
-    this.tail = new ScrollportTail(host, viewport, {
+    this.tail = new ScrollportTail(viewport, {
       invalidateGeometry: () => this.extent.invalidateGeometry(),
       measureGeometry: (run) => this.extent.measureGeometry(run),
       tailOffsetY: () => this.extent.tailOffsetY(),
@@ -405,7 +405,6 @@ class ScrollportMotion {
     this.pressAnchor.dispose();
     this.extent.dispose();
   }
-
 
   scheduleLayoutReconcile(): void {
     this.extent.invalidateGeometry();

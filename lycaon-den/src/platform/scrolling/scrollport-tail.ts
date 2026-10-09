@@ -25,7 +25,7 @@ export class ScrollportTail {
   private tailPin: (() => boolean) | null = null;
   tailOffsetResolver: ((naturalTailOffset: number) => number | null) | undefined;
   private disposed = false;
-  constructor(readonly host: HTMLElement, readonly viewport: HTMLElement, private readonly ports: TailPorts) {}
+  constructor(readonly viewport: HTMLElement, private readonly ports: TailPorts) {}
 
   setTailPin(pin: (() => boolean) | null): void {
     this.tailPin = pin;
