@@ -103,7 +103,7 @@ func TestSetupPermissionCoversRepeatedAuthenticatedServiceUse(t *testing.T) {
 		}
 		return "service configured", nil
 	}))
-	testutil.FailErr(t, "register HTTP consumer", Register(registry, Deps{Boundary: testBoundary(), SecretMatcher: matcher, SecretAsk: executor.AskSecretScreen, Secrets: service}))
+	testutil.FailErr(t, "register HTTP consumer", Register(registry, Deps{Boundary: testBoundary(), SecretMatcher: matcher, SecretAsk: executor.Secrets.AskSecretScreen, Secrets: service}))
 	tc := tools.ToolContext{
 		Identity: tools.InvocationIdentity{ProjectID: testdbseed.DefaultProjectID,
 			SessionID:  "task",

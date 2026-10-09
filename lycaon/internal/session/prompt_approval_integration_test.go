@@ -102,7 +102,7 @@ func TestPromptAskWriteApproveRunsTool(t *testing.T) {
 	pub := &events.Publisher{Hub: hub}
 	hitlMgr := hitl.NewManager(hitl.NewSQLStore(sqlDB), pub, authzcontext.SQLRecorder(sqlDB))
 	hitlMgr.SetApprovalAuthorityInstaller(promptApprovalInstaller{})
-	exec.SetCheckpointManager(hitlMgr, gate)
+	exec.Approvals.SetCheckpointManager(hitlMgr, gate)
 	toolReg := tools.NewExecutorRegistry(exec, reg)
 
 	postureRegistry, err := profiles.LoadPostureRegistry()
@@ -219,11 +219,11 @@ func TestPromptAskWriteRejectSurfacesApprovalDenied(t *testing.T) {
 	outcomeCfg, err := approvaloutcome.Load()
 	testutil.FailErr(t, "load approval-outcome catalog", err)
 	outcomes := outcomeRenderer{cat: approvaloutcome.NewCatalog(outcomeCfg)}
-	exec.SetApprovalOutcomeRenderer(outcomes)
+	exec.Approvals.SetApprovalOutcomeRenderer(outcomes)
 	hub := events.NewMemoryHub()
 	pub := &events.Publisher{Hub: hub}
 	hitlMgr := hitl.NewManager(hitl.NewSQLStore(sqlDB), pub, authzcontext.SQLRecorder(sqlDB))
-	exec.SetCheckpointManager(hitlMgr, gate)
+	exec.Approvals.SetCheckpointManager(hitlMgr, gate)
 	toolReg := tools.NewExecutorRegistry(exec, reg)
 
 	postureRegistry, err := profiles.LoadPostureRegistry()
