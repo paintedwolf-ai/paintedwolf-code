@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
@@ -124,7 +123,7 @@ func TestSourceProjectionInvalidatesOnlyAffectedAncestors(t *testing.T) {
 	}
 }
 
-func TestSourceProjectionTTLBackstopsIncompleteWatchCoverage(t *testing.T) {
+func TestSourceProjectionUnwatchedReadsFreshMembership(t *testing.T) {
 	p, rootPath := browseFixtureProject(t)
 	projection := &sourceDirectoryProjection{
 		listings: make(map[sourceProjectionKey]projectedSourceListing),
@@ -139,19 +138,14 @@ func TestSourceProjectionTTLBackstopsIncompleteWatchCoverage(t *testing.T) {
 	testutil.FailErr(t, "browse projected root", err)
 	testutil.FailErr(t, "write unwatched source", os.WriteFile(filepath.Join(rootPath, "late.go"), []byte("x"), 0o644))
 
-	projection.mu.Lock()
-	record := projection.listings[key]
-	record.loadedAt = time.Now().Add(-sourceProjectionTTL - time.Millisecond)
-	projection.listings[key] = record
-	projection.mu.Unlock()
 	listing, err := projection.get(key, root)
-	testutil.FailErr(t, "browse after ttl", err)
+	testutil.FailErr(t, "browse unwatched directory again", err)
 	found := false
 	for _, entry := range listing.Entries {
 		found = found || entry.Name == "late.go"
 	}
 	if !found {
-		t.Fatalf("ttl listing = %+v, want late.go", listing.Entries)
+		t.Fatalf("fresh listing = %+v, want late.go", listing.Entries)
 	}
 }
 
