@@ -91,7 +91,7 @@ func (l toolBatch) settleToolResult(
 	ownerRef := invocationOwnerRef(run.captures.ownerRef, toolMsg.ToolResult)
 	run.sourceRevision, run.sourceRootDigest = invocation.SourceRevisionForRoot(tools.HostWriteRoot(toolCtx))
 	if tc.Name == "complete_leg" {
-		run.sourceRevision, run.sourceRootDigest = sourceledger.VerificationState(ctx, toolCtx.Source.SourceLedger, tools.HostWriteRoot(toolCtx))
+		run.sourceRevision, run.sourceRootDigest = sourceledger.VerificationState(ctx, toolCtx.Source.Observations, tools.HostWriteRoot(toolCtx))
 	}
 	if source := run.captures.sourceRun; source != nil {
 		run.sourceRevision, run.sourceRootDigest = source.SourceRevision, source.SourceRootDigest

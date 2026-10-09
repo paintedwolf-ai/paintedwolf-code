@@ -35,13 +35,13 @@ func openLedger(t *testing.T) (*Store, context.Context) {
 func TestNamedPinsRemainUntilExplicitDeletion(t *testing.T) {
 	store, ctx := openLedger(t)
 	for range 64 {
-		_, err := store.CreatePin(ctx, "p1", "saved boundary")
+		_, err := store.Checkpoints.CreatePin(ctx, "p1", "saved boundary")
 		testutil.FailErr(t, "create pin", err)
 	}
 	var pins []Pin
 	query := PinPageQuery{Limit: 17}
 	for {
-		page, err := store.ListPinsPage(ctx, "p1", query)
+		page, err := store.Checkpoints.ListPinsPage(ctx, "p1", query)
 		testutil.FailErr(t, "list pins", err)
 		pins = append(pins, page.Pins...)
 		if page.NextID == "" {
@@ -61,7 +61,7 @@ func mustRecord(t *testing.T, store *Store, ctx context.Context, input RecordInp
 
 func mustResolve(t *testing.T, store *Store, ctx context.Context, path string) (string, string) {
 	t.Helper()
-	fileID, versionID, err := store.ResolveFile(ctx, "p1", sourcebranch.Trunk, "r1", path)
+	fileID, versionID, err := store.History.ResolveFile(ctx, "p1", sourcebranch.Trunk, "r1", path)
 	testutil.FailErr(t, "resolve file", err)
 	return fileID, versionID
 }
@@ -96,7 +96,7 @@ func TestMovePreservesFileIdentityAndExactComparison(t *testing.T) {
 	if movedFileID != fileID || afterVersionID == beforeVersionID {
 		t.Fatalf("move identity/version = %s/%s, want %s/new", movedFileID, afterVersionID, fileID)
 	}
-	comparison, err := store.CompareEffect(ctx, "p1", latestEffectID(t, store, ctx))
+	comparison, err := store.Comparisons.CompareEffect(ctx, "p1", latestEffectID(t, store, ctx))
 	testutil.FailErr(t, "compare move", err)
 	if !comparison.LocationChanged || comparison.Before.Path != "story.txt" ||
 		comparison.After.Path != "test/story.txt" ||
@@ -132,7 +132,7 @@ func TestDirectoryMoveAdvancesOnlyTrackedDescendants(t *testing.T) {
 	if movedFileID != childFileID || movedVersionID == childVersionID {
 		t.Fatalf("descendant identity/version = %s/%s, want %s/new", movedFileID, movedVersionID, childFileID)
 	}
-	if _, _, err := store.ResolveFile(ctx, "p1", sourcebranch.Trunk, "r1", "src/main.go"); !errors.Is(err, ErrHistoryNotFound) {
+	if _, _, err := store.History.ResolveFile(ctx, "p1", sourcebranch.Trunk, "r1", "src/main.go"); !errors.Is(err, ErrHistoryNotFound) {
 		t.Fatalf("old descendant path error = %v", err)
 	}
 	var files int
@@ -165,7 +165,7 @@ func TestDeleteAndRecreatePathMintsNewFileIdentity(t *testing.T) {
 	if newFileID == oldFileID {
 		t.Fatal("delete and recreate reused the deleted file identity")
 	}
-	oldComparison, err := store.CompareScope(ctx, "p1", sourcebranch.Trunk, Baseline{}, oldFileID, ScopeComparisonOptions{})
+	oldComparison, err := store.Comparisons.CompareScope(ctx, "p1", sourcebranch.Trunk, Baseline{}, oldFileID, ScopeComparisonOptions{})
 	testutil.FailErr(t, "compare deleted identity", err)
 	if !oldComparison.InRange || oldComparison.After.Availability != ContentAbsent {
 		t.Fatalf("deleted identity comparison = %+v", oldComparison)
@@ -206,7 +206,7 @@ func TestWalkEffectOwnsBothWriteEndpoints(t *testing.T) {
 		Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginAgent,
 		OperationID: "write-main", Before: []byte("package old\n"), After: []byte("package main\n"),
 	})
-	comparison, err := store.CompareEffect(ctx, "p1", latestEffectID(t, store, ctx))
+	comparison, err := store.Comparisons.CompareEffect(ctx, "p1", latestEffectID(t, store, ctx))
 	testutil.FailErr(t, "compare write", err)
 	if comparison.Before.Content != "package old\n" || comparison.After.Content != "package main\n" {
 		t.Fatalf("comparison = %+v", comparison)
@@ -232,7 +232,7 @@ func TestVersionHistoryContainsWorkerBranchWithoutAnotherTab(t *testing.T) {
 		JobID: "job-1", OperationID: "worker-write",
 		Before: []byte("primary\n"), After: []byte("worker\n"),
 	})
-	history, err := store.QueryFileVersions(ctx, "p1", fileID, 20, 0)
+	history, err := store.History.QueryFileVersions(ctx, "p1", fileID, 20, 0)
 	testutil.FailErr(t, "list file versions", err)
 	// Newest first: the worker's write, the pre-image the worker branch
 	// started from, and the primary create.
@@ -279,24 +279,24 @@ func TestReadRestorableVersionReturnsExactBytesAndAbsence(t *testing.T) {
 		Op: api.SourceChangeOpDelete, Origin: api.SourceChangeOriginUser,
 		OperationID: "delete-binary", Before: raw,
 	})
-	history, err := store.QueryFileVersions(ctx, "p1", fileID, 10, 0)
+	history, err := store.History.QueryFileVersions(ctx, "p1", fileID, 10, 0)
 	testutil.FailErr(t, "query deleted history", err)
 	if len(history.Versions) == 0 {
 		t.Fatal("deleted history is empty")
 	}
 	absentVersionID := history.Versions[0].ID
 
-	content, err := store.ReadRestorableVersion(ctx, "p1", contentVersionID)
+	content, err := store.History.ReadRestorableVersion(ctx, "p1", contentVersionID)
 	testutil.FailErr(t, "read content version", err)
 	if content.FileID != fileID || content.State != "content" || string(content.Content) != string(raw) {
 		t.Fatalf("restorable content = %+v bytes=%x", content, content.Content)
 	}
-	absent, err := store.ReadRestorableVersion(ctx, "p1", absentVersionID)
+	absent, err := store.History.ReadRestorableVersion(ctx, "p1", absentVersionID)
 	testutil.FailErr(t, "read absent version", err)
 	if absent.FileID != fileID || absent.State != "absent" || absent.Content != nil {
 		t.Fatalf("restorable absence = %+v", absent)
 	}
-	if _, err := store.ReadRestorableVersion(ctx, "another-project", contentVersionID); !errors.Is(err, ErrHistoryNotFound) {
+	if _, err := store.History.ReadRestorableVersion(ctx, "another-project", contentVersionID); !errors.Is(err, ErrHistoryNotFound) {
 		t.Fatalf("cross-project read error = %v", err)
 	}
 	mustRecord(t, store, ctx, RecordInput{
@@ -305,7 +305,7 @@ func TestReadRestorableVersionReturnsExactBytesAndAbsence(t *testing.T) {
 		OperationID: "create-uncaptured", AfterSHA256: strings.Repeat("a", 64), AfterSize: 12,
 	})
 	_, unavailableVersionID := mustResolve(t, store, ctx, "uncaptured.bin")
-	if _, err := store.ReadRestorableVersion(ctx, "p1", unavailableVersionID); !errors.Is(err, ErrVersionUnavailable) {
+	if _, err := store.History.ReadRestorableVersion(ctx, "p1", unavailableVersionID); !errors.Is(err, ErrVersionUnavailable) {
 		t.Fatalf("uncaptured read error = %v", err)
 	}
 	other := []byte("different retained bytes")
@@ -326,7 +326,7 @@ func TestReadRestorableVersionReturnsExactBytesAndAbsence(t *testing.T) {
 		otherObject.StorageRelpath, sourceblob.ContentSHA(raw),
 	)
 	testutil.FailErr(t, "redirect source object", err)
-	if _, err := store.ReadRestorableVersion(ctx, "p1", contentVersionID); !errors.Is(err, ErrVersionUnavailable) {
+	if _, err := store.History.ReadRestorableVersion(ctx, "p1", contentVersionID); !errors.Is(err, ErrVersionUnavailable) {
 		t.Fatalf("digest mismatch error = %v", err)
 	}
 }
@@ -351,7 +351,7 @@ func TestRecordBatchStoresOneOperationAndOrderedEffects(t *testing.T) {
 	if operations != 1 || effects != 2 {
 		t.Fatalf("operations/effects = %d/%d", operations, effects)
 	}
-	walk, err := store.QueryWalk(ctx, "p1", Baseline{Kind: BaselineSession, SessionID: "session-1"}, 10, 0, CommitLens{})
+	walk, err := store.Walk.QueryWalk(ctx, "p1", Baseline{Kind: BaselineSession, SessionID: "session-1"}, 10, 0, CommitLens{})
 	testutil.FailErr(t, "query attributed walk", err)
 	if len(walk.Files) != 2 || walk.Files[0].Effects[0].ToolName != "edit" {
 		t.Fatalf("walk tool projection = %+v", walk.Files)
@@ -366,7 +366,7 @@ func TestMaintenancePreservesReferencedVersionContent(t *testing.T) {
 		Before: []byte("before payload\n"), After: []byte("after payload\n"),
 	})
 	effectID := latestEffectID(t, store, ctx)
-	available, err := store.CompareEffect(ctx, "p1", effectID)
+	available, err := store.Comparisons.CompareEffect(ctx, "p1", effectID)
 	testutil.FailErr(t, "compare available effect", err)
 	_, err = store.sqlDB.ExecContext(ctx, `
 		INSERT INTO file_briefings (
@@ -377,8 +377,8 @@ func TestMaintenancePreservesReferencedVersionContent(t *testing.T) {
 			'automatic', 'complete', '{"line_count":1}', '[]', '[]', 0, '', ?, ?)
 	`, available.Before.SHA256, db.FormatTime(time.Now()), time.Now().UnixMilli())
 	testutil.FailErr(t, "insert version briefing", err)
-	testutil.FailErr(t, "maintain blobs", store.MaintainBlobs(ctx))
-	comparison, err := store.CompareEffect(ctx, "p1", effectID)
+	testutil.FailErr(t, "maintain blobs", store.Retention.MaintainBlobs(ctx))
+	comparison, err := store.Comparisons.CompareEffect(ctx, "p1", effectID)
 	testutil.FailErr(t, "compare retained effect", err)
 	if comparison.Before.Availability != ContentAvailable || comparison.After.Availability != ContentAvailable {
 		t.Fatalf("availability = %s/%s", comparison.Before.Availability, comparison.After.Availability)
@@ -403,13 +403,13 @@ func TestMaintenanceReclaimsObjectsNoHistoryNames(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "main.go")
 	testutil.FailErr(t, "write snapshot source", os.WriteFile(path, []byte("package main\n"), 0o600))
-	snapshot, err := store.SnapshotStore().Ensure(ctx, sourcesnapshot.Request{
+	snapshot, err := store.Snapshots.Ensure(ctx, sourcesnapshot.Request{
 		Roots: []sourcesnapshot.Root{{Path: root}},
 	})
 	testutil.FailErr(t, "publish snapshot", err)
 	extra := []byte("unprotected content\n")
 	extraSHA := sourceblob.ContentSHA(extra)
-	extraRel, extraStored, extraOIDs, err := store.objects.Put(extraSHA, extra)
+	extraRel, extraStored, extraOIDs, err := store.Content.Put(extraSHA, extra)
 	testutil.FailErr(t, "store unprotected object", err)
 	testutil.FailErr(t, "index unprotected object", store.queries.UpsertSourceBlobObject(ctx, db.UpsertSourceBlobObjectParams{
 		Sha256: extraSHA, Size: int64(len(extra)), StoredSize: extraStored,
@@ -417,13 +417,13 @@ func TestMaintenanceReclaimsObjectsNoHistoryNames(t *testing.T) {
 		GitOidSha1:     extraOIDs.SHA1, GitOidSha256: extraOIDs.SHA256,
 	}))
 
-	testutil.FailErr(t, "maintain blobs", store.MaintainBlobs(ctx))
-	entry, ok, err := store.SnapshotStore().Lookup(ctx, snapshot.ID, root, "main.go")
+	testutil.FailErr(t, "maintain blobs", store.Retention.MaintainBlobs(ctx))
+	entry, ok, err := store.Snapshots.Lookup(ctx, snapshot.ID, root, "main.go")
 	testutil.FailErr(t, "look up snapshot entry", err)
 	if !ok {
 		t.Fatal("generation lost its entry")
 	}
-	raw, err := store.SnapshotStore().Bytes(ctx, entry)
+	raw, err := store.Snapshots.Bytes(ctx, entry)
 	testutil.FailErr(t, "read snapshot after maintenance", err)
 	if string(raw) != "package main\n" {
 		t.Fatalf("snapshot content = %q", raw)
@@ -468,11 +468,11 @@ func TestMaintenanceReclaimsContentAfterProjectDeletion(t *testing.T) {
 	if queued != 1 {
 		t.Fatalf("deleted reclaim candidates = %d", queued)
 	}
-	testutil.FailErr(t, "maintain blobs", store.MaintainBlobs(ctx))
+	testutil.FailErr(t, "maintain blobs", store.Retention.MaintainBlobs(ctx))
 	if _, err := store.queries.GetSourceBlobObject(ctx, sha); !errors.Is(err, sql.ErrNoRows) {
 		t.Fatalf("deleted project object error = %v, want sql.ErrNoRows", err)
 	}
-	if exists, err := store.objects.Exists(object.StorageRelpath); err != nil || exists {
+	if exists, err := store.Content.Exists(object.StorageRelpath); err != nil || exists {
 		t.Fatalf("deleted project bytes: exists=%v err=%v", exists, err)
 	}
 }
@@ -496,7 +496,7 @@ func TestRecordTxRollsBackHistoryWithCaller(t *testing.T) {
 
 func TestColdTrackingBoundaryDoesNotMaterializeInventoryAsHistory(t *testing.T) {
 	store, ctx := openLedger(t)
-	testutil.FailErr(t, "seed tracking boundary", store.seedTrackingBoundary(ctx, "p1"))
+	testutil.FailErr(t, "seed tracking boundary", store.Inventory.seedTrackingBoundary(ctx, "p1"))
 	var files, versions, effects int
 	testutil.FailErr(t, "count files", store.sqlDB.QueryRowContext(ctx, `SELECT count(*) FROM source_files`).Scan(&files))
 	testutil.FailErr(t, "count versions", store.sqlDB.QueryRowContext(ctx, `SELECT count(*) FROM source_versions`).Scan(&versions))
@@ -508,7 +508,7 @@ func TestColdTrackingBoundaryDoesNotMaterializeInventoryAsHistory(t *testing.T) 
 
 func TestMissingFileIdentityIsNotAPathFallback(t *testing.T) {
 	store, ctx := openLedger(t)
-	_, _, err := store.ResolveFile(ctx, "p1", sourcebranch.Trunk, "r1", "missing.txt")
+	_, _, err := store.History.ResolveFile(ctx, "p1", sourcebranch.Trunk, "r1", "missing.txt")
 	if !errors.Is(err, ErrHistoryNotFound) {
 		t.Fatalf("resolve missing error = %v", err)
 	}

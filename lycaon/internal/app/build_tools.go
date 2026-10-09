@@ -123,8 +123,8 @@ func (b toolWiring) registerCoordinatorTools() error {
 		Closeout:     b.delegationMgr,
 		Projects:     b.registry,
 		Scans:        b.scanTriggers,
-		SourceLedger: b.sourceLedger,
-		DataDir:      b.dataDir,
+		SourceLedger: b.sourceLedger, SourceHistory: b.sourceLedger.Walk,
+		DataDir: b.dataDir,
 		Reports: worker.ChangeReportDeps{
 			SourceRuns: b.mgr.WorkerSourceRuns,
 			Messages: func(ctx context.Context, childSessionID string) ([]wire.Message, error) {

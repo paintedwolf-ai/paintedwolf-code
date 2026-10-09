@@ -86,6 +86,11 @@ type Manager struct {
 	toolInvoker                tools.ToolInvoker
 	toolLister                 tools.ToolProfileLister
 	sourceLedger               sourceledger.Recorder
+	sourceHistory              tools.SourceHistory
+	sourceCommands             sourceledger.CommandWindowOpener
+	sourceGitMutations         tools.SourceGitMutations
+	sourceObservations         *sourceledger.Inventory
+	sourceCheckpoints          sourceReviewCheckpointer
 	sourceMutations            sourceeffect.Journal
 	sourceRewinds              *sourcerewind.Service
 	editorDocuments            tools.EditorDocuments

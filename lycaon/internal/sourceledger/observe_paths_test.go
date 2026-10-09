@@ -28,7 +28,7 @@ func trackRootFile(t *testing.T, store *Store, ctx context.Context, root, rel, c
 
 func trunkEffects(t *testing.T, store *Store, ctx context.Context) map[string]Effect {
 	t.Helper()
-	walk, err := store.QueryWalk(ctx, "p1", Baseline{}, 50, 0, CommitLens{})
+	walk, err := store.Walk.QueryWalk(ctx, "p1", Baseline{}, 50, 0, CommitLens{})
 	testutil.FailErr(t, "query walk", err)
 	return effectsByPath(walk)
 }
@@ -39,7 +39,7 @@ func TestObservePathsRecordsOutsideEditToTrackedFile(t *testing.T) {
 	trackRootFile(t, store, ctx, root, "docs/a.md", "before\n")
 	writeRootFile(t, root, "docs/a.md", "after\n")
 
-	recorded, err := store.ObservePaths(ctx, "p1", onDiskRoots(root), []PathRef{{RootID: "r1", Path: "docs/a.md"}})
+	recorded, err := store.Inventory.ObservePaths(ctx, "p1", onDiskRoots(root), []PathRef{{RootID: "r1", Path: "docs/a.md"}})
 	testutil.FailErr(t, "observe paths", err)
 	if recorded != 1 {
 		t.Fatalf("recorded = %d, want 1", recorded)
@@ -54,7 +54,7 @@ func TestObservePathsRecordsOutsideEditToTrackedFile(t *testing.T) {
 	}
 
 	// The same bytes seen again record nothing.
-	recorded, err = store.ObservePaths(ctx, "p1", onDiskRoots(root), []PathRef{{RootID: "r1", Path: "docs/a.md"}})
+	recorded, err = store.Inventory.ObservePaths(ctx, "p1", onDiskRoots(root), []PathRef{{RootID: "r1", Path: "docs/a.md"}})
 	testutil.FailErr(t, "observe unchanged", err)
 	if recorded != 0 {
 		t.Fatalf("unchanged file recorded %d effects", recorded)
@@ -67,11 +67,11 @@ func TestObservePathsDoesNotReuseMetadataAfterReportedWrite(t *testing.T) {
 	file := filepath.Join(root, "same.txt")
 	info, err := os.Stat(file)
 	testutil.FailErr(t, "stat before", err)
-	_, _, err = store.snapshots.Identify(ctx, root, "same.txt")
+	_, _, err = store.Snapshots.Identify(ctx, root, "same.txt")
 	testutil.FailErr(t, "warm observation", err)
 	writeRootFile(t, root, "same.txt", "edited\n")
 	testutil.FailErr(t, "preserve external timestamp", os.Chtimes(file, info.ModTime(), info.ModTime()))
-	recorded, err := store.ObservePaths(ctx, "p1", onDiskRoots(root), []PathRef{{RootID: "r1", Path: "same.txt"}})
+	recorded, err := store.Inventory.ObservePaths(ctx, "p1", onDiskRoots(root), []PathRef{{RootID: "r1", Path: "same.txt"}})
 	testutil.FailErr(t, "observe changed bytes", err)
 	if recorded != 1 {
 		t.Fatalf("same-metadata outside edit recorded %d effects, want 1", recorded)
@@ -83,7 +83,7 @@ func TestObservePathsRecordsOutsideDeleteOfTrackedFile(t *testing.T) {
 	trackRootFile(t, store, ctx, root, "gone.txt", "bytes\n")
 	testutil.FailErr(t, "remove", os.Remove(filepath.Join(root, "gone.txt")))
 
-	recorded, err := store.ObservePaths(ctx, "p1", onDiskRoots(root), []PathRef{{RootID: "r1", Path: "gone.txt"}})
+	recorded, err := store.Inventory.ObservePaths(ctx, "p1", onDiskRoots(root), []PathRef{{RootID: "r1", Path: "gone.txt"}})
 	testutil.FailErr(t, "observe delete", err)
 	if recorded != 1 {
 		t.Fatalf("recorded = %d, want 1", recorded)
@@ -117,7 +117,7 @@ func TestObservePathsDirectoryEventRecordsTrackedDescendants(t *testing.T) {
 				writeRootFile(t, root, "src/a.txt", "after\n")
 				writeRootFile(t, root, "src/deep/b.txt", "after\n")
 			}
-			recorded, err := store.ObservePaths(ctx, "p1", onDiskRoots(root), []PathRef{
+			recorded, err := store.Inventory.ObservePaths(ctx, "p1", onDiskRoots(root), []PathRef{
 				{RootID: "r1", Path: "src"}, {RootID: "r1", Path: "src/a.txt"},
 			})
 			testutil.FailErr(t, "observe directory and overlapping file", err)
@@ -145,7 +145,7 @@ func TestObservePathsStampsOneBatchPerCall(t *testing.T) {
 	writeRootFile(t, root, "a.txt", "a2\n")
 	writeRootFile(t, root, "b.txt", "b2\n")
 
-	recorded, err := store.ObservePaths(ctx, "p1", onDiskRoots(root), []PathRef{
+	recorded, err := store.Inventory.ObservePaths(ctx, "p1", onDiskRoots(root), []PathRef{
 		{RootID: "r1", Path: "a.txt"}, {RootID: "r1", Path: "b.txt"},
 	})
 	testutil.FailErr(t, "observe batch", err)
@@ -158,9 +158,9 @@ func TestObservePathsStampsOneBatchPerCall(t *testing.T) {
 	}
 
 	writeRootFile(t, root, "a.txt", "a3\n")
-	_, err = store.ObservePaths(ctx, "p1", onDiskRoots(root), []PathRef{{RootID: "r1", Path: "a.txt"}})
+	_, err = store.Inventory.ObservePaths(ctx, "p1", onDiskRoots(root), []PathRef{{RootID: "r1", Path: "a.txt"}})
 	testutil.FailErr(t, "observe again", err)
-	walk, err := store.QueryWalk(ctx, "p1", Baseline{}, 50, 0, CommitLens{})
+	walk, err := store.Walk.QueryWalk(ctx, "p1", Baseline{}, 50, 0, CommitLens{})
 	testutil.FailErr(t, "query walk", err)
 	batches := make(map[string]struct{})
 	for _, file := range walk.Files {
@@ -180,8 +180,8 @@ func TestObservePathsNamesTheGitMovementItObserves(t *testing.T) {
 	reader := &fakeGitReader{states: map[string]gitstate.State{
 		root: {Repo: gitstate.RepoPresent, HeadCommit: "aaa", HeadRef: "main"},
 	}}
-	store.SetGitReader(reader)
-	_, err := store.ObserveGitState(ctx, "p1", onDiskRoots(root))
+	store.Git.SetGitReader(reader)
+	_, err := store.Git.ObserveGitState(ctx, "p1", onDiskRoots(root))
 	testutil.FailErr(t, "seed git state", err)
 	trackRootFile(t, store, ctx, root, "swapped.txt", "main\n")
 
@@ -191,12 +191,12 @@ func TestObservePathsNamesTheGitMovementItObserves(t *testing.T) {
 		{Commit: "bbb", Subject: "checkout: moving from main to work"},
 		{Commit: "aaa", Subject: "commit: earlier"},
 	}}
-	recorded, err := store.ObservePaths(ctx, "p1", onDiskRoots(root), []PathRef{{RootID: "r1", Path: "swapped.txt"}})
+	recorded, err := store.Inventory.ObservePaths(ctx, "p1", onDiskRoots(root), []PathRef{{RootID: "r1", Path: "swapped.txt"}})
 	testutil.FailErr(t, "observe checkout paths", err)
 	if recorded != 1 {
 		t.Fatalf("recorded = %d, want 1", recorded)
 	}
-	walk, err := store.QueryWalk(ctx, "p1", Baseline{}, 10, 0, CommitLens{})
+	walk, err := store.Walk.QueryWalk(ctx, "p1", Baseline{}, 10, 0, CommitLens{})
 	testutil.FailErr(t, "query walk", err)
 	effect := effectsByPath(walk)["swapped.txt"]
 	if effect.GitTransitionID == "" {
@@ -215,7 +215,7 @@ func TestObservePathsSkipsUntrackedAndUnknownRoots(t *testing.T) {
 	trackRootFile(t, store, ctx, root, "known.txt", "known\n")
 	writeRootFile(t, root, "known.txt", "changed\n")
 
-	recorded, err := store.ObservePaths(ctx, "p1", onDiskRoots(root), []PathRef{
+	recorded, err := store.Inventory.ObservePaths(ctx, "p1", onDiskRoots(root), []PathRef{
 		{RootID: "r1", Path: "scratch.txt"},
 		{RootID: "r-elsewhere", Path: "known.txt"},
 	})
@@ -238,24 +238,24 @@ func TestWorktreeObservationNeverMovesBaseHeads(t *testing.T) {
 	_, err := store.TrackFile(ctx, TrackInput{ProjectID: "p1", BranchID: branch, RootID: "r1", Path: "a.txt", EntryKind: EntryKindFile, Content: []byte("checkout\n"), SHA256: sourceblob.ContentSHA([]byte("checkout\n")), Size: 9})
 	testutil.FailErr(t, "track checkout", err)
 	reader := &fakeGitReader{states: map[string]gitstate.State{base: {Repo: gitstate.RepoPresent, HeadCommit: "base", HeadRef: "main"}, checkout: {Repo: gitstate.RepoPresent, HeadCommit: "checkout", HeadRef: "feature"}}}
-	store.SetGitReader(reader)
+	store.Git.SetGitReader(reader)
 	for _, selection := range [][]RootSpec{onDiskRoots(base), roots, onDiskRoots(base), roots} {
-		changes, err := store.ObserveGitState(ctx, "p1", selection)
+		changes, err := store.Git.ObserveGitState(ctx, "p1", selection)
 		testutil.FailErr(t, "observe checkout git state", err)
 		if len(changes) != 0 {
 			t.Fatal("different checkouts fabricated a Git transition")
 		}
 	}
-	testutil.FailErr(t, "initialize base inventory", store.EnsureInventory(ctx, InventoryRequest{ProjectID: "p1", RootsGeneration: 1, Roots: onDiskRoots(base)}))
+	testutil.FailErr(t, "initialize base inventory", store.Inventory.EnsureInventory(ctx, InventoryRequest{ProjectID: "p1", RootsGeneration: 1, Roots: onDiskRoots(base)}))
 	writeRootFile(t, checkout, "a.txt", "outside checkout\n")
-	count, err := store.ObservePaths(ctx, "p1", roots, []PathRef{{RootID: "r1", Path: "a.txt"}})
+	count, err := store.Inventory.ObservePaths(ctx, "p1", roots, []PathRef{{RootID: "r1", Path: "a.txt"}})
 	testutil.FailErr(t, "observe checkout outside edit", err)
 	if count != 1 {
 		t.Fatalf("checkout observations=%d", count)
 	}
-	testutil.FailErr(t, "inventory checkout", store.EnsureInventory(ctx, InventoryRequest{ProjectID: "p1", RootsGeneration: 1, Roots: roots}))
+	testutil.FailErr(t, "inventory checkout", store.Inventory.EnsureInventory(ctx, InventoryRequest{ProjectID: "p1", RootsGeneration: 1, Roots: roots}))
 	for _, selected := range []sourcebranch.ID{sourcebranch.Trunk, branch} {
-		head, err := store.ResolveHead(ctx, "p1", selected, "r1", "a.txt")
+		head, err := store.History.ResolveHead(ctx, "p1", selected, "r1", "a.txt")
 		testutil.FailErr(t, "resolve checkout head", err)
 		want := "base\n"
 		if selected == branch {
@@ -264,7 +264,7 @@ func TestWorktreeObservationNeverMovesBaseHeads(t *testing.T) {
 		if head.SHA256 != sourceblob.ContentSHA([]byte(want)) {
 			t.Fatalf("wrong head for %q: %+v", selected, head)
 		}
-		state, err := store.InventoryState(ctx, "p1", selected, 1)
+		state, err := store.Inventory.InventoryState(ctx, "p1", selected, 1)
 		testutil.FailErr(t, "read checkout inventory", err)
 		if !state.Complete {
 			t.Fatalf("checkout inventory incomplete: %+v", state)

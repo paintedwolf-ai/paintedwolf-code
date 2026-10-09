@@ -45,7 +45,7 @@ func openDiskLedger(t *testing.T) diskLedger {
 	store := New(sqlDB, contentDir)
 	// These tests deliver the command's writes themselves, so a closed window
 	// that still owes a pass runs it at once instead of waiting out the settle period.
-	store.windowSettle = 0
+	store.Commands.windowSettle = 0
 	return diskLedger{store: store, sqlDB: sqlDB, contentDir: contentDir, root: root}
 }
 
@@ -62,7 +62,7 @@ func onDiskRoots(root string) []RootSpec {
 
 func openTestWindow(t *testing.T, store *Store, ctx context.Context, root, commandLine string) *OpenCommandWindow {
 	t.Helper()
-	window, err := store.OpenCommandWindow(ctx, CommandWindowInput{
+	window, err := store.Commands.OpenCommandWindow(ctx, CommandWindowInput{
 		ProjectID: "p1", Roots: onDiskRoots(root), SessionID: "s1", Turn: 3,
 		ToolCallID: "call-1", ToolName: "command", CommandLine: commandLine,
 	})
@@ -115,7 +115,7 @@ func TestCommandWindowAdmitsWhatTheCommandChanged(t *testing.T) {
 	deliverWrites(ctx, root, "Cargo.lock", "src/lib.rs", "old.txt")
 	closeAndSettle(t, ctx, window)
 
-	walk, err := store.QueryWalk(ctx, "p1", Baseline{Kind: BaselineTurn, SessionID: "s1", Turn: 3}, 50, 0, CommitLens{})
+	walk, err := store.Walk.QueryWalk(ctx, "p1", Baseline{Kind: BaselineTurn, SessionID: "s1", Turn: 3}, 50, 0, CommitLens{})
 	testutil.FailErr(t, "query turn walk", err)
 	got := effectsByPath(walk)
 	if len(got) != 3 {
@@ -144,19 +144,19 @@ func TestCommandWindowAdmitsWhatTheCommandChanged(t *testing.T) {
 	}
 
 	// The rewritten file's comparison spans the start bytes to the end bytes.
-	comparison, err := store.CompareEffect(ctx, "p1", got["src/lib.rs"].ID)
+	comparison, err := store.Comparisons.CompareEffect(ctx, "p1", got["src/lib.rs"].ID)
 	testutil.FailErr(t, "compare rewritten file", err)
 	if comparison.Before.Content != "pub fn a() {}\n" || comparison.After.Content != "pub fn a() {}\npub fn b() {}\n" {
 		t.Fatalf("rewrite comparison = %+v", comparison)
 	}
-	deletion, err := store.CompareEffect(ctx, "p1", got["old.txt"].ID)
+	deletion, err := store.Comparisons.CompareEffect(ctx, "p1", got["old.txt"].ID)
 	testutil.FailErr(t, "compare deletion", err)
 	if deletion.Before.Content != "stale\n" || deletion.After.State != "absent" {
 		t.Fatalf("deletion comparison = %+v", deletion)
 	}
 
 	// The window rides the file's version listing and the session's authorship.
-	versions, err := store.QueryFileVersions(ctx, "p1", got["Cargo.lock"].FileID, 10, 0)
+	versions, err := store.History.QueryFileVersions(ctx, "p1", got["Cargo.lock"].FileID, 10, 0)
 	testutil.FailErr(t, "query versions", err)
 	if len(versions.Versions) == 0 || versions.Versions[0].CommandWindowID != window.ID {
 		t.Fatalf("versions = %+v", versions.Versions)
@@ -164,7 +164,7 @@ func TestCommandWindowAdmitsWhatTheCommandChanged(t *testing.T) {
 	if _, ok := versions.CommandWindows[window.ID]; !ok {
 		t.Fatalf("version windows = %+v", versions.CommandWindows)
 	}
-	authored, err := store.SessionAuthoredPaths(ctx, "p1", "s1", "r1")
+	authored, err := store.Walk.SessionAuthoredPaths(ctx, "p1", "s1", "r1")
 	testutil.FailErr(t, "session authored paths", err)
 	if len(authored) != 3 {
 		t.Fatalf("session authored paths = %v", authored)
@@ -180,7 +180,7 @@ func TestCommandWindowThatObservedNothingLeavesNoRow(t *testing.T) {
 	if _, err := store.queries.GetSourceCommandWindow(ctx, window.ID); err == nil {
 		t.Fatal("window with no effects kept its row")
 	}
-	walk, err := store.QueryWalk(ctx, "p1", Baseline{Kind: BaselineSession, SessionID: "s1"}, 50, 0, CommitLens{})
+	walk, err := store.Walk.QueryWalk(ctx, "p1", Baseline{Kind: BaselineSession, SessionID: "s1"}, 50, 0, CommitLens{})
 	testutil.FailErr(t, "query session walk", err)
 	if len(walk.Files) != 0 || len(walk.Commands) != 0 {
 		t.Fatalf("walk after a quiet command = %+v", walk)
@@ -198,20 +198,20 @@ func TestDriftIsAttributedToTheOpenWindowAndOutsideAppOtherwise(t *testing.T) {
 
 	// The first pass only seeds tracking; drift with no window open is
 	// outside the app.
-	req, err := store.windowInventoryRequest(ctx, "p1", onDiskRoots(root))
+	req, err := store.Commands.windowInventoryRequest(ctx, "p1", onDiskRoots(root))
 	testutil.FailErr(t, "inventory request", err)
 	req.Force, req.Wait = true, true
-	testutil.FailErr(t, "seed tracking", store.EnsureInventory(ctx, req))
+	testutil.FailErr(t, "seed tracking", store.Inventory.EnsureInventory(ctx, req))
 	writeRootFile(t, root, "config.toml", "a = 2\n")
 	deliverWrites(ctx, root, "config.toml")
-	testutil.FailErr(t, "reconcile outside a window", store.EnsureInventory(ctx, req))
+	testutil.FailErr(t, "reconcile outside a window", store.Inventory.EnsureInventory(ctx, req))
 
 	window := openTestWindow(t, store, ctx, root, "sed -i s/2/3/ config.toml")
 	writeRootFile(t, root, "config.toml", "a = 3\n")
 	deliverWrites(ctx, root, "config.toml")
 	closeAndSettle(t, ctx, window)
 
-	walk, err := store.QueryWalk(ctx, "p1", Baseline{}, 50, 0, CommitLens{})
+	walk, err := store.Walk.QueryWalk(ctx, "p1", Baseline{}, 50, 0, CommitLens{})
 	testutil.FailErr(t, "query walk", err)
 	if len(walk.Files) != 1 || len(walk.Files[0].Effects) != 3 {
 		t.Fatalf("walk = %+v", walk.Files)
@@ -235,21 +235,21 @@ func TestWindowStillAttributesUntilItSettles(t *testing.T) {
 	writeRootFile(t, root, "gen/types.go", "package gen\n")
 	deliverWrites(ctx, root, "gen/types.go")
 	// The window keeps settling until the watcher's pass lands.
-	store.windowSettle = time.Hour
+	store.Commands.windowSettle = time.Hour
 	testutil.FailErr(t, "close command window", window.Close(ctx))
 
 	// The watcher's pass for the command's last writes lands after the
 	// process exited; the window still names it.
-	req, err := store.windowInventoryRequest(ctx, "p1", onDiskRoots(root))
+	req, err := store.Commands.windowInventoryRequest(ctx, "p1", onDiskRoots(root))
 	testutil.FailErr(t, "inventory request", err)
 	req.Force, req.Wait = true, true
-	testutil.FailErr(t, "late watcher pass", store.EnsureInventory(ctx, req))
+	testutil.FailErr(t, "late watcher pass", store.Inventory.EnsureInventory(ctx, req))
 	select {
 	case <-window.Settled():
 	case <-time.After(10 * time.Second):
 		t.Fatal("command window did not settle")
 	}
-	walk, err := store.QueryWalk(ctx, "p1", Baseline{Kind: BaselineTurn, SessionID: "s1", Turn: 3}, 50, 0, CommitLens{})
+	walk, err := store.Walk.QueryWalk(ctx, "p1", Baseline{Kind: BaselineTurn, SessionID: "s1", Turn: 3}, 50, 0, CommitLens{})
 	testutil.FailErr(t, "query turn walk", err)
 	got := effectsByPath(walk)
 	if effect, ok := got["gen/types.go"]; !ok || effect.CommandWindowID != window.ID {
@@ -262,23 +262,23 @@ func TestRunningWindowOutranksASettlingOne(t *testing.T) {
 	writeRootFile(t, root, "main.go", "package main\n")
 	first := openTestWindow(t, store, ctx, root, "make first")
 	// The first window is still settling when the second one's pass lands.
-	store.windowSettle = time.Hour
+	store.Commands.windowSettle = time.Hour
 	testutil.FailErr(t, "close first", first.Close(ctx))
 	second := openTestWindow(t, store, ctx, root, "make second")
 	writeRootFile(t, root, "second.out", "2\n")
 	deliverWrites(ctx, root, "second.out")
-	req, err := store.windowInventoryRequest(ctx, "p1", onDiskRoots(root))
+	req, err := store.Commands.windowInventoryRequest(ctx, "p1", onDiskRoots(root))
 	testutil.FailErr(t, "inventory request", err)
 	req.Force, req.Wait = true, true
-	testutil.FailErr(t, "pass while the first window settles", store.EnsureInventory(ctx, req))
+	testutil.FailErr(t, "pass while the first window settles", store.Inventory.EnsureInventory(ctx, req))
 	select {
 	case <-first.Settled():
 	case <-time.After(10 * time.Second):
 		t.Fatal("first window did not settle")
 	}
-	store.windowSettle = 0
+	store.Commands.windowSettle = 0
 	closeAndSettle(t, ctx, second)
-	walk, err := store.QueryWalk(ctx, "p1", Baseline{}, 50, 0, CommitLens{})
+	walk, err := store.Walk.QueryWalk(ctx, "p1", Baseline{}, 50, 0, CommitLens{})
 	testutil.FailErr(t, "query walk", err)
 	got := effectsByPath(walk)
 	if effect, ok := got["second.out"]; !ok || effect.CommandWindowID != second.ID {
@@ -292,16 +292,16 @@ func TestRunningWindowOutranksASettlingOne(t *testing.T) {
 func TestUntrackedFilesStayOutsideHistoryWithoutAWindow(t *testing.T) {
 	store, ctx, root := openLedgerOnDisk(t)
 	writeRootFile(t, root, "seed.txt", "seed\n")
-	req, err := store.windowInventoryRequest(ctx, "p1", onDiskRoots(root))
+	req, err := store.Commands.windowInventoryRequest(ctx, "p1", onDiskRoots(root))
 	testutil.FailErr(t, "inventory request", err)
 	req.Force, req.Wait = true, true
-	testutil.FailErr(t, "seed tracking", store.EnsureInventory(ctx, req))
+	testutil.FailErr(t, "seed tracking", store.Inventory.EnsureInventory(ctx, req))
 
 	writeRootFile(t, root, "generated.txt", "outside\n")
 	deliverWrites(ctx, root, "generated.txt")
-	testutil.FailErr(t, "reconcile outside a window", store.EnsureInventory(ctx, req))
+	testutil.FailErr(t, "reconcile outside a window", store.Inventory.EnsureInventory(ctx, req))
 
-	walk, err := store.QueryWalk(ctx, "p1", Baseline{}, 50, 0, CommitLens{})
+	walk, err := store.Walk.QueryWalk(ctx, "p1", Baseline{}, 50, 0, CommitLens{})
 	testutil.FailErr(t, "query walk", err)
 	if len(walk.Files) != 0 {
 		t.Fatalf("untracked file entered history without a window: %+v", walk.Files)
@@ -315,13 +315,13 @@ func TestMidWindowPassAttributesAndCloseDoesNotDuplicate(t *testing.T) {
 
 	writeRootFile(t, root, "gen/out.go", "package gen\n")
 	deliverWrites(ctx, root, "gen/out.go")
-	req, err := store.windowInventoryRequest(ctx, "p1", onDiskRoots(root))
+	req, err := store.Commands.windowInventoryRequest(ctx, "p1", onDiskRoots(root))
 	testutil.FailErr(t, "inventory request", err)
 	req.Force, req.Wait = true, true
-	testutil.FailErr(t, "watcher pass during the command", store.EnsureInventory(ctx, req))
+	testutil.FailErr(t, "watcher pass during the command", store.Inventory.EnsureInventory(ctx, req))
 	closeAndSettle(t, ctx, window)
 
-	walk, err := store.QueryWalk(ctx, "p1", Baseline{Kind: BaselineTurn, SessionID: "s1", Turn: 3}, 50, 0, CommitLens{})
+	walk, err := store.Walk.QueryWalk(ctx, "p1", Baseline{Kind: BaselineTurn, SessionID: "s1", Turn: 3}, 50, 0, CommitLens{})
 	testutil.FailErr(t, "query turn walk", err)
 	if len(walk.Files) != 1 || len(walk.Files[0].Effects) != 1 ||
 		walk.Files[0].Effects[0].CommandWindowID != window.ID {
@@ -336,16 +336,16 @@ func TestInterruptedWindowsSettleWhenAFreshProcessOpensOne(t *testing.T) {
 	orphan := openTestWindow(t, store, ctx, root, "npm run dev")
 	writeRootFile(t, root, "public/bundle.js", "//\n")
 	deliverWrites(ctx, root, "public/bundle.js")
-	req, err := store.windowInventoryRequest(ctx, "p1", onDiskRoots(root))
+	req, err := store.Commands.windowInventoryRequest(ctx, "p1", onDiskRoots(root))
 	testutil.FailErr(t, "inventory request", err)
 	req.Force, req.Wait = true, true
-	testutil.FailErr(t, "pass during the orphan", store.EnsureInventory(ctx, req))
+	testutil.FailErr(t, "pass during the orphan", store.Inventory.EnsureInventory(ctx, req))
 	quiet := openTestWindow(t, store, ctx, root, "true")
 
 	// A new process holds no memory of either window.
 	fresh := New(ledger.sqlDB, ledger.contentDir)
-	fresh.windowSettle = 0
-	next, err := fresh.OpenCommandWindow(ctx, CommandWindowInput{
+	fresh.Commands.windowSettle = 0
+	next, err := fresh.Commands.OpenCommandWindow(ctx, CommandWindowInput{
 		ProjectID: "p1", Roots: onDiskRoots(root), SessionID: "s2", Turn: 1,
 		ToolName: "command", CommandLine: "cargo build",
 	})
@@ -370,7 +370,7 @@ func TestWindowRowRecordsItsOwnClockPosition(t *testing.T) {
 	closeAndSettle(t, ctx, window)
 	row, err := store.queries.GetSourceCommandWindow(ctx, window.ID)
 	testutil.FailErr(t, "read window", err)
-	walk, err := store.QueryWalk(ctx, "p1", Baseline{}, 50, 0, CommitLens{})
+	walk, err := store.Walk.QueryWalk(ctx, "p1", Baseline{}, 50, 0, CommitLens{})
 	testutil.FailErr(t, "query walk", err)
 	if len(walk.Files) != 1 || walk.Files[0].Effects[0].Ordinal <= row.Ordinal {
 		t.Fatalf("window ordinal %d does not precede its effect: %+v", row.Ordinal, walk.Files)
@@ -406,15 +406,15 @@ func TestCommandWindowReleasesItsStartRetentionWhenSettled(t *testing.T) {
 	if got := pins(); got != 0 {
 		t.Fatalf("retained objects after settle = %d, want 0", got)
 	}
-	testutil.FailErr(t, "maintain blobs", store.MaintainBlobs(ctx))
+	testutil.FailErr(t, "maintain blobs", store.Retention.MaintainBlobs(ctx))
 
-	walk, err := store.QueryWalk(ctx, "p1", Baseline{Kind: BaselineTurn, SessionID: "s1", Turn: 3}, 50, 0, CommitLens{})
+	walk, err := store.Walk.QueryWalk(ctx, "p1", Baseline{Kind: BaselineTurn, SessionID: "s1", Turn: 3}, 50, 0, CommitLens{})
 	testutil.FailErr(t, "query walk", err)
 	effect, ok := effectsByPath(walk)["gen.txt"]
 	if !ok {
 		t.Fatalf("gen.txt not admitted: %+v", effectsByPath(walk))
 	}
-	comparison, err := store.CompareEffect(ctx, "p1", effect.ID)
+	comparison, err := store.Comparisons.CompareEffect(ctx, "p1", effect.ID)
 	testutil.FailErr(t, "compare", err)
 	if comparison.Before.Content != "before\n" || comparison.After.Content != "after\n" {
 		t.Fatalf("comparison = %+v", comparison)

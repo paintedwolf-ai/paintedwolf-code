@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/tools"
 	"os"
 	"path/filepath"
 	"testing"
@@ -36,7 +37,7 @@ func newCheckpointTestSession(t *testing.T) (*Manager, string, string) {
 	mgr.store = st
 	mgr.SetProjectRegistry(project.NewSQLRegistry(database))
 	ledger := sourceledger.New(database, filepath.Join(mgr.dataDir, "source-content"))
-	mgr.SetSourceLedger(ledger)
+	mgr.SetSourceLedger(ledger, tools.SourceHistory{Files: ledger.History, Comparison: ledger.Comparisons, Git: ledger.Git, Authorship: ledger.Walk}, ledger.Commands, ledger.Git, ledger.Checkpoints, ledger.Inventory)
 	mutations := project.NewSourceMutationService(database, ledger)
 	mgr.SetSourceMutations(mutations)
 	mgr.SetSourceRewinds(&sourcerewind.Service{Ledger: ledger, Mutations: mutations})

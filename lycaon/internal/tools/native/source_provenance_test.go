@@ -145,10 +145,11 @@ func writeProvenanceFile(t *testing.T, dir, name, content string) (abs, sha stri
 	return abs, textfile.SHA256([]byte(content))
 }
 
-func provenanceCtx(dir string, ledger sourceledger.Recorder) tools.ToolContext {
+func provenanceCtx(dir string, ledger *fakeSourceLedger) tools.ToolContext {
 	tctx := nativefixture.Context(dir)
 	tctx.Identity.ProjectID = "p1"
 	tctx.Source.SourceLedger = ledger
+	tctx.Source.History = tools.SourceHistory{Files: ledger, Comparison: ledger, Git: ledger, Authorship: ledger}
 	return tctx
 }
 
@@ -347,4 +348,17 @@ func TestReadSourceStampPreservesWorkerDestination(t *testing.T) {
 	if stamp == nil || stamp.Navigation != "source://r1/a%20%23b.go?job_id=worker-1" {
 		t.Fatalf("worker source stamp=%+v", stamp)
 	}
+}
+
+func (f *fakeSourceLedger) ResolveHeadByFile(context.Context, string, sourcebranch.ID, string) (sourceledger.BranchHead, error) {
+	return sourceledger.BranchHead{}, sourceledger.ErrHistoryNotFound
+}
+func (f *fakeSourceLedger) TurnCheckpoint(context.Context, string, string, int) (sourceledger.Checkpoint, bool, error) {
+	return sourceledger.Checkpoint{}, false, nil
+}
+func (f *fakeSourceLedger) EffectsBetween(context.Context, string, int64, int64, int) ([]sourceledger.Effect, error) {
+	return nil, nil
+}
+func (f *fakeSourceLedger) GitTransitionsBetween(context.Context, string, int64, int64, int) ([]sourceledger.GitTransition, error) {
+	return nil, nil
 }

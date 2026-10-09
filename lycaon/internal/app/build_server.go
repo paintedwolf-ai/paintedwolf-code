@@ -361,7 +361,7 @@ func (b serverWiring) wireFileBriefings(deps *api.Dependencies) error {
 // and the contribution runtime that reads document revisions.
 func (b serverWiring) wireSourceEditing(deps *api.Dependencies) error {
 	if b.sourceLedger != nil {
-		deps.Source.SourceLedger, deps.Source.SourceInventory = b.sourceLedger, b.sourceLedger
+		deps.Source.SourceLedger, deps.Source.SourceInventory = b.sourceLedger, b.sourceLedger.Inventory
 	}
 	sourceMutations := project.NewSourceMutationService(b.db, b.sourceLedger)
 	if err := delegationWiring(b).registerRecovery(bootrecovery.Entry{
@@ -373,7 +373,7 @@ func (b serverWiring) wireSourceEditing(deps *api.Dependencies) error {
 	deps.Source.SourceMutations = sourceMutations
 	deps.Source.FileOperations = fileops.NewService(fileops.NewStore(b.db))
 	b.mgr.SetSourceMutations(sourceMutations)
-	editorDocuments := editordoc.New(editordoc.NewStore(b.db), b.sourceLedger, b.registry)
+	editorDocuments := editordoc.New(editordoc.NewStore(b.db), b.sourceLedger, b.sourceLedger.History, b.registry)
 	if b.workerMergeSvc != nil {
 		b.workerMergeSvc.Documents = editorDocuments
 	}

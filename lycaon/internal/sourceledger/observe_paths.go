@@ -24,21 +24,21 @@ type pathDrift struct {
 
 // ObservePaths records tracked-path drift in one transaction, after observing
 // ref movements. It excludes untracked files and avoids a tree walk.
-func (s *Store) ObservePaths(ctx context.Context, projectID string, roots []RootSpec, refs []PathRef) (int, error) {
+func (s *Inventory) ObservePaths(ctx context.Context, projectID string, roots []RootSpec, refs []PathRef) (int, error) {
 	if s == nil || s.sqlDB == nil || len(refs) == 0 {
 		return 0, nil
 	}
-	release, err := s.lockObservations(ctx, projectID, roots)
+	release, err := s.git.lockObservations(ctx, projectID, roots)
 	if err != nil {
 		return 0, err
 	}
 	defer release()
-	transitionByRoot, gitErr := s.observeGitState(ctx, projectID, roots)
+	transitionByRoot, gitErr := s.git.observeGitState(ctx, projectID, roots)
 	recorded, err := s.observePaths(ctx, projectID, roots, refs, transitionByRoot, nil)
 	return recorded, errors.Join(gitErr, err)
 }
 
-func (s *Store) observePaths(ctx context.Context, projectID string, roots []RootSpec, refs []PathRef, transitionByRoot map[string]string, actor *Contributor) (int, error) {
+func (s *Inventory) observePaths(ctx context.Context, projectID string, roots []RootSpec, refs []PathRef, transitionByRoot map[string]string, actor *Contributor) (int, error) {
 	if len(refs) == 0 {
 		return 0, nil
 	}
@@ -94,11 +94,11 @@ func (s *Store) observePaths(ctx context.Context, projectID string, roots []Root
 }
 
 // recordPathDrift lands one batch of observations in one transaction.
-func (s *Store) recordPathDrift(ctx context.Context, projectID string, roots []RootSpec, drifts []pathDrift, transitionByRoot map[string]string, actor *Contributor) (int, error) {
+func (s *Inventory) recordPathDrift(ctx context.Context, projectID string, roots []RootSpec, drifts []pathDrift, transitionByRoot map[string]string, actor *Contributor) (int, error) {
 	if len(drifts) == 0 {
 		return 0, nil
 	}
-	cause := observationCause{actor: actor, batchID: newID(), window: s.attributionWindow(projectID, roots)}
+	cause := observationCause{actor: actor, batchID: newID(), window: s.commands.attributionWindow(projectID, roots)}
 	s.recordMu.Lock()
 	defer s.recordMu.Unlock()
 	tx, err := s.sqlDB.BeginTx(ctx, nil)
@@ -106,7 +106,7 @@ func (s *Store) recordPathDrift(ctx context.Context, projectID string, roots []R
 		return 0, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	scope, err := s.mutationObservationScope(ctx, tx, projectID)
+	scope, err := s.writer.mutationObservationScope(ctx, tx, projectID)
 	if err != nil {
 		return 0, err
 	}

@@ -20,7 +20,8 @@ func TestOpenObservedKeepsSavedSourceAndLiveDraftDistinct(t *testing.T) {
 	testdbseed.InsertProjectRootWithID(t, db, projectID, rootID, root)
 	testutil.FailErr(t, "write source", os.WriteFile(filepath.Join(root, "a.txt"), []byte("saved\n"), 0o644))
 	p := &project.Project{ID: projectID, Roots: []project.Root{{ID: rootID, ProjectID: projectID, Path: root, IsPrimary: true}}}
-	service := New(NewStore(db), sourceledger.New(db, ""), fixedRoots{p: p})
+	sourceHistory9 := sourceledger.New(db, "")
+	service := New(NewStore(db), sourceHistory9, sourceHistory9.History, fixedRoots{p: p})
 	closeServiceAtCleanup(t, service)
 	observation, err := project.ObserveProjectSource(p, project.SourceReadRequest{Path: "a.txt", RootID: rootID})
 	testutil.FailErr(t, "observe source", err)
@@ -81,7 +82,8 @@ func TestOpenObservedBinaryDoesNotCreateDocument(t *testing.T) {
 	testdbseed.InsertProjectRootWithID(t, db, projectID, rootID, root)
 	testutil.FailErr(t, "write binary", os.WriteFile(filepath.Join(root, "data.bin"), []byte{0, 1, 2, 3}, 0o644))
 	p := &project.Project{ID: projectID, Roots: []project.Root{{ID: rootID, ProjectID: projectID, Path: root, IsPrimary: true}}}
-	service := New(NewStore(db), sourceledger.New(db, ""), fixedRoots{p: p})
+	sourceHistory10 := sourceledger.New(db, "")
+	service := New(NewStore(db), sourceHistory10, sourceHistory10.History, fixedRoots{p: p})
 	closeServiceAtCleanup(t, service)
 	observation, err := project.ObserveProjectSource(p, project.SourceReadRequest{Path: "data.bin", RootID: rootID})
 	testutil.FailErr(t, "observe binary", err)

@@ -135,7 +135,7 @@ func TestPromoteOverlayEmitsRootScopeSourceChanges(t *testing.T) {
 
 		Store:        &mergeStoreStub{},
 		Reject:       mergeRejectFmt(t),
-		SourceLedger: ledger,
+		SourceLedger: ledger, SourceHistory: ledger.Walk,
 	}
 
 	out, err := svc.PromoteOverlay(ctx, "parent-1", "job-feed", api.PromoteOverlayInput{
@@ -357,9 +357,9 @@ func newEditorSyncPromotion(t *testing.T, store *mergeStoreStub) editorSyncPromo
 		Queue:        &mergeQueueStub{task: task},
 		Store:        store,
 		Reject:       mergeRejectFmt(t),
-		SourceLedger: ledger,
-		Projects:     projects,
-		Documents:    syncStub,
+		SourceLedger: ledger, SourceHistory: ledger.Walk,
+		Projects:  projects,
+		Documents: syncStub,
 	}
 	return editorSyncPromotion{svc: svc, primary: primary, rootID: rootID, ledger: ledger, docs: syncStub}
 }

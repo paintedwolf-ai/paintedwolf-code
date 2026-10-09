@@ -104,7 +104,7 @@ func (b delegationWiring) registerBackgroundRunners(app *ServeApp) {
 	}
 	if b.sourceLedger != nil {
 		byName["source-blob-gc"] = registration{run: func(ctx context.Context) error {
-			return b.sourceLedger.RunBlobGC(ctx, sourceledger.BlobGCInterval, sourceledger.BlobGCRetry)
+			return b.sourceLedger.Retention.RunBlobGC(ctx, sourceledger.BlobGCInterval, sourceledger.BlobGCRetry)
 		}}
 	}
 	if b.db != nil && b.dataDir != "" {

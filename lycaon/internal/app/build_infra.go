@@ -132,8 +132,8 @@ func (b *serveBuilder) openStore() error {
 	b.registry = project.NewSQLRegistry(b.db)
 	wireAgentPolicyRoots(b.ctx, b.registry)
 	b.sourceLedger = sourceledger.New(b.db, filepath.Join(b.dataDir, enginepaths.SourceContentDirName))
-	b.sourceLedger.SetStoreGuard(b.storeClaim)
-	b.sourceLedger.SetGitReader(gitStateReader{mgr: git.NewManager()})
+	b.sourceLedger.Content.SetGuard(b.storeClaim)
+	b.sourceLedger.Git.SetGitReader(gitStateReader{mgr: git.NewManager()})
 	return nil
 }
 

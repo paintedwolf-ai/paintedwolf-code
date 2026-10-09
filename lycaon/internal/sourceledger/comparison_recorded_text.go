@@ -10,7 +10,7 @@ import (
 
 // Recorded file writes have snapshot authorship. Replaying their actual text
 // deltas retains unchanged ranges without inventing a comparison endpoint.
-func (s *Store) attachRecordedTextAttribution(ctx context.Context, baseline Baseline, opts ScopeComparisonOptions, out *Comparison) error {
+func (s *Comparisons) attachRecordedTextAttribution(ctx context.Context, baseline Baseline, opts ScopeComparisonOptions, out *Comparison) error {
 	if !textSide(out.Before) || !textSide(out.After) {
 		return nil
 	}
@@ -113,7 +113,7 @@ func sliceTextSpans(spans []TextSpan, from, through uint32) []TextSpan {
 	return result
 }
 
-func (s *Store) comparisonVersionChain(ctx context.Context, before, after string) ([]string, error) {
+func (s *Comparisons) comparisonVersionChain(ctx context.Context, before, after string) ([]string, error) {
 	var ids []string
 	seen := map[string]bool{}
 	for after != before {
@@ -137,7 +137,7 @@ func (s *Store) comparisonVersionChain(ctx context.Context, before, after string
 	return ids, nil
 }
 
-func (s *Store) savedVersionAuthors(ctx context.Context, id string) ([]Contributor, error) {
+func (s *Comparisons) savedVersionAuthors(ctx context.Context, id string) ([]Contributor, error) {
 	rows, err := s.sqlDB.QueryContext(ctx, `SELECT DISTINCT a.origin,a.session_id,a.turn,a.person_id,a.actor_label,a.tool_call_id,a.tool_name,a.job_id
  FROM source_effects e JOIN source_effect_authors a ON a.effect_id=e.id WHERE e.after_version_id=?`, id)
 	if err != nil {

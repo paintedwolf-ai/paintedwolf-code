@@ -133,7 +133,7 @@ func TestFileBriefingReadsImmutableRetainedVersion(t *testing.T) {
 		ProjectID: p.ID, RootID: p.Roots[0].ID, Path: "main.go", Op: wire.SourceChangeOpWrite,
 		Origin: wire.SourceChangeOriginUser, SessionID: "briefing-version", Before: oldSource, After: currentSource,
 	}))
-	walk, err := ledger.QueryWalk(t.Context(), p.ID,
+	walk, err := ledger.Walk.QueryWalk(t.Context(), p.ID,
 		sourceledger.Baseline{Kind: sourceledger.BaselineSession, SessionID: "briefing-version"},
 		10, 0, sourceledger.CommitLens{})
 	testutil.FailErr(t, "query source versions", err)
@@ -141,7 +141,7 @@ func TestFileBriefingReadsImmutableRetainedVersion(t *testing.T) {
 		t.Fatalf("walk = %+v", walk.Files)
 	}
 	versionID := walk.Files[0].Effects[0].BeforeVersionID
-	version, err := ledger.CompareVersions(t.Context(), p.ID, versionID)
+	version, err := ledger.Comparisons.CompareVersions(t.Context(), p.ID, versionID)
 	testutil.FailErr(t, "read retained version", err)
 
 	body, err := json.Marshal(wire.FileBriefingRequest{

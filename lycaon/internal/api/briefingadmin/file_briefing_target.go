@@ -67,7 +67,7 @@ func (s *Handler) resolveVersionBriefing(ctx context.Context, p *project.Project
 	if req.VersionID == "" {
 		return resolvedFileBriefing{}, invalidFileBriefingRequest("version presentation requires version_id")
 	}
-	version, err := s.SourceLedger.ReadRestorableVersion(ctx, p.ID, req.VersionID)
+	version, err := s.SourceLedger.History.ReadRestorableVersion(ctx, p.ID, req.VersionID)
 	if err != nil {
 		return resolvedFileBriefing{}, err
 	}

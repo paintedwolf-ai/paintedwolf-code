@@ -36,7 +36,7 @@ func (s *History) HandleGetProjectSourceWalkSummary(w http.ResponseWriter, r *ht
 		s.responses.InvalidQueryParam(w, "message_ids", "must list 1 to 100 message ids")
 		return
 	}
-	rows, err := s.SourceLedger.WalkSummary(r.Context(), project.ID, sessionID, ids)
+	rows, err := s.SourceLedger.Walk.WalkSummary(r.Context(), project.ID, sessionID, ids)
 	if err != nil {
 		s.responses.InternalError(w, r, err)
 		return
@@ -134,7 +134,7 @@ func (s *History) HandleListProjectSourceWalk(w http.ResponseWriter, r *http.Req
 		beforeOrdinal = position.BeforeOrdinal
 	}
 	bas.RootBranches = workspaceSourceBranches(p)
-	res, err := s.SourceLedger.QueryWalk(
+	res, err := s.SourceLedger.Walk.QueryWalk(
 		r.Context(), p.ID, bas, query.page.Limit, beforeOrdinal, s.Comparisons.CommitLens(r.Context(), p),
 	)
 	if errors.Is(err, sourceledger.ErrBaselinePinNotFound) {

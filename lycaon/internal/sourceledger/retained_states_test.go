@@ -28,7 +28,7 @@ func TestVersionListIncludesTheTrackedBaseline(t *testing.T) {
 		OperationID: "edit-a", Before: baseline, After: []byte("one\ntwo edited\n"),
 	})
 
-	page, err := store.QueryFileVersions(ctx, "p1", tracked.FileID, 0, 0)
+	page, err := store.History.QueryFileVersions(ctx, "p1", tracked.FileID, 0, 0)
 	testutil.FailErr(t, "query versions", err)
 	if len(page.Versions) != 2 {
 		t.Fatalf("versions = %d want 2 (baseline + edit)", len(page.Versions))
@@ -65,7 +65,7 @@ func TestVersionListIncludesAPreservedPreImage(t *testing.T) {
 		Before:      []byte("unrecorded\n"), After: []byte("observed\n"),
 	})
 	fileID, _ := mustResolve(t, store, ctx, "b.txt")
-	page, err := store.QueryFileVersions(ctx, "p1", fileID, 0, 0)
+	page, err := store.History.QueryFileVersions(ctx, "p1", fileID, 0, 0)
 	testutil.FailErr(t, "query versions", err)
 	if len(page.Versions) != 2 {
 		t.Fatalf("versions = %d want 2 (pre-image + write)", len(page.Versions))
@@ -101,7 +101,7 @@ func TestVersionPagingCoversEveryRetainedState(t *testing.T) {
 		if pages > 8 {
 			t.Fatal("version paging did not terminate")
 		}
-		page, err := store.QueryFileVersions(ctx, "p1", tracked.FileID, 1, before)
+		page, err := store.History.QueryFileVersions(ctx, "p1", tracked.FileID, 1, before)
 		testutil.FailErr(t, "query versions", err)
 		for _, version := range page.Versions {
 			if _, dup := seen[version.ID]; dup {
@@ -157,7 +157,7 @@ func TestUnverifiableBytesAreNeverServedAsHistory(t *testing.T) {
 	testutil.FailErr(t, "read blob object", err)
 	swapRetainedBytes(t, store, object.StorageRelpath)
 
-	side, err := store.comparisonSide(ctx, "p1", versionID)
+	side, err := store.Comparisons.comparisonSide(ctx, "p1", versionID)
 	testutil.FailErr(t, "comparison side", err)
 	if side.Availability != ContentUnavailable {
 		t.Fatalf("availability = %q want unavailable for unverifiable bytes", side.Availability)
@@ -165,7 +165,7 @@ func TestUnverifiableBytesAreNeverServedAsHistory(t *testing.T) {
 	if side.Content != "" {
 		t.Fatalf("content = %q want empty for unverifiable bytes", side.Content)
 	}
-	if _, err := store.ReadRestorableVersion(ctx, "p1", versionID); err == nil {
+	if _, err := store.History.ReadRestorableVersion(ctx, "p1", versionID); err == nil {
 		t.Fatal("restore accepted unverifiable bytes")
 	}
 }
@@ -175,6 +175,6 @@ func swapRetainedBytes(t *testing.T, store *Store, relPath string) {
 	t.Helper()
 	compressed, err := zstdcodec.Compress(bytes.NewReader([]byte("tampered\n")))
 	testutil.FailErr(t, "compress replacement bytes", err)
-	target := filepath.Join(store.objects.Root(), relPath)
+	target := filepath.Join(store.Content.Root(), relPath)
 	testutil.FailErr(t, "swap retained bytes", os.WriteFile(target, compressed, 0o600))
 }

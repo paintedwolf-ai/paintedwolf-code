@@ -30,7 +30,7 @@ func TestDeletedPathsScopePaginationAndCurrentOccupant(t *testing.T) {
 		before := int64(0)
 		found := make(map[string]bool)
 		for {
-			page, err := store.DeletedPaths(ctx, "p1", baseline, 1, before)
+			page, err := store.History.DeletedPaths(ctx, "p1", baseline, 1, before)
 			testutil.FailErr(t, "read deleted paths", err)
 			for _, path := range page.Paths {
 				found[path.Path] = true
@@ -47,7 +47,7 @@ func TestDeletedPathsScopePaginationAndCurrentOccupant(t *testing.T) {
 			t.Fatalf("without user=%v paths=%v", withoutUser, found)
 		}
 	}
-	page, err := store.DeletedPaths(ctx, "p1", Baseline{Kind: BaselineSession, SessionID: "chat", RootBranches: map[string]sourcebranch.ID{"r1": checkout}}, 200, 0)
+	page, err := store.History.DeletedPaths(ctx, "p1", Baseline{Kind: BaselineSession, SessionID: "chat", RootBranches: map[string]sourcebranch.ID{"r1": checkout}}, 200, 0)
 	testutil.FailErr(t, "read checkout deletions", err)
 	if len(page.Paths) != 1 || page.Paths[0].Path != "checkout.go" {
 		t.Fatalf("checkout paths=%+v", page)

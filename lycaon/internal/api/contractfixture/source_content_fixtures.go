@@ -32,7 +32,7 @@ func NewSourceContentFixture(t *testing.T, raw []byte) SourceContentFixture {
 	t.Helper()
 	ledger, database, withLedger := TestSourceLedger(t)
 	srv := NewTestServer(t, withLedger, WithSessionStore(sessionstore.NewSQL(database)), func(d *hostapi.Dependencies) {
-		d.Source.EditorDocuments = editordoc.New(editordoc.NewStore(database), ledger, d.Core.Projects)
+		d.Source.EditorDocuments = editordoc.New(editordoc.NewStore(database), ledger, ledger.History, d.Core.Projects)
 	})
 	dir := t.TempDir()
 	path := filepath.Join(dir, "content.txt")

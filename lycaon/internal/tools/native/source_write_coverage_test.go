@@ -117,13 +117,17 @@ func TestEveryMutatingToolRecordsAnAttributedRow(t *testing.T) {
 			tctx.Identity.UserTurn = 4
 			tctx.Identity.ToolCallID = "call_" + tc.tool
 			tctx.Source.SourceLedger = st
+			tctx.Source.History = tools.SourceHistory{Files: st.History, Comparison: st.Comparisons, Git: st.Git, Authorship: st.Walk}
+			tctx.Source.Commands = st.Commands
+			tctx.Source.Observations = st.Inventory
+			tctx.Source.GitMutations = st.Git
 			tctx.Source.SourceMutations = project.NewSourceMutationService(st.LedgerDB(), st)
 
 			testutil.FailErr(t, tc.tool+" tool failed", tc.run(t, dir, tctx))
 
 			// The session lens is the reader's view. A row that missed the
 			// session or the turn is a change nothing can show.
-			res, err := st.QueryWalk(t.Context(), "p1",
+			res, err := st.Walk.QueryWalk(t.Context(), "p1",
 				sourceledger.Baseline{Kind: sourceledger.BaselineTurn, SessionID: "s1", Turn: 4},
 				20, 0, sourceledger.CommitLens{})
 			testutil.FailErr(t, "turn lens query failed", err)

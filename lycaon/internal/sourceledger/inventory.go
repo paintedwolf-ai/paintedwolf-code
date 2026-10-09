@@ -5,16 +5,15 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log/slog"
-	"strings"
-	"sync"
-	"time"
-
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/sourcesnapshot"
+	"log/slog"
+	"strings"
+	"sync"
+	"time"
 )
 
 // InventoryPhase is the project inventory lifecycle.
@@ -69,7 +68,7 @@ type inventoryJob struct {
 
 // EnsureInventory waits for passes it starts. Joining requests return after
 // merging unless Wait requires completion of the merged rerun.
-func (s *Store) EnsureInventory(ctx context.Context, req InventoryRequest) error {
+func (s *Inventory) EnsureInventory(ctx context.Context, req InventoryRequest) error {
 	if s == nil || strings.TrimSpace(req.ProjectID) == "" || req.RootsGeneration < 0 {
 		return nil
 	}
@@ -155,7 +154,7 @@ admit:
 
 // SuspendInventory cancels and drains every branch's discovery before a project
 // changes roots or is removed. Admission stays closed until resume is called.
-func (s *Store) SuspendInventory(ctx context.Context, projectID string) (resume func(), err error) {
+func (s *Inventory) SuspendInventory(ctx context.Context, projectID string) (resume func(), err error) {
 	if s == nil {
 		return func() {}, nil
 	}
@@ -191,7 +190,7 @@ func (s *Store) SuspendInventory(ctx context.Context, projectID string) (resume 
 	return resume, nil
 }
 
-func (s *Store) inventoryStateReusable(state InventoryState, roots []RootSpec) bool {
+func (s *Inventory) inventoryStateReusable(state InventoryState, roots []RootSpec) bool {
 	if sourcesnapshot.ChangeTokenTrusted(snapshotRoots(roots)) {
 		return true
 	}
@@ -208,7 +207,7 @@ func (s *Store) inventoryStateReusable(state InventoryState, roots []RootSpec) b
 
 // settleInventoryJob retires the job once the pass that just ran was for the
 // newest merged request; a request merged meanwhile makes the caller loop.
-func (s *Store) settleInventoryJob(projectID string, job *inventoryJob, completed InventoryRequest, runErr error) bool {
+func (s *Inventory) settleInventoryJob(projectID string, job *inventoryJob, completed InventoryRequest, runErr error) bool {
 	s.inventoryMu.Lock()
 	defer s.inventoryMu.Unlock()
 	if s.inventoryJobs[projectID] != job || job.request.serial != completed.serial {
@@ -220,7 +219,7 @@ func (s *Store) settleInventoryJob(projectID string, job *inventoryJob, complete
 	return true
 }
 
-func (s *Store) releaseInventoryJob(projectID string, job *inventoryJob) {
+func (s *Inventory) releaseInventoryJob(projectID string, job *inventoryJob) {
 	s.inventoryMu.Lock()
 	if s.inventoryJobs[projectID] == job {
 		delete(s.inventoryJobs, projectID)
@@ -229,7 +228,7 @@ func (s *Store) releaseInventoryJob(projectID string, job *inventoryJob) {
 	s.inventoryMu.Unlock()
 }
 
-func (s *Store) runInventoryGeneration(ctx context.Context, req InventoryRequest) error {
+func (s *Inventory) runInventoryGeneration(ctx context.Context, req InventoryRequest) error {
 	now := db.FormatTime(time.Now().UTC())
 	if err := s.queries.QueueSourceInventory(ctx, db.QueueSourceInventoryParams{
 		ProjectID: req.ProjectID, BranchID: inventoryBranch(req.Roots).String(), RequestedGeneration: int64(req.RootsGeneration),
@@ -272,7 +271,7 @@ func (s *Store) runInventoryGeneration(ctx context.Context, req InventoryRequest
 	if err != nil {
 		return err
 	}
-	s.notePassCompleted(req.ProjectID)
+	s.commands.notePassCompleted(req.ProjectID)
 	slog.InfoContext(ctx, "source inventory ready",
 		"project_id", req.ProjectID, "duration_ms", time.Since(started).Milliseconds(),
 		"files", outcome.files, "recorded", outcome.recorded)
@@ -282,13 +281,13 @@ func (s *Store) runInventoryGeneration(ctx context.Context, req InventoryRequest
 
 // signalInventoryMoved tells projections the inventory phase changed. The
 // phase is a fact consumers present, so every completion announces itself.
-func (s *Store) signalInventoryMoved(ctx context.Context, req InventoryRequest) {
+func (s *Inventory) signalInventoryMoved(ctx context.Context, req InventoryRequest) {
 	if err := sourcefeed.EmitProjectSignal(ctx, req.ProjectID, rootRefsOf(req.Roots)); err != nil {
 		slog.WarnContext(ctx, "source inventory signal", "project_id", req.ProjectID, "err", err)
 	}
 }
 
-func (s *Store) reconcileInventoryRequest(
+func (s *Inventory) reconcileInventoryRequest(
 	ctx context.Context,
 	req InventoryRequest,
 ) (outcome reconcileOutcome, snapshotID, epoch string, err error) {
@@ -299,7 +298,7 @@ func (s *Store) reconcileInventoryRequest(
 	if s.snapshots == nil {
 		return reconcileOutcome{}, "", "", errors.New("source snapshot store is not configured")
 	}
-	release, err := s.lockObservations(ctx, req.ProjectID, req.Roots)
+	release, err := s.git.lockObservations(ctx, req.ProjectID, req.Roots)
 	if err != nil {
 		return reconcileOutcome{}, "", "", err
 	}
@@ -320,20 +319,20 @@ func (s *Store) reconcileInventoryRequest(
 	}
 	// Observe ref movements before attributing file changes. Failed observations
 	// leave external changes unattributed.
-	transitionByRoot, gitErr := s.observeGitState(ctx, req.ProjectID, req.Roots)
+	transitionByRoot, gitErr := s.git.observeGitState(ctx, req.ProjectID, req.Roots)
 	if gitErr != nil {
 		transitionByRoot = nil
 	}
 	outcome, err = s.reconcileSnapshot(
 		ctx, req.ProjectID,
-		snapshot, req.Roots, transitionByRoot, s.attributionWindow(req.ProjectID, req.Roots),
+		snapshot, req.Roots, transitionByRoot, s.commands.attributionWindow(req.ProjectID, req.Roots),
 	)
 	if err != nil {
 		return outcome, snapshot.ID, req.requestedEpoch, err
 	}
 	// A pass repairs a little on completion; one deferred behind another
 	// capture is not this inventory's failure.
-	if err := s.MaintainBlobs(ctx); err != nil && !errors.Is(err, ErrBlobMaintenanceDeferred) {
+	if err := s.retention.MaintainBlobs(ctx); err != nil && !errors.Is(err, ErrBlobMaintenanceDeferred) {
 		return outcome, snapshot.ID, req.requestedEpoch, err
 	}
 	return outcome, snapshot.ID, req.requestedEpoch, nil
@@ -348,7 +347,7 @@ func snapshotRoots(roots []RootSpec) []sourcesnapshot.Root {
 }
 
 // InventoryState returns a generation-aware lifecycle without starting work.
-func (s *Store) InventoryState(ctx context.Context, projectID string, branch sourcebranch.ID, rootsGeneration int) (InventoryState, error) {
+func (s *Inventory) InventoryState(ctx context.Context, projectID string, branch sourcebranch.ID, rootsGeneration int) (InventoryState, error) {
 	out := InventoryState{
 		ProjectID: projectID, RequestedGeneration: rootsGeneration,
 		CompletedGeneration: -1, Phase: InventoryUninitialized,
@@ -409,4 +408,44 @@ func inventoryBranch(roots []RootSpec) sourcebranch.ID {
 }
 func (r InventoryRequest) scopeKey() string {
 	return r.ProjectID + "\x00" + inventoryBranch(r.Roots).String()
+}
+
+// Inventory schedules source observations and reconciles current heads.
+type Inventory struct {
+	inventoryJobs      map[string]*inventoryJob
+	inventoryMu        sync.Mutex
+	inventoryNow       func() time.Time
+	inventoryReconcile func(context.Context, string, []RootSpec) (int, error)
+	inventorySerial    uint64
+	inventorySuspended map[string]int
+	observationBudget  time.Duration
+	queries            *db.Queries
+	recordMu           *sync.Mutex
+	snapshots          *sourcesnapshot.Store
+	sqlDB              db.Handle
+	commands           inventoryCommandsPort
+	git                inventoryGitPort
+	retention          inventoryRetentionPort
+	writer             observationRecorder
+}
+
+type inventoryCommandsPort interface {
+	attributionWindow(projectID string, roots []RootSpec) *openCommandWindow
+	notePassCompleted(projectID string)
+}
+
+type inventoryGitPort interface {
+	lockObservations(ctx context.Context, projectID string, roots []RootSpec) (func(), error)
+	observeGitState(ctx context.Context, projectID string, roots []RootSpec) (map[string]string, error)
+}
+
+type inventoryRetentionPort interface {
+	MaintainBlobs(ctx context.Context) error
+}
+
+// Observation recording shares mutation admission and the writer's transaction.
+type observationRecorder interface {
+	RecordBatchTx(context.Context, *sql.Tx, []RecordInput) error
+	recordBatchTx(context.Context, *db.Queries, []RecordInput) error
+	mutationObservationScope(context.Context, *sql.Tx, string) (MutationObservationScope, error)
 }

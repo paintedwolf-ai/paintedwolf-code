@@ -239,7 +239,7 @@ func runCommandBackground(
 	window := openCommandWindow(ctx, tctx, toolName, commandLine)
 	var sourceRevision, sourceRootDigest string
 	if tctx.Execution.VerificationCheck {
-		sourceRevision, sourceRootDigest = sourceledger.VerificationState(ctx, tctx.Source.SourceLedger, tools.HostWriteRoot(tctx))
+		sourceRevision, sourceRootDigest = sourceledger.VerificationState(ctx, tctx.Source.Observations, tools.HostWriteRoot(tctx))
 	}
 	index := watchIndex(tctx, confinement)
 	handle, err := registry.StartPipeline(ctx, bgprocess.PipelineSpec{

@@ -24,15 +24,6 @@ const (
 	sourceChangeBriefGitCap = 10
 )
 
-// sourceProvenanceReader is the ledger read surface the change brief consumes.
-type sourceProvenanceReader interface {
-	sourceledger.Recorder
-	TurnCheckpoint(ctx context.Context, projectID, sessionID string, turn int) (sourceledger.Checkpoint, bool, error)
-	EffectsBetween(ctx context.Context, projectID string, afterOrdinal, throughOrdinal int64, limit int) ([]sourceledger.Effect, error)
-	GitTransitionsBetween(ctx context.Context, projectID string, afterOrdinal, throughOrdinal int64, limit int) ([]sourceledger.GitTransition, error)
-	SessionAuthoredPaths(ctx context.Context, projectID, sessionID, rootID string) ([]string, error)
-}
-
 // recordTurnSourceBrief stores the source-change brief a coordinator turn
 // opens with; assembly restates it unchanged on every later call.
 func (m *Manager) recordTurnSourceBrief(ctx context.Context, sess *api.Session, openingMessageID string) {
@@ -78,23 +69,23 @@ func (m *Manager) buildSourceChangeBrief(ctx context.Context, sess *api.Session)
 	if m == nil || sess == nil || sess.ProjectID == "" {
 		return inject.SourceChangeBrief{}
 	}
-	reader, ok := m.sourceLedger.(sourceProvenanceReader)
-	if !ok || m.store == nil {
+	reader := m.sourceHistory
+	if reader.Files == nil || reader.Git == nil || reader.Authorship == nil || m.sourceCheckpoints == nil || m.store == nil {
 		return inject.SourceChangeBrief{}
 	}
 	turn, err := m.store.UserTurnOrdinal(ctx, sess.ID)
 	if err != nil || turn < 2 {
 		return inject.SourceChangeBrief{}
 	}
-	current, foundCurrent, err := reader.TurnCheckpoint(ctx, sess.ProjectID, sess.ID, turn)
+	current, foundCurrent, err := m.sourceCheckpoints.TurnCheckpoint(ctx, sess.ProjectID, sess.ID, turn)
 	if err != nil || !foundCurrent {
 		return inject.SourceChangeBrief{}
 	}
-	previous, foundPrevious, err := reader.TurnCheckpoint(ctx, sess.ProjectID, sess.ID, turn-1)
+	previous, foundPrevious, err := m.sourceCheckpoints.TurnCheckpoint(ctx, sess.ProjectID, sess.ID, turn-1)
 	if err != nil || !foundPrevious {
 		return inject.SourceChangeBrief{}
 	}
-	effects, err := reader.EffectsBetween(
+	effects, err := reader.Files.EffectsBetween(
 		ctx, sess.ProjectID, previous.CreatedOrdinal, current.CreatedOrdinal, sourceChangeBriefEffectCap+1,
 	)
 	if err != nil {
@@ -102,7 +93,7 @@ func (m *Manager) buildSourceChangeBrief(ctx context.Context, sess *api.Session)
 	}
 	// Ref movements are part of the same window: a bare commit changes what
 	// "since last commit" means even when no file byte moved.
-	transitions, err := reader.GitTransitionsBetween(
+	transitions, err := reader.Git.GitTransitionsBetween(
 		ctx, sess.ProjectID, previous.CreatedOrdinal, current.CreatedOrdinal, sourceChangeBriefGitCap,
 	)
 	if err != nil {
@@ -204,7 +195,7 @@ func (m *Manager) sessionTouchedPaths(
 		}
 	}
 	for _, root := range roots {
-		authored, err := reader.SessionAuthoredPaths(ctx, sess.ProjectID, sess.ID, root.ID)
+		authored, err := reader.Authorship.SessionAuthoredPaths(ctx, sess.ProjectID, sess.ID, root.ID)
 		if err != nil {
 			continue
 		}

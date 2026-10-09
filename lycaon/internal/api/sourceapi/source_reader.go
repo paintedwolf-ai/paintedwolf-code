@@ -166,7 +166,7 @@ func (s *Comparisons) writeSourceScopeDiff(w http.ResponseWriter, r *http.Reques
 }
 
 func (s *Comparisons) writeSourceEffectComparison(w http.ResponseWriter, r *http.Request, p *project.Project, effectID string) {
-	diff, err := s.SourceLedger.CompareEffect(r.Context(), p.ID, effectID)
+	diff, err := s.SourceLedger.Comparisons.CompareEffect(r.Context(), p.ID, effectID)
 	if errors.Is(err, sourceledger.ErrHistoryNotFound) {
 		s.responses.Fail(w, wire.ApiErrorCodeSourceEffectNotFound, "effect not found")
 		return
@@ -179,7 +179,7 @@ func (s *Comparisons) writeSourceEffectComparison(w http.ResponseWriter, r *http
 }
 
 func (s *Comparisons) writeSourceVersionComparison(w http.ResponseWriter, r *http.Request, p *project.Project, versionID string) {
-	diff, err := s.SourceLedger.CompareVersions(r.Context(), p.ID, versionID)
+	diff, err := s.SourceLedger.Comparisons.CompareVersions(r.Context(), p.ID, versionID)
 	if errors.Is(err, sourceledger.ErrHistoryNotFound) {
 		s.responses.Fail(w, wire.ApiErrorCodeSourceVersionNotFound, "version not found")
 		return
