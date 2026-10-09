@@ -15,4 +15,3 @@ func decodeCompleteLeg(b *serveBuilder) workertools.CompleteLegDecoder {
 		})
 	}
 }
-

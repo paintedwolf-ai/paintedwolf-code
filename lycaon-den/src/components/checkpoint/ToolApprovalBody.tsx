@@ -453,4 +453,3 @@ export function ToolApprovalBody(props: ApprovalCardProps) {
     </ShellCard>
   );
 }
-
