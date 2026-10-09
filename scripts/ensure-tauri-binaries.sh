@@ -9,7 +9,7 @@ TARGET="$(rustc --print host-tuple)"
 # Native tests compile the same resource manifest as packaged builds.
 if [[ ! -f "${ROOT}/lycaon-den/src-tauri/THIRD-PARTY-NOTICES.md" ]]; then
   if [[ ! -f "${ROOT}/THIRD-PARTY-NOTICES.md" ]]; then
-    echo "error: native resources are missing; run ./task licenses:notices after ./task setup-dev -- --frontend" >&2
+    echo "error: native resources are missing; run ./task setup-dev -- --frontend, then ./task setup-dev -- --shell-resources" >&2
     exit 1
   fi
   cp "${ROOT}/THIRD-PARTY-NOTICES.md" "${ROOT}/lycaon-den/src-tauri/THIRD-PARTY-NOTICES.md"
