@@ -45,7 +45,7 @@ func TestAgentPublicationFailureRecoversOriginalBytesAtomically(t *testing.T) {
 	if replayed.Saved || replayed.HeldVersionID == "" || replayed.Document.Draft != "agent with later typing\n" {
 		t.Fatalf("recovery changed later work: %+v", replayed)
 	}
-	held, err := ledger.ReadRestorableVersion(t.Context(), f.project.ID, replayed.HeldVersionID)
+	held, err := ledger.History.ReadRestorableVersion(t.Context(), f.project.ID, replayed.HeldVersionID)
 	testutil.FailErr(t, "read original held publication", err)
 	if text, ok := held.Text(); !ok || text != "agent\n" {
 		t.Fatalf("held bytes = %q, readable=%v", text, ok)
