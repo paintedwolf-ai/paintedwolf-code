@@ -84,7 +84,7 @@ def execution_environment(environment, declaration=None):
 def catalog():
     value = json.loads(CATALOG.read_text())
     if set(value) != {"groups", "go", "tasks", "private", "selection", "resources", "environment", "ci",
-                      "runner_priority", "capacity"}:
+                      "capacity"}:
         raise ValueError("invalid verification catalog")
     names = set()
     for section in ("groups", "go", "tasks"):
