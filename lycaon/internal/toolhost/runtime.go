@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
-	"sync/atomic"
 
 	"github.com/lycaon/lycaon/internal/approvaloutcome"
 	"github.com/lycaon/lycaon/internal/approvals"
@@ -84,10 +83,7 @@ type Runtime struct {
 	fileAge                 *fileage.Provider
 	// gitStatusCache is shared with the board GET path when the host wires it.
 	// Native git_status always loads with force=true.
-	gitStatusCache atomic.Pointer[git.StatusCache]
-	// releaseOwnStatusCache unbinds the default cache from repochange once a
-	// host cache replaces it; repeated calls are no-ops.
-	releaseOwnStatusCache func()
+	gitStatusCache *statusCacheBinding
 }
 
 // RenderSkillBody uses the same renderer as skills_read.
@@ -147,9 +143,7 @@ func (r *Runtime) SetGitStatusCache(cache *git.StatusCache) {
 	if r == nil {
 		return
 	}
-	if previous := r.gitStatusCache.Swap(cache); previous != cache && r.releaseOwnStatusCache != nil {
-		r.releaseOwnStatusCache()
-	}
+	r.gitStatusCache.replace(cache)
 }
 
 // SetBackgroundRegistry wires session-scoped background command processes.
@@ -615,7 +609,6 @@ func NewRuntime(cfg RuntimeConfig) (*Runtime, error) {
 
 	gitMgr := git.NewManager()
 	statusCache := git.NewStatusCache(gitMgr)
-	releaseStatusCache := statusCache.RegisterRepochangeObserver()
 	surveyCat, err := survey.LoadCatalog(survey.CatalogDir())
 	if err != nil {
 		return nil, fmt.Errorf("survey catalog: %w", err)
@@ -634,13 +627,12 @@ func NewRuntime(cfg RuntimeConfig) (*Runtime, error) {
 		activation: activation,
 		fileAge:    ageProvider,
 
-		releaseOwnStatusCache: releaseStatusCache,
+		gitStatusCache: newStatusCacheBinding(statusCache),
 	}
-	runtime.gitStatusCache.Store(statusCache)
 	registry, mutationTools, err := buildNativeRegistry(buildDeps{
 		boundary:      boundary,
 		git:           gitMgr,
-		statusCache:   &runtime.gitStatusCache,
+		statusCache:   runtime.gitStatusCache,
 		command:       commandRunner,
 		nativeConfig:  nativeCfg,
 		toolSchemas:   schemaCfg,
@@ -794,7 +786,7 @@ func effectiveEgressApprovalRules(ctx context.Context, runtime *Runtime, store *
 type buildDeps struct {
 	boundary       *sandbox.Boundary
 	git            *git.Manager
-	statusCache    *atomic.Pointer[git.StatusCache]
+	statusCache    *statusCacheBinding
 	command        *hostcmd.Runner
 	nativeConfig   nativemanifest.Config
 	toolSchemas    *toolschema.Config

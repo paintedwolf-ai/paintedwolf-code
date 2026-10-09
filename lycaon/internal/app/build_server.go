@@ -257,6 +257,12 @@ func (b serverWiring) wireServer() error {
 		return err
 	}
 	b.srv = api.NewServer(deps, b.logger, b.apiToken)
+	srv := b.srv
+	// Project watches are process-wide and call back into this server.
+	b.resources.track("source-watches", 79, func(ctx context.Context) error {
+		srv.Sources.StopSourceWatches(ctx)
+		return nil
+	})
 	return b.registerServerHooks(extensionJournal)
 }
 

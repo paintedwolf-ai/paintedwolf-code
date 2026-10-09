@@ -91,6 +91,19 @@ func (s *Scanner) Run(ctx context.Context, req scan.ScanRequest) (*scanoutput.Re
 	return nil, fmt.Errorf("library scan worker unavailable")
 }
 
+// Close stops the resident worker process after any in-flight request; a later
+// Run starts a new one.
+func (s *Scanner) Close() error {
+	s.mu.Lock()
+	worker := s.worker
+	s.worker = nil
+	s.mu.Unlock()
+	if worker != nil {
+		worker.stop()
+	}
+	return nil
+}
+
 func (s *Scanner) ensureWorker(ctx context.Context) (*resident, error) {
 	if s.worker != nil && !s.worker.exited() {
 		return s.worker, nil

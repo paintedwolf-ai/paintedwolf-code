@@ -148,6 +148,8 @@ func BuildForTest(t *testing.T, opts ...Option) *Harness {
 
 	applyTestHarnessRelaxations(sa)
 
+	trackHost(t.Name(), sa)
+
 	harnessStore := store.NewSQL(sa.DB)
 	// Seeded and runtime evidence share the same content directory.
 	harnessStore.SetDataDir(testDir)

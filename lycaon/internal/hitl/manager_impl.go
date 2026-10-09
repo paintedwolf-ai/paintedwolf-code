@@ -50,6 +50,8 @@ type Manager struct {
 	resolutionLocks keyedMutex
 	// vault verifies presence and holds each chat's unlock for person-held values.
 	vault vaultUnlock
+	// expiries holds armed fail-safe expiries until they fire or shutdown.
+	expiries expiryTimers
 }
 
 // SetSessionAdmission wires session admission.
@@ -167,7 +169,7 @@ func (m *Manager) scheduleExpiry(ctx context.Context, checkpointID string, d tim
 	}
 	// Expiry outlives the request that created the checkpoint.
 	expiryCtx := context.WithoutCancel(ctx)
-	time.AfterFunc(d, func() {
+	m.expiries.schedule(d, func() {
 		_ = m.expirePending(expiryCtx, checkpointID, "approval request timed out — denied (fail-safe)")
 	})
 }

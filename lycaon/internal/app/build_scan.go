@@ -41,6 +41,8 @@ func (b toolWiring) wireScan() error {
 			return fmt.Errorf("scan registry: %w", err)
 		}
 		b.scannerReg = reg
+		// Library scanners keep a worker process per adapter.
+		b.resources.track("scanner-workers", 52, func(context.Context) error { return reg.Close() })
 	}
 	b.scanCoordinator.Registry = b.scannerReg
 	b.scanStore.SecretIgnores = b.scanSecretIgnores

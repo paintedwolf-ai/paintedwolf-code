@@ -62,6 +62,8 @@ type Handler struct {
 	sourceReaders   sourcecomparison.Cache
 	sourceViews     sourceViewService
 	sourceWatchJobs map[string]*sourceWatchJob
+	// watchedProjects names the projects whose process-wide watch this host bound.
+	watchedProjects map[string]struct{}
 	sourceWatchMu   sync.Mutex
 	warmupPolls     *warmupClock
 	background      *taskgroup.Group
@@ -97,7 +99,7 @@ func New(responses *httpio.Responder, background *taskgroup.Group, operations Op
 	// Editor saves apply through the same mutation service as other writes.
 	deps.EditorDocuments.SetSourceMutations(deps.SourceMutations)
 	return Handler{Deps: deps, responses: responses, background: background, operations: operations,
-		sourceIndexes: project.NewSourceIndexCache(), sourceWatchJobs: make(map[string]*sourceWatchJob), warmupPolls: newWarmupClock()}
+		sourceIndexes: project.NewSourceIndexCache(), sourceWatchJobs: make(map[string]*sourceWatchJob), watchedProjects: make(map[string]struct{}), warmupPolls: newWarmupClock()}
 }
 
 // SnapshotBytes reports retained current-source snapshot bytes across all views.

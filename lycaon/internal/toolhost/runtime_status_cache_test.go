@@ -15,8 +15,8 @@ func TestSetGitStatusCacheReleasesReplacedDefault(t *testing.T) {
 	r, err := NewRuntime(RuntimeConfig{ConfigRoot: configlayout.FindModuleRoot(), Catalog: extpackstest.StockCatalog(t)})
 	testutil.FailErr(t, "build tool runtime", err)
 	releases := 0
-	release := r.releaseOwnStatusCache
-	r.releaseOwnStatusCache = func() { releases++; release() }
+	release := r.gitStatusCache.releaseOwned
+	r.gitStatusCache.releaseOwned = func() { releases++; release() }
 
 	r.SetGitStatusCache(r.gitStatusCache.Load())
 	if releases != 0 {

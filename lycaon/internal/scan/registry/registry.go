@@ -2,7 +2,9 @@ package registry
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"sync"
@@ -185,8 +187,40 @@ func (r *Impl) Reload() error {
 	if err != nil {
 		return err
 	}
+	previous := r.adapters()
 	r.scannerRegistry().Replace(values)
+	// Replaced adapters finish in-flight scans before their workers stop.
+	go closeScanners(previous)
 	return nil
+}
+
+// Close stops every adapter's resident processes.
+func (r *Impl) Close() error {
+	if r == nil {
+		return nil
+	}
+	return closeScanners(r.adapters())
+}
+
+func (r *Impl) adapters() []scan.CodeScanner {
+	reg := r.scannerRegistry()
+	var out []scan.CodeScanner
+	for _, id := range reg.IDs() {
+		if s, ok := reg.Get(id); ok {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+func closeScanners(scanners []scan.CodeScanner) error {
+	var errs []error
+	for _, s := range scanners {
+		if closer, ok := s.(io.Closer); ok {
+			errs = append(errs, closer.Close())
+		}
+	}
+	return errors.Join(errs...)
 }
 
 func newScannerFromEntry(entry scancatalog.ScannerEntry, moduleRoot, home string, manifest *bundled.Manifest, opts Options) (scan.CodeScanner, error) {
