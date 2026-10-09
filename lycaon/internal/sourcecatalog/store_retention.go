@@ -3,7 +3,6 @@ package sourcecatalog
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -137,23 +136,6 @@ func treeStoreBytes(file string) int64 {
 		}
 	}
 	return total
-}
-
-// checkpointTreeStore reclaims the write-ahead log of an idle generation.
-func checkpointTreeStore(ctx context.Context, file string, vacuumPages int) error {
-	if strings.HasSuffix(file, structuralFileSuffix) {
-		return nil
-	}
-	db, err := openTreeDB(ctx, file)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = db.Close() }()
-	if _, err := db.ExecContext(ctx, fmt.Sprintf("PRAGMA incremental_vacuum(%d)", vacuumPages)); err != nil {
-		return err
-	}
-	_, err = db.ExecContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)")
-	return err
 }
 
 // ClearTreeStores drains all cache writers and runs clearStorage while new
