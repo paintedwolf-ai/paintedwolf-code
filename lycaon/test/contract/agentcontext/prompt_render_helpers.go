@@ -4,7 +4,6 @@ import (
 	"context"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/internal/workflow"
 	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"testing"
