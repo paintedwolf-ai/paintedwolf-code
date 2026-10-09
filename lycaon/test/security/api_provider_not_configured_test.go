@@ -14,7 +14,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/app"
- "github.com/lycaon/lycaon/internal/app/configuration"
+	"github.com/lycaon/lycaon/internal/app/configuration"
 	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/testutil"
