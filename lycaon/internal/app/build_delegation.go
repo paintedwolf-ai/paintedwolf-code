@@ -47,16 +47,16 @@ func (b delegationWiring) wireWorkerServices() error {
 
 	b.injectRenderer = prompts.NewInjectRenderer(b.promptEngine)
 	b.workerExec = worker.NewLocalWorkerExecutor(b.mgr, b.workerQueue)
-	b.workerExec.Waits = &awaitstore.Store{DB: b.db}
+	b.workerExec.Waits = &awaitstore.Store{DB: b.storage.Database}
 	b.workerQueue.SetSessionAdmission(b.mgr.WithSessionTreeAdmission)
 	b.workerExec.SetPromptInjects(b.injectRenderer)
 	b.workerExec.SetPhaseTouchPaths(b.workflowMgr)
-	b.workerBranchRoot = enginepaths.WorkerBranchesRootUnder(b.dataDir)
-	b.workerSeedRoot = enginepaths.WorkerSeedsRootUnder(b.dataDir)
+	b.workerBranchRoot = enginepaths.WorkerBranchesRootUnder(b.storage.Directory)
+	b.workerSeedRoot = enginepaths.WorkerSeedsRootUnder(b.storage.Directory)
 	b.wsMgr = workspace.NewManager(b.workerBranchRoot, b.workerSeedRoot)
 	b.workerQueue.SetWorkerWorkspaceManager(b.wsMgr)
-	b.workerQueue.SetBaselineStore(b.sourceLedger.BaselineStore())
-	b.workerQueue.SetProjectStore(b.registry)
+	b.workerQueue.SetBaselineStore(b.storage.SourceLedger.BaselineStore())
+	b.workerQueue.SetProjectStore(b.storage.Projects)
 
 	b.workerCancelSvc = &worker.CancelService{
 		Queue:    b.workerQueue,
@@ -64,7 +64,7 @@ func (b delegationWiring) wireWorkerServices() error {
 		Reject:   b.rejectFmt,
 		Reports: worker.ChangeReportDeps{
 			Messages: func(ctx context.Context, childSessionID string) ([]wire.Message, error) {
-				return b.store.GetMessages(ctx, childSessionID)
+				return b.storage.Sessions.GetMessages(ctx, childSessionID)
 			},
 		},
 	}
@@ -75,7 +75,7 @@ func (b delegationWiring) wireWorkerServices() error {
 		Delegations: b.delegationStore,
 	}
 	b.workflowMgr.SessionCoordinatorBusy = func(ctx context.Context, sessionID string) bool {
-		sess, err := b.store.Get(ctx, sessionID)
+		sess, err := b.storage.Sessions.Get(ctx, sessionID)
 		if err != nil || sess == nil {
 			return false
 		}
@@ -94,11 +94,11 @@ func (b delegationWiring) wireWorkerServices() error {
 		Plans: b.blueprintMgr,
 		WorkflowReady: workflow.RegistryWorkflowReadyChecker{
 			Registry: b.condReg,
-			Sessions: b.store,
+			Sessions: b.storage.Sessions,
 		},
 	}
 	b.delegationMgr = delegation.NewManager(b.delegationStore, b.workerQueue, b.mgr, dispatchGate)
-	b.delegationMgr.Projects = b.registry
+	b.delegationMgr.Projects = b.storage.Projects
 	b.delegationMgr.Plans = b.blueprintMgr
 	b.delegationMgr.HeadSHA = b.gitMgr
 	b.delegationMgr.InspectorCloseout = &delegation.InspectorCloseoutGate{
@@ -150,11 +150,11 @@ func (b delegationWiring) configureDelegationWorkflow() error {
 	b.mgr.SetCoordinatorTurnFrameSource(&workflow.CoordinatorTurnFrameLoader{
 		Runs:           b.workflowMgr,
 		SessionStore:   b.sessionWorkflowStore,
-		ConfigRoot:     b.configRoot,
+		ConfigRoot:     b.catalog.ModuleRoot,
 		VerdictCatalog: b.sessionVerdictCatalog,
 	})
-	if b.synthesisCurator != nil {
-		b.mgr.SetSynthesisCurator(b.synthesisCurator)
+	if b.providers.Curator != nil {
+		b.mgr.SetSynthesisCurator(b.providers.Curator)
 	}
 	return nil
 }

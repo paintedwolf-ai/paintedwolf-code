@@ -24,7 +24,7 @@ func (b *serveBuilder) wireUserPath() error {
 		}
 	} else {
 		// A shutdown during startup cancels the probe instead of waiting out its timeout.
-		snapshot = userpath.NewProvider(cfg).Resolve(b.ctx)
+		snapshot = userpath.NewProvider(cfg).Resolve(b.startup.ctx)
 	}
 
 	b.userPath = snapshot

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/projectcontrib"
 	"path/filepath"
 	"strings"
 
@@ -49,8 +50,8 @@ type boardWiring struct{ *serveBuilder }
 
 func (b boardWiring) wireBoardAndResearch() error {
 	var err error
-	b.repoProvider = repoinfo.NewProvider(sourcecatalog.Process().Trees, b.repoCatalogRoot, filepath.Join(enginepaths.RepoOrientationRootUnder(b.dataDir), "v1"))
-	b.resources.track("source-catalog", 86, sourcecatalog.Process().Drain)
+	b.repoProvider = repoinfo.NewProvider(sourcecatalog.Process().Trees, b.repoCatalogRoot, filepath.Join(enginepaths.RepoOrientationRootUnder(b.storage.Directory), "v1"))
+	b.startup.resources.Track("source-catalog", 86, sourcecatalog.Process().Drain)
 	b.mgr.SetRepoProvider(b.repoProvider)
 	// Background brief completion publishes its own board update.
 	b.repoProvider.SetOnSettled(func(projectDir string) {
@@ -71,24 +72,24 @@ func (b boardWiring) wireBoardAndResearch() error {
 		Git:                    b.gitMgr,
 		StatusCache:            b.gitStatusCache,
 		RepoSets:               git.NewRepoSetCache(git.DefaultStatusCacheTTL),
-		Projects:               b.registry,
+		Projects:               b.storage.Projects,
 		Scans:                  b.scanCoordinator,
 		ScanCompare:            b.scanCoordinator,
-		SecurityScanners:       b.settingsSvc.SecurityScanners,
-		OverlayGate:            b.projectSettingsGate(),
+		SecurityScanners:       b.settings.Service.SecurityScanners,
+		OverlayGate:            b.settings.ProjectSurfaceGate(projectcontrib.SurfaceProjectSettings, b.storage.Projects),
 		DefaultExecutionTarget: worker.DefaultExecutionTarget(b.workersCfg),
-		Cost:                   b.costTracker,
+		Cost:                   b.providers.Costs,
 		CostTrackingEnabled: func() bool {
-			return b.settingsSvc != nil && b.settingsSvc.Pricing != nil && b.settingsSvc.Pricing.Effective().CostTrackingEnabled
+			return b.settings.Service != nil && b.settings.Service.Pricing != nil && b.settings.Service.Pricing.Effective().CostTrackingEnabled
 		},
 		Worktree: b.mgr.BoardGitWorktreeFunc(b.gitMgr),
 	}
-	b.mgr.SetBoardInject(&board.InjectBuilder{SnapshotBuilder: b.boardSnap, Projects: b.registry}, board.DefaultInjectFormatter())
+	b.mgr.SetBoardInject(&board.InjectBuilder{SnapshotBuilder: b.boardSnap, Projects: b.storage.Projects}, board.DefaultInjectFormatter())
 	b.mgr.SetIncludeScanLegend(func() bool {
-		if b.settingsSvc == nil || b.settingsSvc.SecurityScanners == nil {
+		if b.settings.Service == nil || b.settings.Service.SecurityScanners == nil {
 			return true
 		}
-		return b.settingsSvc.SecurityScanners.Effective().Enabled
+		return b.settings.Service.SecurityScanners.Effective().Enabled
 	})
 	if err := board.RegisterBoardTools(b.toolRuntime.Registry, board.ToolDeps{
 		Builder:            b.boardSnap,
@@ -122,16 +123,16 @@ func (b boardWiring) wireBoardAndResearch() error {
 	}
 	b.webResearchCreds = b.webResearchRuntime.Creds
 	webCat, webCfg, webReg := b.webResearchRuntime.Catalog, b.webResearchRuntime.Config, b.webResearchRuntime.Registry
-	var llmReg, llmPol = b.llmRegistryPolicy()
-	b.webDiscoverer = webresearch.NewDirectDiscovererFactory(b.webIndex, webReg, b.webResearchCreds, webCfg, webCat, b.rerank)
+	var llmReg, llmPol = b.providers.RegistryPolicy()
+	b.webDiscoverer = webresearch.NewDirectDiscovererFactory(b.storage.WebIndex, webReg, b.webResearchCreds, webCfg, webCat, b.rerank)
 	b.toolRuntime.Web.SetDirectDiscovererFactory(b.webDiscoverer)
-	if b.webIndex != nil {
-		webReg.AttachQuotaStore(b.webIndex)
+	if b.storage.WebIndex != nil {
+		webReg.AttachQuotaStore(b.storage.WebIndex)
 		// Session activity and schedules warm the index.
-		b.webWarmer = webresearch.NewWarmer(b.webIndex, llmReg, llmPol, webCfg)
-		b.webWarmer.Cost = b.costTracker
-		if b.llmSvc != nil {
-			b.webWarmer.Plane = b.llmSvc.Utility
+		b.webWarmer = webresearch.NewWarmer(b.storage.WebIndex, llmReg, llmPol, webCfg)
+		b.webWarmer.Cost = b.providers.Costs
+		if b.providers.Service != nil {
+			b.webWarmer.Plane = b.providers.Service.Utility
 		}
 		b.mgr.SetIndexWarmer(b.webWarmer)
 		// Presence is evaluated for each warm cycle.
@@ -145,7 +146,7 @@ func (b boardWiring) wireBoardAndResearch() error {
 		Config:   webCfg,
 		Catalog:  webCat,
 		Registry: webReg,
-		Index:    b.webIndex,
+		Index:    b.storage.WebIndex,
 		Rerank:   b.rerank,
 		Boundary: b.toolRuntime.Boundary,
 		SearchWarmHook: func(ctx context.Context, sessionID, toolCallID, query, projectDir string, hitURLs, residualURLs []string, strongHits, maxResults int, directParticipated bool) {
@@ -202,10 +203,10 @@ func (b boardWiring) repoCatalogFileCount(projectDir string) (int, bool) {
 }
 
 func (b boardWiring) repoCatalogRoot(ctx context.Context, rootPath string) (repoinfo.CatalogRoot, bool, error) {
-	if b.registry == nil {
+	if b.storage.Projects == nil {
 		return repoinfo.CatalogRoot{}, false, nil
 	}
-	projects, err := b.registry.List(ctx)
+	projects, err := b.storage.Projects.List(ctx)
 	if err != nil {
 		return repoinfo.CatalogRoot{}, false, err
 	}
@@ -221,10 +222,10 @@ func (b boardWiring) repoCatalogRoot(ctx context.Context, rootPath string) (repo
 }
 
 func (b boardWiring) projectIDForRoot(ctx context.Context, rootPath string) (string, error) {
-	if b.registry == nil {
+	if b.storage.Projects == nil {
 		return "", nil
 	}
-	projects, err := b.registry.List(ctx)
+	projects, err := b.storage.Projects.List(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -281,7 +282,7 @@ func (b boardWiring) wireGroundingCoordinators() error {
 	b.groundingSvc = &toolhost.GroundingService{
 		Config:    groundingCfg,
 		State:     grounding.NewStateStore(),
-		Ledger:    b.store,
+		Ledger:    b.storage.Sessions,
 		RejectFmt: b.rejectFmt,
 		Nudger:    b.mgr,
 	}
@@ -289,7 +290,7 @@ func (b boardWiring) wireGroundingCoordinators() error {
 }
 
 func (b boardWiring) wireFindingAndProgressTools() error {
-	b.findingsStore = findings.NewSQLStore(b.db)
+	b.findingsStore = findings.NewSQLStore(b.storage.Database)
 	b.mgr.SetFindingsStore(b.findingsStore)
 	b.mgr.SetPeerRejectionFeed(session.NewPeerRejectionFeed())
 	if err := native.RegisterRecordFindingTool(b.toolRuntime.Registry, reporttools.RecordFindingGates{
@@ -300,7 +301,7 @@ func (b boardWiring) wireFindingAndProgressTools() error {
 	if err := native.RegisterSurfaceNoteTool(b.toolRuntime.Registry, reporttools.SurfaceNoteDeps{
 		Ledger: b.mgr.CloseoutEvidence(),
 		Messages: func(ctx context.Context, sessionID string) ([]api.Message, error) {
-			return b.store.GetMessages(ctx, sessionID)
+			return b.storage.Sessions.GetMessages(ctx, sessionID)
 		},
 		Friction: func(ctx context.Context, sessionID, code string) {
 			if b.mgr != nil {
@@ -310,7 +311,7 @@ func (b boardWiring) wireFindingAndProgressTools() error {
 	}); err != nil {
 		return fmt.Errorf("surface_note tool: %w", err)
 	}
-	b.progressStore = progress.NewSQLStore(b.db)
+	b.progressStore = progress.NewSQLStore(b.storage.Database)
 	b.workflowMgr.Progress = b.progressStore
 	b.mgr.SetProgressStore(b.progressStore)
 	if err := native.RegisterUpdateProgressTool(b.toolRuntime.Registry, b.progressStore, b.rootSessionKey); err != nil {
@@ -320,14 +321,14 @@ func (b boardWiring) wireFindingAndProgressTools() error {
 		return fmt.Errorf("complete_leg tool: %w", err)
 	}
 	// Recall reach follows session topology.
-	if err := native.RegisterRecallTool(b.toolRuntime.Registry, recall.NewService(b.db, b.dataDir)); err != nil {
+	if err := native.RegisterRecallTool(b.toolRuntime.Registry, recall.NewService(b.storage.Database, b.storage.Directory)); err != nil {
 		return fmt.Errorf("recall tool: %w", err)
 	}
 	return nil
 }
 
 func (b boardWiring) wireVisualAndRenderTools() error {
-	artifactRecords := visual.NewRecords(b.db, b.eventOutbox, visual.ArtifactProjection{
+	artifactRecords := visual.NewRecords(b.storage.Database, b.eventOutbox, visual.ArtifactProjection{
 		Write: func(ctx context.Context, tx *sql.Tx, projectID string, rec visual.ArtifactRecord) error {
 			return search.ProjectArtifactTx(ctx, tx, projectID, search.ProjectArtifactInput{
 				ID:             rec.ID,
@@ -344,14 +345,14 @@ func (b boardWiring) wireVisualAndRenderTools() error {
 		},
 		Delete: search.DeleteArtifactProjectionTx,
 	})
-	b.store.SetArtifactRecords(artifactRecords)
+	b.storage.Sessions.SetArtifactRecords(artifactRecords)
 	b.visualStore = visual.NewDurableStore(visual.DurableConfig{
-		DataDir: b.dataDir,
+		DataDir: b.storage.Directory,
 		ArtifactsDir: func(projectID string) (string, error) {
-			return project.HostSubdir(b.dataDir, projectID, "artifacts")
+			return project.HostSubdir(b.storage.Directory, projectID, "artifacts")
 		},
 		Lookup: func(ctx context.Context, sessionID string) (string, error) {
-			sess, err := b.store.Get(ctx, sessionID)
+			sess, err := b.storage.Sessions.Get(ctx, sessionID)
 			if err != nil || sess == nil {
 				return "", err
 			}
@@ -373,8 +374,8 @@ func (b boardWiring) wireVisualAndRenderTools() error {
 	b.mgr.SetVisualStore(b.visualStore)
 	// Provider requests resolve image attachments from the root session's artifacts.
 	providerwire.SetVisualBytesResolver(func(sessionID, artifactID string) ([]byte, string, bool) {
-		root := session.RootSessionID(b.ctx, b.store, sessionID)
-		res := b.visualStore.Resolve(b.ctx, root, artifactID)
+		root := session.RootSessionID(b.startup.ctx, b.storage.Sessions, sessionID)
+		res := b.visualStore.Resolve(b.startup.ctx, root, artifactID)
 		if !res.IsPresent() {
 			return nil, "", false
 		}
@@ -427,9 +428,9 @@ func (b boardWiring) wireVisualAndRenderTools() error {
 }
 
 func (b boardWiring) wireDecisionAndCallTools() error {
-	b.decisionStore = session.NewSQLDecisionStore(b.db)
+	b.decisionStore = session.NewSQLDecisionStore(b.storage.Database)
 	b.mgr.SetDecisionStore(b.decisionStore)
-	b.workerBudgetLedger = worker.NewSQLBudgetLedger(b.store, b.workerQueue)
+	b.workerBudgetLedger = worker.NewSQLBudgetLedger(b.storage.Sessions, b.workerQueue)
 	if err := worker.RegisterRequestBudgetTool(b.toolRuntime.Registry, worker.RequestBudgetToolDeps{
 		Queue:      b.workerQueue,
 		Ledger:     b.workerBudgetLedger,
@@ -441,7 +442,7 @@ func (b boardWiring) wireDecisionAndCallTools() error {
 	b.answerDecisionSvc = &worker.AnswerDecisionService{
 		Queue:     b.workerQueue,
 		Decisions: b.decisionStore,
-		Resolver:  worker.NewSQLDecisionResolver(b.store, b.workerQueue),
+		Resolver:  worker.NewSQLDecisionResolver(b.storage.Sessions, b.workerQueue),
 		Reject:    b.rejectFmt,
 	}
 	if err := native.RegisterRequestDecisionTool(b.toolRuntime.Registry, workertools.RequestDecisionDeps{
@@ -452,7 +453,7 @@ func (b boardWiring) wireDecisionAndCallTools() error {
 		return fmt.Errorf("request_decision tool: %w", err)
 	}
 	callLookup := call.StoreSessionLookup{Get: func(ctx context.Context, id string) (string, error) {
-		sess, err := b.store.Get(ctx, id)
+		sess, err := b.storage.Sessions.Get(ctx, id)
 		if err != nil {
 			return "", err
 		}
@@ -461,7 +462,7 @@ func (b boardWiring) wireDecisionAndCallTools() error {
 		}
 		return sess.WorkspacePath, nil
 	}}
-	b.callMgr = call.NewSQLManager(b.db, callLookup)
+	b.callMgr = call.NewSQLManager(b.storage.Database, callLookup)
 	b.mgr.SetCallManager(b.callMgr)
 	b.mgr.SetWorkerTouchLedger(session.NewWorkerTouchLedger())
 	b.boardSnap.Touches = b.mgr
@@ -478,7 +479,7 @@ func (b boardWiring) wireDecisionAndCallTools() error {
 }
 
 func (b boardWiring) rootSessionKey(ctx context.Context, sessionID string) string {
-	return session.RootSessionID(ctx, b.store, sessionID)
+	return session.RootSessionID(ctx, b.storage.Sessions, sessionID)
 }
 
 // wireApprovalRationaleAttacher records rationale after checkpoint creation.
@@ -488,24 +489,24 @@ func (b boardWiring) wireApprovalRationaleAttacher() {
 	}
 	// An unavailable model leaves the rationale unset.
 	var summarizer compaction.Summarizer = compaction.UnavailableSummarizer{}
-	if b.llmSvc != nil && b.llmSvc.Registry != nil && b.llmSvc.Policy != nil && llm.ProviderUtilityCallsEnabled() {
-		summarizer = b.llmSvc.BindSummarizer(&llm.RegistrySummarizer{
+	if b.providers.Service != nil && b.providers.Service.Registry != nil && b.providers.Service.Policy != nil && llm.ProviderUtilityCallsEnabled() {
+		summarizer = b.providers.Service.BindSummarizer(&llm.RegistrySummarizer{
 			Fallback: compaction.UnavailableSummarizer{},
-			Cost:     b.costTracker,
+			Cost:     b.providers.Costs,
 			Purpose:  "approval_rationale",
 			Class:    llm.UtilityClassRequested,
 		})
 	}
 	var enabledFn func() bool
-	if b.settingsSvc != nil && b.settingsSvc.Approvals != nil {
-		perms := b.settingsSvc.Approvals
+	if b.settings.Service != nil && b.settings.Service.Approvals != nil {
+		perms := b.settings.Service.Approvals
 		enabledFn = perms.AIRationaleEnabled
 	}
 	attacher := toolhost.NewApprovalRationaleAttacher(toolhost.ApprovalRationaleDeps{
 		Messages:    b.mgr,
 		Workers:     b.workerQueue,
 		Progress:    b.progressStore,
-		Root:        sessionRootResolver{store: b.store},
+		Root:        sessionRootResolver{store: b.storage.Sessions},
 		Summarizer:  summarizer,
 		Checkpoints: b.checkpointMgr,
 		EnabledFn:   enabledFn,
@@ -523,10 +524,10 @@ func (r sessionRootResolver) RootSessionID(ctx context.Context, sessionID string
 
 // Each project's primary root precedes its additional roots.
 func (b boardWiring) projectRootPaths(ctx context.Context) ([]string, error) {
-	if b.registry == nil {
+	if b.storage.Projects == nil {
 		return nil, nil
 	}
-	projects, err := b.registry.List(ctx)
+	projects, err := b.storage.Projects.List(ctx)
 	if err != nil {
 		return nil, err
 	}

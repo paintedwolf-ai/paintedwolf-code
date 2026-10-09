@@ -1,4 +1,4 @@
-package app
+package persistence
 
 import (
 	"context"
@@ -15,7 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/version"
 )
 
-func (b serverWiring) openUpgradeableStore(path string) (*db.Store, error) {
+func (b *Runtime) openUpgradeableStore(path string) (*db.Store, error) {
 	hooks := db.UpgradeHooks{
 		Before: func(ctx context.Context, source *sql.DB, plan migrations.Plan) error {
 			previous, _, err := db.ReadAppVersion(ctx, source)
@@ -27,7 +27,7 @@ func (b serverWiring) openUpgradeableStore(path string) (*db.Store, error) {
 		},
 		Progress: func(phase migrations.Phase) {
 			b.logger.Info("store upgrade", "phase", phase)
-			if b.cfg.Startup == nil {
+			if b.startup == nil {
 				return
 			}
 			var stage startupprotocol.Phase
@@ -41,7 +41,7 @@ func (b serverWiring) openUpgradeableStore(path string) (*db.Store, error) {
 			default:
 				return
 			}
-			_ = b.cfg.Startup.Phase(stage)
+			_ = b.startup.Phase(stage)
 		},
 	}
 	if _, err := os.Stat(path); err == nil {
@@ -66,7 +66,7 @@ func (b serverWiring) openUpgradeableStore(path string) (*db.Store, error) {
 	return database, nil
 }
 
-func (b serverWiring) prepareUpgradeReadiness(database *db.Store, dataDir string) error {
+func (b *Runtime) prepareUpgradeReadiness(database *db.Store, dataDir string) error {
 	recoveryDir := filepath.Join(dataDir, db.UpgradeRecoveryDirName)
 	pending := filepath.Join(recoveryDir, "pending.json")
 	if _, err := os.Stat(pending); err == nil {
@@ -81,7 +81,7 @@ func (b serverWiring) prepareUpgradeReadiness(database *db.Store, dataDir string
 		return err
 	}
 	if _, err := os.Stat(recoveryDir); err == nil {
-		b.upgradeRecoveryReady = func() error {
+		b.UpgradeReady = func() error {
 			err := backup.CompleteUpgradeRecovery(dataDir, version.Version)
 			var prune *backup.RecoveryPruneError
 			if errors.As(err, &prune) {
@@ -96,7 +96,7 @@ func (b serverWiring) prepareUpgradeReadiness(database *db.Store, dataDir string
 	return nil
 }
 
-func (b serverWiring) captureVersionRecovery(path string, hooks db.UpgradeHooks) error {
+func (b *Runtime) captureVersionRecovery(path string, hooks db.UpgradeHooks) error {
 	source, err := db.OpenReadOnly(b.ctx, path)
 	if err != nil {
 		// OpenWithOptions classifies corrupt and incompatible stores.

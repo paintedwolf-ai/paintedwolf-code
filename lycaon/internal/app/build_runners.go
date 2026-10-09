@@ -47,7 +47,7 @@ func (b delegationWiring) registerBackgroundRunners(app *ServeApp) {
 	}
 	byName := make(map[string]registration, len(serveRunnerOrder))
 	byName["boot-recovery"] = registration{run: b.runServeRecovery, oneShot: true}
-	if b.registry != nil && b.dataDir != "" {
+	if b.storage.Projects != nil && b.storage.Directory != "" {
 		byName["store-coupled-reconcile"] = registration{run: func(ctx context.Context) error {
 			if err := b.reconcileStoreCoupledStorage(ctx); err != nil {
 				return err
@@ -66,19 +66,19 @@ func (b delegationWiring) registerBackgroundRunners(app *ServeApp) {
 			}
 		}}
 	}
-	if b.db != nil {
+	if b.storage.Database != nil {
 		byName["wal-checkpointer"] = registration{run: func(ctx context.Context) error {
-			return db.RunWALCheckpointer(ctx, b.db, b.storePath)
+			return db.RunWALCheckpointer(ctx, b.storage.Database, b.storage.Path)
 		}}
 	}
-	if b.db != nil && b.retentionCfg.Enabled {
+	if b.storage.Database != nil && b.storage.Retention.Enabled {
 		byName["store-maintenance"] = registration{run: func(ctx context.Context) error {
-			return db.RunMaintenance(ctx, b.db, b.retentionCfg)
+			return db.RunMaintenance(ctx, b.storage.Database, b.storage.Retention)
 		}}
 	}
-	if b.db != nil && b.db.IntegrityAuditDue() {
+	if b.storage.Database != nil && b.storage.Database.IntegrityAuditDue() {
 		byName["store-integrity-audit"] = registration{run: func(ctx context.Context) error {
-			return db.RunIntegrityAudit(ctx, b.db)
+			return db.RunIntegrityAudit(ctx, b.storage.Database)
 		}}
 	}
 	if b.secretCaps != nil {
@@ -102,25 +102,25 @@ func (b delegationWiring) registerBackgroundRunners(app *ServeApp) {
 	if _, ok := b.deciderWarmer(); ok {
 		byName["decision-engine-warm"] = registration{run: b.warmDecider, oneShot: true}
 	}
-	if b.sourceLedger != nil {
+	if b.storage.SourceLedger != nil {
 		byName["source-blob-gc"] = registration{run: func(ctx context.Context) error {
-			return b.sourceLedger.RunBlobGC(ctx, sourceledger.BlobGCInterval, sourceledger.BlobGCRetry)
+			return b.storage.SourceLedger.RunBlobGC(ctx, sourceledger.BlobGCInterval, sourceledger.BlobGCRetry)
 		}}
 	}
-	if b.db != nil && b.dataDir != "" {
+	if b.storage.Database != nil && b.storage.Directory != "" {
 		byName["content-blob-gc"] = registration{run: func(ctx context.Context) error {
-			return contentblob.RunGC(ctx, contentblob.GCDeps{Database: b.db, Queries: db.New(b.db), DataDir: b.dataDir, Guard: b.storeClaim})
+			return contentblob.RunGC(ctx, contentblob.GCDeps{Database: b.storage.Database, Queries: db.New(b.storage.Database), DataDir: b.storage.Directory, Guard: b.storage.Claim})
 		}}
 		byName["history-retention"] = registration{run: b.historyStorage.Run}
 		byName["prompt-attachment-maintenance"] = registration{run: b.srv.Admin.Prompt.Attachments.RunPromptAttachmentMaintenance}
 		byName["content-density"] = registration{run: func(ctx context.Context) error {
-			deps := contentblob.DensityDeps{Queries: db.New(b.db), DataDir: b.dataDir}
+			deps := contentblob.DensityDeps{Queries: db.New(b.storage.Database), DataDir: b.storage.Directory}
 			return contentblob.RunDensity(ctx, deps, contentblob.DefaultDensityConfig())
 		}}
 	}
-	if b.dataDir != "" {
+	if b.storage.Directory != "" {
 		byName["debug-retention"] = registration{run: func(ctx context.Context) error {
-			return debugretention.Run(ctx, b.dataDir, debugretention.DefaultConfig())
+			return debugretention.Run(ctx, b.storage.Directory, debugretention.DefaultConfig())
 		}}
 	}
 	if b.workerQueue != nil && b.workerBranchRoot != "" {
@@ -145,12 +145,12 @@ func (b delegationWiring) registerBackgroundRunners(app *ServeApp) {
 // names. It refuses once the store path is replaced: the registry then describes
 // another store and every tree would look orphaned.
 func (b delegationWiring) reconcileStoreCoupledStorage(ctx context.Context) error {
-	if b.storeClaim != nil {
-		if err := b.storeClaim.Verify(); err != nil {
+	if b.storage.Claim != nil {
+		if err := b.storage.Claim.Verify(); err != nil {
 			return err
 		}
 	}
-	projects, err := b.registry.List(ctx)
+	projects, err := b.storage.Projects.List(ctx)
 	if err != nil {
 		return err
 	}
@@ -162,11 +162,11 @@ func (b delegationWiring) reconcileStoreCoupledStorage(ctx context.Context) erro
 			roots = append(roots, root.Path)
 		}
 	}
-	removedHost, hostErr := project.ReconcileHostStorage(b.dataDir, ids)
-	removedCheckpoints, checkpointErr := sessioncheckpoint.ReconcileRoots(b.dataDir, roots)
+	removedHost, hostErr := project.ReconcileHostStorage(b.storage.Directory, ids)
+	removedCheckpoints, checkpointErr := sessioncheckpoint.ReconcileRoots(b.storage.Directory, roots)
 	removedCatalogs, catalogErr := sourcecatalog.Process().Trees.ReconcileTreeStores(ctx, sourcecatalog.TreeStoreRetention)
 	removedSandboxes, sandboxErr := b.reconcileWorkerSandboxes(ctx, roots)
-	removedSpills, spillErr := scan.ReconcileSpills(ctx, b.dataDir, b.scanStore)
+	removedSpills, spillErr := scan.ReconcileSpills(ctx, b.storage.Directory, b.scanStore)
 	if removedHost+removedCheckpoints+removedCatalogs+removedSandboxes+removedSpills > 0 {
 		slog.InfoContext(ctx, "reconciled orphan store-coupled storage",
 			"host_trees", removedHost, "checkpoint_roots", removedCheckpoints,
@@ -214,25 +214,25 @@ func (b delegationWiring) reconcileWorkerSandboxes(ctx context.Context, roots []
 }
 
 func (b delegationWiring) registerRecovery(e bootrecovery.Entry) error {
-	if b.recovery == nil {
-		b.recovery = bootrecovery.New()
+	if b.startup.recovery == nil {
+		b.startup.recovery = bootrecovery.New()
 	}
-	return b.recovery.Register(e)
+	return b.startup.recovery.Register(e)
 }
 
 func (b delegationWiring) runBuildRecovery() error {
-	return b.reportRecovery(b.recovery.Run(b.ctx, bootrecovery.PhaseBuild))
+	return b.reportRecovery(b.startup.recovery.Run(b.startup.ctx, bootrecovery.PhaseBuild))
 }
 
 func (b delegationWiring) runServeRecovery(ctx context.Context) error {
-	return b.reportRecovery(b.recovery.Run(ctx, bootrecovery.PhaseServe))
+	return b.reportRecovery(b.startup.recovery.Run(ctx, bootrecovery.PhaseServe))
 }
 
 func (b delegationWiring) reportRecovery(report bootrecovery.Report, err error) error {
 	if err != nil {
 		return err
 	}
-	log := b.logger
+	log := b.startup.logger
 	if log == nil {
 		log = slog.Default()
 	}

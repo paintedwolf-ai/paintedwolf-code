@@ -2,6 +2,7 @@ package wiring
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/app/configuration"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -76,7 +77,7 @@ func BuildForTest(t *testing.T, opts ...Option) *Harness {
 		opt(&o)
 	}
 
-	cfg := app.DefaultConfig()
+	cfg := configuration.Config{}
 	cfg.ConfigRoot = configlayout.FindModuleRoot()
 	// Install packs before the builder resolves the catalog.
 	installHarnessPacks(t, o.installedPackDirs)

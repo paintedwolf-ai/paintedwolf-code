@@ -32,22 +32,6 @@ func resolveServeAPIToken() (token string, generated bool, err error) {
 	return token, true, nil
 }
 
-func loadSettingsService(configRoot string) (*settings.Service, string, error) {
-	if configRoot != "" {
-		svc, err := settings.NewService()
-		if err != nil {
-			return nil, "", fmt.Errorf("settings service: %w", err)
-		}
-		return svc, configRoot, nil
-	}
-	root := configlayout.FindModuleRoot()
-	svc, err := settings.NewService()
-	if err != nil {
-		return nil, root, fmt.Errorf("settings service: %w", err)
-	}
-	return svc, root, nil
-}
-
 func loadToolRuntime(settingsSvc *settings.Service, configRoot string, catalog *extpacks.EffectiveCatalog, activation tools.SchemaActivation, resolve tools.RequestResolver, record tools.RequestObserver, lookup tools.SkillLookup, rerank decide.Reranker) (*toolhost.Runtime, error) {
 	cfg := toolhost.RuntimeConfig{ConfigRoot: configRoot, Catalog: catalog, Activation: activation, RequestResolver: resolve, RequestObserver: record, SkillLookup: lookup, Rerank: rerank}
 	if settingsSvc != nil {

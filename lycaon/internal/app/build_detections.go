@@ -59,7 +59,7 @@ func (r *detectionRuntime) egressSource() *detectionpack.EgressSource {
 
 // Detection load failures leave approval facts incomplete.
 func (b toolWiring) wireDetectionPacks() {
-	semantics, semanticsErr := detectionpack.LoadActionSemantics(b.dataDir)
+	semantics, semanticsErr := detectionpack.LoadActionSemantics(b.storage.Directory)
 	if semanticsErr != nil {
 		slog.Warn("detection action semantics unavailable", "error", semanticsErr)
 	}
@@ -72,7 +72,7 @@ func (b toolWiring) wireDetectionPacks() {
 	b.toolRuntime.Authority.SetDetectionSource(b.detections.gateSource)
 	b.toolRuntime.Authority.SetEgressDetectionSource(egressDetectionAdapter{source: b.detections.egressSource})
 	cat, err := detectionpack.LoadCatalog(detectionpack.Input{
-		ConfigDir:   b.dataDir,
+		ConfigDir:   b.storage.Directory,
 		Contributed: b.contributedDetectionPacks(),
 	})
 	if err != nil {
@@ -83,10 +83,10 @@ func (b toolWiring) wireDetectionPacks() {
 }
 
 func (b toolWiring) contributedDetectionPacks() []detectionpack.Pack {
-	if b.serveBuilder == nil || b.deviceView == nil {
+	if b.serveBuilder == nil || b.catalog.DeviceView == nil {
 		return nil
 	}
-	return b.deviceView.DetectionPacks()
+	return b.catalog.DeviceView.DetectionPacks()
 }
 
 // egressDetectionAdapter avoids a package cycle.

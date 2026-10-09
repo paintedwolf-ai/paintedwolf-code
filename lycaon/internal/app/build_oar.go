@@ -22,13 +22,13 @@ func (b toolWiring) wireOARBlockPlane() error {
 	if b.toolRuntime == nil || b.mgr == nil {
 		return fmt.Errorf("oar: tool runtime and session manager required")
 	}
-	if b.deviceView == nil || b.deviceView.Rules == nil {
+	if b.catalog.DeviceView == nil || b.catalog.DeviceView.Rules == nil {
 		return fmt.Errorf("oar: device catalog view required")
 	}
-	schemaDir := configlayout.SchemasDir(b.configRoot)
+	schemaDir := configlayout.SchemasDir(b.catalog.ModuleRoot)
 	if schemaDir == "" {
 		return fmt.Errorf("oar: no %s/ tree beside config root %s — desktop bundles must stage it (scripts/den-build-bundle.sh)",
-			configlayout.SchemasDirName, b.configRoot)
+			configlayout.SchemasDirName, b.catalog.ModuleRoot)
 	}
 	if err := anchorcatalog.InstallBundled(); err != nil {
 		return fmt.Errorf("oar: load anchor catalog: %w", err)
@@ -50,7 +50,7 @@ func (b toolWiring) wireOARBlockPlane() error {
 		return fmt.Errorf("oar loader: %w", err)
 	}
 	loader.SetDetectors(detectors)
-	rs := b.deviceView.Rules
+	rs := b.catalog.DeviceView.Rules
 	if err := oar.ValidateHostRuleSet(rs); err != nil {
 		return err
 	}

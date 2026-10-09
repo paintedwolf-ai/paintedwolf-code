@@ -16,8 +16,8 @@ func (b sessionWiring) wireExceptionalCapability() error {
 	socketCapabilityRT := approvalstate.NewSocketCapabilityRuntime()
 	b.socketCapabilityRT = socketCapabilityRT
 	b.toolRuntime.Executor.Capabilities.SetSocketCapabilityRuntime(socketCapabilityAdapter{rt: socketCapabilityRT})
-	if b.settingsSvc != nil && b.settingsSvc.Approvals != nil {
-		b.toolRuntime.Executor.Capabilities.SetDurableSocketSource(b.settingsSvc.Approvals.SocketPathsForProject)
+	if b.settings.Service != nil && b.settings.Service.Approvals != nil {
+		b.toolRuntime.Executor.Capabilities.SetDurableSocketSource(b.settings.Service.Approvals.SocketPathsForProject)
 	}
 	b.toolRuntime.Executor.Capabilities.SetApprovalsDisabled(b.toolRuntime.Authority.ApprovalsDisabled)
 	if err := b.mgr.RegisterSessionCleanup("socket-capabilities", 51, func(_ context.Context, sessionID string) error {

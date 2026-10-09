@@ -20,8 +20,8 @@ func (b sessionWiring) loadSecretMatcher() (*secretmatch.Matcher, error) {
 	if b.secretMatcher != nil {
 		return b.secretMatcher, nil
 	}
-	if b.cfg.TestSecretMatcher != nil {
-		b.secretMatcher = b.cfg.TestSecretMatcher
+	if b.startup.cfg.TestSecretMatcher != nil {
+		b.secretMatcher = b.startup.cfg.TestSecretMatcher
 		fingerprinter, err := secretmatch.NewFingerprinter(bytes.Repeat([]byte{0x5a}, 32))
 		if err != nil {
 			return nil, fmt.Errorf("test secret fingerprint key: %w", err)
@@ -50,10 +50,10 @@ func (b sessionWiring) wireSecretEvidence(m *secretmatch.Matcher, fp *secretmatc
 	b.secretHarvest = secretharvest.NewRuntime(fp)
 	harvest := b.secretHarvest
 	harvest.SetProjectResolver(func(rootSessionID string) string {
-		if b.store == nil {
+		if b.storage.Sessions == nil {
 			return ""
 		}
-		sess, err := b.store.Get(context.Background(), rootSessionID)
+		sess, err := b.storage.Sessions.Get(context.Background(), rootSessionID)
 		if err != nil || sess == nil {
 			return ""
 		}
@@ -101,17 +101,17 @@ func (b sessionWiring) wireSecretEvidence(m *secretmatch.Matcher, fp *secretmatc
 	})
 	b.secretIgnores = &projectignore.SecretService{
 		Trusted: func(ctx context.Context, projectID string) bool {
-			if b.registry == nil || b.settingsSvc == nil || b.settingsSvc.TrustSurfaces == nil {
+			if b.storage.Projects == nil || b.settings.Service == nil || b.settings.Service.TrustSurfaces == nil {
 				return false
 			}
-			p, err := b.registry.Get(ctx, projectID)
-			return err == nil && b.settingsSvc.TrustSurfaces.Applies(protectedpath.SurfaceScanConfig, *p)
+			p, err := b.storage.Projects.Get(ctx, projectID)
+			return err == nil && b.settings.Service.TrustSurfaces.Applies(protectedpath.SurfaceScanConfig, *p)
 		},
 		Roots: func(ctx context.Context, projectID string) ([]projectignore.Root, error) {
-			if b.registry == nil {
+			if b.storage.Projects == nil {
 				return nil, projectignore.ErrUnavailable
 			}
-			p, err := b.registry.Get(ctx, projectID)
+			p, err := b.storage.Projects.Get(ctx, projectID)
 			if err != nil {
 				return nil, err
 			}

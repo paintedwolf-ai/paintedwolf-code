@@ -1,24 +1,14 @@
-package app
+package configuration
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/lycaon/lycaon/internal/hostresources"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/settings"
 )
 
-func (b *serveBuilder) wireHostResources() error {
-	service, err := hostresources.NewService(b.dataDir)
-	if err != nil {
-		return fmt.Errorf("host resources service: %w", err)
-	}
-	b.hostResources = service
-	return nil
-}
-
-func newHostResourcePolicyBinder(
+func HostResourcePolicyBinder(
 	store *settings.ApprovalStore,
 	source settings.ApprovalRuleCatalogSource,
 ) hostresources.PolicyBinder {

@@ -55,10 +55,10 @@ func (b serverWiring) checkDecisionEngineForPreflight(context.Context) preflight
 }
 
 func (b serverWiring) liteSlotUnavailableForPreflight() (bool, map[string]string) {
-	if b.llmSvc == nil || b.llmSvc.Utility == nil {
+	if b.providers.Service == nil || b.providers.Service.Utility == nil {
 		return false, nil
 	}
-	snap := b.llmSvc.Utility.Snapshot()
+	snap := b.providers.Service.Utility.Snapshot()
 	if snap.State != llm.SlotUnavailable {
 		return false, nil
 	}
@@ -84,17 +84,17 @@ var preflightBrowserProbe = struct {
 
 // providerCountForPreflight reads configured providers without discovery.
 func (b serverWiring) providerCountForPreflight() int {
-	if b.llmSvc == nil || b.llmSvc.Registry == nil {
+	if b.providers.Service == nil || b.providers.Service.Registry == nil {
 		return 0
 	}
-	return b.llmSvc.Registry.ConfiguredCount()
+	return b.providers.Service.Registry.ConfiguredCount()
 }
 
 func (b serverWiring) missingRoleProvidersForPreflight() map[string]string {
-	if b.llmSvc == nil || b.llmSvc.Registry == nil || b.llmSvc.Policy == nil {
+	if b.providers.Service == nil || b.providers.Service.Registry == nil || b.providers.Service.Policy == nil {
 		return nil
 	}
-	policy, err := b.llmSvc.Policy.Get(llm.SettingsScopeGlobal, "")
+	policy, err := b.providers.Service.Policy.Get(llm.SettingsScopeGlobal, "")
 	if err != nil {
 		return nil
 	}
@@ -107,7 +107,7 @@ func (b serverWiring) missingRoleProvidersForPreflight() map[string]string {
 		if id == "" {
 			continue
 		}
-		if _, err := b.llmSvc.Registry.Get(id); err != nil {
+		if _, err := b.providers.Service.Registry.Get(id); err != nil {
 			missing[role] = id
 		}
 	}
@@ -116,7 +116,7 @@ func (b serverWiring) missingRoleProvidersForPreflight() map[string]string {
 		if id == "" {
 			continue
 		}
-		if _, err := b.llmSvc.Registry.Get(id); err != nil {
+		if _, err := b.providers.Service.Registry.Get(id); err != nil {
 			missing["agent_pool."+strconv.Itoa(i)] = id
 		}
 	}

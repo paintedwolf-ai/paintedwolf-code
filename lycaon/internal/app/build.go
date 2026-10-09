@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
+	"github.com/lycaon/lycaon/internal/app/configuration"
+	"github.com/lycaon/lycaon/internal/app/persistence"
+	"github.com/lycaon/lycaon/internal/app/providers"
 
 	"github.com/lycaon/lycaon/internal/agentpresence"
 	"github.com/lycaon/lycaon/internal/api"
@@ -17,17 +19,14 @@ import (
 	"github.com/lycaon/lycaon/internal/browser/pagesession"
 	"github.com/lycaon/lycaon/internal/browser/preview"
 	"github.com/lycaon/lycaon/internal/call"
-	"github.com/lycaon/lycaon/internal/catalogview"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/coordinator"
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
-	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/eventoutbox"
 	"github.com/lycaon/lycaon/internal/events"
-	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/findings"
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/grantedpath"
@@ -37,19 +36,13 @@ import (
 	"github.com/lycaon/lycaon/internal/historyretention"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/hostidentity"
-	"github.com/lycaon/lycaon/internal/hostlock"
-	"github.com/lycaon/lycaon/internal/hostpower"
-	"github.com/lycaon/lycaon/internal/hostresources"
 	"github.com/lycaon/lycaon/internal/inspector"
 	"github.com/lycaon/lycaon/internal/invocation"
-	"github.com/lycaon/lycaon/internal/llm"
-	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/presence"
 	"github.com/lycaon/lycaon/internal/progress"
-	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectignore"
 	"github.com/lycaon/lycaon/internal/projectliveness"
 	"github.com/lycaon/lycaon/internal/prompts"
@@ -66,9 +59,6 @@ import (
 	"github.com/lycaon/lycaon/internal/secretspan"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
-	"github.com/lycaon/lycaon/internal/session/store"
-	"github.com/lycaon/lycaon/internal/settings"
-	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/sourcescope"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/startupprotocol"
@@ -77,7 +67,6 @@ import (
 	"github.com/lycaon/lycaon/internal/usernotice"
 	"github.com/lycaon/lycaon/internal/userpath"
 	"github.com/lycaon/lycaon/internal/visual"
-	"github.com/lycaon/lycaon/internal/webindex"
 	"github.com/lycaon/lycaon/internal/webresearch"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workflow"
@@ -86,20 +75,12 @@ import (
 )
 
 type serveBuilder struct {
-	ctx       context.Context
-	cfg       Config
-	logger    *slog.Logger
-	resources *runtimeResources
-	recovery  *bootrecovery.Registry
+	providers providers.Runtime
+	catalog   configuration.Catalog
+	settings  configuration.Runtime
+	startup   startupBootstrap
+	storage   persistence.Runtime
 
-	addr                string
-	configRoot          string
-	effective           *extpacks.EffectiveCatalog
-	viewCache           *catalogview.Cache
-	deviceView          *catalogview.View
-	sessionCfg          settings.SessionLimits
-	storeRevision       uint64
-	retentionCfg        db.RetentionConfig
 	apiToken            string
 	tokenGenerated      bool
 	hostIdentity        hostidentity.Identity
@@ -108,18 +89,11 @@ type serveBuilder struct {
 	bundledRules        map[string]*rules.RulesConfig
 	workerToolBudgetFor func(string) spawn.WorkerToolBudget
 
-	db        *db.Store
-	storePath string
-	dataDir   string
 	// egressBrokerBound records that this build owns the mediation front door.
 	egressBrokerBound bool
 	// refusalWatchStarted records that this build reads kernel refusal reports.
 	refusalWatchStarted bool
 	// storeClaim's release transfers to runtimeResources after construction.
-	storeClaim        *hostlock.Claim
-	store             *store.SQL
-	registry          *project.SQLRegistry
-	sourceLedger      *sourceledger.Store
 	sourceScopes      *sourcescope.Provider
 	sourceFeedUnbinds []func()
 	hub               events.ReplayHub
@@ -134,22 +108,11 @@ type serveBuilder struct {
 	pageRegistry      *pagesession.Registry
 	previewCtrl       *preview.Controller
 
-	mockLLM              modelcall.LLMClient
-	manualLLM            *llm.ManualProvider
-	llmSvc               *llm.Service
-	synthesisCurator     llm.Curator
-	webIndex             *webindex.Store
-	upgradeRecoveryReady func() error
-	webWarmer            *webresearch.Warmer
-	warmRunner           *webresearch.WarmRunner
-	costTracker          cost.CostTracker
-	invocations          invocation.Recorder
-	pricingHost          *settings.PricingHost
-	settingsSvc          *settings.Service
-	hostResources        *hostresources.Service
-	hostPower            *hostpower.Controller
-	userPath             userpath.Snapshot
-	toolRuntime          *toolhost.Runtime
+	webWarmer   *webresearch.Warmer
+	warmRunner  *webresearch.WarmRunner
+	invocations invocation.Recorder
+	userPath    userpath.Snapshot
+	toolRuntime *toolhost.Runtime
 	// turnLoads is the loaded-schema ledger shared by request_tools and the coordinator turn.
 	turnLoads *turnload.Ledger
 	// decider is the local decision model; nil resolves to an absent engine.
@@ -250,25 +213,35 @@ type serveBuilder struct {
 }
 
 // Build wires all serve subsystems and validates boot configuration.
-func Build(ctx context.Context, cfg Config) (*ServeApp, error) {
+func Build(ctx context.Context, cfg configuration.Config) (*ServeApp, error) {
 	buildPerf := observability.StartPerformanceOperation("app.build", nil)
 	buildOutcome := "error"
 	defer func() { buildPerf.End(buildOutcome) }()
-	b := &serveBuilder{ctx: ctx, cfg: cfg, resources: newRuntimeResources(), recovery: bootrecovery.New()}
+	resources := newRuntimeResources()
+	b := &serveBuilder{startup: startupBootstrap{ctx: ctx, cfg: cfg, resources: resources, recovery: bootrecovery.New()},
+		storage: persistence.Runtime{}}
 	for _, step := range []struct {
 		name  string
 		phase startupprotocol.Phase
 		fn    func() error
 	}{
-		{"observability", startupprotocol.PhaseObservability, b.initObservability},
-		{"store", startupprotocol.PhaseStore, b.openStore},
+		{"observability", startupprotocol.PhaseObservability, b.startup.initObservability},
+		{"store", startupprotocol.PhaseStore, func() error {
+			path, err := cfg.ResolveDBPath()
+			if err != nil {
+				return err
+			}
+			return b.storage.Open(ctx, path, cfg.Startup, b.startup.logger, resources)
+		}},
 		{"config", startupprotocol.PhaseConfiguration, b.loadConfig},
 		{"egress-broker", startupprotocol.PhaseConfiguration, b.wireEgressBroker},
 		{"refusal-watch", startupprotocol.PhaseConfiguration, b.wireRefusalWatch},
 		{"user-path", startupprotocol.PhaseUserPath, b.wireUserPath},
 		{"credential-floors", startupprotocol.PhaseCredentials, sessionWiring{b}.wireCredentialFloors},
-		{"host_resources", startupprotocol.PhaseHostResources, b.wireHostResources},
-		{"llm", startupprotocol.PhaseProviders, b.wireLLM},
+		{"host_resources", startupprotocol.PhaseHostResources, func() error { return b.settings.BuildHostResources(b.storage.Directory) }},
+		{"llm", startupprotocol.PhaseProviders, func() error {
+			return b.providers.Build(ctx, providers.Options{Client: cfg.TestLLMClient, Pricer: cfg.TestCostPricer, Startup: cfg.Startup}, b.storage.Database, b.storage.Directory, b.settings.Service, resources, b.startup.recovery)
+		}},
 		{"tool-runtime", startupprotocol.PhaseTools, b.wireToolRuntime},
 		{"presence", startupprotocol.PhaseTools, b.wirePresence},
 		{"agents", startupprotocol.PhaseAgents, b.wireAgents},
@@ -295,44 +268,39 @@ func Build(ctx context.Context, cfg Config) (*ServeApp, error) {
 	} {
 		if err := ctx.Err(); err != nil {
 			// Shutdown arrived mid-startup; stop before starting more children.
-			b.closeFailedBuild(context.WithoutCancel(ctx))
+			b.startup.closeFailedBuild(context.WithoutCancel(ctx))
 			return nil, fmt.Errorf("startup interrupted before %s: %w", step.name, err)
 		}
 		if cfg.Startup != nil {
 			if err := cfg.Startup.Phase(step.phase); err != nil {
-				b.closeFailedBuild(ctx)
+				b.startup.closeFailedBuild(ctx)
 				return nil, fmt.Errorf("startup protocol: %w", err)
 			}
 		}
 		err := step.fn()
 		buildPerf.Mark(step.name)
-		b.resources.capture(b)
+		b.startup.resources.capture(b)
 		if err != nil {
 			if step.name == "store" && errors.Is(err, db.ErrStoreIncompatible) {
 				// Recovery mode keeps restore available for the intact store.
 				if cfg.Startup != nil {
 					if protocolErr := cfg.Startup.Phase(startupprotocol.PhaseRecovery); protocolErr != nil {
-						b.closeFailedBuild(ctx)
+						b.startup.closeFailedBuild(ctx)
 						return nil, fmt.Errorf("startup protocol: %w", protocolErr)
 					}
 				}
 				app, recoveryErr := buildRecoveryApp(ctx, cfg, b, err)
 				if recoveryErr != nil {
-					b.closeFailedBuild(ctx)
+					b.startup.closeFailedBuild(ctx)
 				} else {
 					buildOutcome = "recovery"
 				}
 				return app, recoveryErr
 			}
-			b.closeFailedBuild(ctx)
+			b.startup.closeFailedBuild(ctx)
 			return nil, fmt.Errorf("%s: %w", step.name, err)
 		}
 	}
 	buildOutcome = "ok"
 	return serverWiring{b}.serveApp(), nil
-}
-
-func (b *serveBuilder) closeFailedBuild(ctx context.Context) {
-	b.resources.capture(b)
-	_ = b.resources.Close(ctx)
 }

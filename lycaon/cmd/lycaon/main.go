@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/app/configuration"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -129,7 +130,7 @@ func runServe(signals context.Context, dbPath string) error {
 	ctx, cancel := context.WithCancel(signals)
 	defer cancel()
 	startReaper() //nolint:contextcheck // the reaper outlives the serve context
-	cfg := app.DefaultConfig()
+	cfg := configuration.Config{}
 	startup, err := startupprotocol.FromEnvironment(os.Stdout, os.Stderr)
 	if err != nil {
 		return err

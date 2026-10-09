@@ -13,12 +13,12 @@ func (b *serveBuilder) wireEgressBroker() error {
 	if !confine.Available() {
 		return nil
 	}
-	addrs, err := confine.StartEgressBroker(b.dataDir)
+	addrs, err := confine.StartEgressBroker(b.storage.Directory)
 	if err != nil {
 		return fmt.Errorf("egress broker: %w", err)
 	}
 	b.egressBrokerBound = true
-	b.logger.Info("egress broker", "http", addrs.HTTP, "socks", addrs.SOCKS)
+	b.startup.logger.Info("egress broker", "http", addrs.HTTP, "socks", addrs.SOCKS)
 	return nil
 }
 
@@ -28,7 +28,7 @@ func (b *serveBuilder) wireRefusalWatch() error {
 	if !confine.Available() {
 		return nil
 	}
-	confine.StartRefusalWatch(b.dataDir)
+	confine.StartRefusalWatch(b.storage.Directory)
 	b.refusalWatchStarted = true
 	return nil
 }

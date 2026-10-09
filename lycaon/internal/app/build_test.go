@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/app/configuration"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -22,13 +23,13 @@ import (
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-func testBuildConfig(t *testing.T, configRoot string) Config {
+func testBuildConfig(t *testing.T, configRoot string) configuration.Config {
 	t.Helper()
 	t.Setenv(configdir.EnvConfigDir, t.TempDir())
 	configtest.Overlay(t, map[config.Rel]string{
 		config.DistroMCP: "providers:\n  - id: svca\n    command: \"true\"\n    args: []\n    enabled: false\n",
 	})
-	return Config{
+	return configuration.Config{
 		DBPath:                    filepath.Join(t.TempDir(), "app-test.db"),
 		ListenAddr:                "127.0.0.1:0",
 		ConfigRoot:                configRoot,

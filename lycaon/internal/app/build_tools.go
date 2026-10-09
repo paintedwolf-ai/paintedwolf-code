@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/projectcontrib"
 
 	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/blueprint"
@@ -43,10 +44,10 @@ func (b toolWiring) wireCoordinatorRuntime() error {
 		}
 		waitConditions[profile.ID] = allowed
 	}
-	waitStore := &awaitstore.Store{DB: b.db}
+	waitStore := &awaitstore.Store{DB: b.storage.Database}
 	if err := loopwake.RegisterWaitTool(b.toolRuntime.Registry, b.coordRuntime.CoordinatorLoop(), loopwake.WaitToolDeps{
 		Store: waitStore, ProfileConditions: waitConditions,
-		SecretMatcher: b.secretMatcher, RuntimeContext: b.ctx,
+		SecretMatcher: b.secretMatcher, RuntimeContext: b.startup.ctx,
 	}); err != nil {
 		return fmt.Errorf("wait tool: %w", err)
 	}
@@ -81,7 +82,7 @@ func (b toolWiring) registerCoordinatorTools() error {
 	}
 	if err := workflow.RegisterStateTools(b.toolRuntime.Registry, workflow.StateToolDeps{
 		Runs:     b.workflowMgr,
-		Sessions: b.store,
+		Sessions: b.storage.Sessions,
 	}); err != nil {
 		return fmt.Errorf("state tools: %w", err)
 	}
@@ -119,14 +120,14 @@ func (b toolWiring) registerCoordinatorTools() error {
 		Reconcile:    b.mgr,
 		Coord:        b.mgr,
 		Closeout:     b.delegationMgr,
-		Projects:     b.registry,
+		Projects:     b.storage.Projects,
 		Scans:        b.scanTriggers,
-		SourceLedger: b.sourceLedger,
-		DataDir:      b.dataDir,
+		SourceLedger: b.storage.SourceLedger,
+		DataDir:      b.storage.Directory,
 		Reports: worker.ChangeReportDeps{
 			SourceRuns: b.mgr.WorkerSourceRuns,
 			Messages: func(ctx context.Context, childSessionID string) ([]wire.Message, error) {
-				return b.store.GetMessages(ctx, childSessionID)
+				return b.storage.Sessions.GetMessages(ctx, childSessionID)
 			},
 		},
 	}
@@ -197,7 +198,7 @@ func (b toolWiring) taskToolDeps() worker.TaskToolDeps {
 			return dec.WorkerID, true, nil
 		},
 		ComposePrompt: func(ctx context.Context, tctx tools.ToolContext, agentType string, brief wire.WorkerTaskCharter, workerJobID string, scope *wire.TaskScope, maxToolLoops int) (string, error) {
-			msgs, err := b.store.GetMessages(ctx, tctx.Identity.SessionID)
+			msgs, err := b.storage.Sessions.GetMessages(ctx, tctx.Identity.SessionID)
 			if err != nil {
 				return brief.Goal, err
 			}
@@ -273,18 +274,18 @@ func (b toolWiring) wireMCP() error {
 	mcpOpts := mcp.RuntimeOptions{
 		OnSettingsChange: func() {
 			if b.hub != nil {
-				_ = b.hub.Publish(b.ctx, wire.EventTopicSettings, events.PublishKey{Facet: string(wire.SettingsAreaMcp)}, wire.SettingsEvent{
+				_ = b.hub.Publish(b.startup.ctx, wire.EventTopicSettings, events.PublishKey{Facet: string(wire.SettingsAreaMcp)}, wire.SettingsEvent{
 					Area:   wire.SettingsAreaMcp,
 					Action: "updated",
 				})
 			}
 		},
 	}
-	if b.cfg.TestMCPConnector != nil {
-		mcpOpts.Connector = b.cfg.TestMCPConnector
+	if b.startup.cfg.TestMCPConnector != nil {
+		mcpOpts.Connector = b.startup.cfg.TestMCPConnector
 	}
-	if b.cfg.TestMCPGlobalOverridePath != "" {
-		mcpOpts.GlobalOverridePath = b.cfg.TestMCPGlobalOverridePath
+	if b.startup.cfg.TestMCPGlobalOverridePath != "" {
+		mcpOpts.GlobalOverridePath = b.startup.cfg.TestMCPGlobalOverridePath
 	}
 	var err error
 	b.mcpReg, err = mcp.NewRuntime(mcpOpts)
@@ -296,13 +297,13 @@ func (b toolWiring) wireMCP() error {
 	if b.toolRuntime != nil {
 		b.toolRuntime.Authority.SetMCPToolPinSource(b.mcpReg.Tools)
 	}
-	b.mcpReg.Catalog.SetProjectOverlayGate(b.projectMCPGate().AppliesPath)
+	b.mcpReg.Catalog.SetProjectOverlayGate(b.settings.ProjectSurfaceGate(projectcontrib.SurfaceProjectMCP, b.storage.Projects).AppliesPath)
 	if err := serverWiring(b).wireDestinationConfig(); err != nil {
 		return err
 	}
 	// Device inspection may inspect every registered project root.
 	b.mcpReg.Connections.SetDeviceProbeRoots(func() []string {
-		paths, err := boardWiring(b).projectRootPaths(b.ctx)
+		paths, err := boardWiring(b).projectRootPaths(b.startup.ctx)
 		if err != nil {
 			return nil
 		}
@@ -339,7 +340,7 @@ func (b toolWiring) wireMCP() error {
 		// Editor spans preview outbound screening.
 		b.secretSpans = secretspan.New(matcher)
 		sessionWiring(b).wireMessageSecretRedaction(matcher)
-		if b.llmSvc != nil && b.llmSvc.Registry != nil {
+		if b.providers.Service != nil && b.providers.Service.Registry != nil {
 			screen := llm.NewModelSecretScreen(matcher, sessionWiring(b).secretAskFunc())
 			if b.secretCaps != nil {
 				screen.SetManagedSecretEvidence(b.secretCaps.ScreeningValues)
@@ -352,10 +353,10 @@ func (b toolWiring) wireMCP() error {
 					return put.Metadata.Reference, putErr
 				})
 			}
-			b.llmSvc.Registry.SetOutboundSecretScreen(screen)
+			b.providers.Service.Registry.SetOutboundSecretScreen(screen)
 		}
 	}
-	if err := b.mcpReg.Catalog.Load(b.ctx); err != nil {
+	if err := b.mcpReg.Catalog.Load(b.startup.ctx); err != nil {
 		return fmt.Errorf("mcp registry: %w", err)
 	}
 	if b.toolRuntime != nil && b.toolRuntime.Executor != nil {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/app/configuration"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"net/http"
 	"net/http/httptest"
@@ -28,7 +29,7 @@ func prepareRecoveryStore(t *testing.T, dbPath string) {
 }
 
 // recoveryTestConfig uses store.db — staged restores replace that relative path.
-func recoveryTestConfig(t *testing.T) Config {
+func recoveryTestConfig(t *testing.T) configuration.Config {
 	t.Helper()
 	cfg := testBuildConfig(t, configlayout.FindModuleRoot())
 	cfg.DBPath = filepath.Join(t.TempDir(), "store.db")

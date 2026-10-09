@@ -1,4 +1,4 @@
-package app
+package configuration
 
 import (
 	"fmt"
@@ -48,12 +48,7 @@ type Config struct {
 	TestOrchestrator func(orchestration.OrchestratorDeps) orchestration.Orchestrator
 }
 
-// DefaultConfig returns zero values; Build resolves listen addr and DB path when unset.
-func DefaultConfig() Config {
-	return Config{}
-}
-
-func (c Config) resolvedListenAddr() (string, error) {
+func (c Config) ResolveListenAddr() (string, error) {
 	if c.ListenAddr != "" {
 		return c.ListenAddr, nil
 	}
@@ -64,7 +59,7 @@ func (c Config) resolvedListenAddr() (string, error) {
 	return addr, nil
 }
 
-func (c Config) resolvedDBPath() (string, error) {
+func (c Config) ResolveDBPath() (string, error) {
 	if c.DBPath != "" {
 		return c.DBPath, nil
 	}

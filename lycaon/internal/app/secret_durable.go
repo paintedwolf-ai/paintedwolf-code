@@ -23,14 +23,14 @@ func (b sessionWiring) wireMessageSecretRedaction(matcher *secretmatch.Matcher) 
 	if b.secretCaps != nil && b.mgr != nil {
 		b.secretCaps.AddScreeningInvalidationObserver(func(_ context.Context, projectID string) {
 			// Scheduling runs after writer release and completes within the request drain.
-			b.sweepManagedSecretTrees(b.ctx, projectID) //nolint:contextcheck // Committed protection survives request cancellation.
+			b.sweepManagedSecretTrees(b.startup.ctx, projectID) //nolint:contextcheck // Committed protection survives request cancellation.
 		})
-		b.sweepManagedSecretTrees(b.ctx, "")
+		b.sweepManagedSecretTrees(b.startup.ctx, "")
 	}
 }
 
 func (b sessionWiring) sweepManagedSecretTrees(ctx context.Context, projectID string) {
-	rows, err := db.New(b.db).ListSessions(ctx)
+	rows, err := db.New(b.storage.Database).ListSessions(ctx)
 	if err != nil {
 		slog.WarnContext(ctx, "could not refresh managed secret transcript screening", "error", err)
 		return

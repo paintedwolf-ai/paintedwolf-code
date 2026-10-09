@@ -104,11 +104,11 @@ func (b serverWiring) wireRuntimeServices() error {
 func (b serverWiring) wireRuntimeObservers() error {
 	b.mgr.SetEventPublisher(b.eventPub)
 	b.workerQueue.SetEventPublisher(b.eventPub)
-	if b.llmSvc != nil && b.eventPub != nil {
-		b.llmSvc.Lifecycle = utilityLanePublisher{pub: b.eventPub}
+	if b.providers.Service != nil && b.eventPub != nil {
+		b.providers.Service.Lifecycle = utilityLanePublisher{pub: b.eventPub}
 	}
-	if b.llmSvc != nil && b.llmSvc.Utility != nil && b.eventPub != nil {
-		b.llmSvc.Utility.SetOnChange(func(llm.SlotSnapshot) {
+	if b.providers.Service != nil && b.providers.Service.Utility != nil && b.eventPub != nil {
+		b.providers.Service.Utility.SetOnChange(func(llm.SlotSnapshot) {
 			b.eventPub.PublishPreflight(context.Background(), preflight.ProbeLiteSlot)
 		})
 	}
@@ -128,7 +128,7 @@ func (b serverWiring) wireRuntimeObservers() error {
 		}
 	})
 	activeRun := activeRunIDFromWorkflow(b.workflowMgr)
-	progressCoalescer := progress.NewCoalescer(progress.DefaultCoalesceWindow, newProgressChangeEmitter(b.store, b.eventPub, activeRun, b.progressStore))
+	progressCoalescer := progress.NewCoalescer(progress.DefaultCoalesceWindow, newProgressChangeEmitter(b.storage.Sessions, b.eventPub, activeRun, b.progressStore))
 	progress.RegisterWriteObserver(func(ctx context.Context, evt progress.WriteEvent) {
 		if strings.TrimSpace(evt.SessionID) == "" {
 			return
@@ -136,7 +136,7 @@ func (b serverWiring) wireRuntimeObservers() error {
 		rev := progress.BumpRevision(evt.SessionID)
 		b.eventPub.PublishProgress(ctx, evt.SessionID, rev)
 		progressCoalescer.Record(evt.SessionID, evt.Prev, b.progressStore.Get(ctx, evt.SessionID))
-		emitProgressCompletion(ctx, b.store, b.eventPub, b.progressStore, activeRun, evt.SessionID)
+		emitProgressCompletion(ctx, b.storage.Sessions, b.eventPub, b.progressStore, activeRun, evt.SessionID)
 		// Progress closure releases the post-worker latch.
 		if b.mgr != nil {
 			b.mgr.MaybeClearProgressClosureAfterWrite(ctx, evt.SessionID)
@@ -148,15 +148,15 @@ func (b serverWiring) wireRuntimeObservers() error {
 // wireServer builds the API server once over the host's services, then
 // registers the recoveries and hooks that call into its handlers.
 func (b serverWiring) wireServer() error {
-	extensionJournal := extensionstate.NewSQLJournal(b.db)
+	extensionJournal := extensionstate.NewSQLJournal(b.storage.Database)
 	deps := api.Dependencies{Core: api.CoreDependencies{
-		Database: b.db, Store: b.store, PersonActions: personactions.New(b.db), Projects: b.registry, Sessions: b.mgr, Settings: b.settingsSvc,
-		Invocations: b.invocations, MutationGate: project.NewMutationGate()}, Providers: api.ProvidersDependencies{LLM: b.llmSvc, CostTracker: b.costTracker, Rerank: b.rerank}, Host: api.HostDependencies{
+		Database: b.storage.Database, Store: b.storage.Sessions, PersonActions: personactions.New(b.storage.Database), Projects: b.storage.Projects, Sessions: b.mgr, Settings: b.settings.Service,
+		Invocations: b.invocations, MutationGate: project.NewMutationGate()}, Providers: api.ProvidersDependencies{LLM: b.providers.Service, CostTracker: b.providers.Costs, Rerank: b.rerank}, Host: api.HostDependencies{
 		Events: b.hub, EventPublisher: b.eventPub, Presence: b.presence, HostIdentity: b.hostIdentity,
-		HostResources: b.hostResources, HostPower: b.hostPower, Pricing: b.pricingHost, Preview: b.previewCtrl,
+		HostResources: b.settings.HostResources, HostPower: b.settings.Power, Pricing: b.providers.Pricing, Preview: b.previewCtrl,
 		PreflightEnv: b.buildPreflightEnv()}, Storage: api.StorageDependencies{
-		DataDir: b.dataDir, StorePath: b.storePath, WorkerBranchRoot: b.workerBranchRoot, WorkerSeedRoot: b.workerSeedRoot,
-		ModuleRoot: b.configRoot, StoreRevision: b.storeRevision, MinDenVersion: os.Getenv("LYCAON_MIN_DEN_VERSION")}, Approvals: api.ApprovalsDependencies{
+		DataDir: b.storage.Directory, StorePath: b.storage.Path, WorkerBranchRoot: b.workerBranchRoot, WorkerSeedRoot: b.workerSeedRoot,
+		ModuleRoot: b.catalog.ModuleRoot, StoreRevision: b.storage.Revision, MinDenVersion: os.Getenv("LYCAON_MIN_DEN_VERSION")}, Approvals: api.ApprovalsDependencies{
 		SecretIgnores: b.secretIgnores, ManagedSecrets: b.secretCaps, SecretSpans: b.secretSpans,
 		Checkpoints: b.checkpointMgr, ApprovalGate: b.toolRuntime.Authority.ApprovalGate(),
 		Authority: capabilityadmin.Authority{
@@ -173,14 +173,14 @@ func (b serverWiring) wireServer() error {
 		AgentPresence: b.agentPresence, ProjectRules: b.projectRulesOverlay, HintConfig: b.hintCfg,
 		FileAgeWarmer: b.toolRuntime.Survey.WarmFileAge, VisualStore: b.visualStore, ProgressStore: b.progressStore,
 		Video: toolWiring(b).videoDecoder()}, Extensions: api.ExtensionsDependencies{
-		ExtensionViews: b.viewCache, ExtensionJournal: extensionJournal}, External: api.ExternalDependencies{
-		MCP: b.mcpReg, WebResearch: b.webResearchRuntime, WebDiscoverer: b.webDiscoverer, WebIndex: b.webIndex}, Harness: api.HarnessDependencies{ManualLLM: b.manualLLM, HarnessWorkers: b.harnessWorkers}}
+		ExtensionViews: b.catalog.ViewCache, ExtensionJournal: extensionJournal}, External: api.ExternalDependencies{
+		MCP: b.mcpReg, WebResearch: b.webResearchRuntime, WebDiscoverer: b.webDiscoverer, WebIndex: b.storage.WebIndex}, Harness: api.HarnessDependencies{ManualLLM: b.providers.Manual, HarnessWorkers: b.harnessWorkers}}
 	if b.authzCapturer != nil {
 		deps.Approvals.Authority.AuthzRecorder = b.authzCapturer.Recorder
 		deps.Approvals.Authority.ApprovalDecisions = b.authzCapturer.Store
 	}
 	b.projectLiveness = projectliveness.New(projectliveness.Config{
-		Sessions: b.store,
+		Sessions: b.storage.Sessions,
 		Handler: appProjectLifecycleHandler{
 			activate: func(ctx context.Context, projectID string) error {
 				if b.srv != nil {
@@ -195,14 +195,14 @@ func (b serverWiring) wireServer() error {
 			},
 		},
 	})
-	b.resources.track("project-liveness", 85, func(context.Context) error {
+	b.startup.resources.Track("project-liveness", 85, func(context.Context) error {
 		b.projectLiveness.Close()
 		return nil
 	})
 	deps.Source.ProjectLiveness = b.projectLiveness
 	b.mgr.SetProjectLiveness(b.projectLiveness)
 	b.mgr.SetMutationGate(deps.Core.MutationGate)
-	prev, ok, err := db.ReadBootPreviousAppVersion(b.ctx, b.db)
+	prev, ok, err := db.ReadBootPreviousAppVersion(b.startup.ctx, b.storage.Database)
 	if err != nil {
 		return fmt.Errorf("previous app version: %w", err)
 	} else if ok {
@@ -219,16 +219,16 @@ func (b serverWiring) wireServer() error {
 	if err != nil {
 		return fmt.Errorf("extension subsystem owner: %w", err)
 	}
-	deps.Extensions.ExtensionScanners = scan.RequirementChecker{ModuleRoot: b.configRoot, HomeDir: homeDir}
-	b.historyStorage = historyretention.New(b.db, b.storePath, b.visualStore)
+	deps.Extensions.ExtensionScanners = scan.RequirementChecker{ModuleRoot: b.catalog.ModuleRoot, HomeDir: homeDir}
+	b.historyStorage = historyretention.New(b.storage.Database, b.storage.Path, b.visualStore)
 	deps.External.HistoryStorage = b.historyStorage
 	// HTTP and SSE share one attention source.
 	deps.Host.Attention = &attention.Source{
-		Sessions:    b.store,
+		Sessions:    b.storage.Sessions,
 		Checkpoints: b.checkpointMgr,
 		Asks:        b.workflowMgr,
-		Finishes:    b.store,
-		Projects:    attention.RegistryNamer{Registry: b.registry},
+		Finishes:    b.storage.Sessions,
+		Projects:    attention.RegistryNamer{Registry: b.storage.Projects},
 	}
 	b.eventPub.Attention = deps.Host.Attention
 	if manager, ok := b.checkpointMgr.(*hitl.Manager); ok {
@@ -253,7 +253,7 @@ func (b serverWiring) wireServer() error {
 	if err := b.wireSourceEditing(&deps); err != nil {
 		return err
 	}
-	b.srv = api.NewServer(deps, b.logger, b.apiToken)
+	b.srv = api.NewServer(deps, b.startup.logger, b.apiToken)
 	return b.registerServerHooks(extensionJournal)
 }
 
@@ -316,8 +316,8 @@ func (b serverWiring) registerServerHooks(extensionJournal *extensionstate.SQLJo
 	}); err != nil {
 		return err
 	}
-	if err := b.srv.Admin.Extensions.Contributions.WarmContributionFrame(b.ctx); err != nil {
-		b.logger.Warn("contribution frame warm failed", "err", err)
+	if err := b.srv.Admin.Extensions.Contributions.WarmContributionFrame(b.startup.ctx); err != nil {
+		b.startup.logger.Warn("contribution frame warm failed", "err", err)
 	}
 	return nil
 }
@@ -328,17 +328,17 @@ func (b serverWiring) wireFileBriefings(deps *api.Dependencies) error {
 	if err != nil {
 		return fmt.Errorf("file briefing config: %w", err)
 	}
-	fileBriefingStore := filebriefing.NewSQL(b.db)
-	if b.settingsSvc != nil && b.settingsSvc.FileSummaries != nil && !b.settingsSvc.FileSummaries.Enabled() {
-		if err := fileBriefingStore.Clear(b.ctx); err != nil {
+	fileBriefingStore := filebriefing.NewSQL(b.storage.Database)
+	if b.settings.Service != nil && b.settings.Service.FileSummaries != nil && !b.settings.Service.FileSummaries.Enabled() {
+		if err := fileBriefingStore.Clear(b.startup.ctx); err != nil {
 			return fmt.Errorf("clear disabled file briefings: %w", err)
 		}
-	} else if err := fileBriefingStore.MaintainDevice(b.ctx, fileBriefingConfig.Retention); err != nil {
+	} else if err := fileBriefingStore.MaintainDevice(b.startup.ctx, fileBriefingConfig.Retention); err != nil {
 		return fmt.Errorf("maintain file briefings: %w", err)
 	}
-	deps.Source.FileBriefings = filebriefing.NewService(b.ctx, filebriefing.Dependencies{
-		Store: fileBriefingStore, Config: fileBriefingConfig, Generator: filebriefing.NewModelGenerator(b.llmSvc, b.mgr.CostTracker()),
-		Events: b.hub, Settings: b.settingsSvc.FileSummaries, Logger: b.logger,
+	deps.Source.FileBriefings = filebriefing.NewService(b.startup.ctx, filebriefing.Dependencies{
+		Store: fileBriefingStore, Config: fileBriefingConfig, Generator: filebriefing.NewModelGenerator(b.providers.Service, b.mgr.CostTracker()),
+		Events: b.hub, Settings: b.settings.Service.FileSummaries, Logger: b.startup.logger,
 	})
 	return nil
 }
@@ -347,10 +347,10 @@ func (b serverWiring) wireFileBriefings(deps *api.Dependencies) error {
 // session runtime: source mutations, durable file requests, editor documents,
 // and the contribution runtime that reads document revisions.
 func (b serverWiring) wireSourceEditing(deps *api.Dependencies) error {
-	if b.sourceLedger != nil {
-		deps.Source.SourceLedger, deps.Source.SourceInventory = b.sourceLedger, b.sourceLedger
+	if b.storage.SourceLedger != nil {
+		deps.Source.SourceLedger, deps.Source.SourceInventory = b.storage.SourceLedger, b.storage.SourceLedger
 	}
-	sourceMutations := project.NewSourceMutationService(b.db, b.sourceLedger)
+	sourceMutations := project.NewSourceMutationService(b.storage.Database, b.storage.SourceLedger)
 	if err := delegationWiring(b).registerRecovery(bootrecovery.Entry{
 		Name: "source-mutations", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseBuild,
 		Run: sourceMutations.Recover,
@@ -358,13 +358,13 @@ func (b serverWiring) wireSourceEditing(deps *api.Dependencies) error {
 		return err
 	}
 	deps.Source.SourceMutations = sourceMutations
-	deps.Source.FileOperations = fileops.NewService(fileops.NewStore(b.db))
+	deps.Source.FileOperations = fileops.NewService(fileops.NewStore(b.storage.Database))
 	b.mgr.SetSourceMutations(sourceMutations)
-	editorDocuments := editordoc.New(editordoc.NewStore(b.db), b.sourceLedger, b.registry)
+	editorDocuments := editordoc.New(editordoc.NewStore(b.storage.Database), b.storage.SourceLedger, b.storage.Projects)
 	if b.workerMergeSvc != nil {
 		b.workerMergeSvc.Documents = editorDocuments
 	}
-	b.resources.track("editor-documents", 86, editorDocuments.Close)
+	b.startup.resources.Track("editor-documents", 86, editorDocuments.Close)
 	if err := delegationWiring(b).registerRecovery(bootrecovery.Entry{
 		Name: "editor-documents", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseBuild,
 		// Editor recovery follows settled source mutations.
@@ -376,7 +376,7 @@ func (b serverWiring) wireSourceEditing(deps *api.Dependencies) error {
 		return err
 	}
 	b.agentPresence.SetAnchors(presenceAnchors{service: editorDocuments})
-	b.agentPresence.SetDrafts(presenceDrafts{projects: b.registry, documents: editorDocuments,
+	b.agentPresence.SetDrafts(presenceDrafts{projects: b.storage.Projects, documents: editorDocuments,
 		tasks: func(jobID string) (*wire.WorkerTask, bool) {
 			if b.workerQueue == nil {
 				return nil, false
@@ -398,10 +398,10 @@ func (b serverWiring) wireSourceEditing(deps *api.Dependencies) error {
 	})
 	// A file the person has open is the document, for reads and writes alike.
 	b.mgr.SetEditorDocuments(editorDocumentsAdapter{service: editorDocuments})
-	b.mgr.SetSourceRewinds(&sourcerewind.Service{Ledger: b.sourceLedger, Mutations: sourceMutations, Documents: editorDocuments})
+	b.mgr.SetSourceRewinds(&sourcerewind.Service{Ledger: b.storage.SourceLedger, Mutations: sourceMutations, Documents: editorDocuments})
 	// Contribution dispatch uses durable receipts and policy-derived authority.
 	deps.Extensions.Contributions = extensionadmin.ContributionRuntime{
-		Receipts: commandinvoke.SQLReceipts{DB: b.db},
+		Receipts: commandinvoke.SQLReceipts{DB: b.storage.Database},
 		Authority: commandinvoke.PolicyAuthority{
 			FindingNamesPath: func(ctx context.Context, sessionID, path string) (bool, error) {
 				if b.findingsStore == nil {
@@ -419,7 +419,7 @@ func (b serverWiring) wireSourceEditing(deps *api.Dependencies) error {
 				return false, nil
 			},
 			DocumentRevision: func(ctx context.Context, projectID, rootID, path string) (int64, bool, error) {
-				p, err := b.registry.Get(ctx, projectID)
+				p, err := b.storage.Projects.Get(ctx, projectID)
 				if err != nil || p == nil {
 					return 0, false, err
 				}
@@ -439,8 +439,8 @@ func (b serverWiring) wireOrchestrator() error {
 		Workflows:  b.workflowMgr,
 		Catalog:    extpacks.CatalogForConsumers,
 	}
-	if b.cfg.TestOrchestrator != nil {
-		b.orch = b.cfg.TestOrchestrator(orchDeps)
+	if b.startup.cfg.TestOrchestrator != nil {
+		b.orch = b.startup.cfg.TestOrchestrator(orchDeps)
 	} else {
 		b.orch = orchestration.NewOrchestratorImpl(orchDeps)
 	}
@@ -449,7 +449,7 @@ func (b serverWiring) wireOrchestrator() error {
 	workerOutcomes := &worker.SessionOutcomeBridge{Sessions: b.mgr, Inner: b.delegationMgr}
 	var executor worker.WorkerExecutor = b.workerExec
 	if configdir.IsHarnessChannel() {
-		scripted, err := harnessfixture.NewWorkers(b.dataDir, b.store, b.workerQueue, b.mgr.VerifyHarnessWorker, b.mgr.ReadHarnessWorker, b.decisionStore, b.workerExec)
+		scripted, err := harnessfixture.NewWorkers(b.storage.Directory, b.storage.Sessions, b.workerQueue, b.mgr.VerifyHarnessWorker, b.mgr.ReadHarnessWorker, b.decisionStore, b.workerExec)
 		if err != nil {
 			return err
 		}
@@ -466,7 +466,7 @@ func (b serverWiring) serveApp() *ServeApp {
 	app := &ServeApp{
 		Server:               b.srv,
 		SessionMgr:           b.mgr,
-		SessionStore:         b.store,
+		SessionStore:         b.storage.Sessions,
 		decider:              b.decider,
 		ProjectLiveness:      b.projectLiveness,
 		CoordinatorRuntime:   b.coordRuntime,
@@ -480,17 +480,17 @@ func (b serverWiring) serveApp() *ServeApp {
 		SessionWorkflowStore: b.sessionWorkflowStore,
 		CheckpointMgr:        b.checkpointMgr,
 		VisualStore:          b.visualStore,
-		DB:                   b.db,
+		DB:                   b.storage.Database,
 		Events:               b.hub,
-		ConfigRoot:           b.configRoot,
-		ListenAddr:           b.addr,
+		ConfigRoot:           b.catalog.ModuleRoot,
+		ListenAddr:           b.startup.addr,
 		APIToken:             b.apiToken,
 		TokenGenerated:       b.tokenGenerated,
-		startup:              b.cfg.Startup,
-		upgradeRecoveryReady: b.upgradeRecoveryReady,
-		resources:            b.resources,
-		storeClaim:           b.storeClaim,
-		projects:             b.registry,
+		startup:              b.startup.cfg.Startup,
+		upgradeRecoveryReady: b.storage.UpgradeReady,
+		resources:            b.startup.resources,
+		storeClaim:           b.storage.Claim,
+		projects:             b.storage.Projects,
 		eventPub:             b.eventPub,
 	}
 	delegationWiring(b).registerBackgroundRunners(app)
@@ -521,23 +521,23 @@ func (b serverWiring) wireDestinationConfig() error {
 	}
 	b.toolRuntime.Executor.Network.SetPackageRegistries(registries)
 	reg := destconfig.NewRegistry()
-	if b.llmSvc != nil && b.llmSvc.Registry != nil {
+	if b.providers.Service != nil && b.providers.Service.Registry != nil {
 		reg.Add(destconfig.Source{
 			Name:  "provider_endpoints",
-			Hosts: func(string) []string { return b.llmSvc.Registry.ConfiguredHosts() },
+			Hosts: func(string) []string { return b.providers.Service.Registry.ConfiguredHosts() },
 		})
 	}
 	if b.mcpReg != nil {
 		reg.Add(destconfig.Source{
 			Name:  "mcp_servers",
-			Hosts: func(projectDir string) []string { return b.mcpReg.Catalog.ConfiguredHosts(b.ctx, projectDir) },
+			Hosts: func(projectDir string) []string { return b.mcpReg.Catalog.ConfiguredHosts(b.startup.ctx, projectDir) },
 		})
 	}
 	reg.Add(destconfig.Source{
 		HostSources: func(projectDir string) map[string]string {
 			roots := []string{projectDir}
-			if b.registry != nil {
-				if list, err := b.registry.List(b.ctx); err == nil {
+			if b.storage.Projects != nil {
+				if list, err := b.storage.Projects.List(b.startup.ctx); err == nil {
 					if p := project.FindByRootPath(list, projectDir); p != nil {
 						for _, r := range p.Roots {
 							if r.Path != "" {

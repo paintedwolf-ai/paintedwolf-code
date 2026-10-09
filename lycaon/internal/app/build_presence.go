@@ -33,11 +33,11 @@ func (b *serveBuilder) wirePresence() error {
 	unlocks.SetObserver(presence.UnlockObserver{
 		Ended: func(unlock presence.Unlock, reason presence.EndReason, at time.Time) {
 			if b.secretCaps != nil {
-				b.secretCaps.RecordUnlockEnd(b.ctx, unlock, reason, at)
+				b.secretCaps.RecordUnlockEnd(b.startup.ctx, unlock, reason, at)
 			}
 		},
 		Changed: func(chatSessionID string) {
-			b.eventPub.PublishChatVault(b.ctx, capabilityadmin.ChatVaultState(chatSessionID, unlocks))
+			b.eventPub.PublishChatVault(b.startup.ctx, capabilityadmin.ChatVaultState(chatSessionID, unlocks))
 		},
 	})
 	b.presenceBroker, b.vaultUnlocks = broker, unlocks

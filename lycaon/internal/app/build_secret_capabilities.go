@@ -19,7 +19,7 @@ func (b sessionWiring) wireSecretCapabilities() error {
 			b.secretHarvest.Remember(rootSessionID, values...)
 		}
 	}
-	service, err := secretcap.New(b.db, remember)
+	service, err := secretcap.New(b.storage.Database, remember)
 	if err != nil {
 		return fmt.Errorf("secret capability store: %w", err)
 	}
@@ -27,10 +27,10 @@ func (b sessionWiring) wireSecretCapabilities() error {
 	service.SetUnlocks(b.vaultUnlocks)
 	service.SetFingerprinter(b.secretFingerprinter)
 	// Unlocks live in memory, so none survived the last engine.
-	if err := service.CloseUnlocksLeftOpen(b.ctx); err != nil {
+	if err := service.CloseUnlocksLeftOpen(b.startup.ctx); err != nil {
 		return err
 	}
-	if err := service.Reconcile(b.ctx); err != nil {
+	if err := service.Reconcile(b.startup.ctx); err != nil {
 		return fmt.Errorf("reconcile secret capabilities: %w", err)
 	}
 	if err := native.RegisterSecretCapabilityTools(b.toolRuntime.Registry, service); err != nil {

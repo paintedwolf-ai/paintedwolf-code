@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/projectcontrib"
 	"log/slog"
 	"path/filepath"
 
@@ -28,14 +29,14 @@ func (b toolWiring) wireScan() error {
 		return err
 	}
 	runnerCfg := scancfg.DefaultRunnerConfig()
-	if b.cfg.TestScanRegistry != nil {
-		b.scannerReg = b.cfg.TestScanRegistry
+	if b.startup.cfg.TestScanRegistry != nil {
+		b.scannerReg = b.startup.cfg.TestScanRegistry
 	} else {
 		reg, err := scanregistry.New(scanregistry.Options{
 			ScannerFingerprintKey: b.secretFingerprinter.ScannerKey(),
-			ModuleRoot:            b.configRoot,
+			ModuleRoot:            b.catalog.ModuleRoot,
 			ProcessPriority:       runnerCfg.ExecProcessPriority(),
-			ProjectTierApplies:    b.projectScanConfigGate().AppliesPath,
+			ProjectTierApplies:    b.settings.ProjectSurfaceGate(projectcontrib.SurfaceScanConfig, b.storage.Projects).AppliesPath,
 		})
 		if err != nil {
 			return fmt.Errorf("scan registry: %w", err)
@@ -50,16 +51,16 @@ func (b toolWiring) wireScan() error {
 		Module:                  scancfg.DefaultModuleConfig(),
 		Budget:                  scancfg.NewFindingBudget(b.gatesCfg.Gates.AgentBudget),
 		BlockOn:                 b.gatesCfg.Gates.BlockOn,
-		OverlayRootsApply:       b.projectScanConfigGate().FilterPaths,
+		OverlayRootsApply:       b.settings.ProjectSurfaceGate(projectcontrib.SurfaceScanConfig, b.storage.Projects).FilterPaths,
 		RecordWithoutDelegation: true,
 	}
 	b.scanRunner = scanexecution.NewRunner(b.scanStore, b.scannerReg, scanIngester, runnerCfg, b.eventPub)
-	b.scanRunner.DataDir = b.dataDir
-	if b.sourceLedger != nil {
-		b.scanRunner.Snapshots = b.sourceLedger.SnapshotStore()
+	b.scanRunner.DataDir = b.storage.Directory
+	if b.storage.SourceLedger != nil {
+		b.scanRunner.Snapshots = b.storage.SourceLedger.SnapshotStore()
 	}
 	b.scanRunner.Coordinator = b.scanCoordinator
-	b.scanRunner.Settings = b.settingsSvc.SecurityScanners
+	b.scanRunner.Settings = b.settings.Service.SecurityScanners
 	b.scanRunner.OnDelta = func(ctx context.Context, completed api.CodeScan, introduced, fixed []api.SecurityFinding) {
 		if completed.TargetKind == api.ScanTargetPaths {
 			b.mgr.NoteScanDelta(ctx, completed, introduced, fixed)
@@ -116,10 +117,10 @@ func (b toolWiring) wireScan() error {
 		Coordinator: b.scanCoordinator,
 		Registry:    b.scannerReg,
 		Gates:       b.gatesCfg,
-		Settings:    b.settingsSvc.SecurityScanners,
+		Settings:    b.settings.Service.SecurityScanners,
 	}
-	b.scanCadence = scancadence.New(b.scanStore, b.scanCoordinator, b.scannerReg, b.settingsSvc.SecurityScanners, b.gatesCfg, b.scanTriggers)
-	b.scanCadence.OverlayRootsApply = b.projectScanConfigGate().FilterPaths
+	b.scanCadence = scancadence.New(b.scanStore, b.scanCoordinator, b.scannerReg, b.settings.Service.SecurityScanners, b.gatesCfg, b.scanTriggers)
+	b.scanCadence.OverlayRootsApply = b.settings.ProjectSurfaceGate(projectcontrib.SurfaceScanConfig, b.storage.Projects).FilterPaths
 	b.scanCadence.Preempt = b.scanRunner.Preempt
 	b.scanCadence.Scopes = b.sourceScopes
 	b.scanCadence.ObserveRepochange()
@@ -142,7 +143,7 @@ func (b toolWiring) wireScan() error {
 		},
 	}
 	b.mgr.SetScanGuidance(b.scanGuidance)
-	if err := scantoolapi.RegisterScanTools(b.toolRuntime.Registry, b.scanCoordinator, b.scannerReg, b.scanCadence, b.rejectFmt, b.settingsSvc.SecurityScanners); err != nil {
+	if err := scantoolapi.RegisterScanTools(b.toolRuntime.Registry, b.scanCoordinator, b.scannerReg, b.scanCadence, b.rejectFmt, b.settings.Service.SecurityScanners); err != nil {
 		return fmt.Errorf("scan tools: %w", err)
 	}
 	if err := workflow.RegisterComposeTool(b.toolRuntime.Registry, b.workflowComposer); err != nil {
@@ -153,7 +154,7 @@ func (b toolWiring) wireScan() error {
 	}
 	catalogResolver := workflow.ManifestResolver{
 		SessionStore:       b.sessionWorkflowStore,
-		ProjectTierApplies: b.projectScanConfigGate().AppliesPath,
+		ProjectTierApplies: b.settings.ProjectSurfaceGate(projectcontrib.SurfaceScanConfig, b.storage.Projects).AppliesPath,
 	}
 	if err := workflow.RegisterCatalogSummariesTool(b.toolRuntime.Registry, catalogResolver, b.sessionWorkflowStore, b.workflowComposer.Templates); err != nil {
 		return fmt.Errorf("workflow_catalog_summaries tool: %w", err)
@@ -186,17 +187,17 @@ func (b toolWiring) wireScan() error {
 // of a project tree shares: the bundled scope, the device overlay, and each
 // trusted project's declarations.
 func (b toolWiring) wireSourceScope() error {
-	cfg, err := sourcescope.LoadConfig(filepath.Join(b.dataDir, sourceScopeOverlayName))
+	cfg, err := sourcescope.LoadConfig(filepath.Join(b.storage.Directory, sourceScopeOverlayName))
 	if err != nil {
 		return fmt.Errorf("source scope: %w", err)
 	}
-	provider, err := sourcescope.NewProvider(cfg, b.projectScanConfigGate().AppliesPath)
+	provider, err := sourcescope.NewProvider(cfg, b.settings.ProjectSurfaceGate(projectcontrib.SurfaceScanConfig, b.storage.Projects).AppliesPath)
 	if err != nil {
 		return fmt.Errorf("source scope: %w", err)
 	}
 	b.sourceScopes = provider
-	if b.sourceLedger != nil && b.sourceLedger.SnapshotStore() != nil {
-		b.sourceLedger.SnapshotStore().SetScopes(provider)
+	if b.storage.SourceLedger != nil && b.storage.SourceLedger.SnapshotStore() != nil {
+		b.storage.SourceLedger.SnapshotStore().SetScopes(provider)
 	}
 	sourcecatalog.Process().SetScopes(provider)
 	return nil

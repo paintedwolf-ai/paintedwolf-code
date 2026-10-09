@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/app/persistence"
 	"os"
 	"path/filepath"
 	"testing"
@@ -67,7 +68,7 @@ func TestReconcileStoreCoupledStorageRefusesWhenTheStoreClaimIsLost(t *testing.T
 	dbPath, claim := claimedTestStore(t)
 	replaceStoreFile(t, dbPath)
 
-	err := delegationWiring{&serveBuilder{storeClaim: claim}}.reconcileStoreCoupledStorage(context.Background())
+	err := delegationWiring{&serveBuilder{storage: persistence.Runtime{Claim: claim}}}.reconcileStoreCoupledStorage(context.Background())
 	if !errors.Is(err, hostlock.ErrStoreClaimLost) {
 		t.Fatalf("reconcile should refuse on a lost claim, got %v", err)
 	}

@@ -1,6 +1,7 @@
 package smoke_test
 
 import (
+	"github.com/lycaon/lycaon/internal/app/configuration"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -25,7 +26,7 @@ func TestAppBuildBoot(t *testing.T) {
 	}
 	moduleRoot := filepath.Join(filepath.Dir(file), "..", "..")
 
-	cfg := app.DefaultConfig()
+	cfg := configuration.Config{}
 	cfg.DBPath = filepath.Join(t.TempDir(), "smoke-build.db")
 	cfg.ListenAddr = "127.0.0.1:0"
 	cfg.ConfigRoot = moduleRoot

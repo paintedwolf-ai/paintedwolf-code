@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/app/persistence"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -33,7 +34,7 @@ func managedScreeningFixture(t *testing.T) (*serveBuilder, *secretmatch.Matcher,
 		Path:      filepath.Join(t.TempDir(), credentialstore.VaultBasename),
 		Namespace: credentialstore.NamespaceManagedSecrets, Context: "durable screening test",
 	}, func(string) bool { return true })
-	b := &serveBuilder{ctx: t.Context(), db: database}
+	b := &serveBuilder{startup: startupBootstrap{ctx: t.Context()}, storage: persistence.Runtime{Database: database}}
 	matcher, err := secretmatch.BuildMatcher(secretmatch.Bundled())
 	testutil.FailErr(t, "build matcher", err)
 	fp, err := secretmatch.NewFingerprinter(bytes.Repeat([]byte{0x5a}, 32))

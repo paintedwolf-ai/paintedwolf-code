@@ -1,4 +1,4 @@
-package app
+package persistence
 
 import (
 	"context"
