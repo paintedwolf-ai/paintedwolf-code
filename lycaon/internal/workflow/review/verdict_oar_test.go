@@ -52,7 +52,7 @@ func TestWorkflowVerdictRefusalsRetainPolicyOccurrenceAndStructuredCause(t *test
 				"ungrounded_sample": []string{"missing#3"}, "observed_handles": []string{"observed#4"},
 			}
 			body, original := rejectSubmitVerdict(tools.ToolContext{Effects: tools.InvocationEffects{Out: out}}, code, "review-phase", details)
-			reject := tools.AsToolReject(original)
+			reject := toolrejection.AsToolReject(original)
 			if body != "" || reject == nil || reject.Code != code {
 				t.Fatalf("verdict refusal: output=%q error=%v want %s", body, original, code)
 			}

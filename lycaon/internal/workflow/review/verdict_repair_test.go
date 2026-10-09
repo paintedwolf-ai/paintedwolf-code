@@ -29,7 +29,7 @@ func TestVerdictRepairsRetainEveryStructuredCode(t *testing.T) {
 		InventoryIssue: &runstate.InventoryIssue{ReportDocumentIssue: guidance.ReportDocumentIssue{Code: SubmitVerdictScansPendingCode}},
 		MissingAgents:  []string{"skeptic"},
 		GroundingCode:  "SUBMIT_VERDICT_UNGROUNDED",
-		QuestionIssue:  tools.AsToolReject(rejectReviewQuestion("current_review_required", "question/c1")),
+		QuestionIssue:  toolrejection.AsToolReject(rejectReviewQuestion("current_review_required", "question/c1")),
 		CoverageIssue:  &toolrejection.ToolReject{Code: workflowvalidation.ReviewLoopVerdictInvalidCode, Data: map[string]any{"reason": "stale coverage revision"}},
 	}
 	repairs := verdictRepairs("", out)

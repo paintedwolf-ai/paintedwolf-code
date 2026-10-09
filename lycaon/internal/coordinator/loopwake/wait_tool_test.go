@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/orchestration"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 	"testing"
@@ -129,7 +130,7 @@ func TestWaitRejectsConditionShapeWithStructuredCode(t *testing.T) {
 	_, err := registry.Run(t.Context(), "wait", map[string]any{
 		"conditions": []any{map[string]any{"kind": "next_worker_done", "url": "https://example.test"}},
 	}, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "s1", Agent: orchestration.ProfileCoordinator}})
-	reject := tools.AsToolReject(err)
+	reject := toolrejection.AsToolReject(err)
 	if reject == nil || reject.Code != "TOOL_ARGS_INVALID" {
 		t.Fatalf("error = %#v, want TOOL_ARGS_INVALID", err)
 	}
