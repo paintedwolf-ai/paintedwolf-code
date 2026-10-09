@@ -177,4 +177,6 @@ type loopBudgetKey struct {
 	sessionID string
 	runID     string
 }
+
+// Nonzero size keeps execution tokens distinct.
 type promptExecutionToken struct{ _ byte }

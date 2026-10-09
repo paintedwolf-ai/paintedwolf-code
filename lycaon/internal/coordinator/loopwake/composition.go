@@ -14,7 +14,18 @@ type LoopEngine struct {
 }
 
 func NewLoopEngine() *LoopEngine {
-	l := &LoopEngine{Subscriptions: &WaitSubscriptions{}, Deliveries: &WaitDeliveries{}, Policy: &HostWakePolicy{}, Facts: &SessionFacts{}, Observations: &PromptObservations{}, Cycles: &WorkerCycles{}, Turns: &HostTurns{}, Waits: &Waits{}, Nudges: &Nudges{}, Admission: &Admission{}}
+	l := &LoopEngine{
+		Subscriptions: &WaitSubscriptions{},
+		Deliveries:    &WaitDeliveries{},
+		Policy:        &HostWakePolicy{},
+		Facts:         &SessionFacts{},
+		Observations:  &PromptObservations{},
+		Cycles:        &WorkerCycles{},
+		Turns:         &HostTurns{},
+		Waits:         &Waits{},
+		Nudges:        &Nudges{},
+		Admission:     &Admission{},
+	}
 	l.Subscriptions.Nudges = l.Nudges
 	l.Subscriptions.Facts = l.Facts
 	l.Subscriptions.Deliveries = l.Deliveries
