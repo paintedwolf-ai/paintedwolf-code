@@ -9,7 +9,7 @@ import (
 )
 
 func (l *PromptObservations) ObservePrompt(sessionID string) func(inject.CoordinatorTurnFrame) {
-	seq := l.Nudges.nudgeSeq.Add(1)
+	seq := l.Nudges.nextSequence()
 	return func(frame inject.CoordinatorTurnFrame) {
 		l.promptObservedSeq.Store(sessionID, seq)
 		l.promptWorkflow.Store(sessionID, observedWorkflow{frame.RunContext.RunID, frame.WorkflowRevision})
@@ -51,11 +51,7 @@ func (l *PromptObservations) wakeConsumed(ctx context.Context, sessionID string,
 	return consumed
 }
 
-type PromptObservationsDeps struct {
-}
 type PromptObservations struct {
-	depsMu            sync.RWMutex
-	deps              PromptObservationsDeps
 	promptObservedSeq sync.Map
 	promptWorkflow    sync.Map
 	Nudges            *Nudges
@@ -63,19 +59,6 @@ type PromptObservations struct {
 	Subscriptions     *WaitSubscriptions
 }
 
-func (l *PromptObservations) setDeps(deps PromptObservationsDeps) {
-	l.depsMu.Lock()
-	l.deps = deps
-	l.depsMu.Unlock()
-}
-func (l *PromptObservations) loopDeps() PromptObservationsDeps {
-	if l == nil {
-		return PromptObservationsDeps{}
-	}
-	l.depsMu.RLock()
-	defer l.depsMu.RUnlock()
-	return l.deps
-}
 func (l *PromptObservations) lastPromptObservedSeq(sessionID string) uint64 {
 	if v, ok := l.promptObservedSeq.Load(sessionID); ok {
 		seq, _ := v.(uint64)

@@ -69,7 +69,7 @@ func (l *Nudges) nudgeNow(
 	if l == nil || strings.TrimSpace(sessionID) == "" {
 		return
 	}
-	seq := l.nudgeSeq.Add(1)
+	seq := l.nextSequence()
 	pending := pendingLoopWake{wake: wake, inform: inform, legID: legID, completingJobID: completingJobID, env: env, seq: seq}
 	if wake == anchor.PhaseAdvanced {
 		if run, _, ok := l.Facts.activeRunAndVars(ctx, sessionID); ok && run != nil {
@@ -367,7 +367,7 @@ func (l *Nudges) deferNudge(ctx context.Context, sessionID string, d pendingLoop
 		return
 	}
 	if d.seq == 0 {
-		d.seq = l.nudgeSeq.Add(1)
+		d.seq = l.nextSequence()
 	}
 	if !d.env.BatchSeqSet {
 		live := l.Policy.coordinatorBatchState(ctx, sessionID)
@@ -396,3 +396,5 @@ func (l *Nudges) flushDeferredWhenWorkerCycleIdle(ctx context.Context, sessionID
 	}
 	l.flushDeferredNudges(ctx, sessionID)
 }
+
+func (l *Nudges) nextSequence() uint64 { return l.nudgeSeq.Add(1) }

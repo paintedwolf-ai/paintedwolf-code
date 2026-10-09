@@ -70,7 +70,6 @@ func (l *LoopEngine) SetDeps(deps LoopDeps) {
 	l.Deliveries.setDeps(WaitDeliveriesDeps{RunWaitResume: deps.RunWaitResume})
 	l.Policy.setDeps(HostWakePolicyDeps{DropPendingKicksBeforeBatchSeq: deps.DropPendingKicksBeforeBatchSeq, DropPendingKicksForBatchSeq: deps.DropPendingKicksForBatchSeq, HostWakeActionable: deps.HostWakeActionable, WorkflowSource: deps.WorkflowSource})
 	l.Facts.setDeps(SessionFactsDeps{GetSession: deps.GetSession, Limits: deps.Limits, WorkflowObligationsOpen: deps.WorkflowObligationsOpen, WorkflowSource: deps.WorkflowSource})
-	l.Observations.setDeps(PromptObservationsDeps{})
 	l.Cycles.setDeps(WorkerCyclesDeps{GetSession: deps.GetSession, WorkerCycleIdle: deps.WorkerCycleIdle})
 	l.Turns.setDeps(HostTurnsDeps{HostTurnBlocked: deps.HostTurnBlocked, RunPrompt: deps.RunPrompt})
 	l.Waits.setDeps(WaitsDeps{PublishWaitLease: deps.PublishWaitLease})
