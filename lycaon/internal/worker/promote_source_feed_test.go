@@ -85,6 +85,10 @@ func (s *promoteLedgerStub) RecordBatchTx(ctx context.Context, _ *sql.Tx, inputs
 	return s.RecordBatch(ctx, inputs)
 }
 
+func (s *promoteLedgerStub) JobVersionForPath(context.Context, string, string, string, string) (string, error) {
+	return "", nil
+}
+
 func (s *promoteLedgerStub) JobPathFirstWriteOrder(context.Context, string, string) ([]string, error) {
 	return append([]string(nil), s.firstWrite...), nil
 }
@@ -135,7 +139,7 @@ func TestPromoteOverlayEmitsRootScopeSourceChanges(t *testing.T) {
 
 		Store:        &mergeStoreStub{},
 		Reject:       mergeRejectFmt(t),
-		SourceLedger: ledger, SourceHistory: ledger.Walk,
+		SourceLedger: ledger, SourceHistory: ledger,
 	}
 
 	out, err := svc.PromoteOverlay(ctx, "parent-1", "job-feed", api.PromoteOverlayInput{
@@ -357,7 +361,7 @@ func newEditorSyncPromotion(t *testing.T, store *mergeStoreStub) editorSyncPromo
 		Queue:        &mergeQueueStub{task: task},
 		Store:        store,
 		Reject:       mergeRejectFmt(t),
-		SourceLedger: ledger, SourceHistory: ledger.Walk,
+		SourceLedger: ledger, SourceHistory: ledger,
 		Projects:  projects,
 		Documents: syncStub,
 	}
