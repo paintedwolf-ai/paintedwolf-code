@@ -1,0 +1,18 @@
+name: Stop with a removed merge group
+description: Cancel this run once the merge queue removes its group, which GitHub would leave running
+runs:
+  using: composite
+  steps:
+    # Runs in the background for the rest of the job; only merge groups have a branch to lose.
+    # Cancelling needs actions write, which only the merge-group caller grants. The log
+    # travels with the job's verification evidence.
+    - name: Watch this merge group's branch
+      if: github.event_name == 'merge_group'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        PYTHONPATH: ${{ github.workspace }}/scripts
+      run: |
+        log="$(python3 scripts/artifact_paths.py artifacts "$GITHUB_WORKSPACE")/ci/merge-group-watch.log"
+        mkdir -p "$(dirname "$log")"
+        nohup python3 -m ci_policy.merge_group > "$log" 2>&1 &
