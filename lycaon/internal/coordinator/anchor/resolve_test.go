@@ -1,6 +1,7 @@
 package anchor
 
 import (
+	"errors"
 	"testing"
 
 	"gopkg.in/yaml.v3"
@@ -111,7 +112,7 @@ func TestResolveInform_WorkflowVersionMissingError(t *testing.T) {
 	})
 	// Workflow specified without WorkflowVersion must fail closed with ErrWorkflowVersionMissing.
 	got, err := r.ResolveInform(PhaseEntered, MatchContext{Surface: "phase", Workflow: "recon-pack", Phase: "plan"})
-	if err != ErrWorkflowVersionMissing {
+	if !errors.Is(err, ErrWorkflowVersionMissing) {
 		t.Fatalf("expected ErrWorkflowVersionMissing, got err=%v, binding=%v", err, got)
 	}
 }

@@ -181,7 +181,7 @@ func (m ReviewRepairs) RecordToolResult(ctx context.Context, sessionID string, m
 	run.UpdatedAt = now
 	vars = maps.Clone(vars)
 	vars[reviewRepairsKey] = rows
-	if err = m.commitCommand(ctx, run, "review_repair", struct{ MessageID string }{msg.ID}, vars, boundary, "", workflowWorkerMutation{HoldPending: blocked}, nil); err != nil {
+	if err := m.commitCommand(ctx, run, "review_repair", struct{ MessageID string }{msg.ID}, vars, boundary, "", workflowWorkerMutation{HoldPending: blocked}, nil); err != nil {
 		return err
 	}
 	m.publishSession(ctx, run)
@@ -252,9 +252,8 @@ func reviewDiagnosticIdentity(code string, details map[string]any) string {
 		}
 	}
 	if raw, ok := details["issues"]; ok {
-		encoded, _ := json.Marshal(raw)
 		var issues []reviewcoverage.Issue
-		if json.Unmarshal(encoded, &issues) == nil {
+		if decodeDiagnosticRows(raw, &issues) {
 			stable := make([]map[string]any, 0, len(issues))
 			for _, issue := range issues {
 				stable = append(stable, map[string]any{"kind": issue.Kind, "field_path": issue.FieldPath, "fact_id": issue.FactID})
@@ -263,9 +262,8 @@ func reviewDiagnosticIdentity(code string, details map[string]any) string {
 		}
 	}
 	if raw, ok := details["repairs"]; ok {
-		encoded, _ := json.Marshal(raw)
 		var repairs []verdictRepair
-		if json.Unmarshal(encoded, &repairs) == nil {
+		if decodeDiagnosticRows(raw, &repairs) {
 			stable := make([]string, 0, len(repairs))
 			for _, repair := range repairs {
 				identity := reviewDiagnosticIdentity(repair.Code, repair.Details)
@@ -282,6 +280,17 @@ func reviewDiagnosticIdentity(code string, details map[string]any) string {
 		return ""
 	}
 	return reviewcoverage.Identity(sig)
+}
+
+// decodeDiagnosticRows reads a feedback detail as typed rows, whether it holds
+// in-process values or JSON decoded on recovery. An unreadable detail
+// contributes nothing to the identity.
+func decodeDiagnosticRows(raw, out any) bool {
+	encoded, err := json.Marshal(raw)
+	if err != nil {
+		return false
+	}
+	return json.Unmarshal(encoded, out) == nil
 }
 
 func canonicalDiagnosticSet(value any) any {
@@ -485,7 +494,7 @@ func (m ReviewRepairs) blockContract(ctx context.Context, runID string, cause er
 	run.PausedAt = &now
 	run.UpdatedAt = now
 	boundary := newCommandBoundary(run, run.Revision, "paused", run.CurrentPhase, ReviewBlockedReason)
-	if err = m.commitCommand(ctx, run, "review_contract_blocked", struct{ Code string }{reviewContractInvalidCode}, vars, &boundary, "", workflowWorkerMutation{HoldPending: true}, nil); err != nil {
+	if err := m.commitCommand(ctx, run, "review_contract_blocked", struct{ Code string }{reviewContractInvalidCode}, vars, &boundary, "", workflowWorkerMutation{HoldPending: true}, nil); err != nil {
 		return err
 	}
 	m.publishSession(ctx, run)

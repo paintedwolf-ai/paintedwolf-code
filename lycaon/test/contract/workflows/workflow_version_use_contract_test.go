@@ -34,21 +34,9 @@ func TestWorkflowVersionUsageGuardrail(t *testing.T) {
 
 			// 1. Binary comparison operators (==, !=, <, >, <=, >=)
 			if bin, ok := n.(*ast.BinaryExpr); ok {
-				switch bin.Op {
-				case token.EQL, token.NEQ:
-					// Emptiness/presence checks (v == "" or v != "") are valid input validation.
-					if isEmptyStringLiteral(bin.X) || isEmptyStringLiteral(bin.Y) {
-						return true
-					}
-					if isWorkflowVersionExpr(bin.X) || isWorkflowVersionExpr(bin.Y) {
-						pos := corpus.Fset.Position(bin.Pos())
-						t.Errorf("%s:%d: illegal binary comparison on workflow version; branching on workflow version is prohibited", relPath, pos.Line)
-					}
-				case token.LSS, token.GTR, token.LEQ, token.GEQ:
-					if isWorkflowVersionExpr(bin.X) || isWorkflowVersionExpr(bin.Y) {
-						pos := corpus.Fset.Position(bin.Pos())
-						t.Errorf("%s:%d: illegal binary comparison on workflow version; branching on workflow version is prohibited", relPath, pos.Line)
-					}
+				if comparesWorkflowVersion(bin) {
+					pos := corpus.Fset.Position(bin.Pos())
+					t.Errorf("%s:%d: illegal binary comparison on workflow version; branching on workflow version is prohibited", relPath, pos.Line)
 				}
 				return true
 			}
@@ -78,6 +66,21 @@ func TestWorkflowVersionUsageGuardrail(t *testing.T) {
 			return true
 		})
 	}
+}
+
+// comparesWorkflowVersion reports an equality or ordering comparison on a
+// workflow version. Emptiness checks (v == "" or v != "") are input validation.
+func comparesWorkflowVersion(bin *ast.BinaryExpr) bool {
+	switch bin.Op {
+	case token.EQL, token.NEQ:
+		if isEmptyStringLiteral(bin.X) || isEmptyStringLiteral(bin.Y) {
+			return false
+		}
+	case token.LSS, token.GTR, token.LEQ, token.GEQ:
+	default:
+		return false
+	}
+	return isWorkflowVersionExpr(bin.X) || isWorkflowVersionExpr(bin.Y)
 }
 
 func isEmptyStringLiteral(expr ast.Expr) bool {
@@ -117,20 +120,18 @@ func isWorkflowVersionExpr(expr ast.Expr) bool {
 	if expr == nil {
 		return false
 	}
-	switch e := expr.(type) {
-	case *ast.SelectorExpr:
-		name := e.Sel.Name
-		if name == "WorkflowVersion" {
-			return true
-		}
-		if name == "Version" {
-			// Check if base is a manifest or workflow descriptor
-			if ident, ok := e.X.(*ast.Ident); ok {
-				lower := strings.ToLower(ident.Name)
-				if strings.Contains(lower, "manifest") || lower == "m" || strings.Contains(lower, "wf") {
-					return true
-				}
-			}
+	sel, ok := expr.(*ast.SelectorExpr)
+	if !ok {
+		return false
+	}
+	switch sel.Sel.Name {
+	case "WorkflowVersion":
+		return true
+	case "Version":
+		// A Version field counts only on a manifest or workflow descriptor.
+		if ident, ok := sel.X.(*ast.Ident); ok {
+			lower := strings.ToLower(ident.Name)
+			return strings.Contains(lower, "manifest") || lower == "m" || strings.Contains(lower, "wf")
 		}
 	}
 	return false

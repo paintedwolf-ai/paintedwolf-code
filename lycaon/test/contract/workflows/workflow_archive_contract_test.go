@@ -38,6 +38,7 @@ func TestWorkflowArchiveChecksums(t *testing.T) {
 
 	for _, archiveDir := range archiveDirs {
 		t.Run(archiveDir, func(t *testing.T) {
+			t.Parallel()
 			sumsPath := filepath.Join(archiveDir, "SHA256SUMS")
 			sumsBytes, err := os.ReadFile(sumsPath)
 			if err != nil {

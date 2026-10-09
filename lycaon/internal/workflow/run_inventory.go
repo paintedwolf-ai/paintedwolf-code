@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"sort"
@@ -305,7 +306,10 @@ func (m InventoryAccounting) QueryWorkflowInventory(ctx context.Context, session
 	if !slices.Equal(ids, requested) {
 		return "", &tools.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"field": "scan_ids", "reason": "run_bound_scan_set_required"}}
 	}
-	revision := scanfindings.InventoryRevision(inventory.Scans)
+	revision, err := scanfindings.InventoryRevision(inventory.Scans)
+	if err != nil {
+		return "", err
+	}
 	if expected, _ := args["inventory_revision"].(string); expected != "" && expected != revision {
 		return "", &tools.ToolReject{Code: "SCAN_INVENTORY_STALE", Data: map[string]any{"inventory_revision": revision}}
 	}
@@ -412,38 +416,57 @@ func (m InventoryAccounting) candidateInventory(ctx context.Context, run *api.Wo
 		if msg.ID != repair.CandidateMessageID || msg.ToolResult == nil {
 			continue
 		}
-		verdict, _, _, err := parseSubmitVerdictArgs(*phase.ReviewLoop, msg.ToolResult.ToolArgs)
-		if err != nil {
+		account, err := m.candidateAccount(ctx, run, *phase.ReviewLoop, msg.ToolResult.ToolArgs, inventory.Groups)
+		if errors.Is(err, errCandidateInvalid) {
+			// A malformed candidate is a labeled draft state, not a read failure.
 			return empty, "invalid", nil
 		}
-		rules, err := m.VerdictRulesFor(ctx, run)
 		if err != nil {
 			return empty, "", err
-		}
-		if ValidateReviewLoopVerdict(*phase.ReviewLoop, verdict, rules) != nil {
-			return empty, "invalid", nil
-		}
-		sets, err := ParseVerdictSetAsides(*phase.ReviewLoop, verdict)
-		if err != nil {
-			return empty, "invalid", nil
-		}
-		byField, err := ParseVerdictClaims(*phase.ReviewLoop, verdict)
-		if err != nil {
-			return empty, "invalid", nil
-		}
-		var linked []string
-		for _, claims := range byField {
-			for _, claim := range claims {
-				linked = append(linked, claim.ScanGroupIDs...)
-			}
-		}
-		account := scanfindings.AccountInventory(inventory.Groups, linked, setAsideSelectors(sets))
-		if len(account.Unknown) > 0 {
-			return empty, "invalid", nil
 		}
 		return account, "draft", nil
 	}
 	return empty, "unavailable", nil
+}
+
+// errCandidateInvalid marks a defect in the model-authored candidate verdict.
+var errCandidateInvalid = errors.New("candidate verdict invalid")
+
+// candidateAccount accounts the inventory against a candidate's verdict
+// arguments. Defects in those arguments wrap errCandidateInvalid; any other
+// error is a host read failure.
+func (m InventoryAccounting) candidateAccount(ctx context.Context, run *api.WorkflowRun, def workflowdef.ReviewLoopDef, args map[string]any, groups []scanfindings.InventoryGroup) (scanfindings.InventoryAccount, error) {
+	var none scanfindings.InventoryAccount
+	verdict, _, _, err := parseSubmitVerdictArgs(def, args)
+	if err != nil {
+		return none, fmt.Errorf("%w: %w", errCandidateInvalid, err)
+	}
+	rules, err := m.VerdictRulesFor(ctx, run)
+	if err != nil {
+		return none, err
+	}
+	if err := ValidateReviewLoopVerdict(def, verdict, rules); err != nil {
+		return none, fmt.Errorf("%w: %w", errCandidateInvalid, err)
+	}
+	sets, err := ParseVerdictSetAsides(def, verdict)
+	if err != nil {
+		return none, fmt.Errorf("%w: %w", errCandidateInvalid, err)
+	}
+	byField, err := ParseVerdictClaims(def, verdict)
+	if err != nil {
+		return none, fmt.Errorf("%w: %w", errCandidateInvalid, err)
+	}
+	var linked []string
+	for _, claims := range byField {
+		for _, claim := range claims {
+			linked = append(linked, claim.ScanGroupIDs...)
+		}
+	}
+	account := scanfindings.AccountInventory(groups, linked, setAsideSelectors(sets))
+	if len(account.Unknown) > 0 {
+		return none, fmt.Errorf("%w: unknown scan groups %v", errCandidateInvalid, account.Unknown)
+	}
+	return account, nil
 }
 
 func selectorPartlyMatches(selector scanfindings.SetAside, group scanfindings.InventoryGroup) bool {

@@ -103,7 +103,9 @@ func TestScanQueryGroupsRefuseAStaleInventoryRevision(t *testing.T) {
 		Revision string `json:"inventory_revision"`
 	}
 	testutil.FailErr(t, "decode page", json.Unmarshal([]byte(raw), &page))
-	if page.Revision != scanfindings.InventoryRevision(ledger.scans) {
+	want, err := scanfindings.InventoryRevision(ledger.scans)
+	testutil.FailErr(t, "inventory revision", err)
+	if page.Revision != want {
 		t.Fatalf("page revision = %q", page.Revision)
 	}
 	_, err = runScanQuery(t.Context(), map[string]any{"scan_ids": []string{"complete"}, "view": "groups", "inventory_revision": page.Revision}, tctx, ledger, nil)

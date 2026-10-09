@@ -145,9 +145,16 @@ func checksums(files map[string][]byte) []byte {
 	return out.Bytes()
 }
 
+// verifyArchive reads through an os.Root so a release path cannot name a file
+// outside the archive.
 func verifyArchive(archiveDir string, files map[string][]byte) error {
+	root, err := os.OpenRoot(archiveDir)
+	if err != nil {
+		return fmt.Errorf("archive %s: %w", archiveDir, err)
+	}
+	defer func() { _ = root.Close() }()
 	for rel, want := range files {
-		got, err := os.ReadFile(filepath.Join(archiveDir, filepath.FromSlash(rel)))
+		got, err := root.ReadFile(filepath.FromSlash(rel))
 		if err != nil {
 			return fmt.Errorf("archive %s: %w", archiveDir, err)
 		}

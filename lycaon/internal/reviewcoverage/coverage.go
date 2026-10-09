@@ -108,16 +108,6 @@ func (f Facts) idSample() string {
 	return boundedList(append(factIDs(f.Obligations), factIDs(f.Gaps)...))
 }
 
-func (f Facts) unassessed(seen map[string]bool) string {
-	var ids []string
-	for _, fact := range append(append([]Fact(nil), f.Obligations...), f.Gaps...) {
-		if !seen[fact.ID] {
-			ids = append(ids, fact.ID)
-		}
-	}
-	return boundedList(ids)
-}
-
 func boundedList(ids []string) string {
 	if len(ids) == 0 {
 		return "(none)"

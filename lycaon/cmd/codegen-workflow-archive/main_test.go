@@ -95,6 +95,20 @@ func TestSealReproducesTheCommittedArchive(t *testing.T) {
 	if _, err := seal(committedRelease(t), securityPack, "security-survey", packDir, true); err == nil {
 		t.Fatal("check accepted an archive that differs from the release")
 	}
+	if _, err := seal(committedRelease(t), securityPack, "security-survey", t.TempDir(), true); err == nil {
+		t.Fatal("check accepted a missing archive")
+	}
+}
+
+// A release path that leaves the archive is refused, not read.
+func TestVerifyArchiveStaysInsideTheArchive(t *testing.T) {
+	parent := t.TempDir()
+	archive := filepath.Join(parent, "archive")
+	testutil.FailErr(t, "create archive", os.Mkdir(archive, 0o750))
+	testutil.FailErr(t, "write outside file", os.WriteFile(filepath.Join(parent, "outside.md"), []byte("outside\n"), 0o600))
+	if err := verifyArchive(archive, map[string][]byte{"../outside.md": []byte("outside\n")}); err == nil {
+		t.Fatal("verified a file outside the archive")
+	}
 }
 
 func TestMain(m *testing.M) {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"testing"
 	"time"
 
@@ -544,6 +545,17 @@ func TestReviewRepairFingerprintUsesStructuredDefects(t *testing.T) {
 	}
 	if first == reviewIssueFingerprint(feedback("verdict.claims", "wording one")) {
 		t.Fatal("distinct defects share repair identity")
+	}
+}
+
+func TestReviewRepairFingerprintOmitsUnreadableRows(t *testing.T) {
+	typed := map[string]any{"field": "verdict.coverage"}
+	want := reviewDiagnosticIdentity("TOOL_ARGS_INVALID", typed)
+	for _, unreadable := range []any{math.NaN(), "not rows"} {
+		details := map[string]any{"field": "verdict.coverage", "issues": unreadable, "repairs": unreadable}
+		if got := reviewDiagnosticIdentity("TOOL_ARGS_INVALID", details); got != want {
+			t.Fatalf("unreadable rows %v changed identity: %q want %q", unreadable, got, want)
+		}
 	}
 }
 

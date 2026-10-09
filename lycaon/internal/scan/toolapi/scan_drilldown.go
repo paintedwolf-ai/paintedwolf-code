@@ -207,7 +207,10 @@ func queryFindingGroups(ctx context.Context, coord scanbase.ScanCoordinator, ids
 		scans = append(scans, *rec)
 		findings = append(findings, scanbase.FilterFindings(scanfindings.InventoryFindings([]api.CodeScan{*rec}), req)...)
 	}
-	revision := scanfindings.InventoryRevision(scans)
+	revision, err := scanfindings.InventoryRevision(scans)
+	if err != nil {
+		return "", err
+	}
 	if expected != "" && expected != revision {
 		return "", &tools.ToolReject{Code: "SCAN_INVENTORY_STALE", Data: map[string]any{"inventory_revision": revision}}
 	}
