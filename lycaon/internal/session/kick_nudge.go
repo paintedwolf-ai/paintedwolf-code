@@ -61,7 +61,7 @@ func (m *Manager) coordinatorKickCleared(ctx context.Context, sessionID string) 
 	budgetRequested := anchor.InformRender(anchor.WorkerBudgetRequested)
 	return func(id, subject string) bool {
 		if anchor.SameInform(id, anchor.ReviewLoopContinue) || anchor.SameInform(id, anchor.ReviewLoopDecide) {
-			return m.workflows != nil && !m.workflows.ActiveReviewVerdictPending(ctx, sessionID)
+			return m.workflows != nil && !m.workflows.Policy.ActiveReviewVerdictPending(ctx, sessionID)
 		}
 		if id == budgetRequested {
 			return !m.workerBudgetRequestOpen(subject)
@@ -81,7 +81,7 @@ func (m *Manager) sessionPendingUserInputKnown(ctx context.Context, sessionID st
 	if m == nil || m.workflows == nil {
 		return false, false
 	}
-	vars, err := m.workflows.ScaffoldVarsForSession(ctx, sessionID)
+	vars, err := m.workflows.Policy.ScaffoldVarsForSession(ctx, sessionID)
 	if err != nil || vars == nil {
 		return false, false
 	}
@@ -176,7 +176,7 @@ func (m *Manager) applyPromptUserTurn(ctx context.Context, id string, in PromptI
 		m.maybeResetCoordinatorBatchOnVisibleUser(ctx, id, userMsg)
 		// Only visible user intent resolves pending feedback.
 		if m.workflows != nil && isVisibleUserIntentMessage(userMsg) {
-			if err := m.workflows.TryResolveUserFeedback(ctx, id, userMsg.ID, userMsg.AuthorPersonID, userPrompt); err != nil {
+			if err := m.workflows.Feedback.TryResolveUserFeedback(ctx, id, userMsg.ID, userMsg.AuthorPersonID, userPrompt); err != nil {
 				return "", fmt.Errorf("resolve user feedback: %w", err)
 			}
 		}
@@ -242,7 +242,7 @@ func (m *Manager) appendUserContinuation(ctx context.Context, sessionID string, 
 		return api.Message{}, err
 	}
 	if m.workflows != nil && in.Recovery == nil && api.IsUserInstructionMessage(msg) {
-		if err := m.workflows.TryResolveUserFeedback(ctx, sessionID, msg.ID, msg.AuthorPersonID, msg.Content); err != nil {
+		if err := m.workflows.Feedback.TryResolveUserFeedback(ctx, sessionID, msg.ID, msg.AuthorPersonID, msg.Content); err != nil {
 			return api.Message{}, fmt.Errorf("resolve user feedback from continuation: %w", err)
 		}
 	}
@@ -363,7 +363,7 @@ func (m *Manager) workflowObligationsOpen(ctx context.Context, sessionID string)
 	if sessionID == "" {
 		return false
 	}
-	run, err := m.workflows.GetActive(ctx, sessionID)
+	run, err := m.workflows.Runs.ActiveBySession(ctx, sessionID)
 	if err != nil || run == nil || run.Status != api.WorkflowRunStatusRunning {
 		return false
 	}
@@ -397,8 +397,8 @@ func (m *Manager) projectKickGateObligations(ctx context.Context, sessionID stri
 		return nil
 	}
 	fb := m.gateFeedback
-	if m.workflows != nil {
-		if manifest, ok := m.workflows.ActiveManifest(ctx, sessionID); ok {
+	if m.workflows != nil && m.workflows.Policy != nil {
+		if manifest, ok := m.workflows.Policy.ActiveManifest(ctx, sessionID); ok {
 			fb = fb.WithWorkflowArchive(manifest.Archive)
 		}
 	}

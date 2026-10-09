@@ -79,7 +79,7 @@ func (m *Manager) releaseSessionMemory(ctx context.Context, sessionID string) {
 		m.coordinatorRuntime.ForgetSession(ctx, sessionID)
 	}
 	if m.workflows != nil {
-		m.workflows.ForgetSession(sessionID)
+		m.workflows.Cleanup.ForgetSession(sessionID)
 	}
 	m.checkpointCapture.Reset(sessionID)
 	m.Streams().Finish(ctx, sessionID)

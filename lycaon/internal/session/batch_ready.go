@@ -103,7 +103,7 @@ func (m *Manager) activePhaseRequiresVerify(ctx context.Context, sessionID strin
 	if m == nil || m.workflows == nil {
 		return false
 	}
-	return m.workflows.ActivePhaseRequiresEvidence(ctx, sessionID, "verify")
+	return m.workflows.Policy.ActivePhaseRequiresEvidence(ctx, sessionID, "verify")
 }
 
 // Only resumable states keep a worker envelope open.

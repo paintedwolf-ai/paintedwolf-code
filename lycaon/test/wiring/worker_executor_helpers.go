@@ -20,7 +20,7 @@ func wiringWorkerExecutor(h *Harness) *worker.LocalWorkerExecutor {
 		prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}),
 	))
 	if h.WorkflowMgr != nil {
-		exec.SetPhaseTouchPaths(h.WorkflowMgr)
+		exec.SetPhaseTouchPaths(h.WorkflowMgr.Ambient)
 	}
 	return exec
 }

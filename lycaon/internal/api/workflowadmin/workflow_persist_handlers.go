@@ -2,12 +2,13 @@ package workflowadmin
 
 import (
 	"errors"
+	"github.com/go-chi/chi/v5"
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
-	"github.com/lycaon/lycaon/internal/workflow"
+	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
+	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -24,7 +25,7 @@ func (s *Handler) HandlePersistWorkflow(w http.ResponseWriter, r *http.Request) 
 		s.responses.DecodeError(w, r, err)
 		return
 	}
-	result, err := s.Persister.Persist(r.Context(), workflow.PersistRequest{
+	result, err := s.Persister.Persist(r.Context(), workflowcomposition.PersistRequest{
 		SessionID:      sessionID,
 		ProjectDir:     sess.WorkspacePath,
 		WorkflowID:     workflowID,
@@ -32,19 +33,19 @@ func (s *Handler) HandlePersistWorkflow(w http.ResponseWriter, r *http.Request) 
 		Confirm:        req.Confirm,
 		Trigger:        req.Trigger,
 		SessionPosture: sess.Posture,
-		CreatedBy:      workflow.ComposeActorUser,
+		CreatedBy:      workflowdrafts.User,
 	})
 	if err != nil {
-		var notConfirmed *workflow.PersistNotConfirmedError
+		var notConfirmed *workflowcomposition.PersistNotConfirmedError
 		if errors.As(err, &notConfirmed) {
 			s.responses.Fail(w, wire.ApiErrorCodePersistNotConfirmed, "confirm before saving this workflow")
 			return
 		}
-		if errors.Is(err, workflow.ErrSessionWorkflowNotFound) {
+		if errors.Is(err, workflowdrafts.ErrNotFound) {
 			s.responses.Fail(w, wire.ApiErrorCodeSessionWorkflowNotFound, "chat workflow not found")
 			return
 		}
-		var vf *workflow.ComposeValidationFailed
+		var vf *workflowcomposition.ComposeValidationFailed
 		if errors.As(err, &vf) {
 			s.responses.FailDetails(w, wire.ApiErrorCodeWorkflowValidationFailed, map[string]any{"errors": vf.Errors}, "workflow validation failed")
 			return
@@ -60,7 +61,7 @@ func (s *Handler) HandlePersistWorkflow(w http.ResponseWriter, r *http.Request) 
 			Status:     string(result.Summary.Scope),
 			Path:       result.Path,
 			Version:    result.Summary.Version,
-			CreatedBy:  string(workflow.ComposeActorUser),
+			CreatedBy:  string(workflowdrafts.User),
 		})
 	}
 	httpio.WriteJSON(w, http.StatusCreated, wire.PersistWorkflowResponse{

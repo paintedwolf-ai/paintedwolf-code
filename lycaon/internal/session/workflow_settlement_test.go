@@ -3,10 +3,6 @@ package session
 import (
 	"context"
 	"errors"
-	"sync/atomic"
-	"testing"
-	"time"
-
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/session/store"
@@ -15,6 +11,9 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
+	"sync/atomic"
+	"testing"
+	"time"
 )
 
 type settlementWorkflowSource struct {
@@ -22,10 +21,10 @@ type settlementWorkflowSource struct {
 	err    error
 }
 
-func (s *settlementWorkflowSource) ActiveRun(context.Context, string) (*api.WorkflowRun, error) {
+func (s *settlementWorkflowSource) ActiveBySession(context.Context, string) (*api.WorkflowRun, error) {
 	return s.active, s.err
 }
-func (*settlementWorkflowSource) ScaffoldVars(context.Context, string) (map[string]any, error) {
+func (*settlementWorkflowSource) GetScaffoldVars(context.Context, string) (map[string]any, error) {
 	return nil, nil
 }
 func (*settlementWorkflowSource) HumanApprovalAwaiting(context.Context, string) (bool, error) {
@@ -60,7 +59,8 @@ func TestWorkflowCompletionSettlesAfterExecutionDrains(t *testing.T) {
 			ctx := t.Context()
 			st := store.NewMemory()
 			mgr := NewManager(st, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
-			mgr.SetLoopWorkflowSource(&settlementWorkflowSource{})
+			loopWorkflowFixture1 := &settlementWorkflowSource{}
+			mgr.SetLoopWorkflowSource(&loopwake.WorkflowDomains{Runs: loopWorkflowFixture1, Approvals: loopWorkflowFixture1, Obligations: loopWorkflowFixture1})
 			sess, err := st.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 			testutil.FailErr(t, "create session", err)
 			testutil.FailErr(t, "mark busy", st.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
@@ -73,11 +73,11 @@ func TestWorkflowCompletionSettlesAfterExecutionDrains(t *testing.T) {
 			workers := &settlementWorkerQueue{}
 			workers.idle.Store(blocker != "workers")
 			mgr.workerQueue = workers
-			loop.EnterSleep(ctx, sess.ID, time.Now().Add(time.Hour), "phase wait", loopwake.HostObligationWaitTriggers(false), nil, loopwake.SleepMoverHost)
+			loop.Waits.EnterSleep(ctx, sess.ID, time.Now().Add(time.Hour), "phase wait", loopwake.HostObligationWaitTriggers(false), nil, loopwake.SleepMoverHost)
 			unblock := func() {}
 			switch blocker {
 			case "execution":
-				unblock = loop.BeginPromptExecution(ctx, sess.ID)
+				unblock = loop.Admission.BeginPromptExecution(ctx, sess.ID)
 			case "workers":
 				unblock = func() { workers.idle.Store(true) }
 			case "session lock":
@@ -101,8 +101,8 @@ func TestWorkflowCompletionSettlesAfterExecutionDrains(t *testing.T) {
 			}
 			current, err := st.Get(ctx, sess.ID)
 			testutil.FailErr(t, "read settled session", err)
-			if current.Status != api.SessionStatusIdle || loop.IsSleeping(sess.ID) {
-				t.Fatalf("status=%q sleeping=%v", current.Status, loop.IsSleeping(sess.ID))
+			if current.Status != api.SessionStatusIdle || loop.Waits.IsSleeping(sess.ID) {
+				t.Fatalf("status=%q sleeping=%v", current.Status, loop.Waits.IsSleeping(sess.ID))
 			}
 			testutil.FailErr(t, "replay completed notification", mgr.SettleCompletedWorkflow(ctx, sess.ID, "finished-run"))
 			assertNoSessionIdleEvent(t, eventCh)
@@ -118,7 +118,8 @@ func TestWorkflowCompletionDoesNotSettleAnotherActiveRun(t *testing.T) {
 	st := store.NewMemory()
 	mgr := NewManager(st, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
 	source := &settlementWorkflowSource{active: &api.WorkflowRun{ID: "new-run", Status: api.WorkflowRunStatusRunning}}
-	mgr.SetLoopWorkflowSource(source)
+	loopWorkflowFixture2 := source
+	mgr.SetLoopWorkflowSource(&loopwake.WorkflowDomains{Runs: loopWorkflowFixture2, Approvals: loopWorkflowFixture2, Obligations: loopWorkflowFixture2})
 	sess, err := st.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	testutil.FailErr(t, "mark busy", st.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
@@ -139,7 +140,8 @@ func TestWorkflowCompletionRetriesLookupFailure(t *testing.T) {
 	mgr := NewManager(st, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
 	want := errors.New("workflow store unavailable")
 	source := &settlementWorkflowSource{err: want}
-	mgr.SetLoopWorkflowSource(source)
+	loopWorkflowFixture3 := source
+	mgr.SetLoopWorkflowSource(&loopwake.WorkflowDomains{Runs: loopWorkflowFixture3, Approvals: loopWorkflowFixture3, Obligations: loopWorkflowFixture3})
 	sess, err := st.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	testutil.FailErr(t, "mark busy", st.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))

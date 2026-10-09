@@ -2,13 +2,12 @@ package session
 
 import (
 	"context"
-	"log/slog"
-	"strings"
-	"time"
-
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/pkg/api"
+	"log/slog"
+	"strings"
+	"time"
 )
 
 // NotifyWorkerCycleTerminal flushes deferred loop wakes when the parent worker cycle is idle.
@@ -16,7 +15,7 @@ func (m *Manager) NotifyWorkerCycleTerminal(ctx context.Context, parentID, compl
 	if m == nil {
 		return
 	}
-	m.ensureCoordinatorRuntime().CoordinatorLoop().OnWorkerCycleTerminal(ctx, parentID, completingJobID)
+	m.ensureCoordinatorRuntime().CoordinatorLoop().Cycles.OnWorkerCycleTerminal(ctx, parentID, completingJobID)
 	m.reconcileCoordinatorBatchFromLedger(ctx, parentID)
 	m.disarmCoordinatorLoopIfBatchTerminal(ctx, parentID)
 	m.maybeReconcileSandboxesOnIdle(ctx, parentID)
@@ -42,7 +41,7 @@ func (m *Manager) RecordWorkerTerminalProofAfterQueueComplete(ctx context.Contex
 	if summary := m.workerSummaryStatusForJob(ctx, parentID, jobID); summary != "" {
 		status = summary
 	}
-	return m.workflows.RecordWorkerTerminalProof(ctx, parentID, jobID, status)
+	return m.workflows.Fanout.RecordWorkerTerminalProof(ctx, parentID, jobID, status)
 }
 
 func (m *Manager) workerSummaryStatusForJob(ctx context.Context, parentID, jobID string) string {
@@ -111,11 +110,11 @@ func (m *Manager) workerCycleCompletingJobID(ctx context.Context, sessionID stri
 	if sessionID == "" {
 		return ""
 	}
-	run, err := m.loopWorkflowSource.ActiveRun(ctx, sessionID)
+	run, err := m.loopWorkflowSource.Runs.ActiveBySession(ctx, sessionID)
 	if err != nil || run == nil {
 		return ""
 	}
-	vars, err := m.loopWorkflowSource.ScaffoldVars(ctx, run.ID)
+	vars, err := m.loopWorkflowSource.Runs.GetScaffoldVars(ctx, run.ID)
 	if err != nil {
 		return ""
 	}

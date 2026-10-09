@@ -3,17 +3,17 @@ package workflowadmin
 import (
 	"context"
 	"errors"
+	"github.com/go-chi/chi/v5"
 	"net/http"
 	"strings"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/hostctx"
-	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -45,11 +45,11 @@ func (s *Handler) HandleStartWorkflowRun(w http.ResponseWriter, r *http.Request)
 	if !ok {
 		return
 	}
-	if err := s.Workflows.ValidateUserFacingStart(r.Context(), sess.WorkspacePath, sessionID, req.WorkflowID, req.WorkflowVersion); err != nil {
+	if err := s.Workflows.Resolver.ValidateUserFacingStart(r.Context(), sess.WorkspacePath, sessionID, req.WorkflowID, req.WorkflowVersion); err != nil {
 		s.WriteWorkflowError(w, r, err)
 		return
 	}
-	run, err := s.Workflows.Start(hostctx.WithHumanWorkflowStart(r.Context()), sessionID, req)
+	run, err := s.Workflows.Starts.Start(hostctx.WithHumanWorkflowStart(r.Context()), sessionID, req)
 	if err != nil {
 		s.WriteWorkflowError(w, r, err)
 		return
@@ -73,12 +73,12 @@ func (s *Handler) HandleExitWorkflowRun(w http.ResponseWriter, r *http.Request) 
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidWorkflowTarget, "expected_revision is required and must be positive")
 		return
 	}
-	run, err := s.Workflows.Get(r.Context(), runID)
+	run, err := s.Workflows.Store.Runs.Get(r.Context(), runID)
 	if err != nil {
 		s.WriteWorkflowError(w, r, err)
 		return
 	}
-	exitedRun, err := s.Workflows.Exit(r.Context(), run.SessionID, runID, req.ExpectedRevision, strings.TrimSpace(req.Reason))
+	exitedRun, err := s.Workflows.Controls.Exit(r.Context(), run.SessionID, runID, req.ExpectedRevision, strings.TrimSpace(req.Reason))
 	if err != nil {
 		s.WriteWorkflowError(w, r, err)
 		return
@@ -91,7 +91,7 @@ func (s *Handler) HandleGetActiveWorkflowRun(w http.ResponseWriter, r *http.Requ
 	if !requestscope.SessionExists(s.Store, s.responses, w, r, sessionID) {
 		return
 	}
-	run, err := s.Workflows.GetActive(r.Context(), sessionID)
+	run, err := s.Workflows.Store.Runs.ActiveBySession(r.Context(), sessionID)
 	if err != nil {
 		s.responses.InternalError(w, r, err)
 		return
@@ -102,7 +102,7 @@ func (s *Handler) HandleGetActiveWorkflowRun(w http.ResponseWriter, r *http.Requ
 
 func (s *Handler) HandleGetWorkflowRun(w http.ResponseWriter, r *http.Request) {
 	runID := chi.URLParam(r, "id")
-	run, err := s.Workflows.Get(r.Context(), runID)
+	run, err := s.Workflows.Store.Runs.Get(r.Context(), runID)
 	if err != nil {
 		s.writeRunLookupError(w, r, err)
 		return
@@ -112,19 +112,19 @@ func (s *Handler) HandleGetWorkflowRun(w http.ResponseWriter, r *http.Request) {
 
 func (s *Handler) HandlePauseWorkflowRun(w http.ResponseWriter, r *http.Request) {
 	s.controlWorkflowRun(w, r, func(ctx context.Context, runID string, reason string) (*wire.WorkflowRun, error) {
-		return s.Workflows.Pause(ctx, runID, reason)
+		return s.Workflows.Controls.Pause(ctx, runID, reason)
 	})
 }
 
 func (s *Handler) HandleResumeWorkflowRun(w http.ResponseWriter, r *http.Request) {
 	s.controlWorkflowRun(w, r, func(ctx context.Context, runID string, _ string) (*wire.WorkflowRun, error) {
-		return s.Workflows.Resume(ctx, runID)
+		return s.Workflows.Controls.Resume(ctx, runID)
 	})
 }
 
 func (s *Handler) HandleCancelWorkflowRun(w http.ResponseWriter, r *http.Request) {
 	s.controlWorkflowRun(w, r, func(ctx context.Context, runID string, reason string) (*wire.WorkflowRun, error) {
-		return s.Workflows.Cancel(ctx, runID, reason)
+		return s.Workflows.Controls.Cancel(ctx, runID, reason)
 	})
 }
 
@@ -139,11 +139,11 @@ func (s *Handler) HandleAdvanceWorkflowRun(w http.ResponseWriter, r *http.Reques
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidWorkflowRevision, "expected_revision must be positive")
 		return
 	}
-	run, err := s.Workflows.Advance(workflow.WithExpectedRevision(r.Context(), req.ExpectedRevision), runID)
+	run, err := s.Workflows.Phases.Advance(runstate.WithExpectedRevision(r.Context(), req.ExpectedRevision), runID)
 	if err != nil {
-		var gateErr *workflow.PhaseGateUnmetError
+		var gateErr *runstate.PhaseGateUnmetError
 		if errors.As(err, &gateErr) && !gateErr.Replayed {
-			if active, gerr := s.Workflows.Get(r.Context(), runID); gerr == nil && active != nil {
+			if active, gerr := s.Workflows.Store.Runs.Get(r.Context(), runID); gerr == nil && active != nil {
 				// A committed gate rejection emits one coordinator nudge.
 				s.Sessions.Emit(r.Context(), active.SessionID, anchor.GateBlocked, anchor.Envelope{})
 				s.Sessions.NudgeCoordinatorLoop(
@@ -174,7 +174,7 @@ func (s *Handler) HandleFireWorkflowTransition(w http.ResponseWriter, r *http.Re
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidWorkflowRevision, "expected_revision must be positive")
 		return
 	}
-	run, err := s.Workflows.FireTransition(workflow.WithExpectedRevision(r.Context(), req.ExpectedRevision), runID, transitionID, workflowdef.TransitionActorHuman)
+	run, err := s.Workflows.Phases.FireTransition(runstate.WithExpectedRevision(r.Context(), req.ExpectedRevision), runID, transitionID, workflowdef.TransitionActorHuman)
 	if err != nil {
 		s.WriteWorkflowError(w, r, err)
 		return
@@ -195,7 +195,7 @@ func (s *Handler) controlWorkflowRun(w http.ResponseWriter, r *http.Request, fn 
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidWorkflowRevision, "expected_revision must be positive")
 		return
 	}
-	run, err := fn(workflow.WithExpectedRevision(r.Context(), req.ExpectedRevision), runID, strings.TrimSpace(req.Reason))
+	run, err := fn(runstate.WithExpectedRevision(r.Context(), req.ExpectedRevision), runID, strings.TrimSpace(req.Reason))
 	if err != nil {
 		s.WriteWorkflowError(w, r, err)
 		return

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/worker/jobstate"
 	"time"
 
 	"github.com/google/uuid"
@@ -69,7 +70,7 @@ func (s *SQLStore) CancelJob(ctx context.Context, id string, result *api.WorkerR
 	}); err != nil {
 		return false, err
 	}
-	if err := EnqueueJobEventTx(ctx, tx, s.outbox, id); err != nil {
+	if err := jobstate.EnqueueJobEventTx(ctx, tx, s.outbox, id); err != nil {
 		return false, err
 	}
 	if err := tx.Commit(); err != nil {

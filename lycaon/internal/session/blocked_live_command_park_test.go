@@ -2,10 +2,6 @@ package session
 
 import (
 	"context"
-	"runtime"
-	"testing"
-	"time"
-
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	hostexec "github.com/lycaon/lycaon/internal/exec"
@@ -14,6 +10,9 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
+	"runtime"
+	"testing"
+	"time"
 )
 
 func TestParkBlockedLiveCommandsArmsExactProcessSubscription(t *testing.T) {
@@ -46,14 +45,14 @@ func TestParkBlockedLiveCommandsArmsExactProcessSubscription(t *testing.T) {
 		t.Fatal("running visible command was not parked")
 	}
 	loop := mgr.ensureCoordinatorRuntime().CoordinatorLoop()
-	if !loop.IsSleeping("session-1") {
+	if !loop.Waits.IsSleeping("session-1") {
 		t.Fatal("coordinator loop is not sleeping")
 	}
-	triggers := loop.WaitSubscriptionForTest("session-1")
+	triggers := loop.Waits.Triggers("session-1")
 	if len(triggers) != 2 || triggers[0] != loopwake.WaitTriggerTimer || triggers[1] != loopwake.WaitTriggerProcessDone {
 		t.Fatalf("wait triggers = %v want [timer process_done]", triggers)
 	}
-	handles := loop.ActiveProcessHandles("session-1")
+	handles := loop.Waits.ActiveProcessHandles("session-1")
 	if len(handles) != 1 || handles[0] != handle {
 		t.Fatalf("wait handles = %v want [%s]", handles, handle)
 	}

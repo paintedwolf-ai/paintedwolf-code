@@ -12,7 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/worker"
-	"github.com/lycaon/lycaon/internal/workflow"
+	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -85,10 +85,10 @@ func TestWorkflowHistoryIncludesEveryPage(t *testing.T) {
 	capture := t.TempDir()
 	database := testdbfixture.OpenPath(t, filepath.Join(capture, "store.db"))
 	testdbseed.InsertSession(t, database, "root", "project")
-	store := workflow.NewSQLStore(database)
+	store := workflowpersistence.New(database)
 	for i := range 103 {
 		run := api.WorkflowRun{ID: fmt.Sprintf("run-%03d", i), SessionID: "root", ProjectID: "project", WorkflowID: "release", WorkflowVersion: "1.0.0", Status: api.WorkflowRunStatusComplete, CurrentPhase: "done", CompletedAt: new(time.Now().UTC())}
-		testutil.FailErr(t, "create completed workflow", store.CreateState(t.Context(), &run, "", nil))
+		testutil.FailErr(t, "create completed workflow", store.State.CreateState(t.Context(), &run, "", nil))
 	}
 	_, err := database.ExecContext(t.Context(), `PRAGMA wal_checkpoint(TRUNCATE)`)
 	testutil.FailErr(t, "checkpoint workflow history", err)

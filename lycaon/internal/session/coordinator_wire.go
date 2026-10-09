@@ -114,7 +114,7 @@ func (w sessionWorkflowManifest) ActiveManifest(ctx context.Context, sessionID s
 	if w.m == nil || w.m.workflows == nil {
 		return assembly.ActiveWorkflowManifest{}, false
 	}
-	manifest, ok := w.m.workflows.ActiveManifest(ctx, sessionID)
+	manifest, ok := w.m.workflows.Policy.ActiveManifest(ctx, sessionID)
 	if !ok {
 		return assembly.ActiveWorkflowManifest{}, false
 	}
@@ -128,7 +128,7 @@ func (w sessionWorkflowManifest) RecordBoardOrientReady(ctx context.Context, ses
 	if w.m == nil || w.m.workflows == nil {
 		return nil
 	}
-	return w.m.workflows.RecordBoardOrientReady(ctx, sessionID, injectKey)
+	return w.m.workflows.Fanout.RecordBoardOrientReady(ctx, sessionID, injectKey)
 }
 
 func (m *Manager) SetWebResearchConfig(cfg *webresearch.ConfigStore) {
@@ -335,7 +335,7 @@ func (m *Manager) bindPromptLoopRuntimeDeps(deps *promptloop.PromptLoopDeps) {
 	}
 	deps.AnnouncePendingToolAsk = func(ctx context.Context, sessionID string) {
 		if m != nil && m.workflows != nil {
-			m.workflows.AnnouncePendingAsk(ctx, sessionID)
+			m.workflows.Asks.AnnouncePendingAsk(ctx, sessionID)
 		}
 	}
 	deps.HasActiveWorkflow = m.hasActiveWorkflowRun
@@ -343,14 +343,14 @@ func (m *Manager) bindPromptLoopRuntimeDeps(deps *promptloop.PromptLoopDeps) {
 		if m == nil || m.loopWorkflowSource == nil {
 			return false
 		}
-		awaiting, err := m.loopWorkflowSource.HumanApprovalAwaiting(ctx, sessionID)
+		awaiting, err := m.loopWorkflowSource.Approvals.HumanApprovalAwaiting(ctx, sessionID)
 		return err == nil && awaiting
 	}
 	deps.HostObligationHeld = func(ctx context.Context, sessionID string) bool {
 		if m == nil || m.loopWorkflowSource == nil {
 			return false
 		}
-		held, err := m.loopWorkflowSource.HostObligationHeld(ctx, sessionID)
+		held, err := m.loopWorkflowSource.Obligations.HostObligationHeld(ctx, sessionID)
 		return err == nil && held
 	}
 	deps.ParkBlockedLiveCommands = m.parkBlockedLiveCommands
@@ -536,7 +536,7 @@ func (m *Manager) beforePromptLoopToolRun(
 	if m.progress != nil {
 		currentProgress = m.progress.Get(ctx, root)
 	}
-	reviewLoopActive := m.workflows != nil && m.workflows.ActivePhaseHasReviewLoop(ctx, sess.ID)
+	reviewLoopActive := m.workflows != nil && m.workflows.Policy.ActivePhaseHasReviewLoop(ctx, sess.ID)
 	closureBaseline, closureArmed := m.progressClosureLatch(root)
 	guardDeps := m.workerCycleGuardDeps()
 	declaredVerify := ""
@@ -933,7 +933,7 @@ func (m *Manager) buildLoopWakeDeps() loopwake.LoopDeps {
 				if m == nil || m.workflows == nil {
 					return nil, nil
 				}
-				return m.workflows.GetActive(ctx, sessionID)
+				return m.workflows.Runs.ActiveBySession(ctx, sessionID)
 			},
 			WorkflowObligationsOpen: m.workflowObligationsOpen,
 		}),

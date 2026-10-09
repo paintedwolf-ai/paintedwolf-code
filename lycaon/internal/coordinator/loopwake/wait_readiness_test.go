@@ -3,8 +3,16 @@ package loopwake
 import (
 	"context"
 	"errors"
+	awaitstore "github.com/lycaon/lycaon/internal/await"
+	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/egressproxy"
 	"github.com/lycaon/lycaon/internal/promptresult"
+	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
+	"github.com/lycaon/lycaon/internal/testdbseed"
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/pkg/api"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -14,15 +22,6 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-
-	awaitstore "github.com/lycaon/lycaon/internal/await"
-	"github.com/lycaon/lycaon/internal/confine"
-	"github.com/lycaon/lycaon/internal/egressproxy"
-	"github.com/lycaon/lycaon/internal/settings"
-	"github.com/lycaon/lycaon/internal/testdbseed"
-	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestParseReadinessConditions(t *testing.T) {
@@ -186,7 +185,7 @@ func TestConditionMonitorCannotResolveAfterDeadline(t *testing.T) {
 	})
 	testutil.FailErr(t, "arm delayed readiness wait", err)
 
-	monitorConditions(t.Context(), NewLoopEngine(), store, lease)
+	monitorConditions(t.Context(), NewLoopEngine().Subscriptions, store, lease)
 	active, ok, err := store.ForSession(t.Context(), lease.SessionID)
 	testutil.FailErr(t, "read delayed readiness wait", err)
 	if !ok || active.ID != lease.ID {
@@ -207,11 +206,11 @@ func TestRecoverWaitLeasesRebuildsParkedState(t *testing.T) {
 
 	loop := NewLoopEngine()
 	loop.SetDeps(busyWaitLoopDeps())
-	if err := RecoverWaitLeases(context.Background(), loop, store); err != nil {
+	if err := RecoverWaitLeases(context.Background(), loop.Subscriptions, store); err != nil {
 		t.Fatalf("recover wait leases: %v", err)
 	}
-	if !loop.IsSleeping(lease.SessionID) || !loop.SessionSleepingOnProcess(lease.SessionID, "command-1") {
-		t.Fatalf("recovered triggers = %v", loop.WaitSubscriptionForTest(lease.SessionID))
+	if !loop.Waits.IsSleeping(lease.SessionID) || !loop.Waits.SessionSleepingOnProcess(lease.SessionID, "command-1") {
+		t.Fatalf("recovered triggers = %v", waitSubscriptionForTest(loop.Subscriptions, lease.SessionID))
 	}
 }
 
@@ -234,7 +233,7 @@ func TestRecoverSettledWaitResumesDirectSessionExactlyOnce(t *testing.T) {
 
 	resumed := make(chan awaitstore.Condition, 2)
 	loop := NewLoopEngine()
-	loop.SetWaitStore(store)
+	loop.Subscriptions.SetWaitStore(store)
 	loop.SetDeps(LoopDeps{
 		GetSession: func(context.Context, string) (*api.Session, error) {
 			return &api.Session{ID: "direct-1", AgentType: "explore", Status: api.SessionStatusIdle}, nil
@@ -253,7 +252,7 @@ func TestRecoverSettledWaitResumesDirectSessionExactlyOnce(t *testing.T) {
 			return &promptresult.Result{}, nil
 		},
 	})
-	if err := RecoverWaitLeases(context.Background(), loop, store); err != nil {
+	if err := RecoverWaitLeases(context.Background(), loop.Subscriptions, store); err != nil {
 		t.Fatalf("recover settled direct wait: %v", err)
 	}
 	select {
@@ -264,11 +263,11 @@ func TestRecoverSettledWaitResumesDirectSessionExactlyOnce(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("settled direct wait did not resume")
 	}
-	loop.WaitForAsyncTurns(testutil.BoundedContext(t, time.Second))
+	loop.Turns.WaitForAsyncTurns(testutil.BoundedContext(t, time.Second))
 	if pending, err := store.PendingAgentResumes(t.Context()); err != nil || len(pending) != 0 {
 		t.Fatalf("pending resumes after delivery = %+v err=%v", pending, err)
 	}
-	if err := RecoverWaitLeases(context.Background(), loop, store); err != nil {
+	if err := RecoverWaitLeases(context.Background(), loop.Subscriptions, store); err != nil {
 		t.Fatalf("recover delivered direct wait: %v", err)
 	}
 	select {
@@ -298,7 +297,7 @@ func TestSettledWaitRetriesTransientAdmissionFailure(t *testing.T) {
 	resumed := make(chan struct{}, 1)
 	var attempts atomic.Int32
 	loop := NewLoopEngine()
-	loop.SetWaitStore(store)
+	loop.Subscriptions.SetWaitStore(store)
 	loop.SetDeps(LoopDeps{
 		GetSession: func(context.Context, string) (*api.Session, error) {
 			return &api.Session{ID: "direct-retry", AgentType: "explore", Status: api.SessionStatusIdle}, nil
@@ -318,7 +317,7 @@ func TestSettledWaitRetriesTransientAdmissionFailure(t *testing.T) {
 		},
 	})
 	t.Cleanup(func() { loop.ForgetSession(context.Background(), "direct-retry") })
-	if err := RecoverWaitLeases(context.Background(), loop, store); err != nil {
+	if err := RecoverWaitLeases(context.Background(), loop.Subscriptions, store); err != nil {
 		t.Fatalf("recover retry wait: %v", err)
 	}
 	select {

@@ -17,7 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/lifecycle"
 	"github.com/lycaon/lycaon/internal/usernotice"
-	"github.com/lycaon/lycaon/internal/workflow"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -53,9 +53,9 @@ func TestPromptHostErrorCode(t *testing.T) {
 		}{
 			{session.ErrGroundingEscalated, "grounding_escalated"},
 			{project.ErrMutationInProgress, "project_mutation_in_progress"},
-			{workflow.ErrActiveRunExists, "workflow_active"},
+			{runstate.ErrActiveRunExists, "workflow_active"},
 			{&session.SessionSpendCeilingReached{CeilingUSD: 5, SpentUSD: 5.1}, "session_spend_ceiling_reached"},
-			{&workflow.NotRunnableError{Reason: "paused"}, "workflow_not_runnable"},
+			{&runstate.NotRunnableError{Reason: "paused"}, "workflow_not_runnable"},
 			{&failure.ProviderNotConfiguredError{ProviderID: "x"}, "provider_not_configured"},
 			{&failure.ProviderEmptyCompletionError{}, "provider_empty_completion"},
 			{&failure.ProviderContextTooSmallError{ProviderID: "desktop", Model: "qwen3.5:27b"}, "provider_context_too_small"},

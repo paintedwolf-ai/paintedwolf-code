@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/worker/jobstate"
 	"reflect"
 	"strings"
 
@@ -91,7 +92,7 @@ func (r *SQLDecisionResolver) resolve(ctx context.Context, expected api.WorkerDe
 		if err := queries.ClearWorkerOutcomeDelivery(ctx, jobID); err != nil {
 			return err
 		}
-		if err := EnqueueJobEventTx(ctx, tx, r.queue.store.outbox, jobID); err != nil {
+		if err := jobstate.EnqueueJobEventTx(ctx, tx, r.queue.store.outbox, jobID); err != nil {
 			return err
 		}
 		return queries.DeleteWorkerDecision(ctx, childSessionID)

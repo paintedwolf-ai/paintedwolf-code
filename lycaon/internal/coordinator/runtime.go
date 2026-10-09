@@ -2,8 +2,6 @@ package coordinator
 
 import (
 	"context"
-	"sync"
-
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/assembly"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
@@ -12,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/pkg/api"
+	"sync"
 )
 
 // RuntimeDeps wires the coordinator prompt runtime.
@@ -75,7 +74,7 @@ func (r *Runtime) refreshDepsLocked() {
 		}
 		r.loop.Deps = r.loopDeps()
 		// Direct binding avoids reentering depsMu.
-		r.loop.Deps.ObservePrompt = r.coordLoop.ObservePrompt
+		r.loop.Deps.ObservePrompt = r.coordLoop.Observations.ObservePrompt
 		r.loop.Deps.CommitWorkerContext = r.assemblyEngineLocked().CommitWorkerContext
 	}
 	if r.assemblyDepsFn != nil {
@@ -224,7 +223,7 @@ func (r *Runtime) StopSleepTimers() {
 	r.depsMu.Lock()
 	loop := r.coordLoop
 	r.depsMu.Unlock()
-	loop.StopSleepTimers()
+	loop.Waits.StopSleepTimers()
 }
 
 // DrainLoopPending runs deferred loop wakes with deps refreshed.
@@ -237,7 +236,7 @@ func (r *Runtime) DrainLoopPending(ctx context.Context, sessionID string) {
 	loop := r.coordLoop
 	r.depsMu.Unlock()
 	if loop != nil {
-		loop.DrainPending(ctx, sessionID)
+		loop.Nudges.DrainPending(ctx, sessionID)
 	}
 }
 

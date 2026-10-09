@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/worker/jobstate"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/db"
@@ -70,7 +71,7 @@ func (l *SQLBudgetLedger) Request(ctx context.Context, jobID string, req api.Wor
 			return nil
 		}
 		recorded = true
-		return EnqueueJobEventTx(ctx, tx, l.queue.store.outbox, jobID)
+		return jobstate.EnqueueJobEventTx(ctx, tx, l.queue.store.outbox, jobID)
 	})
 	if err != nil || !recorded {
 		return false, err
@@ -102,7 +103,7 @@ func (l *SQLBudgetLedger) Grant(ctx context.Context, childSessionID, jobID strin
 		if rows != 1 {
 			return ErrWorkerBudgetNotLive
 		}
-		return EnqueueJobEventTx(ctx, tx, l.queue.store.outbox, jobID)
+		return jobstate.EnqueueJobEventTx(ctx, tx, l.queue.store.outbox, jobID)
 	})
 	if err != nil {
 		return err

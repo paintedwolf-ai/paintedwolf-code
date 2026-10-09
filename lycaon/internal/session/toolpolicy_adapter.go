@@ -27,10 +27,14 @@ func (m *Manager) toolpolicyEngineDeps() toolpolicy.EngineDeps {
 		}
 		return postureRegistryAdapter{reg: reg}, nil
 	}
+	var workflowSource toolpolicy.WorkflowSource
+	if m.workflows != nil && m.workflows.Policy != nil {
+		workflowSource = m.workflows.Policy.PolicySnapshot
+	}
 	return toolpolicy.EngineDeps{
 		ToolInvoker:      m.toolInvoker,
 		Rules:            m.rules,
-		Workflows:        m.workflowPolicy,
+		Workflows:        workflowSource,
 		Postures:         posturesFn,
 		ToolAccess:       m.ResolveToolAccess,
 		RejectFormatter:  m.toolRejectFormatter,

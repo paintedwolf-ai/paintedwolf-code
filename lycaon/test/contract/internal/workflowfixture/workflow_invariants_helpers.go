@@ -10,13 +10,14 @@ import (
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/orchestration"
-	"github.com/lycaon/lycaon/internal/workflow"
+	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
-func ContractWorkflowComposer(t *testing.T) *workflow.Composer {
+func ContractWorkflowComposer(t *testing.T) *workflowcomposition.Composer {
 	t.Helper()
 	moduleRoot := filepath.Join(contractcheck.RepoRoot(t), "lycaon")
 	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{})
@@ -25,20 +26,20 @@ func ContractWorkflowComposer(t *testing.T) *workflow.Composer {
 	if err := orchestration.LoadRequiredAgentRegistry(context.Background(), agents); err != nil {
 		contractcheck.FailErr(t, "agents.LoadRequiredAgentRegistry failed", err)
 	}
-	policy, err := workflow.LoadComposePolicy()
-	contractcheck.FailErr(t, "workflow.LoadComposePolicy failed", err)
-	return &workflow.Composer{
+	policy, err := workflowcomposition.LoadComposePolicy()
+	contractcheck.FailErr(t, "workflowcomposition.LoadComposePolicy failed", err)
+	return &workflowcomposition.Composer{
 		ModuleRoot:   moduleRoot,
-		SessionStore: workflow.NewMemorySessionWorkflowStore(),
+		SessionStore: workflowdrafts.NewMemory(),
 		Registry:     reg,
 		Agents:       agents,
 		Policy:       policy,
 	}
 }
 
-func ContractWorkflowTemplates(t *testing.T) workflow.TemplateCatalog {
+func ContractWorkflowTemplates(t *testing.T) workflowcomposition.TemplateCatalog {
 	t.Helper()
-	catalog, err := workflow.LoadTemplatesFromDir(extpacks.Bundled(config.PlatformFlows.Join("_templates")))
+	catalog, err := workflowcomposition.LoadTemplatesFromDir(extpacks.Bundled(config.PlatformFlows.Join("_templates")))
 	contractcheck.FailErr(t, "load workflow templates", err)
 	return catalog
 }
@@ -100,9 +101,9 @@ func templateComposeParams(id string) map[string]any {
 	return params
 }
 
-func ComposeTemplate(t *testing.T, c *workflow.Composer, templateID string) *workflow.ComposeResult {
+func ComposeTemplate(t *testing.T, c *workflowcomposition.Composer, templateID string) *workflowcomposition.ComposeResult {
 	t.Helper()
-	result, err := c.ComposeFromTemplate(context.Background(), workflow.ComposeFromTemplateRequest{
+	result, err := c.ComposeFromTemplate(context.Background(), workflowcomposition.ComposeFromTemplateRequest{
 		SessionID:  "contract-session",
 		TemplateID: templateID,
 		Params:     templateComposeParams(templateID),

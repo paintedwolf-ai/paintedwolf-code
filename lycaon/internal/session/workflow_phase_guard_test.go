@@ -1,6 +1,8 @@
 package session
 
 import (
+	workflowfacts "github.com/lycaon/lycaon/internal/session/workflowfacts"
+
 	"context"
 	"strings"
 	"testing"
@@ -11,19 +13,20 @@ import (
 
 type phaseGuardWorkflowView struct {
 	stubWorkflowManifest
-	state WorkflowPhaseGuardState
+	state workflowfacts.WorkflowPhaseGuardState
 }
 
-func (v phaseGuardWorkflowView) ActivePhaseGuardState(context.Context, string) WorkflowPhaseGuardState {
+func (v phaseGuardWorkflowView) ActivePhaseGuardState(context.Context, string) workflowfacts.WorkflowPhaseGuardState {
 	return v.state
 }
 
 func TestCloseoutBlocksCompletionReportBeforeReportPhase(t *testing.T) {
 	mgr, sess := newSynthesisDelayManager(t)
-	mgr.workflows = phaseGuardWorkflowView{state: WorkflowPhaseGuardState{
+	workflowFixture1 := phaseGuardWorkflowView{state: workflowfacts.WorkflowPhaseGuardState{
 		Phase:                 "ingest",
 		ReportCloseoutPending: true,
 	}}
+	mgr.workflows = &WorkflowDomains{Runs: workflowFixture1, Policy: workflowFixture1, Ambient: workflowFixture1, Blueprints: workflowFixture1, Batch: workflowFixture1, Slash: workflowFixture1, Requests: workflowFixture1, Feedback: workflowFixture1, Transcript: workflowFixture1, Asks: workflowFixture1, Fanout: workflowFixture1, Phases: workflowFixture1, Reports: workflowFixture1, Recovery: workflowFixture1, Cleanup: workflowFixture1}
 
 	reject, blocked := mgr.maybeRejectCloseoutBeforeReportPhase(
 		context.Background(), sess, `{"synthesis":"done"}`, "implement_synthesis", true,
@@ -38,17 +41,20 @@ func TestCloseoutBlocksCompletionReportBeforeReportPhase(t *testing.T) {
 
 func TestCloseoutPhaseGuardAllowsInterimProseAndReportPhase(t *testing.T) {
 	mgr, sess := newSynthesisDelayManager(t)
-	mgr.workflows = phaseGuardWorkflowView{state: WorkflowPhaseGuardState{
+	workflowFixture2 := phaseGuardWorkflowView{state: workflowfacts.WorkflowPhaseGuardState{
 		Phase:                 "ingest",
 		ReportCloseoutPending: true,
 	}}
+	mgr.workflows = &WorkflowDomains{Runs: workflowFixture2, Policy: workflowFixture2, Ambient: workflowFixture2, Blueprints: workflowFixture2, Batch: workflowFixture2, Slash: workflowFixture2, Requests: workflowFixture2, Feedback: workflowFixture2, Transcript: workflowFixture2, Asks: workflowFixture2, Fanout: workflowFixture2, Phases: workflowFixture2, Reports: workflowFixture2, Recovery: workflowFixture2, Cleanup: workflowFixture2}
 	if _, blocked := mgr.maybeRejectCloseoutBeforeReportPhase(
 		context.Background(), sess, "Still collecting scans.", "implement_synthesis", true,
 	); blocked {
 		t.Fatal("interim prose must not be treated as a completion report")
 	}
 
-	mgr.workflows = phaseGuardWorkflowView{state: WorkflowPhaseGuardState{Phase: "report"}}
+	workflowFixture3 := phaseGuardWorkflowView{state: workflowfacts.WorkflowPhaseGuardState{Phase: "report"}}
+
+	mgr.workflows = &WorkflowDomains{Runs: workflowFixture3, Policy: workflowFixture3, Ambient: workflowFixture3, Blueprints: workflowFixture3, Batch: workflowFixture3, Slash: workflowFixture3, Requests: workflowFixture3, Feedback: workflowFixture3, Transcript: workflowFixture3, Asks: workflowFixture3, Fanout: workflowFixture3, Phases: workflowFixture3, Reports: workflowFixture3, Recovery: workflowFixture3, Cleanup: workflowFixture3}
 	if _, blocked := mgr.maybeRejectCloseoutBeforeReportPhase(
 		context.Background(), sess, `{"synthesis":"done"}`, "implement_synthesis", true,
 	); blocked {
@@ -59,8 +65,8 @@ func TestCloseoutPhaseGuardAllowsInterimProseAndReportPhase(t *testing.T) {
 func TestTaskObservationBlocksPendingPhaseObligation(t *testing.T) {
 	sess := &api.Session{ID: "session-1", AgentType: "coordinator"}
 	gc := &oar.GuardContext{}
-	deps := WorkerCycleGuardDeps{PhaseGuardState: func(context.Context, string) WorkflowPhaseGuardState {
-		return WorkflowPhaseGuardState{
+	deps := WorkerCycleGuardDeps{PhaseGuardState: func(context.Context, string) workflowfacts.WorkflowPhaseGuardState {
+		return workflowfacts.WorkflowPhaseGuardState{
 			Phase: "ingest", PhaseObligationPending: true, PendingObligationKinds: []string{"scan"},
 		}
 	}}
@@ -79,8 +85,8 @@ func TestTaskObservationBlocksPendingPhaseObligation(t *testing.T) {
 
 func TestTaskPolicyRejectsPendingPhaseObligation(t *testing.T) {
 	mgr, sess := newSynthesisDelayManager(t)
-	deps := WorkerCycleGuardDeps{PhaseGuardState: func(context.Context, string) WorkflowPhaseGuardState {
-		return WorkflowPhaseGuardState{
+	deps := WorkerCycleGuardDeps{PhaseGuardState: func(context.Context, string) workflowfacts.WorkflowPhaseGuardState {
+		return workflowfacts.WorkflowPhaseGuardState{
 			Phase: "ingest", PhaseObligationPending: true, PendingObligationKinds: []string{"scan"},
 		}
 	}}

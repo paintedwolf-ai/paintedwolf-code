@@ -1,13 +1,12 @@
 package contract
 
 import (
-	"strings"
-	"testing"
-
-	"github.com/lycaon/lycaon/internal/session"
+	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/workflowfixture"
+	"strings"
+	"testing"
 )
 
 func TestBundledWorkflowManifestPosturesValid(t *testing.T) {
@@ -35,7 +34,7 @@ func checkManifestPostures(t *testing.T, key string, m workflowdef.Manifest) {
 
 func assertValidPosture(t *testing.T, manifestKey, field, value string) {
 	t.Helper()
-	if !session.ValidSessionPosture(value) {
+	if !sessionposture.ValidSessionPosture(value) {
 		t.Errorf("%s %s = %q is not a valid SessionPosture", manifestKey, field, value)
 	}
 	for _, legacy := range []string{"plan", "implement", "delegation", "security"} {

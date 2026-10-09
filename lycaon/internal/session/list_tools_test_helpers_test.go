@@ -1,7 +1,13 @@
 package session_test
 
 import (
+	workflowruntime "github.com/lycaon/lycaon/internal/workflow/runtime"
+	workflowstatetools "github.com/lycaon/lycaon/internal/workflow/statetools"
+
 	"context"
+	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
+	workflowinputs "github.com/lycaon/lycaon/internal/workflow/inputs"
+	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
 	"path/filepath"
 	"testing"
 
@@ -26,7 +32,11 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workflow"
+	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
+	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
+	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -73,31 +83,33 @@ func setupContextualToolsFixtureFull(t *testing.T, posture api.SessionPosture, c
 	bundledDir := filepath.Join(configRoot, "config", "packs", "painted-wolf", "platform", "workflows")
 	manifestRegistry, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "workflow.RegistryFromDirs failed", err)
-	sessionWF := workflow.NewSessionWorkflowSQLStore(sqlDB)
-	workflowMgr := workflow.NewManager(workflow.NewSQLStore(sqlDB), store, manifestRegistry, nil)
-	workflowMgr.Resolver = workflow.ManifestResolver{SessionStore: sessionWF}
-	workflowMgr.SessionScaffold = workflow.NewSessionScaffoldSQLStore(sqlDB)
+	sessionWF := workflowdrafts.NewSQL(sqlDB)
+	workflowMgr := workflow.NewManager(workflowpersistence.New(sqlDB), store, manifestRegistry, nil)
+	workflowMgr.Resolver.SessionStore = sessionWF
+	workflowMgr.Blueprints.Scaffold.Store = workflowpersistence.NewSessionScaffoldSQLStore(sqlDB)
 	projectDir := t.TempDir()
 	blueprintStore := blueprint.NewFileStoreForTest(projectDir)
 	blueprintMgr := blueprint.NewManager(blueprintStore)
-	workflowMgr.BlueprintCreate = blueprint.WorkflowBlueprintCreator{Manager: blueprintMgr}
-	workflowMgr.BlueprintGet = blueprintMgr
-	mgr.SetWorkflowSessionView(workflowMgr, workflow.PolicySource(workflowMgr))
-	mgr.SetCoordinatorTurnFrameSource(&workflow.CoordinatorTurnFrameLoader{Runs: workflowMgr, SessionStore: sessionWF})
-	if err := workflow.RegisterStateTools(rt.Registry, workflow.StateToolDeps{Runs: workflowMgr, Sessions: store}); err != nil {
+	workflowMgr.Blueprints.Creator = blueprint.WorkflowBlueprintCreator{Manager: blueprintMgr}
+	workflowMgr.Blueprints.Getter = blueprintMgr
+	workflowMgr.Presentation.BlueprintGetter = blueprintMgr
+	workflowMgr.Approvals.Getter = blueprintMgr
+	mgr.SetWorkflowDomains(&session.WorkflowDomains{Runs: workflowMgr.Store.Runs, Policy: workflowMgr.Policy, Ambient: workflowMgr.Ambient, Blueprints: workflowMgr.Blueprints, Batch: workflowMgr.Batch, Slash: workflowMgr.Slash, Requests: workflowMgr.Requests, Feedback: workflowMgr.Feedback, Transcript: workflowMgr.Transcript, Asks: workflowMgr.Asks, Fanout: workflowMgr.Fanout, Phases: workflowMgr.Phases, Reports: workflowMgr.Reports, Recovery: workflowMgr.Recovery, Cleanup: workflowMgr})
+	mgr.SetCoordinatorTurnFrameSource(&workflowruntime.CoordinatorFrames{Runs: workflowMgr.Store.Runs, Resolver: &workflowMgr.Resolver, Snapshots: workflowMgr.Snapshots, Policy: workflowMgr.Policy, Obligations: workflowMgr.Obligations, SessionStore: sessionWF})
+	if err := workflowstatetools.RegisterStateTools(rt.Registry, workflowstatetools.StateToolDeps{Runs: workflowMgr.Store.Runs, Vars: workflowMgr.Phases.Vars, Journal: workflowMgr.Phases.Journal, Resolver: &workflowMgr.Resolver, Starts: workflowMgr.Starts, Controls: workflowMgr.Controls, Scaffold: workflowMgr.Blueprints.Scaffold, Sessions: store}); err != nil {
 		testutil.FailErr(t, "workflow.RegisterStateTools failed", err)
 	}
-	if err := workflow.RegisterAdvanceTool(rt.Registry, workflowMgr); err != nil {
-		testutil.FailErr(t, "workflow.RegisterAdvanceTool failed", err)
+	if err := workflowphases.RegisterAdvanceTool(rt.Registry, workflowMgr.Phases); err != nil {
+		testutil.FailErr(t, "workflowphases.RegisterAdvanceTool failed", err)
 	}
-	if err := workflow.RegisterTransitionTool(rt.Registry, workflowMgr); err != nil {
-		testutil.FailErr(t, "workflow.RegisterTransitionTool failed", err)
+	if err := workflowphases.RegisterTransitionTool(rt.Registry, workflowMgr.Phases); err != nil {
+		testutil.FailErr(t, "workflowphases.RegisterTransitionTool failed", err)
 	}
-	if err := workflow.RegisterFeedbackTool(rt.Registry, workflowMgr); err != nil {
+	if err := workflowinputs.RegisterFeedbackTool(rt.Registry, workflowMgr.Feedback); err != nil {
 		testutil.FailErr(t, "workflow.RegisterFeedbackTool failed", err)
 	}
-	if err := workflow.RegisterAskUserTool(rt.Registry, workflowMgr, rt.Boundary); err != nil {
-		testutil.FailErr(t, "workflow.RegisterAskUserTool failed", err)
+	if err := workflowinputs.RegisterAskUserTool(rt.Registry, workflowMgr.Asks, rt.Boundary); err != nil {
+		testutil.FailErr(t, "workflowinputs.RegisterAskUserTool failed", err)
 	}
 	registerContextualToolsCoordinatorExtras(t, configRoot, rt.Registry, mgr, agents, sessionWF, bundledDir)
 
@@ -127,7 +139,7 @@ func wireBundledToolPolicyForTest(t *testing.T, mgr *session.Manager) {
 	testutil.FailErr(t, "LoadPostureRegistry", err)
 	packs, err := rules.LoadBundledRules()
 	testutil.FailErr(t, "LoadBundledRules", err)
-	if err := rules.ValidatePostureRules(postures, session.AllSessionPostures(), packs); err != nil {
+	if err := rules.ValidatePostureRules(postures, sessionposture.AllSessionPostures(), packs); err != nil {
 		testutil.FailErr(t, "ValidatePostureRules", err)
 	}
 	condReg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{})
@@ -175,7 +187,7 @@ func registerContextualToolsCoordinatorExtras(
 	reg *tools.DefaultRegistry,
 	mgr *session.Manager,
 	agents *orchestration.MemoryAgentRegistry,
-	sessionWF *workflow.SessionWorkflowSQLStore,
+	sessionWF *workflowdrafts.SQL,
 	bundledDir string,
 ) {
 	t.Helper()
@@ -195,11 +207,11 @@ func registerContextualToolsCoordinatorExtras(
 	}
 	condReg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{})
 	testutil.FailErr(t, "build conditions registry", err)
-	policy, err := workflow.LoadComposePolicy()
-	testutil.FailErr(t, "workflow.LoadComposePolicy failed", err)
-	templates, err := workflow.LoadTemplatesFromDir(extpacks.Bundled(config.PlatformFlows.Join("_templates")))
+	policy, err := workflowcomposition.LoadComposePolicy()
+	testutil.FailErr(t, "workflowcomposition.LoadComposePolicy failed", err)
+	templates, err := workflowcomposition.LoadTemplatesFromDir(extpacks.Bundled(config.PlatformFlows.Join("_templates")))
 	testutil.FailErr(t, "load workflow templates", err)
-	composer := &workflow.Composer{
+	composer := &workflowcomposition.Composer{
 		SessionStore: sessionWF,
 		Registry:     condReg,
 		Agents:       agents,
@@ -212,12 +224,12 @@ func registerContextualToolsCoordinatorExtras(
 	if err := workflow.RegisterComposeFromTemplateTool(reg, composer); err != nil {
 		testutil.FailErr(t, "workflow.RegisterComposeFromTemplateTool failed", err)
 	}
-	if err := workflow.RegisterCatalogSummariesTool(reg, workflow.ManifestResolver{
+	if err := workflow.RegisterCatalogSummariesTool(reg, workflowcatalog.Resolver{
 		SessionStore: sessionWF,
 	}, sessionWF, composer.Templates); err != nil {
 		t.Fatal(err)
 	}
-	persister := &workflow.Persister{SessionStore: sessionWF}
+	persister := &workflowcomposition.Persister{SessionStore: sessionWF}
 	if err := workflow.RegisterPersistTool(reg, persister); err != nil {
 		testutil.FailErr(t, "workflow.RegisterPersistTool failed", err)
 	}

@@ -2,9 +2,9 @@ package reenter
 
 import (
 	"context"
+	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
-	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 )
 
@@ -27,7 +27,7 @@ func NudgeOnManifestReenter(
 	if n == nil {
 		return
 	}
-	legID, ok := workflow.ReenterLegForAdvance(manifest, previousPhase, newPhase, sessionID)
+	legID, ok := workflowphases.ReenterLegForAdvance(manifest, previousPhase, newPhase, sessionID)
 	if !ok {
 		return
 	}

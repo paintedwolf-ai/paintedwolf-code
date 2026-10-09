@@ -2,6 +2,7 @@ package wiring
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"strings"
 	"testing"
 
@@ -19,7 +20,7 @@ func TestFirstPromptAttachesDefaultWorkflow(t *testing.T) {
 	projectDir := h.ProjectDir(t, "new-session")
 	sess, err := h.CreateHarnessSession(t, wire.CreateSessionRequest{}, projectDir)
 	testutil.FailErr(t, "h.Store.Create failed", err)
-	run, err := h.WorkflowMgr.GetActive(ctx, sess.ID)
+	run, err := h.WorkflowMgr.Store.Runs.ActiveBySession(ctx, sess.ID)
 	testutil.FailErr(t, "read workflow before first prompt", err)
 	if run != nil {
 		t.Fatal("store-only session fixture already has a workflow")
@@ -27,9 +28,9 @@ func TestFirstPromptAttachesDefaultWorkflow(t *testing.T) {
 	if _, err := h.SessionMgr.Prompt(ctx, sess.ID, "Let's build a basic python text adventure game."); err != nil {
 		testutil.FailErr(t, "h.SessionMgr.Prompt failed", err)
 	}
-	run, err = h.WorkflowMgr.GetActive(ctx, sess.ID)
+	run, err = h.WorkflowMgr.Store.Runs.ActiveBySession(ctx, sess.ID)
 	testutil.FailErr(t, "h.WorkflowMgr.GetActive failed", err)
-	if run == nil || !h.WorkflowMgr.IsAmbientRun(run) {
+	if run == nil || !runstate.IsAmbientRun(run) {
 		t.Fatalf("first prompt must attach the default workflow, got %+v", run)
 	}
 	sess, err = h.Store.Get(ctx, sess.ID)

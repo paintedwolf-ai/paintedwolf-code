@@ -6,6 +6,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -17,18 +18,18 @@ func TestHostObligationHeldWhilePending(t *testing.T) {
 		Kind: "scan", Status: api.ObligationStatusPending,
 	}}
 	wireTestObligation(t, mgr, obligation)
-	mgr.Manifests = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"obligationtest@1.0.0": obligationTestManifest()})
+	mgr.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"obligationtest@1.0.0": obligationTestManifest()})
 
 	ctx := context.Background()
 	if _, err := startRun(ctx, mgr, "sess-1", "obligationtest", "1.0.0"); err != nil {
 		testutil.FailErr(t, "start run", err)
 	}
-	held, err := mgr.HostObligationHeld(ctx, "sess-1")
+	held, err := mgr.Obligations.HostObligationHeld(ctx, "sess-1")
 	testutil.FailErr(t, "HostObligationHeld", err)
 	if !held {
 		t.Fatal("a pending host obligation must hold the phase")
 	}
-	if kinds := mgr.HostObligationHoldKinds(ctx, "sess-1"); len(kinds) != 1 || kinds[0] != "scan" {
+	if kinds := mgr.Obligations.HostObligationHoldKinds(ctx, "sess-1"); len(kinds) != 1 || kinds[0] != "scan" {
 		t.Fatalf("hold kinds = %#v want [scan]", kinds)
 	}
 }
@@ -47,14 +48,14 @@ func TestHostObligationHeldReleasedByTerminalStatus(t *testing.T) {
 				Kind: "scan", Status: api.ObligationStatusPending,
 			}}
 			wireTestObligation(t, mgr, obligation)
-			mgr.Manifests = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"obligationtest@1.0.0": obligationTestManifest()})
+			mgr.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"obligationtest@1.0.0": obligationTestManifest()})
 
 			ctx := context.Background()
 			if _, err := startRun(ctx, mgr, "sess-1", "obligationtest", "1.0.0"); err != nil {
 				testutil.FailErr(t, "start run", err)
 			}
 			obligation.status = api.WorkflowRunObligation{Kind: "scan", Status: status}
-			held, err := mgr.HostObligationHeld(ctx, "sess-1")
+			held, err := mgr.Obligations.HostObligationHeld(ctx, "sess-1")
 			testutil.FailErr(t, "HostObligationHeld", err)
 			if held {
 				t.Fatalf("status %q must release the hold", status)
@@ -71,7 +72,7 @@ func TestHostObligationHeldFalseWithoutDeclaredObligations(t *testing.T) {
 	if _, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.0"); err != nil {
 		testutil.FailErr(t, "start run", err)
 	}
-	held, err := mgr.HostObligationHeld(ctx, "sess-1")
+	held, err := mgr.Obligations.HostObligationHeld(ctx, "sess-1")
 	testutil.FailErr(t, "HostObligationHeld", err)
 	if held {
 		t.Fatal("a phase without on_enter.obligations must not be held")
@@ -84,26 +85,26 @@ func TestHostObligationHeldWhileTopologyPhaseIsRunning(t *testing.T) {
 	run, err := startRun(ctx, mgr, "sess-1", "bugbash", "1.0.0")
 	testutil.FailErr(t, "start bugbash run", err)
 
-	held, err := mgr.HostObligationHeld(ctx, "sess-1")
+	held, err := mgr.Obligations.HostObligationHeld(ctx, "sess-1")
 	testutil.FailErr(t, "read hunt hold", err)
 	if !held {
 		t.Fatal("an incomplete topology-bound phase must hold the coordinator")
 	}
-	if kinds := mgr.HostObligationHoldKinds(ctx, "sess-1"); len(kinds) != 1 || kinds[0] != topologyHostHoldKind {
+	if kinds := mgr.Obligations.HostObligationHoldKinds(ctx, "sess-1"); len(kinds) != 1 || kinds[0] != topologyHostHoldKind {
 		t.Fatalf("hold kinds = %#v want [%s]", kinds, topologyHostHoldKind)
 	}
 
 	for _, stage := range []string{"hunt_correctness", "hunt_edges", "hunt_races"} {
-		testutil.FailErr(t, "complete hunt stage", mgr.MarkTopologyStageComplete(ctx, run.ID, stage, stage, ""))
+		testutil.FailErr(t, "complete hunt stage", mgr.Phases.MarkTopologyStageComplete(ctx, run.ID, stage, stage, ""))
 	}
-	held, err = mgr.HostObligationHeld(ctx, "sess-1")
+	held, err = mgr.Obligations.HostObligationHeld(ctx, "sess-1")
 	testutil.FailErr(t, "read triage hold", err)
 	if !held {
 		t.Fatal("the next incomplete topology-bound phase must keep the coordinator held")
 	}
 
-	testutil.FailErr(t, "complete triage stage", mgr.MarkTopologyStageComplete(ctx, run.ID, "triage", "triaged", ""))
-	held, err = mgr.HostObligationHeld(ctx, "sess-1")
+	testutil.FailErr(t, "complete triage stage", mgr.Phases.MarkTopologyStageComplete(ctx, run.ID, "triage", "triaged", ""))
+	held, err = mgr.Obligations.HostObligationHeld(ctx, "sess-1")
 	testutil.FailErr(t, "read approval hold", err)
 	if held {
 		t.Fatal("the human approval phase is handled by the approval park, not a topology hold")
@@ -114,7 +115,7 @@ func TestHostObligationHeldWhileTopologyPhaseIsRunning(t *testing.T) {
 // silenced for every plain chat session.
 func TestHostObligationHeldFalseWithoutActiveRun(t *testing.T) {
 	mgr, _, _, _ := testManagerWithRegistry(t)
-	held, err := mgr.HostObligationHeld(context.Background(), "sess-none")
+	held, err := mgr.Obligations.HostObligationHeld(context.Background(), "sess-none")
 	testutil.FailErr(t, "HostObligationHeld", err)
 	if held {
 		t.Fatal("no active run must not be held")
@@ -132,7 +133,7 @@ func TestValidateHostObligationWakeRejectsSilentSuccessor(t *testing.T) {
 			{
 				ID:           "ingest",
 				CompleteWhen: workflowdef.CompleteWhenGatesSatisfied,
-				Gates:        []string{ObligationGateLeaf("scan")},
+				Gates:        []string{workflowdef.ObligationGateLeaf("scan")},
 				OnEnter:      workflowdef.PhaseOnEnter{Obligations: []workflowdef.ObligationDef{{Kind: "scan"}}},
 				Next:         "work",
 			},
@@ -144,7 +145,7 @@ func TestValidateHostObligationWakeRejectsSilentSuccessor(t *testing.T) {
 	if !ok {
 		t.Fatal("ingest phase missing")
 	}
-	errs := ValidateHostObligationWake(m, ingest)
+	errs := workflowvalidation.ValidateHostObligationWake(m, ingest)
 	if len(errs) != 1 {
 		t.Fatalf("want one diagnostic, got %#v", errs)
 	}
@@ -162,7 +163,7 @@ func TestValidateHostObligationWakeAcceptsReachableWakes(t *testing.T) {
 		"chained": {
 			ID:           "next",
 			CompleteWhen: workflowdef.CompleteWhenGatesSatisfied,
-			Gates:        []string{ObligationGateLeaf("scan")},
+			Gates:        []string{workflowdef.ObligationGateLeaf("scan")},
 			OnEnter:      workflowdef.PhaseOnEnter{Obligations: []workflowdef.ObligationDef{{Kind: "scan"}}},
 		},
 	}
@@ -176,7 +177,7 @@ func TestValidateHostObligationWakeAcceptsReachableWakes(t *testing.T) {
 					{
 						ID:           "ingest",
 						CompleteWhen: workflowdef.CompleteWhenGatesSatisfied,
-						Gates:        []string{ObligationGateLeaf("scan")},
+						Gates:        []string{workflowdef.ObligationGateLeaf("scan")},
 						OnEnter:      workflowdef.PhaseOnEnter{Obligations: []workflowdef.ObligationDef{{Kind: "scan"}}},
 						Next:         "next",
 					},
@@ -187,7 +188,7 @@ func TestValidateHostObligationWakeAcceptsReachableWakes(t *testing.T) {
 			if !ok {
 				t.Fatal("ingest phase missing")
 			}
-			if errs := ValidateHostObligationWake(m, ingest); len(errs) != 0 {
+			if errs := workflowvalidation.ValidateHostObligationWake(m, ingest); len(errs) != 0 {
 				t.Fatalf("want no diagnostics, got %#v", errs)
 			}
 		})

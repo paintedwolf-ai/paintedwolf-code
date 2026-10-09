@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/decide"
 	"io"
 	"log/slog"
 	"net"
@@ -22,6 +21,7 @@ import (
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/coordinator"
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/hitl"
@@ -36,6 +36,7 @@ import (
 	"github.com/lycaon/lycaon/internal/visual"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workflow"
+	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
 )
 
 // ServeApp holds wired serve subsystems after Build.
@@ -52,7 +53,7 @@ type ServeApp struct {
 	AgentRegistry        *orchestration.MemoryAgentRegistry
 	WorkerQueue          worker.WorkerQueue
 	ToolRegistry         *tools.DefaultRegistry
-	SessionWorkflowStore workflow.SessionWorkflowStore
+	SessionWorkflowStore workflowdrafts.Store
 	CheckpointMgr        hitl.CheckpointManager
 	VisualStore          visual.Store
 	DB                   db.ReadHandle

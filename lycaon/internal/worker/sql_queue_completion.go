@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/worker/jobstate"
 	"strings"
 	"time"
 
@@ -199,7 +200,7 @@ func (q *SQLQueue) ResumeReadyWaits(ctx context.Context) (int, error) {
 			return 0, err
 		}
 		if changed == 1 {
-			if err := EnqueueJobEventTx(ctx, tx, q.store.outbox, jobID); err != nil {
+			if err := jobstate.EnqueueJobEventTx(ctx, tx, q.store.outbox, jobID); err != nil {
 				return 0, err
 			}
 		}

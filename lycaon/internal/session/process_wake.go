@@ -3,9 +3,6 @@ package session
 import (
 	"context"
 	"fmt"
-	"strings"
-	"time"
-
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
@@ -14,6 +11,8 @@ import (
 	"github.com/lycaon/lycaon/internal/runeclamp"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
+	"strings"
+	"time"
 )
 
 // nudgeProcessWait wakes only the owning session's matching process subscription.
@@ -22,13 +21,13 @@ func (m *Manager) nudgeProcessWait(ctx context.Context, sessionID, handle string
 		return false
 	}
 	loop := m.ensureCoordinatorRuntime().CoordinatorLoop()
-	if !loop.SessionSleepingOnProcess(sessionID, handle) {
+	if !loop.Waits.SessionSleepingOnProcess(sessionID, handle) {
 		return false
 	}
 	if wake == anchor.ProcessRefused {
-		loop.NudgeProcessRefused(ctx, sessionID, handle, env)
+		loop.Nudges.NudgeProcessRefused(ctx, sessionID, handle, env)
 	} else {
-		loop.NudgeProcessFinished(ctx, sessionID, handle, env)
+		loop.Nudges.NudgeProcessFinished(ctx, sessionID, handle, env)
 	}
 	return true
 }

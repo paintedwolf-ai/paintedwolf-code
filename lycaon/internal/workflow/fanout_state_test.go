@@ -2,6 +2,8 @@ package workflow
 
 import (
 	"errors"
+	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
+	workflowstatetools "github.com/lycaon/lycaon/internal/workflow/statetools"
 	"reflect"
 	"testing"
 
@@ -9,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 )
 
 func TestStateUpdateCannotForgeHostWorkflowProof(t *testing.T) {
@@ -16,8 +19,8 @@ func TestStateUpdateCannotForgeHostWorkflowProof(t *testing.T) {
 	run, err := startRun(t.Context(), mgr, "sess-1", "plan", "1.0.0")
 	testutil.FailErr(t, "start run", err)
 	reg := tools.NewDefaultRegistry()
-	testutil.FailErr(t, "register state tools", RegisterStateTools(reg, StateToolDeps{Runs: mgr, Sessions: sessions}))
-	before, err := mgr.Store.GetScaffoldVars(t.Context(), run.ID)
+	testutil.FailErr(t, "register state tools", workflowstatetools.RegisterStateTools(reg, workflowstatetools.StateToolDeps{Runs: mgr.Store.Runs, Vars: mgr.Phases.Vars, Journal: mgr.Phases.Journal, Resolver: &mgr.Resolver, Starts: mgr.Starts, Controls: mgr.Controls, Scaffold: mgr.Blueprints.Scaffold, Sessions: sessions}))
+	before, err := mgr.Store.Runs.GetScaffoldVars(t.Context(), run.ID)
 	testutil.FailErr(t, "read initial variables", err)
 	tctx := tools.ToolContext{SessionID: "sess-1", Roots: []projectroot.RootRef{{ID: "root", Path: dir, IsPrimary: true}}, ActiveRootID: "root"}
 	for _, path := range []string{
@@ -27,10 +30,10 @@ func TestStateUpdateCannotForgeHostWorkflowProof(t *testing.T) {
 		"user_feedback", "user_feedback.approve.response", "user_decision", "user_decision.approve.choice",
 		"hitl_consulted:approve", "topology_stages", "topology_stages.review", "topology_outputs.review",
 		"orchestration_complete", "content_review", "content_review.paths",
-		hostVarBaselinePosture, workflowdef.ScaffoldExecutionModeVar, workflowRequestFeedbackID, coordinatorAskVar, obligationsVarKey,
+		runstate.BaselinePostureKey, workflowdef.ScaffoldExecutionModeVar, runstate.WorkflowRequestFeedbackID, runstate.CoordinatorAskVar, runstate.ObligationsVarKey,
 		"board", "board.orient_ready", "child_run.status", "params", "params.review_depth", "intake", "intake.scope",
-		"options", "options.criterion", coordinatorAskVar + ".state", workflowRequestFeedbackID + ".phase_active",
-		HostAutoAdvancedFromKey, "workflow_compose_summary_id", "last_failed_leaves", "evidence_digest",
+		"options", "options.criterion", runstate.CoordinatorAskVar + ".state", runstate.WorkflowRequestFeedbackID + ".phase_active",
+		workflowphases.HostAutoAdvancedFromKey, "workflow_compose_summary_id", "last_failed_leaves", "evidence_digest",
 	} {
 		_, err := reg.Run(t.Context(), "state_update", map[string]any{"path": path, "value": true}, tctx)
 		var reject *tools.ToolReject
@@ -38,7 +41,7 @@ func TestStateUpdateCannotForgeHostWorkflowProof(t *testing.T) {
 			t.Fatalf("%s: expected host-state rejection, got %v", path, err)
 		}
 	}
-	after, err := mgr.Store.GetScaffoldVars(t.Context(), run.ID)
+	after, err := mgr.Store.Runs.GetScaffoldVars(t.Context(), run.ID)
 	testutil.FailErr(t, "read protected variables", err)
 	if !reflect.DeepEqual(before, after) {
 		t.Fatal("rejected state mutation changed host proof")

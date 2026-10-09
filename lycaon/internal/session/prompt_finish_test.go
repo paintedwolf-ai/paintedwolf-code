@@ -4,9 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"testing"
-	"time"
-
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/events"
@@ -18,6 +15,8 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
+	"testing"
+	"time"
 )
 
 type sessionStatusFailStore struct {
@@ -62,7 +61,8 @@ func TestFinishPromptExecutionPropagatesTopologyReportFailure(t *testing.T) {
 	st := store.NewMemory()
 	mgr := NewManager(st, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
 	view := &recordingWorkflowView{topologyErr: wantErr}
-	mgr.SetWorkflowSessionView(view, nil)
+	workflowFixture1 := view
+	mgr.SetWorkflowDomains(&WorkflowDomains{Runs: workflowFixture1, Policy: workflowFixture1, Ambient: workflowFixture1, Blueprints: workflowFixture1, Batch: workflowFixture1, Slash: workflowFixture1, Requests: workflowFixture1, Feedback: workflowFixture1, Transcript: workflowFixture1, Asks: workflowFixture1, Fanout: workflowFixture1, Phases: workflowFixture1, Reports: workflowFixture1, Recovery: workflowFixture1, Cleanup: workflowFixture1})
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
@@ -80,7 +80,8 @@ func TestFinishPromptExecutionReconcilesWorkflowCompletion(t *testing.T) {
 	st := store.NewMemory()
 	view := &recordingWorkflowView{}
 	mgr := NewManager(st, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
-	mgr.SetWorkflowSessionView(view, nil)
+	workflowFixture2 := view
+	mgr.SetWorkflowDomains(&WorkflowDomains{Runs: workflowFixture2, Policy: workflowFixture2, Ambient: workflowFixture2, Blueprints: workflowFixture2, Batch: workflowFixture2, Slash: workflowFixture2, Requests: workflowFixture2, Feedback: workflowFixture2, Transcript: workflowFixture2, Asks: workflowFixture2, Fanout: workflowFixture2, Phases: workflowFixture2, Reports: workflowFixture2, Recovery: workflowFixture2, Cleanup: workflowFixture2})
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
@@ -104,7 +105,7 @@ func TestFinishPromptExecutionKeepsUserTurnBusyAcrossHostContinuation(t *testing
 	t.Cleanup(unsubscribe)
 
 	mgr.beginPromptTurn(sess.ID, "")
-	mgr.ensureCoordinatorRuntime().CoordinatorLoop().MarkWaitCalled(sess.ID)
+	mgr.ensureCoordinatorRuntime().CoordinatorLoop().Waits.MarkWaitCalled(sess.ID)
 	testutil.FailErr(t, "finish waiting prompt", mgr.finishPromptExecution(ctx, sess.ID, false, false, ""))
 	afterWait, err := st.Get(ctx, sess.ID)
 	testutil.FailErr(t, "read session after wait", err)
@@ -114,8 +115,8 @@ func TestFinishPromptExecutionKeepsUserTurnBusyAcrossHostContinuation(t *testing
 	assertNoSessionIdleEvent(t, eventCh)
 
 	loop := mgr.ensureCoordinatorRuntime().CoordinatorLoop()
-	finishExecution := loop.BeginPromptExecution(t.Context(), sess.ID)
-	loop.Nudge(ctx, sess.ID, anchor.PhaseAdvanced, "", "", anchor.Envelope{})
+	finishExecution := loop.Admission.BeginPromptExecution(t.Context(), sess.ID)
+	loop.Nudges.Nudge(ctx, sess.ID, anchor.PhaseAdvanced, "", "", anchor.Envelope{})
 	mgr.beginPromptTurn(sess.ID, "")
 	testutil.FailErr(t, "finish terminal host prompt", mgr.finishPromptExecution(ctx, sess.ID, false, true, ""))
 	deferred, err := st.Get(ctx, sess.ID)
@@ -165,7 +166,7 @@ func TestFinishPromptExecutionKeepsUserTurnBusyWhileWaitIsArmed(t *testing.T) {
 	testutil.FailErr(t, "mark visible turn busy", st.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
 
 	loop := mgr.ensureCoordinatorRuntime().CoordinatorLoop()
-	loop.EnterSleep(
+	loop.Waits.EnterSleep(
 		ctx,
 		sess.ID,
 		time.Now().UTC().Add(time.Minute),
@@ -174,7 +175,7 @@ func TestFinishPromptExecutionKeepsUserTurnBusyWhileWaitIsArmed(t *testing.T) {
 		[]string{"command-1"},
 		loopwake.SleepMoverHost,
 	)
-	loop.MarkWaitCalled(sess.ID)
+	loop.Waits.MarkWaitCalled(sess.ID)
 	mgr.beginPromptTurn(sess.ID, "")
 	testutil.FailErr(t, "finish waiting prompt", mgr.finishPromptExecution(ctx, sess.ID, false, true, ""))
 
@@ -190,7 +191,8 @@ func TestFinishPromptExecutionPropagatesCompletionReconciliationFailure(t *testi
 	wantErr := errors.New("workflow completion unavailable")
 	st := store.NewMemory()
 	mgr := NewManager(st, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
-	mgr.SetWorkflowSessionView(&recordingWorkflowView{completionErr: wantErr}, nil)
+	workflowFixture3 := &recordingWorkflowView{completionErr: wantErr}
+	mgr.SetWorkflowDomains(&WorkflowDomains{Runs: workflowFixture3, Policy: workflowFixture3, Ambient: workflowFixture3, Blueprints: workflowFixture3, Batch: workflowFixture3, Slash: workflowFixture3, Requests: workflowFixture3, Feedback: workflowFixture3, Transcript: workflowFixture3, Asks: workflowFixture3, Fanout: workflowFixture3, Phases: workflowFixture3, Reports: workflowFixture3, Recovery: workflowFixture3, Cleanup: workflowFixture3})
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 

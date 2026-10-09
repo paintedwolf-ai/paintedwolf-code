@@ -17,7 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/preflight"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/usernotice"
-	"github.com/lycaon/lycaon/internal/workflow"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -156,13 +156,13 @@ func contextFromPromptErrorFixtures() map[string]map[string]any {
 			},
 		),
 		"workflow_not_runnable": usernotice.ContextFromPromptError(
-			&workflow.NotRunnableError{RunID: "11111111-2222-4333-8444-555555555555", Reason: "paused", Status: wire.WorkflowRunStatusPaused},
+			&runstate.NotRunnableError{RunID: "11111111-2222-4333-8444-555555555555", Reason: "paused", Status: wire.WorkflowRunStatusPaused},
 		),
 		"workflow_version_unavailable": usernotice.ContextFromPromptError(
-			&workflow.WorkflowVersionUnavailableError{WorkflowID: "security-survey", Version: "1.0.0"},
+			&runstate.WorkflowVersionUnavailableError{WorkflowID: "security-survey", Version: "1.0.0"},
 		),
 		"grounding_escalated": usernotice.ContextFromPromptError(session.ErrGroundingEscalated),
-		"workflow_active":     usernotice.ContextFromPromptError(workflow.ErrActiveRunExists),
+		"workflow_active":     usernotice.ContextFromPromptError(runstate.ErrActiveRunExists),
 		"session_spend_ceiling_reached": usernotice.ContextFromPromptError(
 			&session.SessionSpendCeilingReached{CeilingUSD: 5, SpentUSD: 5.12, Coverage: wire.CostEstimateLowerBound, UnpricedTokens: 100, UnknownChargedCalls: 2},
 		),

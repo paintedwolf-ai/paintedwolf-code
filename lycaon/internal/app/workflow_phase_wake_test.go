@@ -1,6 +1,7 @@
 package app
 
 import (
+	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"testing"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -30,19 +32,18 @@ func TestCrossPhaseHostAdvanceQueuesCoordinatorWake(t *testing.T) {
 
 	manifests, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "load manifests", err)
-	wfStore := workflow.NewSQLStore(sqlDB)
+	wfStore := workflowpersistence.New(sqlDB)
 	wfMgr := workflow.NewManager(wfStore, sessionStore, manifests, nil)
-	wfMgr.Resolver = workflow.ManifestResolver{}
 	now := time.Now().UTC()
 	run := &api.WorkflowRun{
 		ID: "bugbash-run", SessionID: sess.ID, ProjectID: testdbseed.DefaultProjectID,
 		WorkflowID: "bugbash", WorkflowVersion: "1.0.0", Status: api.WorkflowRunStatusRunning,
 		CurrentPhase: "expand", CreatedAt: now, UpdatedAt: now,
 	}
-	testutil.FailErr(t, "create workflow state", wfStore.CreateState(ctx, run, projectDir, nil))
+	testutil.FailErr(t, "create workflow state", wfStore.State.CreateState(ctx, run, projectDir, nil))
 
 	sessionMgr := session.NewManager(sessionStore, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
-	sessionMgr.SetLoopWorkflowSource(wfMgr)
+	sessionMgr.SetLoopWorkflowSource(&loopwake.WorkflowDomains{Runs: wfMgr.Store.Runs, Approvals: wfMgr.Policy, Obligations: wfMgr.Obligations})
 	b := &serveBuilder{mgr: sessionMgr, workflowMgr: wfMgr}
 	finishExecution := sessionMgr.BeginPromptExecutionForTest(t.Context(), sess.ID)
 	defer finishExecution()
@@ -67,7 +68,7 @@ func TestTerminalCompletionSettlesWithoutAmbientWake(t *testing.T) {
 
 	manifests, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "load manifests", err)
-	wfStore := workflow.NewSQLStore(sqlDB)
+	wfStore := workflowpersistence.New(sqlDB)
 	wfMgr := workflow.NewManager(wfStore, sessionStore, manifests, nil)
 	now := time.Now().UTC()
 	run := &api.WorkflowRun{
@@ -75,10 +76,10 @@ func TestTerminalCompletionSettlesWithoutAmbientWake(t *testing.T) {
 		WorkflowID: "options", WorkflowVersion: "1.0.0", Status: api.WorkflowRunStatusComplete,
 		CurrentPhase: "done", CreatedAt: now, UpdatedAt: now, CompletedAt: &now,
 	}
-	testutil.FailErr(t, "create workflow state", wfStore.CreateState(ctx, run, projectDir, nil))
+	testutil.FailErr(t, "create workflow state", wfStore.State.CreateState(ctx, run, projectDir, nil))
 
 	sessionMgr := session.NewManager(sessionStore, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
-	sessionMgr.SetLoopWorkflowSource(wfMgr)
+	sessionMgr.SetLoopWorkflowSource(&loopwake.WorkflowDomains{Runs: wfMgr.Store.Runs, Approvals: wfMgr.Policy, Obligations: wfMgr.Obligations})
 	b := &serveBuilder{mgr: sessionMgr, workflowMgr: wfMgr}
 	delegationWiring{b}.onWorkflowPhaseAutoAdvanced(ctx, sess.ID, run.ID, "select", "done")
 	delegationWiring{b}.onWorkflowRunCompleted(ctx, run)
@@ -106,7 +107,7 @@ func TestHumanApprovalAdvanceQueuesWakeForRunningChild(t *testing.T) {
 
 	manifests, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "load manifests", err)
-	wfStore := workflow.NewSQLStore(sqlDB)
+	wfStore := workflowpersistence.New(sqlDB)
 	wfMgr := workflow.NewManager(wfStore, sessionStore, manifests, nil)
 	now := time.Now().UTC()
 	parent := &api.WorkflowRun{
@@ -114,17 +115,17 @@ func TestHumanApprovalAdvanceQueuesWakeForRunningChild(t *testing.T) {
 		WorkflowID: "bugbash", WorkflowVersion: "1.0.0", Status: api.WorkflowRunStatusPausedOnChild,
 		CurrentPhase: "execute", CreatedAt: now, UpdatedAt: now,
 	}
-	testutil.FailErr(t, "create parent workflow state", wfStore.CreateState(ctx, parent, projectDir, nil))
+	testutil.FailErr(t, "create parent workflow state", wfStore.State.CreateState(ctx, parent, projectDir, nil))
 	parentID := parent.ID
 	child := &api.WorkflowRun{
 		ID: "implement-child", SessionID: sess.ID, ProjectID: testdbseed.DefaultProjectID,
 		ParentRunID: &parentID, WorkflowID: "implement", WorkflowVersion: "1.0.0",
 		Status: api.WorkflowRunStatusRunning, CurrentPhase: "boot", CreatedAt: now, UpdatedAt: now,
 	}
-	testutil.FailErr(t, "create child workflow state", wfStore.CreateState(ctx, child, projectDir, nil))
+	testutil.FailErr(t, "create child workflow state", wfStore.State.CreateState(ctx, child, projectDir, nil))
 
 	sessionMgr := session.NewManager(sessionStore, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
-	sessionMgr.SetLoopWorkflowSource(wfMgr)
+	sessionMgr.SetLoopWorkflowSource(&loopwake.WorkflowDomains{Runs: wfMgr.Store.Runs, Approvals: wfMgr.Policy, Obligations: wfMgr.Obligations})
 	finishExecution := sessionMgr.BeginPromptExecutionForTest(t.Context(), sess.ID)
 	defer finishExecution()
 	b := &serveBuilder{mgr: sessionMgr, workflowMgr: wfMgr}

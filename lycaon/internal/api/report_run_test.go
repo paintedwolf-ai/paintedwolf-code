@@ -27,7 +27,10 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil/scantest"
 	"github.com/lycaon/lycaon/internal/visual"
 	"github.com/lycaon/lycaon/internal/workflow"
+	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -154,7 +157,7 @@ func TestGetWorkflowRunReport_NotAvailable(t *testing.T) {
 	running := h.createCompletedRun(t, "run_still_running", "security-survey", "done", now)
 	running.Status = wire.WorkflowRunStatusRunning
 	running.CompletedAt = nil
-	testutil.FailErr(t, "update running run", h.runStore.Update(t.Context(), running))
+	testutil.FailErr(t, "update running run", h.runStore.State.Update(t.Context(), running))
 	h.seedRunReport(t, running)
 	rec = h.getReport(t, running.ID)
 	if rec.Code != http.StatusNotFound {
@@ -167,7 +170,7 @@ type reportTestHarness struct {
 	srv       *Server
 	deps      Dependencies
 	store     *store.SQL
-	runStore  *workflow.SQLStore
+	runStore  *runstate.Repository
 	wfMgr     *workflow.RunManager
 	scanStore *scan.SQLStore
 	project   *project.Project
@@ -190,12 +193,11 @@ func newReportTestHarness(t *testing.T, opts ...testDeps) *reportTestHarness {
 	store := store.NewSQL(sqlDB)
 	wfReg, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "RegistryFromDirs", err)
-	runStore := workflow.NewSQLStore(sqlDB)
+	runStore := workflowpersistence.New(sqlDB)
 	wfMgr := workflow.NewManager(runStore, store, wfReg, nil)
-	wfMgr.Resolver = workflow.ManifestResolver{}
 	hostDir := t.TempDir()
-	wfMgr.EvidenceStore = inspector.NewJSONLStore(inspector.DefaultEvidenceDir)
-	wfMgr.EvidenceProjectDir = func(context.Context, string) (string, error) { return hostDir, nil }
+	wfMgr.Verdicts.EvidenceStore = inspector.NewJSONLStore(inspector.DefaultEvidenceDir)
+	wfMgr.SetEvidenceProjectDir(func(context.Context, string) (string, error) { return hostDir, nil })
 
 	scanStore := scan.NewSQLStore(sqlDB)
 	workDir := t.TempDir()
@@ -208,7 +210,7 @@ func newReportTestHarness(t *testing.T, opts ...testDeps) *reportTestHarness {
 
 	deps := Dependencies{
 		Store: store, Projects: projReg,
-		Workflows: wfMgr, WorkflowCatalog: workflow.ManifestResolver{}, WorkflowRuns: runStore,
+		Workflows: wfMgr, WorkflowCatalog: workflowcatalog.Resolver{}, WorkflowRuns: runStore,
 		ScanCoordinator: scantest.Coordinator(t, scanStore, nil), ModuleRoot: root,
 	}
 	for _, opt := range opts {
@@ -249,7 +251,7 @@ func (h *reportTestHarness) createCompletedRun(t *testing.T, runID, workflowID, 
 		Status: wire.WorkflowRunStatusComplete, CurrentPhase: phase,
 		CompletedAt: &at, CreatedAt: at, UpdatedAt: at,
 	}
-	testutil.FailErr(t, "create run", h.runStore.CreateState(t.Context(), run, h.workDir, nil))
+	testutil.FailErr(t, "create run", h.runStore.State.CreateState(t.Context(), run, h.workDir, nil))
 	return run
 }
 
@@ -438,7 +440,7 @@ func (h *reportTestHarness) seedVerdict(t *testing.T, run *wire.WorkflowRun) {
 		},
 		"", "", "", 1, at,
 	)
-	testutil.FailErr(t, "append claims verdict", h.wfMgr.EvidenceStore.Append(t.Context(), h.hostDir, claims))
+	testutil.FailErr(t, "append claims verdict", h.wfMgr.Verdicts.EvidenceStore.Append(t.Context(), h.hostDir, claims))
 
 	challenge := evidence.GateRecord(
 		evidence.GateTypeSurveyChallenged, "challenge", run.ID,
@@ -454,7 +456,7 @@ func (h *reportTestHarness) seedVerdict(t *testing.T, run *wire.WorkflowRun) {
 		},
 		"", "", "", 1, at.Add(4*time.Minute),
 	)
-	testutil.FailErr(t, "append challenge verdict", h.wfMgr.EvidenceStore.Append(t.Context(), h.hostDir, challenge))
+	testutil.FailErr(t, "append challenge verdict", h.wfMgr.Verdicts.EvidenceStore.Append(t.Context(), h.hostDir, challenge))
 }
 
 func (h *reportTestHarness) seedFindings(t *testing.T, run *wire.WorkflowRun) {
@@ -521,8 +523,8 @@ func assertErrorCode(t *testing.T, rec *httptest.ResponseRecorder, code string) 
 
 func (h *reportTestHarness) markReportDelivered(t *testing.T, run *wire.WorkflowRun) {
 	t.Helper()
-	_, err := h.wfMgr.StampRunVars(t.Context(), run.ID, func(_ context.Context, _ *wire.WorkflowRun, vars map[string]any) (map[string]any, bool, error) {
-		return workflow.SetGateSatisfied(vars, "topology_report_delivered", true), true, nil
+	_, err := h.wfMgr.Phases.Vars.Stamp(t.Context(), run.ID, func(_ context.Context, _ *wire.WorkflowRun, vars map[string]any) (map[string]any, bool, error) {
+		return runstate.SetGateSatisfied(vars, "topology_report_delivered", true), true, nil
 	})
 	testutil.FailErr(t, "stamp report delivery", err)
 }
@@ -537,17 +539,17 @@ func TestBlockedReviewServesItsRetainedSnapshot(t *testing.T) {
 		Responses: []workflow.ReviewRepairResponse{{ID: "response"}},
 		Snapshot:  &workflow.ReviewSnapshot{Vars: map[string]any{}, Unavailable: []string{"scan ledger"}},
 	}
-	_, err := h.wfMgr.StampRunVars(t.Context(), run.ID, func(_ context.Context, _ *wire.WorkflowRun, vars map[string]any) (map[string]any, bool, error) {
+	_, err := h.wfMgr.Phases.Vars.Stamp(t.Context(), run.ID, func(_ context.Context, _ *wire.WorkflowRun, vars map[string]any) (map[string]any, bool, error) {
 		vars["review_repairs"] = []workflow.ReviewRepair{repair}
 		return vars, true, nil
 	})
 	testutil.FailErr(t, "stamp blocked repair", err)
 	pause := func(reason string) {
 		t.Helper()
-		current, err := h.runStore.Get(t.Context(), run.ID)
+		current, err := h.runStore.Runs.Get(t.Context(), run.ID)
 		testutil.FailErr(t, "get run", err)
 		current.Status, current.PauseReason, current.CurrentPhase, current.CompletedAt = wire.WorkflowRunStatusPaused, reason, "claims", nil
-		testutil.FailErr(t, "pause run", h.runStore.Update(t.Context(), current))
+		testutil.FailErr(t, "pause run", h.runStore.State.Update(t.Context(), current))
 	}
 
 	pause(workflow.ReviewBlockedReason)
@@ -571,8 +573,8 @@ func TestReportDownloadRequiresRecordedDelivery(t *testing.T) {
 	h := newReportTestHarness(t)
 	run := h.seedSecuritySurveyRun(t, "run_no_delivery")
 	h.seedRunReport(t, run)
-	_, err := h.wfMgr.StampRunVars(t.Context(), run.ID, func(_ context.Context, _ *wire.WorkflowRun, vars map[string]any) (map[string]any, bool, error) {
-		return workflow.SetGateSatisfied(vars, "topology_report_delivered", false), true, nil
+	_, err := h.wfMgr.Phases.Vars.Stamp(t.Context(), run.ID, func(_ context.Context, _ *wire.WorkflowRun, vars map[string]any) (map[string]any, bool, error) {
+		return runstate.SetGateSatisfied(vars, "topology_report_delivered", false), true, nil
 	})
 	testutil.FailErr(t, "clear delivery", err)
 	rec := h.getReport(t, run.ID)

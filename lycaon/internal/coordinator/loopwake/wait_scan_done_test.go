@@ -3,13 +3,12 @@ package loopwake
 import (
 	"context"
 	"encoding/json"
-	"testing"
-	"time"
-
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
+	"testing"
+	"time"
 )
 
 func TestResolveConditionsAcceptsScanDone(t *testing.T) {
@@ -44,16 +43,16 @@ func TestWaitEventMatchesScanDoneRequiresSubscription(t *testing.T) {
 func TestSessionsSleepingOnScanDone(t *testing.T) {
 	loop := NewLoopEngine()
 	deadline := time.Now().UTC().Add(10 * time.Minute)
-	loop.EnterSleep(context.Background(), "scan-waiter", deadline, "waiting for scan", []WaitTrigger{WaitTriggerTimer, WaitTriggerScanDone}, nil, SleepMoverHost)
-	loop.EnterSleep(context.Background(), "worker-waiter", deadline, "waiting for workers", DefaultCoordinatorWaitTriggers(false), nil, SleepMoverHost)
+	loop.Waits.EnterSleep(context.Background(), "scan-waiter", deadline, "waiting for scan", []WaitTrigger{WaitTriggerTimer, WaitTriggerScanDone}, nil, SleepMoverHost)
+	loop.Waits.EnterSleep(context.Background(), "worker-waiter", deadline, "waiting for workers", DefaultCoordinatorWaitTriggers(false), nil, SleepMoverHost)
 
-	got := loop.SessionsSleepingOn(WaitTriggerScanDone)
+	got := loop.Waits.SessionsSleepingOn(WaitTriggerScanDone)
 	if len(got) != 1 || got[0] != "scan-waiter" {
 		t.Fatalf("SessionsSleepingOn = %v want [scan-waiter]", got)
 	}
 
-	loop.breakSleep(t.Context(), "scan-waiter", "scan_done", true)
-	if got := loop.SessionsSleepingOn(WaitTriggerScanDone); len(got) != 0 {
+	loop.Waits.breakSleep(t.Context(), "scan-waiter", "scan_done", true)
+	if got := loop.Waits.SessionsSleepingOn(WaitTriggerScanDone); len(got) != 0 {
 		t.Fatalf("after break SessionsSleepingOn = %v want empty", got)
 	}
 }
@@ -66,16 +65,16 @@ func TestNudgeScanFinishedBreaksSubscribedSleepOnly(t *testing.T) {
 	}
 	loop.SetDeps(deps)
 	deadline := time.Now().UTC().Add(10 * time.Minute)
-	loop.EnterSleep(context.Background(), "scan-waiter", deadline, "waiting for scan", []WaitTrigger{WaitTriggerTimer, WaitTriggerScanDone}, nil, SleepMoverHost)
-	loop.EnterSleep(context.Background(), "worker-waiter", deadline, "waiting for workers", DefaultCoordinatorWaitTriggers(false), nil, SleepMoverHost)
+	loop.Waits.EnterSleep(context.Background(), "scan-waiter", deadline, "waiting for scan", []WaitTrigger{WaitTriggerTimer, WaitTriggerScanDone}, nil, SleepMoverHost)
+	loop.Waits.EnterSleep(context.Background(), "worker-waiter", deadline, "waiting for workers", DefaultCoordinatorWaitTriggers(false), nil, SleepMoverHost)
 
-	loop.NudgeScanFinished(context.Background(), "scan-waiter", "scan-1", anchor.Envelope{})
-	loop.NudgeScanFinished(context.Background(), "worker-waiter", "scan-1", anchor.Envelope{})
+	loop.Nudges.NudgeScanFinished(context.Background(), "scan-waiter", "scan-1", anchor.Envelope{})
+	loop.Nudges.NudgeScanFinished(context.Background(), "worker-waiter", "scan-1", anchor.Envelope{})
 
-	if loop.IsSleeping("scan-waiter") {
+	if loop.Waits.IsSleeping("scan-waiter") {
 		t.Fatal("scan_done nudge must break a subscribed sleep")
 	}
-	if !loop.IsSleeping("worker-waiter") {
+	if !loop.Waits.IsSleeping("worker-waiter") {
 		t.Fatal("scan_done nudge must not break an unsubscribed sleep")
 	}
 }
@@ -90,7 +89,7 @@ func TestWaitScanDoneAlreadySatisfiedWhenNoOpenScans(t *testing.T) {
 	loop := NewLoopEngine()
 	loop.SetDeps(scanCycleLoopDeps(false))
 	reg := tools.NewDefaultRegistry()
-	if err := RegisterWaitTool(reg, loop, WaitToolDeps{}); err != nil {
+	if err := RegisterWaitTool(reg, loop.Subscriptions, WaitToolDeps{}); err != nil {
 		t.Fatalf("RegisterWaitTool: %v", err)
 	}
 	out, err := reg.Run(context.Background(), "wait", map[string]any{
@@ -109,7 +108,7 @@ func TestWaitScanDoneAlreadySatisfiedWhenNoOpenScans(t *testing.T) {
 	if result.Status != "scan_done" {
 		t.Fatalf("status = %q want scan_done", result.Status)
 	}
-	if loop.IsSleeping("s1") {
+	if loop.Waits.IsSleeping("s1") {
 		t.Fatal("must not arm sleep when no scans are open")
 	}
 }
@@ -118,7 +117,7 @@ func TestWaitScanDoneArmsSleepWhileScanOpen(t *testing.T) {
 	loop := NewLoopEngine()
 	loop.SetDeps(scanCycleLoopDeps(true))
 	reg := tools.NewDefaultRegistry()
-	if err := RegisterWaitTool(reg, loop, WaitToolDeps{}); err != nil {
+	if err := RegisterWaitTool(reg, loop.Subscriptions, WaitToolDeps{}); err != nil {
 		t.Fatalf("RegisterWaitTool: %v", err)
 	}
 	invocationOut := &tools.ToolInvocationOut{}
@@ -137,10 +136,10 @@ func TestWaitScanDoneArmsSleepWhileScanOpen(t *testing.T) {
 	if !WaitCompletionEndsCycle("wait", invocationOut.Completion) {
 		t.Fatalf("output = %q", out)
 	}
-	if !loop.IsSleeping("s1") {
+	if !loop.Waits.IsSleeping("s1") {
 		t.Fatal("expected sleeping while scan is open")
 	}
-	if !hasWaitTrigger(loop.WaitSubscriptionForTest("s1"), WaitTriggerScanDone) {
-		t.Fatalf("armed triggers = %v want scan_done", loop.WaitSubscriptionForTest("s1"))
+	if !hasWaitTrigger(waitSubscriptionForTest(loop.Subscriptions, "s1"), WaitTriggerScanDone) {
+		t.Fatalf("armed triggers = %v want scan_done", waitSubscriptionForTest(loop.Subscriptions, "s1"))
 	}
 }

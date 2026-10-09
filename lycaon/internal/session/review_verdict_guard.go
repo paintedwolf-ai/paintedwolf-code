@@ -20,7 +20,7 @@ func (m *Manager) maybeRejectCloseoutForMissingVerdict(ctx context.Context, sess
 	if !invokeAllowed {
 		return nil, false
 	}
-	verdictPending := m.workflows.ActiveReviewVerdictPending(ctx, sess.ID)
+	verdictPending := m.workflows.Policy.ActiveReviewVerdictPending(ctx, sess.ID)
 	root := RootSessionID(ctx, m.store, sess.ID)
 	delayCount, delayed := m.closeout.delay(sess.ID, root, closeoutVerdictDelay, workersIdle && verdictPending, verdictDelayMaxPerPrompt)
 	return m.tryOARFinishBlock(ctx, sess, func(gc *oar.GuardContext) error {

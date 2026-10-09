@@ -4,10 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
-
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/pkg/api"
+	"sync"
 )
 
 type deferredTurnSettlementStore struct {
@@ -62,7 +61,7 @@ func (m *Manager) finishPromptExecution(ctx context.Context, sessionID string, p
 	m.endPromptTurn(sessionID)
 	if m.sessionStopInProgress(hostCtx, sessionID) {
 		m.deferredTurnSettlement.remove(sessionID)
-		rt.CoordinatorLoop().ClearPending(sessionID)
+		rt.CoordinatorLoop().Nudges.ClearPending(sessionID)
 		rt.Kicks().ClearPending(sessionID)
 		return nil
 	}
@@ -71,17 +70,17 @@ func (m *Manager) finishPromptExecution(ctx context.Context, sessionID string, p
 		return nil
 	}
 	if m.workflows != nil {
-		if err := m.workflows.ReconcileTurnCompletion(hostCtx, sessionID); err != nil {
+		if err := m.workflows.Phases.ReconcileTurnCompletion(hostCtx, sessionID); err != nil {
 			return m.recordUserTurnFailure(sessionID, fmt.Errorf("reconcile workflow turn completion: %w", err))
 		}
 	}
-	continuation := rt.CoordinatorLoop().OnTurnComplete(
+	continuation := rt.CoordinatorLoop().Waits.OnTurnComplete(
 		hostCtx, sessionID, hostTurn,
 	)
 	m.reconcileCoordinatorBatchFromLedger(hostCtx, sessionID)
 	m.disarmCoordinatorLoopIfBatchTerminal(hostCtx, sessionID)
 	if m.workflows != nil {
-		if err := m.workflows.MaybeDeliverTopologyReport(hostCtx, sessionID, closeoutID); err != nil {
+		if err := m.workflows.Reports.MaybeDeliverTopologyReport(hostCtx, sessionID, closeoutID); err != nil {
 			return m.recordUserTurnFailure(sessionID, fmt.Errorf("deliver topology report: %w", err))
 		}
 		m.disarmCoordinatorLoopIfNoActiveRun(hostCtx, sessionID)
@@ -149,7 +148,7 @@ func (m *Manager) settleDeferredUserTurn(ctx context.Context, sessionID string) 
 		return nil
 	}
 	loop := m.ensureCoordinatorRuntime().CoordinatorLoop()
-	release, claimed := loop.BeginUserTurnSettlement(ctx, sessionID)
+	release, claimed := loop.Turns.BeginUserTurnSettlement(ctx, sessionID)
 	if !claimed {
 		if hadDeferred {
 			m.deferredTurnSettlement.put(sessionID, disposition)
@@ -157,7 +156,7 @@ func (m *Manager) settleDeferredUserTurn(ctx context.Context, sessionID string) 
 		return nil
 	}
 	if completed {
-		ready, err := loop.CloseCompletedWorkflowWait(ctx, sessionID)
+		ready, err := loop.Subscriptions.CloseCompletedWorkflowWait(ctx, sessionID)
 		if err != nil || !ready {
 			release()
 			if hadDeferred {
@@ -199,10 +198,10 @@ func (m *Manager) disarmCoordinatorLoopIfNoActiveRun(ctx context.Context, sessio
 	if m == nil || m.workflows == nil {
 		return
 	}
-	if m.workflows.CurrentPhase(ctx, sessionID) != "" {
+	if m.workflows.Policy.CurrentPhase(ctx, sessionID) != "" {
 		return
 	}
-	m.ensureCoordinatorRuntime().CoordinatorLoop().DisarmTimerBackstop(ctx, sessionID)
+	m.ensureCoordinatorRuntime().CoordinatorLoop().Waits.DisarmTimerBackstop(ctx, sessionID)
 }
 
 // drainPendingLoopWakes re-enters prompts after releasing the session lock.

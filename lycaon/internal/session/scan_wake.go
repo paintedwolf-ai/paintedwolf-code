@@ -2,11 +2,10 @@ package session
 
 import (
 	"context"
-	"strings"
-
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/pkg/api"
+	"strings"
 )
 
 // ScanWaitState answers the scan questions a scan_done wait asks about one session.
@@ -35,11 +34,11 @@ func (m *Manager) NudgeCoordinatorScanDone(ctx context.Context, scan api.CodeSca
 		return
 	}
 	loop := m.ensureCoordinatorRuntime().CoordinatorLoop()
-	for _, sessionID := range loop.SessionsSleepingOn(loopwake.WaitTriggerScanDone) {
+	for _, sessionID := range loop.Waits.SessionsSleepingOn(loopwake.WaitTriggerScanDone) {
 		if !m.scanWaits.Requested(ctx, sessionID, scan.ID) {
 			continue
 		}
-		loop.NudgeScanFinished(ctx, sessionID, scan.ID, anchor.Envelope{
+		loop.Nudges.NudgeScanFinished(ctx, sessionID, scan.ID, anchor.Envelope{
 			ScanID:            scan.ID,
 			ScanStatus:        string(scan.Status),
 			ScanCategories:    scanCategoriesLabel(scan.Categories),

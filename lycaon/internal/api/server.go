@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"log/slog"
 	"net/http"
 	"os"
@@ -31,60 +30,34 @@ import (
 	"github.com/lycaon/lycaon/internal/api/taskgroup"
 	"github.com/lycaon/lycaon/internal/api/workflowadmin"
 	"github.com/lycaon/lycaon/internal/attention"
-	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/board"
 	"github.com/lycaon/lycaon/internal/browser/preview"
-	"github.com/lycaon/lycaon/internal/catalogview"
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/delegation"
-	"github.com/lycaon/lycaon/internal/detectionpack"
-	"github.com/lycaon/lycaon/internal/editordoc"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/extensionstate"
-	"github.com/lycaon/lycaon/internal/extpacks"
-	"github.com/lycaon/lycaon/internal/filebriefing"
-	"github.com/lycaon/lycaon/internal/fileops"
-	"github.com/lycaon/lycaon/internal/git"
-	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/harnessfixture"
-	"github.com/lycaon/lycaon/internal/historyretention"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/hostidentity"
-	"github.com/lycaon/lycaon/internal/hostpower"
 	"github.com/lycaon/lycaon/internal/hostresources"
-	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/llm"
-	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/localdata"
-	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/observability"
-	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/people/personactions"
 	"github.com/lycaon/lycaon/internal/preflight"
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/project"
-	"github.com/lycaon/lycaon/internal/projectignore"
 	"github.com/lycaon/lycaon/internal/projectliveness"
-	"github.com/lycaon/lycaon/internal/promptattach"
-	"github.com/lycaon/lycaon/internal/rules"
-	"github.com/lycaon/lycaon/internal/scan"
 	scancadence "github.com/lycaon/lycaon/internal/scan/cadence"
-	"github.com/lycaon/lycaon/internal/secretcap"
-	"github.com/lycaon/lycaon/internal/secretspan"
 	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/session/approvalstate"
 	"github.com/lycaon/lycaon/internal/settings"
-	"github.com/lycaon/lycaon/internal/sourceledger"
-	"github.com/lycaon/lycaon/internal/usernotice"
 	"github.com/lycaon/lycaon/internal/version"
 	"github.com/lycaon/lycaon/internal/visual"
 	"github.com/lycaon/lycaon/internal/webindex"
-	"github.com/lycaon/lycaon/internal/webresearch"
 	"github.com/lycaon/lycaon/internal/worker"
-	"github.com/lycaon/lycaon/internal/workflow"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -146,133 +119,6 @@ type Server struct {
 	harness         harnessServices
 	storagePaths
 	health
-}
-
-// storagePaths names host-managed durable storage.
-type storagePaths struct {
-	dataDir          string
-	storePath        string
-	workerBranchRoot string
-	workerSeedRoot   string
-}
-
-// health is the boot metadata GET /health reports.
-type health struct {
-	storeRevision      uint64
-	previousAppVersion string
-	minDenVersion      string
-}
-
-// Dependencies are the host-supplied services the API routes over.
-type Dependencies struct {
-	SecretIgnores *projectignore.SecretService
-	// Core stores and runtimes. Database is the host database the API's own
-	// journals live in.
-	Database       db.Handle
-	Store          session.Store
-	PersonActions  *personactions.Store
-	Projects       project.Registry
-	Sessions       *session.Manager
-	LLM            *llm.Service
-	CostTracker    cost.CostTracker
-	Settings       *settings.Service
-	Events         events.ReplayHub
-	EventPublisher *events.Publisher
-	// Rerank blends the decision engine into project search hits.
-	Rerank       decide.Reranker
-	Presence     *events.Presence
-	UserNotices  *usernotice.Catalog
-	HostIdentity hostidentity.Identity
-	Invocations  invocation.Recorder
-	MutationGate *project.MutationGate
-
-	// Host storage, module root, and health metadata.
-	DataDir            string
-	StorePath          string
-	WorkerBranchRoot   string
-	WorkerSeedRoot     string
-	ModuleRoot         string
-	StoreRevision      uint64
-	PreviousAppVersion string
-	MinDenVersion      string
-
-	// Secrets.
-	ManagedSecrets *secretcap.Service
-	SecretSpans    *secretspan.Screener
-
-	// Approvals and chat-scoped authority.
-	Checkpoints  hitl.CheckpointManager
-	ApprovalGate hitl.ApprovalGate
-	Authority    capabilityadmin.Authority
-
-	// Scanning and detection packs (stored under DataDir).
-	ScanCoordinator   scan.ScanCoordinator
-	ScannerRegistry   scan.CodeScannerRegistry
-	ScanCadence       *scancadence.Service
-	GateRepeatLedger  *approvalstate.GateRepeatLedger
-	PublishDetections func(*detectionpack.Matcher)
-
-	// Workflows, delegation, and workers.
-	Workflows         *workflow.RunManager
-	WorkflowCatalog   workflow.ManifestResolver
-	WorkflowRuns      workflow.RunStore
-	WorkflowComposer  *workflow.Composer
-	WorkflowPersister *workflow.Persister
-	Blueprints        *blueprint.Manager
-	Orchestrator      orchestration.Orchestrator
-	Delegations       *delegation.Manager
-	Workers           worker.WorkerQueue
-	WorkerCancel      *worker.CancelService
-	Board             *board.SnapshotBuilder
-	RepoSetCache      *git.RepoSetCache
-
-	// Sources, editing, and session content.
-	SourceLedger    *sourceledger.Store
-	SourceMutations *project.SourceMutationService
-	FileOperations  *fileops.Service
-	FileBriefings   *filebriefing.Service
-	EditorDocuments *editordoc.Service
-	EditorClients   *editordoc.ClientLiveness
-	AgentPresence   *agentpresence.Tracker
-	ProjectLiveness *projectliveness.Tracker
-	ProjectRules    *rules.ProjectRulesOverlay
-	HintConfig      *guidance.HintConfig
-	FileAgeWarmer   func(ctx context.Context, projectDir string)
-	VisualStore     visual.Store
-	ProgressStore   progress.Store
-
-	// Extensions: NewServer builds the subsystem owner over these stores,
-	// publishing through the extension routes.
-	ExtensionViews    *catalogview.Cache
-	ExtensionScanners extpacks.ScannerRequirementChecker
-	ExtensionJournal  extensionstate.Journal
-	Contributions     extensionadmin.ContributionRuntime
-
-	// MCP, web research, and history storage.
-	MCP            *mcp.RegistryImpl
-	WebResearch    webresearch.Runtime
-	WebDiscoverer  webresearch.DirectDiscovererFactory
-	WebIndex       *webindex.Store
-	HistoryStorage *historyretention.Service
-
-	// Host services.
-	HostResources *hostresources.Service
-	HostPower     *hostpower.Controller
-	Pricing       *settings.PricingHost
-	Preview       *preview.Controller
-	Video         promptattach.VideoDecoder
-	PreflightEnv  preflight.Env
-	Attention     *attention.Source
-
-	// Harness channel: manual completions and scripted workers.
-	ManualLLM      *llm.ManualProvider
-	HarnessWorkers *harnessfixture.Workers
-
-	// Test substitutes for host defaults.
-	CommitDrafter   compaction.Summarizer
-	SourceInventory sourceapi.InventoryService
-	CatalogSnapshot sourceapi.CatalogSnapshotFunc
-	WatchNeedsSeed  func(rootPath string) bool
 }
 
 // Route families cross-reference each other through fixed addresses in s, so construction order is safe.
@@ -402,50 +248,6 @@ func NewServer(deps Dependencies, logger *slog.Logger, token string) *Server {
 	s.setupMiddleware()
 	s.setupRoutes()
 	return s
-}
-
-// requireDependencies refuses to build a server without a service the host
-// builds on every boot; the route families validate their own.
-func requireDependencies(deps Dependencies) {
-	httpio.RequireDependencies("api",
-		httpio.Required{Name: "AgentPresence", Present: deps.AgentPresence != nil},
-		httpio.Required{Name: "Board", Present: deps.Board != nil},
-		httpio.Required{Name: "Checkpoints", Present: deps.Checkpoints != nil},
-		httpio.Required{Name: "CostTracker", Present: deps.CostTracker != nil},
-		httpio.Required{Name: "Database", Present: deps.Database != nil},
-		httpio.Required{Name: "Delegations", Present: deps.Delegations != nil},
-		httpio.Required{Name: "EventPublisher", Present: deps.EventPublisher != nil},
-		httpio.Required{Name: "Events", Present: deps.Events != nil},
-		httpio.Required{Name: "HostIdentity", Present: deps.HostIdentity.HostID != ""},
-		httpio.Required{Name: "HostResources", Present: deps.HostResources != nil},
-		httpio.Required{Name: "LLM", Present: deps.LLM != nil},
-		httpio.Required{Name: "ProgressStore", Present: deps.ProgressStore != nil},
-		httpio.Required{Name: "Projects", Present: deps.Projects != nil},
-		httpio.Required{Name: "ScanCadence", Present: deps.ScanCadence != nil},
-		httpio.Required{Name: "Sessions", Present: deps.Sessions != nil},
-		httpio.Required{Name: "Settings.Approvals", Present: deps.Settings != nil && deps.Settings.Approvals != nil},
-		httpio.Required{Name: "Store", Present: deps.Store != nil},
-		httpio.Required{Name: "VisualStore", Present: deps.VisualStore != nil},
-		httpio.Required{Name: "WorkerCancel", Present: deps.WorkerCancel != nil},
-		httpio.Required{Name: "Workers", Present: deps.Workers != nil},
-	)
-}
-
-// observeDependencies registers the server's reactions to its dependencies'
-// changes. Each hook captures a handler at its final address in s.
-func (s *Server) observeDependencies(deps Dependencies) {
-	deps.SecretIgnores.Changed = s.Sources.RefreshProjectSecretScreens
-	deps.ManagedSecrets.AddScreeningInvalidationObserver(s.Sources.RefreshProjectSecretScreens)
-	if installer, ok := deps.Checkpoints.(hitl.ApprovalAuthorityInstallerSetter); ok {
-		installer.SetApprovalAuthorityInstaller(&s.Capabilities)
-	}
-	deps.EditorDocuments.SetOnChange(func(ctx context.Context, change editordoc.Change) {
-		s.editorDocumentChanged(ctx, change)
-		d := change.Document
-		_ = s.events.Publish(ctx, wire.EventTopicEditorDocument,
-			events.PublishKey{Project: d.ProjectID, Facet: d.ID},
-			s.Sources.EditorDocumentEventDTO(ctx, d, change.ContentChanged))
-	})
 }
 
 func (s *Server) setupMiddleware() {
@@ -647,234 +449,6 @@ var sourceOperations = sourceapi.Operations{
 	UndoProjectSourceHistory: toSourceOperation(operationUndoProjectSourceHistory),
 }
 
-func toSourceOperation(op generatedOperation) sourceapi.Operation {
-	return sourceapi.Operation{ID: op.ID, Method: op.Method, Path: op.Path}
-}
-
-func (s *Server) registerContributionRoutes(r chi.Router) {
-	s.registerV1Operation(r, operationGetContributions, s.Extensions.HandleGetContributions)
-	s.registerV1Operation(r, operationInvokeProjectCommand, s.Extensions.HandleInvokeProjectCommand)
-	s.registerV1Operation(r, operationInvokeSessionCommand, s.Extensions.HandleInvokeSessionCommand)
-	s.registerV1Operation(r, operationResolveContributionChoices, s.Extensions.HandleContributionChoices)
-	s.registerV1Operation(r, operationSearchContributionSource, s.Extensions.HandleContributionSearch)
-}
-
-func registerRootOperation(r chi.Router, operation generatedOperation, handler http.HandlerFunc) {
-	r.Method(operation.Method, operation.Path, handler)
-}
-
-func (s *Server) registerV1Operation(r chi.Router, operation generatedOperation, handler http.HandlerFunc) {
-	if !strings.HasPrefix(operation.Path, "/v1/") {
-		panic("v1 operation path must start with /v1/")
-	}
-	r.Method(operation.Method, strings.TrimPrefix(operation.Path, "/v1"),
-		s.authorizeOperation(operation, s.rateLimitOperation(operation, s.recordPersonAction(operation, handler)).ServeHTTP))
-}
-
-func (s *Server) registerProjectRoutes(r chi.Router) {
-	s.registerV1Operation(r, operationGetSourceOperation, s.Sources.HandleGetSourceOperation)
-	s.registerV1Operation(r, operationListSourceOperations, s.Sources.HandleListSourceOperations)
-	s.registerV1Operation(r, operationCancelSourceOperation, s.Sources.HandleCancelSourceOperation)
-	s.registerV1Operation(r, operationRetrySourceOperation, s.Sources.HandleRetrySourceOperation)
-	s.registerV1Operation(r, operationListProjects, s.Project.HandleListProjects)
-	s.registerV1Operation(r, operationCreateProject, s.Project.HandleCreateProject)
-	s.registerV1Operation(r, operationCloneProject, s.Project.HandleCloneProject)
-	s.registerV1Operation(r, operationDetectFolder, s.Extensions.HandleDetectFolder)
-	s.registerV1Operation(r, operationGetProject, s.Project.HandleGetProject)
-	s.registerV1Operation(r, operationListProjectSessions, s.SessionAdmin.HandleListProjectSessions)
-	s.registerV1Operation(r, operationGetAgentPresence, s.handleGetAgentPresence)
-	s.registerV1Operation(r, operationUpdateProject, s.Project.HandleUpdateProject)
-	s.registerV1Operation(r, operationGetProjectTrust, s.Project.HandleGetProjectTrust)
-	s.registerV1Operation(r, operationOpenProjectTrustReview, s.Project.HandleOpenProjectTrustReview)
-	s.registerV1Operation(r, operationUpdateProjectTrust, s.Project.HandleUpdateProjectTrust)
-	s.registerV1Operation(r, operationGetProjectAgentContext, s.Project.HandleGetProjectAgentContext)
-	s.registerV1Operation(r, operationAssessProjectRemoval, s.Project.HandleAssessProjectRemoval)
-	s.registerV1Operation(r, operationCreateProjectRemoval, s.Project.HandleCreateProjectRemoval)
-	s.registerV1Operation(r, operationGetProjectRemoval, s.Project.HandleGetProjectRemoval)
-	s.registerV1Operation(r, operationListProjectArtifacts, s.handleListProjectArtifacts)
-	s.registerV1Operation(r, operationDeleteProjectArtifact, s.handleDeleteProjectArtifact)
-	s.registerV1Operation(r, operationListProjectSecretIgnores, s.Project.HandleListSecretIgnores)
-	s.registerV1Operation(r, operationCreateProjectSecretIgnore, s.Project.HandleCreateProjectSecretIgnore)
-	s.registerV1Operation(r, operationDeleteProjectSecretIgnore, s.Project.HandleDeleteProjectSecretIgnore)
-	s.registerV1Operation(r, operationGetSecretIgnoreCandidate, s.Project.HandleSecretIgnoreCandidate)
-	s.registerV1Operation(r, operationListProjectManagedSecrets, s.Project.HandleListProjectManagedSecrets)
-	s.registerV1Operation(r, operationCreateProjectManagedSecret, s.Project.HandleCreateProjectManagedSecret)
-	s.registerV1Operation(r, operationUpdateProjectManagedSecret, s.Project.HandleUpdateProjectManagedSecret)
-	s.registerV1Operation(r, operationReplaceProjectManagedSecretValue, s.Project.HandleReplaceProjectManagedSecretValue)
-	s.registerV1Operation(r, operationHoldProjectManagedSecret, s.Project.HandleHoldProjectManagedSecret)
-	s.registerV1Operation(r, operationListProjectManagedSecretUses,s.Project.HandleListProjectManagedSecretUses)
-	s.registerV1Operation(r, operationBeginProjectManagedSecretReveal, s.Project.HandleBeginProjectManagedSecretReveal)
-	s.registerV1Operation(r, operationCompleteProjectManagedSecretReveal, s.Project.HandleCompleteProjectManagedSecretReveal)
-	s.registerV1Operation(r, operationRevokeProjectManagedSecret, s.Project.HandleRevokeProjectManagedSecret)
-	s.registerV1Operation(r, operationPromoteProject, s.Project.HandlePromoteProject)
-	s.registerV1Operation(r, operationCancelProjectPromotion, s.Project.HandleCancelProjectPromotion)
-	s.registerV1Operation(r, operationAttachProjectRoot, s.Project.HandleAttachProjectRoot)
-	s.registerV1Operation(r, operationDetachProjectRoot, s.Project.HandleDetachProjectRoot)
-	s.registerV1Operation(r, operationUpdateProjectRoot, s.Project.HandleUpdateProjectRoot)
-	s.registerV1Operation(r, operationGetProjectSource, s.Sources.HandleGetProjectSource)
-	s.registerV1Operation(r, operationGetSourceWorkspace, s.Sources.HandleGetSourceWorkspace)
-	s.registerV1Operation(r, operationOpenEditorDocument, s.Sources.HandleOpenEditorDocument)
-	s.registerV1Operation(r, operationReplaceEditorDocumentRetention, s.Sources.HandleReplaceEditorDocumentRetention)
-	s.registerV1Operation(r, operationReadEditorDocumentStatuses, s.Sources.HandleReadEditorDocumentStatuses)
-	s.registerV1Operation(r, operationReplaceEditorDocument, s.Sources.HandleReplaceEditorDocument)
-	s.registerV1Operation(r, operationSyncEditorDocument, s.Sources.HandleSyncEditorDocument)
-	s.registerV1Operation(r, operationResolveEditorDocumentConflict, s.Sources.HandleResolveEditorDocumentConflict)
-	s.registerV1Operation(r, operationCreateEditorDocumentSnapshot, s.Sources.HandleCreateEditorDocumentSnapshot)
-	s.registerV1Operation(r, operationListEditorDocumentChanges, s.Sources.HandleListEditorDocumentChanges)
-	s.registerV1Operation(r, operationRevertEditorDocumentChange, s.Sources.HandleRevertEditorDocumentChange)
-	s.registerV1Operation(r, operationSubmitEditorDocumentUpdate, s.Sources.HandleSubmitEditorDocumentUpdate)
-	s.registerV1Operation(r, operationPublishEditorDocumentPresence, s.Sources.HandlePublishEditorDocumentPresence)
-	s.registerV1Operation(r, operationLeaveEditorDocument, s.Sources.HandleLeaveEditorDocument)
-	s.registerV1Operation(r, operationDiscardEditorDocument, s.Sources.HandleDiscardEditorDocument)
-	s.registerV1Operation(r, operationReloadEditorDocument, s.Sources.HandleReloadEditorDocument)
-	s.registerV1Operation(r, operationObserveEditorDocument, s.Sources.HandleObserveEditorDocument)
-	s.registerV1Operation(r, operationSaveEditorDocument, s.Sources.HandleSaveEditorDocument)
-	s.registerV1Operation(r, operationPreviewEditorSecretMark, s.Sources.HandlePreviewEditorSecretMark)
-	s.registerV1Operation(r, operationMarkEditorSecret, s.Sources.HandleMarkEditorSecret)
-	s.registerV1Operation(r, operationCreateProjectSourceEntry, s.Sources.SourceRequestHandler(toSourceOperation(operationCreateProjectSourceEntry), s.Sources.HandleCreateProjectSourceEntry))
-	s.registerV1Operation(r, operationReplaceProjectSource, s.Sources.HandleReplaceProjectSource)
-	s.registerV1Operation(r, operationMakeProjectSourceEditable, s.Sources.HandleMakeProjectSourceEditable)
-	s.registerV1Operation(r, operationDeleteProjectSource, s.Sources.SourceRequestHandler(toSourceOperation(operationDeleteProjectSource), s.Sources.HandleDeleteProjectSource))
-	s.registerV1Operation(r, operationGetProjectSourceRaw, s.Sources.HandleGetProjectSourceRaw)
-	s.registerV1Operation(r, operationGetProjectSourceEditorConfig, s.Sources.HandleGetProjectSourceEditorConfig)
-	s.registerV1Operation(r, operationBrowseProjectSource, s.Sources.HandleBrowseProjectSource)
-	s.registerV1Operation(r, operationGetProjectSourceHistory, s.Sources.HandleGetProjectSourceHistory)
-	s.registerV1Operation(r, operationUndoProjectSourceHistory, s.Sources.SourceRequestHandler(toSourceOperation(operationUndoProjectSourceHistory), s.Sources.HandleUndoProjectSourceHistory))
-	s.registerV1Operation(r, operationRedoProjectSourceHistory, s.Sources.SourceRequestHandler(toSourceOperation(operationRedoProjectSourceHistory), s.Sources.HandleRedoProjectSourceHistory))
-	s.registerV1Operation(r, operationRenameProjectSource, s.Sources.SourceRequestHandler(toSourceOperation(operationRenameProjectSource), s.Sources.HandleRenameProjectSource))
-	s.registerV1Operation(r, operationCopyProjectSource, s.Sources.SourceRequestHandler(toSourceOperation(operationCopyProjectSource), s.Sources.HandleCopyProjectSource))
-	s.registerV1Operation(r, operationGetProjectSourceIndex, s.Sources.HandleProjectSourceIndex)
-	s.registerV1Operation(r, operationSearchProjectSource, s.Sources.HandleSearchProjectSource)
-	s.registerV1Operation(r, operationResolveProjectSourceDefinition, s.Sources.HandleResolveProjectSourceDefinition)
-	s.registerV1Operation(r, operationListProjectSourceSymbols, s.Sources.HandleListProjectSourceSymbols)
-	s.registerV1Operation(r, operationListProjectSourceWalk, s.Sources.HandleListProjectSourceWalk)
-	s.registerV1Operation(r, operationGetProjectSourceGitReview, s.Sources.HandleGetProjectSourceGitReview)
-	s.registerV1Operation(r, operationResolveProjectSourceRevisions, s.Sources.HandleResolveProjectSourceRevisions)
-	s.registerV1Operation(r, operationGetProjectSourceRevisionReview, s.Sources.HandleGetProjectSourceRevisionReview)
-	s.registerV1Operation(r, operationGetProjectSourceWalkSummary, s.Sources.HandleGetProjectSourceWalkSummary)
-	s.registerV1Operation(r, operationListProjectSourceVersions, s.Sources.HandleListProjectSourceVersions)
-	s.registerV1Operation(r, operationRestoreProjectSourceVersion, s.Sources.HandleRestoreProjectSourceVersion)
-	s.registerV1Operation(r, operationRestoreProjectSourceCommitState, s.Sources.HandleRestoreProjectSourceCommitState)
-	s.registerV1Operation(r, operationGetFileBriefing, s.Sources.HandleGetFileBriefing)
-	s.registerV1Operation(r, operationRequestFileBriefing, s.Sources.HandleRequestFileBriefing)
-	s.registerV1Operation(r, operationCompleteProjectSourcePresentation, s.Sources.HandleCompleteProjectSourcePresentation)
-	s.registerV1Operation(r, operationWithdrawProjectSourcePresentation, s.Sources.HandleWithdrawProjectSourcePresentation)
-	s.registerV1Operation(r, operationListProjectSourceSeen, s.Sources.HandleListProjectSourceSeen)
-	s.registerV1Operation(r, operationGetProjectSourceStorage, s.Sources.HandleGetProjectSourceStorage)
-	s.registerV1Operation(r, operationGetProjectSecurity, s.Scan.HandleGetProjectSecurity)
-	s.registerV1Operation(r, operationQueryProjectFindings, s.handleQueryProjectFindings)
-	s.registerV1Operation(r, operationListProjectFindingIgnores, s.handleListProjectFindingIgnores)
-	s.registerV1Operation(r, operationCreateProjectFindingIgnore, s.handleCreateProjectFindingIgnore)
-	s.registerV1Operation(r, operationDeleteProjectFindingIgnore, s.handleDeleteProjectFindingIgnore)
-	s.registerV1Operation(r, operationExportProjectFindings, s.handleExportProjectFindings)
-	s.registerV1Operation(r, operationListProjectSourcePins, s.Sources.HandleListProjectSourcePins)
-	s.registerV1Operation(r, operationCreateProjectSourcePin, s.Sources.HandleCreateProjectSourcePin)
-	s.registerV1Operation(r, operationUpdateProjectSourcePin, s.Sources.HandleUpdateProjectSourcePin)
-	s.registerV1Operation(r, operationDeleteProjectSourcePin, s.Sources.HandleDeleteProjectSourcePin)
-	s.registerV1Operation(r, operationGetProjectSourceComparison, s.Sources.HandleGetProjectSourceComparison)
-	s.registerV1Operation(r, operationCreateSourceView, s.Sources.HandleCreateSourceView)
-	s.registerV1Operation(r, operationDigestSourceComparisons, s.Sources.HandleDigestSourceComparisons)
-	s.registerV1Operation(r, operationGetSourceView, s.Sources.HandleGetSourceView)
-	s.registerV1Operation(r, operationApplySourceViewIntent, s.Sources.HandleApplySourceViewIntent)
-	s.registerV1Operation(r, operationReleaseSourceView, s.Sources.HandleReleaseSourceView)
-	s.registerV1Operation(r, operationReplaceSourceViewportInterest, s.Sources.HandleReplaceSourceViewportInterest)
-	s.registerV1Operation(r, operationReleaseSourceViewportInterest, s.Sources.HandleReleaseSourceViewportInterest)
-	s.registerV1Operation(r, operationCreateSourcePresentation, s.Sources.HandleCreateSourcePresentation)
-	s.registerV1Operation(r, operationReleaseSourcePresentation, s.Sources.HandleReleaseSourcePresentation)
-	s.registerV1Operation(r, operationGetSourceViewRows, s.Sources.HandleGetSourceViewRows)
-	s.registerV1Operation(r, operationLocateSourceView, s.Sources.HandleLocateSourceView)
-	s.registerV1Operation(r, operationSearchSourceView, s.Sources.HandleSearchSourceView)
-	s.registerV1Operation(r, operationGetProjectSourceAttribution, s.Sources.HandleGetProjectSourceAttribution)
-}
-
-func (s *Server) registerScanRoutes(r chi.Router) {
-	s.registerV1Operation(r, operationListCodeScans, s.Scan.HandleListCodeScans)
-	s.registerV1Operation(r, operationStartFullScan, s.Scan.HandleStartFullScan)
-	s.registerV1Operation(r, operationGetCodeScan, s.Scan.HandleGetCodeScan)
-	s.registerV1Operation(r, operationExportCodeScanSARIF, s.Scan.HandleExportCodeScanSARIF)
-	s.registerV1Operation(r, operationQueryCodeScan, s.Scan.HandleQueryCodeScan)
-	s.registerV1Operation(r, operationListScanners, s.Scan.HandleListScanners)
-	s.registerV1Operation(r, operationListProjectScanners, s.Scan.HandleListProjectScanners)
-	s.registerV1Operation(r, operationCreateScanner, s.Scan.HandleCreateScanner)
-	s.registerV1Operation(r, operationListScannerCatalog, s.Scan.HandleListScannerCatalog)
-	s.registerV1Operation(r, operationCheckScanners, s.Scan.HandleScannerCheck)
-	s.registerV1Operation(r, operationReplaceScannerSlot, s.Scan.HandleReplaceScannerSlot)
-	s.registerV1Operation(r, operationUpdateScanner, s.Scan.HandleUpdateScanner)
-	s.registerV1Operation(r, operationUpdateProjectScanner, s.Scan.HandleUpdateProjectScanner)
-	s.registerV1Operation(r, operationDeleteScanner, s.Scan.HandleDeleteScanner)
-}
-
-func (s *Server) registerWebResearchRoutes(r chi.Router) {
-	s.registerV1Operation(r, operationGetWebResearchProviders, s.researchAdmin.GetProviders)
-	s.registerV1Operation(r, operationGetWebResearchSettings, s.researchAdmin.GetSettings)
-	s.registerV1Operation(r, operationUpdateWebResearchSettings, s.researchAdmin.UpdateSettings)
-	s.registerV1Operation(r, operationUpdateWebResearchProvider, s.researchAdmin.UpdateProvider)
-	s.registerV1Operation(r, operationReplaceWebResearchCredential, s.researchAdmin.SetCredential)
-	s.registerV1Operation(r, operationDeleteWebResearchCredential, s.researchAdmin.DeleteCredential)
-	s.registerV1Operation(r, operationTestWebResearchProvider, s.researchAdmin.TestProvider)
-	s.registerV1Operation(r, operationGetWebResearchIndex, s.researchAdmin.GetIndex)
-}
-
-func (s *Server) registerMCPRoutes(r chi.Router) {
-	s.registerV1Operation(r, operationListMcpRecipes, s.mcpAdmin.ListRecipes)
-	s.registerV1Operation(r, operationListMcpProviders, s.mcpAdmin.ListProviders)
-	s.registerV1Operation(r, operationCreateMcpProvider, s.mcpAdmin.CreateProvider)
-	s.registerV1Operation(r, operationUpdateMcpProvider, s.mcpAdmin.UpdateProvider)
-	s.registerV1Operation(r, operationDeleteMcpProvider, s.mcpAdmin.DeleteProvider)
-	s.registerV1Operation(r, operationListMcpProviderTools, s.mcpAdmin.ListProviderTools)
-	s.registerV1Operation(r, operationRefreshMcpProvider, s.mcpAdmin.RefreshProvider)
-	s.registerV1Operation(r, operationStartMcpOAuth, s.mcpAdmin.StartOAuth)
-	s.registerV1Operation(r, operationCompleteMcpOAuth, s.mcpAdmin.CompleteOAuth)
-	s.registerV1Operation(r, operationCancelMcpOAuth, s.mcpAdmin.CancelOAuth)
-	s.registerV1Operation(r, operationRevokeMcpOAuth, s.mcpAdmin.RevokeOAuth)
-	s.registerV1Operation(r, operationCheckMcpProviders, s.mcpAdmin.CheckProviders)
-}
-
-func (s *Server) registerGitRoutes(r chi.Router) {
-	s.registerV1Operation(r, operationListGitRepos, s.Git.HandleGitRepos)
-	s.registerV1Operation(r, operationGetGitStatus, s.Git.HandleGitStatus)
-	s.registerV1Operation(r, operationListGitChanges, s.Git.HandleGitChanges)
-	s.registerV1Operation(r, operationListGitBranches, s.Git.HandleGitBranches)
-	s.registerV1Operation(r, operationCheckoutGit, s.Git.HandleGitCheckout)
-	s.registerV1Operation(r, operationCreateGitRepo, s.Git.HandleCreateGitRepo)
-	s.registerV1Operation(r, operationCommitGit, s.Git.HandleGitCommit)
-	s.registerV1Operation(r, operationStashGit, s.Git.HandleGitStash)
-	s.registerV1Operation(r, operationDiscardGit, s.Git.HandleGitDiscard)
-	s.registerV1Operation(r, operationPushGit, s.Git.HandleGitPush)
-	s.registerV1Operation(r, operationPullGit, s.Git.HandleGitPull)
-	s.registerV1Operation(r, operationDraftGitCommitMessage, s.Git.HandleGitCommitMessage)
-	s.registerV1Operation(r, operationGetGitWorktree, s.Git.HandleGitWorktreeView)
-	s.registerV1Operation(r, operationBindGitWorktree, s.Git.HandleGitWorktreeBind)
-	s.registerV1Operation(r, operationLandGitWorktree, s.Git.HandleGitWorktreeLand)
-	s.registerV1Operation(r, operationDeleteGitWorktree, s.Git.HandleDeleteGitWorktree)
-}
-
-func (s *Server) registerExtensionsRoutes(r chi.Router) {
-	s.registerV1Operation(r, operationGetExtensionsCatalog, s.Extensions.HandleGetExtensionsCatalog)
-	s.registerV1Operation(r, operationGetExtensionUnit, s.Extensions.HandleGetExtensionUnit)
-	s.registerV1Operation(r, operationUpdateExtensionUnit, s.Extensions.HandleUpdateExtensionUnit)
-	s.registerV1Operation(r, operationInstallExtensionPack, s.Extensions.HandleInstallExtensionPack)
-	s.registerV1Operation(r, operationUpdateExtensionPack, s.Extensions.HandleUpdateExtensionPack)
-	s.registerV1Operation(r, operationDeleteExtensionPack, s.Extensions.HandleDeleteExtensionPack)
-	s.registerV1Operation(r, operationUpdateExtensionConfiguration, s.Extensions.HandleUpdateExtensionConfiguration)
-	s.registerV1Operation(r, operationGetExtensionPackUpdate, s.Extensions.HandleGetExtensionPackUpdate)
-	s.registerV1Operation(r, operationApplyExtensionPackUpdate, s.Extensions.HandleApplyExtensionPackUpdate)
-	s.registerV1Operation(r, operationReloadExtensionPack, s.Extensions.HandleReloadExtensionPack)
-	s.registerV1Operation(r, operationApplyExtensionPackProfile, s.Extensions.HandleApplyExtensionPackProfile)
-	s.registerV1Operation(r, operationInstallExtensionMetaPack, s.Extensions.HandleInstallExtensionMetaPack)
-	s.registerV1Operation(r, operationUpdateExtensionMetaPack, s.Extensions.HandleUpdateExtensionMetaPack)
-	s.registerV1Operation(r, operationDeleteExtensionMetaPack, s.Extensions.HandleDeleteExtensionMetaPack)
-	s.registerV1Operation(r, operationApplyExtensionMetaPack, s.Extensions.HandleApplyExtensionMetaPack)
-	s.registerV1Operation(r, operationGetExtensionSuggestions, s.Extensions.HandleGetExtensionSuggestions)
-	s.registerV1Operation(r, operationAcceptExtensionSuggestions, s.Extensions.HandleAcceptExtensionSuggestions)
-}
-
-func (s *Server) registerHostResourceRoutes(r chi.Router) {
-	s.registerV1Operation(r, operationGetHostResources, s.handleGetHostResources)
-	s.registerV1Operation(r, operationRefreshHostResources, s.handleRefreshHostResources)
-	s.registerV1Operation(r, operationUpdateHostResource, s.handleUpdateHostResource)
-}
-
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.router.ServeHTTP(w, r)
 }
@@ -942,38 +516,4 @@ func (s *Server) handleGetSession(w http.ResponseWriter, r *http.Request) {
 	s.SessionView.HydrateSessionWorkspace(r.Context(), sess)
 	s.SessionView.EnrichSession(r.Context(), sess)
 	httpio.WriteJSON(w, http.StatusOK, sess)
-}
-
-func (s *Server) registerSettingsRoutes(r chi.Router) {
-	s.registerV1Operation(r, operationGetApprovalsSettings, s.Settings.HandleGetApprovals)
-	s.registerV1Operation(r, operationUpdateApprovalsSettings, s.Settings.HandleUpdateApprovals)
-	s.registerV1Operation(r, operationListApprovalGrants, s.Capabilities.HandleListApprovalGrants)
-	s.registerV1Operation(r, operationCreateApprovalGrant, s.Capabilities.HandleCreateApprovalGrant)
-	s.registerV1Operation(r, operationListApprovalAsks, s.Capabilities.HandleListApprovalAsks)
-	s.registerV1Operation(r, operationResolveSocketGrant, s.Capabilities.HandleResolveSocketGrant)
-	s.registerV1Operation(r, operationRevokeApprovalGrants, s.Capabilities.HandleRevokeApprovalGrants)
-	s.registerV1Operation(r, operationGetElevatedAccess, s.Capabilities.HandleGetElevatedAccess)
-	s.registerV1Operation(r, operationRevokeElevatedAccess, s.Capabilities.HandleRevokeElevatedAccess)
-	s.registerV1Operation(r, operationListDetectionPacks, s.Scan.HandleListDetectionPacks)
-	s.registerV1Operation(r, operationUpdateDetectionPack, s.Scan.HandleUpdateDetectionPack)
-	s.registerV1Operation(r, operationImportDetectionPack, s.Scan.HandleImportDetectionPack)
-	s.registerV1Operation(r, operationDeleteDetectionPack, s.Scan.HandleDeleteDetectionPack)
-	s.registerV1Operation(r, operationGetLimitsSettings, s.Settings.HandleGetLimits)
-	s.registerV1Operation(r, operationUpdateLimitsSettings, s.Settings.HandleUpdateLimits)
-	s.registerV1Operation(r, operationGetReviewSettings, s.Settings.HandleGetReview)
-	s.registerV1Operation(r, operationUpdateReviewSettings, s.Settings.HandleUpdateReview)
-	s.registerV1Operation(r, operationGetFileSummariesSettings, s.Settings.HandleGetFileSummariesSettings)
-	s.registerV1Operation(r, operationUpdateFileSummariesSettings, s.Settings.HandleUpdateFileSummariesSettings)
-	s.registerV1Operation(r, operationGetPowerSettings, s.Settings.HandleGetPowerSettings)
-	s.registerV1Operation(r, operationUpdatePowerSettings, s.Settings.HandleUpdatePowerSettings)
-	s.registerV1Operation(r, operationGetVerifySettings, s.Settings.HandleGetVerify)
-	s.registerV1Operation(r, operationUpdateVerifySettings, s.Settings.HandleUpdateVerify)
-	s.registerV1Operation(r, operationDismissVerifySettings, s.Settings.HandleDismissVerify)
-	s.registerV1Operation(r, operationGetSecurityScannersSettings, s.Settings.HandleGetSecurityScannersSettings)
-	s.registerV1Operation(r, operationUpdateSecurityScannersSettings, s.Settings.HandleUpdateSecurityScannersSettings)
-	s.registerV1Operation(r, operationGetPricingSettings, s.Settings.HandleGetPricingSettings)
-	s.registerV1Operation(r, operationUpdatePricingSettings, s.Settings.HandleUpdatePricingSettings)
-	s.registerV1Operation(r, operationRefreshPricingSource, s.Settings.HandleRefreshPricingSource)
-	s.registerV1Operation(r, operationGetTrustSettings, s.Project.HandleGetTrustSettings)
-	s.registerV1Operation(r, operationUpdateTrustSettings, s.Project.HandleUpdateTrustSettings)
 }

@@ -12,7 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/providerretry"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/workflow"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -102,7 +102,7 @@ func TestCloudflarePaidPlanNoticeUsesStructuredReason(t *testing.T) {
 }
 
 func TestContextFromPromptErrorNotRunnable(t *testing.T) {
-	ctx := ContextFromPromptError(&workflow.NotRunnableError{Reason: "paused", Status: wire.WorkflowRunStatusPaused})
+	ctx := ContextFromPromptError(&runstate.NotRunnableError{Reason: "paused", Status: wire.WorkflowRunStatusPaused})
 	if ctx["reason"] != "paused" {
 		t.Fatalf("ctx = %#v", ctx)
 	}
@@ -111,7 +111,7 @@ func TestContextFromPromptErrorNotRunnable(t *testing.T) {
 // The notice names the exact version a run is pinned to, even when the error
 // arrives wrapped by the turn that hit it.
 func TestWorkflowVersionUnavailableNoticeNamesThePinnedVersion(t *testing.T) {
-	err := fmt.Errorf("prompt turn: %w", &workflow.WorkflowVersionUnavailableError{WorkflowID: "security-survey", Version: "1.0.0"})
+	err := fmt.Errorf("prompt turn: %w", &runstate.WorkflowVersionUnavailableError{WorkflowID: "security-survey", Version: "1.0.0"})
 	ctx := ContextFromPromptError(err)
 	if ctx["workflow_id"] != "security-survey" || ctx["version"] != "1.0.0" {
 		t.Fatalf("ctx = %#v", ctx)
@@ -120,7 +120,7 @@ func TestWorkflowVersionUnavailableNoticeNamesThePinnedVersion(t *testing.T) {
 	if !strings.Contains(copy.Message, "security-survey@1.0.0") {
 		t.Fatalf("notice does not name the pinned version: %q", copy.Message)
 	}
-	if blank := ContextFromPromptError(&workflow.WorkflowVersionUnavailableError{}); len(blank) != 0 {
+	if blank := ContextFromPromptError(&runstate.WorkflowVersionUnavailableError{}); len(blank) != 0 {
 		t.Fatalf("an unidentified version must render the generic copy, got ctx %#v", blank)
 	}
 }

@@ -872,4 +872,3 @@ func TestWorkerGroundingBudgetIsPerLeg(t *testing.T) {
 		t.Fatalf("leg 2 out = %+v, want host-assembled partial after retries", out2)
 	}
 }
-
