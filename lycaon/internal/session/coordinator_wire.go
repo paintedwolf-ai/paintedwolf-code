@@ -3,9 +3,12 @@ package session
 import (
 	"context"
 
+	"github.com/lycaon/lycaon/internal/coordinator"
 	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
+	"github.com/lycaon/lycaon/internal/session/coordinatorcontrol"
+	sessionobservation "github.com/lycaon/lycaon/internal/session/observation"
 	"github.com/lycaon/lycaon/internal/session/promptsource"
 	"github.com/lycaon/lycaon/internal/session/toolpresentation"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -45,4 +48,37 @@ func acquireCoordinatorSources(m *Host, store Store, client modelcall.LLMClient,
 	m.Coordinator.Completion = &promptsource.Closeout{Batch: m.Coordinator.Batch, Closeout: m.Coordinator.Closeout, Closeouts: m.Runner.Closeouts, Evidence: m.Verification.Evidence, Guards: m.Coordinator.Guards, Hints: nil, Nudges: m.Coordinator.Nudges, Policy: m.ToolPolicy, Rejects: nil, RenderKick: m.Workers.RenderKick, Reports: nil}
 	m.Coordinator.Assembly = &promptsource.Assembly{Briefs: m.SourceBriefs, Catalog: &m.Catalog, Closeout: m.Coordinator.Closeout, Feedback: nil, Frame: nil, Guards: m.Coordinator.Guards, Hints: nil, Limits: m.Limits, Loading: m.Coordinator.Loading, Model: m.Coordinator.Model, Notes: m.Workers.Notes, PolicyIndex: m.Coordinator.PolicyIndex, Processes: m.Processes, Profiles: m.Profiles, Prompts: nil, Repository: nil, Runtime: nil, Scan: nil, Stash: stash, State: m.Workers.State, WebResearch: nil, WorkerContext: nil, Workspace: m.Workspace, Workspaces: m.Workers.Workspaces}
 	m.Coordinator.Loop = &promptsource.Loop{ActiveRuns: nil, Admission: m.Admission, Events: nil, Frame: nil, Grounding: nil, Guidance: m.Coordinator.Guidance, Limits: m.Limits, Processes: m.Processes, Runtime: nil, ScanInFlight: scanInFlight, Sessions: store, Settlement: m.Runner.Settlement, State: m.Workers.State, Submissions: m.Submissions, Turns: m.Runner.Turns, Workers: nil, Workflow: nil}
+}
+
+// bindCoordinatorRuntime connects the acquired session peers to one coordinator loop.
+func bindCoordinatorRuntime(m *Host, store Store) {
+	runtime := coordinator.NewRuntime(m.Coordinator.RuntimeDependencies())
+	m.Coordinator.Runtime = runtime
+	m.Stops.SetCoordinator(runtime)
+	m.Coordinator.Guidance.Bind(runtime.Kicks(), runtime.Anchors())
+	m.ToolPolicy.SetSurface(runtime)
+	m.Coordinator.Context.Runtime = runtime
+	m.Coordinator.Tools.Runtime = runtime
+	m.Coordinator.Control.Runtime = runtime
+	m.Coordinator.Assembly.Runtime = runtime
+	m.Coordinator.Loop.Runtime = runtime
+	m.Resources.Work.Coordinator = runtime
+	m.RewindRuntime.Coordinator = runtime
+	m.Observations = sessionobservation.New(store, runtime.CoordinatorLoop().Admission, runtime.CoordinatorLoop().Nudges, m.Runner.Turns)
+	m.Processes.SetLoop(runtime.CoordinatorLoop().Waits, runtime.CoordinatorLoop().Nudges)
+	m.Admission.SetLoop(runtime.CoordinatorLoop().Nudges, runtime.CoordinatorLoop().Cycles)
+	m.ProjectControl.SetAnchors(runtime.Anchors())
+	m.Coordinator.Nudges.SetSurface(runtime)
+	m.Coordinator.Guards.SetSurface(runtime)
+	m.Coordinator.Batch.SetLoop(runtime.CoordinatorLoop().Waits)
+	m.Runner.Settlement.SetRuntime(runtime)
+	m.Runner.SetRuntime(runtime)
+
+	m.Coordinator.Admission = m.Admission
+	m.Coordinator.Runtime = runtime
+	m.Coordinator.Workers = &coordinatorcontrol.Workers{Runtime: runtime, Batch: m.Coordinator.Batch, Settlement: m.Runner.Settlement, Admission: m.Admission, Digests: m.Workers.Digests, Results: m.Workers.Results}
+	m.Coordinator.Scans.Runtime = runtime
+
+	m.Coordinator.Profiles = m.Profiles
+	m.Coordinator.ToolPolicy = m.ToolPolicy
 }
