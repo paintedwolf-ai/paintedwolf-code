@@ -17,7 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/workflow"
+	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -30,7 +30,7 @@ func TestListWorkflowsFromCatalogOnly(t *testing.T) {
 	store := store.NewMemory()
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
 		Store: store, Projects: reg}, Workflow: hostapi.WorkflowDependencies{
-		WorkflowCatalog: workflow.ManifestResolver{
+		WorkflowCatalog: workflowcatalog.Resolver{
 			ProjectTierApplies: func(context.Context, string) bool {
 				return true
 			},
@@ -69,7 +69,7 @@ func TestListWorkflowsCatalogAndOverlay(t *testing.T) {
 	store := store.NewMemory()
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
 		Store: store, Projects: reg}, Workflow: hostapi.WorkflowDependencies{
-		WorkflowCatalog: workflow.ManifestResolver{ProjectTierApplies: func(context.Context, string) bool { return true }}}}), nil, hostapi.TestAPIToken)
+		WorkflowCatalog: workflowcatalog.Resolver{ProjectTierApplies: func(context.Context, string) bool { return true }}}}), nil, hostapi.TestAPIToken)
 
 	req := contractfixture.NewAuthedRequest(http.MethodGet, "/v1/workflows?project_id="+opened.ID, nil)
 	w := httptest.NewRecorder()
@@ -157,7 +157,7 @@ phases:
 	store := store.NewMemory()
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
 		Store: store, Projects: reg}, Workflow: hostapi.WorkflowDependencies{
-		WorkflowCatalog: workflow.ManifestResolver{ProjectTierApplies: func(context.Context, string) bool { return true }}}}), nil, hostapi.TestAPIToken)
+		WorkflowCatalog: workflowcatalog.Resolver{ProjectTierApplies: func(context.Context, string) bool { return true }}}}), nil, hostapi.TestAPIToken)
 
 	req := contractfixture.NewAuthedRequest(http.MethodGet, "/v1/workflows?project_id="+opened.ID, nil)
 	w := httptest.NewRecorder()

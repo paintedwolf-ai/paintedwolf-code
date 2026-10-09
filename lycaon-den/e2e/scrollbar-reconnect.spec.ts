@@ -57,7 +57,7 @@ modelIndependentWebE2e("editor reconnects during wheel input and refreshes after
         }));
         await new Promise<void>((resolve) => requestAnimationFrame(() => {
           samples.push({
-            active: motion.isDirectInputActive(),
+            active: motion.input.isDirectInputActive(),
             sameMotion: motion === scrollportMotionForHost(host),
             offset: scroller.scrollTop,
           });
@@ -81,7 +81,7 @@ modelIndependentWebE2e("editor reconnects during wheel input and refreshes after
   await expect.poll(() => editor.evaluate(async (host) => {
     const url = "/src/platform/scrolling/scrollport-motion.ts";
     const { scrollportMotionForHost } = await import(/* @vite-ignore */ url) as typeof import("../src/platform/scrolling/scrollport-motion.ts");
-    return scrollportMotionForHost(host as HTMLElement)?.isDirectInputActive();
+    return scrollportMotionForHost(host as HTMLElement)?.input.isDirectInputActive();
   })).toBe(false);
   await expect(editor.locator(".os-scrollbar-vertical")).toHaveClass(/os-scrollbar-visible/);
   await editor.locator(".cm-content").click();

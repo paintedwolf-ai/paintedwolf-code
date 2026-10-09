@@ -77,7 +77,7 @@ func (s *Sandboxes) reconcileProjectSandboxes(ctx context.Context, projectID, wo
 	if removed > 0 && s.Board != nil && s.Board.Repo != nil {
 		s.Board.Repo.Changed(ctx, workspacePath)
 	}
-	if removedCheckpoints := s.Sessions.RemoveOrphanCheckpoints(ctx, workspacePath); removedCheckpoints > 0 {
+	if removedCheckpoints := s.Sessions.Chats.Captures.RemoveOrphanCheckpoints(ctx, workspacePath); removedCheckpoints > 0 {
 		slog.InfoContext(ctx, "removed orphan session checkpoints", "workspace_path", workspacePath, "removed", removedCheckpoints)
 	}
 	return removed

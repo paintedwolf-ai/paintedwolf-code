@@ -4,15 +4,16 @@ package session_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"strings"
 	"testing"
 
 	coordinatorsurface "github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -52,9 +53,9 @@ func TestMockLLMReceivesWorkflowFilteredTools(t *testing.T) {
 	if buildSession.Posture != api.SessionPostureBuild {
 		t.Fatalf("default workflow posture = %s, want build", buildSession.Posture)
 	}
-	run, err := buildFix.Workflow.GetActive(t.Context(), buildFix.Sess.ID)
+	run, err := buildFix.Workflow.Store.Runs.ActiveBySession(t.Context(), buildFix.Sess.ID)
 	testutil.FailErr(t, "read attached workflow", err)
-	if run == nil || !buildFix.Workflow.IsAmbientRun(run) {
+	if run == nil || !runstate.IsAmbientRun(run) {
 		t.Fatalf("prompt did not attach its default workflow: %+v", run)
 	}
 	// The investigate surface keeps task loadable: offered, or behind the capability map.
@@ -88,7 +89,7 @@ func TestMockLLMInvestigateCoordinatorReceivesEndToEndHostContract(t *testing.T)
 		WorkflowInvestigateEligible:  &investigateEligible,
 	}})
 	recordRequestedLoad(t, fix.Store, fix.Sess.ID, "command")
-	fix.Mgr.SetTurnLoads(turnload.NewLedger())
+	fix.Mgr.Loading.SetLedger(turnload.NewLedger())
 	fix.Mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
 	if _, err := fix.Mgr.Prompt(context.Background(), fix.Sess.ID, "run a bounded local-service workflow"); err != nil {
 		testutil.FailErr(t, "fix.Mgr.Prompt failed", err)

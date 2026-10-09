@@ -65,7 +65,7 @@ func TestProjectSourceMutationRejectsLifecycleTransition(t *testing.T) {
 	srv := contractfixture.NewTestServer(t, func(d *hostapi.Dependencies) {
 		d.Core.MutationGate = gate
 		if d.Core.Sessions != nil {
-			d.Core.Sessions.SetMutationGate(gate)
+			d.Core.Sessions.Runner.Execution.SetMutationGate(gate)
 		}
 	})
 	root := t.TempDir()

@@ -25,7 +25,7 @@ func (s *LocalData) localDataRegistry() (*localdata.Registry, error) {
 	reg.SetSourceCatalogClear(sourcecatalog.Process().Trees.ClearTreeStores)
 	reg.SetSourceCatalogSpilled(sourcecatalog.SpilledBytes)
 	reg.SetExtensionCacheClear(s.extensionOwner.ClearCache)
-	reg.SetSessionScratchReclaim(s.sessions.ReclaimScratch)
+	reg.SetSessionScratchReclaim(s.sessions.Runner.Execution.ReclaimScratch)
 	if s.workerBranchRoot != "" {
 		deps := s.branchRetentionDeps()
 		reg.SetWorkerBranches(

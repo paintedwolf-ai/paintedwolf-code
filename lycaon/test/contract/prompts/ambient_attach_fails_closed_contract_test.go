@@ -19,6 +19,8 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -27,12 +29,12 @@ import (
 // run store either admits or refuses the ambient start.
 type ambientAttachFixture struct {
 	srv       *api.Server
-	runs      *workflow.SQLStore
+	runs      *runstate.Repository
 	projectID string
 }
 
 // refusedStarts is a run store that refuses every workflow start.
-type refusedStarts struct{ *workflow.SQLStore }
+type refusedStarts struct{ runstate.StartsRepository }
 
 func (refusedStarts) ReplayStart(context.Context, string, string, string) (*wire.WorkflowRun, bool, error) {
 	return nil, false, errors.New("run store refused the start")
@@ -51,16 +53,16 @@ func newAmbientAttachFixture(t *testing.T, startsAdmitted bool) ambientAttachFix
 
 	registry, err := workflowdef.RegistryFromDirs("")
 	contractcheck.FailErr(t, "workflow.RegistryFromDirs", err)
-	runs := workflow.NewSQLStore(sqlDB)
-	var store workflow.RunStore = runs
+	runs := workflowpersistence.New(sqlDB)
+	store := runs
 	if !startsAdmitted {
-		store = refusedStarts{runs}
+		store.Starts = refusedStarts{store.Starts}
 	}
 	mgr := workflow.NewManager(store, sessions, registry, nil)
-	mgr.Resolver = workflow.ManifestResolver{}
-	deps := apitest.Dependencies(t, api.Dependencies{Core:api.CoreDependencies{
-		Store: sessions, Projects: projects,},Storage:api.StorageDependencies{ ModuleRoot: filepath.Join(contractcheck.RepoRoot(t), "lycaon"),},Workflow:api.WorkflowDependencies{
-		Workflows: mgr, WorkflowRuns: store,},})
+	deps := apitest.Dependencies(t, api.Dependencies{
+		Store: sessions, Projects: projects, ModuleRoot: filepath.Join(contractcheck.RepoRoot(t), "lycaon"),
+		Workflows: mgr, WorkflowRuns: store,
+	})
 	return ambientAttachFixture{srv: api.NewServer(deps, nil, api.TestAPIToken), projectID: p.ID, runs: runs}
 }
 
@@ -112,7 +114,7 @@ func TestBuildChatSessionAlwaysHasLeafRun(t *testing.T) {
 	if prepared.Status != wire.SessionStatusIdle {
 		t.Fatalf("prepared build session status = %q want %q", prepared.Status, wire.SessionStatusIdle)
 	}
-	run, err := fixture.runs.ActiveBySession(context.Background(), sess.ID)
+	run, err := fixture.runs.Runs.ActiveBySession(context.Background(), sess.ID)
 	contractcheck.FailErr(t, "active run by session", err)
 	if run == nil {
 		t.Fatal("prepared build chat session has no active workflow run — ambient attach must fail closed, not skip")
@@ -149,7 +151,7 @@ func TestNonBuildPosturesPrepareWithoutRun(t *testing.T) {
 			if prepared.Status != wire.SessionStatusIdle {
 				t.Fatalf("prepared %s session status = %q want %q", posture, prepared.Status, wire.SessionStatusIdle)
 			}
-			run, err := fixture.runs.ActiveBySession(context.Background(), sess.ID)
+			run, err := fixture.runs.Runs.ActiveBySession(context.Background(), sess.ID)
 			contractcheck.FailErr(t, "active run by session", err)
 			if run != nil {
 				t.Fatalf("%s session attached workflow run %q; ambient attach is build-only", posture, run.ID)

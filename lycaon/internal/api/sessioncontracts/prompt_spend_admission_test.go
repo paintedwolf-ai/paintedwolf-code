@@ -33,7 +33,7 @@ func TestPromptHTTPReturnsSpendRejectionBeforeAcceptedReceipt(t *testing.T) {
 	limits.SessionSpendCeilingUSD = 5
 	srv := contractfixture.NewTestServer(t, func(d *hostapi.Dependencies) {
 		d.Core.Store, d.Core.Projects = fixture.Sources.Workspace.SessionStore, fixture.Sources.Workspace.ProjectRegistry
-		d.Core.Sessions = session.NewManagerWithLLMService(d.Core.Store, llm.NewMockProvider(nil), nil, tools.NewStubRegistry(), limits, tracker)
+		d.Core.Sessions = session.NewHost(d.Core.Store, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: limits, Cost: tracker}, tools.NewStubRegistry())
 	})
 
 	spent := int64(6_000_000_000)
@@ -50,7 +50,7 @@ func TestPromptHTTPReturnsSpendRejectionBeforeAcceptedReceipt(t *testing.T) {
 	if response.Code != http.StatusConflict || notice.Code != wire.ApiErrorCodeSessionSpendCeilingReached || notice.Message == "" {
 		t.Fatalf("prompt was not rejected synchronously: status=%d body=%s", response.Code, response.Body.String())
 	}
-	if _, err := srv.Admin.SessionAdmin.Lifecycle.Sessions.GetPromptSubmission(t.Context(), request.OperationID); !errors.Is(err, store.ErrPromptSubmissionNotFound) {
+	if _, err := srv.Admin.SessionAdmin.Lifecycle.Sessions.Submissions.GetPromptSubmission(t.Context(), request.OperationID); !errors.Is(err, store.ErrPromptSubmissionNotFound) {
 		t.Fatalf("rejected request left an accepted receipt: %v", err)
 	}
 }

@@ -354,7 +354,9 @@ type ApprovalOption struct {
 	Rung  ApprovalOptionRung `json:"rung"`
 	Scope ApprovalGrantScope `json:"scope,omitempty"`
 	// Optional ladder heading when a card carries a second subject (absorbed predicate or host resources). Absent means the primary ladder.
-	Group          string                 `json:"group,omitempty"`
+	Group string `json:"group,omitempty"`
+	// Host-minted directory candidate covered by this option; absent for unscoped options.
+	DirectoryScope string                 `json:"directory_scope,omitempty"`
 	Title          string                 `json:"title"`
 	Coverage       string                 `json:"coverage"`
 	ExpiresWhen    string                 `json:"expires_when"`
@@ -378,11 +380,13 @@ type ApprovalOverlayRejectedRow struct {
 
 // ApprovalPlan
 type ApprovalPlan struct {
-	ID           string                   `json:"id"`
-	ActionDigest string                   `json:"action_digest"`
-	Stage        ApprovalPlanStage        `json:"stage"`
-	Subject      ApprovalSubject          `json:"subject"`
-	Presentation ApprovalPlanPresentation `json:"presentation"`
+	// Host-approved directory candidates, from the containing folder outward; the first is the default.
+	DirectoryScopes []string                 `json:"directory_scopes,omitempty"`
+	ID              string                   `json:"id"`
+	ActionDigest    string                   `json:"action_digest"`
+	Stage           ApprovalPlanStage        `json:"stage"`
+	Subject         ApprovalSubject          `json:"subject"`
+	Presentation    ApprovalPlanPresentation `json:"presentation"`
 	// Every gate that fired, in citation-priority order. The first is the primary reason and is repeated in presentation.gate.
 	Reasons []ApprovalGate   `json:"reasons"`
 	Options []ApprovalOption `json:"options"`

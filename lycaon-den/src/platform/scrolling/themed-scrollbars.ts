@@ -1,3 +1,11 @@
+import {
+  type ScrollportAxis,
+  scrollportFrameParts,
+  DEN_SCROLLPORT_AXIS_ATTR,
+  DEN_SCROLLPORT_DEFER_ATTR,
+} from "./scrollport-frame-dom.ts";
+
+import { scrollbarChrome, type ScrollbarGeometry } from "./scrollbar-chrome.ts";
 import { measureSync } from "../../chat/stream/den-main-thread-perf.ts";
 import { FrameMeasurements } from "../../layout/frame-measurements.ts";
 import { observeSharedContentBox, type SharedContentBox } from "../../layout/shared-resize-observer.ts";
@@ -9,35 +17,15 @@ import {
 import { documentStyleNonce } from "../csp-nonce.ts";
 import { preservingSelection } from "../interaction/selection-lease.ts";
 import { bindOverlayScrollbarAutoHide } from "./overlay-scrollbar-autohide.ts";
-import { bindOverlayScrollbarInput, type ScrollbarAxisModel, type ScrollbarInput } from "./overlay-scrollbar-input.ts";
+import { bindOverlayScrollbarInput, type ScrollbarAxisModel } from "./overlay-scrollbar-input.ts";
 import { ScrollbarUpdates } from "./scrollbar-updates.ts";
 import {
-  DEN_SCROLLPORT_INPUT_EVENT,
   bindScrollportMotion,
   bindScrollportNativeInput,
   scrollportMotionForHost,
   unbindScrollportMotion,
 } from "./scrollport-motion.ts";
-
-/**
- * Every themed scroll surface is a frame around the element that scrolls:
- *
- *   .den-scrollport[data-den-scrollport=<axis>]   frame: layout box, carries the scrollbar chrome
- *     > .den-scrollport__viewport                 the scroll container
- *       > .den-scrollport__content                the scroll extent
- *
- * The frame carries the scrollbar chrome outside the viewport so the thumb
- * stays stable during off-thread scrolling.
- */
-export const DEN_SCROLLPORT_CLASS = "den-scrollport";
-export const DEN_SCROLLPORT_VIEWPORT_CLASS = "den-scrollport__viewport";
-export const DEN_SCROLLPORT_CONTENT_CLASS = "den-scrollport__content";
-/** Marks a frame and names the axes its viewport scrolls. */
-export const DEN_SCROLLPORT_AXIS_ATTR = "data-den-scrollport";
-/** Frames repeated through long documents attach only once they approach view. */
-export const DEN_SCROLLPORT_DEFER_ATTR = "data-den-scrollport-defer";
-
-export type ScrollportAxis = "x" | "y" | "both";
+import { DEN_SCROLLPORT_INPUT_EVENT } from "./scrollport-motion-types.ts";
 
 const SCROLLPORT_FRAME_SELECTOR = `[${DEN_SCROLLPORT_AXIS_ATTR}]`;
 const EDITOR_SCROLL_BOUNDARY_SELECTOR = ".cm-editor";
@@ -93,11 +81,10 @@ const activeHosts = new Set<HTMLElement>();
 const retainedHosts = new WeakSet<HTMLElement>();
 const pendingHosts = new WeakSet<HTMLElement>();
 const geometrySignatures = new WeakMap<HTMLElement, string>();
-const verticalModels = new WeakMap<HTMLElement, ScrollbarAxisModel>();
 const chromePlacements = new FrameMeasurements(
   (host: HTMLElement) => host.isConnected && activeHosts.has(host) && !isMeasurementHeld(host)
-    ? readThemedScrollbarGeometry(host) : undefined,
-  (host, geometry) => { if (geometry) placeScrollbarChrome(host, geometry); },
+    ? scrollbarChrome.read(host) : undefined,
+  (host, geometry) => { if (geometry && !isMeasurementHeld(host)) scrollbarChrome.place(host, geometry); },
 );
 const updates = new ScrollbarUpdates(
   (host) => activeHosts.has(host) && host.isConnected &&
@@ -111,7 +98,6 @@ const updates = new ScrollbarUpdates(
 const heldAttachments = new Set<HTMLElement>();
 let enqueueAttachment: ((host: HTMLElement) => void) | undefined;
 const hostCleanups = new WeakMap<HTMLElement, () => void>();
-const inputBindings = new WeakMap<HTMLElement, ScrollbarInput>();
 const quietDepthByHost = new Map<HTMLElement, number>();
 const directInputHosts = new Set<HTMLElement>();
 const directInputTimers = new Map<HTMLElement, ReturnType<typeof setTimeout>>();
@@ -132,7 +118,7 @@ function untrackHost(host: HTMLElement): void {
   chromePlacements.cancel(host);
   hostCleanups.get(host)?.();
   hostCleanups.delete(host);
-  inputBindings.delete(host);
+  scrollbarChrome.forget(host);
   unbindScrollportMotion(host);
   activeHosts.delete(host);
   updates.forget(host);
@@ -147,7 +133,6 @@ function untrackHost(host: HTMLElement): void {
   if (inputTimer !== undefined) clearTimeout(inputTimer);
   directInputTimers.delete(host);
   geometrySignatures.delete(host);
-  verticalModels.delete(host);
 }
 
 type ScrollMeasureQuietHold = {
@@ -206,7 +191,7 @@ function noteDirectInput(host: HTMLElement): void {
     host,
     setTimeout(() => {
       directInputTimers.delete(host);
-      if (scrollportMotionForHost(host)?.isDirectInputActive()) {
+      if (scrollportMotionForHost(host)?.input.isDirectInputActive()) {
         noteDirectInput(host);
         return;
       }
@@ -360,7 +345,7 @@ function bindScrollbar(
     )));
   const elements = instance.elements();
   if (vertical) {
-    verticalModels.set(host, vertical);
+    scrollbarChrome.setModel(host, vertical);
     elements.scrollbarVertical.scrollbar.classList.add("den-scrollbar-logical");
   }
   const scrollViewport = elements.scrollOffsetElement ?? viewport;
@@ -371,7 +356,7 @@ function bindScrollbar(
   );
   const motionElements = { ...elements, host, scrollOffsetElement: scrollViewport };
   const input = bindOverlayScrollbarInput(motionElements, motion, vertical);
-  inputBindings.set(host, input);
+  scrollbarChrome.bindInput(host, input);
   const stopAutoHide = bindOverlayScrollbarAutoHide(motionElements, motion);
   const stopNativeInput = bindScrollportNativeInput(motion);
   // A scroll that moved nothing skips the host's measure pass; attach cannot read the offset.
@@ -385,7 +370,7 @@ function bindScrollbar(
       schedule(
         () => chromePlacements.measure(host),
         // Re-applying thumb input here would re-enter the host's scroll pipeline.
-        (geometry) => { if (geometry) placeScrollbarChrome(host, geometry, { reapplyInput: false }); },
+        (geometry) => { if (geometry && !isMeasurementHeld(host)) scrollbarChrome.place(host, geometry, { reapplyInput: false }); },
       );
     }
     : () => chromePlacements.request(host);
@@ -393,7 +378,7 @@ function bindScrollbar(
     if (schedule) placeChrome();
     else chromePlacements.request(host);
   };
-  const stopExtent = motion.subscribeExtent(requestPlaceChrome);
+  const stopExtent = motion.extent.subscribeExtent(requestPlaceChrome);
   const stopCommits = vertical ? motion.subscribeCommits(requestPlaceChrome) : undefined;
   const stopContentExtent = options.extent
     ? observeExtent(host, viewport, options.extent, options.axis ?? "both")
@@ -411,7 +396,7 @@ function bindScrollbar(
     host.removeEventListener(DEN_SCROLLPORT_INPUT_EVENT, onDirectInput);
     scrollViewport.removeEventListener("scroll", placeChrome);
   });
-  placeScrollbarChrome(host);
+  if (!isMeasurementHeld(host)) scrollbarChrome.place(host);
   // Quiet holds apply after the scrollbar instance exists.
   applyActiveQuietTo(host);
   return instance;
@@ -451,7 +436,7 @@ export function updateThemedViewportScrollbar(
   const next = String(geometrySignature);
   if (geometrySignatures.get(host) === next) return;
   geometrySignatures.set(host, next);
-  placeScrollbarChrome(host, geometry);
+  if (!isMeasurementHeld(host)) scrollbarChrome.place(host, geometry);
   updates.request(host);
 }
 
@@ -460,55 +445,6 @@ function attachHeldFor(frame: HTMLElement): boolean {
     if (holdCovers(hold, frame)) return true;
   }
   return false;
-}
-
-export type ScrollportFrameParts = {
-  axis: ScrollportAxis;
-  viewport: HTMLElement;
-  content: HTMLElement;
-};
-
-function isScrollportAxis(value: string | null): value is ScrollportAxis {
-  return value === "x" || value === "y" || value === "both";
-}
-
-/** The frame's viewport and content, or undefined when the markup breaks the contract. */
-export function scrollportFrameParts(frame: HTMLElement): ScrollportFrameParts | undefined {
-  const axis = frame.getAttribute(DEN_SCROLLPORT_AXIS_ATTR);
-  const viewport = frame.firstElementChild;
-  const content = viewport?.firstElementChild;
-  if (
-    !isScrollportAxis(axis) ||
-    !(viewport instanceof HTMLElement) || !viewport.classList.contains(DEN_SCROLLPORT_VIEWPORT_CLASS) ||
-    !(content instanceof HTMLElement) || !content.classList.contains(DEN_SCROLLPORT_CONTENT_CLASS)
-  ) {
-    return undefined;
-  }
-  return { axis, viewport, content };
-}
-
-/** Wraps `content` in scrollport markup, for HTML built outside Solid such as rendered markdown. */
-export function wrapInScrollportFrame(content: HTMLElement, options: {
-  frameClass: string;
-  axis: ScrollportAxis;
-  defer?: boolean;
-  viewportAttributes?: Record<string, string>;
-}): HTMLDivElement {
-  const doc = content.ownerDocument;
-  const frame = doc.createElement("div");
-  frame.className = `${DEN_SCROLLPORT_CLASS} ${options.frameClass}`;
-  frame.setAttribute(DEN_SCROLLPORT_AXIS_ATTR, options.axis);
-  if (options.defer) frame.setAttribute(DEN_SCROLLPORT_DEFER_ATTR, "");
-  const viewport = doc.createElement("div");
-  viewport.className = DEN_SCROLLPORT_VIEWPORT_CLASS;
-  for (const [name, value] of Object.entries(options.viewportAttributes ?? {})) {
-    viewport.setAttribute(name, value);
-  }
-  content.replaceWith(frame);
-  content.classList.add(DEN_SCROLLPORT_CONTENT_CLASS);
-  viewport.append(content);
-  frame.append(viewport);
-  return frame;
 }
 
 let visibilityObserver: IntersectionObserver | undefined;
@@ -566,102 +502,6 @@ function detachScrollportFrame(frame: HTMLElement): void {
   // Unwrapping restores focus the same way attaching does; keep the selection.
   preservingSelection(() => instanceFor(frame)?.destroy());
   untrackHost(frame);
-}
-
-const VIEWPORT_PERCENT_PROPERTY = "--os-viewport-percent";
-const SCROLL_PERCENT_PROPERTY = "--os-scroll-percent";
-
-/** Matches the scrollbar library's CSS geometry precision. */
-function roundCssNumber(value: number): number {
-  return Math.round(value * 1e4) / 1e4;
-}
-
-/** Visible fraction of the scroll range used to size the handle. */
-function viewportPercent(clientSize: number, scrollSize: number): string {
-  return String(roundCssNumber(scrollSize > 0 ? Math.min(1, clientSize / scrollSize) : 1));
-}
-
-/** Position of the handle along its track, as the library's scroll percent. */
-function scrollPercent(offset: number, range: number): string {
-  const fraction = range > 0 ? offset / range : 0;
-  return String(roundCssNumber(Math.max(0, Math.min(1, fraction || 0))));
-}
-
-/** With a scroll timeline the library animates handle offsets and never publishes the percent. */
-function handleOffsetsPublished(): boolean {
-  return typeof ScrollTimeline === "undefined";
-}
-
-function setStyleValue(
-  element: HTMLElement | undefined,
-  property: string,
-  value: string,
-): void {
-  if (element && element.style.getPropertyValue(property) !== value) {
-    element.style.setProperty(property, value);
-  }
-}
-
-export type ScrollbarGeometry = {
-  verticalPercent: string;
-  verticalPosition?: string;
-  horizontalPercent: string;
-  /** Handle offsets along each track; absent where a scroll timeline drives them. */
-  handles?: { x: string; y: string };
-};
-
-/** Geometry snapshot for the enclosing layout read phase. */
-export function readThemedScrollbarGeometry(host: HTMLElement): ScrollbarGeometry {
-  const instance = instanceFor(host);
-  const viewport = instance?.elements().scrollOffsetElement ?? host;
-  const logical = verticalModels.get(host)?.read();
-  // Non-overflowing logical hosts need no layout reads.
-  const horizontalOverflow = !logical || instance?.state().hasOverflow?.x !== false;
-  const handles = handleOffsetsPublished();
-  const logicalRange = logical ? Math.max(1, logical.extent - logical.viewport) : 0;
-  const verticalPosition = logical ? String(Math.max(0, Math.min(1, logical.offset / logicalRange))) : undefined;
-  const clientHeight = logical ? 0 : viewport.clientHeight;
-  const scrollHeight = logical ? 0 : viewport.scrollHeight;
-  const clientWidth = horizontalOverflow ? viewport.clientWidth : 0;
-  const scrollWidth = horizontalOverflow ? viewport.scrollWidth : 0;
-  const geometry: ScrollbarGeometry = {
-    verticalPercent: logical ? viewportPercent(logical.viewport, logical.extent)
-      : viewportPercent(clientHeight, scrollHeight),
-    verticalPosition,
-    horizontalPercent: horizontalOverflow ? viewportPercent(clientWidth, scrollWidth) : "1",
-  };
-  if (handles) {
-    geometry.handles = {
-      x: horizontalOverflow ? scrollPercent(viewport.scrollLeft, scrollWidth - clientWidth) : "0",
-      y: logical ? scrollPercent(logical.offset, logicalRange) : scrollPercent(viewport.scrollTop, scrollHeight - clientHeight),
-    };
-  }
-  return geometry;
-}
-
-/** Keeps scrollbar geometry current during direct input. */
-function placeScrollbarChrome(
-  host: HTMLElement,
-  geometry?: ScrollbarGeometry,
-  options: { reapplyInput?: boolean } = {},
-): void {
-  if (isMeasurementHeld(host)) return;
-  const elements = instanceFor(host)?.elements();
-  const vertical = elements?.scrollbarVertical?.scrollbar;
-  const horizontal = elements?.scrollbarHorizontal?.scrollbar;
-  if (!vertical && !horizontal) return;
-  const moved = options.reapplyInput === false ? false : inputBindings.get(host)?.refreshGeometry();
-  const measured = !moved && geometry ? geometry : readThemedScrollbarGeometry(host);
-  setStyleValue(vertical, VIEWPORT_PERCENT_PROPERTY, measured.verticalPercent);
-  if (measured.verticalPosition !== undefined) {
-    setStyleValue(vertical, "--den-scrollbar-viewport", measured.verticalPercent);
-    setStyleValue(vertical, "--den-scrollbar-position", measured.verticalPosition);
-  }
-  setStyleValue(horizontal, VIEWPORT_PERCENT_PROPERTY, measured.horizontalPercent);
-  if (measured.handles) {
-    setStyleValue(vertical, SCROLL_PERCENT_PROPERTY, measured.handles.y);
-    setStyleValue(horizontal, SCROLL_PERCENT_PROPERTY, measured.handles.x);
-  }
 }
 
 /** Attaches a frame now instead of in the next reconcile frame. */

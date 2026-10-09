@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools/native/command"
 	"strings"
 	"testing"
 
@@ -11,14 +12,14 @@ import (
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/tools/native"
+
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
 func commandRejectExecutor(t *testing.T) *toolexecution.Executor {
 	t.Helper()
 	reg := tools.NewDefaultRegistry()
-	contractcheck.FailErr(t, "Register command", reg.Register("command", (&native.CommandTool{Runner: hostcmd.NewRunner()}).Run))
+	contractcheck.FailErr(t, "Register command", reg.Register("command", (&command.CommandTool{Runner: hostcmd.NewRunner()}).Run))
 	return toolexecution.NewExecutor(nil, reg, "implement")
 }
 

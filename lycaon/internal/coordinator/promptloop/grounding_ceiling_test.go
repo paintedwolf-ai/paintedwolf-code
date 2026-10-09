@@ -82,7 +82,7 @@ func TestCloseoutRetryBudgetDocumentRepairCarriesTheFence(t *testing.T) {
 }
 
 func TestCloseoutRetryBudget_WorkflowConfiguredLimit(t *testing.T) {
-	loop := &PromptLoop{}
+	loop := NewPromptLoop(PromptLoopDeps{})
 	stDefault := &promptLoopTurnState{
 		coordinatorFrame: inject.CoordinatorTurnFrame{
 			Runtime: inject.WorkflowRuntimeSnapshot{
@@ -90,7 +90,7 @@ func TestCloseoutRetryBudget_WorkflowConfiguredLimit(t *testing.T) {
 			},
 		},
 	}
-	budget := turnCloseout{loop}.closeoutRetryBudget(t.Context(), "sess-1", stDefault, guidance.ReportFenceUnreadableCode, "{}")
+	budget := loop.Closeout.closeoutRetryBudget(t.Context(), "sess-1", stDefault, guidance.ReportFenceUnreadableCode, "{}")
 	if budget.limit != 3 {
 		t.Fatalf("expected default limit 3, got %d", budget.limit)
 	}
@@ -103,7 +103,7 @@ func TestCloseoutRetryBudget_WorkflowConfiguredLimit(t *testing.T) {
 			},
 		},
 	}
-	budget5 := turnCloseout{loop}.closeoutRetryBudget(t.Context(), "sess-1", stConfigured, guidance.ReportFenceUnreadableCode, "{}")
+	budget5 := loop.Closeout.closeoutRetryBudget(t.Context(), "sess-1", stConfigured, guidance.ReportFenceUnreadableCode, "{}")
 	if budget5.limit != 5 {
 		t.Fatalf("expected configured limit 5, got %d", budget5.limit)
 	}

@@ -2,6 +2,9 @@ package api
 
 import (
 	"context"
+	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
+	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
+	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 
 	"github.com/lycaon/lycaon/internal/agentpresence"
 	"github.com/lycaon/lycaon/internal/api/capabilityadmin"
@@ -81,7 +84,7 @@ type CoreDependencies struct {
 	Store         session.Store
 	PersonActions *personactions.Store
 	Projects      project.Registry
-	Sessions      *session.Manager
+	Sessions      *session.Host
 	Settings      *settings.Service
 	UserNotices   *usernotice.Catalog
 	Invocations   invocation.Recorder
@@ -138,10 +141,10 @@ type ScansDependencies struct {
 
 type WorkflowDependencies struct {
 	Workflows         *workflow.RunManager
-	WorkflowCatalog   workflow.ManifestResolver
-	WorkflowRuns      workflow.RunStore
-	WorkflowComposer  *workflow.Composer
-	WorkflowPersister *workflow.Persister
+	WorkflowCatalog   workflowcatalog.Resolver
+	WorkflowRuns      *runstate.Repository
+	WorkflowComposer  *workflowcomposition.Composer
+	WorkflowPersister *workflowcomposition.Persister
 	Blueprints        *blueprint.Manager
 	Orchestrator      orchestration.Orchestrator
 	Delegations       *delegation.Manager

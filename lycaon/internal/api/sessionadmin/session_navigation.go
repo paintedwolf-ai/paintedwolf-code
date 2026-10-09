@@ -10,8 +10,8 @@ import (
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/project"
-	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/transcript"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -37,12 +37,12 @@ func (s *Navigation) HandleResolveMessageNavigation(w http.ResponseWriter, r *ht
 		s.responses.InternalError(w, r, err)
 		return
 	}
-	result, err := s.Sessions.ResolveMessageNavigation(ctx, sessionID, req, s.ResolveNavigationWorkspace)
+	result, err := s.Sessions.Runner.Transcript.ResolveNavigation(ctx, sessionID, req, s.ResolveNavigationWorkspace)
 	switch {
-	case errors.Is(err, session.ErrNavigationCandidateInvalid):
+	case errors.Is(err, transcript.ErrNavigationCandidateInvalid):
 		s.responses.FailReason(w, wire.ApiErrorCodeInvalidRequest, "candidate_index must select a stored ambiguous reference")
 		return
-	case errors.Is(err, session.ErrNavigationMessageNotProse):
+	case errors.Is(err, transcript.ErrNavigationMessageNotProse):
 		s.responses.FailReason(w, wire.ApiErrorCodeInvalidRequest, "only visible assistant messages carry navigation references")
 		return
 	case errors.Is(err, store.ErrNavigationContentChanged):

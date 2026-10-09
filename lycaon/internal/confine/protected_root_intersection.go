@@ -18,29 +18,9 @@ func underSecretReadAllowBack(path string) bool {
 	return underAny(path, SecretReadAllowBackRoots())
 }
 
-// attachedWriteRootForbidden checks both path directions: standing roots must
-// not be, contain, or sit inside a protected store.
+// Standing roots may contain stores; the per-path floors still protect them.
 func attachedWriteRootForbidden(path string) bool {
-	return intersectsSecretReadDeny(path) || intersectsKeyMaterial(path) || intersectsCredentialStore(path)
-}
-
-// intersectsSecretReadDeny checks both directions after workspace carve-outs.
-func intersectsSecretReadDeny(path string) bool {
-	if underSecretReadAllowBack(path) {
-		return false
-	}
-	if underSecretReadDeny(path) {
-		return true
-	}
-	for _, deny := range SecretReadDenyRoots() {
-		if strings.TrimSpace(deny) == "" {
-			continue
-		}
-		if PathStrictlyUnder(deny, path) {
-			return true
-		}
-	}
-	return false
+	return underSecretReadDeny(path) || underAny(path, KeyMaterialWritePaths()) || underAny(path, CredentialStorePaths())
 }
 
 // NormalizeWriteRootKey returns a stable deny-set / pending-map key for a write root.

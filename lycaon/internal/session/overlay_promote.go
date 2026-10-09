@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/session/promotionstate"
 	"github.com/lycaon/lycaon/internal/workspacebaseline"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -40,7 +41,7 @@ func InspectOverlayChanges(ctx context.Context, task *api.WorkerTask, roots []pr
 	if len(roots) > 0 {
 		return FilterOverlayPromoteCandidatePathsForRoots(roots, changed), nil
 	}
-	return FilterOverlayPromoteCandidatePaths(changed), nil
+	return promotionstate.FilterOverlayPromoteCandidatePaths(changed), nil
 }
 
 // OverlayWorkspaceAvailable reports whether the task's overlay root is a real directory.
@@ -109,7 +110,7 @@ func OverlayWorkspaceDivergencePaths(task *api.WorkerTask, roots []projectroot.R
 	} else {
 		changed = DiffWorkspaceSnapshot(overlay, projSnap)
 	}
-	return FilterOverlayPromoteCandidatePaths(changed)
+	return promotionstate.FilterOverlayPromoteCandidatePaths(changed)
 }
 
 // ResolveWorkerSummaryStatus keeps completed work open until its overlay is resolved.

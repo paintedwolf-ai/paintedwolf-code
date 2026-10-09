@@ -53,7 +53,7 @@ func TestOwnerSeamTerminalRefusalKeepsInvokedIsolationRejection(t *testing.T) {
 	runErr := toolrejection.RenderReject(&toolrejection.ToolReject{
 		Code: isolation.CodeControlPlaneDenied, Data: map[string]any{"path": "/state/approvals.yaml", "tool": "write"},
 	}, nil)
-	run := toolInvocations{loop}.finalizeToolRun(t.Context(), &api.Session{ID: "session"}, completedToolRun{
+	run := loop.Tools.finalizeToolRun(t.Context(), &api.Session{ID: "session"}, completedToolRun{
 		sessionID: "session", call: api.ToolCall{ID: "call", Name: "write"}, contract: contract,
 		toolCtx: tools.ToolContext{
 			Effects: tools.InvocationEffects{Out: &tools.ToolInvocationOut{OwnerInvoked: true}},

@@ -214,7 +214,7 @@ func classifyStoreOpenFailure(err error) error {
 func openWriter(ctx context.Context, dbPath string, opts StoreOptions) (*sql.DB, error) {
 	query := writerDSNQuery
 	if opts.FastTestSync {
-		query = "_txlock=immediate&_pragma=foreign_keys(on)&_pragma=busy_timeout(10000)&_pragma=synchronous(normal)&_pragma=temp_store(memory)&_pragma=cache_size(-64000)"
+		query = "_txlock=immediate&_pragma=foreign_keys(on)&_pragma=busy_timeout(10000)&_pragma=synchronous(normal)&_pragma=temp_store(memory)&_pragma=cache_size(-2000)"
 	}
 	dsn := fileDSN(dbPath, query)
 	sqlDB, err := sql.Open("sqlite", dsn)

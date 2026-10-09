@@ -21,7 +21,8 @@ import (
 	"github.com/lycaon/lycaon/internal/pongoplain"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/promptattach"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/promptinput"
+	"github.com/lycaon/lycaon/internal/session/spendguard"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/usernotice"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
@@ -81,7 +82,7 @@ func (s *Execution) invokeCommand(w http.ResponseWriter, r *http.Request, scope 
 		return
 	}
 	req.OperationID = operationID.String()
-	unlockOperation := s.Sessions.PromptState().LockOperation(req.OperationID)
+	unlockOperation := s.Sessions.Submissions.LockOperation(req.OperationID)
 	defer unlockOperation()
 	if strings.TrimSpace(req.FrameRevision) == "" {
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "frame_revision is required")
@@ -292,12 +293,12 @@ func (s *Execution) executeWorkflowStart(
 			break
 		}
 	}
-	if err := s.Workflow.Workflows.ValidateUserFacingStart(r.Context(), scope.projectDir, in.SessionID, workflowID, version); err != nil {
+	if err := s.Workflow.Workflows.Resolver.ValidateUserFacingStart(r.Context(), scope.projectDir, in.SessionID, workflowID, version); err != nil {
 		s.Workflow.WriteWorkflowError(w, r, err)
 		return 0, wire.CommandInvokeResponse{}, false
 	}
 	// The invoke route carries human start authorization.
-	run, err := s.Workflow.Workflows.Start(hostctx.WithHumanWorkflowStart(r.Context()), in.SessionID, wire.StartWorkflowRunRequest{
+	run, err := s.Workflow.Workflows.Starts.Start(hostctx.WithHumanWorkflowStart(r.Context()), in.SessionID, wire.StartWorkflowRunRequest{
 		OperationID:     req.OperationID,
 		WorkflowID:      workflowID,
 		WorkflowVersion: version,
@@ -345,7 +346,7 @@ func (s *Execution) ExecuteEditorAction(
 		s.responses.InternalError(w, r, err)
 		return 0, wire.CommandInvokeResponse{}, false
 	}
-	input := session.PromptInput{Text: text, ToolProfile: boundary.ToolProfile}
+	input := promptinput.Input{Text: text, ToolProfile: boundary.ToolProfile}
 	if in.Context.Path != "" {
 		refPart := wire.PromptReferencePart{PathFile: &wire.PromptReferencePathFilePart{
 			Kind:      wire.PromptReferencePathFile,
@@ -370,9 +371,9 @@ func (s *Execution) ExecuteEditorAction(
 		}
 	}
 
-	row, _, err := s.Sessions.AdmitPrompt(r.Context(), in.SessionID, req.OperationID, req, input)
+	row, _, err := s.Sessions.Submissions.AdmitPrompt(r.Context(), in.SessionID, req.OperationID, req, input)
 	if err != nil {
-		if errors.Is(err, session.ErrSessionSpendCeiling) {
+		if errors.Is(err, spendguard.ErrCeiling) {
 			s.responses.FailDetails(w, wire.ApiErrorCodeSessionSpendCeilingReached, usernotice.SpendCeilingContext(err), "chat spend ceiling reached")
 			return 0, wire.CommandInvokeResponse{}, false
 		}

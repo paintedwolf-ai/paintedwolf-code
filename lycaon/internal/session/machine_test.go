@@ -6,25 +6,15 @@ import (
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/hostresources"
-	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/session/profiles"
+	"github.com/lycaon/lycaon/internal/session/toolcontext"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func TestPromptSurfaceFingerprintTracksSkillAvailability(t *testing.T) {
-	first := prompts.AgentPromptSurface{Skills: []prompts.AgentSkillView{{Name: "first", Description: "First procedure"}}}
-	second := prompts.AgentPromptSurface{Skills: []prompts.AgentSkillView{{Name: "second", Description: "Second procedure"}}}
-	if promptSurfaceFingerprint(first) != promptSurfaceFingerprint(second) {
-		t.Fatal("skill catalog changes that do not alter prompt text should keep the prefix")
-	}
-	if promptSurfaceFingerprint(first) == promptSurfaceFingerprint(prompts.AgentPromptSurface{}) {
-		t.Fatal("skill availability changes the prompt procedure")
-	}
-}
-
 func TestAttachSkillReadRootsPrefersMachine(t *testing.T) {
 	tctx := &tools.ToolContext{}
-	attachSkillReadRoots(context.Background(), &Manager{}, nil, "", inject.Machine{
+	(&toolcontext.Service{}).AttachSkillReadRoots(context.Background(), nil, "", inject.Machine{
 		ProfileID: "coordinator",
 		ReadRoots: []string{"/skills/a", "/skills/b"},
 	}, tctx)
@@ -34,14 +24,14 @@ func TestAttachSkillReadRootsPrefersMachine(t *testing.T) {
 }
 
 func TestCompileMachineZeroSession(t *testing.T) {
-	var mgr *Manager
+	var mgr *profiles.Service
 	if got := mgr.CompileMachine(context.Background(), nil, "coordinator"); got.Compiled() {
 		t.Fatalf("nil compile = %+v", got)
 	}
 }
 
 func TestPromptSurfaceWriteAgentSeesOmitAllowPresence(t *testing.T) {
-	mgr := &Manager{}
+	mgr := &profiles.Service{}
 	sess := &api.Session{ID: "s1", AgentType: "implementer"}
 	snapshot := hostresources.Snapshot{Resources: []hostresources.State{{
 		ID: "docker", Label: "Docker", Category: "Containers",
@@ -50,14 +40,14 @@ func TestPromptSurfaceWriteAgentSeesOmitAllowPresence(t *testing.T) {
 		Surfaces: []hostresources.ExecutionSurface{hostresources.SurfaceProcessExec},
 	}}}
 	surfaces := []hostresources.ExecutionSurface{hostresources.SurfaceProcessExec}
-	write := mgr.promptSurfaceFrom(context.Background(), sess, nil, snapshot, surfaces, true)
+	write := mgr.PromptSurface(context.Background(), sess, nil, snapshot, surfaces, true)
 	if len(write.HostResources) != 1 || write.HostResources[0].ID != "docker" {
 		t.Fatalf("write-agent surface = %#v", write.HostResources)
 	}
 	if write.HostResources[0].Category != "Containers" {
 		t.Fatalf("category = %q", write.HostResources[0].Category)
 	}
-	read := mgr.promptSurfaceFrom(context.Background(), sess, nil, snapshot, surfaces, false)
+	read := mgr.PromptSurface(context.Background(), sess, nil, snapshot, surfaces, false)
 	if len(read.HostResources) != 0 {
 		t.Fatalf("read-only surface = %#v", read.HostResources)
 	}

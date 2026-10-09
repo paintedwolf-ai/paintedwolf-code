@@ -35,11 +35,11 @@ func TestLoopProseFinishTurnOmitsTools(t *testing.T) {
 		return "ok", nil
 	})
 	deps := promptloop.StoreDeps(store)
-	deps.Limits = func(context.Context, *api.Session) settings.SessionLimits { return limits }
-	deps.LLM = client
-	deps.Policy = &fixedToolPolicy{metas: []tools.ToolMeta{{Name: "read"}}}
-	deps.Tools = reg
-	deps.TurnCloseoutNudge = func(_ context.Context, _ *api.Session, _ string, cause promptloop.TurnCloseoutCause) promptloop.HostNudge {
+	deps.Context.Limits = func(context.Context, *api.Session) settings.SessionLimits { return limits }
+	deps.Model.LLM = client
+	deps.Context.Policy = &fixedToolPolicy{metas: []tools.ToolMeta{{Name: "read"}}}
+	deps.Context.Tools = reg
+	deps.Closeout.TurnCloseoutNudge = func(_ context.Context, _ *api.Session, _ string, cause promptloop.TurnCloseoutCause) promptloop.HostNudge {
 		closeoutReason = cause.Reason
 		return promptloop.HostNudge{Content: "final turn closeout"}
 	}
@@ -90,9 +90,9 @@ func TestLoopProseFinishInputOmitsToolsOnFirstTurn(t *testing.T) {
 		return "ok", nil
 	})
 	deps := promptloop.StoreDeps(mem)
-	deps.LLM = client
-	deps.Policy = &fixedToolPolicy{metas: []tools.ToolMeta{{Name: "read"}}}
-	deps.Tools = reg
+	deps.Model.LLM = client
+	deps.Context.Policy = &fixedToolPolicy{metas: []tools.ToolMeta{{Name: "read"}}}
+	deps.Context.Tools = reg
 	loop := promptloop.NewPromptLoopForTest(deps)
 	result, err := loop.Run(ctx, promptloop.PromptRunInput{
 		SessionID:   sess.ID,

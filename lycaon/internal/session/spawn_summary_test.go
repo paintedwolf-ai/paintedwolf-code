@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/workercloseout"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
+	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/sourceledger"
@@ -30,13 +31,13 @@ import (
 func TestAppendWorkerSummaryAndTags(t *testing.T) {
 	ctx := context.Background()
 	store := store.NewMemory()
-	mgr := session.NewManager(store, llm.NewMockProvider(&llm.MockConfig{}), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	child, err := store.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "create child", err)
 	long := strings.Repeat("x", 5000)
-	if _, err := mgr.AppendWorkerSummary(ctx, parent.ID, session.WorkerSummaryInput{
+	if _, err := mgr.Workers.Summaries.Append(ctx, parent.ID, workeroutcomes.SummaryInput{
 		Summary:        long,
 		DelegationID:   "dep-1",
 		LegID:          "leg-1",
@@ -46,7 +47,7 @@ func TestAppendWorkerSummaryAndTags(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	tags, err := mgr.WorkerSummaryTags(ctx, parent.ID)
+	tags, err := mgr.Workers.Summaries.Tags(ctx, parent.ID)
 	testutil.FailErr(t, "mgr.WorkerSummaryTags failed", err)
 	if len(tags) != 1 || tags[0].LegID != "leg-1" {
 		t.Fatalf("tags = %+v", tags)
@@ -56,14 +57,14 @@ func TestAppendWorkerSummaryAndTags(t *testing.T) {
 func TestAppendWorkerSummaryOverBudgetRetainsPolicyFeedback(t *testing.T) {
 	ctx := context.Background()
 	store := store.NewMemory()
-	mgr := session.NewManager(store, llm.NewMockProvider(&llm.MockConfig{}), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
 	mgr.SetOARPipeline(sessionTestOARPipeline(t), oar.NewRenderer(nil, nil))
 	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	child, err := store.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "security-reviewer"})
 	testutil.FailErr(t, "create child", err)
-	max := mgr.WorkerSummaryFinalizeOpts(ctx, parent).MaxChars
+	max := mgr.Workers.WorkerSummaryFinalizeOpts(ctx, parent).MaxChars
 	if max <= 0 {
 		t.Fatalf("worker summary max chars = %d", max)
 	}
@@ -71,7 +72,7 @@ func TestAppendWorkerSummaryOverBudgetRetainsPolicyFeedback(t *testing.T) {
 	if len(long) <= max {
 		t.Fatalf("len(long)=%d max=%d", len(long), max)
 	}
-	status, err := mgr.AppendWorkerSummary(ctx, parent.ID, session.WorkerSummaryInput{
+	status, err := mgr.Workers.Summaries.Append(ctx, parent.ID, workeroutcomes.SummaryInput{
 		Report: workercompletion.WorkerCompletionReport{Brief: long, LegStatus: "complete"},
 		JobID:  "job-over", ChildSessionID: child.ID, AgentType: "security-reviewer",
 	})
@@ -101,14 +102,14 @@ func TestAppendWorkerSummaryOverBudgetRetainsPolicyFeedback(t *testing.T) {
 func TestAppendWorkerSummaryEmptyStatusPartial(t *testing.T) {
 	ctx := context.Background()
 	store := store.NewMemory()
-	mgr := session.NewManager(store, llm.NewMockProvider(&llm.MockConfig{}), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
 	mgr.SetOARPipeline(sessionTestOARPipeline(t), oar.NewRenderer(nil, nil))
 	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	child, err := store.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "create child", err)
-	if _, err := mgr.AppendWorkerSummary(ctx, parent.ID, session.WorkerSummaryInput{
+	if _, err := mgr.Workers.Summaries.Append(ctx, parent.ID, workeroutcomes.SummaryInput{
 		JobID: "job-empty", ChildSessionID: child.ID, AgentType: "implementer",
 	}); err != nil {
 		testutil.FailErr(t, "mgr.AppendWorkerSummary failed", err)
@@ -134,7 +135,7 @@ func TestAppendWorkerSummaryEmptyStatusPartial(t *testing.T) {
 func TestAppendWorkerSummaryWriteWorkerOpenStatus(t *testing.T) {
 	ctx := context.Background()
 	store := store.NewMemory()
-	mgr := session.NewManager(store, llm.NewMockProvider(&llm.MockConfig{}), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	q := worker.NewInMemoryQueue(4)
 	mgr.SetWorkerQueue(q)
 	dir := t.TempDir()
@@ -156,7 +157,7 @@ func TestAppendWorkerSummaryWriteWorkerOpenStatus(t *testing.T) {
 		Scope:           &api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"game.py"}},
 	})
 	testutil.FailErr(t, "EnqueueWithProjectID", err)
-	status, err := mgr.AppendWorkerSummary(ctx, parent.ID, session.WorkerSummaryInput{
+	status, err := mgr.Workers.Summaries.Append(ctx, parent.ID, workeroutcomes.SummaryInput{
 		JobID:          jobID,
 		ChildSessionID: child.ID,
 		AgentType:      "implementer",
@@ -188,7 +189,7 @@ func TestAppendWorkerSummaryWriteWorkerOpenStatus(t *testing.T) {
 func TestAppendWorkerSummaryUnmetEvidenceKeepsDeliveredWork(t *testing.T) {
 	ctx := context.Background()
 	mem := store.NewMemory()
-	mgr := session.NewManager(mem, llm.NewMockProvider(&llm.MockConfig{}), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(mem, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	q := worker.NewInMemoryQueue(4)
 	mgr.SetWorkerQueue(q)
 	primary := t.TempDir()
@@ -216,7 +217,7 @@ func TestAppendWorkerSummaryUnmetEvidenceKeepsDeliveredWork(t *testing.T) {
 		WorkspaceBaselinePath: baseline,
 	})
 	testutil.FailErr(t, "EnqueueWithProjectID", err)
-	status, err := mgr.AppendWorkerSummary(ctx, parent.ID, session.WorkerSummaryInput{
+	status, err := mgr.Workers.Summaries.Append(ctx, parent.ID, workeroutcomes.SummaryInput{
 		JobID:          jobID,
 		ChildSessionID: child.ID,
 		AgentType:      "implementer",
@@ -248,7 +249,7 @@ func TestAppendWorkerSummaryUnmetEvidenceKeepsDeliveredWork(t *testing.T) {
 func TestAppendWorkerSummaryEligibleOverlayOpens(t *testing.T) {
 	ctx := context.Background()
 	mem := store.NewMemory()
-	mgr := session.NewManager(mem, llm.NewMockProvider(&llm.MockConfig{}), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(mem, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	ledger := sourceledger.New(testdbfixture.Open(t, "source.db"), t.TempDir())
 	t.Cleanup(func() { testutil.FailErr(t, "close source snapshot store", ledger.Snapshots.Close()) })
 	mgr.SetSourceLedger(ledger, tools.SourceHistory{Files: ledger.History, Comparison: ledger.Comparisons, Git: ledger.Git, Authorship: ledger.Walk}, ledger.Commands, ledger.Git, ledger.Checkpoints, ledger.Inventory)
@@ -292,7 +293,7 @@ func TestAppendWorkerSummaryEligibleOverlayOpens(t *testing.T) {
 			},
 		},
 	}))
-	status, err := mgr.AppendWorkerSummary(ctx, parent.ID, session.WorkerSummaryInput{
+	status, err := mgr.Workers.Summaries.Append(ctx, parent.ID, workeroutcomes.SummaryInput{
 		JobID:          jobID,
 		ChildSessionID: child.ID,
 		AgentType:      "implementer",
@@ -309,11 +310,11 @@ func TestAppendWorkerSummaryEligibleOverlayOpens(t *testing.T) {
 func TestAppendWorkerSummaryRejectsInvalidState(t *testing.T) {
 	ctx := context.Background()
 	mem := store.NewMemory()
-	mgr := session.NewManager(mem, llm.NewMockProvider(&llm.MockConfig{}), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(mem, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	parent, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
 
-	_, err = mgr.AppendWorkerSummary(ctx, parent.ID, session.WorkerSummaryInput{
+	_, err = mgr.Workers.Summaries.Append(ctx, parent.ID, workeroutcomes.SummaryInput{
 		JobID: "job-invalid", ChildSessionID: "child-invalid", AgentType: "implementer", Status: "completed",
 	})
 	if err == nil {
@@ -324,7 +325,7 @@ func TestAppendWorkerSummaryRejectsInvalidState(t *testing.T) {
 func TestAppendWorkerSummaryParentEnvelopeOmitsHostLedger(t *testing.T) {
 	ctx := context.Background()
 	mem := store.NewMemory()
-	mgr := session.NewManager(mem, llm.NewMockProvider(&llm.MockConfig{}), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(mem, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	parent, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
 	child, err := mem.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "security-reviewer"})
@@ -345,7 +346,7 @@ func TestAppendWorkerSummaryParentEnvelopeOmitsHostLedger(t *testing.T) {
 			},
 		},
 	}))
-	_, err = mgr.AppendWorkerSummary(ctx, parent.ID, session.WorkerSummaryInput{
+	_, err = mgr.Workers.Summaries.Append(ctx, parent.ID, workeroutcomes.SummaryInput{
 		JobID:          "job-survey",
 		ChildSessionID: child.ID,
 		AgentType:      "security-reviewer",

@@ -18,7 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools/native"
+	"github.com/lycaon/lycaon/internal/tools/native/command"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -43,7 +43,7 @@ func TestWriteRootPlanBindsProjectIDOnDurableGrants(t *testing.T) {
 		},
 	}, gate.PostureBalanced)
 	card, err := broker.buildWriteRootCard(
-		native.SandboxWriteRootAsk{
+		command.SandboxWriteRootAsk{
 			SessionID: "sess", ProjectID: projectID, ProjectDir: projectDir,
 			ToolName: "command", Command: "docker build .",
 		},
@@ -136,7 +136,7 @@ func TestWriteRootAuthorizeSkipsCardWhenOverlayCovers(t *testing.T) {
 		Checkpoints: unusedWriteRootCheckpoints{t: t},
 		Runtime:     rt,
 	}
-	got, err := broker.Authorize(t.Context(), native.SandboxWriteRootAsk{
+	got, err := broker.Authorize(t.Context(), command.SandboxWriteRootAsk{
 		SessionID: "sess", ProposedWriteRoot: missing,
 	})
 	testutil.FailErr(t, "Authorize covered overlay", err)
@@ -157,7 +157,7 @@ func TestWorkerUsesItsChatsApprovedWriteRoot(t *testing.T) {
 	approved := filepath.Join(t.TempDir(), "approved")
 	rt.GrantChat(parent.ID, approved, "grant-approved", "cp-1", nil)
 	broker := &WriteRootCheckpointBroker{Checkpoints: unusedWriteRootCheckpoints{t: t}, Runtime: rt, Store: store}
-	got, err := broker.Authorize(t.Context(), native.SandboxWriteRootAsk{
+	got, err := broker.Authorize(t.Context(), command.SandboxWriteRootAsk{
 		SessionID: child.ID, ParentSessionID: parent.ID, ProposedWriteRoot: approved,
 	})
 	testutil.FailErr(t, "Authorize worker write", err)
@@ -178,7 +178,7 @@ func TestWriteRootAuthorizeAsksForKeyMaterial(t *testing.T) {
 		Runtime:     approvalstate.NewSandboxPathGrantRuntime(),
 	}
 	proposed := filepath.Join(floor, "authorized_keys")
-	got, err := broker.Authorize(t.Context(), native.SandboxWriteRootAsk{
+	got, err := broker.Authorize(t.Context(), command.SandboxWriteRootAsk{
 		SessionID: "sess", ProposedWriteRoot: proposed, ToolName: "command",
 	})
 	testutil.FailErr(t, "Authorize key material", err)
@@ -196,7 +196,7 @@ func TestWriteRootWorkerApprovalStaysWithChildSession(t *testing.T) {
 	t.Cleanup(func() { confine.SetKeyMaterialPathsSource(nil) })
 	checkpoints := &cannedWriteRootCheckpoints{approve: true}
 	broker := &WriteRootCheckpointBroker{Checkpoints: checkpoints, Runtime: approvalstate.NewSandboxPathGrantRuntime()}
-	_, err := broker.Authorize(t.Context(), native.SandboxWriteRootAsk{
+	_, err := broker.Authorize(t.Context(), command.SandboxWriteRootAsk{
 		SessionID: "child", ParentSessionID: "parent", ProposedWriteRoot: filepath.Join(floor, "authorized_keys"), ToolName: "command",
 	})
 	testutil.FailErr(t, "Authorize worker key material", err)
@@ -217,7 +217,7 @@ func TestWriteRootAuthorizeAsksForCredentialStoreInsideProjectRoot(t *testing.T)
 		Checkpoints: checkpoints,
 		Runtime:     approvalstate.NewSandboxPathGrantRuntime(),
 	}
-	got, err := broker.Authorize(t.Context(), native.SandboxWriteRootAsk{
+	got, err := broker.Authorize(t.Context(), command.SandboxWriteRootAsk{
 		SessionID: "sess", ProjectDir: projectDir, ProposedWriteRoot: store, ToolName: "command",
 	})
 	testutil.FailErr(t, "Authorize in-root credential store", err)
@@ -242,7 +242,7 @@ func TestWriteRootAuthorizeAsksForStoreAncestorAndDisclosesProtected(t *testing.
 	broker := &WriteRootCheckpointBroker{Checkpoints: checkpoints, Runtime: rt}
 
 	proposed := filepath.Join(base, ".docker")
-	got, authErr := broker.Authorize(t.Context(), native.SandboxWriteRootAsk{
+	got, authErr := broker.Authorize(t.Context(), command.SandboxWriteRootAsk{
 		SessionID: "sess", ProposedWriteRoot: proposed, ToolName: "command",
 	})
 	testutil.FailErr(t, "Authorize store ancestor", authErr)
@@ -284,7 +284,7 @@ func TestWriteRootAuthorizeDeniesControlPlaneSilently(t *testing.T) {
 		Checkpoints: unusedWriteRootCheckpoints{t: t},
 		Runtime:     approvalstate.NewSandboxPathGrantRuntime(),
 	}
-	got, err := broker.Authorize(t.Context(), native.SandboxWriteRootAsk{
+	got, err := broker.Authorize(t.Context(), command.SandboxWriteRootAsk{
 		SessionID: "sess", ProposedWriteRoot: filepath.Join(cfg, "credential-vault.age"),
 	})
 	testutil.FailErr(t, "Authorize control plane", err)
@@ -306,7 +306,7 @@ func TestReadPathAuthorizeAsksForKeyMaterial(t *testing.T) {
 		ReadRuntime: approvalstate.NewSandboxPathGrantRuntime(),
 	}
 	proposed := filepath.Join(floor, "id_ed25519")
-	got, err := broker.AuthorizeRead(t.Context(), native.SandboxReadPathAsk{
+	got, err := broker.AuthorizeRead(t.Context(), command.SandboxReadPathAsk{
 		SessionID: "sess", ProposedReadPath: proposed, ToolName: "command",
 	})
 	testutil.FailErr(t, "AuthorizeRead key material", err)
@@ -325,7 +325,7 @@ func TestReadPathAuthorizeNoopForOrdinaryPaths(t *testing.T) {
 		Runtime:     approvalstate.NewSandboxPathGrantRuntime(),
 		ReadRuntime: approvalstate.NewSandboxPathGrantRuntime(),
 	}
-	got, err := broker.AuthorizeRead(t.Context(), native.SandboxReadPathAsk{
+	got, err := broker.AuthorizeRead(t.Context(), command.SandboxReadPathAsk{
 		SessionID: "sess", ProposedReadPath: filepath.Join(t.TempDir(), "notes.txt"),
 	})
 	testutil.FailErr(t, "AuthorizeRead ordinary", err)
@@ -343,7 +343,7 @@ func TestReadPathAuthorizeDeniesControlPlaneSilently(t *testing.T) {
 		Runtime:     approvalstate.NewSandboxPathGrantRuntime(),
 		ReadRuntime: approvalstate.NewSandboxPathGrantRuntime(),
 	}
-	got, err := broker.AuthorizeRead(t.Context(), native.SandboxReadPathAsk{
+	got, err := broker.AuthorizeRead(t.Context(), command.SandboxReadPathAsk{
 		SessionID: "sess", ProposedReadPath: filepath.Join(cfg, "credential-vault.age"),
 	})
 	testutil.FailErr(t, "AuthorizeRead control plane", err)
@@ -445,7 +445,7 @@ func TestReadPathApprovalCoversActionExclusions(t *testing.T) {
 				path := filepath.Join(root, name)
 				checkpoints := &cannedWriteRootCheckpoints{approve: approved}
 				broker := &WriteRootCheckpointBroker{Checkpoints: checkpoints, ReadRuntime: approvalstate.NewSandboxPathGrantRuntime()}
-				ask := native.SandboxReadPathAsk{SessionID: "sess", ToolName: "command", ProposedReadPath: path, ReadDenyPaths: []string{root}}
+				ask := command.SandboxReadPathAsk{SessionID: "sess", ToolName: "command", ProposedReadPath: path, ReadDenyPaths: []string{root}}
 				got, err := broker.AuthorizeRead(t.Context(), ask)
 				testutil.FailErr(t, "review excluded read", err)
 				if checkpoints.requested == nil || !got.Raised || got.Authorized != approved || got.Denied == approved {
@@ -486,7 +486,7 @@ func TestReadPathApprovalUsesProtectedCatalogEntries(t *testing.T) {
 			checkpoints := &cannedWriteRootCheckpoints{approve: true}
 			broker := &WriteRootCheckpointBroker{Checkpoints: checkpoints, ReadRuntime: approvalstate.NewSandboxPathGrantRuntime(), Locations: catalog}
 			path := filepath.Join(t.TempDir(), name)
-			got, authorizeErr := broker.AuthorizeRead(t.Context(), native.SandboxReadPathAsk{SessionID: "sess", ProposedReadPath: path})
+			got, authorizeErr := broker.AuthorizeRead(t.Context(), command.SandboxReadPathAsk{SessionID: "sess", ProposedReadPath: path})
 			testutil.FailErr(t, "review catalogued read", authorizeErr)
 			if !got.Raised || !got.Authorized || checkpoints.requested == nil {
 				t.Fatalf("catalogued read=%+v", got)
@@ -501,7 +501,7 @@ func TestReadPathOwnScratchNeedsNoApprovalEvenUnderConfiguredReadDeny(t *testing
 	scratch := filepath.Join(cfg, "scratch", "own")
 	broker := &WriteRootCheckpointBroker{Checkpoints: unusedWriteRootCheckpoints{t: t}, ReadRuntime: approvalstate.NewSandboxPathGrantRuntime()}
 	for _, path := range []string{filepath.Join(scratch, "file"), filepath.Join(cfg, "scratch", "other", "file"), filepath.Join(cfg, "store.db")} {
-		got, err := broker.AuthorizeRead(t.Context(), native.SandboxReadPathAsk{SessionID: "own", ProposedReadPath: path, SessionScratchRoot: scratch, ReadDenyPaths: []string{cfg}})
+		got, err := broker.AuthorizeRead(t.Context(), command.SandboxReadPathAsk{SessionID: "own", ProposedReadPath: path, SessionScratchRoot: scratch, ReadDenyPaths: []string{cfg}})
 		testutil.FailErr(t, "authorize session scratch", err)
 		if got.Authorized != (path == filepath.Join(scratch, "file")) || got.Raised {
 			t.Fatalf("path=%s result=%+v", path, got)

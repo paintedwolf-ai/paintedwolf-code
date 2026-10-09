@@ -130,8 +130,8 @@ func isConfinementType(expr ast.Expr) bool {
 
 // confinementProducerInventory records each root producer and provenance.
 var confinementProducerInventory = map[string]string{
-	"internal/tools/native/command_exec.go":               "commandConfineRoots(tctx, extraWriteRoots) — host-selected root + attached roots + approved chat write-root overlay",
-	"internal/tools/native/background_tools.go":           "commandConfineRoots(tctx, extraWriteRoots) — same union as foreground command",
+	"internal/tools/native/command/command_exec.go":       "commandConfineRoots(tctx, extraWriteRoots) — host-selected root + attached roots + approved chat write-root overlay",
+	"internal/tools/native/command/background_tools.go":   "commandConfineRoots(tctx, extraWriteRoots) — same union as foreground command",
 	"internal/tools/native/terminal/session_open.go":      "tools.ConfineRootsForAction(tctx) — host provenance only",
 	"internal/tools/safecmd/safecmd.go":                   "Confine(roots) wrapper; callers supply session roots (see internal/mcp/connector.go)",
 	"internal/mcp/connector.go":                           "stdioConfinement(roots) — server spawn roots from the session, never from tool args",

@@ -39,8 +39,9 @@ func (r *memorySocketRuntime) AuthorizedGrants(_, sessionID, toolCallID, actionD
 	return out
 }
 
-func (r *memorySocketRuntime) GrantChat(_ string, g confine.SocketGrant, _, _, _ string, _ *time.Time) {
+func (r *memorySocketRuntime) GrantChat(_ string, g confine.SocketGrant, _, _, _ string, _ *time.Time) bool {
 	r.task = append(r.task, g)
+	return true
 }
 
 func (r *memorySocketRuntime) IssuePermit(sessionID, toolCallID, actionDigest string, g confine.SocketGrant) {

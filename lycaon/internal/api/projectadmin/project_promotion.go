@@ -41,7 +41,7 @@ func (s *Promotion) TryRunPromotion(ctx context.Context, projectID string) {
 	if err != nil || p == nil || p.Promotion == nil {
 		return
 	}
-	quiescent, err := s.Sessions.ProjectPromoteQuiescent(ctx, projectID)
+	quiescent, err := s.Sessions.ProjectControl.ProjectPromoteQuiescent(ctx, projectID)
 	if err != nil || !quiescent {
 		return
 	}
@@ -60,7 +60,7 @@ func (s *Promotion) executeDraftPromote(ctx context.Context, id, destPath string
 		return nil, gateErr
 	}
 	defer s.MutationGate.EndMutation(id)
-	quiescent, err := s.Sessions.ProjectPromoteQuiescent(ctx, id)
+	quiescent, err := s.Sessions.ProjectControl.ProjectPromoteQuiescent(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +89,7 @@ func (s *Promotion) executeDraftPromote(ctx context.Context, id, destPath string
 	folder := project.PrimaryRootPath(p)
 	s.Roots.afterRootAttached(ctx, id, folder)
 	s.Verification.detectVerifyAsync(ctx, id)
-	s.Sessions.ReopenBoardOrientationOnRootAttach(ctx, id)
+	s.Sessions.Chats.ReopenOrientation(ctx, id, s.Roots.Sessions.Coordinator.Runtime.Board())
 	return p, nil
 }
 

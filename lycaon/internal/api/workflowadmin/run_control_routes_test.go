@@ -133,7 +133,7 @@ func TestWorkflowRunControlsRefuseStaleOrMissingTargets(t *testing.T) {
 		})
 	}
 
-	got, err := f.runs.Get(t.Context(), run.ID)
+	got, err := f.runs.Runs.Get(t.Context(), run.ID)
 	testutil.FailErr(t, "reload run", err)
 	if got.Status != wire.WorkflowRunStatusRunning || got.Revision != run.Revision {
 		t.Fatalf("refused controls changed the run: status %s revision %d", got.Status, got.Revision)

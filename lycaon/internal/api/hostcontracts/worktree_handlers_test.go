@@ -118,7 +118,7 @@ func TestGitWorktreeBindRejectsBusySession(t *testing.T) {
 	srv.ServeHTTP(w, req)
 	var sess wire.Session
 	testutil.FailErr(t, "decode", json.Unmarshal(w.Body.Bytes(), &sess))
-	unlock, ok := mgr.TryIdleMutation(sess.ID)
+	unlock, ok := mgr.Execution.TryIdleMutation(sess.ID)
 	if !ok {
 		t.Fatal("hold idle lock")
 	}
@@ -202,7 +202,7 @@ func TestGitWorktreeBindRollsBack(t *testing.T) {
 	mem := store.NewMemory()
 	failing := &contractfixture.PutFailStore{Store: mem, FailPut: true}
 	mock := llm.NewMockProvider(contractfixture.TestMockConfig(t))
-	mgr := session.NewManager(failing, mock, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(failing, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	contractfixture.WireTestBindingRegistry(t)
 	reg := project.NewMemoryRegistry()
 	p, err := project.CreateWithRoot(t.Context(), reg, dir)

@@ -36,7 +36,7 @@ func TestSSEEndToEnd(t *testing.T) {
 
 	store := store.NewMemory()
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
-		Store: store, Projects: reg, Sessions: session.NewManager(store, nil, nil, settings.DefaultSessionLimits())}, Host: hostapi.HostDependencies{Events: hub}}), nil, hostapi.TestAPIToken)
+		Store: store, Projects: reg, Sessions: session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)}, Host: hostapi.HostDependencies{Events: hub}}), nil, hostapi.TestAPIToken)
 
 	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
 	testutil.FailErr(t, "net.Listen failed", err)
@@ -92,7 +92,7 @@ func TestSSEDeviceWideSubscription(t *testing.T) {
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
 		Store:    sessionStore,
 		Projects: project.NewMemoryRegistry(),
-		Sessions: session.NewManager(sessionStore, nil, nil, settings.DefaultSessionLimits())}, Host: hostapi.HostDependencies{
+		Sessions: session.NewHost(sessionStore, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)}, Host: hostapi.HostDependencies{
 		Events: hub}}), nil, hostapi.TestAPIToken)
 
 	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
@@ -225,7 +225,7 @@ func TestSSEHeartbeat(t *testing.T) {
 
 	store := store.NewMemory()
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
-		Store: store, Projects: reg, Sessions: session.NewManager(store, nil, nil, settings.DefaultSessionLimits())}, Host: hostapi.HostDependencies{Events: hub}}), nil, hostapi.TestAPIToken)
+		Store: store, Projects: reg, Sessions: session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)}, Host: hostapi.HostDependencies{Events: hub}}), nil, hostapi.TestAPIToken)
 
 	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
 	testutil.FailErr(t, "net.Listen failed", err)

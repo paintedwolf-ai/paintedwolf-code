@@ -11126,6 +11126,8 @@ export interface components {
             scope?: components["schemas"]["ApprovalGrantScope"];
             /** @description Optional ladder heading when a card carries a second subject (absorbed predicate or host resources). Absent means the primary ladder. */
             group?: string;
+            /** @description Host-minted directory candidate covered by this option; absent for unscoped options. */
+            directory_scope?: string;
             title: string;
             coverage: string;
             expires_when: string;
@@ -11155,6 +11157,8 @@ export interface components {
             recipients: components["schemas"]["ApprovalSecretRecipient"][];
         };
         ApprovalPlan: {
+            /** @description Host-approved directory candidates, from the containing folder outward; the first is the default. */
+            directory_scopes?: string[];
             id: string;
             action_digest: string;
             stage: components["schemas"]["ApprovalPlanStage"];

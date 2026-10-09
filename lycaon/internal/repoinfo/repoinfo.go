@@ -46,8 +46,10 @@ type Brief struct {
 	// Generation is the file-index revision this brief was computed from.
 	Generation uint64 `json:"-"`
 	// Partial includes pending discovery, refreshes, and recorded omissions.
-	Partial    bool `json:"-"`
-	Refreshing bool `json:"-"`
+	Partial             bool `json:"-"`
+	Refreshing          bool `json:"-"`
+	measurementDuration time.Duration
+	omissions           bool
 }
 
 // Current reports whether the brief describes a whole tree.
@@ -189,6 +191,8 @@ func briefStale(brief *Brief, files indexGeneration, now time.Time) bool {
 	switch {
 	case brief == nil || !brief.Materialized:
 		return true
+	case now.Sub(brief.GeneratedAt) < max(briefRevalidateAfter, 10*brief.measurementDuration):
+		return false
 	case brief.Refreshing && files.complete:
 		// Settling can change coverage without publishing another generation.
 		return true
@@ -243,6 +247,10 @@ func (p *fileProvider) ensureAnalyze(projectDir string) {
 		p.mu.Unlock()
 		return
 	}
+	if brief := p.cache[projectDir]; brief != nil && brief.Materialized && time.Since(brief.GeneratedAt) < max(briefRevalidateAfter, 10*brief.measurementDuration) {
+		p.mu.Unlock()
+		return
+	}
 	if p.warming == nil {
 		p.warming = make(map[string]struct{})
 	}
@@ -279,6 +287,8 @@ func (p *fileProvider) ensureAnalyze(projectDir string) {
 				}
 				continue
 			}
+			brief.measurementDuration = time.Since(start)
+			brief.GeneratedAt = time.Now().UTC()
 			brief.Materialized = true
 			brief.Root = projectDir
 			p.store(projectDir, brief)
@@ -295,7 +305,7 @@ func (p *fileProvider) ensureAnalyze(projectDir string) {
 				return
 			}
 			// Status polling avoids repeated full-index measurements.
-			next, refine := p.awaitRefinement(projectDir, brief.Generation, delay, deadline)
+			next, refine := p.awaitRefinement(projectDir, brief, delay, deadline)
 			if !refine {
 				return
 			}
@@ -304,8 +314,8 @@ func (p *fileProvider) ensureAnalyze(projectDir string) {
 	}()
 }
 
-// awaitRefinement backs off partial measurements and promptly remeasures settled indexes.
-func (p *fileProvider) awaitRefinement(projectDir string, from uint64, delay time.Duration, deadline time.Time) (time.Duration, bool) {
+// awaitRefinement observes settlement without bypassing measurement pacing.
+func (p *fileProvider) awaitRefinement(projectDir string, brief *Brief, delay time.Duration, deadline time.Time) (time.Duration, bool) {
 	waited := time.Duration(0)
 	for {
 		if !p.waitDiscovery() || time.Now().After(deadline) {
@@ -316,10 +326,22 @@ func (p *fileProvider) awaitRefinement(projectDir string, from uint64, delay tim
 		if err != nil {
 			return delay, false
 		}
+
+		if files.complete && files.generation == brief.Generation {
+			settled := cloneBrief(brief)
+			settled.Refreshing, settled.Partial = false, brief.omissions
+			p.store(projectDir, settled)
+			p.notifySettled(projectDir)
+			return delay, false
+		}
+		if time.Since(brief.GeneratedAt) < max(briefRevalidateAfter, 10*brief.measurementDuration) {
+			continue
+		}
 		if files.complete || files.failed {
 			return briefDiscoveryPoll, true
 		}
-		if waited >= delay && files.generation != from {
+
+		if waited >= delay && files.generation != brief.Generation {
 			return min(2*delay, briefRefineCeiling), true
 		}
 	}
@@ -388,6 +410,7 @@ func (p *fileProvider) analyze(ctx context.Context, projectDir string) (*Brief, 
 	if err != nil {
 		return nil, err
 	}
+	brief.omissions = coverage.BoundedDirectories > 0 || coverage.FailedDirectories > 0 || coverage.Error != ""
 	brief.Generation = reader.Status.Revision
 	brief.Partial, brief.Refreshing = !coverage.Exhaustive(), coverage.Pending()
 	return brief, nil

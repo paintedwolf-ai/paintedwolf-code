@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/workflow"
+	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/workflowfixture"
@@ -53,7 +53,7 @@ func TestOptionsWorkflowUsesGenericPrimitives(t *testing.T) {
 
 func TestHumanApprovalPrimitiveHasNonPlanConsumer(t *testing.T) {
 	t.Parallel()
-	resolver := workflow.ManifestResolver{}
+	resolver := workflowcatalog.Resolver{}
 	summaries, err := resolver.ListResolved(context.Background(), "", "")
 	contractcheck.FailErr(t, "ListResolved", err)
 

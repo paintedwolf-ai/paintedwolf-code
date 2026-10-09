@@ -56,7 +56,7 @@ func TestPresenceMiddlewareUnwiredIsInert(t *testing.T) {
 	hub := events.NewMemoryHub()
 	st := store.NewMemory()
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
-		Store: st, Projects: project.NewMemoryRegistry(), Sessions: session.NewManager(st, nil, nil, settings.DefaultSessionLimits())}, Host: hostapi.HostDependencies{
+		Store: st, Projects: project.NewMemoryRegistry(), Sessions: session.NewHost(st, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)}, Host: hostapi.HostDependencies{
 		Events: hub}}), nil, hostapi.TestAPIToken)
 	contractfixture.PresenceRequest(t, srv, http.MethodPost, "/v1/sessions/does-not-exist/prompts")
 }

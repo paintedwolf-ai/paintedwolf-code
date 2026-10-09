@@ -80,7 +80,7 @@ func NewSettingsTestServer(t *testing.T, opts ...TestDeps) (*hostapi.Server, str
 
 	store := store.NewMemory()
 	mock := llm.NewMockProvider(TestMockConfig(t))
-	mgr := session.NewManagerWithLLMService(store, mock, nil, nil, settings.DefaultSessionLimits(), nil)
+	mgr := session.NewHost(store, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetLimitsProvider(settings.ProjectLimitsAdapter{Store: svc.Limits})
 	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	reg := project.NewMemoryRegistry()

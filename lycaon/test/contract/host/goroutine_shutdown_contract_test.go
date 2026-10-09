@@ -23,12 +23,12 @@ var goroutineShutdownPackages = []string{
 var goroutineShutdownAllowlist = map[string]string{
 	"internal/coordinator/loopwake/engine.go":  "runPromptAsync — bounded host-turn timeout from session limits",
 	"internal/coordinator/promptloop/batch.go": "parallel tool batch — parent wg.Wait drains per turn",
-	"internal/session/prompt_curation.go":      "kickPromptCuration — promptCurationWG drained by WaitForPromptCuration on shutdown",
+	"internal/session/curation/service.go":     "curation runs drain on shutdown",
 	"internal/app/runners.go":                  "startRunners pairs wg.Add with runner goroutines",
 	"internal/app/serve.go":                    "Run uses http.Server.Shutdown for the listen goroutine",
 	"internal/app/parent_watch.go":             "watchParentExit — Run cancels the watch context and joins the returned channel before draining",
 	"internal/app/secret_screen.go":            "secret-harvest growth sweep is an event callback; SweepSessionTree is idempotent and controls its session cancellation",
-	"internal/session/compaction_runner.go":    "CompactionRunner.Wait drains Trigger goroutines on shutdown",
+	"internal/session/history/runner.go":       "history.Runner.Wait drains Trigger goroutines on shutdown",
 	"internal/session/queue_round_drain.go":    "round-end drain passes count on roundEndDrains.wg, which WaitForCoordinatorAsyncTurns cancels and joins on shutdown",
 }
 

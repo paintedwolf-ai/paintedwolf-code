@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	hostexec "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/hostcmd"
+	"github.com/lycaon/lycaon/internal/session/promptsource"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -23,9 +24,9 @@ func TestParkBlockedLiveCommandsArmsExactProcessSubscription(t *testing.T) {
 	ctx := context.Background()
 	reg := bgprocess.NewRegistry(bgprocess.Config{}, bgprocess.Hooks{})
 	t.Cleanup(func() {
-		testutil.FailErr(t, "dispose process", reg.DisposeSession(ctx, "session-1"))
+		testutil.FailErr(t, "dispose process", reg.Lifecycle.DisposeSession(ctx, "session-1"))
 	})
-	mgr := NewManager(store.NewMemory(), nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	mgr.SetBackgroundRegistry(reg)
 	handle, err := reg.StartPipeline(ctx, bgprocess.PipelineSpec{
 		SessionID:  "session-1",
@@ -42,27 +43,27 @@ func TestParkBlockedLiveCommandsArmsExactProcessSubscription(t *testing.T) {
 	})
 	testutil.FailErr(t, "start process", err)
 
-	if !mgr.parkBlockedLiveCommands(ctx, "session-1") {
+	if !(&promptsource.Control{Processes: mgr.Processes, Runtime: mgr.Coordinator.Runtime}).ParkBlockedLiveCommands(ctx, "session-1") {
 		t.Fatal("running visible command was not parked")
 	}
-	loop := mgr.ensureCoordinatorRuntime().CoordinatorLoop()
-	if !loop.IsSleeping("session-1") {
+	loop := mgr.Coordinator.Runtime.CoordinatorLoop()
+	if !loop.Waits.IsSleeping("session-1") {
 		t.Fatal("coordinator loop is not sleeping")
 	}
 	triggers := loop.WaitSubscriptionForTest("session-1")
 	if len(triggers) != 2 || triggers[0] != loopwake.WaitTriggerTimer || triggers[1] != loopwake.WaitTriggerProcessDone {
 		t.Fatalf("wait triggers = %v want [timer process_done]", triggers)
 	}
-	handles := loop.ActiveProcessHandles("session-1")
+	handles := loop.Waits.ActiveProcessHandles("session-1")
 	if len(handles) != 1 || handles[0] != handle {
 		t.Fatalf("wait handles = %v want [%s]", handles, handle)
 	}
 }
 
 func TestParkBlockedLiveCommandsDoesNothingWithoutVisibleJob(t *testing.T) {
-	mgr := NewManager(store.NewMemory(), nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	mgr.SetBackgroundRegistry(bgprocess.NewRegistry(bgprocess.Config{}, bgprocess.Hooks{}))
-	if mgr.parkBlockedLiveCommands(context.Background(), "session-1") {
+	if (&promptsource.Control{Processes: mgr.Processes, Runtime: mgr.Coordinator.Runtime}).ParkBlockedLiveCommands(context.Background(), "session-1") {
 		t.Fatal("empty process registry must not arm a wait")
 	}
 }

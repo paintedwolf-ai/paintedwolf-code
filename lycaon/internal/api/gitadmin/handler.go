@@ -25,7 +25,7 @@ type Deps struct {
 	ProjectRegistry project.Registry
 	RepoSetCache    *git.RepoSetCache
 	SessionStore    session.Store
-	Sessions        *session.Manager
+	Sessions        *session.Host
 	DataDir         string
 }
 

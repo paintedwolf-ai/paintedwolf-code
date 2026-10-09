@@ -7,7 +7,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/lycaon/lycaon/internal/api/httpio"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/chats"
+	"github.com/lycaon/lycaon/internal/session/naming"
 	"github.com/lycaon/lycaon/internal/session/store"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -46,13 +47,13 @@ func (s *Lifecycle) HandleUpdateSession(w http.ResponseWriter, r *http.Request) 
 	}
 	switch {
 	case req.Title != nil:
-		sess, err = s.Sessions.SetTitle(r.Context(), id, *req.Title)
+		sess, err = s.Sessions.Chats.Naming.SetTitle(r.Context(), id, *req.Title)
 	case req.Archived != nil:
-		sess, err = s.Sessions.SetArchived(r.Context(), id, *req.Archived)
+		sess, err = s.Sessions.Chats.SetArchived(r.Context(), id, *req.Archived)
 	case req.Pinned != nil:
-		sess, err = s.Sessions.SetPinned(r.Context(), id, *req.Pinned)
+		sess, err = s.Sessions.Chats.SetPinned(r.Context(), id, *req.Pinned)
 	case req.PinPosition != nil:
-		sess, err = s.Sessions.MovePinned(r.Context(), id, *req.PinPosition)
+		sess, err = s.Sessions.Chats.MovePinned(r.Context(), id, *req.PinPosition)
 	}
 	if err != nil {
 		s.writeSessionLifecycleError(w, r, err)
@@ -65,7 +66,7 @@ func (s *Lifecycle) HandleUpdateSession(w http.ResponseWriter, r *http.Request) 
 
 func (s *Lifecycle) HandleDeleteSession(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimSpace(chi.URLParam(r, "id"))
-	if err := s.Sessions.DeleteSession(r.Context(), id); err != nil {
+	if err := s.Sessions.Chats.Delete(r.Context(), id); err != nil {
 		s.writeSessionLifecycleError(w, r, err)
 		return
 	}
@@ -74,17 +75,17 @@ func (s *Lifecycle) HandleDeleteSession(w http.ResponseWriter, r *http.Request) 
 
 func (s *Lifecycle) writeSessionLifecycleError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
-	case errors.Is(err, session.ErrInvalidDisplayTitle):
+	case errors.Is(err, naming.ErrInvalidDisplayTitle):
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "title must be 1–80 characters without control characters")
-	case errors.Is(err, session.ErrWorkerChildLifecycle), errors.Is(err, store.ErrWorkerChildPin):
+	case errors.Is(err, chats.ErrWorkerChildLifecycle), errors.Is(err, store.ErrWorkerChildPin):
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "worker child sessions have no chat lifecycle")
 	case errors.Is(err, store.ErrSessionArchived):
 		s.responses.Fail(w, wire.ApiErrorCodeSessionArchived, "Unarchive this chat before pinning it.")
 	case errors.Is(err, store.ErrSessionNotPinned):
 		s.responses.Fail(w, wire.ApiErrorCodeSessionNotPinned, "Pin this chat before moving it.")
-	case errors.Is(err, session.ErrSessionBusy):
+	case errors.Is(err, chats.ErrSessionBusy):
 		s.responses.Fail(w, wire.ApiErrorCodeSessionNotIdle, "session has a turn in flight — stop it first")
-	case errors.Is(err, session.ErrSessionWorktreeBound):
+	case errors.Is(err, chats.ErrSessionWorktreeBound):
 		s.responses.Fail(w, wire.ApiErrorCodeWorktreeAlreadyBound, "Unbind this chat's worktree before deleting it.")
 	case errors.Is(err, store.ErrSessionNotFound):
 		s.responses.Fail(w, wire.ApiErrorCodeSessionNotFound, "chat not found")

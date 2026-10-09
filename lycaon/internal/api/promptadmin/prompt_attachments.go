@@ -18,7 +18,10 @@ import (
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/promptattach"
 	"github.com/lycaon/lycaon/internal/promptattach/attacherr"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/promptinput"
+	"github.com/lycaon/lycaon/internal/session/recovery"
+	sessionscope "github.com/lycaon/lycaon/internal/session/scope"
+	"github.com/lycaon/lycaon/internal/session/spendguard"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/usernotice"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -43,13 +46,13 @@ func (s *Submission) HandlePrompt(w http.ResponseWriter, r *http.Request) {
 	req.OperationID = parsedOperationID.String()
 	perf.SetDimension("session_id", id)
 	perf.SetDimension("operation_id", req.OperationID)
-	unlockOperation := s.Sessions.PromptState().LockOperation(req.OperationID)
+	unlockOperation := s.Sessions.Submissions.LockOperation(req.OperationID)
 	defer unlockOperation()
 	if len(req.Text) > s.Caps.Composer.MaxInlineText.Int() {
 		s.responses.Fail(w, wire.ApiErrorCodePromptTextTooLarge, "inline prompt text exceeds the configured limit")
 		return
 	}
-	replayed, found, err := s.Sessions.ReplayPromptSubmission(r.Context(), id, req.OperationID, req)
+	replayed, found, err := s.Sessions.Submissions.ReplayPromptSubmission(r.Context(), id, req.OperationID, req)
 	if err != nil {
 		var conflict *store.PromptSubmissionConflictError
 		if errors.As(err, &conflict) {
@@ -80,7 +83,7 @@ func (s *Submission) HandlePrompt(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	allowEmpty := s.Sessions.AcceptsEmptyWorkflowRequest(r.Context(), id)
+	allowEmpty := s.Sessions.Runner.AcceptsEmpty(r.Context(), id)
 	if req.Recovery == nil && text == "" && len(req.Attachments) == 0 && len(req.References) == 0 && len(req.Secrets) == 0 && !allowEmpty {
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "text, attachments, references, or an active workflow request required")
 		return
@@ -96,7 +99,7 @@ func (s *Submission) HandlePrompt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	perf.Mark("prepare_attachments")
-	vision := s.Sessions.SessionModelVision(r.Context(), sess)
+	vision := s.Sessions.Coordinator.Model.Vision(r.Context(), sess)
 	acquired, err := attachStore.Retain(req.OperationID, prepared.retainedBlobIDs)
 	if err != nil {
 		s.discardPromptImages(r.Context(), sess.ProjectID, prepared.createdArtifactIDs)
@@ -104,17 +107,17 @@ func (s *Submission) HandlePrompt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	row, _, err := s.Sessions.AdmitPrompt(r.Context(), id, req.OperationID, req, prepared.input)
+	row, _, err := s.Sessions.Submissions.AdmitPrompt(r.Context(), id, req.OperationID, req, prepared.input)
 	if err != nil {
 		if releaseErr := attachStore.Release(req.OperationID, acquired); releaseErr != nil && s.responses.Logger != nil {
 			s.responses.Logger.WarnContext(r.Context(), "release unadmitted prompt attachments", "operation_id", req.OperationID, "error", releaseErr)
 		}
 		s.discardPromptImages(r.Context(), sess.ProjectID, prepared.createdArtifactIDs)
-		if errors.Is(err, session.ErrSessionSpendCeiling) {
+		if errors.Is(err, spendguard.ErrCeiling) {
 			s.responses.FailDetails(w, wire.ApiErrorCodeSessionSpendCeilingReached, usernotice.SpendCeilingContext(err), "chat spend ceiling reached")
 			return
 		}
-		if errors.Is(err, session.ErrPromptRecoveryStale) {
+		if errors.Is(err, recovery.ErrStale) {
 			s.responses.FailReason(w, wire.ApiErrorCodePromptRecoveryStale, err.Error())
 			return
 		}
@@ -159,7 +162,7 @@ func promptAccepted(row *store.PromptSubmission, revision uint64) wire.PromptAcc
 }
 
 type promptAdmission struct {
-	input              session.PromptInput
+	input              promptinput.Input
 	createdArtifactIDs []string
 	retainedBlobIDs    []string
 	hasImages          bool
@@ -182,7 +185,7 @@ func (s *Submission) preparePromptAdmission(
 			s.responses.FailReason(w, wire.ApiErrorCodePromptRecoveryStale, "Recovery cannot add attachments, references, or secrets; send them as a new message")
 			return promptAdmission{}, false
 		}
-		return promptAdmission{input: session.PromptInput{Text: text, Recovery: req.Recovery}}, true
+		return promptAdmission{input: promptinput.Input{Text: text, Recovery: req.Recovery}}, true
 	}
 
 	caps := s.Caps
@@ -234,7 +237,7 @@ func (s *Submission) preparePromptAdmission(
 		}
 	}
 	return promptAdmission{
-		input: session.PromptInput{
+		input: promptinput.Input{
 			Text: text, ArtifactIDs: artifactIDs, Recovery: req.Recovery,
 			SourceContext: refResult.SourceContext(),
 			ContentParts:  PromptContentParts(userProse, ingested.Parts, refResult.Parts, secretParts),
@@ -255,10 +258,10 @@ func (s *Submission) promptSessionForAdmission(w http.ResponseWriter, r *http.Re
 		s.responses.Fail(w, wire.ApiErrorCodeSessionPreparing, "session workspace is still preparing")
 		return nil, false
 	}
-	if unlock, locked := s.Sessions.TryIdleMutation(id); locked {
-		err := s.Sessions.CheckWorktreeReady(r.Context(), id)
+	if unlock, locked := s.Sessions.Runner.Execution.TryIdleMutation(id); locked {
+		err := s.Sessions.Workspace.CheckReady(r.Context(), id)
 		unlock()
-		if errors.Is(err, session.ErrSessionWorktreeStale) {
+		if errors.Is(err, sessionscope.ErrWorktreeStale) {
 			s.responses.Fail(w, wire.ApiErrorCodeWorktreeStale, "This chat's worktree is missing. Unbind it in the Git tab to continue.")
 			return nil, false
 		}

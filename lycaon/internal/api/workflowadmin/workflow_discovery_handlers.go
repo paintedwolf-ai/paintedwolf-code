@@ -9,7 +9,8 @@ import (
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/project"
-	"github.com/lycaon/lycaon/internal/workflow"
+	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
+	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -35,9 +36,9 @@ func (s *RunControl) HandleListWorkflows(w http.ResponseWriter, r *http.Request)
 	}
 	catalog := s.Catalog
 	if projectID != "" {
-		catalog = workflow.ManifestResolver{
+		catalog = workflowcatalog.Resolver{
 			SessionStore: s.Catalog.SessionStore,
-			CatalogFor:   s.Sessions.Catalog().CatalogForProjectDir(projectID),
+			CatalogFor:   s.Sessions.Catalog.CatalogForProjectDir(projectID),
 			// Project workflows retain their trust gate.
 			ProjectTierApplies: s.Catalog.ProjectTierApplies,
 		}
@@ -93,9 +94,9 @@ func (s *RunControl) HandleListSessionWorkflowRuns(w http.ResponseWriter, r *htt
 			}
 		}
 	}
-	page, err := s.Runs.ListPageBySession(r.Context(), sessionID, pq.Limit, statusFilter, pq.Cursor)
+	page, err := s.Runs.Runs.ListPageBySession(r.Context(), sessionID, pq.Limit, statusFilter, pq.Cursor)
 	if err != nil {
-		if errors.Is(err, workflow.ErrInvalidRunPageCursor) {
+		if errors.Is(err, workflowpersistence.ErrInvalidRunPageCursor) {
 			s.responses.PageCursorError(w, r, "cursor", err)
 			return
 		}

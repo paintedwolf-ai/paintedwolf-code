@@ -37,17 +37,22 @@ import (
 	"github.com/lycaon/lycaon/internal/hostresources"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/llm"
+	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
 	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectignore"
 	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/scan"
+	scancadence "github.com/lycaon/lycaon/internal/scan/cadence"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/session"
+	sessiondecisions "github.com/lycaon/lycaon/internal/session/decisions"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
+	repoinfotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
 	"github.com/lycaon/lycaon/internal/testtool"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/scantest"
@@ -56,12 +61,11 @@ import (
 	"github.com/lycaon/lycaon/internal/webresearch"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workflow"
-	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
-	repoinfotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
-	scancadence "github.com/lycaon/lycaon/internal/scan/cadence"
-	sessionstore "github.com/lycaon/lycaon/internal/session/store"
-	wire "github.com/lycaon/lycaon/pkg/api"
+	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
+	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 // Deps mirrors the API dependencies a server cannot be built without.
@@ -73,7 +77,7 @@ type Deps struct {
 	Database          db.Handle
 	Store             session.Store
 	Projects          project.Registry
-	Sessions          *session.Manager
+	Sessions          *session.Host
 	Settings          *settings.Service
 	Invocations       invocation.Recorder
 	MutationGate      *project.MutationGate
@@ -85,9 +89,9 @@ type Deps struct {
 	EditorDocuments   *editordoc.Service
 	FileBriefings     *filebriefing.Service
 	Workflows         *workflow.RunManager
-	WorkflowRuns      workflow.RunStore
-	WorkflowComposer  *workflow.Composer
-	WorkflowPersister *workflow.Persister
+	WorkflowRuns      *runstate.Repository
+	WorkflowComposer  *workflowcomposition.Composer
+	WorkflowPersister *workflowcomposition.Persister
 	Blueprints        *blueprint.Manager
 	ScanCoordinator   scan.ScanCoordinator
 	ScanCadence       *scancadence.Service
@@ -230,7 +234,7 @@ func fillEvents(t *testing.T, d *Deps) {
 func fillHost(t *testing.T, d *Deps) {
 	t.Helper()
 	if d.CostTracker == nil {
-		d.CostTracker = d.Sessions.CostTracker()
+		d.CostTracker = d.Sessions.Coordinator.Model.Cost
 	}
 	if d.CostTracker == nil {
 		d.CostTracker = cost.NewSQLTracker(d.Database, cost.NoopPricer{})
@@ -274,7 +278,7 @@ func fillWorkers(t *testing.T, d *Deps) {
 		d.Workers = worker.NewInMemoryQueue(2)
 	}
 	if d.WorkerCancel == nil {
-		d.WorkerCancel = &worker.CancelService{Queue: d.Workers, Sessions: d.Sessions}
+		d.WorkerCancel = &worker.CancelService{Queue: d.Workers, Events: d.Sessions.Coordinator.Workers, Graceful: d.Sessions.Workers.Cancel, Cancellations: d.Sessions.Workers.Cancellations}
 	}
 	if d.Delegations == nil {
 		d.Delegations = delegation.NewManager(delegation.NewMemoryStore(), d.Workers, nil, nil)
@@ -301,8 +305,8 @@ func fillHarness(t *testing.T, d *Deps) {
 		return
 	}
 	if d.HarnessWorkers == nil {
-		scripted, err := harnessfixture.NewWorkers(t.TempDir(), d.Store, d.Workers, d.Sessions.VerifyHarnessWorker,
-			d.Sessions.ReadHarnessWorker, session.NewSQLDecisionStore(d.Database), refusingExecutor{})
+		scripted, err := harnessfixture.NewWorkers(t.TempDir(), d.Store, d.Workers, d.Sessions.Workers.Harness.Verify,
+			d.Sessions.Workers.Harness.Read, sessiondecisions.NewSQL(d.Database), refusingExecutor{})
 		testutil.FailErr(t, "scripted workers", err)
 		d.HarnessWorkers = scripted
 	}
@@ -335,10 +339,10 @@ func fillSessions(t *testing.T, d *Deps) {
 		return
 	}
 	registry := tools.NewStubRegistry()
-	d.Sessions = session.NewManager(d.Store, llm.NewMockProvider(nil), registry, settings.DefaultSessionLimits())
+	d.Sessions = session.NewHost(d.Store, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, registry)
 	d.Sessions.SetDataDir(t.TempDir())
 	d.Sessions.SetProjectRegistry(d.Projects)
-	d.Sessions.SetToolInvoker(testtool.RegistryInvoker{Registry: registry}, testtool.RegistryInvoker{Registry: registry})
+	d.Sessions.Coordinator.Guards.SetToolMetadata(testtool.RegistryInvoker{Registry: registry})
 }
 
 func fillSettings(t *testing.T, d *Deps) {
@@ -444,17 +448,16 @@ func fillSources(t *testing.T, d *Deps) {
 func fillWorkflows(t *testing.T, d *Deps) {
 	t.Helper()
 	if d.WorkflowRuns == nil {
-		d.WorkflowRuns = workflow.NewSQLStore(d.Database)
+		d.WorkflowRuns = workflowpersistence.New(d.Database)
 	}
 	if d.Workflows == nil {
 		d.Workflows = workflow.NewManager(d.WorkflowRuns, d.Store, workflowdef.NewRegistry(nil), nil)
-		d.Workflows.Resolver = workflow.ManifestResolver{}
 	}
 	if d.WorkflowComposer == nil {
-		d.WorkflowComposer = &workflow.Composer{}
+		d.WorkflowComposer = &workflowcomposition.Composer{}
 	}
 	if d.WorkflowPersister == nil {
-		d.WorkflowPersister = &workflow.Persister{}
+		d.WorkflowPersister = &workflowcomposition.Persister{}
 	}
 	if d.Blueprints == nil {
 		d.Blueprints = blueprint.NewManager(blueprint.NewFileStore(func(ctx context.Context, projectID string) (string, error) {

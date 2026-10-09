@@ -5,12 +5,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/session/promptinput"
+	"github.com/lycaon/lycaon/internal/session/workflowfacts"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // verdictPendingView reports a review_loop phase with an open evidence gate.
 type verdictPendingView struct {
-	WorkflowSessionView
+	stubWorkflowManifest
 	pending bool
 }
 
@@ -18,21 +20,21 @@ func (v verdictPendingView) ActiveReviewVerdictPending(context.Context, string) 
 	return v.pending
 }
 
-func (v verdictPendingView) ActivePhaseGuardState(context.Context, string) WorkflowPhaseGuardState {
-	return WorkflowPhaseGuardState{}
+func (v verdictPendingView) ActivePhaseGuardState(context.Context, string) workflowfacts.WorkflowPhaseGuardState {
+	return workflowfacts.WorkflowPhaseGuardState{}
 }
 
-func rejectVerdictCloseout(t *testing.T, mgr *Manager, sess *api.Session, workersIdle bool) (string, bool) {
+func rejectVerdictCloseout(t *testing.T, mgr *Host, sess *api.Session, workersIdle bool) (string, bool) {
 	t.Helper()
-	reject, blocked := mgr.maybeRejectCloseoutForMissingVerdict(context.Background(), sess, workersIdle, true)
+	reject, blocked := mgr.Coordinator.Guards.MissingVerdict(context.Background(), sess, workersIdle, true)
 	return reject.Error(), blocked
 }
 
 func TestVerdictCloseoutSkipsWhenInvokeGated(t *testing.T) {
 	mgr, sess := newSynthesisDelayManager(t)
-	mgr.workflows = verdictPendingView{pending: true}
+	mgr.SetWorkflowDomains(workflowDomainFixture(verdictPendingView{pending: true}))
 
-	if _, block := mgr.maybeRejectCloseoutForMissingVerdict(
+	if _, block := mgr.Coordinator.Guards.MissingVerdict(
 		context.Background(), sess, true, false,
 	); block {
 		t.Fatal("expected no verdict hold when invokeAllowed=false")
@@ -41,7 +43,7 @@ func TestVerdictCloseoutSkipsWhenInvokeGated(t *testing.T) {
 
 func TestCloseoutBlocksOnMissingReviewVerdict(t *testing.T) {
 	mgr, sess := newSynthesisDelayManager(t)
-	mgr.workflows = verdictPendingView{pending: true}
+	mgr.SetWorkflowDomains(workflowDomainFixture(verdictPendingView{pending: true}))
 
 	reject, block := rejectVerdictCloseout(t, mgr, sess, true)
 	if !block {
@@ -57,7 +59,7 @@ func TestCloseoutBlocksOnMissingReviewVerdict(t *testing.T) {
 
 func TestCloseoutAllowsWhenVerdictRecorded(t *testing.T) {
 	mgr, sess := newSynthesisDelayManager(t)
-	mgr.workflows = verdictPendingView{pending: false}
+	mgr.SetWorkflowDomains(workflowDomainFixture(verdictPendingView{pending: false}))
 
 	if _, block := rejectVerdictCloseout(t, mgr, sess, true); block {
 		t.Fatal("a satisfied review gate must let the closeout through")
@@ -66,7 +68,7 @@ func TestCloseoutAllowsWhenVerdictRecorded(t *testing.T) {
 
 func TestVerdictCloseoutSkipsBusyWorkers(t *testing.T) {
 	mgr, sess := newSynthesisDelayManager(t)
-	mgr.workflows = verdictPendingView{pending: true}
+	mgr.SetWorkflowDomains(workflowDomainFixture(verdictPendingView{pending: true}))
 
 	if _, block := rejectVerdictCloseout(t, mgr, sess, false); block {
 		t.Fatal("the push must not apply while workers are still in flight")
@@ -75,7 +77,7 @@ func TestVerdictCloseoutSkipsBusyWorkers(t *testing.T) {
 
 func TestVerdictCloseoutHoldsRegardlessOfSurface(t *testing.T) {
 	mgr, sess := newSynthesisDelayManager(t)
-	mgr.workflows = verdictPendingView{pending: true}
+	mgr.SetWorkflowDomains(workflowDomainFixture(verdictPendingView{pending: true}))
 
 	if _, block := rejectVerdictCloseout(t, mgr, sess, true); !block {
 		t.Fatal("a pending review verdict must hold the closeout on any surface")
@@ -84,10 +86,10 @@ func TestVerdictCloseoutHoldsRegardlessOfSurface(t *testing.T) {
 
 func TestVerdictCloseoutBoundedPerPrompt(t *testing.T) {
 	mgr, sess := newSynthesisDelayManager(t)
-	mgr.workflows = verdictPendingView{pending: true}
+	mgr.SetWorkflowDomains(workflowDomainFixture(verdictPendingView{pending: true}))
 	ctx := context.Background()
 
-	for i := 0; i < verdictDelayMaxPerPrompt; i++ {
+	for i := 0; i < 2; i++ {
 		if _, block := rejectVerdictCloseout(t, mgr, sess, true); !block {
 			t.Fatalf("delay %d should still block", i)
 		}
@@ -96,7 +98,7 @@ func TestVerdictCloseoutBoundedPerPrompt(t *testing.T) {
 		t.Fatal("the bound must let the closeout through after the per-prompt budget")
 	}
 
-	mgr.beginCloseoutPrompt(ctx, sess, PromptInput{Text: "continue"})
+	mgr.Runner.Closeouts.BeginPrompt(ctx, sess, promptinput.Input{Text: "continue"})
 	if _, block := rejectVerdictCloseout(t, mgr, sess, true); !block {
 		t.Fatal("a fresh prompt should hold the closeout again")
 	}

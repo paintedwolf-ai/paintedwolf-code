@@ -275,7 +275,7 @@ func TestSessionCreateDeletePublishLifecycleActions(t *testing.T) {
 	testutil.FailErr(t, "create project", err)
 	mem := store.NewMemory()
 	hub := events.NewMemoryHub()
-	mgr := session.NewManager(mem, nil, nil, settings.DefaultSessionLimits())
+	mgr := session.NewHost(mem, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetProjectRegistry(reg)
 	mgr.SetEventPublisher(&events.Publisher{
 		Hub:    hub,

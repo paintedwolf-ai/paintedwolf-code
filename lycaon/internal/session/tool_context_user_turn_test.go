@@ -30,7 +30,7 @@ func userTurnMessage(role api.MessageRole, visibility api.MessageVisibility) api
 func TestToolContextUserTurnTracksSessionCurrentTurn(t *testing.T) {
 	ctx := t.Context()
 	sessions := store.NewMemory()
-	mgr := NewManager(sessions, nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(sessions, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 
 	sess, err := sessions.Create(ctx, api.CreateSessionRequest{
 		Posture: api.SessionPostureBuild,
@@ -41,7 +41,7 @@ func TestToolContextUserTurnTracksSessionCurrentTurn(t *testing.T) {
 
 	assertTurn := func(step string, want int) {
 		t.Helper()
-		tctx, err := mgr.buildToolContext(ctx, sess, toolprofiles.DefaultToolProfileID, inject.Machine{})
+		tctx, err := mgr.ToolContext.Build(ctx, sess, toolprofiles.DefaultToolProfileID, inject.Machine{})
 		if err != nil {
 			t.Fatalf("%s: buildToolContext: %v", step, err)
 		}
@@ -51,7 +51,7 @@ func TestToolContextUserTurnTracksSessionCurrentTurn(t *testing.T) {
 		if tctx.Source.SourceWorkspaceKind != api.SourceWorkspaceKindProject {
 			t.Fatalf("%s: workspace kind = %q, want project", step, tctx.Source.SourceWorkspaceKind)
 		}
-		if tctx.Host.MaxToolSpillBytes != mgr.effectiveLimits(ctx, sess).MaxToolSpillBytes {
+		if tctx.Host.MaxToolSpillBytes != mgr.Limits.Effective(ctx, sess).MaxToolSpillBytes {
 			t.Fatal("tool recovery reads must use the session's spill retention bound")
 		}
 		hydrated, err := sessions.Get(ctx, sess.ID)

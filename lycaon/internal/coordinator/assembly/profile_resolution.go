@@ -10,7 +10,7 @@ import (
 )
 
 // resolveCoordinatorProfile returns the profile and the state used to select it.
-func (e *AssemblyEngine) resolveCoordinatorProfile(
+func (e *promptSurface) resolveCoordinatorProfile(
 	ctx context.Context,
 	sess *api.Session,
 	frame inject.CoordinatorTurnFrame,

@@ -48,7 +48,7 @@ func TestCoordinatorProposesRunBeforeHumanStart(t *testing.T) {
 		t.Fatalf("state_start without approval err = %v, want WORKFLOW_START_REQUIRES_HUMAN_APPROVAL reject", err)
 	}
 
-	run, err := h.WorkflowMgr.StartHuman(ctx, sess.ID, wire.StartWorkflowRunRequest{
+	run, err := h.WorkflowMgr.Starts.StartHuman(ctx, sess.ID, wire.StartWorkflowRunRequest{
 		WorkflowID: "plan", WorkflowVersion: "1.0.0",
 	})
 	testutil.FailErr(t, "StartHuman", err)

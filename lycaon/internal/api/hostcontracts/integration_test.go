@@ -25,7 +25,7 @@ func TestServerEndToEnd(t *testing.T) {
 	dir := t.TempDir()
 	store := store.NewMemory()
 	mock := llm.NewMockProvider(contractfixture.TestMockConfig(t))
-	mgr := session.NewManager(store, mock, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: store, Projects: project.NewMemoryRegistry(), Sessions: mgr}}), nil, hostapi.TestAPIToken)
 
 	listener, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")

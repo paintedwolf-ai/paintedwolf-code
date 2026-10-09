@@ -2,6 +2,8 @@ package contractfixture
 
 import (
 	"context"
+	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
+	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	"io"
 	"net/http"
 	"path/filepath"
@@ -51,9 +53,9 @@ func NewTestServerWithRegistry(t *testing.T, reg tools.ToolRegistry, opts ...Tes
 	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	store := store.NewMemory()
 	mock := llm.NewMockProvider(TestMockConfig(t))
-	mgr := session.NewManager(store, mock, reg, settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, reg)
 	mgr.SetDataDir(t.TempDir())
-	mgr.SetToolInvoker(testtool.RegistryInvoker{Registry: reg}, testtool.RegistryInvoker{Registry: reg})
+	mgr.Coordinator.Guards.SetToolMetadata(testtool.RegistryInvoker{Registry: reg})
 	// Stub bindings do not expose coordinator tools.
 	WireTestBindingRegistry(t)
 	return NewServerForTest(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: store, Projects: project.NewMemoryRegistry(), Sessions: mgr}}, opts...)
@@ -68,17 +70,17 @@ func NewTestServerWithWorkflowRegistry(t *testing.T, reg tools.ToolRegistry, opt
 
 	sessions := store.NewSQL(sqlDB)
 	mock := llm.NewMockProvider(TestMockConfig(t))
-	mgr := session.NewManager(sessions, mock, reg, settings.DefaultSessionLimits())
+	mgr := session.NewHost(sessions, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, reg)
 	mgr.SetDataDir(t.TempDir())
-	mgr.SetToolInvoker(testtool.RegistryInvoker{Registry: reg}, testtool.RegistryInvoker{Registry: reg})
+	mgr.Coordinator.Guards.SetToolMetadata(testtool.RegistryInvoker{Registry: reg})
 	WireTestBindingRegistry(t)
 
 	registry, err := workflowdef.RegistryFromDirs("")
-	testutil.FailErr(t, "workflow.RegistryFromDirs", err)
-	runs := workflow.NewSQLStore(sqlDB)
+	testutil.FailErr(t, "workflowdef.RegistryFromDirs", err)
+	runs := workflowpersistence.New(sqlDB)
 	workflows := workflow.NewManager(runs, sessions, registry, nil)
-	workflows.Resolver = workflow.ManifestResolver{}
-	mgr.SetWorkflowSessionView(workflows)
+	workflows.Resolver = workflowcatalog.Resolver{}
+	mgr.SetWorkflowDomains(&session.WorkflowDomains{Runs: workflows.Store.Runs, Policy: workflows.Policy, Ambient: workflows.Ambient, Blueprints: workflows.Blueprints, Batch: workflows.Batch, Slash: workflows.Slash, Requests: workflows.Requests, Feedback: workflows.Feedback, Transcript: workflows.Transcript, Asks: workflows.Asks, Fanout: workflows.Fanout, Phases: workflows.Phases, Reports: workflows.Reports, Recovery: workflows.Recovery, Cleanup: workflows})
 	return NewServerForTest(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
 		Store: sessions, PersonActions: personactions.New(sqlDB), Projects: project.NewSQLRegistry(sqlDB), Sessions: mgr}, Workflow: hostapi.WorkflowDependencies{
 		Workflows: workflows, WorkflowRuns: runs}}, opts...)

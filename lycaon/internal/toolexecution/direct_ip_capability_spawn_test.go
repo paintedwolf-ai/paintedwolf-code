@@ -35,7 +35,9 @@ func (r *memoryDirectIPRuntime) IssuePermit(sessionID, toolCallID, actionDigest,
 // The spawn fixture holds no reusable authority, so only a permit authorizes it.
 func (*memoryDirectIPRuntime) LeaseCovers(string, hitl.DirectIPLease) bool { return false }
 
-func (*memoryDirectIPRuntime) GrantChat(string, hitl.DirectIPLease, string, string, *time.Time) {}
+func (*memoryDirectIPRuntime) GrantChat(string, hitl.DirectIPLease, string, string, *time.Time) bool {
+	return true
+}
 
 func (r *memoryDirectIPRuntime) ConsumePermit(sessionID, toolCallID, actionDigest, requestDigest, confinementDigest string) (bool, error) {
 	key := sessionID + "|" + toolCallID + "|" + actionDigest

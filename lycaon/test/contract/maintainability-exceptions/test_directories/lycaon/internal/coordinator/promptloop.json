@@ -1,0 +1,6 @@
+{
+  "category": "test_directories",
+  "artifact": "lycaon/internal/coordinator/promptloop",
+  "cap": 110,
+  "reason": "Prompt loop testing covers coordinator turn stages, streaming, tools, and closeouts; decomposed from session (#271)."
+}

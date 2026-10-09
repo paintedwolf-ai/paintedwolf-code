@@ -4,19 +4,16 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"strconv"
 	"strings"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
-	"github.com/lycaon/lycaon/internal/llm/modelcall"
-	"github.com/lycaon/lycaon/internal/session"
+	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
 	"github.com/lycaon/lycaon/internal/visual"
-	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowinputs "github.com/lycaon/lycaon/internal/workflow/inputs"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -118,7 +115,7 @@ func (s *HarnessControl) handleHarnessTranscript(w http.ResponseWriter, r *http.
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "messages must contain 1 to 1000 rows")
 		return
 	}
-	if err := s.sessions.AppendAndPublishMessages(
+	if err := s.sessions.Runner.Transcript.AppendPlain(
 		r.Context(),
 		sessionID,
 		s.stampActiveRun(r, sessionID, req.Messages)...,
@@ -135,7 +132,7 @@ func (s *HarnessControl) handleHarnessTranscript(w http.ResponseWriter, r *http.
 
 // stampActiveRun assigns seeded messages to the active workflow span.
 func (s *HarnessControl) stampActiveRun(r *http.Request, sessionID string, msgs []wire.Message) []wire.Message {
-	run, err := s.Workflow.GetActive(r.Context(), sessionID)
+	run, err := s.Workflow.Store.Runs.ActiveBySession(r.Context(), sessionID)
 	if err != nil || run == nil {
 		return msgs
 	}
@@ -145,103 +142,6 @@ func (s *HarnessControl) stampActiveRun(r *http.Request, sessionID string, msgs 
 		}
 	}
 	return msgs
-}
-
-type harnessPendingMessage struct {
-	Role      string          `json:"role"`
-	Content   string          `json:"content"`
-	ToolCalls []wire.ToolCall `json:"tool_calls,omitempty"`
-}
-
-type harnessPendingDTO struct {
-	Pending   bool                    `json:"pending"`
-	ID        string                  `json:"id,omitempty"`
-	SessionID string                  `json:"session_id,omitempty"`
-	Model     string                  `json:"model,omitempty"`
-	Tools     []string                `json:"tools,omitempty"`
-	Messages  []harnessPendingMessage `json:"messages,omitempty"`
-}
-
-func (s *HarnessControl) handleHarnessLLMPending(w http.ResponseWriter, r *http.Request) {
-	wait := time.Duration(0)
-	if v := r.URL.Query().Get("wait"); v != "" {
-		if ms, err := strconv.Atoi(v); err == nil && ms > 0 {
-			wait = time.Duration(min(ms, 30_000)) * time.Millisecond
-		}
-	}
-	pend, ok := s.manualLLM.Pending(r.Context(), strings.TrimSpace(r.URL.Query().Get("session_id")), wait)
-	if !ok {
-		httpio.WriteJSON(w, http.StatusOK, harnessPendingDTO{Pending: false})
-		return
-	}
-	dto := harnessPendingDTO{Pending: true, ID: pend.ID, SessionID: pend.SessionID, Model: pend.Model}
-	for _, t := range pend.Tools {
-		dto.Tools = append(dto.Tools, t.Name)
-	}
-	for _, m := range pend.Messages {
-		dto.Messages = append(dto.Messages, harnessPendingMessage{
-			Role:      string(m.Role),
-			Content:   m.Content,
-			ToolCalls: m.ToolCalls,
-		})
-	}
-	httpio.WriteJSON(w, http.StatusOK, dto)
-}
-
-type harnessRespondReq struct {
-	ID        string          `json:"id"`
-	Content   string          `json:"content"`
-	ToolCalls []wire.ToolCall `json:"tool_calls"`
-	// StreamChunks preserve split deltas, progress frames, and truncated arguments.
-	StreamChunks []harnessStreamChunk `json:"stream_chunks"`
-}
-
-type harnessStreamChunk struct {
-	Content   string          `json:"content"`
-	ToolCalls []wire.ToolCall `json:"tool_calls"`
-	Done      bool            `json:"done"`
-	Progress  bool            `json:"progress"`
-}
-
-func (s *HarnessControl) handleHarnessLLMRespond(w http.ResponseWriter, r *http.Request) {
-	var req harnessRespondReq
-	if err := httpio.DecodeJSON(w, r, &req); err != nil {
-		s.responses.DecodeError(w, r, err)
-		return
-	}
-	if req.ID == "" {
-		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "id is required")
-		return
-	}
-	var chunks []modelcall.StreamChunk
-	for _, c := range req.StreamChunks {
-		chunks = append(chunks, modelcall.StreamChunk{
-			Content:   c.Content,
-			ToolCalls: c.ToolCalls,
-			Done:      c.Done,
-			Progress:  c.Progress,
-		})
-	}
-	if err := s.manualLLM.RespondWithChunks(req.ID, req.Content, req.ToolCalls, chunks); err != nil {
-		s.responses.Fail(w, wire.ApiErrorCodeManualLlmRequestNotFound, "manual LLM request is not pending")
-		return
-	}
-	httpio.WriteJSON(w, http.StatusOK, map[string]bool{"ok": true})
-}
-
-type harnessAutoReq struct {
-	Enabled bool   `json:"enabled"`
-	Text    string `json:"text"`
-}
-
-func (s *HarnessControl) handleHarnessLLMAuto(w http.ResponseWriter, r *http.Request) {
-	var req harnessAutoReq
-	if err := httpio.DecodeJSON(w, r, &req); err != nil {
-		s.responses.DecodeError(w, r, err)
-		return
-	}
-	s.manualLLM.SetAuto(req.Enabled, req.Text)
-	httpio.WriteJSON(w, http.StatusOK, map[string]bool{"ok": true, "enabled": req.Enabled})
 }
 
 type harnessAskUserReq struct {
@@ -293,11 +193,11 @@ func (s *HarnessControl) handleHarnessAskUser(w http.ResponseWriter, r *http.Req
 		},
 		harnessToolResultMessage(toolMsgID, assistantID, toolCallID, "ask_user", pendingBody),
 	}
-	if err := s.sessions.AppendAndPublishMessages(r.Context(), sessionID, s.stampActiveRun(r, sessionID, msgs)...); err != nil {
+	if err := s.sessions.Runner.Transcript.AppendPlain(r.Context(), sessionID, s.stampActiveRun(r, sessionID, msgs)...); err != nil {
 		s.responses.InternalError(w, r, err)
 		return
 	}
-	handle, err := mgr.RequestUserInput(r.Context(), sessionID, workflow.UserInputRequest{
+	handle, err := mgr.Asks.RequestUserInput(r.Context(), sessionID, workflowinputs.UserInputRequest{
 		Prompt:       prompt,
 		ResponseType: rt,
 		Purpose:      req.Purpose,
@@ -306,7 +206,7 @@ func (s *HarnessControl) handleHarnessAskUser(w http.ResponseWriter, r *http.Req
 		ToolCallID:   toolCallID,
 	})
 	if err != nil {
-		reject := &workflow.AskUserReject{}
+		reject := &workflowinputs.AskUserReject{}
 		if errors.As(err, &reject) {
 			s.responses.FailDetails(w, wire.ApiErrorCodeAskUserRejected, map[string]any{"reject_code": reject.Code}, reject.Error())
 			return
@@ -315,7 +215,7 @@ func (s *HarnessControl) handleHarnessAskUser(w http.ResponseWriter, r *http.Req
 		return
 	}
 	// Announce the card after its transcript rows are durable.
-	mgr.AnnouncePendingAsk(r.Context(), sessionID)
+	mgr.Asks.AnnouncePendingAsk(r.Context(), sessionID)
 	// Publish the card to late SSE subscribers.
 	if msgs, err := s.sessionStore.GetMessages(r.Context(), sessionID); err == nil {
 		for _, msg := range msgs {
@@ -388,11 +288,11 @@ func (s *HarnessControl) handleHarnessReviewLoopVerdict(w http.ResponseWriter, r
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "verdict is required")
 		return
 	}
-	if _, err := mgr.RecordReviewLoopVerdict(r.Context(), sessionID, req.Verdict, nil, nil); err != nil {
+	if _, err := mgr.Verdicts.RecordReviewLoopVerdict(r.Context(), sessionID, req.Verdict, nil, nil); err != nil {
 		s.responses.InternalError(w, r, err)
 		return
 	}
-	run, err := mgr.GetActive(r.Context(), sessionID)
+	run, err := mgr.Store.Runs.ActiveBySession(r.Context(), sessionID)
 	if err != nil {
 		s.responses.InternalError(w, r, err)
 		return
@@ -431,7 +331,7 @@ func (s *HarnessControl) handleHarnessAskUserLastResponse(w http.ResponseWriter,
 		if strings.TrimSpace(msg.ToolResult.Tool) != "ask_user" {
 			continue
 		}
-		var body workflow.AskUserAnswerBody
+		var body workflowinputs.AskUserAnswerBody
 		if err := json.Unmarshal([]byte(msg.ToolResult.Content), &body); err != nil || body.Status != "answered" {
 			continue
 		}
@@ -468,7 +368,7 @@ func (s *HarnessControl) handleHarnessVisualFixture(w http.ResponseWriter, r *ht
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "session_id is required")
 		return
 	}
-	root := session.RootSessionID(r.Context(), s.sessionStore, sessionID)
+	root := sessiontree.RootID(r.Context(), s.sessionStore, sessionID)
 	caption := strings.TrimSpace(req.Caption)
 	if caption == "" {
 		caption = "harness fixture"

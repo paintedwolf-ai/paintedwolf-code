@@ -134,7 +134,7 @@ func newProviderTestServerWithCatalogs(t *testing.T, shipYAML, localYAML string,
 	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	store := store.NewMemory()
 	mock := llm.NewMockProvider(testMockConfig(t))
-	mgr := session.NewManagerWithLLMService(store, mock, svc, nil, settings.DefaultSessionLimits(), nil)
+	mgr := session.NewHost(store, session.Models{Client: mock, Provider: svc, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	hub := events.NewMemoryHub()
 	deps := Dependencies{Core: CoreDependencies{Store: store, Projects: project.NewMemoryRegistry(), Sessions: mgr}, Providers: ProvidersDependencies{LLM: svc}, Host: HostDependencies{Events: hub}}
 	for _, opt := range opts {

@@ -95,7 +95,7 @@ func (s *HarnessControl) handleHarnessToolApprovalCheckpoint(w http.ResponseWrit
 			toolMsgID, assistantID, toolCallID, toolName, "awaiting approval",
 		))
 	}
-	if err := s.sessions.AppendAndPublishMessages(r.Context(), sessionID, s.stampActiveRun(r, sessionID, msgs)...); err != nil {
+	if err := s.sessions.Runner.Transcript.AppendPlain(r.Context(), sessionID, s.stampActiveRun(r, sessionID, msgs)...); err != nil {
 		s.responses.InternalError(w, r, err)
 		return
 	}
@@ -118,19 +118,19 @@ func (s *HarnessControl) handleHarnessToolApprovalCheckpoint(w http.ResponseWrit
 		Title:      title,
 		Decision:   decision,
 		ProposedAction: &hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: toolName,
-Args: toolArgs,
-},
-Presentation: hitl.ActionPresentation{
-Command: command,
-},
-Scope: hitl.ActionScope{
-SessionID: sessionID,
-ProjectID: sess.ProjectID,
-ProjectDir: "",
-},
-},
+			Invocation: hitl.ActionInvocation{
+				Tool: toolName,
+				Args: toolArgs,
+			},
+			Presentation: hitl.ActionPresentation{
+				Command: command,
+			},
+			Scope: hitl.ActionScope{
+				SessionID:  sessionID,
+				ProjectID:  sess.ProjectID,
+				ProjectDir: "",
+			},
+		},
 		ConsequenceBand: band,
 		ConsequenceCode: code,
 	}
@@ -182,14 +182,14 @@ func applyHarnessSocketCapability(
 	}
 	cpReq.GrantOffers = capabilitygrants.SocketExecutionGrantOffers(
 		hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-},
-Scope: hitl.ActionScope{
-SessionID: cpReq.SessionID,
-ProjectID: cpReq.ProjectID,
-},
-},
+			Invocation: hitl.ActionInvocation{
+				Tool: "command",
+			},
+			Scope: hitl.ActionScope{
+				SessionID: cpReq.SessionID,
+				ProjectID: cpReq.ProjectID,
+			},
+		},
 		[]confine.SocketGrant{{ApprovedPath: approved, ResolvedPath: resolved}},
 	)
 	cpReq.SocketCapability = &hitl.SocketCapability{
@@ -259,17 +259,17 @@ func applyHarnessDirectIPCapability(
 	}
 	cpReq.GrantOffers = capabilitygrants.DirectIPExecutionGrantOffers(
 		hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-},
-Scope: hitl.ActionScope{
-SessionID: cpReq.SessionID,
-ProjectID: cpReq.ProjectID,
-},
-Presentation: hitl.ActionPresentation{
-Command: command,
-},
-},
+			Invocation: hitl.ActionInvocation{
+				Tool: "command",
+			},
+			Scope: hitl.ActionScope{
+				SessionID: cpReq.SessionID,
+				ProjectID: cpReq.ProjectID,
+			},
+			Presentation: hitl.ActionPresentation{
+				Command: command,
+			},
+		},
 		hitl.DirectIPLease{
 			ActionDigest:         "harness-direct-ip",
 			RequestDigest:        "harness-direct-ip-request",

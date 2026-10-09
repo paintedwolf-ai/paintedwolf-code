@@ -6,10 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/testdbseed"
-
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/llm"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/wiring"
@@ -86,7 +85,7 @@ func TestWorkerLegPromptAppendsSummary(t *testing.T) {
 			}
 			approvalsResolved++
 		}
-		msgs, err := mgr.GetMessages(ctx, parentID)
+		msgs, err := mgr.Transcript.GetMessages(ctx, parentID)
 		if err != nil {
 			return false
 		}
@@ -100,11 +99,11 @@ func TestWorkerLegPromptAppendsSummary(t *testing.T) {
 		}
 		return false
 	}) {
-		parentMessages, _ := mgr.GetMessages(ctx, parentID)
+		parentMessages, _ := mgr.Transcript.GetMessages(ctx, parentID)
 		t.Fatalf("worker card timed out: child_session_id=%q approvals_resolved=%d approval_err=%v parent_messages=%+v model_requests=%d",
 			childSessionID, approvalsResolved, approvalErr, parentMessages, len(rec.AllRequests()))
 	}
-	msgs, err := mgr.GetMessages(ctx, parentID)
+	msgs, err := mgr.Transcript.GetMessages(ctx, parentID)
 	testutil.FailErr(t, "mgr.GetMessages failed", err)
 	var foundWorkerCard bool
 	for _, msg := range msgs {

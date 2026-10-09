@@ -2,6 +2,8 @@ package contractfixture
 
 import (
 	"context"
+	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
+	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
 	"testing"
 
 	"github.com/lycaon/lycaon/config"
@@ -35,18 +37,18 @@ func NewPersistTestServer(t *testing.T) (*api.Server, wire.Session, workflow.Ses
 	agents := orchestration.NewMemoryAgentRegistry()
 	_ = orchestration.LoadRequiredAgentRegistry(t.Context(), agents)
 	sessionStore := workflow.NewMemorySessionWorkflowStore()
-	policy, err := workflow.LoadComposePolicy()
-	testutil.FailErr(t, "workflow.LoadComposePolicy failed", err)
-	templates, err := workflow.LoadTemplatesFromDir(extpacks.Bundled(config.PlatformFlows.Join("_templates")))
+	policy, err := workflowcomposition.LoadComposePolicy()
+	testutil.FailErr(t, "workflowcomposition.LoadComposePolicy failed", err)
+	templates, err := workflowcomposition.LoadTemplatesFromDir(extpacks.Bundled(config.PlatformFlows.Join("_templates")))
 	testutil.FailErr(t, "load workflow templates", err)
-	composer := &workflow.Composer{
+	composer := &workflowcomposition.Composer{
 		SessionStore: sessionStore,
 		Registry:     reg,
 		Agents:       agents,
 		Policy:       policy,
 		Templates:    templates,
 	}
-	persister := &workflow.Persister{
+	persister := &workflowcomposition.Persister{
 		SessionStore: sessionStore,
 		Registry:     reg,
 		Agents:       agents,
@@ -54,7 +56,7 @@ func NewPersistTestServer(t *testing.T) (*api.Server, wire.Session, workflow.Ses
 	}
 	srv := api.NewServer(RequiredTestDeps(t, api.Dependencies{Core: api.CoreDependencies{
 		Store: store, Projects: projReg}, Workflow: api.WorkflowDependencies{
-		WorkflowCatalog: workflow.ManifestResolver{
+		WorkflowCatalog: workflowcatalog.Resolver{
 			SessionStore:       sessionStore,
 			ProjectTierApplies: func(context.Context, string) bool { return true },
 		},

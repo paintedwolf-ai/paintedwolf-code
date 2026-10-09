@@ -17,16 +17,19 @@ import (
 	"github.com/lycaon/lycaon/internal/visual"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workflow"
+	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
+	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 )
 
 // Deps are the workflow routes' dependencies, fixed at construction.
 type Deps struct {
 	Workflows *workflow.RunManager
 	// Catalog and Runs back workflow discovery and session run history.
-	Catalog        workflow.ManifestResolver
-	Runs           workflow.RunStore
-	Composer       *workflow.Composer
-	Persister      *workflow.Persister
+	Catalog        workflowcatalog.Resolver
+	Runs           *runstate.Repository
+	Composer       *workflowcomposition.Composer
+	Persister      *workflowcomposition.Persister
 	Blueprints     *blueprint.Manager
 	Orchestrator   orchestration.Orchestrator
 	EventPublisher *events.Publisher
@@ -34,7 +37,7 @@ type Deps struct {
 	Projects       project.Registry
 	Scans          scan.ScanCoordinator
 	Store          session.Store
-	Sessions       *session.Manager
+	Sessions       *session.Host
 	VisualStore    visual.Store
 	Workers        worker.WorkerQueue
 	SessionAdmin   *sessionadmin.Handler
@@ -52,9 +55,9 @@ type Handler struct {
 type BlueprintRoutes struct {
 	RunControl   *RunControl
 	Blueprints   *blueprint.Manager
-	Catalog      workflow.ManifestResolver
+	Catalog      workflowcatalog.Resolver
 	Projects     project.Registry
-	Runs         workflow.RunStore
+	Runs         *runstate.Repository
 	SessionAdmin *sessionadmin.Lifecycle
 	Topology     *Topology
 	Workflows    *workflow.RunManager
@@ -62,11 +65,11 @@ type BlueprintRoutes struct {
 }
 
 type Composition struct {
-	Composer       *workflow.Composer
+	Composer       *workflowcomposition.Composer
 	EventPublisher *events.Publisher
-	Persister      *workflow.Persister
+	Persister      *workflowcomposition.Persister
 	SessionView    *sessionview.Projector
-	Sessions       *session.Manager
+	Sessions       *session.Host
 	Store          session.Store
 	responses      *httpio.Responder
 }
@@ -74,7 +77,7 @@ type Composition struct {
 type Reports struct {
 	RunControl  *RunControl
 	Projects    project.Registry
-	Runs        workflow.RunStore
+	Runs        *runstate.Repository
 	Scans       scan.ScanCoordinator
 	Store       session.Store
 	VisualStore visual.Store
@@ -84,12 +87,12 @@ type Reports struct {
 }
 
 type RunControl struct {
-	Catalog        workflow.ManifestResolver
+	Catalog        workflowcatalog.Resolver
 	ManagedSecrets *secretcap.Service
 	Projects       project.Registry
-	Runs           workflow.RunStore
+	Runs           *runstate.Repository
 	SessionView    *sessionview.Projector
-	Sessions       *session.Manager
+	Sessions       *session.Host
 	Store          session.Store
 	Topology       *Topology
 	Workflows      *workflow.RunManager
@@ -98,7 +101,7 @@ type RunControl struct {
 
 type Topology struct {
 	Orchestrator       orchestration.Orchestrator
-	Runs               workflow.RunStore
+	Runs               *runstate.Repository
 	Store              session.Store
 	activeTopologyRuns sync.Map // workflow run id → struct{} while topology settlement is executing
 	background         *taskgroup.Group

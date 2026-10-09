@@ -20,7 +20,7 @@ type Deps struct {
 	Power    *hostpower.Controller
 	Events   events.ReplayHub
 	Projects project.Registry
-	Sessions *session.Manager
+	Sessions *session.Host
 	Service  *settings.Service
 	Sources  *sourceapi.Handler
 }

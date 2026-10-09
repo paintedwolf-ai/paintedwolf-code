@@ -61,7 +61,7 @@ func (s *Topology) RecoverOrchestratedTopologies(ctx context.Context) error {
 	if s.Orchestrator == nil {
 		return nil
 	}
-	runs, err := s.Runs.ListRunning(ctx)
+	runs, err := s.Runs.Runs.ListRunning(ctx)
 	if err != nil {
 		return fmt.Errorf("list running workflow topologies: %w", err)
 	}

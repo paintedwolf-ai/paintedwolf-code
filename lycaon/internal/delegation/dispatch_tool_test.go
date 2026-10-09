@@ -24,7 +24,7 @@ func TestDispatchNoDuplicateNextStep(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 	projectID := seedDelegationProject(t, regProj, dir)
-	sess, err := sessMgr.CreateForProject(ctx, projectID, api.SessionPostureOrchestrate)
+	sess, err := sessMgr.Chats.CreateForProject(ctx, projectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "CreateForProject", err)
 	leg := api.Leg{ID: "leg-1", Title: "implement", Prompt: "do work", Files: []string{"src/**"}}
 	delegation := api.Delegation{ProjectID: projectID, WorkspacePath: dir, Task: "do work"}

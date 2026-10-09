@@ -25,14 +25,14 @@ func TestBuildForTestComposition(t *testing.T) {
 	if h.Server == nil || h.SessionMgr == nil || h.WorkflowMgr == nil || h.DB == nil || h.ToolRegistry == nil {
 		t.Fatalf("incomplete harness composition: %+v", h)
 	}
-	if h.SessionMgr.PromptToolPolicy() == nil {
+	if h.SessionMgr.Coordinator.Guards.Policy() == nil {
 		t.Fatal("rule engine required for posture-aware prompts")
 	}
 	if h.Recording == nil {
 		t.Fatal("recording client required")
 	}
-	got, err := h.WorkflowMgr.Manifests.Get(manifest.ID, manifest.Version)
-	testutil.FailErr(t, "h.WorkflowMgr.Manifests.Get failed", err)
+	got, err := h.WorkflowMgr.Resolver.Overlay.Get(manifest.ID, manifest.Version)
+	testutil.FailErr(t, "h.WorkflowMgr.Resolver.Overlay.Get failed", err)
 	if got.ID != manifest.ID {
 		t.Fatalf("manifest = %+v", got)
 	}

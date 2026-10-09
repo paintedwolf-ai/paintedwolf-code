@@ -9,8 +9,8 @@ import (
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/findings"
 	"github.com/lycaon/lycaon/internal/progress"
-	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
+	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -31,7 +31,7 @@ func (s *Bootstrap) HandleSessionBootstrap(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	s.SessionView.EnrichSession(r.Context(), sess)
-	transcript, err := s.Sessions.GetTranscriptPage(r.Context(), id, wire.TranscriptPageQuery{})
+	transcript, err := s.Sessions.Runner.Transcript.GetTranscriptPage(r.Context(), id, wire.TranscriptPageQuery{})
 	if err != nil {
 		s.responses.InternalError(w, r, err)
 		return
@@ -39,20 +39,20 @@ func (s *Bootstrap) HandleSessionBootstrap(w http.ResponseWriter, r *http.Reques
 	if transcript.Messages == nil {
 		transcript.Messages = []wire.Message{}
 	}
-	root := session.RootSessionID(r.Context(), s.Store, id)
+	root := sessiontree.RootID(r.Context(), s.Store, id)
 	progressContent := ""
 	if s.ProgressStore != nil {
 		progressContent = s.ProgressStore.Get(r.Context(), root)
 	}
 	progressDigest := progress.BuildDigest(progressContent, root)
-	rows, err := s.Sessions.ListFindings(r.Context(), root, findings.DefaultListCap)
+	rows, err := s.Sessions.Workers.Notes.ListFindings(r.Context(), root, findings.DefaultListCap)
 	if err != nil {
 		s.responses.InternalError(w, r, err)
 		return
 	}
 	findingsDigest := findings.BuildDigestFromRows(rows, root)
-	queue := s.Sessions.QueueSnapshot(id)
-	coordinator, _ := s.Sessions.CoordinatorRunContext(r.Context(), id)
+	queue := s.Sessions.Chats.Drafts.Snapshot(id)
+	coordinator, _ := s.Sessions.Coordinator.Context.RunContext(r.Context(), id)
 	workers, checkpoints, err := s.sessionBootstrapWorkersAndCheckpoints(
 		r.Context(), sess.ProjectID, id,
 	)
@@ -72,7 +72,7 @@ func (s *Bootstrap) HandleSessionBootstrap(w http.ResponseWriter, r *http.Reques
 		EventCursor: eventCursor,
 		Activities:  s.EventPublisher.SessionActivities(id),
 		Session:     *sess, Transcript: transcript,
-		Progress: progressDigest, TurnClock: s.Sessions.TurnClock(r.Context(), root), Findings: findingsDigest, Queue: queue,
+		Progress: progressDigest, TurnClock: s.Sessions.Runner.Clocks.Read(r.Context(), root), Findings: findingsDigest, Queue: queue,
 		Coordinator: coordinator, Workers: workers, Checkpoints: checkpoints,
 		BackgroundOutputs: background, Previews: previews,
 	})
@@ -102,7 +102,7 @@ func (s *Bootstrap) sessionBootstrapWorkersAndCheckpoints(
 }
 
 func (s *Bootstrap) sessionBackgroundOutputs(ctx context.Context, sessionID string) []wire.BackgroundProcessOutput {
-	processes := s.Sessions.ListBackgroundProcesses(ctx, sessionID)
+	processes := s.Sessions.Processes.ListBackgroundProcesses(ctx, sessionID)
 	out := make([]wire.BackgroundProcessOutput, 0, len(processes))
 	for _, process := range processes {
 		if process.Output != nil {

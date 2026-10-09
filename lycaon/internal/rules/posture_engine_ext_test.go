@@ -6,7 +6,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/rules"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -149,11 +149,11 @@ func TestPostureEngineEachRulesFileDenyRuleReachable(t *testing.T) {
 
 func newBundledPostureEngine(t *testing.T) *rules.PostureRuleEngine {
 	t.Helper()
-	postures, err := session.LoadPostureRegistry()
-	testutil.FailErr(t, "session.LoadPostureRegistry failed", err)
+	postures, err := profiles.LoadPostureRegistry()
+	testutil.FailErr(t, "profiles.LoadPostureRegistry failed", err)
 	packs, err := rules.LoadBundledRules()
 	testutil.FailErr(t, "rules.LoadBundledRules failed", err)
-	if err := rules.ValidatePostureRules(postures, session.AllSessionPostures(), packs); err != nil {
+	if err := rules.ValidatePostureRules(postures, profiles.AllSessionPostures(), packs); err != nil {
 		testutil.FailErr(t, "rules.ValidatePostureRules failed", err)
 	}
 	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{})

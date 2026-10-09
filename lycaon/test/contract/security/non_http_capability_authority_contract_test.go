@@ -2,6 +2,7 @@ package contract
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -113,24 +114,24 @@ func TestNonHTTPContractTypedAuthResolvesOnlyMatchingSubstrate(t *testing.T) {
 	approvals := settings.NewRuleApprovalGate(store, settings.NoSources())
 
 	socketOnly := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-Args: map[string]any{"command": "true"},
-},
-Scope: hitl.ActionScope{
-ProjectDir: proj,
-},
-Execution: hitl.ActionExecution{
-Contained: hitl.Contained{
-			FSJailed: true, Egress: hitl.ContainedEgressProxy, Roots: []string{proj},
-			SocketPathsDigest: digest, SocketCount: 1,
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+			Args: map[string]any{"command": "true"},
 		},
-},
-Sockets: hitl.ActionSockets{
-SocketGrants: []confine.SocketGrant{g},
-AuthorizedSocketDigests: []string{digest},
-},
-}
+		Scope: hitl.ActionScope{
+			ProjectDir: proj,
+		},
+		Execution: hitl.ActionExecution{
+			Contained: hitl.Contained{
+				FSJailed: true, Egress: hitl.ContainedEgressProxy, Roots: []string{proj},
+				SocketPathsDigest: digest, SocketCount: 1,
+			},
+		},
+		Sockets: hitl.ActionSockets{
+			SocketGrants:            []confine.SocketGrant{g},
+			AuthorizedSocketDigests: []string{digest},
+		},
+	}
 	res, err := approvals.Evaluate(context.Background(), socketOnly)
 	contractcheck.FailErr(t, "evaluate authorized socket", err)
 	if !res.AutoApproved() {
@@ -146,19 +147,19 @@ AuthorizedSocketDigests: []string{digest},
 	}
 
 	direct := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-Args: map[string]any{"command": "true"},
-},
-Scope: hitl.ActionScope{
-ProjectDir: proj,
-},
-Execution: hitl.ActionExecution{
-Contained: hitl.Contained{
-			FSJailed: true, Egress: hitl.ContainedEgressDirectIP, DirectIP: true, Roots: []string{proj},
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+			Args: map[string]any{"command": "true"},
 		},
-},
-}
+		Scope: hitl.ActionScope{
+			ProjectDir: proj,
+		},
+		Execution: hitl.ActionExecution{
+			Contained: hitl.Contained{
+				FSJailed: true, Egress: hitl.ContainedEgressDirectIP, DirectIP: true, Roots: []string{proj},
+			},
+		},
+	}
 	res, err = approvals.Evaluate(context.Background(), direct)
 	contractcheck.FailErr(t, "evaluate direct ip", err)
 	if res.Gate() != api.GateUnobservedChannel {

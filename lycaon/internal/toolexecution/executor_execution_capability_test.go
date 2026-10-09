@@ -56,19 +56,11 @@ func TestExecutionCapabilityAsksBeforeSpawnAndConsumesOnce(t *testing.T) {
 			}))
 			executor := toolexecution.NewExecutor(toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), gate), registry, "implement")
 			manager := &asyncHITL{requested: make(chan struct{}, 4)}
-			executor.Approvals.SetCheckpointManager(manager, gate)
+			executor.SetCheckpointManager(manager, gate)
 			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 			defer cancel()
 			done := make(chan error, 1)
-			tc := tools.ToolContext{
-				Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}},
-					ActiveRootID: "root",
-					WorkerCoord:  executionWorkerBranch{root: branch}},
-				Identity: tools.InvocationIdentity{WorkerJobID: "worker",
-					SessionID:  "task",
-					ToolCallID: "call",
-					Agent:      "implement"},
-			}
+			tc := tools.ToolContext{Identity: tools.InvocationIdentity{WorkerJobID: "worker", SessionID: "task", ToolCallID: "call", Agent: "implement"}, Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}}, ActiveRootID: "root", WorkerCoord: executionWorkerBranch{root: branch}}}
 			go func() {
 				_, err := executor.Invoke(ctx, "command", map[string]any{"command": "sudo -n /usr/bin/id", "capability_request": map[string]any{capability: true}}, tc)
 				done <- err
@@ -130,7 +122,7 @@ type executionWorkerBranch struct {
 	root string
 }
 
-func (b executionWorkerBranch) EnsureWorkerBranch(_ context.Context, tc tools.ToolContext) (tools.ToolContext, error) {
+func (b executionWorkerBranch) EnsureBranch(_ context.Context, tc tools.ToolContext) (tools.ToolContext, error) {
 	tc.Source.WorkerBranchRoot = b.root
 	return tc, nil
 }
@@ -160,18 +152,10 @@ func TestCapabilityCardAndExecutionShareTheBranchExpandedArgv(t *testing.T) {
 	}))
 	executor := toolexecution.NewExecutor(toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), gate), registry, "implement")
 	manager := &asyncHITL{requested: make(chan struct{}, 4)}
-	executor.Approvals.SetCheckpointManager(manager, gate)
+	executor.SetCheckpointManager(manager, gate)
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
-	tc := tools.ToolContext{
-		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}},
-			ActiveRootID: "root",
-			WorkerCoord:  executionWorkerBranch{root: branch}},
-		Identity: tools.InvocationIdentity{WorkerJobID: "worker",
-			SessionID:  "task",
-			ToolCallID: "call",
-			Agent:      "implement"},
-	}
+	tc := tools.ToolContext{Identity: tools.InvocationIdentity{WorkerJobID: "worker", SessionID: "task", ToolCallID: "call", Agent: "implement"}, Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}}, ActiveRootID: "root", WorkerCoord: executionWorkerBranch{root: branch}}}
 	done := make(chan error, 1)
 	go func() {
 		_, err := executor.Invoke(ctx, "command", map[string]any{"command": "ls *.txt", "capability_request": map[string]any{"host_execution": true}}, tc)

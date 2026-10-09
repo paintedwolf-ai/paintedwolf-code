@@ -22,7 +22,7 @@ func (s *Lifecycle) AttachAmbientOnSessionCreate(ctx context.Context, req wire.C
 	if err != nil {
 		return fmt.Errorf("attach ambient workflow: resolve default: %w", err)
 	}
-	run, err := s.Workflows.StartAmbient(ctx, sessionID, ref.ID, ref.Version)
+	run, err := s.Workflows.Ambient.StartAmbient(ctx, sessionID, ref.ID, ref.Version)
 	if err != nil {
 		return fmt.Errorf("attach ambient workflow %s@%s: %w", ref.ID, ref.Version, err)
 	}

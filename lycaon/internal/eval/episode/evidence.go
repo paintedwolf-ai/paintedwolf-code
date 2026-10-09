@@ -13,7 +13,8 @@ import (
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/worker"
-	"github.com/lycaon/lycaon/internal/workflow"
+	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -41,7 +42,7 @@ type Session struct {
 	Messages    []api.Message             `json:"messages"`
 	Invocations []api.InvocationReceipt   `json:"invocations"`
 	Checkpoints []api.CheckpointEvent     `json:"checkpoints"`
-	Verdicts    []workflow.VerdictReceipt `json:"verdicts"`
+	Verdicts    []runstate.VerdictReceipt `json:"verdicts"`
 	Workflows   []api.WorkflowRun         `json:"workflows"`
 }
 
@@ -138,9 +139,9 @@ func readSession(ctx context.Context, database *sql.DB, id, projectID string) (S
 	if err != nil {
 		return result, err
 	}
-	result.Verdicts = []workflow.VerdictReceipt{}
+	result.Verdicts = []runstate.VerdictReceipt{}
 	for _, run := range result.Workflows {
-		receipts, err := workflow.NewSQLStore(database).ReadVerdictReceipts(ctx, run.ID)
+		receipts, err := workflowpersistence.New(database).Verdicts.ReadVerdictReceipts(ctx, run.ID)
 		if err != nil {
 			return result, err
 		}

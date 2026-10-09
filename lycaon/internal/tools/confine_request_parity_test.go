@@ -25,7 +25,8 @@ func (parityDirectIPRuntime) ConsumePermit(string, string, string, string, strin
 }
 func (parityDirectIPRuntime) Authorized(string, string, string) bool      { return true }
 func (parityDirectIPRuntime) LeaseCovers(string, hitl.DirectIPLease) bool { return false }
-func (parityDirectIPRuntime) GrantChat(string, hitl.DirectIPLease, string, string, *time.Time) {
+func (parityDirectIPRuntime) GrantChat(string, hitl.DirectIPLease, string, string, *time.Time) bool {
+	return true
 }
 
 // Checks that the gate Contained fact matches the confine.Request applied by the executor spawn path.

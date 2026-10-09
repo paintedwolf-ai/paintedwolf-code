@@ -31,7 +31,7 @@ func TestWorkerCancellationCoversEveryActiveState(t *testing.T) {
 						queue = q
 					} else {
 						q := NewInMemoryQueue(1)
-						q.SetWorkflowRunChecker(allowAllWorkflowRuns{})
+						q.SetWorkflowDomains(&WorkflowDomains{Runs: allowAllWorkflowRuns{}, Tasks: allowAllWorkflowRuns{}})
 						q.SetRunningCancel(onCancel)
 						queue = q
 					}

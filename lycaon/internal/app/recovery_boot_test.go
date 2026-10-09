@@ -4,7 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"fmt"
+	"github.com/lycaon/lycaon/internal/app/configuration"
+	"github.com/lycaon/lycaon/internal/configlayout"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -12,7 +13,6 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/backup"
-	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/testbackup"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -29,7 +29,7 @@ func prepareRecoveryStore(t *testing.T, dbPath string) {
 }
 
 // recoveryTestConfig uses store.db — staged restores replace that relative path.
-func recoveryTestConfig(t *testing.T) Config {
+func recoveryTestConfig(t *testing.T) configuration.Config {
 	t.Helper()
 	cfg := testBuildConfig(t, configlayout.FindModuleRoot())
 	cfg.DBPath = filepath.Join(t.TempDir(), "store.db")
@@ -70,7 +70,7 @@ func TestBuildRecoveryModeOnIntegrityFailure(t *testing.T) {
 	testutil.FailErr(t, "Build recovery", err)
 	t.Cleanup(func() { _ = app.Close() })
 
-	if app.SessionMgr != nil || app.CoordinatorRuntime != nil {
+	if app.Sessions != nil || app.CoordinatorRuntime != nil {
 		t.Fatal("recovery ServeApp must not wire session or coordinator")
 	}
 
@@ -103,7 +103,7 @@ func TestBuildEmptyStoreWithoutRecoveryArtifactsBootsNormally(t *testing.T) {
 	app, err := Build(t.Context(), cfg)
 	testutil.FailErr(t, "Build fresh store", err)
 	t.Cleanup(func() { _ = app.Close() })
-	if app.SessionMgr == nil || app.CoordinatorRuntime == nil {
+	if app.Sessions == nil || app.CoordinatorRuntime == nil {
 		t.Fatal("fresh store must build the normal app")
 	}
 	body := getHealth(t, app.Server)
@@ -123,7 +123,7 @@ func TestBuildRecoveryModePreservesSchemaMismatch(t *testing.T) {
 	cfg := recoveryTestConfig(t)
 	sqlDB, err := db.Open(cfg.DBPath)
 	testutil.FailErr(t, "seed Open", err)
-	_, err = sqlDB.ExecContext(t.Context(), fmt.Sprintf(`PRAGMA user_version = %d`, db.SchemaVersion+1))
+	_, err = sqlDB.ExecContext(t.Context(), `PRAGMA user_version = 2`)
 	testutil.FailErr(t, "change baseline marker", err)
 	testutil.FailErr(t, "close seed store", sqlDB.Close())
 
@@ -135,7 +135,7 @@ func TestBuildRecoveryModePreservesSchemaMismatch(t *testing.T) {
 	if body["recovery_reason"] != "schema_mismatch" {
 		t.Fatalf("recovery_reason = %v", body["recovery_reason"])
 	}
-	if int(body["store_schema_version"].(float64)) != db.SchemaVersion+1 {
+	if int(body["store_schema_version"].(float64)) != 2 {
 		t.Fatalf("store_schema_version = %v", body["store_schema_version"])
 	}
 	store, err := db.OpenReadOnly(t.Context(), cfg.DBPath)
@@ -143,7 +143,7 @@ func TestBuildRecoveryModePreservesSchemaMismatch(t *testing.T) {
 	version, err := db.ReadUserVersion(t.Context(), store)
 	testutil.FailErr(t, "read preserved baseline marker", err)
 	testutil.FailErr(t, "close preserved store", store.Close())
-	if version != db.SchemaVersion+1 {
+	if version != 2 {
 		t.Fatalf("user_version = %d want preserved mismatch 2", version)
 	}
 }
@@ -310,7 +310,7 @@ func TestRecoveryRestoreRoundTrip(t *testing.T) {
 	app2, err := Build(t.Context(), cfg)
 	testutil.FailErr(t, "Build after restore", err)
 	t.Cleanup(func() { _ = app2.Close() })
-	if app2.SessionMgr == nil {
+	if app2.Sessions == nil {
 		t.Fatal("expected normal ServeApp after restore apply")
 	}
 	body := getHealth(t, app2.Server)

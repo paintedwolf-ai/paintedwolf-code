@@ -6,7 +6,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
-	"github.com/lycaon/lycaon/internal/session"
+	sessionobservation "github.com/lycaon/lycaon/internal/session/observation"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -18,7 +18,7 @@ func (s *HarnessPreparation) harnessRequestRejected(w http.ResponseWriter, r *ht
 }
 
 func (s *HarnessPreparation) handleHarnessExecution(w http.ResponseWriter, r *http.Request) {
-	observation, err := s.sessions.ObserveExecution(r.Context(), chi.URLParam(r, "sessionID"), chi.URLParam(r, "submissionID"))
+	observation, err := s.sessions.Observations.Observe(r.Context(), chi.URLParam(r, "sessionID"), chi.URLParam(r, "submissionID"))
 	if err != nil {
 		s.harnessRequestRejected(w, r, "the execution could not be observed", err)
 		return
@@ -52,15 +52,15 @@ func (s *HarnessPreparation) handleHarnessModelLimit(w http.ResponseWriter, r *h
 
 func (s *HarnessPreparation) handleHarnessWorkflowExecution(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "sessionID")
-	run, err := s.Workflow.Get(r.Context(), chi.URLParam(r, "runID"))
+	run, err := s.Workflow.Store.Runs.Get(r.Context(), chi.URLParam(r, "runID"))
 	if err != nil || run == nil || run.SessionID != sessionID {
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "workflow does not belong to session")
 		return
 	}
-	observation, err := s.sessions.ObserveExecutionTree(r.Context(), sessionID)
+	observation, err := s.sessions.Observations.Tree(r.Context(), sessionID)
 	if err != nil {
 		s.harnessRequestRejected(w, r, "the workflow execution could not be observed", err)
 		return
 	}
-	httpio.WriteJSON(w, http.StatusOK, session.WorkflowExecutionObservation{Run: *run, Execution: observation})
+	httpio.WriteJSON(w, http.StatusOK, sessionobservation.WorkflowExecutionObservation{Run: *run, Execution: observation})
 }

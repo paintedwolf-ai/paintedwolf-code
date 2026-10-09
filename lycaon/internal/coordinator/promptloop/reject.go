@@ -21,12 +21,12 @@ import (
 
 // maybeCoerceCloseoutContent stores a report surface's draft as its envelope
 // and returns the members of it the report did not take.
-func (l toolInvocations) maybeCoerceCloseoutContent(
+func (l *toolInvocations) maybeCoerceCloseoutContent(
 	ctx context.Context,
 	history []api.Message,
 	sessionID, surfaceID, content, assistantMessageID string,
 ) (string, []jsonshape.Issue) {
-	pinned := turnCloseout(l).pinnedCloseoutSynthesis(ctx, sessionID)
+	pinned := l.Closeout.pinnedCloseoutSynthesis(ctx, sessionID)
 	prepared, read, ok := guard.PrepareCoordinatorCloseoutContent(surfaceID, content, pinned)
 	if !ok {
 		return content, nil
@@ -41,7 +41,7 @@ func (l toolInvocations) maybeCoerceCloseoutContent(
 	return prepared, read.Unread
 }
 
-func (l toolInvocations) tryRejectNoToolTurn(
+func (l *toolInvocations) tryRejectNoToolTurn(
 	ctx context.Context,
 	sess *api.Session,
 	history []api.Message,
@@ -54,15 +54,15 @@ func (l toolInvocations) tryRejectNoToolTurn(
 	st *promptLoopTurnState,
 	invokeAllowed bool,
 ) (hist []api.Message, reject *guidance.Refusal, blocked bool, err error) {
-	if l.Deps.BeforeFinishNoToolTurn == nil {
+	if l.Closeout.Deps.BeforeFinishNoToolTurn == nil {
 		return history, nil, false, nil
 	}
 	workersIdle := true
-	if l.Deps.ImplementSessionState != nil {
-		state := l.Deps.ImplementSessionState(ctx, sess)
+	if l.Context.Deps.ImplementSessionState != nil {
+		state := l.Context.Deps.ImplementSessionState(ctx, sess)
 		workersIdle = state.WorkersInFlight == 0
 	}
-	reject, block := l.Deps.BeforeFinishNoToolTurn(ctx, sess, history, userPrompt, lastAssistantContent, surfaceID, workersIdle, turnTools, invokeAllowed)
+	reject, block := l.Closeout.Deps.BeforeFinishNoToolTurn(ctx, sess, history, userPrompt, lastAssistantContent, surfaceID, workersIdle, turnTools, invokeAllowed)
 	if !block {
 		return history, nil, false, nil
 	}
@@ -79,7 +79,7 @@ func (l toolInvocations) tryRejectNoToolTurn(
 
 // rejectBlockedAssistantTurn removes rejected assistant prose from the transcript
 // and appends one guidance nudge for the model to read and retry.
-func (l toolInvocations) rejectBlockedAssistantTurn(
+func (l *toolInvocations) rejectBlockedAssistantTurn(
 	ctx context.Context,
 	sessionID string,
 	history []api.Message,
@@ -92,13 +92,13 @@ func (l toolInvocations) rejectBlockedAssistantTurn(
 	if err != nil {
 		return nil, err
 	}
-	return turnNudges(l).appendHostNudge(ctx, sessionID, history, HostNudge{
+	return l.Nudges.appendHostNudge(ctx, sessionID, history, HostNudge{
 		Content:  reject.Body,
 		Feedback: &api.ToolFeedback{Code: reject.Code(), Details: reject.Facts.FeedbackFor(reject.Code()).Details},
 	}, "", st)
 }
 
-func (l toolInvocations) retractRejectedAssistantTurn(
+func (l *toolInvocations) retractRejectedAssistantTurn(
 	ctx context.Context,
 	sessionID string,
 	history []api.Message,
@@ -118,29 +118,29 @@ func (l toolInvocations) retractRejectedAssistantTurn(
 		}
 	}
 	// Save the rejected body before retracting its transcript row.
-	if l.Deps.AppendDraftVersion == nil {
+	if l.Projection.Deps.AppendDraftVersion == nil {
 		return nil, fmt.Errorf("append draft version not configured")
 	}
-	if _, err := l.Deps.AppendDraftVersion(ctx, sessionID, assistantMessageID, rejectedBody, reject.Code()); err != nil {
+	if _, err := l.Projection.Deps.AppendDraftVersion(ctx, sessionID, assistantMessageID, rejectedBody, reject.Code()); err != nil {
 		return nil, err
 	}
 	if draftSlotID != "" && assistantMessageID == draftSlotID {
-		if l.Deps.UpdateMessage != nil {
+		if l.Projection.Deps.UpdateMessage != nil {
 			// Retain the rejected draft until the retry supplies replacement content.
 			reset := newProvisionalAssistantMessage(api.Message{
 				ID:          draftSlotID,
 				Content:     rejectedBody,
 				DraftStatus: api.DraftStatusLive,
 			})
-			if err := turnNudges(l).stampDraftVersionCount(ctx, sessionID, &reset); err != nil {
+			if err := l.Nudges.stampDraftVersionCount(ctx, sessionID, &reset); err != nil {
 				return nil, err
 			}
-			if err := l.Deps.UpdateMessage(ctx, sessionID, draftSlotID, reset); err != nil {
+			if err := l.Projection.Deps.UpdateMessage(ctx, sessionID, draftSlotID, reset); err != nil {
 				return nil, err
 			}
 		}
 	} else {
-		if l.Deps.UpdateMessage == nil {
+		if l.Projection.Deps.UpdateMessage == nil {
 			return nil, fmt.Errorf("update message not configured")
 		}
 		patch := newProvisionalAssistantMessage(api.Message{
@@ -148,7 +148,7 @@ func (l toolInvocations) retractRejectedAssistantTurn(
 			Content:     rejectedBody,
 			DraftStatus: api.DraftStatusRejected,
 		})
-		if err := l.Deps.UpdateMessage(ctx, sessionID, assistantMessageID, patch); err != nil {
+		if err := l.Projection.Deps.UpdateMessage(ctx, sessionID, assistantMessageID, patch); err != nil {
 			return nil, err
 		}
 	}
@@ -162,7 +162,7 @@ func (l toolInvocations) retractRejectedAssistantTurn(
 }
 
 // Intrinsic refusals retain occurrence identity and the offered recovery surface.
-func (l toolInvocations) rejectToolOccurrence(ctx context.Context, sess *api.Session, tc api.ToolCall, toolCtx tools.ToolContext, code string, data map[string]any) *guidance.Refusal {
+func (l *toolInvocations) rejectToolOccurrence(ctx context.Context, sess *api.Session, tc api.ToolCall, toolCtx tools.ToolContext, code string, data map[string]any) *guidance.Refusal {
 	ctx = tools.WithRecoveryTools(ctx, toolCtx.Turn.TurnOfferedToolNames)
 	ctx = curationctx.WithSession(ctx, curationctx.Session{SessionID: sess.ID, ProjectID: sess.ProjectID, OwnerPersonID: sess.OwnerPersonID, Posture: string(sess.Posture), Agent: toolCtx.Identity.Agent})
 	data = maps.Clone(data)
@@ -184,7 +184,7 @@ func (l toolInvocations) rejectToolOccurrence(ctx context.Context, sess *api.Ses
 	}
 	err := l.Deps.BlockPlane.RejectObservation(ctx, tc.Name, toolCtx.Identity.Agent, tc.Args, tr)
 	if err == nil {
-		err = toolrejection.RenderReject(tr, l.Deps.RejectFmt)
+		err = toolrejection.RenderReject(tr, l.Closeout.Deps.RejectFmt)
 	}
 	if refusal, ok := guidance.RefusalFromError(err); ok {
 		return refusal
@@ -193,9 +193,9 @@ func (l toolInvocations) rejectToolOccurrence(ctx context.Context, sess *api.Ses
 }
 
 // toolReject renders a refusal with a structured code.
-func (l toolInvocations) toolReject(code string, data map[string]any) *guidance.Refusal {
-	if l.Deps.RejectFmt != nil {
-		if formatted, err := l.Deps.RejectFmt.Format(code, data); err == nil && strings.TrimSpace(formatted) != "" {
+func (l *toolInvocations) toolReject(code string, data map[string]any) *guidance.Refusal {
+	if l.Closeout.Deps.RejectFmt != nil {
+		if formatted, err := l.Closeout.Deps.RejectFmt.Format(code, data); err == nil && strings.TrimSpace(formatted) != "" {
 			return guidance.NewRefusal(code, formatted).WithDetails(data, nil)
 		}
 	}
@@ -203,7 +203,7 @@ func (l toolInvocations) toolReject(code string, data map[string]any) *guidance.
 }
 
 // toolRejectMessage builds a rejected tool row. Outcome is rejected by construction.
-func (l toolInvocations) toolRejectMessage(toolName, toolCallID, assistantMessageID string, toolArgs map[string]any, reject *guidance.Refusal) api.Message {
+func (l *toolInvocations) toolRejectMessage(toolName, toolCallID, assistantMessageID string, toolArgs map[string]any, reject *guidance.Refusal) api.Message {
 	facts := guidance.ToolResultFacts{}
 	content := ""
 	if reject != nil {
@@ -215,8 +215,8 @@ func (l toolInvocations) toolRejectMessage(toolName, toolCallID, assistantMessag
 }
 
 // toolResultMessage builds a host-authored tool row with its stated outcome.
-func (l toolInvocations) toolResultMessage(toolName, toolCallID, assistantMessageID string, toolArgs map[string]any, content string, facts guidance.ToolResultFacts) api.Message {
-	toolResult := guidance.ComposeToolResult(content, facts, l.Deps.HintConfig)
+func (l *toolInvocations) toolResultMessage(toolName, toolCallID, assistantMessageID string, toolArgs map[string]any, content string, facts guidance.ToolResultFacts) api.Message {
+	toolResult := guidance.ComposeToolResult(content, facts, l.Closeout.Deps.HintConfig)
 	if toolResult == nil {
 		toolResult = &api.ToolResult{Content: content, Outcome: facts.Resolution()}
 	}
@@ -233,7 +233,7 @@ func (l toolInvocations) toolResultMessage(toolName, toolCallID, assistantMessag
 	}
 }
 
-func (l toolInvocations) appendInFlightWorkerRosterNote(
+func (l *toolInvocations) appendInFlightWorkerRosterNote(
 	ctx context.Context,
 	sessionID string,
 	sess *api.Session,
@@ -261,8 +261,8 @@ func (l toolInvocations) appendInFlightWorkerRosterNote(
 			result.Codes, result.Feedback = facts.Codes, facts.Feedback
 			history[i].ToolResult = &result
 		}
-		if l.Deps.UpdateMessage != nil {
-			return l.Deps.UpdateMessage(ctx, sessionID, lastTaskMessageID, history[i])
+		if l.Projection.Deps.UpdateMessage != nil {
+			return l.Projection.Deps.UpdateMessage(ctx, sessionID, lastTaskMessageID, history[i])
 		}
 		break
 	}
@@ -281,21 +281,21 @@ func taskSpawnCommitted(toolName string, result *api.ToolResult, succeeded bool)
 	return result != nil && result.Outcome == api.ToolResultOutcomeCompleted && result.Dispatch != nil && strings.TrimSpace(result.Dispatch.WorkerID) != ""
 }
 
-func (l toolInvocations) overlayIntegrateRejectEndsToolLoop(
+func (l *toolInvocations) overlayIntegrateRejectEndsToolLoop(
 	ctx context.Context,
 	sess *api.Session,
 	sessionID string,
 	rejectCode string,
 ) bool {
-	if l.Deps.ImplementSessionState == nil {
+	if l.Context.Deps.ImplementSessionState == nil {
 		return false
 	}
-	state := l.Deps.ImplementSessionState(ctx, sess)
+	state := l.Context.Deps.ImplementSessionState(ctx, sess)
 	if !guard.OverlayIntegrateRejectEndsToolLoop(rejectCode, state) {
 		return false
 	}
-	if l.Deps.ReconcileCoordinatorBatch != nil {
-		l.Deps.ReconcileCoordinatorBatch(ctx, sessionID)
+	if l.Control.Deps.ReconcileCoordinatorBatch != nil {
+		l.Control.Deps.ReconcileCoordinatorBatch(ctx, sessionID)
 	}
 	return true
 }

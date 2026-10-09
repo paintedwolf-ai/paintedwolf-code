@@ -1,6 +1,7 @@
 package contract
 
 import (
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 	"testing"
 

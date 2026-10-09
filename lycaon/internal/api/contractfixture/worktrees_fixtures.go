@@ -115,7 +115,7 @@ func MustGitOutput(t *testing.T, dir string, args ...string) []byte {
 	return []byte(gittest.Run(t, dir, args...))
 }
 
-func NewWorktreeTestServer(t *testing.T, opts ...TestDeps) (*hostapi.Server, *session.Manager, string) {
+func NewWorktreeTestServer(t *testing.T, opts ...TestDeps) (*hostapi.Server, *session.Host, string) {
 	t.Helper()
 	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	dir := InitCommittedRepoDir(t)
@@ -123,7 +123,7 @@ func NewWorktreeTestServer(t *testing.T, opts ...TestDeps) (*hostapi.Server, *se
 	database := testdbfixture.Open(t, "worktree.db")
 	mem := store.NewSQL(database)
 	mock := llm.NewMockProvider(TestMockConfig(t))
-	mgr := session.NewManager(mem, mock, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(mem, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	WireTestBindingRegistry(t)
 	reg := project.NewSQLRegistry(database)
 	p, err := project.CreateWithRoot(t.Context(), reg, dir)

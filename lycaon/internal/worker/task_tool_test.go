@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
@@ -13,8 +12,10 @@ import (
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectroot"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/workeradmission"
+	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -41,7 +42,7 @@ func TestTaskToolResumeInheritsTheChild(t *testing.T) {
 		out: &enqueued,
 	}
 	testutil.FailErr(t, "register task tool", worker.RegisterTaskTool(reg, worker.TaskToolDeps{
-		Sessions: &fakeTaskSessions{}, Queue: q,
+		Queue:  q,
 		Agents: orchestration.NewMemoryAgentRegistryForTest(), Workers: worker.DefaultWorkersConfig(),
 	}))
 	exec := toolexecution.NewExecutor(nil, reg, "coordinator")
@@ -82,7 +83,7 @@ func TestTaskToolResumeRefusesToChangeTheChild(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			reg := tools.NewDefaultRegistry()
 			testutil.FailErr(t, "register task tool", worker.RegisterTaskTool(reg, worker.TaskToolDeps{
-				Sessions: &fakeTaskSessions{}, Queue: &priorJobQueue{WorkerQueue: worker.NewInMemoryQueue(2), prior: prior},
+				Queue:  &priorJobQueue{WorkerQueue: worker.NewInMemoryQueue(2), prior: prior},
 				Agents: orchestration.NewMemoryAgentRegistryForTest(), Workers: worker.DefaultWorkersConfig(),
 			}))
 			args := map[string]any{"brief": taskBrief("continue"), "child_session_id": "child-1"}
@@ -101,7 +102,7 @@ func TestTaskToolResumeRefusesToChangeTheChild(t *testing.T) {
 func TestTaskToolResumeOfUnknownChildRejects(t *testing.T) {
 	reg := tools.NewDefaultRegistry()
 	testutil.FailErr(t, "register task tool", worker.RegisterTaskTool(reg, worker.TaskToolDeps{
-		Sessions: &fakeTaskSessions{}, Queue: &priorJobQueue{WorkerQueue: worker.NewInMemoryQueue(2)},
+		Queue:  &priorJobQueue{WorkerQueue: worker.NewInMemoryQueue(2)},
 		Agents: orchestration.NewMemoryAgentRegistryForTest(), Workers: worker.DefaultWorkersConfig(),
 	}))
 	_, err := reg.Run(t.Context(), "task", map[string]any{
@@ -117,7 +118,7 @@ func TestTaskToolWorkflowWorkSuppliesOmittedFields(t *testing.T) {
 	var enqueued api.WorkerTask
 	var boundWorkID string
 	testutil.FailErr(t, "register task tool", worker.RegisterTaskTool(reg, worker.TaskToolDeps{
-		Sessions: &fakeTaskSessions{}, Queue: &captureQueue{WorkerQueue: worker.NewInMemoryQueue(2), out: &enqueued},
+		Queue:  &captureQueue{WorkerQueue: worker.NewInMemoryQueue(2), out: &enqueued},
 		Agents: orchestration.NewMemoryAgentRegistryForTest(), Workers: worker.DefaultWorkersConfig(),
 		WorkflowWork: func(_ context.Context, _ string, workID string) (spawn.WorkflowWork, bool, error) {
 			if workID != "leg-2" {
@@ -163,7 +164,7 @@ func TestTaskToolResumeKeepsItsWorkOnlyInItsPhase(t *testing.T) {
 				WorkflowPhase: "execute", WorkflowWorkID: tc.priorWorkID, MaxToolLoops: 12,
 			}
 			testutil.FailErr(t, "register task tool", worker.RegisterTaskTool(reg, worker.TaskToolDeps{
-				Sessions: &fakeTaskSessions{}, Queue: &priorJobQueue{WorkerQueue: worker.NewInMemoryQueue(2), prior: prior},
+				Queue:  &priorJobQueue{WorkerQueue: worker.NewInMemoryQueue(2), prior: prior},
 				Agents: orchestration.NewMemoryAgentRegistryForTest(), Workers: worker.DefaultWorkersConfig(),
 				WorkflowWork: func(context.Context, string, string) (spawn.WorkflowWork, bool, error) {
 					return spawn.WorkflowWork{RunID: "run-1", Phase: tc.phase, AgentType: "repo-researcher"}, true, nil
@@ -198,7 +199,7 @@ func TestTaskToolOmittedBudgetIsTheHostDefault(t *testing.T) {
 			var enqueued api.WorkerTask
 			queue := &captureQueue{WorkerQueue: worker.NewInMemoryQueue(2), out: &enqueued}
 			err := worker.RegisterTaskTool(reg, worker.TaskToolDeps{
-				Sessions: &fakeTaskSessions{}, Queue: queue,
+				Queue:  queue,
 				Agents: orchestration.NewMemoryAgentRegistryForTest(), Workers: worker.DefaultWorkersConfig(),
 				ToolBudget: func(string) spawn.WorkerToolBudget { return budget },
 			})
@@ -248,10 +249,9 @@ func TestTaskToolResumeRejectsPendingDecision(t *testing.T) {
 		},
 	}
 	if err := worker.RegisterTaskTool(reg, worker.TaskToolDeps{
-		Sessions: &fakeTaskSessions{},
-		Queue:    q,
-		Agents:   orchestration.NewMemoryAgentRegistryForTest(),
-		Workers:  worker.DefaultWorkersConfig(),
+		Queue:   q,
+		Agents:  orchestration.NewMemoryAgentRegistryForTest(),
+		Workers: worker.DefaultWorkersConfig(),
 		PendingDecision: func(_ context.Context, childSessionID string) (string, bool, error) {
 			if childSessionID == "child-1" {
 				return "job-dec", true, nil
@@ -289,10 +289,9 @@ func TestTaskToolResumeRejectsDiscardedOverlay(t *testing.T) {
 				},
 			}
 			if err := worker.RegisterTaskTool(reg, worker.TaskToolDeps{
-				Sessions: &fakeTaskSessions{},
-				Queue:    q,
-				Agents:   orchestration.NewMemoryAgentRegistryForTest(),
-				Workers:  worker.DefaultWorkersConfig(),
+				Queue:   q,
+				Agents:  orchestration.NewMemoryAgentRegistryForTest(),
+				Workers: worker.DefaultWorkersConfig(),
 			}); err != nil {
 				t.Fatal(err)
 			}
@@ -323,10 +322,9 @@ func TestTaskToolResumePendingOverlayAllowed(t *testing.T) {
 		out: &enqueued,
 	}
 	if err := worker.RegisterTaskTool(reg, worker.TaskToolDeps{
-		Sessions: &fakeTaskSessions{},
-		Queue:    q,
-		Agents:   orchestration.NewMemoryAgentRegistryForTest(),
-		Workers:  worker.DefaultWorkersConfig(),
+		Queue:   q,
+		Agents:  orchestration.NewMemoryAgentRegistryForTest(),
+		Workers: worker.DefaultWorkersConfig(),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -355,7 +353,7 @@ func (f *fakeTaskSessions) Prompt(context.Context, string, string) (*promptresul
 func (f *fakeTaskSessions) SpawnChild(context.Context, string, api.SpawnChildRequest) (*api.Session, error) {
 	return &api.Session{ID: "child"}, nil
 }
-func (f *fakeTaskSessions) AppendWorkerSummary(context.Context, string, session.WorkerSummaryInput) (string, error) {
+func (f *fakeTaskSessions) AppendWorkerSummary(context.Context, string, workeroutcomes.SummaryInput) (string, error) {
 	return "complete", nil
 }
 
@@ -376,10 +374,9 @@ func TestTaskToolDraftScratchSpawnsImplementerWithWorkspacePath(t *testing.T) {
 	var enqueued api.WorkerTask
 	cq := &captureQueue{WorkerQueue: worker.NewInMemoryQueue(2), out: &enqueued}
 	if err := worker.RegisterTaskTool(reg, worker.TaskToolDeps{
-		Sessions: &fakeTaskSessions{},
-		Queue:    cq,
-		Agents:   orchestration.NewMemoryAgentRegistryForTest(),
-		Workers:  worker.DefaultWorkersConfig(),
+		Queue:   cq,
+		Agents:  orchestration.NewMemoryAgentRegistryForTest(),
+		Workers: worker.DefaultWorkersConfig(),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -397,11 +394,9 @@ func TestTaskToolDraftScratchSpawnsImplementerWithWorkspacePath(t *testing.T) {
 		"agent_type": "implementer",
 		"brief":      taskBrief("ship core module"),
 		"scope":      map[string]any{"mode": "write", "paths": []any{"src"}},
-	}, tools.ToolContext{
-		Identity: tools.InvocationIdentity{SessionID: "parent-draft",
-			ProjectID: p.ID},
-		Source: tools.InvocationSource{Roots: roots,
-			ActiveRootID: roots[0].ID},
+	}, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "parent-draft",
+		ProjectID: p.ID}, Source: tools.InvocationSource{Roots: roots,
+		ActiveRootID: roots[0].ID},
 	})
 	testutil.FailErr(t, "task implementer on draft scratch", err)
 	if enqueued.WorkspacePath != scratch {
@@ -415,10 +410,9 @@ func TestTaskToolDraftScratchSpawnsImplementerWithWorkspacePath(t *testing.T) {
 func TestTaskToolFreshDispatchRequiresAgentType(t *testing.T) {
 	reg := tools.NewDefaultRegistry()
 	testutil.FailErr(t, "register task tool", worker.RegisterTaskTool(reg, worker.TaskToolDeps{
-		Sessions: &fakeTaskSessions{},
-		Queue:    worker.NewInMemoryQueue(1),
-		Agents:   orchestration.NewMemoryAgentRegistryForTest(),
-		Workers:  worker.DefaultWorkersConfig(),
+		Queue:   worker.NewInMemoryQueue(1),
+		Agents:  orchestration.NewMemoryAgentRegistryForTest(),
+		Workers: worker.DefaultWorkersConfig(),
 	}))
 	_, err := reg.Run(t.Context(), "task", map[string]any{
 		"brief": taskBrief("new work"),
@@ -436,7 +430,7 @@ func TestTaskToolFreshDispatchRequiresAgentType(t *testing.T) {
 func TestTaskToolCapsAggregateBriefText(t *testing.T) {
 	reg := tools.NewDefaultRegistry()
 	if err := worker.RegisterTaskTool(reg, worker.TaskToolDeps{
-		Sessions: &fakeTaskSessions{}, Queue: worker.NewInMemoryQueue(1),
+		Queue:  worker.NewInMemoryQueue(1),
 		Agents: orchestration.NewMemoryAgentRegistryForTest(), Workers: worker.DefaultWorkersConfig(),
 	}); err != nil {
 		t.Fatal(err)
@@ -455,16 +449,9 @@ func TestTaskToolCapsAggregateBriefText(t *testing.T) {
 	}
 }
 
-var _ session.PromptRunner = (*fakeTaskSessions)(nil)
-
 func toolContext(sessionID, dir string) tools.ToolContext {
 	roots := []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}}
-	return tools.ToolContext{
-		Identity: tools.InvocationIdentity{SessionID: sessionID,
-			ProjectID: testdbseed.DefaultProjectID},
-		Source: tools.InvocationSource{Roots: roots,
-			ActiveRootID: "r1"},
-	}
+	return tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sessionID, ProjectID: testdbseed.DefaultProjectID}, Source: tools.InvocationSource{Roots: roots, ActiveRootID: "r1"}}
 }
 
 func (f *fakeTaskSessions) PromptHostTurn(context.Context, string, store.PromptSubmissionOrigin, string) (*promptresult.Result, error) {
@@ -481,12 +468,12 @@ func TestTaskToolDoesNotClampExplicitBudget(t *testing.T) {
 		reg := tools.NewDefaultRegistry()
 		var enqueued api.WorkerTask
 		queue := &captureQueue{WorkerQueue: worker.NewInMemoryQueue(2), out: &enqueued}
-		err := worker.RegisterTaskTool(reg, worker.TaskToolDeps{Sessions: &fakeTaskSessions{}, Queue: queue, Agents: orchestration.NewMemoryAgentRegistryForTest(), Workers: worker.DefaultWorkersConfig(), ToolBudget: func(string) spawn.WorkerToolBudget { return budget }})
+		err := worker.RegisterTaskTool(reg, worker.TaskToolDeps{Queue: queue, Agents: orchestration.NewMemoryAgentRegistryForTest(), Workers: worker.DefaultWorkersConfig(), ToolBudget: func(string) spawn.WorkerToolBudget { return budget }})
 		testutil.FailErr(t, "register budgeted task", err)
 		_, err = reg.Run(t.Context(), "task", map[string]any{"agent_type": "repo-researcher", "brief": taskBrief("bounded work"), "scope": map[string]any{"mode": "read"}, "max_tool_loops": requested}, toolContext("parent", t.TempDir()))
 		if requested < budget.Min || requested > budget.Max {
 			var reject *toolrejection.ToolReject
-			if !errors.As(err, &reject) || reject.Code != session.TaskMaxToolLoopsInvalidCode || reject.Data["max_tool_loops"] != requested || reject.Data["host_max"] != budget.Max || enqueued.ID != "" {
+			if !errors.As(err, &reject) || reject.Code != workeradmission.TaskMaxToolLoopsInvalidCode || reject.Data["max_tool_loops"] != requested || reject.Data["host_max"] != budget.Max || enqueued.ID != "" {
 				t.Fatalf("explicit budget changed or enqueued: requested=%d err=%v task=%+v", requested, err, enqueued)
 			}
 		} else {

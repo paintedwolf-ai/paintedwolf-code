@@ -11,25 +11,26 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/workflow"
+	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
+	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
+	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
 )
 
 func TestWorkflowCatalogSummariesTool(t *testing.T) {
-	templates, err := workflow.LoadTemplatesFromDir(extpacks.Bundled(config.PlatformFlows.Join("_templates")))
+	templates, err := workflowcomposition.LoadTemplatesFromDir(extpacks.Bundled(config.PlatformFlows.Join("_templates")))
 	testutil.FailErr(t, "load workflow templates", err)
 	reg := tools.NewDefaultRegistry()
-	store := workflow.NewMemorySessionWorkflowStore()
-	resolver := workflow.ManifestResolver{SessionStore: store}
+	store := workflowdrafts.NewMemory()
+	resolver := workflowcatalog.Resolver{SessionStore: store}
 	if err := workflow.RegisterCatalogSummariesTool(reg, resolver, store, templates); err != nil {
 		testutil.FailErr(t, "workflow.RegisterCatalogSummariesTool failed", err)
 	}
 	dir := t.TempDir()
 	roots := []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}}
-	out, err := reg.Run(context.Background(), "workflow_catalog_summaries", map[string]any{}, tools.ToolContext{
-		Identity: tools.InvocationIdentity{SessionID: "sess-1",
-			Agent: "coordinator"},
+	out, err := reg.Run(context.Background(), "workflow_catalog_summaries", map[string]any{}, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "sess-1",
+		Agent: "coordinator"},
 		Source: tools.InvocationSource{Roots: roots,
-			ActiveRootID: "r1"},
-	})
+			ActiveRootID: "r1"}})
 	testutil.FailErr(t, "reg.Run failed", err)
 	var payload map[string]any
 	if err := json.Unmarshal([]byte(out), &payload); err != nil {

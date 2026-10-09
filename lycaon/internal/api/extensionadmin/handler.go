@@ -27,7 +27,7 @@ type Deps struct {
 	ModuleRoot  string
 	Projects    project.Registry
 	Store       session.Store
-	Sessions    *session.Manager
+	Sessions    *session.Host
 	Settings    *settings.Service
 	Workflow    *workflowadmin.Handler
 	Prompt      *promptadmin.Handler
@@ -53,7 +53,7 @@ type Contributions struct {
 	MCP                *mcp.ProviderCatalog
 	MCPCalls           *mcp.ToolCalls
 	Projects           project.Registry
-	Sessions           *session.Manager
+	Sessions           *session.Host
 	contribDeviceFrame *contribframe.Frame
 	contribFrameOrder  []string
 	contribFrames      map[string]*contribframe.Frame
@@ -69,7 +69,7 @@ type Execution struct {
 	PromptReferences *promptadmin.References
 	PromptExecution  *promptadmin.Execution
 	Runtime          ContributionRuntime
-	Sessions         *session.Manager
+	Sessions         *session.Host
 	Store            session.Store
 	Workflow         *workflowadmin.RunControl
 	responses        *httpio.Responder
@@ -84,7 +84,7 @@ type Mutations struct {
 	Owner         *extensionstate.Owner
 	Projects      project.Registry
 	Scan          *scanadmin.Handler
-	Sessions      *session.Manager
+	Sessions      *session.Host
 	Settings      *settings.Service
 	background    *taskgroup.Group
 	responses     *httpio.Responder

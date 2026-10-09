@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
-	"github.com/lycaon/lycaon/internal/session"
+	sessionobservation "github.com/lycaon/lycaon/internal/session/observation"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -18,7 +18,7 @@ func (c *liveClient) observeSubmission(ctx context.Context, sessionID, submissio
 	if err != nil {
 		return false, err
 	}
-	observation, err := decodeJSON[session.ExecutionObservation](c.do(request)) //nolint:bodyclose // decodeJSON closes the body.
+	observation, err := decodeJSON[sessionobservation.ExecutionObservation](c.do(request)) //nolint:bodyclose // decodeJSON closes the body.
 	if err != nil {
 		return false, err
 	}
@@ -45,14 +45,14 @@ func (c *liveClient) observeSubmission(ctx context.Context, sessionID, submissio
 	return observation.Settled, nil
 }
 
-func executionObservationFailure(observation session.ExecutionObservation) error {
+func executionObservationFailure(observation sessionobservation.ExecutionObservation) error {
 	if observation.Settled && (!observation.SubmissionStatus.Terminal() || len(observation.Blockers) != 0) {
 		return &ExecutionFailure{Kind: "harness", Code: "execution_contract_invalid"}
 	}
 	return executionTreeFailure(observation)
 }
 
-func executionTreeFailure(observation session.ExecutionObservation) error {
+func executionTreeFailure(observation sessionobservation.ExecutionObservation) error {
 	for _, row := range observation.Failures {
 		failure := submissionFailure(row.ErrorCode)
 		if failure.Kind == "provider" || row.SessionID == observation.SessionID {

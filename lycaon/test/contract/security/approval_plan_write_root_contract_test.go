@@ -16,7 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools/native"
+	"github.com/lycaon/lycaon/internal/tools/native/command"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -75,9 +75,9 @@ func TestWriteRootCardAlwaysHasAnOption(t *testing.T) {
 		Posture: func(string) gate.Posture { return gate.PostureStrict },
 	}
 	project, outside := t.TempDir(), "/Users/approval-plan-contract/floor-cache"
-	resultCh := make(chan native.SandboxWriteRootResult, 1)
+	resultCh := make(chan command.SandboxWriteRootResult, 1)
 	go func() {
-		result, _ := broker.Authorize(context.Background(), native.SandboxWriteRootAsk{
+		result, _ := broker.Authorize(context.Background(), command.SandboxWriteRootAsk{
 			SessionID: "session-floor", ProjectDir: project, ToolCallID: "floor-call", Command: "build",
 			ProposedWriteRoot: outside,
 		})
@@ -112,7 +112,7 @@ func TestWriteRootBrokerHomeChildFromUnquotedMkdir(t *testing.T) {
 	broker := &session.WriteRootCheckpointBroker{
 		Checkpoints: mgr, Runtime: runtime, ApprovalsDisabled: func(string) bool { return true },
 	}
-	result, err := broker.Authorize(t.Context(), native.SandboxWriteRootAsk{
+	result, err := broker.Authorize(t.Context(), command.SandboxWriteRootAsk{
 		SessionID: "session-unquoted-mkdir", ProjectDir: t.TempDir(), ToolCallID: "mkdir-cache",
 		Command: "build", ProposedWriteRoot: filepath.Join(home, "cache"),
 	})
@@ -137,7 +137,7 @@ func TestWriteRootBrokerHomeChildFromBSDMkdir(t *testing.T) {
 		Checkpoints: mgr, Runtime: runtime, ApprovalsDisabled: func(string) bool { return true },
 	}
 	blocked := filepath.Join(home, ".tool")
-	result, err := broker.Authorize(t.Context(), native.SandboxWriteRootAsk{
+	result, err := broker.Authorize(t.Context(), command.SandboxWriteRootAsk{
 		SessionID: "session-bsd-mkdir", ProjectDir: t.TempDir(), ToolCallID: "mkdir-tool",
 		Command: "mkdir -p " + blocked, ProposedWriteRoot: blocked,
 	})
@@ -162,9 +162,9 @@ func TestWriteRootBrokerRaisesBalancedCardOutsideRoots(t *testing.T) {
 		Posture: func(string) gate.Posture { return gate.PostureBalanced },
 	}
 	blocked := "/Users/approval-plan-contract/outside-root"
-	resultCh := make(chan native.SandboxWriteRootResult, 1)
+	resultCh := make(chan command.SandboxWriteRootResult, 1)
 	go func() {
-		result, _ := broker.Authorize(context.Background(), native.SandboxWriteRootAsk{
+		result, _ := broker.Authorize(context.Background(), command.SandboxWriteRootAsk{
 			SessionID: "session-balanced-outside-roots", ProjectDir: t.TempDir(),
 			ToolCallID: "mkdir-tool", Command: "mkdir -p " + blocked, ProposedWriteRoot: blocked,
 		})
@@ -199,7 +199,7 @@ func TestAdvancedOffGrantsWriteRootWithoutCard(t *testing.T) {
 		Checkpoints: mgr, Runtime: runtime, ApprovalsDisabled: func(string) bool { return true },
 	}
 	project, outside := t.TempDir(), "/Users/approval-plan-contract/cache"
-	result, err := broker.Authorize(t.Context(), native.SandboxWriteRootAsk{
+	result, err := broker.Authorize(t.Context(), command.SandboxWriteRootAsk{
 		SessionID: "session", ProjectDir: project, ToolCallID: "call", Command: "build",
 		ProposedWriteRoot: outside,
 	})
@@ -226,10 +226,10 @@ func TestWriteRootUsesToolApprovalPlanAndInstallsBeforeRelease(t *testing.T) {
 	}
 	project, outside := t.TempDir(), "/Users/approval-plan-contract/cache"
 
-	resultCh := make(chan native.SandboxWriteRootResult, 1)
+	resultCh := make(chan command.SandboxWriteRootResult, 1)
 	errCh := make(chan error, 1)
 	go func() {
-		result, err := broker.Authorize(context.Background(), native.SandboxWriteRootAsk{
+		result, err := broker.Authorize(context.Background(), command.SandboxWriteRootAsk{
 			SessionID: "session", ProjectDir: project, ToolCallID: "call",
 			ToolName: "verify", Command: "build",
 			ProposedWriteRoot: outside,
@@ -299,7 +299,7 @@ func TestWriteRootRulesEnforceDenyAndRouteAskThroughGate(t *testing.T) {
 			}, true
 		},
 	}
-	denied, err := denyBroker.Authorize(t.Context(), native.SandboxWriteRootAsk{
+	denied, err := denyBroker.Authorize(t.Context(), command.SandboxWriteRootAsk{
 		SessionID: "session", ProjectDir: project, ToolCallID: "deny-call", Command: "build",
 		ProposedWriteRoot: outside,
 	})
@@ -319,9 +319,9 @@ func TestWriteRootRulesEnforceDenyAndRouteAskThroughGate(t *testing.T) {
 		},
 		Posture: func(string) gate.Posture { return gate.PostureLight },
 	}
-	resultCh := make(chan native.SandboxWriteRootResult, 1)
+	resultCh := make(chan command.SandboxWriteRootResult, 1)
 	go func() {
-		result, _ := askBroker.Authorize(context.Background(), native.SandboxWriteRootAsk{
+		result, _ := askBroker.Authorize(context.Background(), command.SandboxWriteRootAsk{
 			SessionID: "session", ProjectDir: project, ToolCallID: "ask-call", Command: "build",
 			ProposedWriteRoot: outside,
 		})

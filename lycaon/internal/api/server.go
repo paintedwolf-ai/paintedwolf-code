@@ -83,7 +83,7 @@ type Server struct {
 	Search         searchadmin.Handler
 	sessionStore   session.Store
 	personActions  *personactions.Store
-	sessions       *session.Manager
+	sessions       *session.Host
 	fileBriefings  *filebriefing.Service
 	events         events.ReplayHub
 	eventPublisher *events.Publisher

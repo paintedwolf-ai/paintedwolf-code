@@ -35,7 +35,7 @@ func TestProjectLivenessAndParkingIntegration(t *testing.T) {
 		t.Fatal("project A should be active while workspace is claimed")
 	}
 
-	sess, err := serveApp.SessionStore.Create(ctx, api.CreateSessionRequest{
+	sess, err := serveApp.Sessions.Store.Create(ctx, api.CreateSessionRequest{
 		ProjectID: projectA,
 		Posture:   api.SessionPostureBuild,
 	}, projectA)

@@ -182,14 +182,15 @@ func DayRung(base ApprovalGrantOffer) ApprovalGrantOffer {
 // ApprovalGrantOffer is the bounded choice attached to a checkpoint. Grant contains
 // host-only authority; the wire exposes only the opaque offer id and reviewed copy.
 type ApprovalGrantOffer struct {
-	ID          string             `json:"id"`
-	Rung        ApprovalOptionRung `json:"rung"`
-	Scope       ApprovalGrantScope `json:"scope"`
-	Group       string             `json:"group,omitempty"`
-	Title       string             `json:"title"`
-	Coverage    string             `json:"coverage"`
-	ExpiresWhen string             `json:"expires_when"`
-	ReaskWhen   string             `json:"reask_when"`
+	ID             string             `json:"id"`
+	Rung           ApprovalOptionRung `json:"rung"`
+	Scope          ApprovalGrantScope `json:"scope"`
+	Group          string             `json:"group,omitempty"`
+	DirectoryScope string             `json:"directory_scope,omitempty"`
+	Title          string             `json:"title"`
+	Coverage       string             `json:"coverage"`
+	ExpiresWhen    string             `json:"expires_when"`
+	ReaskWhen      string             `json:"reask_when"`
 	// Subject is the reuse shape installed by this offer.
 	Subject gate.ReuseShape `json:"-"`
 	// TTLSeconds starts at approval and respects the scope expiry.

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/session"
+	sessiondecisions "github.com/lycaon/lycaon/internal/session/decisions"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -27,7 +27,7 @@ func (q *answerStubQueue) Get(id string) (*api.WorkerTask, bool) {
 }
 
 type answerStubResolver struct {
-	decisions session.DecisionStore
+	decisions sessiondecisions.Store
 	sessionID string
 	appended  []api.Message
 }
@@ -41,7 +41,7 @@ func (r *answerStubResolver) Resolve(ctx context.Context, decision api.WorkerDec
 	return nil
 }
 
-func answerDecisionService(t *testing.T, q *answerStubQueue, decisions session.DecisionStore) (*AnswerDecisionService, *answerStubResolver) {
+func answerDecisionService(t *testing.T, q *answerStubQueue, decisions sessiondecisions.Store) (*AnswerDecisionService, *answerStubResolver) {
 	t.Helper()
 	resolver := &answerStubResolver{decisions: decisions}
 	return &AnswerDecisionService{
@@ -58,7 +58,7 @@ func TestAnswerDecisionResumesWorker(t *testing.T) {
 		AgentType: "implementer", ProjectID: testdbseed.DefaultProjectID,
 		Prompt: "Refactor the project", Brief: "Refactor the project",
 	}}
-	decisions := session.NewMemoryDecisionStore()
+	decisions := sessiondecisions.NewMemory()
 	testutil.FailErr(t, "store decision", decisions.Put(context.Background(), api.WorkerDecisionRequest{
 		ChildSessionID: "child-1", WorkerID: "job-1", Question: "Refactor or work around?", Options: []string{"do A", "do B"}, BlockerClass: api.WorkerBlockerDecision,
 	}))
@@ -90,7 +90,7 @@ func TestAnswerDecisionResumesWorker(t *testing.T) {
 func TestAnswerDecisionValidation(t *testing.T) {
 	reg := tools.NewDefaultRegistry()
 	q := &answerStubQueue{task: &api.WorkerTask{ID: "job-1", ParentSessionID: "parent-1", ChildSessionID: "child-1"}}
-	decisions := session.NewMemoryDecisionStore()
+	decisions := sessiondecisions.NewMemory()
 	testutil.FailErr(t, "store decision", decisions.Put(context.Background(), api.WorkerDecisionRequest{
 		ChildSessionID: "child-1", WorkerID: "job-1", Question: "q", Options: []string{"a", "b"}, BlockerClass: api.WorkerBlockerDecision,
 	}))
@@ -114,7 +114,7 @@ func TestAnswerDecisionJobIDMismatch(t *testing.T) {
 	q := &answerStubQueue{task: &api.WorkerTask{
 		ID: "job-wrong", ParentSessionID: "parent-1", ChildSessionID: "child-1",
 	}}
-	decisions := session.NewMemoryDecisionStore()
+	decisions := sessiondecisions.NewMemory()
 	testutil.FailErr(t, "store decision", decisions.Put(context.Background(), api.WorkerDecisionRequest{
 		ChildSessionID: "child-1", WorkerID: "job-expected", Question: "Pick one", Options: []string{"a", "b"}, BlockerClass: api.WorkerBlockerDecision,
 	}))
@@ -145,7 +145,7 @@ func TestResolveDecisionOption(t *testing.T) {
 }
 
 func TestAnswerDecisionMissingJobRetainsTypedDecisionFacts(t *testing.T) {
-	svc, _ := answerDecisionService(t, &answerStubQueue{}, session.NewMemoryDecisionStore())
+	svc, _ := answerDecisionService(t, &answerStubQueue{}, sessiondecisions.NewMemory())
 	_, err := svc.AnswerJob(t.Context(), "parent", "missing", "a", "coordinator")
 	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != DecisionNotFoundCode || reject.Data["job_id"] != "missing" {

@@ -4,7 +4,6 @@ package workercloseout
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/promptresult"
 	"strings"
 	"unicode/utf8"
 
@@ -13,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/limits"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/session/workercontext"
@@ -22,8 +22,9 @@ import (
 const WorkerSummaryTooLongCode = "WORKER_SUMMARY_TOO_LONG"
 
 type WorkerSummaryFinalizeOpts struct {
+	hostTurns HostTurnRunner
 	// WorkerJobID scopes every transcript read.
-	WorkerJobID                 string
+	WorkerJobID         string
 	MaxChars            int
 	MaxGroundingRetries int
 	WorkflowHints       *guidance.HintConfig
@@ -61,17 +62,22 @@ type WorkerSummaryOutcome struct {
 }
 
 // WorkerSummaryResolver runs closeout and synthesis after the primary worker Prompt.
-type WorkerSummaryResolver interface {
+type HostTurnRunner interface {
 	PromptHostTurn(ctx context.Context, sessionID string, origin store.PromptSubmissionOrigin, text string) (*promptresult.Result, error)
+}
+
+type WorkerSummaryResolver interface {
 	GetWorkerJobMessages(ctx context.Context, sessionID, workerJobID string) ([]api.Message, error)
 }
 
 func FinalizeWorkerSummaryForChild(
 	ctx context.Context,
 	resolver WorkerSummaryResolver,
+	hostTurns HostTurnRunner,
 	childSessionID, agentType string,
 	opts WorkerSummaryFinalizeOpts,
 ) (outcome WorkerSummaryOutcome, err error) {
+	opts.hostTurns = hostTurns
 	childSessionID = strings.TrimSpace(childSessionID)
 	agentType = strings.TrimSpace(agentType)
 	ctx = workercontext.WithJob(ctx, opts.WorkerJobID)
@@ -100,7 +106,7 @@ func FinalizeWorkerSummaryForChild(
 	if resolver != nil {
 		closeout := RenderWorkerKick(ctx, opts.RenderWorkerKick, anchor.InformRenderFor(ctx, anchor.WorkerCloseout, anchor.MatchContext{Surface: "worker", SessionID: childSessionID}), nil)
 		if closeout != "" {
-			if _, err := resolver.PromptHostTurn(ctx, childSessionID, store.PromptSubmissionOriginWorkerCloseout, closeout); err == nil {
+			if _, err := opts.hostTurns.PromptHostTurn(ctx, childSessionID, store.PromptSubmissionOriginWorkerCloseout, closeout); err == nil {
 				if opts.decisionPending(ctx, childSessionID) {
 					return WorkerSummaryOutcome{Status: string(api.WorkerSummaryStatusNeedsDecision), Provenance: "decision_pending"}, nil
 				}
@@ -132,9 +138,11 @@ func FinalizeWorkerSummaryForChild(
 func FinalizeWorkerSummaryForCanceled(
 	ctx context.Context,
 	resolver WorkerSummaryResolver,
+	hostTurns HostTurnRunner,
 	childSessionID, agentType, cancelReason string,
 	opts WorkerSummaryFinalizeOpts,
 ) (WorkerSummaryOutcome, error) {
+	opts.hostTurns = hostTurns
 	childSessionID = strings.TrimSpace(childSessionID)
 	agentType = strings.TrimSpace(agentType)
 	cancelReason = strings.TrimSpace(cancelReason)
@@ -145,7 +153,7 @@ func FinalizeWorkerSummaryForCanceled(
 		kickData := map[string]any{"cancel_reason": cancelReason}
 		closeout := RenderWorkerKick(ctx, opts.RenderWorkerKick, anchor.InformRenderFor(ctx, anchor.WorkerCancelCloseout, anchor.MatchContext{Surface: "worker", SessionID: childSessionID}), kickData)
 		if closeout != "" {
-			if _, err := resolver.PromptHostTurn(ctx, childSessionID, store.PromptSubmissionOriginWorkerCloseout, closeout); err == nil {
+			if _, err := opts.hostTurns.PromptHostTurn(ctx, childSessionID, store.PromptSubmissionOriginWorkerCloseout, closeout); err == nil {
 				if report, ok, err := extractCompleteLegReport(ctx, resolver, childSessionID); err != nil {
 					return WorkerSummaryOutcome{}, err
 				} else if ok {
@@ -323,7 +331,7 @@ func boundWorkerCompletionReport(
 		return report, "", nil, fmt.Errorf("load worker trim transcript: %w", err)
 	}
 	retryStart := len(msgs)
-	if _, err := resolver.PromptHostTurn(ctx, childSessionID, store.PromptSubmissionOriginWorkerCloseout, prompt); err != nil {
+	if _, err := opts.hostTurns.PromptHostTurn(ctx, childSessionID, store.PromptSubmissionOriginWorkerCloseout, prompt); err != nil {
 		return report, "", feedback, fmt.Errorf("retry worker summary trim: %w", err)
 	}
 	if trimmed, ok, err := trimRetryReport(ctx, resolver, childSessionID, retryStart); err != nil {

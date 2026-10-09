@@ -57,9 +57,9 @@ func newTestServerWithRegistry(t *testing.T, reg tools.ToolRegistry, opts ...tes
 	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	store := store.NewMemory()
 	mock := llm.NewMockProvider(testMockConfig(t))
-	mgr := session.NewManager(store, mock, reg, settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, reg)
 	mgr.SetDataDir(t.TempDir())
-	mgr.SetToolInvoker(testtool.RegistryInvoker{Registry: reg}, testtool.RegistryInvoker{Registry: reg})
+	mgr.Coordinator.Guards.SetToolMetadata(testtool.RegistryInvoker{Registry: reg})
 	// Stub bindings do not expose coordinator tools.
 	wireTestBindingRegistry(t)
 	return newServerForTest(t, Dependencies{Core: CoreDependencies{Store: store, Projects: project.NewMemoryRegistry(), Sessions: mgr}}, opts...)
@@ -141,6 +141,7 @@ func wireTestBindingRegistry(t *testing.T) {
 func stopBackgroundOnCleanup(t *testing.T, srv *Server) {
 	t.Helper()
 	t.Cleanup(func() {
+		http.DefaultClient.CloseIdleConnections()
 		srv.StopBackground()
 		drainBackground(t, srv)
 		if _, released := sourcesReleased.LoadOrStore(srv, struct{}{}); !released {
@@ -211,7 +212,10 @@ func startTestHTTPServer(t *testing.T, srv *Server) string {
 	}
 	httpServer := &http.Server{Handler: srv}
 	go httpServer.Serve(listener)
-	t.Cleanup(func() { _ = httpServer.Close() })
+	t.Cleanup(func() {
+		_ = httpServer.Close()
+		http.DefaultClient.CloseIdleConnections()
+	})
 	return fmt.Sprintf("http://%s", listener.Addr().String())
 }
 

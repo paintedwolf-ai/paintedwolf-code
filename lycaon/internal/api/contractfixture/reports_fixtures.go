@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
+	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
+	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -65,11 +68,11 @@ func NewReportTestHarness(t *testing.T, opts ...TestDeps) *ReportTestHarness {
 	store := store.NewSQL(sqlDB)
 	wfReg, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "RegistryFromDirs", err)
-	runStore := workflow.NewSQLStore(sqlDB)
+	runStore := workflowpersistence.New(sqlDB)
 	wfMgr := workflow.NewManager(runStore, store, wfReg, nil)
-	wfMgr.Resolver = workflow.ManifestResolver{}
+	wfMgr.Resolver = workflowcatalog.Resolver{}
 	hostDir := t.TempDir()
-	wfMgr.EvidenceStore = inspector.NewJSONLStore(inspector.DefaultEvidenceDir)
+	wfMgr.Verdicts.EvidenceStore = inspector.NewJSONLStore(inspector.DefaultEvidenceDir)
 	wfMgr.EvidenceProjectDir = func(context.Context, string) (string, error) { return hostDir, nil }
 
 	scanStore := scan.NewSQLStore(sqlDB)
@@ -83,7 +86,7 @@ func NewReportTestHarness(t *testing.T, opts ...TestDeps) *ReportTestHarness {
 
 	deps := hostapi.Dependencies{Core: hostapi.CoreDependencies{
 		Store: store, Projects: projReg}, Workflow: hostapi.WorkflowDependencies{
-		Workflows: wfMgr, WorkflowCatalog: workflow.ManifestResolver{}, WorkflowRuns: runStore}, Scans: hostapi.ScansDependencies{
+		Workflows: wfMgr, WorkflowCatalog: workflowcatalog.Resolver{}, WorkflowRuns: runStore}, Scans: hostapi.ScansDependencies{
 		ScanCoordinator: scantest.Coordinator(t, scanStore, nil)}, Storage: hostapi.StorageDependencies{ModuleRoot: root}}
 	for _, opt := range opts {
 		opt(&deps)
@@ -104,7 +107,7 @@ type ReportTestHarness struct {
 	Srv       *hostapi.Server
 	Deps      hostapi.Dependencies
 	Store     *store.SQL
-	RunStore  *workflow.SQLStore
+	RunStore  *runstate.Repository
 	WfMgr     *workflow.RunManager
 	ScanStore *scan.SQLStore
 	Project   *project.Project
@@ -156,7 +159,7 @@ func (h *ReportTestHarness) CreateCompletedRun(t *testing.T, runID, workflowID, 
 		Status: wire.WorkflowRunStatusComplete, CurrentPhase: phase,
 		CompletedAt: &at, CreatedAt: at, UpdatedAt: at,
 	}
-	testutil.FailErr(t, "create run", h.RunStore.CreateState(t.Context(), run, h.WorkDir, nil))
+	testutil.FailErr(t, "create run", h.RunStore.State.CreateState(t.Context(), run, h.WorkDir, nil))
 	return run
 }
 
@@ -240,7 +243,7 @@ func (h *ReportTestHarness) SeedVerdict(t *testing.T, run *wire.WorkflowRun) {
 		},
 		"", "", "", 1, at,
 	)
-	testutil.FailErr(t, "append claims verdict", h.WfMgr.EvidenceStore.Append(t.Context(), h.HostDir, claims))
+	testutil.FailErr(t, "append claims verdict", h.WfMgr.Verdicts.EvidenceStore.Append(t.Context(), h.HostDir, claims))
 
 	challenge := evidence.GateRecord(
 		evidence.GateTypeSurveyChallenged, "challenge", run.ID,
@@ -256,7 +259,7 @@ func (h *ReportTestHarness) SeedVerdict(t *testing.T, run *wire.WorkflowRun) {
 		},
 		"", "", "", 1, at.Add(4*time.Minute),
 	)
-	testutil.FailErr(t, "append challenge verdict", h.WfMgr.EvidenceStore.Append(t.Context(), h.HostDir, challenge))
+	testutil.FailErr(t, "append challenge verdict", h.WfMgr.Verdicts.EvidenceStore.Append(t.Context(), h.HostDir, challenge))
 }
 
 func (h *ReportTestHarness) SeedFindings(t *testing.T, run *wire.WorkflowRun) {
@@ -295,8 +298,8 @@ func (h *ReportTestHarness) GetReport(t *testing.T, runID string) *httptest.Resp
 
 func (h *ReportTestHarness) MarkReportDelivered(t *testing.T, run *wire.WorkflowRun) {
 	t.Helper()
-	_, err := h.WfMgr.StampRunVars(t.Context(), run.ID, func(_ context.Context, _ *wire.WorkflowRun, vars map[string]any) (map[string]any, bool, error) {
-		return workflow.SetGateSatisfied(vars, "topology_report_delivered", true), true, nil
+	_, err := h.WfMgr.Vars.Stamp(t.Context(), run.ID, func(_ context.Context, _ *wire.WorkflowRun, vars map[string]any) (map[string]any, bool, error) {
+		return runstate.SetGateSatisfied(vars, "topology_report_delivered", true), true, nil
 	})
 	testutil.FailErr(t, "stamp report delivery", err)
 }

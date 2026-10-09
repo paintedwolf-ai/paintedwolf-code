@@ -14,7 +14,8 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/workflow"
+	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -35,9 +36,9 @@ func installDesignDocOverlay(t *testing.T, projectDir string) {
 
 func assertCoordinatorSurface(t *testing.T, h *Harness, ctx context.Context, sess *api.Session, userPrompt, wantSurface string) {
 	t.Helper()
-	runCtx, err := h.SessionMgr.CoordinatorRunContext(ctx, sess.ID)
+	runCtx, err := h.SessionMgr.Coordinator.Context.RunContext(ctx, sess.ID)
 	testutil.FailErr(t, "CoordinatorRunContext", err)
-	state := h.SessionMgr.BuildImplementSessionState(ctx, sess)
+	state := h.SessionMgr.Workers.State.ForSession(ctx, sess)
 	profile := surface.ResolveTurnProfile(runCtx, sess, routingTurnHistory(nil, userPrompt), state)
 	if profile.SurfaceID != wantSurface {
 		t.Fatalf("surface = %q want %q (phase=%q workflow=%q)", profile.SurfaceID, wantSurface, runCtx.CurrentPhase, runCtx.WorkflowID)
@@ -46,7 +47,7 @@ func assertCoordinatorSurface(t *testing.T, h *Harness, ctx context.Context, ses
 
 func assertManifestBoundSurface(t *testing.T, h *Harness, ctx context.Context, sess *api.Session, userPrompt, wantSurface string) {
 	t.Helper()
-	runCtx, err := h.SessionMgr.CoordinatorRunContext(ctx, sess.ID)
+	runCtx, err := h.SessionMgr.Coordinator.Context.RunContext(ctx, sess.ID)
 	testutil.FailErr(t, "CoordinatorRunContext", err)
 	if runCtx.PhaseCoordinatorSurface != wantSurface {
 		t.Fatalf("phase_coordinator_surface = %q want %q (phase=%q)", runCtx.PhaseCoordinatorSurface, wantSurface, runCtx.CurrentPhase)
@@ -68,9 +69,9 @@ func TestCustomDesignDocWorkflowLiveGolden(t *testing.T) {
 		Posture: api.SessionPostureSpec,
 	}, dir)
 	testutil.FailErr(t, "create session", err)
-	h.SessionMgr.Catalog().InvalidateEffectiveCatalog(sess.ProjectID)
+	h.SessionMgr.Catalog.InvalidateEffectiveCatalog(sess.ProjectID)
 
-	run, err := h.WorkflowMgr.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{
+	run, err := h.WorkflowMgr.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{
 		WorkflowID: "design-doc", WorkflowVersion: "1.0.0", Request: "Design the REST API",
 	})
 	testutil.FailErr(t, "StartHuman design-doc", err)
@@ -80,10 +81,10 @@ func TestCustomDesignDocWorkflowLiveGolden(t *testing.T) {
 
 	assertManifestBoundSurface(t, h, ctx, sess, "scope the API surface", "plan_stub")
 
-	if _, err := h.WorkflowMgr.ResolveUserFeedback(ctx, sess.ID, run.ID, "clarify", "REST API with OAuth2"); err != nil {
+	if _, err := h.WorkflowMgr.Feedback.ResolveUserFeedback(ctx, sess.ID, run.ID, "clarify", "REST API with OAuth2"); err != nil {
 		testutil.FailErr(t, "ResolveUserFeedback clarify", err)
 	}
-	run, err = h.WorkflowMgr.Get(ctx, run.ID)
+	run, err = h.WorkflowMgr.Store.Runs.Get(ctx, run.ID)
 	testutil.FailErr(t, "Get run after clarify", err)
 	if run.CurrentPhase != "approve" {
 		t.Fatalf("phase = %q want approve after feedback", run.CurrentPhase)
@@ -91,18 +92,18 @@ func TestCustomDesignDocWorkflowLiveGolden(t *testing.T) {
 
 	assertManifestBoundSurface(t, h, ctx, sess, "review the approach", "plan_approve")
 
-	if _, err := h.WorkflowMgr.Advance(ctx, run.ID); err == nil {
+	if _, err := h.WorkflowMgr.Phases.Advance(ctx, run.ID); err == nil {
 		t.Fatal("expected gate block before user decision on approve")
 	}
 
-	run, err = h.WorkflowMgr.ResolveUserDecision(ctx, sess.ID, run.ID, "approve", []string{"approve"}, "")
+	run, err = h.WorkflowMgr.Feedback.ResolveUserDecision(ctx, sess.ID, run.ID, "approve", []string{"approve"}, "")
 	testutil.FailErr(t, "ResolveUserDecision approve", err)
 	if run.CurrentPhase != "execute" {
 		t.Fatalf("phase = %q want execute after approve", run.CurrentPhase)
 	}
 
 	parentID := run.ID
-	child, err := h.WorkflowMgr.GetActive(ctx, sess.ID)
+	child, err := h.WorkflowMgr.Store.Runs.ActiveBySession(ctx, sess.ID)
 	testutil.FailErr(t, "GetActive child", err)
 	if child == nil || child.WorkflowID != "implement" {
 		t.Fatalf("active child = %+v want implement subroutine", child)
@@ -115,21 +116,21 @@ func TestCustomDesignDocWorkflowLiveGolden(t *testing.T) {
 	assertCoordinatorSurface(t, h, ctx, sess, "map the codebase", toolcontract.SurfaceImplementInvestigate)
 
 	for range 4 {
-		child, err = h.WorkflowMgr.Get(ctx, child.ID)
+		child, err = h.WorkflowMgr.Store.Runs.Get(ctx, child.ID)
 		testutil.FailErr(t, "reload child run", err)
 		now := time.Now().UTC()
 		child.Status = api.WorkflowRunStatusComplete
 		child.CompletedAt = &now
 		child.UpdatedAt = now
-		err = h.WorkflowMgr.Store.Update(ctx, child)
-		if !errors.Is(err, workflow.ErrRunRevisionConflict) {
+		err = h.WorkflowMgr.Store.State.Update(ctx, child)
+		if !errors.Is(err, runstate.ErrRevisionConflict) {
 			break
 		}
 	}
 	testutil.FailErr(t, "update child run", err)
-	testutil.FailErr(t, "resume parent from child terminal", h.WorkflowMgr.ReconcileTerminalRun(ctx, child))
+	testutil.FailErr(t, "resume parent from child terminal", h.WorkflowMgr.Children.ReconcileTerminalRun(ctx, child))
 
-	run, err = h.WorkflowMgr.Get(ctx, parentID)
+	run, err = h.WorkflowMgr.Store.Runs.Get(ctx, parentID)
 	testutil.FailErr(t, "Get parent after child", err)
 	if run.Status != api.WorkflowRunStatusComplete {
 		t.Fatalf("parent status = %q want complete", run.Status)

@@ -21,7 +21,7 @@ func (s *Transcript) HandleListSessionMessages(w http.ResponseWriter, r *http.Re
 	if !ok {
 		return
 	}
-	page, err := s.Sessions.GetTranscriptPage(r.Context(), id, q)
+	page, err := s.Sessions.Runner.Transcript.GetTranscriptPage(r.Context(), id, q)
 	if err != nil {
 		if errors.Is(err, store.ErrSessionNotFound) {
 			s.responses.Fail(w, wire.ApiErrorCodeSessionNotFound, "chat not found")

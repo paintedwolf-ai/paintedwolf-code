@@ -10,6 +10,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/backgroundwork"
 	"github.com/lycaon/lycaon/internal/fseffect"
+	"github.com/lycaon/lycaon/internal/pagedview"
 )
 
 const structuralFormat = "structural-tree-v3"
@@ -21,13 +22,15 @@ const structuralCheckpointInterval = 5 * time.Minute
 
 // Checkpoint scheduling owns its admission and cancellation independently of publication.
 type structuralCheckpoint struct {
-	mu        sync.Mutex
-	cancel    context.CancelFunc
-	done      chan struct{}
-	pending   bool
-	drained   bool
-	lastError error
-	nextWrite time.Time
+	mu             sync.Mutex
+	cancel         context.CancelFunc
+	done           chan struct{}
+	pending        bool
+	drained        bool
+	lastError      error
+	nextWrite      time.Time
+	fingerprint    pagedview.Fingerprint
+	hasFingerprint bool
 }
 
 func (s *structuralCheckpoint) Schedule(parent context.Context, write func(context.Context) (bool, error)) {
@@ -105,6 +108,7 @@ func (s *indexStore) checkpointStructure(ctx context.Context) (bool, error) {
 	if !pin.value.complete {
 		return false, nil
 	}
+
 	replacement, err := s.compactCheckpointPin(ctx, pin)
 	if err != nil {
 		return false, err
@@ -113,10 +117,24 @@ func (s *indexStore) checkpointStructure(ctx context.Context) (bool, error) {
 		pin.Release()
 		pin = replacement
 	}
+	fingerprint, err := structuralCheckpointFingerprint(ctx, pin.value)
+	if err != nil {
+		return false, err
+	}
+	s.checkpoint.mu.Lock()
+	unchanged := s.checkpoint.hasFingerprint && s.checkpoint.fingerprint == fingerprint
+	s.checkpoint.mu.Unlock()
+	if unchanged {
+		return false, nil
+	}
+
 	started := time.Now()
 	if err := s.writePinnedCheckpoint(ctx, pin); err != nil {
 		return false, err
 	}
+	s.checkpoint.mu.Lock()
+	s.checkpoint.fingerprint, s.checkpoint.hasFingerprint = fingerprint, true
+	s.checkpoint.mu.Unlock()
 	slog.DebugContext(ctx, "Structural checkpoint written", "root", s.root.ID, "generation", pin.Generation,
 		"directories", pin.value.directories.Len(), "write_ms", time.Since(started).Milliseconds())
 	return true, nil
@@ -169,4 +187,14 @@ func (s *structuralCheckpoint) Status() (<-chan struct{}, error) {
 func (s *structuralCheckpoint) Active() bool {
 	done, _ := s.Status()
 	return done != nil
+}
+
+// The recursive range fingerprint excludes generation and observation clocks.
+func structuralCheckpointFingerprint(ctx context.Context, generation *structuralGeneration) (pagedview.Fingerprint, error) {
+	root, _, err := generation.directories.Get(ctx, ".")
+	if err != nil {
+		return pagedview.Fingerprint{}, err
+	}
+	index := pagedview.RangeIndex[TreeItem]{Store: generation, Root: root.page}
+	return DirectoryBodyFingerprint(ctx, &index, ".", stateOf(root.observation), true)
 }

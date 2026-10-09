@@ -36,7 +36,7 @@ type Deps struct {
 	Projects      project.Registry
 	ProjectRules  *rules.ProjectRulesOverlay
 	Store         session.Store
-	Sessions      *session.Manager
+	Sessions      *session.Host
 	Workers       worker.WorkerQueue
 	Workflows     *workflow.RunManager
 	Settings      *settings.Service
@@ -62,7 +62,7 @@ type Bootstrap struct {
 	Preview        *preview.Controller
 	ProgressStore  progress.Store
 	SessionView    *sessionview.Projector
-	Sessions       *session.Manager
+	Sessions       *session.Host
 	Store          session.Store
 	Workers        worker.WorkerQueue
 	responses      *httpio.Responder
@@ -77,7 +77,7 @@ type Lifecycle struct {
 	Projects        project.Registry
 	Prompt          *promptadmin.Queue
 	SessionView     *sessionview.Projector
-	Sessions        *session.Manager
+	Sessions        *session.Host
 	Settings        *settings.Service
 	Store           session.Store
 	Workflows       *workflow.RunManager
@@ -88,7 +88,7 @@ type Lifecycle struct {
 }
 
 type Navigation struct {
-	Sessions        *session.Manager
+	Sessions        *session.Host
 	Store           session.Store
 	Workers         worker.WorkerQueue
 	responses       *httpio.Responder
@@ -96,12 +96,12 @@ type Navigation struct {
 }
 
 type Recovery struct {
-	Sessions  *session.Manager
+	Sessions  *session.Host
 	responses *httpio.Responder
 }
 
 type Rewind struct {
-	Sessions  *session.Manager
+	Sessions  *session.Host
 	responses *httpio.Responder
 }
 
@@ -109,7 +109,7 @@ type Transcript struct {
 	Events      events.ReplayHub
 	Invocations invocation.Recorder
 	Projects    project.Registry
-	Sessions    *session.Manager
+	Sessions    *session.Host
 	Store       session.Store
 	responses   *httpio.Responder
 }

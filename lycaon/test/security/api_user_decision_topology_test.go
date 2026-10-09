@@ -34,8 +34,8 @@ func TestAdvanceBlockedUntilTopologyStageMarked(t *testing.T) {
 		t.Fatalf("advance before stage complete status = %d body = %s", w.Code, w.Body.String())
 	}
 
-	if err := workflowMgr.MarkTopologyStageComplete(t.Context(), run.ID, "implement", "", ""); err != nil {
-		testutil.FailErr(t, "workflowMgr.MarkTopologyStageComplete failed", err)
+	if err := workflowMgr.Phases.MarkTopologyStageComplete(t.Context(), run.ID, "implement", "", ""); err != nil {
+		testutil.FailErr(t, "workflowMgr.Phases.MarkTopologyStageComplete failed", err)
 	}
 	req = authedRequest(t, http.MethodPost, "/v1/workflow-runs/"+run.ID+"/advance", workflowCommandBody(t, srv, run.ID, nil))
 	w = httptest.NewRecorder()

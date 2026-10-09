@@ -24,12 +24,12 @@ func TestExploreLegToolsSubsetHasNoCommand(t *testing.T) {
 	dir := t.TempDir()
 	parent, err := h.CreateHarnessSession(t, api.CreateSessionRequest{}, dir)
 	testutil.FailErr(t, "create session", err)
-	policy := h.SessionMgr.PromptToolPolicy()
+	policy := h.SessionMgr.Coordinator.Guards.Policy()
 	builder := compositeWorkerWithPolicy(h.AgentRegistry, policy)
 
 	for _, agentType := range exploreAgentsCommandFree {
 		t.Run(agentType, func(t *testing.T) {
-			child, err := h.SessionMgr.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{
+			child, err := h.SessionMgr.Workers.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{
 				AgentType: agentType,
 				Prompt:    "survey",
 			})

@@ -344,7 +344,8 @@ func TestCreateSessionByProjectID(t *testing.T) {
 	store := store.NewMemory()
 	srv := NewServer(requiredTestDeps(t, Dependencies{Core: CoreDependencies{
 		Store: store, Projects: reg,
-		Sessions: session.NewManager(store, llm.NewMockProvider(testMockConfig(t)), tools.NewStubRegistry(), settings.DefaultSessionLimits())}}), nil, TestAPIToken)
+		Sessions: session.NewHost(store, session.Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())}}), nil, TestAPIToken)
+	stopBackgroundOnCleanup(t, srv)
 	body := `{"project_id":"` + opened.ID + `","posture":"spec"}`
 	req := newAuthedRequest(http.MethodPost, "/v1/sessions", strings.NewReader(body))
 	w := httptest.NewRecorder()
@@ -511,7 +512,7 @@ func TestGetSessionMessagesPositionsWindows(t *testing.T) {
 	srv := newTestServer(t)
 	created := createSessionAtPathOnServer(t, srv, t.TempDir(), wire.SessionPostureBuild)
 	for _, content := range []string{"one", "two", "three", "four", "five"} {
-		testutil.FailErr(t, "append message", srv.Admin.SessionAdmin.Lifecycle.Sessions.AppendAndPublishMessages(
+		testutil.FailErr(t, "append message", srv.Admin.SessionAdmin.Lifecycle.Sessions.Runner.Transcript.AppendPlain(
 			t.Context(), created.ID, wire.Message{Role: wire.MessageRoleAssistant, Content: content}))
 	}
 	read := func(query string, wantStatus int) wire.SessionTranscriptPage {
@@ -564,7 +565,7 @@ func TestGetSessionMessagesFiltersReusedChildByWorkerJob(t *testing.T) {
 	created := createSessionAtPathOnServer(t, srv, dir, wire.SessionPostureBuild)
 	firstJobID := "11111111-1111-4111-8111-111111111111"
 	secondJobID := "22222222-2222-4222-8222-222222222222"
-	testutil.FailErr(t, "append worker messages", srv.Admin.SessionAdmin.Lifecycle.Sessions.AppendAndPublishMessages(
+	testutil.FailErr(t, "append worker messages", srv.Admin.SessionAdmin.Lifecycle.Sessions.Runner.Transcript.AppendPlain(
 		t.Context(), created.ID,
 		wire.Message{Role: wire.MessageRoleAssistant, Content: "first", WorkerID: firstJobID},
 		wire.Message{Role: wire.MessageRoleAssistant, Content: "second", WorkerID: secondJobID},

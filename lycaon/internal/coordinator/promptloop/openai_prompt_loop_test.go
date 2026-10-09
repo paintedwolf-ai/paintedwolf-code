@@ -105,14 +105,20 @@ func TestPromptLoopOpenAIProviderTwoTurns(t *testing.T) {
 
 	provider := openaicompat.New("openai-test", mockServer.URL, "test-key", []modelinfo.Entry{{ID: "gpt-4o"}})
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		Limits: func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
-		LLM:    provider,
-		Tools:  reg,
-		BuildMessages: func(_ context.Context, _ *api.Session, history []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
-			return history, nil
+		Context: ContextDeps{
+			Limits: func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
+			Tools:  reg,
+			BuildMessages: func(_ context.Context, _ *api.Session, history []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
+				return history, nil
+			},
 		},
-		AppendMessages: func(_ context.Context, _ string, msgs ...api.Message) error {
-			return nil
+		Model: ModelDeps{
+			LLM: provider,
+		},
+		Projection: ProjectionDeps{
+			AppendMessages: func(_ context.Context, _ string, msgs ...api.Message) error {
+				return nil
+			},
 		},
 	})
 	sess := &api.Session{ID: "s1", Posture: api.SessionPostureBuild, WorkspacePath: t.TempDir()}
@@ -194,17 +200,23 @@ func TestPromptLoopReassignsCollidingToolCallIDsAcrossTurns(t *testing.T) {
 	var appended []api.Message
 	provider := openaicompat.New("openai-test", mockServer.URL, "test-key", []modelinfo.Entry{{ID: "gpt-4o"}})
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		Limits: func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
-		LLM:    provider,
-		Tools:  reg,
-		BuildMessages: func(_ context.Context, _ *api.Session, history []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
-			return history, nil
+		Context: ContextDeps{
+			Limits: func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
+			Tools:  reg,
+			BuildMessages: func(_ context.Context, _ *api.Session, history []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
+				return history, nil
+			},
 		},
-		AppendMessages: func(_ context.Context, _ string, msgs ...api.Message) error {
-			mu.Lock()
-			appended = append(appended, msgs...)
-			mu.Unlock()
-			return nil
+		Model: ModelDeps{
+			LLM: provider,
+		},
+		Projection: ProjectionDeps{
+			AppendMessages: func(_ context.Context, _ string, msgs ...api.Message) error {
+				mu.Lock()
+				appended = append(appended, msgs...)
+				mu.Unlock()
+				return nil
+			},
 		},
 	})
 	sess := &api.Session{ID: "s1", Posture: api.SessionPostureBuild, WorkspacePath: t.TempDir()}

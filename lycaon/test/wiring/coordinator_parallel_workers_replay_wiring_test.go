@@ -36,7 +36,7 @@ func TestCoordinatorParallelWorkersReplaySiblingNotes(t *testing.T) {
 	}, wiringToolContext(childA.ID, overlayA, fix.WorkerA.JobID))
 	testutil.FailErr(t, "record_finding", err)
 
-	notes, _, err := h.SessionMgr.RecentSiblingNotes(workercontext.WithJob(ctx, fix.WorkerB.JobID), childB.ID, 0, 5)
+	notes, _, err := h.SessionMgr.Workers.Notes.RecentSiblingNotes(workercontext.WithJob(ctx, fix.WorkerB.JobID), childB.ID, 0, 5)
 	testutil.FailErr(t, "read sibling notes", err)
 	if len(notes) != 1 || notes[0].Summary != fix.NoteSummary {
 		t.Fatalf("notes=%+v want %q", notes, fix.NoteSummary)
@@ -168,7 +168,7 @@ func TestCoordinatorParallelWorkersReplayPriorRunFindingsExcluded(t *testing.T) 
 	testutil.FailErr(t, "insert prior-run finding", err)
 
 	workerBCtx := workercontext.WithJob(ctx, fix.WorkerB.JobID)
-	notes, _, err := h.SessionMgr.RecentSiblingNotes(workerBCtx, childB.ID, 0, 5)
+	notes, _, err := h.SessionMgr.Workers.Notes.RecentSiblingNotes(workerBCtx, childB.ID, 0, 5)
 	testutil.FailErr(t, "read prior-run notes", err)
 	if len(notes) != 0 {
 		t.Fatalf("prior-run notes = %+v want none", notes)
@@ -180,7 +180,7 @@ func TestCoordinatorParallelWorkersReplayPriorRunFindingsExcluded(t *testing.T) 
 	}, wiringToolContext(childA.ID, overlayA, fix.WorkerA.JobID))
 	testutil.FailErr(t, "record_finding fresh", err)
 
-	notes2, _, err := h.SessionMgr.RecentSiblingNotes(workerBCtx, childB.ID, 0, 5)
+	notes2, _, err := h.SessionMgr.Workers.Notes.RecentSiblingNotes(workerBCtx, childB.ID, 0, 5)
 	testutil.FailErr(t, "read fresh notes", err)
 	if len(notes2) != 1 || notes2[0].Summary != "fresh batch note" {
 		t.Fatalf("post-spawn notes = %+v", notes2)

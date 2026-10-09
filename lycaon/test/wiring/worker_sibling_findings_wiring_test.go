@@ -86,7 +86,7 @@ func TestParallelWorkerRecordFindingSiblingInjectWiring(t *testing.T) {
 	}, tctx)
 	testutil.FailErr(t, "record_finding worker a", err)
 
-	notes, _, err := h.SessionMgr.RecentSiblingNotes(ctx, childB.ID, 0, 5)
+	notes, _, err := h.SessionMgr.Workers.Notes.RecentSiblingNotes(ctx, childB.ID, 0, 5)
 	testutil.FailErr(t, "read sibling notes", err)
 	if len(notes) != 1 || notes[0].Summary != summary {
 		t.Fatalf("sibling notes for B = %+v want summary %q", notes, summary)

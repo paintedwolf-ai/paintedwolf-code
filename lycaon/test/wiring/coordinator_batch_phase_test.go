@@ -37,13 +37,13 @@ func TestCoordinatorBatchPhaseAdvancesOnTaskDispatch(t *testing.T) {
 	AttachDefaultAmbient(t, h, ctx, sess.ID)
 	h.SeedProgress(t, ctx, sess.ID)
 
-	if _, err := h.SessionMgr.Prompt(ctx, sess.ID, "dispatch implementer patch"); err != nil {
+	if _, err := h.SessionMgr.Submissions.Prompt(ctx, sess.ID, "dispatch implementer patch"); err != nil {
 		testutil.FailErr(t, "Prompt", err)
 	}
 
 	var phase string
 	testutil.WaitFor(t, 5*time.Second, func() bool {
-		state := h.SessionMgr.BuildImplementSessionState(ctx, sess)
+		state := h.SessionMgr.Workers.State.ForSession(ctx, sess)
 		phase = state.BatchPhase
 		return phase == batch.PhaseDispatch
 	})
@@ -90,7 +90,7 @@ func TestCoordinatorBatchPhaseSynthesizeAfterWorkerDrain(t *testing.T) {
 	AttachDefaultAmbient(t, h, ctx, sess.ID)
 	h.SeedProgress(t, ctx, sess.ID)
 
-	if _, err := h.SessionMgr.Prompt(ctx, sess.ID, "Add a TODO comment via implementer"); err != nil {
+	if _, err := h.SessionMgr.Submissions.Prompt(ctx, sess.ID, "Add a TODO comment via implementer"); err != nil {
 		testutil.FailErr(t, "Prompt dispatch", err)
 	}
 	if err := DrainPendingWorkerJobs(ctx, h, sess.ProjectID, sess.ID); err != nil {
@@ -98,9 +98,9 @@ func TestCoordinatorBatchPhaseSynthesizeAfterWorkerDrain(t *testing.T) {
 	}
 
 	// Worker completion wakes integration asynchronously.
-	state := h.SessionMgr.BuildImplementSessionState(ctx, sess)
+	state := h.SessionMgr.Workers.State.ForSession(ctx, sess)
 	if !testutil.WaitForNoFatal(5*time.Second, func() bool {
-		state = h.SessionMgr.BuildImplementSessionState(ctx, sess)
+		state = h.SessionMgr.Workers.State.ForSession(ctx, sess)
 		return state.BatchPhase == batch.PhaseIntegrate
 	}) {
 		t.Fatalf("implement state = %+v, want integrate after write worker drain with pending overlay", state)

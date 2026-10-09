@@ -18,7 +18,7 @@ func (s *Lifecycle) HandleAbortSession(w http.ResponseWriter, r *http.Request) {
 		s.responses.DecodeError(w, r, err)
 		return
 	}
-	if err := s.Sessions.Abort(r.Context(), id, req.Reason); err != nil {
+	if err := s.Sessions.Stops.Abort(r.Context(), id, req.Reason); err != nil {
 		if errors.Is(err, store.ErrSessionNotFound) {
 			s.responses.Fail(w, wire.ApiErrorCodeSessionNotFound, "chat not found")
 			return

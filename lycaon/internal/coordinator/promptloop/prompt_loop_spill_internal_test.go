@@ -29,9 +29,11 @@ func TestTruncateToolResultForSessionClampAppendsRegisteredCode(t *testing.T) {
 	})
 	testutil.FailErr(t, "json.Marshal failed", err)
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		HintConfig: loadCoordinatorTestHintConfig(t),
+		Closeout: CloseoutDeps{
+			HintConfig: loadCoordinatorTestHintConfig(t),
+		},
 	})
-	got := toolInvocations{loop}.truncateToolResultForSession(t.Context(), "find", toolResultStorageProjection{content: string(payload)}, string(payload), 8192, 0, &api.Session{ID: "s1"})
+	got := loop.Tools.truncateToolResultForSession(t.Context(), "find", toolResultStorageProjection{content: string(payload)}, string(payload), 8192, 0, &api.Session{ID: "s1"})
 	if !strings.Contains(got.content, "Code: TOOL_SURVEY_BYTE_CLAMPED") {
 		t.Fatalf("expected registered clamp banner, got %q", got.content)
 	}
@@ -51,10 +53,14 @@ func TestTruncateToolResultForSessionOverlaySpillsUnderProject(t *testing.T) {
 	tail := `{"job_id":"job-1","conflicts":[{"path":"a.go"}],"mode":"preview"}`
 	payload := strings.Repeat("x", (512<<10)+len(tail)+64) + tail
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		HintConfig: loadCoordinatorTestHintConfig(t),
-		DataDir:    dataDir,
+		Closeout: CloseoutDeps{
+			HintConfig: loadCoordinatorTestHintConfig(t),
+		},
+		Tools: ToolsDeps{
+			DataDir: dataDir,
+		},
 	})
-	got := toolInvocations{loop}.truncateToolResultForSession(t.Context(), "preview_overlay", toolResultStorageProjection{content: payload}, payload, 4096, 0, &api.Session{
+	got := loop.Tools.truncateToolResultForSession(t.Context(), "preview_overlay", toolResultStorageProjection{content: payload}, payload, 4096, 0, &api.Session{
 		ID:        "s1",
 		ProjectID: "proj-spill",
 	})
@@ -75,10 +81,14 @@ func TestTruncateToolResultForSessionGenericSpillsInHostData(t *testing.T) {
 	dataDir := t.TempDir()
 	payload := strings.Repeat("z", 4096)
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		HintConfig: loadCoordinatorTestHintConfig(t),
-		DataDir:    dataDir,
+		Closeout: CloseoutDeps{
+			HintConfig: loadCoordinatorTestHintConfig(t),
+		},
+		Tools: ToolsDeps{
+			DataDir: dataDir,
+		},
 	})
-	got := toolInvocations{loop}.truncateToolResultForSession(t.Context(), "read", toolResultStorageProjection{content: payload}, payload, 512, 0, &api.Session{
+	got := loop.Tools.truncateToolResultForSession(t.Context(), "read", toolResultStorageProjection{content: payload}, payload, 512, 0, &api.Session{
 		ID:        "s1",
 		ProjectID: "proj-spill",
 	})

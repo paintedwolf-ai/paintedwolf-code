@@ -611,7 +611,7 @@ Each Linux Go test process has a 3.5 GiB RSS ceiling, declared in
 [`resources.json`](../scripts/ci_policy/resources.json): hosted runners have
 16 GiB and run four packages at once, so the ceiling keeps one package from
 exhausting the runner while leaving room for the toolchain. A package that needs
-more declares its own ceiling with a tracking issue (`internal/api`, #382).
+more declares its own ceiling with a tracking issue.
 Unless a run sets `GOMEMLIMIT`, the test binary gets a soft limit at 80% of its
 ceiling, so the collector reclaims garbage before the ceiling instead of letting
 the heap reach twice its live size, and the guard measures retained memory
@@ -681,7 +681,6 @@ cheap failure.
 | Nightly | `nightly.yml` | `nightly` | 2 (1): the `nightly` profile capped at two, then one browser shard beside the desktop journey, then the upgrade rehearsal beside quarantine observation |
 | Releases | `release.yml`, `release-halt.yml` | `release-static-update` | 2 (2): preflight or the upgrade rehearsal beside one signed build |
 | Maintenance | dependency inventory, release-system live test, queue health, issue staleness, the issue sweep, release secrets check | `maintenance`, shared | 1 |
-| Runner priority sweep | `runner-priority.yml` | `runner-priority` | 1 |
 | Merge queue | CI of merge groups | one run per group, two groups at once | 8: two groups × the `integration` cap of four |
 | Ready pull requests | CI of pull requests | one run per pull request; a newer push cancels it | 1 per pull request, for about ten minutes |
 
@@ -697,14 +696,14 @@ These caps are maxima, not reservations. Hosted runners start waiting jobs in
 the order they were queued, so a merge-queue job waits behind every job queued
 before it, whatever its class. What bounds that wait is that every class's
 footprint is small and each pull request's is a single job of about ten
-minutes.
+minutes. Nothing reorders or preempts runs.
 
-At their widest the bounded classes hold 3 + 1 + 2 + 2 + 1 + 1 = 10 runners and
-the merge queue 8, leaving two that long work never claims; a pull request's CI
+At their widest the bounded classes hold 3 + 1 + 2 + 2 + 1 = 9 runners and the
+merge queue 8, leaving three that long work never claims; a pull request's CI
 run holds one. Under a burst of ten pull request pushes at once, their ten jobs
 queue ahead of a merge-queue job. With every bounded class at its widest, the
-two spare runners serve them five rounds of about ten minutes, so the
-merge-queue job starts after at most about 50 minutes. That worst case needs
+three spare runners serve them four rounds of about ten minutes, so the
+merge-queue job starts after at most about 40 minutes. That worst case needs
 qualification, nightly, a release, warming, maintenance, and both groups all at
 their widest together. With the queue's two groups, qualification, and nightly
 running (13 runners), the ten jobs take seven runners at once and the
@@ -724,81 +723,6 @@ compute each workflow's widest set of jobs that can run at once, following
 within the declared footprint. They also require the classes, the merge queue
 at its queue settings, and one pull request's CI run to fit the plan together,
 and a pull request's run to hold one runner.
-
-### Runner priority
-
-Hosted runners have no priority setting: they start queued jobs roughly first
-come, first served. The GitHub Free plan runs twenty jobs at once across the
-organization, five of them on macOS.
-[`runner-priority.yml`](../.github/workflows/runner-priority.yml) gives that
-capacity to work in this order, highest first:
-
-| Priority | Work | Gives up runners |
-|---|---|---|
-| 1 | Merge-queue CI and release workflows | Never; only CI of a merge group that no longer exists is cancelled |
-| 2 | CI of ready pull requests | Newest first, after everything below |
-| 3 | Main qualification | Before ready pull requests |
-| 4 | CI of draft pull requests, closed pull requests, and superseded heads | Before qualification |
-| 5 | Main cache warming (`build-caches.yml`) | Before pull requests |
-| 6 | Scheduled and background work: nightly, dependency inventory, the release-system live test, and issue automation | First, and whenever the merge queue holds a group |
-
-The `runner_priority` table in
-[`scripts/verification-plan.json`](../scripts/verification-plan.json) declares
-each workflow's class; CI's class follows its event. Contract tests require
-every workflow with its own trigger, other than CI and the sweep, to declare
-one. Dispatched CI, often a release candidate's verification, is never
-cancelled, and neither is issue automation an issue event starts or a
-`one_shot` workflow such as verification recovery, since each such run handles
-the one event that started it. Those runs claim no priority either: they wait
-for a runner without preempting anything.
-
-Each sweep runs `python3 scripts/ci_verification.py schedule` and decides from
-structured facts only: run events, states, and attempts; job states and runner
-labels; merge-queue branches; and each pull request's draft state and head.
-
-1. It force-cancels CI of merge groups whose branch is gone.
-2. For each platform, it counts the runners that waiting merge-queue and
-   release jobs need: those queued beyond the runners this repository leaves
-   free, and any queued for five minutes, since other repositories share the
-   plan.
-3. It cancels runs in reverse priority order until the runners they hold cover
-   that need. Waiting ready pull request jobs then claim runners the same way
-   from every class below them, since their checks are what admits work to the
-   queue; qualification gates releases and runs on the runners left over. Waiting macOS jobs preempt only runs holding macOS runners, and
-   waiting Linux jobs only runs holding Linux runners. A lower-priority run
-   that holds nothing but waits on that platform is cancelled too, since it
-   would take the next free runner. A run is the unit of cancellation, so a
-   run chosen for one platform also frees its jobs on the other.
-4. While the merge queue holds any group, it cancels scheduled and background
-   runs.
-5. Once no merge-queue or release job waits, it re-runs the cancelled jobs of
-   the newest CI run of each ready pull request's head. Once ready pull
-   request jobs no longer wait either, it does the same for main's newest
-   cache-warming or qualification push, so work preempted for those checks
-   doesn't restart into the runners it just gave them. Once the merge queue is
-   also empty, it does the same for each background workflow's newest
-   scheduled run. A run resumes only when
-   its re-run jobs fit the runners left after every queued job starts, in
-   priority order and longest-waiting first, so resumed work never crowds the
-   merge queue it yielded to.
-
-Preempted work is delayed, not lost. Run history is the record: a resumable
-run is one that ended cancelled while still the newest run of its pull request
-head, warming push, or schedule, so a re-run sweep finds nothing left to do. A
-newer push or schedule supersedes it, and so does converting the pull request
-to draft, the way to stop a pull request's CI for good. Resumption keeps the
-jobs that already passed and stops at a run's fifth attempt; past that, the
-next push or schedule carries the work. Runs started by hand are re-run by
-whoever started them.
-
-The sweep runs when CI, release, release-halt, nightly, dependency inventory,
-or the release-system live test is requested or completes, and every ten
-minutes, because workflows cannot trigger on a merge group's removal or a job
-waiting for a runner. Pull request CI triggers it too, since ready checks are
-demand and their completions free runners. One sweep runs at a time and a newer
-trigger replaces a pending one, so every trigger must run the sweep: a trigger
-that skipped it would still displace the pending sweep it replaced. It is
-itself a short Linux job that waits for a runner like any other.
 
 ## Released-version compatibility
 

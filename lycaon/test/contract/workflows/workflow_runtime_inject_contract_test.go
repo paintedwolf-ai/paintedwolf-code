@@ -23,6 +23,9 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
+	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
+	workflowruntime "github.com/lycaon/lycaon/internal/workflow/runtime"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -33,8 +36,8 @@ func TestInjectBuildersDoNotImportBlueprints(t *testing.T) {
 	targets := []string{
 		filepath.Join(root, "lycaon", "internal", "coordinator", "inject", "inject_dto.go"),
 		filepath.Join(root, "lycaon", "internal", "coordinator", "inject", "active_workflow_inject.go"),
-		filepath.Join(root, "lycaon", "internal", "workflow", "coordinator_turn_frame_loader.go"),
-		filepath.Join(root, "lycaon", "internal", "workflow", "session_runtime_snapshot.go"),
+		filepath.Join(root, "lycaon", "internal", "workflow", "runtime", "coordinator_frames.go"),
+		filepath.Join(root, "lycaon", "internal", "workflow", "runtime", "snapshots.go"),
 	}
 	for _, path := range targets {
 		imports, err := goFileImports(path)
@@ -54,10 +57,10 @@ func TestDefaultPipelineActiveWorkflowInjectVisible(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "pipeline-inject.db")
 
 	store := store.NewSQL(sqlDB)
-	mgr := session.NewManager(store, nil, nil, settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	agents := orchestration.NewMemoryAgentRegistry()
 	_ = orchestration.LoadRequiredAgentRegistry(ctx, agents)
-	mgr.SetAgentRegistry(agents)
+	mgr.Profiles.SetAgentRegistry(agents)
 	mgr.SetPromptEngine(contractcheck.BundledPromptEngineForRoot(t))
 	hintCfg, err := guidance.LoadHintConfigStock()
 	contractcheck.FailErr(t, "LoadHintConfigStock", err)
@@ -65,41 +68,43 @@ func TestDefaultPipelineActiveWorkflowInjectVisible(t *testing.T) {
 	contractcheck.FailErr(t, "LoadGateFeedbackCatalog", err)
 	mgr.SetWorkflowHints(hintCfg, gateCfg)
 
-	sessionWF := workflow.NewSessionWorkflowSQLStore(sqlDB)
+	sessionWF := workflowdrafts.NewSQL(sqlDB)
 	manifestReg, err := workflowdef.RegistryFromDirs("")
 	contractcheck.FailErr(t, "workflow.RegistryFromDirs failed", err)
-	wfMgr := workflow.NewManager(workflow.NewSQLStore(sqlDB), store, manifestReg, nil)
+	wfMgr := workflow.NewManager(workflowpersistence.New(sqlDB), store, manifestReg, nil)
 	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{})
 	contractcheck.FailErr(t, "conditions.NewDefaultRegistry failed", err)
 	wfMgr.SetConditionRegistry(reg)
-	wfMgr.Resolver = workflow.ManifestResolver{SessionStore: sessionWF}
-	mgr.SetWorkflowSessionView(wfMgr)
-	frameLoader := &workflow.CoordinatorTurnFrameLoader{Runs: wfMgr, SessionStore: sessionWF}
+	wfMgr.Resolver.SessionStore = sessionWF
+	mgr.SetWorkflowDomains(&session.WorkflowDomains{Runs: wfMgr.Store.Runs, Policy: wfMgr.Policy, Ambient: wfMgr.Ambient, Blueprints: wfMgr.Blueprints, Batch: wfMgr.Batch, Slash: wfMgr.Slash, Requests: wfMgr.Requests, Feedback: wfMgr.Feedback, Transcript: wfMgr.Transcript, Asks: wfMgr.Asks, Fanout: wfMgr.Fanout, Phases: wfMgr.Phases, Reports: wfMgr.Reports, Recovery: wfMgr.Recovery, Cleanup: wfMgr})
+	frameLoader := &workflowruntime.CoordinatorFrames{Runs: wfMgr.Store.Runs, Resolver: &wfMgr.Resolver, Snapshots: wfMgr.Snapshots, Policy: wfMgr.Policy, Obligations: wfMgr.Obligations, SessionStore: sessionWF}
 	mgr.SetCoordinatorTurnFrameSource(frameLoader)
 
 	dir := t.TempDir()
 	blueprintMgr := blueprint.NewManager(blueprint.NewFileStoreForTest(dir))
-	wfMgr.BlueprintCreate = blueprint.WorkflowBlueprintCreator{Manager: blueprintMgr}
-	wfMgr.BlueprintGet = blueprintMgr
+	wfMgr.Blueprints.Creator = blueprint.WorkflowBlueprintCreator{Manager: blueprintMgr}
+	wfMgr.Blueprints.Getter = blueprintMgr
+	wfMgr.Presentation.BlueprintGetter = blueprintMgr
+	wfMgr.Approvals.Getter = blueprintMgr
 
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 
 	sess, err := store.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	contractcheck.FailErr(t, "store.Create failed", err)
-	if _, err := wfMgr.StartHuman(ctx, sess.ID, wire.StartWorkflowRunRequest{
+	if _, err := wfMgr.Starts.StartHuman(ctx, sess.ID, wire.StartWorkflowRunRequest{
 		WorkflowID: "bugbash", WorkflowVersion: "1.0.0",
 	}); err != nil {
 		t.Fatal(err)
 	}
-	run, err := wfMgr.GetActive(ctx, sess.ID)
+	run, err := wfMgr.Store.Runs.ActiveBySession(ctx, sess.ID)
 	if err != nil || run == nil {
 		t.Fatal("missing active run")
 	}
-	if _, err := wfMgr.Advance(ctx, run.ID); err == nil {
+	if _, err := wfMgr.Phases.Advance(ctx, run.ID); err == nil {
 		t.Fatal("expected advance blocked before parallel hunt stages complete")
 	}
 
-	runCtx, err := mgr.CoordinatorRunContext(ctx, sess.ID)
+	runCtx, err := mgr.Coordinator.Context.RunContext(ctx, sess.ID)
 	contractcheck.FailErr(t, "mgr.CoordinatorRunContext failed", err)
 	block := renderWorkflowFrame(t, ctx, frameLoader, sess.ID, surface.StaticWorkflowHintCodes(runCtx, false), hintCfg, gateCfg)
 	for _, want := range []string{
@@ -125,9 +130,9 @@ func TestPlanResearchObligationsInInject(t *testing.T) {
 	contractcheck.FailErr(t, "LoadHintConfig", err)
 	gateCfg, err := feedback.LoadGateFeedbackCatalog()
 	contractcheck.FailErr(t, "LoadGateFeedbackCatalog", err)
-	frameLoader := &workflow.CoordinatorTurnFrameLoader{Runs: wfMgr}
+	frameLoader := &workflowruntime.CoordinatorFrames{Runs: wfMgr.Store.Runs, Resolver: &wfMgr.Resolver, Snapshots: wfMgr.Snapshots, Policy: wfMgr.Policy, Obligations: wfMgr.Obligations}
 
-	run, err := wfMgr.StartHuman(ctx, "sess-posture", wire.StartWorkflowRunRequest{
+	run, err := wfMgr.Starts.StartHuman(ctx, "sess-posture", wire.StartWorkflowRunRequest{
 		WorkflowID: "plan", WorkflowVersion: "1.0.0", Request: "test request",
 	})
 	contractcheck.FailErr(t, "StartHuman plan", err)
@@ -141,7 +146,7 @@ func TestPlanResearchObligationsInInject(t *testing.T) {
 		ctx, run.ProjectID, run.BlueprintPath, researchPlan, blueprint.ContentDigest(seed.Content),
 	)
 	contractcheck.FailErr(t, "seed research plan", err)
-	if _, err := wfMgr.Advance(ctx, run.ID); err == nil {
+	if _, err := wfMgr.Phases.Advance(ctx, run.ID); err == nil {
 		t.Fatal("expected research gate to block advance")
 	}
 
@@ -155,13 +160,13 @@ func TestPlanResearchObligationsInInject(t *testing.T) {
 		}
 	}
 
-	vars, err := wfMgr.Store.GetScaffoldVars(ctx, run.ID)
+	vars, err := wfMgr.Store.Runs.GetScaffoldVars(ctx, run.ID)
 	contractcheck.FailErr(t, "GetScaffoldVars", err)
 	vars["research_satisfied"] = true
-	run, err = wfMgr.Get(ctx, run.ID)
+	run, err = wfMgr.Store.Runs.Get(ctx, run.ID)
 	contractcheck.FailErr(t, "reload run after rejected advance", err)
 	run.CurrentPhase = "research"
-	contractcheck.FailErr(t, "CommitState", wfMgr.Store.CommitState(ctx, run, "", vars))
+	contractcheck.FailErr(t, "CommitState", wfMgr.Store.State.CommitState(ctx, run, "", vars))
 
 	block = renderWorkflowFrame(t, ctx, frameLoader, "sess-posture", nil, hintCfg, gateCfg)
 	if idx := strings.Index(block, "### Phase obligations"); idx >= 0 {
@@ -174,7 +179,7 @@ func TestPlanResearchObligationsInInject(t *testing.T) {
 func renderWorkflowFrame(
 	t *testing.T,
 	ctx context.Context,
-	loader *workflow.CoordinatorTurnFrameLoader,
+	loader *workflowruntime.CoordinatorFrames,
 	sessionID string,
 	codes []string,
 	hints *guidance.HintConfig,

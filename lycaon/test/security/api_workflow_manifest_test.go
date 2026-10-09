@@ -59,10 +59,10 @@ func TestWorkflowManifestGateBlockedE2E(t *testing.T) {
 	projectDir := t.TempDir()
 	sess := createSessionHTTP(t, srv, projectDir)
 
-	run, err := h.WorkflowMgr.StartHuman(context.Background(), sess.ID, wire.StartWorkflowRunRequest{
+	run, err := h.WorkflowMgr.Starts.StartHuman(context.Background(), sess.ID, wire.StartWorkflowRunRequest{
 		WorkflowID: "gated", WorkflowVersion: "1.0.0",
 	})
-	testutil.FailErr(t, "h.WorkflowMgr.StartHuman failed", err)
+	testutil.FailErr(t, "h.WorkflowMgr.Starts.StartHuman failed", err)
 
 	req := authedRequest(t, http.MethodPost, "/v1/workflow-runs/"+run.ID+"/advance", workflowCommandBody(t, srv, run.ID, nil))
 	w := httptest.NewRecorder()
@@ -95,20 +95,20 @@ func TestWorkflowCoordinatorProfileOverridesPostureE2E(t *testing.T) {
 	sess := createSessionWithPostureHTTP(t, srv, projectDir, wire.SessionPostureSpec)
 	ctx := t.Context()
 
-	got, err := mgr.ResolvePromptToolProfile(ctx, sess.ID)
-	testutil.FailErr(t, "mgr.ResolvePromptToolProfile failed", err)
+	got, err := mgr.Profiles.ResolvePromptToolProfile(ctx, sess.ID)
+	testutil.FailErr(t, "mgr.Profiles.ResolvePromptToolProfile failed", err)
 	if got != "coordinator" {
 		t.Fatalf("before workflow profile = %q want coordinator", got)
 	}
 
-	if _, err := h.WorkflowMgr.StartHuman(ctx, sess.ID, wire.StartWorkflowRunRequest{
+	if _, err := h.WorkflowMgr.Starts.StartHuman(ctx, sess.ID, wire.StartWorkflowRunRequest{
 		WorkflowID: "readonly-coord", WorkflowVersion: "1.0.0",
 	}); err != nil {
 		t.Fatal(err)
 	}
 
-	got, err = mgr.ResolvePromptToolProfile(ctx, sess.ID)
-	testutil.FailErr(t, "mgr.ResolvePromptToolProfile failed", err)
+	got, err = mgr.Profiles.ResolvePromptToolProfile(ctx, sess.ID)
+	testutil.FailErr(t, "mgr.Profiles.ResolvePromptToolProfile failed", err)
 	if got != "worker_readonly" {
 		t.Fatalf("with manifest coordinator_profile profile = %q want worker_readonly", got)
 	}

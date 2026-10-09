@@ -40,5 +40,5 @@ func (o *OrchestratorImpl) markTopologyPatternComplete(
 	if runID == "" {
 		return nil
 	}
-	return o.workflows.MarkTopologyStageComplete(ctx, runID, stage, output, designForkCriterion)
+	return o.workflows.Topology.MarkTopologyStageComplete(ctx, runID, stage, output, designForkCriterion)
 }

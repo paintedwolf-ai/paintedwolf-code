@@ -44,11 +44,11 @@ func TestLoopContinuesAfterTaskEnqueue(t *testing.T) {
 		},
 	}})
 	deps := promptloop.StoreDeps(store)
-	deps.LoadedTools = workersLoaded
-	deps.LLM = client
-	deps.Tools = reg
-	deps.CoordinatorFrame = investigateCoordinatorContext()
-	deps.UpdateMessage = func(_ context.Context, _, messageID string, msg api.Message) error {
+	deps.Context.LoadedTools = workersLoaded
+	deps.Model.LLM = client
+	deps.Context.Tools = reg
+	deps.Context.CoordinatorFrame = investigateCoordinatorContext()
+	deps.Projection.UpdateMessage = func(_ context.Context, _, messageID string, msg api.Message) error {
 		_, err := store.UpdateMessage(ctx, sess.ID, messageID, msg)
 		return err
 	}
@@ -106,15 +106,15 @@ func TestLoopBatchThreeTaskOneTurn(t *testing.T) {
 	}})
 	var toolMsgCount int
 	deps := promptloop.StoreDeps(store)
-	deps.LoadedTools = workersLoaded
-	deps.LLM = client
-	deps.Tools = reg
-	deps.CoordinatorFrame = investigateCoordinatorContext()
-	deps.UpdateMessage = func(_ context.Context, _, messageID string, msg api.Message) error {
+	deps.Context.LoadedTools = workersLoaded
+	deps.Model.LLM = client
+	deps.Context.Tools = reg
+	deps.Context.CoordinatorFrame = investigateCoordinatorContext()
+	deps.Projection.UpdateMessage = func(_ context.Context, _, messageID string, msg api.Message) error {
 		_, err := store.UpdateMessage(ctx, sess.ID, messageID, msg)
 		return err
 	}
-	deps.InFlightWorkerRosterNote = func(ctx context.Context, _ *api.Session) string {
+	deps.Tools.InFlightWorkerRosterNote = func(ctx context.Context, _ *api.Session) string {
 		guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
 		note, err := guidance.RenderWorkerInFlightRoster(ctx, guidance.BuildWorkerRosterLines([]api.WorkerTask{
 			{ID: "job-1", AgentType: "repo-researcher", Status: api.WorkerStatusPending},
@@ -195,11 +195,11 @@ func TestLoopBatchTaskAndReadSameTurn(t *testing.T) {
 		},
 	}})
 	deps := promptloop.StoreDeps(store)
-	deps.LoadedTools = workersLoaded
-	deps.LLM = client
-	deps.Tools = reg
-	deps.CoordinatorFrame = investigateCoordinatorContext()
-	deps.UpdateMessage = func(_ context.Context, _, messageID string, msg api.Message) error {
+	deps.Context.LoadedTools = workersLoaded
+	deps.Model.LLM = client
+	deps.Context.Tools = reg
+	deps.Context.CoordinatorFrame = investigateCoordinatorContext()
+	deps.Projection.UpdateMessage = func(_ context.Context, _, messageID string, msg api.Message) error {
 		_, err := store.UpdateMessage(ctx, sess.ID, messageID, msg)
 		return err
 	}
@@ -252,15 +252,15 @@ func TestLoopReloadsHistoryAfterToolBatchCompaction(t *testing.T) {
 	})
 	compactCalls := 0
 	deps := promptloop.StoreDeps(store)
-	deps.LoadedTools = workersLoaded
-	deps.LLM = client
-	deps.Policy = &recordingToolPolicy{}
-	deps.Tools = reg
-	deps.CompactOversizedToolResults = func(context.Context, string, *api.Session) error {
+	deps.Context.LoadedTools = workersLoaded
+	deps.Model.LLM = client
+	deps.Context.Policy = &recordingToolPolicy{}
+	deps.Context.Tools = reg
+	deps.Tools.CompactOversizedToolResults = func(context.Context, string, *api.Session) error {
 		compactCalls++
 		return nil
 	}
-	deps.ReloadHistory = func(ctx context.Context, sessionID string, sess *api.Session, surfaceID string) ([]api.Message, error) {
+	deps.Tools.ReloadHistory = func(ctx context.Context, sessionID string, sess *api.Session, surfaceID string) ([]api.Message, error) {
 		return store.GetMessages(ctx, sessionID)
 	}
 	loop := promptloop.NewPromptLoopForTest(deps)

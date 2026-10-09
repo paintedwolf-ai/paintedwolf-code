@@ -89,10 +89,11 @@ func TestOpenAPIScansRealServer(t *testing.T) {
 
 	sessStore := store.NewMemory()
 	mockLLM := llm.NewMockProvider(nil)
-	mgr := session.NewManager(sessStore, mockLLM, tools.NewStubRegistry(), settings.DefaultSessionLimits())
-	srv := api.NewServer(apitest.Dependencies(t, api.Dependencies{Core:api.CoreDependencies{
-		Store: sessStore, Projects: projReg, Sessions: mgr,},Scans:api.ScansDependencies{
-		ScanCoordinator: coord, ScannerRegistry: reg,},}), nil, api.TestAPIToken)
+	mgr := session.NewHost(sessStore, session.Models{Client: mockLLM, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	srv := api.NewServer(apitest.Dependencies(t, api.Dependencies{
+		Store: sessStore, Projects: projReg, Sessions: mgr,
+		ScanCoordinator: coord, ScannerRegistry: reg,
+	}), nil, api.TestAPIToken)
 
 	created, err := coord.Enqueue(t.Context(), scan.EnqueueRequest{
 		ProjectDir: projectDir,

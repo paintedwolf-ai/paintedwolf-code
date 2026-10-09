@@ -63,7 +63,7 @@ func NewDetectionsTestServer(t *testing.T) (*hostapi.Server, string) {
 	root := configlayout.FindModuleRoot()
 	boot := extpackstest.StockCatalog(t)
 	srv.Admin.SessionAdmin.Lifecycle.Sessions.SetEffectiveCatalogDeps(root, boot, nil)
-	srv.Admin.SessionAdmin.Lifecycle.Sessions.Catalog().SetCatalogViewCache(catalogview.NewCache(root, slog.Default()))
+	srv.Admin.SessionAdmin.Lifecycle.Sessions.Catalog.SetCatalogViewCache(catalogview.NewCache(root, slog.Default()))
 	_ = last
 	return srv, cfgDir
 }

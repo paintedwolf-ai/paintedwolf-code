@@ -160,13 +160,14 @@ func NewProviderTestServerWithCatalogs(t *testing.T, shipYAML, localYAML string,
 	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	store := store.NewMemory()
 	mock := llm.NewMockProvider(TestMockConfig(t))
-	mgr := session.NewManagerWithLLMService(store, mock, svc, nil, settings.DefaultSessionLimits(), nil)
+	mgr := session.NewHost(store, session.Models{Client: mock, Provider: svc, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	hub := events.NewMemoryHub()
 	deps := hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: store, Projects: project.NewMemoryRegistry(), Sessions: mgr}, Providers: hostapi.ProvidersDependencies{LLM: svc}, Host: hostapi.HostDependencies{Events: hub}}
 	for _, opt := range opts {
 		opt(&deps)
 	}
 	srv := hostapi.NewServer(RequiredTestDeps(t, deps), nil, hostapi.TestAPIToken)
+	StopBackgroundOnCleanup(t, srv)
 	return srv, StartTestHTTPServer(t, srv)
 }
 

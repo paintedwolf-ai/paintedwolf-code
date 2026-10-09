@@ -2,6 +2,7 @@ package toolhost
 
 import (
 	"fmt"
+	"github.com/lycaon/lycaon/internal/tools/native/command"
 
 	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/git"
@@ -88,10 +89,10 @@ func buildNativeRegistry(deps buildDeps) (*tools.DefaultRegistry, *nativeToolSer
 	surveyRepo := &survey.RepoTool{
 		Boundary: boundary, BaseCatalog: deps.surveyCatalog, Caps: survey.DefaultCaps(), SourceCatalog: catalog,
 	}
-	var commandTool *native.CommandTool
+	var commandTool *command.CommandTool
 	var verifyTool *native.VerifyTool
-	var commandOutputTool *native.CommandOutputTool
-	var commandStopTool *native.CommandStopTool
+	var commandOutputTool *command.CommandOutputTool
+	var commandStopTool *command.CommandStopTool
 
 	if err := registerCoreNativeTools(register, read, write, edit, replaceLines, codeRewrite, restoreVersion, find, summarizeTool, grep, jqTool, jqEdit, stat, wc, listDir, chmod, deleteTool, copyTool, moveTool, mkdirTool, diffTool, extractArchiveTool, chownTool, surveyRepo); err != nil {
 		return nil, nil, err

@@ -14,7 +14,7 @@ import (
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/workflow"
+	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -113,7 +113,7 @@ phases:
       set_posture: build
     complete_when: delegation_closeout_complete
 `
-	if err := sessionStore.Upsert(t.Context(), sess.ID, []byte(manifest), workflow.ComposeActorCoordinator, nil); err != nil {
+	if err := sessionStore.Upsert(t.Context(), sess.ID, []byte(manifest), workflowdrafts.Coordinator, nil); err != nil {
 		testutil.FailErr(t, "sessionStore.Upsert failed", err)
 	}
 	body := `{"version":"1.0.0","confirm":false}`

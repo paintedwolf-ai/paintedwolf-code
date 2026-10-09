@@ -26,7 +26,7 @@ func TestHumanPlanStartLoopWakesCoordinator(t *testing.T) {
 	}
 
 	testutil.WaitFor(t, 5*time.Second, func() bool {
-		h.SessionMgr.DrainLoopPendingForTest(t.Context(), sess.ID)
+		h.SessionMgr.Runner.Coordinator.CoordinatorLoop().DrainPending(t.Context(), sess.ID)
 		msgs, err := h.Store.GetMessages(t.Context(), sess.ID)
 		testutil.FailErr(t, "GetMessages", err)
 		for _, msg := range msgs {

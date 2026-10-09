@@ -56,11 +56,11 @@ func TestCommandApprovalWildcardDenyE2E(t *testing.T) {
 
 	sess, err := h.CreateHarnessSession(t, wire.CreateSessionRequest{}, dir)
 	testutil.FailErr(t, "create session", err)
-	if err := h.SessionMgr.SetAgentType(ctx, sess.ID, "implementer"); err != nil {
+	if err := h.SessionMgr.Chats.SetAgentType(ctx, sess.ID, "implementer"); err != nil {
 		testutil.FailErr(t, "SetAgentType", err)
 	}
 
-	if _, err := h.SessionMgr.Prompt(ctx, sess.ID, "remove stale container"); err != nil {
+	if _, err := h.SessionMgr.Submissions.Prompt(ctx, sess.ID, "remove stale container"); err != nil {
 		testutil.FailErr(t, "Prompt", err)
 	}
 
@@ -99,7 +99,7 @@ func TestCommandApprovalWildcardAskSSEMetadataE2E(t *testing.T) {
 
 	sess, err := h.CreateHarnessSession(t, wire.CreateSessionRequest{}, dir)
 	testutil.FailErr(t, "create session", err)
-	if err := h.SessionMgr.SetAgentType(ctx, sess.ID, "implementer"); err != nil {
+	if err := h.SessionMgr.Chats.SetAgentType(ctx, sess.ID, "implementer"); err != nil {
 		testutil.FailErr(t, "SetAgentType", err)
 	}
 
@@ -110,7 +110,7 @@ func TestCommandApprovalWildcardAskSSEMetadataE2E(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() {
-		_, err := h.SessionMgr.Prompt(ctx, sess.ID, "sort output file")
+		_, err := h.SessionMgr.Submissions.Prompt(ctx, sess.ID, "sort output file")
 		done <- err
 	}()
 

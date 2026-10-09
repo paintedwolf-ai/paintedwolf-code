@@ -194,7 +194,7 @@ Reaching a folder outside the attached folders always has a route to a card, at 
 | Crossing | Card subject |
 |---|---|
 | Native read of a folder outside the attached folders | That folder and everything under it |
-| Native read of a file outside the attached folders | The containing folder, or the exact file in the home directory or a sensitive location |
+| Native read of a file outside the attached folders | A selected host-approved ancestor directory, or the exact file in a sensitive location |
 | Command write refused outside its write roots | The enclosing repository work tree, otherwise the containing folder ([Security](security.md#credentials-the-agent-drives)) |
 | Native write outside the attached folders | The exact path |
 

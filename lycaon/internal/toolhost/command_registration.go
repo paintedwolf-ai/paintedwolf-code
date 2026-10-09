@@ -6,16 +6,17 @@ import (
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
+	"github.com/lycaon/lycaon/internal/tools/native/command"
 )
 
 func registerCommandTools(
 	reg *tools.DefaultRegistry,
 	runner *hostcmd.Runner,
 	boundary *sandbox.Boundary,
-	commandTool **native.CommandTool,
+	commandTool **command.CommandTool,
 	verifyTool **native.VerifyTool,
-	commandOutputTool **native.CommandOutputTool,
-	commandStopTool **native.CommandStopTool,
+	commandOutputTool **command.CommandOutputTool,
+	commandStopTool **command.CommandStopTool,
 ) error {
 	service, err := hostprocess.New()
 	if err != nil {
@@ -28,11 +29,11 @@ func registerCommandTools(
 	if err := reg.Register("process_signal", processTools.Signal); err != nil {
 		return err
 	}
-	ft := native.NewCommandFailureTracker()
-	*commandTool = &native.CommandTool{Runner: runner, Boundary: boundary, FailureTracker: ft}
+	ft := command.NewCommandFailureTracker()
+	*commandTool = &command.CommandTool{Runner: runner, Boundary: boundary, FailureTracker: ft}
 	*verifyTool = &native.VerifyTool{Runner: runner, Boundary: boundary, FailureTracker: ft}
-	*commandOutputTool = &native.CommandOutputTool{}
-	*commandStopTool = &native.CommandStopTool{}
+	*commandOutputTool = &command.CommandOutputTool{}
+	*commandStopTool = &command.CommandStopTool{}
 	if err := reg.Register("command", (*commandTool).Run); err != nil {
 		return err
 	}

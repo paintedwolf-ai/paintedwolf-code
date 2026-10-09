@@ -10,6 +10,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"gopkg.in/yaml.v3"
@@ -35,13 +36,13 @@ func TestCloseoutPushCoversEveryReachableProseSurface(t *testing.T) {
 	empty := surface.ImplementSessionState{}
 
 	// Open progress keeps synthesis unreachable.
-	if BatchReadyForSynthesis(empty, nil, openPlanFixture, false, false) {
+	if workeroutcomes.BatchReadyForSynthesis(empty, nil, openPlanFixture, false, false) {
 		t.Fatal("an open plan must keep the synthesis surface unreachable (G5 gates entry on AllTerminal)")
 	}
-	if !SynthesisBlockedOnlyByOpenProgress(empty, nil, openPlanFixture, false, false) {
+	if !workeroutcomes.SynthesisBlockedOnlyByOpenProgress(empty, nil, openPlanFixture, false, false) {
 		t.Fatal("an otherwise-ready batch with an open plan must be the blocked-only-by-open-progress wrap-up moment")
 	}
-	if !BatchReadyForSynthesis(empty, nil, terminalPlanFixture, false, false) {
+	if !workeroutcomes.BatchReadyForSynthesis(empty, nil, terminalPlanFixture, false, false) {
 		t.Fatal("a terminal plan with all other gates satisfied must reach the synthesis surface")
 	}
 
@@ -50,7 +51,7 @@ func TestCloseoutPushCoversEveryReachableProseSurface(t *testing.T) {
 	var fired []string
 	for _, surfaceID := range implementSurfaceUniverse {
 		mgr, sess := newSynthesisDelayManager(t)
-		mgr.progress.Set(sess.ID, openPlanFixture)
+		mgr.RewindRuntime.Progress.Set(sess.ID, openPlanFixture)
 
 		_, block := rejectCloseout(t, mgr, sess, surfaceID, true)
 

@@ -110,7 +110,7 @@ func PresenceTestServer(t *testing.T) (*hostapi.Server, *events.Presence) {
 	st := store.NewMemory()
 	p := events.NewPresence(hub, time.Minute)
 	srv := hostapi.NewServer(RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
-		Store: st, Projects: project.NewMemoryRegistry(), Sessions: session.NewManager(st, nil, nil, settings.DefaultSessionLimits())}, Host: hostapi.HostDependencies{
+		Store: st, Projects: project.NewMemoryRegistry(), Sessions: session.NewHost(st, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)}, Host: hostapi.HostDependencies{
 		Events: hub, Presence: p}}), nil, hostapi.TestAPIToken)
 	return srv, p
 }

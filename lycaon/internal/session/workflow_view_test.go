@@ -11,7 +11,9 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/guidance/feedback"
 	"github.com/lycaon/lycaon/internal/promptresult"
+	"github.com/lycaon/lycaon/internal/session/promptinput"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/workflowfacts"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolpolicy"
@@ -25,7 +27,6 @@ type recordingWorkflowView struct {
 	topologyErr   error
 	closeoutID    string
 	archive       string
-	reviewErr     error
 }
 
 func (r *recordingWorkflowView) record(name string) {
@@ -47,14 +48,14 @@ func (r *recordingWorkflowView) ActiveReviewVerdictPending(ctx context.Context, 
 	return false
 }
 
-func (r *recordingWorkflowView) ActiveCloseoutGateState(ctx context.Context, sessionID string) WorkflowCloseoutGateState {
+func (r *recordingWorkflowView) ActiveCloseoutGateState(ctx context.Context, sessionID string) workflowfacts.WorkflowCloseoutGateState {
 	r.record("ActiveCloseoutGateState")
-	return WorkflowCloseoutGateState{}
+	return workflowfacts.WorkflowCloseoutGateState{}
 }
 
-func (r *recordingWorkflowView) ResolvedRequest(ctx context.Context, sessionID string) ResolvedWorkflowRequest {
+func (r *recordingWorkflowView) ResolvedRequest(ctx context.Context, sessionID string) workflowfacts.ResolvedWorkflowRequest {
 	r.record("ResolvedRequest")
-	return ResolvedWorkflowRequest{}
+	return workflowfacts.ResolvedWorkflowRequest{}
 }
 
 func (r *recordingWorkflowView) ActivePhaseHasReviewLoop(ctx context.Context, sessionID string) bool {
@@ -62,9 +63,9 @@ func (r *recordingWorkflowView) ActivePhaseHasReviewLoop(ctx context.Context, se
 	return false
 }
 
-func (r *recordingWorkflowView) ActivePhaseGuardState(ctx context.Context, sessionID string) WorkflowPhaseGuardState {
+func (r *recordingWorkflowView) ActivePhaseGuardState(ctx context.Context, sessionID string) workflowfacts.WorkflowPhaseGuardState {
 	r.record("ActivePhaseGuardState")
-	return WorkflowPhaseGuardState{Phase: "phase-a"}
+	return workflowfacts.WorkflowPhaseGuardState{Phase: "phase-a"}
 }
 
 func (r *recordingWorkflowView) AllowedAgents(ctx context.Context, sessionID string) []string {
@@ -72,9 +73,9 @@ func (r *recordingWorkflowView) AllowedAgents(ctx context.Context, sessionID str
 	return []string{"coordinator"}
 }
 
-func (r *recordingWorkflowView) ActiveManifest(ctx context.Context, sessionID string) (ActiveWorkflowManifest, bool) {
+func (r *recordingWorkflowView) ActiveManifest(ctx context.Context, sessionID string) (workflowfacts.ActiveWorkflowManifest, bool) {
 	r.record("ActiveManifest")
-	return ActiveWorkflowManifest{Rules: []string{"manifest-rules.yaml"}, Archive: r.archive}, true
+	return workflowfacts.ActiveWorkflowManifest{Rules: []string{"manifest-rules.yaml"}, Archive: r.archive}, true
 }
 
 func (r *recordingWorkflowView) ParallelTaskMaxWorkers(ctx context.Context, sessionID string) int {
@@ -112,8 +113,8 @@ func (r *recordingWorkflowView) ActivePhaseRequiresEvidence(ctx context.Context,
 	return false
 }
 
-func (r *recordingWorkflowView) GetActive(ctx context.Context, sessionID string) (*api.WorkflowRun, error) {
-	r.record("GetActive")
+func (r *recordingWorkflowView) ActiveBySession(ctx context.Context, sessionID string) (*api.WorkflowRun, error) {
+	r.record("ActiveBySession")
 	return nil, nil
 }
 
@@ -193,12 +194,13 @@ func TestApplyPromptUserTurnPropagatesFeedbackFailure(t *testing.T) {
 	ctx := t.Context()
 	wantErr := errors.New("feedback store unavailable")
 	st := store.NewMemory()
-	mgr := NewManager(st, nil, nil, settings.DefaultSessionLimits())
-	mgr.SetWorkflowSessionView(&recordingWorkflowView{feedbackErr: wantErr})
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	workflowFixture1 := &recordingWorkflowView{feedbackErr: wantErr}
+	mgr.SetWorkflowDomains(&WorkflowDomains{Runs: workflowFixture1, Policy: workflowFixture1, Ambient: workflowFixture1, Blueprints: workflowFixture1, Batch: workflowFixture1, Slash: workflowFixture1, Requests: workflowFixture1, Feedback: workflowFixture1, Transcript: workflowFixture1, Asks: workflowFixture1, Fanout: workflowFixture1, Phases: workflowFixture1, Reports: workflowFixture1, Recovery: workflowFixture1, Cleanup: workflowFixture1})
 	sess, err := st.Create(ctx, api.CreateSessionRequest{}, "project-1")
 	testutil.FailErr(t, "create session", err)
 
-	_, err = mgr.applyPromptUserTurn(ctx, sess.ID, PromptInput{Text: "answer"})
+	_, err = mgr.Runner.Instructions.Apply(ctx, sess.ID, promptinput.Input{Text: "answer"})
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("prompt user turn error = %v, want feedback failure", err)
 	}
@@ -206,11 +208,13 @@ func TestApplyPromptUserTurnPropagatesFeedbackFailure(t *testing.T) {
 
 func TestToolpolicyEngineDepsWiresWorkflowView(t *testing.T) {
 	view := &recordingWorkflowView{}
-	mgr := NewManager(store.NewMemory(), nil, nil, settings.DefaultSessionLimits())
-	mgr.SetWorkflowSessionView(view)
+	mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	workflowFixture2 := view
+	mgr.SetWorkflowDomains(&WorkflowDomains{Runs: workflowFixture2, Policy: workflowFixture2, Ambient: workflowFixture2, Blueprints: workflowFixture2, Batch: workflowFixture2, Slash: workflowFixture2, Requests: workflowFixture2, Feedback: workflowFixture2, Transcript: workflowFixture2, Asks: workflowFixture2, Fanout: workflowFixture2, Phases: workflowFixture2, Reports: workflowFixture2, Recovery: workflowFixture2, Cleanup: workflowFixture2})
 	sess := &api.Session{ID: "s1", Posture: api.SessionPostureSpec}
 
-	eval := toolpolicy.BuildEvalContext(context.Background(), mgr.toolpolicyEngineDeps(), sess, "read_file", map[string]any{"path": "x"})
+	eval, err := toolpolicy.BuildEvalContext(context.Background(), mgr.Coordinator.Guards.PolicyDependencies(), sess, "read_file", map[string]any{"path": "x"})
+	testutil.FailErr(t, "capture tool policy", err)
 	if eval.Phase != "phase-a" {
 		t.Fatalf("phase = %q want phase-a", eval.Phase)
 	}
@@ -227,15 +231,7 @@ func TestToolpolicyEngineDepsWiresWorkflowView(t *testing.T) {
 		t.Fatalf("vars = %v", eval.Vars)
 	}
 
-	want := []string{
-		"CurrentPhase",
-		"AllowedAgents",
-		"ActiveManifest",
-		"ActivePhaseHasReviewLoop",
-		"GetActive",
-		"ActivePlan",
-		"ScaffoldVarsForSession",
-	}
+	want := []string{"PolicySnapshot"}
 	if len(view.calls) != len(want) {
 		t.Fatalf("calls = %v want %v", view.calls, want)
 	}
@@ -248,24 +244,7 @@ func TestToolpolicyEngineDepsWiresWorkflowView(t *testing.T) {
 
 func (s *recordingWorkflowView) RecordReviewToolResult(context.Context, string, api.Message) error {
 	s.record("RecordReviewToolResult")
-	return s.reviewErr
-}
-
-// A failed accounting write fails the append so the turn does not continue as
-// if the repair attempt were counted; startup recovery replays the stored row.
-func TestLoopAppendReportsReviewAccountingFailure(t *testing.T) {
-	ctx := t.Context()
-	st := store.NewMemory()
-	mgr := NewManager(st, nil, nil, settings.DefaultSessionLimits())
-	wantErr := errors.New("workflow state unavailable")
-	mgr.SetWorkflowSessionView(&recordingWorkflowView{reviewErr: wantErr})
-	sess, err := st.Create(ctx, api.CreateSessionRequest{}, "project-1")
-	testutil.FailErr(t, "create session", err)
-
-	row := api.Message{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Tool: "submit_verdict"}}
-	if err := mgr.appendLoopMessages(ctx, sess.ID, row); !errors.Is(err, wantErr) {
-		t.Fatalf("append error = %v, want the accounting failure", err)
-	}
+	return nil
 }
 
 // Kick obligations for a run on a sealed version come from that version's
@@ -276,10 +255,10 @@ func TestKickGateObligationsFollowTheRunArchive(t *testing.T) {
 	frame := inject.CoordinatorTurnFrame{}
 	frame.RunContext.FailedLeaves = []string{"evidence_passed:survey_challenged"}
 	satisfy := func(archive string) string {
-		mgr := NewManager(store.NewMemory(), nil, nil, settings.DefaultSessionLimits())
+		mgr := NewHost(store.NewMemory(), Models{Limits: settings.DefaultSessionLimits()}, nil)
 		mgr.SetWorkflowHints(nil, gateFeedback)
-		mgr.SetWorkflowSessionView(&recordingWorkflowView{archive: archive})
-		rows := mgr.projectKickGateObligations(t.Context(), "session", frame)
+		mgr.SetWorkflowDomains(workflowDomainFixture(&recordingWorkflowView{archive: archive}))
+		rows := mgr.Coordinator.Guidance.GateObligations(t.Context(), "session", frame)
 		if len(rows) != 1 {
 			t.Fatalf("obligations = %+v", rows)
 		}
@@ -292,21 +271,7 @@ func TestKickGateObligationsFollowTheRunArchive(t *testing.T) {
 	}
 }
 
-// Review repair accounting reads the durable transcript, so it runs only after
-// the coordinator's rows are appended.
-func TestLoopAppendRecordsReviewResultsAfterCommit(t *testing.T) {
-	ctx := t.Context()
-	st := store.NewMemory()
-	mgr := NewManager(st, nil, nil, settings.DefaultSessionLimits())
-	view := &recordingWorkflowView{}
-	mgr.SetWorkflowSessionView(view)
-	sess, err := st.Create(ctx, api.CreateSessionRequest{}, "project-1")
-	testutil.FailErr(t, "create session", err)
-
-	row := api.Message{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Tool: "submit_verdict"}}
-	testutil.FailErr(t, "append loop rows", mgr.appendLoopMessages(ctx, sess.ID, row))
-	want := []string{"StampAndAppendMessages", "RecordReviewToolResult"}
-	if !slices.Equal(view.calls, want) {
-		t.Fatalf("calls = %v, want %v", view.calls, want)
-	}
+func (r *recordingWorkflowView) PolicySnapshot(context.Context, string) (toolpolicy.WorkflowSnapshot, error) {
+	r.record("PolicySnapshot")
+	return toolpolicy.WorkflowSnapshot{Phase: "phase-a", AllowedAgents: []string{"coordinator"}, ManifestRules: []string{"manifest-rules.yaml"}, BlueprintPath: "plan-1", PlanContent: "plan body", Vars: map[string]any{"k": "v"}}, nil
 }

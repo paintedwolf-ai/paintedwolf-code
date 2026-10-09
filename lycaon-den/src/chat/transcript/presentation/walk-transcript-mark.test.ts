@@ -8,10 +8,8 @@ import {
   installWalkTranscriptMark,
   walkTranscriptStreamForSession,
 } from "./walk-transcript-mark.ts";
-import {
-  createTranscriptViewportController,
-  registerTranscriptViewport,
-} from "../../stream/transcript-viewport.tsx";
+import { createTranscriptViewportController } from "../../stream/transcript-viewport.tsx";
+import { registerTranscriptViewport } from "../../stream/transcript-viewport.tsx";
 import {
   enterWalk,
   leaveWalk,

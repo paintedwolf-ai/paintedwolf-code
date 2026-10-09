@@ -78,7 +78,7 @@ func NewMCPProviderWithDistro(t *testing.T, distroBody string, projectMCP bool, 
 	store := store.NewMemory()
 	deps := hostapi.Dependencies{Core: hostapi.CoreDependencies{
 		Store: store, Projects: project.NewMemoryRegistry(),
-		Sessions: session.NewManager(store, nil, toolReg, settings.DefaultSessionLimits())}, External: hostapi.ExternalDependencies{MCP: reg}}
+		Sessions: session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolReg)}, External: hostapi.ExternalDependencies{MCP: reg}}
 	if projectMCP {
 		WithProjectMCP(t, reg)(&deps)
 	}

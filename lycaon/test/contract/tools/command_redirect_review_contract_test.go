@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
+	"github.com/lycaon/lycaon/internal/tools/native/command"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -30,7 +31,7 @@ func TestCommandRedirectTargetsAreReviewedLikeNativeWrites(t *testing.T) {
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, profiles)
 	registry := tools.NewDefaultRegistry()
 	background := bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{})
-	command := &native.CommandTool{Runner: hostcmd.NewRunner(), Boundary: boundary, Background: background}
+	command := &command.CommandTool{Runner: hostcmd.NewRunner(), Boundary: boundary, Background: background}
 	verify := &native.VerifyTool{Runner: hostcmd.NewRunner(), Boundary: boundary, Background: background}
 	contractcheck.FailErr(t, "register command", registry.Register("command", command.Run))
 	contractcheck.FailErr(t, "register verify", registry.Register("verify", verify.Run))

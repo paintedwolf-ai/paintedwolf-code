@@ -41,12 +41,12 @@ func TestStateStartAfterSlash(t *testing.T) {
 	}, dir)
 	testutil.FailErr(t, "create session in store", err)
 
-	_, handled, err := h.WorkflowMgr.TrySlashPrompt(context.Background(), sess.ID, "/plan", "")
-	testutil.FailErr(t, "h.WorkflowMgr.TrySlashPrompt failed", err)
+	_, handled, err := h.WorkflowMgr.Slash.TrySlashPrompt(context.Background(), sess.ID, "/plan", "")
+	testutil.FailErr(t, "h.WorkflowMgr.Slash.TrySlashPrompt failed", err)
 	if !handled {
 		t.Fatal("expected /plan handled")
 	}
-	active, err := h.WorkflowMgr.GetActive(context.Background(), sess.ID)
+	active, err := h.WorkflowMgr.Store.Runs.ActiveBySession(context.Background(), sess.ID)
 	testutil.FailErr(t, "h.WorkflowMgr.GetActive failed", err)
 	if active.WorkflowID != "plan" {
 		t.Fatalf("workflow_id = %q", active.WorkflowID)

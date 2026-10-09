@@ -2,14 +2,14 @@ package delegation
 
 import (
 	"context"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"testing"
-
-	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -19,7 +19,7 @@ func TestDelegateInitCreatesDelegation(t *testing.T) {
 	delStore := NewMemoryStore()
 	queue := worker.NewInMemoryQueue(2)
 	sessStore := store.NewMemory()
-	mgr := session.NewManager(sessStore, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(sessStore, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	delegationMgr := NewManager(delStore, queue, mgr, nil)
 	regProj := project.NewMemoryRegistry()
 	delegationMgr.Projects = regProj

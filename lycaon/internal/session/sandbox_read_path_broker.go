@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools/native/command"
 	"strings"
 	"time"
 
@@ -13,13 +14,13 @@ import (
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/sensitivepath"
-	"github.com/lycaon/lycaon/internal/tools/native"
+
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // AuthorizeRead grants protected reads and silently denies control-plane reads.
-func (b *WriteRootCheckpointBroker) AuthorizeRead(ctx context.Context, in native.SandboxReadPathAsk) (native.SandboxReadPathResult, error) {
-	var out native.SandboxReadPathResult
+func (b *WriteRootCheckpointBroker) AuthorizeRead(ctx context.Context, in command.SandboxReadPathAsk) (command.SandboxReadPathResult, error) {
+	var out command.SandboxReadPathResult
 	if b == nil || b.Checkpoints == nil || b.ReadRuntime == nil {
 		return out, nil
 	}
@@ -29,15 +30,15 @@ func (b *WriteRootCheckpointBroker) AuthorizeRead(ctx context.Context, in native
 	}
 	// Control-plane reads are denied without prompting.
 	if confine.ControlPlanePathDenied(proposed, false, in.SessionScratchRoot) {
-		return native.SandboxReadPathResult{Denied: true, ProposedReadPath: proposed}, nil
+		return command.SandboxReadPathResult{Denied: true, ProposedReadPath: proposed}, nil
 	}
 	if confine.PathAtOrUnder(proposed, in.SessionScratchRoot) || !b.readPathNeedsApproval(proposed, in.ReadDenyPaths) {
 		// Nothing denies this read; the declaration needs no grant.
-		return native.SandboxReadPathResult{Authorized: true, ProposedReadPath: proposed}, nil
+		return command.SandboxReadPathResult{Authorized: true, ProposedReadPath: proposed}, nil
 	}
 	invokingSessionID, rootSessionID := askSessionIDs(ctx, b.Store, in.SessionID, in.ParentSessionID)
 	if sessionOverlayHasExact(b.ReadRuntime, rootSessionID, proposed) {
-		return native.SandboxReadPathResult{Authorized: true, ProposedReadPath: proposed}, nil
+		return command.SandboxReadPathResult{Authorized: true, ProposedReadPath: proposed}, nil
 	}
 	projectDir := strings.TrimSpace(in.ProjectDir)
 	target := &gate.FileTarget{
@@ -66,7 +67,7 @@ func (b *WriteRootCheckpointBroker) AuthorizeRead(ctx context.Context, in native
 	if autoGrant {
 		b.ReadRuntime.ClearDenied(invokingSessionID, proposed)
 		b.ReadRuntime.GrantSessionWriteRoot(rootSessionID, proposed)
-		return native.SandboxReadPathResult{Authorized: true, ProposedReadPath: proposed}, nil
+		return command.SandboxReadPathResult{Authorized: true, ProposedReadPath: proposed}, nil
 	}
 	return b.raiseReadPathCard(ctx, in, invokingSessionID, rootSessionID, projectDir, proposed, decision)
 }
@@ -100,10 +101,10 @@ func (b *WriteRootCheckpointBroker) SessionReadPaths(ctx context.Context, sessio
 // raiseReadPathCard builds and awaits a read-path checkpoint.
 func (b *WriteRootCheckpointBroker) raiseReadPathCard(
 	ctx context.Context,
-	in native.SandboxReadPathAsk,
+	in command.SandboxReadPathAsk,
 	invokingSessionID, rootSessionID, projectDir, proposed string,
 	decision *gate.Decision,
-) (native.SandboxReadPathResult, error) {
+) (command.SandboxReadPathResult, error) {
 	resolved, err := awaitSandboxAsk(ctx, sandboxAskRequest{
 		Gate: b.ReadRuntime, Checkpoints: b.Checkpoints, Authz: b.Authz,
 		InvokingSessionID: invokingSessionID, Key: proposed, ToolCallID: in.ToolCallID,
@@ -114,38 +115,38 @@ func (b *WriteRootCheckpointBroker) raiseReadPathCard(
 		},
 	})
 	if err != nil || !resolved.Answered {
-		return native.SandboxReadPathResult{}, err
+		return command.SandboxReadPathResult{}, err
 	}
-	return native.SandboxReadPathResult{
+	return command.SandboxReadPathResult{
 		Raised: resolved.Raised, Authorized: resolved.Authorized, Denied: resolved.Denied,
 		ProposedReadPath: proposed, UserGuidance: resolved.UserGuidance,
 	}, nil
 }
 
 func (b *WriteRootCheckpointBroker) buildReadPathCard(
-	in native.SandboxReadPathAsk,
+	in command.SandboxReadPathAsk,
 	invokingSessionID, rootSessionID, projectDir, proposed string,
 	decision *gate.Decision,
 ) (sandboxAskCard, error) {
 	summary := sandboxAskCommandSummary(in.Command)
 	grantAction := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "read_path",
-Args: map[string]any{"proposed_read_path": proposed},
-},
-Scope: hitl.ActionScope{
-ProjectID: in.ProjectID,
-ProjectDir: projectDir,
-SessionID: invokingSessionID,
-RootSessionID: rootSessionID,
-},
-Execution: hitl.ActionExecution{
-Contained: hitl.ContainedForAction(hitl.ActionConfineInputs{
-			ProjectID: in.ProjectID,
-			Roots:     projectRoots(projectDir),
-		}),
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool: "read_path",
+			Args: map[string]any{"proposed_read_path": proposed},
+		},
+		Scope: hitl.ActionScope{
+			ProjectID:     in.ProjectID,
+			ProjectDir:    projectDir,
+			SessionID:     invokingSessionID,
+			RootSessionID: rootSessionID,
+		},
+		Execution: hitl.ActionExecution{
+			Contained: hitl.ContainedForAction(hitl.ActionConfineInputs{
+				ProjectID: in.ProjectID,
+				Roots:     projectRoots(projectDir),
+			}),
+		},
+	}
 	chatGrant := readPathChatGrant(grantAction, proposed)
 	chatDelta := hitl.ApprovalAuthorityDelta{
 		Kind: hitl.AuthorityReadPathChat, Grant: &chatGrant,

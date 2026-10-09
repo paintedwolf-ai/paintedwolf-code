@@ -23,7 +23,7 @@ func NewDelegationTestFixture(t *testing.T) (*hostapi.Server, project.Registry, 
 	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	store := store.NewMemory()
 	mock := llm.NewMockProvider(TestMockConfig(t))
-	mgr := session.NewManager(store, mock, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr)
 	delegationStore := delegation.NewMemoryStore()
 	workersCfg := worker.DefaultWorkersConfig()

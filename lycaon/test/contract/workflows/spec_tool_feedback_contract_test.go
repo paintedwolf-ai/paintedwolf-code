@@ -1,9 +1,8 @@
 package contract
 
 import (
-	"github.com/lycaon/lycaon/internal/toolfeedback"
-
 	"context"
+	"github.com/lycaon/lycaon/internal/toolfeedback"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"strings"
@@ -17,7 +16,8 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/rules"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/workflow"
+	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -100,7 +100,7 @@ func TestSpecToolFeedbackRejectShape(t *testing.T) {
 		},
 		{
 			name: "stub required critic incomplete", tool: "task", args: map[string]any{"agent_type": "plan-reviewer"},
-			plan: "## Goal\n\nx\n", vars: workflow.SetHostVar(nil, "phase_skipped.research", true),
+			plan: "## Goal\n\nx\n", vars: runstate.SetHostVar(nil, "phase_skipped.research", true),
 			wantCode: "SPEC_POSTURE_STUB_REQUIRED", wantPhase: "1",
 			blockContains: []string{"Code: SPEC_POSTURE_STUB_REQUIRED"},
 		},
@@ -116,7 +116,7 @@ func TestSpecToolFeedbackRejectShape(t *testing.T) {
 		},
 		{
 			name: "phase skipped research", tool: "task", args: map[string]any{"agent_type": "repo-researcher"},
-			plan: scopeBreaking, vars: workflow.SetHostVar(nil, "phase_skipped.research", true),
+			plan: scopeBreaking, vars: runstate.SetHostVar(nil, "phase_skipped.research", true),
 			wantCode: "SPEC_POSTURE_PHASE_SKIPPED", wantPhase: "2",
 			blockContains: []string{"Code: SPEC_POSTURE_PHASE_SKIPPED"},
 		},

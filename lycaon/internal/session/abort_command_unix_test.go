@@ -24,7 +24,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/tools/native"
+	"github.com/lycaon/lycaon/internal/tools/native/command"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -39,7 +39,7 @@ type commandTurnResult struct {
 func TestAbortEndsATurnBlockedInACommand(t *testing.T) {
 	ctx := context.Background()
 	st := store.NewMemory()
-	mgr := NewManager(st, nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	reg := bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{})
 	mgr.SetBackgroundRegistry(reg)
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
@@ -50,7 +50,7 @@ func TestAbortEndsATurnBlockedInACommand(t *testing.T) {
 	pidFile := filepath.Join(root, "job.pid")
 	testutil.FailErr(t, "write script", os.WriteFile(filepath.Join(root, "serve.sh"),
 		[]byte("set -m\nsleep 1000 &\necho $! > \"$1\"\nwait\n"), 0o600))
-	tool := &native.CommandTool{
+	tool := &command.CommandTool{
 		Runner: hostcmd.NewRunner(),
 		Boundary: sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true}, []sandbox.ToolProfile{
 			{ID: "implement", Tools: map[string]bool{"command": true}},
@@ -65,18 +65,18 @@ func TestAbortEndsATurnBlockedInACommand(t *testing.T) {
 
 	turnDone := make(chan commandTurnResult, 1)
 	go func() {
-		lock := mgr.promptState.Prompt.Acquire(sess.ID)
+		lock := mgr.Runner.Execution.Prompt.Acquire(sess.ID)
 		lock.Lock()
 		defer lock.Unlock()
-		turnCtx := mgr.attachPromptCancel(context.Background(), sess.ID)
-		defer mgr.detachPromptCancel(sess.ID)
+		turnCtx := mgr.Runner.Execution.Attach(context.Background(), sess.ID)
+		defer mgr.Runner.Execution.Cancel(sess.ID)
 		output, err := tool.Run(turnCtx, map[string]any{"command": "sh serve.sh " + pidFile}, tctx)
 		turnDone <- commandTurnResult{output: output, err: err}
 	}()
 	job := waitForJobPID(t, pidFile)
 
 	started := time.Now()
-	testutil.FailErr(t, "abort", mgr.Abort(ctx, sess.ID, "user stopped"))
+	testutil.FailErr(t, "abort", mgr.Stops.Abort(ctx, sess.ID, "user stopped"))
 	if elapsed := time.Since(started); elapsed > exec.TerminateGrace+10*time.Second {
 		t.Fatalf("abort took %v", elapsed)
 	}
@@ -103,16 +103,16 @@ func TestAbortEndsATurnBlockedInACommand(t *testing.T) {
 func TestAbortStopsWithoutATurnThatNeverReleases(t *testing.T) {
 	ctx := context.Background()
 	st := store.NewMemory()
-	mgr := NewManager(st, nil, nil, settings.DefaultSessionLimits())
-	mgr.turnReleaseTimeout = 100 * time.Millisecond
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	mgr.Stops.SetTurnReleaseTimeout(100 * time.Millisecond)
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	testutil.FailErr(t, "mark busy", st.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
 
-	stuck := mgr.promptState.Prompt.Acquire(sess.ID)
+	stuck := mgr.Runner.Execution.Prompt.Acquire(sess.ID)
 	stuck.Lock()
 	started := time.Now()
-	testutil.FailErr(t, "abort", mgr.Abort(ctx, sess.ID, "user stopped"))
+	testutil.FailErr(t, "abort", mgr.Stops.Abort(ctx, sess.ID, "user stopped"))
 	if elapsed := time.Since(started); elapsed > 5*time.Second {
 		t.Fatalf("abort waited %v on a turn that never released", elapsed)
 	}
@@ -124,7 +124,7 @@ func TestAbortStopsWithoutATurnThatNeverReleases(t *testing.T) {
 	stuck.Unlock()
 	// The abandoned acquisition releases the lock once the turn does.
 	testutil.WaitFor(t, 5*time.Second, func() bool {
-		probe := mgr.promptState.Prompt.Acquire(sess.ID)
+		probe := mgr.Runner.Execution.Prompt.Acquire(sess.ID)
 		if !probe.TryLock() {
 			return false
 		}

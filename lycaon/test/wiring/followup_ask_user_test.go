@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/scaffoldvars"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -36,7 +37,7 @@ func TestFollowUpAfterCompletedWorkflowCanAskAndReceiveAnswer(t *testing.T) {
 	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{}, t.TempDir())
 	testutil.FailErr(t, "create session", err)
 	AttachDefaultAmbient(t, h, ctx, sess.ID)
-	original, err := h.WorkflowMgr.GetActive(ctx, sess.ID)
+	original, err := h.WorkflowMgr.Store.Runs.ActiveBySession(ctx, sess.ID)
 	testutil.FailErr(t, "load original workflow", err)
 	if original == nil {
 		t.Fatal("original workflow missing")
@@ -45,24 +46,24 @@ func TestFollowUpAfterCompletedWorkflowCanAskAndReceiveAnswer(t *testing.T) {
 	original.Status = api.WorkflowRunStatusComplete
 	completedAt := time.Now().UTC()
 	original.CompletedAt = &completedAt
-	testutil.FailErr(t, "complete original workflow", h.WorkflowMgr.Store.Update(ctx, original))
-	active, err := h.WorkflowMgr.GetActive(ctx, sess.ID)
+	testutil.FailErr(t, "complete original workflow", h.WorkflowMgr.Store.State.Update(ctx, original))
+	active, err := h.WorkflowMgr.Store.Runs.ActiveBySession(ctx, sess.ID)
 	testutil.FailErr(t, "check workflow gap", err)
 	if active != nil {
 		t.Fatal("fixture must have no active workflow before the follow-up")
 	}
 
-	_, err = h.SessionMgr.Prompt(ctx, sess.ID, "Start again with a native Swift game.")
+	_, err = h.SessionMgr.Submissions.Prompt(ctx, sess.ID, "Start again with a native Swift game.")
 	testutil.FailErr(t, "submit follow-up", err)
 	if calls.Load() != 1 {
 		t.Fatalf("model calls = %d, want one call then park on the question", calls.Load())
 	}
-	active, err = h.WorkflowMgr.GetActive(ctx, sess.ID)
+	active, err = h.WorkflowMgr.Store.Runs.ActiveBySession(ctx, sess.ID)
 	testutil.FailErr(t, "load follow-up workflow", err)
-	if active == nil || active.ID == original.ID || !h.WorkflowMgr.IsAmbientRun(active) {
+	if active == nil || active.ID == original.ID || !runstate.IsAmbientRun(active) {
 		t.Fatalf("follow-up workflow = %+v, want a fresh ambient run", active)
 	}
-	ui, err := h.WorkflowMgr.ComputeRunUI(ctx, active)
+	ui, err := h.WorkflowMgr.Presentation.ComputeRunUI(ctx, active)
 	testutil.FailErr(t, "project question card", err)
 	if ui.PendingFeedback == nil || ui.PendingFeedback.Prompt != "Which platform should I build for?" {
 		t.Fatalf("pending question = %+v", ui.PendingFeedback)
@@ -71,16 +72,16 @@ func TestFollowUpAfterCompletedWorkflowCanAskAndReceiveAnswer(t *testing.T) {
 	assertFollowUpAskResult(t, h, sess.ID, "pending", "")
 	assertFollowUpAskCard(t, h, sess.ID, active.ID, phaseID)
 
-	_, err = h.WorkflowMgr.ResolveUserDecision(ctx, sess.ID, active.ID, phaseID, []string{"macOS"}, "")
+	_, err = h.WorkflowMgr.Feedback.ResolveUserDecision(ctx, sess.ID, active.ID, phaseID, []string{"macOS"}, "")
 	testutil.FailErr(t, "answer follow-up question", err)
 	assertFollowUpAskResult(t, h, sess.ID, "answered", "macOS")
-	vars, err := h.WorkflowMgr.Store.GetScaffoldVars(ctx, active.ID)
+	vars, err := h.WorkflowMgr.Store.Runs.GetScaffoldVars(ctx, active.ID)
 	testutil.FailErr(t, "load answered workflow", err)
 	if scaffoldvars.HasPendingUserInput(vars) {
 		t.Fatal("answered question still blocks the workflow")
 	}
-	testutil.FailErr(t, "answered workflow runnable", h.WorkflowMgr.AssertSessionRunnable(ctx, sess.ID))
-	old, err := h.WorkflowMgr.Get(ctx, original.ID)
+	testutil.FailErr(t, "answered workflow runnable", h.WorkflowMgr.Policy.AssertSessionRunnable(ctx, sess.ID))
+	old, err := h.WorkflowMgr.Store.Runs.Get(ctx, original.ID)
 	testutil.FailErr(t, "load original history", err)
 	if old.Status != api.WorkflowRunStatusComplete || !old.CompletedAt.Equal(completedAt) {
 		t.Fatalf("follow-up changed completed history: %+v", old)
