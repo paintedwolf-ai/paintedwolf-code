@@ -168,7 +168,7 @@ func TestLoopWakeDeniedWhileHostObligationHeld(t *testing.T) {
 			run: &api.WorkflowRun{ID: "run-1", Status: api.WorkflowRunStatusRunning, CurrentPhase: "ingest"},
 		}),
 	})
-	allow, reason, err := loop.ShouldLoopWake(context.Background(), "sess-ob", anchor.PhaseAdvanced)
+	allow, reason, err := loop.Coordinator.Runtime.CoordinatorLoop().ShouldLoopWake(context.Background(), "sess-ob", anchor.PhaseAdvanced)
 	if err != nil {
 		t.Fatalf("ShouldLoopWake: %v", err)
 	}

@@ -23,7 +23,6 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/queue"
 	"github.com/lycaon/lycaon/internal/repoinfo"
-	"github.com/lycaon/lycaon/internal/resourcelifecycle"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
 	"github.com/lycaon/lycaon/internal/session/authorization"
 	"github.com/lycaon/lycaon/internal/session/batchcontrol"
@@ -33,6 +32,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/closeoutassembly"
 	"github.com/lycaon/lycaon/internal/session/closeoutevidence"
 	"github.com/lycaon/lycaon/internal/session/closeouts"
+	"github.com/lycaon/lycaon/internal/session/coordinatorcontrol"
 	"github.com/lycaon/lycaon/internal/session/curation"
 	"github.com/lycaon/lycaon/internal/session/draftqueue"
 	"github.com/lycaon/lycaon/internal/session/execution"
@@ -58,6 +58,8 @@ import (
 	"github.com/lycaon/lycaon/internal/session/protection"
 	"github.com/lycaon/lycaon/internal/session/recovery"
 	"github.com/lycaon/lycaon/internal/session/researchwarm"
+	"github.com/lycaon/lycaon/internal/session/resources"
+	"github.com/lycaon/lycaon/internal/session/rewindruntime"
 	sessionscope "github.com/lycaon/lycaon/internal/session/scope"
 	"github.com/lycaon/lycaon/internal/session/sourcebrief"
 	"github.com/lycaon/lycaon/internal/session/spendguard"
@@ -90,6 +92,9 @@ import (
 )
 
 type Manager struct {
+	Resources       *resources.Service
+	RewindRuntime   *rewindruntime.Service
+	Coordinator     *coordinatorcontrol.Service
 	Closeout        *closeoutassembly.Service
 	ProjectControl  *projectcontrol.Service
 	Admission       *turnadmission.Service
@@ -131,17 +136,15 @@ type Manager struct {
 
 	prompts prompts.PromptTemplateEngine
 
-	doomLoop         loopguard.DoomLoopGuard
-	grounding        GroundingHook
-	rejectFmt        *guidance.StaticRejectFormatter
-	workflows        *WorkflowDomains
-	reportDocuments  ReportDocumentChecker
-	scanEvidenceRuns ScanEvidenceRuns
+	doomLoop        loopguard.DoomLoopGuard
+	grounding       GroundingHook
+	rejectFmt       *guidance.StaticRejectFormatter
+	workflows       *WorkflowDomains
+	reportDocuments ReportDocumentChecker
 
 	Gate *lifecycle.State
 
 	pageRegistry *pagesession.Registry
-	resources    *resourcelifecycle.Registry
 	events       *events.Publisher
 
 	scanGuidance     ScanGuidanceHook
@@ -175,7 +178,6 @@ type Manager struct {
 	// turnReleaseTimeout bounds how long a stop waits for a cancelled turn to
 	// release its session before recording the stop without it.
 
-	scanWaits         ScanWaitState
 	webResearchConfig *webresearch.ConfigStore
 	projects          project.Registry
 	repoProvider      repoinfo.Provider
@@ -213,6 +215,7 @@ func NewManagerWithLLMService(store Store, client modelcall.LLMClient, svc *llm.
 	turnClocks := turnclock.New(store)
 	m := &Manager{
 		store:         store,
+		Coordinator:   &coordinatorcontrol.Service{Scans: &coordinatorcontrol.Scans{Sessions: store}},
 		Protection:    protection.New(),
 		Promotion:     promotionstate.New(),
 		Gate:          lifecycle.New(store),
@@ -292,15 +295,16 @@ func NewManagerWithLLMService(store Store, client modelcall.LLMClient, svc *llm.
 	m.Captures = checkpointcontrol.NewCapture(m.dataDir, store, m.Workspace)
 	m.ToolContext = toolcontext.New(store, m.Workspace, m.Limits, m.Profiles, m.Captures, turnExecution)
 
+	m.RewindRuntime = &rewindruntime.Service{Promotion: m.Promotion, Closeouts: turnCloseouts, ProgressClosure: m.ProgressClosure, History: turnHistory, Queue: m.queue, Drafts: m.Drafts, Submissions: turnSubmissionState}
 	m.Rewinds = checkpointcontrol.NewRewinds(store, m.Captures, &turnExecution.Prompt, m.Workspace, m.projects, nil, m.events, checkpointcontrol.Runtime{
 		WorkersInFlight: func(ctx context.Context, sess *api.Session) int {
 			return workerState.ForSession(ctx, sess).WorkersInFlight
 		},
-		ResetWorkers: m.rollbackWorkerState, ResetCoordinator: m.rollbackCoordinatorBatch, ResetTurnLedgers: m.rollbackTurnLedgers, ResetProgress: m.rollbackProgress, ResetQueue: m.rollbackQueue,
+		ResetWorkers: m.RewindRuntime.ResetWorkers, ResetCoordinator: m.RewindRuntime.ResetCoordinator, ResetTurnLedgers: m.RewindRuntime.ResetTurnLedgers, ResetProgress: m.RewindRuntime.ResetProgress, ResetQueue: m.RewindRuntime.ResetQueue,
 	})
 	m.Interruptions = execution.NewRecovery(store, m.Transcript, turnStatus, m.Rewinds)
-	m.ensureResourceRegistry()
-	m.Chats = chats.New(store, m.PolicyIndex, &turnExecution.Prompt, m.Captures, m.Gate, m.queue, m.resources)
+	m.Resources = resources.New(&resources.Work{Execution: turnExecution, Curation: turnCuration, History: turnHistory.Runner, Research: m.Research}, &resources.TurnState{Capture: m.Captures.Capture, Streams: m.Transcript.Streams, ProgressClosure: m.ProgressClosure, Closeouts: turnCloseouts, Spend: turnSpend, Promotion: m.Promotion, History: turnHistory, Gate: m.Gate, PolicyIndex: m.PolicyIndex, Protection: m.Protection}, &resources.ToolState{}, &resources.Authority{}, m.queue)
+	m.Chats = chats.New(store, m.PolicyIndex, &turnExecution.Prompt, m.Captures, m.Gate, m.queue, m.Resources.Registry)
 	m.Stops = stopping.New(store, m.Gate, turnExecution, m.Chats, m.queue, m.Drafts, m.Interruptions, turnStatus)
 	workerDigests := workeroutcomes.NewDigests()
 	workerCancellations := workeroutcomes.NewCancellations(workeroutcomes.CancellationPorts{Sessions: store, Execution: turnExecution, Stops: m.Stops, Graceful: workerCancel, Cards: workerCards})
@@ -324,7 +328,14 @@ func NewManagerWithLLMService(store Store, client modelcall.LLMClient, svc *llm.
 	m.ProjectControl = projectcontrol.New(store, m.Stops, turnStatus, m.Admission, m.Batch, turnInstructions, m.Transcript)
 	m.Guards = turnguards.New(store, m.ToolPolicy, m.Verification, m.Feedback, workerState, m.Workers, m.Workspace, m.Batch, m.ProgressClosure, turnCloseouts, m.Profiles, m.Limits)
 	m.Loading.SetPolicy(m.Guards.Policy)
+	m.Resources.State.Settlement = turnSettlement
+	m.Resources.State.Batch = m.Batch
+	m.RewindRuntime.Settlement = turnSettlement
+	m.RewindRuntime.Batch = m.Batch
+	m.RewindRuntime.Touches = m.Workers.Workspaces.Touches
 	runtime := m.ensureCoordinatorRuntime()
+	m.Resources.Work.Coordinator = runtime
+	m.RewindRuntime.Coordinator = runtime
 	m.Observations = sessionobservation.New(store, runtime.CoordinatorLoop(), m.Runner.Turns)
 	m.Processes.SetLoop(runtime.CoordinatorLoop())
 	m.Admission.SetLoop(runtime.CoordinatorLoop())
@@ -335,6 +346,14 @@ func NewManagerWithLLMService(store Store, client modelcall.LLMClient, svc *llm.
 	turnSettlement.SetRuntime(runtime)
 	m.Runner.SetRuntime(runtime)
 
+	m.Coordinator = &coordinatorcontrol.Service{
+		Admission: m.Admission,
+		Runtime:   runtime,
+		Workers:   &coordinatorcontrol.Workers{Runtime: runtime, Batch: m.Batch, Settlement: turnSettlement, Admission: m.Admission, Digests: workerDigests, Results: workerResults},
+		Scans:     &coordinatorcontrol.Scans{Sessions: store, Runtime: runtime},
+		Context:   &promptsource.Context{Sessions: store, Frame: m.coordinatorFrame, WorkerState: workerState},
+		Guards:    m.Guards, Guidance: m.Guidance, Loading: m.Loading, Profiles: m.Profiles, Batch: m.Batch, Nudges: m.Nudges, Closeout: m.Closeout, ProgressClosure: m.ProgressClosure, PolicyIndex: m.PolicyIndex, ToolPolicy: m.ToolPolicy, Feedback: m.Feedback,
+	}
 	return m
 }
 

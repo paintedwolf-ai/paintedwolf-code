@@ -35,8 +35,8 @@ func TestLoopSkippedInApprovePhase(t *testing.T) {
 	vars = runstate.SetHumanApprovalReady(vars, true)
 	testutil.FailErr(t, "UpdateVars", fix.wfMgr.Store.UpdateVars(ctx, run, t.TempDir(), vars))
 	before, _ := fix.store.GetMessages(ctx, fix.sess.ID)
-	fix.mgr.NudgeCoordinatorLoop(ctx, fix.sess.ID, anchor.LegFinished, anchor.LegFinished, "leg-1", anchor.Envelope{})
-	fix.mgr.WaitForCoordinatorAsyncTurns(testutil.BoundedContext(t, 5*time.Second))
+	fix.mgr.Coordinator.Runtime.CoordinatorLoop().Nudge(ctx, fix.sess.ID, anchor.LegFinished, anchor.LegFinished, "leg-1", anchor.Envelope{})
+	fix.mgr.Coordinator.WaitForTurns(testutil.BoundedContext(t, 5*time.Second))
 	after, err := fix.store.GetMessages(ctx, fix.sess.ID)
 	testutil.FailErr(t, "fix.store.GetMessages failed", err)
 	if len(after) != len(before) {
@@ -47,8 +47,8 @@ func TestLoopSkippedInApprovePhase(t *testing.T) {
 func TestLoopNoKickPlusSentinel(t *testing.T) {
 	fix := setupLoopFixture(t, settings.DefaultSessionLimits())
 	ctx := context.Background()
-	fix.mgr.NudgeCoordinatorLoop(ctx, fix.sess.ID, anchor.LegFinished, anchor.LegFinished, "leg-1", anchor.Envelope{})
-	fix.mgr.WaitForCoordinatorAsyncTurns(testutil.BoundedContext(t, 5*time.Second))
+	fix.mgr.Coordinator.Runtime.CoordinatorLoop().Nudge(ctx, fix.sess.ID, anchor.LegFinished, anchor.LegFinished, "leg-1", anchor.Envelope{})
+	fix.mgr.Coordinator.WaitForTurns(testutil.BoundedContext(t, 5*time.Second))
 	msgs, err := fix.store.GetMessages(ctx, fix.sess.ID)
 	testutil.FailErr(t, "fix.store.GetMessages failed", err)
 	for _, msg := range msgs {

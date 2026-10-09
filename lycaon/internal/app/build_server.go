@@ -71,7 +71,7 @@ func (b serverWiring) wireRuntimeServices() error {
 	b.previewCtrl = preview.NewController(preview.DefaultConfig(), func(ctx context.Context, projectID, sessionID string, ev wire.PreviewEvent) {
 		b.eventPub.PublishPreview(ctx, projectID, sessionID, ev)
 	})
-	if err := b.mgr.RegisterSessionCleanup("preview-streams", 40, b.previewCtrl.DisposeSession); err != nil {
+	if err := b.mgr.Resources.RegisterCleanup("preview-streams", 40, b.previewCtrl.DisposeSession); err != nil {
 		return fmt.Errorf("register preview cleanup: %w", err)
 	}
 	b.pageRegistry.SetOnClose(func(sessionID, pageID string) {
@@ -274,7 +274,7 @@ func (b serverWiring) registerServerHooks(extensionJournal *extensionstate.SQLJo
 	b.mgr.Admission.SetPromotion(b.srv.Project.TryRunPromotion)
 	b.mgr.Runner.Settlement.SetSandboxReconcile(b.srv.Project.ScheduleProjectSandboxReconcile)
 	// Source views addressed by a chat end with it.
-	if err := b.mgr.RegisterSessionDisposal("source-views", 60, func(_ context.Context, sessionID string) error {
+	if err := b.mgr.Resources.RegisterDisposal("source-views", 60, func(_ context.Context, sessionID string) error {
 		b.srv.Sources.ReleaseChatSourceViews(sessionID)
 		return nil
 	}); err != nil {

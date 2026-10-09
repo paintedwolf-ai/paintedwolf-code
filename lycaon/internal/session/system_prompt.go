@@ -1,17 +1,12 @@
 package session
 
 import (
-	"context"
-	"fmt"
-
 	"github.com/lycaon/lycaon/internal/coordinator/assembly"
-	"github.com/lycaon/lycaon/internal/coordinator/batch"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/guidance/feedback"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // SetPromptEngine wires system prompt template rendering for LLM completion.
@@ -31,6 +26,7 @@ func (m *Manager) SetPromptEngine(engine prompts.PromptTemplateEngine) {
 func (m *Manager) SetCoordinatorTurnFrameSource(source inject.CoordinatorTurnFrameSource) {
 	if m != nil {
 		m.coordinatorFrame = source
+		m.Coordinator.Context.Frame = source
 		m.Guards.SetFrame(source)
 		m.Runner.PostTurn.SetFrame(source)
 		m.Runner.Preparation.SetFrame(source)
@@ -56,8 +52,10 @@ func (m *Manager) SetWorkflowHints(cfg *guidance.HintConfig, gateFeedback *feedb
 		m.Guidance.SetFeedback(gateFeedback)
 		// Phase formatting retains copy evaluated at the rejection occurrence.
 		m.toolRejectFormatter = guidance.NewToolRejectFormatter(guidance.NewFeedbackDeduper())
+		m.Resources.Tools.Rejects = m.toolRejectFormatter
 		m.Guards.SetRejects(m.rejectFmt, m.toolRejectFormatter)
 		m.toolOutputEnricher = guidance.NewToolOutputEnricher(cfg, gateFeedback)
+		m.Resources.Tools.Outputs = m.toolOutputEnricher
 	}
 }
 
@@ -71,36 +69,4 @@ func (m *Manager) SetWorkspaceChecker(c workercompletion.WorkspaceChangeChecker)
 	}
 }
 
-func (m *Manager) buildCompletionMessages(
-	ctx context.Context,
-	sess *api.Session,
-	history []api.Message,
-	frame *inject.CoordinatorTurnFrame,
-) ([]api.Message, error) {
-	return m.ensureCoordinatorRuntime().BuildCompletionMessages(ctx, sess, history, frame)
-}
-
 // CoordinatorRunContext returns the same block exposed on Prompt prepend (optional GET).
-func (m *Manager) CoordinatorRunContext(ctx context.Context, sessionID string) (api.CoordinatorRunContext, error) {
-	if m == nil || m.store == nil {
-		return api.CoordinatorRunContext{}, fmt.Errorf("session store not configured")
-	}
-	sess, err := m.store.Get(ctx, sessionID)
-	if err != nil {
-		return api.CoordinatorRunContext{}, err
-	}
-	if m.coordinatorFrame == nil {
-		return api.CoordinatorRunContext{}, nil
-	}
-	frame, err := m.coordinatorFrame.BuildCoordinatorTurnFrame(ctx, sessionID, sess)
-	if err != nil {
-		return api.CoordinatorRunContext{}, err
-	}
-	runCtx := frame.RunContext
-	state := m.Workers.State.ForSession(ctx, sess)
-	if wirePhase := batch.ToWirePhase(state.BatchPhase); wirePhase != "" {
-		runCtx.BatchPhase = wirePhase
-		runCtx.BatchSeq = state.BatchSeq
-	}
-	return runCtx, nil
-}

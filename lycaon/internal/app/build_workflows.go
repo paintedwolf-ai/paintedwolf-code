@@ -215,7 +215,7 @@ func (b boardWiring) wireWorkflowScanServices() error {
 	b.scanStore.SetEventOutbox(b.eventOutbox)
 	b.workflowMgr.Coverage.Inventory = workflowScanInventory{store: b.scanStore}
 	b.mgr.SetReportDocumentChecker(b.workflowMgr.Reports)
-	b.mgr.SetScanEvidenceRuns(b.workflowMgr.Coverage)
+	b.mgr.Coordinator.Scans.Evidence = b.workflowMgr.Coverage
 	snapshotStore := b.sourceLedger.SnapshotStore()
 	b.scanCoordinator = scan.NewCoordinator(b.scanStore, b.gitMgr, snapshotStore)
 	b.scanCoordinator.Settings = b.settingsSvc.SecurityScanners
@@ -285,7 +285,7 @@ func (b boardWiring) wireWorkflowConditions() error {
 		},
 		DelegationCloseout:      delegation.CloseoutComplete(b.delegationStore),
 		SourceVerifyPassed:      b.mgr.WorkflowSourceVerifyPassed,
-		DeliveryReported:        b.mgr.WorkflowDeliveryReported,
+		DeliveryReported:        b.mgr.Transcript.DeliveredWorkflowPhase,
 		ScanLedger:              b.scanStore,
 		SourceSnapshots:         snapshotStore,
 		ScanProactiveCategories: proactiveCategories,

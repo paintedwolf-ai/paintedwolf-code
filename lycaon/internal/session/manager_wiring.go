@@ -62,7 +62,7 @@ func (m *Manager) SetRejectFormatter(f *guidance.StaticRejectFormatter) {
 func (m *Manager) SetPageRegistry(reg *pagesession.Registry) {
 	if m != nil {
 		m.pageRegistry = reg
-		_ = m.RegisterSessionCleanup("browser-pages", 30, func(ctx context.Context, sessionID string) error {
+		_ = m.Resources.RegisterCleanup("browser-pages", 30, func(ctx context.Context, sessionID string) error {
 			return reg.DisposeSession(ctx, sessionID)
 		})
 		if m.doomLoop != nil {
@@ -101,6 +101,7 @@ func (m *Manager) SetEffectiveCatalogDeps(moduleRoot string, boot *extpacks.Effe
 func (m *Manager) SetSandboxPathGrantRuntime(runtime *approvalstate.SandboxPathGrantRuntime) {
 	if m != nil {
 		m.writeRootRuntime = runtime
+		m.Resources.Authority.Writes = runtime
 		m.Runner.Instructions.SetIntentBoundaries(m.toolApprovalCoalesce, m.gateRepeatLedger, m.writeRootRuntime, m.listenRuntime, m.loopbackRuntime)
 	}
 }
@@ -109,6 +110,7 @@ func (m *Manager) SetSandboxPathGrantRuntime(runtime *approvalstate.SandboxPathG
 func (m *Manager) SetSandboxListenRuntime(runtime *approvalstate.SandboxPortGrantRuntime) {
 	if m != nil {
 		m.listenRuntime = runtime
+		m.Resources.Authority.Listen = runtime
 		m.Runner.Instructions.SetIntentBoundaries(m.toolApprovalCoalesce, m.gateRepeatLedger, m.writeRootRuntime, m.listenRuntime, m.loopbackRuntime)
 	}
 }
@@ -116,6 +118,7 @@ func (m *Manager) SetSandboxListenRuntime(runtime *approvalstate.SandboxPortGran
 func (m *Manager) SetSandboxLoopbackRuntime(runtime *approvalstate.SandboxPortGrantRuntime) {
 	if m != nil {
 		m.loopbackRuntime = runtime
+		m.Resources.Authority.Loopback = runtime
 		m.Runner.Instructions.SetIntentBoundaries(m.toolApprovalCoalesce, m.gateRepeatLedger, m.writeRootRuntime, m.listenRuntime, m.loopbackRuntime)
 	}
 }
@@ -124,6 +127,7 @@ func (m *Manager) SetSandboxLoopbackRuntime(runtime *approvalstate.SandboxPortGr
 func (m *Manager) SetToolApprovalCoalesce(coalesce *approvalstate.ToolApprovalCoalesce) {
 	if m != nil {
 		m.toolApprovalCoalesce = coalesce
+		m.Resources.Tools.Approvals = coalesce
 		m.Runner.Instructions.SetIntentBoundaries(m.toolApprovalCoalesce, m.gateRepeatLedger, m.writeRootRuntime, m.listenRuntime, m.loopbackRuntime)
 	}
 }
@@ -132,6 +136,7 @@ func (m *Manager) SetToolApprovalCoalesce(coalesce *approvalstate.ToolApprovalCo
 func (m *Manager) SetGateRepeatLedger(ledger *approvalstate.GateRepeatLedger) {
 	if m != nil {
 		m.gateRepeatLedger = ledger
+		m.Resources.Tools.Repeat = ledger
 		m.Runner.Instructions.SetIntentBoundaries(m.toolApprovalCoalesce, m.gateRepeatLedger, m.writeRootRuntime, m.listenRuntime, m.loopbackRuntime)
 	}
 }

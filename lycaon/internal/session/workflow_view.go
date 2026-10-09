@@ -121,6 +121,11 @@ type WorkerPhaseTouchPathsSource interface {
 func (m *Manager) SetWorkflowDomains(v *WorkflowDomains) {
 	m.workflows = v
 	if v == nil {
+		m.Resources.Work.Workflow = nil
+	} else {
+		m.Resources.Work.Workflow = v.Cleanup
+	}
+	if v == nil {
 		m.Closeout.SetWorkflow(nil)
 		m.Verification.Evidence.SetWorkflow(nil)
 		m.Runner.Settlement.SetWorkflow(nil)

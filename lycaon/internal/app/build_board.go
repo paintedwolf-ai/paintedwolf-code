@@ -399,7 +399,7 @@ func (b boardWiring) wireVisualAndRenderTools() error {
 	if err := native.RegisterRenderViewTool(b.toolRuntime.Registry, b.toolRuntime.Boundary, b.browserRaster, handleStore); err != nil {
 		return fmt.Errorf("render_view tool: %w", err)
 	}
-	if err := b.mgr.RegisterSessionCleanup("render-handles", 54, func(_ context.Context, sessionID string) error {
+	if err := b.mgr.Resources.RegisterCleanup("render-handles", 54, func(_ context.Context, sessionID string) error {
 		handleStore.Release(sessionID)
 		return nil
 	}); err != nil {
@@ -437,7 +437,7 @@ func (b boardWiring) wireDecisionAndCallTools() error {
 		Queue:      b.workerQueue,
 		Ledger:     b.workerBudgetLedger,
 		ToolBudget: b.workerToolBudgetFor,
-		Notify:     b.mgr.NotifyWorkerBudgetRequested,
+		Notify:     b.mgr.Coordinator.Workers.BudgetRequested,
 	}); err != nil {
 		return fmt.Errorf("request_budget tool: %w", err)
 	}

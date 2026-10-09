@@ -20,6 +20,7 @@ type WorkerCycleLister interface {
 func (m *Manager) SetWorkerQueue(q WorkerCycleLister) {
 	if m != nil {
 		m.workerQueue = q
+		m.RewindRuntime.Workers = q
 		m.Observations.SetWorkers(q)
 		if projects, ok := q.(projectcontrol.Workers); ok {
 			m.ProjectControl.SetWorkers(projects)

@@ -34,7 +34,7 @@ func installDesignDocOverlay(t *testing.T, projectDir string) {
 
 func assertCoordinatorSurface(t *testing.T, h *Harness, ctx context.Context, sess *api.Session, userPrompt, wantSurface string) {
 	t.Helper()
-	runCtx, err := h.SessionMgr.CoordinatorRunContext(ctx, sess.ID)
+	runCtx, err := h.SessionMgr.Coordinator.Context.RunContext(ctx, sess.ID)
 	testutil.FailErr(t, "CoordinatorRunContext", err)
 	state := h.SessionMgr.Workers.State.ForSession(ctx, sess)
 	profile := surface.ResolveTurnProfile(runCtx, sess, routingTurnHistory(nil, userPrompt), state)
@@ -45,7 +45,7 @@ func assertCoordinatorSurface(t *testing.T, h *Harness, ctx context.Context, ses
 
 func assertManifestBoundSurface(t *testing.T, h *Harness, ctx context.Context, sess *api.Session, userPrompt, wantSurface string) {
 	t.Helper()
-	runCtx, err := h.SessionMgr.CoordinatorRunContext(ctx, sess.ID)
+	runCtx, err := h.SessionMgr.Coordinator.Context.RunContext(ctx, sess.ID)
 	testutil.FailErr(t, "CoordinatorRunContext", err)
 	if runCtx.PhaseCoordinatorSurface != wantSurface {
 		t.Fatalf("phase_coordinator_surface = %q want %q (phase=%q)", runCtx.PhaseCoordinatorSurface, wantSurface, runCtx.CurrentPhase)

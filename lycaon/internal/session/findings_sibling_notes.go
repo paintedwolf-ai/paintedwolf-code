@@ -8,6 +8,7 @@ func (m *Manager) SetProgressStore(store progress.RunScopedStore) {
 		return
 	}
 	m.progress = store
+	m.RewindRuntime.Progress = store
 	m.Guards.SetProgress(store)
 	m.Runner.PostTurn.SetProgress(store)
 	m.Batch.SetProgress(store)

@@ -480,7 +480,7 @@ func (b sessionWiring) wireGrantedAccess() error {
 		}
 		return projectpaths.Access{Path: g.Path, Tree: g.Tree}, true
 	})
-	if err := b.mgr.RegisterSessionCleanup("approval-run", 50, func(_ context.Context, sessionID string) error {
+	if err := b.mgr.Resources.RegisterCleanup("approval-run", 50, func(_ context.Context, sessionID string) error {
 		b.toolRuntime.ReleaseSessionRun(sessionID)
 		b.sandboxReadPathRT.ReleaseRun(sessionID)
 		return nil
@@ -488,7 +488,7 @@ func (b sessionWiring) wireGrantedAccess() error {
 		return err
 	}
 	// Chat approvals outlive Stop and end when the chat is disposed.
-	if err := b.mgr.RegisterSessionDisposal("approvals", 50, func(_ context.Context, sessionID string) error {
+	if err := b.mgr.Resources.RegisterDisposal("approvals", 50, func(_ context.Context, sessionID string) error {
 		b.toolRuntime.ForgetSessionAuthorization(sessionID)
 		grantedRT.Forget(sessionID)
 		b.sandboxReadPathRT.ForgetSession(sessionID)
@@ -497,7 +497,7 @@ func (b sessionWiring) wireGrantedAccess() error {
 		return err
 	}
 	// The secret matcher loads lazily.
-	return b.mgr.RegisterSessionCleanup("harvested-secrets", 53, func(_ context.Context, sessionID string) error {
+	return b.mgr.Resources.RegisterCleanup("harvested-secrets", 53, func(_ context.Context, sessionID string) error {
 		b.secretHarvest.Forget(sessionID)
 		return nil
 	})

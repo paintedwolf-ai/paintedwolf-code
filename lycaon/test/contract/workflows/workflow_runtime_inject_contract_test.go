@@ -104,7 +104,7 @@ func TestDefaultPipelineActiveWorkflowInjectVisible(t *testing.T) {
 		t.Fatal("expected advance blocked before parallel hunt stages complete")
 	}
 
-	runCtx, err := mgr.CoordinatorRunContext(ctx, sess.ID)
+	runCtx, err := mgr.Coordinator.Context.RunContext(ctx, sess.ID)
 	contractcheck.FailErr(t, "mgr.CoordinatorRunContext failed", err)
 	block := renderWorkflowFrame(t, ctx, frameLoader, sess.ID, surface.StaticWorkflowHintCodes(runCtx, false), hintCfg, gateCfg)
 	for _, want := range []string{

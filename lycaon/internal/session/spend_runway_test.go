@@ -367,7 +367,7 @@ func TestSpendRunwayLatchReleasedOnForget(t *testing.T) {
 	if got := mgr.Nudges.SpendRunway(ctx, sess, 5); got.Empty() {
 		t.Fatal("first fire")
 	}
-	mgr.DisposeSessionResources(t.Context(), "s1")
+	mgr.Resources.Dispose(t.Context(), "s1")
 	if got := mgr.Nudges.SpendRunway(ctx, sess, 5); got.Empty() {
 		t.Fatal("re-created session with same ceiling must arm again")
 	}

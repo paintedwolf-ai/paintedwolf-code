@@ -155,7 +155,7 @@ func TestStaleBatchSeqWakeDroppedAfterNewUserMessage(t *testing.T) {
 	msgsBefore, err := h.SessionMgr.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages before stale wake", err)
 
-	h.SessionMgr.NudgeCoordinatorLoop(
+	h.SessionMgr.Coordinator.Runtime.CoordinatorLoop().Nudge(
 		ctx,
 		sess.ID,
 		anchor.WaitTimerFired,
@@ -164,7 +164,7 @@ func TestStaleBatchSeqWakeDroppedAfterNewUserMessage(t *testing.T) {
 		anchor.Envelope{BatchSeq: staleSeq, BatchSeqSet: true},
 	)
 	h.SessionMgr.Runner.Coordinator.CoordinatorLoop().DrainPending(ctx, sess.ID)
-	h.SessionMgr.WaitForCoordinatorAsyncTurns(testutil.BoundedContext(t, 5*time.Second))
+	h.SessionMgr.Coordinator.WaitForTurns(testutil.BoundedContext(t, 5*time.Second))
 
 	msgsAfter, err := h.SessionMgr.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages after stale wake", err)

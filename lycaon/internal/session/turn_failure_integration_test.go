@@ -84,7 +84,7 @@ func TestFailedHostTurnReportsItself(t *testing.T) {
 	testutil.FailErr(t, "set session busy", st.SetSessionStatus(ctx, sess.ID, wire.SessionStatusBusy))
 
 	finishExecution := mgr.Runner.Coordinator.CoordinatorLoop().BeginPromptExecution(t.Context(), sess.ID)
-	mgr.NudgeCoordinatorLoop(ctx, sess.ID, anchor.LegFinished, anchor.LegFinished,
+	mgr.Coordinator.Runtime.CoordinatorLoop().Nudge(ctx, sess.ID, anchor.LegFinished, anchor.LegFinished,
 		workflow.ImplementWorkLegKey(sess.ID), anchor.Envelope{})
 	if _, ok := mgr.Runner.Coordinator.CoordinatorLoop().PendingForTest(sess.ID); !ok {
 		t.Fatal("expected a deferred loop wake while prompt execution is active")

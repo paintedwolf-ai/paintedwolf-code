@@ -19,6 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/transcript"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/session/workflowfacts"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -31,14 +32,9 @@ type AgentProfileResolver interface {
 	Get(id string) (agentdef.Profile, error)
 }
 
-// ActiveWorkflowManifest holds runtime fields from the active workflow manifest.
-type ActiveWorkflowManifest struct {
-	CoordinatorProfile string
-}
-
 // WorkflowManifestSource supplies active workflow manifest fields for assembly.
 type WorkflowManifestSource interface {
-	ActiveManifest(ctx context.Context, sessionID string) (ActiveWorkflowManifest, bool)
+	ActiveManifest(ctx context.Context, sessionID string) (workflowfacts.ActiveWorkflowManifest, bool)
 }
 
 // ScanGuidanceHook prepends ephemeral scan guidance before LLM completion.

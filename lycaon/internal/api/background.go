@@ -45,7 +45,7 @@ func (s *Server) WaitForBackground(ctx context.Context) {
 		wg.Add(2)
 		go func() {
 			defer wg.Done()
-			s.sessions.WaitForCoordinatorAsyncTurns(ctx)
+			s.sessions.Coordinator.WaitForTurns(ctx)
 		}()
 		go func() {
 			defer wg.Done()

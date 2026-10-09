@@ -2,10 +2,12 @@ package promptsource
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/browser/pagesession"
 	"github.com/lycaon/lycaon/internal/coordinator"
+	"github.com/lycaon/lycaon/internal/coordinator/batch"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
@@ -143,4 +145,28 @@ func (m *Context) ToolProcedures(ctx context.Context, sess *api.Session, profile
 
 func (m *Context) WebSearchEnabled() bool {
 	return m.WebResearch == nil || m.WebResearch.SearchEnabled()
+}
+
+func (m *Context) RunContext(ctx context.Context, sessionID string) (api.CoordinatorRunContext, error) {
+	if m == nil || m.Sessions == nil {
+		return api.CoordinatorRunContext{}, fmt.Errorf("session store not configured")
+	}
+	sess, err := m.Sessions.Get(ctx, sessionID)
+	if err != nil {
+		return api.CoordinatorRunContext{}, err
+	}
+	if m.Frame == nil {
+		return api.CoordinatorRunContext{}, nil
+	}
+	frame, err := m.Frame.BuildCoordinatorTurnFrame(ctx, sessionID, sess)
+	if err != nil {
+		return api.CoordinatorRunContext{}, err
+	}
+	runCtx := frame.RunContext
+	state := m.WorkerState.ForSession(ctx, sess)
+	if wirePhase := batch.ToWirePhase(state.BatchPhase); wirePhase != "" {
+		runCtx.BatchPhase = wirePhase
+		runCtx.BatchSeq = state.BatchSeq
+	}
+	return runCtx, nil
 }

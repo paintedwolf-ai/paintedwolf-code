@@ -11,9 +11,9 @@ func (m *Manager) SetBackgroundRegistry(reg *bgprocess.Registry) {
 	m.Processes.Background = reg
 	m.Runner.Execution.SetProcesses(reg)
 	m.Protection.SetJobs(reg)
-	_ = m.RegisterSessionCleanup("background-processes", 20, reg.DisposeSession)
+	_ = m.Resources.RegisterCleanup("background-processes", 20, reg.DisposeSession)
 }
 func (m *Manager) SetHeldCalls(reg *heldcall.Registry) {
 	m.Processes.Held = reg
-	_ = m.RegisterSessionCleanup("held-calls", 20, func(_ context.Context, id string) error { reg.DisposeSession(id); return nil })
+	_ = m.Resources.RegisterCleanup("held-calls", 20, func(_ context.Context, id string) error { reg.DisposeSession(id); return nil })
 }

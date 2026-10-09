@@ -166,7 +166,7 @@ func TestInvestigateReturnsAfterWorkersCompleteAndNoQueuedPromotion(t *testing.T
 		if state.WorkersInFlight == 0 && state.BatchPhase != batch.PhaseDispatch {
 			msgs, err = h.SessionMgr.Transcript.GetMessages(ctx, sess.ID)
 			if err == nil && len(state.PendingOverlayIDs) == 0 {
-				runCtx, rerr := h.SessionMgr.CoordinatorRunContext(ctx, sess.ID)
+				runCtx, rerr := h.SessionMgr.Coordinator.Context.RunContext(ctx, sess.ID)
 				if rerr == nil {
 					followProfile = surface.ResolveTurnProfile(runCtx, sess, routingTurnHistory(msgs, "summarize what changed"), state)
 					if followProfile.SurfaceID == tools.SurfaceImplementInvestigate {
@@ -178,12 +178,12 @@ func TestInvestigateReturnsAfterWorkersCompleteAndNoQueuedPromotion(t *testing.T
 		return false
 	})
 	if !settled {
-		runCtx, _ := h.SessionMgr.CoordinatorRunContext(ctx, sess.ID)
+		runCtx, _ := h.SessionMgr.Coordinator.Context.RunContext(ctx, sess.ID)
 		jobs, _ := h.WorkerQueue.ListBySession(ctx, sess.ProjectID, sess.ID)
 		t.Fatalf("follow-up surface did not settle: profile=%q state=%+v run=%+v jobs=%+v", followProfile.SurfaceID, state, runCtx, jobs)
 	}
 	if followProfile.SurfaceID != tools.SurfaceImplementInvestigate {
-		runCtx, _ := h.SessionMgr.CoordinatorRunContext(ctx, sess.ID)
+		runCtx, _ := h.SessionMgr.Coordinator.Context.RunContext(ctx, sess.ID)
 		jobs, _ := h.WorkerQueue.ListBySession(ctx, sess.ProjectID, sess.ID)
 		t.Fatalf("visible user follow-up surface = %q want investigate; state=%+v run=%+v jobs=%+v", followProfile.SurfaceID, state, runCtx, jobs)
 	}

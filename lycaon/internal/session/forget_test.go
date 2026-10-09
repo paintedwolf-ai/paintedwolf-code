@@ -23,7 +23,7 @@ func newForgetTestManager(t *testing.T) *Manager {
 func TestForgetSessionClearsEveryReleasedStore(t *testing.T) {
 	m := newForgetTestManager(t)
 	var forgot []string
-	testutil.FailErr(t, "register approval cleanup", m.RegisterSessionCleanup("approvals", 50, func(_ context.Context, id string) error {
+	testutil.FailErr(t, "register approval cleanup", m.Resources.RegisterCleanup("approvals", 50, func(_ context.Context, id string) error {
 		forgot = append(forgot, id)
 		return nil
 	}))
@@ -42,12 +42,13 @@ func TestForgetSessionClearsEveryReleasedStore(t *testing.T) {
 	m.Runner.History.ObserveTokens(sid, 150, 100)
 	m.Promotion.RecordPromotePathStatus(sid, "job", []api.WorkerPromotePathStatus{{Path: "a.go"}})
 	m.writeRootRuntime = approvalstate.NewSandboxPathGrantRuntime()
+	m.Resources.Authority.Writes = m.writeRootRuntime
 	m.writeRootRuntime.GrantChat(sid, "/opt/cache", "grant-1", "cp-1", nil)
 
 	m.queue.AppendOrdered(sid, "", testutil.HostOwner().ID, "queued follow-up", 0, time.Time{})
 	progress.TurnStarted(sid)
 
-	m.DisposeSessionResources(t.Context(), sid)
+	m.Resources.Dispose(t.Context(), sid)
 
 	m.Captures.Capture.RecordPath(t.Context(), checkpoints, sid, "after.go")
 	manifest, err := checkpoints.Load(t.Context(), sid, "anchor")
@@ -92,16 +93,17 @@ func TestForgetSessionClearsEveryReleasedStore(t *testing.T) {
 func TestStopKeepsTheChatsApprovedSandboxGrants(t *testing.T) {
 	m := newForgetTestManager(t)
 	var released, disposed []string
-	testutil.FailErr(t, "register run cleanup", m.RegisterSessionCleanup("approval-run", 50, func(_ context.Context, id string) error {
+	testutil.FailErr(t, "register run cleanup", m.Resources.RegisterCleanup("approval-run", 50, func(_ context.Context, id string) error {
 		released = append(released, id)
 		return nil
 	}))
-	testutil.FailErr(t, "register disposal", m.RegisterSessionDisposal("approvals", 50, func(_ context.Context, id string) error {
+	testutil.FailErr(t, "register disposal", m.Resources.RegisterDisposal("approvals", 50, func(_ context.Context, id string) error {
 		disposed = append(disposed, id)
 		return nil
 	}))
 	const sid = "sess-stop"
 	m.writeRootRuntime = approvalstate.NewSandboxPathGrantRuntime()
+	m.Resources.Authority.Writes = m.writeRootRuntime
 	m.writeRootRuntime.GrantChat(sid, "/opt/cache", "grant-1", "cp-1", nil)
 	m.writeRootRuntime.GrantSessionWriteRoot(sid, "/opt/derived")
 
@@ -113,7 +115,7 @@ func TestStopKeepsTheChatsApprovedSandboxGrants(t *testing.T) {
 		t.Fatalf("Stop ran release %v and disposal %v, want release only", released, disposed)
 	}
 
-	m.DisposeSessionResources(t.Context(), sid)
+	m.Resources.Dispose(t.Context(), sid)
 	if roots := m.writeRootRuntime.SessionWriteRoots(sid); len(roots) != 0 {
 		t.Fatalf("roots after delete = %v", roots)
 	}

@@ -52,7 +52,7 @@ func (s *Handler) HandleSessionBootstrap(w http.ResponseWriter, r *http.Request)
 	}
 	findingsDigest := findings.BuildDigestFromRows(rows, root)
 	queue := s.Sessions.Drafts.Snapshot(id)
-	coordinator, _ := s.Sessions.CoordinatorRunContext(r.Context(), id)
+	coordinator, _ := s.Sessions.Coordinator.Context.RunContext(r.Context(), id)
 	workers, checkpoints, err := s.sessionBootstrapWorkersAndCheckpoints(
 		r.Context(), sess.ProjectID, id,
 	)

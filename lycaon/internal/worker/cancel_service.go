@@ -212,7 +212,7 @@ func (s *CancelService) cancelImmediate(ctx context.Context, task *api.WorkerTas
 		}); err != nil {
 			return api.WorkerCancelResult{}, err
 		}
-		s.Sessions.NotifyWorkerCycleTerminal(ctx, sessionID, jobID)
+		s.Sessions.Coordinator.Workers.Terminal(ctx, sessionID, jobID)
 	}
 	got, ok := s.Queue.Get(jobID)
 	if !ok {

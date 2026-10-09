@@ -1,4 +1,4 @@
-package session
+package transcript
 
 import (
 	"context"
@@ -7,8 +7,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// WorkflowDeliveryReported requires an accepted closeout for this phase, not a test receipt.
-func (m *Manager) WorkflowDeliveryReported(ctx context.Context, sessionID, runID, phase string) (bool, error) {
+func (m *Service) DeliveredWorkflowPhase(ctx context.Context, sessionID, runID, phase string) (bool, error) {
 	if m == nil || m.store == nil || strings.TrimSpace(runID) == "" {
 		return false, nil
 	}

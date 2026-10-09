@@ -367,7 +367,7 @@ func (b delegationWiring) onWorkflowPhaseAutoAdvanced(ctx context.Context, sessi
 			b.coordRuntime.CoordinatorLoop().ParkForHostObligation(postStartCtx, sessionID)
 			return
 		}
-		b.mgr.NudgeCoordinatorLoop(ctx, sessionID, anchor.PhaseAdvanced, "", "", anchor.Envelope{})
+		b.mgr.Coordinator.Runtime.CoordinatorLoop().Nudge(ctx, sessionID, anchor.PhaseAdvanced, "", "", anchor.Envelope{})
 		return
 	}
 	// Host transitions wake the newly entered phase.
@@ -377,10 +377,10 @@ func (b delegationWiring) onWorkflowPhaseAutoAdvanced(ctx context.Context, sessi
 			b.coordRuntime.CoordinatorLoop().ParkForHostObligation(postAdvanceCtx, sessionID)
 			return
 		}
-		b.mgr.NudgeCoordinatorLoop(postAdvanceCtx, sessionID, anchor.PhaseAdvanced, "", "", anchor.Envelope{})
+		b.mgr.Coordinator.Runtime.CoordinatorLoop().Nudge(postAdvanceCtx, sessionID, anchor.PhaseAdvanced, "", "", anchor.Envelope{})
 		return
 	}
-	b.mgr.NudgeCoordinatorLoop(ctx, sessionID, anchor.PhaseAdvanced, "", "", anchor.Envelope{})
+	b.mgr.Coordinator.Runtime.CoordinatorLoop().Nudge(ctx, sessionID, anchor.PhaseAdvanced, "", "", anchor.Envelope{})
 }
 
 func (b delegationWiring) onWorkflowRunCompleted(ctx context.Context, run *wire.WorkflowRun) {
@@ -401,7 +401,7 @@ func (b delegationWiring) onWorkflowRunResumed(ctx context.Context, run *wire.Wo
 		b.coordRuntime.CoordinatorLoop().ParkForHostObligation(ctx, run.SessionID)
 		return
 	}
-	b.mgr.NudgeCoordinatorLoop(ctx, run.SessionID, anchor.PhaseAdvanced, "", "", anchor.Envelope{})
+	b.mgr.Coordinator.Runtime.CoordinatorLoop().Nudge(ctx, run.SessionID, anchor.PhaseAdvanced, "", "", anchor.Envelope{})
 }
 
 func (b delegationWiring) onWorkflowHumanApprovalAdvanced(ctx context.Context, run *wire.WorkflowRun) {
@@ -418,7 +418,7 @@ func (b delegationWiring) onWorkflowHumanApprovalAdvanced(ctx context.Context, r
 		b.coordRuntime.CoordinatorLoop().ParkForHostObligation(ctx, sessionID)
 		return
 	}
-	b.mgr.NudgeCoordinatorLoop(ctx, sessionID, anchor.PhaseAdvanced, "", "", anchor.Envelope{})
+	b.mgr.Coordinator.Runtime.CoordinatorLoop().Nudge(ctx, sessionID, anchor.PhaseAdvanced, "", "", anchor.Envelope{})
 }
 
 func (b delegationWiring) onWorkflowFeedbackPending(ctx context.Context, sessionID, _ string) {
@@ -432,7 +432,7 @@ func (b delegationWiring) onWorkflowToolAskOpened(ctx context.Context, sessionID
 func (b delegationWiring) onWorkflowFeedbackResolved(ctx context.Context, sessionID, _, _, _ string) {
 	b.mgr.DropCoordinatorKick(sessionID, anchor.FeedbackPending)
 	b.mgr.Emit(ctx, sessionID, anchor.FeedbackReceived, anchor.Envelope{})
-	b.mgr.NudgeCoordinatorLoop(ctx, sessionID, anchor.PhaseAdvanced, anchor.FeedbackReceived, "", anchor.Envelope{})
+	b.mgr.Coordinator.Runtime.CoordinatorLoop().Nudge(ctx, sessionID, anchor.PhaseAdvanced, anchor.FeedbackReceived, "", anchor.Envelope{})
 }
 
 func (b delegationWiring) onWorkflowReviewLoopHeld(ctx context.Context, sessionID string, decisionRequired bool) {
@@ -441,7 +441,7 @@ func (b delegationWiring) onWorkflowReviewLoopHeld(ctx context.Context, sessionI
 		id = anchor.ReviewLoopDecide
 	}
 	b.mgr.Emit(ctx, sessionID, id, anchor.Envelope{})
-	b.mgr.NudgeCoordinatorLoop(ctx, sessionID, anchor.PhaseAdvanced, id, "", anchor.Envelope{})
+	b.mgr.Coordinator.Runtime.CoordinatorLoop().Nudge(ctx, sessionID, anchor.PhaseAdvanced, id, "", anchor.Envelope{})
 }
 
 func (b delegationWiring) onDelegationCloseout(ctx context.Context, _, sessionID, workflowRunID string) {

@@ -9,6 +9,10 @@ func (m *Manager) SetOARPipeline(p *oar.GuardPipeline, r *oar.Renderer) {
 	if m == nil {
 		return
 	}
+	m.Resources.Tools.Counters = nil
+	if p != nil {
+		m.Resources.Tools.Counters = p.Counters()
+	}
 	m.Workers.Delivery.SetPipeline(p)
 	m.ToolPolicy.SetPipeline(p)
 	m.Workers.Summaries.SetEvaluation(m.workspaceCheck, m.workflowHints, m.ToolPolicy.Pipeline)

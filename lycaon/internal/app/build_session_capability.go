@@ -20,13 +20,13 @@ func (b sessionWiring) wireExceptionalCapability() error {
 		b.toolRuntime.Executor.SetDurableSocketSource(b.settingsSvc.Approvals.SocketPathsForProject)
 	}
 	b.toolRuntime.Executor.SetApprovalsDisabled(b.toolRuntime.ApprovalsDisabled)
-	if err := b.mgr.RegisterSessionCleanup("socket-capabilities", 51, func(_ context.Context, sessionID string) error {
+	if err := b.mgr.Resources.RegisterCleanup("socket-capabilities", 51, func(_ context.Context, sessionID string) error {
 		socketCapabilityRT.ReleaseRun(sessionID)
 		return nil
 	}); err != nil {
 		return err
 	}
-	if err := b.mgr.RegisterSessionDisposal("socket-capability-grants", 51, func(_ context.Context, sessionID string) error {
+	if err := b.mgr.Resources.RegisterDisposal("socket-capability-grants", 51, func(_ context.Context, sessionID string) error {
 		socketCapabilityRT.ForgetSession(sessionID)
 		return nil
 	}); err != nil {
@@ -36,13 +36,13 @@ func (b sessionWiring) wireExceptionalCapability() error {
 	directIPCapabilityRT := approvalstate.NewDirectIPCapabilityRuntime()
 	b.directIPCapabilityRT = directIPCapabilityRT
 	b.toolRuntime.Executor.SetDirectIPCapabilityRuntime(directIPCapabilityAdapter{rt: directIPCapabilityRT})
-	if err := b.mgr.RegisterSessionCleanup("direct-ip-capabilities", 52, func(_ context.Context, sessionID string) error {
+	if err := b.mgr.Resources.RegisterCleanup("direct-ip-capabilities", 52, func(_ context.Context, sessionID string) error {
 		directIPCapabilityRT.ReleaseRun(sessionID)
 		return nil
 	}); err != nil {
 		return err
 	}
-	if err := b.mgr.RegisterSessionDisposal("direct-ip-grants", 52, func(_ context.Context, sessionID string) error {
+	if err := b.mgr.Resources.RegisterDisposal("direct-ip-grants", 52, func(_ context.Context, sessionID string) error {
 		directIPCapabilityRT.ForgetSession(sessionID)
 		return nil
 	}); err != nil {

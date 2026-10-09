@@ -5,12 +5,11 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
+	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-
-	"github.com/lycaon/lycaon/internal/session"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -31,7 +30,7 @@ func TestCoordinatorRunContextDelegatesToBuilder(t *testing.T) {
 	ctx := context.Background()
 	sess, err := store.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
-	runCtx, err := mgr.CoordinatorRunContext(ctx, sess.ID)
+	runCtx, err := mgr.Coordinator.Context.RunContext(ctx, sess.ID)
 	testutil.FailErr(t, "mgr.CoordinatorRunContext failed", err)
 	if runCtx.WorkflowID != "hotfix-session" || runCtx.CoordinatorBrief != "brief text" {
 		t.Fatalf("run context = %+v", runCtx)

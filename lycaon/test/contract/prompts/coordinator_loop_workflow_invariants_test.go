@@ -89,7 +89,7 @@ func TestHumanInputScaffoldDeniesCoordinatorLoop(t *testing.T) {
 				if !scaffoldvars.HasPendingUserInput(vars) {
 					t.Fatal("expected pending user input scaffold")
 				}
-				allow, reason, err := mgr.ShouldLoopWake(ctx, sess.ID, anchor.LegFinished)
+				allow, reason, err := mgr.Coordinator.Runtime.CoordinatorLoop().ShouldLoopWake(ctx, sess.ID, anchor.LegFinished)
 				contractcheck.FailErr(t, "mgr.ShouldLoopWake failed", err)
 				if allow {
 					t.Fatalf("loop wake allowed during human input phase %q", phase.ID)

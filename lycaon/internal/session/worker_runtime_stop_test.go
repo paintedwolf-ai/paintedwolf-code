@@ -21,7 +21,7 @@ func TestStopWorkerRuntimePreservesParentAndSibling(t *testing.T) {
 		testutil.FailErr(t, "mark active runtime", mgr.store.SetSessionStatus(t.Context(), id, api.SessionStatusBusy))
 	}
 	released := []string{}
-	testutil.FailErr(t, "register process cleanup", mgr.RegisterSessionCleanup("fixture-processes", 20, func(_ context.Context, id string) error {
+	testutil.FailErr(t, "register process cleanup", mgr.Resources.RegisterCleanup("fixture-processes", 20, func(_ context.Context, id string) error {
 		released = append(released, id)
 		return nil
 	}))

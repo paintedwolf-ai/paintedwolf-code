@@ -97,7 +97,7 @@ func (b *SessionOutcomeBridge) OnWorkerFailed(ctx context.Context, jobID string,
 // OnOutcomeDelivered releases parent deferrals after the queue acknowledgement is visible.
 func (b *SessionOutcomeBridge) OnOutcomeDelivered(ctx context.Context, task api.WorkerTask) {
 	if b.Sessions != nil && strings.TrimSpace(task.ParentSessionID) != "" {
-		b.Sessions.NotifyWorkerCycleTerminal(ctx, task.ParentSessionID, task.ID)
+		b.Sessions.Coordinator.Workers.Terminal(ctx, task.ParentSessionID, task.ID)
 	}
 }
 
@@ -110,7 +110,7 @@ func (b *SessionOutcomeBridge) scheduleParentWake(ctx context.Context, task work
 		b.Closure.Arm(ctx, parentID, jobID)
 	}
 	if strings.TrimSpace(task.LegID) != "" || strings.TrimSpace(task.DelegationID) != "" {
-		b.Sessions.NudgeLegFinishedLoopWake(ctx, parentID, time.Now().UTC(), task.LegID)
+		b.Sessions.Coordinator.Runtime.CoordinatorLoop().NudgeLegFinished(ctx, parentID, time.Now().UTC(), task.LegID)
 		return
 	}
 	if !api.WorkerResultStatusReactable(status) {
@@ -119,7 +119,7 @@ func (b *SessionOutcomeBridge) scheduleParentWake(ctx context.Context, task work
 	if !b.State.ShouldNudge(ctx, parentID, task.ProjectID, jobID) {
 		return
 	}
-	b.Sessions.NudgeCoordinatorLoopAfterWorkerJobTerminal(
+	b.Sessions.Coordinator.Workers.AfterTerminal(
 		ctx,
 		parentID,
 		jobID,

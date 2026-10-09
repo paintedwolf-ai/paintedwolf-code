@@ -13,7 +13,7 @@ import (
 	scanexecution "github.com/lycaon/lycaon/internal/scan/execution"
 	scanregistry "github.com/lycaon/lycaon/internal/scan/registry"
 	scantoolapi "github.com/lycaon/lycaon/internal/scan/toolapi"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/coordinatorcontrol"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/sourcescope"
 	"github.com/lycaon/lycaon/internal/workflow"
@@ -66,14 +66,14 @@ func (b toolWiring) wireScan() error {
 	b.scanRunner.Settings = b.settingsSvc.SecurityScanners
 	b.scanRunner.OnDelta = func(ctx context.Context, completed api.CodeScan, introduced, fixed []api.SecurityFinding) {
 		if completed.TargetKind == api.ScanTargetPaths {
-			b.mgr.NoteScanDelta(ctx, completed, introduced, fixed)
+			b.mgr.Coordinator.Scans.Delta(ctx, completed, introduced, fixed)
 		}
 	}
 	b.scanRunner.OnTerminal = func(ctx context.Context, completed api.CodeScan) {
 		if b.scanCadence != nil {
 			b.scanCadence.OnTerminal(ctx, completed)
 		}
-		b.mgr.NudgeCoordinatorScanDone(ctx, completed)
+		b.mgr.Coordinator.Scans.Finished(ctx, completed)
 		if err := b.bindMovedFileRescans(ctx, completed); err != nil {
 			slog.WarnContext(ctx, "bind moved-file rescan", "scan_id", completed.ID, "error", err)
 		}
@@ -87,7 +87,7 @@ func (b toolWiring) wireScan() error {
 	b.scanRunner.ReconcileTerminal = func(ctx context.Context) error {
 		return b.reconcileScanWorkflowTerminals(ctx, "")
 	}
-	b.mgr.SetScanWaitState(session.ScanWaitState{
+	b.mgr.Coordinator.Scans.Wait = coordinatorcontrol.ScanWaitState{
 		InFlight: func(ctx context.Context, sessionID string) bool {
 			requested, err := b.scanStore.ListBySessionID(ctx, sessionID)
 			if err != nil {
@@ -115,7 +115,7 @@ func (b toolWiring) wireScan() error {
 			}
 			return false
 		},
-	})
+	}
 	b.scanTriggers = &scan.TriggerService{
 		Coordinator: b.scanCoordinator,
 		Registry:    b.scannerReg,
