@@ -2,11 +2,11 @@ package validation
 
 import (
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"slices"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 )
 
@@ -19,7 +19,7 @@ func TestTerminalVerdictRequiresExactStampedClaimIDs(t *testing.T) {
 			raw, err := json.Marshal([]VerdictClaim{{ID: id, Title: "New claim", Statement: "Supported conclusion", Status: "survives"}})
 			testutil.FailErr(t, "encode challenges", err)
 			verdict := map[string]string{"verdict": "CHALLENGED", "challenges": string(raw)}
-			rejection := tools.AsToolReject(ValidateReviewLoopVerdict(def, verdict, rules))
+			rejection := toolrejection.AsToolReject(ValidateReviewLoopVerdict(def, verdict, rules))
 			if rejection == nil || rejection.Code != ReviewLoopVerdictInvalidCode || rejection.Data["reason"] != "claim_outcome_required" {
 				t.Fatalf("missing stamped claim misclassified: %+v", rejection)
 			}
@@ -42,7 +42,7 @@ func TestTerminalVerdictAcceptsCorrectedClaimsAcrossFields(t *testing.T) {
 	verdict := map[string]string{"verdict": "CHALLENGED", "challenges": `[{"id":"secret-gates-hold","statement":"Gates verified","status":"survives"}]`, "advisories": `[{"id":"api-auth-holds","statement":"Auth verified","status":"survives"}]`}
 	testutil.FailErr(t, "accept exact stamped identities across claim fields", ValidateReviewLoopVerdict(def, verdict, rules))
 	verdict["advisories"] = "[]"
-	rejection := tools.AsToolReject(ValidateReviewLoopVerdict(def, verdict, rules))
+	rejection := toolrejection.AsToolReject(ValidateReviewLoopVerdict(def, verdict, rules))
 	if rejection == nil || !slices.Equal(rejection.Data["missing_claim_ids"].([]string), []string{"api-auth-holds"}) {
 		t.Fatalf("missing outcome = %+v", rejection)
 	}

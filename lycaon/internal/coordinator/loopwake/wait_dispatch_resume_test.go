@@ -8,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"testing"
 	"time"
@@ -83,7 +84,7 @@ func TestWaitResumeRechecksLoopbackAuthority(t *testing.T) {
 			registry := tools.NewDefaultRegistry()
 			testutil.FailErr(t, "register wait", RegisterWaitTool(registry, loop.Subscriptions, WaitToolDeps{Store: store, RuntimeContext: t.Context()}))
 			_, err = registry.Run(t.Context(), "wait", map[string]any{"resume": true}, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: id, ProjectID: testdbseed.DefaultProjectID, Agent: "coordinator", ToolCallID: "resume-call"}})
-			reject := tools.AsToolReject(err)
+			reject := toolrejection.AsToolReject(err)
 			if reject == nil || reject.Code != isolation.CodeTryLoopbackConnect {
 				t.Fatalf("resume must review restored local access: %v", err)
 			}
