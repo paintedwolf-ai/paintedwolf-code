@@ -14,7 +14,6 @@ import time
 
 from artifact_paths import artifact_root
 from ci_policy.evidence import oom_events, classify, failure_signature
-import runner_priority
 from verification_plan import catalog, expand
 
 
@@ -371,7 +370,6 @@ def main():
     summary.add_argument("status")
     verified = commands.add_parser("verified")
     verified.add_argument("sha")
-    commands.add_parser("schedule", help="give hosted runners to work in priority order")
     release = commands.add_parser("release")
     release.add_argument("step", help="the step whose leftover requests are withdrawn")
     args = parser.parse_args()
@@ -390,8 +388,6 @@ def main():
         require_success(json.loads(os.environ["NEEDS_JSON"]), args.skipped, args.draft == "true")
     elif args.command == "verified":
         require_qualification(os.environ["GITHUB_REPOSITORY"], args.sha)
-    elif args.command == "schedule":
-        runner_priority.schedule(os.environ["GITHUB_REPOSITORY"], github)
     elif args.command == "release":
         # Cleanup still runs; a request that would not release is reported, not fatal.
         unreleased = release_leftover_requests(args.step)
