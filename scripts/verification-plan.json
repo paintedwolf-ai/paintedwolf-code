@@ -1018,6 +1018,7 @@
       "qualification.yml"
     ],
     "one_shot": [
+      "dco.yml",
       "verification-recovery.yml"
     ]
   },
@@ -1046,6 +1047,7 @@
       "issue-sweep.yml": 1,
       "issue-intake.yml": 1,
       "verification-recovery.yml": 1,
+      "dco.yml": 1,
       "runner-priority.yml": 1
     }
   }
