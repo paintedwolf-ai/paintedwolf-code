@@ -2,10 +2,6 @@ package app
 
 import (
 	"fmt"
-	"os"
-	"strings"
-
-	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/decide"
@@ -20,17 +16,6 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolschema"
 )
-
-func resolveServeAPIToken() (token string, generated bool, err error) {
-	if token = strings.TrimSpace(os.Getenv("LYCAON_API_TOKEN")); token != "" {
-		return token, false, nil
-	}
-	token, err = api.ResolveAPIToken()
-	if err != nil {
-		return "", false, err
-	}
-	return token, true, nil
-}
 
 func loadToolRuntime(settingsSvc *settings.Service, configRoot string, catalog *extpacks.EffectiveCatalog, activation tools.SchemaActivation, rerank decide.Reranker) (*toolhost.Runtime, error) {
 	cfg := toolhost.RuntimeConfig{ConfigRoot: configRoot, Catalog: catalog, Activation: activation, Rerank: rerank}

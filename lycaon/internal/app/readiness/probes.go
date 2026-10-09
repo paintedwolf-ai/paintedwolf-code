@@ -1,9 +1,11 @@
-package app
+package readiness
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/decide"
+	"github.com/lycaon/lycaon/internal/userpath"
 	"os"
 	"strconv"
 	"strings"
@@ -20,7 +22,17 @@ import (
 	"github.com/lycaon/lycaon/internal/scan/bundled"
 )
 
-func (b serverWiring) buildPreflightEnv() preflight.Env {
+type Probes struct {
+	service *llm.Service
+	decider decide.Decider
+	path    userpath.Snapshot
+}
+
+func New(service *llm.Service, decider decide.Decider, path userpath.Snapshot) *Probes {
+	return &Probes{service: service, decider: decider, path: path}
+}
+
+func (b *Probes) Environment() preflight.Env {
 	configDir, err := configdir.UserConfigDir()
 	if err != nil {
 		configDir = ""
@@ -28,37 +40,37 @@ func (b serverWiring) buildPreflightEnv() preflight.Env {
 
 	env := preflight.DefaultEnv(
 		configDir,
-		b.providerCountForPreflight,
-		b.missingRoleProvidersForPreflight,
-		b.resolveScannerForPreflight,
-		b.checkBrowserForPreflight,
-		b.checkDecisionEngineForPreflight,
+		b.providers,
+		b.missingProviders,
+		b.scanner,
+		b.browser,
+		b.decision,
 	)
-	env.LiteSlotUnavailable = b.liteSlotUnavailableForPreflight
-	env.UserPathSource = b.processes.Path.Source()
-	env.UserPathFailure = b.processes.Path.Failure()
+	env.LiteSlotUnavailable = b.utility
+	env.UserPathSource = b.path.Source()
+	env.UserPathFailure = b.path.Failure()
 	return env
 }
 
-// checkDecisionEngineForPreflight reports the engine's own status: the client
+// decision reports the engine's own status: the client
 // knows whether it is disabled, missing, waiting for its checkpoint, or failed
 // its handshake.
-func (b serverWiring) checkDecisionEngineForPreflight(context.Context) preflight.DecisionReason {
-	if client, ok := b.decisions.Decider.(*bialy.Client); ok {
+func (b *Probes) decision(context.Context) preflight.DecisionReason {
+	if client, ok := b.decider.(*bialy.Client); ok {
 		return preflight.DecisionReason(client.Status())
 	}
 	// A scripted decider answers; an absent one has no engine to report on.
-	if b.decisions.Decider == nil || !b.decisions.Decider.Available() {
+	if b.decider == nil || !b.decider.Available() {
 		return preflight.ReasonDecisionBinaryMissing
 	}
 	return ""
 }
 
-func (b serverWiring) liteSlotUnavailableForPreflight() (bool, map[string]string) {
-	if b.providers.Service == nil || b.providers.Service.Utility == nil {
+func (b *Probes) utility() (bool, map[string]string) {
+	if b.service == nil || b.service.Utility == nil {
 		return false, nil
 	}
-	snap := b.providers.Service.Utility.Snapshot()
+	snap := b.service.Utility.Snapshot()
 	if snap.State != llm.SlotUnavailable {
 		return false, nil
 	}
@@ -82,19 +94,19 @@ var preflightBrowserProbe = struct {
 	identity string
 }{}
 
-// providerCountForPreflight reads configured providers without discovery.
-func (b serverWiring) providerCountForPreflight() int {
-	if b.providers.Service == nil || b.providers.Service.Registry == nil {
+// providers reads configured providers without discovery.
+func (b *Probes) providers() int {
+	if b.service == nil || b.service.Registry == nil {
 		return 0
 	}
-	return b.providers.Service.Registry.ConfiguredCount()
+	return b.service.Registry.ConfiguredCount()
 }
 
-func (b serverWiring) missingRoleProvidersForPreflight() map[string]string {
-	if b.providers.Service == nil || b.providers.Service.Registry == nil || b.providers.Service.Policy == nil {
+func (b *Probes) missingProviders() map[string]string {
+	if b.service == nil || b.service.Registry == nil || b.service.Policy == nil {
 		return nil
 	}
-	policy, err := b.providers.Service.Policy.Get(llm.SettingsScopeGlobal, "")
+	policy, err := b.service.Policy.Get(llm.SettingsScopeGlobal, "")
 	if err != nil {
 		return nil
 	}
@@ -107,7 +119,7 @@ func (b serverWiring) missingRoleProvidersForPreflight() map[string]string {
 		if id == "" {
 			continue
 		}
-		if _, err := b.providers.Service.Registry.Get(id); err != nil {
+		if _, err := b.service.Registry.Get(id); err != nil {
 			missing[role] = id
 		}
 	}
@@ -116,7 +128,7 @@ func (b serverWiring) missingRoleProvidersForPreflight() map[string]string {
 		if id == "" {
 			continue
 		}
-		if _, err := b.providers.Service.Registry.Get(id); err != nil {
+		if _, err := b.service.Registry.Get(id); err != nil {
 			missing["agent_pool."+strconv.Itoa(i)] = id
 		}
 	}
@@ -126,8 +138,8 @@ func (b serverWiring) missingRoleProvidersForPreflight() map[string]string {
 	return missing
 }
 
-// checkBrowserForPreflight validates the resolved browser without remediation.
-func (b serverWiring) checkBrowserForPreflight(ctx context.Context) (preflight.BrowserReason, error) {
+// browser validates the resolved browser without remediation.
+func (b *Probes) browser(ctx context.Context) (preflight.BrowserReason, error) {
 	cacheDir := browserengine.ManagedCacheDir()
 	resolved, ok := browserengine.ResolveBinary(browserengine.ResolveOptions{CacheDir: cacheDir})
 	if !ok {
@@ -158,7 +170,7 @@ func (b serverWiring) checkBrowserForPreflight(ctx context.Context) (preflight.B
 
 var errNoBrowserResolved = errors.New("no headless browser resolved (env, bundle, or managed cache)")
 
-func (b serverWiring) resolveScannerForPreflight() (string, string, error) {
+func (b *Probes) scanner() (string, string, error) {
 	manifest, err := bundled.LoadManifest()
 	if err != nil {
 		return "", "not_found", err

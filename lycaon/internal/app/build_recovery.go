@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/app/configuration"
+	"github.com/lycaon/lycaon/internal/app/deviceidentity"
 	"log/slog"
 	"path/filepath"
 
@@ -22,7 +23,7 @@ func buildRecoveryApp(ctx context.Context, cfg configuration.Config, b *serveBui
 	if err != nil {
 		return nil, fmt.Errorf("listen address: %w", err)
 	}
-	token, generated, err := resolveServeAPIToken()
+	token, generated, err := deviceidentity.ResolveToken()
 	if err != nil {
 		return nil, fmt.Errorf("api token: %w", err)
 	}

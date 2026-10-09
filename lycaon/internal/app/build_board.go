@@ -50,6 +50,8 @@ type boardWiring struct{ *serveBuilder }
 func (b boardWiring) wireBoardAndResearch() error {
 	var err error
 	b.repoProvider = repoinfo.NewProvider(sourcecatalog.Process().Trees, b.repoCatalogRoot, filepath.Join(enginepaths.RepoOrientationRootUnder(b.storage.Directory), "v1"))
+	provider := b.repoProvider
+	b.startup.resources.Track("repo-provider", 70, func(context.Context) error { return provider.Close() })
 	b.startup.resources.Track("source-catalog", 86, sourcecatalog.Process().Drain)
 	b.mgr.SetRepoProvider(b.repoProvider)
 	// Background brief completion publishes its own board update.
@@ -129,6 +131,8 @@ func (b boardWiring) wireBoardAndResearch() error {
 		webReg.AttachQuotaStore(b.storage.WebIndex)
 		// Session activity and schedules warm the index.
 		b.webWarmer = webresearch.NewWarmer(b.storage.WebIndex, llmReg, llmPol, webCfg)
+		warmer := b.webWarmer
+		b.startup.resources.Track("web-warmer", 90, func(context.Context) error { warmer.Close(); return nil })
 		b.webWarmer.Cost = b.providers.Costs
 		if b.providers.Service != nil {
 			b.webWarmer.Plane = b.providers.Service.Utility
@@ -415,6 +419,8 @@ func (b boardWiring) wireVisualAndRenderTools() error {
 		return fmt.Errorf("view_image tool: %w", err)
 	}
 	b.browserPool = browser.NewPool(browserCache)
+	pool := b.browserPool
+	b.startup.resources.Track("browser-pool", 60, func(context.Context) error { pool.Close(); return nil })
 	if err := native.RegisterViewVideoTool(b.toolRuntime.Registry, page.ViewVideoDeps{
 		Boundary: b.toolRuntime.Boundary,
 		Pool:     b.browserPool,

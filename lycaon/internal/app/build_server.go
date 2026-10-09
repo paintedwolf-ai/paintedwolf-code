@@ -7,11 +7,11 @@ import (
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/api/capabilityadmin"
 	"github.com/lycaon/lycaon/internal/api/extensionadmin"
+	"github.com/lycaon/lycaon/internal/app/interactions"
+	"github.com/lycaon/lycaon/internal/app/observations"
+	"github.com/lycaon/lycaon/internal/app/readiness"
 	"github.com/lycaon/lycaon/internal/attention"
-	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/bootrecovery"
-	"github.com/lycaon/lycaon/internal/browser/pagesession"
-	"github.com/lycaon/lycaon/internal/browser/preview"
 	"github.com/lycaon/lycaon/internal/commandinvoke"
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/db"
@@ -23,79 +23,39 @@ import (
 	"github.com/lycaon/lycaon/internal/fileops"
 	"github.com/lycaon/lycaon/internal/findings"
 	"github.com/lycaon/lycaon/internal/harnessfixture"
-	"github.com/lycaon/lycaon/internal/heldcall"
 	"github.com/lycaon/lycaon/internal/historyretention"
 	"github.com/lycaon/lycaon/internal/hitl"
-	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/people/personactions"
 	"github.com/lycaon/lycaon/internal/pkgregistry"
-	"github.com/lycaon/lycaon/internal/preflight"
-	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectliveness"
-	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/scan"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/sourcerewind"
-	"github.com/lycaon/lycaon/internal/tools/native"
-	"github.com/lycaon/lycaon/internal/tools/native/heldtools"
 	"github.com/lycaon/lycaon/internal/usernotice"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workernotice"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	"os"
-	"strings"
 )
 
 // serverWiring wires the HTTP server, runtime services, preflight, and store upgrade recovery.
 type serverWiring struct{ *serveBuilder }
 
-// wireRuntimeServices builds background processes, page sessions, and live
-// previews, registers their tools, and installs process-wide observers.
 func (b serverWiring) wireRuntimeServices() error {
 	b.events.Publisher.Board = b.boardSnap
-	b.bgRegistry = bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{
-		Publish: func(ctx context.Context, projectID, sessionID string, ev wire.BackgroundProcessEvent) {
-			b.events.Publisher.PublishProcess(ctx, projectID, sessionID, ev)
-		},
-		Complete: b.mgr.HandleCommandCompletion,
-		Refused:  b.mgr.HandleCommandRefusal,
-	})
-	b.heldCalls = heldcall.New(func(ctx context.Context, projectID, sessionID string, ev wire.BackgroundProcessEvent) {
-		b.events.Publisher.PublishProcess(ctx, projectID, sessionID, ev)
-	}, b.mgr.HandleHeldCallSettled)
-	b.pageRegistry = pagesession.NewRegistry(pagesession.DefaultConfig())
-	b.previewCtrl = preview.NewController(preview.DefaultConfig(), func(ctx context.Context, projectID, sessionID string, ev wire.PreviewEvent) {
-		b.events.Publisher.PublishPreview(ctx, projectID, sessionID, ev)
-	})
-	if err := b.mgr.RegisterSessionCleanup("preview-streams", 40, b.previewCtrl.DisposeSession); err != nil {
-		return fmt.Errorf("register preview cleanup: %w", err)
+	b.interactions = *interactions.New(b.events.Publisher, b.startup.resources)
+	if err := b.interactions.Build(b.mgr.HandleCommandCompletion, b.mgr.HandleCommandRefusal, b.mgr.HandleHeldCallSettled, b.mgr.RegisterSessionCleanup); err != nil {
+		return err
 	}
-	b.pageRegistry.SetOnClose(func(sessionID, pageID string) {
-		b.previewCtrl.Detach(context.Background(), sessionID, pageID)
-	})
-	b.toolRuntime.Commands.SetBackgroundRegistry(b.bgRegistry)
-	b.mgr.SetBackgroundRegistry(b.bgRegistry)
-	b.mgr.SetHeldCalls(b.heldCalls)
-	if err := heldtools.Register(b.toolRuntime.Registry, b.heldCalls); err != nil {
-		return fmt.Errorf("held call tools: %w", err)
-	}
-	b.mgr.SetPageRegistry(b.pageRegistry)
-	if err := native.RegisterTerminalSessionTools(b.toolRuntime.Registry, b.bgRegistry); err != nil {
-		return fmt.Errorf("terminal session tools: %w", err)
-	}
-	if b.browserPool != nil {
-		if err := native.RegisterCapturePageTool(b.toolRuntime.Registry, b.browserPool, b.bgRegistry, b.previewCtrl); err != nil {
-			return fmt.Errorf("capture_page tool: %w", err)
-		}
-		if err := native.RegisterMeasurePageTool(b.toolRuntime.Registry, b.browserPool, b.pageRegistry, b.bgRegistry); err != nil {
-			return fmt.Errorf("measure_page tool: %w", err)
-		}
-		if err := native.RegisterPageSessionTools(b.toolRuntime.Registry, b.browserPool, b.pageRegistry, b.bgRegistry, b.previewCtrl); err != nil {
-			return fmt.Errorf("page session tools: %w", err)
-		}
+	b.toolRuntime.Commands.SetBackgroundRegistry(b.interactions.Processes)
+	b.mgr.SetBackgroundRegistry(b.interactions.Processes)
+	b.mgr.SetHeldCalls(b.interactions.Calls)
+	b.mgr.SetPageRegistry(b.interactions.Pages)
+	if err := b.interactions.RegisterTools(b.toolRuntime.Registry, b.browserPool); err != nil {
+		return err
 	}
 	return b.wireRuntimeObservers()
 }
@@ -103,44 +63,7 @@ func (b serverWiring) wireRuntimeServices() error {
 func (b serverWiring) wireRuntimeObservers() error {
 	b.mgr.SetEventPublisher(b.events.Publisher)
 	b.workerQueue.SetEventPublisher(b.events.Publisher)
-	if b.providers.Service != nil && b.events.Publisher != nil {
-		b.providers.Service.Lifecycle = utilityLanePublisher{pub: b.events.Publisher}
-	}
-	if b.providers.Service != nil && b.providers.Service.Utility != nil && b.events.Publisher != nil {
-		b.providers.Service.Utility.SetOnChange(func(llm.SlotSnapshot) {
-			b.events.Publisher.PublishPreflight(context.Background(), preflight.ProbeLiteSlot)
-		})
-	}
-	findings.RegisterAppendObserver(func(ctx context.Context, evt findings.AppendEvent) {
-		if strings.TrimSpace(evt.SessionID) == "" {
-			return
-		}
-		rev := findings.BumpRevision(evt.SessionID)
-		b.events.Publisher.PublishFindings(ctx, evt.SessionID, rev)
-	})
-	repochange.RegisterObserver(func(ctx context.Context, ev repochange.Event) {
-		if b.repoProvider != nil {
-			b.repoProvider.Changed(ctx, ev.ProjectDir)
-		}
-		if ev.Kind == repochange.HeadMoved {
-			b.toolRuntime.Survey.InvalidateFileAge(ev.ProjectDir)
-		}
-	})
-	activeRun := activeRunIDFromWorkflow(b.workflowMgr.Store.Runs)
-	progressCoalescer := progress.NewCoalescer(progress.DefaultCoalesceWindow, newProgressChangeEmitter(b.storage.Sessions, b.events.Publisher, activeRun, b.progressStore))
-	progress.RegisterWriteObserver(func(ctx context.Context, evt progress.WriteEvent) {
-		if strings.TrimSpace(evt.SessionID) == "" {
-			return
-		}
-		rev := progress.BumpRevision(evt.SessionID)
-		b.events.Publisher.PublishProgress(ctx, evt.SessionID, rev)
-		progressCoalescer.Record(evt.SessionID, evt.Prev, b.progressStore.Get(ctx, evt.SessionID))
-		emitProgressCompletion(ctx, b.storage.Sessions, b.events.Publisher, b.progressStore, activeRun, evt.SessionID)
-		// Progress closure releases the post-worker latch.
-		if b.mgr != nil {
-			b.mgr.MaybeClearProgressClosureAfterWrite(ctx, evt.SessionID)
-		}
-	})
+	observations.Bind(b.events.Publisher, b.storage.Sessions, b.progressStore, b.workflowMgr.Store.Runs, b.mgr.MaybeClearProgressClosureAfterWrite, b.repoProvider, b.toolRuntime.Survey.InvalidateFileAge, b.providers.Service)
 	return nil
 }
 
@@ -151,9 +74,9 @@ func (b serverWiring) wireServer() error {
 	deps := api.Dependencies{Core: api.CoreDependencies{
 		Database: b.storage.Database, Store: b.storage.Sessions, PersonActions: personactions.New(b.storage.Database), Projects: b.storage.Projects, Sessions: b.mgr, Settings: b.settings.Service,
 		Invocations: b.invocations, MutationGate: project.NewMutationGate()}, Providers: api.ProvidersDependencies{LLM: b.providers.Service, CostTracker: b.providers.Costs, Rerank: b.decisions.Rerank}, Host: api.HostDependencies{
-		Events: b.events.Hub, EventPublisher: b.events.Publisher, Presence: b.events.Presence, HostIdentity: b.hostIdentity,
-		HostResources: b.settings.HostResources, HostPower: b.settings.Power, Pricing: b.providers.Pricing, Preview: b.previewCtrl,
-		PreflightEnv: b.buildPreflightEnv()}, Storage: api.StorageDependencies{
+		Events: b.events.Hub, EventPublisher: b.events.Publisher, Presence: b.events.Presence, HostIdentity: b.identity.Host,
+		HostResources: b.settings.HostResources, HostPower: b.settings.Power, Pricing: b.providers.Pricing, Preview: b.interactions.Preview,
+		PreflightEnv: readiness.New(b.providers.Service, b.decisions.Decider, b.processes.Path).Environment()}, Storage: api.StorageDependencies{
 		DataDir: b.storage.Directory, StorePath: b.storage.Path, WorkerBranchRoot: b.workerBranchRoot, WorkerSeedRoot: b.workerSeedRoot,
 		ModuleRoot: b.catalog.ModuleRoot, StoreRevision: b.storage.Revision, MinDenVersion: os.Getenv("LYCAON_MIN_DEN_VERSION")}, Approvals: api.ApprovalsDependencies{
 		SecretIgnores: b.security.Ignores, ManagedSecrets: b.security.Capabilities, SecretSpans: b.security.Spans,
@@ -252,7 +175,7 @@ func (b serverWiring) wireServer() error {
 	if err := b.wireSourceEditing(&deps); err != nil {
 		return err
 	}
-	b.srv = api.NewServer(deps, b.startup.logger, b.apiToken)
+	b.srv = api.NewServer(deps, b.startup.logger, b.identity.Token)
 	return b.registerServerHooks(extensionJournal)
 }
 
@@ -483,8 +406,8 @@ func (b serverWiring) serveApp() *ServeApp {
 		Events:               b.events.Hub,
 		ConfigRoot:           b.catalog.ModuleRoot,
 		ListenAddr:           b.startup.addr,
-		APIToken:             b.apiToken,
-		TokenGenerated:       b.tokenGenerated,
+		APIToken:             b.identity.Token,
+		TokenGenerated:       b.identity.Generated,
 		startup:              b.startup.cfg.Startup,
 		upgradeRecoveryReady: b.storage.UpgradeReady,
 		resources:            b.startup.resources,

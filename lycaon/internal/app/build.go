@@ -7,18 +7,17 @@ import (
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/app/configuration"
 	"github.com/lycaon/lycaon/internal/app/decisions"
+	"github.com/lycaon/lycaon/internal/app/deviceidentity"
 	"github.com/lycaon/lycaon/internal/app/eventing"
+	"github.com/lycaon/lycaon/internal/app/interactions"
 	"github.com/lycaon/lycaon/internal/app/persistence"
 	"github.com/lycaon/lycaon/internal/app/processes"
 	"github.com/lycaon/lycaon/internal/app/providers"
 	"github.com/lycaon/lycaon/internal/app/security"
-	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/board"
 	"github.com/lycaon/lycaon/internal/bootrecovery"
 	"github.com/lycaon/lycaon/internal/browser"
-	"github.com/lycaon/lycaon/internal/browser/pagesession"
-	"github.com/lycaon/lycaon/internal/browser/preview"
 	"github.com/lycaon/lycaon/internal/call"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/coordinator"
@@ -30,10 +29,8 @@ import (
 	"github.com/lycaon/lycaon/internal/grantedpath"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/harnessfixture"
-	"github.com/lycaon/lycaon/internal/heldcall"
 	"github.com/lycaon/lycaon/internal/historyretention"
 	"github.com/lycaon/lycaon/internal/hitl"
-	"github.com/lycaon/lycaon/internal/hostidentity"
 	"github.com/lycaon/lycaon/internal/inspector"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/mcp"
@@ -69,29 +66,23 @@ import (
 )
 
 type serveBuilder struct {
-	providers providers.Runtime
-	catalog   configuration.Catalog
-	settings  configuration.Runtime
-	startup   startupBootstrap
-	storage   persistence.Runtime
-	decisions decisions.Runtime
-	agents    configuration.Agents
-
-	apiToken            string
-	tokenGenerated      bool
-	hostIdentity        hostidentity.Identity
+	identity            deviceidentity.Credentials
+	interactions        interactions.Runtime
+	providers           providers.Runtime
+	catalog             configuration.Catalog
+	settings            configuration.Runtime
+	startup             startupBootstrap
+	storage             persistence.Runtime
+	decisions           decisions.Runtime
+	agents              configuration.Agents
 	workerBranchRoot    string
 	workerSeedRoot      string
 	bundledRules        map[string]*rules.RulesConfig
 	workerToolBudgetFor func(string) spawn.WorkerToolBudget
 
 	sourceScopes  *sourcescope.Provider
-	bgRegistry    *bgprocess.Registry
-	heldCalls     *heldcall.Registry
 	browserPool   *browser.Pool
 	browserRaster *browser.Rasterizer
-	pageRegistry  *pagesession.Registry
-	previewCtrl   *preview.Controller
 
 	webWarmer   *webresearch.Warmer
 	warmRunner  *webresearch.WarmRunner
@@ -254,7 +245,6 @@ func Build(ctx context.Context, cfg configuration.Config) (*ServeApp, error) {
 		}
 		err := step.fn()
 		buildPerf.Mark(step.name)
-		b.startup.resources.capture(b)
 		if err != nil {
 			if step.name == "store" && errors.Is(err, db.ErrStoreIncompatible) {
 				// Recovery mode keeps restore available for the intact store.

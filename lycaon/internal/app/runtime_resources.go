@@ -3,10 +3,6 @@ package app
 import (
 	"context"
 	"errors"
-	"net"
-	"net/http"
-	"time"
-
 	"github.com/lycaon/lycaon/internal/clisocket"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/fileoutline"
@@ -14,6 +10,9 @@ import (
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/resourcelifecycle"
+	"net"
+	"net/http"
+	"time"
 )
 
 type runtimeResources struct {
@@ -27,7 +26,10 @@ type runtimeResources struct {
 }
 
 func newRuntimeResources() *runtimeResources {
-	return &runtimeResources{lifecycle: resourcelifecycle.New()}
+	resources := &runtimeResources{lifecycle: resourcelifecycle.New()}
+	resources.Track("source-watchers", 85, func(context.Context) error { repochange.CloseWatchers(); return nil })
+	resources.Track("debug-captures", 150, func(context.Context) error { observability.CloseDebugCaptures(); return nil })
+	return resources
 }
 
 func (r *runtimeResources) Track(name string, order int, cleanup func(context.Context) error) {
@@ -39,52 +41,9 @@ func (r *runtimeResources) Track(name string, order int, cleanup func(context.Co
 	})
 }
 
-// capture records resources acquired by a build phase.
-func (r *runtimeResources) capture(b *serveBuilder) {
-	if r == nil || b == nil {
-		return
-	}
-	if controller := b.previewCtrl; controller != nil {
-		r.Track("preview", 30, func(context.Context) error { controller.Close(); return nil })
-	}
-	if registry := b.pageRegistry; registry != nil {
-		r.Track("browser-pages", 40, func(ctx context.Context) error { registry.Close(ctx); return nil })
-	}
-	if registry := b.heldCalls; registry != nil {
-		r.Track("held-calls", 49, func(ctx context.Context) error {
-			closeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-			defer cancel()
-			return registry.Close(closeCtx)
-		})
-	}
-	if registry := b.bgRegistry; registry != nil {
-		r.Track("background-processes", 50, func(ctx context.Context) error {
-			closeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-			defer cancel()
-			return registry.Close(closeCtx)
-		})
-	}
-	if pool := b.browserPool; pool != nil {
-		r.Track("browser-pool", 60, func(context.Context) error { pool.Close(); return nil })
-	}
-	if provider := b.repoProvider; provider != nil {
-		r.Track("repo-provider", 70, func(context.Context) error { return provider.Close() })
-	}
-	r.Track("source-watchers", 85, func(context.Context) error {
-		repochange.CloseWatchers()
-		return nil
-	})
-	if warmer := b.webWarmer; warmer != nil {
-		r.Track("web-warmer", 90, func(context.Context) error { warmer.Close(); return nil })
-	}
-	if registry := b.mcpReg; registry != nil {
-		r.mcpRegistry = registry
-		r.Track("mcp", 110, func(context.Context) error { return registry.Close() }) //nolint:contextcheck // Close has no context.
-	}
-	r.Track("debug-captures", 150, func(context.Context) error {
-		observability.CloseDebugCaptures()
-		return nil
-	})
+func (r *runtimeResources) setMCP(registry *mcp.Runtime) {
+	r.mcpRegistry = registry
+	r.Track("mcp", 110, func(context.Context) error { return registry.Close() })
 }
 
 func (r *runtimeResources) setCLISocket(server *clisocket.Server) {

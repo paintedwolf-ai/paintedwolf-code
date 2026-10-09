@@ -291,9 +291,10 @@ func (b toolWiring) wireMCP() error {
 	if err != nil {
 		return fmt.Errorf("mcp registry: %w", err)
 	}
+	b.startup.resources.setMCP(b.mcpReg)
 	b.security.BindMCPInventory(b.mcpReg.Catalog)
 	b.mcpReg.Tools.SetToolRegistry(b.toolRuntime.Registry)
-	b.mcpReg.Connections.SetAPIAccess(b.apiToken)
+	b.mcpReg.Connections.SetAPIAccess(b.identity.Token)
 	if b.toolRuntime != nil {
 		b.toolRuntime.Authority.SetMCPToolPinSource(b.mcpReg.Tools)
 	}
@@ -320,11 +321,11 @@ func (b toolWiring) wireMCP() error {
 		if b.security.Capabilities != nil {
 			captureProjector.SetManagedSecretGeneration(b.security.Capabilities.ScreeningGeneration)
 		}
-		if b.bgRegistry != nil {
-			b.bgRegistry.SetCaptureProjector(captureProjector)
+		if b.interactions.Processes != nil {
+			b.interactions.Processes.SetCaptureProjector(captureProjector)
 		}
-		if b.previewCtrl != nil {
-			b.previewCtrl.SetCaptureProjector(captureProjector)
+		if b.interactions.Preview != nil {
+			b.interactions.Preview.SetCaptureProjector(captureProjector)
 		}
 		if b.browserPool != nil {
 			b.browserPool.SetCaptureProjector(captureProjector)

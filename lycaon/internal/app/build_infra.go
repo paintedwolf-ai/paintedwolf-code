@@ -2,20 +2,18 @@ package app
 
 import (
 	"fmt"
-	"github.com/lycaon/lycaon/internal/app/eventing"
-	"os"
-
 	"github.com/lycaon/lycaon/internal/api/capabilityadmin"
+	"github.com/lycaon/lycaon/internal/app/deviceidentity"
+	"github.com/lycaon/lycaon/internal/app/eventing"
 	"github.com/lycaon/lycaon/internal/bootrecovery"
-	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
-	"github.com/lycaon/lycaon/internal/hostidentity"
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/presence"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tsparse"
 	"github.com/lycaon/lycaon/internal/worker"
+	"os"
 )
 
 func (b *serveBuilder) wireToolRuntime() error {
@@ -75,16 +73,9 @@ func (b *serveBuilder) wireEvents() error {
 
 	project.SetDefaultOpenPolicy(project.DefaultOpenPolicy())
 
-	b.apiToken, b.tokenGenerated, err = resolveServeAPIToken()
+	b.identity, err = deviceidentity.Load()
 	if err != nil {
-		return fmt.Errorf("api token: %w", err)
-	}
-	configDir, err := configdir.UserConfigDir()
-	if err != nil {
-		return fmt.Errorf("config dir: %w", err)
-	}
-	if b.hostIdentity, err = hostidentity.LoadOrCreate(configDir); err != nil {
-		return fmt.Errorf("host identity: %w", err)
+		return err
 	}
 
 	logFields := []any{"level", os.Getenv("LYCAON_LOG_LEVEL")}
