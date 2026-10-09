@@ -210,6 +210,7 @@ impl NativeUpdateState {
             can_install_automatically: supported
                 && direct
                 && ready
+                && self.offer_confirmed_at.is_some()
                 && self.automatic_updates_enabled,
             blocked_reason: if !direct {
                 Some(

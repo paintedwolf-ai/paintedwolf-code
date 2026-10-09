@@ -110,9 +110,6 @@ jobs:
         if: runner.os == 'macOS' && (steps.setup.outputs.go-cache-hit != 'true' || steps.setup.outputs.decide-cache-hit != 'true')
         run: ./task build:lycaon-dev
 
-      - name: Prepare pinned analysis tools
-        run: ./task setup-dev -- --analysis-tools
-
       - name: Warm desktop workspace builds
         if: steps.setup.outputs.rust-cache-hit != 'true'
         run: ./task setup-dev -- --workspace-cache
