@@ -47,7 +47,7 @@ async function followSourceOperation<T>(connection: BackendConnection, projectId
   for (;;) {
     signal.throwIfAborted();
     await new Promise<void>((resolve, reject) => {
-      const abort = () => { clearTimeout(timer); reject(signal.reason); };
+      const abort = () => { clearTimeout(timer); reject(signal.reason instanceof Error ? signal.reason : new DOMException("The operation was aborted.", "AbortError")); };
       const timer = globalThis.setTimeout(() => { signal.removeEventListener("abort", abort); resolve(); }, delay);
       signal.addEventListener("abort", abort, { once: true });
       if (signal.aborted) abort();

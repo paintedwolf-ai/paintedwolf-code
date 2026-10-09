@@ -105,3 +105,19 @@ it("releases the completion follower when its caller stops waiting", async () =>
   await vi.advanceTimersByTimeAsync(1600);
   expect(lycaonJson).not.toHaveBeenCalled();
 });
+
+
+it.each([new Error("Caller stopped waiting"), "caller stopped waiting"])("stops receipt polling with an Error for abort reason %s", async (reason) => {
+  vi.mocked(lycaonFetch).mockResolvedValueOnce(Response.json(status(), { status: 202 }));
+  const controller = new AbortController();
+  const result = sourceOperation(connection, "project", id, path, { method: "DELETE", signal: controller.signal });
+  const rejected = reason instanceof Error ? expect(result).rejects.toBe(reason) : expect(result).rejects.toMatchObject({ name: "AbortError" });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(vi.getTimerCount()).toBe(1);
+  controller.abort(reason);
+  await rejected;
+  expect(vi.getTimerCount()).toBe(0);
+  await vi.advanceTimersByTimeAsync(1600);
+  expect(lycaonFetch).toHaveBeenCalledOnce();
+  expect(lycaonJson).not.toHaveBeenCalled();
+});
