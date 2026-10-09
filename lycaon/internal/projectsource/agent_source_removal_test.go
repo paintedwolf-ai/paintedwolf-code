@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/desktoptrash"
 	"os"
 	"path/filepath"
 	"testing"
@@ -20,10 +21,10 @@ import (
 func agentRemoval(p *Project, path, reviewed string) sourceeffect.Removal {
 	return sourceeffect.Removal{
 		Record: sourceledger.RecordInput{
-			ProjectID: p.ID, RootID: p.Roots[0].ID, Path: path, Op: api.SourceChangeOpDelete,
+			RecordLocation: sourceledger.RecordLocation{RootID: p.Roots[0].ID, Path: path},
+			ProjectID:      p.ID, Op: api.SourceChangeOpDelete,
 			Origin: api.SourceChangeOriginAgent, SessionID: "session-1", Turn: 3,
-			ToolCallID: "call-1", ToolName: "delete",
-		},
+			ToolCallID: "call-1", ToolName: "delete"},
 		Change: sourcefeed.Change{
 			ProjectID: p.ID, WorkspaceID: p.WorkspaceID(), WorkspaceKind: api.SourceWorkspaceKindProject,
 		},
@@ -34,9 +35,9 @@ func agentRemoval(p *Project, path, reviewed string) sourceeffect.Removal {
 
 func refuseTrash(t *testing.T, service *SourceMutationService) {
 	t.Helper()
-	service.Effects.SetTrashMover(func(context.Context, string) error {
+	service.Effects.SetTrashMover(func(context.Context, string) (desktoptrash.Receipt, error) {
 		t.Fatal("an agent removal reached the system Trash")
-		return nil
+		return desktoptrash.Receipt{}, nil
 	})
 }
 

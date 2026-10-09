@@ -56,7 +56,7 @@ func (s *SourceEffects) prepareSourceCopy(ctx context.Context, row *sourceMutati
 	}
 	defer func() { _ = source.Close() }()
 	transfer := &sourceTreeTransfer{ctx: ctx, digest: newSourceTreeDigest()}
-	if plan.Kind == "copy" {
+	if plan.Kind == "copy" && plan.NativeTrash == nil {
 		plan.RecoveryID = row.ID
 		if err := s.Journal.update(ctx, row); err != nil {
 			return err
@@ -78,6 +78,9 @@ func (s *SourceEffects) prepareSourceCopy(ctx context.Context, row *sourceMutati
 		return ErrSourceMutationDiverged
 	}
 	plan.TreeSHA = transfer.digest.sum()
+	if transfer.capture == nil && transfer.rootSHA != "" {
+		plan.AfterSHA, plan.After = transfer.rootSHA, transfer.rootContent
+	}
 	if transfer.capture != nil {
 		if err := transfer.capture.finish(ctx); err != nil {
 			return err
@@ -163,7 +166,7 @@ func clearSourceStage(plan *sourceMutationPlan) error {
 
 func (s *SourceEffects) prepareSourceContents(ctx context.Context, row *sourceMutationRow) error {
 	plan := &row.Plan
-	if plan.Kind != "delete" || plan.RecoveryCount > 0 {
+	if plan.Kind != "delete" || plan.NativeTrash != nil || plan.RecoveryCount > 0 {
 		return nil
 	}
 	if plan.RecoveryID == "" {

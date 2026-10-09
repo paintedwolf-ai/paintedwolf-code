@@ -178,9 +178,9 @@ func TestCommitReviewHistoryEnrichesLiveContentsAndPreservesPresentation(t *test
 	contractfixture.MirrorLedgerProject(t, ledgerDB, p)
 	rootID := p.Roots[0].ID
 	testutil.FailErr(t, "record agent change", ledger.Record(t.Context(), sourceledger.RecordInput{
-		ProjectID: p.ID, RootID: rootID, Path: "src/app.ts", Op: wire.SourceChangeOpWrite,
-		Origin: wire.SourceChangeOriginAgent, Before: []byte("committed\n"), After: []byte("recorded\n"),
-	}))
+		RecordLocation: sourceledger.RecordLocation{RootID: rootID, Path: "src/app.ts"},
+		ProjectID:      p.ID, Op: wire.SourceChangeOpWrite,
+		Origin: wire.SourceChangeOriginAgent, Before: []byte("committed\n"), After: []byte("recorded\n")}))
 	testutil.FailErr(t, "write unseen successor", os.WriteFile(filepath.Join(root, "src/app.ts"), []byte("live successor\n"), 0o644))
 	page := contractfixture.ReadCommitReview(t, srv, p.ID, "", "100")
 	if len(page.Files) != 1 {
@@ -197,9 +197,9 @@ func TestCommitReviewHistoryEnrichesLiveContentsAndPreservesPresentation(t *test
 		t.Fatalf("comparison used recorded head: status=%d diff=%+v", code, diff)
 	}
 	testutil.FailErr(t, "record deletion", ledger.Record(t.Context(), sourceledger.RecordInput{
-		ProjectID: p.ID, RootID: rootID, Path: "src/app.ts", Op: wire.SourceChangeOpDelete,
-		Origin: wire.SourceChangeOriginUser, Before: []byte("recorded\n"),
-	}))
+		RecordLocation: sourceledger.RecordLocation{RootID: rootID, Path: "src/app.ts"},
+		ProjectID:      p.ID, Op: wire.SourceChangeOpDelete,
+		Origin: wire.SourceChangeOriginUser, Before: []byte("recorded\n")}))
 	page = contractfixture.ReadCommitReview(t, srv, p.ID, "", "100")
 	if page.Files[0].FileID != "" || len(page.Files[0].Effects) != 0 {
 		t.Fatal("unobserved recreation inherited a deleted identity")

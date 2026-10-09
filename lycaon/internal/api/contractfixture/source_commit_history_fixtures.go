@@ -108,11 +108,10 @@ func NewMergedHistoryFixture(t *testing.T) MergedHistoryFixture {
 	trackedBytes := []byte("tracked v1\n")
 	testutil.FailErr(t, "write tracked bytes", os.WriteFile(appPath, trackedBytes, 0o600))
 	testutil.FailErr(t, "record tracked edit", ledger.Record(t.Context(), sourceledger.RecordInput{
-		ProjectID: p.ID,
-		RootID:    rootID, Path: "src/app.ts", Op: wire.SourceChangeOpWrite,
+		RecordLocation: sourceledger.RecordLocation{RootID: rootID, Path: "src/app.ts"},
+		ProjectID:      p.ID, Op: wire.SourceChangeOpWrite,
 		Origin: wire.SourceChangeOriginUser,
-		Before: []byte("second\n"), After: trackedBytes,
-	}))
+		Before: []byte("second\n"), After: trackedBytes}))
 	reader := NewScriptedGitStateReader(t, nested,
 		gitstate.State{Repo: gitstate.RepoPresent, HeadCommit: commitA, HeadRef: "main"})
 	ledger.Git.SetGitReader(reader)
@@ -152,13 +151,12 @@ func NewMergedHistoryFixture(t *testing.T) MergedHistoryFixture {
 		t.Fatalf("terminal transitions = %+v", terminal)
 	}
 	testutil.FailErr(t, "record reconcile", ledger.Record(t.Context(), sourceledger.RecordInput{
-		ProjectID: p.ID,
-		RootID:    rootID, Path: "src/app.ts", Op: wire.SourceChangeOpWrite,
+		RecordLocation: sourceledger.RecordLocation{RootID: rootID, Path: "src/app.ts"},
+		ProjectID:      p.ID, Op: wire.SourceChangeOpWrite,
 		Origin: wire.SourceChangeOriginExternal,
 		Cause:  "filesystem_reconcile", CaptureQuality: "reconciled",
 		Before: trackedBytes, After: []byte("landed\n"),
-		GitTransitionID: terminal[rootID],
-	}))
+		GitTransitionID: terminal[rootID]}))
 	fileID, _, err := ledger.History.ResolveFile(t.Context(), p.ID, sourcebranch.Trunk, rootID, "src/app.ts")
 	testutil.FailErr(t, "resolve file", err)
 

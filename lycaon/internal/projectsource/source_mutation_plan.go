@@ -21,7 +21,7 @@ const (
 	sourceMutationFailed      sourceMutationStatus = "failed"
 )
 
-// Recovery is retained for both disposal modes.
+// Disposal selects the filesystem effect; recovery is described by the plan.
 type sourceDisposal string
 
 const (
@@ -78,10 +78,11 @@ type sourceMutationPublication struct {
 }
 
 type sourceMutationRecovery struct {
-	RecoveryID    string         `json:"recovery_id,omitempty"`
-	RecoveryCount int64          `json:"recovery_count,omitempty"`
-	Disposal      sourceDisposal `json:"disposal,omitempty"`
-	TreeSHA       string         `json:"tree_sha256,omitempty"`
+	NativeTrash   *sourceTrashRecovery `json:"native_trash,omitempty"`
+	RecoveryID    string               `json:"recovery_id,omitempty"`
+	RecoveryCount int64                `json:"recovery_count,omitempty"`
+	Disposal      sourceDisposal       `json:"disposal,omitempty"`
+	TreeSHA       string               `json:"tree_sha256,omitempty"`
 }
 
 type sourceMutationPlan struct {

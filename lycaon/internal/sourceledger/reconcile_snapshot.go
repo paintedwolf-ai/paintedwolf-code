@@ -231,9 +231,8 @@ func (s *Inventory) windowAdmissions(
 	now := time.Now().UTC()
 	admit := func(rootID, path string, op api.SourceChangeOp, before, after *sourcesnapshot.Entry) error {
 		in := observationCause{batchID: batchID, gitTransitionID: transitionByRoot[rootID], window: window}.apply(RecordInput{
-			ProjectID: projectID, BranchID: branchForObservedRoot(window.roots, rootID),
-			RootID: rootID, Path: path, Op: op, EntryKind: EntryKindFile, TS: now,
-		})
+			RecordLocation: RecordLocation{RootID: rootID, Path: path, EntryKind: EntryKindFile},
+			ProjectID:      projectID, BranchID: branchForObservedRoot(window.roots, rootID), Op: op, TS: now})
 		if before != nil {
 			sha, raw, err := s.versionFacts(ctx, *before)
 			if err != nil {

@@ -285,14 +285,13 @@ func (s *Service) commit(ctx context.Context, p *project.Project, d *Document, m
 		textAfter.Revision = m.DraftRevision
 	}
 	record := sourceledger.RecordInput{
-		TextAfter: textAfter,
-		ProjectID: m.ProjectID, BranchID: d.BranchID,
-		RootID: m.RootID, Path: m.Path, FileID: d.FileID, EntryKind: sourceledger.EntryKindFile,
+		RecordLocation: sourceledger.RecordLocation{RootID: m.RootID, Path: m.Path, EntryKind: sourceledger.EntryKindFile},
+		TextAfter:      textAfter,
+		ProjectID:      m.ProjectID, BranchID: d.BranchID, FileID: d.FileID,
 		Op: op, Origin: m.Origin, PersonID: m.PersonID,
 		SessionID: m.SessionID, Turn: m.Turn, OperationID: m.ID,
 		ToolCallID: m.ToolCallID, ToolName: m.ToolName,
-		AfterSHA256: m.AfterSHA256, After: m.AfterBytes, AfterSize: int64(len(m.AfterBytes)),
-	}
+		AfterSHA256: m.AfterSHA256, After: m.AfterBytes, AfterSize: int64(len(m.AfterBytes))}
 	if m.Creates() {
 		// A recreated path is a new file to the ledger.
 		record.FileID = ""

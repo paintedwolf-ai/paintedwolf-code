@@ -23,10 +23,10 @@ func TestVersionListIncludesTheTrackedBaseline(t *testing.T) {
 	testutil.FailErr(t, "track file", err)
 
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "a.txt", FileID: tracked.FileID,
+		RecordLocation: RecordLocation{RootID: "r1", Path: "a.txt"},
+		ProjectID:      "p1", FileID: tracked.FileID,
 		Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginUser,
-		OperationID: "edit-a", Before: baseline, After: []byte("one\ntwo edited\n"),
-	})
+		OperationID: "edit-a", Before: baseline, After: []byte("one\ntwo edited\n")})
 
 	page, err := store.History.QueryFileVersions(ctx, "p1", tracked.FileID, 0, 0)
 	testutil.FailErr(t, "query versions", err)
@@ -59,11 +59,11 @@ func TestVersionListIncludesTheTrackedBaseline(t *testing.T) {
 func TestVersionListIncludesAPreservedPreImage(t *testing.T) {
 	store, ctx := openLedger(t)
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "b.txt",
-		Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginExternal,
+		RecordLocation: RecordLocation{RootID: "r1", Path: "b.txt"},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpWrite, Origin: api.SourceChangeOriginExternal,
 		OperationID: "observe-b",
-		Before:      []byte("unrecorded\n"), After: []byte("observed\n"),
-	})
+		Before:      []byte("unrecorded\n"), After: []byte("observed\n")})
 	fileID, _ := mustResolve(t, store, ctx, "b.txt")
 	page, err := store.History.QueryFileVersions(ctx, "p1", fileID, 0, 0)
 	testutil.FailErr(t, "query versions", err)
@@ -88,10 +88,10 @@ func TestVersionPagingCoversEveryRetainedState(t *testing.T) {
 	previous := []byte("v0\n")
 	for _, next := range [][]byte{[]byte("v1\n"), []byte("v2\n"), []byte("v3\n")} {
 		mustRecord(t, store, ctx, RecordInput{
-			ProjectID: "p1", RootID: "r1", Path: "c.txt", FileID: tracked.FileID,
+			RecordLocation: RecordLocation{RootID: "r1", Path: "c.txt"},
+			ProjectID:      "p1", FileID: tracked.FileID,
 			Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginUser,
-			OperationID: "edit-" + string(next), Before: previous, After: next,
-		})
+			OperationID: "edit-" + string(next), Before: previous, After: next})
 		previous = next
 	}
 
@@ -126,10 +126,10 @@ func TestVersionPagingCoversEveryRetainedState(t *testing.T) {
 func TestContentWithoutAnIdentityRecordsAsUnresolved(t *testing.T) {
 	store, ctx := openLedger(t)
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "opaque.bin",
-		Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginExternal,
-		OperationID: "observe-opaque",
-	})
+		RecordLocation: RecordLocation{RootID: "r1", Path: "opaque.bin"},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpWrite, Origin: api.SourceChangeOriginExternal,
+		OperationID: "observe-opaque"})
 	fileID, versionID := mustResolve(t, store, ctx, "opaque.bin")
 	if fileID == "" || versionID == "" {
 		t.Fatal("observation without content produced no tracked state")
@@ -146,10 +146,10 @@ func TestContentWithoutAnIdentityRecordsAsUnresolved(t *testing.T) {
 func TestUnverifiableBytesAreNeverServedAsHistory(t *testing.T) {
 	store, ctx := openLedger(t)
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "d.txt",
-		Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
-		OperationID: "create-d", After: []byte("trustworthy\n"),
-	})
+		RecordLocation: RecordLocation{RootID: "r1", Path: "d.txt"},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
+		OperationID: "create-d", After: []byte("trustworthy\n")})
 	_, versionID := mustResolve(t, store, ctx, "d.txt")
 	row, err := store.queries.GetSourceVersion(ctx, versionID)
 	testutil.FailErr(t, "read version", err)

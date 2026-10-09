@@ -663,6 +663,10 @@ values:
     status: 409
     comment: >-
       another file operation reserves this path
+  - id: source_trash_recovery_unavailable
+    status: 410
+    comment: >-
+      the exact native Trash item is no longer available for restoration
   - id: source_recovery_failed
     status: 500
     comment: >-

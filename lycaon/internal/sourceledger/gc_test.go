@@ -52,10 +52,10 @@ func TestSweepDefersBehindACaptureWithoutHoldingTheLedger(t *testing.T) {
 			return
 		}
 		done <- store.Record(ctx, RecordInput{
-			ProjectID: "p1", RootID: "r1", Path: "a.txt",
-			Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginAgent,
-			After: []byte("recorded while a capture runs\n"),
-		})
+			RecordLocation: RecordLocation{RootID: "r1", Path: "a.txt"},
+			ProjectID:      "p1",
+			Op:             api.SourceChangeOpCreate, Origin: api.SourceChangeOriginAgent,
+			After: []byte("recorded while a capture runs\n")})
 	}()
 	select {
 	case err := <-done:
@@ -76,10 +76,10 @@ func TestSweepJudgesEveryShardAndDrainsTheQueue(t *testing.T) {
 	first := agedOrphan(t, store, "orphan one\n")
 	second := agedOrphan(t, store, "orphan two\n")
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "kept.txt",
-		Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginAgent,
-		After: []byte("referenced by a version\n"),
-	})
+		RecordLocation: RecordLocation{RootID: "r1", Path: "kept.txt"},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpCreate, Origin: api.SourceChangeOriginAgent,
+		After: []byte("referenced by a version\n")})
 	var keptSHA string
 	testutil.FailErr(t, "load kept hash", store.sqlDB.QueryRowContext(ctx,
 		`SELECT content_sha256 FROM source_versions WHERE path = 'kept.txt'`).Scan(&keptSHA))
@@ -122,9 +122,9 @@ func TestMaintenanceWaitsForARecordTransactionToCommit(t *testing.T) {
 	tx, err := store.sqlDB.BeginTx(ctx, nil)
 	testutil.FailErr(t, "begin caller transaction", err)
 	testutil.FailErr(t, "record inside caller transaction", store.RecordTx(ctx, tx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "joined.txt",
-		Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser, After: content,
-	}))
+		RecordLocation: RecordLocation{RootID: "r1", Path: "joined.txt"},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser, After: content}))
 
 	swept := make(chan error, 1)
 	go func() { swept <- store.Retention.SweepBlobs(ctx) }()

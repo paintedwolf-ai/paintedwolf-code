@@ -1,6 +1,7 @@
 package projectsource
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -20,10 +21,12 @@ import (
 
 // Transfer evidence describes the bytes written into an unpublished tree.
 type sourceTreeTransfer struct {
-	ctx      context.Context
-	digest   *sourceTreeDigest
-	capture  *sourceRecoveryCapture
-	progress *sourceWorkProgress
+	rootContent []byte
+	rootSHA     string
+	ctx         context.Context
+	digest      *sourceTreeDigest
+	capture     *sourceRecoveryCapture
+	progress    *sourceWorkProgress
 }
 
 func (t *sourceTreeTransfer) copyEntry(source *os.Root, from string, destination *os.Root, to, rel string) error {
@@ -154,16 +157,45 @@ func (t *sourceTreeTransfer) transferFileBytes(source *os.Root, from string, des
 		}
 		return t.capture.append(t.ctx, entry, source, from, out)
 	}
+	digest := sha256.New()
+	var content bytes.Buffer
+	outputs := []io.Writer{digest}
+	reader := in
 	if cloned {
-		info, err := destination.Lstat(to)
-		if err != nil {
-			return entry, err
-		}
-		entry.SHA, err = fingerprintSourceFile(t.ctx, info, func() (*os.File, error) { return destination.Open(to) }, t.progress)
+		reader = out
+	} else {
+		outputs = append(outputs, out)
+	}
+	info, err := reader.Stat()
+	if err != nil {
 		return entry, err
 	}
-	digest := sha256.New()
-	_, err := io.Copy(io.MultiWriter(out, digest), contextio.Reader{Context: t.ctx, Source: in, OnRead: t.progress.noteBytes})
+	retain := entry.Path == "." && info.Size() <= sourceledger.MaxRevisionContentBytes
+	if retain {
+		outputs = append(outputs, sourceRevisionBuffer{buffer: &content})
+	}
+	count, err := io.Copy(io.MultiWriter(outputs...), contextio.Reader{Context: t.ctx, Source: reader, OnRead: t.progress.noteBytes})
 	entry.SHA = hex.EncodeToString(digest.Sum(nil))
+	if entry.Path == "." && err == nil {
+		t.rootSHA = entry.SHA
+		if retain && count <= sourceledger.MaxRevisionContentBytes {
+			t.rootContent = append([]byte{}, content.Bytes()...)
+		}
+	}
 	return entry, err
+}
+
+// Keep a bounded revision preview even if a file grows during its transfer.
+type sourceRevisionBuffer struct{ buffer *bytes.Buffer }
+
+func (w sourceRevisionBuffer) Write(p []byte) (int, error) {
+	n := len(p)
+	remaining := sourceledger.MaxRevisionContentBytes - w.buffer.Len()
+	if remaining > 0 {
+		if len(p) > remaining {
+			p = p[:remaining]
+		}
+		_, _ = w.buffer.Write(p)
+	}
+	return n, nil
 }

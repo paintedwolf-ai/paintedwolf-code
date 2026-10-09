@@ -12,7 +12,8 @@ import (
 
 func TestContributionSelectionUsesIdentityKindAndRevision(t *testing.T) {
 	store, ctx := openLedger(t)
-	mustRecord(t, store, ctx, RecordInput{ProjectID: "p1", RootID: "r1", Path: "a.txt", Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser, OperationID: "create", After: []byte("base")})
+	mustRecord(t, store, ctx, RecordInput{
+		RecordLocation: RecordLocation{RootID: "r1", Path: "a.txt"}, ProjectID: "p1", Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser, OperationID: "create", After: []byte("base")})
 	head, err := store.History.ResolveHead(ctx, "p1", sourcebranch.Trunk, "r1", "a.txt")
 	testutil.FailErr(t, "resolve file", err)
 	person, err := store.people.HostOwner(ctx)

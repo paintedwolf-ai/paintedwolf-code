@@ -109,12 +109,12 @@ func TestEffectsCarryTheirGitTransition(t *testing.T) {
 	testutil.FailErr(t, "observe checkout", err)
 
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "swapped.txt",
-		Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginExternal,
+		RecordLocation: RecordLocation{RootID: "r1", Path: "swapped.txt"},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpWrite, Origin: api.SourceChangeOriginExternal,
 		After: []byte("from the other branch\n"),
 		Cause: "filesystem_reconcile", CaptureQuality: "reconciled",
-		GitTransitionID: terminal["r1"],
-	})
+		GitTransitionID: terminal["r1"]})
 
 	walk, err := store.Walk.QueryWalk(ctx, "p1", Baseline{}, 10, 0, CommitLens{})
 	testutil.FailErr(t, "query walk", err)
@@ -153,10 +153,10 @@ func TestWalkReportsBareGitTransitionsOnItsSpan(t *testing.T) {
 	testutil.FailErr(t, "seed git state", err)
 
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "notes.txt",
-		Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
-		After: []byte("draft\n"),
-	})
+		RecordLocation: RecordLocation{RootID: "r1", Path: "notes.txt"},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
+		After: []byte("draft\n")})
 
 	// A commit lands with no working-tree byte change: a transition row and
 	// nothing else.
@@ -209,10 +209,10 @@ func TestFileVersionsCarryTheirGitTransition(t *testing.T) {
 	testutil.FailErr(t, "seed git state", err)
 
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "swapped.txt",
-		Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginAgent,
-		After: []byte("ours\n"),
-	})
+		RecordLocation: RecordLocation{RootID: "r1", Path: "swapped.txt"},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpCreate, Origin: api.SourceChangeOriginAgent,
+		After: []byte("ours\n")})
 
 	reader.states["/tmp/source-ledger-test"] = gitstate.State{
 		Repo: gitstate.RepoPresent, HeadCommit: "bbb", HeadRef: "work",
@@ -226,12 +226,12 @@ func TestFileVersionsCarryTheirGitTransition(t *testing.T) {
 	terminal, err := store.Git.ObserveGitState(ctx, "p1", testRoots)
 	testutil.FailErr(t, "observe checkout", err)
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "swapped.txt",
-		Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginExternal,
+		RecordLocation: RecordLocation{RootID: "r1", Path: "swapped.txt"},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpWrite, Origin: api.SourceChangeOriginExternal,
 		After: []byte("theirs\n"),
 		Cause: "filesystem_reconcile", CaptureQuality: "reconciled",
-		GitTransitionID: terminal["r1"],
-	})
+		GitTransitionID: terminal["r1"]})
 
 	fileID, _ := mustResolve(t, store, ctx, "swapped.txt")
 	history, err := store.History.QueryFileVersions(ctx, "p1", fileID, 10, 0)
@@ -264,10 +264,10 @@ func TestReadVersionGitSourceNamesTheCommit(t *testing.T) {
 	testutil.FailErr(t, "seed git state", err)
 
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "swapped.txt",
-		Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginAgent,
-		After: []byte("ours\n"),
-	})
+		RecordLocation: RecordLocation{RootID: "r1", Path: "swapped.txt"},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpCreate, Origin: api.SourceChangeOriginAgent,
+		After: []byte("ours\n")})
 	reader.states["/tmp/source-ledger-test"] = gitstate.State{
 		Repo: gitstate.RepoPresent, HeadCommit: "bbb", HeadRef: "work",
 	}
@@ -280,12 +280,12 @@ func TestReadVersionGitSourceNamesTheCommit(t *testing.T) {
 	terminal, err := store.Git.ObserveGitState(ctx, "p1", testRoots)
 	testutil.FailErr(t, "observe checkout", err)
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "swapped.txt",
-		Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginExternal,
+		RecordLocation: RecordLocation{RootID: "r1", Path: "swapped.txt"},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpWrite, Origin: api.SourceChangeOriginExternal,
 		After: []byte("theirs\n"),
 		Cause: "filesystem_reconcile", CaptureQuality: "reconciled",
-		GitTransitionID: terminal["r1"],
-	})
+		GitTransitionID: terminal["r1"]})
 
 	fileID, gitVersionID := mustResolve(t, store, ctx, "swapped.txt")
 	src, err := store.History.ReadVersionGitSource(ctx, "p1", gitVersionID)
@@ -335,20 +335,20 @@ func TestWalkHeadMatchComparesDerivedOIDs(t *testing.T) {
 	store, ctx := openLedger(t)
 	content := []byte("hello\n")
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "same.txt",
-		Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
-		After: content,
-	})
+		RecordLocation: RecordLocation{RootID: "r1", Path: "same.txt"},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
+		After: content})
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "differs.txt",
-		Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
-		After: []byte("local edit\n"),
-	})
+		RecordLocation: RecordLocation{RootID: "r1", Path: "differs.txt"},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
+		After: []byte("local edit\n")})
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "untracked.txt",
-		Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
-		After: []byte("brand new\n"),
-	})
+		RecordLocation: RecordLocation{RootID: "r1", Path: "untracked.txt"},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
+		After: []byte("brand new\n")})
 	oids := sourceblob.ContentGitOIDs(content)
 	tree := &fakeWorkingTree{treeOIDs: map[string]string{
 		"/tmp/source-ledger-test/same.txt":    oids.SHA1,

@@ -23,11 +23,10 @@ func retainedBeforeVersion(
 ) (string, string) {
 	t.Helper()
 	testutil.FailErr(t, "record retained versions", service.settlement.recorder.(*sourceledger.Store).Record(t.Context(), sourceledger.RecordInput{
-		ProjectID: p.ID,
-		RootID:    p.Roots[0].ID, Path: path,
-		Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginAgent,
-		SessionID: "session-1", Turn: 1, Before: before, After: after,
-	}))
+		RecordLocation: sourceledger.RecordLocation{RootID: p.Roots[0].ID, Path: path},
+		ProjectID:      p.ID,
+		Op:             api.SourceChangeOpWrite, Origin: api.SourceChangeOriginAgent,
+		SessionID: "session-1", Turn: 1, Before: before, After: after}))
 	walk, err := service.settlement.recorder.(*sourceledger.Store).Walk.QueryWalk(
 		t.Context(), p.ID,
 		sourceledger.Baseline{Kind: sourceledger.BaselineSession, SessionID: "session-1"},
@@ -81,25 +80,22 @@ func TestRestoreVersionKeepsTheCurrentPathAcrossHistoricalRename(t *testing.T) {
 	newPath := filepath.Join(rootPath, "new-name.txt")
 	testutil.FailErr(t, "seed renamed current file", os.WriteFile(newPath, current, 0o640))
 	testutil.FailErr(t, "record old-path source", service.settlement.recorder.(*sourceledger.Store).Record(t.Context(), sourceledger.RecordInput{
-		ProjectID: p.ID,
-		RootID:    p.Roots[0].ID, Path: "old-name.txt",
-		Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginAgent, After: selectedBytes,
-	}))
+		RecordLocation: sourceledger.RecordLocation{RootID: p.Roots[0].ID, Path: "old-name.txt"},
+		ProjectID:      p.ID,
+		Op:             api.SourceChangeOpCreate, Origin: api.SourceChangeOriginAgent, After: selectedBytes}))
 	fileID, selectedVersionID, err := service.settlement.recorder.(*sourceledger.Store).History.ResolveFile(
 		t.Context(), p.ID, sourcebranch.Trunk, p.Roots[0].ID, "old-name.txt",
 	)
 	testutil.FailErr(t, "resolve old-path version", err)
 	testutil.FailErr(t, "record source rename", service.settlement.recorder.(*sourceledger.Store).Record(t.Context(), sourceledger.RecordInput{
-		ProjectID: p.ID,
-		RootID:    p.Roots[0].ID, Path: "new-name.txt", FromPath: "old-name.txt", FileID: fileID,
-		Op: api.SourceChangeOpRename, Origin: api.SourceChangeOriginAgent,
-	}))
+		RecordLocation: sourceledger.RecordLocation{RootID: p.Roots[0].ID, Path: "new-name.txt", FromPath: "old-name.txt"},
+		ProjectID:      p.ID, FileID: fileID,
+		Op: api.SourceChangeOpRename, Origin: api.SourceChangeOriginAgent}))
 	testutil.FailErr(t, "record renamed current source", service.settlement.recorder.(*sourceledger.Store).Record(t.Context(), sourceledger.RecordInput{
-		ProjectID: p.ID,
-		RootID:    p.Roots[0].ID, Path: "new-name.txt", FileID: fileID,
+		RecordLocation: sourceledger.RecordLocation{RootID: p.Roots[0].ID, Path: "new-name.txt"},
+		ProjectID:      p.ID, FileID: fileID,
 		Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginAgent,
-		Before: selectedBytes, After: current,
-	}))
+		Before: selectedBytes, After: current}))
 	selected, err := service.settlement.recorder.(*sourceledger.Store).History.ReadRestorableVersion(t.Context(), p.ID, selectedVersionID)
 	testutil.FailErr(t, "read old-path version", err)
 
@@ -168,11 +164,10 @@ func TestRestoreVersionRejectsAStaleWorkingTip(t *testing.T) {
 func TestRestoreVersionLeavesMatchingAbsenceAbsent(t *testing.T) {
 	service, p, rootPath, _ := sourceMutationFixture(t)
 	testutil.FailErr(t, "record retained deletion", service.settlement.recorder.(*sourceledger.Store).Record(t.Context(), sourceledger.RecordInput{
-		ProjectID: p.ID,
-		RootID:    p.Roots[0].ID, Path: "gone.txt",
-		Op: api.SourceChangeOpDelete, Origin: api.SourceChangeOriginAgent,
-		SessionID: "session-absent", Turn: 1, Before: []byte("before\n"),
-	}))
+		RecordLocation: sourceledger.RecordLocation{RootID: p.Roots[0].ID, Path: "gone.txt"},
+		ProjectID:      p.ID,
+		Op:             api.SourceChangeOpDelete, Origin: api.SourceChangeOriginAgent,
+		SessionID: "session-absent", Turn: 1, Before: []byte("before\n")}))
 	walk, err := service.settlement.recorder.(*sourceledger.Store).Walk.QueryWalk(
 		t.Context(), p.ID,
 		sourceledger.Baseline{Kind: sourceledger.BaselineSession, SessionID: "session-absent"},
@@ -211,11 +206,10 @@ func TestRestoreVersionMakesRetainedAbsenceCurrent(t *testing.T) {
 	current := []byte("current\n")
 	testutil.FailErr(t, "seed current file", os.WriteFile(path, current, 0o640))
 	testutil.FailErr(t, "record retained deletion", service.settlement.recorder.(*sourceledger.Store).Record(t.Context(), sourceledger.RecordInput{
-		ProjectID: p.ID,
-		RootID:    p.Roots[0].ID, Path: "remove-me.txt",
-		Op: api.SourceChangeOpDelete, Origin: api.SourceChangeOriginAgent,
-		SessionID: "session-delete", Turn: 1, Before: []byte("older\n"),
-	}))
+		RecordLocation: sourceledger.RecordLocation{RootID: p.Roots[0].ID, Path: "remove-me.txt"},
+		ProjectID:      p.ID,
+		Op:             api.SourceChangeOpDelete, Origin: api.SourceChangeOriginAgent,
+		SessionID: "session-delete", Turn: 1, Before: []byte("older\n")}))
 	walk, err := service.settlement.recorder.(*sourceledger.Store).Walk.QueryWalk(
 		t.Context(), p.ID,
 		sourceledger.Baseline{Kind: sourceledger.BaselineSession, SessionID: "session-delete"},
@@ -264,11 +258,10 @@ func TestRestoreVersionAcceptsAStateNoEffectProduced(t *testing.T) {
 
 	edited := []byte("edited since\n")
 	testutil.FailErr(t, "record edit", service.settlement.recorder.(*sourceledger.Store).Record(t.Context(), sourceledger.RecordInput{
-		ProjectID: p.ID,
-		RootID:    p.Roots[0].ID, Path: "opened.txt", FileID: tracked.FileID,
+		RecordLocation: sourceledger.RecordLocation{RootID: p.Roots[0].ID, Path: "opened.txt"},
+		ProjectID:      p.ID, FileID: tracked.FileID,
 		Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginAgent,
-		Before: baselineBytes, After: edited,
-	}))
+		Before: baselineBytes, After: edited}))
 	testutil.FailErr(t, "apply edit on disk", os.WriteFile(path, edited, 0o640))
 
 	// The baseline is listed with no action behind it.
@@ -304,22 +297,20 @@ func TestRestoreVersionAcceptsAWorkerBranchVersion(t *testing.T) {
 	path := filepath.Join(rootPath, "shared.txt")
 	testutil.FailErr(t, "seed source", os.WriteFile(path, primaryBytes, 0o640))
 	testutil.FailErr(t, "record primary", service.settlement.recorder.(*sourceledger.Store).Record(t.Context(), sourceledger.RecordInput{
-		ProjectID: p.ID,
-		RootID:    p.Roots[0].ID, Path: "shared.txt",
-		Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser, After: primaryBytes,
-	}))
+		RecordLocation: sourceledger.RecordLocation{RootID: p.Roots[0].ID, Path: "shared.txt"},
+		ProjectID:      p.ID,
+		Op:             api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser, After: primaryBytes}))
 	fileID, primaryVersionID, err := service.settlement.recorder.(*sourceledger.Store).History.ResolveFile(
 		t.Context(), p.ID, sourcebranch.Trunk, p.Roots[0].ID, "shared.txt")
 	testutil.FailErr(t, "resolve file", err)
 
 	workerBytes := []byte("worker draft\n")
 	testutil.FailErr(t, "record worker write", service.settlement.recorder.(*sourceledger.Store).Record(t.Context(), sourceledger.RecordInput{
-		ProjectID: p.ID, BranchID: "job-1",
-		RootID: p.Roots[0].ID, Path: "shared.txt", FileID: fileID,
+		RecordLocation: sourceledger.RecordLocation{RootID: p.Roots[0].ID, Path: "shared.txt"},
+		ProjectID:      p.ID, BranchID: "job-1", FileID: fileID,
 		DerivedFromVersionID: primaryVersionID, JobID: "job-1",
 		Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginAgent,
-		Before: primaryBytes, After: workerBytes,
-	}))
+		Before: primaryBytes, After: workerBytes}))
 
 	history, err := service.settlement.recorder.(*sourceledger.Store).History.QueryFileVersions(t.Context(), p.ID, fileID, 10, 0)
 	testutil.FailErr(t, "list versions", err)

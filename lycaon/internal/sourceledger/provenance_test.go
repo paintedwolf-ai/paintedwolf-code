@@ -59,10 +59,10 @@ func TestTurnCheckpointAndActivityFloorReportAbsenceAsUnknown(t *testing.T) {
 	})
 	testutil.FailErr(t, "create turn 1 checkpoint", err)
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "a.txt",
-		Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
-		OperationID: "op-user-a", After: []byte("a\n"),
-	})
+		RecordLocation: RecordLocation{RootID: "r1", Path: "a.txt"},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
+		OperationID: "op-user-a", After: []byte("a\n")})
 	_, err = store.Checkpoints.CreateStructuralCheckpoint(ctx, StructuralCheckpointInput{
 		ProjectID: "p1", Kind: CheckpointTurn, Label: "Turn start", SessionID: "s1", Turn: 2,
 	})
@@ -91,10 +91,10 @@ func TestTurnCheckpointIsAnImmutableIdempotentBoundary(t *testing.T) {
 	first, err := store.Checkpoints.CreateStructuralCheckpoint(ctx, input)
 	testutil.FailErr(t, "create turn checkpoint", err)
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "a.txt",
-		Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginAgent,
-		SessionID: "s1", Turn: 1, OperationID: "op-agent-a", After: []byte("a\n"),
-	})
+		RecordLocation: RecordLocation{RootID: "r1", Path: "a.txt"},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpCreate, Origin: api.SourceChangeOriginAgent,
+		SessionID: "s1", Turn: 1, OperationID: "op-agent-a", After: []byte("a\n")})
 
 	replayed, err := store.Checkpoints.CreateStructuralCheckpoint(ctx, input)
 	testutil.FailErr(t, "replay turn checkpoint", err)
@@ -123,10 +123,10 @@ func TestEffectsBetweenBoundsAreExclusiveInclusive(t *testing.T) {
 		{"op-3", "b.txt", "three\n"},
 	} {
 		mustRecord(t, store, ctx, RecordInput{
-			ProjectID: "p1", RootID: "r1", Path: step.path,
-			Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginUser,
-			OperationID: step.op, After: []byte(step.content),
-		})
+			RecordLocation: RecordLocation{RootID: "r1", Path: step.path},
+			ProjectID:      "p1",
+			Op:             api.SourceChangeOpWrite, Origin: api.SourceChangeOriginUser,
+			OperationID: step.op, After: []byte(step.content)})
 	}
 	all, err := store.History.EffectsBetween(ctx, "p1", 0, 0, 10)
 	testutil.FailErr(t, "list all effects", err)
@@ -145,16 +145,16 @@ func TestQueryFileEffectsPagesNewestFirst(t *testing.T) {
 	store, ctx := openLedger(t)
 	for _, op := range []string{"op-1", "op-2", "op-3"} {
 		mustRecord(t, store, ctx, RecordInput{
-			ProjectID: "p1", RootID: "r1", Path: "a.txt",
-			Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginAgent,
-			SessionID: "s1", OperationID: op, After: []byte(op + "\n"),
-		})
+			RecordLocation: RecordLocation{RootID: "r1", Path: "a.txt"},
+			ProjectID:      "p1",
+			Op:             api.SourceChangeOpWrite, Origin: api.SourceChangeOriginAgent,
+			SessionID: "s1", OperationID: op, After: []byte(op + "\n")})
 	}
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "other.txt",
-		Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
-		OperationID: "op-other", After: []byte("noise\n"),
-	})
+		RecordLocation: RecordLocation{RootID: "r1", Path: "other.txt"},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
+		OperationID: "op-other", After: []byte("noise\n")})
 	fileID, _ := mustResolve(t, store, ctx, "a.txt")
 
 	page, err := store.History.QueryFileEffects(ctx, "p1", fileID, 0, 0, 2)
@@ -184,16 +184,16 @@ func TestQueryFileEffectsPagesNewestFirst(t *testing.T) {
 func TestQueryAttributionCarriesEveryOrigin(t *testing.T) {
 	store, ctx := openLedger(t)
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "a.txt",
-		Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
-		OperationID: "op-user-create", After: []byte("alpha\nbeta\n"),
-	})
+		RecordLocation: RecordLocation{RootID: "r1", Path: "a.txt"},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
+		OperationID: "op-user-create", After: []byte("alpha\nbeta\n")})
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "a.txt",
-		Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginAgent, SessionID: "s1",
+		RecordLocation: RecordLocation{RootID: "r1", Path: "a.txt"},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpWrite, Origin: api.SourceChangeOriginAgent, SessionID: "s1",
 		OperationID: "op-agent-write",
-		Before:      []byte("alpha\nbeta\n"), After: []byte("alpha\ngamma\n"),
-	})
+		Before:      []byte("alpha\nbeta\n"), After: []byte("alpha\ngamma\n")})
 	res, err := store.History.QueryAttribution(ctx, "p1", sourcebranch.Trunk, "r1", "a.txt")
 	testutil.FailErr(t, "query attribution", err)
 	origins := map[api.SourceChangeOrigin]bool{}

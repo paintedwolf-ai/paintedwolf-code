@@ -115,17 +115,13 @@ func New(sqlDB db.Handle, contentDir string) *Store {
 
 // RecordInput is one exact consequence within a causal operation.
 type RecordInput struct {
+	RecordLocation
 	TextBefore, TextAfter *TextState
 	ProjectID             string
 	// BranchID is the line of history this lands on; the zero value is the trunk.
 	BranchID             sourcebranch.ID
-	RootID               string
-	Path                 string
-	FromRootID           string
-	FromPath             string
 	FileID               string
 	DerivedFromVersionID string
-	EntryKind            string
 	Op                   api.SourceChangeOp
 	Origin               api.SourceChangeOrigin
 	// An empty PersonID uses the acting person for user-origin operations.
@@ -289,15 +285,17 @@ func (s *Store) trackFileTx(ctx context.Context, q *db.Queries, in TrackInput) (
 	head, err := q.GetSourceBranchHeadByPath(ctx, db.GetSourceBranchHeadByPathParams{
 		ProjectID: in.ProjectID, BranchID: in.BranchID.String(), RootID: in.RootID, Path: in.Path,
 	})
+	if err == nil && (head.State == "directory") != (in.EntryKind == EntryKindDirectory) {
+		err = sql.ErrNoRows
+	}
 	if err == nil {
 		if in.SHA256 != "" && head.ContentSha256 != "" && head.ContentSha256 != in.SHA256 {
 			if err := s.recordBatchTx(ctx, q, []RecordInput{{
-				ProjectID: in.ProjectID, BranchID: in.BranchID,
-				RootID: in.RootID, Path: in.Path, FileID: head.FileID, EntryKind: in.EntryKind,
+				RecordLocation: RecordLocation{RootID: in.RootID, Path: in.Path, EntryKind: in.EntryKind},
+				ProjectID:      in.ProjectID, BranchID: in.BranchID, FileID: head.FileID,
 				Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginExternal,
 				AfterSHA256: in.SHA256, After: in.Content, AfterSize: in.Size,
-				Cause: "open_observation", CaptureQuality: "observed", TS: in.TS,
-			}}); err != nil {
+				Cause: "open_observation", CaptureQuality: "observed", TS: in.TS}}); err != nil {
 				return TrackedFile{}, err
 			}
 			updated, err := q.GetSourceBranchHeadByFile(ctx, db.GetSourceBranchHeadByFileParams{
@@ -322,7 +320,7 @@ func (s *Store) trackFileTx(ctx context.Context, q *db.Queries, in TrackInput) (
 		if err != nil {
 			return TrackedFile{}, err
 		}
-		if err := q.UpsertSourceBranchHead(ctx, db.UpsertSourceBranchHeadParams{
+		if err := upsertSourceHead(ctx, q, db.SourceBranchHeads{
 			ProjectID: in.ProjectID, BranchID: in.BranchID.String(),
 			FileID: head.FileID, VersionID: versionID, RootID: in.RootID, Path: in.Path,
 			State: "content", ContentSha256: in.SHA256, Ordinal: head.Ordinal,
@@ -341,9 +339,9 @@ func (s *Store) trackFileTx(ctx context.Context, q *db.Queries, in TrackInput) (
 		trunk, trunkErr := q.GetTrunkSourceHeadByPath(ctx, db.GetTrunkSourceHeadByPathParams{
 			ProjectID: in.ProjectID, RootID: in.RootID, Path: in.Path,
 		})
-		if trunkErr == nil {
+		if trunkErr == nil && (trunk.State == "directory") == (in.EntryKind == EntryKindDirectory) {
 			fileID, derivedFromVersionID = trunk.FileID, trunk.VersionID
-		} else if !errors.Is(trunkErr, sql.ErrNoRows) {
+		} else if trunkErr != nil && !errors.Is(trunkErr, sql.ErrNoRows) {
 			return TrackedFile{}, trunkErr
 		}
 	}
@@ -376,7 +374,7 @@ func (s *Store) trackFileTx(ctx context.Context, q *db.Queries, in TrackInput) (
 	if err != nil {
 		return TrackedFile{}, err
 	}
-	if err := q.UpsertSourceBranchHead(ctx, db.UpsertSourceBranchHeadParams{
+	if err := upsertSourceHead(ctx, q, db.SourceBranchHeads{
 		ProjectID: in.ProjectID, BranchID: in.BranchID.String(),
 		FileID: fileID, VersionID: versionID, RootID: in.RootID, Path: in.Path,
 		State: state, ContentSha256: in.SHA256, Ordinal: ordinal,

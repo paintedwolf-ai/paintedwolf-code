@@ -48,7 +48,8 @@ func TestSweepCommittedRewindsReclaimsOrphanedAnchor(t *testing.T) {
 	testutil.FailErr(t, "resolve project", err)
 	turn, err := repository.UserTurnOrdinal(ctx, sessionID)
 	testutil.FailErr(t, "resolve turn", err)
-	testutil.FailErr(t, "record effect", ledger.Record(ctx, sourceledger.RecordInput{ProjectID: project.ID, RootID: project.Roots[0].ID, Path: "file.txt", Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginAgent, SessionID: sessionID, Turn: turn, Before: []byte("before"), After: []byte("after")}))
+	testutil.FailErr(t, "record effect", ledger.Record(ctx, sourceledger.RecordInput{
+		RecordLocation: sourceledger.RecordLocation{RootID: project.Roots[0].ID, Path: "file.txt"}, ProjectID: project.ID, Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginAgent, SessionID: sessionID, Turn: turn, Before: []byte("before"), After: []byte("after")}))
 
 	rootID := sessiontree.RootID(ctx, repository, sessionID)
 	// The existence check below fails loudly if this checkpoint layout changes.

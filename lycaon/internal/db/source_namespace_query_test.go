@@ -1,0 +1,37 @@
+package db
+
+import (
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
+)
+
+func TestSourcePathLookupUsesIndexedNamespaceEdges(t *testing.T) {
+	database, err := Open(filepath.Join(t.TempDir(), "store.db"))
+	testutil.FailErr(t, "open namespace", err)
+	t.Cleanup(func() { _ = database.Close() })
+	rows, err := database.QueryContext(t.Context(), "EXPLAIN QUERY PLAN "+getSourceBranchHeadByPath, "project", "", "a/b/c", "root")
+	testutil.FailErr(t, "explain current path lookup", err)
+	defer func() { _ = rows.Close() }()
+	indexedRoot, indexedChild, indexedEntry, indexedHead := false, false, false, false
+	for rows.Next() {
+		var id, parent, unused int
+		var detail string
+		testutil.FailErr(t, "read lookup plan", rows.Scan(&id, &parent, &unused, &detail))
+		for _, table := range []string{"root", "d", "e", "h"} {
+			if strings.HasPrefix(detail, "SCAN "+table+" ") || detail == "SCAN "+table {
+				t.Fatalf("point lookup scans stored namespace: %s", detail)
+			}
+		}
+		indexedRoot = indexedRoot || strings.Contains(detail, "SEARCH root USING INDEX idx_source_directories_root")
+		indexedChild = indexedChild || strings.Contains(detail, "SEARCH d USING INDEX idx_source_directories_name")
+		indexedEntry = indexedEntry || strings.Contains(detail, "SEARCH e USING INDEX idx_source_head_entries_live_name")
+		indexedHead = indexedHead || strings.Contains(detail, "SEARCH h USING PRIMARY KEY")
+	}
+	testutil.FailErr(t, "finish lookup plan", rows.Err())
+	if !indexedRoot || !indexedChild || !indexedEntry || !indexedHead {
+		t.Fatalf("missing indexed point lookup: root=%v child=%v entry=%v head=%v", indexedRoot, indexedChild, indexedEntry, indexedHead)
+	}
+}

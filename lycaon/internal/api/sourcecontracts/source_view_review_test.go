@@ -25,9 +25,9 @@ func TestSourceViewTreeReviewAndScopeReplacement(t *testing.T) {
 	physical, err := server.Sources.Workspace.ProjectRegistry.Get(t.Context(), p.ID)
 	testutil.FailErr(t, "resolve physical project", err)
 	testutil.FailErr(t, "record deleted review path", ledger.Record(t.Context(), sourceledger.RecordInput{
-		ProjectID: p.ID, RootID: p.Roots[0].ID, Path: "gone/deleted.go", Op: wire.SourceChangeOpDelete,
-		Origin: wire.SourceChangeOriginAgent, SessionID: "chat", Before: []byte("source\n"),
-	}))
+		RecordLocation: sourceledger.RecordLocation{RootID: p.Roots[0].ID, Path: "gone/deleted.go"},
+		ProjectID:      p.ID, Op: wire.SourceChangeOpDelete,
+		Origin: wire.SourceChangeOriginAgent, SessionID: "chat", Before: []byte("source\n")}))
 	request := wire.SourceTreeViewCreate{Kind: "tree", ClientID: "window:main", OperationID: uuid.NewString(), WorkspaceID: physical.WorkspaceID(), Intent: wire.SourceTreeIntent{Review: &wire.SourceTreeReviewScope{Baseline: "session:chat"}}}
 	created := contractfixture.ReadSourceViewResponse(t, contractfixture.CallSourceViewHandler(t, server.Sources.Views.HandleCreateSourceView, p.ID, "", request), http.StatusCreated)
 	id := created.Tree.ID

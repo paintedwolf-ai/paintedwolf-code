@@ -25,8 +25,8 @@ func newLookFixture(t *testing.T) lookFixture {
 func (f lookFixture) write(origin api.SourceChangeOrigin, op api.SourceChangeOp, text string) (string, int64) {
 	f.t.Helper()
 	mustRecord(f.t, f.store, f.ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "a.go", Op: op, Origin: origin, After: []byte(text),
-	})
+		RecordLocation: RecordLocation{RootID: "r1", Path: "a.go"},
+		ProjectID:      "p1", Op: op, Origin: origin, After: []byte(text)})
 	effectID := latestEffectID(f.t, f.store, f.ctx)
 	row, err := f.store.queries.GetSourceEffect(f.ctx, effectID)
 	testutil.FailErr(f.t, "read effect", err)

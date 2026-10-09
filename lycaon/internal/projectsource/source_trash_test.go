@@ -3,8 +3,12 @@ package projectsource
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/desktoptrash"
+	"github.com/lycaon/lycaon/internal/fseffect"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -17,13 +21,13 @@ import (
 func installTestTrash(t *testing.T, service *SourceMutationService) string {
 	t.Helper()
 	dir := t.TempDir()
-	service.Effects.SetTrashMover(func(_ context.Context, path string) error {
-		return os.Rename(path, filepath.Join(dir, uuid.NewString()+"-"+filepath.Base(path)))
+	service.Effects.SetTrashMover(func(_ context.Context, path string) (desktoptrash.Receipt, error) {
+		return testTrashRelocate(path, filepath.Join(dir, uuid.NewString()+"-"+filepath.Base(path)))
 	})
 	return dir
 }
 
-func TestTrashRecoverySurvivesEmptyTrashAndRestart(t *testing.T) {
+func TestRetainedTrashRecoverySurvivesEmptyTrashAndRestart(t *testing.T) {
 	service, p, root, _ := sourceMutationFixture(t)
 	trash := installTestTrash(t, service)
 	testutil.FailErr(t, "create nested folder", os.MkdirAll(filepath.Join(root, "folder", "empty"), 0o750))
@@ -33,7 +37,7 @@ func TestTrashRecoverySurvivesEmptyTrashAndRestart(t *testing.T) {
 	testutil.FailErr(t, "fingerprint before", err)
 	id := uuid.NewString()
 	req := SourceDeleteRequest{RootID: p.Roots[0].ID, Path: "folder", Recursive: true}
-	testutil.FailErr(t, "trash folder", service.Delete(t.Context(), id, p, req))
+	testutil.FailErr(t, "trash folder", legacyTrash(t, service, id, p, req))
 	testutil.FailErr(t, "empty test trash", os.RemoveAll(trash))
 	restarted := NewSourceMutationService(service.Journal.db, service.settlement.recorder.(*sourceledger.Store))
 	installTestTrash(t, restarted)
@@ -51,7 +55,9 @@ func TestTrashRecoverySurvivesEmptyTrashAndRestart(t *testing.T) {
 func TestTrashFailureRestoresSourceAndRetryUsesOriginalOperation(t *testing.T) {
 	service, p, root, _ := sourceMutationFixture(t)
 	testutil.FailErr(t, "seed file", os.WriteFile(filepath.Join(root, "file.txt"), []byte("keep"), 0o600))
-	service.Effects.SetTrashMover(func(context.Context, string) error { return os.ErrPermission })
+	service.Effects.SetTrashMover(func(context.Context, string) (desktoptrash.Receipt, error) {
+		return desktoptrash.Receipt{}, os.ErrPermission
+	})
 	id := uuid.NewString()
 	req := SourceDeleteRequest{RootID: p.Roots[0].ID, Path: "file.txt"}
 	if err := service.Delete(t.Context(), id, p, req); !errors.Is(err, ErrSourceTrashFailed) {
@@ -59,12 +65,12 @@ func TestTrashFailureRestoresSourceAndRetryUsesOriginalOperation(t *testing.T) {
 	}
 	assertSourceHistoryFile(t, root, "file.txt", "keep")
 	trash := t.TempDir()
-	service.Effects.SetTrashMover(func(ctx context.Context, path string) error {
+	service.Effects.SetTrashMover(func(ctx context.Context, path string) (desktoptrash.Receipt, error) {
 		row, found, err := service.Journal.load(t.Context(), id)
 		if err != nil || !found || row.Status != sourceMutationPrepared {
 			t.Fatalf("retry acceptance was not durable before native effect: row=%+v found=%v err=%v", row, found, err)
 		}
-		return os.Rename(path, filepath.Join(trash, "file.txt"))
+		return testTrashRelocate(path, filepath.Join(trash, "file.txt"))
 	})
 	testutil.FailErr(t, "retry trash", service.Delete(t.Context(), id, p, req))
 	undoHistoryHead(t, service, p, id)
@@ -110,14 +116,14 @@ func TestTrashLostAcknowledgementDoesNotDeleteReplacement(t *testing.T) {
 	service, p, root, _ := sourceMutationFixture(t)
 	trash := t.TempDir()
 	testutil.FailErr(t, "seed", os.WriteFile(filepath.Join(root, "file"), []byte("original"), 0o600))
-	service.Effects.SetTrashMover(func(_ context.Context, path string) error {
+	service.Effects.SetTrashMover(func(_ context.Context, path string) (desktoptrash.Receipt, error) {
 		if err := os.Rename(path, filepath.Join(trash, "file")); err != nil {
-			return err
+			return desktoptrash.Receipt{}, err
 		}
 		if err := os.WriteFile(filepath.Join(root, "file"), []byte("replacement"), 0o600); err != nil {
-			return err
+			return desktoptrash.Receipt{}, err
 		}
-		return context.DeadlineExceeded
+		return desktoptrash.Receipt{}, context.DeadlineExceeded
 	})
 	id := uuid.NewString()
 	req := SourceDeleteRequest{RootID: p.Roots[0].ID, Path: "file"}
@@ -134,13 +140,18 @@ func TestTrashLostAcknowledgementDoesNotDeleteReplacement(t *testing.T) {
 func TestTrashFailureIsNotRetriedAtStartup(t *testing.T) {
 	service, p, root, _ := sourceMutationFixture(t)
 	testutil.FailErr(t, "seed", os.WriteFile(filepath.Join(root, "file"), []byte("keep"), 0o600))
-	service.Effects.SetTrashMover(func(context.Context, string) error { return os.ErrPermission })
+	service.Effects.SetTrashMover(func(context.Context, string) (desktoptrash.Receipt, error) {
+		return desktoptrash.Receipt{}, os.ErrPermission
+	})
 	id := uuid.NewString()
 	if err := service.Delete(t.Context(), id, p, SourceDeleteRequest{RootID: p.Roots[0].ID, Path: "file"}); !errors.Is(err, ErrSourceTrashFailed) {
 		t.Fatalf("delete error = %v", err)
 	}
 	restarted := NewSourceMutationService(service.Journal.db, service.settlement.recorder.(*sourceledger.Store))
-	restarted.Effects.SetTrashMover(func(context.Context, string) error { t.Fatal("startup retried a failed deletion"); return nil })
+	restarted.Effects.SetTrashMover(func(context.Context, string) (desktoptrash.Receipt, error) {
+		t.Fatal("startup retried a failed deletion")
+		return desktoptrash.Receipt{}, nil
+	})
 	testutil.FailErr(t, "recover", restarted.Recover(t.Context()))
 	assertSourceHistoryFile(t, root, "file", "keep")
 }
@@ -171,7 +182,10 @@ func TestTrashRecoveryFinishesInterruptedNativeEffect(t *testing.T) {
 	testutil.FailErr(t, "persist intent", service.Journal.insert(t.Context(), row))
 	testutil.FailErr(t, "native effect before crash", service.Effects.applySourceDelete(t.Context(), row))
 	restarted := NewSourceMutationService(service.Journal.db, service.settlement.recorder.(*sourceledger.Store))
-	restarted.Effects.SetTrashMover(func(context.Context, string) error { t.Fatal("completed native effect repeated"); return nil })
+	restarted.Effects.SetTrashMover(func(context.Context, string) (desktoptrash.Receipt, error) {
+		t.Fatal("completed native effect repeated")
+		return desktoptrash.Receipt{}, nil
+	})
 	testutil.FailErr(t, "recover", restarted.Recover(t.Context()))
 	undoHistoryHead(t, restarted, p, id)
 	assertSourceHistoryFile(t, root, "file", "recover")
@@ -235,28 +249,31 @@ func TestInterruptedPreparationReleasesUnclaimedRecovery(t *testing.T) {
 	assertSourceHistoryFile(t, root, "file", "still here")
 }
 
-func TestTrashRetryRefusesChangedSource(t *testing.T) {
+func TestTrashRetryPreservesChangesToSelectedEntry(t *testing.T) {
 	service, p, root, _ := sourceMutationFixture(t)
 	abs := filepath.Join(root, "file")
 	testutil.FailErr(t, "seed", os.WriteFile(abs, []byte("first"), 0o600))
-	service.Effects.SetTrashMover(func(context.Context, string) error { return os.ErrPermission })
+	service.Effects.SetTrashMover(func(context.Context, string) (desktoptrash.Receipt, error) {
+		return desktoptrash.Receipt{}, os.ErrPermission
+	})
 	id := uuid.NewString()
 	req := SourceDeleteRequest{RootID: p.Roots[0].ID, Path: "file"}
 	if err := service.Delete(t.Context(), id, p, req); !errors.Is(err, ErrSourceTrashFailed) {
 		t.Fatalf("delete = %v", err)
 	}
 	testutil.FailErr(t, "edit between attempts", os.WriteFile(abs, []byte("changed"), 0o600))
-	service.Effects.SetTrashMover(func(context.Context, string) error { t.Fatal("retry moved changed source"); return nil })
-	if err := service.Delete(t.Context(), id, p, req); !errors.Is(err, ErrSourceMutationDiverged) {
-		t.Fatalf("retry = %v", err)
-	}
+	installTestTrash(t, service)
+	testutil.FailErr(t, "retry selected entry", service.Delete(t.Context(), id, p, req))
+	undoHistoryHead(t, service, p, id)
 	assertSourceHistoryFile(t, root, "file", "changed")
 }
 
 func TestTrashRetryRefusesChangedAttachedFolder(t *testing.T) {
 	service, p, root, _ := sourceMutationFixture(t)
 	testutil.FailErr(t, "seed original", os.WriteFile(filepath.Join(root, "file"), []byte("original"), 0o600))
-	service.Effects.SetTrashMover(func(context.Context, string) error { return os.ErrPermission })
+	service.Effects.SetTrashMover(func(context.Context, string) (desktoptrash.Receipt, error) {
+		return desktoptrash.Receipt{}, os.ErrPermission
+	})
 	id := uuid.NewString()
 	req := SourceDeleteRequest{RootID: p.Roots[0].ID, Path: "file"}
 	if err := service.Delete(t.Context(), id, p, req); !errors.Is(err, ErrSourceTrashFailed) {
@@ -265,7 +282,10 @@ func TestTrashRetryRefusesChangedAttachedFolder(t *testing.T) {
 	replacement := t.TempDir()
 	testutil.FailErr(t, "seed replacement folder", os.WriteFile(filepath.Join(replacement, "file"), []byte("replacement"), 0o600))
 	p.Roots[0].Path = replacement
-	service.Effects.SetTrashMover(func(context.Context, string) error { t.Fatal("retried against a detached folder"); return nil })
+	service.Effects.SetTrashMover(func(context.Context, string) (desktoptrash.Receipt, error) {
+		t.Fatal("retried against a detached folder")
+		return desktoptrash.Receipt{}, nil
+	})
 	if err := service.Delete(t.Context(), id, p, req); !errors.Is(err, ErrSourceMutationDiverged) {
 		t.Fatalf("retry = %v", err)
 	}
@@ -303,7 +323,10 @@ func TestTrashPreflightFailureWaitsForExplicitRetry(t *testing.T) {
 	}
 	testutil.FailErr(t, "return selected file", os.Rename(abs+".held", abs))
 	restarted := NewSourceMutationService(service.Journal.db, service.settlement.recorder.(*sourceledger.Store))
-	restarted.Effects.SetTrashMover(func(context.Context, string) error { t.Fatal("startup retried a failed preflight"); return nil })
+	restarted.Effects.SetTrashMover(func(context.Context, string) (desktoptrash.Receipt, error) {
+		t.Fatal("startup retried a failed preflight")
+		return desktoptrash.Receipt{}, nil
+	})
 	testutil.FailErr(t, "recover", restarted.Recover(t.Context()))
 	assertSourceHistoryFile(t, root, "file", "keep")
 }
@@ -314,16 +337,65 @@ func TestTrashHistoryRetryRefusesChangedAttachedFolder(t *testing.T) {
 	id := uuid.NewString()
 	testutil.FailErr(t, "trash", service.Delete(t.Context(), id, p, SourceDeleteRequest{RootID: p.Roots[0].ID, Path: "file"}))
 	undoHistoryHead(t, service, p, id)
-	service.Effects.SetTrashMover(func(context.Context, string) error { return os.ErrPermission })
+	service.Effects.SetTrashMover(func(context.Context, string) (desktoptrash.Receipt, error) {
+		return desktoptrash.Receipt{}, os.ErrPermission
+	})
 	retryID := uuid.NewString()
 	req := SourceHistoryMutationRequest{ExpectedEntryID: id}
 	if _, err := service.Redo(t.Context(), retryID, p, req); !errors.Is(err, ErrSourceTrashFailed) {
 		t.Fatalf("redo error = %v", err)
 	}
 	p.Roots[0].Path = t.TempDir()
-	service.Effects.SetTrashMover(func(context.Context, string) error { t.Fatal("retry used detached folder"); return nil })
+	service.Effects.SetTrashMover(func(context.Context, string) (desktoptrash.Receipt, error) {
+		t.Fatal("retry used detached folder")
+		return desktoptrash.Receipt{}, nil
+	})
 	if _, err := service.Redo(t.Context(), retryID, p, req); !errors.Is(err, ErrSourceMutationDiverged) {
 		t.Fatalf("retry error = %v", err)
 	}
 	assertSourceHistoryFile(t, root, "file", "keep")
+}
+
+func testTrashRelocate(from, to string) (desktoptrash.Receipt, error) {
+	identity, err := fspath.EntryIdentity(from)
+	if err != nil {
+		return desktoptrash.Receipt{}, err
+	}
+	err = fseffect.RelocateGuarded(fseffect.Location{Root: filepath.Dir(from), Rel: filepath.Base(from)}, fseffect.Location{Root: filepath.Dir(to), Rel: filepath.Base(to)}, identity)
+	return desktoptrash.Receipt{Platform: runtime.GOOS, Path: to, Identity: identity}, err
+}
+
+// Load a persisted pre-native intent to exercise the shipped retained contract.
+func legacyTrash(t *testing.T, service *SourceMutationService, id string, p ProjectSource, req SourceDeleteRequest) error {
+	return legacyTrashContext(t.Context(), t, service, id, p, req)
+}
+func legacyTrashContext(ctx context.Context, t *testing.T, service *SourceMutationService, id string, p ProjectSource, req SourceDeleteRequest) error {
+	t.Helper()
+	root, abs, rel, err := locateLifecycleSource(p, req.RootID, req.Path)
+	if err != nil {
+		return err
+	}
+	info, err := os.Lstat(abs)
+	if err != nil {
+		return err
+	}
+	digest, err := sourceMutationDigest(struct {
+		ProjectID, RootID, Path, SessionID string
+		Recursive                          bool
+	}{p.SourceID(), req.RootID, req.Path, req.SessionID, req.Recursive})
+	if err != nil {
+		return err
+	}
+	plan := sourceMutationPlan{
+		sourceMutationRecovery:    sourceMutationRecovery{RecoveryID: id, Disposal: sourceDisposalTrash},
+		sourceMutationAttribution: sourceMutationAttribution{ProjectID: p.SourceID(), WorkspaceID: p.WorkspaceID()},
+		sourceMutationContent:     sourceMutationContent{BeforeSize: info.Size()},
+		Kind:                      "delete", RootID: root.ID, RootPath: root.Path, Path: rel, AbsPath: abs, EntryKind: sourceEntryKind(info), Changed: true, Response: []byte(`{}`),
+	}
+	row := &sourceMutationRow{ID: id, ProjectID: p.SourceID(), Kind: "delete", InputDigest: digest, Plan: plan, Status: sourceMutationPrepared, CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	if err := service.Journal.insert(ctx, row); err != nil {
+		return err
+	}
+	_, err = service.execute(ctx, id, p.SourceID(), digest, func() (*sourceMutationPlan, error) { return &plan, nil })
+	return err
 }
