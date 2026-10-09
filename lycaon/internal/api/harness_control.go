@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
+	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
 	"github.com/lycaon/lycaon/internal/visual"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowinputs "github.com/lycaon/lycaon/internal/workflow/inputs"
@@ -131,7 +132,7 @@ func (s *HarnessControl) handleHarnessTranscript(w http.ResponseWriter, r *http.
 
 // stampActiveRun assigns seeded messages to the active workflow span.
 func (s *HarnessControl) stampActiveRun(r *http.Request, sessionID string, msgs []wire.Message) []wire.Message {
-	run, err := s.Workflow.GetActive(r.Context(), sessionID)
+	run, err := s.Workflow.Store.Runs.ActiveBySession(r.Context(), sessionID)
 	if err != nil || run == nil {
 		return msgs
 	}

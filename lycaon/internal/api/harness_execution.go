@@ -52,7 +52,7 @@ func (s *HarnessPreparation) handleHarnessModelLimit(w http.ResponseWriter, r *h
 
 func (s *HarnessPreparation) handleHarnessWorkflowExecution(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "sessionID")
-	run, err := s.Workflow.Get(r.Context(), chi.URLParam(r, "runID"))
+	run, err := s.Workflow.Store.Runs.Get(r.Context(), chi.URLParam(r, "runID"))
 	if err != nil || run == nil || run.SessionID != sessionID {
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "workflow does not belong to session")
 		return
