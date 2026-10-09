@@ -23,35 +23,10 @@ window.__scrollThread = {
     };
     mark("opening the project");
     await must("open project", __harness.openProject("Harness"));
-    mark("draining pending completions");
-    // Earlier runs can leave completions pending; answer them before scripting this one.
-    await __harness.llm.auto("ok");
-    await new Promise((r) => setTimeout(r, 2500));
-    await __harness.llm.manual();
     mark("opening a session");
     await must("new session", __harness.newSession());
-    const step = async (reply) => {
-      await __harness.llm.pending(20000);
-      await __harness.llm.respond(reply);
-    };
-    const send = (text) => must("send", __harness.sendPrompt(text));
-    for (let i = 0; i < 5; i++) {
-      mark(`answering question ${i + 1}`);
-      await send(`Question ${i + 1}: tell me about the layout.`);
-      await step({ text: "The layout uses a spacing scale and an icon set. ".repeat(30) });
-      await __harness.waitForIdle(30000);
-    }
-    mark("running the tool turn");
-    await send("Can we improve the interface?");
-    await step({
-      toolCalls: [
-        { id: "b1", name: "read", args: { path: "README.md" } },
-        { id: "b2", name: "read", args: { path: "main.go" } },
-        { id: "b3", name: "read", args: { path: "go.mod" } },
-      ],
-    });
-    await step({ text: "Done." });
-    await __harness.waitForIdle(30000);
+    mark("admitting the transcript fixture");
+    await must("scroll transcript", __harness.goto("scroll-transcript", { turns: 5, activity: true }));
     mark("waiting for transcript rows");
     for (let i = 0; i < 60 && document.querySelectorAll(".transcript-viewport-row").length < 3; i++) {
       await new Promise((r) => setTimeout(r, 250));
@@ -65,20 +40,8 @@ window.__scrollThread = {
    * enough to virtualize and rows mount away from their estimates. Returns the scroll extent.
    */
   async extend(turns) {
-    const step = async (reply) => {
-      await __harness.llm.pending(20000);
-      await __harness.llm.respond(reply);
-    };
-    const shapes = [
-      (i) => `Step ${i} walks through the setup.\n\n` + "The profile holds the team and the entitlements it grants. ".repeat(12),
-      (i) => `Checklist ${i}:\n\n` + Array.from({ length: 8 }, (_, n) => `- Item ${n + 1}: confirm the signing identity and the provisioning profile match.`).join("\n"),
-      (i) => `Run this for part ${i}:\n\n\`\`\`sh\n` + Array.from({ length: 10 }, (_, n) => `security cms -D -i profile-${n}.provisionprofile | plutil -p - | grep -E 'Expiration'`).join("\n") + "\n```\n\nThen verify the output.",
-    ];
-    for (let i = 0; i < turns; i++) {
-      await __harness.sendPrompt(`Part ${i + 1}: walk me through the next step.`);
-      await step({ text: shapes[i % shapes.length](i + 1) });
-      await __harness.waitForIdle(30000);
-    }
+    const result = await __harness.goto("scroll-transcript", { turns, start: 5 });
+    if (!result || result.ok !== true) throw new Error(`extend transcript: ${JSON.stringify(result)}`);
     await new Promise((r) => setTimeout(r, 1500));
     return this.stream().scrollHeight;
   },

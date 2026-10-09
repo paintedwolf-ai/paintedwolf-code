@@ -9,6 +9,8 @@ import { harnessControlFetch } from "../connection/backend.ts";
 import { getRegisteredNoticeStore } from "../connection/app-connection.ts";
 import { sessionScope } from "../../notices/notice-scope.ts";
 
+import { scrollTranscriptFixture } from "./scroll-transcript-fixture.ts";
+
 type ReadState = () => Json;
 type WaitForSettled = (timeoutMs?: number) => Promise<Json>;
 type LiveByTestid = (testid: string) => HTMLElement | null;
@@ -297,6 +299,19 @@ export async function goto(deps: JumpDeps, scenario: string, opts?: Json): Promi
   }
 
   switch (name) {
+    case "scroll-transcript": {
+      const messages = scrollTranscriptFixture(
+        typeof options.turns === "number" ? options.turns : 5,
+        typeof options.start === "number" ? options.start : 0,
+        options.activity === true,
+      );
+      const seeded = await harnessFetch("/harness/transcript", {
+        method: "POST",
+        body: JSON.stringify({ session_id: sessionId, messages }),
+      });
+      if (seeded.ok !== true) return { ok: false, error: "scroll transcript admission failed", seeded };
+      return { ok: true, scenario: name, seeded, state: deps.readState() };
+    }
     case "huge-transcript": {
       const count = typeof options.count === "number" ? options.count : 200;
       const seeded = await seedHugeTranscript(sessionId, count);
@@ -399,6 +414,7 @@ export async function goto(deps: JumpDeps, scenario: string, opts?: Json): Promi
         error: `unknown scenario "${name}"`,
         available: [
           "huge-transcript",
+          "scroll-transcript",
           "checkpoint-held",
           "ask-user",
           "untrusted-content",
@@ -415,7 +431,7 @@ export async function goto(deps: JumpDeps, scenario: string, opts?: Json): Promi
 
 export const JUMP_HELP: Json = {
   jump: [
-    "goto(scenario, opts?)  // huge-transcript | checkpoint-held | ask-user | untrusted-content | review-verdict | visual-fixture | spend-ceiling | mid-stream | plan-awaiting",
+    "goto(scenario, opts?)  // huge-transcript | scroll-transcript | checkpoint-held | ask-user | untrusted-content | review-verdict | visual-fixture | spend-ceiling | mid-stream | plan-awaiting",
     "listSessions()",
     "switchSession(id)",
     "openStage(id)  // files | search | security | cost | artifacts | blueprints | extensions",
