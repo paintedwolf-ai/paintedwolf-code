@@ -262,7 +262,8 @@ func TestLoopAppendReportsReviewAccountingFailure(t *testing.T) {
 	st := store.NewMemory()
 	mgr := NewManager(st, nil, nil, settings.DefaultSessionLimits())
 	wantErr := errors.New("workflow state unavailable")
-	mgr.SetWorkflowSessionView(&recordingWorkflowView{reviewErr: wantErr})
+	workflowFixture := &recordingWorkflowView{reviewErr: wantErr}
+	mgr.SetWorkflowDomains(&WorkflowDomains{Transcript: workflowFixture, Reviews: workflowFixture})
 	sess, err := st.Create(ctx, api.CreateSessionRequest{}, "project-1")
 	testutil.FailErr(t, "create session", err)
 
@@ -282,7 +283,7 @@ func TestKickGateObligationsFollowTheRunArchive(t *testing.T) {
 	satisfy := func(archive string) string {
 		mgr := NewManager(store.NewMemory(), nil, nil, settings.DefaultSessionLimits())
 		mgr.SetWorkflowHints(nil, gateFeedback)
-		mgr.SetWorkflowSessionView(&recordingWorkflowView{archive: archive})
+		mgr.SetWorkflowDomains(&WorkflowDomains{Policy: &recordingWorkflowView{archive: archive}})
 		rows := mgr.projectKickGateObligations(t.Context(), "session", frame)
 		if len(rows) != 1 {
 			t.Fatalf("obligations = %+v", rows)
@@ -303,7 +304,7 @@ func TestLoopAppendRecordsReviewResultsAfterCommit(t *testing.T) {
 	st := store.NewMemory()
 	mgr := NewManager(st, nil, nil, settings.DefaultSessionLimits())
 	view := &recordingWorkflowView{}
-	mgr.SetWorkflowSessionView(view)
+	mgr.SetWorkflowDomains(&WorkflowDomains{Transcript: view, Reviews: view})
 	sess, err := st.Create(ctx, api.CreateSessionRequest{}, "project-1")
 	testutil.FailErr(t, "create session", err)
 
