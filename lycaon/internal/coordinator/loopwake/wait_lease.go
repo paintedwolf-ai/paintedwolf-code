@@ -80,7 +80,7 @@ func (l *LoopEngine) WaitLeaseOpenForTest(sessionID string) bool {
 	if l == nil {
 		return false
 	}
-	st := l.sleepState(sessionID)
+	st := l.sleep.state(sessionID)
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	return strings.TrimSpace(st.activityID) != ""

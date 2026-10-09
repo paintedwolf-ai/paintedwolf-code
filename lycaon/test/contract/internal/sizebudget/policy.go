@@ -1,7 +1,4 @@
-// Package sizebudget holds measured artifacts to the size limits a category
-// chose on purpose, with reasoned exceptions for artifacts that must be
-// larger. Standing is absolute: no recorded sizes and no comparison with an
-// earlier state. A change answers for the artifacts it touches.
+// Package sizebudget evaluates absolute limits, explicit caps, and measured growth.
 package sizebudget
 
 import (
@@ -112,7 +109,8 @@ type Kind string
 const (
 	// OverLimit: an artifact the change touched is past its category limit
 	// and no exception admits it.
-	OverLimit Kind = "over_limit"
+	OverLimit  Kind = "over_limit"
+	LegacyDebt Kind = "legacy_debt"
 	// OverCap: an artifact is past the ceiling its exception records.
 	OverCap Kind = "over_cap"
 	// OverWarn: an artifact the change touched is past its warning line.

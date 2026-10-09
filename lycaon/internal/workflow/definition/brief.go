@@ -432,6 +432,26 @@ func (b *Brief) PromptText() string {
 	return strings.Join(lines, "\n")
 }
 
+// LevelIndex finds a declared level by its label or tone, ignoring case.
+func (b *Brief) LevelIndex(name string) (int, bool) {
+	name = strings.TrimSpace(name)
+	for i, l := range b.Levels {
+		if strings.EqualFold(name, l.Label) || (l.Tone != "" && strings.EqualFold(name, l.Tone)) {
+			return i, true
+		}
+	}
+	return -1, false
+}
+
+// LevelLabels lists the declared levels, most severe first.
+func (b *Brief) LevelLabels() []string {
+	out := make([]string, 0, len(b.Levels))
+	for _, l := range b.Levels {
+		out = append(out, l.Label)
+	}
+	return out
+}
+
 // LevelRange rates one finding's answers. An unknown answer is tried as every
 // declared value, so the range spans every level the unknown could decide.
 func (b *Brief) LevelRange(answers map[string]string) (worst, best int) {

@@ -46,9 +46,8 @@ jobs:
           bash scripts/release-source-validate.sh \
             "${RELEASE_TAG}" "${GITHUB_SHA}" refs/remotes/origin/main
 
-      # Main only advances through the merge queue, which runs the full tier on the
-      # exact commit it lands; a release ships nothing that tier has not passed.
-      - name: Require full-tier verification of the release commit
+      # Qualification follows main; admission alone never authorizes a release.
+      - name: Require exact-commit qualification
         if: ${{ github.ref_type == 'tag' }}
         env:
           GH_TOKEN: ${{ github.token }}
