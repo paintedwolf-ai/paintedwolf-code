@@ -14,18 +14,20 @@ import (
 )
 
 type Runtime struct {
-	Host       *toolhost.Runtime
-	Registry   *tools.ExecutorRegistry
-	TurnLoads  *turnload.Ledger
-	Hints      *guidance.HintConfig
-	Rejections *guidance.StaticRejectFormatter
+	Host        *toolhost.Runtime
+	Registry    *tools.ExecutorRegistry
+	TurnLoads   *turnload.Ledger
+	TurnSources *TurnSources
+	Hints       *guidance.HintConfig
+	Rejections  *guidance.StaticRejectFormatter
 }
 
 func Build(settings *settings.Service, moduleRoot string, catalog *extpacks.EffectiveCatalog, rerank decide.Reranker) (Runtime, error) {
 	var runtime Runtime
 	runtime.TurnLoads = turnload.NewLedger()
+	runtime.TurnSources = &TurnSources{}
 	var err error
-	runtime.Host, err = loadToolRuntime(settings, moduleRoot, catalog, runtime.TurnLoads, rerank)
+	runtime.Host, err = loadToolRuntime(settings, moduleRoot, catalog, runtime.TurnLoads, runtime.TurnSources, rerank)
 	if err != nil {
 		return runtime, fmt.Errorf("tool runtime: %w", err)
 	}
@@ -49,8 +51,8 @@ func (runtime *Runtime) LoadGuidance() error {
 	runtime.Registry = tools.NewExecutorRegistry(runtime.Host.Executor, runtime.Host.Registry)
 	return nil
 }
-func loadToolRuntime(settingsSvc *settings.Service, configRoot string, catalog *extpacks.EffectiveCatalog, activation tools.SchemaActivation, rerank decide.Reranker) (*toolhost.Runtime, error) {
-	cfg := toolhost.RuntimeConfig{ConfigRoot: configRoot, Catalog: catalog, Activation: activation, Rerank: rerank}
+func loadToolRuntime(settingsSvc *settings.Service, configRoot string, catalog *extpacks.EffectiveCatalog, activation tools.SchemaActivation, sources *TurnSources, rerank decide.Reranker) (*toolhost.Runtime, error) {
+	cfg := toolhost.RuntimeConfig{ConfigRoot: configRoot, Catalog: catalog, Activation: activation, Rerank: rerank, RequestResolver: sources.resolve, RequestObserver: sources.record, SkillLookup: sources.lookup}
 	if settingsSvc != nil {
 		cfg.Approvals = settingsSvc.Approvals
 	}

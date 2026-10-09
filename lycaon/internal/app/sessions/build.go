@@ -56,7 +56,9 @@ func Build(ctx context.Context, deps Dependencies) (*Runtime, error) {
 
 	mgr := session.NewHost(deps.Storage.Sessions, session.Models{Client: deps.Providers.Client, Provider: deps.Providers.Service, Limits: deps.Settings.SessionLimits, Cost: deps.Providers.Costs}, deps.Execution.Registry)
 	deps.Security.BindRemember(mgr.ToolPolicy.SetRememberSecrets)
-	deps.Execution.Host.Skills.BindTurnSources(mgr.Coordinator.Loading.ResolveToolRequest, mgr.Coordinator.Loading.RecordToolRequest, mgr.Coordinator.Loading.LookupSkills)
+	if err := deps.Execution.TurnSources.Bind(mgr.Coordinator.Loading); err != nil {
+		return nil, err
+	}
 	mgr.ToolPolicy.SetMintedCredentialSource(deps.Security.Detections.MintedCredentialSource)
 	invocations := invocation.NewSQLRecorder(deps.Storage.Database)
 	mgr.SetInvocationRecorder(invocations)
