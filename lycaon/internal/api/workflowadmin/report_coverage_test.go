@@ -180,7 +180,7 @@ func TestWorkAccountListsEachAttemptOnce(t *testing.T) {
 		{ID: "t4", AgentType: "security-reviewer", WorkflowPhase: phase, WorkflowWorkID: "unplanned", Status: wire.WorkerStatusComplete},
 	}
 	h := &Reports{
-		Runs:    coverageRuns{vars: map[string]any{"fanout_plans": map[string]any{phase: plan}}},
+		Runs:    &runstate.Repository{Runs: coverageRuns{vars: map[string]any{"fanout_plans": map[string]any{phase: plan}}}},
 		Workers: coverageWorkers{tasks: tasks},
 	}
 	var a runAccount
@@ -281,7 +281,7 @@ func TestReportCoverageShowsHostCheckForPartialLeg(t *testing.T) {
 		},
 	}
 	h := &Reports{
-		Runs:    coverageRuns{vars: map[string]any{"fanout_plans": map[string]any{phase: plan}}},
+		Runs:    &runstate.Repository{Runs: coverageRuns{vars: map[string]any{"fanout_plans": map[string]any{phase: plan}}}},
 		Workers: coverageWorkers{tasks: tasks},
 	}
 	var a runAccount
