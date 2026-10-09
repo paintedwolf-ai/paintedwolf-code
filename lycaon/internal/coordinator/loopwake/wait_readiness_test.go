@@ -185,7 +185,7 @@ func TestConditionMonitorCannotResolveAfterDeadline(t *testing.T) {
 	})
 	testutil.FailErr(t, "arm delayed readiness wait", err)
 
-	monitorConditions(t.Context(), NewLoopEngine(), store, lease)
+	monitorConditions(t.Context(), NewLoopEngine().Subscriptions, store, lease)
 	active, ok, err := store.ForSession(t.Context(), lease.SessionID)
 	testutil.FailErr(t, "read delayed readiness wait", err)
 	if !ok || active.ID != lease.ID {

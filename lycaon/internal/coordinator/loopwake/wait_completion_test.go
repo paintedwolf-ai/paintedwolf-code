@@ -215,7 +215,7 @@ func TestCompletionWaitHasNoTimerAndResumesMode(t *testing.T) {
 	testutil.FailErr(t, "replace completion mode", err)
 	result = WaitToolResult{}
 	testutil.FailErr(t, "decode bounded replacement", json.Unmarshal([]byte(out), &result))
-	if result.UntilComplete || result.WakeAt == "" || !hasWaitTrigger(waitSubscriptionForTest(loop, "s1"), WaitTriggerTimer) {
+	if result.UntilComplete || result.WakeAt == "" || !hasWaitTrigger(waitSubscriptionForTest(loop.Subscriptions, "s1"), WaitTriggerTimer) {
 		t.Fatalf("explicit timeout did not replace completion mode: %+v", result)
 	}
 }
@@ -289,11 +289,11 @@ func TestCompletionWaitReconciliationKeepsLiveProcessParked(t *testing.T) {
 	if !found {
 		t.Fatal("live process wait missing")
 	}
-	if done := reconcileWaitConditions(t.Context(), loop, store, lease); done || !loop.Waits.IsSleeping("s1") {
+	if done := reconcileWaitConditions(t.Context(), loop.Subscriptions, store, lease); done || !loop.Waits.IsSleeping("s1") {
 		t.Fatal("host liveness check ended a live process wait")
 	}
 	loop.Waits.InterruptSleep(t.Context(), "s1")
-	if done := reconcileWaitConditions(t.Context(), loop, store, lease); !done {
+	if done := reconcileWaitConditions(t.Context(), loop.Subscriptions, store, lease); !done {
 		t.Fatal("interrupted wait left its host monitor active")
 	}
 	if loop.Nudges.HasPendingLoopWakes("s1") {

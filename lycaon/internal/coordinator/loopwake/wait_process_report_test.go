@@ -91,11 +91,11 @@ func TestReconciliationWaitsForThePublishedCompletion(t *testing.T) {
 	lease, err := store.Arm(t.Context(), awaitstore.Lease{SessionID: "s1", ProjectID: testdbseed.DefaultProjectID, UntilComplete: true,
 		Conditions: []awaitstore.Condition{{Kind: "process_done", Handles: []string{"command-1"}}}})
 	testutil.FailErr(t, "arm process wait", err)
-	if done := reconcileWaitConditions(t.Context(), loop, store, lease); done {
+	if done := reconcileWaitConditions(t.Context(), loop.Subscriptions, store, lease); done {
 		t.Fatal("reconciliation settled an ended job before its completion was published")
 	}
 	published.Store(true)
-	if done := reconcileWaitConditions(t.Context(), loop, store, lease); !done {
+	if done := reconcileWaitConditions(t.Context(), loop.Subscriptions, store, lease); !done {
 		t.Fatal("reconciliation did not settle the published completion")
 	}
 	testutil.WaitFor(t, time.Second, func() bool { return len(delivered()) == 1 })
