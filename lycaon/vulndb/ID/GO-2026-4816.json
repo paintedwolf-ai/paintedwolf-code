@@ -1,0 +1,64 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/kubernetes-csi/csi-driver-nfs"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "0.0.0-20260210055231-316af2d86b91"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-3864",
+  "GHSA-2mjq-54qg-7w6j"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-4816"
+ },
+ "details": "NFS CSI driver for Kubernetes is Vulnerable to Path Traversal through Volume Identifier Parameter in github.com/kubernetes-csi/csi-driver-nfs",
+ "id": "GO-2026-4816",
+ "modified": "2026-03-26T20:33:02Z",
+ "published": "2026-03-26T20:33:02Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-2mjq-54qg-7w6j"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-3864"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/kubernetes-csi/csi-driver-nfs/commit/316af2d86b913a595542dc17e8599cf81afd938f"
+  },
+  {
+   "type": "WEB",
+   "url": "http://www.openwall.com/lists/oss-security/2026/03/17/1"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/kubernetes/kubernetes/issues/137797"
+  },
+  {
+   "type": "WEB",
+   "url": "https://groups.google.com/g/kubernetes-security-announce/c/i4ZKN9VLcUE"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "NFS CSI driver for Kubernetes is Vulnerable to Path Traversal through Volume Identifier Parameter in github.com/kubernetes-csi/csi-driver-nfs"
+}

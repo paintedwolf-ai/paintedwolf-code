@@ -1,0 +1,45 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/ollama/ollama"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2024-12055",
+  "GHSA-89qx-m49c-8crf"
+ ],
+ "database_specific": {
+  "review_status": "REVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2025-3558"
+ },
+ "details": "Ollama Allows Out-of-Bounds Read in github.com/ollama/ollama",
+ "id": "GO-2025-3558",
+ "modified": "2025-03-31T17:03:53Z",
+ "published": "2025-03-31T17:03:53Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-89qx-m49c-8crf"
+  },
+  {
+   "type": "WEB",
+   "url": "https://huntr.com/bounties/7b111d55-8215-4727-8807-c5ed4cf1bfbe"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Ollama Allows Out-of-Bounds Read in github.com/ollama/ollama"
+}

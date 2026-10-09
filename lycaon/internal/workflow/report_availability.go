@@ -27,6 +27,12 @@ func (m *RunManager) ReportAvailable(ctx context.Context, runID string) (bool, e
 // A report the host stored without accepting it stays downloadable: the
 // document states what it is missing.
 func reportAvailable(run *api.WorkflowRun, manifest workflowdef.Manifest, vars map[string]any) bool {
+	if run != nil && manifest.ReportEnabled() && (run.PauseReason == ReviewBlockedReason || run.Status == api.WorkflowRunStatusCanceled) {
+		repair, err := CurrentReviewRepair(vars, run.CurrentPhase)
+		if err == nil && repair != nil && repair.State == "blocked" && repair.Snapshot != nil {
+			return true
+		}
+	}
 	return run != nil && IsTerminal(run.Status) && manifest.ReportEnabled() &&
 		(gateSatisfiedInVars(vars, "topology_report_delivered") || reportNotAcceptedRun(run))
 }

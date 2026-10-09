@@ -1,0 +1,56 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/jandedobbeleer/oh-my-posh"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "29.35.1+incompatible"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-73505",
+  "GHSA-6xj8-qv9j-xcjq"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6108"
+ },
+ "details": "Oh My Posh: Arbitrary command execution via template injection in the path segment in github.com/jandedobbeleer/oh-my-posh",
+ "id": "GO-2026-6108",
+ "modified": "2026-08-18T14:32:29Z",
+ "published": "2026-08-18T14:32:29Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/JanDeDobbeleer/oh-my-posh/security/advisories/GHSA-6xj8-qv9j-xcjq"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/JanDeDobbeleer/oh-my-posh/commit/88ddbe0b0a4dd13cc345996108c9869493f2c690"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/JanDeDobbeleer/oh-my-posh/releases/tag/v29.35.1"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/JanDeDobbeleer/oh-my-posh/releases/tag/v29.36.0"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Oh My Posh: Arbitrary command execution via template injection in the path segment in github.com/jandedobbeleer/oh-my-posh"
+}

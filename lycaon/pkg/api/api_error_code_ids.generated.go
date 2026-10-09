@@ -769,6 +769,9 @@ const (
 	ApiErrorCodeWorkflowNotFound ApiErrorCode = "workflow_not_found"
 	// ApiErrorCodeWorkflowNotRunnable workflow run is paused or terminal
 	ApiErrorCodeWorkflowNotRunnable ApiErrorCode = "workflow_not_runnable"
+	// ApiErrorCodeWorkflowVersionUnavailable the run's pinned workflow version is
+	// no longer in the catalog, live or sealed
+	ApiErrorCodeWorkflowVersionUnavailable ApiErrorCode = "workflow_version_unavailable"
 	// ApiErrorCodeWorkflowRunNotFound workflow run id not found
 	ApiErrorCodeWorkflowRunNotFound ApiErrorCode = "workflow_run_not_found"
 	// ApiErrorCodeReportNotFound workflow run report PDF unavailable (not
@@ -1219,6 +1222,7 @@ var allApiErrorCodeValues = []ApiErrorCode{
 	ApiErrorCodeBlueprintDraftRequired,
 	ApiErrorCodeWorkflowNotFound,
 	ApiErrorCodeWorkflowNotRunnable,
+	ApiErrorCodeWorkflowVersionUnavailable,
 	ApiErrorCodeWorkflowRunNotFound,
 	ApiErrorCodeReportNotFound,
 	ApiErrorCodeManagedSecretRevoked,
@@ -1535,6 +1539,7 @@ func (c ApiErrorCode) HTTPStatus() int {
 		ApiErrorCodeWorkflowRevisionConflict,
 		ApiErrorCodeWorkflowReplacementTargetRequired,
 		ApiErrorCodeWorkflowNotRunnable,
+		ApiErrorCodeWorkflowVersionUnavailable,
 		ApiErrorCodeManagedSecretRevoked,
 		ApiErrorCodeManagedSecretAgentUseExpired,
 		ApiErrorCodePresenceNotRequired,

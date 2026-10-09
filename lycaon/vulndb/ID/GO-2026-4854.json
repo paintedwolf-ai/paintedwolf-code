@@ -1,0 +1,61 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/digitalocean/droplet-agent"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-24516",
+  "GHSA-fh3m-562m-w4f6"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-4854"
+ },
+ "details": "DigitalOcean Droplet Agent: Command Injection via Metadata Service Endpoint in github.com/digitalocean/droplet-agent",
+ "id": "GO-2026-4854",
+ "modified": "2026-03-26T20:33:09Z",
+ "published": "2026-03-26T20:33:09Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-fh3m-562m-w4f6"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-24516"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/digitalocean/droplet-agent/blob/main/internal/troubleshooting/actioner/actioner.go"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/digitalocean/droplet-agent/blob/main/internal/troubleshooting/command/command.go"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/digitalocean/droplet-agent/blob/main/internal/troubleshooting/command/exec.go"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/poxsky/CVE-2026-24516-DigitalOcean-RCE"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "DigitalOcean Droplet Agent: Command Injection via Metadata Service Endpoint in github.com/digitalocean/droplet-agent"
+}

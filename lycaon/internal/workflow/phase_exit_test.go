@@ -127,7 +127,7 @@ func TestProjectPhaseExit_GatelessProofNamesCompleteWhen(t *testing.T) {
 func TestProjectPhaseExitReviewLoopNamesOwedReviewers(t *testing.T) {
 	reg, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "RegistryFromDirs", err)
-	m, err := reg.Get("security-survey", "1.0.1")
+	m, err := reg.Get("security-survey", "2.0.0")
 	testutil.FailErr(t, "Get security-survey", err)
 	challenge, ok := m.PhaseByID("challenge")
 	if !ok {
@@ -150,7 +150,7 @@ func TestProjectPhaseExitReviewLoopNamesOwedReviewers(t *testing.T) {
 func TestProjectPhaseExitReviewLoopFallsBackToDeclaredRoster(t *testing.T) {
 	reg, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "RegistryFromDirs", err)
-	m, err := reg.Get("security-survey", "1.0.1")
+	m, err := reg.Get("security-survey", "2.0.0")
 	testutil.FailErr(t, "Get security-survey", err)
 	challenge, ok := m.PhaseByID("challenge")
 	if !ok {

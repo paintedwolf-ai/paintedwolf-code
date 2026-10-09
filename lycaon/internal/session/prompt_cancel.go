@@ -15,6 +15,20 @@ func mapPromptRunError(err error) error {
 	return err
 }
 
+// beginTurnCancelScope admits a turn as engine-owned work that session stop
+// can also cancel; engine shutdown waits for the returned end.
+func (m *Manager) beginTurnCancelScope(parent context.Context, sessionID string) (context.Context, func(), error) {
+	ctx, finishWork, err := m.engineWork.Begin(parent)
+	if err != nil {
+		return nil, nil, err
+	}
+	ctx = m.attachPromptCancel(ctx, sessionID)
+	return ctx, func() {
+		m.detachPromptCancel(sessionID)
+		finishWork()
+	}, nil
+}
+
 func (m *Manager) attachPromptCancel(parent context.Context, sessionID string) context.Context {
 	if m == nil {
 		return parent

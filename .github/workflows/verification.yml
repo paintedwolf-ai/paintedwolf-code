@@ -4,16 +4,20 @@ on:
   workflow_call:
     inputs:
       profile:
-        description: Catalog profile (fast, check, nightly, or release)
+        description: Catalog profile (fast, integration, check, nightly, or release)
         required: true
         type: string
+      affected:
+        description: Resolve the event change base and narrow integration lanes
+        default: false
+        type: boolean
       suite:
         description: Nightly suite selection
         default: all
         type: string
 
-permissions:
-  contents: read
+# The caller's token permissions apply: only merge-group CI grants actions write,
+# so a removed group's jobs can cancel their own run.
 
 env:
   # MLX 0.32 Metal kernels need the Xcode 26 toolchain; Linux runners ignore it.
@@ -25,22 +29,33 @@ jobs:
     timeout-minutes: 5
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
+      max-parallel: ${{ steps.plan.outputs.max-parallel }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
       - name: Resolve verification jobs
         id: plan
         env:
           PROFILE: ${{ inputs.profile }}
           SUITE: ${{ inputs.suite }}
+          AFFECTED: ${{ inputs.affected }}
         run: |
-          matrix="$(python3 scripts/ci_verification.py matrix "$PROFILE" --suite "$SUITE")"
+          args=()
+          if [[ "$AFFECTED" == true ]]; then args+=(--affected); fi
+          matrix="$(python3 scripts/ci_verification.py matrix "$PROFILE" --suite "$SUITE" "${args[@]}")"
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "max-parallel=$(python3 scripts/ci_verification.py max-parallel "$PROFILE")" >> "$GITHUB_OUTPUT"
 
   verify:
     name: ${{ matrix.lane }}${{ matrix.shard != '' && format(' ({0})', matrix.shard) || '' }}
     needs: plan
     strategy:
-      fail-fast: false
+      # A merge group stops at its first failure and frees its runners; every other run keeps
+      # each lane's evidence.
+      fail-fast: ${{ github.event_name == 'merge_group' }}
+      # The catalog's capacity table bounds how many runners each profile holds at once.
+      max-parallel: ${{ fromJSON(needs.plan.outputs.max-parallel) }}
       matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: ${{ matrix.job_minutes }}
@@ -50,10 +65,13 @@ jobs:
       # Hosted runners run one lane each, so admission may use every CPU.
       PW_TEST_HOST: dedicated
       SOAK: 10m
+      PW_CI_AFFECTED: ${{ inputs.affected && '1' || '0' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+
+      - uses: ./.github/actions/merge-group-watch
 
       - uses: ./.github/actions/setup-verification
         with:
@@ -70,7 +88,15 @@ jobs:
         env:
           LANE: ${{ matrix.lane }}
           SHARD: ${{ matrix.shard }}
-        run: python3 scripts/ci_verification.py run "$LANE" --shard "$SHARD"
+          # Admission runs with loopback networking only.
+          OFFLINE: ${{ inputs.profile == 'fast' || inputs.profile == 'integration' }}
+          PYTHONPATH: scripts
+        run: |
+          if [[ "$OFFLINE" == true ]]; then
+            python3 -m ci_policy.offline "$LANE" --shard "$SHARD"
+          else
+            python3 scripts/ci_verification.py run "$LANE" --shard "$SHARD"
+          fi
 
       - uses: ./.github/actions/verification-evidence
         if: always()

@@ -1,0 +1,92 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/osrg/gobgp"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/osrg/gobgp/v3"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {
+    "imports": [
+     {
+      "path": "github.com/osrg/gobgp/v4/pkg/server",
+      "symbols": [
+       "fsmHandler.recvMessageloop"
+      ]
+     }
+    ]
+   },
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/osrg/gobgp/v4"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-30405",
+  "GHSA-4p9m-8gc4-rw2h"
+ ],
+ "database_specific": {
+  "review_status": "REVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-4736"
+ },
+ "details": "GoBGP vulnerable to a denial of service via the NEXT_HOP path attribute in github.com/osrg/gobgp",
+ "id": "GO-2026-4736",
+ "modified": "2026-04-07T14:58:41Z",
+ "published": "2026-04-07T14:58:41Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-4p9m-8gc4-rw2h"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/osrg/gobgp/commit/583080a7258e22cc884162e15b078771aa2c2c80"
+  },
+  {
+   "type": "REPORT",
+   "url": "https://github.com/osrg/gobgp/issues/3305"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "GoBGP vulnerable to a denial of service via the NEXT_HOP path attribute in github.com/osrg/gobgp"
+}

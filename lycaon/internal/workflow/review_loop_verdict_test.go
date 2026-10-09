@@ -10,6 +10,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/evidence"
+	"github.com/lycaon/lycaon/internal/reviewcoverage"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolschema"
@@ -30,8 +31,8 @@ type reviewLoopFixture struct {
 
 var reviewLoopFixtures = []reviewLoopFixture{
 	{"options", "1.0.0", "judge", "options_judge", "options_judge.json"},
-	{"security-survey", "1.0.1", "claims", "survey_claims", "survey_claims.json"},
-	{"security-survey", "1.0.1", "challenge", "survey_challenged", "survey_challenged.json"},
+	{"security-survey", "2.0.0", "claims", "survey_claims", "survey_claims.json"},
+	{"security-survey", "2.0.0", "challenge", "survey_challenged", "survey_challenged.json"},
 	{"plan", "1.0.0", "review", "plan_review", "plan_review.json"},
 }
 
@@ -456,5 +457,22 @@ func TestObservedUnclosedCoverageSubmissionNamesItsDefect(t *testing.T) {
 	}
 	if _, ok := data["replacement_args_json"]; ok {
 		t.Fatal("an 11 KB submission was restated in the refusal")
+	}
+}
+
+func TestOfferedVerdictAcceptsHostFactIDsAndNestedCitations(t *testing.T) {
+	f := reviewLoopFixtures[1]
+	loop := reviewLoopDef(t, f)
+	schema := offeredVerdictSchema(t, f)
+	facts := reviewcoverage.Facts{Obligations: []reviewcoverage.Fact{{ID: "execute/leg-1"}, {ID: "ingest/scans"}}, Gaps: []reviewcoverage.Fact{{ID: "gap/123"}, {ID: "question/claim-1"}, {ID: "worker/job-1/scope"}}}
+	testutil.FailErr(t, "host ids fit offered schema", verdictcall.CheckCoverageIDs(schema, loop, facts))
+	call := verdictCall(t, loop, loadVerdictFixture(t, f.fixture))
+	verdict := call["verdict"].(map[string]any)
+	coverage := verdict["coverage"].(map[string]any)
+	coverage["assessments"] = []any{map[string]any{"id": "execute/leg-1", "disposition": "satisfied", "reason": "Observed trace", "cited_evidence": []any{map[string]any{"handle": "read#1"}}}}
+	testutil.FailErr(t, "real host id accepted", tools.ValidateToolArgs(schema, call))
+	coverage["assessments"].([]any)[0].(map[string]any)["cited_evidence"] = []any{map[string]any{"evidence": "read#1"}}
+	if tools.ValidateToolArgs(schema, call) == nil {
+		t.Fatal("nested citation bypassed shared schema")
 	}
 }

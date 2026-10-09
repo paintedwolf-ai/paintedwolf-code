@@ -1,0 +1,80 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/go-pkgz/auth"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "1.18.0"
+      },
+      {
+       "fixed": "1.25.2"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/go-pkgz/auth/v2"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "2.0.0"
+      },
+      {
+       "fixed": "2.1.2"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-42560",
+  "GHSA-f6qq-3m3h-4g42"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5348"
+ },
+ "details": "auth: Patreon provider assigns the same local user ID to every authenticated Patreon account, enabling cross\u2011user impersonation in github.com/go-pkgz/auth",
+ "id": "GO-2026-5348",
+ "modified": "2026-06-25T18:43:19Z",
+ "published": "2026-06-25T18:43:19Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/go-pkgz/auth/security/advisories/GHSA-f6qq-3m3h-4g42"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-42560"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/go-pkgz/auth/commit/c0b15ee72a8401da83c01781c16636c521f42698"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/go-pkgz/auth/releases/tag/v1.25.2"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/go-pkgz/auth/releases/tag/v2.1.2"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "auth: Patreon provider assigns the same local user ID to every authenticated Patreon account, enabling cross\u2011user impersonation in github.com/go-pkgz/auth"
+}

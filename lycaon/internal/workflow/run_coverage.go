@@ -204,6 +204,11 @@ func scanCoverageFacts(scans []api.CodeScan) []reviewcoverage.Fact {
 func workerCoverageFacts(tasks []api.WorkerTask) []reviewcoverage.Fact {
 	var gaps []reviewcoverage.Fact
 	for _, task := range tasks {
+		if task.Result != nil && task.Result.CompletionReport != nil {
+			for _, gap := range task.Result.CompletionReport.CoverageGaps {
+				gaps = append(gaps, reviewcoverage.Fact{ID: "worker/" + task.ID + "/" + gap.ID, Kind: "worker_scope", Subject: gap.Subject, Paths: gap.Paths, Question: gap.Reason, Tasks: []string{task.ID}, Phase: task.WorkflowPhase})
+			}
+		}
 		if task.WorkflowWorkID != "" {
 			continue
 		}
@@ -317,7 +322,12 @@ func (m *RunManager) checkReviewCoverage(ctx context.Context, run *api.WorkflowR
 // coverageReject refuses a coverage review the model can repair. The
 // submit_verdict handler adds the call the phase accepts to every repair.
 func coverageReject(_ workflowdef.ReviewLoopDef, cause error) *tools.ToolReject {
-	return &tools.ToolReject{Code: ReviewLoopVerdictInvalidCode, Data: map[string]any{"reason": cause.Error()}}
+	data := map[string]any{"reason": cause.Error()}
+	var validation *reviewcoverage.ValidationError
+	if errors.As(cause, &validation) {
+		data["issues"] = validation.Issues
+	}
+	return &tools.ToolReject{Code: ReviewLoopVerdictInvalidCode, Data: data}
 }
 
 // Coverage ends at the final assessment phase; report and follow-on work do not
