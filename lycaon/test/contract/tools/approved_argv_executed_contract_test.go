@@ -80,7 +80,7 @@ func TestApprovedCommandPlanIsTheExecutedPlan(t *testing.T) {
 
 				want := tc.tail
 				if want == "" {
-					want = reportedArgv(t, approved.Args)
+					want = reportedArgv(t, approved.Invocation.Args)
 				}
 				want = nonEmptyLines(want)
 				got := nonEmptyLines(observedOutput(t, root, out, tc.output))
@@ -88,19 +88,19 @@ func TestApprovedCommandPlanIsTheExecutedPlan(t *testing.T) {
 					t.Fatalf("the process received a different argv than the approval reviewed.\n"+
 						"approved: %v\nexecuted output: %q\napproved argv implies: %q\n"+
 						"Rewrite arguments (glob expansion, scratch addresses, redirection binding) once, before review, and execute exactly those.",
-						approved.Args, got, want)
+						approved.Invocation.Args, got, want)
 				}
 
-				approvedFiles := approvedStreamFiles(t, root, approved.Files, approved.ResolvedFiles)
+				approvedFiles := approvedStreamFiles(t, root, approved.Invocation.Files, approved.Invocation.ResolvedFiles)
 				for _, written := range changedFiles(t, root, before) {
 					if !approvedFiles[written] {
 						t.Errorf("the process wrote %s, which the approval never named (files %q, resolved %q)",
-							relTo(root, written), approved.Files, approved.ResolvedFiles)
+							relTo(root, written), approved.Invocation.Files, approved.Invocation.ResolvedFiles)
 					}
 				}
 				for _, read := range tc.reads {
 					if !approvedFiles[filepath.Join(root, filepath.FromSlash(read))] {
-						t.Errorf("the process read %s through a stream the approval never named (files %q)", read, approved.Files)
+						t.Errorf("the process read %s through a stream the approval never named (files %q)", read, approved.Invocation.Files)
 					}
 				}
 			})

@@ -442,29 +442,26 @@ func stampVerdictOutcome(tctx tools.ToolContext, rl workflowdef.ReviewLoopDef, o
 	}
 }
 
-// verdictRepair retains each refusal's code and facts in the same response.
-type verdictRepair = runstate.VerdictRepair
-
-func verdictRepairs(outline string, out runstate.ReviewOutcome) []verdictRepair {
-	var repairs []verdictRepair
+func verdictRepairs(outline string, out runstate.ReviewOutcome) []runstate.VerdictRepair {
+	var repairs []runstate.VerdictRepair
 	if issue := out.InventoryIssue; issue != nil {
 		details := issue.Details()
 		code := SubmitVerdictInventoryUnaccountedCode
 		if issue.Code == SubmitVerdictScansPendingCode {
 			code = SubmitVerdictScansPendingCode
 		}
-		repairs = append(repairs, verdictRepair{code, details})
+		repairs = append(repairs, runstate.VerdictRepair{Code: code, Details: details})
 	}
 	if len(out.MissingAgents) > 0 {
-		repairs = append(repairs, verdictRepair{SubmitVerdictReviewerMissingCode, map[string]any{"missing_reviewers": out.MissingAgents, "expected_call": describeVerdictCall(outline)}})
+		repairs = append(repairs, runstate.VerdictRepair{Code: SubmitVerdictReviewerMissingCode, Details: map[string]any{"missing_reviewers": out.MissingAgents, "expected_call": describeVerdictCall(outline)}})
 	}
 	if out.GroundingCode != "" {
-		repairs = append(repairs, verdictRepair{out.GroundingCode, verdictGroundingRejectDetails(outline, out)})
+		repairs = append(repairs, runstate.VerdictRepair{Code: out.GroundingCode, Details: verdictGroundingRejectDetails(outline, out)})
 	}
 	if out.QuestionIssue != nil {
-		repairs = append(repairs, verdictRepair{out.QuestionIssue.Code, out.QuestionIssue.Data})
+		repairs = append(repairs, runstate.VerdictRepair{Code: out.QuestionIssue.Code, Details: out.QuestionIssue.Data})
 	}
-	if issue := out.CoverageIssue; issue != nil && !slices.ContainsFunc(repairs, func(r verdictRepair) bool { return r.Code == issue.Code }) {
+	if issue := out.CoverageIssue; issue != nil && !slices.ContainsFunc(repairs, func(r runstate.VerdictRepair) bool { return r.Code == issue.Code }) {
 		details := maps.Clone(issue.Data)
 		if details == nil {
 			details = map[string]any{}
@@ -472,7 +469,7 @@ func verdictRepairs(outline string, out runstate.ReviewOutcome) []verdictRepair 
 		if _, ok := details["expected_call"]; !ok && issue.Code == workflowvalidation.ReviewLoopVerdictInvalidCode {
 			details["expected_call"] = describeVerdictCall(outline)
 		}
-		repairs = append(repairs, verdictRepair{issue.Code, details})
+		repairs = append(repairs, runstate.VerdictRepair{Code: issue.Code, Details: details})
 	}
 	return repairs
 }
