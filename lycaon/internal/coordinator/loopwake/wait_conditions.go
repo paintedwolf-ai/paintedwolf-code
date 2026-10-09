@@ -2,12 +2,13 @@ package loopwake
 
 import (
 	"fmt"
-	awaitstore "github.com/lycaon/lycaon/internal/await"
-	"github.com/lycaon/lycaon/internal/outboundhttp"
 	"net"
 	"net/url"
 	"strconv"
 	"strings"
+
+	awaitstore "github.com/lycaon/lycaon/internal/await"
+	"github.com/lycaon/lycaon/internal/outboundhttp"
 )
 
 func parseWaitRequest(args map[string]any) (waitRequest, error) {

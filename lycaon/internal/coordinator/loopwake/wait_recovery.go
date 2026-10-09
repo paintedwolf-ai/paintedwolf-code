@@ -2,10 +2,11 @@ package loopwake
 
 import (
 	"context"
+	"strings"
+
 	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/tools"
-	"strings"
 )
 
 func restoreWaitRequest(ctx context.Context, loop *WaitSubscriptions, store *awaitstore.Store, tctx tools.ToolContext, request *waitRequest) error {

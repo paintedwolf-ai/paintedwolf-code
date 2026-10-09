@@ -2,15 +2,16 @@ package loopwake
 
 import (
 	"context"
+	"net/url"
+	"sort"
+	"strconv"
+	"strings"
+
 	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/egress"
 	"github.com/lycaon/lycaon/internal/isolation"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/tools"
-	"net/url"
-	"sort"
-	"strconv"
-	"strings"
 )
 
 func screenWaitURLs(ctx context.Context, deps WaitToolDeps, tctx tools.ToolContext, conditions []awaitstore.Condition) error {

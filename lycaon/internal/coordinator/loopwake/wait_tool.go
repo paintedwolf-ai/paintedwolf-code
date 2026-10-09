@@ -3,15 +3,15 @@ package loopwake
 import (
 	"context"
 	"fmt"
+	"strings"
+	"time"
+
 	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/coordinator/batch"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
-	"time"
-	"tool"
 )
 
 // One-second waits support short local readiness checks.

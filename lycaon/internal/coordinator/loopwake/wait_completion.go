@@ -2,10 +2,11 @@ package loopwake
 
 import (
 	"encoding/json"
+	"strings"
+
 	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
 )
 
 // waitAlreadySatisfied returns a satisfied subscription without sleeping.
