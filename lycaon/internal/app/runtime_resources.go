@@ -109,9 +109,9 @@ func (r *runtimeResources) capture(b *serveBuilder) {
 			return nil
 		})
 	}
-	if ledger := b.sourceLedger; ledger != nil && ledger.SnapshotStore() != nil {
-		r.track("worker-baselines", 81, func(context.Context) error { return ledger.BaselineStore().Close() })
-		snapshots := ledger.SnapshotStore()
+	if ledger := b.sourceLedger; ledger != nil && ledger.Snapshots != nil {
+		r.track("worker-baselines", 81, func(context.Context) error { return ledger.Baselines.Close() })
+		snapshots := ledger.Snapshots
 		r.track("source-snapshots", 82, func(context.Context) error { return snapshots.Close() })
 	}
 	r.track("source-watchers", 85, func(context.Context) error {

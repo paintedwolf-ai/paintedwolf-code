@@ -260,9 +260,13 @@ type Git struct {
 	recordMu        *sync.Mutex
 	sqlDB           db.Handle
 	commands        gitCommandsPort
-	Inventory       *Inventory
+	inventory       gitInventoryPort
 }
 
 type gitCommandsPort interface {
 	attributionWindow(projectID string, roots []RootSpec) *openCommandWindow
+}
+
+type gitInventoryPort interface {
+	observePaths(ctx context.Context, projectID string, roots []RootSpec, refs []PathRef, transitionByRoot map[string]string, actor *Contributor) (int, error)
 }

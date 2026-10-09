@@ -214,7 +214,7 @@ func (b boardWiring) wireWorkflowScanServices() error {
 	b.workflowMgr.Inventory = workflowScanInventory{store: b.scanStore}
 	b.mgr.SetReportDocumentChecker(b.workflowMgr)
 	b.mgr.SetScanEvidenceRuns(b.workflowMgr)
-	snapshotStore := b.sourceLedger.SnapshotStore()
+	snapshotStore := b.sourceLedger.Snapshots
 	b.scanCoordinator = scan.NewCoordinator(b.scanStore, b.gitMgr, snapshotStore)
 	b.scanCoordinator.Settings = b.settingsSvc.SecurityScanners
 	b.securityCloseout = &scan.SecurityCloseoutChecker{
@@ -267,7 +267,7 @@ func (b boardWiring) seedHostPowerWork() error {
 }
 
 func (b boardWiring) wireWorkflowConditions() error {
-	snapshotStore := b.sourceLedger.SnapshotStore()
+	snapshotStore := b.sourceLedger.Snapshots
 	proactiveCategories := b.gatesCfg.Gates.ProactiveCategories
 	if len(proactiveCategories) == 0 {
 		proactiveCategories = scancfg.DefaultGatesConfig().Gates.ProactiveCategories

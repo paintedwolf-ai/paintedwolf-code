@@ -78,7 +78,7 @@ func TestSourceLedger(t *testing.T) (*sourceledger.Store, *db.Store, TestDeps) {
 	sqlDB := testdbfixture.Open(t, "store.db")
 	st := sourceledger.New(sqlDB, t.TempDir())
 	return st, sqlDB, func(d *hostapi.Dependencies) {
-		d.Source.SourceLedger, d.Source.SourceInventory = st, st
+		d.Source.SourceLedger, d.Source.SourceInventory = st, st.Inventory
 		d.Source.SourceMutations = project.NewSourceMutationService(sqlDB, st)
 	}
 }

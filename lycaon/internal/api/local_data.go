@@ -21,7 +21,7 @@ func (s *LocalData) localDataRegistry() (*localdata.Registry, error) {
 		return nil, err
 	}
 	reg.SetWebIndexClear(s.clearWebIndex)
-	reg.SetSourceObservationsClear(s.sourceLedger.ClearObservationCache)
+	reg.SetSourceObservationsClear(s.sourceLedger.Snapshots.ClearObservations)
 	reg.SetSourceCatalogClear(sourcecatalog.Process().Trees.ClearTreeStores)
 	reg.SetSourceCatalogSpilled(sourcecatalog.SpilledBytes)
 	reg.SetExtensionCacheClear(s.extensionOwner.ClearCache)

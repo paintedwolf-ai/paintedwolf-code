@@ -429,6 +429,13 @@ type Inventory struct {
 	writer             observationRecorder
 }
 
+// Observation recording shares mutation admission and the writer's transaction.
+type observationRecorder interface {
+	RecordBatchTx(context.Context, *sql.Tx, []RecordInput) error
+	recordBatchTx(context.Context, *db.Queries, []RecordInput) error
+	mutationObservationScope(context.Context, *sql.Tx, string) (MutationObservationScope, error)
+}
+
 type inventoryCommandsPort interface {
 	attributionWindow(projectID string, roots []RootSpec) *openCommandWindow
 	notePassCompleted(projectID string)
@@ -441,11 +448,5 @@ type inventoryGitPort interface {
 
 type inventoryRetentionPort interface {
 	MaintainBlobs(ctx context.Context) error
-}
-
-// Observation recording shares mutation admission and the writer's transaction.
-type observationRecorder interface {
-	RecordBatchTx(context.Context, *sql.Tx, []RecordInput) error
-	recordBatchTx(context.Context, *db.Queries, []RecordInput) error
-	mutationObservationScope(context.Context, *sql.Tx, string) (MutationObservationScope, error)
+	readVerifiedBlob(ctx context.Context, sha256 string) ([]byte, bool, error)
 }

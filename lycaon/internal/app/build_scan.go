@@ -59,7 +59,7 @@ func (b toolWiring) wireScan() error {
 	b.scanRunner = scanexecution.NewRunner(b.scanStore, b.scannerReg, scanIngester, runnerCfg, b.eventPub)
 	b.scanRunner.DataDir = b.dataDir
 	if b.sourceLedger != nil {
-		b.scanRunner.Snapshots = b.sourceLedger.SnapshotStore()
+		b.scanRunner.Snapshots = b.sourceLedger.Snapshots
 	}
 	b.scanRunner.Coordinator = b.scanCoordinator
 	b.scanRunner.Settings = b.settingsSvc.SecurityScanners
@@ -198,8 +198,8 @@ func (b toolWiring) wireSourceScope() error {
 		return fmt.Errorf("source scope: %w", err)
 	}
 	b.sourceScopes = provider
-	if b.sourceLedger != nil && b.sourceLedger.SnapshotStore() != nil {
-		b.sourceLedger.SnapshotStore().SetScopes(provider)
+	if b.sourceLedger != nil && b.sourceLedger.Snapshots != nil {
+		b.sourceLedger.Snapshots.SetScopes(provider)
 	}
 	sourcecatalog.Process().SetScopes(provider)
 	return nil

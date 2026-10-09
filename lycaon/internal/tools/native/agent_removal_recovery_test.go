@@ -29,6 +29,10 @@ func recoverableToolFixture(t *testing.T) (tools.ToolContext, *project.SourceMut
 	tctx := nativefixture.Context(dir)
 	tctx.Identity.ProjectID, tctx.Identity.SessionID, tctx.Identity.UserTurn = "p1", "s1", 1
 	tctx.Source.SourceLedger, tctx.Source.SourceMutations = ledger, service
+	tctx.Source.History = tools.SourceHistory{Files: ledger.History, Comparison: ledger.Comparisons, Git: ledger.Git, Authorship: ledger.Walk}
+	tctx.Source.Commands = ledger.Commands
+	tctx.Source.GitMutations = ledger.Git
+	tctx.Source.Observations = ledger.Inventory
 	p := &project.Project{ID: "p1", Roots: []project.Root{{ID: "r1", ProjectID: "p1", Path: dir, IsPrimary: true}}}
 	return tctx, service, p, dir
 }

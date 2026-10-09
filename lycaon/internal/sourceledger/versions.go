@@ -290,8 +290,12 @@ type History struct {
 	walk        historyWalkPort
 }
 
-type historyRetentionPort interface {
-	readVerifiedBlob(ctx context.Context, sha256 string) ([]byte, bool, error)
+type historyCommandsPort interface {
+	commandWindowsFor(ctx context.Context, ids []string) (map[string]CommandWindow, error)
+}
+
+type historyGitPort interface {
+	GitTransitionsByIDs(ctx context.Context, ids []string) (map[string]GitTransition, error)
 }
 
 type historyWalkPort interface {
@@ -313,12 +317,8 @@ type historyWalkPort interface {
 	) (map[string]walkFileState, error)
 }
 
-type historyCommandsPort interface {
-	commandWindowsFor(ctx context.Context, ids []string) (map[string]CommandWindow, error)
-}
-
-type historyGitPort interface {
-	GitTransitionsByIDs(ctx context.Context, ids []string) (map[string]GitTransition, error)
+type historyRetentionPort interface {
+	readVerifiedBlob(ctx context.Context, sha256 string) ([]byte, bool, error)
 }
 
 type historyComparisonsPort interface {

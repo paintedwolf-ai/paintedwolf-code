@@ -194,7 +194,7 @@ func TestQueryAttributionCarriesEveryOrigin(t *testing.T) {
 		OperationID: "op-agent-write",
 		Before:      []byte("alpha\nbeta\n"), After: []byte("alpha\ngamma\n"),
 	})
-	res, err := store.QueryAttribution(ctx, "p1", sourcebranch.Trunk, "r1", "a.txt")
+	res, err := store.History.QueryAttribution(ctx, "p1", sourcebranch.Trunk, "r1", "a.txt")
 	testutil.FailErr(t, "query attribution", err)
 	origins := map[api.SourceChangeOrigin]bool{}
 	for _, iv := range res.Intervals {

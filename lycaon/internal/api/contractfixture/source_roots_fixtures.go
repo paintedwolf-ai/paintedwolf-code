@@ -91,7 +91,7 @@ func NewTestSources(t *testing.T, workers worker.WorkerQueue) *sourceapi.Handler
 
 func PublishSnapshotFor(t *testing.T, srv *hostapi.Server, root string) {
 	t.Helper()
-	store := srv.Sources.Workspace.SourceLedger.SnapshotStore()
+	store := srv.Sources.Workspace.SourceLedger.Snapshots
 	if store == nil {
 		t.Fatal("test server has no snapshot store")
 	}

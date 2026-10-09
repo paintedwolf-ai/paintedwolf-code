@@ -239,7 +239,7 @@ func (s *Walk) resolveHeadMatches(ctx context.Context, out *WalkResult, lens Com
 		if len(paths) == 0 {
 			continue
 		}
-		oids, ok := lens.git.TreeOIDs(ctx, root.Abs, paths)
+		oids, ok := lens.Git.TreeOIDs(ctx, root.Abs, paths)
 		headByRoot[root.ID], answered[root.ID] = oids, ok
 	}
 	for i := range out.Files {

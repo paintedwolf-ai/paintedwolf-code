@@ -55,7 +55,7 @@ func (b delegationWiring) wireWorkerServices() error {
 	b.workerSeedRoot = enginepaths.WorkerSeedsRootUnder(b.dataDir)
 	b.wsMgr = workspace.NewManager(b.workerBranchRoot, b.workerSeedRoot)
 	b.workerQueue.SetWorkerWorkspaceManager(b.wsMgr)
-	b.workerQueue.SetBaselineStore(b.sourceLedger.BaselineStore())
+	b.workerQueue.SetBaselineStore(b.sourceLedger.Baselines)
 	b.workerQueue.SetProjectStore(b.registry)
 
 	b.workerCancelSvc = &worker.CancelService{
