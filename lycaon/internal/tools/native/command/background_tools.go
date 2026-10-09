@@ -38,7 +38,7 @@ func (t *CommandOutputTool) Run(ctx context.Context, args map[string]any, tctx t
 	if v, ok := args["cursor"].(float64); ok {
 		cursor = int64(v)
 	}
-	snapshot, err := t.Registry.ReadRawOutput(tctx.SessionID, handle, cursor)
+	snapshot, err := t.Registry.Output.ReadRawOutput(tctx.SessionID, handle, cursor)
 	if err != nil {
 		if errors.Is(err, bgprocess.ErrProcessNotFound) {
 			return "", missingCommandHandleReject(t.Registry, tctx.SessionID, handle)
@@ -49,7 +49,7 @@ func (t *CommandOutputTool) Run(ctx context.Context, args map[string]any, tctx t
 	capBackgroundOutput(&out, 0)
 	payload := observeBackgroundOutput(tctx, out, snapshot.Boundary, snapshot.Facts)
 	payload.ExecFailure = snapshot.Failure
-	t.Registry.NoteRefusalsShown(tctx.SessionID, handle, len(payload.SandboxRefusals))
+	t.Registry.Output.NoteRefusalsShown(tctx.SessionID, handle, len(payload.SandboxRefusals))
 	encoded, err := surveyjson.Marshal(payload)
 	if err != nil {
 		return "", fmt.Errorf("command_output encode: %w", err)
@@ -130,7 +130,7 @@ func (t *CommandStopTool) Run(ctx context.Context, args map[string]any, tctx too
 	}
 	subject, _ := t.Registry.CommandLine(tctx.SessionID, handle)
 	tctx.SetDisplaySubject(subject)
-	out, err := t.Registry.Stop(tctx.SessionID, handle)
+	out, err := t.Registry.Lifecycle.Stop(tctx.SessionID, handle)
 	if err != nil {
 		if errors.Is(err, bgprocess.ErrProcessNotFound) {
 			return "", missingCommandHandleReject(t.Registry, tctx.SessionID, handle)
@@ -278,10 +278,10 @@ func runCommandBackground(
 		tools.EmitDirectIPLifecycle(tctx, tools.DirectIPLifecycleStarted)
 	}
 	networkLife := newCommandNetworkLifecycle(tctx, toolName, egressLease, directIPApplied)
-	registry.WatchIndex(tctx.SessionID, handle, index)
+	registry.Lifecycle.WatchIndex(tctx.SessionID, handle, index)
 	// The exit hook fires after this call returns and its ctx is canceled.
 	exitCtx := context.WithoutCancel(ctx)
-	registry.OnExit(tctx.SessionID, handle, func() {
+	registry.Lifecycle.OnExit(tctx.SessionID, handle, func() {
 		networkLife.complete(exitCtx)
 		if snap, snapErr := registry.Snapshot(exitCtx, tctx.SessionID, handle, bgprocess.DefaultTailBytes); snapErr == nil {
 			recordContainerLaunch(tctx, snap)
@@ -332,7 +332,7 @@ func runCommandBackground(
 	).WithSandboxRefusals(refusals)
 	result.BoundaryRefusal = string(boundaryRefusal)
 	if !result.ExitedEarly {
-		registry.NoteRefusalsShown(tctx.SessionID, handle, len(refusals.Refusals))
+		registry.Output.NoteRefusalsShown(tctx.SessionID, handle, len(refusals.Refusals))
 	}
 	tools.CaptureExternalAccess(tctx, observedNetwork, directIPApplied)
 	// Only live handles keep the status indicator running.
@@ -354,7 +354,7 @@ func awaitBackgroundEarlyExit(
 ) (stages []hostcmd.StageResult, exitCode int, tail string, exited bool) {
 	deadline := time.Now().Add(backgroundLaunchGrace)
 	for {
-		snapshot, err := registry.ReadRawOutput(sessionID, handle, 0)
+		snapshot, err := registry.Output.ReadRawOutput(sessionID, handle, 0)
 		if err != nil {
 			return nil, 0, "", false
 		}

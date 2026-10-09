@@ -75,5 +75,5 @@ func (w commandWindow) closeOnExit(ctx context.Context, registry *bgprocess.Regi
 		return
 	}
 	background := context.WithoutCancel(ctx)
-	registry.OnExit(sessionID, handle, func() { w.closeNow(background) })
+	registry.Lifecycle.OnExit(sessionID, handle, func() { w.closeNow(background) })
 }

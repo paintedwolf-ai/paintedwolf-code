@@ -29,8 +29,8 @@ func TestCommandSubjectSurvivesProcessExit(t *testing.T) {
 		Request: hostcmd.Request{Launch: exec.HostLaunch("command presentation test"), ProjectDir: t.TempDir(), Stages: []exec.Stage{{Name: executable, Args: []string{argument}}}},
 	})
 	testutil.FailErr(t, "start command", err)
-	t.Cleanup(func() { _, _ = registry.Stop("session", handle) })
-	done, err := registry.Await(t.Context(), "session", handle, 5*time.Second)
+	t.Cleanup(func() { _, _ = registry.Lifecycle.Stop("session", handle) })
+	done, err := registry.Lifecycle.Await(t.Context(), "session", handle, 5*time.Second)
 	testutil.FailErr(t, "await command", err)
 	if !done {
 		t.Fatal("command did not exit")

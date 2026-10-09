@@ -43,7 +43,7 @@ func TestCancelledCommandDrainsEscapedOutputInline(t *testing.T) {
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		testutil.FailErr(t, "close command registry", registry.Close(ctx))
+		testutil.FailErr(t, "close command registry", registry.Lifecycle.Close(ctx))
 	})
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()

@@ -89,7 +89,7 @@ func (r *runtimeResources) capture(b *serveBuilder) {
 		r.track("background-processes", 50, func(ctx context.Context) error {
 			closeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 			defer cancel()
-			return registry.Close(closeCtx)
+			return registry.Lifecycle.Close(closeCtx)
 		})
 	}
 	if pool := b.browserPool; pool != nil {

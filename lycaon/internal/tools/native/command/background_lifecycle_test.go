@@ -52,7 +52,7 @@ func TestBackgroundHandleRetainsOutputAcrossCancellationAndEnforcesSessionOwners
 	var start hostcmd.BackgroundStartResult
 	testutil.FailErr(t, "decode persistent launch", json.Unmarshal([]byte(raw), &start))
 	t.Cleanup(func() {
-		testutil.FailErr(t, "dispose background session", reg.DisposeSession(context.Background(), ctx.SessionID))
+		testutil.FailErr(t, "dispose background session", reg.Lifecycle.DisposeSession(context.Background(), ctx.SessionID))
 	})
 	if start.ExitedEarly || captured.Process == nil || !captured.Process.Running || captured.Process.Handle != start.Handle {
 		t.Fatalf("live launch status = %+v / %+v", start, captured.Process)
@@ -102,7 +102,7 @@ func TestBackgroundHandleRetainsOutputAcrossCancellationAndEnforcesSessionOwners
 	}
 	_, err = stop.Run(t.Context(), map[string]any{"handle": start.Handle}, ctx)
 	testutil.FailErr(t, "stop owned background command", err)
-	settled, err := reg.Await(t.Context(), ctx.SessionID, start.Handle, 5*time.Second)
+	settled, err := reg.Lifecycle.Await(t.Context(), ctx.SessionID, start.Handle, 5*time.Second)
 	testutil.FailErr(t, "await stopped command", err)
 	if !settled || reg.HasRunning(ctx.SessionID) {
 		t.Fatal("stop did not settle background job")

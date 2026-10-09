@@ -62,7 +62,7 @@ func requireTerminalRunning(bg *bgprocess.Registry, sessionID, id string) error 
 	if err := bg.RequireRunning(sessionID, id); err != nil {
 		return mapTerminalLifecycleReject(err, id)
 	}
-	if err := bg.LookupPTY(sessionID, id); err != nil {
+	if err := bg.Terminal.LookupPTY(sessionID, id); err != nil {
 		return mapTerminalLifecycleReject(err, id)
 	}
 	return nil

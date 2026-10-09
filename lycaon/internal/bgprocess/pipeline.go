@@ -60,7 +60,7 @@ func (r *Registry) StartPipeline(ctx context.Context, spec PipelineSpec) (string
 		SessionID:     sessionID,
 		ProjectID:     trim(spec.ProjectID),
 		RootSessionID: trim(spec.RootSessionID),
-		buffer:        NewRingBuffer(r.cfg.RingBufferBytes),
+		buffer:        NewRingBuffer(r.ringBufferBytes),
 		running:       true,
 		silent:        spec.Mode == JobModeAwaited,
 		done:          make(chan struct{}),
@@ -80,53 +80,53 @@ func (r *Registry) StartPipeline(ctx context.Context, spec PipelineSpec) (string
 	}
 	proc.Stages = hostcmd.StagePlaceholders(req.Stages)
 
-	r.mu.Lock()
-	if r.closed {
-		r.mu.Unlock()
+	r.jobs.mu.Lock()
+	if r.jobs.closed {
+		r.jobs.mu.Unlock()
 		cancel()
 		return "", ErrRegistryClosed
 	}
-	r.pruneCompletedLocked(sessionID)
-	duplicates, awaited := r.runningConflictsLocked(sessionID, runKey)
+	r.jobs.pruneCompletedLocked(sessionID)
+	duplicates, awaited := r.jobs.runningConflictsLocked(sessionID, runKey)
 	if len(duplicates) > 0 {
-		r.mu.Unlock()
+		r.jobs.mu.Unlock()
 		cancel()
 		return "", &StartConflict{Kind: ErrDuplicateRunning, Handles: duplicates}
 	}
 	if spec.Mode == JobModeAwaited && !spec.AllowConcurrent && len(awaited) > 0 {
-		r.mu.Unlock()
+		r.jobs.mu.Unlock()
 		cancel()
 		return "", &StartConflict{Kind: ErrCommandInFlight, Handles: awaited}
 	}
 	// Awaited jobs begin invisible so a quick command does not flash a process card.
 	if proc.silent {
-		if r.countRunningAwaitedLocked(sessionID) >= r.cfg.MaxAwaited {
-			err := r.awaitedCapacityErrorLocked(sessionID)
-			r.mu.Unlock()
+		if r.jobs.countRunningAwaitedLocked(sessionID) >= r.jobs.maxAwaited {
+			err := r.jobs.awaitedCapacityErrorLocked(sessionID)
+			r.jobs.mu.Unlock()
 			cancel()
 			return "", err
 		}
-	} else if r.countRunningBackgroundLocked(sessionID) >= r.cfg.MaxBackground {
-		err := r.backgroundCapacityErrorLocked(sessionID)
-		r.mu.Unlock()
+	} else if r.jobs.countRunningBackgroundLocked(sessionID) >= r.jobs.maxBackground {
+		err := r.jobs.backgroundCapacityErrorLocked(sessionID)
+		r.jobs.mu.Unlock()
 		cancel()
 		return "", err
 	}
-	if r.sessions[sessionID] == nil {
-		r.sessions[sessionID] = make(map[string]*Process)
+	if r.jobs.sessions[sessionID] == nil {
+		r.jobs.sessions[sessionID] = make(map[string]*Process)
 	}
-	r.sessions[sessionID][handle] = proc
-	r.mu.Unlock()
+	r.jobs.sessions[sessionID][handle] = proc
+	r.jobs.mu.Unlock()
 
-	stdout := streamWriter{proc: proc, stream: "stdout", publish: r.publishStream}
-	stderr := streamWriter{proc: proc, stream: "stderr", publish: r.publishStream}
+	stdout := streamWriter{proc: proc, stream: "stdout", publish: r.Output.publishStream}
+	stderr := streamWriter{proc: proc, stream: "stderr", publish: r.Output.publishStream}
 
 	async, err := exec.StartPipelineAsync(runCtx, req.Stages, exec.ExecOpts{
 		Launch:         req.Launch,
 		Dir:            req.ProjectDir,
 		Timeout:        spec.Timeout,
 		NoTimeout:      spec.Timeout <= 0,
-		MaxOutputBytes: r.cfg.RingBufferBytes,
+		MaxOutputBytes: r.ringBufferBytes,
 		InlineEnv:      req.InlineEnv,
 		PathExtra:      req.PathExtra,
 		Stdin:          req.Stdin,
@@ -134,18 +134,18 @@ func (r *Registry) StartPipeline(ctx context.Context, spec PipelineSpec) (string
 	}, stdout, stderr)
 	if err != nil {
 		cancel()
-		r.remove(sessionID, handle)
+		r.jobs.remove(sessionID, handle)
 		return "", err
 	}
-	r.mu.Lock()
+	r.jobs.mu.Lock()
 	proc.async = async
 	stopped := proc.stopped
-	r.mu.Unlock()
+	r.jobs.mu.Unlock()
 	if stopped {
 		async.Kill()
 	}
 
-	r.watchRefusals(baseCtx, proc)
+	r.Output.watchRefusals(baseCtx, proc)
 	go r.waitProcess(context.WithoutCancel(ctx), proc, req.Stages)
 	return handle, nil
 }
@@ -179,7 +179,7 @@ func (r *Registry) waitProcess(ctx context.Context, proc *Process, stages []exec
 
 	// Publish exit fields atomically for readers.
 	finishedAt := time.Now().UTC()
-	r.mu.Lock()
+	r.jobs.mu.Lock()
 	proc.Stages = finalStages
 	proc.running = false
 	proc.hasExit = true
@@ -192,10 +192,10 @@ func (r *Registry) waitProcess(ctx context.Context, proc *Process, stages []exec
 	} else if proc.stopped {
 		proc.reason = TerminationStopped
 	}
-	r.pruneCompletedLocked(proc.SessionID)
-	r.mu.Unlock()
+	r.jobs.pruneCompletedLocked(proc.SessionID)
+	r.jobs.mu.Unlock()
 	close(proc.done)
-	r.publishTerminal(ctx, proc)
+	r.Output.publishTerminal(ctx, proc)
 }
 
 var _ io.Writer = streamWriter{}
