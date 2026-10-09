@@ -42,7 +42,7 @@ func newCheckpointTestSession(t *testing.T) (*Manager, string, string) {
 	mutations := projectsource.NewSourceMutationService(database, ledger)
 
 	mgr.SetSourceMutations(mutations)
-	mgr.SetSourceRewinds(&sourcerewind.Service{Ledger: ledger, Mutations: mutations})
+	mgr.SetSourceRewinds(&sourcerewind.Service{Planner: ledger.Comparisons, Mutations: mutations})
 	ctx := context.Background()
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
