@@ -34,7 +34,7 @@ type ambientAttachFixture struct {
 }
 
 // refusedStarts is a run store that refuses every workflow start.
-type refusedStarts struct{ *runstate.Repository }
+type refusedStarts struct{ runstate.StartsRepository }
 
 func (refusedStarts) ReplayStart(context.Context, string, string, string) (*wire.WorkflowRun, bool, error) {
 	return nil, false, errors.New("run store refused the start")
@@ -54,9 +54,9 @@ func newAmbientAttachFixture(t *testing.T, startsAdmitted bool) ambientAttachFix
 	registry, err := workflowdef.RegistryFromDirs("")
 	contractcheck.FailErr(t, "workflow.RegistryFromDirs", err)
 	runs := workflowpersistence.New(sqlDB)
-	var store *runstate.Repository = runs
+	store := runs
 	if !startsAdmitted {
-		store = refusedStarts{runs}
+		store.Starts = refusedStarts{store.Starts}
 	}
 	mgr := workflow.NewManager(store, sessions, registry, nil)
 	deps := apitest.Dependencies(t, api.Dependencies{
