@@ -3,8 +3,6 @@ package feedback
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 
@@ -39,7 +37,9 @@ type GateMissingSignal struct {
 
 // GateFeedbackCatalog loads and renders per-gate feedback YAML.
 type GateFeedbackCatalog struct {
-	defs     map[string]GateFeedbackDef
+	defs map[string]GateFeedbackDef
+	// archived holds each sealed workflow version's own definitions by archive key.
+	archived map[string]map[string]GateFeedbackDef
 	template *pongo2.Template
 }
 
@@ -58,8 +58,18 @@ func LoadGateFeedbackCatalogWithCatalog(catalog *extpacks.EffectiveCatalog) (*Ga
 		return nil, fmt.Errorf("gate-feedback: effective catalog required")
 	}
 	defs := map[string]GateFeedbackDef{}
+	archived := map[string]map[string]GateFeedbackDef{}
 	for _, id := range catalog.LoadedUnitIDs() {
-		if !strings.HasPrefix(id, extpacks.GateFeedbackUnitIDPrefix) {
+		into := defs
+		if key, rest, ok := extpacks.SplitArchiveUnitID(id); ok {
+			if !strings.HasPrefix(rest, extpacks.GateFeedbackUnitIDPrefix) {
+				continue
+			}
+			if archived[key] == nil {
+				archived[key] = map[string]GateFeedbackDef{}
+			}
+			into = archived[key]
+		} else if !strings.HasPrefix(id, extpacks.GateFeedbackUnitIDPrefix) {
 			continue
 		}
 		content, _, ok := catalog.UnitContent(id)
@@ -75,10 +85,10 @@ func LoadGateFeedbackCatalogWithCatalog(catalog *extpacks.EffectiveCatalog) (*Ga
 			return nil, err
 		}
 		// Body identifiers must remain unique across unit identifiers.
-		if _, ok := defs[def.ID]; ok {
+		if _, ok := into[def.ID]; ok {
 			return nil, fmt.Errorf("%s: duplicate gate-feedback id %q", at, def.ID)
 		}
-		defs[def.ID] = def
+		into[def.ID] = def
 	}
 	if len(defs) == 0 {
 		return nil, fmt.Errorf("gate-feedback: no definitions in the effective catalog")
@@ -91,46 +101,31 @@ func LoadGateFeedbackCatalogWithCatalog(catalog *extpacks.EffectiveCatalog) (*Ga
 	if err != nil {
 		return nil, fmt.Errorf("gate feedback template: %w", err)
 	}
-	return &GateFeedbackCatalog{defs: defs, template: tmpl}, nil
+	return &GateFeedbackCatalog{defs: defs, archived: archived, template: tmpl}, nil
 }
 
-// WithWorkflowArchive returns a derived catalog with sealed copy overrides.
-func (c *GateFeedbackCatalog) WithWorkflowArchive(archiveDir string) (*GateFeedbackCatalog, error) {
-	if c == nil || strings.TrimSpace(archiveDir) == "" {
-		return c, nil
+// WithWorkflowArchive returns the catalog a run on the sealed workflow version
+// archiveKey reads: that version's own definitions over the current ones.
+func (c *GateFeedbackCatalog) WithWorkflowArchive(archiveKey string) *GateFeedbackCatalog {
+	sealed := c.sealedDefs(archiveKey)
+	if len(sealed) == 0 {
+		return c
 	}
-	archiveDir = filepath.Clean(strings.TrimSpace(archiveDir))
-	fbDir := filepath.Join(archiveDir, "guidance", "gate-feedback")
-	if _, err := os.Stat(fbDir); os.IsNotExist(err) {
-		return c, nil
+	derived := make(map[string]GateFeedbackDef, len(c.defs)+len(sealed))
+	for id, def := range c.defs {
+		derived[id] = def
 	}
-	entries, err := os.ReadDir(fbDir)
-	if err != nil {
-		return nil, fmt.Errorf("read sealed gate feedback dir: %w", err)
+	for id, def := range sealed {
+		derived[id] = def
 	}
-	derivedDefs := make(map[string]GateFeedbackDef, len(c.defs))
-	for k, v := range c.defs {
-		derivedDefs[k] = v
+	return &GateFeedbackCatalog{defs: derived, archived: c.archived, template: c.template}
+}
+
+func (c *GateFeedbackCatalog) sealedDefs(archiveKey string) map[string]GateFeedbackDef {
+	if c == nil {
+		return nil
 	}
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".yaml") {
-			continue
-		}
-		path := filepath.Join(fbDir, entry.Name())
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return nil, fmt.Errorf("read sealed gate feedback %s: %w", path, err)
-		}
-		var def GateFeedbackDef
-		if err := config.DecodeYAML(data, &def); err != nil {
-			return nil, fmt.Errorf("%s: %w", path, err)
-		}
-		if err := validateGateFeedbackDef(extpacks.OnDisk(path), entry.Name(), def); err != nil {
-			return nil, err
-		}
-		derivedDefs[def.ID] = def
-	}
-	return &GateFeedbackCatalog{defs: derivedDefs, template: c.template}, nil
+	return c.archived[strings.TrimSpace(archiveKey)]
 }
 
 func validateGateFeedbackDef(at extpacks.Source, name string, def GateFeedbackDef) error {

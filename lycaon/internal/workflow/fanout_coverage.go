@@ -65,7 +65,7 @@ func (m *RunManager) WorkflowWork(ctx context.Context, sessionID, workID string)
 	if err != nil || run == nil {
 		return spawn.WorkflowWork{}, false, err
 	}
-	manifest, err := m.runnableManifestForRun(ctx, run)
+	manifest, err := m.manifestForRun(ctx, run)
 	if err != nil {
 		return spawn.WorkflowWork{}, false, err
 	}
@@ -128,7 +128,7 @@ func (m *RunManager) AssertWorkerTask(ctx context.Context, task *api.WorkerTask)
 	if run == nil || run.CurrentPhase != task.WorkflowPhase {
 		return rejectFanoutTask("workflow_phase_changed", task)
 	}
-	manifest, err := m.runnableManifestForRun(ctx, run)
+	manifest, err := m.manifestForRun(ctx, run)
 	if err != nil {
 		return err
 	}

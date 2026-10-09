@@ -76,29 +76,18 @@ func TestEmitMatchHonorsConditionWhenPhase(t *testing.T) {
 	}
 }
 
-func TestEmitMatchWorkflowVersionMissingQueuesStructuredGuidance(t *testing.T) {
+// A run context without its workflow version is a host defect: the bus
+// resolves nothing rather than guessing a version, and the model is not asked
+// to repair it.
+func TestEmitMatchWorkflowVersionMissingFailsClosed(t *testing.T) {
 	kicks := &kick.KickEngine{}
 	bus := anchor.NewBus(kicks)
-	reg := loadTestRegistry(t)
-	bus.SetRegistry(reg)
+	bus.SetRegistry(loadTestRegistry(t))
 
-	// An active run specifying a workflow without a workflow version
-	matchCtx := anchor.MatchContext{
-		Surface:  "phase",
-		Workflow: "security-survey",
-		Phase:    "challenge",
-	}
+	matchCtx := anchor.MatchContext{Surface: "phase", Workflow: "security-survey", Phase: "challenge"}
 	bus.EmitMatch(context.Background(), "sess-missing-ver", anchor.PhaseEntered, anchor.Envelope{}, matchCtx)
 
-	kickID, ok := kicks.PeekPendingKickID("sess-missing-ver")
-	if !ok {
-		t.Fatal("expected pending guidance for missing workflow version")
-	}
-	if kickID != "guidance:WORKFLOW_VERSION_MISSING" {
-		t.Fatalf("expected guidance:WORKFLOW_VERSION_MISSING, got %q", kickID)
-	}
-	text := kicks.TakePendingKickID("sess-missing-ver")
-	if text != "guidance:WORKFLOW_VERSION_MISSING" {
-		t.Fatalf("expected staged kick guidance:WORKFLOW_VERSION_MISSING, got %q", text)
+	if kickID, ok := kicks.PeekPendingKickID("sess-missing-ver"); ok {
+		t.Fatalf("missing workflow version queued %q", kickID)
 	}
 }

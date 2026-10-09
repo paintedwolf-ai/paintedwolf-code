@@ -107,7 +107,7 @@ components:
       additionalProperties: false
       required: [id, subject, reason]
       properties:
-        id: {type: string, minLength: 1}
+        id: {type: string, pattern: '^[A-Za-z0-9_.-]+$', description: Worker-local gap id; the host scopes it to the task.}
         subject: {type: string, minLength: 1}
         reason: {type: string, minLength: 1}
         paths:

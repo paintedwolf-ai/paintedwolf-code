@@ -34,26 +34,15 @@ func ParseManifestYAML(data []byte) (Manifest, error) {
 	if err := validateWorkflowFileHeader(wf); err != nil {
 		return Manifest{}, err
 	}
-	ApplyFormatDefaults(&wf)
-	if err := ValidateManifestFormat(wf.ID, wf.Format); err != nil {
-		return Manifest{}, err
-	}
 	allowedAgents, agentToolAccess, err := parseAgentBindings(wf.ID, wf.Agents)
 	if err != nil {
 		return Manifest{}, err
 	}
-	ext := strings.TrimSpace(wf.Extends)
-	if ext != "" {
-		if !strings.Contains(ext, "@") || strings.HasPrefix(ext, "@") || strings.HasSuffix(ext, "@") {
-			return Manifest{}, fmt.Errorf("workflow manifest %s: extends must pin an exact version (e.g. id@version), got %q", wf.ID, ext)
-		}
-	}
 	m := Manifest{
 		ID:                 strings.TrimSpace(wf.ID),
 		Version:            strings.TrimSpace(wf.Version),
-		Format:             wf.Format,
 		Retired:            wf.Retired,
-		Extends:            ext,
+		Extends:            strings.TrimSpace(wf.Extends),
 		Name:               strings.TrimSpace(wf.Name),
 		Description:        strings.TrimSpace(wf.Description),
 		Trigger:            strings.TrimSpace(wf.Trigger),

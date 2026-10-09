@@ -137,36 +137,9 @@ func LoadRegistryFromConfigRootWithCatalog(catalog *extpacks.EffectiveCatalog) (
 				return nil, fmt.Errorf("%s: %w", id, err)
 			}
 			r.add(b)
-		case workflowManifestUnit(id):
+		case workflowManifestUnit(id), archivedManifestUnit(id):
 			if err := r.loadWorkflowInjects(id, content); err != nil {
 				return nil, err
-			}
-		}
-	}
-	packs, err := extpacks.DiscoverEffective(catalog)
-	if err == nil {
-		for _, p := range packs {
-			archiveSource := p.Root.Join("archive")
-			if !archiveSource.IsDir() {
-				continue
-			}
-			versionEntries, err := archiveSource.List()
-			if err != nil {
-				continue
-			}
-			for _, ve := range versionEntries {
-				if !ve.IsDir() {
-					continue
-				}
-				versionName := strings.TrimSpace(ve.Name())
-				wfSource := archiveSource.Join(versionName, "workflow.yaml")
-				data, err := wfSource.Read()
-				if err != nil {
-					continue
-				}
-				if err := r.loadWorkflowInjects(fmt.Sprintf("%s/archive/%s/workflow.yaml", p.ID, versionName), data); err != nil {
-					return nil, err
-				}
 			}
 		}
 	}
@@ -176,6 +149,11 @@ func LoadRegistryFromConfigRootWithCatalog(catalog *extpacks.EffectiveCatalog) (
 func workflowManifestUnit(id string) bool {
 	rel, ok := strings.CutPrefix(strings.TrimSpace(id), "workflows/")
 	return ok && rel != "" && !strings.HasPrefix(rel, "_") && !strings.Contains(rel, "/")
+}
+
+func archivedManifestUnit(id string) bool {
+	_, rest, ok := extpacks.SplitArchiveUnitID(id)
+	return ok && rest == "workflow"
 }
 
 type bindingDoc struct {

@@ -12,7 +12,7 @@ import (
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
-// TestWorkflowArchiveChecksums verifies that every sealed copy under archive/<version>/
+// TestWorkflowArchiveChecksums verifies that every sealed copy under archive/<workflow>/<version>/
 // is intact, byte-identical to its recorded SHA256SUMS, and has no untracked files.
 func TestWorkflowArchiveChecksums(t *testing.T) {
 	t.Parallel()
@@ -24,7 +24,7 @@ func TestWorkflowArchiveChecksums(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		if d.IsDir() && filepath.Base(filepath.Dir(path)) == "archive" {
+		if d.IsDir() && filepath.Base(filepath.Dir(filepath.Dir(path))) == "archive" {
 			archiveDirs = append(archiveDirs, path)
 			return filepath.SkipDir
 		}

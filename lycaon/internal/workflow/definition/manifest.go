@@ -18,14 +18,8 @@ import (
 type Manifest struct {
 	ID      string
 	Version string
-	// Format is the manifest document schema version (defaults to 1).
-	Format int
 	// Retired definitions remain available to existing runs but leave the start catalog.
-	Retired bool
-	// Sealed marks a superseded release kept as an immutable archive copy.
-	Sealed bool
-	// ArchiveDir records the directory of the sealed copy if Sealed is true.
-	ArchiveDir         string
+	Retired            bool
 	Attach             ManifestAttach
 	Request            *ManifestRequest
 	Extends            string

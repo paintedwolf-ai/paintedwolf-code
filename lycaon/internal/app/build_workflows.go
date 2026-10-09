@@ -122,7 +122,7 @@ func (b boardWiring) wireWorkflows() error {
 			if err := b.workflowMgr.RecoverVerdictOperations(ctx); err != nil {
 				return err
 			}
-			return b.workflowMgr.RecoverReviewRepairs(ctx)
+			return workflow.ReviewRepairs{RunManager: b.workflowMgr}.Recover(ctx)
 		},
 	}); err != nil {
 		return err

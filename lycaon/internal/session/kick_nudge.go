@@ -398,10 +398,8 @@ func (m *Manager) projectKickGateObligations(ctx context.Context, sessionID stri
 	}
 	fb := m.gateFeedback
 	if m.workflows != nil {
-		if manifest, ok := m.workflows.ActiveManifest(ctx, sessionID); ok && manifest.Sealed && manifest.ArchiveDir != "" {
-			if derived, err := fb.WithWorkflowArchive(manifest.ArchiveDir); err == nil {
-				fb = derived
-			}
+		if manifest, ok := m.workflows.ActiveManifest(ctx, sessionID); ok {
+			fb = fb.WithWorkflowArchive(manifest.Archive)
 		}
 	}
 	runCtx := frame.RunContext

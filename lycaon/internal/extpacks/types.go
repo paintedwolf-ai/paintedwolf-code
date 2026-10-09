@@ -348,17 +348,8 @@ type Manifest struct {
 	Version          string                       `yaml:"version"`
 	Compatibility    ManifestCompatibility        `yaml:"compatibility"`
 	Dependencies     map[string]DependencyRequest `yaml:"dependencies,omitempty"`
-	RequiresScanners []string                     `yaml:"requires_scanners,omitempty"`
-	Feature          string                       `yaml:"feature,omitempty"`
-	Exports          []string                     `yaml:"exports,omitempty"`
-	Routing          *ManifestRouting             `yaml:"routing,omitempty"`
-}
-
-// ManifestRouting declares unit redirection, scheduled deprecations, and tombstoned removals.
-type ManifestRouting struct {
-	Redirect   map[string]string `yaml:"redirect,omitempty"`
-	Deprecated map[string]string `yaml:"deprecated,omitempty"`
-	Removed    []string          `yaml:"removed,omitempty"`
+	RequiresScanners []string                     `yaml:"requires_scanners"`
+	Feature          string                       `yaml:"feature"`
 }
 
 // ManifestCompatibility states which extension host contract a release uses.

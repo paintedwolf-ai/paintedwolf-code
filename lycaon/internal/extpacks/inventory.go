@@ -17,6 +17,7 @@ var inventoryKindRoots = []string{
 	"policy",
 	"guidance",
 	"workflows",
+	ArchiveKindRoot,
 	"agents",
 	"tools",
 	"approvals",
@@ -93,7 +94,9 @@ func (c ProjectScopeClass) String() string {
 // Every inventory root has one project-scope class.
 var projectScopeByKind = map[string]ProjectScopeClass{
 	"workflows": ScopeShared,
-	"agents":    ScopeShared,
+	// Sealed copies serve existing runs; projects cannot replace them.
+	ArchiveKindRoot: ScopeDeviceOnly,
+	"agents":        ScopeShared,
 	"guidance":  ScopeShared,
 	"shared":    ScopeShared,
 	"policy":    ScopeAdditive,
@@ -258,7 +261,7 @@ func validatePackYAMLConsumption(p Pack) error {
 		}
 		if entry.IsDir() {
 			switch entry.Name() {
-			case ".git", "vendor", "node_modules", "archive":
+			case ".git", "vendor", "node_modules":
 				return filepath.SkipDir
 			default:
 				return nil
@@ -350,6 +353,8 @@ func UnitIDFor(packID, rel string) string {
 			return "workflows/" + parts[1] + "/" + stem
 		}
 		return ""
+	case ArchiveKindRoot:
+		return archiveUnitID(parts)
 	case "skills":
 		// Only SKILL.md defines a unit; adjacent files remain its payload.
 		if len(parts) == 3 && parts[2] == "SKILL.md" {

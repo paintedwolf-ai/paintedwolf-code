@@ -8,7 +8,6 @@ import (
 type workflowFile struct {
 	ID                 string                           `yaml:"id"`
 	Version            string                           `yaml:"version"`
-	Format             int                              `yaml:"format,omitempty"`
 	Attach             *attachYAML                      `yaml:"attach"`
 	Request            *requestYAML                     `yaml:"request"`
 	Extends            string                           `yaml:"extends"`

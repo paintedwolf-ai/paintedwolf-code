@@ -193,7 +193,7 @@ func (m *RunManager) Resume(ctx context.Context, runID string) (*api.WorkflowRun
 	if run.Status != api.WorkflowRunStatusPaused {
 		return nil, ErrInvalidTransition
 	}
-	_, err = m.runnableManifestForRun(ctx, run)
+	_, err = m.manifestForRun(ctx, run)
 	if err != nil {
 		return nil, err
 	}

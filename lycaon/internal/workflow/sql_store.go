@@ -13,7 +13,6 @@ import (
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/eventoutbox"
 	"github.com/lycaon/lycaon/internal/people"
-	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -1211,72 +1210,6 @@ func runFromRow(r db.WorkflowRuns) (*api.WorkflowRun, error) {
 	}
 	run.CompletedAt, err = db.TimePtrFromNull(r.CompletedAt)
 	return &run, err
-}
-
-func (s *SQLStore) RecordUnitProvenance(ctx context.Context, runID, phase string, rec prompts.UnitProvenanceRecord) error {
-	if s == nil || s.queries == nil {
-		return nil
-	}
-	runID = strings.TrimSpace(runID)
-	if runID == "" {
-		return nil
-	}
-	return s.queries.RecordWorkflowRunUnitProvenance(ctx, db.RecordWorkflowRunUnitProvenanceParams{
-		ID:            uuid.NewString(),
-		RunID:         runID,
-		Phase:         strings.TrimSpace(phase),
-		UnitKind:      strings.TrimSpace(rec.UnitKind),
-		UnitID:        strings.TrimSpace(rec.UnitID),
-		SourceTier:    strings.TrimSpace(rec.SourceTier),
-		SourcePath:    strings.TrimSpace(rec.SourcePath),
-		ContentSha256: strings.TrimSpace(rec.ContentSha256),
-		CreatedAt:     time.Now().UTC().Format(time.RFC3339Nano),
-	})
-}
-
-func (s *SQLStore) ListUnitProvenance(ctx context.Context, runID string) ([]prompts.UnitProvenanceRecord, error) {
-	if s == nil || s.queries == nil {
-		return nil, nil
-	}
-	rows, err := s.queries.ListWorkflowRunUnitProvenance(ctx, runID)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]prompts.UnitProvenanceRecord, len(rows))
-	for i, r := range rows {
-		out[i] = prompts.UnitProvenanceRecord{
-			UnitKind:      r.UnitKind,
-			UnitID:        r.UnitID,
-			SourceTier:    r.SourceTier,
-			SourcePath:    r.SourcePath,
-			ContentSha256: r.ContentSha256,
-		}
-	}
-	return out, nil
-}
-
-func (s *SQLStore) ListUnitProvenanceByPhase(ctx context.Context, runID, phase string) ([]prompts.UnitProvenanceRecord, error) {
-	if s == nil || s.queries == nil {
-		return nil, nil
-	}
-	rows, err := s.queries.ListWorkflowRunUnitProvenanceByPhase(ctx, db.ListWorkflowRunUnitProvenanceByPhaseParams{
-		RunID: runID,
-		Phase: phase,
-	})
-	if err != nil {
-		return nil, err
-	}
-	out := make([]prompts.UnitProvenanceRecord, len(rows))
-	for i, r := range rows {
-		out[i] = prompts.UnitProvenanceRecord{
-			UnitKind:      r.UnitKind,
-			UnitID:        r.UnitID,
-			SourceTier:    r.SourceTier,
-			SourcePath:    r.SourcePath,
-			ContentSha256: r.ContentSha256,
-		}
-	}
-	return out, nil
 }
 
 var _ RunStore = (*SQLStore)(nil)

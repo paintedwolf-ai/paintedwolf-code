@@ -12,7 +12,6 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/inspector"
 	"github.com/lycaon/lycaon/internal/progress"
-	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/visual"
@@ -81,7 +80,7 @@ type RunManager struct {
 	OnToolAskOpened ToolAskOpenedHook
 	// OnFeedbackResolved reports cleared pending input.
 	OnFeedbackResolved     FeedbackResolvedHook
-	OnReviewProgress       ReviewProgressHook
+	OnReviewLoopHeld       ReviewLoopHeldHook
 	PhaseEnterHook         PhaseEnterHook
 	PhaseReenterHook       PhaseReenterHook
 	WorkerStop             WorkerRunStop
@@ -142,15 +141,9 @@ type ToolAskOpenedHook func(ctx context.Context, sessionID, phaseID string)
 // FeedbackResolvedHook is invoked when pending user feedback/decision is cleared.
 type FeedbackResolvedHook func(ctx context.Context, sessionID, runID, phaseID, response string)
 
-type ReviewProgress string
-
-const (
-	ReviewRoundAccepted    ReviewProgress = "accepted_review_round"
-	ReviewDecisionRequired ReviewProgress = "decision_required"
-)
-
-// ReviewProgressHook publishes accepted progress, never a repair rejection.
-type ReviewProgressHook func(ctx context.Context, sessionID string, progress ReviewProgress)
+// ReviewLoopHeldHook reports accepted review progress and whether its cap
+// requires a terminal verdict. A repair rejection never reports.
+type ReviewLoopHeldHook func(ctx context.Context, sessionID string, decisionRequired bool)
 
 // PhaseAutoAdvancedHook is invoked after host auto-advance commits a new phase.
 type PhaseAutoAdvancedHook func(ctx context.Context, sessionID, runID, previousPhase, newPhase string)
@@ -244,14 +237,6 @@ func (m *RunManager) Get(ctx context.Context, runID string) (*api.WorkflowRun, e
 	return run, nil
 }
 
-// RecordUnitProvenance records execution provenance for an asset.
-func (m *RunManager) RecordUnitProvenance(ctx context.Context, runID, phase string, rec prompts.UnitProvenanceRecord) error {
-	if m == nil || m.Store == nil {
-		return nil
-	}
-	return m.Store.RecordUnitProvenance(ctx, runID, phase, rec)
-}
-
 // GetActive returns the unadorned active leaf for a session.
 func (m *RunManager) GetActive(ctx context.Context, sessionID string) (*api.WorkflowRun, error) {
 	return m.Store.ActiveBySession(ctx, sessionID)
@@ -268,7 +253,7 @@ func (m *RunManager) AssertRunnable(ctx context.Context, runID string) error {
 	}
 	switch run.Status {
 	case api.WorkflowRunStatusRunning:
-		_, err := m.runnableManifestForRun(ctx, run)
+		_, err := m.manifestForRun(ctx, run)
 		return err
 	case api.WorkflowRunStatusPaused:
 		return &NotRunnableError{RunID: runID, Status: run.Status, Reason: "paused"}

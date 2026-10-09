@@ -50,7 +50,7 @@ func (m *RunManager) FireTransition(ctx context.Context, runID, transitionID, ac
 	if IsTerminal(run.Status) || run.Status != api.WorkflowRunStatusRunning {
 		return nil, &NotRunnableError{RunID: runID, Status: run.Status, Reason: string(run.Status)}
 	}
-	manifest, err := m.runnableManifestForRun(ctx, run)
+	manifest, err := m.manifestForRun(ctx, run)
 	if err != nil {
 		return nil, err
 	}

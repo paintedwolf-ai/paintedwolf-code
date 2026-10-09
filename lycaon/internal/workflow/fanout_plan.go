@@ -84,7 +84,7 @@ func RegisterFanoutPlanTool(reg *tools.DefaultRegistry, runs *RunManager) error 
 		if active == nil {
 			return marshalFanoutPlanResult(FanoutPlanToolResult{Error: "no_active_run", Message: "start a workflow run before calling fanout_plan"})
 		}
-		manifest, err := runs.runnableManifestForRun(ctx, active)
+		manifest, err := runs.manifestForRun(ctx, active)
 		if err != nil {
 			return "", err
 		}

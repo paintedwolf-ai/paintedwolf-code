@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/lycaon/lycaon/internal/noticeerr"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -101,7 +102,8 @@ func (e *NotRunnableError) NoticeCode() api.NoticeCode {
 	return api.NoticeCodeWorkflowNotRunnable
 }
 
-// WorkflowVersionUnavailableError indicates a workflow version is retired and marked non-resumable.
+// WorkflowVersionUnavailableError reports a run whose pinned workflow
+// version is no longer in the catalog, live or sealed.
 type WorkflowVersionUnavailableError struct {
 	WorkflowID string
 	Version    string
@@ -110,6 +112,8 @@ type WorkflowVersionUnavailableError struct {
 func (e *WorkflowVersionUnavailableError) Error() string {
 	return fmt.Sprintf("workflow %s@%s is unavailable and cannot be resumed", e.WorkflowID, e.Version)
 }
+
+func (e *WorkflowVersionUnavailableError) Unwrap() error { return workflowdef.ErrUnknownWorkflow }
 
 func (e *WorkflowVersionUnavailableError) RejectionCode() string {
 	return "WORKFLOW_VERSION_UNAVAILABLE"

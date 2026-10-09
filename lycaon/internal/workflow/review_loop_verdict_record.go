@@ -140,7 +140,7 @@ func (m *RunManager) RecordReviewLoopVerdict(
 	if !out.Valid {
 		// Only an exceeded iteration cap requests a decision.
 		if out.IterationCapExceeded {
-			m.notifyReviewProgress(ctx, sessionID, ReviewDecisionRequired)
+			m.notifyReviewLoopHeld(ctx, sessionID, true)
 		}
 		return out, nil
 	}
@@ -149,9 +149,9 @@ func (m *RunManager) RecordReviewLoopVerdict(
 	}
 	switch {
 	case out.Attempt < reviewLoopIterationCap(rl):
-		m.notifyReviewProgress(ctx, sessionID, ReviewRoundAccepted)
+		m.notifyReviewLoopHeld(ctx, sessionID, false)
 	case out.Attempt == reviewLoopIterationCap(rl):
-		m.notifyReviewProgress(ctx, sessionID, ReviewDecisionRequired)
+		m.notifyReviewLoopHeld(ctx, sessionID, true)
 	}
 	return out, nil
 }
@@ -440,9 +440,9 @@ func (m *RunManager) missingReviewAgents(ctx context.Context, run *api.WorkflowR
 	return missing
 }
 
-func (m *RunManager) notifyReviewProgress(ctx context.Context, sessionID string, progress ReviewProgress) {
-	if m != nil && m.OnReviewProgress != nil {
-		m.OnReviewProgress(ctx, sessionID, progress)
+func (m *RunManager) notifyReviewLoopHeld(ctx context.Context, sessionID string, decisionRequired bool) {
+	if m != nil && m.OnReviewLoopHeld != nil {
+		m.OnReviewLoopHeld(ctx, sessionID, decisionRequired)
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/lycaon/lycaon/internal/promptresult"
+	"slices"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/batch"
@@ -241,5 +242,25 @@ func TestToolpolicyEngineDepsWiresWorkflowView(t *testing.T) {
 }
 
 func (s *recordingWorkflowView) RecordReviewToolResult(context.Context, string, api.Message) error {
+	s.record("RecordReviewToolResult")
 	return nil
+}
+
+// Review repair accounting reads the durable transcript, so it runs only after
+// the coordinator's rows are appended.
+func TestLoopAppendRecordsReviewResultsAfterCommit(t *testing.T) {
+	ctx := t.Context()
+	st := store.NewMemory()
+	mgr := NewManager(st, nil, nil, settings.DefaultSessionLimits())
+	view := &recordingWorkflowView{}
+	mgr.SetWorkflowSessionView(view)
+	sess, err := st.Create(ctx, api.CreateSessionRequest{}, "project-1")
+	testutil.FailErr(t, "create session", err)
+
+	row := api.Message{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Tool: "submit_verdict"}}
+	testutil.FailErr(t, "append loop rows", mgr.appendLoopMessages(ctx, sess.ID, row))
+	want := []string{"StampAndAppendMessages", "RecordReviewToolResult"}
+	if !slices.Equal(view.calls, want) {
+		t.Fatalf("calls = %v, want %v", view.calls, want)
+	}
 }

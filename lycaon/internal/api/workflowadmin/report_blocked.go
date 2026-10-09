@@ -24,11 +24,18 @@ func (s *Handler) blockedRunReport(ctx context.Context, run *wire.WorkflowRun, m
 		return report.ReportInput{}, false, err
 	}
 	input := report.ReportInput{
-		Kind: report.BlockedReviewSnapshot, Title: manifest.Name, Headline: "Review incomplete", RunID: run.ID,
-		Project: s.reportProjectLabel(ctx, run.ProjectID), StartedAt: reportStartedAt(run), CompletedAt: repair.UpdatedAt.Format(time.RFC3339),
-		Workflow: &report.ReportWorkflow{ID: run.WorkflowID, Version: run.WorkflowVersion},
-		Summary:  fmt.Sprintf("Review paused in %s after %d rejected response attempts. No terminal verdict was recorded for this phase.", repair.Phase, len(repair.Responses)),
-		Ask:      &report.ReportAsk{Do: "Resume the review after addressing the blocker, or cancel and retain this snapshot.", Effort: "Completed work is retained."},
+		ReportHeader: report.ReportHeader{
+			Kind:        report.BlockedReviewSnapshot,
+			Title:       manifest.Name,
+			Headline:    "Review incomplete",
+			RunID:       run.ID,
+			Project:     s.reportProjectLabel(ctx, run.ProjectID),
+			StartedAt:   reportStartedAt(run),
+			CompletedAt: repair.UpdatedAt.Format(time.RFC3339),
+			Workflow:    &report.ReportWorkflow{ID: run.WorkflowID, Version: run.WorkflowVersion},
+			Summary:     fmt.Sprintf("Review paused in %s after %d rejected response attempts. No terminal verdict was recorded for this phase.", repair.Phase, len(repair.Responses)),
+		},
+		Ask: &report.ReportAsk{Do: "Resume the review after addressing the blocker, or cancel and retain this snapshot.", Effort: "Completed work is retained."},
 	}
 	var narrative strings.Builder
 	narrative.WriteString(input.Summary + "\n\nBlocking diagnostics:\n")

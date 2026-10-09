@@ -139,7 +139,7 @@ func (m *RunManager) PrepareUserRequest(ctx context.Context, sessionID, text str
 	if err != nil || run == nil {
 		return text, nil, false, err
 	}
-	manifest, err := m.runnableManifestForRun(ctx, run)
+	manifest, err := m.manifestForRun(ctx, run)
 	if err != nil || manifest.Request == nil {
 		return text, nil, false, err
 	}
@@ -222,7 +222,7 @@ func (m *RunManager) resumeResolvedRequestPhase(ctx context.Context, run *api.Wo
 	if !ok || state.Status != requestStatusResolved || requestPhaseActive(vars) {
 		return false, nil
 	}
-	manifest, err := m.runnableManifestForRun(ctx, run)
+	manifest, err := m.manifestForRun(ctx, run)
 	if err != nil {
 		return false, err
 	}

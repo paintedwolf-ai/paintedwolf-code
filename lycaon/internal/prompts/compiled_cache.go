@@ -10,68 +10,54 @@ import (
 	"golang.org/x/sync/singleflight"
 )
 
-type compiledPromptEntry struct {
-	tpl        *pongo2.Template
-	provenance []UnitProvenanceRecord
-}
-
-var compiledPrompts = scopedstore.New[compiledPromptEntry](64)
+var compiledPrompts = scopedstore.New[*pongo2.Template](64)
 var compilingPrompts singleflight.Group
 
 // compiledTemplate reuses only immutable source graphs. Execution data and
 // rendered output remain private to each call.
 func (e *FileTemplateEngine) compiledTemplate(ctx context.Context, ref string) (*pongo2.Template, error) {
-	entry, err := e.compiledTemplateEntry(ctx, ref)
-	if err != nil {
+	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	return entry.tpl, nil
-}
-
-func (e *FileTemplateEngine) compiledTemplateEntry(ctx context.Context, ref string) (compiledPromptEntry, error) {
-	if err := ctx.Err(); err != nil {
-		return compiledPromptEntry{}, err
-	}
 	if e.Revision() == "" {
-		entry, _, err := e.compileTemplate(ref)
-		return entry, err
+		tpl, _, err := e.compileTemplate(ref)
+		return tpl, err
 	}
 	key := e.Revision() + "\x00" + ref
-	if entry, ok := compiledPrompts.Load(key); ok {
-		return entry, nil
+	if tpl, ok := compiledPrompts.Load(key); ok {
+		return tpl, nil
 	}
 	result := compilingPrompts.DoChan(key, func() (any, error) {
-		if entry, ok := compiledPrompts.Load(key); ok {
-			return entry, nil
+		if tpl, ok := compiledPrompts.Load(key); ok {
+			return tpl, nil
 		}
-		entry, size, err := e.compileTemplate(ref)
+		tpl, size, err := e.compileTemplate(ref)
 		if err == nil && size <= 256<<10 {
-			compiledPrompts.Store(key, entry)
+			compiledPrompts.Store(key, tpl)
 		}
-		return entry, err
+		return tpl, err
 	})
 	select {
 	case <-ctx.Done():
-		return compiledPromptEntry{}, ctx.Err()
+		return nil, ctx.Err()
 	case result := <-result:
 		if result.Err != nil {
-			return compiledPromptEntry{}, result.Err
+			return nil, result.Err
 		}
-		entry, ok := result.Val.(compiledPromptEntry)
+		tpl, ok := result.Val.(*pongo2.Template)
 		if !ok {
-			return compiledPromptEntry{}, fmt.Errorf("invalid compiled prompt")
+			return nil, fmt.Errorf("invalid compiled prompt")
 		}
-		return entry, nil
+		return tpl, nil
 	}
 }
 
-func (e *FileTemplateEngine) compileTemplate(ref string) (compiledPromptEntry, int, error) {
+func (e *FileTemplateEngine) compileTemplate(ref string) (*pongo2.Template, int, error) {
 	loader := newLayeredLoader(e.layers, e.registered)
 	ref, err := loader.Preflight(ref)
 	if err != nil {
-		return compiledPromptEntry{}, 0, err
+		return nil, 0, err
 	}
-	prov := loader.Provenance()
 	// The compiled set needs only its preflighted graph, not the entire overlay.
 	loader.layers, loader.registered = PromptLayers{}, nil
 	size := 0
@@ -80,11 +66,8 @@ func (e *FileTemplateEngine) compileTemplate(ref string) (compiledPromptEntry, i
 	}
 	set, err := pongoplain.NewSet("lycaon-prompts", loader, pongoplain.Composed)
 	if err != nil {
-		return compiledPromptEntry{}, 0, err
+		return nil, 0, err
 	}
 	tpl, err := set.FromCache(ref)
-	if err != nil {
-		return compiledPromptEntry{}, 0, err
-	}
-	return compiledPromptEntry{tpl: tpl, provenance: prov}, size, nil
+	return tpl, size, err
 }

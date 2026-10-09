@@ -252,8 +252,7 @@ func (m *RunManager) ActiveManifest(ctx context.Context, sessionID string) (sess
 		CoordinatorProfile: strings.TrimSpace(manifest.CoordinatorProfile),
 		Rules:              append([]string(nil), manifest.Rules...),
 		HostPhaseAdvance:   workflowdef.PhaseHostPhaseAdvance(manifest, active.CurrentPhase),
-		Sealed:             manifest.Sealed,
-		ArchiveDir:         manifest.ArchiveDir,
+		Archive:            runArchive(manifest),
 	}, true
 }
 

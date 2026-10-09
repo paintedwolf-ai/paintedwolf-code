@@ -99,8 +99,8 @@ hooks:
       Queues feedback.received and wakes the pending-input sleep.
 
   - manager: workflow.RunManager
-    field: OnReviewProgress
-    fires_on: "accepted review_loop progress (RecordReviewLoopVerdict): a non-terminal round, or decision_required at iteration_cap; never a repair rejection"
+    field: OnReviewLoopHeld
+    fires_on: "review_loop phase held on a non-terminal verdict (RecordReviewLoopVerdict); decisionRequired at iteration_cap"
     binds_to: mgr.Emit(review_loop.*) + mgr.NudgeCoordinatorLoop
     posture: async
     reentrant: false

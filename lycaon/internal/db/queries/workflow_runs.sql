@@ -307,21 +307,3 @@ WHERE workflow_runs.session_id = sqlc.arg(target_session_id)
         AND expected.parent_run_id IS NULL
         AND expected.status IN ('running', 'paused', 'paused_on_child')
   );
-
--- name: RecordWorkflowRunUnitProvenance :exec
-INSERT INTO workflow_run_unit_provenance (
-    id, run_id, phase, unit_kind, unit_id, source_tier, source_path, content_sha256, created_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-ON CONFLICT (run_id, phase, unit_kind, unit_id, content_sha256) DO NOTHING;
-
--- name: ListWorkflowRunUnitProvenance :many
-SELECT id, run_id, phase, unit_kind, unit_id, source_tier, source_path, content_sha256, created_at
-FROM workflow_run_unit_provenance
-WHERE run_id = ?
-ORDER BY created_at ASC, id ASC;
-
--- name: ListWorkflowRunUnitProvenanceByPhase :many
-SELECT id, run_id, phase, unit_kind, unit_id, source_tier, source_path, content_sha256, created_at
-FROM workflow_run_unit_provenance
-WHERE run_id = ? AND phase = ?
-ORDER BY created_at ASC, id ASC;

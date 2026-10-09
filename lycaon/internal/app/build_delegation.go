@@ -145,7 +145,7 @@ func (b delegationWiring) configureDelegationWorkflow() error {
 	b.workflowMgr.OnFeedbackPending = b.onWorkflowFeedbackPending
 	b.workflowMgr.OnToolAskOpened = b.onWorkflowToolAskOpened
 	b.workflowMgr.OnFeedbackResolved = b.onWorkflowFeedbackResolved
-	b.workflowMgr.OnReviewProgress = b.onWorkflowReviewProgress
+	b.workflowMgr.OnReviewLoopHeld = b.onWorkflowReviewLoopHeld
 	b.delegationMgr.OnCloseout = b.onDelegationCloseout
 	b.mgr.SetCoordinatorTurnFrameSource(&workflow.CoordinatorTurnFrameLoader{
 		Runs:           b.workflowMgr,
@@ -270,9 +270,6 @@ func (b delegationWiring) onWorkflowPhaseEnter(ctx context.Context, rc *workflow
 			env.Vars["review_verdict"] = verdicts
 		}
 		if manifest, err := b.workflowMgr.ManifestForRunID(ctx, rc.RunID); err == nil {
-			if rc.WorkflowVersion == "" {
-				rc.WorkflowVersion = manifest.Version
-			}
 			if phase, ok := manifest.PhaseByID(rc.Phase); ok {
 				if plan, found := workflow.FanoutPlanForPhase(vars, phase); found {
 					env.FanoutPlanText = workflow.FormatFanoutPlan(plan)
@@ -430,9 +427,9 @@ func (b delegationWiring) onWorkflowFeedbackResolved(ctx context.Context, sessio
 	b.mgr.NudgeCoordinatorLoop(ctx, sessionID, anchor.PhaseAdvanced, anchor.FeedbackReceived, "", anchor.Envelope{})
 }
 
-func (b delegationWiring) onWorkflowReviewProgress(ctx context.Context, sessionID string, progress workflow.ReviewProgress) {
+func (b delegationWiring) onWorkflowReviewLoopHeld(ctx context.Context, sessionID string, decisionRequired bool) {
 	id := anchor.ReviewLoopContinue
-	if progress == workflow.ReviewDecisionRequired {
+	if decisionRequired {
 		id = anchor.ReviewLoopDecide
 	}
 	b.mgr.Emit(ctx, sessionID, id, anchor.Envelope{})

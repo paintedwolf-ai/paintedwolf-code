@@ -116,8 +116,8 @@ func TestArchivedWorkflowReplay_100(t *testing.T) {
 	if manifest.Version != fixture.WorkflowVersion {
 		t.Fatalf("expected manifest version %s, got %s", fixture.WorkflowVersion, manifest.Version)
 	}
-	if !manifest.Sealed {
-		t.Fatalf("expected manifest to be marked Sealed")
+	if active, ok := h.WorkflowMgr.ActiveManifest(ctx, sess.ID); !ok || !manifest.Retired || active.Archive != "security-survey/"+fixture.WorkflowVersion {
+		t.Fatalf("expected the run to resolve its sealed archive, got retired=%v active=%+v", manifest.Retired, active)
 	}
 
 	for i, p := range fixture.Phases {

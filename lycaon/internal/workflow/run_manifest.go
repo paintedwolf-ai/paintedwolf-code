@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/lycaon/lycaon/internal/extpacks"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -75,33 +76,19 @@ func (m *RunManager) manifestForRun(ctx context.Context, run *api.WorkflowRun) (
 	if run == nil {
 		return workflowdef.Manifest{}, fmt.Errorf("workflow run required")
 	}
-	return m.manifestForSession(ctx, m.projectDirForRun(ctx, run), run.SessionID, run.WorkflowID, run.WorkflowVersion)
+	manifest, err := m.manifestForSession(ctx, m.projectDirForRun(ctx, run), run.SessionID, run.WorkflowID, run.WorkflowVersion)
+	if errors.Is(err, workflowdef.ErrUnknownWorkflow) {
+		return workflowdef.Manifest{}, &WorkflowVersionUnavailableError{WorkflowID: run.WorkflowID, Version: run.WorkflowVersion}
+	}
+	return manifest, err
 }
 
-// runnableManifestForRun validates that the workflow definition exists and is permitted to execute.
-// Under the compatibility contract (docs/compatibility.md), sealed archives are permitted to
-// execute, while retired unsealed versions and missing workflows fail with WorkflowVersionUnavailableError.
-func (m *RunManager) runnableManifestForRun(ctx context.Context, run *api.WorkflowRun) (workflowdef.Manifest, error) {
-	if run == nil {
-		return workflowdef.Manifest{}, fmt.Errorf("workflow run required")
+// runArchive names the sealed version a retired run reads its guidance from.
+func runArchive(manifest workflowdef.Manifest) string {
+	if !manifest.Retired {
+		return ""
 	}
-	manifest, err := m.manifestForRun(ctx, run)
-	if err != nil {
-		if errors.Is(err, workflowdef.ErrUnknownWorkflow) {
-			return workflowdef.Manifest{}, &WorkflowVersionUnavailableError{
-				WorkflowID: run.WorkflowID,
-				Version:    run.WorkflowVersion,
-			}
-		}
-		return workflowdef.Manifest{}, err
-	}
-	if manifest.Retired && !manifest.Sealed {
-		return workflowdef.Manifest{}, &WorkflowVersionUnavailableError{
-			WorkflowID: run.WorkflowID,
-			Version:    run.WorkflowVersion,
-		}
-	}
-	return manifest, nil
+	return extpacks.ArchiveKey(manifest.ID, manifest.Version)
 }
 
 func (m *RunManager) projectDirForRun(ctx context.Context, run *api.WorkflowRun) string {

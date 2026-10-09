@@ -25697,6 +25697,7 @@ components:
         - blueprint_draft_required
         - workflow_not_found
         - workflow_not_runnable
+        - workflow_version_unavailable
         - workflow_run_not_found
         - report_not_found
         - managed_secret_revoked
@@ -27955,7 +27956,8 @@ components:
       properties:
         id:
           type: string
-          minLength: 1
+          pattern: ^[A-Za-z0-9_.-]+$
+          description: Worker-local gap id; the host scopes it to the task.
         subject:
           type: string
           minLength: 1

@@ -2,7 +2,6 @@ package wiring
 
 import (
 	"context"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -15,21 +14,16 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// securitySurveyArchiveDir returns the sealed 1.0.0 archive directory for
-// archive-scoped gate-feedback assertions.
-func securitySurveyArchiveDir(t *testing.T) string {
-	t.Helper()
-	root := testutil.CheckoutRoot(t)
-	return filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "security-survey", "archive", "1.0.0")
-}
-
-func archiveScopedGateFeedback(t *testing.T, archiveDir string) *feedback.GateFeedbackCatalog {
+// runGateFeedback returns the gate feedback the session's active run reads.
+func runGateFeedback(t *testing.T, h *Harness, sessionID string) *feedback.GateFeedbackCatalog {
 	t.Helper()
 	stock, err := feedback.LoadGateFeedbackCatalog()
 	testutil.FailErr(t, "LoadGateFeedbackCatalog", err)
-	archiveScoped, err := stock.WithWorkflowArchive(archiveDir)
-	testutil.FailErr(t, "WithWorkflowArchive", err)
-	return archiveScoped
+	active, ok := h.WorkflowMgr.ActiveManifest(context.Background(), sessionID)
+	if !ok {
+		t.Fatal("session has no active workflow manifest")
+	}
+	return stock.WithWorkflowArchive(active.Archive)
 }
 
 type testRunSource struct {
@@ -110,7 +104,7 @@ func TestWorkflowResumption_100RetainsPromptRulesAndGateFeedback(t *testing.T) {
 	// Gate feedback resolution for 1.0.0 resolves the archived copy of
 	// evidence_passed:survey_challenged, which accepts only CHALLENGED and never
 	// mentions NEEDS_INVESTIGATION (the live 2.0.0 feedback adds it).
-	archiveCatalog := archiveScopedGateFeedback(t, securitySurveyArchiveDir(t))
+	archiveCatalog := runGateFeedback(t, h, sess.ID)
 	obs := archiveCatalog.ProjectObligations(ctx, []string{"evidence_passed:survey_challenged"}, "", map[string]any{})
 	if len(obs) == 0 {
 		t.Fatal("expected obligation for evidence_passed:survey_challenged")

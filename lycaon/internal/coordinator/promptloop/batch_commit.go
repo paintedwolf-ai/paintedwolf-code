@@ -34,7 +34,6 @@ func (l toolBatch) persistClassifiedToolOutcome(
 	if err != nil {
 		return history, err
 	}
-
 	return l.enrichCommittedToolRow(ctx, sessionID, sess, history, out.toolName, out.toolArgs, stored.ID, out.handleEligible, st)
 }
 
@@ -60,11 +59,6 @@ func (l toolBatch) enrichCommittedToolRow(
 		stored = overlay.stored
 		transient := overlay.transient
 		raw = &transient
-	}
-	if l.Deps.RecordReviewToolResult != nil {
-		if err := l.Deps.RecordReviewToolResult(ctx, sessionID, stored); err != nil {
-			return history, err
-		}
 	}
 	before := stored.Content
 	if stored.ToolResult != nil {

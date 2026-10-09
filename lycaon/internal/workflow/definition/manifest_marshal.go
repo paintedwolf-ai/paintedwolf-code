@@ -25,7 +25,6 @@ func manifestToWorkflowFile(m Manifest) workflowFile {
 	wf := workflowFile{
 		ID:      m.ID,
 		Version: m.Version,
-		Format:  m.Format,
 		Retired: m.Retired,
 		Attach:  manifestAttachYAML(m.Attach),
 		Request: manifestRequestYAML(m.Request),

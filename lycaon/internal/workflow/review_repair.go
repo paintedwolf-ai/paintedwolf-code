@@ -9,13 +9,27 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/jsonvalue"
 	"github.com/lycaon/lycaon/internal/reviewcoverage"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
+// ReviewRepairs accounts for refused verdicts and pauses a review whose repair
+// cannot converge, retaining the evidence an incomplete report needs.
+type ReviewRepairs struct{ *RunManager }
+
+// RecordReviewToolResult hands a durable transcript row to review repair accounting.
+func (m *RunManager) RecordReviewToolResult(ctx context.Context, sessionID string, msg api.Message) error {
+	return ReviewRepairs{m}.RecordToolResult(ctx, sessionID, msg)
+}
+
 const reviewRepairsKey = "review_repairs"
+
 const ReviewBlockedReason = "review_blocked"
+
 const reviewRepairMaxAttempts = 8
+
 const reviewRepairMaxRepeated = 3
 
 // ReviewRepairResponse deduplicates results from one model response.
@@ -69,9 +83,9 @@ func CurrentReviewRepair(vars map[string]any, phase string) (*ReviewRepair, erro
 	return nil, nil
 }
 
-// RecordReviewToolResult accounts for schema and semantic refusals alike, after
-// the screened result is durable. Transcript replay uses the same response id.
-func (m *RunManager) RecordReviewToolResult(ctx context.Context, sessionID string, msg api.Message) error {
+// RecordToolResult accounts for schema and semantic refusals alike, after the
+// screened result is durable. Transcript replay uses the same response id.
+func (m ReviewRepairs) RecordToolResult(ctx context.Context, sessionID string, msg api.Message) error {
 	result := msg.ToolResult
 	if result == nil || result.Tool != "submit_verdict" || result.Outcome != api.ToolResultOutcomeRejected {
 		return nil
@@ -151,7 +165,7 @@ func (m *RunManager) RecordReviewToolResult(ctx context.Context, sessionID strin
 	var boundary *api.Message
 	if blocked {
 		episode.State = "blocked"
-		snapshot := m.captureReviewSnapshot(ctx, run, manifest, vars, result.ToolArgs)
+		snapshot := m.captureSnapshot(ctx, run, manifest, vars, result.ToolArgs)
 		episode.Snapshot = &snapshot
 		if phase.ReviewLoop.CarriesCoverage() && len(snapshot.Unavailable) == 0 {
 			facts := BuildCoverageFacts(manifest, vars, snapshot.Workers, snapshot.Scans)
@@ -308,9 +322,9 @@ func resolveReviewRepair(vars map[string]any, phase string) (map[string]any, err
 	return next, nil
 }
 
-// RecoverReviewRepairs closes the crash window between transcript commit and
-// repair accounting. Accepted submissions delimit the current repair sequence.
-func (m *RunManager) RecoverReviewRepairs(ctx context.Context) error {
+// Recover closes the crash window between transcript commit and repair
+// accounting. Accepted submissions delimit the current repair sequence.
+func (m ReviewRepairs) Recover(ctx context.Context) error {
 	if m.Sessions == nil {
 		return nil
 	}
@@ -333,7 +347,7 @@ func (m *RunManager) RecoverReviewRepairs(ctx context.Context) error {
 			if msg.WorkflowRunID != run.ID {
 				continue
 			}
-			if err := m.RecordReviewToolResult(ctx, run.SessionID, msg); err != nil {
+			if err := m.RecordToolResult(ctx, run.SessionID, msg); err != nil {
 				return err
 			}
 		}
@@ -378,4 +392,102 @@ func finalReviewResponseResult(messages []api.Message, candidate api.Message) (b
 		}
 	}
 	return last == candidate.ID, nil
+}
+
+// ReviewSnapshot freezes the evidence used by an incomplete report at pause.
+// Its candidate remains explicitly separate from accepted verdict records.
+type ReviewSnapshot struct {
+	Vars        map[string]any   `json:"vars"`
+	Workers     []api.WorkerTask `json:"workers"`
+	Scans       []api.CodeScan   `json:"scans"`
+	Verdicts    []PhaseVerdict   `json:"verdicts"`
+	Candidate   map[string]any   `json:"candidate,omitempty"`
+	Unavailable []string         `json:"unavailable,omitempty"`
+}
+
+func (m ReviewRepairs) captureSnapshot(ctx context.Context, run *api.WorkflowRun, manifest workflowdef.Manifest, vars map[string]any, candidate map[string]any) ReviewSnapshot {
+	snapshot := ReviewSnapshot{Vars: map[string]any{}, Candidate: jsonvalue.CloneMap(candidate)}
+	// Only report inputs are copied, excluding repair episodes themselves.
+	for _, key := range []string{"fanout_plans"} {
+		if value, ok := vars[key]; ok {
+			snapshot.Vars[key] = value
+		}
+	}
+	if m.WorkerTasks != nil {
+		workers, err := m.WorkerTasks(ctx, run.ID)
+		if err != nil {
+			snapshot.Unavailable = append(snapshot.Unavailable, "worker ledger")
+		} else {
+			snapshot.Workers = workers
+		}
+	} else {
+		snapshot.Unavailable = append(snapshot.Unavailable, "worker ledger")
+	}
+	if m.Inventory != nil {
+		inventory, err := LoadRunInventory(ctx, m.Inventory, run.ID)
+		if err != nil {
+			snapshot.Unavailable = append(snapshot.Unavailable, "scan ledger")
+		} else {
+			snapshot.Scans = inventory.Scans
+		}
+	} else {
+		snapshot.Unavailable = append(snapshot.Unavailable, "scan ledger")
+	}
+	verdicts, err := ReviewVerdicts(ctx, m.RunManager, run, manifest)
+	snapshot.Verdicts = verdicts
+	if err != nil {
+		snapshot.Unavailable = append(snapshot.Unavailable, "review evidence ledger")
+	}
+	return snapshot
+}
+
+type reviewContractError struct{ error }
+
+const reviewContractInvalidCode = "WORKFLOW_REVIEW_CONTRACT_INVALID"
+
+// blockContract pauses a review whose offered contract cannot accept the
+// host's own facts, before any model attempt is spent.
+func (m ReviewRepairs) blockContract(ctx context.Context, runID string, cause error) error {
+	unlock := m.lockRunVars(runID)
+	defer unlock()
+	run, err := m.loadRun(ctx, runID)
+	if err != nil {
+		return err
+	}
+	if run.Status != api.WorkflowRunStatusRunning {
+		return nil
+	}
+	vars, err := m.Store.GetScaffoldVars(ctx, runID)
+	if err != nil {
+		return err
+	}
+	repairs, err := readReviewRepairs(vars)
+	if err != nil {
+		return err
+	}
+	manifest, err := m.manifestForRun(ctx, run)
+	if err != nil {
+		return err
+	}
+	snapshot := m.captureSnapshot(ctx, run, manifest, vars, nil)
+	now := time.Now().UTC()
+	repair := ReviewRepair{Snapshot: &snapshot, ID: uuid.NewString(), Phase: run.CurrentPhase, State: "blocked", CreatedAt: now, UpdatedAt: now, Diagnostics: []api.ToolFeedback{{Code: reviewContractInvalidCode, Details: map[string]any{"reason": cause.Error()}}}}
+	if len(snapshot.Unavailable) == 0 {
+		facts := BuildCoverageFacts(manifest, vars, snapshot.Workers, snapshot.Scans)
+		repair.CoverageFacts = &facts
+	}
+	repairs = append(repairs, repair)
+
+	vars = maps.Clone(vars)
+	vars[reviewRepairsKey] = repairs
+	run.Status = api.WorkflowRunStatusPaused
+	run.PauseReason = ReviewBlockedReason
+	run.PausedAt = &now
+	run.UpdatedAt = now
+	boundary := newCommandBoundary(run, run.Revision, "paused", run.CurrentPhase, ReviewBlockedReason)
+	if err = m.commitCommand(ctx, run, "review_contract_blocked", struct{ Code string }{reviewContractInvalidCode}, vars, &boundary, "", workflowWorkerMutation{HoldPending: true}, nil); err != nil {
+		return err
+	}
+	m.publishSession(ctx, run)
+	return nil
 }

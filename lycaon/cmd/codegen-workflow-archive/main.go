@@ -1,242 +1,178 @@
-// Command codegen-workflow-archive extracts a released workflow and its referenced units
-// byte-for-byte from a git release tag into a sealed archive directory with SHA256SUMS.
+// Command codegen-workflow-archive seals a released workflow version: it copies
+// the manifest, the guidance its injects render, and its pack's gate feedback
+// from a release tag into archive/<workflow>/<version>/ with a SHA256SUMS
+// ledger. --check verifies an existing archive against the tag.
 package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
-	"os/exec"
+	"path"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 
-	"gopkg.in/yaml.v3"
+	"github.com/lycaon/lycaon/internal/configlayout"
+	"github.com/lycaon/lycaon/internal/extpacks"
+	"github.com/lycaon/lycaon/internal/fseffect"
+	"github.com/lycaon/lycaon/internal/gitexec"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 )
 
-type manifestInject struct {
-	Render string `yaml:"render"`
-}
-
-type manifestGate struct {
-	Predicate string `yaml:"predicate"`
-}
-
-func (g *manifestGate) UnmarshalYAML(node *yaml.Node) error {
-	if node.Kind == yaml.ScalarNode {
-		g.Predicate = node.Value
-		return nil
-	}
-	var obj struct {
-		Predicate string `yaml:"predicate"`
-	}
-	if err := node.Decode(&obj); err != nil {
-		return err
-	}
-	g.Predicate = obj.Predicate
-	return nil
-}
-
-type manifestPhase struct {
-	ID    string         `yaml:"id"`
-	Gates []manifestGate `yaml:"gates"`
-}
-
-type manifestFile struct {
-	ID      string           `yaml:"id"`
-	Version string           `yaml:"version"`
-	Phases  []manifestPhase  `yaml:"phases"`
-	Injects []manifestInject `yaml:"injects"`
-}
-
-var includeRe = regexp.MustCompile(`(?:\{%|\{\{)\s*include\s+["']([^"']+)["']`)
+const sumsFile = "SHA256SUMS"
 
 func main() {
-	checkOnly := flag.Bool("check", false, "verify archive matches tag without writing")
+	checkOnly := flag.Bool("check", false, "verify the archive matches the tag without writing")
 	flag.Parse()
-
 	args := flag.Args()
-	if len(args) < 3 {
-		fmt.Fprintf(os.Stderr, "Usage: codegen-workflow-archive [--check] <pack> <workflow> <tag>\n")
-		fmt.Fprintf(os.Stderr, "Example: codegen-workflow-archive painted-wolf/security-survey security-survey v1.0.0\n")
+	if len(args) != 3 {
+		fmt.Fprintln(os.Stderr, "usage: codegen-workflow-archive [--check] <pack> <workflow> <tag>")
+		fmt.Fprintln(os.Stderr, "example: codegen-workflow-archive painted-wolf/security-survey security-survey v1.0.0")
 		os.Exit(2)
 	}
-
-	packID := strings.Trim(args[0], "/")
-	workflowID := strings.Trim(args[1], "/")
-	tag := strings.TrimSpace(args[2])
-
-	repoRoot, err := findRepoRoot()
+	moduleRoot := configlayout.FindModuleRoot()
+	if moduleRoot == "" {
+		fmt.Fprintln(os.Stderr, "codegen-workflow-archive: run inside a checkout")
+		os.Exit(1)
+	}
+	repoRoot := filepath.Dir(moduleRoot)
+	release := gitRelease{ctx: context.Background(), repoRoot: repoRoot, tag: strings.TrimSpace(args[2])}
+	packRel := path.Join("lycaon", "config", "packs", strings.Trim(args[0], "/"))
+	report, err := seal(release, packRel, strings.Trim(args[1], "/"), filepath.Join(repoRoot, filepath.FromSlash(packRel)), *checkOnly)
 	if err != nil {
-		fatal(fmt.Errorf("find repo root: %w", err))
+		fmt.Fprintf(os.Stderr, "codegen-workflow-archive: %v\n", err)
+		os.Exit(1)
 	}
-
-	// 1. Read manifest from git tag
-	manifestGitRel := filepath.ToSlash(filepath.Join("lycaon", "config", "packs", packID, "workflows", workflowID, "workflow.yaml"))
-	manifestBytes, err := gitShow(repoRoot, tag, manifestGitRel)
-	if err != nil {
-		fatal(fmt.Errorf("git show %s:%s: %w", tag, manifestGitRel, err))
-	}
-
-	var m manifestFile
-	if err := yaml.Unmarshal(manifestBytes, &m); err != nil {
-		fatal(fmt.Errorf("unmarshal manifest YAML: %w", err))
-	}
-
-	version := strings.TrimSpace(m.Version)
-	if version == "" {
-		fatal(fmt.Errorf("manifest at %s has empty version", manifestGitRel))
-	}
-
-	// 2. Validate that replay fixtures exist before sealing
-	replayDir := filepath.Join(repoRoot, "lycaon", "test", "wiring", "testdata", "replay", fmt.Sprintf("%s@%s", workflowID, version))
-	if entries, err := os.ReadDir(replayDir); err != nil || len(entries) == 0 {
-		fatal(fmt.Errorf("refusing to seal: missing replay fixtures in %s", replayDir))
-	}
-
-	// 3. Resolve all units referenced by the manifest from the git tag
-	archiveFiles := make(map[string][]byte)
-	archiveFiles["workflow.yaml"] = manifestBytes
-
-	packGuidanceGitPrefix := filepath.ToSlash(filepath.Join("lycaon", "config", "packs", packID, "guidance"))
-
-	// Resolve injects / prompts
-	for _, inj := range m.Injects {
-		render := strings.TrimSpace(inj.Render)
-		if render == "" {
-			continue
-		}
-		// Look for .md then .yaml
-		promptGitRelMD := filepath.ToSlash(filepath.Join(packGuidanceGitPrefix, render+".md"))
-		promptGitRelYAML := filepath.ToSlash(filepath.Join(packGuidanceGitPrefix, render+".yaml"))
-
-		var promptBytes []byte
-		var promptArchiveRel string
-		if data, err := gitShow(repoRoot, tag, promptGitRelMD); err == nil {
-			promptBytes = data
-			promptArchiveRel = filepath.ToSlash(filepath.Join("guidance", render+".md"))
-		} else if data, err := gitShow(repoRoot, tag, promptGitRelYAML); err == nil {
-			promptBytes = data
-			promptArchiveRel = filepath.ToSlash(filepath.Join("guidance", render+".yaml"))
-		} else {
-			fatal(fmt.Errorf("prompt %q referenced in injects not found in tag %s", render, tag))
-		}
-
-		archiveFiles[promptArchiveRel] = promptBytes
-
-		// Scan for included partials
-		matches := includeRe.FindAllSubmatch(promptBytes, -1)
-		for _, match := range matches {
-			if len(match) < 2 {
-				continue
-			}
-			incName := string(match[1])
-			incGitRel := filepath.ToSlash(filepath.Join(packGuidanceGitPrefix, incName))
-			if incBytes, err := gitShow(repoRoot, tag, incGitRel); err == nil {
-				archiveFiles[filepath.ToSlash(filepath.Join("guidance", incName))] = incBytes
-			}
-		}
-	}
-
-	// Resolve gate feedback files from phase gate predicates
-	for _, phase := range m.Phases {
-		for _, gate := range phase.Gates {
-			pred := strings.TrimSpace(gate.Predicate)
-			parts := strings.SplitN(pred, ":", 2)
-			if len(parts) != 2 {
-				continue
-			}
-			category, leaf := parts[0], parts[1]
-			fbName := fmt.Sprintf("%s-%s.yaml", category, leaf)
-			fbGitRel := filepath.ToSlash(filepath.Join(packGuidanceGitPrefix, "gate-feedback", fbName))
-			if fbBytes, err := gitShow(repoRoot, tag, fbGitRel); err == nil {
-				archiveFiles[filepath.ToSlash(filepath.Join("guidance", "gate-feedback", fbName))] = fbBytes
-			}
-		}
-	}
-
-	// 4. Compute SHA256 sums
-	sortedPaths := make([]string, 0, len(archiveFiles))
-	for p := range archiveFiles {
-		sortedPaths = append(sortedPaths, p)
-	}
-	sort.Strings(sortedPaths)
-
-	var sumsBuf bytes.Buffer
-	for _, p := range sortedPaths {
-		sum := sha256.Sum256(archiveFiles[p])
-		fmt.Fprintf(&sumsBuf, "%s  %s\n", hex.EncodeToString(sum[:]), p)
-	}
-	expectedSums := sumsBuf.Bytes()
-
-	archiveDir := filepath.Join(repoRoot, "lycaon", "config", "packs", packID, "archive", version)
-
-	if *checkOnly {
-		// Verify archive directory matches
-		currentSums, err := os.ReadFile(filepath.Join(archiveDir, "SHA256SUMS"))
-		if err != nil {
-			fatal(fmt.Errorf("archive %s not found: %w", archiveDir, err))
-		}
-		if !bytes.Equal(bytes.TrimSpace(currentSums), bytes.TrimSpace(expectedSums)) {
-			fatal(fmt.Errorf("archive SHA256SUMS in %s does not match tag %s", archiveDir, tag))
-		}
-		for _, p := range sortedPaths {
-			curBytes, err := os.ReadFile(filepath.Join(archiveDir, filepath.FromSlash(p)))
-			if err != nil {
-				fatal(fmt.Errorf("missing file in archive %s: %s", archiveDir, p))
-			}
-			if !bytes.Equal(curBytes, archiveFiles[p]) {
-				fatal(fmt.Errorf("file %s in %s differs from tag %s", p, archiveDir, tag))
-			}
-		}
-		fmt.Printf("Archive %s is byte-identical to tag %s (%d files verified)\n", archiveDir, tag, len(sortedPaths))
-		return
-	}
-
-	// 5. Write archive directory
-	if err := os.MkdirAll(archiveDir, 0755); err != nil {
-		fatal(fmt.Errorf("mkdir %s: %w", archiveDir, err))
-	}
-
-	for _, p := range sortedPaths {
-		fullPath := filepath.Join(archiveDir, filepath.FromSlash(p))
-		if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
-			fatal(fmt.Errorf("mkdir parent %s: %w", fullPath, err))
-		}
-		if err := os.WriteFile(fullPath, archiveFiles[p], 0644); err != nil {
-			fatal(fmt.Errorf("write %s: %w", fullPath, err))
-		}
-	}
-
-	sumsPath := filepath.Join(archiveDir, "SHA256SUMS")
-	if err := os.WriteFile(sumsPath, expectedSums, 0644); err != nil {
-		fatal(fmt.Errorf("write %s: %w", sumsPath, err))
-	}
-
-	fmt.Printf("Successfully sealed %s from tag %s into %s (%d files)\n", workflowID, tag, archiveDir, len(sortedPaths))
+	fmt.Println(report)
 }
 
-func findRepoRoot() (string, error) {
-	cmd := exec.Command("git", "rev-parse", "--show-toplevel")
-	out, err := cmd.Output()
+// releaseSource reads one release's tree.
+type releaseSource interface {
+	show(rel string) ([]byte, error)
+	list(dir string) ([]string, error)
+}
+
+// seal writes or verifies the archive of workflowID under packDir.
+func seal(release releaseSource, packRel, workflowID, packDir string, checkOnly bool) (string, error) {
+	files, version, err := sealedFiles(release, packRel, workflowID)
 	if err != nil {
 		return "", err
 	}
-	return strings.TrimSpace(string(out)), nil
+	archiveRel := filepath.Join(extpacks.ArchiveKindRoot, workflowID, version)
+	archiveDir := filepath.Join(packDir, archiveRel)
+	if checkOnly {
+		if err := verifyArchive(archiveDir, files); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("%s matches the release (%d files)", archiveDir, len(files)-1), nil
+	}
+	for rel, data := range files {
+		if _, err := fseffect.Replace(fseffect.ReplaceRequest{
+			Location: fseffect.Location{Root: packDir, Rel: filepath.Join(archiveRel, filepath.FromSlash(rel))},
+			Source:   bytes.NewReader(data),
+			Mode:     0o644,
+			DirMode:  0o755,
+		}); err != nil {
+			return "", err
+		}
+	}
+	return fmt.Sprintf("sealed %s@%s into %s (%d files)", workflowID, version, archiveDir, len(files)-1), nil
 }
 
-func gitShow(repoRoot, tag, gitRelPath string) ([]byte, error) {
-	spec := fmt.Sprintf("%s:%s", tag, filepath.ToSlash(gitRelPath))
-	cmd := exec.Command("git", "show", spec)
-	cmd.Dir = repoRoot
-	return cmd.Output()
+// sealedFiles reads the sealed set from the release, keyed by archive-relative
+// path, with its SHA256SUMS ledger.
+func sealedFiles(release releaseSource, packRel, workflowID string) (map[string][]byte, string, error) {
+	manifestBytes, err := release.show(path.Join(packRel, "workflows", workflowID, "workflow.yaml"))
+	if err != nil {
+		return nil, "", err
+	}
+	m, err := workflowdef.ParseManifestYAML(manifestBytes)
+	if err != nil {
+		return nil, "", fmt.Errorf("released manifest: %w", err)
+	}
+	files := map[string][]byte{"workflow.yaml": manifestBytes}
+	for _, inject := range m.Injects {
+		if render := strings.TrimSpace(inject.Render); render != "" {
+			rel := path.Join("guidance", render+".md")
+			if files[rel], err = release.show(path.Join(packRel, rel)); err != nil {
+				return nil, "", fmt.Errorf("inject %q: %w", render, err)
+			}
+		}
+	}
+	feedbackDir := path.Join("guidance", extpacks.GuidanceGateFeedbackDir)
+	names, err := release.list(path.Join(packRel, feedbackDir))
+	if err != nil {
+		return nil, "", err
+	}
+	for _, name := range names {
+		if !strings.HasSuffix(name, ".yaml") {
+			continue
+		}
+		rel := path.Join(feedbackDir, name)
+		if files[rel], err = release.show(path.Join(packRel, rel)); err != nil {
+			return nil, "", err
+		}
+	}
+	files[sumsFile] = checksums(files)
+	return files, m.Version, nil
 }
 
-func fatal(err error) {
-	fmt.Fprintf(os.Stderr, "codegen-workflow-archive: %v\n", err)
-	os.Exit(1)
+func checksums(files map[string][]byte) []byte {
+	paths := make([]string, 0, len(files))
+	for rel := range files {
+		paths = append(paths, rel)
+	}
+	sort.Strings(paths)
+	var out bytes.Buffer
+	for _, rel := range paths {
+		sum := sha256.Sum256(files[rel])
+		fmt.Fprintf(&out, "%s  %s\n", hex.EncodeToString(sum[:]), rel)
+	}
+	return out.Bytes()
+}
+
+func verifyArchive(archiveDir string, files map[string][]byte) error {
+	for rel, want := range files {
+		got, err := os.ReadFile(filepath.Join(archiveDir, filepath.FromSlash(rel)))
+		if err != nil {
+			return fmt.Errorf("archive %s: %w", archiveDir, err)
+		}
+		if !bytes.Equal(got, want) {
+			return fmt.Errorf("archive %s: %s differs from the release", archiveDir, rel)
+		}
+	}
+	return nil
+}
+
+// gitRelease reads a tagged tree through the bundled git.
+type gitRelease struct {
+	ctx      context.Context
+	repoRoot string
+	tag      string
+}
+
+func (g gitRelease) show(rel string) ([]byte, error) {
+	return g.run("show", g.tag+":"+rel)
+}
+
+func (g gitRelease) list(dir string) ([]string, error) {
+	out, err := g.run("ls-tree", "--name-only", g.tag+":"+dir)
+	return strings.Fields(string(out)), err
+}
+
+func (g gitRelease) run(args ...string) ([]byte, error) {
+	out, code, err := gitexec.Run(g.ctx, g.repoRoot, args, gitexec.Opts{})
+	if err == nil && code != 0 {
+		err = errors.New(string(bytes.TrimSpace(out)))
+	}
+	if err != nil {
+		return nil, fmt.Errorf("git %s: %w", strings.Join(args, " "), err)
+	}
+	return out, nil
 }

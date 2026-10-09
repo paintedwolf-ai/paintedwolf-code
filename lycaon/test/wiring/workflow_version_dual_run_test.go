@@ -73,18 +73,18 @@ func TestWorkflowVersionDualRun_Concurrent100And200Isolation(t *testing.T) {
 		t.Fatalf("expected coordinator-security-challenge for 2.0.0, got %+v", binding200)
 	}
 
-	// Verify gate feedback resolution for both versions
-	m100, err := h.WorkflowMgr.ManifestForRunID(ctx, runIDA)
-	testutil.FailErr(t, "ManifestForRunID 1.0.0", err)
-	if !m100.Sealed || m100.ArchiveDir == "" {
-		t.Fatalf("expected 1.0.0 manifest to be sealed with ArchiveDir set, got %+v", m100)
+	// Each run reads gate feedback from its own version.
+	active100, ok := h.WorkflowMgr.ActiveManifest(ctx, sessA.ID)
+	if !ok || active100.Archive != "security-survey/1.0.0" {
+		t.Fatalf("1.0.0 run archive = %+v, want security-survey/1.0.0", active100)
+	}
+	if active200, ok := h.WorkflowMgr.ActiveManifest(ctx, sessB.ID); !ok || active200.Archive != "" {
+		t.Fatalf("2.0.0 run archive = %+v, want the live definition", active200)
 	}
 
 	catalog, err := feedback.LoadGateFeedbackCatalog()
 	testutil.FailErr(t, "LoadGateFeedbackCatalog", err)
-
-	cat100, err := catalog.WithWorkflowArchive(m100.ArchiveDir)
-	testutil.FailErr(t, "WithWorkflowArchive 1.0.0", err)
+	cat100 := catalog.WithWorkflowArchive(active100.Archive)
 
 	obs100 := cat100.ProjectObligations(ctx, []string{"evidence_passed:survey_challenged"}, "", nil)
 	if len(obs100) == 0 || obs100[0].ID != "evidence_passed:survey_challenged" {

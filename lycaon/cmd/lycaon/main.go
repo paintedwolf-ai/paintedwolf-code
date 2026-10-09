@@ -100,9 +100,6 @@ func run(ctx context.Context, args []string) error {
 		return runBrowser(ctx, rest)
 	case "decide":
 		return runDecide(ctx, rest)
-	case "pack":
-		installAuthorCatalog(ctx)
-		return runPack(ctx, rest)
 	default:
 		return fmt.Errorf("unknown command %q", verb)
 	}

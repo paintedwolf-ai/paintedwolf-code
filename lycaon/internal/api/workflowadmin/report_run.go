@@ -90,16 +90,18 @@ func (s *Handler) BuildRunReportInput(ctx context.Context, runID string) (report
 	unreported := reportUnreported(findings, claims)
 
 	input := report.ReportInput{
-		Title:            name,
-		Headline:         reportHeadline(completion),
-		RunID:            run.ID,
-		Project:          s.reportProjectLabel(ctx, run.ProjectID),
-		StartedAt:        reportStartedAt(run),
-		CompletedAt:      completedAt,
-		Workflow:         &report.ReportWorkflow{ID: strings.TrimSpace(run.WorkflowID), Version: strings.TrimSpace(run.WorkflowVersion)},
-		Workforce:        workforceFor(sess, msgs, inRun),
+		ReportHeader: report.ReportHeader{
+			Title:       name,
+			Headline:    reportHeadline(completion),
+			RunID:       run.ID,
+			Project:     s.reportProjectLabel(ctx, run.ProjectID),
+			StartedAt:   reportStartedAt(run),
+			CompletedAt: completedAt,
+			Workflow:    &report.ReportWorkflow{ID: strings.TrimSpace(run.WorkflowID), Version: strings.TrimSpace(run.WorkflowVersion)},
+			Workforce:   workforceFor(sess, msgs, inRun),
+			Summary:     reportSummary(completion),
+		},
 		Synthesis:        completion.Content,
-		Summary:          reportSummary(completion),
 		Findings:         findingRows(findings),
 		FindingsLabel:    manifest.ReportFindingsLabel(),
 		Limits:           reportLimits(completion),

@@ -273,7 +273,7 @@ func TestOpenRefusesBaselineMismatchWithoutChangingStore(t *testing.T) {
 
 	writer, err := openWriter(t.Context(), dbPath, StoreOptions{})
 	testutil.FailErr(t, "open writer", err)
-	_, err = writer.Exec(fmt.Sprintf(`PRAGMA user_version = %d`, SchemaVersion+1))
+	_, err = writer.Exec(`PRAGMA user_version = 2`)
 	testutil.FailErr(t, "change baseline marker", err)
 	testutil.FailErr(t, "close writer", writer.Close())
 	before, err := os.ReadFile(dbPath)
@@ -301,8 +301,8 @@ func TestOpenRefusesBaselineMismatchWithoutChangingStore(t *testing.T) {
 	t.Cleanup(func() { _ = writer.Close() })
 	version, err := ReadUserVersion(t.Context(), writer)
 	testutil.FailErr(t, "read baseline marker", err)
-	if version != SchemaVersion+1 {
-		t.Fatalf("user_version = %d want preserved mismatch %d", version, SchemaVersion+1)
+	if version != 2 {
+		t.Fatalf("user_version = %d want preserved mismatch 2", version)
 	}
 }
 

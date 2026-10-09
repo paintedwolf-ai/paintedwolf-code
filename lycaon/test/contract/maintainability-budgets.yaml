@@ -25,7 +25,7 @@ exceptions:
             reason: Predates the limits; fixes still land here while the package is decomposed (#271).
         lycaon/internal/workflow/workflow.RunManager:
             cap: 6500
-            reason: The workflow run lifecycle (advance, gates, topology settlement, closeout, report delivery, runtime snapshots) shares one manager's run locks and ledger; splitting it needs its own change with a lifecycle and locking review.
+            reason: The workflow run lifecycle (advance, gates, topology settlement, closeout, report delivery, runtime snapshots) shares one manager's run locks and ledger; the services it splits into, with their lifecycle and locking review, are tracked in #351. New lifecycle behavior lands on its own service type, as review repair and inventory accounting do.
     go_receiver_methods:
         lycaon/internal/coordinator/assembly/assembly.AssemblyEngine:
             cap: 55
@@ -35,7 +35,7 @@ exceptions:
             reason: Predates the limits; fixes still land here while the package is decomposed (#271).
         lycaon/internal/workflow/workflow.RunManager:
             cap: 250
-            reason: The workflow run lifecycle (advance, gates, topology settlement, closeout, report delivery, runtime snapshots) shares one manager's run locks and ledger; splitting it needs its own change with a lifecycle and locking review.
+            reason: The workflow run lifecycle (advance, gates, topology settlement, closeout, report delivery, runtime snapshots) shares one manager's run locks and ledger; the services it splits into, with their lifecycle and locking review, are tracked in #351. New lifecycle behavior lands on its own service type, as review repair and inventory accounting do.
     go_struct_fields:
         lycaon/internal/session/session.Manager:
             cap: 145
@@ -45,10 +45,16 @@ exceptions:
             cap: 1100
             reason: Predates the limits; fixes still land here while the package is decomposed (#271).
     test_directories:
+        lycaon/internal/workflow:
+            cap: 170
+            reason: Predates the limits; its tests exercise RunManager's unexported lifecycle and move with the services split out of it (#353, after #351).
         lycaon/internal/session:
             cap: 265
             reason: Predates the limits; fixes still land here while the package is decomposed (#271).
     source_directories:
+        lycaon/internal/workflow:
+            cap: 125
+            reason: Predates the limits; its files share RunManager's unexported run locks and command journal, so they leave the package as the services split out of RunManager gain narrow interfaces (#353, after #351).
         lycaon/internal/session:
             cap: 210
             reason: Predates the limits; fixes still land here while the package is decomposed (#271).

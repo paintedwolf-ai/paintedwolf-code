@@ -593,39 +593,31 @@ generate the actual notices before packaging. The catalog derives the notice
 and analyzer setup inputs from each lane's targets, so the gate and its setup
 remain aligned.
 
-## PR compatibility gate
+## Released-version compatibility
 
-Every pull request proves the durable surfaces it touches against released
-material, before review. The gate composes three proofs, all in the shared
-`./task` queue:
+These suites hold the current host to what releases shipped:
 
 - **Sealed archive replay.** `lycaon/test/wiring/archived_workflow_replay_test.go`
-  replays the sealed v1.0.0 security-survey workflow against the current runtime:
-  exact archived prompt bindings, real `submit_verdict` semantics under the
-  sealed verdict schemas (including enum rejection), reviewer-roster
-  enforcement, and host-driven phase advance. Output drift fails unless
-  documented in the fixture's `changes.yaml` with `spec_fix` or `safety`.
+  replays the sealed security-survey 1.0.0 workflow against the current runtime:
+  its archived prompt bindings, real `submit_verdict` semantics under the sealed
+  verdict schemas, reviewer-roster enforcement, and host-driven phase advance.
+  Output drift fails unless the fixture's `changes.yaml` documents it as
+  `spec_fix` or `safety`.
 - **Frozen store resume.**
-  `lycaon/test/wiring/archived_run_state_resume_test.go` copies the frozen
-  v1.0.0 corpus database into a temp directory and exercises the durable-store
-  contract: the store either upgrades through a registered migration route and
-  resumes its 1.0.0 runs with provenance recording, or — while no route covers
-  the shipped revision — is refused into recovery without a byte changing.
-  Hand-mutating the schema is never part of the contract, and a test that does
-  it is wrong.
-- **Live-contract wiring.** The remaining wiring and contract suites
-  (`./task test:wiring`, `./task test:contract`) run against the current
-  released artifacts only — removed versions are never kept alive for tests,
-  and repointing them is part of removing a release.
+  `lycaon/test/wiring/archived_run_state_resume_test.go` copies each frozen
+  release corpus database into a temp directory, upgrades the copy through the
+  registered route to the current baseline, and requires every preserved run
+  to resolve its pinned definition, live or sealed. Hand-mutating the schema is
+  never part of the contract, and a test that does it is wrong.
+- **Sealed archive integrity.** The `workflows` contract suite checks each
+  archive against its `SHA256SUMS`, loads sealed versions through the catalog,
+  and renders their guidance through the archive layer.
 
-The hosted `CI/check` profile requires the upgrade corpus alongside these
-suites, so a PR cannot pass while a released store shape is unregistered. The
-upgrade corpus fixtures under `lycaon/testdata/upgrade-corpus/` are sealed at
-each release: their `store.db`, `backup.zip`, and manifest digests are frozen,
-and a release that changes a released schema must ship a registered baseline
-and migration step in the same change. Fixture seeds come from
-[`scripts/upgrade-corpus-boot.sh`](../scripts/upgrade-corpus-boot.sh), which
-self-tests its own immutability and refusal behavior.
+Contract suites run in both gates; wiring suites run in the full gate. Upgrade
+corpus fixtures under `lycaon/testdata/upgrade-corpus/` are sealed at each
+release, and a release that changes a released schema ships a registered
+baseline and migration step in the same change
+([compatibility](compatibility.md)).
 
 ## Fixtures
 

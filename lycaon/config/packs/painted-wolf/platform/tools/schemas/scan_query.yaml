@@ -13,9 +13,10 @@ schema:
       additionalProperties: false
       required: [scanner, paths]
       properties:
-        scanner: {type: string, minLength: 1}
+        scanner: {type: string, minLength: 1, description: Scanner whose groups the set-aside selects.}
         paths:
           type: array
+          description: Path globs every selected group must lie wholly inside.
           minItems: 1
           items: {type: string, minLength: 1}
     inventory_revision:

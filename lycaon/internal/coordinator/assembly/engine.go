@@ -2,7 +2,6 @@ package assembly
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"sync/atomic"
@@ -10,12 +9,10 @@ import (
 	"github.com/lycaon/lycaon/internal/agentdef"
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/catalogview"
-	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/capability"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
-	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/guidance/feedback"
 	"github.com/lycaon/lycaon/internal/heldcall"
@@ -23,7 +20,6 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/transcript"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -40,8 +36,8 @@ type AgentProfileResolver interface {
 // ActiveWorkflowManifest holds runtime fields from the active workflow manifest.
 type ActiveWorkflowManifest struct {
 	CoordinatorProfile string
-	Sealed             bool
-	ArchiveDir         string
+	// Archive names the sealed version a retired run reads its guidance from.
+	Archive string
 }
 
 // WorkflowManifestSource supplies active workflow manifest fields for assembly.
@@ -167,134 +163,6 @@ func (e *AssemblyEngine) deps() AssemblyDeps {
 func (e *AssemblyEngine) repoKnownEmpty(ctx context.Context, workspacePath string) bool {
 	fn := e.deps().RepoKnownEmpty
 	return fn != nil && fn(ctx, workspacePath)
-}
-
-// ResolveSystemPromptTemplate selects the session's system prompt.
-func ResolveSystemPromptTemplate(sess *api.Session, agents AgentProfileResolver, coordinatorProfile string) string {
-	if sess != nil && strings.TrimSpace(sess.AgentType) != "" && agents != nil {
-		if p, err := agents.Get(strings.TrimSpace(sess.AgentType)); err == nil {
-			if ref := strings.TrimSpace(p.SystemPromptTemplate); ref != "" {
-				return ref
-			}
-		}
-	}
-	if cp := strings.TrimSpace(coordinatorProfile); cp != "" && agents != nil {
-		if p, err := agents.Get(cp); err == nil {
-			if ref := strings.TrimSpace(p.SystemPromptTemplate); ref != "" {
-				return ref
-			}
-		}
-	}
-	if agents != nil {
-		if p, err := agents.Get(orchestration.ProfileCoordinator); err == nil {
-			if ref := strings.TrimSpace(p.SystemPromptTemplate); ref != "" {
-				return ref
-			}
-		}
-	}
-	return defaultCoordinatorPromptTemplate
-}
-
-func (e *AssemblyEngine) resolveSystemPromptRef(ctx context.Context, sess *api.Session) (string, error) {
-	coordinatorProfile := ""
-	if e != nil && e.deps().Workflows != nil {
-		if manifest, ok := e.deps().Workflows.ActiveManifest(ctx, sess.ID); ok {
-			coordinatorProfile = manifest.CoordinatorProfile
-		}
-	}
-	return ResolveSystemPromptTemplate(sess, e.agentsForSession(ctx, sess), coordinatorProfile), nil
-}
-
-func (e *AssemblyEngine) agentsForSession(ctx context.Context, sess *api.Session) AgentProfileResolver {
-	if view := e.sessionCatalogView(ctx, sess); view != nil {
-		return view
-	}
-	return e.deps().Agents
-}
-
-// projectPrompts returns the session-scoped prompt engine.
-func (e *AssemblyEngine) projectPrompts(ctx context.Context, sess *api.Session) prompts.PromptTemplateEngine {
-	pe := e.deps().Prompts
-	fe, ok := pe.(*prompts.FileTemplateEngine)
-	if !ok || fe == nil || sess == nil {
-		return pe
-	}
-	if e != nil && e.deps().Workflows != nil {
-		if manifest, ok := e.deps().Workflows.ActiveManifest(ctx, sess.ID); ok && manifest.Sealed && manifest.ArchiveDir != "" {
-			fe = fe.WithWorkflowArchive(manifest.ArchiveDir)
-		}
-	}
-	// Empty trusted roots disable project prompt layers.
-	if resolve := e.deps().ProjectOverlayRootPaths; resolve != nil {
-		paths := resolve(ctx, sess)
-		if len(paths) == 0 {
-			return e.attachSessionCatalog(ctx, sess, fe)
-		}
-		return e.attachSessionCatalog(ctx, sess, fe.WithProjectOverlays(paths))
-	}
-	return e.attachSessionCatalog(ctx, sess, fe.WithProjectOverlay(sess.WorkspacePath))
-}
-
-// projectPromptsSnapshot binds one immutable prompt source for the whole turn.
-func (e *AssemblyEngine) projectPromptsSnapshot(ctx context.Context, sess *api.Session) (prompts.PromptTemplateEngine, string, error) {
-	pe := e.projectPrompts(ctx, sess)
-	if pe == nil {
-		return nil, "", nil
-	}
-	fe, ok := pe.(*prompts.FileTemplateEngine)
-	if !ok {
-		return pe, "", nil
-	}
-	snapshot, err := fe.Snapshot()
-	if err != nil {
-		return nil, "", fmt.Errorf("prompt source snapshot: %w", err)
-	}
-	revision := snapshot.Revision()
-	return snapshot, revision, nil
-}
-
-func (e *AssemblyEngine) attachSessionCatalog(ctx context.Context, sess *api.Session, fe *prompts.FileTemplateEngine) *prompts.FileTemplateEngine {
-	if e == nil || fe == nil {
-		return fe
-	}
-	if resolve := e.deps().SessionView; resolve != nil {
-		if view := resolve(ctx, sess); view != nil && view.Catalog != nil {
-			return fe.WithEffectiveCatalog(view.Catalog)
-		}
-		return fe
-	}
-	return fe
-}
-
-// sessionCatalogView resolves the turn view once (nil when unwired).
-func (e *AssemblyEngine) sessionCatalogView(ctx context.Context, sess *api.Session) *catalogview.View {
-	if e == nil {
-		return nil
-	}
-	if resolve := e.deps().SessionView; resolve != nil {
-		return resolve(ctx, sess)
-	}
-	return nil
-}
-
-func (e *AssemblyEngine) renderSystemPromptWithEngine(ctx context.Context, pe prompts.PromptTemplateEngine, sess *api.Session, templateRef string, vars map[string]any) (string, error) {
-	if e == nil || pe == nil {
-		return "", errPromptEngineNotConfigured
-	}
-	agentType := ""
-	if sess != nil {
-		agentType = strings.TrimSpace(sess.AgentType)
-	}
-	if fe, ok := pe.(*prompts.FileTemplateEngine); ok && agentType != "" {
-		out, err := prompts.RenderPersona(ctx, fe, agentType, vars)
-		if err == nil {
-			return out, nil
-		}
-		if !errors.Is(err, prompts.ErrUnknownAgent) {
-			return "", err
-		}
-	}
-	return pe.Render(ctx, templateRef, vars)
 }
 
 func (e *AssemblyEngine) mergeVisibleTools(ctx context.Context, sess *api.Session, frame inject.CoordinatorTurnFrame, vars map[string]any) {
@@ -601,109 +469,6 @@ func (e *AssemblyEngine) markPromptCacheBreakpoints(out []api.Message, standingI
 	mark(historyIdx, api.PromptCacheTierHistory)
 }
 
-// appendWorkerLegInject builds changed worker context for the turn.
-func (e *AssemblyEngine) appendWorkerLegInject(ctx context.Context, sess *api.Session, rendered string, turn *TurnAssemblyScratch) ([]api.Message, error) {
-	deps := e.deps()
-	legCtx, err := deps.WorkerContext.BuildWorkerPromptContext(sess.ID, sess)
-	if err != nil {
-		return nil, err
-	}
-	legCtx.Checklist = FilterChecklistDedup(legCtx.Checklist, ExtractProcessBullets(rendered))
-	if deps.SiblingNoteDelivery != nil {
-		page, err := deps.SiblingNoteDelivery.PrepareSiblingNotes(ctx, sess.ID, siblingNoteInjectCap)
-		if err != nil {
-			return nil, err
-		}
-		legCtx.SiblingNotes = page.Notes
-		legCtx.SiblingNotesMore = page.More
-		legCtx.SiblingNotesAfter = page.Cursor
-		turn.LastSeenSiblingNoteID = page.Cursor
-		turn.PendingSiblingNotes = page.Notes
-	}
-	if deps.PeerReservations != nil {
-		legCtx.ReservedPaths = deps.PeerReservations.PeerReservations(ctx, sess.ID)
-	}
-	if deps.Injects == nil {
-		return nil, fmt.Errorf("worker-leg inject: inject renderer not configured")
-	}
-	var guidance []api.Message
-	if strings.TrimSpace(legCtx.AgentsMDMessage.Content) != "" {
-		guidance = append(guidance, legCtx.AgentsMDMessage)
-	}
-	block, err := inject.RenderWorkerLegInject(ctx, deps.Injects, sess.ID, legCtx)
-	if err != nil {
-		return nil, fmt.Errorf("worker-leg inject: %w", err)
-	}
-	if strings.TrimSpace(block) == "" {
-		return guidance, nil
-	}
-	hostCtx := legCtx
-	hostCtx.ScanDigest = nil
-	hostCtx.HasPeerFindings = len(legCtx.SiblingNotes) > 0
-	hostCtx.SiblingNotes = nil
-	hostBlock, err := inject.RenderWorkerLegInject(ctx, deps.Injects, sess.ID, hostCtx)
-	if err != nil {
-		return nil, fmt.Errorf("worker-leg host projection: %w", err)
-	}
-	parts := workerLegContentParts(hostBlock, legCtx)
-	return append(guidance, api.Message{
-		Role:      api.MessageRoleSystem,
-		Content:   block,
-		Origin:    api.MessageOriginHost,
-		Authority: api.ContentAuthoritySystem, TrustTier: api.ContentTrustTierTrusted,
-		ContentParts: parts,
-	}), nil
-}
-
-func workerLegContentParts(hostBlock string, legCtx inject.WorkerLegContext) []api.MessageContentPart {
-	parts := []api.MessageContentPart{{
-		Content:   hostBlock,
-		Origin:    api.MessageOriginHost,
-		Authority: api.ContentAuthoritySystem, TrustTier: api.ContentTrustTierTrusted,
-	}}
-	if len(legCtx.ScanDigest) > 0 {
-		parts = append(parts, api.MessageContentPart{
-			Content: strings.Join(legCtx.ScanDigest, "\n"), Origin: api.MessageOriginRetrieval,
-			Authority: api.ContentAuthorityNone, TrustTier: api.ContentTrustTierUntrusted, Source: "scan_evidence",
-		})
-	}
-
-	if peer := renderPeerNotesData(legCtx.SiblingNotes); peer != "" {
-		parts = append(parts,
-			api.MessageContentPart{
-				Content: peer, Origin: api.MessageOriginPeerAgent,
-				Authority: api.ContentAuthorityNone, TrustTier: api.ContentTrustTierUntrusted, Source: "sibling_notes",
-			},
-		)
-	}
-	return parts
-}
-
-func renderPeerNotesData(notes []inject.SiblingNote) string {
-	var lines []string
-	for _, note := range notes {
-		summary := strings.TrimSpace(note.Summary)
-		if summary == "" {
-			continue
-		}
-		line := summary
-		if note.ID > 0 {
-			line = fmt.Sprintf("finding %d: %s", note.ID, line)
-		}
-		if note.HasBody {
-			line += " [detail: pack_board finding_id]"
-		}
-		if agent := strings.TrimSpace(note.Agent); agent != "" {
-			line = agent + ": " + line
-		}
-		if ref := strings.TrimSpace(note.Ref); ref != "" {
-			line += " (" + ref + ")"
-		}
-		lines = append(lines, line)
-	}
-	return strings.Join(lines, "\n")
-}
-
 // resolveTurnRoster combines workflow declarations with workspace and capability facts.
 func (e *AssemblyEngine) resolveTurnRoster(
 	ctx context.Context,
@@ -728,80 +493,6 @@ func (e *AssemblyEngine) resolveTurnRoster(
 	}
 	roster := inject.ResolveAgentRoster(profile.SurfaceID, declared, rootCount, repoKnownEmpty, webSearchEnabled)
 	return &roster
-}
-
-func (e *AssemblyEngine) prependCoordinatorRunInject(
-	ctx context.Context,
-	sess *api.Session,
-	frame inject.CoordinatorTurnFrame,
-	pendingKickIDs []string,
-	turn *TurnAssemblyScratch,
-	history []api.Message,
-) ([]api.Message, error) {
-	deps := e.deps()
-	var out []api.Message
-	runCtx := frame.RunContext
-	if frame.Roster == nil {
-		frame.Roster = e.resolveTurnRoster(ctx, sess, frame, history, turn)
-	}
-
-	// Workflow state is request-local and must accompany every bound request.
-	if strings.TrimSpace(runCtx.WorkflowID) != "" {
-		hintCodes := surface.StaticWorkflowHintCodes(runCtx, runCtx.HasComposeDraft)
-		hintCodes = anchor.FilterSuppressedHintCodes(hintCodes, runCtx, pendingKickIDs...)
-		snap := frame.Runtime
-		// The binding selects the template stem.
-		gateFeedback := deps.GateFeedback
-		if deps.Workflows != nil {
-			if manifest, ok := deps.Workflows.ActiveManifest(ctx, sess.ID); ok && manifest.Sealed && manifest.ArchiveDir != "" {
-				if derived, err := gateFeedback.WithWorkflowArchive(manifest.ArchiveDir); err == nil {
-					gateFeedback = derived
-				}
-			}
-		}
-		block, err := inject.RenderActiveWorkflowInject(ctx, deps.Injects, sess.ID, frame, deps.WorkflowHints, hintCodes, gateFeedback)
-		if err != nil {
-			return nil, fmt.Errorf("active-workflow inject (%s): %w", inject.ActiveWorkflowRenderStem(ctx, sess.ID), err)
-		}
-		if strings.TrimSpace(block) != "" {
-			out = append(out, api.Message{Role: api.MessageRoleSystem, Content: block})
-		}
-		if snap.Blueprint != nil {
-			govBlock, err := inject.RenderBlueprintInject(ctx, deps.Injects, sess.ID, snap.Blueprint)
-			if err != nil {
-				return nil, fmt.Errorf("blueprint inject: %w", err)
-			}
-			if strings.TrimSpace(govBlock) != "" {
-				out = append(out, api.Message{Role: api.MessageRoleSystem, Content: govBlock})
-			}
-		}
-	}
-
-	// Spawn-capable sessions always receive the active roster.
-	if len(frame.Roster.Declared) > 0 {
-		facts := frame.Roster.Facts
-		spawnAgents := frame.Roster.Effective
-		if len(spawnAgents) == 0 {
-			return out, nil
-		}
-		var catalog *extpacks.EffectiveCatalog
-		var toolProfiles []sandbox.ToolProfile
-		if view := e.sessionCatalogView(ctx, sess); view != nil {
-			catalog = view.Catalog
-			toolProfiles = view.ToolProfiles
-		}
-		block, err := inject.RenderImplementSpawnInject(
-			ctx, deps.Injects, sess.ID, spawnAgents, spawn.MaxInFlightTaskWorkers, facts.SurfaceID, facts.RootCount, facts.RepoKnownEmpty, facts.WebSearchEnabled,
-			catalog, toolProfiles,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("implement-spawn inject: %w", err)
-		}
-		if strings.TrimSpace(block) != "" && e.taskOffered(sess, facts.SurfaceID, facts.RootCount) {
-			out = append(out, api.Message{Role: api.MessageRoleSystem, Content: block})
-		}
-	}
-	return out, nil
 }
 
 func (e *AssemblyEngine) workerBoard(
@@ -845,78 +536,6 @@ func (e *AssemblyEngine) PushModeTransitionCause(sessionID string, cause surface
 	if e != nil {
 		e.cache.PushModeTransitionCause(sessionID, cause)
 	}
-}
-
-func (e *AssemblyEngine) prependTransitionInject(
-	ctx context.Context,
-	sess *api.Session,
-	frame inject.CoordinatorTurnFrame,
-	history []api.Message,
-	turn *TurnAssemblyScratch,
-) (string, bool) {
-	if e == nil || e.deps().Prompts == nil || sess == nil || turn == nil {
-		return "", false
-	}
-	profile, implState := e.resolveCoordinatorProfile(ctx, sess, frame, history, turn)
-	previous := e.loadExecutionModeState(ctx, sess.ID).LastFamily
-	current := surface.ExecutionModeFamily(profile.SurfaceID)
-	transition := surface.ComputeModeTransition(previous, current, turn.ModeTransitionCauses)
-	if !inject.ShouldRenderTransitionInject(transition) {
-		return "", false
-	}
-	key := inject.TransitionInjectKey(sess.ID, turn.PromptTurnSeq, transition)
-	if turn.Iteration > 0 && key == turn.TransitionInjectKey && strings.TrimSpace(turn.TransitionInjectBlock) != "" {
-		return turn.TransitionInjectBlock, true
-	}
-	if turn.Iteration > 0 && key == turn.TransitionInjectKey {
-		return "", false
-	}
-
-	inj := e.deps().Injects
-	if inj == nil {
-		return "", false
-	}
-	surfaceVars := map[string]any{"project_dir": sess.WorkspacePath}
-	if roots, count, activePath, ok := e.workspaceRootsForTurn(ctx, sess, turn); ok {
-		surfaceVars["root_count"] = count
-		surfaceVars["workspace_roots"] = roots
-		if activePath != "" {
-			surfaceVars["project_dir"] = activePath
-		}
-	}
-	var toolProfiles []sandbox.ToolProfile
-	turnSurface := prompts.SurfaceTurn{Loaded: e.loadedTools(sess)}
-	if view := e.sessionCatalogView(ctx, sess); view != nil {
-		toolProfiles = view.ToolProfiles
-		turnSurface.Schemas = view.ToolSchemas
-	}
-	if err := prompts.MergeCoordinatorSurfacePathVars(profile.SurfaceID, toolProfiles, surfaceVars, turnSurface); err != nil {
-		return "", false
-	}
-	if err := prompts.MergeCoordinatorPromptVars(
-		profile.SurfaceID,
-		prompts.ExecutionModePromptTransition{
-			ExecutionMode:         transition.ExecutionMode,
-			ExecutionModePrevious: transition.ExecutionModePrevious,
-			ExecutionModeEntered:  transition.ExecutionModeEntered,
-			ExecutionModeLeft:     transition.ExecutionModeLeft,
-		},
-		prompts.CoordinatorPromptGates{
-			PendingOverlayPromote: len(implState.PendingOverlayIDs) > 0,
-			VerifyRequired:        frame.RequiresEvidence("verify"),
-			VerifyCommand:         implState.VerifyCommand,
-		},
-		surfaceVars,
-	); err != nil {
-		return "", false
-	}
-	block, err := anchor.RenderInform(ctx, anchor.InjectTransition, anchor.MatchContext{Surface: "coordinator", SessionID: sess.ID}, inj, surfaceVars)
-	if err != nil || strings.TrimSpace(block) == "" {
-		return "", false
-	}
-	turn.TransitionInjectKey = key
-	turn.TransitionInjectBlock = strings.TrimSpace(block)
-	return turn.TransitionInjectBlock, true
 }
 
 // SetTurnSurfaceID records the coordinator surface for the active prompt turn.

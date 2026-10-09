@@ -59,7 +59,7 @@ func (l *CoordinatorTurnFrameLoader) BuildCoordinatorTurnFrame(
 		out.AllowedAgents = spawn.AmbientAllowedAgents()
 		return inject.CoordinatorTurnFrame{RunContext: out}, nil
 	}
-	manifest, err := l.Runs.runnableManifestForRun(ctx, active)
+	manifest, err := l.Runs.manifestForRun(ctx, active)
 	if err != nil {
 		return inject.CoordinatorTurnFrame{WorkflowRevision: active.Revision, RunContext: out}, err
 	}
@@ -69,7 +69,7 @@ func (l *CoordinatorTurnFrameLoader) BuildCoordinatorTurnFrame(
 		if !errors.As(err, &invalid) {
 			return inject.CoordinatorTurnFrame{}, err
 		}
-		if blockErr := l.Runs.blockReviewContract(ctx, active.ID, err); blockErr != nil {
+		if blockErr := (ReviewRepairs{l.Runs}).blockContract(ctx, active.ID, err); blockErr != nil {
 			return inject.CoordinatorTurnFrame{}, blockErr
 		}
 		return inject.CoordinatorTurnFrame{}, &NotRunnableError{RunID: active.ID, Status: api.WorkflowRunStatusPaused, Reason: ReviewBlockedReason}

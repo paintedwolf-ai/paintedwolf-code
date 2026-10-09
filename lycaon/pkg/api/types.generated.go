@@ -8525,6 +8525,7 @@ type WorkerContextUsage struct {
 
 // WorkerCoverageGap
 type WorkerCoverageGap struct {
+	// Worker-local gap id; the host scopes it to the task.
 	ID      string   `json:"id"`
 	Subject string   `json:"subject"`
 	Reason  string   `json:"reason"`

@@ -2,7 +2,7 @@ package anchor
 
 import (
 	"context"
-	"errors"
+	"log/slog"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/anchorcatalog"
@@ -74,11 +74,9 @@ func (b *Bus) EmitMatch(ctx context.Context, sessionID string, id ID, partial En
 	}
 	binding, err := reg.ResolveInform(id, match)
 	if err != nil {
-		if errors.Is(err, ErrWorkflowVersionMissing) && b.kicks != nil {
-			b.kicks.QueuePendingGuidance(sessionID, "Workflow version is missing; runs must be bound to an exact workflow version.", api.ToolFeedback{
-				Code: "WORKFLOW_VERSION_MISSING",
-			})
-		}
+		// A run context without its workflow version is a host defect, not
+		// something the model can repair.
+		slog.ErrorContext(ctx, "anchor inform unresolved", "anchor", string(id), "session_id", sessionID, "error", err)
 		return
 	}
 	if binding == nil || binding.Render == "" {

@@ -9,20 +9,21 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/db"
-	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/workflow"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	_ "modernc.org/sqlite"
 )
 
-// TestArchivedRunStateResume_100Database verifies the durable-store contract
-// for frozen v1.0.0 application release databases.
+// TestArchivedRunStateResume_100Database verifies that runs in the frozen
+// v1.0.0 release store open at the current baseline and still resolve their definitions.
 func TestArchivedRunStateResume_100Database(t *testing.T) {
 	testArchivedRunStateResumeForRelease(t, "1.0.0")
 }
 
-// TestArchivedRunStateResume_101Database verifies the durable-store contract
-// for frozen v1.0.1 application release databases.
+// TestArchivedRunStateResume_101Database verifies the same for the frozen
+// v1.0.1 release store.
 func TestArchivedRunStateResume_101Database(t *testing.T) {
 	testArchivedRunStateResumeForRelease(t, "1.0.1")
 }
@@ -52,7 +53,7 @@ func testArchivedRunStateResumeForRelease(t *testing.T, releaseVersion string) {
 	err = db.UpgradeStaged(ctx, targetDB)
 	testutil.FailErr(t, "upgrade staged frozen "+releaseVersion+" store", err)
 
-	// The registered route landed the store on the current revision.
+	// The store lands on the current revision.
 	database, err := sql.Open("sqlite", targetDB)
 	testutil.FailErr(t, "open upgraded "+releaseVersion+" database", err)
 	defer database.Close()
@@ -63,15 +64,12 @@ func testArchivedRunStateResumeForRelease(t *testing.T, releaseVersion string) {
 		t.Fatalf("upgraded user_version = %d, want %d", version, db.SchemaVersion)
 	}
 
-	// The upgrade created or verified the current provenance table.
-	var tableName string
-	err = database.QueryRowContext(ctx,
-		"SELECT name FROM sqlite_master WHERE type='table' AND name='workflow_run_unit_provenance'",
-	).Scan(&tableName)
-	testutil.FailErr(t, "verify workflow_run_unit_provenance table existence", err)
-	if tableName != "workflow_run_unit_provenance" {
-		t.Fatalf("expected workflow_run_unit_provenance table, got %q", tableName)
-	}
+	// Every preserved run must resolve to a live or sealed definition in the stock
+	// catalog, so the upgraded store's runs remain resumable.
+	catalog, err := extpacks.ResolveStockCatalog(ctx, nil)
+	testutil.FailErr(t, "resolve stock catalog", err)
+	manifests, _, err := workflowdef.LoadManifestsFromCatalog(catalog)
+	testutil.FailErr(t, "load catalog manifests", err)
 
 	// Initialize SQLStore on top of the upgraded database and resume the
 	// preserved runs. Note that workflow_runs records the *workflow* version,
@@ -122,23 +120,9 @@ func testArchivedRunStateResumeForRelease(t *testing.T, releaseVersion string) {
 			t.Errorf("run %s currentPhase = %s, want %s", s.id, run.CurrentPhase, s.phase)
 		}
 
-		// Verify provenance recording on resumed runs works seamlessly.
-		err = sqlStore.RecordUnitProvenance(ctx, run.ID, run.CurrentPhase, prompts.UnitProvenanceRecord{
-			UnitKind:      "prompt",
-			UnitID:        "coordinator-test",
-			SourceTier:    "archive",
-			SourcePath:    "path/to/prompt.md",
-			ContentSha256: "sha256-test-hash",
-		})
-		testutil.FailErr(t, "RecordUnitProvenance on resumed run", err)
-
-		records, err := sqlStore.ListUnitProvenance(ctx, run.ID)
-		testutil.FailErr(t, "ListUnitProvenance on resumed run", err)
-		if len(records) != 1 {
-			t.Fatalf("expected 1 provenance record, got %d", len(records))
-		}
-		if records[0].UnitID != "coordinator-test" {
-			t.Errorf("provenance UnitID = %s, want coordinator-test", records[0].UnitID)
+		key := workflowdef.ManifestKey(run.WorkflowID, run.WorkflowVersion)
+		if _, ok := manifests[key]; !ok {
+			t.Errorf("run %s pins %s, which the catalog no longer defines", run.ID, key)
 		}
 	}
 }
