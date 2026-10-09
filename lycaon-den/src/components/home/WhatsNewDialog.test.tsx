@@ -21,7 +21,7 @@ vi.mock("../../platform/desktop/external-link.ts", async (importOriginal) => ({
 }));
 
 describe("WhatsNewDialog", () => {
-  it("opens app-owned note links directly and confirms third-party destinations", async () => {
+  it("opens first-party note links directly and confirms third-party destinations", async () => {
     openAppLink.mockClear();
     confirmAndOpenExternalLink.mockClear();
     render(() => <WhatsNewDialog open version="1.0.1" notes={`[Release](${REPOSITORY_URL}/releases/tag/v1.0.1) [Other](https://example.com)`} onClose={() => {}} onGotIt={() => {}} />);
