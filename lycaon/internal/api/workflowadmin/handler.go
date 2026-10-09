@@ -46,6 +46,7 @@ type Deps struct {
 
 type Handler struct {
 	Deps
+	blueprintRoutes
 	activeTopologyRuns sync.Map // workflow run id → struct{} while topology settlement is executing
 	responses          *httpio.Responder
 	background         *taskgroup.Group
@@ -62,5 +63,10 @@ func New(responses *httpio.Responder, background *taskgroup.Group, deps Deps) Ha
 		httpio.Required{Name: "Store", Present: deps.Store != nil},
 		httpio.Required{Name: "Workflows", Present: deps.Workflows != nil},
 	)
-	return Handler{Deps: deps, responses: responses, background: background}
+	return Handler{
+		Deps:            deps,
+		blueprintRoutes: newBlueprintRoutes(responses, deps),
+		responses:       responses,
+		background:      background,
+	}
 }

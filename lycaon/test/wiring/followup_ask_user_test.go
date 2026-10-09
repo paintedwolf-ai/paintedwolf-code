@@ -37,7 +37,7 @@ func TestFollowUpAfterCompletedWorkflowCanAskAndReceiveAnswer(t *testing.T) {
 	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{}, t.TempDir())
 	testutil.FailErr(t, "create session", err)
 	AttachDefaultAmbient(t, h, ctx, sess.ID)
-	original, err := h.WorkflowMgr.GetActive(ctx, sess.ID)
+	original, err := h.WorkflowMgr.Store.Runs.ActiveBySession(ctx, sess.ID)
 	testutil.FailErr(t, "load original workflow", err)
 	if original == nil {
 		t.Fatal("original workflow missing")
@@ -47,7 +47,7 @@ func TestFollowUpAfterCompletedWorkflowCanAskAndReceiveAnswer(t *testing.T) {
 	completedAt := time.Now().UTC()
 	original.CompletedAt = &completedAt
 	testutil.FailErr(t, "complete original workflow", h.WorkflowMgr.Store.State.Update(ctx, original))
-	active, err := h.WorkflowMgr.GetActive(ctx, sess.ID)
+	active, err := h.WorkflowMgr.Store.Runs.ActiveBySession(ctx, sess.ID)
 	testutil.FailErr(t, "check workflow gap", err)
 	if active != nil {
 		t.Fatal("fixture must have no active workflow before the follow-up")
@@ -58,7 +58,7 @@ func TestFollowUpAfterCompletedWorkflowCanAskAndReceiveAnswer(t *testing.T) {
 	if calls.Load() != 1 {
 		t.Fatalf("model calls = %d, want one call then park on the question", calls.Load())
 	}
-	active, err = h.WorkflowMgr.GetActive(ctx, sess.ID)
+	active, err = h.WorkflowMgr.Store.Runs.ActiveBySession(ctx, sess.ID)
 	testutil.FailErr(t, "load follow-up workflow", err)
 	if active == nil || active.ID == original.ID || !runstate.IsAmbientRun(active) {
 		t.Fatalf("follow-up workflow = %+v, want a fresh ambient run", active)

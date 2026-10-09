@@ -22,11 +22,11 @@ type batchRunLoopWF struct {
 	vars map[string]any
 }
 
-func (s batchRunLoopWF) ActiveRun(context.Context, string) (*api.WorkflowRun, error) {
+func (s batchRunLoopWF) ActiveBySession(context.Context, string) (*api.WorkflowRun, error) {
 	return s.run, nil
 }
 
-func (s batchRunLoopWF) ScaffoldVars(context.Context, string) (map[string]any, error) {
+func (s batchRunLoopWF) GetScaffoldVars(context.Context, string) (map[string]any, error) {
 	if s.vars != nil {
 		return s.vars, nil
 	}
@@ -64,7 +64,7 @@ func TestStackedWakeFactsAreConsumedByOneObservedPrompt(t *testing.T) {
 		QueueInform:          func(context.Context, string, anchor.ID, anchor.Envelope) {},
 	}
 	deps.GetSession = func(context.Context, string) (*api.Session, error) { return sess, nil }
-	deps.WorkflowSource = synthesizeWF
+	deps.WorkflowSource = &loopwake.WorkflowDomains{Runs: synthesizeWF, Approvals: synthesizeWF, Obligations: synthesizeWF}
 	deps.RunPrompt = func(context.Context, string) (*promptresult.Result, error) {
 		engine.Observations.ObservePrompt("s1")(inject.CoordinatorTurnFrame{})
 		prompts.Add(1)

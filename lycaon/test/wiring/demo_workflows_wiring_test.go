@@ -148,7 +148,7 @@ func TestBugbashWorkflowEndToEnd(t *testing.T) {
 	run, err = h.WorkflowMgr.Approvals.SyncHumanApproval(ctx, run.ID, dir)
 	testutil.FailErr(t, "SyncHumanApproval approve", err)
 
-	child, err := h.WorkflowMgr.GetActive(ctx, sess.ID)
+	child, err := h.WorkflowMgr.Store.Runs.ActiveBySession(ctx, sess.ID)
 	testutil.FailErr(t, "get implementation child", err)
 	if child == nil || child.WorkflowID != "implement" || child.ParentRunID == nil || *child.ParentRunID != run.ID {
 		t.Fatalf("active run = %+v want implementation child of %s", child, run.ID)
@@ -177,7 +177,7 @@ func investigateSecurityQuestion(t *testing.T, h *Harness, ctx context.Context, 
 	t.Helper()
 	run, err := h.WorkflowMgr.Store.Runs.Get(ctx, runID)
 	testutil.FailErr(t, "load question run", err)
-	manifest, err := h.WorkflowMgr.ManifestForRunID(ctx, runID)
+	manifest, err := h.WorkflowMgr.Resolver.ForRunID(ctx, runID)
 	testutil.FailErr(t, "load question manifest", err)
 	facts, err := h.WorkflowMgr.Coverage.CoverageFacts(ctx, run, manifest)
 	testutil.FailErr(t, "load question obligations", err)

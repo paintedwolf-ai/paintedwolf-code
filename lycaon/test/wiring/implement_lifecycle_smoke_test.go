@@ -131,14 +131,14 @@ func TestImplementLifecycleSmokePathsForward(t *testing.T) {
 	sess, err := h.CreateHarnessSession(t, wire.CreateSessionRequest{}, dir)
 	testutil.FailErr(t, "Create session", err)
 	AttachDefaultAmbient(t, h, ctx, sess.ID)
-	run, err := h.WorkflowMgr.GetActive(ctx, sess.ID)
+	run, err := h.WorkflowMgr.Store.Runs.ActiveBySession(ctx, sess.ID)
 	testutil.FailErr(t, "GetActive after ambient attach", err)
 	if run.CurrentPhase != "boot" {
 		t.Fatalf("initial phase = %q want boot", run.CurrentPhase)
 	}
 	h.SeedProgress(t, ctx, sess.ID)
 	testutil.FailErr(t, "RecordBoardOrientReady", h.WorkflowMgr.Fanout.RecordBoardOrientReady(ctx, sess.ID, "smoke-board"))
-	run, err = h.WorkflowMgr.GetActive(ctx, sess.ID)
+	run, err = h.WorkflowMgr.Store.Runs.ActiveBySession(ctx, sess.ID)
 	testutil.FailErr(t, "GetActive after orient", err)
 	if run.CurrentPhase != "work" {
 		t.Fatalf("phase after board orient = %q want work", run.CurrentPhase)

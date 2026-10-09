@@ -92,7 +92,49 @@ func validDocument() guidance.CoordinatorCompletionReport {
 			{Title: "Sound surface", Disposition: "held"},
 			{ID: "new-risk", Title: "Additional risk", Disposition: "accept", Answers: map[string]string{"reachable": workflowdef.BriefUnknown, "outcome": "degraded", "attacker": "anyone_remote"}},
 		},
-		Ask: &guidance.CoordinatorAsk{Do: "Approve the fix.", Effort: "small"},
+		Ask:    &guidance.CoordinatorAsk{Do: "Approve the fix.", Effort: "small"},
+		Rating: &guidance.CoordinatorRating{Level: "Critical", Why: "The reachable sink and the open question together."},
+	}
+}
+
+// The report states its own call on the brief question: a declared level with
+// a reason, never milder than the level the findings' answers decide.
+func TestCheckReportDocument_RatingIsTheReviewsCallBoundedByTheAnswers(t *testing.T) {
+	facts := documentFacts(t)
+	brief := facts.Brief
+	certain := brief.Rate([]map[string]string{facts.Claims[1].Answers, brief.Rateable(validDocument().Findings[3].Answers)}).Best
+	refusing := func(doc guidance.CoordinatorCompletionReport, want string) {
+		t.Helper()
+		issue := firstIssue(doc, facts)
+		if issue.Code != guidance.ReportDocumentInvalidCode || !strings.Contains(issue.Reason, want) {
+			t.Fatalf("issue = %+v, want %q", issue, want)
+		}
+	}
+	doc := validDocument()
+	doc.Rating = nil
+	refusing(doc, "needs rating")
+	doc.Rating = &guidance.CoordinatorRating{Level: "Severe", Why: "x"}
+	refusing(doc, "not a declared level")
+	doc.Rating = &guidance.CoordinatorRating{Level: brief.Levels[certain].Label}
+	refusing(doc, "rating.why is empty")
+	if certain+1 < len(brief.Levels) {
+		doc.Rating = &guidance.CoordinatorRating{Level: brief.Levels[certain+1].Label, Why: "Looked fine."}
+		refusing(doc, "milder than "+brief.Levels[certain].Label)
+	}
+	for _, level := range []string{brief.Levels[certain].Label, strings.ToLower(brief.Levels[0].Label), brief.Levels[0].Tone} {
+		doc.Rating = &guidance.CoordinatorRating{Level: level, Why: "Taken together these matter."}
+		if issue := firstIssue(doc, facts); issue.Code != "" {
+			t.Fatalf("level %q: issue = %+v, want the call accepted", level, issue)
+		}
+	}
+	noBrief := facts
+	noBrief.Brief = nil
+	doc = validDocument()
+	for i := range doc.Findings {
+		doc.Findings[i].Answers = nil
+	}
+	if issue := firstIssue(doc, noBrief); issue.Code != guidance.ReportDocumentInvalidCode || !strings.Contains(issue.Reason, "asks no rating question") {
+		t.Fatalf("rating without a brief: issue = %+v", issue)
 	}
 }
 
@@ -357,6 +399,7 @@ func TestReportChecksEveryUnratedFindingAndInventoryTogether(t *testing.T) {
 			{ID: "c1", Title: "First", Disposition: "act"},
 			{ID: "c2", Title: "Second", Disposition: "accept"},
 		},
+		Rating: &guidance.CoordinatorRating{Level: "Critical", Why: "Both findings reach production."},
 	}
 	issues := CheckReportDocument(doc, facts)
 	if len(issues) != 4 {
