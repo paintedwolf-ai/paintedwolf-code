@@ -8,7 +8,6 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -16,7 +15,6 @@ import (
 
 	hostapi "github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/board"
-	lyexec "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/gitstate"
 	sessionstore "github.com/lycaon/lycaon/internal/session/store"
@@ -122,16 +120,12 @@ func NewMergedHistoryFixture(t *testing.T) MergedHistoryFixture {
 		[]sourceledger.RootSpec{{ID: rootID, Path: nested}})
 	testutil.FailErr(t, "seed git state", err)
 
+	blobDir := t.TempDir()
 	writeBlob := func(content string) string {
 		t.Helper()
-		cmd := exec.CommandContext(t.Context(), "git", "-C", repo, "hash-object", "-w", "--stdin")
-		cmd.Env = lyexec.LocalGitEnv()
-		cmd.Stdin = strings.NewReader(content)
-		out, err := cmd.Output()
-		if err != nil {
-			t.Fatalf("git hash-object: %v", err)
-		}
-		return strings.TrimSpace(string(out))
+		staged := filepath.Join(blobDir, "blob")
+		testutil.FailErr(t, "stage blob bytes", os.WriteFile(staged, []byte(content), 0o644))
+		return gitAt("hash-object", "-w", staged)
 	}
 	commitBlob := func(parent, content, message string) string {
 		t.Helper()

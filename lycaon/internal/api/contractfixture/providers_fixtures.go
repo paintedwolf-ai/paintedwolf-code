@@ -29,7 +29,7 @@ func CreateProviderJSON(t *testing.T, base, body string) wire.ProviderMeta {
 	testutil.FailErr(t, "new provider create", err)
 	req.Header.Set("Content-Type", "application/json")
 	hostapi.WithTestAuth(req)
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := fixtureClient.Do(req)
 	testutil.FailErr(t, "create provider", err)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusCreated {
@@ -178,7 +178,7 @@ func PutProviderJSON(t *testing.T, base, id, body string) wire.ProviderMeta {
 	testutil.FailErr(t, "new provider update", err)
 	req.Header.Set("Content-Type", "application/json")
 	hostapi.WithTestAuth(req)
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := fixtureClient.Do(req)
 	testutil.FailErr(t, "update provider", err)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {

@@ -20,6 +20,10 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
+// fixtureClient reaches loopback test servers; its bound turns a hung handler
+// into a test failure instead of a stalled run.
+var fixtureClient = &http.Client{Timeout: 2 * time.Minute}
+
 func AcceptPrompt(t *testing.T, baseURL, sessionID, Text string) {
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, baseURL+"/v1/sessions/"+sessionID+"/prompts",
@@ -29,7 +33,7 @@ func AcceptPrompt(t *testing.T, baseURL, sessionID, Text string) {
 	}
 	req.Header.Set("Content-Type", "application/json")
 	hostapi.WithTestAuth(req)
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := fixtureClient.Do(req)
 	if err != nil {
 		t.Fatalf("prompt: %v", err)
 	}
@@ -72,7 +76,7 @@ func AuthedHTTPGet(url string) (*http.Response, error) {
 		return nil, err
 	}
 	hostapi.WithTestAuth(req)
-	return http.DefaultClient.Do(req)
+	return fixtureClient.Do(req)
 }
 
 // testDeps adjusts the dependencies a test server is built with.
@@ -86,7 +90,7 @@ func AuthedHTTPPost(url, contentType, body string) (*http.Response, error) {
 		req.Header.Set("Content-Type", contentType)
 	}
 	hostapi.WithTestAuth(req)
-	return http.DefaultClient.Do(req)
+	return fixtureClient.Do(req)
 }
 
 func CreateProjectForTest(t *testing.T, srv *hostapi.Server, dir string) wire.Project {
@@ -137,7 +141,7 @@ func CreateTestSession(t *testing.T, baseURL, projectDir string) wire.Session {
 	}
 	req.Header.Set("Content-Type", "application/json")
 	hostapi.WithTestAuth(req)
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := fixtureClient.Do(req)
 	if err != nil {
 		t.Fatalf("create session: %v", err)
 	}
@@ -176,7 +180,7 @@ func GetSessionAtURL(t *testing.T, baseURL, sessionID string) wire.Session {
 		t.Fatalf("get session request: %v", err)
 	}
 	hostapi.WithTestAuth(req)
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := fixtureClient.Do(req)
 	if err != nil {
 		t.Fatalf("get session: %v", err)
 	}
@@ -199,7 +203,7 @@ func ListMessagesAtURL(t *testing.T, baseURL, sessionID string) []wire.Message {
 		t.Fatalf("list messages request: %v", err)
 	}
 	hostapi.WithTestAuth(req)
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := fixtureClient.Do(req)
 	if err != nil {
 		t.Fatalf("list messages: %v", err)
 	}
@@ -239,7 +243,7 @@ func ReadSSEStream(t *testing.T, streamURL string) (content string, sawDone bool
 		t.Fatalf("stream request: %v", err)
 	}
 	hostapi.WithTestAuth(req)
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := fixtureClient.Do(req)
 	if err != nil {
 		t.Fatalf("stream get: %v", err)
 	}
