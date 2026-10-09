@@ -10391,6 +10391,13 @@ export interface components {
             /** @description The consequence that makes the ask worth the reader's time. */
             why?: string;
         };
+        /** @description The report's own answer to the workflow's rating question, made from all the run's work: one declared level and the reason for it. */
+        CompletionReportRating: {
+            /** @description A level label the workflow's brief declares. */
+            level: string;
+            /** @description One line saying what decided the level. */
+            why: string;
+        };
         /** @description Scanner groups accounted for together: named by id, or selected as every group one scanner reported entirely inside the listed path globs. */
         CompletionReportSetAside: {
             scan_group_ids?: string[];
@@ -10430,6 +10437,7 @@ export interface components {
             /** @description Coverage gaps the report declares, one per entry: what was not checked, run, or reached. Rendered as a boxed list so a gap survives a reader who never reaches the closing paragraph. */
             limits?: string[];
             ask?: components["schemas"]["CompletionReportAsk"];
+            rating?: components["schemas"]["CompletionReportRating"];
             /** @description Scanner groups the report accounts for without assessing them one by one, each with its reason. */
             set_asides?: components["schemas"]["CompletionReportSetAside"][];
             /** @description Run scope only. The document requirements this report still failed when its repairs ran out and the host stored it as drafted, one per failing requirement. Absent on a report the host accepted; a report that carries defects ends its run as not accepted. */
@@ -29614,6 +29622,7 @@ export type CompletionReportFindingDisposition = components["schemas"]["Completi
 export type CompletionReportFinding = components["schemas"]["CompletionReportFinding"];
 export type CompletionReportAskEffort = components["schemas"]["CompletionReportAskEffort"];
 export type CompletionReportAsk = components["schemas"]["CompletionReportAsk"];
+export type CompletionReportRating = components["schemas"]["CompletionReportRating"];
 export type CompletionReportSetAside = components["schemas"]["CompletionReportSetAside"];
 export type CompletionReportDefectCode = components["schemas"]["CompletionReportDefectCode"];
 export type CompletionReportDefect = components["schemas"]["CompletionReportDefect"];
