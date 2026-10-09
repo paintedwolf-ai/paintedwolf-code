@@ -22,7 +22,7 @@ func (e *ProcessAuthority) preflightExecutionCapability(ctx context.Context, too
 	}
 	tc.Execution.ProcessControl, tc.Execution.HostExecution = request.ProcessControl, request.HostExecution
 	action := e.executionCapabilityAction(ctx, tool, args, *tc)
-	if request.ProcessControl && !action.Contained.FSJailed {
+	if request.ProcessControl && !action.Execution.Contained.FSJailed {
 		return &toolrejection.ToolReject{Code: isolation.CodeExecutionBoundaryUnavailable}
 	}
 	result, err := e.Approvals.evaluatePreSpawn(ctx, action)
@@ -47,21 +47,21 @@ func (e *ProcessAuthority) preflightExecutionCapability(ctx context.Context, too
 func (e *ProcessAuthority) executionCapabilityAction(ctx context.Context, tool string, args map[string]any, tc tools.ToolContext) hitl.ProposedAction {
 	request := e.Boundary.actionConfineRequest(ctx, tc)
 	action := proposedActionFromPolicy(e.Boundary.preInvokePolicyContext(tool, tc.ProfileID(), args, tc, request))
-	action.ExecutionBoundaryDigest = tools.ExecutionBoundaryDigest(request)
-	action.Command = commandsurface.PrimaryCommandLine(args, nil)
+	action.Execution.ExecutionBoundaryDigest = tools.ExecutionBoundaryDigest(request)
+	action.Presentation.Command = commandsurface.PrimaryCommandLine(args, nil)
 	return action
 }
 
 func (e *ProcessAuthority) awaitExecutionCapability(ctx context.Context, action hitl.ProposedAction, tc tools.ToolContext, result *hitl.ApprovalResult) error {
 	subject, title, impact, consequence := executionCapabilityCopy(tc.Execution.HostExecution)
-	targets := []hitl.ApprovalTarget{{Kind: string(subject), Label: action.Command}}
+	targets := []hitl.ApprovalTarget{{Kind: string(subject), Label: action.Presentation.Command}}
 	who := hitl.WhoAgentCommand
-	if action.ProcessAccess != "" {
+	if action.Execution.ProcessAccess != "" {
 		subject = hitl.ApprovalSubjectAction
 		who = hitl.WhoAgentAction
 		title, impact, consequence = hitl.ProcessSignalTitle, hitl.ProcessSignalWhat, hitl.ProcessSignalIfWrong
-		targets = action.ProcessTargets
-		if action.ProcessAccess == "list" {
+		targets = action.Execution.ProcessTargets
+		if action.Execution.ProcessAccess == "list" {
 			title, impact, consequence = hitl.ProcessListTitle, hitl.ProcessListWhat, hitl.ProcessListIfWrong
 		} else {
 			subject = hitl.ApprovalSubjectActionSet
@@ -77,7 +77,7 @@ func (e *ProcessAuthority) awaitExecutionCapability(ctx context.Context, action 
 	plan, err := hitl.NewApprovalPlan(action, hitl.ApprovalStagePreSpawn, hitl.ApprovalSubject{
 		Kind: subject, Title: title, Targets: targets,
 	}, hitl.ApprovalPresentation{
-		Action: title, Tool: action.Tool, Command: action.Command,
+		Action: title, Tool: action.Invocation.Tool, Command: action.Presentation.Command,
 		Impact: impact, Who: who, IfWrong: consequence,
 		AllowLine: hitl.ExecutionAllowLine,
 		Gate:      primary, Cited: cited, Detection: detectionOf(result), GrantDelta: result.GrantDelta,
@@ -85,7 +85,7 @@ func (e *ProcessAuthority) awaitExecutionCapability(ctx context.Context, action 
 	if err != nil {
 		return toolrejection.ApprovalPlanInvalid()
 	}
-	permission, err := e.Secrets.prepareSecretPermission(ctx, action.Tool, action.Args, tc)
+	permission, err := e.Secrets.prepareSecretPermission(ctx, action.Invocation.Tool, action.Invocation.Args, tc)
 	if err != nil {
 		return err
 	}

@@ -22,46 +22,60 @@ func (e *Approvals) awaitApproval(
 	confReq confine.Request,
 ) (map[string]any, error) {
 	action := hitl.ProposedAction{
-		AgentPolicy:             policyWriteTargets(confReq, tc.ActiveRootPath()),
-		Tool:                    tool,
-		Args:                    args,
-		Files:                   append(filesFromArgs(tool, args), policyWritePaths(confReq)...),
-		ResolvedFiles:           append(ResolvedApprovalFiles(tool, args, tc), policyWritePaths(confReq)...),
-		HostResources:           append([]string(nil), tc.Host.HostResources...),
-		HostResourceFamilies:    append([]string(nil), tc.Host.HostResourceFamilies...),
-		ProjectID:               tc.Identity.ProjectID,
-		ProjectDir:              tc.ActiveRootPath(),
-		SessionID:               tc.Identity.SessionID,
-		RootSessionID:           tc.ChatSessionID(),
-		SessionScratchRoot:      tc.Host.SessionScratchDir,
-		SocketGrants:            append([]confine.SocketGrant(nil), tc.Socket.SocketGrants...),
-		SocketScopes:            append([]string(nil), tc.Socket.SocketScopes...),
-		SocketGrantStates:       append([]string(nil), tc.Socket.SocketGrantStates...),
-		AuthorizedSocketDigests: append([]string(nil), tc.Socket.AuthorizedSocketDigests...),
-		AuthorizedDirectIP:      tc.Direct.DirectIPAuthorized,
-		Contained:               hitl.ContainedForRequest(confReq),
-		ActionID:                tc.Identity.ToolCallID,
-		DirectIPRequested:       tc.Direct.DirectIPRequested,
-		Visibility:              directIPVisibility(tc.Direct.DirectIPRequested),
-		DeclaredDestinations:    append([]string(nil), tc.Direct.DirectIPDeclared...),
-		PackageExecution:        tc.Files.PackageExecution,
-	}
+Mutations: hitl.ActionMutations{
+AgentPolicy: policyWriteTargets(confReq, tc.ActiveRootPath()),
+},
+Invocation: hitl.ActionInvocation{
+Tool: tool,
+Args: args,
+Files: append(filesFromArgs(tool, args), policyWritePaths(confReq)...),
+ResolvedFiles: append(ResolvedApprovalFiles(tool, args, tc), policyWritePaths(confReq)...),
+ActionID: tc.Identity.ToolCallID,
+},
+Resources: hitl.ActionResources{
+HostResources: append([]string(nil), tc.Host.HostResources...),
+HostResourceFamilies: append([]string(nil), tc.Host.HostResourceFamilies...),
+},
+Scope: hitl.ActionScope{
+ProjectID: tc.Identity.ProjectID,
+ProjectDir: tc.ActiveRootPath(),
+SessionID: tc.Identity.SessionID,
+RootSessionID: tc.ChatSessionID(),
+SessionScratchRoot: tc.Host.SessionScratchDir,
+},
+Sockets: hitl.ActionSockets{
+SocketGrants: append([]confine.SocketGrant(nil), tc.Socket.SocketGrants...),
+SocketScopes: append([]string(nil), tc.Socket.SocketScopes...),
+SocketGrantStates: append([]string(nil), tc.Socket.SocketGrantStates...),
+AuthorizedSocketDigests: append([]string(nil), tc.Socket.AuthorizedSocketDigests...),
+},
+Egress: hitl.ActionEgress{
+AuthorizedDirectIP: tc.Direct.DirectIPAuthorized,
+DirectIPRequested: tc.Direct.DirectIPRequested,
+Visibility: directIPVisibility(tc.Direct.DirectIPRequested),
+DeclaredDestinations: append([]string(nil), tc.Direct.DirectIPDeclared...),
+},
+Execution: hitl.ActionExecution{
+Contained: hitl.ContainedForRequest(confReq),
+PackageExecution: tc.Files.PackageExecution,
+},
+}
 	if meta, ok := e.Metadata.registry.Meta(tool); ok {
-		action.ApprovalCategory = meta.ApprovalCategory
-		action.ApprovalSubject = meta.ApprovalSubject
+		action.Resources.ApprovalCategory = meta.ApprovalCategory
+		action.Resources.ApprovalSubject = meta.ApprovalSubject
 	}
 	if tool == "command" || tool == "verify" || tool == "terminal_open" {
-		action.Command = commandsurface.PrimaryCommandLine(args, nil)
+		action.Presentation.Command = commandsurface.PrimaryCommandLine(args, nil)
 	}
 	if tool == "command_stop" && e.backgroundCommand != nil {
 		handle, _ := args["handle"].(string)
-		action.Command = e.backgroundCommand(tc.Identity.SessionID, handle)
+		action.Presentation.Command = e.backgroundCommand(tc.Identity.SessionID, handle)
 	}
 	return e.awaitActionApproval(ctx, action, args, tc, approvalResult)
 }
 
 func (e *Approvals) awaitActionApproval(ctx context.Context, action hitl.ProposedAction, args map[string]any, tc tools.ToolContext, approvalResult *hitl.ApprovalResult) (map[string]any, error) {
-	tool := action.Tool
+	tool := action.Invocation.Tool
 	approvalMatches := approvalRuleMatches(approvalResult)
 	decision := approvalDecision(approvalResult)
 	detection := detectionOf(approvalResult)

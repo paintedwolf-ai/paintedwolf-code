@@ -55,7 +55,11 @@ func TestCheckpointHandlersListAndResolve(t *testing.T) {
 	dec, err := contractfixture.RequestExplicitAPIApprovalCheckpoint(t, mgr, hitl.CheckpointRequest{
 		SessionID:      sess.ID,
 		Kind:           wire.CheckpointKindToolApproval,
-		ProposedAction: &hitl.ProposedAction{Tool: "command"},
+		ProposedAction: &hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+},
+},
 	})
 	testutil.FailErr(t, "mgr.RequestCheckpoint failed", err)
 
@@ -106,7 +110,12 @@ func TestCheckpointHandlersRejectWithGuidance(t *testing.T) {
 	dec, err := contractfixture.RequestExplicitAPIApprovalCheckpoint(t, mgr, hitl.CheckpointRequest{
 		SessionID:      sess.ID,
 		Kind:           wire.CheckpointKindToolApproval,
-		ProposedAction: &hitl.ProposedAction{Tool: "write", Args: map[string]any{"path": "a.txt"}},
+		ProposedAction: &hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "write",
+Args: map[string]any{"path": "a.txt"},
+},
+},
 	})
 	testutil.FailErr(t, "mgr.RequestCheckpoint failed", err)
 
@@ -137,7 +146,11 @@ func TestCheckpointHandlersValidationErrors(t *testing.T) {
 	dec, err := contractfixture.RequestExplicitAPIApprovalCheckpoint(t, mgr, hitl.CheckpointRequest{
 		SessionID:      sess.ID,
 		Kind:           wire.CheckpointKindToolApproval,
-		ProposedAction: &hitl.ProposedAction{Tool: "command"},
+		ProposedAction: &hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+},
+},
 	})
 	testutil.FailErr(t, "mgr.RequestCheckpoint failed", err)
 
@@ -174,7 +187,11 @@ func TestCheckpointHandlersResolveExactReplay(t *testing.T) {
 	dec, err := contractfixture.RequestExplicitAPIApprovalCheckpoint(t, mgr, hitl.CheckpointRequest{
 		SessionID:      sess.ID,
 		Kind:           wire.CheckpointKindToolApproval,
-		ProposedAction: &hitl.ProposedAction{Tool: "command"},
+		ProposedAction: &hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+},
+},
 	})
 	testutil.FailErr(t, "mgr.RequestCheckpoint failed", err)
 	body := `{"kind":"tool_approval","action":"approve","option_id":"approve_current_action"}`
@@ -227,9 +244,19 @@ func TestCheckpointGrantOfferCreatesProjectLease(t *testing.T) {
 		Settings: svc}, Host: api.HostDependencies{Events: hub}, Approvals: api.ApprovalsDependencies{Checkpoints: chkMgr, ApprovalGate: approvals}}), nil, api.TestAPIToken)
 
 	action := hitl.ProposedAction{
-		Tool: "network", Args: map[string]any{"host": "api.example.test"},
-		ProjectID: p.ID, ProjectDir: dir, SessionID: sess.ID, Contained: hitl.ContainedForRequest(confine.Request{Roots: []string{dir}}),
-	}
+Invocation: hitl.ActionInvocation{
+Tool: "network",
+Args: map[string]any{"host": "api.example.test"},
+},
+Scope: hitl.ActionScope{
+ProjectID: p.ID,
+ProjectDir: dir,
+SessionID: sess.ID,
+},
+Execution: hitl.ActionExecution{
+Contained: hitl.ContainedForRequest(confine.Request{Roots: []string{dir}}),
+},
+}
 	decision := &gate.Decision{Primary: wire.GateUserRule, Cited: []gate.Fact{{
 		Gate: wire.GateUserRule, Key: "rule.pattern", Value: "api.example.test", Source: "test_fixture",
 	}}}
@@ -319,9 +346,19 @@ func TestWriteRootPlanAtomicallyCreatesTaskAndDeviceAuthority(t *testing.T) {
 	proposed := filepath.Join(tmp, "shared-cache")
 	testutil.FailErr(t, "create proposed write root", os.MkdirAll(proposed, 0o755))
 	action := hitl.ProposedAction{
-		Tool: "write_root", Args: map[string]any{"proposed_write_root": proposed},
-		ProjectID: p.ID, ProjectDir: projectDir, SessionID: sess.ID, Contained: hitl.ContainedForRequest(confine.Request{Roots: []string{projectDir}}),
-	}
+Invocation: hitl.ActionInvocation{
+Tool: "write_root",
+Args: map[string]any{"proposed_write_root": proposed},
+},
+Scope: hitl.ActionScope{
+ProjectID: p.ID,
+ProjectDir: projectDir,
+SessionID: sess.ID,
+},
+Execution: hitl.ActionExecution{
+Contained: hitl.ContainedForRequest(confine.Request{Roots: []string{projectDir}}),
+},
+}
 	_, writeDecision := gate.Evaluate(gate.Facts{
 		Stage: gate.StagePreSpawn,
 		Ran: gate.ProducerContainment | gate.ProducerDetection | gate.ProducerConsent |
@@ -433,7 +470,11 @@ func TestCheckpointRejectsClientAuthoredGrantPredicate(t *testing.T) {
 		Kind:           wire.CheckpointKindToolApproval,
 		Type:           hitl.DecisionTypeApprove,
 		ToolCallID:     "call-client-predicate",
-		ProposedAction: &hitl.ProposedAction{Tool: "write"},
+		ProposedAction: &hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "write",
+},
+},
 	})
 	testutil.FailErr(t, "RequestCheckpoint", err)
 

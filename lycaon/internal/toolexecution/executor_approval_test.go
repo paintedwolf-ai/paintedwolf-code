@@ -301,7 +301,7 @@ func TestExecutorCommandStopApprovalShowsRecordedCommand(t *testing.T) {
 		return "npm run dev"
 	})
 	executor.Approvals.SetApprovalExplainer(approvalExplainerFunc(func(action hitl.ProposedAction) toolapproval.ApprovalExplanation {
-		return toolapproval.ApprovalExplanation{What: "Stop the background command: " + action.Command + "."}
+		return toolapproval.ApprovalExplanation{What: "Stop the background command: " + action.Presentation.Command + "."}
 	}))
 
 	type result struct {
@@ -322,7 +322,7 @@ func TestExecutorCommandStopApprovalShowsRecordedCommand(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("timed out waiting for command_stop approval")
 	}
-	if mgr.request.ProposedAction == nil || mgr.request.ProposedAction.Command != "npm run dev" {
+	if mgr.request.ProposedAction == nil || mgr.request.ProposedAction.Presentation.Command != "npm run dev" {
 		t.Fatalf("approval action = %+v", mgr.request.ProposedAction)
 	}
 	if mgr.request.Explanation == nil || mgr.request.Explanation.What != "Stop the background command: npm run dev." {

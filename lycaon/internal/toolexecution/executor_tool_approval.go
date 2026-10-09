@@ -164,7 +164,7 @@ func (e *Approvals) raiseAndWaitToolApproval(ctx context.Context, in toolApprova
 		repeat = e.noteRepeatAsk(chat, in)
 	}
 	checkpoint := hitl.CheckpointRequest{
-		SessionID:          in.Action.SessionID,
+		SessionID:          in.Action.Scope.SessionID,
 		Kind:               api.CheckpointKindToolApproval,
 		Type:               hitl.DecisionTypeApprove,
 		Title:              in.Title,
@@ -219,7 +219,7 @@ func (e *Approvals) raiseAndWaitToolApproval(ctx context.Context, in toolApprova
 			ToolContext:  in.Rationale.ToolContext,
 			Tool:         in.Rationale.Tool,
 			Args:         in.Rationale.Args,
-			Files:        in.Action.Files,
+			Files:        in.Action.Invocation.Files,
 			Explanation:  in.Explanation,
 		})
 	}
@@ -253,12 +253,12 @@ func (e *Approvals) recordAskSuppressed(ctx context.Context, in toolApprovalRais
 	if e == nil || e.authzRecorder == nil {
 		return
 	}
-	tool := strings.TrimSpace(in.Action.Tool)
+	tool := strings.TrimSpace(in.Action.Invocation.Tool)
 	if tool == "" {
 		tool = "command"
 	}
 	_ = e.authzRecorder.AppendCapabilityRecord(ctx, authzledger.CapabilityRecord{
-		SessionID:        in.Action.SessionID,
+		SessionID:        in.Action.Scope.SessionID,
 		Action:           authzledger.ActionAskSuppressed,
 		Outcome:          authzledger.OutcomeDenied,
 		ResolvedBy:       authzledger.ResolvedBySystemDeny,
@@ -279,22 +279,26 @@ func (e *Approvals) recordToolDenied(
 		return
 	}
 	action := hitl.ProposedAction{
-		Tool:               eval.ToolName,
-		Args:               eval.ToolArgs,
-		Files:              filesFromArgs(eval.ToolName, eval.ToolArgs),
-		ResolvedFiles:      eval.ResolvedFiles,
-		ProjectID:          eval.ProjectID,
-		ProjectDir:         eval.ProjectDir,
-		SessionID:          eval.SessionID,
-		RootSessionID:      eval.ChatSessionID(),
-		SessionScratchRoot: eval.ConfineRequest.SessionScratchRoot,
-	}
+Invocation: hitl.ActionInvocation{
+Tool: eval.ToolName,
+Args: eval.ToolArgs,
+Files: filesFromArgs(eval.ToolName, eval.ToolArgs),
+ResolvedFiles: eval.ResolvedFiles,
+},
+Scope: hitl.ActionScope{
+ProjectID: eval.ProjectID,
+ProjectDir: eval.ProjectDir,
+SessionID: eval.SessionID,
+RootSessionID: eval.ChatSessionID(),
+SessionScratchRoot: eval.ConfineRequest.SessionScratchRoot,
+},
+}
 	record := authzledger.ToolDeniedRecord{
 		SessionID:       eval.SessionID,
 		ParentSessionID: eval.ParentSessionID,
 		Tool:            eval.ToolName,
 		Args:            eval.ToolArgs,
-		Files:           action.Files,
+		Files:           action.Invocation.Files,
 		ProjectDir:      eval.ProjectDir,
 	}
 	if decision != nil {

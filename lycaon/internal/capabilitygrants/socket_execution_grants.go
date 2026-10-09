@@ -17,7 +17,7 @@ func SocketExecutionGrantOffers(action hitl.ProposedAction, grants []confine.Soc
 	task := socketChatGrantOffer(action, grants)
 	day := task
 	if gate.ReuseFor(api.GateUnobservedChannel).DayScope() == gate.ScopeProject &&
-		action.HasProjectIdentity() {
+		action.Scope.HasProjectIdentity() {
 		day = socketProjectDayCarrier(task, action)
 	}
 	day = hitl.DayRung(day)
@@ -38,13 +38,13 @@ func socketProjectDayCarrier(task hitl.ApprovalGrantOffer, action hitl.ProposedA
 	day.Scope = hitl.ApprovalGrantScopeProject
 	day.Grant.Scope = hitl.ApprovalGrantScopeProject
 	day.Grant.ChatSessionID = ""
-	day.Grant.ProjectID = action.ProjectID
-	day.Grant.ProjectDir = action.ProjectDir
+	day.Grant.ProjectID = action.Scope.ProjectID
+	day.Grant.ProjectDir = action.Scope.ProjectDir
 	sum := sha256.Sum256([]byte(strings.Join([]string{
 		string(hitl.ApprovalGrantScopeProject),
 		hitl.ApprovalGrantCategorySocketCapability,
 		task.Grant.Predicate.Pattern,
-		action.ProjectID,
+		action.Scope.ProjectID,
 	}, "\x00")))
 	day.ID = "grant_" + hex.EncodeToString(sum[:8])
 	day.Grant.ID = day.ID
@@ -67,7 +67,7 @@ func socketChatGrantAuthority(
 	return []hitl.ApprovalAuthorityDelta{{
 		Kind:          hitl.AuthoritySocketChat,
 		Grant:         grant,
-		ChatSessionID: action.ChatSession(),
+		ChatSessionID: action.Scope.ChatSession(),
 		ActionDigest:  hitl.GrantKey(action),
 		Sockets:       targets,
 		TTLSeconds:    ttlSeconds,
@@ -82,8 +82,8 @@ func socketProjectGrantOffer(task hitl.ApprovalGrantOffer, action hitl.ProposedA
 	project.Authority = nil
 	project.Grant.Scope = hitl.ApprovalGrantScopeProject
 	project.Grant.ChatSessionID = ""
-	project.Grant.ProjectID = action.ProjectID
-	project.Grant.ProjectDir = action.ProjectDir
+	project.Grant.ProjectID = action.Scope.ProjectID
+	project.Grant.ProjectDir = action.Scope.ProjectDir
 	project.Title = hitl.TitleAllowForThisProject
 	project.ExpiresWhen = hitl.ExpiresIn7DaysOrRevoked
 	now := project.Grant.GrantedAt
@@ -95,12 +95,12 @@ func socketProjectGrantOffer(task hitl.ApprovalGrantOffer, action hitl.ProposedA
 		string(hitl.ApprovalGrantScopeProject),
 		hitl.ApprovalGrantCategorySocketCapability,
 		task.Grant.Predicate.Pattern,
-		action.ProjectID,
+		action.Scope.ProjectID,
 	}, "\x00")))
 	project.ID = "grant_" + hex.EncodeToString(sum[:8])
 	project.Grant.ID = project.ID
 	project.Authority = socketProjectAuthorities(action, grants, project)
-	if !action.HasProjectIdentity() {
+	if !action.Scope.HasProjectIdentity() {
 		project = hitl.DisabledOffer(project, hitl.NoteNoProjectOpen)
 	}
 	return project
@@ -118,15 +118,15 @@ func socketProjectAuthorities(
 			hitl.ApprovalGrantCategorySocketPath,
 			socket.ApprovedPath,
 			socket.ResolvedPath,
-			action.ProjectID,
-			action.ProjectDir,
+			action.Scope.ProjectID,
+			action.Scope.ProjectDir,
 		}, "\x00")))
 		grant := hitl.ApprovalGrant{
 			ID:           "grant_" + hex.EncodeToString(sum[:8]),
 			Scope:        hitl.ApprovalGrantScopeProject,
 			Predicate:    hitl.ApprovalGrantPredicate{Category: hitl.ApprovalGrantCategorySocketPath, Pattern: socket.ApprovedPath},
-			ProjectID:    action.ProjectID,
-			ProjectDir:   action.ProjectDir,
+			ProjectID:    action.Scope.ProjectID,
+			ProjectDir:   action.Scope.ProjectDir,
 			Title:        offer.Title,
 			Coverage:     "connect to `" + socket.ApprovedPath + "`",
 			GrantedAt:    offer.Grant.GrantedAt,
@@ -151,21 +151,21 @@ func socketChatGrantOffer(action hitl.ProposedAction, grants []confine.SocketGra
 	domainGrant := hitl.ApprovalGrant{
 		Scope:         hitl.ApprovalGrantScopeChat,
 		Predicate:     hitl.ApprovalGrantPredicate{Category: hitl.ApprovalGrantCategorySocketCapability, Pattern: confine.SocketPathsDigest(grants)},
-		ChatSessionID: action.ChatSession(),
-		ProjectID:     action.ProjectID,
-		ProjectDir:    action.ProjectDir,
+		ChatSessionID: action.Scope.ChatSession(),
+		ProjectID:     action.Scope.ProjectID,
+		ProjectDir:    action.Scope.ProjectDir,
 		Title:         hitl.TitleAllowForThisChat,
 		Coverage:      "connections to this exact local-service set",
 		GrantedAt:     now,
 		ExpiresWhen:   hitl.ExpiresWhenChatDeleted,
 		ReaskWhen:     "the socket path, symlink target, or confinement changes",
-		Witness:       hitl.BoundaryWitness(action.Contained),
+		Witness:       hitl.BoundaryWitness(action.Execution.Contained),
 	}
 	sum := sha256.Sum256([]byte(strings.Join([]string{
 		string(hitl.ApprovalGrantScopeChat),
 		hitl.ApprovalGrantCategorySocketCapability,
 		confine.SocketPathsDigest(grants),
-		action.ChatSession(),
+		action.Scope.ChatSession(),
 	}, "\x00")))
 	domainGrant.ID = "grant_" + hex.EncodeToString(sum[:8])
 	return hitl.ApprovalGrantOffer{

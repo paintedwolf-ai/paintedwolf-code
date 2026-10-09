@@ -18,7 +18,11 @@ func TestManagerSecretRedactionRequiresHostCapability(t *testing.T) {
 
 	_, err := requestSecretApprovalCheckpoint(t, ctx, mgr, hitl.CheckpointRequest{
 		SessionID: sessionID, Kind: api.CheckpointKindToolApproval,
-		ProposedAction: &hitl.ProposedAction{Tool: "fetch_url"},
+		ProposedAction: &hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "fetch_url",
+},
+},
 		SecretScreen: &hitl.SecretScreen{
 			Surface: "fetch_url", SurfaceLabel: "page fetch",
 			RedactionNote: "Redaction is not offered here: no reviewed rewrite exists.",
@@ -78,7 +82,11 @@ func TestManagerSecretRedactionRequiresHostCapability(t *testing.T) {
 
 	secret, err := requestSecretApprovalCheckpoint(t, ctx, mgr, hitl.CheckpointRequest{
 		SessionID: sessionID, Kind: api.CheckpointKindToolApproval,
-		ProposedAction: &hitl.ProposedAction{Tool: "model_request"},
+		ProposedAction: &hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "model_request",
+},
+},
 		SecretScreen: &hitl.SecretScreen{
 			Surface: "model_request", CanRedact: true, DestinationID: "fireworks-main",
 			RuleID:       "gitleaks:github-pat",
@@ -104,7 +112,11 @@ func TestManagerUnrewritableSecretNamesHeldStandingRedaction(t *testing.T) {
 	note := "Redaction is not offered here: replacing the value would run a command neither you nor the model wrote."
 	_, err := requestSecretApprovalCheckpoint(t, ctx, mgr, hitl.CheckpointRequest{
 		SessionID: sessionID, Kind: api.CheckpointKindToolApproval,
-		ProposedAction: &hitl.ProposedAction{Tool: "command"},
+		ProposedAction: &hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+},
+},
 		SecretScreen: &hitl.SecretScreen{
 			Surface: "command", SurfaceLabel: "command",
 			RedactionNote:         note,
@@ -134,7 +146,14 @@ func TestManagerSecretReleaseQuietSendsUnredacted(t *testing.T) {
 
 	secret, err := requestSecretApprovalCheckpoint(t, ctx, mgr, hitl.CheckpointRequest{
 		SessionID: sessionID, Kind: api.CheckpointKindToolApproval,
-		ProposedAction: &hitl.ProposedAction{Tool: "model_request", SessionID: sessionID},
+		ProposedAction: &hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "model_request",
+},
+Scope: hitl.ActionScope{
+SessionID: sessionID,
+},
+},
 		SecretScreen: &hitl.SecretScreen{
 			Surface: "model_request", CanRedact: true, DestinationID: "fireworks-main",
 			DestinationLabel: "Fireworks", RuleID: "gitleaks:github-pat",
@@ -170,7 +189,11 @@ func TestManagerSecretLocationFileOrigin(t *testing.T) {
 
 	_, err := requestSecretApprovalCheckpoint(t, ctx, mgr, hitl.CheckpointRequest{
 		SessionID: sessionID, Kind: api.CheckpointKindToolApproval,
-		ProposedAction: &hitl.ProposedAction{Tool: "model_request"},
+		ProposedAction: &hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "model_request",
+},
+},
 		SecretScreen: &hitl.SecretScreen{
 			Surface: "model_request", SurfaceLabel: "model request", CanRedact: true,
 			DestinationID: "fireworks-main", DestinationLabel: "Fireworks",

@@ -177,32 +177,46 @@ func proposedActionFromPolicy(eval platform.PolicyContext) hitl.ProposedAction {
 		confReq.SocksProxyEnv = false
 	}
 	return hitl.ProposedAction{
-		AgentPolicy:             policyWriteTargets(confReq, eval.ProjectDir),
-		Tool:                    eval.ToolName,
-		Args:                    eval.ToolArgs,
-		ApprovalCategory:        eval.ApprovalCategory,
-		ApprovalSubject:         eval.ApprovalSubject,
-		Files:                   append(filesFromArgs(eval.ToolName, eval.ToolArgs), policyWritePaths(confReq)...),
-		ResolvedFiles:           append(append([]string(nil), eval.ResolvedFiles...), policyWritePaths(confReq)...),
-		HostResources:           append([]string(nil), eval.HostResources...),
-		HostResourceFamilies:    append([]string(nil), eval.HostResourceFamilies...),
-		ProjectID:               eval.ProjectID,
-		ProjectDir:              eval.ProjectDir,
-		SessionID:               eval.SessionID,
-		RootSessionID:           eval.ChatSessionID(),
-		SessionScratchRoot:      confReq.SessionScratchRoot,
-		Contained:               hitl.ContainedForRequest(confReq),
-		SocketGrants:            append([]confine.SocketGrant(nil), eval.SocketGrants...),
-		SocketScopes:            append([]string(nil), eval.SocketScopes...),
-		SocketGrantStates:       append([]string(nil), eval.SocketGrantStates...),
-		AuthorizedSocketDigests: append([]string(nil), eval.AuthorizedSocketDigests...),
-		AuthorizedDirectIP:      eval.AuthorizedDirectIP,
-		ActionID:                eval.ActionID,
-		DirectIPRequested:       eval.DirectIPRequested,
-		Visibility:              eval.DirectIPVisibility,
-		DeclaredDestinations:    append([]string(nil), eval.DeclaredDestinations...),
-		PackageExecution:        eval.PackageExecution,
-	}
+Mutations: hitl.ActionMutations{
+AgentPolicy: policyWriteTargets(confReq, eval.ProjectDir),
+},
+Invocation: hitl.ActionInvocation{
+Tool: eval.ToolName,
+Args: eval.ToolArgs,
+Files: append(filesFromArgs(eval.ToolName, eval.ToolArgs), policyWritePaths(confReq)...),
+ResolvedFiles: append(append([]string(nil), eval.ResolvedFiles...), policyWritePaths(confReq)...),
+ActionID: eval.ActionID,
+},
+Resources: hitl.ActionResources{
+ApprovalCategory: eval.ApprovalCategory,
+ApprovalSubject: eval.ApprovalSubject,
+HostResources: append([]string(nil), eval.HostResources...),
+HostResourceFamilies: append([]string(nil), eval.HostResourceFamilies...),
+},
+Scope: hitl.ActionScope{
+ProjectID: eval.ProjectID,
+ProjectDir: eval.ProjectDir,
+SessionID: eval.SessionID,
+RootSessionID: eval.ChatSessionID(),
+SessionScratchRoot: confReq.SessionScratchRoot,
+},
+Execution: hitl.ActionExecution{
+Contained: hitl.ContainedForRequest(confReq),
+PackageExecution: eval.PackageExecution,
+},
+Sockets: hitl.ActionSockets{
+SocketGrants: append([]confine.SocketGrant(nil), eval.SocketGrants...),
+SocketScopes: append([]string(nil), eval.SocketScopes...),
+SocketGrantStates: append([]string(nil), eval.SocketGrantStates...),
+AuthorizedSocketDigests: append([]string(nil), eval.AuthorizedSocketDigests...),
+},
+Egress: hitl.ActionEgress{
+AuthorizedDirectIP: eval.AuthorizedDirectIP,
+DirectIPRequested: eval.DirectIPRequested,
+Visibility: eval.DirectIPVisibility,
+DeclaredDestinations: append([]string(nil), eval.DeclaredDestinations...),
+},
+}
 }
 
 // denyRejectData is the denied path and first matched rule plus tool and profile.

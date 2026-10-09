@@ -118,13 +118,19 @@ func (s *HarnessControl) handleHarnessToolApprovalCheckpoint(w http.ResponseWrit
 		Title:      title,
 		Decision:   decision,
 		ProposedAction: &hitl.ProposedAction{
-			Tool:       toolName,
-			Command:    command,
-			Args:       toolArgs,
-			SessionID:  sessionID,
-			ProjectID:  sess.ProjectID,
-			ProjectDir: "",
-		},
+Invocation: hitl.ActionInvocation{
+Tool: toolName,
+Args: toolArgs,
+},
+Presentation: hitl.ActionPresentation{
+Command: command,
+},
+Scope: hitl.ActionScope{
+SessionID: sessionID,
+ProjectID: sess.ProjectID,
+ProjectDir: "",
+},
+},
 		ConsequenceBand: band,
 		ConsequenceCode: code,
 	}
@@ -175,7 +181,15 @@ func applyHarnessSocketCapability(
 		AllowLine: "connections to " + approved,
 	}
 	cpReq.GrantOffers = capabilitygrants.SocketExecutionGrantOffers(
-		hitl.ProposedAction{Tool: "command", SessionID: cpReq.SessionID, ProjectID: cpReq.ProjectID},
+		hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+},
+Scope: hitl.ActionScope{
+SessionID: cpReq.SessionID,
+ProjectID: cpReq.ProjectID,
+},
+},
 		[]confine.SocketGrant{{ApprovedPath: approved, ResolvedPath: resolved}},
 	)
 	cpReq.SocketCapability = &hitl.SocketCapability{
@@ -200,7 +214,7 @@ func applyHarnessDeclaredEndpoints(cpReq *hitl.CheckpointRequest, req harnessToo
 		cpReq.Title = "Allow network: " + countedNoun
 	}
 	if cpReq.ProposedAction != nil {
-		cpReq.ProposedAction.Tool = "network"
+		cpReq.ProposedAction.Invocation.Tool = "network"
 	}
 	cpReq.Explanation = &hitl.ApprovalExplanation{
 		What: "Connect to the " + countedNoun + " this tool call reaches",
@@ -244,7 +258,18 @@ func applyHarnessDirectIPCapability(
 		AllowLine: hitl.DirectIPAllowLine,
 	}
 	cpReq.GrantOffers = capabilitygrants.DirectIPExecutionGrantOffers(
-		hitl.ProposedAction{Tool: "command", SessionID: cpReq.SessionID, ProjectID: cpReq.ProjectID, Command: command},
+		hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+},
+Scope: hitl.ActionScope{
+SessionID: cpReq.SessionID,
+ProjectID: cpReq.ProjectID,
+},
+Presentation: hitl.ActionPresentation{
+Command: command,
+},
+},
 		hitl.DirectIPLease{
 			ActionDigest:         "harness-direct-ip",
 			RequestDigest:        "harness-direct-ip-request",

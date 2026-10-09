@@ -16,13 +16,13 @@ import (
 func (e *ProcessAuthority) processReviewer(tool string, args map[string]any, tc tools.ToolContext) tools.ProcessReviewer {
 	return func(ctx context.Context, operation string, processes []hostprocess.Process) error {
 		action := e.executionCapabilityAction(ctx, tool, args, tc)
-		action.ProcessAccess = operation
-		action.ExecutionBoundaryDigest = ""
+		action.Execution.ProcessAccess = operation
+		action.Execution.ExecutionBoundaryDigest = ""
 		if operation == "list" {
-			action.ProcessTargets = []hitl.ApprovalTarget{{Kind: "process_inventory", Label: hitl.ProcessListTitle, Details: map[string]any{"args": args}}}
+			action.Execution.ProcessTargets = []hitl.ApprovalTarget{{Kind: "process_inventory", Label: hitl.ProcessListTitle, Details: map[string]any{"args": args}}}
 		} else {
 			for _, process := range processes {
-				action.ProcessTargets = append(action.ProcessTargets, hitl.ApprovalTarget{Kind: "process", Label: fmt.Sprintf("Send %s to %s (PID %d)", args["signal"], process.Name, process.PID), Details: map[string]any{"args": map[string]any{"pid": process.PID, "instance": process.Instance, "uid": process.UID, "executable": process.Executable, "signal": args["signal"]}}})
+				action.Execution.ProcessTargets = append(action.Execution.ProcessTargets, hitl.ApprovalTarget{Kind: "process", Label: fmt.Sprintf("Send %s to %s (PID %d)", args["signal"], process.Name, process.PID), Details: map[string]any{"args": map[string]any{"pid": process.PID, "instance": process.Instance, "uid": process.UID, "executable": process.Executable, "signal": args["signal"]}}})
 			}
 		}
 		result, err := e.Approvals.evaluatePreSpawn(ctx, action)

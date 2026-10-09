@@ -95,17 +95,23 @@ func (e *Secrets) AskSecretScreen(ctx context.Context, finding secretmatch.Alert
 	defer releaseReview()
 	args := secretScreenArgs(payload)
 	action := hitl.ProposedAction{
-		Tool:            payload.Surface,
-		Args:            args,
-		EstimatedImpact: secretEstimatedImpact(payload),
-		SessionID:       finding.SessionID,
-		RootSessionID:   finding.RootSessionID,
-		ProjectID:       finding.ProjectID,
-		ProjectDir:      finding.ProjectDir,
-	}
+Invocation: hitl.ActionInvocation{
+Tool: payload.Surface,
+Args: args,
+},
+Presentation: hitl.ActionPresentation{
+EstimatedImpact: secretEstimatedImpact(payload),
+},
+Scope: hitl.ActionScope{
+SessionID: finding.SessionID,
+RootSessionID: finding.RootSessionID,
+ProjectID: finding.ProjectID,
+ProjectDir: finding.ProjectDir,
+},
+}
 	grantOffers := []hitl.ApprovalGrantOffer(nil)
 	if decision != nil && decision.Reuse().Offered() {
-		grantOffers = secretReleaseLadder(action.ChatSession(), finding.ProjectID, finding.ProjectDir,
+		grantOffers = secretReleaseLadder(action.Scope.ChatSession(), finding.ProjectID, finding.ProjectDir,
 			recipients, finding.SecretNames, finding.Managed(), finding.Fingerprints)
 		// Redaction grants remain available at every release ceiling.
 		if payload.CanRedact {
@@ -331,7 +337,12 @@ func secretScreenArgs(payload *hitl.SecretScreen) map[string]any {
 func (e *Secrets) explainSecretScreen(args map[string]any, screen *hitl.SecretScreen) *hitl.ApprovalExplanation {
 	explanation := &hitl.ApprovalExplanation{}
 	if e.Approvals.approvalExplainer != nil {
-		copy := e.Approvals.approvalExplainer.ExplainApproval(hitl.ProposedAction{Tool: toolsecrets.OutboundSecretExplainTool, Args: args})
+		copy := e.Approvals.approvalExplainer.ExplainApproval(hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: toolsecrets.OutboundSecretExplainTool,
+Args: args,
+},
+})
 		explanation.What = copy.What
 		explanation.Who = copy.Who
 		explanation.IfWrong = copy.IfWrong

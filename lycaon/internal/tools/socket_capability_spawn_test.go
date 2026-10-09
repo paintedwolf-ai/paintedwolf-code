@@ -16,7 +16,14 @@ import (
 )
 
 func TestSocketDayGrantOfferIdentity(t *testing.T) {
-	action := hitl.ProposedAction{Tool: "command", SessionID: "sess-sock"}
+	action := hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+},
+Scope: hitl.ActionScope{
+SessionID: "sess-sock",
+},
+}
 	grant := confine.SocketGrant{ApprovedPath: "/tmp/svc.sock", ResolvedPath: "/private/tmp/svc.sock"}
 	offers := capabilitygrants.SocketExecutionGrantOffers(action, []confine.SocketGrant{grant})
 	day, task := offers[0], offers[1]
@@ -52,7 +59,16 @@ func TestSocketDayGrantOfferIdentity(t *testing.T) {
 }
 
 func TestSocketDayRungRidesProjectWhileDurableRungStaysTask(t *testing.T) {
-	action := hitl.ProposedAction{Tool: "command", SessionID: "sess-sock", ProjectID: "proj-sock", ProjectDir: "/tmp/proj"}
+	action := hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+},
+Scope: hitl.ActionScope{
+SessionID: "sess-sock",
+ProjectID: "proj-sock",
+ProjectDir: "/tmp/proj",
+},
+}
 	grant := confine.SocketGrant{ApprovedPath: "/tmp/svc.sock", ResolvedPath: "/private/tmp/svc.sock"}
 	offers := capabilitygrants.SocketExecutionGrantOffers(action, []confine.SocketGrant{grant})
 	if len(offers) != 3 {
@@ -90,7 +106,7 @@ func TestSocketDayRungRidesProjectWhileDurableRungStaysTask(t *testing.T) {
 		durable.ApprovedPath != grant.ApprovedPath || durable.ResolvedPath != grant.ResolvedPath {
 		t.Fatalf("project day durable grant = %+v", durable)
 	}
-	if durable.ProjectID != action.ProjectID || durable.ProjectDir != action.ProjectDir ||
+	if durable.ProjectID != action.Scope.ProjectID || durable.ProjectDir != action.Scope.ProjectDir ||
 		day.Authority[0].TTLSeconds != hitl.DayRungTTLSeconds {
 		t.Fatalf("project day durable scope = %+v", day.Authority[0])
 	}
@@ -100,7 +116,15 @@ func TestSocketDayRungRidesProjectWhileDurableRungStaysTask(t *testing.T) {
 }
 
 func TestSocketDayRungRidesIdentityWithoutFolder(t *testing.T) {
-	action := hitl.ProposedAction{Tool: "command", SessionID: "sess-sock", ProjectID: "proj-sock"}
+	action := hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+},
+Scope: hitl.ActionScope{
+SessionID: "sess-sock",
+ProjectID: "proj-sock",
+},
+}
 	grant := confine.SocketGrant{ApprovedPath: "/tmp/svc.sock", ResolvedPath: "/private/tmp/svc.sock"}
 	offers := capabilitygrants.SocketExecutionGrantOffers(action, []confine.SocketGrant{grant})
 	if offers[0].Scope != hitl.ApprovalGrantScopeProject || offers[0].Grant.ProjectID != "proj-sock" {
@@ -109,7 +133,15 @@ func TestSocketDayRungRidesIdentityWithoutFolder(t *testing.T) {
 }
 
 func TestSocketDayRungStaysTaskWithoutProjectIdentity(t *testing.T) {
-	action := hitl.ProposedAction{Tool: "command", SessionID: "sess-sock", ProjectDir: "/tmp/proj"}
+	action := hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+},
+Scope: hitl.ActionScope{
+SessionID: "sess-sock",
+ProjectDir: "/tmp/proj",
+},
+}
 	grant := confine.SocketGrant{ApprovedPath: "/tmp/svc.sock", ResolvedPath: "/private/tmp/svc.sock"}
 	offers := capabilitygrants.SocketExecutionGrantOffers(action, []confine.SocketGrant{grant})
 	if offers[0].Scope != hitl.ApprovalGrantScopeChat {

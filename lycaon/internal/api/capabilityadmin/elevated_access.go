@@ -51,7 +51,12 @@ func (s *Access) elevatedAccessSummary(ctx context.Context, chat *wire.Session) 
 		return summary, nil
 	}
 	now := time.Now()
-	action := hitl.ProposedAction{SessionID: chat.ID, ProjectID: chat.ProjectID}
+	action := hitl.ProposedAction{
+Scope: hitl.ActionScope{
+SessionID: chat.ID,
+ProjectID: chat.ProjectID,
+},
+}
 	byID := make(map[string]int)
 	for _, grant := range s.Inventory.approvalGrants(chat.ID) {
 		// Runtime chat capabilities bind directly to the root chat, with no project

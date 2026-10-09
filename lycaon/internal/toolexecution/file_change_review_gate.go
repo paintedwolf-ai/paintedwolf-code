@@ -18,28 +18,39 @@ func (e *Boundary) fileChangeReviewer(tool string, args map[string]any, tc tools
 			return unwired.ReviewFileChanges(ctx, changes...)
 		}
 		action := hitl.ProposedAction{
-			Tool: tool, Args: args, ProjectID: tc.Identity.ProjectID, ProjectDir: tc.ActiveRootPath(),
-			SessionID: tc.Identity.SessionID, RootSessionID: tc.ChatSessionID(), ActionID: tc.Identity.ToolCallID,
-			SessionScratchRoot: tc.Host.SessionScratchDir,
-			Contained:          hitl.ContainedForRequest(e.actionConfineRequest(ctx, tc)),
-		}
+Invocation: hitl.ActionInvocation{
+Tool: tool,
+Args: args,
+ActionID: tc.Identity.ToolCallID,
+},
+Scope: hitl.ActionScope{
+ProjectID: tc.Identity.ProjectID,
+ProjectDir: tc.ActiveRootPath(),
+SessionID: tc.Identity.SessionID,
+RootSessionID: tc.ChatSessionID(),
+SessionScratchRoot: tc.Host.SessionScratchDir,
+},
+Execution: hitl.ActionExecution{
+Contained: hitl.ContainedForRequest(e.actionConfineRequest(ctx, tc)),
+},
+}
 		files, policies := map[string]bool{}, map[string]bool{}
 		for _, change := range changes {
 			for _, path := range []string{change.Path, change.FromPath} {
 				if path != "" && !files[path] {
 					files[path] = true
-					action.Files = append(action.Files, path)
-					action.ResolvedFiles = append(action.ResolvedFiles, fspath.CanonicalPath(path))
+					action.Invocation.Files = append(action.Invocation.Files, path)
+					action.Invocation.ResolvedFiles = append(action.Invocation.ResolvedFiles, fspath.CanonicalPath(path))
 				}
 				if change.Preview.Target == "index" || policies[path] {
 					continue
 				}
 				if target, policy := tc.AgentPolicyTarget(path); policy {
 					policies[path] = true
-					action.AgentPolicy = append(action.AgentPolicy, target)
+					action.Mutations.AgentPolicy = append(action.Mutations.AgentPolicy, target)
 				}
 			}
-			action.FileChanges = append(action.FileChanges, change.Preview)
+			action.Mutations.FileChanges = append(action.Mutations.FileChanges, change.Preview)
 		}
 		result, err := e.Approvals.approvalGate.Evaluate(ctx, action)
 		if err != nil {

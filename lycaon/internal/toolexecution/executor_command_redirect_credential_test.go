@@ -121,7 +121,7 @@ func TestCommandRedirectIntoCredentialFileAsksAsProtectedWrite(t *testing.T) {
 				t.Fatalf("%q wrote %s without a %s ask", tc.line, tc.target, api.GateSensitiveLocation)
 			}
 			action := asks[0].ProposedAction
-			if action == nil || len(action.FileChanges) == 0 {
+			if action == nil || len(action.Mutations.FileChanges) == 0 {
 				t.Fatalf("%q: the protected ask carries no prepared change: %+v", tc.line, action)
 			}
 			body, err := os.ReadFile(credential)

@@ -40,9 +40,15 @@ func detectionCheckpointRequest(sessionID string) hitl.CheckpointRequest {
 		Kind:       api.CheckpointKindToolApproval,
 		ToolCallID: "call-detection",
 		ProposedAction: &hitl.ProposedAction{
-			Tool: "command", Args: map[string]any{"command": "aws iam create-user"},
-			SessionID: sessionID, ActionID: "call-detection",
-		},
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": "aws iam create-user"},
+ActionID: "call-detection",
+},
+Scope: hitl.ActionScope{
+SessionID: sessionID,
+},
+},
 		Detection: &hitl.DetectionMatch{
 			PackID: "pack-cloud", RuleID: "rule-42", RuleTitle: "IAM principal creation", Level: "high",
 		},
@@ -124,7 +130,11 @@ func TestRejectSealedInResolvingTransaction(t *testing.T) {
 	resp, err := requestExplicitApprovalCheckpoint(t, ctx, mgr, hitl.CheckpointRequest{
 		SessionID:      sessionID,
 		Kind:           api.CheckpointKindToolApproval,
-		ProposedAction: &hitl.ProposedAction{Tool: "write"},
+		ProposedAction: &hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "write",
+},
+},
 	})
 	testutil.FailErr(t, "RequestCheckpoint", err)
 	_, err = mgr.ResolveCheckpoint(ctx, sessionID, resp.CheckpointID, api.CheckpointKindToolApproval,
@@ -147,7 +157,11 @@ func TestRejectFailsClosedWhenLedgerAppendFails(t *testing.T) {
 	resp, err := requestExplicitApprovalCheckpoint(t, ctx, mgr, hitl.CheckpointRequest{
 		SessionID:      sessionID,
 		Kind:           api.CheckpointKindToolApproval,
-		ProposedAction: &hitl.ProposedAction{Tool: "write"},
+		ProposedAction: &hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "write",
+},
+},
 	})
 	testutil.FailErr(t, "RequestCheckpoint", err)
 	_, err = mgr.ResolveCheckpoint(ctx, sessionID, resp.CheckpointID, api.CheckpointKindToolApproval,

@@ -51,11 +51,17 @@ detection:
 	}}}))
 
 	action := hitl.ProposedAction{
-		Tool:       "command",
-		Args:       map[string]any{"command": "echo hi"},
-		ProjectDir: "/proj",
-		SessionID:  "s1",
-		Contained: hitl.Contained{
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": "echo hi"},
+ActionID: "call-1",
+},
+Scope: hitl.ActionScope{
+ProjectDir: "/proj",
+SessionID: "s1",
+},
+Execution: hitl.ActionExecution{
+Contained: hitl.Contained{
 			FSJailed:          true,
 			Egress:            hitl.ContainedEgressDirectIP,
 			DirectIP:          true,
@@ -63,11 +69,13 @@ detection:
 			SocketCount:       2,
 			Roots:             []string{"/proj"},
 		},
-		ActionID:             "call-1",
-		DirectIPRequested:    true,
-		Visibility:           "unobserved",
-		DeclaredDestinations: []string{"db.example.com:22"},
-	}
+},
+Egress: hitl.ActionEgress{
+DirectIPRequested: true,
+Visibility: "unobserved",
+DeclaredDestinations: []string{"db.example.com:22"},
+},
+}
 	_, ok := src.MatchAction(action, "strict")
 	if !ok {
 		t.Fatal("GateSource must match tool_exec against Contained-bearing action")
@@ -144,21 +152,27 @@ func TestNonHTTPContractCapabilityGrantsCannotSuppressDetection(t *testing.T) {
 	}
 	approvalGate := sigmaGateWithDetection(t, gate.PostureBalanced, src)
 	action := hitl.ProposedAction{
-		Tool:       "command",
-		Args:       map[string]any{"command": "echo hi"},
-		Contained:  hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressProxy, Roots: []string{"/tmp/proj"}},
-		ProjectDir: "/tmp/proj",
-		SessionID:  "s1",
-	}
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": "echo hi"},
+},
+Execution: hitl.ActionExecution{
+Contained: hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressProxy, Roots: []string{"/tmp/proj"}},
+},
+Scope: hitl.ActionScope{
+ProjectDir: "/tmp/proj",
+SessionID: "s1",
+},
+}
 	// Family host leases leave exact-action detection asks intact.
 	hostGrant := hitl.ApprovalGrant{
 		ID: "grant_host_family_sigma", Scope: hitl.ApprovalGrantScopeChat,
-		ChatSessionID: action.ChatSession(), ProjectDir: action.ProjectDir,
+		ChatSessionID: action.Scope.ChatSession(), ProjectDir: action.Scope.ProjectDir,
 		Title: hitl.TitleAllowForThisChat, Coverage: "connections to `api.example.com`",
 		ExpiresWhen: hitl.ExpiresWhenChatDeleted,
 		Predicate:   hitl.ApprovalGrantPredicate{Category: string(settings.ApprovalCategoryHost), Pattern: "api.example.com"},
 		Witness: hitl.ApprovalGrantWitness{
-			FSJailed: action.Contained.FSJailed, Egress: action.Contained.Egress,
+			FSJailed: action.Execution.Contained.FSJailed, Egress: action.Execution.Contained.Egress,
 		},
 	}
 	_, err := approvalGate.ApplyGrant(hostGrant)
@@ -355,9 +369,17 @@ func TestNonHTTPContractCorrelationIDNeverAuthorizationIdentity(t *testing.T) {
 		}
 	}
 	action := hitl.ProposedAction{
-		Tool: "command", Args: map[string]any{"command": "echo"}, ProjectDir: "/p",
-		Contained: hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressProxy, Roots: []string{"/p"}},
-	}
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": "echo"},
+},
+Scope: hitl.ActionScope{
+ProjectDir: "/p",
+},
+Execution: hitl.ActionExecution{
+Contained: hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressProxy, Roots: []string{"/p"}},
+},
+}
 	key := hitl.GrantKey(action)
 	if strings.Contains(key, "det_") || strings.Contains(strings.ToLower(key), "correlation") {
 		t.Fatalf("GrantKey must not embed correlation material: %q", key)

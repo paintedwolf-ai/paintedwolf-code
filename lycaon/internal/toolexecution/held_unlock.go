@@ -70,10 +70,19 @@ func (e *Secrets) ensureHeldUnlocked(
 		return secretmatch.Resolution{}, secretmatch.NewAskFault(secretmatch.FaultStageCheckpointsUnwired, nil)
 	}
 	action := hitl.ProposedAction{
-		Tool: string(finding.Surface), EstimatedImpact: "Unlocks values you stored for this chat",
-		SessionID: finding.SessionID, RootSessionID: finding.RootSessionID,
-		ProjectID: finding.ProjectID, ProjectDir: finding.ProjectDir,
-	}
+Invocation: hitl.ActionInvocation{
+Tool: string(finding.Surface),
+},
+Presentation: hitl.ActionPresentation{
+EstimatedImpact: "Unlocks values you stored for this chat",
+},
+Scope: hitl.ActionScope{
+SessionID: finding.SessionID,
+RootSessionID: finding.RootSessionID,
+ProjectID: finding.ProjectID,
+ProjectDir: finding.ProjectDir,
+},
+}
 	screen := toolsecrets.SecretReviewPayload(finding, recipients, false)
 	screen.Held = held
 	plan, err := hitl.NewUnlockPlan(action, *held, screen)

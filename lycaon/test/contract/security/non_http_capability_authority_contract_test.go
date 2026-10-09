@@ -113,16 +113,24 @@ func TestNonHTTPContractTypedAuthResolvesOnlyMatchingSubstrate(t *testing.T) {
 	approvals := settings.NewRuleApprovalGate(store, settings.NoSources())
 
 	socketOnly := hitl.ProposedAction{
-		Tool:       "command",
-		ProjectDir: proj,
-		Args:       map[string]any{"command": "true"},
-		Contained: hitl.Contained{
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": "true"},
+},
+Scope: hitl.ActionScope{
+ProjectDir: proj,
+},
+Execution: hitl.ActionExecution{
+Contained: hitl.Contained{
 			FSJailed: true, Egress: hitl.ContainedEgressProxy, Roots: []string{proj},
 			SocketPathsDigest: digest, SocketCount: 1,
 		},
-		SocketGrants:            []confine.SocketGrant{g},
-		AuthorizedSocketDigests: []string{digest},
-	}
+},
+Sockets: hitl.ActionSockets{
+SocketGrants: []confine.SocketGrant{g},
+AuthorizedSocketDigests: []string{digest},
+},
+}
 	res, err := approvals.Evaluate(context.Background(), socketOnly)
 	contractcheck.FailErr(t, "evaluate authorized socket", err)
 	if !res.AutoApproved() {
@@ -130,7 +138,7 @@ func TestNonHTTPContractTypedAuthResolvesOnlyMatchingSubstrate(t *testing.T) {
 	}
 
 	unauthSocket := socketOnly
-	unauthSocket.AuthorizedSocketDigests = nil
+	unauthSocket.Sockets.AuthorizedSocketDigests = nil
 	res, err = approvals.Evaluate(context.Background(), unauthSocket)
 	contractcheck.FailErr(t, "evaluate unauthorized socket", err)
 	if res.Gate() != api.GateUnobservedChannel {
@@ -138,13 +146,19 @@ func TestNonHTTPContractTypedAuthResolvesOnlyMatchingSubstrate(t *testing.T) {
 	}
 
 	direct := hitl.ProposedAction{
-		Tool:       "command",
-		ProjectDir: proj,
-		Args:       map[string]any{"command": "true"},
-		Contained: hitl.Contained{
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": "true"},
+},
+Scope: hitl.ActionScope{
+ProjectDir: proj,
+},
+Execution: hitl.ActionExecution{
+Contained: hitl.Contained{
 			FSJailed: true, Egress: hitl.ContainedEgressDirectIP, DirectIP: true, Roots: []string{proj},
 		},
-	}
+},
+}
 	res, err = approvals.Evaluate(context.Background(), direct)
 	contractcheck.FailErr(t, "evaluate direct ip", err)
 	if res.Gate() != api.GateUnobservedChannel {
@@ -152,7 +166,7 @@ func TestNonHTTPContractTypedAuthResolvesOnlyMatchingSubstrate(t *testing.T) {
 	}
 
 	directWithSocketAuth := direct
-	directWithSocketAuth.AuthorizedSocketDigests = []string{digest}
+	directWithSocketAuth.Sockets.AuthorizedSocketDigests = []string{digest}
 	res, err = approvals.Evaluate(context.Background(), directWithSocketAuth)
 	contractcheck.FailErr(t, "evaluate direct ip with socket auth", err)
 	if res.Gate() != api.GateUnobservedChannel {
@@ -160,7 +174,7 @@ func TestNonHTTPContractTypedAuthResolvesOnlyMatchingSubstrate(t *testing.T) {
 	}
 
 	authorizedDirect := direct
-	authorizedDirect.AuthorizedDirectIP = true
+	authorizedDirect.Egress.AuthorizedDirectIP = true
 	res, err = approvals.Evaluate(context.Background(), authorizedDirect)
 	contractcheck.FailErr(t, "evaluate authorized direct ip", err)
 	if !res.AutoApproved() {

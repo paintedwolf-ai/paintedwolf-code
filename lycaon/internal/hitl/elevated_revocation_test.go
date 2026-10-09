@@ -30,7 +30,15 @@ func TestRevocationWaitsForInstallAndSeal(t *testing.T) {
 	defer cancel()
 	ctx := testdbseed.OwnerCaller(t, timed, database)
 	insertSession(t, database, sessionID)
-	action := hitl.ProposedAction{Tool: "command", SessionID: sessionID, Args: map[string]any{"command": "make"}}
+	action := hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": "make"},
+},
+Scope: hitl.ActionScope{
+SessionID: sessionID,
+},
+}
 	grant := hitl.ApprovalGrant{ID: "grant_elevated", Scope: hitl.ApprovalGrantScopeChat, ChatSessionID: sessionID, Title: hitl.TitleAllowForThisChat,
 		ElevatedEffects: []api.ElevatedAccessEffect{api.ElevatedAccessEffectHostExecution}}
 	presentation, reasons := approvalPlanPresentation()

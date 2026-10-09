@@ -42,17 +42,25 @@ func (e *Network) resolveEgress(ctx context.Context, cmd confine.EgressCommand, 
 	ctx = authzledger.WithInvocation(ctx, cmd.SessionID, cmd.RootSessionID, cmd.ToolCallID)
 	subject := egressAskFor(cmd, ep, detection)
 	action := hitl.ProposedAction{
-		Tool:             networkEgressTool,
-		PresentationTool: strings.TrimSpace(cmd.ToolName),
-		Args:             subject.Args,
-		Command:          strings.TrimSpace(cmd.CommandLine),
-		EstimatedImpact:  subject.Impact,
-		ProjectID:        cmd.ProjectID,
-		ProjectDir:       cmd.ProjectDir,
-		SessionID:        cmd.SessionID,
-		RootSessionID:    cmd.RootSessionID,
-		Contained:        subject.Contained,
-	}
+Invocation: hitl.ActionInvocation{
+Tool: networkEgressTool,
+Args: subject.Args,
+},
+Presentation: hitl.ActionPresentation{
+PresentationTool: strings.TrimSpace(cmd.ToolName),
+Command: strings.TrimSpace(cmd.CommandLine),
+EstimatedImpact: subject.Impact,
+},
+Scope: hitl.ActionScope{
+ProjectID: cmd.ProjectID,
+ProjectDir: cmd.ProjectDir,
+SessionID: cmd.SessionID,
+RootSessionID: cmd.RootSessionID,
+},
+Execution: hitl.ActionExecution{
+Contained: subject.Contained,
+},
+}
 
 	facts := gate.Facts{
 		Stage: gate.StagePreDial,
@@ -60,7 +68,7 @@ func (e *Network) resolveEgress(ctx context.Context, cmd confine.EgressCommand, 
 			gate.ProducerLease | gate.ProducerRule | gate.ProducerDetection,
 		Containment: gate.Containment{FSJailed: true, Egress: gate.EgressProxy},
 		Destination: destinationFact(cmd, ep,
-			e.firstUseThisSession(action.ChatSession(), ep.Host), e.configuredBy(cmd.ProjectDir, ep.Host), e.publicRegistry(ep.Host)),
+			e.firstUseThisSession(action.Scope.ChatSession(), ep.Host), e.configuredBy(cmd.ProjectDir, ep.Host), e.publicRegistry(ep.Host)),
 		Leased:           e.egressLeaseCovers(ctx, action) || e.loopbackLeaseCovers(ctx, cmd, ep),
 		RequestConsented: cmd.ToolName == "http_request" && egressgate.RequestConsented(ctx, ep.Host, ep.Port),
 	}
@@ -79,14 +87,14 @@ func (e *Network) resolveEgress(ctx context.Context, cmd confine.EgressCommand, 
 		}}
 	}
 	if e.Secrets.secretExposure != nil {
-		exposed, err := e.Secrets.secretExposure(ctx, action.ChatSession())
+		exposed, err := e.Secrets.secretExposure(ctx, action.Scope.ChatSession())
 		if err == nil {
 			facts.Ran |= gate.ProducerExposure
 			facts.SecretExposed = exposed
 		}
 	}
 	if e.Secrets.untrustedIngestion != nil {
-		ingested, err := e.Secrets.untrustedIngestion(ctx, action.ChatSession())
+		ingested, err := e.Secrets.untrustedIngestion(ctx, action.Scope.ChatSession())
 		if err == nil {
 			facts.Ran |= gate.ProducerIngestion
 			facts.UntrustedIngested = ingested
@@ -115,7 +123,7 @@ func (e *Network) resolveEgress(ctx context.Context, cmd confine.EgressCommand, 
 
 	verdict, decision := gate.Evaluate(facts, e.egressPosture(cmd))
 	if verdict != gate.Ask {
-		e.recordHostVisit(ctx, action.ChatSession(), ep.Host)
+		e.recordHostVisit(ctx, action.Scope.ChatSession(), ep.Host)
 		return true
 	}
 

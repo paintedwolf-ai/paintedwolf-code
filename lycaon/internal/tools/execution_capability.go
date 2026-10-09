@@ -87,7 +87,7 @@ func executionBoundarySet[T comparable](values []T) []T {
 
 // StampExecutionApproval binds reviewed authority to this call and launch boundary.
 func (tc *ToolContext) StampExecutionApproval(args map[string]any, reviewed hitl.ProposedAction) {
-	tc.Execution.executionPermit = &executionPermit{session: tc.Identity.SessionID, call: tc.Identity.ToolCallID, processControl: tc.Execution.ProcessControl, hostExecution: tc.Execution.HostExecution, boundary: reviewed.ExecutionBoundaryDigest, arguments: executionArgumentsDigest(args)}
+	tc.Execution.executionPermit = &executionPermit{session: tc.Identity.SessionID, call: tc.Identity.ToolCallID, processControl: tc.Execution.ProcessControl, hostExecution: tc.Execution.HostExecution, boundary: reviewed.Execution.ExecutionBoundaryDigest, arguments: executionArgumentsDigest(args)}
 }
 
 // HasExecutionApproval reports whether this invocation reached capability review.

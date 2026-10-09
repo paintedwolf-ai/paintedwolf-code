@@ -36,9 +36,13 @@ func TestManagerPublishCheckpointSSE(t *testing.T) {
 		SessionID: sessionID,
 		Kind:      api.CheckpointKindToolApproval,
 		ProposedAction: &hitl.ProposedAction{
-			Tool:       "write",
-			ProjectDir: projectDir,
-		},
+Invocation: hitl.ActionInvocation{
+Tool: "write",
+},
+Scope: hitl.ActionScope{
+ProjectDir: projectDir,
+},
+},
 	})
 	testutil.FailErr(t, "mgr.RequestCheckpoint failed", err)
 	assertCheckpointEvent(t, ch, resp.CheckpointID, api.CheckpointStatusPending)
@@ -69,10 +73,14 @@ func TestManagerCheckpointRoutesByProjectID(t *testing.T) {
 		Kind:      api.CheckpointKindToolApproval,
 		ProjectID: projectID,
 		ProposedAction: &hitl.ProposedAction{
-			Tool:       "command",
-			Args:       map[string]any{"command": "git push origin main"},
-			ProjectDir: "/on/disk/project/path",
-		},
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": "git push origin main"},
+},
+Scope: hitl.ActionScope{
+ProjectDir: "/on/disk/project/path",
+},
+},
 	})
 	testutil.FailErr(t, "mgr.RequestCheckpoint failed", err)
 	assertCheckpointEvent(t, ch, resp.CheckpointID, api.CheckpointStatusPending)
@@ -126,7 +134,12 @@ func TestPatchPendingAIRationaleNoSSEAfterResolve(t *testing.T) {
 		SessionID:      sessionID,
 		Kind:           api.CheckpointKindToolApproval,
 		ProjectID:      projectID,
-		ProposedAction: &hitl.ProposedAction{Tool: "command", Args: map[string]any{"command": "git push"}},
+		ProposedAction: &hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": "git push"},
+},
+},
 	})
 	testutil.FailErr(t, "RequestCheckpoint", err)
 	assertCheckpointEvent(t, ch, resp.CheckpointID, api.CheckpointStatusPending)
@@ -190,7 +203,12 @@ func TestClearPendingAIRationale(t *testing.T) {
 		SessionID:          sessionID,
 		Kind:               api.CheckpointKindToolApproval,
 		ProjectID:          projectID,
-		ProposedAction:     &hitl.ProposedAction{Tool: "command", Args: map[string]any{"command": "git push"}},
+		ProposedAction:     &hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": "git push"},
+},
+},
 		AIRationalePending: true,
 	})
 	testutil.FailErr(t, "RequestCheckpoint", err)
@@ -241,9 +259,13 @@ func TestJoinerBandEscalationReachesWire(t *testing.T) {
 		Kind:      api.CheckpointKindToolApproval,
 		Type:      hitl.DecisionTypeApprove,
 		ProposedAction: &hitl.ProposedAction{
-			Tool:    "command",
-			Command: "git status",
-		},
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+},
+Presentation: hitl.ActionPresentation{
+Command: "git status",
+},
+},
 		ConsequenceBand: api.ConsequenceBandStandard,
 	})
 	testutil.FailErr(t, "RequestCheckpoint", err)

@@ -24,7 +24,12 @@ func TestCheckpointAutoExpiresToDenied(t *testing.T) {
 		Kind:           api.CheckpointKindToolApproval,
 		Type:           hitl.DecisionTypeApprove,
 		Title:          "Approve command",
-		ProposedAction: &hitl.ProposedAction{Tool: "command", Args: map[string]any{"command": "echo hi"}},
+		ProposedAction: &hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": "echo hi"},
+},
+},
 	})
 	testutil.FailErr(t, "mgr.RequestCheckpoint failed", err)
 
@@ -69,7 +74,12 @@ func TestCheckpointExpiryNotifiesToolApprovalTerminal(t *testing.T) {
 		Kind:             api.CheckpointKindToolApproval,
 		Type:             hitl.DecisionTypeApprove,
 		Title:            "Approve command",
-		ProposedAction:   &hitl.ProposedAction{Tool: "command", Args: map[string]any{"command": "echo hi"}},
+		ProposedAction:   &hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": "echo hi"},
+},
+},
 		JoinedCount:      1,
 		CoalesceChat:     sessionID,
 		CoalesceGrantKey: grantKey,
@@ -109,7 +119,12 @@ func TestRestorePendingExpiresFromOriginalCreationTime(t *testing.T) {
 	resp, err := requestExplicitApprovalCheckpoint(t, ctx, original, hitl.CheckpointRequest{
 		SessionID: sessionID, Kind: api.CheckpointKindToolApproval,
 		Type: hitl.DecisionTypeApprove, Title: "Old approval",
-		ProposedAction: &hitl.ProposedAction{Tool: "command", Args: map[string]any{"command": "echo old"}},
+		ProposedAction: &hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": "echo old"},
+},
+},
 	})
 	testutil.FailErr(t, "create pending checkpoint", err)
 	_, err = sqlDB.ExecContext(ctx, "UPDATE checkpoints SET created_at = ? WHERE id = ?", db.FormatTime(time.Now().UTC().Add(-time.Hour)), resp.CheckpointID)
@@ -138,7 +153,12 @@ func TestRestorePendingRebuildsCoalescingBeforeExpiry(t *testing.T) {
 	resp, err := requestExplicitApprovalCheckpoint(t, ctx, original, hitl.CheckpointRequest{
 		SessionID: sessionID, Kind: api.CheckpointKindToolApproval,
 		Type: hitl.DecisionTypeApprove, Title: "Restored approval",
-		ProposedAction: &hitl.ProposedAction{Tool: "command", Args: map[string]any{"command": "echo restored"}},
+		ProposedAction: &hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": "echo restored"},
+},
+},
 		CoalesceChat:   sessionID, CoalesceGrantKey: "restored-key",
 	})
 	testutil.FailErr(t, "create pending checkpoint", err)
@@ -174,7 +194,12 @@ func TestRestoreRejectedToolApprovalDenials(t *testing.T) {
 	resp, err := requestExplicitApprovalCheckpoint(t, ctx, original, hitl.CheckpointRequest{
 		SessionID: sessionID, Kind: api.CheckpointKindToolApproval,
 		Type: hitl.DecisionTypeApprove, Title: "Denied approval",
-		ProposedAction: &hitl.ProposedAction{Tool: "command", Args: map[string]any{"command": "echo denied"}},
+		ProposedAction: &hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": "echo denied"},
+},
+},
 		CoalesceChat:   sessionID, CoalesceGrantKey: "denied-key",
 	})
 	testutil.FailErr(t, "create checkpoint", err)
@@ -209,7 +234,12 @@ func TestStoppedCheckpointsPreservePendingRowsForRestart(t *testing.T) {
 	original.SetCheckpointExpiry(func() time.Duration { return time.Hour })
 	response, err := requestExplicitApprovalCheckpoint(t, ctx, original, hitl.CheckpointRequest{
 		SessionID: sessionID, Kind: api.CheckpointKindToolApproval,
-		ProposedAction: &hitl.ProposedAction{Tool: "command", Args: map[string]any{"command": "echo restart"}},
+		ProposedAction: &hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": "echo restart"},
+},
+},
 	})
 	testutil.FailErr(t, "request pending approval", err)
 	original.StopExpiryTimers()

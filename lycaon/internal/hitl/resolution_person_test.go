@@ -22,7 +22,12 @@ func commandCheckpoint(sessionID string) hitl.CheckpointRequest {
 	return hitl.CheckpointRequest{
 		SessionID: sessionID, Kind: api.CheckpointKindToolApproval, Type: hitl.DecisionTypeApprove,
 		Title:          "Approve command",
-		ProposedAction: &hitl.ProposedAction{Tool: "command", Args: map[string]any{"command": "echo hi"}},
+		ProposedAction: &hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": "echo hi"},
+},
+},
 	}
 }
 

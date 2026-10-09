@@ -87,7 +87,7 @@ func TestNativeTargetFilesReachProductionDetection(t *testing.T) {
 				ToolName: tc.tool, ToolArgs: tc.args, ProjectDir: t.TempDir(),
 				SessionID: "session", ActionID: "action",
 			})
-			if len(action.Files) == 0 {
+			if len(action.Invocation.Files) == 0 {
 				t.Fatal("policy adapter projected no target files")
 			}
 			hit, ok := source.MatchAction(action, "balanced")

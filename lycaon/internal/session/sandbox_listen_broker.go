@@ -168,15 +168,25 @@ func (b *ListenCheckpointBroker) buildListenCard(
 	summary := sandboxAskCommandSummary(in.Command)
 	label := listenGrantLabel(ports)
 	grantAction := hitl.ProposedAction{
-		Tool: "local_listen", Args: map[string]any{"listen_ports": listenPortInts(ports)},
-		ProjectID: in.ProjectID, ProjectDir: in.ProjectDir, SessionID: invokingSessionID, RootSessionID: rootSessionID,
-		Contained: hitl.ContainedForAction(hitl.ActionConfineInputs{
+Invocation: hitl.ActionInvocation{
+Tool: "local_listen",
+Args: map[string]any{"listen_ports": listenPortInts(ports)},
+},
+Scope: hitl.ActionScope{
+ProjectID: in.ProjectID,
+ProjectDir: in.ProjectDir,
+SessionID: invokingSessionID,
+RootSessionID: rootSessionID,
+},
+Execution: hitl.ActionExecution{
+Contained: hitl.ContainedForAction(hitl.ActionConfineInputs{
 			ProjectID:        in.ProjectID,
 			Roots:            projectRoots(in.ProjectDir),
 			LocalListen:      true,
 			LocalListenPorts: ports,
 		}),
-	}
+},
+}
 	chatGrant := listenChatGrant(grantAction)
 	options := portAuthorityLadder(
 		"approve_local_listen_once",
@@ -189,7 +199,7 @@ func (b *ListenCheckpointBroker) buildListenCard(
 		if b.Authority == nil {
 			return false
 		}
-		_, live := b.Authority.AskQuietLive(grantAction.ChatSession(), key)
+		_, live := b.Authority.AskQuietLive(grantAction.Scope.ChatSession(), key)
 		return live
 	})...)
 	title := "Allow a local server"
@@ -241,13 +251,13 @@ func listenChatGrant(action hitl.ProposedAction) hitl.ApprovalGrant {
 	key := listenAxisKey
 	raw := strings.Join([]string{
 		string(hitl.ApprovalGrantScopeChat), hitl.ApprovalGrantCategoryLocalListen,
-		key, action.ChatSession(),
+		key, action.Scope.ChatSession(),
 	}, "\x00")
 	sum := sha256.Sum256([]byte(raw))
 	return hitl.ApprovalGrant{
 		ID: "grant_" + hex.EncodeToString(sum[:8]), Scope: hitl.ApprovalGrantScopeChat,
 		Predicate:     hitl.ApprovalGrantPredicate{Category: hitl.ApprovalGrantCategoryLocalListen, Pattern: key},
-		ChatSessionID: action.ChatSession(), ProjectID: action.ProjectID, ProjectDir: action.ProjectDir,
+		ChatSessionID: action.Scope.ChatSession(), ProjectID: action.Scope.ProjectID, ProjectDir: action.Scope.ProjectDir,
 		Title: hitl.TitleAllowForThisChat, Coverage: "binding local server ports in this chat",
 		GrantedAt: time.Now().UTC(), ExpiresWhen: hitl.ExpiresWhenChatDeleted,
 		ReaskWhen: "this chat is deleted", Source: "checkpoint",

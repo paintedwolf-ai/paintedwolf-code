@@ -40,9 +40,18 @@ func TestRuntimeDetectionReloadPreservesSealedGate(t *testing.T) {
 	if _, ok := r.Authority.approvalGate.PutAskQuiet(hitl.AskQuiet{ChatSessionID: "session", Key: "retained"}, 0); !ok {
 		t.Fatal("install ask quiet")
 	}
-	action := hitl.ProposedAction{Tool: "command", SessionID: "session",
-		Args:      map[string]any{"command": "echo hi"},
-		Contained: hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressProxy}}
+	action := hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": "echo hi"},
+},
+Scope: hitl.ActionScope{
+SessionID: "session",
+},
+Execution: hitl.ActionExecution{
+Contained: hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressProxy},
+},
+}
 	for _, source := range []settings.DetectionSource{nil, runtimeDetectionFixture{}, runtimeDetectionFixture{true}, nil, runtimeDetectionFixture{}} {
 		if source == nil {
 			published.Store(nil)

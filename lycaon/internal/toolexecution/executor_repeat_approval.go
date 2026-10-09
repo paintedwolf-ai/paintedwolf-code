@@ -56,7 +56,7 @@ func (e *Approvals) noteRepeatSuppressed(chat string, in toolApprovalRaise) {
 
 // quietOptionsFor mints quiet rungs with this executor's live-quiet callback.
 func (e *Approvals) quietOptionsFor(action hitl.ProposedAction, decision *gate.Decision) []hitl.ApprovalOption {
-	chat := action.ChatSession()
+	chat := action.Scope.ChatSession()
 	return hitl.QuietOptions(action, decision, nil, func(key string) bool {
 		if e == nil || e.approvalGate == nil {
 			return false

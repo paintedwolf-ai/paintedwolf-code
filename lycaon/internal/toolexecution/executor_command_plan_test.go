@@ -43,12 +43,13 @@ func (g *recordingApprovalGate) last(t *testing.T) hitl.ProposedAction {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	for _, action := range g.actions {
-		if action.Tool == "command" {
+		if action.Invocation.Tool == "command" {
 			return action
 		}
 	}
 	t.Fatal("the approval gate reviewed no command")
-	return hitl.ProposedAction{}
+	return hitl.ProposedAction{
+}
 }
 
 func (g *recordingApprovalGate) reset() {
@@ -120,7 +121,7 @@ func TestInlineRedirectionRunsThroughTheExecutor(t *testing.T) {
 	if _, mutated := args["stdout_to"]; mutated || len(args) != 1 {
 		t.Fatalf("the executor rewrote the caller's arguments: %#v", args)
 	}
-	if files := f.gate.last(t).Files; !slices.Contains(files, "out.log") {
+	if files := f.gate.last(t).Invocation.Files; !slices.Contains(files, "out.log") {
 		t.Fatalf("approval did not see the redirect target: %q", files)
 	}
 
@@ -136,7 +137,7 @@ func TestInlineRedirectionRunsThroughTheExecutor(t *testing.T) {
 	if tail, _ := result["tail"].(string); !strings.Contains(tail, "a\nb") {
 		t.Fatalf("the second group did not read the first group's output: %#v", result)
 	}
-	files := f.gate.last(t).Files
+	files := f.gate.last(t).Invocation.Files
 	if !slices.Contains(files, "pkg/sorted.txt") || !slices.Contains(files, "pkg/../in.txt") {
 		t.Fatalf("approval did not see the cwd-relative stream files: %q", files)
 	}
@@ -149,7 +150,7 @@ func TestApprovalReviewsTheExpandedArgv(t *testing.T) {
 	}
 	args := map[string]any{"command": "cat *.log > joined.txt"}
 	f.run(t, args)
-	reviewed, _ := f.gate.last(t).Args["command"].(string)
+	reviewed, _ := f.gate.last(t).Invocation.Args["command"].(string)
 	if reviewed != "cat a.log b.log > joined.txt" {
 		t.Fatalf("approval reviewed %q, want the expanded argv", reviewed)
 	}
@@ -161,7 +162,7 @@ func TestApprovalReviewsTheExpandedArgv(t *testing.T) {
 	}
 
 	f.run(t, map[string]any{"command": "echo '*.log'"})
-	if reviewed, _ := f.gate.last(t).Args["command"].(string); reviewed != "echo '*.log'" {
+	if reviewed, _ := f.gate.last(t).Invocation.Args["command"].(string); reviewed != "echo '*.log'" {
 		t.Fatalf("a quoted pattern was expanded: %q", reviewed)
 	}
 }

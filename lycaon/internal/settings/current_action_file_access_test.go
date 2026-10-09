@@ -29,8 +29,15 @@ func TestApprovalFreezesExactFileAccess(t *testing.T) {
 		t.Run(tc.tool, func(t *testing.T) {
 			paths := []string{filepath.Join(outside, "a.txt"), filepath.Join(outside, "b.txt")}
 			result, err := approvalGate.Evaluate(context.Background(), hitl.ProposedAction{
-				Tool: tc.tool, Files: paths, ProjectDir: project, SessionID: "review-paths",
-			})
+Invocation: hitl.ActionInvocation{
+Tool: tc.tool,
+Files: paths,
+},
+Scope: hitl.ActionScope{
+ProjectDir: project,
+SessionID: "review-paths",
+},
+})
 			testutil.FailErr(t, "evaluate file action", err)
 			if !result.Required() || len(result.FileAccess) != len(paths) {
 				t.Fatalf("approval did not retain every target: %+v", result)

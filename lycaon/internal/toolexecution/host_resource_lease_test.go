@@ -62,7 +62,14 @@ func TestPermitCoveredHostResourceSocketsIssuesRealizationOnly(t *testing.T) {
 	other := confine.SocketGrant{ApprovedPath: extra, ResolvedPath: extra}
 	covered, extras := exec.Capabilities.permitCoveredHostResourceSockets(
 		context.Background(),
-		hitl.ProposedAction{Tool: "command", HostResources: []string{"docker"}},
+		hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+},
+Resources: hitl.ActionResources{
+HostResources: []string{"docker"},
+},
+},
 		"digest-1",
 		[]confine.SocketGrant{docker, other},
 		tools.ToolContext{

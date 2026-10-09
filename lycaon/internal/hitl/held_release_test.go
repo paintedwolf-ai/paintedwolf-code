@@ -68,7 +68,14 @@ func (f heldFixture) requestHeld(t *testing.T) string {
 	t.Helper()
 	resp, err := requestSecretApprovalCheckpoint(t, f.ctx, f.mgr, hitl.CheckpointRequest{
 		SessionID: f.sessionID, Kind: api.CheckpointKindToolApproval,
-		ProposedAction: &hitl.ProposedAction{Tool: "http_request", SessionID: f.sessionID},
+		ProposedAction: &hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "http_request",
+},
+Scope: hitl.ActionScope{
+SessionID: f.sessionID,
+},
+},
 		SecretScreen: &hitl.SecretScreen{
 			Surface: "http_request", SurfaceLabel: "HTTP request", CanRedact: true, Managed: true,
 			DestinationID: heldRecipients[0].ID, DestinationLabel: heldRecipients[0].Label, Recipients: heldRecipients,
@@ -83,7 +90,14 @@ func (f heldFixture) requestHeld(t *testing.T) string {
 // requestUnlock raises the card that only unlocks the chat.
 func (f heldFixture) requestUnlock(t *testing.T) string {
 	t.Helper()
-	action := hitl.ProposedAction{Tool: "http_request", SessionID: f.sessionID}
+	action := hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "http_request",
+},
+Scope: hitl.ActionScope{
+SessionID: f.sessionID,
+},
+}
 	plan, err := hitl.NewUnlockPlan(action, *f.held(), &hitl.SecretScreen{
 		Surface: "http_request", SurfaceLabel: "HTTP request", CanRedact: true, Managed: true, Recipients: heldRecipients,
 	})

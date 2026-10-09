@@ -207,11 +207,15 @@ func (m *Manager) ObserveMintedCredential(ctx context.Context, sess *api.Session
 		return
 	}
 	hit, ok := source.MintedCredentialRule(hitl.ProposedAction{
-		Tool:       tool,
-		Args:       args,
-		ProjectDir: m.overlayProjectDir(ctx, sess),
-		SessionID:  sess.ID,
-	})
+Invocation: hitl.ActionInvocation{
+Tool: tool,
+Args: args,
+},
+Scope: hitl.ActionScope{
+ProjectDir: m.overlayProjectDir(ctx, sess),
+SessionID: sess.ID,
+},
+})
 	if !ok {
 		return
 	}
