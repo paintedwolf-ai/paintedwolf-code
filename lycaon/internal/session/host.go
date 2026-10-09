@@ -103,9 +103,9 @@ func (m *Host) SetLoopbackProvenance(p LoopbackProvenanceResolver) {
 	}
 }
 
-// NewManagerWithLLMService optionally wires provider settings, cost tracking, and model routing.
-func NewHost(store Store, models Models, registry tools.ToolRegistry) *Host {
-	client, svc, cfg, tracker := models.Client, models.Provider, models.Limits, models.Cost
+// NewHost acquires the session domains and binds their shared resources.
+func NewHost(store Store, modelSources Models, registry tools.ToolRegistry) *Host {
+	client, svc, cfg, tracker := modelSources.Client, modelSources.Provider, modelSources.Limits, modelSources.Cost
 
 	turnAuthorization := authorization.New()
 	queueStore := queue.New()
