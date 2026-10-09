@@ -265,11 +265,12 @@ func (b sessionWiring) wireCheckpointRuntime() error {
 	}
 	checkpointStore := hitl.NewSQLStore(b.storage.Database)
 	checkpointStore.SetEventOutbox(b.events.Outbox)
-	checkpointMgr := hitl.NewManager(checkpointStore, b.events.Publisher, b.authzCapturer.Recorder)
-	checkpointMgr.SetSessionAdmission(b.mgr.WithSessionTreeAdmission)
-	checkpointMgr.SetVaultUnlock(b.security.Presence, b.security.Unlocks, unlockRecorder{})
-	b.toolRuntime.Executor.Secrets.SetPresenceAvailable(checkpointMgr.PresenceAvailable)
-	checkpointMgr.SetCheckpointWaitObserver(b.mgr.BeginCheckpointWait)
+	checkpointMgr := hitl.NewCheckpoints(checkpointStore, b.events.Publisher, b.authzCapturer.Recorder)
+	b.startup.resources.Track("checkpoint-expiries", 25, func(context.Context) error { checkpointMgr.StopExpiryTimers(); return nil })
+	checkpointMgr.Sessions.SetSessionAdmission(b.mgr.WithSessionTreeAdmission)
+	checkpointMgr.Presence.SetVaultUnlock(b.security.Presence, b.security.Unlocks, unlockRecorder{})
+	b.toolRuntime.Executor.Secrets.SetPresenceAvailable(checkpointMgr.Presence.PresenceAvailable)
+	checkpointMgr.Sessions.SetCheckpointWaitObserver(b.mgr.BeginCheckpointWait)
 	var authzRec authzledger.Recorder = b.authzCapturer.Recorder
 	if b.toolRuntime != nil {
 		b.toolRuntime.Authority.SetAuthzRecorder(authzRec)
@@ -404,11 +405,11 @@ func (b sessionWiring) wireAskSpamGuards() *approvalstate.ToolApprovalCoalesce {
 
 // wireToolApprovalCheckpointHooks restores pending approval joiners.
 func (b sessionWiring) wireToolApprovalCheckpointHooks(toolApprovalRT *approvalstate.ToolApprovalCoalesce) error {
-	mgr, ok := b.checkpointMgr.(*hitl.Manager)
+	mgr, ok := b.checkpointMgr.(*hitl.Checkpoints)
 	if !ok {
 		return nil
 	}
-	mgr.SetToolApprovalTerminalHook(func(chatSessionID, grantKey string, status hitl.DecisionStatus) {
+	mgr.Authority.SetToolApprovalTerminalHook(func(chatSessionID, grantKey string, status hitl.DecisionStatus) {
 		toolApprovalRT.ClearPending(chatSessionID, grantKey)
 		switch status {
 		case hitl.DecisionStatusRejected:
@@ -418,7 +419,7 @@ func (b sessionWiring) wireToolApprovalCheckpointHooks(toolApprovalRT *approvals
 		case hitl.DecisionStatusPending, hitl.DecisionStatusExpired, hitl.DecisionStatusCanceled:
 		}
 	})
-	mgr.SetToolApprovalRestoreHook(func(row hitl.StoredCheckpoint) {
+	mgr.Authority.SetToolApprovalRestoreHook(func(row hitl.StoredCheckpoint) {
 		chat, _ := row.Payload["coalesce_chat"].(string)
 		if strings.TrimSpace(chat) == "" {
 			chat = row.SessionID
@@ -441,7 +442,7 @@ func (b sessionWiring) wireToolApprovalCheckpointHooks(toolApprovalRT *approvals
 		}
 		toolApprovalRT.RestorePending(chat, key, row.ID, joined, ids)
 	})
-	mgr.SetToolApprovalDenyRestoreHook(func(row hitl.StoredCheckpoint) {
+	mgr.Authority.SetToolApprovalDenyRestoreHook(func(row hitl.StoredCheckpoint) {
 		chat, _ := row.Payload["coalesce_chat"].(string)
 		if strings.TrimSpace(chat) == "" {
 			chat = row.SessionID
@@ -454,7 +455,7 @@ func (b sessionWiring) wireToolApprovalCheckpointHooks(toolApprovalRT *approvals
 	if err := mgr.RestorePending(context.Background()); err != nil {
 		return fmt.Errorf("restore pending checkpoints: %w", err)
 	}
-	if err := mgr.RestoreRejectedToolApprovalDenials(context.Background()); err != nil {
+	if err := mgr.Authority.RestoreRejectedToolApprovalDenials(context.Background()); err != nil {
 		return fmt.Errorf("restore rejected tool-approval denials: %w", err)
 	}
 	return nil

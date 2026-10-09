@@ -231,10 +231,10 @@ func (b serverWiring) wireServer() error {
 		Projects:    attention.RegistryNamer{Registry: b.storage.Projects},
 	}
 	b.events.Publisher.Attention = deps.Host.Attention
-	if manager, ok := b.checkpointMgr.(*hitl.Manager); ok {
+	if manager, ok := b.checkpointMgr.(*hitl.Checkpoints); ok {
 		if err := delegationWiring(b).registerRecovery(bootrecovery.Entry{
 			Name: "approval-operations", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseBuild,
-			Run: manager.RecoverApprovalOperations,
+			Run: manager.Authority.RecoverApprovalOperations,
 		}); err != nil {
 			return err
 		}
@@ -242,7 +242,7 @@ func (b serverWiring) wireServer() error {
 		if err := delegationWiring(b).registerRecovery(bootrecovery.Entry{
 			Name: "chat-grants", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseBuild,
 			After: []string{"approval-operations"},
-			Run:   manager.RestoreChatGrants,
+			Run:   manager.Authority.RestoreChatGrants,
 		}); err != nil {
 			return err
 		}
@@ -259,8 +259,8 @@ func (b serverWiring) wireServer() error {
 
 // chatGrantLedger exposes the checkpoint manager's chat approvals to revoke.
 func chatGrantLedger(checkpoints hitl.CheckpointManager) capabilityadmin.ChatGrantLedger {
-	if manager, ok := checkpoints.(*hitl.Manager); ok {
-		return manager
+	if manager, ok := checkpoints.(*hitl.Checkpoints); ok {
+		return manager.Authority
 	}
 	return nil
 }

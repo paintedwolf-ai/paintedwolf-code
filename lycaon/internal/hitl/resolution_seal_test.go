@@ -60,9 +60,9 @@ func TestInstallFailureLeavesCheckpointPending(t *testing.T) {
 	ctx := testdbseed.OwnerCaller(t, context.Background(), sqlDB)
 	testdbseed.InsertSession(t, sqlDB, "sess-1", testdbseed.DefaultProjectID)
 	rec := &fakeAuthzRecorder{}
-	mgr := NewManager(NewSQLStore(sqlDB), nil, rec)
+	mgr := NewCheckpoints(NewSQLStore(sqlDB), nil, rec)
 	installErr := errors.New("runtime unavailable")
-	mgr.SetApprovalAuthorityInstaller(failingInstaller{err: installErr})
+	mgr.Authority.SetApprovalAuthorityInstaller(failingInstaller{err: installErr})
 
 	verdict, decision := gate.Evaluate(gate.Facts{
 		Stage: gate.StagePreSpawn, Ran: gate.ProducerApprovalRequest,
@@ -79,7 +79,7 @@ func TestInstallFailureLeavesCheckpointPending(t *testing.T) {
 	})
 	testutil.FailErr(t, "RequestCheckpoint", err)
 
-	_, err = mgr.ResolveApprovalOption(ctx, "sess-1", resp.CheckpointID, "approve_current_action")
+	_, err = mgr.Authority.ResolveApprovalOption(ctx, "sess-1", resp.CheckpointID, "approve_current_action")
 	if !errors.Is(err, installErr) {
 		t.Fatalf("resolve err = %v, want install failure", err)
 	}

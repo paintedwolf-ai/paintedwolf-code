@@ -25,7 +25,7 @@ func (r *recordedUnlocks) RecordUnlockTx(_ context.Context, _ *sql.Tx, _ string,
 }
 
 type heldFixture struct {
-	mgr       *hitl.Manager
+	mgr       *hitl.Checkpoints
 	ctx       context.Context
 	sessionID string
 	key       ed25519.PrivateKey
@@ -42,8 +42,8 @@ func newHeldFixture(t *testing.T) heldFixture {
 	broker := presence.NewBroker()
 	testutil.FailErr(t, "configure presence key", broker.Configure(base64.RawURLEncoding.EncodeToString(publicKey)))
 	unlocks, recorded := presence.NewUnlocks(), &recordedUnlocks{}
-	mgr.SetVaultUnlock(broker, unlocks, recorded)
-	mgr.SetApprovalAuthorityInstaller(noopApprovalInstaller{})
+	mgr.Presence.SetVaultUnlock(broker, unlocks, recorded)
+	mgr.Authority.SetApprovalAuthorityInstaller(noopApprovalInstaller{})
 	return heldFixture{
 		mgr: mgr, ctx: testdbseed.OwnerCaller(t, context.Background(), sqlDB), sessionID: sessionID,
 		key: privateKey, unlocks: unlocks, recorded: recorded,
@@ -108,9 +108,9 @@ func (f heldFixture) proof(t *testing.T, challenge hitl.UnlockChallenge) presenc
 // approveWithPresence answers option the way the desktop shell does.
 func (f heldFixture) approveWithPresence(t *testing.T, checkpointID, optionID string) (*hitl.CheckpointResponse, hitl.UnlockChallenge) {
 	t.Helper()
-	challenge, err := f.mgr.BeginUnlockChallenge(f.ctx, f.sessionID, checkpointID, optionID, "main")
+	challenge, err := f.mgr.Presence.BeginUnlockChallenge(f.ctx, f.sessionID, checkpointID, optionID, "main")
 	testutil.FailErr(t, "begin unlock challenge", err)
-	final, err := f.mgr.ResolveApprovalOptionBy(f.ctx, f.sessionID, checkpointID, optionID, hitl.AttestedApproval(f.proof(t, challenge)))
+	final, err := f.mgr.Authority.ResolveApprovalOptionBy(f.ctx, f.sessionID, checkpointID, optionID, hitl.AttestedApproval(f.proof(t, challenge)))
 	testutil.FailErr(t, "approve with presence", err)
 	return final, challenge
 }
@@ -134,7 +134,7 @@ func TestHeldPlanOffersNoChoiceThatAnswersWithoutThePerson(t *testing.T) {
 func TestLockedChatRefusesAnApprovalWithoutPresence(t *testing.T) {
 	f := newHeldFixture(t)
 	checkpointID := f.requestHeld(t)
-	if _, err := f.mgr.ResolveApprovalOption(f.ctx, f.sessionID, checkpointID, "send_unchanged"); !errors.Is(err, hitl.ErrPresenceRequired) {
+	if _, err := f.mgr.Authority.ResolveApprovalOption(f.ctx, f.sessionID, checkpointID, "send_unchanged"); !errors.Is(err, hitl.ErrPresenceRequired) {
 		t.Fatalf("bearer-only approval error = %v", err)
 	}
 	if len(f.recorded.unlocks) != 0 {
@@ -163,10 +163,10 @@ func TestUnlockedChatApprovesWithoutPresence(t *testing.T) {
 	f := newHeldFixture(t)
 	f.approveWithPresence(t, f.requestHeld(t), "send_unchanged")
 	next := f.requestHeld(t)
-	if _, err := f.mgr.BeginUnlockChallenge(f.ctx, f.sessionID, next, "send_unchanged", "main"); !errors.Is(err, hitl.ErrPresenceNotRequired) {
+	if _, err := f.mgr.Presence.BeginUnlockChallenge(f.ctx, f.sessionID, next, "send_unchanged", "main"); !errors.Is(err, hitl.ErrPresenceNotRequired) {
 		t.Fatalf("unlocked challenge error = %v", err)
 	}
-	final, err := f.mgr.ResolveApprovalOption(f.ctx, f.sessionID, next, "send_unchanged")
+	final, err := f.mgr.Authority.ResolveApprovalOption(f.ctx, f.sessionID, next, "send_unchanged")
 	testutil.FailErr(t, "unlocked approval", err)
 	if final.Status != hitl.DecisionStatusApproved || len(f.recorded.unlocks) != 1 {
 		t.Fatalf("final = %+v, unlocks = %d", final, len(f.recorded.unlocks))
@@ -177,7 +177,7 @@ func TestUnlockedChatApprovesWithoutPresence(t *testing.T) {
 func TestUnlockCardOpensTheChat(t *testing.T) {
 	f := newHeldFixture(t)
 	checkpointID := f.requestUnlock(t)
-	if _, err := f.mgr.ResolveApprovalOption(f.ctx, f.sessionID, checkpointID, "unlock_for_chat"); !errors.Is(err, hitl.ErrPresenceRequired) {
+	if _, err := f.mgr.Authority.ResolveApprovalOption(f.ctx, f.sessionID, checkpointID, "unlock_for_chat"); !errors.Is(err, hitl.ErrPresenceRequired) {
 		t.Fatalf("bearer-only unlock error = %v", err)
 	}
 	f.approveWithPresence(t, checkpointID, "unlock_for_chat")
@@ -190,13 +190,13 @@ func TestUnlockCardOpensTheChat(t *testing.T) {
 func TestUnlockProofCannotAnswerAnotherCard(t *testing.T) {
 	f := newHeldFixture(t)
 	first := f.requestHeld(t)
-	challenge, err := f.mgr.BeginUnlockChallenge(f.ctx, f.sessionID, first, "send_unchanged", "main")
+	challenge, err := f.mgr.Presence.BeginUnlockChallenge(f.ctx, f.sessionID, first, "send_unchanged", "main")
 	testutil.FailErr(t, "begin unlock challenge", err)
 	second := f.requestHeld(t)
 	if second == first {
 		t.Fatal("two requests shared one card")
 	}
-	if _, err := f.mgr.ResolveApprovalOptionBy(f.ctx, f.sessionID, second, "send_unchanged", hitl.AttestedApproval(f.proof(t, challenge))); !errors.Is(err, presence.ErrDenied) {
+	if _, err := f.mgr.Authority.ResolveApprovalOptionBy(f.ctx, f.sessionID, second, "send_unchanged", hitl.AttestedApproval(f.proof(t, challenge))); !errors.Is(err, presence.ErrDenied) {
 		t.Fatalf("cross-card proof error = %v", err)
 	}
 	if _, open := f.unlocks.Active(f.sessionID); open {
@@ -208,10 +208,10 @@ func TestUnlockProofCannotAnswerAnotherCard(t *testing.T) {
 func TestRedactedSendNeedsNoPresence(t *testing.T) {
 	f := newHeldFixture(t)
 	checkpointID := f.requestHeld(t)
-	if _, err := f.mgr.BeginUnlockChallenge(f.ctx, f.sessionID, checkpointID, "send_redacted", "main"); !errors.Is(err, hitl.ErrPresenceNotRequired) {
+	if _, err := f.mgr.Presence.BeginUnlockChallenge(f.ctx, f.sessionID, checkpointID, "send_redacted", "main"); !errors.Is(err, hitl.ErrPresenceNotRequired) {
 		t.Fatalf("redacted challenge error = %v", err)
 	}
-	final, err := f.mgr.ResolveApprovalOption(f.ctx, f.sessionID, checkpointID, "send_redacted")
+	final, err := f.mgr.Authority.ResolveApprovalOption(f.ctx, f.sessionID, checkpointID, "send_redacted")
 	testutil.FailErr(t, "redacted send", err)
 	if !final.Result.RedactSecrets {
 		t.Fatalf("redacted final = %+v", final.Result)

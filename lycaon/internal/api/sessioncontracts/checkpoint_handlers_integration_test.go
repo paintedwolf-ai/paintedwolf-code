@@ -47,7 +47,7 @@ func TestCheckpointHandlersListAndResolve(t *testing.T) {
 
 	hub := events.NewMemoryHub()
 	pub := &events.Publisher{Hub: hub}
-	mgr := hitl.NewManager(hitl.NewSQLStore(sqlDB), pub, authzcontext.SQLRecorder(sqlDB))
+	mgr := hitl.NewCheckpoints(hitl.NewSQLStore(sqlDB), pub, authzcontext.SQLRecorder(sqlDB))
 
 	srv := api.NewServer(apitest.Dependencies(t, api.Dependencies{Core: api.CoreDependencies{
 		Store: store, Projects: reg, Sessions: session.NewManager(store, nil, nil, settings.DefaultSessionLimits())}, Approvals: api.ApprovalsDependencies{Checkpoints: mgr}}), nil, api.TestAPIToken)
@@ -219,7 +219,7 @@ func TestCheckpointGrantOfferCreatesProjectLease(t *testing.T) {
 
 	hub := events.NewMemoryHub()
 	pub := &events.Publisher{Hub: hub}
-	chkMgr := hitl.NewManager(hitl.NewSQLStore(sqlDB), pub, authzcontext.SQLRecorder(sqlDB))
+	chkMgr := hitl.NewCheckpoints(hitl.NewSQLStore(sqlDB), pub, authzcontext.SQLRecorder(sqlDB))
 
 	approvals := settings.NewRuleApprovalGate(svc.Approvals, settings.NoSources())
 	srv := api.NewServer(apitest.Dependencies(t, api.Dependencies{Core: api.CoreDependencies{
@@ -307,7 +307,7 @@ func TestWriteRootPlanAtomicallyCreatesTaskAndDeviceAuthority(t *testing.T) {
 
 	hub := events.NewMemoryHub()
 	pub := &events.Publisher{Hub: hub}
-	chkMgr := hitl.NewManager(hitl.NewSQLStore(sqlDB), pub, authzcontext.SQLRecorder(sqlDB))
+	chkMgr := hitl.NewCheckpoints(hitl.NewSQLStore(sqlDB), pub, authzcontext.SQLRecorder(sqlDB))
 
 	approvals := settings.NewRuleApprovalGate(svc.Approvals, settings.NoSources())
 	writeRootRT := approvalstate.NewSandboxPathGrantRuntime()

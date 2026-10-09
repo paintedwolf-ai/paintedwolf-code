@@ -60,7 +60,7 @@ func TestWorkerLegPromptAppendsSummary(t *testing.T) {
 	var approvalErr error
 	var approvalsResolved int
 	var childSessionID string
-	resolver, ok := h.CheckpointMgr.(hitl.ApprovalOptionResolver)
+	resolver, ok := h.CheckpointMgr.(*hitl.Checkpoints)
 	if !ok {
 		t.Fatalf("checkpoint manager = %T, want approval option resolver", h.CheckpointMgr)
 	}
@@ -78,7 +78,7 @@ func TestWorkerLegPromptAppendsSummary(t *testing.T) {
 			return false
 		}
 		for _, checkpoint := range pending {
-			_, approvalErr = resolver.ResolveApprovalOption(
+			_, approvalErr = resolver.Authority.ResolveApprovalOption(
 				ctx, childSessionID, checkpoint.ID, "approve_current_action",
 			)
 			if approvalErr != nil {

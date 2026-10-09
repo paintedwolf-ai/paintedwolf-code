@@ -114,9 +114,9 @@ func TestInvestigateCoordinatorWriteLandsOnProjectTree(t *testing.T) {
 		_, promptErr := h.SessionMgr.Prompt(promptCtx, sess.ID, "fix auth in src/foo.go")
 		done <- promptErr
 	}()
-	hitlMgr, ok := h.CheckpointMgr.(*hitl.Manager)
+	hitlMgr, ok := h.CheckpointMgr.(*hitl.Checkpoints)
 	if !ok {
-		t.Fatalf("checkpoint manager = %T, want *hitl.Manager", h.CheckpointMgr)
+		t.Fatalf("checkpoint manager = %T, want *hitl.Checkpoints", h.CheckpointMgr)
 	}
 	var checkpointID string
 	var promptErr error
@@ -136,7 +136,7 @@ func TestInvestigateCoordinatorWriteLandsOnProjectTree(t *testing.T) {
 		return true
 	})
 	if checkpointID != "" {
-		_, err = hitlMgr.ResolveApprovalOption(ctx, sess.ID, checkpointID, "approve_current_action")
+		_, err = hitlMgr.Authority.ResolveApprovalOption(ctx, sess.ID, checkpointID, "approve_current_action")
 		testutil.FailErr(t, "approve verify fixture", err)
 	}
 	if !promptFinished {

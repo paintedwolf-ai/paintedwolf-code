@@ -240,7 +240,7 @@ func fillHost(t *testing.T, d *Deps) {
 		d.HostIdentity = identity
 	}
 	if d.Checkpoints == nil {
-		d.Checkpoints = hitl.NewManager(hitl.NewSQLStore(d.Database), d.EventPublisher, authzcontext.SQLRecorder(d.Database))
+		d.Checkpoints = hitl.NewCheckpoints(hitl.NewSQLStore(d.Database), d.EventPublisher, authzcontext.SQLRecorder(d.Database))
 	}
 	if d.ProgressStore == nil {
 		d.ProgressStore = progress.NewSQLStore(d.Database)

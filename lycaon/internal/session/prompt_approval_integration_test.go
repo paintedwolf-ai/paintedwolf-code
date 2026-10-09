@@ -100,8 +100,8 @@ func TestPromptAskWriteApproveRunsTool(t *testing.T) {
 	exec := toolexecution.NewExecutor(policy, reg, "implement")
 	hub := events.NewMemoryHub()
 	pub := &events.Publisher{Hub: hub}
-	hitlMgr := hitl.NewManager(hitl.NewSQLStore(sqlDB), pub, authzcontext.SQLRecorder(sqlDB))
-	hitlMgr.SetApprovalAuthorityInstaller(promptApprovalInstaller{})
+	hitlMgr := hitl.NewCheckpoints(hitl.NewSQLStore(sqlDB), pub, authzcontext.SQLRecorder(sqlDB))
+	hitlMgr.Authority.SetApprovalAuthorityInstaller(promptApprovalInstaller{})
 	exec.Approvals.SetCheckpointManager(hitlMgr, gate)
 	toolReg := tools.NewExecutorRegistry(exec, reg)
 
@@ -137,7 +137,7 @@ func TestPromptAskWriteApproveRunsTool(t *testing.T) {
 		}
 		return false
 	})
-	if _, err := hitlMgr.ResolveApprovalOption(promptApprovalDecider(ctx, t, sqlDB), sess.ID, decisionID, "approve_current_action"); err != nil {
+	if _, err := hitlMgr.Authority.ResolveApprovalOption(promptApprovalDecider(ctx, t, sqlDB), sess.ID, decisionID, "approve_current_action"); err != nil {
 		testutil.FailErr(t, "hitlMgr.ResolveApprovalOption failed", err)
 	}
 	if err := <-done; err != nil {
@@ -222,7 +222,7 @@ func TestPromptAskWriteRejectSurfacesApprovalDenied(t *testing.T) {
 	exec.Approvals.SetApprovalOutcomeRenderer(outcomes)
 	hub := events.NewMemoryHub()
 	pub := &events.Publisher{Hub: hub}
-	hitlMgr := hitl.NewManager(hitl.NewSQLStore(sqlDB), pub, authzcontext.SQLRecorder(sqlDB))
+	hitlMgr := hitl.NewCheckpoints(hitl.NewSQLStore(sqlDB), pub, authzcontext.SQLRecorder(sqlDB))
 	exec.Approvals.SetCheckpointManager(hitlMgr, gate)
 	toolReg := tools.NewExecutorRegistry(exec, reg)
 
