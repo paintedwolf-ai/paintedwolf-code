@@ -22,7 +22,7 @@ func (m *Service) MissingVerdict(ctx context.Context, sess *api.Session, workers
 	if !invokeAllowed {
 		return nil, false
 	}
-	verdictPending := m.workflows.ActiveReviewVerdictPending(ctx, sess.ID)
+	verdictPending := m.workflows.Policy.ActiveReviewVerdictPending(ctx, sess.ID)
 	root := sessiontree.RootID(ctx, m.store, sess.ID)
 	delayCount, delayed := m.closeouts.Delay(sess.ID, root, closeouts.VerdictDelay, workersIdle && verdictPending, verdictDelayMaxPerPrompt)
 	return m.ToolPolicy.FinishBlock(ctx, sess, func(gc *oar.GuardContext) error {

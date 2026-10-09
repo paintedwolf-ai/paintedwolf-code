@@ -218,7 +218,7 @@ func (b sessionWiring) wireSessionAuthorization() error {
 			// Workflows narrow the session's spawn set.
 			cap.Sealer.SpawnAllowlist = func(ctx context.Context, sess *api.Session) []string {
 				if b.workflowMgr != nil && sess != nil {
-					if roster := b.workflowMgr.AllowedAgents(ctx, sess.ID); len(roster) > 0 {
+					if roster := b.workflowMgr.Policy.AllowedAgents(ctx, sess.ID); len(roster) > 0 {
 						return roster
 					}
 				}

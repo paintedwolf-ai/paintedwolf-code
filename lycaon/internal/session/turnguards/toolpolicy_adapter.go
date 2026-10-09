@@ -33,7 +33,7 @@ func (m *Service) PolicyDependencies() toolpolicy.EngineDeps {
 	return toolpolicy.EngineDeps{
 		ToolInvoker:      m.toolInvoker,
 		Rules:            m.rules,
-		Workflows:        m.workflows,
+		Workflows:        m.policyWorkflows(),
 		Postures:         posturesFn,
 		Limits:           m.Limits.Effective,
 		HasComposeDraft:  m.HasComposeDraft,
@@ -56,4 +56,11 @@ func (m *Service) BeforeInvoke(_ context.Context, sess *api.Session, toolName st
 		}
 	}
 	return nil
+}
+
+func (m *Service) policyWorkflows() *toolpolicy.WorkflowDomains {
+	if m.workflows == nil {
+		return nil
+	}
+	return &toolpolicy.WorkflowDomains{Policy: m.workflows.Policy, Blueprints: m.workflows.Blueprints, Runs: m.workflows.Runs}
 }

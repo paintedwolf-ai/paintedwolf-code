@@ -134,7 +134,7 @@ type Manager struct {
 	doomLoop         loopguard.DoomLoopGuard
 	grounding        GroundingHook
 	rejectFmt        *guidance.StaticRejectFormatter
-	workflows        WorkflowSessionView
+	workflows        *WorkflowDomains
 	reportDocuments  ReportDocumentChecker
 	scanEvidenceRuns ScanEvidenceRuns
 
@@ -156,7 +156,7 @@ type Manager struct {
 	boardBuilder           assembly.BoardSnapshotBuilder
 	boardFormatter         assembly.BoardPackFormatter
 	includeScanLegend      func() bool
-	loopWorkflowSource     loopwake.LoopWorkflowSource
+	loopWorkflowSource     *loopwake.WorkflowDomains
 	coordinatorRuntime     *coordinator.Runtime
 	coordinatorRuntimeOnce sync.Once
 	delegations            DelegationLegLookup

@@ -11,7 +11,7 @@ import (
 
 // gatedCloseoutView reports a gated phase with the given open gate leaves.
 type gatedCloseoutView struct {
-	WorkflowSessionView
+	stubWorkflowManifest
 	state workflowfacts.WorkflowCloseoutGateState
 }
 
@@ -29,7 +29,7 @@ func gatedExecuteState() workflowfacts.WorkflowCloseoutGateState {
 
 func TestGatedCloseoutSkipsWhenInvokeGated(t *testing.T) {
 	mgr, sess := newSynthesisDelayManager(t)
-	mgr.SetWorkflowSessionView(gatedCloseoutView{state: gatedExecuteState()})
+	mgr.SetWorkflowDomains(workflowDomainFixture(gatedCloseoutView{state: gatedExecuteState()}))
 
 	if _, block := mgr.Guards.OpenGates(context.Background(), sess, true, false); block {
 		t.Fatal("expected no open-gates hold when invokeAllowed=false")
@@ -38,7 +38,7 @@ func TestGatedCloseoutSkipsWhenInvokeGated(t *testing.T) {
 
 func TestGatedCloseoutBlocksOnOpenGates(t *testing.T) {
 	mgr, sess := newSynthesisDelayManager(t)
-	mgr.SetWorkflowSessionView(gatedCloseoutView{state: gatedExecuteState()})
+	mgr.SetWorkflowDomains(workflowDomainFixture(gatedCloseoutView{state: gatedExecuteState()}))
 
 	reject, block := mgr.Guards.OpenGates(context.Background(), sess, true, true)
 	if !block {
@@ -58,7 +58,7 @@ func TestGatedCloseoutBlocksOnOpenGates(t *testing.T) {
 
 func TestGatedCloseoutAllowsWhenNotGated(t *testing.T) {
 	mgr, sess := newSynthesisDelayManager(t)
-	mgr.SetWorkflowSessionView(gatedCloseoutView{state: workflowfacts.WorkflowCloseoutGateState{}})
+	mgr.SetWorkflowDomains(workflowDomainFixture(gatedCloseoutView{state: workflowfacts.WorkflowCloseoutGateState{}}))
 
 	if _, block := mgr.Guards.OpenGates(context.Background(), sess, true, true); block {
 		t.Fatal("a phase without a gated closeout must let the prose finish through")
@@ -67,7 +67,7 @@ func TestGatedCloseoutAllowsWhenNotGated(t *testing.T) {
 
 func TestGatedCloseoutSkipsBusyWorkers(t *testing.T) {
 	mgr, sess := newSynthesisDelayManager(t)
-	mgr.SetWorkflowSessionView(gatedCloseoutView{state: gatedExecuteState()})
+	mgr.SetWorkflowDomains(workflowDomainFixture(gatedCloseoutView{state: gatedExecuteState()}))
 
 	if _, block := mgr.Guards.OpenGates(context.Background(), sess, false, true); block {
 		t.Fatal("the hold must not apply while workers are still in flight")
@@ -76,7 +76,7 @@ func TestGatedCloseoutSkipsBusyWorkers(t *testing.T) {
 
 func TestGatedCloseoutBoundedPerPrompt(t *testing.T) {
 	mgr, sess := newSynthesisDelayManager(t)
-	mgr.SetWorkflowSessionView(gatedCloseoutView{state: gatedExecuteState()})
+	mgr.SetWorkflowDomains(workflowDomainFixture(gatedCloseoutView{state: gatedExecuteState()}))
 	ctx := context.Background()
 
 	for i := 0; i < 2; i++ {

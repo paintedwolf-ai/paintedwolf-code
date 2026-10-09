@@ -20,8 +20,8 @@ type activeRunView struct {
 	run *api.WorkflowRun
 }
 
-func (v *activeRunView) GetActive(ctx context.Context, sessionID string) (*api.WorkflowRun, error) {
-	v.record("GetActive")
+func (v *activeRunView) ActiveBySession(ctx context.Context, sessionID string) (*api.WorkflowRun, error) {
+	v.record("ActiveBySession")
 	return v.run, nil
 }
 
@@ -29,7 +29,8 @@ func newHostEventManager(t *testing.T, run *api.WorkflowRun) (*Manager, string) 
 	t.Helper()
 	store := store.NewMemory()
 	mgr := NewManager(store, llm.NewMockProvider(nil), tools.NewStubRegistry(), settings.DefaultSessionLimits())
-	mgr.SetWorkflowSessionView(&activeRunView{run: run})
+	workflowFixture1 := &activeRunView{run: run}
+	mgr.SetWorkflowDomains(&WorkflowDomains{Runs: workflowFixture1, Policy: workflowFixture1, Ambient: workflowFixture1, Blueprints: workflowFixture1, Batch: workflowFixture1, Slash: workflowFixture1, Requests: workflowFixture1, Feedback: workflowFixture1, Transcript: workflowFixture1, Asks: workflowFixture1, Fanout: workflowFixture1, Phases: workflowFixture1, Reports: workflowFixture1, Recovery: workflowFixture1, Cleanup: workflowFixture1})
 	ctx := context.Background()
 	sess, err := store.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "store.Create failed", err)

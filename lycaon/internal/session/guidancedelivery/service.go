@@ -27,11 +27,18 @@ type CycleState interface {
 	ForSession(context.Context, *api.Session) surface.ImplementSessionState
 }
 type BudgetRequests interface{ BudgetRequestOpen(string) bool }
-type Workflow interface {
-	ActiveReviewVerdictPending(context.Context, string) bool
-	ScaffoldVarsForSession(context.Context, string) (map[string]any, error)
-	GetActive(context.Context, string) (*api.WorkflowRun, error)
+type WorkflowDomains struct {
+	Policy WorkflowPolicy
+	Runs   WorkflowRuns
 }
+type WorkflowPolicy interface {
+	ActiveReviewVerdictPending(ctx context.Context, sessionID string) bool
+	ScaffoldVarsForSession(ctx context.Context, sessionID string) (map[string]any, error)
+}
+type WorkflowRuns interface {
+	ActiveBySession(context.Context, string) (*api.WorkflowRun, error)
+}
+
 type Progress interface {
 	Get(context.Context, string) string
 }
@@ -44,7 +51,7 @@ type Service struct {
 	state        CycleState
 	budgets      BudgetRequests
 	workers      workeroutcomes.CycleLedger
-	workflows    Workflow
+	workflows    *WorkflowDomains
 	frame        inject.CoordinatorTurnFrameSource
 	progress     Progress
 	closure      Closure
@@ -63,7 +70,7 @@ func (m *Service) Bind(kicks *kick.KickEngine, anchors *anchor.Bus) {
 	m.anchors = anchors
 }
 func (m *Service) SetWorkers(workers workeroutcomes.CycleLedger)     { m.workers = workers }
-func (m *Service) SetWorkflow(workflows Workflow)                    { m.workflows = workflows }
+func (m *Service) SetWorkflow(workflows *WorkflowDomains)            { m.workflows = workflows }
 func (m *Service) SetFrame(frame inject.CoordinatorTurnFrameSource)  { m.frame = frame }
 func (m *Service) SetProgress(progress Progress)                     { m.progress = progress }
 func (m *Service) SetFeedback(catalog *feedback.GateFeedbackCatalog) { m.gateFeedback = catalog }

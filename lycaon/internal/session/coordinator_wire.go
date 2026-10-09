@@ -78,14 +78,15 @@ func (h runtimeBoardHook) InvalidateOrientation(sessionID string) {
 }
 
 type sessionWorkflowManifest struct {
-	m *Manager
+	policy WorkflowPolicy
+	fanout WorkflowFanout
 }
 
 func (w sessionWorkflowManifest) ActiveManifest(ctx context.Context, sessionID string) (assembly.ActiveWorkflowManifest, bool) {
-	if w.m == nil || w.m.workflows == nil {
+	if w.policy == nil {
 		return assembly.ActiveWorkflowManifest{}, false
 	}
-	manifest, ok := w.m.workflows.ActiveManifest(ctx, sessionID)
+	manifest, ok := w.policy.ActiveManifest(ctx, sessionID)
 	if !ok {
 		return assembly.ActiveWorkflowManifest{}, false
 	}
@@ -93,10 +94,10 @@ func (w sessionWorkflowManifest) ActiveManifest(ctx context.Context, sessionID s
 }
 
 func (w sessionWorkflowManifest) RecordBoardOrientReady(ctx context.Context, sessionID, injectKey string) error {
-	if w.m == nil || w.m.workflows == nil {
+	if w.fanout == nil {
 		return nil
 	}
-	return w.m.workflows.RecordBoardOrientReady(ctx, sessionID, injectKey)
+	return w.fanout.RecordBoardOrientReady(ctx, sessionID, injectKey)
 }
 
 func (m *Manager) SetWebResearchConfig(cfg *webresearch.ConfigStore) {
@@ -114,13 +115,25 @@ func (m *Manager) webSearchEnabled() bool {
 }
 
 func (m *Manager) buildPromptLoopDeps() promptloop.PromptLoopDeps {
+	var policy promptsource.WorkflowRunnable
+	var asks promptsource.WorkflowAsks
+	var approvals promptsource.WorkflowApprovals
+	var obligations promptsource.WorkflowObligations
+	if m.workflows != nil {
+		policy = m.workflows.Policy
+		asks = m.workflows.Asks
+	}
+	if m.loopWorkflowSource != nil {
+		approvals = m.loopWorkflowSource.Approvals
+		obligations = m.loopWorkflowSource.Obligations
+	}
 	return promptloop.PromptLoopDeps{
 		Context:    (&promptsource.Context{Frame: m.coordinatorFrame, Guards: m.Guards, Limits: m.Limits, Loading: m.Loading, Pages: m.pageRegistry, Policy: m.ToolPolicy, Processes: m.Processes, Profiles: m.Profiles, Prompts: m.prompts, Runtime: m.ensureCoordinatorRuntime(), Sessions: m.store, ToolContext: m.ToolContext, Tools: m.tools, WebResearch: m.webResearchConfig, WorkerState: m.Workers.State, Workspace: m.Workspace, Workspaces: m.Workers.Workspaces}).Build(),
 		Tools:      (&promptsource.Tools{Batch: m.Batch, DataDir: m.dataDir, Enricher: m.toolOutputEnricher, Feedback: m.Feedback, Frame: m.coordinatorFrame, Guards: m.Guards, Guidance: m.Guidance, History: m.Runner.History, Invocations: m.invocations, Naming: m.Naming, Policy: m.ToolPolicy, Presence: m.agentPresence, Processes: m.Processes, Projects: m.projects, Runtime: m.ensureCoordinatorRuntime(), Sessions: m.store, Verification: m.Verification, Visual: m.visual, WorkerState: m.Workers.State, Workers: m.workerQueue, Workspace: m.Workspace}).Build(),
-		Control:    (&promptsource.Control{Batch: m.Batch, GracefulCancel: m.Workers.Cancel, Holds: m.loopWorkflowSource, Processes: m.Processes, Runtime: m.ensureCoordinatorRuntime(), Workflow: m.workflows}).Build(),
+		Control:    (&promptsource.Control{Batch: m.Batch, GracefulCancel: m.Workers.Cancel, Approvals: approvals, Obligations: obligations, Processes: m.Processes, Runtime: m.ensureCoordinatorRuntime(), Workflow: policy}).Build(),
 		Inbox:      (&promptsource.Inbox{Guidance: m.Guidance, Submissions: m.Submissions}).Build(),
 		Model:      (&promptsource.Model{Cost: m.cost, History: m.Runner.History, LLM: m.llm, LLMService: m.llmSvc, Limits: m.Limits}).Build(),
-		Projection: (&promptsource.Projection{Events: m.events, Rejections: m.Workers.Rejections, Sessions: m.store, Stash: m.planToolStash, Transcript: m.Transcript, Workflow: m.workflows}).Build(),
+		Projection: (&promptsource.Projection{Events: m.events, Rejections: m.Workers.Rejections, Sessions: m.store, Stash: m.planToolStash, Transcript: m.Transcript, Workflow: asks}).Build(),
 		Nudges:     (&promptsource.Nudges{DoomLoop: m.doomLoop, Nudges: m.Nudges, Policy: m.ToolPolicy, Spend: m.Runner.Spend, Workers: m.workerQueue}).Build(),
 		Closeout:   (&promptsource.Closeout{Batch: m.Batch, Closeout: m.Closeout, Closeouts: m.Runner.Closeouts, Evidence: m.Verification.Evidence, Guards: m.Guards, Hints: m.workflowHints, Nudges: m.Nudges, Policy: m.ToolPolicy, Rejects: m.rejectFmt, RenderKick: m.Workers.RenderKick, Reports: m.reportDocuments}).Build(),
 	}
@@ -137,7 +150,7 @@ func (m *Manager) buildAssemblyDeps() assembly.AssemblyDeps {
 		Injects:               prompts.NewInjectRenderer(m.prompts),
 		Limits:                m.Limits.Effective,
 		Agents:                m.Profiles.Agents,
-		Workflows:             sessionWorkflowManifest{m: m},
+		Workflows:             m.workflowManifestSource(),
 		CoordinatorFrame:      m.coordinatorFrame,
 		WorkerContext:         workerCtx,
 		SiblingNoteDelivery:   m.Workers.Notes,
@@ -156,7 +169,7 @@ func (m *Manager) buildAssemblyDeps() assembly.AssemblyDeps {
 			return repoinfo.MeasuredEmpty(ctx, m.repoProvider, workspacePath)
 		},
 		Board:            runtimeBoardHook{rt: rt},
-		BoardOrientReady: sessionWorkflowManifest{m: m},
+		BoardOrientReady: m.workflowManifestSource(),
 		EnrichHistory: func(sessionID string, history []api.Message) []api.Message {
 			if m == nil || m.planToolStash == nil {
 				return history
@@ -311,7 +324,7 @@ func (m *Manager) buildLoopWakeDeps() loopwake.LoopDeps {
 				if m == nil || m.workflows == nil {
 					return nil, nil
 				}
-				return m.workflows.GetActive(ctx, sessionID)
+				return m.workflows.Runs.ActiveBySession(ctx, sessionID)
 			},
 			WorkflowObligationsOpen: m.Guidance.WorkflowObligationsOpen,
 		}),
@@ -474,4 +487,11 @@ func (m *Manager) isCoordinatorSessionForLoop(_ context.Context, sess *api.Sessi
 		return false
 	}
 	return surface.IsCoordinatorSession(sess)
+}
+
+func (m *Manager) workflowManifestSource() sessionWorkflowManifest {
+	if m.workflows == nil {
+		return sessionWorkflowManifest{}
+	}
+	return sessionWorkflowManifest{policy: m.workflows.Policy, fanout: m.workflows.Fanout}
 }

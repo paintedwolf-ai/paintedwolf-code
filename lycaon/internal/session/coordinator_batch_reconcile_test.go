@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/batch"
+	loopwake "github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/progress"
@@ -23,6 +24,7 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -39,14 +41,13 @@ func TestFinishPromptExecutionQueuesOverlayIntegrateCompleteKick(t *testing.T) {
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
 	testutil.FailErr(t, "install anchor registry", mgr.Guidance.InstallAnchorRegistry())
 
-	wfStore := workflow.NewSQLStore(sqlDB)
+	wfStore := workflowpersistence.New(sqlDB)
 	bundledDir := filepath.Join(root, "config", "packs", "painted-wolf", "platform", "workflows")
 	manifestRegistry, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "RegistryFromDirs", err)
 	wfMgr := workflow.NewManager(wfStore, store, manifestRegistry, nil)
-	wfMgr.Resolver = workflow.ManifestResolver{}
-	mgr.SetWorkflowSessionView(wfMgr)
-	mgr.SetLoopWorkflowSource(wfMgr)
+	mgr.SetWorkflowDomains(&session.WorkflowDomains{Runs: wfMgr.Store.Runs, Policy: wfMgr.Policy, Ambient: wfMgr.Ambient, Blueprints: wfMgr.Blueprints, Batch: wfMgr.Batch, Slash: wfMgr.Slash, Requests: wfMgr.Requests, Feedback: wfMgr.Feedback, Transcript: wfMgr.Transcript, Asks: wfMgr.Asks, Fanout: wfMgr.Fanout, Phases: wfMgr.Phases, Reports: wfMgr.Reports, Recovery: wfMgr.Recovery, Cleanup: wfMgr})
+	mgr.SetLoopWorkflowSource(&loopwake.WorkflowDomains{Runs: wfMgr.Store.Runs, Approvals: wfMgr.Policy, Obligations: wfMgr.Obligations})
 	prog := progress.NewMemoryStore()
 	mgr.SetProgressStore(prog)
 
@@ -57,12 +58,12 @@ func TestFinishPromptExecutionQueuesOverlayIntegrateCompleteKick(t *testing.T) {
 	testutil.FailErr(t, "create session in store", err)
 	ref, err := workflowdef.LoadRegistryConfig(extpacks.OnDisk(bundledDir))
 	testutil.FailErr(t, "LoadRegistryConfig", err)
-	_, err = wfMgr.StartAmbient(ctx, sess.ID, ref.ID, ref.Version)
+	_, err = wfMgr.Ambient.StartAmbient(ctx, sess.ID, ref.ID, ref.Version)
 	testutil.FailErr(t, "StartAmbient", err)
 	prog.Set(sess.ID, "## Progress\n- [x] implement\n- [x] verify")
 
-	testutil.FailErr(t, "ApplyCoordinatorBatchEvent dispatch", wfMgr.ApplyCoordinatorBatchEvent(ctx, sess.ID, batch.EventWriterTaskEnqueued, 0))
-	testutil.FailErr(t, "ApplyCoordinatorBatchEvent integrate", wfMgr.ApplyCoordinatorBatchEvent(ctx, sess.ID, batch.EventOverlaysPendingIdle, 0))
+	testutil.FailErr(t, "ApplyCoordinatorBatchEvent dispatch", wfMgr.Batch.ApplyCoordinatorBatchEvent(ctx, sess.ID, batch.EventWriterTaskEnqueued, 0))
+	testutil.FailErr(t, "ApplyCoordinatorBatchEvent integrate", wfMgr.Batch.ApplyCoordinatorBatchEvent(ctx, sess.ID, batch.EventOverlaysPendingIdle, 0))
 
 	func() {
 		_ = mgr.Runner.Settlement.Finish(ctx, sess.ID, false, true, "")

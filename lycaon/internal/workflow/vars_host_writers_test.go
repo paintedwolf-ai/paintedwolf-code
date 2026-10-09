@@ -20,7 +20,7 @@ func TestPlanStatusVarAutoAdvances(t *testing.T) {
 	if run.CurrentPhase != "approve" {
 		t.Fatalf("phase = %q want approve", run.CurrentPhase)
 	}
-	run, err = mgr.SyncHumanApproval(ctx, run.ID, projectDir)
+	run, err = mgr.Approvals.SyncHumanApproval(ctx, run.ID, projectDir)
 	testutil.FailErr(t, "SyncHumanApproval", err)
 	if run.CurrentPhase != "execute" {
 		t.Fatalf("phase = %q want execute after human approval", run.CurrentPhase)

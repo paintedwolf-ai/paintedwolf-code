@@ -82,7 +82,11 @@ import (
 	"github.com/lycaon/lycaon/internal/webresearch"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workflow"
+	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
+	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/internal/workspace"
 )
 
@@ -183,9 +187,9 @@ type serveBuilder struct {
 	manifestRegistry *workflowdef.Registry
 	// manifestResolver is the one workflow catalog seam: discovery and start
 	// read the same source.
-	manifestResolver     workflow.ManifestResolver
-	sessionWorkflowStore *workflow.SessionWorkflowSQLStore
-	workflowStore        *workflow.SQLStore
+	manifestResolver     workflowcatalog.Resolver
+	sessionWorkflowStore *workflowdrafts.SQL
+	workflowStore        *runstate.Repository
 	workflowMgr          *workflow.RunManager
 	evidenceStore        inspector.EvidenceStore
 	simpleInspector      *inspector.SimpleInspector
@@ -199,8 +203,8 @@ type serveBuilder struct {
 	securityCloseout     *scan.SecurityCloseoutChecker
 	workerQueue          *worker.SQLQueue
 	condReg              *conditions.ConditionRegistry
-	workflowComposer     *workflow.Composer
-	workflowPersister    *workflow.Persister
+	workflowComposer     *workflowcomposition.Composer
+	workflowPersister    *workflowcomposition.Persister
 	ruleEngine           *rules.PostureRuleEngine
 	projectRulesOverlay  *rules.ProjectRulesOverlay
 	criteriaChecker      delegation.CriteriaChecker

@@ -35,7 +35,7 @@ type PreInvokeGuard func(ctx context.Context, sess *api.Session, toolName string
 type EngineDeps struct {
 	ToolInvoker      tools.ToolInvoker
 	Rules            RuleEvaluator
-	Workflows        WorkflowView
+	Workflows        *WorkflowDomains
 	Postures         func(context.Context, *api.Session) (PostureRegistry, error)
 	Limits           func(context.Context, *api.Session) settings.SessionLimits
 	HasComposeDraft  func(context.Context, *api.Session) bool

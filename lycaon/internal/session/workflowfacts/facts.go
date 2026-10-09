@@ -5,13 +5,6 @@ type ActiveWorkflowManifest struct {
 	Rules              []string
 	HostPhaseAdvance   bool
 }
-
-type WorkflowCloseoutGateState struct {
-	Gated      bool
-	Phase      string
-	OpenLeaves []string
-}
-
 type WorkflowPhaseGuardState struct {
 	Phase string
 	// ReportPhaseDeclared marks the phase that produces the run report.
@@ -21,7 +14,11 @@ type WorkflowPhaseGuardState struct {
 	PhaseObligationPending bool
 	PendingObligationKinds []string
 }
-
+type WorkflowCloseoutGateState struct {
+	Gated      bool
+	Phase      string
+	OpenLeaves []string
+}
 type ResolvedWorkflowRequest struct {
 	RunID            string
 	OpeningMessageID string

@@ -70,7 +70,7 @@ func (m *Service) Finish(ctx context.Context, sessionID string, promptFailed, ho
 		return nil
 	}
 	if m.workflows != nil {
-		if err := m.workflows.ReconcileTurnCompletion(hostCtx, sessionID); err != nil {
+		if err := m.workflows.Phases.ReconcileTurnCompletion(hostCtx, sessionID); err != nil {
 			return m.Failure(sessionID, fmt.Errorf("reconcile workflow turn completion: %w", err))
 		}
 	}
@@ -80,7 +80,7 @@ func (m *Service) Finish(ctx context.Context, sessionID string, promptFailed, ho
 	m.batch.Reconcile(hostCtx, sessionID)
 	m.batch.DisarmTerminal(hostCtx, sessionID)
 	if m.workflows != nil {
-		if err := m.workflows.MaybeDeliverTopologyReport(hostCtx, sessionID, closeoutID); err != nil {
+		if err := m.workflows.Reports.MaybeDeliverTopologyReport(hostCtx, sessionID, closeoutID); err != nil {
 			return m.Failure(sessionID, fmt.Errorf("deliver topology report: %w", err))
 		}
 		m.DisarmInactiveWorkflow(hostCtx, sessionID)
@@ -188,7 +188,7 @@ func (m *Service) DisarmInactiveWorkflow(ctx context.Context, sessionID string) 
 	if m == nil || m.workflows == nil {
 		return
 	}
-	if m.workflows.CurrentPhase(ctx, sessionID) != "" {
+	if m.workflows.Policy.CurrentPhase(ctx, sessionID) != "" {
 		return
 	}
 	m.runtime.CoordinatorLoop().DisarmTimerBackstop(ctx, sessionID)

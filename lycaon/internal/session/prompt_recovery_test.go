@@ -135,7 +135,7 @@ func TestPromptRoutingKeepsQueuedSlashCommands(t *testing.T) {
 			sess, err := st.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 			testutil.FailErr(t, "create chat", err)
 			view := &recoveryRoutingView{}
-			mgr.SetWorkflowSessionView(view)
+			mgr.SetWorkflowDomains(workflowDomainFixture(view))
 			_, err = mgr.Runner.Run(t.Context(), sess.ID, tc.input)
 			if !errors.Is(err, errRoutingObserved) {
 				t.Fatalf("routing did not reach workflow boundary: %v", err)

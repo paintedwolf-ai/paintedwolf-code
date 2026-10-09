@@ -15,8 +15,7 @@ type Workers interface {
 	ListBySession(context.Context, string, string, ...api.WorkerStatus) ([]api.WorkerTask, error)
 }
 type Workflow interface {
-	GetActive(context.Context, string) (*api.WorkflowRun, error)
-	IsAmbientRun(*api.WorkflowRun) bool
+	ActiveBySession(context.Context, string) (*api.WorkflowRun, error)
 }
 type Service struct {
 	store     Sessions

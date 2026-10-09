@@ -153,7 +153,7 @@ func finishPlanWorkflow(
 	if superseded.ID == run.ID {
 		t.Fatal("expected a new run id after human supersede")
 	}
-	prior, err := h.WorkflowMgr.Get(ctx, run.ID)
+	prior, err := h.WorkflowMgr.Store.Runs.Get(ctx, run.ID)
 	testutil.FailErr(t, "Get prior run after supersede", err)
 	if prior.Status != wire.WorkflowRunStatusCanceled {
 		t.Fatalf("prior status = %q want canceled after supersede", prior.Status)

@@ -36,6 +36,7 @@ import (
 	"github.com/lycaon/lycaon/internal/visual"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workflow"
+	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
 )
 
 // ServeApp holds wired serve subsystems after Build.
@@ -52,7 +53,7 @@ type ServeApp struct {
 	AgentRegistry        *orchestration.MemoryAgentRegistry
 	WorkerQueue          worker.WorkerQueue
 	ToolRegistry         *tools.DefaultRegistry
-	SessionWorkflowStore workflow.SessionWorkflowStore
+	SessionWorkflowStore workflowdrafts.Store
 	CheckpointMgr        hitl.CheckpointManager
 	VisualStore          visual.Store
 	DB                   db.ReadHandle

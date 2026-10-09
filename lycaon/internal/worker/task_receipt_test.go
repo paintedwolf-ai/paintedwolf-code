@@ -23,7 +23,7 @@ func TestTaskToolReplaysReceiptAfterWorkflowMovedOn(t *testing.T) {
 	reg := tools.NewDefaultRegistry()
 	var enqueued api.WorkerTask
 	inner := worker.NewInMemoryQueue(2)
-	inner.SetWorkflowRunChecker(receiptWorkflowChecker{})
+	inner.SetWorkflowDomains(&worker.WorkflowDomains{Runs: receiptWorkflowChecker{}, Tasks: receiptWorkflowChecker{}})
 	queue := &captureQueue{WorkerQueue: inner, out: &enqueued}
 	bound := 0
 	deps := worker.TaskToolDeps{

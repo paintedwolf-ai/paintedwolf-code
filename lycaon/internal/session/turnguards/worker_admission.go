@@ -18,25 +18,25 @@ func (m *Service) WorkerAdmission() workeradmission.WorkerCycleGuardDeps {
 			if m.workflows == nil {
 				return 0
 			}
-			return m.workflows.ParallelTaskMaxWorkers(ctx, sessionID)
+			return m.workflows.Ambient.ParallelTaskMaxWorkers(ctx, sessionID)
 		},
 		MaxReadWorkers: func(ctx context.Context, sessionID string) int {
 			if m.workflows == nil {
 				return 0
 			}
-			return m.workflows.ParallelTaskMaxReadWorkers(ctx, sessionID)
+			return m.workflows.Ambient.ParallelTaskMaxReadWorkers(ctx, sessionID)
 		},
 		MaxWriteWorkers: func(ctx context.Context, sessionID string) int {
 			if m.workflows == nil {
 				return 0
 			}
-			return m.workflows.ParallelTaskMaxWriteWorkers(ctx, sessionID)
+			return m.workflows.Ambient.ParallelTaskMaxWriteWorkers(ctx, sessionID)
 		},
 		PhaseGuardState: func(ctx context.Context, sessionID string) workflowfacts.WorkflowPhaseGuardState {
 			if m.workflows == nil {
 				return workflowfacts.WorkflowPhaseGuardState{}
 			}
-			return m.workflows.ActivePhaseGuardState(ctx, sessionID)
+			return m.workflows.Policy.ActivePhaseGuardState(ctx, sessionID)
 		},
 		RepoKnownEmpty: func(ctx context.Context, workspacePath string) bool {
 			return repoinfo.MeasuredEmpty(ctx, m.repoProvider, workspacePath)

@@ -60,7 +60,7 @@ func (m *Service) cleared(ctx context.Context, sessionID string) kick.KickSkip {
 	budgetRequested := anchor.InformRender(anchor.WorkerBudgetRequested)
 	return func(id, subject string) bool {
 		if anchor.SameInform(id, anchor.ReviewLoopContinue) || anchor.SameInform(id, anchor.ReviewLoopDecide) {
-			return m.workflows != nil && !m.workflows.ActiveReviewVerdictPending(ctx, sessionID)
+			return m.workflows != nil && !m.workflows.Policy.ActiveReviewVerdictPending(ctx, sessionID)
 		}
 		if id == budgetRequested {
 			return !m.budgets.BudgetRequestOpen(subject)
@@ -80,7 +80,7 @@ func (m *Service) pendingInput(ctx context.Context, sessionID string) (pending b
 	if m == nil || m.workflows == nil {
 		return false, false
 	}
-	vars, err := m.workflows.ScaffoldVarsForSession(ctx, sessionID)
+	vars, err := m.workflows.Policy.ScaffoldVarsForSession(ctx, sessionID)
 	if err != nil || vars == nil {
 		return false, false
 	}
@@ -232,7 +232,7 @@ func (m *Service) WorkflowObligationsOpen(ctx context.Context, sessionID string)
 	if sessionID == "" {
 		return false
 	}
-	run, err := m.workflows.GetActive(ctx, sessionID)
+	run, err := m.workflows.Runs.ActiveBySession(ctx, sessionID)
 	if err != nil || run == nil || run.Status != api.WorkflowRunStatusRunning {
 		return false
 	}

@@ -22,7 +22,7 @@ type Workers interface {
 	Get(string) (*api.WorkerTask, bool)
 }
 type Workflow interface {
-	ActivePhaseRequiresEvidence(context.Context, string, string) bool
+	ActivePhaseRequiresEvidence(ctx context.Context, sessionID, evidenceType string) bool
 }
 
 // Service binds terminal verification evidence to the current source revision.

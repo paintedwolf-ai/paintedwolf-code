@@ -28,7 +28,7 @@ type Store interface {
 	CompactionViewCurrent(context.Context, string, int64, string, int64) (bool, error)
 }
 type Workflow interface {
-	ResolvedRequest(context.Context, string) workflowfacts.ResolvedWorkflowRequest
+	ResolvedRequest(ctx context.Context, sessionID string) workflowfacts.ResolvedWorkflowRequest
 }
 type Workers interface {
 	Get(string) (*api.WorkerTask, bool)

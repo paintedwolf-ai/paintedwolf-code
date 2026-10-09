@@ -19,7 +19,7 @@ type State interface {
 	ForSession(context.Context, *api.Session) surface.ImplementSessionState
 }
 type Workflow interface {
-	ApplyCoordinatorBatchEvent(context.Context, string, batch.Event, int) error
+	ApplyCoordinatorBatchEvent(ctx context.Context, sessionID string, ev batch.Event, eventSeq int) error
 }
 type Progress interface {
 	Get(context.Context, string) string

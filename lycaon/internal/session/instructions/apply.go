@@ -70,7 +70,7 @@ func (m *Service) Apply(ctx context.Context, id string, in promptinput.Input) (s
 		m.resetBatch(ctx, id, userMsg)
 		// Only visible user intent resolves pending feedback.
 		if m.workflows != nil && promptinput.VisibleIntent(userMsg) {
-			if err := m.workflows.TryResolveUserFeedback(ctx, id, userMsg.ID, userMsg.AuthorPersonID, userPrompt); err != nil {
+			if err := m.workflows.Feedback.TryResolveUserFeedback(ctx, id, userMsg.ID, userMsg.AuthorPersonID, userPrompt); err != nil {
 				return "", fmt.Errorf("resolve user feedback: %w", err)
 			}
 		}

@@ -11,6 +11,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
+	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
@@ -67,8 +68,8 @@ func TestFailedHostTurnReportsItself(t *testing.T) {
 	testutil.FailErr(t, "RegistryFromDirs", err)
 	wfMgr := workflow.NewManager(wfStore, st, manifestRegistry, nil)
 	wfMgr.Resolver = workflow.ManifestResolver{}
-	mgr.SetWorkflowSessionView(wfMgr)
-	mgr.SetLoopWorkflowSource(wfMgr)
+	mgr.SetWorkflowDomains(&session.WorkflowDomains{Runs: wfMgr.Store.Runs, Policy: wfMgr.Policy, Ambient: wfMgr.Ambient, Blueprints: wfMgr.Blueprints, Batch: wfMgr.Batch, Slash: wfMgr.Slash, Requests: wfMgr.Requests, Feedback: wfMgr.Feedback, Transcript: wfMgr.Transcript, Asks: wfMgr.Asks, Fanout: wfMgr.Fanout, Phases: wfMgr.Phases, Reports: wfMgr.Reports, Recovery: wfMgr.Recovery, Cleanup: wfMgr})
+	mgr.SetLoopWorkflowSource(&loopwake.WorkflowDomains{Runs: wfMgr.Store.Runs, Approvals: wfMgr.Policy, Obligations: wfMgr.Obligations})
 
 	ctx := context.Background()
 	dir := t.TempDir()

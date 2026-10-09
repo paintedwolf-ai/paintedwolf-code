@@ -55,7 +55,7 @@ func (m *Service) AppendContinuation(ctx context.Context, sessionID string, in p
 		return api.Message{}, err
 	}
 	if m.workflows != nil && in.Recovery == nil && api.IsUserInstructionMessage(msg) {
-		if err := m.workflows.TryResolveUserFeedback(ctx, sessionID, msg.ID, msg.AuthorPersonID, msg.Content); err != nil {
+		if err := m.workflows.Feedback.TryResolveUserFeedback(ctx, sessionID, msg.ID, msg.AuthorPersonID, msg.Content); err != nil {
 			return api.Message{}, fmt.Errorf("resolve user feedback from continuation: %w", err)
 		}
 	}

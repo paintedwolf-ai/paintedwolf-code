@@ -216,7 +216,7 @@ func TestBudgetExhaustedLegResumesPreservedChild(t *testing.T) {
 	_, store, queue, manager, reg := newDelegationTestManager(t)
 	ctx := t.Context()
 	projectID := seedDelegationProject(t, reg, t.TempDir())
-	queue.SetWorkflowRunChecker(allowWorkflowRuns{})
+	queue.SetWorkflowDomains(&worker.WorkflowDomains{Runs: allowWorkflowRuns{}, Tasks: allowWorkflowRuns{}})
 	delegation, err := manager.Create(ctx, api.CreateDelegationRequest{
 		ProjectID: projectID, Task: "inspect the implementation", WorkflowRunID: "workflow-run",
 	})

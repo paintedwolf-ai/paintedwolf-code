@@ -5,8 +5,8 @@ import (
 
 	"github.com/lycaon/lycaon/internal/report"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
 )
 
 // The rating is decided from the findings that need attention: the review's
@@ -21,7 +21,7 @@ func TestReportBrief_DecidesFromAttentionFindings(t *testing.T) {
 		{finding: report.ReportFinding{Title: "Sound", Disposition: "held"}},
 		{finding: report.ReportFinding{Title: "Unreadable", Disposition: "act"}, answers: map[string]string{"reachable": "maybe"}},
 	}
-	claims := []workflow.RunClaim{{ID: "c1", Answers: map[string]string{"reachable": "app_window", "outcome": "limited_misuse", "attacker": "already_inside"}}}
+	claims := []workflowpresentation.RunClaim{{ID: "c1", Answers: map[string]string{"reachable": "app_window", "outcome": "limited_misuse", "attacker": "already_inside"}}}
 	got := reportBrief(brief, findings, claims, nil)
 	if len(got.Rated) != 3 || got.Rated[0].Number != 1 || !got.Rated[0].Adjudicated || got.Rated[1].Adjudicated {
 		t.Fatalf("rated = %+v, want the three attention findings with the review's answers first", got.Rated)
@@ -45,7 +45,7 @@ func TestReportBrief_DecidesFromAttentionFindings(t *testing.T) {
 // as its review answered it, or across every answer, never as cleared.
 func TestReportBrief_RatesUnreportedClaims(t *testing.T) {
 	brief := surveyBrief(t)
-	claims := []workflow.RunClaim{
+	claims := []workflowpresentation.RunClaim{
 		{ID: "held", Title: "Held", Class: workflowdef.ClaimHeld},
 		{ID: "adv-open", Title: "Advisory still open", Class: workflowdef.ClaimOpen},
 		{ID: "refuted", Title: "Fixture triage refuted", Class: workflowdef.ClaimFailed,

@@ -12,8 +12,10 @@ type WorkflowRunnable interface {
 type WorkflowAsks interface {
 	AnnouncePendingAsk(context.Context, string)
 }
-type WorkflowHolds interface {
+type WorkflowApprovals interface {
 	HumanApprovalAwaiting(context.Context, string) (bool, error)
+}
+type WorkflowObligations interface {
 	HostObligationHeld(context.Context, string) (bool, error)
 }
 type ReportDocuments interface {

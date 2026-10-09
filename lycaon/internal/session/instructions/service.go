@@ -15,11 +15,21 @@ type Store interface {
 	Get(context.Context, string) (*api.Session, error)
 	UserTurnOrdinal(context.Context, string) (int, error)
 }
-type Workflow interface {
-	GetActive(context.Context, string) (*api.WorkflowRun, error)
-	TryResolveUserFeedback(context.Context, string, string, string, string) error
-	ApplyCoordinatorBatchEvent(context.Context, string, batch.Event, int) error
+type WorkflowDomains struct {
+	Batch    WorkflowBatch
+	Feedback WorkflowFeedback
+	Runs     WorkflowRuns
 }
+type WorkflowBatch interface {
+	ApplyCoordinatorBatchEvent(ctx context.Context, sessionID string, ev batch.Event, eventSeq int) error
+}
+type WorkflowFeedback interface {
+	TryResolveUserFeedback(ctx context.Context, sessionID, messageID, authorPersonID, message string) error
+}
+type WorkflowRuns interface {
+	ActiveBySession(context.Context, string) (*api.WorkflowRun, error)
+}
+
 type IntentBoundary interface{ NoteUserIntentBoundary(string) }
 
 // Service records user instructions and advances only their explicit boundaries.
@@ -29,7 +39,7 @@ type Service struct {
 	captures             *checkpointcontrol.Capture
 	deliverKicks         func(context.Context, string) error
 	progress             progress.RunScopedStore
-	workflows            Workflow
+	workflows            *WorkflowDomains
 	review               ReviewCheckpointer
 	toolApprovalCoalesce IntentBoundary
 	gateRepeatLedger     IntentBoundary
@@ -41,7 +51,7 @@ type Service struct {
 func New(store Store, transcript *transcript.Service, captures *checkpointcontrol.Capture, deliver func(context.Context, string) error) *Service {
 	return &Service{store: store, transcript: transcript, captures: captures, deliverKicks: deliver}
 }
-func (m *Service) SetWorkflow(workflow Workflow)                   { m.workflows = workflow }
+func (m *Service) SetWorkflow(workflow *WorkflowDomains)           { m.workflows = workflow }
 func (m *Service) SetProgress(progress progress.RunScopedStore)    { m.progress = progress }
 func (m *Service) SetReviewCheckpointer(review ReviewCheckpointer) { m.review = review }
 func (m *Service) SetIntentBoundaries(coalesce, repeat, write, listen, loopback IntentBoundary) {
@@ -53,6 +63,6 @@ func (m *Service) SetIntentBoundaries(coalesce, repeat, write, listen, loopback 
 }
 func (m *Service) resetBatch(ctx context.Context, id string, message api.Message) {
 	if m.workflows != nil && promptinput.VisibleIntent(message) {
-		_ = m.workflows.ApplyCoordinatorBatchEvent(ctx, id, batch.EventVisibleUserMessage, 0)
+		_ = m.workflows.Batch.ApplyCoordinatorBatchEvent(ctx, id, batch.EventVisibleUserMessage, 0)
 	}
 }

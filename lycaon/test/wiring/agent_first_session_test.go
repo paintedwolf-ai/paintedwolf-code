@@ -7,6 +7,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -29,7 +30,7 @@ func TestFirstPromptAttachesDefaultWorkflow(t *testing.T) {
 	}
 	run, err = h.WorkflowMgr.GetActive(ctx, sess.ID)
 	testutil.FailErr(t, "h.WorkflowMgr.GetActive failed", err)
-	if run == nil || !h.WorkflowMgr.IsAmbientRun(run) {
+	if run == nil || !runstate.IsAmbientRun(run) {
 		t.Fatalf("first prompt must attach the default workflow, got %+v", run)
 	}
 	sess, err = h.Store.Get(ctx, sess.ID)

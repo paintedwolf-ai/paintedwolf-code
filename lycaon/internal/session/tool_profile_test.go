@@ -61,10 +61,10 @@ func TestManagerPromptToolProfileUsesWorkflowManifest(t *testing.T) {
 	mgr := NewManager(store.NewMemory(), nil, nil, settings.DefaultSessionLimits())
 	mgr.Profiles.SetPostureRegistry(reg)
 	mgr.Profiles.SetAgentRegistry(loadAgentsForTest(t))
-	mgr.SetWorkflowSessionView(stubWorkflowManifest{
+	mgr.SetWorkflowDomains(workflowDomainFixture(stubWorkflowManifest{
 		manifest: workflowfacts.ActiveWorkflowManifest{CoordinatorProfile: "worker_readonly"},
 		ok:       true,
-	})
+	}))
 	sess := &api.Session{ID: "s1", Posture: api.SessionPostureSpec, AgentType: orchestration.ProfileCoordinator}
 	got, err := mgr.Profiles.PromptToolProfile(context.Background(), sess)
 	testutil.FailErr(t, "mgr.Profiles.PromptToolProfile failed", err)
@@ -143,7 +143,7 @@ func (s stubWorkflowManifest) ActivePlan(context.Context, string) (string, strin
 func (s stubWorkflowManifest) ActivePhaseRequiresEvidence(context.Context, string, string) bool {
 	return false
 }
-func (s stubWorkflowManifest) GetActive(context.Context, string) (*api.WorkflowRun, error) {
+func (s stubWorkflowManifest) ActiveBySession(context.Context, string) (*api.WorkflowRun, error) {
 	return nil, nil
 }
 func (s stubWorkflowManifest) IsAmbientRun(*api.WorkflowRun) bool {

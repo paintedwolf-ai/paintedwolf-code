@@ -293,12 +293,12 @@ func (s *Handler) executeWorkflowStart(
 			break
 		}
 	}
-	if err := s.Workflow.Workflows.ValidateUserFacingStart(r.Context(), scope.projectDir, in.SessionID, workflowID, version); err != nil {
+	if err := s.Workflow.Workflows.Resolver.ValidateUserFacingStart(r.Context(), scope.projectDir, in.SessionID, workflowID, version); err != nil {
 		s.Workflow.WriteWorkflowError(w, r, err)
 		return 0, wire.CommandInvokeResponse{}, false
 	}
 	// The invoke route carries human start authorization.
-	run, err := s.Workflow.Workflows.Start(hostctx.WithHumanWorkflowStart(r.Context()), in.SessionID, wire.StartWorkflowRunRequest{
+	run, err := s.Workflow.Workflows.Starts.Start(hostctx.WithHumanWorkflowStart(r.Context()), in.SessionID, wire.StartWorkflowRunRequest{
 		OperationID:     req.OperationID,
 		WorkflowID:      workflowID,
 		WorkflowVersion: version,

@@ -23,7 +23,7 @@ func (m *Service) completedWorkflow(ctx context.Context, sessionID string) (stri
 	if m.loopWorkflowSource == nil {
 		return runID, false, fmt.Errorf("workflow completion lookup not configured")
 	}
-	active, err := m.loopWorkflowSource.ActiveRun(ctx, sessionID)
+	active, err := m.loopWorkflowSource.Runs.ActiveBySession(ctx, sessionID)
 	if err != nil {
 		return runID, false, err
 	}

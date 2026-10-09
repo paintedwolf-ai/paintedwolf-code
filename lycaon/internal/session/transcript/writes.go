@@ -20,7 +20,7 @@ func (m *Service) Append(ctx context.Context, sessionID string, msgs ...api.Mess
 		return err
 	}
 	if m.workflows != nil {
-		err = m.workflows.StampAndAppendMessages(ctx, sessionID, stamped...)
+		err = m.workflows.Transcript.StampAndAppendMessages(ctx, sessionID, stamped...)
 	} else {
 		err = m.store.AppendMessages(ctx, sessionID, stamped...)
 	}

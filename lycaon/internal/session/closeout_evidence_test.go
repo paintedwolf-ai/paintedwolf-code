@@ -63,7 +63,7 @@ type evidenceWorkflowView struct {
 	run *api.WorkflowRun
 }
 
-func (v *evidenceWorkflowView) GetActive(context.Context, string) (*api.WorkflowRun, error) {
+func (v *evidenceWorkflowView) ActiveBySession(context.Context, string) (*api.WorkflowRun, error) {
 	return v.run, nil
 }
 
@@ -74,7 +74,7 @@ func TestWorkflowEvidenceSurvivesLaterUserMessagesAndCompaction(t *testing.T) {
 	child, err := st.CreateChild(t.Context(), parent, api.SpawnChildRequest{AgentType: "skeptic", Prompt: "Review"})
 	testutil.FailErr(t, "create reviewer", err)
 	run := &api.WorkflowRun{ID: "review-run", CurrentPhase: "challenge"}
-	mgr.SetWorkflowSessionView(&evidenceWorkflowView{run: run})
+	mgr.SetWorkflowDomains(workflowDomainFixture(&evidenceWorkflowView{run: run}))
 	before := time.Unix(100, 0)
 	mgr.SetWorkerQueue(jobLister{tasks: []api.WorkerTask{
 		{ID: "original", ParentSessionID: parent.ID, ChildSessionID: child.ID, AgentType: "skeptic", Status: api.WorkerStatusComplete, Result: &api.WorkerResult{CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"}}, WorkflowRunID: run.ID, WorkflowPhase: run.CurrentPhase, CreatedAt: before},

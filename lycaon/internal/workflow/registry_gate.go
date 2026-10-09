@@ -8,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/observability"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowgates "github.com/lycaon/lycaon/internal/workflow/gates"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -24,46 +25,46 @@ type SessionLookup interface {
 	Get(ctx context.Context, sessionID string) (*api.Session, error)
 }
 
-func (e RegistryGateEvaluator) PhaseGateMet(ctx context.Context, manifest workflowdef.Manifest, run *api.WorkflowRun, vars map[string]any) (bool, GateCheckResult, error) {
+func (e RegistryGateEvaluator) PhaseGateMet(ctx context.Context, manifest workflowdef.Manifest, run *api.WorkflowRun, vars map[string]any) (bool, workflowgates.GateCheckResult, error) {
 	if run == nil {
-		return true, GateCheckResult{}, nil
+		return true, workflowgates.GateCheckResult{}, nil
 	}
 	def, ok := manifest.PhaseForRun(run, run.CurrentPhase)
 	if !ok {
-		return true, GateCheckResult{}, nil
+		return true, workflowgates.GateCheckResult{}, nil
 	}
 	okPrimary, result, err := e.evaluatePrimaryGate(ctx, def, run, vars)
 	if err != nil || !okPrimary {
 		return okPrimary, result, err
 	}
-	return true, GateCheckResult{}, nil
+	return true, workflowgates.GateCheckResult{}, nil
 }
 
-func (e RegistryGateEvaluator) evaluatePrimaryGate(ctx context.Context, def workflowdef.PhaseDef, run *api.WorkflowRun, vars map[string]any) (bool, GateCheckResult, error) {
+func (e RegistryGateEvaluator) evaluatePrimaryGate(ctx context.Context, def workflowdef.PhaseDef, run *api.WorkflowRun, vars map[string]any) (bool, workflowgates.GateCheckResult, error) {
 	cw := strings.TrimSpace(def.CompleteWhen)
 	switch cw {
 	case workflowdef.CompleteWhenGatesSatisfied:
 		return e.evaluateGateList(ctx, def, run, vars, def.Gates, workflowdef.CompleteWhenGatesSatisfied)
 	case "":
-		return true, GateCheckResult{}, nil
+		return true, workflowgates.GateCheckResult{}, nil
 	default:
 		if strings.HasPrefix(cw, workflowdef.CompleteWhenGateSatisfied) {
 			gate := strings.TrimPrefix(cw, workflowdef.CompleteWhenGateSatisfied)
 			return e.evaluateGateList(ctx, def, run, vars, []string{gate}, cw)
 		}
-		return e.evaluateCompleteWhen(ctx, cw, def, run, vars)
+		return e.ExpressionMet(ctx, cw, def, run, vars)
 	}
 }
 
-func (e RegistryGateEvaluator) evaluateGateList(ctx context.Context, def workflowdef.PhaseDef, run *api.WorkflowRun, vars map[string]any, gates []string, reason string) (bool, GateCheckResult, error) {
+func (e RegistryGateEvaluator) evaluateGateList(ctx context.Context, def workflowdef.PhaseDef, run *api.WorkflowRun, vars map[string]any, gates []string, reason string) (bool, workflowgates.GateCheckResult, error) {
 	reg := e.Registry
 	if reg == nil {
-		return false, GateCheckResult{Reason: reason, FailedGate: reason, FailedLeaves: gates}, nil
+		return false, workflowgates.GateCheckResult{Reason: reason, FailedGate: reason, FailedLeaves: gates}, nil
 	}
 	ec := e.buildEvalContext(ctx, def, run, vars)
 	failed, err := collectFailedLeaves(reg, ec, gates)
 	if err != nil {
-		return false, GateCheckResult{}, err
+		return false, workflowgates.GateCheckResult{}, err
 	}
 	if len(failed) > 0 {
 		workflowGateLog.Debug("phase gates not satisfied",
@@ -73,42 +74,42 @@ func (e RegistryGateEvaluator) evaluateGateList(ctx context.Context, def workflo
 			"blueprint_path", ec.BlueprintPath,
 			"failed_leaves", failed,
 		)
-		return false, GateCheckResult{
+		return false, workflowgates.GateCheckResult{
 			Reason:       reason,
 			FailedGate:   failed[0],
 			FailedLeaves: failed,
 		}, nil
 	}
-	return true, GateCheckResult{}, nil
+	return true, workflowgates.GateCheckResult{}, nil
 }
 
-func (e RegistryGateEvaluator) evaluateCompleteWhen(ctx context.Context, expr string, def workflowdef.PhaseDef, run *api.WorkflowRun, vars map[string]any) (bool, GateCheckResult, error) {
+func (e RegistryGateEvaluator) ExpressionMet(ctx context.Context, expr string, def workflowdef.PhaseDef, run *api.WorkflowRun, vars map[string]any) (bool, workflowgates.GateCheckResult, error) {
 	reg := e.Registry
 	if reg == nil {
-		return false, GateCheckResult{Reason: expr, FailedGate: expr, FailedLeaves: []string{expr}}, nil
+		return false, workflowgates.GateCheckResult{Reason: expr, FailedGate: expr, FailedLeaves: []string{expr}}, nil
 	}
 	ec := e.buildEvalContext(ctx, def, run, vars)
 
 	// A bare gate leaf parses to a one-node tree, so there is no second path.
 	node, err := boolexpr.Parse(expr)
 	if err != nil {
-		return false, GateCheckResult{Reason: "invalid complete_when: " + expr, FailedGate: expr, FailedLeaves: []string{expr}}, nil //nolint:nilerr // parse failure becomes a structured gate-deny reason rather than a fatal error
+		return false, workflowgates.GateCheckResult{Reason: "invalid complete_when: " + expr, FailedGate: expr, FailedLeaves: []string{expr}}, nil //nolint:nilerr // parse failure becomes a structured gate-deny reason rather than a fatal error
 	}
 	env := func(name string) bool {
 		ok, err := reg.Evaluate(name, ec)
 		return err == nil && ok
 	}
 	if boolexpr.Eval(node, env) {
-		return true, GateCheckResult{}, nil
+		return true, workflowgates.GateCheckResult{}, nil
 	}
 	failed, err := collectFailedLeavesFromExpr(reg, ec, node)
 	if err != nil {
-		return false, GateCheckResult{}, err
+		return false, workflowgates.GateCheckResult{}, err
 	}
 	if len(failed) == 0 {
 		failed = []string{expr}
 	}
-	return false, GateCheckResult{
+	return false, workflowgates.GateCheckResult{
 		Reason:       expr,
 		FailedGate:   failed[0],
 		FailedLeaves: failed,

@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
+	loopwake "github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/coordinator/reenter"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/llm"
@@ -30,6 +31,9 @@ import (
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
+	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -42,7 +46,7 @@ func wireImplementConvergenceHooks(t *testing.T, mgr *session.Manager, wfMgr *wo
 	})
 	testutil.FailErr(t, "NewDefaultRegistry", err)
 	wfMgr.SetConditionRegistry(reg)
-	wfMgr.PhaseReenterHook = func(ctx context.Context, rc *workflow.RunContext, def workflowdef.PhaseDef) {
+	wfMgr.Phases.PhaseReenterHook = func(ctx context.Context, rc *workflowphases.RunContext, def workflowdef.PhaseDef) {
 		if rc == nil {
 			return
 		}
@@ -54,10 +58,10 @@ func wireImplementConvergenceHooks(t *testing.T, mgr *session.Manager, wfMgr *wo
 			mgr.Guidance.Emit(ctx, rc.SessionID, id, mgr.Workers.Results.EnvelopeForTerminal(ctx, rc.SessionID, ""))
 		}
 	}
-	wfMgr.OnPhaseAutoAdvanced = func(ctx context.Context, sessionID, runID, previousPhase, newPhase string) {
-		manifest, err := wfMgr.ManifestForRunID(ctx, runID)
+	wfMgr.Publication.OnPhaseAutoAdvanced = func(ctx context.Context, sessionID, runID, previousPhase, newPhase string) {
+		manifest, err := wfMgr.Resolver.ForRunID(ctx, runID)
 		if err == nil {
-			if _, ok := workflow.ReenterLegForAdvance(manifest, previousPhase, newPhase, sessionID); ok {
+			if _, ok := workflowphases.ReenterLegForAdvance(manifest, previousPhase, newPhase, sessionID); ok {
 				reenter.NudgeOnManifestReenter(ctx, mgr, sessionID, manifest, previousPhase, newPhase)
 				return
 			}
@@ -71,7 +75,7 @@ func wireImplementConvergenceHooks(t *testing.T, mgr *session.Manager, wfMgr *wo
 		}
 		mgr.NudgeCoordinatorLoop(ctx, sessionID, anchor.PhaseAdvanced, anchor.PhaseAdvanced, "", anchor.Envelope{})
 	}
-	wfMgr.PhaseEnterHook = func(ctx context.Context, rc *workflow.RunContext, def workflowdef.PhaseDef) {
+	wfMgr.Phases.PhaseEnterHook = func(ctx context.Context, rc *workflowphases.RunContext, def workflowdef.PhaseDef) {
 		if rc == nil {
 			return
 		}
@@ -93,13 +97,13 @@ func drainCoordinatorAsyncTurnsOnCleanup(t *testing.T, mgr *session.Manager) {
 	})
 }
 
-func setImplementRunPhase(t *testing.T, wfStore *workflow.SQLStore, run *wire.WorkflowRun, projectDir, phase string) {
+func setImplementRunPhase(t *testing.T, wfStore *runstate.Repository, run *wire.WorkflowRun, projectDir, phase string) {
 	t.Helper()
 	ctx := context.Background()
-	vars, err := wfStore.GetScaffoldVars(ctx, run.ID)
+	vars, err := wfStore.Runs.GetScaffoldVars(ctx, run.ID)
 	testutil.FailErr(t, "GetScaffoldVars", err)
 	run.CurrentPhase = phase
-	testutil.FailErr(t, "CommitState", wfStore.CommitState(ctx, run, projectDir, vars))
+	testutil.FailErr(t, "CommitState", wfStore.State.CommitState(ctx, run, projectDir, vars))
 }
 
 type loopFixture struct {
@@ -126,16 +130,18 @@ func setupLoopFixture(t *testing.T, cfg settings.SessionLimits) loopFixture {
 
 	manifestRegistry, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "workflow.RegistryFromDirs failed", err)
-	wfStore := workflow.NewSQLStore(sqlDB)
+	wfStore := workflowpersistence.New(sqlDB)
 	wfMgr := workflow.NewManager(wfStore, store, manifestRegistry, nil)
-	wfMgr.SessionScaffold = workflow.NewSessionScaffoldSQLStore(sqlDB)
+	wfMgr.Blueprints.Scaffold.Store = workflowpersistence.NewSessionScaffoldSQLStore(sqlDB)
 	dir := t.TempDir()
 	blueprintStore := blueprint.NewFileStoreForTest(dir)
 	blueprintMgr := blueprint.NewManager(blueprintStore)
-	wfMgr.BlueprintCreate = blueprint.WorkflowBlueprintCreator{Manager: blueprintMgr}
-	wfMgr.BlueprintGet = blueprintMgr
-	mgr.SetWorkflowSessionView(wfMgr)
-	mgr.SetLoopWorkflowSource(wfMgr)
+	wfMgr.Blueprints.Creator = blueprint.WorkflowBlueprintCreator{Manager: blueprintMgr}
+	wfMgr.Blueprints.Getter = blueprintMgr
+	wfMgr.Presentation.BlueprintGetter = blueprintMgr
+	wfMgr.Approvals.Getter = blueprintMgr
+	mgr.SetWorkflowDomains(&session.WorkflowDomains{Runs: wfMgr.Store.Runs, Policy: wfMgr.Policy, Ambient: wfMgr.Ambient, Blueprints: wfMgr.Blueprints, Batch: wfMgr.Batch, Slash: wfMgr.Slash, Requests: wfMgr.Requests, Feedback: wfMgr.Feedback, Transcript: wfMgr.Transcript, Asks: wfMgr.Asks, Fanout: wfMgr.Fanout, Phases: wfMgr.Phases, Reports: wfMgr.Reports, Recovery: wfMgr.Recovery, Cleanup: wfMgr})
+	mgr.SetLoopWorkflowSource(&loopwake.WorkflowDomains{Runs: wfMgr.Store.Runs, Approvals: wfMgr.Policy, Obligations: wfMgr.Obligations})
 
 	ctx := context.Background()
 
@@ -143,12 +149,12 @@ func setupLoopFixture(t *testing.T, cfg settings.SessionLimits) loopFixture {
 
 	sess, err := store.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
-	if _, err := wfMgr.StartHuman(ctx, sess.ID, wire.StartWorkflowRunRequest{
+	if _, err := wfMgr.Starts.StartHuman(ctx, sess.ID, wire.StartWorkflowRunRequest{
 		WorkflowID: "plan", WorkflowVersion: "1.0.0", Request: "Exercise the coordinator loop",
 	}); err != nil {
-		testutil.FailErr(t, "wfMgr.StartHuman failed", err)
+		testutil.FailErr(t, "wfMgr.Starts.StartHuman failed", err)
 	}
-	run, err := wfMgr.GetActive(ctx, sess.ID)
+	run, err := wfMgr.Store.Runs.ActiveBySession(ctx, sess.ID)
 	if err != nil || run == nil {
 		t.Fatal("missing active run")
 	}
@@ -164,7 +170,7 @@ func setupLoopFixture(t *testing.T, cfg settings.SessionLimits) loopFixture {
 func TestShouldLoopWakeDeniesHumanApprovalAwaiting(t *testing.T) {
 	fix := setupLoopFixture(t, settings.DefaultSessionLimits())
 	ctx := context.Background()
-	run, err := fix.wfMgr.GetActive(ctx, fix.sess.ID)
+	run, err := fix.wfMgr.Store.Runs.ActiveBySession(ctx, fix.sess.ID)
 	if err != nil || run == nil {
 		t.Fatal("missing run")
 	}
@@ -172,10 +178,10 @@ func TestShouldLoopWakeDeniesHumanApprovalAwaiting(t *testing.T) {
 	if err := fix.wfMgr.Store.Update(ctx, run); err != nil {
 		testutil.FailErr(t, "fix.wfMgr.Store.Update failed", err)
 	}
-	vars, err := fix.wfMgr.Store.GetScaffoldVars(ctx, run.ID)
+	vars, err := fix.wfMgr.Store.Runs.GetScaffoldVars(ctx, run.ID)
 	testutil.FailErr(t, "GetScaffoldVars", err)
-	vars = workflow.StampHumanApprovalPhase(vars, &workflowdef.HumanApprovalConfig{}, run.BlueprintPath)
-	vars = workflow.SetHumanApprovalReady(vars, true)
+	vars = runstate.StampHumanApprovalPhase(vars, &workflowdef.HumanApprovalConfig{}, run.BlueprintPath)
+	vars = runstate.SetHumanApprovalReady(vars, true)
 	testutil.FailErr(t, "UpdateVars", fix.wfMgr.Store.UpdateVars(ctx, run, t.TempDir(), vars))
 	allow, reason, err := fix.mgr.ShouldLoopWake(ctx, fix.sess.ID, anchor.LegFinished)
 	testutil.FailErr(t, "fix.mgr.ShouldLoopWake failed", err)
@@ -190,7 +196,7 @@ func TestShouldLoopWakeDeniesHumanApprovalAwaiting(t *testing.T) {
 func TestShouldLoopWakeIgnoresApprovePhaseName(t *testing.T) {
 	fix := setupLoopFixture(t, settings.DefaultSessionLimits())
 	ctx := context.Background()
-	run, err := fix.wfMgr.GetActive(ctx, fix.sess.ID)
+	run, err := fix.wfMgr.Store.Runs.ActiveBySession(ctx, fix.sess.ID)
 	if err != nil || run == nil {
 		t.Fatal("missing run")
 	}
@@ -231,7 +237,7 @@ func TestShouldLoopWakeRespectsBudget(t *testing.T) {
 	cfg.MaxCoordinatorLoopCycles = 1
 	fix := setupLoopFixture(t, cfg)
 	ctx := context.Background()
-	run, _ := fix.wfMgr.GetActive(ctx, fix.sess.ID)
+	run, _ := fix.wfMgr.Store.Runs.ActiveBySession(ctx, fix.sess.ID)
 	if run == nil {
 		t.Fatal("missing run")
 	}
@@ -247,7 +253,7 @@ func TestShouldLoopWakeRespectsBudget(t *testing.T) {
 func TestShouldLoopWakeDeniesPendingDecision(t *testing.T) {
 	fix := setupLoopFixture(t, settings.DefaultSessionLimits())
 	ctx := context.Background()
-	run, _ := fix.wfMgr.GetActive(ctx, fix.sess.ID)
+	run, _ := fix.wfMgr.Store.Runs.ActiveBySession(ctx, fix.sess.ID)
 	if run == nil {
 		t.Fatal("missing run")
 	}
@@ -313,17 +319,16 @@ func TestImplementWorkerSummaryLoopWakesWithCompletingJobStillRunning(t *testing
 	testutil.FailErr(t, "install anchor registry", mgr.Guidance.InstallAnchorRegistry())
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
 
-	wfStore := workflow.NewSQLStore(sqlDB)
+	wfStore := workflowpersistence.New(sqlDB)
 	bundledDir := filepath.Join(root, "config", "packs", "painted-wolf", "platform", "workflows")
 	manifestRegistry, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "RegistryFromDirs", err)
 	wfMgr := workflow.NewManager(wfStore, store, manifestRegistry, nil)
-	wfMgr.Resolver = workflow.ManifestResolver{}
 	q := worker.NewInMemoryQueue(4)
 	mgr.SetWorkerQueue(q)
 	wireImplementConvergenceHooks(t, mgr, wfMgr, q)
-	mgr.SetWorkflowSessionView(wfMgr)
-	mgr.SetLoopWorkflowSource(wfMgr)
+	mgr.SetWorkflowDomains(&session.WorkflowDomains{Runs: wfMgr.Store.Runs, Policy: wfMgr.Policy, Ambient: wfMgr.Ambient, Blueprints: wfMgr.Blueprints, Batch: wfMgr.Batch, Slash: wfMgr.Slash, Requests: wfMgr.Requests, Feedback: wfMgr.Feedback, Transcript: wfMgr.Transcript, Asks: wfMgr.Asks, Fanout: wfMgr.Fanout, Phases: wfMgr.Phases, Reports: wfMgr.Reports, Recovery: wfMgr.Recovery, Cleanup: wfMgr})
+	mgr.SetLoopWorkflowSource(&loopwake.WorkflowDomains{Runs: wfMgr.Store.Runs, Approvals: wfMgr.Policy, Obligations: wfMgr.Obligations})
 
 	ctx := context.Background()
 	dir := t.TempDir()
@@ -335,7 +340,7 @@ func TestImplementWorkerSummaryLoopWakesWithCompletingJobStillRunning(t *testing
 	drainCoordinatorAsyncTurnsOnCleanup(t, mgr)
 	ref, err := workflowdef.LoadRegistryConfig(extpacks.OnDisk(bundledDir))
 	testutil.FailErr(t, "LoadRegistryConfig", err)
-	run, err := wfMgr.StartAmbient(ctx, sess.ID, ref.ID, ref.Version)
+	run, err := wfMgr.Ambient.StartAmbient(ctx, sess.ID, ref.ID, ref.Version)
 	testutil.FailErr(t, "StartAmbient", err)
 	setImplementRunPhase(t, wfStore, run, sess.WorkspacePath, "work")
 	child, err := store.CreateChild(ctx, sess, wire.SpawnChildRequest{AgentType: orchestration.ProfilePathExplorer})
@@ -395,17 +400,16 @@ func TestImplementWorkerCompleteFiresSingleLoopWake(t *testing.T) {
 	testutil.FailErr(t, "install anchor registry", mgr.Guidance.InstallAnchorRegistry())
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
 
-	wfStore := workflow.NewSQLStore(sqlDB)
+	wfStore := workflowpersistence.New(sqlDB)
 	bundledDir := filepath.Join(root, "config", "packs", "painted-wolf", "platform", "workflows")
 	manifestRegistry, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "RegistryFromDirs", err)
 	wfMgr := workflow.NewManager(wfStore, store, manifestRegistry, nil)
-	wfMgr.Resolver = workflow.ManifestResolver{}
 	q := worker.NewInMemoryQueue(4)
 	mgr.SetWorkerQueue(q)
 	wireImplementConvergenceHooks(t, mgr, wfMgr, q)
-	mgr.SetWorkflowSessionView(wfMgr)
-	mgr.SetLoopWorkflowSource(wfMgr)
+	mgr.SetWorkflowDomains(&session.WorkflowDomains{Runs: wfMgr.Store.Runs, Policy: wfMgr.Policy, Ambient: wfMgr.Ambient, Blueprints: wfMgr.Blueprints, Batch: wfMgr.Batch, Slash: wfMgr.Slash, Requests: wfMgr.Requests, Feedback: wfMgr.Feedback, Transcript: wfMgr.Transcript, Asks: wfMgr.Asks, Fanout: wfMgr.Fanout, Phases: wfMgr.Phases, Reports: wfMgr.Reports, Recovery: wfMgr.Recovery, Cleanup: wfMgr})
+	mgr.SetLoopWorkflowSource(&loopwake.WorkflowDomains{Runs: wfMgr.Store.Runs, Approvals: wfMgr.Policy, Obligations: wfMgr.Obligations})
 
 	ctx := context.Background()
 	dir := t.TempDir()
@@ -417,7 +421,7 @@ func TestImplementWorkerCompleteFiresSingleLoopWake(t *testing.T) {
 	drainCoordinatorAsyncTurnsOnCleanup(t, mgr)
 	ref, err := workflowdef.LoadRegistryConfig(extpacks.OnDisk(bundledDir))
 	testutil.FailErr(t, "LoadRegistryConfig", err)
-	run, err := wfMgr.StartAmbient(ctx, sess.ID, ref.ID, ref.Version)
+	run, err := wfMgr.Ambient.StartAmbient(ctx, sess.ID, ref.ID, ref.Version)
 	testutil.FailErr(t, "StartAmbient", err)
 	setImplementRunPhase(t, wfStore, run, sess.WorkspacePath, "work")
 	child, err := store.CreateChild(ctx, sess, wire.SpawnChildRequest{AgentType: orchestration.ProfilePathExplorer})
@@ -499,17 +503,16 @@ func TestImplementWorkerSummaryLoopWakesCoordinator(t *testing.T) {
 	testutil.FailErr(t, "install anchor registry", mgr.Guidance.InstallAnchorRegistry())
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
 
-	wfStore := workflow.NewSQLStore(sqlDB)
+	wfStore := workflowpersistence.New(sqlDB)
 	bundledDir := filepath.Join(root, "config", "packs", "painted-wolf", "platform", "workflows")
 	manifestRegistry, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "RegistryFromDirs", err)
 	wfMgr := workflow.NewManager(wfStore, store, manifestRegistry, nil)
-	wfMgr.Resolver = workflow.ManifestResolver{}
 	q := worker.NewInMemoryQueue(4)
 	mgr.SetWorkerQueue(q)
 	wireImplementConvergenceHooks(t, mgr, wfMgr, q)
-	mgr.SetWorkflowSessionView(wfMgr)
-	mgr.SetLoopWorkflowSource(wfMgr)
+	mgr.SetWorkflowDomains(&session.WorkflowDomains{Runs: wfMgr.Store.Runs, Policy: wfMgr.Policy, Ambient: wfMgr.Ambient, Blueprints: wfMgr.Blueprints, Batch: wfMgr.Batch, Slash: wfMgr.Slash, Requests: wfMgr.Requests, Feedback: wfMgr.Feedback, Transcript: wfMgr.Transcript, Asks: wfMgr.Asks, Fanout: wfMgr.Fanout, Phases: wfMgr.Phases, Reports: wfMgr.Reports, Recovery: wfMgr.Recovery, Cleanup: wfMgr})
+	mgr.SetLoopWorkflowSource(&loopwake.WorkflowDomains{Runs: wfMgr.Store.Runs, Approvals: wfMgr.Policy, Obligations: wfMgr.Obligations})
 
 	ctx := context.Background()
 	dir := t.TempDir()
@@ -521,7 +524,7 @@ func TestImplementWorkerSummaryLoopWakesCoordinator(t *testing.T) {
 	drainCoordinatorAsyncTurnsOnCleanup(t, mgr)
 	ref, err := workflowdef.LoadRegistryConfig(extpacks.OnDisk(bundledDir))
 	testutil.FailErr(t, "LoadRegistryConfig", err)
-	run, err := wfMgr.StartAmbient(ctx, sess.ID, ref.ID, ref.Version)
+	run, err := wfMgr.Ambient.StartAmbient(ctx, sess.ID, ref.ID, ref.Version)
 	testutil.FailErr(t, "StartAmbient", err)
 	setImplementRunPhase(t, wfStore, run, sess.WorkspacePath, "work")
 	child, err := store.CreateChild(ctx, sess, wire.SpawnChildRequest{AgentType: orchestration.ProfileImplementer, Prompt: "build game.py"})
@@ -664,10 +667,10 @@ func TestImplementWorkerSummaryPartialSkipsLoopWake(t *testing.T) {
 	mgr.Profiles.SetAgentRegistry(agents)
 	testutil.FailErr(t, "install anchor registry", mgr.Guidance.InstallAnchorRegistry())
 
-	wfStore := workflow.NewSQLStore(sqlDB)
+	wfStore := workflowpersistence.New(sqlDB)
 	wfMgr := workflow.NewManager(wfStore, store, nil, nil)
-	mgr.SetWorkflowSessionView(wfMgr)
-	mgr.SetLoopWorkflowSource(wfMgr)
+	mgr.SetWorkflowDomains(&session.WorkflowDomains{Runs: wfMgr.Store.Runs, Policy: wfMgr.Policy, Ambient: wfMgr.Ambient, Blueprints: wfMgr.Blueprints, Batch: wfMgr.Batch, Slash: wfMgr.Slash, Requests: wfMgr.Requests, Feedback: wfMgr.Feedback, Transcript: wfMgr.Transcript, Asks: wfMgr.Asks, Fanout: wfMgr.Fanout, Phases: wfMgr.Phases, Reports: wfMgr.Reports, Recovery: wfMgr.Recovery, Cleanup: wfMgr})
+	mgr.SetLoopWorkflowSource(&loopwake.WorkflowDomains{Runs: wfMgr.Store.Runs, Approvals: wfMgr.Policy, Obligations: wfMgr.Obligations})
 	mgr.SetWorkerQueue(worker.NewInMemoryQueue(4))
 
 	ctx := context.Background()

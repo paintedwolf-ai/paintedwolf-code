@@ -73,7 +73,7 @@ func TestResolvedWorkflowRequestDoesNotReplaceWorkerAssignment(t *testing.T) {
 	st := store.NewMemory()
 	mgr := NewManager(st, nil, nil, settings.DefaultSessionLimits())
 	var asked []string
-	mgr.SetWorkflowSessionView(requestWorkflowView{request: workflowfacts.ResolvedWorkflowRequest{Text: "run request"}, asked: &asked})
+	mgr.SetWorkflowDomains(workflowDomainFixture(requestWorkflowView{request: workflowfacts.ResolvedWorkflowRequest{Text: "run request"}, asked: &asked}))
 	root, err := st.Create(t.Context(), api.CreateSessionRequest{}, "project-1")
 	testutil.FailErr(t, "create root", err)
 	worker, err := st.CreateChild(t.Context(), root, api.SpawnChildRequest{AgentType: "security-reviewer"})

@@ -16,7 +16,7 @@ func TestReviewGuidanceFollowsLiveVerdictGate(t *testing.T) {
 			for _, staged := range []bool{false, true} {
 				t.Run(fmt.Sprintf("%s/pending=%v/staged=%v", id, pending, staged), func(t *testing.T) {
 					mgr := NewManager(store.NewMemory(), nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
-					mgr.SetWorkflowSessionView(verdictPendingView{pending: true})
+					mgr.SetWorkflowDomains(workflowDomainFixture(verdictPendingView{pending: true}))
 					kicks := mgr.ensureCoordinatorRuntime().Kicks()
 					review := anchor.InformRender(id)
 					other := anchor.InformRender(anchor.ComposeDone)
@@ -28,7 +28,7 @@ func TestReviewGuidanceFollowsLiveVerdictGate(t *testing.T) {
 							t.Fatalf("open review guidance = %q, want %q", got, review)
 						}
 					}
-					mgr.SetWorkflowSessionView(verdictPendingView{pending: pending})
+					mgr.SetWorkflowDomains(workflowDomainFixture(verdictPendingView{pending: pending}))
 					want := other
 					if pending {
 						want = review

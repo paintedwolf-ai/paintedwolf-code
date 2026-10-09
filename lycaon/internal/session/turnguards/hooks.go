@@ -34,7 +34,7 @@ func (m *Service) BeforeTool(
 	if m.progress != nil {
 		currentProgress = m.progress.Get(ctx, root)
 	}
-	reviewLoopActive := m.workflows != nil && m.workflows.ActivePhaseHasReviewLoop(ctx, sess.ID)
+	reviewLoopActive := m.workflows != nil && m.workflows.Policy.ActivePhaseHasReviewLoop(ctx, sess.ID)
 	closureBaseline, closureArmed := m.ProgressClosure.Baseline(root)
 	guardDeps := m.WorkerAdmission()
 	declaredVerify := ""

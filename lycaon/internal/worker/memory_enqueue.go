@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/worker/jobstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -24,7 +25,7 @@ func (q *InMemoryQueue) refreshBoard(ctx context.Context, task api.WorkerTask, p
 	if q.events.Hub != nil {
 		publishKey := events.PublishKeyFor(ctx, q.events.Lookup, key, strings.TrimSpace(task.ParentSessionID))
 		publishKey.Facet = task.ID
-		_ = q.events.Hub.Publish(ctx, api.EventTopicWorker, publishKey, JobEvent(task))
+		_ = q.events.Hub.Publish(ctx, api.EventTopicWorker, publishKey, jobstate.JobEvent(task))
 	}
 	q.events.PublishBoard(ctx, key, strings.TrimSpace(task.ParentSessionID))
 }
@@ -97,14 +98,17 @@ func (q *InMemoryQueue) PrepareEnqueue(ctx context.Context, projectID string, ta
 	q.mu.Unlock()
 	if task.WorkflowRunID != "" {
 		// Workflow tasks require a runnable-state source.
-		if workflowRuns == nil {
+		if workflowRuns == nil || workflowRuns.Runs == nil {
 			return fmt.Errorf("worker queue: workflow run checker required for workflow-bound task %s", task.WorkflowRunID)
 		}
-		if err := workflowRuns.AssertRunnable(ctx, task.WorkflowRunID); err != nil {
+		if err := workflowRuns.Runs.AssertRunnable(ctx, task.WorkflowRunID); err != nil {
 			return err
 		}
 		if task.WorkflowPhase != "" {
-			if err := workflowRuns.AssertWorkerTask(ctx, task); err != nil {
+			if workflowRuns.Tasks == nil {
+				return fmt.Errorf("worker queue: workflow task admission required for phase-bound task %s", task.WorkflowPhase)
+			}
+			if err := workflowRuns.Tasks.AssertWorkerTask(ctx, task); err != nil {
 				return err
 			}
 		}

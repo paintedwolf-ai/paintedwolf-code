@@ -408,11 +408,11 @@ func busyWaitLoopDeps() LoopDeps {
 
 func pendingAskIdleWaitLoopDeps() LoopDeps {
 	deps := idleWaitLoopDeps()
-	deps.WorkflowSource = StubLoopWF{
+	deps.WorkflowSource = workflowFixturePorts(StubLoopWF{
 		run: &api.WorkflowRun{ID: "run-1", SessionID: "s1", Status: api.WorkflowRunStatusRunning},
 		vars: map[string]any{"user_feedback": map[string]any{
 			"ask-1": map[string]any{"pending": true, "source": "coordinator_tool", "blocking": true},
 		}},
-	}
+	})
 	return deps
 }

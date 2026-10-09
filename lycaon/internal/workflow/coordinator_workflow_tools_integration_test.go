@@ -14,6 +14,9 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
+	workflowstatetools "github.com/lycaon/lycaon/internal/workflow/statetools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -23,11 +26,11 @@ func TestComposeProposalHumanStartAdvanceToolPath(t *testing.T) {
 	reg := tools.NewDefaultRegistry()
 	hints, err := guidance.LoadHintConfigStock()
 	testutil.FailErr(t, "load hint config", err)
-	if err := RegisterStateTools(reg, StateToolDeps{Runs: mgr, Sessions: mgr.Sessions}); err != nil {
+	if err := workflowstatetools.RegisterStateTools(reg, workflowstatetools.StateToolDeps{Runs: mgr.Store.Runs, Vars: mgr.Phases.Vars, Journal: mgr.Phases.Journal, Resolver: &mgr.Resolver, Starts: mgr.Starts, Controls: mgr.Controls, Scaffold: mgr.Blueprints.Scaffold, Sessions: mgr.Policy.Sessions}); err != nil {
 		testutil.FailErr(t, "RegisterStateTools failed", err)
 	}
-	if err := RegisterAdvanceTool(reg, mgr); err != nil {
-		testutil.FailErr(t, "RegisterAdvanceTool failed", err)
+	if err := workflowphases.RegisterAdvanceTool(reg, mgr.Phases); err != nil {
+		testutil.FailErr(t, "workflowphases.RegisterAdvanceTool failed", err)
 	}
 	ctx := context.Background()
 	tctx := toolContext("coordinator", "sess-1", projectDir)
@@ -45,20 +48,20 @@ func TestComposeProposalHumanStartAdvanceToolPath(t *testing.T) {
 			t.Fatalf("rendered reject missing %q:\n%s", want, rendered)
 		}
 	}
-	_, err = mgr.StartHuman(ctx, "sess-1", api.StartWorkflowRunRequest{
+	_, err = mgr.Starts.StartHuman(ctx, "sess-1", api.StartWorkflowRunRequest{
 		WorkflowID: "plan", WorkflowVersion: "1.0.0",
 	})
 	testutil.FailErr(t, "StartHuman", err)
 
-	run, err := mgr.GetActive(ctx, "sess-1")
+	run, err := mgr.Store.Runs.ActiveBySession(ctx, "sess-1")
 	if err != nil || run == nil {
 		t.Fatal("expected active run")
 	}
 	run = completePlanIntakeT(ctx, t, mgr, run)
 	seedValidPlanContent(t, blueprintMgr, run.BlueprintPath)
 
-	advanced, err := mgr.TryAutoAdvance(ctx, run.ID)
-	testutil.FailErr(t, "mgr.TryAutoAdvance failed", err)
+	advanced, err := mgr.Phases.TryAutoAdvance(ctx, run.ID)
+	testutil.FailErr(t, "mgr.Phases.TryAutoAdvance failed", err)
 	if advanced.CurrentPhase != "research" {
 		t.Fatalf("phase = %q want research", advanced.CurrentPhase)
 	}
@@ -67,11 +70,11 @@ func TestComposeProposalHumanStartAdvanceToolPath(t *testing.T) {
 func TestAdvanceToolMatchesHTTPGateShape(t *testing.T) {
 	mgr, _, _, projectDir := testManagerWithRegistry(t)
 	reg := tools.NewDefaultRegistry()
-	if err := RegisterStateTools(reg, StateToolDeps{Runs: mgr, Sessions: mgr.Sessions}); err != nil {
+	if err := workflowstatetools.RegisterStateTools(reg, workflowstatetools.StateToolDeps{Runs: mgr.Store.Runs, Vars: mgr.Phases.Vars, Journal: mgr.Phases.Journal, Resolver: &mgr.Resolver, Starts: mgr.Starts, Controls: mgr.Controls, Scaffold: mgr.Blueprints.Scaffold, Sessions: mgr.Policy.Sessions}); err != nil {
 		testutil.FailErr(t, "RegisterStateTools failed", err)
 	}
-	if err := RegisterAdvanceTool(reg, mgr); err != nil {
-		testutil.FailErr(t, "RegisterAdvanceTool failed", err)
+	if err := workflowphases.RegisterAdvanceTool(reg, mgr.Phases); err != nil {
+		testutil.FailErr(t, "workflowphases.RegisterAdvanceTool failed", err)
 	}
 	ctx := context.Background()
 	manifest := workflowdef.FinalizeManifest(workflowdef.Manifest{
@@ -85,7 +88,7 @@ func TestAdvanceToolMatchesHTTPGateShape(t *testing.T) {
 			AdvanceWhenGateMet: workflowdef.AdvanceWhenGateMetCoordinator,
 		}, {ID: "next"}},
 	})
-	mgr.Manifests = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"gate-shape@1.0.0": manifest})
+	mgr.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"gate-shape@1.0.0": manifest})
 	if _, err := startRun(ctx, mgr, "sess-1", "gate-shape", "1.0.0"); err != nil {
 		testutil.FailErr(t, "startRun failed", err)
 	}
@@ -97,12 +100,12 @@ func TestAdvanceToolMatchesHTTPGateShape(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &toolResult); err != nil {
 		testutil.FailErr(t, "unmarshal JSON document", err)
 	}
-	run, err := mgr.GetActive(ctx, "sess-1")
+	run, err := mgr.Store.Runs.ActiveBySession(ctx, "sess-1")
 	if err != nil || run == nil {
 		t.Fatal(err)
 	}
-	_, httpErr := mgr.Advance(ctx, run.ID)
-	gateErr, ok := IsPhaseGateUnmet(httpErr)
+	_, httpErr := mgr.Phases.Advance(ctx, run.ID)
+	gateErr, ok := runstate.IsPhaseGateUnmet(httpErr)
 	if !ok {
 		t.Fatalf("http err = %v", httpErr)
 	}

@@ -43,10 +43,17 @@ type Workspace interface {
 type Workers interface {
 	Get(string) (*api.WorkerTask, bool)
 }
-type Workflow interface {
-	TryResolveUserFeedback(context.Context, string, string, string, string) error
-	StampAndAppendMessages(context.Context, string, ...api.Message) error
+type WorkflowDomains struct {
+	Feedback   WorkflowFeedback
+	Transcript WorkflowTranscript
 }
+type WorkflowFeedback interface {
+	TryResolveUserFeedback(ctx context.Context, sessionID, messageID, authorPersonID, message string) error
+}
+type WorkflowTranscript interface {
+	StampAndAppendMessages(ctx context.Context, sessionID string, msgs ...api.Message) error
+}
+
 type Reconciler interface {
 	ReconcileOrphanedRuns(context.Context, string) error
 }
@@ -58,7 +65,7 @@ type Service struct {
 	projects                Projects
 	Workspace               Workspace
 	workerQueue             Workers
-	workflows               Workflow
+	workflows               *WorkflowDomains
 	events                  *events.Publisher
 	Streams                 *stream.State
 	redactMessageForStorage Redactor
@@ -71,7 +78,7 @@ func New(store Store, workspace Workspace) *Service {
 }
 func (m *Service) SetProjects(projects Projects)            { m.projects = projects }
 func (m *Service) SetWorkers(workers Workers)               { m.workerQueue = workers }
-func (m *Service) SetWorkflow(workflow Workflow)            { m.workflows = workflow }
+func (m *Service) SetWorkflow(workflow *WorkflowDomains)    { m.workflows = workflow }
 func (m *Service) SetPublisher(publisher *events.Publisher) { m.events = publisher }
 func (m *Service) SetRedactor(redactor Redactor)            { m.redactMessageForStorage = redactor }
 func (m *Service) Redact(ctx context.Context, message api.Message) (api.Message, bool) {

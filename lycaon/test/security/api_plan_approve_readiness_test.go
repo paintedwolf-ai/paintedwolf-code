@@ -14,8 +14,8 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/wiring"
 )
@@ -41,13 +41,13 @@ func TestApprovePlanHTTPRejectsWhenNotReady(t *testing.T) {
 	}
 	run = completePlanIntakeHTTP(t, h, run.ID)
 	run = completePlanDepthAtNoneHTTP(t, h, run.ID, "research")
-	current, err := h.WorkflowMgr.Get(ctx, run.ID)
+	current, err := h.WorkflowMgr.Store.Runs.Get(ctx, run.ID)
 	testutil.FailErr(t, "Get run before forcing approve", err)
 	run = *current
 
-	vars, err := h.WorkflowMgr.Store.GetScaffoldVars(ctx, run.ID)
+	vars, err := h.WorkflowMgr.Store.Runs.GetScaffoldVars(ctx, run.ID)
 	testutil.FailErr(t, "GetScaffoldVars", err)
-	vars = workflow.SetHostVar(vars, "phase_skipped.review", true)
+	vars = runstate.SetHostVar(vars, "phase_skipped.review", true)
 	run.CurrentPhase = "approve"
 	testutil.FailErr(t, "CommitState", h.WorkflowMgr.Store.CommitState(ctx, &run, sess.WorkspacePath, vars))
 
@@ -74,7 +74,7 @@ func TestApprovePlanHTTPRejectsWhenNotReady(t *testing.T) {
 	if plan.Status != wire.BlueprintStatusDraft {
 		t.Fatalf("plan status = %q want draft", plan.Status)
 	}
-	active, err := h.WorkflowMgr.Get(ctx, run.ID)
+	active, err := h.WorkflowMgr.Store.Runs.Get(ctx, run.ID)
 	testutil.FailErr(t, "Get run after reject", err)
 	if active.CurrentPhase != "approve" {
 		t.Fatalf("phase = %q want approve", active.CurrentPhase)
@@ -114,9 +114,9 @@ func TestApprovePlanHTTPPersistsBeforeAdvanceAndWakesCoordinator(t *testing.T) {
 		t.Fatalf("phase = %q want approve", run.CurrentPhase)
 	}
 
-	originalAdvanceHook := h.WorkflowMgr.OnHumanApprovalAdvanced
+	originalAdvanceHook := h.WorkflowMgr.Approvals.OnHumanApprovalAdvanced
 	var sawApprovalAdvance atomic.Bool
-	h.WorkflowMgr.OnHumanApprovalAdvanced = func(ctx context.Context, advanced *wire.WorkflowRun) {
+	h.WorkflowMgr.Approvals.OnHumanApprovalAdvanced = func(ctx context.Context, advanced *wire.WorkflowRun) {
 		if advanced.ID == run.ID && advanced.CurrentPhase == "execute" {
 			plan, err := h.BlueprintMgr.Get(ctx, run.ProjectID, run.BlueprintPath)
 			testutil.FailErr(t, "Get blueprint during workflow advance", err)
@@ -134,7 +134,7 @@ func TestApprovePlanHTTPPersistsBeforeAdvanceAndWakesCoordinator(t *testing.T) {
 		t.Fatalf("fixture preparation started %d model requests before approval", requestCountBeforeApproval)
 	}
 	limits.enabled.Store(true)
-	current, err := h.WorkflowMgr.Get(ctx, run.ID)
+	current, err := h.WorkflowMgr.Store.Runs.Get(ctx, run.ID)
 	testutil.FailErr(t, "Get run before approve", err)
 	plan, err := h.BlueprintMgr.Get(ctx, current.ProjectID, current.BlueprintPath)
 	testutil.FailErr(t, "Get plan before approve", err)
@@ -156,14 +156,14 @@ func TestApprovePlanHTTPPersistsBeforeAdvanceAndWakesCoordinator(t *testing.T) {
 		if active == nil {
 			t.Fatal("approval did not leave an active workflow")
 		}
-		vars, varsErr := h.WorkflowMgr.Store.GetScaffoldVars(ctx, active.ID)
+		vars, varsErr := h.WorkflowMgr.Store.Runs.GetScaffoldVars(ctx, active.ID)
 		messages, messageErr := h.Store.GetMessages(ctx, sess.ID)
 		allowed, reason, wakeErr := h.SessionMgr.ShouldLoopWake(ctx, sess.ID, anchor.PhaseAdvanced)
 		t.Fatalf("approval did not wake coordinator: allowed=%v reason=%q wake_err=%v active=%+v vars=%+v messages=%+v active_err=%v vars_err=%v message_err=%v",
 			allowed, reason, wakeErr, active, vars, messages, activeErr, varsErr, messageErr)
 	}
 	h.SessionMgr.WaitForCoordinatorAsyncTurns(ctx)
-	history, err := h.WorkflowMgr.Store.ListBySession(ctx, sess.ID, 100, nil)
+	history, err := h.WorkflowMgr.Store.Runs.ListBySession(ctx, sess.ID, 100, nil)
 	testutil.FailErr(t, "list workflows after approval", err)
 	for _, child := range history {
 		if child.ParentRunID != nil && *child.ParentRunID == run.ID && child.WorkflowID == "implement" {

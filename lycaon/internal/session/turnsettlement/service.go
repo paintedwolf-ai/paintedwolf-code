@@ -21,11 +21,21 @@ type Sessions interface {
 type Gate interface {
 	InProgress(context.Context, string) bool
 }
-type Workflow interface {
-	ReconcileTurnCompletion(context.Context, string) error
-	MaybeDeliverTopologyReport(context.Context, string, string) error
-	CurrentPhase(context.Context, string) string
+type WorkflowDomains struct {
+	Phases  WorkflowPhases
+	Policy  WorkflowPolicy
+	Reports WorkflowReports
 }
+type WorkflowPhases interface {
+	ReconcileTurnCompletion(ctx context.Context, sessionID string) error
+}
+type WorkflowReports interface {
+	MaybeDeliverTopologyReport(ctx context.Context, sessionID, messageID string) error
+}
+type WorkflowPolicy interface {
+	CurrentPhase(ctx context.Context, sessionID string) string
+}
+
 type Workspace interface {
 	ActivePath(context.Context, *api.Session) (string, error)
 }
@@ -37,8 +47,8 @@ type Service struct {
 	workspace                   Workspace
 	batch                       *batchcontrol.Service
 	runtime                     *coordinator.Runtime
-	workflows                   Workflow
-	loopWorkflowSource          loopwake.LoopWorkflowSource
+	workflows                   *WorkflowDomains
+	loopWorkflowSource          *loopwake.WorkflowDomains
 	workerQueue                 workeroutcomes.CycleLedger
 	projectSandboxReconcile     ProjectSandboxReconcile
 	deferredTurnSettlement      deferredTurnSettlementStore
@@ -50,8 +60,8 @@ func New(store Sessions, gate Gate, prompt *promptstate.MutexRegistry, status *e
 	return &Service{store: store, gate: gate, prompt: prompt, status: status, workspace: workspace, batch: batch}
 }
 func (m *Service) SetRuntime(runtime *coordinator.Runtime) { m.runtime = runtime }
-func (m *Service) SetWorkflow(workflow Workflow)           { m.workflows = workflow }
-func (m *Service) SetWorkflowSource(source loopwake.LoopWorkflowSource) {
+func (m *Service) SetWorkflow(workflow *WorkflowDomains)   { m.workflows = workflow }
+func (m *Service) SetWorkflowSource(source *loopwake.WorkflowDomains) {
 	m.loopWorkflowSource = source
 }
 func (m *Service) SetWorkers(workers workeroutcomes.CycleLedger) { m.workerQueue = workers }

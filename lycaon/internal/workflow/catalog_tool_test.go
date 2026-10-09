@@ -11,14 +11,17 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/workflow"
+	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
+	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
+	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
 )
 
 func TestWorkflowCatalogSummariesTool(t *testing.T) {
-	templates, err := workflow.LoadTemplatesFromDir(extpacks.Bundled(config.PlatformFlows.Join("_templates")))
+	templates, err := workflowcomposition.LoadTemplatesFromDir(extpacks.Bundled(config.PlatformFlows.Join("_templates")))
 	testutil.FailErr(t, "load workflow templates", err)
 	reg := tools.NewDefaultRegistry()
-	store := workflow.NewMemorySessionWorkflowStore()
-	resolver := workflow.ManifestResolver{SessionStore: store}
+	store := workflowdrafts.NewMemory()
+	resolver := workflowcatalog.Resolver{SessionStore: store}
 	if err := workflow.RegisterCatalogSummariesTool(reg, resolver, store, templates); err != nil {
 		testutil.FailErr(t, "workflow.RegisterCatalogSummariesTool failed", err)
 	}

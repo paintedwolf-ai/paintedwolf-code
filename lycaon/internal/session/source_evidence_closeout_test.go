@@ -42,7 +42,7 @@ func TestSourceEvidenceCloseoutAllowsRoutineWorkWithoutAssessment(t *testing.T) 
 
 func TestSourceEvidenceCloseoutAcceptsCurrentPass(t *testing.T) {
 	mgr, sess, history := sourceEvidenceCloseoutHarness(t)
-	mgr.SetWorkflowSessionView(verifyWorkflowStub{required: true})
+	mgr.SetWorkflowDomains(workflowDomainFixture(verifyWorkflowStub{required: true}))
 	recordVerify(t, mgr, sess, "go test ./...", 0)
 	if _, blocked := mgr.Guards.SourceEvidence(
 		context.Background(), sess, history, "implement_investigate", true,
@@ -53,7 +53,7 @@ func TestSourceEvidenceCloseoutAcceptsCurrentPass(t *testing.T) {
 
 func TestSourceEvidenceCloseoutAcceptsCurrentCommand(t *testing.T) {
 	mgr, sess, history := sourceEvidenceCloseoutHarness(t)
-	mgr.SetWorkflowSessionView(verifyWorkflowStub{required: true})
+	mgr.SetWorkflowDomains(workflowDomainFixture(verifyWorkflowStub{required: true}))
 	recordCommand(t, mgr, sess, "./ntp_check.py --json", 0)
 	if _, blocked := mgr.Guards.SourceEvidence(
 		context.Background(), sess, history, "implement_investigate", true,
@@ -64,7 +64,7 @@ func TestSourceEvidenceCloseoutAcceptsCurrentCommand(t *testing.T) {
 
 func TestSourceEvidenceCloseoutAllowsExplicitUnverifiedAfterBoundedAttempts(t *testing.T) {
 	mgr, sess, history := sourceEvidenceCloseoutHarness(t)
-	mgr.SetWorkflowSessionView(verifyWorkflowStub{required: true})
+	mgr.SetWorkflowDomains(workflowDomainFixture(verifyWorkflowStub{required: true}))
 	for range verification.MaxAttemptsPerRun {
 		recordVerify(t, mgr, sess, "go test ./...", 1)
 	}
@@ -123,7 +123,7 @@ func TestWorkerSourceEvidenceCloseoutDoesNotGateOnValidation(t *testing.T) {
 			t.Run("selected="+selected+"/verdict="+verdict, func(t *testing.T) {
 				mgr, child, task, history := workerSourceEvidenceCloseoutHarness(t)
 				mgr.Verification.SetVerifyConfig(stubVerifyConfig{cmd: selected})
-				mgr.SetWorkflowSessionView(verifyWorkflowStub{required: true})
+				mgr.SetWorkflowDomains(workflowDomainFixture(verifyWorkflowStub{required: true}))
 				if verdict != "" {
 					history = append(history, api.Message{
 						Role: api.MessageRoleTool,

@@ -34,7 +34,7 @@ func TestRunStopServiceCancelProjectsWorkerCard(t *testing.T) {
 	runID := uuid.NewString()
 	jobID := uuid.NewString()
 	queue := NewInMemoryQueue(2)
-	queue.SetWorkflowRunChecker(allowAllWorkflowRuns{})
+	queue.SetWorkflowDomains(&WorkflowDomains{Runs: allowAllWorkflowRuns{}, Tasks: allowAllWorkflowRuns{}})
 	_, err = queue.EnqueueWithProjectID(ctx, testdbseed.DefaultProjectID, api.WorkerTask{
 		Prompt:          "fixture",
 		Brief:           "fixture",
@@ -111,7 +111,7 @@ func TestRunStopServiceCancelSettlesRemainingTasksPastPoisonTask(t *testing.T) {
 	poisonID := uuid.NewString()
 	victimID := uuid.NewString()
 	queue := NewInMemoryQueue(2)
-	queue.SetWorkflowRunChecker(allowAllWorkflowRuns{})
+	queue.SetWorkflowDomains(&WorkflowDomains{Runs: allowAllWorkflowRuns{}, Tasks: allowAllWorkflowRuns{}})
 	for _, jobID := range []string{poisonID, victimID} {
 		_, err := queue.EnqueueWithProjectID(ctx, testdbseed.DefaultProjectID, api.WorkerTask{
 			Prompt:          "fixture",
@@ -149,7 +149,7 @@ func TestRunStopServiceHoldContinuesPastPoisonTask(t *testing.T) {
 	poisonID := uuid.NewString()
 	victimID := uuid.NewString()
 	queue := NewInMemoryQueue(2)
-	queue.SetWorkflowRunChecker(allowAllWorkflowRuns{})
+	queue.SetWorkflowDomains(&WorkflowDomains{Runs: allowAllWorkflowRuns{}, Tasks: allowAllWorkflowRuns{}})
 	for _, jobID := range []string{poisonID, victimID} {
 		_, err := queue.EnqueueWithProjectID(ctx, testdbseed.DefaultProjectID, api.WorkerTask{
 			Prompt:          "fixture",
@@ -191,7 +191,7 @@ func TestRunStopServiceHoldPatchesCanonicalWorkerRow(t *testing.T) {
 	runID := uuid.NewString()
 	jobID := uuid.NewString()
 	queue := NewInMemoryQueue(2)
-	queue.SetWorkflowRunChecker(allowAllWorkflowRuns{})
+	queue.SetWorkflowDomains(&WorkflowDomains{Runs: allowAllWorkflowRuns{}, Tasks: allowAllWorkflowRuns{}})
 	_, err = queue.EnqueueWithProjectID(ctx, testdbseed.DefaultProjectID, api.WorkerTask{
 		Prompt:          "fixture",
 		Brief:           "fixture",

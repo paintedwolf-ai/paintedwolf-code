@@ -14,7 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/usernotice"
-	"github.com/lycaon/lycaon/internal/workflow"
+	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 )
 
 func examplePackDir(t *testing.T, name string) string {
@@ -99,7 +99,7 @@ func TestInstalledPacksReachEngines(t *testing.T) {
 	})
 
 	t.Run("workflows → manifest resolver", func(t *testing.T) {
-		resolver := workflow.ManifestResolver{
+		resolver := workflowcatalog.Resolver{
 			CatalogFor: func(context.Context, string, string) *extpacks.EffectiveCatalog { return cat },
 		}
 		reg, _, err := resolver.Resolve(ctx, "", "")

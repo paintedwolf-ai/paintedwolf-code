@@ -9,7 +9,13 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/conditions"
+	"github.com/lycaon/lycaon/internal/session"
+	workflowblueprints "github.com/lycaon/lycaon/internal/workflow/blueprints"
+	"github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
+	"github.com/lycaon/lycaon/internal/workflow/publication"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -20,11 +26,29 @@ var ErrSubworkflowDepthExceeded = errors.New("subworkflow depth exceeded (max 1)
 var ErrChildRunActive = errors.New("child workflow run already active")
 
 // InvokeChild starts a child workflow run for parentRunID and pauses the parent on the current phase.
-func (m *RunManager) InvokeChild(ctx context.Context, parentRunID string, spec workflowdef.InvokeWorkflowSpec) (*api.WorkflowRun, error) {
-	if m == nil || m.Store == nil {
+
+type Children struct {
+	Runs              runstate.RunsRepository
+	Starts            runstate.StartsRepository
+	Sessions          session.Store
+	Resolver          *catalog.Resolver
+	Vars              *runstate.Variables
+	Journal           *runstate.Journal
+	Blueprints        *workflowblueprints.Service
+	Approvals         *Approvals
+	Phases            *workflowphases.Service
+	Entries           *workflowphases.Entries
+	Publication       *publication.Runs
+	Registry          *conditions.ConditionRegistry
+	ReviewSpawnFilter func(context.Context, string, string, []string) []string
+	OnRunCompleted    func(context.Context, *api.WorkflowRun)
+}
+
+func (m *Children) InvokeChild(ctx context.Context, parentRunID string, spec workflowdef.InvokeWorkflowSpec) (*api.WorkflowRun, error) {
+	if m == nil || m.Runs == nil {
 		return nil, fmt.Errorf("workflow manager required")
 	}
-	parent, err := m.loadRun(ctx, parentRunID)
+	parent, err := m.Runs.Get(ctx, parentRunID)
 	if err != nil {
 		return nil, err
 	}
@@ -36,24 +60,24 @@ func (m *RunManager) InvokeChild(ctx context.Context, parentRunID string, spec w
 	if workflowID == "" || version == "" {
 		return nil, fmt.Errorf("invoke_workflow workflow_id and version required")
 	}
-	child, err := m.Store.LatestChildByParentRunID(ctx, parent.ID)
+	child, err := m.Runs.LatestChildByParentRunID(ctx, parent.ID)
 	if err != nil {
 		return nil, err
 	}
-	if child != nil && !IsTerminal(child.Status) {
+	if child != nil && !runstate.IsTerminal(child.Status) {
 		if child.WorkflowID == workflowID && child.WorkflowVersion == version {
 			return child, nil
 		}
 		return nil, ErrChildRunActive
 	}
 	if parent.Status != api.WorkflowRunStatusRunning {
-		return nil, &NotRunnableError{RunID: parent.ID, Status: parent.Status, Reason: "parent not running"}
+		return nil, &runstate.NotRunnableError{RunID: parent.ID, Status: parent.Status, Reason: "parent not running"}
 	}
 	sess, err := m.Sessions.Get(ctx, parent.SessionID)
 	if err != nil {
 		return nil, err
 	}
-	childManifest, err := m.manifestForSession(ctx, sess.WorkspacePath, parent.SessionID, workflowID, version)
+	childManifest, err := m.Resolver.ForSession(ctx, sess.WorkspacePath, parent.SessionID, workflowID, version)
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +102,7 @@ func (m *RunManager) InvokeChild(ctx context.Context, parentRunID string, spec w
 		CurrentPhase:    childManifest.FirstPhase(),
 		BlueprintPath:   blueprintPath,
 	}
-	vars, err := ApplyPhaseOnEnter(ctx, PhaseEnterRequest{
+	vars, err := workflowphases.ApplyPhaseOnEnter(ctx, workflowphases.PhaseEnterRequest{
 		Sessions: m.Sessions, SessionID: parent.SessionID, Manifest: childManifest,
 		PhaseID: childRun.CurrentPhase, BlueprintPath: childRun.BlueprintPath, Registry: m.Registry,
 		ReviewSpawnFilter: m.ReviewSpawnFilter,
@@ -87,21 +111,21 @@ func (m *RunManager) InvokeChild(ctx context.Context, parentRunID string, spec w
 		return nil, err
 	}
 	if childManifest.Controls.ContentReview != nil {
-		vars = ApplyPhaseContentReviewVars(vars, workflowdef.PhaseDef{ContentReview: childManifest.Controls.ContentReview})
+		vars = runstate.ApplyPhaseContentReviewVars(vars, workflowdef.PhaseDef{ContentReview: childManifest.Controls.ContentReview})
 	}
 	if childManifest.Request != nil {
 		inherited := "Complete the work delegated by the parent workflow."
-		if parentVars, varsErr := m.Store.GetScaffoldVars(ctx, parent.ID); varsErr == nil {
-			if parentRequest, ok := requestStateFromVars(parentVars); ok && strings.TrimSpace(parentRequest.Text) != "" {
+		if parentVars, varsErr := m.Runs.GetScaffoldVars(ctx, parent.ID); varsErr == nil {
+			if parentRequest, ok := runstate.RequestStateFromVars(parentVars); ok && strings.TrimSpace(parentRequest.Text) != "" {
 				inherited = parentRequest.Text
 			}
 		}
-		vars = setRequestState(vars, childManifest.Request, requestStatusResolved, inherited, "inherited", 1, true)
+		vars = runstate.SetRequestState(vars, childManifest.Request, runstate.RequestStatusResolved, inherited, "inherited", 1, true)
 	}
-	vars = saveBaselinePosture(vars, sess.Posture)
+	vars = runstate.SaveBaselinePosture(vars, sess.Posture)
 	terminalSink := false
 	if def, ok := childManifest.PhaseByID(childRun.CurrentPhase); ok {
-		terminalSink = completeTerminalPhaseEntry(childRun, def, now)
+		terminalSink = runstate.CompleteTerminalPhaseEntry(childRun, def, now)
 		if terminalSink {
 			childRun.UpdatedAt = now
 		}
@@ -109,22 +133,22 @@ func (m *RunManager) InvokeChild(ctx context.Context, parentRunID string, spec w
 	projectDir := sess.WorkspacePath
 	parent.Status = api.WorkflowRunStatusPausedOnChild
 	parent.UpdatedAt = now
-	boundary := newCommandBoundary(parent, parent.Revision, "paused_on_child", parent.CurrentPhase, "")
+	boundary := runstate.NewCommandBoundary(parent, parent.Revision, "paused_on_child", parent.CurrentPhase, "")
 	messages := []api.Message{boundary}
 	if terminalSink {
-		childBoundary := newCommandBoundary(childRun, childRun.Revision, "completed", childRun.CurrentPhase, "")
+		childBoundary := runstate.NewCommandBoundary(childRun, childRun.Revision, "completed", childRun.CurrentPhase, "")
 		childRun.EndMessageID = childBoundary.ID
 		messages = append(messages, childBoundary)
 	}
-	mutation := workflowChildStartMutation{ProjectDir: projectDir, Vars: vars, Messages: messages,
-		Posture: workflowMutationPosture(childRun, vars, workflowStartPosture(childManifest, childRun.CurrentPhase))}
-	if err := m.Store.StartChild(ctx, parent, childRun, mutation); err != nil {
+	mutation := runstate.ChildStartMutation{ProjectDir: projectDir, Vars: vars, Messages: messages,
+		Posture: runstate.MutationPosture(childRun, vars, workflowdef.StartPosture(childManifest, childRun.CurrentPhase))}
+	if err := m.Starts.StartChild(ctx, parent, childRun, mutation); err != nil {
 		return nil, err
 	}
 	if def, ok := childManifest.PhaseByID(childRun.CurrentPhase); ok && !terminalSink {
-		m.triggerPhaseEnter(ctx, childRun, projectDir, def)
-		if m.PhaseEnterHook != nil {
-			m.PhaseEnterHook(ctx, &RunContext{
+		m.Entries.Trigger(ctx, childRun, projectDir, def)
+		if m.Phases.PhaseEnterHook != nil {
+			m.Phases.PhaseEnterHook(ctx, &workflowphases.RunContext{
 				SessionID:  childRun.SessionID,
 				RunID:      childRun.ID,
 				WorkflowID: childRun.WorkflowID,
@@ -132,18 +156,18 @@ func (m *RunManager) InvokeChild(ctx context.Context, parentRunID string, spec w
 			}, def)
 		}
 	}
-	m.publish(ctx, sess, childRun)
+	m.Publication.Publish(ctx, sess, childRun)
 	if terminalSink {
 		if err := m.ReconcileTerminalRun(ctx, childRun); err != nil {
 			return nil, err
 		}
 		return childRun, nil
 	}
-	m.publishSession(ctx, parent)
+	m.Publication.PublishSession(ctx, parent)
 	return childRun, nil
 }
 
-func (m *RunManager) resolveChildBlueprint(
+func (m *Children) resolveChildBlueprint(
 	ctx context.Context,
 	parent *api.WorkflowRun,
 	child workflowdef.Manifest,
@@ -154,25 +178,25 @@ func (m *RunManager) resolveChildBlueprint(
 	case workflowdef.ChildBlueprintNone:
 		return "", nil
 	case workflowdef.ChildBlueprintOwn:
-		if m.BlueprintCreate == nil {
-			return "", ErrPlanDraftRequired
+		if m.Blueprints.Creator == nil {
+			return "", runstate.ErrPlanDraftRequired
 		}
 		fixedPath := ""
 		if child.Blueprint != nil {
 			fixedPath = strings.TrimSpace(child.Blueprint.Path)
 		}
-		return m.resolvePlanForStart(ctx, api.StartWorkflowRunRequest{}, parent.ProjectID, fixedPath, child.ID, parent.SessionID, "")
+		return m.Blueprints.ResolvePlanForStart(ctx, api.StartWorkflowRunRequest{}, parent.ProjectID, fixedPath, child.ID, parent.SessionID, "")
 	case workflowdef.ChildBlueprintInherit:
 		path := strings.TrimSpace(parent.BlueprintPath)
 		if path == "" {
-			return "", ErrInheritedBlueprintNotApproved
+			return "", runstate.ErrInheritedBlueprintNotApproved
 		}
-		approved, err := m.inheritedBlueprintApprovalMatches(ctx, parent, projectDir, path)
+		approved, err := m.Approvals.InheritedMatches(ctx, parent, projectDir, path)
 		if err != nil {
 			return "", err
 		}
 		if !approved {
-			return "", ErrInheritedBlueprintNotApproved
+			return "", runstate.ErrInheritedBlueprintNotApproved
 		}
 		return path, nil
 	default:
@@ -180,31 +204,7 @@ func (m *RunManager) resolveChildBlueprint(
 	}
 }
 
-func (m *RunManager) inheritedBlueprintApprovalMatches(
-	ctx context.Context,
-	parent *api.WorkflowRun,
-	projectDir string,
-	path string,
-) (bool, error) {
-	if m == nil || m.Store == nil || parent == nil || strings.TrimSpace(path) == "" {
-		return false, nil
-	}
-	vars, err := m.Store.GetScaffoldVars(ctx, parent.ID)
-	if err != nil {
-		return false, err
-	}
-	hash, ok := DotPathString(vars, "human_approval.blueprint_hash")
-	if !ok || !conditions.DotPathTruthy(vars, "human_approval.issued") {
-		return false, nil
-	}
-	content, err := ResolveBlueprintContent(ctx, m, parent, projectDir, path)
-	if err != nil {
-		return false, err
-	}
-	return workflowdef.HumanApprovalContentMatches(hash, content), nil
-}
-
-func (m *RunManager) maybeInvokeOnPhaseEnter(ctx context.Context, parent *api.WorkflowRun, def workflowdef.PhaseDef) error {
+func (m *Children) InvokeOnPhaseEnter(ctx context.Context, parent *api.WorkflowRun, def workflowdef.PhaseDef) error {
 	if m == nil || parent == nil || def.InvokeWorkflow == nil {
 		return nil
 	}
@@ -218,7 +218,7 @@ func (m *RunManager) maybeInvokeOnPhaseEnter(ctx context.Context, parent *api.Wo
 	if _, err := m.InvokeChild(ctx, parent.ID, *def.InvokeWorkflow); err != nil {
 		return err
 	}
-	reloaded, err := m.loadRun(ctx, parent.ID)
+	reloaded, err := m.Runs.Get(ctx, parent.ID)
 	if err != nil {
 		return err
 	}
@@ -228,7 +228,7 @@ func (m *RunManager) maybeInvokeOnPhaseEnter(ctx context.Context, parent *api.Wo
 }
 
 // ReconcileTerminalRun resumes any parent and announces committed completion.
-func (m *RunManager) ReconcileTerminalRun(ctx context.Context, child *api.WorkflowRun) error {
+func (m *Children) ReconcileTerminalRun(ctx context.Context, child *api.WorkflowRun) error {
 	if m == nil || child == nil {
 		return nil
 	}
@@ -244,7 +244,7 @@ func (m *RunManager) ReconcileTerminalRun(ctx context.Context, child *api.Workfl
 	if parentID == "" {
 		return nil
 	}
-	parent, err := m.loadRun(ctx, parentID)
+	parent, err := m.Runs.Get(ctx, parentID)
 	if err != nil {
 		return err
 	}
@@ -253,8 +253,8 @@ func (m *RunManager) ReconcileTerminalRun(ctx context.Context, child *api.Workfl
 		return nil
 	}
 	if parent.Status == api.WorkflowRunStatusPausedOnChild {
-		unlockVars := m.lockRunVars(parentID)
-		vars, varsErr := m.Store.GetScaffoldVars(ctx, parentID)
+		unlockVars := m.Vars.Lock(parentID)
+		vars, varsErr := m.Runs.GetScaffoldVars(ctx, parentID)
 		if varsErr != nil {
 			unlockVars()
 			return varsErr
@@ -262,25 +262,25 @@ func (m *RunManager) ReconcileTerminalRun(ctx context.Context, child *api.Workfl
 		vars = SetChildRunStatusVar(vars, string(child.Status))
 		parent.Status = api.WorkflowRunStatusRunning
 		parent.UpdatedAt = time.Now().UTC()
-		boundary := newCommandBoundary(parent, parent.Revision, "resumed", parent.CurrentPhase, "child terminal")
+		boundary := runstate.NewCommandBoundary(parent, parent.Revision, "resumed", parent.CurrentPhase, "child terminal")
 		payload := struct{ ChildID, Status string }{child.ID, string(child.Status)}
-		if err := m.commitCommand(ctx, parent, "resume_after_child", payload, vars, &boundary, "", workflowWorkerMutation{}, nil); err != nil {
+		if err := m.Journal.Commit(ctx, parent, "resume_after_child", payload, vars, &boundary, "", runstate.WorkerMutation{}, nil); err != nil {
 			unlockVars()
 			return err
 		}
 		unlockVars()
 	}
-	m.publishSession(ctx, parent)
+	m.Publication.PublishSession(ctx, parent)
 	if child.Status == api.WorkflowRunStatusComplete {
 		for i := 0; i < 3; i++ {
-			parent, err = m.loadRun(ctx, parentID)
+			parent, err = m.Runs.Get(ctx, parentID)
 			if err != nil {
 				return err
 			}
-			if IsTerminal(parent.Status) {
+			if runstate.IsTerminal(parent.Status) {
 				return nil
 			}
-			if _, err := m.TryAutoAdvance(ctx, parentID); err != nil {
+			if _, err := m.Phases.TryAutoAdvance(ctx, parentID); err != nil {
 				return err
 			}
 		}
@@ -290,17 +290,17 @@ func (m *RunManager) ReconcileTerminalRun(ctx context.Context, child *api.Workfl
 
 // RecoverTerminalChildren closes the commit window between a child becoming
 // terminal and the corresponding paused parent being resumed.
-func (m *RunManager) RecoverTerminalChildren(ctx context.Context) error {
-	parents, err := m.Store.ListPausedOnChild(ctx)
+func (m *Children) RecoverTerminalChildren(ctx context.Context) error {
+	parents, err := m.Runs.ListPausedOnChild(ctx)
 	if err != nil {
 		return err
 	}
 	for i := range parents {
-		child, childErr := m.Store.LatestChildByParentRunID(ctx, parents[i].ID)
+		child, childErr := m.Runs.LatestChildByParentRunID(ctx, parents[i].ID)
 		if childErr != nil {
 			return childErr
 		}
-		if child == nil || !IsTerminal(child.Status) {
+		if child == nil || !runstate.IsTerminal(child.Status) {
 			continue
 		}
 		if handleErr := m.ReconcileTerminalRun(ctx, child); handleErr != nil {
@@ -310,20 +310,20 @@ func (m *RunManager) RecoverTerminalChildren(ctx context.Context) error {
 	return nil
 }
 
-func (m *RunManager) resumeParentAfterChildExit(ctx context.Context, child *api.WorkflowRun, childStatus string) (*api.WorkflowRun, error) {
+func (m *Children) ResumeParentAfterChildExit(ctx context.Context, child *api.WorkflowRun, childStatus string) (*api.WorkflowRun, error) {
 	if child == nil || child.ParentRunID == nil {
 		return nil, nil
 	}
 	parentID := strings.TrimSpace(*child.ParentRunID)
 	// The parent keeps running while the child does; stamping the child's exit
 	// status is a read/mutate/write on the parent's vars like any other.
-	unlockVars := m.lockRunVars(parentID)
+	unlockVars := m.Vars.Lock(parentID)
 	defer unlockVars()
-	parent, err := m.loadRun(ctx, parentID)
+	parent, err := m.Runs.Get(ctx, parentID)
 	if err != nil {
 		return nil, err
 	}
-	vars, err := m.Store.GetScaffoldVars(ctx, parentID)
+	vars, err := m.Runs.GetScaffoldVars(ctx, parentID)
 	if err != nil {
 		return nil, err
 	}
@@ -331,12 +331,12 @@ func (m *RunManager) resumeParentAfterChildExit(ctx context.Context, child *api.
 	if parent.Status == api.WorkflowRunStatusPausedOnChild {
 		parent.Status = api.WorkflowRunStatusRunning
 		parent.UpdatedAt = time.Now().UTC()
-		boundary := newCommandBoundary(parent, parent.Revision, "resumed", parent.CurrentPhase, "child exit")
+		boundary := runstate.NewCommandBoundary(parent, parent.Revision, "resumed", parent.CurrentPhase, "child exit")
 		payload := struct{ ChildID, Status string }{child.ID, strings.TrimSpace(childStatus)}
-		if err := m.commitCommand(ctx, parent, "resume_after_child_exit", payload, vars, &boundary, "", workflowWorkerMutation{}, nil); err != nil {
+		if err := m.Journal.Commit(ctx, parent, "resume_after_child_exit", payload, vars, &boundary, "", runstate.WorkerMutation{}, nil); err != nil {
 			return nil, err
 		}
-		m.publishSession(ctx, parent)
+		m.Publication.PublishSession(ctx, parent)
 	}
 	return parent, nil
 }

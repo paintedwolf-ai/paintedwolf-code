@@ -26,7 +26,7 @@ func TestCoordinatorToolReturnsManifestPrompt(t *testing.T) {
 	toolReg := h.ToolRegistry
 	workflowMgr := h.WorkflowMgr
 	ctx := context.Background()
-	if _, err := workflowMgr.StartHuman(ctx, sess.ID, wire.StartWorkflowRunRequest{
+	if _, err := workflowMgr.Starts.StartHuman(ctx, sess.ID, wire.StartWorkflowRunRequest{
 		WorkflowID: "feedback-tool-e2e", WorkflowVersion: "1.0.0",
 	}); err != nil {
 		t.Fatal(err)

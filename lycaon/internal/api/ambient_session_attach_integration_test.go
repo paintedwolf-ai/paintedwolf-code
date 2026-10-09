@@ -256,7 +256,7 @@ attach:
 	testutil.FailErr(t, "reg.Create failed", err)
 
 	mgr := session.NewManager(store, nil, nil, settings.DefaultSessionLimits())
-	mgr.SetWorkflowSessionView(wfMgr)
+	mgr.SetWorkflowDomains(&session.WorkflowDomains{Runs: wfMgr.Store.Runs, Policy: wfMgr.Policy, Ambient: wfMgr.Ambient, Blueprints: wfMgr.Blueprints, Batch: wfMgr.Batch, Slash: wfMgr.Slash, Requests: wfMgr.Requests, Feedback: wfMgr.Feedback, Transcript: wfMgr.Transcript, Asks: wfMgr.Asks, Fanout: wfMgr.Fanout, Phases: wfMgr.Phases, Reports: wfMgr.Reports, Recovery: wfMgr.Recovery, Cleanup: wfMgr})
 	mgr.Stops.SetWorkflowStop(wfMgr)
 
 	srv := NewServer(requiredTestDeps(t, Dependencies{

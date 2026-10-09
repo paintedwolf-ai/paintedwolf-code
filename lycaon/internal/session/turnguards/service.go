@@ -42,15 +42,34 @@ type Workspace interface {
 	RootCount(context.Context, *api.Session) int
 	SettingsRoots(context.Context, *api.Session) []string
 }
-type Workflow interface {
-	toolpolicy.WorkflowView
-	ActivePhaseGuardState(context.Context, string) workflowfacts.WorkflowPhaseGuardState
-	ActiveCloseoutGateState(context.Context, string) workflowfacts.WorkflowCloseoutGateState
-	ActiveReviewVerdictPending(context.Context, string) bool
-	ParallelTaskMaxWorkers(context.Context, string) int
-	ParallelTaskMaxReadWorkers(context.Context, string) int
-	ParallelTaskMaxWriteWorkers(context.Context, string) int
+type WorkflowDomains struct {
+	Ambient    WorkflowAmbient
+	Blueprints WorkflowBlueprints
+	Policy     WorkflowPolicy
+	Runs       WorkflowRuns
 }
+type WorkflowPolicy interface {
+	ActiveCloseoutGateState(ctx context.Context, sessionID string) workflowfacts.WorkflowCloseoutGateState
+	ActiveManifest(ctx context.Context, sessionID string) (workflowfacts.ActiveWorkflowManifest, bool)
+	ActivePhaseGuardState(ctx context.Context, sessionID string) workflowfacts.WorkflowPhaseGuardState
+	ActivePhaseHasReviewLoop(ctx context.Context, sessionID string) bool
+	ActiveReviewVerdictPending(ctx context.Context, sessionID string) bool
+	AllowedAgents(ctx context.Context, sessionID string) []string
+	CurrentPhase(ctx context.Context, sessionID string) string
+	ScaffoldVarsForSession(ctx context.Context, sessionID string) (map[string]any, error)
+}
+type WorkflowAmbient interface {
+	ParallelTaskMaxReadWorkers(ctx context.Context, sessionID string) int
+	ParallelTaskMaxWorkers(ctx context.Context, sessionID string) int
+	ParallelTaskMaxWriteWorkers(ctx context.Context, sessionID string) int
+}
+type WorkflowBlueprints interface {
+	ActivePlan(ctx context.Context, sessionID string) (planID, content string, ok bool)
+}
+type WorkflowRuns interface {
+	ActiveBySession(context.Context, string) (*api.WorkflowRun, error)
+}
+
 type Service struct {
 	store               Sessions
 	progress            Progress
@@ -64,7 +83,7 @@ type Service struct {
 	Batch               *batchcontrol.Service
 	ProgressClosure     *progressclosure.Service
 	surface             Surface
-	workflows           Workflow
+	workflows           *WorkflowDomains
 	workspaceCheck      workercompletion.WorkspaceChangeChecker
 	repoProvider        repoinfo.Provider
 	toolInvoker         tools.ToolInvoker
@@ -82,7 +101,7 @@ func New(store Sessions, policy *policyfacts.Service, verification *sessionverif
 	return &Service{store: store, ToolPolicy: policy, Verification: verification, Feedback: feedback, state: state, decisions: decisions, Workspace: workspace, Batch: batch, ProgressClosure: closure, closeouts: closeouts, Profiles: profiles, Limits: limits}
 }
 func (m *Service) SetSurface(surface Surface)                    { m.surface = surface }
-func (m *Service) SetWorkflow(workflow Workflow)                 { m.workflows = workflow }
+func (m *Service) SetWorkflow(workflow *WorkflowDomains)         { m.workflows = workflow }
 func (m *Service) SetWorkers(workers workeroutcomes.CycleLedger) { m.workerQueue = workers }
 func (m *Service) SetProgress(progress Progress)                 { m.progress = progress }
 func (m *Service) SetWorkspaceCheck(check workercompletion.WorkspaceChangeChecker) {

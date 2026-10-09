@@ -17,7 +17,8 @@ import (
 type Control struct {
 	Batch          *batchcontrol.Service
 	GracefulCancel *workerresults.GracefulCancel
-	Holds          WorkflowHolds
+	Approvals      WorkflowApprovals
+	Obligations    WorkflowObligations
 	Processes      *processcontrol.Service
 	Runtime        *coordinator.Runtime
 	Workflow       WorkflowRunnable
@@ -32,17 +33,17 @@ func (m *Control) Build() promptloop.ControlDeps {
 	deps.AssertRunnable = m.AssertRunnable
 	deps.WorkerGracefulCancelPending = m.GracefulCancel.Pending
 	deps.HumanApprovalAwaiting = func(ctx context.Context, sessionID string) bool {
-		if m == nil || m.Holds == nil {
+		if m == nil || m.Approvals == nil {
 			return false
 		}
-		awaiting, err := m.Holds.HumanApprovalAwaiting(ctx, sessionID)
+		awaiting, err := m.Approvals.HumanApprovalAwaiting(ctx, sessionID)
 		return err == nil && awaiting
 	}
 	deps.HostObligationHeld = func(ctx context.Context, sessionID string) bool {
-		if m == nil || m.Holds == nil {
+		if m == nil || m.Obligations == nil {
 			return false
 		}
-		held, err := m.Holds.HostObligationHeld(ctx, sessionID)
+		held, err := m.Obligations.HostObligationHeld(ctx, sessionID)
 		return err == nil && held
 	}
 	deps.ParkBlockedLiveCommands = m.ParkBlockedLiveCommands

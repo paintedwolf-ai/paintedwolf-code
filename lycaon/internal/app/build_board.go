@@ -68,7 +68,7 @@ func (b boardWiring) wireBoardAndResearch() error {
 	b.boardSnap = &board.SnapshotBuilder{
 		Delegations:            b.delegationStore,
 		Workers:                b.workerQueue,
-		Workflow:               b.workflowMgr,
+		Workflow:               &board.WorkflowRunSource{Runs: b.workflowMgr.Store.Runs, Presentation: b.workflowMgr.Presentation},
 		Repo:                   b.repoProvider,
 		Git:                    b.gitMgr,
 		StatusCache:            b.gitStatusCache,
@@ -314,7 +314,7 @@ func (b boardWiring) wireFindingAndProgressTools() error {
 		return fmt.Errorf("surface_note tool: %w", err)
 	}
 	b.progressStore = progress.NewSQLStore(b.db)
-	b.workflowMgr.Progress = b.progressStore
+	b.workflowMgr.Fanout.Progress = b.progressStore
 	b.mgr.SetProgressStore(b.progressStore)
 	if err := native.RegisterUpdateProgressTool(b.toolRuntime.Registry, b.progressStore, b.rootSessionKey); err != nil {
 		return fmt.Errorf("update_progress tool: %w", err)
@@ -365,7 +365,7 @@ func (b boardWiring) wireVisualAndRenderTools() error {
 			if b.workflowMgr == nil {
 				return "", nil
 			}
-			run, err := b.workflowMgr.GetActive(ctx, sessionID)
+			run, err := b.workflowMgr.Store.Runs.ActiveBySession(ctx, sessionID)
 			if err != nil || run == nil {
 				return "", err
 			}

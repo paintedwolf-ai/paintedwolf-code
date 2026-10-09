@@ -2,12 +2,12 @@ package loopwake
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/promptresult"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
+	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -129,9 +129,9 @@ func TestLoopNeedsDecisionWakesThroughAllWorkersIdleWait(t *testing.T) {
 	deps.GetSession = func(context.Context, string) (*api.Session, error) {
 		return &api.Session{ID: "s1", Status: api.SessionStatusIdle}, nil
 	}
-	deps.WorkflowSource = StubLoopWF{
+	deps.WorkflowSource = workflowFixturePorts(StubLoopWF{
 		run: &api.WorkflowRun{ID: "run-1", Status: api.WorkflowRunStatusRunning, CurrentPhase: "work"},
-	}
+	})
 	deps.WorkerCycleIdle = func(context.Context, *api.Session, string) (bool, error) {
 		return false, nil // siblings still running
 	}
