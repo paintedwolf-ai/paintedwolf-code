@@ -141,10 +141,10 @@ func TestAdvanceToolAndHTTPParity(t *testing.T) {
 		parity := newAdvanceParityRig(t)
 		httpRun := parity.startRunHTTP(t, "parity-coord", "1.0.0")
 		// A startup turn already in flight ignores the held lane and would take the kick.
-		parity.sessionMgr.WaitForCoordinatorAsyncTurns(t.Context())
+		parity.sessionMgr.Coordinator.WaitForTurns(t.Context())
 		// Holding the execution lane keeps the coordinator loop from consuming the
 		// kick before it is read.
-		finishExecution := parity.sessionMgr.Runner.Coordinator.CoordinatorLoop().BeginPromptExecution(t.Context(), parity.httpSession.ID)
+		finishExecution := parity.sessionMgr.Runner.Coordinator.CoordinatorLoop().Admission.BeginPromptExecution(t.Context(), parity.httpSession.ID)
 		defer finishExecution()
 		// Drain startup feedback to isolate the failed-advance event.
 		parity.sessionMgr.Runner.Coordinator.Kicks().ClearPending(parity.httpSession.ID)

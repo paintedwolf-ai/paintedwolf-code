@@ -60,17 +60,17 @@ func TestPlanImplementLegLoopWakesCoordinator(t *testing.T) {
 	var reason string
 	testutil.WaitFor(t, promptIdleBudget, func() bool {
 		var err error
-		allowed, reason, err = mgr.Coordinator.Runtime.CoordinatorLoop().ShouldLoopWake(ctx, sess.ID, anchor.LegFinished)
+		allowed, reason, err = mgr.Coordinator.Runtime.CoordinatorLoop().Admission.ShouldLoopWake(ctx, sess.ID, anchor.LegFinished)
 		return err == nil && allowed
 	})
 	if !allowed {
 		t.Fatalf("completed leg cannot wake coordinator: %s", reason)
 	}
-	mgr.Coordinator.Runtime.CoordinatorLoop().Nudge(ctx, sess.ID, anchor.LegFinished, anchor.LegFinished, "leg-e2e", anchor.Envelope{})
+	mgr.Coordinator.Runtime.CoordinatorLoop().Nudges.Nudge(ctx, sess.ID, anchor.LegFinished, anchor.LegFinished, "leg-e2e", anchor.Envelope{})
 
 	testutil.WaitFor(t, promptIdleBudget, func() bool {
 		mgr.Runner.Coordinator.CoordinatorLoop().Nudges.DrainPending(ctx, sess.ID)
-		msgs, err := mgr.Transcript.GetMessages(ctx, sess.ID)
+		msgs, err := mgr.Runner.Transcript.GetMessages(ctx, sess.ID)
 		if err != nil {
 			return false
 		}

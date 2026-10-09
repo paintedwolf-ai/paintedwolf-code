@@ -158,7 +158,7 @@ func TestApprovePlanHTTPPersistsBeforeAdvanceAndWakesCoordinator(t *testing.T) {
 		}
 		vars, varsErr := h.Workflows.Manager.Store.Runs.GetScaffoldVars(ctx, active.ID)
 		messages, messageErr := h.Store.GetMessages(ctx, sess.ID)
-		allowed, reason, wakeErr := h.Sessions.Manager.Coordinator.Runtime.CoordinatorLoop().ShouldLoopWake(ctx, sess.ID, anchor.PhaseAdvanced)
+		allowed, reason, wakeErr := h.Sessions.Manager.Coordinator.Runtime.CoordinatorLoop().Admission.ShouldLoopWake(ctx, sess.ID, anchor.PhaseAdvanced)
 		t.Fatalf("approval did not wake coordinator: allowed=%v reason=%q wake_err=%v active=%+v vars=%+v messages=%+v active_err=%v vars_err=%v message_err=%v",
 			allowed, reason, wakeErr, active, vars, messages, activeErr, varsErr, messageErr)
 	}
