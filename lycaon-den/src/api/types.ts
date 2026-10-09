@@ -14654,6 +14654,15 @@ export interface components {
             scan_detail: components["schemas"]["HistoryRetentionRule"];
             receipt_detail: components["schemas"]["HistoryRetentionRule"];
         };
+        HistoryClassUsage: {
+            /** @enum {string} */
+            class: "recordings" | "checkpoints" | "source_revisions" | "scan_detail" | "receipt_detail";
+            /**
+             * Format: int64
+             * @description Uncompressed retained content referenced by this class, deduplicated within the class. SQLite classes count serialized detail fields, excluding row and page overhead. Shared bodies can appear in multiple classes; this is neither exclusive disk allocation nor reclaimable bytes.
+             */
+            content_bytes: number;
+        };
         HistoryStorageLane: {
             id: string;
             /**
@@ -14678,6 +14687,7 @@ export interface components {
         };
         HistoryStorageStatus: {
             policy: components["schemas"]["HistoryRetentionPolicy"];
+            classes?: components["schemas"]["HistoryClassUsage"][];
             lanes: components["schemas"]["HistoryStorageLane"][];
             protections: components["schemas"]["HistoryProtection"][];
         };
@@ -30011,6 +30021,7 @@ export type WorkspaceCacheStatus = components["schemas"]["WorkspaceCacheStatus"]
 export type LocalDataStatus = components["schemas"]["LocalDataStatus"];
 export type HistoryRetentionRule = components["schemas"]["HistoryRetentionRule"];
 export type HistoryRetentionPolicy = components["schemas"]["HistoryRetentionPolicy"];
+export type HistoryClassUsage = components["schemas"]["HistoryClassUsage"];
 export type HistoryStorageLane = components["schemas"]["HistoryStorageLane"];
 export type HistoryProtection = components["schemas"]["HistoryProtection"];
 export type HistoryStorageStatus = components["schemas"]["HistoryStorageStatus"];

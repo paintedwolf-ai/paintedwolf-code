@@ -135,11 +135,11 @@ export function HistoryStorageSettingsPanel(props: { client: LycaonClient | null
     <ShowLatest when={draft()}>{(policy) => <>
       <Show when={policy().suspended}><p role="status">Imported retention is paused. Review and save a policy to enable automatic pruning.</p></Show>
       <Show when={query.value()?.lanes.length} fallback={<p class="den-settings-hint">Storage measurements are not yet available.</p>}>
-        <p class="den-settings-hint">Measurements refresh hourly in the background and can lag recent changes. They describe retained content; filesystem allocation can differ, and recovery snapshots can share disk space.</p>
+        <p class="den-settings-hint">Measurements refresh hourly in the background and can lag recent changes. Class sizes count uncompressed content; shared bodies can appear in more than one class, and database overhead is excluded. They describe retained content; filesystem allocation can differ, and recovery snapshots can share disk space.</p>
         <For each={query.value()?.lanes}>{(lane) => <p class="den-settings-hint">{historyLaneLabel(lane.id)}: {historyLaneUsage(lane)}</p>}</For>
       </Show>
       <For each={HISTORY_CLASSES}>{(row) => <div class="den-settings-pref-row">
-        <div class="den-settings-pref-copy"><span class="den-settings-pref-label">{row.label}</span><p class="den-settings-hint">Pruning removes: {row.loss.toLowerCase()}.<Show when={row.id === "receipt_detail"}> Usage and cost totals remain.</Show></p></div>
+        <div class="den-settings-pref-copy"><span class="den-settings-pref-label">{row.label}</span><p class="den-settings-hint"><Show when={query.value()?.classes?.find((usage) => usage.class === row.id)}>{(usage) => <span data-testid={`history-${row.id}-usage`}>{historyBytes(usage().content_bytes)} of retained content. </span>}</Show>Pruning removes: {row.loss.toLowerCase()}.<Show when={row.id === "receipt_detail"}> Usage and cost totals remain.</Show></p></div>
         <DenSelect aria-label={`${row.label} retention`} data-testid={`history-${row.id}-mode`} options={RETENTION_MODES} value={policy()[row.id].mode} disabled={!!busy()} onValueChange={(mode) => changeRule(row.id, retentionRule(mode as HistoryRetentionRule["mode"]))} />
         <Show when={policy()[row.id].mode !== "forever"}>
           <label>{policy()[row.id].mode === "max_age" ? "Days" : "GiB"}

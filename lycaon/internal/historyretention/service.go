@@ -37,14 +37,15 @@ type plan struct {
 
 // Service coordinates reviewed policies and bounded body cleanup.
 type Service struct {
-	Database  db.Handle
-	DataDir   string
-	StorePath string
-	Artifacts visual.Store
-	Now       func() time.Time
-	mu        sync.Mutex
-	plans     map[string]plan
-	lanes     []api.HistoryStorageLane
+	Database        db.Handle
+	DataDir         string
+	StorePath       string
+	Artifacts       visual.Store
+	Now             func() time.Time
+	mu              sync.Mutex
+	plans           map[string]plan
+	lanes           []api.HistoryStorageLane
+	classUsageCache []api.HistoryClassUsage
 }
 
 func New(database db.Handle, storePath string, artifacts visual.Store) *Service {
@@ -58,7 +59,7 @@ func (s *Service) Status(ctx context.Context) (api.HistoryStorageStatus, error) 
 	if err != nil {
 		return api.HistoryStorageStatus{}, err
 	}
-	out := api.HistoryStorageStatus{Policy: policy, Lanes: append([]api.HistoryStorageLane{}, s.lanes...), Protections: []api.HistoryProtection{}}
+	out := api.HistoryStorageStatus{Policy: policy, Classes: append([]api.HistoryClassUsage{}, s.classUsageCache...), Lanes: append([]api.HistoryStorageLane{}, s.lanes...), Protections: []api.HistoryProtection{}}
 	rows, err := s.Database.QueryContext(ctx, `SELECT owner_id,session_id IS NOT NULL FROM history_protections WHERE protected = 1 ORDER BY owner_id`)
 	if err != nil {
 		return out, err

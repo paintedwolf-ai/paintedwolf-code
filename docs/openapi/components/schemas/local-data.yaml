@@ -181,6 +181,18 @@ components:
           type: string
           format: uuid
         protected: {type: boolean}
+    HistoryClassUsage:
+      type: object
+      x-go-generate: true
+      additionalProperties: false
+      required: [class, content_bytes]
+      properties:
+        class: {type: string, enum: [recordings, checkpoints, source_revisions, scan_detail, receipt_detail]}
+        content_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Uncompressed retained content referenced by this class, deduplicated within the class. SQLite classes count serialized detail fields, excluding row and page overhead. Shared bodies can appear in multiple classes; this is neither exclusive disk allocation nor reclaimable bytes.
     HistoryStorageStatus:
       type: object
       x-go-generate: true
@@ -188,6 +200,7 @@ components:
       required: [policy, lanes, protections]
       properties:
         policy: {$ref: '#/components/schemas/HistoryRetentionPolicy'}
+        classes: {type: array, items: {$ref: '#/components/schemas/HistoryClassUsage'}}
         lanes: {type: array, items: {$ref: '#/components/schemas/HistoryStorageLane'}}
         protections: {type: array, items: {$ref: '#/components/schemas/HistoryProtection'}}
     HistoryRetentionRequest:
