@@ -43,7 +43,7 @@ func NewDelegationTestFixture(t *testing.T) (*hostapi.Server, project.Registry, 
 	poller := worker.NewLocalWorkerPoller(queue, exec, workersCfg, &worker.SessionOutcomeBridge{Inner: delegationMgr})
 	queue.SetRunningCancel(poller.Abort)
 
-	return srv, reg, func() { go poller.Run(t.Context()) }
+	return srv, reg, func() { go func() { _ = poller.Run(t.Context()) }() }
 }
 
 func NewDelegationTestServer(t *testing.T) (*hostapi.Server, project.Registry) {

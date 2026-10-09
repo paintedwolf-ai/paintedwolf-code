@@ -128,7 +128,7 @@ func InitCommittedRepo(t *testing.T) (string, func(args ...string)) {
 		gittest.Run(t, dir, args...)
 	}
 	gittest.Init(t, dir)
-	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("hello\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("hello\n"), 0o600); err != nil {
 		t.Fatalf("write README: %v", err)
 	}
 	run("add", "README.md")
@@ -139,10 +139,10 @@ func InitCommittedRepo(t *testing.T) (string, func(args ...string)) {
 func InitDirtyRepo(t *testing.T) string {
 	t.Helper()
 	dir, _ := InitCommittedRepo(t)
-	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("changed\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("changed\n"), 0o600); err != nil {
 		t.Fatalf("modify README: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "new.txt"), []byte("new\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "new.txt"), []byte("new\n"), 0o600); err != nil {
 		t.Fatalf("write new.txt: %v", err)
 	}
 	return dir
@@ -173,7 +173,7 @@ func NewGitTestServer(t *testing.T, opts ...TestDeps) (*hostapi.Server, string) 
 	testutil.FailErr(t, "reg.Open", err)
 
 	drafter := func(d *hostapi.Dependencies) {
-		d.Providers.CommitDrafter = compaction.MockSummarizer{Text: "feat: drafted subject"}
+		d.Providers.CommitDrafter = compaction.MockSummarizer{text: "feat: drafted subject"}
 	}
 	srv := NewGitServer(t, reg, append([]TestDeps{drafter}, opts...)...)
 	return srv, p.ID

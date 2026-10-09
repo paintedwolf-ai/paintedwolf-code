@@ -22,18 +22,18 @@ func ComparisonTextForTest(t *testing.T, srv *hostapi.Server, projectID string, 
 	if view.State != "ready" {
 		t.Fatalf("comparison failed: %+v", view.Failure)
 	}
-	var Text strings.Builder
+	var text strings.Builder
 	for offset := 0; int64(offset) < view.Extent.Rows; {
 		frame := ComparisonRowsForTest(t, srv, projectID, view, offset)
 		for _, row := range frame.Rows {
-			Text.WriteString(row.Text)
+			text.WriteString(row.text)
 		}
 		if frame.Span.End <= int64(offset) {
 			t.Fatal("comparison frame did not advance")
 		}
 		offset = int(frame.Span.End)
 	}
-	return Text.String()
+	return text.String()
 }
 
 func DigestComparisonsForTest(t *testing.T, srv *hostapi.Server, projectID, body string) *httptest.ResponseRecorder {
@@ -65,7 +65,7 @@ func SeedRewrittenReadme(t *testing.T, srv *hostapi.Server) (wire.Project, strin
 	dir := t.TempDir()
 	p := CreateProjectForTest(t, srv, dir)
 	MirrorLedgerProject(t, ledger.LedgerDB(), p)
-	testutil.FailErr(t, "write README", os.WriteFile(filepath.Join(dir, "README.md"), []byte(DiffReadmeV3), 0o644))
+	testutil.FailErr(t, "write README", os.WriteFile(filepath.Join(dir, "README.md"), []byte(DiffReadmeV3), 0o600))
 
 	rootID := p.Roots[0].ID
 	base := time.Date(2026, 8, 9, 14, 22, 0, 0, time.UTC)

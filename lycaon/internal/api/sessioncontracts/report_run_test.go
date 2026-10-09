@@ -13,6 +13,7 @@ import (
 	hostapi "github.com/lycaon/lycaon/internal/api"
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/eventoutbox"
+	"github.com/lycaon/lycaon/internal/report"
 	"github.com/lycaon/lycaon/internal/report/reporttest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/visual"
@@ -256,6 +257,47 @@ func TestGetWorkflowRunReport_MissingArtifactBytesShrinks(t *testing.T) {
 	}
 	rec := h.GetReport(t, run.ID)
 	contractfixture.AssertPDFOK(t, rec)
+}
+
+// A review paused as review_blocked serves its retained snapshot as an
+// incomplete report; a run paused for any other reason has no report yet.
+func TestBlockedReviewServesItsRetainedSnapshot(t *testing.T) {
+	h := contractfixture.NewReportTestHarness(t)
+	run := h.SeedSecuritySurveyRun(t, "run_review_blocked")
+	repair := workflow.ReviewRepair{
+		ID: "repair", Phase: "claims", State: "blocked", UpdatedAt: time.Now().UTC(),
+		Responses: []workflow.ReviewRepairResponse{{ID: "response"}},
+		Snapshot:  &workflow.ReviewSnapshot{Vars: map[string]any{}, Unavailable: []string{"scan ledger"}},
+	}
+	_, err := h.WfMgr.StampRunVars(t.Context(), run.ID, func(_ context.Context, _ *wire.WorkflowRun, vars map[string]any) (map[string]any, bool, error) {
+		vars["review_repairs"] = []workflow.ReviewRepair{repair}
+		return vars, true, nil
+	})
+	testutil.FailErr(t, "stamp blocked repair", err)
+	pause := func(reason string) {
+		t.Helper()
+		current, err := h.RunStore.Get(t.Context(), run.ID)
+		testutil.FailErr(t, "get run", err)
+		current.Status, current.PauseReason, current.CurrentPhase, current.CompletedAt = wire.WorkflowRunStatusPaused, reason, "claims", nil
+		testutil.FailErr(t, "pause run", h.RunStore.Update(t.Context(), current))
+	}
+
+	reports := h.Srv.Admin.Workflow.Reports
+	pause(workflow.ReviewBlockedReason)
+	input, ok, err := reports.BuildRunReportInput(t.Context(), run.ID)
+	testutil.FailErr(t, "build blocked report", err)
+	if !ok || input.Kind != report.BlockedReviewSnapshot || input.Completeness() != report.CompletenessIncomplete {
+		t.Fatalf("blocked review report = ok %v kind %q", ok, input.Kind)
+	}
+	if !strings.Contains(input.Synthesis, "Unavailable when paused: scan ledger.") {
+		t.Fatalf("snapshot omitted its unavailable sources: %s", input.Synthesis)
+	}
+	contractfixture.AssertPDFOK(t, h.GetReport(t, run.ID))
+
+	pause("user")
+	if _, ok, err := reports.BuildRunReportInput(t.Context(), run.ID); err != nil || ok {
+		t.Fatalf("an ordinarily paused run offered a report: ok %v err %v", ok, err)
+	}
 }
 
 func TestReportDownloadRequiresRecordedDelivery(t *testing.T) {

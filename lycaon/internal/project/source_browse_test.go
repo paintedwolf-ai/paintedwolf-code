@@ -149,6 +149,36 @@ func TestSourceProjectionUnwatchedReadsFreshMembership(t *testing.T) {
 	}
 }
 
+// A watched directory's listing is projected once and served from the cache.
+func TestSourceProjectionCachesWatchedMembership(t *testing.T) {
+	p, rootPath := browseFixtureProject(t)
+	repochange.ResetWatchersForTest()
+	t.Cleanup(repochange.ResetWatchersForTest)
+	repochange.EnsureRoot(t.Context(), rootPath)
+	projection := &sourceDirectoryProjection{
+		listings: make(map[sourceProjectionKey]projectedSourceListing),
+		flights:  make(map[sourceProjectionKey]*sourceProjectionFlight),
+	}
+	root, err := resolveSourceBrowseRoot(p, "r1")
+	testutil.FailErr(t, "resolve root", err)
+	key := sourceProjectionKey{
+		workspaceID: p.WorkspaceID(), rootID: "r1", rootPath: rootPath, dir: ".",
+	}
+	first, err := projection.get(key, root)
+	testutil.FailErr(t, "browse watched root", err)
+	if !first.WatchComplete {
+		t.Fatal("the watched root reported no watch coverage")
+	}
+	if _, ok := projection.listings[key]; !ok {
+		t.Fatal("a watched listing was not kept as projected membership")
+	}
+	second, err := projection.get(key, root)
+	testutil.FailErr(t, "browse watched root again", err)
+	if len(second.Entries) != len(first.Entries) || !second.WatchComplete {
+		t.Fatalf("cached listing = %+v, want the projected %+v", second, first)
+	}
+}
+
 // Listing freshness follows its directory watch.
 func TestSourceListingReportsWatchCoveragePerDirectory(t *testing.T) {
 	p, rootPath := browseFixtureProject(t)

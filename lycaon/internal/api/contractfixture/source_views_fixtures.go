@@ -76,11 +76,11 @@ func DeletedSourceRowsForTest(t *testing.T, server *hostapi.Server, projectID st
 
 func DeletedSourceTextForTest(t *testing.T, server *hostapi.Server, projectID string, deleted *wire.SourceDeletedFile) string {
 	t.Helper()
-	var Text strings.Builder
+	var text strings.Builder
 	for _, row := range DeletedSourceRowsForTest(t, server, projectID, deleted) {
-		Text.WriteString(row.Text)
+		text.WriteString(row.text)
 	}
-	return Text.String()
+	return text.String()
 }
 
 func PresentationForTest(t *testing.T, server *hostapi.Server, project, view, intent string) wire.SourcePresentation {

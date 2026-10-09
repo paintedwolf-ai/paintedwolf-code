@@ -17,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/scan"
 	"github.com/lycaon/lycaon/internal/sourcesnapshot"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/extpackstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -60,14 +61,7 @@ func NewDetectionsTestServer(t *testing.T) (*hostapi.Server, string) {
 		d.Scans.PublishDetections = rewire
 	})
 	root := configlayout.FindModuleRoot()
-	boot := extpacks.Resolve(t.Context(), extpacks.ResolveInput{
-		Packs: func() []extpacks.PackContent {
-			content, err := extpacks.DiscoverStockContent()
-			testutil.FailErr(t, "DiscoverStockContent", err)
-			return content
-		}(),
-		Desired: extpacks.EmptyDesired(),
-	})
+	boot := extpackstest.StockCatalog(t)
 	srv.Admin.SessionAdmin.Lifecycle.Sessions.SetEffectiveCatalogDeps(root, boot, nil)
 	srv.Admin.SessionAdmin.Lifecycle.Sessions.Catalog().SetCatalogViewCache(catalogview.NewCache(root, slog.Default()))
 	_ = last
