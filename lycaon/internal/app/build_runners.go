@@ -99,8 +99,8 @@ func (b delegationWiring) registerBackgroundRunners(app *ServeApp) {
 	if b.warmRunner != nil {
 		byName["warm-runner"] = registration{run: b.warmRunner.Run}
 	}
-	if _, ok := b.deciderWarmer(); ok {
-		byName["decision-engine-warm"] = registration{run: b.warmDecider, oneShot: true}
+	if _, ok := b.decisions.Warmer(); ok {
+		byName["decision-engine-warm"] = registration{run: b.decisions.Warm, oneShot: true}
 	}
 	if b.storage.SourceLedger != nil {
 		byName["source-blob-gc"] = registration{run: func(ctx context.Context) error {

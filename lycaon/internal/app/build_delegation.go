@@ -185,7 +185,7 @@ func (b delegationWiring) wireWorkerContext() error {
 		if view := b.mgr.Catalog().ViewForSession(context.Background(), sess); view != nil {
 			return view
 		}
-		return b.agentRegistry
+		return b.agents.Registry
 	}
 	playbooksForSession := func(sess *wire.Session) delegation.PlaybookMatcherInterface {
 		if view := b.mgr.Catalog().ViewForSession(context.Background(), sess); view != nil && view.Playbooks != nil {

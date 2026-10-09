@@ -41,7 +41,7 @@ func TestRequestDiscoveryOutageToExactActivation(t *testing.T) {
 				}))
 			}
 			var receipt turnload.RequestToolsResult
-			testutil.FailErr(t, "register discovery", tools.RegisterRequestTools(reg, tools.RequestToolsDeps{
+			testutil.FailErr(t, "register discovery", tools.NewRequestTools(reg, tools.RequestToolsDeps{
 				Activation: activation, Boundary: fakeRequestBoundary{},
 				Resolve: func(ctx context.Context, _ tools.ToolContext, need string, cards []turnload.ToolCard) turnload.RequestOutcome {
 					return turnload.ResolveRequest(ctx, d, turnload.RequestSpec{DeadlineMS: 1000, LoadAt: 2, MaxLoads: 1}, need, cards)
@@ -49,7 +49,7 @@ func TestRequestDiscoveryOutageToExactActivation(t *testing.T) {
 				Record: func(_ context.Context, _ tools.ToolContext, _ turnload.RequestOutcome, result turnload.RequestToolsResult, _ time.Duration) {
 					receipt = result
 				},
-			}))
+			}).Register())
 			tctx := tools.ToolContext{
 				Identity: tools.InvocationIdentity{SessionID: "s"},
 				Turn:     tools.InvocationTurn{TurnToolPlan: toolsurface.Compile([]string{"request_tools"}, names[:42])},
@@ -110,7 +110,7 @@ func TestRequestDiscoveryPartialSelectionAndCancellation(t *testing.T) {
 		}
 		return turnload.ResolveRequest(t.Context(), nil, turnload.RequestSpec{}, need, cards)
 	}
-	testutil.FailErr(t, "register discovery", tools.RegisterRequestTools(reg, tools.RequestToolsDeps{Activation: activation, Boundary: fakeRequestBoundary{}, Resolve: resolve}))
+	testutil.FailErr(t, "register discovery", tools.NewRequestTools(reg, tools.RequestToolsDeps{Activation: activation, Boundary: fakeRequestBoundary{}, Resolve: resolve}).Register())
 	tctx := tools.ToolContext{
 		Identity: tools.InvocationIdentity{SessionID: "partial"},
 		Turn:     tools.InvocationTurn{TurnToolPlan: toolsurface.Compile([]string{"read", "request_tools"}, []string{"write", "edit"})},
@@ -142,7 +142,7 @@ func TestRequestDiscoveryCursorSurvivesPartialActivation(t *testing.T) {
 		names = append(names, fmt.Sprintf("mcp_fixture_tool_%02d", i))
 	}
 	registerRequestFixtureTools(t, reg, names...)
-	testutil.FailErr(t, "register discovery", tools.RegisterRequestTools(reg, tools.RequestToolsDeps{Activation: activation, Boundary: fakeRequestBoundary{}}))
+	testutil.FailErr(t, "register discovery", tools.NewRequestTools(reg, tools.RequestToolsDeps{Activation: activation, Boundary: fakeRequestBoundary{}}).Register())
 	tctx := tools.ToolContext{
 		Identity: tools.InvocationIdentity{SessionID: "partial-page"},
 		Turn:     tools.InvocationTurn{TurnToolPlan: toolsurface.Compile([]string{"request_tools"}, names)},
@@ -178,12 +178,12 @@ func TestRequestHealthyRankingHasNoDiscovery(t *testing.T) {
 			registerRequestFixtureTools(t, reg, "read")
 			activation := tools.NewMemoryActivation()
 			d := &decidetest.Fake{Scores: []float64{tc.score}}
-			testutil.FailErr(t, "register request", tools.RegisterRequestTools(reg, tools.RequestToolsDeps{
+			testutil.FailErr(t, "register request", tools.NewRequestTools(reg, tools.RequestToolsDeps{
 				Activation: activation, Boundary: fakeRequestBoundary{},
 				Resolve: func(ctx context.Context, _ tools.ToolContext, need string, cards []turnload.ToolCard) turnload.RequestOutcome {
 					return turnload.ResolveRequest(ctx, d, turnload.RequestSpec{DeadlineMS: 1000, LoadAt: 2, MaxLoads: 1, NearestLoads: tc.nearest}, need, cards)
 				},
-			}))
+			}).Register())
 			raw, err := reg.Run(t.Context(), "request_tools", map[string]any{"need": "inspect content"}, tools.ToolContext{
 				Identity: tools.InvocationIdentity{SessionID: "healthy"},
 				Turn:     tools.InvocationTurn{TurnToolPlan: toolsurface.Compile([]string{"request_tools"}, []string{"read"})},

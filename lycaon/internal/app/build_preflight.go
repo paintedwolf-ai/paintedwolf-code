@@ -35,8 +35,8 @@ func (b serverWiring) buildPreflightEnv() preflight.Env {
 		b.checkDecisionEngineForPreflight,
 	)
 	env.LiteSlotUnavailable = b.liteSlotUnavailableForPreflight
-	env.UserPathSource = b.userPath.Source()
-	env.UserPathFailure = b.userPath.Failure()
+	env.UserPathSource = b.processes.Path.Source()
+	env.UserPathFailure = b.processes.Path.Failure()
 	return env
 }
 
@@ -44,11 +44,11 @@ func (b serverWiring) buildPreflightEnv() preflight.Env {
 // knows whether it is disabled, missing, waiting for its checkpoint, or failed
 // its handshake.
 func (b serverWiring) checkDecisionEngineForPreflight(context.Context) preflight.DecisionReason {
-	if client, ok := b.decider.(*bialy.Client); ok {
+	if client, ok := b.decisions.Decider.(*bialy.Client); ok {
 		return preflight.DecisionReason(client.Status())
 	}
 	// A scripted decider answers; an absent one has no engine to report on.
-	if b.decider == nil || !b.decider.Available() {
+	if b.decisions.Decider == nil || !b.decisions.Decider.Available() {
 		return preflight.ReasonDecisionBinaryMissing
 	}
 	return ""

@@ -53,7 +53,8 @@ func (b sessionWiring) wireSessionManager() error {
 	}
 	b.mgr = session.NewManagerWithLLMService(b.storage.Sessions, b.providers.Client, b.providers.Service, b.toolReg, b.settings.SessionLimits, b.providers.Costs)
 	b.security.BindRemember(b.mgr.SetRememberSecrets)
-	b.mgr.SetMintedCredentialSource(b.detections.mintedCredentialSource)
+	b.toolRuntime.Skills.BindTurnSources(b.mgr.ResolveToolRequest, b.mgr.RecordToolRequest, b.mgr.LookupSkills)
+	b.mgr.SetMintedCredentialSource(b.security.Detections.MintedCredentialSource)
 	invocations := invocation.NewSQLRecorder(b.storage.Database)
 	b.invocations = invocations
 	b.mgr.SetInvocationRecorder(invocations)
@@ -76,7 +77,7 @@ func (b sessionWiring) wireSessionManager() error {
 
 func (b sessionWiring) configureSessionManager() error {
 	b.mgr.SetSourceLedger(b.storage.SourceLedger)
-	b.mgr.SetAgentRegistry(b.agentRegistry)
+	b.mgr.SetAgentRegistry(b.agents.Registry)
 	b.mgr.SetHostResources(b.settings.HostResources)
 	if b.settings.HostResources != nil && b.settings.Service != nil && b.settings.Service.Approvals != nil {
 		b.settings.HostResources.SetPolicyBinder(configuration.HostResourcePolicyBinder(b.settings.Service.Approvals, b.mgr))
@@ -88,7 +89,7 @@ func (b sessionWiring) configureSessionManager() error {
 	b.promptEngine = prompts.NewFileTemplateEngineLayers(promptLayers)
 	b.mgr.SetPromptEngine(b.promptEngine)
 	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(b.promptEngine))
-	b.mgr.SetPostureRegistry(b.postureRegistry)
+	b.mgr.SetPostureRegistry(b.agents.Postures)
 	b.mgr.SetProjectRegistry(b.storage.Projects)
 	b.mgr.SetDataDir(b.storage.Directory)
 	b.mgr.SetScratchFolders(scratch.New(b.storage.Directory))
@@ -187,7 +188,7 @@ func (b sessionWiring) wireSessionAuthorization() error {
 		if err != nil {
 			return fmt.Errorf("audit config: %w", err)
 		}
-		b.authzCapturer = authzcontext.NewSQLCapturer(b.storage.Database, auditCfg, authzcontext.ProfileMap(b.toolProfiles))
+		b.authzCapturer = authzcontext.NewSQLCapturer(b.storage.Database, auditCfg, authzcontext.ProfileMap(b.agents.ToolProfiles))
 		cap := b.authzCapturer
 		if cap != nil && cap.Sealer != nil {
 			if b.settings.Service != nil {

@@ -44,21 +44,27 @@ type RequestToolsDeps struct {
 	RejectFmt func() *guidance.StaticRejectFormatter
 }
 
-// RegisterRequestTools registers the meta-tool that loads open-world schemas.
-func RegisterRequestTools(reg *DefaultRegistry, deps RequestToolsDeps) error {
-	if reg == nil || deps.Activation == nil || deps.Boundary == nil {
-		return fmt.Errorf("registry, activation store, and boundary required")
-	}
-	t := requestTools{reg: reg, deps: deps}
-	return reg.Register("request_tools", t.run)
-}
-
-type requestTools struct {
+// RequestTools discovers and activates the schemas admitted for one turn.
+type RequestTools struct {
 	reg  *DefaultRegistry
 	deps RequestToolsDeps
 }
 
-func (t requestTools) run(ctx context.Context, args map[string]any, tctx ToolContext) (string, error) {
+func NewRequestTools(reg *DefaultRegistry, deps RequestToolsDeps) *RequestTools {
+	return &RequestTools{reg: reg, deps: deps}
+}
+func (t *RequestTools) Register() error {
+	if t == nil || t.reg == nil || t.deps.Activation == nil || t.deps.Boundary == nil {
+		return fmt.Errorf("registry, activation store, and boundary required")
+	}
+	return t.reg.Register("request_tools", t.run)
+}
+func (t *RequestTools) BindResolvers(resolve RequestResolver, record RequestObserver) {
+	t.deps.Resolve = resolve
+	t.deps.Record = record
+}
+
+func (t *RequestTools) run(ctx context.Context, args map[string]any, tctx ToolContext) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
@@ -142,7 +148,7 @@ func (t requestTools) run(ctx context.Context, args map[string]any, tctx ToolCon
 }
 
 // Exact identifiers do not need scores for unrelated registered tools.
-func (t requestTools) resolve(ctx context.Context, tctx ToolContext, need string, cards []turnload.ToolCard) turnload.RequestOutcome {
+func (t *RequestTools) resolve(ctx context.Context, tctx ToolContext, need string, cards []turnload.ToolCard) turnload.RequestOutcome {
 	for _, meta := range t.reg.List() {
 		if strings.EqualFold(need, meta.Name) {
 			return turnload.RequestOutcome{Need: need, Exact: []string{meta.Name}}
@@ -154,7 +160,7 @@ func (t requestTools) resolve(ctx context.Context, tctx ToolContext, need string
 	return turnload.ResolveRequest(ctx, nil, turnload.RequestSpec{}, need, cards)
 }
 
-func (t requestTools) activationResult(ctx context.Context, tctx ToolContext, profileID string, plan toolsurface.Plan, constrained bool, outcome turnload.RequestOutcome) turnload.RequestToolsResult {
+func (t *RequestTools) activationResult(ctx context.Context, tctx ToolContext, profileID string, plan toolsurface.Plan, constrained bool, outcome turnload.RequestOutcome) turnload.RequestToolsResult {
 	// Declared companions load with a selected tool; the plan keeps out any the surface lacks.
 	names := toolcontract.WithCompanions(outcome.Loaded())
 	registered := make([]turnload.ToolCard, 0)

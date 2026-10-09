@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/clisocket"
-	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/fileoutline"
 	"github.com/lycaon/lycaon/internal/mcp"
@@ -44,14 +43,6 @@ func (r *runtimeResources) Track(name string, order int, cleanup func(context.Co
 func (r *runtimeResources) capture(b *serveBuilder) {
 	if r == nil || b == nil {
 		return
-	}
-	if b.egressBrokerBound {
-		// The front door closes after the processes that use it.
-		r.Track("egress-broker", 55, func(context.Context) error { return confine.StopEgressBroker() })
-	}
-	if b.refusalWatchStarted {
-		// Refusal reports stop after the processes they describe.
-		r.Track("refusal-watch", 55, func(context.Context) error { confine.StopRefusalWatch(); return nil })
 	}
 	if controller := b.previewCtrl; controller != nil {
 		r.Track("preview", 30, func(context.Context) error { controller.Close(); return nil })

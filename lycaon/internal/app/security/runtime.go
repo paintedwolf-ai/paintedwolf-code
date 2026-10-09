@@ -16,6 +16,7 @@ import (
 )
 
 type Runtime struct {
+	Detections    Detections
 	Presence      *presence.Broker
 	Unlocks       *presence.Unlocks
 	Spans         *secretspan.Screener

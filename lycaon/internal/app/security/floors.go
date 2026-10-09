@@ -1,4 +1,4 @@
-package app
+package security
 
 import (
 	"fmt"
@@ -8,15 +8,15 @@ import (
 )
 
 // wireCredentialFloors loads key-material and credential-store paths.
-func (b sessionWiring) wireCredentialFloors() error {
-	if err := b.wireKeyMaterial(); err != nil {
+func (b *Detections) LoadFloors() error {
+	if err := b.installKeyMaterial(); err != nil {
 		return err
 	}
-	return b.wireCredentialStores()
+	return b.installCredentialStores()
 }
 
 // wireKeyMaterial installs the key-material write floor.
-func (b sessionWiring) wireKeyMaterial() error {
+func (b *Detections) installKeyMaterial() error {
 	paths, err := detectionpack.BundledKeyMaterialPaths()
 	if err != nil {
 		return fmt.Errorf("key material catalogue: %w", err)
@@ -25,14 +25,14 @@ func (b sessionWiring) wireKeyMaterial() error {
 	return nil
 }
 
-func (b sessionWiring) wireCredentialStores() error {
+func (b *Detections) installCredentialStores() error {
 	bundled, err := detectionpack.BundledCredentialStorePaths()
 	if err != nil {
 		return fmt.Errorf("credential store catalogue: %w", err)
 	}
 	confine.SetCredentialStorePathsSource(func() []string {
 		// Preserve bundled deny paths when overlays add paths or fail to load.
-		current := b.detections.current.Load()
+		current := b.current.Load()
 		if current == nil {
 			return bundled
 		}

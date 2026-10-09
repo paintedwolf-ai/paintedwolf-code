@@ -36,8 +36,8 @@ type toolWiring struct{ *serveBuilder }
 func (b toolWiring) wireCoordinatorRuntime() error {
 	b.coordRuntime = coordinator.NewRuntime(b.mgr.CoordinatorRuntimeDeps())
 	b.mgr.SetCoordinatorRuntime(b.coordRuntime)
-	waitConditions := make(map[string]map[string]bool, len(b.toolProfiles))
-	for _, profile := range b.toolProfiles {
+	waitConditions := make(map[string]map[string]bool, len(b.agents.ToolProfiles))
+	for _, profile := range b.agents.ToolProfiles {
 		allowed := make(map[string]bool, len(profile.WaitConditions))
 		for _, condition := range profile.WaitConditions {
 			allowed[condition] = true
@@ -61,7 +61,7 @@ func (b toolWiring) wireCoordinatorRuntime() error {
 	}
 
 	if err := boot.ValidateServeWiring(boot.ServeWiring{
-		PostureRegistry: b.postureRegistry,
+		PostureRegistry: b.agents.Postures,
 		BundledRules:    b.bundledRules,
 		RuleEngine:      b.ruleEngine,
 		SessionManager:  b.mgr,
@@ -162,11 +162,11 @@ func (b toolWiring) registerCoordinatorTools() error {
 	if err := tools.ValidateBootToolClaimsHonest(b.toolRuntime.Registry); err != nil {
 		return fmt.Errorf("boot tool claims: %w", err)
 	}
-	profileByID := make(map[string]sandbox.ToolProfile, len(b.toolProfiles))
-	for _, p := range b.toolProfiles {
+	profileByID := make(map[string]sandbox.ToolProfile, len(b.agents.ToolProfiles))
+	for _, p := range b.agents.ToolProfiles {
 		profileByID[p.ID] = p
 	}
-	if err := orchestration.ValidateAgentSkillSurface(b.agentRegistry, profileByID); err != nil {
+	if err := orchestration.ValidateAgentSkillSurface(b.agents.Registry, profileByID); err != nil {
 		return fmt.Errorf("agent skill surface: %w", err)
 	}
 	return nil
@@ -178,7 +178,7 @@ func (b toolWiring) taskToolDeps() worker.TaskToolDeps {
 	return worker.TaskToolDeps{
 		Sessions:         b.mgr,
 		Queue:            b.workerQueue,
-		Agents:           b.agentRegistry,
+		Agents:           b.agents.Registry,
 		Workers:          b.workersCfg,
 		ToolBudget:       b.workerToolBudgetFor,
 		BindWorkflowTask: b.workflowMgr.BindWorkflowTask,

@@ -1,4 +1,4 @@
-package app
+package security
 
 import (
 	"log/slog"
@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/toolhost"
 )
 
 type detectionGeneration struct {
@@ -19,12 +20,12 @@ type detectionGeneration struct {
 }
 
 // All detection consumers read one published catalog generation.
-type detectionRuntime struct {
+type Detections struct {
 	current   atomic.Pointer[detectionGeneration]
 	semantics *detectionpack.ActionSemanticsCatalog
 }
 
-func (r *detectionRuntime) publish(matcher *detectionpack.Matcher) {
+func (r *Detections) Publish(matcher *detectionpack.Matcher) {
 	if matcher == nil {
 		r.current.Store(nil)
 		return
@@ -36,21 +37,21 @@ func (r *detectionRuntime) publish(matcher *detectionpack.Matcher) {
 	})
 }
 
-func (r *detectionRuntime) gateSource() settings.DetectionSource {
+func (r *Detections) GateSource() settings.DetectionSource {
 	if current := r.current.Load(); current != nil {
 		return current.gate
 	}
 	return nil
 }
 
-func (r *detectionRuntime) mintedCredentialSource() session.MintedCredentialSource {
+func (r *Detections) MintedCredentialSource() session.MintedCredentialSource {
 	if current := r.current.Load(); current != nil {
 		return current.gate
 	}
 	return nil
 }
 
-func (r *detectionRuntime) egressSource() *detectionpack.EgressSource {
+func (r *Detections) EgressSource() *detectionpack.EgressSource {
 	if current := r.current.Load(); current != nil {
 		return current.egress
 	}
@@ -58,8 +59,8 @@ func (r *detectionRuntime) egressSource() *detectionpack.EgressSource {
 }
 
 // Detection load failures leave approval facts incomplete.
-func (b toolWiring) wireDetectionPacks() {
-	semantics, semanticsErr := detectionpack.LoadActionSemantics(b.storage.Directory)
+func (b *Detections) Load(configDir string, contributed []detectionpack.Pack, authority *toolhost.AuthorityServices) {
+	semantics, semanticsErr := detectionpack.LoadActionSemantics(configDir)
 	if semanticsErr != nil {
 		slog.Warn("detection action semantics unavailable", "error", semanticsErr)
 	}
@@ -68,25 +69,18 @@ func (b toolWiring) wireDetectionPacks() {
 			slog.Warn("detection action semantics warning", "warning", warning)
 		}
 	}
-	b.detections.semantics = semantics
-	b.toolRuntime.Authority.SetDetectionSource(b.detections.gateSource)
-	b.toolRuntime.Authority.SetEgressDetectionSource(egressDetectionAdapter{source: b.detections.egressSource})
+	b.semantics = semantics
+	authority.SetDetectionSource(b.GateSource)
+	authority.SetEgressDetectionSource(egressDetectionAdapter{source: b.EgressSource})
 	cat, err := detectionpack.LoadCatalog(detectionpack.Input{
-		ConfigDir:   b.storage.Directory,
-		Contributed: b.contributedDetectionPacks(),
+		ConfigDir:   configDir,
+		Contributed: contributed,
 	})
 	if err != nil {
 		slog.Warn("detection packs unavailable", "error", err)
 		return
 	}
-	b.detections.publish(detectionpack.NewMatcher(cat))
-}
-
-func (b toolWiring) contributedDetectionPacks() []detectionpack.Pack {
-	if b.serveBuilder == nil || b.catalog.DeviceView == nil {
-		return nil
-	}
-	return b.catalog.DeviceView.DetectionPacks()
+	b.Publish(detectionpack.NewMatcher(cat))
 }
 
 // egressDetectionAdapter avoids a package cycle.

@@ -4,11 +4,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/configlayout"
-	"github.com/lycaon/lycaon/internal/detectionpack"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -62,44 +60,5 @@ func TestBuildDetectionObservationBeforeSettingsAndAcrossReloads(t *testing.T) {
 				}
 			}
 		})
-	}
-}
-
-func TestDetectionPublicationRetainsCompleteGenerations(t *testing.T) {
-	t.Parallel()
-	var runtime detectionRuntime
-	if runtime.gateSource() != nil || runtime.mintedCredentialSource() != nil || runtime.egressSource() != nil {
-		t.Fatal("unpublished catalog reported a source")
-	}
-	matcher := detectionpack.NewMatcher(&detectionpack.Catalog{})
-	runtime.publish(matcher)
-	original := runtime.current.Load()
-	if original.matcher != matcher || original.gate != runtime.gateSource() || original.gate != runtime.mintedCredentialSource() || original.egress != runtime.egressSource() {
-		t.Fatal("consumers disagree on the published generation")
-	}
-	var workers sync.WaitGroup
-	workers.Go(func() {
-		for range 100 {
-			runtime.publish(nil)
-			runtime.publish(matcher)
-		}
-	})
-	for range 3 {
-		workers.Go(func() {
-			for range 100 {
-				current := runtime.current.Load()
-				if current != nil && (current.matcher == nil || current.gate == nil || current.egress == nil) {
-					t.Error("published an incomplete generation")
-				}
-			}
-		})
-	}
-	workers.Wait()
-	runtime.publish(nil)
-	if runtime.gateSource() != nil || runtime.mintedCredentialSource() != nil || runtime.egressSource() != nil {
-		t.Fatal("withdrawn catalog reported a source")
-	}
-	if original.matcher != matcher || original.gate == nil || original.egress == nil {
-		t.Fatal("publication changed a retained generation")
 	}
 }

@@ -115,7 +115,7 @@ func (b boardWiring) wireBoardAndResearch() error {
 		return repoinfo.FormatOrientationBriefText(mrb.OrientationRoots()), nil
 	})
 	b.mgr.SetTurnLoads(b.turnLoads)
-	b.mgr.SetDecider(b.decider)
+	b.mgr.SetDecider(b.decisions.Decider)
 	b.mgr.SetSkillBodyRenderer(b.toolRuntime.Skills.RenderSkillBody)
 	b.webResearchRuntime, err = webresearch.WireRuntime()
 	if err != nil {
@@ -124,7 +124,7 @@ func (b boardWiring) wireBoardAndResearch() error {
 	b.webResearchCreds = b.webResearchRuntime.Creds
 	webCat, webCfg, webReg := b.webResearchRuntime.Catalog, b.webResearchRuntime.Config, b.webResearchRuntime.Registry
 	var llmReg, llmPol = b.providers.RegistryPolicy()
-	b.webDiscoverer = webresearch.NewDirectDiscovererFactory(b.storage.WebIndex, webReg, b.webResearchCreds, webCfg, webCat, b.rerank)
+	b.webDiscoverer = webresearch.NewDirectDiscovererFactory(b.storage.WebIndex, webReg, b.webResearchCreds, webCfg, webCat, b.decisions.Rerank)
 	b.toolRuntime.Web.SetDirectDiscovererFactory(b.webDiscoverer)
 	if b.storage.WebIndex != nil {
 		webReg.AttachQuotaStore(b.storage.WebIndex)
@@ -147,7 +147,7 @@ func (b boardWiring) wireBoardAndResearch() error {
 		Catalog:  webCat,
 		Registry: webReg,
 		Index:    b.storage.WebIndex,
-		Rerank:   b.rerank,
+		Rerank:   b.decisions.Rerank,
 		Boundary: b.toolRuntime.Boundary,
 		SearchWarmHook: func(ctx context.Context, sessionID, toolCallID, query, projectDir string, hitURLs, residualURLs []string, strongHits, maxResults int, directParticipated bool) {
 			b.mgr.WarmIndexForSearch(ctx, sessionID, toolCallID, query, projectDir, hitURLs, residualURLs, strongHits, maxResults, directParticipated)

@@ -151,7 +151,7 @@ func (b serverWiring) wireServer() error {
 	extensionJournal := extensionstate.NewSQLJournal(b.storage.Database)
 	deps := api.Dependencies{Core: api.CoreDependencies{
 		Database: b.storage.Database, Store: b.storage.Sessions, PersonActions: personactions.New(b.storage.Database), Projects: b.storage.Projects, Sessions: b.mgr, Settings: b.settings.Service,
-		Invocations: b.invocations, MutationGate: project.NewMutationGate()}, Providers: api.ProvidersDependencies{LLM: b.providers.Service, CostTracker: b.providers.Costs, Rerank: b.rerank}, Host: api.HostDependencies{
+		Invocations: b.invocations, MutationGate: project.NewMutationGate()}, Providers: api.ProvidersDependencies{LLM: b.providers.Service, CostTracker: b.providers.Costs, Rerank: b.decisions.Rerank}, Host: api.HostDependencies{
 		Events: b.events.Hub, EventPublisher: b.events.Publisher, Presence: b.events.Presence, HostIdentity: b.hostIdentity,
 		HostResources: b.settings.HostResources, HostPower: b.settings.Power, Pricing: b.providers.Pricing, Preview: b.previewCtrl,
 		PreflightEnv: b.buildPreflightEnv()}, Storage: api.StorageDependencies{
@@ -165,7 +165,7 @@ func (b serverWiring) wireServer() error {
 			Sockets: b.socketCapabilityRT, ChatGrants: chatGrantLedger(b.checkpointMgr), Vault: b.security.Unlocks,
 		}}, Scans: api.ScansDependencies{
 		ScanCoordinator: b.scanCoordinator, ScannerRegistry: b.scannerReg, ScanCadence: b.scanCadence,
-		GateRepeatLedger: b.gateRepeatRT, PublishDetections: b.detections.publish}, Workflow: api.WorkflowDependencies{
+		GateRepeatLedger: b.gateRepeatRT, PublishDetections: b.security.Detections.Publish}, Workflow: api.WorkflowDependencies{
 		Workflows: b.workflowMgr, WorkflowCatalog: b.manifestResolver,
 		WorkflowRuns: b.workflowStore, WorkflowComposer: b.workflowComposer, WorkflowPersister: b.workflowPersister,
 		Blueprints: b.blueprintMgr, Orchestrator: b.orch, Delegations: b.delegationMgr, Workers: b.workerQueue,
@@ -435,7 +435,7 @@ func (b serverWiring) wireOrchestrator() error {
 	orchDeps := orchestration.OrchestratorDeps{
 		Delegation: b.delegationMgr,
 		Store:      b.delegationStore,
-		Agents:     b.agentRegistry,
+		Agents:     b.agents.Registry,
 		Workflows:  b.workflowMgr,
 		Catalog:    extpacks.CatalogForConsumers,
 	}
@@ -467,14 +467,14 @@ func (b serverWiring) serveApp() *ServeApp {
 		Server:               b.srv,
 		SessionMgr:           b.mgr,
 		SessionStore:         b.storage.Sessions,
-		decider:              b.decider,
+		decider:              b.decisions.Decider,
 		ProjectLiveness:      b.projectLiveness,
 		CoordinatorRuntime:   b.coordRuntime,
 		WorkflowMgr:          b.workflowMgr,
 		BlueprintMgr:         b.blueprintMgr,
 		DelegationMgr:        b.delegationMgr,
 		DelegationStore:      b.delegationStore,
-		AgentRegistry:        b.agentRegistry,
+		AgentRegistry:        b.agents.Registry,
 		WorkerQueue:          b.workerQueue,
 		ToolRegistry:         b.toolRuntime.Registry,
 		SessionWorkflowStore: b.sessionWorkflowStore,

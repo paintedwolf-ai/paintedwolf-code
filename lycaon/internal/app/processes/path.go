@@ -1,6 +1,7 @@
-package app
+package processes
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
@@ -10,7 +11,7 @@ import (
 )
 
 // wireUserPath establishes the shared PATH before executable discovery and child launches.
-func (b *serveBuilder) wireUserPath() error {
+func (b *Runtime) ResolvePath(ctx context.Context) error {
 	cfg, err := userpath.LoadConfig()
 	if err != nil {
 		// The embedded catalog is required for PATH resolution.
@@ -24,10 +25,10 @@ func (b *serveBuilder) wireUserPath() error {
 		}
 	} else {
 		// A shutdown during startup cancels the probe instead of waiting out its timeout.
-		snapshot = userpath.NewProvider(cfg).Resolve(b.startup.ctx)
+		snapshot = userpath.NewProvider(cfg).Resolve(ctx)
 	}
 
-	b.userPath = snapshot
+	b.Path = snapshot
 	exec.SetResolvedPathSource(snapshot.Value)
 
 	attrs := []any{

@@ -92,13 +92,13 @@ func TestRequestToolsLoadsNamedDeferredTools(t *testing.T) {
 	reg := tools.NewDefaultRegistry()
 	registerRequestFixtureTools(t, reg, "wc", "read")
 	store := tools.NewMemoryActivation()
-	err := tools.RegisterRequestTools(reg, tools.RequestToolsDeps{
+	err := tools.NewRequestTools(reg, tools.RequestToolsDeps{
 		Activation: store,
 		Boundary: fakeRequestBoundary{
 			deferred: map[string]bool{"wc": true, "chmod": true},
 			allowed:  map[string]bool{"read": true, "wc": true, "chmod": true},
 		},
-	})
+	}).Register()
 	testutil.FailErr(t, "RegisterRequestTools", err)
 
 	out, err := reg.Run(context.Background(), "request_tools",
@@ -130,10 +130,10 @@ func TestRequestToolsWithoutResolverNeedsExactName(t *testing.T) {
 		deferred: map[string]bool{"mcp_tracker_search_issues": true, "mcp_tracker_create_issue": true},
 		allowed:  map[string]bool{"mcp_tracker_search_issues": true, "mcp_tracker_create_issue": true},
 	}
-	testutil.FailErr(t, "RegisterRequestTools", tools.RegisterRequestTools(reg, tools.RequestToolsDeps{
+	testutil.FailErr(t, "RegisterRequestTools", tools.NewRequestTools(reg, tools.RequestToolsDeps{
 		Activation: store,
 		Boundary:   boundary,
-	}))
+	}).Register())
 	for _, meta := range []tools.ToolMeta{
 		{Name: "mcp_tracker_search_issues", Description: "Search project issues", Source: tools.ToolSourceMCP, SourceID: "tracker", ArgsSchema: map[string]any{"type": "object"}},
 		{Name: "mcp_tracker_create_issue", Description: "Create a project issue", Source: tools.ToolSourceMCP, SourceID: "tracker", ArgsSchema: map[string]any{"type": "object"}},
@@ -174,12 +174,12 @@ func TestRequestToolsLoadsSurfaceDeferred(t *testing.T) {
 	reg := tools.NewDefaultRegistry()
 	registerRequestFixtureTools(t, reg, "page_open", "read")
 	store := tools.NewMemoryActivation()
-	err := tools.RegisterRequestTools(reg, tools.RequestToolsDeps{
+	err := tools.NewRequestTools(reg, tools.RequestToolsDeps{
 		Activation: store,
 		Boundary: fakeRequestBoundary{
 			allowed: map[string]bool{"read": true, "page_open": true},
 		},
-	})
+	}).Register()
 	testutil.FailErr(t, "RegisterRequestTools", err)
 
 	out, err := reg.Run(context.Background(), "request_tools",
@@ -207,10 +207,10 @@ func TestRequestToolsLoadsExplicitControlFamily(t *testing.T) {
 	reg := tools.NewDefaultRegistry()
 	registerRequestFixtureTools(t, reg, "command", "command_output", "command_stop")
 	store := tools.NewMemoryActivation()
-	testutil.FailErr(t, "RegisterRequestTools", tools.RegisterRequestTools(reg, tools.RequestToolsDeps{
+	testutil.FailErr(t, "RegisterRequestTools", tools.NewRequestTools(reg, tools.RequestToolsDeps{
 		Activation: store,
 		Boundary:   fakeRequestBoundary{allowed: map[string]bool{"command": true}},
-	}))
+	}).Register())
 
 	family := []string{"command", "command_output", "command_stop"}
 	out, err := reg.Run(context.Background(), "request_tools",

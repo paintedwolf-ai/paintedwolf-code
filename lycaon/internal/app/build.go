@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/app/configuration"
+	"github.com/lycaon/lycaon/internal/app/decisions"
 	"github.com/lycaon/lycaon/internal/app/eventing"
 	"github.com/lycaon/lycaon/internal/app/persistence"
+	"github.com/lycaon/lycaon/internal/app/processes"
 	"github.com/lycaon/lycaon/internal/app/providers"
 	"github.com/lycaon/lycaon/internal/app/security"
 
@@ -24,7 +26,6 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator"
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/db"
-	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/findings"
 	"github.com/lycaon/lycaon/internal/git"
@@ -45,7 +46,6 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/repoinfo"
 	"github.com/lycaon/lycaon/internal/rules"
-	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/scan"
 	scancadence "github.com/lycaon/lycaon/internal/scan/cadence"
 	scancfg "github.com/lycaon/lycaon/internal/scan/configuration"
@@ -58,7 +58,6 @@ import (
 	"github.com/lycaon/lycaon/internal/toolhost"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/usernotice"
-	"github.com/lycaon/lycaon/internal/userpath"
 	"github.com/lycaon/lycaon/internal/visual"
 	"github.com/lycaon/lycaon/internal/webresearch"
 	"github.com/lycaon/lycaon/internal/worker"
@@ -73,6 +72,8 @@ type serveBuilder struct {
 	settings  configuration.Runtime
 	startup   startupBootstrap
 	storage   persistence.Runtime
+	decisions decisions.Runtime
+	agents    configuration.Agents
 
 	apiToken            string
 	tokenGenerated      bool
@@ -82,11 +83,6 @@ type serveBuilder struct {
 	bundledRules        map[string]*rules.RulesConfig
 	workerToolBudgetFor func(string) spawn.WorkerToolBudget
 
-	// egressBrokerBound records that this build owns the mediation front door.
-	egressBrokerBound bool
-	// refusalWatchStarted records that this build reads kernel refusal reports.
-	refusalWatchStarted bool
-	// storeClaim's release transfers to runtimeResources after construction.
 	sourceScopes  *sourcescope.Provider
 	bgRegistry    *bgprocess.Registry
 	heldCalls     *heldcall.Registry
@@ -98,23 +94,17 @@ type serveBuilder struct {
 	webWarmer   *webresearch.Warmer
 	warmRunner  *webresearch.WarmRunner
 	invocations invocation.Recorder
-	userPath    userpath.Snapshot
 	toolRuntime *toolhost.Runtime
 	// turnLoads is the loaded-schema ledger shared by request_tools and the coordinator turn.
 	turnLoads *turnload.Ledger
 	// decider is the local decision model; nil resolves to an absent engine.
 	// rerank carries it with the catalog policies into every ranking site.
-	decider          decide.Decider
-	rerank           decide.Reranker
 	toolReg          *tools.ExecutorRegistry
-	detections       detectionRuntime
 	security         *security.Runtime
 	events           *eventing.Runtime
+	processes        *processes.Runtime
 	rejectFmt        *guidance.StaticRejectFormatter
 	hintCfg          *guidance.HintConfig
-	agentRegistry    *orchestration.MemoryAgentRegistry
-	toolProfiles     []sandbox.ToolProfile
-	postureRegistry  *session.PostureRegistry
 	promptEngine     *prompts.FileTemplateEngine
 	mgr              *session.Manager
 	projectLiveness  *projectliveness.Tracker
@@ -217,17 +207,20 @@ func Build(ctx context.Context, cfg configuration.Config) (*ServeApp, error) {
 			return nil
 		}},
 		{"config", startupprotocol.PhaseConfiguration, b.loadConfig},
-		{"egress-broker", startupprotocol.PhaseConfiguration, b.wireEgressBroker},
-		{"refusal-watch", startupprotocol.PhaseConfiguration, b.wireRefusalWatch},
-		{"user-path", startupprotocol.PhaseUserPath, b.wireUserPath},
-		{"credential-floors", startupprotocol.PhaseCredentials, sessionWiring{b}.wireCredentialFloors},
+		{"egress-broker", startupprotocol.PhaseConfiguration, func() error {
+			b.processes = processes.New(b.startup.logger, resources)
+			return b.processes.StartEgress(b.storage.Directory)
+		}},
+		{"refusal-watch", startupprotocol.PhaseConfiguration, func() error { return b.processes.StartRefusalWatch(b.storage.Directory) }},
+		{"user-path", startupprotocol.PhaseUserPath, func() error { return b.processes.ResolvePath(ctx) }},
+		{"credential-floors", startupprotocol.PhaseCredentials, func() error { return b.security.Detections.LoadFloors() }},
 		{"host_resources", startupprotocol.PhaseHostResources, func() error { return b.settings.BuildHostResources(b.storage.Directory) }},
 		{"llm", startupprotocol.PhaseProviders, func() error {
 			return b.providers.Build(ctx, providers.Options{Client: cfg.TestLLMClient, Pricer: cfg.TestCostPricer, Startup: cfg.Startup}, b.storage.Database, b.storage.Directory, b.settings.Service, resources, b.startup.recovery)
 		}},
 		{"tool-runtime", startupprotocol.PhaseTools, b.wireToolRuntime},
 		{"presence", startupprotocol.PhaseTools, func() error { return b.security.BuildPresence(b.toolRuntime.Executor.Secrets) }},
-		{"agents", startupprotocol.PhaseAgents, b.wireAgents},
+		{"agents", startupprotocol.PhaseAgents, func() error { return b.agents.Load(ctx) }},
 		{"session-manager", startupprotocol.PhaseSessions, sessionWiring{b}.wireSessionManager},
 		{"oar-block-plane", startupprotocol.PhasePolicy, toolWiring{b}.wireOARBlockPlane},
 		{"events", startupprotocol.PhaseEvents, b.wireEvents},

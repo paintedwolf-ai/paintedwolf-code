@@ -304,7 +304,7 @@ func (b boardWiring) wireWorkflowConditions() error {
 	if err != nil {
 		return fmt.Errorf("rules config: %w", err)
 	}
-	if err := rules.ValidatePostureRules(b.postureRegistry, session.AllSessionPostures(), b.bundledRules); err != nil {
+	if err := rules.ValidatePostureRules(b.agents.Postures, session.AllSessionPostures(), b.bundledRules); err != nil {
 		return fmt.Errorf("posture rules: %w", err)
 	}
 	ruleConfigs := make([]*rules.RulesConfig, 0, len(b.bundledRules))
@@ -344,7 +344,7 @@ func (b boardWiring) wireWorkflowComposition() error {
 		SessionStore: b.sessionWorkflowStore,
 		Registry:     b.condReg,
 		Obligations:  obligationSpecs,
-		Agents:       b.agentRegistry,
+		Agents:       b.agents.Registry,
 	}
 	if composePolicy, err := workflow.LoadComposePolicy(); err != nil {
 		return fmt.Errorf("compose policy: %w", err)
@@ -368,11 +368,11 @@ func (b boardWiring) wireWorkflowComposition() error {
 		SessionStore: b.sessionWorkflowStore,
 		Registry:     b.condReg,
 		Obligations:  obligationSpecs,
-		Agents:       b.agentRegistry,
+		Agents:       b.agents.Registry,
 		Policy:       b.workflowComposer.Policy,
 	}
 
-	ruleEngine, err := rules.NewPostureRuleEngine(b.postureRegistry, b.bundledRules, b.condReg)
+	ruleEngine, err := rules.NewPostureRuleEngine(b.agents.Postures, b.bundledRules, b.condReg)
 	if err != nil {
 		return fmt.Errorf("posture rule engine: %w", err)
 	}
