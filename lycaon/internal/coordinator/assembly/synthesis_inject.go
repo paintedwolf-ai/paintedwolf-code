@@ -6,7 +6,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func (e *AssemblyEngine) prependSynthesisEvidenceInject(
+func (e *turnContextAssembler) prependSynthesisEvidenceInject(
 	ctx context.Context,
 	sess *api.Session,
 	surfaceID string,
@@ -14,7 +14,7 @@ func (e *AssemblyEngine) prependSynthesisEvidenceInject(
 	if e == nil || sess == nil || sess.IsWorkerChild() {
 		return nil
 	}
-	src := e.deps().SynthesisEvidence
+	src := e.deps.SynthesisEvidence
 	if src == nil {
 		return nil
 	}

@@ -9,7 +9,6 @@ import (
 	"github.com/lycaon/lycaon/internal/agentdef"
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/catalogview"
-	"github.com/lycaon/lycaon/internal/coordinator/capability"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
@@ -21,7 +20,6 @@ import (
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/settings"
-	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -159,126 +157,30 @@ func (e *AssemblyEngine) deps() AssemblyDeps {
 	return AssemblyDeps{}
 }
 
-// Missing host measurements leave workspace contents unknown.
-func (e *AssemblyEngine) repoKnownEmpty(ctx context.Context, workspacePath string) bool {
-	fn := e.deps().RepoKnownEmpty
-	return fn != nil && fn(ctx, workspacePath)
-}
-
-func (e *AssemblyEngine) mergeVisibleTools(ctx context.Context, sess *api.Session, frame inject.CoordinatorTurnFrame, vars map[string]any) {
-	if e == nil || vars == nil || sess == nil || e.deps().PromptToolLister == nil {
-		return
-	}
-	profileID := strings.TrimSpace(frame.Machine.ProfileID)
-	if agents := e.agentsForSession(ctx, sess); profileID == "" && agents != nil {
-		if profile, err := agents.Get(sess.AgentType); err == nil {
-			profileID = profile.ToolProfile
-		}
-	}
-	if profileID == "" {
-		fe, ok := e.deps().Prompts.(*prompts.FileTemplateEngine)
-		if !ok || fe == nil {
-			return
-		}
-		var err error
-		profileID, err = prompts.ToolProfileForAgent(sess.AgentType)
-		if err != nil {
-			return
-		}
-	}
-	metas, err := e.deps().PromptToolLister(ctx, sess, profileID)
-	if err != nil || len(metas) == 0 {
-		return
-	}
-	if frame.Machine.Compiled() {
-		metas = tools.HideSkillsReadWhenEmpty(metas, frame.Machine.SkillCount)
-	}
-	names := make([]string, 0, len(metas))
-	for _, meta := range metas {
-		if strings.TrimSpace(meta.Name) != "" {
-			names = append(names, meta.Name)
-		}
-	}
-	vars["visible_tools"] = names
-	// A persona renders the units and loaded tools of its own session.
-	vars["loaded_tools"] = e.loadedTools(sess)
-	vars["omitted_units"] = e.omittedUnits(sess)
-}
-
-func (e *AssemblyEngine) mergeEffectivePromptSurface(ctx context.Context, sess *api.Session, frame inject.CoordinatorTurnFrame, vars map[string]any) {
-	if e == nil || sess == nil || vars == nil {
-		return
-	}
-	var surface prompts.AgentPromptSurface
-	switch {
-	case frame.Machine.Compiled():
-		surface = frame.Machine.Surface
-	case e.deps().EffectivePromptSurface != nil:
-		surface = e.deps().EffectivePromptSurface(ctx, sess)
-	default:
-		return
-	}
-	for key, value := range prompts.AgentPromptSurfaceTemplateVars(surface) {
-		switch value := value.(type) {
-		case []map[string]any:
-			if len(value) > 0 {
-				vars[key] = value
-			}
-		case string:
-			if strings.TrimSpace(value) != "" {
-				vars[key] = value
-			}
-		case int:
-			// Preserve the full count when the roster is truncated.
-			if value > 0 {
-				vars[key] = value
+// ResolveSystemPromptTemplate selects the session's system prompt.
+func ResolveSystemPromptTemplate(sess *api.Session, agents AgentProfileResolver, coordinatorProfile string) string {
+	if sess != nil && strings.TrimSpace(sess.AgentType) != "" && agents != nil {
+		if p, err := agents.Get(strings.TrimSpace(sess.AgentType)); err == nil {
+			if ref := strings.TrimSpace(p.SystemPromptTemplate); ref != "" {
+				return ref
 			}
 		}
 	}
-}
-
-func (e *AssemblyEngine) mergeVisibleToolCapabilityVars(vars map[string]any) {
-	if vars == nil {
-		return
-	}
-	rootCount := 0
-	if v, ok := vars["root_count"].(int); ok {
-		rootCount = v
-	}
-	var visible []string
-	switch v := vars["visible_tools"].(type) {
-	case []string:
-		visible = v
-	case []any:
-		for _, item := range v {
-			if s, ok := item.(string); ok && strings.TrimSpace(s) != "" {
-				visible = append(visible, s)
+	if cp := strings.TrimSpace(coordinatorProfile); cp != "" && agents != nil {
+		if p, err := agents.Get(cp); err == nil {
+			if ref := strings.TrimSpace(p.SystemPromptTemplate); ref != "" {
+				return ref
 			}
 		}
 	}
-	capability.MergeVars(vars, capability.Derive(rootCount, visible, nil))
-}
-
-// workerToolBudget resolves the effective worker tool-budget bounds for a session,
-// falling back to host defaults when no limits resolver is wired.
-func (e *AssemblyEngine) workerToolBudget(ctx context.Context, sess *api.Session) spawn.WorkerToolBudget {
-	if deps := e.deps(); deps.Limits != nil {
-		return deps.Limits(ctx, sess).WorkerToolBudget()
+	if agents != nil {
+		if p, err := agents.Get(orchestration.ProfileCoordinator); err == nil {
+			if ref := strings.TrimSpace(p.SystemPromptTemplate); ref != "" {
+				return ref
+			}
+		}
 	}
-	return spawn.DefaultWorkerToolBudget()
-}
-
-// applyToolBudgetVars projects role-specific worker budget bounds.
-func (e *AssemblyEngine) applyToolBudgetVars(ctx context.Context, sess *api.Session, coordinator bool, vars map[string]any) {
-	budget := e.workerToolBudget(ctx, sess)
-	if sess.IsWorkerChild() {
-		vars["max_tool_loops"] = budget.Effective(sess.MaxToolLoops)
-	}
-	if coordinator {
-		vars["worker_tool_budget_default"] = budget.Default
-		vars["worker_tool_budget_min"] = budget.Min
-		vars["worker_tool_budget_max"] = budget.Max
-	}
+	return defaultCoordinatorPromptTemplate
 }
 
 // BuildCompletionMessages assembles the completion prompt.
@@ -292,6 +194,7 @@ func (e *AssemblyEngine) BuildCompletionMessages(
 		return history, nil
 	}
 	deps := e.deps()
+	prompt, contextAssembler := newAssemblyDomains(deps, &e.cache)
 	messages := api.FilterPromptHistory(history)
 	if deps.Prompts == nil {
 		if deps.ScanGuidance != nil {
@@ -302,12 +205,12 @@ func (e *AssemblyEngine) BuildCompletionMessages(
 
 	turn := e.cache.LoadTurn(sess.ID)
 
-	templateRef, err := e.resolveSystemPromptRef(ctx, sess)
+	templateRef, err := prompt.resolveSystemPromptRef(ctx, sess)
 	if err != nil {
 		return nil, err
 	}
 	vars := map[string]any{"project_dir": sess.WorkspacePath}
-	if roots, count, activePath, ok := e.workspaceRootsForTurn(ctx, sess, turn); ok {
+	if roots, count, activePath, ok := prompt.workspaceRootsForTurn(ctx, sess, turn); ok {
 		vars["root_count"] = count
 		vars["workspace_roots"] = roots
 		if activePath != "" {
@@ -320,7 +223,7 @@ func (e *AssemblyEngine) BuildCompletionMessages(
 		// Coordinator rosters use a top-level heading.
 		vars["skills_heading"] = "##"
 	}
-	e.applyToolBudgetVars(ctx, sess, coordinator, vars)
+	prompt.applyToolBudgetVars(ctx, sess, coordinator, vars)
 	if deps.ModelVision != nil {
 		prompts.MergeModelCapabilityVars(deps.ModelVision(ctx, sess), vars)
 	}
@@ -336,21 +239,21 @@ func (e *AssemblyEngine) BuildCompletionMessages(
 	coordinatorSurface := coordinator && (!frame.Machine.Compiled() || frame.Machine.ProfileID == orchestration.ProfileCoordinator)
 	boardBlock := ""
 	if coordinator && !sess.IsWorkerChild() {
-		frame, boardBlock, err = e.prepareCoordinatorBoard(ctx, sess, frame, turn)
+		frame, boardBlock, err = contextAssembler.prepareCoordinatorBoard(ctx, sess, frame, turn)
 		if err != nil {
 			return nil, err
 		}
 		// Stamped on the frame so every projection reads one roster.
-		frame.Roster = e.resolveTurnRoster(ctx, sess, frame, history, turn)
+		frame.Roster = prompt.resolveTurnRoster(ctx, sess, frame, history, turn)
 	}
 	if turnFrame != nil {
 		*turnFrame = frame
 	}
 	if !coordinatorSurface {
-		e.mergeVisibleTools(ctx, sess, frame, vars)
-		e.mergeVisibleToolCapabilityVars(vars)
+		prompt.mergeVisibleTools(ctx, sess, frame, vars)
+		prompt.mergeVisibleToolCapabilityVars(vars)
 	}
-	e.mergeEffectivePromptSurface(ctx, sess, frame, vars)
+	prompt.mergeEffectivePromptSurface(ctx, sess, frame, vars)
 
 	var pendingKickIDs []string
 	if turn != nil {
@@ -365,18 +268,18 @@ func (e *AssemblyEngine) BuildCompletionMessages(
 	if surfaceFP, ok := vars["prompt_surface_fingerprint"].(string); ok && strings.TrimSpace(surfaceFP) != "" {
 		settingsFP += ";surface=" + surfaceFP
 	}
-	pe, promptRevision, err := e.projectPromptsSnapshot(ctx, sess)
+	pe, promptRevision, err := prompt.projectPromptsSnapshot(ctx, sess)
 	if err != nil {
 		return nil, err
 	}
 	var rendered string
 	if coordinatorSurface {
-		rendered, err = e.renderCoordinatorStablePrompt(ctx, pe, promptRevision, sess, frame, history, templateRef, posture, settingsFP, turn, vars)
+		rendered, err = prompt.renderCoordinatorStablePrompt(ctx, pe, promptRevision, sess, frame, history, templateRef, posture, settingsFP, turn, vars)
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		rendered, err = e.renderSystemPromptWithEngine(ctx, pe, sess, templateRef, vars)
+		rendered, err = prompt.renderSystemPromptWithEngine(ctx, pe, sess, templateRef, vars)
 		if err != nil {
 			return nil, fmt.Errorf("system prompt %q: %w", templateRef, err)
 		}
@@ -386,10 +289,10 @@ func (e *AssemblyEngine) BuildCompletionMessages(
 
 	// The standing prefix ends after the pre-history injects; its read point
 	// survives a rewritten history.
-	out, prefixIdx := e.appendPreHistorySystemInjects(ctx, sess, turn, out, 0)
+	out, prefixIdx := contextAssembler.appendPreHistorySystemInjects(ctx, sess, turn, out, 0)
 	lastStableIdx := prefixIdx
 
-	tailInjects, err := e.buildTailSystemInjects(
+	tailInjects, err := contextAssembler.buildTailSystemInjects(
 		ctx, sess, coordinatorSurface, frame, pendingKickIDs, history, turn,
 	)
 	if err != nil {
@@ -400,7 +303,7 @@ func (e *AssemblyEngine) BuildCompletionMessages(
 		messages = deps.EnrichHistory(sess.ID, messages)
 	}
 	if coordinator && !sess.IsWorkerChild() {
-		messages = e.interleaveSourceBriefs(ctx, sess, turn, messages)
+		messages = contextAssembler.interleaveSourceBriefs(ctx, sess, turn, messages)
 	}
 	if deps.ScanGuidance != nil {
 		out = append(out, deps.ScanGuidance.PrependGuidance(ctx, sess.ID, messages)...)
@@ -418,7 +321,7 @@ func (e *AssemblyEngine) BuildCompletionMessages(
 
 	// Volatile worker context follows cached history.
 	if sess.IsWorkerChild() && deps.WorkerContext != nil {
-		legMsgs, err := e.appendWorkerLegInject(ctx, sess, rendered, turn)
+		legMsgs, err := contextAssembler.appendWorkerLegInject(ctx, sess, rendered, turn)
 		if err != nil {
 			return nil, err
 		}
@@ -429,37 +332,16 @@ func (e *AssemblyEngine) BuildCompletionMessages(
 		out = append(out, api.Message{Role: api.MessageRoleSystem, Content: boardBlock})
 	}
 
-	e.markPromptCacheBreakpoints(out, prefixIdx, lastStableIdx)
+	markPromptCacheBreakpoints(out, prefixIdx, lastStableIdx)
 
 	turn.Iteration++
 	return transcript.Project(deduplicateProjectGuidance(out)), nil
 }
 
-func (e *AssemblyEngine) workspaceRootsForTurn(ctx context.Context, sess *api.Session, turn *TurnAssemblyScratch) ([]map[string]any, int, string, bool) {
-	if turn != nil && turn.WorkspaceRootsLoaded {
-		return turn.WorkspaceRoots, turn.WorkspaceRootCount, turn.WorkspaceActivePath, true
-	}
-	load := e.deps().WorkspaceRoots
-	if load == nil {
-		return nil, 0, "", false
-	}
-	roots, count, activePath := load(ctx, sess)
-	if count < 0 {
-		return nil, 0, "", false
-	}
-	if turn != nil {
-		turn.WorkspaceRoots = roots
-		turn.WorkspaceRootCount = count
-		turn.WorkspaceActivePath = activePath
-		turn.WorkspaceRootsLoaded = true
-	}
-	return roots, count, activePath, true
-}
-
 // markPromptCacheBreakpoints marks each stable boundary a provider may cache
 // up to: the end of the standing prefix and the end of stable history. With
 // no history the one boundary closes the standing prefix.
-func (e *AssemblyEngine) markPromptCacheBreakpoints(out []api.Message, standingIdx, historyIdx int) {
+func markPromptCacheBreakpoints(out []api.Message, standingIdx, historyIdx int) {
 	mark := func(idx int, tier api.PromptCacheTier) {
 		if idx >= 0 && idx < len(out) && out[idx].PromptCacheBreakpoint == api.PromptCacheTierNone {
 			out[idx].PromptCacheBreakpoint = tier
@@ -467,49 +349,6 @@ func (e *AssemblyEngine) markPromptCacheBreakpoints(out []api.Message, standingI
 	}
 	mark(standingIdx, api.PromptCacheTierStanding)
 	mark(historyIdx, api.PromptCacheTierHistory)
-}
-
-// resolveTurnRoster combines workflow declarations with workspace and capability facts.
-func (e *AssemblyEngine) resolveTurnRoster(
-	ctx context.Context,
-	sess *api.Session,
-	frame inject.CoordinatorTurnFrame,
-	history []api.Message,
-	turn *TurnAssemblyScratch,
-) *inject.AgentRoster {
-	profile, _ := e.resolveCoordinatorProfile(ctx, sess, frame, history, turn)
-	_, rootCount, _, _ := e.workspaceRootsForTurn(ctx, sess, turn)
-	repoKnownEmpty := false
-	if path := strings.TrimSpace(sess.WorkspacePath); path != "" {
-		repoKnownEmpty = e.repoKnownEmpty(ctx, path)
-	}
-	webSearchEnabled := true
-	if fn := e.deps().WebSearchEnabled; fn != nil {
-		webSearchEnabled = fn()
-	}
-	declared := frame.RunContext.AllowedAgents
-	if len(declared) == 0 {
-		declared = spawn.AmbientAllowedAgents()
-	}
-	roster := inject.ResolveAgentRoster(profile.SurfaceID, declared, rootCount, repoKnownEmpty, webSearchEnabled)
-	return &roster
-}
-
-func (e *AssemblyEngine) workerBoard(
-	ctx context.Context,
-	sess *api.Session,
-	turn *TurnAssemblyScratch,
-) (string, bool) {
-	if e == nil || e.deps().Board == nil {
-		return "", false
-	}
-	block, ok := e.deps().Board.WorkerBoard(ctx, sess)
-	if !ok {
-		return "", false
-	}
-	turn.BoardBlock = block
-	turn.BoardKey = e.deps().Board.BoardInjectHash(sess.ID)
-	return block, true
 }
 
 // BeginPromptTurn starts a cached assembly turn for sessionID.
@@ -526,7 +365,9 @@ func (e *AssemblyEngine) EndPromptTurn(sessionID string) {
 	}
 	turn := e.cache.LoadTurn(sessionID)
 	if family := strings.TrimSpace(turn.CurrentExecutionModeFamily); family != "" {
-		e.saveExecutionModeFamily(context.Background(), sessionID, family)
+		if save := e.deps().SaveExecutionModeState; save != nil {
+			save(context.Background(), sessionID, family)
+		}
 	}
 	e.cache.EndTurn(sessionID)
 }
@@ -559,20 +400,6 @@ func (e *AssemblyEngine) Cache() *SessionPromptCache {
 		return &SessionPromptCache{}
 	}
 	return &e.cache
-}
-
-// taskOffered reports whether task is on this turn's model call: on the
-// surface floor, or loaded by the turn ledger. The spawn roster only makes
-// sense next to a task schema.
-func (e *AssemblyEngine) taskOffered(sess *api.Session, surfaceID string, rootCount int) bool {
-	plan, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: surfaceID}, rootCount)
-	if err != nil {
-		return false
-	}
-	if plan.Immediate("task") {
-		return true
-	}
-	return plan.Deferred("task") && e.loadedTools(sess)["task"]
 }
 
 // CommitWorkerContext advances communication only after a successful response.

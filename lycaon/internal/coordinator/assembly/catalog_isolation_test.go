@@ -33,7 +33,7 @@ func TestProjectPromptCatalogIsolation(t *testing.T) {
 	})
 	for _, projectID := range []string{"a", "b", "a"} {
 		sess := &api.Session{ID: "session-" + projectID, ProjectID: projectID}
-		derived, ok := engine.projectPrompts(t.Context(), sess).(*prompts.FileTemplateEngine)
+		derived, ok := testPromptSurface(engine).projectPrompts(t.Context(), sess).(*prompts.FileTemplateEngine)
 		if !ok || derived == nil {
 			t.Fatal("expected project prompt engine")
 		}

@@ -14,7 +14,7 @@ import (
 // mergeUnitBlocks renders the instruction units this turn carries into the
 // `units` slots. The offered set comes from the surface vars already merged;
 // omissions come from the turn ledger.
-func (e *AssemblyEngine) mergeUnitBlocks(ctx context.Context, pe prompts.PromptTemplateEngine, sess *api.Session, surfaceID string, rootCount int, vars map[string]any) error {
+func (e *promptSurface) mergeUnitBlocks(ctx context.Context, pe prompts.PromptTemplateEngine, sess *api.Session, surfaceID string, rootCount int, vars map[string]any) error {
 	if e == nil || vars == nil {
 		return nil
 	}
@@ -41,7 +41,7 @@ func (e *AssemblyEngine) mergeUnitBlocks(ctx context.Context, pe prompts.PromptT
 
 // effectiveCatalog returns the session's resolved catalog, or nil for the
 // process catalog.
-func (e *AssemblyEngine) effectiveCatalog(ctx context.Context, sess *api.Session) *extpacks.EffectiveCatalog {
+func (e *promptSurface) effectiveCatalog(ctx context.Context, sess *api.Session) *extpacks.EffectiveCatalog {
 	if view := e.sessionCatalogView(ctx, sess); view != nil {
 		return view.Catalog
 	}
@@ -49,9 +49,9 @@ func (e *AssemblyEngine) effectiveCatalog(ctx context.Context, sess *api.Session
 }
 
 // omittedUnits returns the instruction units the turn ledger left out.
-func (e *AssemblyEngine) omittedUnits(sess *api.Session) map[string]bool {
-	if e == nil || sess == nil || e.deps().OmittedUnits == nil {
+func (e *promptSurface) omittedUnits(sess *api.Session) map[string]bool {
+	if e == nil || sess == nil || e.deps.OmittedUnits == nil {
 		return nil
 	}
-	return e.deps().OmittedUnits(sess.ID)
+	return e.deps.OmittedUnits(sess.ID)
 }

@@ -19,9 +19,9 @@ func TestRenderSystemPromptUnknownAgentFallsBack(t *testing.T) {
 		Prompts: prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: root}),
 	})
 	sess := &api.Session{AgentType: "nonexistent-agent-xyz", WorkspacePath: t.TempDir()}
-	pe, _, err := engine.projectPromptsSnapshot(context.Background(), sess)
+	pe, _, err := testPromptSurface(engine).projectPromptsSnapshot(context.Background(), sess)
 	testutil.FailErr(t, "engine.projectPromptsSnapshot failed", err)
-	out, err := engine.renderSystemPromptWithEngine(context.Background(), pe, sess,
+	out, err := testPromptSurface(engine).renderSystemPromptWithEngine(context.Background(), pe, sess,
 		"agents/coordinator-core.md", map[string]any{"project_dir": t.TempDir()})
 	testutil.FailErr(t, "engine.renderSystemPromptWithEngine failed", err)
 	if strings.TrimSpace(out) == "" {
@@ -49,7 +49,7 @@ func TestReviewEvidenceUnitsUseCapabilitiesAndRespectOmissions(t *testing.T) {
 				PhaseCoordinatorSurface: "review_adjudicate",
 				AllowedAgents:           []string{"skeptic", "web-researcher"},
 			}}
-			out, profile, _, err := engine.renderTripartiteCoordinatorPrompt(t.Context(), pe, sess, frame, nil, "", nil,
+			out, profile, _, err := testPromptSurface(engine).renderTripartiteCoordinatorPrompt(t.Context(), pe, sess, frame, nil, "", nil,
 				map[string]any{"root_count": 1, "project_dir": sess.WorkspacePath})
 			testutil.FailErr(t, "render review evidence units", err)
 			if profile.SurfaceID != "review_adjudicate" {
@@ -80,7 +80,7 @@ func TestCoordinatorUnitsKeepLoadedToolsAndWebGate(t *testing.T) {
 		})
 		sess := &api.Session{ID: "loaded", AgentType: "coordinator", Posture: api.SessionPostureBuild, WorkspacePath: t.TempDir()}
 		frame := inject.CoordinatorTurnFrame{RunContext: api.CoordinatorRunContext{PhaseCoordinatorSurface: "implement_investigate"}}
-		out, _, _, err := engine.renderTripartiteCoordinatorPrompt(t.Context(), pe, sess, frame, nil, "", nil,
+		out, _, _, err := testPromptSurface(engine).renderTripartiteCoordinatorPrompt(t.Context(), pe, sess, frame, nil, "", nil,
 			map[string]any{"root_count": 1, "project_dir": sess.WorkspacePath})
 		testutil.FailErr(t, "render loaded tool guidance", err)
 		if !strings.Contains(out, "Use `http_request` for APIs") {

@@ -25,7 +25,7 @@ func TestRosterRenderingReusesAvailabilityFacts(t *testing.T) {
 	})
 	roster := inject.ResolveAgentRoster("implement_investigate", []string{"repo-researcher"}, 1, false, true)
 	frame := inject.CoordinatorTurnFrame{Roster: &roster}
-	_, err := engine.prependCoordinatorRunInject(t.Context(), &api.Session{ID: "session", WorkspacePath: t.TempDir()},
+	_, err := testTurnContext(engine).prependCoordinatorRunInject(t.Context(), &api.Session{ID: "session", WorkspacePath: t.TempDir()},
 		frame, nil, &TurnAssemblyScratch{}, nil)
 	testutil.FailErr(t, "render measured roster", err)
 }

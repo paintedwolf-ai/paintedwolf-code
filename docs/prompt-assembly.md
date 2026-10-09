@@ -22,6 +22,8 @@ No consumer treats another consumer's lossy view as canonical state. Model conte
 
 ## Assembly pipeline
 
+Completion assembly captures one immutable host wiring snapshot per request. `coordinator/assembly` keeps the engine's turn lifecycle and cache separate from `promptSurface`, which resolves catalogs, capabilities, profiles, and stable rendering, and `turnContextAssembler`, which projects guidance, source briefs, worker context, boards, and workflow orientation around history. The composition root projects that snapshot into separate typed dependencies. Turn context uses a narrow catalog/profile/roster port and its own guidance, board, and worker sources; neither domain retains the engine or its full wiring record. Both use explicit turn scratch state, and a dependency update applies to the next completion.
+
 Initial fitting runs over history alone. History assembly (compaction view, surface diet, deterministic fit) returns fitted history; completion assembly then appends the system prompt, current turn frame, and tail injects. A final provider-boundary pass adds procedures for the tools actually offered and refits the assembled messages. The rendered system instructions and current user request stay pinned through both passes.
 
 ```mermaid
