@@ -637,9 +637,9 @@ capacity to work in this order, highest first:
 | Priority | Work | Gives up runners |
 |---|---|---|
 | 1 | Merge-queue CI, and release and verification-recovery workflows | Never; only CI of a merge group that no longer exists is cancelled |
-| 2 | Main qualification | After pull requests and before protected work |
-| 3 | CI of ready pull requests | Newest first, after everything below |
-| 4 | CI of draft pull requests, closed pull requests, and superseded heads | Before ready pull requests |
+| 2 | CI of ready pull requests | Newest first, after everything below |
+| 3 | Main qualification | Before ready pull requests |
+| 4 | CI of draft pull requests, closed pull requests, and superseded heads | Before qualification |
 | 5 | Main cache warming (`build-caches.yml`) | Before pull requests |
 | 6 | Scheduled and background work: nightly, dependency inventory, the release-system live test, and issue automation | First, and whenever the merge queue holds a group |
 
@@ -661,7 +661,9 @@ labels; merge-queue branches; and each pull request's draft state and head.
    free, and any queued for five minutes, since other repositories share the
    plan.
 3. It cancels runs in reverse priority order until the runners they hold cover
-   that need. Waiting macOS jobs preempt only runs holding macOS runners, and
+   that need. Waiting ready pull request jobs then claim runners the same way
+   from every class below them, since their checks are what admits work to the
+   queue; qualification gates releases and runs on the runners left over. Waiting macOS jobs preempt only runs holding macOS runners, and
    waiting Linux jobs only runs holding Linux runners. A lower-priority run
    that holds nothing but waits on that platform is cancelled too, since it
    would take the next free runner. A run is the unit of cancellation, so a
