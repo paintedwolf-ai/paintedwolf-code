@@ -11,17 +11,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/search"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
-	gittestsetup "github.com/lycaon/lycaon/internal/testsetup/git"
-	catalogtest "github.com/lycaon/lycaon/internal/testsetup/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/testutil"
+	catalogtest "github.com/lycaon/lycaon/internal/testsetup/sourcecatalog"
+	gittestsetup "github.com/lycaon/lycaon/internal/testsetup/git"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -51,7 +51,7 @@ func newSearchFixture(t *testing.T) *searchFixture {
 	f.handler = New(responses, Dependencies{
 		Database:        database,
 		Projects:        f.projects,
-		SourceMutations: project.NewSourceMutationService(database, ledger),
+		SourceMutations: projectsource.NewSourceMutationService(database, ledger),
 		ChatAffiliation: func(*http.Request) (string, int) { return "", 0 },
 		WriteSourceError: func(w http.ResponseWriter, _ *http.Request, err error) {
 			f.sourceErrors = append(f.sourceErrors, err)

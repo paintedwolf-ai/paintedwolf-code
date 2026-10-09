@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/editordoc"
 	"github.com/lycaon/lycaon/internal/filebriefing"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/sourceblob"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -77,12 +78,12 @@ func (s *Handler) resolveVersionBriefing(ctx context.Context, p *project.Project
 	if version.State != "content" || version.SHA256 == "" {
 		return resolvedFileBriefing{}, sourceledger.ErrVersionUnavailable
 	}
-	if len(version.Content) > project.SourceReadMaxBytes {
-		return resolvedFileBriefing{}, project.ErrSourceBinary
+	if len(version.Content) > projectsource.SourceReadMaxBytes {
+		return resolvedFileBriefing{}, projectsource.ErrSourceBinary
 	}
 	text, ok := version.Text()
 	if !ok {
-		return resolvedFileBriefing{}, project.ErrSourceBinary
+		return resolvedFileBriefing{}, projectsource.ErrSourceBinary
 	}
 	return resolvedFileBriefing{rootID: version.RootID, path: version.Path, input: filebriefing.Input{
 		Path: version.Path, Presentation: req.Presentation, Source: text, SourceSHA256: version.SHA256,
@@ -96,14 +97,14 @@ func (s *Handler) resolveCurrentBriefing(ctx context.Context, p *project.Project
 	if err != nil {
 		return resolvedFileBriefing{}, err
 	}
-	read, err := project.ReadProjectSource(p, project.SourceReadRequest{
+	read, err := projectsource.ReadProjectSource(p, projectsource.SourceReadRequest{
 		Path: req.Path, RootID: req.RootID,
 	})
 	if err != nil {
 		return resolvedFileBriefing{}, err
 	}
 	if read.Binary || read.OverLimit || strings.TrimSpace(read.SHA256) == "" {
-		return resolvedFileBriefing{}, project.ErrSourceBinary
+		return resolvedFileBriefing{}, projectsource.ErrSourceBinary
 	}
 	return resolvedFileBriefing{rootID: read.RootID, path: read.Path, input: filebriefing.Input{
 		Path: read.Path, Presentation: req.Presentation, Source: read.Content, SourceSHA256: read.SHA256,
@@ -140,19 +141,19 @@ func FileBriefingRequestError(err error) (wire.ApiErrorCode, string, bool) {
 		return wire.ApiErrorCodeSourceVersionNotFound, "briefing source version not found", true
 	case errors.Is(err, sourceledger.ErrVersionUnavailable):
 		return wire.ApiErrorCodeSourceVersionUnavailable, "exact content for this version is unavailable", true
-	case errors.Is(err, project.ErrSourceBinary):
+	case errors.Is(err, projectsource.ErrSourceBinary):
 		return wire.ApiErrorCodeSourceBinary, "file briefing requires a readable text presentation", true
-	case errors.Is(err, project.ErrSourceUnsupportedEncoding):
+	case errors.Is(err, projectsource.ErrSourceUnsupportedEncoding):
 		return wire.ApiErrorCodeUnsupportedEncoding, "file briefing requires a readable text presentation", true
-	case errors.Is(err, project.ErrSourceNotFound):
+	case errors.Is(err, projectsource.ErrSourceNotFound):
 		return wire.ApiErrorCodeSourceNotFound, "briefing source not found", true
-	case errors.Is(err, project.ErrSourcePathAmbiguous):
+	case errors.Is(err, projectsource.ErrSourcePathAmbiguous):
 		return wire.ApiErrorCodeSourcePathAmbiguous, "briefing source path is ambiguous", true
-	case errors.Is(err, project.ErrSourcePathInvalid):
+	case errors.Is(err, projectsource.ErrSourcePathInvalid):
 		return wire.ApiErrorCodeInvalidPath, "briefing source path is invalid", true
-	case errors.Is(err, project.ErrSourcePathDenied):
+	case errors.Is(err, projectsource.ErrSourcePathDenied):
 		return wire.ApiErrorCodeSourcePathDenied, "briefing source is outside the project", true
-	case errors.Is(err, project.ErrSourceNoRoot):
+	case errors.Is(err, projectsource.ErrSourceNoRoot):
 		return wire.ApiErrorCodeNoProjectRoot, "project has no attached folder", true
 	default:
 		return "", "", false

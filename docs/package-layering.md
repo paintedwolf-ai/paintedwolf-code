@@ -23,6 +23,16 @@ Headline: `db` is true bottom → `search` may use `db` → `session` stays thin
 
 [`internal/app`](../lycaon/internal/app/doc.go) is the serve composition root: `Build` wires hub↔hub in topical `build_*.go` files. Domain packages must not reach into `internal/api` or peer hubs to “just get a type.”
 
+Project registration, root membership, trust, and promotion live in
+[`internal/project`](../lycaon/internal/project). Filesystem observation,
+navigation, source search, and durable file operations live in
+[`internal/projectsource`](../lycaon/internal/projectsource), consuming only
+project identity, physical root facts, and workspace identity. Source mutation
+admission coordinates journal rows, path reservations, filesystem effects,
+recovery content, history, and atomic settlement through explicit domains.
+The recorder, head reader, and recovery archive are separate ledger ports;
+attribution, source events, and journal completion still share one transaction.
+
 ### HTTP route families
 
 [`build_server.go`](../lycaon/internal/app/build_server.go) fills one [`api.Dependencies`](../lycaon/internal/api/server_dependencies.go) and calls `api.NewServer`. `NewServer` gives each route family a `Deps` struct holding only the fields it uses, then drops `Dependencies`. Runtime handlers retain their named services and domain peers, rather than the construction bundle. A family never receives the whole `Server`, and nothing copies dependencies in later through setters. When one family calls another, it holds a pointer to that family's handler inside the `Server`.

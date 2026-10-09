@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/sourcecomparison"
 	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/textfile"
@@ -17,7 +18,7 @@ import (
 
 type currentSourceSnapshot struct {
 	document *sourcecomparison.CurrentDocument
-	stream   *project.SourceStream
+	stream   *projectsource.SourceStream
 	users    atomic.Int64
 }
 
@@ -35,7 +36,7 @@ func currentSourceChanged() error {
 
 func (s *ComparisonViews) prepareCurrentSource(view *sourceView, p *project.Project) error {
 	source := view.comparisonData.comparisonSource.Current
-	stream, err := project.OpenProjectSourceStream(p, project.SourceReadRequest{Path: source.Path, RootID: source.RootID, DecodeAs: source.DecodeAs})
+	stream, err := projectsource.OpenProjectSourceStream(p, projectsource.SourceReadRequest{Path: source.Path, RootID: source.RootID, DecodeAs: source.DecodeAs})
 	if err != nil {
 		return currentSourceReadError(err)
 	}
@@ -77,15 +78,15 @@ func (s *ComparisonViews) installCurrentSource(view *sourceView, snapshot *curre
 }
 
 func currentSourceReadError(err error) error {
-	var encoding *project.SourceUnsupportedEncodingError
+	var encoding *projectsource.SourceUnsupportedEncodingError
 	switch {
 	case errors.As(err, &encoding):
 		return &comparisonFailure{wire.ApiErrorCodeUnsupportedEncoding, fmt.Sprintf("This file uses an unsupported encoding (%s). Choose a supported encoding to read it.", encoding.Detected)}
 	case errors.Is(err, textfile.ErrUnsupported):
 		return &comparisonFailure{wire.ApiErrorCodeUnsupportedEncoding, "The file contains invalid text for the selected encoding."}
-	case errors.Is(err, project.ErrSourceBinary), errors.Is(err, textfile.ErrBinary):
+	case errors.Is(err, projectsource.ErrSourceBinary), errors.Is(err, textfile.ErrBinary):
 		return &comparisonFailure{wire.ApiErrorCodeSourceBinary, "This file contains binary data and cannot be shown as text."}
-	case errors.Is(err, os.ErrNotExist), errors.Is(err, project.ErrSourceNotFound):
+	case errors.Is(err, os.ErrNotExist), errors.Is(err, projectsource.ErrSourceNotFound):
 		return &comparisonFailure{wire.ApiErrorCodeSourceNotFound, "This file is no longer available."}
 	default:
 		return err

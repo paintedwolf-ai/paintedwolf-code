@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/documentcore"
 	"github.com/lycaon/lycaon/internal/editordoc"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/textfile"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -260,21 +261,21 @@ func TestDocumentErrorsMapToStructuredCodes(t *testing.T) {
 		code wire.ApiErrorCode
 	}{
 		{&documentcore.Rejected{Code: "stale_update"}, wire.ApiErrorCodeInvalidRequest},
-		{project.ErrSourceEncodingInvalid, wire.ApiErrorCodeInvalidRequest},
-		{project.ErrSourceBusy, wire.ApiErrorCodeSourcePathBusy},
+		{projectsource.ErrSourceEncodingInvalid, wire.ApiErrorCodeInvalidRequest},
+		{projectsource.ErrSourceBusy, wire.ApiErrorCodeSourcePathBusy},
 		{editordoc.ErrInvalidEOL, wire.ApiErrorCodeInvalidRequest},
 		{textfile.ErrRawTooLarge, wire.ApiErrorCodeSourceContentTooLarge},
-		{project.ErrSourceWriteTooLarge, wire.ApiErrorCodeSourceContentTooLarge},
+		{projectsource.ErrSourceWriteTooLarge, wire.ApiErrorCodeSourceContentTooLarge},
 		{textfile.ErrBinary, wire.ApiErrorCodeInvalidRequest},
-		{project.ErrSourceNotFound, wire.ApiErrorCodeEditorDocumentNotFound},
+		{projectsource.ErrSourceNotFound, wire.ApiErrorCodeEditorDocumentNotFound},
 		{editordoc.ErrOperationConflict, wire.ApiErrorCodeIdempotencyConflict},
-		{project.ErrSourceWriteConflict, wire.ApiErrorCodeEditorRevisionConflict},
+		{projectsource.ErrSourceWriteConflict, wire.ApiErrorCodeEditorRevisionConflict},
 		{editordoc.ErrReplicaEpoch, wire.ApiErrorCodeEditorReplicaEpoch},
 		{editordoc.ErrReplicaIdentity, wire.ApiErrorCodeEditorReplicaIdentity},
 		{editordoc.ErrRootDetached, wire.ApiErrorCodeEditorRootDetached},
-		{project.ErrSourcePathDenied, wire.ApiErrorCodeSourcePathDenied},
+		{projectsource.ErrSourcePathDenied, wire.ApiErrorCodeSourcePathDenied},
 		{editordoc.ErrReadOnly, wire.ApiErrorCodeSourceReadOnly},
-		{project.ErrSourceBinary, wire.ApiErrorCodeSourceBinary},
+		{projectsource.ErrSourceBinary, wire.ApiErrorCodeSourceBinary},
 		{errors.New("store offline"), wire.ApiErrorCodeInternalError},
 	}
 	for _, tc := range cases {

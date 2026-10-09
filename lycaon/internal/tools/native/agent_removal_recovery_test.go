@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -17,12 +18,12 @@ import (
 
 // recoverableToolFixture wires the tool context to the Files history service
 // with a system Trash that must never be reached.
-func recoverableToolFixture(t *testing.T) (tools.ToolContext, *project.SourceMutationService, *project.Project, string) {
+func recoverableToolFixture(t *testing.T) (tools.ToolContext, *projectsource.SourceMutationService, *project.Project, string) {
 	t.Helper()
 	dir := t.TempDir()
 	ledger := bindLedgerForWrites(t, dir)
-	service := project.NewSourceMutationService(ledger.LedgerDB(), ledger)
-	service.SetTrashMover(func(context.Context, string) error {
+	service := projectsource.NewSourceMutationService(ledger.LedgerDB(), ledger)
+	service.Effects.SetTrashMover(func(context.Context, string) error {
 		t.Fatal("an agent tool reached the system Trash")
 		return nil
 	})
@@ -37,14 +38,14 @@ func unversionedBody() []byte {
 	return bytes.Repeat([]byte("large\n"), sourceledger.MaxRevisionContentBytes/4)
 }
 
-func undoLatest(t *testing.T, service *project.SourceMutationService, p *project.Project, wantKind string) {
+func undoLatest(t *testing.T, service *projectsource.SourceMutationService, p *project.Project, wantKind string) {
 	t.Helper()
-	history, err := service.History(t.Context(), p.ID)
+	history, err := service.History.State(t.Context(), p.ID)
 	testutil.FailErr(t, "read history", err)
 	if history.Undo == nil || history.Undo.Kind != wantKind {
 		t.Fatalf("undo head = %+v, want kind %s", history.Undo, wantKind)
 	}
-	_, err = service.Undo(t.Context(), uuid.NewString(), p, project.SourceHistoryMutationRequest{ExpectedEntryID: history.Undo.ID})
+	_, err = service.Undo(t.Context(), uuid.NewString(), p, projectsource.SourceHistoryMutationRequest{ExpectedEntryID: history.Undo.ID})
 	testutil.FailErr(t, "undo", err)
 }
 
@@ -109,7 +110,7 @@ func TestCopyOverAVersionedFileStaysOneWrite(t *testing.T) {
 	_, err := (&CopyTool{Boundary: nativefixture.Boundary(t)}).Run(t.Context(),
 		map[string]any{"copies": []any{map[string]any{"from": "a.txt", "to": "b.txt"}}}, tctx)
 	testutil.FailErr(t, "copy", err)
-	history, err := service.History(t.Context(), p.ID)
+	history, err := service.History.State(t.Context(), p.ID)
 	testutil.FailErr(t, "read history", err)
 	if history.Undo != nil {
 		t.Fatalf("a versioned overwrite entered Files history: %+v", history.Undo)

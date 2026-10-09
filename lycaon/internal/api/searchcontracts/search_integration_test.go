@@ -15,16 +15,17 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	hostapi "github.com/lycaon/lycaon/internal/api"
-	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/search"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
-	catalogtest "github.com/lycaon/lycaon/internal/testsetup/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/testutil"
+	catalogtest "github.com/lycaon/lycaon/internal/testsetup/sourcecatalog"
+	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
+	hostapi "github.com/lycaon/lycaon/internal/api"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -74,7 +75,7 @@ func TestHandleSearchReplaceApplyExactReplay(t *testing.T) {
 	testutil.FailErr(t, "write source", os.WriteFile(filepath.Join(rootPath, "a.txt"), []byte("old value\n"), 0o644))
 	p, err := project.NewSQLRegistry(sqlDB).Get(t.Context(), "proj-replace")
 	testutil.FailErr(t, "get project", err)
-	read, err := project.ReadProjectSource(p, project.SourceReadRequest{RootID: rootID, Path: "a.txt"})
+	read, err := projectsource.ReadProjectSource(p, projectsource.SourceReadRequest{RootID: rootID, Path: "a.txt"})
 	testutil.FailErr(t, "read source", err)
 
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: store.NewSQL(sqlDB), Projects: project.NewSQLRegistry(sqlDB)}}), nil, hostapi.TestAPIToken)

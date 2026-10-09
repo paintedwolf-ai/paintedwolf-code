@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
-	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/testutil"
+	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -21,9 +21,9 @@ func TestSourceTrashErrorsCarryAccurateRecovery(t *testing.T) {
 		code  string
 		retry bool
 	}{
-		{project.ErrSourcePathDenied, "source_path_denied", false},
-		{project.ErrSourcePathProtected, "source_path_protected", false},
-		{&project.SourceTrashFailedError{Cause: errors.New("Disk is full")}, "source_trash_failed", true},
+		{projectsource.ErrSourcePathDenied, "source_path_denied", false},
+		{projectsource.ErrSourcePathProtected, "source_path_protected", false},
+		{&projectsource.SourceTrashFailedError{Cause: errors.New("Disk is full")}, "source_trash_failed", true},
 	} {
 		t.Run(tc.code, func(t *testing.T) {
 			rec := httptest.NewRecorder()

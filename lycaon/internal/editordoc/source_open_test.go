@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -22,7 +23,7 @@ func TestOpenObservedKeepsSavedSourceAndLiveDraftDistinct(t *testing.T) {
 	p := &project.Project{ID: projectID, Roots: []project.Root{{ID: rootID, ProjectID: projectID, Path: root, IsPrimary: true}}}
 	service := New(NewStore(db), sourceledger.New(db, ""), fixedRoots{p: p})
 	closeServiceAtCleanup(t, service)
-	observation, err := project.ObserveProjectSource(p, project.SourceReadRequest{Path: "a.txt", RootID: rootID})
+	observation, err := projectsource.ObserveProjectSource(p, projectsource.SourceReadRequest{Path: "a.txt", RootID: rootID})
 	testutil.FailErr(t, "observe source", err)
 	opened, err := service.OpenObserved(t.Context(), p, observation, "", "window", nil)
 	testutil.FailErr(t, "open source", err)
@@ -83,7 +84,7 @@ func TestOpenObservedBinaryDoesNotCreateDocument(t *testing.T) {
 	p := &project.Project{ID: projectID, Roots: []project.Root{{ID: rootID, ProjectID: projectID, Path: root, IsPrimary: true}}}
 	service := New(NewStore(db), sourceledger.New(db, ""), fixedRoots{p: p})
 	closeServiceAtCleanup(t, service)
-	observation, err := project.ObserveProjectSource(p, project.SourceReadRequest{Path: "data.bin", RootID: rootID})
+	observation, err := projectsource.ObserveProjectSource(p, projectsource.SourceReadRequest{Path: "data.bin", RootID: rootID})
 	testutil.FailErr(t, "observe binary", err)
 	opened, err := service.OpenObserved(t.Context(), p, observation, "", "window", nil)
 	testutil.FailErr(t, "open binary", err)

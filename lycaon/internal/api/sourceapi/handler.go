@@ -15,7 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/filebriefing"
 	"github.com/lycaon/lycaon/internal/fileops"
 	"github.com/lycaon/lycaon/internal/project"
-	scancadence "github.com/lycaon/lycaon/internal/scan/cadence"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretspan"
 	"github.com/lycaon/lycaon/internal/session"
@@ -23,6 +23,7 @@ import (
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/visual"
 	"github.com/lycaon/lycaon/internal/worker"
+	scancadence "github.com/lycaon/lycaon/internal/scan/cadence"
 )
 
 type Deps struct {
@@ -47,7 +48,7 @@ type Deps struct {
 	SourceInventory InventoryService
 	SourceLedger    *sourceledger.Store
 	// SourceMutations applies source writes.
-	SourceMutations *project.SourceMutationService
+	SourceMutations *projectsource.SourceMutationService
 	VisualStore     visual.Store
 	Workers         worker.WorkerQueue
 	AttachmentStore func(context.Context, string) (blobstore.Store, bool)
@@ -75,7 +76,7 @@ type Analysis struct {
 	SessionStore    session.Store
 	Workspace       *Workspace
 	responses       *httpio.Responder
-	sourceIndexes   *project.SourceIndexCache
+	sourceIndexes   *projectsource.SourceIndexCache
 	warmupPolls     *warmupClock
 }
 
@@ -128,7 +129,7 @@ type Mutations struct {
 	ProjectRegistry project.Registry
 	SessionStore    session.Store
 	SourceLedger    *sourceledger.Store
-	SourceMutations *project.SourceMutationService
+	SourceMutations *projectsource.SourceMutationService
 	Workspace       *Workspace
 	background      *taskgroup.Group
 	operations      Operations
@@ -233,7 +234,7 @@ func New(responses *httpio.Responder, background *taskgroup.Group, operations Op
 	sourceReaders := &sourcecomparison.Cache{}
 	warmupPolls := newWarmupClock()
 	h := Handler{Editor: editor}
-	h.Analysis = &Analysis{ProjectRegistry: deps.ProjectRegistry, SessionStore: deps.SessionStore, responses: responses, sourceIndexes: project.NewSourceIndexCache(), warmupPolls: warmupPolls}
+	h.Analysis = &Analysis{ProjectRegistry: deps.ProjectRegistry, SessionStore: deps.SessionStore, responses: responses, sourceIndexes: projectsource.NewSourceIndexCache(), warmupPolls: warmupPolls}
 	h.ComparisonViews = &ComparisonViews{ManagedSecrets: deps.ManagedSecrets, SecretSpans: deps.SecretSpans, background: background, sourceReaders: sourceReaders, sourceViews: sourceViews}
 	h.Comparisons = &Comparisons{EditorDocuments: deps.EditorDocuments, Git: deps.Git, ManagedSecrets: deps.ManagedSecrets, ProjectRegistry: deps.ProjectRegistry, SecretSpans: deps.SecretSpans, SessionStore: deps.SessionStore, SourceLedger: deps.SourceLedger, responses: responses, sourceReaders: sourceReaders}
 	h.History = &History{AttachmentStore: deps.AttachmentStore, ProjectRegistry: deps.ProjectRegistry, SessionStore: deps.SessionStore, SourceLedger: deps.SourceLedger, VisualStore: deps.VisualStore, Workers: deps.Workers, responses: responses}

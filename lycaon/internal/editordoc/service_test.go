@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -42,7 +43,7 @@ func (f fixedRoots) Get(context.Context, string) (*project.Project, error) { ret
 
 func TestSourceLifecycleReservationKeepsUnrelatedEditorSavesAvailable(t *testing.T) {
 	f := newAgentFixture(t, map[string]string{"a.txt": "before", "b.txt": "before"})
-	mutations := project.NewSourceMutationService(f.store.db, f.recorder.Store)
+	mutations := projectsource.NewSourceMutationService(f.store.db, f.recorder.Store)
 	f.service.SetSourceMutations(mutations)
 	documents := make(map[string]*Document)
 	for _, name := range []string{"a.txt", "b.txt"} {
@@ -52,13 +53,13 @@ func TestSourceLifecycleReservationKeepsUnrelatedEditorSavesAvailable(t *testing
 		testutil.FailErr(t, "edit draft", err)
 		documents[name] = d
 	}
-	release, err := mutations.ReserveSourcePath(f.root, "a.txt")
+	release, err := mutations.Paths.ReserveSourcePath(f.root, "a.txt")
 	testutil.FailErr(t, "reserve lifecycle source", err)
 	defer release()
 	a, b := documents["a.txt"], documents["b.txt"]
 	id := uuid.NewString()
 	_, err = f.service.Save(t.Context(), f.project, a.ID, "window", id, "", 0, a.Revision)
-	if !errors.Is(err, project.ErrSourceBusy) {
+	if !errors.Is(err, projectsource.ErrSourceBusy) {
 		t.Fatalf("related save error=%v", err)
 	}
 	if f.disk(t, "a.txt") != "before" {
@@ -131,7 +132,7 @@ func TestSaveConflictIsTerminalAndDropsJournalPayload(t *testing.T) {
 	testutil.FailErr(t, "write external change", os.WriteFile(path, []byte("external\n"), 0o644))
 	operationID := uuid.NewString()
 	_, err = service.Save(t.Context(), p, document.ID, "window", operationID, "", 0, document.Revision)
-	if !errors.Is(err, project.ErrSourceWriteConflict) {
+	if !errors.Is(err, projectsource.ErrSourceWriteConflict) {
 		t.Fatalf("save error = %v", err)
 	}
 	mutation, err := store.Mutation(t.Context(), operationID)
@@ -229,12 +230,12 @@ func TestRecoverRetargetMovesOnlyTheRenamedDocumentSubtree(t *testing.T) {
 		ids[path] = document.ID
 	}
 	operationID := uuid.NewString()
-	intentID, err := service.PrepareRetarget(t.Context(), p, project.SourceRenamePlan{
+	intentID, err := service.PrepareRetarget(t.Context(), p, projectsource.SourceRenamePlan{
 		OperationID: operationID, RootID: rootID, From: "dir", To: "moved",
 	})
 	testutil.FailErr(t, "prepare retarget", err)
-	mutations := project.NewSourceMutationService(sqlDB, nil)
-	_, err = mutations.Rename(t.Context(), operationID, p, project.SourceRenameRequest{RootID: rootID, From: "dir", To: "moved"})
+	mutations := projectsource.NewSourceMutationService(sqlDB, nil)
+	_, err = mutations.Rename(t.Context(), operationID, p, projectsource.SourceRenameRequest{RootID: rootID, From: "dir", To: "moved"})
 	testutil.FailErr(t, "rename directory", err)
 	if intentID == "" {
 		t.Fatal("retarget intent id is empty")

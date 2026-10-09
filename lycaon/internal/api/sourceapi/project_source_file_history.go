@@ -10,11 +10,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/sourceblob"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/textfile"
@@ -241,7 +241,7 @@ func gitBlobComparisonSide(
 	side := sourceledger.ComparisonSide{
 		State: "content", SHA256: textfile.SHA256(raw), SizeBytes: int64(len(raw)),
 	}
-	doc, _, err := textfile.Open(raw, textfile.LimitsForRaw(project.SourceReadMaxBytes))
+	doc, _, err := textfile.Open(raw, textfile.LimitsForRaw(projectsource.SourceReadMaxBytes))
 	if err != nil {
 		side.Availability, side.Reason = sourceledger.ContentBinary, "binary_content"
 		return side
@@ -336,7 +336,7 @@ func (s *Mutations) HandleRestoreProjectSourceCommitState(w http.ResponseWriter,
 		return
 	}
 	sessionID, turn := s.Workspace.UserSourceChatAffiliation(r)
-	result, err := s.SourceMutations.RestoreVersion(r.Context(), operationID.String(), p, project.SourceVersionRestoreRequest{
+	result, err := s.SourceMutations.Versions.Restore(r.Context(), operationID.String(), p, projectsource.SourceVersionRestoreRequest{
 		Version: sourceledger.RestorableVersion{
 			FileID: strings.TrimSpace(req.FileID), ProjectID: p.ID,
 			RootID: strings.TrimSpace(req.RootID), Path: req.Path,

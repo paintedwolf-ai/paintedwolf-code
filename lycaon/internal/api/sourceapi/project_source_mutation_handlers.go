@@ -6,11 +6,11 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -59,7 +59,7 @@ func (s *Mutations) HandleReplaceProjectSource(w http.ResponseWriter, r *http.Re
 		return
 	}
 	sessionID, turn := s.Workspace.UserSourceChatAffiliation(r)
-	result, err := s.SourceMutations.Write(r.Context(), operationID.String(), p, project.SourceWriteRequest{
+	result, err := s.SourceMutations.Write(r.Context(), operationID.String(), p, projectsource.SourceWriteRequest{
 		Path:       req.Path,
 		RootID:     strings.TrimSpace(req.RootID),
 		Content:    req.Content,
@@ -68,7 +68,7 @@ func (s *Mutations) HandleReplaceProjectSource(w http.ResponseWriter, r *http.Re
 		SessionID:  sessionID,
 		Turn:       turn,
 	})
-	if errors.Is(err, project.ErrSourceBinary) {
+	if errors.Is(err, projectsource.ErrSourceBinary) {
 		s.responses.Fail(w, wire.ApiErrorCodeSourceBinaryDenied, "binary content cannot be written as text")
 		return
 	}
@@ -98,7 +98,7 @@ func (s *Mutations) HandleMakeProjectSourceEditable(w http.ResponseWriter, r *ht
 		s.responses.FailReason(w, wire.ApiErrorCodeInvalidRequest, "path, root_id, and base_sha256 are required")
 		return
 	}
-	result, err := project.MakeSourceEditable(p, project.SourceMakeEditableRequest{
+	result, err := projectsource.MakeSourceEditable(p, projectsource.SourceMakeEditableRequest{
 		Path: req.Path, RootID: req.RootID, BaseSHA256: req.BaseSHA256,
 	})
 	if err != nil {
@@ -132,9 +132,9 @@ func (s *Mutations) HandleCreateProjectSourceEntry(w http.ResponseWriter, r *htt
 		return
 	}
 	sessionID, turn := s.Workspace.UserSourceChatAffiliation(r)
-	rel, err := s.SourceMutations.Create(r.Context(), operationID.String(), p, project.SourceEntryCreateRequest{
+	rel, err := s.SourceMutations.Create(r.Context(), operationID.String(), p, projectsource.SourceEntryCreateRequest{
 		Path:      req.Path,
-		Kind:      project.SourceEntryKind(strings.TrimSpace(req.Kind)),
+		Kind:      projectsource.SourceEntryKind(strings.TrimSpace(req.Kind)),
 		RootID:    strings.TrimSpace(req.RootID),
 		SessionID: sessionID,
 		Turn:      turn,
@@ -168,11 +168,11 @@ func (s *Mutations) HandleRenameProjectSource(w http.ResponseWriter, r *http.Req
 	}
 	sessionID, turn := s.Workspace.UserSourceChatAffiliation(r)
 	var retargetID string
-	result, err := s.SourceMutations.Rename(r.Context(), operationID.String(), p, project.SourceRenameRequest{
+	result, err := s.SourceMutations.Rename(r.Context(), operationID.String(), p, projectsource.SourceRenameRequest{
 		RootID: strings.TrimSpace(req.RootID),
 		From:   req.From,
 		To:     req.To,
-		Prepare: func(ctx context.Context, plan project.SourceRenamePlan) error {
+		Prepare: func(ctx context.Context, plan projectsource.SourceRenamePlan) error {
 			var prepareErr error
 			retargetID, prepareErr = s.EditorDocuments.PrepareRetarget(ctx, p, plan)
 			return prepareErr
@@ -225,7 +225,7 @@ func (s *Mutations) HandleCopyProjectSource(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	sessionID, turn := s.Workspace.UserSourceChatAffiliation(r)
-	result, err := s.SourceMutations.Copy(r.Context(), operationID.String(), p, project.SourceCopyRequest{
+	result, err := s.SourceMutations.Copy(r.Context(), operationID.String(), p, projectsource.SourceCopyRequest{
 		RootID:    strings.TrimSpace(req.RootID),
 		From:      req.From,
 		To:        req.To,
@@ -265,7 +265,7 @@ func (s *Mutations) HandleDeleteProjectSource(w http.ResponseWriter, r *http.Req
 		return
 	}
 	sessionID, turn := s.Workspace.UserSourceChatAffiliation(r)
-	err = s.SourceMutations.Delete(r.Context(), operationID.String(), p, project.SourceDeleteRequest{
+	err = s.SourceMutations.Delete(r.Context(), operationID.String(), p, projectsource.SourceDeleteRequest{
 		RootID:    strings.TrimSpace(q.Get("root_id")),
 		Path:      pathQuery,
 		Recursive: recursive,

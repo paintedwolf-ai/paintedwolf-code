@@ -9,13 +9,13 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/pagecursor"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -193,7 +193,7 @@ func (s *Mutations) HandleRestoreProjectSourceVersion(w http.ResponseWriter, r *
 		return
 	}
 	sessionID, turn := s.Workspace.UserSourceChatAffiliation(r)
-	result, err := s.SourceMutations.RestoreVersion(r.Context(), operationID.String(), p, project.SourceVersionRestoreRequest{
+	result, err := s.SourceMutations.Versions.Restore(r.Context(), operationID.String(), p, projectsource.SourceVersionRestoreRequest{
 		Version: version, FileID: strings.TrimSpace(req.FileID), RootID: strings.TrimSpace(req.RootID),
 		Path: req.Path, Base: req.Base, SessionID: sessionID, Turn: turn,
 	})

@@ -8,15 +8,15 @@ import (
 	"testing"
 	"time"
 
-	hostapi "github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/db"
-	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/worker"
+	hostapi "github.com/lycaon/lycaon/internal/api"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -79,7 +79,7 @@ func TestSourceLedger(t *testing.T) (*sourceledger.Store, *db.Store, TestDeps) {
 	st := sourceledger.New(sqlDB, t.TempDir())
 	return st, sqlDB, func(d *hostapi.Dependencies) {
 		d.Source.SourceLedger, d.Source.SourceInventory = st, st
-		d.Source.SourceMutations = project.NewSourceMutationService(sqlDB, st)
+		d.Source.SourceMutations = projectsource.NewSourceMutationService(sqlDB, st)
 	}
 }
 

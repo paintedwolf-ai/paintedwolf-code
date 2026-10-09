@@ -7,13 +7,14 @@ import (
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 )
 
 type Dependencies struct {
 	Database         db.Handle
 	Projects         project.Registry
 	Rerank           decide.Reranker
-	SourceMutations  *project.SourceMutationService
+	SourceMutations  *projectsource.SourceMutationService
 	ChatAffiliation  func(*http.Request) (string, int)
 	WriteSourceError func(http.ResponseWriter, *http.Request, error)
 }
@@ -22,7 +23,7 @@ type Handler struct {
 	database         db.Handle
 	projectRegistry  project.Registry
 	rerank           decide.Reranker
-	sourceMutations  *project.SourceMutationService
+	sourceMutations  *projectsource.SourceMutationService
 	chatAffiliation  func(*http.Request) (string, int)
 	writeSourceError func(http.ResponseWriter, *http.Request, error)
 	responses        *httpio.Responder

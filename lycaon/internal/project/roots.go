@@ -6,6 +6,19 @@ import (
 	"github.com/lycaon/lycaon/internal/projectroot"
 )
 
+// SourceID binds source effects to the durable project identity.
+func (p *Project) SourceID() string {
+	if p == nil {
+		return ""
+	}
+	return p.ID
+}
+
+// SourceRoots exposes only attached filesystem facts to source operations.
+func (p *Project) SourceRoots() []projectroot.RootRef {
+	return RootRefsFrom(p)
+}
+
 // RootPaths returns unique project root paths, primary first.
 func RootPaths(p *Project) []string {
 	if p == nil || len(p.Roots) == 0 {

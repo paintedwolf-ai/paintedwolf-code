@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
-	"gopkg.in/yaml.v3"
 )
 
 const peoplePkg = "github.com/lycaon/lycaon/internal/people"
@@ -25,7 +24,7 @@ var actingFallbacks = map[string]string{
 	"internal/session/prompt_submission.go:admitPrompt":       "a user prompt admission names its request's caller",
 	"internal/editordoc/authorship.go:personActor":            "editor transitions are authored by their client's person",
 	"internal/sourceledger/store.go:operationPerson":          "user-origin source operations without an explicit person",
-	"internal/project/source_mutation_store.go:insert":        "user file mutations journal their person",
+	"internal/projectsource/source_mutation_store.go:insert":        "user file mutations journal their person",
 }
 
 func TestOwnerFallbackIsLimitedToAdmittedAuthorship(t *testing.T) {

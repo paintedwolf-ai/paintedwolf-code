@@ -4,21 +4,20 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
-	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Analysis) sourceIndexSnapshot(w http.ResponseWriter, r *http.Request) (project.SourceIndexSnapshot, string, bool) {
+func (s *Analysis) sourceIndexSnapshot(w http.ResponseWriter, r *http.Request) (projectsource.SourceIndexSnapshot, string, bool) {
 	p, ok := requestscope.ProjectByURLID(s.ProjectRegistry, s.responses, w, r)
 	if !ok {
-		return project.SourceIndexSnapshot{}, "", false
+		return projectsource.SourceIndexSnapshot{}, "", false
 	}
 	p, ok = requestscope.ProjectForRequest(s.SessionStore, s.responses, w, r, p)
 	if !ok {
-		return project.SourceIndexSnapshot{}, "", false
+		return projectsource.SourceIndexSnapshot{}, "", false
 	}
 	if rootID := strings.TrimSpace(r.URL.Query().Get("root_id")); rootID != "" {
 		scoped := *p
@@ -29,15 +28,15 @@ func (s *Analysis) sourceIndexSnapshot(w http.ResponseWriter, r *http.Request) (
 			}
 		}
 		if len(scoped.Roots) == 0 {
-			s.Workspace.writeSourceReadError(w, r, project.ErrSourceNoRoot)
-			return project.SourceIndexSnapshot{}, "", false
+			s.Workspace.writeSourceReadError(w, r, projectsource.ErrSourceNoRoot)
+			return projectsource.SourceIndexSnapshot{}, "", false
 		}
 		p = &scoped
 	}
 	return s.sourceIndexes.Snapshot(r.Context(), p), p.ID, true
 }
 
-func sourceIndexCoverage(snapshot project.SourceIndexSnapshot) []wire.SourceIndexRootCoverage {
+func sourceIndexCoverage(snapshot projectsource.SourceIndexSnapshot) []wire.SourceIndexRootCoverage {
 	out := make([]wire.SourceIndexRootCoverage, 0, len(snapshot.Coverage))
 	for _, root := range snapshot.Coverage {
 		out = append(out, wire.SourceIndexRootCoverage{RootID: root.RootID, State: sourceIndexWireState(root.State),
@@ -47,11 +46,11 @@ func sourceIndexCoverage(snapshot project.SourceIndexSnapshot) []wire.SourceInde
 	return out
 }
 
-func sourceIndexWireState(state project.SourceIndexState) wire.SourceIndexState {
+func sourceIndexWireState(state projectsource.SourceIndexState) wire.SourceIndexState {
 	switch state {
-	case project.SourceIndexReady:
+	case projectsource.SourceIndexReady:
 		return wire.SourceIndexStateReady
-	case project.SourceIndexFailed:
+	case projectsource.SourceIndexFailed:
 		return wire.SourceIndexStateFailed
 	default:
 		return wire.SourceIndexStateWarming
@@ -78,7 +77,7 @@ func (s *Analysis) HandleProjectSourceIndex(w http.ResponseWriter, r *http.Reque
 	retryAfter := 0
 	warmupKey := "source-index:" + projectID
 	if snapshot.Refreshing {
-		if snapshot.State == project.SourceIndexWarming {
+		if snapshot.State == projectsource.SourceIndexWarming {
 			status = http.StatusAccepted
 		}
 		retryAfter = s.warmupPolls.warming(warmupKey)
@@ -112,9 +111,9 @@ func (s *Analysis) HandleSearchProjectSource(w http.ResponseWriter, r *http.Requ
 		s.responses.PageCursorError(w, r, "cursor", err)
 		return
 	}
-	style := project.HostSourcePathStyle()
-	parsed := project.ParseSourceQuery(query, style)
-	entries, err := project.SearchSourceIndex(r.Context(), snapshot, parsed, style, rootID, position, limit+1)
+	style := projectsource.HostSourcePathStyle()
+	parsed := projectsource.ParseSourceQuery(query, style)
+	entries, err := projectsource.SearchSourceIndex(r.Context(), snapshot, parsed, style, rootID, position, limit+1)
 	if err != nil {
 		s.responses.InternalError(w, r, err)
 		return
@@ -133,7 +132,7 @@ func (s *Analysis) HandleSearchProjectSource(w http.ResponseWriter, r *http.Requ
 	retryAfter := 0
 	warmupKey := "source-search:" + projectID
 	if snapshot.Refreshing {
-		if snapshot.State == project.SourceIndexWarming {
+		if snapshot.State == projectsource.SourceIndexWarming {
 			status = http.StatusAccepted
 		}
 		retryAfter = s.warmupPolls.warming(warmupKey)
@@ -178,7 +177,7 @@ func (s *Analysis) HandleListProjectSourceSymbols(w http.ResponseWriter, r *http
 		s.responses.InvalidQueryParam(w, "path", "is required")
 		return
 	}
-	result, err := project.ListProjectSourceSymbols(r.Context(), p, project.SourceSymbolsRequest{
+	result, err := projectsource.ListProjectSourceSymbols(r.Context(), p, projectsource.SourceSymbolsRequest{
 		Path:   pathQuery,
 		RootID: strings.TrimSpace(r.URL.Query().Get("root_id")),
 	})
@@ -229,7 +228,7 @@ func (s *Analysis) HandleResolveProjectSourceDefinition(w http.ResponseWriter, r
 	if req.IncludeDependencies {
 		excludeDirs = nil
 	}
-	result, err := project.ResolveProjectSourceDefinitions(r.Context(), p, project.SourceDefinitionRequest{
+	result, err := projectsource.ResolveProjectSourceDefinitions(r.Context(), p, projectsource.SourceDefinitionRequest{
 		RootID:      strings.TrimSpace(req.RootID),
 		Path:        pathQuery,
 		Symbol:      symbol,

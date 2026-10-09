@@ -6,12 +6,12 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
-	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 	"github.com/lycaon/lycaon/pkg/api"
+	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 )
 
 // Every mutating native tool lands an attributed row. A write without one reaches
@@ -117,7 +117,7 @@ func TestEveryMutatingToolRecordsAnAttributedRow(t *testing.T) {
 			tctx.Identity.UserTurn = 4
 			tctx.Identity.ToolCallID = "call_" + tc.tool
 			tctx.Source.SourceLedger = st
-			tctx.Source.SourceMutations = project.NewSourceMutationService(st.LedgerDB(), st)
+			tctx.Source.SourceMutations = projectsource.NewSourceMutationService(st.LedgerDB(), st)
 
 			testutil.FailErr(t, tc.tool+" tool failed", tc.run(t, dir, tctx))
 

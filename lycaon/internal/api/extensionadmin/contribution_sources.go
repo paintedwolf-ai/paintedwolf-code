@@ -17,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/contribution"
 	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -199,7 +200,7 @@ func projectPathResolver(p *project.Project) commandinvoke.ProjectPathResolver {
 		return nil
 	}
 	return func(rootID, path string) (string, string, error) {
-		resolved, err := project.ResolveProjectPath(p, rootID, path)
+		resolved, err := projectsource.ResolveProjectPath(p, rootID, path)
 		return resolved.RootID, resolved.Path, err
 	}
 }

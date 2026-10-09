@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/documentcore"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -212,7 +213,7 @@ func TestConflictResolutionBindsBothReviewedVersions(t *testing.T) {
 	in := ConflictResolution{ClientID: "window", OperationID: uuid.NewString(), ExpectedRevision: d.Revision, DiskSHA256: d.BaseSHA256, Content: "merged", EOL: "lf"}
 	in.DiskSHA256 = "different"
 	_, err := f.service.Resolve(t.Context(), f.project, d.ID, in)
-	if !errors.Is(err, project.ErrSourceWriteConflict) {
+	if !errors.Is(err, projectsource.ErrSourceWriteConflict) {
 		t.Fatalf("changed disk = %v", err)
 	}
 	in.DiskSHA256 = d.BaseSHA256

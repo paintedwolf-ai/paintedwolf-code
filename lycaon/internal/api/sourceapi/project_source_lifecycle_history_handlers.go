@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
-	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -22,7 +22,7 @@ func (s *Mutations) HandleGetProjectSourceHistory(w http.ResponseWriter, r *http
 	if !ok {
 		return
 	}
-	state, err := s.SourceMutations.History(r.Context(), p.ID)
+	state, err := s.SourceMutations.History.State(r.Context(), p.ID)
 	if err != nil {
 		s.Workspace.writeSourceReadError(w, r, err)
 		return
@@ -60,17 +60,17 @@ func (s *Mutations) handleProjectSourceHistoryMutation(w http.ResponseWriter, r 
 	}
 	sessionID, turn := s.Workspace.UserSourceChatAffiliation(r)
 	var retargetID string
-	historyReq := project.SourceHistoryMutationRequest{
+	historyReq := projectsource.SourceHistoryMutationRequest{
 		ExpectedEntryID: strings.TrimSpace(req.ExpectedEntryID),
 		SessionID:       sessionID,
 		Turn:            turn,
-		Prepare: func(ctx context.Context, plan project.SourceRenamePlan) error {
+		Prepare: func(ctx context.Context, plan projectsource.SourceRenamePlan) error {
 			var prepareErr error
 			retargetID, prepareErr = s.EditorDocuments.PrepareRetarget(ctx, p, plan)
 			return prepareErr
 		},
 	}
-	var result *project.SourceHistoryMutationResult
+	var result *projectsource.SourceHistoryMutationResult
 	if direction == "redo" {
 		result, err = s.SourceMutations.Redo(r.Context(), operationID.String(), p, historyReq)
 	} else {
@@ -105,14 +105,14 @@ func (s *Mutations) reconcileSourceHistoryRetarget(ctx context.Context, retarget
 	return err
 }
 
-func toSourceHistoryStateDTO(state project.SourceHistoryState) wire.SourceHistoryState {
+func toSourceHistoryStateDTO(state projectsource.SourceHistoryState) wire.SourceHistoryState {
 	return wire.SourceHistoryState{
 		Undo: toSourceHistoryActionDTO(state.Undo),
 		Redo: toSourceHistoryActionDTO(state.Redo),
 	}
 }
 
-func toSourceHistoryActionDTO(action *project.SourceHistoryAction) *wire.SourceHistoryAction {
+func toSourceHistoryActionDTO(action *projectsource.SourceHistoryAction) *wire.SourceHistoryAction {
 	if action == nil {
 		return nil
 	}
