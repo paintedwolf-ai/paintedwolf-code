@@ -18,7 +18,7 @@ func (m *Service) StopBackgroundProcess(sessionID, handle string) (*api.Backgrou
 			return &api.BackgroundProcessStopResult{ProcessID: result.Handle, StopRequested: result.Running, Running: result.Running}, nil
 		}
 	}
-	return m.Background.Stop(sessionID, handle)
+	return m.Background.Lifecycle.Stop(sessionID, handle)
 }
 
 // ListBackgroundProcesses returns visible processes for session recovery.
@@ -26,7 +26,7 @@ func (m *Service) ListBackgroundProcesses(ctx context.Context, sessionID string)
 	if m == nil || m.Background == nil {
 		return nil
 	}
-	processes := m.Background.List(ctx, sessionID)
+	processes := m.Background.Output.List(ctx, sessionID)
 	budget := 32768 / max(1, len(processes))
 	for i := range processes {
 		output, err := m.GetBackgroundProcessOutput(ctx, sessionID, processes[i].ProcessID)
@@ -55,7 +55,7 @@ func (m *Service) GetBackgroundProcessOutput(ctx context.Context, sessionID, han
 			return output, nil
 		}
 	}
-	output, err := m.Background.ReadOutput(ctx, sessionID, handle)
+	output, err := m.Background.Output.ReadOutput(ctx, sessionID, handle)
 	if err != nil {
 		return nil, err
 	}

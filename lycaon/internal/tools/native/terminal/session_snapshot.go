@@ -55,7 +55,7 @@ func CaptureFromScreen(
 	ctx context.Context, bg *bgprocess.Registry, tctx tools.ToolContext,
 	screen bgprocess.ScreenSnapshot, caption string,
 ) SnapshotResult {
-	if safe, err := bg.ProjectCapturedText(
+	if safe, err := bg.Output.ProjectCapturedText(
 		ctx, tctx.Identity.ProjectID, tctx.Identity.ParentSessionID, tctx.Identity.SessionID,
 		"capture.terminal.caption", caption,
 	); err == nil {
@@ -94,7 +94,7 @@ func SnapshotHandler(bg *bgprocess.Registry) tools.ToolHandler {
 		if err != nil {
 			return "", err
 		}
-		if err := bg.LookupPTY(tctx.Identity.SessionID, in.ID); err != nil {
+		if err := bg.Terminal.LookupPTY(tctx.Identity.SessionID, in.ID); err != nil {
 			return "", mapTerminalLifecycleReject(err, in.ID)
 		}
 		subject, _ := bg.CommandLine(tctx.Identity.SessionID, in.ID)
@@ -125,11 +125,11 @@ func captureTerminalSnapshot(
 	if timeoutMS > 0 {
 		opts.Timeout = time.Duration(timeoutMS) * time.Millisecond
 	}
-	res, err := bg.SnapshotPTY(ctx, tctx.Identity.SessionID, id, opts)
+	res, err := bg.Terminal.SnapshotPTY(ctx, tctx.Identity.SessionID, id, opts)
 	if err != nil {
 		return SnapshotResult{}, mapTerminalLifecycleReject(err, id)
 	}
-	caption, err = bg.ProjectCapturedText(
+	caption, err = bg.Output.ProjectCapturedText(
 		ctx, tctx.Identity.ProjectID, tctx.Identity.ParentSessionID, tctx.Identity.SessionID,
 		"capture.terminal.caption", caption,
 	)

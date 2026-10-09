@@ -321,7 +321,7 @@ func (b *serveBuilder) wireMCP() error {
 			captureProjector.SetManagedSecretGeneration(b.security.Capabilities.ScreeningGeneration)
 		}
 		if b.interactions.Processes != nil {
-			b.interactions.Processes.SetCaptureProjector(captureProjector)
+			b.interactions.Processes.Output.SetCaptureProjector(captureProjector)
 		}
 		if b.interactions.Preview != nil {
 			b.interactions.Preview.SetCaptureProjector(captureProjector)

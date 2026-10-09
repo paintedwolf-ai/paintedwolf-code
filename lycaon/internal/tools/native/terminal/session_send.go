@@ -59,12 +59,12 @@ func SendHandler(bg *bgprocess.Registry) tools.ToolHandler {
 		if err := tctx.Effects.Secrets.HandOff(ctx, nil); err != nil {
 			return "", toolrejection.HeldHandOffReject("terminal_send", err)
 		}
-		if err := bg.WritePTY(tctx.Identity.SessionID, in.ID, payload); err != nil {
+		if err := bg.Terminal.WritePTY(tctx.Identity.SessionID, in.ID, payload); err != nil {
 			return "", mapTerminalLifecycleReject(err, in.ID)
 		}
 		running := bg.RequireRunning(tctx.Identity.SessionID, in.ID) == nil
 		outPayload := SendResult{ID: in.ID, Running: running, Observe: in.Observe}
-		if report, reportErr := bg.PTYReport(tctx.Identity.SessionID, in.ID); reportErr == nil {
+		if report, reportErr := bg.Terminal.PTYReport(tctx.Identity.SessionID, in.ID); reportErr == nil {
 			outPayload.Report = report
 		}
 		switch in.Observe {

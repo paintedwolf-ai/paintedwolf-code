@@ -44,7 +44,7 @@ func TestBuildProtectionStateUnknownVsActive(t *testing.T) {
 		ToolCallID: "call-direct-1",
 	})
 	testutil.FailErr(t, "start", err)
-	t.Cleanup(func() { _, _ = reg.Stop("sess-prot", handle) })
+	t.Cleanup(func() { _, _ = reg.Lifecycle.Stop("sess-prot", handle) })
 
 	prot := protection.BuildProtectionState("sess-prot", reg)
 	if prot == nil || len(prot.BackgroundDirect) != 1 {
@@ -85,7 +85,7 @@ func TestProtectionStateReconstructEmitsOnceWithoutDestinations(t *testing.T) {
 		Mode:   bgprocess.JobModeBackground, ToolCallID: "call-9",
 	})
 	testutil.FailErr(t, "start", err)
-	t.Cleanup(func() { _, _ = reg.Stop("sess-rec", handle) })
+	t.Cleanup(func() { _, _ = reg.Lifecycle.Stop("sess-rec", handle) })
 
 	mgr := session.NewHost(sessionstore.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetBackgroundRegistry(reg)
@@ -134,7 +134,7 @@ func TestRevokeChatGrantAfterRecoveryKeepsBackgroundWarning(t *testing.T) {
 		Mode:   bgprocess.JobModeBackground,
 	})
 	testutil.FailErr(t, "start", err)
-	t.Cleanup(func() { _, _ = reg.Stop("sess-rev", handle) })
+	t.Cleanup(func() { _, _ = reg.Lifecycle.Stop("sess-rev", handle) })
 
 	rt := approvalstate.NewSocketCapabilityRuntime()
 	approved, resolved := tempSocket(t)

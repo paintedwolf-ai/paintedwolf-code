@@ -36,7 +36,7 @@ func TestSnapshotKeepsScreenedOutputBeyondTheTail(t *testing.T) {
 
 func TestSnapshotOutputUnscreenedWithoutProjector(t *testing.T) {
 	h := newProjectionHarness(t, DefaultRingBufferBytes)
-	h.reg.SetCaptureProjector(nil)
+	h.reg.Output.SetCaptureProjector(nil)
 	h.write("stdout", "plain output")
 
 	snap, err := h.reg.Snapshot(context.Background(), "s1", "h1", 64)
@@ -53,7 +53,7 @@ func TestSnapshotOutputUnscreenedWithoutProjector(t *testing.T) {
 
 func TestSnapshotReportsRingEviction(t *testing.T) {
 	h := newProjectionHarness(t, 64)
-	h.reg.SetCaptureProjector(nil)
+	h.reg.Output.SetCaptureProjector(nil)
 	// Eviction happens on the append after the buffer overflows.
 	h.write("stdout", strings.Repeat("b", 60))
 	h.write("stdout", strings.Repeat("c", 60))

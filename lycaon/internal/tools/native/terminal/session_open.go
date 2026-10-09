@@ -137,7 +137,7 @@ func OpenHandler(bg *bgprocess.Registry) tools.ToolHandler {
 		if err := tctx.Effects.Secrets.HandOff(ctx, nil); err != nil {
 			return "", toolrejection.HeldHandOffReject("terminal_open", err)
 		}
-		handle, err := bg.StartPTY(
+		handle, err := bg.Terminal.StartPTY(
 			ctx, tctx.Identity.SessionID, tctx.Identity.ParentSessionID, tctx.Identity.ProjectID,
 			req, hostRunner, in.WinSize, facts,
 		)
@@ -146,7 +146,7 @@ func OpenHandler(bg *bgprocess.Registry) tools.ToolHandler {
 			return "", mapTerminalLifecycleReject(err, "")
 		}
 		ledgerCtx := context.WithoutCancel(ctx)
-		bg.OnExit(tctx.Identity.SessionID, handle, func() {
+		bg.Lifecycle.OnExit(tctx.Identity.SessionID, handle, func() {
 			hosts := egressLease.Close(ledgerCtx)
 			tools.RecordMediatedEgress(ledgerCtx, tctx, OpenToolName, hosts)
 		})

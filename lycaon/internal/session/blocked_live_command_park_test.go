@@ -24,7 +24,7 @@ func TestParkBlockedLiveCommandsArmsExactProcessSubscription(t *testing.T) {
 	ctx := context.Background()
 	reg := bgprocess.NewRegistry(bgprocess.Config{}, bgprocess.Hooks{})
 	t.Cleanup(func() {
-		testutil.FailErr(t, "dispose process", reg.DisposeSession(ctx, "session-1"))
+		testutil.FailErr(t, "dispose process", reg.Lifecycle.DisposeSession(ctx, "session-1"))
 	})
 	mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	mgr.SetBackgroundRegistry(reg)

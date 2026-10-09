@@ -36,7 +36,7 @@ func (r *Runtime) Build(completed bgprocess.CompletionPublisher, refused bgproce
 	r.resources.Track("background-processes", 50, func(ctx context.Context) error {
 		closeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
-		return processes.Close(closeCtx)
+		return processes.Lifecycle.Close(closeCtx)
 	})
 	r.Calls = heldcall.New(r.publisher.PublishProcess, settled)
 	calls := r.Calls
