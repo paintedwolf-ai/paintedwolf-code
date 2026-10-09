@@ -79,7 +79,7 @@ func TestCommandStatesNoVerdictWhileRunning(t *testing.T) {
 	if tctx.Out.SourceRun != nil {
 		t.Fatalf("a promoted running command stated a verdict: %+v", tctx.Out.SourceRun)
 	}
-	testutil.FailErr(t, "dispose session commands", reg.DisposeSession(context.Background(), "sess"))
+	testutil.FailErr(t, "dispose session commands", reg.Lifecycle.DisposeSession(context.Background(), "sess"))
 }
 
 func TestVerifyStatesVerdictOnSettledRun(t *testing.T) {

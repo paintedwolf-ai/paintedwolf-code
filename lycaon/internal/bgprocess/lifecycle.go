@@ -19,19 +19,19 @@ import (
 const stopSettleTimeout = exec.TerminateGrace + 8*time.Second
 
 // Promote makes a job visible and publishes buffered output and any observed exit.
-func (r *Registry) Promote(ctx context.Context, sessionID, handle string) error {
-	proc, err := r.lookup(sessionID, handle)
+func (r *Output) Promote(ctx context.Context, sessionID, handle string) error {
+	proc, err := r.jobs.lookup(sessionID, handle)
 	if err != nil {
 		return err
 	}
-	r.mu.Lock()
+	r.jobs.mu.Lock()
 	if !proc.silent {
-		r.mu.Unlock()
+		r.jobs.mu.Unlock()
 		return nil
 	}
 	proc.silent = false
 	running := proc.running
-	r.mu.Unlock()
+	r.jobs.mu.Unlock()
 	if r.publish != nil {
 		proc.publishMu.Lock()
 		projection := r.projectWindow(ctx, proc)
@@ -64,14 +64,14 @@ func (r *Registry) Promote(ctx context.Context, sessionID, handle string) error 
 
 // WatchIndex hands the process the Git index captured before it spawned. A
 // process that already published its exit releases the capture at once.
-func (r *Registry) WatchIndex(sessionID, handle string, snapshot indexwatch.Snapshot) {
-	proc, err := r.lookup(sessionID, handle)
+func (r *ProcessLifecycle) WatchIndex(sessionID, handle string, snapshot indexwatch.Snapshot) {
+	proc, err := r.jobs.lookup(sessionID, handle)
 	if err != nil || proc == nil {
 		snapshot.Release()
 		return
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.jobs.mu.Lock()
+	defer r.jobs.mu.Unlock()
 	if proc.terminalPublished || proc.discarded {
 		snapshot.Release()
 		return
@@ -81,31 +81,31 @@ func (r *Registry) WatchIndex(sessionID, handle string, snapshot indexwatch.Snap
 }
 
 // TakeIndexWatch returns the process's index capture to an awaiting caller.
-func (r *Registry) TakeIndexWatch(sessionID, handle string) indexwatch.Snapshot {
-	proc, err := r.lookup(sessionID, handle)
+func (r *ProcessLifecycle) TakeIndexWatch(sessionID, handle string) indexwatch.Snapshot {
+	proc, err := r.jobs.lookup(sessionID, handle)
 	if err != nil || proc == nil {
 		return indexwatch.Snapshot{}
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.jobs.mu.Lock()
+	defer r.jobs.mu.Unlock()
 	snapshot := proc.indexWatch
 	proc.indexWatch = indexwatch.Snapshot{}
 	return snapshot
 }
 
 // Discard removes a finished inline await job.
-func (r *Registry) Discard(sessionID, handle string) {
-	r.remove(trim(sessionID), trim(handle))
+func (r *ProcessLifecycle) Discard(sessionID, handle string) {
+	r.jobs.remove(trim(sessionID), trim(handle))
 }
 
 // Stop requests process-tree termination and returns the currently observed exit state.
-func (r *Registry) Stop(sessionID, handle string) (*api.BackgroundProcessStopResult, error) {
-	proc, err := r.lookup(sessionID, handle)
+func (r *ProcessLifecycle) Stop(sessionID, handle string) (*api.BackgroundProcessStopResult, error) {
+	proc, err := r.jobs.lookup(sessionID, handle)
 	if err != nil {
 		return nil, err
 	}
 	r.killProcess(proc)
-	running, hasExit, exitCode := r.exitState(proc)
+	running, hasExit, exitCode := r.jobs.exitState(proc)
 	return &api.BackgroundProcessStopResult{
 		ProcessID:     handle,
 		StopRequested: true,
@@ -119,13 +119,13 @@ func (r *Registry) Stop(sessionID, handle string) (*api.BackgroundProcessStopRes
 	}, nil
 }
 
-func (r *Registry) killProcess(proc *Process) {
+func (r *ProcessLifecycle) killProcess(proc *Process) {
 	if proc == nil {
 		return
 	}
-	r.mu.Lock()
+	r.jobs.mu.Lock()
 	if proc.stopped {
-		r.mu.Unlock()
+		r.jobs.mu.Unlock()
 		return
 	}
 	proc.stopped = true
@@ -133,7 +133,7 @@ func (r *Registry) killProcess(proc *Process) {
 	async := proc.async
 	pty := proc.pty
 	screen := proc.screen
-	r.mu.Unlock()
+	r.jobs.mu.Unlock()
 	if async != nil {
 		async.Kill()
 	}
@@ -149,18 +149,18 @@ func (r *Registry) killProcess(proc *Process) {
 }
 
 // DisposeSession removes every handle and waits for process exit.
-func (r *Registry) DisposeSession(ctx context.Context, sessionID string) error {
+func (r *ProcessLifecycle) DisposeSession(ctx context.Context, sessionID string) error {
 	if r == nil {
 		return nil
 	}
 	sessionID = trim(sessionID)
-	r.mu.Lock()
-	procs := r.sessions[sessionID]
-	delete(r.sessions, sessionID)
+	r.jobs.mu.Lock()
+	procs := r.jobs.sessions[sessionID]
+	delete(r.jobs.sessions, sessionID)
 	for _, proc := range procs {
 		proc.discarded = true
 	}
-	r.mu.Unlock()
+	r.jobs.mu.Unlock()
 	for _, proc := range procs {
 		r.killProcess(proc)
 	}
@@ -175,7 +175,7 @@ func (r *Registry) DisposeSession(ctx context.Context, sessionID string) error {
 // awaitSettled waits for a stopped job to report its exit. After
 // stopSettleTimeout the handle is abandoned so the caller's stop can finish;
 // the job stays signalled and the reaper still covers it at engine exit.
-func (r *Registry) awaitSettled(ctx context.Context, proc *Process) error {
+func (r *ProcessLifecycle) awaitSettled(ctx context.Context, proc *Process) error {
 	timer := time.NewTimer(stopSettleTimeout)
 	defer timer.Stop()
 	select {
@@ -184,9 +184,9 @@ func (r *Registry) awaitSettled(ctx context.Context, proc *Process) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-timer.C:
-		r.mu.Lock()
+		r.jobs.mu.Lock()
 		stages := append([]hostcmd.StageResult(nil), proc.Stages...)
-		r.mu.Unlock()
+		r.jobs.mu.Unlock()
 		slog.WarnContext(ctx, "stopped process did not settle; abandoning its handle",
 			"session_id", proc.SessionID, "handle", proc.Handle, "command", hostcmd.CommandLine(stages))
 		return nil
@@ -194,25 +194,25 @@ func (r *Registry) awaitSettled(ctx context.Context, proc *Process) error {
 }
 
 // Close rejects new work and waits for registered processes to exit.
-func (r *Registry) Close(ctx context.Context) error {
+func (r *ProcessLifecycle) Close(ctx context.Context) error {
 	if r == nil {
 		return nil
 	}
-	r.mu.Lock()
-	if r.closed {
-		r.mu.Unlock()
+	r.jobs.mu.Lock()
+	if r.jobs.closed {
+		r.jobs.mu.Unlock()
 		return nil
 	}
-	r.closed = true
+	r.jobs.closed = true
 	var procs []*Process
-	for sessionID, sessionProcs := range r.sessions {
+	for sessionID, sessionProcs := range r.jobs.sessions {
 		for _, proc := range sessionProcs {
 			proc.discarded = true
 			procs = append(procs, proc)
 		}
-		delete(r.sessions, sessionID)
+		delete(r.jobs.sessions, sessionID)
 	}
-	r.mu.Unlock()
+	r.jobs.mu.Unlock()
 
 	for _, proc := range procs {
 		r.killProcess(proc)
@@ -226,11 +226,11 @@ func (r *Registry) Close(ctx context.Context) error {
 }
 
 // OnExit releases process-scoped resources after exit, or immediately for an absent handle.
-func (r *Registry) OnExit(sessionID, handle string, fn func()) {
+func (r *ProcessLifecycle) OnExit(sessionID, handle string, fn func()) {
 	if r == nil || fn == nil {
 		return
 	}
-	proc, err := r.lookup(sessionID, handle)
+	proc, err := r.jobs.lookup(sessionID, handle)
 	if err != nil || proc == nil {
 		fn()
 		return
@@ -241,13 +241,13 @@ func (r *Registry) OnExit(sessionID, handle string, fn func()) {
 	}()
 }
 
-func (r *Registry) publishTerminal(ctx context.Context, proc *Process) {
+func (r *Output) publishTerminal(ctx context.Context, proc *Process) {
 	if r == nil || proc == nil {
 		return
 	}
-	r.mu.Lock()
+	r.jobs.mu.Lock()
 	if proc.silent || proc.discarded || !proc.hasExit || proc.terminalPublished {
-		r.mu.Unlock()
+		r.jobs.mu.Unlock()
 		return
 	}
 	proc.terminalPublished = true
@@ -269,9 +269,9 @@ func (r *Registry) publishTerminal(ctx context.Context, proc *Process) {
 	sessionID := proc.SessionID
 	publish := r.publish
 	complete := r.complete
-	r.mu.Unlock()
+	r.jobs.mu.Unlock()
 	body, _, screening := r.safeOutput(ctx, proc)
-	completion.Tail = screenedOrSuppressed(CutTail(body, r.cfg.RingBufferBytes), screening)
+	completion.Tail = screenedOrSuppressed(CutTail(body, r.ringBufferBytes), screening)
 	stamped := confine.StampRefusal(originTool, sessionID, boundary, confine.RefusalContext{
 		MediatedNetwork:        facts.MediatedNetwork(),
 		RemotePackageExecution: facts.Report.RemotePackageExecution,

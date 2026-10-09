@@ -13,7 +13,7 @@ import (
 func (m *Manager) SetBackgroundRegistry(reg *bgprocess.Registry) {
 	if m != nil {
 		m.bgRegistry = reg
-		_ = m.RegisterSessionCleanup("background-processes", 20, reg.DisposeSession)
+		_ = m.RegisterSessionCleanup("background-processes", 20, reg.Lifecycle.DisposeSession)
 	}
 }
 
@@ -27,7 +27,7 @@ func (m *Manager) StopBackgroundProcess(sessionID, handle string) (*api.Backgrou
 			return &api.BackgroundProcessStopResult{ProcessID: result.Handle, StopRequested: result.Running, Running: result.Running}, nil
 		}
 	}
-	return m.bgRegistry.Stop(sessionID, handle)
+	return m.bgRegistry.Lifecycle.Stop(sessionID, handle)
 }
 
 // ListBackgroundProcesses returns visible processes for session recovery.
@@ -35,7 +35,7 @@ func (m *Manager) ListBackgroundProcesses(ctx context.Context, sessionID string)
 	if m == nil || m.bgRegistry == nil {
 		return nil
 	}
-	processes := m.bgRegistry.List(ctx, sessionID)
+	processes := m.bgRegistry.Output.List(ctx, sessionID)
 	budget := 32768 / max(1, len(processes))
 	for i := range processes {
 		output, err := m.GetBackgroundProcessOutput(ctx, sessionID, processes[i].ProcessID)
@@ -64,7 +64,7 @@ func (m *Manager) GetBackgroundProcessOutput(ctx context.Context, sessionID, han
 			return output, nil
 		}
 	}
-	output, err := m.bgRegistry.ReadOutput(ctx, sessionID, handle)
+	output, err := m.bgRegistry.Output.ReadOutput(ctx, sessionID, handle)
 	if err != nil {
 		return nil, err
 	}

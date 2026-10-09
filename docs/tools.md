@@ -392,6 +392,8 @@ Declaring a capability is not receiving it. Unsupported, unavailable, or denied 
 
 ## Interactive exec (PTY)
 
+The host composes command launching, terminal interaction, captured output, and process lifetime as separate services over one synchronized process table. Terminal operations use the terminal service; output screening and publication use the output service; awaiting, stopping, index-watch transfer, and session teardown use the lifecycle service. Shared admission and process state keep launch, shutdown, and completion atomic across these services.
+
 Terminal execution has two intentional lifetimes:
 
 - `command` with `terminal_capture` runs one exact process in a sealed PTY, returns its settled virtual screen, and creates no mutable terminal handle. The capability request and the captured screen therefore describe the same reviewed action; this is the terminal-proof path for non-interactive programs and direct-network actions. Keep captures to one argv line and read `exit_code` from the result; for sequences or pipelines, omit `terminal_capture` and capture the final program separately.
