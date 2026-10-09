@@ -55,6 +55,24 @@ Args: map[string]any{"proposed_write_root": "/Users/me/go"},
 	testutil.FailErr(t, "create approval plan", err)
 	stored, err := storeApprovalPlan(plan)
 	testutil.FailErr(t, "store approval plan", err)
+	if _, exists := stored["directory_scopes"]; exists {
+		t.Fatal("historical plan acquired directory scope state")
+	}
+	for _, raw := range stored["options"].([]any) {
+		if _, exists := raw.(map[string]any)["directory_scope"]; exists {
+			t.Fatal("historical option acquired a directory scope")
+		}
+	}
+	retained, err := approvalPlanFromMap(stored)
+	testutil.FailErr(t, "read retained approval plan without directory scopes", err)
+	if retained.ID != plan.ID || len(retained.DirectoryScopes) != 0 {
+		t.Fatalf("retained identity or authority changed: %#v", retained)
+	}
+	retainedID, err := retained.canonicalID()
+	testutil.FailErr(t, "check retained approval identity", err)
+	if retainedID != plan.ID {
+		t.Fatalf("historical canonical identity = %q, want %q", retainedID, plan.ID)
+	}
 	row := StoredCheckpoint{
 		Kind:     api.CheckpointKindToolApproval,
 		ToolName: "write_root",

@@ -430,3 +430,11 @@
   color: var(--den-text);
   overflow-wrap: anywhere;
 }
+
+@utility den-approval-directory-scope {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  margin-block: 10px;
+  font-size: var(--text-den-caption);
+}
