@@ -3,6 +3,7 @@ package maintainability
 import (
 	"archive/tar"
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os/exec"
@@ -18,7 +19,7 @@ func openBaseTree(root, base string) (*workingTree, error) {
 	archive := tar.NewReader(bytes.NewReader(raw))
 	for {
 		header, err := archive.Next()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {

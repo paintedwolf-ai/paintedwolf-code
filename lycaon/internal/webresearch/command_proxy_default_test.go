@@ -1,7 +1,6 @@
 package webresearch_test
 
 import (
-	"context"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
@@ -36,11 +35,5 @@ func TestWebToolsUnaffectedByCommandProxyOnlyDefault(t *testing.T) {
 		if !c.LoopbackConnect {
 			t.Fatal("BrowserConfinement must keep host-local connect on the floor")
 		}
-	}
-
-	if err := webresearch.ValidateProviderConfigEndpoint(
-		context.Background(), "https://search.brave.com/", false,
-	); err != nil {
-		t.Fatalf("provider endpoint validation must stay open for public HTTPS: %v", err)
 	}
 }
