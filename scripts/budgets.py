@@ -16,6 +16,7 @@ import subprocess
 import sys
 
 from artifact_paths import artifact_root
+from ci_policy.budget_snapshot import seal
 import change_report
 from change_report import Finding
 
@@ -66,14 +67,14 @@ def suite_findings(name, report):
                                "limit, or add an exception that says why it must be this large", source))
         elif kind == "legacy_debt":
             out.append(Finding("warning", name, f"{label}: {size(f)}, unchanged or smaller than "
-                               f"{f['previous']:,} at the base; legacy debt needs a tracking issue", source))
+                               f"{f['previous']:,} at the base; legacy debt is tracked after merge", source))
         elif kind == "over_cap":
             failed = True
             out.append(Finding("error", name, f'{label}: {size(f)}, past its exception cap of {f["bound"]:,}. Make it '
                                f'smaller, or revisit the reason: {f["reason"]}', source))
         elif kind == "over_warn":
             out.append(Finding("warning", name, f"{label}: {size(f)}, past the warning line of {f['bound']:,} on the way "
-                               f"to its limit of {limit:,}; put new behavior in a new file or package", source))
+                               f"to its limit of {limit:,}; prefer a cohesive new file or package; merged changes create a cleanup issue", source))
         elif kind == "excepted":
             out.append(Finding("notice", name, f'{label}: {size(f)}, admitted up to {f["bound"]:,} because: '
                                f'{f["reason"]}', source))
@@ -105,6 +106,12 @@ def main():
               f"or set {change_report.BASE_ENV} to the commit this change builds on.")
         return 2
     code, reports = run_suites(artifact_root(ROOT) / "budgets", change_set(scope, inspect))
+    if 'maintainability' in reports:
+        report = reports['maintainability']
+        source = os.environ.get('GITHUB_SHA') or change_report.git(ROOT, 'rev-parse', 'HEAD').stdout.strip()
+        tree = change_report.git(ROOT, 'rev-parse', 'HEAD^{tree}').stdout.strip()
+        seal(report, source, tree, scope.base)
+        (artifact_root(ROOT) / 'budgets' / 'reports' / 'maintainability.json').write_text(json.dumps(report) + '\n')
     findings, failed = [], code != 0
     for name in SUITES:
         if name not in reports:
