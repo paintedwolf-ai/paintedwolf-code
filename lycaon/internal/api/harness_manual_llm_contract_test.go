@@ -23,7 +23,7 @@ func manualHarnessServer(t *testing.T) (*Server, *llm.ManualProvider) {
 	t.Setenv(configdir.EnvHarness, "1")
 	provider := llm.NewManualProvider()
 	provider.SetAuto(false, "")
-	return NewServer(requiredTestDeps(t, Dependencies{Store: store.NewMemory(), ManualLLM: provider}), nil, "harness-test-token"), provider
+	return NewServer(requiredTestDeps(t, Dependencies{Core: CoreDependencies{Store: store.NewMemory()}, Harness: HarnessDependencies{ManualLLM: provider}}), nil, "harness-test-token"), provider
 }
 
 func manualHarnessRequest(s *Server, method, path, body string, authorized bool) *httptest.ResponseRecorder {
