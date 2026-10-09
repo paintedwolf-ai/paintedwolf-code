@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/observability"
+	"github.com/lycaon/lycaon/internal/workscope"
 )
 
 // CompactionRunner coalesces background compaction by session.
@@ -13,12 +14,13 @@ type CompactionRunner struct {
 	running map[string]*compactionRun
 	pending map[string]bool
 	active  map[string]*compactionRun
-	wg      sync.WaitGroup
+	work    workscope.Group
 }
 
 type compactionRun struct {
 	cancel context.CancelFunc
 	done   chan struct{}
+	finish func()
 }
 
 // NewCompactionRunner constructs a background compaction scheduler.
@@ -41,13 +43,17 @@ func (r *CompactionRunner) Trigger(parent context.Context, sessionID string, run
 		r.mu.Unlock()
 		return
 	}
-	bg, cancel := context.WithCancel(context.WithoutCancel(parent))
+	bg, finish, err := r.work.Begin(context.WithoutCancel(parent))
+	if err != nil {
+		r.mu.Unlock()
+		return
+	}
+	bg, cancel := context.WithCancel(bg)
 	work := &compactionRun{cancel: cancel, done: make(chan struct{})}
 	r.running[sessionID] = work
-	r.wg.Add(1)
 	r.mu.Unlock()
 	go func() {
-		defer r.wg.Done()
+		defer finish()
 		defer observability.GuardPanic("session.compaction_runner")
 		defer cancel()
 		defer close(work.done)
@@ -103,7 +109,7 @@ func (r *CompactionRunner) Wait() {
 	if r == nil {
 		return
 	}
-	r.wg.Wait()
+	_ = r.work.Wait(context.Background())
 }
 
 // Execute serializes manual and background passes before either reads history.
@@ -119,7 +125,7 @@ func (r *CompactionRunner) Execute(ctx context.Context, sessionID string, run fu
 		delete(r.active, sessionID)
 		close(work.done)
 		r.mu.Unlock()
-		r.wg.Done()
+		work.finish()
 	}()
 	return run(workCtx)
 }
@@ -140,11 +146,30 @@ func (r *CompactionRunner) admit(ctx context.Context, sessionID string) (*compac
 				continue
 			}
 		}
-		activeCtx, cancel := context.WithCancel(ctx)
-		work := &compactionRun{cancel: cancel, done: make(chan struct{})}
+		activeCtx, finish, err := r.work.Begin(ctx)
+		if err != nil {
+			r.mu.Unlock()
+			return nil, nil, err
+		}
+		activeCtx, cancel := context.WithCancel(activeCtx)
+		work := &compactionRun{cancel: cancel, done: make(chan struct{}), finish: finish}
 		r.active[sessionID] = work
-		r.wg.Add(1)
 		r.mu.Unlock()
 		return work, activeCtx, nil
 	}
+}
+
+// Stop seals admission and cancels all scheduled and manual passes.
+func (r *CompactionRunner) Stop() {
+	if r != nil {
+		r.work.Stop()
+	}
+}
+
+// WaitContext drains compaction before its stores are released.
+func (r *CompactionRunner) WaitContext(ctx context.Context) error {
+	if r == nil {
+		return nil
+	}
+	return r.work.Wait(ctx)
 }

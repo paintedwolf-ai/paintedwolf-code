@@ -27,6 +27,9 @@ UNFINISHED_RUNS = ("requested", "waiting", "pending", "queued", "in_progress")
 PLATFORMS = ("macos", "linux")
 QUEUE, RELEASE, READY, DRAFT, WARMING, BACKGROUND = "queue", "release", "ready", "draft", "warming", "background"
 QUALIFICATION = "qualification"
+# Each run handles the one event that started it, so no newer run would carry it after a cancellation:
+# such runs are never cancelled and claim no priority.
+ONE_SHOT = "one_shot"
 PROTECTED = {QUEUE, RELEASE}
 # Lowest priority first: the order in which runs give up runners.
 YIELD_ORDER = (BACKGROUND, WARMING, DRAFT, QUALIFICATION, READY)
@@ -39,8 +42,8 @@ Plan = namedtuple("Plan", "stale preempted resumable")
 def workflow_classes():
     """Workflow file to priority class, from the catalog; CI's class follows each run's event."""
     declared = catalog()["runner_priority"]
-    if set(declared) - {RELEASE, QUALIFICATION, WARMING, BACKGROUND}:
-        raise ValueError("runner priority classes are release, qualification, warming, and background")
+    if set(declared) - {RELEASE, QUALIFICATION, WARMING, BACKGROUND, ONE_SHOT}:
+        raise ValueError("runner priority classes are release, qualification, warming, background, and one_shot")
     files = [name for names in declared.values() for name in names]
     if len(files) != len(set(files)) or "ci.yml" in files:
         raise ValueError("each workflow declares one runner priority, and CI's follows its event")
@@ -54,7 +57,7 @@ def run_class(run, classes, ready_heads):
         ready = READY if run["head_sha"] in ready_heads else DRAFT
         return {"merge_group": QUEUE, "pull_request": ready}.get(run["event"])
     # Each issue event's run handles one issue, so no newer run would carry it after a cancellation.
-    if run["event"] == "issues":
+    if run["event"] == "issues" or classes.get(workflow) == ONE_SHOT:
         return None
     return classes.get(workflow)
 
@@ -141,6 +144,9 @@ def decide(runs, kinds, jobs, live_groups, now):
     preempted += preemptions([(run, jobs.get(run["id"], [])) for run in lower], need)
     if any(job["status"] == "queued" for job in protected):
         resumable = set()
+    elif any(need.values()):
+        # Lower classes stay down while ready checks still wait for the runners they gave up.
+        resumable = {READY}
     else:
         resumable = {READY, WARMING, QUALIFICATION} | (set() if live_groups else {BACKGROUND})
     return Plan(stale, [(run, kinds[run["id"]]) for run in preempted], resumable)
