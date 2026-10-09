@@ -17,16 +17,10 @@ limits:
     ts_local_dependencies: {warn: 20, limit: 30}
 exceptions:
     go_receiver_lines:
-        lycaon/internal/coordinator/assembly/assembly.AssemblyEngine:
-            cap: 1200
-            reason: Already past the limit before the boot-orientation fix, which adds one bounded loop; the split is tracked in #270.
         lycaon/internal/session/session.Manager:
             cap: 12700
             reason: Predates the limits; fixes still land here while the package is decomposed (#271).
     go_receiver_methods:
-        lycaon/internal/coordinator/assembly/assembly.AssemblyEngine:
-            cap: 55
-            reason: Already past the limit before the boot-orientation fix; the split is tracked in #270.
         lycaon/internal/session/session.Manager:
             cap: 720
             reason: Predates the limits; fixes still land here while the package is decomposed (#271).
