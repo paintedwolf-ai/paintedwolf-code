@@ -3,6 +3,7 @@ package native
 import (
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,7 +12,6 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 	lycexec "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/hostcmd"
-	"github.com/lycaon/lycaon/internal/tools"
 )
 
 func TestRejectCommandNotFoundFromConfineExit(t *testing.T) {
@@ -22,7 +22,7 @@ func TestRejectCommandNotFoundFromConfineExit(t *testing.T) {
 		OK:       false,
 	}
 	err := rejectCommandNotFound(res, map[string]any{"command": "missing-tool --help"})
-	tr := tools.AsToolReject(err)
+	tr := toolrejection.AsToolReject(err)
 	if tr == nil {
 		t.Fatalf("want ToolReject, got %v", err)
 	}
@@ -43,7 +43,7 @@ func TestRejectCommandNotFoundIgnoresOtherExit127(t *testing.T) {
 
 func TestRejectStartCommandNotFoundLookPath(t *testing.T) {
 	err := rejectStartCommandNotFound(&confine.CommandNotFoundError{Name: "nope"})
-	tr := tools.AsToolReject(err)
+	tr := toolrejection.AsToolReject(err)
 	if tr == nil || tr.Code != "COMMAND_NOT_FOUND" {
 		t.Fatalf("got %v", err)
 	}
@@ -54,7 +54,7 @@ func TestRejectStartCommandNotFoundLookPath(t *testing.T) {
 
 func TestRejectStartCommandNotFoundExecErrNotFound(t *testing.T) {
 	err := rejectStartCommandNotFound(exec.ErrNotFound)
-	tr := tools.AsToolReject(err)
+	tr := toolrejection.AsToolReject(err)
 	if tr == nil || tr.Code != "COMMAND_NOT_FOUND" {
 		t.Fatalf("got %v", err)
 	}
@@ -64,7 +64,7 @@ func TestRejectStartCommandNotFoundPreservesWrappedExecName(t *testing.T) {
 	err := rejectStartCommandNotFound(fmt.Errorf("start command: %w", &exec.Error{
 		Name: "missing-command", Err: exec.ErrNotFound,
 	}))
-	tr := tools.AsToolReject(err)
+	tr := toolrejection.AsToolReject(err)
 	if tr == nil || tr.Code != "COMMAND_NOT_FOUND" {
 		t.Fatalf("got %v", err)
 	}
@@ -97,7 +97,7 @@ func TestCommandNotFoundNamesResolvableNeighbours(t *testing.T) {
 	}
 	t.Setenv("PATH", dir)
 
-	tr := tools.AsToolReject(commandNotFoundReject("toolshed"))
+	tr := toolrejection.AsToolReject(commandNotFoundReject("toolshed"))
 	if tr == nil {
 		t.Fatal("want ToolReject")
 	}
@@ -109,7 +109,7 @@ func TestCommandNotFoundNamesResolvableNeighbours(t *testing.T) {
 
 func TestCommandNotFoundStaysSilentWithoutNeighbours(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
-	tr := tools.AsToolReject(commandNotFoundReject("toolshed"))
+	tr := toolrejection.AsToolReject(commandNotFoundReject("toolshed"))
 	if tr == nil {
 		t.Fatal("want ToolReject")
 	}

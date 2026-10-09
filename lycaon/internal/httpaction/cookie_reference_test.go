@@ -2,6 +2,7 @@ package httpaction
 
 import (
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -12,7 +13,6 @@ import (
 	"github.com/lycaon/lycaon/internal/httpcookies"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 )
 
 // csrfServer is the double-submit pattern: a token arrives as a cookie and has
@@ -134,7 +134,7 @@ func TestUnheldCookieReferenceIsRefusedNotSentLiterally(t *testing.T) {
 		},
 		"capability_request": loopbackCapability(t, server.URL),
 	}, sessionContext(root, "call-2"))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != CookieNotHeldCode {
 		t.Fatalf("error = %v, want %s", err, CookieNotHeldCode)
 	}
@@ -181,7 +181,7 @@ func TestCookieReferenceWithoutAJarIsRefused(t *testing.T) {
 		"url":     "https://example.test/",
 		"headers": []any{map[string]any{"name": "X-CSRFToken", "value": "{{cookie:csrftoken}}"}},
 	}, sessionContext(t.TempDir(), "call-1"))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "TOOL_ARGS_INVALID" {
 		t.Fatalf("error = %v, want TOOL_ARGS_INVALID", err)
 	}
@@ -203,7 +203,7 @@ func TestJarIsWrittenBackWhenTheExchangeFails(t *testing.T) {
 		"url": server.URL + "/login", "method": "POST", "body_text": "u=1", "cookie_jar": "app",
 		"capability_request": loopbackCapability(t, server.URL),
 	}, sessionContext(root, "call-1"))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "HTTP_REQUEST_FAILED" {
 		t.Fatalf("error = %v", err)
 	}

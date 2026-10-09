@@ -57,9 +57,9 @@ func TestCoordinatorSynthesisWrapupReplay(t *testing.T) {
 			// The guard records facts and reject data for policy evaluation.
 			data, observed := gc.RejectData[tc.WantCode]
 			if !observed {
-				t.Fatalf("guard did not stamp reject data for %q; forbidden=%v", tc.WantCode, gc.SynthesisWrapupToolForbidden)
+				t.Fatalf("guard did not stamp reject data for %q; forbidden=%v", tc.WantCode, gc.Workflow.SynthesisWrapupToolForbidden)
 			}
-			if tc.WantCode == guard.CoordinatorSynthesisWrapupOnlyCode && !gc.SynthesisWrapupToolForbidden {
+			if tc.WantCode == guard.CoordinatorSynthesisWrapupOnlyCode && !gc.Workflow.SynthesisWrapupToolForbidden {
 				t.Fatal("synthesis_wrapup_tool_forbidden fact is unset")
 			}
 			formatted, err := rejectFmt.Format(tc.WantCode, data)

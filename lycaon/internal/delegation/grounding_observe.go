@@ -19,26 +19,26 @@ func ObserveDelegationGroundingVerdict(gc *oar.GuardContext, verdict GroundingVe
 	}
 	switch code {
 	case "COORDINATOR_GROUNDING_ESCALATED":
-		gc.GroundingEscalated = true
-		gc.ClaimsCompletion = true
+		gc.Grounding.GroundingEscalated = true
+		gc.Grounding.ClaimsCompletion = true
 	case ambientGroundingEscalatedCode:
-		gc.GroundingEscalated = true
-		gc.ClaimsCompletion = false
+		gc.Grounding.GroundingEscalated = true
+		gc.Grounding.ClaimsCompletion = false
 	case "COORDINATOR_UNGROUNDED_CLAIM":
-		gc.ClaimsCompletion = true
-		gc.HasMatchingLedgerJob = false
+		gc.Grounding.ClaimsCompletion = true
+		gc.Grounding.HasMatchingLedgerJob = false
 	case "COORDINATOR_CRITERIA_UNMET":
-		gc.ClaimsCompletion = true
-		gc.HasMatchingLedgerJob = true
-		gc.LedgerCriteriaMet = false
+		gc.Grounding.ClaimsCompletion = true
+		gc.Grounding.HasMatchingLedgerJob = true
+		gc.Grounding.LedgerCriteriaMet = false
 	case ambientUngroundedCompletionCode:
-		gc.LastAuditUngrounded = true
-		gc.HasMatchingLedgerJob = false
-		gc.ClaimsCompletion = false
+		gc.Grounding.LastAuditUngrounded = true
+		gc.Grounding.HasMatchingLedgerJob = false
+		gc.Grounding.ClaimsCompletion = false
 	default:
 		// An ambient audit records failure without identifying offending citations.
-		gc.LastAuditUngrounded = true
-		gc.ClaimsCompletion = false
+		gc.Grounding.LastAuditUngrounded = true
+		gc.Grounding.ClaimsCompletion = false
 		annotateAmbientAuditSurface(gc, code)
 	}
 	gc.PutRejectData(code, data)
@@ -48,11 +48,11 @@ func annotateAmbientAuditSurface(gc *oar.GuardContext, code string) {
 	switch code {
 	case guidance.InvestHandleNotObservedCode, guidance.InvestURLNotObservedCode,
 		guidance.InvestCitationUnverifiableCode, guidance.InvestCitationsRequiredCode:
-		gc.Surface = "implement_investigate"
+		gc.Session.Surface = "implement_investigate"
 	case guidance.SynthHandleNotInLegsCode, guidance.SynthURLNotObservedCode,
 		guidance.SynthCitationUnverifiableCode, guidance.SynthCitationsRequiredCode:
-		if gc.Surface == "" {
-			gc.Surface = "implement_dispatch"
+		if gc.Session.Surface == "" {
+			gc.Session.Surface = "implement_dispatch"
 		}
 	}
 }

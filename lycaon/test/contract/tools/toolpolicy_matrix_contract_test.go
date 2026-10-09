@@ -107,7 +107,7 @@ func listCoordinatorToolsForPosture(t *testing.T, row postureToolExpectation) []
 	rt, err := toolhost.NewRuntime(toolhost.RuntimeConfig{ConfigRoot: configRoot, Catalog: contractcheck.StockCatalog(t)})
 	contractcheck.FailErr(t, "toolhost.NewRuntime failed", err)
 	mgr := session.NewManager(store, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
-	mgr.SetToolInvoker(rt.Executor)
+	mgr.SetToolInvoker(rt.Executor, rt.Executor.Metadata)
 	workflowMgr := wireToolpolicyMatrixContract(t, configRoot, mgr, store, rt.Registry, sqlDB)
 
 	ctx := context.Background()

@@ -18,9 +18,9 @@ func TestAgentCommandLaunchInjectsPackageCacheEnv(t *testing.T) {
 		t.Skip("no home directory")
 	}
 	tctx := tools.ToolContext{
-		PackageExecution: &packageexec.Execution{
+		Files: tools.InvocationFiles{PackageExecution: &packageexec.Execution{
 			Manager: "bun",
-		},
+		}},
 	}
 	confinement := &confine.Confinement{Roots: []string{t.TempDir()}}
 	launch := agentCommandLaunch(tctx, "test-command", confinement)

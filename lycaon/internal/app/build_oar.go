@@ -1,6 +1,8 @@
 package app
 
 import (
+	"github.com/lycaon/lycaon/internal/toolfeedback"
+
 	"context"
 	"fmt"
 
@@ -11,7 +13,6 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/mcp/bindings"
 	"github.com/lycaon/lycaon/internal/oar"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -96,8 +97,8 @@ func (b toolWiring) wireOARBlockPlane() error {
 	})
 
 	renderer := oar.NewRenderer(b.rejectFmt, nudgeFormatter{f: b.rejectFmt})
-	bp := &tools.BlockPlane{Pipeline: pipeline, Renderer: renderer}
-	b.toolRuntime.Executor.SetBlockPlane(bp)
+	bp := &toolfeedback.BlockPlane{Pipeline: pipeline, Renderer: renderer}
+	b.toolRuntime.Executor.Rejections.SetBlockPlane(bp)
 	b.mgr.SetOARPipeline(pipeline, renderer)
 
 	pipeline.SetMCPBindingsFor(func(ctx context.Context, sessionID string) []bindings.Binding {

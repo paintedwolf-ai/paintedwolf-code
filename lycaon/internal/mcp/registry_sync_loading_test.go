@@ -9,8 +9,8 @@ import (
 )
 
 func TestBuildToolDefinitionCarriesProviderLoadingMode(t *testing.T) {
-	reg := &RegistryImpl{}
-	def, _, _, err := reg.buildToolDefinition(MCPProviderEntry{
+	reg := &Runtime{Tools: &ToolDiscovery{}}
+	def, _, _, err := reg.Tools.buildToolDefinition(MCPProviderEntry{
 		ID: "tracker", ToolLoading: api.McpToolLoadingAlways,
 	}, &sdkmcp.Tool{Name: "search", InputSchema: map[string]any{"type": "object"}})
 	if err != nil {

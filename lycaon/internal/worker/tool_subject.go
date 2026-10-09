@@ -16,7 +16,7 @@ func captureWorkerSubject(tctx tools.ToolContext, queue subjectQueue, id string)
 		return
 	}
 	task, ok := queue.Get(strings.TrimSpace(id))
-	if ok && task != nil && strings.TrimSpace(task.ParentSessionID) == strings.TrimSpace(tctx.SessionID) {
+	if ok && task != nil && strings.TrimSpace(task.ParentSessionID) == strings.TrimSpace(tctx.Identity.SessionID) {
 		tctx.SetDisplaySubject(task.Brief)
 	}
 }

@@ -44,11 +44,11 @@ func TestGateContainedMatchesSpawnRequest(t *testing.T) {
 	grant := confine.SocketGrant{ApprovedPath: resolved, ResolvedPath: resolved}
 
 	base := tools.ToolContext{
-		ProjectID:    "proj-1",
-		Roots:        []projectroot.RootRef{{ID: "r1", Path: project, IsPrimary: true}},
-		ActiveRootID: "r1",
-		SessionID:    "sess-1",
-		ToolCallID:   "call-1",
+		Identity: tools.InvocationIdentity{ProjectID: "proj-1",
+			SessionID:  "sess-1",
+			ToolCallID: "call-1"},
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Path: project, IsPrimary: true}},
+			ActiveRootID: "r1"},
 	}
 
 	cases := []struct {
@@ -58,19 +58,19 @@ func TestGateContainedMatchesSpawnRequest(t *testing.T) {
 	}{
 		{name: "command_with_overlay_roots", overlay: []string{overlayRoot}},
 		{name: "package_explicit_read", mutate: func(tc *tools.ToolContext) {
-			tc.PackageExecution = &packageexec.Execution{SensitiveReads: []string{overlayRoot}, ApprovedReadPaths: []string{filepath.Join(overlayRoot, "cacert.pem")}}
-			tc.SessionReadPaths = []string{filepath.Join(overlayRoot, "unrelated-secret")}
+			tc.Files.PackageExecution = &packageexec.Execution{SensitiveReads: []string{overlayRoot}, ApprovedReadPaths: []string{filepath.Join(overlayRoot, "cacert.pem")}}
+			tc.Files.SessionReadPaths = []string{filepath.Join(overlayRoot, "unrelated-secret")}
 		}},
 		{name: "socket_grants", mutate: func(tc *tools.ToolContext) {
-			tc.SocketGrants = []confine.SocketGrant{grant}
+			tc.Socket.SocketGrants = []confine.SocketGrant{grant}
 			// The overlay covers the grant, so spawn finalize consumes no permit.
-			tc.DurableSocketGrants = []confine.SocketGrant{grant}
+			tc.Socket.DurableSocketGrants = []confine.SocketGrant{grant}
 		}},
-		{name: "socks_proxy_env", mutate: func(tc *tools.ToolContext) { tc.SocksProxyEnv = true }},
+		{name: "socks_proxy_env", mutate: func(tc *tools.ToolContext) { tc.Local.SocksProxyEnv = true }},
 		{name: "direct_ip_declared", mutate: func(tc *tools.ToolContext) {
-			tc.DirectIPRequested = true
-			tc.DirectIPDeclared = []string{"udp:123"}
-			tc.DirectIPCapabilityRuntime = parityDirectIPRuntime{}
+			tc.Direct.DirectIPRequested = true
+			tc.Direct.DirectIPDeclared = []string{"udp:123"}
+			tc.Direct.DirectIPCapabilityRuntime = parityDirectIPRuntime{}
 		}},
 	}
 	for _, tc := range cases {
@@ -103,7 +103,7 @@ func TestGateContainedMatchesSpawnRequest(t *testing.T) {
 					t.Fatalf("overlay root missing from gate Contained.Roots: %+v", gateContained.Roots)
 				}
 			}
-			if tctx.DirectIPRequested && gateContained.Active() {
+			if tctx.Direct.DirectIPRequested && gateContained.Active() {
 				foundNarrowed := false
 				for _, permit := range gateContained.EffectiveBoundaryPermits() {
 					if permit.Kind == hitl.BoundaryPermitDirectIP && permit.Digest != "enabled" {

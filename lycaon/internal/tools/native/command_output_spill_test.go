@@ -46,7 +46,7 @@ func TestCommandResultStatesTruncationAndSpill(t *testing.T) {
 func TestSpillCommandOutputWritesTheWholeScreenedBody(t *testing.T) {
 	dir := t.TempDir()
 	tctx := testToolContext(t.TempDir())
-	tctx.HostDataDir = dir
+	tctx.Host.HostDataDir = dir
 	full := "stdout: " + strings.Repeat("row\n", 50)
 	snap := bgprocess.Snapshot{Tail: full[len(full)-32:], Output: full, OutputScreened: true}
 
@@ -68,11 +68,11 @@ func TestSpillCommandOutputWritesTheWholeScreenedBody(t *testing.T) {
 	if spillCommandOutput(tctx, bgprocess.Snapshot{Tail: "x", Output: full, OutputScreened: false}) != "" {
 		t.Fatal("unscreened output must never leave the process")
 	}
-	tctx.MaxToolSpillBytes = len(full) - 1
+	tctx.Host.MaxToolSpillBytes = len(full) - 1
 	if spillCommandOutput(tctx, snap) != "" {
 		t.Fatal("output beyond the retention bound must not advertise whole-output recovery")
 	}
-	tctx.MaxToolSpillBytes = len(full)
+	tctx.Host.MaxToolSpillBytes = len(full)
 	if spillCommandOutput(tctx, snap) != rel {
 		t.Fatal("output at the retention bound lost its recovery reference")
 	}

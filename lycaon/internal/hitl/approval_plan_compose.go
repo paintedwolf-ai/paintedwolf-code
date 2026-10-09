@@ -20,15 +20,15 @@ func ComposeCapabilityApprovals(action ProposedAction, reviews []*PreparedApprov
 	}
 	decision := &gate.Decision{Posture: gate.PostureLight}
 	subject := ApprovalSubject{Kind: ApprovalSubjectActionSet, Title: "Allow command capabilities"}
-	presentation := ApprovalPresentation{Action: "Use the listed capabilities", Tool: action.Tool, Command: action.Command}
+	presentation := ApprovalPresentation{Action: "Use the listed capabilities", Tool: action.Invocation.Tool, Command: action.Presentation.Command}
 	var reasons []api.ApprovalGate
 	var reasonKeys []string
 	var held *HeldRelease
 	plans := make([]*ApprovalPlan, 0, len(reviews))
 	for _, review := range reviews {
 		req := review.Request
-		if req.ApprovalPlan == nil || req.Decision == nil || req.ProposedAction == nil || req.ProjectID != action.ProjectID ||
-			req.SessionID != action.SessionID || req.ToolCallID != action.ActionID {
+		if req.ApprovalPlan == nil || req.Decision == nil || req.ProposedAction == nil || req.ProjectID != action.Scope.ProjectID ||
+			req.SessionID != action.Scope.SessionID || req.ToolCallID != action.Invocation.ActionID {
 			return nil, nil, fmt.Errorf("capability review has incomplete or foreign contributions")
 		}
 		plan := req.ApprovalPlan

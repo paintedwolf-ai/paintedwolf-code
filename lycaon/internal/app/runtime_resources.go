@@ -23,7 +23,7 @@ type runtimeResources struct {
 	cliSocket     *clisocket.Server
 	httpServer    *http.Server
 	profileServer *http.Server
-	mcpRegistry   *mcp.RegistryImpl
+	mcpRegistry   *mcp.Runtime
 	db            *db.Store
 }
 
@@ -53,6 +53,9 @@ func (r *runtimeResources) releaseObserver(name string, release func()) {
 func (r *runtimeResources) capture(b *serveBuilder) {
 	if r == nil || b == nil {
 		return
+	}
+	if checkpoints, ok := b.checkpointMgr.(interface{ StopExpiryTimers() }); ok {
+		r.track("checkpoint-expiries", 25, func(context.Context) error { checkpoints.StopExpiryTimers(); return nil })
 	}
 	if b.egressBrokerBound {
 		// The front door closes after the processes that use it.

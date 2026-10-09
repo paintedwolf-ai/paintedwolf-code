@@ -89,6 +89,10 @@ Intrinsic tool failures publish `paintedwolf.rejection_code` at `tool.rejected`;
 
 ## Fact catalogue
 
+`paintedwolf.high_risk_tool` is deprecated and retired because its provider combined policy categories, contrary to OAR-FACT-7. Its named successor is the explicit rule expression `(paintedwolf.tool_is_state || paintedwolf.tool_is_delegation || paintedwolf.tool_is_handoff || paintedwolf.tool_is_task)`. The capability catalog no longer advertises the retired name; a rule naming it fails load with the undeclared identifier before evaluation. This is the published retirement rule for that agent-public fact; the name must never be reused. The independent host posture-condition vocabulary retains its existing authorization behavior.
+
+Internal occurrence facts are grouped into typed domains for invocation, session, progress, workflow, workers, execution, refusals, source, access, content, grounding, MCP, and counters. These Go domains are not capability profiles. The activation projection uses the declared flat fact names and types ([OAR-FACT-14]–[OAR-FACT-28]); lazy provider state and the pre-occurrence counter snapshot retain their own lifetimes ([OAR-FACT-11], [OAR-FIRE-6]).
+
 The fact catalogue is closed and generated from the host's registered observation environment ([`catalogue.go`](../lycaon/internal/oar/catalogue.go)), grouped by anchor and tier:
 
 | Tier | Meaning |

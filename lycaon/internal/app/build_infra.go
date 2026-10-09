@@ -4,14 +4,15 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync/atomic"
 	"time"
-	"os"
-	"strings"
 
 	"github.com/lycaon/lycaon/internal/agentdef"
+	"github.com/lycaon/lycaon/internal/agentpresence"
 	"github.com/lycaon/lycaon/internal/backup"
 	"github.com/lycaon/lycaon/internal/bootrecovery"
 	"github.com/lycaon/lycaon/internal/catalogview"
@@ -24,10 +25,14 @@ import (
 	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/decide/bialy"
 	"github.com/lycaon/lycaon/internal/enginepaths"
+	"github.com/lycaon/lycaon/internal/eventoutbox"
+	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/extensionstate"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/git"
+	"github.com/lycaon/lycaon/internal/hostidentity"
 	"github.com/lycaon/lycaon/internal/hostlock"
+	"github.com/lycaon/lycaon/internal/hostpower"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/llm/providerwire"
@@ -45,6 +50,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/skills"
+	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/startupprotocol"
@@ -52,12 +58,6 @@ import (
 	"github.com/lycaon/lycaon/internal/tsparse"
 	"github.com/lycaon/lycaon/internal/version"
 	"github.com/lycaon/lycaon/internal/webindex"
-	"github.com/lycaon/lycaon/internal/agentpresence"
-	"github.com/lycaon/lycaon/internal/eventoutbox"
-	"github.com/lycaon/lycaon/internal/events"
-	"github.com/lycaon/lycaon/internal/hostidentity"
-	"github.com/lycaon/lycaon/internal/hostpower"
-	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -294,7 +294,7 @@ func (b *serveBuilder) wireToolRuntime() error {
 		})
 		b.synthesisCurator = curator
 	}
-	b.toolRuntime.SetReadEvidenceLedger(b.store)
+	b.toolRuntime.Survey.SetReadEvidenceLedger(b.store)
 	toolWiring{b}.wireDetectionPacks()
 	hintCfg, rejectFmt, err := loadStockHintRegistry()
 	if err != nil {
@@ -303,13 +303,13 @@ func (b *serveBuilder) wireToolRuntime() error {
 	b.hintCfg = hintCfg
 	b.rejectFmt = rejectFmt
 	if b.rejectFmt != nil {
-		b.toolRuntime.ApplyGuidanceRejects(b.rejectFmt)
+		b.toolRuntime.Authority.ApplyGuidanceRejects(b.rejectFmt)
 	}
 	schemaCfg, err := loadToolSchemas()
 	if err != nil {
 		return fmt.Errorf("tool schemas: %w", err)
 	}
-	b.toolRuntime.Executor.SetToolSchemas(schemaCfg)
+	b.toolRuntime.Executor.Metadata.SetToolSchemas(schemaCfg)
 	b.toolReg = tools.NewExecutorRegistry(b.toolRuntime.Executor, b.toolRuntime.Registry)
 	return nil
 }

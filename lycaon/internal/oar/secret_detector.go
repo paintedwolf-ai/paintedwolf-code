@@ -3,6 +3,7 @@ package oar
 import (
 	"context"
 	"fmt"
+
 	"github.com/lycaon/lycaon/internal/secretmatch"
 )
 
@@ -22,8 +23,8 @@ func (d SecretMatchDetector) Inspect(gc *GuardContext) ([]Finding, error) {
 	if gc == nil || d.Matcher.Inert() {
 		return []Finding{{Fact: "secret_matches", Value: []any{}}}, nil
 	}
-	ctx := secretmatch.WithAskAttribution(context.Background(), secretmatch.AskAttribution{ProjectID: gc.ProjectID, SessionID: gc.SessionID})
-	hits := d.Matcher.ScreenContext(ctx, gc.Content)
+	ctx := secretmatch.WithAskAttribution(context.Background(), secretmatch.AskAttribution{ProjectID: gc.Session.ProjectID, SessionID: gc.Session.SessionID})
+	hits := d.Matcher.ScreenContext(ctx, gc.Content.Content)
 	vals := make([]any, 0, len(hits))
 	for _, m := range hits {
 		vals = append(vals, map[string]any{

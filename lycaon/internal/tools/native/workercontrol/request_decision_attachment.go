@@ -1,10 +1,10 @@
 package workercontrol
 
 import (
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/lycaon/lycaon/internal/tools"
 )
 
 type decisionAttachment struct {
@@ -13,7 +13,7 @@ type decisionAttachment struct {
 }
 
 func decisionAttachmentShape(reason string) error {
-	return &tools.ToolReject{Code: "REQUEST_DECISION_ARTIFACT_SHAPE", Data: map[string]any{"reason": reason}}
+	return &toolrejection.ToolReject{Code: "REQUEST_DECISION_ARTIFACT_SHAPE", Data: map[string]any{"reason": reason}}
 }
 
 func parseDecisionAttachment(args map[string]any) (decisionAttachment, error) {
@@ -42,7 +42,7 @@ func parseDecisionAttachment(args map[string]any) (decisionAttachment, error) {
 		return decisionAttachment{}, decisionAttachmentShape("artifact_ids must be an array of UUID strings")
 	}
 	if len(raw) < 2 || len(raw) > 4 {
-		return decisionAttachment{}, &tools.ToolReject{Code: "REQUEST_DECISION_ARTIFACT_ARITY", Data: map[string]any{"count": len(raw)}}
+		return decisionAttachment{}, &toolrejection.ToolReject{Code: "REQUEST_DECISION_ARTIFACT_ARITY", Data: map[string]any{"count": len(raw)}}
 	}
 	out := decisionAttachment{Compare: make([]string, 0, len(raw))}
 	seen := map[string]bool{}

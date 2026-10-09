@@ -1,6 +1,9 @@
 package workflow
 
 import (
+	"github.com/lycaon/lycaon/internal/toolfeedback"
+
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -27,7 +30,7 @@ func TestWorkflowVerdictRefusalsRetainPolicyOccurrenceAndStructuredCause(t *test
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
 	pipeline := oar.NewGuardPipeline(rules, loader, oar.NewCounterStore())
 	pipeline.EnableAnchor(oar.AnchorToolRejected)
-	plane := tools.BlockPlane{Pipeline: pipeline, Renderer: oar.NewRenderer(guidance.NewStaticRejectFormatter(hints), nil)}
+	plane := toolfeedback.BlockPlane{Pipeline: pipeline, Renderer: oar.NewRenderer(guidance.NewStaticRejectFormatter(hints), nil)}
 	for _, code := range []string{
 		ReviewLoopVerdictInvalidCode, SubmitVerdictUnavailableCode, SubmitVerdictIterationCapCode,
 		SubmitVerdictReviewerMissingCode, guidance.VerdictCitationsRequiredCode,
@@ -47,11 +50,13 @@ func TestWorkflowVerdictRefusalsRetainPolicyOccurrenceAndStructuredCause(t *test
 				"missing_reviewers": []string{"reviewer-1"}, "uncited_reviewers": []string{"reviewer-2"},
 				"ungrounded_sample": []string{"missing#3"}, "observed_handles": []string{"observed#4"},
 			}
-			body, original := rejectSubmitVerdict(tools.ToolContext{Out: out}, code, "review-phase", details)
+			body, original := rejectSubmitVerdict(tools.ToolContext{
+				Effects: tools.InvocationEffects{Out: out},
+			}, code, "review-phase", details)
 			reject := requireVerdictRejection(t, body, original, code)
 			failure := plane.RejectObservation(ctx, "submit_verdict", "coordinator", nil, reject)
 			refusal, ok := guidance.RefusalFromError(failure)
-			if !ok || refusal.Code() != code || tools.AsToolReject(failure) != reject || len(refusal.Copy) != 5 {
+			if !ok || refusal.Code() != code || toolrejection.AsToolReject(failure) != reject || len(refusal.Copy) != 5 {
 				t.Fatalf("lost evaluated refusal or original cause: %v", failure)
 			}
 			if count := pipeline.Counters().Get(t.Name(), rule.Qualified(), oar.CounterFire); count != 1 {

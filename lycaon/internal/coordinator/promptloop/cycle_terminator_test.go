@@ -1,6 +1,8 @@
 package promptloop
 
 import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+
 	"context"
 	"strings"
 	"sync/atomic"
@@ -28,8 +30,8 @@ func TestExecuteToolCallsInTurnHostDecoratedCycleTerminator(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			reg := tools.NewStubRegistry()
 			err := reg.Register(tt.tool, func(_ context.Context, _ map[string]any, tctx tools.ToolContext) (string, error) {
-				if tt.tool == "wait" && tctx.Out != nil {
-					tctx.Out.Completion = &api.ToolCompletion{Operation: "wait", State: "parked"}
+				if tt.tool == "wait" && tctx.Effects.Out != nil {
+					tctx.Effects.Out.Completion = &api.ToolCompletion{Operation: "wait", State: "parked"}
 				}
 				return tt.toolOutput, nil
 			})
@@ -72,7 +74,9 @@ func TestExecuteToolCallsInTurnHostDecoratedCycleTerminator(t *testing.T) {
 			history := []api.Message{{ID: assistantID, Role: api.MessageRoleAssistant, ToolCalls: calls}}
 
 			_, _, _, _, _, breakLoop, err := toolBatch{loop}.executeToolCallsInTurn(
-				context.Background(), sess, sess.ID, calls, tools.ToolContext{SessionID: sess.ID},
+				context.Background(), sess, sess.ID, calls, tools.ToolContext{
+					Identity: tools.InvocationIdentity{SessionID: sess.ID},
+				},
 				history, "continue", assistantID, "", nil,
 			)
 			testutil.FailErr(t, "execute decorated cycle terminator", err)
@@ -105,7 +109,9 @@ func TestExecuteToolCallsInTurnHumanApprovalEndsCycle(t *testing.T) {
 	history := []api.Message{{ID: assistantID, Role: api.MessageRoleAssistant, ToolCalls: calls}}
 
 	_, _, _, _, _, breakLoop, err := toolBatch{loop}.executeToolCallsInTurn(
-		context.Background(), sess, sess.ID, calls, tools.ToolContext{SessionID: sess.ID},
+		context.Background(), sess, sess.ID, calls, tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: sess.ID},
+		},
 		history, "continue", assistantID, "", nil,
 	)
 	testutil.FailErr(t, "execute write while awaiting approval", err)
@@ -129,7 +135,7 @@ func TestExecuteToolCallsInTurnAnsweringUnderHostHoldContinues(t *testing.T) {
 	var held atomic.Bool
 	held.Store(true)
 	var ran atomic.Bool
-	if runHostHoldBatch(t, &held, tools.SurfaceAwaitHost, func() { ran.Store(true) }) {
+	if runHostHoldBatch(t, &held, toolcontract.SurfaceAwaitHost, func() { ran.Store(true) }) {
 		t.Fatal("an await_host turn that started under the hold must continue to the reply")
 	}
 	if !ran.Load() {
@@ -140,7 +146,7 @@ func TestExecuteToolCallsInTurnAnsweringUnderHostHoldContinues(t *testing.T) {
 // A batch that moves the run into a host-held phase ends, whatever its surface.
 func TestExecuteToolCallsInTurnEnteringHostHoldEndsCycle(t *testing.T) {
 	var held atomic.Bool
-	if !runHostHoldBatch(t, &held, tools.SurfaceAwaitHost, func() { held.Store(true) }) {
+	if !runHostHoldBatch(t, &held, toolcontract.SurfaceAwaitHost, func() { held.Store(true) }) {
 		t.Fatal("entering a host-held phase must end the tool cycle")
 	}
 }
@@ -174,7 +180,9 @@ func runHostHoldBatch(t *testing.T, held *atomic.Bool, surfaceID string, onCall 
 	}
 
 	_, _, _, _, _, breakLoop, err := toolBatch{loop}.executeToolCallsInTurn(
-		context.Background(), sess, sess.ID, calls, tools.ToolContext{SessionID: sess.ID},
+		context.Background(), sess, sess.ID, calls, tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: sess.ID},
+		},
 		history, "continue", assistantID, surfaceID, st,
 	)
 	testutil.FailErr(t, "execute scan_list around a host hold", err)
@@ -201,7 +209,9 @@ func TestExecuteToolCallsInTurnWriteContinuesWhenNotAwaiting(t *testing.T) {
 	history := []api.Message{{ID: assistantID, Role: api.MessageRoleAssistant, ToolCalls: calls}}
 
 	_, _, _, _, _, breakLoop, err := toolBatch{loop}.executeToolCallsInTurn(
-		context.Background(), sess, sess.ID, calls, tools.ToolContext{SessionID: sess.ID},
+		context.Background(), sess, sess.ID, calls, tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: sess.ID},
+		},
 		history, "continue", assistantID, "", nil,
 	)
 	testutil.FailErr(t, "execute write", err)

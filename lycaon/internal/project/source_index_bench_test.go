@@ -35,7 +35,7 @@ func BenchmarkSourceIndexSearch(b *testing.B) {
 	runtime.ReadMemStats(&before)
 	started := time.Now()
 	for {
-		r, status, err := catalog.OpenIndex(b.Context(), p.ID, sourcecatalog.Root{ID: "root", Path: root}, 10*time.Minute)
+		r, status, err := catalog.Trees.OpenIndex(b.Context(), p.ID, sourcecatalog.Root{ID: "root", Path: root}, 10*time.Minute)
 		if err != nil || r == nil {
 			b.Fatalf("discover source paths: status=%+v err=%v", status, err)
 		}

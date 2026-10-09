@@ -15,7 +15,7 @@ import (
 
 var messageLimitBounds = httpio.MustPageLimit(100, 1, 500)
 
-func (s *Handler) HandleListSessionMessages(w http.ResponseWriter, r *http.Request) {
+func (s *Transcript) HandleListSessionMessages(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	q, ok := s.parseTranscriptPageQuery(w, r, id)
 	if !ok {
@@ -40,7 +40,7 @@ func (s *Handler) HandleListSessionMessages(w http.ResponseWriter, r *http.Reque
 // transcript window: a continuation cursor, a message anchor, or an end.
 var transcriptPositionParams = []string{"before", "after", "before_message_id", "after_message_id", "from"}
 
-func (s *Handler) parseTranscriptPageQuery(w http.ResponseWriter, r *http.Request, sessionID string) (wire.TranscriptPageQuery, bool) {
+func (s *Transcript) parseTranscriptPageQuery(w http.ResponseWriter, r *http.Request, sessionID string) (wire.TranscriptPageQuery, bool) {
 	var q wire.TranscriptPageQuery
 	wq, err := httpio.ReadWindowQuery(r, messageLimitBounds)
 	if err != nil {
@@ -110,7 +110,7 @@ func (s *Handler) parseTranscriptPageQuery(w http.ResponseWriter, r *http.Reques
 }
 
 // transcriptAnchorOrd places a window beside a message of this chat.
-func (s *Handler) transcriptAnchorOrd(w http.ResponseWriter, r *http.Request, sessionID, param, messageID string) (int64, bool) {
+func (s *Transcript) transcriptAnchorOrd(w http.ResponseWriter, r *http.Request, sessionID, param, messageID string) (int64, bool) {
 	if _, err := uuid.Parse(messageID); err != nil {
 		s.responses.InvalidQueryParam(w, param, "must be a UUID")
 		return 0, false

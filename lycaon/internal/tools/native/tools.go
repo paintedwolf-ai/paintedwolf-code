@@ -3,6 +3,7 @@ package native
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"io"
 	"os"
 	"strings"
@@ -197,18 +198,18 @@ func (t *EditTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 }
 
 func captureFileEdit(tctx tools.ToolContext, path, after string, before *string) {
-	if tctx.Out == nil || strings.TrimSpace(path) == "" {
+	if tctx.Effects.Out == nil || strings.TrimSpace(path) == "" {
 		return
 	}
 	// The recorded edit names each value this call resolved by its reference.
 	if before != nil {
-		referenced := tctx.Secrets.ReferenceEchoes(*before)
+		referenced := tctx.Effects.Secrets.ReferenceEchoes(*before)
 		before = &referenced
 	}
-	tctx.Out.FileEdit = &tools.FileEditCapture{
+	tctx.Effects.Out.FileEdit = &tools.FileEditCapture{
 		Path:   path,
 		Before: before,
-		After:  tctx.Secrets.ReferenceEchoes(after),
+		After:  tctx.Effects.Secrets.ReferenceEchoes(after),
 	}
 }
 
@@ -223,23 +224,23 @@ func verifyTextWriteBase(target fseffect.Target, fullPath, baseSHA256 string) er
 		} else if err != nil {
 			return fmt.Errorf("stat write base: %w", err)
 		}
-		return &tools.ToolReject{Code: "TEXT_WRITE_CONFLICT", Data: map[string]any{"path": fullPath, "text_base_changed": true}}
+		return &toolrejection.ToolReject{Code: "TEXT_WRITE_CONFLICT", Data: map[string]any{"path": fullPath, "text_base_changed": true}}
 	}
 	currentFile, err := target.Open()
 	if err != nil {
-		return &tools.ToolReject{Code: "TEXT_WRITE_CONFLICT", Data: map[string]any{"path": fullPath}}
+		return &toolrejection.ToolReject{Code: "TEXT_WRITE_CONFLICT", Data: map[string]any{"path": fullPath}}
 	}
 	defer func() { _ = currentFile.Close() }()
 	info, err := currentFile.Stat()
 	if err != nil || !info.Mode().IsRegular() || info.Size() > readcaps.MaxMutationBytes {
-		return &tools.ToolReject{Code: "TEXT_WRITE_CONFLICT", Data: map[string]any{"path": fullPath}}
+		return &toolrejection.ToolReject{Code: "TEXT_WRITE_CONFLICT", Data: map[string]any{"path": fullPath}}
 	}
 	current, err := io.ReadAll(io.LimitReader(currentFile, readcaps.MaxMutationBytes+1))
 	if err != nil {
-		return &tools.ToolReject{Code: "TEXT_WRITE_CONFLICT", Data: map[string]any{"path": fullPath}}
+		return &toolrejection.ToolReject{Code: "TEXT_WRITE_CONFLICT", Data: map[string]any{"path": fullPath}}
 	}
 	if textfile.SHA256(current) != baseSHA256 {
-		return &tools.ToolReject{Code: "TEXT_WRITE_CONFLICT", Data: map[string]any{"path": fullPath, "text_base_changed": true}}
+		return &toolrejection.ToolReject{Code: "TEXT_WRITE_CONFLICT", Data: map[string]any{"path": fullPath, "text_base_changed": true}}
 	}
 	return nil
 }
@@ -255,10 +256,10 @@ type CommandTool struct {
 }
 
 func (t *CommandTool) Run(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-	tctx.VerificationCheck = verificationRequested(args)
+	tctx.Execution.VerificationCheck = verificationRequested(args)
 	if t.DeclaredCommand != nil {
 		declared := t.DeclaredCommand(tctx.ActiveRootPath())
-		tctx.VerificationCheck = tctx.VerificationCheck || (strings.TrimSpace(declared) != "" && commandsurface.SameCommandLine(canonicalCommandKey(tctx, args), declared))
+		tctx.Execution.VerificationCheck = tctx.Execution.VerificationCheck || (strings.TrimSpace(declared) != "" && commandsurface.SameCommandLine(canonicalCommandKey(tctx, args), declared))
 	}
 	if t.Runner == nil {
 		return "", fmt.Errorf("command runner not configured")
@@ -374,10 +375,10 @@ func commandResultFromOutcome(
 
 // captureProcessHandle records a live process on the invocation.
 func captureProcessHandle(tctx tools.ToolContext, handle string, running bool) {
-	if tctx.Out == nil || strings.TrimSpace(handle) == "" {
+	if tctx.Effects.Out == nil || strings.TrimSpace(handle) == "" {
 		return
 	}
-	tctx.Out.Process = &api.ToolProcessHandle{Handle: handle, Running: running}
+	tctx.Effects.Out.Process = &api.ToolProcessHandle{Handle: handle, Running: running}
 }
 
 // encodeCommandRunning renders a foreground command promoted to a live handle,
@@ -385,18 +386,18 @@ func captureProcessHandle(tctx tools.ToolContext, handle string, running bool) {
 func encodeCommandRunning(tctx tools.ToolContext, outcome commandRunOutcome, budget time.Duration) (string, error) {
 	captureProcessHandle(tctx, outcome.Handle, true)
 	report := commandConfinementReport(
-		outcome.Boundary, outcome.NetworkPosture, tools.LocalNetworkGrantOf(tctx), tctx.PackageExecution,
+		outcome.Boundary, outcome.NetworkPosture, tools.LocalNetworkGrantOf(tctx), tctx.Files.PackageExecution,
 	)
 	if outcome.Boundary.Applied {
-		stamped := confine.StampRefusal("command", tctx.SessionID, outcome.Boundary, confine.RefusalContext{
+		stamped := confine.StampRefusal("command", tctx.Identity.SessionID, outcome.Boundary, confine.RefusalContext{
 			MediatedNetwork:        outcome.Network,
 			RemotePackageExecution: report.RemotePackageExecution,
 			Running:                true,
 			Refusals:               outcome.Refusals,
 		})
 		report.BoundaryRefusal = string(stamped.Attribution)
-		if tctx.Out != nil {
-			tctx.Out.Facts = tools.ApplyRefusalFacts(tctx.Out.Facts, stamped)
+		if tctx.Effects.Out != nil {
+			tctx.Effects.Out.Facts = tools.ApplyRefusalFacts(tctx.Effects.Out.Facts, stamped)
 		}
 	}
 	out, err := surveyjson.Marshal(hostcmd.CommandRunningResult{

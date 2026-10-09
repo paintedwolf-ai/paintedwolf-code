@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"log/slog"
 	"strings"
 
@@ -56,12 +57,12 @@ func RegisterFanoutPlanTool(reg *tools.DefaultRegistry, runs *RunManager) error 
 		return fmt.Errorf("registry and run manager required")
 	}
 	return reg.Register("fanout_plan", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-		if !isCoordinatorAgent(tctx.Agent) {
+		if !isCoordinatorAgent(tctx.Identity.Agent) {
 			return "", fmt.Errorf("fanout_plan requires coordinator role")
 		}
 		plan, err := parseFanoutPlanArgs(args)
 		if err != nil {
-			var reject *tools.ToolReject
+			var reject *toolrejection.ToolReject
 			if errors.As(err, &reject) {
 				return "", err
 			}
@@ -71,13 +72,13 @@ func RegisterFanoutPlanTool(reg *tools.DefaultRegistry, runs *RunManager) error 
 			OK: true, Legs: len(plan.Legs),
 			Message: fmt.Sprintf("fanout plan stamped (%d leg(s)); no workers were dispatched — call workflow_advance when ready to execute", len(plan.Legs)),
 		}
-		if _, ok, replayErr := runs.replayCommandOperation(ctx, tctx.ToolCallID, "fanout_plan", args); replayErr != nil || ok {
+		if _, ok, replayErr := runs.replayCommandOperation(ctx, tctx.Identity.ToolCallID, "fanout_plan", args); replayErr != nil || ok {
 			if replayErr != nil {
 				return "", replayErr
 			}
 			return marshalFanoutPlanResult(result)
 		}
-		active, err := runs.Store.ActiveBySession(ctx, tctx.SessionID)
+		active, err := runs.Store.ActiveBySession(ctx, tctx.Identity.SessionID)
 		if err != nil {
 			return "", err
 		}
@@ -103,7 +104,7 @@ func RegisterFanoutPlanTool(reg *tools.DefaultRegistry, runs *RunManager) error 
 		if def.Fanout.RequireTaskCharter {
 			for _, leg := range plan.Legs {
 				if len(leg.DoneWhen) == 0 {
-					return "", &tools.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"tool": "fanout_plan", "field": "legs.done_when", "reason": "completion_criteria_required"}}
+					return "", &toolrejection.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"tool": "fanout_plan", "field": "legs.done_when", "reason": "completion_criteria_required"}}
 				}
 			}
 		}
@@ -120,11 +121,11 @@ func RegisterFanoutPlanTool(reg *tools.DefaultRegistry, runs *RunManager) error 
 		}
 		vars = stampFanoutPlan(vars, plan)
 		vars = SetGateSatisfied(vars, "fanout_planned", true)
-		commandCtx := withWorkflowCommandOperation(WithExpectedRevision(ctx, active.Revision), tctx.ToolCallID)
+		commandCtx := withWorkflowCommandOperation(WithExpectedRevision(ctx, active.Revision), tctx.Identity.ToolCallID)
 		if err := runs.commitCommand(commandCtx, active, "fanout_plan", args, vars, nil, "", workflowWorkerMutation{}, nil); err != nil {
 			return "", err
 		}
-		seedFanoutProgress(ctx, runs.Progress, tctx.SessionID, active.ID, plan)
+		seedFanoutProgress(ctx, runs.Progress, tctx.Identity.SessionID, active.ID, plan)
 		return marshalFanoutPlanResult(result)
 	})
 }
@@ -182,7 +183,7 @@ func parseFanoutPlanArgs(args map[string]any) (FanoutPlan, error) {
 			return FanoutPlan{}, fmt.Errorf("legs[%d] requires agent_type, subject, and prompt", i)
 		}
 		if len(leg.DoneWhen) > 0 && spawn.TaskCharterRunes(api.WorkerTaskCharter{Goal: leg.Prompt, DoneWhen: leg.DoneWhen}) > spawn.MaxTaskCharterRunes {
-			return FanoutPlan{}, &tools.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"tool": "fanout_plan", "field": fmt.Sprintf("legs[%d]", i), "reason": "brief_too_long", "max_runes": spawn.MaxTaskCharterRunes}}
+			return FanoutPlan{}, &toolrejection.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"tool": "fanout_plan", "field": fmt.Sprintf("legs[%d]", i), "reason": "brief_too_long", "max_runes": spawn.MaxTaskCharterRunes}}
 		}
 		if n := len([]rune(leg.Subject)); n > maxLegSubjectRunes {
 			return FanoutPlan{}, fmt.Errorf("legs[%d].subject is %d characters; name the area in at most %d", i, n, maxLegSubjectRunes)

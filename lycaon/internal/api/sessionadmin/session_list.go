@@ -15,7 +15,7 @@ import (
 var sessionListLimit = httpio.MustPageLimit(wire.DefaultSessionListLimit, 1, wire.MaxSessionListLimit)
 
 // HandleListProjectSessions lists top-level chats for one project.
-func (s *Handler) HandleListProjectSessions(w http.ResponseWriter, r *http.Request) {
+func (s *Transcript) HandleListProjectSessions(w http.ResponseWriter, r *http.Request) {
 	p, ok := requestscope.ProjectByURLID(s.Projects, s.responses, w, r)
 	if !ok {
 		return

@@ -40,9 +40,10 @@ type SandboxReadPathAsk struct {
 	ToolCallID      string
 	ProjectDir      string
 	// ToolName is the argv-running tool.
-	ToolName         string
-	Command          string
-	ProposedReadPath string
+	ToolName           string
+	Command            string
+	ProposedReadPath   string
+	SessionScratchRoot string
 	// ReadDenyPaths are additional host-resolved exclusions for this action.
 	ReadDenyPaths []string
 }

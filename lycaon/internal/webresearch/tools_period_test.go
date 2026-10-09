@@ -3,6 +3,7 @@ package webresearch
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 	"testing"
 
@@ -22,7 +23,9 @@ func periodToolRegistry(t *testing.T, fake *FakeDirectDiscoverer) *tools.Default
 
 func runWebSearch(t *testing.T, reg *tools.DefaultRegistry, args map[string]any) (string, error) {
 	t.Helper()
-	return reg.Run(context.Background(), "web_search", args, tools.ToolContext{SessionID: "sess-period"})
+	return reg.Run(context.Background(), "web_search", args, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "sess-period"},
+	})
 }
 
 func fakeHits() []WebHit {
@@ -58,7 +61,7 @@ func TestWebSearchRejectsUnreadableWindow(t *testing.T) {
 	fake := &FakeDirectDiscoverer{Hits: fakeHits()}
 	_, err := runWebSearch(t, periodToolRegistry(t, fake),
 		map[string]any{"query": "widget guide", "period": "last year"})
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) {
 		t.Fatalf("want ToolReject, got %T %v", err, err)
 	}

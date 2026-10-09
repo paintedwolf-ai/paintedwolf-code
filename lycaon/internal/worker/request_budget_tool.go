@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 	"time"
 
@@ -41,9 +42,9 @@ func RegisterRequestBudgetTool(reg *tools.DefaultRegistry, deps RequestBudgetToo
 		deps.Now = time.Now
 	}
 	return reg.Register(RequestBudgetTool, func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-		jobID := strings.TrimSpace(tctx.WorkerJobID)
+		jobID := strings.TrimSpace(tctx.Identity.WorkerJobID)
 		if tools.OutOfSessionScope(RequestBudgetTool, tctx) || jobID == "" {
-			return "", &tools.ToolReject{Code: requestBudgetAddressedSessionCode, Data: map[string]any{"tool": RequestBudgetTool}}
+			return "", &toolrejection.ToolReject{Code: requestBudgetAddressedSessionCode, Data: map[string]any{"tool": RequestBudgetTool}}
 		}
 		rounds, err := session.ParseTaskMaxToolLoopsFromArgs(map[string]any{"max_tool_loops": args["rounds"]})
 		if err != nil || rounds <= 0 {
@@ -63,12 +64,12 @@ func RegisterRequestBudgetTool(reg *tools.DefaultRegistry, deps RequestBudgetToo
 		}
 		current := budget.Effective(task.MaxToolLoops)
 		if current >= budget.Max {
-			return "", &tools.ToolReject{Code: workerBudgetRequestAtHostMaxCode, Data: map[string]any{
+			return "", &toolrejection.ToolReject{Code: workerBudgetRequestAtHostMaxCode, Data: map[string]any{
 				"max_tool_loops": current, "host_max": budget.Max,
 			}}
 		}
 		if open := task.BudgetRequest; open != nil {
-			return "", &tools.ToolReject{Code: workerBudgetRequestOpenCode, Data: map[string]any{
+			return "", &toolrejection.ToolReject{Code: workerBudgetRequestOpenCode, Data: map[string]any{
 				"requested_max": open.RequestedMax, "max_tool_loops": current,
 			}}
 		}
@@ -84,7 +85,7 @@ func RegisterRequestBudgetTool(reg *tools.DefaultRegistry, deps RequestBudgetToo
 			return "", err
 		}
 		if !recorded {
-			return "", &tools.ToolReject{Code: workerBudgetRequestOpenCode, Data: map[string]any{"max_tool_loops": current}}
+			return "", &toolrejection.ToolReject{Code: workerBudgetRequestOpenCode, Data: map[string]any{"max_tool_loops": current}}
 		}
 		task.BudgetRequest = &req
 		deps.Notify(ctx, *task)

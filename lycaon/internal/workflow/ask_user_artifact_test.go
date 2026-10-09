@@ -40,7 +40,10 @@ func TestAskUserArtifactReviewAttach(t *testing.T) {
 	out, err := fx.runAskUser(ctx, map[string]any{
 		"prompt":    "Approve this layout?",
 		"artifacts": []any{art.ID},
-	}, tools.ToolContext{SessionID: fx.sess.ID, Agent: orchestration.ProfileCoordinator})
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: fx.sess.ID,
+			Agent: orchestration.ProfileCoordinator},
+	})
 	testutil.FailErr(t, "ask_user", err)
 	var body map[string]any
 	testutil.FailErr(t, "unmarshal", json.Unmarshal([]byte(out), &body))
@@ -116,7 +119,10 @@ func TestAskUserArtifactRejects(t *testing.T) {
 	_, err = fx.runAskUser(ctx, map[string]any{
 		"prompt":    "foreign",
 		"artifacts": []any{foreign.ID},
-	}, tools.ToolContext{SessionID: fx.sess.ID, Agent: orchestration.ProfileCoordinator})
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: fx.sess.ID,
+			Agent: orchestration.ProfileCoordinator},
+	})
 	if err == nil || !strings.Contains(err.Error(), "ASK_USER_ARTIFACT_FOREIGN") {
 		t.Fatalf("want FOREIGN, got %v", err)
 	}
@@ -129,7 +135,10 @@ func TestAskUserArtifactRejects(t *testing.T) {
 	_, err = fx.runAskUser(ctx, map[string]any{
 		"prompt":    "unsupported",
 		"artifacts": []any{unsupported.ID},
-	}, tools.ToolContext{SessionID: fx.sess.ID, Agent: orchestration.ProfileCoordinator})
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: fx.sess.ID,
+			Agent: orchestration.ProfileCoordinator},
+	})
 	if err == nil || !strings.Contains(err.Error(), "ASK_USER_ARTIFACT_UNSUPPORTED") {
 		t.Fatalf("want UNSUPPORTED, got %v", err)
 	}
@@ -146,11 +155,11 @@ func TestPendingRequestDecisionDoesNotTripHasPendingUserInput(t *testing.T) {
 // session workspace, as the executor supplies it.
 func workspaceAskContext(fx *askUserFixture, toolCallID string) tools.ToolContext {
 	return tools.ToolContext{
-		SessionID:    fx.sess.ID,
-		ToolCallID:   toolCallID,
-		Agent:        orchestration.ProfileCoordinator,
-		Roots:        []projectroot.RootRef{{ID: "r1", Path: fx.sess.WorkspacePath, IsPrimary: true}},
-		ActiveRootID: "r1",
+		Identity: tools.InvocationIdentity{SessionID: fx.sess.ID,
+			ToolCallID: toolCallID,
+			Agent:      orchestration.ProfileCoordinator},
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Path: fx.sess.WorkspacePath, IsPrimary: true}},
+			ActiveRootID: "r1"},
 	}
 }
 

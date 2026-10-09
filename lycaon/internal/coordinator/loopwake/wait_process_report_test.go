@@ -41,7 +41,10 @@ func recordDeliveries(loop *LoopEngine) func() []awaitstore.Condition {
 func TestRefusalEndsTheProcessWaitWithItsReport(t *testing.T) {
 	loop, _, reg := completionWaitFixture(t)
 	delivered := recordDeliveries(loop)
-	_, err := reg.Run(t.Context(), "wait", completionWaitArgs(), tools.ToolContext{SessionID: "s1", ProjectID: testdbseed.DefaultProjectID})
+	_, err := reg.Run(t.Context(), "wait", completionWaitArgs(), tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "s1",
+			ProjectID: testdbseed.DefaultProjectID},
+	})
 	testutil.FailErr(t, "park process wait", err)
 
 	loop.NudgeProcessRefused(t.Context(), "s1", "unrelated", anchor.Envelope{CommandRefusalDigest: "other job"})
@@ -64,7 +67,10 @@ func TestRefusalEndsTheProcessWaitWithItsReport(t *testing.T) {
 func TestCompletionWakeCarriesTheCompletionReport(t *testing.T) {
 	loop, _, reg := completionWaitFixture(t)
 	delivered := recordDeliveries(loop)
-	_, err := reg.Run(t.Context(), "wait", completionWaitArgs(), tools.ToolContext{SessionID: "s1", ProjectID: testdbseed.DefaultProjectID})
+	_, err := reg.Run(t.Context(), "wait", completionWaitArgs(), tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "s1",
+			ProjectID: testdbseed.DefaultProjectID},
+	})
 	testutil.FailErr(t, "park process wait", err)
 	report := "handle=command-1 termination=timed_out exit_code=-1"
 	loop.NudgeProcessFinished(t.Context(), "s1", "command-1", anchor.Envelope{CommandCompletionDigest: report})
@@ -106,7 +112,10 @@ func TestReconciliationWaitsForThePublishedCompletion(t *testing.T) {
 	}
 
 	// A wait on a finished job returns inline with the same account.
-	out, err := reg.Run(t.Context(), "wait", completionWaitArgs(), tools.ToolContext{SessionID: "s1", ProjectID: testdbseed.DefaultProjectID})
+	out, err := reg.Run(t.Context(), "wait", completionWaitArgs(), tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "s1",
+			ProjectID: testdbseed.DefaultProjectID},
+	})
 	testutil.FailErr(t, "wait on finished job", err)
 	if !strings.Contains(out, "termination=exited") {
 		t.Fatalf("inline completion lacks its report: %s", out)

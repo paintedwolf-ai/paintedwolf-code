@@ -76,9 +76,10 @@ func (m *Manager) SetRejectFormatter(f *guidance.StaticRejectFormatter) {
 	m.rejectFmt = f
 }
 
-// SetToolInvoker wires the policy-aware tool invoker for profile-filtered listing.
-func (m *Manager) SetToolInvoker(inv tools.ToolInvoker) {
+// SetToolInvoker wires invocation and profile-filtered definition metadata.
+func (m *Manager) SetToolInvoker(inv tools.ToolInvoker, lister tools.ToolProfileLister) {
 	m.toolInvoker = inv
+	m.toolLister = lister
 }
 
 // SetPageRegistry wires session-scoped held browser pages.

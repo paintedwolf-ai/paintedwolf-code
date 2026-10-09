@@ -30,7 +30,7 @@ func BenchmarkIndexRepository(b *testing.B) {
 	var firstAnswer time.Duration
 	var reader *IndexReader
 	for {
-		r, status, err := c.OpenIndex(b.Context(), "benchmark", Root{ID: "root", Path: root}, 0)
+		r, status, err := c.Trees.OpenIndex(b.Context(), "benchmark", Root{ID: "root", Path: root}, 0)
 		if err != nil {
 			testutil.FailErr(b, "index benchmark", err)
 		}

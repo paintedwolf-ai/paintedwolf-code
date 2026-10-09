@@ -2,6 +2,7 @@ package native
 
 import (
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
@@ -46,7 +47,7 @@ func TestOrdinaryExitCodesKeepTheirVerdict(t *testing.T) {
 
 func rejectCode(t *testing.T, err error) string {
 	t.Helper()
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) {
 		t.Fatalf("error is not a ToolReject: %v", err)
 	}
@@ -83,16 +84,20 @@ func TestStampUnverifiableFactsPrependsVerifyCode(t *testing.T) {
 	t.Parallel()
 	out := &tools.ToolInvocationOut{}
 	out.Facts = out.Facts.WithCode(isolation.CodeBoundaryRefused)
-	tctx := tools.ToolContext{Out: out}
+	tctx := tools.ToolContext{
+		Effects: tools.InvocationEffects{Out: out},
+	}
 	stampUnverifiableFacts(tctx, VerifyOutcomeUnverifiable)
-	if out.Facts.PrimaryCode() != tools.VerifyUnverifiableCode {
-		t.Fatalf("primary = %q want %q", out.Facts.PrimaryCode(), tools.VerifyUnverifiableCode)
+	if out.Facts.PrimaryCode() != toolrejection.VerifyUnverifiableCode {
+		t.Fatalf("primary = %q want %q", out.Facts.PrimaryCode(), toolrejection.VerifyUnverifiableCode)
 	}
 	if !out.Facts.HasCode(isolation.CodeBoundaryRefused) {
 		t.Fatal("confine code was dropped")
 	}
 	failed := &tools.ToolInvocationOut{}
-	stampUnverifiableFacts(tools.ToolContext{Out: failed}, VerifyOutcomeFailed)
+	stampUnverifiableFacts(tools.ToolContext{
+		Effects: tools.InvocationEffects{Out: failed},
+	}, VerifyOutcomeFailed)
 	if failed.Facts.PrimaryCode() != "" {
 		t.Fatalf("failed verdict must not stamp: %q", failed.Facts.PrimaryCode())
 	}
@@ -105,12 +110,14 @@ func TestBrokerDeniedVerifyReceiptStaysCompleted(t *testing.T) {
 	}, confine.RefusalContext{MediatedNetwork: []confine.EgressHost{{Host: "blocked.test", Allowed: false}}})
 	out := &tools.ToolInvocationOut{}
 	out.Facts = tools.ApplyRefusalFacts(out.Facts, stamped)
-	stampUnverifiableFacts(tools.ToolContext{Out: out}, VerifyOutcomeUnverifiable)
+	stampUnverifiableFacts(tools.ToolContext{
+		Effects: tools.InvocationEffects{Out: out},
+	}, VerifyOutcomeUnverifiable)
 	if out.Facts.Resolution() != api.ToolResultOutcomeCompleted {
 		t.Fatalf("outcome = %q want completed", out.Facts.Resolution())
 	}
-	if out.Facts.PrimaryCode() != tools.VerifyUnverifiableCode {
-		t.Fatalf("primary = %q want %q", out.Facts.PrimaryCode(), tools.VerifyUnverifiableCode)
+	if out.Facts.PrimaryCode() != toolrejection.VerifyUnverifiableCode {
+		t.Fatalf("primary = %q want %q", out.Facts.PrimaryCode(), toolrejection.VerifyUnverifiableCode)
 	}
 	if !out.Facts.HasCode(isolation.CodeBoundaryRefused) {
 		t.Fatal("boundary code was dropped")
@@ -119,7 +126,7 @@ func TestBrokerDeniedVerifyReceiptStaysCompleted(t *testing.T) {
 	if tr == nil || tr.Outcome != api.ToolResultOutcomeCompleted {
 		t.Fatalf("wire outcome = %v", tr)
 	}
-	if tr.PrimaryCode() != tools.VerifyUnverifiableCode {
+	if tr.PrimaryCode() != toolrejection.VerifyUnverifiableCode {
 		t.Fatalf("wire primary = %q", tr.PrimaryCode())
 	}
 }

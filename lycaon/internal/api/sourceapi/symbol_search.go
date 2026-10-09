@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/search"
+	"github.com/lycaon/lycaon/internal/sourcecatalog"
 )
 
 // symbolProjectWorkers bounds projects searched at once on one symbol leg.
@@ -125,7 +126,7 @@ func (e *SymbolExecutor) searchProject(ctx context.Context, leg *search.SymbolPl
 		CaseSensitive: leg.Flags.CaseSensitive,
 		Exact:         leg.Flags.WholeWord,
 		ExcludeDirs:   leg.ExcludeDirs,
-	}, declarationSearchIn(leg.DiscoveryScope(), leg.Flags.Include, leg.Flags.Exclude))
+	}, declarationSearchIn(leg.DiscoveryScope(), leg.Flags.Include, leg.Flags.Exclude, leg.IncludeDependencies))
 	if err != nil {
 		return symbolProjectResult{err: err}
 	}
@@ -134,8 +135,13 @@ func (e *SymbolExecutor) searchProject(ctx context.Context, leg *search.SymbolPl
 	for _, pass := range result.Passes {
 		out.filesOutlined += pass.Files
 	}
+	rootFilters := make(map[string]search.SymbolFilter, len(p.Roots))
+	for _, root := range p.Roots {
+		rootFilters[root.ID] = filter.ForRoot(ctx, sourcecatalog.Process(), root.Path, leg.IncludeDependencies)
+	}
 	for _, match := range result.Symbols {
-		if !filter.Admits(match.Path, match.Name) {
+		rootFilter, knownRoot := rootFilters[match.RootID]
+		if !knownRoot || !rootFilter.Admits(match.Path, match.Name) {
 			continue
 		}
 		highlights := make([]search.TextRange, 0, len(match.Highlights))

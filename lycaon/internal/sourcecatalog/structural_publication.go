@@ -16,7 +16,7 @@ import (
 // Publication serializes writers without holding the mutex used by readers.
 func (s *indexStore) acquireStructurePublication(ctx context.Context) (func(), error) {
 	s.mu.Lock()
-	if s.pins.drained || s.navigation.retired {
+	if s.pins.drained || s.navigation.Retired() {
 		s.mu.Unlock()
 		return nil, pagedview.ErrExpired
 	}
@@ -126,7 +126,7 @@ func (s *indexStore) installPreparedStructure(ctx context.Context, next *structu
 	}
 	defer release()
 	s.mu.Lock()
-	if s.pins.drained || s.navigation.retired || ctx.Err() != nil {
+	if s.pins.drained || s.navigation.Retired() || ctx.Err() != nil {
 		s.mu.Unlock()
 		next.close()
 		if err := ctx.Err(); err != nil {
@@ -385,7 +385,7 @@ func (b *structuralBuilder) foregroundEdgeRetired(ctx context.Context, current *
 
 func (s *indexStore) buildStructure(ctx context.Context, dirty map[string]struct{}, recursive bool) error {
 	started := time.Now()
-	root, release, err := s.acquireNavigation(ctx)
+	root, release, err := s.navigation.Acquire(ctx, s.root.Path)
 	if err != nil {
 		return err
 	}
@@ -413,7 +413,7 @@ func (s *indexStore) buildStructure(ctx context.Context, dirty map[string]struct
 	defer func() { builder.close() }()
 	builder.comparison = pin.value
 	expected := pin.Generation
-	options := structuralScanOptions{store: s, broker: s.catalog.broker, epoch: repochange.CurrentEpoch(s.root.Path)}
+	options := structuralScanOptions{store: s, broker: s.stores.broker, epoch: repochange.CurrentEpoch(s.root.Path)}
 	options.request = func(dir string) backgroundwork.Request {
 		request := s.observationRequest(dir)
 		request.Interests = &s.inventory.interests
@@ -521,13 +521,18 @@ func structuralScanRoots(dirty map[string]struct{}) []string {
 }
 
 // AwaitSubtree waits for caller-defined coverage, independently of inventory completion.
-func (c *Catalog) AwaitSubtree(ctx context.Context, project string, root Root, dir string, settled func(context.Context, *Navigation) (bool, error)) error {
+func (c *Directories) AwaitSubtree(ctx context.Context, project string, root Root, dir string, settled func(context.Context, *Navigation) (bool, error)) error {
 	if err := validateObservationDirectory(root, dir); err != nil {
 		return err
 	}
-	store, err := c.indexStore(ctx, project, root)
+	store, err := c.trees.indexStore(ctx, project, root)
 	if err != nil {
 		return err
+	}
+	if store.policy.boundaryPath(dir, true) != "" {
+		if err := c.observeDisclosedSubtree(ctx, store, normalizeDir(dir)); err != nil {
+			return err
+		}
 	}
 	return c.awaitStructure(ctx, project, root, store, normalizeDir(dir), settled)
 }
@@ -549,7 +554,7 @@ func SubtreeCovered(ctx context.Context, navigation *Navigation, dir string) (bo
 // awaitStructure retries settled against the head generation, then against the
 // last complete generation published since the call began, until it reports
 // done. Between attempts it asks the inventory to cover dir when it is idle.
-func (c *Catalog) awaitStructure(ctx context.Context, project string, root Root, store *indexStore, dir string, settled func(context.Context, *Navigation) (bool, error)) error {
+func (c *Directories) awaitStructure(ctx context.Context, project string, root Root, store *indexStore, dir string, settled func(context.Context, *Navigation) (bool, error)) error {
 	if err := store.startInventory(ctx); err != nil {
 		return err
 	}

@@ -4,92 +4,53 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"sync"
 
-	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/fileoutline"
-	"github.com/lycaon/lycaon/internal/sandbox"
-	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/summarize"
-	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/tools/projectpaths"
-	"github.com/lycaon/lycaon/internal/tsparse"
-	"golang.org/x/mod/modfile"
 )
 
-type summarizeGatherer struct {
-	parseFailures     []tsparse.FileFailure
-	parseFailureCount int
-	skippedPaths      map[string]bool
-	nonTextPaths      map[string]bool
-	treeViews         map[string]summaryTreeLookup
-	truncatedPaths    map[string]bool
-	readReservations  map[string]int64
-	sourceFiles       int
-	sourceBytes       int64
-	sourceReadBytes   int64
-	readMu            sync.Mutex
-	sourceLimited     bool
-	treeReaders       []*sourcecatalog.SummaryReader
-	treeErr           error
-	treeRequest       summarize.Request
-	treeState         sourcecatalog.State
-	treeRefreshing    bool
-	treeNodes         int
-	directoryEntries  int
-	directoriesOpened int
-	indexWaitUsed     bool
-	boundary          *sandbox.Boundary
-	// reads resolves and opens every file the gather reads.
-	reads             *projectpaths.ReadSession
-	caps              summarize.Caps
-	tctx              tools.ToolContext
-	catalog           *sourcecatalog.Catalog
-	rerank            decide.Reranker
-	// nestedPruneCount spans all scans in one gather.
-	nestedPruneCount *int
-	nestedPruneSeen  map[string]struct{}
-	// faninGrepPasses counts shared grep passes.
-	faninGrepPasses *int
-	// Gather and Outline share these call-local memos.
-	memoMu             sync.Mutex
-	structureByPath    map[string]structureCacheEntry
-	bytesByAbs         map[string][]byte
-	goImportByPkgDir   map[string]string // path.Dir(rel) → module import path ("" = miss)
-	goModByAbs         map[string]*modfile.File
-	subtreeByPath      map[string]*summarize.SubtreeNode
-	catalogRevision    uint64
-	patternFilesTotal  int
-	patternNextPath    string
-	patternCursorFound bool
+func (g *summarizeGatherer) stampWork(res *summarize.Result) {
+	res.Orchestration.Curator.DirectoryEntriesRead = g.trees.directoryEntries
+	res.Orchestration.Curator.DirectoriesOpened = g.trees.directoriesOpened
+	for _, r := range g.trees.treeReaders {
+		res.Orchestration.Curator.MetadataRowsRead += r.RowsRead
+	}
+	res.Orchestration.Curator.SourceFilesRead = g.sources.sourceFiles
+	res.Orchestration.Curator.SourceBytesRead = g.sources.sourceReadBytes
+	if len(g.sources.skippedPaths) > 0 {
+		res.Coverage.Complete = false
+		res.Pack.Gaps = append(res.Pack.Gaps, fmt.Sprintf("Source detail omitted %d unreadable, non-text or budget-limited paths; this pack does not establish their contents.", len(g.sources.skippedPaths)))
+	}
+	if g.sources.sourceLimited {
+		res.Pack.Gaps = append(res.Pack.Gaps, "Source detail reached the read budget; summarize a narrower path for more detail.")
+	}
 }
 
 var _ summarize.Gatherer = (*summarizeGatherer)(nil)
 
-var _ summarize.OutlineProvider = (*summarizeGatherer)(nil)
-
 func (g *summarizeGatherer) Gather(ctx context.Context, req summarize.Request) (summarize.GatherResult, error) {
-	g.treeRequest = req
+	g.trees.treeRequest = req
+	g.sources.task = req.Task
 	mode := summarize.ResolveMode(strings.TrimSpace(req.Content) != "", req.HasRepoKeys())
 	res := summarize.GatherResult{Mode: mode}
-	g.patternFilesTotal = 0
-	g.patternNextPath = ""
-	g.patternCursorFound = false
+	g.patterns.patternFilesTotal = 0
+	g.patterns.patternNextPath = ""
+	g.patterns.patternCursorFound = false
 
 	var nestedPruned int
-	g.nestedPruneCount = &nestedPruned
-	g.nestedPruneSeen = nil
+	g.nested.nestedPruneCount = &nestedPruned
+	g.nested.nestedPruneSeen = nil
 	var faninPasses int
-	g.faninGrepPasses = &faninPasses
+	g.relations.faninGrepPasses = &faninPasses
 	defer func() {
-		g.nestedPruneCount = nil
-		g.nestedPruneSeen = nil
-		g.faninGrepPasses = nil
+		g.nested.nestedPruneCount = nil
+		g.nested.nestedPruneSeen = nil
+		g.relations.faninGrepPasses = nil
 	}()
 
 	if req.Content != "" {
 		outline := fileoutline.AnalyzeText(ctx, inlineOutlineHint(req.Content), []byte(req.Content))
-		g.noteParseFailure("inline", "source", outline.ParseFailure)
+		g.sources.noteParseFailure("inline", "source", outline.ParseFailure)
 		if len(outline.Symbols) > 0 || (outline.Parses != nil && *outline.Parses) {
 			sc := summarize.StructureCandidate{
 				RelPath:   "inline",
@@ -138,14 +99,14 @@ func (g *summarizeGatherer) Gather(ctx context.Context, req summarize.Request) (
 				target = req.Paths[0]
 			}
 			if target != "" {
-				res.Subtree = g.buildSubtreeForTarget(ctx, target)
-				res.Importance, err = g.computeSubtreeImportance(ctx, target, res.Subtree, res.Structure)
+				res.Subtree = g.trees.buildSubtreeForTarget(ctx, target)
+				res.Importance, err = g.relations.computeSubtreeImportance(ctx, target, res.Subtree, res.Structure)
 				if err != nil {
 					return summarize.GatherResult{}, fmt.Errorf("summarize fan-in leads: %w", err)
 				}
 			} else if len(req.Paths) > 1 {
-				res.Subtree = g.buildSubtreeForTargets(ctx, req.Paths)
-				res.Importance, err = g.computeSubtreeImportance(ctx, ".", res.Subtree, res.Structure)
+				res.Subtree = g.trees.buildSubtreeForTargets(ctx, req.Paths)
+				res.Importance, err = g.relations.computeSubtreeImportance(ctx, ".", res.Subtree, res.Structure)
 				if err != nil {
 					return summarize.GatherResult{}, fmt.Errorf("summarize fan-in leads: %w", err)
 				}
@@ -164,26 +125,26 @@ func (g *summarizeGatherer) Gather(ctx context.Context, req summarize.Request) (
 	stats.NestedReposPruned = nestedPruned
 	stats.FaninGrepPasses = faninPasses
 	res.Stats = stats
-	fit, fitErr := g.gatherFitEdges(ctx, req, res.Structure, stats)
+	fit, fitErr := g.relations.gatherFitEdges(ctx, req, res.Structure, stats)
 	if fitErr != nil {
 		return summarize.GatherResult{}, fmt.Errorf("summarize reference leads: %w", fitErr)
 	}
 	res.Fit = fit
-	res.NextActions = g.patternInspectionActions(ctx, req, nil)
-	res.CatalogRevision = g.catalogRevision
-	res.MatchingFilesObserved = g.patternFilesTotal
-	res.CursorFound = g.patternCursorFound
-	res.NextCursorPath = g.patternNextPath
-	res.CatalogState = string(g.treeState)
-	res.CatalogRefreshing = g.treeRefreshing
+	res.NextActions = g.patterns.patternInspectionActions(ctx, req, nil)
+	res.CatalogRevision = g.trees.catalogRevision
+	res.MatchingFilesObserved = g.patterns.patternFilesTotal
+	res.CursorFound = g.patterns.patternCursorFound
+	res.NextCursorPath = g.patterns.patternNextPath
+	res.CatalogState = string(g.trees.treeState)
+	res.CatalogRefreshing = g.trees.treeRefreshing
 	if res.Subtree != nil && res.Subtree.LoadChildren != nil && req.CursorPosition != "" {
 		res.CursorFound = true
 	}
 	if err := ctx.Err(); err != nil {
 		return summarize.GatherResult{}, err
 	}
-	if g.treeErr != nil {
-		return summarize.GatherResult{}, g.treeErr
+	if g.trees.treeErr != nil {
+		return summarize.GatherResult{}, g.trees.treeErr
 	}
 	return res, nil
 }

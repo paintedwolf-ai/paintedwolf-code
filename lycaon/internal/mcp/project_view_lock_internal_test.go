@@ -22,15 +22,15 @@ func TestProjectViewNeverObservesRollbackTransient(t *testing.T) {
 	statePath := t.TempDir()
 	projectDir := t.TempDir()
 
-	r, err := NewRegistryImpl(RegistryOptions{
+	r, err := NewRuntime(RuntimeOptions{
 		StatePath:          statePath,
 		GlobalOverridePath: t.TempDir() + "/mcp.yaml",
 		Connector:          &MockConnector{},
 	})
-	testutil.FailErr(t, "NewRegistryImpl", err)
+	testutil.FailErr(t, "NewRuntime", err)
 	t.Cleanup(func() { _ = r.Close() })
-	r.SetProjectOverlayGate(func(context.Context, string) bool { return true })
-	testutil.FailErr(t, "load", r.Load(context.Background()))
+	r.Catalog.SetProjectOverlayGate(func(context.Context, string) bool { return true })
+	testutil.FailErr(t, "load", r.Catalog.Load(context.Background()))
 
 	validateEntered := make(chan struct{})
 	proceedValidate := make(chan struct{})
@@ -39,7 +39,7 @@ func TestProjectViewNeverObservesRollbackTransient(t *testing.T) {
 	writeDone := make(chan error, 1)
 
 	go func() {
-		writeDone <- r.updateOverlay(context.Background(), projectDir,
+		writeDone <- r.Administration.updateOverlay(context.Background(), projectDir,
 			func(_ context.Context, path string) error {
 				// The transient row an aborted transaction must never leak to a reader.
 				return saveUserMCPConfig(path, UserMCPConfig{Providers: []MCPProviderOverlay{
@@ -58,7 +58,7 @@ func TestProjectViewNeverObservesRollbackTransient(t *testing.T) {
 
 	go func() {
 		close(readerAboutToRead)
-		readerResult <- r.projectView(context.Background(), projectDir)
+		readerResult <- r.Catalog.projectView(context.Background(), projectDir)
 	}()
 	<-readerAboutToRead
 

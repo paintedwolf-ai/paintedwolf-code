@@ -26,7 +26,7 @@ func TestProf9ConcurrentAdmissionUsesOneOrderedHistory(t *testing.T) {
 		go func() {
 			defer callers.Done()
 			gc := NewGuardContext()
-			gc.SessionID = "session"
+			gc.Session.SessionID = "session"
 			gc.ObserveToolCall("read", nil)
 			result, err := pipeline.EvaluateBlock(t.Context(), AnchorToolPreInvoke, gc)
 			if err != nil {
@@ -44,7 +44,7 @@ func TestProf9ConcurrentAdmissionUsesOneOrderedHistory(t *testing.T) {
 	}
 	for _, anchor := range []string{AnchorToolHandler, AnchorToolPost, AnchorToolRejected} {
 		gc := NewGuardContext()
-		gc.SessionID = "session"
+		gc.Session.SessionID = "session"
 		gc.ObserveToolCall("another", nil)
 		_, err := pipeline.EvaluateBlock(t.Context(), anchor, gc)
 		testutil.FailErr(t, "evaluate later boundary", err)
@@ -57,7 +57,7 @@ func TestProf9ConcurrentAdmissionUsesOneOrderedHistory(t *testing.T) {
 		t.Fatalf("[OAR-FIRE-5] closed session retained state: %#v", store)
 	}
 	gc := NewGuardContext()
-	gc.SessionID = "another session"
+	gc.Session.SessionID = "another session"
 	gc.ObserveToolCall("read", nil)
 	result, err := pipeline.EvaluateBlock(t.Context(), AnchorToolPreInvoke, gc)
 	testutil.FailErr(t, "evaluate separate session", err)
@@ -70,7 +70,7 @@ func TestFact6NonToolOccurrenceHasNoFingerprint(t *testing.T) {
 	gc := NewGuardContext()
 	gc.ObserveToolCall("", nil)
 	testutil.FailErr(t, "produce absent fingerprint", gc.Ensure("tool_args_fingerprint"))
-	if gc.ToolArgsFingerprint != "" {
-		t.Fatalf("[OAR-FACT-6] invented non-tool fingerprint %q", gc.ToolArgsFingerprint)
+	if gc.Invocation.ToolArgsFingerprint != "" {
+		t.Fatalf("[OAR-FACT-6] invented non-tool fingerprint %q", gc.Invocation.ToolArgsFingerprint)
 	}
 }

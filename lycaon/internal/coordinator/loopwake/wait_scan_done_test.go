@@ -96,8 +96,8 @@ func TestWaitScanDoneAlreadySatisfiedWhenNoOpenScans(t *testing.T) {
 	out, err := reg.Run(context.Background(), "wait", map[string]any{
 		"conditions": []any{map[string]any{"kind": "scan_done"}},
 	}, tools.ToolContext{
-		SessionID: "s1",
-		Agent:     orchestration.ProfileCoordinator,
+		Identity: tools.InvocationIdentity{SessionID: "s1",
+			Agent: orchestration.ProfileCoordinator},
 	})
 	if err != nil {
 		t.Fatalf("wait(scan_done) with no open scans: %v", err)
@@ -127,9 +127,9 @@ func TestWaitScanDoneArmsSleepWhileScanOpen(t *testing.T) {
 		"conditions": []any{map[string]any{"kind": "scan_done"}},
 		"reason":     "waiting for SAST scan to complete",
 	}, tools.ToolContext{
-		SessionID: "s1",
-		Agent:     orchestration.ProfileCoordinator,
-		Out:       invocationOut,
+		Identity: tools.InvocationIdentity{SessionID: "s1",
+			Agent: orchestration.ProfileCoordinator},
+		Effects: tools.InvocationEffects{Out: invocationOut},
 	})
 	if err != nil {
 		t.Fatalf("wait(scan_done) with open scan: %v", err)

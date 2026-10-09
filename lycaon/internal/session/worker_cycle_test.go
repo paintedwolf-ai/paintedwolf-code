@@ -9,17 +9,16 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
-	"github.com/lycaon/lycaon/internal/session/store"
-	"github.com/lycaon/lycaon/internal/settingsoverlay"
-	"github.com/lycaon/lycaon/internal/testdbseed"
-
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/spawn"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
@@ -134,12 +133,12 @@ func TestObserveCoordinatorTaskInFlightParallelCap(t *testing.T) {
 		testutil.FailErr(t, "Observe after enqueue", session.ObserveCoordinatorTaskInFlight(ctx, deps, sess, "task", readScoutArgs, gc))
 		blocked := evaluateHasCode(t, gc, session.CoordinatorWorkerInFlightCode)
 		if i < cap-1 {
-			if blocked || gc.WorkerSpawnBlocked {
+			if blocked || gc.Workers.WorkerSpawnBlocked {
 				t.Fatalf("expected allow with %d in-flight jobs", i+1)
 			}
 			continue
 		}
-		if !blocked || !gc.WorkerSpawnBlocked {
+		if !blocked || !gc.Workers.WorkerSpawnBlocked {
 			t.Fatalf("expected reject at cap with %d in-flight jobs", cap)
 		}
 	}

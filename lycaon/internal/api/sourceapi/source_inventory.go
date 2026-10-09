@@ -2,6 +2,7 @@ package sourceapi
 
 import (
 	"context"
+
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
@@ -31,7 +32,7 @@ func sourceInventoryRequest(p *project.Project) sourceledger.InventoryRequest {
 }
 
 // ScheduleSourceInventory starts a coalesced background inventory.
-func (s *Handler) ScheduleSourceInventory(parent context.Context, projectID string) {
+func (s *Watch) ScheduleSourceInventory(parent context.Context, projectID string) {
 	if projectID == "" {
 		return
 	}
@@ -42,20 +43,20 @@ func (s *Handler) ScheduleSourceInventory(parent context.Context, projectID stri
 	s.scheduleWorkspaceInventory(parent, p)
 }
 
-func (s *Handler) AwaitAttachedRootStructure(ctx context.Context, projectID, rootPath string) error {
+func (s *Watch) AwaitAttachedRootStructure(ctx context.Context, projectID, rootPath string) error {
 	p, err := s.ProjectRegistry.Get(ctx, projectID)
 	if err != nil {
 		return err
 	}
 	for _, root := range p.Roots {
 		if root.Path == rootPath {
-			return sourcecatalog.Process().AwaitNavigation(ctx, p.ID, sourcecatalog.Root{ID: root.ID, Path: root.Path})
+			return sourcecatalog.Process().Directories.AwaitNavigation(ctx, p.ID, sourcecatalog.Root{ID: root.ID, Path: root.Path})
 		}
 	}
 	return nil
 }
 
-func (s *Handler) scheduleWorkspaceInventory(parent context.Context, p *project.Project) {
+func (s *Watch) scheduleWorkspaceInventory(parent context.Context, p *project.Project) {
 	if p == nil {
 		return
 	}
@@ -63,7 +64,7 @@ func (s *Handler) scheduleWorkspaceInventory(parent context.Context, p *project.
 	req := sourceInventoryRequest(p)
 	s.background.Go(parent, func(ctx context.Context) {
 		for _, root := range p.Roots {
-			if err := sourcecatalog.Process().WarmNavigation(ctx, p.ID, sourcecatalog.Root{ID: root.ID, Path: root.Path}); err != nil {
+			if err := sourcecatalog.Process().Directories.WarmNavigation(ctx, p.ID, sourcecatalog.Root{ID: root.ID, Path: root.Path}); err != nil {
 				s.responses.Logger.WarnContext(ctx, "source structure", "project_id", p.ID, "root", root.ID, "err", err)
 			}
 		}
@@ -71,7 +72,7 @@ func (s *Handler) scheduleWorkspaceInventory(parent context.Context, p *project.
 			return
 		}
 		for _, root := range p.Roots {
-			if err := sourcecatalog.Process().AwaitNavigation(ctx, p.ID, sourcecatalog.Root{ID: root.ID, Path: root.Path}); err != nil {
+			if err := sourcecatalog.Process().Directories.AwaitNavigation(ctx, p.ID, sourcecatalog.Root{ID: root.ID, Path: root.Path}); err != nil {
 				s.responses.Logger.WarnContext(ctx, "source structure", "project_id", p.ID, "root", root.ID, "err", err)
 				return
 			}
@@ -85,12 +86,12 @@ func (s *Handler) scheduleWorkspaceInventory(parent context.Context, p *project.
 	})
 }
 
-func (s *Handler) noteScanCadenceInventory(ctx context.Context, p *project.Project) {
+func (s *Watch) noteScanCadenceInventory(ctx context.Context, p *project.Project) {
 	if s == nil || s.ScanCadence == nil || p == nil {
 		return
 	}
 	for _, root := range p.Roots {
-		files, err := sourcecatalog.Process().RootFileCount(ctx, p.ID,
+		files, err := sourcecatalog.Process().Trees.RootFileCount(ctx, p.ID,
 			sourcecatalog.Root{ID: root.ID, Path: root.Path}, sourcecatalog.FileScope{Audience: sourcecatalog.AgentAudience, IncludeHidden: true}, 0)
 		if err != nil {
 			s.responses.Logger.WarnContext(ctx, "scan cadence root file count", "path", root.Path, "err", err)
@@ -106,7 +107,7 @@ func (s *Handler) noteScanCadenceInventory(ctx context.Context, p *project.Proje
 	}
 }
 
-func (s *Handler) sourceInventoryState(
+func (s *Watch) sourceInventoryState(
 	ctx context.Context,
 	p *project.Project,
 ) (sourceledger.InventoryState, error) {

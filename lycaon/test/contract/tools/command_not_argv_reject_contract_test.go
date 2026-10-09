@@ -2,6 +2,8 @@ package contract
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolexecution"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 	"testing"
 
@@ -13,11 +15,11 @@ import (
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
-func commandRejectExecutor(t *testing.T) *tools.DefaultToolExecutor {
+func commandRejectExecutor(t *testing.T) *toolexecution.Executor {
 	t.Helper()
 	reg := tools.NewDefaultRegistry()
 	contractcheck.FailErr(t, "Register command", reg.Register("command", (&native.CommandTool{Runner: hostcmd.NewRunner()}).Run))
-	return tools.NewDefaultToolExecutor(nil, reg, "implement")
+	return toolexecution.NewExecutor(nil, reg, "implement")
 }
 
 func TestCommandNotArgvRejectObservation(t *testing.T) {
@@ -25,14 +27,14 @@ func TestCommandNotArgvRejectObservation(t *testing.T) {
 	exec := commandRejectExecutor(t)
 	// Substitution is rejected because expanded values are not visible in the command line.
 	_, err := exec.Invoke(context.Background(), "command", map[string]any{"command": "go test $(id -u)"}, tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
-		ActiveRootID: "r1",
-		Agent:        "implement",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{Agent: "implement"},
 	})
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	tr := tools.AsToolReject(err)
+	tr := toolrejection.AsToolReject(err)
 	if tr == nil || tr.Code != "COMMAND_NOT_ARGV" {
 		t.Fatalf("want COMMAND_NOT_ARGV ToolReject, got %v", err)
 	}
@@ -73,14 +75,14 @@ func TestCommandNotArgvRejectsShellPipeline(t *testing.T) {
 		"command":          "git log --oneline | head -20",
 		"terminal_capture": true,
 	}, tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
-		ActiveRootID: "r1",
-		Agent:        "implement",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{Agent: "implement"},
 	})
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	tr := tools.AsToolReject(err)
+	tr := toolrejection.AsToolReject(err)
 	if tr == nil || tr.Code != "COMMAND_NOT_ARGV" {
 		t.Fatalf("want COMMAND_NOT_ARGV ToolReject, got %v", err)
 	}
@@ -95,11 +97,11 @@ func TestCommandNotArgvRejectsInlineEnvironment(t *testing.T) {
 	_, err := exec.Invoke(context.Background(), "command", map[string]any{
 		"command": "TOKEN=value",
 	}, tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
-		ActiveRootID: "r1",
-		Agent:        "implement",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{Agent: "implement"},
 	})
-	tr := tools.AsToolReject(err)
+	tr := toolrejection.AsToolReject(err)
 	if tr == nil || tr.Code != "COMMAND_NOT_ARGV" {
 		t.Fatalf("want COMMAND_NOT_ARGV ToolReject, got %v", err)
 	}
@@ -137,14 +139,14 @@ func TestCommandArgvRequiredRejectObservation(t *testing.T) {
 	_, err := exec.Invoke(context.Background(), "command", map[string]any{
 		"cwd": ".", "timeout_ms": 120000, "wait_ms": 30000,
 	}, tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
-		ActiveRootID: "r1",
-		Agent:        "implement",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{Agent: "implement"},
 	})
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	tr := tools.AsToolReject(err)
+	tr := toolrejection.AsToolReject(err)
 	if tr == nil || tr.Code != "COMMAND_ARGV_REQUIRED" {
 		t.Fatalf("want COMMAND_ARGV_REQUIRED ToolReject, got %v", err)
 	}
@@ -157,14 +159,14 @@ func TestCommandArgvConflictRejectObservation(t *testing.T) {
 		"command":  "go version",
 		"pipeline": []any{"echo hi"},
 	}, tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
-		ActiveRootID: "r1",
-		Agent:        "implement",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{Agent: "implement"},
 	})
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	tr := tools.AsToolReject(err)
+	tr := toolrejection.AsToolReject(err)
 	if tr == nil || tr.Code != "COMMAND_ARGV_CONFLICT" {
 		t.Fatalf("want COMMAND_ARGV_CONFLICT ToolReject, got %v", err)
 	}

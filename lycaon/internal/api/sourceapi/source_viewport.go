@@ -18,7 +18,7 @@ type sourceFrameKey struct {
 	limit        int
 }
 
-func (s *Handler) HandleReplaceSourceViewportInterest(w http.ResponseWriter, r *http.Request) {
+func (s *Presentation) HandleReplaceSourceViewportInterest(w http.ResponseWriter, r *http.Request) {
 	var demand wire.SourceViewportInterest
 	if err := httpio.DecodeJSON(w, r, &demand); err != nil {
 		s.responses.DecodeError(w, r, err)
@@ -26,22 +26,22 @@ func (s *Handler) HandleReplaceSourceViewportInterest(w http.ResponseWriter, r *
 	}
 	id, err := sourceHandleParam(r, "interest_id")
 	if err != nil {
-		s.writeSourceViewError(w, r, err)
+		s.Views.writeSourceViewError(w, r, err)
 		return
 	}
 	if _, err := uuid.Parse(demand.PresentationID); err != nil || demand.Sequence < 1 || demand.Sequence > 9007199254740991 || demand.Start < 0 || demand.End <= demand.Start || demand.End-demand.Start > 4*pagedview.MaxRows || demand.Direction < -1 || demand.Direction > 1 {
-		s.writeSourceViewError(w, r, pagedview.ErrRange)
+		s.Views.writeSourceViewError(w, r, pagedview.ErrRange)
 		return
 	}
-	view, r, releaseView, ok := s.requestedSourceView(w, r)
+	view, r, releaseView, ok := s.Views.requestedSourceView(w, r)
 	if !ok {
 		return
 	}
 	defer releaseView()
-	service := s.sourceViewRegistry()
+	service := s.Views.sourceViewRegistry()
 	presentation, release, err := s.acquireBasisPresentation(view, demand.PresentationID)
 	if err != nil {
-		s.writeSourceViewError(w, r, err)
+		s.Views.writeSourceViewError(w, r, err)
 		return
 	}
 	total := int64(0)
@@ -72,14 +72,14 @@ func (s *Handler) HandleReplaceSourceViewportInterest(w http.ResponseWriter, r *
 		}
 	}, release)
 	if err != nil {
-		s.writeSourceViewError(w, r, err)
+		s.Views.writeSourceViewError(w, r, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Handler) HandleReleaseSourceViewportInterest(w http.ResponseWriter, r *http.Request) {
-	view, r, release, ok := s.requestedSourceView(w, r)
+func (s *Presentation) HandleReleaseSourceViewportInterest(w http.ResponseWriter, r *http.Request) {
+	view, r, release, ok := s.Views.requestedSourceView(w, r)
 	if !ok {
 		return
 	}
@@ -88,8 +88,8 @@ func (s *Handler) HandleReleaseSourceViewportInterest(w http.ResponseWriter, r *
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Handler) sourceFrame(r *http.Request, id string, read *sourceViewRead, query sourceFrameQuery) ([]byte, error) {
-	service := s.sourceViewRegistry()
+func (s *Presentation) sourceFrame(r *http.Request, id string, read *sourceViewRead, query sourceFrameQuery) ([]byte, error) {
+	service := s.Views.sourceViewRegistry()
 	key := sourceFrameKey{id, query.offset, query.limit}
 	cacheable := query.anchor == "" && len(query.retain) == 0
 	if cacheable {
@@ -102,7 +102,7 @@ func (s *Handler) sourceFrame(r *http.Request, id string, read *sourceViewRead, 
 	}
 	var frame wire.SourceViewFrame
 	var err error
-	if read.tree != nil {
+	if read.navigation.tree != nil {
 		frame.Tree, err = read.treeFrame(r, query)
 	} else {
 		frame.Comparison, err = read.comparisonFrame(r, query)

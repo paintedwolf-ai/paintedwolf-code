@@ -82,10 +82,14 @@ func TestApprovalExplainActionIntegration(t *testing.T) {
 	contractcheck.FailErr(t, "LoadRegistryStock", err)
 
 	got := reg.ExplainAction(hitl.ProposedAction{
-		Tool:       "command",
-		Args:       map[string]any{"command": "git push origin main"},
-		ProjectDir: "/proj",
-	}, settings.TierIrreversible)
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": "git push origin main"},
+},
+Scope: hitl.ActionScope{
+ProjectDir: "/proj",
+},
+}, settings.TierIrreversible)
 	if got.Key != approvals.KeyCommandDestructive {
 		t.Fatalf("command push key: got %q", got.Key)
 	}

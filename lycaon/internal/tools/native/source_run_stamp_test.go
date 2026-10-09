@@ -16,7 +16,7 @@ import (
 // Source-run consumers read the subsystem owner's invocation fact.
 
 func withOut(tctx tools.ToolContext) tools.ToolContext {
-	tctx.Out = &tools.ToolInvocationOut{}
+	tctx.Effects.Out = &tools.ToolInvocationOut{}
 	return tctx
 }
 
@@ -29,7 +29,7 @@ func TestCommandStatesVerdictOnSettledRun(t *testing.T) {
 	_, err := tool.Run(context.Background(), map[string]any{"command": "echo hi"}, tctx)
 	testutil.FailErr(t, "command run", err)
 
-	run := tctx.Out.SourceRun
+	run := tctx.Effects.Out.SourceRun
 	if run == nil {
 		t.Fatal("a settled command stated no source run")
 	}
@@ -53,7 +53,7 @@ func TestCommandStatesFailedVerdictOnNonZeroExit(t *testing.T) {
 	_, err := tool.Run(context.Background(), map[string]any{"command": "false"}, tctx)
 	testutil.FailErr(t, "command run", err)
 
-	run := tctx.Out.SourceRun
+	run := tctx.Effects.Out.SourceRun
 	if run == nil {
 		t.Fatal("a settled command stated no source run")
 	}
@@ -76,8 +76,8 @@ func TestCommandStatesNoVerdictWhileRunning(t *testing.T) {
 	}, tctx)
 	testutil.FailErr(t, "command run", err)
 
-	if tctx.Out.SourceRun != nil {
-		t.Fatalf("a promoted running command stated a verdict: %+v", tctx.Out.SourceRun)
+	if tctx.Effects.Out.SourceRun != nil {
+		t.Fatalf("a promoted running command stated a verdict: %+v", tctx.Effects.Out.SourceRun)
 	}
 	testutil.FailErr(t, "dispose session commands", reg.DisposeSession(context.Background(), "sess"))
 }
@@ -91,11 +91,11 @@ func TestVerifyStatesVerdictOnSettledRun(t *testing.T) {
 		Background: bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{}),
 	}
 	tctx := withOut(commandToolContext(t.TempDir(), "sess", ""))
-	tctx.Agent = "implement"
+	tctx.Identity.Agent = "implement"
 	_, err := tool.Run(context.Background(), map[string]any{"command": "true"}, tctx)
 	testutil.FailErr(t, "verify run", err)
 
-	run := tctx.Out.SourceRun
+	run := tctx.Effects.Out.SourceRun
 	if run == nil {
 		t.Fatal("a settled verify stated no source run")
 	}

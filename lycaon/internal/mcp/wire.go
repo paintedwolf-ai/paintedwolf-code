@@ -11,7 +11,7 @@ func ProviderToolPrefix(providerID string) string {
 	return "mcp_" + strings.ReplaceAll(strings.TrimSpace(providerID), "-", "_") + "_"
 }
 
-func (r *RegistryImpl) wireProvider(s MergedMCPProviderEntry, view projectCatalogView) api.McpProvider {
+func (r *ProviderCatalog) wireProvider(s MergedMCPProviderEntry, view projectCatalogView) api.McpProvider {
 	entry := api.McpProvider{
 		ID:               s.ID,
 		Enabled:          s.Enabled,
@@ -31,19 +31,19 @@ func (r *RegistryImpl) wireProvider(s MergedMCPProviderEntry, view projectCatalo
 
 	r.mu.RLock()
 	entry.Profiles = ProfilesForProvider(r.distro, s.ID)
-	lastError := r.syncErrors[s.ID]
-	synced := r.syncOK[s.ID]
-	authNeeded := r.authRequired[s.ID]
+	lastError := r.Tools.syncErrors[s.ID]
+	synced := r.Tools.syncOK[s.ID]
+	authNeeded := r.Credentials.authRequired[s.ID]
 	toolCount := 0
 	prefix := ProviderToolPrefix(s.ID)
-	for name := range r.toolRefs {
+	for name := range r.Tools.toolRefs {
 		if strings.HasPrefix(name, prefix) {
 			toolCount++
 		}
 	}
 	r.mu.RUnlock()
 
-	entry.SignedIn = r.oauthStore.SignedIn(s.ID)
+	entry.SignedIn = r.Credentials.oauthStore.SignedIn(s.ID)
 	if entry.Enabled {
 		entry.LastError = lastError
 	}
@@ -64,7 +64,7 @@ func (r *RegistryImpl) wireProvider(s MergedMCPProviderEntry, view projectCatalo
 			entry.Source = "default"
 		}
 	}
-	if rec, ok := r.recipes.Entry(s.Recipe); ok {
+	if rec, ok := r.Credentials.recipes.Entry(s.Recipe); ok {
 		entry.Recipe = rec.ID
 		entry.Auth = api.McpRecipeAuth(rec.Auth)
 		entry.CredentialLabel = rec.CredentialLabel

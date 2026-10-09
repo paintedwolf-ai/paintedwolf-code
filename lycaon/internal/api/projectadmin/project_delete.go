@@ -12,7 +12,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Handler) deleteProject(ctx context.Context, id string, force bool) error {
+func (s *Removal) deleteProject(ctx context.Context, id string, force bool) error {
 	release, waitForDrain, err := s.acquireProjectDeletion(ctx, id)
 	if err != nil {
 		return err
@@ -27,7 +27,7 @@ func (s *Handler) deleteProject(ctx context.Context, id string, force bool) erro
 	if err != nil {
 		return err
 	}
-	dependents, err = s.withEditorDocumentDependents(ctx, dependents, id, "")
+	dependents, err = s.Roots.withEditorDocumentDependents(ctx, dependents, id, "")
 	if err != nil {
 		return err
 	}
@@ -69,11 +69,11 @@ func (s *Handler) deleteProject(ctx context.Context, id string, force bool) erro
 	return nil
 }
 
-func (s *Handler) finishProjectDeletion(ctx context.Context, p *project.Project, dependents session.RootDependents, removedRootPaths []string) {
+func (s *Removal) finishProjectDeletion(ctx context.Context, p *project.Project, dependents session.RootDependents, removedRootPaths []string) {
 	id := p.ID
-	s.forgetRemovedEditorDocuments(dependents)
-	s.Sources.InvalidateProjectSourceViews(id)
-	s.releaseUnattachedSourceRoots(ctx, removedRootPaths)
+	s.Roots.forgetRemovedEditorDocuments(dependents)
+	s.sourceViews.InvalidateProjectSourceViews(id)
+	s.Roots.releaseUnattachedSourceRoots(ctx, removedRootPaths)
 	sourcefeed.StopProjectWatch(ctx, id)
 	// Project deletion removes only engine-managed storage.
 	if err := project.RemoveHostDataDir(s.DataDir, id); err != nil {
@@ -86,27 +86,27 @@ func (s *Handler) finishProjectDeletion(ctx context.Context, p *project.Project,
 		if err := workspace.RemoveSeed(ctx, s.WorkerSeedRoot, root.Path); err != nil {
 			slog.WarnContext(ctx, "remove worker seed on project delete", "path", root.Path, "err", err)
 		}
-		if err := s.removeRootCheckpoints(ctx, id, root.Path); err != nil {
+		if err := s.Roots.removeRootCheckpoints(ctx, id, root.Path); err != nil {
 			slog.WarnContext(ctx, "remove session checkpoints on project delete", "path", root.Path, "err", err)
 		}
 	}
-	s.publishProjectLifecycleEvent(ctx, wire.ProjectEventDeleted, &project.Project{ID: id})
+	s.Projects.publishProjectLifecycleEvent(ctx, wire.ProjectEventDeleted, &project.Project{ID: id})
 }
 
-func (s *Handler) acquireProjectDeletion(ctx context.Context, id string) (func(), func(context.Context) error, error) {
+func (s *Removal) acquireProjectDeletion(ctx context.Context, id string) (func(), func(context.Context) error, error) {
 	drain, err := s.MutationGate.BeginDrainingMutation(id)
 	if err != nil {
 		return nil, nil, err
 	}
 	release := func() { s.MutationGate.EndMutation(id) }
-	if s.Sources.SourceInventory == nil {
+	if s.sourceWatch.SourceInventory == nil {
 		return release, drain, nil
 	}
-	resume, err := s.Sources.SourceInventory.SuspendInventory(ctx, id)
+	resume, err := s.sourceWatch.SourceInventory.SuspendInventory(ctx, id)
 	finish := func() {
 		resume()
 		release()
-		s.Sources.ScheduleSourceInventory(context.WithoutCancel(ctx), id)
+		s.sourceWatch.ScheduleSourceInventory(context.WithoutCancel(ctx), id)
 	}
 	if err != nil {
 		finish()

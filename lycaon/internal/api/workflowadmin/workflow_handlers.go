@@ -17,7 +17,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Handler) HandleStartWorkflowRun(w http.ResponseWriter, r *http.Request) {
+func (s *RunControl) HandleStartWorkflowRun(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "id")
 	var req wire.StartWorkflowRunRequest
 	if err := httpio.DecodeJSON(w, r, &req); err != nil {
@@ -54,11 +54,11 @@ func (s *Handler) HandleStartWorkflowRun(w http.ResponseWriter, r *http.Request)
 		s.WriteWorkflowError(w, r, err)
 		return
 	}
-	s.StartOrchestratedTopologyForRun(r.Context(), sessionID, run)
+	s.Topology.StartOrchestratedTopologyForRun(r.Context(), sessionID, run)
 	s.SessionView.WriteWorkflowRun(w, r, http.StatusCreated, run)
 }
 
-func (s *Handler) HandleExitWorkflowRun(w http.ResponseWriter, r *http.Request) {
+func (s *RunControl) HandleExitWorkflowRun(w http.ResponseWriter, r *http.Request) {
 	runID := strings.TrimSpace(chi.URLParam(r, "id"))
 	if runID == "" {
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "id is required")
@@ -86,7 +86,7 @@ func (s *Handler) HandleExitWorkflowRun(w http.ResponseWriter, r *http.Request) 
 	s.SessionView.WriteWorkflowRun(w, r, http.StatusOK, exitedRun)
 }
 
-func (s *Handler) HandleGetActiveWorkflowRun(w http.ResponseWriter, r *http.Request) {
+func (s *RunControl) HandleGetActiveWorkflowRun(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "id")
 	if !requestscope.SessionExists(s.Store, s.responses, w, r, sessionID) {
 		return
@@ -100,7 +100,7 @@ func (s *Handler) HandleGetActiveWorkflowRun(w http.ResponseWriter, r *http.Requ
 	httpio.WriteJSON(w, http.StatusOK, wire.ActiveWorkflowRunResponse{Run: run})
 }
 
-func (s *Handler) HandleGetWorkflowRun(w http.ResponseWriter, r *http.Request) {
+func (s *RunControl) HandleGetWorkflowRun(w http.ResponseWriter, r *http.Request) {
 	runID := chi.URLParam(r, "id")
 	run, err := s.Workflows.Get(r.Context(), runID)
 	if err != nil {
@@ -110,25 +110,25 @@ func (s *Handler) HandleGetWorkflowRun(w http.ResponseWriter, r *http.Request) {
 	s.SessionView.WriteWorkflowRun(w, r, http.StatusOK, run)
 }
 
-func (s *Handler) HandlePauseWorkflowRun(w http.ResponseWriter, r *http.Request) {
+func (s *RunControl) HandlePauseWorkflowRun(w http.ResponseWriter, r *http.Request) {
 	s.controlWorkflowRun(w, r, func(ctx context.Context, runID string, reason string) (*wire.WorkflowRun, error) {
 		return s.Workflows.Pause(ctx, runID, reason)
 	})
 }
 
-func (s *Handler) HandleResumeWorkflowRun(w http.ResponseWriter, r *http.Request) {
+func (s *RunControl) HandleResumeWorkflowRun(w http.ResponseWriter, r *http.Request) {
 	s.controlWorkflowRun(w, r, func(ctx context.Context, runID string, _ string) (*wire.WorkflowRun, error) {
 		return s.Workflows.Resume(ctx, runID)
 	})
 }
 
-func (s *Handler) HandleCancelWorkflowRun(w http.ResponseWriter, r *http.Request) {
+func (s *RunControl) HandleCancelWorkflowRun(w http.ResponseWriter, r *http.Request) {
 	s.controlWorkflowRun(w, r, func(ctx context.Context, runID string, reason string) (*wire.WorkflowRun, error) {
 		return s.Workflows.Cancel(ctx, runID, reason)
 	})
 }
 
-func (s *Handler) HandleAdvanceWorkflowRun(w http.ResponseWriter, r *http.Request) {
+func (s *RunControl) HandleAdvanceWorkflowRun(w http.ResponseWriter, r *http.Request) {
 	runID := chi.URLParam(r, "id")
 	var req wire.AdvanceWorkflowRunRequest
 	if err := httpio.DecodeJSON(w, r, &req); err != nil {
@@ -162,7 +162,7 @@ func (s *Handler) HandleAdvanceWorkflowRun(w http.ResponseWriter, r *http.Reques
 	s.SessionView.WriteWorkflowRun(w, r, http.StatusOK, run)
 }
 
-func (s *Handler) HandleFireWorkflowTransition(w http.ResponseWriter, r *http.Request) {
+func (s *RunControl) HandleFireWorkflowTransition(w http.ResponseWriter, r *http.Request) {
 	runID := chi.URLParam(r, "id")
 	transitionID := chi.URLParam(r, "transition_id")
 	var req wire.FireWorkflowTransitionRequest
@@ -184,7 +184,7 @@ func (s *Handler) HandleFireWorkflowTransition(w http.ResponseWriter, r *http.Re
 
 type workflowControlFn func(ctx context.Context, runID, reason string) (*wire.WorkflowRun, error)
 
-func (s *Handler) controlWorkflowRun(w http.ResponseWriter, r *http.Request, fn workflowControlFn) {
+func (s *RunControl) controlWorkflowRun(w http.ResponseWriter, r *http.Request, fn workflowControlFn) {
 	runID := chi.URLParam(r, "id")
 	var req wire.WorkflowControlRequest
 	if err := httpio.DecodeJSON(w, r, &req); err != nil {

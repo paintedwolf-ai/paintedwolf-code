@@ -16,7 +16,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Handler) HandleCompleteProjectSourcePresentation(w http.ResponseWriter, r *http.Request) {
+func (s *History) HandleCompleteProjectSourcePresentation(w http.ResponseWriter, r *http.Request) {
 	p, ok := requestscope.ProjectByURLID(s.ProjectRegistry, s.responses, w, r)
 	if !ok {
 		return
@@ -43,7 +43,7 @@ func (s *Handler) HandleCompleteProjectSourcePresentation(w http.ResponseWriter,
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Handler) HandleWithdrawProjectSourcePresentation(w http.ResponseWriter, r *http.Request) {
+func (s *History) HandleWithdrawProjectSourcePresentation(w http.ResponseWriter, r *http.Request) {
 	p, ok := requestscope.ProjectByURLID(s.ProjectRegistry, s.responses, w, r)
 	if !ok {
 		return
@@ -72,7 +72,7 @@ func (s *Handler) HandleWithdrawProjectSourcePresentation(w http.ResponseWriter,
 	}
 }
 
-func (s *Handler) HandleListProjectSourceSeen(w http.ResponseWriter, r *http.Request) {
+func (s *History) HandleListProjectSourceSeen(w http.ResponseWriter, r *http.Request) {
 	p, ok := requestscope.ProjectByURLID(s.ProjectRegistry, s.responses, w, r)
 	if !ok {
 		return
@@ -152,12 +152,12 @@ func mapSourceSeen(res sourceledger.SeenResult) wire.SourceSeenList {
 	return out
 }
 
-func (s *Handler) HandleGetProjectSourceStorage(w http.ResponseWriter, r *http.Request) {
+func (s *History) HandleGetProjectSourceStorage(w http.ResponseWriter, r *http.Request) {
 	p, ok := requestscope.ProjectByURLID(s.ProjectRegistry, s.responses, w, r)
 	if !ok {
 		return
 	}
-	inventory, err := s.sourceInventoryState(r.Context(), p)
+	inventory, err := s.Watch.sourceInventoryState(r.Context(), p)
 	if err != nil {
 		s.responses.InternalError(w, r, err)
 		return
@@ -189,7 +189,7 @@ func (s *Handler) HandleGetProjectSourceStorage(w http.ResponseWriter, r *http.R
 	})
 }
 
-func (s *Handler) HandleListProjectSourcePins(w http.ResponseWriter, r *http.Request) {
+func (s *History) HandleListProjectSourcePins(w http.ResponseWriter, r *http.Request) {
 	p, ok := requestscope.ProjectByURLID(s.ProjectRegistry, s.responses, w, r)
 	if !ok {
 		return
@@ -251,7 +251,7 @@ func sourcePinPageQuery(pq httpio.PageQuery, projectID string) (sourceledger.Pin
 	return query, nil
 }
 
-func (s *Handler) HandleCreateProjectSourcePin(w http.ResponseWriter, r *http.Request) {
+func (s *History) HandleCreateProjectSourcePin(w http.ResponseWriter, r *http.Request) {
 	p, ok := requestscope.ProjectByURLID(s.ProjectRegistry, s.responses, w, r)
 	if !ok {
 		return
@@ -261,7 +261,7 @@ func (s *Handler) HandleCreateProjectSourcePin(w http.ResponseWriter, r *http.Re
 		s.responses.DecodeError(w, r, err)
 		return
 	}
-	inventory, err := s.sourceInventoryState(r.Context(), p)
+	inventory, err := s.Watch.sourceInventoryState(r.Context(), p)
 	if err != nil {
 		s.responses.InternalError(w, r, err)
 		return
@@ -295,7 +295,7 @@ func mapSourceInventoryState(state sourceledger.InventoryState, rootsGeneration 
 	return out
 }
 
-func (s *Handler) HandleUpdateProjectSourcePin(w http.ResponseWriter, r *http.Request) {
+func (s *History) HandleUpdateProjectSourcePin(w http.ResponseWriter, r *http.Request) {
 	p, ok := requestscope.ProjectByURLID(s.ProjectRegistry, s.responses, w, r)
 	if !ok {
 		return
@@ -330,7 +330,7 @@ func (s *Handler) HandleUpdateProjectSourcePin(w http.ResponseWriter, r *http.Re
 	httpio.WriteJSON(w, http.StatusOK, mapSourcePin(pin))
 }
 
-func (s *Handler) HandleDeleteProjectSourcePin(w http.ResponseWriter, r *http.Request) {
+func (s *History) HandleDeleteProjectSourcePin(w http.ResponseWriter, r *http.Request) {
 	p, ok := requestscope.ProjectByURLID(s.ProjectRegistry, s.responses, w, r)
 	if !ok {
 		return

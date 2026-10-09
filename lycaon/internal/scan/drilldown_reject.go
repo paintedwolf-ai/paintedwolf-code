@@ -2,9 +2,9 @@ package scan
 
 import (
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 
 	"github.com/lycaon/lycaon/internal/guidance"
-	"github.com/lycaon/lycaon/internal/tools"
 )
 
 // Drill-down reject codes (scan_list / scan_summary / scan_query).
@@ -36,7 +36,7 @@ func FormatDrilldownReject(err error, formatter *guidance.StaticRejectFormatter)
 	if !errors.As(err, &reject) || reject == nil || reject.Code == "" {
 		return err
 	}
-	return tools.FormatDecisionReject(reject.Code, reject.Data, formatter)
+	return toolrejection.FormatDecisionReject(reject.Code, reject.Data, formatter)
 }
 
 func MapDrilldownReject(err error, rejectFmt *guidance.StaticRejectFormatter) error {

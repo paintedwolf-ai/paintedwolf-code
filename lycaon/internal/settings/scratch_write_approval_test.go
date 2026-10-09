@@ -24,9 +24,16 @@ func scratchGate(t *testing.T, posture gate.Posture) (hitl.ApprovalGate, string)
 
 func scratchAction(tool, project, path string) hitl.ProposedAction {
 	return hitl.ProposedAction{
-		Tool: tool, Files: []string{path}, ProjectID: "project", ProjectDir: project,
-		SessionID: "task",
-	}
+Invocation: hitl.ActionInvocation{
+Tool: tool,
+Files: []string{path},
+},
+Scope: hitl.ActionScope{
+ProjectID: "project",
+ProjectDir: project,
+SessionID: "task",
+},
+}
 }
 
 func asksOutsideRoots(result *hitl.ApprovalResult) bool {
@@ -74,7 +81,7 @@ func TestScratchCommandStaysSilentAtStrict(t *testing.T) {
 	approvalGate, project := scratchGate(t, gate.PostureStrict)
 	scratch := filepath.Join(t.TempDir(), "probe")
 	action := scratchAction("command", project, scratch)
-	action.Args = map[string]any{"command": "mkdir -p " + scratch}
+	action.Invocation.Args = map[string]any{"command": "mkdir -p " + scratch}
 	result, err := approvalGate.Evaluate(t.Context(), action)
 	testutil.FailErr(t, "evaluate", err)
 	if asksOutsideRoots(result) {

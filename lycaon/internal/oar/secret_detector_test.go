@@ -16,7 +16,7 @@ func TestSecretDetectorFindings(t *testing.T) {
 	testutil.FailErr(t, "BuildMatcher", err)
 	d := oar.SecretMatchDetector{Matcher: m}
 	gc := oar.NewGuardContext()
-	gc.Content = "雪 leak AKIAQYJK5TXV4NZR7SGB in text"
+	gc.Content.Content = "雪 leak AKIAQYJK5TXV4NZR7SGB in text"
 	findings, err := d.Inspect(gc)
 	testutil.FailErr(t, "Inspect", err)
 	if len(findings) != 1 || findings[0].Fact != "secret_matches" {
@@ -39,7 +39,7 @@ func TestSecretDetectorFindings(t *testing.T) {
 	}
 	start, okStart := row["start"].(int)
 	end, okEnd := row["end"].(int)
-	if !okStart || !okEnd || string([]rune(gc.Content)[start:end]) != "AKIAQYJK5TXV4NZR7SGB" {
+	if !okStart || !okEnd || string([]rune(gc.Content.Content)[start:end]) != "AKIAQYJK5TXV4NZR7SGB" {
 		t.Fatalf("[OAR-OPS-14] invalid Unicode span: %#v", row)
 	}
 }

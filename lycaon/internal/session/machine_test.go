@@ -28,8 +28,8 @@ func TestAttachSkillReadRootsPrefersMachine(t *testing.T) {
 		ProfileID: "coordinator",
 		ReadRoots: []string{"/skills/a", "/skills/b"},
 	}, tctx)
-	if len(tctx.ReadRoots) != 2 || tctx.ReadRoots[0] != "/skills/a" || tctx.ReadRoots[1] != "/skills/b" {
-		t.Fatalf("ReadRoots = %v", tctx.ReadRoots)
+	if len(tctx.Files.ReadRoots) != 2 || tctx.Files.ReadRoots[0] != "/skills/a" || tctx.Files.ReadRoots[1] != "/skills/b" {
+		t.Fatalf("ReadRoots = %v", tctx.Files.ReadRoots)
 	}
 }
 

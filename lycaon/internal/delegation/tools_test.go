@@ -36,10 +36,10 @@ func TestDelegateInitCreatesDelegation(t *testing.T) {
 	testutil.FailErr(t, "sessStore.Create failed", err)
 
 	raw, err := reg.Run(context.Background(), "delegate_init", map[string]any{"task": "ship it"}, tools.ToolContext{
-		ProjectID:    p.ID,
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}},
-		ActiveRootID: "r1",
-		SessionID:    sess.ID,
+		Identity: tools.InvocationIdentity{ProjectID: p.ID,
+			SessionID: sess.ID},
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}},
+			ActiveRootID: "r1"},
 	})
 	testutil.FailErr(t, "reg.Run failed", err)
 	if raw == "" {

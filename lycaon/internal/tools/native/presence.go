@@ -18,7 +18,7 @@ import (
 // anything the person types while the write waits.
 func reportTextIntent(tctx tools.ToolContext, resolved projectpaths.Resolved, st sourceview.Text, exists bool, after string) {
 	// A worker writes its private branch; that change reaches presence as a draft.
-	if tctx.Presence == nil || strings.TrimSpace(tctx.WorkerBranchRoot) != "" {
+	if tctx.Effects.Presence == nil || strings.TrimSpace(tctx.Source.WorkerBranchRoot) != "" {
 		return
 	}
 	target, ok := sourceview.ReportTarget(tctx, resolved, api.AgentActivityKindEditing)
@@ -28,7 +28,7 @@ func reportTextIntent(tctx tools.ToolContext, resolved projectpaths.Resolved, st
 	intent := agentpresence.Intent{Target: target, Operation: api.AgentIntentOperationEdit, Extent: api.AgentPresenceExtentWholeFile}
 	if !exists {
 		intent.Operation = api.AgentIntentOperationCreate
-		tctx.Presence.Intents([]agentpresence.Intent{intent})
+		tctx.Effects.Presence.Intents([]agentpresence.Intent{intent})
 		return
 	}
 	if st.Editor != nil {
@@ -37,13 +37,13 @@ func reportTextIntent(tctx tools.ToolContext, resolved projectpaths.Resolved, st
 	if changes, err := documentcore.ChangedLines(st.Content, after); err == nil && len(changes) > 0 {
 		intent.Extent, intent.Spans = changeExtent(changes), changeSpans(changes)
 	}
-	tctx.Presence.Intents([]agentpresence.Intent{intent})
+	tctx.Effects.Presence.Intents([]agentpresence.Intent{intent})
 }
 
 // reportLanded names the document revision a write produced.
 func reportLanded(tctx tools.ToolContext, document tools.EditorDocumentText) {
-	if tctx.Presence != nil && document.ID != "" {
-		tctx.Presence.Landed([]agentpresence.Document{{ID: document.ID, Revision: document.Revision}})
+	if tctx.Effects.Presence != nil && document.ID != "" {
+		tctx.Effects.Presence.Landed([]agentpresence.Document{{ID: document.ID, Revision: document.Revision}})
 	}
 }
 
@@ -72,7 +72,7 @@ func changeExtent(changes []documentcore.LineChange) api.AgentPresenceExtent {
 // reportMutationIntent publishes a whole-file mutation that is not a text
 // rewrite: a streamed write, a delete, or a rename.
 func reportMutationIntent(tctx tools.ToolContext, m agentMutation, target, from fseffect.Location, operation api.AgentIntentOperation) {
-	if tctx.Presence == nil {
+	if tctx.Effects.Presence == nil {
 		return
 	}
 	preview := agentMutationPreview(tctx, m, target, from)
@@ -83,6 +83,6 @@ func reportMutationIntent(tctx tools.ToolContext, m agentMutation, target, from 
 	if intent.RootID == "" || filepath.IsAbs(intent.Path) {
 		return
 	}
-	tctx.Presence.Target(intent.Target, api.AgentActivityKindEditing)
-	tctx.Presence.Intents([]agentpresence.Intent{intent})
+	tctx.Effects.Presence.Target(intent.Target, api.AgentActivityKindEditing)
+	tctx.Effects.Presence.Intents([]agentpresence.Intent{intent})
 }

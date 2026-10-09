@@ -2,6 +2,7 @@ package native
 
 import (
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	osexec "os/exec"
 	"path/filepath"
@@ -12,7 +13,6 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/hostcmd"
-	"github.com/lycaon/lycaon/internal/tools"
 )
 
 // rejectCommandNotFound maps unresolved executable failures into agent-facing rejects.
@@ -32,7 +32,7 @@ func commandNotFoundReject(name string) error {
 			data["resolvable"] = strings.Join(near, ", ")
 		}
 	}
-	return &tools.ToolReject{Code: tools.CommandNotFoundCode, Data: data}
+	return &toolrejection.ToolReject{Code: toolrejection.CommandNotFoundCode, Data: data}
 }
 
 // neighbourLimit bounds the reject.

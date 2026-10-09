@@ -17,16 +17,16 @@ func TestFindSourceContextContainsOnlyDeliveredPage(t *testing.T) {
 		testutil.FailErr(t, "write candidate", os.WriteFile(filepath.Join(root, fmt.Sprintf("file%d.go", i)), []byte("package main"), 0600))
 	}
 	tctx := nativefixture.Context(root)
-	tctx.ProjectID = "p"
-	tctx.Out = &tools.ToolInvocationOut{}
+	tctx.Identity.ProjectID = "p"
+	tctx.Effects.Out = &tools.ToolInvocationOut{}
 	tool := &FindTool{Boundary: nativefixture.Boundary(t)}
 	output, err := tool.Run(t.Context(), map[string]any{"name_glob": "*.go", "max_results": 2, "view": "raw"}, tctx)
 	testutil.FailErr(t, "find page", err)
 	response := parseFindResponse(t, output)
-	if len(response.Results) != 2 || tctx.Out.SourceContext == nil || len(tctx.Out.SourceContext.Locations) != 2 {
-		t.Fatalf("page=%+v context=%+v", response, tctx.Out.SourceContext)
+	if len(response.Results) != 2 || tctx.Effects.Out.SourceContext == nil || len(tctx.Effects.Out.SourceContext.Locations) != 2 {
+		t.Fatalf("page=%+v context=%+v", response, tctx.Effects.Out.SourceContext)
 	}
-	for i, location := range tctx.Out.SourceContext.Locations {
+	for i, location := range tctx.Effects.Out.SourceContext.Locations {
 		if location.Path != response.Results[i].Path || location.RootID != "r1" {
 			t.Fatalf("source=%+v result=%+v", location, response.Results[i])
 		}

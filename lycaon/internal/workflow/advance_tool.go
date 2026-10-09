@@ -35,7 +35,7 @@ func RegisterAdvanceTool(reg *tools.DefaultRegistry, runs *RunManager) error {
 		return fmt.Errorf("registry and run manager required")
 	}
 	if err := reg.Register("workflow_advance", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-		if !isCoordinatorAgent(tctx.Agent) {
+		if !isCoordinatorAgent(tctx.Identity.Agent) {
 			return "", fmt.Errorf("workflow_advance requires coordinator role")
 		}
 		if len(args) > 0 {
@@ -44,13 +44,13 @@ func RegisterAdvanceTool(reg *tools.DefaultRegistry, runs *RunManager) error {
 		if err := requireSessionProject(ctx, runs.Sessions, tctx); err != nil {
 			return "", err
 		}
-		if replayed, already, ok, replayErr := runs.replayAdvanceToolOperation(ctx, tctx.ToolCallID); replayErr != nil || ok {
+		if replayed, already, ok, replayErr := runs.replayAdvanceToolOperation(ctx, tctx.Identity.ToolCallID); replayErr != nil || ok {
 			if already {
-				return marshalAdvanceToolResult(tctx.Out, alreadyAdvancedResult(replayed, ""))
+				return marshalAdvanceToolResult(tctx.Effects.Out, alreadyAdvancedResult(replayed, ""))
 			}
-			return marshalAdvanceToolOutcome(tctx.Out, replayed, replayErr)
+			return marshalAdvanceToolOutcome(tctx.Effects.Out, replayed, replayErr)
 		}
-		active, err := runs.Store.ActiveBySession(ctx, tctx.SessionID)
+		active, err := runs.Store.ActiveBySession(ctx, tctx.Identity.SessionID)
 		if err != nil {
 			return "", err
 		}
@@ -62,7 +62,7 @@ func RegisterAdvanceTool(reg *tools.DefaultRegistry, runs *RunManager) error {
 			return "", err
 		}
 		if scaffoldvars.HasPendingUserInput(vars) {
-			return marshalAdvanceToolResult(tctx.Out, advanceBlockedPendingInput(vars, active.CurrentPhase))
+			return marshalAdvanceToolResult(tctx.Effects.Out, advanceBlockedPendingInput(vars, active.CurrentPhase))
 		}
 		manifest, err := runs.manifestForRun(ctx, active)
 		if err != nil {
@@ -70,24 +70,24 @@ func RegisterAdvanceTool(reg *tools.DefaultRegistry, runs *RunManager) error {
 		}
 		if def, ok := manifest.PhaseByID(active.CurrentPhase); ok {
 			if workflowdef.EffectiveAdvancePolicy(manifest, def) != workflowdef.AdvanceWhenGateMetCoordinator {
-				return marshalAdvanceToolResult(tctx.Out, AdvanceToolResult{
+				return marshalAdvanceToolResult(tctx.Effects.Out, AdvanceToolResult{
 					Error:   "advance_not_coordinator_mode",
 					Phase:   active.CurrentPhase,
 					Message: fmt.Sprintf("phase %q uses host auto-advance; workflow_advance is not available on this phase", active.CurrentPhase),
 				})
 			}
 		} else if manifest.Controls.PhaseAdvance.HostOnly() {
-			return marshalAdvanceToolResult(tctx.Out, AdvanceToolResult{
+			return marshalAdvanceToolResult(tctx.Effects.Out, AdvanceToolResult{
 				Error:   "advance_not_coordinator_mode",
 				Phase:   active.CurrentPhase,
 				Message: fmt.Sprintf("phase %q uses host auto-advance; workflow_advance is not available on this phase", active.CurrentPhase),
 			})
 		}
 		if _, ok := hostAutoAdvancedFromPhase(vars); ok {
-			if out, consumed, consumeErr := runs.consumeHostAutoAdvancedMarker(ctx, active.ID, tctx.ToolCallID); consumeErr != nil {
+			if out, consumed, consumeErr := runs.consumeHostAutoAdvancedMarker(ctx, active.ID, tctx.Identity.ToolCallID); consumeErr != nil {
 				return "", consumeErr
 			} else if consumed {
-				return marshalAdvanceToolResult(tctx.Out, out)
+				return marshalAdvanceToolResult(tctx.Effects.Out, out)
 			}
 			// The marker was consumed concurrently; fall through to a real advance
 			// against the run's current revision.
@@ -95,9 +95,9 @@ func RegisterAdvanceTool(reg *tools.DefaultRegistry, runs *RunManager) error {
 				return "", err
 			}
 		}
-		commandCtx := withWorkflowCommandOperation(WithExpectedRevision(ctx, active.Revision), tctx.ToolCallID)
+		commandCtx := withWorkflowCommandOperation(WithExpectedRevision(ctx, active.Revision), tctx.Identity.ToolCallID)
 		run, err := runs.Advance(commandCtx, active.ID)
-		return marshalAdvanceToolOutcome(tctx.Out, run, err)
+		return marshalAdvanceToolOutcome(tctx.Effects.Out, run, err)
 	}); err != nil {
 		return err
 	}

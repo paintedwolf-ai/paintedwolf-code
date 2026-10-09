@@ -1,8 +1,11 @@
 package native
 
 import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"maps"
 	"os"
 	"path/filepath"
@@ -19,8 +22,8 @@ import (
 
 func testToolContext(root string) tools.ToolContext {
 	return tools.ToolContext{
-		Agent: "implement",
-		Roots: []projectroot.RootRef{{ID: "primary", Path: root, IsPrimary: true}},
+		Identity: tools.InvocationIdentity{Agent: "implement"},
+		Source:   tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "primary", Path: root, IsPrimary: true}}},
 	}
 }
 
@@ -85,14 +88,14 @@ func TestCommandIORedirectRejectsOutOfScope(t *testing.T) {
 		{ID: "plan_writer", Tools: map[string]bool{"write": true, "command": true}, WriteGlobs: []string{settingsoverlay.Rel("blueprints/**")}},
 	})
 	tctx := testToolContext(root)
-	tctx.Agent = "plan_writer"
+	tctx.Identity.Agent = "plan_writer"
 	_, err := commandIOFor(context.Background(), b, tctx, map[string]any{
 		"stdout_to": "src/out.log",
 	}, "command")
 	if err == nil {
 		t.Fatal("expected write-scope rejection")
 	}
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "WRITE_SCOPE_DENIED" {
 		t.Fatalf("err = %v want WRITE_SCOPE_DENIED ToolReject", err)
 	}
@@ -110,14 +113,14 @@ func TestCommandIORedirectRejectsOutOfScopeVerify(t *testing.T) {
 		{ID: "plan_writer", Tools: map[string]bool{"write": true, "verify": true}, WriteGlobs: []string{settingsoverlay.Rel("blueprints/**")}},
 	})
 	tctx := testToolContext(root)
-	tctx.Agent = "plan_writer"
+	tctx.Identity.Agent = "plan_writer"
 	_, err := commandIOFor(context.Background(), b, tctx, map[string]any{
 		"stdout_to": "src/out.log",
 	}, "verify")
 	if err == nil {
 		t.Fatal("expected write-scope rejection")
 	}
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "WRITE_SCOPE_DENIED" {
 		t.Fatalf("err = %v want WRITE_SCOPE_DENIED ToolReject", err)
 	}
@@ -132,14 +135,14 @@ func TestCommandIORedirectRejectsCoordinator(t *testing.T) {
 		{ID: "coordinator", Tools: map[string]bool{"command": true}, WriteGlobs: []string{settingsoverlay.Rel("blueprints/**")}},
 	})
 	tctx := testToolContext(root)
-	tctx.Agent = "coordinator"
+	tctx.Identity.Agent = "coordinator"
 	_, err := commandIOFor(context.Background(), b, tctx, map[string]any{
 		"stdout_to": "src/out.log",
 	}, "command")
 	if err == nil {
 		t.Fatal("expected write-scope rejection")
 	}
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "WRITE_SCOPE_DENIED" {
 		t.Fatalf("err = %v want WRITE_SCOPE_DENIED ToolReject (coordinator redirect)", err)
 	}
@@ -171,8 +174,8 @@ func TestCommandIORedirectSharesInvestigateWriteScope(t *testing.T) {
 	}
 	b.SetPathScopes(scopes)
 	tctx := testToolContext(root)
-	tctx.Agent = "coordinator"
-	tctx.TurnSurfaceID = tools.SurfaceImplementInvestigate
+	tctx.Identity.Agent = "coordinator"
+	tctx.Turn.TurnSurfaceID = toolcontract.SurfaceImplementInvestigate
 
 	io, err := commandIOFor(context.Background(), b, tctx, map[string]any{
 		"stdout_to": "scratch/git-status.txt",

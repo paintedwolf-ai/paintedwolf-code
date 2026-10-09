@@ -2,10 +2,10 @@ package page
 
 import (
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/browser"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 )
 
@@ -24,16 +24,16 @@ func parsePageOpenArgs(args map[string]any) (pageOpenArgs, error) {
 	in.ProcessHandle = strings.TrimSpace(in.ProcessHandle)
 	in.Wait = strings.TrimSpace(in.Wait)
 	if in.URL == "" && in.ProjectDir == "" {
-		return pageOpenArgs{}, &tools.ToolReject{Code: "CAPTURE_TARGET_INVALID", Data: map[string]any{"reason": "missing_target"}}
+		return pageOpenArgs{}, &toolrejection.ToolReject{Code: "CAPTURE_TARGET_INVALID", Data: map[string]any{"reason": "missing_target"}}
 	}
 	if in.URL != "" && in.ProjectDir != "" {
-		return pageOpenArgs{}, &tools.ToolReject{Code: "CAPTURE_TARGET_INVALID", Data: map[string]any{"reason": "url_and_project_dir"}}
+		return pageOpenArgs{}, &toolrejection.ToolReject{Code: "CAPTURE_TARGET_INVALID", Data: map[string]any{"reason": "url_and_project_dir"}}
 	}
 	if in.Path != "" && in.ProjectDir == "" {
-		return pageOpenArgs{}, &tools.ToolReject{Code: "CAPTURE_TARGET_INVALID", Data: map[string]any{"reason": "path_without_project_dir"}}
+		return pageOpenArgs{}, &toolrejection.ToolReject{Code: "CAPTURE_TARGET_INVALID", Data: map[string]any{"reason": "path_without_project_dir"}}
 	}
 	if in.ProcessHandle != "" && in.ProjectDir != "" {
-		return pageOpenArgs{}, &tools.ToolReject{Code: "CAPTURE_TARGET_INVALID", Data: map[string]any{"reason": "process_handle_with_project_dir"}}
+		return pageOpenArgs{}, &toolrejection.ToolReject{Code: "CAPTURE_TARGET_INVALID", Data: map[string]any{"reason": "process_handle_with_project_dir"}}
 	}
 	if in.Path != "" {
 		if _, err := browser.JoinStaticEntry(in.Path); err != nil {
@@ -54,10 +54,10 @@ func parsePageActArgs(args map[string]any) (pageActArgs, error) {
 	}
 	in.ID = strings.TrimSpace(in.ID)
 	if in.ID == "" {
-		return pageActArgs{}, &tools.ToolReject{Code: "PAGE_ID_REQUIRED", Data: map[string]any{"reason": "missing_id"}}
+		return pageActArgs{}, &toolrejection.ToolReject{Code: "PAGE_ID_REQUIRED", Data: map[string]any{"reason": "missing_id"}}
 	}
 	if len(in.Actions) == 0 {
-		return pageActArgs{}, &tools.ToolReject{Code: "CAPTURE_TARGET_INVALID", Data: map[string]any{"reason": "missing_actions", "capture_actions_required": true}}
+		return pageActArgs{}, &toolrejection.ToolReject{Code: "CAPTURE_TARGET_INVALID", Data: map[string]any{"reason": "missing_actions", "capture_actions_required": true}}
 	}
 	if in.Record != nil {
 		if err := browser.ValidateRecordOpts(*in.Record); err != nil {
@@ -80,7 +80,7 @@ func parsePageSnapshotArgs(args map[string]any) (pageSnapshotArgs, error) {
 	in.Selector = strings.TrimSpace(in.Selector)
 	in.Caption = strings.TrimSpace(in.Caption)
 	if in.ID == "" {
-		return pageSnapshotArgs{}, &tools.ToolReject{Code: "PAGE_ID_REQUIRED", Data: map[string]any{"reason": "missing_id"}}
+		return pageSnapshotArgs{}, &toolrejection.ToolReject{Code: "PAGE_ID_REQUIRED", Data: map[string]any{"reason": "missing_id"}}
 	}
 	return in, nil
 }
@@ -98,7 +98,7 @@ func parsePageCloseArgs(args map[string]any) (pageCloseArgs, error) {
 	in.Selector = strings.TrimSpace(in.Selector)
 	in.Caption = strings.TrimSpace(in.Caption)
 	if in.ID == "" {
-		return pageCloseArgs{}, &tools.ToolReject{Code: "PAGE_ID_REQUIRED", Data: map[string]any{"reason": "missing_id"}}
+		return pageCloseArgs{}, &toolrejection.ToolReject{Code: "PAGE_ID_REQUIRED", Data: map[string]any{"reason": "missing_id"}}
 	}
 	return in, nil
 }
