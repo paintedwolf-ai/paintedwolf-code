@@ -132,10 +132,10 @@ func runScanQuery(ctx context.Context, args map[string]any, tctx tools.ToolConte
 		return "", fmt.Errorf("scan_ids is required")
 	}
 	if _, present := args["selector"]; present {
-		return "", &tools.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"tool": "scan_query", "field": "selector", "reason": "requires_accounting_view"}}
+		return "", &toolrejection.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"tool": "scan_query", "field": "selector", "reason": "requires_accounting_view"}}
 	}
 	if _, present := args["inventory_revision"]; present && drilldownStringArg(args, "view") != "groups" {
-		return "", &tools.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"tool": "scan_query", "field": "inventory_revision", "reason": "requires_inventory_view"}}
+		return "", &toolrejection.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"tool": "scan_query", "field": "inventory_revision", "reason": "requires_inventory_view"}}
 	}
 	if drilldownStringArg(args, "view") == "coverage" {
 		out, err := queryCoverage(ctx, coord, scanIDs, args)
@@ -213,7 +213,7 @@ func queryFindingGroups(ctx context.Context, coord scanbase.ScanCoordinator, ids
 		return "", err
 	}
 	if expected != "" && expected != revision {
-		return "", &tools.ToolReject{Code: "SCAN_INVENTORY_STALE", Data: map[string]any{"inventory_revision": revision}}
+		return "", &toolrejection.ToolReject{Code: "SCAN_INVENTORY_STALE", Data: map[string]any{"inventory_revision": revision}}
 	}
 	groups := scanfindings.GroupFindings(findings, 10)
 	offset := min(max(req.Offset, 0), len(groups))

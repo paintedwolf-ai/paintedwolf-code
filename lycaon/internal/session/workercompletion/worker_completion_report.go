@@ -3,8 +3,8 @@ package workercompletion
 import (
 	"context"
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"sort"
 	"strconv"
 	"strings"

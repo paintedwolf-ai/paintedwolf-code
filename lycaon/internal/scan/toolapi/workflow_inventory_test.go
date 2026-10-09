@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/projectroot"
@@ -99,7 +100,7 @@ func TestWorkflowInventoryPaginationUsesTheSameGroupsAsScanQuery(t *testing.T) {
 // inventory is refused rather than spliced onto a different group list.
 func TestScanQueryGroupsRefuseAStaleInventoryRevision(t *testing.T) {
 	ledger := &inventoryLedger{scans: []api.CodeScan{{ID: "complete", Status: api.CodeScanStatusComplete}}}
-	tctx := tools.ToolContext{Roots: []projectroot.RootRef{{ID: "root", Path: t.TempDir(), IsPrimary: true}}, ActiveRootID: "root"}
+	tctx := tools.ToolContext{Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: t.TempDir(), IsPrimary: true}}, ActiveRootID: "root"}}
 	raw, err := runScanQuery(t.Context(), map[string]any{"scan_ids": []string{"complete"}, "view": "groups"}, tctx, ledger, nil)
 	testutil.FailErr(t, "first page", err)
 	var page struct {
@@ -114,7 +115,7 @@ func TestScanQueryGroupsRefuseAStaleInventoryRevision(t *testing.T) {
 	_, err = runScanQuery(t.Context(), map[string]any{"scan_ids": []string{"complete"}, "view": "groups", "inventory_revision": page.Revision}, tctx, ledger, nil)
 	testutil.FailErr(t, "page at the current revision", err)
 
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	_, err = runScanQuery(t.Context(), map[string]any{"scan_ids": []string{"complete"}, "view": "groups", "inventory_revision": "stale"}, tctx, ledger, nil)
 	if !errors.As(err, &reject) || reject.Code != "SCAN_INVENTORY_STALE" || reject.Data["inventory_revision"] != page.Revision {
 		t.Fatalf("stale revision err = %v", err)
@@ -151,7 +152,7 @@ func TestScanQueryAccountingViewReadsWorkflowAccounting(t *testing.T) {
 	scanners := &scanbase.MockRegistry{Scanner: &scanbase.MockScanner{}}
 	reg := tools.NewDefaultRegistry()
 	testutil.FailErr(t, "register", RegisterScanTools(reg, ledger, scanners, noFullScans{}, nil, nil, accounting))
-	tctx := tools.ToolContext{SessionID: "session", Roots: []projectroot.RootRef{{ID: "root", Path: t.TempDir(), IsPrimary: true}}, ActiveRootID: "root"}
+	tctx := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "session"}, Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: t.TempDir(), IsPrimary: true}}, ActiveRootID: "root"}}
 	out, err := reg.Run(t.Context(), toolScanQuery, map[string]any{"scan_ids": []any{"s"}, "view": "accounting"}, tctx)
 	testutil.FailErr(t, "accounting view", err)
 	if out != `{"view":"accounting"}` || accounting.sessionID != "session" || ledger.request.ScanID != "" {

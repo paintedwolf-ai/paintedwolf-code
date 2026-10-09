@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"log/slog"
 	"strings"
 
@@ -61,7 +62,7 @@ func RegisterFanoutPlanTool(reg *tools.DefaultRegistry, runs *RunManager) error 
 		}
 		plan, err := parseFanoutPlanArgs(args)
 		if err != nil {
-			var reject *tools.ToolReject
+			var reject *toolrejection.ToolReject
 			if errors.As(err, &reject) {
 				return "", err
 			}
@@ -103,7 +104,7 @@ func RegisterFanoutPlanTool(reg *tools.DefaultRegistry, runs *RunManager) error 
 		if def.Fanout.RequireTaskCharter {
 			for _, leg := range plan.Legs {
 				if len(leg.DoneWhen) == 0 {
-					return "", &tools.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"tool": "fanout_plan", "field": "legs.done_when", "reason": "completion_criteria_required"}}
+					return "", &toolrejection.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"tool": "fanout_plan", "field": "legs.done_when", "reason": "completion_criteria_required"}}
 				}
 			}
 		}
@@ -182,7 +183,7 @@ func parseFanoutPlanArgs(args map[string]any) (FanoutPlan, error) {
 			return FanoutPlan{}, fmt.Errorf("legs[%d] requires agent_type, subject, and prompt", i)
 		}
 		if len(leg.DoneWhen) > 0 && spawn.TaskCharterRunes(api.WorkerTaskCharter{Goal: leg.Prompt, DoneWhen: leg.DoneWhen}) > spawn.MaxTaskCharterRunes {
-			return FanoutPlan{}, &tools.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"tool": "fanout_plan", "field": fmt.Sprintf("legs[%d]", i), "reason": "brief_too_long", "max_runes": spawn.MaxTaskCharterRunes}}
+			return FanoutPlan{}, &toolrejection.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"tool": "fanout_plan", "field": fmt.Sprintf("legs[%d]", i), "reason": "brief_too_long", "max_runes": spawn.MaxTaskCharterRunes}}
 		}
 		if n := len([]rune(leg.Subject)); n > maxLegSubjectRunes {
 			return FanoutPlan{}, fmt.Errorf("legs[%d].subject is %d characters; name the area in at most %d", i, n, maxLegSubjectRunes)

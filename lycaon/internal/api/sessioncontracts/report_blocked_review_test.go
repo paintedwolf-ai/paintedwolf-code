@@ -1,16 +1,16 @@
 package sessioncontracts
 
 import (
- "context"
- "strings"
- "testing"
- "time"
- "github.com/lycaon/lycaon/internal/api/contractfixture"
- "github.com/lycaon/lycaon/internal/report"
- "github.com/lycaon/lycaon/internal/report/reporttest"
- "github.com/lycaon/lycaon/internal/testutil"
- "github.com/lycaon/lycaon/internal/workflow"
- wire "github.com/lycaon/lycaon/pkg/api"
+	"context"
+	"github.com/lycaon/lycaon/internal/api/contractfixture"
+	"github.com/lycaon/lycaon/internal/report"
+	"github.com/lycaon/lycaon/internal/report/reporttest"
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/workflow"
+	wire "github.com/lycaon/lycaon/pkg/api"
+	"strings"
+	"testing"
+	"time"
 )
 
 func TestBlockedReviewServesItsRetainedSnapshot(t *testing.T) {
@@ -50,4 +50,3 @@ func TestBlockedReviewServesItsRetainedSnapshot(t *testing.T) {
 		t.Fatalf("an ordinarily paused run offered a report: ok %v err %v", ok, err)
 	}
 }
-
