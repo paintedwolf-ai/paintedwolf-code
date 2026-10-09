@@ -110,7 +110,7 @@ func (r *Runtime) WireBoardAndResearch(ctx context.Context) error {
 	}
 
 	r.deps.Sessions.Manager.SetBoardInject(&board.InjectBuilder{SnapshotBuilder: r.Snapshot, Projects: r.deps.Storage.Projects}, board.DefaultInjectFormatter())
-	r.deps.Sessions.Manager.SetIncludeScanLegend(func() bool {
+	r.deps.Sessions.Manager.Coordinator.Runtime.SetIncludeScanLegend(func() bool {
 		if r.deps.Settings.Service == nil || r.deps.Settings.Service.SecurityScanners == nil {
 			return true
 		}
@@ -143,8 +143,8 @@ func (r *Runtime) WireBoardAndResearch(ctx context.Context) error {
 	})
 
 	r.deps.Sessions.Manager.SetTurnLoads(r.deps.Execution.TurnLoads)
-	r.deps.Sessions.Manager.SetDecider(r.deps.Decisions.Decider)
-	r.deps.Sessions.Manager.SetSkillBodyRenderer(r.deps.Execution.Host.Skills.RenderSkillBody)
+	r.deps.Sessions.Manager.Coordinator.Loading.SetDecider(r.deps.Decisions.Decider)
+	r.deps.Sessions.Manager.Coordinator.Loading.SetSkillBodyRenderer(r.deps.Execution.Host.Skills.RenderSkillBody)
 
 	r.WebRuntime, err = webresearch.WireRuntime()
 	if err != nil {

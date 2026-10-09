@@ -87,7 +87,10 @@ func (m *Feedback) resolveUserFeedback(ctx context.Context, answererID, sessionI
 		}
 		return nil, fmt.Errorf("%w: run %s is not running", runstate.ErrRevisionConflict, run.ID)
 	}
-	manifest, _ := m.Resolver.ForRun(ctx, run)
+	manifest, err := m.Resolver.ForRun(ctx, run)
+	if err != nil {
+		return nil, err
+	}
 	if phaseID == runstate.WorkflowRequestFeedbackID && manifest.Request != nil {
 		return m.Requests.ResolveWorkflowRequest(ctx, answererID, sessionID, run, manifest, response)
 	}

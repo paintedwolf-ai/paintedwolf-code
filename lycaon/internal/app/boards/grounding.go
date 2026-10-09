@@ -98,7 +98,7 @@ func (r *Runtime) wireFindingAndProgressTools() error {
 		},
 		Friction: func(ctx context.Context, sessionID, code string) {
 			if r.deps.Sessions != nil && r.deps.Sessions.Manager != nil {
-				r.deps.Sessions.Manager.RecordGroundingFriction(ctx, sessionID)
+				r.deps.Sessions.Manager.Runner.Closeouts.RecordGroundingFriction(ctx, sessionID)
 			}
 		},
 	}); err != nil {

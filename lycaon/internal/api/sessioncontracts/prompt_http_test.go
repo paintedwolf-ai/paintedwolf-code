@@ -3,6 +3,7 @@ package sessioncontracts
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/session/promptinput"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -62,7 +63,7 @@ func TestPromptReplayPrecedesWorkspaceValidation(t *testing.T) {
 	sess := contractfixture.CreateSessionAtPathOnServer(t, srv, dir, wire.SessionPostureBuild)
 	operationID := uuid.NewString()
 	prompt := wire.PromptRequest{OperationID: operationID, Text: "hello"}
-	row, created, err := srv.Admin.SessionAdmin.Lifecycle.Sessions.AdmitPrompt(t.Context(), sess.ID, operationID, prompt, session.PromptInput{Text: prompt.Text})
+	row, created, err := srv.Admin.SessionAdmin.Lifecycle.Sessions.Submissions.AdmitPrompt(t.Context(), sess.ID, operationID, prompt, promptinput.Input{Text: prompt.Text})
 	if err != nil {
 		testutil.FailErr(t, "admit prompt", err)
 	}
@@ -230,7 +231,7 @@ func TestPromptConcurrentHTTP(t *testing.T) {
 
 func TestPromptMaxIterationHTTP(t *testing.T) {
 	srv := contractfixture.NewTestServer(t)
-	srv.Admin.SessionAdmin.Lifecycle.Sessions.SetMaxIterations(3)
+	srv.Admin.SessionAdmin.Lifecycle.Sessions.Limits.SetMaxIterations(3)
 	baseURL := contractfixture.StartTestHTTPServer(t, srv)
 	dir := t.TempDir()
 	sess := contractfixture.CreateTestSession(t, baseURL, dir)

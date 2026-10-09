@@ -2,6 +2,7 @@ package boot
 
 import (
 	"fmt"
+
 	"github.com/lycaon/lycaon/internal/rules"
 	"github.com/lycaon/lycaon/internal/session"
 	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
@@ -13,7 +14,7 @@ type ServeWiring struct {
 	PostureRegistry *session.PostureRegistry
 	BundledRules    map[string]*rules.RulesConfig
 	RuleEngine      *rules.PostureRuleEngine
-	SessionManager  *session.Manager
+	SessionManager  *session.Host
 	WorkflowManager *workflow.RunManager
 }
 

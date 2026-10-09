@@ -2,6 +2,10 @@ package api
 
 import (
 	"context"
+	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
+	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
+	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
+
 	"github.com/lycaon/lycaon/internal/agentpresence"
 	"github.com/lycaon/lycaon/internal/api/capabilityadmin"
 	"github.com/lycaon/lycaon/internal/api/extensionadmin"
@@ -57,9 +61,6 @@ import (
 	"github.com/lycaon/lycaon/internal/webresearch"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workflow"
-	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
-	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
-	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 )
 
 // Dependencies are the host-supplied services the API routes over.
@@ -82,7 +83,7 @@ type CoreDependencies struct {
 	Store         session.Store
 	PersonActions *personactions.Store
 	Projects      project.Registry
-	Sessions      *session.Manager
+	Sessions      *session.Host
 	Settings      *settings.Service
 	UserNotices   *usernotice.Catalog
 	Invocations   invocation.Recorder

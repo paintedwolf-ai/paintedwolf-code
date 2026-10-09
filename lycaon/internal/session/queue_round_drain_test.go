@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/session/promptinput"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -24,33 +25,33 @@ func TestQueuedPromptDispatchesWhenRoundCompletesAfterTurnEndCheck(t *testing.T)
 	}}}
 	mgr.SetWorkerQueue(workers)
 
-	row, _, err := mgr.AdmitPrompt(ctx, sess.ID, uuid.NewString(), "second", PromptInput{Text: "second of two"})
+	row, _, err := mgr.Submissions.AdmitPrompt(ctx, sess.ID, uuid.NewString(), "second", promptinput.Input{Text: "second of two"})
 	testutil.FailErr(t, "admit prompt", err)
-	_, err = mgr.RunPromptSubmission(ctx, row.ID)
+	_, err = mgr.Submissions.RunPromptSubmission(ctx, row.ID)
 	testutil.FailErr(t, "dispatch check with open round", err)
-	waiting, err := mgr.GetPromptSubmission(ctx, row.ID)
+	waiting, err := mgr.Submissions.GetPromptSubmission(ctx, row.ID)
 	testutil.FailErr(t, "get waiting receipt", err)
 	if waiting.Status != store.PromptSubmissionQueued {
 		t.Fatalf("receipt status = %s, want queued while the worker cycle runs", waiting.Status)
 	}
 
 	workers.jobs[0].Status = api.WorkerStatusComplete
-	mgr.DrainLoopPendingForTest(ctx, sess.ID)
-	mgr.WaitForCoordinatorAsyncTurns(ctx)
+	mgr.Runner.Coordinator.CoordinatorLoop().DrainPending(ctx, sess.ID)
+	mgr.Coordinator.WaitForTurns(ctx)
 
-	closed, err := mgr.GetPromptSubmission(ctx, row.ID)
+	closed, err := mgr.Submissions.GetPromptSubmission(ctx, row.ID)
 	testutil.FailErr(t, "get drained receipt", err)
 	if closed.Status != store.PromptSubmissionComplete {
 		t.Fatalf("receipt status = %s, want complete once the round completes", closed.Status)
 	}
-	if draft := mgr.queue.Snapshot(sess.ID); len(draft.QueueItems) != 0 {
+	if draft := mgr.Resources.Queue.Snapshot(sess.ID); len(draft.QueueItems) != 0 {
 		t.Fatalf("draft retained items after round-end drain: %+v", draft.QueueItems)
 	}
 
 	// A later quiescence finds nothing queued and does not replay the turn.
-	mgr.DrainLoopPendingForTest(ctx, sess.ID)
-	mgr.WaitForCoordinatorAsyncTurns(ctx)
-	msgs, err := mgr.GetMessages(ctx, sess.ID)
+	mgr.Runner.Coordinator.CoordinatorLoop().DrainPending(ctx, sess.ID)
+	mgr.Coordinator.WaitForTurns(ctx)
+	msgs, err := mgr.Runner.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "get messages", err)
 	userTurns := 0
 	for _, msg := range msgs {

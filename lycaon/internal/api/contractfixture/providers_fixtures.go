@@ -29,9 +29,9 @@ func CreateProviderJSON(t *testing.T, base, body string) wire.ProviderMeta {
 	testutil.FailErr(t, "new provider create", err)
 	req.Header.Set("Content-Type", "application/json")
 	hostapi.WithTestAuth(req)
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := fixtureClient.Do(req)
 	testutil.FailErr(t, "create provider", err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("create status = %d body = %s", resp.StatusCode, ReadBody(t, resp))
 	}
@@ -137,7 +137,7 @@ func NewProviderTestServerWithCatalogs(t *testing.T, shipYAML, localYAML string,
 	credPath := filepath.Join(tmp, "credential-vault.age")
 	globalPolicy := filepath.Join(tmp, "model-policy.yaml")
 	// Bundled provider kinds remain templates.
-	if err := os.WriteFile(userProviders, []byte(localYAML), 0o644); err != nil {
+	if err := os.WriteFile(userProviders, []byte(localYAML), 0o600); err != nil {
 		testutil.FailErr(t, "write providers.local", err)
 	}
 
@@ -160,7 +160,7 @@ func NewProviderTestServerWithCatalogs(t *testing.T, shipYAML, localYAML string,
 	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	store := store.NewMemory()
 	mock := llm.NewMockProvider(TestMockConfig(t))
-	mgr := session.NewManagerWithLLMService(store, mock, svc, nil, settings.DefaultSessionLimits(), nil)
+	mgr := session.NewHost(store, session.Models{Client: mock, Provider: svc, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	hub := events.NewMemoryHub()
 	deps := hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: store, Projects: project.NewMemoryRegistry(), Sessions: mgr}, Providers: hostapi.ProvidersDependencies{LLM: svc}, Host: hostapi.HostDependencies{Events: hub}}
 	for _, opt := range opts {
@@ -178,9 +178,9 @@ func PutProviderJSON(t *testing.T, base, id, body string) wire.ProviderMeta {
 	testutil.FailErr(t, "new provider update", err)
 	req.Header.Set("Content-Type", "application/json")
 	hostapi.WithTestAuth(req)
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := fixtureClient.Do(req)
 	testutil.FailErr(t, "update provider", err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("PUT %s status = %d body = %s", body, resp.StatusCode, ReadBody(t, resp))
 	}

@@ -1,13 +1,14 @@
 package review
 
 import (
+	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
+	"strings"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
-	"strings"
-	"testing"
 )
 
 func TestVerdictRepairReportsIndependentShapeErrors(t *testing.T) {
@@ -28,7 +29,7 @@ func TestVerdictRepairsRetainEveryStructuredCode(t *testing.T) {
 		InventoryIssue: &runstate.InventoryIssue{ReportDocumentIssue: guidance.ReportDocumentIssue{Code: SubmitVerdictScansPendingCode}},
 		MissingAgents:  []string{"skeptic"},
 		GroundingCode:  "SUBMIT_VERDICT_UNGROUNDED",
-		QuestionIssue:  toolrejection.AsToolReject(rejectReviewQuestion("current_review_required", "question/c1")),
+		QuestionIssue:  tools.AsToolReject(rejectReviewQuestion("current_review_required", "question/c1")),
 		CoverageIssue:  &toolrejection.ToolReject{Code: workflowvalidation.ReviewLoopVerdictInvalidCode, Data: map[string]any{"reason": "stale coverage revision"}},
 	}
 	repairs := verdictRepairs("", out)

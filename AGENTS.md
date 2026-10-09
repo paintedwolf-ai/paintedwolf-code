@@ -17,7 +17,7 @@ policy before editing. Start unfamiliar work at [docs](docs/README.md) and
   to sibling repos, tags, force pushes, releases, deployments, or merging.
 - **Keep PRs draft until we believe the work is complete**, independently of CI
   results. Return to draft if more implementation is needed. Merge only on
-  request, through the merge queue; never bypass its required checks.
+  request: auto-merge on a ready PR enqueues it; never bypass required checks.
 - **Use root `./task` for repository dev and verification targets.** Use digest
   targets for test output; never truncate raw results with `tail` or `grep FAIL`.
 - **Ask first** for destructive Git/shared-state operations, discarding others'
@@ -58,11 +58,13 @@ owner's engine you stop and why.
 
 ## Testing
 
-**Use GitHub CI by default.** Push work in progress to its draft PR; local tests
-are not a prerequisite. PRs run `check-fast` stages; the merge queue runs `check`
-and platform verification on the landing commit. Do not run these gates locally
-first or repeat checks CI passed for the same commit. Report the PR without
-waiting on or polling CI.
+**Use GitHub CI by default.** Push work in progress to its draft PR; drafts run
+no CI, and local tests are not a prerequisite. A ready PR runs the fast tier;
+once its `check` passes, auto-merge adds it to the merge queue, which runs the
+affected-scope integration gate on the exact landing commit. Main receives full
+qualification separately; releases require qualification on the exact commit.
+Do not run these gates locally first or repeat checks CI passed for the same
+commit. Report the PR without waiting on or polling CI.
 
 **Run specific local tests when needed and the machine is free.** Check
 `./task test:status`, then use the smallest relevant target or scoped digest.
@@ -81,8 +83,9 @@ failures to get green. Test conventions: [backend](lycaon/AGENTS.md#testing) and
 [frontend](lycaon-den/AGENTS.md#testing).
 
 **Both gates enforce size budgets and changed-statement coverage.** Files,
-directories, Go types, and prompts must meet category limits or justified
-exceptions. Before editing large code, run
+directories, and Go types must not grow above category limits without justified
+exceptions. Unchanged legacy excess is tracked; explicit caps and prompt limits
+remain absolute. Before editing large code, run
 `PW_BUDGETS_INSPECT="<path>" ./task budgets`. Above the warning line, put new
 behavior in a new file/package; resolve failures by reshaping or trimming.
 `coverage:changes` and `den:coverage:changes` require tests for added statements.

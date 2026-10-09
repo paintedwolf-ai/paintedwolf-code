@@ -31,7 +31,7 @@ func TestCoordinatorWaitDeliverySurvivesOptionalWakeGates(t *testing.T) {
 				Conditions: []awaitstore.Condition{{Kind: "process_done", Handles: []string{"server"}}}})
 			testutil.FailErr(t, "arm coordinator wait", err)
 			loop := NewLoopEngine()
-			loop.SetWaitStore(store)
+			loop.Subscriptions.SetWaitStore(store)
 			t.Cleanup(func() { loop.ForgetSession(context.Background(), id) })
 			deps := loopDepsForTest()
 			deps.GetSession = func(context.Context, string) (*api.Session, error) {
@@ -59,32 +59,32 @@ func TestCoordinatorWaitDeliverySurvivesOptionalWakeGates(t *testing.T) {
 				return &promptresult.Result{}, nil
 			}
 			loop.SetDeps(deps)
-			finish := loop.BeginPromptExecution(t.Context(), id)
+			finish := loop.Admission.BeginPromptExecution(t.Context(), id)
 			defer finish()
 			if event == "recovery" {
 				_, err = store.SettleLease(t.Context(), lease.ID, "timed_out", awaitstore.Condition{Kind: "timer", Outcome: "timed_out"})
 				testutil.FailErr(t, "settle before recovery", err)
-				testutil.FailErr(t, "recover pending wait", RecoverWaitLeases(t.Context(), loop, store))
+				testutil.FailErr(t, "recover pending wait", RecoverWaitLeases(t.Context(), loop.Subscriptions, store))
 			} else {
-				loop.EnterSleep(t.Context(), id, deadline, "server startup", []WaitTrigger{WaitTriggerTimer, WaitTriggerProcessDone}, []string{"server"}, SleepMoverHost)
+				loop.Waits.EnterSleep(t.Context(), id, deadline, "server startup", []WaitTrigger{WaitTriggerTimer, WaitTriggerProcessDone}, []string{"server"}, SleepMoverHost)
 				if event == "process" {
-					loop.NudgeProcessFinished(t.Context(), id, "server", anchor.Envelope{})
+					loop.Nudges.NudgeProcessFinished(t.Context(), id, "server", anchor.Envelope{})
 				}
 			}
-			testutil.WaitFor(t, time.Second, func() bool { _, ready := loop.waitWinner(id); return ready })
+			testutil.WaitFor(t, time.Second, func() bool { _, ready := loop.Deliveries.waitWinner(id); return ready })
 			if deliveries.Load() != 0 {
 				t.Fatal("wait delivery overlapped active execution")
 			}
 			finish()
 			testutil.WaitFor(t, time.Second, func() bool { return deliveries.Load() == 1 })
-			loop.WaitForAsyncTurns(testutil.BoundedContext(t, time.Second))
+			loop.Turns.WaitForAsyncTurns(testutil.BoundedContext(t, time.Second))
 			pending, err := store.PendingAgentResumes(t.Context())
 			testutil.FailErr(t, "read pending waits", err)
 			if len(pending) != 0 {
 				t.Fatalf("delivered wait remains pending: %+v", pending)
 			}
-			testutil.FailErr(t, "recover acknowledged wait", RecoverWaitLeases(t.Context(), loop, store))
-			loop.WaitForAsyncTurns(testutil.BoundedContext(t, time.Second))
+			testutil.FailErr(t, "recover acknowledged wait", RecoverWaitLeases(t.Context(), loop.Subscriptions, store))
+			loop.Turns.WaitForAsyncTurns(testutil.BoundedContext(t, time.Second))
 			if deliveries.Load() != 1 {
 				t.Fatalf("deliveries = %d", deliveries.Load())
 			}
@@ -107,13 +107,13 @@ func TestWaitDeliveryRetriesMissingAcknowledgement(t *testing.T) {
 		return &promptresult.Result{}, admitted()
 	}
 	loop.SetDeps(deps)
-	loop.rememberWaitWinner(id, "lease", awaitstore.Condition{Kind: "timer", Outcome: "timed_out"})
-	if !loop.HasPendingLoopWakes(id) {
+	loop.Deliveries.rememberWaitWinner(id, "lease", awaitstore.Condition{Kind: "timer", Outcome: "timed_out"})
+	if !loop.Nudges.HasPendingLoopWakes(id) {
 		t.Fatal("undelivered result did not keep the turn open")
 	}
-	loop.Nudge(t.Context(), id, anchor.WaitTimerFired, anchor.WaitTimerFired, "", anchor.Envelope{})
-	testutil.WaitFor(t, 3*time.Second, func() bool { return attempts.Load() == 2 && !loop.HasPendingLoopWakes(id) })
-	loop.WaitForAsyncTurns(testutil.BoundedContext(t, time.Second))
+	loop.Nudges.Nudge(t.Context(), id, anchor.WaitTimerFired, anchor.WaitTimerFired, "", anchor.Envelope{})
+	testutil.WaitFor(t, 3*time.Second, func() bool { return attempts.Load() == 2 && !loop.Nudges.HasPendingLoopWakes(id) })
+	loop.Turns.WaitForAsyncTurns(testutil.BoundedContext(t, time.Second))
 	if attempts.Load() != 2 {
 		t.Fatalf("admission attempts = %d", attempts.Load())
 	}
@@ -130,10 +130,10 @@ func TestUserInputRetiresPendingWaitDelivery(t *testing.T) {
 	_, err = store.SettleLease(t.Context(), lease.ID, "timed_out", winner)
 	testutil.FailErr(t, "settle wait", err)
 	loop := NewLoopEngine()
-	loop.SetWaitStore(store)
-	loop.rememberWaitWinner(id, lease.ID, winner)
-	loop.InterruptSleep(t.Context(), id)
-	if loop.HasPendingLoopWakes(id) {
+	loop.Subscriptions.SetWaitStore(store)
+	loop.Deliveries.rememberWaitWinner(id, lease.ID, winner)
+	loop.Waits.InterruptSleep(t.Context(), id)
+	if loop.Nudges.HasPendingLoopWakes(id) {
 		t.Fatal("interrupted wait kept the turn open")
 	}
 	pending, err := store.PendingAgentResumes(t.Context())
@@ -163,19 +163,19 @@ func TestWaitDeliveryRetiresOnlyObservedWakeFacts(t *testing.T) {
 				if err := delivery.Admitted(); err != nil {
 					return nil, err
 				}
-				observe := loop.ObservePrompt(id)
+				observe := loop.Observations.ObservePrompt(id)
 				if observed {
 					observe(inject.CoordinatorTurnFrame{})
 				}
 				return &promptresult.Result{}, nil
 			}
 			loop.SetDeps(deps)
-			queue := loop.sessionPendingQueue(id)
-			queue.push(pendingLoopWake{wake: anchor.PhaseAdvanced, seq: loop.nudgeSeq.Add(1)})
-			loop.rememberWaitWinner(id, "lease", awaitstore.Condition{Kind: "timer", Outcome: "timed_out"})
-			loop.Nudge(t.Context(), id, anchor.WaitTimerFired, anchor.WaitTimerFired, "", anchor.Envelope{})
-			loop.WaitForAsyncTurns(testutil.BoundedContext(t, time.Second))
-			loop.DrainPending(t.Context(), id)
+			queue := loop.Nudges.sessionPendingQueue(id)
+			queue.push(pendingLoopWake{wake: anchor.PhaseAdvanced, seq: loop.Nudges.nudgeSeq.Add(1)})
+			loop.Deliveries.rememberWaitWinner(id, "lease", awaitstore.Condition{Kind: "timer", Outcome: "timed_out"})
+			loop.Nudges.Nudge(t.Context(), id, anchor.WaitTimerFired, anchor.WaitTimerFired, "", anchor.Envelope{})
+			loop.Turns.WaitForAsyncTurns(testutil.BoundedContext(t, time.Second))
+			loop.Nudges.DrainPending(t.Context(), id)
 			wantPrompts := int32(1)
 			if observed {
 				wantPrompts = 0
@@ -183,8 +183,8 @@ func TestWaitDeliveryRetiresOnlyObservedWakeFacts(t *testing.T) {
 			if prompts.Load() != wantPrompts {
 				t.Fatalf("earlier wake prompts=%d, want %d", prompts.Load(), wantPrompts)
 			}
-			queue.push(pendingLoopWake{wake: anchor.PhaseAdvanced, seq: loop.nudgeSeq.Add(1)})
-			loop.DrainPending(t.Context(), id)
+			queue.push(pendingLoopWake{wake: anchor.PhaseAdvanced, seq: loop.Nudges.nudgeSeq.Add(1)})
+			loop.Nudges.DrainPending(t.Context(), id)
 			if prompts.Load() != wantPrompts+1 {
 				t.Fatal("wait resume suppressed a later wake")
 			}

@@ -28,10 +28,10 @@ func TestMaybeAdvanceCoordinatorBatchOnTaskEnqueued_writerStillDispatches(t *tes
 	sqlDB := testdbfixture.Open(t, "batch-writer.db")
 
 	store := store.NewSQL(sqlDB)
-	mgr := session.NewManager(store, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	agents := orchestration.NewMemoryAgentRegistry()
 	testutil.FailErr(t, "LoadRequiredAgentRegistry", orchestration.LoadRequiredAgentRegistry(context.Background(), agents))
-	mgr.SetAgentRegistry(agents)
+	mgr.Profiles.SetAgentRegistry(agents)
 
 	wfStore := workflowpersistence.New(sqlDB)
 	bundledDir := filepath.Join(root, "config", "packs", "painted-wolf", "platform", "workflows")
@@ -50,9 +50,9 @@ func TestMaybeAdvanceCoordinatorBatchOnTaskEnqueued_writerStillDispatches(t *tes
 	_, err = wfMgr.Ambient.StartAmbient(ctx, sess.ID, ref.ID, ref.Version)
 	testutil.FailErr(t, "StartAmbient", err)
 
-	mgr.MaybeAdvanceCoordinatorBatchOnTaskEnqueuedForTest(ctx, sess.ID, orchestration.ProfileImplementer)
+	mgr.Coordinator.Batch.TaskEnqueued(ctx, sess.ID, orchestration.ProfileImplementer)
 
-	state := mgr.BuildImplementSessionState(ctx, sess)
+	state := mgr.Workers.State.ForSession(ctx, sess)
 	if state.BatchPhase != batch.PhaseDispatch {
 		t.Fatalf("batch phase = %q want dispatch after writer enqueue", state.BatchPhase)
 	}

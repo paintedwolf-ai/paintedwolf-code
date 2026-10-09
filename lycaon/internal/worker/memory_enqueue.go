@@ -3,30 +3,35 @@ package worker
 import (
 	"context"
 	"fmt"
+	"strings"
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/worker/jobstate"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
-	"time"
 )
 
 // refreshBoard runs outside q.mu because board reads can re-enter the queue.
 func (q *InMemoryQueue) refreshBoard(ctx context.Context, task api.WorkerTask, projectID string) {
-	if q.events == nil {
+	refreshWorkerTaskBoard(q.events, ctx, task, projectID)
+}
+
+func refreshWorkerTaskBoard(ev *events.Publisher, ctx context.Context, task api.WorkerTask, projectID string) {
+	if ev == nil {
 		return
 	}
 	key := strings.TrimSpace(task.ProjectID)
 	if key == "" {
 		key = strings.TrimSpace(projectID)
 	}
-	if q.events.Hub != nil {
-		publishKey := events.PublishKeyFor(ctx, q.events.Lookup, key, strings.TrimSpace(task.ParentSessionID))
+	if ev.Hub != nil {
+		publishKey := events.PublishKeyFor(ctx, ev.Lookup, key, strings.TrimSpace(task.ParentSessionID))
 		publishKey.Facet = task.ID
-		_ = q.events.Hub.Publish(ctx, api.EventTopicWorker, publishKey, jobstate.JobEvent(task))
+		_ = ev.Hub.Publish(ctx, api.EventTopicWorker, publishKey, jobstate.JobEvent(task))
 	}
-	q.events.PublishBoard(ctx, key, strings.TrimSpace(task.ParentSessionID))
+	ev.PublishBoard(ctx, key, strings.TrimSpace(task.ParentSessionID))
 }
 
 func enqueueScope(projectID string, task *api.WorkerTask) project.ProjectScope {
@@ -95,22 +100,8 @@ func (q *InMemoryQueue) PrepareEnqueue(ctx context.Context, projectID string, ta
 	q.mu.Lock()
 	workflowRuns := q.workflowRuns
 	q.mu.Unlock()
-	if task.WorkflowRunID != "" {
-		// Workflow tasks require a runnable-state source.
-		if workflowRuns == nil || workflowRuns.Runs == nil {
-			return fmt.Errorf("worker queue: workflow run checker required for workflow-bound task %s", task.WorkflowRunID)
-		}
-		if err := workflowRuns.Runs.AssertRunnable(ctx, task.WorkflowRunID); err != nil {
-			return err
-		}
-		if task.WorkflowPhase != "" {
-			if workflowRuns.Tasks == nil {
-				return fmt.Errorf("worker queue: workflow task admission required for phase-bound task %s", task.WorkflowPhase)
-			}
-			if err := workflowRuns.Tasks.AssertWorkerTask(ctx, task); err != nil {
-				return err
-			}
-		}
+	if err := assertWorkflowTaskAdmissible(ctx, workflowRuns, task); err != nil {
+		return err
 	}
 
 	q.mu.Lock()
@@ -165,4 +156,25 @@ func (q *InMemoryQueue) PublishEnqueued(ctx context.Context, jobID string) {
 		q.refreshBoard(ctx, job.task, job.projectID)
 	}
 	q.NotifyRunnable()
+}
+
+func assertWorkflowTaskAdmissible(ctx context.Context, workflowRuns *WorkflowDomains, task *api.WorkerTask) error {
+	if task == nil || task.WorkflowRunID == "" {
+		return nil
+	}
+	if workflowRuns == nil || workflowRuns.Runs == nil {
+		return fmt.Errorf("worker queue: workflow run checker required for workflow-bound task %s", task.WorkflowRunID)
+	}
+	if err := workflowRuns.Runs.AssertRunnable(ctx, task.WorkflowRunID); err != nil {
+		return err
+	}
+	if task.WorkflowPhase != "" {
+		if workflowRuns.Tasks == nil {
+			return fmt.Errorf("worker queue: workflow task admission required for phase-bound task %s", task.WorkflowPhase)
+		}
+		if err := workflowRuns.Tasks.AssertWorkerTask(ctx, task); err != nil {
+			return err
+		}
+	}
+	return nil
 }

@@ -8,7 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/lycaon/lycaon/internal/project"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/projectcontrol"
 	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/workspace"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -41,7 +41,7 @@ func (s *Roots) HandleDetachProjectRoot(w http.ResponseWriter, r *http.Request) 
 			break
 		}
 	}
-	dependents, err := s.Sessions.RootDependents(r.Context(), id, rootID)
+	dependents, err := s.Sessions.ProjectControl.RootDependents(r.Context(), id, rootID)
 	if err != nil {
 		s.responses.ProjectRegistryError(w, r, err)
 		return
@@ -56,7 +56,7 @@ func (s *Roots) HandleDetachProjectRoot(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if force && dependents.HasAny() {
-		if err := s.Sessions.ForceCancelForRootDetach(r.Context(), id, rootID, dependents, detachedPath); err != nil {
+		if err := s.Sessions.ProjectControl.ForceCancelForRootDetach(r.Context(), id, rootID, dependents, detachedPath); err != nil {
 			s.responses.InternalError(w, r, err)
 			return
 		}
@@ -83,9 +83,9 @@ func (s *Roots) HandleDetachProjectRoot(w http.ResponseWriter, r *http.Request) 
 	s.sourceViews.InvalidateProjectSourceViews(id)
 	sourcefeed.StopProjectWatch(r.Context(), id)
 	afterRoots := project.RootRefsFrom(change.After)
-	s.Sessions.ReassignSessionsAfterRootDetach(r.Context(), id, rootID, afterRoots)
-	s.Sessions.InvalidateSessionWorkspacePaths(r.Context(), id)
-	s.Sessions.EnqueueRootsChangedKick(r.Context(), id, project.RootRefsFrom(change.Before), afterRoots)
+	s.Sessions.ProjectControl.ReassignSessionsAfterRootDetach(r.Context(), id, rootID, afterRoots)
+	s.Sessions.ProjectControl.InvalidateSessionWorkspacePaths(r.Context(), id)
+	s.Sessions.ProjectControl.EnqueueRootsChangedKick(r.Context(), id, project.RootRefsFrom(change.Before), afterRoots)
 	if detachedPath != "" {
 		s.releaseUnattachedSourceRoots(r.Context(), []string{detachedPath})
 		if removed := s.Sandboxes.reconcileProjectSandboxes(r.Context(), id, detachedPath); removed > 0 {
@@ -130,16 +130,16 @@ func (s *Roots) beginDestructiveProjectMutation(w http.ResponseWriter, r *http.R
 	return finish, drain
 }
 
-func (s *Roots) withEditorDocumentDependents(ctx context.Context, dependents session.RootDependents, projectID, rootID string) (session.RootDependents, error) {
+func (s *Roots) withEditorDocumentDependents(ctx context.Context, dependents projectcontrol.RootDependents, projectID, rootID string) (projectcontrol.RootDependents, error) {
 	if s.sourceEditor.EditorDocuments == nil {
 		return dependents, nil
 	}
 	documents, err := s.sourceEditor.EditorDocuments.LifecycleDependents(ctx, projectID, rootID)
 	if err != nil {
-		return session.RootDependents{}, err
+		return projectcontrol.RootDependents{}, err
 	}
 	for _, document := range documents {
-		dependents.Documents = append(dependents.Documents, session.RootDependentDocument{
+		dependents.Documents = append(dependents.Documents, projectcontrol.RootDependentDocument{
 			DocumentID: document.ID,
 			Path:       document.Path,
 		})
@@ -147,7 +147,7 @@ func (s *Roots) withEditorDocumentDependents(ctx context.Context, dependents ses
 	return dependents, nil
 }
 
-func (s *Roots) forgetRemovedEditorDocuments(dependents session.RootDependents) {
+func (s *Roots) forgetRemovedEditorDocuments(dependents projectcontrol.RootDependents) {
 	if s.sourceEditor.EditorDocuments == nil || len(dependents.Documents) == 0 {
 		return
 	}

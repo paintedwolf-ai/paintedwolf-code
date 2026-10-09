@@ -24,7 +24,7 @@ func (s *Conversation) handleListBackgroundProcesses(w http.ResponseWriter, r *h
 	if !ok {
 		return
 	}
-	processes := s.sessions.ListBackgroundProcesses(r.Context(), id)
+	processes := s.sessions.Processes.ListBackgroundProcesses(r.Context(), id)
 	if processes == nil {
 		processes = []wire.BackgroundProcess{}
 	}
@@ -42,7 +42,7 @@ func (s *Conversation) handleGetBackgroundProcessOutput(w http.ResponseWriter, r
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "process_id required")
 		return
 	}
-	output, err := s.sessions.GetBackgroundProcessOutput(r.Context(), id, processID)
+	output, err := s.sessions.Processes.GetBackgroundProcessOutput(r.Context(), id, processID)
 	if err != nil {
 		s.responses.Fail(w, wire.ApiErrorCodeBackgroundProcessNotFound, "background process not found")
 		return
@@ -61,7 +61,7 @@ func (s *Conversation) handleStopBackgroundProcess(w http.ResponseWriter, r *htt
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "process_id required")
 		return
 	}
-	result, err := s.sessions.StopBackgroundProcess(id, processID)
+	result, err := s.sessions.Processes.StopBackgroundProcess(id, processID)
 	if err != nil {
 		s.responses.Fail(w, wire.ApiErrorCodeBackgroundProcessNotFound, "background process not found")
 		return

@@ -3,6 +3,11 @@ package wiring
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/evidence"
@@ -12,10 +17,6 @@ import (
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"github.com/lycaon/lycaon/pkg/api"
-	"os"
-	"path/filepath"
-	"testing"
-	"time"
 )
 
 func TestSecuritySurveyFanOutWorkflowEndToEnd(t *testing.T) {
@@ -25,12 +26,12 @@ func TestSecuritySurveyFanOutWorkflowEndToEnd(t *testing.T) {
 	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureVet}, dir)
 	testutil.FailErr(t, "create session", err)
 
-	run, err := h.WorkflowMgr.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{WorkflowID: "security-survey", WorkflowVersion: "1.0.1"})
-	testutil.FailErr(t, "start security patch workflow", err)
+	run, err := h.WorkflowMgr.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{WorkflowID: "security-survey", WorkflowVersion: "2.0.0"})
+	testutil.FailErr(t, "start security workflow", err)
 	settleScanObligationAndAdvance(t, h, ctx, run.ID, "plan")
 	satisfyFanoutPlannedAndAdvance(t, h, ctx, run.ID, dir, []runstate.FanoutPlanLeg{
-		{AgentType: "security-reviewer", Subject: "Dependencies", Prompt: "Survey dependency risk"},
-		{AgentType: "security-reviewer", Subject: "Sign-in", Prompt: "Survey auth patterns"},
+		{AgentType: "security-reviewer", Subject: "Dependencies", Prompt: "Survey dependency risk", DoneWhen: []string{"Account for dependency risk and unexamined scope"}},
+		{AgentType: "security-reviewer", Subject: "Sign-in", Prompt: "Survey auth patterns", DoneWhen: []string{"Trace authentication boundaries and unexamined scope"}},
 	}, "execute")
 	satisfyWorkerCycleAndAdvance(t, h, ctx, sess, run.ID, dir)
 	waitWorkflowPhase(t, ctx, h.WorkflowMgr, run.ID, "claims")
@@ -39,7 +40,7 @@ func TestSecuritySurveyFanOutWorkflowEndToEnd(t *testing.T) {
 
 	scaffoldTopologyOutput(t, h.WorkflowMgr, run.ID, orchestration.TopologyBindStageFanOut)
 
-	h.SessionMgr.ClearPendingKickForTest(sess.ID)
+	h.SessionMgr.Runner.Coordinator.Kicks().ClearPending(sess.ID)
 
 	claimed := map[string]string{
 		"verdict":      "CLAIMED",
@@ -147,7 +148,7 @@ func TestBugbashWorkflowEndToEnd(t *testing.T) {
 	run, err = h.WorkflowMgr.Approvals.SyncHumanApproval(ctx, run.ID, dir)
 	testutil.FailErr(t, "SyncHumanApproval approve", err)
 
-	child, err := h.WorkflowMgr.GetActive(ctx, sess.ID)
+	child, err := h.WorkflowMgr.Store.Runs.ActiveBySession(ctx, sess.ID)
 	testutil.FailErr(t, "get implementation child", err)
 	if child == nil || child.WorkflowID != "implement" || child.ParentRunID == nil || *child.ParentRunID != run.ID {
 		t.Fatalf("active run = %+v want implementation child of %s", child, run.ID)
@@ -157,7 +158,7 @@ func TestBugbashWorkflowEndToEnd(t *testing.T) {
 	}
 	now := time.Now().UTC()
 	child.Status, child.CompletedAt, child.UpdatedAt = api.WorkflowRunStatusComplete, &now, now
-	testutil.FailErr(t, "complete implementation child", h.WorkflowMgr.Store.Update(ctx, child))
+	testutil.FailErr(t, "complete implementation child", h.WorkflowMgr.Store.State.Update(ctx, child))
 	testutil.FailErr(t, "resume bugbash after implementation", h.WorkflowMgr.Children.ReconcileTerminalRun(ctx, child))
 	waitWorkflowPhase(t, ctx, h.WorkflowMgr, run.ID, "closeout")
 
@@ -176,7 +177,7 @@ func investigateSecurityQuestion(t *testing.T, h *Harness, ctx context.Context, 
 	t.Helper()
 	run, err := h.WorkflowMgr.Store.Runs.Get(ctx, runID)
 	testutil.FailErr(t, "load question run", err)
-	manifest, err := h.WorkflowMgr.ManifestForRunID(ctx, runID)
+	manifest, err := h.WorkflowMgr.Resolver.ForRunID(ctx, runID)
 	testutil.FailErr(t, "load question manifest", err)
 	facts, err := h.WorkflowMgr.Coverage.CoverageFacts(ctx, run, manifest)
 	testutil.FailErr(t, "load question obligations", err)

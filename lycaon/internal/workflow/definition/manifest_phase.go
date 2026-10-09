@@ -82,6 +82,7 @@ type ParallelTask struct {
 // FanoutOptions is phase-level policy for fanout_plan.
 type FanoutOptions struct {
 	RequireThreatModel bool
+	RequireTaskCharter bool
 	MaxAttempts        int
 }
 
@@ -351,6 +352,9 @@ func MergePhaseDef(parent, child PhaseDef) PhaseDef {
 			MaxReadWorkers:  child.ParallelTask.MaxReadWorkers,
 			MaxWriteWorkers: child.ParallelTask.MaxWriteWorkers,
 		}
+	}
+	if child.Fanout.RequireTaskCharter {
+		out.Fanout.RequireTaskCharter = true
 	}
 	if child.Fanout.RequireThreatModel {
 		out.Fanout.RequireThreatModel = true

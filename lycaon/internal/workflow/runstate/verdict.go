@@ -2,9 +2,27 @@ package runstate
 
 import (
 	"github.com/lycaon/lycaon/internal/toolrejection"
-	"github.com/lycaon/lycaon/pkg/api"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/evidence"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/pkg/api"
 )
+
+// PhaseVerdict is one review phase's last decided record, with the schema it
+// was recorded under.
+type PhaseVerdict struct {
+	Phase  string                    `json:"phase"`
+	Label  string                    `json:"label"`
+	Def    workflowdef.ReviewLoopDef `json:"def"`
+	Record evidence.Record           `json:"record"`
+}
+
+// VerdictRepair retains each refusal's code and facts in the same response.
+type VerdictRepair struct {
+	Code    string         `json:"code"`
+	Details map[string]any `json:"details"`
+}
 
 type VerdictOperation struct {
 	ToolCallID       string

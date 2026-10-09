@@ -2,12 +2,13 @@ package workflowadmin
 
 import (
 	"errors"
+	"net/http"
+
 	"github.com/lycaon/lycaon/internal/session/lifecycle"
 	"github.com/lycaon/lycaon/internal/session/store"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"net/http"
 )
 
 // workflowFailure is the answer for one workflow sentinel error.
@@ -46,7 +47,7 @@ var workflowFailures = []workflowFailure{
 
 // writeRunLookupError answers a failed read of one workflow run.
 func (s *RunControl) writeRunLookupError(w http.ResponseWriter, r *http.Request, err error) {
-	if errors.Is(err, runstate.ErrNotFound) {
+	if errors.Is(err, workflow.ErrRunNotFound) {
 		s.responses.Fail(w, wire.ApiErrorCodeWorkflowRunNotFound, "workflow run not found")
 		return
 	}
@@ -54,6 +55,14 @@ func (s *RunControl) writeRunLookupError(w http.ResponseWriter, r *http.Request,
 }
 
 func (s *RunControl) WriteWorkflowError(w http.ResponseWriter, r *http.Request, err error) {
+	// A run's missing pinned version is more specific than an unknown workflow.
+	var unavailable *runstate.WorkflowVersionUnavailableError
+	if errors.As(err, &unavailable) {
+		s.responses.FailDetails(w, wire.ApiErrorCodeWorkflowVersionUnavailable,
+			map[string]any{"workflow_id": unavailable.WorkflowID, "version": unavailable.Version},
+			"this run's workflow version is no longer available")
+		return
+	}
 	for _, failure := range workflowFailures {
 		if errors.Is(err, failure.sentinel) {
 			s.responses.Fail(w, failure.code, failure.message)

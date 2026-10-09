@@ -63,6 +63,69 @@ func TestCreateBlueprintInvalidPathReturns400NotInternalError(t *testing.T) {
 	}
 }
 
+// blueprintCall serves one authed blueprint request and checks its status.
+func blueprintCall(t *testing.T, srv *hostapi.Server, method, target, body string, want int) *httptest.ResponseRecorder {
+	t.Helper()
+	req := contractfixture.NewAuthedRequest(method, target, strings.NewReader(body))
+	if body != "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != want {
+		t.Fatalf("%s %s: status = %d, want %d; body=%s", method, target, w.Code, want, w.Body.String())
+	}
+	return w
+}
+
+func TestBlueprintRoutesEditAndRemoveABlueprint(t *testing.T) {
+	dir := t.TempDir()
+	srv := contractfixture.NewTestServerWithWorkflows(t, func(d *hostapi.Dependencies) {
+		d.Workflow.Blueprints = blueprint.NewManager(blueprint.NewFileStoreForTest(dir))
+	})
+	opened := contractfixture.CreateProjectForTest(t, srv, dir)
+	base := "/v1/projects/" + opened.ID + "/blueprints"
+
+	var created wire.Blueprint
+	w := blueprintCall(t, srv, http.MethodPost, base, `{"title":"Plan"}`, http.StatusCreated)
+	testutil.FailErr(t, "decode created", json.Unmarshal(w.Body.Bytes(), &created))
+
+	var listed wire.BlueprintListResponse
+	w = blueprintCall(t, srv, http.MethodGet, base, "", http.StatusOK)
+	testutil.FailErr(t, "decode list", json.Unmarshal(w.Body.Bytes(), &listed))
+	if len(listed.Blueprints) != 1 || listed.Blueprints[0].ID != created.ID {
+		t.Fatalf("list = %+v, want the created blueprint", listed.Blueprints)
+	}
+
+	w = blueprintCall(t, srv, http.MethodGet, base+"?path="+created.Path, "", http.StatusOK)
+	testutil.FailErr(t, "decode path filter", json.Unmarshal(w.Body.Bytes(), &listed))
+	if len(listed.Blueprints) != 1 || listed.Blueprints[0].Path != created.Path {
+		t.Fatalf("path filter = %+v, want %q", listed.Blueprints, created.Path)
+	}
+	blueprintCall(t, srv, http.MethodGet, base+"?path=", "", http.StatusBadRequest)
+
+	item := base + "/" + created.ID
+	var got wire.Blueprint
+	w = blueprintCall(t, srv, http.MethodGet, item, "", http.StatusOK)
+	testutil.FailErr(t, "decode get", json.Unmarshal(w.Body.Bytes(), &got))
+	if got.ID != created.ID {
+		t.Fatalf("get id = %q, want %q", got.ID, created.ID)
+	}
+
+	blueprintCall(t, srv, http.MethodPatch, item, `{}`, http.StatusBadRequest)
+	blueprintCall(t, srv, http.MethodPatch, item, `{"title":"   "}`, http.StatusBadRequest)
+	var updated wire.Blueprint
+	w = blueprintCall(t, srv, http.MethodPatch, item, `{"title":"Revised plan","content":"# Revised plan\n"}`, http.StatusOK)
+	testutil.FailErr(t, "decode update", json.Unmarshal(w.Body.Bytes(), &updated))
+	if updated.Title != "Revised plan" || !strings.Contains(updated.Content, "# Revised plan") {
+		t.Fatalf("updated = %q / %q, want the new title and content", updated.Title, updated.Content)
+	}
+
+	blueprintCall(t, srv, http.MethodDelete, item, "", http.StatusNoContent)
+	blueprintCall(t, srv, http.MethodGet, item, "", http.StatusNotFound)
+	blueprintCall(t, srv, http.MethodDelete, item, "", http.StatusNotFound)
+}
+
 // errScanCoordinator fails every read with getErr; summary, when set, is the
 // run's identity that project-scoped routes check before reading.
 

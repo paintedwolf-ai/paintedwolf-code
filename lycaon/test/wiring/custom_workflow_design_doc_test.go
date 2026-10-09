@@ -1,20 +1,22 @@
 package wiring
 
 import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/configlayout"
-	"github.com/lycaon/lycaon/internal/coordinator/surface"
-	"github.com/lycaon/lycaon/internal/settingsoverlay"
-	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/toolcontract"
-	"github.com/lycaon/lycaon/internal/workflow"
-	"github.com/lycaon/lycaon/internal/workflow/runstate"
-	"github.com/lycaon/lycaon/pkg/api"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/configlayout"
+	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/settingsoverlay"
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func installDesignDocOverlay(t *testing.T, projectDir string) {
@@ -34,9 +36,9 @@ func installDesignDocOverlay(t *testing.T, projectDir string) {
 
 func assertCoordinatorSurface(t *testing.T, h *Harness, ctx context.Context, sess *api.Session, userPrompt, wantSurface string) {
 	t.Helper()
-	runCtx, err := h.SessionMgr.CoordinatorRunContext(ctx, sess.ID)
+	runCtx, err := h.SessionMgr.Coordinator.Context.RunContext(ctx, sess.ID)
 	testutil.FailErr(t, "CoordinatorRunContext", err)
-	state := h.SessionMgr.BuildImplementSessionState(ctx, sess)
+	state := h.SessionMgr.Workers.State.ForSession(ctx, sess)
 	profile := surface.ResolveTurnProfile(runCtx, sess, routingTurnHistory(nil, userPrompt), state)
 	if profile.SurfaceID != wantSurface {
 		t.Fatalf("surface = %q want %q (phase=%q workflow=%q)", profile.SurfaceID, wantSurface, runCtx.CurrentPhase, runCtx.WorkflowID)
@@ -45,7 +47,7 @@ func assertCoordinatorSurface(t *testing.T, h *Harness, ctx context.Context, ses
 
 func assertManifestBoundSurface(t *testing.T, h *Harness, ctx context.Context, sess *api.Session, userPrompt, wantSurface string) {
 	t.Helper()
-	runCtx, err := h.SessionMgr.CoordinatorRunContext(ctx, sess.ID)
+	runCtx, err := h.SessionMgr.Coordinator.Context.RunContext(ctx, sess.ID)
 	testutil.FailErr(t, "CoordinatorRunContext", err)
 	if runCtx.PhaseCoordinatorSurface != wantSurface {
 		t.Fatalf("phase_coordinator_surface = %q want %q (phase=%q)", runCtx.PhaseCoordinatorSurface, wantSurface, runCtx.CurrentPhase)
@@ -67,7 +69,7 @@ func TestCustomDesignDocWorkflowLiveGolden(t *testing.T) {
 		Posture: api.SessionPostureSpec,
 	}, dir)
 	testutil.FailErr(t, "create session", err)
-	h.SessionMgr.Catalog().InvalidateEffectiveCatalog(sess.ProjectID)
+	h.SessionMgr.Catalog.InvalidateEffectiveCatalog(sess.ProjectID)
 
 	run, err := h.WorkflowMgr.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{
 		WorkflowID: "design-doc", WorkflowVersion: "1.0.0", Request: "Design the REST API",
@@ -101,7 +103,7 @@ func TestCustomDesignDocWorkflowLiveGolden(t *testing.T) {
 	}
 
 	parentID := run.ID
-	child, err := h.WorkflowMgr.GetActive(ctx, sess.ID)
+	child, err := h.WorkflowMgr.Store.Runs.ActiveBySession(ctx, sess.ID)
 	testutil.FailErr(t, "GetActive child", err)
 	if child == nil || child.WorkflowID != "implement" {
 		t.Fatalf("active child = %+v want implement subroutine", child)
@@ -120,7 +122,7 @@ func TestCustomDesignDocWorkflowLiveGolden(t *testing.T) {
 		child.Status = api.WorkflowRunStatusComplete
 		child.CompletedAt = &now
 		child.UpdatedAt = now
-		err = h.WorkflowMgr.Store.Update(ctx, child)
+		err = h.WorkflowMgr.Store.State.Update(ctx, child)
 		if !errors.Is(err, runstate.ErrRevisionConflict) {
 			break
 		}

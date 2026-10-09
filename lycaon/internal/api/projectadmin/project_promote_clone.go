@@ -61,7 +61,7 @@ func (s *Promotion) HandlePromoteProject(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	quiescent, quiescentErr := s.Sessions.ProjectPromoteQuiescent(r.Context(), id)
+	quiescent, quiescentErr := s.Sessions.ProjectControl.ProjectPromoteQuiescent(r.Context(), id)
 	if quiescentErr != nil {
 		s.responses.InternalError(w, r, quiescentErr)
 		return

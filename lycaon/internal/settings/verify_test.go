@@ -34,7 +34,7 @@ func TestVerifyStoreProjectOverlay(t *testing.T) {
 		t.Fatalf("verify.yaml not written: %v", err)
 	}
 	fresh := &VerifyStore{projectCache: map[string]VerifyConfig{}}
-	if got := fresh.Store.Runs.Get(llm.SettingsScopeProject, dir).Test; got != "./task check" {
+	if got := fresh.Get(llm.SettingsScopeProject, dir).Test; got != "./task check" {
 		t.Fatalf("reload = %q want ./task check", got)
 	}
 }

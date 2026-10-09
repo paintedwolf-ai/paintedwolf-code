@@ -2,6 +2,10 @@ package contractfixture
 
 import (
 	"context"
+	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
+	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
+	"testing"
+
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/conditions"
@@ -11,14 +15,11 @@ import (
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
-	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
-	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
+	"github.com/lycaon/lycaon/internal/workflow"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
-func NewPersistTestServer(t *testing.T) (*api.Server, wire.Session, workflowdrafts.Store) {
+func NewPersistTestServer(t *testing.T) (*api.Server, wire.Session, workflow.SessionWorkflowStore) {
 	t.Helper()
 	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	store := store.NewMemory()
@@ -35,7 +36,7 @@ func NewPersistTestServer(t *testing.T) (*api.Server, wire.Session, workflowdraf
 	testutil.FailErr(t, "build conditions registry", err)
 	agents := orchestration.NewMemoryAgentRegistry()
 	_ = orchestration.LoadRequiredAgentRegistry(t.Context(), agents)
-	sessionStore := workflowdrafts.NewMemory()
+	sessionStore := workflow.NewMemorySessionWorkflowStore()
 	policy, err := workflowcomposition.LoadComposePolicy()
 	testutil.FailErr(t, "workflowcomposition.LoadComposePolicy failed", err)
 	templates, err := workflowcomposition.LoadTemplatesFromDir(extpacks.Bundled(config.PlatformFlows.Join("_templates")))

@@ -120,8 +120,8 @@ func (e *Capabilities) preflightSocketCapability(
 	}
 	authorized = mergeAuthorizedWithOverlay(authorized, requested, overlay)
 	observation := socketObservationFields(merged, requested, chatGrants, durableGrants, authorized)
-	action.SocketScopes = append([]string(nil), observation.scopes...)
-	action.SocketGrantStates = append([]string(nil), observation.states...)
+	action.Sockets.SocketScopes = append([]string(nil), observation.scopes...)
+	action.Sockets.SocketGrantStates = append([]string(nil), observation.states...)
 	chatByPair := capabilitygrants.SocketGrantPairSet(overlay)
 	authSource := ""
 	// Existing route authority suppresses only the socket card.
@@ -207,23 +207,37 @@ func socketCapabilityProposedAction(
 		contained = contained.WithDialedSockets(merged)
 	}
 	return hitl.ProposedAction{
-		Tool:                 tool,
-		Args:                 args,
-		Files:                filesFromArgs(tool, args),
-		ResolvedFiles:        ResolvedApprovalFiles(tool, args, tc),
-		Command:              commandsurface.PrimaryCommandLine(args, nil),
-		ProjectID:            tc.Identity.ProjectID,
-		ProjectDir:           tc.ActiveRootPath(),
-		SessionID:            tc.Identity.SessionID,
-		RootSessionID:        chatSession,
-		SessionScratchRoot:   tc.Host.SessionScratchDir,
-		SocketGrants:         append([]confine.SocketGrant(nil), merged...),
-		Contained:            contained,
-		ActionID:             tc.Identity.ToolCallID,
-		Visibility:           "unobserved",
-		HostResources:        append([]string(nil), tc.Host.HostResources...),
-		HostResourceFamilies: append([]string(nil), tc.Host.HostResourceFamilies...),
-	}
+Invocation: hitl.ActionInvocation{
+Tool: tool,
+Args: args,
+Files: filesFromArgs(tool, args),
+ResolvedFiles: ResolvedApprovalFiles(tool, args, tc),
+ActionID: tc.Identity.ToolCallID,
+},
+Presentation: hitl.ActionPresentation{
+Command: commandsurface.PrimaryCommandLine(args, nil),
+},
+Scope: hitl.ActionScope{
+ProjectID: tc.Identity.ProjectID,
+ProjectDir: tc.ActiveRootPath(),
+SessionID: tc.Identity.SessionID,
+RootSessionID: chatSession,
+SessionScratchRoot: tc.Host.SessionScratchDir,
+},
+Sockets: hitl.ActionSockets{
+SocketGrants: append([]confine.SocketGrant(nil), merged...),
+},
+Execution: hitl.ActionExecution{
+Contained: contained,
+},
+Egress: hitl.ActionEgress{
+Visibility: "unobserved",
+},
+Resources: hitl.ActionResources{
+HostResources: append([]string(nil), tc.Host.HostResources...),
+HostResourceFamilies: append([]string(nil), tc.Host.HostResourceFamilies...),
+},
+}
 }
 
 // authorizeMissingSocketGrants reviews grants absent from the action digest.

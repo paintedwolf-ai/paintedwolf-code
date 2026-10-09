@@ -21,7 +21,7 @@ type Deps struct {
 	ManagedSecrets *secretcap.Service
 	Projects       project.Registry
 	Store          session.Store
-	Sessions       *session.Manager
+	Sessions       *session.Host
 	VisualStore    visual.Store
 	Sources        *sourceapi.Handler
 	// Video decodes attached videos; nil refuses them.
@@ -41,7 +41,7 @@ type Attachments struct {
 	Caps       promptattach.Caps
 	DataDir    string
 	Projects   project.Registry
-	Sessions   *session.Manager
+	Sessions   *session.Host
 	Store      session.Store
 	Submission *Submission
 	Video      promptattach.VideoDecoder
@@ -50,7 +50,7 @@ type Attachments struct {
 
 type Content struct {
 	HintConfig *guidance.HintConfig
-	Sessions   *session.Manager
+	Sessions   *session.Host
 	Store      session.Store
 	responses  *httpio.Responder
 }
@@ -58,14 +58,14 @@ type Content struct {
 type Execution struct {
 	Attachments    *Attachments
 	EventPublisher *events.Publisher
-	Sessions       *session.Manager
+	Sessions       *session.Host
 	Store          session.Store
 	background     *taskgroup.Group
 	responses      *httpio.Responder
 }
 
 type Queue struct {
-	Sessions   *session.Manager
+	Sessions   *session.Host
 	Store      session.Store
 	background *taskgroup.Group
 	responses  *httpio.Responder
@@ -86,7 +86,7 @@ type Submission struct {
 	Execution      *Execution
 	ManagedSecrets *secretcap.Service
 	References     *References
-	Sessions       *session.Manager
+	Sessions       *session.Host
 	Store          session.Store
 	Video          promptattach.VideoDecoder
 	VisualStore    visual.Store

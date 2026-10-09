@@ -124,7 +124,7 @@ func reportPhaseCompletion(message api.Message, run *api.WorkflowRun, manifest w
 	return meta.Scope == api.CompletionReportScopePhase
 }
 
-// recoverReportDelivery finishes a committed closeout after process loss.
+// RecoverReportDelivery finishes a committed closeout after process loss.
 func (m *Reports) RecoverReportDelivery(ctx context.Context, run *api.WorkflowRun) (bool, error) {
 	manifest, err := m.Resolver.ForRun(ctx, run)
 	if err != nil {

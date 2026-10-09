@@ -74,7 +74,7 @@ func TestCommandRedirectTargetsAreReviewedLikeNativeWrites(t *testing.T) {
 				credential := filepath.Join(filepath.Dir(written), ".env")
 				asCommand := retarget(review, credential)
 				asWrite := retarget(review, credential)
-				asWrite.Tool, asWrite.Args = "write", map[string]any{"path": credential, "content": ""}
+				asWrite.Invocation.Tool, asWrite.Invocation.Args = "write", map[string]any{"path": credential, "content": ""}
 				commandResult, err := realGate.Evaluate(t.Context(), asCommand)
 				contractcheck.FailErr(t, "evaluate command review", err)
 				writeResult, err := realGate.Evaluate(t.Context(), asWrite)
@@ -107,15 +107,16 @@ func changeReviewFor(g *recordingGate, tool, path string) (hitl.ProposedAction, 
 			return action, true
 		}
 	}
-	return hitl.ProposedAction{}, false
+	return hitl.ProposedAction{
+}, false
 }
 
 // retarget points a recorded review at another file of the same root.
 func retarget(action hitl.ProposedAction, path string) hitl.ProposedAction {
 	out := action
-	out.Files, out.ResolvedFiles = []string{path}, []string{fspath.CanonicalPath(path)}
-	out.FileChanges = []api.ApprovalFileChange{{Path: path, Operation: "write"}}
-	out.AgentPolicy = nil
+	out.Invocation.Files, out.Invocation.ResolvedFiles = []string{path}, []string{fspath.CanonicalPath(path)}
+	out.Mutations.FileChanges = []api.ApprovalFileChange{{Path: path, Operation: "write"}}
+	out.Mutations.AgentPolicy = nil
 	return out
 }
 

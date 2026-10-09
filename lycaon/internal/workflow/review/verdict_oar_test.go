@@ -1,20 +1,22 @@
 package review
 
 import (
+	"github.com/lycaon/lycaon/internal/toolfeedback"
+
+	"github.com/lycaon/lycaon/internal/toolrejection"
+	"path/filepath"
+	"strings"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/anchorcatalog"
 	"github.com/lycaon/lycaon/internal/curationctx"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/toolfeedback"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"github.com/lycaon/lycaon/pkg/api"
-	"path/filepath"
-	"strings"
-	"testing"
 )
 
 func TestWorkflowVerdictRefusalsRetainPolicyOccurrenceAndStructuredCause(t *testing.T) {
@@ -49,10 +51,8 @@ func TestWorkflowVerdictRefusalsRetainPolicyOccurrenceAndStructuredCause(t *test
 				"missing_reviewers": []string{"reviewer-1"}, "uncited_reviewers": []string{"reviewer-2"},
 				"ungrounded_sample": []string{"missing#3"}, "observed_handles": []string{"observed#4"},
 			}
-			body, original := rejectSubmitVerdict(tools.ToolContext{
-				Effects: tools.InvocationEffects{Out: out},
-			}, code, "review-phase", details)
-			reject := toolrejection.AsToolReject(original)
+			body, original := rejectSubmitVerdict(tools.ToolContext{Effects: tools.InvocationEffects{Out: out}}, code, "review-phase", details)
+			reject := tools.AsToolReject(original)
 			if body != "" || reject == nil || reject.Code != code {
 				t.Fatalf("verdict refusal: output=%q error=%v want %s", body, original, code)
 			}

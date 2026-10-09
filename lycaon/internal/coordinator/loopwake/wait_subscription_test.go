@@ -142,7 +142,7 @@ func TestLoopNeedsDecisionWakesThroughAllWorkersIdleWait(t *testing.T) {
 		return false // mid-batch would otherwise skip_turn_rearm
 	}
 	loop.SetDeps(deps)
-	loop.EnterSleep(context.Background(), "s1", time.Now().UTC().Add(30*time.Minute), "waiting for all workers", []WaitTrigger{WaitTriggerTimer, WaitTriggerAllWorkersIdle}, nil, SleepMoverHost)
+	loop.Waits.EnterSleep(context.Background(), "s1", time.Now().UTC().Add(30*time.Minute), "waiting for all workers", []WaitTrigger{WaitTriggerTimer, WaitTriggerAllWorkersIdle}, nil, SleepMoverHost)
 
 	var env anchor.Envelope
 	env.WithWorkerDecision(api.WorkerDecisionRequest{
@@ -152,7 +152,7 @@ func TestLoopNeedsDecisionWakesThroughAllWorkersIdleWait(t *testing.T) {
 		Options:        []string{"retry scan_list", "manual audit"},
 		BlockerClass:   api.WorkerBlockerDecision,
 	})
-	loop.NudgeAfterWorkerJobTerminal(
+	loop.Nudges.NudgeAfterWorkerJobTerminal(
 		context.Background(),
 		"s1",
 		"job-decision",
@@ -162,7 +162,7 @@ func TestLoopNeedsDecisionWakesThroughAllWorkersIdleWait(t *testing.T) {
 		env,
 	)
 	testutil.WaitFor(t, 2*time.Second, func() bool { return prompts.Load() >= 1 })
-	if loop.IsSleeping("s1") {
+	if loop.Waits.IsSleeping("s1") {
 		t.Fatal("needs_decision must break sleep")
 	}
 }
@@ -182,15 +182,15 @@ func TestLoopSubscriptionFiltersPerJobWake(t *testing.T) {
 		return &promptresult.Result{}, nil
 	}
 	loop.SetDeps(deps)
-	loop.EnterSleep(context.Background(), "s1", time.Now().UTC().Add(30*time.Minute), "batch scouts", []WaitTrigger{
+	loop.Waits.EnterSleep(context.Background(), "s1", time.Now().UTC().Add(30*time.Minute), "batch scouts", []WaitTrigger{
 		WaitTriggerTimer,
 		WaitTriggerAllWorkersIdle,
 	}, nil, SleepMoverHost)
-	loop.NudgeAfterWorkerJobTerminal(context.Background(), "s1", "job-1", anchor.WorkerTaskFinished, anchor.WorkerTaskFinished, "", anchor.Envelope{})
+	loop.Nudges.NudgeAfterWorkerJobTerminal(context.Background(), "s1", "job-1", anchor.WorkerTaskFinished, anchor.WorkerTaskFinished, "", anchor.Envelope{})
 	if prompts != 0 {
 		t.Fatalf("prompts=%d want 0 filtered wake", prompts)
 	}
-	if !loop.IsSleeping("s1") {
+	if !loop.Waits.IsSleeping("s1") {
 		t.Fatal("sleep should stay armed when per-job wake not subscribed")
 	}
 }

@@ -1,0 +1,121 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {
+    "imports": [
+     {
+      "path": "github.com/cometbft/cometbft/consensus",
+      "symbols": [
+       "BaseWAL.OnStart",
+       "BaseWAL.SearchForEndHeight",
+       "Handshaker.Handshake",
+       "Handshaker.HandshakeWithContext",
+       "Handshaker.ReplayBlocks",
+       "Handshaker.ReplayBlocksWithContext",
+       "MsgFromProto",
+       "NewState",
+       "NewValidBlockMessage.ValidateBasic",
+       "PeerState.ApplyHasVoteMessage",
+       "PeerState.ApplyVoteSetBitsMessage",
+       "PeerState.EnsureVoteBitArrays",
+       "PeerState.InitProposalBlockParts",
+       "PeerState.PickSendVote",
+       "PeerState.PickVoteToSend",
+       "PeerState.SetHasProposal",
+       "PeerState.SetHasProposalBlockPart",
+       "PeerState.SetHasVote",
+       "ProposalPOLMessage.ValidateBasic",
+       "Reactor.AddPeer",
+       "Reactor.OnStart",
+       "Reactor.Receive",
+       "Reactor.SwitchToConsensus",
+       "RunReplayFile",
+       "State.OnStart",
+       "State.OpenWAL",
+       "State.ReplayFile",
+       "VoteSetBitsMessage.ValidateBasic",
+       "WALDecoder.Decode",
+       "WALFromProto",
+       "WALGenerateNBlocks",
+       "WALWithNBlocks"
+      ]
+     },
+     {
+      "path": "github.com/cometbft/cometbft/libs/bits",
+      "symbols": [
+       "BitArray.And",
+       "BitArray.Or",
+       "BitArray.PickRandom",
+       "BitArray.SetIndex",
+       "BitArray.Sub",
+       "BitArray.UnmarshalJSON",
+       "BitArray.copyBits",
+       "BitArray.getNumTrueIndices",
+       "BitArray.setIndex",
+       "NewBitArray",
+       "NewBitArrayFromFn"
+      ]
+     }
+    ]
+   },
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/cometbft/cometbft"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "0.37.16"
+      },
+      {
+       "introduced": "0.38.0-alpha.1"
+      },
+      {
+       "fixed": "0.38.19"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "GHSA-hrhf-2vcr-ghch"
+ ],
+ "database_specific": {
+  "review_status": "REVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2025-4025"
+ },
+ "details": "CometBFT's invalid BitArray handling can lead to network halt in github.com/cometbft/cometbft",
+ "id": "GO-2025-4025",
+ "modified": "2025-11-18T15:44:15Z",
+ "published": "2025-11-18T15:44:15Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/cometbft/cometbft/security/advisories/GHSA-hrhf-2vcr-ghch"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/cometbft/cometbft/commit/be5677c3e58f998b7f67bb6186dd2c9b81a041a1"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/cometbft/cometbft/commit/dcb1f265b59477be40804f7ccdc4fb30612d6a4f"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/cometbft/cometbft/releases/tag/v0.37.16"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/cometbft/cometbft/releases/tag/v0.38.19"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "CometBFT's invalid BitArray handling can lead to network halt in github.com/cometbft/cometbft"
+}

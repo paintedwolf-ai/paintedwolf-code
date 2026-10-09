@@ -133,11 +133,11 @@ func runGroundingAudits(t *testing.T, ctx context.Context, store Store, sessionI
 	}
 }
 
-func newSQLCompactionManager(t *testing.T, store Store, cfg compaction.CompactionConfig) *Manager {
+func newSQLCompactionManager(t *testing.T, store Store, cfg compaction.CompactionConfig) *Host {
 	t.Helper()
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
-	mgr := NewManager(store, llm.NewMockProvider(testMockConfig(t)), tools.NewStubRegistry(), settings.DefaultSessionLimits())
-	mgr.SetCompactor(compaction.NewSimpleCompactor(cfg, compaction.MockSummarizer{Text: "Continue from compacted context."}))
+	mgr := NewHost(store, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr.Runner.History.SetCompactor(compaction.NewSimpleCompactor(cfg, compaction.MockSummarizer{Text: "Continue from compacted context."}))
 	return mgr
 }
 
@@ -190,10 +190,10 @@ func TestEvidenceLedgerCompactionIndependence(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := mgr.compactOversizedToolResultsInSession(ctx, sess); err != nil {
+	if err := mgr.Runner.History.ScheduleChunks(ctx, sess); err != nil {
 		testutil.FailErr(t, "compactOversizedToolResultsInSession", err)
 	}
-	mgr.waitForCompaction()
+	mgr.Runner.History.Wait()
 	// Messages stay canonical; the compacted chunk lives only in the applied view.
 	msgs, err := store.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages", err)

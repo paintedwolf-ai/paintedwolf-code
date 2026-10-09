@@ -1,15 +1,15 @@
 package contract
 
 import (
-	"github.com/lycaon/lycaon/internal/guidance/feedback"
-	"github.com/lycaon/lycaon/internal/workflow"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/guidance/feedback"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
+	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
 func TestManifestAdvancePolicyEnumsParseAndRejectNever(t *testing.T) {
@@ -59,7 +59,7 @@ func TestEffectiveAdvancePolicyShippedManifestContractParity(t *testing.T) {
 		"implement@1.0.0":       {},
 		"plan@1.0.0":            {},
 		"recon-pack@1.0.0":      {},
-		"security-survey@1.0.1": {},
+		"security-survey@2.0.0": {},
 		"security-survey@1.0.0": {},
 		"options@1.0.0":         {},
 		// bugbash host-advances so a human triage approval never sits waiting

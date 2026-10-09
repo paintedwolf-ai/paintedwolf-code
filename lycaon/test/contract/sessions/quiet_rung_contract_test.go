@@ -35,7 +35,15 @@ func TestEveryDiscretionaryGateProducesAQuietSubject(t *testing.T) {
 func TestInstructionReviewCannotBeQuietedByAnotherGate(t *testing.T) {
 	t.Parallel()
 	decision := &gate.Decision{Primary: api.GateUserRule, Also: []api.ApprovalGate{api.GateAgentPolicyChange}}
-	action := hitl.ProposedAction{Tool: "write", SessionID: "chat", RootSessionID: "chat"}
+	action := hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "write",
+},
+Scope: hitl.ActionScope{
+SessionID: "chat",
+RootSessionID: "chat",
+},
+}
 	if subjects := hitl.QuietSubjectsFromDecision(decision, nil, "digest"); len(subjects) != 0 {
 		t.Fatalf("a decision carrying agent policy exposed quiet subjects: %+v", subjects)
 	}

@@ -2,6 +2,9 @@ package review
 
 import (
 	"context"
+	"sort"
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/scan"
@@ -11,8 +14,6 @@ import (
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"github.com/lycaon/lycaon/pkg/api"
-	"sort"
-	"strings"
 )
 
 // SubmitVerdictScanGroupUnknownCode rejects a verdict whose claims cite
@@ -195,8 +196,12 @@ func (m *Coverage) checkReviewInventory(ctx context.Context, run *api.WorkflowRu
 	if err != nil {
 		return nil, err
 	}
+	priors, err := workflowpresentation.ReviewVerdicts(ctx, m.Reviews, run, manifest)
+	if err != nil {
+		return nil, err
+	}
 	var phases []workflowpresentation.PhaseVerdict
-	for _, prior := range workflowpresentation.ReviewVerdicts(ctx, m.Reviews, run, manifest) {
+	for _, prior := range priors {
 		if prior.Phase != run.CurrentPhase {
 			phases = append(phases, prior)
 		}

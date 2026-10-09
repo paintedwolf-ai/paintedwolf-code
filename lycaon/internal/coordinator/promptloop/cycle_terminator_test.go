@@ -1,9 +1,8 @@
 package promptloop
 
 import (
-	"github.com/lycaon/lycaon/internal/toolcontract"
-
 	"context"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -41,31 +40,37 @@ func TestExecuteToolCallsInTurnHostDecoratedCycleTerminator(t *testing.T) {
 				"SPEC_POSTURE_PROGRESS": {Message: "progress {{.progress}}"},
 			}}, nil)
 			loop := NewPromptLoopForTest(PromptLoopDeps{
-				Tools: reg,
-				AppendMessages: func(_ context.Context, _ string, _ ...api.Message) error {
-					return nil
+				Context: ContextDeps{
+					Tools: reg,
 				},
-				EnrichToolOutput: func(_ context.Context, sess *api.Session, tool string, args map[string]any, output string, _ guidance.ToolResultFacts, _ int) (string, guidance.ToolResultFacts) {
-					hostArgs := make(map[string]any, len(args)+1)
-					for key, value := range args {
-						hostArgs[key] = value
-					}
-					hostArgs["_pending_feedback_line"] = "pending_feedback: phase `ask-1`"
-					enriched := enricher.Enrich(t.Context(), guidance.EnrichInput{
-						SessionID: sess.ID,
-						Session:   sess,
-						Tool:      tool,
-						Args:      hostArgs,
-						Output:    output,
-						PlanProgress: guidance.PlanProgress{
-							PhaseInferred:     1,
-							PhaseInferredName: "intake",
-							NextAction:        "wait for input",
-							ProgressChecklist: "[ ] intake",
-							ChecklistHash:     "intake-1",
-						},
-					})
-					return enriched.Output, enriched.Facts
+				Projection: ProjectionDeps{
+					AppendMessages: func(_ context.Context, _ string, _ ...api.Message) error {
+						return nil
+					},
+				},
+				Tools: ToolsDeps{
+					EnrichToolOutput: func(_ context.Context, sess *api.Session, tool string, args map[string]any, output string, _ guidance.ToolResultFacts, _ int) (string, guidance.ToolResultFacts) {
+						hostArgs := make(map[string]any, len(args)+1)
+						for key, value := range args {
+							hostArgs[key] = value
+						}
+						hostArgs["_pending_feedback_line"] = "pending_feedback: phase `ask-1`"
+						enriched := enricher.Enrich(t.Context(), guidance.EnrichInput{
+							SessionID: sess.ID,
+							Session:   sess,
+							Tool:      tool,
+							Args:      hostArgs,
+							Output:    output,
+							PlanProgress: guidance.PlanProgress{
+								PhaseInferred:     1,
+								PhaseInferredName: "intake",
+								NextAction:        "wait for input",
+								ProgressChecklist: "[ ] intake",
+								ChecklistHash:     "intake-1",
+							},
+						})
+						return enriched.Output, enriched.Facts
+					},
 				},
 			})
 			sess := &api.Session{ID: "sess-" + tt.tool, Posture: api.SessionPostureSpec}
@@ -73,10 +78,8 @@ func TestExecuteToolCallsInTurnHostDecoratedCycleTerminator(t *testing.T) {
 			calls := []api.ToolCall{{ID: "call-1", Name: tt.tool, Args: map[string]any{}}}
 			history := []api.Message{{ID: assistantID, Role: api.MessageRoleAssistant, ToolCalls: calls}}
 
-			_, _, _, _, _, breakLoop, err := toolBatch{loop}.executeToolCallsInTurn(
-				context.Background(), sess, sess.ID, calls, tools.ToolContext{
-					Identity: tools.InvocationIdentity{SessionID: sess.ID},
-				},
+			_, _, _, _, _, breakLoop, err := loop.Batch.executeToolCallsInTurn(
+				context.Background(), sess, sess.ID, calls, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID}},
 				history, "continue", assistantID, "", nil,
 			)
 			testutil.FailErr(t, "execute decorated cycle terminator", err)
@@ -97,21 +100,25 @@ func TestExecuteToolCallsInTurnHumanApprovalEndsCycle(t *testing.T) {
 	testutil.FailErr(t, "register write", err)
 
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		Tools: reg,
-		AppendMessages: func(_ context.Context, _ string, _ ...api.Message) error {
-			return nil
+		Context: ContextDeps{
+			Tools: reg,
 		},
-		HumanApprovalAwaiting: func(context.Context, string) bool { return awaiting },
+		Projection: ProjectionDeps{
+			AppendMessages: func(_ context.Context, _ string, _ ...api.Message) error {
+				return nil
+			},
+		},
+		Control: ControlDeps{
+			HumanApprovalAwaiting: func(context.Context, string) bool { return awaiting },
+		},
 	})
 	sess := &api.Session{ID: "sess-hitl"}
 	assistantID := "assistant-1"
 	calls := []api.ToolCall{{ID: "call-1", Name: "write", Args: map[string]any{"path": "bp.md"}}}
 	history := []api.Message{{ID: assistantID, Role: api.MessageRoleAssistant, ToolCalls: calls}}
 
-	_, _, _, _, _, breakLoop, err := toolBatch{loop}.executeToolCallsInTurn(
-		context.Background(), sess, sess.ID, calls, tools.ToolContext{
-			Identity: tools.InvocationIdentity{SessionID: sess.ID},
-		},
+	_, _, _, _, _, breakLoop, err := loop.Batch.executeToolCallsInTurn(
+		context.Background(), sess, sess.ID, calls, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID}},
 		history, "continue", assistantID, "", nil,
 	)
 	testutil.FailErr(t, "execute write while awaiting approval", err)
@@ -161,12 +168,18 @@ func runHostHoldBatch(t *testing.T, held *atomic.Bool, surfaceID string, onCall 
 	testutil.FailErr(t, "register scan_list", err)
 
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		Tools: reg,
-		AppendMessages: func(_ context.Context, _ string, _ ...api.Message) error {
-			return nil
+		Context: ContextDeps{
+			Tools: reg,
 		},
-		HumanApprovalAwaiting: func(context.Context, string) bool { return false },
-		HostObligationHeld:    func(context.Context, string) bool { return held.Load() },
+		Projection: ProjectionDeps{
+			AppendMessages: func(_ context.Context, _ string, _ ...api.Message) error {
+				return nil
+			},
+		},
+		Control: ControlDeps{
+			HumanApprovalAwaiting: func(context.Context, string) bool { return false },
+			HostObligationHeld:    func(context.Context, string) bool { return held.Load() },
+		},
 	})
 	sess := &api.Session{ID: "sess-obligation"}
 	assistantID := "assistant-1"
@@ -179,10 +192,8 @@ func runHostHoldBatch(t *testing.T, held *atomic.Bool, surfaceID string, onCall 
 		st = &promptLoopTurnState{turnToolPlan: plan}
 	}
 
-	_, _, _, _, _, breakLoop, err := toolBatch{loop}.executeToolCallsInTurn(
-		context.Background(), sess, sess.ID, calls, tools.ToolContext{
-			Identity: tools.InvocationIdentity{SessionID: sess.ID},
-		},
+	_, _, _, _, _, breakLoop, err := loop.Batch.executeToolCallsInTurn(
+		context.Background(), sess, sess.ID, calls, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID}},
 		history, "continue", assistantID, surfaceID, st,
 	)
 	testutil.FailErr(t, "execute scan_list around a host hold", err)
@@ -197,21 +208,25 @@ func TestExecuteToolCallsInTurnWriteContinuesWhenNotAwaiting(t *testing.T) {
 	testutil.FailErr(t, "register write", err)
 
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		Tools: reg,
-		AppendMessages: func(_ context.Context, _ string, _ ...api.Message) error {
-			return nil
+		Context: ContextDeps{
+			Tools: reg,
 		},
-		HumanApprovalAwaiting: func(context.Context, string) bool { return false },
+		Projection: ProjectionDeps{
+			AppendMessages: func(_ context.Context, _ string, _ ...api.Message) error {
+				return nil
+			},
+		},
+		Control: ControlDeps{
+			HumanApprovalAwaiting: func(context.Context, string) bool { return false },
+		},
 	})
 	sess := &api.Session{ID: "sess-write"}
 	assistantID := "assistant-1"
 	calls := []api.ToolCall{{ID: "call-1", Name: "write", Args: map[string]any{"path": "bp.md"}}}
 	history := []api.Message{{ID: assistantID, Role: api.MessageRoleAssistant, ToolCalls: calls}}
 
-	_, _, _, _, _, breakLoop, err := toolBatch{loop}.executeToolCallsInTurn(
-		context.Background(), sess, sess.ID, calls, tools.ToolContext{
-			Identity: tools.InvocationIdentity{SessionID: sess.ID},
-		},
+	_, _, _, _, _, breakLoop, err := loop.Batch.executeToolCallsInTurn(
+		context.Background(), sess, sess.ID, calls, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID}},
 		history, "continue", assistantID, "", nil,
 	)
 	testutil.FailErr(t, "execute write", err)
@@ -230,11 +245,18 @@ func TestWorkerDecisionSettlesUnattemptedCompletion(t *testing.T) {
 		completed = true
 		return `{ "recorded": true }`, nil
 	}))
-	loop := NewPromptLoopForTest(PromptLoopDeps{Tools: reg, AppendMessages: func(context.Context, string, ...api.Message) error { return nil }})
+	loop := NewPromptLoopForTest(PromptLoopDeps{
+		Context: ContextDeps{
+			Tools: reg,
+		},
+		Projection: ProjectionDeps{
+			AppendMessages: func(context.Context, string, ...api.Message) error { return nil },
+		},
+	})
 	calls := []api.ToolCall{{ID: "decision", Name: "request_decision"}, {ID: "completion", Name: "complete_leg"}}
 	sess := &api.Session{ID: "worker", ParentSessionID: "parent"}
 	history := []api.Message{{ID: "assistant", Role: api.MessageRoleAssistant, ToolCalls: calls}}
-	history, _, _, _, _, stopped, err := toolBatch{loop}.executeToolCallsInTurn(t.Context(), sess, sess.ID, calls, tools.ToolContext{}, history, "implement", "assistant", "", nil)
+	history, _, _, _, _, stopped, err := loop.Batch.executeToolCallsInTurn(t.Context(), sess, sess.ID, calls, tools.ToolContext{}, history, "implement", "assistant", "", nil)
 	testutil.FailErr(t, "pause worker batch", err)
 	if !stopped || completed || len(history) != 3 {
 		t.Fatalf("stopped=%v completed=%v history=%+v", stopped, completed, history)

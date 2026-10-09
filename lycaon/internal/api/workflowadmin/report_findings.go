@@ -1,13 +1,14 @@
 package workflowadmin
 
 import (
+	"sort"
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/report"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
 	workflowreview "github.com/lycaon/lycaon/internal/workflow/review"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"sort"
-	"strings"
 )
 
 // The headline, summary, findings, and limits come from the closeout's

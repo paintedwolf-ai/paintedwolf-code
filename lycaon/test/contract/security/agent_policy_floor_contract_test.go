@@ -51,8 +51,17 @@ func TestProjectAgentPolicyAsksWhileHostStateDenies(t *testing.T) {
 			t.Fatalf("%s is not agent policy", rel)
 		}
 		res, err := gate.Evaluate(context.Background(), hitl.ProposedAction{
-			Tool: "write", Files: []string{path}, ProjectDir: proj, AgentPolicy: []hitl.AgentPolicyTarget{target},
-		})
+Invocation: hitl.ActionInvocation{
+Tool: "write",
+Files: []string{path},
+},
+Scope: hitl.ActionScope{
+ProjectDir: proj,
+},
+Mutations: hitl.ActionMutations{
+AgentPolicy: []hitl.AgentPolicyTarget{target},
+},
+})
 		testutil.FailErr(t, "Evaluate "+rel, err)
 		if res == nil || res.Denied || !res.Required() || !slices.Contains(res.Decision.Gates(), api.GateAgentPolicyChange) {
 			t.Fatalf("%s: want an agent-policy ask, got %+v", rel, res)
@@ -61,8 +70,14 @@ func TestProjectAgentPolicyAsksWhileHostStateDenies(t *testing.T) {
 
 	hostSink := filepath.Join(cfg, "mcp.yaml")
 	res, err := gate.Evaluate(context.Background(), hitl.ProposedAction{
-		Tool: "write", Files: []string{hostSink}, ProjectDir: proj,
-	})
+Invocation: hitl.ActionInvocation{
+Tool: "write",
+Files: []string{hostSink},
+},
+Scope: hitl.ActionScope{
+ProjectDir: proj,
+},
+})
 	testutil.FailErr(t, "Evaluate host sink", err)
 	if res == nil || !res.Denied || res.DenyCode != isolation.CodeControlPlaneDenied {
 		t.Fatalf("host state want %s, got %+v", isolation.CodeControlPlaneDenied, res)
@@ -77,8 +92,14 @@ func TestProjectAgentPolicyAsksWhileHostStateDenies(t *testing.T) {
 			t.Errorf("%s classified as agent policy; no loader reads it", free)
 		}
 		res, err := gate.Evaluate(context.Background(), hitl.ProposedAction{
-			Tool: "write", Files: []string{free}, ProjectDir: proj,
-		})
+Invocation: hitl.ActionInvocation{
+Tool: "write",
+Files: []string{free},
+},
+Scope: hitl.ActionScope{
+ProjectDir: proj,
+},
+})
 		testutil.FailErr(t, "Evaluate "+free, err)
 		if res != nil && res.Denied && res.DenyCode != isolation.CodeControlPlaneDenied {
 			t.Errorf("%s denied with %s", free, res.DenyCode)

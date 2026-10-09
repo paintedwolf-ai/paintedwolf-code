@@ -4,6 +4,11 @@ package session_test
 
 import (
 	"context"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/configlayout"
@@ -17,6 +22,7 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -29,17 +35,13 @@ import (
 	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"path/filepath"
-	"strings"
-	"testing"
-	"time"
 )
 
-func wireImplementConvergenceHooks(t *testing.T, mgr *session.Manager, wfMgr *workflow.RunManager, q session.WorkerCycleLister) {
+func wireImplementConvergenceHooks(t *testing.T, mgr *session.Host, wfMgr *workflow.RunManager, q session.WorkerCycleLister) {
 	t.Helper()
 	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{
 		WorkerCycleIdle: func(projectID, sessionID, completingJobID string) (bool, error) {
-			return session.ParentSessionWorkerCycleIdle(context.Background(), q, projectID, sessionID, completingJobID)
+			return workeroutcomes.ParentSessionWorkerCycleIdle(context.Background(), q, projectID, sessionID, completingJobID)
 		},
 	})
 	testutil.FailErr(t, "NewDefaultRegistry", err)
@@ -53,7 +55,7 @@ func wireImplementConvergenceHooks(t *testing.T, mgr *session.Manager, wfMgr *wo
 			return
 		}
 		if id, ok := anchor.ParseID(kickID); ok {
-			mgr.Emit(ctx, rc.SessionID, id, mgr.CoordinatorEnvelopeForWorkerCycleTerminal(ctx, rc.SessionID, ""))
+			mgr.Coordinator.Guidance.Emit(ctx, rc.SessionID, id, mgr.Workers.Results.EnvelopeForTerminal(ctx, rc.SessionID, ""))
 		}
 	}
 	wfMgr.Publication.OnPhaseAutoAdvanced = func(ctx context.Context, sessionID, runID, previousPhase, newPhase string) {
@@ -65,19 +67,19 @@ func wireImplementConvergenceHooks(t *testing.T, mgr *session.Manager, wfMgr *wo
 			}
 		}
 		if strings.TrimSpace(previousPhase) == "" && strings.TrimSpace(newPhase) != "" {
-			mgr.NudgeCoordinatorLoop(ctx, sessionID, anchor.PhaseAdvanced, anchor.PhaseAdvanced, "", anchor.Envelope{})
+			mgr.Coordinator.Runtime.CoordinatorLoop().Nudges.Nudge(ctx, sessionID, anchor.PhaseAdvanced, anchor.PhaseAdvanced, "", anchor.Envelope{})
 			return
 		}
 		if strings.TrimSpace(previousPhase) != strings.TrimSpace(newPhase) {
 			return
 		}
-		mgr.NudgeCoordinatorLoop(ctx, sessionID, anchor.PhaseAdvanced, anchor.PhaseAdvanced, "", anchor.Envelope{})
+		mgr.Coordinator.Runtime.CoordinatorLoop().Nudges.Nudge(ctx, sessionID, anchor.PhaseAdvanced, anchor.PhaseAdvanced, "", anchor.Envelope{})
 	}
 	wfMgr.Phases.PhaseEnterHook = func(ctx context.Context, rc *workflowphases.RunContext, def workflowdef.PhaseDef) {
 		if rc == nil {
 			return
 		}
-		mgr.EmitMatch(ctx, rc.SessionID, anchor.PhaseEntered, anchor.Envelope{}, anchor.MatchContext{
+		mgr.Coordinator.Guidance.EmitMatch(ctx, rc.SessionID, anchor.PhaseEntered, anchor.Envelope{}, anchor.MatchContext{
 			Surface:  "phase",
 			Phase:    rc.Phase,
 			Workflow: rc.WorkflowID,
@@ -86,12 +88,12 @@ func wireImplementConvergenceHooks(t *testing.T, mgr *session.Manager, wfMgr *wo
 }
 
 // drainCoordinatorAsyncTurnsOnCleanup prevents writes during temp-dir cleanup.
-func drainCoordinatorAsyncTurnsOnCleanup(t *testing.T, mgr *session.Manager) {
+func drainCoordinatorAsyncTurnsOnCleanup(t *testing.T, mgr *session.Host) {
 	t.Helper()
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		mgr.WaitForCoordinatorAsyncTurns(ctx)
+		mgr.Coordinator.WaitForTurns(ctx)
 	})
 }
 
@@ -105,7 +107,7 @@ func setImplementRunPhase(t *testing.T, wfStore *runstate.Repository, run *wire.
 }
 
 type loopFixture struct {
-	mgr   *session.Manager
+	mgr   *session.Host
 	wfMgr *workflow.RunManager
 	store *store.SQL
 	sess  *wire.Session
@@ -118,11 +120,11 @@ func setupLoopFixture(t *testing.T, cfg settings.SessionLimits) loopFixture {
 
 	store := store.NewSQL(sqlDB)
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ack"}}}))
-	mgr := session.NewManager(store, rec, tools.NewStubRegistry(), cfg)
+	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: cfg, Cost: nil}, tools.NewStubRegistry())
 	agents := orchestration.NewMemoryAgentRegistry()
 	_ = orchestration.LoadRequiredAgentRegistry(context.Background(), agents)
-	mgr.SetAgentRegistry(agents)
-	testutil.FailErr(t, "install anchor registry", mgr.InstallAnchorRegistry())
+	mgr.Profiles.SetAgentRegistry(agents)
+	testutil.FailErr(t, "install anchor registry", mgr.Coordinator.Guidance.InstallAnchorRegistry())
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
 	wirePromptTestManager(t, mgr)
 
@@ -158,7 +160,7 @@ func setupLoopFixture(t *testing.T, cfg settings.SessionLimits) loopFixture {
 	}
 	run.CurrentPhase = "research"
 	run.Status = wire.WorkflowRunStatusRunning
-	if err := wfMgr.Store.Update(ctx, run); err != nil {
+	if err := wfMgr.Store.State.Update(ctx, run); err != nil {
 		testutil.FailErr(t, "wfMgr.Store.Update failed", err)
 	}
 	drainCoordinatorAsyncTurnsOnCleanup(t, mgr)
@@ -173,15 +175,15 @@ func TestShouldLoopWakeDeniesHumanApprovalAwaiting(t *testing.T) {
 		t.Fatal("missing run")
 	}
 	run.CurrentPhase = "approve"
-	if err := fix.wfMgr.Store.Update(ctx, run); err != nil {
+	if err := fix.wfMgr.Store.State.Update(ctx, run); err != nil {
 		testutil.FailErr(t, "fix.wfMgr.Store.Update failed", err)
 	}
 	vars, err := fix.wfMgr.Store.Runs.GetScaffoldVars(ctx, run.ID)
 	testutil.FailErr(t, "GetScaffoldVars", err)
 	vars = runstate.StampHumanApprovalPhase(vars, &workflowdef.HumanApprovalConfig{}, run.BlueprintPath)
 	vars = runstate.SetHumanApprovalReady(vars, true)
-	testutil.FailErr(t, "UpdateVars", fix.wfMgr.Store.UpdateVars(ctx, run, t.TempDir(), vars))
-	allow, reason, err := fix.mgr.ShouldLoopWake(ctx, fix.sess.ID, anchor.LegFinished)
+	testutil.FailErr(t, "UpdateVars", fix.wfMgr.Store.State.UpdateVars(ctx, run, t.TempDir(), vars))
+	allow, reason, err := fix.mgr.Coordinator.Runtime.CoordinatorLoop().Admission.ShouldLoopWake(ctx, fix.sess.ID, anchor.LegFinished)
 	testutil.FailErr(t, "fix.mgr.ShouldLoopWake failed", err)
 	if allow {
 		t.Fatal("expected deny while human approval is awaiting")
@@ -199,10 +201,10 @@ func TestShouldLoopWakeIgnoresApprovePhaseName(t *testing.T) {
 		t.Fatal("missing run")
 	}
 	run.CurrentPhase = "approve"
-	if err := fix.wfMgr.Store.Update(ctx, run); err != nil {
+	if err := fix.wfMgr.Store.State.Update(ctx, run); err != nil {
 		testutil.FailErr(t, "fix.wfMgr.Store.Update failed", err)
 	}
-	allow, reason, err := fix.mgr.ShouldLoopWake(ctx, fix.sess.ID, anchor.LegFinished)
+	allow, reason, err := fix.mgr.Coordinator.Runtime.CoordinatorLoop().Admission.ShouldLoopWake(ctx, fix.sess.ID, anchor.LegFinished)
 	testutil.FailErr(t, "fix.mgr.ShouldLoopWake failed", err)
 	if reason == "approve_phase" || reason == "human_approval_awaiting" {
 		t.Fatalf("phase name must not deny, reason=%q", reason)
@@ -218,9 +220,9 @@ func TestShouldLoopWakeDeniesWhenBusy(t *testing.T) {
 	if err := fix.store.SetSessionStatus(ctx, fix.sess.ID, wire.SessionStatusBusy); err != nil {
 		testutil.FailErr(t, "fix.store.SetSessionStatus failed", err)
 	}
-	finishExecution := fix.mgr.BeginPromptExecutionForTest(t.Context(), fix.sess.ID)
+	finishExecution := fix.mgr.Runner.Coordinator.CoordinatorLoop().Admission.BeginPromptExecution(t.Context(), fix.sess.ID)
 	defer finishExecution()
-	allow, reason, err := fix.mgr.ShouldLoopWake(ctx, fix.sess.ID, anchor.LegFinished)
+	allow, reason, err := fix.mgr.Coordinator.Runtime.CoordinatorLoop().Admission.ShouldLoopWake(ctx, fix.sess.ID, anchor.LegFinished)
 	testutil.FailErr(t, "fix.mgr.ShouldLoopWake failed", err)
 	if allow {
 		t.Fatal("expected deny while busy")
@@ -239,11 +241,11 @@ func TestShouldLoopWakeRespectsBudget(t *testing.T) {
 	if run == nil {
 		t.Fatal("missing run")
 	}
-	fix.mgr.ResetLoopBudget(run.ID)
-	if !fix.mgr.TryConsumeLoopBudgetForTest(ctx, fix.sess.ID, run.ID) {
+	fix.mgr.Coordinator.Runtime.CoordinatorLoop().Admission.ResetBudget(run.ID)
+	if !fix.mgr.Runner.Coordinator.CoordinatorLoop().TryConsumeBudgetForTest(ctx, fix.sess.ID, run.ID) {
 		t.Fatal("expected first consume")
 	}
-	if fix.mgr.TryConsumeLoopBudgetForTest(ctx, fix.sess.ID, run.ID) {
+	if fix.mgr.Runner.Coordinator.CoordinatorLoop().TryConsumeBudgetForTest(ctx, fix.sess.ID, run.ID) {
 		t.Fatal("budget should be exhausted")
 	}
 }
@@ -260,10 +262,10 @@ func TestShouldLoopWakeDeniesPendingDecision(t *testing.T) {
 			"implement": map[string]any{"pending": true, "prompt": "choose", "options": []any{"yes", "no"}},
 		},
 	}
-	if err := fix.wfMgr.Store.UpdateVars(ctx, run, fix.sess.WorkspacePath, vars); err != nil {
+	if err := fix.wfMgr.Store.State.UpdateVars(ctx, run, fix.sess.WorkspacePath, vars); err != nil {
 		testutil.FailErr(t, "fix.wfMgr.Store.UpdateVars failed", err)
 	}
-	allow, reason, err := fix.mgr.ShouldLoopWake(ctx, fix.sess.ID, anchor.LegFinished)
+	allow, reason, err := fix.mgr.Coordinator.Runtime.CoordinatorLoop().Admission.ShouldLoopWake(ctx, fix.sess.ID, anchor.LegFinished)
 	testutil.FailErr(t, "fix.mgr.ShouldLoopWake failed", err)
 	if allow {
 		t.Fatal("expected deny with pending decision")
@@ -279,17 +281,17 @@ func TestLoopDefersUntilIdle(t *testing.T) {
 	if err := fix.store.SetSessionStatus(ctx, fix.sess.ID, wire.SessionStatusBusy); err != nil {
 		testutil.FailErr(t, "fix.store.SetSessionStatus failed", err)
 	}
-	finishExecution := fix.mgr.BeginPromptExecutionForTest(t.Context(), fix.sess.ID)
+	finishExecution := fix.mgr.Runner.Coordinator.CoordinatorLoop().Admission.BeginPromptExecution(t.Context(), fix.sess.ID)
 	defer finishExecution()
-	fix.mgr.NudgeCoordinatorLoop(ctx, fix.sess.ID, anchor.LegFinished, anchor.LegFinished, "leg-1", anchor.Envelope{})
-	if _, ok := fix.mgr.PendingLoopNudgeForTest(fix.sess.ID); !ok {
+	fix.mgr.Coordinator.Runtime.CoordinatorLoop().Nudges.Nudge(ctx, fix.sess.ID, anchor.LegFinished, anchor.LegFinished, "leg-1", anchor.Envelope{})
+	if _, ok := fix.mgr.Runner.Coordinator.CoordinatorLoop().PendingForTest(fix.sess.ID); !ok {
 		t.Fatal("expected deferred loop wake")
 	}
 	if err := fix.store.SetSessionStatus(ctx, fix.sess.ID, wire.SessionStatusIdle); err != nil {
 		testutil.FailErr(t, "fix.store.SetSessionStatus failed", err)
 	}
 	finishExecution()
-	fix.mgr.DrainLoopPendingForTest(ctx, fix.sess.ID)
+	fix.mgr.Runner.Coordinator.CoordinatorLoop().Nudges.DrainPending(ctx, fix.sess.ID)
 	testutil.WaitFor(t, 3*time.Second, func() bool {
 		msgs, err := fix.store.GetMessages(ctx, fix.sess.ID)
 		if err != nil {
@@ -310,11 +312,11 @@ func TestImplementWorkerSummaryLoopWakesWithCompletingJobStillRunning(t *testing
 
 	store := store.NewSQL(sqlDB)
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "traced"}}}))
-	mgr := session.NewManager(store, rec, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	agents := orchestration.NewMemoryAgentRegistry()
 	_ = orchestration.LoadRequiredAgentRegistry(context.Background(), agents)
-	mgr.SetAgentRegistry(agents)
-	testutil.FailErr(t, "install anchor registry", mgr.InstallAnchorRegistry())
+	mgr.Profiles.SetAgentRegistry(agents)
+	testutil.FailErr(t, "install anchor registry", mgr.Coordinator.Guidance.InstallAnchorRegistry())
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
 
 	wfStore := workflowpersistence.New(sqlDB)
@@ -359,7 +361,7 @@ func TestImplementWorkerSummaryLoopWakesWithCompletingJobStillRunning(t *testing
 		t.Fatalf("claimed = %s want %s", claimed.ID, jobID)
 	}
 
-	if _, err := mgr.AppendWorkerSummary(ctx, sess.ID, session.WorkerSummaryInput{
+	if _, err := mgr.Workers.Summaries.Append(ctx, sess.ID, workeroutcomes.SummaryInput{
 		Summary:        "Found linux_cli_adventure.html",
 		JobID:          jobID,
 		AgentType:      orchestration.ProfilePathExplorer,
@@ -391,11 +393,11 @@ func TestImplementWorkerCompleteFiresSingleLoopWake(t *testing.T) {
 
 	store := store.NewSQL(sqlDB)
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "synthesized"}}}))
-	mgr := session.NewManager(store, rec, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	agents := orchestration.NewMemoryAgentRegistry()
 	_ = orchestration.LoadRequiredAgentRegistry(context.Background(), agents)
-	mgr.SetAgentRegistry(agents)
-	testutil.FailErr(t, "install anchor registry", mgr.InstallAnchorRegistry())
+	mgr.Profiles.SetAgentRegistry(agents)
+	testutil.FailErr(t, "install anchor registry", mgr.Coordinator.Guidance.InstallAnchorRegistry())
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
 
 	wfStore := workflowpersistence.New(sqlDB)
@@ -440,7 +442,7 @@ func TestImplementWorkerCompleteFiresSingleLoopWake(t *testing.T) {
 		t.Fatalf("claimed = %s want %s", claimed.ID, jobID)
 	}
 
-	if _, err := mgr.AppendWorkerSummary(ctx, sess.ID, session.WorkerSummaryInput{
+	if _, err := mgr.Workers.Summaries.Append(ctx, sess.ID, workeroutcomes.SummaryInput{
 		Summary:        "Found linux_cli_adventure.html",
 		JobID:          jobID,
 		AgentType:      orchestration.ProfilePathExplorer,
@@ -468,7 +470,7 @@ func TestImplementWorkerCompleteFiresSingleLoopWake(t *testing.T) {
 
 	drainCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	mgr.WaitForCoordinatorAsyncTurns(drainCtx)
+	mgr.Coordinator.WaitForTurns(drainCtx)
 
 	msgs, err := store.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
@@ -494,11 +496,11 @@ func TestImplementWorkerSummaryLoopWakesCoordinator(t *testing.T) {
 
 	store := store.NewSQL(sqlDB)
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "traced"}}}))
-	mgr := session.NewManager(store, rec, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	agents := orchestration.NewMemoryAgentRegistry()
 	_ = orchestration.LoadRequiredAgentRegistry(context.Background(), agents)
-	mgr.SetAgentRegistry(agents)
-	testutil.FailErr(t, "install anchor registry", mgr.InstallAnchorRegistry())
+	mgr.Profiles.SetAgentRegistry(agents)
+	testutil.FailErr(t, "install anchor registry", mgr.Coordinator.Guidance.InstallAnchorRegistry())
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
 
 	wfStore := workflowpersistence.New(sqlDB)
@@ -554,7 +556,7 @@ func TestImplementWorkerSummaryLoopWakesCoordinator(t *testing.T) {
 		t.Fatalf("claimed = %s want %s", claimed.ID, jobID)
 	}
 
-	if _, err := mgr.AppendWorkerSummary(ctx, sess.ID, session.WorkerSummaryInput{
+	if _, err := mgr.Workers.Summaries.Append(ctx, sess.ID, workeroutcomes.SummaryInput{
 		Summary:        "Created game.py",
 		JobID:          jobID,
 		AgentType:      orchestration.ProfileImplementer,
@@ -589,12 +591,12 @@ func TestLegFinishedQueuesKickAndAutoPrompts(t *testing.T) {
 	fix := setupLoopFixture(t, settings.DefaultSessionLimits())
 	ctx := context.Background()
 
-	if _, err := fix.mgr.Prompt(ctx, fix.sess.ID, "start implement"); err != nil {
-		testutil.FailErr(t, "fix.mgr.Prompt failed", err)
+	if _, err := fix.mgr.Submissions.Prompt(ctx, fix.sess.ID, "start implement"); err != nil {
+		testutil.FailErr(t, "fix.mgr.Submissions.Prompt failed", err)
 	}
 	child, err := fix.store.CreateChild(ctx, fix.sess, wire.SpawnChildRequest{AgentType: orchestration.ProfilePathExplorer})
 	testutil.FailErr(t, "create child", err)
-	if _, err := fix.mgr.AppendWorkerSummary(ctx, fix.sess.ID, session.WorkerSummaryInput{
+	if _, err := fix.mgr.Workers.Summaries.Append(ctx, fix.sess.ID, workeroutcomes.SummaryInput{
 		Summary:        "leg done",
 		DelegationID:   "dep-1",
 		LegID:          "leg-1",
@@ -606,7 +608,7 @@ func TestLegFinishedQueuesKickAndAutoPrompts(t *testing.T) {
 	}); err != nil {
 		testutil.FailErr(t, "append leg summary", err)
 	}
-	fix.mgr.NudgeCoordinatorLoop(ctx, fix.sess.ID, anchor.LegFinished, anchor.LegFinished, "leg-1", anchor.Envelope{
+	fix.mgr.Coordinator.Runtime.CoordinatorLoop().Nudges.Nudge(ctx, fix.sess.ID, anchor.LegFinished, anchor.LegFinished, "leg-1", anchor.Envelope{
 		CompletedAt: autoContinuePtrTime(time.Now().UTC()),
 	})
 
@@ -635,7 +637,7 @@ func autoContinuePtrTime(t time.Time) *time.Time {
 }
 
 // simulateWorkerJobComplete applies the queue and session terminal hooks.
-func simulateWorkerJobComplete(t *testing.T, mgr *session.Manager, q worker.WorkerQueue, jobID string) {
+func simulateWorkerJobComplete(t *testing.T, mgr *session.Host, q worker.WorkerQueue, jobID string) {
 	t.Helper()
 	ctx := context.Background()
 	result := wire.WorkerResult{Status: "complete"}
@@ -648,7 +650,7 @@ func simulateWorkerJobComplete(t *testing.T, mgr *session.Manager, q worker.Work
 	if !won {
 		t.Fatal("completion claim lost")
 	}
-	bridge := &worker.SessionOutcomeBridge{Sessions: mgr}
+	bridge := &worker.SessionOutcomeBridge{Workers: mgr.Coordinator.Workers, Loop: mgr.Coordinator.Runtime.CoordinatorLoop(), Results: mgr.Workers.Results, State: mgr.Workers.State, Closure: mgr.Coordinator.ProgressClosure}
 	testutil.FailErr(t, "OnWorkerComplete", bridge.OnWorkerComplete(ctx, jobID, result))
 	testutil.FailErr(t, "acknowledge worker outcome", q.MarkOutcomeDelivered(ctx, jobID))
 }
@@ -658,12 +660,12 @@ func TestImplementWorkerSummaryPartialSkipsLoopWake(t *testing.T) {
 
 	store := store.NewSQL(sqlDB)
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ack"}}}))
-	mgr := session.NewManager(store, rec, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	mgr.SetOARPipeline(sessionTestOARPipeline(t), oar.NewRenderer(nil, nil))
 	agents := orchestration.NewMemoryAgentRegistry()
 	_ = orchestration.LoadRequiredAgentRegistry(context.Background(), agents)
-	mgr.SetAgentRegistry(agents)
-	testutil.FailErr(t, "install anchor registry", mgr.InstallAnchorRegistry())
+	mgr.Profiles.SetAgentRegistry(agents)
+	testutil.FailErr(t, "install anchor registry", mgr.Coordinator.Guidance.InstallAnchorRegistry())
 
 	wfStore := workflowpersistence.New(sqlDB)
 	wfMgr := workflow.NewManager(wfStore, store, nil, nil)
@@ -692,7 +694,7 @@ func TestImplementWorkerSummaryPartialSkipsLoopWake(t *testing.T) {
 		testutil.FailErr(t, "store.AppendMessages failed", err)
 	}
 
-	status, err := mgr.AppendWorkerSummary(ctx, sess.ID, session.WorkerSummaryInput{
+	status, err := mgr.Workers.Summaries.Append(ctx, sess.ID, workeroutcomes.SummaryInput{
 		Summary:        "Created game.py",
 		JobID:          "job-command-only",
 		AgentType:      orchestration.ProfileImplementer,
@@ -706,7 +708,7 @@ func TestImplementWorkerSummaryPartialSkipsLoopWake(t *testing.T) {
 
 	drainCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	mgr.WaitForCoordinatorAsyncTurns(drainCtx)
+	mgr.Coordinator.WaitForTurns(drainCtx)
 
 	msgs, err := store.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "store.GetMessages failed", err)

@@ -87,13 +87,18 @@ func (m *Service) effectiveCatalogForWorkspace(ctx context.Context, p *project.P
 	m.catalogMu.RUnlock()
 
 	resolveResult := m.effectiveCatalogResolve.DoChan(cacheID+"\x00"+key, func() (any, error) {
+		resolveCtx, finish, err := m.work.Begin(context.WithoutCancel(ctx))
+		if err != nil {
+			return nil, err
+		}
+		defer finish()
 		m.catalogMu.RLock()
 		if ent, ok := m.effectiveCatalogCache.Load(cacheID); ok && ent.key == key {
 			m.catalogMu.RUnlock()
 			return ent.catalog, nil
 		}
 		m.catalogMu.RUnlock()
-		catalog, resolveErr := m.resolveEffectiveCatalogForRoots(context.WithoutCancel(ctx), *p, projectDirs)
+		catalog, resolveErr := m.resolveEffectiveCatalogForRoots(resolveCtx, *p, projectDirs)
 		if resolveErr != nil {
 			return nil, resolveErr
 		}

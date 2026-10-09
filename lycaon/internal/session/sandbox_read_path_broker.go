@@ -129,13 +129,23 @@ func (b *WriteRootCheckpointBroker) buildReadPathCard(
 ) (sandboxAskCard, error) {
 	summary := sandboxAskCommandSummary(in.Command)
 	grantAction := hitl.ProposedAction{
-		Tool: "read_path", Args: map[string]any{"proposed_read_path": proposed},
-		ProjectID: in.ProjectID, ProjectDir: projectDir, SessionID: invokingSessionID, RootSessionID: rootSessionID,
-		Contained: hitl.ContainedForAction(hitl.ActionConfineInputs{
+Invocation: hitl.ActionInvocation{
+Tool: "read_path",
+Args: map[string]any{"proposed_read_path": proposed},
+},
+Scope: hitl.ActionScope{
+ProjectID: in.ProjectID,
+ProjectDir: projectDir,
+SessionID: invokingSessionID,
+RootSessionID: rootSessionID,
+},
+Execution: hitl.ActionExecution{
+Contained: hitl.ContainedForAction(hitl.ActionConfineInputs{
 			ProjectID: in.ProjectID,
 			Roots:     projectRoots(projectDir),
 		}),
-	}
+},
+}
 	chatGrant := readPathChatGrant(grantAction, proposed)
 	chatDelta := hitl.ApprovalAuthorityDelta{
 		Kind: hitl.AuthorityReadPathChat, Grant: &chatGrant,
@@ -177,13 +187,13 @@ func readPathChatGrant(action hitl.ProposedAction, path string) hitl.ApprovalGra
 	path = confine.NormalizeWriteRootKey(path)
 	raw := strings.Join([]string{
 		string(hitl.ApprovalGrantScopeChat), hitl.ApprovalGrantCategoryReadPath,
-		path, action.ChatSession(),
+		path, action.Scope.ChatSession(),
 	}, "\x00")
 	sum := sha256.Sum256([]byte(raw))
 	return hitl.ApprovalGrant{
 		ID: "grant_" + hex.EncodeToString(sum[:8]), Scope: hitl.ApprovalGrantScopeChat,
 		Predicate:     hitl.ApprovalGrantPredicate{Category: hitl.ApprovalGrantCategoryReadPath, Pattern: path},
-		ChatSessionID: action.ChatSession(), ProjectID: action.ProjectID, ProjectDir: action.ProjectDir,
+		ChatSessionID: action.Scope.ChatSession(), ProjectID: action.Scope.ProjectID, ProjectDir: action.Scope.ProjectDir,
 		Title: hitl.TitleAllowForThisChat, Coverage: "reading `" + path + "`",
 		GrantedAt: time.Now().UTC(), ExpiresWhen: hitl.ExpiresWhenChatDeleted,
 		ReaskWhen: "a different protected path is needed", Source: "checkpoint",

@@ -1,3 +1,5 @@
+//go:build integration
+
 package sessioncontracts
 
 import (
@@ -50,12 +52,16 @@ func TestCheckpointHandlersListAndResolve(t *testing.T) {
 	mgr := hitl.NewCheckpoints(hitl.NewSQLStore(sqlDB), pub, authzcontext.SQLRecorder(sqlDB))
 
 	srv := api.NewServer(apitest.Dependencies(t, api.Dependencies{Core: api.CoreDependencies{
-		Store: store, Projects: reg, Sessions: session.NewManager(store, nil, nil, settings.DefaultSessionLimits())}, Approvals: api.ApprovalsDependencies{Checkpoints: mgr}}), nil, api.TestAPIToken)
+		Store: store, Projects: reg, Sessions: session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)}, Approvals: api.ApprovalsDependencies{Checkpoints: mgr}}), nil, api.TestAPIToken)
 
 	dec, err := contractfixture.RequestExplicitAPIApprovalCheckpoint(t, mgr, hitl.CheckpointRequest{
-		SessionID:      sess.ID,
-		Kind:           wire.CheckpointKindToolApproval,
-		ProposedAction: &hitl.ProposedAction{Tool: "command"},
+		SessionID: sess.ID,
+		Kind:      wire.CheckpointKindToolApproval,
+		ProposedAction: &hitl.ProposedAction{
+			Invocation: hitl.ActionInvocation{
+				Tool: "command",
+			},
+		},
 	})
 	testutil.FailErr(t, "mgr.RequestCheckpoint failed", err)
 
@@ -104,9 +110,14 @@ func TestCheckpointHandlersRejectWithGuidance(t *testing.T) {
 	srv, mgr, sess := contractfixture.NewCheckpointHandlerFixture(t)
 
 	dec, err := contractfixture.RequestExplicitAPIApprovalCheckpoint(t, mgr, hitl.CheckpointRequest{
-		SessionID:      sess.ID,
-		Kind:           wire.CheckpointKindToolApproval,
-		ProposedAction: &hitl.ProposedAction{Tool: "write", Args: map[string]any{"path": "a.txt"}},
+		SessionID: sess.ID,
+		Kind:      wire.CheckpointKindToolApproval,
+		ProposedAction: &hitl.ProposedAction{
+			Invocation: hitl.ActionInvocation{
+				Tool: "write",
+				Args: map[string]any{"path": "a.txt"},
+			},
+		},
 	})
 	testutil.FailErr(t, "mgr.RequestCheckpoint failed", err)
 
@@ -135,9 +146,13 @@ func TestCheckpointHandlersValidationErrors(t *testing.T) {
 	srv, mgr, sess := contractfixture.NewCheckpointHandlerFixture(t)
 
 	dec, err := contractfixture.RequestExplicitAPIApprovalCheckpoint(t, mgr, hitl.CheckpointRequest{
-		SessionID:      sess.ID,
-		Kind:           wire.CheckpointKindToolApproval,
-		ProposedAction: &hitl.ProposedAction{Tool: "command"},
+		SessionID: sess.ID,
+		Kind:      wire.CheckpointKindToolApproval,
+		ProposedAction: &hitl.ProposedAction{
+			Invocation: hitl.ActionInvocation{
+				Tool: "command",
+			},
+		},
 	})
 	testutil.FailErr(t, "mgr.RequestCheckpoint failed", err)
 
@@ -172,9 +187,13 @@ func TestCheckpointHandlersResolveExactReplay(t *testing.T) {
 	srv, mgr, sess := contractfixture.NewCheckpointHandlerFixture(t)
 
 	dec, err := contractfixture.RequestExplicitAPIApprovalCheckpoint(t, mgr, hitl.CheckpointRequest{
-		SessionID:      sess.ID,
-		Kind:           wire.CheckpointKindToolApproval,
-		ProposedAction: &hitl.ProposedAction{Tool: "command"},
+		SessionID: sess.ID,
+		Kind:      wire.CheckpointKindToolApproval,
+		ProposedAction: &hitl.ProposedAction{
+			Invocation: hitl.ActionInvocation{
+				Tool: "command",
+			},
+		},
 	})
 	testutil.FailErr(t, "mgr.RequestCheckpoint failed", err)
 	body := `{"kind":"tool_approval","action":"approve","option_id":"approve_current_action"}`
@@ -223,12 +242,22 @@ func TestCheckpointGrantOfferCreatesProjectLease(t *testing.T) {
 
 	approvals := settings.NewRuleApprovalGate(svc.Approvals, settings.NoSources())
 	srv := api.NewServer(apitest.Dependencies(t, api.Dependencies{Core: api.CoreDependencies{
-		Store: store, Projects: reg, Sessions: session.NewManager(store, nil, nil, settings.DefaultSessionLimits()),
+		Store: store, Projects: reg, Sessions: session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil),
 		Settings: svc}, Host: api.HostDependencies{Events: hub}, Approvals: api.ApprovalsDependencies{Checkpoints: chkMgr, ApprovalGate: approvals}}), nil, api.TestAPIToken)
 
 	action := hitl.ProposedAction{
-		Tool: "network", Args: map[string]any{"host": "api.example.test"},
-		ProjectID: p.ID, ProjectDir: dir, SessionID: sess.ID, Contained: hitl.ContainedForRequest(confine.Request{Roots: []string{dir}}),
+		Invocation: hitl.ActionInvocation{
+			Tool: "network",
+			Args: map[string]any{"host": "api.example.test"},
+		},
+		Scope: hitl.ActionScope{
+			ProjectID:  p.ID,
+			ProjectDir: dir,
+			SessionID:  sess.ID,
+		},
+		Execution: hitl.ActionExecution{
+			Contained: hitl.ContainedForRequest(confine.Request{Roots: []string{dir}}),
+		},
 	}
 	decision := &gate.Decision{Primary: wire.GateUserRule, Cited: []gate.Fact{{
 		Gate: wire.GateUserRule, Key: "rule.pattern", Value: "api.example.test", Source: "test_fixture",
@@ -312,15 +341,25 @@ func TestWriteRootPlanAtomicallyCreatesTaskAndDeviceAuthority(t *testing.T) {
 	approvals := settings.NewRuleApprovalGate(svc.Approvals, settings.NoSources())
 	writeRootRT := approvalstate.NewSandboxPathGrantRuntime()
 	srv := api.NewServer(apitest.Dependencies(t, api.Dependencies{Core: api.CoreDependencies{
-		Store: store, Projects: reg, Sessions: session.NewManager(store, nil, nil, settings.DefaultSessionLimits()),
+		Store: store, Projects: reg, Sessions: session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil),
 		Settings: svc}, Host: api.HostDependencies{Events: hub}, Approvals: api.ApprovalsDependencies{Checkpoints: chkMgr, ApprovalGate: approvals,
 		Authority: capabilityadmin.Authority{WriteRoots: writeRootRT}}}), nil, api.TestAPIToken)
 
 	proposed := filepath.Join(tmp, "shared-cache")
 	testutil.FailErr(t, "create proposed write root", os.MkdirAll(proposed, 0o755))
 	action := hitl.ProposedAction{
-		Tool: "write_root", Args: map[string]any{"proposed_write_root": proposed},
-		ProjectID: p.ID, ProjectDir: projectDir, SessionID: sess.ID, Contained: hitl.ContainedForRequest(confine.Request{Roots: []string{projectDir}}),
+		Invocation: hitl.ActionInvocation{
+			Tool: "write_root",
+			Args: map[string]any{"proposed_write_root": proposed},
+		},
+		Scope: hitl.ActionScope{
+			ProjectID:  p.ID,
+			ProjectDir: projectDir,
+			SessionID:  sess.ID,
+		},
+		Execution: hitl.ActionExecution{
+			Contained: hitl.ContainedForRequest(confine.Request{Roots: []string{projectDir}}),
+		},
 	}
 	_, writeDecision := gate.Evaluate(gate.Facts{
 		Stage: gate.StagePreSpawn,
@@ -429,11 +468,15 @@ func TestCheckpointRejectsClientAuthoredGrantPredicate(t *testing.T) {
 	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	srv, chkMgr, sess := contractfixture.NewCheckpointHandlerFixture(t)
 	dec, err := contractfixture.RequestExplicitAPIApprovalCheckpoint(t, chkMgr, hitl.CheckpointRequest{
-		SessionID:      sess.ID,
-		Kind:           wire.CheckpointKindToolApproval,
-		Type:           hitl.DecisionTypeApprove,
-		ToolCallID:     "call-client-predicate",
-		ProposedAction: &hitl.ProposedAction{Tool: "write"},
+		SessionID:  sess.ID,
+		Kind:       wire.CheckpointKindToolApproval,
+		Type:       hitl.DecisionTypeApprove,
+		ToolCallID: "call-client-predicate",
+		ProposedAction: &hitl.ProposedAction{
+			Invocation: hitl.ActionInvocation{
+				Tool: "write",
+			},
+		},
 	})
 	testutil.FailErr(t, "RequestCheckpoint", err)
 

@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/llm"
+	"github.com/lycaon/lycaon/internal/session/promptinput"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -101,40 +102,40 @@ func (q *queueRoundWorkerQueue) Get(jobID string) (*api.WorkerTask, bool) {
 func TestRunPromptSubmissionEnqueuesWhileBusy(t *testing.T) {
 	ctx := context.Background()
 	st := store.NewMemory()
-	mgr := NewManager(st, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	operationID := uuid.NewString()
-	row, _, err := mgr.AdmitPrompt(ctx, sess.ID, operationID, map[string]string{"text": "do this next"}, PromptInput{Text: "do this next"})
+	row, _, err := mgr.Submissions.AdmitPrompt(ctx, sess.ID, operationID, map[string]string{"text": "do this next"}, promptinput.Input{Text: "do this next"})
 	testutil.FailErr(t, "admit prompt", err)
 
-	dispatch := mgr.promptState.Submission.Acquire(sess.ID)
+	dispatch := mgr.Submissions.DispatchLock(sess.ID)
 	dispatch.Lock()
 	defer dispatch.Unlock()
 
-	resp, err := mgr.RunPromptSubmission(ctx, row.ID)
+	resp, err := mgr.Submissions.RunPromptSubmission(ctx, row.ID)
 	if err != nil {
 		t.Fatalf("RunPromptSubmission while busy returned error: %v", err)
 	}
 	if resp == nil {
 		t.Fatal("expected a non-nil response for an enqueued submission")
 	}
-	draft := mgr.queue.Snapshot(sess.ID)
+	draft := mgr.Resources.Queue.Snapshot(sess.ID)
 	if len(draft.QueueItems) != 1 || draft.QueueItems[0].Text != "do this next" || draft.QueueItems[0].ID != row.ID {
 		t.Fatalf("submission did not enqueue under its id: %+v", draft.QueueItems)
 	}
-	stored, err := mgr.GetPromptSubmission(ctx, row.ID)
+	stored, err := mgr.Submissions.GetPromptSubmission(ctx, row.ID)
 	testutil.FailErr(t, "get submission", err)
 	if stored.Status != store.PromptSubmissionQueued {
 		t.Fatalf("receipt status = %s, want queued while waiting in the draft", stored.Status)
 	}
 
 	// Replay keeps one draft item.
-	if _, err := mgr.RunPromptSubmission(ctx, row.ID); err != nil {
+	if _, err := mgr.Submissions.RunPromptSubmission(ctx, row.ID); err != nil {
 		t.Fatalf("replayed RunPromptSubmission returned error: %v", err)
 	}
-	if got := mgr.queue.Snapshot(sess.ID); len(got.QueueItems) != 1 {
+	if got := mgr.Resources.Queue.Snapshot(sess.ID); len(got.QueueItems) != 1 {
 		t.Fatalf("replay duplicated the draft item: %+v", got.QueueItems)
 	}
 }
@@ -142,7 +143,7 @@ func TestRunPromptSubmissionEnqueuesWhileBusy(t *testing.T) {
 func TestRunPromptSubmissionRoutesConcurrentReceiptsInAdmissionOrder(t *testing.T) {
 	ctx := context.Background()
 	st := store.NewMemory()
-	mgr := NewManager(st, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
@@ -156,7 +157,7 @@ func TestRunPromptSubmissionRoutesConcurrentReceiptsInAdmissionOrder(t *testing.
 		{id: uuid.NewString(), text: "accepted second", at: base.Add(time.Second)},
 	}
 	for _, item := range inputs {
-		raw, marshalErr := json.Marshal(PromptInput{Text: item.text})
+		raw, marshalErr := json.Marshal(promptinput.Input{Text: item.text})
 		testutil.FailErr(t, "encode input", marshalErr)
 		_, _, putErr := st.PutPromptSubmission(ctx, store.PromptSubmission{
 			ID: item.id, SessionID: sess.ID, ProjectID: sess.ProjectID,
@@ -166,13 +167,13 @@ func TestRunPromptSubmissionRoutesConcurrentReceiptsInAdmissionOrder(t *testing.
 		testutil.FailErr(t, "put prompt submission", putErr)
 	}
 
-	lock := mgr.promptState.Prompt.Acquire(sess.ID)
+	lock := mgr.Runner.Execution.Prompt.Acquire(sess.ID)
 	lock.Lock()
 	defer lock.Unlock()
-	_, err = mgr.RunPromptSubmission(ctx, inputs[1].id)
+	_, err = mgr.Submissions.RunPromptSubmission(ctx, inputs[1].id)
 	testutil.FailErr(t, "run later receipt", err)
 
-	draft := mgr.queue.Snapshot(sess.ID)
+	draft := mgr.Resources.Queue.Snapshot(sess.ID)
 	if len(draft.QueueItems) != 2 || draft.QueueItems[0].ID != inputs[0].id || draft.QueueItems[1].ID != inputs[1].id {
 		t.Fatalf("draft order = %+v, want durable admission order", draft.QueueItems)
 	}
@@ -182,22 +183,22 @@ func TestNextReceiptClaimsOnlyAfterPriorReceiptIsTerminal(t *testing.T) {
 	ctx := context.Background()
 	st := &receiptTransitionStore{Memory: store.NewMemory()}
 	registry := tools.NewStubRegistry()
-	mgr := NewManager(st, llm.NewMockProvider(testMockConfig(t)), registry, settings.DefaultSessionLimits())
+	mgr := NewHost(st, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, registry)
 	oartest.InstallCloseoutPolicy(t, mgr)
-	mgr.SetToolInvoker(testtool.RegistryInvoker{Registry: registry}, testtool.RegistryInvoker{Registry: registry})
+	mgr.Coordinator.Guards.SetToolMetadata(testtool.RegistryInvoker{Registry: registry})
 	mgr.SetDataDir(t.TempDir())
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	firstInput := PromptInput{ContentParts: []api.MessageContentPart{{
+	firstInput := promptinput.Input{ContentParts: []api.MessageContentPart{{
 		Content: "first", Origin: api.MessageOriginUser,
 		Authority: api.ContentAuthorityUser, TrustTier: api.ContentTrustTierTrusted,
 	}}}
-	first, _, err := mgr.AdmitPrompt(ctx, sess.ID, uuid.NewString(), "first", firstInput)
+	first, _, err := mgr.Submissions.AdmitPrompt(ctx, sess.ID, uuid.NewString(), "first", firstInput)
 	testutil.FailErr(t, "admit first", err)
-	second, _, err := mgr.AdmitPrompt(ctx, sess.ID, uuid.NewString(), "second", PromptInput{Text: "second"})
+	second, _, err := mgr.Submissions.AdmitPrompt(ctx, sess.ID, uuid.NewString(), "second", promptinput.Input{Text: "second"})
 	testutil.FailErr(t, "admit second", err)
 
-	_, err = mgr.RunPromptSubmission(ctx, first.ID)
+	_, err = mgr.Submissions.RunPromptSubmission(ctx, first.ID)
 	testutil.FailErr(t, "run first", err)
 
 	st.mu.Lock()
@@ -218,9 +219,9 @@ func TestMalformedReceiptFailsThenDispatcherRunsNextReceipt(t *testing.T) {
 	ctx := context.Background()
 	st := &receiptTransitionStore{Memory: store.NewMemory()}
 	registry := tools.NewStubRegistry()
-	mgr := NewManager(st, llm.NewMockProvider(testMockConfig(t)), registry, settings.DefaultSessionLimits())
+	mgr := NewHost(st, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, registry)
 	oartest.InstallCloseoutPolicy(t, mgr)
-	mgr.SetToolInvoker(testtool.RegistryInvoker{Registry: registry}, testtool.RegistryInvoker{Registry: registry})
+	mgr.Coordinator.Guards.SetToolMetadata(testtool.RegistryInvoker{Registry: registry})
 	mgr.SetDataDir(t.TempDir())
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
@@ -230,10 +231,10 @@ func TestMalformedReceiptFailsThenDispatcherRunsNextReceipt(t *testing.T) {
 		InputDigest: firstID, InputJSON: "{", Origin: store.PromptSubmissionOriginUser, SubmittedBy: sess.OwnerPersonID,
 	})
 	testutil.FailErr(t, "put malformed receipt", err)
-	second, _, err := mgr.AdmitPrompt(ctx, sess.ID, uuid.NewString(), "second", PromptInput{Text: "second"})
+	second, _, err := mgr.Submissions.AdmitPrompt(ctx, sess.ID, uuid.NewString(), "second", promptinput.Input{Text: "second"})
 	testutil.FailErr(t, "admit second", err)
 
-	if _, runErr := mgr.RunPromptSubmission(ctx, first.ID); runErr == nil {
+	if _, runErr := mgr.Submissions.RunPromptSubmission(ctx, first.ID); runErr == nil {
 		t.Fatal("malformed receipt unexpectedly succeeded")
 	}
 
@@ -256,29 +257,29 @@ func TestQueueDrainRunsSubmissionReceiptLifecycle(t *testing.T) {
 	testutil.FailErr(t, "create session", err)
 
 	operationID := uuid.NewString()
-	row, _, err := mgr.AdmitPrompt(ctx, sess.ID, operationID, map[string]string{"text": "queued work"}, PromptInput{Text: "queued work"})
+	row, _, err := mgr.Submissions.AdmitPrompt(ctx, sess.ID, operationID, map[string]string{"text": "queued work"}, promptinput.Input{Text: "queued work"})
 	testutil.FailErr(t, "admit prompt", err)
 
 	func() {
-		lock := mgr.promptState.Prompt.Acquire(sess.ID)
+		lock := mgr.Runner.Execution.Prompt.Acquire(sess.ID)
 		lock.Lock()
 		defer lock.Unlock()
-		if _, err := mgr.RunPromptSubmission(ctx, row.ID); err != nil {
+		if _, err := mgr.Submissions.RunPromptSubmission(ctx, row.ID); err != nil {
 			t.Fatalf("RunPromptSubmission while busy: %v", err)
 		}
 	}()
 
-	mgr.DrainQueue(ctx, sess.ID)
+	mgr.Submissions.DrainQueue(ctx, sess.ID)
 
-	if got := mgr.queue.Snapshot(sess.ID); len(got.QueueItems) != 0 {
+	if got := mgr.Resources.Queue.Snapshot(sess.ID); len(got.QueueItems) != 0 {
 		t.Fatalf("drain left items: %+v", got.QueueItems)
 	}
-	stored, err := mgr.GetPromptSubmission(ctx, row.ID)
+	stored, err := mgr.Submissions.GetPromptSubmission(ctx, row.ID)
 	testutil.FailErr(t, "get submission", err)
 	if stored.Status != store.PromptSubmissionComplete {
 		t.Fatalf("receipt status = %s (error %q), want complete after drain", stored.Status, stored.Error)
 	}
-	msgs, err := mgr.GetMessages(ctx, sess.ID)
+	msgs, err := mgr.Runner.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "get messages", err)
 	if len(msgs) == 0 || msgs[0].Role != api.MessageRoleUser || msgs[0].Content != "queued work" {
 		t.Fatalf("queued turn did not run as the user prompt: %+v", msgs)
@@ -288,7 +289,7 @@ func TestQueueDrainRunsSubmissionReceiptLifecycle(t *testing.T) {
 func TestTakeQueuedSendPersistsContinuationWithoutOpeningNewTurn(t *testing.T) {
 	ctx := t.Context()
 	st := store.NewMemory()
-	mgr := NewManager(st, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	testutil.FailErr(t, "append opening user turn", st.AppendMessages(ctx, sess.ID, api.Message{
@@ -299,16 +300,16 @@ func TestTakeQueuedSendPersistsContinuationWithoutOpeningNewTurn(t *testing.T) {
 	testutil.FailErr(t, "mark session busy", st.UpdateSession(ctx, sess.ID, func(current *api.Session) {
 		current.Status = api.SessionStatusBusy
 	}))
-	row, _, err := mgr.AdmitPrompt(ctx, sess.ID, uuid.NewString(), "send", PromptInput{Text: "Use new.go instead"})
+	row, _, err := mgr.Submissions.AdmitPrompt(ctx, sess.ID, uuid.NewString(), "send", promptinput.Input{Text: "Use new.go instead"})
 	testutil.FailErr(t, "admit queued prompt", err)
-	draft := mgr.queue.AppendOrdered(sess.ID, row.ID, row.SubmittedBy, "Use new.go instead", row.AdmissionSeq, row.CreatedAt)
-	draft, err = mgr.QueueSend(ctx, sess.ID, draft.Revision)
+	draft := mgr.Resources.Queue.AppendOrdered(sess.ID, row.ID, row.SubmittedBy, "Use new.go instead", row.AdmissionSeq, row.CreatedAt)
+	draft, err = mgr.Chats.Drafts.Send(ctx, sess.ID, draft.Revision)
 	testutil.FailErr(t, "request send", err)
 	if !draft.Sending {
 		t.Fatal("send reservation was not exposed in the draft")
 	}
 
-	messages, err := mgr.takeQueuedSend(ctx, sess.ID)
+	messages, err := mgr.Submissions.TakeSend(ctx, sess.ID)
 	testutil.FailErr(t, "take queued send", err)
 	if len(messages) != 1 {
 		t.Fatalf("sent messages = %d want 1", len(messages))
@@ -329,7 +330,7 @@ func TestTakeQueuedSendPersistsContinuationWithoutOpeningNewTurn(t *testing.T) {
 	if stored.Status != store.PromptSubmissionComplete {
 		t.Fatalf("prompt receipt = %s want complete", stored.Status)
 	}
-	if after := mgr.QueueSnapshot(sess.ID); after.Sending || len(after.QueueItems) != 0 {
+	if after := mgr.Chats.Drafts.Snapshot(sess.ID); after.Sending || len(after.QueueItems) != 0 {
 		t.Fatalf("queue after send = %+v", after)
 	}
 }
@@ -347,20 +348,20 @@ func TestQueueSendWithoutActivePromptLoopStartsContinuationCycle(t *testing.T) {
 	testutil.FailErr(t, "mark session busy", st.UpdateSession(ctx, sess.ID, func(current *api.Session) {
 		current.Status = api.SessionStatusBusy
 	}))
-	row, _, err := mgr.AdmitPrompt(ctx, sess.ID, uuid.NewString(), "send", PromptInput{Text: "Change the approach"})
+	row, _, err := mgr.Submissions.AdmitPrompt(ctx, sess.ID, uuid.NewString(), "send", promptinput.Input{Text: "Change the approach"})
 	testutil.FailErr(t, "admit queued prompt", err)
-	draft := mgr.queue.AppendOrdered(sess.ID, row.ID, row.SubmittedBy, "Change the approach", row.AdmissionSeq, row.CreatedAt)
-	_, err = mgr.QueueSend(ctx, sess.ID, draft.Revision)
+	draft := mgr.Resources.Queue.AppendOrdered(sess.ID, row.ID, row.SubmittedBy, "Change the approach", row.AdmissionSeq, row.CreatedAt)
+	_, err = mgr.Chats.Drafts.Send(ctx, sess.ID, draft.Revision)
 	testutil.FailErr(t, "request send", err)
 	persisted, err := st.GetPromptSubmission(ctx, row.ID)
 	testutil.FailErr(t, "read reserved receipt", err)
-	var persistedInput PromptInput
+	var persistedInput promptinput.Input
 	testutil.FailErr(t, "decode reserved receipt", json.Unmarshal([]byte(persisted.InputJSON), &persistedInput))
 	if !persistedInput.Continuation {
 		t.Fatal("send reservation did not persist continuation recovery intent")
 	}
 
-	drained, err := mgr.drainQueuedNextTurn(ctx, sess.ID)
+	drained, err := mgr.Submissions.DrainNext(ctx, sess.ID)
 	testutil.FailErr(t, "drain continuation", err)
 	if !drained {
 		t.Fatal("reserved send was not drained")
@@ -389,25 +390,25 @@ func TestQueueSendWithoutActivePromptLoopStartsContinuationCycle(t *testing.T) {
 func TestQueueRemoveCancelsSubmissionReceipt(t *testing.T) {
 	ctx := context.Background()
 	st := store.NewMemory()
-	mgr := NewManager(st, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
-	row, _, err := mgr.AdmitPrompt(ctx, sess.ID, uuid.NewString(), map[string]string{"text": "drop me"}, PromptInput{Text: "drop me"})
+	row, _, err := mgr.Submissions.AdmitPrompt(ctx, sess.ID, uuid.NewString(), map[string]string{"text": "drop me"}, promptinput.Input{Text: "drop me"})
 	testutil.FailErr(t, "admit prompt", err)
 	func() {
-		lock := mgr.promptState.Prompt.Acquire(sess.ID)
+		lock := mgr.Runner.Execution.Prompt.Acquire(sess.ID)
 		lock.Lock()
 		defer lock.Unlock()
-		_, err := mgr.RunPromptSubmission(ctx, row.ID)
+		_, err := mgr.Submissions.RunPromptSubmission(ctx, row.ID)
 		testutil.FailErr(t, "enqueue submission", err)
 	}()
 
-	draft := mgr.queue.Snapshot(sess.ID)
-	if _, err := mgr.QueueRemove(ctx, sess.ID, draft.Revision, []string{row.ID}); err != nil {
+	draft := mgr.Resources.Queue.Snapshot(sess.ID)
+	if _, err := mgr.Chats.Drafts.Remove(ctx, sess.ID, draft.Revision, []string{row.ID}); err != nil {
 		testutil.FailErr(t, "queue remove", err)
 	}
-	stored, err := mgr.GetPromptSubmission(ctx, row.ID)
+	stored, err := mgr.Submissions.GetPromptSubmission(ctx, row.ID)
 	testutil.FailErr(t, "get submission", err)
 	if stored.Status != store.PromptSubmissionCanceled {
 		t.Fatalf("receipt status = %s, want canceled after removal", stored.Status)
@@ -417,7 +418,7 @@ func TestQueueRemoveCancelsSubmissionReceipt(t *testing.T) {
 func TestMixedContentReceiptWaitsForPriorWorkerCycle(t *testing.T) {
 	ctx := context.Background()
 	st := store.NewMemory()
-	mgr := NewManager(st, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	dir := t.TempDir()
@@ -426,12 +427,12 @@ func TestMixedContentReceiptWaitsForPriorWorkerCycle(t *testing.T) {
 		ID: "job-1", ParentSessionID: sess.ID, ProjectID: testdbseed.DefaultProjectID,
 		WorkspacePath: dir, Status: api.WorkerStatusRunning,
 	}}})
-	row, _, err := mgr.AdmitPrompt(ctx, sess.ID, uuid.NewString(), "mixed", PromptInput{
+	row, _, err := mgr.Submissions.AdmitPrompt(ctx, sess.ID, uuid.NewString(), "mixed", promptinput.Input{
 		Text: "inspect image", ArtifactIDs: []string{"artifact-1"},
 	})
 	testutil.FailErr(t, "admit mixed prompt", err)
 
-	resp, err := mgr.RunPromptSubmission(ctx, row.ID)
+	resp, err := mgr.Submissions.RunPromptSubmission(ctx, row.ID)
 	testutil.FailErr(t, "route mixed prompt", err)
 	if resp == nil || resp.MessageID != "" {
 		t.Fatalf("response = %+v, want accepted queued response", resp)
@@ -446,7 +447,7 @@ func TestMixedContentReceiptWaitsForPriorWorkerCycle(t *testing.T) {
 func TestQueueableReceiptJoinsDraftWhilePriorWorkerCycleRuns(t *testing.T) {
 	ctx := context.Background()
 	st := store.NewMemory()
-	mgr := NewManager(st, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	dir := t.TempDir()
@@ -455,15 +456,15 @@ func TestQueueableReceiptJoinsDraftWhilePriorWorkerCycleRuns(t *testing.T) {
 		ID: "job-1", ParentSessionID: sess.ID, ProjectID: testdbseed.DefaultProjectID,
 		WorkspacePath: dir, Status: api.WorkerStatusRunning,
 	}}})
-	row, _, err := mgr.AdmitPrompt(ctx, sess.ID, uuid.NewString(), "next", PromptInput{Text: "run next"})
+	row, _, err := mgr.Submissions.AdmitPrompt(ctx, sess.ID, uuid.NewString(), "next", promptinput.Input{Text: "run next"})
 	testutil.FailErr(t, "admit prompt", err)
 
-	resp, err := mgr.RunPromptSubmission(ctx, row.ID)
+	resp, err := mgr.Submissions.RunPromptSubmission(ctx, row.ID)
 	testutil.FailErr(t, "route prompt", err)
 	if resp == nil || resp.MessageID != "" {
 		t.Fatalf("response = %+v, want accepted queued response", resp)
 	}
-	draft := mgr.queue.Snapshot(sess.ID)
+	draft := mgr.Resources.Queue.Snapshot(sess.ID)
 	if len(draft.QueueItems) != 1 || draft.QueueItems[0].ID != row.ID {
 		t.Fatalf("draft = %+v, want waiting receipt", draft.QueueItems)
 	}
@@ -472,7 +473,7 @@ func TestQueueableReceiptJoinsDraftWhilePriorWorkerCycleRuns(t *testing.T) {
 func TestQueueRoundCompleteRequiresIdleWorkerCycle(t *testing.T) {
 	ctx := context.Background()
 	store := store.NewMemory()
-	mgr := NewManager(store, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(store, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 
 	sess, err := store.Create(ctx, api.CreateSessionRequest{
 		Posture: api.SessionPostureBuild,
@@ -484,7 +485,7 @@ func TestQueueRoundCompleteRequiresIdleWorkerCycle(t *testing.T) {
 	workers := &queueRoundWorkerQueue{}
 	mgr.SetWorkerQueue(workers)
 
-	if !mgr.queueRoundComplete(ctx, sess.ID) {
+	if !mgr.Admission.RoundComplete(ctx, sess.ID) {
 		t.Fatal("expected complete with no workers")
 	}
 
@@ -495,24 +496,24 @@ func TestQueueRoundCompleteRequiresIdleWorkerCycle(t *testing.T) {
 		Status: api.WorkerStatusPending,
 	})
 
-	if mgr.queueRoundComplete(ctx, sess.ID) {
+	if mgr.Admission.RoundComplete(ctx, sess.ID) {
 		t.Fatal("expected incomplete while workers in flight")
 	}
 }
 
 func TestDrainQueuedNextTurnRespectsHold(t *testing.T) {
-	mgr := NewManager(store.NewMemory(), nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr)
 	const id = "sess-hold"
 
-	draft := mgr.queue.AppendOrdered(id, "", testutil.HostOwner().ID, "queued", 0, time.Time{})
-	if _, err := mgr.queue.SetHold(id, draft.Revision, true); err != nil {
+	draft := mgr.Resources.Queue.AppendOrdered(id, "", testutil.HostOwner().ID, "queued", 0, time.Time{})
+	if _, err := mgr.Resources.Queue.SetHold(id, draft.Revision, true); err != nil {
 		testutil.FailErr(t, "hold queue", err)
 	}
 
-	mgr.drainQueuedNextTurn(context.Background(), id)
+	mgr.Submissions.DrainNext(context.Background(), id)
 
-	if got := mgr.queue.Snapshot(id); len(got.QueueItems) != 1 {
+	if got := mgr.Resources.Queue.Snapshot(id); len(got.QueueItems) != 1 {
 		t.Fatalf("hold should have suppressed drain, draft = %+v", got.QueueItems)
 	}
 }
@@ -525,15 +526,15 @@ func TestDrainQueueRunsQueuedTurn(t *testing.T) {
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 
-	row, _, err := mgr.AdmitPrompt(ctx, sess.ID, uuid.NewString(), "queued work", PromptInput{Text: "queued work"})
+	row, _, err := mgr.Submissions.AdmitPrompt(ctx, sess.ID, uuid.NewString(), "queued work", promptinput.Input{Text: "queued work"})
 	testutil.FailErr(t, "admit queued prompt", err)
-	mgr.queue.AppendOrdered(sess.ID, row.ID, row.SubmittedBy, "queued work", 0, time.Time{})
-	mgr.DrainQueue(ctx, sess.ID)
+	mgr.Resources.Queue.AppendOrdered(sess.ID, row.ID, row.SubmittedBy, "queued work", 0, time.Time{})
+	mgr.Submissions.DrainQueue(ctx, sess.ID)
 
-	if got := mgr.queue.Snapshot(sess.ID); len(got.QueueItems) != 0 {
+	if got := mgr.Resources.Queue.Snapshot(sess.ID); len(got.QueueItems) != 0 {
 		t.Fatalf("drain left items: %+v", got.QueueItems)
 	}
-	msgs, err := mgr.GetMessages(ctx, sess.ID)
+	msgs, err := mgr.Runner.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "get messages", err)
 	if len(msgs) < 2 {
 		t.Fatalf("queued turn did not run, messages = %d", len(msgs))
@@ -541,7 +542,7 @@ func TestDrainQueueRunsQueuedTurn(t *testing.T) {
 	if msgs[0].Role != api.MessageRoleUser || msgs[0].Content != "queued work" {
 		t.Fatalf("first message is not the queued user prompt: %+v", msgs[0])
 	}
-	closed, err := mgr.GetPromptSubmission(ctx, row.ID)
+	closed, err := mgr.Submissions.GetPromptSubmission(ctx, row.ID)
 	testutil.FailErr(t, "get drained receipt", err)
 	if closed.Status != store.PromptSubmissionComplete {
 		t.Fatalf("drained receipt status = %s, want complete", closed.Status)
@@ -556,13 +557,13 @@ func TestDrainQueueRetainsItemWithoutReceipt(t *testing.T) {
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 
-	mgr.queue.AppendOrdered(sess.ID, "", testutil.HostOwner().ID, "orphan work", 0, time.Time{})
-	mgr.DrainQueue(ctx, sess.ID)
-	if draft := mgr.queue.Snapshot(sess.ID); len(draft.QueueItems) != 1 || draft.QueueItems[0].Text != "orphan work" {
+	mgr.Resources.Queue.AppendOrdered(sess.ID, "", testutil.HostOwner().ID, "orphan work", 0, time.Time{})
+	mgr.Submissions.DrainQueue(ctx, sess.ID)
+	if draft := mgr.Resources.Queue.Snapshot(sess.ID); len(draft.QueueItems) != 1 || draft.QueueItems[0].Text != "orphan work" {
 		t.Fatalf("receiptless item disappeared from draft: %+v", draft.QueueItems)
 	}
 
-	msgs, err := mgr.GetMessages(ctx, sess.ID)
+	msgs, err := mgr.Runner.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "get messages", err)
 	if len(msgs) != 0 {
 		t.Fatalf("receiptless item ran anyway, messages = %d", len(msgs))
@@ -573,20 +574,20 @@ func TestDrainQueueRetainsDraftWhenReceiptClaimFails(t *testing.T) {
 	ctx := context.Background()
 	wantErr := errors.New("receipt store unavailable")
 	st := &batchClaimFailStore{Memory: store.NewMemory(), err: wantErr}
-	mgr := NewManager(st, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	row, _, err := mgr.AdmitPrompt(ctx, sess.ID, uuid.NewString(), "queued work", PromptInput{Text: "queued work"})
+	row, _, err := mgr.Submissions.AdmitPrompt(ctx, sess.ID, uuid.NewString(), "queued work", promptinput.Input{Text: "queued work"})
 	testutil.FailErr(t, "admit prompt", err)
-	draft := mgr.queue.AppendOrdered(sess.ID, row.ID, row.SubmittedBy, "queued work", row.AdmissionSeq, row.CreatedAt)
+	draft := mgr.Resources.Queue.AppendOrdered(sess.ID, row.ID, row.SubmittedBy, "queued work", row.AdmissionSeq, row.CreatedAt)
 
-	mgr.DrainQueue(ctx, sess.ID)
+	mgr.Submissions.DrainQueue(ctx, sess.ID)
 
-	after := mgr.queue.Snapshot(sess.ID)
+	after := mgr.Resources.Queue.Snapshot(sess.ID)
 	if after.Revision != draft.Revision || len(after.QueueItems) != 1 || after.QueueItems[0].ID != row.ID {
 		t.Fatalf("failed claim changed draft: before=%+v after=%+v", draft, after)
 	}
-	stored, err := mgr.GetPromptSubmission(ctx, row.ID)
+	stored, err := mgr.Submissions.GetPromptSubmission(ctx, row.ID)
 	testutil.FailErr(t, "get prompt submission", err)
 	if stored.Status != store.PromptSubmissionQueued {
 		t.Fatalf("receipt status = %s, want queued after failed atomic claim", stored.Status)
@@ -596,12 +597,12 @@ func TestDrainQueueRetainsDraftWhenReceiptClaimFails(t *testing.T) {
 func TestQueueHeadWaitsForEarlierMixedContentReceipt(t *testing.T) {
 	ctx := context.Background()
 	st := store.NewMemory()
-	mgr := NewManager(st, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	base := time.Date(2026, 8, 17, 12, 0, 0, 0, time.UTC)
 
-	put := func(id string, in PromptInput, at time.Time) *store.PromptSubmission {
+	put := func(id string, in promptinput.Input, at time.Time) *store.PromptSubmission {
 		raw, marshalErr := json.Marshal(in)
 		testutil.FailErr(t, "encode prompt input", marshalErr)
 		row, _, putErr := st.PutPromptSubmission(ctx, store.PromptSubmission{
@@ -611,17 +612,17 @@ func TestQueueHeadWaitsForEarlierMixedContentReceipt(t *testing.T) {
 		testutil.FailErr(t, "put prompt submission", putErr)
 		return row
 	}
-	mixed := put(uuid.NewString(), PromptInput{Text: "inspect image", ArtifactIDs: []string{"artifact-1"}}, base)
-	text := put(uuid.NewString(), PromptInput{Text: "run second"}, base.Add(time.Second))
-	mgr.queue.AppendOrdered(sess.ID, text.ID, text.SubmittedBy, "run second", text.AdmissionSeq, text.CreatedAt)
+	mixed := put(uuid.NewString(), promptinput.Input{Text: "inspect image", ArtifactIDs: []string{"artifact-1"}}, base)
+	text := put(uuid.NewString(), promptinput.Input{Text: "run second"}, base.Add(time.Second))
+	mgr.Resources.Queue.AppendOrdered(sess.ID, text.ID, text.SubmittedBy, "run second", text.AdmissionSeq, text.CreatedAt)
 
-	dispatchable, err := mgr.queueHeadIsDispatchable(ctx, sess.ID)
+	dispatchable, err := mgr.Submissions.HeadDispatchable(ctx, sess.ID)
 	testutil.FailErr(t, "check queue head", err)
 	if dispatchable {
 		t.Fatal("text draft became dispatchable before the mixed-content receipt")
 	}
 
-	draft := mgr.queue.Snapshot(sess.ID)
+	draft := mgr.Resources.Queue.Snapshot(sess.ID)
 	if len(draft.QueueItems) != 1 || draft.QueueItems[0].ID != text.ID {
 		t.Fatalf("later text draft changed while mixed receipt was first: %+v", draft.QueueItems)
 	}
@@ -642,14 +643,14 @@ func TestDrainQueueReplaysStoredInput(t *testing.T) {
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 
-	stored := PromptInput{Text: "stored prose"}
-	row, _, err := mgr.AdmitPrompt(ctx, sess.ID, uuid.NewString(), stored, stored)
+	stored := promptinput.Input{Text: "stored prose"}
+	row, _, err := mgr.Submissions.AdmitPrompt(ctx, sess.ID, uuid.NewString(), stored, stored)
 	testutil.FailErr(t, "admit queued prompt", err)
 	// The receipt records executable input.
-	mgr.queue.AppendOrdered(sess.ID, row.ID, row.SubmittedBy, "stale draft preview", 0, time.Time{})
-	mgr.DrainQueue(ctx, sess.ID)
+	mgr.Resources.Queue.AppendOrdered(sess.ID, row.ID, row.SubmittedBy, "stale draft preview", 0, time.Time{})
+	mgr.Submissions.DrainQueue(ctx, sess.ID)
 
-	msgs, err := mgr.GetMessages(ctx, sess.ID)
+	msgs, err := mgr.Runner.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "get messages", err)
 	if len(msgs) == 0 || msgs[0].Content != "stored prose" {
 		t.Fatalf("turn did not run from the stored input, messages = %+v", msgs)
@@ -664,23 +665,23 @@ func TestQueueUpdateTextRewritesStoredInput(t *testing.T) {
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 
-	row, _, err := mgr.AdmitPrompt(ctx, sess.ID, uuid.NewString(), "first draft", PromptInput{Text: "first draft"})
+	row, _, err := mgr.Submissions.AdmitPrompt(ctx, sess.ID, uuid.NewString(), "first draft", promptinput.Input{Text: "first draft"})
 	testutil.FailErr(t, "admit queued prompt", err)
-	draft := mgr.queue.AppendOrdered(sess.ID, row.ID, row.SubmittedBy, "first draft", 0, time.Time{})
+	draft := mgr.Resources.Queue.AppendOrdered(sess.ID, row.ID, row.SubmittedBy, "first draft", 0, time.Time{})
 
-	_, err = mgr.QueueUpdateText(ctx, sess.ID, draft.Revision, row.ID, "edited text")
+	_, err = mgr.Chats.Drafts.UpdateText(ctx, sess.ID, draft.Revision, row.ID, "edited text")
 	testutil.FailErr(t, "queue update text", err)
 
-	stored, err := mgr.GetPromptSubmission(ctx, row.ID)
+	stored, err := mgr.Submissions.GetPromptSubmission(ctx, row.ID)
 	testutil.FailErr(t, "get edited receipt", err)
-	var in PromptInput
+	var in promptinput.Input
 	testutil.FailErr(t, "decode stored input", json.Unmarshal([]byte(stored.InputJSON), &in))
 	if in.Text != "edited text" {
 		t.Fatalf("stored input text = %q, want the edited text", in.Text)
 	}
 
-	mgr.DrainQueue(ctx, sess.ID)
-	msgs, err := mgr.GetMessages(ctx, sess.ID)
+	mgr.Submissions.DrainQueue(ctx, sess.ID)
+	msgs, err := mgr.Runner.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "get messages", err)
 	if len(msgs) == 0 || msgs[0].Content != "edited text" {
 		t.Fatalf("drain ran the pre-edit text: %+v", msgs)
@@ -688,7 +689,7 @@ func TestQueueUpdateTextRewritesStoredInput(t *testing.T) {
 }
 
 func TestCoalescePromptInputs(t *testing.T) {
-	got := coalescePromptInputs([]PromptInput{
+	got := promptinput.Coalesce([]promptinput.Input{
 		{Text: "a"}, {Text: "b"}, {Text: "  "}, {Text: "c"},
 	})
 	want := "a\n\nb\n\nc"
@@ -700,22 +701,22 @@ func TestCoalescePromptInputs(t *testing.T) {
 func TestPromptRidesQueueAcceptsOnlyEditableText(t *testing.T) {
 	tests := []struct {
 		name string
-		in   PromptInput
+		in   promptinput.Input
 		want bool
 	}{
-		{name: "text", in: PromptInput{Text: "next"}, want: true},
-		{name: "blank", in: PromptInput{Text: "  "}},
-		{name: "artifact", in: PromptInput{Text: "next", ArtifactIDs: []string{"artifact"}}},
-		{name: "content part", in: PromptInput{Text: "next", ContentParts: []api.MessageContentPart{{Content: "part"}}}},
-		{name: "tool profile", in: PromptInput{Text: "next", ToolProfile: "editor"}},
-		{name: "write root", in: PromptInput{Text: "next", WritePinRootID: "root"}},
-		{name: "write glob", in: PromptInput{Text: "next", WritePinGlobs: []string{"file.go"}}},
-		{name: "host signal", in: PromptInput{Text: "next", HostSignal: &PromptHostSignal{Kind: api.MessageKindHostKick}}},
-		{name: "closeout", in: PromptInput{Text: "next", ProseFinish: true}},
+		{name: "text", in: promptinput.Input{Text: "next"}, want: true},
+		{name: "blank", in: promptinput.Input{Text: "  "}},
+		{name: "artifact", in: promptinput.Input{Text: "next", ArtifactIDs: []string{"artifact"}}},
+		{name: "content part", in: promptinput.Input{Text: "next", ContentParts: []api.MessageContentPart{{Content: "part"}}}},
+		{name: "tool profile", in: promptinput.Input{Text: "next", ToolProfile: "editor"}},
+		{name: "write root", in: promptinput.Input{Text: "next", WritePinRootID: "root"}},
+		{name: "write glob", in: promptinput.Input{Text: "next", WritePinGlobs: []string{"file.go"}}},
+		{name: "host signal", in: promptinput.Input{Text: "next", HostSignal: &promptinput.HostSignal{Kind: api.MessageKindHostKick}}},
+		{name: "closeout", in: promptinput.Input{Text: "next", ProseFinish: true}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if got := promptRidesQueue(test.in); got != test.want {
+			if got := test.in.RidesQueue(); got != test.want {
 				t.Fatalf("promptRidesQueue() = %v, want %v", got, test.want)
 			}
 		})

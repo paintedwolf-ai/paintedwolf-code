@@ -41,7 +41,7 @@ func directIPChatAuthority(
 	ttlSeconds int,
 ) []hitl.ApprovalAuthorityDelta {
 	return []hitl.ApprovalAuthorityDelta{{
-		Kind: hitl.AuthorityDirectIPChat, Grant: grant, ChatSessionID: action.ChatSession(),
+		Kind: hitl.AuthorityDirectIPChat, Grant: grant, ChatSessionID: action.Scope.ChatSession(),
 		DirectIPLease: &lease, TTLSeconds: ttlSeconds,
 	}}
 }
@@ -49,27 +49,27 @@ func directIPChatAuthority(
 func directIPChatGrantOffer(action hitl.ProposedAction, lease hitl.DirectIPLease) hitl.ApprovalGrantOffer {
 	chatConfinement := lease.ChatConfinementDigest
 	if chatConfinement == "" {
-		chatConfinement = hitl.DirectIPChatConfinementDigest(action.Contained.Roots, action.Contained.Egress)
+		chatConfinement = hitl.DirectIPChatConfinementDigest(action.Execution.Contained.Roots, action.Execution.Contained.Egress)
 	}
 	grant := hitl.ApprovalGrant{
 		Scope: hitl.ApprovalGrantScopeChat,
 		// The predicate pattern is the chat confinement digest, not the command text or exact triple:
 		// a chat lease covers direct network access for any command under the same confinement roots.
 		Predicate:     hitl.ApprovalGrantPredicate{Category: hitl.ApprovalGrantCategoryDirectIP, Pattern: chatConfinement},
-		ChatSessionID: action.ChatSession(),
-		ProjectID:     action.ProjectID,
-		ProjectDir:    action.ProjectDir,
+		ChatSessionID: action.Scope.ChatSession(),
+		ProjectID:     action.Scope.ProjectID,
+		ProjectDir:    action.Scope.ProjectDir,
 		Title:         hitl.TitleAllowForThisChat,
 		Coverage:      directIPCoverage(lease),
 		ExpiresWhen:   hitl.ExpiresWhenChatDeleted,
 		ReaskWhen:     "the confinement roots change",
-		Witness:       hitl.BoundaryWitness(action.Contained),
+		Witness:       hitl.BoundaryWitness(action.Execution.Contained),
 	}
 	sum := sha256.Sum256([]byte(strings.Join([]string{
 		string(hitl.ApprovalGrantScopeChat),
 		hitl.ApprovalGrantCategoryDirectIP,
 		chatConfinement,
-		action.ChatSession(),
+		action.Scope.ChatSession(),
 	}, "\x00")))
 	grant.ID = "grant_" + hex.EncodeToString(sum[:8])
 	return hitl.ApprovalGrantOffer{

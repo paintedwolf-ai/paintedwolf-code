@@ -1,6 +1,11 @@
 package contract
 
 import (
+	"maps"
+	"path/filepath"
+	"strings"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
@@ -12,10 +17,6 @@ import (
 	"github.com/lycaon/lycaon/internal/workflow/verdictcall"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/workflowfixture"
-	"maps"
-	"path/filepath"
-	"strings"
-	"testing"
 )
 
 // Submissions are generated from the projected schemas, so every projected

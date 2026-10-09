@@ -10,6 +10,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/session/workerworkspace"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/sourceledger"
@@ -98,10 +99,7 @@ func TestWorkerBranchEditRecordsAgainstWorkerBranch(t *testing.T) {
 			testutil.FailErr(t, "create worker branch", err)
 			branch, err := newBranchWorkspace(binding.Root)
 			testutil.FailErr(t, "new branch workspace", err)
-			tctx, err := (&Manager{}).EnsureWorkerBranch(ctx, tools.ToolContext{
-				Source: tools.InvocationSource{WorkerBranchRoot: binding.Root,
-					BranchWorkspace: branch},
-			})
+			tctx, err := workerworkspace.New(nil, nil, newBranchWorkspace).EnsureBranch(ctx, tools.ToolContext{Source: tools.InvocationSource{WorkerBranchRoot: binding.Root, BranchWorkspace: branch}})
 			testutil.FailErr(t, "ensure worker branch", err)
 
 			ledger := &workerBranchLedgerCapture{}

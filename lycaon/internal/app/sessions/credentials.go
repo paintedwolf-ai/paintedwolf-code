@@ -102,22 +102,22 @@ func (c *credentialFiles) managedFingerprints(projectID string) map[secretmatch.
 	return held
 }
 
-func wireCredentialObservations(mgr *session.Manager, fp *secretmatch.Fingerprinter, matcher *secretmatch.Matcher, harvest *secretharvest.Runtime) {
+func wireCredentialObservations(mgr *session.Host, fp *secretmatch.Fingerprinter, matcher *secretmatch.Matcher, harvest *secretharvest.Runtime) {
 	if mgr == nil {
 		return
 	}
-	mgr.SetCredentialSlotProvider(func(ctx context.Context, sess *api.Session) *secretmint.Inspector {
-		if view := mgr.Catalog().ViewForSession(ctx, sess); view != nil {
+	mgr.ToolPolicy.SetCredentialSlotProvider(func(ctx context.Context, sess *api.Session) *secretmint.Inspector {
+		if view := mgr.Catalog.ViewForSession(ctx, sess); view != nil {
 			return view.CredentialSlots
 		}
 		return nil
 	})
-	mgr.SetSecretFingerprinter(fp)
-	mgr.SetIgnoredCredentialCandidate(func(ctx context.Context, projectID, value string) bool {
+	mgr.ToolPolicy.SetSecretFingerprinter(fp)
+	mgr.ToolPolicy.SetIgnoredCredentialCandidate(func(ctx context.Context, projectID, value string) bool {
 		return matcher.Ignored(secretmatch.WithAskAttribution(ctx, secretmatch.AskAttribution{ProjectID: projectID}), value)
 	})
 	if harvest != nil {
-		mgr.SetHarvestedFingerprint(func(root string, f secretmatch.SecretFingerprint) bool {
+		mgr.ToolPolicy.SetHarvestedFingerprint(func(root string, f secretmatch.SecretFingerprint) bool {
 			return harvest.Has(root, f)
 		})
 	}

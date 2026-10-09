@@ -31,49 +31,53 @@ func TestCloseoutCitationsRequiredHostAssemblesImmediately(t *testing.T) {
 			var kickAppends int
 			st := &promptLoopTurnState{coordinatorFrame: testReportFrame(), draftSlotID: "slot-1", draftSlotAppended: true, turnTools: []string{"read"}}
 			loop := NewPromptLoopForTest(PromptLoopDeps{
-				HintConfig: loadCoordinatorTestHintConfig(t),
-				EvidenceLedger: closeoutLedgerReader{ledger: evidence.Ledger{
-					Handles: map[string]evidence.Record{
-						"read#1": {
-							Handle: "read#1",
-							Kind:   "read",
-							Path:   "src/a.go",
-							Body:   []string{"package main"},
+				Closeout: CloseoutDeps{
+					HintConfig: loadCoordinatorTestHintConfig(t),
+					EvidenceLedger: closeoutLedgerReader{ledger: evidence.Ledger{
+						Handles: map[string]evidence.Record{
+							"read#1": {
+								Handle: "read#1",
+								Kind:   "read",
+								Path:   "src/a.go",
+								Body:   []string{"package main"},
+							},
 						},
+						ByPath:       map[string][]string{"src/a.go": {"read#1"}},
+						PathFidelity: map[string]string{"src/a.go": "structured"},
+					}},
+					AssembleLedgerCloseout: func(_ context.Context, _, _ string, forcedBy []string, drafted string, retryCount int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
+						if len(forcedBy) != 1 || forcedBy[0] != tc.code {
+							t.Fatalf("forcedBy = %v want [%s]", forcedBy, tc.code)
+						}
+						parsed, ok := guidance.ParseCoordinatorCompletionReport(drafted)
+						if !ok || parsed.Synthesis != "no citations here" || parsed.Headline != "Overview" || len(parsed.Limits) != 1 {
+							t.Fatalf("drafted = %q", drafted)
+						}
+						if retryCount != 0 {
+							t.Fatalf("retryCount = %d want 0 (no model bounce)", retryCount)
+						}
+						return parsed,
+							&api.CitationGrounding{
+								HostAssembled: true,
+								Traced:        false,
+								HintCode:      tc.code,
+								CitedEvidence: []api.CitationGroundingCitedEvidence{{Handle: "read#1", Path: "src/a.go", Verdict: api.CitationVerdictMatched}},
+							}
 					},
-					ByPath:       map[string][]string{"src/a.go": {"read#1"}},
-					PathFidelity: map[string]string{"src/a.go": "structured"},
-				}},
-				AssembleLedgerCloseout: func(_ context.Context, _, _ string, forcedBy []string, drafted string, retryCount int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
-					if len(forcedBy) != 1 || forcedBy[0] != tc.code {
-						t.Fatalf("forcedBy = %v want [%s]", forcedBy, tc.code)
-					}
-					parsed, ok := guidance.ParseCoordinatorCompletionReport(drafted)
-					if !ok || parsed.Synthesis != "no citations here" || parsed.Headline != "Overview" || len(parsed.Limits) != 1 {
-						t.Fatalf("drafted = %q", drafted)
-					}
-					if retryCount != 0 {
-						t.Fatalf("retryCount = %d want 0 (no model bounce)", retryCount)
-					}
-					return parsed,
-						&api.CitationGrounding{
-							HostAssembled: true,
-							Traced:        false,
-							HintCode:      tc.code,
-							CitedEvidence: []api.CitationGroundingCitedEvidence{{Handle: "read#1", Path: "src/a.go", Verdict: api.CitationVerdictMatched}},
-						}
 				},
-				UpdateMessage: func(_ context.Context, _, _ string, msg api.Message) error {
-					committed = msg
-					return nil
-				},
-				AppendMessages: func(_ context.Context, _ string, msgs ...api.Message) error {
-					for _, m := range msgs {
-						if m.Role == api.MessageRoleUser {
-							kickAppends++
+				Projection: ProjectionDeps{
+					UpdateMessage: func(_ context.Context, _, _ string, msg api.Message) error {
+						committed = msg
+						return nil
+					},
+					AppendMessages: func(_ context.Context, _ string, msgs ...api.Message) error {
+						for _, m := range msgs {
+							if m.Role == api.MessageRoleUser {
+								kickAppends++
+							}
 						}
-					}
-					return nil
+						return nil
+					},
 				},
 			})
 
@@ -82,7 +86,7 @@ func TestCloseoutCitationsRequiredHostAssemblesImmediately(t *testing.T) {
 				{ID: "slot-1", Role: api.MessageRoleAssistant, Content: "no citations here", Visibility: api.MessageVisibilityInternal},
 			}
 			report := guidance.CoordinatorCompletionReport{Synthesis: "no citations here", Headline: "Overview", Limits: []string{"Inspection only."}}
-			out, err := turnCloseout{loop}.handleAcceptedCloseoutReport(
+			out, err := loop.Closeout.handleAcceptedCloseoutReport(
 				context.Background(), &api.Session{ID: "s1", WorkspacePath: t.TempDir()},
 				"s1", "", tc.surface, st, history,
 				api.Message{ID: "slot-1", Role: api.MessageRoleAssistant, Content: "no citations here"},
@@ -130,29 +134,33 @@ func TestCloseoutCitationRetryKeepsPinnedSynthesis(t *testing.T) {
 	var assembled string
 	st := &promptLoopTurnState{coordinatorFrame: testReportFrame(), draftSlotID: "slot-1", draftSlotAppended: true, turnTools: []string{"read"}}
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		HintConfig: loadCoordinatorTestHintConfig(t),
-		EvidenceLedger: closeoutLedgerReader{ledger: evidence.Ledger{
-			Handles: map[string]evidence.Record{
-				"read#1": {Handle: "read#1", Kind: "read", Path: "src/a.go", Body: []string{"package main"}},
+		Closeout: CloseoutDeps{
+			HintConfig: loadCoordinatorTestHintConfig(t),
+			EvidenceLedger: closeoutLedgerReader{ledger: evidence.Ledger{
+				Handles: map[string]evidence.Record{
+					"read#1": {Handle: "read#1", Kind: "read", Path: "src/a.go", Body: []string{"package main"}},
+				},
+				ByPath:       map[string][]string{"src/a.go": {"read#1"}},
+				PathFidelity: map[string]string{"src/a.go": "structured"},
+			}},
+			CloseoutStallState: func(_ context.Context, _ string) guidance.RetainedCloseout {
+				return guidance.RetainedCloseout{Active: true, Attempt: 1, PrevKey: "k", Drafted: pinned}
 			},
-			ByPath:       map[string][]string{"src/a.go": {"read#1"}},
-			PathFidelity: map[string]string{"src/a.go": "structured"},
-		}},
-		CloseoutStallState: func(_ context.Context, _ string) guidance.RetainedCloseout {
-			return guidance.RetainedCloseout{Active: true, Attempt: 1, PrevKey: "k", Drafted: pinned}
+			AssembleLedgerCloseout: func(_ context.Context, _, _ string, _ []string, drafted string, _ int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
+				assembled = drafted
+				return guidance.CoordinatorCompletionReport{Synthesis: drafted},
+					&api.CitationGrounding{HostAssembled: true, HintCode: guidance.InvestCitationsRequiredCode}
+			},
 		},
-		AssembleLedgerCloseout: func(_ context.Context, _, _ string, _ []string, drafted string, _ int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
-			assembled = drafted
-			return guidance.CoordinatorCompletionReport{Synthesis: drafted},
-				&api.CitationGrounding{HostAssembled: true, HintCode: guidance.InvestCitationsRequiredCode}
+		Projection: ProjectionDeps{
+			UpdateMessage: func(_ context.Context, _, _ string, _ api.Message) error { return nil },
 		},
-		UpdateMessage: func(_ context.Context, _, _ string, _ api.Message) error { return nil },
 	})
 	history := []api.Message{
 		{ID: "u1", Role: api.MessageRoleUser, Content: "research"},
 		{ID: "slot-1", Role: api.MessageRoleAssistant, Content: "Invented REST CLI success story", Visibility: api.MessageVisibilityInternal},
 	}
-	out, err := turnCloseout{loop}.handleAcceptedCloseoutReport(
+	out, err := loop.Closeout.handleAcceptedCloseoutReport(
 		context.Background(), &api.Session{ID: "s1", WorkspacePath: t.TempDir()},
 		"s1", "", "implement_investigate", st, history,
 		api.Message{ID: "slot-1", Role: api.MessageRoleAssistant, Content: "Invented REST CLI success story"},
@@ -184,40 +192,45 @@ func TestCloseoutCitationRepairPreservesReportOnCommit(t *testing.T) {
 			var committed api.Message
 			var assembled bool
 			loop := NewPromptLoopForTest(PromptLoopDeps{
-				HintConfig: loadCoordinatorTestHintConfig(t), EvidenceLedger: closeoutLedgerReader{ledger: ledger},
-				ProseCitationGrounding: func(_ context.Context, _ *api.Session, _ []api.Message, _, raw, surface string) *api.CitationGrounding {
-					report, ok := guidance.ParseCoordinatorCompletionReport(raw)
-					if !ok {
-						t.Fatalf("commit lost the report envelope: %q", raw)
-					}
-					ev := guidance.CloseoutEvidence{Ledger: ledger}
-					eval := guidance.EvaluateCloseoutCitations(evidence.CitationRoots{}, surface, report, ev)
-					return guidance.BuildCloseoutCitationGrounding(evidence.CitationRoots{}, surface, report, ev, eval)
+				Closeout: CloseoutDeps{
+					HintConfig:     loadCoordinatorTestHintConfig(t),
+					EvidenceLedger: closeoutLedgerReader{ledger: ledger},
+					ProseCitationGrounding: func(_ context.Context, _ *api.Session, _ []api.Message, _, raw, surface string) *api.CitationGrounding {
+						report, ok := guidance.ParseCoordinatorCompletionReport(raw)
+						if !ok {
+							t.Fatalf("commit lost the report envelope: %q", raw)
+						}
+						ev := guidance.CloseoutEvidence{Ledger: ledger}
+						eval := guidance.EvaluateCloseoutCitations(evidence.CitationRoots{}, surface, report, ev)
+						return guidance.BuildCloseoutCitationGrounding(evidence.CitationRoots{}, surface, report, ev, eval)
+					},
+					CloseoutStallState: func(context.Context, string) guidance.RetainedCloseout {
+						return guidance.RetainedCloseout{Active: true, Attempt: 1, PrevKey: guidance.InvestHandleNotObservedCode, Drafted: draft}
+					},
+					AssembleLedgerCloseout: func(_ context.Context, _, surface string, codes []string, raw string, retries int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
+						assembled = true
+						report, ok := guidance.ParseCoordinatorCompletionReport(raw)
+						if !ok {
+							t.Fatalf("fallback lost the retained report: %q", raw)
+						}
+						return guidance.AssembleRetainedCloseout(evidence.CitationRoots{}, surface, guidance.CloseoutEvidence{Ledger: ledger}, report, codes[0], retries)
+					},
 				},
-				CloseoutStallState: func(context.Context, string) guidance.RetainedCloseout {
-					return guidance.RetainedCloseout{Active: true, Attempt: 1, PrevKey: guidance.InvestHandleNotObservedCode, Drafted: draft}
-				},
-				AssembleLedgerCloseout: func(_ context.Context, _, surface string, codes []string, raw string, retries int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
-					assembled = true
-					report, ok := guidance.ParseCoordinatorCompletionReport(raw)
-					if !ok {
-						t.Fatalf("fallback lost the retained report: %q", raw)
-					}
-					return guidance.AssembleRetainedCloseout(evidence.CitationRoots{}, surface, guidance.CloseoutEvidence{Ledger: ledger}, report, codes[0], retries)
-				},
-				UpdateMessage: func(_ context.Context, _, _ string, msg api.Message) error {
-					committed = msg
-					return nil
+				Projection: ProjectionDeps{
+					UpdateMessage: func(_ context.Context, _, _ string, msg api.Message) error {
+						committed = msg
+						return nil
+					},
 				},
 			})
 			cleared := 0
-			loop.Deps.ClearCloseoutStall = func(context.Context, string) { cleared++ }
+			loop.Closeout.Deps.ClearCloseoutStall = func(context.Context, string) { cleared++ }
 			repaired := guidance.CoordinatorCompletionReport{Synthesis: "The merge succeeded.", Headline: "All done"}
 			if !removeAll {
 				repaired.CitedEvidence = []guidance.CoordinatorCitedEvidence{{Evidence: "command#1"}}
 			}
 			st := &promptLoopTurnState{coordinatorFrame: testReportFrame(), draftSlotID: "slot-1", draftSlotAppended: true, turnTools: []string{"command"}, closeoutRetry: closeoutRetryState{attempt: 1}}
-			out, err := turnCloseout{loop}.handleAcceptedCloseoutReport(t.Context(), &api.Session{ID: "s1", WorkspacePath: t.TempDir()}, "s1", "", "implement_investigate", st,
+			out, err := loop.Closeout.handleAcceptedCloseoutReport(t.Context(), &api.Session{ID: "s1", WorkspacePath: t.TempDir()}, "s1", "", "implement_investigate", st,
 				[]api.Message{{ID: "u1", Role: api.MessageRoleUser, Content: "merge"}, {ID: "slot-1", Role: api.MessageRoleAssistant}},
 				api.Message{ID: "slot-1", Role: api.MessageRoleAssistant}, guidance.CloseoutRead{Report: repaired})
 			testutil.FailErr(t, "commit citation repair", err)

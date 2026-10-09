@@ -270,7 +270,7 @@ func (s *Lifecycle) prepareSessionWorkspace(
 	if err := overlay.CheckCompatibility(); err != nil {
 		return err
 	}
-	if err := s.Sessions.WarmPostureOverlayForProject(p, workspacePath); err != nil {
+	if err := s.Sessions.Profiles.WarmPostureOverlayForProject(p, workspacePath); err != nil {
 		return err
 	}
 	if s.ProjectRules == nil || !requestscope.ProjectSurfaceApplies(s.Settings, p, projectcontrib.SurfaceProjectSettings) {

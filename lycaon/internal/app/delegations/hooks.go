@@ -277,7 +277,7 @@ func (r *Runtime) OnDelegationCloseout(ctx context.Context, sessionID, workflowR
 // SessionVerdictCatalog is the session's effective submit_verdict schema, or
 // the registered one when the session has no catalog view.
 func (r *Runtime) SessionVerdictCatalog(ctx context.Context, sessionID string) map[string]any {
-	if view := r.deps.Sessions.Manager.Catalog().ViewForSessionID(ctx, sessionID); view != nil && view.ToolSchemas != nil {
+	if view := r.deps.Sessions.Manager.Catalog.ViewForSessionID(ctx, sessionID); view != nil && view.ToolSchemas != nil {
 		if meta, ok := view.ToolSchemas.ToolMeta("submit_verdict"); ok {
 			return meta.ArgsSchema
 		}

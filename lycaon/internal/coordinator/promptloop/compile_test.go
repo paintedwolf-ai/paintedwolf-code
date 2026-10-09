@@ -26,15 +26,17 @@ func TestCompiledSurfaceExpandsCommandFamily(t *testing.T) {
 }
 
 func TestCompiledSurfaceLiveResourceAddsWaitOnInvestigate(t *testing.T) {
-	loop := &PromptLoop{Deps: PromptLoopDeps{
-		LiveResources: func(string) toolcontract.ResourcePresence {
-			return toolcontract.ResourcePresence{CommandJobs: true}
+	loop := NewPromptLoop(PromptLoopDeps{
+		Context: ContextDeps{
+			LiveResources: func(string) toolcontract.ResourcePresence {
+				return toolcontract.ResourcePresence{CommandJobs: true}
+			},
 		},
-	}}
+	})
 	sess := &api.Session{ID: "s1", WorkspacePath: "/tmp/repo"}
 	plan, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: toolcontract.SurfaceImplementInvestigate}, 1)
 	testutil.FailErr(t, "compile tool plan", err)
-	plan = modelTurn{loop}.compileRuntimeToolPlan(plan, api.CoordinatorRunContext{}, nil, nil, tools.MCPToolPlan{}, false, sess)
+	plan = loop.Context.compileRuntimeToolPlan(plan, api.CoordinatorRunContext{}, nil, nil, tools.MCPToolPlan{}, false, sess)
 	for _, name := range []string{"command_output", "command_stop", "wait"} {
 		if !plan.Immediate(name) {
 			t.Fatalf("investigate + live jobs missing immediate %s: %v", name, plan.ImmediateNames())
@@ -43,16 +45,18 @@ func TestCompiledSurfaceLiveResourceAddsWaitOnInvestigate(t *testing.T) {
 }
 
 func TestCompiledTurnPlanAdmitsActivatedOpenWorld(t *testing.T) {
-	loop := &PromptLoop{Deps: PromptLoopDeps{
-		LoadedTools: func(string) map[string]bool {
-			return map[string]bool{"mcp_github_create_pr": true}
+	loop := NewPromptLoop(PromptLoopDeps{
+		Context: ContextDeps{
+			LoadedTools: func(string) map[string]bool {
+				return map[string]bool{"mcp_github_create_pr": true}
+			},
 		},
-	}}
+	})
 	sess := &api.Session{ID: "s1", WorkspacePath: "/tmp/repo"}
 	plan, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: "implement_park"}, 1)
 	testutil.FailErr(t, "compile tool plan", err)
-	active := modelTurn{loop}.activeDeferredTools(sess)
-	plan = modelTurn{loop}.compileRuntimeToolPlan(plan, api.CoordinatorRunContext{}, nil, active, tools.MCPToolPlan{}, false, sess)
+	active := loop.Context.activeDeferredTools(sess)
+	plan = loop.Context.compileRuntimeToolPlan(plan, api.CoordinatorRunContext{}, nil, active, tools.MCPToolPlan{}, false, sess)
 	if !plan.Immediate("mcp_github_create_pr") {
 		t.Fatalf("activated MCP must bypass surface: %v", plan.ImmediateNames())
 	}
@@ -82,12 +86,14 @@ func TestCoordinatorToolsForTurnDefersSmallAutomaticMCPSet(t *testing.T) {
 		Handler:  func(context.Context, map[string]any, tools.ToolContext) (string, error) { return "", nil },
 	}))
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		Policy: registryTestPolicy{metas: []tools.ToolMeta{
-			{Name: "read"},
-			{Name: "request_tools"},
-			{Name: "mcp_coropa_intel_search", Deferred: true, Description: "Federated search", Source: tools.ToolSourceMCP, SourceID: "coropa"},
-		}},
-		Tools: reg,
+		Context: ContextDeps{
+			Policy: registryTestPolicy{metas: []tools.ToolMeta{
+				{Name: "read"},
+				{Name: "request_tools"},
+				{Name: "mcp_coropa_intel_search", Deferred: true, Description: "Federated search", Source: tools.ToolSourceMCP, SourceID: "coropa"},
+			}},
+			Tools: reg,
+		},
 	})
 	sess := &api.Session{ID: "s1", AgentType: prompts.CoordinatorProfileID, WorkspacePath: "/tmp/repo", Posture: api.SessionPostureBuild}
 	got, plan := mustCoordinatorToolsForTurn(t, loop, sess, inject.CoordinatorTurnFrame{})
@@ -111,16 +117,22 @@ func TestCoordinatorToolsForTurnPutsLiveJobControlsOnTheWire(t *testing.T) {
 	}
 	sess := &api.Session{ID: "s1", AgentType: prompts.CoordinatorProfileID, WorkspacePath: "/tmp/repo", Posture: api.SessionPostureBuild}
 
-	idle := NewPromptLoopForTest(PromptLoopDeps{Policy: registryTestPolicy{metas: metas}})
+	idle := NewPromptLoopForTest(PromptLoopDeps{
+		Context: ContextDeps{
+			Policy: registryTestPolicy{metas: metas},
+		},
+	})
 	got, _ := mustCoordinatorToolsForTurn(t, idle, sess, inject.CoordinatorTurnFrame{})
 	if containsMeta(got, "command_output") {
 		t.Fatalf("no live job should mean no control schema: %v", namesOf(got))
 	}
 
 	live := NewPromptLoopForTest(PromptLoopDeps{
-		Policy: registryTestPolicy{metas: metas},
-		LiveResources: func(string) toolcontract.ResourcePresence {
-			return toolcontract.ResourcePresence{CommandJobs: true}
+		Context: ContextDeps{
+			Policy: registryTestPolicy{metas: metas},
+			LiveResources: func(string) toolcontract.ResourcePresence {
+				return toolcontract.ResourcePresence{CommandJobs: true}
+			},
 		},
 	})
 	got, _ = mustCoordinatorToolsForTurn(t, live, sess, inject.CoordinatorTurnFrame{})
@@ -133,10 +145,12 @@ func TestCoordinatorToolsForTurnPutsLiveJobControlsOnTheWire(t *testing.T) {
 
 func TestCoordinatorToolsForTurnOffersSurfaceStickyProfileDeferredTool(t *testing.T) {
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		Policy: registryTestPolicy{metas: []tools.ToolMeta{
-			{Name: "scan_list", Deferred: true},
-			{Name: "request_tools"},
-		}},
+		Context: ContextDeps{
+			Policy: registryTestPolicy{metas: []tools.ToolMeta{
+				{Name: "scan_list", Deferred: true},
+				{Name: "request_tools"},
+			}},
+		},
 	})
 	sess := &api.Session{
 		ID: "s1", AgentType: prompts.CoordinatorProfileID,
@@ -188,19 +202,23 @@ func TestCompiledTurnPlanIncludesMCPOnInvestigate(t *testing.T) {
 		Contract: toolcontract.External("mcp:coropa"),
 		Handler:  func(context.Context, map[string]any, tools.ToolContext) (string, error) { return "", nil },
 	}))
-	loop := NewPromptLoopForTest(PromptLoopDeps{Tools: reg})
+	loop := NewPromptLoopForTest(PromptLoopDeps{
+		Context: ContextDeps{
+			Tools: reg,
+		},
+	})
 	sess := &api.Session{ID: "s1", WorkspacePath: "/tmp/repo"}
 	plan, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: "implement_investigate"}, 1)
 	testutil.FailErr(t, "compile investigate plan", err)
 	metas := reg.List()
-	mcpPlan := modelTurn{loop}.mcpToolPlan(context.Background(), sess, metas, nil)
-	plan = modelTurn{loop}.compileRuntimeToolPlan(plan, api.CoordinatorRunContext{}, metas, nil, mcpPlan, true, sess)
+	mcpPlan := loop.Context.mcpToolPlan(context.Background(), sess, metas, nil)
+	plan = loop.Context.compileRuntimeToolPlan(plan, api.CoordinatorRunContext{}, metas, nil, mcpPlan, true, sess)
 	if !plan.Addressable("mcp_coropa_intel_search") {
 		t.Fatalf("investigate must allow MCP invoke without request_tools: %v", plan.AddressableNames())
 	}
 	park, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: "implement_park"}, 1)
 	testutil.FailErr(t, "compile park plan", err)
-	park = modelTurn{loop}.compileRuntimeToolPlan(park, api.CoordinatorRunContext{}, metas, nil, mcpPlan, false, sess)
+	park = loop.Context.compileRuntimeToolPlan(park, api.CoordinatorRunContext{}, metas, nil, mcpPlan, false, sess)
 	if park.Addressable("mcp_coropa_intel_search") {
 		t.Fatalf("park must not allow MCP: %v", park.AddressableNames())
 	}
@@ -214,8 +232,10 @@ func TestCoordinatorToolsForTurnDefersRegistryMCPMissingFromList(t *testing.T) {
 		Handler:  func(context.Context, map[string]any, tools.ToolContext) (string, error) { return "", nil },
 	}))
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		Policy: registryTestPolicy{metas: []tools.ToolMeta{{Name: "read"}, {Name: "request_tools"}}},
-		Tools:  reg,
+		Context: ContextDeps{
+			Policy: registryTestPolicy{metas: []tools.ToolMeta{{Name: "read"}, {Name: "request_tools"}}},
+			Tools:  reg,
+		},
 	})
 	sess := &api.Session{ID: "s1", AgentType: prompts.CoordinatorProfileID, WorkspacePath: "/tmp/repo", Posture: api.SessionPostureBuild}
 	got, plan := mustCoordinatorToolsForTurn(t, loop, sess, inject.CoordinatorTurnFrame{})
@@ -235,8 +255,10 @@ func TestCoordinatorToolsForTurnAlwaysLoadedRegistryMCPIsEager(t *testing.T) {
 		Handler:  func(context.Context, map[string]any, tools.ToolContext) (string, error) { return "", nil },
 	}))
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		Policy: registryTestPolicy{metas: []tools.ToolMeta{{Name: "read"}, {Name: "request_tools"}}},
-		Tools:  reg,
+		Context: ContextDeps{
+			Policy: registryTestPolicy{metas: []tools.ToolMeta{{Name: "read"}, {Name: "request_tools"}}},
+			Tools:  reg,
+		},
 	})
 	sess := &api.Session{ID: "s1", AgentType: prompts.CoordinatorProfileID, WorkspacePath: "/tmp/repo", Posture: api.SessionPostureBuild}
 	got, plan := mustCoordinatorToolsForTurn(t, loop, sess, inject.CoordinatorTurnFrame{})
@@ -250,11 +272,13 @@ func TestCoordinatorToolsForTurnAlwaysLoadedRegistryMCPIsEager(t *testing.T) {
 
 func TestCoordinatorToolsForTurnDefersAutomaticMCPSet(t *testing.T) {
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		Policy: registryTestPolicy{metas: []tools.ToolMeta{
-			{Name: "request_tools"},
-			{Name: "mcp_alpha_read", Source: tools.ToolSourceMCP},
-			{Name: "mcp_beta_read", Source: tools.ToolSourceMCP},
-		}},
+		Context: ContextDeps{
+			Policy: registryTestPolicy{metas: []tools.ToolMeta{
+				{Name: "request_tools"},
+				{Name: "mcp_alpha_read", Source: tools.ToolSourceMCP},
+				{Name: "mcp_beta_read", Source: tools.ToolSourceMCP},
+			}},
+		},
 	})
 	sess := &api.Session{ID: "s1", AgentType: prompts.CoordinatorProfileID, WorkspacePath: "/tmp/repo", Posture: api.SessionPostureBuild}
 	got, plan := mustCoordinatorToolsForTurn(t, loop, sess, inject.CoordinatorTurnFrame{})
@@ -268,14 +292,16 @@ func TestCoordinatorToolsForTurnDefersAutomaticMCPSet(t *testing.T) {
 
 func TestCoordinatorToolsForTurnIntersectsActiveSurface(t *testing.T) {
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		Policy: registryTestPolicy{metas: []tools.ToolMeta{
-			{Name: "read"},
-			{Name: "command"},
-			{Name: "task"},
-			{Name: "wait"},
-		}},
-		ImplementSessionState: func(context.Context, *api.Session) surface.ImplementSessionState {
-			return surface.ImplementSessionState{WorkersInFlight: 1}
+		Context: ContextDeps{
+			Policy: registryTestPolicy{metas: []tools.ToolMeta{
+				{Name: "read"},
+				{Name: "command"},
+				{Name: "task"},
+				{Name: "wait"},
+			}},
+			ImplementSessionState: func(context.Context, *api.Session) surface.ImplementSessionState {
+				return surface.ImplementSessionState{WorkersInFlight: 1}
+			},
 		},
 	})
 	sess := &api.Session{ID: "s1", AgentType: prompts.CoordinatorProfileID, WorkspacePath: "/tmp/repo", Posture: api.SessionPostureBuild}
@@ -290,12 +316,14 @@ func TestCoordinatorToolsForTurnIntersectsActiveSurface(t *testing.T) {
 
 func TestCoordinatorToolsForTurnHidesMCPOnPark(t *testing.T) {
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		Policy: registryTestPolicy{metas: []tools.ToolMeta{
-			{Name: "read"},
-			{Name: "mcp_coropa_intel_search", Source: tools.ToolSourceMCP, SourceID: "coropa"},
-		}},
-		ImplementSessionState: func(context.Context, *api.Session) surface.ImplementSessionState {
-			return surface.ImplementSessionState{WorkersInFlight: 1}
+		Context: ContextDeps{
+			Policy: registryTestPolicy{metas: []tools.ToolMeta{
+				{Name: "read"},
+				{Name: "mcp_coropa_intel_search", Source: tools.ToolSourceMCP, SourceID: "coropa"},
+			}},
+			ImplementSessionState: func(context.Context, *api.Session) surface.ImplementSessionState {
+				return surface.ImplementSessionState{WorkersInFlight: 1}
+			},
 		},
 	})
 	sess := &api.Session{ID: "s1", AgentType: prompts.CoordinatorProfileID, WorkspacePath: "/tmp/repo", Posture: api.SessionPostureBuild}
@@ -313,10 +341,12 @@ func TestCoordinatorToolsForTurnAppendsActivatedMissingFromList(t *testing.T) {
 		Handler:  func(context.Context, map[string]any, tools.ToolContext) (string, error) { return "", nil },
 	}))
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		Policy: registryTestPolicy{metas: []tools.ToolMeta{{Name: "read"}}},
-		Tools:  reg,
-		LoadedTools: func(string) map[string]bool {
-			return map[string]bool{"mcp_coropa_intel_search": true}
+		Context: ContextDeps{
+			Policy: registryTestPolicy{metas: []tools.ToolMeta{{Name: "read"}}},
+			Tools:  reg,
+			LoadedTools: func(string) map[string]bool {
+				return map[string]bool{"mcp_coropa_intel_search": true}
+			},
 		},
 	})
 	sess := &api.Session{ID: "s1", AgentType: prompts.CoordinatorProfileID, WorkspacePath: "/tmp/repo", Posture: api.SessionPostureBuild}
@@ -359,7 +389,7 @@ func mustCoordinatorToolsForTurn(
 	frame inject.CoordinatorTurnFrame,
 ) ([]tools.ToolMeta, toolsurface.Plan) {
 	t.Helper()
-	metas, plan, _, err := modelTurn{loop}.coordinatorToolsForTurn(
+	metas, plan, _, err := loop.Context.coordinatorToolsForTurn(
 		context.Background(), sess, prompts.CoordinatorProfileID, nil, "do work", 0, 8, frame, nil,
 	)
 	testutil.FailErr(t, "compile coordinator tools", err)

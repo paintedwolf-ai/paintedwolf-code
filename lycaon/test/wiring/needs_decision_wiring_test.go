@@ -7,7 +7,8 @@ import (
 
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectroot"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/workercompletion"
+	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -51,7 +52,7 @@ func TestNeedsDecisionRoundTrip(t *testing.T) {
 		testutil.FailErr(t, "request_decision", err)
 	}
 
-	status, err := h.SessionMgr.AppendWorkerSummary(ctx, sess.ID, session.WorkerSummaryInput{
+	status, err := h.SessionMgr.Workers.Summaries.Append(ctx, sess.ID, workeroutcomes.SummaryInput{
 		JobID:          jobID,
 		ChildSessionID: child.ID,
 		AgentType:      "implementer",
@@ -81,7 +82,7 @@ func TestNeedsDecisionRoundTrip(t *testing.T) {
 			break
 		}
 	}
-	env, ok := session.ParseWorkerCompletionEnvelope(envelope)
+	env, ok := workercompletion.ParseWorkerCompletionEnvelope(envelope)
 	if !ok || env.DecisionRequest == nil {
 		t.Fatalf("structured decision missing: ok=%v", ok)
 	}
@@ -105,7 +106,7 @@ func TestNeedsDecisionRoundTrip(t *testing.T) {
 	if !anyMessageContains(childMsgs, "write a new parser") {
 		t.Fatalf("child did not receive the decision")
 	}
-	if _, ok, err := h.SessionMgr.Decisions().Get(ctx, child.ID); err != nil || ok {
+	if _, ok, err := h.SessionMgr.Decisions.Get(ctx, child.ID); err != nil || ok {
 		t.Fatal("decision stash not cleared after answer")
 	}
 

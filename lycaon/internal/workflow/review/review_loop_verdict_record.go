@@ -6,15 +6,16 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/google/uuid"
-	"github.com/lycaon/lycaon/internal/evidence"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
-	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
-	"github.com/lycaon/lycaon/pkg/api"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/evidence"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 type verdictOperationContextKey struct{}
@@ -95,6 +96,12 @@ func (m *Verdicts) RecordReviewLoopVerdict(
 	case out.Valid:
 		committedVars = bumpReviewLoopAttempt(vars, active.CurrentPhase)
 		out.Attempt = runstate.ReviewLoopAttempt(committedVars, active.CurrentPhase)
+	}
+	if out.Valid && committedVars != nil {
+		committedVars, err = runstate.ResolveReviewRepair(committedVars, active.CurrentPhase)
+		if err != nil {
+			return out, err
+		}
 	}
 	evidenceID := uuid.NewSHA1(uuid.NameSpaceOID, []byte("verdict-evidence:"+operationID)).String()
 	op := runstate.VerdictOperation{

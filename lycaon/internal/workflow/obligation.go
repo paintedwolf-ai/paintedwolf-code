@@ -34,7 +34,7 @@ type ObligationKind interface {
 	Status(ctx context.Context, workflowRunID, phase string) (api.WorkflowRunObligation, error)
 }
 
-// RegisterObligationKind adds a kind to the manager's registry.
+// Register adds a kind to the obligation registry.
 func (m *Obligations) Register(kind ObligationKind) {
 	if m == nil || kind == nil || strings.TrimSpace(kind.Kind()) == "" {
 		return
@@ -167,7 +167,7 @@ func ObligationsFromVars(vars map[string]any) map[string]any {
 	return raw
 }
 
-// triggerObligationsOnEnter starts phase work and records status.
+// TriggerOnEnter starts phase work and records status.
 func (m *Obligations) TriggerOnEnter(ctx context.Context, run *api.WorkflowRun, projectDir string, def workflowdef.PhaseDef) {
 	if m == nil || run == nil || !def.HasOnEnterObligations() {
 		return

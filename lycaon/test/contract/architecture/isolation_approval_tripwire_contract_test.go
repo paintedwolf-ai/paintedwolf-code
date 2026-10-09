@@ -287,8 +287,14 @@ func TestIsolationBypassReachesEffectsButNotControlPlane(t *testing.T) {
 	contractcheck.FailErr(t, "load approval store", err)
 	gate := settings.NewRuleApprovalGate(store, settings.NoSources())
 	result, err := gate.Evaluate(t.Context(), hitl.ProposedAction{
-		Tool: "write", Files: []string{"/etc/hosts"}, ProjectDir: project,
-	})
+Invocation: hitl.ActionInvocation{
+Tool: "write",
+Files: []string{"/etc/hosts"},
+},
+Scope: hitl.ActionScope{
+ProjectDir: project,
+},
+})
 	contractcheck.FailErr(t, "evaluate bypassed action", err)
 	if !result.AutoApproved() || result.Denied {
 		t.Fatalf("approval bypass did not reach the effect: %+v", result)

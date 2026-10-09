@@ -1,13 +1,14 @@
 package contract
 
 import (
+	"strings"
+	"testing"
+
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/rules"
-	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
+	"github.com/lycaon/lycaon/internal/session/profiles"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
-	"strings"
-	"testing"
 )
 
 // postureRulesFile maps rules/*.yaml basename → expected posture_is value.
@@ -42,7 +43,7 @@ func TestPostureBundledRulesDeclareMatchingPosture(t *testing.T) {
 			if got != wantPosture {
 				t.Errorf("%s rule %q posture_is = %q want %q", file, rule.ID, got, wantPosture)
 			}
-			if !sessionposture.ValidSessionPosture(got) {
+			if !profiles.ValidSessionPosture(got) {
 				t.Errorf("%s rule %q invalid posture_is %q", file, rule.ID, got)
 			}
 		}

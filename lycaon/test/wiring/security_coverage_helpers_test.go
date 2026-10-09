@@ -11,7 +11,7 @@ func securityCoverageFixture(t *testing.T, h *Harness, ctx context.Context, runI
 	t.Helper()
 	run, err := h.WorkflowMgr.Store.Runs.Get(ctx, runID)
 	testutil.FailErr(t, "load coverage run", err)
-	manifest, err := h.WorkflowMgr.ManifestForRunID(ctx, runID)
+	manifest, err := h.WorkflowMgr.Resolver.ForRunID(ctx, runID)
 	testutil.FailErr(t, "load coverage manifest", err)
 	facts, err := h.WorkflowMgr.Coverage.CoverageFacts(ctx, run, manifest)
 	testutil.FailErr(t, "load coverage facts", err)

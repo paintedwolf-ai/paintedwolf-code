@@ -1,13 +1,13 @@
 package contract
 
 import (
+	"path/filepath"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/conditions"
-	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
-	"path/filepath"
-	"testing"
 )
 
 func TestWorkflowVocabularyDelegateLeavesRegistered(t *testing.T) {

@@ -78,7 +78,7 @@ func (s *Transcript) HandleExportSessionTranscript(w http.ResponseWriter, r *htt
 // ascending transcript is collected (same authority as GET .../messages).
 func (s *Transcript) loadFullTranscriptPage(ctx context.Context, id string) (wire.SessionTranscriptPage, error) {
 	q := wire.TranscriptPageQuery{Limit: wire.MaxTranscriptPageLimit}
-	page, err := s.Sessions.GetTranscriptPage(ctx, id, q)
+	page, err := s.Sessions.Runner.Transcript.GetTranscriptPage(ctx, id, q)
 	if err != nil {
 		return wire.SessionTranscriptPage{}, err
 	}
@@ -93,7 +93,7 @@ func (s *Transcript) loadFullTranscriptPage(ctx context.Context, id string) (wir
 		if err != nil {
 			return wire.SessionTranscriptPage{}, err
 		}
-		page, err = s.Sessions.GetTranscriptPage(ctx, id, wire.TranscriptPageQuery{
+		page, err = s.Sessions.Runner.Transcript.GetTranscriptPage(ctx, id, wire.TranscriptPageQuery{
 			Limit:  wire.MaxTranscriptPageLimit,
 			Before: &pos.Ord,
 		})

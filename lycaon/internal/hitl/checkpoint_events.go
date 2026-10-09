@@ -106,10 +106,10 @@ func approvalRecordInput(row StoredCheckpoint, status DecisionStatus) authzledge
 		ToolCallID:       checkpointToolCallID(row),
 		SessionID:        row.SessionID,
 		CheckpointID:     row.ID,
-		Tool:             action.Tool,
-		Args:             action.Args,
-		Files:            action.Files,
-		ProjectDir:       action.ProjectDir,
+		Tool:             action.Invocation.Tool,
+		Args:             action.Invocation.Args,
+		Files:            action.Invocation.Files,
+		ProjectDir:       action.Scope.ProjectDir,
 		ResolvedBy:       resolutionBy(row.Resolution),
 		ResolverPersonID: resolutionPersonID(row.Resolution),
 		ResolverPolicy:   resolutionPolicy(row.Resolution),
@@ -161,13 +161,17 @@ func approvalRecordInput(row StoredCheckpoint, status DecisionStatus) authzledge
 
 func proposedActionFromCheckpoint(row StoredCheckpoint) ProposedAction {
 	return ProposedAction{
-		Tool:       row.ToolName,
-		Args:       cloneArgs(row.Args),
-		Files:      append([]string(nil), row.Files...),
-		ProjectID:  row.ProjectID,
-		ProjectDir: row.ProjectDir,
-		SessionID:  row.SessionID,
-	}
+Invocation: ActionInvocation{
+Tool: row.ToolName,
+Args: cloneArgs(row.Args),
+Files: append([]string(nil), row.Files...),
+},
+Scope: ActionScope{
+ProjectID: row.ProjectID,
+ProjectDir: row.ProjectDir,
+SessionID: row.SessionID,
+},
+}
 }
 
 // Ensure Manager implements CheckpointManager.

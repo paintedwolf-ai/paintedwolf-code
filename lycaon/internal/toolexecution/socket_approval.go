@@ -72,7 +72,7 @@ func (e *Capabilities) awaitSocketCapabilities(
 		subjectKind = hitl.ApprovalSubjectActionSet
 		presentationAction = "Use local services and direct network access"
 		approvalTargets = append(approvalTargets, hitl.ApprovalTarget{
-			Kind: "direct_ip", Label: DirectIPTargetLabel(direct.Action.Command),
+			Kind: "direct_ip", Label: DirectIPTargetLabel(direct.Action.Presentation.Command),
 			Details: map[string]any{"declared_destinations": direct.Lease.DeclaredDestinations, "visibility": hitl.DirectIPVisibilityUnobserved},
 		})
 		for i := range options {
@@ -89,7 +89,7 @@ func (e *Capabilities) awaitSocketCapabilities(
 	plan, err := hitl.NewApprovalPlan(planAction, hitl.ApprovalStagePreSpawn, hitl.ApprovalSubject{
 		Kind: subjectKind, Title: title, Targets: approvalTargets,
 	}, hitl.ApprovalPresentation{
-		Action: presentationAction, Tool: planAction.Tool, Command: planAction.Command,
+		Action: presentationAction, Tool: planAction.Invocation.Tool, Command: planAction.Presentation.Command,
 		Impact: explanation.What, Who: explanation.Who, IfWrong: explanation.IfWrong, AllowLine: explanation.AllowLine,
 		Gate: primaryGate, Cited: cited, GrantDelta: approvalGrantDelta(approval),
 		Detection: detectionOf(approval),
@@ -97,7 +97,7 @@ func (e *Capabilities) awaitSocketCapabilities(
 	if err != nil {
 		return toolrejection.ApprovalPlanInvalid()
 	}
-	permission, err := e.Secrets.prepareSecretPermission(ctx, action.Tool, action.Args, tc)
+	permission, err := e.Secrets.prepareSecretPermission(ctx, action.Invocation.Tool, action.Invocation.Args, tc)
 	if err != nil {
 		return err
 	}

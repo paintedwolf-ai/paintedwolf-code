@@ -54,10 +54,10 @@ func Build(ctx context.Context, deps Dependencies) (*Runtime, error) {
 		deps.Providers.Service.Preparation = preparation
 	}
 
-	mgr := session.NewManagerWithLLMService(deps.Storage.Sessions, deps.Providers.Client, deps.Providers.Service, deps.Execution.Registry, deps.Settings.SessionLimits, deps.Providers.Costs)
-	deps.Security.BindRemember(mgr.SetRememberSecrets)
-	deps.Execution.Host.Skills.BindTurnSources(mgr.ResolveToolRequest, mgr.RecordToolRequest, mgr.LookupSkills)
-	mgr.SetMintedCredentialSource(deps.Security.Detections.MintedCredentialSource)
+	mgr := session.NewHost(deps.Storage.Sessions, session.Models{Client: deps.Providers.Client, Provider: deps.Providers.Service, Limits: deps.Settings.SessionLimits, Cost: deps.Providers.Costs}, deps.Execution.Registry)
+	deps.Security.BindRemember(mgr.ToolPolicy.SetRememberSecrets)
+	deps.Execution.Host.Skills.BindTurnSources(mgr.Coordinator.Loading.ResolveToolRequest, mgr.Coordinator.Loading.RecordToolRequest, mgr.Coordinator.Loading.LookupSkills)
+	mgr.ToolPolicy.SetMintedCredentialSource(deps.Security.Detections.MintedCredentialSource)
 	invocations := invocation.NewSQLRecorder(deps.Storage.Database)
 	mgr.SetInvocationRecorder(invocations)
 
@@ -74,24 +74,24 @@ func Build(ctx context.Context, deps Dependencies) (*Runtime, error) {
 		if err := deps.RegisterRecovery(bootrecovery.Entry{
 			Name: "session-turns", Kind: bootrecovery.KindReconcile, Phase: bootrecovery.PhaseBuild,
 			After: []string{"tool-invocations"},
-			Run:   mgr.RecoverOrphanedTurns,
+			Run:   mgr.Stops.Recovery.RecoverOrphanedTurns,
 		}); err != nil {
 			return nil, err
 		}
 		if err := deps.RegisterRecovery(bootrecovery.Entry{
 			Name: "transcript-invocations", Kind: bootrecovery.KindReconcile, Phase: bootrecovery.PhaseServe,
 			After: []string{"tool-invocations", "session-turns"},
-			Run:   mgr.RecoverInterruptedToolResults,
+			Run:   mgr.Stops.Recovery.RecoverInterruptedToolResults,
 		}); err != nil {
 			return nil, err
 		}
 	}
 
 	mgr.SetSourceLedger(deps.Storage.SourceLedger)
-	mgr.SetAgentRegistry(deps.Agents.Registry)
-	mgr.SetHostResources(deps.Settings.HostResources)
+	mgr.Profiles.SetAgentRegistry(deps.Agents.Registry)
+	mgr.Profiles.SetHostResources(deps.Settings.HostResources)
 	if deps.Settings.HostResources != nil && deps.Settings.Service != nil && deps.Settings.Service.Approvals != nil {
-		deps.Settings.HostResources.SetPolicyBinder(configuration.HostResourcePolicyBinder(deps.Settings.Service.Approvals, mgr))
+		deps.Settings.HostResources.SetPolicyBinder(configuration.HostResourcePolicyBinder(deps.Settings.Service.Approvals, mgr.Profiles))
 	}
 
 	promptLayers := prompts.PromptLayers{
@@ -101,7 +101,7 @@ func Build(ctx context.Context, deps Dependencies) (*Runtime, error) {
 	promptEngine := prompts.NewFileTemplateEngineLayers(promptLayers)
 	mgr.SetPromptEngine(promptEngine)
 	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(promptEngine))
-	mgr.SetPostureRegistry(deps.Agents.Postures)
+	mgr.Profiles.SetPostureRegistry(deps.Agents.Postures)
 	mgr.SetProjectRegistry(deps.Storage.Projects)
 	mgr.SetDataDir(deps.Storage.Directory)
 	mgr.SetScratchFolders(scratch.New(deps.Storage.Directory))
@@ -110,20 +110,20 @@ func Build(ctx context.Context, deps Dependencies) (*Runtime, error) {
 	}
 	mgr.SetDoomLoopGuard(loopguard.NewMemoryDoomLoopGuard())
 	mgr.SetRejectFormatter(deps.Execution.Rejections)
-	mgr.SetProfileRuntimeRules(loadProfileRuntimeRules())
+	mgr.Coordinator.Guards.SetRuntimeRules(loadProfileRuntimeRules())
 	if err := progress.InitProgressGatedTools(deps.Catalog.ModuleRoot); err != nil {
 		return nil, fmt.Errorf("init progress-gated tools: %w", err)
 	}
-	mgr.SetToolInvoker(deps.Execution.Host.Executor, deps.Execution.Host.Executor.Metadata)
+	mgr.Coordinator.Guards.SetToolMetadata(deps.Execution.Host.Executor.Metadata)
 	if deps.Settings.Service != nil {
 		if deps.TestSessionLimits == nil {
-			mgr.SetLimitsProvider(settings.ProjectLimitsAdapter{Store: deps.Settings.Service.Limits})
+			mgr.Limits.SetProvider(settings.ProjectLimitsAdapter{Store: deps.Settings.Service.Limits})
 		}
 		mgr.SetEffectiveCatalogDeps(deps.Catalog.ModuleRoot, deps.Catalog.Effective, deps.Settings.Service.TrustSurfaces)
-		mgr.SetSkillsGate(deps.Settings.ProjectSurfaceGate(projectcontrib.SurfaceSkills, deps.Storage.Projects))
+		mgr.Profiles.SetSkillsGate(deps.Settings.ProjectSurfaceGate(projectcontrib.SurfaceSkills, deps.Storage.Projects))
 	}
 	if deps.Catalog.ViewCache != nil {
-		mgr.Catalog().SetCatalogViewCache(deps.Catalog.ViewCache)
+		mgr.Catalog.SetCatalogViewCache(deps.Catalog.ViewCache)
 	}
 
 	workerToolBudgetFor := func(projectDir string) spawn.WorkerToolBudget {
@@ -138,12 +138,12 @@ func Build(ctx context.Context, deps Dependencies) (*Runtime, error) {
 
 	wireSessionToolSources(mgr, deps.Execution.Host, deps.Settings.HostResources, workerToolBudgetFor)
 
-	if err := deps.Security.BuildAuthorization(deps.Catalog.ModuleRoot, deps.Agents.ToolProfiles, deps.Settings.Service.Approvals, deps.Execution.Host.Authority.ApprovalGate, deps.Execution.Host.Registry.List, mgr.ResolveToolAccess, workerToolBudgetFor); err != nil {
+	if err := deps.Security.BuildAuthorization(deps.Catalog.ModuleRoot, deps.Agents.ToolProfiles, deps.Settings.Service.Approvals, deps.Execution.Host.Authority.ApprovalGate, deps.Execution.Host.Registry.List, mgr.Profiles.ResolveToolAccess, workerToolBudgetFor); err != nil {
 		return nil, err
 	}
-	mgr.SetAuthzSealer(deps.Security.Authority.Sealer)
+	mgr.Runner.Authorization.SetSealer(deps.Security.Authority.Sealer)
 	if compactor, err := loadCompactor(deps.Providers.Service, deps.Catalog.ModuleRoot, deps.Providers.Costs); err == nil && compactor != nil {
-		mgr.SetCompactor(compactor)
+		mgr.Runner.History.SetCompactor(compactor)
 	}
 
 	return &Runtime{
@@ -155,10 +155,10 @@ func Build(ctx context.Context, deps Dependencies) (*Runtime, error) {
 	}, nil
 }
 
-func wireSessionToolSources(mgr *session.Manager, host *toolhost.Runtime, hostResources *hostresources.Service, workerToolBudgetFor func(string) spawn.WorkerToolBudget) {
+func wireSessionToolSources(mgr *session.Host, host *toolhost.Runtime, hostResources *hostresources.Service, workerToolBudgetFor func(string) spawn.WorkerToolBudget) {
 	if host != nil && host.Boundary != nil {
 		host.Boundary.SetProfileSource(func(ctx context.Context, sessionID string) []sandbox.ToolProfile {
-			view := mgr.Catalog().ViewForSessionID(ctx, sessionID)
+			view := mgr.Catalog.ViewForSessionID(ctx, sessionID)
 			if view == nil {
 				return nil
 			}
@@ -166,7 +166,7 @@ func wireSessionToolSources(mgr *session.Manager, host *toolhost.Runtime, hostRe
 		})
 		if host.Executor != nil {
 			host.Executor.Metadata.SetToolSchemaSource(func(ctx context.Context, sessionID string) *toolschema.Config {
-				view := mgr.Catalog().ViewForSessionID(ctx, sessionID)
+				view := mgr.Catalog.ViewForSessionID(ctx, sessionID)
 				if view == nil {
 					return nil
 				}
@@ -186,8 +186,8 @@ func wireSessionToolSources(mgr *session.Manager, host *toolhost.Runtime, hostRe
 					roots = append(roots, path)
 				}
 			}
-			sess, _ := mgr.SessionByID(ctx, tctx.Identity.SessionID)
-			loaded, _ := mgr.EffectiveSkillsForProfile(ctx, sess, tctx.Identity.Agent, roots)
+			sess, _ := mgr.Chats.Get(ctx, tctx.Identity.SessionID)
+			loaded, _ := mgr.Profiles.EffectiveSkillsForProfile(ctx, sess, tctx.Identity.Agent, roots)
 			return loaded
 		})
 		host.Skills.SetSkillTemplateVars(func(_ context.Context, tctx tools.ToolContext) map[string]any {
@@ -199,7 +199,7 @@ func wireSessionToolSources(mgr *session.Manager, host *toolhost.Runtime, hostRe
 		})
 		host.Skills.SetSkillPackConfiguration(
 			func(ctx context.Context, tctx tools.ToolContext, packID string) map[string]any {
-				view := mgr.Catalog().ViewForSessionID(ctx, tctx.Identity.SessionID)
+				view := mgr.Catalog.ViewForSessionID(ctx, tctx.Identity.SessionID)
 				if view == nil {
 					return nil
 				}

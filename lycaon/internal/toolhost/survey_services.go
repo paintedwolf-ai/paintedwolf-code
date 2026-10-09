@@ -2,7 +2,6 @@ package toolhost
 
 import (
 	"context"
-	"sync/atomic"
 
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/guidance"
@@ -20,7 +19,7 @@ type SurveyServices struct {
 	findTool       *surveytools.FindTool
 	summarizeTool  *surveytools.SummarizeTool
 	fileAge        *fileage.Provider
-	gitStatusCache *atomic.Pointer[git.StatusCache]
+	gitStatusCache *statusCacheBinding
 }
 
 func (r *SurveyServices) WarmFileAge(ctx context.Context, projectDir string) {
@@ -41,7 +40,7 @@ func (r *SurveyServices) SetGitStatusCache(cache *git.StatusCache) {
 	if r == nil {
 		return
 	}
-	r.gitStatusCache.Store(cache)
+	r.gitStatusCache.replace(cache)
 }
 
 func (r *SurveyServices) SetReadEvidenceLedger(ledger guidance.EvidenceLedgerReader) {

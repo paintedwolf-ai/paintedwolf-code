@@ -48,23 +48,28 @@ func TestCloseoutReportUsesOnePolicyOccurrence(t *testing.T) {
 			calls := 0
 			var selected *oar.Decision
 			loop := NewPromptLoopForTest(PromptLoopDeps{
-				HintConfig: cfg, RejectFmt: guidance.NewStaticRejectFormatter(cfg),
-				EvidenceLedger:     closeoutLedgerReader{ledger: evidence.AssembleLedger([]evidence.Record{{Handle: "command#1", Kind: "command", Shape: evidence.ShapeCommand, Body: []string{"prior"}}, {Handle: "command#2", Kind: "command", Shape: evidence.ShapeCommand, Body: []string{"new"}}})},
-				AppendDraftVersion: func(context.Context, string, string, string, string) (int, error) { return 1, nil },
-				EvaluateCloseoutBlock: func(ctx context.Context, sess *api.Session, gc *oar.GuardContext) (*oar.Decision, error) {
-					calls++
-					gc.Session.SessionID = sess.ID
-					result, err := pipeline.EvaluateBlock(ctx, oar.AnchorCoordinatorCloseoutCheck, gc)
-					if err != nil {
-						return nil, err
-					}
-					selected = result.Decision
-					return selected, nil
+				Closeout: CloseoutDeps{
+					HintConfig:     cfg,
+					RejectFmt:      guidance.NewStaticRejectFormatter(cfg),
+					EvidenceLedger: closeoutLedgerReader{ledger: evidence.AssembleLedger([]evidence.Record{{Handle: "command#1", Kind: "command", Shape: evidence.ShapeCommand, Body: []string{"prior"}}, {Handle: "command#2", Kind: "command", Shape: evidence.ShapeCommand, Body: []string{"new"}}})},
+					EvaluateCloseoutBlock: func(ctx context.Context, sess *api.Session, gc *oar.GuardContext) (*oar.Decision, error) {
+						calls++
+						gc.Session.SessionID = sess.ID
+						result, err := pipeline.EvaluateBlock(ctx, oar.AnchorCoordinatorCloseoutCheck, gc)
+						if err != nil {
+							return nil, err
+						}
+						selected = result.Decision
+						return selected, nil
+					},
+				},
+				Projection: ProjectionDeps{
+					AppendDraftVersion: func(context.Context, string, string, string, string) (int, error) { return 1, nil },
 				},
 			})
 			st := &promptLoopTurnState{draftSlotID: "draft", draftSlotAppended: true, turnTools: []string{"command"}}
 			report := guidance.CoordinatorCompletionReport{Synthesis: tc.body, CitedEvidence: []guidance.CoordinatorCitedEvidence{{Evidence: tc.evidence}}}
-			out, err := turnCloseout{loop}.handleAcceptedCloseoutReport(t.Context(), sess, sess.ID, "", tc.surface, st, history, history[2], guidance.CloseoutRead{Report: report})
+			out, err := loop.Closeout.handleAcceptedCloseoutReport(t.Context(), sess, sess.ID, "", tc.surface, st, history, history[2], guidance.CloseoutRead{Report: report})
 			testutil.FailErr(t, "check report", err)
 			if calls != 1 {
 				t.Fatalf("report generated %d policy occurrences", calls)

@@ -13,7 +13,7 @@ import (
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/commandinvoke"
 	"github.com/lycaon/lycaon/internal/contribution"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/promptinput"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -54,9 +54,9 @@ func TestEditorActionsPreserveInstructionAndUntrustedSource(t *testing.T) {
 			if !accepted || status != http.StatusAccepted {
 				t.Fatalf("editor action status=%d accepted=%v body=%s", status, accepted, recorder.Body.String())
 			}
-			row, getErr := srv.Admin.SessionAdmin.Lifecycle.Sessions.GetPromptSubmission(t.Context(), response.MessageID)
+			row, getErr := srv.Admin.SessionAdmin.Lifecycle.Sessions.Submissions.GetPromptSubmission(t.Context(), response.MessageID)
 			testutil.FailErr(t, "get admitted prompt", getErr)
-			var prompt session.PromptInput
+			var prompt promptinput.Input
 			testutil.FailErr(t, "decode admitted prompt", json.Unmarshal([]byte(row.InputJSON), &prompt))
 			instruction := wire.MessageUserInstructionContent(wire.Message{
 				Role: wire.MessageRoleUser, Content: prompt.Text, ContentParts: prompt.ContentParts,

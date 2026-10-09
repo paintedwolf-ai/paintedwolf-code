@@ -4,6 +4,15 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
+	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
+	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+	"time"
+
 	hostapi "github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/db"
@@ -17,16 +26,8 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil/scantest"
 	"github.com/lycaon/lycaon/internal/visual"
 	"github.com/lycaon/lycaon/internal/workflow"
-	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
-	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"net/http"
-	"net/http/httptest"
-	"strings"
-	"testing"
-	"time"
 )
 
 func AssertErrorCode(t *testing.T, rec *httptest.ResponseRecorder, code string) {
@@ -69,10 +70,10 @@ func NewReportTestHarness(t *testing.T, opts ...TestDeps) *ReportTestHarness {
 	testutil.FailErr(t, "RegistryFromDirs", err)
 	runStore := workflowpersistence.New(sqlDB)
 	wfMgr := workflow.NewManager(runStore, store, wfReg, nil)
-
+	wfMgr.Resolver = workflowcatalog.Resolver{}
 	hostDir := t.TempDir()
 	wfMgr.Verdicts.EvidenceStore = inspector.NewJSONLStore(inspector.DefaultEvidenceDir)
-	wfMgr.SetEvidenceProjectDir(func(context.Context, string) (string, error) { return hostDir, nil })
+	wfMgr.EvidenceProjectDir = func(context.Context, string) (string, error) { return hostDir, nil }
 
 	scanStore := scan.NewSQLStore(sqlDB)
 	workDir := t.TempDir()
@@ -297,7 +298,7 @@ func (h *ReportTestHarness) GetReport(t *testing.T, runID string) *httptest.Resp
 
 func (h *ReportTestHarness) MarkReportDelivered(t *testing.T, run *wire.WorkflowRun) {
 	t.Helper()
-	_, err := h.WfMgr.Phases.Vars.Stamp(t.Context(), run.ID, func(_ context.Context, _ *wire.WorkflowRun, vars map[string]any) (map[string]any, bool, error) {
+	_, err := h.WfMgr.Vars.Stamp(t.Context(), run.ID, func(_ context.Context, _ *wire.WorkflowRun, vars map[string]any) (map[string]any, bool, error) {
 		return runstate.SetGateSatisfied(vars, "topology_report_delivered", true), true, nil
 	})
 	testutil.FailErr(t, "stamp report delivery", err)

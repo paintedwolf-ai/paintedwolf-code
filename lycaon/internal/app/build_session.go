@@ -50,7 +50,7 @@ func (b *serveBuilder) assertAuthzCapturer() error {
 	if b.security.Authority.Store == nil || b.security.Authority.Sealer == nil || b.security.Authority.Ledger == nil {
 		return fmt.Errorf("authz: capturer incomplete")
 	}
-	if b.sessions == nil || b.sessions.Manager == nil || !b.sessions.Manager.AuthzSealWired() {
+	if b.sessions == nil || b.sessions.Manager == nil || !b.sessions.Manager.Runner.Authorization.Wired() {
 		return fmt.Errorf("authz: session manager missing authz sealer")
 	}
 	return nil

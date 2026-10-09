@@ -2,15 +2,16 @@ package worker
 
 import (
 	"context"
+	"strings"
+	"sync"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/keylock"
 	"github.com/lycaon/lycaon/internal/worker/jobstate"
 	"github.com/lycaon/lycaon/internal/workspacebaseline"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
-	"sync"
-	"time"
 )
 
 // sqlQueueGetTimeout bounds lookups without caller contexts.

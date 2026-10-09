@@ -31,7 +31,7 @@ const MaxBoardGitOthers = 4
 
 // WorkerTouchEnricher supplies live touched paths for in-flight worker jobs.
 type WorkerTouchEnricher interface {
-	WorkerTouchedPaths(jobID string) []string
+	Paths(jobID string) []string
 }
 
 // ActiveReservationLister returns handoff_reserve holds for a coordinator session.
@@ -113,7 +113,7 @@ func (b *SnapshotBuilder) Build(ctx context.Context, projectID, workspacePath, s
 		}
 		if b.Touches != nil {
 			for i := range tasks {
-				if paths := b.Touches.WorkerTouchedPaths(tasks[i].ID); len(paths) > 0 {
+				if paths := b.Touches.Paths(tasks[i].ID); len(paths) > 0 {
 					tasks[i].TouchedPaths = append([]string(nil), paths...)
 				}
 			}

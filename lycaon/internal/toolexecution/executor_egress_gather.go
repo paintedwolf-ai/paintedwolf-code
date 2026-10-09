@@ -246,16 +246,17 @@ func (e *Network) raiseEgressSetCard(ctx context.Context, members []egressRaise)
 	noun := strconv.Itoa(count) + " hosts"
 
 	action := hitl.ProposedAction{
-		Tool:             networkEgressTool,
-		PresentationTool: lead.action.PresentationTool,
-		Args:             map[string]any{"hosts": labels, "host_count": count, "observed_hosts_digest": digest},
-		Command:          lead.action.Command,
-		EstimatedImpact:  "Outbound connections to the " + noun + " this command reached",
-		ProjectID:        lead.action.ProjectID,
-		ProjectDir:       lead.action.ProjectDir,
-		SessionID:        lead.action.SessionID,
-		RootSessionID:    lead.action.RootSessionID,
-		Contained:        lead.action.Contained,
+Invocation: hitl.ActionInvocation{
+Tool: networkEgressTool,
+Args: map[string]any{"hosts": labels, "host_count": count, "observed_hosts_digest": digest},
+},
+		Presentation: hitl.ActionPresentation{
+			PresentationTool: lead.action.Presentation.PresentationTool,
+			Command:          lead.action.Presentation.Command,
+			EstimatedImpact:  "Outbound connections to the " + noun + " this command reached",
+		},
+		Scope:     lead.action.Scope,
+		Execution: hitl.ActionExecution{Contained: lead.action.Execution.Contained},
 	}
 	explanation := &hitl.ApprovalExplanation{
 		What:      "Open tunnels to the " + noun + " this command reached while running",
@@ -266,8 +267,8 @@ func (e *Network) raiseEgressSetCard(ctx context.Context, members []egressRaise)
 	set := egressRaise{
 		cmd: lead.cmd, ep: lead.ep, action: action, decision: lead.decision, facts: lead.facts, matches: lead.matches,
 		subject: egressAskSubject{
-			Args: action.Args, Title: "Allow network: " + noun, Impact: action.EstimatedImpact, Explanation: explanation,
-			Contained: action.Contained, ApprovalKey: "egress-observed:" + digest,
+			Args: action.Invocation.Args, Title: "Allow network: " + noun, Impact: action.Presentation.EstimatedImpact, Explanation: explanation,
+			Contained: action.Execution.Contained, ApprovalKey: "egress-observed:" + digest,
 			Declared: &hitl.DeclaredEndpoints{Hosts: labels, HostCount: count, Digest: digest, Source: DeclaredEndpointObserved},
 		},
 	}
@@ -311,7 +312,7 @@ func observedSetOffers(action hitl.ProposedAction, keys []string, decision *gate
 	day := hitl.DayRung(task)
 	project := hitl.ExactActionSetOfferAtScope(action, keys, hitl.ApprovalGrantScopeProject)
 	switch {
-	case !action.HasProjectIdentity():
+	case !action.Scope.HasProjectIdentity():
 		project = hitl.DisabledOffer(project, hitl.NoteNoProjectOpen)
 	case reuse.Scope == gate.ScopeChat:
 		project = hitl.DisabledOffer(project, hitl.NoteEndsWithChat)

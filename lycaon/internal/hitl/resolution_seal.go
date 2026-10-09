@@ -111,9 +111,9 @@ func seedPayloadDetection(row *StoredCheckpoint, req CheckpointRequest) {
 		RuleID:               req.Detection.RuleID,
 		RuleTitle:            req.Detection.RuleTitle,
 		Level:                req.Detection.Level,
-		ActionID:             strings.TrimSpace(req.ProposedAction.ActionID),
-		Direct:               req.ProposedAction.DirectIPRequested,
-		DeclaredDestinations: append([]string(nil), req.ProposedAction.DeclaredDestinations...),
+		ActionID:             strings.TrimSpace(req.ProposedAction.Invocation.ActionID),
+		Direct:               req.ProposedAction.Egress.DirectIPRequested,
+		DeclaredDestinations: append([]string(nil), req.ProposedAction.Egress.DeclaredDestinations...),
 	}
 	if det.ActionID == "" {
 		det.ActionID = strings.TrimSpace(req.ToolCallID)
@@ -123,7 +123,7 @@ func seedPayloadDetection(row *StoredCheckpoint, req CheckpointRequest) {
 			Host: ep.Host, Port: ep.Port, Transport: ep.Transport, Attempts: ep.Attempts,
 		})
 	}
-	for _, grant := range req.ProposedAction.SocketGrants {
+	for _, grant := range req.ProposedAction.Sockets.SocketGrants {
 		det.Sockets = append(det.Sockets, storedDetectionSocket{
 			ApprovedPath: grant.ApprovedPath, ResolvedPath: grant.ResolvedPath,
 		})

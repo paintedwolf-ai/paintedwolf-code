@@ -1,6 +1,8 @@
 package workflowadmin
 
 import (
+	"sync"
+
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/sessionadmin"
 	"github.com/lycaon/lycaon/internal/api/sessionview"
@@ -18,7 +20,6 @@ import (
 	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
-	"sync"
 )
 
 // Deps are the workflow routes' dependencies, fixed at construction.
@@ -36,7 +37,7 @@ type Deps struct {
 	Projects       project.Registry
 	Scans          scan.ScanCoordinator
 	Store          session.Store
-	Sessions       *session.Manager
+	Sessions       *session.Host
 	VisualStore    visual.Store
 	Workers        worker.WorkerQueue
 	SessionAdmin   *sessionadmin.Handler
@@ -56,7 +57,7 @@ type BlueprintRoutes struct {
 	Blueprints   *blueprint.Manager
 	Catalog      workflowcatalog.Resolver
 	Projects     project.Registry
-	Runs         runstate.RunsRepository
+	Runs         *runstate.Repository
 	SessionAdmin *sessionadmin.Lifecycle
 	Topology     *Topology
 	Workflows    *workflow.RunManager
@@ -68,7 +69,7 @@ type Composition struct {
 	EventPublisher *events.Publisher
 	Persister      *workflowcomposition.Persister
 	SessionView    *sessionview.Projector
-	Sessions       *session.Manager
+	Sessions       *session.Host
 	Store          session.Store
 	responses      *httpio.Responder
 }
@@ -76,7 +77,7 @@ type Composition struct {
 type Reports struct {
 	RunControl  *RunControl
 	Projects    project.Registry
-	Runs        runstate.RunsRepository
+	Runs        *runstate.Repository
 	Scans       scan.ScanCoordinator
 	Store       session.Store
 	VisualStore visual.Store
@@ -89,9 +90,9 @@ type RunControl struct {
 	Catalog        workflowcatalog.Resolver
 	ManagedSecrets *secretcap.Service
 	Projects       project.Registry
-	Runs           runstate.RunsRepository
+	Runs           *runstate.Repository
 	SessionView    *sessionview.Projector
-	Sessions       *session.Manager
+	Sessions       *session.Host
 	Store          session.Store
 	Topology       *Topology
 	Workflows      *workflow.RunManager
@@ -100,7 +101,7 @@ type RunControl struct {
 
 type Topology struct {
 	Orchestrator       orchestration.Orchestrator
-	Runs               runstate.RunsRepository
+	Runs               *runstate.Repository
 	Store              session.Store
 	activeTopologyRuns sync.Map // workflow run id → struct{} while topology settlement is executing
 	background         *taskgroup.Group
@@ -118,11 +119,11 @@ func New(responses *httpio.Responder, background *taskgroup.Group, deps Deps) Ha
 		httpio.Required{Name: "Workflows", Present: deps.Workflows != nil},
 	)
 	h := Handler{}
-	h.BlueprintRoutes = &BlueprintRoutes{Runs: deps.Runs.Runs, Blueprints: deps.Blueprints, Catalog: deps.Catalog, Projects: deps.Projects, SessionAdmin: deps.SessionAdmin.Lifecycle, Workflows: deps.Workflows, responses: responses}
+	h.BlueprintRoutes = &BlueprintRoutes{Runs: deps.Runs, Blueprints: deps.Blueprints, Catalog: deps.Catalog, Projects: deps.Projects, SessionAdmin: deps.SessionAdmin.Lifecycle, Workflows: deps.Workflows, responses: responses}
 	h.Composition = &Composition{Composer: deps.Composer, EventPublisher: deps.EventPublisher, Persister: deps.Persister, SessionView: deps.SessionView, Sessions: deps.Sessions, Store: deps.Store, responses: responses}
-	h.Reports = &Reports{Runs: deps.Runs.Runs, Projects: deps.Projects, Scans: deps.Scans, Store: deps.Store, VisualStore: deps.VisualStore, Workers: deps.Workers, Workflows: deps.Workflows, responses: responses}
-	h.RunControl = &RunControl{Runs: deps.Runs.Runs, Catalog: deps.Catalog, ManagedSecrets: deps.ManagedSecrets, Projects: deps.Projects, SessionView: deps.SessionView, Sessions: deps.Sessions, Store: deps.Store, Workflows: deps.Workflows, responses: responses}
-	h.Topology = &Topology{Runs: deps.Runs.Runs, Orchestrator: deps.Orchestrator, Store: deps.Store, background: background}
+	h.Reports = &Reports{Runs: deps.Runs, Projects: deps.Projects, Scans: deps.Scans, Store: deps.Store, VisualStore: deps.VisualStore, Workers: deps.Workers, Workflows: deps.Workflows, responses: responses}
+	h.RunControl = &RunControl{Runs: deps.Runs, Catalog: deps.Catalog, ManagedSecrets: deps.ManagedSecrets, Projects: deps.Projects, SessionView: deps.SessionView, Sessions: deps.Sessions, Store: deps.Store, Workflows: deps.Workflows, responses: responses}
+	h.Topology = &Topology{Runs: deps.Runs, Orchestrator: deps.Orchestrator, Store: deps.Store, background: background}
 
 	h.BlueprintRoutes.Topology = h.Topology
 

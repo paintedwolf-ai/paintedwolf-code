@@ -64,15 +64,15 @@ func ExactActionSetOfferAtScope(action ProposedAction, exactActions []string, sc
 	if scope != ApprovalGrantScopeChat && scope != ApprovalGrantScopeProject {
 		scope = ApprovalGrantScopeChat
 	}
-	witness := BoundaryWitness(action.Contained)
+	witness := BoundaryWitness(action.Execution.Contained)
 	digest := sha256.Sum256([]byte(strings.Join(exactActions, "\x00")))
 	pattern := base64.RawURLEncoding.EncodeToString(digest[:])
 	now := time.Now().UTC()
 	grant := ApprovalGrant{
 		Scope:           scope,
 		Predicate:       ApprovalGrantPredicate{Category: ApprovalGrantCategoryActionSet, Pattern: pattern},
-		ProjectID:       action.ProjectID,
-		ProjectDir:      action.ProjectDir,
+		ProjectID:       action.Scope.ProjectID,
+		ProjectDir:      action.Scope.ProjectDir,
 		Coverage:        CoverageOnlyEnumeratedActions,
 		GrantedAt:       now,
 		ReaskWhen:       "any action, argument, project, or confinement differs",
@@ -89,7 +89,7 @@ func ExactActionSetOfferAtScope(action ProposedAction, exactActions []string, sc
 		grant.ExpiresWhen = ExpiresIn7DaysOrRevoked
 	default:
 		rung = ApprovalRungChat
-		grant.ChatSessionID = action.ChatSession()
+		grant.ChatSessionID = action.Scope.ChatSession()
 		grant.Title = TitleAllowForThisChat
 		grant.ExpiresWhen = ExpiresWhenChatDeleted
 	}
@@ -106,17 +106,17 @@ func ExactActionSetOfferAtScope(action ProposedAction, exactActions []string, sc
 // every host is still observed and recorded. Never minted where a detection,
 // credential exposure, or the high-risk band is on the card.
 func CommandNetworkOffer(action ProposedAction) (ApprovalGrantOffer, bool) {
-	command := strings.TrimSpace(action.Command)
-	if action.Tool != "network" || command == "" || action.ChatSession() == "" {
+	command := strings.TrimSpace(action.Presentation.Command)
+	if action.Invocation.Tool != "network" || command == "" || action.Scope.ChatSession() == "" {
 		return ApprovalGrantOffer{}, false
 	}
-	witness := BoundaryWitness(action.Contained)
+	witness := BoundaryWitness(action.Execution.Contained)
 	grant := ApprovalGrant{
 		Scope:         ApprovalGrantScopeChat,
 		Predicate:     ApprovalGrantPredicate{Category: ApprovalGrantCategoryEgressCommand, Pattern: command},
-		ChatSessionID: action.ChatSession(),
-		ProjectID:     action.ProjectID,
-		ProjectDir:    action.ProjectDir,
+		ChatSessionID: action.Scope.ChatSession(),
+		ProjectID:     action.Scope.ProjectID,
+		ProjectDir:    action.Scope.ProjectDir,
 		Title:         TitleAllowCommandNetworkForThisChat,
 		Coverage:      CoverageCommandNetwork(command),
 		GrantedAt:     time.Now().UTC(),

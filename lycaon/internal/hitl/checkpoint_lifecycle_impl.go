@@ -176,10 +176,10 @@ func (m *Checkpoints) checkpointProject(ctx context.Context, req CheckpointReque
 		return "", fmt.Errorf("checkpoint project differs from session")
 	}
 	if action := req.ProposedAction; action != nil {
-		if action.ProjectID != "" && action.ProjectID != projectID {
+		if action.Scope.ProjectID != "" && action.Scope.ProjectID != projectID {
 			return "", fmt.Errorf("checkpoint action project differs from session")
 		}
-		if action.SessionID != "" && action.SessionID != req.SessionID {
+		if action.Scope.SessionID != "" && action.Scope.SessionID != req.SessionID {
 			return "", fmt.Errorf("checkpoint action session differs from request")
 		}
 	}

@@ -11,6 +11,7 @@ import (
 
 // Prompt tests cover each projected exit kind.
 
+
 // The frame loader composes a review phase's call from the session's catalog;
 // without a catalog source the phase offers the stock schema unchanged.
 

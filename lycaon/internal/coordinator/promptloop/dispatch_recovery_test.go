@@ -41,12 +41,12 @@ func TestPartialDispatchRepairsFailedPeerWhileAcceptedWorkerRuns(t *testing.T) {
 		{ToolCalls: []api.ToolCall{{ID: "wait", Name: "wait", Args: map[string]any{"conditions": []any{map[string]any{"kind": "next_worker_done"}}}}}},
 	}}
 	deps := promptloop.StoreDeps(storage)
-	deps.LoadedTools = workersLoaded
-	deps.Tools, deps.LLM = reg, client
-	deps.ImplementSessionState = func(context.Context, *api.Session) surface.ImplementSessionState {
+	deps.Context.LoadedTools = workersLoaded
+	deps.Context.Tools, deps.Model.LLM = reg, client
+	deps.Context.ImplementSessionState = func(context.Context, *api.Session) surface.ImplementSessionState {
 		return surface.ImplementSessionState{WorkersInFlight: len(accepted)}
 	}
-	deps.BeforeToolRun = func(_ context.Context, _ *api.Session, _ []api.Message, _, _ string, args map[string]any) (string, bool, error) {
+	deps.Tools.BeforeToolRun = func(_ context.Context, _ *api.Session, _ []api.Message, _, _ string, args map[string]any) (string, bool, error) {
 		if args["invalid"] == true {
 			return "", false, guidance.NewRefusal("TOOL_ARGS_INVALID", "brief.constraints must be an array")
 		}

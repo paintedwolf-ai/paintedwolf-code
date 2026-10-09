@@ -58,18 +58,18 @@ func (r *Runtime) WireCheckpoints(ctx context.Context, deps CheckpointDependenci
 	checkpointStore.SetEventOutbox(deps.EventsOutbox)
 	checkpointMgr := hitl.NewCheckpoints(checkpointStore, deps.EventPublisher, deps.Security.Authority.Recorder)
 	deps.Resources.Track("checkpoint-expiries", 25, func(context.Context) error { checkpointMgr.StopExpiryTimers(); return nil })
-	checkpointMgr.Sessions.SetSessionAdmission(r.Manager.WithSessionTreeAdmission)
+	checkpointMgr.Sessions.SetSessionAdmission(r.Manager.Chats.Gate.WithSessionTreeAdmission)
 	checkpointMgr.Presence.SetVaultUnlock(deps.Security.Presence, deps.Security.Unlocks, unlockRecorder{})
 	deps.Execution.Host.Executor.Secrets.SetPresenceAvailable(checkpointMgr.Presence.PresenceAvailable)
-	checkpointMgr.Sessions.SetCheckpointWaitObserver(r.Manager.BeginCheckpointWait)
+	checkpointMgr.Sessions.SetCheckpointWaitObserver(r.Manager.Runner.Clocks.Wait)
 
 	var authzRec authzledger.Recorder = deps.Security.Authority.Recorder
 	if deps.Execution.Host != nil {
 		deps.Execution.Host.Authority.SetAuthzRecorder(authzRec)
 	}
 	r.Checkpoints = checkpointMgr
-	r.Manager.SetSessionCheckpointStop(checkpointMgr)
-	r.Manager.SetExecutionCheckpoints(checkpointMgr)
+	r.Manager.Stops.SetCheckpointStop(checkpointMgr)
+	r.Manager.Observations.SetExecutionCheckpoints(checkpointMgr)
 	deps.Execution.Host.Authority.SetCheckpointManager(checkpointMgr)
 
 	writeRootRT := approvalstate.NewSandboxPathGrantRuntime()
@@ -90,7 +90,7 @@ func (r *Runtime) WireCheckpoints(ctx context.Context, deps CheckpointDependenci
 		return err
 	}
 	if deps.Security.Harvest != nil {
-		r.Manager.SetCredentialFiles(newCredentialFiles(deps.Security.Harvest, deps.Security.Fingerprinter, deps.Database, deps.Security.Capabilities, deps.Sessions))
+		r.Manager.ToolContext.SetCredentialFiles(newCredentialFiles(deps.Security.Harvest, deps.Security.Fingerprinter, deps.Database, deps.Security.Capabilities, deps.Sessions))
 	}
 	wireCredentialObservations(r.Manager, deps.Security.Fingerprinter, deps.Security.Matcher, deps.Security.Harvest)
 	deps.Execution.Host.Executor.Secrets.SetSecretExposureSource(func(c context.Context, chatSessionID string) (bool, error) {
@@ -162,7 +162,7 @@ func (r *Runtime) WireCheckpoints(ctx context.Context, deps CheckpointDependenci
 	})
 	toolApprovalRT := wireAskSpamGuards(r, deps.Execution.Host.Authority)
 	if deps.SettingsService != nil {
-		if err := deps.Security.BuildExceptional(deps.Execution.Host.Executor.Capabilities, deps.SettingsService.Approvals, deps.Execution.Host.Authority.ApprovalsDisabled, r.Manager, deps.Security.Authority.Recorder, r.Manager.SetDirectIPReconstructHook); err != nil {
+		if err := deps.Security.BuildExceptional(deps.Execution.Host.Executor.Capabilities, deps.SettingsService.Approvals, deps.Execution.Host.Authority.ApprovalsDisabled, r.Manager.Resources, deps.Security.Authority.Recorder, r.Manager.Chats.Protection.SetDirectIPReconstructHook); err != nil {
 			return err
 		}
 	}
@@ -260,14 +260,14 @@ func wireGrantedAccess(r *Runtime, deps CheckpointDependencies) error {
 		}
 		return projectpaths.Access{Path: g.Path, Tree: g.Tree}, true
 	})
-	if err := r.Manager.RegisterSessionCleanup("approval-run", 50, func(_ context.Context, sessionID string) error {
+	if err := r.Manager.Resources.RegisterCleanup("approval-run", 50, func(_ context.Context, sessionID string) error {
 		deps.Execution.Host.Authority.ReleaseSessionRun(sessionID)
 		r.SandboxReadPath.ReleaseRun(sessionID)
 		return nil
 	}); err != nil {
 		return err
 	}
-	if err := r.Manager.RegisterSessionDisposal("approvals", 50, func(_ context.Context, sessionID string) error {
+	if err := r.Manager.Resources.RegisterDisposal("approvals", 50, func(_ context.Context, sessionID string) error {
 		deps.Execution.Host.Authority.ForgetSessionAuthorization(sessionID)
 		grantedRT.Forget(sessionID)
 		r.SandboxReadPath.ForgetSession(sessionID)
@@ -275,7 +275,7 @@ func wireGrantedAccess(r *Runtime, deps CheckpointDependencies) error {
 	}); err != nil {
 		return err
 	}
-	return r.Manager.RegisterSessionCleanup("harvested-secrets", 53, func(_ context.Context, sessionID string) error {
+	return r.Manager.Resources.RegisterCleanup("harvested-secrets", 53, func(_ context.Context, sessionID string) error {
 		if deps.Security.Harvest != nil {
 			deps.Security.Harvest.Forget(sessionID)
 		}

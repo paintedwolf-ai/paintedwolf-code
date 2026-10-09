@@ -28,11 +28,11 @@ func TestSendWithdrawsObsoleteToolProposalAndContinuesSameLoop(t *testing.T) {
 		return "old contents", nil
 	}))
 	deps := promptloop.StoreDeps(st)
-	deps.LLM = client
-	deps.Tools = reg
-	deps.Policy = &recordingToolPolicy{}
+	deps.Model.LLM = client
+	deps.Context.Tools = reg
+	deps.Context.Policy = &recordingToolPolicy{}
 	checks := 0
-	deps.TakeUserSend = func(context.Context, string) ([]api.Message, error) {
+	deps.Inbox.TakeUserSend = func(context.Context, string) ([]api.Message, error) {
 		checks++
 		if checks != 2 {
 			return nil, nil
@@ -81,8 +81,8 @@ func TestLoopStopsOnNoToolCalls(t *testing.T) {
 	client := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "done"}}})
 	store := store.NewMemory()
 	deps := promptloop.StoreDeps(store)
-	deps.LLM = client
-	deps.Policy = &recordingToolPolicy{}
+	deps.Model.LLM = client
+	deps.Context.Policy = &recordingToolPolicy{}
 	loop := promptloop.NewPromptLoopForTest(deps)
 	ctx := context.Background()
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
@@ -109,9 +109,9 @@ func TestLoopWorkflowAbortAfterAssistant(t *testing.T) {
 	store := store.NewMemory()
 	client := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".*", Text: "partial"}}})
 	deps := promptloop.StoreDeps(store)
-	deps.LLM = client
-	deps.Policy = &recordingToolPolicy{}
-	deps.AssertRunnable = func(context.Context, string) error {
+	deps.Model.LLM = client
+	deps.Context.Policy = &recordingToolPolicy{}
+	deps.Control.AssertRunnable = func(context.Context, string) error {
 		calls++
 		if calls > 1 {
 			return errors.New("workflow blocked")

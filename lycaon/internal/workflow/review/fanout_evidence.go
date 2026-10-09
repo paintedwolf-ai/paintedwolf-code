@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 	"strings"
@@ -114,11 +115,11 @@ func formatWorkerCitationDigest(msgs []api.Message) string {
 func mergeFanoutWorkerEnvelopes(msgs []api.Message) string {
 	since := api.UserIntentBoundary(msgs)
 	var blocks []string
-	for _, env := range session.TerminalWorkerEnvelopesSince(msgs, since) {
+	for _, env := range workeroutcomes.TerminalWorkerEnvelopesSince(msgs, since) {
 		if strings.TrimSpace(env.AgentType) == "" && strings.TrimSpace(env.JobID) == "" {
 			continue
 		}
-		block := strings.TrimSpace(session.WorkerEnvelopeBlockText(env))
+		block := strings.TrimSpace(workeroutcomes.WorkerEnvelopeBlockText(env))
 		if block == "" {
 			continue
 		}

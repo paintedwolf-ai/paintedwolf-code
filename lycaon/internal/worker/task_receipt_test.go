@@ -26,7 +26,7 @@ func TestTaskToolReplaysReceiptAfterWorkflowMovedOn(t *testing.T) {
 	queue := &captureQueue{WorkerQueue: inner, out: &enqueued}
 	bound := 0
 	deps := worker.TaskToolDeps{
-		Sessions: &fakeTaskSessions{}, Queue: queue, Agents: orchestration.NewMemoryAgentRegistryForTest(), Workers: worker.DefaultWorkersConfig(),
+		Queue: queue, Agents: orchestration.NewMemoryAgentRegistryForTest(), Workers: worker.DefaultWorkersConfig(),
 		BindWorkflowTask: func(_ context.Context, _ tools.ToolContext, id string, task *api.WorkerTask) error {
 			bound++
 			if bound > 1 {

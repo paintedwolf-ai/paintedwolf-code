@@ -169,11 +169,12 @@ func (m *Service) advanceToNextPhase(ctx context.Context, run *api.WorkflowRun, 
 		if def, found := manifest.PhaseByID(next); found && !terminalSink {
 			m.Entries.Trigger(ctx, run, projectDir, def)
 			rc := &RunContext{
-				SessionID:     run.SessionID,
-				RunID:         run.ID,
-				WorkflowID:    run.WorkflowID,
-				Phase:         next,
-				PreviousPhase: prevPhase,
+				SessionID:       run.SessionID,
+				RunID:           run.ID,
+				WorkflowID:      run.WorkflowID,
+				WorkflowVersion: run.WorkflowVersion,
+				Phase:           next,
+				PreviousPhase:   prevPhase,
 			}
 			sameReenter := strings.TrimSpace(prevPhase) == strings.TrimSpace(next) && prevPhase != ""
 			if sameReenter {

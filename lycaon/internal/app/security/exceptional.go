@@ -14,8 +14,8 @@ import (
 )
 
 type SessionLifetime interface {
-	RegisterSessionCleanup(string, int, func(context.Context, string) error) error
-	RegisterSessionDisposal(string, int, func(context.Context, string) error) error
+	RegisterCleanup(string, int, func(context.Context, string) error) error
+	RegisterDisposal(string, int, func(context.Context, string) error) error
 }
 type DirectIPRecorder interface {
 	AppendDirectIPLifecycle(context.Context, authzledger.DirectIPLifecycleRecord)
@@ -29,13 +29,13 @@ func (b *Runtime) BuildExceptional(control *toolexecution.Capabilities, approval
 		control.SetDurableSocketSource(approvals.SocketPathsForProject)
 	}
 	control.SetApprovalsDisabled(disabled)
-	if err := lifetime.RegisterSessionCleanup("socket-capabilities", 51, func(_ context.Context, sessionID string) error {
+	if err := lifetime.RegisterCleanup("socket-capabilities", 51, func(_ context.Context, sessionID string) error {
 		socketCapabilityRT.ReleaseRun(sessionID)
 		return nil
 	}); err != nil {
 		return err
 	}
-	if err := lifetime.RegisterSessionDisposal("socket-capability-grants", 51, func(_ context.Context, sessionID string) error {
+	if err := lifetime.RegisterDisposal("socket-capability-grants", 51, func(_ context.Context, sessionID string) error {
 		socketCapabilityRT.ForgetSession(sessionID)
 		return nil
 	}); err != nil {
@@ -45,13 +45,13 @@ func (b *Runtime) BuildExceptional(control *toolexecution.Capabilities, approval
 	directIPCapabilityRT := approvalstate.NewDirectIPCapabilityRuntime()
 	b.DirectIP = directIPCapabilityRT
 	control.SetDirectIPCapabilityRuntime(directIPCapabilityRT)
-	if err := lifetime.RegisterSessionCleanup("direct-ip-capabilities", 52, func(_ context.Context, sessionID string) error {
+	if err := lifetime.RegisterCleanup("direct-ip-capabilities", 52, func(_ context.Context, sessionID string) error {
 		directIPCapabilityRT.ReleaseRun(sessionID)
 		return nil
 	}); err != nil {
 		return err
 	}
-	if err := lifetime.RegisterSessionDisposal("direct-ip-grants", 52, func(_ context.Context, sessionID string) error {
+	if err := lifetime.RegisterDisposal("direct-ip-grants", 52, func(_ context.Context, sessionID string) error {
 		directIPCapabilityRT.ForgetSession(sessionID)
 		return nil
 	}); err != nil {

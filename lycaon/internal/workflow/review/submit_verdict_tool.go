@@ -5,18 +5,19 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/toolrejection"
-	"github.com/lycaon/lycaon/internal/tools"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/internal/workflow/toolguard"
-	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
-	"github.com/lycaon/lycaon/internal/workflow/verdictcall"
-	"github.com/lycaon/lycaon/pkg/api"
 	"maps"
 	"net/url"
 	"slices"
 	"sort"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/tools"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
+	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
+	"github.com/lycaon/lycaon/internal/workflow/verdictcall"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // SubmitVerdictToolResult is returned by submit_verdict.
@@ -75,7 +76,7 @@ func RegisterSubmitVerdictTool(reg *tools.DefaultRegistry, runs *Verdicts) error
 		}
 		rl := *def.ReviewLoop
 		outline := verdictOutline(tctx.Turn.TurnOfferedToolSchemas["submit_verdict"], stock, rl, manifest.ReportBrief())
-		verdict, cited, citedURLs, err := parseSubmitVerdictArgs(rl, args)
+		verdict, cited, citedURLs, err := ParseSubmitVerdictArgs(rl, args)
 		if err != nil {
 			return rejectSubmitVerdict(tctx, workflowvalidation.ReviewLoopVerdictInvalidCode, active.CurrentPhase, verdictInvalidDetails(outline, err))
 		}
@@ -157,7 +158,7 @@ func RegisterSubmitVerdictTool(reg *tools.DefaultRegistry, runs *Verdicts) error
 }
 
 // Structured verdict fields retain JSON in the durable string-valued record.
-func parseSubmitVerdictArgs(def workflowdef.ReviewLoopDef, args map[string]any) (map[string]string, []api.CitationGroundingCitedEvidence, []string, error) {
+func ParseSubmitVerdictArgs(def workflowdef.ReviewLoopDef, args map[string]any) (map[string]string, []api.CitationGroundingCitedEvidence, []string, error) {
 	if args == nil {
 		return nil, nil, nil, fmt.Errorf("verdict object required")
 	}
@@ -383,13 +384,6 @@ func scanGroupRejectDetails(check ScanGroupCheck) map[string]any {
 	}
 }
 
-func verdictInvalidDetails(outline string, err error) map[string]any {
-	return map[string]any{
-		"reason":        err.Error(),
-		"expected_call": describeVerdictCall(outline),
-	}
-}
-
 // describeVerdictCall renders the call a review phase accepts from its
 // verdict outline; the offered submit_verdict schema carries the types.
 func describeVerdictCall(outline string) string {
@@ -449,10 +443,7 @@ func stampVerdictOutcome(tctx tools.ToolContext, rl workflowdef.ReviewLoopDef, o
 }
 
 // verdictRepair retains each refusal's code and facts in the same response.
-type verdictRepair struct {
-	Code    string         `json:"code"`
-	Details map[string]any `json:"details"`
-}
+type verdictRepair = runstate.VerdictRepair
 
 func verdictRepairs(outline string, out runstate.ReviewOutcome) []verdictRepair {
 	var repairs []verdictRepair

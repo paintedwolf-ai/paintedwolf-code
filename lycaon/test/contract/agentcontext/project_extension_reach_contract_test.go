@@ -253,9 +253,9 @@ func TestGateParitySurfaceOffResolvesDevice(t *testing.T) {
 				}(),
 				Desired: extpacks.EmptyDesired(),
 			})
-			m := session.NewManager(store.NewMemory(), nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+			m := session.NewHost(store.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 			m.SetEffectiveCatalogDeps(root, boot, surfaces)
-			m.Catalog().SetCatalogViewCache(catalogview.NewCache(root, nil))
+			m.Catalog.SetCatalogViewCache(catalogview.NewCache(root, nil))
 
 			reg := project.NewMemoryRegistry()
 			m.SetProjectRegistry(reg)
@@ -274,8 +274,8 @@ func TestGateParitySurfaceOffResolvesDevice(t *testing.T) {
 					contractcheck.FailErr(t, "SetTrustEnabled", err)
 				}
 			}
-			view := m.Catalog().ViewForProject(ctx, p.ID)
-			device := m.Catalog().DeviceView(ctx)
+			view := m.Catalog.ViewForProject(ctx, p.ID)
+			device := m.Catalog.DeviceView(ctx)
 			if view == nil || device == nil {
 				t.Fatal("nil view")
 			}

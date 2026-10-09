@@ -3,6 +3,7 @@ package workercompletion
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"sort"
 	"strconv"
@@ -30,6 +31,7 @@ const (
 // WorkerCompletionReport is structured worker finish metadata.
 // The host supplies file and evidence fields.
 type WorkerCompletionReport struct {
+	CoverageGaps        []api.WorkerCoverageGap  `json:"coverage_gaps,omitempty"`
 	CoverageReview      *api.CoverageReview      `json:"coverage_review,omitempty"`
 	Verification        *verification.Assessment `json:"verification,omitempty"`
 	DeclaredLegStatus   string                   `json:"declared_leg_status,omitempty"`
@@ -121,6 +123,13 @@ func CompleteLegDecoder(_ context.Context, args map[string]any, _ tools.ToolCont
 	if !ok {
 		return workertools.CompleteLegRecord{}, &toolrejection.ToolReject{Code: "COMPLETE_LEG_STATUS_REQUIRED", Data: map[string]any{"tool": workertools.CompleteLegTool}}
 	}
+	seen := map[string]bool{}
+	for i, gap := range report.CoverageGaps {
+		if strings.TrimSpace(gap.ID) == "" || strings.TrimSpace(gap.Subject) == "" || strings.TrimSpace(gap.Reason) == "" || seen[gap.ID] {
+			return workertools.CompleteLegRecord{}, &toolrejection.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"tool": workertools.CompleteLegTool, "field": fmt.Sprintf("coverage_gaps[%d]", i), "reason": "unique_gap_id_subject_and_reason_required"}}
+		}
+		seen[gap.ID] = true
+	}
 	return workertools.CompleteLegRecord{LegStatus: report.LegStatus, Findings: len(report.Findings)}, nil
 }
 
@@ -149,6 +158,7 @@ func (r WorkerCompletionReport) Empty() bool {
 		len(r.FilesModified) == 0 &&
 		len(r.ObjectivesMet) == 0 &&
 		len(r.RemainingRisk) == 0 &&
+		len(r.CoverageGaps) == 0 &&
 		strings.TrimSpace(r.SuggestedNextTask) == "" &&
 		strings.TrimSpace(r.Brief) == "" &&
 		len(r.Findings) == 0 &&

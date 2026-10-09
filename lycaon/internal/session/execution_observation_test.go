@@ -41,12 +41,12 @@ func TestExecutionObservationUsesApplicationOwners(t *testing.T) {
 			testutil.FailErr(t, "create child", err)
 			_, _, err = st.PutPromptSubmission(t.Context(), store.PromptSubmission{ID: "admission", SessionID: parent.ID, ProjectID: parent.ProjectID, Origin: store.PromptSubmissionOriginUser, SubmittedBy: parent.OwnerPersonID, InputDigest: "task", InputJSON: "{}"})
 			testutil.FailErr(t, "admit task", err)
-			manager := session.NewManager(st, nil, nil, settings.SessionLimits{})
+			manager := session.NewHost(st, session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
 			checkpoints := &executionCheckpoints{}
-			manager.SetExecutionCheckpoints(checkpoints)
+			manager.Observations.SetExecutionCheckpoints(checkpoints)
 			check := func(want bool) {
 				t.Helper()
-				observation, err := manager.ObserveExecution(t.Context(), parent.ID, "admission")
+				observation, err := manager.Observations.Observe(t.Context(), parent.ID, "admission")
 				testutil.FailErr(t, "observe execution", err)
 				if observation.Settled != want {
 					t.Fatalf("settlement=%+v, want %v", observation, want)
@@ -69,7 +69,7 @@ func TestExecutionObservationUsesApplicationOwners(t *testing.T) {
 			check(false)
 			checkpoints.pending = nil
 			check(true)
-			release := manager.BeginPromptExecutionForTest(t.Context(), child.ID)
+			release := manager.Runner.Coordinator.CoordinatorLoop().BeginPromptExecution(t.Context(), child.ID)
 			check(false)
 			release()
 			check(true)
@@ -87,7 +87,7 @@ func TestExecutionObservationUsesApplicationOwners(t *testing.T) {
 				}
 				testutil.FailErr(t, "settle child execution", st.FinishPromptSubmission(t.Context(), id, receipt.ClaimToken, status, "{}", failure))
 				check(true)
-				observation, err := manager.ObserveExecution(t.Context(), parent.ID, "admission")
+				observation, err := manager.Observations.Observe(t.Context(), parent.ID, "admission")
 				testutil.FailErr(t, "observe latest child receipt", err)
 				if (len(observation.Failures) == 1) != (id == "child-failed") {
 					t.Fatalf("stale failure projection: %+v", observation.Failures)
@@ -105,7 +105,7 @@ func TestExecutionObservationUsesApplicationOwners(t *testing.T) {
 			check(false)
 			testutil.FailErr(t, "deliver decision", q.MarkOutcomeDelivered(t.Context(), jobID))
 			check(true)
-			if _, err := manager.ObserveExecution(t.Context(), child.ID, "admission"); err == nil {
+			if _, err := manager.Observations.Observe(t.Context(), child.ID, "admission"); err == nil {
 				t.Fatal("foreign admission accepted")
 			}
 		})
@@ -116,8 +116,8 @@ func TestExecutionObservationRejectsMissingSession(t *testing.T) {
 	st := store.NewMemory()
 	_, _, err := st.PutPromptSubmission(t.Context(), store.PromptSubmission{ID: "orphan", SessionID: "missing", Origin: store.PromptSubmissionOriginUser, SubmittedBy: testutil.HostOwner().ID})
 	testutil.FailErr(t, "retain orphan admission", err)
-	manager := session.NewManager(st, nil, nil, settings.SessionLimits{})
-	if _, err := manager.ObserveExecution(t.Context(), "missing", "orphan"); err == nil {
+	manager := session.NewHost(st, session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
+	if _, err := manager.Observations.Observe(t.Context(), "missing", "orphan"); err == nil {
 		t.Fatal("missing session became a wait state")
 	}
 }
@@ -126,20 +126,20 @@ func TestExecutionTreeSupportsWorkflowStartsWithoutPromptAdmission(t *testing.T)
 	st := store.NewMemory()
 	root, err := st.Create(t.Context(), api.CreateSessionRequest{}, "project")
 	testutil.FailErr(t, "create workflow session", err)
-	manager := session.NewManager(st, nil, nil, settings.SessionLimits{})
-	observation, err := manager.ObserveExecutionTree(t.Context(), root.ID)
+	manager := session.NewHost(st, session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
+	observation, err := manager.Observations.Tree(t.Context(), root.ID)
 	testutil.FailErr(t, "observe idle tree", err)
 	if !observation.Settled || observation.SubmissionID != "" {
 		t.Fatalf("workflow tree observation: %+v", observation)
 	}
-	release := manager.BeginPromptExecutionForTest(t.Context(), root.ID)
+	release := manager.Runner.Coordinator.CoordinatorLoop().BeginPromptExecution(t.Context(), root.ID)
 	defer release()
-	observation, err = manager.ObserveExecutionTree(t.Context(), root.ID)
+	observation, err = manager.Observations.Tree(t.Context(), root.ID)
 	testutil.FailErr(t, "observe active workflow", err)
 	if observation.Settled {
 		t.Fatal("active workflow prompt was considered settled")
 	}
-	if _, err := manager.ObserveExecutionTree(t.Context(), "missing"); err == nil {
+	if _, err := manager.Observations.Tree(t.Context(), "missing"); err == nil {
 		t.Fatal("missing workflow session accepted")
 	}
 }

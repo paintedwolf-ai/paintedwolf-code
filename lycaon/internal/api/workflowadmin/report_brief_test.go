@@ -1,11 +1,13 @@
 package workflowadmin
 
 import (
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/report"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
-	"testing"
+	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 // The rating is decided from the findings that need attention: the review's
@@ -21,7 +23,7 @@ func TestReportBrief_DecidesFromAttentionFindings(t *testing.T) {
 		{finding: report.ReportFinding{Title: "Unreadable", Disposition: "act"}, answers: map[string]string{"reachable": "maybe"}},
 	}
 	claims := []workflowpresentation.RunClaim{{ID: "c1", Answers: map[string]string{"reachable": "app_window", "outcome": "limited_misuse", "attacker": "already_inside"}}}
-	got := reportBrief(brief, findings, claims, nil)
+	got := reportBrief(brief, findings, claims, nil, nil)
 	if len(got.Rated) != 3 || got.Rated[0].Number != 1 || !got.Rated[0].Adjudicated || got.Rated[1].Adjudicated {
 		t.Fatalf("rated = %+v, want the three attention findings with the review's answers first", got.Rated)
 	}
@@ -35,7 +37,7 @@ func TestReportBrief_DecidesFromAttentionFindings(t *testing.T) {
 	if got.Levels[got.Worst].Label != "Critical" || got.Levels[got.Best].Label != "Low" {
 		t.Fatalf("rating = %s..%s, want Critical..Low", got.Levels[got.Worst].Label, got.Levels[got.Best].Label)
 	}
-	if reportBrief(nil, findings, claims, nil) != nil {
+	if reportBrief(nil, findings, claims, nil, nil) != nil {
 		t.Fatal("a workflow without a declared rating gets none")
 	}
 }
@@ -54,7 +56,7 @@ func TestReportBrief_RatesUnreportedClaims(t *testing.T) {
 	if len(unreported) != 2 {
 		t.Fatalf("unreported = %+v, want the open and the refuted claim", unreported)
 	}
-	got := reportBrief(brief, nil, claims, unreported)
+	got := reportBrief(brief, nil, claims, unreported, nil)
 	if len(got.Rated) != 2 || !got.Rated[0].Unreported || got.Rated[0].Number != 0 || got.Rated[0].Title != "Advisory still open" {
 		t.Fatalf("rated = %+v, want the unreported claims rated without a finding number", got.Rated)
 	}
@@ -74,10 +76,31 @@ func surveyBrief(t *testing.T) *workflowdef.Brief {
 	t.Helper()
 	manifests, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "RegistryFromDirs", err)
-	m, err := manifests.Get("security-survey", "1.0.1")
+	m, err := manifests.Get("security-survey", "2.0.0")
 	testutil.FailErr(t, "manifest", err)
 	if m.ReportBrief() == nil {
 		t.Fatal("security survey declares no rating")
 	}
 	return m.ReportBrief()
+}
+
+// The review's accepted call decides page 1 and carries its reason; the
+// findings keep their own answer-decided levels beneath it.
+func TestReportBrief_TheReviewsCallDecidesTheLevel(t *testing.T) {
+	brief := surveyBrief(t)
+	findings := []assembledFinding{
+		{finding: report.ReportFinding{Title: "Open reachability", Disposition: "act"},
+			answers: map[string]string{"reachable": workflowdef.BriefUnknown, "outcome": "degraded", "attacker": "anyone_remote"}},
+	}
+	call := &wire.CompletionReportRating{Level: "moderate", Why: "Two production advisories with unknown reachability."}
+	got := reportBrief(brief, findings, nil, nil, call)
+	if got.Worst != got.Best || got.Levels[got.Worst].Label != "Moderate" || got.Call != call.Why {
+		t.Fatalf("brief = %+v, want the Moderate call with its reason", got)
+	}
+	if r := got.Rated[0]; r.Worst == r.Best {
+		t.Fatalf("rated finding = %+v, want its own open range kept", r)
+	}
+	if undeclared := reportBrief(brief, findings, nil, nil, &wire.CompletionReportRating{Level: "Severe"}); undeclared.Worst == undeclared.Best {
+		t.Fatal("an undeclared level decided the rating")
+	}
 }

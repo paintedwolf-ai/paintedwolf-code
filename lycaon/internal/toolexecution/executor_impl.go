@@ -278,5 +278,5 @@ func (e *Executor) ensureWorkerBranchIfNeeded(ctx context.Context, tool string, 
 			Data: map[string]any{"tool": tool, "reason": "worker branch coordinator not configured"},
 		}
 	}
-	return tc.Source.WorkerCoord.EnsureWorkerBranch(ctx, tc)
+	return tc.Source.WorkerCoord.EnsureBranch(ctx, tc)
 }

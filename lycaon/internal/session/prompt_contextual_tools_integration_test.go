@@ -4,6 +4,9 @@ package session_test
 
 import (
 	"context"
+	"strings"
+	"testing"
+
 	coordinatorsurface "github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/llm"
@@ -12,8 +15,6 @@ import (
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
-	"testing"
 )
 
 func TestMockLLMReceivesWorkflowFilteredTools(t *testing.T) {
@@ -23,8 +24,8 @@ func TestMockLLMReceivesWorkflowFilteredTools(t *testing.T) {
 		ID: "spec-tools", Version: "1.0.0", InitialPosture: "spec",
 		PhaseDefs: []workflowdef.PhaseDef{{ID: "work", CompleteWhen: workflowdef.CompleteWhenGatesSatisfied, Gates: []string{"research_satisfied"}}},
 	})
-	specFix.Workflow.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"spec-tools@1.0.0": specManifest})
-	_, err := specFix.Workflow.Starts.StartHuman(t.Context(), specFix.Sess.ID, api.StartWorkflowRunRequest{WorkflowID: specManifest.ID, WorkflowVersion: specManifest.Version})
+	specFix.Workflow.Manifests = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"spec-tools@1.0.0": specManifest})
+	_, err := specFix.Workflow.StartHuman(t.Context(), specFix.Sess.ID, api.StartWorkflowRunRequest{WorkflowID: specManifest.ID, WorkflowVersion: specManifest.Version})
 	testutil.FailErr(t, "start spec workflow", err)
 	specFix.Mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
 	if _, err := specFix.Mgr.Prompt(context.Background(), specFix.Sess.ID, "hello"); err != nil {
@@ -88,7 +89,7 @@ func TestMockLLMInvestigateCoordinatorReceivesEndToEndHostContract(t *testing.T)
 		WorkflowInvestigateEligible:  &investigateEligible,
 	}})
 	recordRequestedLoad(t, fix.Store, fix.Sess.ID, "command")
-	fix.Mgr.SetTurnLoads(turnload.NewLedger())
+	fix.Mgr.Loading.SetLedger(turnload.NewLedger())
 	fix.Mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
 	if _, err := fix.Mgr.Prompt(context.Background(), fix.Sess.ID, "run a bounded local-service workflow"); err != nil {
 		testutil.FailErr(t, "fix.Mgr.Prompt failed", err)

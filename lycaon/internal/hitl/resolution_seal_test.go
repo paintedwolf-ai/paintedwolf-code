@@ -75,7 +75,14 @@ func TestInstallFailureLeavesCheckpointPending(t *testing.T) {
 		SessionID:      "sess-1",
 		Kind:           api.CheckpointKindToolApproval,
 		Decision:       decision,
-		ProposedAction: &ProposedAction{Tool: "write", SessionID: "sess-1"},
+		ProposedAction: &ProposedAction{
+Invocation: ActionInvocation{
+Tool: "write",
+},
+Scope: ActionScope{
+SessionID: "sess-1",
+},
+},
 	})
 	testutil.FailErr(t, "RequestCheckpoint", err)
 

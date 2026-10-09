@@ -2,20 +2,21 @@ package workflowadmin
 
 import (
 	"context"
+	"net/http"
+	"strings"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/secretview"
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"net/http"
-	"strings"
 )
 
 func (s *RunControl) HandleResolveWorkflowDecision(w http.ResponseWriter, r *http.Request) {
 	runID := chi.URLParam(r, "id")
 	phaseID := chi.URLParam(r, "phase_id")
-	currentRun, err := s.Runs.Get(r.Context(), runID)
+	currentRun, err := s.Workflows.Store.Runs.Get(r.Context(), runID)
 	if err != nil {
 		s.WriteWorkflowError(w, r, err)
 		return
@@ -54,7 +55,7 @@ func (s *RunControl) HandleResolveWorkflowDecision(w http.ResponseWriter, r *htt
 func (s *RunControl) HandleResolveWorkflowFeedback(w http.ResponseWriter, r *http.Request) {
 	runID := chi.URLParam(r, "id")
 	phaseID := chi.URLParam(r, "phase_id")
-	currentRun, err := s.Runs.Get(r.Context(), runID)
+	currentRun, err := s.Workflows.Store.Runs.Get(r.Context(), runID)
 	if err != nil {
 		s.WriteWorkflowError(w, r, err)
 		return
@@ -89,7 +90,7 @@ func (s *RunControl) HandleResolveWorkflowFeedback(w http.ResponseWriter, r *htt
 func (s *RunControl) HandleResolveWorkflowSecret(w http.ResponseWriter, r *http.Request) {
 	runID := chi.URLParam(r, "id")
 	phaseID := chi.URLParam(r, "phase_id")
-	currentRun, err := s.Runs.Get(r.Context(), runID)
+	currentRun, err := s.Workflows.Store.Runs.Get(r.Context(), runID)
 	if err != nil {
 		s.WriteWorkflowError(w, r, err)
 		return

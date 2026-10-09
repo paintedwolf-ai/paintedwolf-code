@@ -20,14 +20,15 @@ import (
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/search"
 	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/protection"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/webresearch"
+	"github.com/lycaon/lycaon/internal/workflow"
 	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
-	"github.com/lycaon/lycaon/internal/workflow"
 )
 
 // Dependencies declares required inputs for workflow initialization.
@@ -38,7 +39,7 @@ type Dependencies struct {
 	EffectiveCatalog    *extpacks.EffectiveCatalog
 	Projects            project.Registry
 	Sessions            *store.SQL
-	SessionManager      *session.Manager
+	SessionManager      *session.Host
 	DelegationStore     *delegation.SQLStore
 	EventsOutbox        *eventoutbox.Outbox
 	EventPublisher      *events.Publisher
@@ -76,7 +77,7 @@ func Build(ctx context.Context, deps Dependencies, registerRecovery func(bootrec
 		CatalogFor: func(c context.Context, _ string, sessionID string) *extpacks.EffectiveCatalog {
 			if deps.SessionManager != nil && deps.Sessions != nil && strings.TrimSpace(sessionID) != "" {
 				if sess, sErr := deps.Sessions.Get(c, sessionID); sErr == nil && sess != nil {
-					if cat, catErr := deps.SessionManager.Catalog().EffectiveCatalogForProject(c, sess.ProjectID); catErr == nil && cat != nil {
+					if cat, catErr := deps.SessionManager.Catalog.EffectiveCatalogForProject(c, sess.ProjectID); catErr == nil && cat != nil {
 						return cat
 					}
 				}
@@ -110,14 +111,18 @@ func Build(ctx context.Context, deps Dependencies, registerRecovery func(bootrec
 	workflowMgr.Children.ReviewSpawnFilter = workflowMgr.Phases.ReviewSpawnFilter
 	workflowMgr.Recovery.Before = time.Now().UTC()
 	if deps.SessionManager != nil {
-		workflowMgr.Verdicts.VerdictGrounding = deps.SessionManager.EvaluateVerdictGrounding
+		workflowMgr.Verdicts.VerdictGrounding = deps.SessionManager.Coordinator.Closeout.EvaluateVerdictGrounding
 	}
 	workflowMgr.Resolver.SessionStore = manifestResolver.SessionStore
 	workflowMgr.Resolver.CatalogFor = manifestResolver.CatalogFor
 	workflowMgr.Resolver.ProjectTierApplies = manifestResolver.ProjectTierApplies
 	workflowMgr.Blueprints.Scaffold.Store = workflowpersistence.NewSessionScaffoldSQLStore(deps.Database)
 	if deps.EventPublisher != nil {
-		deps.EventPublisher.SessionUI = session.UIWithProtection{Inner: workflowMgr.Presentation, Mgr: deps.SessionManager}
+		var protectionService *protection.Service
+		if deps.SessionManager != nil {
+			protectionService = deps.SessionManager.Chats.Protection
+		}
+		deps.EventPublisher.SessionUI = protection.UIWithProtection{Inner: workflowMgr.Presentation, Protection: protectionService}
 	}
 	workflowMgr.Blueprints.Creator = blueprint.WorkflowBlueprintCreator{Manager: blueprintMgr}
 	workflowMgr.Blueprints.Getter = blueprintMgr
@@ -130,9 +135,9 @@ func Build(ctx context.Context, deps Dependencies, registerRecovery func(bootrec
 			return
 		}
 		if deps.SessionManager != nil {
-			deps.SessionManager.RecordPrimaryMutation(c, run.SessionID, from)
-			deps.SessionManager.RecordPrimaryMutation(c, run.SessionID, to)
-			deps.SessionManager.RecordBlueprintBinding(c, run.SessionID, from)
+			deps.SessionManager.Chats.Captures.RecordPrimaryMutation(c, run.SessionID, from)
+			deps.SessionManager.Chats.Captures.RecordPrimaryMutation(c, run.SessionID, to)
+			deps.SessionManager.Chats.Captures.RecordBlueprintBinding(c, run.SessionID, from)
 		}
 	}
 	blueprintMgr.AfterRetarget = workflowMgr.Blueprints.RebindBlueprintPath
@@ -148,6 +153,12 @@ func Build(ctx context.Context, deps Dependencies, registerRecovery func(bootrec
 		if err := registerRecovery(bootrecovery.Entry{
 			Name: "workflow-verdicts", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseServe,
 			Run: workflowMgr.Verdicts.RecoverVerdictOperations,
+		}); err != nil {
+			return nil, err
+		}
+		if err := registerRecovery(bootrecovery.Entry{
+			Name: "workflow-review-repairs", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseServe,
+			After: []string{"workflow-verdicts"}, Run: workflowMgr.Repairs.Recover,
 		}); err != nil {
 			return nil, err
 		}

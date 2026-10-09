@@ -117,7 +117,7 @@ func TestImplementLifecycleSmokePathsForward(t *testing.T) {
 	recording := llm.NewRecordingClient(mock)
 	h := BuildForTest(t, WithLLMClient(recording))
 	limits := &implementLifecycleLimits{}
-	h.SessionMgr.SetLimitsProvider(limits)
+	h.SessionMgr.Limits.SetProvider(limits)
 
 	ctx := context.Background()
 	dir := t.TempDir()
@@ -130,14 +130,14 @@ func TestImplementLifecycleSmokePathsForward(t *testing.T) {
 	sess, err := h.CreateHarnessSession(t, wire.CreateSessionRequest{}, dir)
 	testutil.FailErr(t, "Create session", err)
 	AttachDefaultAmbient(t, h, ctx, sess.ID)
-	run, err := h.WorkflowMgr.GetActive(ctx, sess.ID)
+	run, err := h.WorkflowMgr.Store.Runs.ActiveBySession(ctx, sess.ID)
 	testutil.FailErr(t, "GetActive after ambient attach", err)
 	if run.CurrentPhase != "boot" {
 		t.Fatalf("initial phase = %q want boot", run.CurrentPhase)
 	}
 	h.SeedProgress(t, ctx, sess.ID)
 	testutil.FailErr(t, "RecordBoardOrientReady", h.WorkflowMgr.Fanout.RecordBoardOrientReady(ctx, sess.ID, "smoke-board"))
-	run, err = h.WorkflowMgr.GetActive(ctx, sess.ID)
+	run, err = h.WorkflowMgr.Store.Runs.ActiveBySession(ctx, sess.ID)
 	testutil.FailErr(t, "GetActive after orient", err)
 	if run.CurrentPhase != "work" {
 		t.Fatalf("phase after board orient = %q want work", run.CurrentPhase)
@@ -154,7 +154,7 @@ func TestImplementLifecycleSmokePathsForward(t *testing.T) {
 
 	// Dispatch and complete the first worker.
 	start := time.Now()
-	if _, err := h.SessionMgr.Prompt(ctx, sess.ID, "Build the stub and resolve any TODOs."); err != nil {
+	if _, err := h.SessionMgr.Submissions.Prompt(ctx, sess.ID, "Build the stub and resolve any TODOs."); err != nil {
 		testutil.FailErr(t, "user Prompt", err)
 	}
 	var pending []wire.WorkerTask
@@ -220,7 +220,7 @@ func TestImplementLifecycleSmokePathsForward(t *testing.T) {
 			workerTaskFinishedCount.Load(), legFinishedCount.Load())
 	}
 
-	h.SessionMgr.DrainLoopPendingForTest(ctx, sess.ID)
+	h.SessionMgr.Runner.Coordinator.CoordinatorLoop().DrainPending(ctx, sess.ID)
 	AssertSessionNotStuck(t, h, ctx, sess.ID)
 }
 
@@ -246,7 +246,7 @@ func completeWorkerWrite(t *testing.T, h *Harness, sess *wire.Session, job wire.
 	testutil.FailErr(t, "CommitEvidenceToolResult "+callID, err)
 	testutil.FailErr(t, "DrainPendingWorkerJobs "+callID, DrainPendingWorkerJobs(ctx, h, sess.ProjectID, sess.ID))
 	testutil.FailErr(t, "PromotePendingWriteOverlays "+callID, PromotePendingWriteOverlays(ctx, h, sess.ProjectID, sess.ID))
-	h.SessionMgr.DrainLoopPendingForTest(ctx, sess.ID)
+	h.SessionMgr.Runner.Coordinator.CoordinatorLoop().DrainPending(ctx, sess.ID)
 }
 
 func completedWriteToolResult(toolCallID, content string) wire.Message {

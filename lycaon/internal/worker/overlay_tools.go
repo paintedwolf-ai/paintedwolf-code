@@ -8,7 +8,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/hostmarker"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/projectcontrol"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -232,7 +232,7 @@ func formatOverlayPromoteHostContent(ctx context.Context, overlayID string, out 
 	if err != nil {
 		return "", err
 	}
-	content, err := session.FormatOverlayHostToolContent(hostmarker.OverlayPromoteEventPrefix, out, banners)
+	content, err := projectcontrol.FormatOverlayHostToolContent(hostmarker.OverlayPromoteEventPrefix, out, banners)
 	if err != nil {
 		return "", err
 	}
@@ -250,7 +250,7 @@ func formatOverlayRejectHostContent(ctx context.Context, overlayID string, out a
 	if err != nil {
 		return "", err
 	}
-	content, err := session.FormatOverlayHostToolContent(hostmarker.OverlayRejectEventPrefix, out, banners)
+	content, err := projectcontrol.FormatOverlayHostToolContent(hostmarker.OverlayRejectEventPrefix, out, banners)
 	if err != nil {
 		return "", err
 	}

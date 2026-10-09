@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/projectcontrib"
 	"github.com/lycaon/lycaon/internal/rules"
 	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
@@ -39,10 +40,10 @@ func NewProjectOverlayTestServer(t *testing.T, opts ...TestDeps) (*hostapi.Serve
 		}},
 	})
 	toolRegistry := tools.NewStubRegistry()
-	mgr := session.NewManager(sessionStore, mock, toolRegistry, settings.DefaultSessionLimits())
-	mgr.SetToolInvoker(testtool.RegistryInvoker{Registry: toolRegistry}, testtool.RegistryInvoker{Registry: toolRegistry})
+	mgr := session.NewHost(sessionStore, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolRegistry)
+	mgr.Coordinator.Guards.SetInvoker(testtool.RegistryInvoker{Registry: toolRegistry})
 
-	postures, err := session.LoadPostureRegistry()
+	postures, err := profiles.LoadPostureRegistry()
 	testutil.FailErr(t, "load posture registry", err)
 	packs, err := rules.LoadBundledRules()
 	testutil.FailErr(t, "load bundled rules", err)
@@ -53,8 +54,8 @@ func NewProjectOverlayTestServer(t *testing.T, opts ...TestDeps) (*hostapi.Serve
 	testutil.FailErr(t, "build posture rule engine", err)
 	overlay := rules.NewProjectRulesOverlay(conditionRegistry)
 	engine.Overlay = overlay
-	mgr.SetPostureRegistry(postures)
-	mgr.SetRuleEngine(engine)
+	mgr.Profiles.SetPostureRegistry(postures)
+	mgr.Coordinator.Guards.SetRules(engine)
 	mgr.SetProjectRegistry(projects)
 
 	surfaces, err := settings.NewTrustSurfacesStoreAt(filepath.Join(t.TempDir(), "trust-surfaces.yaml"))
@@ -66,7 +67,7 @@ func NewProjectOverlayTestServer(t *testing.T, opts ...TestDeps) (*hostapi.Serve
 	}).Applies
 
 	gate := project.NewMutationGate()
-	mgr.SetMutationGate(gate)
+	mgr.Runner.Execution.SetMutationGate(gate)
 	deps := hostapi.Dependencies{Core: hostapi.CoreDependencies{
 		Store: sessionStore, Projects: projects, Sessions: mgr, Settings: &settings.Service{TrustSurfaces: surfaces},
 		MutationGate: gate}, Source: hostapi.SourceDependencies{ProjectRules: overlay}}
@@ -95,7 +96,7 @@ func TrustSettingsServer(t *testing.T, opts ...TestDeps) *hostapi.Server {
 func WriteOverlay(t *testing.T, root, basename, content string) {
 	t.Helper()
 	dir := filepath.Join(root, settingsoverlay.DirName())
-	testutil.FailErr(t, "mkdir overlay", os.MkdirAll(dir, 0o755))
+	testutil.FailErr(t, "mkdir overlay", os.MkdirAll(dir, 0o750))
 	testutil.FailErr(t, "write "+basename,
-		os.WriteFile(filepath.Join(dir, basename), []byte(content), 0o644))
+		os.WriteFile(filepath.Join(dir, basename), []byte(content), 0o600))
 }

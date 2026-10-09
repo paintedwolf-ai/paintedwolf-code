@@ -1,18 +1,23 @@
 name: CI
 
-# Ready pull requests run the fast tier, the stages of `./task check-fast`. The
-# merge queue runs the full tier on the exact commit that lands on main: every
-# stage of `./task check` plus platform verification. `check` is the one
-# required check for both, so main only advances to a commit the full tier
-# passed. Drafts spend no verification runners, and their `check` fails until
-# they are marked ready.
+# A ready pull request runs the fast tier, whose check lets auto-merge add it to
+# the merge queue; the queue runs the affected-scope integration gate on the
+# exact commit that lands. Exact-commit platform qualification follows main and
+# gates releases.
 on:
   pull_request:
     branches: [main]
     types: [opened, synchronize, reopened, ready_for_review]
   merge_group:
-  # The full tier on any branch, before queueing or to reproduce a queue failure.
+  # The full tier on any branch, before queueing or to reproduce a queue failure;
+  # the fast tier for a pull request whose events start no CI.
   workflow_dispatch:
+    inputs:
+      profile:
+        description: Catalog profile to run
+        type: choice
+        default: check
+        options: [check, fast]
 
 permissions:
   contents: read
@@ -22,20 +27,32 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  verification:
-    if: ${{ !github.event.pull_request.draft }}
+  fast:
+    if: ${{ github.event_name == 'pull_request' && !github.event.pull_request.draft || inputs.profile == 'fast' }}
     uses: ./.github/workflows/verification.yml
     with:
-      profile: ${{ github.event_name == 'pull_request' && 'fast' || 'check' }}
+      profile: fast
+      affected: ${{ github.event_name == 'pull_request' }}
+
+  integration:
+    if: ${{ github.event_name == 'merge_group' || inputs.profile == 'check' }}
+    # Its jobs cancel their own run once the merge queue removes the group.
+    permissions:
+      contents: read
+      actions: write
+    uses: ./.github/workflows/verification.yml
+    with:
+      profile: ${{ github.event_name == 'merge_group' && 'integration' || 'check' }}
+      affected: ${{ github.event_name == 'merge_group' }}
 
   platform:
-    if: github.event_name != 'pull_request'
+    if: inputs.profile == 'check'
     uses: ./.github/workflows/platform-verification.yml
 
   check:
     # Judges failed and timed-out jobs, but a cancelled run must not wait for a runner to do so.
     if: ${{ !cancelled() }}
-    needs: [verification, platform]
+    needs: [fast, integration, platform]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -43,6 +60,6 @@ jobs:
       - name: Require this tier's verification
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}
-          SKIPPED: ${{ github.event_name == 'pull_request' && 'platform' || '' }}
+          SKIPPED: ${{ inputs.profile == 'check' && 'fast' || format('{0},platform', github.event_name == 'merge_group' && 'fast' || 'integration') }}
           DRAFT: ${{ github.event.pull_request.draft == true }}
         run: python3 scripts/ci_verification.py gate --skipped "$SKIPPED" --draft "$DRAFT"

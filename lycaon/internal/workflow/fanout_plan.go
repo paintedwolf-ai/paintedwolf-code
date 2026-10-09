@@ -3,17 +3,20 @@ package workflow
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/workflow/toolguard"
+	"log/slog"
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/progress"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/workeradmission"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/tools"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
-	"github.com/lycaon/lycaon/internal/workflow/toolguard"
 	"github.com/lycaon/lycaon/pkg/api"
-	"log/slog"
-	"strings"
 )
 
 // maxLegSubjectRunes keeps a leg subject to one short checklist line.
@@ -38,6 +41,10 @@ func RegisterFanoutPlanTool(reg *tools.DefaultRegistry, runs *Fanout) error {
 		}
 		plan, err := parseFanoutPlanArgs(args)
 		if err != nil {
+			var reject *toolrejection.ToolReject
+			if errors.As(err, &reject) {
+				return "", err
+			}
 			return marshalFanoutPlanResult(FanoutPlanToolResult{Error: "invalid_plan", Message: err.Error()})
 		}
 		result := FanoutPlanToolResult{
@@ -72,6 +79,13 @@ func RegisterFanoutPlanTool(reg *tools.DefaultRegistry, runs *Fanout) error {
 		roster := runs.Policy.RosterFor(active, manifest)
 		if err := validateFanoutPlan(plan, roster, runstate.ReviewLoopFanoutExcludedAgents(manifest), maxLegs, def.Fanout.RequireThreatModel); err != nil {
 			return marshalFanoutPlanResult(FanoutPlanToolResult{Error: "invalid_plan", Message: err.Error()})
+		}
+		if def.Fanout.RequireTaskCharter {
+			for _, leg := range plan.Legs {
+				if len(leg.DoneWhen) == 0 {
+					return "", &toolrejection.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"tool": "fanout_plan", "field": "legs.done_when", "reason": "completion_criteria_required"}}
+				}
+			}
 		}
 		if err := validateFanoutLegBudgets(plan, runs.workerToolBudget(tctx.ActiveRootPath())); err != nil {
 			return marshalFanoutPlanResult(FanoutPlanToolResult{Error: "invalid_plan", Message: err.Error()})
@@ -142,9 +156,13 @@ func parseFanoutPlanArgs(args map[string]any) (runstate.FanoutPlan, error) {
 			AgentType: strings.TrimSpace(toolguard.StringArg(m["agent_type"])),
 			Subject:   strings.Join(strings.Fields(toolguard.StringArg(m["subject"])), " "),
 			Prompt:    strings.TrimSpace(toolguard.StringArg(m["prompt"])),
+			DoneWhen:  fanoutDoneWhen(m["done_when"]),
 		}
 		if leg.AgentType == "" || leg.Subject == "" || leg.Prompt == "" {
 			return runstate.FanoutPlan{}, fmt.Errorf("legs[%d] requires agent_type, subject, and prompt", i)
+		}
+		if len(leg.DoneWhen) > 0 && spawn.TaskCharterRunes(api.WorkerTaskCharter{Goal: leg.Prompt, DoneWhen: leg.DoneWhen}) > spawn.MaxTaskCharterRunes {
+			return runstate.FanoutPlan{}, &toolrejection.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"tool": "fanout_plan", "field": fmt.Sprintf("legs[%d]", i), "reason": "brief_too_long", "max_runes": spawn.MaxTaskCharterRunes}}
 		}
 		if n := len([]rune(leg.Subject)); n > maxLegSubjectRunes {
 			return runstate.FanoutPlan{}, fmt.Errorf("legs[%d].subject is %d characters; name the area in at most %d", i, n, maxLegSubjectRunes)
@@ -156,7 +174,7 @@ func parseFanoutPlanArgs(args map[string]any) (runstate.FanoutPlan, error) {
 			}
 			leg.Scope = &scope
 		}
-		loops, err := session.ParseTaskMaxToolLoopsFromArgs(m)
+		loops, err := workeradmission.ParseTaskMaxToolLoopsFromArgs(m)
 		if err != nil {
 			return runstate.FanoutPlan{}, fmt.Errorf("legs[%d].%w", i, err)
 		}
@@ -237,7 +255,7 @@ func validateFanoutPlan(plan runstate.FanoutPlan, allowedAgents, excludedAgents 
 // validateFanoutLegBudgets keeps each planned ceiling inside the host range.
 func validateFanoutLegBudgets(plan runstate.FanoutPlan, budget spawn.WorkerToolBudget) error {
 	for i, leg := range plan.Legs {
-		if session.ValidateTaskMaxToolLoopsCode(leg.MaxToolLoops, budget) != "" {
+		if workeradmission.ValidateTaskMaxToolLoopsCode(leg.MaxToolLoops, budget) != "" {
 			return fmt.Errorf("legs[%d].max_tool_loops is %d; set it between %d and %d, or omit it for the default %d",
 				i, leg.MaxToolLoops, budget.Min, budget.Max, budget.Default)
 		}
@@ -286,4 +304,19 @@ func marshalFanoutPlanResult(result FanoutPlanToolResult) (string, error) {
 		return "", err
 	}
 	return string(raw), nil
+}
+
+func fanoutDoneWhen(raw any) []string {
+	var out []string
+	switch values := raw.(type) {
+	case []any:
+		for _, v := range values {
+			if s, ok := v.(string); ok && strings.TrimSpace(s) != "" {
+				out = append(out, strings.TrimSpace(s))
+			}
+		}
+	case []string:
+		out = append(out, values...)
+	}
+	return out
 }

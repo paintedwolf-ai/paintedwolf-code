@@ -21,17 +21,17 @@ func TestStreamProgressBuffersContentUntilSettle(t *testing.T) {
 	st := store.NewMemory()
 	deps := promptloop.StoreDeps(st)
 	var live, updates int
-	deps.Streams = &observedMessageStreams{MessageStreams: deps.Streams, project: func(ctx context.Context, sessionID string, msg api.Message) error {
+	deps.Projection.Streams = &observedMessageStreams{MessageStreams: deps.Projection.Streams, project: func(ctx context.Context, sessionID string, msg api.Message) error {
 		live++
 		return st.PatchLiveProjection(ctx, sessionID, msg.ID, msg.Content, msg.ToolCalls)
 	}}
-	deps.UpdateMessage = func(ctx context.Context, sessionID, messageID string, msg api.Message) error {
+	deps.Projection.UpdateMessage = func(ctx context.Context, sessionID, messageID string, msg api.Message) error {
 		updates++
 		_, err := st.UpdateMessage(ctx, sessionID, messageID, msg)
 		return err
 	}
-	deps.LLM = tokenStreamingLLM{tokens: []string{"Hel", "lo", " ", "world"}}
-	deps.Policy = &recordingToolPolicy{}
+	deps.Model.LLM = tokenStreamingLLM{tokens: []string{"Hel", "lo", " ", "world"}}
+	deps.Context.Policy = &recordingToolPolicy{}
 	loop := promptloop.NewPromptLoopForTest(deps)
 	ctx := context.Background()
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
@@ -60,7 +60,7 @@ func TestStreamProgressBuffersAllToolCalls(t *testing.T) {
 	st := store.NewMemory()
 	deps := promptloop.StoreDeps(st)
 	var sawCommand bool
-	deps.Streams = &observedMessageStreams{MessageStreams: deps.Streams, project: func(ctx context.Context, sessionID string, msg api.Message) error {
+	deps.Projection.Streams = &observedMessageStreams{MessageStreams: deps.Projection.Streams, project: func(ctx context.Context, sessionID string, msg api.Message) error {
 		for _, call := range msg.ToolCalls {
 			if call.Name == "summarize" && strings.TrimSpace(call.ID) != "" {
 				sawCommand = true
@@ -71,7 +71,7 @@ func TestStreamProgressBuffersAllToolCalls(t *testing.T) {
 		}
 		return st.PatchLiveProjection(ctx, sessionID, msg.ID, msg.Content, msg.ToolCalls)
 	}}
-	deps.LLM = &toolStreamingLLM{calls: []api.ToolCall{
+	deps.Model.LLM = &toolStreamingLLM{calls: []api.ToolCall{
 		{ID: "tc-sum", Name: "summarize", Args: map[string]any{"path": "pkg"}},
 		{ID: "tc-read", Name: "read", Args: map[string]any{"path": "a.go"}},
 	}}
@@ -82,9 +82,9 @@ func TestStreamProgressBuffersAllToolCalls(t *testing.T) {
 	_ = reg.Register("read", func(_ context.Context, _ map[string]any, _ tools.ToolContext) (string, error) {
 		return "file", nil
 	})
-	deps.Tools = reg
-	deps.Policy = &recordingToolPolicy{}
-	deps.Limits = loopTestLimits(2)
+	deps.Context.Tools = reg
+	deps.Context.Policy = &recordingToolPolicy{}
+	deps.Context.Limits = loopTestLimits(2)
 	loop := promptloop.NewPromptLoopForTest(deps)
 	ctx := context.Background()
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
@@ -106,10 +106,10 @@ func TestLoopPublishesWorkerProgress(t *testing.T) {
 	var published []publishedProgress
 	var lastCtx *api.WorkerContextUsage
 	deps := promptloop.StoreDeps(store)
-	deps.LLM = usageReportingLLM{usage: modelcall.TokenUsage{PromptTokens: 1234, CompletionTokens: 10}}
-	deps.Policy = &recordingToolPolicy{}
-	deps.CompactionConfig = staticCompactionConfig
-	deps.PublishWorkerProgress = func(_ context.Context, _ string, snap workerprogress.Snapshot, checkpoint bool) {
+	deps.Model.LLM = usageReportingLLM{usage: modelcall.TokenUsage{PromptTokens: 1234, CompletionTokens: 10}}
+	deps.Context.Policy = &recordingToolPolicy{}
+	deps.Model.CompactionConfig = staticCompactionConfig
+	deps.Nudges.PublishWorkerProgress = func(_ context.Context, _ string, snap workerprogress.Snapshot, checkpoint bool) {
 		published = append(published, publishedProgress{snap: snap, checkpoint: checkpoint})
 		if snap.ContextUsage != nil {
 			lastCtx = snap.ContextUsage
@@ -178,10 +178,10 @@ func TestLoopPublishesAnEdgePerSettledToolCall(t *testing.T) {
 	store := store.NewMemory()
 	var published []publishedProgress
 	deps := promptloop.StoreDeps(store)
-	deps.LLM = client
-	deps.Tools = tools.NewStubRegistry()
-	deps.Policy = &recordingToolPolicy{}
-	deps.PublishWorkerProgress = func(_ context.Context, _ string, snap workerprogress.Snapshot, checkpoint bool) {
+	deps.Model.LLM = client
+	deps.Context.Tools = tools.NewStubRegistry()
+	deps.Context.Policy = &recordingToolPolicy{}
+	deps.Nudges.PublishWorkerProgress = func(_ context.Context, _ string, snap workerprogress.Snapshot, checkpoint bool) {
 		published = append(published, publishedProgress{snap: snap, checkpoint: checkpoint})
 	}
 	loop := promptloop.NewPromptLoopForTest(deps)

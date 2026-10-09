@@ -1,0 +1,59 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {
+    "imports": [
+     {
+      "path": "github.com/ollama/ollama/x/imagegen/transfer"
+     }
+    ]
+   },
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/ollama/ollama"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-7020",
+  "GHSA-x99g-8v8j-25j2"
+ ],
+ "database_specific": {
+  "review_status": "REVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5750"
+ },
+ "details": "Ollama is Vulnerable to Path Traversal in github.com/ollama/ollama",
+ "id": "GO-2026-5750",
+ "modified": "2026-07-27T16:28:49Z",
+ "published": "2026-07-27T16:28:49Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-x99g-8v8j-25j2"
+  },
+  {
+   "type": "WEB",
+   "url": "https://vuldb.com/submit/797576"
+  },
+  {
+   "type": "WEB",
+   "url": "https://vuldb.com/vuln/359599"
+  },
+  {
+   "type": "WEB",
+   "url": "https://vuldb.com/vuln/359599/cti"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Ollama is Vulnerable to Path Traversal in github.com/ollama/ollama"
+}

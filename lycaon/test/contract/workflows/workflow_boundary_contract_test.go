@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
+	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -16,11 +18,11 @@ func TestWorkflowBoundaryNoDisplayProseInGo(t *testing.T) {
 	if !ok {
 		t.Fatal("runtime.Caller failed")
 	}
-	path := filepath.Join(filepath.Dir(file), "..", "..", "..", "internal", "workflow", "boundary.go")
+	path := filepath.Join(filepath.Dir(file), "..", "..", "..", "internal", "workflow", "runstate", "journal.go")
 	data, err := os.ReadFile(path)
 	contractcheck.FailErr(t, "read file", err)
 	if strings.Contains(string(data), "── ") {
-		t.Fatal("internal/workflow/boundary.go must not format boundary display prose — Den supplies labels")
+		t.Fatal("internal/workflow/runstate/journal.go must not format boundary display prose — Den supplies labels")
 	}
 	if strings.Contains(string(data), "boundaryContent") {
 		t.Fatal("boundaryContent helper removed — structured WorkflowBoundaryMeta only")
@@ -55,20 +57,9 @@ func TestAssemblyFiltersPromptHistory(t *testing.T) {
 
 func TestNewBoundaryMessageUsesSystemRole(t *testing.T) {
 	t.Parallel()
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("runtime.Caller(0) failed")
-	}
-	path := filepath.Join(filepath.Dir(file), "..", "..", "..", "internal", "workflow", "boundary.go")
-	data, err := os.ReadFile(path)
-	contractcheck.FailErr(t, "read file", err)
-	src := string(data)
-	if !strings.Contains(src, "MessageRoleSystem") {
-		t.Fatal("newBoundaryMessage must set Role: api.MessageRoleSystem")
-	}
-	if strings.Contains(src, "Role:             api.MessageRoleAssistant") ||
-		strings.Contains(src, "Role: api.MessageRoleAssistant") {
-		t.Fatal("newBoundaryMessage must not use MessageRoleAssistant")
+	msg := runstate.NewBoundaryMessage(&api.WorkflowRun{ID: "run", SessionID: "session", WorkflowID: "plan", WorkflowVersion: "1.0.0"}, "started", "research", "")
+	if msg.Role != api.MessageRoleSystem || msg.Kind != api.MessageKindWorkflowBoundary || msg.WorkflowBoundary == nil {
+		t.Fatalf("boundary message must use a structured system row: %+v", msg)
 	}
 }
 

@@ -12,7 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/project"
-	"github.com/lycaon/lycaon/internal/session"
+	sessiondecisions "github.com/lycaon/lycaon/internal/session/decisions"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testbaseline"
@@ -62,7 +62,7 @@ type scriptedHarness struct {
 	queue     *worker.SQLQueue
 	manager   *workspace.Manager
 	ledger    *sourceledger.Store
-	decisions session.DecisionStore
+	decisions sessiondecisions.Store
 	database  db.Handle
 	fallback  *countingFallback
 	verified  []string
@@ -93,7 +93,7 @@ func newScriptedHarness(t *testing.T, files map[string]string) *scriptedHarness 
 	h.queue.SetProjectStore(h.projects)
 	h.manager = workspace.NewManager(filepath.Join(testbaseline.DataDir(t, database), "worker-branches"), t.TempDir())
 	h.queue.SetWorkerWorkspaceManager(h.manager)
-	h.decisions = session.NewSQLDecisionStore(database)
+	h.decisions = sessiondecisions.NewSQL(database)
 	return h
 }
 

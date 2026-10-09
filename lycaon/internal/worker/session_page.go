@@ -3,12 +3,13 @@ package worker
 import (
 	"context"
 	"errors"
+	"sort"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/pagecursor"
 	"github.com/lycaon/lycaon/internal/worker/jobstate"
 	"github.com/lycaon/lycaon/pkg/api"
-	"sort"
-	"time"
 )
 
 // MaxSessionPageSize bounds one worker history read, including direct queue calls.

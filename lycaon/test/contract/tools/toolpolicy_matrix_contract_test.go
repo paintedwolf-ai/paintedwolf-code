@@ -2,6 +2,11 @@ package contract
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/conditions"
@@ -11,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/rules"
 	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -30,10 +36,6 @@ import (
 	workflowstatetools "github.com/lycaon/lycaon/internal/workflow/statetools"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
-	"os"
-	"path/filepath"
-	"strings"
-	"testing"
 )
 
 type postureToolExpectation struct {
@@ -113,8 +115,8 @@ func listCoordinatorToolsForPosture(t *testing.T, row postureToolExpectation) []
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, projectDir)
 	rt, err := toolhost.NewRuntime(toolhost.RuntimeConfig{ConfigRoot: configRoot, Catalog: contractcheck.StockCatalog(t)})
 	contractcheck.FailErr(t, "toolhost.NewRuntime failed", err)
-	mgr := session.NewManager(store, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
-	mgr.SetToolInvoker(rt.Executor, rt.Executor.Metadata)
+	mgr := session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr.Coordinator.Guards.SetToolMetadata(rt.Executor.Metadata)
 	workflowMgr := wireToolpolicyMatrixContract(t, configRoot, mgr, store, rt.Registry, sqlDB)
 
 	ctx := context.Background()
@@ -126,7 +128,7 @@ func listCoordinatorToolsForPosture(t *testing.T, row postureToolExpectation) []
 		}
 	}
 	names := make([]string, 0)
-	for _, meta := range mgr.PromptToolPolicy().ListForPrompt(ctx, sess, "coordinator") {
+	for _, meta := range mgr.Coordinator.Guards.Policy().ListForPrompt(ctx, sess, "coordinator") {
 		names = append(names, meta.Name)
 	}
 	return names
@@ -135,15 +137,15 @@ func listCoordinatorToolsForPosture(t *testing.T, row postureToolExpectation) []
 func wireToolpolicyMatrixContract(
 	t *testing.T,
 	configRoot string,
-	mgr *session.Manager,
+	mgr *session.Host,
 	store session.Store,
 	reg *tools.DefaultRegistry,
 	sqlDB db.Handle,
 ) *workflow.RunManager {
 	t.Helper()
 	projectDir := t.TempDir()
-	postures, err := session.LoadPostureRegistry()
-	contractcheck.FailErr(t, "session.LoadPostureRegistry failed", err)
+	postures, err := profiles.LoadPostureRegistry()
+	contractcheck.FailErr(t, "profiles.LoadPostureRegistry failed", err)
 	packs, err := rules.LoadBundledRules()
 	contractcheck.FailErr(t, "rules.LoadBundledRules failed", err)
 	condReg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{})
@@ -153,12 +155,12 @@ func wireToolpolicyMatrixContract(
 	}
 	engine, err := rules.NewPostureRuleEngine(postures, packs, condReg)
 	contractcheck.FailErr(t, "rules.NewPostureRuleEngine failed", err)
-	mgr.SetPostureRegistry(postures)
-	mgr.SetRuleEngine(engine)
+	mgr.Profiles.SetPostureRegistry(postures)
+	mgr.Coordinator.Guards.SetRules(engine)
 
 	agents := orchestration.NewMemoryAgentRegistry()
 	_ = orchestration.LoadRequiredAgentRegistry(context.Background(), agents)
-	mgr.SetAgentRegistry(agents)
+	mgr.Profiles.SetAgentRegistry(agents)
 
 	manifestRegistry, err := workflowdef.RegistryFromDirs("")
 	contractcheck.FailErr(t, "workflow.RegistryFromDirs failed", err)
@@ -185,7 +187,7 @@ func wireToolpolicyMatrixContract(
 	if err := workflow.RegisterFanoutPlanTool(reg, workflowMgr.Fanout); err != nil {
 		contractcheck.FailErr(t, "workflow.RegisterFanoutPlanTool failed", err)
 	}
-	if err := workflow.RegisterFeedbackTool(reg, workflowMgr); err != nil {
+	if err := workflowinputs.RegisterFeedbackTool(reg, workflowMgr.Feedback); err != nil {
 		contractcheck.FailErr(t, "workflow.RegisterFeedbackTool failed", err)
 	}
 	if err := workflowinputs.RegisterAskUserTool(reg, workflowMgr.Asks, nil); err != nil {
@@ -198,7 +200,7 @@ func wireToolpolicyMatrixContract(
 	if err := delegation.RegisterDelegationTools(reg, delegMgr); err != nil {
 		contractcheck.FailErr(t, "delegation.RegisterDelegationTools failed", err)
 	}
-	if err := worker.RegisterTaskTool(reg, worker.TaskToolDeps{Sessions: mgr, Queue: queue, Agents: agents, Workers: worker.DefaultWorkersConfig()}); err != nil {
+	if err := worker.RegisterTaskTool(reg, worker.TaskToolDeps{Queue: queue, Agents: agents, Workers: worker.DefaultWorkersConfig()}); err != nil {
 		contractcheck.FailErr(t, "worker.RegisterTaskTool failed", err)
 	}
 	policy, err := workflowcomposition.LoadComposePolicy()

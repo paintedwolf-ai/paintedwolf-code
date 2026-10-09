@@ -61,11 +61,11 @@ func TestLoopSkipTurnRearmsWithoutKickOrPrompt(t *testing.T) {
 		},
 	})
 	engine.SetDeps(deps)
-	engine.EnterSleep(context.Background(), "s1", time.Now().UTC().Add(30*time.Minute), "batch work", []WaitTrigger{
+	engine.Waits.EnterSleep(context.Background(), "s1", time.Now().UTC().Add(30*time.Minute), "batch work", []WaitTrigger{
 		WaitTriggerTimer,
 		WaitTriggerNextWorkerDone,
 	}, nil, SleepMoverHost)
-	engine.NudgeAfterWorkerJobTerminal(
+	engine.Nudges.NudgeAfterWorkerJobTerminal(
 		context.Background(),
 		"s1",
 		"job-1",
@@ -74,14 +74,14 @@ func TestLoopSkipTurnRearmsWithoutKickOrPrompt(t *testing.T) {
 		"",
 		anchor.Envelope{},
 	)
-	engine.WaitForAsyncTurns(testutil.BoundedContext(t, 5*time.Second))
+	engine.Turns.WaitForAsyncTurns(testutil.BoundedContext(t, 5*time.Second))
 	if prompts.Load() != 0 {
 		t.Fatalf("prompts = %d want 0 on skip turn", prompts.Load())
 	}
 	if kicks.Load() != 0 {
 		t.Fatalf("kicks = %d want 0 on skip turn", kicks.Load())
 	}
-	if !engine.IsSleeping("s1") {
+	if !engine.Waits.IsSleeping("s1") {
 		t.Fatal("expected sleep re-armed after skip turn")
 	}
 }
@@ -122,7 +122,7 @@ func TestLoopSkipTurnDoesNotApplyToDispatchWake(t *testing.T) {
 		},
 	})
 	engine.SetDeps(deps)
-	engine.NudgeAfterWorkerJobTerminal(
+	engine.Nudges.NudgeAfterWorkerJobTerminal(
 		context.Background(),
 		"s1",
 		"job-2",

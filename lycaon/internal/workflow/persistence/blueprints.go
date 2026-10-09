@@ -114,13 +114,17 @@ func (s *Blueprints) RelocateBlueprintPath(ctx context.Context, projectID, from,
 	if err != nil {
 		return nil, err
 	}
-	if err := tx.Commit(); err != nil {
-		return nil, err
-	}
 	seen := make(map[string]struct{}, len(rows))
 	out := make([]string, 0, len(rows))
-	for _, sessionID := range rows {
-		sessionID = strings.TrimSpace(sessionID)
+	for _, row := range rows {
+		run, err := runFromRow(row)
+		if err != nil {
+			return nil, err
+		}
+		if err := s.transactions.enqueueRunTx(ctx, tx, run, api.WorkflowEventKindRunUpdated, ""); err != nil {
+			return nil, err
+		}
+		sessionID := strings.TrimSpace(run.SessionID)
 		if sessionID == "" {
 			continue
 		}
@@ -130,5 +134,9 @@ func (s *Blueprints) RelocateBlueprintPath(ctx context.Context, projectID, from,
 		seen[sessionID] = struct{}{}
 		out = append(out, sessionID)
 	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	s.transactions.outbox.Notify()
 	return out, nil
 }

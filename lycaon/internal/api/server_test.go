@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"io"
 	"math"
 	"net/http"
 	"net/http/httptest"
@@ -345,7 +344,7 @@ func TestCreateSessionByProjectID(t *testing.T) {
 	store := store.NewMemory()
 	srv := NewServer(requiredTestDeps(t, Dependencies{Core: CoreDependencies{
 		Store: store, Projects: reg,
-		Sessions: session.NewManager(store, llm.NewMockProvider(testMockConfig(t)), tools.NewStubRegistry(), settings.DefaultSessionLimits())}}), nil, TestAPIToken)
+		Sessions: session.NewHost(store, session.Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())}}), nil, TestAPIToken)
 	body := `{"project_id":"` + opened.ID + `","posture":"spec"}`
 	req := newAuthedRequest(http.MethodPost, "/v1/sessions", strings.NewReader(body))
 	w := httptest.NewRecorder()
@@ -672,16 +671,6 @@ func TestRecoveryMiddleware(t *testing.T) {
 
 func filepathJoin(base, elem string) string {
 	return strings.TrimRight(base, string(os.PathSeparator)) + string(os.PathSeparator) + elem
-}
-
-func readBody(t *testing.T, resp *http.Response) []byte {
-	t.Helper()
-	defer resp.Body.Close()
-	b, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("read body: %v", err)
-	}
-	return b
 }
 
 // primaryRootPath mirrors the primary-or-first root selection Den applies to wire projects.

@@ -3,12 +3,13 @@ package worker
 import (
 	"context"
 	"fmt"
+	"strings"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/worker/jobstate"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
-	"time"
 )
 
 // List returns jobs for a project with optional status filter.

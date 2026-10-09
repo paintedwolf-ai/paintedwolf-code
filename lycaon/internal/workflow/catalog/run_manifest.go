@@ -2,8 +2,10 @@ package catalog
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 	"strings"
 )
@@ -53,7 +55,11 @@ func (r Resolver) ForRun(ctx context.Context, run *api.WorkflowRun) (workflowdef
 	if run == nil {
 		return workflowdef.Manifest{}, fmt.Errorf("workflow run required")
 	}
-	return r.ForSession(ctx, r.ProjectDirForRun(ctx, run), run.SessionID, run.WorkflowID, run.WorkflowVersion)
+	manifest, err := r.ForSession(ctx, r.ProjectDirForRun(ctx, run), run.SessionID, run.WorkflowID, run.WorkflowVersion)
+	if errors.Is(err, workflowdef.ErrUnknownWorkflow) {
+		return workflowdef.Manifest{}, &runstate.WorkflowVersionUnavailableError{WorkflowID: run.WorkflowID, Version: run.WorkflowVersion}
+	}
+	return manifest, err
 }
 
 func (r Resolver) ProjectDirForRun(ctx context.Context, run *api.WorkflowRun) string {

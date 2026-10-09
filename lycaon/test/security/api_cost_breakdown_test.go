@@ -74,7 +74,7 @@ func (u *usageMockLLM) Stream(ctx context.Context, req modelcall.CompletionReque
 	return ch, nil
 }
 
-func newCostBreakdownHarness(t *testing.T) (*wiring.Harness, *api.Server, *session.Manager, *events.MemoryHub) {
+func newCostBreakdownHarness(t *testing.T) (*wiring.Harness, *api.Server, *session.Host, *events.MemoryHub) {
 	t.Helper()
 	mock := &usageMockLLM{MockProvider: llm.NewMockProvider(loadMockConfig(t))}
 	h := wiring.BuildForTest(t, wiring.WithLLMClient(mock))
@@ -140,8 +140,8 @@ func TestCostSSEIncludesBreakdown(t *testing.T) {
 	testutil.FailErr(t, "hub.Subscribe failed", err)
 	defer unsub()
 
-	if _, err := mgr.Prompt(ctx, parent.ID, "hello"); err != nil {
-		testutil.FailErr(t, "mgr.Prompt failed", err)
+	if _, err := mgr.Submissions.Prompt(ctx, parent.ID, "hello"); err != nil {
+		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 	}
 
 	var got wire.CostEvent

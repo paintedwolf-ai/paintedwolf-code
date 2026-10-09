@@ -21,7 +21,7 @@ func TestExecutionReviewPreservesPackageAndPolicyFacts(t *testing.T) {
 	}
 	executor := NewExecutor(nil, nil, "implement")
 	action := executor.Process.executionCapabilityAction(t.Context(), "command", map[string]any{"command": "example"}, tc)
-	if action.PackageExecution != execution || len(action.AgentPolicy) != 1 {
+	if action.Execution.PackageExecution != execution || len(action.Mutations.AgentPolicy) != 1 {
 		t.Fatalf("execution capability dropped independent review facts: %+v", action)
 	}
 }

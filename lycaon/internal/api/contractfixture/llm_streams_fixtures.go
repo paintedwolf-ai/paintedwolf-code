@@ -13,7 +13,7 @@ func GetSessionMessages(t *testing.T, baseURL, sessionID string) []wire.Message 
 	t.Helper()
 	resp, err := AuthedHTTPGet(baseURL + "/v1/sessions/" + sessionID + "/messages")
 	testutil.FailErr(t, "authedHTTPGet failed", err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("GET messages status = %d", resp.StatusCode)
 	}

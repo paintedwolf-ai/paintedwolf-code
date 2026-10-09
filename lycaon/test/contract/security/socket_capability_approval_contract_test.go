@@ -21,7 +21,16 @@ import (
 // device-scoped — so no answer to "connect to this daemon" outlives review.
 func assertNoStandingSocketGrant(t *testing.T) {
 	t.Helper()
-	action := hitl.ProposedAction{Tool: "command", SessionID: "sess", ProjectID: "proj", ProjectDir: "/tmp/proj"}
+	action := hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+},
+Scope: hitl.ActionScope{
+SessionID: "sess",
+ProjectID: "proj",
+ProjectDir: "/tmp/proj",
+},
+}
 	grant := confine.SocketGrant{ApprovedPath: "/tmp/svc.sock", ResolvedPath: "/private/tmp/svc.sock"}
 	offers := capabilitygrants.SocketExecutionGrantOffers(action, []confine.SocketGrant{grant})
 	if len(offers) == 0 {

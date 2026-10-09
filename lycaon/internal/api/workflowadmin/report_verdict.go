@@ -1,15 +1,16 @@
 package workflowadmin
 
 import (
+	"sort"
+	"strings"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/report"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
 	workflowreview "github.com/lycaon/lycaon/internal/workflow/review"
 	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
-	"sort"
-	"strings"
-	"time"
 )
 
 // projectVerdicts writes the phases' records in order, and returns beside

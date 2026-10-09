@@ -149,7 +149,7 @@ func TestFileOperationRecoveryReconcilesOnlyCommittedEffects(t *testing.T) {
 		return Outcome{Status: 204}, r.ID == "applied", nil
 	}))
 	for id, want := range map[string]string{"applied": "completed", "prepared": "interrupted"} {
-		got, err := restarted.Store.Runs.Get(t.Context(), id)
+		got, err := restarted.Get(t.Context(), id)
 		testutil.FailErr(t, "read recovered result", err)
 		if got.State != want {
 			t.Fatalf("%s state=%s want=%s", id, got.State, want)

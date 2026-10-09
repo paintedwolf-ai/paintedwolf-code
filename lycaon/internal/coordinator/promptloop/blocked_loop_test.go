@@ -4,15 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/lycaon/lycaon/internal/llm/failure"
 	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/google/uuid"
-
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/session/loopguard"
 	"github.com/lycaon/lycaon/internal/session/store"
@@ -79,12 +78,12 @@ func TestBlockedLoopClosesOutInsteadOfSpinning(t *testing.T) {
 	})
 	client := &alwaysSameToolClient{args: args}
 	deps := promptloop.StoreDeps(msgStore)
-	deps.LLM = client
-	deps.Tools = tools.NewStubRegistry()
-	deps.Policy = &recordingToolPolicy{}
-	deps.DoomLoop = guard
-	deps.RejectFmt = fmttr
-	deps.FormatDoomLoopReject = func(_ context.Context, _, tool string, _ map[string]any, count int, repeatedCode string) (*guidance.Refusal, error) {
+	deps.Model.LLM = client
+	deps.Context.Tools = tools.NewStubRegistry()
+	deps.Context.Policy = &recordingToolPolicy{}
+	deps.Nudges.DoomLoop = guard
+	deps.Closeout.RejectFmt = fmttr
+	deps.Nudges.FormatDoomLoopReject = func(_ context.Context, _, tool string, _ map[string]any, count int, repeatedCode string) (*guidance.Refusal, error) {
 		data := map[string]any{"count": count, "tool": tool}
 		if repeatedCode != "" {
 			data["code"] = repeatedCode
@@ -96,7 +95,7 @@ func TestBlockedLoopClosesOutInsteadOfSpinning(t *testing.T) {
 		return guidance.NewRefusal("DOOM_LOOP_REPEAT", block), nil
 	}
 	var closeout promptloop.TurnCloseoutCause
-	deps.TurnCloseoutNudge = func(_ context.Context, _ *api.Session, _ string, cause promptloop.TurnCloseoutCause) promptloop.HostNudge {
+	deps.Closeout.TurnCloseoutNudge = func(_ context.Context, _ *api.Session, _ string, cause promptloop.TurnCloseoutCause) promptloop.HostNudge {
 		client.closeout = true
 		closeout = cause
 		return promptloop.HostNudge{Content: "final turn: " + cause.Text()}
@@ -108,9 +107,7 @@ func TestBlockedLoopClosesOutInsteadOfSpinning(t *testing.T) {
 		Session:   sess,
 		History:   userHistory("go"),
 		ProfileID: "coordinator",
-		ToolCtx: tools.ToolContext{
-			Identity: tools.InvocationIdentity{SessionID: sess.ID},
-		},
+		ToolCtx:   tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID}},
 	})
 	testutil.FailErr(t, "loop.Run", err)
 	if result.LastAssistantContent != "Stopping: the same call keeps being blocked." {
@@ -161,27 +158,25 @@ func TestBlockedLoopFinalTurnToolCallIsReportedAsTheModelsMiss(t *testing.T) {
 	fmttr := guidance.NewStaticRejectFormatter(&guidance.HintConfig{HintCodes: map[string]guidance.HintEntry{"DOOM_LOOP_REPEAT": {Message: "blocked repeat"}}})
 	client := &alwaysSameToolClient{args: args, ignoreCloseout: true}
 	deps := promptloop.StoreDeps(msgStore)
-	deps.LLM = client
-	deps.Tools = tools.NewStubRegistry()
-	deps.Policy = &recordingToolPolicy{}
-	deps.DoomLoop = guard
-	deps.RejectFmt = fmttr
-	deps.FormatDoomLoopReject = func(_ context.Context, _, tool string, _ map[string]any, count int, repeatedCode string) (*guidance.Refusal, error) {
+	deps.Model.LLM = client
+	deps.Context.Tools = tools.NewStubRegistry()
+	deps.Context.Policy = &recordingToolPolicy{}
+	deps.Nudges.DoomLoop = guard
+	deps.Closeout.RejectFmt = fmttr
+	deps.Nudges.FormatDoomLoopReject = func(_ context.Context, _, tool string, _ map[string]any, count int, repeatedCode string) (*guidance.Refusal, error) {
 		block, err := fmttr.Format("DOOM_LOOP_REPEAT", map[string]any{"count": count, "tool": tool, "code": repeatedCode})
 		if err != nil {
 			return nil, err
 		}
 		return guidance.NewRefusal("DOOM_LOOP_REPEAT", block), nil
 	}
-	deps.TurnCloseoutNudge = func(_ context.Context, _ *api.Session, _ string, cause promptloop.TurnCloseoutCause) promptloop.HostNudge {
+	deps.Closeout.TurnCloseoutNudge = func(_ context.Context, _ *api.Session, _ string, cause promptloop.TurnCloseoutCause) promptloop.HostNudge {
 		return promptloop.HostNudge{Content: "final turn: " + cause.Text()}
 	}
 	loop := promptloop.NewPromptLoopForTest(deps)
 	_, err = loop.Run(ctx, promptloop.PromptRunInput{
 		SessionID: sess.ID, Session: sess, History: userHistory("go"), ProfileID: "coordinator",
-		ToolCtx: tools.ToolContext{
-			Identity: tools.InvocationIdentity{SessionID: sess.ID},
-		},
+		ToolCtx: tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID}},
 	})
 	var miss *promptloop.ProseTurnToolCallError
 	if !errors.As(err, &miss) {
@@ -217,12 +212,12 @@ func TestBlockedLoopEarlyCloseoutAssemblesWhenFinishBlocked(t *testing.T) {
 	clientWithSynth := &closeoutSynthesisClient{inner: client, synthesis: "## Status\nStopped after repeated blocks."}
 
 	deps := promptloop.StoreDeps(msgStore)
-	deps.LLM = clientWithSynth
-	deps.Tools = tools.NewStubRegistry()
-	deps.Policy = &recordingToolPolicy{}
-	deps.DoomLoop = guard
-	deps.RejectFmt = fmttr
-	deps.FormatDoomLoopReject = func(_ context.Context, _, tool string, _ map[string]any, count int, repeatedCode string) (*guidance.Refusal, error) {
+	deps.Model.LLM = clientWithSynth
+	deps.Context.Tools = tools.NewStubRegistry()
+	deps.Context.Policy = &recordingToolPolicy{}
+	deps.Nudges.DoomLoop = guard
+	deps.Closeout.RejectFmt = fmttr
+	deps.Nudges.FormatDoomLoopReject = func(_ context.Context, _, tool string, _ map[string]any, count int, repeatedCode string) (*guidance.Refusal, error) {
 		data := map[string]any{"count": count, "tool": tool}
 		if repeatedCode != "" {
 			data["code"] = repeatedCode
@@ -233,17 +228,17 @@ func TestBlockedLoopEarlyCloseoutAssemblesWhenFinishBlocked(t *testing.T) {
 		}
 		return guidance.NewRefusal("DOOM_LOOP_REPEAT", block), nil
 	}
-	deps.TurnCloseoutNudge = func(_ context.Context, _ *api.Session, _ string, cause promptloop.TurnCloseoutCause) promptloop.HostNudge {
+	deps.Closeout.TurnCloseoutNudge = func(_ context.Context, _ *api.Session, _ string, cause promptloop.TurnCloseoutCause) promptloop.HostNudge {
 		return promptloop.HostNudge{Content: "final turn: " + cause.Text()}
 	}
-	deps.BeforeFinishNoToolTurn = func(_ context.Context, _ *api.Session, _ []api.Message, _, _, _ string, _ bool, _ []string, _ bool) (*guidance.Refusal, bool) {
+	deps.Closeout.BeforeFinishNoToolTurn = func(_ context.Context, _ *api.Session, _ []api.Message, _, _, _ string, _ bool, _ []string, _ bool) (*guidance.Refusal, bool) {
 		return guidance.NewRefusal("PROGRESS_OPEN_BEFORE_CLOSEOUT", "Rejected: held\n\nCode: PROGRESS_OPEN_BEFORE_CLOSEOUT\n"), true
 	}
-	deps.AssembleLedgerCloseout = func(_ context.Context, _, _ string, _ []string, drafted string, _ int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
+	deps.Closeout.AssembleLedgerCloseout = func(_ context.Context, _, _ string, _ []string, drafted string, _ int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
 		return guidance.CoordinatorCompletionReport{Synthesis: drafted},
 			&api.CitationGrounding{HostAssembled: true, Traced: false}
 	}
-	deps.PromptTurnSurface = func(string) string { return "implement_investigate" }
+	deps.Context.PromptTurnSurface = func(string) string { return "implement_investigate" }
 
 	loop := promptloop.NewPromptLoopForTest(deps)
 	res, err := loop.Run(ctx, promptloop.PromptRunInput{
@@ -251,9 +246,7 @@ func TestBlockedLoopEarlyCloseoutAssemblesWhenFinishBlocked(t *testing.T) {
 		Session:   sess,
 		History:   userHistory("go"),
 		ProfileID: "coordinator",
-		ToolCtx: tools.ToolContext{
-			Identity: tools.InvocationIdentity{SessionID: sess.ID},
-		},
+		ToolCtx:   tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID}},
 	})
 	testutil.FailErr(t, "loop.Run", err)
 	if res == nil || res.LastAssistantID == "" {
@@ -319,9 +312,9 @@ func TestBlockedLoopStreakResetsOnProgress(t *testing.T) {
 		{Content: "Read both files."},
 	}}
 	deps := promptloop.StoreDeps(msgStore)
-	deps.LLM = client
-	deps.Tools = tools.NewStubRegistry()
-	deps.Policy = &recordingToolPolicy{}
+	deps.Model.LLM = client
+	deps.Context.Tools = tools.NewStubRegistry()
+	deps.Context.Policy = &recordingToolPolicy{}
 
 	loop := promptloop.NewPromptLoopForTest(deps)
 	res, err := loop.Run(ctx, promptloop.PromptRunInput{
@@ -329,9 +322,7 @@ func TestBlockedLoopStreakResetsOnProgress(t *testing.T) {
 		Session:   sess,
 		History:   userHistory("go"),
 		ProfileID: "coordinator",
-		ToolCtx: tools.ToolContext{
-			Identity: tools.InvocationIdentity{SessionID: sess.ID},
-		},
+		ToolCtx:   tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID}},
 	})
 	testutil.FailErr(t, "loop.Run", err)
 	if res == nil {
@@ -358,10 +349,10 @@ func TestSchemaRejectsDoNotForceBlockedLoopCloseout(t *testing.T) {
 		proseAfter: promptloop.BlockedLoopRejectCap + 1,
 	}
 	deps := promptloop.StoreDeps(msgStore)
-	deps.LLM = client
-	deps.Tools = reg
-	deps.Policy = &recordingToolPolicy{}
-	deps.TurnCloseoutNudge = func(_ context.Context, _ *api.Session, _ string, cause promptloop.TurnCloseoutCause) promptloop.HostNudge {
+	deps.Model.LLM = client
+	deps.Context.Tools = reg
+	deps.Context.Policy = &recordingToolPolicy{}
+	deps.Closeout.TurnCloseoutNudge = func(_ context.Context, _ *api.Session, _ string, cause promptloop.TurnCloseoutCause) promptloop.HostNudge {
 		return promptloop.HostNudge{Content: "forced closeout: " + cause.Text()}
 	}
 
@@ -371,9 +362,7 @@ func TestSchemaRejectsDoNotForceBlockedLoopCloseout(t *testing.T) {
 		Session:   sess,
 		History:   userHistory("fix the port"),
 		ProfileID: "coordinator",
-		ToolCtx: tools.ToolContext{
-			Identity: tools.InvocationIdentity{SessionID: sess.ID},
-		},
+		ToolCtx:   tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID}},
 	})
 	testutil.FailErr(t, "loop.Run", err)
 	if res == nil {
@@ -443,19 +432,19 @@ func TestPreInvokeRejectAccruesCodeTotalAndEscalates(t *testing.T) {
 	client := &varyingArgsToolClient{}
 	var escalateCalls int
 	deps := promptloop.StoreDeps(msgStore)
-	deps.LLM = client
-	deps.Tools = tools.NewStubRegistry()
-	deps.Policy = &recordingToolPolicy{}
-	deps.DoomLoop = guard
-	deps.RejectFmt = guidance.NewStaticRejectFormatter(&guidance.HintConfig{
+	deps.Model.LLM = client
+	deps.Context.Tools = tools.NewStubRegistry()
+	deps.Context.Policy = &recordingToolPolicy{}
+	deps.Nudges.DoomLoop = guard
+	deps.Closeout.RejectFmt = guidance.NewStaticRejectFormatter(&guidance.HintConfig{
 		HintCodes: map[string]guidance.HintEntry{
 			"PROGRESS_ITEM_NOT_CLOSED": {Message: "reconcile the checklist"},
 		},
 	})
-	deps.BeforeToolRun = func(context.Context, *api.Session, []api.Message, string, string, map[string]any) (string, bool, error) {
+	deps.Tools.BeforeToolRun = func(context.Context, *api.Session, []api.Message, string, string, map[string]any) (string, bool, error) {
 		return "", false, guidance.NewRefusal("PROGRESS_ITEM_NOT_CLOSED", "Rejected: reconcile the checklist first")
 	}
-	deps.EscalateRepeatedCode = func(_ context.Context, sessionID, tool string, original *guidance.Refusal) *guidance.Refusal {
+	deps.Nudges.EscalateRepeatedCode = func(_ context.Context, sessionID, tool string, original *guidance.Refusal) *guidance.Refusal {
 		code := original.Code()
 		if guard.CodeRejectResponses(sessionID, tool, code) < loopguard.DoomLoopMaxCodeRepeats {
 			return nil
@@ -463,7 +452,7 @@ func TestPreInvokeRejectAccruesCodeTotalAndEscalates(t *testing.T) {
 		escalateCalls++
 		return guidance.NewRefusal("DOOM_LOOP_CODE_REPEAT", "Escalated: this exact guidance keeps failing to land")
 	}
-	deps.TurnCloseoutNudge = func(_ context.Context, _ *api.Session, _ string, cause promptloop.TurnCloseoutCause) promptloop.HostNudge {
+	deps.Closeout.TurnCloseoutNudge = func(_ context.Context, _ *api.Session, _ string, cause promptloop.TurnCloseoutCause) promptloop.HostNudge {
 		client.closeout = true
 		return promptloop.HostNudge{Content: "final turn: " + cause.Text()}
 	}
@@ -474,9 +463,7 @@ func TestPreInvokeRejectAccruesCodeTotalAndEscalates(t *testing.T) {
 		Session:   sess,
 		History:   userHistory("go"),
 		ProfileID: "coordinator",
-		ToolCtx: tools.ToolContext{
-			Identity: tools.InvocationIdentity{SessionID: sess.ID},
-		},
+		ToolCtx:   tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID}},
 	})
 	testutil.FailErr(t, "loop.Run", err)
 	if result.LastAssistantContent != "Stopping: the same call keeps being blocked." {

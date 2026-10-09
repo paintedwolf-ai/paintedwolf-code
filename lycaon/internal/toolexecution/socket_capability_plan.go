@@ -20,7 +20,7 @@ func socketPermitDelta(
 	targets []hitl.ApprovalSocketTarget,
 ) hitl.ApprovalAuthorityDelta {
 	return hitl.ApprovalAuthorityDelta{
-		Kind: hitl.AuthoritySocketPermit, SessionID: action.SessionID, ToolCallID: tc.Identity.ToolCallID,
+		Kind: hitl.AuthoritySocketPermit, SessionID: action.Scope.SessionID, ToolCallID: tc.Identity.ToolCallID,
 		ActionDigest: actionDigest, Sockets: targets,
 	}
 }
@@ -53,7 +53,7 @@ func socketCapabilityOptions(
 
 func combinedDirectIPAuthority(option hitl.ApprovalOption, direct directIPApprovalReview, tc tools.ToolContext) []hitl.ApprovalAuthorityDelta {
 	permit := hitl.ApprovalAuthorityDelta{
-		Kind: hitl.AuthorityDirectIPPermit, SessionID: direct.Action.SessionID, ToolCallID: tc.Identity.ToolCallID,
+		Kind: hitl.AuthorityDirectIPPermit, SessionID: direct.Action.Scope.SessionID, ToolCallID: tc.Identity.ToolCallID,
 		ActionDigest: direct.Lease.ActionDigest, DirectIPLease: &direct.Lease,
 	}
 	// Absorbed second-subject options and once: current-call only.
@@ -86,7 +86,7 @@ func attachRealizationWriteRoots(options []hitl.ApprovalOption, action hitl.Prop
 		}
 		delta := hitl.ApprovalAuthorityDelta{
 			Kind: hitl.AuthorityWriteRootChat, Grant: &grant,
-			ChatSessionID: action.ChatSession(), WriteRoots: append([]string(nil), roots...),
+			ChatSessionID: action.Scope.ChatSession(), WriteRoots: append([]string(nil), roots...),
 		}
 		if options[i].Rung == hitl.ApprovalRungDay {
 			delta.TTLSeconds = hitl.DayRungTTLSeconds
@@ -100,13 +100,13 @@ func realizationWriteRootGrant(action hitl.ProposedAction, roots []string) hitl.
 	pattern := strings.Join(roots, "\x1e")
 	raw := strings.Join([]string{
 		string(hitl.ApprovalGrantScopeChat), hitl.ApprovalGrantCategoryWriteRoot,
-		pattern, action.ChatSession(),
+		pattern, action.Scope.ChatSession(),
 	}, "\x00")
 	sum := sha256.Sum256([]byte(raw))
 	return hitl.ApprovalGrant{
 		ID: "grant_" + hex.EncodeToString(sum[:8]), Scope: hitl.ApprovalGrantScopeChat,
 		Predicate:     hitl.ApprovalGrantPredicate{Category: hitl.ApprovalGrantCategoryWriteRoot, Pattern: pattern},
-		ChatSessionID: action.ChatSession(), ProjectID: action.ProjectID, ProjectDir: action.ProjectDir,
+		ChatSessionID: action.Scope.ChatSession(), ProjectID: action.Scope.ProjectID, ProjectDir: action.Scope.ProjectDir,
 		Title: hitl.TitleAllowForThisChat, Coverage: "writes required by the reviewed local service",
 		GrantedAt: time.Now().UTC(), ExpiresWhen: hitl.ExpiresWhenChatDeleted,
 		ReaskWhen: "this chat is deleted", Source: "checkpoint",

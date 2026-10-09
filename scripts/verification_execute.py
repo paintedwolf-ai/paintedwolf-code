@@ -203,7 +203,7 @@ class StageEvents:
         found = {}
         for event in self.lines("events"):
             if isinstance(event.get("package"), str) and type(event.get("exit_code")) is int and event["exit_code"] > 0:
-                found[event["package"]] = {key: event[key] for key in ("output", "tests") if key in event}
+                found[event["package"]] = {key: event[key] for key in ("output", "tests", "resource_limit") if key in event}
         for event in self.lines("raw"):
             if event.get("Action") == "fail" and isinstance(event.get("Package"), str) and not event.get("Test"):
                 found.setdefault(event["Package"], {})
@@ -490,10 +490,11 @@ class Executor:
                          f"{', '.join(failed)} failed in {stage_id} before the stage finished")
 
     def finish_stage(self, job):
-        """Results publish before the stage's reservation releases, so work waiting on its resources sees
-        which requests no longer need it."""
+        """Results publish and the requests they settle are answered before the stage's reservation releases,
+        so work waiting on its resources sees which requests no longer need it."""
         try:
             self.publish_stage(job)
+            self.ready()
         finally:
             job["reservation"].__exit__(None, None, None)
 

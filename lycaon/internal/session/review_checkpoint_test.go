@@ -31,7 +31,7 @@ func (r *reviewCheckpointRecorder) CreateStructuralCheckpoint(
 func TestReviewCheckpointOnlyOpensForRealUserIntent(t *testing.T) {
 	ctx := t.Context()
 	sessions := store.NewMemory()
-	mgr := NewManager(sessions, nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(sessions, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	recorder := &reviewCheckpointRecorder{}
 	mgr.SetSourceLedger(recorder)
 	sess, err := sessions.Create(ctx, api.CreateSessionRequest{
@@ -47,15 +47,15 @@ func TestReviewCheckpointOnlyOpensForRealUserIntent(t *testing.T) {
 		}
 	}
 	first := message("user-1", api.MessageOriginUser, api.MessageVisibilityTranscript, "")
-	mgr.createUserTurnReviewCheckpoint(ctx, sess.ID, first)
+	mgr.Runner.Instructions.ReviewCheckpoint(ctx, sess.ID, first)
 	testutil.FailErr(t, "append first user turn", sessions.AppendMessages(ctx, sess.ID, first))
 
 	hostKick := message("host-kick", api.MessageOriginHost, api.MessageVisibilityInternal, api.MessageKindHostKick)
-	mgr.createUserTurnReviewCheckpoint(ctx, sess.ID, hostKick)
+	mgr.Runner.Instructions.ReviewCheckpoint(ctx, sess.ID, hostKick)
 	testutil.FailErr(t, "append host kick", sessions.AppendMessages(ctx, sess.ID, hostKick))
 
 	second := message("user-2", api.MessageOriginUser, api.MessageVisibilityTranscript, "")
-	mgr.createUserTurnReviewCheckpoint(ctx, sess.ID, second)
+	mgr.Runner.Instructions.ReviewCheckpoint(ctx, sess.ID, second)
 	if len(recorder.inputs) != 2 {
 		t.Fatalf("review checkpoints = %d, want one for each of two user turns", len(recorder.inputs))
 	}

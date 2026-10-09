@@ -29,15 +29,19 @@ func (g *recordingDoomLoop) RecordAttempt(_ context.Context, _, _, _ string, _ m
 func settleFailure(t *testing.T, guard *recordingDoomLoop, failure *api.InvocationFailure, code string) singleToolOutcome {
 	t.Helper()
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		DoomLoop:       guard,
-		AppendMessages: func(context.Context, string, ...api.Message) error { return nil },
+		Nudges: NudgesDeps{
+			DoomLoop: guard,
+		},
+		Projection: ProjectionDeps{
+			AppendMessages: func(context.Context, string, ...api.Message) error { return nil },
+		},
 	})
 	run := toolInvocation{
 		content: "Rejected: something\nCode: " + code,
 		facts:   guidance.ToolResultFacts{Outcome: api.ToolResultOutcomeError}.WithCode(code),
 		failure: failure,
 	}
-	return toolBatch{loop}.settleRejectedToolCall(
+	return loop.Batch.settleRejectedToolCall(
 		context.Background(), &api.Session{ID: "s1"}, "s1",
 		api.ToolCall{ID: "call-1", Name: "task"}, "a1", run,
 	)
@@ -77,8 +81,12 @@ func TestRenderedOwnerFailureKeepsOwnershipClassification(t *testing.T) {
 	testutil.FailErr(t, "register read", registry.Register("read", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 		return "", rendered
 	}))
-	loop := NewPromptLoopForTest(PromptLoopDeps{Tools: registry})
-	run := toolInvocations{loop}.executeToolCall(t.Context(), &api.Session{ID: "s1"}, "s1", "", nil, api.ToolCall{
+	loop := NewPromptLoopForTest(PromptLoopDeps{
+		Context: ContextDeps{
+			Tools: registry,
+		},
+	})
+	run := loop.Tools.executeToolCall(t.Context(), &api.Session{ID: "s1"}, "s1", "", nil, api.ToolCall{
 		ID: "call-1", Name: "read", Args: map[string]any{},
 	}, tools.ToolContext{
 		Identity: tools.InvocationIdentity{SessionID: "s1"},

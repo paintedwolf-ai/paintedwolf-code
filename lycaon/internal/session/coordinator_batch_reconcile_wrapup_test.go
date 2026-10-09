@@ -28,10 +28,10 @@ func TestReconcileCoordinatorBatch_skipsSynthesisReadyWithoutBatchReady(t *testi
 	sqlDB := testdbfixture.Open(t, "batch-reconcile-wrapup.db")
 
 	store := store.NewSQL(sqlDB)
-	mgr := session.NewManager(store, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	agents := orchestration.NewMemoryAgentRegistry()
 	testutil.FailErr(t, "LoadRequiredAgentRegistry", orchestration.LoadRequiredAgentRegistry(context.Background(), agents))
-	mgr.SetAgentRegistry(agents)
+	mgr.Profiles.SetAgentRegistry(agents)
 
 	wfStore := workflowpersistence.New(sqlDB)
 	bundledDir := filepath.Join(root, "config", "packs", "painted-wolf", "platform", "workflows")
@@ -70,9 +70,9 @@ func TestReconcileCoordinatorBatch_skipsSynthesisReadyWithoutBatchReady(t *testi
 	}
 	testutil.FailErr(t, "append messages", store.AppendMessages(ctx, sess.ID, inlineEdit...))
 
-	mgr.ReconcileCoordinatorBatchFromLedgerForTest(ctx, sess.ID)
+	mgr.Coordinator.Batch.Reconcile(ctx, sess.ID)
 
-	state := mgr.BuildImplementSessionState(ctx, sess)
+	state := mgr.Workers.State.ForSession(ctx, sess)
 	if state.BatchPhase == batch.PhaseSynthesize {
 		t.Fatalf("batch phase = %q want not synthesize without verify pass", state.BatchPhase)
 	}

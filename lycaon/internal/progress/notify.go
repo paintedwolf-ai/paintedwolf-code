@@ -2,6 +2,7 @@ package progress
 
 import (
 	"context"
+	"slices"
 	"sync"
 )
 
@@ -15,27 +16,45 @@ type WriteEvent struct {
 // WriteObserver runs after a successful progress write (revision bump, SSE, etc.).
 type WriteObserver func(ctx context.Context, evt WriteEvent)
 
+type writeObserverEntry struct {
+	id  uint64
+	obs WriteObserver
+}
+
 var (
 	writeMu        sync.RWMutex
-	writeObservers []WriteObserver
+	writeObservers []writeObserverEntry
+	writeSeq       uint64
 )
 
-// RegisterWriteObserver attaches a post-write hook.
-func RegisterWriteObserver(obs WriteObserver) {
+// RegisterWriteObserver attaches a post-write hook and returns its release.
+// The registry is process-wide: a host that never releases its hook keeps its
+// whole object graph reachable after shutdown.
+func RegisterWriteObserver(obs WriteObserver) func() {
 	if obs == nil {
-		return
+		return func() {}
 	}
 	writeMu.Lock()
-	writeObservers = append(writeObservers, obs)
+	writeSeq++
+	id := writeSeq
+	writeObservers = append(writeObservers, writeObserverEntry{id: id, obs: obs})
 	writeMu.Unlock()
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			writeMu.Lock()
+			writeObservers = slices.DeleteFunc(writeObservers, func(e writeObserverEntry) bool { return e.id == id })
+			writeMu.Unlock()
+		})
+	}
 }
 
 // NotifyWriteObservers invokes registered observers after a write lands.
 func NotifyWriteObservers(ctx context.Context, evt WriteEvent) {
 	writeMu.RLock()
-	obs := append([]WriteObserver(nil), writeObservers...)
+	entries := slices.Clone(writeObservers)
 	writeMu.RUnlock()
-	for _, fn := range obs {
-		fn(ctx, evt)
+	for _, e := range entries {
+		e.obs(ctx, evt)
 	}
 }

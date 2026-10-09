@@ -5,18 +5,19 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/toolrejection"
+	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
+	"github.com/lycaon/lycaon/internal/workflow/toolguard"
+	"strings"
+
+	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/inputs"
 	"github.com/lycaon/lycaon/internal/workflow/lifecycle"
-	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
-	"github.com/lycaon/lycaon/internal/workflow/toolguard"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
 )
 
 // StateToolDeps holds dependencies for state_* tools.
@@ -153,7 +154,7 @@ func hostWorkflowStatePath(path string) bool {
 	}
 	root, _, _ := strings.Cut(path, ".")
 	switch root {
-	case "fanout_plans", "fanout_coverage", "fanout_settled", "worker_cycle", "gates",
+	case runstate.ReviewRepairsKey, "fanout_plans", "fanout_coverage", "fanout_settled", "worker_cycle", "gates",
 		"human_approval", "phase_skipped", "review_if_spawnable", "review_loop", "review_verdict", "review_questions",
 		"user_feedback", "user_decision", "topology_stages", "topology_outputs", "orchestration_complete", "content_review",
 		runstate.BaselinePostureKey, workflowdef.ScaffoldExecutionModeVar, runstate.WorkflowRequestFeedbackID, runstate.CoordinatorAskVar, runstate.ObligationsVarKey,

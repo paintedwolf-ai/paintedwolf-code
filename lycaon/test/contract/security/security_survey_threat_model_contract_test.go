@@ -1,21 +1,22 @@
 package contract
 
 import (
-	"github.com/lycaon/lycaon/internal/configlayout"
-	"github.com/lycaon/lycaon/internal/testutil"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/configlayout"
+	"github.com/lycaon/lycaon/internal/testutil"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 )
 
 func TestSecuritySurveyPlanRequiresThreatModel(t *testing.T) {
 	t.Parallel()
 	manifests, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "RegistryFromDirs", err)
-	m, err := manifests.Get("security-survey", "1.0.1")
+	m, err := manifests.Get("security-survey", "2.0.0")
 	testutil.FailErr(t, "manifests.Get", err)
 	plan, ok := m.PhaseByID("plan")
 	if !ok {

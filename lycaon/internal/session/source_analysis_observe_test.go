@@ -19,7 +19,7 @@ func TestSourceAnalysisFailureAnnotatesPartialResult(t *testing.T) {
 	data := failure.Facts("source")
 	data["path"], data["parse_failure_count"], data["parse_paths"] = "Level.swift", 1, []string{"Level.swift"}
 	raised := guidance.ToolResultFacts{}.WithFeedback(toolrejection.SourceAnalysisUnavailableCode, data, &api.FeedbackSubject{Kind: "path", ID: "Level.swift"})
-	out, facts := mgr.appendPostToolGuidance(context.Background(), sess, "grep", map[string]any{"pattern": "spawn($A)", "structural": true}, "partial matches", 1, raised)
+	out, facts := mgr.ToolPolicy.AfterTool(context.Background(), sess, "grep", map[string]any{"pattern": "spawn($A)", "structural": true}, "partial matches", 1, raised)
 	for _, want := range []string{"partial matches", "Code: SOURCE_ANALYSIS_UNAVAILABLE", "Level.swift", "timeout", "5000", "structural=false"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("feedback missing %q: %s", want, out)
@@ -28,7 +28,7 @@ func TestSourceAnalysisFailureAnnotatesPartialResult(t *testing.T) {
 	if !facts.HasCode(toolrejection.SourceAnalysisUnavailableCode) {
 		t.Fatalf("feedback code missing: %+v", facts)
 	}
-	plain, _ := mgr.appendPostToolGuidance(context.Background(), sess, "grep", map[string]any{"pattern": "spawn"}, "no matches", 1, guidance.ToolResultFacts{})
+	plain, _ := mgr.ToolPolicy.AfterTool(context.Background(), sess, "grep", map[string]any{"pattern": "spawn"}, "no matches", 1, guidance.ToolResultFacts{})
 	if strings.Contains(plain, toolrejection.SourceAnalysisUnavailableCode) {
 		t.Fatalf("invented parser failure: %s", plain)
 	}
@@ -45,7 +45,7 @@ func TestSyntaxOverrideFeedbackRecordsExplicitChoice(t *testing.T) {
 	raised = raised.WithFeedback(tools.SyntaxCheckOverriddenCode, map[string]any{
 		"paths": []string{"b.swift"}, "syntax_override_reason": data["syntax_override_reason"],
 	}, &api.FeedbackSubject{Kind: "path", ID: "b.swift"})
-	out, facts := mgr.appendPostToolGuidance(context.Background(), sess, "write", map[string]any{"path": "a.swift"}, "write completed", 1, raised)
+	out, facts := mgr.ToolPolicy.AfterTool(context.Background(), sess, "write", map[string]any{"path": "a.swift"}, "write completed", 1, raised)
 	for _, want := range []string{"write completed", "Code: SYNTAX_CHECK_OVERRIDDEN", "a.swift", "b.swift", "the language compiler accepts this file"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("override feedback missing %q: %s", want, out)

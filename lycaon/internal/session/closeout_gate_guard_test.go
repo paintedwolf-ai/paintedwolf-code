@@ -5,11 +5,14 @@ import (
 	workflowfacts "github.com/lycaon/lycaon/internal/session/workflowfacts"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/session/promptinput"
+	"github.com/lycaon/lycaon/internal/session/workflowfacts"
 )
 
 // gatedCloseoutView reports a gated phase with the given open gate leaves.
 type gatedCloseoutView struct {
-	WorkflowPolicy
+	stubWorkflowManifest
 	state workflowfacts.WorkflowCloseoutGateState
 }
 
@@ -27,20 +30,18 @@ func gatedExecuteState() workflowfacts.WorkflowCloseoutGateState {
 
 func TestGatedCloseoutSkipsWhenInvokeGated(t *testing.T) {
 	mgr, sess := newSynthesisDelayManager(t)
-	workflowFixture1 := gatedCloseoutView{state: gatedExecuteState()}
-	mgr.workflows = &WorkflowDomains{Policy: workflowFixture1}
+	mgr.SetWorkflowDomains(workflowDomainFixture(gatedCloseoutView{state: gatedExecuteState()}))
 
-	if _, block := mgr.maybeRejectCloseoutForOpenGates(context.Background(), sess, true, false); block {
+	if _, block := mgr.Coordinator.Guards.OpenGates(context.Background(), sess, true, false); block {
 		t.Fatal("expected no open-gates hold when invokeAllowed=false")
 	}
 }
 
 func TestGatedCloseoutBlocksOnOpenGates(t *testing.T) {
 	mgr, sess := newSynthesisDelayManager(t)
-	workflowFixture2 := gatedCloseoutView{state: gatedExecuteState()}
-	mgr.workflows = &WorkflowDomains{Policy: workflowFixture2}
+	mgr.SetWorkflowDomains(workflowDomainFixture(gatedCloseoutView{state: gatedExecuteState()}))
 
-	reject, block := mgr.maybeRejectCloseoutForOpenGates(context.Background(), sess, true, true)
+	reject, block := mgr.Coordinator.Guards.OpenGates(context.Background(), sess, true, true)
 	if !block {
 		t.Fatal("expected the closeout to be held while the gated phase's gates are open")
 	}
@@ -58,41 +59,38 @@ func TestGatedCloseoutBlocksOnOpenGates(t *testing.T) {
 
 func TestGatedCloseoutAllowsWhenNotGated(t *testing.T) {
 	mgr, sess := newSynthesisDelayManager(t)
-	workflowFixture3 := gatedCloseoutView{state: workflowfacts.WorkflowCloseoutGateState{}}
-	mgr.workflows = &WorkflowDomains{Policy: workflowFixture3}
+	mgr.SetWorkflowDomains(workflowDomainFixture(gatedCloseoutView{state: workflowfacts.WorkflowCloseoutGateState{}}))
 
-	if _, block := mgr.maybeRejectCloseoutForOpenGates(context.Background(), sess, true, true); block {
+	if _, block := mgr.Coordinator.Guards.OpenGates(context.Background(), sess, true, true); block {
 		t.Fatal("a phase without a gated closeout must let the prose finish through")
 	}
 }
 
 func TestGatedCloseoutSkipsBusyWorkers(t *testing.T) {
 	mgr, sess := newSynthesisDelayManager(t)
-	workflowFixture4 := gatedCloseoutView{state: gatedExecuteState()}
-	mgr.workflows = &WorkflowDomains{Policy: workflowFixture4}
+	mgr.SetWorkflowDomains(workflowDomainFixture(gatedCloseoutView{state: gatedExecuteState()}))
 
-	if _, block := mgr.maybeRejectCloseoutForOpenGates(context.Background(), sess, false, true); block {
+	if _, block := mgr.Coordinator.Guards.OpenGates(context.Background(), sess, false, true); block {
 		t.Fatal("the hold must not apply while workers are still in flight")
 	}
 }
 
 func TestGatedCloseoutBoundedPerPrompt(t *testing.T) {
 	mgr, sess := newSynthesisDelayManager(t)
-	workflowFixture5 := gatedCloseoutView{state: gatedExecuteState()}
-	mgr.workflows = &WorkflowDomains{Policy: workflowFixture5}
+	mgr.SetWorkflowDomains(workflowDomainFixture(gatedCloseoutView{state: gatedExecuteState()}))
 	ctx := context.Background()
 
-	for i := 0; i < closeoutGateDelayMaxPerPrompt; i++ {
-		if _, block := mgr.maybeRejectCloseoutForOpenGates(ctx, sess, true, true); !block {
+	for i := 0; i < 2; i++ {
+		if _, block := mgr.Coordinator.Guards.OpenGates(ctx, sess, true, true); !block {
 			t.Fatalf("delay %d should still block", i)
 		}
 	}
-	if _, block := mgr.maybeRejectCloseoutForOpenGates(ctx, sess, true, true); block {
+	if _, block := mgr.Coordinator.Guards.OpenGates(ctx, sess, true, true); block {
 		t.Fatal("the bound must let the closeout through after the per-prompt budget")
 	}
 
-	mgr.beginCloseoutPrompt(ctx, sess, PromptInput{Text: "continue"})
-	if _, block := mgr.maybeRejectCloseoutForOpenGates(ctx, sess, true, true); !block {
+	mgr.Runner.Closeouts.BeginPrompt(ctx, sess, promptinput.Input{Text: "continue"})
+	if _, block := mgr.Coordinator.Guards.OpenGates(ctx, sess, true, true); !block {
 		t.Fatal("a fresh prompt should hold the closeout again")
 	}
 }

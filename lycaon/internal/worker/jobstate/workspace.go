@@ -3,12 +3,13 @@ package jobstate
 import (
 	"context"
 	"fmt"
+	"path/filepath"
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/workspacebaseline"
 	"github.com/lycaon/lycaon/pkg/api"
-	"path/filepath"
-	"strings"
 )
 
 func resolveWorkerWorkspace(ctx context.Context, database db.DBTX, row db.WorkerJobs, task *api.WorkerTask) error {

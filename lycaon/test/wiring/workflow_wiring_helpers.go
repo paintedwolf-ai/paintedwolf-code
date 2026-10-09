@@ -2,6 +2,10 @@ package wiring
 
 import (
 	"context"
+	"strings"
+	"testing"
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/evidence"
@@ -16,9 +20,6 @@ import (
 	"github.com/lycaon/lycaon/internal/workflow"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
-	"testing"
-	"time"
 )
 
 const topologyWaitBudget = 30 * time.Second
@@ -92,7 +93,7 @@ func assertFanOutWorkers(t *testing.T, legs []api.Leg, wantProfile string, wantC
 // Expected worker profiles and counts come from the run's topology.
 func assertFanOutWorkersMatchTopology(t *testing.T, h *Harness, runID string, legs []api.Leg) {
 	t.Helper()
-	m, err := h.WorkflowMgr.ManifestForRunID(context.Background(), runID)
+	m, err := h.WorkflowMgr.Resolver.ForRunID(context.Background(), runID)
 	testutil.FailErr(t, "manifest for run "+runID, err)
 	workflowID := m.ID
 	spec, err := orchestration.LoadTopologyFromFile(extpacks.Bundled(config.PlatformFlows.Join("_topologies", m.Topology+".yaml")))
@@ -109,19 +110,19 @@ func assertFanOutWorkersMatchTopology(t *testing.T, h *Harness, runID string, le
 
 func deliverTopologyReport(t *testing.T, h *Harness, ctx context.Context, sess *api.Session, runID string) {
 	t.Helper()
-	if _, ok := h.SessionMgr.PendingKickIDForTest(sess.ID); ok {
-		h.SessionMgr.ClearPendingKickForTest(sess.ID)
+	if _, ok := h.SessionMgr.Runner.Coordinator.Kicks().PeekPendingKickID(sess.ID); ok {
+		h.SessionMgr.Runner.Coordinator.Kicks().ClearPending(sess.ID)
 	}
 	run, err := h.WorkflowMgr.Store.Runs.Get(ctx, runID)
 	testutil.FailErr(t, "load report phase", err)
-	manifest, err := h.WorkflowMgr.ManifestForRunID(ctx, runID)
+	manifest, err := h.WorkflowMgr.Resolver.ForRunID(ctx, runID)
 	testutil.FailErr(t, "load report manifest", err)
 	scope := api.CompletionReportScopePhase
 	if manifest.ReportEnabled() {
 		scope = api.CompletionReportScopeRun
 	}
 	messageID := uuid.NewString()
-	testutil.FailErr(t, "persist grounded completion", h.WorkflowMgr.Policy.Sessions.AppendMessages(ctx, sess.ID, api.Message{
+	testutil.FailErr(t, "persist grounded completion", h.WorkflowMgr.Transcript.Sessions.AppendMessages(ctx, sess.ID, api.Message{
 		ID: messageID, Role: api.MessageRoleAssistant, Kind: api.MessageKindCompletionReport,
 		Content: "Completed assessment.", CreatedAt: time.Now().UTC(), WorkflowRunID: runID,
 		Visibility: api.MessageVisibilityTranscript, Grounding: &api.CitationGrounding{Traced: true},
@@ -179,7 +180,7 @@ func satisfyFanoutPlannedAndAdvance(t *testing.T, h *Harness, ctx context.Contex
 	}
 	plans[run.CurrentPhase] = map[string]any{"legs": rawLegs}
 	vars["fanout_plans"] = plans
-	if err := h.WorkflowMgr.Store.UpdateVars(ctx, run, dir, vars); err != nil {
+	if err := h.WorkflowMgr.Store.State.UpdateVars(ctx, run, dir, vars); err != nil {
 		testutil.FailErr(t, "UpdateVars plan", err)
 	}
 	run, err = h.WorkflowMgr.Phases.Advance(ctx, runID)
@@ -236,9 +237,7 @@ func appendSucceededReviewAgent(t *testing.T, h *Harness, ctx context.Context, s
 		ParentSessionID: sess.ID, AgentType: agent, Prompt: "review " + agent, Brief: "review " + agent,
 		Status: api.WorkerStatusPending, SpawnReason: api.SpawnReasonHumanRequest, Scope: &api.TaskScope{Mode: "read"},
 	}
-	testutil.FailErr(t, "bind reviewer "+agent, h.WorkflowMgr.Fanout.BindWorkflowTask(ctx, tools.ToolContext{
-		Identity: tools.InvocationIdentity{SessionID: sess.ID},
-	}, workID, &task))
+	testutil.FailErr(t, "bind reviewer "+agent, h.WorkflowMgr.Fanout.BindWorkflowTask(ctx, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID}}, workID, &task))
 	testutil.FailErr(t, "enqueue defaults "+agent, worker.ApplyEnqueueDefaults(&task,
 		project.ProjectScope{ProjectID: sess.ProjectID, WorkspacePath: sess.WorkspacePath}, worker.DefaultWorkersConfig()))
 	workerID, err := h.WorkerQueue.Enqueue(ctx, task)
@@ -291,7 +290,7 @@ func satisfyWorkerCycleAndAdvance(t *testing.T, h *Harness, ctx context.Context,
 	vars["topology_stages"] = map[string]any{
 		orchestration.TopologyBindStageFanOut: map[string]any{"complete": true},
 	}
-	if err := h.WorkflowMgr.Store.UpdateVars(ctx, run, dir, vars); err != nil {
+	if err := h.WorkflowMgr.Store.State.UpdateVars(ctx, run, dir, vars); err != nil {
 		testutil.FailErr(t, "UpdateVars execute", err)
 	}
 	if _, err := h.WorkflowMgr.Phases.TryAutoAdvance(ctx, runID); err != nil {
@@ -312,7 +311,7 @@ func completeQueuedFixtureWork(t *testing.T, h *Harness, ctx context.Context, pr
 		if claimed.WorkflowRunID != "" {
 			run, err := h.WorkflowMgr.Store.Runs.Get(ctx, claimed.WorkflowRunID)
 			testutil.FailErr(t, "load fixture review run", err)
-			manifest, err := h.WorkflowMgr.ManifestForRunID(ctx, run.ID)
+			manifest, err := h.WorkflowMgr.Resolver.ForRunID(ctx, run.ID)
 			testutil.FailErr(t, "load fixture review manifest", err)
 			assignment, err := h.WorkflowMgr.Coverage.CoverageAssignment(ctx, run, manifest, claimed.AgentType)
 			testutil.FailErr(t, "load fixture coverage assignment", err)

@@ -2,31 +2,33 @@ package session
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/coordinator/batch"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/promptresult"
+	"github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/session/store"
-	workflowfacts "github.com/lycaon/lycaon/internal/session/workflowfacts"
+	"github.com/lycaon/lycaon/internal/session/workflowfacts"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
-	"os"
-	"path/filepath"
-	"testing"
 )
 
 func TestManifestCoordinatorProfileOverridesAgent(t *testing.T) {
 	agents := loadAgentsForTest(t)
 	sess := &api.Session{Posture: api.SessionPostureSpec, AgentType: orchestration.ProfileCoordinator}
-	got := ResolveToolProfile(sess, agents, "worker_readonly")
+	got := profiles.ResolveToolProfile(sess, agents, "worker_readonly")
 	if got != "worker_readonly" {
 		t.Fatalf("profile = %q want worker_readonly", got)
 	}
 }
 
-func loadAgentsForTest(t *testing.T) AgentProfileResolver {
+func loadAgentsForTest(t *testing.T) profiles.AgentProfileResolver {
 	t.Helper()
 	agents := orchestration.NewMemoryAgentRegistry()
 	testutil.FailErr(t, "LoadRequiredAgentRegistry", orchestration.LoadRequiredAgentRegistry(t.Context(), agents))
@@ -41,40 +43,39 @@ func TestBuildSessionCreateDefaultsCoordinatorProfile(t *testing.T) {
 	if sess.AgentType != orchestration.ProfileCoordinator {
 		t.Fatalf("agent_type = %q want coordinator", sess.AgentType)
 	}
-	reg, err := LoadPostureRegistry()
-	testutil.FailErr(t, "LoadPostureRegistry failed", err)
-	mgr := NewManager(store, nil, nil, settings.DefaultSessionLimits())
-	mgr.SetPostureRegistry(reg)
-	mgr.SetAgentRegistry(loadAgentsForTest(t))
-	got, err := mgr.promptToolProfile(ctx, sess)
-	testutil.FailErr(t, "mgr.promptToolProfile failed", err)
+	reg, err := profiles.LoadPostureRegistry()
+	testutil.FailErr(t, "profiles.LoadPostureRegistry failed", err)
+	mgr := NewHost(store, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	mgr.Profiles.SetPostureRegistry(reg)
+	mgr.Profiles.SetAgentRegistry(loadAgentsForTest(t))
+	got, err := mgr.Profiles.PromptToolProfile(ctx, sess)
+	testutil.FailErr(t, "mgr.Profiles.PromptToolProfile failed", err)
 	if got != "coordinator" {
 		t.Fatalf("profile = %q want coordinator", got)
 	}
 }
 
 func TestManagerPromptToolProfileUsesWorkflowManifest(t *testing.T) {
-	reg, err := LoadPostureRegistry()
-	testutil.FailErr(t, "LoadPostureRegistry failed", err)
-	mgr := NewManager(store.NewMemory(), nil, nil, settings.DefaultSessionLimits())
-	mgr.SetPostureRegistry(reg)
-	mgr.SetAgentRegistry(loadAgentsForTest(t))
-	workflowFixture1 := stubWorkflowManifest{
+	reg, err := profiles.LoadPostureRegistry()
+	testutil.FailErr(t, "profiles.LoadPostureRegistry failed", err)
+	mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	mgr.Profiles.SetPostureRegistry(reg)
+	mgr.Profiles.SetAgentRegistry(loadAgentsForTest(t))
+	mgr.SetWorkflowDomains(workflowDomainFixture(stubWorkflowManifest{
 		manifest: workflowfacts.ActiveWorkflowManifest{CoordinatorProfile: "worker_readonly"},
 		ok:       true,
-	}
-	mgr.SetWorkflowDomains(&WorkflowDomains{Runs: workflowFixture1, Policy: workflowFixture1, Ambient: workflowFixture1, Blueprints: workflowFixture1, Batch: workflowFixture1, Slash: workflowFixture1, Requests: workflowFixture1, Feedback: workflowFixture1, Transcript: workflowFixture1, Asks: workflowFixture1, Fanout: workflowFixture1, Phases: workflowFixture1, Reports: workflowFixture1, Recovery: workflowFixture1, Cleanup: workflowFixture1})
+	}))
 	sess := &api.Session{ID: "s1", Posture: api.SessionPostureSpec, AgentType: orchestration.ProfileCoordinator}
-	got, err := mgr.promptToolProfile(context.Background(), sess)
-	testutil.FailErr(t, "mgr.promptToolProfile failed", err)
+	got, err := mgr.Profiles.PromptToolProfile(context.Background(), sess)
+	testutil.FailErr(t, "mgr.Profiles.PromptToolProfile failed", err)
 	if got != "worker_readonly" {
 		t.Fatalf("profile = %q want worker_readonly", got)
 	}
 }
 
 func TestProjectPostureOverlayCannotSelectToolProfile(t *testing.T) {
-	reg, err := LoadPostureRegistry()
-	testutil.FailErr(t, "LoadPostureRegistry failed", err)
+	reg, err := profiles.LoadPostureRegistry()
+	testutil.FailErr(t, "profiles.LoadPostureRegistry failed", err)
 	dir := t.TempDir()
 	overlayDir := filepath.Join(dir, settingsoverlay.DirName())
 	if err := os.MkdirAll(overlayDir, 0o755); err != nil {
@@ -88,13 +89,13 @@ postures:
 	if err := os.WriteFile(filepath.Join(overlayDir, "postures.yaml"), overlay, 0o644); err != nil {
 		testutil.FailErr(t, "write file", err)
 	}
-	mgr := NewManager(store.NewMemory(), nil, nil, settings.DefaultSessionLimits())
-	mgr.SetPostureRegistry(reg)
-	mgr.SetAgentRegistry(loadAgentsForTest(t))
+	mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	mgr.Profiles.SetPostureRegistry(reg)
+	mgr.Profiles.SetAgentRegistry(loadAgentsForTest(t))
 	projectID := RegisterProjectContextForTest(t, mgr, dir)
 	sess := &api.Session{ID: "s1", ProjectID: projectID, Posture: api.SessionPostureSpec, AgentType: orchestration.ProfileCoordinator, WorkspacePath: dir}
-	got, err := mgr.promptToolProfile(context.Background(), sess)
-	testutil.FailErr(t, "mgr.promptToolProfile failed", err)
+	got, err := mgr.Profiles.PromptToolProfile(context.Background(), sess)
+	testutil.FailErr(t, "mgr.Profiles.PromptToolProfile failed", err)
 	if got != orchestration.ProfileCoordinator {
 		t.Fatalf("overlay profile = %q want %q", got, orchestration.ProfileCoordinator)
 	}
@@ -180,3 +181,7 @@ func (s stubWorkflowManifest) ApplyCoordinatorBatchEvent(context.Context, string
 	return nil
 }
 func (s stubWorkflowManifest) ForgetSession(string) {}
+
+func (s stubWorkflowManifest) RecordReviewToolResult(context.Context, string, api.Message) error {
+	return nil
+}

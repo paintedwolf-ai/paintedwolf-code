@@ -15,7 +15,7 @@ import (
 // Vars writes load the run after locking so their CAS revision belongs to the critical section.
 var runVarsWriterExemptions = map[string]string{
 	// Document approval commits vars and the approval record together.
-	"lycaon/internal/workflow/user_interaction.go": "CommitBlueprintApproval commits vars and the approval record together",
+	"lycaon/internal/workflow/approval_service.go": "CommitBlueprintApproval commits vars and the approval record together",
 }
 
 // runVarsWriterHome is the primitive's own file.

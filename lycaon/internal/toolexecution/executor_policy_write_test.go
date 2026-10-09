@@ -201,7 +201,7 @@ func TestFileChangeApprovalDeduplicatesPathsAndRetainsIndexPreviews(t *testing.T
 		t.Fatal("prepared review did not ask")
 	}
 	action := manager.request.ProposedAction
-	if len(action.Files) != 1 || action.Files[0] != path || len(action.ResolvedFiles) != 1 || action.ResolvedFiles[0] != fspath.CanonicalPath(path) || len(action.AgentPolicy) != 1 || len(action.FileChanges) != 2 || action.FileChanges[1].Target != "index" {
+	if len(action.Invocation.Files) != 1 || action.Invocation.Files[0] != path || len(action.Invocation.ResolvedFiles) != 1 || action.Invocation.ResolvedFiles[0] != fspath.CanonicalPath(path) || len(action.Mutations.AgentPolicy) != 1 || len(action.Mutations.FileChanges) != 2 || action.Mutations.FileChanges[1].Target != "index" {
 		t.Fatalf("prepared review lost or duplicated evidence: %+v", action)
 	}
 	manager.approve()
@@ -243,7 +243,7 @@ func TestCommandInstructionGrantUsesOneOrdinaryApproval(t *testing.T) {
 	case <-ctx.Done():
 		t.Fatal("policy command did not ask")
 	}
-	if !slices.Contains(manager.request.Decision.Gates(), api.GateAgentPolicyChange) || manager.request.ProposedAction.Command != "touch AGENTS.md" {
+	if !slices.Contains(manager.request.Decision.Gates(), api.GateAgentPolicyChange) || manager.request.ProposedAction.Presentation.Command != "touch AGENTS.md" {
 		t.Fatalf("incorrect command ask: %+v", manager.request)
 	}
 	manager.approve()

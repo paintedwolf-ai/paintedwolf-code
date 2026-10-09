@@ -32,13 +32,17 @@ func TestExecuteToolCallsInTurnRunsFullSerialTaskBatch(t *testing.T) {
 	})
 
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		Tools: reg,
-		AssertRunnable: func(_ context.Context, _ string) error {
-			n := atomic.AddInt32(&assertCalls, 1)
-			if n > 1 {
-				return fmt.Errorf("not runnable after first task enqueue")
-			}
-			return nil
+		Context: ContextDeps{
+			Tools: reg,
+		},
+		Control: ControlDeps{
+			AssertRunnable: func(_ context.Context, _ string) error {
+				n := atomic.AddInt32(&assertCalls, 1)
+				if n > 1 {
+					return fmt.Errorf("not runnable after first task enqueue")
+				}
+				return nil
+			},
 		},
 	})
 	sess := &api.Session{ID: "sess-1", Posture: api.SessionPostureBuild}
@@ -54,12 +58,12 @@ func TestExecuteToolCallsInTurnRunsFullSerialTaskBatch(t *testing.T) {
 		},
 	}}
 	var appended []api.Message
-	loop.Deps.AppendMessages = func(_ context.Context, _ string, msgs ...api.Message) error {
+	loop.Projection.Deps.AppendMessages = func(_ context.Context, _ string, msgs ...api.Message) error {
 		appended = append(appended, msgs...)
 		return nil
 	}
 
-	history, turnTools, anyTask, taskCount, _, breakLoop, err := toolBatch{loop}.executeToolCallsInTurn(
+	history, turnTools, anyTask, taskCount, _, breakLoop, err := loop.Batch.executeToolCallsInTurn(
 		context.Background(),
 		sess,
 		sess.ID,

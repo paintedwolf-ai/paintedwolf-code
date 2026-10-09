@@ -20,8 +20,16 @@ go to Preview; versions such as `1.0.0` go to Stable.
 | Environment | Secrets | Variables |
 |---|---|---|
 | `release-signing` | `APPLE_CERTIFICATE` (base64 p12), `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ENGINE_PROVISIONING_PROFILE_BASE64`, `APPLE_API_KEY_P8` (base64), `APPLE_API_ISSUER`, `APPLE_API_KEY_ID`, `TAURI_SIGNING_PRIVATE_KEY`, optional `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`; Windows candidates also need `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID` | Windows candidates: `AZURE_ARTIFACT_SIGNING_ENDPOINT`, `AZURE_ARTIFACT_SIGNING_ACCOUNT`, `AZURE_ARTIFACT_SIGNING_PROFILE` |
-| `release-publication` | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `R2_BUCKET`, `HOMEBREW_TAP_TOKEN`, `WWW_DISPATCH_TOKEN`, `FEED_SIGNING_PRIVATE_KEY`, optional `FEED_SIGNING_PRIVATE_KEY_PASSWORD` | `HOMEBREW_TAP_REPO=paintedwolf-ai/homebrew-tap` |
+| `release-publication` | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `R2_BUCKET`, `HOMEBREW_TAP_TOKEN`, `WWW_DISPATCH_TOKEN`, `FEED_SIGNING_KEYS_JSON` | `HOMEBREW_TAP_REPO=paintedwolf-ai/homebrew-tap` |
 | `release-rehearsal` | `RELEASE_TEST_R2_API_TOKEN` | `RELEASE_TEST_R2_ACCOUNT_ID`, `RELEASE_TEST_R2_BUCKET`, `RELEASE_TEST_DOWNLOAD_BASE_URL` |
+
+Before enabling these workflows, replace the publication environment's two unnumbered feed secrets with `FEED_SIGNING_KEYS_JSON`:
+
+```json
+{"format_version":1,"generations":{"1":{"private_key":"<generation-1 private key>","password":""}}}
+```
+
+Retain every generation's feed credential while its feed may need a halt; add a separate entry before publishing a bridge. Each signing invocation receives only its selected credential. Build jobs never receive the map. The registered public key is checked even in rehearsals, which use an explicit fixture registry restricted to `release-system-tests/`.
 
 The `release-rehearsal` environment serves the weekly [release system live
 test](../../.github/workflows/release-system-live-test.yml), which exercises
@@ -49,17 +57,15 @@ reuse the public bucket and domain or point at a scratch bucket.
 - [ ] Protect `main` with the `main-protection` ruleset: pull requests merged by
   squash through a merge queue, the required checks `check` (GitHub Actions) and
   `DCO`, no force-pushes or deletions, and the dependency-inventory deploy key
-  as the only bypass actor. `check` is the aggregate of every CI tier, so no
-  individual job is listed. The queue builds up to three groups at once and
-  merges up to five pull requests when the newest passing group's head passes
-  (`HEADGREEN`). Each group contains every pull request ahead of it, so main
-  still advances only to a commit the full tier passed, and a flaky earlier
-  group no longer sends the entries behind it back to rebuild. A full-tier run
-  keeps browser journeys in nightly and runs one macOS confinement/Git-parity
-  job per group. Full Go behavior uses two Linux shards. Calibrate queue
-  concurrency from current runner wait and execution times after cache warming;
-  additional groups can still hold back pull requests' fast tiers. Confirm the queue is live afterwards:
-  the repository's `mergeQueue(branch: "main")` in the GraphQL API is not null.
+  as the only bypass actor. `check` is the aggregate of each CI tier, so no
+  individual job is listed: a pull request's fast tier admits it to the queue,
+  and its merge group's integration gate admits it to main. Apply the reviewed
+  [queue parameters](../test-strategy.md#determinism-and-capacity), two groups
+  of one pull request each with `ALLGREEN`, whose gate caps leave the
+  [runner capacity](../test-strategy.md#runner-capacity) for the other
+  classes. Enable **Allow auto-merge**: it is how a ready pull request enters
+  the queue. Confirm the queue is live afterwards: the repository's
+  `mergeQueue(branch: "main")` in the GraphQL API is not null.
 - [ ] Configure public repository presentation: description (`Local-first AI coding agent`), website (`https://paintedwolf.ai`), topics (`ai`, `agent`, `tauri`, `golang`, `solidjs`, `local-first`), and social preview image.
 
 ## Release
@@ -86,15 +92,18 @@ release, update both the host manifest and the action's revision pin together.
    A schema change ships its registered migration step and recorded released
    baseline with the candidate ([compatibility](../compatibility.md)).
 3. If provider integrations changed, run the [provider checks](#provider-integration-checks).
-4. Merge the candidate through the merge queue, which runs the full CI tier on
-   the commit that lands, and wait for
-   [Build caches](../../.github/workflows/build-caches.yml) to
-   pass; the release build restores the Go and Tauri compiles that run saved.
+4. Mark the candidate ready and enable auto-merge; the merge queue runs the
+   integration gate on the commit that lands. Wait for
+   [Qualification](../../.github/workflows/qualification.yml) and
+   [Build caches](../../.github/workflows/build-caches.yml) to pass on that
+   commit; the release build restores the Go and Tauri compiles the warmer
+   saved. One qualification runs at a time and a newer push replaces a pending
+   one, so when main moves on first, tag the newest qualified commit that
+   contains the candidate, after reviewing what else it brings.
    Tag that exact commit as `v<VERSION>` and push the tag. This starts
    [Release](../../.github/workflows/release.yml), which refuses a commit
-   without a passing full-tier `CI/check`. A dependency-inventory refresh
-   pushed after the candidate bypasses the queue: dispatch
-   [CI](../../.github/workflows/ci.yml) on `main` and tag once it passes.
+   without a passing exact-commit qualification. A dependency-inventory refresh
+   pushed to main bypasses the queue but is qualified like any other push.
 5. The workflow tests, builds, signs, notarizes, publishes the downloads,
    updates the tap and website, and activates the updater feeds. Manual dispatch
    never publishes.
@@ -150,6 +159,10 @@ Keep results with the release evidence. A local unit pass is not a claim of Gate
    all affected feeds and withdraws or replaces the tap and website downloads.
 3. Verify the public download state. Existing installations are not downgraded.
    Publish a fixed version and explain the affected versions and recovery steps.
+
+Halt preparation signs and validates every affected pointer before recording a permanent withdrawal or changing discovery. Dry runs perform the same signing checks. The workflow retains `prepared-halt/` with the reviewed plan (including its distribution scope), original pointers, exact prepared pointer/signature bytes and their SHA-256 digests. Apply validates the complete set and rechecks every feed before writing withdrawal markers, then uses those exact signed bytes. `application.json` records each attempted feed and its result; failures do not prevent attempts on the other prepared feeds. A retry accepts an unchanged original pointer or the already-applied replacement. A changed feed requires a new reviewed preparation. Pointer and signature objects are separate writes, so clients can briefly reject a mismatched pair; they must never install through that rejection.
+
+For a retained preparation, run `./task release:halt -- --plan <halt-plan.json> --apply-prepared <prepared-halt-directory>` with publication credentials. Do not edit the signed files. Keep the generation feed keys available offline as part of recovery custody.
 
 ## When updating dependencies
 

@@ -134,13 +134,13 @@ type AmbientGroundingCoordinator struct {
 	Gate     AmbientGroundingGate
 	Config   GroundingConfig
 	State    *grounding.StateStore
-	Sessions *session.Manager
+	Sessions *session.Host
 	Events   *events.Publisher
 	// Pipeline is required for ambient post-turn Decisions (coordinator.closeout_check).
 	Pipeline *oar.GuardPipeline
 }
 
-func NewAmbientGroundingCoordinator(store Store, queue ambientWorkerQueue, gate AmbientGroundingGate, cfg GroundingConfig, state *grounding.StateStore, sessions *session.Manager) *AmbientGroundingCoordinator {
+func NewAmbientGroundingCoordinator(store Store, queue ambientWorkerQueue, gate AmbientGroundingGate, cfg GroundingConfig, state *grounding.StateStore, sessions *session.Host) *AmbientGroundingCoordinator {
 	if gate == nil {
 		gate = NewSimpleAmbientGroundingGate(cfg)
 	}
@@ -269,7 +269,7 @@ func (g *AmbientGroundingCoordinator) buildInput(ctx context.Context, sessionID 
 	if g.Sessions == nil {
 		return in, nil
 	}
-	sess, err := g.Sessions.Get(ctx, sessionID)
+	sess, err := g.Sessions.Chats.Get(ctx, sessionID)
 	if err != nil {
 		return AmbientGroundingInput{}, err
 	}
@@ -281,7 +281,7 @@ func (g *AmbientGroundingCoordinator) buildInput(ctx context.Context, sessionID 
 		jobs, _ := g.Queue.ListBySession(ctx, sess.ProjectID, sessionID)
 		in.Jobs = append([]api.WorkerTask(nil), jobs...)
 	}
-	msgs, _ := g.Sessions.GetMessages(ctx, sessionID)
+	msgs, _ := g.Sessions.Runner.Transcript.GetMessages(ctx, sessionID)
 	in.SummaryTags = summaryTagsFromMessages(msgs)
 	if audit := lastAssistantAudit(msgs); audit != nil && !audit.Traced {
 		in.LastAuditUngrounded = true

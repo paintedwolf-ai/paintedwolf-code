@@ -2,8 +2,6 @@ package session_test
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"sort"
 	"strings"
 	"testing"
@@ -12,11 +10,10 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance/ledgertest"
 	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/stream"
 	"github.com/lycaon/lycaon/internal/session/workercloseout"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
+	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -138,7 +135,7 @@ func (s *stubSummaryResolver) SpawnChild(ctx context.Context, parentID string, r
 	return &api.Session{ID: "child"}, nil
 }
 
-func (s *stubSummaryResolver) AppendWorkerSummary(ctx context.Context, parentID string, in session.WorkerSummaryInput) (string, error) {
+func (s *stubSummaryResolver) AppendWorkerSummary(ctx context.Context, parentID string, in workeroutcomes.SummaryInput) (string, error) {
 	return in.Status, nil
 }
 
@@ -158,10 +155,6 @@ func (s *stubSummaryResolver) Streams() *stream.State {
 		streams.CacheReplay(id, content, nil)
 	}
 	return streams
-}
-
-func (s *stubSummaryResolver) PromptHostTurn(ctx context.Context, sessionID string, _ store.PromptSubmissionOrigin, text string) (*promptresult.Result, error) {
-	return s.Prompt(ctx, sessionID, text)
 }
 
 func finalizeOpts(resolver *stubSummaryResolver, childID string, opts workercloseout.WorkerSummaryFinalizeOpts) workercloseout.WorkerSummaryFinalizeOpts {
@@ -214,7 +207,7 @@ func TestFinalizeWorkerSummaryPrefersCompleteLeg(t *testing.T) {
 			"objectives_met": []any{"mapped auth"},
 		})),
 	}
-	out, workerEvalErr := workercloseout.FinalizeWorkerSummaryForChild(context.Background(), resolver, "child", "path-explorer", finalizeOpts(resolver, "child", workercloseout.WorkerSummaryFinalizeOpts{}))
+	out, workerEvalErr := workercloseout.FinalizeWorkerSummaryForChild(context.Background(), resolver, resolver, "child", "path-explorer", finalizeOpts(resolver, "child", workercloseout.WorkerSummaryFinalizeOpts{}))
 	testutil.FailErr(t, "evaluate worker completion", workerEvalErr)
 	if out.Provenance != "complete_leg" || out.Report.Brief != "surveyed via tool" {
 		t.Fatalf("out = %+v want complete_leg", out)
@@ -243,7 +236,7 @@ func TestFinalizeWorkerSummaryScopesReusedChildToWorkerJob(t *testing.T) {
 	opts := finalizeOpts(resolver, "child", workercloseout.WorkerSummaryFinalizeOpts{WorkerJobID: "job-current"})
 
 	out, workerEvalErr := workercloseout.FinalizeWorkerSummaryForChild(
-		context.Background(), resolver, "child", "path-explorer", opts,
+		context.Background(), resolver, resolver, "child", "path-explorer", opts,
 	)
 	testutil.FailErr(t, "evaluate worker completion", workerEvalErr)
 
@@ -265,7 +258,7 @@ func TestFinalizeWorkerSummaryCompleteLegSurvivesCompactedBody(t *testing.T) {
 	resolver := &stubSummaryResolver{
 		msgs: append(scoutSurveyFixtureMessages(), row),
 	}
-	out, workerEvalErr := workercloseout.FinalizeWorkerSummaryForChild(context.Background(), resolver, "child", "security-reviewer", finalizeOpts(resolver, "child", workercloseout.WorkerSummaryFinalizeOpts{}))
+	out, workerEvalErr := workercloseout.FinalizeWorkerSummaryForChild(context.Background(), resolver, resolver, "child", "security-reviewer", finalizeOpts(resolver, "child", workercloseout.WorkerSummaryFinalizeOpts{}))
 	testutil.FailErr(t, "evaluate worker completion", workerEvalErr)
 	if out.Provenance != "complete_leg" || out.Status != "complete" || out.Summary != "Triaged all three scans." {
 		t.Fatalf("out = %+v want complete_leg complete", out)
@@ -282,7 +275,7 @@ func TestFinalizeWorkerSummaryBlockedLegMapsToPartialStatus(t *testing.T) {
 			"brief":      "waiting on missing schema decision",
 		})),
 	}
-	out, workerEvalErr := workercloseout.FinalizeWorkerSummaryForChild(context.Background(), resolver, "child", "path-explorer", finalizeOpts(resolver, "child", workercloseout.WorkerSummaryFinalizeOpts{}))
+	out, workerEvalErr := workercloseout.FinalizeWorkerSummaryForChild(context.Background(), resolver, resolver, "child", "path-explorer", finalizeOpts(resolver, "child", workercloseout.WorkerSummaryFinalizeOpts{}))
 	testutil.FailErr(t, "evaluate worker completion", workerEvalErr)
 	if out.Status != "partial" {
 		t.Fatalf("status = %q want partial for a blocked leg", out.Status)
@@ -297,7 +290,7 @@ func TestFinalizeWorkerSummaryCloseoutRecordsCompleteLeg(t *testing.T) {
 		closeoutAddsLegTool: true,
 		msgs:                scoutSurveyFixtureMessages(),
 	}
-	out, workerEvalErr := workercloseout.FinalizeWorkerSummaryForChild(context.Background(), resolver, "child", "path-explorer", finalizeOpts(resolver, "child", workercloseout.WorkerSummaryFinalizeOpts{}))
+	out, workerEvalErr := workercloseout.FinalizeWorkerSummaryForChild(context.Background(), resolver, resolver, "child", "path-explorer", finalizeOpts(resolver, "child", workercloseout.WorkerSummaryFinalizeOpts{}))
 	testutil.FailErr(t, "evaluate worker completion", workerEvalErr)
 	if out.Status != "complete" || out.Provenance != "closeout_complete_leg" {
 		t.Fatalf("out = %+v want closeout complete", out)
@@ -315,7 +308,7 @@ func TestFinalizeWorkerSummaryForCanceledCloseout(t *testing.T) {
 		closeoutAddsLegTool: true,
 		msgs:                scoutSurveyFixtureMessages(),
 	}
-	out, workerEvalErr := workercloseout.FinalizeWorkerSummaryForCanceled(context.Background(), resolver, "child", "path-explorer", "wrong scope", finalizeOpts(resolver, "child", workercloseout.WorkerSummaryFinalizeOpts{}))
+	out, workerEvalErr := workercloseout.FinalizeWorkerSummaryForCanceled(context.Background(), resolver, resolver, "child", "path-explorer", "wrong scope", finalizeOpts(resolver, "child", workercloseout.WorkerSummaryFinalizeOpts{}))
 	testutil.FailErr(t, "evaluate worker completion", workerEvalErr)
 	if out.Status != "partial" || out.Provenance != "cancel_complete_leg" {
 		t.Fatalf("out = %+v want cancel closeout partial", out)
@@ -337,7 +330,7 @@ func TestFinalizeWorkerSummarySynthesizedFromTools(t *testing.T) {
 	}
 	// The closeout prompt adds no prose, so synthesis runs.
 	resolver.prompts = 0
-	out, workerEvalErr := workercloseout.FinalizeWorkerSummaryForChild(context.Background(), resolver, "child", "path-explorer", finalizeOpts(resolver, "child", workercloseout.WorkerSummaryFinalizeOpts{}))
+	out, workerEvalErr := workercloseout.FinalizeWorkerSummaryForChild(context.Background(), resolver, resolver, "child", "path-explorer", finalizeOpts(resolver, "child", workercloseout.WorkerSummaryFinalizeOpts{}))
 	testutil.FailErr(t, "evaluate worker completion", workerEvalErr)
 	if out.Status != "partial" || out.Provenance != "synthesized" {
 		t.Fatalf("out = %+v want synthesized partial", out)
@@ -353,7 +346,7 @@ func TestFinalizeWorkerSummaryNoProsePartial(t *testing.T) {
 			{Role: api.MessageRoleTool, Content: "Rejected: bad"},
 		},
 	}
-	out, workerEvalErr := workercloseout.FinalizeWorkerSummaryForChild(context.Background(), resolver, "child", "path-explorer", finalizeOpts(resolver, "child", workercloseout.WorkerSummaryFinalizeOpts{Pipeline: sessionTestOARPipeline(t)}))
+	out, workerEvalErr := workercloseout.FinalizeWorkerSummaryForChild(context.Background(), resolver, resolver, "child", "path-explorer", finalizeOpts(resolver, "child", workercloseout.WorkerSummaryFinalizeOpts{Pipeline: sessionTestOARPipeline(t)}))
 	testutil.FailErr(t, "evaluate worker completion", workerEvalErr)
 	if out.Status != "partial" || out.HintCode != workercompletion.WorkerCompletionReportMissingCode {
 		t.Fatalf("out = %+v", out)
@@ -371,7 +364,7 @@ func TestFinalizeWorkerSummaryTrimRejectsProseOnlyAnswer(t *testing.T) {
 		trimAddsProse: true,
 		msgs:          append(scoutSurveyFixtureMessages(), completeLegToolRow(map[string]any{"leg_status": "complete", "brief": longBrief})),
 	}
-	out, workerEvalErr := workercloseout.FinalizeWorkerSummaryForChild(context.Background(), resolver, "child", "path-explorer", finalizeOpts(resolver, "child", workercloseout.WorkerSummaryFinalizeOpts{
+	out, workerEvalErr := workercloseout.FinalizeWorkerSummaryForChild(context.Background(), resolver, resolver, "child", "path-explorer", finalizeOpts(resolver, "child", workercloseout.WorkerSummaryFinalizeOpts{
 		MaxChars: 50,
 		Pipeline: sessionTestOARPipeline(t),
 	}))
@@ -396,7 +389,7 @@ func TestFinalizeWorkerSummaryTooLongTrimRetryAcceptsCompleteLegAnswer(t *testin
 			"brief":      strings.Repeat("x", 200),
 		})),
 	}
-	out, workerEvalErr := workercloseout.FinalizeWorkerSummaryForChild(context.Background(), resolver, "child", "path-explorer", finalizeOpts(resolver, "child", workercloseout.WorkerSummaryFinalizeOpts{
+	out, workerEvalErr := workercloseout.FinalizeWorkerSummaryForChild(context.Background(), resolver, resolver, "child", "path-explorer", finalizeOpts(resolver, "child", workercloseout.WorkerSummaryFinalizeOpts{
 		MaxChars: 50,
 		Pipeline: sessionTestOARPipeline(t),
 	}))
@@ -420,7 +413,7 @@ func TestFinalizeWorkerSummaryTooLongPartialWhenTrimFails(t *testing.T) {
 	resolver := &stubSummaryResolver{
 		msgs: append(scoutSurveyFixtureMessages(), completeLegJSONRow(t, "", longJSON)),
 	}
-	out, workerEvalErr := workercloseout.FinalizeWorkerSummaryForChild(context.Background(), resolver, "child", "path-explorer", finalizeOpts(resolver, "child", workercloseout.WorkerSummaryFinalizeOpts{
+	out, workerEvalErr := workercloseout.FinalizeWorkerSummaryForChild(context.Background(), resolver, resolver, "child", "path-explorer", finalizeOpts(resolver, "child", workercloseout.WorkerSummaryFinalizeOpts{
 		MaxChars: 50,
 		Pipeline: sessionTestOARPipeline(t),
 	}))
@@ -442,7 +435,7 @@ func TestFinalizeWorkerSummaryMidRunProseTriggersCloseout(t *testing.T) {
 			{ID: "empty-terminal", Role: api.MessageRoleAssistant, Content: ""},
 		},
 	}
-	out, workerEvalErr := workercloseout.FinalizeWorkerSummaryForChild(context.Background(), resolver, "child", "security-reviewer", finalizeOpts(resolver, "child", workercloseout.WorkerSummaryFinalizeOpts{}))
+	out, workerEvalErr := workercloseout.FinalizeWorkerSummaryForChild(context.Background(), resolver, resolver, "child", "security-reviewer", finalizeOpts(resolver, "child", workercloseout.WorkerSummaryFinalizeOpts{}))
 	testutil.FailErr(t, "evaluate worker completion", workerEvalErr)
 	if out.Status != "complete" || out.Provenance != "closeout_complete_leg" {
 		t.Fatalf("out = %+v want closeout complete (mid-run prose must not satisfy survey)", out)
@@ -455,77 +448,3 @@ func TestFinalizeWorkerSummaryMidRunProseTriggersCloseout(t *testing.T) {
 	}
 }
 
-// A pending decision parks the worker run.
-func TestFinalizeWorkerSummaryParksOnAPendingDecision(t *testing.T) {
-	resolver := &stubSummaryResolver{msgs: scoutSurveyFixtureMessages()}
-	opts := finalizeOpts(resolver, "child", workercloseout.WorkerSummaryFinalizeOpts{
-		DecisionPending: func(context.Context, string) bool { return true },
-	})
-	out, workerEvalErr := workercloseout.FinalizeWorkerSummaryForChild(
-		context.Background(), resolver, "child", "skeptic", opts,
-	)
-	testutil.FailErr(t, "evaluate worker completion", workerEvalErr)
-	if out.Status != string(api.WorkerSummaryStatusNeedsDecision) {
-		t.Fatalf("status = %q want needs_decision", out.Status)
-	}
-	if resolver.prompts != 0 {
-		t.Fatalf("prompts = %d want 0 — a parked worker is not given a forced closeout turn", resolver.prompts)
-	}
-}
-
-func TestFinalizeWorkerSummaryStillClosesOutWithoutAPendingDecision(t *testing.T) {
-	resolver := &stubSummaryResolver{msgs: scoutSurveyFixtureMessages()}
-	opts := finalizeOpts(resolver, "child", workercloseout.WorkerSummaryFinalizeOpts{
-		DecisionPending: func(context.Context, string) bool { return false },
-	})
-	out, workerEvalErr := workercloseout.FinalizeWorkerSummaryForChild(
-		context.Background(), resolver, "child", "skeptic", opts,
-	)
-	testutil.FailErr(t, "evaluate worker completion", workerEvalErr)
-	if out.Status == string(api.WorkerSummaryStatusNeedsDecision) {
-		t.Fatalf("status = %q — nothing was pending, so the closeout path still handles this", out.Status)
-	}
-}
-
-func TestFinalizeWorkerSummaryBudgetCountsUnicodeCharacters(t *testing.T) {
-	brief := strings.Repeat("界🚀", 25)
-	resolver := &stubSummaryResolver{msgs: append(scoutSurveyFixtureMessages(), completeLegToolRow(map[string]any{
-		"leg_status": "complete", "brief": brief,
-	}))}
-	out, workerEvalErr := workercloseout.FinalizeWorkerSummaryForChild(t.Context(), resolver, "child", "path-explorer", finalizeOpts(resolver, "child", workercloseout.WorkerSummaryFinalizeOpts{
-		MaxChars: 50, Pipeline: sessionTestOARPipeline(t),
-	}))
-	testutil.FailErr(t, "evaluate worker completion", workerEvalErr)
-	if resolver.prompts != 0 || out.Summary != brief || out.Status != "complete" {
-		t.Fatalf("in-budget Unicode report was trimmed or lost: prompts=%d outcome=%+v", resolver.prompts, out)
-	}
-}
-
-func completeLegNamedRow(id string, args map[string]any) api.Message {
-	message := completeLegToolRow(args)
-	message.ID = id
-	return message
-}
-func completeLegJSONRow(t *testing.T, id, raw string) api.Message {
-	t.Helper()
-	var args map[string]any
-	testutil.FailErr(t, "decode complete_leg fixture", json.Unmarshal([]byte(raw), &args))
-	return completeLegNamedRow(id, args)
-}
-
-func TestFinalizeWorkerSummaryPropagatesTrimRetryFailure(t *testing.T) {
-	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
-	failure := errors.New("host turn unavailable")
-	resolver := &stubSummaryResolver{
-		promptErr: failure,
-		msgs: append(scoutSurveyFixtureMessages(), completeLegToolRow(map[string]any{
-			"leg_status": "complete", "brief": strings.Repeat("x", 200),
-		})),
-	}
-	_, err := workercloseout.FinalizeWorkerSummaryForChild(t.Context(), resolver, "child", "path-explorer", finalizeOpts(resolver, "child", workercloseout.WorkerSummaryFinalizeOpts{
-		MaxChars: 50, Pipeline: sessionTestOARPipeline(t),
-	}))
-	if !errors.Is(err, failure) || resolver.prompts != 1 {
-		t.Fatalf("trim retry failure: prompts=%d error=%v", resolver.prompts, err)
-	}
-}

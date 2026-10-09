@@ -22,7 +22,7 @@ func startSecuritySurveyRun(t *testing.T) (*workflow.RunManager, string) {
 	_, err = mgr.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{
 		OperationID:     "op-" + sess.ID,
 		WorkflowID:      "security-survey",
-		WorkflowVersion: "1.0.1",
+		WorkflowVersion: "2.0.0",
 	})
 	testutil.FailErr(t, "Start security-survey", err)
 	return mgr, sess.ID

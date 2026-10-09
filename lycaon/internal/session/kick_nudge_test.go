@@ -3,7 +3,6 @@ package session_test
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/testutil/oartest"
 	"strings"
 	"testing"
 
@@ -16,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/oartest"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -48,20 +48,20 @@ func TestPromptDoesNotQueueGreenfieldBuildKickForPlanReviewPolicyPrompt(t *testi
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	store := store.NewMemory()
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
-	mgr := session.NewManager(store, rec, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr)
 	wirePromptTestManager(t, mgr)
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
 	mgr.SetProgressStore(progress.NewMemoryStore())
-	testutil.FailErr(t, "install anchor registry", mgr.InstallAnchorRegistry())
+	testutil.FailErr(t, "install anchor registry", mgr.Coordinator.Guidance.InstallAnchorRegistry())
 
 	ctx := context.Background()
-	sess, err := mgr.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureBuild)
+	sess, err := mgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureBuild)
 	testutil.FailErr(t, "create coordinator session", err)
-	if _, err := mgr.Prompt(ctx, sess.ID, incidentPlanReviewPolicyPrompt); err != nil {
-		testutil.FailErr(t, "mgr.Prompt failed", err)
+	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, incidentPlanReviewPolicyPrompt); err != nil {
+		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 	}
-	if id, ok := mgr.PendingKickIDForTest(sess.ID); ok && id != "" {
+	if id, ok := mgr.Runner.Coordinator.Kicks().PeekPendingKickID(sess.ID); ok && id != "" {
 		t.Fatalf("TakePendingKickID = %q want empty (greenfield-build kick must not queue)", id)
 	}
 	for _, msg := range rec.LastRequest().Messages {
@@ -75,7 +75,7 @@ func TestQueueCoordinatorKickPrependsOnPrompt(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	store := store.NewMemory()
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
-	mgr := session.NewManager(store, rec, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr)
 	wirePromptTestManager(t, mgr)
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
@@ -84,9 +84,9 @@ func TestQueueCoordinatorKickPrependsOnPrompt(t *testing.T) {
 
 	sess, err := store.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
-	mgr.Emit(context.Background(), sess.ID, anchor.ComposeDone, anchor.Envelope{})
-	if _, err := mgr.Prompt(ctx, sess.ID, "continue"); err != nil {
-		testutil.FailErr(t, "mgr.Prompt failed", err)
+	mgr.Coordinator.Guidance.Emit(context.Background(), sess.ID, anchor.ComposeDone, anchor.Envelope{})
+	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "continue"); err != nil {
+		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 	}
 	req := rec.LastRequest()
 	foundKick := false
@@ -125,28 +125,28 @@ func TestPromptRenderFailurePreservesCoordinatorKickForRetry(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	st := store.NewMemory()
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
-	mgr := session.NewManager(st, rec, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(st, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr)
 	wirePromptTestManager(t, mgr)
-	testutil.FailErr(t, "install anchor registry", mgr.InstallAnchorRegistry())
+	testutil.FailErr(t, "install anchor registry", mgr.Coordinator.Guidance.InstallAnchorRegistry())
 	mgr.SetPromptEngine(failingKickPromptEngine{err: errors.New("template unavailable")})
 
 	ctx := context.Background()
 	sess, err := st.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	mgr.Emit(ctx, sess.ID, anchor.ComposeDone, anchor.Envelope{})
-	if _, err := mgr.Prompt(ctx, sess.ID, "continue"); err == nil {
+	mgr.Coordinator.Guidance.Emit(ctx, sess.ID, anchor.ComposeDone, anchor.Envelope{})
+	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "continue"); err == nil {
 		t.Fatal("Prompt error = nil, want kick render failure")
 	}
-	if id, ok := mgr.PendingKickIDForTest(sess.ID); !ok || !anchor.SameInform(id, anchor.ComposeDone) {
+	if id, ok := mgr.Runner.Coordinator.Kicks().PeekPendingKickID(sess.ID); !ok || !anchor.SameInform(id, anchor.ComposeDone) {
 		t.Fatalf("pending kick after render failure = (%q, %v), want compose-done", id, ok)
 	}
 
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
-	if _, err := mgr.Prompt(ctx, sess.ID, "continue"); err != nil {
+	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "continue"); err != nil {
 		testutil.FailErr(t, "retry prompt", err)
 	}
-	if id, ok := mgr.PendingKickIDForTest(sess.ID); ok || id != "" {
+	if id, ok := mgr.Runner.Coordinator.Kicks().PeekPendingKickID(sess.ID); ok || id != "" {
 		t.Fatalf("pending kick after successful retry = (%q, %v), want empty", id, ok)
 	}
 }

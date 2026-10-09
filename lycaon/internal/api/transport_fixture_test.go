@@ -2,8 +2,6 @@ package api
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -16,40 +14,13 @@ import (
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/llm"
 	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
-	"github.com/lycaon/lycaon/internal/modelfeed"
-	"github.com/lycaon/lycaon/internal/pricing"
 	"github.com/lycaon/lycaon/internal/project"
-	"github.com/lycaon/lycaon/internal/scan"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
-	wire "github.com/lycaon/lycaon/pkg/api"
 )
-
-func (*warmTrackingRepo) Close() error { return nil }
-
-func (s *apiStubFeed) Document(context.Context) (*modelfeed.Document, error) { return s.doc, nil }
-
-func (multiScannerRegistry) Get(id string) (scan.CodeScanner, error) {
-	return nil, fmt.Errorf("scanner %q not found", id)
-}
-
-func (s *apiStubFeed) Snapshot() (*modelfeed.Document, string, bool) {
-	return s.doc, string(pricing.StatusOK), s.doc != nil
-}
-
-type apiStubFeed struct {
-	doc *modelfeed.Document
-}
-
-func decodeErr(t *testing.T, w *httptest.ResponseRecorder) wire.ErrorResponse {
-	t.Helper()
-	var resp wire.ErrorResponse
-	testutil.FailErr(t, "decode error", json.Unmarshal(w.Body.Bytes(), &resp))
-	return resp
-}
 
 func fakeModelPolicyYAML() string {
 	return `coordinator:
@@ -100,8 +71,6 @@ func fakeProvidersYAML(baseURL string) string {
 }
 
 // newProvADiscoveryServer serves fixture discovery models.
-
-type multiScannerRegistry struct{}
 
 func newProvADiscoveryServer(t *testing.T) *httptest.Server {
 	t.Helper()
@@ -165,7 +134,7 @@ func newProviderTestServerWithCatalogs(t *testing.T, shipYAML, localYAML string,
 	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	store := store.NewMemory()
 	mock := llm.NewMockProvider(testMockConfig(t))
-	mgr := session.NewManagerWithLLMService(store, mock, svc, nil, settings.DefaultSessionLimits(), nil)
+	mgr := session.NewHost(store, session.Models{Client: mock, Provider: svc, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	hub := events.NewMemoryHub()
 	deps := Dependencies{Core: CoreDependencies{Store: store, Projects: project.NewMemoryRegistry(), Sessions: mgr}, Providers: ProvidersDependencies{LLM: svc}, Host: HostDependencies{Events: hub}}
 	for _, opt := range opts {
@@ -193,26 +162,7 @@ func (f *recordingInventoryService) snapshot() []sourceledger.InventoryRequest {
 	return append([]sourceledger.InventoryRequest(nil), f.requests...)
 }
 
-type sourceContentFixture struct {
-	server  *Server
-	project *project.Project
-	path    string
-	url     string
-}
-
 const testProviderID = "prov-a"
-
-func (f sourceContentFixture) text(t *testing.T, doc wire.EditorDocument) string {
-	t.Helper()
-	current, err := f.server.Sources.Editor.EditorDocuments.CurrentSnapshot(t.Context(), f.project.ID, doc.ID)
-	testutil.FailErr(t, "load current document", err)
-	return current.Draft
-}
-
-type warmTrackingRepo struct {
-	warmed     []string
-	briefCalls int
-}
 
 func withSessionStore(store session.Store) testDeps {
 	return func(d *Dependencies) { d.Core.Store = store }

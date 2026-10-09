@@ -17,20 +17,28 @@ type hostedStep struct {
 	Env      map[string]string
 }
 
+const mergeGroupFailFast = "${{ github.event_name == 'merge_group' }}"
+
 type hostedJob struct {
-	Uses     string
-	Needs    yaml.Node
-	If       string
-	Timeout  string `yaml:"timeout-minutes"`
-	Continue bool   `yaml:"continue-on-error"`
-	With     map[string]string
-	Steps    []hostedStep
-	Strategy struct {
-		FailFast *bool `yaml:"fail-fast"`
+	Uses        string
+	Permissions map[string]string
+	Needs       yaml.Node
+	If          string
+	Timeout     string `yaml:"timeout-minutes"`
+	Continue    bool   `yaml:"continue-on-error"`
+	With        map[string]string
+	Steps       []hostedStep
+	Strategy    struct {
+		FailFast string `yaml:"fail-fast"`
 	}
 }
 
 type hostedWorkflow struct {
+	Permissions map[string]string
+	Concurrency struct {
+		Group  string
+		Cancel yaml.Node `yaml:"cancel-in-progress"`
+	}
 	On   map[string]yaml.Node
 	Jobs map[string]hostedJob
 }
@@ -75,13 +83,13 @@ func requireHostedGate(t *testing.T, jobs map[string]hostedJob, gate string, dep
 	t.Fatalf("%s does not require successful structured dependency results", gate)
 }
 
-func TestHostedVerificationAggregatesRequireEveryJob(t *testing.T) {
+func TestHostedVerificationAggregatesRequireEveryBlockingJob(t *testing.T) {
 	t.Parallel()
-	for workflow, gate := range map[string]string{"ci": "check", "nightly": "nightly"} {
+	for workflow, gate := range map[string]string{"ci": "check", "nightly": "nightly", "qualification": "qualification"} {
 		jobs := hostedJobs(t, workflow)
 		var dependencies []string
 		for name := range jobs {
-			if name != gate {
+			if name != gate && !(workflow == "nightly" && name == "quarantine") {
 				dependencies = append(dependencies, name)
 			}
 		}
@@ -103,79 +111,14 @@ func TestReusableVerificationFailsWithItsPlanOrAnyMatrixJob(t *testing.T) {
 	if !slices.Equal(hostedNeeds(t, verify), []string{"plan"}) {
 		t.Fatal("matrix execution must depend on successful planning")
 	}
-	if verify.Strategy.FailFast == nil || *verify.Strategy.FailFast {
-		t.Fatal("each selected matrix job must run and retain its own evidence")
+	// A merge group stops at its first failure to free its runners; other runs keep every lane's evidence.
+	if verify.Strategy.FailFast != mergeGroupFailFast {
+		t.Fatalf("only a merge group may stop its other lanes at the first failure, got fail-fast %q", verify.Strategy.FailFast)
 	}
 	for _, step := range verify.Steps {
 		if strings.HasPrefix(step.Run, "python3 scripts/ci_verification.py run") && step.Continue {
 			t.Fatal("an unverified or failed lane must fail the reusable workflow")
 		}
-	}
-}
-
-// Pull requests get the fast tier; main advances only through the merge queue,
-// whose single required check judges the full tier on the commit that lands.
-func TestCIRunsTheFastTierOnPullRequestsAndTheFullTierBeforeMain(t *testing.T) {
-	t.Parallel()
-	workflow := hostedWorkflowFile(t, "ci")
-	for _, event := range []string{"pull_request", "merge_group", "workflow_dispatch"} {
-		if _, ok := workflow.On[event]; !ok {
-			t.Errorf("CI must run on %s", event)
-		}
-	}
-	if _, ok := workflow.On["push"]; ok {
-		t.Error("the merge queue verifies what lands on main; a push run would repeat it")
-	}
-	var pullRequest struct {
-		Paths       []string
-		PathsIgnore []string `yaml:"paths-ignore"`
-	}
-	trigger := workflow.On["pull_request"]
-	contractcheck.FailErr(t, "decode pull_request trigger", trigger.Decode(&pullRequest))
-	if len(pullRequest.Paths)+len(pullRequest.PathsIgnore) > 0 {
-		t.Error("the required check must report on every pull request")
-	}
-	jobs := workflow.Jobs
-	if jobs["verification"].With["profile"] != "${{ github.event_name == 'pull_request' && 'fast' || 'check' }}" {
-		t.Error("pull requests must run the fast profile and every other event the check profile")
-	}
-	if platform := jobs["platform"]; platform.Uses != "./.github/workflows/platform-verification.yml" ||
-		platform.If != "github.event_name != 'pull_request'" {
-		t.Error("platform verification must run in every full-tier event and only there")
-	}
-	requireHostedGate(t, jobs, "check", []string{"verification", "platform"})
-	for _, step := range jobs["check"].Steps {
-		if strings.HasPrefix(step.Run, "python3 scripts/ci_verification.py gate") &&
-			(step.Env["SKIPPED"] != "${{ github.event_name == 'pull_request' && 'platform' || '' }}" ||
-				!strings.Contains(step.Run, `--skipped "$SKIPPED"`)) {
-			t.Error("the gate may excuse only the platform job, and only on pull requests")
-		}
-	}
-}
-
-// Drafts spend no verification runners, never pass the required check, and get
-// the fast tier once marked ready.
-func TestDraftPullRequestsWaitForReadyForReview(t *testing.T) {
-	t.Parallel()
-	workflow := hostedWorkflowFile(t, "ci")
-	var pullRequest struct{ Types []string }
-	trigger := workflow.On["pull_request"]
-	contractcheck.FailErr(t, "decode pull_request trigger", trigger.Decode(&pullRequest))
-	types := slices.Clone(pullRequest.Types)
-	slices.Sort(types)
-	if !slices.Equal(types, []string{"opened", "ready_for_review", "reopened", "synchronize"}) {
-		t.Errorf("pull request CI must run when a ready pull request changes and when a draft becomes ready, got %v", pullRequest.Types)
-	}
-	if workflow.Jobs["verification"].If != "${{ !github.event.pull_request.draft }}" {
-		t.Error("draft pull requests must not start verification")
-	}
-	refused := false
-	for _, step := range workflow.Jobs["check"].Steps {
-		refused = refused || strings.HasPrefix(step.Run, "python3 scripts/ci_verification.py gate") &&
-			step.Env["DRAFT"] == "${{ github.event.pull_request.draft == true }}" && strings.Contains(step.Run, `--draft "$DRAFT"`)
-	}
-	if !refused {
-		t.Error("the required check must refuse a draft rather than pass on skipped verification")
 	}
 }
 
@@ -209,8 +152,8 @@ func TestHostedVerificationBudgetsAndEvidence(t *testing.T) {
 	t.Parallel()
 	jobs := hostedJobs(t, "verification")
 	verify := jobs["verify"]
-	if verify.Strategy.FailFast == nil || *verify.Strategy.FailFast {
-		t.Fatal("one verification failure must not cancel independent matrix jobs")
+	if verify.Strategy.FailFast != mergeGroupFailFast {
+		t.Fatal("outside a merge group, one verification failure must not cancel independent matrix jobs")
 	}
 	if verify.Timeout != "${{ matrix.job_minutes }}" {
 		t.Fatal("verification jobs must consume the catalog job budget")
@@ -229,7 +172,7 @@ func TestHostedVerificationBudgetsAndEvidence(t *testing.T) {
 	}
 	for _, workflow := range []string{"ci", "nightly", "verification", "platform-verification", "e2e-verification"} {
 		for name, job := range hostedJobs(t, workflow) {
-			if job.Continue || job.Uses == "" && job.Timeout == "" {
+			if job.Continue && !(workflow == "nightly" && name == "quarantine") || job.Uses == "" && job.Timeout == "" {
 				t.Errorf("%s/%s must be blocking and have an explicit deadline", workflow, name)
 			}
 			for _, step := range job.Steps {
@@ -241,22 +184,30 @@ func TestHostedVerificationBudgetsAndEvidence(t *testing.T) {
 	}
 }
 
-func TestEndToEndVerificationRunsOnlyInTheSelectedNightlyTier(t *testing.T) {
+func TestEndToEndVerificationRunsInQualificationAndSelectedNightly(t *testing.T) {
 	t.Parallel()
 	platform := hostedJobs(t, "platform-verification")
 	if len(platform) != 2 || platform["confinement"].Timeout == "" || platform["upgrade-corpus"].Timeout == "" {
-		t.Fatal("merge admission must retain confinement and upgrade gates without browser journeys")
+		t.Fatal("platform qualification must retain confinement and upgrade gates")
 	}
 	e2e := hostedJobs(t, "e2e-verification")
 	if len(e2e) != 2 || e2e["playwright-desktop"].Timeout == "" {
 		t.Fatal("end-to-end verification must run web and desktop suites")
 	}
 	web := e2e["playwright-web"]
-	if web.Strategy.FailFast == nil || *web.Strategy.FailFast || web.Continue {
+	if web.Strategy.FailFast != "false" || web.Continue {
 		t.Fatal("each web shard must run independently and contribute to the verdict")
 	}
-	const selected = "github.event_name == 'schedule' || inputs.suite == 'all' || inputs.suite == 'e2e'"
+	// Nightly stages run in turn, and each runs whatever an earlier stage concluded.
+	const selected = "${{ !cancelled() && (github.event_name == 'schedule' || inputs.suite == 'all' || inputs.suite == 'e2e') }}"
+	qualification := hostedJobs(t, "qualification")
+	if qualification["e2e"].Uses != "./.github/workflows/e2e-verification.yml" {
+		t.Fatal("main qualification must include browser verification")
+	}
 	nightly := hostedJobs(t, "nightly")
+	if !nightly["quarantine"].Continue {
+		t.Fatal("quarantine observation must not block nightly qualification")
+	}
 	if nightly["e2e"].Uses != "./.github/workflows/e2e-verification.yml" || nightly["e2e"].If != selected {
 		t.Fatal("scheduled, full, and explicit E2E nightly runs must include browser verification")
 	}
@@ -302,9 +253,11 @@ func TestBrowserVerificationRetainsSuitesEvidenceAndCleanup(t *testing.T) {
 
 func TestHostedProfilesAndSetupAreReachable(t *testing.T) {
 	t.Parallel()
-	for _, workflow := range []string{"ci", "nightly"} {
-		if hostedJobs(t, workflow)["verification"].Uses != "./.github/workflows/verification.yml" {
-			t.Errorf("%s must invoke catalog verification", workflow)
+	for workflow, jobs := range map[string][]string{"ci": {"fast", "integration"}, "nightly": {"verification"}} {
+		for _, job := range jobs {
+			if hostedJobs(t, workflow)[job].Uses != "./.github/workflows/verification.yml" {
+				t.Errorf("%s/%s must invoke catalog verification", workflow, job)
+			}
 		}
 	}
 	if hostedJobs(t, "nightly")["verification"].With["profile"] != "nightly" {
@@ -321,5 +274,13 @@ func TestHostedProfilesAndSetupAreReachable(t *testing.T) {
 		if !setup {
 			t.Errorf("%s/%s has no shared verification setup", workflow, job)
 		}
+	}
+}
+
+func TestRecoveryConcurrencyPreservesDistinctCompletedRuns(t *testing.T) {
+	t.Parallel()
+	workflow := hostedWorkflowFile(t, "verification-recovery")
+	if workflow.Concurrency.Group != "verification-recovery-${{ github.event.workflow_run.id }}" || workflow.Concurrency.Cancel.Value != "false" {
+		t.Fatal("recovery must retain each completed run independently")
 	}
 }

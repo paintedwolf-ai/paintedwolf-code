@@ -3,11 +3,12 @@ package workflowadmin
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"log/slog"
-	"strings"
 )
 
 func (s *Topology) StartOrchestratedTopologyForRun(ctx context.Context, sessionID string, run *wire.WorkflowRun) {
@@ -60,7 +61,7 @@ func (s *Topology) RecoverOrchestratedTopologies(ctx context.Context) error {
 	if s.Orchestrator == nil {
 		return nil
 	}
-	runs, err := s.Runs.ListRunning(ctx)
+	runs, err := s.Runs.Runs.Runs.ListRunning(ctx)
 	if err != nil {
 		return fmt.Errorf("list running workflow topologies: %w", err)
 	}

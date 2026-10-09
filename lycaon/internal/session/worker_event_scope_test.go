@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/events"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -24,11 +26,9 @@ func TestWorkerWritePublishesBoardByProjectIdentity(t *testing.T) {
 	testutil.FailErr(t, "subscribe to project events", err)
 	defer unsubscribe()
 	board := &workerEventBoard{}
-	manager := &Manager{events: &events.Publisher{Hub: hub, Board: board}}
-	manager.AfterWorkerWrite(t.Context(), tools.ToolContext{
-		Identity: tools.InvocationIdentity{ProjectID: testdbseed.DefaultProjectID,
-			HandoffSessionID: "session"},
-	}, "file.go")
+	manager := NewHost(sessionstore.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	manager.SetEventPublisher(&events.Publisher{Hub: hub, Board: board})
+	manager.Workers.Workspaces.AfterWorkerWrite(t.Context(), tools.ToolContext{Identity: tools.InvocationIdentity{ProjectID: testdbseed.DefaultProjectID, HandoffSessionID: "session"}}, "file.go")
 	hub.FlushDebounced()
 	if board.projectID != testdbseed.DefaultProjectID {
 		t.Fatalf("board project = %q", board.projectID)

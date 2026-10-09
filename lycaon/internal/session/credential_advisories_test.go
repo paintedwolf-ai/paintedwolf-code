@@ -22,7 +22,7 @@ func TestCredentialAdvisoriesDistinguishWeakAndOtherLiterals(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			output, facts := mgr.appendPostToolGuidance(t.Context(), &api.Session{ID: tc.name}, tc.tool, tc.args, "completed", 1, guidance.ToolResultFacts{})
+			output, facts := mgr.ToolPolicy.AfterTool(t.Context(), &api.Session{ID: tc.name}, tc.tool, tc.args, "completed", 1, guidance.ToolResultFacts{})
 			if !facts.Succeeded() {
 				t.Fatalf("advisory changed outcome: %#v", facts)
 			}
@@ -44,7 +44,7 @@ func TestCredentialRemediesUseOfferedToolSnapshot(t *testing.T) {
 			names = []string{"secret_generate", "ask_user"}
 		}
 		ctx := tools.WithRecoveryTools(t.Context(), names)
-		output, facts := mgr.appendPostToolGuidance(ctx, &api.Session{ID: "remedies"}, "command",
+		output, facts := mgr.ToolPolicy.AfterTool(ctx, &api.Session{ID: "remedies"}, "command",
 			map[string]any{"command": "example --password=password"}, "completed", 1, guidance.ToolResultFacts{})
 		if !facts.HasCode("WEAK_CREDENTIAL_LITERAL") {
 			t.Fatalf("credential advisory missing: %s", output)
@@ -59,7 +59,7 @@ func TestCredentialRemediesUseOfferedToolSnapshot(t *testing.T) {
 
 func TestCredentialAdvisoriesKeepDistinctValueSubjects(t *testing.T) {
 	mgr, _ := newWeakSecretMintGuidanceManager(t)
-	_, facts := mgr.appendPostToolGuidance(t.Context(), &api.Session{ID: "distinct-values"}, "write", map[string]any{"content": "MYSQL_PASSWORD=password\nPOSTGRES_PASSWORD=password1\n"}, "written", 1, guidance.ToolResultFacts{})
+	_, facts := mgr.ToolPolicy.AfterTool(t.Context(), &api.Session{ID: "distinct-values"}, "write", map[string]any{"content": "MYSQL_PASSWORD=password\nPOSTGRES_PASSWORD=password1\n"}, "written", 1, guidance.ToolResultFacts{})
 	result := guidance.ComposeToolResult("written", facts, nil)
 	if len(result.Feedback) != 2 || result.Feedback[0].Subject == nil || result.Feedback[1].Subject == nil || result.Feedback[0].Subject.ID == result.Feedback[1].Subject.ID {
 		t.Fatalf("credential subjects lost: %#v", result.Feedback)
@@ -75,7 +75,7 @@ func TestCredentialRemediesDiscoverDeferredTools(t *testing.T) {
 				names = append(names, "secret_generate", "ask_user")
 			}
 			ctx := tools.WithRecoveryTools(t.Context(), names)
-			output, facts := mgr.appendPostToolGuidance(ctx, &api.Session{ID: "deferred-remedies"}, "write",
+			output, facts := mgr.ToolPolicy.AfterTool(ctx, &api.Session{ID: "deferred-remedies"}, "write",
 				map[string]any{"content": "password=" + value}, "written", 1, guidance.ToolResultFacts{})
 			if !facts.HasCode("WEAK_CREDENTIAL_LITERAL") && !facts.HasCode("CREDENTIAL_LITERAL") {
 				t.Fatalf("credential observation lost: %s", output)

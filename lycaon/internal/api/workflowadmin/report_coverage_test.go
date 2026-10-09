@@ -2,6 +2,9 @@ package workflowadmin
 
 import (
 	"context"
+	"strings"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/report"
 	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -10,8 +13,6 @@ import (
 	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"strings"
-	"testing"
 )
 
 // The scan account counts only the run's own inventory: a group is used when a
@@ -160,7 +161,7 @@ func TestReportAdvisoryDetailsNameMalwareAndEveryAlias(t *testing.T) {
 func TestWorkAccountListsEachAttemptOnce(t *testing.T) {
 	manifests, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "RegistryFromDirs", err)
-	manifest, err := manifests.Get("security-survey", "1.0.1")
+	manifest, err := manifests.Get("security-survey", "2.0.0")
 	testutil.FailErr(t, "manifest", err)
 	var phase string
 	for _, p := range manifest.PhaseDefs {

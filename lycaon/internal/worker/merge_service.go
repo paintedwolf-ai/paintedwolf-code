@@ -83,7 +83,7 @@ type MergeSessionLister interface {
 
 // WorkerCoordinationCleanup releases landed worker coordination state.
 type WorkerCoordinationCleanup interface {
-	ReleaseWorkerReservations(ctx context.Context, parentSessionID, jobID string) error
+	ReleaseReservations(ctx context.Context, parentSessionID, jobID string) error
 }
 
 // DelegationCloseoutRetry re-evaluates closeout after promotion.
@@ -112,7 +112,8 @@ type MergeService struct {
 	Workspace    WorkerWorkspaceManager
 	Reject       *guidance.StaticRejectFormatter
 	Sessions     MergeSessionLister
-	Reconcile    session.MergeReconcileRegistrar
+	Reconcile    MergeReconcileRegistrar
+	Captures     PromoteCapture
 	Coord        WorkerCoordinationCleanup
 	Closeout     DelegationCloseoutRetry
 	Projects     ProjectStore
@@ -461,7 +462,7 @@ func (s *MergeService) finishPromoteState(
 			}
 		}
 		if s.Coord != nil && task != nil {
-			_ = s.Coord.ReleaseWorkerReservations(ctx, task.ParentSessionID, jobID)
+			_ = s.Coord.ReleaseReservations(ctx, task.ParentSessionID, jobID)
 		}
 		if s.Closeout != nil && task != nil && task.DelegationID != "" {
 			_ = s.Closeout.RetryCloseout(ctx, task.DelegationID)
@@ -601,4 +602,15 @@ func (s *MergeService) taskRootRefs(ctx context.Context, task *api.WorkerTask) [
 		projects = s.Projects
 	}
 	return TaskRootRefs(ctx, task, projects)
+}
+
+type MergeReconcileRegistrar interface {
+	SetMergeReconcilePaths(sessionID string, paths []string)
+	ClearMergeReconcilePaths(sessionID string)
+	RecordPromotePathStatus(sessionID, jobID string, statuses []api.WorkerPromotePathStatus)
+	RecordOverlayPreviewSummary(sessionID, jobID string, out *api.WorkerMergeResult)
+	ClearPromotePathStatus(sessionID, jobID string)
+}
+type PromoteCapture interface {
+	RecordPromotedPrimaryPaths(context.Context, string, []string)
 }

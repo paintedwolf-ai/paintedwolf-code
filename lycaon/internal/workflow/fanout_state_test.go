@@ -2,16 +2,17 @@ package workflow
 
 import (
 	"errors"
-	"github.com/lycaon/lycaon/internal/projectroot"
-	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolrejection"
-	"github.com/lycaon/lycaon/internal/tools"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
-	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	workflowstatetools "github.com/lycaon/lycaon/internal/workflow/statetools"
 	"reflect"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 )
 
 func TestStateUpdateCannotForgeHostWorkflowProof(t *testing.T) {
@@ -22,13 +23,11 @@ func TestStateUpdateCannotForgeHostWorkflowProof(t *testing.T) {
 	testutil.FailErr(t, "register state tools", workflowstatetools.RegisterStateTools(reg, workflowstatetools.StateToolDeps{Runs: mgr.Store.Runs, Vars: mgr.Phases.Vars, Journal: mgr.Phases.Journal, Resolver: &mgr.Resolver, Starts: mgr.Starts, Controls: mgr.Controls, Scaffold: mgr.Blueprints.Scaffold, Sessions: sessions}))
 	before, err := mgr.Store.Runs.GetScaffoldVars(t.Context(), run.ID)
 	testutil.FailErr(t, "read initial variables", err)
-	tctx := tools.ToolContext{
-		Identity: tools.InvocationIdentity{SessionID: "sess-1"},
+	tctx := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "sess-1"},
 		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: dir, IsPrimary: true}},
-			ActiveRootID: "root"},
-	}
+			ActiveRootID: "root"}}
 	for _, path := range []string{
-		"fanout_plans.execute", "fanout_coverage", "fanout_settled", "worker_cycle.evaluating", "gates.worker_cycle_ready",
+		"review_repairs", "review_repairs.state", "fanout_plans.execute", "fanout_coverage", "fanout_settled", "worker_cycle.evaluating", "gates.worker_cycle_ready",
 		"human_approval", "human_approval.issued", "human_approval.blueprint_hash", "phase_skipped.approve",
 		"review_if_spawnable", "review_if_spawnable.challenge", "review_loop.challenge.attempt", "review_questions", "review_questions.challenge", "review_verdict.challenge",
 		"user_feedback", "user_feedback.approve.response", "user_decision", "user_decision.approve.choice",

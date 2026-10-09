@@ -38,11 +38,23 @@ func TestTerminalOpenClassifyTierParityWithCommand(t *testing.T) {
 	}
 	for _, tc := range cases {
 		commandTier := settings.ClassifyTier(hitl.ProposedAction{
-			Tool: "command", ProjectDir: proj, Args: map[string]any{"command": tc.cmd},
-		})
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": tc.cmd},
+},
+Scope: hitl.ActionScope{
+ProjectDir: proj,
+},
+})
 		openTier := settings.ClassifyTier(hitl.ProposedAction{
-			Tool: "terminal_open", ProjectDir: proj, Args: map[string]any{"command": tc.cmd},
-		})
+Invocation: hitl.ActionInvocation{
+Tool: "terminal_open",
+Args: map[string]any{"command": tc.cmd},
+},
+Scope: hitl.ActionScope{
+ProjectDir: proj,
+},
+})
 		if commandTier != openTier {
 			t.Fatalf("command %q: command=%v terminal_open=%v", tc.cmd, commandTier, openTier)
 		}
@@ -55,15 +67,29 @@ func TestBundledTerminalOpenBranchesOnContainmentNotCommandText(t *testing.T) {
 	contained := hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressProxy, Roots: []string{dir}}
 	for _, command := range []string{"go test ./...", "cat /etc/hosts", "git push origin main"} {
 		approved := evalBundled(t, hitl.ProposedAction{
-			Tool: "terminal_open", Args: map[string]any{"command": command}, ProjectDir: dir,
-			Contained: contained,
-		})
+Invocation: hitl.ActionInvocation{
+Tool: "terminal_open",
+Args: map[string]any{"command": command},
+},
+Scope: hitl.ActionScope{
+ProjectDir: dir,
+},
+Execution: hitl.ActionExecution{
+Contained: contained,
+},
+})
 		if !approved.AutoApproved() || approved.Required() || approved.Denied {
 			t.Errorf("contained terminal_open %q must run: %+v", command, approved)
 		}
 		asked := evalBundled(t, hitl.ProposedAction{
-			Tool: "terminal_open", Args: map[string]any{"command": command}, ProjectDir: dir,
-		})
+Invocation: hitl.ActionInvocation{
+Tool: "terminal_open",
+Args: map[string]any{"command": command},
+},
+Scope: hitl.ActionScope{
+ProjectDir: dir,
+},
+})
 		if !asked.Required() || asked.Denied {
 			t.Errorf("uncontained terminal_open %q must ask: %+v", command, asked)
 		}

@@ -19,7 +19,7 @@ type ResourceTracker interface {
 
 // Runtime holds the wired session manager, checkpoints, runtimes, and prompt engines.
 type Runtime struct {
-	Manager             *session.Manager
+	Manager             *session.Host
 	Store               session.Store
 	PromptEngine        *prompts.FileTemplateEngine
 	Invocations         invocation.Recorder

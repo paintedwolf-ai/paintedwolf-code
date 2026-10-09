@@ -26,7 +26,7 @@ type approvalHITLHarness struct {
 	ownerCtx      context.Context
 	store         session.Store
 	projectDir    string
-	mgr           *session.Manager
+	mgr           *session.Host
 	checkpointMgr hitl.CheckpointManager
 	hub           *events.MemoryHub
 	srv           *api.Server
@@ -67,8 +67,8 @@ func newApprovalHITLHarness(t *testing.T) *approvalHITLHarness {
 	forceWriteAsk(t, projectDir)
 	sess, err := h.CreateHarnessSession(t, wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, projectDir)
 	testutil.FailErr(t, "create session in store", err)
-	if err := h.SessionMgr.SetAgentType(ctx, sess.ID, "implementer"); err != nil {
-		testutil.FailErr(t, "h.SessionMgr.SetAgentType failed", err)
+	if err := h.SessionMgr.Chats.SetAgentType(ctx, sess.ID, "implementer"); err != nil {
+		testutil.FailErr(t, "h.SessionMgr.Chats.SetAgentType failed", err)
 	}
 	sess.AgentType = "implementer"
 	// Progress lets write reach the approval gate.
@@ -113,7 +113,7 @@ func (h *approvalHITLHarness) runPrompt(t *testing.T) chan error {
 	t.Helper()
 	done := make(chan error, 1)
 	go func() {
-		_, err := h.mgr.Prompt(h.ctx, h.sess.ID, "please write file")
+		_, err := h.mgr.Submissions.Prompt(h.ctx, h.sess.ID, "please write file")
 		done <- err
 	}()
 	return done

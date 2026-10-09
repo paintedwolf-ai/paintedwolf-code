@@ -13,7 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/pagecursor"
 	"github.com/lycaon/lycaon/internal/pagedview"
 	"github.com/lycaon/lycaon/internal/project"
-	"github.com/lycaon/lycaon/internal/session"
+	sessionscope "github.com/lycaon/lycaon/internal/session/scope"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/sourcetree"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -165,7 +165,7 @@ func (s *Views) writeSourceViewAddressError(w http.ResponseWriter, r *http.Reque
 	switch {
 	case errors.As(err, &handle):
 		s.responses.FailReason(w, wire.ApiErrorCodeInvalidRequest, handle.Error())
-	case errors.Is(err, session.ErrSessionWorktreeStale):
+	case errors.Is(err, sessionscope.ErrWorktreeStale):
 		s.responses.Fail(w, wire.ApiErrorCodeWorktreeStale, "This chat's worktree is missing or invalid. Unbind it in the Git tab to continue.")
 	case errors.Is(err, store.ErrSessionNotFound):
 		s.responses.Fail(w, wire.ApiErrorCodeSessionNotFound, "This chat no longer exists.")

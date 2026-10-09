@@ -11,19 +11,29 @@ import (
 
 func directIPLadderAction() hitl.ProposedAction {
 	return hitl.ProposedAction{
-		Tool:              "command",
-		Args:              map[string]any{"command": "ntpdate time.nist.gov"},
-		Command:           "ntpdate time.nist.gov",
-		SessionID:         "sess-direct",
-		ProjectDir:        "/tmp/proj",
-		DirectIPRequested: true,
-		Contained: hitl.Contained{
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": "ntpdate time.nist.gov"},
+},
+Presentation: hitl.ActionPresentation{
+Command: "ntpdate time.nist.gov",
+},
+Scope: hitl.ActionScope{
+SessionID: "sess-direct",
+ProjectDir: "/tmp/proj",
+},
+Egress: hitl.ActionEgress{
+DirectIPRequested: true,
+},
+Execution: hitl.ActionExecution{
+Contained: hitl.Contained{
 			FSJailed: true,
 			Egress:   hitl.ContainedEgressDirectIP,
 			Roots:    []string{"/tmp/proj"},
 			DirectIP: true,
 		},
-	}
+},
+}
 }
 
 func directIPTestLease() hitl.DirectIPLease {
@@ -91,11 +101,11 @@ func TestDirectIPOfferIdentityFollowsTheAction(t *testing.T) {
 		t.Fatal("commands with different declarations under the same roots should share the task lease")
 	}
 	differingRoots := directIPLadderAction()
-	differingRoots.Contained.Roots = []string{"/other/path"}
+	differingRoots.Execution.Contained.Roots = []string{"/other/path"}
 	if capabilitygrants.DirectIPExecutionGrantOffers(differingRoots, directIPTestLease())[1].ID == base[1].ID {
 		t.Fatal("differing confinement roots should mint different lease identities")
 	}
-	expectedPattern := hitl.DirectIPChatConfinementDigest(action.Contained.Roots, action.Contained.Egress)
+	expectedPattern := hitl.DirectIPChatConfinementDigest(action.Execution.Contained.Roots, action.Execution.Contained.Egress)
 	if base[1].Grant.Predicate.Pattern != expectedPattern {
 		t.Fatalf("predicate pattern = %q, want %q", base[1].Grant.Predicate.Pattern, expectedPattern)
 	}
@@ -127,18 +137,18 @@ func TestDirectIPLadderFollowsDecisionReuse(t *testing.T) {
 
 func TestDirectIPWitnessPinsJailNotTransportNarrowing(t *testing.T) {
 	wide := directIPLadderAction()
-	wide.Contained.BoundaryPermits = []hitl.BoundaryPermit{
+	wide.Execution.Contained.BoundaryPermits = []hitl.BoundaryPermit{
 		{Kind: hitl.BoundaryPermitDirectIP, Digest: "enabled", Count: 1},
 	}
 	narrowed := directIPLadderAction()
-	narrowed.Contained.BoundaryPermits = []hitl.BoundaryPermit{
+	narrowed.Execution.Contained.BoundaryPermits = []hitl.BoundaryPermit{
 		{Kind: hitl.BoundaryPermitDirectIP, Digest: "udp-123-digest", Count: 1},
 	}
 
-	if !hitl.WitnessEqual(hitl.BoundaryWitness(wide.Contained), hitl.BoundaryWitness(narrowed.Contained)) {
+	if !hitl.WitnessEqual(hitl.BoundaryWitness(wide.Execution.Contained), hitl.BoundaryWitness(narrowed.Execution.Contained)) {
 		t.Fatal("transport narrowing changed the jail witness")
 	}
-	if directIPConfinementDigest(wide.Contained) == directIPConfinementDigest(narrowed.Contained) {
+	if directIPConfinementDigest(wide.Execution.Contained) == directIPConfinementDigest(narrowed.Execution.Contained) {
 		t.Fatal("UDP/123 and the open box must not share a confinement digest")
 	}
 }

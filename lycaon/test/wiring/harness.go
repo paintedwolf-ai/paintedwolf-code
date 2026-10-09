@@ -6,7 +6,6 @@ import (
 	"github.com/lycaon/lycaon/config/configtest"
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/app"
-	"github.com/lycaon/lycaon/internal/app/configuration"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/db"
@@ -24,10 +23,7 @@ import (
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/worker"
-	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -50,15 +46,10 @@ func stageFakeMCPDistro(t *testing.T) {
 // Harness holds a production-wired ServeApp for E2E tests.
 type Harness struct {
 	*app.ServeApp
-	SessionMgr    *session.Manager
-	WorkflowMgr   *workflow.RunManager
-	BlueprintMgr  *blueprint.Manager
-	DelegationMgr *delegation.Manager
-	WorkerQueue   worker.WorkerQueue
-	Recording     *llm.RecordingClient
-	Store         session.Store
-	testDir       string
-	dbPath        string
+	Recording *llm.RecordingClient
+	Store     session.Store
+	testDir   string
+	dbPath    string
 }
 
 // BuildForTest constructs a production-parity server via app.Build with test defaults.
@@ -84,7 +75,7 @@ func BuildForTest(t *testing.T, opts ...Option) *Harness {
 		opt(&o)
 	}
 
-	cfg := configuration.Config{}
+	cfg := app.DefaultConfig()
 	cfg.ConfigRoot = configlayout.FindModuleRoot()
 	// Install packs before the builder resolves the catalog.
 	installHarnessPacks(t, o.installedPackDirs)
@@ -151,25 +142,22 @@ func BuildForTest(t *testing.T, opts ...Option) *Harness {
 	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 
 	if o.replaceManifests != nil {
-		sa.Workflows.Manager.Resolver.Overlay = workflowdef.NewRegistry(o.replaceManifests)
+		sa.WorkflowMgr.Resolver.Overlay = workflowdef.NewRegistry(o.replaceManifests)
 	}
 
 	applyTestHarnessRelaxations(sa)
+
+	trackHost(t.Name(), sa)
 
 	harnessStore := store.NewSQL(sa.DB)
 	// Seeded and runtime evidence share the same content directory.
 	harnessStore.SetDataDir(testDir)
 	h := &Harness{
-		ServeApp:      sa,
-		SessionMgr:    sa.Sessions.Manager,
-		WorkflowMgr:   sa.Workflows.Manager,
-		BlueprintMgr:  sa.Workflows.Blueprints,
-		DelegationMgr: sa.Delegations.Manager,
-		WorkerQueue:   sa.Delegations.Queue,
-		Recording:     recording,
-		Store:         harnessStore,
-		testDir:       testDir,
-		dbPath:        dbPath,
+		ServeApp:  sa,
+		Recording: recording,
+		Store:     harnessStore,
+		testDir:   testDir,
+		dbPath:    dbPath,
 	}
 	return h
 }
@@ -304,10 +292,10 @@ func (testCostPricer) EstimateCost(_, _ string, usage cost.TokenUsage) (cost.Cos
 }
 
 func applyTestHarnessRelaxations(sa *app.ServeApp) {
-	if sa == nil || sa.Delegations == nil || sa.Delegations.Manager == nil {
+	if sa == nil || sa.DelegationMgr == nil {
 		return
 	}
-	if g := sa.Delegations.Manager.Grounding; g != nil {
+	if g := sa.DelegationMgr.Grounding; g != nil {
 		cfg := g.Config
 		cfg.Closeout.Mode = "off"
 		g.Config = cfg

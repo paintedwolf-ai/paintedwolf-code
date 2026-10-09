@@ -3,6 +3,8 @@ package workflowadmin
 import (
 	"context"
 	"fmt"
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/report"
 	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
@@ -10,7 +12,6 @@ import (
 	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
 	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"strings"
 )
 
 // runAccount is the host's account of a run's work: the recorded facts behind
@@ -180,7 +181,7 @@ func (s *Reports) workAccount(ctx context.Context, a *runAccount, run *wire.Work
 		a.coverage = append(a.coverage, report.ReportCoverageItem{Subject: "Workers", Status: "Unavailable", Detail: "Worker accounting is unavailable."})
 		return nil
 	}
-	vars, err := s.Runs.GetScaffoldVars(ctx, run.ID)
+	vars, err := s.Runs.Runs.Runs.GetScaffoldVars(ctx, run.ID)
 	if err != nil {
 		return err
 	}
@@ -188,6 +189,11 @@ func (s *Reports) workAccount(ctx context.Context, a *runAccount, run *wire.Work
 	if err != nil {
 		return err
 	}
+	a.accountWorkers(manifest, vars, tasks)
+	return nil
+}
+
+func (a *runAccount) accountWorkers(manifest workflowdef.Manifest, vars map[string]any, tasks []wire.WorkerTask) {
 	taskByID := make(map[string]wire.WorkerTask, len(tasks))
 	for _, task := range tasks {
 		taskByID[task.ID] = task
@@ -260,5 +266,4 @@ func (s *Reports) workAccount(ctx context.Context, a *runAccount, run *wire.Work
 		}
 	}
 	a.gap(helpers)
-	return nil
 }

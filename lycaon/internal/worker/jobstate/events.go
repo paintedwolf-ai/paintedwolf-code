@@ -3,6 +3,7 @@ package jobstate
 import (
 	"context"
 	"database/sql"
+
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/pkg/api"

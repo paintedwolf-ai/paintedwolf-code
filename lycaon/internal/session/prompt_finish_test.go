@@ -42,14 +42,14 @@ func TestFinishPromptExecutionPropagatesIdlePersistenceFailure(t *testing.T) {
 	ctx := context.Background()
 	wantErr := errors.New("status store unavailable")
 	st := &sessionStatusFailStore{Memory: store.NewMemory(), err: wantErr}
-	mgr := NewManager(st, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	testutil.FailErr(t, "mark visible turn busy", st.Memory.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
-	mgr.beginPromptTurn(sess.ID, "")
+	mgr.Runner.Settlement.Begin(sess.ID, "")
 
-	testutil.FailErr(t, "finish prompt execution", mgr.finishPromptExecution(ctx, sess.ID, true, false, ""))
-	err = mgr.drainPendingLoopWakes(ctx, sess.ID)
+	testutil.FailErr(t, "finish prompt execution", mgr.Runner.Settlement.Finish(ctx, sess.ID, true, false, ""))
+	err = mgr.Runner.Settlement.Drain(ctx, sess.ID)
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("finish error = %v, want idle persistence failure", err)
 	}
@@ -59,14 +59,14 @@ func TestFinishPromptExecutionPropagatesTopologyReportFailure(t *testing.T) {
 	ctx := context.Background()
 	wantErr := errors.New("topology store unavailable")
 	st := store.NewMemory()
-	mgr := NewManager(st, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	view := &recordingWorkflowView{topologyErr: wantErr}
 	workflowFixture1 := view
 	mgr.SetWorkflowDomains(&WorkflowDomains{Runs: workflowFixture1, Policy: workflowFixture1, Ambient: workflowFixture1, Blueprints: workflowFixture1, Batch: workflowFixture1, Slash: workflowFixture1, Requests: workflowFixture1, Feedback: workflowFixture1, Transcript: workflowFixture1, Asks: workflowFixture1, Fanout: workflowFixture1, Phases: workflowFixture1, Reports: workflowFixture1, Recovery: workflowFixture1, Cleanup: workflowFixture1})
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
-	err = mgr.finishPromptExecution(ctx, sess.ID, false, false, "committed-closeout")
+	err = mgr.Runner.Settlement.Finish(ctx, sess.ID, false, false, "committed-closeout")
 	if view.closeoutID != "committed-closeout" {
 		t.Fatalf("delivery lost committed message: %q", view.closeoutID)
 	}
@@ -79,13 +79,13 @@ func TestFinishPromptExecutionReconcilesWorkflowCompletion(t *testing.T) {
 	ctx := t.Context()
 	st := store.NewMemory()
 	view := &recordingWorkflowView{}
-	mgr := NewManager(st, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	workflowFixture2 := view
 	mgr.SetWorkflowDomains(&WorkflowDomains{Runs: workflowFixture2, Policy: workflowFixture2, Ambient: workflowFixture2, Blueprints: workflowFixture2, Batch: workflowFixture2, Slash: workflowFixture2, Requests: workflowFixture2, Feedback: workflowFixture2, Transcript: workflowFixture2, Asks: workflowFixture2, Fanout: workflowFixture2, Phases: workflowFixture2, Reports: workflowFixture2, Recovery: workflowFixture2, Cleanup: workflowFixture2})
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
-	testutil.FailErr(t, "finish prompt execution", mgr.finishPromptExecution(ctx, sess.ID, false, true, ""))
+	testutil.FailErr(t, "finish prompt execution", mgr.Runner.Settlement.Finish(ctx, sess.ID, false, true, ""))
 	if len(view.calls) == 0 || view.calls[0] != "ReconcileTurnCompletion" {
 		t.Fatalf("workflow turn-end calls = %v want completion reconciliation first", view.calls)
 	}
@@ -94,7 +94,7 @@ func TestFinishPromptExecutionReconcilesWorkflowCompletion(t *testing.T) {
 func TestFinishPromptExecutionKeepsUserTurnBusyAcrossHostContinuation(t *testing.T) {
 	ctx := t.Context()
 	st := store.NewMemory()
-	mgr := NewManager(st, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	hub := events.NewMemoryHub()
 	mgr.SetEventPublisher(&events.Publisher{Hub: hub})
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
@@ -104,9 +104,9 @@ func TestFinishPromptExecutionKeepsUserTurnBusyAcrossHostContinuation(t *testing
 	testutil.FailErr(t, "subscribe to session events", err)
 	t.Cleanup(unsubscribe)
 
-	mgr.beginPromptTurn(sess.ID, "")
-	mgr.ensureCoordinatorRuntime().CoordinatorLoop().MarkWaitCalled(sess.ID)
-	testutil.FailErr(t, "finish waiting prompt", mgr.finishPromptExecution(ctx, sess.ID, false, false, ""))
+	mgr.Runner.Settlement.Begin(sess.ID, "")
+	mgr.Coordinator.Runtime.CoordinatorLoop().MarkWaitCalled(sess.ID)
+	testutil.FailErr(t, "finish waiting prompt", mgr.Runner.Settlement.Finish(ctx, sess.ID, false, false, ""))
 	afterWait, err := st.Get(ctx, sess.ID)
 	testutil.FailErr(t, "read session after wait", err)
 	if afterWait.Status != api.SessionStatusBusy {
@@ -114,11 +114,11 @@ func TestFinishPromptExecutionKeepsUserTurnBusyAcrossHostContinuation(t *testing
 	}
 	assertNoSessionIdleEvent(t, eventCh)
 
-	loop := mgr.ensureCoordinatorRuntime().CoordinatorLoop()
+	loop := mgr.Coordinator.Runtime.CoordinatorLoop()
 	finishExecution := loop.BeginPromptExecution(t.Context(), sess.ID)
 	loop.Nudge(ctx, sess.ID, anchor.PhaseAdvanced, "", "", anchor.Envelope{})
-	mgr.beginPromptTurn(sess.ID, "")
-	testutil.FailErr(t, "finish terminal host prompt", mgr.finishPromptExecution(ctx, sess.ID, false, true, ""))
+	mgr.Runner.Settlement.Begin(sess.ID, "")
+	testutil.FailErr(t, "finish terminal host prompt", mgr.Runner.Settlement.Finish(ctx, sess.ID, false, true, ""))
 	deferred, err := st.Get(ctx, sess.ID)
 	testutil.FailErr(t, "read session before queued wake drain", err)
 	if deferred.Status != api.SessionStatusBusy {
@@ -127,7 +127,7 @@ func TestFinishPromptExecutionKeepsUserTurnBusyAcrossHostContinuation(t *testing
 	assertNoSessionIdleEvent(t, eventCh)
 
 	finishExecution()
-	testutil.FailErr(t, "drain queued wake", mgr.drainPendingLoopWakes(ctx, sess.ID))
+	testutil.FailErr(t, "drain queued wake", mgr.Runner.Settlement.Drain(ctx, sess.ID))
 	if disposition := awaitIdleDisposition(t, eventCh); disposition != api.SessionIdleDispositionCompleted {
 		t.Fatalf("terminal disposition = %q want completed", disposition)
 	}
@@ -160,12 +160,12 @@ func assertNoSessionIdleEvent(t *testing.T, eventCh <-chan api.EventEnvelope) {
 func TestFinishPromptExecutionKeepsUserTurnBusyWhileWaitIsArmed(t *testing.T) {
 	ctx := t.Context()
 	st := store.NewMemory()
-	mgr := NewManager(st, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	testutil.FailErr(t, "mark visible turn busy", st.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
 
-	loop := mgr.ensureCoordinatorRuntime().CoordinatorLoop()
+	loop := mgr.Coordinator.Runtime.CoordinatorLoop()
 	loop.EnterSleep(
 		ctx,
 		sess.ID,
@@ -176,8 +176,8 @@ func TestFinishPromptExecutionKeepsUserTurnBusyWhileWaitIsArmed(t *testing.T) {
 		loopwake.SleepMoverHost,
 	)
 	loop.MarkWaitCalled(sess.ID)
-	mgr.beginPromptTurn(sess.ID, "")
-	testutil.FailErr(t, "finish waiting prompt", mgr.finishPromptExecution(ctx, sess.ID, false, true, ""))
+	mgr.Runner.Settlement.Begin(sess.ID, "")
+	testutil.FailErr(t, "finish waiting prompt", mgr.Runner.Settlement.Finish(ctx, sess.ID, false, true, ""))
 
 	waiting, err := st.Get(ctx, sess.ID)
 	testutil.FailErr(t, "read waiting session", err)
@@ -190,13 +190,13 @@ func TestFinishPromptExecutionPropagatesCompletionReconciliationFailure(t *testi
 	ctx := t.Context()
 	wantErr := errors.New("workflow completion unavailable")
 	st := store.NewMemory()
-	mgr := NewManager(st, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	workflowFixture3 := &recordingWorkflowView{completionErr: wantErr}
 	mgr.SetWorkflowDomains(&WorkflowDomains{Runs: workflowFixture3, Policy: workflowFixture3, Ambient: workflowFixture3, Blueprints: workflowFixture3, Batch: workflowFixture3, Slash: workflowFixture3, Requests: workflowFixture3, Feedback: workflowFixture3, Transcript: workflowFixture3, Asks: workflowFixture3, Fanout: workflowFixture3, Phases: workflowFixture3, Reports: workflowFixture3, Recovery: workflowFixture3, Cleanup: workflowFixture3})
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
-	err = mgr.finishPromptExecution(ctx, sess.ID, false, true, "")
+	err = mgr.Runner.Settlement.Finish(ctx, sess.ID, false, true, "")
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("finish error = %v, want completion reconciliation failure", err)
 	}
@@ -205,15 +205,15 @@ func TestFinishPromptExecutionPropagatesCompletionReconciliationFailure(t *testi
 func TestSettleDeferredUserTurnDefersWhileSessionLaneOccupied(t *testing.T) {
 	ctx := t.Context()
 	st := store.NewMemory()
-	mgr := NewManager(st, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	testutil.FailErr(t, "mark visible turn busy", st.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
-	mgr.deferredTurnSettlement.put(sess.ID, api.SessionIdleDispositionCompleted)
+	mgr.Runner.Settlement.Defer(sess.ID, api.SessionIdleDispositionCompleted)
 
-	lane := mgr.promptState.Prompt.Acquire(sess.ID)
+	lane := mgr.Runner.Execution.Prompt.Acquire(sess.ID)
 	lane.Lock()
-	testutil.FailErr(t, "settle occupied session lane", mgr.settleDeferredUserTurn(ctx, sess.ID))
+	testutil.FailErr(t, "settle occupied session lane", mgr.Runner.Settlement.SettlePending(ctx, sess.ID))
 	whileOccupied, err := st.Get(ctx, sess.ID)
 	testutil.FailErr(t, "read occupied session", err)
 	if whileOccupied.Status != api.SessionStatusBusy {
@@ -221,7 +221,7 @@ func TestSettleDeferredUserTurnDefersWhileSessionLaneOccupied(t *testing.T) {
 	}
 	lane.Unlock()
 
-	testutil.FailErr(t, "settle released session lane", mgr.settleDeferredUserTurn(ctx, sess.ID))
+	testutil.FailErr(t, "settle released session lane", mgr.Runner.Settlement.SettlePending(ctx, sess.ID))
 	settled, err := st.Get(ctx, sess.ID)
 	testutil.FailErr(t, "read settled session", err)
 	if settled.Status != api.SessionStatusIdle {
@@ -232,39 +232,39 @@ func TestSettleDeferredUserTurnDefersWhileSessionLaneOccupied(t *testing.T) {
 func TestSettleDeferredUserTurnDropsSettlementDuringStop(t *testing.T) {
 	ctx := t.Context()
 	st := store.NewMemory()
-	mgr := NewManager(st, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	mgr.deferredTurnSettlement.put(sess.ID, api.SessionIdleDispositionCompleted)
+	mgr.Runner.Settlement.Defer(sess.ID, api.SessionIdleDispositionCompleted)
 
-	flight, leader := mgr.stopState.Begin(sess.ID)
+	flight, leader := mgr.Chats.Gate.Begin(sess.ID)
 	if !leader {
 		t.Fatal("expected to lead session stop")
 	}
-	testutil.FailErr(t, "settle stopping session", mgr.settleDeferredUserTurn(ctx, sess.ID))
-	if _, ok := mgr.deferredTurnSettlement.take(sess.ID); ok {
+	testutil.FailErr(t, "settle stopping session", mgr.Runner.Settlement.SettlePending(ctx, sess.ID))
+	if mgr.Runner.Settlement.Pending(sess.ID) {
 		t.Fatal("expected stop to discard deferred settlement")
 	}
-	mgr.stopState.Finish(sess.ID, flight, nil)
+	mgr.Chats.Gate.Finish(sess.ID, flight, nil)
 }
 
 func TestTurnEndDispositionDistinguishesFailure(t *testing.T) {
-	mgr := &Manager{}
-	if got := mgr.turnEndDisposition(true); got != api.SessionIdleDispositionTurnError {
+	mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	if got := mgr.Runner.Settlement.Disposition(true); got != api.SessionIdleDispositionTurnError {
 		t.Fatalf("failed turn disposition = %q", got)
 	}
-	if got := mgr.turnEndDisposition(false); got != api.SessionIdleDispositionCompleted {
+	if got := mgr.Runner.Settlement.Disposition(false); got != api.SessionIdleDispositionCompleted {
 		t.Fatalf("successful turn disposition = %q", got)
 	}
 }
 
 func TestTurnEndDispositionReportsShutdownAsInterrupted(t *testing.T) {
-	mgr := &Manager{}
-	mgr.BeginEngineShutdown()
-	if got := mgr.turnEndDisposition(true); got != api.SessionIdleDispositionInterrupted {
+	mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	mgr.Runner.Settlement.BeginShutdown()
+	if got := mgr.Runner.Settlement.Disposition(true); got != api.SessionIdleDispositionInterrupted {
 		t.Fatalf("failed turn during shutdown = %q, want interrupted", got)
 	}
-	if got := mgr.turnEndDisposition(false); got != api.SessionIdleDispositionCompleted {
+	if got := mgr.Runner.Settlement.Disposition(false); got != api.SessionIdleDispositionCompleted {
 		t.Fatalf("successful turn during shutdown = %q, want completed", got)
 	}
 }
@@ -272,12 +272,12 @@ func TestTurnEndDispositionReportsShutdownAsInterrupted(t *testing.T) {
 func TestPromptWithoutAssistantReturnsNoInvalidResponse(t *testing.T) {
 	ctx := context.Background()
 	st := store.NewMemory()
-	mgr := NewManager(st, alwaysWithholdPromptLLM{}, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(st, Models{Client: alwaysWithholdPromptLLM{}, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	mgr.SetDataDir(t.TempDir())
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
-	resp, err := mgr.Prompt(ctx, sess.ID, "continue without the credential")
+	resp, err := mgr.Submissions.Prompt(ctx, sess.ID, "continue without the credential")
 	testutil.FailErr(t, "prompt", err)
 	if resp != nil {
 		t.Fatalf("response = %+v, want nil when no assistant message exists", resp)

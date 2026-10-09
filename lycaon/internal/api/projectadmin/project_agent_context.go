@@ -56,7 +56,7 @@ func (s *Projects) HandleGetProjectAgentContext(w http.ResponseWriter, r *http.R
 		}
 	}
 	if result.SkillsEnabled {
-		loaded, _ := s.Sessions.EffectiveSkills(r.Context(), p.ID, project.RootPaths(p))
+		loaded, _ := s.Sessions.Profiles.EffectiveSkills(r.Context(), p.ID, project.RootPaths(p))
 		for _, skill := range loaded {
 			if !skill.Project {
 				continue

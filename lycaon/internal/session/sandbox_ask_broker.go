@@ -12,6 +12,8 @@ import (
 	"github.com/lycaon/lycaon/internal/isolation"
 	"github.com/lycaon/lycaon/internal/runeclamp"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
+	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -177,7 +179,7 @@ func askSessionIDs(ctx context.Context, store Store, sessionID, parentSessionID 
 	if invokingSessionID == "" {
 		return "", ""
 	}
-	rootSessionID := RootSessionID(ctx, store, invokingSessionID)
+	rootSessionID := sessiontree.RootID(ctx, store, invokingSessionID)
 	if rootSessionID == "" {
 		rootSessionID = invokingSessionID
 	}

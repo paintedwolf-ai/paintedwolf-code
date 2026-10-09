@@ -4,10 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/orchestration"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
+	"github.com/lycaon/lycaon/internal/workflow/toolguard"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/tools"
 )
 
 // FeedbackToolResult is returned by workflow_user_feedback.
@@ -23,7 +24,7 @@ func RegisterFeedbackTool(reg *tools.DefaultRegistry, runs *Feedback) error {
 		return fmt.Errorf("registry and run manager required")
 	}
 	if err := reg.Register("workflow_user_feedback", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-		if strings.TrimSpace(tctx.Identity.Agent) != orchestration.ProfileCoordinator {
+		if !toolguard.IsCoordinatorAgent(tctx.Identity.Agent) {
 			return "", fmt.Errorf("workflow_user_feedback requires coordinator role")
 		}
 		if len(args) > 0 {

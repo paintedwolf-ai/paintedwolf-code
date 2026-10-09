@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/internal/toolprofiles"
-	"sync/atomic"
 
 	"github.com/lycaon/lycaon/internal/approvaloutcome"
 	"github.com/lycaon/lycaon/internal/approvals"
@@ -80,7 +79,6 @@ func NewRuntime(cfg RuntimeConfig) (*Runtime, error) {
 
 	gitMgr := git.NewManager()
 	statusCache := git.NewStatusCache(gitMgr)
-	statusCache.RegisterRepochangeObserver()
 	surveyCat, err := survey.LoadCatalog(survey.CatalogDir())
 	if err != nil {
 		return nil, fmt.Errorf("survey catalog: %w", err)
@@ -94,8 +92,7 @@ func NewRuntime(cfg RuntimeConfig) (*Runtime, error) {
 	if activation == nil {
 		activation = tools.NewMemoryActivation()
 	}
-	statusPointer := &atomic.Pointer[git.StatusCache]{}
-	statusPointer.Store(statusCache)
+	statusPointer := newStatusCacheBinding(statusCache)
 	runtime := &Runtime{Boundary: boundary, Web: &WebServices{boundary: boundary}, Authority: &AuthorityServices{}}
 	registry, mutationTools, err := buildNativeRegistry(buildDeps{
 		boundary:      boundary,

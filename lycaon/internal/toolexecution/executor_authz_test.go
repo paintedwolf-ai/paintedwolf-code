@@ -97,8 +97,14 @@ func TestApprovalGateAutoAllowNoEvent(t *testing.T) {
 	store := testApprovalStore(t)
 	gate := settings.NewRuleApprovalGate(store, settings.NoSources())
 	res, err := gate.Evaluate(context.Background(), hitl.ProposedAction{
-		Tool: "read", SessionID: "sess-gate", ProjectDir: t.TempDir(),
-	})
+Invocation: hitl.ActionInvocation{
+Tool: "read",
+},
+Scope: hitl.ActionScope{
+SessionID: "sess-gate",
+ProjectDir: t.TempDir(),
+},
+})
 	if err != nil {
 		testutil.FailErr(t, "evaluate", err)
 	}

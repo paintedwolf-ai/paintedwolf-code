@@ -2,18 +2,19 @@ package workflow
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
-	"github.com/lycaon/lycaon/pkg/api"
 	"testing"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestPlannedFanoutDoesNotAdvancePastMissingOrPartialWork(t *testing.T) {
 	mgr, _, _, dir := testManagerWithRegistry(t)
 	ctx := t.Context()
-	run, err := startRun(ctx, mgr, "sess-1", "security-survey", "1.0.1")
+	run, err := startRun(ctx, mgr, "sess-1", "security-survey", "2.0.0")
 	testutil.FailErr(t, "start run", err)
 	run.CurrentPhase = "execute"
 	testutil.FailErr(t, "set execution phase", mgr.Store.State.Update(ctx, run))
@@ -31,9 +32,7 @@ func TestPlannedFanoutDoesNotAdvancePastMissingOrPartialWork(t *testing.T) {
 	mgr.Verdicts.Questions.WorkerTasks = workflowTaskQuery1
 	mgr.Verdicts.WorkerTasks = workflowTaskQuery1
 	first := api.WorkerTask{ID: "one", AgentType: "security-reviewer", ParentSessionID: "sess-1", CreatedAt: time.Unix(1, 0)}
-	testutil.FailErr(t, "bind first leg", mgr.Fanout.BindWorkflowTask(ctx, tools.ToolContext{
-		Identity: tools.InvocationIdentity{SessionID: "sess-1"},
-	}, "leg-1", &first))
+	testutil.FailErr(t, "bind first leg", mgr.Fanout.BindWorkflowTask(ctx, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "sess-1"}}, "leg-1", &first))
 	if first.WorkflowRunID != run.ID || first.WorkflowPhase != "execute" {
 		t.Fatalf("task binding=%#v", first)
 	}

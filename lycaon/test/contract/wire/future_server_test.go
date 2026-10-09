@@ -164,8 +164,8 @@ func newRealServerWithSession(t *testing.T, root string) (*api.Server, string) {
 		t.Fatalf("load mock config: %v", err)
 	}
 	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
-	mgr := session.NewManager(store, llm.NewMockProvider(mockCfg), tools.NewStubRegistry(), settings.DefaultSessionLimits())
-	srv := api.NewServer(apitest.Dependencies(t, api.Dependencies{Core:api.CoreDependencies{Store: store, Projects: project.NewMemoryRegistry(), Sessions: mgr,},}), nil, api.TestAPIToken)
+	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(mockCfg), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	srv := api.NewServer(apitest.Dependencies(t, api.Dependencies{Store: store, Projects: project.NewMemoryRegistry(), Sessions: mgr}), nil, api.TestAPIToken)
 
 	// Wait for detached prompt work before temporary-directory cleanup.
 	t.Cleanup(func() {

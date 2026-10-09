@@ -5,6 +5,11 @@ package contract
 import (
 	"context"
 	"fmt"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/guidance"
@@ -21,10 +26,6 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/workflowfixture"
-	"path/filepath"
-	"strings"
-	"testing"
-	"time"
 )
 
 func measureCoordinatorInjectSizes(

@@ -44,7 +44,7 @@ import (
 func (b *serveBuilder) wireRuntimeServices() error {
 	b.events.Publisher.Board = b.boards.Snapshot
 	b.interactions = *interactions.New(b.events.Publisher, b.startup.resources)
-	if err := b.interactions.Build(b.sessions.Manager.HandleCommandCompletion, b.sessions.Manager.HandleCommandRefusal, b.sessions.Manager.HandleHeldCallSettled, b.sessions.Manager.RegisterSessionCleanup); err != nil {
+	if err := b.interactions.Build(b.sessions.Manager.Processes.HandleCommandCompletion, b.sessions.Manager.Processes.HandleCommandRefusal, b.sessions.Manager.Processes.HandleHeldCallSettled, b.sessions.Manager.Resources.RegisterCleanup); err != nil {
 		return err
 	}
 	b.execution.Host.Commands.SetBackgroundRegistry(b.interactions.Processes)
@@ -60,7 +60,7 @@ func (b *serveBuilder) wireRuntimeServices() error {
 func (b *serveBuilder) wireRuntimeObservers() error {
 	b.sessions.Manager.SetEventPublisher(b.events.Publisher)
 	b.delegations.Queue.SetEventPublisher(b.events.Publisher)
-	observations.Bind(b.events.Publisher, b.storage.Sessions, b.boards.Progress, b.workflows.Store.Runs, b.sessions.Manager.MaybeClearProgressClosureAfterWrite, b.boards.RepoProvider, b.execution.Host.Survey.InvalidateFileAge, b.providers.Service)
+	observations.Bind(b.events.Publisher, b.storage.Sessions, b.boards.Progress, b.workflows.Store.Runs, b.sessions.Manager.Coordinator.ProgressClosure.AfterWrite, b.boards.RepoProvider, b.execution.Host.Survey.InvalidateFileAge, b.providers.Service)
 	return nil
 }
 
@@ -119,8 +119,8 @@ func (b *serveBuilder) wireServer() error {
 		return nil
 	})
 	deps.Source.ProjectLiveness = b.server.ProjectLiveness
-	b.sessions.Manager.SetProjectLiveness(b.server.ProjectLiveness)
-	b.sessions.Manager.SetMutationGate(deps.Core.MutationGate)
+	b.sessions.Manager.Runner.Execution.SetProjectLiveness(b.server.ProjectLiveness)
+	b.sessions.Manager.Runner.Execution.SetMutationGate(deps.Core.MutationGate)
 	prev, ok, err := db.ReadBootPreviousAppVersion(b.startup.ctx, b.storage.Database)
 	if err != nil {
 		return fmt.Errorf("previous app version: %w", err)
@@ -188,11 +188,11 @@ func chatGrantLedger(checkpoints hitl.CheckpointManager) capabilityadmin.ChatGra
 // into the constructed server's handlers.
 func registerServerHooks(b *serveBuilder, extensionJournal *extensionstate.SQLJournal) error {
 	// Publish execution failures before queued follow-up work can delay the caller.
-	b.sessions.Manager.SetTurnFailureSink(b.server.Server.Admin.Prompt.Execution.PublishTurnFailure)
-	b.sessions.Manager.SetPromotionHook(b.server.Server.Admin.Project.Promotion.TryRunPromotion)
-	b.sessions.Manager.SetProjectSandboxReconcile(b.server.Server.Admin.Project.Sandboxes.ScheduleProjectSandboxReconcile)
+	b.sessions.Manager.Runner.Turns.SetFailureSink(b.server.Server.Admin.Prompt.Execution.PublishTurnFailure)
+	b.sessions.Manager.Admission.SetPromotion(b.server.Server.Admin.Project.Promotion.TryRunPromotion)
+	b.sessions.Manager.Runner.Settlement.SetSandboxReconcile(b.server.Server.Admin.Project.Sandboxes.ScheduleProjectSandboxReconcile)
 	// Source views addressed by a chat end with it.
-	if err := b.sessions.Manager.RegisterSessionDisposal("source-views", 60, func(_ context.Context, sessionID string) error {
+	if err := b.sessions.Manager.Resources.RegisterDisposal("source-views", 60, func(_ context.Context, sessionID string) error {
 		b.server.Server.Sources.Views.ReleaseChatSourceViews(sessionID)
 		return nil
 	}); err != nil {
@@ -256,7 +256,7 @@ func wireFileBriefings(b *serveBuilder, deps *api.Dependencies) error {
 		return fmt.Errorf("maintain file briefings: %w", err)
 	}
 	deps.Source.FileBriefings = filebriefing.NewService(b.startup.ctx, filebriefing.Dependencies{
-		Store: fileBriefingStore, Config: fileBriefingConfig, Generator: filebriefing.NewModelGenerator(b.providers.Service, b.sessions.Manager.CostTracker()),
+		Store: fileBriefingStore, Config: fileBriefingConfig, Generator: filebriefing.NewModelGenerator(b.providers.Service, b.sessions.Manager.Coordinator.Model.Cost),
 		Events: b.events.Hub, Settings: b.settings.Service.FileSummaries, Logger: b.startup.logger,
 	})
 	return nil
@@ -278,7 +278,7 @@ func wireSourceEditing(b *serveBuilder, deps *api.Dependencies) error {
 	}
 	deps.Source.SourceMutations = sourceMutations
 	deps.Source.FileOperations = fileops.NewService(fileops.NewStore(b.storage.Database))
-	b.sessions.Manager.SetSourceMutations(sourceMutations)
+	b.sessions.Manager.ToolContext.SetSourceMutations(sourceMutations)
 	editorDocuments := editordoc.New(editordoc.NewStore(b.storage.Database), b.storage.SourceLedger, b.storage.Projects)
 	if b.worker.merge != nil {
 		b.worker.merge.Documents = editorDocuments
@@ -318,8 +318,8 @@ func wireSourceEditing(b *serveBuilder, deps *api.Dependencies) error {
 		editorDocuments.DisconnectClient(context.Background(), clientID)
 	})
 	// A file the person has open is the document, for reads and writes alike.
-	b.sessions.Manager.SetEditorDocuments(editorDocumentsAdapter{service: editorDocuments})
-	b.sessions.Manager.SetSourceRewinds(&sourcerewind.Service{Ledger: b.storage.SourceLedger, Mutations: sourceMutations, Documents: editorDocuments})
+	b.sessions.Manager.ToolContext.SetEditorDocuments(editorDocumentsAdapter{service: editorDocuments})
+	b.sessions.Manager.Chats.Rewinds.SetSourceRewinds(&sourcerewind.Service{Ledger: b.storage.SourceLedger, Mutations: sourceMutations, Documents: editorDocuments})
 	// Contribution dispatch uses durable receipts and policy-derived authority.
 	deps.Extensions.Contributions = extensionadmin.ContributionRuntime{
 		Receipts: commandinvoke.SQLReceipts{DB: b.storage.Database},
@@ -370,7 +370,7 @@ func (b *serveBuilder) wireOrchestrator() error {
 	workerOutcomes := &worker.SessionOutcomeBridge{Sessions: b.sessions.Manager, Inner: b.delegations.Manager}
 	var executor worker.WorkerExecutor = b.delegations.Executor
 	if configdir.IsHarnessChannel() {
-		scripted, err := harnessfixture.NewWorkers(b.storage.Directory, b.storage.Sessions, b.delegations.Queue, b.sessions.Manager.VerifyHarnessWorker, b.sessions.Manager.ReadHarnessWorker, b.sessions.Decisions, b.delegations.Executor)
+		scripted, err := harnessfixture.NewWorkers(b.storage.Directory, b.storage.Sessions, b.delegations.Queue, b.sessions.Manager.Workers.Harness.Verify, b.sessions.Manager.Workers.Harness.Read, b.sessions.Decisions, b.delegations.Executor)
 		if err != nil {
 			return err
 		}

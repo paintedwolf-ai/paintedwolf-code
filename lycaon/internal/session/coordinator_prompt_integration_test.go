@@ -31,7 +31,7 @@ import (
 )
 
 type coordinatorPromptFixture struct {
-	mgr   *session.Manager
+	mgr   *session.Host
 	rec   *llm.RecordingClient
 	wfMgr *workflow.RunManager
 	sess  *wire.Session
@@ -47,10 +47,10 @@ func setupCoordinatorPromptFixture(t *testing.T) coordinatorPromptFixture {
 	store := store.NewSQL(sqlDB)
 	inner := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}})
 	rec := llm.NewRecordingClient(inner)
-	mgr := session.NewManager(store, rec, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	agents := orchestration.NewMemoryAgentRegistry()
 	testutil.FailErr(t, "load agent registry", orchestration.LoadRequiredAgentRegistry(context.Background(), agents))
-	mgr.SetAgentRegistry(agents)
+	mgr.Profiles.SetAgentRegistry(agents)
 	wirePromptTestManager(t, mgr)
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
 
@@ -112,7 +112,7 @@ phases:
 func firstCoordinatorPromptRequest(t *testing.T, fix coordinatorPromptFixture, prompt string) modelcall.CompletionRequest {
 	t.Helper()
 	before := len(fix.rec.AllRequests())
-	_, err := fix.mgr.Prompt(t.Context(), fix.sess.ID, prompt)
+	_, err := fix.mgr.Submissions.Prompt(t.Context(), fix.sess.ID, prompt)
 	testutil.FailErr(t, "run coordinator prompt", err)
 	requests := fix.rec.AllRequests()
 	if len(requests) <= before {

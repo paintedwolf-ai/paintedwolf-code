@@ -3,6 +3,11 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/api/httpio"
@@ -13,10 +18,6 @@ import (
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowinputs "github.com/lycaon/lycaon/internal/workflow/inputs"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"net/http"
-	"strconv"
-	"strings"
-	"time"
 )
 
 // registerHarnessRoutes registers authenticated controls for an isolated harness.
@@ -117,7 +118,7 @@ func (s *HarnessControl) handleHarnessTranscript(w http.ResponseWriter, r *http.
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "messages must contain 1 to 1000 rows")
 		return
 	}
-	if err := s.sessions.AppendAndPublishMessages(
+	if err := s.sessions.Runner.Transcript.AppendPlain(
 		r.Context(),
 		sessionID,
 		s.stampActiveRun(r, sessionID, req.Messages)...,
@@ -134,7 +135,7 @@ func (s *HarnessControl) handleHarnessTranscript(w http.ResponseWriter, r *http.
 
 // stampActiveRun assigns seeded messages to the active workflow span.
 func (s *HarnessControl) stampActiveRun(r *http.Request, sessionID string, msgs []wire.Message) []wire.Message {
-	run, err := s.Workflow.Store.Runs.ActiveBySession(r.Context(), sessionID)
+	run, err := s.Workflow.GetActive(r.Context(), sessionID)
 	if err != nil || run == nil {
 		return msgs
 	}
@@ -292,7 +293,7 @@ func (s *HarnessControl) handleHarnessAskUser(w http.ResponseWriter, r *http.Req
 		},
 		harnessToolResultMessage(toolMsgID, assistantID, toolCallID, "ask_user", pendingBody),
 	}
-	if err := s.sessions.AppendAndPublishMessages(r.Context(), sessionID, s.stampActiveRun(r, sessionID, msgs)...); err != nil {
+	if err := s.sessions.Runner.Transcript.AppendPlain(r.Context(), sessionID, s.stampActiveRun(r, sessionID, msgs)...); err != nil {
 		s.responses.InternalError(w, r, err)
 		return
 	}
@@ -467,7 +468,7 @@ func (s *HarnessControl) handleHarnessVisualFixture(w http.ResponseWriter, r *ht
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "session_id is required")
 		return
 	}
-	root := session.RootSessionID(r.Context(), s.sessionStore, sessionID)
+	root := sessiontree.RootID(r.Context(), s.sessionStore, sessionID)
 	caption := strings.TrimSpace(req.Caption)
 	if caption == "" {
 		caption = "harness fixture"

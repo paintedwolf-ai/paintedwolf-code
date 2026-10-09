@@ -1,3 +1,5 @@
+//go:build integration
+
 package hostcontracts
 
 import (
@@ -95,7 +97,7 @@ func TestMCPSettingsSSEOnToggle(t *testing.T) {
 	store := store.NewMemory()
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
 		Store: store, Projects: project.NewMemoryRegistry(),
-		Sessions: session.NewManager(store, nil, toolReg, settings.DefaultSessionLimits())}, Host: hostapi.HostDependencies{Events: hub}, External: hostapi.ExternalDependencies{MCP: reg}}), nil, hostapi.TestAPIToken)
+		Sessions: session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolReg)}, Host: hostapi.HostDependencies{Events: hub}, External: hostapi.ExternalDependencies{MCP: reg}}), nil, hostapi.TestAPIToken)
 
 	enabled := true
 	body, err := json.Marshal(wire.UpdateMcpProviderRequest{Enabled: &enabled})

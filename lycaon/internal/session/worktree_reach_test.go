@@ -19,6 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	sessionscope "github.com/lycaon/lycaon/internal/session/scope"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -43,7 +44,7 @@ func initReachRepo(t *testing.T) string {
 }
 
 type reachFixture struct {
-	mgr     *Manager
+	mgr     *Host
 	mem     *store.Memory
 	reg     *project.MemoryRegistry
 	project *project.Project
@@ -58,7 +59,7 @@ func newReachFixture(t *testing.T, rootPath string) *reachFixture {
 	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	mem := store.NewMemory()
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}})
-	mgr := NewManager(mem, mock, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(mem, Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	reg := project.NewMemoryRegistry()
 	p, err := project.CreateWithRoot(t.Context(), reg, rootPath)
 	testutil.FailErr(t, "CreateWithRoot", err)
@@ -127,7 +128,7 @@ func writeBoundary(t *testing.T) *sandbox.Boundary {
 func TestWorktreeReach_writeLandsInWorktree(t *testing.T) {
 	f := newReachFixture(t, initReachRepo(t))
 	f.bind(t)
-	tctx, err := f.mgr.buildToolContext(t.Context(), f.sess, toolprofiles.DefaultToolProfileID, inject.Machine{})
+	tctx, err := f.mgr.ToolContext.Build(t.Context(), f.sess, toolprofiles.DefaultToolProfileID, inject.Machine{})
 	testutil.FailErr(t, "buildToolContext", err)
 
 	tool := &native.WriteTool{Boundary: writeBoundary(t)}
@@ -154,7 +155,7 @@ func TestWorktreeReach_writeLandsInWorktree(t *testing.T) {
 func TestWorktreeReach_jailFollows(t *testing.T) {
 	f := newReachFixture(t, initReachRepo(t))
 	f.bind(t)
-	tctx, err := f.mgr.buildToolContext(t.Context(), f.sess, "", inject.Machine{})
+	tctx, err := f.mgr.ToolContext.Build(t.Context(), f.sess, "", inject.Machine{})
 	testutil.FailErr(t, "buildToolContext", err)
 
 	host := tools.HostWriteRoot(tctx)
@@ -188,7 +189,7 @@ func TestWorktreeReach_commandCwdFollows(t *testing.T) {
 	testutil.FailErr(t, "wt marker", os.WriteFile(filepath.Join(f.wtPath, "marker"), []byte("worktree"), 0o644))
 	testutil.FailErr(t, "proj marker", os.WriteFile(filepath.Join(f.repoDir, "marker"), []byte("project"), 0o644))
 
-	tctx, err := f.mgr.buildToolContext(t.Context(), f.sess, toolprofiles.DefaultToolProfileID, inject.Machine{})
+	tctx, err := f.mgr.ToolContext.Build(t.Context(), f.sess, toolprofiles.DefaultToolProfileID, inject.Machine{})
 	testutil.FailErr(t, "buildToolContext", err)
 
 	reg := bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{})
@@ -206,17 +207,17 @@ func TestWorktreeReach_commandCwdFollows(t *testing.T) {
 
 func TestWorktreeReach_rootIdentityStable(t *testing.T) {
 	f := newReachFixture(t, initReachRepo(t))
-	unbound, err := f.mgr.buildToolContext(t.Context(), f.sess, "", inject.Machine{})
+	unbound, err := f.mgr.ToolContext.Build(t.Context(), f.sess, "", inject.Machine{})
 	testutil.FailErr(t, "unbound context", err)
-	activeID := unbound.Source.ActiveRootID
+	activeID := unbound.ActiveRootID
 	if activeID == "" {
 		t.Fatal("expected active root id")
 	}
 	f.bind(t)
-	bound, err := f.mgr.buildToolContext(t.Context(), f.sess, "", inject.Machine{})
+	bound, err := f.mgr.ToolContext.Build(t.Context(), f.sess, "", inject.Machine{})
 	testutil.FailErr(t, "bound context", err)
-	if bound.Source.ActiveRootID != activeID {
-		t.Fatalf("ActiveRootID changed: %q -> %q", activeID, bound.Source.ActiveRootID)
+	if bound.ActiveRootID != activeID {
+		t.Fatalf("ActiveRootID changed: %q -> %q", activeID, bound.ActiveRootID)
 	}
 	if !sameReachPath(bound.ActiveRootPath(), f.wtPath) {
 		t.Fatalf("ActiveRootPath = %q want %q", bound.ActiveRootPath(), f.wtPath)
@@ -237,7 +238,7 @@ func TestWorktreeReach_foreignRootsUntouched(t *testing.T) {
 	f.project = p
 	f.bind(t)
 
-	tctx, err := f.mgr.buildToolContext(t.Context(), f.sess, "", inject.Machine{})
+	tctx, err := f.mgr.ToolContext.Build(t.Context(), f.sess, "", inject.Machine{})
 	testutil.FailErr(t, "buildToolContext", err)
 	if len(tctx.Source.Roots) != 2 {
 		t.Fatalf("roots = %d want 2", len(tctx.Source.Roots))
@@ -263,7 +264,7 @@ func TestWorktreeReach_rootBelowToplevel(t *testing.T) {
 	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	mem := store.NewMemory()
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}})
-	mgr := NewManager(mem, mock, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(mem, Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	reg := project.NewMemoryRegistry()
 	p, err := project.CreateWithRoot(t.Context(), reg, web)
 	testutil.FailErr(t, "CreateWithRoot", err)
@@ -283,7 +284,7 @@ func TestWorktreeReach_rootBelowToplevel(t *testing.T) {
 		Toplevel: top, WorktreePath: wt, Branch: "session/" + sess.ID, BaseBranch: base,
 	}))
 
-	tctx, err := mgr.buildToolContext(t.Context(), sess, "", inject.Machine{})
+	tctx, err := mgr.ToolContext.Build(t.Context(), sess, "", inject.Machine{})
 	testutil.FailErr(t, "buildToolContext", err)
 	want := filepath.Join(wt, "packages", "web")
 	if !sameReachPath(tctx.ActiveRootPath(), want) {
@@ -297,17 +298,17 @@ func TestWorktreeReach_workerInheritance(t *testing.T) {
 	marker := "worker-src-only.txt"
 	testutil.FailErr(t, "wt-only file", os.WriteFile(filepath.Join(f.wtPath, marker), []byte("from-wt\n"), 0o644))
 
-	tctx, err := f.mgr.buildToolContext(t.Context(), f.sess, "", inject.Machine{})
+	tctx, err := f.mgr.ToolContext.Build(t.Context(), f.sess, "", inject.Machine{})
 	testutil.FailErr(t, "buildToolContext", err)
 	if !sameReachPath(tctx.Source.Roots[0].Path, f.wtPath) {
 		t.Fatalf("substituted root = %q want %q", tctx.Source.Roots[0].Path, f.wtPath)
 	}
 	child, err := f.mem.CreateChild(t.Context(), f.sess, api.SpawnChildRequest{AgentType: "implementer", Prompt: "edit"})
 	testutil.FailErr(t, "CreateChild", err)
-	childCtx, err := f.mgr.buildToolContext(t.Context(), child, "", inject.Machine{})
+	childCtx, err := f.mgr.ToolContext.Build(t.Context(), child, "", inject.Machine{})
 	testutil.FailErr(t, "build child ToolContext", err)
-	if !sameReachPath(childCtx.Source.Roots[0].Path, f.wtPath) {
-		t.Fatalf("child root = %q want inherited worktree %q", childCtx.Source.Roots[0].Path, f.wtPath)
+	if !sameReachPath(childCtx.Roots[0].Path, f.wtPath) {
+		t.Fatalf("child root = %q want inherited worktree %q", childCtx.Roots[0].Path, f.wtPath)
 	}
 
 	ws := workspace.NewManager(filepath.Join(t.TempDir(), "branches"), filepath.Join(t.TempDir(), "seeds"))
@@ -332,13 +333,13 @@ func TestWorktreeReach_staleRefusesTurn(t *testing.T) {
 	f.bind(t)
 	testutil.FailErr(t, "remove worktree dir", os.RemoveAll(f.wtPath))
 
-	_, err := f.mgr.Prompt(t.Context(), f.sess.ID, "hello")
-	if !errors.Is(err, ErrSessionWorktreeStale) {
-		t.Fatalf("Prompt = %v want ErrSessionWorktreeStale", err)
+	_, err := f.mgr.Submissions.Prompt(t.Context(), f.sess.ID, "hello")
+	if !errors.Is(err, sessionscope.ErrWorktreeStale) {
+		t.Fatalf("Prompt = %v want sessionscope.ErrWorktreeStale", err)
 	}
-	_, err = f.mgr.buildToolContext(t.Context(), f.sess, "", inject.Machine{})
-	if !errors.Is(err, ErrSessionWorktreeStale) {
-		t.Fatalf("buildToolContext = %v want ErrSessionWorktreeStale", err)
+	_, err = f.mgr.ToolContext.Build(t.Context(), f.sess, "", inject.Machine{})
+	if !errors.Is(err, sessionscope.ErrWorktreeStale) {
+		t.Fatalf("buildToolContext = %v want sessionscope.ErrWorktreeStale", err)
 	}
 }
 
@@ -360,7 +361,7 @@ func TestWorktreeReach_getFailureRefuses(t *testing.T) {
 	mem := store.NewMemory()
 	failing := &getFailStore{Store: mem, failGet: true}
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}})
-	mgr := NewManager(failing, mock, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(failing, Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	reg := project.NewMemoryRegistry()
 	p, err := project.CreateWithRoot(t.Context(), reg, repoDir)
 	testutil.FailErr(t, "CreateWithRoot", err)
@@ -371,20 +372,20 @@ func TestWorktreeReach_getFailureRefuses(t *testing.T) {
 	}, p.ID)
 	testutil.FailErr(t, "create session", err)
 
-	_, err = mgr.buildToolContext(t.Context(), sess, "", inject.Machine{})
+	_, err = mgr.ToolContext.Build(t.Context(), sess, "", inject.Machine{})
 	if err == nil {
 		t.Fatal("buildToolContext must refuse on binding-store Get failure")
 	}
-	if errors.Is(err, ErrSessionWorktreeStale) {
+	if errors.Is(err, sessionscope.ErrWorktreeStale) {
 		t.Fatal("Get failure must not be remapped to stale")
 	}
-	_, err = mgr.Prompt(t.Context(), sess.ID, "hello")
+	_, err = mgr.Submissions.Prompt(t.Context(), sess.ID, "hello")
 	if err == nil {
 		t.Fatal("Prompt must refuse on binding-store Get failure")
 	}
 	// The refusals above fail closed; project roots apply only once Get succeeds.
 	failing.failGet = false
-	tctx, err := mgr.buildToolContext(t.Context(), sess, "", inject.Machine{})
+	tctx, err := mgr.ToolContext.Build(t.Context(), sess, "", inject.Machine{})
 	testutil.FailErr(t, "buildToolContext unbound", err)
 	if !sameReachPath(tctx.ActiveRootPath(), repoDir) {
 		t.Fatalf("unbound path = %q want %q", tctx.ActiveRootPath(), repoDir)
@@ -393,7 +394,7 @@ func TestWorktreeReach_getFailureRefuses(t *testing.T) {
 
 func TestWorktreeReach_unboundUnchanged(t *testing.T) {
 	f := newReachFixture(t, initReachRepo(t))
-	tctx, err := f.mgr.buildToolContext(t.Context(), f.sess, "", inject.Machine{})
+	tctx, err := f.mgr.ToolContext.Build(t.Context(), f.sess, "", inject.Machine{})
 	testutil.FailErr(t, "buildToolContext", err)
 	if !sameReachPath(tctx.ActiveRootPath(), f.repoDir) {
 		t.Fatalf("unbound path = %q want %q", tctx.ActiveRootPath(), f.repoDir)
@@ -413,7 +414,7 @@ func TestWorktreeReach_unboundUnchanged(t *testing.T) {
 func TestWorktreeReach_boardWorktreeFact(t *testing.T) {
 	f := newReachFixture(t, initReachRepo(t))
 	f.bind(t)
-	fn := f.mgr.BoardGitWorktreeFunc(f.gm)
+	fn := f.mgr.Workspace.BoardWorktree(f.gm)
 	fact := fn(t.Context(), f.sess.ID)
 	if fact == nil {
 		t.Fatal("expected worktree fact")
@@ -468,7 +469,7 @@ func TestSubstituteWorktreeRoots_hasDeclaredBoundaries(t *testing.T) {
 		t.Fatalf("SubstituteWorktreeRoots callers = %v want exactly 4", callers)
 	}
 	joined := strings.Join(callers, "\n")
-	if !strings.Contains(joined, "tool_context.go") || !strings.Contains(joined, filepath.Join("requestscope", "session.go")) || !strings.Contains(joined, "navigation_refs.go") || !strings.Contains(joined, "workspace.go") {
+	if !strings.Contains(joined, filepath.Join("scope", "service.go")) || !strings.Contains(joined, filepath.Join("requestscope", "session.go")) || !strings.Contains(joined, "navigation_refs.go") || !strings.Contains(joined, "workspace.go") {
 		t.Fatalf("unexpected callers: %v", callers)
 	}
 }

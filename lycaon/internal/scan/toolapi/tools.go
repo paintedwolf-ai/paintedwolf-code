@@ -26,10 +26,13 @@ func securityDisabledReject(rejectFmt *guidance.StaticRejectFormatter) error {
 	}, rejectFmt)
 }
 
-// RegisterScanTools registers scan_pack and drill-down tools. full is what
-// scan_pack asks for a whole-tree pass; a path-scoped pack still enqueues
-// directly.
-func RegisterScanTools(reg *tools.DefaultRegistry, coord scanbase.ScanCoordinator, scannerReg scanbase.CodeScannerRegistry, full scanbase.FullScanRequester, rejectFmt *guidance.StaticRejectFormatter, secStore *settings.SecurityScannersStore) error {
+// InventoryAccounting reads accepted workflow accounting for a bound scan set.
+type InventoryAccounting interface {
+	QueryWorkflowInventory(context.Context, string, map[string]any) (string, error)
+}
+
+// RegisterScanTools registers scan_pack and drill-down tools.
+func RegisterScanTools(reg *tools.DefaultRegistry, coord scanbase.ScanCoordinator, scannerReg scanbase.CodeScannerRegistry, full scanbase.FullScanRequester, rejectFmt *guidance.StaticRejectFormatter, secStore *settings.SecurityScannersStore, accounting InventoryAccounting) error {
 	if reg == nil || coord == nil || scannerReg == nil || full == nil {
 		return fmt.Errorf("registry, coordinator, scan registry, and full scan requester required")
 	}
@@ -57,6 +60,15 @@ func RegisterScanTools(reg *tools.DefaultRegistry, coord scanbase.ScanCoordinato
 	if err := reg.Register(toolScanQuery, func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
 		if securityScannersOff(secStore) {
 			return "", securityDisabledReject(rejectFmt)
+		}
+		if err := rejectSuppliedProjectDir(args, tctx.ActiveRootPath()); err != nil {
+			return "", err
+		}
+		if view, _ := args["view"].(string); view == "accounting" {
+			if accounting == nil {
+				return "", fmt.Errorf("workflow inventory accounting unavailable")
+			}
+			return accounting.QueryWorkflowInventory(ctx, tctx.Identity.SessionID, args)
 		}
 		return runScanQuery(ctx, args, tctx, coord, rejectFmt)
 	}); err != nil {

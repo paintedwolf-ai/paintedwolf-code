@@ -69,9 +69,11 @@ func TestManagerRequestApproveResolve(t *testing.T) {
 		Type:      hitl.DecisionTypeApprove,
 		Title:     "Approve command",
 		ProposedAction: &hitl.ProposedAction{
-			Tool: "command",
-			Args: map[string]any{"command": "echo hi"},
-		},
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": "echo hi"},
+},
+},
 	})
 	testutil.FailErr(t, "mgr.RequestCheckpoint failed", err)
 	if resp.Status != hitl.DecisionStatusPending {
@@ -108,9 +110,14 @@ func TestManagerPersistsRedactedApprovalArguments(t *testing.T) {
 	resp, err := requestExplicitApprovalCheckpoint(t, ctx, mgr, hitl.CheckpointRequest{
 		SessionID: sessionID, Kind: api.CheckpointKindToolApproval,
 		ProposedAction: &hitl.ProposedAction{
-			Tool: "command", Command: command,
-			Args: map[string]any{"command": command, "token": secret},
-		},
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": command, "token": secret},
+},
+Presentation: hitl.ActionPresentation{
+Command: command,
+},
+},
 	})
 	testutil.FailErr(t, "request redacted checkpoint", err)
 	var argsJSON, payloadJSON string
@@ -133,9 +140,11 @@ func TestCancelPendingForSessionResolvesCheckpointWithoutAuthority(t *testing.T)
 		Type:      hitl.DecisionTypeApprove,
 		Title:     "Approve command",
 		ProposedAction: &hitl.ProposedAction{
-			Tool: "command",
-			Args: map[string]any{"command": "echo hi"},
-		},
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": "echo hi"},
+},
+},
 	})
 	testutil.FailErr(t, "request checkpoint", err)
 	mgr.Sessions.SetSessionAdmission(func(context.Context, string, func() error) error {
@@ -188,10 +197,14 @@ func TestManagerPersistsHostPresentationCommandForToolApproval(t *testing.T) {
 		Kind:      api.CheckpointKindToolApproval,
 		Type:      hitl.DecisionTypeApprove,
 		ProposedAction: &hitl.ProposedAction{
-			Tool:    "command_stop",
-			Args:    map[string]any{"handle": "process-123"},
-			Command: "npm run dev",
-		},
+Invocation: hitl.ActionInvocation{
+Tool: "command_stop",
+Args: map[string]any{"handle": "process-123"},
+},
+Presentation: hitl.ActionPresentation{
+Command: "npm run dev",
+},
+},
 	})
 	testutil.FailErr(t, "RequestCheckpoint", err)
 	pending, err := mgr.ListPending(ctx, sessionID, nil)
@@ -212,14 +225,30 @@ func TestManagerRejectsPlanForDifferentAction(t *testing.T) {
 	sqlDB, mgr, sessionID := newTestManager(t)
 	ctx := testdbseed.OwnerCaller(t, context.Background(), sqlDB)
 	insertSession(t, sqlDB, sessionID)
-	planned := hitl.ProposedAction{Tool: "command", Command: "first", Args: map[string]any{"command": "first"}}
+	planned := hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": "first"},
+},
+Presentation: hitl.ActionPresentation{
+Command: "first",
+},
+}
 	presentation, reasons := approvalPlanPresentation()
 	plan, err := hitl.NewApprovalPlan(planned, hitl.ApprovalStagePreSpawn, hitl.ApprovalSubject{
 		Kind: hitl.ApprovalSubjectAction, Title: "First",
 		Targets: []hitl.ApprovalTarget{{Kind: "action", Label: "first"}},
 	}, presentation, reasons, []hitl.ApprovalOption{hitl.CurrentActionOption()}, hitl.FaceContext{})
 	testutil.FailErr(t, "NewApprovalPlan", err)
-	other := hitl.ProposedAction{Tool: "command", Command: "second", Args: map[string]any{"command": "second"}}
+	other := hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": "second"},
+},
+Presentation: hitl.ActionPresentation{
+Command: "second",
+},
+}
 	_, err = mgr.RequestCheckpoint(ctx, hitl.CheckpointRequest{
 		SessionID: sessionID, Kind: api.CheckpointKindToolApproval,
 		ProposedAction: &other, ApprovalPlan: plan,
@@ -237,7 +266,11 @@ func TestManagerRejectSetsApprovalDenied(t *testing.T) {
 		SessionID:      sessionID,
 		Kind:           api.CheckpointKindToolApproval,
 		ToolCallID:     "call-denied-guidance",
-		ProposedAction: &hitl.ProposedAction{Tool: "write"},
+		ProposedAction: &hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "write",
+},
+},
 	})
 	testutil.FailErr(t, "mgr.RequestCheckpoint failed", err)
 	final, err := mgr.ResolveCheckpoint(ctx, sessionID, resp.CheckpointID, api.CheckpointKindToolApproval, &hitl.DecisionResult{
@@ -287,7 +320,11 @@ func TestManagerResolveWrongSession(t *testing.T) {
 	resp, err := requestExplicitApprovalCheckpoint(t, ctx, mgr, hitl.CheckpointRequest{
 		SessionID:      sessionID,
 		Kind:           api.CheckpointKindToolApproval,
-		ProposedAction: &hitl.ProposedAction{Tool: "write"},
+		ProposedAction: &hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "write",
+},
+},
 	})
 	testutil.FailErr(t, "mgr.RequestCheckpoint failed", err)
 	_, err = mgr.ResolveCheckpoint(ctx, "other-session", resp.CheckpointID, api.CheckpointKindToolApproval, &hitl.DecisionResult{Approved: true}, nil)

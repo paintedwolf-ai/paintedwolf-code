@@ -31,8 +31,7 @@ import (
 )
 
 func (b *serveBuilder) wireCoordinatorRuntime() error {
-	b.server.Coordinator = coordinator.NewRuntime(b.sessions.Manager.CoordinatorRuntimeDeps())
-	b.sessions.Manager.SetCoordinatorRuntime(b.server.Coordinator)
+	b.server.Coordinator = b.sessions.Manager.Coordinator.Runtime
 	waitConditions := make(map[string]map[string]bool, len(b.agents.ToolProfiles))
 	for _, profile := range b.agents.ToolProfiles {
 		allowed := make(map[string]bool, len(profile.WaitConditions))
@@ -121,19 +120,19 @@ func (b *serveBuilder) registerCoordinatorTools() error {
 		SourceLedger: b.storage.SourceLedger,
 		DataDir:      b.storage.Directory,
 		Reports: worker.ChangeReportDeps{
-			SourceRuns: b.sessions.Manager.WorkerSourceRuns,
+			SourceRuns: b.sessions.Manager.Workers.Workspaces.SourceRuns,
 			Messages: func(ctx context.Context, childSessionID string) ([]wire.Message, error) {
 				return b.storage.Sessions.GetMessages(ctx, childSessionID)
 			},
 		},
 	}
 	workerMergeSvc.Evidence = worker.SourceEvidenceContext{
-		SourceRevision: b.sessions.Manager.WorkerVerificationRevision,
+		SourceRevision: b.sessions.Manager.Workers.Workspaces.VerificationRevision,
 		DeclaredCommand: func(ctx context.Context, task *wire.WorkerTask) string {
 			if task == nil {
 				return ""
 			}
-			return b.sessions.Manager.SourceVerifyCommand(ctx, task.WorkspacePath)
+			return b.sessions.Manager.Verification.SourceVerifyCommand(ctx, task.WorkspacePath)
 		},
 	}
 	b.worker.merge = workerMergeSvc
@@ -149,7 +148,7 @@ func (b *serveBuilder) registerCoordinatorTools() error {
 	}); err != nil {
 		return fmt.Errorf("worker_cancel tool: %w", err)
 	}
-	b.sessions.Manager.SetOverlayPromoter(workerMergeSvc)
+	b.sessions.Manager.ProjectControl.SetOverlayPromoter(workerMergeSvc)
 	if err := worker.RegisterOverlayTools(b.execution.Host.Registry, worker.OverlayToolDeps{
 		Merge: workerMergeSvc,
 	}); err != nil {
@@ -181,10 +180,10 @@ func taskToolDeps(b *serveBuilder) worker.TaskToolDeps {
 		WorkflowWork:     b.workflows.Manager.Fanout.WorkflowWork,
 		TaskReceipt:      b.delegations.Queue.TaskReceipt,
 		PendingDecision: func(ctx context.Context, childSessionID string) (string, bool, error) {
-			if b.sessions.Manager == nil || b.sessions.Manager.Decisions() == nil {
+			if b.sessions.Manager == nil || b.sessions.Manager.Decisions == nil {
 				return "", false, nil
 			}
-			dec, ok, err := b.sessions.Manager.Decisions().Get(ctx, childSessionID)
+			dec, ok, err := b.sessions.Manager.Decisions.Get(ctx, childSessionID)
 			if err != nil {
 				return "", false, err
 			}
@@ -340,7 +339,7 @@ func (b *serveBuilder) wireMCP() error {
 		}
 		// Editor spans preview outbound screening.
 		b.security.Spans = secretspan.New(matcher)
-		b.security.BindTranscript(matcher, b.sessions.Manager.SetMessageStorageRedactor, b.sessions.Manager.SweepSessionTree)
+		b.security.BindTranscript(matcher, b.sessions.Manager.Runner.Transcript.SetRedactor, b.sessions.Manager.Runner.Transcript.SweepSessionTree)
 		if b.providers.Service != nil && b.providers.Service.Registry != nil {
 			screen := llm.NewModelSecretScreen(matcher, b.security.Ask(b.execution.Host.Executor.Secrets, b.execution.Host.Authority.ApprovalsDisabled))
 			if b.security.Capabilities != nil {
@@ -364,7 +363,7 @@ func (b *serveBuilder) wireMCP() error {
 		b.execution.Host.Executor.Rejections.SetMCPCatalog(b.server.MCP.Catalog)
 	}
 	if b.sessions != nil && b.sessions.Manager != nil {
-		b.sessions.Manager.SetMCPRuntime(b.server.MCP.Catalog)
+		b.sessions.Manager.ToolPolicy.SetMCPRuntime(b.server.MCP.Catalog)
 	}
 	return nil
 }

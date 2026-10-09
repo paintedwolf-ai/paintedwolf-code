@@ -2,12 +2,13 @@ package wiring
 
 import (
 	"context"
+	"strings"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"strings"
-	"testing"
 )
 
 func TestFirstPromptAttachesDefaultWorkflow(t *testing.T) {
@@ -19,15 +20,15 @@ func TestFirstPromptAttachesDefaultWorkflow(t *testing.T) {
 	projectDir := h.ProjectDir(t, "new-session")
 	sess, err := h.CreateHarnessSession(t, wire.CreateSessionRequest{}, projectDir)
 	testutil.FailErr(t, "h.Store.Create failed", err)
-	run, err := h.WorkflowMgr.GetActive(ctx, sess.ID)
+	run, err := h.WorkflowMgr.Store.Runs.ActiveBySession(ctx, sess.ID)
 	testutil.FailErr(t, "read workflow before first prompt", err)
 	if run != nil {
 		t.Fatal("store-only session fixture already has a workflow")
 	}
-	if _, err := h.SessionMgr.Prompt(ctx, sess.ID, "Let's build a basic python text adventure game."); err != nil {
-		testutil.FailErr(t, "h.SessionMgr.Prompt failed", err)
+	if _, err := h.SessionMgr.Submissions.Prompt(ctx, sess.ID, "Let's build a basic python text adventure game."); err != nil {
+		testutil.FailErr(t, "h.SessionMgr.Submissions.Prompt failed", err)
 	}
-	run, err = h.WorkflowMgr.GetActive(ctx, sess.ID)
+	run, err = h.WorkflowMgr.Store.Runs.ActiveBySession(ctx, sess.ID)
 	testutil.FailErr(t, "h.WorkflowMgr.GetActive failed", err)
 	if run == nil || !runstate.IsAmbientRun(run) {
 		t.Fatalf("first prompt must attach the default workflow, got %+v", run)
@@ -49,10 +50,10 @@ func TestNoWorkflowStartNudgeOnCasualPrompt(t *testing.T) {
 	sess, err := h.CreateHarnessSession(t, wire.CreateSessionRequest{}, projectDir)
 	testutil.FailErr(t, "h.Store.Create failed", err)
 	prompt := "Let's build a basic python text adventure game."
-	if _, err := h.SessionMgr.Prompt(ctx, sess.ID, prompt); err != nil {
-		testutil.FailErr(t, "h.SessionMgr.Prompt failed", err)
+	if _, err := h.SessionMgr.Submissions.Prompt(ctx, sess.ID, prompt); err != nil {
+		testutil.FailErr(t, "h.SessionMgr.Submissions.Prompt failed", err)
 	}
-	msgs, err := h.SessionMgr.GetMessages(ctx, sess.ID)
+	msgs, err := h.SessionMgr.Runner.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "h.SessionMgr.GetMessages failed", err)
 	for _, msg := range msgs {
 		if strings.Contains(msg.Content, "[host:workflow-start]") {

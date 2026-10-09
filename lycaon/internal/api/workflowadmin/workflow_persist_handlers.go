@@ -2,13 +2,14 @@ package workflowadmin
 
 import (
 	"errors"
+	"net/http"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
 	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
 	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"net/http"
 )
 
 func (s *Composition) HandlePersistWorkflow(w http.ResponseWriter, r *http.Request) {
@@ -52,7 +53,7 @@ func (s *Composition) HandlePersistWorkflow(w http.ResponseWriter, r *http.Reque
 		s.responses.InternalError(w, r, err)
 		return
 	}
-	s.Sessions.Catalog().InvalidateEffectiveCatalog(sess.ProjectID)
+	s.Sessions.Catalog.InvalidateEffectiveCatalog(sess.ProjectID)
 	if s.EventPublisher != nil {
 		s.EventPublisher.PublishWorkflowPersisted(r.Context(), sess.ProjectID, sessionID, wire.WorkflowEvent{
 			Event:      wire.WorkflowEventKindWorkflowPersisted,

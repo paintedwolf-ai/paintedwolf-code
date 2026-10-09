@@ -80,7 +80,7 @@ func TestScanSummaryHTTPIntegration(t *testing.T) {
 	go func() { _ = runner.Run(ctx) }()
 
 	sessStore := store.NewMemory()
-	mgr := session.NewManager(sessStore, llm.NewMockProvider(nil), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	projects := project.NewMemoryRegistry()
 	srv := api.NewServer(apitest.Dependencies(t, api.Dependencies{Core:api.CoreDependencies{
 		Store: sessStore, Projects: projects, Sessions: mgr,},Scans:api.ScansDependencies{

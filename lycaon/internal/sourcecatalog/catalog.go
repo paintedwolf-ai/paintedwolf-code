@@ -49,6 +49,15 @@ type record struct {
 	fullReconcile bool
 }
 
+// settle ends the record's build. The build context carries its caller's
+// values, such as an HTTP request and the host serving it; the record outlives both.
+func (r *record) settle() {
+	r.building = false
+	r.cancel()
+	r.cancel = nil
+	close(r.done)
+}
+
 // ScopeProvider supplies walk budgets and traversal order without excluding paths.
 type ScopeProvider interface {
 	Catalog(ctx context.Context, root string) *sourcescope.Scope
@@ -143,7 +152,7 @@ func (c *TreeStores) OpenDependencyIndex(ctx context.Context, projectID string, 
 	var once sync.Once
 	var cleanupErr error
 	cleanup := func() error {
-		once.Do(func() { cleanupErr = errors.Join(temporary.Drain(context.Background()), os.RemoveAll(dir)) })
+		once.Do(func() { cleanupErr = errors.Join(temporary.Drain(context.WithoutCancel(ctx)), os.RemoveAll(dir)) })
 		return cleanupErr
 	}
 	store, err := temporary.Trees.indexStore(ctx, projectID, root)

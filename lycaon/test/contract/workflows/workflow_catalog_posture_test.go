@@ -1,12 +1,12 @@
 package contract
 
 import (
-	"github.com/lycaon/lycaon/internal/session"
-	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
+	"testing"
+
+	"github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/workflowfixture"
-	"testing"
 )
 
 func TestWorkflowCatalogSummaryPosturesValid(t *testing.T) {
@@ -19,11 +19,11 @@ func TestWorkflowCatalogSummaryPosturesValid(t *testing.T) {
 			if summary.InitialPosture != ip {
 				t.Errorf("%s: summary initial_posture = %q manifest = %q", key, summary.InitialPosture, ip)
 			}
-			if !sessionposture.ValidSessionPosture(ip) {
+			if !profiles.ValidSessionPosture(ip) {
 				t.Errorf("%s: invalid initial_posture %q", key, ip)
 			}
 		}
-		if summary.InitialPosture != "" && !sessionposture.ValidSessionPosture(summary.InitialPosture) {
+		if summary.InitialPosture != "" && !profiles.ValidSessionPosture(summary.InitialPosture) {
 			t.Errorf("%s: summary exposes invalid posture %q", key, summary.InitialPosture)
 		}
 	}
@@ -37,7 +37,7 @@ func TestDefaultRegistrySummariesExposeValidPostures(t *testing.T) {
 			t.Errorf("workflow %s@%s missing initial_posture in catalog summary", summary.ID, summary.Version)
 			continue
 		}
-		if !sessionposture.ValidSessionPosture(summary.InitialPosture) {
+		if !profiles.ValidSessionPosture(summary.InitialPosture) {
 			t.Errorf("workflow %s@%s summary posture = %q invalid", summary.ID, summary.Version, summary.InitialPosture)
 		}
 	}
@@ -45,8 +45,8 @@ func TestDefaultRegistrySummariesExposeValidPostures(t *testing.T) {
 
 func TestBundledPlanManifestMatchesSessionPostureRegistry(t *testing.T) {
 	t.Parallel()
-	reg, err := session.LoadPostureRegistry()
-	contractcheck.FailErr(t, "session.LoadPostureRegistry failed", err)
+	reg, err := profiles.LoadPostureRegistry()
+	contractcheck.FailErr(t, "profiles.LoadPostureRegistry failed", err)
 	catalog, err := workflowfixture.LoadMergedWorkflowCatalog(t)
 	contractcheck.FailErr(t, "loadMergedWorkflowCatalog failed", err)
 	plan, ok := catalog["plan@1.0.0"]

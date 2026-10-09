@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance/feedback"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	workflowruntime "github.com/lycaon/lycaon/internal/workflow/runtime"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -25,13 +26,13 @@ func (r *Runtime) configureDelegationWorkflow(deps Dependencies) error {
 		Transcript: deps.Workflows.Manager.Transcript, Asks: deps.Workflows.Manager.Asks,
 		Fanout: deps.Workflows.Manager.Fanout, Phases: deps.Workflows.Manager.Phases,
 		Reports: deps.Workflows.Manager.Reports, Recovery: deps.Workflows.Manager.Recovery,
-		Cleanup: deps.Workflows.Manager,
+		Cleanup: deps.Workflows.Manager, Reviews: deps.Workflows.Manager.Repairs,
 	})
-	deps.Sessions.Manager.SetWorkflowToolAccessView(deps.Workflows.Manager.Policy)
-	deps.Sessions.Manager.SetSessionWorkflowStop(deps.Workflows.Manager.Controls)
-	deps.Workflows.Manager.Starts.Barrier = deps.Sessions.Manager
-	deps.Workflows.Manager.Controls.SessionExit = deps.Sessions.Manager
-	deps.Workflows.Manager.Requests.OnRequestAccepted = deps.Sessions.Manager.CurateAcceptedWorkflowRequest
+	deps.Sessions.Manager.Profiles.SetWorkflowToolAccessView(deps.Workflows.Manager.Policy)
+	deps.Sessions.Manager.Stops.SetWorkflowStop(deps.Workflows.Manager.Controls)
+	deps.Workflows.Manager.Starts.Barrier = deps.Sessions.Manager.Chats.Gate
+	deps.Workflows.Manager.Controls.SessionExit = deps.Sessions.Manager.Stops
+	deps.Workflows.Manager.Requests.OnRequestAccepted = deps.Sessions.Manager.Runner.Curation.AcceptedWorkflowRequest
 	if deps.Execution.Hints == nil {
 		return fmt.Errorf("hint registry: not loaded")
 	}
@@ -48,7 +49,7 @@ func (r *Runtime) configureDelegationWorkflow(deps Dependencies) error {
 	deps.Sessions.Manager.SetWorkspaceChecker(&workercompletion.CompositeWorkspaceChangeChecker{
 		Git: &workercompletion.GitWorkspaceChangeChecker{Git: deps.Git},
 	})
-	if err := deps.Sessions.Manager.InstallAnchorRegistry(); err != nil {
+	if err := deps.Sessions.Manager.Coordinator.Guidance.InstallAnchorRegistry(); err != nil {
 		return fmt.Errorf("anchor registry: %w", err)
 	}
 	deps.Sessions.Manager.SetLoopWorkflowSource(&loopwake.WorkflowDomains{
@@ -72,13 +73,13 @@ func (r *Runtime) configureDelegationWorkflow(deps Dependencies) error {
 	deps.Sessions.Manager.SetCoordinatorTurnFrameSource(&workflowruntime.CoordinatorFrames{
 		Runs: deps.Workflows.Store.Runs, Resolver: &deps.Workflows.Manager.Resolver,
 		Snapshots: deps.Workflows.Manager.Snapshots, Policy: deps.Workflows.Manager.Policy,
-		Obligations: deps.Workflows.Manager.Obligations,
+		Obligations:    deps.Workflows.Manager.Obligations,
 		SessionStore:   deps.Workflows.Drafts,
 		ConfigRoot:     deps.Catalog.ModuleRoot,
 		VerdictCatalog: r.SessionVerdictCatalog,
 	})
 	if deps.Providers.Curator != nil {
-		deps.Sessions.Manager.SetSynthesisCurator(deps.Providers.Curator)
+		deps.Sessions.Manager.Coordinator.Closeout.SetSynthesisCurator(deps.Providers.Curator)
 	}
 	return nil
 }
@@ -93,7 +94,7 @@ func (r *Runtime) wireWorkerContext(deps Dependencies) error {
 		return fmt.Errorf("playbooks: %w", err)
 	}
 	legToolLister := delegation.LegToolListerFunc(func(ctx context.Context, sess *wire.Session, profileID string) []string {
-		policy := deps.Sessions.Manager.PromptToolPolicy()
+		policy := deps.Sessions.Manager.Coordinator.Guards.Policy()
 		if policy == nil || sess == nil {
 			return nil
 		}
@@ -105,14 +106,14 @@ func (r *Runtime) wireWorkerContext(deps Dependencies) error {
 		}
 		return names
 	})
-	agentsForSession := func(sess *wire.Session) session.AgentProfileResolver {
-		if view := deps.Sessions.Manager.Catalog().ViewForSession(context.Background(), sess); view != nil {
+	agentsForSession := func(sess *wire.Session) profiles.AgentProfileResolver {
+		if view := deps.Sessions.Manager.Catalog.ViewForSession(context.Background(), sess); view != nil {
 			return view
 		}
 		return deps.Agents.Registry
 	}
 	playbooksForSession := func(sess *wire.Session) delegation.PlaybookMatcherInterface {
-		if view := deps.Sessions.Manager.Catalog().ViewForSession(context.Background(), sess); view != nil && view.Playbooks != nil {
+		if view := deps.Sessions.Manager.Catalog.ViewForSession(context.Background(), sess); view != nil && view.Playbooks != nil {
 			return view.Playbooks
 		}
 		return r.PlaybookMatcher
@@ -125,7 +126,7 @@ func (r *Runtime) wireWorkerContext(deps Dependencies) error {
 		AgentsFor:     agentsForSession,
 		Tools:         legToolLister,
 		Scans:         deps.Scanning.Coordinator,
-		AgentsMDChain: deps.Sessions.Manager.AgentsMDChainForPaths,
+		AgentsMDChain: deps.Sessions.Manager.Coordinator.PolicyIndex.Chain,
 		Repo:          nil, // Set when repo provider is wired via SetRepoProvider
 		Topology: func(workflowID string) string {
 			if strings.TrimSpace(workflowID) == "default-pipeline" {

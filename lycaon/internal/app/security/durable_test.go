@@ -123,7 +123,7 @@ func TestMarkingAProjectSecretRescreensExistingTaskHistory(t *testing.T) {
 			if cancelOnCommit {
 				b.Capabilities.AddScreeningInvalidationObserver(func(context.Context, string) { cancel() })
 			}
-			mgr := session.NewManager(store, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+			mgr := session.NewHost(store, session.Models{Client: nil, Limits: settings.DefaultSessionLimits()}, tools.NewStubRegistry())
 			b.BindTranscript(matcher, mgr.SetMessageStorageRedactor, mgr.SweepSessionTree)
 			_, err := b.Capabilities.Put(requestCtx, secretcap.PutRequest{
 				ProjectID: testdbseed.DefaultProjectID, OperationID: "late-mark", Name: "Late token", Purpose: "screen earlier reads",

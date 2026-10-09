@@ -2,6 +2,10 @@ package session_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolexecution"
+	"path/filepath"
+	"testing"
+
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/conditions"
@@ -14,13 +18,13 @@ import (
 	"github.com/lycaon/lycaon/internal/rules"
 	"github.com/lycaon/lycaon/internal/session"
 	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
+	"github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/oartest"
-	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/internal/toolhost"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
@@ -35,12 +39,10 @@ import (
 	workflowruntime "github.com/lycaon/lycaon/internal/workflow/runtime"
 	workflowstatetools "github.com/lycaon/lycaon/internal/workflow/statetools"
 	"github.com/lycaon/lycaon/pkg/api"
-	"path/filepath"
-	"testing"
 )
 
 type contextualToolsFixture struct {
-	Mgr        *session.Manager
+	Mgr        *session.Host
 	Store      session.Store
 	Workflow   *workflow.RunManager
 	Executor   *toolexecution.Executor
@@ -67,17 +69,17 @@ func setupContextualToolsFixtureFull(t *testing.T, posture api.SessionPosture, c
 
 	store := store.NewSQL(sqlDB)
 	rt := newContextualToolsRuntime(t, configRoot)
-	mgr := session.NewManager(store, client, tools.NewStubRegistry(), cfg)
+	mgr := session.NewHost(store, session.Models{Client: client, Provider: nil, Limits: cfg, Cost: nil}, tools.NewStubRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr)
 	mgr.SetProjectRegistry(project.NewSQLRegistry(sqlDB))
-	mgr.SetToolInvoker(rt.Executor, rt.Executor.Metadata)
+	mgr.Coordinator.Guards.SetToolMetadata(rt.Executor.Metadata)
 	wireBundledToolPolicyForTest(t, mgr)
 
 	agents := orchestration.NewMemoryAgentRegistry()
 	if err := orchestration.LoadRequiredAgentRegistry(context.Background(), agents); err != nil {
 		testutil.FailErr(t, "LoadRequiredAgentRegistry", err)
 	}
-	mgr.SetAgentRegistry(agents)
+	mgr.Profiles.SetAgentRegistry(agents)
 
 	bundledDir := filepath.Join(configRoot, "config", "packs", "painted-wolf", "platform", "workflows")
 	manifestRegistry, err := workflowdef.RegistryFromDirs("")
@@ -94,9 +96,13 @@ func setupContextualToolsFixtureFull(t *testing.T, posture api.SessionPosture, c
 	workflowMgr.Presentation.BlueprintGetter = blueprintMgr
 	workflowMgr.Approvals.Getter = blueprintMgr
 	mgr.SetWorkflowDomains(&session.WorkflowDomains{Runs: workflowMgr.Store.Runs, Policy: workflowMgr.Policy, Ambient: workflowMgr.Ambient, Blueprints: workflowMgr.Blueprints, Batch: workflowMgr.Batch, Slash: workflowMgr.Slash, Requests: workflowMgr.Requests, Feedback: workflowMgr.Feedback, Transcript: workflowMgr.Transcript, Asks: workflowMgr.Asks, Fanout: workflowMgr.Fanout, Phases: workflowMgr.Phases, Reports: workflowMgr.Reports, Recovery: workflowMgr.Recovery, Cleanup: workflowMgr})
-	mgr.SetCoordinatorTurnFrameSource(&workflowruntime.CoordinatorFrames{Runs: workflowMgr.Store.Runs, Resolver: &workflowMgr.Resolver, Snapshots: workflowMgr.Snapshots, Policy: workflowMgr.Policy, Obligations: workflowMgr.Obligations, SessionStore: sessionWF})
-	if err := workflowstatetools.RegisterStateTools(rt.Registry, workflowstatetools.StateToolDeps{Runs: workflowMgr.Store.Runs, Vars: workflowMgr.Phases.Vars, Journal: workflowMgr.Phases.Journal, Resolver: &workflowMgr.Resolver, Starts: workflowMgr.Starts, Controls: workflowMgr.Controls, Scaffold: workflowMgr.Blueprints.Scaffold, Sessions: store}); err != nil {
-		testutil.FailErr(t, "workflow.RegisterStateTools failed", err)
+	mgr.SetCoordinatorTurnFrameSource(&workflowruntime.CoordinatorFrames{Runs: workflowMgr.Store.Runs, Resolver: &workflowMgr.Resolver, Snapshots: workflowMgr.Snapshots, Policy: workflowMgr.Policy, Obligations: workflowMgr.Obligations, SessionStore: sessionWF, ConfigRoot: configRoot})
+	if err := workflowstatetools.RegisterStateTools(rt.Registry, workflowstatetools.StateToolDeps{
+		Runs: workflowMgr.Store.Runs, Vars: workflowMgr.Phases.Vars, Journal: workflowMgr.Phases.Journal,
+		Resolver: &workflowMgr.Resolver, Starts: workflowMgr.Starts, Controls: workflowMgr.Controls,
+		Scaffold: workflowMgr.Blueprints.Scaffold, Sessions: store,
+	}); err != nil {
+		testutil.FailErr(t, "workflowstatetools.RegisterStateTools failed", err)
 	}
 	if err := workflowphases.RegisterAdvanceTool(rt.Registry, workflowMgr.Phases); err != nil {
 		testutil.FailErr(t, "workflowphases.RegisterAdvanceTool failed", err)
@@ -105,7 +111,7 @@ func setupContextualToolsFixtureFull(t *testing.T, posture api.SessionPosture, c
 		testutil.FailErr(t, "workflowphases.RegisterTransitionTool failed", err)
 	}
 	if err := workflowinputs.RegisterFeedbackTool(rt.Registry, workflowMgr.Feedback); err != nil {
-		testutil.FailErr(t, "workflow.RegisterFeedbackTool failed", err)
+		testutil.FailErr(t, "workflowinputs.RegisterFeedbackTool failed", err)
 	}
 	if err := workflowinputs.RegisterAskUserTool(rt.Registry, workflowMgr.Asks, rt.Boundary); err != nil {
 		testutil.FailErr(t, "workflowinputs.RegisterAskUserTool failed", err)
@@ -116,8 +122,8 @@ func setupContextualToolsFixtureFull(t *testing.T, posture api.SessionPosture, c
 	ctx := context.Background()
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: posture}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
-	if err := mgr.SetAgentType(ctx, sess.ID, orchestration.ProfileCoordinator); err != nil {
-		testutil.FailErr(t, "mgr.SetAgentType failed", err)
+	if err := mgr.Chats.SetAgentType(ctx, sess.ID, orchestration.ProfileCoordinator); err != nil {
+		testutil.FailErr(t, "mgr.Chats.SetAgentType failed", err)
 	}
 	sess.AgentType = orchestration.ProfileCoordinator
 
@@ -132,10 +138,10 @@ func setupContextualToolsFixtureFull(t *testing.T, posture api.SessionPosture, c
 	}
 }
 
-func wireBundledToolPolicyForTest(t *testing.T, mgr *session.Manager) {
+func wireBundledToolPolicyForTest(t *testing.T, mgr *session.Host) {
 	t.Helper()
-	postures, err := session.LoadPostureRegistry()
-	testutil.FailErr(t, "LoadPostureRegistry", err)
+	postures, err := profiles.LoadPostureRegistry()
+	testutil.FailErr(t, "profiles.LoadPostureRegistry", err)
 	packs, err := rules.LoadBundledRules()
 	testutil.FailErr(t, "LoadBundledRules", err)
 	if err := rules.ValidatePostureRules(postures, sessionposture.AllSessionPostures(), packs); err != nil {
@@ -148,17 +154,17 @@ func wireBundledToolPolicyForTest(t *testing.T, mgr *session.Manager) {
 	}
 	engine, err := rules.NewPostureRuleEngine(postures, packs, condReg)
 	testutil.FailErr(t, "NewPostureRuleEngine", err)
-	mgr.SetPostureRegistry(postures)
-	mgr.SetRuleEngine(engine)
+	mgr.Profiles.SetPostureRegistry(postures)
+	mgr.Coordinator.Guards.SetRules(engine)
 }
 
 // wirePromptTestManager wires toolhost + posture rules so coordinator Prompt has visible_tools.
-func wirePromptTestManager(t *testing.T, mgr *session.Manager) {
+func wirePromptTestManager(t *testing.T, mgr *session.Host) {
 	t.Helper()
 	oartest.InstallCloseoutPolicy(t, mgr)
 	configRoot := configlayout.FindModuleRoot()
 	rt := newContextualToolsRuntime(t, configRoot)
-	mgr.SetToolInvoker(rt.Executor, rt.Executor.Metadata)
+	mgr.Coordinator.Guards.SetToolMetadata(rt.Executor.Metadata)
 	wireBundledToolPolicyForTest(t, mgr)
 }
 
@@ -184,9 +190,9 @@ func registerContextualToolsCoordinatorExtras(
 	t *testing.T,
 	configRoot string,
 	reg *tools.DefaultRegistry,
-	mgr *session.Manager,
+	mgr *session.Host,
 	agents *orchestration.MemoryAgentRegistry,
-	sessionWF *workflowdrafts.SQL,
+	sessionWF workflowdrafts.Store,
 	bundledDir string,
 ) {
 	t.Helper()
@@ -197,10 +203,9 @@ func registerContextualToolsCoordinatorExtras(
 		testutil.FailErr(t, "delegation.RegisterDelegationTools failed", err)
 	}
 	if err := worker.RegisterTaskTool(reg, worker.TaskToolDeps{
-		Sessions: mgr,
-		Queue:    queue,
-		Agents:   agents,
-		Workers:  worker.DefaultWorkersConfig(),
+		Queue:   queue,
+		Agents:  agents,
+		Workers: worker.DefaultWorkersConfig(),
 	}); err != nil {
 		t.Fatal(err)
 	}

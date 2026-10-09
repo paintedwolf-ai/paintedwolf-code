@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"github.com/lycaon/lycaon/internal/conditions"
+	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/scaffoldvars"
 	workflowfacts "github.com/lycaon/lycaon/internal/session/workflowfacts"
@@ -14,6 +15,14 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 	"strings"
 )
+
+// runArchive names the sealed version a retired run reads its guidance from.
+func runArchive(manifest workflowdef.Manifest) string {
+	if !manifest.Retired {
+		return ""
+	}
+	return extpacks.ArchiveKey(manifest.ID, manifest.Version)
+}
 
 // AgentToolAccess returns the active workflow's explicit breadth for an agent.
 func (m *SessionPolicy) AgentToolAccess(ctx context.Context, sessionID, agentType string) sandbox.ToolAccess {
@@ -180,7 +189,7 @@ func (m *SessionPolicy) ActiveReviewVerdictPending(ctx context.Context, sessionI
 		return false
 	}
 	active, err := m.Runs.ActiveBySession(ctx, sessionID)
-	if err != nil || active == nil {
+	if err != nil || active == nil || active.Status != api.WorkflowRunStatusRunning {
 		return false
 	}
 	manifest, err := m.Resolver.ForRun(ctx, active)
@@ -209,7 +218,7 @@ func (m *SessionPolicy) ActiveCloseoutGateState(ctx context.Context, sessionID s
 		return state
 	}
 	active, err := m.Runs.ActiveBySession(ctx, sessionID)
-	if err != nil || active == nil {
+	if err != nil || active == nil || active.Status != api.WorkflowRunStatusRunning {
 		return state
 	}
 	manifest, err := m.Resolver.ForRun(ctx, active)
@@ -254,6 +263,7 @@ func (m *SessionPolicy) ActiveManifest(ctx context.Context, sessionID string) (w
 		CoordinatorProfile: strings.TrimSpace(manifest.CoordinatorProfile),
 		Rules:              append([]string(nil), manifest.Rules...),
 		HostPhaseAdvance:   workflowdef.PhaseHostPhaseAdvance(manifest, active.CurrentPhase),
+		Archive:            runArchive(manifest),
 	}, true
 }
 
@@ -282,6 +292,10 @@ func (m *SessionPolicy) AssertRunnable(ctx context.Context, runID string) error 
 	}
 	switch run.Status {
 	case api.WorkflowRunStatusRunning:
+		if m != nil && m.Resolver != nil {
+			_, err := m.Resolver.ForRun(ctx, run)
+			return err
+		}
 		return nil
 	case api.WorkflowRunStatusPaused:
 		return &runstate.NotRunnableError{RunID: runID, Status: run.Status, Reason: "paused"}

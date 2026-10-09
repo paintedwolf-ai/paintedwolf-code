@@ -83,7 +83,7 @@ func TestApprovePlanHTTPRejectsWhenNotReady(t *testing.T) {
 func TestApprovePlanHTTPPersistsBeforeAdvanceAndWakesCoordinator(t *testing.T) {
 	h := wiring.BuildForTest(t, wiring.WithRecordingLLM())
 	limits := &approvalWakeLimits{}
-	h.SessionMgr.SetLimitsProvider(limits)
+	h.SessionMgr.Limits.SetProvider(limits)
 	srv := h.Server
 	proj := createProjectHTTP(t, srv, h.ProjectDir(t, "approval-wake"))
 	sess := createSessionForProjectHTTP(t, srv, proj.ID, wire.SessionPostureBuild)
@@ -100,7 +100,7 @@ func TestApprovePlanHTTPPersistsBeforeAdvanceAndWakesCoordinator(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &run); err != nil {
 		testutil.FailErr(t, "unmarshal start run", err)
 	}
-	h.SessionMgr.WaitForCoordinatorAsyncTurns(ctx)
+	h.SessionMgr.Coordinator.WaitForTurns(ctx)
 
 	run = completePlanIntakeHTTP(t, h, run.ID)
 	run = completePlanDepthAtNoneHTTP(t, h, run.ID, "research")
@@ -157,11 +157,11 @@ func TestApprovePlanHTTPPersistsBeforeAdvanceAndWakesCoordinator(t *testing.T) {
 		}
 		vars, varsErr := h.WorkflowMgr.Store.Runs.GetScaffoldVars(ctx, active.ID)
 		messages, messageErr := h.Store.GetMessages(ctx, sess.ID)
-		allowed, reason, wakeErr := h.SessionMgr.ShouldLoopWake(ctx, sess.ID, anchor.PhaseAdvanced)
+		allowed, reason, wakeErr := h.SessionMgr.Coordinator.Runtime.CoordinatorLoop().ShouldLoopWake(ctx, sess.ID, anchor.PhaseAdvanced)
 		t.Fatalf("approval did not wake coordinator: allowed=%v reason=%q wake_err=%v active=%+v vars=%+v messages=%+v active_err=%v vars_err=%v message_err=%v",
 			allowed, reason, wakeErr, active, vars, messages, activeErr, varsErr, messageErr)
 	}
-	h.SessionMgr.WaitForCoordinatorAsyncTurns(ctx)
+	h.SessionMgr.Coordinator.WaitForTurns(ctx)
 	history, err := h.WorkflowMgr.Store.Runs.ListBySession(ctx, sess.ID, 100, nil)
 	testutil.FailErr(t, "list workflows after approval", err)
 	for _, child := range history {

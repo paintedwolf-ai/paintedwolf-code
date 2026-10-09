@@ -73,7 +73,7 @@ type Conversation struct {
 	progressStore progress.Store
 	responses     *httpio.Responder
 	sessionStore  session.Store
-	sessions      *session.Manager
+	sessions      *session.Host
 }
 
 type Findings struct {
@@ -95,7 +95,7 @@ type HarnessControl struct {
 	responses          *httpio.Responder
 	router             chi.Router
 	sessionStore       session.Store
-	sessions           *session.Manager
+	sessions           *session.Host
 	visualStore        visual.Store
 }
 
@@ -109,7 +109,7 @@ type HarnessPreparation struct {
 	projectRegistry project.Registry
 	responses       *httpio.Responder
 	sessionStore    session.Store
-	sessions        *session.Manager
+	sessions        *session.Host
 	workers         worker.WorkerQueue
 }
 
@@ -124,7 +124,7 @@ type LocalData struct {
 	dataDir          string
 	localData        *localdata.Registry
 	responses        *httpio.Responder
-	sessions         *session.Manager
+	sessions         *session.Host
 	sourceLedger     *sourceledger.Store
 	webIndex         *webindex.Store
 	workerBranchRoot string

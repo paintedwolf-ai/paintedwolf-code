@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 type activityLease struct {
@@ -21,7 +21,7 @@ type activityLease struct {
 }
 
 // beginActivity opens one host-observed activity lease.
-func (l *PromptLoop) beginActivity(
+func (l *turnProjection) beginActivity(
 	ctx context.Context,
 	sess *api.Session,
 	sessionID string,
@@ -91,8 +91,8 @@ func coordinatorLLMLoopProgress(profileID, surfaceID, activityLabel string, host
 	return loop
 }
 
-func (l modelTurn) coordinatorSurfaceActivityLabel(surfaceID string) string {
-	if l.PromptLoop == nil || l.Deps.CoordinatorSurfaceActivityLabel == nil {
+func (l *promptContext) coordinatorSurfaceActivityLabel(surfaceID string) string {
+	if l == nil || l.Deps.CoordinatorSurfaceActivityLabel == nil {
 		return ""
 	}
 	return l.Deps.CoordinatorSurfaceActivityLabel(surfaceID)

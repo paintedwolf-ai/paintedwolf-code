@@ -1,8 +1,9 @@
 package posture
 
 import (
-	"github.com/lycaon/lycaon/pkg/api"
 	"strings"
+
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // AllSessionPostures is the closed posture enum.

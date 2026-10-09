@@ -19,7 +19,7 @@ func TestEditorConfigMismatchCardAnnotatesTheLandedWrite(t *testing.T) {
 		"editorconfig_lines": "tests/test_image.py:16,28 trim_trailing_whitespace; tests/test_image.py:16,28 indent_style",
 	}, &api.FeedbackSubject{Kind: "file", ID: "tests/test_image.py"})
 
-	out, facts := mgr.appendPostToolGuidance(context.Background(), sess, "write",
+	out, facts := mgr.ToolPolicy.AfterTool(context.Background(), sess, "write",
 		map[string]any{"path": "tests/test_image.py"}, "Wrote 1200 bytes to tests/test_image.py", 1, raised)
 	for _, want := range []string{
 		"Wrote 1200 bytes to tests/test_image.py",
@@ -35,7 +35,7 @@ func TestEditorConfigMismatchCardAnnotatesTheLandedWrite(t *testing.T) {
 		t.Fatalf("facts = %#v, want the mismatch code", facts)
 	}
 
-	plain, _ := mgr.appendPostToolGuidance(context.Background(), sess, "write",
+	plain, _ := mgr.ToolPolicy.AfterTool(context.Background(), sess, "write",
 		map[string]any{"path": "tests/test_image.py"}, "Wrote 1200 bytes", 1, guidance.ToolResultFacts{})
 	if strings.Contains(plain, "EDITORCONFIG_MISMATCH") {
 		t.Fatalf("a write with no stated mismatch carried the card:\n%s", plain)

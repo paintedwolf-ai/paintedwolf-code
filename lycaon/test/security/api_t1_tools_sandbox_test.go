@@ -2,6 +2,8 @@ package security
 
 import (
 	"context"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -12,7 +14,6 @@ import (
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	workflowstatetools "github.com/lycaon/lycaon/internal/workflow/statetools"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
 func TestStateToolsRespectProjectDir(t *testing.T) {

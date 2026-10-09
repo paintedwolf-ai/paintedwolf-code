@@ -353,6 +353,8 @@ func (s *storeCore) touch(now time.Time) {
 	_ = os.Chtimes(s.file, now, now)
 }
 
+// SuspendProjectStores retires in-memory projection stores for a parked project
+// while keeping the persisted SQLite generation files intact on disk.
 func (c *TreeStores) SuspendProjectStores(projectID string) {
 	if c == nil {
 		return
@@ -396,7 +398,8 @@ func (c *TreeStores) evictTreeStores(keep string) {
 	}
 }
 
-// Drain waits for admitted catalog work to settle.
+// Drain cancels in-flight catalog builds and waits for them and the tree
+// stores to settle, or for ctx to end.
 func (c *Catalog) Drain(ctx context.Context) error {
 	if c == nil {
 		return nil

@@ -33,7 +33,7 @@ func LedgerRequest(t *testing.T, srv *hostapi.Server, method, target, body strin
 func LedgerTestProject(t *testing.T) (*hostapi.Server, api.Project) {
 	t.Helper()
 	dir := t.TempDir()
-	testutil.FailErr(t, "write source", os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main\n"), 0o644))
+	testutil.FailErr(t, "write source", os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main\n"), 0o600))
 
 	store := scan.NewSQLStore(testdbfixture.Open(t, "ledger-routes.db"))
 	coord := scantest.Coordinator(t, store, nil)

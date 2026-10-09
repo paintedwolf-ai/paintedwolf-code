@@ -32,7 +32,7 @@ func (l *LoopEngine) DisarmTimerBackstop(ctx context.Context, sessionID string) 
 	if l == nil {
 		return
 	}
-	st := l.sleepState(sessionID)
+	st := l.sleep.state(sessionID)
 	st.mu.Lock()
 	cancelSleepTimerLocked(st)
 	if len(st.waitTriggers) == 0 {

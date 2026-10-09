@@ -1,3 +1,5 @@
+//go:build integration
+
 package sessioncontracts
 
 import (
@@ -25,7 +27,7 @@ import (
 func TestHandleCostSummarySessionBreakdown(t *testing.T) {
 	tracker := costtest.NewTracker(t, nil)
 	store := store.NewMemory()
-	mgr := session.NewManagerWithLLMService(store, llm.NewMockProvider(nil), nil, tools.NewStubRegistry(), settings.DefaultSessionLimits(), tracker)
+	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: tracker}, tools.NewStubRegistry())
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: store, Projects: project.NewMemoryRegistry(), Sessions: mgr}}), nil, hostapi.TestAPIToken)
 
 	parent, err := store.Create(t.Context(), wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, testdbseed.DefaultProjectID)
@@ -65,7 +67,7 @@ func TestHandleCostSummaryProjectBreakdown(t *testing.T) {
 	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	tracker := costtest.NewTracker(t, nil)
 	store := store.NewMemory()
-	mgr := session.NewManagerWithLLMService(store, llm.NewMockProvider(nil), nil, tools.NewStubRegistry(), settings.DefaultSessionLimits(), tracker)
+	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: tracker}, tools.NewStubRegistry())
 	reg := project.NewMemoryRegistry()
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: store, Projects: reg, Sessions: mgr}}), nil, hostapi.TestAPIToken)
 
@@ -109,7 +111,7 @@ func TestHandleProjectCostReportIncludesSessionBreakdownAndArchivedChats(t *test
 	sqlDB := testdbfixture.Open(t, "cost-report.db")
 	tracker := &contractfixture.ProjectReportCountingTracker{CostTracker: cost.NewSQLTracker(sqlDB, nil)}
 	memStore := store.NewSQL(sqlDB)
-	mgr := session.NewManagerWithLLMService(memStore, llm.NewMockProvider(nil), nil, tools.NewStubRegistry(), settings.DefaultSessionLimits(), tracker)
+	mgr := session.NewHost(memStore, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: tracker}, tools.NewStubRegistry())
 	reg := project.NewSQLRegistry(sqlDB)
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: memStore, Projects: reg, Sessions: mgr}}), nil, hostapi.TestAPIToken)
 
@@ -128,7 +130,7 @@ func TestHandleProjectCostReportIncludesSessionBreakdownAndArchivedChats(t *test
 		Posture: wire.SessionPostureVet, ProjectID: p.ID,
 	}, "")
 	testutil.FailErr(t, "create second session", err)
-	_, err = mgr.SetArchived(t.Context(), second.ID, true)
+	_, err = mgr.Chats.SetArchived(t.Context(), second.ID, true)
 	testutil.FailErr(t, "archive second session", err)
 
 	firstUSD, childUSD, secondUSD, utilityUSD, retiredUSD := 0.40, 0.10, 0.20, 0.05, 0.15

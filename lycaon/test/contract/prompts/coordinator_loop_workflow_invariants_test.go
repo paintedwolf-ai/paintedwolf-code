@@ -2,6 +2,8 @@ package contract
 
 import (
 	"context"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/llm"
@@ -20,7 +22,6 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/workflowfixture"
-	"testing"
 )
 
 func TestHumanInputPhasesLatchPendingOnEnter(t *testing.T) {
@@ -46,10 +47,10 @@ func TestHumanInputScaffoldDeniesCoordinatorLoop(t *testing.T) {
 
 	store := store.NewSQL(sqlDB)
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ack"}}}))
-	mgr := session.NewManager(store, rec, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	agents := orchestration.NewMemoryAgentRegistry()
 	contractcheck.FailErr(t, "LoadRequiredAgentRegistry", orchestration.LoadRequiredAgentRegistry(ctx, agents))
-	mgr.SetAgentRegistry(agents)
+	mgr.Profiles.SetAgentRegistry(agents)
 
 	manifestRegistry, err := workflowdef.RegistryFromDirs("")
 	contractcheck.FailErr(t, "workflow.RegistryFromDirs failed", err)
@@ -82,13 +83,13 @@ func TestHumanInputScaffoldDeniesCoordinatorLoop(t *testing.T) {
 					Sessions: store, SessionID: sess.ID, Manifest: m, PhaseID: phase.ID,
 				})
 				contractcheck.FailErr(t, "workflowphases.ApplyPhaseOnEnter failed", err)
-				if err := wfMgr.Store.CommitState(ctx, run, dir, vars); err != nil {
+				if err := wfMgr.Store.State.CommitState(ctx, run, dir, vars); err != nil {
 					contractcheck.FailErr(t, "wfMgr.Store.CommitState failed", err)
 				}
 				if !scaffoldvars.HasPendingUserInput(vars) {
 					t.Fatal("expected pending user input scaffold")
 				}
-				allow, reason, err := mgr.ShouldLoopWake(ctx, sess.ID, anchor.LegFinished)
+				allow, reason, err := mgr.Coordinator.Runtime.CoordinatorLoop().ShouldLoopWake(ctx, sess.ID, anchor.LegFinished)
 				contractcheck.FailErr(t, "mgr.ShouldLoopWake failed", err)
 				if allow {
 					t.Fatalf("loop wake allowed during human input phase %q", phase.ID)

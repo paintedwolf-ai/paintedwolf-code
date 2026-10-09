@@ -2,16 +2,19 @@ package usernotice
 
 import (
 	"errors"
-	"github.com/lycaon/lycaon/internal/llm/failure"
-	"github.com/lycaon/lycaon/internal/llm/providerretry"
-	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/workflow/runstate"
-	wire "github.com/lycaon/lycaon/pkg/api"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
 	"unicode/utf8"
+
+	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/llm/failure"
+	"github.com/lycaon/lycaon/internal/llm/providerretry"
+	"github.com/lycaon/lycaon/internal/session/spendguard"
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
+	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestContextFromPromptErrorProvider(t *testing.T) {
@@ -106,18 +109,35 @@ func TestContextFromPromptErrorNotRunnable(t *testing.T) {
 	}
 }
 
+// The notice names the exact version a run is pinned to, even when the error
+// arrives wrapped by the turn that hit it.
+func TestWorkflowVersionUnavailableNoticeNamesThePinnedVersion(t *testing.T) {
+	err := fmt.Errorf("prompt turn: %w", &runstate.WorkflowVersionUnavailableError{WorkflowID: "security-survey", Version: "1.0.0"})
+	ctx := ContextFromPromptError(err)
+	if ctx["workflow_id"] != "security-survey" || ctx["version"] != "1.0.0" {
+		t.Fatalf("ctx = %#v", ctx)
+	}
+	copy := loadTestCatalog(t).RenderWire(string(wire.NoticeCodeWorkflowVersionUnavailable), ctx)
+	if !strings.Contains(copy.Message, "security-survey@1.0.0") {
+		t.Fatalf("notice does not name the pinned version: %q", copy.Message)
+	}
+	if blank := ContextFromPromptError(&runstate.WorkflowVersionUnavailableError{}); len(blank) != 0 {
+		t.Fatalf("an unidentified version must render the generic copy, got ctx %#v", blank)
+	}
+}
+
 func TestContextFromPromptErrorGeneric(t *testing.T) {
 	ctx := ContextFromPromptError(errors.New("boom"))
 	if ctx["detail"] != "boom" {
 		t.Fatalf("generic error ctx = %#v want detail=boom", ctx)
 	}
-	if ctx := ContextFromPromptError(session.ErrGroundingEscalated); len(ctx) != 0 {
+	if ctx := ContextFromPromptError(guidance.ErrGroundingEscalated); len(ctx) != 0 {
 		t.Fatalf("grounding ctx = %#v want empty map", ctx)
 	}
 }
 
 func TestContextFromSpendCeilingErrorDisclosesPartialPricing(t *testing.T) {
-	ctx := ContextFromPromptError(&session.SessionSpendCeilingReached{
+	ctx := ContextFromPromptError(&spendguard.CeilingReached{
 		CeilingUSD: 5, SpentUSD: 5.12, Coverage: wire.CostEstimateLowerBound, UnpricedTokens: 100, UnknownChargedCalls: 2,
 	})
 	if ctx["ceiling_usd"] != "5.00" || ctx["spent_usd"] != "5.12" || ctx["estimate_coverage"] != "lower_bound" || ctx["unpriced_tokens"] != 100 || ctx["unknown_charged_calls"] != 2 {

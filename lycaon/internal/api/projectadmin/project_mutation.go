@@ -7,7 +7,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/project"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/projectcontrol"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -59,7 +59,7 @@ func (s *Projects) queryForce(w http.ResponseWriter, r *http.Request) (bool, boo
 	return force, true
 }
 
-func (s *Projects) writeRootBusy(w http.ResponseWriter, dependents session.RootDependents) {
+func (s *Projects) writeRootBusy(w http.ResponseWriter, dependents projectcontrol.RootDependents) {
 	details := dependents.Details()
 
 	s.responses.FailDetails(w, wire.ApiErrorCodeRootBusy, details, "folder has in-flight dependents")

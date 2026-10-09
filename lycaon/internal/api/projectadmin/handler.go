@@ -40,7 +40,7 @@ type Deps struct {
 	ProjectRules   *rules.ProjectRulesOverlay
 	ScanCadence    *scancadence.Service
 	Store          session.Store
-	Sessions       *session.Manager
+	Sessions       *session.Host
 	Settings       *settings.Service
 	// WorkerSeedRoot and WorkerBranchRoot hold host-only worker storage.
 	WorkerSeedRoot   string
@@ -67,7 +67,7 @@ type Projects struct {
 	MutationGate    *project.MutationGate
 	Registry        project.Registry
 	Roots           *Roots
-	Sessions        *session.Manager
+	Sessions        *session.Host
 	Settings        *settings.Service
 	Store           session.Store
 	Verification    *Verification
@@ -81,7 +81,7 @@ type Promotion struct {
 	Projects     *Projects
 	Registry     project.Registry
 	Roots        *Roots
-	Sessions     *session.Manager
+	Sessions     *session.Host
 	Verification *Verification
 	responses    *httpio.Responder
 	sourceViews  *sourceapi.Views
@@ -97,7 +97,7 @@ type Removal struct {
 	Registry       project.Registry
 	Owner          *projectremoval.Owner
 	Roots          *Roots
-	Sessions       *session.Manager
+	Sessions       *session.Host
 	Settings       *settings.Service
 	WorkerSeedRoot string
 	responses      *httpio.Responder
@@ -114,7 +114,7 @@ type Roots struct {
 	Registry        project.Registry
 	Sandboxes       *Sandboxes
 	ScanCadence     *scancadence.Service
-	Sessions        *session.Manager
+	Sessions        *session.Host
 	Settings        *settings.Service
 	Store           session.Store
 	Verification    *Verification
@@ -129,7 +129,7 @@ type Roots struct {
 
 type Sandboxes struct {
 	Board                   *board.SnapshotBuilder
-	Sessions                *session.Manager
+	Sessions                *session.Host
 	WorkerBranchRoot        string
 	Workers                 worker.WorkerQueue
 	background              *taskgroup.Group
@@ -158,7 +158,7 @@ type Verification struct {
 	Events               events.ReplayHub
 	LLMService           *llm.Service
 	Registry             project.Registry
-	Sessions             *session.Manager
+	Sessions             *session.Host
 	Settings             *settings.Service
 	background           *taskgroup.Group
 	verifyDetectInFlight sync.Map

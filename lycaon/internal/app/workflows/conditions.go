@@ -12,8 +12,9 @@ import (
 	"github.com/lycaon/lycaon/internal/rules"
 	"github.com/lycaon/lycaon/internal/scan"
 	scancfg "github.com/lycaon/lycaon/internal/scan/configuration"
-	"github.com/lycaon/lycaon/internal/session"
 	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
+	"github.com/lycaon/lycaon/internal/session/profiles"
+	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/sourcesnapshot"
 	"github.com/lycaon/lycaon/internal/vocabulary"
@@ -36,7 +37,7 @@ type ConditionDependencies struct {
 	Checkpoints             hitl.CheckpointManager
 	WorkerQueue             *worker.SQLQueue
 	Agents                  *orchestration.MemoryAgentRegistry
-	Postures                *session.PostureRegistry
+	Postures                *profiles.PostureRegistry
 	EffectiveCatalog        *extpacks.EffectiveCatalog
 	TestTemplatesDir        string
 	ProjectSettingsGate     *settings.ProjectSurfaceGate
@@ -69,7 +70,7 @@ func (r *Runtime) BuildConditions(ctx context.Context, deps ConditionDependencie
 		SecurityScannersEnabled: deps.SecurityScannersEnabled,
 		ApprovalDenied:          deps.Checkpoints.SessionApprovalDenied,
 		WorkerCycleIdle: func(projectID, sessionID, completingJobID string) (bool, error) {
-			return session.ParentSessionWorkerCycleIdle(ctx, deps.WorkerQueue, projectID, sessionID, completingJobID)
+			return workeroutcomes.ParentSessionWorkerCycleIdle(ctx, deps.WorkerQueue, projectID, sessionID, completingJobID)
 		},
 		ChildRunStatus: func(parentRunID string) (string, bool) {
 			child, cErr := r.Store.Runs.LatestChildByParentRunID(ctx, parentRunID)

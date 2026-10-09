@@ -12,11 +12,11 @@ import (
 	"github.com/lycaon/lycaon/internal/catalogview"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/extensionstate"
-	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/extpackstest"
 	"github.com/lycaon/lycaon/internal/testutil/extstatetest"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -56,14 +56,7 @@ func NewContributionHTTPTestServer(t *testing.T) *hostapi.Server {
 	t.Helper()
 	srv := NewTestServer(t)
 	root := configlayout.FindModuleRoot()
-	boot := extpacks.Resolve(t.Context(), extpacks.ResolveInput{
-		Packs: func() []extpacks.PackContent {
-			content, err := extpacks.DiscoverStockContent()
-			testutil.FailErr(t, "discover stock content", err)
-			return content
-		}(),
-		Desired: extpacks.EmptyDesired(),
-	})
+	boot := extpackstest.StockCatalog(t)
 	srv.Admin.SessionAdmin.Lifecycle.Sessions.SetEffectiveCatalogDeps(root, boot, nil)
 	srv.Admin.SessionAdmin.Lifecycle.Sessions.Catalog().SetCatalogViewCache(catalogview.NewCache(root, slog.Default()))
 	return srv
@@ -86,11 +79,11 @@ func WithExtensionOwner(t *testing.T) TestDeps {
 func WriteAPIMetaLeaf(t *testing.T, suite, leaf, id string) {
 	t.Helper()
 	dir := filepath.Join(suite, leaf)
-	testutil.FailErr(t, "mkdir", os.MkdirAll(filepath.Join(dir, "guidance"), 0o755))
+	testutil.FailErr(t, "mkdir", os.MkdirAll(filepath.Join(dir, "guidance"), 0o750))
 	testutil.FailErr(t, "manifest", os.WriteFile(filepath.Join(dir, "extension.yaml"), []byte(
 		"manifest_version: 1\nid: "+id+"\nname: "+leaf+"\nversion: 1.0.0\ncompatibility:\n  extension_api: \"^1.0.0\"\n",
-	), 0o644))
-	testutil.FailErr(t, "guidance", os.WriteFile(filepath.Join(dir, "guidance", leaf+".md"), []byte("# "+leaf+"\n"), 0o644))
+	), 0o600))
+	testutil.FailErr(t, "guidance", os.WriteFile(filepath.Join(dir, "guidance", leaf+".md"), []byte("# "+leaf+"\n"), 0o600))
 }
 
 func WriteAPIMetaSuite(t *testing.T, suite, metaID string, leaves ...string) {
@@ -103,5 +96,5 @@ func WriteAPIMetaSuite(t *testing.T, suite, metaID string, leaves ...string) {
 	testutil.FailErr(t, "meta.yaml", os.WriteFile(filepath.Join(suite, "meta.yaml"), []byte(
 		"manifest_version: 1\nid: "+metaID+"\nname: Kit\nversion: \"1.0.0\"\n"+
 			"compatibility:\n  extension_api: \"^1.0.0\"\nmembers:\n"+members+"conflicts_with: []\nextends: []\n",
-	), 0o644))
+	), 0o600))
 }

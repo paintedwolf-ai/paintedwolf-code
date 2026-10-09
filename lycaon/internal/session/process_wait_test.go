@@ -14,21 +14,20 @@ import (
 
 func TestCommandCompletionWakesWorkerProcessWait(t *testing.T) {
 	memory := store.NewMemory()
-	mgr := NewManager(memory, nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(memory, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	sess, err := memory.Create(t.Context(), api.CreateSessionRequest{}, "")
 	testutil.FailErr(t, "create waiting worker session", err)
 	testutil.FailErr(t, "mark worker session", memory.UpdateSession(t.Context(), sess.ID, func(s *api.Session) {
 		s.ParentSessionID = "parent"
 	}))
-	loop := mgr.ensureCoordinatorRuntime().CoordinatorLoop()
-	loop.SetDeps(loopwake.LoopDeps{GetSession: memory.Get})
+	loop := mgr.Coordinator.Runtime.CoordinatorLoop()
 	loop.EnterSleep(t.Context(), sess.ID, time.Time{}, "waiting for command completion",
 		[]loopwake.WaitTrigger{loopwake.WaitTriggerProcessDone}, []string{"command-1"}, loopwake.SleepMoverHost)
-	mgr.HandleCommandCompletion(t.Context(), bgprocess.Completion{SessionID: sess.ID, Handle: "other"})
+	mgr.Processes.HandleCommandCompletion(t.Context(), bgprocess.Completion{SessionID: sess.ID, Handle: "other"})
 	if !loop.IsSleeping(sess.ID) {
 		t.Fatal("unrelated completion broke worker wait")
 	}
-	mgr.HandleCommandCompletion(t.Context(), bgprocess.Completion{SessionID: sess.ID, Handle: "command-1"})
+	mgr.Processes.HandleCommandCompletion(t.Context(), bgprocess.Completion{SessionID: sess.ID, Handle: "command-1"})
 	if loop.IsSleeping(sess.ID) {
 		t.Fatal("worker wait ignored command completion")
 	}

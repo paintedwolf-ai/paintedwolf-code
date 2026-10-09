@@ -24,7 +24,10 @@ func (m *Reports) CheckRunReportDocument(ctx context.Context, sessionID string, 
 	if err != nil {
 		return nil, err
 	}
-	verdicts := workflowpresentation.ReviewVerdicts(ctx, m.Verdicts, run, manifest)
+	verdicts, err := workflowpresentation.ReviewVerdicts(ctx, m.Verdicts, run, manifest)
+	if err != nil {
+		return nil, err
+	}
 	return workflowreview.CheckReportDocument(report, workflowreview.ReportDocumentFacts{
 		Brief:     manifest.ReportBrief(),
 		Claims:    workflowpresentation.ReconcileClaims(verdicts),

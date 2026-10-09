@@ -7,8 +7,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/findings"
-	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
+	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -23,8 +23,8 @@ func (s *Conversation) handleSessionFindings(w http.ResponseWriter, r *http.Requ
 		s.responses.InternalError(w, r, err)
 		return
 	}
-	root := session.RootSessionID(r.Context(), s.sessionStore, sess.ID)
-	rows, err := s.sessions.ListFindings(r.Context(), root, findings.DefaultListCap)
+	root := sessiontree.RootID(r.Context(), s.sessionStore, sess.ID)
+	rows, err := s.sessions.Workers.Notes.ListFindings(r.Context(), root, findings.DefaultListCap)
 	if err != nil {
 		s.responses.InternalError(w, r, err)
 		return

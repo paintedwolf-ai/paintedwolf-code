@@ -42,7 +42,7 @@ func (s *Verification) detectVerifyAsync(parent context.Context, projectID strin
 			Scope:      llm.SettingsScopeProject,
 			ProjectID:  projectID,
 			ProjectDir: primary,
-			Cost:       s.Sessions.CostTracker(),
+			Cost:       s.Sessions.Coordinator.Model.Cost,
 			// An unavailable model leaves the proposal unset.
 			Fallback: compaction.UnavailableSummarizer{},
 			Purpose:  "verify_detect",

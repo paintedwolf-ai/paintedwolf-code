@@ -3,6 +3,8 @@ package workflowadmin
 import (
 	"context"
 	"errors"
+	"net/http"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
@@ -10,7 +12,6 @@ import (
 	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
 	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"net/http"
 )
 
 func (s *Composition) HandleComposeWorkflow(w http.ResponseWriter, r *http.Request) {
@@ -65,7 +66,7 @@ func (s *Composition) HandleComposeWorkflow(w http.ResponseWriter, r *http.Reque
 }
 
 func (s *Composition) queueComposeKick(ctx context.Context, sessionID string) {
-	s.Sessions.Emit(ctx, sessionID, anchor.ComposeDone, anchor.Envelope{})
+	s.Sessions.Coordinator.Guidance.Emit(ctx, sessionID, anchor.ComposeDone, anchor.Envelope{})
 }
 
 func (s *Composition) HandleListWorkflowTemplates(w http.ResponseWriter, r *http.Request) {

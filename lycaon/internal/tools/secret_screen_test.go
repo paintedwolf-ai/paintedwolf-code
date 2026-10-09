@@ -241,7 +241,7 @@ func TestAskSecretScreenUsesAttributionAndNeverStoresValue(t *testing.T) {
 	if mgr.req.ProposedAction == nil {
 		t.Fatal("missing proposed action")
 	}
-	args := mgr.req.ProposedAction.Args
+	args := mgr.req.ProposedAction.Invocation.Args
 	blob := strings.Join([]string{
 		mgr.req.Title,
 		stringifyAny(args["surface"]),

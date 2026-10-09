@@ -6,18 +6,15 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/workercloseout"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
+	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // GracefulCancelSession supports graceful worker cancellation closeout.
-type GracefulCancelSession interface {
-	// RegisterWorkerGracefulCancel records a pending graceful cancel.
-	RegisterWorkerGracefulCancel(childSessionID, jobID, reason string) error
-	AppendWorkerCancellation(ctx context.Context, parentID string, in session.WorkerCancellationInput) error
-	NotifyWorkerCycleTerminal(ctx context.Context, parentSessionID, jobID string)
+type TerminalNotice interface {
+	Terminal(ctx context.Context, parentSessionID, jobID string)
 }
 
 // completeGracefulStop records the child closeout and parent cancellation.
@@ -36,7 +33,7 @@ func (e *LocalWorkerExecutor) completeGracefulStop(
 		return api.WorkerResult{}, fmt.Errorf("worker task missing parent_session_id")
 	}
 
-	outcome, err := workercloseout.FinalizeWorkerSummaryForCanceled(ctx, e.Sessions, child.ID, task.AgentType, cancelReason, finalizeOpts)
+	outcome, err := workercloseout.FinalizeWorkerSummaryForCanceled(ctx, e.Transcripts, e.Prompts, child.ID, task.AgentType, cancelReason, finalizeOpts)
 	if err != nil {
 		return api.WorkerResult{}, err
 	}
@@ -66,7 +63,7 @@ func (e *LocalWorkerExecutor) completeGracefulStop(
 	completionReport.LegStatus = "partial"
 	result.CompletionReport = workercompletion.ReportWire(completionReport)
 
-	if err := e.Sessions.AppendWorkerCancellation(ctx, parentID, session.WorkerCancellationInput{
+	if err := e.WorkerCancellations.Append(ctx, parentID, workeroutcomes.CancellationInput{
 		JobID:            task.ID,
 		AgentType:        task.AgentType,
 		ChildSessionID:   child.ID,
@@ -79,4 +76,12 @@ func (e *LocalWorkerExecutor) completeGracefulStop(
 	}
 
 	return result, nil
+}
+
+type WorkerCancellationProjection interface {
+	Append(context.Context, string, workeroutcomes.CancellationInput) error
+}
+type WorkerCancellationRuntime interface {
+	WorkerCancellationProjection
+	StopRuntime(context.Context, string) error
 }

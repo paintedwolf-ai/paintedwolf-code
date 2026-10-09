@@ -14,27 +14,25 @@ func TestReviewGuidanceFollowsLiveVerdictGate(t *testing.T) {
 		for _, pending := range []bool{false, true} {
 			for _, staged := range []bool{false, true} {
 				t.Run(fmt.Sprintf("%s/pending=%v/staged=%v", id, pending, staged), func(t *testing.T) {
-					mgr := NewManager(store.NewMemory(), nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
-					workflowFixture1 := verdictPendingView{pending: true}
-					mgr.workflows = &WorkflowDomains{Policy: workflowFixture1}
-					kicks := mgr.ensureCoordinatorRuntime().Kicks()
+					mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+					mgr.SetWorkflowDomains(workflowDomainFixture(verdictPendingView{pending: true}))
+					kicks := mgr.Coordinator.Runtime.Kicks()
 					review := anchor.InformRender(id)
 					other := anchor.InformRender(anchor.ComposeDone)
 					kicks.QueueDeferred("review-session", review)
 					kicks.QueueDeferred("review-session", other)
 					kicks.QueueDeferred("other-session", review)
 					if staged {
-						if got := kicks.TakePendingKickIDUnless("review-session", mgr.coordinatorKickCleared(t.Context(), "review-session")); got != review {
+						if got := kicks.TakePendingKickID("review-session"); got != review {
 							t.Fatalf("open review guidance = %q, want %q", got, review)
 						}
 					}
-					workflowFixture2 := verdictPendingView{pending: pending}
-					mgr.workflows = &WorkflowDomains{Policy: workflowFixture2}
+					mgr.SetWorkflowDomains(workflowDomainFixture(verdictPendingView{pending: pending}))
 					want := other
 					if pending {
 						want = review
 					}
-					if got := mgr.coordinatorKickIDs(t.Context(), "review-session"); len(got) == 0 || got[0] != want {
+					if got := mgr.Coordinator.Guidance.PendingIDs(t.Context(), "review-session"); len(got) == 0 || got[0] != want {
 						t.Fatalf("guidance = %v, want %q first for current verdict gate", got, want)
 					}
 					if got, ok := kicks.PeekPendingKickID("other-session"); !ok || got != review {

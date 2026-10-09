@@ -33,7 +33,7 @@ type heldToolCall struct {
 // runHeldToolCall runs a detachable call. A call that settles inside its
 // budget returns exactly as an ordinary call does. One that does not returns a
 // running result and a handle, and keeps running under the host's context.
-func (l toolBatch) runHeldToolCall(
+func (l *toolBatch) runHeldToolCall(
 	ctx context.Context,
 	sess *api.Session,
 	tc api.ToolCall,
@@ -43,13 +43,13 @@ func (l toolBatch) runHeldToolCall(
 	// The supervised call writes settled before it finishes; the caller reads it
 	// only after the call settles inside the budget.
 	var settled toolInvocation
-	screened, _ := toolInvocations(l).storageSafeMessage(ctx, api.Message{ToolCalls: []api.ToolCall{tc}})
+	screened, _ := l.Projection.storageSafeMessage(ctx, api.Message{ToolCalls: []api.ToolCall{tc}})
 	visible := messageview.RedactMessage(screened)
 	title := strings.ReplaceAll(tc.Name, "_", " ")
 	if detail := toolpresentation.Title(tc.Name, visible.ToolCalls[0].Args); detail != "" {
 		title += " · " + detail
 	}
-	outcome, err := l.Deps.HeldCalls.Run(ctx, heldcall.Spec{
+	outcome, err := l.Tools.Deps.HeldCalls.Run(ctx, heldcall.Spec{
 		DisplayTitle: title,
 		ProjectID:    sess.ProjectID, SessionID: sess.ID, ToolCallID: tc.ID, Tool: tc.Name,
 		ArgsDigest: held.argsDigest, Budget: l.heldCallBudget(),
@@ -66,9 +66,9 @@ func (l toolBatch) runHeldToolCall(
 	return heldRunning(tc.Name, outcome, held)
 }
 
-func (l toolBatch) heldCallBudget() time.Duration {
-	if l.Deps.HeldCallBudget > 0 {
-		return l.Deps.HeldCallBudget
+func (l *toolBatch) heldCallBudget() time.Duration {
+	if l.Tools.Deps.HeldCallBudget > 0 {
+		return l.Tools.Deps.HeldCallBudget
 	}
 	return heldcall.DefaultBudget
 }
@@ -99,7 +99,7 @@ func heldRunning(tool string, outcome heldcall.Outcome, held heldToolCall) toolI
 }
 
 // refuseHeldCall renders a duplicate or over-capacity call as a host refusal.
-func (l toolBatch) refuseHeldCall(
+func (l *toolBatch) refuseHeldCall(
 	ctx context.Context,
 	sess *api.Session,
 	tc api.ToolCall,
@@ -123,7 +123,7 @@ func (l toolBatch) refuseHeldCall(
 		refused.receipt, refused.contract = held.receipt, held.contract
 		return refused
 	}
-	refused := refusedInvocation(toolInvocations(l).rejectToolOccurrence(ctx, sess, tc, toolCtx, code, data))
+	refused := refusedInvocation(l.Tools.rejectToolOccurrence(ctx, sess, tc, toolCtx, code, data))
 	refused.receipt, refused.contract = held.receipt, held.contract
 	return refused
 }

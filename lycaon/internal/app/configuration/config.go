@@ -37,6 +37,9 @@ type Config struct {
 	TestWorkflowTemplatesDir string
 	// TestScanRegistry, when set, replaces bundled scanners for deterministic scan tests.
 	TestScanRegistry scan.CodeScannerRegistry
+	// TestAdvisoryDatabase, when set, is the OSV export bundled dependency
+	// scanners match against without contacting the advisory endpoint.
+	TestAdvisoryDatabase string
 	// TestCostPricer, when set, replaces NoopPricer in tests.
 	TestCostPricer cost.Pricer
 	// TestSessionLimits supplies session limits in tests.

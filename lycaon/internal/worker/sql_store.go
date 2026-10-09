@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"database/sql"
+
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/worker/jobstate"
 )

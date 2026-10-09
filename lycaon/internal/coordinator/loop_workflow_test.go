@@ -2,13 +2,14 @@ package coordinator_test
 
 import (
 	"context"
+	"testing"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/scaffoldvars"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
-	"time"
 )
 
 func TestLoopEvaluateDeniesWhenDisabled(t *testing.T) {
@@ -123,7 +124,7 @@ func TestLoopShouldLoopWakeHumanApprovalAwaiting(t *testing.T) {
 		}},
 	})
 	engine.SetDeps(deps)
-	allow, reason, err := engine.ShouldLoopWake(context.Background(), "s1", anchor.LegFinished)
+	allow, reason, err := engine.Coordinator.Runtime.CoordinatorLoop().ShouldLoopWake(context.Background(), "s1", anchor.LegFinished)
 	if err != nil || allow || reason != "human_approval_awaiting" {
 		t.Fatalf("allow=%v reason=%q err=%v", allow, reason, err)
 	}
@@ -144,7 +145,7 @@ func TestLoopShouldLoopWakeIgnoresApprovePhaseName(t *testing.T) {
 		run: &api.WorkflowRun{ID: "run-1", Status: api.WorkflowRunStatusRunning, CurrentPhase: "approve"},
 	})
 	engine.SetDeps(deps)
-	allow, reason, err := engine.ShouldLoopWake(context.Background(), "s1", anchor.LegFinished)
+	allow, reason, err := engine.Coordinator.Runtime.CoordinatorLoop().ShouldLoopWake(context.Background(), "s1", anchor.LegFinished)
 	if err != nil {
 		t.Fatalf("ShouldLoopWake: %v", err)
 	}

@@ -2,11 +2,14 @@ package contract
 
 import (
 	"context"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/authzcontext"
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/rules"
 	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -16,7 +19,6 @@ import (
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
-	"testing"
 )
 
 func TestPlanWorkflowPostureLifecycleContract(t *testing.T) {
@@ -39,7 +41,7 @@ func TestPlanWorkflowPostureLifecycleContract(t *testing.T) {
 	}
 	assertSessionPosture(t, ctx, sessStore, "sess-posture", api.SessionPostureSpec)
 
-	run, err = mgr.Advance(ctx, run.ID)
+	run, err = mgr.Phases.Advance(ctx, run.ID)
 	if err != nil {
 		t.Fatalf("advance expand: %v", err)
 	}
@@ -62,8 +64,8 @@ func TestPlanWorkflowPostureLifecycleContract(t *testing.T) {
 }
 
 func TestPostureRuleBehaviorMatrix(t *testing.T) {
-	postures, err := session.LoadPostureRegistry()
-	contractcheck.FailErr(t, "session.LoadPostureRegistry failed", err)
+	postures, err := profiles.LoadPostureRegistry()
+	contractcheck.FailErr(t, "profiles.LoadPostureRegistry failed", err)
 	packs, err := rules.LoadBundledRules()
 	contractcheck.FailErr(t, "rules.LoadBundledRules failed", err)
 	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{})

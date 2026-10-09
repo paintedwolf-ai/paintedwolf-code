@@ -51,7 +51,7 @@ func (r *Runtime) BuildWorkers(ctx context.Context, deps Dependencies) error {
 	r.InjectRenderer = prompts.NewInjectRenderer(deps.Sessions.PromptEngine)
 	r.Executor = worker.NewLocalWorkerExecutor(deps.Sessions.Manager, r.Queue)
 	r.Executor.Waits = &awaitstore.Store{DB: deps.Storage.Database}
-	r.Queue.SetSessionAdmission(deps.Sessions.Manager.WithSessionTreeAdmission)
+	r.Queue.SetSessionAdmission(deps.Sessions.Manager.Chats.Gate.WithSessionTreeAdmission)
 	r.Executor.SetPromptInjects(r.InjectRenderer)
 	r.Executor.SetPhaseTouchPaths(deps.Workflows.Manager.Ambient)
 	r.BranchRoot = enginepaths.WorkerBranchesRootUnder(deps.Storage.Directory)

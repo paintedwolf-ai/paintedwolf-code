@@ -56,8 +56,8 @@ export function createSearchResultNavigation(options: Options) {
         `[data-hit-key="${safe}"]`,
       );
       if (!target) return;
-      const motion = options.resultsViewport() ? scrollportMotionForViewport(options.resultsViewport()!) : undefined;
-      motion?.revealElement(target);
+      const viewport = options.resultsViewport();
+      if (viewport) scrollportMotionForViewport(viewport)?.revealElement(target);
     });
   };
 

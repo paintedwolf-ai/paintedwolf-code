@@ -441,12 +441,18 @@ func TestExactLeaseSilencesDetection(t *testing.T) {
 		}
 	}})
 	action := hitl.ProposedAction{
-		Tool:       "command",
-		Args:       map[string]any{"command": "aws s3 rm --recursive s3://x"},
-		ProjectDir: tmp,
-		SessionID:  "chat",
-		Contained:  hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressProxy, Roots: []string{tmp}},
-	}
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": "aws s3 rm --recursive s3://x"},
+},
+Scope: hitl.ActionScope{
+ProjectDir: tmp,
+SessionID: "chat",
+},
+Execution: hitl.ActionExecution{
+Contained: hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressProxy, Roots: []string{tmp}},
+},
+}
 	offer := hitl.ExactActionSetOffer(action, []string{hitl.GrantKey(action)})
 	_, err = approvals.ApplyGrant(offer.Grant)
 	testutil.FailErr(t, "ApplyGrant", err)

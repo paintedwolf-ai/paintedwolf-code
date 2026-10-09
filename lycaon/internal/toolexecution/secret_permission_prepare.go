@@ -140,7 +140,7 @@ func approveSecretPermission(resolution *secretcap.Resolution, permission *hitl.
 
 // composeToolSecretReview joins disclosure to an ordinary action approval.
 func (e *Secrets) composeToolSecretReview(ctx context.Context, review *toolApprovalRaise, tc tools.ToolContext) (*hitl.SecretPermission, error) {
-	permission, err := e.prepareSecretPermission(ctx, review.Action.Tool, review.Action.Args, tc)
+	permission, err := e.prepareSecretPermission(ctx, review.Action.Invocation.Tool, review.Action.Invocation.Args, tc)
 	if err != nil || permission == nil {
 		return permission, err
 	}
