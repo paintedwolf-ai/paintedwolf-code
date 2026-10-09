@@ -16,8 +16,8 @@ on:
         default: all
         type: string
 
-permissions:
-  contents: read
+# The caller's token permissions apply: only merge-group CI grants actions write,
+# so a removed group's jobs can cancel their own run.
 
 env:
   # MLX 0.32 Metal kernels need the Xcode 26 toolchain; Linux runners ignore it.
@@ -69,6 +69,8 @@ jobs:
         with:
           fetch-depth: 0
 
+      - uses: ./.github/actions/merge-group-watch
+
       - uses: ./.github/actions/setup-verification
         with:
           setup: ${{ matrix.setup }}
@@ -84,7 +86,8 @@ jobs:
         env:
           LANE: ${{ matrix.lane }}
           SHARD: ${{ matrix.shard }}
-          OFFLINE: ${{ inputs.profile == 'integration' }}
+          # Admission runs with loopback networking only.
+          OFFLINE: ${{ inputs.profile == 'fast' || inputs.profile == 'integration' }}
           PYTHONPATH: scripts
         run: |
           if [[ "$OFFLINE" == true ]]; then

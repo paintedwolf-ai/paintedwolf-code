@@ -381,7 +381,8 @@ func TestTriggeredWorkflowsHoldBoundedRunners(t *testing.T) {
 	}
 }
 
-// Every bounded class at its widest, together with the merge queue's groups at their cap, fits the plan's runners.
+// Every bounded class at its widest, together with the merge queue's groups at their cap, fits the plan's
+// runners and leaves a ready pull request's fast tier a runner per job.
 func TestBoundedClassesFitTheHostedRunners(t *testing.T) {
 	t.Parallel()
 	plan := loadCapacityPlan(t)
@@ -402,8 +403,9 @@ func TestBoundedClassesFitTheHostedRunners(t *testing.T) {
 		total += count
 		macTotal += macos[group]
 	}
-	if total > plan.capacity.Runners {
-		t.Errorf("bounded classes %v and %d merge-queue jobs need %d runners; the plan runs %d", runners, queue, total, plan.capacity.Runners)
+	if fast := plan.capacity.MaxParallel["fast"]; total+fast > plan.capacity.Runners {
+		t.Errorf("bounded classes %v, %d merge-queue jobs, and a %d-job fast tier need %d runners; the plan runs %d",
+			runners, queue, fast, total+fast, plan.capacity.Runners)
 	}
 	if macTotal > plan.capacity.MacOSRunners {
 		t.Errorf("bounded classes %v need %d macOS runners; the plan runs %d", macos, macTotal, plan.capacity.MacOSRunners)

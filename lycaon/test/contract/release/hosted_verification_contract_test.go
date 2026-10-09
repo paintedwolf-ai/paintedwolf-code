@@ -19,19 +19,21 @@ type hostedStep struct {
 }
 
 type hostedJob struct {
-	Uses     string
-	Needs    yaml.Node
-	If       string
-	Timeout  string `yaml:"timeout-minutes"`
-	Continue bool   `yaml:"continue-on-error"`
-	With     map[string]string
-	Steps    []hostedStep
-	Strategy struct {
+	Uses        string
+	Permissions map[string]string
+	Needs       yaml.Node
+	If          string
+	Timeout     string `yaml:"timeout-minutes"`
+	Continue    bool   `yaml:"continue-on-error"`
+	With        map[string]string
+	Steps       []hostedStep
+	Strategy    struct {
 		FailFast *bool `yaml:"fail-fast"`
 	}
 }
 
 type hostedWorkflow struct {
+	Permissions map[string]string
 	Concurrency struct {
 		Group  string
 		Cancel yaml.Node `yaml:"cancel-in-progress"`
@@ -115,71 +117,6 @@ func TestReusableVerificationFailsWithItsPlanOrAnyMatrixJob(t *testing.T) {
 		if strings.HasPrefix(step.Run, "python3 scripts/ci_verification.py run") && step.Continue {
 			t.Fatal("an unverified or failed lane must fail the reusable workflow")
 		}
-	}
-}
-
-// Pull requests and queue commits share admission; qualification follows main.
-func TestCIUsesSharedAdmissionAndSeparateQualification(t *testing.T) {
-	t.Parallel()
-	workflow := hostedWorkflowFile(t, "ci")
-	for _, event := range []string{"pull_request", "merge_group", "workflow_dispatch"} {
-		if _, ok := workflow.On[event]; !ok {
-			t.Errorf("CI must run on %s", event)
-		}
-	}
-	if _, ok := workflow.On["push"]; ok {
-		t.Error("the merge queue verifies what lands on main; a push run would repeat it")
-	}
-	var pullRequest struct {
-		Paths       []string
-		PathsIgnore []string `yaml:"paths-ignore"`
-	}
-	trigger := workflow.On["pull_request"]
-	contractcheck.FailErr(t, "decode pull_request trigger", trigger.Decode(&pullRequest))
-	if len(pullRequest.Paths)+len(pullRequest.PathsIgnore) > 0 {
-		t.Error("the required check must report on every pull request")
-	}
-	jobs := workflow.Jobs
-	if jobs["verification"].With["profile"] != "${{ github.event_name == 'workflow_dispatch' && 'check' || 'integration' }}" {
-		t.Error("pull requests and merge groups must share the integration profile")
-	}
-	if platform := jobs["platform"]; platform.Uses != "./.github/workflows/platform-verification.yml" ||
-		platform.If != "github.event_name == 'workflow_dispatch'" {
-		t.Error("manual CI dispatch must include platform qualification")
-	}
-	requireHostedGate(t, jobs, "check", []string{"verification", "platform"})
-	for _, step := range jobs["check"].Steps {
-		if strings.HasPrefix(step.Run, "python3 scripts/ci_verification.py gate") &&
-			(step.Env["SKIPPED"] != "${{ github.event_name != 'workflow_dispatch' && 'platform' || '' }}" ||
-				!strings.Contains(step.Run, `--skipped "$SKIPPED"`)) {
-			t.Error("admission may excuse only the separate platform qualification job")
-		}
-	}
-}
-
-// Drafts spend no verification runners, never pass the required check, and get
-// the fast tier once marked ready.
-func TestDraftPullRequestsWaitForReadyForReview(t *testing.T) {
-	t.Parallel()
-	workflow := hostedWorkflowFile(t, "ci")
-	var pullRequest struct{ Types []string }
-	trigger := workflow.On["pull_request"]
-	contractcheck.FailErr(t, "decode pull_request trigger", trigger.Decode(&pullRequest))
-	types := slices.Clone(pullRequest.Types)
-	slices.Sort(types)
-	if !slices.Equal(types, []string{"opened", "ready_for_review", "reopened", "synchronize"}) {
-		t.Errorf("pull request CI must run when a ready pull request changes and when a draft becomes ready, got %v", pullRequest.Types)
-	}
-	if workflow.Jobs["verification"].If != "${{ !github.event.pull_request.draft }}" {
-		t.Error("draft pull requests must not start verification")
-	}
-	refused := false
-	for _, step := range workflow.Jobs["check"].Steps {
-		refused = refused || strings.HasPrefix(step.Run, "python3 scripts/ci_verification.py gate") &&
-			step.Env["DRAFT"] == "${{ github.event.pull_request.draft == true }}" && strings.Contains(step.Run, `--draft "$DRAFT"`)
-	}
-	if !refused {
-		t.Error("the required check must refuse a draft rather than pass on skipped verification")
 	}
 }
 
@@ -314,9 +251,11 @@ func TestBrowserVerificationRetainsSuitesEvidenceAndCleanup(t *testing.T) {
 
 func TestHostedProfilesAndSetupAreReachable(t *testing.T) {
 	t.Parallel()
-	for _, workflow := range []string{"ci", "nightly"} {
-		if hostedJobs(t, workflow)["verification"].Uses != "./.github/workflows/verification.yml" {
-			t.Errorf("%s must invoke catalog verification", workflow)
+	for workflow, jobs := range map[string][]string{"ci": {"fast", "integration"}, "nightly": {"verification"}} {
+		for _, job := range jobs {
+			if hostedJobs(t, workflow)[job].Uses != "./.github/workflows/verification.yml" {
+				t.Errorf("%s/%s must invoke catalog verification", workflow, job)
+			}
 		}
 	}
 	if hostedJobs(t, "nightly")["verification"].With["profile"] != "nightly" {

@@ -20,8 +20,10 @@ from verification_plan import catalog, expand
 
 ROOT = Path(__file__).resolve().parent.parent
 PROFILES = {"fast", "check", "nightly", "release", "integration"}
-# Each profile on the left runs exactly the stages of the local gate on the right.
-GATES = {"fast": "check-fast", "check": "check"}
+# The check profile runs exactly the stages of the local gate of the same name.
+GATE = "check"
+# Ready pull requests run a quick subset of the local handoff gate; the merge queue runs the rest.
+FAST_GATE = "check-fast"
 # Output lines kept per failure in the job log and summary; the full logs travel with the evidence.
 EXCERPT_LINES = 60
 # Go's progress lines for tests that are running or passed; they bury a parallel package's failure.
@@ -57,13 +59,17 @@ def lanes():
             raise ValueError(f"CI lane {name} workers must be an integer from 1 through 8")
         if "shards" in lane and (type(lane["shards"]) is not int or not 2 <= lane["shards"] <= 8):
             raise ValueError(f"CI lane {name} shards must be an integer from 2 through 8")
-    for profile, gate in GATES.items():
-        expected = Counter(stage["name"] for stage in expand([gate]))
-        actual = Counter(stage["name"] for lane in values.values() if profile in lane["profiles"]
-                         for stage in expand(lane["targets"]))
-        if actual != expected:
-            raise ValueError(f"CI {profile} partition differs from {gate}: "
-                             f"missing={expected - actual}, extra={actual - expected}")
+    expected = Counter(stage["name"] for stage in expand([GATE]))
+    actual = Counter(stage["name"] for lane in values.values() if GATE in lane["profiles"]
+                     for stage in expand(lane["targets"]))
+    if actual != expected:
+        raise ValueError(f"CI {GATE} profile differs from the {GATE} gate: "
+                         f"missing={expected - actual}, extra={actual - expected}")
+    fast = Counter(stage["name"] for lane in values.values() if "fast" in lane["profiles"]
+                   for stage in expand(lane["targets"]))
+    extra = set(fast) - {stage["name"] for stage in expand([FAST_GATE])}
+    if not fast or extra or max(fast.values()) > 1:
+        raise ValueError(f"CI fast tier must run stages of {FAST_GATE} once each: extra={extra}, counts={dict(fast)}")
     expected = Counter(stage["name"] for stage in expand(["check"]) if stage["name"] != "build:cross")
     actual = Counter(stage["name"] for lane in values.values() if "integration" in lane["profiles"]
                      for stage in expand(lane["targets"]))
@@ -374,7 +380,7 @@ def main():
         scope = change() if args.affected else None
         if scope and os.environ.get("GITHUB_STEP_SUMMARY"):
             with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as summary:
-                summary.write("### Integration scope\n\n```json\n" + json.dumps(scope, indent=2) + "\n```\n")
+                summary.write("### Change scope\n\n```json\n" + json.dumps(scope, indent=2) + "\n```\n")
         print(json.dumps(matrix(args.profile, args.suite, scope), separators=(",", ":")))
     elif args.command == "max-parallel":
         print(max_parallel(args.profile))

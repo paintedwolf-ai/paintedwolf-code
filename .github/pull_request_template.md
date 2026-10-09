@@ -24,5 +24,5 @@
 ## Test plan
 
 <!-- What did you check while working, and how? Prefer scoped ./task targets
-     (test:digest, den:test:digest, …). CI runs check-fast here and the full
+     (test:digest, den:test:digest, …). CI runs a fast tier here and the full
      gate in the merge queue. -->
