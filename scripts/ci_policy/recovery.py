@@ -42,7 +42,7 @@ def evidence(run):
                 elif path.endswith('ci/failures.json') and isinstance(value, list):
                     failures.extend(value)
                 elif isinstance(value, dict):
-                    debt.extend(f for f in value.get('findings', []) if f.get('kind') == 'legacy_debt')
+                    debt.extend(f for f in value.get('findings', []) if f.get('kind') in {'legacy_debt', 'over_limit', 'over_cap'})
     return records, failures, debt
 
 
@@ -73,11 +73,6 @@ def propose_revert(run, failures):
     candidate = revert_candidate(run, commit, pulls, len(parent) == 1 and qualified(parent[0]['sha']), main)
     description = '\n'.join(f"- `{f.get('stage', '')}` / `{f.get('subject', '')}`: {', '.join(f.get('tests', []))}"
                             for f in failures[:30])
-    issue = ensure_issue(f'Qualification failed at {sha[:12]}',
-                         f"[Qualification evidence]({run['html_url']})\n\n{description}\n\n"
-                         + (f"Candidate introducing PR: #{candidate['number']}. Its parent passed qualification. "
-                            'The revert is a proposal for review, not proof that every failure is caused by this change.'
-                            if candidate else 'Attribution is ambiguous or main has advanced; investigate before reverting.'))
     if not candidate or not any(f.get("status") == "failed" for f in failures):
         return
     branch = 'automation/revert-' + sha[:12]
@@ -88,7 +83,7 @@ def propose_revert(run, failures):
     subprocess.run(['git', 'switch', '-c', branch, sha], check=True)
     result = subprocess.run(['git', 'revert', '--no-commit', sha], capture_output=True, text=True)
     if result.returncode:
-        print('Revert conflicts; the incident issue requires manual resolution.')
+        print('Revert conflicts; inspect the qualification run for manual resolution.')
         return
     subprocess.run(['git', '-c', 'user.name=github-actions[bot]', '-c',
                     'user.email=41898282+github-actions[bot]@users.noreply.github.com',
@@ -96,7 +91,8 @@ def propose_revert(run, failures):
     subprocess.run(['git', 'push', 'origin', 'HEAD:refs/heads/' + branch], check=True)
     api(f'{repository()}/pulls', 'POST', {'title': f"Revert #{candidate['number']} after qualification failure",
         'head': branch, 'base': 'main', 'draft': True,
-        'body': f"Proposed recovery for {issue['html_url']}. Review failure attribution and mark ready to run admission."})
+        'body': f"Proposed recovery for [qualification run]({run['html_url']}).\n\n{description}\n\n"
+                "The immediate parent passed qualification. Review failure attribution and mark ready to run admission."})
 
 
 def recover(run):
@@ -122,9 +118,6 @@ def recover(run):
         return
     if run.get('path') == '.github/workflows/qualification.yml':
         propose_revert(run, failures)
-    else:
-        ensure_issue(f"Integration failed: run {run['id']}", f"[Evidence]({run['html_url']}). "
-                     'The queue rejected this combined commit. Test failures are not retried.')
 
 
 def main():

@@ -601,10 +601,13 @@ privileged token.
 
 [`verification-recovery.yml`](../.github/workflows/verification-recovery.yml)
 runs code from main, parses bounded JSON without extracting or executing
-artifacts, and opens incidents for failed queue and qualification runs. It
+artifacts, and opens deduplicated issues only for maintainability findings above
+a category limit or exception cap, including tracked legacy debt. Other failures
+remain in run annotations, summaries, and retained evidence. It
 proposes a draft revert only for a source failure on the current main tip with
 one introducing merged PR and a qualified immediate parent. Ambiguous attribution,
-advanced main, and conflicts leave an incident for investigation. Reverts never
+advanced main, and conflicts require investigation from the qualification run.
+Revert proposals link directly to that run. Reverts never
 merge automatically.
 
 Each Linux Go test process has a 3.5 GiB RSS ceiling, declared in
@@ -653,8 +656,8 @@ never labels an unexplained failure flaky or quarantines it automatically.
 [`queue-health.yml`](../.github/workflows/queue-health.yml) reports the last
 24 hours every four hours: queue-to-merge time from structured timeline events,
 lane durations, and unsuccessful merge-group runs. Three distinct runs sharing
-one failure signature open a deduplicated incident. Missing artifacts remain a
-coverage gap; cancellation is reported separately from an attributed test failure.
+one failure signature appear in the report without opening issues. Missing artifacts
+remain a coverage gap; cancellation is reported separately from an attributed test failure.
 
 ### Runner capacity
 
