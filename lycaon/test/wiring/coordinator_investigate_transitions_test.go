@@ -57,17 +57,17 @@ func TestInvestigateTaskFanOutBlocksInvestigateUntilWorkersIdle(t *testing.T) {
 	AttachDefaultAmbient(t, h, ctx, sess.ID)
 	h.SeedProgress(t, ctx, sess.ID)
 
-	if _, err := h.SessionMgr.Submissions.Prompt(ctx, sess.ID, "build parallel modules with implementer"); err != nil {
+	if _, err := h.Sessions.Manager.Submissions.Prompt(ctx, sess.ID, "build parallel modules with implementer"); err != nil {
 		testutil.FailErr(t, "Prompt", err)
 	}
 
 	var state surface.ImplementSessionState
 	testutil.WaitFor(t, 5*time.Second, func() bool {
-		state = h.SessionMgr.Workers.State.ForSession(ctx, sess)
+		state = h.Sessions.Manager.Workers.State.ForSession(ctx, sess)
 		if state.WorkersInFlight > 0 {
 			return true
 		}
-		jobs, listErr := h.WorkerQueue.List(ctx, testdbseed.DefaultProjectID, api.WorkerStatusPending, api.WorkerStatusRunning)
+		jobs, listErr := h.Delegations.Queue.List(ctx, testdbseed.DefaultProjectID, api.WorkerStatusPending, api.WorkerStatusRunning)
 		testutil.FailErr(t, "WorkerQueue.List", listErr)
 		if len(jobs) > 0 {
 			state.WorkersInFlight = len(jobs)
@@ -79,7 +79,7 @@ func TestInvestigateTaskFanOutBlocksInvestigateUntilWorkersIdle(t *testing.T) {
 		t.Fatal("expected workers in flight after task() from investigate turn")
 	}
 
-	msgs, err := h.SessionMgr.Runner.Transcript.GetMessages(ctx, sess.ID)
+	msgs, err := h.Sessions.Manager.Runner.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	wakeProfile := surface.ResolveTurnProfile(
 		api.CoordinatorRunContext{WorkflowID: "implement", CurrentPhase: "work"},
@@ -137,25 +137,25 @@ func TestInvestigateReturnsAfterWorkersCompleteAndNoQueuedPromotion(t *testing.T
 	AttachDefaultAmbient(t, h, ctx, sess.ID)
 	h.SeedProgress(t, ctx, sess.ID)
 
-	if _, err := h.SessionMgr.Submissions.Prompt(ctx, sess.ID, "Add a TODO comment via implementer"); err != nil {
+	if _, err := h.Sessions.Manager.Submissions.Prompt(ctx, sess.ID, "Add a TODO comment via implementer"); err != nil {
 		testutil.FailErr(t, "Prompt dispatch", err)
 	}
 	if err := DrainPendingWorkerJobs(ctx, h, sess.ProjectID, sess.ID); err != nil {
 		testutil.FailErr(t, "DrainPendingWorkerJobs", err)
 	}
 
-	msgs, err := h.SessionMgr.Runner.Transcript.GetMessages(ctx, sess.ID)
+	msgs, err := h.Sessions.Manager.Runner.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
-	state := h.SessionMgr.Workers.State.ForSession(ctx, sess)
+	state := h.Sessions.Manager.Workers.State.ForSession(ctx, sess)
 	if len(state.PendingOverlayIDs) == 0 {
 		t.Fatalf("expected pending overlay promote after write worker drain, PendingOverlayIDs=%v", state.PendingOverlayIDs)
 	}
 	if err := PromotePendingWriteOverlays(ctx, h, sess.ProjectID, sess.ID); err != nil {
 		testutil.FailErr(t, "PromotePendingWriteOverlays", err)
 	}
-	msgs, err = h.SessionMgr.Runner.Transcript.GetMessages(ctx, sess.ID)
+	msgs, err = h.Sessions.Manager.Runner.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages after promote", err)
-	state = h.SessionMgr.Workers.State.ForSession(ctx, sess)
+	state = h.Sessions.Manager.Workers.State.ForSession(ctx, sess)
 	if len(state.PendingOverlayIDs) > 0 {
 		t.Fatalf("expected no pending overlay promote after promote_overlay, PendingOverlayIDs=%v", state.PendingOverlayIDs)
 	}
@@ -163,11 +163,11 @@ func TestInvestigateReturnsAfterWorkersCompleteAndNoQueuedPromotion(t *testing.T
 	// Wait for the batch ledger and follow-up surface to settle.
 	var followProfile surface.TurnProfile
 	settled := testutil.WaitForNoFatal(15*time.Second, func() bool {
-		state = h.SessionMgr.Workers.State.ForSession(ctx, sess)
+		state = h.Sessions.Manager.Workers.State.ForSession(ctx, sess)
 		if state.WorkersInFlight == 0 && state.BatchPhase != batch.PhaseDispatch {
-			msgs, err = h.SessionMgr.Runner.Transcript.GetMessages(ctx, sess.ID)
+			msgs, err = h.Sessions.Manager.Runner.Transcript.GetMessages(ctx, sess.ID)
 			if err == nil && len(state.PendingOverlayIDs) == 0 {
-				runCtx, rerr := h.SessionMgr.Coordinator.Context.RunContext(ctx, sess.ID)
+				runCtx, rerr := h.Sessions.Manager.Coordinator.Context.RunContext(ctx, sess.ID)
 				if rerr == nil {
 					followProfile = surface.ResolveTurnProfile(runCtx, sess, routingTurnHistory(msgs, "summarize what changed"), state)
 					if followProfile.SurfaceID == toolcontract.SurfaceImplementInvestigate {
@@ -179,21 +179,21 @@ func TestInvestigateReturnsAfterWorkersCompleteAndNoQueuedPromotion(t *testing.T
 		return false
 	})
 	if !settled {
-		runCtx, _ := h.SessionMgr.Coordinator.Context.RunContext(ctx, sess.ID)
-		jobs, _ := h.WorkerQueue.ListBySession(ctx, sess.ProjectID, sess.ID)
+		runCtx, _ := h.Sessions.Manager.Coordinator.Context.RunContext(ctx, sess.ID)
+		jobs, _ := h.Delegations.Queue.ListBySession(ctx, sess.ProjectID, sess.ID)
 		t.Fatalf("follow-up surface did not settle: profile=%q state=%+v run=%+v jobs=%+v", followProfile.SurfaceID, state, runCtx, jobs)
 	}
-	if followProfile.SurfaceID != tools.SurfaceImplementInvestigate {
-		runCtx, _ := h.SessionMgr.Coordinator.Context.RunContext(ctx, sess.ID)
-		jobs, _ := h.WorkerQueue.ListBySession(ctx, sess.ProjectID, sess.ID)
+	if followProfile.SurfaceID != toolcontract.SurfaceImplementInvestigate {
+		runCtx, _ := h.Sessions.Manager.Coordinator.Context.RunContext(ctx, sess.ID)
+		jobs, _ := h.Delegations.Queue.ListBySession(ctx, sess.ProjectID, sess.ID)
 		t.Fatalf("visible user follow-up surface = %q want investigate; state=%+v run=%+v jobs=%+v", followProfile.SurfaceID, state, runCtx, jobs)
 	}
 
 	seqBefore := state.BatchSeq
-	if _, err := h.SessionMgr.Submissions.Prompt(ctx, sess.ID, "summarize what changed"); err != nil {
+	if _, err := h.Sessions.Manager.Submissions.Prompt(ctx, sess.ID, "summarize what changed"); err != nil {
 		testutil.FailErr(t, "Prompt follow-up", err)
 	}
-	state = h.SessionMgr.Workers.State.ForSession(ctx, sess)
+	state = h.Sessions.Manager.Workers.State.ForSession(ctx, sess)
 	if state.BatchSeq <= seqBefore {
 		t.Fatalf("batch_seq = %d want > %d after visible user follow-up (batch epoch reset)", state.BatchSeq, seqBefore)
 	}

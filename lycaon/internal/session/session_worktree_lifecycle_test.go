@@ -56,7 +56,7 @@ func TestDeleteSessionDisposesBackgroundRuntimeBeforeRow(t *testing.T) {
 	})
 	testutil.FailErr(t, "start session background process", err)
 	testutil.FailErr(t, "delete session", mgr.Chats.Delete(t.Context(), sess.ID))
-	if got := reg.List(context.Background(), sess.ID); len(got) != 0 {
+	if got := reg.Output.List(context.Background(), sess.ID); len(got) != 0 {
 		t.Fatalf("background handles retained after delete: %#v", got)
 	}
 }

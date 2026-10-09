@@ -36,42 +36,42 @@ func TestWorkerLegPromptAppendsSummary(t *testing.T) {
 	h := wiring.BuildForTest(t, wiring.WithLLMClient(rec))
 	cancel := h.StartBackgroundWorkers(t, context.Background())
 	t.Cleanup(cancel)
-	mgr := h.SessionMgr
+	mgr := h.Sessions.Manager
 	ctx := context.Background()
 	projectDir := t.TempDir()
 	testdbseed.InsertProjectRoot(t, h.DB, testdbseed.DefaultProjectID, projectDir)
 
-	r, err := h.DelegationMgr.Create(ctx, api.CreateDelegationRequest{
+	r, err := h.Delegations.Manager.Create(ctx, api.CreateDelegationRequest{
 		ProjectID: testdbseed.DefaultProjectID,
 		Task:      "implement feature",
 		Strategy:  api.HuntStrategyFileBased,
 	})
-	testutil.FailErr(t, "h.DelegationMgr.Create failed", err)
-	dep, err := h.DelegationMgr.GetStatus(ctx, r.ID)
-	testutil.FailErr(t, "h.DelegationMgr.GetStatus failed", err)
+	testutil.FailErr(t, "h.Delegations.Manager.Create failed", err)
+	dep, err := h.Delegations.Manager.GetStatus(ctx, r.ID)
+	testutil.FailErr(t, "h.Delegations.Manager.GetStatus failed", err)
 	parentID := dep.CoordinatorSessionID
 	legID := r.Legs[0].ID
-	dispatched, err := h.DelegationMgr.DispatchLeg(ctx, r.ID, legID, "")
+	dispatched, err := h.Delegations.Manager.DispatchLeg(ctx, r.ID, legID, "")
 	if err != nil {
-		testutil.FailErr(t, "h.DelegationMgr.DispatchLeg failed", err)
+		testutil.FailErr(t, "h.Delegations.Manager.DispatchLeg failed", err)
 	}
 
 	var approvalErr error
 	var approvalsResolved int
 	var childSessionID string
-	resolver, ok := h.CheckpointMgr.(*hitl.Checkpoints)
+	resolver, ok := h.Sessions.Checkpoints.(*hitl.Checkpoints)
 	if !ok {
-		t.Fatalf("checkpoint manager = %T, want approval option resolver", h.CheckpointMgr)
+		t.Fatalf("checkpoint manager = %T, want approval option resolver", h.Sessions.Checkpoints)
 	}
 	if !testutil.WaitForNoFatal(15*time.Second, func() bool {
-		if task, ok := h.WorkerQueue.Get(dispatched.WorkerID); ok {
+		if task, ok := h.Delegations.Queue.Get(dispatched.WorkerID); ok {
 			childSessionID = task.ChildSessionID
 		}
 		if childSessionID == "" {
 			return false
 		}
 		kind := api.CheckpointKindToolApproval
-		pending, err := h.CheckpointMgr.ListPending(ctx, childSessionID, &kind)
+		pending, err := h.Sessions.Checkpoints.ListPending(ctx, childSessionID, &kind)
 		if err != nil {
 			approvalErr = err
 			return false
@@ -85,7 +85,7 @@ func TestWorkerLegPromptAppendsSummary(t *testing.T) {
 			}
 			approvalsResolved++
 		}
-		msgs, err := mgr.Transcript.GetMessages(ctx, parentID)
+		msgs, err := mgr.Runner.Transcript.GetMessages(ctx, parentID)
 		if err != nil {
 			return false
 		}
@@ -99,11 +99,11 @@ func TestWorkerLegPromptAppendsSummary(t *testing.T) {
 		}
 		return false
 	}) {
-		parentMessages, _ := mgr.Transcript.GetMessages(ctx, parentID)
+		parentMessages, _ := mgr.Runner.Transcript.GetMessages(ctx, parentID)
 		t.Fatalf("worker card timed out: child_session_id=%q approvals_resolved=%d approval_err=%v parent_messages=%+v model_requests=%d",
 			childSessionID, approvalsResolved, approvalErr, parentMessages, len(rec.AllRequests()))
 	}
-	msgs, err := mgr.Transcript.GetMessages(ctx, parentID)
+	msgs, err := mgr.Runner.Transcript.GetMessages(ctx, parentID)
 	testutil.FailErr(t, "mgr.GetMessages failed", err)
 	var foundWorkerCard bool
 	for _, msg := range msgs {

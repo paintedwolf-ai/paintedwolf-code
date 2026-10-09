@@ -123,6 +123,9 @@ func RequiredTestDeps(t *testing.T, deps hostapi.Dependencies) hostapi.Dependenc
 	deps.Core.Settings, deps.Core.Invocations, deps.Core.MutationGate = fill.Settings, fill.Invocations, fill.MutationGate
 	deps.Approvals.ManagedSecrets, deps.Approvals.SecretIgnores, deps.Source.SourceLedger = fill.ManagedSecrets, fill.SecretIgnores, fill.SourceLedger
 	deps.Source.SourceMutations, deps.Source.FileOperations = fill.SourceMutations, fill.FileOperations
+	if deps.Source.SourceInventory == nil {
+		deps.Source.SourceInventory = fill.SourceLedger.Inventory
+	}
 	deps.Source.EditorDocuments, deps.Source.FileBriefings, deps.Workflow.Workflows = fill.EditorDocuments, fill.FileBriefings, fill.Workflows
 	deps.Workflow.WorkflowRuns, deps.Workflow.WorkflowComposer, deps.Workflow.WorkflowPersister = fill.WorkflowRuns, fill.WorkflowComposer, fill.WorkflowPersister
 	deps.Workflow.Blueprints, deps.Scans.ScanCoordinator, deps.Scans.ScanCadence = fill.Blueprints, fill.ScanCoordinator, fill.ScanCadence

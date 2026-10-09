@@ -24,7 +24,7 @@ func TestCoordinatorToolReturnsManifestPrompt(t *testing.T) {
 	})
 	h, sess := buildWorkflowHarnessWithManifest(t, manifest)
 	toolReg := h.ToolRegistry
-	workflowMgr := h.WorkflowMgr
+	workflowMgr := h.Workflows.Manager
 	ctx := context.Background()
 	if _, err := workflowMgr.Starts.StartHuman(ctx, sess.ID, wire.StartWorkflowRunRequest{
 		WorkflowID: "feedback-tool-e2e", WorkflowVersion: "1.0.0",

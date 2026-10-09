@@ -45,10 +45,10 @@ func TestInspectionDeliveryDoesNotRequireSelectedCheck(t *testing.T) {
 	testutil.FailErr(t, "allow fixture write", os.WriteFile(filepath.Join(overlay, "approvals.yaml"), []byte("rules:\n  - category: tool\n    pattern: write\n    effect: allow\n"), 0o600))
 	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{}, root)
 	testutil.FailErr(t, "create session", err)
-	h.SessionMgr.Verification.SetVerifyConfig(fixedVerifyConfig("project-check"))
+	h.Sessions.Manager.Verification.SetVerifyConfig(fixedVerifyConfig("project-check"))
 	AttachDefaultAmbient(t, h, ctx, sess.ID)
 	h.SeedProgress(t, ctx, sess.ID)
-	_, err = h.SessionMgr.Submissions.Prompt(ctx, sess.ID, "Update the guide and inspect the resulting text.")
+	_, err = h.Sessions.Manager.Submissions.Prompt(ctx, sess.ID, "Update the guide and inspect the resulting text.")
 	testutil.FailErr(t, "deliver inspected change", err)
 	if calls.Load() > 8 {
 		t.Fatalf("inspection delivery spiraled into %d model calls", calls.Load())

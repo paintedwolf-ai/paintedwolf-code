@@ -65,11 +65,11 @@ func TestCostTrackingOnPricedSummaryAndSSE(t *testing.T) {
 	testutil.FailErr(t, "Subscribe", err)
 	defer unsub()
 
-	if _, err := h.SessionMgr.Submissions.Prompt(ctx, sess.ID, "hello"); err != nil {
+	if _, err := h.Sessions.Manager.Submissions.Prompt(ctx, sess.ID, "hello"); err != nil {
 		testutil.FailErr(t, "Prompt", err)
 	}
 
-	summary, err := h.SessionMgr.Coordinator.Model.Cost.Summary(ctx, wire.CostScopeSession, sess.ID, "")
+	summary, err := h.Sessions.Manager.Coordinator.Model.Cost.Summary(ctx, wire.CostScopeSession, sess.ID, "")
 	testutil.FailErr(t, "Summary", err)
 	if summary.EstimateCoverage != wire.CostEstimateComplete || len(summary.PricingProvenance) != 1 || summary.PricingProvenance[0].Source != "fixture" || summary.PricingProvenance[0].PricedAt == nil {
 		t.Fatalf("summary = %+v", summary)
@@ -132,11 +132,11 @@ func TestCostTrackingOffUnpricedNoFetch(t *testing.T) {
 	sess, err := h.CreateHarnessSession(t, wire.CreateSessionRequest{}, t.TempDir())
 	testutil.FailErr(t, "CreateHarnessSession", err)
 
-	if _, err := h.SessionMgr.Submissions.Prompt(ctx, sess.ID, "hello"); err != nil {
+	if _, err := h.Sessions.Manager.Submissions.Prompt(ctx, sess.ID, "hello"); err != nil {
 		testutil.FailErr(t, "Prompt", err)
 	}
 
-	summary, err := h.SessionMgr.Coordinator.Model.Cost.Summary(ctx, wire.CostScopeSession, sess.ID, "")
+	summary, err := h.Sessions.Manager.Coordinator.Model.Cost.Summary(ctx, wire.CostScopeSession, sess.ID, "")
 	testutil.FailErr(t, "Summary", err)
 	if summary.EstimateCoverage != wire.CostEstimateUnpriced || len(summary.PricingProvenance) != 0 {
 		t.Fatalf("tracking off must be unpriced: %+v", summary)

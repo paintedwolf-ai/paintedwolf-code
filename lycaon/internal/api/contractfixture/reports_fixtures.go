@@ -73,7 +73,7 @@ func NewReportTestHarness(t *testing.T, opts ...TestDeps) *ReportTestHarness {
 	wfMgr.Resolver = workflowcatalog.Resolver{}
 	hostDir := t.TempDir()
 	wfMgr.Verdicts.EvidenceStore = inspector.NewJSONLStore(inspector.DefaultEvidenceDir)
-	wfMgr.SetEvidenceProjectDir(func(context.Context, string) (string, error) { return hostDir, nil })
+	wfMgr.Verdicts.EvidenceProjectDir = func(context.Context, string) (string, error) { return hostDir, nil }
 
 	scanStore := scan.NewSQLStore(sqlDB)
 	workDir := t.TempDir()

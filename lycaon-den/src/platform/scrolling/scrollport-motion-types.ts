@@ -50,4 +50,3 @@ export type ScrollportTailPolicy = {
   /** Keeps the offset on the tail while it holds. */
   pinned?: () => boolean;
 };
-

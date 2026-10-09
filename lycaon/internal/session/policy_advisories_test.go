@@ -37,12 +37,12 @@ func TestPolicyFeedbackRetriesRenderingAndPersistenceWithoutLoss(t *testing.T) {
 	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	decision := &oar.Decision{Effect: oar.EffectNudge, Advisories: []oar.Advisory{{Code: "PROBE", Rule: "example/PROBE", Copy: map[string]string{"what": "frozen observation"}}}}
-	testutil.FailErr(t, "queue before renderer", mgr.Coordinator.Guidance.queuePolicy(t.Context(), sess.ID, oar.AnchorCoordinatorPostTurn, decision))
+	testutil.FailErr(t, "queue before renderer", mgr.Coordinator.Guidance.DeliverAdvisories(t.Context(), sess.ID, oar.AnchorCoordinatorPostTurn, decision))
 	lease := mgr.Coordinator.Runtime.Kicks().LeasePolicyFeedback(sess.ID)
 	if _, err := mgr.Coordinator.Guidance.TakePolicy(t.Context(), sess.ID); err == nil {
 		t.Fatal("missing renderer accepted")
 	}
-	mgr.SetOARPipeline(nil, advisoryTestManager(t).Feedback.Renderer())
+	mgr.SetOARPipeline(nil, advisoryTestManager(t).Coordinator.Feedback.Renderer())
 	storage.failRead = true
 	if _, err := mgr.Coordinator.Guidance.TakePolicy(t.Context(), sess.ID); err == nil {
 		t.Fatal("injected read failure not returned")
@@ -97,7 +97,7 @@ func TestPolicyAdvisoryRoutingAtEveryHostBoundary(t *testing.T) {
 func TestPolicyAdvisoryPersistenceUsesScreenedBytesAndAcknowledgesOnce(t *testing.T) {
 	mem := store.NewMemory()
 	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
-	renderer := advisoryTestManager(t).Feedback.Renderer()
+	renderer := advisoryTestManager(t).Coordinator.Feedback.Renderer()
 	mgr.SetOARPipeline(nil, renderer)
 	mgr.Runner.Transcript.SetRedactor(func(_ context.Context, msg api.Message) (api.Message, bool) {
 		msg.Content = strings.ReplaceAll(msg.Content, "private-fixture", "screened-fixture")
@@ -110,7 +110,7 @@ func TestPolicyAdvisoryPersistenceUsesScreenedBytesAndAcknowledgesOnce(t *testin
 	testutil.FailErr(t, "create session", err)
 	for _, id := range []string{"first", "second"} {
 		decision := &oar.Decision{Effect: oar.EffectNudge, Advisories: []oar.Advisory{{Code: "PROBE", Rule: "example/PROBE", Copy: map[string]string{"what": "private-fixture"}, Data: map[string]any{"subject": map[string]any{"kind": "task", "id": id}, "observation": "private-fixture"}}}}
-		testutil.FailErr(t, "queue advisory", mgr.Coordinator.Guidance.queuePolicy(t.Context(), sess.ID, oar.AnchorCoordinatorCloseoutCheck, decision))
+		testutil.FailErr(t, "queue advisory", mgr.Coordinator.Guidance.DeliverAdvisories(t.Context(), sess.ID, oar.AnchorCoordinatorCloseoutCheck, decision))
 	}
 	messages, err := mgr.Coordinator.Guidance.TakePolicy(t.Context(), sess.ID)
 	testutil.FailErr(t, "take feedback", err)

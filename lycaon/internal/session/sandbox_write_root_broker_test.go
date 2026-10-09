@@ -53,8 +53,8 @@ func TestWriteRootPlanBindsProjectIDOnDurableGrants(t *testing.T) {
 	)
 	testutil.FailErr(t, "buildWriteRootCard", err)
 	action, plan := card.Action, card.Plan
-	if action.ProjectID != projectID {
-		t.Fatalf("action.ProjectID = %q, want %q", action.ProjectID, projectID)
+	if action.Scope.ProjectID != projectID {
+		t.Fatalf("action.Scope.ProjectID = %q, want %q", action.Scope.ProjectID, projectID)
 	}
 	var day *hitl.ApprovalOption
 	for i := range plan.Options {

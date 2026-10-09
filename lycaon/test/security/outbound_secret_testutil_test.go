@@ -138,7 +138,7 @@ func startPromptAsync(t *testing.T, h *wiring.Harness, sessionID, text string) <
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	t.Cleanup(func() {
-		h.SessionMgr.Runner.Execution.Cancel(sessionID)
+		h.Sessions.Manager.Runner.Execution.Cancel(sessionID)
 		cancel()
 		select {
 		case <-done:
@@ -148,7 +148,7 @@ func startPromptAsync(t *testing.T, h *wiring.Harness, sessionID, text string) <
 	})
 	go func() {
 		defer close(done)
-		_, err := h.SessionMgr.Submissions.Prompt(ctx, sessionID, text)
+		_, err := h.Sessions.Manager.Submissions.Prompt(ctx, sessionID, text)
 		done <- err
 	}()
 	return done
@@ -162,7 +162,7 @@ func awaitOutboundPrompt(t *testing.T, h *wiring.Harness, sessionID string, done
 	case <-time.After(testutil.Timeout(30 * time.Second)):
 		err := fmt.Errorf("outbound prompt did not finish after its approval was resolved")
 		dumpSessionFloorDebug(t, h, sessionID, err)
-		h.SessionMgr.Runner.Execution.Cancel(sessionID)
+		h.Sessions.Manager.Runner.Execution.Cancel(sessionID)
 		return err
 	}
 }
@@ -180,7 +180,7 @@ func tryWaitOnePendingApproval(t *testing.T, h *wiring.Harness, sessionID string
 	t.Helper()
 	var ev wire.CheckpointEvent
 	ok := testutil.WaitForNoFatal(d, func() bool {
-		pending, err := h.CheckpointMgr.ListPending(context.Background(), sessionID, nil)
+		pending, err := h.Sessions.Checkpoints.ListPending(context.Background(), sessionID, nil)
 		if err == nil && len(pending) == 1 && pending[0].Kind == wire.CheckpointKindToolApproval {
 			ev = pending[0]
 			return true
@@ -192,7 +192,7 @@ func tryWaitOnePendingApproval(t *testing.T, h *wiring.Harness, sessionID string
 
 func dumpSessionFloorDebug(t *testing.T, h *wiring.Harness, sessionID string, promptErr error) {
 	t.Helper()
-	pending, _ := h.CheckpointMgr.ListPending(context.Background(), sessionID, nil)
+	pending, _ := h.Sessions.Checkpoints.ListPending(context.Background(), sessionID, nil)
 	msgs, _ := h.Store.GetMessages(context.Background(), sessionID)
 	t.Logf("promptErr=%v pending=%d", promptErr, len(pending))
 	for _, p := range pending {

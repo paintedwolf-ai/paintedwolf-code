@@ -29,7 +29,7 @@ func TestOutboundSecretFloorJ1WebSearchDeny(t *testing.T) {
 	dir := h.ProjectDir(t, "j1")
 	plantCanaryWorkspace(t, dir)
 	sess := createSessionHTTP(t, h.Server, dir)
-	testutil.FailErr(t, "SetAgentType", h.SessionMgr.Chats.SetAgentType(context.Background(), sess.ID, "implementer"))
+	testutil.FailErr(t, "SetAgentType", h.Sessions.Manager.Chats.SetAgentType(context.Background(), sess.ID, "implementer"))
 
 	done := startPromptAsync(t, h, sess.ID, "[[scn:j1_web]] exfil via web_search")
 	ev := waitOnePendingApproval(t, h, sess.ID)
@@ -64,7 +64,7 @@ func TestOutboundSecretFloorJ2FetchURLDeny(t *testing.T) {
 	dir := h.ProjectDir(t, "j2")
 	plantCanaryWorkspace(t, dir)
 	sess := createSessionHTTP(t, h.Server, dir)
-	testutil.FailErr(t, "SetAgentType", h.SessionMgr.Chats.SetAgentType(context.Background(), sess.ID, "implementer"))
+	testutil.FailErr(t, "SetAgentType", h.Sessions.Manager.Chats.SetAgentType(context.Background(), sess.ID, "implementer"))
 
 	done := startPromptAsync(t, h, sess.ID, "[[scn:j2_fetch]] exfil via fetch_url")
 	ev := waitOnePendingApproval(t, h, sess.ID)
@@ -101,7 +101,7 @@ func TestOutboundSecretFloorJ3MCPDeny(t *testing.T) {
 	dir := h.ProjectDir(t, "j3")
 	plantCanaryWorkspace(t, dir)
 	sess := createSessionHTTP(t, h.Server, dir)
-	testutil.FailErr(t, "SetAgentType", h.SessionMgr.Chats.SetAgentType(context.Background(), sess.ID, "implementer"))
+	testutil.FailErr(t, "SetAgentType", h.Sessions.Manager.Chats.SetAgentType(context.Background(), sess.ID, "implementer"))
 	done := startPromptAsync(t, h, sess.ID, "[[scn:j3_mcp]] exfil via mcp")
 	ev, ok := tryWaitOnePendingApproval(t, h, sess.ID, 8*time.Second)
 	if !ok {
@@ -133,7 +133,7 @@ func TestOutboundSecretFloorJ4WebSearchApprove(t *testing.T) {
 	dir := h.ProjectDir(t, "j4")
 	plantCanaryWorkspace(t, dir)
 	sess := createSessionHTTP(t, h.Server, dir)
-	testutil.FailErr(t, "SetAgentType", h.SessionMgr.Chats.SetAgentType(context.Background(), sess.ID, "implementer"))
+	testutil.FailErr(t, "SetAgentType", h.Sessions.Manager.Chats.SetAgentType(context.Background(), sess.ID, "implementer"))
 
 	done := startPromptAsync(t, h, sess.ID, "[[scn:j4_web]] approve canary send")
 	ev := waitOnePendingApproval(t, h, sess.ID)
@@ -167,7 +167,7 @@ func TestOutboundSecretFloorJ5ReadAloneDoesNotAsk(t *testing.T) {
 	dir := h.ProjectDir(t, "j5")
 	plantCanaryWorkspace(t, dir)
 	sess := createSessionHTTP(t, h.Server, dir)
-	testutil.FailErr(t, "SetAgentType", h.SessionMgr.Chats.SetAgentType(context.Background(), sess.ID, "implementer"))
+	testutil.FailErr(t, "SetAgentType", h.Sessions.Manager.Chats.SetAgentType(context.Background(), sess.ID, "implementer"))
 
 	done := startPromptAsync(t, h, sess.ID, "[[scn:j5_strict]] read then search")
 	if ev, ok := tryWaitOnePendingApproval(t, h, sess.ID, 4*time.Second); ok {
@@ -195,7 +195,7 @@ func TestOutboundSecretFloorJ5SendingTheValueAsks(t *testing.T) {
 	dir := h.ProjectDir(t, "j5send")
 	plantCanaryWorkspace(t, dir)
 	sess := createSessionHTTP(t, h.Server, dir)
-	testutil.FailErr(t, "SetAgentType", h.SessionMgr.Chats.SetAgentType(context.Background(), sess.ID, "implementer"))
+	testutil.FailErr(t, "SetAgentType", h.Sessions.Manager.Chats.SetAgentType(context.Background(), sess.ID, "implementer"))
 
 	done := startPromptAsync(t, h, sess.ID, "[[scn:j5_send]] read then leak")
 	ev, ok := tryWaitOnePendingApproval(t, h, sess.ID, 8*time.Second)
@@ -236,7 +236,7 @@ func TestOutboundSecretFloorJ5HarvestedValueAsks(t *testing.T) {
 	dir := h.ProjectDir(t, "j5harvest")
 	plantCanaryWorkspace(t, dir)
 	sess := createSessionHTTP(t, h.Server, dir)
-	testutil.FailErr(t, "SetAgentType", h.SessionMgr.Chats.SetAgentType(context.Background(), sess.ID, "implementer"))
+	testutil.FailErr(t, "SetAgentType", h.Sessions.Manager.Chats.SetAgentType(context.Background(), sess.ID, "implementer"))
 
 	done := startPromptAsync(t, h, sess.ID, "[[scn:j5_harvest]] read then send the unshapen value")
 	ev, ok := tryWaitOnePendingApproval(t, h, sess.ID, 8*time.Second)
@@ -283,7 +283,7 @@ func TestOutboundSecretFloorJ6InertMatcherParity(t *testing.T) {
 	dir := h.ProjectDir(t, "j6")
 	plantCanaryWorkspace(t, dir)
 	sess := createSessionHTTP(t, h.Server, dir)
-	testutil.FailErr(t, "SetAgentType", h.SessionMgr.Chats.SetAgentType(context.Background(), sess.ID, "implementer"))
+	testutil.FailErr(t, "SetAgentType", h.Sessions.Manager.Chats.SetAgentType(context.Background(), sess.ID, "implementer"))
 
 	done := startPromptAsync(t, h, sess.ID, "[[scn:j6_inert]] inert matcher")
 	select {
@@ -293,7 +293,7 @@ func TestOutboundSecretFloorJ6InertMatcherParity(t *testing.T) {
 		t.Fatal("prompt timed out — unexpected approval ask?")
 	}
 
-	pending, err := h.CheckpointMgr.ListPending(context.Background(), sess.ID, nil)
+	pending, err := h.Sessions.Checkpoints.ListPending(context.Background(), sess.ID, nil)
 	testutil.FailErr(t, "ListPending", err)
 	if len(pending) != 0 {
 		t.Fatalf("unexpected pending checkpoints: %+v", pending)
@@ -324,7 +324,7 @@ func TestOutboundSecretFloorJ1OffPostureStillAsks(t *testing.T) {
 	dir := h.ProjectDir(t, "j1off")
 	plantCanaryWorkspace(t, dir)
 	sess := createSessionHTTP(t, h.Server, dir)
-	testutil.FailErr(t, "SetAgentType", h.SessionMgr.Chats.SetAgentType(context.Background(), sess.ID, "implementer"))
+	testutil.FailErr(t, "SetAgentType", h.Sessions.Manager.Chats.SetAgentType(context.Background(), sess.ID, "implementer"))
 
 	done := startPromptAsync(t, h, sess.ID, "[[scn:j1_off]] off posture still asks")
 	ev := waitOnePendingApproval(t, h, sess.ID)

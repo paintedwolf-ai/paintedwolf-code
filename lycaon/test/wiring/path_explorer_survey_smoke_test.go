@@ -24,14 +24,14 @@ func TestPathExplorerChildSchemaIsCommandFree(t *testing.T) {
 	dir := t.TempDir()
 	parent, err := h.CreateHarnessSession(t, api.CreateSessionRequest{}, dir)
 	testutil.FailErr(t, "create session", err)
-	child, err := h.SessionMgr.Workers.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{
+	child, err := h.Sessions.Manager.Workers.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{
 		AgentType: orchestration.ProfilePathExplorer,
 		Prompt:    "Survey Go files under src/",
 	})
 	testutil.FailErr(t, "SpawnChild", err)
 	prof, err := h.AgentRegistry.Get(orchestration.ProfilePathExplorer)
 	testutil.FailErr(t, "agents.Get", err)
-	policy := h.SessionMgr.Coordinator.Guards.Policy()
+	policy := h.Sessions.Manager.Coordinator.Guards.Policy()
 	var schema []string
 	for _, meta := range policy.ListForPrompt(ctx, child, prof.ToolProfile) {
 		schema = append(schema, meta.Name)
@@ -71,9 +71,9 @@ func TestPathExplorerSurveyWithFindAndGrepOnly(t *testing.T) {
 	testutil.FailErr(t, "worker defaults", worker.ApplyEnqueueDefaults(
 		&task, project.ProjectScope{ProjectID: parent.ProjectID, WorkspacePath: dir}, worker.DefaultWorkersConfig(),
 	))
-	_, err = h.WorkerQueue.Enqueue(ctx, task)
+	_, err = h.Delegations.Queue.Enqueue(ctx, task)
 	testutil.FailErr(t, "enqueue worker", err)
-	claimed, err := h.WorkerQueue.ClaimNext(ctx, worker.ClaimRequest{
+	claimed, err := h.Delegations.Queue.ClaimNext(ctx, worker.ClaimRequest{
 		ProjectID: parent.ProjectID, ExecutionTarget: api.ExecutionTargetLocal, ClaimedBy: "path-explorer-test",
 	})
 	testutil.FailErr(t, "claim worker", err)
@@ -81,7 +81,7 @@ func TestPathExplorerSurveyWithFindAndGrepOnly(t *testing.T) {
 	result, err := exec.Execute(ctx, *claimed, worker.RunContextForTask(*claimed, dir))
 	testutil.FailErr(t, "worker Execute", err)
 	if result.Status != string(api.WorkerStatusComplete) {
-		stored, _ := h.WorkerQueue.Get(task.ID)
+		stored, _ := h.Delegations.Queue.Get(task.ID)
 		var messages []api.Message
 		if stored != nil {
 			messages, _ = h.Store.GetWorkerJobMessages(ctx, stored.ChildSessionID, task.ID)

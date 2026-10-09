@@ -67,4 +67,3 @@ export function useHighRisk(
   });
   return { highRisk, consequenceText, impactText, labelId, impactId, describedBy };
 }
-

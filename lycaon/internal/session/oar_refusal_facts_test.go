@@ -5,11 +5,12 @@ import (
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/session/policyfacts"
 )
 
 func TestTerminalRefusalsRetainPathsWithoutRecoverableGrants(t *testing.T) {
 	gc := &oar.GuardContext{}
-	ObserveConfine(gc, confine.Observation{Applied: true, FailedStages: []string{"tool"}, Refusals: confine.SandboxRefusals{Witness: confine.WitnessKernel, Refusals: []confine.SandboxRefusal{
+	policyfacts.ObserveConfine(gc, confine.Observation{Applied: true, FailedStages: []string{"tool"}, Refusals: confine.SandboxRefusals{Witness: confine.WitnessKernel, Refusals: []confine.SandboxRefusal{
 		{Operation: "file-read-data", Target: "/state/store.db", Layer: confine.FloorReadControlPlane, Recovery: confine.RecoverNone},
 		{Operation: "file-write-data", Target: "/state/approvals.yaml", Layer: confine.FloorControlPlane, Recovery: confine.RecoverNone},
 	}}})
@@ -26,7 +27,7 @@ func TestRefusalWitnessReportsTheObservedLayerWithoutPolicyCombination(t *testin
 			if failed {
 				obs.FailedStages = []string{"tool"}
 			}
-			ObserveConfine(gc, obs)
+			policyfacts.ObserveConfine(gc, obs)
 			if gc.Refusals.SandboxRefusalWitness != string(witness) {
 				t.Fatalf("witness=%s failed=%v facts=%+v", witness, failed, gc)
 			}

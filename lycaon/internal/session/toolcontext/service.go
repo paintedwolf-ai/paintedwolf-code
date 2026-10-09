@@ -27,24 +27,24 @@ type Projects interface {
 
 // Service binds invocation context to structured session and source facts.
 type Service struct {
-	store              Store
-	workspace          *sessionscope.Service
-	limits             *limits.Service
-	profiles           *profiles.Service
-	captures           *checkpointcontrol.Capture
-	execution          *execution.Lifetime
-	projects           Projects
-	loopbackProv       tools.ContainerRecorder
-	SourceLedger       sourceledger.Recorder
-	SourceHistory      tools.SourceHistory
-	SourceCommands     sourceledger.CommandWindowOpener
-	SourceGitMutations tools.SourceGitMutations
-	SourceObservations *sourceledger.Inventory
-	sourceMutations    sourceeffect.Journal
-	editorDocuments    tools.EditorDocuments
-	credentialFiles    tools.CredentialFiles
-	repoProvider       repoinfo.Provider
-	dataDir            string
+	store           Store
+	workspace       *sessionscope.Service
+	limits          *limits.Service
+	profiles        *profiles.Service
+	captures        *checkpointcontrol.Capture
+	execution       *execution.Lifetime
+	projects        Projects
+	loopbackProv    tools.ContainerRecorder
+	SourceLedger    sourceledger.Recorder
+	history         tools.SourceHistory
+	commands        sourceledger.CommandWindowOpener
+	gitMutations    tools.SourceGitMutations
+	observations    *sourceledger.Inventory
+	sourceMutations sourceeffect.Journal
+	editorDocuments tools.EditorDocuments
+	credentialFiles tools.CredentialFiles
+	repoProvider    repoinfo.Provider
+	dataDir         string
 }
 
 func New(store Store, workspace *sessionscope.Service, limits *limits.Service, profiles *profiles.Service, captures *checkpointcontrol.Capture, execution *execution.Lifetime) *Service {
@@ -56,7 +56,11 @@ func (m *Service) SetContainers(containers tools.ContainerRecorder) {
 	m.loopbackProv = containers
 }
 func (m *Service) SetSourceLedger(source sourceledger.Recorder, history tools.SourceHistory, commands sourceledger.CommandWindowOpener, mutations tools.SourceGitMutations, observations *sourceledger.Inventory) {
-	m.SourceLedger, m.SourceHistory, m.SourceCommands, m.SourceGitMutations, m.SourceObservations = source, history, commands, mutations, observations
+	m.SourceLedger = source
+	m.history = history
+	m.commands = commands
+	m.gitMutations = mutations
+	m.observations = observations
 }
 func (m *Service) SetSourceMutations(source sourceeffect.Journal)     { m.sourceMutations = source }
 func (m *Service) SetEditorDocuments(documents tools.EditorDocuments) { m.editorDocuments = documents }

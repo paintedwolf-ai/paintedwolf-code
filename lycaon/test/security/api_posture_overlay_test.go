@@ -37,7 +37,7 @@ func createAPISessionForProject(t *testing.T, serve http.Handler, projectDir, po
 func TestPostureOverlayWarmOnCreateSession(t *testing.T) {
 	h := wiring.BuildForTest(t)
 	srv := h.Server
-	mgr := h.SessionMgr
+	mgr := h.Sessions.Manager
 
 	projectDir := t.TempDir()
 	overlayDir := filepath.Join(projectDir, settingsoverlay.DirName())
@@ -114,7 +114,7 @@ postures:
 func TestCreateProjectWarmsPostureOverlay(t *testing.T) {
 	h := wiring.BuildForTest(t)
 	srv := h.Server
-	mgr := h.SessionMgr
+	mgr := h.Sessions.Manager
 
 	projectDir := t.TempDir()
 	overlayDir := filepath.Join(projectDir, settingsoverlay.DirName())

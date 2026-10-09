@@ -16,7 +16,7 @@ import (
 func TestResearchDepthNoneSetsPlanCatalogPredicate(t *testing.T) {
 	h := wiring.BuildForTest(t)
 	srv := h.Server
-	workflowStore := h.WorkflowMgr.Store
+	workflowStore := h.Workflows.Manager.Store
 	projectDir := t.TempDir()
 	sess := createSessionHTTP(t, srv, projectDir)
 

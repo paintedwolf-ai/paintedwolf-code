@@ -24,7 +24,7 @@ func TestAdvanceBlockedUntilTopologyStageMarked(t *testing.T) {
 	})
 	h, sess := buildWorkflowHarnessWithManifest(t, manifest)
 	srv := h.Server
-	workflowMgr := h.WorkflowMgr
+	workflowMgr := h.Workflows.Manager
 	run := startHarnessRun(t, h, sess.ID, "topo-gate", "1.0.0")
 
 	req := authedRequest(t, http.MethodPost, "/v1/workflow-runs/"+run.ID+"/advance", workflowCommandBody(t, srv, run.ID, nil))

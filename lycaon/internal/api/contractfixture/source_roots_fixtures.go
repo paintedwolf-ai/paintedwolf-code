@@ -83,7 +83,7 @@ func NewTestSources(t *testing.T, workers worker.WorkerQueue) *sourceapi.Handler
 	sources := sourceapi.New(&httpio.Responder{Logger: slog.Default()}, &taskgroup.Group{}, sourceapi.Operations{}, sourceapi.Deps{
 		EditorDocuments: deps.EditorDocuments, FileBriefings: deps.FileBriefings, ManagedSecrets: deps.ManagedSecrets,
 		MutationGate: deps.MutationGate, ProjectRegistry: deps.Projects, SessionStore: deps.Store,
-		SourceLedger: deps.SourceLedger, SourceMutations: deps.SourceMutations, FileOperations: deps.FileOperations,
+		SourceLedger: deps.SourceLedger, SourceInventory: deps.SourceLedger.Inventory, SourceMutations: deps.SourceMutations, FileOperations: deps.FileOperations,
 		Workers: workers,
 	})
 	return &sources

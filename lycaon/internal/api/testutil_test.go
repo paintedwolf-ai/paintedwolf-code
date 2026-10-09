@@ -109,6 +109,9 @@ func requiredTestDeps(t *testing.T, deps Dependencies) Dependencies {
 	deps.Core.Settings, deps.Core.Invocations, deps.Core.MutationGate = fill.Settings, fill.Invocations, fill.MutationGate
 	deps.Approvals.ManagedSecrets, deps.Approvals.SecretIgnores, deps.Source.SourceLedger = fill.ManagedSecrets, fill.SecretIgnores, fill.SourceLedger
 	deps.Source.SourceMutations, deps.Source.FileOperations = fill.SourceMutations, fill.FileOperations
+	if deps.Source.SourceInventory == nil {
+		deps.Source.SourceInventory = fill.SourceLedger.Inventory
+	}
 	deps.Source.EditorDocuments, deps.Source.FileBriefings, deps.Workflow.Workflows = fill.EditorDocuments, fill.FileBriefings, fill.Workflows
 	deps.Workflow.WorkflowRuns, deps.Workflow.WorkflowComposer, deps.Workflow.WorkflowPersister = fill.WorkflowRuns, fill.WorkflowComposer, fill.WorkflowPersister
 	deps.Workflow.Blueprints, deps.Scans.ScanCoordinator, deps.Scans.ScanCadence = fill.Blueprints, fill.ScanCoordinator, fill.ScanCadence
@@ -159,7 +162,7 @@ var sourcesReleased sync.Map
 // and keep retrying inventory for the rest of the test binary.
 func releaseProjectSources(t *testing.T, srv *Server) {
 	t.Helper()
-	if srv.Sources.Workspace.ProjectRegistry == nil {
+	if srv.Sources.Workspace == nil || srv.Sources.Workspace.ProjectRegistry == nil {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

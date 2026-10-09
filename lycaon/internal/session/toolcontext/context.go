@@ -73,10 +73,10 @@ func (m *Service) Build(ctx context.Context, sess *api.Session, profileID string
 		tctx.Host.MaxToolSpillBytes = m.limits.Effective(ctx, sess).MaxToolSpillBytes
 		tctx.Source.MutationRecorder = m.captures
 		tctx.Source.SourceLedger = m.SourceLedger
-		tctx.Source.History = m.SourceHistory
-		tctx.Source.Commands = m.SourceCommands
-		tctx.Source.GitMutations = m.SourceGitMutations
-		tctx.Source.Observations = m.SourceObservations
+		tctx.Source.History = m.history
+		tctx.Source.Commands = m.commands
+		tctx.Source.GitMutations = m.gitMutations
+		tctx.Source.Observations = m.observations
 		tctx.Source.SourceMutations = m.sourceMutations
 		tctx.Source.EditorDocuments = m.editorDocuments
 		tctx.Effects.CredentialFiles = m.credentialFiles

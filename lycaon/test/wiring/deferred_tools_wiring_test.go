@@ -18,7 +18,7 @@ func TestListForPromptMarksDeferredMetas(t *testing.T) {
 	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{}, dir)
 	testutil.FailErr(t, "create session", err)
 
-	policy := h.SessionMgr.Coordinator.Guards.Policy()
+	policy := h.Sessions.Manager.Coordinator.Guards.Policy()
 	metas := policy.ListForPrompt(ctx, sess, "implement")
 	deferred := map[string]bool{}
 	var hasRequestTools bool

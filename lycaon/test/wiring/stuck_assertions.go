@@ -56,10 +56,10 @@ func (s sessionState) hasForwardProgress() bool {
 // isImplementWorkResting reports an ambient implement work phase at rest with no pending
 // host hooks, the steady state after a build-loop cycle.
 func isImplementWorkResting(ctx context.Context, h *Harness, sessionID string, st sessionState) bool {
-	if h == nil || h.WorkflowMgr == nil || st.phase != "work" || st.hasForwardProgress() {
+	if h == nil || h.Workflows.Manager == nil || st.phase != "work" || st.hasForwardProgress() {
 		return false
 	}
-	run, err := h.WorkflowMgr.Store.Runs.ActiveBySession(ctx, sessionID)
+	run, err := h.Workflows.Manager.Store.Runs.ActiveBySession(ctx, sessionID)
 	if err != nil || run == nil || run.WorkflowID != "implement" {
 		return false
 	}
@@ -68,8 +68,8 @@ func isImplementWorkResting(ctx context.Context, h *Harness, sessionID string, s
 
 func inspectSessionForwardProgress(ctx context.Context, h *Harness, sessionID string) (sessionState, error) {
 	st := sessionState{}
-	if h.WorkflowMgr != nil {
-		run, err := h.WorkflowMgr.Store.Runs.ActiveBySession(ctx, sessionID)
+	if h.Workflows.Manager != nil {
+		run, err := h.Workflows.Manager.Store.Runs.ActiveBySession(ctx, sessionID)
 		if err != nil {
 			return st, err
 		}
@@ -80,15 +80,15 @@ func inspectSessionForwardProgress(ctx context.Context, h *Harness, sessionID st
 			st.terminal = runstate.IsTerminal(run.Status)
 		}
 	}
-	if h.SessionMgr != nil {
-		if id, ok := h.SessionMgr.Runner.Coordinator.Kicks().PeekPendingKickID(sessionID); ok {
+	if h.Sessions.Manager != nil {
+		if id, ok := h.Sessions.Manager.Runner.Coordinator.Kicks().PeekPendingKickID(sessionID); ok {
 			st.pendingKickID = id
 		}
-		if trigger, ok := h.SessionMgr.Runner.Coordinator.CoordinatorLoop().PendingForTest(sessionID); ok {
+		if trigger, ok := h.Sessions.Manager.Runner.Coordinator.CoordinatorLoop().Nudges.Pending(sessionID); ok {
 			st.pendingTrigger = string(trigger)
 		}
 		if sess, err := h.Store.Get(ctx, sessionID); err == nil && sess != nil {
-			tasks, err := workeroutcomes.ParentSessionInFlightWorkers(ctx, h.WorkerQueue, sess.ProjectID, sessionID)
+			tasks, err := workeroutcomes.ParentSessionInFlightWorkers(ctx, h.Delegations.Queue, sess.ProjectID, sessionID)
 			if err == nil {
 				st.inFlightWorkers = len(tasks)
 			}

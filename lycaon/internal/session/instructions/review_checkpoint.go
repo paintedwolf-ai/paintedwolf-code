@@ -9,8 +9,8 @@ import (
 )
 
 type ReviewCheckpointer interface {
-	CreateStructuralCheckpoint(context.Context, sourceledger.StructuralCheckpointInput) (sourceledger.Checkpoint, error)
 	TurnCheckpoint(context.Context, string, string, int) (sourceledger.Checkpoint, bool, error)
+	CreateStructuralCheckpoint(context.Context, sourceledger.StructuralCheckpointInput) (sourceledger.Checkpoint, error)
 }
 
 func (m *Service) ReviewCheckpoint(ctx context.Context, sessionID string, msg api.Message) {

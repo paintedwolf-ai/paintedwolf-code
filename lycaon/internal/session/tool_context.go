@@ -9,13 +9,12 @@ import (
 
 // SetSourceLedger wires the app-scoped source mutation recorder into every tool invocation.
 func (m *Host) SetSourceLedger(recorder sourceledger.Recorder, history tools.SourceHistory, commands sourceledger.CommandWindowOpener, mutations tools.SourceGitMutations, checkpoints instructions.ReviewCheckpointer, observations *sourceledger.Inventory) {
-	if m == nil {
-		return
+	if m != nil {
+		m.ToolContext.SetSourceLedger(recorder, history, commands, mutations, observations)
+		m.Verification.SetSourceObservations(observations)
+		m.Runner.Instructions.SetReviewCheckpointer(checkpoints)
+		m.SourceBriefs.SetSources(history, checkpoints)
 	}
-	m.ToolContext.SetSourceLedger(recorder, history, commands, mutations, observations)
-	m.Verification.SetSourceObservations(observations)
-	m.Runner.Instructions.SetReviewCheckpointer(checkpoints)
-	m.SourceBriefs.SetSources(history, checkpoints)
 }
 
 // SetEditorDocuments wires the open-document view into every tool invocation,

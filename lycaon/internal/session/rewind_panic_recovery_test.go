@@ -44,7 +44,7 @@ func TestRewindApplyPanicRollsBackInPlace(t *testing.T) {
 
 	// Apply a.txt before injecting a panic on b.txt.
 	originalSource := mgr.Chats.Rewinds.SourceRewinds()
-	faultSource := &sourcerewind.Service{Ledger: originalSource.Ledger, Mutations: &rewindFaultJournal{delegate: originalSource.Mutations, before: func(entryIndex int) {
+	faultSource := &sourcerewind.Service{Planner: originalSource.Planner, Mutations: &rewindFaultJournal{delegate: originalSource.Mutations, before: func(entryIndex int) {
 		if entryIndex == 1 {
 			panic("boom: injected rewind apply panic")
 		}

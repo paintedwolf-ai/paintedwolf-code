@@ -91,7 +91,7 @@ func TestInvestigateCoordinatorWriteLandsOnProjectTree(t *testing.T) {
 
 	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{}, dir)
 	testutil.FailErr(t, "create session", err)
-	h.SessionMgr.Verification.SetVerifyConfig(fixedVerifyConfig("true"))
+	h.Sessions.Manager.Verification.SetVerifyConfig(fixedVerifyConfig("true"))
 	if sess.WorkspacePath != projectDir {
 		t.Fatalf("ProjectDir = %q want %q", sess.WorkspacePath, projectDir)
 	}
@@ -106,17 +106,17 @@ func TestInvestigateCoordinatorWriteLandsOnProjectTree(t *testing.T) {
 	// the staged config, or it keeps running into the next test.
 	t.Cleanup(func() {
 		cancelPrompt()
-		h.SessionMgr.Runner.Execution.Cancel(sess.ID)
+		h.Sessions.Manager.Runner.Execution.Cancel(sess.ID)
 		<-promptExited
 	})
 	go func() {
 		defer close(promptExited)
-		_, promptErr := h.SessionMgr.Submissions.Prompt(promptCtx, sess.ID, "fix auth in src/foo.go")
+		_, promptErr := h.Sessions.Manager.Submissions.Prompt(promptCtx, sess.ID, "fix auth in src/foo.go")
 		done <- promptErr
 	}()
-	hitlMgr, ok := h.CheckpointMgr.(*hitl.Checkpoints)
+	hitlMgr, ok := h.Sessions.Checkpoints.(*hitl.Checkpoints)
 	if !ok {
-		t.Fatalf("checkpoint manager = %T, want *hitl.Checkpoints", h.CheckpointMgr)
+		t.Fatalf("checkpoint manager = %T, want *hitl.Checkpoints", h.Sessions.Checkpoints)
 	}
 	var checkpointID string
 	var promptErr error
@@ -160,15 +160,15 @@ func TestInvestigateCoordinatorWriteLandsOnProjectTree(t *testing.T) {
 		t.Fatalf("src/foo.go = %q want investigate edit in project tree ProjectDir; stage=%d messages=%+v", string(data), stage.Load(), msgs)
 	}
 
-	state := h.SessionMgr.Workers.State.ForSession(ctx, sess)
+	state := h.Sessions.Manager.Workers.State.ForSession(ctx, sess)
 	if len(state.PendingOverlayIDs) != 0 {
 		t.Fatalf("PendingOverlayIDs = %v want empty", state.PendingOverlayIDs)
 	}
-	if h.SessionMgr.Allowed(sess.ID, "src/foo.go") {
+	if h.Sessions.Manager.Promotion.Allowed(sess.ID, "src/foo.go") {
 		t.Fatal("merge reconcile must not open investigate product path without promote conflict")
 	}
 
-	jobs, err := h.WorkerQueue.List(ctx, testdbseed.DefaultProjectID, api.WorkerStatusPending, api.WorkerStatusRunning)
+	jobs, err := h.Delegations.Queue.List(ctx, testdbseed.DefaultProjectID, api.WorkerStatusPending, api.WorkerStatusRunning)
 	testutil.FailErr(t, "WorkerQueue.List", err)
 	if len(jobs) != 0 {
 		t.Fatalf("investigate coordinator write must not enqueue worker jobs: %+v", jobs)

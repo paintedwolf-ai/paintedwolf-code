@@ -10,7 +10,6 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/projectroot"
-	"github.com/lycaon/lycaon/internal/session/instructions"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -28,15 +27,16 @@ type Roots interface {
 }
 
 type Service struct {
-	store             Store
-	roots             Roots
-	sourceHistory     tools.SourceHistory
-	sourceCheckpoints instructions.ReviewCheckpointer
+	store       Store
+	roots       Roots
+	history     tools.SourceHistory
+	checkpoints Checkpoints
 }
 
 func New(store Store, roots Roots) *Service { return &Service{store: store, roots: roots} }
-func (m *Service) SetSources(history tools.SourceHistory, checkpoints instructions.ReviewCheckpointer) {
-	m.sourceHistory, m.sourceCheckpoints = history, checkpoints
+func (m *Service) SetSources(history tools.SourceHistory, checkpoints Checkpoints) {
+	m.history = history
+	m.checkpoints = checkpoints
 }
 
 const (
@@ -48,6 +48,10 @@ const (
 	// sourceChangeBriefGitCap bounds itemized ref movements per window.
 	sourceChangeBriefGitCap = 10
 )
+
+type Checkpoints interface {
+	TurnCheckpoint(context.Context, string, string, int) (sourceledger.Checkpoint, bool, error)
+}
 
 // Record stores the source-change brief a coordinator turn
 // opens with; assembly restates it unchanged on every later call.
@@ -94,19 +98,19 @@ func (m *Service) Build(ctx context.Context, sess *api.Session) inject.SourceCha
 	if m == nil || sess == nil || sess.ProjectID == "" {
 		return inject.SourceChangeBrief{}
 	}
-	reader := m.sourceHistory
-	if reader.Files == nil || reader.Git == nil || reader.Authorship == nil || m.sourceCheckpoints == nil || m.store == nil {
+	reader := m.history
+	if reader.Files == nil || reader.Git == nil || reader.Authorship == nil || m.checkpoints == nil || m.store == nil {
 		return inject.SourceChangeBrief{}
 	}
 	turn, err := m.store.UserTurnOrdinal(ctx, sess.ID)
 	if err != nil || turn < 2 {
 		return inject.SourceChangeBrief{}
 	}
-	current, foundCurrent, err := m.sourceCheckpoints.TurnCheckpoint(ctx, sess.ProjectID, sess.ID, turn)
+	current, foundCurrent, err := m.checkpoints.TurnCheckpoint(ctx, sess.ProjectID, sess.ID, turn)
 	if err != nil || !foundCurrent {
 		return inject.SourceChangeBrief{}
 	}
-	previous, foundPrevious, err := m.sourceCheckpoints.TurnCheckpoint(ctx, sess.ProjectID, sess.ID, turn-1)
+	previous, foundPrevious, err := m.checkpoints.TurnCheckpoint(ctx, sess.ProjectID, sess.ID, turn-1)
 	if err != nil || !foundPrevious {
 		return inject.SourceChangeBrief{}
 	}
@@ -137,7 +141,7 @@ func (m *Service) Build(ctx context.Context, sess *api.Session) inject.SourceCha
 		Truncated:   len(effects) > sourceChangeBriefEffectCap,
 		SessionID:   sess.ID,
 		Roots:       roots,
-		Touched:     m.sessionTouchedPaths(ctx, sess, reader.Authorship, roots),
+		Touched:     m.sessionTouchedPaths(ctx, sess, reader, roots),
 	})
 }
 
@@ -208,9 +212,7 @@ func assembleSourceChangeBrief(in sourceChangeBriefInputs) inject.SourceChangeBr
 func (m *Service) sessionTouchedPaths(
 	ctx context.Context,
 	sess *api.Session,
-	reader interface {
-		SessionAuthoredPaths(context.Context, string, string, string) ([]string, error)
-	},
+	reader tools.SourceHistory,
 	roots []projectroot.RootRef,
 ) map[string]bool {
 	touched := make(map[string]bool)
@@ -222,7 +224,7 @@ func (m *Service) sessionTouchedPaths(
 		}
 	}
 	for _, root := range roots {
-		authored, err := reader.SessionAuthoredPaths(ctx, sess.ProjectID, sess.ID, root.ID)
+		authored, err := reader.Authorship.SessionAuthoredPaths(ctx, sess.ProjectID, sess.ID, root.ID)
 		if err != nil {
 			continue
 		}

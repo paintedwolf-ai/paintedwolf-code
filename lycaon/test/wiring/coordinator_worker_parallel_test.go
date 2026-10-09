@@ -23,7 +23,7 @@ func TestCoordinatorParallelTaskCapMixedAgents(t *testing.T) {
 	}, dir)
 	testutil.FailErr(t, "create session", err)
 
-	q := h.WorkerQueue
+	q := h.Delegations.Queue
 	deps := workeradmission.WorkerCycleGuardDeps{Workers: q}
 	agents := []string{"repo-researcher", "path-explorer", "implementer", "code-reviewer", "web-researcher"}
 	cap := spawn.MaxInFlightTaskWorkers
@@ -31,7 +31,7 @@ func TestCoordinatorParallelTaskCapMixedAgents(t *testing.T) {
 	for i := 0; i < cap; i++ {
 		agentType := agents[i%len(agents)]
 		gc := observeReadScoutSpawn(t, ctx, deps, sess, []any{"internal/**"})
-		if _, rejected := gc.RejectData[workeradmission.CoordinatorWorkerInFlightCode]; rejected || gc.WorkerSpawnBlocked {
+		if _, rejected := gc.RejectData[workeradmission.CoordinatorWorkerInFlightCode]; rejected || gc.Workers.WorkerSpawnBlocked {
 			t.Fatalf("expected allow before enqueuing %s at %d in flight", agentType, i)
 		}
 		_, err = q.Enqueue(ctx, api.WorkerTask{
