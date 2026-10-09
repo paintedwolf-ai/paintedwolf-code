@@ -29,7 +29,7 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/session/profiles"
+	sessionprofiles "github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
@@ -105,7 +105,7 @@ func TestPromptAskWriteApproveRunsTool(t *testing.T) {
 	exec.Approvals.SetCheckpointManager(hitlMgr, gate)
 	toolReg := tools.NewExecutorRegistry(exec, reg)
 
-	postureRegistry, err := profiles.LoadPostureRegistry()
+	postureRegistry, err := sessionprofiles.LoadPostureRegistry()
 	testutil.FailErr(t, "profiles.LoadPostureRegistry failed", err)
 	mgr := session.NewHost(store, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolReg)
 	oartest.InstallCloseoutPolicy(t, mgr)
@@ -226,7 +226,7 @@ func TestPromptAskWriteRejectSurfacesApprovalDenied(t *testing.T) {
 	exec.Approvals.SetCheckpointManager(hitlMgr, gate)
 	toolReg := tools.NewExecutorRegistry(exec, reg)
 
-	postureRegistry, err := profiles.LoadPostureRegistry()
+	postureRegistry, err := sessionprofiles.LoadPostureRegistry()
 	testutil.FailErr(t, "profiles.LoadPostureRegistry failed", err)
 	mgr := session.NewHost(store, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolReg)
 	oartest.InstallCloseoutPolicy(t, mgr)
