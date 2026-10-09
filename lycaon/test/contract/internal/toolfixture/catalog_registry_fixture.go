@@ -65,7 +65,7 @@ func registerCatalogToolsOnto(t *testing.T, reg *tools.DefaultRegistry) {
 		contractcheck.FailErr(t, "parse.RegisterParseTools failed", err)
 	}
 	delegationStore := delegation.NewMemoryStore()
-	delegationMgr := delegation.NewManager(delegationStore, worker.NewInMemoryQueue(2), session.NewManager(store.NewMemory(), nil, tools.NewStubRegistry(), settings.DefaultSessionLimits()), nil)
+	delegationMgr := delegation.NewManager(delegationStore, worker.NewInMemoryQueue(2), session.NewHost(store.NewMemory(), session.Models{Limits: settings.DefaultSessionLimits()}, tools.NewStubRegistry()), nil)
 	if err := delegation.RegisterDelegationTools(reg, delegationMgr); err != nil {
 		contractcheck.FailErr(t, "delegation.RegisterDelegationTools failed", err)
 	}
@@ -198,12 +198,10 @@ func ContractServeBootRegistry(t *testing.T) *tools.DefaultRegistry {
 
 	agents := orchestration.NewMemoryAgentRegistry()
 	contractcheck.FailErr(t, "LoadRequiredAgentRegistry", orchestration.LoadRequiredAgentRegistry(context.Background(), agents))
-	sessMgr := session.NewManager(store.NewMemory(), nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
 	if err := worker.RegisterTaskTool(rt.Registry, worker.TaskToolDeps{
-		Sessions: sessMgr,
-		Queue:    worker.NewInMemoryQueue(2),
-		Agents:   agents,
-		Workers:  worker.DefaultWorkersConfig(),
+		Queue:   worker.NewInMemoryQueue(2),
+		Agents:  agents,
+		Workers: worker.DefaultWorkersConfig(),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -247,7 +245,7 @@ func ContractServeBootRegistry(t *testing.T) *tools.DefaultRegistry {
 	}
 	memStore := store.NewMemory()
 	if err := native.RegisterSurfaceNoteTool(rt.Registry, reporttools.SurfaceNoteDeps{
-		Ledger: session.NewManager(memStore, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits()).CloseoutEvidence(),
+		Ledger: session.NewHost(memStore, session.Models{Limits: settings.DefaultSessionLimits()}, tools.NewStubRegistry()).Verification.Evidence,
 		Messages: func(ctx context.Context, sessionID string) ([]api.Message, error) {
 			return memStore.GetMessages(ctx, sessionID)
 		},

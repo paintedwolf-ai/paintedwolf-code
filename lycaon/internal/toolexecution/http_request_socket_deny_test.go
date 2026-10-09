@@ -80,10 +80,11 @@ func (r *recordingSocketRuntime) AuthorizedGrants(_, _, _, _ string, requested [
 	return out
 }
 
-func (r *recordingSocketRuntime) GrantChat(_ string, g confine.SocketGrant, _, _, _ string, _ *time.Time) {
+func (r *recordingSocketRuntime) GrantChat(_ string, g confine.SocketGrant, _, _, _ string, _ *time.Time) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.granted = append(r.granted, g)
+	return true
 }
 
 func (r *recordingSocketRuntime) IssuePermit(_, _, _ string, g confine.SocketGrant) {

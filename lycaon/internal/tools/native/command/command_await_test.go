@@ -50,7 +50,9 @@ func (*oneShotDirectIPRuntime) IssuePermit(string, string, string, string, strin
 
 func (*oneShotDirectIPRuntime) LeaseCovers(string, hitl.DirectIPLease) bool { return false }
 
-func (*oneShotDirectIPRuntime) GrantChat(string, hitl.DirectIPLease, string, string, *time.Time) {}
+func (*oneShotDirectIPRuntime) GrantChat(string, hitl.DirectIPLease, string, string, *time.Time) bool {
+	return true
+}
 
 func (r *oneShotDirectIPRuntime) ConsumePermit(string, string, string, string, string) (bool, error) {
 	if r.consumed {

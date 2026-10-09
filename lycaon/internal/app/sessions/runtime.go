@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
+	sessiondecisions "github.com/lycaon/lycaon/internal/session/decisions"
 	"github.com/lycaon/lycaon/internal/spawn"
 )
 
@@ -24,7 +25,7 @@ type Runtime struct {
 	PromptEngine        *prompts.FileTemplateEngine
 	Invocations         invocation.Recorder
 	Checkpoints         hitl.CheckpointManager
-	Decisions           session.DecisionStore
+	Decisions           sessiondecisions.Store
 	GateRepeat          *approvalstate.GateRepeatLedger
 	SandboxWriteRoot    *approvalstate.SandboxPathGrantRuntime
 	SandboxReadPath     *approvalstate.SandboxPathGrantRuntime

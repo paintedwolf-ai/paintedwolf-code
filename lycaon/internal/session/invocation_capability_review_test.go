@@ -95,14 +95,6 @@ func (c *capabilityReviewCheckpoints) install(delta hitl.ApprovalAuthorityDelta)
 	}
 }
 
-type capabilityReviewSocketRuntime struct {
-	*approvalstate.SocketCapabilityRuntime
-}
-
-func (r capabilityReviewSocketRuntime) GrantChat(session string, socket confine.SocketGrant, id, checkpoint, action string, expiry *time.Time) {
-	r.SocketCapabilityRuntime.GrantChat(session, socket, id, checkpoint, action, expiry)
-}
-
 type capabilityReviewFixture struct {
 	executor    *toolexecution.Executor
 	checkpoints *capabilityReviewCheckpoints
@@ -162,7 +154,7 @@ func newCapabilityReviewFixture(t *testing.T, approve bool) *capabilityReviewFix
 	}))
 	f.executor = toolexecution.NewExecutor(nil, registry, "implement")
 	f.executor.Approvals.SetCheckpointManager(c, authority)
-	f.executor.Capabilities.SetSocketCapabilityRuntime(capabilityReviewSocketRuntime{c.sockets})
+	f.executor.Capabilities.SetSocketCapabilityRuntime(c.sockets)
 	f.executor.Boundary.SetSessionWriteRootOverlay(broker.SessionWriteRoots)
 	f.executor.Boundary.SetSessionReadPathOverlay(broker.SessionReadPaths)
 	f.executor.Boundary.SetWriteRootPreflight(func(ctx context.Context, tool string, _ map[string]any, tc tools.ToolContext, path string) (bool, bool, string, error) {

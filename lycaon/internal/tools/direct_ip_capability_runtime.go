@@ -14,7 +14,7 @@ type DirectIPCapabilityRuntime interface {
 	// LeaseCovers matches live exact-action authority.
 	LeaseCovers(chatSessionID string, lease hitl.DirectIPLease) bool
 	// GrantChat records an accepted exact-action lease.
-	GrantChat(chatSessionID string, lease hitl.DirectIPLease, grantID, checkpointID string, expiresAt *time.Time)
+	GrantChat(chatSessionID string, lease hitl.DirectIPLease, grantID, checkpointID string, expiresAt *time.Time) bool
 }
 
 // DirectIPLifecyclePhase is a typed lifecycle moment for one-action direct IP.

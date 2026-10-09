@@ -23,6 +23,7 @@ import (
 	"github.com/lycaon/lycaon/internal/sensitivepath"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
+	sessiondecisions "github.com/lycaon/lycaon/internal/session/decisions"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/toolhost"
@@ -170,7 +171,7 @@ func (r *Runtime) WireCheckpoints(ctx context.Context, deps CheckpointDependenci
 		return err
 	}
 
-	r.Decisions = session.NewSQLDecisionStore(deps.Database)
+	r.Decisions = sessiondecisions.NewSQL(deps.Database)
 	r.Manager.SetDecisionStore(r.Decisions)
 	return nil
 }

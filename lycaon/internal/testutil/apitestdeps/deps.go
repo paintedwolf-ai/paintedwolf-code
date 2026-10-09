@@ -277,7 +277,7 @@ func fillWorkers(t *testing.T, d *Deps) {
 		d.Workers = worker.NewInMemoryQueue(2)
 	}
 	if d.WorkerCancel == nil {
-		d.WorkerCancel = &worker.CancelService{Queue: d.Workers, Events: d.Sessions, Graceful: d.Sessions.Workers.Cancel, Cancellations: d.Sessions.Workers.Cancellations}
+		d.WorkerCancel = &worker.CancelService{Queue: d.Workers, Events: d.Sessions.Observations, Graceful: d.Sessions.Workers.Cancel, Cancellations: d.Sessions.Workers.Cancellations}
 	}
 	if d.Delegations == nil {
 		d.Delegations = delegation.NewManager(delegation.NewMemoryStore(), d.Workers, nil, nil)
@@ -341,7 +341,7 @@ func fillSessions(t *testing.T, d *Deps) {
 	d.Sessions = session.NewHost(d.Store, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, registry)
 	d.Sessions.SetDataDir(t.TempDir())
 	d.Sessions.SetProjectRegistry(d.Projects)
-	d.Sessions.SetToolInvoker(testtool.RegistryInvoker{Registry: registry}, testtool.RegistryInvoker{Registry: registry})
+	d.Sessions.Coordinator.Guards.SetToolMetadata(testtool.RegistryInvoker{Registry: registry})
 }
 
 func fillSettings(t *testing.T, d *Deps) {
