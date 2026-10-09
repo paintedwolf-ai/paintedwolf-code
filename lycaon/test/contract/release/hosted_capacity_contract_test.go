@@ -119,10 +119,13 @@ func (p capacityPlan) group(t *testing.T, name string) string {
 		Group  string
 		Cancel string `yaml:"cancel-in-progress"`
 	}
-	if node.Kind == yaml.ScalarNode {
+	switch node.Kind {
+	case yaml.ScalarNode:
 		settings.Group = node.Value
-	} else if node.Kind == yaml.MappingNode {
+	case yaml.MappingNode:
 		contractcheck.FailErr(t, "decode concurrency of "+name, node.Decode(&settings))
+	default:
+		// No group at all is refused below.
 	}
 	if settings.Group == "" {
 		t.Fatalf("%s must run one at a time in a concurrency group", name)
