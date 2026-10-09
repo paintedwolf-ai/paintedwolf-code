@@ -4,7 +4,8 @@ import (
 	"context"
 
 	"github.com/lycaon/lycaon/internal/projectcontrib"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/coordinatorcontrol"
+	"github.com/lycaon/lycaon/internal/workflow"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -12,7 +13,7 @@ func (b *serveBuilder) wireScan() error {
 	if _, err := b.security.LoadMatcher(b.startup.cfg.TestSecretMatcher); err != nil {
 		return err
 	}
-	b.sessions.Manager.SetScanWaitState(session.ScanWaitState{
+	b.sessions.Manager.Coordinator.Scans.Wait = coordinatorcontrol.ScanWaitState{
 		InFlight: func(ctx context.Context, sessionID string) bool {
 			requested, qErr := b.scanning.Store.ListBySessionID(ctx, sessionID)
 			if qErr != nil {
@@ -38,12 +39,12 @@ func (b *serveBuilder) wireScan() error {
 			}
 			return false
 		},
-	})
+	}
 	b.sessions.Manager.SetScanGuidance(b.scanning.Guidance)
 	if b.worker.merge != nil {
 		b.worker.merge.Scans = b.scanning.Cadence
 	}
-	if err := b.scanning.RegisterTools(b.execution.Host.Registry, b.execution.Rejections, b.settings.Service); err != nil {
+	if err := b.scanning.RegisterTools(b.execution.Host.Registry, b.execution.Rejections, b.settings.Service, workflow.InventoryAccounting{RunManager: b.workflows.Manager}); err != nil {
 		return err
 	}
 	return b.workflows.RegisterTools(b.execution.Host.Registry, b.execution.Host.Boundary, b.storage.Sessions, b.settings.ProjectSurfaceGate(projectcontrib.SurfaceScanConfig, b.storage.Projects))

@@ -8,7 +8,6 @@ import (
 	"github.com/lycaon/lycaon/internal/boot"
 	"github.com/lycaon/lycaon/internal/bootrecovery"
 	"github.com/lycaon/lycaon/internal/captureprojection"
-	"github.com/lycaon/lycaon/internal/coordinator"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
@@ -120,14 +119,14 @@ func (b *serveBuilder) registerCoordinatorTools() error {
 		SourceLedger: b.storage.SourceLedger,
 		DataDir:      b.storage.Directory,
 		Reports: worker.ChangeReportDeps{
-			SourceRuns: b.sessions.Manager.Workers.Workspaces.SourceRuns,
+			SourceRuns: b.sessions.Manager.Verification.WorkerSourceRuns,
 			Messages: func(ctx context.Context, childSessionID string) ([]wire.Message, error) {
 				return b.storage.Sessions.GetMessages(ctx, childSessionID)
 			},
 		},
 	}
 	workerMergeSvc.Evidence = worker.SourceEvidenceContext{
-		SourceRevision: b.sessions.Manager.Workers.Workspaces.VerificationRevision,
+		SourceRevision: b.sessions.Manager.Verification.WorkerRevision,
 		DeclaredCommand: func(ctx context.Context, task *wire.WorkerTask) string {
 			if task == nil {
 				return ""

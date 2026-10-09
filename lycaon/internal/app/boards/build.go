@@ -3,6 +3,7 @@ package boards
 import (
 	"context"
 	"fmt"
+	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
 	"path/filepath"
 	"strings"
 
@@ -27,7 +28,6 @@ import (
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/repoinfo"
 	"github.com/lycaon/lycaon/internal/secretmatch"
-	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/tools"
 	workertools "github.com/lycaon/lycaon/internal/tools/native/workercontrol"
@@ -106,10 +106,10 @@ func (r *Runtime) WireBoardAndResearch(ctx context.Context) error {
 		CostTrackingEnabled: func() bool {
 			return r.deps.Settings.Service != nil && r.deps.Settings.Service.Pricing != nil && r.deps.Settings.Service.Pricing.Effective().CostTrackingEnabled
 		},
-		Worktree: r.deps.Sessions.Manager.BoardGitWorktreeFunc(r.deps.GitMgr),
+		Worktree: r.deps.Sessions.Manager.Workspace.BoardWorktree(r.deps.GitMgr),
 	}
 
-	r.deps.Sessions.Manager.SetBoardInject(&board.InjectBuilder{SnapshotBuilder: r.Snapshot, Projects: r.deps.Storage.Projects}, board.DefaultInjectFormatter())
+	r.deps.Sessions.Manager.Coordinator.ConfigureBoard(&board.InjectBuilder{SnapshotBuilder: r.Snapshot, Projects: r.deps.Storage.Projects}, board.DefaultInjectFormatter(), r.deps.Sessions.Manager.Promotion)
 	r.deps.Sessions.Manager.Coordinator.Runtime.SetIncludeScanLegend(func() bool {
 		if r.deps.Settings.Service == nil || r.deps.Settings.Service.SecurityScanners == nil {
 			return true
@@ -121,9 +121,9 @@ func (r *Runtime) WireBoardAndResearch(ctx context.Context) error {
 		Builder:            r.Snapshot,
 		Findings:           func() findings.Store { return r.Findings },
 		RootSession:        r.rootSessionKey,
-		PromotePaths:       r.deps.Sessions.Manager.PromotePathBoardLines,
-		OverlayMergePlan:   r.deps.Sessions.Manager.OverlayMergePlanFn(),
-		ActiveReservations: r.deps.Sessions.Manager.ActiveReservationBoardEntries,
+		PromotePaths:       r.deps.Sessions.Manager.Promotion.PromotePathBoardLines,
+		OverlayMergePlan:   r.deps.Sessions.Manager.Promotion.MergePlan(),
+		ActiveReservations: r.deps.Sessions.Manager.Workers.Workspaces.ReservationEntries,
 	}); err != nil {
 		return fmt.Errorf("board tools: %w", err)
 	}
@@ -142,7 +142,8 @@ func (r *Runtime) WireBoardAndResearch(ctx context.Context) error {
 		return repoinfo.FormatOrientationBriefText(mrb.OrientationRoots()), nil
 	})
 
-	r.deps.Sessions.Manager.SetTurnLoads(r.deps.Execution.TurnLoads)
+	r.deps.Sessions.Manager.Coordinator.Loading.SetLedger(r.deps.Execution.TurnLoads)
+	r.deps.Sessions.Manager.Coordinator.Nudges.SetLedger(r.deps.Execution.TurnLoads)
 	r.deps.Sessions.Manager.Coordinator.Loading.SetDecider(r.deps.Decisions.Decider)
 	r.deps.Sessions.Manager.Coordinator.Loading.SetSkillBodyRenderer(r.deps.Execution.Host.Skills.RenderSkillBody)
 
@@ -165,7 +166,7 @@ func (r *Runtime) WireBoardAndResearch(ctx context.Context) error {
 		if r.deps.Providers.Service != nil {
 			r.WebWarmer.Plane = r.deps.Providers.Service.Utility
 		}
-		r.deps.Sessions.Manager.SetIndexWarmer(r.WebWarmer)
+		r.deps.Sessions.Manager.Chats.Research.SetWarmer(r.WebWarmer)
 		r.WarmRunner = &webresearch.WarmRunner{
 			W: r.WebWarmer, Roots: r.ProjectRootPaths, ProjectIDForRoot: r.projectIDForRoot, Repo: r.RepoProvider,
 			Live: func() bool { return r.deps.Events.Presence.Live() },
@@ -181,10 +182,10 @@ func (r *Runtime) WireBoardAndResearch(ctx context.Context) error {
 		Rerank:   r.deps.Decisions.Rerank,
 		Boundary: r.deps.Execution.Host.Boundary,
 		SearchWarmHook: func(ctx context.Context, sessionID, toolCallID, query, projectDir string, hitURLs, residualURLs []string, strongHits, maxResults int, directParticipated bool) {
-			r.deps.Sessions.Manager.WarmIndexForSearch(ctx, sessionID, toolCallID, query, projectDir, hitURLs, residualURLs, strongHits, maxResults, directParticipated)
+			r.deps.Sessions.Manager.Chats.Research.Search(ctx, sessionID, toolCallID, query, projectDir, hitURLs, residualURLs, strongHits, maxResults, directParticipated)
 		},
 		FetchWarmHook: func(ctx context.Context, sessionID, toolCallID, pageURL, title, projectDir string) {
-			r.deps.Sessions.Manager.WarmIndexForFetch(ctx, sessionID, toolCallID, pageURL, title, projectDir)
+			r.deps.Sessions.Manager.Chats.Research.Fetch(ctx, sessionID, toolCallID, pageURL, title, projectDir)
 		},
 	}
 
@@ -301,5 +302,5 @@ func (r *Runtime) ProjectRootPaths(ctx context.Context) ([]string, error) {
 }
 
 func (r *Runtime) rootSessionKey(ctx context.Context, sessionID string) string {
-	return session.RootSessionID(ctx, r.deps.Storage.Sessions, sessionID)
+	return sessiontree.RootID(ctx, r.deps.Storage.Sessions, sessionID)
 }

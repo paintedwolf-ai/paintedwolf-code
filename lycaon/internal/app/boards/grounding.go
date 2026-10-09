@@ -4,6 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/session/decisions"
+	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
+	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 
 	"github.com/lycaon/lycaon/internal/browser"
 	"github.com/lycaon/lycaon/internal/browser/renderhandle"
@@ -34,7 +37,7 @@ import (
 
 // WireGroundingAndFindings wires grounding coordinators, progress, visual, and decision tools.
 func (r *Runtime) WireGroundingAndFindings(ctx context.Context) error {
-	r.deps.Sessions.Manager.SetRuleEngine(r.deps.Workflows.Rules)
+	r.deps.Sessions.Manager.Coordinator.Guards.SetRules(r.deps.Workflows.Rules)
 	if err := r.wireGroundingCoordinators(); err != nil {
 		return err
 	}
@@ -62,12 +65,12 @@ func (r *Runtime) wireGroundingCoordinators() error {
 	r.deps.Delegations.Manager.Grounding = delegation.NewGroundingCoordinator(r.deps.Delegations.Store, r.deps.Delegations.Queue, groundingGate, groundingCfg, groundingState, r.deps.Sessions.Manager)
 	r.deps.Delegations.Manager.Grounding.InspectorCloseout = r.deps.Delegations.Manager.InspectorCloseout
 	r.deps.Delegations.Manager.Grounding.Events = r.deps.Events.Publisher
-	r.deps.Delegations.Manager.Grounding.Pipeline = r.deps.Sessions.Manager.OARPipeline()
+	r.deps.Delegations.Manager.Grounding.Pipeline = r.deps.Sessions.Manager.ToolPolicy.Pipeline
 	ambientGate := delegation.NewSimpleAmbientGroundingGate(groundingCfg)
 	ambientState := grounding.NewStateStore()
 	ambientCoord := delegation.NewAmbientGroundingCoordinator(r.deps.Delegations.Store, r.deps.Delegations.Queue, ambientGate, groundingCfg, ambientState, r.deps.Sessions.Manager)
 	ambientCoord.Events = r.deps.Events.Publisher
-	ambientCoord.Pipeline = r.deps.Sessions.Manager.OARPipeline()
+	ambientCoord.Pipeline = r.deps.Sessions.Manager.ToolPolicy.Pipeline
 	r.deps.Sessions.Manager.SetGroundingHook(&delegation.ChainedGroundingCoordinator{
 		Delegation: r.deps.Delegations.Manager.Grounding,
 		Ambient:    ambientCoord,
@@ -77,22 +80,22 @@ func (r *Runtime) wireGroundingCoordinators() error {
 		State:     grounding.NewStateStore(),
 		Ledger:    r.deps.Storage.Sessions,
 		RejectFmt: r.deps.Execution.Rejections,
-		Nudger:    r.deps.Sessions.Manager,
+		Nudger:    r.deps.Sessions.Manager.Coordinator.Guidance,
 	}
 	return nil
 }
 
 func (r *Runtime) wireFindingAndProgressTools() error {
 	r.Findings = findings.NewSQLStore(r.deps.Storage.Database)
-	r.deps.Sessions.Manager.SetFindingsStore(r.Findings)
-	r.deps.Sessions.Manager.SetPeerRejectionFeed(session.NewPeerRejectionFeed())
+	r.deps.Sessions.Manager.Workers.Notes.SetFindings(r.Findings)
+	r.deps.Sessions.Manager.SetPeerRejectionFeed(workeroutcomes.NewPeerRejectionFeed())
 	if err := native.RegisterRecordFindingTool(r.deps.Execution.Host.Registry, reporttools.RecordFindingGates{
 		Grounding: r.Grounding,
 	}, r.Findings, r.rootSessionKey); err != nil {
 		return fmt.Errorf("record_finding tool: %w", err)
 	}
 	if err := native.RegisterSurfaceNoteTool(r.deps.Execution.Host.Registry, reporttools.SurfaceNoteDeps{
-		Ledger: r.deps.Sessions.Manager.CloseoutEvidence(),
+		Ledger: r.deps.Sessions.Manager.Verification.Evidence,
 		Messages: func(ctx context.Context, sessionID string) ([]api.Message, error) {
 			return r.deps.Storage.Sessions.GetMessages(ctx, sessionID)
 		},
@@ -164,7 +167,7 @@ func (r *Runtime) wireVisualAndRenderTools() error {
 	})
 	r.deps.Sessions.Manager.SetVisualStore(r.Visual)
 	providerwire.SetVisualBytesResolver(func(sessionID, artifactID string) ([]byte, string, bool) {
-		root := session.RootSessionID(context.Background(), r.deps.Storage.Sessions, sessionID)
+		root := sessiontree.RootID(context.Background(), r.deps.Storage.Sessions, sessionID)
 		res := r.Visual.Resolve(context.Background(), root, artifactID)
 		if !res.IsPresent() {
 			return nil, "", false
@@ -172,7 +175,7 @@ func (r *Runtime) wireVisualAndRenderTools() error {
 		return res.Bytes(), res.Meta().Mime, true
 	})
 	if r.deps.Workflows != nil && r.deps.Workflows.Manager != nil {
-		r.deps.Workflows.Manager.SetVisualArtifacts(r.Visual, r.rootSessionKey)
+		r.deps.Workflows.Manager.SetVisualStore(r.Visual, r.rootSessionKey)
 	}
 	if err := visual.RegisterTestProducer(r.deps.Execution.Host.Registry); err != nil {
 		return fmt.Errorf("emit_visual_fixture tool: %w", err)
@@ -187,7 +190,7 @@ func (r *Runtime) wireVisualAndRenderTools() error {
 	if err := native.RegisterRenderViewTool(r.deps.Execution.Host.Registry, r.deps.Execution.Host.Boundary, r.BrowserRaster, handleStore); err != nil {
 		return fmt.Errorf("render_view tool: %w", err)
 	}
-	if err := r.deps.Sessions.Manager.RegisterSessionCleanup("render-handles", 54, func(_ context.Context, sessionID string) error {
+	if err := r.deps.Sessions.Manager.Resources.RegisterCleanup("render-handles", 54, func(_ context.Context, sessionID string) error {
 		handleStore.Release(sessionID)
 		return nil
 	}); err != nil {
@@ -220,14 +223,14 @@ func (r *Runtime) wireVisualAndRenderTools() error {
 }
 
 func (r *Runtime) wireDecisionAndCallTools() error {
-	r.deps.Sessions.Decisions = session.NewSQLDecisionStore(r.deps.Storage.Database)
+	r.deps.Sessions.Decisions = decisions.NewSQL(r.deps.Storage.Database)
 	r.deps.Sessions.Manager.SetDecisionStore(r.deps.Sessions.Decisions)
 	r.BudgetLedger = worker.NewSQLBudgetLedger(r.deps.Storage.Sessions, r.deps.Delegations.Queue)
 	if err := worker.RegisterRequestBudgetTool(r.deps.Execution.Host.Registry, worker.RequestBudgetToolDeps{
 		Queue:      r.deps.Delegations.Queue,
 		Ledger:     r.BudgetLedger,
 		ToolBudget: r.deps.Sessions.WorkerToolBudgetFor,
-		Notify:     r.deps.Sessions.Manager.NotifyWorkerBudgetRequested,
+		Notify:     r.deps.Sessions.Manager.Coordinator.Workers.BudgetRequested,
 	}); err != nil {
 		return fmt.Errorf("request_budget tool: %w", err)
 	}
@@ -255,10 +258,10 @@ func (r *Runtime) wireDecisionAndCallTools() error {
 		return sess.WorkspacePath, nil
 	}}
 	r.Calls = call.NewSQLManager(r.deps.Storage.Database, callLookup)
-	r.deps.Sessions.Manager.SetCallManager(r.Calls)
-	r.deps.Sessions.Manager.SetWorkerTouchLedger(session.NewWorkerTouchLedger())
-	r.Snapshot.Touches = r.deps.Sessions.Manager
-	r.Snapshot.ActiveReservations = r.deps.Sessions.Manager.ActiveReservationBoardEntries
+	r.deps.Sessions.Manager.Workers.Workspaces.SetCalls(r.Calls)
+
+	r.Snapshot.Touches = r.deps.Sessions.Manager.Workers.Workspaces.Touches
+	r.Snapshot.ActiveReservations = r.deps.Sessions.Manager.Workers.Workspaces.ReservationEntries
 
 	r.deps.Sessions.Manager.SetWorkerQueue(r.deps.Delegations.Queue)
 	r.deps.Sessions.Manager.SetSessionWorkerAbort(r.deps.Delegations.Cancel)
@@ -305,5 +308,5 @@ type sessionRootResolver struct {
 }
 
 func (s sessionRootResolver) RootSessionID(ctx context.Context, sessionID string) string {
-	return session.RootSessionID(ctx, s.store, sessionID)
+	return sessiontree.RootID(ctx, s.store, sessionID)
 }

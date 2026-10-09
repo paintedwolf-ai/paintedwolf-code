@@ -2,6 +2,7 @@ package eventing
 
 import (
 	"context"
+	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
 	"strings"
 	"sync"
 
@@ -39,7 +40,7 @@ func (c *presenceChats) Chat(ctx context.Context, sessionID string) (agentpresen
 	}
 	ref = agentpresence.ChatRef{ProjectID: sess.ProjectID, SessionID: sess.ID, Title: sess.Title}
 	if strings.TrimSpace(sess.ParentSessionID) != "" {
-		root := session.RootSessionID(ctx, c.store, sessionID)
+		root := sessiontree.RootID(ctx, c.store, sessionID)
 		chat, err := c.store.Get(ctx, root)
 		if err != nil || chat == nil {
 			return agentpresence.ChatRef{}, false

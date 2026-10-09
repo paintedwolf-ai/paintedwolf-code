@@ -32,12 +32,12 @@ func (b *serveBuilder) wireToolRuntime() error {
 
 func (b *serveBuilder) wireEvents() error {
 	b.settings.BuildHostPower(b.startup.resources)
-	eventRuntime, err := eventing.Build(b.startup.ctx, b.storage.Database, b.storage.Sessions, b.storage.Projects, b.settings.Power, b.sessions.Manager, b.sessions.Manager, b.sessions.Manager, b.startup.resources)
+	eventRuntime, err := eventing.Build(b.startup.ctx, b.storage.Database, b.storage.Sessions, b.storage.Projects, b.settings.Power, b.sessions.Manager.Runner.SubmissionState, b.sessions.Manager.Runner.SubmissionState, b.sessions.Manager.Chats, b.startup.resources)
 	if err != nil {
 		return err
 	}
 	b.events = eventRuntime
-	b.sessions.Manager.OARPipeline().SetEventPublisher(oarHostEventPublisher{publisher: eventRuntime.Publisher})
+	b.sessions.Manager.ToolPolicy.Pipeline.SetEventPublisher(oarHostEventPublisher{publisher: eventRuntime.Publisher})
 	b.sessions.Manager.SetAgentPresence(eventRuntime.Agents)
 	publisher, vaultContext := eventRuntime.Publisher, b.startup.ctx
 	b.security.BindVaultPublisher(func(chat string, unlocks *presence.Unlocks) {
@@ -46,7 +46,7 @@ func (b *serveBuilder) wireEvents() error {
 	if err := b.registerRecovery(bootrecovery.Entry{
 		Name: "rewind-operations", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseBuild,
 		After: []string{"tool-invocations", "source-mutations", "editor-documents"},
-		Run:   b.sessions.Manager.RecoverRewinds,
+		Run:   b.sessions.Manager.Chats.Rewinds.RecoverRewinds,
 	}); err != nil {
 		return err
 	}

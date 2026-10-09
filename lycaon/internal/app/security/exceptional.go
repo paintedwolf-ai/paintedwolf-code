@@ -5,8 +5,8 @@ import (
 
 	"github.com/lycaon/lycaon/internal/authzcontext"
 	"github.com/lycaon/lycaon/internal/authzledger"
-	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
+	"github.com/lycaon/lycaon/internal/session/protection"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -21,7 +21,7 @@ type DirectIPRecorder interface {
 	AppendDirectIPLifecycle(context.Context, authzledger.DirectIPLifecycleRecord)
 }
 
-func (b *Runtime) BuildExceptional(control *toolexecution.Capabilities, approvals *settings.ApprovalStore, disabled func(string) bool, lifetime SessionLifetime, recorder DirectIPRecorder, reconstruct func(session.DirectIPReconstructHook)) error {
+func (b *Runtime) BuildExceptional(control *toolexecution.Capabilities, approvals *settings.ApprovalStore, disabled func(string) bool, lifetime SessionLifetime, recorder DirectIPRecorder, reconstruct func(protection.DirectIPReconstructHook)) error {
 	socketCapabilityRT := approvalstate.NewSocketCapabilityRuntime()
 	b.Sockets = socketCapabilityRT
 	control.SetSocketCapabilityRuntime(socketCapabilityRT)
