@@ -2,6 +2,7 @@ package command
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"strings"
 
@@ -106,7 +107,7 @@ func rejectDisallowedDesktopCapture(tctx tools.ToolContext, args map[string]any)
 		for _, stage := range plan.Stages {
 			base := strings.ToLower(filepath.Base(strings.TrimSpace(stage.Name)))
 			if base == "screencapture" || base == "scrot" || base == "xwd" {
-				return tools.RejectInvalidArguments("DESKTOP_CAPTURE_DISALLOWED", map[string]any{
+				return toolrejection.RejectInvalidArguments("DESKTOP_CAPTURE_DISALLOWED", map[string]any{
 					"command": CanonicalCommandKey(tctx, args),
 					"reason":  "desktop_screen_capture_disallowed",
 					"instead": "Use command with snapshot_capture or APP_SNAPSHOT to render views offscreen in-process without OS permissions",

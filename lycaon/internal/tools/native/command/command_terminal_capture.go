@@ -3,6 +3,7 @@ package command
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/argv"
@@ -29,11 +30,11 @@ func runCommandTerminalCapture(
 	toolName string,
 ) (RunOutcome, error) {
 	if toolName != "command" {
-		return RunOutcome{}, tools.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": "terminal_capture_is_command_only"})
+		return RunOutcome{}, toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": "terminal_capture_is_command_only"})
 	}
 	for _, key := range []string{"snapshot_capture", "pipeline", "stdin", "stdin_from", "stdout_to", "stderr_to", "background"} {
 		if value, exists := args[key]; exists && value != nil && value != false && value != "" {
-			return RunOutcome{}, tools.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": "terminal_capture_incompatible", "field": key})
+			return RunOutcome{}, toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": "terminal_capture_incompatible", "field": key})
 		}
 	}
 	plan, err := tctx.CommandPlan(args)
@@ -101,7 +102,7 @@ func runCommandTerminalCapture(
 		facts.Network = bound.lease.ObservedHosts
 	}
 	if err := tctx.Effects.Secrets.HandOff(ctx, nil); err != nil {
-		return RunOutcome{}, tools.HeldHandOffReject(toolName, err)
+		return RunOutcome{}, toolrejection.HeldHandOffReject(toolName, err)
 	}
 	var sourceRevision, sourceRootDigest string
 	if tctx.Execution.VerificationCheck {

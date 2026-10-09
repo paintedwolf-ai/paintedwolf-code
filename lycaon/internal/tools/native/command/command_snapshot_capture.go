@@ -46,11 +46,11 @@ func runCommandSnapshotCapture(
 	toolName string,
 ) (RunOutcome, error) {
 	if toolName != "command" {
-		return RunOutcome{}, tools.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": "snapshot_capture_is_command_only"})
+		return RunOutcome{}, toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": "snapshot_capture_is_command_only"})
 	}
 	for _, key := range []string{"terminal_capture", "pipeline", "stdin", "stdin_from", "stdout_to", "stderr_to", "background"} {
 		if value, exists := args[key]; exists && value != nil && value != false && value != "" {
-			return RunOutcome{}, tools.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": "snapshot_capture_incompatible", "field": key})
+			return RunOutcome{}, toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": "snapshot_capture_incompatible", "field": key})
 		}
 	}
 
@@ -113,7 +113,7 @@ func runCommandSnapshotCapture(
 
 	f, err := fseffect.OpenRead(fseffect.Location{Root: filepath.Dir(outPath), Rel: filepath.Base(outPath)})
 	if err != nil {
-		return RunOutcome{}, tools.RejectInvalidArguments("SNAPSHOT_FILE_NOT_PRODUCED", map[string]any{
+		return RunOutcome{}, toolrejection.RejectInvalidArguments("SNAPSHOT_FILE_NOT_PRODUCED", map[string]any{
 			"path":    outPath,
 			"env_var": envVar,
 			"reason":  "snapshot_file_missing_on_zero_exit",
@@ -123,7 +123,7 @@ func runCommandSnapshotCapture(
 
 	rawBytes, err := io.ReadAll(io.LimitReader(f, visual.MaxRasterBytes().Int64()))
 	if err != nil || len(rawBytes) == 0 {
-		return RunOutcome{}, tools.RejectInvalidArguments("SNAPSHOT_FILE_NOT_PRODUCED", map[string]any{
+		return RunOutcome{}, toolrejection.RejectInvalidArguments("SNAPSHOT_FILE_NOT_PRODUCED", map[string]any{
 			"path":    outPath,
 			"env_var": envVar,
 			"reason":  "snapshot_file_missing_on_zero_exit",

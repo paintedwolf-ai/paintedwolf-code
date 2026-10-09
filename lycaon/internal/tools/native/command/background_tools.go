@@ -160,7 +160,7 @@ func missingCommandHandleReject(reg *bgprocess.Registry, sessionID, handle strin
 func rejectBackgroundCapture(args map[string]any) error {
 	for _, capture := range []string{"terminal_capture", "snapshot_capture"} {
 		if _, ok := args[capture]; ok {
-			return tools.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": capture + "_incompatible", "field": "background"})
+			return toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": capture + "_incompatible", "field": "background"})
 		}
 	}
 	return nil
@@ -248,7 +248,7 @@ func runCommandBackground(
 		tools.LocalNetworkGrantOf(tctx), tctx.Files.PackageExecution,
 	), Action: egressLease, Network: egressLease.ObservedHosts}
 	if err := tctx.Effects.Secrets.HandOff(ctx, nil); err != nil {
-		return "", tools.HeldHandOffReject(toolName, err)
+		return "", toolrejection.HeldHandOffReject(toolName, err)
 	}
 	window := openCommandWindow(ctx, tctx, toolName, commandLine)
 	var sourceRevision, sourceRootDigest string
