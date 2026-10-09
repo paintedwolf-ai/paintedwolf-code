@@ -25,6 +25,9 @@ func TestReadyPullRequestsRunTheFastTierAndMergeGroupsTheGate(t *testing.T) {
 	if _, ok := workflow.On["push"]; ok {
 		t.Error("the merge queue verifies what lands on main; a push run would repeat it")
 	}
+	if workflow.Concurrency.Cancel.Value != "${{ github.event_name == 'pull_request' }}" {
+		t.Errorf("only a pull request's newer push may cancel its CI, got %q", workflow.Concurrency.Cancel.Value)
+	}
 	var pullRequest struct {
 		Paths       []string
 		PathsIgnore []string `yaml:"paths-ignore"`
