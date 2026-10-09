@@ -16,7 +16,6 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/rules"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
