@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/app/server"
 	"github.com/lycaon/lycaon/internal/app/sessions"
 	"github.com/lycaon/lycaon/internal/app/workflows"
+	"github.com/lycaon/lycaon/internal/resourcelifecycle"
 )
 
 // TestDomainBuilderStructLimits guarantees that ServeApp, serveBuilder, and the
@@ -51,10 +52,9 @@ func TestDomainBuilderStructLimits(t *testing.T) {
 	}
 }
 
-// TestResourceLifetimeOrderInvariant ensures that runtime resources registered
-// with priorities close in strict descending priority order during shutdown.
+// Runtime resources close in ascending disposal order: stop admission first, then storage.
 func TestResourceLifetimeOrderInvariant(t *testing.T) {
-	resources := newRuntimeResources()
+	resources := &runtimeResources{lifecycle: resourcelifecycle.New()}
 
 	var mu sync.Mutex
 	var closedOrder []string
