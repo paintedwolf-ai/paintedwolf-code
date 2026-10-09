@@ -42,7 +42,11 @@ func (e *turnContextAssembler) prependCoordinatorRunInject(
 		hintCodes = anchor.FilterSuppressedHintCodes(hintCodes, runCtx, pendingKickIDs...)
 		snap := frame.Runtime
 		// The binding selects the template stem.
-		block, err := inject.RenderActiveWorkflowInject(ctx, deps.Injects, sess.ID, frame, deps.WorkflowHints, hintCodes, deps.GateFeedback)
+		gateFeedback := deps.GateFeedback
+		if archive := deps.WorkflowArchive; archive != nil {
+			gateFeedback = gateFeedback.WithWorkflowArchive(archive(ctx, sess.ID))
+		}
+		block, err := inject.RenderActiveWorkflowInject(ctx, deps.Injects, sess.ID, frame, deps.WorkflowHints, hintCodes, gateFeedback)
 		if err != nil {
 			return nil, fmt.Errorf("active-workflow inject (%s): %w", inject.ActiveWorkflowRenderStem(ctx, sess.ID), err)
 		}

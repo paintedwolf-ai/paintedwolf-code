@@ -59,9 +59,37 @@ Deleting bytes must produce an explainable unavailable state, not make a durable
 
 ## Workflow definitions
 
-A workflow run pins its definition by id and version (`durable-db` state), and the host resolves that exact manifest for the run's whole life. A bundled definition is therefore released the moment a run can select it: changing a phase, verdict schema, gate, or report control changes the contract of every run already in flight on that version.
+A run pins its definition by id and version (`durable-db` state). Released
+workflow definitions are contracts for existing runs. An unreleased candidate
+can be corrected under its current version; the security workflow remains
+`2.0.0` until that candidate ships.
 
-A change to released behaviour ships as a new version beside the old one. The prior version stays in the bundle marked `retired: true`, which removes it from the start catalog and refuses new starts while keeping it resolvable for existing runs and their history. A retired file is frozen at the bytes its release shipped plus that one line; [`retired-definitions.yaml`](../lycaon/test/contract/testdata/workflows/retired-definitions.yaml) pins each retired manifest's digest and the contract suite holds the bundle to it. Engine-level tightening still applies to retired runs where the engine, not the manifest, defines it; the manifest's own contract does not move. Version selection and ordering: [Workflows](workflows.md#review_loop).
+Released workflow content changes receive a new workflow version. The prior
+version is stored byte-for-byte under its pack's `archive/<workflow>/<version>/`,
+with `SHA256SUMS` sealing the manifest, phase guidance, and gate feedback. The
+archive is catalog content like any other unit, so a revision pins its bytes.
+Runs on a sealed version render that version's guidance and gate feedback
+before project or site overlays; sealed and `retired: true` versions refuse new
+starts but let existing runs resume and finish. A run whose pinned version the
+catalog no longer defines refuses to continue with `WORKFLOW_VERSION_UNAVAILABLE`.
+See [Workflows](workflows.md#review_loop).
+
+The manifest format is the engine contract, governed by `extension_api`. It
+grows additively: absent or zero fields retain their prior meaning. Engine
+implementation bugs can be fixed directly without inventing a new workflow
+version. The optional `fanout.require_task_charter` field, for example, adds
+requirements only to manifests that declare it.
+
+Surface templates, posture rules, worker personas, and rating questions remain
+shared host presentation and are not sealed with phase guidance.
+
+Review repair episodes and blocked report snapshots are durable workflow
+variables committed through the existing workflow command journal. Their new
+reserved key is additive; existing runs without it have no repair episode.
+
+Worker `coverage_gaps` is an additive completion-report field. Co-shipped Go and
+Den wire types move together, and archived workflows do not acquire the new
+plan-charter requirement.
 
 ## Bundle wire and generated code
 

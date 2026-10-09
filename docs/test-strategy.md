@@ -636,7 +636,7 @@ capacity to work in this order, highest first:
 
 | Priority | Work | Gives up runners |
 |---|---|---|
-| 1 | Merge-queue CI, and release and verification-recovery workflows | Never; only CI of a merge group that no longer exists is cancelled |
+| 1 | Merge-queue CI and release workflows | Never; only CI of a merge group that no longer exists is cancelled |
 | 2 | CI of ready pull requests | Newest first, after everything below |
 | 3 | Main qualification | Before ready pull requests |
 | 4 | CI of draft pull requests, closed pull requests, and superseded heads | Before qualification |
@@ -648,8 +648,10 @@ The `runner_priority` table in
 each workflow's class; CI's class follows its event. Contract tests require
 every workflow with its own trigger, other than CI and the sweep, to declare
 one. Dispatched CI, often a release candidate's verification, is never
-cancelled, and neither is issue automation an issue event starts, since each
-such run handles one issue.
+cancelled, and neither is issue automation an issue event starts or a
+`one_shot` workflow such as verification recovery, since each such run handles
+the one event that started it. Those runs claim no priority either: they wait
+for a runner without preempting anything.
 
 Each sweep runs `python3 scripts/ci_verification.py schedule` and decides from
 structured facts only: run events, states, and attempts; job states and runner
@@ -671,9 +673,12 @@ labels; merge-queue branches; and each pull request's draft state and head.
 4. While the merge queue holds any group, it cancels scheduled and background
    runs.
 5. Once no merge-queue or release job waits, it re-runs the cancelled jobs of
-   the newest CI run of each ready pull request's head and of main's newest
-   cache-warming or qualification push. Once the merge queue is also empty, it does the same for
-   each background workflow's newest scheduled run. A run resumes only when
+   the newest CI run of each ready pull request's head. Once ready pull
+   request jobs no longer wait either, it does the same for main's newest
+   cache-warming or qualification push, so work preempted for those checks
+   doesn't restart into the runners it just gave them. Once the merge queue is
+   also empty, it does the same for each background workflow's newest
+   scheduled run. A run resumes only when
    its re-run jobs fit the runners left after every queued job starts, in
    priority order and longest-waiting first, so resumed work never crowds the
    merge queue it yielded to.
@@ -688,10 +693,39 @@ next push or schedule carries the work. Runs started by hand are re-run by
 whoever started them.
 
 The sweep runs when CI, release, release-halt, nightly, dependency inventory,
-or the release-system live test is requested or completes, other than pull
-request CI, and every ten minutes, because workflows cannot trigger on a merge
-group's removal or a job waiting for a runner. It is itself a short Linux job
-that waits for a runner like any other.
+or the release-system live test is requested or completes, and every ten
+minutes, because workflows cannot trigger on a merge group's removal or a job
+waiting for a runner. Pull request CI triggers it too, since ready checks are
+demand and their completions free runners. One sweep runs at a time and a newer
+trigger replaces a pending one, so every trigger must run the sweep: a trigger
+that skipped it would still displace the pending sweep it replaced. It is
+itself a short Linux job that waits for a runner like any other.
+
+## Released-version compatibility
+
+These suites hold the current host to what releases shipped:
+
+- **Sealed archive replay.** `lycaon/test/wiring/archived_workflow_replay_test.go`
+  replays the sealed security-survey 1.0.0 workflow against the current runtime:
+  its archived prompt bindings, real `submit_verdict` semantics under the sealed
+  verdict schemas, reviewer-roster enforcement, and host-driven phase advance.
+  Output drift fails unless the fixture's `changes.yaml` documents it as
+  `spec_fix` or `safety`.
+- **Frozen store resume.**
+  `lycaon/test/wiring/archived_run_state_resume_test.go` copies each frozen
+  release corpus database into a temp directory, upgrades the copy through the
+  registered route to the current baseline, and requires every preserved run
+  to resolve its pinned definition, live or sealed. Hand-mutating the schema is
+  never part of the contract, and a test that does it is wrong.
+- **Sealed archive integrity.** The `workflows` contract suite checks each
+  archive against its `SHA256SUMS`, loads sealed versions through the catalog,
+  and renders their guidance through the archive layer.
+
+Contract suites run in both gates; wiring suites run in the full gate. Upgrade
+corpus fixtures under `lycaon/testdata/upgrade-corpus/` are sealed at each
+release, and a release that changes a released schema ships a registered
+baseline and migration step in the same change
+([compatibility](compatibility.md)).
 
 ## Fixtures
 

@@ -34,6 +34,8 @@ type AgentProfileResolver interface {
 // ActiveWorkflowManifest holds runtime fields from the active workflow manifest.
 type ActiveWorkflowManifest struct {
 	CoordinatorProfile string
+	// Archive names the sealed version a retired run reads its guidance from.
+	Archive string
 }
 
 // WorkflowManifestSource supplies active workflow manifest fields for assembly.

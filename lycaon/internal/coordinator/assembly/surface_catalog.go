@@ -36,6 +36,9 @@ func (e *promptSurface) projectPrompts(ctx context.Context, sess *api.Session) p
 	if !ok || fe == nil || sess == nil {
 		return pe
 	}
+	if archive := e.deps.WorkflowArchive; archive != nil {
+		fe = fe.WithWorkflowArchive(archive(ctx, sess.ID))
+	}
 	// Empty trusted roots disable project prompt layers.
 	if resolve := e.deps.ProjectOverlayRootPaths; resolve != nil {
 		paths := resolve(ctx, sess)
