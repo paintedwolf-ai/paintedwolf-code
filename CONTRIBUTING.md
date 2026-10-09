@@ -54,7 +54,9 @@ Use a real name and a reachable address. To sign off a branch you have already w
 
 Contributions are licensed under Apache-2.0 for application code and CC BY 4.0 for first-party rule YAML, matching the surface you are editing — see [Licensing](docs/licensing.md). Published copyright lines read `Copyright Painted Wolf LLC and contributors`; notable authors are listed in `AUTHORS`.
 
-A GitHub DCO check enforces the trailer on every pull request.
+The repository-owned `DCO-owned` check certifies every original pull request commit, including all pages of large stacks. It accepts a sign-off matching the author or committer identity (case insensitive), and preserves the default exemptions for merge commits and GitHub-identified bots. There are no owner or organization-member exemptions or remediation commits configured. Merge groups certify their member pull requests rather than GitHub's synthetic commits.
+
+The workflow reads only trusted default-branch source and posts its check on the captured pull request head or merge-group SHA. An incomplete API response or changed head fails certification. Draft pull requests are left untouched. Maintainers can rerun certification with the **Original commit certification** workflow's pull request number input.
 
 See `REPORTING.md`, `AGENTS.md`, and `docs/dev-tasks.md` for more.
 
