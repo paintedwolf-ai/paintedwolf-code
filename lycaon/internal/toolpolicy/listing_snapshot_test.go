@@ -25,7 +25,7 @@ func TestListingCapturesFactsOnceAndInvocationReadsAgain(t *testing.T) {
 	var events []string
 	var evaluated []rules.EvalContext
 	eng := NewEngine(EngineDeps{
-		ToolInvoker: listInvoker{metas: []tools.ToolMeta{{Name: "read"}, {Name: "write"}}},
+		ToolLister: listInvoker{metas: []tools.ToolMeta{{Name: "read"}, {Name: "write"}}},
 		Workflows: func(context.Context, string) (WorkflowSnapshot, error) {
 			captures++
 			events = append(events, "capture")
@@ -72,7 +72,7 @@ func TestListingCapturesFactsOnceAndInvocationReadsAgain(t *testing.T) {
 func TestListingIsolatesMutableFactsBetweenTools(t *testing.T) {
 	seen := 0
 	eng := NewEngine(EngineDeps{
-		ToolInvoker: listInvoker{metas: []tools.ToolMeta{{Name: "read"}, {Name: "write"}}},
+		ToolLister: listInvoker{metas: []tools.ToolMeta{{Name: "read"}, {Name: "write"}}},
 		Workflows: func(context.Context, string) (WorkflowSnapshot, error) {
 			return WorkflowSnapshot{
 				AllowedAgents: []string{"worker"}, ManifestRules: []string{"rule"}, Vars: map[string]any{"nested": map[string]any{"value": "original"}},
@@ -98,10 +98,10 @@ func TestListingIsolatesMutableFactsBetweenTools(t *testing.T) {
 func TestListingDoesNotCaptureForBypassedOrRejectedTools(t *testing.T) {
 	captures := 0
 	eng := NewEngine(EngineDeps{
-		ToolInvoker: listInvoker{metas: []tools.ToolMeta{{Name: "read"}, {Name: "write", Deferred: true}, {Name: "mcp_search", Source: tools.ToolSourceMCP}}},
-		Workflows:   func(context.Context, string) (WorkflowSnapshot, error) { captures++; return WorkflowSnapshot{}, nil },
-		PreInvoke:   func(context.Context, *api.Session, string, map[string]any) error { return errors.New("guard rejected") },
-		Rules:       staticRuleEvaluator{},
+		ToolLister: listInvoker{metas: []tools.ToolMeta{{Name: "read"}, {Name: "write", Deferred: true}, {Name: "mcp_search", Source: tools.ToolSourceMCP}}},
+		Workflows:  func(context.Context, string) (WorkflowSnapshot, error) { captures++; return WorkflowSnapshot{}, nil },
+		PreInvoke:  func(context.Context, *api.Session, string, map[string]any) error { return errors.New("guard rejected") },
+		Rules:      staticRuleEvaluator{},
 	})
 	if listed := eng.ListForPrompt(t.Context(), &api.Session{ID: "session"}, "coordinator"); len(listed) != 2 || captures != 0 {
 		t.Fatalf("listed=%v captures=%d", listed, captures)
@@ -111,9 +111,9 @@ func TestListingDoesNotCaptureForBypassedOrRejectedTools(t *testing.T) {
 func TestWorkflowCaptureFailureDoesNotBecomeAbsentState(t *testing.T) {
 	for _, captureErr := range []error{errors.New("store unavailable"), settingsoverlay.ErrFormatInvalid} {
 		eng := NewEngine(EngineDeps{
-			ToolInvoker: listInvoker{metas: []tools.ToolMeta{{Name: "read"}, {Name: "write"}}},
-			Workflows:   func(context.Context, string) (WorkflowSnapshot, error) { return WorkflowSnapshot{}, captureErr },
-			Rules:       staticRuleEvaluator{},
+			ToolLister: listInvoker{metas: []tools.ToolMeta{{Name: "read"}, {Name: "write"}}},
+			Workflows:  func(context.Context, string) (WorkflowSnapshot, error) { return WorkflowSnapshot{}, captureErr },
+			Rules:      staticRuleEvaluator{},
 		})
 		sess := &api.Session{ID: "session"}
 		if listed := eng.ListForPrompt(t.Context(), sess, "coordinator"); len(listed) != 0 {
@@ -134,7 +134,7 @@ func TestListingDetachesSourceBeforeLaterPreInvoke(t *testing.T) {
 	roots := []string{"initial-root"}
 	seen := 0
 	eng := NewEngine(EngineDeps{
-		ToolInvoker:      listInvoker{metas: []tools.ToolMeta{{Name: "read"}, {Name: "write"}}},
+		ToolLister:       listInvoker{metas: []tools.ToolMeta{{Name: "read"}, {Name: "write"}}},
 		Workflows:        func(context.Context, string) (WorkflowSnapshot, error) { return source, nil },
 		OverlayRootPaths: func(context.Context, *api.Session) []string { return roots },
 		PreInvoke: func(_ context.Context, _ *api.Session, tool string, _ map[string]any) error {
@@ -175,7 +175,7 @@ func TestListingAndInvocationHonorBoundFrame(t *testing.T) {
 	frame := &inject.CoordinatorTurnFrame{RunContext: api.CoordinatorRunContext{CurrentPhase: "bound", AllowedAgents: []string{"fallback"}}, Roster: &inject.AgentRoster{Effective: []string{}}}
 	seen := 0
 	eng := NewEngine(EngineDeps{
-		ToolInvoker: listInvoker{metas: []tools.ToolMeta{{Name: "read"}, {Name: "write"}}},
+		ToolLister: listInvoker{metas: []tools.ToolMeta{{Name: "read"}, {Name: "write"}}},
 		Workflows: func(context.Context, string) (WorkflowSnapshot, error) {
 			t.Fatal("bound frame triggered live capture")
 			return WorkflowSnapshot{}, nil
