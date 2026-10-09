@@ -281,7 +281,8 @@ func TestDocumentErrorsMapToStructuredCodes(t *testing.T) {
 		response := httptest.NewRecorder()
 		f.h.writeEditorDocumentError(response, httptest.NewRequest(http.MethodPost, "/", nil), fmt.Errorf("wrapped: %w", tc.err))
 		failure := expectCode(t, tc.err.Error(), response, tc.code)
-		if _, rejected := tc.err.(*documentcore.Rejected); rejected && failure.Details["reject_code"] != "stale_update" {
+		var rejected *documentcore.Rejected
+		if errors.As(tc.err, &rejected) && failure.Details["reject_code"] != "stale_update" {
 			t.Fatalf("rejection details = %v", failure.Details)
 		}
 	}

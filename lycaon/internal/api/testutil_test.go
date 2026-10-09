@@ -1,7 +1,6 @@
 package api
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -20,22 +19,17 @@ import (
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/llm"
-	"github.com/lycaon/lycaon/internal/mcp"
-	"github.com/lycaon/lycaon/internal/people/personactions"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/sourcefeed"
-	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testtool"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/apitestdeps"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/usernotice"
-	"github.com/lycaon/lycaon/internal/workflow"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -48,27 +42,6 @@ func newAuthedRequest(method, target string, body io.Reader) *http.Request {
 		WithTestAuth(req)
 	}
 	return req
-}
-
-func authedHTTPPost(url, contentType, body string) (*http.Response, error) {
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, url, strings.NewReader(body))
-	if err != nil {
-		return nil, err
-	}
-	if contentType != "" {
-		req.Header.Set("Content-Type", contentType)
-	}
-	WithTestAuth(req)
-	return http.DefaultClient.Do(req)
-}
-
-func authedHTTPGet(url string) (*http.Response, error) {
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
-	if err != nil {
-		return nil, err
-	}
-	WithTestAuth(req)
-	return http.DefaultClient.Do(req)
 }
 
 // testDeps adjusts the dependencies a test server is built with.
@@ -92,35 +65,6 @@ func newTestServerWithRegistry(t *testing.T, reg tools.ToolRegistry, opts ...tes
 	return newServerForTest(t, Dependencies{Core: CoreDependencies{Store: store, Projects: project.NewMemoryRegistry(), Sessions: mgr}}, opts...)
 }
 
-// Ambient attach requires sessions and workflows in the same database.
-func newTestServerWithWorkflows(t *testing.T, opts ...testDeps) *Server {
-	t.Helper()
-	return newTestServerWithWorkflowRegistry(t, tools.NewStubRegistry(), opts...)
-}
-
-func newTestServerWithWorkflowRegistry(t *testing.T, reg tools.ToolRegistry, opts ...testDeps) *Server {
-	t.Helper()
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
-	sqlDB := testdbfixture.Open(t, "store.db")
-
-	sessions := store.NewSQL(sqlDB)
-	mock := llm.NewMockProvider(testMockConfig(t))
-	mgr := session.NewManager(sessions, mock, reg, settings.DefaultSessionLimits())
-	mgr.SetDataDir(t.TempDir())
-	mgr.SetToolInvoker(testtool.RegistryInvoker{Registry: reg})
-	wireTestBindingRegistry(t)
-
-	registry, err := workflowdef.RegistryFromDirs("")
-	testutil.FailErr(t, "workflow.RegistryFromDirs", err)
-	runs := workflow.NewSQLStore(sqlDB)
-	workflows := workflow.NewManager(runs, sessions, registry, nil)
-	workflows.Resolver = workflow.ManifestResolver{}
-	mgr.SetWorkflowSessionView(workflows)
-	return newServerForTest(t, Dependencies{Core: CoreDependencies{
-		Store: sessions, PersonActions: personactions.New(sqlDB), Projects: project.NewSQLRegistry(sqlDB), Sessions: mgr}, Workflow: WorkflowDependencies{
-		Workflows: workflows, WorkflowRuns: runs}}, opts...)
-}
-
 // newServerForTest builds a server with the bundled user notices after opts
 // adjust deps, and stops its background work when the test ends.
 func newServerForTest(t *testing.T, deps Dependencies, opts ...testDeps) *Server {
@@ -132,17 +76,6 @@ func newServerForTest(t *testing.T, deps Dependencies, opts ...testDeps) *Server
 	srv := NewServer(requiredTestDeps(t, deps), nil, TestAPIToken)
 	stopBackgroundOnCleanup(t, srv)
 	return srv
-}
-
-// withSQLProjects keeps projects in the database the filled source ledger
-// writes to, so the files a read tracks can reference their project.
-func withSQLProjects(t *testing.T) testDeps {
-	t.Helper()
-	database := testdbfixture.Open(t, "projects.db")
-	return func(d *Dependencies) {
-		d.Core.Database = database
-		d.Core.Projects = project.NewSQLRegistry(database)
-	}
 }
 
 // requiredTestDeps supplies every dependency the route families require that
@@ -190,44 +123,6 @@ func requiredTestDeps(t *testing.T, deps Dependencies) Dependencies {
 	deps.Harness.HarnessWorkers = fill.HarnessWorkers
 	deps.External.WebResearch, deps.External.WebDiscoverer = fill.WebResearch, fill.WebDiscoverer
 	return deps
-}
-
-type hiddenToolRegistry struct {
-	tools.ToolRegistry
-	hidden map[string]struct{}
-}
-
-func withoutTools(reg tools.ToolRegistry, names ...string) tools.ToolRegistry {
-	hidden := make(map[string]struct{}, len(names))
-	for _, name := range names {
-		hidden[name] = struct{}{}
-	}
-	return hiddenToolRegistry{ToolRegistry: reg, hidden: hidden}
-}
-
-func (r hiddenToolRegistry) Definition(name string) (tools.Definition, bool) {
-	if _, hidden := r.hidden[name]; hidden {
-		return tools.Definition{}, false
-	}
-	return r.ToolRegistry.Definition(name)
-}
-
-func (r hiddenToolRegistry) Run(ctx context.Context, name string, args map[string]any, tctx tools.ToolContext) (string, error) {
-	if _, hidden := r.hidden[name]; hidden {
-		return "", fmt.Errorf("unknown tool: %s", name)
-	}
-	return r.ToolRegistry.Run(ctx, name, args, tctx)
-}
-
-func (r hiddenToolRegistry) List() []tools.ToolMeta {
-	listed := r.ToolRegistry.List()
-	visible := listed[:0]
-	for _, meta := range listed {
-		if _, hidden := r.hidden[meta.Name]; !hidden {
-			visible = append(visible, meta)
-		}
-	}
-	return visible
 }
 
 // wireTestBindingRegistry isolates tests that replace the process-wide registry.
@@ -360,98 +255,8 @@ func createSessionAtPathOnServer(t *testing.T, srv *Server, dir string, posture 
 	return sess
 }
 
-func createTestSession(t *testing.T, baseURL, projectDir string) wire.Session {
-	t.Helper()
-	projBody := fmt.Sprintf(`{"roots":[{"path":%q}]}`, projectDir)
-	projResp, err := authedHTTPPost(baseURL+"/v1/projects", "application/json", projBody)
-	if err != nil {
-		t.Fatalf("create project: %v", err)
-	}
-	defer projResp.Body.Close()
-	if projResp.StatusCode != http.StatusCreated {
-		t.Fatalf("create project status = %d body = %s", projResp.StatusCode, string(readBody(t, projResp)))
-	}
-	var proj wire.Project
-	if err := json.NewDecoder(projResp.Body).Decode(&proj); err != nil {
-		t.Fatalf("decode project: %v", err)
-	}
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, baseURL+"/v1/sessions", strings.NewReader(
-		fmt.Sprintf(`{"project_id":%q,"posture":"build"}`, proj.ID)))
-	if err != nil {
-		t.Fatalf("create session request: %v", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	WithTestAuth(req)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("create session: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusAccepted {
-		t.Fatalf("create session status = %d body = %s", resp.StatusCode, string(readBody(t, resp)))
-	}
-	var sess wire.Session
-	if err := json.NewDecoder(resp.Body).Decode(&sess); err != nil {
-		t.Fatalf("decode session: %v", err)
-	}
-	return waitSessionPrepared(t, baseURL, sess)
-}
-
 // waitSessionPrepared polls a newly created session until preparation ends;
 // creation answers 202 while the workspace is still being prepared.
-func waitSessionPrepared(t *testing.T, baseURL string, sess wire.Session) wire.Session {
-	t.Helper()
-	deadline := time.Now().Add(testutil.Timeout(10 * time.Second))
-	for sess.Status == wire.SessionStatusPreparing && time.Now().Before(deadline) {
-		readyResp, getErr := authedHTTPGet(baseURL + "/v1/sessions/" + sess.ID)
-		if getErr != nil {
-			t.Fatalf("wait for session preparation: %v", getErr)
-		}
-		if readyResp.StatusCode != http.StatusOK {
-			readyResp.Body.Close()
-			t.Fatalf("wait for session preparation status = %d", readyResp.StatusCode)
-		}
-		if decodeErr := json.NewDecoder(readyResp.Body).Decode(&sess); decodeErr != nil {
-			readyResp.Body.Close()
-			t.Fatalf("decode prepared session: %v", decodeErr)
-		}
-		readyResp.Body.Close()
-		if sess.Status == wire.SessionStatusPreparing {
-			time.Sleep(5 * time.Millisecond)
-		}
-	}
-	if sess.Status == wire.SessionStatusPreparing {
-		t.Fatal("session preparation did not complete")
-	}
-	return sess
-}
-
-func acceptPrompt(t *testing.T, baseURL, sessionID, text string) {
-	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, baseURL+"/v1/sessions/"+sessionID+"/prompts",
-		strings.NewReader(promptJSON(text)))
-	if err != nil {
-		t.Fatalf("prompt request: %v", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	WithTestAuth(req)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("prompt: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusAccepted {
-		t.Fatalf("prompt status = %d body = %s", resp.StatusCode, string(readBody(t, resp)))
-	}
-	var accepted wire.PromptAcceptedResponse
-	if err := json.NewDecoder(resp.Body).Decode(&accepted); err != nil {
-		t.Fatalf("decode prompt accept: %v", err)
-	}
-	if accepted.Status != "queued" {
-		t.Fatalf("prompt accept status = %q", accepted.Status)
-	}
-	waitForSessionIdle(t, baseURL, sessionID, 10*time.Second)
-}
 
 func promptJSON(text string) string {
 	return fmt.Sprintf(`{"operation_id":%q,"text":%q}`, uuid.NewString(), text)
@@ -459,123 +264,6 @@ func promptJSON(text string) string {
 
 // waitForSessionIdle waits until no admitted prompt is pending and no turn runs;
 // prompt_pending covers the gap between admission and the turn going busy.
-func waitForSessionIdle(t *testing.T, baseURL, sessionID string, timeout time.Duration) wire.Session {
-	t.Helper()
-	timeout = testutil.Timeout(timeout)
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		sess := getSessionAtURL(t, baseURL, sessionID)
-		if sess.Status == wire.SessionStatusIdle && !sess.PromptPending {
-			return sess
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	t.Fatalf("session %s prompt turn did not complete within %s", sessionID, timeout)
-	return wire.Session{}
-}
-
-func getSessionAtURL(t *testing.T, baseURL, sessionID string) wire.Session {
-	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, baseURL+"/v1/sessions/"+sessionID, nil)
-	if err != nil {
-		t.Fatalf("get session request: %v", err)
-	}
-	WithTestAuth(req)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("get session: %v", err)
-	}
-	defer resp.Body.Close()
-	body := readBody(t, resp)
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("get session status = %d body = %s", resp.StatusCode, body)
-	}
-	var sess wire.Session
-	if err := json.Unmarshal(body, &sess); err != nil {
-		t.Fatalf("decode session: %v", err)
-	}
-	return sess
-}
-
-func listMessagesAtURL(t *testing.T, baseURL, sessionID string) []wire.Message {
-	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, baseURL+"/v1/sessions/"+sessionID+"/messages", nil)
-	if err != nil {
-		t.Fatalf("list messages request: %v", err)
-	}
-	WithTestAuth(req)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("list messages: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("list messages status = %d body = %s", resp.StatusCode, string(readBody(t, resp)))
-	}
-	var page wire.SessionTranscriptPage
-	if err := json.NewDecoder(resp.Body).Decode(&page); err != nil {
-		t.Fatalf("decode messages: %v", err)
-	}
-	return page.Messages
-}
-
-func waitForAssistantStream(t *testing.T, baseURL, sessionID string, timeout time.Duration) (messageID, streamURL string) {
-	t.Helper()
-	waitForSessionIdle(t, baseURL, sessionID, timeout)
-	msgs := listMessagesAtURL(t, baseURL, sessionID)
-	for i := len(msgs) - 1; i >= 0; i-- {
-		if msgs[i].Role == wire.MessageRoleAssistant && strings.TrimSpace(msgs[i].ID) != "" {
-			messageID = msgs[i].ID
-			streamURL = fmt.Sprintf("/v1/sessions/%s/stream?message=%s", sessionID, messageID)
-			return messageID, streamURL
-		}
-	}
-	t.Fatalf("no assistant message for session %s", sessionID)
-	return "", ""
-}
-
-func readSSEStream(t *testing.T, streamURL string) (content string, sawDone bool) {
-	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, streamURL, nil)
-	if err != nil {
-		t.Fatalf("stream request: %v", err)
-	}
-	WithTestAuth(req)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("stream get: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("stream status = %d", resp.StatusCode)
-	}
-	if ct := resp.Header.Get("Content-Type"); !strings.Contains(ct, "text/event-stream") {
-		t.Fatalf("content-type = %q", ct)
-	}
-
-	scanner := bufio.NewScanner(resp.Body)
-	var tokens []string
-	for scanner.Scan() {
-		line := scanner.Text()
-		if !strings.HasPrefix(line, "data: ") {
-			continue
-		}
-		var chunk wire.PromptStreamChunk
-		if err := json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &chunk); err != nil {
-			t.Fatalf("decode chunk: %v", err)
-		}
-		if chunk.Token != "" {
-			tokens = append(tokens, chunk.Token)
-		}
-		if chunk.Done {
-			sawDone = true
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		t.Fatalf("scan stream: %v", err)
-	}
-	return strings.Join(tokens, ""), sawDone
-}
 
 func testMockConfig(t *testing.T) *llm.MockConfig {
 	t.Helper()
@@ -604,28 +292,5 @@ func assertErrorResponse(t *testing.T, w *httptest.ResponseRecorder, wantStatus 
 }
 
 // withTrustSurfaces adds a trust-surface store when the settings lack one.
-func withTrustSurfaces(t *testing.T) testDeps {
-	t.Helper()
-	return func(d *Dependencies) {
-		if d.Core.Settings == nil {
-			d.Core.Settings = &settings.Service{}
-		}
-		if d.Core.Settings.TrustSurfaces != nil {
-			return
-		}
-		surfaces, err := settings.NewTrustSurfacesStoreAt(filepath.Join(t.TempDir(), "trust-surfaces.yaml"))
-		testutil.FailErr(t, "trust surfaces store", err)
-		d.Core.Settings.TrustSurfaces = surfaces
-	}
-}
 
 // withProjectMCP serves reg with its project-layer gate open.
-func withProjectMCP(t *testing.T, reg *mcp.RegistryImpl) testDeps {
-	t.Helper()
-	trust := withTrustSurfaces(t)
-	return func(d *Dependencies) {
-		trust(d)
-		reg.SetProjectOverlayGate(func(context.Context, string) bool { return true })
-		d.External.MCP = reg
-	}
-}

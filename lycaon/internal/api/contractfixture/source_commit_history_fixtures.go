@@ -66,12 +66,12 @@ func NestedRootRepo(t *testing.T) (repo, nested string) {
 
 	nested = filepath.Join(repo, "packages", "app")
 	for _, dir := range []string{filepath.Join(repo, "src"), filepath.Join(nested, "src")} {
-		testutil.FailErr(t, "mkdir", os.MkdirAll(dir, 0o755))
+		testutil.FailErr(t, "mkdir", os.MkdirAll(dir, 0o750))
 	}
 	testutil.FailErr(t, "write top-level file",
-		os.WriteFile(filepath.Join(repo, "src", "app.ts"), []byte("TOP LEVEL\n"), 0o644))
+		os.WriteFile(filepath.Join(repo, "src", "app.ts"), []byte("TOP LEVEL\n"), 0o600))
 	testutil.FailErr(t, "write nested file",
-		os.WriteFile(filepath.Join(nested, "src", "app.ts"), []byte("committed\n"), 0o644))
+		os.WriteFile(filepath.Join(nested, "src", "app.ts"), []byte("committed\n"), 0o600))
 	run("add", "-A")
 	run("commit", "-m", "init")
 	return repo, nested
@@ -96,7 +96,7 @@ func NewMergedHistoryFixture(t *testing.T) MergedHistoryFixture {
 	}
 	commitBytes := func(content, message string) string {
 		t.Helper()
-		testutil.FailErr(t, "write "+message, os.WriteFile(appPath, []byte(content), 0o644))
+		testutil.FailErr(t, "write "+message, os.WriteFile(appPath, []byte(content), 0o600))
 		gitAt("add", "-A")
 		gitAt("commit", "-m", message)
 		return gitAt("rev-parse", "HEAD")
@@ -106,7 +106,7 @@ func NewMergedHistoryFixture(t *testing.T) MergedHistoryFixture {
 	commitA := commitBytes("second\n", "pre-tracking growth")
 
 	trackedBytes := []byte("tracked v1\n")
-	testutil.FailErr(t, "write tracked bytes", os.WriteFile(appPath, trackedBytes, 0o644))
+	testutil.FailErr(t, "write tracked bytes", os.WriteFile(appPath, trackedBytes, 0o600))
 	testutil.FailErr(t, "record tracked edit", ledger.Record(t.Context(), sourceledger.RecordInput{
 		ProjectID: p.ID,
 		RootID:    rootID, Path: "src/app.ts", Op: wire.SourceChangeOpWrite,
@@ -124,7 +124,7 @@ func NewMergedHistoryFixture(t *testing.T) MergedHistoryFixture {
 	writeBlob := func(content string) string {
 		t.Helper()
 		staged := filepath.Join(blobDir, "blob")
-		testutil.FailErr(t, "stage blob bytes", os.WriteFile(staged, []byte(content), 0o644))
+		testutil.FailErr(t, "stage blob bytes", os.WriteFile(staged, []byte(content), 0o600))
 		return gitAt("hash-object", "-w", staged)
 	}
 	commitBlob := func(parent, content, message string) string {

@@ -95,7 +95,7 @@ func TrustSettingsServer(t *testing.T, opts ...TestDeps) *hostapi.Server {
 func WriteOverlay(t *testing.T, root, basename, content string) {
 	t.Helper()
 	dir := filepath.Join(root, settingsoverlay.DirName())
-	testutil.FailErr(t, "mkdir overlay", os.MkdirAll(dir, 0o755))
+	testutil.FailErr(t, "mkdir overlay", os.MkdirAll(dir, 0o750))
 	testutil.FailErr(t, "write "+basename,
-		os.WriteFile(filepath.Join(dir, basename), []byte(content), 0o644))
+		os.WriteFile(filepath.Join(dir, basename), []byte(content), 0o600))
 }

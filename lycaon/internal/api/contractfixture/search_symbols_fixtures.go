@@ -69,8 +69,8 @@ func SymbolSearchProject(t *testing.T, files map[string]string) (*hostapi.Server
 	dir := t.TempDir()
 	for name, content := range files {
 		abs := filepath.Join(dir, filepath.FromSlash(name))
-		testutil.FailErr(t, "mkdir "+name, os.MkdirAll(filepath.Dir(abs), 0o755))
-		testutil.FailErr(t, "write "+name, os.WriteFile(abs, []byte(content), 0o644))
+		testutil.FailErr(t, "mkdir "+name, os.MkdirAll(filepath.Dir(abs), 0o750))
+		testutil.FailErr(t, "write "+name, os.WriteFile(abs, []byte(content), 0o600))
 	}
 	p, err := project.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, dir)
 	testutil.FailErr(t, "create project", err)

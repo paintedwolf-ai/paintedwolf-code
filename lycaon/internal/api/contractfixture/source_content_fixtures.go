@@ -61,7 +61,7 @@ func (f SourceContentFixture) Open(t *testing.T) wire.EditorDocument {
 
 // The wire document carries its text inside the CRDT state; the service snapshot reads it back as a string.
 
-func (f SourceContentFixture) Text(t *testing.T, doc wire.EditorDocument) string {
+func (f SourceContentFixture) text(t *testing.T, doc wire.EditorDocument) string {
 	t.Helper()
 	current, err := f.Server.Sources.Editor.EditorDocuments.CurrentSnapshot(t.Context(), f.Project.ID, doc.ID)
 	testutil.FailErr(t, "load current document", err)

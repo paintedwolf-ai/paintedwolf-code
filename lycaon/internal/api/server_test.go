@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"io"
 	"math"
 	"net/http"
 	"net/http/httptest"
@@ -672,16 +671,6 @@ func TestRecoveryMiddleware(t *testing.T) {
 
 func filepathJoin(base, elem string) string {
 	return strings.TrimRight(base, string(os.PathSeparator)) + string(os.PathSeparator) + elem
-}
-
-func readBody(t *testing.T, resp *http.Response) []byte {
-	t.Helper()
-	defer resp.Body.Close()
-	b, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("read body: %v", err)
-	}
-	return b
 }
 
 // primaryRootPath mirrors the primary-or-first root selection Den applies to wire projects.

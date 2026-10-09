@@ -151,10 +151,10 @@ func New(responses *httpio.Responder, deps Deps) Handler {
 	h := Handler{}
 	h.Access = &Access{Gate: deps.Gate, Events: deps.Events, Projects: deps.Projects, Settings: deps.Settings, Store: deps.Store, responses: responses}
 	h.CheckpointActions = &CheckpointActions{Checkpoints: deps.Checkpoints, Events: deps.Events, ManagedSecrets: deps.ManagedSecrets, Projects: deps.Projects, Store: deps.Store, options: options, responses: responses}
-	h.Grants = &Grants{Gate: deps.Gate, AuthzRecorder: deps.Authority.AuthzRecorder, ChatGrants: deps.Authority.ChatGrants, Events: deps.Events, GrantedPaths: deps.Authority.GrantedPaths, Listen: deps.Authority.Listen, Loopback: deps.Authority.Loopback, Projects: deps.Projects, ReadPaths: deps.Authority.ReadPaths, Settings: deps.Settings, Sockets: deps.Authority.Sockets, WriteRoots: deps.Authority.WriteRoots, authorityMu: authorityMu, responses: responses}
-	h.Installation = &Installation{Gate: deps.Gate, DirectIP: deps.Authority.DirectIP, GrantedPaths: deps.Authority.GrantedPaths, LLMService: deps.LLMService, Listen: deps.Authority.Listen, Loopback: deps.Authority.Loopback, ReadPaths: deps.Authority.ReadPaths, Sockets: deps.Authority.Sockets, WriteRoots: deps.Authority.WriteRoots, authorityMu: authorityMu}
-	h.Inventory = &Inventory{Gate: deps.Gate, ApprovalDecisions: deps.Authority.ApprovalDecisions, AuthzRecorder: deps.Authority.AuthzRecorder, DirectIP: deps.Authority.DirectIP, HostResources: deps.HostResources, Listen: deps.Authority.Listen, Loopback: deps.Authority.Loopback, Sockets: deps.Authority.Sockets, Store: deps.Store, WriteRoots: deps.Authority.WriteRoots, responses: responses}
-	h.HeldValues = &HeldValues{Vault: deps.Authority.Vault, responses: responses}
+	h.Grants = &Grants{Gate: deps.Gate, AuthzRecorder: deps.AuthzRecorder, ChatGrants: deps.ChatGrants, Events: deps.Events, GrantedPaths: deps.GrantedPaths, Listen: deps.Listen, Loopback: deps.Loopback, Projects: deps.Projects, ReadPaths: deps.ReadPaths, Settings: deps.Settings, Sockets: deps.Sockets, WriteRoots: deps.WriteRoots, authorityMu: authorityMu, responses: responses}
+	h.Installation = &Installation{Gate: deps.Gate, DirectIP: deps.DirectIP, GrantedPaths: deps.GrantedPaths, LLMService: deps.LLMService, Listen: deps.Listen, Loopback: deps.Loopback, ReadPaths: deps.ReadPaths, Sockets: deps.Sockets, WriteRoots: deps.WriteRoots, authorityMu: authorityMu}
+	h.Inventory = &Inventory{Gate: deps.Gate, ApprovalDecisions: deps.ApprovalDecisions, AuthzRecorder: deps.AuthzRecorder, DirectIP: deps.DirectIP, HostResources: deps.HostResources, Listen: deps.Listen, Loopback: deps.Loopback, Sockets: deps.Sockets, Store: deps.Store, WriteRoots: deps.WriteRoots, responses: responses}
+	h.HeldValues = &HeldValues{Vault: deps.Vault, responses: responses}
 	h.Access.Grants = h.Grants
 	h.Access.Inventory = h.Inventory
 	h.Grants.Inventory = h.Inventory

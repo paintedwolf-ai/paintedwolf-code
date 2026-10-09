@@ -152,7 +152,7 @@ func (c *TreeStores) OpenDependencyIndex(ctx context.Context, projectID string, 
 	var once sync.Once
 	var cleanupErr error
 	cleanup := func() error {
-		once.Do(func() { cleanupErr = errors.Join(temporary.Drain(context.Background()), os.RemoveAll(dir)) })
+		once.Do(func() { cleanupErr = errors.Join(temporary.Drain(context.WithoutCancel(ctx)), os.RemoveAll(dir)) })
 		return cleanupErr
 	}
 	store, err := temporary.Trees.indexStore(ctx, projectID, root)

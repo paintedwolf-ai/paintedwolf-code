@@ -103,7 +103,7 @@ func NewSecretSpanFixture(t *testing.T) SecretSpanFixture {
 
 	dir := t.TempDir()
 	testutil.FailErr(t, "write fixture",
-		os.WriteFile(filepath.Join(dir, "staging.ts"), []byte(FileWithSecret), 0o644))
+		os.WriteFile(filepath.Join(dir, "staging.ts"), []byte(FileWithSecret), 0o600))
 	p, err := project.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, dir)
 	testutil.FailErr(t, "create project", err)
 	testdbseed.InsertProjectRootWithID(t, database, p.ID, p.Roots[0].ID, dir)
@@ -129,7 +129,8 @@ func NewSecretSpanFixture(t *testing.T) SecretSpanFixture {
 
 // runeRange locates the relay token as the client would: by rune offsets.
 
-const RelayToken = "pw-relay-7QK4-2ZB9-XM31"
+// RelayToken is synthetic fixture data, never a host credential.
+const RelayToken = "pw-relay-7QK4-2ZB9-XM31" //nolint:gosec // G101: synthetic canary fixture
 
 // The marked value matches no catalog rule.
 

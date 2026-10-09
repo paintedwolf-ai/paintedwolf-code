@@ -177,7 +177,7 @@ func TestReplaceStoreMapsSourceErrors(t *testing.T) {
 		{project.ErrSourcePathDenied, search.ErrReplacePathDenied},
 		{other, other},
 	} {
-		if got := mapReplaceStoreErr(tc.in); !errors.Is(got, tc.want) && got != tc.want {
+		if got := mapReplaceStoreErr(tc.in); !errors.Is(got, tc.want) {
 			t.Fatalf("mapReplaceStoreErr(%v) = %v, want %v", tc.in, got, tc.want)
 		}
 	}

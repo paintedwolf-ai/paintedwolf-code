@@ -18,7 +18,7 @@ func CallSourceViewHandler(t *testing.T, handler http.HandlerFunc, projectID, vi
 	t.Helper()
 	encoded, err := json.Marshal(body)
 	testutil.FailErr(t, "encode source view request", err)
-	request := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(encoded))
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", bytes.NewReader(encoded))
 	request.Header.Set("Content-Type", "application/json")
 	route := chi.NewRouteContext()
 	route.URLParams.Add("id", projectID)

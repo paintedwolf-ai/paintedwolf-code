@@ -49,7 +49,7 @@ func GetApprovals(t *testing.T, base, query string) wire.ApprovalConfigResponse 
 	}
 	resp, err := AuthedHTTPGet(url)
 	testutil.FailErr(t, "get approvals", err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	var out wire.ApprovalConfigResponse
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		testutil.FailErr(t, "decode approvals", err)
@@ -61,7 +61,7 @@ func GetGlobalApprovalConfig(t *testing.T, base string) wire.ApprovalConfigRespo
 	t.Helper()
 	resp, err := AuthedHTTPGet(base + "/v1/settings/approvals")
 	testutil.FailErr(t, "get approvals", err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	var cfg wire.ApprovalConfigResponse
 	if err := json.NewDecoder(resp.Body).Decode(&cfg); err != nil {
 		testutil.FailErr(t, "decode approvals", err)
@@ -106,7 +106,7 @@ func PutApprovals(t *testing.T, base, query, body string, want int) {
 	hostapi.WithTestAuth(req)
 	resp, err := fixtureClient.Do(req)
 	testutil.FailErr(t, "approvals PUT", err)
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	if resp.StatusCode != want {
 		t.Fatalf("PUT %s %s status = %d, want %d", query, body, resp.StatusCode, want)
 	}
@@ -122,7 +122,7 @@ func ReadSettingsBody(t *testing.T, resp *http.Response) string {
 func SeedToolAndWriteRootGrants(t *testing.T, srv *hostapi.Server, base string) (toolID, writeRootID string) {
 	t.Helper()
 	writeRoot := filepath.Join(t.TempDir(), "root")
-	if err := os.MkdirAll(writeRoot, 0o755); err != nil {
+	if err := os.MkdirAll(writeRoot, 0o750); err != nil {
 		testutil.FailErr(t, "mkdir write root", err)
 	}
 	now := time.Now().UTC()
@@ -144,7 +144,7 @@ func SeedToolAndWriteRootGrants(t *testing.T, srv *hostapi.Server, base string) 
 	}
 	listResp, err := AuthedHTTPGet(base + "/v1/approval-grants")
 	testutil.FailErr(t, "list grants", err)
-	defer listResp.Body.Close()
+	defer func() { _ = listResp.Body.Close() }()
 	if listResp.StatusCode != http.StatusOK {
 		t.Fatalf("list grants status = %d body = %s", listResp.StatusCode, ReadSettingsBody(t, listResp))
 	}

@@ -24,10 +24,10 @@ import (
 // into a test failure instead of a stalled run.
 var fixtureClient = &http.Client{Timeout: 2 * time.Minute}
 
-func AcceptPrompt(t *testing.T, baseURL, sessionID, Text string) {
+func AcceptPrompt(t *testing.T, baseURL, sessionID, text string) {
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, baseURL+"/v1/sessions/"+sessionID+"/prompts",
-		strings.NewReader(PromptJSON(Text)))
+		strings.NewReader(PromptJSON(text)))
 	if err != nil {
 		t.Fatalf("prompt request: %v", err)
 	}
@@ -37,7 +37,7 @@ func AcceptPrompt(t *testing.T, baseURL, sessionID, Text string) {
 	if err != nil {
 		t.Fatalf("prompt: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusAccepted {
 		t.Fatalf("prompt status = %d body = %s", resp.StatusCode, string(ReadBody(t, resp)))
 	}
@@ -126,7 +126,7 @@ func CreateTestSession(t *testing.T, baseURL, projectDir string) wire.Session {
 	if err != nil {
 		t.Fatalf("create project: %v", err)
 	}
-	defer projResp.Body.Close()
+	defer func() { _ = projResp.Body.Close() }()
 	if projResp.StatusCode != http.StatusCreated {
 		t.Fatalf("create project status = %d body = %s", projResp.StatusCode, string(ReadBody(t, projResp)))
 	}
@@ -145,7 +145,7 @@ func CreateTestSession(t *testing.T, baseURL, projectDir string) wire.Session {
 	if err != nil {
 		t.Fatalf("create session: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusAccepted {
 		t.Fatalf("create session status = %d body = %s", resp.StatusCode, string(ReadBody(t, resp)))
 	}
@@ -184,7 +184,7 @@ func GetSessionAtURL(t *testing.T, baseURL, sessionID string) wire.Session {
 	if err != nil {
 		t.Fatalf("get session: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body := ReadBody(t, resp)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("get session status = %d body = %s", resp.StatusCode, body)
@@ -207,7 +207,7 @@ func ListMessagesAtURL(t *testing.T, baseURL, sessionID string) []wire.Message {
 	if err != nil {
 		t.Fatalf("list messages: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("list messages status = %d body = %s", resp.StatusCode, string(ReadBody(t, resp)))
 	}
@@ -229,8 +229,8 @@ func NewAuthedRequest(method, target string, body io.Reader) *http.Request {
 	return req
 }
 
-func PromptJSON(Text string) string {
-	return fmt.Sprintf(`{"operation_id":%q,"text":%q}`, uuid.NewString(), Text)
+func PromptJSON(text string) string {
+	return fmt.Sprintf(`{"operation_id":%q,"text":%q}`, uuid.NewString(), text)
 }
 
 // waitForSessionIdle waits until no admitted prompt is pending and no turn runs;
@@ -247,7 +247,7 @@ func ReadSSEStream(t *testing.T, streamURL string) (content string, sawDone bool
 	if err != nil {
 		t.Fatalf("stream get: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("stream status = %d", resp.StatusCode)
 	}
@@ -285,8 +285,8 @@ func StartTestHTTPServer(t *testing.T, srv *hostapi.Server) string {
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
-	httpServer := &http.Server{Handler: srv}
-	go httpServer.Serve(listener)
+	httpServer := &http.Server{Handler: srv, ReadHeaderTimeout: 5 * time.Second}
+	go func() { _ = httpServer.Serve(listener) }()
 	t.Cleanup(func() { _ = httpServer.Close() })
 	return fmt.Sprintf("http://%s", listener.Addr().String())
 }
@@ -330,14 +330,14 @@ func WaitSessionPrepared(t *testing.T, baseURL string, sess wire.Session) wire.S
 			t.Fatalf("wait for session preparation: %v", getErr)
 		}
 		if readyResp.StatusCode != http.StatusOK {
-			readyResp.Body.Close()
+			_ = readyResp.Body.Close()
 			t.Fatalf("wait for session preparation status = %d", readyResp.StatusCode)
 		}
 		if DecodeErr := json.NewDecoder(readyResp.Body).Decode(&sess); DecodeErr != nil {
-			readyResp.Body.Close()
+			_ = readyResp.Body.Close()
 			t.Fatalf("decode prepared session: %v", DecodeErr)
 		}
-		readyResp.Body.Close()
+		_ = readyResp.Body.Close()
 		if sess.Status == wire.SessionStatusPreparing {
 			time.Sleep(5 * time.Millisecond)
 		}
