@@ -188,18 +188,18 @@ func (t *EditTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 }
 
 func captureFileEdit(tctx tools.ToolContext, path, after string, before *string) {
-	if tctx.Out == nil || strings.TrimSpace(path) == "" {
+	if tctx.Effects.Out == nil || strings.TrimSpace(path) == "" {
 		return
 	}
 	// The recorded edit names each value this call resolved by its reference.
 	if before != nil {
-		referenced := tctx.Secrets.ReferenceEchoes(*before)
+		referenced := tctx.Effects.Secrets.ReferenceEchoes(*before)
 		before = &referenced
 	}
-	tctx.Out.FileEdit = &tools.FileEditCapture{
+	tctx.Effects.Out.FileEdit = &tools.FileEditCapture{
 		Path:   path,
 		Before: before,
-		After:  tctx.Secrets.ReferenceEchoes(after),
+		After:  tctx.Effects.Secrets.ReferenceEchoes(after),
 	}
 }
 
