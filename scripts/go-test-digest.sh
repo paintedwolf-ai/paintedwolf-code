@@ -138,9 +138,6 @@ cleanup() {
 trap cleanup EXIT
 trap 'reap_test_group; reap_watchdog; exit 130' INT TERM
 
-export GOCACHE="${GOCACHE:-$(go env GOCACHE)}"
-export GOMODCACHE="${GOMODCACHE:-$(go env GOMODCACHE)}"
-export GOPATH="${GOPATH:-$(go env GOPATH)}"
 # shellcheck source=document-core-env.sh
 source "${ROOT}/scripts/document-core-env.sh"
 test_run_create_isolation "go-test"

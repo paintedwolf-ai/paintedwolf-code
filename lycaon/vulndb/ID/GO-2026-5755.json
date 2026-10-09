@@ -1,0 +1,56 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/canonical/microceph/microceph"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "0.0.0-20260609072127-5c2760d8fb76"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-10720",
+  "GHSA-xg3j-c7q4-f9ph"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5755"
+ },
+ "details": "Canonical MicroCeph: path traversal issue in the remote-import AP in github.com/canonical/microceph/microceph",
+ "id": "GO-2026-5755",
+ "modified": "2026-06-25T22:34:41Z",
+ "published": "2026-06-25T22:34:41Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-xg3j-c7q4-f9ph"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-10720"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/canonical/microceph/commit/5c2760d8fb765d670e2673d3a537b67eae4b67c6"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/canonical/microceph/pull/758"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Canonical MicroCeph: path traversal issue in the remote-import AP in github.com/canonical/microceph/microceph"
+}

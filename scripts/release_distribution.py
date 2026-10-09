@@ -45,16 +45,21 @@ def activation_manifest(manifest: dict, record: dict) -> dict:
     return {**manifest, "pub_date": record["started_at"]}
 
 
-def storage_json(url: str, token: str) -> tuple[bytes, dict]:
+def storage_bytes(url: str, token: str) -> bytes:
     request = urllib.request.Request(url, headers={"Authorization": "Bearer " + token, "Cache-Control": "no-cache"})
     with urllib.request.urlopen(request, timeout=30) as response:
         raw = response.read(2 * 1024 * 1024 + 1)
         if len(raw) > 2 * 1024 * 1024:
             raise ValueError("release storage metadata exceeds its bound")
-        return raw, json.loads(raw)
+        return raw
 
 
-def read_storage(key: str) -> dict | None:
+def storage_json(url: str, token: str) -> tuple[bytes, dict]:
+    raw = storage_bytes(url, token)
+    return raw, json.loads(raw)
+
+
+def read_storage_bytes(key: str) -> bytes | None:
     account, bucket, token = (os.environ[name] for name in ("CLOUDFLARE_ACCOUNT_ID", "R2_BUCKET", "CLOUDFLARE_API_TOKEN"))
     base = f"https://api.cloudflare.com/client/v4/accounts/{account}/r2/buckets/{bucket}/objects"
     _, listing = storage_json(base + "?" + urllib.parse.urlencode({"prefix": key, "per_page": 20}), token)
@@ -72,15 +77,20 @@ def read_storage(key: str) -> dict | None:
     # The listing establishes existence while GET may still return a cached miss.
     for attempt in range(12):
         try:
-            raw, value = storage_json(base + "/" + urllib.parse.quote(key, safe="/"), token)
+            raw = storage_bytes(base + "/" + urllib.parse.quote(key, safe="/"), token)
             if hashlib.md5(raw).hexdigest() == etag:
-                return value
+                return raw
         except urllib.error.HTTPError as error:
             if error.code != 404:
                 raise
         if attempt < 11:
             time.sleep(5)
     raise ValueError("release storage bytes did not converge to the listed object: " + key)
+
+
+def read_storage(key: str) -> dict | None:
+    raw = read_storage_bytes(key)
+    return json.loads(raw) if raw is not None else None
 
 
 def require_publishable(version: str) -> None:
@@ -293,9 +303,9 @@ def main() -> None:
     website.add_argument("--generation", type=int, default=1)
     args = parser.parse_args()
     if args.command == "storage-read":
-        value = read_storage(args.key)
+        value = read_storage_bytes(args.key)
         if value is not None:
-            args.output.write_bytes(encoded(value))
+            args.output.write_bytes(value)
         print(404 if value is None else 200)
     elif args.command == "advance":
         manifest = json.loads(args.file.read_text())

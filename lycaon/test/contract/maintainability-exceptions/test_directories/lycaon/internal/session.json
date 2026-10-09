@@ -1,0 +1,6 @@
+{
+  "category": "test_directories",
+  "artifact": "lycaon/internal/session",
+  "cap": 265,
+  "reason": "Predates the limits; fixes still land here while the package is decomposed (#271)."
+}

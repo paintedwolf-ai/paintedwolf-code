@@ -1,0 +1,81 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {
+    "imports": [
+     {
+      "path": "k8s.io/kubernetes/pkg/volume/git_repo",
+      "symbols": [
+       "validateVolume"
+      ]
+     }
+    ]
+   },
+   "package": {
+    "ecosystem": "Go",
+    "name": "k8s.io/kubernetes"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.28.12"
+      },
+      {
+       "introduced": "1.29.0"
+      },
+      {
+       "fixed": "1.29.7"
+      },
+      {
+       "introduced": "1.30.0"
+      },
+      {
+       "fixed": "1.30.3"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2024-10220",
+  "GHSA-27wf-5967-98gx"
+ ],
+ "database_specific": {
+  "review_status": "REVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2024-3286"
+ },
+ "details": "Kubernetes kubelet arbitrary command execution in k8s.io/kubernetes",
+ "id": "GO-2024-3286",
+ "modified": "2024-12-13T19:06:25Z",
+ "published": "2024-11-27T19:16:39Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-27wf-5967-98gx"
+  },
+  {
+   "type": "WEB",
+   "url": "http://www.openwall.com/lists/oss-security/2024/11/20/1"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/kubernetes/kubernetes/commit/1ab06efe92d8e898ca1931471c9533ce94aba29b"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/kubernetes/kubernetes/issues/128885"
+  },
+  {
+   "type": "WEB",
+   "url": "https://groups.google.com/g/kubernetes-security-announce/c/ptNgV5Necko"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Kubernetes kubelet arbitrary command execution in k8s.io/kubernetes"
+}
