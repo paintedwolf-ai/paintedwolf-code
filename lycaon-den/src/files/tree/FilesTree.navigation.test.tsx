@@ -274,3 +274,20 @@ it("animates scroll to center a newly revealed file when disclosing a closed fol
   } finally { cancelAnimationFrame(frame); }
   expect(samples.filter(s => s > 0).length).toBeGreaterThan(3);
 });
+
+it.each([0, 700])("keeps painted rows at the browser's landed offset when a reveal write is clamped to %s", async limit => {
+  const view = await mount(2001);
+  vi.stubGlobal("matchMedia", (query: string) => ({ matches: query.includes("prefers-reduced-motion") }));
+  let landed = 0;
+  let writes = 0;
+  Object.defineProperty(view.scroll, "scrollTop", {
+    configurable: true,
+    get: () => landed,
+    set: (offset: number) => { writes++; landed = Math.max(0, Math.min(limit, offset)); },
+  });
+  view.navigate("automatic", 1500);
+  await waitFor(() => expect(writes).toBeGreaterThan(0));
+  await new Promise(resolve => setTimeout(resolve, 100));
+  expect(paintedRows(view.scroll).length).toBeGreaterThan(0);
+  expect(paintedRows(view.scroll)[0]!.top).toBeLessThanOrEqual(0);
+});

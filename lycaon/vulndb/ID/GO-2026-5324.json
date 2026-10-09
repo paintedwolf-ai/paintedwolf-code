@@ -1,0 +1,65 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/gotenberg/gotenberg/v7"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/gotenberg/gotenberg/v8"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "8.32.0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-42595",
+  "GHSA-chwh-f6gm-r836"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5324"
+ },
+ "details": "Gotenberg: Server-Side Request Forgery via Chromium URL Endpoint with Redirect-Based Deny-List Bypass in github.com/gotenberg/gotenberg",
+ "id": "GO-2026-5324",
+ "modified": "2026-06-25T18:43:19Z",
+ "published": "2026-06-25T18:43:19Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/gotenberg/gotenberg/security/advisories/GHSA-chwh-f6gm-r836"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-42595"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Gotenberg: Server-Side Request Forgery via Chromium URL Endpoint with Redirect-Based Deny-List Bypass in github.com/gotenberg/gotenberg"
+}

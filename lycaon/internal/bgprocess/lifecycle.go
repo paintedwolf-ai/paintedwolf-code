@@ -2,7 +2,6 @@ package bgprocess
 
 import (
 	"context"
-	"log/slog"
 	"strings"
 	"time"
 
@@ -13,10 +12,8 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// stopSettleTimeout bounds how long a stopped job may take to report its exit
-// after the kill fallback fired. A tree whose output pipe is still held from
-// outside the signalled session cannot be reaped from here.
-const stopSettleTimeout = exec.TerminateGrace + 8*time.Second
+// processCloseTimeout bounds shutdown even when a leader cannot be killed.
+const processCloseTimeout = exec.TerminateGrace + exec.PipelineWaitDelay + 3*time.Second
 
 // Promote makes a job visible and publishes buffered output and any observed exit.
 func (r *Output) Promote(ctx context.Context, sessionID, handle string) error {
@@ -172,29 +169,20 @@ func (r *ProcessLifecycle) DisposeSession(ctx context.Context, sessionID string)
 	return nil
 }
 
-// awaitSettled waits for a stopped job to report its exit. After
-// stopSettleTimeout the handle is abandoned so the caller's stop can finish;
-// the job stays signalled and the reaper still covers it at engine exit.
+// awaitSettled waits for process exit and output drain under the caller's deadline.
 func (r *ProcessLifecycle) awaitSettled(ctx context.Context, proc *Process) error {
-	timer := time.NewTimer(stopSettleTimeout)
-	defer timer.Stop()
 	select {
 	case <-proc.done:
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
-	case <-timer.C:
-		r.jobs.mu.Lock()
-		stages := append([]hostcmd.StageResult(nil), proc.Stages...)
-		r.jobs.mu.Unlock()
-		slog.WarnContext(ctx, "stopped process did not settle; abandoning its handle",
-			"session_id", proc.SessionID, "handle", proc.Handle, "command", hostcmd.CommandLine(stages))
-		return nil
 	}
 }
 
 // Close rejects new work and waits for registered processes to exit.
 func (r *ProcessLifecycle) Close(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, processCloseTimeout)
+	defer cancel()
 	if r == nil {
 		return nil
 	}

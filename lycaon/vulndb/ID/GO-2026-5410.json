@@ -1,0 +1,61 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {
+    "imports": [
+     {
+      "path": "github.com/slack-go/slack",
+      "symbols": [
+       "NewSecretsVerifier",
+       "unsafeSignatureVerifier"
+      ]
+     }
+    ]
+   },
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/slack-go/slack"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "0.23.1"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "GHSA-gxhx-2686-5h9g"
+ ],
+ "database_specific": {
+  "review_status": "REVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5410"
+ },
+ "details": "SecretsVerifier accepts empty signing secret without precondition in github.com/slack-go/slack",
+ "id": "GO-2026-5410",
+ "modified": "2026-07-07T16:52:19Z",
+ "published": "2026-07-07T16:52:19Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/slack-go/slack/security/advisories/GHSA-gxhx-2686-5h9g"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/slack-go/slack/commit/34ad5c052e446f58505ae8d81a2a72821de107cc"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/slack-go/slack/releases/tag/v0.23.1"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "SecretsVerifier accepts empty signing secret without precondition in github.com/slack-go/slack"
+}

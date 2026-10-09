@@ -1,0 +1,78 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/lxc/incus"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/lxc/incus/v6"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/lxc/incus/v7"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "7.2.0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-48750",
+  "GHSA-73hr-m85f-64v9"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5801"
+ },
+ "details": "Incus has an arbitrary file write on host via `exec-output` symlink in crafted image in github.com/lxc/incus",
+ "id": "GO-2026-5801",
+ "modified": "2026-07-07T16:41:46Z",
+ "published": "2026-07-07T16:41:46Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/lxc/incus/security/advisories/GHSA-73hr-m85f-64v9"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Incus has an arbitrary file write on host via `exec-output` symlink in crafted image in github.com/lxc/incus"
+}

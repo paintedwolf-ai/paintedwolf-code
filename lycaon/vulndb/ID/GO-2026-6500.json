@@ -1,0 +1,76 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {
+    "imports": [
+     {
+      "path": "github.com/rabbitmq/amqp091-go",
+      "symbols": [
+       "Channel.recvContent",
+       "Connection.Reconnect",
+       "DefaultConnectionRecovery.OnConnectionClose",
+       "Dial",
+       "DialConfig",
+       "DialTLS",
+       "DialTLS_ExternalAuth",
+       "Open"
+      ]
+     }
+    ]
+   },
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/rabbitmq/amqp091-go"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.13.0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-77410",
+  "GHSA-r9c8-gcjp-xfwh"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6500"
+ },
+ "details": "RabbitMQ amqp091-go: Resource Exhaustion (OOM) via Unbounded Body Buffer Allocation in github.com/rabbitmq/amqp091-go",
+ "id": "GO-2026-6500",
+ "modified": "2026-10-01T20:23:56Z",
+ "published": "2026-10-01T20:23:56Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/rabbitmq/amqp091-go/security/advisories/GHSA-r9c8-gcjp-xfwh"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-77410"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/rabbitmq/amqp091-go/commit/91b65fa0096a99a580cf51a31b24028ff1c60382"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/rabbitmq/amqp091-go/pull/346"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/rabbitmq/amqp091-go/releases/tag/v1.13.0"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "RabbitMQ amqp091-go: Resource Exhaustion (OOM) via Unbounded Body Buffer Allocation in github.com/rabbitmq/amqp091-go"
+}

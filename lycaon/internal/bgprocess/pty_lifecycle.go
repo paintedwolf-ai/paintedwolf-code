@@ -7,8 +7,12 @@ import (
 	"os/exec"
 	"time"
 
+	execution "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/pkg/api"
 )
+
+// ptyCloseTimeout covers termination and the final terminal read.
+const ptyCloseTimeout = execution.TerminateGrace + DefaultPTYReadTimeout + 3*time.Second
 
 // ClosePTY kills a pty handle and removes the entry. It discards residual
 // output so terminal_read remains the only incremental-output channel.
@@ -26,7 +30,7 @@ func (r *Terminal) ClosePTY(sessionID, handle string) (PTYCloseResult, error) {
 	r.Lifecycle.killProcess(proc)
 	select {
 	case <-proc.done:
-	case <-time.After(stopSettleTimeout):
+	case <-time.After(ptyCloseTimeout):
 	}
 	r.jobs.mu.Lock()
 	hasExit := proc.hasExit

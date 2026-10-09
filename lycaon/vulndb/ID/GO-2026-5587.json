@@ -1,0 +1,64 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/gotenberg/gotenberg/v7"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/gotenberg/gotenberg/v8"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "8.30.0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "GHSA-qmwh-9m9c-h36m"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5587"
+ },
+ "details": "Gotenberg has incomplete fix for ExifTool arbitrary file write: case-insensitive bypass and missing HardLink/SymLink tags in github.com/gotenberg/gotenberg",
+ "id": "GO-2026-5587",
+ "modified": "2026-06-25T22:34:34Z",
+ "published": "2026-06-25T22:34:34Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/gotenberg/gotenberg/security/advisories/GHSA-qmwh-9m9c-h36m"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/gotenberg/gotenberg/commit/15050a311b73d76d8b9223bafe7fa7ba71240011"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Gotenberg has incomplete fix for ExifTool arbitrary file write: case-insensitive bypass and missing HardLink/SymLink tags in github.com/gotenberg/gotenberg"
+}

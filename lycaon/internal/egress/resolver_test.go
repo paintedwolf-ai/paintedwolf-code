@@ -3,6 +3,7 @@ package egress
 import (
 	"context"
 	"errors"
+	"net"
 	"net/netip"
 	"reflect"
 	"testing"
@@ -55,6 +56,22 @@ func TestResolverRetainsFailureCause(t *testing.T) {
 		var denied *DestinationDeniedError
 		if !errors.As(err, &denied) || !errors.Is(err, failure) {
 			t.Fatalf("lookup cause lost: %v", err)
+		}
+	}
+}
+
+func TestTestingResolveAnswersPolicyLookupsWithoutDNS(t *testing.T) {
+	public := netip.MustParseAddr("1.1.1.1")
+	TestingResolve(t, StaticLookup(public))
+	ips, err := ResolvePublicIPs(t.Context(), "api.search.brave.com")
+	if err != nil || len(ips) != 1 || ips[0] != public {
+		t.Fatalf("static lookup = %v, %v", ips, err)
+	}
+	for _, reserved := range []string{"localhost", "missing.invalid", "feed.example", "host.test."} {
+		_, err := ResolvePublicIPs(t.Context(), reserved)
+		var dnsErr *net.DNSError
+		if !errors.As(err, &dnsErr) || !dnsErr.IsNotFound {
+			t.Fatalf("%s resolved: %v", reserved, err)
 		}
 	}
 }

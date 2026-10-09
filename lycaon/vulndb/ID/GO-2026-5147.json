@@ -1,0 +1,69 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/oauth2-proxy/oauth2-proxy"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/oauth2-proxy/oauth2-proxy/v7"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "7.15.2"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-34457",
+  "GHSA-5hvv-m4w4-gf6v"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5147"
+ },
+ "details": "OAuth2 Proxy's Health Check User-Agent Matching Bypasses Authentication in auth_request Mode in github.com/oauth2-proxy/oauth2-proxy",
+ "id": "GO-2026-5147",
+ "modified": "2026-06-25T18:26:48Z",
+ "published": "2026-06-25T18:26:48Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/oauth2-proxy/oauth2-proxy/security/advisories/GHSA-5hvv-m4w4-gf6v"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-34457"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/oauth2-proxy/oauth2-proxy/releases/tag/v7.15.2"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "OAuth2 Proxy's Health Check User-Agent Matching Bypasses Authentication in auth_request Mode in github.com/oauth2-proxy/oauth2-proxy"
+}

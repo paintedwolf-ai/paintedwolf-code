@@ -12,8 +12,9 @@ import (
 
 // workingTree lists the checkout's files, tracked or not, and reads them.
 type workingTree struct {
-	root  string
-	paths []string
+	root   string
+	paths  []string
+	bodies map[string][]byte
 }
 
 func openWorkingTree(root string) (*workingTree, error) {
@@ -29,11 +30,22 @@ func openWorkingTree(root string) (*workingTree, error) {
 func (w *workingTree) files() []string { return w.paths }
 
 func (w *workingTree) regular(relative string) bool {
+	if w.bodies != nil {
+		_, ok := w.bodies[relative]
+		return ok
+	}
 	info, err := os.Lstat(filepath.Join(w.root, filepath.FromSlash(relative)))
 	return err == nil && info.Mode().IsRegular()
 }
 
 func (w *workingTree) read(relative string) ([]byte, error) {
+	if w.bodies != nil {
+		body, ok := w.bodies[relative]
+		if !ok {
+			return nil, os.ErrNotExist
+		}
+		return body, nil
+	}
 	return os.ReadFile(filepath.Join(w.root, filepath.FromSlash(relative)))
 }
 
