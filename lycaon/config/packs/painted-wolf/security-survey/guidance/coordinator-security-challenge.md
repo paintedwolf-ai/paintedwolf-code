@@ -10,7 +10,7 @@ For each unresolved claim, submit `NEEDS_INVESTIGATION` with `question: {missing
 Each question allows {{ review_followup_attempts }} completed investigation attempts; provider failures and rejected calls do not consume them. Assess every registered question in coverage. An open question cannot be `covered`; `immaterial` needs evidence bounding its consequences. Material or essential uncertainty also leaves its affected obligations open. Submit `CHALLENGED` only after resolution, evidenced immateriality, exhausted investigation, or a host-recorded blocker.
 {% endif %}
 
-`challenges` needs one entry per stamped id; independent advisory assessments need new ids and titles. Use status {{ claim_statuses|join:" | " }}, evidence, and uncertainty. Preserve assessed `scan_group_ids` (`group:…`, never scan ids); listing a group is not assessment. Missing outcomes stay unresolved.
+`challenges` needs one entry per stamped id, copying each stamped `id` verbatim without spelling or suffix changes; independent advisory assessments need new ids and titles. Use status {{ claim_statuses|join:" | " }}, evidence, and uncertainty. Preserve assessed `scan_group_ids` (`group:…`, never scan ids); listing a group is not assessment. Missing outcomes stay unresolved.
 
 Inherited claim links and set-asides already count. Account for remaining groups before terminal submission. Select whole groups with `{scanner, paths, reason}` or explicit `{scan_group_ids, reason}`; the reason must cover every selected group.
 {% if rating_questions %}Restate each flaw's `answers` from the evidence, using `unknown` only where open:

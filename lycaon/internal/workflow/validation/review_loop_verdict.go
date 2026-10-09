@@ -11,6 +11,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/tools"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -207,6 +208,9 @@ func ValidateReviewLoopVerdict(def workflowdef.ReviewLoopDef, verdict map[string
 	if err != nil {
 		issues = append(issues, err)
 	} else {
+		if err := validateStampedClaimOutcomes(def, verdict, byField, rules); err != nil {
+			issues = append(issues, err)
+		}
 		for _, field := range SortedClaimFields(byField) {
 			for _, claim := range byField[field] {
 				if err := validateVerdictClaim(def, field, claim, rules); err != nil {
@@ -265,4 +269,34 @@ func ReviewLoopVerdictEvidenceVerdict(def workflowdef.ReviewLoopDef, verdict map
 		return evidence.GateVerdictApproved
 	}
 	return evidence.GateVerdictNeedsChanges
+}
+
+// Stamped claim identity is a verdict contract, independent of question follow-up.
+func validateStampedClaimOutcomes(def workflowdef.ReviewLoopDef, verdict map[string]string, byField map[string][]VerdictClaim, rules VerdictRules) error {
+	if !ReviewLoopVerdictTerminal(def, verdict) {
+		return nil
+	}
+	present := make(map[string]bool)
+	for _, claims := range byField {
+		for _, claim := range claims {
+			present[claim.ID] = true
+		}
+	}
+	var expected, missing []string
+	for id := range rules.KnownClaims {
+		expected = append(expected, id)
+		if !present[id] {
+			missing = append(missing, id)
+		}
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	sort.Strings(expected)
+	sort.Strings(missing)
+	data := guidance.OffenderHintData(missing)
+	data["reason"] = "claim_outcome_required"
+	data["missing_claim_ids"] = missing
+	data["expected_claim_ids"] = expected
+	return &tools.ToolReject{Code: ReviewLoopVerdictInvalidCode, Data: data}
 }
