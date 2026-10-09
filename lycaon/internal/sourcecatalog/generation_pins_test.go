@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/backgroundwork"
 	"github.com/lycaon/lycaon/internal/pagedview"
@@ -195,5 +196,45 @@ func TestReleaseTreeRootPreservesPinnedGeneration(t *testing.T) {
 	pin.Release()
 	if _, err := pin.OpenNavigation(t.Context()); !errors.Is(err, pagedview.ErrExpired) {
 		t.Fatalf("released pin reopened navigation: %v", err)
+	}
+}
+
+func TestPinnedTreeSurvivesExpiredOverBudgetReconciliation(t *testing.T) {
+	catalog, root := indexFixture(t)
+	writeIndexFile(t, root.Path, "folder/a.txt", "source")
+	_, err := catalog.Directories.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{})
+	testutil.FailErr(t, "observe root", err)
+	head, err := catalog.Directories.OpenNavigation(t.Context(), "p", root)
+	testutil.FailErr(t, "open head", err)
+	generation, extent := head.Generation, rootExtent(t, head)
+	pin, err := head.Retain()
+	testutil.FailErr(t, "retain generation", err)
+	defer pin.Release()
+	testutil.FailErr(t, "close head", head.Close())
+	store, err := catalog.Trees.indexStore(t.Context(), "p", root)
+	testutil.FailErr(t, "resolve store", err)
+	database, err := openTreeDB(t.Context(), store.file)
+	testutil.FailErr(t, "materialize active projection", err)
+	testutil.FailErr(t, "close projection fixture", database.Close())
+	testutil.FailErr(t, "materialize structural checkpoint", store.writePinnedCheckpoint(t.Context(), pin))
+	aged := time.Now().Add(-48 * time.Hour)
+	for _, file := range []string{store.file, store.structureFile} {
+		testutil.FailErr(t, "expire active generation", os.Chtimes(file, aged, aged))
+	}
+	removed, err := catalog.Trees.reconcileTreeStores(t.Context(), treeStorePolicy{retention: time.Hour, maxBytes: 1, vacuumPages: 2048})
+	testutil.FailErr(t, "reconcile with held generation", err)
+	if removed != 0 {
+		t.Fatalf("removed held stores: %d", removed)
+	}
+	pinned, err := pin.OpenNavigation(t.Context())
+	testutil.FailErr(t, "open retained reader", err)
+	defer pinned.Close()
+	if pinned.Generation != generation || rootExtent(t, pinned) != extent {
+		t.Fatal("retention changed pinned coordinates")
+	}
+	entry, err := pinned.Entry(t.Context(), "folder")
+	testutil.FailErr(t, "read retained entry", err)
+	if !entry.IsDir {
+		t.Fatalf("retained entry=%+v", entry)
 	}
 }

@@ -142,7 +142,7 @@ func reconcileStoreCoupledStorage(b *serveBuilder, ctx context.Context) error {
 	}
 	removedHost, hostErr := project.ReconcileHostStorage(b.storage.Directory, ids)
 	removedCheckpoints, checkpointErr := sessioncheckpoint.ReconcileRoots(b.storage.Directory, roots)
-	removedCatalogs, catalogErr := sourcecatalog.Process().Trees.ReconcileTreeStores(ctx, sourcecatalog.TreeStoreRetention)
+	removedCatalogs, catalogErr := sourcecatalog.Process().Trees.ReconcileTreeStores(ctx)
 	var removedSandboxes int
 	var sandboxErr error
 	if b.delegations != nil {

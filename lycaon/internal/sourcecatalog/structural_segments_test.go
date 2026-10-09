@@ -214,7 +214,7 @@ func TestStructuralRetentionLeavesNoScratchToReclaim(t *testing.T) {
 
 	catalog := New()
 	catalog.Trees.treeDir = dir
-	removed, err := catalog.Trees.ReconcileTreeStores(t.Context(), TreeStoreRetention)
+	removed, err := catalog.Trees.ReconcileTreeStores(t.Context())
 	testutil.FailErr(t, "reconcile structural caches", err)
 	if removed != 0 {
 		t.Fatalf("removed entries = %d, want none", removed)

@@ -14,25 +14,23 @@ import (
 	"github.com/lycaon/lycaon/internal/backgroundwork"
 )
 
-// TreeStoreRetention expires unused generations by their last write or daily access stamp.
-const TreeStoreRetention = 30 * 24 * time.Hour
-
 // treeTouchInterval bounds how often an open stamps last use on the file.
 const treeTouchInterval = 24 * time.Hour
 
 // Journal companions count toward the generation's disk budget.
 var treeSidecarSuffixes = []string{"-wal", "-shm", "-journal"}
 
-// TreeStoreByteBudget is an inactive-cache retention target, never an admission limit.
-const TreeStoreByteBudget int64 = 4 << 30
-
 // Structural scratch is unlinked as it is created, so one still visible this
 // long after its last write was left behind by an interrupted engine.
 const structuralScratchGrace = time.Minute
 
 // ReconcileTreeStores expires unused generations and reclaims inactive storage toward the retention target.
-func (c *TreeStores) ReconcileTreeStores(ctx context.Context, maxAge time.Duration) (int, error) {
-	if c == nil || maxAge <= 0 {
+func (c *TreeStores) ReconcileTreeStores(ctx context.Context) (int, error) {
+	return c.reconcileTreeStores(ctx, defaultTreeStorePolicy())
+}
+
+func (c *TreeStores) reconcileTreeStores(ctx context.Context, policy treeStorePolicy) (int, error) {
+	if c == nil || policy.retention <= 0 {
 		return 0, nil
 	}
 	c.treeLifecycle.Lock()
@@ -57,7 +55,7 @@ func (c *TreeStores) ReconcileTreeStores(ctx context.Context, maxAge time.Durati
 		}
 	}
 	c.mu.Unlock()
-	cutoff := time.Now().Add(-maxAge)
+	cutoff := time.Now().Add(-policy.retention)
 	removed := 0
 	var errs []error
 	type generation struct {
@@ -104,7 +102,7 @@ func (c *TreeStores) ReconcileTreeStores(ctx context.Context, maxAge time.Durati
 			removed++
 			continue
 		}
-		if err := checkpointTreeStore(ctx, file); err != nil {
+		if err := checkpointTreeStore(ctx, file, policy.vacuumPages); err != nil {
 			errs = append(errs, err)
 		}
 		size := treeStoreBytes(file)
@@ -113,7 +111,7 @@ func (c *TreeStores) ReconcileTreeStores(ctx context.Context, maxAge time.Durati
 	}
 	sort.Slice(kept, func(i, j int) bool { return kept[i].lastUsed.Before(kept[j].lastUsed) })
 	for _, g := range kept {
-		if total <= TreeStoreByteBudget {
+		if total <= policy.maxBytes {
 			break
 		}
 		if err := removeTreeStore(g.file); err != nil {
@@ -138,25 +136,6 @@ func treeStoreBytes(file string) int64 {
 		}
 	}
 	return total
-}
-
-// checkpointTreeStore reclaims the write-ahead log of an idle generation.
-func checkpointTreeStore(ctx context.Context, file string) error {
-	if strings.HasSuffix(file, structuralFileSuffix) {
-		return nil
-	}
-	wal := file + "-wal"
-	info, err := os.Stat(wal)
-	if err != nil || info.Size() == 0 {
-		return nil
-	}
-	db, err := openTreeDB(ctx, file)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = db.Close() }()
-	_, err = db.ExecContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)")
-	return err
 }
 
 // ClearTreeStores drains all cache writers and runs clearStorage while new
