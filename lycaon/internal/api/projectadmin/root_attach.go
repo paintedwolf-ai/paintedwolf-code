@@ -51,7 +51,7 @@ func (s *Roots) HandleAttachProjectRoot(w http.ResponseWriter, r *http.Request) 
 	}
 	s.Verification.detectVerifyAsync(r.Context(), id)
 	s.Sessions.ProjectControl.EnqueueRootsChangedKick(r.Context(), id, project.RootRefsFrom(change.Before), project.RootRefsFrom(change.After))
-	s.Sessions.Chats.ReopenOrientation(r.Context(), id, s.Sandboxes.Board)
+	s.Sessions.Chats.ReopenOrientation(r.Context(), id, s.Sessions.Coordinator.Runtime.Board())
 	s.Projects.publishProjectLifecycleEvent(r.Context(), wire.ProjectEventUpdated, change.After)
 	httpio.WriteJSON(w, http.StatusCreated, project.ToAPI(change.After))
 }
