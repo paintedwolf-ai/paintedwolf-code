@@ -41,7 +41,7 @@ func observeMutationPaths(t *testing.T, service *SourceMutationService, p *Proje
 	for _, path := range paths {
 		refs = append(refs, sourceledger.PathRef{RootID: p.Roots[0].ID, Path: path})
 	}
-	count, err := service.settlement.recorder.(*sourceledger.Store).ObservePaths(t.Context(), p.ID, []sourceledger.RootSpec{{ID: p.Roots[0].ID, Path: p.Roots[0].Path}}, refs)
+	count, err := service.settlement.recorder.(*sourceledger.Store).Inventory.ObservePaths(t.Context(), p.ID, []sourceledger.RootSpec{{ID: p.Roots[0].ID, Path: p.Roots[0].Path}}, refs)
 	testutil.FailErr(t, "observe tracked paths", err)
 	return count
 }
@@ -97,7 +97,7 @@ func TestMutationCommitRacingObservationDoesNotCreateOutsideEffect(t *testing.T)
 	}
 	finished := make(chan result, 1)
 	go func() {
-		count, err := service.settlement.recorder.(*sourceledger.Store).ObservePaths(t.Context(), p.ID, []sourceledger.RootSpec{{ID: p.Roots[0].ID, Path: p.Roots[0].Path}}, []sourceledger.PathRef{{RootID: p.Roots[0].ID, Path: "a.txt"}})
+		count, err := service.settlement.recorder.(*sourceledger.Store).Inventory.ObservePaths(t.Context(), p.ID, []sourceledger.RootSpec{{ID: p.Roots[0].ID, Path: p.Roots[0].Path}}, []sourceledger.PathRef{{RootID: p.Roots[0].ID, Path: "a.txt"}})
 		finished <- result{count, err}
 	}()
 	select {

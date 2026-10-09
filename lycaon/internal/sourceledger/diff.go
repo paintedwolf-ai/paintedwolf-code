@@ -5,10 +5,10 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/pkg/api"
+	"sync"
 )
 
 // ErrHistoryNotFound identifies a missing effect or version.
@@ -62,7 +62,7 @@ type ScopeComparisonOptions struct {
 }
 
 // CompareEffect reads an effect's immutable endpoints.
-func (s *Store) CompareEffect(ctx context.Context, projectID, effectID string) (Comparison, error) {
+func (s *Comparisons) CompareEffect(ctx context.Context, projectID, effectID string) (Comparison, error) {
 	if s == nil {
 		return Comparison{}, fmt.Errorf("ledger not configured")
 	}
@@ -90,7 +90,7 @@ func (s *Store) CompareEffect(ctx context.Context, projectID, effectID string) (
 }
 
 // CompareVersions compares a version with its parent.
-func (s *Store) CompareVersions(ctx context.Context, projectID, versionID string) (Comparison, error) {
+func (s *Comparisons) CompareVersions(ctx context.Context, projectID, versionID string) (Comparison, error) {
 	version, err := s.queries.GetSourceVersion(ctx, versionID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Comparison{}, ErrHistoryNotFound
@@ -114,7 +114,7 @@ func (s *Store) CompareVersions(ctx context.Context, projectID, versionID string
 }
 
 // CompareScope compares a range start with its tracked head.
-func (s *Store) CompareScope(
+func (s *Comparisons) CompareScope(
 	ctx context.Context,
 	projectID string,
 	branch sourcebranch.ID,
@@ -160,7 +160,7 @@ func (s *Store) CompareScope(
 	default:
 		switch baseline.Kind {
 		case BaselinePin:
-			ordinal, err = s.resolvePinOrdinal(ctx, projectID, baseline)
+			ordinal, err = s.walk.resolvePinOrdinal(ctx, projectID, baseline)
 			if err != nil {
 				return Comparison{}, err
 			}
@@ -207,7 +207,7 @@ func (s *Store) CompareScope(
 
 // CompareTurn compares one file from its state before the turn to its state
 // after the turn's last write, excluding later turns.
-func (s *Store) CompareTurn(ctx context.Context, projectID, sessionID string, turn int, fileID string, opts ScopeComparisonOptions) (Comparison, error) {
+func (s *Comparisons) CompareTurn(ctx context.Context, projectID, sessionID string, turn int, fileID string, opts ScopeComparisonOptions) (Comparison, error) {
 	if s == nil {
 		return Comparison{}, fmt.Errorf("ledger not configured")
 	}
@@ -245,11 +245,11 @@ func (s *Store) CompareTurn(ctx context.Context, projectID, sessionID string, tu
 }
 
 // CompareVersionPair compares two arbitrary retained states.
-func (s *Store) CompareVersionPair(ctx context.Context, projectID, beforeID, afterID string) (Comparison, error) {
+func (s *Comparisons) CompareVersionPair(ctx context.Context, projectID, beforeID, afterID string) (Comparison, error) {
 	return s.compareVersions(ctx, projectID, beforeID, afterID)
 }
 
-func (s *Store) compareVersions(ctx context.Context, projectID, beforeID, afterID string) (Comparison, error) {
+func (s *Comparisons) compareVersions(ctx context.Context, projectID, beforeID, afterID string) (Comparison, error) {
 	before, err := s.comparisonSide(ctx, projectID, beforeID)
 	if err != nil {
 		return Comparison{}, err
@@ -261,7 +261,7 @@ func (s *Store) compareVersions(ctx context.Context, projectID, beforeID, afterI
 	return Comparison{Before: before, After: after}, nil
 }
 
-func (s *Store) comparisonSide(ctx context.Context, projectID, versionID string) (ComparisonSide, error) {
+func (s *Comparisons) comparisonSide(ctx context.Context, projectID, versionID string) (ComparisonSide, error) {
 	if versionID == "" {
 		return ComparisonSide{State: "absent", Availability: ContentAbsent}, nil
 	}
@@ -293,7 +293,7 @@ func (s *Store) comparisonSide(ctx context.Context, projectID, versionID string)
 		out.Availability = ContentNotCaptured
 		return out, nil
 	}
-	raw, found, err := s.readVerifiedBlob(ctx, version.ContentSha256)
+	raw, found, err := s.retention.readVerifiedBlob(ctx, version.ContentSha256)
 	if err != nil {
 		return ComparisonSide{}, err
 	}
@@ -308,4 +308,33 @@ func (s *Store) comparisonSide(ctx context.Context, projectID, versionID string)
 	}
 	out.Availability, out.Content = ContentAvailable, text
 	return out, nil
+}
+
+// Comparison resolves retained content and authorship for review and rewind.
+type Comparisons struct {
+	queries   *db.Queries
+	recordMu  *sync.Mutex
+	sqlDB     db.Handle
+	history   comparisonsHistoryPort
+	retention comparisonsRetentionPort
+	walk      comparisonsWalkPort
+}
+
+type comparisonsWalkPort interface {
+	resolvePinOrdinal(ctx context.Context, projectID string, baseline Baseline) (int64, error)
+}
+
+type comparisonsRetentionPort interface {
+	readVerifiedBlob(ctx context.Context, sha256 string) ([]byte, bool, error)
+}
+
+type comparisonsHistoryPort interface {
+	ReadRestorableVersion(
+		ctx context.Context,
+		projectID, versionID string,
+	) (RestorableVersion, error)
+	ResolveHeadByFile(
+		ctx context.Context,
+		projectID string, branch sourcebranch.ID, fileID string,
+	) (BranchHead, error)
 }

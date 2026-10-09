@@ -179,6 +179,10 @@ type InvocationSource struct {
 	MutationRecorder PrimaryMutationRecorder
 	// SourceLedger records project mutations in this app instance.
 	SourceLedger    sourceledger.Recorder
+	History         SourceHistory
+	Commands        sourceledger.CommandWindowOpener
+	GitMutations    SourceGitMutations
+	Observations    *sourceledger.Inventory
 	SourceMutations sourceeffect.Journal
 	// EditorDocuments serves and lands text for files the person has open.
 	// Nil when the app runs without an editor host; tools then use the file.

@@ -95,8 +95,8 @@ func TestRestoreGitCausedVersionUsesGitObjectStore(t *testing.T) {
 	first := revParse()
 	reader := contractfixture.NewScriptedGitStateReader(t, nested,
 		gitstate.State{Repo: gitstate.RepoPresent, HeadCommit: first, HeadRef: "main"})
-	ledger.SetGitReader(reader)
-	_, err := ledger.ObserveGitState(t.Context(), p.ID,
+	ledger.Git.SetGitReader(reader)
+	_, err := ledger.Git.ObserveGitState(t.Context(), p.ID,
 		[]sourceledger.RootSpec{{ID: rootID, Path: nested}})
 	testutil.FailErr(t, "seed git state", err)
 
@@ -112,7 +112,7 @@ func TestRestoreGitCausedVersionUsesGitObjectStore(t *testing.T) {
 		{Commit: second, Subject: "commit: rewrite from git"},
 		{Commit: first, Subject: "commit: init"},
 	})
-	terminal, err := ledger.ObserveGitState(t.Context(), p.ID,
+	terminal, err := ledger.Git.ObserveGitState(t.Context(), p.ID,
 		[]sourceledger.RootSpec{{ID: rootID, Path: nested}})
 	testutil.FailErr(t, "observe commit", err)
 	if terminal[rootID] == "" {
@@ -127,7 +127,7 @@ func TestRestoreGitCausedVersionUsesGitObjectStore(t *testing.T) {
 		AfterSHA256: textfile.SHA256(gitBytes), AfterSize: int64(len(gitBytes)),
 		GitTransitionID: terminal[rootID],
 	}))
-	fileID, gitVersionID, err := ledger.ResolveFile(t.Context(), p.ID, sourcebranch.Trunk, rootID, "src/app.ts")
+	fileID, gitVersionID, err := ledger.History.ResolveFile(t.Context(), p.ID, sourcebranch.Trunk, rootID, "src/app.ts")
 	testutil.FailErr(t, "resolve git-caused version", err)
 
 	workingBytes := []byte("working edit\n")
@@ -178,8 +178,8 @@ func TestRestoreGitCausedVersionRefusesDriftedGitBytes(t *testing.T) {
 
 	reader := contractfixture.NewScriptedGitStateReader(t, nested,
 		gitstate.State{Repo: gitstate.RepoPresent, HeadCommit: "0000", HeadRef: "main"})
-	ledger.SetGitReader(reader)
-	_, err := ledger.ObserveGitState(t.Context(), p.ID,
+	ledger.Git.SetGitReader(reader)
+	_, err := ledger.Git.ObserveGitState(t.Context(), p.ID,
 		[]sourceledger.RootSpec{{ID: rootID, Path: nested}})
 	testutil.FailErr(t, "seed git state", err)
 	reader.Put(nested, gitstate.State{
@@ -189,7 +189,7 @@ func TestRestoreGitCausedVersionRefusesDriftedGitBytes(t *testing.T) {
 		{Commit: "1111", Subject: "commit: claimed"},
 		{Commit: "0000", Subject: "commit: earlier"},
 	})
-	terminal, err := ledger.ObserveGitState(t.Context(), p.ID,
+	terminal, err := ledger.Git.ObserveGitState(t.Context(), p.ID,
 		[]sourceledger.RootSpec{{ID: rootID, Path: nested}})
 	testutil.FailErr(t, "observe commit", err)
 	if terminal[rootID] == "" {
@@ -205,7 +205,7 @@ func TestRestoreGitCausedVersionRefusesDriftedGitBytes(t *testing.T) {
 		AfterSHA256: strings.Repeat("a", 64), AfterSize: 9,
 		GitTransitionID: terminal[rootID],
 	}))
-	fileID, versionID, err := ledger.ResolveFile(t.Context(), p.ID, sourcebranch.Trunk, rootID, "src/app.ts")
+	fileID, versionID, err := ledger.History.ResolveFile(t.Context(), p.ID, sourcebranch.Trunk, rootID, "src/app.ts")
 	testutil.FailErr(t, "resolve drifted version", err)
 
 	body, err := json.Marshal(wire.SourceVersionRestoreRequest{
@@ -401,7 +401,7 @@ func TestCommitRestoreRefusesADriftedObject(t *testing.T) {
 		Origin: wire.SourceChangeOriginUser,
 		Before: []byte("committed\n"), After: []byte("working\n"),
 	}))
-	fileID, _, err := ledger.ResolveFile(t.Context(), p.ID, sourcebranch.Trunk, rootID, "src/app.ts")
+	fileID, _, err := ledger.History.ResolveFile(t.Context(), p.ID, sourcebranch.Trunk, rootID, "src/app.ts")
 	testutil.FailErr(t, "resolve file", err)
 
 	body, err := json.Marshal(wire.SourceCommitRestoreRequest{

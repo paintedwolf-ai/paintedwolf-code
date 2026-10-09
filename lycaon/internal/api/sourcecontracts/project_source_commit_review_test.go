@@ -129,7 +129,7 @@ func TestCommitReviewIncludesUnobservedGitChangesWithoutCreatingHistory(t *testi
 			t.Fatal("live Git comparison claimed retained versions")
 		}
 	}
-	walk, err := ledger.QueryWalk(t.Context(), p.ID, sourceledger.Baseline{Kind: sourceledger.BaselinePresentation}, 100, 0, sourceledger.CommitLens{})
+	walk, err := ledger.Walk.QueryWalk(t.Context(), p.ID, sourceledger.Baseline{Kind: sourceledger.BaselinePresentation}, 100, 0, sourceledger.CommitLens{})
 	testutil.FailErr(t, "read recorded history", err)
 	if len(walk.Files) != 0 {
 		t.Fatal("Git review invented observed effects")

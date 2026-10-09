@@ -49,7 +49,7 @@ func (s *Workspace) workspaceSourceHead(ctx context.Context, p *project.Project,
 			continue
 		}
 		branches[branch] = true
-		head, err := s.SourceLedger.ResolveHeadByFile(ctx, p.ID, branch, fileID)
+		head, err := s.SourceLedger.History.ResolveHeadByFile(ctx, p.ID, branch, fileID)
 		if errors.Is(err, sourceledger.ErrHistoryNotFound) {
 			continue
 		}
@@ -93,7 +93,7 @@ func (s *History) HandleGetProjectSourceAttribution(w http.ResponseWriter, r *ht
 		s.responses.InvalidQueryParam(w, "path", "is required")
 		return
 	}
-	res, err := s.SourceLedger.QueryAttribution(r.Context(), p.ID, p.BranchForRoot(rootID), rootID, path)
+	res, err := s.SourceLedger.History.QueryAttribution(r.Context(), p.ID, p.BranchForRoot(rootID), rootID, path)
 	if err != nil {
 		s.responses.InternalError(w, r, err)
 		return
@@ -131,7 +131,7 @@ func (s *History) HandleGetWorkerChanges(w http.ResponseWriter, r *http.Request)
 		s.responses.Fail(w, wire.ApiErrorCodeWorkerNotFound, "worker not found")
 		return
 	}
-	rows, err := s.SourceLedger.QueryJobChanges(r.Context(), task.ProjectID, workerID)
+	rows, err := s.SourceLedger.Walk.QueryJobChanges(r.Context(), task.ProjectID, workerID)
 	if err != nil {
 		s.responses.InternalError(w, r, err)
 		return

@@ -28,7 +28,7 @@ func retainedBeforeVersion(
 		Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginAgent,
 		SessionID: "session-1", Turn: 1, Before: before, After: after,
 	}))
-	walk, err := service.settlement.recorder.(*sourceledger.Store).QueryWalk(
+	walk, err := service.settlement.recorder.(*sourceledger.Store).Walk.QueryWalk(
 		t.Context(), p.ID,
 		sourceledger.Baseline{Kind: sourceledger.BaselineSession, SessionID: "session-1"},
 		10, 0, sourceledger.CommitLens{},
@@ -48,7 +48,7 @@ func TestRestoreVersionWritesExactBytesAndRecordsDerivation(t *testing.T) {
 	path := filepath.Join(rootPath, "asset.bin")
 	testutil.FailErr(t, "seed current file", os.WriteFile(path, current, 0o640))
 	fileID, selectedVersionID := retainedBeforeVersion(t, service, p, "asset.bin", selectedBytes, current)
-	selected, err := service.settlement.recorder.(*sourceledger.Store).ReadRestorableVersion(t.Context(), p.ID, selectedVersionID)
+	selected, err := service.settlement.recorder.(*sourceledger.Store).History.ReadRestorableVersion(t.Context(), p.ID, selectedVersionID)
 	testutil.FailErr(t, "read selected version", err)
 
 	result, err := service.Versions.Restore(t.Context(), uuid.NewString(), p, SourceVersionRestoreRequest{
@@ -65,7 +65,7 @@ func TestRestoreVersionWritesExactBytesAndRecordsDerivation(t *testing.T) {
 	if string(restored) != string(selectedBytes) {
 		t.Fatalf("restored bytes = %x want %x", restored, selectedBytes)
 	}
-	history, err := service.settlement.recorder.(*sourceledger.Store).QueryFileVersions(t.Context(), p.ID, fileID, 10, 0)
+	history, err := service.settlement.recorder.(*sourceledger.Store).History.QueryFileVersions(t.Context(), p.ID, fileID, 10, 0)
 	testutil.FailErr(t, "query restored history", err)
 	if len(history.Versions) == 0 || history.Versions[0].DerivedFromVersionID != selectedVersionID ||
 		history.Versions[0].Cause != sourceledger.CauseVersionRestore ||
@@ -85,7 +85,7 @@ func TestRestoreVersionKeepsTheCurrentPathAcrossHistoricalRename(t *testing.T) {
 		RootID:    p.Roots[0].ID, Path: "old-name.txt",
 		Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginAgent, After: selectedBytes,
 	}))
-	fileID, selectedVersionID, err := service.settlement.recorder.(*sourceledger.Store).ResolveFile(
+	fileID, selectedVersionID, err := service.settlement.recorder.(*sourceledger.Store).History.ResolveFile(
 		t.Context(), p.ID, sourcebranch.Trunk, p.Roots[0].ID, "old-name.txt",
 	)
 	testutil.FailErr(t, "resolve old-path version", err)
@@ -100,7 +100,7 @@ func TestRestoreVersionKeepsTheCurrentPathAcrossHistoricalRename(t *testing.T) {
 		Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginAgent,
 		Before: selectedBytes, After: current,
 	}))
-	selected, err := service.settlement.recorder.(*sourceledger.Store).ReadRestorableVersion(t.Context(), p.ID, selectedVersionID)
+	selected, err := service.settlement.recorder.(*sourceledger.Store).History.ReadRestorableVersion(t.Context(), p.ID, selectedVersionID)
 	testutil.FailErr(t, "read old-path version", err)
 
 	result, err := service.Versions.Restore(t.Context(), uuid.NewString(), p, SourceVersionRestoreRequest{
@@ -129,7 +129,7 @@ func TestRestoreVersionRecreatesDeletedPathAndParents(t *testing.T) {
 	testutil.FailErr(t, "seed source", os.WriteFile(path, content, 0o640))
 	fileID, selectedVersionID := retainedBeforeVersion(t, service, p, "gone/note.txt", content, []byte("newer\n"))
 	testutil.FailErr(t, "remove deleted parent", os.RemoveAll(filepath.Dir(path)))
-	selected, err := service.settlement.recorder.(*sourceledger.Store).ReadRestorableVersion(t.Context(), p.ID, selectedVersionID)
+	selected, err := service.settlement.recorder.(*sourceledger.Store).History.ReadRestorableVersion(t.Context(), p.ID, selectedVersionID)
 	testutil.FailErr(t, "read selected version", err)
 
 	result, err := service.Versions.Restore(t.Context(), uuid.NewString(), p, SourceVersionRestoreRequest{
@@ -153,7 +153,7 @@ func TestRestoreVersionRejectsAStaleWorkingTip(t *testing.T) {
 	path := filepath.Join(rootPath, "note.txt")
 	testutil.FailErr(t, "seed source", os.WriteFile(path, current, 0o640))
 	fileID, selectedVersionID := retainedBeforeVersion(t, service, p, "note.txt", []byte("older\n"), current)
-	selected, err := service.settlement.recorder.(*sourceledger.Store).ReadRestorableVersion(t.Context(), p.ID, selectedVersionID)
+	selected, err := service.settlement.recorder.(*sourceledger.Store).History.ReadRestorableVersion(t.Context(), p.ID, selectedVersionID)
 	testutil.FailErr(t, "read selected version", err)
 
 	_, err = service.Versions.Restore(t.Context(), uuid.NewString(), p, SourceVersionRestoreRequest{
@@ -173,7 +173,7 @@ func TestRestoreVersionLeavesMatchingAbsenceAbsent(t *testing.T) {
 		Op: api.SourceChangeOpDelete, Origin: api.SourceChangeOriginAgent,
 		SessionID: "session-absent", Turn: 1, Before: []byte("before\n"),
 	}))
-	walk, err := service.settlement.recorder.(*sourceledger.Store).QueryWalk(
+	walk, err := service.settlement.recorder.(*sourceledger.Store).Walk.QueryWalk(
 		t.Context(), p.ID,
 		sourceledger.Baseline{Kind: sourceledger.BaselineSession, SessionID: "session-absent"},
 		10, 0, sourceledger.CommitLens{},
@@ -184,7 +184,7 @@ func TestRestoreVersionLeavesMatchingAbsenceAbsent(t *testing.T) {
 	}
 	fileID := walk.Files[0].FileID
 	absentVersionID := walk.Files[0].Effects[0].AfterVersionID
-	selected, err := service.settlement.recorder.(*sourceledger.Store).ReadRestorableVersion(t.Context(), p.ID, absentVersionID)
+	selected, err := service.settlement.recorder.(*sourceledger.Store).History.ReadRestorableVersion(t.Context(), p.ID, absentVersionID)
 	testutil.FailErr(t, "read absent version", err)
 	if selected.State != string(api.SourceTipStateAbsent) {
 		t.Fatalf("selected state = %q", selected.State)
@@ -216,7 +216,7 @@ func TestRestoreVersionMakesRetainedAbsenceCurrent(t *testing.T) {
 		Op: api.SourceChangeOpDelete, Origin: api.SourceChangeOriginAgent,
 		SessionID: "session-delete", Turn: 1, Before: []byte("older\n"),
 	}))
-	walk, err := service.settlement.recorder.(*sourceledger.Store).QueryWalk(
+	walk, err := service.settlement.recorder.(*sourceledger.Store).Walk.QueryWalk(
 		t.Context(), p.ID,
 		sourceledger.Baseline{Kind: sourceledger.BaselineSession, SessionID: "session-delete"},
 		10, 0, sourceledger.CommitLens{},
@@ -226,7 +226,7 @@ func TestRestoreVersionMakesRetainedAbsenceCurrent(t *testing.T) {
 		t.Fatalf("retained deletion = %+v", walk.Files)
 	}
 	fileID := walk.Files[0].FileID
-	selected, err := service.settlement.recorder.(*sourceledger.Store).ReadRestorableVersion(
+	selected, err := service.settlement.recorder.(*sourceledger.Store).History.ReadRestorableVersion(
 		t.Context(), p.ID, walk.Files[0].Effects[0].AfterVersionID,
 	)
 	testutil.FailErr(t, "read retained deletion", err)
@@ -272,14 +272,14 @@ func TestRestoreVersionAcceptsAStateNoEffectProduced(t *testing.T) {
 	testutil.FailErr(t, "apply edit on disk", os.WriteFile(path, edited, 0o640))
 
 	// The baseline is listed with no action behind it.
-	history, err := service.settlement.recorder.(*sourceledger.Store).QueryFileVersions(t.Context(), p.ID, tracked.FileID, 10, 0)
+	history, err := service.settlement.recorder.(*sourceledger.Store).History.QueryFileVersions(t.Context(), p.ID, tracked.FileID, 10, 0)
 	testutil.FailErr(t, "list versions", err)
 	baseline := history.Versions[len(history.Versions)-1]
 	if baseline.ID != tracked.VersionID || baseline.Op != "" || baseline.EffectID != "" {
 		t.Fatalf("oldest version = %+v want the tracked baseline with no effect", baseline)
 	}
 
-	selected, err := service.settlement.recorder.(*sourceledger.Store).ReadRestorableVersion(t.Context(), p.ID, baseline.ID)
+	selected, err := service.settlement.recorder.(*sourceledger.Store).History.ReadRestorableVersion(t.Context(), p.ID, baseline.ID)
 	testutil.FailErr(t, "read baseline version", err)
 	result, err := service.Versions.Restore(t.Context(), uuid.NewString(), p, SourceVersionRestoreRequest{
 		Version: selected, FileID: tracked.FileID, RootID: p.Roots[0].ID, Path: "opened.txt",
@@ -308,7 +308,7 @@ func TestRestoreVersionAcceptsAWorkerBranchVersion(t *testing.T) {
 		RootID:    p.Roots[0].ID, Path: "shared.txt",
 		Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser, After: primaryBytes,
 	}))
-	fileID, primaryVersionID, err := service.settlement.recorder.(*sourceledger.Store).ResolveFile(
+	fileID, primaryVersionID, err := service.settlement.recorder.(*sourceledger.Store).History.ResolveFile(
 		t.Context(), p.ID, sourcebranch.Trunk, p.Roots[0].ID, "shared.txt")
 	testutil.FailErr(t, "resolve file", err)
 
@@ -321,14 +321,14 @@ func TestRestoreVersionAcceptsAWorkerBranchVersion(t *testing.T) {
 		Before: primaryBytes, After: workerBytes,
 	}))
 
-	history, err := service.settlement.recorder.(*sourceledger.Store).QueryFileVersions(t.Context(), p.ID, fileID, 10, 0)
+	history, err := service.settlement.recorder.(*sourceledger.Store).History.QueryFileVersions(t.Context(), p.ID, fileID, 10, 0)
 	testutil.FailErr(t, "list versions", err)
 	worker := history.Versions[0]
 	if !worker.BranchID.IsWorker() {
 		t.Fatalf("newest version = %+v want the worker branch", worker)
 	}
 
-	selected, err := service.settlement.recorder.(*sourceledger.Store).ReadRestorableVersion(t.Context(), p.ID, worker.ID)
+	selected, err := service.settlement.recorder.(*sourceledger.Store).History.ReadRestorableVersion(t.Context(), p.ID, worker.ID)
 	testutil.FailErr(t, "read worker version", err)
 	result, err := service.Versions.Restore(t.Context(), uuid.NewString(), p, SourceVersionRestoreRequest{
 		Version: selected, FileID: fileID, RootID: p.Roots[0].ID, Path: "shared.txt",

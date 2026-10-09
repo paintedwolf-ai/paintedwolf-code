@@ -50,7 +50,7 @@ func TestReplicaAcceptanceIsDurableAndIdempotent(t *testing.T) {
 	if b.Document.Draft != "aleft🐺rightz" {
 		t.Fatalf("merged text = %q", b.Document.Draft)
 	}
-	f.service = New(f.store, f.service.ledger, fixedRoots{p: f.project})
+	f.service = New(f.store, f.service.ledger, f.service.history, fixedRoots{p: f.project})
 	closeServiceAtCleanup(t, f.service)
 	first.Vector = b.Document.StateVector
 	replay, err := f.service.SubmitReplica(t.Context(), f.project.ID, d.ID, first)
@@ -243,7 +243,7 @@ func TestAgentChangeCanBeSelectivelyUndoneAfterRestart(t *testing.T) {
 	_, err = f.service.SubmitReplica(t.Context(), f.project.ID, d.ID, pending)
 	testutil.FailErr(t, "accept contribution inside agent text", err)
 	testutil.FailErr(t, "stop document service", f.service.Close(t.Context()))
-	f.service = New(f.store, f.recorder, fixedRoots{p: f.project})
+	f.service = New(f.store, f.recorder, f.recorder.History, fixedRoots{p: f.project})
 	closeServiceAtCleanup(t, f.service)
 	changes, err := f.service.Changes(t.Context(), f.project.ID, d.ID, 0, 100)
 	testutil.FailErr(t, "read semantic history", err)
@@ -290,7 +290,7 @@ func TestAgentRetryAfterRestartDoesNotReapplyOrOverwritePeerText(t *testing.T) {
 			current, err := f.service.SubmitReplica(t.Context(), f.project.ID, d.ID, update)
 			testutil.FailErr(t, "type after agent edit", err)
 			testutil.FailErr(t, "close document service", f.service.Close(t.Context()))
-			f.service = New(f.store, f.recorder, fixedRoots{p: f.project})
+			f.service = New(f.store, f.recorder, f.recorder.History, fixedRoots{p: f.project})
 			closeServiceAtCleanup(t, f.service)
 			replay, err := f.service.ApplyAgentEdit(t.Context(), in)
 			testutil.FailErr(t, "retry accepted edit after restart", err)
@@ -405,7 +405,7 @@ func TestFilesystemReplicaUsesExactSavedCheckpointAfterRestart(t *testing.T) {
 	_, err = f.service.Save(t.Context(), f.project, d.ID, "window", uuid.NewString(), "", 0, pinned.Revision)
 	testutil.FailErr(t, "publish earlier snapshot", err)
 	testutil.FailErr(t, "stop service", f.service.Close(t.Context()))
-	f.service = New(f.store, f.recorder, fixedRoots{p: f.project})
+	f.service = New(f.store, f.recorder, f.recorder.History, fixedRoots{p: f.project})
 	closeServiceAtCleanup(t, f.service)
 	for _, outside := range []string{"ONE\nTWO\nthree\n", "FIRST\nTWO\nthree\n"} {
 		f.write(t, "a.txt", outside)

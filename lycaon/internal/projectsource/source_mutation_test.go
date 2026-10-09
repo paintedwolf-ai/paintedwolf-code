@@ -115,7 +115,7 @@ func TestSourceMutationBatchWriteExactReplay(t *testing.T) {
 			t.Fatalf("%s = %q want %q", name, content, want)
 		}
 	}
-	walk, err := service.settlement.recorder.(*sourceledger.Store).QueryWalk(t.Context(), p.ID, sourceledger.Baseline{Kind: sourceledger.BaselineSession, SessionID: "session-1"}, 20, 0, sourceledger.CommitLens{})
+	walk, err := service.settlement.recorder.(*sourceledger.Store).Walk.QueryWalk(t.Context(), p.ID, sourceledger.Baseline{Kind: sourceledger.BaselineSession, SessionID: "session-1"}, 20, 0, sourceledger.CommitLens{})
 	testutil.FailErr(t, "query batch ledger", err)
 	batchMembers := 0
 	for _, file := range walk.Files {

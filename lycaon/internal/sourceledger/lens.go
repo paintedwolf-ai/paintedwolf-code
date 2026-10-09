@@ -6,15 +6,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"slices"
-	"sort"
-	"strings"
-	"time"
-
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/sourceblob"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/pkg/api"
+	"slices"
+	"sort"
+	"strings"
+	"time"
 )
 
 var ErrBaselinePinNotFound = errors.New("baseline pin not found")
@@ -113,7 +112,7 @@ type CommitLens struct {
 }
 
 // QueryWalk pages Git movements and groups file effects by logical file.
-func (s *Store) QueryWalk(
+func (s *Walk) QueryWalk(
 	ctx context.Context,
 	projectID string,
 	baseline Baseline,
@@ -194,14 +193,14 @@ func (s *Store) QueryWalk(
 }
 
 // walkCommandWindows resolves the windows this page's effects name.
-func (s *Store) walkCommandWindows(ctx context.Context, effects []Effect) ([]CommandWindow, error) {
+func (s *Walk) walkCommandWindows(ctx context.Context, effects []Effect) ([]CommandWindow, error) {
 	ids := make([]string, 0, 4)
 	for _, effect := range effects {
 		if effect.CommandWindowID != "" {
 			ids = append(ids, effect.CommandWindowID)
 		}
 	}
-	byID, err := s.commandWindowsFor(ctx, ids)
+	byID, err := s.commands.commandWindowsFor(ctx, ids)
 	if err != nil {
 		return nil, err
 	}
@@ -214,7 +213,7 @@ func (s *Store) walkCommandWindows(ctx context.Context, effects []Effect) ([]Com
 }
 
 // Failed object lookups leave HeadMatch unknown.
-func (s *Store) resolveHeadMatches(ctx context.Context, out *WalkResult, lens CommitLens) {
+func (s *Walk) resolveHeadMatches(ctx context.Context, out *WalkResult, lens CommitLens) {
 	if !lens.Available || lens.Git == nil || len(out.Files) == 0 {
 		return
 	}
@@ -240,7 +239,7 @@ func (s *Store) resolveHeadMatches(ctx context.Context, out *WalkResult, lens Co
 		if len(paths) == 0 {
 			continue
 		}
-		oids, ok := lens.Git.TreeOIDs(ctx, root.Abs, paths)
+		oids, ok := lens.git.TreeOIDs(ctx, root.Abs, paths)
 		headByRoot[root.ID], answered[root.ID] = oids, ok
 	}
 	for i := range out.Files {
@@ -274,7 +273,7 @@ func (s *Store) resolveHeadMatches(ctx context.Context, out *WalkResult, lens Co
 }
 
 // Digests without stored bytes have no derived object ids.
-func (s *Store) blobOIDsForTips(ctx context.Context, files []WalkFile) map[string]sourceblob.GitOIDs {
+func (s *Walk) blobOIDsForTips(ctx context.Context, files []WalkFile) map[string]sourceblob.GitOIDs {
 	shas := make([]string, 0, len(files))
 	seen := make(map[string]struct{}, len(files))
 	for _, file := range files {
@@ -314,7 +313,7 @@ type walkFileState struct {
 
 // walkFileStates reads each file's head on the branch its root reads under
 // the request, so trunk and a chat's worktree never answer for each other.
-func (s *Store) walkFileStates(
+func (s *Walk) walkFileStates(
 	ctx context.Context,
 	projectID string,
 	rootBranches map[string]sourcebranch.ID,
@@ -395,7 +394,7 @@ func (s *Store) walkFileStates(
 	return out, rows.Err()
 }
 
-func (s *Store) queryEffects(
+func (s *Walk) queryEffects(
 	ctx context.Context,
 	projectID string,
 	baseline Baseline,
@@ -568,7 +567,7 @@ type JobChangedFile struct {
 
 const MaxJobChangedFiles = 2000
 
-func (s *Store) QueryJobChanges(ctx context.Context, projectID, jobID string) ([]JobChangedFile, error) {
+func (s *Walk) QueryJobChanges(ctx context.Context, projectID, jobID string) ([]JobChangedFile, error) {
 	rows, err := s.queries.ListJobChangedFiles(ctx, db.ListJobChangedFilesParams{
 		ProjectID: strings.TrimSpace(projectID), JobID: strings.TrimSpace(jobID), Limit: MaxJobChangedFiles,
 	})
@@ -583,7 +582,7 @@ func (s *Store) QueryJobChanges(ctx context.Context, projectID, jobID string) ([
 	return out, nil
 }
 
-func (s *Store) JobPathFirstWriteOrder(ctx context.Context, projectID, jobID string) ([]string, error) {
+func (s *Walk) JobPathFirstWriteOrder(ctx context.Context, projectID, jobID string) ([]string, error) {
 	rows, err := s.queries.ListJobChangedFilesByFirstWrite(ctx, db.ListJobChangedFilesByFirstWriteParams{ProjectID: projectID, JobID: jobID, Limit: MaxJobChangedFiles})
 	if err != nil {
 		return nil, err
@@ -597,7 +596,7 @@ func (s *Store) JobPathFirstWriteOrder(ctx context.Context, projectID, jobID str
 	return out, nil
 }
 
-func (s *Store) JobVersionForPath(
+func (s *Walk) JobVersionForPath(
 	ctx context.Context,
 	projectID, jobID, rootID, path string,
 ) (string, string, error) {
@@ -612,7 +611,7 @@ func (s *Store) JobVersionForPath(
 
 const MaxSessionAuthoredFiles = 2000
 
-func (s *Store) SessionAuthoredPaths(ctx context.Context, projectID, sessionID, rootID string) ([]string, error) {
+func (s *Walk) SessionAuthoredPaths(ctx context.Context, projectID, sessionID, rootID string) ([]string, error) {
 	rows, err := s.queries.ListSessionAuthoredFiles(ctx, db.ListSessionAuthoredFilesParams{ProjectID: projectID, SessionID: sessionID, RootID: rootID, Limit: MaxSessionAuthoredFiles})
 	if err != nil {
 		return nil, err
@@ -632,7 +631,7 @@ func (s *Store) SessionAuthoredPaths(ctx context.Context, projectID, sessionID, 
 	return out, nil
 }
 
-func (s *Store) resolvePinOrdinal(ctx context.Context, projectID string, baseline Baseline) (int64, error) {
+func (s *Walk) resolvePinOrdinal(ctx context.Context, projectID string, baseline Baseline) (int64, error) {
 	if baseline.Kind != BaselinePin {
 		return 0, nil
 	}
@@ -703,4 +702,20 @@ func ParseBaseline(raw string) (Baseline, error) {
 		return Baseline{Kind: BaselineTurn, SessionID: strings.TrimSpace(parts[0]), Turn: turn}, nil
 	}
 	return Baseline{}, fmt.Errorf("unknown baseline %q", raw)
+}
+
+// Walk projects causal source activity under an explicit history lens.
+type Walk struct {
+	queries  *db.Queries
+	sqlDB    db.Handle
+	commands walkCommandsPort
+	git      walkGitPort
+}
+
+type walkCommandsPort interface {
+	commandWindowsFor(ctx context.Context, ids []string) (map[string]CommandWindow, error)
+}
+
+type walkGitPort interface {
+	GitTransitionsByIDs(ctx context.Context, ids []string) (map[string]GitTransition, error)
 }

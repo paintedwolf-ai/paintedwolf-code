@@ -40,7 +40,7 @@ func NewSourceMutationService(database db.Handle, ledger *sourceledger.Store) *S
 	var heads SourceHeadReader
 	var objects RecoveryStorage
 	if ledger != nil {
-		recorder, heads, objects = ledger, ledger, ledger
+		recorder, heads, objects = ledger, ledger.History, ledger.Retention
 	}
 	journal := &SourceMutationJournal{db: database, people: peoplestore.New(database), memory: make(map[string]*sourceMutationRow)}
 	recovery := &sourceRecovery{db: database, objects: objects, recoveryBytes: make(map[string][]byte), recoveryEntries: make(map[string][]sourceledger.RecoveryEntry)}

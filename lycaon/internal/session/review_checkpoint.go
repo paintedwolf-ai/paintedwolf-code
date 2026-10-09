@@ -10,14 +10,15 @@ import (
 
 type sourceReviewCheckpointer interface {
 	CreateStructuralCheckpoint(context.Context, sourceledger.StructuralCheckpointInput) (sourceledger.Checkpoint, error)
+	TurnCheckpoint(context.Context, string, string, int) (sourceledger.Checkpoint, bool, error)
 }
 
 func (m *Manager) createUserTurnReviewCheckpoint(ctx context.Context, sessionID string, msg api.Message) {
 	if !api.IsUserIntentMessage(msg) {
 		return
 	}
-	checkpointer, ok := m.sourceLedger.(sourceReviewCheckpointer)
-	if !ok {
+	checkpointer := m.sourceCheckpoints
+	if checkpointer == nil {
 		return
 	}
 	sess, err := m.store.Get(ctx, sessionID)

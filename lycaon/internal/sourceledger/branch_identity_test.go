@@ -25,7 +25,7 @@ func TestFileHistorySurvivesTheRootFolderMoving(t *testing.T) {
 		Before: []byte("first\n"), After: []byte("second\n"),
 	})
 	fileID, _ := mustResolve(t, store, ctx, "notes/hello.txt")
-	before, err := store.QueryFileVersions(ctx, "p1", fileID, 50, 0)
+	before, err := store.History.QueryFileVersions(ctx, "p1", fileID, 50, 0)
 	testutil.FailErr(t, "list versions before the move", err)
 	if len(before.Versions) < 2 {
 		t.Fatalf("expected the file's states before the move, got %d", len(before.Versions))
@@ -40,7 +40,7 @@ func TestFileHistorySurvivesTheRootFolderMoving(t *testing.T) {
 	if afterID != fileID {
 		t.Fatalf("the file forked its identity across the move: %s then %s", fileID, afterID)
 	}
-	after, err := store.QueryFileVersions(ctx, "p1", afterID, 50, 0)
+	after, err := store.History.QueryFileVersions(ctx, "p1", afterID, 50, 0)
 	testutil.FailErr(t, "list versions after the move", err)
 	if len(after.Versions) != len(before.Versions) {
 		t.Fatalf("versions after the move = %d, want the %d recorded before it",
@@ -77,7 +77,7 @@ func TestFileHistorySurvivesAnUnrelatedRootAttaching(t *testing.T) {
 	if afterDetach != fileID {
 		t.Fatalf("detaching forked the file: %s then %s", fileID, afterDetach)
 	}
-	versions, err := store.QueryFileVersions(ctx, "p1", fileID, 50, 0)
+	versions, err := store.History.QueryFileVersions(ctx, "p1", fileID, 50, 0)
 	testutil.FailErr(t, "list versions", err)
 	if len(versions.Versions) == 0 {
 		t.Fatal("the file reports no retained states after the root set changed")
@@ -103,7 +103,7 @@ func TestWorkerBranchExtendsTrunkFileIdentity(t *testing.T) {
 		Before: []byte("trunk\n"), After: []byte("overlay\n"),
 	}))
 
-	workerHead, err := store.ResolveHead(ctx, "p1", worker, "r1", "shared.txt")
+	workerHead, err := store.History.ResolveHead(ctx, "p1", worker, "r1", "shared.txt")
 	testutil.FailErr(t, "resolve the worker head", err)
 	if workerHead.FileID != trunkFileID {
 		t.Fatalf("worker branch started a second file: %s want %s", workerHead.FileID, trunkFileID)
@@ -112,7 +112,7 @@ func TestWorkerBranchExtendsTrunkFileIdentity(t *testing.T) {
 		t.Fatal("worker branch did not advance its own head")
 	}
 
-	trunkHead, err := store.ResolveHead(ctx, "p1", sourcebranch.Trunk, "r1", "shared.txt")
+	trunkHead, err := store.History.ResolveHead(ctx, "p1", sourcebranch.Trunk, "r1", "shared.txt")
 	testutil.FailErr(t, "resolve the trunk head", err)
 	if trunkHead.VersionID != trunkVersionID {
 		t.Fatalf("the worker's write moved the trunk head to %s", trunkHead.VersionID)
@@ -136,7 +136,7 @@ func TestCheckpointHoldsOneEntryPerTrunkFile(t *testing.T) {
 		Before: []byte("trunk\n"), After: []byte("overlay\n"),
 	}))
 
-	pin, err := store.CreatePin(ctx, "p1", "boundary")
+	pin, err := store.Checkpoints.CreatePin(ctx, "p1", "boundary")
 	testutil.FailErr(t, "create the pin", err)
 
 	rows, err := store.sqlDB.QueryContext(ctx,

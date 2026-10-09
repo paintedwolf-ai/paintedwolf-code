@@ -89,7 +89,7 @@ func newScriptedHarness(t *testing.T, files map[string]string) *scriptedHarness 
 	h.parent = parent
 	h.queue = worker.NewSQLQueue(database, 8)
 	h.ledger = sourceledger.New(database, filepath.Join(testbaseline.DataDir(t, database), "source-content"))
-	h.queue.SetBaselineStore(h.ledger.BaselineStore())
+	h.queue.SetBaselineStore(h.ledger.Baselines)
 	h.queue.SetProjectStore(h.projects)
 	h.manager = workspace.NewManager(filepath.Join(testbaseline.DataDir(t, database), "worker-branches"), t.TempDir())
 	h.queue.SetWorkerWorkspaceManager(h.manager)
@@ -142,7 +142,7 @@ func (h *scriptedHarness) outcome(jobID string) Outcome {
 
 func (h *scriptedHarness) promote(jobID string) string {
 	h.t.Helper()
-	service := &worker.MergeService{Queue: h.queue, Store: worker.NewSQLStore(h.database), Projects: h.projects, Workspace: h.manager, DataDir: h.t.TempDir(), SourceLedger: h.ledger}
+	service := &worker.MergeService{Queue: h.queue, Store: worker.NewSQLStore(h.database), Projects: h.projects, Workspace: h.manager, DataDir: h.t.TempDir(), SourceLedger: h.ledger, SourceHistory: h.ledger.Walk}
 	promoted, err := service.PromoteOverlay(h.t.Context(), h.parent.ID, jobID, api.PromoteOverlayInput{})
 	testutil.FailErr(h.t, "promote", err)
 	if promoted.Status != api.WorkerMergeStatusMerged {

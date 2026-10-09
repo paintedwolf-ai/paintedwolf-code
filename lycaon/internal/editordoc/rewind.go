@@ -53,9 +53,7 @@ func (s *Service) sourceRewindDocuments(ctx context.Context, p *project.Project,
 			destination = f.Expected.Path
 		}
 		if applyErr != nil {
-			if ledger, ok := s.ledger.(interface {
-				ResolveHeadByFile(context.Context, string, sourcebranch.ID, string) (sourceledger.BranchHead, error)
-			}); ok {
+			if ledger := s.history; ledger != nil {
 				head, err := ledger.ResolveHeadByFile(ctx, p.ID, f.BranchID, f.FileID)
 				if err != nil {
 					reconcileErr = errors.Join(reconcileErr, err)

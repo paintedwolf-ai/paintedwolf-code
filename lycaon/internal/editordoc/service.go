@@ -24,7 +24,6 @@ import (
 
 type Ledger interface {
 	sourceledger.FileTracker
-	QueryAttribution(context.Context, string, sourcebranch.ID, string, string) (sourceledger.AttributionResult, error)
 	RecordTx(context.Context, *sql.Tx, sourceledger.RecordInput) error
 	// RecordFileTx records a publication and answers the file identity it
 	// landed on, which a recreated path receives fresh.
@@ -37,7 +36,9 @@ type Service struct {
 	replicas        replicaRuntime
 	store           *Store
 	ledger          Ledger
+	history         *sourceledger.History
 	sourceMutations *projectsource.SourceMutationService
+
 	// roots resolves stable root identities to live paths.
 	roots RootSource
 	// ops lets recovery and retargets quiesce document operations.
@@ -135,11 +136,11 @@ type RootSource interface {
 	Get(ctx context.Context, projectID string) (*project.Project, error)
 }
 
-func New(store *Store, ledger Ledger, roots RootSource) *Service {
+func New(store *Store, ledger Ledger, history *sourceledger.History, roots RootSource) *Service {
 	if ledger == nil {
 		panic("editor document ledger is required")
 	}
-	return &Service{store: store, ledger: ledger, roots: roots,
+	return &Service{store: store, ledger: ledger, history: history, roots: roots,
 		windowNumbers: make(map[string]int), clientPeople: make(map[string]string),
 		participants: make(map[string]map[string]Participant)}
 }

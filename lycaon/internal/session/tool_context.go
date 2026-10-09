@@ -78,6 +78,10 @@ func (m *Manager) buildToolContext(ctx context.Context, sess *api.Session, profi
 		tctx.Host.MaxToolSpillBytes = m.effectiveLimits(ctx, sess).MaxToolSpillBytes
 		tctx.Source.MutationRecorder = m
 		tctx.Source.SourceLedger = m.sourceLedger
+		tctx.Source.History = m.sourceHistory
+		tctx.Source.Commands = m.sourceCommands
+		tctx.Source.GitMutations = m.sourceGitMutations
+		tctx.Source.Observations = m.sourceObservations
 		tctx.Source.SourceMutations = m.sourceMutations
 		tctx.Source.EditorDocuments = m.editorDocuments
 		tctx.Effects.CredentialFiles = m.credentialFiles
@@ -89,9 +93,14 @@ func (m *Manager) buildToolContext(ctx context.Context, sess *api.Session, profi
 }
 
 // SetSourceLedger wires the app-scoped source mutation recorder into every tool invocation.
-func (m *Manager) SetSourceLedger(recorder sourceledger.Recorder) {
+func (m *Manager) SetSourceLedger(recorder sourceledger.Recorder, history tools.SourceHistory, commands sourceledger.CommandWindowOpener, mutations tools.SourceGitMutations, checkpoints sourceReviewCheckpointer, observations *sourceledger.Inventory) {
 	if m != nil {
 		m.sourceLedger = recorder
+		m.sourceHistory = history
+		m.sourceCommands = commands
+		m.sourceGitMutations = mutations
+		m.sourceCheckpoints = checkpoints
+		m.sourceObservations = observations
 	}
 }
 

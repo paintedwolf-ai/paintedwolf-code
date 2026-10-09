@@ -72,7 +72,7 @@ func (b sessionWiring) wireSessionManager() error {
 }
 
 func (b sessionWiring) configureSessionManager() error {
-	b.mgr.SetSourceLedger(b.sourceLedger)
+	b.mgr.SetSourceLedger(b.sourceLedger, tools.SourceHistory{Files: b.sourceLedger.History, Comparison: b.sourceLedger.Comparisons, Git: b.sourceLedger.Git, Authorship: b.sourceLedger.Walk}, b.sourceLedger.Commands, b.sourceLedger.Git, b.sourceLedger.Checkpoints, b.sourceLedger.Inventory)
 	b.mgr.SetAgentRegistry(b.agentRegistry)
 	b.mgr.SetHostResources(b.hostResources)
 	if b.hostResources != nil && b.settingsSvc != nil && b.settingsSvc.Approvals != nil {

@@ -25,7 +25,7 @@ func TestDeletedPathDoesNotResurrectAnObservedReplacement(t *testing.T) {
 		ProjectID: "p1", RootID: "r1", Path: "same.go", Content: []byte("replacement\n"),
 	})
 	testutil.FailErr(t, "observe replacement", err)
-	if _, err := store.ResolveDeletedPath(ctx, "p1", sourcebranch.Trunk, "r1", "same.go"); !errors.Is(err, ErrHistoryNotFound) {
+	if _, err := store.History.ResolveDeletedPath(ctx, "p1", sourcebranch.Trunk, "r1", "same.go"); !errors.Is(err, ErrHistoryNotFound) {
 		t.Fatalf("old deletion survived a live observation: %v", err)
 	}
 }
@@ -38,48 +38,48 @@ func TestDeletedPathTracksLatestOccupantAndBranch(t *testing.T) {
 	}
 	record(sourcebranch.Trunk, api.SourceChangeOpCreate, "", "first\n")
 	record(sourcebranch.Trunk, api.SourceChangeOpDelete, "first\n", "")
-	first, err := store.ResolveDeletedPath(ctx, "p1", sourcebranch.Trunk, "r1", "same.go")
+	first, err := store.History.ResolveDeletedPath(ctx, "p1", sourcebranch.Trunk, "r1", "same.go")
 	testutil.FailErr(t, "resolve first deletion", err)
-	content, err := store.DeletedPathContent(ctx, "p1", first)
+	content, err := store.History.DeletedPathContent(ctx, "p1", first)
 	testutil.FailErr(t, "read first deletion", err)
 	if content.Content != "first\n" || content.Availability != ContentAvailable {
 		t.Fatalf("previous = %+v", content)
 	}
 	record(sourcebranch.Trunk, api.SourceChangeOpCreate, "", "replacement\n")
-	if _, err := store.ResolveDeletedPath(ctx, "p1", sourcebranch.Trunk, "r1", "same.go"); !errors.Is(err, ErrHistoryNotFound) {
+	if _, err := store.History.ResolveDeletedPath(ctx, "p1", sourcebranch.Trunk, "r1", "same.go"); !errors.Is(err, ErrHistoryNotFound) {
 		t.Fatalf("live replacement = %v", err)
 	}
 	record(sourcebranch.Trunk, api.SourceChangeOpDelete, "replacement\n", "")
-	second, err := store.ResolveDeletedPath(ctx, "p1", sourcebranch.Trunk, "r1", "same.go")
+	second, err := store.History.ResolveDeletedPath(ctx, "p1", sourcebranch.Trunk, "r1", "same.go")
 	testutil.FailErr(t, "resolve second deletion", err)
 	if second.FileID == first.FileID {
 		t.Fatal("recreated path reused deleted identity")
 	}
-	content, err = store.DeletedPathContent(ctx, "p1", second)
+	content, err = store.History.DeletedPathContent(ctx, "p1", second)
 	testutil.FailErr(t, "read second deletion", err)
 	if content.Content != "replacement\n" {
 		t.Fatalf("replacement = %+v", content)
 	}
 	branch, err := sourcebranch.ForWorker("worker-1")
 	testutil.FailErr(t, "worker branch", err)
-	if _, err := store.ResolveDeletedPath(ctx, "p1", branch, "r1", "same.go"); !errors.Is(err, ErrHistoryNotFound) {
+	if _, err := store.History.ResolveDeletedPath(ctx, "p1", branch, "r1", "same.go"); !errors.Is(err, ErrHistoryNotFound) {
 		t.Fatalf("worker inherited trunk deletion: %v", err)
 	}
 	record(branch, api.SourceChangeOpCreate, "", "worker\n")
 	record(branch, api.SourceChangeOpDelete, "worker\n", "")
-	worker, err := store.ResolveDeletedPath(ctx, "p1", branch, "r1", "same.go")
+	worker, err := store.History.ResolveDeletedPath(ctx, "p1", branch, "r1", "same.go")
 	testutil.FailErr(t, "resolve worker deletion", err)
-	content, err = store.DeletedPathContent(ctx, "p1", worker)
+	content, err = store.History.DeletedPathContent(ctx, "p1", worker)
 	testutil.FailErr(t, "read worker deletion", err)
 	if content.Content != "worker\n" {
 		t.Fatalf("worker contents = %+v", content)
 	}
 	for _, query := range [][3]string{{"other", "r1", "same.go"}, {"p1", "other", "same.go"}, {"p1", "r1", "other.go"}} {
-		if _, err := store.ResolveDeletedPath(ctx, query[0], sourcebranch.Trunk, query[1], query[2]); !errors.Is(err, ErrHistoryNotFound) {
+		if _, err := store.History.ResolveDeletedPath(ctx, query[0], sourcebranch.Trunk, query[1], query[2]); !errors.Is(err, ErrHistoryNotFound) {
 			t.Fatalf("foreign query %v = %v", query, err)
 		}
 	}
-	if _, err := store.DeletedPathContent(ctx, "other", first); !errors.Is(err, ErrHistoryNotFound) {
+	if _, err := store.History.DeletedPathContent(ctx, "other", first); !errors.Is(err, ErrHistoryNotFound) {
 		t.Fatalf("foreign content = %v", err)
 	}
 }
@@ -101,11 +101,11 @@ func TestDeletedPathDoesNotResurrectAfterReplacementMoves(t *testing.T) {
 			record(api.SourceChangeOpDelete, "same.go", "", "old\n", "")
 			record(api.SourceChangeOpCreate, "same.go", "", "", "replacement\n")
 			record(api.SourceChangeOpRename, "moved.go", "same.go", "replacement\n", "replacement\n")
-			if _, err := store.ResolveDeletedPath(ctx, "p1", branch, "r1", "same.go"); !errors.Is(err, ErrHistoryNotFound) {
+			if _, err := store.History.ResolveDeletedPath(ctx, "p1", branch, "r1", "same.go"); !errors.Is(err, ErrHistoryNotFound) {
 				t.Fatalf("moved replacement resurrected an old deletion: %v", err)
 			}
 			record(api.SourceChangeOpDelete, "moved.go", "", "replacement\n", "")
-			if _, err := store.ResolveDeletedPath(ctx, "p1", branch, "r1", "same.go"); !errors.Is(err, ErrHistoryNotFound) {
+			if _, err := store.History.ResolveDeletedPath(ctx, "p1", branch, "r1", "same.go"); !errors.Is(err, ErrHistoryNotFound) {
 				t.Fatalf("deletion elsewhere resurrected an old deletion: %v", err)
 			}
 		})
@@ -118,7 +118,7 @@ func TestDeletedPathIgnoresUnsavedDocumentVersions(t *testing.T) {
 		ProjectID: "p1", RootID: "r1", Path: "same.go", Op: api.SourceChangeOpDelete,
 		Origin: api.SourceChangeOriginUser, Before: []byte("on disk\n"),
 	})
-	deleted, err := store.ResolveDeletedPath(ctx, "p1", sourcebranch.Trunk, "r1", "same.go")
+	deleted, err := store.History.ResolveDeletedPath(ctx, "p1", sourcebranch.Trunk, "r1", "same.go")
 	testutil.FailErr(t, "resolve deletion", err)
 	tx, err := store.sqlDB.BeginTx(ctx, nil)
 	testutil.FailErr(t, "begin draft", err)
@@ -128,12 +128,12 @@ func TestDeletedPathIgnoresUnsavedDocumentVersions(t *testing.T) {
 	})
 	testutil.FailErr(t, "retain draft", err)
 	testutil.FailErr(t, "commit draft", tx.Commit())
-	resolved, err := store.ResolveDeletedPath(ctx, "p1", sourcebranch.Trunk, "r1", "same.go")
+	resolved, err := store.History.ResolveDeletedPath(ctx, "p1", sourcebranch.Trunk, "r1", "same.go")
 	testutil.FailErr(t, "resolve after draft", err)
 	if resolved.VersionID != deleted.VersionID {
 		t.Fatalf("unsaved draft replaced deletion: %+v", resolved)
 	}
-	content, err := store.DeletedPathContent(ctx, "p1", resolved)
+	content, err := store.History.DeletedPathContent(ctx, "p1", resolved)
 	testutil.FailErr(t, "read retained contents", err)
 	if content.Content != "on disk\n" {
 		t.Fatalf("retained content = %q", content.Content)

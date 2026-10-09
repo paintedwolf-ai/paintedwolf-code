@@ -395,7 +395,7 @@ func TestWriteProjectSourceStampsChatAffiliation(t *testing.T) {
 		BaseSHA256: textfile.SHA256([]byte("hello\n")), SessionID: "sess-1", Turn: 4,
 	})
 	testutil.FailErr(t, "write", err)
-	walk, err := service.settlement.recorder.(*sourceledger.Store).QueryWalk(t.Context(), p.ID, sourceledger.Baseline{Kind: sourceledger.BaselineSession, SessionID: "sess-1"}, 20, 0, sourceledger.CommitLens{})
+	walk, err := service.settlement.recorder.(*sourceledger.Store).Walk.QueryWalk(t.Context(), p.ID, sourceledger.Baseline{Kind: sourceledger.BaselineSession, SessionID: "sess-1"}, 20, 0, sourceledger.CommitLens{})
 	testutil.FailErr(t, "query ledger", err)
 	if len(walk.Files) != 1 || len(walk.Files[0].Effects) != 1 {
 		t.Fatalf("walk effects = %+v", walk.Files)

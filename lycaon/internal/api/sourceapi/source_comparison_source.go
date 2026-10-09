@@ -36,9 +36,9 @@ func (s *Comparisons) loadComparisonSource(ctx context.Context, p *project.Proje
 	var err error
 	switch {
 	case source.Effect != nil:
-		diff, err = s.SourceLedger.CompareEffect(ctx, p.ID, source.Effect.EffectID)
+		diff, err = s.SourceLedger.Comparisons.CompareEffect(ctx, p.ID, source.Effect.EffectID)
 	case source.Version != nil:
-		diff, err = s.SourceLedger.CompareVersions(ctx, p.ID, source.Version.VersionID)
+		diff, err = s.SourceLedger.Comparisons.CompareVersions(ctx, p.ID, source.Version.VersionID)
 	case source.Scope != nil:
 		diff, err = s.loadScopeComparison(ctx, p, *source.Scope)
 	case source.Turn != nil:

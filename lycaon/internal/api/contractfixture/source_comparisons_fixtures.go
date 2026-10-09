@@ -84,7 +84,7 @@ func SeedRewrittenReadme(t *testing.T, srv *hostapi.Server) (wire.Project, strin
 		})
 		testutil.FailErr(t, "record README change", err)
 	}
-	walk, err := ledger.QueryWalk(t.Context(), p.ID,
+	walk, err := ledger.Walk.QueryWalk(t.Context(), p.ID,
 		sourceledger.Baseline{Kind: sourceledger.BaselineSession, SessionID: "s1"},
 		10, 0, sourceledger.CommitLens{})
 	testutil.FailErr(t, "query README identity", err)

@@ -25,7 +25,7 @@ func (s *Workspace) ResolveNavigationPaths(ctx context.Context, p *project.Proje
 			ref.Status = wire.NavigationUnavailable
 			continue
 		}
-		_, err = s.SourceLedger.ResolveDeletedPath(ctx, p.ID, branch, ref.RootID, path)
+		_, err = s.SourceLedger.History.ResolveDeletedPath(ctx, p.ID, branch, ref.RootID, path)
 		switch {
 		case err == nil:
 			ref.Status, ref.EntryKind, ref.Deleted = wire.NavigationResolved, wire.NavigationEntryKind("file"), true
@@ -42,14 +42,14 @@ func (s *Workspace) readDeletedSource(ctx context.Context, p *project.Project, r
 	if err != nil {
 		return nil, err
 	}
-	deleted, err := s.SourceLedger.ResolveDeletedPath(ctx, p.ID, scope.branch, req.RootID, path)
+	deleted, err := s.SourceLedger.History.ResolveDeletedPath(ctx, p.ID, scope.branch, req.RootID, path)
 	if errors.Is(err, sourceledger.ErrHistoryNotFound) {
 		return nil, projectsource.ErrSourceNotFound
 	}
 	if err != nil {
 		return nil, err
 	}
-	previous, err := s.SourceLedger.DeletedPathContent(ctx, p.ID, deleted)
+	previous, err := s.SourceLedger.History.DeletedPathContent(ctx, p.ID, deleted)
 	if err != nil {
 		return nil, err
 	}

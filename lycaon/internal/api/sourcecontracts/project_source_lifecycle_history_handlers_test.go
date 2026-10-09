@@ -23,7 +23,7 @@ import (
 func TestProjectSourceLifecycleHistoryRoutes(t *testing.T) {
 	ledger, database, withLedger := contractfixture.TestSourceLedger(t)
 	srv := contractfixture.NewTestServer(t, withLedger, contractfixture.WithSessionStore(sessionstore.NewSQL(database)), func(d *hostapi.Dependencies) {
-		d.Source.EditorDocuments = editordoc.New(editordoc.NewStore(database), ledger, d.Core.Projects)
+		d.Source.EditorDocuments = editordoc.New(editordoc.NewStore(database), ledger, ledger.History, d.Core.Projects)
 	})
 	root := t.TempDir()
 	p, err := project.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, root)

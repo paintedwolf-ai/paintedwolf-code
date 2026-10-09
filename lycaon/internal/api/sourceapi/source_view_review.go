@@ -163,7 +163,7 @@ func (s *Trees) loadTreeReview(ctx context.Context, view *sourceView, scope *wir
 	} else {
 		before := int64(0)
 		for {
-			page, err := s.SourceLedger.DeletedPaths(ctx, p.ID, baseline, 200, before)
+			page, err := s.SourceLedger.History.DeletedPaths(ctx, p.ID, baseline, 200, before)
 			if err != nil {
 				return nil, err
 			}

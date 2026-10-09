@@ -38,7 +38,7 @@ func TestAgentPublicationFailureRecoversOriginalBytesAtomically(t *testing.T) {
 	_, err = f.service.ReplaceSnapshot(t.Context(), d.ID, f.project.ID, SnapshotReplacement{DocumentCommand: DocumentCommand{ClientID: "window", OperationID: uuid.NewString(), ExpectedRevision: current.Revision}, Content: "agent with later typing\n", EOL: "lf", MixedEOL: false})
 	testutil.FailErr(t, "accept later typing", err)
 	testutil.FailErr(t, "stop service", f.service.Close(t.Context()))
-	restarted := New(f.store, ledger, fixedRoots{p: f.project})
+	restarted := New(f.store, ledger, ledger.History, fixedRoots{p: f.project})
 	closeServiceAtCleanup(t, restarted)
 	replayed, err := restarted.ApplyAgentEdit(t.Context(), in)
 	testutil.FailErr(t, "recover interrupted publication", err)

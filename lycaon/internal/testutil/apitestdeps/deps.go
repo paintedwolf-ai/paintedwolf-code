@@ -430,7 +430,7 @@ func fillSources(t *testing.T, d *Deps) {
 		d.FileOperations = fileops.NewService(fileops.NewStore(d.Database))
 	}
 	if d.EditorDocuments == nil {
-		documents := editordoc.New(editordoc.NewStore(d.Database), d.SourceLedger, d.Projects)
+		documents := editordoc.New(editordoc.NewStore(d.Database), d.SourceLedger, d.SourceLedger.History, d.Projects)
 		t.Cleanup(func() { _ = documents.Close(context.Background()) })
 		d.EditorDocuments = documents
 	}

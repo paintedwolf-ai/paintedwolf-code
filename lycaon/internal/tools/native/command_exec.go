@@ -210,7 +210,7 @@ func runCommandForeground(
 	}
 	var sourceRevision, sourceRootDigest string
 	if tctx.Execution.VerificationCheck {
-		sourceRevision, sourceRootDigest = sourceledger.VerificationState(ctx, tctx.Source.SourceLedger, tools.HostWriteRoot(tctx))
+		sourceRevision, sourceRootDigest = sourceledger.VerificationState(ctx, tctx.Source.Observations, tools.HostWriteRoot(tctx))
 	}
 	if err := tctx.Effects.Secrets.HandOff(ctx, nil); err != nil {
 		return commandRunOutcome{}, toolrejection.HeldHandOffReject(toolName, err)

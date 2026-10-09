@@ -156,7 +156,7 @@ func TestSymbolSearchSpansRootsAndHonorsRootID(t *testing.T) {
 		t.Fatalf("root-scoped matches = %+v", scoped.Symbols)
 	}
 
-	_, err = SearchProjectSourceSymbols(context.Background(), p, SourceSymbolSearchRequest{Query: "SharedName", RootIDs: []string{"missing"}, Wall: testSymbolWall}, testDeclarationSearch)
+	_, err := SearchProjectSourceSymbols(context.Background(), p, SourceSymbolSearchRequest{Query: "SharedName", RootIDs: []string{"missing"}, Wall: testSymbolWall}, testDeclarationSearch)
 	if !errors.Is(err, ErrSourceNoRoot) {
 		t.Fatalf("unknown root error = %v, want ErrSourceNoRoot", err)
 	}

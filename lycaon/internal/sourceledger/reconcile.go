@@ -69,7 +69,7 @@ func (c observationCause) apply(in RecordInput) RecordInput {
 	return in
 }
 
-func (s *Store) hasTrackingCheckpoint(ctx context.Context, projectID string) (bool, error) {
+func (s *Inventory) hasTrackingCheckpoint(ctx context.Context, projectID string) (bool, error) {
 	_, err := s.queries.FindSourceCheckpointByKind(ctx, db.FindSourceCheckpointByKindParams{
 		ProjectID: projectID, Kind: CheckpointTracking,
 	})
@@ -81,7 +81,7 @@ func (s *Store) hasTrackingCheckpoint(ctx context.Context, projectID string) (bo
 
 // recordObservation records one tracked head's drift and reports whether it
 // landed; a head another writer already moved is left alone.
-func (s *Store) recordObservation(
+func (s *Inventory) recordObservation(
 	ctx context.Context,
 	projectID string,
 	head db.SourceBranchHeads,
@@ -96,7 +96,7 @@ func (s *Store) recordObservation(
 		return false, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	scope, err := s.mutationObservationScope(ctx, tx, projectID)
+	scope, err := s.writer.mutationObservationScope(ctx, tx, projectID)
 	if err != nil {
 		return false, err
 	}
@@ -109,7 +109,7 @@ func (s *Store) recordObservation(
 
 // recordObservationTx is recordObservation inside a caller's transaction,
 // which a batch of path observations shares.
-func (s *Store) recordObservationTx(
+func (s *Inventory) recordObservationTx(
 	ctx context.Context,
 	tx *sql.Tx,
 	scope MutationObservationScope,
@@ -151,7 +151,7 @@ func (s *Store) recordObservationTx(
 	}
 	var beforeBytes []byte
 	if head.ContentSha256 != "" {
-		if raw, ok, err := s.readVerifiedBlob(ctx, head.ContentSha256); err != nil {
+		if raw, ok, err := s.retention.readVerifiedBlob(ctx, head.ContentSha256); err != nil {
 			return false, err
 		} else if ok {
 			beforeBytes = raw
@@ -174,7 +174,7 @@ func (s *Store) recordObservationTx(
 	if err := validateBatch([]RecordInput{in}); err != nil {
 		return false, err
 	}
-	if err := s.recordBatchTx(ctx, q, []RecordInput{in}); err != nil {
+	if err := s.writer.recordBatchTx(ctx, q, []RecordInput{in}); err != nil {
 		return false, err
 	}
 	return true, nil
@@ -182,7 +182,7 @@ func (s *Store) recordObservationTx(
 
 // recordWindowAdmissions lands a window's admitted files as one operation per
 // git cause.
-func (s *Store) recordWindowAdmissions(ctx context.Context, inputs []RecordInput) (int, error) {
+func (s *Inventory) recordWindowAdmissions(ctx context.Context, inputs []RecordInput) (int, error) {
 	if len(inputs) == 0 {
 		return 0, nil
 	}
@@ -206,7 +206,7 @@ func (s *Store) recordWindowAdmissions(ctx context.Context, inputs []RecordInput
 	return recorded, nil
 }
 
-func (s *Store) recordObservedBatch(ctx context.Context, inputs []RecordInput) (int, error) {
+func (s *Inventory) recordObservedBatch(ctx context.Context, inputs []RecordInput) (int, error) {
 	s.recordMu.Lock()
 	defer s.recordMu.Unlock()
 	tx, err := s.sqlDB.BeginTx(ctx, nil)
@@ -214,7 +214,7 @@ func (s *Store) recordObservedBatch(ctx context.Context, inputs []RecordInput) (
 		return 0, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	scope, err := s.mutationObservationScope(ctx, tx, inputs[0].ProjectID)
+	scope, err := s.writer.mutationObservationScope(ctx, tx, inputs[0].ProjectID)
 	if err != nil {
 		return 0, err
 	}
@@ -227,7 +227,7 @@ func (s *Store) recordObservedBatch(ctx context.Context, inputs []RecordInput) (
 	if len(admitted) == 0 {
 		return 0, nil
 	}
-	if err := s.RecordBatchTx(ctx, tx, admitted); err != nil {
+	if err := s.writer.RecordBatchTx(ctx, tx, admitted); err != nil {
 		return 0, err
 	}
 	return len(admitted), tx.Commit()

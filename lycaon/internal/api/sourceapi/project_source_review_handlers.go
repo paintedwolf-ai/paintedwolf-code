@@ -30,7 +30,7 @@ func (s *History) HandleCompleteProjectSourcePresentation(w http.ResponseWriter,
 		s.responses.FailReason(w, wire.ApiErrorCodeInvalidRequest, "file_id, effect_id, and ordinal are required")
 		return
 	}
-	if err := s.SourceLedger.CompletePresentation(
+	if err := s.SourceLedger.Checkpoints.CompletePresentation(
 		r.Context(), p.ID, req.FileID, req.EffectID, req.Ordinal,
 	); err != nil {
 		if errors.Is(err, sourceledger.ErrPresentationMismatch) {
@@ -58,7 +58,7 @@ func (s *History) HandleWithdrawProjectSourcePresentation(w http.ResponseWriter,
 		s.responses.InvalidQueryParam(w, "through_ordinal", "is required")
 		return
 	}
-	err = s.SourceLedger.WithdrawPresentation(r.Context(), p.ID, fileID, through)
+	err = s.SourceLedger.Checkpoints.WithdrawPresentation(r.Context(), p.ID, fileID, through)
 	switch {
 	case errors.Is(err, sourceledger.ErrPresentationNotFound):
 		s.responses.Fail(w, wire.ApiErrorCodeSourcePresentationNotFound, "source presentation not found")
@@ -106,7 +106,7 @@ func (s *History) HandleListProjectSourceSeen(w http.ResponseWriter, r *http.Req
 		}
 		query.AfterSeenTS, query.AfterFileID = cursor.SeenTS, cursor.FileID
 	}
-	res, err := s.SourceLedger.QuerySeen(r.Context(), p.ID, workspaceSourceBranches(p), query, withoutUserEdits)
+	res, err := s.SourceLedger.History.QuerySeen(r.Context(), p.ID, workspaceSourceBranches(p), query, withoutUserEdits)
 	if err != nil {
 		s.responses.InternalError(w, r, err)
 		return
@@ -162,7 +162,7 @@ func (s *History) HandleGetProjectSourceStorage(w http.ResponseWriter, r *http.R
 		s.responses.InternalError(w, r, err)
 		return
 	}
-	sourceLane, err := s.SourceLedger.StorageUsage(r.Context())
+	sourceLane, err := s.SourceLedger.Retention.StorageUsage(r.Context())
 	if err != nil {
 		s.responses.InternalError(w, r, err)
 		return
@@ -204,7 +204,7 @@ func (s *History) HandleListProjectSourcePins(w http.ResponseWriter, r *http.Req
 		s.responses.PageCursorError(w, r, "cursor", err)
 		return
 	}
-	page, err := s.SourceLedger.ListPinsPage(r.Context(), p.ID, query)
+	page, err := s.SourceLedger.Checkpoints.ListPinsPage(r.Context(), p.ID, query)
 	if err != nil {
 		s.responses.InternalError(w, r, err)
 		return
@@ -270,7 +270,7 @@ func (s *History) HandleCreateProjectSourcePin(w http.ResponseWriter, r *http.Re
 		s.responses.Fail(w, wire.ApiErrorCodeSourceInventoryPending, "source inventory is still being prepared")
 		return
 	}
-	pin, err := s.SourceLedger.CreatePin(r.Context(), p.ID, strings.TrimSpace(req.Label))
+	pin, err := s.SourceLedger.Checkpoints.CreatePin(r.Context(), p.ID, strings.TrimSpace(req.Label))
 	if err != nil {
 		s.responses.InternalError(w, r, err)
 		return
@@ -307,7 +307,7 @@ func (s *History) HandleUpdateProjectSourcePin(w http.ResponseWriter, r *http.Re
 	}
 	pinID := chi.URLParam(r, "pin_id")
 	if req.Label != nil {
-		if err := s.SourceLedger.UpdatePinLabel(
+		if err := s.SourceLedger.Checkpoints.UpdatePinLabel(
 			r.Context(), p.ID, pinID, strings.TrimSpace(*req.Label),
 		); err != nil {
 			if errors.Is(err, sourceledger.ErrPinNotFound) {
@@ -318,7 +318,7 @@ func (s *History) HandleUpdateProjectSourcePin(w http.ResponseWriter, r *http.Re
 			return
 		}
 	}
-	pin, err := s.SourceLedger.GetPin(r.Context(), p.ID, pinID)
+	pin, err := s.SourceLedger.Checkpoints.GetPin(r.Context(), p.ID, pinID)
 	if err != nil {
 		if errors.Is(err, sourceledger.ErrPinNotFound) {
 			s.responses.Fail(w, wire.ApiErrorCodeSourcePinNotFound, "pin not found")
@@ -335,7 +335,7 @@ func (s *History) HandleDeleteProjectSourcePin(w http.ResponseWriter, r *http.Re
 	if !ok {
 		return
 	}
-	if err := s.SourceLedger.DeletePin(r.Context(), p.ID, chi.URLParam(r, "pin_id")); err != nil {
+	if err := s.SourceLedger.Checkpoints.DeletePin(r.Context(), p.ID, chi.URLParam(r, "pin_id")); err != nil {
 		if errors.Is(err, sourceledger.ErrPinNotFound) {
 			s.responses.Fail(w, wire.ApiErrorCodeSourcePinNotFound, "pin not found")
 			return

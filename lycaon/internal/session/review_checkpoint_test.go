@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/tools"
 	"testing"
 	"time"
 
@@ -33,7 +34,7 @@ func TestReviewCheckpointOnlyOpensForRealUserIntent(t *testing.T) {
 	sessions := store.NewMemory()
 	mgr := NewManager(sessions, nil, nil, settings.DefaultSessionLimits())
 	recorder := &reviewCheckpointRecorder{}
-	mgr.SetSourceLedger(recorder)
+	mgr.SetSourceLedger(recorder, tools.SourceHistory{}, nil, nil, recorder, nil)
 	sess, err := sessions.Create(ctx, api.CreateSessionRequest{
 		Posture: api.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
@@ -63,4 +64,8 @@ func TestReviewCheckpointOnlyOpensForRealUserIntent(t *testing.T) {
 		t.Fatalf("review checkpoint turns = %d, %d, want 1, 2",
 			recorder.inputs[0].Turn, recorder.inputs[1].Turn)
 	}
+}
+
+func (r *reviewCheckpointRecorder) TurnCheckpoint(context.Context, string, string, int) (sourceledger.Checkpoint, bool, error) {
+	return sourceledger.Checkpoint{}, false, nil
 }

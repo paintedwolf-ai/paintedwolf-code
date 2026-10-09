@@ -68,7 +68,7 @@ func PrepareLedgerInventory(t *testing.T, srv *hostapi.Server, ledger *sourceled
 	for _, root := range p.Roots {
 		roots = append(roots, sourceledger.RootSpec{ID: root.ID, Path: root.Path})
 	}
-	testutil.FailErr(t, "prepare source inventory", ledger.EnsureInventory(t.Context(), sourceledger.InventoryRequest{
+	testutil.FailErr(t, "prepare source inventory", ledger.Inventory.EnsureInventory(t.Context(), sourceledger.InventoryRequest{
 		ProjectID: p.ID, RootsGeneration: p.RootsGeneration, Roots: roots,
 	}))
 }

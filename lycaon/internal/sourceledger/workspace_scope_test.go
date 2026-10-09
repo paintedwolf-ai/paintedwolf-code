@@ -21,12 +21,12 @@ func TestWalkScopesCheckoutsBeforePagination(t *testing.T) {
 		"/base":     {Repo: gitstate.RepoPresent, HeadCommit: "before"},
 		"/checkout": {Repo: gitstate.RepoPresent, HeadCommit: "before"},
 	}}
-	store.SetGitReader(reader)
+	store.Git.SetGitReader(reader)
 	for _, root := range []RootSpec{{ID: "r1", Path: "/base"}, {ID: "r1", Path: "/checkout", BranchID: checkout}} {
-		_, err := store.ObserveGitState(ctx, "p1", []RootSpec{root})
+		_, err := store.Git.ObserveGitState(ctx, "p1", []RootSpec{root})
 		testutil.FailErr(t, "seed checkout", err)
 		reader.states[root.Path] = gitstate.State{Repo: gitstate.RepoPresent, HeadCommit: root.Path}
-		_, err = store.ObserveGitState(ctx, "p1", []RootSpec{root})
+		_, err = store.Git.ObserveGitState(ctx, "p1", []RootSpec{root})
 		testutil.FailErr(t, "move checkout head", err)
 	}
 	for _, kind := range []BaselineKind{BaselinePresentation, BaselineSession, BaselineTurn} {
@@ -37,7 +37,7 @@ func TestWalkScopesCheckoutsBeforePagination(t *testing.T) {
 			var movements []GitTransition
 			var before int64
 			for {
-				walk, err := store.QueryWalk(ctx, "p1", baseline, 1, before, CommitLens{})
+				walk, err := store.Walk.QueryWalk(ctx, "p1", baseline, 1, before, CommitLens{})
 				testutil.FailErr(t, "query checkout walk", err)
 				files = append(files, walk.Files...)
 				movements = append(movements, walk.GitChanges...)

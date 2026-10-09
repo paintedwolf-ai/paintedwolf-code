@@ -28,7 +28,7 @@ func TestCompareTurnNetsEveryWriteInTheTurn(t *testing.T) {
 	})
 	fileID, _ := mustResolve(t, store, ctx, "load.go")
 
-	turn, err := store.CompareTurn(ctx, "p1", "s1", 2, fileID, ScopeComparisonOptions{})
+	turn, err := store.Comparisons.CompareTurn(ctx, "p1", "s1", 2, fileID, ScopeComparisonOptions{})
 	testutil.FailErr(t, "compare turn", err)
 	if !turn.InRange {
 		t.Fatal("turn comparison is out of range")
@@ -56,13 +56,13 @@ func TestCompareTurnIgnoresLaterTurns(t *testing.T) {
 	})
 	fileID, _ := mustResolve(t, store, ctx, "load.go")
 
-	turn, err := store.CompareTurn(ctx, "p1", "s1", 1, fileID, ScopeComparisonOptions{})
+	turn, err := store.Comparisons.CompareTurn(ctx, "p1", "s1", 1, fileID, ScopeComparisonOptions{})
 	testutil.FailErr(t, "compare turn", err)
 	if turn.After.Content != "first\n" {
 		t.Fatalf("turn 1 ended at %q, want what turn 1 wrote", turn.After.Content)
 	}
 
-	scope, err := store.CompareScope(ctx, "p1", sourcebranch.Trunk,
+	scope, err := store.Comparisons.CompareScope(ctx, "p1", sourcebranch.Trunk,
 		Baseline{Kind: BaselineTurn, SessionID: "s1", Turn: 1}, fileID, ScopeComparisonOptions{})
 	testutil.FailErr(t, "compare scope", err)
 	if scope.After.Content != "second\n" {
@@ -83,7 +83,7 @@ func TestCompareTurnSkipsUntouchedFiles(t *testing.T) {
 	})
 	fileID, _ := mustResolve(t, store, ctx, "other.go")
 
-	out, err := store.CompareTurn(ctx, "p1", "s1", 2, fileID, ScopeComparisonOptions{})
+	out, err := store.Comparisons.CompareTurn(ctx, "p1", "s1", 2, fileID, ScopeComparisonOptions{})
 	testutil.FailErr(t, "compare turn", err)
 	if out.InRange {
 		t.Fatalf("turn 2 claimed a range for a file it never touched: %+v", out)
@@ -100,7 +100,7 @@ func TestCompareTurnNamesTheEffectForASingleWrite(t *testing.T) {
 	})
 	fileID, _ := mustResolve(t, store, ctx, "once.go")
 
-	out, err := store.CompareTurn(ctx, "p1", "s1", 4, fileID, ScopeComparisonOptions{})
+	out, err := store.Comparisons.CompareTurn(ctx, "p1", "s1", 4, fileID, ScopeComparisonOptions{})
 	testutil.FailErr(t, "compare turn", err)
 	if out.EffectID == "" {
 		t.Fatal("a single-write range did not name its effect")

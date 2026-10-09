@@ -80,7 +80,7 @@ func TestSourceRecoveryCancellationDoesNotReplayOnRestart(t *testing.T) {
 	restarted.Effects.SetTrashMover(func(context.Context, string) error { t.Error("startup retried canceled trash"); return nil })
 	testutil.FailErr(t, "recover", restarted.Recover(t.Context()))
 	assertSourceHistoryFile(t, root, "file", "retained")
-	state, err := restarted.History(t.Context(), p.ID)
+	state, err := restarted.History.State(t.Context(), p.ID)
 	testutil.FailErr(t, "history", err)
 	if state.Undo != nil {
 		t.Fatal("canceled preparation entered history")

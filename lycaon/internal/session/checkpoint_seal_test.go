@@ -10,15 +10,16 @@ import (
 	"github.com/lycaon/lycaon/internal/people"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectsource"
+	sessioncheckpoint "github.com/lycaon/lycaon/internal/session/checkpoint"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/sourceblob"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/sourcerewind"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
-	sessioncheckpoint "github.com/lycaon/lycaon/internal/session/checkpoint"
-	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 )
 
 // checkpointPreImages is the engine's shared source content store, where a
@@ -37,8 +38,9 @@ func newCheckpointTestSession(t *testing.T) (*Manager, string, string) {
 	mgr.store = st
 	mgr.SetProjectRegistry(project.NewSQLRegistry(database))
 	ledger := sourceledger.New(database, filepath.Join(mgr.dataDir, "source-content"))
-	mgr.SetSourceLedger(ledger)
+	mgr.SetSourceLedger(ledger, tools.SourceHistory{Files: ledger.History, Comparison: ledger.Comparisons, Git: ledger.Git, Authorship: ledger.Walk}, ledger.Commands, ledger.Git, ledger.Checkpoints, ledger.Inventory)
 	mutations := projectsource.NewSourceMutationService(database, ledger)
+
 	mgr.SetSourceMutations(mutations)
 	mgr.SetSourceRewinds(&sourcerewind.Service{Ledger: ledger, Mutations: mutations})
 	ctx := context.Background()

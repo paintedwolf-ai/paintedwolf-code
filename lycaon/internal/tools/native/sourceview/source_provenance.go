@@ -12,8 +12,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// Provenance is the ledger read surface tool handlers reach by
-// asserting tctx.SourceLedger.
+// Provenance reads retained source facts.
 type Provenance interface {
 	ResolveHead(ctx context.Context, projectID string, branch sourcebranch.ID, rootID, path string) (sourceledger.BranchHead, error)
 	LatestFileEffect(ctx context.Context, projectID, fileID string) (sourceledger.Effect, bool, error)
@@ -48,8 +47,8 @@ func ReadStamp(
 	absPath, servedSHA256 string,
 ) *surveyreceipt.SourceContext {
 	tctx.RecordSourcePath(absPath, api.NavigationEntryKindFile)
-	prov, ok := tctx.Source.SourceLedger.(Provenance)
-	if !ok {
+	prov := tctx.Source.History.Files
+	if prov == nil {
 		return nil
 	}
 	branch, rootID, rel, ok := LedgerLocation(tctx, absPath)
@@ -99,8 +98,8 @@ func ForeignChanges(
 	tctx tools.ToolContext,
 	absPath string,
 ) (changes []*surveyreceipt.SourceChange, total int, ok bool) {
-	prov, isProv := tctx.Source.SourceLedger.(Provenance)
-	if !isProv || tctx.Identity.SessionID == "" {
+	prov := tctx.Source.History.Files
+	if prov == nil || tctx.Identity.SessionID == "" {
 		return nil, 0, false
 	}
 	branch, rootID, rel, located := LedgerLocation(tctx, absPath)

@@ -43,7 +43,7 @@ func TestRestoreProjectSourceVersionMakesSelectedBytesCurrent(t *testing.T) {
 		Origin: wire.SourceChangeOriginAgent, SessionID: "session-before", Turn: 1,
 		Before: oldContent, After: currentContent,
 	}))
-	walk, err := ledger.QueryWalk(t.Context(), p.ID,
+	walk, err := ledger.Walk.QueryWalk(t.Context(), p.ID,
 		sourceledger.Baseline{Kind: sourceledger.BaselineSession, SessionID: "session-before"},
 		10, 0, sourceledger.CommitLens{})
 	testutil.FailErr(t, "query source history", err)
@@ -75,7 +75,7 @@ func TestRestoreProjectSourceVersionMakesSelectedBytesCurrent(t *testing.T) {
 	if string(restored) != string(oldContent) {
 		t.Fatalf("restored source = %q", restored)
 	}
-	history, err := ledger.QueryFileVersions(t.Context(), p.ID, fileID, 10, 0)
+	history, err := ledger.History.QueryFileVersions(t.Context(), p.ID, fileID, 10, 0)
 	testutil.FailErr(t, "query restored version", err)
 	if len(history.Versions) == 0 || history.Versions[0].DerivedFromVersionID != versionID ||
 		history.Versions[0].Cause != sourceledger.CauseVersionRestore {
@@ -95,7 +95,7 @@ func TestRestoreProjectSourceVersionRejectsUnavailableBytesWithoutMutation(t *te
 		RootID:    rootID, Path: "missing.bin", Op: wire.SourceChangeOpCreate,
 		Origin: wire.SourceChangeOriginExternal, AfterSHA256: strings.Repeat("a", 64), AfterSize: 12,
 	}))
-	fileID, versionID, err := ledger.ResolveFile(t.Context(), p.ID, sourcebranch.Trunk, rootID, "missing.bin")
+	fileID, versionID, err := ledger.History.ResolveFile(t.Context(), p.ID, sourcebranch.Trunk, rootID, "missing.bin")
 	testutil.FailErr(t, "resolve uncaptured source", err)
 	body, err := json.Marshal(wire.SourceVersionRestoreRequest{
 		OperationID: uuid.NewString(), FileID: fileID, RootID: rootID, Path: "missing.bin",
@@ -135,7 +135,7 @@ func TestProjectSourceVersionsListsCompleteFileHistory(t *testing.T) {
 			Op: revision.op, Origin: revision.origin, After: []byte(revision.after),
 		}))
 	}
-	fileID, _, err := ledger.ResolveFile(t.Context(), p.ID, sourcebranch.Trunk, rootID, "a.go")
+	fileID, _, err := ledger.History.ResolveFile(t.Context(), p.ID, sourcebranch.Trunk, rootID, "a.go")
 	testutil.FailErr(t, "resolve file", err)
 	testutil.FailErr(t, "record worker revision", ledger.Record(t.Context(), sourceledger.RecordInput{
 		ProjectID: p.ID, BranchID: "worker-1", RootID: rootID, Path: "a.go", FileID: fileID, JobID: "worker-1",
@@ -330,7 +330,7 @@ func TestCreateProjectSourcePinRejectsMalformedJSONWithoutMutation(t *testing.T)
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
 	}
-	page, err := ledger.ListPinsPage(t.Context(), p.ID, sourceledger.PinPageQuery{})
+	page, err := ledger.Checkpoints.ListPinsPage(t.Context(), p.ID, sourceledger.PinPageQuery{})
 	testutil.FailErr(t, "list pins", err)
 	if len(page.Pins) != 0 {
 		t.Fatalf("pins = %+v, want no mutation", page.Pins)
@@ -351,7 +351,7 @@ func TestSourcePinsPageWithoutExpiringHistory(t *testing.T) {
 	contractfixture.MirrorLedgerProject(t, ledgerDB, p)
 	contractfixture.PrepareLedgerInventory(t, srv, ledger, p)
 	for i := 0; i < 3; i++ {
-		_, err := ledger.CreatePin(t.Context(), p.ID, "pin "+strconv.Itoa(i))
+		_, err := ledger.Checkpoints.CreatePin(t.Context(), p.ID, "pin "+strconv.Itoa(i))
 		testutil.FailErr(t, "create pin", err)
 	}
 
@@ -407,7 +407,7 @@ func TestSourcePinsExcludeStructuralCheckpoints(t *testing.T) {
 	var pin wire.SourcePin
 	testutil.FailErr(t, "decode pin", json.Unmarshal(w.Body.Bytes(), &pin))
 
-	page, err := ledger.ListPinsPage(t.Context(), p.ID, sourceledger.PinPageQuery{})
+	page, err := ledger.Checkpoints.ListPinsPage(t.Context(), p.ID, sourceledger.PinPageQuery{})
 	testutil.FailErr(t, "list pins", err)
 	if len(page.Pins) != 1 || page.Pins[0].ID != pin.ID {
 		t.Fatalf("pins = %+v, want pin %q", page.Pins, pin.ID)
@@ -417,7 +417,7 @@ func TestSourcePinsExcludeStructuralCheckpoints(t *testing.T) {
 		{ProjectID: p.ID, Kind: sourceledger.CheckpointSession, SessionID: "session-1"},
 		{ProjectID: p.ID, Kind: sourceledger.CheckpointTurn, SessionID: "session-1", Turn: 1},
 	} {
-		checkpoint, createErr := ledger.CreateStructuralCheckpoint(t.Context(), input)
+		checkpoint, createErr := ledger.Checkpoints.CreateStructuralCheckpoint(t.Context(), input)
 		testutil.FailErr(t, "create structural checkpoint", createErr)
 		structural = append(structural, checkpoint)
 	}

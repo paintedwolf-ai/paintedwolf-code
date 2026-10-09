@@ -13,8 +13,8 @@ import (
 	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/pkg/api"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // txProbeSink records transactional staging and delivery.
@@ -97,6 +97,10 @@ func TestAgentMutationCommitsAttributionAndEventTogether(t *testing.T) {
 	tctx := nativefixture.Context(dir)
 	tctx.Identity.ProjectID, tctx.Identity.SessionID, tctx.Identity.UserTurn = "p1", "s1", 1
 	tctx.Source.SourceLedger = st
+	tctx.Source.History = tools.SourceHistory{Files: st.History, Comparison: st.Comparisons, Git: st.Git, Authorship: st.Walk}
+	tctx.Source.Commands = st.Commands
+	tctx.Source.Observations = st.Inventory
+	tctx.Source.GitMutations = st.Git
 	tctx.Source.SourceMutations = projectsource.NewSourceMutationService(st.LedgerDB(), st)
 
 	path := filepath.Join(dir, "one.txt")
@@ -123,6 +127,10 @@ func TestAgentMutationEventFailureRollsBackTheLedgerRow(t *testing.T) {
 	tctx := nativefixture.Context(dir)
 	tctx.Identity.ProjectID, tctx.Identity.SessionID, tctx.Identity.UserTurn = "p1", "s1", 1
 	tctx.Source.SourceLedger = st
+	tctx.Source.History = tools.SourceHistory{Files: st.History, Comparison: st.Comparisons, Git: st.Git, Authorship: st.Walk}
+	tctx.Source.Commands = st.Commands
+	tctx.Source.Observations = st.Inventory
+	tctx.Source.GitMutations = st.Git
 	tctx.Source.SourceMutations = projectsource.NewSourceMutationService(st.LedgerDB(), st)
 
 	path := filepath.Join(dir, "torn.txt")
@@ -177,7 +185,12 @@ func TestAgentMutationPreparationFailureLeavesFileUntouched(t *testing.T) {
 	tctx := nativefixture.Context(dir)
 	tctx.Identity.ProjectID, tctx.Identity.SessionID = "p1", "s1"
 	tctx.Source.SourceLedger = st
+	tctx.Source.History = tools.SourceHistory{Files: st.History, Comparison: st.Comparisons, Git: st.Git, Authorship: st.Walk}
+	tctx.Source.Commands = st.Commands
+	tctx.Source.Observations = st.Inventory
+	tctx.Source.GitMutations = st.Git
 	tctx.Source.SourceMutations = projectsource.NewSourceMutationService(st.LedgerDB(), st)
+
 	_, err := st.LedgerDB().ExecContext(t.Context(), `CREATE TRIGGER reject_effect_preparation BEFORE INSERT ON source_mutations BEGIN SELECT RAISE(ABORT,'journal unavailable'); END`)
 	testutil.FailErr(t, "inject journal failure", err)
 	path := filepath.Join(dir, "not-created.txt")

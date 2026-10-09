@@ -115,7 +115,7 @@ func resolveRestorableVersion(
 	rootID, rel, path string,
 	versionID, baseVersionID string,
 ) (sourceledger.RestorableVersion, string, error) {
-	head, err := ledger.ResolveHead(ctx, projectID, branch, rootID, rel)
+	head, err := ledger.History.ResolveHead(ctx, projectID, branch, rootID, rel)
 	if err != nil && !errors.Is(err, sourceledger.ErrHistoryNotFound) {
 		return sourceledger.RestorableVersion{}, "", fmt.Errorf("resolve file head: %w", err)
 	}
@@ -131,7 +131,7 @@ func resolveRestorableVersion(
 				},
 			}
 		}
-		versionsResult, qErr := ledger.QueryFileVersions(ctx, projectID, head.FileID, 2, 0)
+		versionsResult, qErr := ledger.History.QueryFileVersions(ctx, projectID, head.FileID, 2, 0)
 		if qErr != nil {
 			return sourceledger.RestorableVersion{}, "", fmt.Errorf("query file versions: %w", qErr)
 		}
@@ -165,7 +165,7 @@ func resolveRestorableVersion(
 		}
 	}
 
-	targetVer, err := ledger.ReadRestorableVersion(ctx, projectID, targetVersionID)
+	targetVer, err := ledger.History.ReadRestorableVersion(ctx, projectID, targetVersionID)
 	if err != nil {
 		if errors.Is(err, sourceledger.ErrHistoryNotFound) {
 			return sourceledger.RestorableVersion{}, "", &toolrejection.ToolReject{

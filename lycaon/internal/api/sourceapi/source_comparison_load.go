@@ -56,7 +56,7 @@ func (s *Comparisons) loadScopeComparison(ctx context.Context, p *project.Projec
 	if err != nil {
 		return sourceledger.Comparison{}, err
 	}
-	return s.SourceLedger.CompareScope(ctx, p.ID, branch, baseline, source.FileID, sourceledger.ScopeComparisonOptions{
+	return s.SourceLedger.Comparisons.CompareScope(ctx, p.ID, branch, baseline, source.FileID, sourceledger.ScopeComparisonOptions{
 		UnmarkUserEdits:          source.MarkUserEdits != nil && !*source.MarkUserEdits,
 		PresentationAfterOrdinal: source.PresentationAfterOrdinal,
 	})
@@ -72,7 +72,7 @@ func (s *Comparisons) loadTurnComparison(ctx context.Context, p *project.Project
 		}
 		return sourceledger.Comparison{}, err
 	}
-	return s.SourceLedger.CompareTurn(ctx, p.ID, source.SessionID, source.Turn, source.FileID, sourceledger.ScopeComparisonOptions{
+	return s.SourceLedger.Comparisons.CompareTurn(ctx, p.ID, source.SessionID, source.Turn, source.FileID, sourceledger.ScopeComparisonOptions{
 		UnmarkUserEdits: source.MarkUserEdits != nil && !*source.MarkUserEdits,
 	})
 }
@@ -84,7 +84,7 @@ func (s *Comparisons) loadReviewedComparison(ctx context.Context, p *project.Pro
 	if _, _, err := s.Workspace.workspaceSourceHead(ctx, p, source.FileID); err != nil {
 		return sourceledger.Comparison{}, err
 	}
-	return s.SourceLedger.CompareReviewed(ctx, p.ID, source.FileID, source.ReviewedThroughOrdinal)
+	return s.SourceLedger.Comparisons.CompareReviewed(ctx, p.ID, source.FileID, source.ReviewedThroughOrdinal)
 }
 
 // commitComparisonHead returns an empty head for a repository without commits.

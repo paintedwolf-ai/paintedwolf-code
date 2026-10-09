@@ -68,7 +68,7 @@ func (s *Review) fileGitLane(
 	}
 	projectionStarted := time.Now()
 	defer func() { projectionDuration = time.Since(projectionStarted) }()
-	oids, err := s.SourceLedger.FileVersionGitOIDs(ctx, p.ID, fileID)
+	oids, err := s.SourceLedger.History.FileVersionGitOIDs(ctx, p.ID, fileID)
 	if err != nil {
 		oids = nil
 	}
@@ -135,7 +135,7 @@ func (s *Review) newArrivalAnchor(
 	mgr git.GitManager,
 	rootAbs, projectID, rootID string,
 ) *arrivalAnchor {
-	chain, err := s.SourceLedger.GitTransitionChain(ctx, projectID, rootID, 64)
+	chain, err := s.SourceLedger.History.GitTransitionChain(ctx, projectID, rootID, 64)
 	if err != nil {
 		chain = nil
 	}

@@ -250,8 +250,8 @@ func TestAppendWorkerSummaryEligibleOverlayOpens(t *testing.T) {
 	mem := store.NewMemory()
 	mgr := session.NewManager(mem, llm.NewMockProvider(&llm.MockConfig{}), tools.NewStubRegistry(), settings.DefaultSessionLimits())
 	ledger := sourceledger.New(testdbfixture.Open(t, "source.db"), t.TempDir())
-	t.Cleanup(func() { testutil.FailErr(t, "close source snapshot store", ledger.SnapshotStore().Close()) })
-	mgr.SetSourceLedger(ledger)
+	t.Cleanup(func() { testutil.FailErr(t, "close source snapshot store", ledger.Snapshots.Close()) })
+	mgr.SetSourceLedger(ledger, tools.SourceHistory{Files: ledger.History, Comparison: ledger.Comparisons, Git: ledger.Git, Authorship: ledger.Walk}, ledger.Commands, ledger.Git, ledger.Checkpoints, ledger.Inventory)
 	q := worker.NewInMemoryQueue(4)
 	mgr.SetWorkerQueue(q)
 	primary := t.TempDir()
@@ -279,7 +279,7 @@ func TestAppendWorkerSummaryEligibleOverlayOpens(t *testing.T) {
 		WorkspaceBaselinePath: baseline,
 	})
 	testutil.FailErr(t, "EnqueueWithProjectID", err)
-	revision, digest := sourceledger.VerificationState(ctx, ledger, overlay)
+	revision, digest := sourceledger.VerificationState(ctx, ledger.Inventory, overlay)
 	testutil.FailErr(t, "AppendMessages", mem.AppendMessages(ctx, child.ID, api.Message{
 		Role: api.MessageRoleTool, WorkerID: jobID,
 		ToolResult: &api.ToolResult{

@@ -153,7 +153,7 @@ func (s *MergeService) promotedSourceFacts(
 	if projectID == "" {
 		return promotionSourceFacts{documents: documents}, nil
 	}
-	ordered := orderAppliedByFirstWrite(ctx, s.SourceLedger, projectID, task.ID, applied)
+	ordered := orderAppliedByFirstWrite(ctx, s.SourceHistory, projectID, task.ID, applied)
 	txID := uuid.NewString()
 	facts := promotionSourceFacts{
 		records:   make([]sourceledger.RecordInput, 0, len(ordered)),
@@ -204,7 +204,7 @@ func (s *MergeService) promotedSourceFacts(
 			})
 		}
 		if s.SourceLedger != nil {
-			if resolver, ok := s.SourceLedger.(sourceledger.JobVersionResolver); ok {
+			if resolver := s.SourceHistory; resolver != nil {
 				// The record points at merged bytes while retaining worker attribution.
 				record.FileID, record.DerivedFromVersionID, _ = resolver.JobVersionForPath(
 					ctx, projectID, task.ID, target.rootID, target.relPath,
@@ -256,7 +256,7 @@ func promotedFileSnapshot(target promoteTarget, after []byte, afterSHA string, o
 // orderAppliedByFirstWrite preserves worker write order.
 func orderAppliedByFirstWrite(
 	ctx context.Context,
-	ledger sourceledger.PromoteRecorder,
+	ledger sourceledger.JobHistory,
 	projectID, jobID string,
 	applied []string,
 ) []string {
