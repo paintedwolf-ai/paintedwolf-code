@@ -127,8 +127,12 @@ func TestSourceEffectReadmissionRefusesFilesystemReplay(t *testing.T) {
 		}
 		return pending.Finish(t.Context(), os.WriteFile(path, original.Record.After, 0o600))
 	}
-	if err := apply(); !errors.Is(err, ErrSourceMutationConflict) {
-		t.Fatalf("readmission error=%v", err)
+	for _, status := range []sourceMutationStatus{sourceMutationPrepared, sourceMutationFileApplied, sourceMutationDiverged, sourceMutationCommitted} {
+		row.Status = status
+		testutil.FailErr(t, "persist admission status", service.Journal.update(t.Context(), row))
+		if err := apply(); !errors.Is(err, ErrSourceMutationConflict) {
+			t.Fatalf("readmission status=%s error=%v", status, err)
+		}
 	}
 	var count int
 	testutil.FailErr(t, "count source receipts", service.Journal.db.QueryRowContext(t.Context(), `SELECT count(*) FROM source_operations WHERE operation_key=?`, pending.ID()).Scan(&count))
