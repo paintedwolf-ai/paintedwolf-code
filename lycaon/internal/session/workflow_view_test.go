@@ -3,7 +3,6 @@ package session
 import (
 	"context"
 	"errors"
-	"slices"
 	"strings"
 	"testing"
 
