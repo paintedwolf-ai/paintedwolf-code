@@ -7,15 +7,16 @@ requires:
     - tool
   facts:
     - paintedwolf.rejection_code
+    - paintedwolf.offenders_sample
     - paintedwolf.review_expected_call
     - paintedwolf.review_reason
 when: paintedwolf.rejection_code == "SUBMIT_VERDICT_INVALID"
 effect: block
 copy:
   what: "The verdict payload does not match the active review phase contract."
-  cause: "{{ paintedwolf.review_reason }}"
+  cause: '{% if paintedwolf.review_reason == "claim_outcome_required" %}Missing outcome for stamped claim(s): {{ paintedwolf.offenders_sample }}. The terminal verdict must include every previously stamped claim ID exactly.{% else %}{{ paintedwolf.review_reason }}{% endif %}'
   why: "The host records only the declared verdict schema and top-level citation channels."
-  fix: "Use the current schema: {{ paintedwolf.review_expected_call }}. Keep adjudication citations top-level and required claim or coverage citations within their entries; evidence-handle objects use handle, not evidence."
+  fix: '{% if paintedwolf.review_reason == "claim_outcome_required" %}Copy stamped claim IDs verbatim into the verdict claim entries. The host feedback lists missing_claim_ids and expected_claim_ids. Correct omitted or misspelled IDs; do not register a follow-up question to repair a claim ID. {% endif %}Use the current schema: {{ paintedwolf.review_expected_call }}. Keep adjudication citations top-level and required claim or coverage citations within their entries; evidence-handle objects use handle, not evidence.'
   instead: "Correct only the invalid fields and resubmit the current expected call with observed citations."
 x-paintedwolf-category: recoverable
 x-paintedwolf-severity: error
@@ -26,4 +27,14 @@ x-paintedwolf-scenarios:
       review_reason: 'verdict has undeclared field(s): cited_evidence'
       review_expected_call: 'submit_verdict(verdict={verdict: CHALLENGED}, cited_evidence=[{"handle":"<observed-handle>"}], cited_urls=["<observed-url>"])'
     expect_contains: ['Code: SUBMIT_VERDICT_INVALID', 'cited_evidence', 'expected']
+  - id: stamped_claim_missing
+    vars:
+      review_reason: claim_outcome_required
+      offenders_sample: secret-gates-hold
+      review_expected_call: 'submit_verdict(verdict={verdict: CHALLENGED, challenges: [...]})'
+    expect_contains:
+      - 'Code: SUBMIT_VERDICT_INVALID'
+      - 'Missing outcome for stamped claim(s): secret-gates-hold'
+      - 'Copy stamped claim IDs verbatim'
+      - 'do not register a follow-up question'
 x-paintedwolf-emit: guard:workflow
