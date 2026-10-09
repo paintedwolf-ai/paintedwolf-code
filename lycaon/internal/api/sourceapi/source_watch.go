@@ -74,33 +74,11 @@ func (s *Handler) ensureWorkspaceWatch(ctx context.Context, p *project.Project) 
 	bound := sourcefeed.EnsureProjectWatch(ctx, p.ID, p.SourceBranch.String(), roots, func(ctx context.Context, _ string, batch sourcefeed.ExternalBatch) {
 		s.observeWorkspaceChanges(ctx, p, batch)
 	})
-	s.sourceWatchMu.Lock()
-	if s.watchedProjects == nil {
-		s.watchedProjects = make(map[string]struct{})
-	}
-	s.watchedProjects[p.ID] = struct{}{}
-	s.sourceWatchMu.Unlock()
 	if bound {
 		s.scheduleWorkspaceInventory(ctx, p)
 	}
 	s.seedSourceWatch(ctx, p)
 	return bound
-}
-
-// StopSourceWatches unbinds every project watch this host bound. The watch
-// registry is process-wide and its observers reach this handler, so a closed
-// host must leave none behind.
-func (s *Handler) StopSourceWatches(ctx context.Context) {
-	s.sourceWatchMu.Lock()
-	projects := make([]string, 0, len(s.watchedProjects))
-	for projectID := range s.watchedProjects {
-		projects = append(projects, projectID)
-	}
-	clear(s.watchedProjects)
-	s.sourceWatchMu.Unlock()
-	for _, projectID := range projects {
-		sourcefeed.StopProjectWatch(ctx, projectID)
-	}
 }
 
 // Platforms with per-directory watches need the catalog to complete coverage.

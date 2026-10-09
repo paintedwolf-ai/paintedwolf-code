@@ -8,7 +8,7 @@ import (
 func TestStopSleepTimersDisarmsArmedWaits(t *testing.T) {
 	loop := NewLoopEngine()
 	fired := make(chan struct{})
-	st := loop.sleepState("session-1")
+	st := loop.sleep.state("session-1")
 	st.mu.Lock()
 	st.timer = time.AfterFunc(time.Hour, func() { close(fired) })
 	generation := st.timerGeneration

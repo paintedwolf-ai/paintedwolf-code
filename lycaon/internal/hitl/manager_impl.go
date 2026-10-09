@@ -116,7 +116,7 @@ func (m *Manager) RestorePending(ctx context.Context) error {
 		if d > 0 {
 			remaining := row.CreatedAt.Add(d).Sub(now)
 			if remaining <= 0 {
-				if err := m.expirePending(ctx, row.ID, "approval request timed out — denied (fail-safe)"); err != nil && !errors.Is(err, ErrCheckpointNotFound) {
+				if err := m.expirePending(ctx, row.ID, expiryReason); err != nil && !errors.Is(err, ErrCheckpointNotFound) {
 					return err
 				}
 				continue
@@ -126,7 +126,7 @@ func (m *Manager) RestorePending(ctx context.Context) error {
 		if row.Kind == api.CheckpointKindToolApproval && m.onToolApprovalRestored != nil {
 			m.onToolApprovalRestored(row)
 		}
-		m.scheduleExpiry(ctx, row.ID, d)
+		m.expiries.schedule(ctx, row.ID, d, m.expirePending)
 	}
 	return nil
 }
@@ -159,19 +159,6 @@ func (m *Manager) notifyToolApprovalTerminal(row StoredCheckpoint, status Decisi
 		chat = row.SessionID
 	}
 	m.onToolApprovalTerminal(chat, key, status)
-}
-
-// scheduleExpiry denies a still-pending checkpoint after expiryFor's window.
-// Nonpositive windows disable the timer.
-func (m *Manager) scheduleExpiry(ctx context.Context, checkpointID string, d time.Duration) {
-	if d <= 0 {
-		return
-	}
-	// Expiry outlives the request that created the checkpoint.
-	expiryCtx := context.WithoutCancel(ctx)
-	m.expiries.schedule(d, func() {
-		_ = m.expirePending(expiryCtx, checkpointID, "approval request timed out — denied (fail-safe)")
-	})
 }
 
 // expirePending serializes expiry with human resolution and skips resolved rows.
@@ -293,7 +280,7 @@ func (m *Manager) RequestCheckpoint(ctx context.Context, req CheckpointRequest) 
 	}
 	m.publishEvent(ctx, row)
 	if m.expiryFor != nil {
-		m.scheduleExpiry(ctx, id, m.expiryFor())
+		m.expiries.schedule(ctx, id, m.expiryFor(), m.expirePending)
 	}
 	return storedToCheckpointResponse(&row), nil
 }
