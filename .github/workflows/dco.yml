@@ -1,5 +1,7 @@
 name: Original commit certification
 on:
+  pull_request:
+    types: [synchronize]
   pull_request_target:
     types: [opened, synchronize, reopened, ready_for_review, edited]
   workflow_run:
@@ -17,15 +19,13 @@ permissions:
   contents: read
   pull-requests: read
   actions: read
-  checks: write
-  statuses: write
 concurrency:
   group: dco-certification
   queue: max
   cancel-in-progress: false
 jobs:
   certify:
-    if: (github.event_name != 'pull_request_target' || (github.event.pull_request.draft == false && github.actor != 'dependabot[bot]')) && (github.event_name != 'workflow_run' || github.event.workflow_run.event == 'pull_request')
+    if: github.event_name != 'pull_request' && (github.event_name != 'pull_request_target' || (github.event.pull_request.draft == false && github.actor != 'dependabot[bot]')) && (github.event_name != 'workflow_run' || github.event.workflow_run.event == 'pull_request')
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
