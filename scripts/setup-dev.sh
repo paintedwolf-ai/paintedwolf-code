@@ -13,10 +13,6 @@ if [[ "${1:-}" == "--frontend" ]]; then
   exit 0
 fi
 
-if [[ "${1:-}" == "--analysis-tools" ]]; then
-  exec python3 "${ROOT}/scripts/analysis_tools.py" ensure all
-fi
-
 if [[ "${1:-}" == "--shell-resources" ]]; then
   exec bash "${ROOT}/scripts/licenses-notices.sh"
 fi
@@ -28,7 +24,7 @@ if [[ "${1:-}" == "--release-cache" ]]; then
   exec bash "${ROOT}/scripts/warm-release-build.sh"
 fi
 if [[ $# != 0 ]]; then
-  echo "usage: ./task setup-dev [-- --ci-inputs|--frontend|--analysis-tools|--shell-resources|--workspace-cache|--release-cache]" >&2
+  echo "usage: ./task setup-dev [-- --ci-inputs|--frontend|--shell-resources|--workspace-cache|--release-cache]" >&2
   exit 2
 fi
 

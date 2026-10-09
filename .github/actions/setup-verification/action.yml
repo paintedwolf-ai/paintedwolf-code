@@ -146,6 +146,14 @@ runs:
       with:
         tools: ${{ inputs.analysis }}
 
+    # Offline lanes cannot reach the module proxy, so a cache miss builds the analyzers here.
+    - name: Provision analysis tools
+      if: inputs.analysis != 'none'
+      shell: bash
+      env:
+        TOOLS: ${{ inputs.analysis }}
+      run: python3 scripts/analysis_tools.py ensure "$TOOLS"
+
     - name: Save pinned frontend packages
       if: inputs.save-caches == 'true' && github.ref == 'refs/heads/main'
       uses: actions/cache/save@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
