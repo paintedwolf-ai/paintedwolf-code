@@ -1,0 +1,44 @@
+# Sealed security-survey 1.0.0 replay script. The wiring test seeds a run and
+# drives every phase against the current Go runtime: exact archived prompts,
+# real submit_verdict semantics under the sealed verdict schemas, and
+# host-driven phase advance. Output drift fails unless documented in
+# changes.yaml with category spec_fix or safety.
+workflow_id: security-survey
+workflow_version: "1.0.0"
+phases:
+  - phase: plan
+    expected_prompt: coordinator-security-plan
+    gate_outcomes:
+      fanout_planned: true
+  - phase: execute
+    expected_prompt: coordinator-security-execute
+    gate_outcomes:
+      worker_cycle_ready: true
+  - phase: claims
+    expected_prompt: coordinator-security-claims
+    submissions:
+      - verdict:
+          verdict: invalid_premise
+        expect_rejection: true
+        rejection_reason: verdict not in the sealed enum CLAIMED
+      - verdict:
+          verdict: CLAIMED
+          threat_model: >-
+            HTTP service; unauthenticated clients on the public internet;
+            the session cookie is the only auth boundary
+          claims: |
+            [{"id":"claim-1","title":"Request id reaches a formatted SQL query","status":"claimed","statement":"Attacker-controlled request id reaches a formatted SQL query on every request","cited_evidence":[{"path":"internal/store/query.go","line":88,"excerpt":"id reaches Sprintf in query.go:88"}]}]
+  - phase: challenge
+    expected_prompt: coordinator-security-challenge
+    reviewer_agents: [skeptic, web-researcher]
+    submissions:
+      - verdict:
+          verdict: CHALLENGED
+          challenges: |
+            [{"id":"claim-1","status":"survives","statement":"the id still reaches Sprintf on every request","cited_evidence":[{"path":"internal/store/query.go","line":88,"excerpt":"id reaches Sprintf in query.go:88"}]}]
+          set_asides: "[]"
+  - phase: report
+    expected_prompt: coordinator-security-synthesis
+    gate_outcomes:
+      topology_report_delivered: true
+terminal_status: complete

@@ -10,8 +10,8 @@ import (
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/guidance"
-	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/inspector"
+	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/visual"
@@ -141,7 +141,8 @@ type ToolAskOpenedHook func(ctx context.Context, sessionID, phaseID string)
 // FeedbackResolvedHook is invoked when pending user feedback/decision is cleared.
 type FeedbackResolvedHook func(ctx context.Context, sessionID, runID, phaseID, response string)
 
-// ReviewLoopHeldHook reports a held review and whether its cap requires a terminal verdict.
+// ReviewLoopHeldHook reports accepted review progress and whether its cap
+// requires a terminal verdict. A repair rejection never reports.
 type ReviewLoopHeldHook func(ctx context.Context, sessionID string, decisionRequired bool)
 
 // PhaseAutoAdvancedHook is invoked after host auto-advance commits a new phase.
@@ -252,7 +253,8 @@ func (m *RunManager) AssertRunnable(ctx context.Context, runID string) error {
 	}
 	switch run.Status {
 	case api.WorkflowRunStatusRunning:
-		return nil
+		_, err := m.manifestForRun(ctx, run)
+		return err
 	case api.WorkflowRunStatusPaused:
 		return &NotRunnableError{RunID: runID, Status: run.Status, Reason: "paused"}
 	case api.WorkflowRunStatusPausedOnChild:
