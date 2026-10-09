@@ -118,7 +118,7 @@ func assertOutboundSecretBoundary(t *testing.T, root string) {
 	preflightSource := contractcheck.ReadRepoFile(t, root, "lycaon/internal/toolexecution/invocation_boundary.go")
 	preflight := sourceFuncChunk(t, preflightSource, "func (e *Executor) applyPreInvokeBoundary")
 	if !strings.Contains(preflight, "e.Secrets.resolveSecretReferences(ctx, tool, args, tc)") ||
-		!strings.Contains(preflight, "tc.Secrets = secrets") {
+		!strings.Contains(preflight, "tc.Effects.Secrets = secrets") {
 		t.Fatal("pre-invoke boundary must bind resolved secrets to the invocation context")
 	}
 	screen := contractcheck.ReadRepoFile(t, root, "lycaon/internal/toolexecution/outbound_secret_screen.go")
