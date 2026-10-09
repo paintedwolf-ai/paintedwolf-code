@@ -95,7 +95,7 @@ func TestWriteRootAndReadPathBrokerResults(t *testing.T) {
 		return settings.ApprovalRule{Effect: settings.ApprovalEffectDeny}, true
 	}
 	resDeny, err := broker.Authorize(ctx, command.SandboxWriteRootAsk{
-		SessionID: "sess", ProjectDir: projectDir, ProposedWriteRoot: filepath.Join(t.TempDir(), "denied"),
+		SessionID: "sess", ProjectDir: projectDir, ProposedWriteRoot: "/opt/paintedwolf-broker-test-nonexistent/denied",
 	})
 	testutil.FailErr(t, "Authorize rule deny", err)
 	if !resDeny.Denied {
