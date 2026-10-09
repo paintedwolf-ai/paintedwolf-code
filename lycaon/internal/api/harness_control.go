@@ -392,7 +392,7 @@ func (s *HarnessControl) handleHarnessReviewLoopVerdict(w http.ResponseWriter, r
 		s.responses.InternalError(w, r, err)
 		return
 	}
-	run, err := mgr.Store.Runs.Store.Runs.ActiveBySession(r.Context(), sessionID)
+	run, err := mgr.Store.Runs.ActiveBySession(r.Context(), sessionID)
 	if err != nil {
 		s.responses.InternalError(w, r, err)
 		return

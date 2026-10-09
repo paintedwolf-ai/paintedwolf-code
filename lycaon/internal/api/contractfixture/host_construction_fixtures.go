@@ -55,7 +55,7 @@ func NewTestServerWithRegistry(t *testing.T, reg tools.ToolRegistry, opts ...Tes
 	mock := llm.NewMockProvider(TestMockConfig(t))
 	mgr := session.NewHost(store, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, reg)
 	mgr.SetDataDir(t.TempDir())
-	mgr.Coordinator.Guards.SetInvoker(testtool.RegistryInvoker{Registry: reg})
+	mgr.Coordinator.Guards.SetToolMetadata(testtool.RegistryInvoker{Registry: reg})
 	// Stub bindings do not expose coordinator tools.
 	WireTestBindingRegistry(t)
 	return NewServerForTest(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: store, Projects: project.NewMemoryRegistry(), Sessions: mgr}}, opts...)
@@ -72,7 +72,7 @@ func NewTestServerWithWorkflowRegistry(t *testing.T, reg tools.ToolRegistry, opt
 	mock := llm.NewMockProvider(TestMockConfig(t))
 	mgr := session.NewHost(sessions, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, reg)
 	mgr.SetDataDir(t.TempDir())
-	mgr.Coordinator.Guards.SetInvoker(testtool.RegistryInvoker{Registry: reg})
+	mgr.Coordinator.Guards.SetToolMetadata(testtool.RegistryInvoker{Registry: reg})
 	WireTestBindingRegistry(t)
 
 	registry, err := workflowdef.RegistryFromDirs("")
@@ -80,7 +80,7 @@ func NewTestServerWithWorkflowRegistry(t *testing.T, reg tools.ToolRegistry, opt
 	runs := workflowpersistence.New(sqlDB)
 	workflows := workflow.NewManager(runs, sessions, registry, nil)
 	workflows.Resolver = workflowcatalog.Resolver{}
-	mgr.SetWorkflowSessionView(workflows)
+	mgr.SetWorkflowDomains(&session.WorkflowDomains{Runs: workflows.Store.Runs, Policy: workflows.Policy, Ambient: workflows.Ambient, Blueprints: workflows.Blueprints, Batch: workflows.Batch, Slash: workflows.Slash, Requests: workflows.Requests, Feedback: workflows.Feedback, Transcript: workflows.Transcript, Asks: workflows.Asks, Fanout: workflows.Fanout, Phases: workflows.Phases, Reports: workflows.Reports, Recovery: workflows.Recovery, Cleanup: workflows})
 	return NewServerForTest(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
 		Store: sessions, PersonActions: personactions.New(sqlDB), Projects: project.NewSQLRegistry(sqlDB), Sessions: mgr}, Workflow: hostapi.WorkflowDependencies{
 		Workflows: workflows, WorkflowRuns: runs}}, opts...)

@@ -73,7 +73,7 @@ func (s *RunControl) HandleExitWorkflowRun(w http.ResponseWriter, r *http.Reques
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidWorkflowTarget, "expected_revision is required and must be positive")
 		return
 	}
-	run, err := s.Workflows.Store.Runs.Store.Runs.Get(r.Context(), runID)
+	run, err := s.Workflows.Store.Runs.Get(r.Context(), runID)
 	if err != nil {
 		s.WriteWorkflowError(w, r, err)
 		return
@@ -91,7 +91,7 @@ func (s *RunControl) HandleGetActiveWorkflowRun(w http.ResponseWriter, r *http.R
 	if !requestscope.SessionExists(s.Store, s.responses, w, r, sessionID) {
 		return
 	}
-	run, err := s.Workflows.Store.Runs.Store.Runs.ActiveBySession(r.Context(), sessionID)
+	run, err := s.Workflows.Store.Runs.ActiveBySession(r.Context(), sessionID)
 	if err != nil {
 		s.responses.InternalError(w, r, err)
 		return
@@ -102,7 +102,7 @@ func (s *RunControl) HandleGetActiveWorkflowRun(w http.ResponseWriter, r *http.R
 
 func (s *RunControl) HandleGetWorkflowRun(w http.ResponseWriter, r *http.Request) {
 	runID := chi.URLParam(r, "id")
-	run, err := s.Workflows.Store.Runs.Store.Runs.Get(r.Context(), runID)
+	run, err := s.Workflows.Store.Runs.Get(r.Context(), runID)
 	if err != nil {
 		s.writeRunLookupError(w, r, err)
 		return
@@ -143,7 +143,7 @@ func (s *RunControl) HandleAdvanceWorkflowRun(w http.ResponseWriter, r *http.Req
 	if err != nil {
 		var gateErr *runstate.PhaseGateUnmetError
 		if errors.As(err, &gateErr) && !gateErr.Replayed {
-			if active, gerr := s.Workflows.Store.Runs.Store.Runs.Get(r.Context(), runID); gerr == nil && active != nil {
+			if active, gerr := s.Workflows.Store.Runs.Get(r.Context(), runID); gerr == nil && active != nil {
 				// A committed gate rejection emits one coordinator nudge.
 				s.Sessions.Coordinator.Guidance.Emit(r.Context(), active.SessionID, anchor.GateBlocked, anchor.Envelope{})
 				s.Sessions.Coordinator.Runtime.CoordinatorLoop().Nudge(

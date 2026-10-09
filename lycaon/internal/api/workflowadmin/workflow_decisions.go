@@ -16,7 +16,7 @@ import (
 func (s *RunControl) HandleResolveWorkflowDecision(w http.ResponseWriter, r *http.Request) {
 	runID := chi.URLParam(r, "id")
 	phaseID := chi.URLParam(r, "phase_id")
-	currentRun, err := s.Workflows.Store.Runs.Store.Runs.Get(r.Context(), runID)
+	currentRun, err := s.Workflows.Store.Runs.Get(r.Context(), runID)
 	if err != nil {
 		s.WriteWorkflowError(w, r, err)
 		return
@@ -55,7 +55,7 @@ func (s *RunControl) HandleResolveWorkflowDecision(w http.ResponseWriter, r *htt
 func (s *RunControl) HandleResolveWorkflowFeedback(w http.ResponseWriter, r *http.Request) {
 	runID := chi.URLParam(r, "id")
 	phaseID := chi.URLParam(r, "phase_id")
-	currentRun, err := s.Workflows.Store.Runs.Store.Runs.Get(r.Context(), runID)
+	currentRun, err := s.Workflows.Store.Runs.Get(r.Context(), runID)
 	if err != nil {
 		s.WriteWorkflowError(w, r, err)
 		return
@@ -90,7 +90,7 @@ func (s *RunControl) HandleResolveWorkflowFeedback(w http.ResponseWriter, r *htt
 func (s *RunControl) HandleResolveWorkflowSecret(w http.ResponseWriter, r *http.Request) {
 	runID := chi.URLParam(r, "id")
 	phaseID := chi.URLParam(r, "phase_id")
-	currentRun, err := s.Workflows.Store.Runs.Store.Runs.Get(r.Context(), runID)
+	currentRun, err := s.Workflows.Store.Runs.Get(r.Context(), runID)
 	if err != nil {
 		s.WriteWorkflowError(w, r, err)
 		return

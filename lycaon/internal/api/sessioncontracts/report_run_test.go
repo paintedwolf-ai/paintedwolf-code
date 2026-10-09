@@ -1,9 +1,9 @@
 package sessioncontracts
 
 import (
- workflowrunstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	"bytes"
 	"context"
+	workflowrunstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -270,14 +270,14 @@ func TestBlockedReviewServesItsRetainedSnapshot(t *testing.T) {
 		Responses: []workflow.ReviewRepairResponse{{ID: "response"}},
 		Snapshot:  &workflow.ReviewSnapshot{Vars: map[string]any{}, Unavailable: []string{"scan ledger"}},
 	}
-	_, err := h.WfMgr.StampRunVars(t.Context(), run.ID, func(_ context.Context, _ *wire.WorkflowRun, vars map[string]any) (map[string]any, bool, error) {
+	_, err := h.WfMgr.Vars.Stamp(t.Context(), run.ID, func(_ context.Context, _ *wire.WorkflowRun, vars map[string]any) (map[string]any, bool, error) {
 		vars["review_repairs"] = []workflow.ReviewRepair{repair}
 		return vars, true, nil
 	})
 	testutil.FailErr(t, "stamp blocked repair", err)
 	pause := func(reason string) {
 		t.Helper()
-		current, err := h.RunStore.Store.Runs.Get(t.Context(), run.ID)
+		current, err := h.RunStore.Runs.Get(t.Context(), run.ID)
 		testutil.FailErr(t, "get run", err)
 		current.Status, current.PauseReason, current.CurrentPhase, current.CompletedAt = wire.WorkflowRunStatusPaused, reason, "claims", nil
 		testutil.FailErr(t, "pause run", h.RunStore.State.Update(t.Context(), current))
@@ -305,7 +305,7 @@ func TestReportDownloadRequiresRecordedDelivery(t *testing.T) {
 	h := contractfixture.NewReportTestHarness(t)
 	run := h.SeedSecuritySurveyRun(t, "run_no_delivery")
 	h.SeedRunReport(t, run)
-	_, err := h.WfMgr.StampRunVars(t.Context(), run.ID, func(_ context.Context, _ *wire.WorkflowRun, vars map[string]any) (map[string]any, bool, error) {
+	_, err := h.WfMgr.Vars.Stamp(t.Context(), run.ID, func(_ context.Context, _ *wire.WorkflowRun, vars map[string]any) (map[string]any, bool, error) {
 		return workflowrunstate.SetGateSatisfied(vars, "topology_report_delivered", false), true, nil
 	})
 	testutil.FailErr(t, "clear delivery", err)

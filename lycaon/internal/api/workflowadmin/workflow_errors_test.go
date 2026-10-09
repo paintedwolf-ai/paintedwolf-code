@@ -1,8 +1,8 @@
 package workflowadmin
 
 import (
- workflowrunstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	"fmt"
+	workflowrunstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"

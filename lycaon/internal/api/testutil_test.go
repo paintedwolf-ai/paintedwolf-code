@@ -59,7 +59,7 @@ func newTestServerWithRegistry(t *testing.T, reg tools.ToolRegistry, opts ...tes
 	mock := llm.NewMockProvider(testMockConfig(t))
 	mgr := session.NewHost(store, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, reg)
 	mgr.SetDataDir(t.TempDir())
-	mgr.Coordinator.Guards.SetInvoker(testtool.RegistryInvoker{Registry: reg})
+	mgr.Coordinator.Guards.SetToolMetadata(testtool.RegistryInvoker{Registry: reg})
 	// Stub bindings do not expose coordinator tools.
 	wireTestBindingRegistry(t)
 	return newServerForTest(t, Dependencies{Core: CoreDependencies{Store: store, Projects: project.NewMemoryRegistry(), Sessions: mgr}}, opts...)

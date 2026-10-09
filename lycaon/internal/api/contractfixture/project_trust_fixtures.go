@@ -41,7 +41,7 @@ func NewProjectOverlayTestServer(t *testing.T, opts ...TestDeps) (*hostapi.Serve
 	})
 	toolRegistry := tools.NewStubRegistry()
 	mgr := session.NewHost(sessionStore, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolRegistry)
-	mgr.Coordinator.Guards.SetInvoker(testtool.RegistryInvoker{Registry: toolRegistry})
+	mgr.Coordinator.Guards.SetToolMetadata(testtool.RegistryInvoker{Registry: toolRegistry})
 
 	postures, err := profiles.LoadPostureRegistry()
 	testutil.FailErr(t, "load posture registry", err)
