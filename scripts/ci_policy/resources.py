@@ -4,6 +4,8 @@ from pathlib import Path
 import time
 
 POLICY = Path(__file__).with_name('resources.json')
+# Leaves room for stacks, cgo, and runtime metadata that GOMEMLIMIT does not govern.
+SOFT_LIMIT_PERCENT = 80
 
 
 def budget(package):
@@ -12,6 +14,13 @@ def budget(package):
     if type(value.get('rss_mib')) is not int or value['rss_mib'] < 64:
         raise ValueError('package RSS budget must be an integer of at least 64 MiB')
     return value['rss_mib'] * 1024 * 1024
+
+
+def runtime_environment(environment, limit):
+    """Give the Go runtime a soft limit below the ceiling, so collector slack is not mistaken for growth."""
+    if 'GOMEMLIMIT' in environment:
+        return environment
+    return {**environment, 'GOMEMLIMIT': str(limit * SOFT_LIMIT_PERCENT // 100)}
 
 
 def resident_bytes(pid):

@@ -73,6 +73,10 @@ class AdmissionTests(unittest.TestCase):
             self.assertEqual(monitor.sample(), {'kind': 'package_rss', 'measured_bytes': 101, 'limit_bytes': 100})
         self.assertEqual(monitor.peak, 101)
 
+    def test_package_memory_guard_sets_a_soft_runtime_limit_below_the_ceiling(self):
+        self.assertEqual(resources.runtime_environment({'A': '1'}, 1000), {'A': '1', 'GOMEMLIMIT': '800'})
+        self.assertEqual(resources.runtime_environment({'GOMEMLIMIT': '5MiB'}, 1000), {'GOMEMLIMIT': '5MiB'})
+
     def test_offline_namespace_drops_root_and_preserves_argument_boundaries(self):
         from ci_policy.offline import command
         argv = command(['python3', 'runner.py', 'lane;false'], 1001, 1001)
