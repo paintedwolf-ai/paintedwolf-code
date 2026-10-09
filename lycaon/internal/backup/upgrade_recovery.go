@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"math"
 	"os"
 	"path/filepath"
@@ -69,7 +70,7 @@ func CaptureUpgradeRecovery(ctx context.Context, opts CreateOpts, plan migration
 	temporary := ".backup-snapshot-" + name
 	temporaryPath := filepath.Join(root, temporary)
 	defer func() { _ = os.RemoveAll(temporaryPath) }()
-	manifest, err := captureRecoveryDirectory(ctx, opts, temporaryPath)
+	manifest, usage, err := captureRecoveryDirectory(ctx, opts, temporaryPath)
 	if err != nil {
 		return err
 	}
@@ -85,7 +86,14 @@ func CaptureUpgradeRecovery(ctx context.Context, opts CreateOpts, plan migration
 	if err := publishRecoveryDirectory(root, temporary, record); err != nil {
 		return err
 	}
-	return publishUpgradePending(root, record)
+	if err := publishUpgradePending(root, record); err != nil {
+		return err
+	}
+	slog.DebugContext(ctx, "Upgrade recovery captured", "database_bytes", usage.DatabaseBytes, "payload_copied_bytes", usage.PayloadCopiedBytes, "payload_shared_bytes", usage.PayloadSharedBytes, "copied_files", usage.CopiedFiles, "shared_files", usage.SharedFiles)
+	if opts.OnRecoveryCapture != nil {
+		opts.OnRecoveryCapture(usage)
+	}
+	return nil
 }
 
 func reusePublishedRecovery(ctx context.Context, opts CreateOpts, plan migrations.Plan, targetApp, root string) (bool, error) {
@@ -460,7 +468,7 @@ func StageLatestUpgradeRecovery(ctx context.Context, opts StageOpts) (StageResul
 		if err != nil {
 			return err
 		}
-		if err := copySnapshotRegular(ctx, source, dest, os.FileMode(entry.Mode)); err != nil {
+		if _, err := copySnapshotRegular(ctx, source, dest, os.FileMode(entry.Mode)); err != nil {
 			return err
 		}
 		return verifySnapshotFile(ctx, root, entry)
