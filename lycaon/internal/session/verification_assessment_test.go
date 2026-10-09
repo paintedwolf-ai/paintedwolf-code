@@ -35,7 +35,7 @@ func TestInspectionDoesNotRunSelectedProjectCheck(t *testing.T) {
 
 func TestInspectionCannotSatisfyExplicitWorkflowTestGate(t *testing.T) {
 	mgr, sess, history := sourceEvidenceCloseoutHarness(t)
-	mgr.SetWorkflowSessionView(verifyWorkflowStub{required: true})
+	mgr.SetWorkflowSessionView(verifyWorkflowStub{required: true}, nil)
 	history = assessedCloseout(t, history, verification.Inspection)
 	if _, blocked := mgr.maybeRejectCloseoutForSourceEvidence(t.Context(), sess, history, "implement_investigate", true); !blocked {
 		t.Fatal("inspection waived an explicit workflow test gate")

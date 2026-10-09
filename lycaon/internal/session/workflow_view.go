@@ -2,12 +2,13 @@ package session
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/promptresult"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/coordinator/batch"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/guidance/feedback"
+	"github.com/lycaon/lycaon/internal/promptresult"
+	"github.com/lycaon/lycaon/internal/toolpolicy"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -24,7 +25,6 @@ type WorkflowSessionView interface {
 	ActiveReviewVerdictPending(ctx context.Context, sessionID string) bool
 	// ActiveCloseoutGateState reports a gated phase with open completion gates.
 	ActiveCloseoutGateState(ctx context.Context, sessionID string) WorkflowCloseoutGateState
-	AllowedAgents(ctx context.Context, sessionID string) []string
 	ActiveManifest(ctx context.Context, sessionID string) (ActiveWorkflowManifest, bool)
 	// ResolvedRequest returns the active run's resolved request, if available.
 	ResolvedRequest(ctx context.Context, sessionID string) ResolvedWorkflowRequest
@@ -33,7 +33,6 @@ type WorkflowSessionView interface {
 	ParallelTaskMaxWriteWorkers(ctx context.Context, sessionID string) int
 	PhaseTouchPaths(ctx context.Context, sessionID string) []string
 	ScaffoldVarsForSession(ctx context.Context, sessionID string) (map[string]any, error)
-	ActivePlan(ctx context.Context, sessionID string) (planID, content string, ok bool)
 	// ActivePhaseRequiresEvidence checks the active phase's evidence gate.
 	ActivePhaseRequiresEvidence(ctx context.Context, sessionID, evidenceType string) bool
 
@@ -86,8 +85,9 @@ type WorkerPhaseTouchPathsSource interface {
 }
 
 // SetWorkflowSessionView wires the workflow session view for prompts, tools, and messages.
-func (m *Manager) SetWorkflowSessionView(v WorkflowSessionView) {
+func (m *Manager) SetWorkflowSessionView(v WorkflowSessionView, policy toolpolicy.WorkflowSource) {
 	m.workflows = v
+	m.workflowPolicy = policy
 }
 
 // AcceptsEmptyWorkflowRequest reports whether an empty prompt has active workflow semantics.

@@ -53,7 +53,7 @@ func TestHumanInputScaffoldDeniesCoordinatorLoop(t *testing.T) {
 	contractcheck.FailErr(t, "workflow.RegistryFromDirs failed", err)
 	wfStore := workflow.NewSQLStore(sqlDB)
 	wfMgr := workflow.NewManager(wfStore, store, manifestRegistry, nil)
-	mgr.SetWorkflowSessionView(wfMgr)
+	mgr.SetWorkflowSessionView(wfMgr, workflow.PolicySource(wfMgr))
 	mgr.SetLoopWorkflowSource(wfMgr)
 
 	for key, m := range workflowfixture.ContractAllResolvedManifests(t) {

@@ -98,7 +98,7 @@ func TestWorkflowVerifyGateStateRequiresExplicitWorkflowEvidence(t *testing.T) {
 		t.Fatalf("changed source invented a workflow gate: (%v,%v,%v,%v)", required, passed, repair, unverified)
 	}
 
-	mgr.SetWorkflowSessionView(verifyWorkflowStub{required: true})
+	mgr.SetWorkflowSessionView(verifyWorkflowStub{required: true}, nil)
 	if required, passed, repair, unverified := mgr.workflowVerifyGateState(context.Background(), sess, history); !required || passed || repair || unverified {
 		t.Fatalf("required workflow gate = (%v,%v,%v,%v) want (true,false,false,false)", required, passed, repair, unverified)
 	}

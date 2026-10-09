@@ -115,7 +115,7 @@ func newTestServerWithWorkflowRegistry(t *testing.T, reg tools.ToolRegistry, opt
 	runs := workflow.NewSQLStore(sqlDB)
 	workflows := workflow.NewManager(runs, sessions, registry, nil)
 	workflows.Resolver = workflow.ManifestResolver{}
-	mgr.SetWorkflowSessionView(workflows)
+	mgr.SetWorkflowSessionView(workflows, workflow.PolicySource(workflows))
 	return newServerForTest(t, Dependencies{
 		Store: sessions, PersonActions: personactions.New(sqlDB), Projects: project.NewSQLRegistry(sqlDB), Sessions: mgr,
 		Workflows: workflows, WorkflowRuns: runs,

@@ -62,7 +62,7 @@ func TestFinishPromptExecutionPropagatesTopologyReportFailure(t *testing.T) {
 	st := store.NewMemory()
 	mgr := NewManager(st, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
 	view := &recordingWorkflowView{topologyErr: wantErr}
-	mgr.SetWorkflowSessionView(view)
+	mgr.SetWorkflowSessionView(view, nil)
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
@@ -80,7 +80,7 @@ func TestFinishPromptExecutionReconcilesWorkflowCompletion(t *testing.T) {
 	st := store.NewMemory()
 	view := &recordingWorkflowView{}
 	mgr := NewManager(st, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
-	mgr.SetWorkflowSessionView(view)
+	mgr.SetWorkflowSessionView(view, nil)
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
@@ -190,7 +190,7 @@ func TestFinishPromptExecutionPropagatesCompletionReconciliationFailure(t *testi
 	wantErr := errors.New("workflow completion unavailable")
 	st := store.NewMemory()
 	mgr := NewManager(st, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
-	mgr.SetWorkflowSessionView(&recordingWorkflowView{completionErr: wantErr})
+	mgr.SetWorkflowSessionView(&recordingWorkflowView{completionErr: wantErr}, nil)
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 

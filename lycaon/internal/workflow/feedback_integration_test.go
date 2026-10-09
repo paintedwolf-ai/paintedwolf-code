@@ -73,7 +73,7 @@ func setupFeedbackIntegration(t *testing.T) (*workflow.RunManager, *session.Mana
 		Posture: wire.SessionPostureSpec,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
-	sessMgr.SetWorkflowSessionView(wfMgr)
+	sessMgr.SetWorkflowSessionView(wfMgr, workflow.PolicySource(wfMgr))
 	return wfMgr, sessMgr, sess, testdbseed.OwnerCaller(t, context.Background(), sqlDB)
 }
 

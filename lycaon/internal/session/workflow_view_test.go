@@ -61,11 +61,6 @@ func (r *recordingWorkflowView) ActivePhaseGuardState(ctx context.Context, sessi
 	return WorkflowPhaseGuardState{Phase: "phase-a"}
 }
 
-func (r *recordingWorkflowView) AllowedAgents(ctx context.Context, sessionID string) []string {
-	r.record("AllowedAgents")
-	return []string{"coordinator"}
-}
-
 func (r *recordingWorkflowView) ActiveManifest(ctx context.Context, sessionID string) (ActiveWorkflowManifest, bool) {
 	r.record("ActiveManifest")
 	return ActiveWorkflowManifest{Rules: []string{"manifest-rules.yaml"}}, true
@@ -94,11 +89,6 @@ func (r *recordingWorkflowView) PhaseTouchPaths(ctx context.Context, sessionID s
 func (r *recordingWorkflowView) ScaffoldVarsForSession(ctx context.Context, sessionID string) (map[string]any, error) {
 	r.record("ScaffoldVarsForSession")
 	return map[string]any{"k": "v"}, nil
-}
-
-func (r *recordingWorkflowView) ActivePlan(ctx context.Context, sessionID string) (string, string, bool) {
-	r.record("ActivePlan")
-	return "plan-1", "plan body", true
 }
 
 func (r *recordingWorkflowView) ActivePhaseRequiresEvidence(ctx context.Context, sessionID, evidenceType string) bool {
@@ -188,7 +178,7 @@ func TestApplyPromptUserTurnPropagatesFeedbackFailure(t *testing.T) {
 	wantErr := errors.New("feedback store unavailable")
 	st := store.NewMemory()
 	mgr := NewManager(st, nil, nil, settings.DefaultSessionLimits())
-	mgr.SetWorkflowSessionView(&recordingWorkflowView{feedbackErr: wantErr})
+	mgr.SetWorkflowSessionView(&recordingWorkflowView{feedbackErr: wantErr}, nil)
 	sess, err := st.Create(ctx, api.CreateSessionRequest{}, "project-1")
 	testutil.FailErr(t, "create session", err)
 
@@ -201,10 +191,16 @@ func TestApplyPromptUserTurnPropagatesFeedbackFailure(t *testing.T) {
 func TestToolpolicyEngineDepsWiresWorkflowView(t *testing.T) {
 	view := &recordingWorkflowView{}
 	mgr := NewManager(store.NewMemory(), nil, nil, settings.DefaultSessionLimits())
-	mgr.SetWorkflowSessionView(view)
+	mgr.SetWorkflowSessionView(view, func(context.Context, string) (toolpolicy.WorkflowSnapshot, error) {
+		view.record("snapshot")
+		return toolpolicy.WorkflowSnapshot{Phase: "phase-a", AllowedAgents: []string{"coordinator"}, ManifestRules: []string{"manifest-rules.yaml"}, BlueprintPath: "plan-1", PlanContent: "plan body", Vars: map[string]any{"k": "v"}}, nil
+	})
 	sess := &api.Session{ID: "s1", Posture: api.SessionPostureSpec}
 
-	eval := toolpolicy.BuildEvalContext(context.Background(), mgr.toolpolicyEngineDeps(), sess, "read_file", map[string]any{"path": "x"})
+	eval, err := toolpolicy.BuildEvalContext(context.Background(), mgr.toolpolicyEngineDeps(), sess, "read_file", map[string]any{"path": "x"})
+	if err != nil {
+		t.Fatalf("build policy context: %v", err)
+	}
 	if eval.Phase != "phase-a" {
 		t.Fatalf("phase = %q want phase-a", eval.Phase)
 	}
@@ -221,15 +217,7 @@ func TestToolpolicyEngineDepsWiresWorkflowView(t *testing.T) {
 		t.Fatalf("vars = %v", eval.Vars)
 	}
 
-	want := []string{
-		"CurrentPhase",
-		"AllowedAgents",
-		"ActiveManifest",
-		"ActivePhaseHasReviewLoop",
-		"GetActive",
-		"ActivePlan",
-		"ScaffoldVarsForSession",
-	}
+	want := []string{"snapshot"}
 	if len(view.calls) != len(want) {
 		t.Fatalf("calls = %v want %v", view.calls, want)
 	}

@@ -69,7 +69,7 @@ func setupCoordinatorPromptFixture(t *testing.T) coordinatorPromptFixture {
 	blueprintMgr := blueprint.NewManager(blueprintStore)
 	wfMgr.BlueprintCreate = blueprint.WorkflowBlueprintCreator{Manager: blueprintMgr}
 	wfMgr.BlueprintGet = blueprintMgr
-	mgr.SetWorkflowSessionView(wfMgr)
+	mgr.SetWorkflowSessionView(wfMgr, workflow.PolicySource(wfMgr))
 	mgr.SetCoordinatorTurnFrameSource(&workflow.CoordinatorTurnFrameLoader{Runs: wfMgr, SessionStore: sessionWF, ConfigRoot: root})
 
 	ctx := context.Background()

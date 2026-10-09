@@ -100,7 +100,7 @@ func setupAskUserIntegration(t *testing.T) *askUserFixture {
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	fx.sess = sess
-	sessMgr.SetWorkflowSessionView(wfMgr)
+	sessMgr.SetWorkflowSessionView(wfMgr, workflow.PolicySource(wfMgr))
 	return fx
 }
 

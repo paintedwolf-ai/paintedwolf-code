@@ -52,7 +52,7 @@ func setupPlanTripartiteFixture(t *testing.T) coordinatorPromptFixture {
 	wfMgr.BlueprintCreate = blueprint.WorkflowBlueprintCreator{Manager: blueprintMgr}
 	wfMgr.BlueprintGet = blueprintMgr
 	wfMgr.Resolver = workflow.ManifestResolver{}
-	mgr.SetWorkflowSessionView(wfMgr)
+	mgr.SetWorkflowSessionView(wfMgr, workflow.PolicySource(wfMgr))
 	mgr.SetCoordinatorTurnFrameSource(&workflow.CoordinatorTurnFrameLoader{Runs: wfMgr, SessionStore: workflow.NewSessionWorkflowSQLStore(sqlDB)})
 
 	ctx := context.Background()

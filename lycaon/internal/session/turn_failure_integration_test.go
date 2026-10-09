@@ -67,7 +67,7 @@ func TestFailedHostTurnReportsItself(t *testing.T) {
 	testutil.FailErr(t, "RegistryFromDirs", err)
 	wfMgr := workflow.NewManager(wfStore, st, manifestRegistry, nil)
 	wfMgr.Resolver = workflow.ManifestResolver{}
-	mgr.SetWorkflowSessionView(wfMgr)
+	mgr.SetWorkflowSessionView(wfMgr, workflow.PolicySource(wfMgr))
 	mgr.SetLoopWorkflowSource(wfMgr)
 
 	ctx := context.Background()

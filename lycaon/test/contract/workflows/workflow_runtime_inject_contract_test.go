@@ -73,7 +73,7 @@ func TestDefaultPipelineActiveWorkflowInjectVisible(t *testing.T) {
 	contractcheck.FailErr(t, "conditions.NewDefaultRegistry failed", err)
 	wfMgr.SetConditionRegistry(reg)
 	wfMgr.Resolver = workflow.ManifestResolver{SessionStore: sessionWF}
-	mgr.SetWorkflowSessionView(wfMgr)
+	mgr.SetWorkflowSessionView(wfMgr, workflow.PolicySource(wfMgr))
 	frameLoader := &workflow.CoordinatorTurnFrameLoader{Runs: wfMgr, SessionStore: sessionWF}
 	mgr.SetCoordinatorTurnFrameSource(frameLoader)
 

@@ -50,17 +50,18 @@ func (l *CoordinatorTurnFrameLoader) BuildCoordinatorTurnFrame(
 		}
 	}
 
-	active, vars, err := l.Runs.Store.ActiveStateBySession(ctx, sessionID)
+	state, err := loadActiveRunState(ctx, l.Runs, sessionID)
 	if err != nil {
-		return inject.CoordinatorTurnFrame{RunContext: out}, err
+		frame := inject.CoordinatorTurnFrame{RunContext: out}
+		if state.run != nil {
+			frame.WorkflowRevision = state.run.Revision
+		}
+		return frame, err
 	}
+	active, vars, manifest := state.run, state.vars, state.manifest
 	if active == nil {
 		out.AllowedAgents = spawn.AmbientAllowedAgents()
 		return inject.CoordinatorTurnFrame{RunContext: out}, nil
-	}
-	manifest, err := l.Runs.manifestForRun(ctx, active)
-	if err != nil {
-		return inject.CoordinatorTurnFrame{WorkflowRevision: active.Revision, RunContext: out}, err
 	}
 	runtime := l.Runs.workflowRuntimeSnapshot(ctx, active, manifest, vars)
 	l.attachPhaseVerdictCall(ctx, sessionID, active, manifest, runtime.PhaseExit)

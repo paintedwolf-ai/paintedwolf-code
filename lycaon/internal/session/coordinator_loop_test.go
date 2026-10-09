@@ -133,7 +133,7 @@ func setupLoopFixture(t *testing.T, cfg settings.SessionLimits) loopFixture {
 	blueprintMgr := blueprint.NewManager(blueprintStore)
 	wfMgr.BlueprintCreate = blueprint.WorkflowBlueprintCreator{Manager: blueprintMgr}
 	wfMgr.BlueprintGet = blueprintMgr
-	mgr.SetWorkflowSessionView(wfMgr)
+	mgr.SetWorkflowSessionView(wfMgr, workflow.PolicySource(wfMgr))
 	mgr.SetLoopWorkflowSource(wfMgr)
 
 	ctx := context.Background()
@@ -321,7 +321,7 @@ func TestImplementWorkerSummaryLoopWakesWithCompletingJobStillRunning(t *testing
 	q := worker.NewInMemoryQueue(4)
 	mgr.SetWorkerQueue(q)
 	wireImplementConvergenceHooks(t, mgr, wfMgr, q)
-	mgr.SetWorkflowSessionView(wfMgr)
+	mgr.SetWorkflowSessionView(wfMgr, workflow.PolicySource(wfMgr))
 	mgr.SetLoopWorkflowSource(wfMgr)
 
 	ctx := context.Background()
@@ -403,7 +403,7 @@ func TestImplementWorkerCompleteFiresSingleLoopWake(t *testing.T) {
 	q := worker.NewInMemoryQueue(4)
 	mgr.SetWorkerQueue(q)
 	wireImplementConvergenceHooks(t, mgr, wfMgr, q)
-	mgr.SetWorkflowSessionView(wfMgr)
+	mgr.SetWorkflowSessionView(wfMgr, workflow.PolicySource(wfMgr))
 	mgr.SetLoopWorkflowSource(wfMgr)
 
 	ctx := context.Background()
@@ -507,7 +507,7 @@ func TestImplementWorkerSummaryLoopWakesCoordinator(t *testing.T) {
 	q := worker.NewInMemoryQueue(4)
 	mgr.SetWorkerQueue(q)
 	wireImplementConvergenceHooks(t, mgr, wfMgr, q)
-	mgr.SetWorkflowSessionView(wfMgr)
+	mgr.SetWorkflowSessionView(wfMgr, workflow.PolicySource(wfMgr))
 	mgr.SetLoopWorkflowSource(wfMgr)
 
 	ctx := context.Background()
@@ -665,7 +665,7 @@ func TestImplementWorkerSummaryPartialSkipsLoopWake(t *testing.T) {
 
 	wfStore := workflow.NewSQLStore(sqlDB)
 	wfMgr := workflow.NewManager(wfStore, store, nil, nil)
-	mgr.SetWorkflowSessionView(wfMgr)
+	mgr.SetWorkflowSessionView(wfMgr, workflow.PolicySource(wfMgr))
 	mgr.SetLoopWorkflowSource(wfMgr)
 	mgr.SetWorkerQueue(worker.NewInMemoryQueue(4))
 

@@ -39,7 +39,7 @@ func TestMaybeAdvanceCoordinatorBatchOnTaskEnqueued_writerStillDispatches(t *tes
 	testutil.FailErr(t, "RegistryFromDirs", err)
 	wfMgr := workflow.NewManager(wfStore, store, manifestRegistry, nil)
 	wfMgr.Resolver = workflow.ManifestResolver{}
-	mgr.SetWorkflowSessionView(wfMgr)
+	mgr.SetWorkflowSessionView(wfMgr, workflow.PolicySource(wfMgr))
 
 	ctx := context.Background()
 	projectDir := t.TempDir()

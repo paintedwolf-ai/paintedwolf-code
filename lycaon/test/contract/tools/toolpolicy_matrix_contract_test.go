@@ -162,7 +162,7 @@ func wireToolpolicyMatrixContract(
 	workflowMgr.Resolver = workflow.ManifestResolver{SessionStore: sessionWF}
 	workflowMgr.BlueprintCreate = blueprint.WorkflowBlueprintCreator{Manager: blueprintMgr}
 	workflowMgr.BlueprintGet = blueprintMgr
-	mgr.SetWorkflowSessionView(workflowMgr)
+	mgr.SetWorkflowSessionView(workflowMgr, workflow.PolicySource(workflowMgr))
 	mgr.SetCoordinatorTurnFrameSource(&workflow.CoordinatorTurnFrameLoader{Runs: workflowMgr, SessionStore: sessionWF})
 	if err := workflow.RegisterStateTools(reg, workflow.StateToolDeps{Runs: workflowMgr, Sessions: store}); err != nil {
 		contractcheck.FailErr(t, "workflow.RegisterStateTools failed", err)

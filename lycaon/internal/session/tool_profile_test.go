@@ -63,7 +63,7 @@ func TestManagerPromptToolProfileUsesWorkflowManifest(t *testing.T) {
 	mgr.SetWorkflowSessionView(stubWorkflowManifest{
 		manifest: ActiveWorkflowManifest{CoordinatorProfile: "worker_readonly"},
 		ok:       true,
-	})
+	}, nil)
 	sess := &api.Session{ID: "s1", Posture: api.SessionPostureSpec, AgentType: orchestration.ProfileCoordinator}
 	got, err := mgr.promptToolProfile(context.Background(), sess)
 	testutil.FailErr(t, "mgr.promptToolProfile failed", err)
@@ -121,7 +121,6 @@ func (s stubWorkflowManifest) ActivePhaseHasReviewLoop(context.Context, string) 
 func (s stubWorkflowManifest) ActivePhaseGuardState(context.Context, string) WorkflowPhaseGuardState {
 	return WorkflowPhaseGuardState{}
 }
-func (s stubWorkflowManifest) AllowedAgents(context.Context, string) []string { return nil }
 func (s stubWorkflowManifest) ResolvedRequest(context.Context, string) ResolvedWorkflowRequest {
 	return ResolvedWorkflowRequest{}
 }
@@ -136,9 +135,7 @@ func (s stubWorkflowManifest) PhaseTouchPaths(context.Context, string) []string 
 func (s stubWorkflowManifest) ScaffoldVarsForSession(context.Context, string) (map[string]any, error) {
 	return nil, nil
 }
-func (s stubWorkflowManifest) ActivePlan(context.Context, string) (string, string, bool) {
-	return "", "", false
-}
+
 func (s stubWorkflowManifest) ActivePhaseRequiresEvidence(context.Context, string, string) bool {
 	return false
 }

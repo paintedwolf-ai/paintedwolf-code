@@ -101,3 +101,21 @@ func (m *RunManager) triggerPhaseEnter(ctx context.Context, run *api.WorkflowRun
 		}
 	}
 }
+
+// activeRunState binds projection inputs to one stored workflow revision.
+type activeRunState struct {
+	run      *api.WorkflowRun
+	vars     map[string]any
+	manifest workflowdef.Manifest
+}
+
+func loadActiveRunState(ctx context.Context, runs *RunManager, sessionID string) (activeRunState, error) {
+	var state activeRunState
+	var err error
+	state.run, state.vars, err = runs.Store.ActiveStateBySession(ctx, sessionID)
+	if err != nil || state.run == nil {
+		return state, err
+	}
+	state.manifest, err = runs.manifestForRun(ctx, state.run)
+	return state, err
+}

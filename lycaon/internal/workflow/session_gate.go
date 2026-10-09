@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"slices"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/conditions"
@@ -9,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/scaffoldvars"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/spawn"
+	"github.com/lycaon/lycaon/internal/toolpolicy"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -268,4 +270,40 @@ func (m *RunManager) ResolvedRequest(ctx context.Context, sessionID string) sess
 		return session.ResolvedWorkflowRequest{RunID: active.ID, OpeningMessageID: active.StartMessageID, Text: strings.TrimSpace(state.Text)}
 	}
 	return session.ResolvedWorkflowRequest{}
+}
+
+// PolicySource projects policy facts without building coordinator presentation state.
+func PolicySource(runs *RunManager) toolpolicy.WorkflowSource {
+	return func(ctx context.Context, sessionID string) (toolpolicy.WorkflowSnapshot, error) {
+		if runs == nil || sessionID == "" {
+			return toolpolicy.WorkflowSnapshot{}, nil
+		}
+		state, err := loadActiveRunState(ctx, runs, sessionID)
+		if err != nil {
+			return toolpolicy.WorkflowSnapshot{}, err
+		}
+		if state.run == nil {
+			return toolpolicy.WorkflowSnapshot{AllowedAgents: spawn.AmbientAllowedAgents()}, nil
+		}
+		return projectPolicyState(ctx, runs, state)
+	}
+}
+
+func projectPolicyState(ctx context.Context, runs *RunManager, state activeRunState) (toolpolicy.WorkflowSnapshot, error) {
+	run, manifest := state.run, state.manifest
+	out := toolpolicy.WorkflowSnapshot{
+		Phase: run.CurrentPhase, AllowedAgents: runs.RosterFor(run, manifest),
+		ManifestRules: slices.Clone(manifest.Rules), Vars: state.vars,
+		RunID: run.ID, WorkflowID: run.WorkflowID, RunStatus: run.Status,
+		BlueprintPath: strings.TrimSpace(run.BlueprintPath),
+	}
+	if phase, ok := manifest.PhaseByID(run.CurrentPhase); ok {
+		out.ReviewLoopActive = phase.ReviewLoop != nil
+	}
+	content, err := readPolicyBlueprint(ctx, runs.BlueprintGet, run.ProjectID, out.BlueprintPath)
+	if err != nil {
+		return toolpolicy.WorkflowSnapshot{}, err
+	}
+	out.PlanContent = content
+	return out, nil
 }

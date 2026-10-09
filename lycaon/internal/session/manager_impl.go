@@ -104,6 +104,7 @@ type Manager struct {
 	oarRenderer             *oar.Renderer
 	mcpRuntime              MCPRuntimeView
 	workflows               WorkflowSessionView
+	workflowPolicy          toolpolicy.WorkflowSource
 	reportDocuments         ReportDocumentChecker
 	scanEvidenceRuns        ScanEvidenceRuns
 	workflowToolAccess      WorkflowToolAccessView

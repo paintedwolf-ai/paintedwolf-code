@@ -256,7 +256,7 @@ attach:
 	testutil.FailErr(t, "reg.Create failed", err)
 
 	mgr := session.NewManager(store, nil, nil, settings.DefaultSessionLimits())
-	mgr.SetWorkflowSessionView(wfMgr)
+	mgr.SetWorkflowSessionView(wfMgr, workflow.PolicySource(wfMgr))
 	mgr.SetSessionWorkflowStop(wfMgr)
 
 	srv := NewServer(requiredTestDeps(t, Dependencies{

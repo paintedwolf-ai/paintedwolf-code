@@ -110,7 +110,7 @@ func (b delegationWiring) wireWorkerServices() error {
 }
 
 func (b delegationWiring) configureDelegationWorkflow() error {
-	b.mgr.SetWorkflowSessionView(b.workflowMgr)
+	b.mgr.SetWorkflowSessionView(b.workflowMgr, workflow.PolicySource(b.workflowMgr))
 	b.mgr.SetWorkflowToolAccessView(b.workflowMgr)
 	b.mgr.SetSessionWorkflowStop(b.workflowMgr)
 	b.workflowMgr.SessionAdmission = b.mgr

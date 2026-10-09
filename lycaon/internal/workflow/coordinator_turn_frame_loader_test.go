@@ -3,16 +3,21 @@ package workflow_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/orchestration"
+	"github.com/lycaon/lycaon/internal/rules"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolpolicy"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -239,5 +244,111 @@ func TestPlanResearchDepthNoneOmitsResearch(t *testing.T) {
 	}
 	if conditions.DotPathTruthy(vars, "phase_skipped.review") {
 		t.Fatal("research_depth=none alone must not skip transition-only review")
+	}
+}
+
+type policyReadStore struct {
+	workflow.RunStore
+	run        *wire.WorkflowRun
+	vars       map[string]any
+	err        error
+	reads      int
+	splitReads int
+}
+
+func (s *policyReadStore) ActiveStateBySession(context.Context, string) (*wire.WorkflowRun, map[string]any, error) {
+	s.reads++
+	return s.run, s.vars, s.err
+}
+func (s *policyReadStore) ActiveBySession(context.Context, string) (*wire.WorkflowRun, error) {
+	s.splitReads++
+	return &wire.WorkflowRun{ID: "later-run", CurrentPhase: "later"}, nil
+}
+func (s *policyReadStore) GetScaffoldVars(context.Context, string) (map[string]any, error) {
+	s.splitReads++
+	return map[string]any{"revision": "later"}, nil
+}
+
+func TestPolicySourceUsesOneActiveRevision(t *testing.T) {
+	_, sess, runs, _ := setupCoordinatorTurnFrameLoader(t)
+	run, _, err := runs.Store.ActiveStateBySession(t.Context(), sess.ID)
+	testutil.FailErr(t, "read initial workflow state", err)
+	expected, err := workflow.PolicySource(runs)(t.Context(), sess.ID)
+	testutil.FailErr(t, "capture expected workflow", err)
+	store := &policyReadStore{RunStore: runs.Store, run: run, vars: map[string]any{"revision": "captured"}}
+	runs.Store = store
+	state, err := workflow.PolicySource(runs)(t.Context(), sess.ID)
+	testutil.FailErr(t, "capture policy state", err)
+	if store.reads != 1 || store.splitReads != 0 {
+		t.Fatalf("state reads=%d split reads=%d", store.reads, store.splitReads)
+	}
+	if state.RunID != run.ID || state.Phase != run.CurrentPhase || state.WorkflowID != run.WorkflowID || state.RunStatus != run.Status || state.Vars["revision"] != "captured" {
+		t.Fatalf("mixed workflow revision: %+v", state)
+	}
+	if !reflect.DeepEqual(state.AllowedAgents, expected.AllowedAgents) || !reflect.DeepEqual(state.ManifestRules, expected.ManifestRules) || state.ReviewLoopActive != expected.ReviewLoopActive {
+		t.Fatalf("policy projection changed revision: %+v", state)
+	}
+}
+
+func TestPolicySourceDistinguishesAbsentRunAndReadFailure(t *testing.T) {
+	store := &policyReadStore{}
+	runs := workflow.NewManager(store, nil, nil, nil)
+	state, err := workflow.PolicySource(runs)(t.Context(), "session")
+	testutil.FailErr(t, "capture absent workflow", err)
+	if state.RunID != "" || len(state.AllowedAgents) == 0 || store.reads != 1 || store.splitReads != 0 {
+		t.Fatalf("absent workflow facts=%+v reads=%d/%d", state, store.reads, store.splitReads)
+	}
+	store.err = errors.New("unavailable workflow store")
+	_, err = workflow.PolicySource(runs)(t.Context(), "session")
+	if !errors.Is(err, store.err) {
+		t.Fatalf("store error became absent workflow: %v", err)
+	}
+}
+
+type failedPolicyBlueprint struct{ err error }
+
+func (g failedPolicyBlueprint) Get(context.Context, string, string) (*wire.Blueprint, error) {
+	return nil, g.err
+}
+
+func TestPolicySourcePropagatesBlueprintFailure(t *testing.T) {
+	_, sess, runs, _ := setupCoordinatorTurnFrameLoader(t)
+	run, vars, err := runs.Store.ActiveStateBySession(t.Context(), sess.ID)
+	testutil.FailErr(t, "read initial state", err)
+	run.BlueprintPath = "plan.md"
+	runs.Store = &policyReadStore{RunStore: runs.Store, run: run, vars: vars}
+	unavailable := errors.New("blueprint unavailable")
+	runs.BlueprintGet = failedPolicyBlueprint{err: unavailable}
+	_, err = workflow.PolicySource(runs)(t.Context(), sess.ID)
+	if !errors.Is(err, unavailable) {
+		t.Fatalf("blueprint read failure lost: %v", err)
+	}
+}
+
+type missingBlueprintRules struct{ evaluated bool }
+
+func (r *missingBlueprintRules) Evaluate(_ context.Context, eval rules.EvalContext) (*rules.RuleOutcome, error) {
+	r.evaluated = eval.BlueprintPath == "plan.md" && eval.PlanContent == "" && eval.ToolArgs["path"] == "plan.md"
+	return nil, nil
+}
+func TestPolicySourceMissingBlueprintRetainsRepairFacts(t *testing.T) {
+	_, sess, runs, _ := setupCoordinatorTurnFrameLoader(t)
+	run, vars, err := runs.Store.ActiveStateBySession(t.Context(), sess.ID)
+	testutil.FailErr(t, "read initial state", err)
+	run.BlueprintPath = "plan.md"
+	runs.Store = &policyReadStore{RunStore: runs.Store, run: run, vars: vars}
+	runs.BlueprintGet = failedPolicyBlueprint{err: blueprint.ErrNotFound}
+	source := workflow.PolicySource(runs)
+	state, err := source(t.Context(), sess.ID)
+	testutil.FailErr(t, "capture missing blueprint", err)
+	if state.BlueprintPath != "plan.md" || state.PlanContent != "" {
+		t.Fatalf("missing blueprint facts=%+v", state)
+	}
+	evaluator := &missingBlueprintRules{}
+	engine := toolpolicy.NewEngine(toolpolicy.EngineDeps{Workflows: source, Rules: evaluator})
+	err = engine.EvaluateInvoke(t.Context(), sess, "write", map[string]any{"path": "plan.md"})
+	testutil.FailErr(t, "evaluate missing blueprint repair", err)
+	if !evaluator.evaluated {
+		t.Fatal("repair skipped ordinary policy evaluation")
 	}
 }

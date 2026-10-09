@@ -33,7 +33,7 @@ func TestImplementModeWorkerSummaryUsesCompletionEnvelope(t *testing.T) {
 
 	wfStore := workflow.NewSQLStore(sqlDB)
 	wfMgr := workflow.NewManager(wfStore, store, nil, nil)
-	mgr.SetWorkflowSessionView(wfMgr)
+	mgr.SetWorkflowSessionView(wfMgr, workflow.PolicySource(wfMgr))
 
 	ctx := context.Background()
 	dir := t.TempDir()

@@ -2,26 +2,26 @@ package workflow
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/blueprint"
 )
 
-// ActivePlan returns the active run's plan id and content when present.
-func (m *RunManager) ActivePlan(ctx context.Context, sessionID string) (blueprintPath, content string, ok bool) {
-	if m == nil {
-		return "", "", false
+func readPolicyBlueprint(ctx context.Context, getter BlueprintGetter, projectID, path string) (string, error) {
+	if path == "" || getter == nil {
+		return "", nil
 	}
-	active, err := m.Store.ActiveBySession(ctx, sessionID)
-	if err != nil || active == nil {
-		return "", "", false
+	plan, err := getter.Get(ctx, projectID, path)
+	if errors.Is(err, blueprint.ErrNotFound) {
+		return "", nil
 	}
-	blueprintPath = strings.TrimSpace(active.BlueprintPath)
-	if blueprintPath == "" {
-		return "", "", false
+	if err != nil {
+		return "", fmt.Errorf("read workflow policy blueprint: %w", err)
 	}
-	if m.BlueprintGet != nil {
-		if p, err := m.BlueprintGet.Get(ctx, active.ProjectID, blueprintPath); err == nil && p != nil && strings.TrimSpace(p.Content) != "" {
-			return blueprintPath, p.Content, true
-		}
+	if plan == nil || strings.TrimSpace(plan.Content) == "" {
+		return "", nil
 	}
-	return blueprintPath, "", true
+	return plan.Content, nil
 }

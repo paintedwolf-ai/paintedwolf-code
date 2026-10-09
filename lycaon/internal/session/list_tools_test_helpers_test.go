@@ -82,7 +82,7 @@ func setupContextualToolsFixtureFull(t *testing.T, posture api.SessionPosture, c
 	blueprintMgr := blueprint.NewManager(blueprintStore)
 	workflowMgr.BlueprintCreate = blueprint.WorkflowBlueprintCreator{Manager: blueprintMgr}
 	workflowMgr.BlueprintGet = blueprintMgr
-	mgr.SetWorkflowSessionView(workflowMgr)
+	mgr.SetWorkflowSessionView(workflowMgr, workflow.PolicySource(workflowMgr))
 	mgr.SetCoordinatorTurnFrameSource(&workflow.CoordinatorTurnFrameLoader{Runs: workflowMgr, SessionStore: sessionWF})
 	if err := workflow.RegisterStateTools(rt.Registry, workflow.StateToolDeps{Runs: workflowMgr, Sessions: store}); err != nil {
 		testutil.FailErr(t, "workflow.RegisterStateTools failed", err)
