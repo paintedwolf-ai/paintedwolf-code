@@ -3,7 +3,9 @@ package workflowadmin
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/workflow"
 	workflowblueprints "github.com/lycaon/lycaon/internal/workflow/blueprints"
+	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 	"net/http"
 	"strings"
 
@@ -28,7 +30,7 @@ type blueprintRoutes struct {
 type blueprintDeps struct {
 	Blueprints   *blueprint.Manager
 	Projects     project.Registry
-	Catalog      workflow.ManifestResolver
+	Catalog      workflowcatalog.Resolver
 	Workflows    *workflow.RunManager
 	SessionAdmin *sessionadmin.Handler
 }
