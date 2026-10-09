@@ -88,7 +88,7 @@ func (c *SourceIndexCache) Snapshot(ctx context.Context, p *Project) SourceIndex
 	revisions := sha256.New()
 	for _, root := range orderedRootsForSource(p) {
 		out.rootPaths = append(out.rootPaths, root.Path)
-		reader, status, err := c.catalog.OpenIndex(ctx, p.ID, sourcecatalog.Root{ID: root.ID, Path: root.Path}, 0)
+		reader, status, err := c.catalog.Trees.OpenIndex(ctx, p.ID, sourcecatalog.Root{ID: root.ID, Path: root.Path}, 0)
 		coverage := SourceIndexRootCoverage{RootID: root.ID, State: SourceIndexWarming, IndexCoverage: sourcecatalog.CoverageFromStatus(status)}
 		if reader != nil && err == nil {
 			coverage.IndexCoverage, err = reader.Coverage(ctx)

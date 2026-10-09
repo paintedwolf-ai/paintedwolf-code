@@ -68,7 +68,7 @@ func BuildForTest(t *testing.T, opts ...Option) *Harness {
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
-		testutil.FailErr(t, "clear source catalog", sourcecatalog.Process().ClearTreeStores(ctx, nil))
+		testutil.FailErr(t, "clear source catalog", sourcecatalog.Process().Trees.ClearTreeStores(ctx, nil))
 	})
 
 	o := defaultOptions()

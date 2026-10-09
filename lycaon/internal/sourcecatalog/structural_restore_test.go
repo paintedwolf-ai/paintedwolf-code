@@ -175,11 +175,11 @@ func TestStructuralCheckpointRestoresAcrossEnginesByDirectoryStamp(t *testing.T)
 	dirs := []string{".", "src", "src/deep", "other"}
 
 	first := New()
-	first.treeDir = treeDir
+	first.Trees.treeDir = treeDir
 	firstRoot := Root{ID: "r1", Path: rootPath}
-	testutil.FailErr(t, "start first inventory", first.WarmNavigation(t.Context(), "p1", firstRoot))
-	testutil.FailErr(t, "await first inventory", first.AwaitNavigation(t.Context(), "p1", firstRoot))
-	firstStore, err := first.indexStore(t.Context(), "p1", firstRoot)
+	testutil.FailErr(t, "start first inventory", first.Directories.WarmNavigation(t.Context(), "p1", firstRoot))
+	testutil.FailErr(t, "await first inventory", first.Directories.AwaitNavigation(t.Context(), "p1", firstRoot))
+	firstStore, err := first.Trees.indexStore(t.Context(), "p1", firstRoot)
 	testutil.FailErr(t, "open first store", err)
 	awaitQuietStructure(t, firstStore)
 	before := make(map[string]DirectoryObservation, len(dirs))
@@ -203,12 +203,12 @@ func TestStructuralCheckpointRestoresAcrossEnginesByDirectoryStamp(t *testing.T)
 		os.WriteFile(filepath.Join(rootPath, "other", "d.txt"), []byte("content"), 0o600))
 
 	second := New()
-	second.treeDir = treeDir
+	second.Trees.treeDir = treeDir
 	secondRoot := Root{ID: "r2", Path: rootPath}
 	t.Cleanup(func() { testutil.FailErr(t, "drain second engine", second.Drain(context.Background())) })
-	testutil.FailErr(t, "start second inventory", second.WarmNavigation(t.Context(), "p2", secondRoot))
-	testutil.FailErr(t, "await second inventory", second.AwaitNavigation(t.Context(), "p2", secondRoot))
-	secondStore, err := second.indexStore(t.Context(), "p2", secondRoot)
+	testutil.FailErr(t, "start second inventory", second.Directories.WarmNavigation(t.Context(), "p2", secondRoot))
+	testutil.FailErr(t, "await second inventory", second.Directories.AwaitNavigation(t.Context(), "p2", secondRoot))
+	secondStore, err := second.Trees.indexStore(t.Context(), "p2", secondRoot)
 	testutil.FailErr(t, "open second store", err)
 	for _, dir := range []string{".", "src", "src/deep"} {
 		after, err := secondStore.readObservation(t.Context(), dir)
@@ -222,7 +222,7 @@ func TestStructuralCheckpointRestoresAcrossEnginesByDirectoryStamp(t *testing.T)
 	if changed.Sequence <= before["other"].Sequence || changed.Entries != 2 || !changed.Complete {
 		t.Fatalf("changed directory was not relisted: %+v, checkpointed %+v", changed, before["other"])
 	}
-	navigation, err := second.OpenNavigation(t.Context(), "p2", secondRoot)
+	navigation, err := second.Directories.OpenNavigation(t.Context(), "p2", secondRoot)
 	testutil.FailErr(t, "open restored navigation", err)
 	defer func() { _ = navigation.Close() }()
 	if _, err := navigation.Entry(t.Context(), "other/d.txt"); err != nil {

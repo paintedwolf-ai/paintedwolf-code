@@ -49,7 +49,7 @@ type boardWiring struct{ *serveBuilder }
 
 func (b boardWiring) wireBoardAndResearch() error {
 	var err error
-	b.repoProvider = repoinfo.NewProvider(sourcecatalog.Process(), b.repoCatalogRoot, filepath.Join(enginepaths.RepoOrientationRootUnder(b.dataDir), "v1"))
+	b.repoProvider = repoinfo.NewProvider(sourcecatalog.Process().Trees, b.repoCatalogRoot, filepath.Join(enginepaths.RepoOrientationRootUnder(b.dataDir), "v1"))
 	b.resources.track("source-catalog", 86, sourcecatalog.Process().Drain)
 	b.mgr.SetRepoProvider(b.repoProvider)
 	// Background brief completion publishes its own board update.

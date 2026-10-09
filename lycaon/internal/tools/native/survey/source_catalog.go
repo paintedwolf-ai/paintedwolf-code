@@ -15,9 +15,18 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/safecmd"
 )
 
+type sourceInventoryCatalog interface {
+	Current(context.Context, string, []sourcecatalog.Root) sourcecatalog.Snapshot
+	ObserveWithin(context.Context, string, []sourcecatalog.Root, time.Duration) (sourcecatalog.Snapshot, bool, error)
+	BoundaryPath(context.Context, string, string, bool) string
+	ObserveDependencyScope(context.Context, sourcecatalog.Root) (sourcecatalog.Snapshot, error)
+}
+
 // sourceInventory is one scope of a catalog generation. Entries reach callers
 // through walk, addressed relative to the project root.
 type sourceInventory struct {
+	catalog  sourceInventoryCatalog
+	rootPath string
 	snapshot sourcecatalog.Snapshot
 	// catalogRoot and catalogDir address the scope inside snapshot.
 	catalogRoot string
@@ -35,16 +44,41 @@ type sourceInventory struct {
 // walk visits the scope depth-first. A skipped directory costs one visit, so
 // pruning keeps a walk proportional to what it admits.
 func (inv sourceInventory) walk(ctx context.Context, visit func(sourcecatalog.Entry) sourcecatalog.WalkStep) error {
-	if !inv.rebased {
-		return inv.snapshot.Walk(ctx, inv.catalogRoot, inv.catalogDir, visit)
-	}
-	return inv.snapshot.Walk(ctx, inv.catalogRoot, inv.catalogDir, func(entry sourcecatalog.Entry) sourcecatalog.WalkStep {
-		entry.RootID = inv.rootID
-		entry.Path = path.Join(inv.base, entry.Path)
-		entry.Parent = normalizeCatalogPath(path.Dir(entry.Path))
-		entry.Depth = catalogPathDepth(entry.Path)
-		return visit(entry)
+	var expansionErr error
+	stopped := false
+	err := inv.snapshot.Walk(ctx, inv.catalogRoot, inv.catalogDir, func(entry sourcecatalog.Entry) sourcecatalog.WalkStep {
+		if inv.rebased {
+			entry.RootID = inv.rootID
+			entry.Path = path.Join(inv.base, entry.Path)
+			entry.Parent = normalizeCatalogPath(path.Dir(entry.Path))
+			entry.Depth = catalogPathDepth(entry.Path)
+		}
+		action := visit(entry)
+		if action != sourcecatalog.WalkContinue || !entry.IsDir || entry.IsSymlink || inv.catalog == nil || inv.catalog.BoundaryPath(ctx, inv.rootPath, entry.Path, true) == "" {
+			return action
+		}
+		// Tool walks expand only lazy directories their own selection admits.
+		lazyRoot := sourcecatalog.Root{ID: inv.rootID + "\x00" + entry.Path, Path: filepath.Join(inv.rootPath, filepath.FromSlash(entry.Path)), Within: inv.rootPath}
+		snapshot, openErr := inv.catalog.ObserveDependencyScope(ctx, lazyRoot)
+		if openErr != nil {
+			expansionErr = openErr
+			return sourcecatalog.WalkStop
+		}
+		expansionErr = snapshot.Walk(ctx, lazyRoot.ID, ".", func(child sourcecatalog.Entry) sourcecatalog.WalkStep {
+			child.RootID = inv.rootID
+			child.Path = path.Join(entry.Path, child.Path)
+			child.Parent = normalizeCatalogPath(path.Dir(child.Path))
+			child.Depth = catalogPathDepth(child.Path)
+			step := visit(child)
+			stopped = step == sourcecatalog.WalkStop
+			return step
+		})
+		if expansionErr != nil || stopped {
+			return sourcecatalog.WalkStop
+		}
+		return sourcecatalog.WalkSkip
 	})
+	return errors.Join(err, expansionErr)
 }
 
 // depth is an entry's depth below the scope; the scope's children are depth 1.
@@ -54,22 +88,33 @@ func (inv sourceInventory) depth(entry sourcecatalog.Entry) int {
 
 func sourceInventoryForScope(
 	ctx context.Context,
-	catalog *sourcecatalog.Catalog,
+	catalog sourceInventoryCatalog,
 	projectID string,
 	root projectroot.RootRef,
 	fullRoot string,
 ) (sourceInventory, error) {
 	base := projectroot.ScopeRel(root, fullRoot)
-	svc := catalogOrProcess(catalog)
-	whole := sourceInventory{catalogRoot: root.ID, catalogDir: base, rootID: root.ID, base: base}
+	svc := catalog
+	if svc == nil {
+		svc = sourcecatalog.Process()
+	}
+	whole := sourceInventory{catalog: svc, rootPath: root.Path, catalogRoot: root.ID, catalogDir: base, rootID: root.ID, base: base}
 	if base != "." {
+		if svc.BoundaryPath(ctx, root.Path, base, true) != "" {
+			scoped := sourceInventory{catalog: svc, rootPath: root.Path, catalogRoot: root.ID + "\x00" + base, catalogDir: ".", rootID: root.ID, base: base, rebased: true}
+			snapshot, err := svc.ObserveDependencyScope(ctx, sourcecatalog.Root{ID: scoped.catalogRoot, Path: fullRoot, Within: root.Path})
+			if err != nil {
+				return sourceInventory{}, err
+			}
+			return reportedInventory(ctx, scoped, snapshot, false), nil
+		}
 		// Reuse ready parent snapshot to avoid re-crawling subtrees.
 		current := svc.Current(ctx, projectID, []sourcecatalog.Root{{ID: root.ID, Path: root.Path}})
 		if current.State == sourcecatalog.StateReady {
 			return reportedInventory(ctx, whole, current, current.Refreshing), nil
 		}
 		// Scoped generations avoid full-root reconciliation when parent is cold.
-		scoped := sourceInventory{catalogRoot: root.ID + "\x00" + base, catalogDir: ".", rootID: root.ID, base: base, rebased: true}
+		scoped := sourceInventory{catalog: svc, rootPath: root.Path, catalogRoot: root.ID + "\x00" + base, catalogDir: ".", rootID: root.ID, base: base, rebased: true}
 		return snapshotInventory(ctx, svc, projectID, sourcecatalog.Root{ID: scoped.catalogRoot, Path: fullRoot, Within: root.Path}, scoped)
 	}
 	return snapshotInventory(ctx, svc, projectID, sourcecatalog.Root{ID: root.ID, Path: root.Path}, whole)
@@ -77,7 +122,7 @@ func sourceInventoryForScope(
 
 func snapshotInventory(
 	ctx context.Context,
-	catalog *sourcecatalog.Catalog,
+	catalog sourceInventoryCatalog,
 	projectID string,
 	root sourcecatalog.Root,
 	scope sourceInventory,

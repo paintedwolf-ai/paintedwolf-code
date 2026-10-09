@@ -1,27 +1,25 @@
 package survey
 
 import (
-	"os"
-	"path/filepath"
-	"testing"
-
+	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/summarize"
 	"github.com/lycaon/lycaon/internal/testutil"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
+	"os"
+	"path/filepath"
+	"testing"
 )
 
 func testSummarizeGatherer(t *testing.T, dir string, caps summarize.Caps) *summarizeGatherer {
 	t.Helper()
 	caps.Gather.IndexWaitMs = 30_000
-	g := &summarizeGatherer{
-		boundary: nativefixture.Boundary(t),
-		reads:    projectpaths.NewReadSession(nativefixture.Boundary(t), nativefixture.Context(dir)),
-		caps:     caps,
-		tctx:     nativefixture.Context(dir),
-	}
-	t.Cleanup(g.closeTrees)
-	t.Cleanup(g.reads.Close)
+	boundary := nativefixture.Boundary(t)
+	tctx := nativefixture.Context(dir)
+	reads := projectpaths.NewReadSession(boundary, tctx)
+	g := newSummarizeGatherer(boundary, reads, caps, tctx, nil, decide.Reranker{})
+	t.Cleanup(g.trees.closeTrees)
+	t.Cleanup(reads.Close)
 	return g
 }
 

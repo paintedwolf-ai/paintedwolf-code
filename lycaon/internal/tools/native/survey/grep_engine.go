@@ -338,7 +338,7 @@ func (t *GrepTool) forEachGrepCatalogJob(
 	search *grepSearch,
 	yield func(grepFileJob) bool,
 ) error {
-	inventory, err := sourceInventoryForScope(ctx, t.Catalog, tctx.ProjectID, target.root, target.fullRoot)
+	inventory, err := sourceInventoryForScope(ctx, catalogOrProcess(t.Catalog), tctx.ProjectID, target.root, target.fullRoot)
 	if err != nil {
 		return err
 	}
@@ -375,7 +375,7 @@ func (t *GrepTool) forEachGrepCatalogJob(
 			return sourcecatalog.WalkContinue
 		}
 		if canPrune {
-			if _, hasDraft := search.drafts.Lookup(abs); !hasDraft && t.Catalog.CanPrune(target.root.Path, search.require, entry) {
+			if _, hasDraft := search.drafts.Lookup(abs); !hasDraft && t.Catalog.Literals.CanPrune(target.root.Path, search.require, entry) {
 				if search.stats != nil {
 					search.stats.IndexBloomPruned.Add(1)
 				}

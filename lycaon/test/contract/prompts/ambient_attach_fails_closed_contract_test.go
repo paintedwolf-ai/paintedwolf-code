@@ -58,10 +58,9 @@ func newAmbientAttachFixture(t *testing.T, startsAdmitted bool) ambientAttachFix
 	}
 	mgr := workflow.NewManager(store, sessions, registry, nil)
 	mgr.Resolver = workflow.ManifestResolver{}
-	deps := apitest.Dependencies(t, api.Dependencies{
-		Store: sessions, Projects: projects, ModuleRoot: filepath.Join(contractcheck.RepoRoot(t), "lycaon"),
-		Workflows: mgr, WorkflowRuns: store,
-	})
+	deps := apitest.Dependencies(t, api.Dependencies{Core:api.CoreDependencies{
+		Store: sessions, Projects: projects,},Storage:api.StorageDependencies{ ModuleRoot: filepath.Join(contractcheck.RepoRoot(t), "lycaon"),},Workflow:api.WorkflowDependencies{
+		Workflows: mgr, WorkflowRuns: store,},})
 	return ambientAttachFixture{srv: api.NewServer(deps, nil, api.TestAPIToken), projectID: p.ID, runs: runs}
 }
 

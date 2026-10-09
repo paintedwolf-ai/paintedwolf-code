@@ -162,7 +162,7 @@ func (t *WcTool) wcRecursiveDir(ctx context.Context, reads *projectpaths.ReadSes
 		return t.wcRecursiveDirSurvey(ctx, reads, tctx, root, fullRoot, relRoot, includeWords)
 	}
 	var totals wcDirTotals
-	inventory, err := sourceInventoryForScope(ctx, t.Catalog, tctx.ProjectID, root, fullRoot)
+	inventory, err := sourceInventoryForScope(ctx, catalogOrProcess(t.Catalog), tctx.ProjectID, root, fullRoot)
 	if err != nil {
 		return wcResult{}, err
 	}

@@ -60,11 +60,12 @@ type ReplacePreviewResult struct {
 
 // ReplacePreviewRequest drives PreviewReplace.
 type ReplacePreviewRequest struct {
-	Query       Node
-	Replacement string
-	Flags       MatchFlags
-	Roots       []CodeRoot
-	ExcludeDirs []string
+	IncludeDependencies bool
+	Query               Node
+	Replacement         string
+	Flags               MatchFlags
+	Roots               []CodeRoot
+	ExcludeDirs         []string
 }
 
 // lineIndex maps content byte offsets to 1-based line numbers.

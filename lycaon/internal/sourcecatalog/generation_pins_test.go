@@ -27,9 +27,9 @@ func TestRetainedGenerationSurvivesPublicationUntilReleased(t *testing.T) {
 	for i := range 3 {
 		writeIndexFile(t, root.Path, fmt.Sprintf("dir-%d/a.txt", i), "source")
 	}
-	_, err := catalog.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{Priority: backgroundwork.PriorityInteractive})
+	_, err := catalog.Directories.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{Priority: backgroundwork.PriorityInteractive})
 	testutil.FailErr(t, "observe root", err)
-	head, err := catalog.OpenNavigation(t.Context(), "p", root)
+	head, err := catalog.Directories.OpenNavigation(t.Context(), "p", root)
 	testutil.FailErr(t, "open head", err)
 	generation := head.Generation
 	if extent := rootExtent(t, head); extent != 3 {
@@ -44,12 +44,12 @@ func TestRetainedGenerationSurvivesPublicationUntilReleased(t *testing.T) {
 	testutil.FailErr(t, "close head", head.Close())
 	testutil.FailErr(t, "pin generation", err)
 	for i := range 3 {
-		_, err := catalog.ObserveDirectory(t.Context(), "p", root, fmt.Sprintf("dir-%d", i), DirectoryRead{Priority: backgroundwork.PriorityInteractive})
+		_, err := catalog.Directories.ObserveDirectory(t.Context(), "p", root, fmt.Sprintf("dir-%d", i), DirectoryRead{Priority: backgroundwork.PriorityInteractive})
 		testutil.FailErr(t, "list child directory", err)
 	}
 	testutil.FailErr(t, "remove a directory", os.RemoveAll(filepath.Join(root.Path, "dir-2")))
 	catalog.InvalidateRoot(root.Path, "dir-2")
-	_, err = catalog.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{Priority: backgroundwork.PriorityInteractive})
+	_, err = catalog.Directories.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{Priority: backgroundwork.PriorityInteractive})
 	testutil.FailErr(t, "publish removal", err)
 	pinned, err := pin.OpenNavigation(t.Context())
 	testutil.FailErr(t, "open pinned generation", err)
@@ -62,7 +62,7 @@ func TestRetainedGenerationSurvivesPublicationUntilReleased(t *testing.T) {
 		t.Fatalf("removed entry=%+v", removed)
 	}
 	testutil.FailErr(t, "close pinned", pinned.Close())
-	current, err := catalog.OpenNavigation(t.Context(), "p", root)
+	current, err := catalog.Directories.OpenNavigation(t.Context(), "p", root)
 	testutil.FailErr(t, "open current head", err)
 	if extent := rootExtent(t, current); extent != 4 {
 		t.Fatalf("head extent=%d", extent)
@@ -72,10 +72,10 @@ func TestRetainedGenerationSurvivesPublicationUntilReleased(t *testing.T) {
 	}
 	testutil.FailErr(t, "close current", current.Close())
 	pin.Release()
-	store, err := catalog.indexStore(t.Context(), "p", root)
+	store, err := catalog.Trees.indexStore(t.Context(), "p", root)
 	testutil.FailErr(t, "get store", err)
 	store.mu.Lock()
-	checkpointDone := store.drainStructuralCheckpointLocked()
+	checkpointDone := store.checkpoint.Drain()
 	store.mu.Unlock()
 	if checkpointDone != nil {
 		<-checkpointDone
@@ -93,7 +93,7 @@ func TestRetainedGenerationSurvivesPublicationUntilReleased(t *testing.T) {
 
 func TestGenerationCannotBeRetainedWithoutAnExistingReference(t *testing.T) {
 	catalog, root := indexFixture(t)
-	nav, err := catalog.OpenNavigation(t.Context(), "p", root)
+	nav, err := catalog.Directories.OpenNavigation(t.Context(), "p", root)
 	testutil.FailErr(t, "open snapshot", err)
 	pin, err := nav.Retain()
 	testutil.FailErr(t, "retain snapshot", err)
@@ -105,7 +105,7 @@ func TestGenerationCannotBeRetainedWithoutAnExistingReference(t *testing.T) {
 	testutil.FailErr(t, "retain from active read", err)
 	testutil.FailErr(t, "close read", next.Close())
 	writeIndexFile(t, root.Path, "successor.txt", "new generation")
-	_, err = catalog.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{})
+	_, err = catalog.Directories.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{})
 	testutil.FailErr(t, "publish successor generation", err)
 	copy.Release()
 	if _, err := copy.OpenNavigation(t.Context()); !errors.Is(err, pagedview.ErrExpired) {
@@ -116,9 +116,9 @@ func TestGenerationCannotBeRetainedWithoutAnExistingReference(t *testing.T) {
 func TestOnlyReferencedGenerationAndHeadSurviveIntermediatePublications(t *testing.T) {
 	catalog, root := indexFixture(t)
 	writeIndexFile(t, root.Path, "first.txt", "source")
-	_, err := catalog.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{})
+	_, err := catalog.Directories.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{})
 	testutil.FailErr(t, "observe initial directory", err)
-	initial, err := catalog.OpenNavigation(t.Context(), "p", root)
+	initial, err := catalog.Directories.OpenNavigation(t.Context(), "p", root)
 	testutil.FailErr(t, "open initial structure", err)
 	pin, err := initial.Retain()
 	testutil.FailErr(t, "retain initial structure", err)
@@ -129,19 +129,19 @@ func TestOnlyReferencedGenerationAndHeadSurviveIntermediatePublications(t *testi
 		name := fmt.Sprintf("file-%d.txt", i)
 		writeIndexFile(t, root.Path, name, "source")
 		catalog.InvalidateRoot(root.Path, name)
-		_, err := catalog.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{})
+		_, err := catalog.Directories.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{})
 		testutil.FailErr(t, "publish changed membership", err)
 		if i == 5 {
-			current, openErr := catalog.OpenNavigation(t.Context(), "p", root)
+			current, openErr := catalog.Directories.OpenNavigation(t.Context(), "p", root)
 			testutil.FailErr(t, "open intermediate generation", openErr)
 			intermediate = current.Generation
 			testutil.FailErr(t, "close intermediate generation", current.Close())
 		}
 	}
-	store, err := catalog.indexStore(t.Context(), "p", root)
+	store, err := catalog.Trees.indexStore(t.Context(), "p", root)
 	testutil.FailErr(t, "resolve store", err)
 	store.mu.Lock()
-	checkpointDone := store.drainStructuralCheckpointLocked()
+	checkpointDone := store.checkpoint.Drain()
 	store.mu.Unlock()
 	if checkpointDone != nil {
 		select {
@@ -171,16 +171,16 @@ func TestOnlyReferencedGenerationAndHeadSurviveIntermediatePublications(t *testi
 func TestReleaseTreeRootPreservesPinnedGeneration(t *testing.T) {
 	catalog, root := indexFixture(t)
 	writeIndexFile(t, root.Path, "first.txt", "source")
-	_, err := catalog.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{})
+	_, err := catalog.Directories.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{})
 	testutil.FailErr(t, "observe initial directory", err)
-	navigation, err := catalog.OpenNavigation(t.Context(), "p", root)
+	navigation, err := catalog.Directories.OpenNavigation(t.Context(), "p", root)
 	testutil.FailErr(t, "open navigation", err)
 	pin, err := navigation.Retain()
 	testutil.FailErr(t, "retain generation", err)
 	testutil.FailErr(t, "close navigation", navigation.Close())
 	defer pin.Release()
 
-	testutil.FailErr(t, "release detached root", catalog.ReleaseTreeRoot(t.Context(), root.Path))
+	testutil.FailErr(t, "release detached root", catalog.Trees.ReleaseTreeRoot(t.Context(), root.Path))
 	retained, err := pin.OpenNavigation(t.Context())
 	testutil.FailErr(t, "open navigation from retired pin", err)
 	testutil.FailErr(t, "close retained navigation", retained.Close())

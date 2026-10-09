@@ -107,7 +107,7 @@ func TestIndexLiteralPreparationSurvivesSearchCancellation(t *testing.T) {
 		return literalTestOpener(root.Path)(entry)
 	}}
 	ctx, cancel := context.WithCancel(t.Context())
-	page := c.IndexLiteralCandidates(ctx, r, query, entries)
+	page := c.Literals.IndexLiteralCandidates(ctx, r, query, entries)
 	if len(page.Candidates) != 2 || !page.Warming {
 		t.Fatalf("cold candidates=%d warming=%v", len(page.Candidates), page.Warming)
 	}
@@ -121,13 +121,13 @@ func TestIndexLiteralPreparationSurvivesSearchCancellation(t *testing.T) {
 		t.Fatal("content preparation lost its scope")
 	}
 	<-build.done
-	page = c.IndexLiteralCandidates(t.Context(), r, query, entries)
+	page = c.Literals.IndexLiteralCandidates(t.Context(), r, query, entries)
 	if page.Warming || !slices.Equal(literalCandidatePaths(page.Candidates), []string{"a.txt"}) {
 		t.Fatalf("warm candidates=%v warming=%v", literalCandidatePaths(page.Candidates), page.Warming)
 	}
 	writeTreeTestFile(t, root.Path, "b.txt", "needle!!!")
 	c.InvalidateRoot(root.Path, "b.txt")
-	page = c.IndexLiteralCandidates(t.Context(), r, query, entries)
+	page = c.Literals.IndexLiteralCandidates(t.Context(), r, query, entries)
 	if !slices.Equal(literalCandidatePaths(page.Candidates), []string{"a.txt", "b.txt"}) {
 		t.Fatalf("stale generation lost changed candidate: %v", literalCandidatePaths(page.Candidates))
 	}
@@ -139,12 +139,12 @@ func TestIndexLiteralScopesBoundAndDrainQueuedWorkers(t *testing.T) {
 	root := Root{ID: "root", Path: t.TempDir()}
 	writeTreeTestFile(t, root.Path, "a.txt", "source")
 	reader := readyIndex(t, c, root)
-	c.broker = backgroundwork.New(map[backgroundwork.Resource]backgroundwork.Limits{backgroundwork.ResourceIO: {Total: 1, PerLane: 1}})
-	release, err := c.broker.Acquire(t.Context(), backgroundwork.Request{Lane: root.Path, Resources: []backgroundwork.Resource{backgroundwork.ResourceIO}})
+	c.Literals.broker = backgroundwork.New(map[backgroundwork.Resource]backgroundwork.Limits{backgroundwork.ResourceIO: {Total: 1, PerLane: 1}})
+	release, err := c.Literals.broker.Acquire(t.Context(), backgroundwork.Request{Lane: root.Path, Resources: []backgroundwork.Resource{backgroundwork.ResourceIO}})
 	testutil.FailErr(t, "hold content admission", err)
 	defer release()
 	for i := range literalIndexCacheCap + 3 {
-		c.prepareIndexLiterals(t.Context(), reader, LiteralQuery{IncludeKey: fmt.Sprint(i), Open: literalTestOpener(root.Path)})
+		c.Literals.prepareIndexLiterals(t.Context(), reader, LiteralQuery{IncludeKey: fmt.Sprint(i), Open: literalTestOpener(root.Path)})
 	}
 	reader.store.mu.Lock()
 	count := len(reader.store.content)

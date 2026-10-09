@@ -85,7 +85,7 @@ type repositoryIndex interface {
 }
 
 // NewProvider uses the supplied catalog and root identities.
-func NewProvider(catalog *sourcecatalog.Catalog, resolve CatalogRootResolver, cacheDir string) Provider {
+func NewProvider(catalog repositoryIndex, resolve CatalogRootResolver, cacheDir string) Provider {
 	if catalog == nil || resolve == nil {
 		panic("repo provider requires a catalog and root resolver")
 	}

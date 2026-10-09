@@ -19,7 +19,7 @@ import (
 
 func checkpointTestStore(t *testing.T) *indexStore {
 	t.Helper()
-	return &indexStore{catalog: New(), structureFile: filepath.Join(t.TempDir(), "snapshot.tree"),
+	return &indexStore{stores: New().Trees, structureFile: filepath.Join(t.TempDir(), "snapshot.tree"),
 		storeCore: storeCore{root: Root{ID: "checkpoint-root", Path: t.TempDir()}}}
 }
 
@@ -249,10 +249,8 @@ func TestStructuralCheckpointRejectsCompleteUnlistedDirectory(t *testing.T) {
 func TestStructuralCheckpointAtomicWriteAndDrain(t *testing.T) {
 	store := checkpointTestStore(t)
 	store.structure = checkpointTestGeneration(t, store, nil, 20)
-	store.scheduleStructuralCheckpoint(t.Context())
-	store.mu.Lock()
-	done := store.checkpoint.done
-	store.mu.Unlock()
+	store.checkpoint.Schedule(t.Context(), store.checkpointStructure)
+	done, _ := store.checkpoint.Status()
 	if done != nil {
 		select {
 		case <-done:
@@ -260,20 +258,14 @@ func TestStructuralCheckpointAtomicWriteAndDrain(t *testing.T) {
 			t.Fatal("checkpoint did not settle")
 		}
 	}
-	store.mu.Lock()
-	err := store.checkpoint.lastError
-	store.mu.Unlock()
+	_, err := store.checkpoint.Status()
 	testutil.FailErr(t, "asynchronous checkpoint", err)
 	loaded, err := loadStructuralCheckpoint(t.Context(), store, false)
 	testutil.FailErr(t, "load atomic checkpoint", err)
 	loaded.close()
-	store.mu.Lock()
-	store.drainStructuralCheckpointLocked()
-	store.mu.Unlock()
-	store.scheduleStructuralCheckpoint(t.Context())
-	store.mu.Lock()
-	defer store.mu.Unlock()
-	if store.checkpoint.done != nil {
+	store.checkpoint.Drain()
+	store.checkpoint.Schedule(t.Context(), store.checkpointStructure)
+	if active, _ := store.checkpoint.Status(); active != nil {
 		t.Fatal("checkpoint admitted after drain")
 	}
 }
@@ -281,15 +273,15 @@ func TestStructuralCheckpointAtomicWriteAndDrain(t *testing.T) {
 func TestStructuralCheckpointDrainCancelsQueuedIO(t *testing.T) {
 	store := checkpointTestStore(t)
 	store.structure = checkpointTestGeneration(t, store, nil, 2)
-	store.catalog.broker = backgroundwork.New(map[backgroundwork.Resource]backgroundwork.Limits{backgroundwork.ResourceIO: {Total: 1}})
-	release, err := store.catalog.broker.Acquire(t.Context(), backgroundwork.Request{Resources: []backgroundwork.Resource{backgroundwork.ResourceIO}})
+	store.stores.broker = backgroundwork.New(map[backgroundwork.Resource]backgroundwork.Limits{backgroundwork.ResourceIO: {Total: 1}})
+	release, err := store.stores.broker.Acquire(t.Context(), backgroundwork.Request{Resources: []backgroundwork.Resource{backgroundwork.ResourceIO}})
 	testutil.FailErr(t, "hold checkpoint IO capacity", err)
 	defer release()
 	for range 100 {
-		store.scheduleStructuralCheckpoint(t.Context())
+		store.checkpoint.Schedule(t.Context(), store.checkpointStructure)
 	}
 	store.mu.Lock()
-	done := store.drainStructuralCheckpointLocked()
+	done := store.checkpoint.Drain()
 	store.mu.Unlock()
 	if done != nil {
 		select {
@@ -305,18 +297,18 @@ func TestStructuralCheckpointDrainCancelsQueuedIO(t *testing.T) {
 
 func TestStructuralCheckpointRetention(t *testing.T) {
 	catalog := New()
-	catalog.treeDir = t.TempDir()
-	file := filepath.Join(catalog.treeDir, "expired.tree")
+	catalog.Trees.treeDir = t.TempDir()
+	file := filepath.Join(catalog.Trees.treeDir, "expired.tree")
 	testutil.FailErr(t, "write expired cache", os.WriteFile(file, []byte("cache"), 0o600))
 	old := time.Now().Add(-2 * TreeStoreRetention)
 	testutil.FailErr(t, "age expired cache", os.Chtimes(file, old, old))
 	// Visible scratch files are orphaned only after the grace period.
-	orphan := filepath.Join(catalog.treeDir, "structural-segments-1.tmp")
+	orphan := filepath.Join(catalog.Trees.treeDir, "structural-segments-1.tmp")
 	testutil.FailErr(t, "write orphaned scratch", os.WriteFile(orphan, []byte("spill"), 0o600))
 	testutil.FailErr(t, "age orphaned scratch", os.Chtimes(orphan, old, old))
-	fresh := filepath.Join(catalog.treeDir, "structural-scan-2.tmp")
+	fresh := filepath.Join(catalog.Trees.treeDir, "structural-scan-2.tmp")
 	testutil.FailErr(t, "write fresh scratch", os.WriteFile(fresh, []byte("spool"), 0o600))
-	removed, err := catalog.ReconcileTreeStores(t.Context(), TreeStoreRetention)
+	removed, err := catalog.Trees.ReconcileTreeStores(t.Context(), TreeStoreRetention)
 	testutil.FailErr(t, "reconcile structural caches", err)
 	if removed != 1 {
 		t.Fatalf("removed structural caches = %d", removed)
@@ -412,15 +404,12 @@ func TestStructuralCheckpointCooldownCoalescesAndCancels(t *testing.T) {
 	store := checkpointTestStore(t)
 	store.structure = checkpointTestGeneration(t, store, nil, 2)
 	store.checkpoint.nextWrite = time.Now().Add(time.Hour)
-	store.scheduleStructuralCheckpoint(t.Context())
-	store.mu.Lock()
-	first := store.checkpoint.done
-	store.mu.Unlock()
-	store.scheduleStructuralCheckpoint(t.Context())
-	store.mu.Lock()
-	duplicate := store.checkpoint.done != first
-	done := store.drainStructuralCheckpointLocked()
-	store.mu.Unlock()
+	store.checkpoint.Schedule(t.Context(), store.checkpointStructure)
+	first, _ := store.checkpoint.Status()
+	store.checkpoint.Schedule(t.Context(), store.checkpointStructure)
+	current, _ := store.checkpoint.Status()
+	duplicate := current != first
+	done := store.checkpoint.Drain()
 	if duplicate {
 		t.Fatal("duplicate checkpoint worker during cooldown")
 	}
