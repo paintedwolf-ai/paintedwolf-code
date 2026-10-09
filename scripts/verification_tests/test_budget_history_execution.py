@@ -19,14 +19,15 @@ class HistoryTests(unittest.TestCase):
                     'spans': [{'file': 'pkg/server.go', 'first': 20, 'last': 30}]}
         _, latest = validate(report([source, directory, receiver]), 'a' * 40, 'b' * 40)
         prior = dict(source_sha='c' * 40)
-        for changed, additions, expected in [
-            ({'pkg/server.go': {5}}, [], {'source_files'}),
-            ({'pkg/server.go': {25}}, [], {'source_files', 'go_receiver_lines'}),
-            ({'pkg/new.go': {1}}, ['pkg/new.go'], {'source_directories'}),
+        for paths, changed, additions, expected in [
+            (['pkg/server.go'], {'pkg/server.go': {5}}, [], {'source_files'}),
+            (['pkg/server.go'], {'pkg/server.go': {25}}, [], {'source_files', 'go_receiver_lines'}),
+            (['pkg/new.go'], {'pkg/new.go': {1}}, ['pkg/new.go'], {'source_directories'}),
+            (['pkg/server.go'], {}, [], {'source_files'}),
         ]:
             with self.subTest(changed=changed), patch.object(history, 'ancestor', return_value=True), \
                     patch.object(history.change_report, 'git') as git, \
-                    patch.object(history.change_report, 'changed_paths', return_value=list(changed)), \
+                    patch.object(history.change_report, 'changed_paths', return_value=paths), \
                     patch.object(history.change_report, 'changed_lines', return_value=changed), \
                     patch.object(history.change_report, 'added_and_removed', return_value=(additions, [])):
                 git.return_value.stdout = 'a' * 40

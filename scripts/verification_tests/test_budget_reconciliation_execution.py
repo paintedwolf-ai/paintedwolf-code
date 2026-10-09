@@ -150,6 +150,25 @@ class ReconciliationTests(unittest.TestCase):
             tracker.reconcile(run())
         self.assertFalse(any(len(call.args) > 1 for call in api.call_args_list))
 
+    def test_main_advance_during_throttle_prevents_stale_issue_write(self):
+        current = True
+        def advance(_seconds):
+            nonlocal current
+            current = False
+        with patch.dict('os.environ', GITHUB_REPOSITORY='owner/repo'), \
+                patch.object(tracker, 'current_main', side_effect=lambda _sha: current), \
+                patch.object(tracker, 'api', return_value={'tree': {'sha': 'b' * 40}}) as api, \
+                patch.object(tracker, 'merged_pulls', return_value=[self.pull]), \
+                patch.object(tracker, 'pages', return_value=[]), \
+                patch.object(tracker, 'read_snapshot', return_value=validate(report(), 'a' * 40, 'b' * 40)), \
+                patch.object(tracker, 'checkpoint', return_value=None), \
+                patch.object(tracker, 'intake', return_value=set(validate(report(), 'a' * 40, 'b' * 40)[1])), \
+                patch.object(tracker.time, 'sleep', side_effect=advance):
+            result = tracker.reconcile(run())
+        self.assertEqual(result['stopped'], 'main advanced during reconciliation')
+        self.assertNotIn('checkpoint', result)
+        self.assertFalse(any(len(call.args) > 1 for call in api.call_args_list))
+
     def test_applied_create_is_idempotent_on_repeated_run(self):
         first, _, _ = self.invoke()
         current = issue(body=first['operations'][0]['body']['body'])

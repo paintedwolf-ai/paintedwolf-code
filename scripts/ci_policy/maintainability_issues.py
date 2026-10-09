@@ -61,11 +61,11 @@ def reconcile(run, dry_run=False, backfill=False, save_plan=None):
         save_plan(report)
     if not dry_run:
         for operation in selected:
+            time.sleep(1)
             # A full later snapshot converges state; do not write older evidence once main advances.
             if not current_main(run['head_sha']):
                 report['stopped'] = 'main advanced during reconciliation'
                 break
-            time.sleep(1)
             path = f'{repository()}/issues'
             if operation['action'] == 'create':
                 api(path, 'POST', operation['body'])

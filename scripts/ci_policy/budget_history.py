@@ -75,7 +75,7 @@ def intake(run, rows, prior):
             touched = any(any(span['first'] <= line <= span['last'] for line in lines.get(span['file'], []))
                           for span in row['spans'])
         else:
-            touched = row['id'] in lines
+            touched = row['id'] in paths
         if touched:
             identities.add(identity)
     return identities
