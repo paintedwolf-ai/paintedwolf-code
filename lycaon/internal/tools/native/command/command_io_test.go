@@ -6,9 +6,11 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/commandsurface"
+	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -225,4 +227,46 @@ func commandIOFor(ctx context.Context, b *sandbox.Boundary, tctx tools.ToolConte
 		return hostcmd.IOParams{}, err
 	}
 	return CommandIO(ctx, b, tctx, plan, args, tool)
+}
+
+func TestCommandIOInlineReadResolveFailure(t *testing.T) {
+	root := t.TempDir()
+	b := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true}, []sandbox.ToolProfile{
+		{ID: "implement", Tools: map[string]bool{"read": true, "write": true, "command": true}},
+	})
+	args := map[string]any{"command": "sort < /outside/missing.txt"}
+	_, err := commandIOFor(t.Context(), b, testToolContext(root), args, "command")
+	if err == nil {
+		t.Fatal("expected error resolving outside inline read")
+	}
+}
+
+func TestCommandIOParseEnvValidation(t *testing.T) {
+	root := t.TempDir()
+	tc := testToolContext(root)
+
+	// Line 145: env is not an object
+	_, err := commandIOFor(t.Context(), nil, tc, map[string]any{"command": "true", "env": "not-an-object"}, "command")
+	if err == nil || !strings.Contains(err.Error(), "env must be an object") {
+		t.Fatalf("err = %v, want env must be an object", err)
+	}
+
+	// Line 154: env value is not a string
+	_, err = commandIOFor(t.Context(), nil, tc, map[string]any{"command": "true", "env": map[string]any{"FOO": 123}}, "command")
+	if err == nil || !strings.Contains(err.Error(), "must be a string") {
+		t.Fatalf("err = %v, want must be a string", err)
+	}
+
+	// Line 158: env key is empty
+	_, err = commandIOFor(t.Context(), nil, tc, map[string]any{"command": "true", "env": map[string]any{"   ": "val"}}, "command")
+	if err == nil || !strings.Contains(err.Error(), "env key is empty") {
+		t.Fatalf("err = %v, want env key is empty", err)
+	}
+}
+
+func TestCommitCommandOutputWithoutCommitter(t *testing.T) {
+	err := commitCommandOutput(t.Context(), tools.ToolContext{}, fseffect.Location{}, strings.NewReader("out"), false)
+	if err == nil || !strings.Contains(err.Error(), "output committer not configured") {
+		t.Fatalf("err = %v, want output committer not configured", err)
+	}
 }

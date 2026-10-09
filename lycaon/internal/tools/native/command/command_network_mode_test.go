@@ -7,6 +7,7 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/packageexec"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
 )
 
 // Command results state the applied network mode.
@@ -88,5 +89,19 @@ func TestCommandResultStatesRemotePackageBoundaryOnSuccess(t *testing.T) {
 		!result.RemotePackageExecution.AmbientCredentialsRemoved ||
 		!result.RemotePackageExecution.ProtectedReadsDenied {
 		t.Fatalf("remote package boundary = %+v", result.RemotePackageExecution)
+	}
+}
+
+func TestCommandNetworkLifecycleCompleteBranches(t *testing.T) {
+	// Line 37: nil receiver
+	var nilLifecycle *commandNetworkLifecycle
+	if hosts := nilLifecycle.complete(t.Context()); hosts != nil {
+		t.Fatalf("nil lifecycle hosts = %v, want nil", hosts)
+	}
+
+	// Line 49: directApplied lifecycle
+	lc := newCommandNetworkLifecycle(tools.ToolContext{SessionID: "sess-1"}, "command", nil, true)
+	if hosts := lc.complete(t.Context()); len(hosts) != 0 {
+		t.Fatalf("hosts = %v, want empty", hosts)
 	}
 }
