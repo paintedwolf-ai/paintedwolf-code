@@ -104,3 +104,42 @@ func TestExplicitFreshStartRetainsOldEditorWorkWithItsRecoveryDatabase(t *testin
 		t.Fatal("fresh-start recovery lost pending editor work")
 	}
 }
+
+func TestUpgradeRecoveryCountsOutboxOnceAfterVerifiedPublication(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "store.db")
+	database := testdbfixture.OpenPath(t, path)
+	relative, want := seedEditorOutbox(t, root)
+	plan, err := db.PlanUpgrade(t.Context(), database)
+	testutil.FailErr(t, "plan recovery", err)
+	var captures []backup.RecoveryCaptureUsage
+	opts := backup.CreateOpts{ConfigDir: root, DBPath: path, SQLDB: database, SchemaUserVersion: db.SchemaVersion, AppVersion: "test"}
+	opts.OnRecoveryCapture = func(usage backup.RecoveryCaptureUsage) {
+		archive, _, err := backup.LatestUpgradeRecovery(t.Context(), root)
+		testutil.FailErr(t, "verify published capture in observer", err)
+		got, err := os.ReadFile(filepath.Join(archive, relative))
+		testutil.FailErr(t, "read captured editor work in observer", err)
+		if string(got) != string(want) {
+			t.Fatal("observer preceded complete editor capture")
+		}
+		info, err := os.Stat(filepath.Join(archive, "store.db"))
+		testutil.FailErr(t, "stat captured database", err)
+		if usage.DatabaseBytes != info.Size() {
+			t.Fatalf("database accounting = %d, actual = %d", usage.DatabaseBytes, info.Size())
+		}
+		captures = append(captures, usage)
+	}
+	testutil.FailErr(t, "capture pending editor work", backup.CaptureUpgradeRecovery(t.Context(), opts, plan, "next"))
+	testutil.FailErr(t, "retry interrupted boot", backup.CaptureUpgradeRecovery(t.Context(), opts, plan, "next"))
+	if len(captures) != 1 {
+		t.Fatalf("fresh capture observers = %d, want 1", len(captures))
+	}
+	logInfo, err := os.Stat(filepath.Join(root, relative))
+	testutil.FailErr(t, "stat live record log", err)
+	headerInfo, err := os.Stat(filepath.Join(root, filepath.Dir(relative), "header.json"))
+	testutil.FailErr(t, "stat live transaction header", err)
+	usage := captures[0]
+	if usage.CopiedFiles+usage.SharedFiles != 2 || usage.PayloadCopiedBytes+usage.PayloadSharedBytes != logInfo.Size()+headerInfo.Size() {
+		t.Fatalf("outbox must count once, independently of clone support: %+v", usage)
+	}
+}
