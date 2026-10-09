@@ -199,8 +199,8 @@ data: {"type":"message_stop"}`,
 	if tc.Args["path"] != "a.txt" {
 		t.Fatalf("args = %+v", tc.Args)
 	}
-	if tc.Effects.ArgsTruncated || tc.Effects.ArgsMalformed {
-		t.Fatalf("complete args flagged: truncated=%v malformed=%v", tc.Effects.ArgsTruncated, tc.Effects.ArgsMalformed)
+	if tc.ArgsTruncated || tc.ArgsMalformed {
+		t.Fatalf("complete args flagged: truncated=%v malformed=%v", tc.ArgsTruncated, tc.ArgsMalformed)
 	}
 	if completion.Usage.PromptTokens != 8 || completion.Usage.CompletionTokens != 6 {
 		t.Fatalf("usage = %+v", completion.Usage)
@@ -278,10 +278,10 @@ data: {"type":"message_stop"}`,
 		t.Fatalf("tool_calls = %+v", completion.ToolCalls)
 	}
 	tc := completion.ToolCalls[0]
-	if !tc.Effects.ArgsTruncated {
+	if !tc.ArgsTruncated {
 		t.Fatalf("expected ArgsTruncated on max_tokens stop, got %+v", tc)
 	}
-	if tc.Effects.ArgsMalformed {
+	if tc.ArgsMalformed {
 		t.Fatalf("length-capped args must not be flagged malformed: %+v", tc)
 	}
 	if tc.WireID != "toolu_cut" || tc.Name != "write" {
