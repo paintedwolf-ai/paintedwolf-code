@@ -137,18 +137,28 @@ func (s *SourceHistory) planSourceHistory(ctx context.Context, operationID strin
 			}
 		}
 		undo := sourceMutationPlan{
-			Kind: "delete", ProjectID: original.ProjectID, WorkspaceID: original.WorkspaceID,
-			RootID: original.RootID, RootPath: original.RootPath, Path: original.Path,
-			AbsPath: targetAbs, RecoveryID: original.RecoveryID, RecoveryCount: original.RecoveryCount, TreeSHA: fingerprint,
-			EntryKind: original.EntryKind, Before: original.After, BaseSHA256: original.AfterSHA,
-			BeforeSize: original.AfterSize, Disposal: sourceDisposalTrash, BranchID: original.BranchID, Changed: true,
+			sourceMutationContent:     sourceMutationContent{Before: original.After, BaseSHA256: original.AfterSHA, BeforeSize: original.AfterSize},
+			sourceMutationRecovery:    sourceMutationRecovery{RecoveryID: original.RecoveryID, RecoveryCount: original.RecoveryCount, TreeSHA: fingerprint, Disposal: sourceDisposalTrash},
+			sourceMutationAttribution: sourceMutationAttribution{ProjectID: original.ProjectID, WorkspaceID: original.WorkspaceID, BranchID: original.BranchID},
+			Kind:                      "delete",
+			RootID:                    original.RootID,
+			RootPath:                  original.RootPath,
+			Path:                      original.Path,
+			AbsPath:                   targetAbs,
+			EntryKind:                 original.EntryKind,
+			Changed:                   true,
 		}
 		redo := sourceMutationPlan{
-			Kind: "restore", ProjectID: original.ProjectID, WorkspaceID: original.WorkspaceID,
-			RootID: original.RootID, RootPath: original.RootPath, Path: original.Path,
-			AbsPath: targetAbs, RecoveryID: original.RecoveryID, RecoveryCount: original.RecoveryCount, TreeSHA: fingerprint,
-			EntryKind: original.EntryKind, After: original.After, AfterSHA: original.AfterSHA,
-			AfterSize: original.AfterSize, BranchID: original.BranchID, Changed: true,
+			sourceMutationContent:     sourceMutationContent{After: original.After, AfterSHA: original.AfterSHA, AfterSize: original.AfterSize},
+			sourceMutationRecovery:    sourceMutationRecovery{RecoveryID: original.RecoveryID, RecoveryCount: original.RecoveryCount, TreeSHA: fingerprint},
+			sourceMutationAttribution: sourceMutationAttribution{ProjectID: original.ProjectID, WorkspaceID: original.WorkspaceID, BranchID: original.BranchID},
+			Kind:                      "restore",
+			RootID:                    original.RootID,
+			RootPath:                  original.RootPath,
+			Path:                      original.Path,
+			AbsPath:                   targetAbs,
+			EntryKind:                 original.EntryKind,
+			Changed:                   true,
 		}
 		kind := original.Kind
 		return sourceHistoryPlans{
@@ -157,11 +167,16 @@ func (s *SourceHistory) planSourceHistory(ctx context.Context, operationID strin
 		}, nil
 	case "delete":
 		undo := sourceMutationPlan{
-			Kind: "restore", ProjectID: original.ProjectID, WorkspaceID: original.WorkspaceID,
-			RootID: original.RootID, RootPath: original.RootPath, Path: original.Path,
-			AbsPath: original.AbsPath, NativeTrash: original.NativeTrash, RecoveryID: original.RecoveryID, RecoveryCount: original.RecoveryCount, TreeSHA: original.TreeSHA,
-			EntryKind: original.EntryKind, After: original.Before, AfterSHA: original.BaseSHA256,
-			AfterSize: original.BeforeSize, BranchID: original.BranchID, Changed: true,
+			sourceMutationContent:     sourceMutationContent{After: original.Before, AfterSHA: original.BaseSHA256, AfterSize: original.BeforeSize},
+			sourceMutationRecovery:    sourceMutationRecovery{NativeTrash: original.NativeTrash, RecoveryID: original.RecoveryID, RecoveryCount: original.RecoveryCount, TreeSHA: original.TreeSHA},
+			sourceMutationAttribution: sourceMutationAttribution{ProjectID: original.ProjectID, WorkspaceID: original.WorkspaceID, BranchID: original.BranchID},
+			Kind:                      "restore",
+			RootID:                    original.RootID,
+			RootPath:                  original.RootPath,
+			Path:                      original.Path,
+			AbsPath:                   original.AbsPath,
+			EntryKind:                 original.EntryKind,
+			Changed:                   true,
 		}
 		redo := original
 		plans := sourceHistoryPlans{undo: historyPlan(undo), redo: historyPlan(redo)}

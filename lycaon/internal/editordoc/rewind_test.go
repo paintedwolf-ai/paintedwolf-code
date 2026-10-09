@@ -6,7 +6,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/db"
-	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectsource"
 	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/sourcerewind"
@@ -76,7 +75,7 @@ func TestSourceRewindSelectivelyUndoesAgentTextAndPreservesSavedHumanText(t *tes
 	if got := f.disk(t, "a.txt"); got != "one\ntwo human\n" {
 		t.Fatalf("retry disk=%q", got)
 	}
-	versions, err := ledger.QueryFileVersions(ctx, f.project.ID, d.FileID, 10, 0)
+	versions, err := ledger.History.QueryFileVersions(ctx, f.project.ID, d.FileID, 10, 0)
 	testutil.FailErr(t, "read rewind versions", err)
 	if len(versions.Versions) == 0 || versions.Versions[0].Origin != api.SourceChangeOriginUser || versions.Versions[0].Cause != "session_rewind" {
 		t.Fatalf("versions=%+v", versions.Versions)

@@ -55,9 +55,20 @@ func (s *SourceMutationService) lifecycle(ctx context.Context, operationID strin
 			return nil, identityErr
 		}
 		encoded, _ := json.Marshal(SourceLifecycleResult{RootID: root.ID, Path: toRel})
-		plan := &sourceMutationPlan{Kind: kind, ProjectID: p.SourceID(), WorkspaceID: p.WorkspaceID(), RootID: root.ID, RootPath: root.Path,
-			Path: toRel, FromPath: fromRel, ToPath: toRel, FromAbs: fromAbs, ToAbs: toAbs,
-			EntryIdentity: identity, SessionID: sessionID, Turn: turn, Changed: true, Response: encoded}
+		plan := &sourceMutationPlan{
+			sourceMutationPublication: sourceMutationPublication{EntryIdentity: identity},
+			sourceMutationAttribution: sourceMutationAttribution{ProjectID: p.SourceID(), WorkspaceID: p.WorkspaceID(), SessionID: sessionID, Turn: turn},
+			Kind:                      kind,
+			RootID:                    root.ID,
+			RootPath:                  root.Path,
+			Path:                      toRel,
+			FromPath:                  fromRel,
+			ToPath:                    toRel,
+			FromAbs:                   fromAbs,
+			ToAbs:                     toAbs,
+			Changed:                   true,
+			Response:                  encoded,
+		}
 		info, statErr := os.Lstat(fromAbs)
 		if statErr != nil {
 			return nil, statErr
@@ -128,11 +139,20 @@ func (s *SourceMutationService) Delete(ctx context.Context, operationID string, 
 				return nil, ErrSourceNotEmpty
 			}
 		}
-		plan := &sourceMutationPlan{Kind: "delete", ProjectID: p.SourceID(), WorkspaceID: p.WorkspaceID(), RootID: root.ID, RootPath: root.Path,
-			Path: rel, AbsPath: abs, NativeTrash: &sourceTrashRecovery{}, Recursive: req.Recursive, Disposal: sourceDisposalTrash,
-			EntryKind: sourceEntryKind(info), BeforeSize: info.Size(),
-			SessionID: req.SessionID, Turn: req.Turn,
-			Changed: true, Response: json.RawMessage(`{}`)}
+		plan := &sourceMutationPlan{
+			sourceMutationContent:     sourceMutationContent{BeforeSize: info.Size()},
+			sourceMutationRecovery:    sourceMutationRecovery{NativeTrash: &sourceTrashRecovery{}, Disposal: sourceDisposalTrash},
+			sourceMutationAttribution: sourceMutationAttribution{ProjectID: p.SourceID(), WorkspaceID: p.WorkspaceID(), SessionID: req.SessionID, Turn: req.Turn},
+			Kind:                      "delete",
+			RootID:                    root.ID,
+			RootPath:                  root.Path,
+			Path:                      rel,
+			AbsPath:                   abs,
+			Recursive:                 req.Recursive,
+			EntryKind:                 sourceEntryKind(info),
+			Changed:                   true,
+			Response:                  json.RawMessage(`{}`),
+		}
 		plan.EntryIdentity, statErr = fspath.EntryIdentity(abs)
 		if statErr != nil { return nil, statErr }
 		return plan, nil

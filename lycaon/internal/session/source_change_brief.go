@@ -112,7 +112,7 @@ func (m *Manager) buildSourceChangeBrief(ctx context.Context, sess *api.Session)
 		Truncated:   len(effects) > sourceChangeBriefEffectCap,
 		SessionID:   sess.ID,
 		Roots:       roots,
-		Touched:     m.sessionTouchedPaths(ctx, sess, reader, roots),
+		Touched:     m.sessionTouchedPaths(ctx, sess, reader.Authorship, roots),
 	})
 }
 
@@ -157,14 +157,14 @@ func assembleSourceChangeBrief(in sourceChangeBriefInputs) inject.SourceChangeBr
 			order = append(order, effect.FileID)
 			continue
 		}
-		group.Effects++
+		group.effects++
 	}
 	for _, fileID := range order {
 		group := groups[fileID]
 		display := displaySourcePath(in.Roots, group.newest.RootID, group.newest.Path)
 		if (!in.Touched[group.newest.Path] && !in.Touched[display]) || len(brief.Files) >= sourceChangeBriefFileCap {
 			brief.OtherFiles++
-			brief.OtherEffects += group.Effects
+			brief.OtherEffects += group.effects
 			continue
 		}
 		brief.Files = append(brief.Files, inject.SourceChangeFile{
@@ -173,7 +173,7 @@ func assembleSourceChangeBrief(in sourceChangeBriefInputs) inject.SourceChangeBr
 			Detail:  group.newest.ActorDisplay(in.SessionID),
 			Op:      string(group.newest.Op),
 			At:      group.newest.TS.UTC().Format("15:04") + " UTC",
-			Effects: group.Effects,
+			Effects: group.effects,
 		})
 	}
 	return brief
@@ -183,7 +183,9 @@ func assembleSourceChangeBrief(in sourceChangeBriefInputs) inject.SourceChangeBr
 func (m *Manager) sessionTouchedPaths(
 	ctx context.Context,
 	sess *api.Session,
-	reader sourceProvenanceReader,
+	reader interface {
+		SessionAuthoredPaths(context.Context, string, string, string) ([]string, error)
+	},
 	roots []projectroot.RootRef,
 ) map[string]bool {
 	touched := make(map[string]bool)
@@ -195,7 +197,7 @@ func (m *Manager) sessionTouchedPaths(
 		}
 	}
 	for _, root := range roots {
-		authored, err := reader.Authorship.SessionAuthoredPaths(ctx, sess.ProjectID, sess.ID, root.ID)
+		authored, err := reader.SessionAuthoredPaths(ctx, sess.ProjectID, sess.ID, root.ID)
 		if err != nil {
 			continue
 		}

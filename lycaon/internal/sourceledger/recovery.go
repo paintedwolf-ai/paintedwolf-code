@@ -4,12 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"io"
+	"os"
+
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/sourceblob"
 	"github.com/lycaon/lycaon/internal/sourcesnapshot"
 	"github.com/lycaon/lycaon/internal/workspacebaseline"
-	"io"
-	"os"
 )
 
 // CopyRecoveryFile verifies the complete retained object while streaming it.

@@ -37,64 +37,77 @@ type sourceMutationAgent struct {
 	WorkspaceKind api.SourceWorkspaceKind `json:"workspace_kind,omitempty"`
 }
 
+// Admission identity stays flat in durable mutation plans.
+type sourceMutationAttribution struct {
+	Agent       *sourceMutationAgent `json:"agent,omitempty"`
+	ProjectID   string               `json:"project_id"`
+	BranchID    sourcebranch.ID      `json:"branch_id,omitempty"`
+	WorkspaceID string               `json:"workspace_id"`
+	SessionID   string               `json:"session_id,omitempty"`
+	Turn        int                  `json:"turn,omitempty"`
+	PersonID    string               `json:"person_id,omitempty"`
+	BatchID     string               `json:"batch_id,omitempty"`
+	Cause       string               `json:"cause,omitempty"`
+}
+
+type sourceMutationContent struct {
+	Encoding             string `json:"encoding,omitempty"`
+	BaseSHA256           string `json:"base_sha256,omitempty"`
+	AfterSHA             string `json:"after_sha256,omitempty"`
+	Before               []byte `json:"before,omitempty"`
+	After                []byte `json:"after,omitempty"`
+	BeforeSize           int64  `json:"before_size,omitempty"`
+	AfterSize            int64  `json:"after_size,omitempty"`
+	FileID               string `json:"file_id,omitempty"`
+	DerivedFromVersionID string `json:"derived_from_version_id,omitempty"`
+}
+
+type sourceMutationPublication struct {
+	CrossVolume         bool   `json:"cross_volume,omitempty"`
+	HoldAbs             string `json:"hold_abs,omitempty"`
+	MoveCleanupStarted  bool   `json:"move_cleanup_started,omitempty"`
+	HoldStarted         bool   `json:"hold_started,omitempty"`
+	DestinationIdentity string `json:"destination_identity,omitempty"`
+	EffectStarted       bool   `json:"effect_started,omitempty"`
+	StageIdentity       string `json:"stage_identity,omitempty"`
+	PublicationMode     uint32 `json:"publication_mode,omitempty"`
+	StageAbs            string `json:"stage_abs,omitempty"`
+	DeleteIdentity      string `json:"delete_identity,omitempty"`
+	DeleteStarted       bool   `json:"delete_started,omitempty"`
+	EntryIdentity       string `json:"entry_identity,omitempty"`
+}
+
+type sourceMutationRecovery struct {
+ NativeTrash *sourceTrashRecovery `json:"native_trash,omitempty"`
+	RecoveryID    string         `json:"recovery_id,omitempty"`
+	RecoveryCount int64          `json:"recovery_count,omitempty"`
+	Disposal      sourceDisposal `json:"disposal,omitempty"`
+	TreeSHA       string         `json:"tree_sha256,omitempty"`
+}
+
 type sourceMutationPlan struct {
-	NativeTrash *sourceTrashRecovery `json:"native_trash,omitempty"`
-	AgentEffect *sourceeffect.Plan `json:"agent_effect,omitempty"`
-	// Agent is nil for person-initiated operations.
-	Agent     *sourceMutationAgent `json:"agent,omitempty"`
-	Kind      string               `json:"kind"`
-	ProjectID string               `json:"project_id"`
-	// A zero BranchID selects trunk history.
-	BranchID sourcebranch.ID `json:"branch_id,omitempty"`
-	// WorkspaceID addresses the change event; history keys on the branch.
-	WorkspaceID         string          `json:"workspace_id"`
-	RootID              string          `json:"root_id"`
-	RootPath            string          `json:"root_path"`
-	Path                string          `json:"path,omitempty"`
-	FromPath            string          `json:"from_path,omitempty"`
-	ToPath              string          `json:"to_path,omitempty"`
-	AbsPath             string          `json:"abs_path,omitempty"`
-	FromAbs             string          `json:"from_abs,omitempty"`
-	ToAbs               string          `json:"to_abs,omitempty"`
-	CrossVolume         bool            `json:"cross_volume,omitempty"`
-	HoldAbs             string          `json:"hold_abs,omitempty"`
-	MoveCleanupStarted  bool            `json:"move_cleanup_started,omitempty"`
-	HoldStarted         bool            `json:"hold_started,omitempty"`
-	DestinationIdentity string          `json:"destination_identity,omitempty"`
-	EffectStarted       bool            `json:"effect_started,omitempty"`
-	StageIdentity       string          `json:"stage_identity,omitempty"`
-	PublicationMode     uint32          `json:"publication_mode,omitempty"`
-	StageAbs            string          `json:"stage_abs,omitempty"`
-	RecoveryID          string          `json:"recovery_id,omitempty"`
-	RecoveryCount       int64           `json:"recovery_count,omitempty"`
-	DeleteIdentity      string          `json:"delete_identity,omitempty"`
-	DeleteStarted       bool            `json:"delete_started,omitempty"`
-	Disposal            sourceDisposal  `json:"disposal,omitempty"`
-	EntryKind           SourceEntryKind `json:"entry_kind,omitempty"`
-	Recursive           bool            `json:"recursive,omitempty"`
-	Encoding            string          `json:"encoding,omitempty"`
-	BaseSHA256          string          `json:"base_sha256,omitempty"`
-	AfterSHA            string          `json:"after_sha256,omitempty"`
-	TreeSHA             string          `json:"tree_sha256,omitempty"`
-	EntryIdentity       string          `json:"entry_identity,omitempty"`
-	Before              []byte          `json:"before,omitempty"`
-	After               []byte          `json:"after,omitempty"`
-	BeforeSize          int64           `json:"before_size,omitempty"`
-	AfterSize           int64           `json:"after_size,omitempty"`
-	SessionID           string          `json:"session_id,omitempty"`
-	Turn                int             `json:"turn,omitempty"`
-	// PersonID is stamped at admission.
-	PersonID             string               `json:"person_id,omitempty"`
-	Changed              bool                 `json:"changed"`
-	BatchID              string               `json:"batch_id,omitempty"`
-	FileID               string               `json:"file_id,omitempty"`
-	DerivedFromVersionID string               `json:"derived_from_version_id,omitempty"`
-	Cause                string               `json:"cause,omitempty"`
-	HistoryEntryID       string               `json:"history_entry_id,omitempty"`
-	HistoryTransition    string               `json:"history_transition,omitempty"`
-	CreateParents        bool                 `json:"create_parents,omitempty"`
-	Writes               []sourceMutationPlan `json:"writes,omitempty"`
-	Response             json.RawMessage      `json:"response"`
+	sourceMutationContent
+	sourceMutationPublication
+	sourceMutationRecovery
+	sourceMutationAttribution
+	AgentEffect       *sourceeffect.Plan   `json:"agent_effect,omitempty"`
+	Kind              string               `json:"kind"`
+	RootID            string               `json:"root_id"`
+	RootPath          string               `json:"root_path"`
+	Path              string               `json:"path,omitempty"`
+	FromPath          string               `json:"from_path,omitempty"`
+	ToPath            string               `json:"to_path,omitempty"`
+	AbsPath           string               `json:"abs_path,omitempty"`
+	FromAbs           string               `json:"from_abs,omitempty"`
+	ToAbs             string               `json:"to_abs,omitempty"`
+	EntryKind         SourceEntryKind      `json:"entry_kind,omitempty"`
+	Recursive         bool                 `json:"recursive,omitempty"`
+	Changed           bool                 `json:"changed"`
+	HistoryEntryID    string               `json:"history_entry_id,omitempty"`
+	HistoryTransition string               `json:"history_transition,omitempty"`
+	CreateParents     bool                 `json:"create_parents,omitempty"`
+	Writes            []sourceMutationPlan `json:"writes,omitempty"`
+	Response          json.RawMessage      `json:"response"`
 }
 
 type sourceMutationRow struct {

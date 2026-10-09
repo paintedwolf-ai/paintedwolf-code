@@ -5,12 +5,13 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"sync"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/gitstate"
 	"github.com/lycaon/lycaon/internal/keylock"
 	"github.com/lycaon/lycaon/internal/sourcefeed"
-	"sync"
-	"time"
 )
 
 type GitStateReader interface {

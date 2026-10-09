@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -144,7 +143,7 @@ func TestFailedPromotionLeavesDocumentUnchanged(t *testing.T) {
 
 func TestHeldPromotionWinsExternalObservationRace(t *testing.T) {
 	f := newExternalFixture(t, map[string]string{"a.txt": "base\n"})
-	f.service.SetSourceMutations(projectsource.NewSourceMutationService(f.store.db, sourceledger.New(f.store.db, "")))
+	f.service.SetSourcePaths(projectsource.NewSourceMutationService(f.store.db, sourceledger.New(f.store.db, "")).Paths)
 	document := f.open(t, "a.txt")
 	hold := holdPromoted(t, f, "a.txt")
 	f.write(t, "a.txt", "base\npromoted\n")
@@ -173,7 +172,7 @@ func TestHeldPromotionWinsExternalObservationRace(t *testing.T) {
 
 func TestReleaseReobservesHeldPathsNotImported(t *testing.T) {
 	f := newExternalFixture(t, map[string]string{"a.txt": "base\n"})
-	f.service.SetSourceMutations(projectsource.NewSourceMutationService(f.store.db, sourceledger.New(f.store.db, "")))
+	f.service.SetSourcePaths(projectsource.NewSourceMutationService(f.store.db, sourceledger.New(f.store.db, "")).Paths)
 	document := f.open(t, "a.txt")
 	hold := holdPromoted(t, f, "a.txt")
 	f.write(t, "a.txt", "changed while held\n")
