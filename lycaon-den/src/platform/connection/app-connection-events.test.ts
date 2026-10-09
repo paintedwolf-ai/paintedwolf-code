@@ -1,6 +1,7 @@
 import { installConnectionFixtureCleanup, fetchHealth, noteHealthResponse, watchWindowExit, reconcileActiveScope, refreshCodeScanCache, noteStoreRevision, createLycaonClient, subscribeEvents, resetSessionEventRevisions, refreshPreflight, lastSubscribeOptions, lastSubscribeHandlers, subscribedProjectIds, closeMock, loadModule, testEntityRetire } from "./app-connection-test-fixture.ts";
 
 import { describe, expect, it, vi } from "vitest";
+import { LycaonApiError } from "../../api/http.ts";
 import { createAppStore } from "../../store/app-state.ts";
 
 import { createProjectsStore } from "../../store/projects-store.ts";
@@ -14,6 +15,38 @@ import { connectSourceTreeWorkspace } from "../../files/tree/source-tree-store.t
 
 installConnectionFixtureCleanup();
 describe("app connection events", () => {
+  it.each(["revision", "reconnect", "event"])("ignores a delayed %s scope failure from a replaced backend", async mode => {
+    const mod = await loadModule();
+    const appStore = createAppStore();
+    let rejectRead!: (error: Error) => void;
+    const client = {
+      listProjects: vi.fn(async () => []),
+      getSessionBootstrap: vi.fn(() => new Promise((_resolve, reject) => { rejectRead = reject; })),
+    };
+    createLycaonClient.mockReturnValue(client);
+    await mod.connectAppBackend(appStore);
+    appStore.actions.setCurrentSession({
+      id: "session-kept", project_id: "project-kept", workspace_path: "/tmp/p",
+      owner_person_id: "00000000-0000-4000-8000-000000000002", posture: "build",
+      status: "idle", created_at: "t", activity_at: "t", updated_at: "t",
+    });
+    const actual = await vi.importActual<typeof import("../../chat/session/session-reconcile.ts")>("../../chat/session/session-reconcile.ts");
+    reconcileActiveScope.mockImplementation(actual.reconcileActiveScope);
+    noteStoreRevision.mockReturnValue(mode === "revision");
+    const settled = mode === "event"
+      ? lastSubscribeOptions!.onReconcile!().catch(() => undefined)
+      : (lastSubscribeOptions!.onOpen!("reconnect"), Promise.resolve());
+    await vi.waitFor(() => expect(client.getSessionBootstrap).toHaveBeenCalledOnce());
+    createLycaonClient.mockReturnValue({ listProjects: vi.fn(async () => []) });
+    mod.attachKnownBackend(appStore, { baseUrl: "http://127.0.0.1:9992", apiToken: "replacement" });
+    const reset = vi.spyOn(appStore.actions, "resetChatForSessionSwitch");
+    rejectRead(new LycaonApiError("Missing from the old host", 404, "session_not_found"));
+    await settled;
+    await new Promise<void>(resolve => setImmediate(resolve));
+    expect(reset).not.toHaveBeenCalled();
+    expect(appStore.state.currentSession?.id).toBe("session-kept");
+  });
+
   it("ignores reconnect health after its backend was replaced", async () => {
     const mod = await loadModule();
     const appStore = createAppStore();

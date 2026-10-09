@@ -58,6 +58,7 @@ export function createConnectionReconcile(host: Pick<ConnectionHost, "generation
       await reconcileActiveScope(appStore, client, projectsRegistry(), {
         onSessionGone: handleSessionGone,
         resumeVisible: true,
+        shouldApply: () => generation === host.generation && host.client === client,
       }).catch(() => undefined);
     }
     host.assertCurrent(generation, client);
@@ -190,6 +191,7 @@ export function createConnectionReconcile(host: Pick<ConnectionHost, "generation
         await reconcileActiveScope(appStore, client, projectsRegistry(), {
           onSessionGone: handleSessionGone,
           resumeVisible: true,
+          shouldApply: () => generation === host.generation && host.client === client,
         }).catch(() => undefined);
       }
     } catch {

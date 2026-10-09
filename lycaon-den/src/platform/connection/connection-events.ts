@@ -165,6 +165,7 @@ export function createConnectionEvents(ports: EventPorts) {
           onSessionGone: ports.reconcile.handleSessionGone,
           resumeVisible: true,
           resumeEvents: false,
+          shouldApply: () => generation === ports.host.generation && ports.host.client === client,
         });
       }
       ports.host.assertCurrent(generation, client);

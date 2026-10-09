@@ -94,6 +94,7 @@ describe("app connection cache", () => {
     expect(reconcileActiveScope).toHaveBeenCalledWith(appStore, client, expect.anything(), {
       onSessionGone: expect.any(Function),
       resumeVisible: true,
+      shouldApply: expect.any(Function),
     });
   });
 
@@ -236,6 +237,7 @@ describe("app connection cache", () => {
       expect(reconcileActiveScope).toHaveBeenCalledWith(appStore, client, expect.anything(), {
         onSessionGone: expect.any(Function),
         resumeVisible: true,
+      shouldApply: expect.any(Function),
       });
     });
     expect(reconcileRecentsWithStores).not.toHaveBeenCalled();
