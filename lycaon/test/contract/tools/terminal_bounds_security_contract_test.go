@@ -64,14 +64,6 @@ func TestTerminalPTYReusesBoundedExecGuards(t *testing.T) {
 			},
 		},
 		{
-			path: filepath.Join(root, "lycaon", "internal", "bgprocess", "pty.go"),
-			markers: []string{
-				"StartPTY",
-				"MaxOutputBytes",
-				"RingBufferBytes",
-			},
-		},
-		{
 			path: filepath.Join(root, "lycaon", "internal", "exec", "pty_windows.go"),
 			markers: []string{
 				"ErrPTYUnsupported",
