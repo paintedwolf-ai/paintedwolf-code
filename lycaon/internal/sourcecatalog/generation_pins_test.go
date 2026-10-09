@@ -213,6 +213,10 @@ func TestPinnedTreeSurvivesExpiredOverBudgetReconciliation(t *testing.T) {
 	testutil.FailErr(t, "close head", head.Close())
 	store, err := catalog.Trees.indexStore(t.Context(), "p", root)
 	testutil.FailErr(t, "resolve store", err)
+	database, err := openTreeDB(t.Context(), store.file)
+	testutil.FailErr(t, "materialize active projection", err)
+	testutil.FailErr(t, "close projection fixture", database.Close())
+	testutil.FailErr(t, "materialize structural checkpoint", store.writePinnedCheckpoint(t.Context(), pin))
 	aged := time.Now().Add(-48 * time.Hour)
 	for _, file := range []string{store.file, store.structureFile} {
 		testutil.FailErr(t, "expire active generation", os.Chtimes(file, aged, aged))
