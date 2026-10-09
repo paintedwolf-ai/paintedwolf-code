@@ -80,7 +80,7 @@ func TestHandoffReserveVisibleOnPackBoardAndPeerLegWiring(t *testing.T) {
 		t.Fatalf("pack_board missing reservation: %q", out)
 	}
 
-	peer := h.Sessions.Manager.PeerReservations(ctx, childB.ID)
+	peer := h.Sessions.Manager.Workers.Workspaces.PeerReservations(ctx, childB.ID)
 	if len(peer) != 1 || peer[0].Path != "shellsim/builtins.py" || peer[0].JobID != "job-a" {
 		t.Fatalf("peer reservations = %+v", peer)
 	}

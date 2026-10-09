@@ -164,7 +164,7 @@ func TestInvestigateCoordinatorWriteLandsOnProjectTree(t *testing.T) {
 	if len(state.PendingOverlayIDs) != 0 {
 		t.Fatalf("PendingOverlayIDs = %v want empty", state.PendingOverlayIDs)
 	}
-	if h.Sessions.Manager.Allowed(sess.ID, "src/foo.go") {
+	if h.Sessions.Manager.Promotion.Allowed(sess.ID, "src/foo.go") {
 		t.Fatal("merge reconcile must not open investigate product path without promote conflict")
 	}
 

@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -33,9 +32,8 @@ func TestTerminalSendInputRedactedInPersistedTranscript(t *testing.T) {
 	if err := h.Sessions.Manager.Chats.SetAgentType(ctx, sess.ID, "implementer"); err != nil {
 		testutil.FailErr(t, "SetAgentType", err)
 	}
-	activation := turnload.NewLedger()
+	activation := h.Sessions.Manager.Coordinator.Loading.Ledger
 	activation.Activate(sess.ID, []string{"terminal_send"}, "type into the terminal")
-	h.Sessions.Manager.SetTurnLoads(activation)
 
 	if _, err := h.Sessions.Manager.Submissions.Prompt(ctx, sess.ID, "drive the menu"); err != nil {
 		testutil.FailErr(t, "Prompt", err)
