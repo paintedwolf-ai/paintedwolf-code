@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/conditions"
 	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
 	"github.com/lycaon/lycaon/internal/testutil"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -80,12 +81,34 @@ func TestInventoryAccountingRequiresBoundScansAndPreservesRevision(t *testing.T)
 	}
 }
 
+func startInventoryReview(t *testing.T) (*RunManager, *api.WorkflowRun, string) {
+	t.Helper()
+	mgr, _, blueprints, dir := testManager(t)
+	setTestRegistry(t, mgr, blueprints, conditions.TestRegistryDeps())
+	manifest := reviewLoopTestManifest()
+	manifest.PhaseDefs[0].ActivityLabel = "Reviewing inventory"
+	manifest.PhaseDefs[1].ActivityLabel = "Done"
+	def := manifest.PhaseDefs[0].ReviewLoop
+	def.RequireInventoryAccounted = true
+	def.VerdictSchema = map[string]string{"verdict": "SELECTED", "claims": "claims", "set_asides": "set_asides"}
+	def.ClaimStatuses = map[string]workflowdef.ClaimClass{"held": workflowdef.ClaimHeld}
+	raw, err := workflowdef.MarshalManifestYAML(manifest)
+	testutil.FailErr(t, "marshal inventory policy", err)
+	manifest, err = workflowdef.ParseManifestYAML([]byte(raw))
+	testutil.FailErr(t, "parse inventory policy", err)
+	if !manifest.PhaseDefs[0].ReviewLoop.RequireInventoryAccounted {
+		t.Fatal("inventory requirement lost during manifest round trip")
+	}
+	mgr.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"rltest@1.0.0": manifest})
+	run, err := startRun(t.Context(), mgr, "sess-1", "rltest", "1.0.0")
+	testutil.FailErr(t, "start review", err)
+	return mgr, run, dir
+}
+
 // Every defect in the model-authored candidate is labeled invalid; only a
 // structurally valid candidate yields a draft account.
 func TestCandidateAccountLabelsCandidateDefects(t *testing.T) {
-	mgr, _, blueprints, _ := testManager(t)
-	setTestRegistry(t, mgr, blueprints, conditions.TestRegistryDeps())
-	run := startReviewLoopRun(t.Context(), t, mgr)
+	mgr, run, _ := startInventoryReview(t)
 	manifest, err := mgr.Resolver.ForRun(t.Context(), run)
 	testutil.FailErr(t, "manifest", err)
 	phase, _ := manifest.PhaseByID(run.CurrentPhase)

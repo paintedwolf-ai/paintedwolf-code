@@ -7,19 +7,19 @@ import (
 
 	"github.com/lycaon/lycaon/internal/report"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestBlockedReportUsesFrozenEvidenceWithoutCompletion(t *testing.T) {
-	repair := workflow.ReviewRepair{State: "blocked", Phase: "claims", UpdatedAt: time.Now(), Responses: []workflow.ReviewRepairResponse{{ID: "r1"}, {ID: "r2"}, {ID: "r3"}}, Snapshot: &workflow.ReviewSnapshot{
+	repair := runstate.ReviewRepair{State: "blocked", Phase: "claims", UpdatedAt: time.Now(), Responses: []runstate.ReviewRepairResponse{{ID: "r1"}, {ID: "r2"}, {ID: "r3"}}, Snapshot: &runstate.ReviewSnapshot{
 		Vars:      map[string]any{},
 		Scans:     []wire.CodeScan{{ID: "scan", ScannerID: "sast", Status: wire.CodeScanStatusComplete, CoverageStatus: wire.ScanCoveragePartial, Warnings: []wire.ScanWarning{{Kind: wire.ScanWarningFilePartialSemantics, File: "src/core.go"}}}},
 		Candidate: map[string]any{"verdict": map[string]any{"claims": []any{map[string]any{"id": "candidate", "statement": "Unaccepted candidate observation"}}}},
 	}}
-	h := Handler{Deps: Deps{Runs: coverageRuns{vars: map[string]any{"review_repairs": []workflow.ReviewRepair{repair}}}}}
-	run := &wire.WorkflowRun{ID: "run", CurrentPhase: "claims", Status: wire.WorkflowRunStatusPaused, PauseReason: workflow.ReviewBlockedReason}
+	h := Handler{Deps: Deps{Runs: &runstate.Repository{Runs: coverageRuns{vars: map[string]any{"review_repairs": []runstate.ReviewRepair{repair}}}}}}
+	run := &wire.WorkflowRun{ID: "run", CurrentPhase: "claims", Status: wire.WorkflowRunStatusPaused, PauseReason: runstate.ReviewBlockedReason}
 	input, ok, err := h.blockedRunReport(t.Context(), run, workflowdef.Manifest{Name: "Security review"})
 	testutil.FailErr(t, "build paused snapshot", err)
 	if !ok || input.Completeness() != report.CompletenessIncomplete || input.Kind != report.BlockedReviewSnapshot {
@@ -49,11 +49,11 @@ func TestBlockedReportLabelsWorkerWorkAndOpenReviews(t *testing.T) {
 			CoverageGaps: []wire.WorkerCoverageGap{{ID: "gap-1", Subject: "admin routes", Reason: "timed out", Paths: []string{"admin/"}}},
 		},
 	}}
-	repair := workflow.ReviewRepair{State: "blocked", Phase: "claims", UpdatedAt: time.Now(), Diagnostics: []wire.ToolFeedback{{Code: "TOOL_ARGS_INVALID", Details: map[string]any{"reason": "coverage is not an object"}}},
-		Snapshot: &workflow.ReviewSnapshot{Vars: map[string]any{}, Workers: []wire.WorkerTask{worker}, Unavailable: []string{"scan ledger"}}}
+	repair := runstate.ReviewRepair{State: "blocked", Phase: "claims", UpdatedAt: time.Now(), Diagnostics: []wire.ToolFeedback{{Code: "TOOL_ARGS_INVALID", Details: map[string]any{"reason": "coverage is not an object"}}},
+		Snapshot: &runstate.ReviewSnapshot{Vars: map[string]any{}, Workers: []wire.WorkerTask{worker}, Unavailable: []string{"scan ledger"}}}
 	manifest := workflowdef.Manifest{Name: "Security review", PhaseDefs: []workflowdef.PhaseDef{{ID: "claims", ActivityLabel: "Stating claims", ReviewLoop: &workflowdef.ReviewLoopDef{RequiredAgents: []string{"skeptic"}}}}}
-	h := Handler{Deps: Deps{Runs: coverageRuns{vars: map[string]any{"review_repairs": []workflow.ReviewRepair{repair}}}}}
-	run := &wire.WorkflowRun{ID: "run", CurrentPhase: "claims", Status: wire.WorkflowRunStatusPaused, PauseReason: workflow.ReviewBlockedReason}
+	h := Handler{Deps: Deps{Runs: &runstate.Repository{Runs: coverageRuns{vars: map[string]any{"review_repairs": []runstate.ReviewRepair{repair}}}}}}
+	run := &wire.WorkflowRun{ID: "run", CurrentPhase: "claims", Status: wire.WorkflowRunStatusPaused, PauseReason: runstate.ReviewBlockedReason}
 	input, ok, err := h.blockedRunReport(t.Context(), run, manifest)
 	testutil.FailErr(t, "build snapshot", err)
 	if !ok || len(input.Findings) != 0 {
@@ -80,12 +80,12 @@ func TestBlockedReportLabelsWorkerWorkAndOpenReviews(t *testing.T) {
 
 // Only a blocked episode for the current phase yields a snapshot.
 func TestBlockedReportNeedsABlockedEpisodeForTheCurrentPhase(t *testing.T) {
-	run := &wire.WorkflowRun{ID: "run", CurrentPhase: "claims", Status: wire.WorkflowRunStatusPaused, PauseReason: workflow.ReviewBlockedReason}
-	for name, repair := range map[string]workflow.ReviewRepair{
-		"repairing":   {State: "repairing", Phase: "claims", Snapshot: &workflow.ReviewSnapshot{}},
-		"other phase": {State: "blocked", Phase: "challenge", Snapshot: &workflow.ReviewSnapshot{}},
+	run := &wire.WorkflowRun{ID: "run", CurrentPhase: "claims", Status: wire.WorkflowRunStatusPaused, PauseReason: runstate.ReviewBlockedReason}
+	for name, repair := range map[string]runstate.ReviewRepair{
+		"repairing":   {State: "repairing", Phase: "claims", Snapshot: &runstate.ReviewSnapshot{}},
+		"other phase": {State: "blocked", Phase: "challenge", Snapshot: &runstate.ReviewSnapshot{}},
 	} {
-		h := Handler{Deps: Deps{Runs: coverageRuns{vars: map[string]any{"review_repairs": []workflow.ReviewRepair{repair}}}}}
+		h := Handler{Deps: Deps{Runs: &runstate.Repository{Runs: coverageRuns{vars: map[string]any{"review_repairs": []runstate.ReviewRepair{repair}}}}}}
 		if _, ok, err := h.blockedRunReport(t.Context(), run, workflowdef.Manifest{}); ok || err != nil {
 			t.Fatalf("%s: ok %v err %v", name, ok, err)
 		}

@@ -140,9 +140,7 @@ func (m *Verdicts) RecordReviewLoopVerdict(
 	}
 	if !out.Valid {
 		// Only an exceeded iteration cap requests a decision.
-		if out.IterationCapExceeded {
-			m.notifyReviewLoopHeld(ctx, sessionID, true)
-		}
+		m.notifyReviewLoopHeld(ctx, sessionID, out.IterationCapExceeded)
 		return out, nil
 	}
 	if rl.FollowupAttempts > 0 {

@@ -159,7 +159,7 @@ func contextFromPromptErrorFixtures() map[string]map[string]any {
 			&runstate.NotRunnableError{RunID: "11111111-2222-4333-8444-555555555555", Reason: "paused", Status: wire.WorkflowRunStatusPaused},
 		),
 		"workflow_version_unavailable": usernotice.ContextFromPromptError(
-			&workflow.WorkflowVersionUnavailableError{WorkflowID: "security-survey", Version: "1.0.0"},
+			&runstate.WorkflowVersionUnavailableError{WorkflowID: "security-survey", Version: "1.0.0"},
 		),
 		"grounding_escalated": usernotice.ContextFromPromptError(session.ErrGroundingEscalated),
 		"workflow_active":     usernotice.ContextFromPromptError(runstate.ErrActiveRunExists),

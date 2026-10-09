@@ -294,6 +294,10 @@ func (m *SessionPolicy) AssertRunnable(ctx context.Context, runID string) error 
 	}
 	switch run.Status {
 	case api.WorkflowRunStatusRunning:
+		if m != nil && m.Resolver != nil {
+			_, err := m.Resolver.ForRun(ctx, run)
+			return err
+		}
 		return nil
 	case api.WorkflowRunStatusPaused:
 		return &runstate.NotRunnableError{RunID: runID, Status: run.Status, Reason: "paused"}

@@ -10,7 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/guidance/feedback"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/workflow"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -19,7 +19,7 @@ func runGateFeedback(t *testing.T, h *Harness, sessionID string) *feedback.GateF
 	t.Helper()
 	stock, err := feedback.LoadGateFeedbackCatalog()
 	testutil.FailErr(t, "LoadGateFeedbackCatalog", err)
-	active, ok := h.WorkflowMgr.ActiveManifest(context.Background(), sessionID)
+	active, ok := h.WorkflowMgr.Policy.ActiveManifest(context.Background(), sessionID)
 	if !ok {
 		t.Fatal("session has no active workflow manifest")
 	}
@@ -66,25 +66,25 @@ func TestWorkflowResumption_100RetainsPromptRulesAndGateFeedback(t *testing.T) {
 		UpdatedAt:       now,
 		Revision:        1,
 	}
-	err = h.WorkflowMgr.Store.CreateState(ctx, run100, dir, map[string]any{})
+	err = h.WorkflowMgr.Store.State.CreateState(ctx, run100, dir, map[string]any{})
 	testutil.FailErr(t, "create state for 1.0.0 run", err)
 
 	// Manifest resolution must resolve 1.0.0 manifest
-	manifest, err := h.WorkflowMgr.ManifestForRunID(ctx, runID)
+	manifest, err := h.WorkflowMgr.Resolver.ForRunID(ctx, runID)
 	testutil.FailErr(t, "ManifestForRunID", err)
 	if manifest.Version != "1.0.0" {
 		t.Fatalf("expected manifest version 1.0.0, got %q", manifest.Version)
 	}
 
 	// Satisfy evidence_passed:survey_claims gate so advance can proceed
-	vars, err := h.WorkflowMgr.Store.GetScaffoldVars(ctx, runID)
+	vars, err := h.WorkflowMgr.Store.Runs.GetScaffoldVars(ctx, runID)
 	testutil.FailErr(t, "GetScaffoldVars", err)
-	vars = workflow.SetGateSatisfied(vars, "evidence_passed:survey_claims", true)
-	err = h.WorkflowMgr.Store.UpdateVars(ctx, run100, dir, vars)
+	vars = runstate.SetGateSatisfied(vars, "evidence_passed:survey_claims", true)
+	err = h.WorkflowMgr.Store.State.UpdateVars(ctx, run100, dir, vars)
 	testutil.FailErr(t, "UpdateVars", err)
 
 	// Advance must succeed (1.0.0 is retired but resumable)
-	runAfter, err := h.WorkflowMgr.Advance(ctx, runID)
+	runAfter, err := h.WorkflowMgr.Phases.Advance(ctx, runID)
 	testutil.FailErr(t, "Advance 1.0.0 run to challenge", err)
 	if runAfter.CurrentPhase != "challenge" {
 		t.Fatalf("expected current phase challenge, got %q", runAfter.CurrentPhase)
@@ -136,7 +136,7 @@ func TestWorkflowResumption_100AdvancesThroughEveryPhase(t *testing.T) {
 		UpdatedAt:       now,
 		Revision:        1,
 	}
-	err = h.WorkflowMgr.Store.CreateState(ctx, run100, dir, map[string]any{})
+	err = h.WorkflowMgr.Store.State.CreateState(ctx, run100, dir, map[string]any{})
 	testutil.FailErr(t, "create state for 1.0.0 run", err)
 
 	type phaseStep struct {
@@ -153,18 +153,18 @@ func TestWorkflowResumption_100AdvancesThroughEveryPhase(t *testing.T) {
 	}
 
 	for _, step := range steps {
-		vars, err := h.WorkflowMgr.Store.GetScaffoldVars(ctx, runID)
+		vars, err := h.WorkflowMgr.Store.Runs.GetScaffoldVars(ctx, runID)
 		testutil.FailErr(t, "GetScaffoldVars in "+step.phase, err)
-		vars = workflow.SetGateSatisfied(vars, step.gate, true)
+		vars = runstate.SetGateSatisfied(vars, step.gate, true)
 		if step.phase == "execute" {
 			vars["worker_cycle"] = map[string]any{"evaluating": true, "summary_status": "complete"}
 		}
-		run100, err = h.WorkflowMgr.Get(ctx, runID)
+		run100, err = h.WorkflowMgr.Store.Runs.Get(ctx, runID)
 		testutil.FailErr(t, "Get run in "+step.phase, err)
-		err = h.WorkflowMgr.Store.UpdateVars(ctx, run100, dir, vars)
+		err = h.WorkflowMgr.Store.State.UpdateVars(ctx, run100, dir, vars)
 		testutil.FailErr(t, "UpdateVars in "+step.phase, err)
 
-		run100, err = h.WorkflowMgr.Advance(ctx, runID)
+		run100, err = h.WorkflowMgr.Phases.Advance(ctx, runID)
 		testutil.FailErr(t, "Advance from "+step.phase, err)
 		if run100.CurrentPhase != step.expected {
 			t.Fatalf("after advancing from %s, expected phase %q, got %q", step.phase, step.expected, run100.CurrentPhase)

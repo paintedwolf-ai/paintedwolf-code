@@ -74,7 +74,10 @@ func (s *Handler) BuildRunReportInput(ctx context.Context, runID string) (report
 		name = strings.TrimSpace(run.WorkflowID)
 	}
 
-	phaseVerdicts := workflowpresentation.ReviewVerdicts(ctx, s.Workflows.Verdicts, run, manifest)
+	phaseVerdicts, err := workflowpresentation.ReviewVerdicts(ctx, s.Workflows.Verdicts, run, manifest)
+	if err != nil {
+		return report.ReportInput{}, false, err
+	}
 	claims := workflowpresentation.ReconcileClaims(phaseVerdicts)
 	verdicts, channels, verdictURLs := projectVerdicts(phaseVerdicts)
 	cites := append(closeoutCitations(completion.Grounding), verdictCitations(verdicts, channels)...)
