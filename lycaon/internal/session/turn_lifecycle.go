@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -206,7 +207,7 @@ func (m *Manager) disarmCoordinatorLoopIfNoActiveRun(ctx context.Context, sessio
 
 // drainPendingLoopWakes re-enters prompts after releasing the session lock.
 func (m *Manager) drainPendingLoopWakes(ctx context.Context, sessionID string) error {
-	if m == nil {
+	if m == nil || m.engineStopping.Load() {
 		return nil
 	}
 	hostCtx := context.WithoutCancel(ctx)
@@ -225,6 +226,18 @@ func (m *Manager) BeginEngineShutdown() {
 		return
 	}
 	m.engineStopping.Store(true)
+	m.engineWork.Stop()
+	m.promptState.Stop()
+	m.catalog.Stop()
+	m.compactionRunner.Stop()
+}
+
+// WaitForEngineShutdown joins turns and detached catalog work before resource release.
+func (m *Manager) WaitForEngineShutdown(ctx context.Context) error {
+	if m == nil {
+		return nil
+	}
+	return errors.Join(m.engineWork.Wait(ctx), m.catalog.Wait(ctx), m.compactionRunner.WaitContext(ctx))
 }
 
 func (m *Manager) turnEndDisposition(promptFailed bool) api.SessionIdleDisposition {

@@ -49,3 +49,39 @@ func TestDetachPromptCancelReleasesStopContext(t *testing.T) {
 		t.Fatal("detachPromptCancel must release (cancel) the stop context")
 	}
 }
+
+func TestEngineShutdownCancelsStopContextAndRejectsLaterTurns(t *testing.T) {
+	m := &Manager{}
+	turn := m.attachPromptCancel(t.Context(), "before-stop")
+	m.BeginEngineShutdown()
+	select {
+	case <-hitl.WaitContext(turn).Done():
+	default:
+		t.Fatal("engine shutdown left the approval stop context live")
+	}
+	later := m.attachPromptCancel(t.Context(), "after-stop")
+	if later.Err() == nil {
+		t.Fatal("new prompt survived engine shutdown")
+	}
+	if _, _, err := m.engineWork.Begin(t.Context()); err == nil {
+		t.Fatal("engine work admitted after shutdown")
+	}
+}
+
+func TestEngineShutdownWaitsForTurnSettlement(t *testing.T) {
+	m := &Manager{}
+	_, finish, err := m.engineWork.Begin(t.Context())
+	if err != nil {
+		t.Fatalf("begin engine work: %v", err)
+	}
+	m.BeginEngineShutdown()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Millisecond)
+	defer cancel()
+	if err := m.WaitForEngineShutdown(ctx); err == nil {
+		t.Fatal("shutdown drained before turn settlement")
+	}
+	finish()
+	if err := m.WaitForEngineShutdown(t.Context()); err != nil {
+		t.Fatalf("drain settled turn: %v", err)
+	}
+}

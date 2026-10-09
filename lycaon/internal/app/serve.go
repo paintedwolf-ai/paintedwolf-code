@@ -114,15 +114,24 @@ func (a *ServeApp) Close() error {
 	if a == nil {
 		return nil
 	}
+	if a.SessionMgr != nil {
+		a.SessionMgr.BeginEngineShutdown()
+	}
 	a.stopRunners()
 	drainCtx, cancel := context.WithTimeout(context.Background(), resourceReleaseTimeout)
 	defer cancel()
 	if a.Server != nil {
 		a.Server.StopBackground()
+	}
+	var drainErr error
+	if a.SessionMgr != nil {
+		drainErr = a.SessionMgr.WaitForEngineShutdown(drainCtx)
+	}
+	if a.Server != nil {
 		a.Server.WaitForBackground(drainCtx)
 	}
 	// Store shutdown retains its reserved cleanup floor.
-	err := a.resources.Close(drainCtx)
+	err := errors.Join(drainErr, a.resources.Close(drainCtx))
 	a.profileWG.Wait()
 	a.DB = nil
 	return err

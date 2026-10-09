@@ -87,7 +87,7 @@ func TestFirstPromptWithDeclaredURLFiresIndexWarmerAndAppendsMessage(t *testing.
 	userText := "summarize https://docs.example/widget"
 	_, err = mgr.Prompt(ctx, sess.ID, userText)
 	testutil.FailErr(t, "prompt", err)
-	mgr.WaitForPromptCuration()
+	mgr.WaitForPromptCuration(t.Context())
 
 	declaredURLs := warmer.declaredURLsSeen()
 	if len(declaredURLs) != 1 || declaredURLs[0].urlSource != userText {
@@ -128,10 +128,10 @@ func TestEachPromptOffersItsDeclaredURLsToWarming(t *testing.T) {
 	first := "summarize https://docs.example/widget"
 	_, err = mgr.Prompt(ctx, sess.ID, first)
 	testutil.FailErr(t, "first prompt", err)
-	mgr.WaitForPromptCuration()
+	mgr.WaitForPromptCuration(t.Context())
 	_, err = mgr.Prompt(ctx, sess.ID, "also compare https://other.example/widget")
 	testutil.FailErr(t, "follow-up prompt", err)
-	mgr.WaitForPromptCuration()
+	mgr.WaitForPromptCuration(t.Context())
 
 	declaredURLs := warmer.declaredURLsSeen()
 	if len(declaredURLs) != 2 || declaredURLs[0].urlSource != first ||
@@ -151,7 +151,7 @@ func TestWarmDeclaredURLsWithoutCallbackResultAppendsNothing(t *testing.T) {
 
 	_, err = mgr.Prompt(ctx, sess.ID, "read https://docs.example/widget")
 	testutil.FailErr(t, "prompt", err)
-	mgr.WaitForPromptCuration()
+	mgr.WaitForPromptCuration(t.Context())
 	if len(warmer.declaredURLsSeen()) != 1 {
 		t.Fatalf("declared URL warm calls = %v", warmer.declaredURLsSeen())
 	}
@@ -198,7 +198,7 @@ func TestHostLoopWakeTextFromUserRemainsUserIntent(t *testing.T) {
 
 	_, err = mgr.Prompt(ctx, sess.ID, surface.HostLoopWakeSentinel)
 	testutil.FailErr(t, "prompt", err)
-	mgr.WaitForPromptCuration()
+	mgr.WaitForPromptCuration(t.Context())
 	if len(warmer.declaredURLsSeen()) != 1 {
 		t.Fatalf("first user prompt was not offered to declared-URL warmer: %v", warmer.declaredURLsSeen())
 	}

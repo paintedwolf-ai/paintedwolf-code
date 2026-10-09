@@ -136,3 +136,34 @@ func TestCompactionExecutionCancellationJoinsManual(t *testing.T) {
 	}
 	r.Wait()
 }
+
+func TestCompactionRunnerStopCancelsAndSealsAllPasses(t *testing.T) {
+	r := NewCompactionRunner()
+	entered := make(chan struct{})
+	done := make(chan error, 1)
+	go func() {
+		done <- r.Execute(t.Context(), "manual", func(ctx context.Context) error {
+			close(entered)
+			<-ctx.Done()
+			return ctx.Err()
+		})
+	}()
+	<-entered
+	background := make(chan struct{})
+	r.Trigger(t.Context(), "background", func(ctx context.Context) {
+		close(background)
+		<-ctx.Done()
+	})
+	<-background
+	r.Stop()
+	if err := r.WaitContext(t.Context()); err != nil {
+		t.Fatalf("drain stopped passes: %v", err)
+	}
+	if err := <-done; !errors.Is(err, context.Canceled) {
+		t.Fatalf("manual cancellation: %v", err)
+	}
+	r.Trigger(t.Context(), "later", func(context.Context) { t.Error("background admitted after stop") })
+	if err := r.Execute(t.Context(), "later", func(context.Context) error { t.Error("manual admitted after stop"); return nil }); !errors.Is(err, context.Canceled) {
+		t.Fatalf("admit after stop: %v", err)
+	}
+}
