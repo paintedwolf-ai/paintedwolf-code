@@ -75,7 +75,7 @@ func RegisterSubmitVerdictTool(reg *tools.DefaultRegistry, runs *Verdicts) error
 		}
 		rl := *def.ReviewLoop
 		outline := verdictOutline(tctx.TurnOfferedToolSchemas["submit_verdict"], stock, rl, manifest.ReportBrief())
-		verdict, cited, citedURLs, err := parseSubmitVerdictArgs(rl, args)
+		verdict, cited, citedURLs, err := ParseSubmitVerdictArgs(rl, args)
 		if err != nil {
 			return rejectSubmitVerdict(tctx, workflowvalidation.ReviewLoopVerdictInvalidCode, active.CurrentPhase, verdictInvalidDetails(outline, err))
 		}
@@ -157,7 +157,7 @@ func RegisterSubmitVerdictTool(reg *tools.DefaultRegistry, runs *Verdicts) error
 }
 
 // Structured verdict fields retain JSON in the durable string-valued record.
-func parseSubmitVerdictArgs(def workflowdef.ReviewLoopDef, args map[string]any) (map[string]string, []api.CitationGroundingCitedEvidence, []string, error) {
+func ParseSubmitVerdictArgs(def workflowdef.ReviewLoopDef, args map[string]any) (map[string]string, []api.CitationGroundingCitedEvidence, []string, error) {
 	if args == nil {
 		return nil, nil, nil, fmt.Errorf("verdict object required")
 	}
@@ -449,10 +449,7 @@ func stampVerdictOutcome(tctx tools.ToolContext, rl workflowdef.ReviewLoopDef, o
 }
 
 // verdictRepair retains each refusal's code and facts in the same response.
-type verdictRepair struct {
-	Code    string         `json:"code"`
-	Details map[string]any `json:"details"`
-}
+type verdictRepair = runstate.VerdictRepair
 
 func verdictRepairs(outline string, out runstate.ReviewOutcome) []verdictRepair {
 	var repairs []verdictRepair

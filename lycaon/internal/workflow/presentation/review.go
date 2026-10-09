@@ -2,24 +2,21 @@ package presentation
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/guidance"
+	"fmt"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/evidence"
+	"github.com/lycaon/lycaon/internal/guidance"
 	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // PhaseVerdict is one review phase's last decided record, with the schema it
 // was recorded under.
-type PhaseVerdict struct {
-	Phase  string
-	Label  string
-	Def    workflowdef.ReviewLoopDef
-	Record evidence.Record
-}
+type PhaseVerdict = runstate.PhaseVerdict
 
 // RunClaim is one claim as the run's review phases left it.
 type RunClaim struct {
@@ -65,9 +62,9 @@ type ReviewEvidenceLister interface {
 // ReviewVerdicts reads every review phase's last decided record, in manifest
 // phase order. A later phase's verdict is a further decision, never a
 // replacement for an earlier one.
-func ReviewVerdicts(ctx context.Context, lister ReviewEvidenceLister, run *api.WorkflowRun, manifest workflowdef.Manifest) []PhaseVerdict {
+func ReviewVerdicts(ctx context.Context, lister ReviewEvidenceLister, run *api.WorkflowRun, manifest workflowdef.Manifest) ([]PhaseVerdict, error) {
 	if lister == nil || run == nil {
-		return nil
+		return nil, nil
 	}
 	seen := map[string]struct{}{}
 	var out []PhaseVerdict
@@ -83,20 +80,23 @@ func ReviewVerdicts(ctx context.Context, lister ReviewEvidenceLister, run *api.W
 			continue
 		}
 		seen[id] = struct{}{}
-		rec, ok := lastDecidedRecord(ctx, lister, run, id)
+		rec, ok, err := lastDecidedRecord(ctx, lister, run, id)
+		if err != nil {
+			return out, fmt.Errorf("read review phase %s: %w", id, err)
+		}
 		if !ok {
 			continue
 		}
 		out = append(out, PhaseVerdict{Phase: id, Label: def.ActivityLabel, Def: *def.ReviewLoop, Record: rec})
 	}
-	return out
+	return out, nil
 }
 
 // lastDecidedRecord is the newest record in a slot that carries a decision.
-func lastDecidedRecord(ctx context.Context, lister ReviewEvidenceLister, run *api.WorkflowRun, slot string) (rec evidence.Record, ok bool) {
+func lastDecidedRecord(ctx context.Context, lister ReviewEvidenceLister, run *api.WorkflowRun, slot string) (rec evidence.Record, ok bool, err error) {
 	recs, err := lister.ListReviewLoopEvidence(ctx, run.SessionID, run.ID, slot)
 	if err != nil {
-		return rec, false
+		return rec, false, err
 	}
 	for i := range recs {
 		candidate := recs[i]
@@ -105,7 +105,7 @@ func lastDecidedRecord(ctx context.Context, lister ReviewEvidenceLister, run *ap
 		}
 		rec, ok = candidate, true
 	}
-	return rec, ok
+	return rec, ok, nil
 }
 
 // RunSetAsides are the set-asides the run's review phases recorded, in phase
@@ -184,7 +184,6 @@ func cloneAnswers(in map[string]string) map[string]string {
 // VerdictRulesFor collects what a verdict in the run's current phase is also
 // checked against: the claim ids earlier records introduced, and the rating
 // questions the manifest declares.
-
 func SetAsideSelectors(in []guidance.CoordinatorSetAside) []scanfindings.SetAside {
 	out := make([]scanfindings.SetAside, 0, len(in))
 	for _, sa := range in {

@@ -336,7 +336,7 @@ func (m *Manager) coordinatorKickRenderContext(ctx context.Context, sessionID st
 			rc.FailedLeaves = append([]string(nil), frame.RunContext.FailedLeaves...)
 		}
 	}
-	rc.GateObligations = m.projectKickGateObligations(ctx, frame)
+	rc.GateObligations = m.projectKickGateObligations(ctx, sessionID, frame)
 	rc.ProgressOpenItems, rc.ProgressClosureArmed = m.kickProgressClosureState(ctx, sessionID)
 	return rc
 }
@@ -392,9 +392,15 @@ func unsatisfiedFrameGateLeaves(frame inject.CoordinatorTurnFrame) []string {
 	return leaves
 }
 
-func (m *Manager) projectKickGateObligations(ctx context.Context, frame inject.CoordinatorTurnFrame) []kick.GateObligation {
+func (m *Manager) projectKickGateObligations(ctx context.Context, sessionID string, frame inject.CoordinatorTurnFrame) []kick.GateObligation {
 	if m == nil || m.gateFeedback == nil {
 		return nil
+	}
+	fb := m.gateFeedback
+	if m.workflows != nil && m.workflows.Policy != nil {
+		if manifest, ok := m.workflows.Policy.ActiveManifest(ctx, sessionID); ok {
+			fb = fb.WithWorkflowArchive(manifest.Archive)
+		}
 	}
 	runCtx := frame.RunContext
 	leaves := unsatisfiedFrameGateLeaves(frame)
@@ -402,7 +408,7 @@ func (m *Manager) projectKickGateObligations(ctx context.Context, frame inject.C
 	if frame.Runtime.PhaseExit != nil {
 		extras = feedback.WithReviewAgents(extras, frame.Runtime.PhaseExit.ReviewAgents)
 	}
-	rows := m.gateFeedback.ProjectObligations(ctx, leaves, runCtx.AdvanceWhenGateMet, extras)
+	rows := fb.ProjectObligations(ctx, leaves, runCtx.AdvanceWhenGateMet, extras)
 	if len(rows) == 0 {
 		return nil
 	}

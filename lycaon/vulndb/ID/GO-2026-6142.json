@@ -1,0 +1,52 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/kube-logging/logging-operator"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "0.0.0-20260608145523-cf437d7f1e05"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-54680",
+  "GHSA-mjqf-28ph-426h"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6142"
+ },
+ "details": "Logging operator has Fluentd configuration injection that allows remote code execution in github.com/kube-logging/logging-operator",
+ "id": "GO-2026-6142",
+ "modified": "2026-08-18T14:32:29Z",
+ "published": "2026-08-18T14:32:29Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/kube-logging/logging-operator/security/advisories/GHSA-mjqf-28ph-426h"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/kube-logging/logging-operator/commit/cf437d7f1e056c78740bf5716ac8bdebcf002425"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/kube-logging/logging-operator/releases/tag/6.6.0"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Logging operator has Fluentd configuration injection that allows remote code execution in github.com/kube-logging/logging-operator"
+}

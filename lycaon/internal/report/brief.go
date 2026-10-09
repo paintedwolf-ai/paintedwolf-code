@@ -101,6 +101,9 @@ func defectLine(d ReportDefect) string {
 // answerRows is the opening line: the rating, then how complete the work is.
 func answerRows(ms *measurer, input ReportInput, completeness string) []measuredRow {
 	var runs []inlineRun
+	if input.Kind == BlockedReviewSnapshot {
+		return textRows(ms, []inlineRun{{Text: "Review incomplete"}}, labelProp())
+	}
 	if b := input.Brief; b != nil && len(b.Levels) > 0 {
 		runs = append(runs, inlineRun{Text: ratingAnswer(*b) + " ", Color: briefTone(b.Levels[b.Worst].Tone).ink})
 	}

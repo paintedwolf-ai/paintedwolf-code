@@ -1,0 +1,79 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/gofiber/fiber"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {
+    "imports": [
+     {
+      "path": "github.com/gofiber/fiber/v2/utils",
+      "symbols": [
+       "UUID",
+       "UUIDv4"
+      ]
+     }
+    ]
+   },
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/gofiber/fiber/v2"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "2.52.11"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2025-66630",
+  "GHSA-68rr-p4fp-j59v"
+ ],
+ "database_specific": {
+  "review_status": "REVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-4471"
+ },
+ "details": "Fiber has an insecure fallback in utils.UUIDv4() / utils.UUID() \u2014 predictable / zero\u2011UUID on crypto/rand failure in github.com/gofiber/fiber",
+ "id": "GO-2026-4471",
+ "modified": "2026-02-19T17:28:55Z",
+ "published": "2026-02-19T17:28:55Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/gofiber/fiber/security/advisories/GHSA-68rr-p4fp-j59v"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/gofiber/fiber/commit/eb874b6f6c5896b968d9b0ab2b56ac7052cb0ee1"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/gofiber/fiber/releases/tag/v2.52.11"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Fiber has an insecure fallback in utils.UUIDv4() / utils.UUID() on crypto/rand failure in github.com/gofiber/fiber"
+}

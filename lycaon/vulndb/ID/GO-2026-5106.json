@@ -1,0 +1,66 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/cloudnative-pg/cloudnative-pg"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.28.3"
+      },
+      {
+       "introduced": "1.29.0"
+      },
+      {
+       "fixed": "1.29.1"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-44477",
+  "GHSA-423p-g724-fr39"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5106"
+ },
+ "details": "CloudNativePG's metrics exporter allows privilege escalation to PostgreSQL superuser and OS RCE in github.com/cloudnative-pg/cloudnative-pg",
+ "id": "GO-2026-5106",
+ "modified": "2026-06-25T18:26:48Z",
+ "published": "2026-06-25T18:26:48Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/cloudnative-pg/cloudnative-pg/security/advisories/GHSA-423p-g724-fr39"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-44477"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/cloudnative-pg/cloudnative-pg/pull/10576"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/cloudnative-pg/cloudnative-pg/releases/tag/v1.28.3"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/cloudnative-pg/cloudnative-pg/releases/tag/v1.29.1"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "CloudNativePG's metrics exporter allows privilege escalation to PostgreSQL superuser and OS RCE in github.com/cloudnative-pg/cloudnative-pg"
+}

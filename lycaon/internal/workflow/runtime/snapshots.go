@@ -77,7 +77,8 @@ func (m *Snapshots) Project(
 		if err != nil {
 			snap.CoverageReview = "Coverage facts unavailable: " + err.Error()
 		} else {
-			prior := workflowpresentation.RunCoverageReview(workflowpresentation.ReviewVerdicts(ctx, m.Verdicts, active, manifest))
+			verdicts, _ := workflowpresentation.ReviewVerdicts(ctx, m.Verdicts, active, manifest)
+			prior := workflowpresentation.RunCoverageReview(verdicts)
 			raw, marshalErr := json.Marshal(struct {
 				Facts any `json:"facts"`
 				Prior any `json:"prior_review,omitempty"`

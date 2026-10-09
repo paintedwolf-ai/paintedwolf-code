@@ -55,6 +55,14 @@ func (s *Handler) writeRunLookupError(w http.ResponseWriter, r *http.Request, er
 }
 
 func (s *Handler) WriteWorkflowError(w http.ResponseWriter, r *http.Request, err error) {
+	// A run's missing pinned version is more specific than an unknown workflow.
+	var unavailable *workflow.WorkflowVersionUnavailableError
+	if errors.As(err, &unavailable) {
+		s.responses.FailDetails(w, wire.ApiErrorCodeWorkflowVersionUnavailable,
+			map[string]any{"workflow_id": unavailable.WorkflowID, "version": unavailable.Version},
+			"this run's workflow version is no longer available")
+		return
+	}
 	for _, failure := range workflowFailures {
 		if errors.Is(err, failure.sentinel) {
 			s.responses.Fail(w, failure.code, failure.message)

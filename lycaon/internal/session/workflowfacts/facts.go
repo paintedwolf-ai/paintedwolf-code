@@ -4,6 +4,8 @@ type ActiveWorkflowManifest struct {
 	CoordinatorProfile string
 	Rules              []string
 	HostPhaseAdvance   bool
+	// Archive names the sealed version a retired run reads its guidance from.
+	Archive string
 }
 type WorkflowPhaseGuardState struct {
 	Phase string
