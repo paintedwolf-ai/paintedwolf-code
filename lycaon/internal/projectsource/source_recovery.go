@@ -110,6 +110,7 @@ func (s *sourceRecovery) copyRecoveryFile(ctx context.Context, sha string, dst i
 }
 
 func (s *SourceEffects) applySourceRestore(ctx context.Context, row *sourceMutationRow) error {
+	if row.Plan.NativeTrash != nil { return s.restoreNativeTrash(ctx, row) }
 	plan := &row.Plan
 	if sourceMutationPathExists(plan.AbsPath) {
 		if !plan.EffectStarted {

@@ -21,7 +21,7 @@ const (
 	sourceMutationFailed      sourceMutationStatus = "failed"
 )
 
-// Recovery is retained for both disposal modes.
+// Disposal selects the filesystem effect; recovery is described by the plan.
 type sourceDisposal string
 
 const (
@@ -38,6 +38,7 @@ type sourceMutationAgent struct {
 }
 
 type sourceMutationPlan struct {
+	NativeTrash *sourceTrashRecovery `json:"native_trash,omitempty"`
 	AgentEffect *sourceeffect.Plan `json:"agent_effect,omitempty"`
 	// Agent is nil for person-initiated operations.
 	Agent     *sourceMutationAgent `json:"agent,omitempty"`

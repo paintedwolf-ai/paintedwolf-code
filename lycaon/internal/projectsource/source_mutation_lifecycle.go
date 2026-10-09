@@ -129,10 +129,12 @@ func (s *SourceMutationService) Delete(ctx context.Context, operationID string, 
 			}
 		}
 		plan := &sourceMutationPlan{Kind: "delete", ProjectID: p.SourceID(), WorkspaceID: p.WorkspaceID(), RootID: root.ID, RootPath: root.Path,
-			Path: rel, AbsPath: abs, RecoveryID: operationID, Recursive: req.Recursive, Disposal: sourceDisposalTrash,
+			Path: rel, AbsPath: abs, NativeTrash: &sourceTrashRecovery{}, Recursive: req.Recursive, Disposal: sourceDisposalTrash,
 			EntryKind: sourceEntryKind(info), BeforeSize: info.Size(),
 			SessionID: req.SessionID, Turn: req.Turn,
 			Changed: true, Response: json.RawMessage(`{}`)}
+		plan.EntryIdentity, statErr = fspath.EntryIdentity(abs)
+		if statErr != nil { return nil, statErr }
 		return plan, nil
 	})
 	return err

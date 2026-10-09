@@ -159,7 +159,7 @@ func (s *SourceHistory) planSourceHistory(ctx context.Context, operationID strin
 		undo := sourceMutationPlan{
 			Kind: "restore", ProjectID: original.ProjectID, WorkspaceID: original.WorkspaceID,
 			RootID: original.RootID, RootPath: original.RootPath, Path: original.Path,
-			AbsPath: original.AbsPath, RecoveryID: original.RecoveryID, RecoveryCount: original.RecoveryCount, TreeSHA: original.TreeSHA,
+			AbsPath: original.AbsPath, NativeTrash: original.NativeTrash, RecoveryID: original.RecoveryID, RecoveryCount: original.RecoveryCount, TreeSHA: original.TreeSHA,
 			EntryKind: original.EntryKind, After: original.Before, AfterSHA: original.BaseSHA256,
 			AfterSize: original.BeforeSize, BranchID: original.BranchID, Changed: true,
 		}
@@ -179,6 +179,7 @@ func (s *SourceHistory) planSourceHistory(ctx context.Context, operationID strin
 }
 
 func historyPlan(plan sourceMutationPlan) sourceMutationPlan {
+	if plan.NativeTrash != nil { copy := *plan.NativeTrash; plan.NativeTrash = &copy }
 	plan.Response = nil
 	plan.EffectStarted = false
 	plan.CrossVolume = false
@@ -218,6 +219,14 @@ func commitSourceHistoryTx(ctx context.Context, tx *sql.Tx, plan sourceMutationP
 		if err != nil || changed != 1 {
 			return ErrSourceHistoryChanged
 		}
+		if plan.NativeTrash != nil {
+            column := "redo_plan_json"
+            if plan.HistoryTransition == "redo" { column = "undo_plan_json" }
+            receipt, marshalErr := json.Marshal(plan.NativeTrash)
+            if marshalErr != nil { return marshalErr }
+            _, err = tx.ExecContext(ctx, `UPDATE source_history_entries SET `+column+`=json_set(`+column+`,'$.native_trash',json(?),'$.entry_identity',?) WHERE id=?`, string(receipt), plan.DestinationIdentity, plan.HistoryEntryID)
+            return err
+        }
 		if plan.Kind == "rename" && plan.CrossVolume {
 			column := "redo_plan_json"
 			if plan.HistoryTransition == "redo" {
@@ -265,6 +274,13 @@ func (s *SourceHistory) commitSourceHistoryMemory(plan sourceMutationPlan, entry
 			return ErrSourceHistoryChanged
 		}
 		held.State, held.UpdatedAt = to, time.Now().UTC()
+		if plan.NativeTrash != nil {
+            opposite := &held.RedoPlan
+            if plan.HistoryTransition == "redo" { opposite = &held.UndoPlan }
+            copy := *plan.NativeTrash
+            opposite.NativeTrash = &copy
+            if plan.Kind == "restore" { opposite.EntryIdentity = plan.DestinationIdentity }
+        }
 		if plan.Kind == "rename" && plan.CrossVolume {
 			if plan.HistoryTransition == "redo" {
 				held.UndoPlan.EntryIdentity = plan.DestinationIdentity

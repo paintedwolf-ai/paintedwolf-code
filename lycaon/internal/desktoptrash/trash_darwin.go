@@ -14,18 +14,20 @@ import (
 	"unsafe"
 )
 
-func platformMove(path string) error {
+func platformMove(path string) (Receipt, error) {
 	cPath := C.CString(path)
 	defer C.free(unsafe.Pointer(cPath))
 
-	var cErr *C.char
-	res := C.pw_trash_item(cPath, &cErr)
+	var cErr, cResult *C.char
+	res := C.pw_trash_item(cPath, &cResult, &cErr)
 	if res != 0 {
 		if cErr != nil {
 			defer C.free(unsafe.Pointer(cErr))
-			return errors.New(C.GoString(cErr))
+			return Receipt{}, errors.New(C.GoString(cErr))
 		}
-		return errors.New("failed to move item to trash")
+		return Receipt{}, errors.New("failed to move item to trash")
 	}
-	return nil
+	if cResult == nil { return Receipt{}, errors.New("trash returned no recovery location") }
+ defer C.free(unsafe.Pointer(cResult))
+ return Receipt{Path: C.GoString(cResult)}, nil
 }

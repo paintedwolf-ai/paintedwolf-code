@@ -458,13 +458,23 @@ func RenameGuarded(root, fromRel, toRel, expected string) error {
 	return renameEntry(root, fromRel, toRel, false, expected)
 }
 
+// RelocateGuarded moves an identified entry between held roots without replacing a destination.
+func RelocateGuarded(from, to Location, expected string) error {
+ if expected == "" { return ErrPostcondition }
+ return relocateEntry(from, to, false, expected)
+}
+
 func renameEntry(root, fromRel, toRel string, replace bool, expected string) error {
-	from, err := openParent(Location{Root: root, Rel: fromRel}, false, 0)
+ return relocateEntry(Location{Root: root, Rel: fromRel}, Location{Root: root, Rel: toRel}, replace, expected)
+}
+
+func relocateEntry(source, destination Location, replace bool, expected string) error {
+	from, err := openParent(source, false, 0)
 	if err != nil {
 		return err
 	}
 	defer from.close()
-	to, err := openParent(Location{Root: root, Rel: toRel}, true, 0o755)
+	to, err := openParent(destination, true, 0o755)
 	if err != nil {
 		return err
 	}

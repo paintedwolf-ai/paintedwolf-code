@@ -9,14 +9,14 @@ import (
 	"time"
 )
 
-func platformMove(path string) error {
+func platformMove(path string) (Receipt, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return fmt.Errorf("resolve user home for trash: %w", err)
+		return Receipt{}, fmt.Errorf("resolve user home for trash: %w", err)
 	}
 	trashDir := filepath.Join(home, ".Trash")
 	if err := os.MkdirAll(trashDir, 0o700); err != nil {
-		return fmt.Errorf("create trash directory: %w", err)
+		return Receipt{}, fmt.Errorf("create trash directory: %w", err)
 	}
 
 	base := filepath.Base(path)
@@ -25,5 +25,5 @@ func platformMove(path string) error {
 		dest = filepath.Join(trashDir, fmt.Sprintf("%s.%d", base, time.Now().UnixNano()))
 	}
 
-	return os.Rename(path, dest)
+	if err := os.Rename(path, dest); err != nil { return Receipt{}, err }; return Receipt{Path: dest}, nil
 }

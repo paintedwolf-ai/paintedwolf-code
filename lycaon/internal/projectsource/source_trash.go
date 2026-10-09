@@ -7,18 +7,19 @@ import (
 	"path/filepath"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
+"github.com/lycaon/lycaon/internal/desktoptrash"
 	"github.com/lycaon/lycaon/internal/fspath"
 )
 
 type SourceEffects struct {
 	Journal        *SourceMutationJournal
 	recovery       *sourceRecovery
-	trash          func(context.Context, string) error
+	trash          func(context.Context, string) (desktoptrash.Receipt, error)
 	sameFilesystem func(string, string) (bool, error)
 }
 
 // SetTrashMover installs the platform adapter before the service starts.
-func (s *SourceEffects) SetTrashMover(move func(context.Context, string) error) {
+func (s *SourceEffects) SetTrashMover(move func(context.Context, string) (desktoptrash.Receipt, error)) {
 	if move != nil {
 		s.trash = move
 	}
@@ -48,6 +49,7 @@ func (s *SourceEffects) applyMutation(ctx context.Context, row *sourceMutationRo
 // applySourceDelete disposes of an entry whose recovery copy is already kept.
 func (s *SourceEffects) applySourceDelete(ctx context.Context, row *sourceMutationRow) error {
 	plan := &row.Plan
+	if plan.NativeTrash != nil { return s.applyNativeTrash(ctx, row) }
 	if plan.RecoveryCount == 0 {
 		return ErrSourceRecoveryFailed
 	}
@@ -103,7 +105,8 @@ func (s *SourceEffects) applySourceDelete(ctx context.Context, row *sourceMutati
 func (s *SourceEffects) disposeSourceEntry(ctx context.Context, plan *sourceMutationPlan, identity string) error {
 	switch plan.Disposal {
 	case sourceDisposalTrash:
-		return s.trash(ctx, plan.AbsPath)
+		_, err := s.trash(ctx, plan.AbsPath)
+		return err
 	case sourceDisposalDiscard:
 		return fseffect.RemoveTreeGuarded(fseffect.Location{Root: plan.RootPath, Rel: filepath.FromSlash(plan.Path)}, identity)
 	default:

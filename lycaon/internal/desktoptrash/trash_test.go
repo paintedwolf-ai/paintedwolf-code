@@ -9,10 +9,10 @@ import (
 
 func TestMoveValidatesAbsolutePath(t *testing.T) {
 	ctx := context.Background()
-	if err := Move(ctx, "relative/path"); err == nil {
+	if _, err := Move(ctx, "relative/path"); err == nil {
 		t.Fatal("expected error for relative path, got nil")
 	}
-	if err := Move(ctx, "/path/with\x00null"); err == nil {
+	if _, err := Move(ctx, "/path/with\x00null"); err == nil {
 		t.Fatal("expected error for path with null character, got nil")
 	}
 }
@@ -25,7 +25,7 @@ func TestMoveFileToTrash(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	if err := Move(ctx, filePath); err != nil {
+	if _, err := Move(ctx, filePath); err != nil {
 		t.Fatalf("Move failed: %v", err)
 	}
 
@@ -46,7 +46,7 @@ func TestMoveDirectoryToTrash(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	if err := Move(ctx, subDir); err != nil {
+	if _, err := Move(ctx, subDir); err != nil {
 		t.Fatalf("Move failed on directory: %v", err)
 	}
 

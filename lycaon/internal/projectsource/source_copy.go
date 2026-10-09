@@ -163,7 +163,7 @@ func clearSourceStage(plan *sourceMutationPlan) error {
 
 func (s *SourceEffects) prepareSourceContents(ctx context.Context, row *sourceMutationRow) error {
 	plan := &row.Plan
-	if plan.Kind != "delete" || plan.RecoveryCount > 0 {
+	if plan.Kind != "delete" || plan.NativeTrash != nil || plan.RecoveryCount > 0 {
 		return nil
 	}
 	if plan.RecoveryID == "" {
