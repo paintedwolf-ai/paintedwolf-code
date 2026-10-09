@@ -42,7 +42,7 @@ func (m *Manager) RecordWorkerTerminalProofAfterQueueComplete(ctx context.Contex
 	if summary := m.workerSummaryStatusForJob(ctx, parentID, jobID); summary != "" {
 		status = summary
 	}
-	return m.workflows.RecordWorkerTerminalProof(ctx, parentID, jobID, status)
+	return m.workflows.Fanout.RecordWorkerTerminalProof(ctx, parentID, jobID, status)
 }
 
 func (m *Manager) workerSummaryStatusForJob(ctx context.Context, parentID, jobID string) string {
@@ -111,11 +111,11 @@ func (m *Manager) workerCycleCompletingJobID(ctx context.Context, sessionID stri
 	if sessionID == "" {
 		return ""
 	}
-	run, err := m.loopWorkflowSource.ActiveRun(ctx, sessionID)
+	run, err := m.loopWorkflowSource.Runs.ActiveBySession(ctx, sessionID)
 	if err != nil || run == nil {
 		return ""
 	}
-	vars, err := m.loopWorkflowSource.ScaffoldVars(ctx, run.ID)
+	vars, err := m.loopWorkflowSource.Runs.GetScaffoldVars(ctx, run.ID)
 	if err != nil {
 		return ""
 	}

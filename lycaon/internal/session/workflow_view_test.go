@@ -1,6 +1,8 @@
 package session
 
 import (
+	workflowfacts "github.com/lycaon/lycaon/internal/session/workflowfacts"
+
 	"context"
 	"errors"
 	"github.com/lycaon/lycaon/internal/promptresult"
@@ -41,14 +43,14 @@ func (r *recordingWorkflowView) ActiveReviewVerdictPending(ctx context.Context, 
 	return false
 }
 
-func (r *recordingWorkflowView) ActiveCloseoutGateState(ctx context.Context, sessionID string) WorkflowCloseoutGateState {
+func (r *recordingWorkflowView) ActiveCloseoutGateState(ctx context.Context, sessionID string) workflowfacts.WorkflowCloseoutGateState {
 	r.record("ActiveCloseoutGateState")
-	return WorkflowCloseoutGateState{}
+	return workflowfacts.WorkflowCloseoutGateState{}
 }
 
-func (r *recordingWorkflowView) ResolvedRequest(ctx context.Context, sessionID string) ResolvedWorkflowRequest {
+func (r *recordingWorkflowView) ResolvedRequest(ctx context.Context, sessionID string) workflowfacts.ResolvedWorkflowRequest {
 	r.record("ResolvedRequest")
-	return ResolvedWorkflowRequest{}
+	return workflowfacts.ResolvedWorkflowRequest{}
 }
 
 func (r *recordingWorkflowView) ActivePhaseHasReviewLoop(ctx context.Context, sessionID string) bool {
@@ -56,9 +58,9 @@ func (r *recordingWorkflowView) ActivePhaseHasReviewLoop(ctx context.Context, se
 	return false
 }
 
-func (r *recordingWorkflowView) ActivePhaseGuardState(ctx context.Context, sessionID string) WorkflowPhaseGuardState {
+func (r *recordingWorkflowView) ActivePhaseGuardState(ctx context.Context, sessionID string) workflowfacts.WorkflowPhaseGuardState {
 	r.record("ActivePhaseGuardState")
-	return WorkflowPhaseGuardState{Phase: "phase-a"}
+	return workflowfacts.WorkflowPhaseGuardState{Phase: "phase-a"}
 }
 
 func (r *recordingWorkflowView) AllowedAgents(ctx context.Context, sessionID string) []string {
@@ -66,9 +68,9 @@ func (r *recordingWorkflowView) AllowedAgents(ctx context.Context, sessionID str
 	return []string{"coordinator"}
 }
 
-func (r *recordingWorkflowView) ActiveManifest(ctx context.Context, sessionID string) (ActiveWorkflowManifest, bool) {
+func (r *recordingWorkflowView) ActiveManifest(ctx context.Context, sessionID string) (workflowfacts.ActiveWorkflowManifest, bool) {
 	r.record("ActiveManifest")
-	return ActiveWorkflowManifest{Rules: []string{"manifest-rules.yaml"}}, true
+	return workflowfacts.ActiveWorkflowManifest{Rules: []string{"manifest-rules.yaml"}}, true
 }
 
 func (r *recordingWorkflowView) ParallelTaskMaxWorkers(ctx context.Context, sessionID string) int {
@@ -106,8 +108,8 @@ func (r *recordingWorkflowView) ActivePhaseRequiresEvidence(ctx context.Context,
 	return false
 }
 
-func (r *recordingWorkflowView) GetActive(ctx context.Context, sessionID string) (*api.WorkflowRun, error) {
-	r.record("GetActive")
+func (r *recordingWorkflowView) ActiveBySession(ctx context.Context, sessionID string) (*api.WorkflowRun, error) {
+	r.record("ActiveBySession")
 	return nil, nil
 }
 
@@ -188,7 +190,8 @@ func TestApplyPromptUserTurnPropagatesFeedbackFailure(t *testing.T) {
 	wantErr := errors.New("feedback store unavailable")
 	st := store.NewMemory()
 	mgr := NewManager(st, nil, nil, settings.DefaultSessionLimits())
-	mgr.SetWorkflowSessionView(&recordingWorkflowView{feedbackErr: wantErr})
+	workflowFixture1 := &recordingWorkflowView{feedbackErr: wantErr}
+	mgr.SetWorkflowDomains(&WorkflowDomains{Runs: workflowFixture1, Policy: workflowFixture1, Ambient: workflowFixture1, Blueprints: workflowFixture1, Batch: workflowFixture1, Slash: workflowFixture1, Requests: workflowFixture1, Feedback: workflowFixture1, Transcript: workflowFixture1, Asks: workflowFixture1, Fanout: workflowFixture1, Phases: workflowFixture1, Reports: workflowFixture1, Recovery: workflowFixture1, Cleanup: workflowFixture1})
 	sess, err := st.Create(ctx, api.CreateSessionRequest{}, "project-1")
 	testutil.FailErr(t, "create session", err)
 
@@ -201,7 +204,8 @@ func TestApplyPromptUserTurnPropagatesFeedbackFailure(t *testing.T) {
 func TestToolpolicyEngineDepsWiresWorkflowView(t *testing.T) {
 	view := &recordingWorkflowView{}
 	mgr := NewManager(store.NewMemory(), nil, nil, settings.DefaultSessionLimits())
-	mgr.SetWorkflowSessionView(view)
+	workflowFixture2 := view
+	mgr.SetWorkflowDomains(&WorkflowDomains{Runs: workflowFixture2, Policy: workflowFixture2, Ambient: workflowFixture2, Blueprints: workflowFixture2, Batch: workflowFixture2, Slash: workflowFixture2, Requests: workflowFixture2, Feedback: workflowFixture2, Transcript: workflowFixture2, Asks: workflowFixture2, Fanout: workflowFixture2, Phases: workflowFixture2, Reports: workflowFixture2, Recovery: workflowFixture2, Cleanup: workflowFixture2})
 	sess := &api.Session{ID: "s1", Posture: api.SessionPostureSpec}
 
 	eval := toolpolicy.BuildEvalContext(context.Background(), mgr.toolpolicyEngineDeps(), sess, "read_file", map[string]any{"path": "x"})
@@ -226,7 +230,7 @@ func TestToolpolicyEngineDepsWiresWorkflowView(t *testing.T) {
 		"AllowedAgents",
 		"ActiveManifest",
 		"ActivePhaseHasReviewLoop",
-		"GetActive",
+		"ActiveBySession",
 		"ActivePlan",
 		"ScaffoldVarsForSession",
 	}

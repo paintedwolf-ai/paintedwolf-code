@@ -62,7 +62,8 @@ func TestFinishPromptExecutionPropagatesTopologyReportFailure(t *testing.T) {
 	st := store.NewMemory()
 	mgr := NewManager(st, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
 	view := &recordingWorkflowView{topologyErr: wantErr}
-	mgr.SetWorkflowSessionView(view)
+	workflowFixture1 := view
+	mgr.SetWorkflowDomains(&WorkflowDomains{Runs: workflowFixture1, Policy: workflowFixture1, Ambient: workflowFixture1, Blueprints: workflowFixture1, Batch: workflowFixture1, Slash: workflowFixture1, Requests: workflowFixture1, Feedback: workflowFixture1, Transcript: workflowFixture1, Asks: workflowFixture1, Fanout: workflowFixture1, Phases: workflowFixture1, Reports: workflowFixture1, Recovery: workflowFixture1, Cleanup: workflowFixture1})
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
@@ -80,7 +81,8 @@ func TestFinishPromptExecutionReconcilesWorkflowCompletion(t *testing.T) {
 	st := store.NewMemory()
 	view := &recordingWorkflowView{}
 	mgr := NewManager(st, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
-	mgr.SetWorkflowSessionView(view)
+	workflowFixture2 := view
+	mgr.SetWorkflowDomains(&WorkflowDomains{Runs: workflowFixture2, Policy: workflowFixture2, Ambient: workflowFixture2, Blueprints: workflowFixture2, Batch: workflowFixture2, Slash: workflowFixture2, Requests: workflowFixture2, Feedback: workflowFixture2, Transcript: workflowFixture2, Asks: workflowFixture2, Fanout: workflowFixture2, Phases: workflowFixture2, Reports: workflowFixture2, Recovery: workflowFixture2, Cleanup: workflowFixture2})
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
@@ -190,7 +192,8 @@ func TestFinishPromptExecutionPropagatesCompletionReconciliationFailure(t *testi
 	wantErr := errors.New("workflow completion unavailable")
 	st := store.NewMemory()
 	mgr := NewManager(st, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
-	mgr.SetWorkflowSessionView(&recordingWorkflowView{completionErr: wantErr})
+	workflowFixture3 := &recordingWorkflowView{completionErr: wantErr}
+	mgr.SetWorkflowDomains(&WorkflowDomains{Runs: workflowFixture3, Policy: workflowFixture3, Ambient: workflowFixture3, Blueprints: workflowFixture3, Batch: workflowFixture3, Slash: workflowFixture3, Requests: workflowFixture3, Feedback: workflowFixture3, Transcript: workflowFixture3, Asks: workflowFixture3, Fanout: workflowFixture3, Phases: workflowFixture3, Reports: workflowFixture3, Recovery: workflowFixture3, Cleanup: workflowFixture3})
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 

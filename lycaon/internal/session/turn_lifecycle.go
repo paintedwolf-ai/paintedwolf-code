@@ -70,7 +70,7 @@ func (m *Manager) finishPromptExecution(ctx context.Context, sessionID string, p
 		return nil
 	}
 	if m.workflows != nil {
-		if err := m.workflows.ReconcileTurnCompletion(hostCtx, sessionID); err != nil {
+		if err := m.workflows.Phases.ReconcileTurnCompletion(hostCtx, sessionID); err != nil {
 			return m.recordUserTurnFailure(sessionID, fmt.Errorf("reconcile workflow turn completion: %w", err))
 		}
 	}
@@ -80,7 +80,7 @@ func (m *Manager) finishPromptExecution(ctx context.Context, sessionID string, p
 	m.reconcileCoordinatorBatchFromLedger(hostCtx, sessionID)
 	m.disarmCoordinatorLoopIfBatchTerminal(hostCtx, sessionID)
 	if m.workflows != nil {
-		if err := m.workflows.MaybeDeliverTopologyReport(hostCtx, sessionID, closeoutID); err != nil {
+		if err := m.workflows.Reports.MaybeDeliverTopologyReport(hostCtx, sessionID, closeoutID); err != nil {
 			return m.recordUserTurnFailure(sessionID, fmt.Errorf("deliver topology report: %w", err))
 		}
 		m.disarmCoordinatorLoopIfNoActiveRun(hostCtx, sessionID)
@@ -198,7 +198,7 @@ func (m *Manager) disarmCoordinatorLoopIfNoActiveRun(ctx context.Context, sessio
 	if m == nil || m.workflows == nil {
 		return
 	}
-	if m.workflows.CurrentPhase(ctx, sessionID) != "" {
+	if m.workflows.Policy.CurrentPhase(ctx, sessionID) != "" {
 		return
 	}
 	m.ensureCoordinatorRuntime().CoordinatorLoop().DisarmTimerBackstop(ctx, sessionID)

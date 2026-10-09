@@ -251,7 +251,7 @@ type stubWorkflowRunSource struct {
 	active func(ctx context.Context, sessionID string) (*api.WorkflowRun, error)
 }
 
-func (s *stubWorkflowRunSource) GetActive(ctx context.Context, sessionID string) (*api.WorkflowRun, error) {
+func (s *stubWorkflowRunSource) ActiveBySession(ctx context.Context, sessionID string) (*api.WorkflowRun, error) {
 	if s.active != nil {
 		return s.active(ctx, sessionID)
 	}
@@ -271,7 +271,7 @@ func TestSnapshotBuilderBuild_WorkflowRunScopedToSession(t *testing.T) {
 			return nil, nil
 		},
 	}
-	b := &SnapshotBuilder{Workflow: workflow, Repo: repotest.NewProvider(t)}
+	b := &SnapshotBuilder{Workflow: &WorkflowRunSource{Runs: workflow, Presentation: workflow}, Repo: repotest.NewProvider(t)}
 	ctx := context.Background()
 	dir := t.TempDir()
 

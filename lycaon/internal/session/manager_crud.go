@@ -124,7 +124,7 @@ func (m *Manager) reconcileOrphanedWorkflowRuns(ctx context.Context, sessionID s
 	if m == nil || m.workflows == nil {
 		return
 	}
-	_ = m.workflows.ReconcileOrphanedRuns(ctx, sessionID)
+	_ = m.workflows.Recovery.ReconcileOrphanedRuns(ctx, sessionID)
 }
 
 // HasActiveProjectSessions reports whether a project has unarchived active sessions.

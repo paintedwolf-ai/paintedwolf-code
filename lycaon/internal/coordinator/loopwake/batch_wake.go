@@ -173,7 +173,7 @@ func (l *LoopEngine) workflowRunFinished(ctx context.Context, sessionID string) 
 	if deps.WorkflowSource == nil {
 		return false
 	}
-	run, err := deps.WorkflowSource.ActiveRun(ctx, sessionID)
+	run, err := deps.WorkflowSource.Runs.ActiveBySession(ctx, sessionID)
 	if err != nil {
 		return false
 	}

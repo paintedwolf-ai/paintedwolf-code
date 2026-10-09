@@ -3,12 +3,13 @@ package workflowadmin
 import (
 	"context"
 	"fmt"
+	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
+	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/report"
 	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
-	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -31,7 +32,7 @@ func (a *runAccount) gap(g report.ReportGap) {
 // scanAccount records the run's bound scans, separating gaps a rescan would
 // close from standing scanner limits, and accounts for every scanner group:
 // linked by a claim or finding, or set aside by a review phase or the closeout.
-func (a *runAccount) scanAccount(scans []wire.CodeScan, completion *wire.CompletionReportMeta, claims []workflow.RunClaim, reviewed []scanfindings.SetAside) {
+func (a *runAccount) scanAccount(scans []wire.CodeScan, completion *wire.CompletionReportMeta, claims []workflowpresentation.RunClaim, reviewed []scanfindings.SetAside) {
 	if len(scans) == 0 {
 		return
 	}
@@ -100,7 +101,7 @@ func plural(n int, one, many string) string {
 	return many
 }
 
-func linkedGroups(completion *wire.CompletionReportMeta, claims []workflow.RunClaim) []string {
+func linkedGroups(completion *wire.CompletionReportMeta, claims []workflowpresentation.RunClaim) []string {
 	var out []string
 	for _, c := range claims {
 		out = append(out, c.ScanGroupIDs...)
@@ -126,7 +127,7 @@ func setAsides(completion *wire.CompletionReportMeta) []scanfindings.SetAside {
 
 // claimAccount states where the run's claims stand: open claims are unfinished
 // work, and each review phase a workflow names for a reader is a check.
-func (a *runAccount) claimAccount(manifest workflowdef.Manifest, claims []workflow.RunClaim) {
+func (a *runAccount) claimAccount(manifest workflowdef.Manifest, claims []workflowpresentation.RunClaim) {
 	open := report.ReportGap{Kind: report.GapClaimsOpen, Of: len(claims)}
 	for _, c := range claims {
 		if c.Class == workflowdef.ClaimOpen {
@@ -166,7 +167,7 @@ func (a *runAccount) claimAccount(manifest workflowdef.Manifest, claims []workfl
 	}
 }
 
-func claimName(c workflow.RunClaim) string {
+func claimName(c workflowpresentation.RunClaim) string {
 	if t := strings.TrimSpace(c.Title); t != "" {
 		return t
 	}
@@ -180,7 +181,7 @@ func (s *Handler) workAccount(ctx context.Context, a *runAccount, run *wire.Work
 		a.coverage = append(a.coverage, report.ReportCoverageItem{Subject: "Workers", Status: "Unavailable", Detail: "Worker accounting is unavailable."})
 		return nil
 	}
-	vars, err := s.Runs.GetScaffoldVars(ctx, run.ID)
+	vars, err := s.Runs.Runs.GetScaffoldVars(ctx, run.ID)
 	if err != nil {
 		return err
 	}
@@ -196,11 +197,11 @@ func (s *Handler) workAccount(ctx context.Context, a *runAccount, run *wire.Work
 	partial := report.ReportGap{Kind: report.GapLegsPartial}
 	legAttempts := map[string]bool{}
 	for _, phase := range manifest.PhaseDefs {
-		plan, ok := workflow.FanoutPlanForPhase(vars, phase)
+		plan, ok := runstate.FanoutPlanForPhase(vars, phase)
 		if !ok {
 			continue
 		}
-		for _, leg := range workflow.FanoutCoverage(plan, tasks, phase.ID) {
+		for _, leg := range runstate.FanoutCoverage(plan, tasks, phase.ID) {
 			for _, id := range leg.Attempts {
 				legAttempts[id] = true
 			}

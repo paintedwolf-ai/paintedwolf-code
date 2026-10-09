@@ -35,7 +35,7 @@ func TestLoopSkipScheduledWhenBatchClosed(t *testing.T) {
 	deps.GetSession = func(context.Context, string) (*api.Session, error) {
 		return &api.Session{ID: "s1", Status: api.SessionStatusIdle, WorkspacePath: workspaceDir}, nil
 	}
-	deps.WorkflowSource = closedBatchLoopWF(2)
+	deps.WorkflowSource = workflowFixturePorts(closedBatchLoopWF(2))
 	deps.RunPrompt = func(context.Context, string) (*promptresult.Result, error) {
 		prompts.Add(1)
 		return &promptresult.Result{}, nil
@@ -70,7 +70,7 @@ func TestLoopDropScheduledWhenNonActionable(t *testing.T) {
 	deps.GetSession = func(context.Context, string) (*api.Session, error) {
 		return &api.Session{ID: "s1", Status: api.SessionStatusIdle, WorkspacePath: workspaceDir}, nil
 	}
-	deps.WorkflowSource = StubLoopWF{
+	deps.WorkflowSource = workflowFixturePorts(StubLoopWF{
 		run: &api.WorkflowRun{ID: "run-1", Status: api.WorkflowRunStatusRunning, CurrentPhase: "work"},
 		vars: map[string]any{
 			"coordinator_batch": map[string]any{
@@ -78,7 +78,7 @@ func TestLoopDropScheduledWhenNonActionable(t *testing.T) {
 				"seq":   1,
 			},
 		},
-	}
+	})
 	deps.RunPrompt = func(context.Context, string) (*promptresult.Result, error) {
 		prompts.Add(1)
 		return &promptresult.Result{}, nil
@@ -110,9 +110,9 @@ func TestLoopDropPhaseAdvanceWhenIntentAlreadySettled(t *testing.T) {
 	deps.GetSession = func(context.Context, string) (*api.Session, error) {
 		return &api.Session{ID: "s1", Status: api.SessionStatusIdle, WorkspacePath: workspaceDir}, nil
 	}
-	deps.WorkflowSource = StubLoopWF{
+	deps.WorkflowSource = workflowFixturePorts(StubLoopWF{
 		run: &api.WorkflowRun{ID: "run-1", Status: api.WorkflowRunStatusRunning, CurrentPhase: "work"},
-	}
+	})
 	deps.HostWakeActionable = BuildHostWakeActionable(HostWakeActionableDeps{
 		GetMessages: func(context.Context, string) ([]api.Message, error) { return history, nil },
 		GetSession: func(context.Context, string) (*api.Session, error) {
@@ -163,9 +163,9 @@ func TestLoopPhaseAdvanceKeepsNewWorkflowWorkActionable(t *testing.T) {
 	deps.GetSession = func(context.Context, string) (*api.Session, error) {
 		return &api.Session{ID: "s1", Status: api.SessionStatusIdle, WorkspacePath: workspaceDir}, nil
 	}
-	deps.WorkflowSource = StubLoopWF{
+	deps.WorkflowSource = workflowFixturePorts(StubLoopWF{
 		run: &api.WorkflowRun{ID: "run-1", Status: api.WorkflowRunStatusRunning, CurrentPhase: "execute"},
-	}
+	})
 	deps.HostWakeActionable = BuildHostWakeActionable(HostWakeActionableDeps{
 		GetMessages: func(context.Context, string) ([]api.Message, error) { return history, nil },
 		GetSession: func(context.Context, string) (*api.Session, error) {
@@ -200,9 +200,9 @@ func TestLoopPhaseAdvanceStartsEnteredPhaseBeforeCloseout(t *testing.T) {
 	deps.GetSession = func(context.Context, string) (*api.Session, error) {
 		return &api.Session{ID: "s1", Status: api.SessionStatusIdle, WorkspacePath: workspaceDir}, nil
 	}
-	deps.WorkflowSource = StubLoopWF{
+	deps.WorkflowSource = workflowFixturePorts(StubLoopWF{
 		run: &api.WorkflowRun{ID: "run-1", Status: api.WorkflowRunStatusRunning, CurrentPhase: "review"},
-	}
+	})
 	deps.HostWakeActionable = BuildHostWakeActionable(HostWakeActionableDeps{
 		GetMessages: func(context.Context, string) ([]api.Message, error) { return history, nil },
 		GetSession: func(context.Context, string) (*api.Session, error) {
@@ -234,7 +234,7 @@ func TestLoopDropStaleBatchSeqWake(t *testing.T) {
 	deps.GetSession = func(context.Context, string) (*api.Session, error) {
 		return &api.Session{ID: "s1", Status: api.SessionStatusIdle, WorkspacePath: workspaceDir}, nil
 	}
-	deps.WorkflowSource = StubLoopWF{
+	deps.WorkflowSource = workflowFixturePorts(StubLoopWF{
 		run: &api.WorkflowRun{ID: "run-1", Status: api.WorkflowRunStatusRunning, CurrentPhase: "work"},
 		vars: map[string]any{
 			"coordinator_batch": map[string]any{
@@ -242,7 +242,7 @@ func TestLoopDropStaleBatchSeqWake(t *testing.T) {
 				"seq":   3,
 			},
 		},
-	}
+	})
 	deps.RunPrompt = func(context.Context, string) (*promptresult.Result, error) {
 		prompts.Add(1)
 		return &promptresult.Result{}, nil
@@ -271,9 +271,9 @@ func TestLoopScheduledDroppedDuringPromptExecution(t *testing.T) {
 	deps.GetSession = func(context.Context, string) (*api.Session, error) {
 		return &api.Session{ID: "s1", Status: api.SessionStatusBusy, WorkspacePath: workspaceDir}, nil
 	}
-	deps.WorkflowSource = StubLoopWF{
+	deps.WorkflowSource = workflowFixturePorts(StubLoopWF{
 		run: &api.WorkflowRun{ID: "run-1", Status: api.WorkflowRunStatusRunning, CurrentPhase: "work"},
-	}
+	})
 	deps.RunPrompt = func(context.Context, string) (*promptresult.Result, error) {
 		prompts.Add(1)
 		return &promptresult.Result{}, nil
@@ -318,7 +318,7 @@ func TestLoopScheduledRunsWhenObligationsOpenOnClosedBatch(t *testing.T) {
 	deps.GetSession = func(context.Context, string) (*api.Session, error) {
 		return &api.Session{ID: "s1", Status: api.SessionStatusIdle, WorkspacePath: workspaceDir}, nil
 	}
-	deps.WorkflowSource = closedBatchLoopWF(2)
+	deps.WorkflowSource = workflowFixturePorts(closedBatchLoopWF(2))
 	deps.WorkflowObligationsOpen = func(context.Context, string) bool { return true }
 	deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) bool { return false }
 	deps.RunPrompt = func(context.Context, string) (*promptresult.Result, error) {

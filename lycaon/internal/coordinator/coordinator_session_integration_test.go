@@ -4,6 +4,7 @@ package coordinator_test
 
 import (
 	"context"
+	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
 	"github.com/lycaon/lycaon/internal/testutil/oartest"
 	"path/filepath"
 	"runtime"
@@ -49,7 +50,7 @@ func wireManagerPromptPolicy(t *testing.T, mgr *session.Manager, root string) {
 	testutil.FailErr(t, "LoadPostureRegistry", err)
 	packs, err := rules.LoadBundledRules()
 	testutil.FailErr(t, "LoadBundledRules", err)
-	if err := rules.ValidatePostureRules(postures, session.AllSessionPostures(), packs); err != nil {
+	if err := rules.ValidatePostureRules(postures, sessionposture.AllSessionPostures(), packs); err != nil {
 		testutil.FailErr(t, "ValidatePostureRules", err)
 	}
 	condReg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{})

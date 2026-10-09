@@ -1,11 +1,12 @@
 package workflowadmin
 
 import (
+	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
+	workflowreview "github.com/lycaon/lycaon/internal/workflow/review"
 	"sort"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/report"
-	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -51,11 +52,11 @@ type assembledFinding struct {
 // claims are reported separately. Under a declared rating, a finding that
 // needs attention is stated at the level its answers decide, the same level
 // the rating counts for it, and rated findings lead.
-func reportFindings(msg *wire.Message, brief *workflowdef.Brief, claims []workflow.RunClaim) []assembledFinding {
+func reportFindings(msg *wire.Message, brief *workflowdef.Brief, claims []workflowpresentation.RunClaim) []assembledFinding {
 	if msg == nil || msg.CompletionReport == nil {
 		return nil
 	}
-	reviewed := workflow.ClaimAnswers(claims)
+	reviewed := workflowreview.ClaimAnswers(claims)
 	out := make([]assembledFinding, 0, len(msg.CompletionReport.Findings))
 	for _, f := range msg.CompletionReport.Findings {
 		title := strings.TrimSpace(f.Title)

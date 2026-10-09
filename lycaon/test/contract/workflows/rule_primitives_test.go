@@ -2,6 +2,7 @@ package contract
 
 import (
 	"context"
+	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
 	"strings"
 	"testing"
 
@@ -48,7 +49,7 @@ func TestRuleYAMLWhenKeysAreImplemented(t *testing.T) {
 				}
 				if key == "posture_is" {
 					val, _ := raw.(string)
-					if !session.ValidSessionPosture(val) {
+					if !sessionposture.ValidSessionPosture(val) {
 						t.Errorf("%s rule %q: invalid posture_is %q", e.Name(), rule.ID, val)
 					}
 				}

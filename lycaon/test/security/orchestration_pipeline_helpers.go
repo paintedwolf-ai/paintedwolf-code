@@ -24,7 +24,7 @@ type orchestrationPipelineHarness struct {
 
 func startBugcommandRun(t *testing.T, h *orchestrationPipelineHarness) wire.WorkflowRun {
 	t.Helper()
-	run, err := h.workflowMgr.StartHuman(context.Background(), h.sess.ID, wire.StartWorkflowRunRequest{
+	run, err := h.workflowMgr.Starts.StartHuman(context.Background(), h.sess.ID, wire.StartWorkflowRunRequest{
 		WorkflowID: "bugbash", WorkflowVersion: "1.0.0",
 	})
 	if err != nil {
@@ -51,7 +51,7 @@ func newOrchestrationPipelineServer(t *testing.T, projectDir string) *orchestrat
 func completeActiveChildRun(t *testing.T, h *orchestrationPipelineHarness) {
 	t.Helper()
 	ctx := t.Context()
-	child, err := h.workflowMgr.GetActive(ctx, h.sess.ID)
+	child, err := h.workflowMgr.Store.Runs.ActiveBySession(ctx, h.sess.ID)
 	testutil.FailErr(t, "get active child run", err)
 	if child == nil || child.ParentRunID == nil {
 		t.Fatalf("active run = %+v, want child", child)
@@ -61,14 +61,14 @@ func completeActiveChildRun(t *testing.T, h *orchestrationPipelineHarness) {
 	child.CompletedAt = &now
 	child.UpdatedAt = now
 	testutil.FailErr(t, "complete child run", h.workflowMgr.Store.Update(ctx, child))
-	testutil.FailErr(t, "resume parent run", h.workflowMgr.ReconcileTerminalRun(ctx, child))
+	testutil.FailErr(t, "resume parent run", h.workflowMgr.Children.ReconcileTerminalRun(ctx, child))
 }
 
 func waitTopologyStageComplete(t *testing.T, mgr *workflow.RunManager, runID, stage string) {
 	t.Helper()
 	var lastStages any
 	ok := testutil.WaitForNoFatal(15*time.Second, func() bool {
-		vars, err := mgr.Store.GetScaffoldVars(context.Background(), runID)
+		vars, err := mgr.Store.Runs.GetScaffoldVars(context.Background(), runID)
 		if err != nil {
 			return false
 		}
@@ -78,7 +78,7 @@ func waitTopologyStageComplete(t *testing.T, mgr *workflow.RunManager, runID, st
 		return entry != nil && entry["complete"] == true
 	})
 	if !ok {
-		run, _ := mgr.Get(context.Background(), runID)
+		run, _ := mgr.Store.Runs.Get(context.Background(), runID)
 		phase := ""
 		if run != nil {
 			phase = run.CurrentPhase
@@ -92,7 +92,7 @@ func waitWorkflowPhase(t *testing.T, mgr *workflow.RunManager, runID, phase stri
 	t.Helper()
 	var last string
 	ok := testutil.WaitForNoFatal(15*time.Second, func() bool {
-		run, err := mgr.Get(context.Background(), runID)
+		run, err := mgr.Store.Runs.Get(context.Background(), runID)
 		if err != nil || run == nil {
 			return false
 		}
@@ -100,7 +100,7 @@ func waitWorkflowPhase(t *testing.T, mgr *workflow.RunManager, runID, phase stri
 		return run.CurrentPhase == phase
 	})
 	if !ok {
-		vars, _ := mgr.Store.GetScaffoldVars(context.Background(), runID)
+		vars, _ := mgr.Store.Runs.GetScaffoldVars(context.Background(), runID)
 		t.Fatalf("workflow never reached phase %q; stuck at %q, topology_stages = %+v",
 			phase, last, vars["topology_stages"])
 	}

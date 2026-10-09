@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"strconv"
 	"strings"
 	"time"
@@ -264,11 +265,11 @@ func (m *Manager) reviewerEvidence(ctx context.Context, sessionID string, histor
 	}
 	phase := ""
 	if m.workflows != nil {
-		run, err := m.workflows.GetActive(ctx, sessionID)
+		run, err := m.workflows.Runs.ActiveBySession(ctx, sessionID)
 		if err != nil {
 			return nil, err
 		}
-		if run != nil && !m.workflows.IsAmbientRun(run) {
+		if run != nil && !runstate.IsAmbientRun(run) {
 			phase = run.CurrentPhase
 		}
 	}

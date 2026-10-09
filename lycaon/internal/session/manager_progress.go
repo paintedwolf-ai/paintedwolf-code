@@ -28,7 +28,7 @@ func (m *Manager) activeWorkflowRunID(ctx context.Context, sessionID string) str
 	if m == nil || m.workflows == nil {
 		return ""
 	}
-	run, err := m.workflows.GetActive(ctx, sessionID)
+	run, err := m.workflows.Runs.ActiveBySession(ctx, sessionID)
 	if err != nil || run == nil {
 		return ""
 	}

@@ -137,7 +137,7 @@ func TestImplementLifecycleSmokePathsForward(t *testing.T) {
 		t.Fatalf("initial phase = %q want boot", run.CurrentPhase)
 	}
 	h.SeedProgress(t, ctx, sess.ID)
-	testutil.FailErr(t, "RecordBoardOrientReady", h.WorkflowMgr.RecordBoardOrientReady(ctx, sess.ID, "smoke-board"))
+	testutil.FailErr(t, "RecordBoardOrientReady", h.WorkflowMgr.Fanout.RecordBoardOrientReady(ctx, sess.ID, "smoke-board"))
 	run, err = h.WorkflowMgr.GetActive(ctx, sess.ID)
 	testutil.FailErr(t, "GetActive after orient", err)
 	if run.CurrentPhase != "work" {

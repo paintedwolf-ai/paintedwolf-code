@@ -22,9 +22,9 @@ func TestLoopDefersPhaseAdvancedWhileWorkersInFlight(t *testing.T) {
 	deps.GetSession = func(context.Context, string) (*api.Session, error) {
 		return &api.Session{ID: "s1", Status: api.SessionStatusIdle, WorkspacePath: workspaceDir}, nil
 	}
-	deps.WorkflowSource = StubLoopWF{
+	deps.WorkflowSource = workflowFixturePorts(StubLoopWF{
 		run: &api.WorkflowRun{ID: "run-1", Status: api.WorkflowRunStatusRunning, CurrentPhase: "work"},
-	}
+	})
 	deps.WorkerCycleIdle = func(context.Context, *api.Session, string) (bool, error) {
 		return false, nil
 	}
@@ -45,9 +45,9 @@ func TestLoopDefersPhaseAdvancedWhileWorkersInFlight(t *testing.T) {
 	deps.GetSession = func(context.Context, string) (*api.Session, error) {
 		return &api.Session{ID: "s1", Status: api.SessionStatusIdle, WorkspacePath: workspaceDir}, nil
 	}
-	deps.WorkflowSource = StubLoopWF{
+	deps.WorkflowSource = workflowFixturePorts(StubLoopWF{
 		run: &api.WorkflowRun{ID: "run-1", Status: api.WorkflowRunStatusRunning, CurrentPhase: "work"},
-	}
+	})
 	deps.RunPrompt = func(context.Context, string) (*promptresult.Result, error) {
 		prompts.Add(1)
 		return &promptresult.Result{}, nil
@@ -89,9 +89,9 @@ func TestWorkerOutcomeAcknowledgementDrainsDeferredPhaseWake(t *testing.T) {
 func TestWorkerAcknowledgementRunsAnUnconsumedTerminalWake(t *testing.T) {
 	engine := NewLoopEngine()
 	deps := loopDepsForTest()
-	deps.WorkflowSource = StubLoopWF{
+	deps.WorkflowSource = workflowFixturePorts(StubLoopWF{
 		run: &api.WorkflowRun{ID: "run-1", Status: api.WorkflowRunStatusRunning, CurrentPhase: "work"},
-	}
+	})
 	workspace := t.TempDir()
 	deps.GetSession = func(context.Context, string) (*api.Session, error) {
 		return &api.Session{ID: "s1", Status: api.SessionStatusIdle, WorkspacePath: workspace}, nil
@@ -121,9 +121,9 @@ func TestLoopNudgeAfterWorkerJobTerminalRunsPerJobWake(t *testing.T) {
 	deps.GetSession = func(context.Context, string) (*api.Session, error) {
 		return &api.Session{ID: "s1", Status: api.SessionStatusIdle, WorkspacePath: workspaceDir}, nil
 	}
-	deps.WorkflowSource = StubLoopWF{
+	deps.WorkflowSource = workflowFixturePorts(StubLoopWF{
 		run: &api.WorkflowRun{ID: "run-1", Status: api.WorkflowRunStatusRunning, CurrentPhase: "work"},
-	}
+	})
 	deps.WorkerCycleIdle = func(_ context.Context, _ *api.Session, completingJobID string) (bool, error) {
 		if strings.TrimSpace(completingJobID) == excludeJob {
 			return true, nil
@@ -158,9 +158,9 @@ func TestWorkerCompletionBreaksSleep(t *testing.T) {
 	deps.GetSession = func(context.Context, string) (*api.Session, error) {
 		return &api.Session{ID: "s1", Status: api.SessionStatusIdle, WorkspacePath: workspaceDir}, nil
 	}
-	deps.WorkflowSource = StubLoopWF{
+	deps.WorkflowSource = workflowFixturePorts(StubLoopWF{
 		run: &api.WorkflowRun{ID: "run-1", Status: api.WorkflowRunStatusRunning, CurrentPhase: "work"},
-	}
+	})
 	deps.RunPrompt = func(context.Context, string) (*promptresult.Result, error) {
 		prompts.Add(1)
 		return &promptresult.Result{}, nil
@@ -185,9 +185,9 @@ func TestWorkerTaskFinishedKickDedupPerJob(t *testing.T) {
 	deps.GetSession = func(context.Context, string) (*api.Session, error) {
 		return &api.Session{ID: "s1", Status: api.SessionStatusIdle, WorkspacePath: projectDir}, nil
 	}
-	deps.WorkflowSource = StubLoopWF{
+	deps.WorkflowSource = workflowFixturePorts(StubLoopWF{
 		run: &api.WorkflowRun{ID: "run-1", Status: api.WorkflowRunStatusRunning, CurrentPhase: "work"},
-	}
+	})
 	deps.RunPrompt = func(context.Context, string) (*promptresult.Result, error) {
 		return &promptresult.Result{}, nil
 	}
@@ -210,9 +210,9 @@ func TestPhaseReenterFinishKickCoversTheJobFinishKick(t *testing.T) {
 	deps.GetSession = func(context.Context, string) (*api.Session, error) {
 		return &api.Session{ID: "s1", Status: api.SessionStatusIdle, WorkspacePath: projectDir}, nil
 	}
-	deps.WorkflowSource = StubLoopWF{
+	deps.WorkflowSource = workflowFixturePorts(StubLoopWF{
 		run: &api.WorkflowRun{ID: "run-1", Status: api.WorkflowRunStatusRunning, CurrentPhase: "work"},
-	}
+	})
 	deps.RunPrompt = func(context.Context, string) (*promptresult.Result, error) {
 		return &promptresult.Result{}, nil
 	}
@@ -235,9 +235,9 @@ func TestPromptExecutionQueuesMultipleNudgesWithoutLoss(t *testing.T) {
 	kickEngine := &kick.KickEngine{}
 	deps := loopDepsForTest()
 	deps.GetSession = func(context.Context, string) (*api.Session, error) { return sess, nil }
-	deps.WorkflowSource = StubLoopWF{
+	deps.WorkflowSource = workflowFixturePorts(StubLoopWF{
 		run: &api.WorkflowRun{ID: "run-1", Status: api.WorkflowRunStatusRunning, CurrentPhase: "work"},
-	}
+	})
 	// This stub leaves guidance queued, so each wake requires a turn.
 	deps.QueueInform = func(_ context.Context, sessionID string, inform anchor.ID, env anchor.Envelope) {
 		kickEngine.QueueDeferred(sessionID, anchor.InformRender(inform), env.KickOptions()...)
@@ -266,9 +266,9 @@ func TestOnWorkerCycleTerminalFlushesPromptExecutionDeferral(t *testing.T) {
 	sess := &api.Session{ID: "s1", Status: api.SessionStatusBusy, WorkspacePath: workspaceDir}
 	deps := loopDepsForTest()
 	deps.GetSession = func(context.Context, string) (*api.Session, error) { return sess, nil }
-	deps.WorkflowSource = StubLoopWF{
+	deps.WorkflowSource = workflowFixturePorts(StubLoopWF{
 		run: &api.WorkflowRun{ID: "run-1", Status: api.WorkflowRunStatusRunning, CurrentPhase: "work"},
-	}
+	})
 	deps.RunPrompt = func(context.Context, string) (*promptresult.Result, error) {
 		prompts.Add(1)
 		return &promptresult.Result{}, nil

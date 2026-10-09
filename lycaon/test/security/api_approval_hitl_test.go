@@ -56,7 +56,7 @@ func newApprovalHITLHarness(t *testing.T) *approvalHITLHarness {
 	}}})
 	h := wiring.BuildForTest(t, wiring.WithLLMClient(mock))
 	// Tool authorization is independent of workflow content review.
-	manifest, err := h.WorkflowMgr.Manifests.Get("implement", "1.0.0")
+	manifest, err := h.WorkflowMgr.Resolver.Overlay.Get("implement", "1.0.0")
 	testutil.FailErr(t, "load approval fixture workflow", err)
 	manifest.Controls.ContentReview = nil
 	for i := range manifest.PhaseDefs {

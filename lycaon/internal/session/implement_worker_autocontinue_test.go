@@ -3,6 +3,10 @@ package session_test
 import (
 	"context"
 	"fmt"
+	"strings"
+	"testing"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/session"
@@ -15,10 +19,8 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workflow"
+	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"strings"
-	"testing"
-	"time"
 )
 
 func TestImplementModeWorkerSummaryUsesCompletionEnvelope(t *testing.T) {
@@ -31,9 +33,9 @@ func TestImplementModeWorkerSummaryUsesCompletionEnvelope(t *testing.T) {
 	_ = orchestration.LoadRequiredAgentRegistry(context.Background(), agents)
 	mgr.SetAgentRegistry(agents)
 
-	wfStore := workflow.NewSQLStore(sqlDB)
+	wfStore := workflowpersistence.New(sqlDB)
 	wfMgr := workflow.NewManager(wfStore, store, nil, nil)
-	mgr.SetWorkflowSessionView(wfMgr)
+	mgr.SetWorkflowDomains(&session.WorkflowDomains{Runs: wfMgr.Store.Runs, Policy: wfMgr.Policy, Ambient: wfMgr.Ambient, Blueprints: wfMgr.Blueprints, Batch: wfMgr.Batch, Slash: wfMgr.Slash, Requests: wfMgr.Requests, Feedback: wfMgr.Feedback, Transcript: wfMgr.Transcript, Asks: wfMgr.Asks, Fanout: wfMgr.Fanout, Phases: wfMgr.Phases, Reports: wfMgr.Reports, Recovery: wfMgr.Recovery, Cleanup: wfMgr})
 
 	ctx := context.Background()
 	dir := t.TempDir()

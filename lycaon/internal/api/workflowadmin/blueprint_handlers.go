@@ -3,6 +3,7 @@ package workflowadmin
 import (
 	"context"
 	"errors"
+	workflowblueprints "github.com/lycaon/lycaon/internal/workflow/blueprints"
 	"net/http"
 	"strings"
 
@@ -11,7 +12,6 @@ import (
 	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/project"
-	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -180,7 +180,7 @@ func (s *Handler) HandleUpdateBlueprint(w http.ResponseWriter, r *http.Request) 
 	}
 	httpio.WriteJSON(w, http.StatusOK, out)
 	if out != nil {
-		s.Workflows.NotifyBlueprintPathWritten(r.Context(), "", projectID, out.Path)
+		s.Workflows.Blueprints.NotifyBlueprintPathWritten(r.Context(), "", projectID, out.Path)
 	}
 }
 
@@ -230,7 +230,7 @@ func (s *Handler) compatibleWorkflowsFor(ctx context.Context, projectID, path st
 	if err != nil {
 		return nil
 	}
-	return workflow.CompatibleWorkflowIDs(path, manifests)
+	return workflowblueprints.CompatibleWorkflowIDs(path, manifests)
 }
 
 func (s *Handler) blueprintCatalogManifests(ctx context.Context, projectDir string) ([]workflowdef.Manifest, error) {

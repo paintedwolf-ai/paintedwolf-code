@@ -49,8 +49,8 @@ func (m *Manager) synthesisEvidenceDigest(ctx context.Context, sessionID, surfac
 	var scaffold map[string]any
 	var workflowPhase string
 	if m.workflows != nil {
-		scaffold, _ = m.workflows.ScaffoldVarsForSession(ctx, sessionID)
-		workflowPhase = m.workflows.CurrentPhase(ctx, sessionID)
+		scaffold, _ = m.workflows.Policy.ScaffoldVarsForSession(ctx, sessionID)
+		workflowPhase = m.workflows.Policy.CurrentPhase(ctx, sessionID)
 	}
 	msgs, err := m.store.GetMessages(ctx, sessionID)
 	if err != nil || len(msgs) == 0 {

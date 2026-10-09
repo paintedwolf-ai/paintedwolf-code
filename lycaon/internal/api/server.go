@@ -2,13 +2,13 @@ package api
 
 import (
 	"context"
+	"github.com/go-chi/chi/v5"
 	"log/slog"
 	"net/http"
 	"os"
 	"strings"
 	"sync/atomic"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/lycaon/lycaon/internal/agentpresence"
@@ -85,6 +85,9 @@ import (
 	"github.com/lycaon/lycaon/internal/webresearch"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workflow"
+	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
+	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -214,10 +217,10 @@ type Dependencies struct {
 
 	// Workflows, delegation, and workers.
 	Workflows         *workflow.RunManager
-	WorkflowCatalog   workflow.ManifestResolver
-	WorkflowRuns      workflow.RunStore
-	WorkflowComposer  *workflow.Composer
-	WorkflowPersister *workflow.Persister
+	WorkflowCatalog   workflowcatalog.Resolver
+	WorkflowRuns      *runstate.Repository
+	WorkflowComposer  *workflowcomposition.Composer
+	WorkflowPersister *workflowcomposition.Persister
 	Blueprints        *blueprint.Manager
 	Orchestrator      orchestration.Orchestrator
 	Delegations       *delegation.Manager
@@ -702,7 +705,7 @@ func (s *Server) registerProjectRoutes(r chi.Router) {
 	s.registerV1Operation(r, operationUpdateProjectManagedSecret, s.Project.HandleUpdateProjectManagedSecret)
 	s.registerV1Operation(r, operationReplaceProjectManagedSecretValue, s.Project.HandleReplaceProjectManagedSecretValue)
 	s.registerV1Operation(r, operationHoldProjectManagedSecret, s.Project.HandleHoldProjectManagedSecret)
-	s.registerV1Operation(r, operationListProjectManagedSecretUses,s.Project.HandleListProjectManagedSecretUses)
+	s.registerV1Operation(r, operationListProjectManagedSecretUses, s.Project.HandleListProjectManagedSecretUses)
 	s.registerV1Operation(r, operationBeginProjectManagedSecretReveal, s.Project.HandleBeginProjectManagedSecretReveal)
 	s.registerV1Operation(r, operationCompleteProjectManagedSecretReveal, s.Project.HandleCompleteProjectManagedSecretReveal)
 	s.registerV1Operation(r, operationRevokeProjectManagedSecret, s.Project.HandleRevokeProjectManagedSecret)

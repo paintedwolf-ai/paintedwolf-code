@@ -1,19 +1,21 @@
 package workflowadmin
 
 import (
+	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
+	workflowreview "github.com/lycaon/lycaon/internal/workflow/review"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/report"
-	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 )
 
 // projectVerdicts writes the phases' records in order, and returns beside
 // them the citation channels each record carried, keyed by phase.
-func projectVerdicts(records []workflow.PhaseVerdict) ([]report.ReportVerdict, map[string][]citation, map[string][]string) {
+func projectVerdicts(records []workflowpresentation.PhaseVerdict) ([]report.ReportVerdict, map[string][]citation, map[string][]string) {
 	var out []report.ReportVerdict
 	channels := map[string][]citation{}
 	urls := map[string][]string{}
@@ -102,7 +104,7 @@ func artifactStrings(arts map[string]any, key string) []string {
 // schema. Nothing here names a schema member, so any schema reports the same
 // way; only the reserved decision and citation channels are treated apart.
 func reportVerdict(rec evidence.Record, def workflowdef.ReviewLoopDef) *report.ReportVerdict {
-	members := workflow.VerdictMembers(rec.Artifacts)
+	members := workflowpresentation.VerdictMembers(rec.Artifacts)
 	decision := strings.TrimSpace(members[workflowdef.VerdictDecisionKey])
 	if decision == "" {
 		decision = strings.TrimSpace(rec.Summary)
@@ -115,7 +117,7 @@ func reportVerdict(rec evidence.Record, def workflowdef.ReviewLoopDef) *report.R
 
 	// A claims-typed member is rendered as claims, not repeated as a field.
 	claimed := map[string]bool{}
-	byField, err := workflow.ParseVerdictClaims(def, members)
+	byField, err := workflowvalidation.ParseVerdictClaims(def, members)
 	if err == nil {
 		names := make([]string, 0, len(byField))
 		for name := range byField {
@@ -136,7 +138,7 @@ func reportVerdict(rec evidence.Record, def workflowdef.ReviewLoopDef) *report.R
 			claimed[field] = true
 		}
 	}
-	for _, f := range workflow.OrderVerdictFields(members) {
+	for _, f := range workflowreview.OrderVerdictFields(members) {
 		if f.Name == workflowdef.VerdictDecisionKey || claimed[f.Name] || strings.TrimSpace(f.Value) == "" {
 			continue
 		}
@@ -145,7 +147,7 @@ func reportVerdict(rec evidence.Record, def workflowdef.ReviewLoopDef) *report.R
 	return out
 }
 
-func reportClaim(c workflow.VerdictClaim) report.ReportVerdictClaim {
+func reportClaim(c workflowvalidation.VerdictClaim) report.ReportVerdictClaim {
 	out := report.ReportVerdictClaim{
 		ScanGroupIDs: append([]string(nil), c.ScanGroupIDs...),
 		ID:           strings.TrimSpace(c.ID),

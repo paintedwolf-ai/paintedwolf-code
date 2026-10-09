@@ -21,7 +21,7 @@ func (m *Manager) maybeRejectCloseoutForOpenGates(ctx context.Context, sess *api
 	if !invokeAllowed {
 		return nil, false
 	}
-	state := m.workflows.ActiveCloseoutGateState(ctx, sess.ID)
+	state := m.workflows.Policy.ActiveCloseoutGateState(ctx, sess.ID)
 	if !state.Gated || len(state.OpenLeaves) == 0 {
 		return nil, false
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"github.com/lycaon/lycaon/internal/worker/jobstate"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/db"
@@ -111,5 +112,5 @@ func (q *SQLQueue) TaskReceipt(ctx context.Context, sessionID, callID string) (*
 	if err != nil {
 		return nil, err
 	}
-	return workerTaskFromRow(ctx, q.store.db, row)
+	return jobstate.FromRow(ctx, q.store.db, row)
 }

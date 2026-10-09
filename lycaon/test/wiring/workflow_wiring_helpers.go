@@ -18,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workflow"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -26,7 +27,7 @@ const topologyWaitBudget = 30 * time.Second
 func waitTopologyStageComplete(t *testing.T, mgr *workflow.RunManager, runID, stage string) {
 	t.Helper()
 	testutil.WaitFor(t, topologyWaitBudget, func() bool {
-		vars, err := mgr.Store.GetScaffoldVars(context.Background(), runID)
+		vars, err := mgr.Store.Runs.GetScaffoldVars(context.Background(), runID)
 		if err != nil {
 			return false
 		}
@@ -40,7 +41,7 @@ func waitWorkflowPhase(t *testing.T, ctx context.Context, mgr *workflow.RunManag
 	t.Helper()
 	got := ""
 	if !testutil.WaitForNoFatal(topologyWaitBudget, func() bool {
-		run, err := mgr.Get(ctx, runID)
+		run, err := mgr.Store.Runs.Get(ctx, runID)
 		if err != nil || run == nil {
 			return false
 		}
@@ -53,7 +54,7 @@ func waitWorkflowPhase(t *testing.T, ctx context.Context, mgr *workflow.RunManag
 
 func startTopologyWorkflowRun(t *testing.T, h *Harness, ctx context.Context, sess *api.Session, workflowID string) *api.WorkflowRun {
 	t.Helper()
-	run, err := h.WorkflowMgr.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{
+	run, err := h.WorkflowMgr.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{
 		WorkflowID: workflowID, WorkflowVersion: "1.0.0",
 	})
 	testutil.FailErr(t, "StartHuman "+workflowID, err)
@@ -112,7 +113,7 @@ func deliverTopologyReport(t *testing.T, h *Harness, ctx context.Context, sess *
 	if _, ok := h.SessionMgr.PendingKickIDForTest(sess.ID); ok {
 		h.SessionMgr.ClearPendingKickForTest(sess.ID)
 	}
-	run, err := h.WorkflowMgr.Get(ctx, runID)
+	run, err := h.WorkflowMgr.Store.Runs.Get(ctx, runID)
 	testutil.FailErr(t, "load report phase", err)
 	manifest, err := h.WorkflowMgr.ManifestForRunID(ctx, runID)
 	testutil.FailErr(t, "load report manifest", err)
@@ -121,14 +122,14 @@ func deliverTopologyReport(t *testing.T, h *Harness, ctx context.Context, sess *
 		scope = api.CompletionReportScopeRun
 	}
 	messageID := uuid.NewString()
-	testutil.FailErr(t, "persist grounded completion", h.WorkflowMgr.Sessions.AppendMessages(ctx, sess.ID, api.Message{
+	testutil.FailErr(t, "persist grounded completion", h.WorkflowMgr.Policy.Sessions.AppendMessages(ctx, sess.ID, api.Message{
 		ID: messageID, Role: api.MessageRoleAssistant, Kind: api.MessageKindCompletionReport,
 		Content: "Completed assessment.", CreatedAt: time.Now().UTC(), WorkflowRunID: runID,
 		Visibility: api.MessageVisibilityTranscript, Grounding: &api.CitationGrounding{Traced: true},
 		CompletionReport: &api.CompletionReportMeta{Scope: scope, Phase: run.CurrentPhase},
 	}))
-	testutil.FailErr(t, "MaybeDeliverTopologyReport", h.WorkflowMgr.MaybeDeliverTopologyReport(ctx, sess.ID, messageID))
-	run, err = h.WorkflowMgr.Get(ctx, runID)
+	testutil.FailErr(t, "MaybeDeliverTopologyReport", h.WorkflowMgr.Reports.MaybeDeliverTopologyReport(ctx, sess.ID, messageID))
+	run, err = h.WorkflowMgr.Store.Runs.Get(ctx, runID)
 	testutil.FailErr(t, "Get run after report", err)
 	if run.Status != api.WorkflowRunStatusComplete {
 		t.Fatalf("status = %q want complete (phase=%q)", run.Status, run.CurrentPhase)
@@ -137,7 +138,7 @@ func deliverTopologyReport(t *testing.T, h *Harness, ctx context.Context, sess *
 
 func scaffoldTopologyOutput(t *testing.T, mgr *workflow.RunManager, runID, stage string) string {
 	t.Helper()
-	vars, err := mgr.Store.GetScaffoldVars(context.Background(), runID)
+	vars, err := mgr.Store.Runs.GetScaffoldVars(context.Background(), runID)
 	testutil.FailErr(t, "GetScaffoldVars", err)
 	outputs, _ := vars["topology_outputs"].(map[string]any)
 	text, _ := outputs[stage].(string)
@@ -149,7 +150,7 @@ func scaffoldTopologyOutput(t *testing.T, mgr *workflow.RunManager, runID, stage
 
 func startWorkflowRunAt(t *testing.T, h *Harness, ctx context.Context, sess *api.Session, workflowID, wantPhase string) *api.WorkflowRun {
 	t.Helper()
-	run, err := h.WorkflowMgr.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{
+	run, err := h.WorkflowMgr.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{
 		WorkflowID: workflowID, WorkflowVersion: "1.0.0",
 	})
 	testutil.FailErr(t, "StartHuman "+workflowID, err)
@@ -159,13 +160,13 @@ func startWorkflowRunAt(t *testing.T, h *Harness, ctx context.Context, sess *api
 	return run
 }
 
-func satisfyFanoutPlannedAndAdvance(t *testing.T, h *Harness, ctx context.Context, runID, dir string, legs []workflow.FanoutPlanLeg, wantPhase string) {
+func satisfyFanoutPlannedAndAdvance(t *testing.T, h *Harness, ctx context.Context, runID, dir string, legs []runstate.FanoutPlanLeg, wantPhase string) {
 	t.Helper()
-	run, err := h.WorkflowMgr.Get(ctx, runID)
+	run, err := h.WorkflowMgr.Store.Runs.Get(ctx, runID)
 	testutil.FailErr(t, "get run", err)
-	vars, err := h.WorkflowMgr.Store.GetScaffoldVars(ctx, runID)
+	vars, err := h.WorkflowMgr.Store.Runs.GetScaffoldVars(ctx, runID)
 	testutil.FailErr(t, "GetScaffoldVars", err)
-	vars = workflow.SetGateSatisfied(vars, "fanout_planned", true)
+	vars = runstate.SetGateSatisfied(vars, "fanout_planned", true)
 	rawLegs := make([]any, 0, len(legs))
 	for _, leg := range legs {
 		rawLegs = append(rawLegs, map[string]any{
@@ -182,7 +183,7 @@ func satisfyFanoutPlannedAndAdvance(t *testing.T, h *Harness, ctx context.Contex
 	if err := h.WorkflowMgr.Store.UpdateVars(ctx, run, dir, vars); err != nil {
 		testutil.FailErr(t, "UpdateVars plan", err)
 	}
-	run, err = h.WorkflowMgr.Advance(ctx, runID)
+	run, err = h.WorkflowMgr.Phases.Advance(ctx, runID)
 	testutil.FailErr(t, "Advance plan", err)
 	if run.CurrentPhase != wantPhase {
 		t.Fatalf("phase = %q want %s", run.CurrentPhase, wantPhase)
@@ -191,7 +192,7 @@ func satisfyFanoutPlannedAndAdvance(t *testing.T, h *Harness, ctx context.Contex
 
 func settleScanObligationAndAdvance(t *testing.T, h *Harness, ctx context.Context, runID, wantPhase string) {
 	t.Helper()
-	run, err := h.WorkflowMgr.Get(ctx, runID)
+	run, err := h.WorkflowMgr.Store.Runs.Get(ctx, runID)
 	testutil.FailErr(t, "get run", err)
 	if run.CurrentPhase == wantPhase {
 		return
@@ -221,8 +222,8 @@ func settleScanObligationAndAdvance(t *testing.T, h *Harness, ctx context.Contex
 			testutil.FailErr(t, "FinalizeFailure "+scans[i].ID, err)
 		}
 	}
-	testutil.FailErr(t, "RecordObligationTerminal", h.WorkflowMgr.RecordObligationTerminal(ctx, runID, scan.WorkflowObligationKind))
-	run, err = h.WorkflowMgr.Get(ctx, runID)
+	testutil.FailErr(t, "RecordObligationTerminal", h.WorkflowMgr.Obligations.RecordObligationTerminal(ctx, runID, scan.WorkflowObligationKind))
+	run, err = h.WorkflowMgr.Store.Runs.Get(ctx, runID)
 	testutil.FailErr(t, "get run after obligation", err)
 	if run.CurrentPhase != wantPhase {
 		t.Fatalf("phase = %q want %s", run.CurrentPhase, wantPhase)
@@ -236,7 +237,7 @@ func appendSucceededReviewAgent(t *testing.T, h *Harness, ctx context.Context, s
 		ParentSessionID: sess.ID, AgentType: agent, Prompt: "review " + agent, Brief: "review " + agent,
 		Status: api.WorkerStatusPending, SpawnReason: api.SpawnReasonHumanRequest, Scope: &api.TaskScope{Mode: "read"},
 	}
-	testutil.FailErr(t, "bind reviewer "+agent, h.WorkflowMgr.BindWorkflowTask(ctx, tools.ToolContext{SessionID: sess.ID}, workID, &task))
+	testutil.FailErr(t, "bind reviewer "+agent, h.WorkflowMgr.Fanout.BindWorkflowTask(ctx, tools.ToolContext{SessionID: sess.ID}, workID, &task))
 	testutil.FailErr(t, "enqueue defaults "+agent, worker.ApplyEnqueueDefaults(&task,
 		project.ProjectScope{ProjectID: sess.ProjectID, WorkspacePath: sess.WorkspacePath}, worker.DefaultWorkersConfig()))
 	workerID, err := h.WorkerQueue.Enqueue(ctx, task)
@@ -277,9 +278,9 @@ func reviewerCitation(childID, agent string) api.CitationGroundingCitedEvidence 
 
 func satisfyWorkerCycleAndAdvance(t *testing.T, h *Harness, ctx context.Context, sess *api.Session, runID, dir string) {
 	t.Helper()
-	run, err := h.WorkflowMgr.Get(ctx, runID)
+	run, err := h.WorkflowMgr.Store.Runs.Get(ctx, runID)
 	testutil.FailErr(t, "get run", err)
-	vars, err := h.WorkflowMgr.Store.GetScaffoldVars(ctx, runID)
+	vars, err := h.WorkflowMgr.Store.Runs.GetScaffoldVars(ctx, runID)
 	testutil.FailErr(t, "GetScaffoldVars execute", err)
 	vars = workflow.SetWorkerCycleEvalVars(vars, "job-stub", "complete")
 	vars["fanout_settled"] = true
@@ -292,7 +293,7 @@ func satisfyWorkerCycleAndAdvance(t *testing.T, h *Harness, ctx context.Context,
 	if err := h.WorkflowMgr.Store.UpdateVars(ctx, run, dir, vars); err != nil {
 		testutil.FailErr(t, "UpdateVars execute", err)
 	}
-	if _, err := h.WorkflowMgr.TryAutoAdvance(ctx, runID); err != nil {
+	if _, err := h.WorkflowMgr.Phases.TryAutoAdvance(ctx, runID); err != nil {
 		testutil.FailErr(t, "TryAutoAdvance execute", err)
 	}
 }
@@ -308,11 +309,11 @@ func completeQueuedFixtureWork(t *testing.T, h *Harness, ctx context.Context, pr
 		}
 		report := &api.WorkerCompletionReport{LegStatus: "complete"}
 		if claimed.WorkflowRunID != "" {
-			run, err := h.WorkflowMgr.Get(ctx, claimed.WorkflowRunID)
+			run, err := h.WorkflowMgr.Store.Runs.Get(ctx, claimed.WorkflowRunID)
 			testutil.FailErr(t, "load fixture review run", err)
 			manifest, err := h.WorkflowMgr.ManifestForRunID(ctx, run.ID)
 			testutil.FailErr(t, "load fixture review manifest", err)
-			assignment, err := h.WorkflowMgr.CoverageAssignment(ctx, run, manifest, claimed.AgentType)
+			assignment, err := h.WorkflowMgr.Coverage.CoverageAssignment(ctx, run, manifest, claimed.AgentType)
 			testutil.FailErr(t, "load fixture coverage assignment", err)
 			if assignment != nil {
 				report.CoverageReview = coverageReviewFixture(assignment.Facts)

@@ -11,7 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/providerretry"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/workflow"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -101,7 +101,7 @@ func TestCloudflarePaidPlanNoticeUsesStructuredReason(t *testing.T) {
 }
 
 func TestContextFromPromptErrorNotRunnable(t *testing.T) {
-	ctx := ContextFromPromptError(&workflow.NotRunnableError{Reason: "paused", Status: wire.WorkflowRunStatusPaused})
+	ctx := ContextFromPromptError(&runstate.NotRunnableError{Reason: "paused", Status: wire.WorkflowRunStatusPaused})
 	if ctx["reason"] != "paused" {
 		t.Fatalf("ctx = %#v", ctx)
 	}

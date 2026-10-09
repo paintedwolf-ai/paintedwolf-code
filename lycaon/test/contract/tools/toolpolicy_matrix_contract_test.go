@@ -1,7 +1,12 @@
 package contract
 
 import (
+	workflowruntime "github.com/lycaon/lycaon/internal/workflow/runtime"
+	workflowstatetools "github.com/lycaon/lycaon/internal/workflow/statetools"
+
 	"context"
+	workflowinputs "github.com/lycaon/lycaon/internal/workflow/inputs"
+	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
 	"os"
 	"path/filepath"
 	"strings"
@@ -24,7 +29,11 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workflow"
+	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
+	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
+	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -114,8 +123,8 @@ func listCoordinatorToolsForPosture(t *testing.T, row postureToolExpectation) []
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: row.posture}, testdbseed.DefaultProjectID)
 	contractcheck.FailErr(t, "create session in store", err)
 	if row.withRun {
-		if _, err := workflowMgr.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{WorkflowID: "plan", WorkflowVersion: "1.0.0"}); err != nil {
-			contractcheck.FailErr(t, "workflowMgr.StartHuman failed", err)
+		if _, err := workflowMgr.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{WorkflowID: "plan", WorkflowVersion: "1.0.0"}); err != nil {
+			contractcheck.FailErr(t, "workflowMgr.Starts.StartHuman failed", err)
 		}
 	}
 	names := make([]string, 0)
@@ -155,32 +164,34 @@ func wireToolpolicyMatrixContract(
 
 	manifestRegistry, err := workflowdef.RegistryFromDirs("")
 	contractcheck.FailErr(t, "workflow.RegistryFromDirs failed", err)
-	sessionWF := workflow.NewSessionWorkflowSQLStore(sqlDB)
+	sessionWF := workflowdrafts.NewSQL(sqlDB)
 	blueprintStore := blueprint.NewFileStoreForTest(projectDir)
 	blueprintMgr := blueprint.NewManager(blueprintStore)
-	workflowMgr := workflow.NewManager(workflow.NewSQLStore(sqlDB), store, manifestRegistry, nil)
-	workflowMgr.Resolver = workflow.ManifestResolver{SessionStore: sessionWF}
-	workflowMgr.BlueprintCreate = blueprint.WorkflowBlueprintCreator{Manager: blueprintMgr}
-	workflowMgr.BlueprintGet = blueprintMgr
-	mgr.SetWorkflowSessionView(workflowMgr)
-	mgr.SetCoordinatorTurnFrameSource(&workflow.CoordinatorTurnFrameLoader{Runs: workflowMgr, SessionStore: sessionWF})
-	if err := workflow.RegisterStateTools(reg, workflow.StateToolDeps{Runs: workflowMgr, Sessions: store}); err != nil {
+	workflowMgr := workflow.NewManager(workflowpersistence.New(sqlDB), store, manifestRegistry, nil)
+	workflowMgr.Resolver.SessionStore = sessionWF
+	workflowMgr.Blueprints.Creator = blueprint.WorkflowBlueprintCreator{Manager: blueprintMgr}
+	workflowMgr.Blueprints.Getter = blueprintMgr
+	workflowMgr.Presentation.BlueprintGetter = blueprintMgr
+	workflowMgr.Approvals.Getter = blueprintMgr
+	mgr.SetWorkflowDomains(&session.WorkflowDomains{Runs: workflowMgr.Store.Runs, Policy: workflowMgr.Policy, Ambient: workflowMgr.Ambient, Blueprints: workflowMgr.Blueprints, Batch: workflowMgr.Batch, Slash: workflowMgr.Slash, Requests: workflowMgr.Requests, Feedback: workflowMgr.Feedback, Transcript: workflowMgr.Transcript, Asks: workflowMgr.Asks, Fanout: workflowMgr.Fanout, Phases: workflowMgr.Phases, Reports: workflowMgr.Reports, Recovery: workflowMgr.Recovery, Cleanup: workflowMgr})
+	mgr.SetCoordinatorTurnFrameSource(&workflowruntime.CoordinatorFrames{Runs: workflowMgr.Store.Runs, Resolver: &workflowMgr.Resolver, Snapshots: workflowMgr.Snapshots, Policy: workflowMgr.Policy, Obligations: workflowMgr.Obligations, SessionStore: sessionWF})
+	if err := workflowstatetools.RegisterStateTools(reg, workflowstatetools.StateToolDeps{Runs: workflowMgr.Store.Runs, Vars: workflowMgr.Phases.Vars, Journal: workflowMgr.Phases.Journal, Resolver: &workflowMgr.Resolver, Starts: workflowMgr.Starts, Controls: workflowMgr.Controls, Scaffold: workflowMgr.Blueprints.Scaffold, Sessions: store}); err != nil {
 		contractcheck.FailErr(t, "workflow.RegisterStateTools failed", err)
 	}
-	if err := workflow.RegisterAdvanceTool(reg, workflowMgr); err != nil {
-		contractcheck.FailErr(t, "workflow.RegisterAdvanceTool failed", err)
+	if err := workflowphases.RegisterAdvanceTool(reg, workflowMgr.Phases); err != nil {
+		contractcheck.FailErr(t, "workflowphases.RegisterAdvanceTool failed", err)
 	}
-	if err := workflow.RegisterTransitionTool(reg, workflowMgr); err != nil {
-		contractcheck.FailErr(t, "workflow.RegisterTransitionTool failed", err)
+	if err := workflowphases.RegisterTransitionTool(reg, workflowMgr.Phases); err != nil {
+		contractcheck.FailErr(t, "workflowphases.RegisterTransitionTool failed", err)
 	}
-	if err := workflow.RegisterFanoutPlanTool(reg, workflowMgr); err != nil {
+	if err := workflow.RegisterFanoutPlanTool(reg, workflowMgr.Fanout); err != nil {
 		contractcheck.FailErr(t, "workflow.RegisterFanoutPlanTool failed", err)
 	}
 	if err := workflow.RegisterFeedbackTool(reg, workflowMgr); err != nil {
 		contractcheck.FailErr(t, "workflow.RegisterFeedbackTool failed", err)
 	}
-	if err := workflow.RegisterAskUserTool(reg, workflowMgr, nil); err != nil {
-		contractcheck.FailErr(t, "workflow.RegisterAskUserTool failed", err)
+	if err := workflowinputs.RegisterAskUserTool(reg, workflowMgr.Asks, nil); err != nil {
+		contractcheck.FailErr(t, "workflowinputs.RegisterAskUserTool failed", err)
 	}
 
 	delegStore := delegation.NewMemoryStore()
@@ -192,23 +203,23 @@ func wireToolpolicyMatrixContract(
 	if err := worker.RegisterTaskTool(reg, worker.TaskToolDeps{Sessions: mgr, Queue: queue, Agents: agents, Workers: worker.DefaultWorkersConfig()}); err != nil {
 		contractcheck.FailErr(t, "worker.RegisterTaskTool failed", err)
 	}
-	policy, err := workflow.LoadComposePolicy()
-	contractcheck.FailErr(t, "workflow.LoadComposePolicy failed", err)
-	templates, err := workflow.LoadTemplatesFromDir(extpacks.Bundled(config.PlatformFlows.Join("_templates")))
+	policy, err := workflowcomposition.LoadComposePolicy()
+	contractcheck.FailErr(t, "workflowcomposition.LoadComposePolicy failed", err)
+	templates, err := workflowcomposition.LoadTemplatesFromDir(extpacks.Bundled(config.PlatformFlows.Join("_templates")))
 	contractcheck.FailErr(t, "load workflow templates", err)
-	composer := &workflow.Composer{SessionStore: sessionWF, Registry: condReg, Agents: agents, Policy: policy, Templates: templates}
+	composer := &workflowcomposition.Composer{SessionStore: sessionWF, Registry: condReg, Agents: agents, Policy: policy, Templates: templates}
 	if err := workflow.RegisterComposeTool(reg, composer); err != nil {
 		contractcheck.FailErr(t, "workflow.RegisterComposeTool failed", err)
 	}
 	if err := workflow.RegisterComposeFromTemplateTool(reg, composer); err != nil {
 		contractcheck.FailErr(t, "workflow.RegisterComposeFromTemplateTool failed", err)
 	}
-	if err := workflow.RegisterCatalogSummariesTool(reg, workflow.ManifestResolver{
+	if err := workflow.RegisterCatalogSummariesTool(reg, workflowcatalog.Resolver{
 		SessionStore: sessionWF,
 	}, sessionWF, templates); err != nil {
 		contractcheck.FailErr(t, "workflow.RegisterCatalogSummariesTool failed", err)
 	}
-	persister := &workflow.Persister{SessionStore: sessionWF}
+	persister := &workflowcomposition.Persister{SessionStore: sessionWF}
 	if err := workflow.RegisterPersistTool(reg, persister); err != nil {
 		contractcheck.FailErr(t, "workflow.RegisterPersistTool failed", err)
 	}

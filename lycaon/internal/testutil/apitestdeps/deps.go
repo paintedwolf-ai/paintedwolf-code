@@ -59,7 +59,10 @@ import (
 	"github.com/lycaon/lycaon/internal/webresearch"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workflow"
+	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -84,9 +87,9 @@ type Deps struct {
 	EditorDocuments   *editordoc.Service
 	FileBriefings     *filebriefing.Service
 	Workflows         *workflow.RunManager
-	WorkflowRuns      workflow.RunStore
-	WorkflowComposer  *workflow.Composer
-	WorkflowPersister *workflow.Persister
+	WorkflowRuns      *runstate.Repository
+	WorkflowComposer  *workflowcomposition.Composer
+	WorkflowPersister *workflowcomposition.Persister
 	Blueprints        *blueprint.Manager
 	ScanCoordinator   scan.ScanCoordinator
 	ScanCadence       *scancadence.Service
@@ -443,17 +446,16 @@ func fillSources(t *testing.T, d *Deps) {
 func fillWorkflows(t *testing.T, d *Deps) {
 	t.Helper()
 	if d.WorkflowRuns == nil {
-		d.WorkflowRuns = workflow.NewSQLStore(d.Database)
+		d.WorkflowRuns = workflowpersistence.New(d.Database)
 	}
 	if d.Workflows == nil {
 		d.Workflows = workflow.NewManager(d.WorkflowRuns, d.Store, workflowdef.NewRegistry(nil), nil)
-		d.Workflows.Resolver = workflow.ManifestResolver{}
 	}
 	if d.WorkflowComposer == nil {
-		d.WorkflowComposer = &workflow.Composer{}
+		d.WorkflowComposer = &workflowcomposition.Composer{}
 	}
 	if d.WorkflowPersister == nil {
-		d.WorkflowPersister = &workflow.Persister{}
+		d.WorkflowPersister = &workflowcomposition.Persister{}
 	}
 	if d.Blueprints == nil {
 		d.Blueprints = blueprint.NewManager(blueprint.NewFileStore(func(ctx context.Context, projectID string) (string, error) {

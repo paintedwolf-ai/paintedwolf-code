@@ -3,11 +3,11 @@ package app
 import (
 	"context"
 	"fmt"
+	workflowinputs "github.com/lycaon/lycaon/internal/workflow/inputs"
 
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/tools/native"
-	"github.com/lycaon/lycaon/internal/workflow"
 )
 
 func (b sessionWiring) wireSecretCapabilities() error {
@@ -38,13 +38,13 @@ func (b sessionWiring) wireSecretCapabilities() error {
 	}
 	b.toolRuntime.Executor.SetSecretResolver(service)
 	if b.workflowMgr != nil {
-		b.workflowMgr.SetSecretCapture(func(ctx context.Context, req workflow.SecretCaptureRequest) (workflow.SecretCaptureResult, error) {
+		b.workflowMgr.Asks.SetSecretCapture(func(ctx context.Context, req workflowinputs.SecretCaptureRequest) (workflowinputs.SecretCaptureResult, error) {
 			put, err := service.Put(ctx, secretcap.PutRequest{
 				ProjectID: req.ProjectID, ChatSessionID: req.RootSessionID, SessionID: req.SessionID,
 				OperationID: req.OperationID, Name: req.Name, Purpose: req.Purpose, Scope: req.Scope,
 				Origin: secretcap.OriginAskUserResponse, Value: req.Value, PersonID: req.PersonID, AgentUseTTL: req.AgentUseTTL,
 			})
-			result := workflow.SecretCaptureResult{Reference: put.Metadata.Reference}
+			result := workflowinputs.SecretCaptureResult{Reference: put.Metadata.Reference}
 			// A committed mint needs compensating even when Put errs; only this reference reaches its bytes.
 			if put.Created {
 				result.Discard = func(discardCtx context.Context) error {

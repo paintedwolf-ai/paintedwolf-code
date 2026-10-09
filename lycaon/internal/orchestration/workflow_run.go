@@ -2,16 +2,29 @@ package orchestration
 
 import (
 	"context"
-
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// WorkflowRunLifecycle gates orchestrated runs against WorkflowRun state.
-type WorkflowRunLifecycle interface {
-	Start(ctx context.Context, sessionID string, req api.StartWorkflowRunRequest) (*api.WorkflowRun, error)
-	Get(ctx context.Context, runID string) (*api.WorkflowRun, error)
-	Cancel(ctx context.Context, runID, reason string) (*api.WorkflowRun, error)
-	Fail(ctx context.Context, runID string, failure api.WorkflowFailure) (*api.WorkflowRun, error)
-	MarkTopologyStageComplete(ctx context.Context, runID, stage, output, designForkCriterion string) error
-	AssertRunnable(ctx context.Context, runID string) error
+type WorkflowRunLifecycle struct {
+	Runs     WorkflowRuns
+	Starts   WorkflowStarts
+	Controls WorkflowControls
+	Policy   WorkflowPolicy
+	Topology WorkflowTopology
+}
+type WorkflowRuns interface {
+	Get(context.Context, string) (*api.WorkflowRun, error)
+}
+type WorkflowStarts interface {
+	Start(context.Context, string, api.StartWorkflowRunRequest) (*api.WorkflowRun, error)
+}
+type WorkflowControls interface {
+	Cancel(context.Context, string, string) (*api.WorkflowRun, error)
+	Fail(context.Context, string, api.WorkflowFailure) (*api.WorkflowRun, error)
+}
+type WorkflowPolicy interface {
+	AssertRunnable(context.Context, string) error
+}
+type WorkflowTopology interface {
+	MarkTopologyStageComplete(context.Context, string, string, string, string) error
 }

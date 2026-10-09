@@ -1,6 +1,8 @@
 package session
 
 import (
+	workflowfacts "github.com/lycaon/lycaon/internal/session/workflowfacts"
+
 	"context"
 	"strings"
 
@@ -9,26 +11,21 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// ResolvedWorkflowRequest binds request text to its workflow start.
-type ResolvedWorkflowRequest struct {
-	RunID            string
-	OpeningMessageID string
-	Text             string
-}
+// workflowfacts.ResolvedWorkflowRequest binds request text to its workflow start.
 
 // resolvedWorkflowRequest supplies a coordinator's resolved workflow request.
-func (m *Manager) resolvedWorkflowRequest(ctx context.Context, sess *api.Session) ResolvedWorkflowRequest {
+func (m *Manager) resolvedWorkflowRequest(ctx context.Context, sess *api.Session) workflowfacts.ResolvedWorkflowRequest {
 	if m == nil || m.workflows == nil || sess == nil || sess.IsWorkerChild() {
-		return ResolvedWorkflowRequest{}
+		return workflowfacts.ResolvedWorkflowRequest{}
 	}
-	return m.workflows.ResolvedRequest(ctx, sess.ID)
+	return m.workflows.Policy.ResolvedRequest(ctx, sess.ID)
 }
 
 // turnRequest names the human request a turn decides for. A turn that carries
 // its own instruction decides for it. A turn a host opened decides only when
 // the request it continues has no decision yet: a workflow started from a
 // slash command, or a user turn the host parked before any model call.
-func (m *Manager) turnRequest(ctx context.Context, in PromptInput, history []api.Message, openingMessageID string, resolvedRequest ResolvedWorkflowRequest) (string, string, bool) {
+func (m *Manager) turnRequest(ctx context.Context, in PromptInput, history []api.Message, openingMessageID string, resolvedRequest workflowfacts.ResolvedWorkflowRequest) (string, string, bool) {
 	if in.HostSignal == nil {
 		if text := promptUserInstruction(in); text != "" {
 			if strings.TrimSpace(openingMessageID) == "" {
@@ -44,7 +41,7 @@ func (m *Manager) turnRequest(ctx context.Context, in PromptInput, history []api
 	return opening, text, true
 }
 
-func requestOpening(history []api.Message, request ResolvedWorkflowRequest) (string, string) {
+func requestOpening(history []api.Message, request workflowfacts.ResolvedWorkflowRequest) (string, string) {
 	for i := len(history) - 1; i >= 0; i-- {
 		msg := history[i]
 		if request.OpeningMessageID != "" && msg.ID == request.OpeningMessageID && request.Text != "" {

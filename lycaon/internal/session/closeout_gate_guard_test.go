@@ -1,6 +1,8 @@
 package session
 
 import (
+	workflowfacts "github.com/lycaon/lycaon/internal/session/workflowfacts"
+
 	"context"
 	"strings"
 	"testing"
@@ -8,16 +10,16 @@ import (
 
 // gatedCloseoutView reports a gated phase with the given open gate leaves.
 type gatedCloseoutView struct {
-	WorkflowSessionView
-	state WorkflowCloseoutGateState
+	WorkflowPolicy
+	state workflowfacts.WorkflowCloseoutGateState
 }
 
-func (v gatedCloseoutView) ActiveCloseoutGateState(context.Context, string) WorkflowCloseoutGateState {
+func (v gatedCloseoutView) ActiveCloseoutGateState(context.Context, string) workflowfacts.WorkflowCloseoutGateState {
 	return v.state
 }
 
-func gatedExecuteState() WorkflowCloseoutGateState {
-	return WorkflowCloseoutGateState{
+func gatedExecuteState() workflowfacts.WorkflowCloseoutGateState {
+	return workflowfacts.WorkflowCloseoutGateState{
 		Gated:      true,
 		Phase:      "execute",
 		OpenLeaves: []string{"worker_cycle_ready"},
@@ -26,7 +28,8 @@ func gatedExecuteState() WorkflowCloseoutGateState {
 
 func TestGatedCloseoutSkipsWhenInvokeGated(t *testing.T) {
 	mgr, sess := newSynthesisDelayManager(t)
-	mgr.workflows = gatedCloseoutView{state: gatedExecuteState()}
+	workflowFixture1 := gatedCloseoutView{state: gatedExecuteState()}
+	mgr.workflows = &WorkflowDomains{Policy: workflowFixture1}
 
 	if _, block := mgr.maybeRejectCloseoutForOpenGates(context.Background(), sess, true, false); block {
 		t.Fatal("expected no open-gates hold when invokeAllowed=false")
@@ -35,7 +38,8 @@ func TestGatedCloseoutSkipsWhenInvokeGated(t *testing.T) {
 
 func TestGatedCloseoutBlocksOnOpenGates(t *testing.T) {
 	mgr, sess := newSynthesisDelayManager(t)
-	mgr.workflows = gatedCloseoutView{state: gatedExecuteState()}
+	workflowFixture2 := gatedCloseoutView{state: gatedExecuteState()}
+	mgr.workflows = &WorkflowDomains{Policy: workflowFixture2}
 
 	reject, block := mgr.maybeRejectCloseoutForOpenGates(context.Background(), sess, true, true)
 	if !block {
@@ -55,7 +59,8 @@ func TestGatedCloseoutBlocksOnOpenGates(t *testing.T) {
 
 func TestGatedCloseoutAllowsWhenNotGated(t *testing.T) {
 	mgr, sess := newSynthesisDelayManager(t)
-	mgr.workflows = gatedCloseoutView{state: WorkflowCloseoutGateState{}}
+	workflowFixture3 := gatedCloseoutView{state: workflowfacts.WorkflowCloseoutGateState{}}
+	mgr.workflows = &WorkflowDomains{Policy: workflowFixture3}
 
 	if _, block := mgr.maybeRejectCloseoutForOpenGates(context.Background(), sess, true, true); block {
 		t.Fatal("a phase without a gated closeout must let the prose finish through")
@@ -64,7 +69,8 @@ func TestGatedCloseoutAllowsWhenNotGated(t *testing.T) {
 
 func TestGatedCloseoutSkipsBusyWorkers(t *testing.T) {
 	mgr, sess := newSynthesisDelayManager(t)
-	mgr.workflows = gatedCloseoutView{state: gatedExecuteState()}
+	workflowFixture4 := gatedCloseoutView{state: gatedExecuteState()}
+	mgr.workflows = &WorkflowDomains{Policy: workflowFixture4}
 
 	if _, block := mgr.maybeRejectCloseoutForOpenGates(context.Background(), sess, false, true); block {
 		t.Fatal("the hold must not apply while workers are still in flight")
@@ -73,7 +79,8 @@ func TestGatedCloseoutSkipsBusyWorkers(t *testing.T) {
 
 func TestGatedCloseoutBoundedPerPrompt(t *testing.T) {
 	mgr, sess := newSynthesisDelayManager(t)
-	mgr.workflows = gatedCloseoutView{state: gatedExecuteState()}
+	workflowFixture5 := gatedCloseoutView{state: gatedExecuteState()}
+	mgr.workflows = &WorkflowDomains{Policy: workflowFixture5}
 	ctx := context.Background()
 
 	for i := 0; i < closeoutGateDelayMaxPerPrompt; i++ {

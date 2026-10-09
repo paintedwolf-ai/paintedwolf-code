@@ -3,16 +3,18 @@ package workflow
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/workflow/catalog"
+	"github.com/lycaon/lycaon/internal/workflow/lifecycle"
+	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
+	workflowreview "github.com/lycaon/lycaon/internal/workflow/review"
+	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
 )
-
-// ReportNotAcceptedFailureCode ends a run whose report phase stored a report
-// that still failed the document check when its repairs ran out.
-const ReportNotAcceptedFailureCode = "REPORT_NOT_ACCEPTED"
 
 type reportSettlement int
 
@@ -25,7 +27,19 @@ const (
 // MaybeDeliverTopologyReport settles the report phase on a committed report:
 // an accepted one satisfies topology_report_delivered and advances committed
 // gates, and one stored with document defects fails the run as not accepted.
-func (m *RunManager) MaybeDeliverTopologyReport(ctx context.Context, sessionID, messageID string) error {
+
+type Reports struct {
+	Coverage *workflowreview.Coverage
+	Verdicts *workflowreview.Verdicts
+	Runs     runstate.RunsRepository
+	Sessions session.Store
+	Resolver *catalog.Resolver
+	Vars     *runstate.Variables
+	Controls *lifecycle.Commands
+	Phases   *workflowphases.Service
+}
+
+func (m *Reports) MaybeDeliverTopologyReport(ctx context.Context, sessionID, messageID string) error {
 	if m == nil || strings.TrimSpace(sessionID) == "" || strings.TrimSpace(messageID) == "" {
 		return nil
 	}
@@ -33,16 +47,16 @@ func (m *RunManager) MaybeDeliverTopologyReport(ctx context.Context, sessionID, 
 	if err != nil {
 		return err
 	}
-	active, err := m.Store.ActiveBySession(ctx, sessionID)
+	active, err := m.Runs.ActiveBySession(ctx, sessionID)
 	if err != nil || active == nil {
 		return err
 	}
-	manifest, err := m.manifestForRun(ctx, active)
+	manifest, err := m.Resolver.ForRun(ctx, active)
 	if err != nil {
 		return err
 	}
 	settled, phase := reportUnsettled, ""
-	if _, err := m.StampRunVars(ctx, active.ID, func(ctx context.Context, run *api.WorkflowRun, vars map[string]any) (map[string]any, bool, error) {
+	if _, err := m.Vars.Stamp(ctx, active.ID, func(ctx context.Context, run *api.WorkflowRun, vars map[string]any) (map[string]any, bool, error) {
 		settled = reportUnsettled
 		def, ok := manifest.PhaseForRun(run, run.CurrentPhase)
 		if !ok || !workflowdef.PhaseHasGate(def, "topology_report_delivered") ||
@@ -62,17 +76,17 @@ func (m *RunManager) MaybeDeliverTopologyReport(ctx context.Context, sessionID, 
 			return nil, false, nil
 		}
 		settled = reportAccepted
-		return SatisfyGateInVars(vars, "topology_report_delivered"), true, nil
+		return runstate.SatisfyGateInVars(vars, "topology_report_delivered"), true, nil
 	}); err != nil {
 		return err
 	}
 	switch settled {
 	case reportNotAccepted:
-		_, err = m.Fail(ctx, active.ID, reportNotAcceptedFailure(message.CompletionReport.Defects, phase))
+		_, err = m.Controls.Fail(ctx, active.ID, reportNotAcceptedFailure(message.CompletionReport.Defects, phase))
 		return err
 	case reportAccepted:
 		// Entering done stamps terminal completion for the next hop.
-		_, err = m.TryAutoAdvanceThroughCommittedGates(ctx, active.ID, len(manifest.Phases))
+		_, err = m.Phases.TryAutoAdvanceThroughCommittedGates(ctx, active.ID, len(manifest.Phases))
 		return err
 	default:
 		return nil
@@ -85,18 +99,11 @@ func reportNotAcceptedFailure(defects []api.CompletionReportDefect, phase string
 		requirements = "requirements"
 	}
 	return api.WorkflowFailure{
-		Code: ReportNotAcceptedFailureCode,
+		Code: runstate.ReportNotAcceptedFailureCode,
 		Message: fmt.Sprintf("The report still failed %d document %s when its repairs ran out. It was stored with what it is missing.",
 			len(defects), requirements),
 		Phase: phase,
 	}
-}
-
-// reportNotAcceptedRun reports whether a run ended on a report the host
-// stored without accepting it.
-func reportNotAcceptedRun(run *api.WorkflowRun) bool {
-	return run != nil && run.Status == api.WorkflowRunStatusFailed &&
-		run.Failure != nil && run.Failure.Code == ReportNotAcceptedFailureCode
 }
 
 // reportPhaseCompletion binds delivery to a committed completion of this phase.
@@ -119,8 +126,8 @@ func reportPhaseCompletion(message api.Message, run *api.WorkflowRun, manifest w
 }
 
 // recoverReportDelivery finishes a committed closeout after process loss.
-func (m *RunManager) recoverReportDelivery(ctx context.Context, run *api.WorkflowRun) (bool, error) {
-	manifest, err := m.manifestForRun(ctx, run)
+func (m *Reports) RecoverReportDelivery(ctx context.Context, run *api.WorkflowRun) (bool, error) {
+	manifest, err := m.Resolver.ForRun(ctx, run)
 	if err != nil {
 		return false, err
 	}

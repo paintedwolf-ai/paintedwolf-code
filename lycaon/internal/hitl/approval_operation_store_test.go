@@ -2,12 +2,13 @@ package hitl
 
 import (
 	"context"
+	"testing"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
-	"time"
 )
 
 type recoveryApprovalInstaller struct {
@@ -52,7 +53,7 @@ func TestRecoverApprovalOperationsRollsBackPreparedAuthority(t *testing.T) {
 	if status != "prepared" {
 		t.Fatalf("retried status = %q", status)
 	}
-	stored, err := store.Get(t.Context(), checkpoint.ID)
+	stored, err := store.Runs.Get(t.Context(), checkpoint.ID)
 	testutil.FailErr(t, "get checkpoint", err)
 	if stored.Status != DecisionStatusPending {
 		t.Fatalf("checkpoint status = %q", stored.Status)

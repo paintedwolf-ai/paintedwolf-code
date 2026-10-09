@@ -5,8 +5,8 @@ import (
 
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -28,7 +28,7 @@ func TestSubmitVerdictSchemaRequiresEveryPhaseDiscriminant(t *testing.T) {
 			}
 			phases++
 			t.Run(key+"/"+phase.ID, func(t *testing.T) {
-				if workflow.ValidateReviewLoopVerdict(*phase.ReviewLoop, map[string]string{}, workflow.VerdictRules{}) == nil {
+				if workflowvalidation.ValidateReviewLoopVerdict(*phase.ReviewLoop, map[string]string{}, workflowvalidation.VerdictRules{}) == nil {
 					t.Fatal("runtime no longer requires a verdict discriminant")
 				}
 				for _, projected := range []tools.ToolMeta{full, tools.TrimCoordinatorToolMeta(full)} {

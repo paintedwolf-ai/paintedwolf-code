@@ -22,5 +22,5 @@ func (b delegationWiring) decodeCompleteLeg(ctx context.Context, args map[string
 		return record, fmt.Errorf("worker job %q unavailable", tctx.WorkerJobID)
 	}
 	report, _ := workercompletion.ReportFromCompleteLegArgs(args)
-	return record, b.workflowMgr.ValidateCoverageCompletion(ctx, task, report.CoverageReview)
+	return record, b.workflowMgr.Coverage.ValidateCoverageCompletion(ctx, task, report.CoverageReview)
 }

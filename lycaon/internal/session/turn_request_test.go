@@ -1,6 +1,8 @@
 package session
 
 import (
+	workflowfacts "github.com/lycaon/lycaon/internal/session/workflowfacts"
+
 	"context"
 	"errors"
 	"testing"
@@ -15,11 +17,11 @@ import (
 
 type requestWorkflowView struct {
 	stubWorkflowManifest
-	request ResolvedWorkflowRequest
+	request workflowfacts.ResolvedWorkflowRequest
 	asked   *[]string
 }
 
-func (v requestWorkflowView) ResolvedRequest(_ context.Context, sessionID string) ResolvedWorkflowRequest {
+func (v requestWorkflowView) ResolvedRequest(_ context.Context, sessionID string) workflowfacts.ResolvedWorkflowRequest {
 	if v.asked != nil {
 		*v.asked = append(*v.asked, sessionID)
 	}
@@ -28,7 +30,7 @@ func (v requestWorkflowView) ResolvedRequest(_ context.Context, sessionID string
 
 func TestTurnRequestDecidesAUserTurnForItsInstruction(t *testing.T) {
 	mgr := NewManager(store.NewMemory(), nil, nil, settings.DefaultSessionLimits())
-	opening, text, ok := mgr.turnRequest(t.Context(), PromptInput{Text: "fix the flaky test"}, nil, "u1", ResolvedWorkflowRequest{})
+	opening, text, ok := mgr.turnRequest(t.Context(), PromptInput{Text: "fix the flaky test"}, nil, "u1", workflowfacts.ResolvedWorkflowRequest{})
 	if !ok || opening != "u1" || text != "fix the flaky test" {
 		t.Fatalf("user turn = %q %q %v", opening, text, ok)
 	}
@@ -41,7 +43,7 @@ func TestTurnRequestDecidesAParkedRequestOnItsFirstHostTurn(t *testing.T) {
 		{ID: "wake", Role: api.MessageRoleUser, Origin: api.MessageOriginHost, Kind: api.MessageKindHostLoopWake, Visibility: api.MessageVisibilityInternal},
 	}
 	wake := PromptInput{HostSignal: &PromptHostSignal{Kind: api.MessageKindHostLoopWake}}
-	request := ResolvedWorkflowRequest{OpeningMessageID: "slash", Text: "Review the project against its threat model."}
+	request := workflowfacts.ResolvedWorkflowRequest{OpeningMessageID: "slash", Text: "Review the project against its threat model."}
 	opening, text, ok := mgr.turnRequest(t.Context(), wake, history, "", request)
 	if !ok || opening != "slash" || text != request.Text {
 		t.Fatalf("parked request = %q %q %v, want a decision for the run's resolved request", opening, text, ok)
@@ -61,7 +63,7 @@ func TestTurnRequestKeepsADecidedRequestAcrossHostTurns(t *testing.T) {
 	testutil.FailErr(t, "put receipt", err)
 	history := []api.Message{{ID: "u1", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "add a flag"}}
 	wake := PromptInput{HostSignal: &PromptHostSignal{Kind: api.MessageKindHostLoopWake}}
-	if _, _, ok := mgr.turnRequest(t.Context(), wake, history, "", ResolvedWorkflowRequest{}); ok {
+	if _, _, ok := mgr.turnRequest(t.Context(), wake, history, "", workflowfacts.ResolvedWorkflowRequest{}); ok {
 		t.Fatal("a host turn re-decided a request that already has a decision")
 	}
 }
@@ -70,7 +72,8 @@ func TestResolvedWorkflowRequestDoesNotReplaceWorkerAssignment(t *testing.T) {
 	st := store.NewMemory()
 	mgr := NewManager(st, nil, nil, settings.DefaultSessionLimits())
 	var asked []string
-	mgr.SetWorkflowSessionView(requestWorkflowView{request: ResolvedWorkflowRequest{Text: "run request"}, asked: &asked})
+	workflowFixture1 := requestWorkflowView{request: workflowfacts.ResolvedWorkflowRequest{Text: "run request"}, asked: &asked}
+	mgr.SetWorkflowDomains(&WorkflowDomains{Runs: workflowFixture1, Policy: workflowFixture1, Ambient: workflowFixture1, Blueprints: workflowFixture1, Batch: workflowFixture1, Slash: workflowFixture1, Requests: workflowFixture1, Feedback: workflowFixture1, Transcript: workflowFixture1, Asks: workflowFixture1, Fanout: workflowFixture1, Phases: workflowFixture1, Reports: workflowFixture1, Recovery: workflowFixture1, Cleanup: workflowFixture1})
 	root, err := st.Create(t.Context(), api.CreateSessionRequest{}, "project-1")
 	testutil.FailErr(t, "create root", err)
 	worker, err := st.CreateChild(t.Context(), root, api.SpawnChildRequest{AgentType: "security-reviewer"})
@@ -141,7 +144,7 @@ func TestWorkflowStartDecisionUsesItsBoundRequestOnce(t *testing.T) {
 	mgr := NewManager(st, nil, nil, settings.DefaultSessionLimits())
 	sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, "project-1")
 	testutil.FailErr(t, "create session", err)
-	request := ResolvedWorkflowRequest{RunID: "new-run", OpeningMessageID: "start", Text: "Review the project security."}
+	request := workflowfacts.ResolvedWorkflowRequest{RunID: "new-run", OpeningMessageID: "start", Text: "Review the project security."}
 	wake := PromptInput{HostSignal: &PromptHostSignal{Kind: api.MessageKindHostLoopWake}}
 	history := []api.Message{
 		{ID: "old-user", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, WorkflowRunID: "old-run", Content: "Unrelated earlier work"},

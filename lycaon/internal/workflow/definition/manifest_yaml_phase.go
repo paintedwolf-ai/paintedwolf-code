@@ -2,11 +2,11 @@ package definition
 
 import (
 	"fmt"
+	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
 	"slices"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/blueprint"
-	"github.com/lycaon/lycaon/internal/session"
 )
 
 func parsePhaseYAML(p phaseYAML) (PhaseDef, error) {
@@ -346,7 +346,7 @@ func parseObligationsYAML(phaseID string, raw []obligationYAML) ([]ObligationDef
 func parseOnEnterYAML(phaseID string, raw onEnterYAML) (PhaseOnEnter, error) {
 	var enter PhaseOnEnter
 	if sm := strings.TrimSpace(raw.SetPosture); sm != "" {
-		if !session.ValidSessionPosture(sm) {
+		if !sessionposture.ValidSessionPosture(sm) {
 			return PhaseOnEnter{}, fmt.Errorf("phase %q: invalid set_posture %q", phaseID, sm)
 		}
 		enter.SetPosture = sm

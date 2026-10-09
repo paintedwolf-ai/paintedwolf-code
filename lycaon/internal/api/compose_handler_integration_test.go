@@ -17,11 +17,13 @@ import (
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/workflow"
+	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
+	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
+	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func newComposeTestServer(t *testing.T) (*Server, wire.Session, *workflow.Composer) {
+func newComposeTestServer(t *testing.T) (*Server, wire.Session, *workflowcomposition.Composer) {
 	t.Helper()
 	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	store := store.NewMemory()
@@ -35,12 +37,12 @@ func newComposeTestServer(t *testing.T) (*Server, wire.Session, *workflow.Compos
 	testutil.FailErr(t, "build conditions registry", err)
 	agents := orchestration.NewMemoryAgentRegistry()
 	_ = orchestration.LoadRequiredAgentRegistry(t.Context(), agents)
-	sessionStore := workflow.NewMemorySessionWorkflowStore()
-	policy, err := workflow.LoadComposePolicy()
-	testutil.FailErr(t, "workflow.LoadComposePolicy failed", err)
-	templates, err := workflow.LoadTemplatesFromDir(extpacks.Bundled(config.PlatformFlows.Join("_templates")))
+	sessionStore := workflowdrafts.NewMemory()
+	policy, err := workflowcomposition.LoadComposePolicy()
+	testutil.FailErr(t, "workflowcomposition.LoadComposePolicy failed", err)
+	templates, err := workflowcomposition.LoadTemplatesFromDir(extpacks.Bundled(config.PlatformFlows.Join("_templates")))
 	testutil.FailErr(t, "load workflow templates", err)
-	composer := &workflow.Composer{
+	composer := &workflowcomposition.Composer{
 		SessionStore: sessionStore,
 		Registry:     reg,
 		Agents:       agents,
@@ -49,7 +51,7 @@ func newComposeTestServer(t *testing.T) (*Server, wire.Session, *workflow.Compos
 	}
 	srv := NewServer(requiredTestDeps(t, Dependencies{
 		Store: store, Projects: projReg,
-		WorkflowCatalog:  workflow.ManifestResolver{SessionStore: sessionStore},
+		WorkflowCatalog:  workflowcatalog.Resolver{SessionStore: sessionStore},
 		WorkflowComposer: composer,
 	}), nil, TestAPIToken)
 	return srv, *sess, composer
@@ -90,7 +92,7 @@ phases:
 	if len(rows) != 1 {
 		t.Fatalf("rows = %d", len(rows))
 	}
-	if rows[0].CreatedBy != workflow.ComposeActorUser {
+	if rows[0].CreatedBy != workflowdrafts.User {
 		t.Fatalf("created_by = %q, want user", rows[0].CreatedBy)
 	}
 

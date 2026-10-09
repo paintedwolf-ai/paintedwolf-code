@@ -15,7 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/workflow"
+	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -30,7 +30,7 @@ func TestListWorkflowsFromCatalogOnly(t *testing.T) {
 	store := store.NewMemory()
 	srv := NewServer(requiredTestDeps(t, Dependencies{
 		Store: store, Projects: reg,
-		WorkflowCatalog: workflow.ManifestResolver{
+		WorkflowCatalog: workflowcatalog.Resolver{
 			ProjectTierApplies: func(context.Context, string) bool {
 				return true
 			},
@@ -70,7 +70,7 @@ func TestListWorkflowsCatalogAndOverlay(t *testing.T) {
 	store := store.NewMemory()
 	srv := NewServer(requiredTestDeps(t, Dependencies{
 		Store: store, Projects: reg,
-		WorkflowCatalog: workflow.ManifestResolver{ProjectTierApplies: func(context.Context, string) bool { return true }},
+		WorkflowCatalog: workflowcatalog.Resolver{ProjectTierApplies: func(context.Context, string) bool { return true }},
 	}), nil, TestAPIToken)
 
 	req := newAuthedRequest(http.MethodGet, "/v1/workflows?project_id="+opened.ID, nil)
@@ -159,7 +159,7 @@ phases:
 	store := store.NewMemory()
 	srv := NewServer(requiredTestDeps(t, Dependencies{
 		Store: store, Projects: reg,
-		WorkflowCatalog: workflow.ManifestResolver{ProjectTierApplies: func(context.Context, string) bool { return true }},
+		WorkflowCatalog: workflowcatalog.Resolver{ProjectTierApplies: func(context.Context, string) bool { return true }},
 	}), nil, TestAPIToken)
 
 	req := newAuthedRequest(http.MethodGet, "/v1/workflows?project_id="+opened.ID, nil)

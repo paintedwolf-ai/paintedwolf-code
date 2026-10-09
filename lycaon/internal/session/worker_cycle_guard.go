@@ -1,6 +1,8 @@
 package session
 
 import (
+	workflowfacts "github.com/lycaon/lycaon/internal/session/workflowfacts"
+
 	"context"
 	"strings"
 
@@ -15,7 +17,7 @@ type WorkerCycleGuardDeps struct {
 	MaxWorkers      func(ctx context.Context, sessionID string) int
 	MaxReadWorkers  func(ctx context.Context, sessionID string) int
 	MaxWriteWorkers func(ctx context.Context, sessionID string) int
-	PhaseGuardState func(ctx context.Context, sessionID string) WorkflowPhaseGuardState
+	PhaseGuardState func(ctx context.Context, sessionID string) workflowfacts.WorkflowPhaseGuardState
 	// RepoKnownEmpty reports whether the session workspace is empty.
 	RepoKnownEmpty func(ctx context.Context, workspacePath string) bool
 }

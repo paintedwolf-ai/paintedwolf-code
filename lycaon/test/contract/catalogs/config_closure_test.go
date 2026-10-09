@@ -2,6 +2,7 @@ package contract
 
 import (
 	"context"
+	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
 	"os"
 	"path/filepath"
 	"strings"
@@ -54,7 +55,7 @@ func TestPostureRegistryRulesPathsExist(t *testing.T) {
 	cfgRoot := filepath.Join(root, "lycaon", "config")
 	reg, err := session.LoadPostureRegistry()
 	contractcheck.FailErr(t, "session.LoadPostureRegistry failed", err)
-	for _, posture := range session.AllSessionPostures() {
+	for _, posture := range sessionposture.AllSessionPostures() {
 		spec, err := reg.Get(posture)
 		contractcheck.FailErr(t, "reg.Get failed", err)
 		for _, rulePath := range spec.Rules {

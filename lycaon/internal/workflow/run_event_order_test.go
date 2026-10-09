@@ -14,6 +14,8 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -104,7 +106,7 @@ func assertRunEventsPrecedeTheirRows(t *testing.T, sqlDB db.Handle, wantRows int
 }
 
 type orderHarness struct {
-	runs    *SQLStore
+	runs    *runstate.Repository
 	db      db.Handle
 	session *api.Session
 }
@@ -118,9 +120,9 @@ func newOrderHarness(t *testing.T) orderHarness {
 	outbox := eventoutbox.New(sqlDB, events.NewMemoryHub())
 	sessions := store.NewSQL(sqlDB)
 	sessions.SetEventOutbox(outbox)
-	runs := NewSQLStore(sqlDB)
-	runs.SetEventOutbox(outbox)
-	runs.SetSessionMutations(sessions)
+	runs := workflowpersistence.New(sqlDB)
+	runs.Transactions.SetEventOutbox(outbox)
+	runs.Transactions.SetSessionMutations(sessions)
 
 	sess, err := sessions.Create(context.Background(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
@@ -147,8 +149,8 @@ func TestActivateStartAnnouncesTheRunBeforeItsRows(t *testing.T) {
 	h := newOrderHarness(t)
 	run := h.run("run-start")
 
-	_, err := h.runs.ActivateStart(context.Background(), uuid.NewString(), "digest", nil, run,
-		workflowStartMutation{Messages: []api.Message{h.row(run.ID, "/plan go")}})
+	_, err := h.runs.Starts.ActivateStart(context.Background(), uuid.NewString(), "digest", nil, run,
+		runstate.StartMutation{Messages: []api.Message{h.row(run.ID, "/plan go")}})
 	testutil.FailErr(t, "ActivateStart", err)
 
 	assertRunEventsPrecedeTheirRows(t, h.db, 1)
@@ -159,14 +161,14 @@ func TestSupersedingStartAnnouncesEveryRunBeforeItsRows(t *testing.T) {
 	ctx := context.Background()
 
 	first := h.run("run-first")
-	_, err := h.runs.ActivateStart(ctx, uuid.NewString(), "digest-1", nil, first,
-		workflowStartMutation{Messages: []api.Message{h.row(first.ID, "/plan one")}})
+	_, err := h.runs.Starts.ActivateStart(ctx, uuid.NewString(), "digest-1", nil, first,
+		runstate.StartMutation{Messages: []api.Message{h.row(first.ID, "/plan one")}})
 	testutil.FailErr(t, "ActivateStart first", err)
 
 	// Replacing cancels the first run and writes a boundary row naming it.
 	second := h.run("run-second")
-	replaced, err := h.runs.ActivateStart(ctx, uuid.NewString(), "digest-2", first, second,
-		workflowStartMutation{Messages: []api.Message{h.row(second.ID, "/plan two")}})
+	replaced, err := h.runs.Starts.ActivateStart(ctx, uuid.NewString(), "digest-2", first, second,
+		runstate.StartMutation{Messages: []api.Message{h.row(second.ID, "/plan two")}})
 	testutil.FailErr(t, "ActivateStart replacement", err)
 	if len(replaced) != 1 {
 		t.Fatalf("replaced runs = %d, want 1", len(replaced))
@@ -181,13 +183,13 @@ func TestCommitCommandAnnouncesTheRunBeforeItsRows(t *testing.T) {
 	ctx := context.Background()
 
 	run := h.run("run-command")
-	_, err := h.runs.ActivateStart(ctx, uuid.NewString(), "digest", nil, run, workflowStartMutation{})
+	_, err := h.runs.Starts.ActivateStart(ctx, uuid.NewString(), "digest", nil, run, runstate.StartMutation{})
 	testutil.FailErr(t, "ActivateStart", err)
 
 	next := *run
 	next.CurrentPhase = "build"
-	testutil.FailErr(t, "CommitCommand", h.runs.CommitCommand(ctx, &next, workflowCommandMutation{
-		OperationID: uuid.NewString(), Kind: advanceCommandKind, InputDigest: "digest",
+	testutil.FailErr(t, "CommitCommand", h.runs.Commands.CommitCommand(ctx, &next, runstate.CommandMutation{
+		OperationID: uuid.NewString(), Kind: runstate.AdvanceCommandKind, InputDigest: "digest",
 		Messages: []api.Message{h.row(run.ID, "phase advanced")},
 	}))
 
@@ -201,12 +203,12 @@ func TestStartChildAnnouncesBothRunsBeforeItsRows(t *testing.T) {
 	ctx := context.Background()
 
 	parent := h.run("run-parent")
-	_, err := h.runs.ActivateStart(ctx, uuid.NewString(), "digest", nil, parent, workflowStartMutation{})
+	_, err := h.runs.Starts.ActivateStart(ctx, uuid.NewString(), "digest", nil, parent, runstate.StartMutation{})
 	testutil.FailErr(t, "ActivateStart parent", err)
 
 	child := h.run("run-child")
 	child.ParentRunID = &parent.ID
-	testutil.FailErr(t, "StartChild", h.runs.StartChild(ctx, parent, child, workflowChildStartMutation{
+	testutil.FailErr(t, "StartChild", h.runs.Starts.StartChild(ctx, parent, child, runstate.ChildStartMutation{
 		Messages: []api.Message{h.row(child.ID, "child started")},
 	}))
 
@@ -218,10 +220,10 @@ func TestCancelActiveTreeAnnouncesCancellationBeforeItsBoundaries(t *testing.T) 
 	ctx := context.Background()
 
 	run := h.run("run-cancel")
-	_, err := h.runs.ActivateStart(ctx, uuid.NewString(), "digest", nil, run, workflowStartMutation{})
+	_, err := h.runs.Starts.ActivateStart(ctx, uuid.NewString(), "digest", nil, run, runstate.StartMutation{})
 	testutil.FailErr(t, "ActivateStart", err)
 
-	canceled, err := h.runs.CancelActiveTree(ctx, run, "user exited", "", nil)
+	canceled, err := h.runs.Commands.CancelActiveTree(ctx, run, "user exited", "", nil)
 	testutil.FailErr(t, "CancelActiveTree", err)
 	if len(canceled) != 1 {
 		t.Fatalf("canceled runs = %d, want 1", len(canceled))

@@ -3,6 +3,8 @@
 package session_test
 
 import (
+	workflowruntime "github.com/lycaon/lycaon/internal/workflow/runtime"
+
 	"context"
 	"strings"
 	"testing"
@@ -23,7 +25,10 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/workflow"
+	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
+	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -51,26 +56,28 @@ func setupCoordinatorPromptFixture(t *testing.T) coordinatorPromptFixture {
 	wirePromptTestManager(t, mgr)
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
 
-	sessionWF := workflow.NewSessionWorkflowSQLStore(sqlDB)
+	sessionWF := workflowdrafts.NewSQL(sqlDB)
 	condReg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{})
 	testutil.FailErr(t, "build conditions registry", err)
-	policy, err := workflow.LoadComposePolicy()
-	testutil.FailErr(t, "workflow.LoadComposePolicy failed", err)
-	composer := &workflow.Composer{
+	policy, err := workflowcomposition.LoadComposePolicy()
+	testutil.FailErr(t, "workflowcomposition.LoadComposePolicy failed", err)
+	composer := &workflowcomposition.Composer{
 		SessionStore: sessionWF, Registry: condReg, Agents: agents, Policy: policy,
 	}
 	manifestReg, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "workflow.RegistryFromDirs failed", err)
-	wfMgr := workflow.NewManager(workflow.NewSQLStore(sqlDB), store, manifestReg, nil)
-	wfMgr.Resolver = workflow.ManifestResolver{SessionStore: sessionWF}
-	wfMgr.SessionScaffold = workflow.NewSessionScaffoldSQLStore(sqlDB)
+	wfMgr := workflow.NewManager(workflowpersistence.New(sqlDB), store, manifestReg, nil)
+	wfMgr.Resolver.SessionStore = sessionWF
+	wfMgr.Blueprints.Scaffold.Store = workflowpersistence.NewSessionScaffoldSQLStore(sqlDB)
 	dir := t.TempDir()
 	blueprintStore := blueprint.NewFileStoreForTest(dir)
 	blueprintMgr := blueprint.NewManager(blueprintStore)
-	wfMgr.BlueprintCreate = blueprint.WorkflowBlueprintCreator{Manager: blueprintMgr}
-	wfMgr.BlueprintGet = blueprintMgr
-	mgr.SetWorkflowSessionView(wfMgr)
-	mgr.SetCoordinatorTurnFrameSource(&workflow.CoordinatorTurnFrameLoader{Runs: wfMgr, SessionStore: sessionWF, ConfigRoot: root})
+	wfMgr.Blueprints.Creator = blueprint.WorkflowBlueprintCreator{Manager: blueprintMgr}
+	wfMgr.Blueprints.Getter = blueprintMgr
+	wfMgr.Presentation.BlueprintGetter = blueprintMgr
+	wfMgr.Approvals.Getter = blueprintMgr
+	mgr.SetWorkflowDomains(&session.WorkflowDomains{Runs: wfMgr.Store.Runs, Policy: wfMgr.Policy, Ambient: wfMgr.Ambient, Blueprints: wfMgr.Blueprints, Batch: wfMgr.Batch, Slash: wfMgr.Slash, Requests: wfMgr.Requests, Feedback: wfMgr.Feedback, Transcript: wfMgr.Transcript, Asks: wfMgr.Asks, Fanout: wfMgr.Fanout, Phases: wfMgr.Phases, Reports: wfMgr.Reports, Recovery: wfMgr.Recovery, Cleanup: wfMgr})
+	mgr.SetCoordinatorTurnFrameSource(&workflowruntime.CoordinatorFrames{Runs: wfMgr.Store.Runs, Resolver: &wfMgr.Resolver, Snapshots: wfMgr.Snapshots, Policy: wfMgr.Policy, Obligations: wfMgr.Obligations, SessionStore: sessionWF, ConfigRoot: root})
 
 	ctx := context.Background()
 
@@ -91,15 +98,15 @@ phases:
       set_posture: build
     complete_when: delegation_closeout_complete
 `
-	result, err := composer.Compose(ctx, workflow.ComposeRequest{
+	result, err := composer.Compose(ctx, workflowcomposition.ComposeRequest{
 		SessionID:      sess.ID,
 		ManifestYAML:   []byte(manifest),
 		SessionPosture: sess.Posture,
-		CreatedBy:      workflow.ComposeActorCoordinator,
+		CreatedBy:      workflowdrafts.Coordinator,
 	})
 	testutil.FailErr(t, "compose workflow manifest", err)
-	if _, err := wfMgr.StartHuman(ctx, sess.ID, wire.StartWorkflowRunRequest{WorkflowID: "hotfix-session", WorkflowVersion: "1.0.0", Request: "test request"}); err != nil {
-		testutil.FailErr(t, "wfMgr.StartHuman failed", err)
+	if _, err := wfMgr.Starts.StartHuman(ctx, sess.ID, wire.StartWorkflowRunRequest{WorkflowID: "hotfix-session", WorkflowVersion: "1.0.0", Request: "test request"}); err != nil {
+		testutil.FailErr(t, "wfMgr.Starts.StartHuman failed", err)
 	}
 	return coordinatorPromptFixture{mgr: mgr, rec: rec, wfMgr: wfMgr, sess: sess, brief: result.EffectiveSummary.CoordinatorBrief}
 }
@@ -139,11 +146,11 @@ func TestPromptPrependsCoordinatorBriefOnSecondTurn(t *testing.T) {
 func TestPromptIncludesFailedLeavesAfterAdvance409(t *testing.T) {
 	fix := setupCoordinatorPromptFixture(t)
 	ctx := context.Background()
-	run, err := fix.wfMgr.GetActive(ctx, fix.sess.ID)
+	run, err := fix.wfMgr.Store.Runs.ActiveBySession(ctx, fix.sess.ID)
 	if err != nil || run == nil {
 		t.Fatal("missing active run")
 	}
-	if _, err := fix.wfMgr.Advance(ctx, run.ID); err == nil {
+	if _, err := fix.wfMgr.Phases.Advance(ctx, run.ID); err == nil {
 		t.Fatal("expected phase gate error")
 	}
 	req := firstCoordinatorPromptRequest(t, fix, "why blocked")

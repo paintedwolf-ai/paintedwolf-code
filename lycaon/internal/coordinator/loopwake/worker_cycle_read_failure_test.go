@@ -21,9 +21,9 @@ func TestWorkerCycleReadFailureDoesNotStallTheLoop(t *testing.T) {
 	deps.GetSession = func(context.Context, string) (*api.Session, error) {
 		return &api.Session{ID: "s1", Status: api.SessionStatusIdle, WorkspacePath: workspaceDir}, nil
 	}
-	deps.WorkflowSource = StubLoopWF{
+	deps.WorkflowSource = workflowFixturePorts(StubLoopWF{
 		run: &api.WorkflowRun{ID: "run-1", Status: api.WorkflowRunStatusRunning, CurrentPhase: "work"},
-	}
+	})
 	// (false, err) mirrors a failed queue read: the false is a zero value.
 	deps.WorkerCycleIdle = func(context.Context, *api.Session, string) (bool, error) {
 		return false, errors.New("worker queue read failed")
@@ -51,9 +51,9 @@ func TestWorkerCycleGenuinelyBusyStillDefers(t *testing.T) {
 	deps.GetSession = func(context.Context, string) (*api.Session, error) {
 		return &api.Session{ID: "s1", Status: api.SessionStatusIdle, WorkspacePath: workspaceDir}, nil
 	}
-	deps.WorkflowSource = StubLoopWF{
+	deps.WorkflowSource = workflowFixturePorts(StubLoopWF{
 		run: &api.WorkflowRun{ID: "run-1", Status: api.WorkflowRunStatusRunning, CurrentPhase: "work"},
-	}
+	})
 	deps.WorkerCycleIdle = func(context.Context, *api.Session, string) (bool, error) {
 		return false, nil
 	}

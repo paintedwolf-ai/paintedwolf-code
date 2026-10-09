@@ -62,11 +62,11 @@ func (m *Manager) runTurnLocked(ctx context.Context, id string, in PromptInput) 
 	text := promptUserInstruction(in)
 	hostTurn := in.HostSignal != nil
 	if !hostTurn && in.Recovery == nil && m.workflows != nil {
-		if resp, handled, err := m.workflows.TrySlashPrompt(ctx, id, text, in.SubmissionID); handled {
+		if resp, handled, err := m.workflows.Slash.TrySlashPrompt(ctx, id, text, in.SubmissionID); handled {
 			// A parked phase cancels the current turn.
 			return resp, mapPromptRunError(err)
 		}
-		prepared, workflowResp, handled, err := m.workflows.PrepareUserRequest(ctx, id, text)
+		prepared, workflowResp, handled, err := m.workflows.Requests.PrepareUserRequest(ctx, id, text)
 		if err != nil {
 			return nil, mapPromptRunError(err)
 		}
@@ -217,18 +217,18 @@ func (m *Manager) executePromptRun(
 	finishPreparing()
 
 	result, err := m.ensureCoordinatorRuntime().RunPrompt(ctx, promptloop.PromptRunInput{
-		SessionID:   sessionID,
-		TurnID:      turn.Turn.ID,
-		AttemptID:   turn.Attempt.ID,
-		Session:     sess,
-		History:     assembly.History,
-		ProfileID:   assembly.ProfileID,
-		UserPrompt:  userPrompt,
+		SessionID:    sessionID,
+		TurnID:       turn.Turn.ID,
+		AttemptID:    turn.Attempt.ID,
+		Session:      sess,
+		History:      assembly.History,
+		ProfileID:    assembly.ProfileID,
+		UserPrompt:   userPrompt,
 		HostTurn:     hostTurn,
 		HostSignalID: in.hostSignalID(),
 		ProseFinish:  in.ProseFinish,
-		ToolCtx:     assembly.ToolCtx,
-		Machine:     assembly.Machine,
+		ToolCtx:      assembly.ToolCtx,
+		Machine:      assembly.Machine,
 	})
 	if err != nil {
 		return execution, mapPromptRunError(err)

@@ -4,11 +4,12 @@ package session_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/coordinator/turnload"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"strings"
 	"testing"
 
 	coordinatorsurface "github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -23,8 +24,8 @@ func TestMockLLMReceivesWorkflowFilteredTools(t *testing.T) {
 		ID: "spec-tools", Version: "1.0.0", InitialPosture: "spec",
 		PhaseDefs: []workflowdef.PhaseDef{{ID: "work", CompleteWhen: workflowdef.CompleteWhenGatesSatisfied, Gates: []string{"research_satisfied"}}},
 	})
-	specFix.Workflow.Manifests = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"spec-tools@1.0.0": specManifest})
-	_, err := specFix.Workflow.StartHuman(t.Context(), specFix.Sess.ID, api.StartWorkflowRunRequest{WorkflowID: specManifest.ID, WorkflowVersion: specManifest.Version})
+	specFix.Workflow.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"spec-tools@1.0.0": specManifest})
+	_, err := specFix.Workflow.Starts.StartHuman(t.Context(), specFix.Sess.ID, api.StartWorkflowRunRequest{WorkflowID: specManifest.ID, WorkflowVersion: specManifest.Version})
 	testutil.FailErr(t, "start spec workflow", err)
 	specFix.Mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
 	if _, err := specFix.Mgr.Prompt(context.Background(), specFix.Sess.ID, "hello"); err != nil {
@@ -52,9 +53,9 @@ func TestMockLLMReceivesWorkflowFilteredTools(t *testing.T) {
 	if buildSession.Posture != api.SessionPostureBuild {
 		t.Fatalf("default workflow posture = %s, want build", buildSession.Posture)
 	}
-	run, err := buildFix.Workflow.GetActive(t.Context(), buildFix.Sess.ID)
+	run, err := buildFix.Workflow.Store.Runs.ActiveBySession(t.Context(), buildFix.Sess.ID)
 	testutil.FailErr(t, "read attached workflow", err)
-	if run == nil || !buildFix.Workflow.IsAmbientRun(run) {
+	if run == nil || !runstate.IsAmbientRun(run) {
 		t.Fatalf("prompt did not attach its default workflow: %+v", run)
 	}
 	// The investigate surface keeps task loadable: offered, or behind the capability map.

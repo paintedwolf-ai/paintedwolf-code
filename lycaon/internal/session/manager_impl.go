@@ -102,7 +102,7 @@ type Manager struct {
 	oarPipeline             *oar.GuardPipeline
 	oarRenderer             *oar.Renderer
 	mcpRuntime              MCPRuntimeView
-	workflows               WorkflowSessionView
+	workflows               *WorkflowDomains
 	reportDocuments         ReportDocumentChecker
 	scanEvidenceRuns        ScanEvidenceRuns
 	workflowToolAccess      WorkflowToolAccessView
@@ -139,7 +139,7 @@ type Manager struct {
 	boardBuilder            assembly.BoardSnapshotBuilder
 	boardFormatter          assembly.BoardPackFormatter
 	includeScanLegend       func() bool
-	loopWorkflowSource      loopwake.LoopWorkflowSource
+	loopWorkflowSource      *loopwake.WorkflowDomains
 	coordinatorRuntime      *coordinator.Runtime
 	coordinatorRuntimeOnce  sync.Once
 	delegations             DelegationLegLookup
