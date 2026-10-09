@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/desktoptrash"
 	"os"
 	"path/filepath"
 	"sync"
@@ -48,7 +49,7 @@ func TestSourceRecoveryManifestPagesAndRoundTrips(t *testing.T) {
 		testutil.FailErr(t, "seed entry", os.WriteFile(filepath.Join(root, "tree", fmt.Sprintf("%04d", i)), []byte(fmt.Sprintf("entry %d", i)), 0o640))
 	}
 	id := uuid.NewString()
-	testutil.FailErr(t, "trash tree", service.Delete(t.Context(), id, p, SourceDeleteRequest{RootID: p.Roots[0].ID, Path: "tree", Recursive: true}))
+	testutil.FailErr(t, "trash tree", legacyTrash(t, service, id, p, SourceDeleteRequest{RootID: p.Roots[0].ID, Path: "tree", Recursive: true}))
 	var count, receiptBytes int
 	testutil.FailErr(t, "count manifest", service.Journal.db.QueryRowContext(t.Context(), `SELECT count(*) FROM source_recovery_entries WHERE recovery_id=?`, id).Scan(&count))
 	testutil.FailErr(t, "measure receipt", service.Journal.db.QueryRowContext(t.Context(), `SELECT length(plan_json) FROM source_mutations WHERE id=?`, id).Scan(&receiptBytes))
@@ -72,12 +73,15 @@ func TestSourceRecoveryCancellationDoesNotReplayOnRestart(t *testing.T) {
 		}
 	})
 	id := uuid.NewString()
-	err := service.Delete(ctx, id, p, SourceDeleteRequest{RootID: p.Roots[0].ID, Path: "file"})
+	err := legacyTrashContext(ctx, t, service, id, p, SourceDeleteRequest{RootID: p.Roots[0].ID, Path: "file"})
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancel error=%v", err)
 	}
 	restarted := NewSourceMutationService(service.Journal.db, service.settlement.recorder.(*sourceledger.Store))
-	restarted.Effects.SetTrashMover(func(context.Context, string) error { t.Error("startup retried canceled trash"); return nil })
+	restarted.Effects.SetTrashMover(func(context.Context, string) (desktoptrash.Receipt, error) {
+		t.Error("startup retried canceled trash")
+		return desktoptrash.Receipt{}, nil
+	})
 	testutil.FailErr(t, "recover", restarted.Recover(t.Context()))
 	assertSourceHistoryFile(t, root, "file", "retained")
 	state, err := restarted.History.State(t.Context(), p.ID)
@@ -101,7 +105,7 @@ func TestSourceRecoveryAllowsUnrelatedSave(t *testing.T) {
 	})
 	done := make(chan error, 1)
 	go func() {
-		done <- service.Delete(ctx, uuid.NewString(), p, SourceDeleteRequest{RootID: p.Roots[0].ID, Path: "large"})
+		done <- legacyTrashContext(ctx, t, service, uuid.NewString(), p, SourceDeleteRequest{RootID: p.Roots[0].ID, Path: "large"})
 	}()
 	select {
 	case <-started:

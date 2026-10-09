@@ -63,6 +63,10 @@ func (s *SourceMutationService) recoverOne(ctx context.Context, row *sourceMutat
 			identity, statErr := fspath.EntryIdentity(current.Plan.AbsPath)
 			applied = current.Plan.DeleteStarted && (os.IsNotExist(statErr) || (statErr == nil && identity != current.Plan.DeleteIdentity))
 		}
+		if applied && current.Plan.NativeTrash != nil && !nativeTrashReceiptRecorded(&current.Plan) {
+			current.Status, current.Error = sourceMutationFailed, "Native Trash did not acknowledge a recovery receipt before interruption. Automatic Undo is unavailable; recover the item through system Trash."
+			return s.Journal.update(ctx, current)
+		}
 		if !applied {
 			current.Status, current.Error = sourceMutationFailed, "File operation was interrupted before completion. Retry explicitly to continue."
 			if err := s.cancelSourcePreparation(ctx, current); err != nil {

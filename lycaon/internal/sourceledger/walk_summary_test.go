@@ -36,10 +36,9 @@ func TestWalkSummaryPreservesTurnsAndGroupedSteps(t *testing.T) {
 		{1, "f", "", "mixed"}, {2, "g", "", "mixed"},
 		{2, "h", "", ""},
 	} {
-		mustRecord(t, store, ctx, RecordInput{ProjectID: "p1", RootID: "r1", SessionID: "s1", Turn: entry.turn,
-			Path: entry.path, OperationID: fmt.Sprintf("op-%d", i), CommandWindowID: entry.command, GitTransitionID: entry.git,
-			Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginAgent, Before: []byte(fmt.Sprint(i)), After: []byte(fmt.Sprint(i + 1)),
-		})
+		mustRecord(t, store, ctx, RecordInput{
+			RecordLocation: RecordLocation{RootID: "r1", Path: entry.path}, ProjectID: "p1", SessionID: "s1", Turn: entry.turn, OperationID: fmt.Sprintf("op-%d", i), CommandWindowID: entry.command, GitTransitionID: entry.git,
+			Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginAgent, Before: []byte(fmt.Sprint(i)), After: []byte(fmt.Sprint(i + 1))})
 	}
 	summaries, err := store.Walk.WalkSummary(ctx, "p1", "s1", []string{"first", "second", "empty", "internal", "continuation"})
 	testutil.FailErr(t, "read turn counts", err)

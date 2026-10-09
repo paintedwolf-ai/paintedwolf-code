@@ -2,17 +2,16 @@ package projectsource
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"path/filepath"
-	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/fspath"
 )
 
 type SourceHistory struct {
@@ -72,336 +71,6 @@ type sourceHistoryEntry struct {
 	RedoPlan  sourceMutationPlan
 	CreatedAt time.Time
 	UpdatedAt time.Time
-}
-
-func (s *SourceHistory) buildSourceHistoryEntry(ctx context.Context, operationID string, plan *sourceMutationPlan) (*sourceHistoryEntry, error) {
-	if plan == nil || plan.AgentEffect != nil || plan.HistoryEntryID != "" || !plan.Changed {
-		return nil, nil
-	}
-	if plan.Kind != "create" && plan.Kind != "rename" && plan.Kind != "copy" && plan.Kind != "delete" {
-		return nil, nil
-	}
-	plans, err := s.planSourceHistory(ctx, operationID, *plan)
-	if err != nil {
-		return nil, err
-	}
-	now := time.Now().UTC()
-	return &sourceHistoryEntry{
-		ID: operationID, ProjectID: plan.ProjectID, Kind: plans.kind, State: "applied",
-		UndoLabel: plans.undoLabel, RedoLabel: plans.redoLabel, UndoPlan: plans.undo, RedoPlan: plans.redo,
-		CreatedAt: now, UpdatedAt: now,
-	}, nil
-}
-
-type sourceHistoryPlans struct {
-	undo, redo                 sourceMutationPlan
-	kind, undoLabel, redoLabel string
-}
-
-func (s *SourceHistory) planSourceHistory(ctx context.Context, operationID string, original sourceMutationPlan) (sourceHistoryPlans, error) {
-	name := filepath.Base(filepath.FromSlash(original.Path))
-	switch original.Kind {
-	case "rename":
-		kind := "move"
-		if sourceParent(original.FromPath) == sourceParent(original.ToPath) {
-			kind = "rename"
-		}
-		if original.CrossVolume {
-			original.EntryIdentity = original.DestinationIdentity
-		}
-		undo := original
-		undo.Path, undo.FromPath, undo.ToPath = original.FromPath, original.ToPath, original.FromPath
-		undo.FromAbs, undo.ToAbs = original.ToAbs, original.FromAbs
-		redo := original
-		return sourceHistoryPlans{
-			undo: historyPlan(undo), redo: historyPlan(redo), kind: kind,
-			undoLabel: "Undo " + kind + " of " + name, redoLabel: "Redo " + kind + " of " + name,
-		}, nil
-	case "create", "copy":
-		targetAbs := original.AbsPath
-		if targetAbs == "" {
-			targetAbs = original.ToAbs
-		}
-		fingerprint := original.TreeSHA
-		if fingerprint == "" {
-			var err error
-			fingerprint, err = sourceTreeFingerprint(ctx, targetAbs)
-			if err != nil {
-				return sourceHistoryPlans{}, err
-			}
-		}
-		original.RecoveryID, original.TreeSHA = operationID, fingerprint
-		if original.RecoveryCount == 0 {
-			if err := s.recovery.captureRecovery(ctx, &original, targetAbs); err != nil {
-				return sourceHistoryPlans{}, err
-			}
-		}
-		undo := sourceMutationPlan{
-			sourceMutationContent:     sourceMutationContent{Before: original.After, BaseSHA256: original.AfterSHA, BeforeSize: original.AfterSize},
-			sourceMutationRecovery:    sourceMutationRecovery{RecoveryID: original.RecoveryID, RecoveryCount: original.RecoveryCount, TreeSHA: fingerprint, Disposal: sourceDisposalTrash},
-			sourceMutationAttribution: sourceMutationAttribution{ProjectID: original.ProjectID, WorkspaceID: original.WorkspaceID, BranchID: original.BranchID},
-			Kind:                      "delete",
-			RootID:                    original.RootID,
-			RootPath:                  original.RootPath,
-			Path:                      original.Path,
-			AbsPath:                   targetAbs,
-			EntryKind:                 original.EntryKind,
-			Changed:                   true,
-		}
-		redo := sourceMutationPlan{
-			sourceMutationContent:     sourceMutationContent{After: original.After, AfterSHA: original.AfterSHA, AfterSize: original.AfterSize},
-			sourceMutationRecovery:    sourceMutationRecovery{RecoveryID: original.RecoveryID, RecoveryCount: original.RecoveryCount, TreeSHA: fingerprint},
-			sourceMutationAttribution: sourceMutationAttribution{ProjectID: original.ProjectID, WorkspaceID: original.WorkspaceID, BranchID: original.BranchID},
-			Kind:                      "restore",
-			RootID:                    original.RootID,
-			RootPath:                  original.RootPath,
-			Path:                      original.Path,
-			AbsPath:                   targetAbs,
-			EntryKind:                 original.EntryKind,
-			Changed:                   true,
-		}
-		kind := original.Kind
-		return sourceHistoryPlans{
-			undo: historyPlan(undo), redo: historyPlan(redo), kind: kind,
-			undoLabel: "Undo " + kind + " of " + name, redoLabel: "Redo " + kind + " of " + name,
-		}, nil
-	case "delete":
-		undo := sourceMutationPlan{
-			sourceMutationContent:     sourceMutationContent{After: original.Before, AfterSHA: original.BaseSHA256, AfterSize: original.BeforeSize},
-			sourceMutationRecovery:    sourceMutationRecovery{RecoveryID: original.RecoveryID, RecoveryCount: original.RecoveryCount, TreeSHA: original.TreeSHA},
-			sourceMutationAttribution: sourceMutationAttribution{ProjectID: original.ProjectID, WorkspaceID: original.WorkspaceID, BranchID: original.BranchID},
-			Kind:                      "restore",
-			RootID:                    original.RootID,
-			RootPath:                  original.RootPath,
-			Path:                      original.Path,
-			AbsPath:                   original.AbsPath,
-			EntryKind:                 original.EntryKind,
-			Changed:                   true,
-		}
-		redo := original
-		plans := sourceHistoryPlans{undo: historyPlan(undo), redo: historyPlan(redo)}
-		if original.Disposal == sourceDisposalDiscard {
-			plans.kind = "delete"
-			plans.undoLabel, plans.redoLabel = "Undo deletion of "+name, "Redo deletion of "+name
-		} else {
-			plans.kind = "trash"
-			plans.undoLabel, plans.redoLabel = "Undo move of "+name+" to Trash", "Redo move of "+name+" to Trash"
-		}
-		return plans, nil
-	default:
-		return sourceHistoryPlans{}, nil
-	}
-}
-
-func historyPlan(plan sourceMutationPlan) sourceMutationPlan {
-	plan.Response = nil
-	plan.EffectStarted = false
-	plan.CrossVolume = false
-	plan.HoldAbs, plan.DestinationIdentity = "", ""
-	plan.HoldStarted = false
-	plan.MoveCleanupStarted = false
-	if plan.Kind == "rename" {
-		plan.TreeSHA = ""
-		plan.RecoveryID = ""
-		plan.RecoveryCount = 0
-	}
-	plan.StageIdentity = ""
-	plan.PublicationMode = 0
-	plan.StageAbs, plan.DeleteStarted, plan.DeleteIdentity = "", false, ""
-	// Undo and redo receive fresh actor attribution.
-	plan.SessionID, plan.Turn, plan.Agent = "", 0, nil
-	plan.Cause = "source_history"
-	return plan
-}
-
-func sourceParent(path string) string {
-	if i := strings.LastIndex(path, "/"); i >= 0 {
-		return path[:i]
-	}
-	return "."
-}
-
-func commitSourceHistoryTx(ctx context.Context, tx *sql.Tx, plan sourceMutationPlan, entry *sourceHistoryEntry, now time.Time) error {
-	if plan.HistoryEntryID != "" {
-		from, to := historyTransitionStates(plan.HistoryTransition)
-		result, err := tx.ExecContext(ctx, `UPDATE source_history_entries SET state=?, updated_at=? WHERE id=? AND state=?`,
-			to, now.Format(time.RFC3339Nano), plan.HistoryEntryID, from)
-		if err != nil {
-			return err
-		}
-		changed, err := result.RowsAffected()
-		if err != nil || changed != 1 {
-			return ErrSourceHistoryChanged
-		}
-		if plan.Kind == "rename" && plan.CrossVolume {
-			column := "redo_plan_json"
-			if plan.HistoryTransition == "redo" {
-				column = "undo_plan_json"
-			}
-			_, err = tx.ExecContext(ctx, `UPDATE source_history_entries SET `+column+`=json_set(`+column+`,'$.entry_identity',?) WHERE id=?`, plan.DestinationIdentity, plan.HistoryEntryID)
-			return err
-		}
-		return nil
-	}
-	if entry == nil {
-		return nil
-	}
-	undoJSON, err := json.Marshal(entry.UndoPlan)
-	if err != nil {
-		return err
-	}
-	redoJSON, err := json.Marshal(entry.RedoPlan)
-	if err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM source_history_entries WHERE project_id=? AND state='undone'`, entry.ProjectID); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO source_history_entries(id, project_id, kind, state, undo_label, redo_label, undo_plan_json, redo_plan_json, created_at, updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`,
-		entry.ID, entry.ProjectID, entry.Kind, entry.State, entry.UndoLabel, entry.RedoLabel,
-		string(undoJSON), string(redoJSON), entry.CreatedAt.Format(time.RFC3339Nano), entry.UpdatedAt.Format(time.RFC3339Nano)); err != nil {
-		return err
-	}
-	_, err = tx.ExecContext(ctx, `DELETE FROM source_history_entries WHERE project_id=? AND seq NOT IN (SELECT seq FROM source_history_entries WHERE project_id=? ORDER BY seq DESC LIMIT ?)`,
-		entry.ProjectID, entry.ProjectID, sourceHistoryLimit)
-	if err != nil {
-		return err
-	}
-	return pruneSourceRecoveryRows(ctx, tx, entry.ProjectID)
-}
-
-func (s *SourceHistory) commitSourceHistoryMemory(plan sourceMutationPlan, entry *sourceHistoryEntry) error {
-	s.stateMu.Lock()
-	defer s.stateMu.Unlock()
-	if plan.HistoryEntryID != "" {
-		held := s.history[plan.HistoryEntryID]
-		from, to := historyTransitionStates(plan.HistoryTransition)
-		if held == nil || held.State != from {
-			return ErrSourceHistoryChanged
-		}
-		held.State, held.UpdatedAt = to, time.Now().UTC()
-		if plan.Kind == "rename" && plan.CrossVolume {
-			if plan.HistoryTransition == "redo" {
-				held.UndoPlan.EntryIdentity = plan.DestinationIdentity
-			} else {
-				held.RedoPlan.EntryIdentity = plan.DestinationIdentity
-			}
-		}
-		return nil
-	}
-	if entry == nil {
-		return nil
-	}
-	for id, held := range s.history {
-		if held.ProjectID == entry.ProjectID && held.State == "undone" {
-			delete(s.history, id)
-		}
-	}
-	s.historySeq++
-	copy := *entry
-	copy.Seq = s.historySeq
-	s.history[copy.ID] = &copy
-	s.pruneSourceHistoryMemory(copy.ProjectID)
-	return nil
-}
-
-func (s *SourceHistory) pruneSourceHistoryMemory(projectID string) {
-	entries := make([]*sourceHistoryEntry, 0)
-	for _, entry := range s.history {
-		if entry.ProjectID == projectID {
-			entries = append(entries, entry)
-		}
-	}
-	sort.Slice(entries, func(i, j int) bool { return entries[i].Seq > entries[j].Seq })
-	if len(entries) <= sourceHistoryLimit {
-		return
-	}
-	for _, entry := range entries[sourceHistoryLimit:] {
-		delete(s.history, entry.ID)
-	}
-}
-
-func historyTransitionStates(transition string) (string, string) {
-	if transition == "redo" {
-		return "undone", "applied"
-	}
-	return "applied", "undone"
-}
-
-func (s *SourceHistory) State(ctx context.Context, projectID string) (SourceHistoryState, error) {
-	return s.readSourceHistory(ctx, projectID)
-}
-
-func (s *SourceHistory) readSourceHistory(ctx context.Context, projectID string) (SourceHistoryState, error) {
-	undo, err := s.historyEntry(ctx, projectID, "applied", "DESC")
-	if err != nil {
-		return SourceHistoryState{}, err
-	}
-	redo, err := s.historyEntry(ctx, projectID, "undone", "ASC")
-	if err != nil {
-		return SourceHistoryState{}, err
-	}
-	state := SourceHistoryState{}
-	if undo != nil {
-		action := undo.action("undo")
-		state.Undo = &action
-	}
-	if redo != nil {
-		action := redo.action("redo")
-		state.Redo = &action
-	}
-	return state, nil
-}
-
-func (s *SourceHistory) historyEntry(ctx context.Context, projectID, state, order string) (*sourceHistoryEntry, error) {
-	if s.db == nil {
-		s.stateMu.Lock()
-		defer s.stateMu.Unlock()
-		var selected *sourceHistoryEntry
-		for _, entry := range s.history {
-			if entry.ProjectID != projectID || entry.State != state {
-				continue
-			}
-			if selected == nil || (order == "DESC" && entry.Seq > selected.Seq) || (order == "ASC" && entry.Seq < selected.Seq) {
-				copy := *entry
-				selected = &copy
-			}
-		}
-		return selected, nil
-	}
-	query := `SELECT seq,id,project_id,kind,state,undo_label,redo_label,undo_plan_json,redo_plan_json,created_at,updated_at FROM source_history_entries WHERE project_id=? AND state=? ORDER BY seq ` + order + ` LIMIT 1`
-	entry := &sourceHistoryEntry{}
-	var undoJSON, redoJSON, createdAt, updatedAt string
-	err := s.db.QueryRowContext(ctx, query, projectID, state).Scan(
-		&entry.Seq, &entry.ID, &entry.ProjectID, &entry.Kind, &entry.State,
-		&entry.UndoLabel, &entry.RedoLabel, &undoJSON, &redoJSON, &createdAt, &updatedAt)
-	if db.IsNoRows(err) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	if err := json.Unmarshal([]byte(undoJSON), &entry.UndoPlan); err != nil {
-		return nil, err
-	}
-	if err := json.Unmarshal([]byte(redoJSON), &entry.RedoPlan); err != nil {
-		return nil, err
-	}
-	entry.CreatedAt, _ = time.Parse(time.RFC3339Nano, createdAt)
-	entry.UpdatedAt, _ = time.Parse(time.RFC3339Nano, updatedAt)
-	return entry, nil
-}
-
-func (entry sourceHistoryEntry) action(direction string) SourceHistoryAction {
-	plan, label := entry.UndoPlan, entry.UndoLabel
-	if direction == "redo" {
-		plan, label = entry.RedoPlan, entry.RedoLabel
-	}
-	return SourceHistoryAction{
-		ID: entry.ID, Label: label, Kind: entry.Kind, RootID: plan.RootID,
-		Path: plan.Path, FromPath: plan.FromPath, ToPath: plan.ToPath,
-		IsDir: plan.EntryKind == SourceEntryFolder, RemovesPath: plan.Kind == "delete" || plan.Kind == "rename",
-	}
 }
 
 func (s *SourceMutationService) Undo(ctx context.Context, operationID string, p ProjectSource, req SourceHistoryMutationRequest) (*SourceHistoryMutationResult, error) {
@@ -555,4 +224,180 @@ func (s *SourceMutationService) validatePendingHistoryHead(ctx context.Context, 
 		return ErrSourceHistoryChanged
 	}
 	return nil
+}
+
+func (s *SourceHistory) buildSourceHistoryEntry(ctx context.Context, operationID string, plan *sourceMutationPlan) (*sourceHistoryEntry, error) {
+	if plan == nil || plan.AgentEffect != nil || plan.HistoryEntryID != "" || !plan.Changed {
+		return nil, nil
+	}
+	if plan.Kind != "create" && plan.Kind != "rename" && plan.Kind != "copy" && plan.Kind != "delete" {
+		return nil, nil
+	}
+	plans, err := s.planSourceHistory(ctx, operationID, *plan)
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now().UTC()
+	return &sourceHistoryEntry{
+		ID: operationID, ProjectID: plan.ProjectID, Kind: plans.kind, State: "applied",
+		UndoLabel: plans.undoLabel, RedoLabel: plans.redoLabel, UndoPlan: plans.undo, RedoPlan: plans.redo,
+		CreatedAt: now, UpdatedAt: now,
+	}, nil
+}
+
+type sourceHistoryPlans struct {
+	undo, redo                 sourceMutationPlan
+	kind, undoLabel, redoLabel string
+}
+
+func (s *SourceHistory) planSourceHistory(ctx context.Context, operationID string, original sourceMutationPlan) (sourceHistoryPlans, error) {
+	name := filepath.Base(filepath.FromSlash(original.Path))
+	switch original.Kind {
+	case "rename":
+		kind := "move"
+		if sourceParent(original.FromPath) == sourceParent(original.ToPath) {
+			kind = "rename"
+		}
+		if original.CrossVolume {
+			original.EntryIdentity = original.DestinationIdentity
+		}
+		undo := original
+		undo.Path, undo.FromPath, undo.ToPath = original.FromPath, original.ToPath, original.FromPath
+		undo.FromAbs, undo.ToAbs = original.ToAbs, original.FromAbs
+		redo := original
+		return sourceHistoryPlans{
+			undo: historyPlan(undo), redo: historyPlan(redo), kind: kind,
+			undoLabel: "Undo " + kind + " of " + name, redoLabel: "Redo " + kind + " of " + name,
+		}, nil
+	case "create", "copy":
+		if original.NativeTrash != nil {
+			return nativeCreationHistory(original)
+		}
+		targetAbs := original.AbsPath
+		if targetAbs == "" {
+			targetAbs = original.ToAbs
+		}
+		fingerprint := original.TreeSHA
+		if fingerprint == "" {
+			var err error
+			fingerprint, err = sourceTreeFingerprint(ctx, targetAbs)
+			if err != nil {
+				return sourceHistoryPlans{}, err
+			}
+		}
+		original.RecoveryID, original.TreeSHA = operationID, fingerprint
+		if original.RecoveryCount == 0 {
+			if err := s.recovery.captureRecovery(ctx, &original, targetAbs); err != nil {
+				return sourceHistoryPlans{}, err
+			}
+		}
+		undo := sourceMutationPlan{
+			sourceMutationContent:     sourceMutationContent{Before: original.After, BaseSHA256: original.AfterSHA, BeforeSize: original.AfterSize},
+			sourceMutationRecovery:    sourceMutationRecovery{RecoveryID: original.RecoveryID, RecoveryCount: original.RecoveryCount, TreeSHA: fingerprint, Disposal: sourceDisposalTrash},
+			sourceMutationAttribution: sourceMutationAttribution{ProjectID: original.ProjectID, WorkspaceID: original.WorkspaceID, BranchID: original.BranchID},
+			Kind:                      "delete",
+			RootID:                    original.RootID,
+			RootPath:                  original.RootPath,
+			Path:                      original.Path,
+			AbsPath:                   targetAbs,
+			EntryKind:                 original.EntryKind,
+			Changed:                   true,
+		}
+		redo := sourceMutationPlan{
+			sourceMutationContent:     sourceMutationContent{After: original.After, AfterSHA: original.AfterSHA, AfterSize: original.AfterSize},
+			sourceMutationRecovery:    sourceMutationRecovery{RecoveryID: original.RecoveryID, RecoveryCount: original.RecoveryCount, TreeSHA: fingerprint},
+			sourceMutationAttribution: sourceMutationAttribution{ProjectID: original.ProjectID, WorkspaceID: original.WorkspaceID, BranchID: original.BranchID},
+			Kind:                      "restore",
+			RootID:                    original.RootID,
+			RootPath:                  original.RootPath,
+			Path:                      original.Path,
+			AbsPath:                   targetAbs,
+			EntryKind:                 original.EntryKind,
+			Changed:                   true,
+		}
+		kind := original.Kind
+		return sourceHistoryPlans{
+			undo: historyPlan(undo), redo: historyPlan(redo), kind: kind,
+			undoLabel: "Undo " + kind + " of " + name, redoLabel: "Redo " + kind + " of " + name,
+		}, nil
+	case "delete":
+		undo := sourceMutationPlan{
+			sourceMutationContent:     sourceMutationContent{After: original.Before, AfterSHA: original.BaseSHA256, AfterSize: original.BeforeSize},
+			sourceMutationRecovery:    sourceMutationRecovery{NativeTrash: original.NativeTrash, RecoveryID: original.RecoveryID, RecoveryCount: original.RecoveryCount, TreeSHA: original.TreeSHA},
+			sourceMutationAttribution: sourceMutationAttribution{ProjectID: original.ProjectID, WorkspaceID: original.WorkspaceID, BranchID: original.BranchID},
+			Kind:                      "restore",
+			RootID:                    original.RootID,
+			RootPath:                  original.RootPath,
+			Path:                      original.Path,
+			AbsPath:                   original.AbsPath,
+			EntryKind:                 original.EntryKind,
+			Changed:                   true,
+		}
+		redo := original
+		plans := sourceHistoryPlans{undo: historyPlan(undo), redo: historyPlan(redo)}
+		if original.Disposal == sourceDisposalDiscard {
+			plans.kind = "delete"
+			plans.undoLabel, plans.redoLabel = "Undo deletion of "+name, "Redo deletion of "+name
+		} else {
+			plans.kind = "trash"
+			plans.undoLabel, plans.redoLabel = "Undo move of "+name+" to Trash", "Redo move of "+name+" to Trash"
+		}
+		return plans, nil
+	default:
+		return sourceHistoryPlans{}, nil
+	}
+}
+
+func historyPlan(plan sourceMutationPlan) sourceMutationPlan {
+	if plan.NativeTrash != nil {
+		copy := *plan.NativeTrash
+		plan.NativeTrash = &copy
+	}
+	plan.Response = nil
+	plan.EffectStarted = false
+	plan.CrossVolume = false
+	plan.HoldAbs, plan.DestinationIdentity = "", ""
+	plan.HoldStarted = false
+	plan.MoveCleanupStarted = false
+	if plan.Kind == "rename" {
+		plan.TreeSHA = ""
+		plan.RecoveryID = ""
+		plan.RecoveryCount = 0
+	}
+	plan.StageIdentity = ""
+	plan.PublicationMode = 0
+	plan.StageAbs, plan.DeleteStarted, plan.DeleteIdentity = "", false, ""
+	// Undo and redo receive fresh actor attribution.
+	plan.SessionID, plan.Turn, plan.Agent = "", 0, nil
+	plan.Cause = "source_history"
+	return plan
+}
+
+func sourceParent(path string) string {
+	if i := strings.LastIndex(path, "/"); i >= 0 {
+		return path[:i]
+	}
+	return "."
+}
+
+func nativeCreationHistory(original sourceMutationPlan) (sourceHistoryPlans, error) {
+	target := original.AbsPath
+	if target == "" {
+		target = original.ToAbs
+	}
+	identity, err := fspath.EntryIdentity(target)
+	if err != nil {
+		return sourceHistoryPlans{}, err
+	}
+	undo := sourceMutationPlan{
+		sourceMutationAttribution: sourceMutationAttribution{ProjectID: original.ProjectID, WorkspaceID: original.WorkspaceID, BranchID: original.BranchID},
+		sourceMutationPublication: sourceMutationPublication{EntryIdentity: identity},
+		sourceMutationRecovery:    sourceMutationRecovery{NativeTrash: &sourceTrashRecovery{}, Disposal: sourceDisposalTrash},
+		Kind:                      "delete", RootID: original.RootID, RootPath: original.RootPath, Path: original.Path, AbsPath: target, EntryKind: original.EntryKind, Changed: true,
+	}
+	redo := undo
+	redo.Kind = "restore"
+	name := filepath.Base(filepath.FromSlash(original.Path))
+	return sourceHistoryPlans{undo: historyPlan(undo), redo: historyPlan(redo), kind: original.Kind,
+		undoLabel: "Undo " + original.Kind + " of " + name, redoLabel: "Redo " + original.Kind + " of " + name}, nil
 }

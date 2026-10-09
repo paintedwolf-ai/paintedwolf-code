@@ -27,7 +27,8 @@ func pendingObservationWrite(t *testing.T, status sourceMutationStatus) (*Source
 	service, p, root, _ := sourceMutationFixture(t)
 	for _, name := range []string{"a.txt", "unrelated.txt"} {
 		testutil.FailErr(t, "seed tracked file", os.WriteFile(filepath.Join(root, name), []byte("before"), 0o600))
-		testutil.FailErr(t, "record tracked file", service.settlement.recorder.(*sourceledger.Store).Record(t.Context(), sourceledger.RecordInput{ProjectID: p.ID, RootID: p.Roots[0].ID, Path: name, Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser, OperationID: uuid.NewString(), After: []byte("before")}))
+		testutil.FailErr(t, "record tracked file", service.settlement.recorder.(*sourceledger.Store).Record(t.Context(), sourceledger.RecordInput{
+			RecordLocation: sourceledger.RecordLocation{RootID: p.Roots[0].ID, Path: name}, ProjectID: p.ID, Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser, OperationID: uuid.NewString(), After: []byte("before")}))
 	}
 	write, err := planProjectSourceWrite(p, SourceWriteRequest{RootID: p.Roots[0].ID, Path: "a.txt", Content: "in app", Encoding: textfile.UTF8, BaseSHA256: textfile.SHA256([]byte("before"))})
 	testutil.FailErr(t, "plan pending write", err)

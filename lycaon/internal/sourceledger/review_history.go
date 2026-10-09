@@ -23,10 +23,12 @@ type ReviewHistory struct {
 // ReviewPathHistory enriches a current path without admitting it to history.
 // The latest identity at a deleted path remains addressable until recreation.
 func (s *History) ReviewPathHistory(ctx context.Context, projectID string, branch sourcebranch.ID, rootID, path string, absent bool) (ReviewHistory, error) {
-	var fileID, state string
-	err := s.sqlDB.QueryRowContext(ctx, `SELECT file_id, state FROM source_branch_heads
-		WHERE project_id = ? AND branch_id = ? AND root_id = ? AND path = ?
-		ORDER BY ordinal DESC LIMIT 1`, projectID, branch, rootID, path).Scan(&fileID, &state)
+	head, err := s.queries.GetSourceBranchHeadByPath(ctx, db.GetSourceBranchHeadByPathParams{ProjectID: projectID, BranchID: branch.String(), RootID: rootID, Path: path})
+	fileID, state := head.FileID, head.State
+	if errors.Is(err, sql.ErrNoRows) && absent {
+		deleted, deletedErr := s.queries.GetDeletedSourcePathHead(ctx, db.GetDeletedSourcePathHeadParams{ProjectID: projectID, BranchID: branch.String(), RootID: rootID, Path: path})
+		fileID, state, err = deleted.FileID, "absent", deletedErr
+	}
 	if errors.Is(err, sql.ErrNoRows) {
 		return ReviewHistory{}, nil
 	}

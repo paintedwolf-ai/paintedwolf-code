@@ -11,20 +11,20 @@ import (
 func TestCompareScopeUnmarksUserEdits(t *testing.T) {
 	store, ctx := openLedger(t)
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "notes.txt",
-		Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
-		OperationID: "person-creates", After: []byte("a\nb\nc\n"),
-	})
+		RecordLocation: RecordLocation{RootID: "r1", Path: "notes.txt"},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
+		OperationID: "person-creates", After: []byte("a\nb\nc\n")})
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "notes.txt",
-		Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginAgent,
-		OperationID: "agent-edits", After: []byte("a\nB\nc\n"),
-	})
+		RecordLocation: RecordLocation{RootID: "r1", Path: "notes.txt"},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpWrite, Origin: api.SourceChangeOriginAgent,
+		OperationID: "agent-edits", After: []byte("a\nB\nc\n")})
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "notes.txt",
-		Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginUser,
-		OperationID: "person-edits", After: []byte("A\nB\nc\n"),
-	})
+		RecordLocation: RecordLocation{RootID: "r1", Path: "notes.txt"},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpWrite, Origin: api.SourceChangeOriginUser,
+		OperationID: "person-edits", After: []byte("A\nB\nc\n")})
 	fileID, _ := mustResolve(t, store, ctx, "notes.txt")
 
 	marked, err := store.Comparisons.CompareScope(ctx, "p1", sourcebranch.Trunk, Baseline{}, fileID, ScopeComparisonOptions{})
@@ -57,15 +57,15 @@ func TestCompareScopeUnmarksUserEdits(t *testing.T) {
 func TestWalkWithoutUserEditsDropsFilesOnlyThePersonChanged(t *testing.T) {
 	store, ctx := openLedger(t)
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "mine.txt",
-		Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
-		OperationID: "person-writes", After: []byte("mine\n"),
-	})
+		RecordLocation: RecordLocation{RootID: "r1", Path: "mine.txt"},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
+		OperationID: "person-writes", After: []byte("mine\n")})
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "theirs.txt",
-		Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginAgent,
-		OperationID: "agent-writes", After: []byte("theirs\n"),
-	})
+		RecordLocation: RecordLocation{RootID: "r1", Path: "theirs.txt"},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpCreate, Origin: api.SourceChangeOriginAgent,
+		OperationID: "agent-writes", After: []byte("theirs\n")})
 	paths := func(baseline Baseline) []string {
 		t.Helper()
 		res, err := store.Walk.QueryWalk(ctx, "p1", baseline, 100, 0, CommitLens{})
@@ -101,7 +101,8 @@ func TestRecordedComparisonSelectsChatAndPreservesOtherAuthors(t *testing.T) {
 		{"person", "first typed\n", api.SourceChangeOriginUser},
 		{"b", "first typed\nsecond\n", api.SourceChangeOriginAgent},
 	} {
-		mustRecord(t, store, ctx, RecordInput{ProjectID: "p1", RootID: "r1", Path: "notes.txt", Op: api.SourceChangeOpWrite, Origin: step.origin,
+		mustRecord(t, store, ctx, RecordInput{
+			RecordLocation: RecordLocation{RootID: "r1", Path: "notes.txt"}, ProjectID: "p1", Op: api.SourceChangeOpWrite, Origin: step.origin,
 			SessionID: step.chat, Turn: 1, OperationID: step.chat, Before: []byte(previous), After: []byte(step.text)})
 		previous = step.text
 	}

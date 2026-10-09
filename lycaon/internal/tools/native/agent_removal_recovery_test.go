@@ -3,6 +3,7 @@ package native
 import (
 	"bytes"
 	"context"
+	"github.com/lycaon/lycaon/internal/desktoptrash"
 	"os"
 	"path/filepath"
 	"testing"
@@ -23,9 +24,9 @@ func recoverableToolFixture(t *testing.T) (tools.ToolContext, *projectsource.Sou
 	dir := t.TempDir()
 	ledger := bindLedgerForWrites(t, dir)
 	service := projectsource.NewSourceMutationService(ledger.LedgerDB(), ledger)
-	service.Effects.SetTrashMover(func(context.Context, string) error {
+	service.Effects.SetTrashMover(func(context.Context, string) (desktoptrash.Receipt, error) {
 		t.Fatal("an agent tool reached the system Trash")
-		return nil
+		return desktoptrash.Receipt{}, nil
 	})
 	tctx := nativefixture.Context(dir)
 	tctx.Identity.ProjectID, tctx.Identity.SessionID, tctx.Identity.UserTurn = "p1", "s1", 1

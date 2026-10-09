@@ -94,10 +94,10 @@ func Build(ctx context.Context, deps Dependencies) (*Runtime, error) {
 	}
 
 	obligation := &scan.WorkflowObligation{
-		Ledger:   store,
-		History:  store,
-		Runs:     deps.WorkflowRunsGet,
-		Params:   deps.WorkflowRunParams,
+		Ledger:  store,
+		History: store,
+		Runs:    deps.WorkflowRunsGet,
+		Params:  deps.WorkflowRunParams,
 		Projects: func(c context.Context, projectID string) (string, error) {
 			p, err := deps.Projects.Get(c, projectID)
 			if err != nil {

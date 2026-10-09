@@ -38,11 +38,10 @@ func TestRestoreProjectSourceVersionMakesSelectedBytesCurrent(t *testing.T) {
 	oldContent, currentContent := []byte("old\n"), []byte("current\n")
 	testutil.FailErr(t, "write current source", os.WriteFile(filepath.Join(rootPath, "note.txt"), currentContent, 0o640))
 	testutil.FailErr(t, "record source history", ledger.Record(t.Context(), sourceledger.RecordInput{
-		ProjectID: p.ID,
-		RootID:    rootID, Path: "note.txt", Op: wire.SourceChangeOpWrite,
+		RecordLocation: sourceledger.RecordLocation{RootID: rootID, Path: "note.txt"},
+		ProjectID:      p.ID, Op: wire.SourceChangeOpWrite,
 		Origin: wire.SourceChangeOriginAgent, SessionID: "session-before", Turn: 1,
-		Before: oldContent, After: currentContent,
-	}))
+		Before: oldContent, After: currentContent}))
 	walk, err := ledger.Walk.QueryWalk(t.Context(), p.ID,
 		sourceledger.Baseline{Kind: sourceledger.BaselineSession, SessionID: "session-before"},
 		10, 0, sourceledger.CommitLens{})
@@ -91,10 +90,9 @@ func TestRestoreProjectSourceVersionRejectsUnavailableBytesWithoutMutation(t *te
 	contractfixture.MirrorLedgerProject(t, ledgerDB, p)
 	rootID := p.Roots[0].ID
 	testutil.FailErr(t, "record uncaptured source", ledger.Record(t.Context(), sourceledger.RecordInput{
-		ProjectID: p.ID,
-		RootID:    rootID, Path: "missing.bin", Op: wire.SourceChangeOpCreate,
-		Origin: wire.SourceChangeOriginExternal, AfterSHA256: strings.Repeat("a", 64), AfterSize: 12,
-	}))
+		RecordLocation: sourceledger.RecordLocation{RootID: rootID, Path: "missing.bin"},
+		ProjectID:      p.ID, Op: wire.SourceChangeOpCreate,
+		Origin: wire.SourceChangeOriginExternal, AfterSHA256: strings.Repeat("a", 64), AfterSize: 12}))
 	fileID, versionID, err := ledger.History.ResolveFile(t.Context(), p.ID, sourcebranch.Trunk, rootID, "missing.bin")
 	testutil.FailErr(t, "resolve uncaptured source", err)
 	body, err := json.Marshal(wire.SourceVersionRestoreRequest{
@@ -131,16 +129,16 @@ func TestProjectSourceVersionsListsCompleteFileHistory(t *testing.T) {
 		{op: wire.SourceChangeOpWrite, origin: wire.SourceChangeOriginUser, after: "two\n"},
 	} {
 		testutil.FailErr(t, "record primary revision", ledger.Record(t.Context(), sourceledger.RecordInput{
-			ProjectID: p.ID, RootID: rootID, Path: "a.go",
-			Op: revision.op, Origin: revision.origin, After: []byte(revision.after),
-		}))
+			RecordLocation: sourceledger.RecordLocation{RootID: rootID, Path: "a.go"},
+			ProjectID:      p.ID,
+			Op:             revision.op, Origin: revision.origin, After: []byte(revision.after)}))
 	}
 	fileID, _, err := ledger.History.ResolveFile(t.Context(), p.ID, sourcebranch.Trunk, rootID, "a.go")
 	testutil.FailErr(t, "resolve file", err)
 	testutil.FailErr(t, "record worker revision", ledger.Record(t.Context(), sourceledger.RecordInput{
-		ProjectID: p.ID, BranchID: "worker-1", RootID: rootID, Path: "a.go", FileID: fileID, JobID: "worker-1",
-		Op: wire.SourceChangeOpWrite, Origin: wire.SourceChangeOriginAgent, After: []byte("overlay\n"),
-	}))
+		RecordLocation: sourceledger.RecordLocation{RootID: rootID, Path: "a.go"},
+		ProjectID:      p.ID, BranchID: "worker-1", FileID: fileID, JobID: "worker-1",
+		Op: wire.SourceChangeOpWrite, Origin: wire.SourceChangeOriginAgent, After: []byte("overlay\n")}))
 
 	requestPage := func(cursor string) wire.SourceFileVersionsResponse {
 		t.Helper()
@@ -180,10 +178,10 @@ func TestProjectSourceVersionsListsCompleteFileHistory(t *testing.T) {
 	}
 	// Newer inserts do not shift the seek window.
 	testutil.FailErr(t, "record concurrent primary revision", ledger.Record(t.Context(), sourceledger.RecordInput{
-		ProjectID: p.ID, RootID: rootID, Path: "a.go",
-		FileID: fileID, Op: wire.SourceChangeOpWrite, Origin: wire.SourceChangeOriginAgent,
-		After: []byte("three\n"),
-	}))
+		RecordLocation: sourceledger.RecordLocation{RootID: rootID, Path: "a.go"},
+		ProjectID:      p.ID,
+		FileID:         fileID, Op: wire.SourceChangeOpWrite, Origin: wire.SourceChangeOriginAgent,
+		After: []byte("three\n")}))
 
 	// Verify descending, unique, complete pagination.
 	seen := map[string]bool{first.Versions[0].ID: true}
@@ -294,10 +292,10 @@ func TestWorkerChangesReturnsLedgerRowsByRoot(t *testing.T) {
 
 	after := []byte("branch\n")
 	err = ledger.Record(t.Context(), sourceledger.RecordInput{
-		ProjectID: "p1", BranchID: "worker-branch", RootID: "r1", Path: "a.go",
+		RecordLocation: sourceledger.RecordLocation{RootID: "r1", Path: "a.go"},
+		ProjectID:      "p1", BranchID: "worker-branch",
 		Op: wire.SourceChangeOpWrite, Origin: wire.SourceChangeOriginAgent,
-		JobID: jobID, After: after,
-	})
+		JobID: jobID, After: after})
 	testutil.FailErr(t, "record worker change", err)
 
 	req := contractfixture.NewAuthedRequest(http.MethodGet, "/v1/workers/"+jobID+"/changes", nil)
@@ -492,10 +490,10 @@ func TestProjectSourcePresentationStopsAtDisplayedRevision(t *testing.T) {
 
 	for _, after := range []string{"first\n", "second\n"} {
 		testutil.FailErr(t, "record agent revision", ledger.Record(t.Context(), sourceledger.RecordInput{
-			ProjectID: p.ID, RootID: rootID, Path: "a.go",
-			Op: wire.SourceChangeOpWrite, Origin: wire.SourceChangeOriginAgent,
-			After: []byte(after),
-		}))
+			RecordLocation: sourceledger.RecordLocation{RootID: rootID, Path: "a.go"},
+			ProjectID:      p.ID,
+			Op:             wire.SourceChangeOpWrite, Origin: wire.SourceChangeOriginAgent,
+			After: []byte(after)}))
 	}
 	var effectID, fileID string
 	var ordinal int64

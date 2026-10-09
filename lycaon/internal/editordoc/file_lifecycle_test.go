@@ -26,8 +26,8 @@ func TestDocumentFollowsItsPathThroughDeletionAndRecreation(t *testing.T) {
 	testutil.FailErr(t, "type an unsaved line", err)
 
 	testutil.FailErr(t, "remove on disk", os.Remove(filepath.Join(f.root, "a.txt")))
-	testutil.FailErr(t, "record the deletion", ledger.Record(t.Context(), sourceledger.RecordInput{ProjectID: f.project.ID, RootID: f.rootID,
-		Path: "a.txt", OperationID: uuid.NewString(), Op: api.SourceChangeOpDelete,
+	testutil.FailErr(t, "record the deletion", ledger.Record(t.Context(), sourceledger.RecordInput{
+		RecordLocation: sourceledger.RecordLocation{RootID: f.rootID, Path: "a.txt"}, ProjectID: f.project.ID, OperationID: uuid.NewString(), Op: api.SourceChangeOpDelete,
 		Origin: api.SourceChangeOriginExternal, Before: []byte("old file\n")}))
 	testutil.FailErr(t, "observe the deletion", f.service.ObserveExternal(t.Context(), f.project, []PathRef{{RootID: f.rootID, Path: "a.txt"}}))
 	absent, err := f.store.Get(t.Context(), d.ID)
@@ -75,8 +75,8 @@ func TestSavingAnAbsentDocumentRecreatesTheFile(t *testing.T) {
 		Content:         "kept draft\n", EOL: "lf"})
 	testutil.FailErr(t, "type", err)
 	testutil.FailErr(t, "remove on disk", os.Remove(filepath.Join(f.root, "a.txt")))
-	testutil.FailErr(t, "record the deletion", ledger.Record(t.Context(), sourceledger.RecordInput{ProjectID: f.project.ID, RootID: f.rootID,
-		Path: "a.txt", OperationID: uuid.NewString(), Op: api.SourceChangeOpDelete,
+	testutil.FailErr(t, "record the deletion", ledger.Record(t.Context(), sourceledger.RecordInput{
+		RecordLocation: sourceledger.RecordLocation{RootID: f.rootID, Path: "a.txt"}, ProjectID: f.project.ID, OperationID: uuid.NewString(), Op: api.SourceChangeOpDelete,
 		Origin: api.SourceChangeOriginExternal, Before: []byte("old file\n")}))
 	absent, err := f.service.ObserveDisk(t.Context(), f.project, d.ID, "window")
 	testutil.FailErr(t, "observe", err)

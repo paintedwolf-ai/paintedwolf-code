@@ -82,16 +82,16 @@ func TestMovePreservesFileIdentityAndExactComparison(t *testing.T) {
 	store, ctx := openLedger(t)
 	content := []byte("the door\n")
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "story.txt",
-		Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
-		OperationID: "create-story", After: content,
-	})
+		RecordLocation: RecordLocation{RootID: "r1", Path: "story.txt"},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
+		OperationID: "create-story", After: content})
 	fileID, beforeVersionID := mustResolve(t, store, ctx, "story.txt")
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "test/story.txt", FromPath: "story.txt",
-		Op: api.SourceChangeOpRename, Origin: api.SourceChangeOriginUser,
-		OperationID: "move-story",
-	})
+		RecordLocation: RecordLocation{RootID: "r1", Path: "test/story.txt", FromPath: "story.txt"},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpRename, Origin: api.SourceChangeOriginUser,
+		OperationID: "move-story"})
 	movedFileID, afterVersionID := mustResolve(t, store, ctx, "test/story.txt")
 	if movedFileID != fileID || afterVersionID == beforeVersionID {
 		t.Fatalf("move identity/version = %s/%s, want %s/new", movedFileID, afterVersionID, fileID)
@@ -108,29 +108,28 @@ func TestMovePreservesFileIdentityAndExactComparison(t *testing.T) {
 	}
 }
 
-func TestDirectoryMoveAdvancesOnlyTrackedDescendants(t *testing.T) {
+func TestDirectoryMovePreservesDescendantContentVersions(t *testing.T) {
 	store, ctx := openLedger(t)
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "src", EntryKind: EntryKindDirectory,
-		Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
-		OperationID: "create-directory",
-	})
+		RecordLocation: RecordLocation{RootID: "r1", Path: "src", EntryKind: EntryKindDirectory},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
+		OperationID: "create-directory"})
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "src/main.go",
-		Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
-		OperationID: "create-child", After: []byte("package main\n"),
-	})
+		RecordLocation: RecordLocation{RootID: "r1", Path: "src/main.go"},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
+		OperationID: "create-child", After: []byte("package main\n")})
 	childFileID, childVersionID := mustResolve(t, store, ctx, "src/main.go")
 
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "app", FromPath: "src",
-		EntryKind: EntryKindDirectory, Op: api.SourceChangeOpRename,
-		Origin: api.SourceChangeOriginUser, OperationID: "move-directory",
-	})
+		RecordLocation: RecordLocation{RootID: "r1", Path: "app", FromPath: "src", EntryKind: EntryKindDirectory},
+		ProjectID:      "p1", Op: api.SourceChangeOpRename,
+		Origin: api.SourceChangeOriginUser, OperationID: "move-directory"})
 
 	movedFileID, movedVersionID := mustResolve(t, store, ctx, "app/main.go")
-	if movedFileID != childFileID || movedVersionID == childVersionID {
-		t.Fatalf("descendant identity/version = %s/%s, want %s/new", movedFileID, movedVersionID, childFileID)
+	if movedFileID != childFileID || movedVersionID != childVersionID {
+		t.Fatalf("descendant identity/version = %s/%s, want %s/%s", movedFileID, movedVersionID, childFileID, childVersionID)
 	}
 	if _, _, err := store.History.ResolveFile(ctx, "p1", sourcebranch.Trunk, "r1", "src/main.go"); !errors.Is(err, ErrHistoryNotFound) {
 		t.Fatalf("old descendant path error = %v", err)
@@ -146,21 +145,21 @@ func TestDirectoryMoveAdvancesOnlyTrackedDescendants(t *testing.T) {
 func TestDeleteAndRecreatePathMintsNewFileIdentity(t *testing.T) {
 	store, ctx := openLedger(t)
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "note.txt",
-		Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
-		OperationID: "create-old", After: []byte("old\n"),
-	})
+		RecordLocation: RecordLocation{RootID: "r1", Path: "note.txt"},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
+		OperationID: "create-old", After: []byte("old\n")})
 	oldFileID, _ := mustResolve(t, store, ctx, "note.txt")
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "note.txt", FileID: oldFileID,
+		RecordLocation: RecordLocation{RootID: "r1", Path: "note.txt"},
+		ProjectID:      "p1", FileID: oldFileID,
 		Op: api.SourceChangeOpDelete, Origin: api.SourceChangeOriginUser,
-		OperationID: "delete-old", Before: []byte("old\n"),
-	})
+		OperationID: "delete-old", Before: []byte("old\n")})
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "note.txt",
-		Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
-		OperationID: "create-new", After: []byte("new\n"),
-	})
+		RecordLocation: RecordLocation{RootID: "r1", Path: "note.txt"},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
+		OperationID: "create-new", After: []byte("new\n")})
 	newFileID, _ := mustResolve(t, store, ctx, "note.txt")
 	if newFileID == oldFileID {
 		t.Fatal("delete and recreate reused the deleted file identity")
@@ -202,10 +201,10 @@ func TestTrackingAnOpenFileCreatesBaselineWithoutFakeWalkEffect(t *testing.T) {
 func TestWalkEffectOwnsBothWriteEndpoints(t *testing.T) {
 	store, ctx := openLedger(t)
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "main.go",
-		Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginAgent,
-		OperationID: "write-main", Before: []byte("package old\n"), After: []byte("package main\n"),
-	})
+		RecordLocation: RecordLocation{RootID: "r1", Path: "main.go"},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpWrite, Origin: api.SourceChangeOriginAgent,
+		OperationID: "write-main", Before: []byte("package old\n"), After: []byte("package main\n")})
 	comparison, err := store.Comparisons.CompareEffect(ctx, "p1", latestEffectID(t, store, ctx))
 	testutil.FailErr(t, "compare write", err)
 	if comparison.Before.Content != "package old\n" || comparison.After.Content != "package main\n" {
@@ -219,19 +218,18 @@ func TestWalkEffectOwnsBothWriteEndpoints(t *testing.T) {
 func TestVersionHistoryContainsWorkerBranchWithoutAnotherTab(t *testing.T) {
 	store, ctx := openLedger(t)
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "main.go",
-		Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
-		OperationID: "create-main", After: []byte("primary\n"),
-	})
+		RecordLocation: RecordLocation{RootID: "r1", Path: "main.go"},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
+		OperationID: "create-main", After: []byte("primary\n")})
 	fileID, primaryVersionID := mustResolve(t, store, ctx, "main.go")
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", BranchID: "ws_worker_1",
-		RootID: "r1", Path: "main.go", FileID: fileID,
+		RecordLocation: RecordLocation{RootID: "r1", Path: "main.go"},
+		ProjectID:      "p1", BranchID: "ws_worker_1", FileID: fileID,
 		DerivedFromVersionID: primaryVersionID,
 		Op:                   api.SourceChangeOpWrite, Origin: api.SourceChangeOriginAgent,
 		JobID: "job-1", OperationID: "worker-write",
-		Before: []byte("primary\n"), After: []byte("worker\n"),
-	})
+		Before: []byte("primary\n"), After: []byte("worker\n")})
 	history, err := store.History.QueryFileVersions(ctx, "p1", fileID, 20, 0)
 	testutil.FailErr(t, "list file versions", err)
 	// Newest first: the worker's write, the pre-image the worker branch
@@ -269,16 +267,16 @@ func TestReadRestorableVersionReturnsExactBytesAndAbsence(t *testing.T) {
 	store, ctx := openLedger(t)
 	raw := []byte{0xff, 0x00, 0x81, 0x7f}
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "asset.bin",
-		Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
-		OperationID: "create-binary", After: raw,
-	})
+		RecordLocation: RecordLocation{RootID: "r1", Path: "asset.bin"},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
+		OperationID: "create-binary", After: raw})
 	fileID, contentVersionID := mustResolve(t, store, ctx, "asset.bin")
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "asset.bin", FileID: fileID,
+		RecordLocation: RecordLocation{RootID: "r1", Path: "asset.bin"},
+		ProjectID:      "p1", FileID: fileID,
 		Op: api.SourceChangeOpDelete, Origin: api.SourceChangeOriginUser,
-		OperationID: "delete-binary", Before: raw,
-	})
+		OperationID: "delete-binary", Before: raw})
 	history, err := store.History.QueryFileVersions(ctx, "p1", fileID, 10, 0)
 	testutil.FailErr(t, "query deleted history", err)
 	if len(history.Versions) == 0 {
@@ -300,20 +298,20 @@ func TestReadRestorableVersionReturnsExactBytesAndAbsence(t *testing.T) {
 		t.Fatalf("cross-project read error = %v", err)
 	}
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "uncaptured.bin",
-		Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginExternal,
-		OperationID: "create-uncaptured", AfterSHA256: strings.Repeat("a", 64), AfterSize: 12,
-	})
+		RecordLocation: RecordLocation{RootID: "r1", Path: "uncaptured.bin"},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpCreate, Origin: api.SourceChangeOriginExternal,
+		OperationID: "create-uncaptured", AfterSHA256: strings.Repeat("a", 64), AfterSize: 12})
 	_, unavailableVersionID := mustResolve(t, store, ctx, "uncaptured.bin")
 	if _, err := store.History.ReadRestorableVersion(ctx, "p1", unavailableVersionID); !errors.Is(err, ErrVersionUnavailable) {
 		t.Fatalf("uncaptured read error = %v", err)
 	}
 	other := []byte("different retained bytes")
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "other.bin",
-		Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
-		OperationID: "create-other", After: other,
-	})
+		RecordLocation: RecordLocation{RootID: "r1", Path: "other.bin"},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
+		OperationID: "create-other", After: other})
 	otherObject, err := store.queries.GetSourceBlobObject(ctx, sourceblob.ContentSHA(other))
 	testutil.FailErr(t, "read other source object", err)
 	_, err = store.sqlDB.ExecContext(ctx,
@@ -334,10 +332,12 @@ func TestReadRestorableVersionReturnsExactBytesAndAbsence(t *testing.T) {
 func TestRecordBatchStoresOneOperationAndOrderedEffects(t *testing.T) {
 	store, ctx := openLedger(t)
 	inputs := []RecordInput{
-		{ProjectID: "p1", RootID: "r1", Path: "a.txt", Op: api.SourceChangeOpCreate,
+		{
+			RecordLocation: RecordLocation{RootID: "r1", Path: "a.txt"}, ProjectID: "p1", Op: api.SourceChangeOpCreate,
 			Origin: api.SourceChangeOriginAgent, OperationID: "batch-1", After: []byte("a"),
 			SessionID: "session-1", ToolCallID: "call-1", ToolName: "edit"},
-		{ProjectID: "p1", RootID: "r1", Path: "b.txt", Op: api.SourceChangeOpCreate,
+		{
+			RecordLocation: RecordLocation{RootID: "r1", Path: "b.txt"}, ProjectID: "p1", Op: api.SourceChangeOpCreate,
 			Origin: api.SourceChangeOriginAgent, OperationID: "batch-1", After: []byte("b"),
 			SessionID: "session-1", ToolCallID: "call-1", ToolName: "edit"},
 	}
@@ -361,10 +361,10 @@ func TestRecordBatchStoresOneOperationAndOrderedEffects(t *testing.T) {
 func TestMaintenancePreservesReferencedVersionContent(t *testing.T) {
 	store, ctx := openLedger(t)
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "a.txt",
-		Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginAgent,
-		Before: []byte("before payload\n"), After: []byte("after payload\n"),
-	})
+		RecordLocation: RecordLocation{RootID: "r1", Path: "a.txt"},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpWrite, Origin: api.SourceChangeOriginAgent,
+		Before: []byte("before payload\n"), After: []byte("after payload\n")})
 	effectID := latestEffectID(t, store, ctx)
 	available, err := store.Comparisons.CompareEffect(ctx, "p1", effectID)
 	testutil.FailErr(t, "compare available effect", err)
@@ -446,10 +446,10 @@ func countBlobObjects(t *testing.T, store *Store, ctx context.Context) int {
 func TestMaintenanceReclaimsContentAfterProjectDeletion(t *testing.T) {
 	store, ctx := openLedger(t)
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "deleted.txt",
-		Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginAgent,
-		After: []byte("retained until project deletion\n"),
-	})
+		RecordLocation: RecordLocation{RootID: "r1", Path: "deleted.txt"},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpCreate, Origin: api.SourceChangeOriginAgent,
+		After: []byte("retained until project deletion\n")})
 	var sha string
 	testutil.FailErr(t, "load retained hash", store.sqlDB.QueryRowContext(ctx,
 		`SELECT content_sha256 FROM source_versions WHERE path = 'deleted.txt'`).Scan(&sha))
@@ -482,9 +482,9 @@ func TestRecordTxRollsBackHistoryWithCaller(t *testing.T) {
 	tx, err := store.sqlDB.BeginTx(ctx, nil)
 	testutil.FailErr(t, "begin transaction", err)
 	err = store.RecordTx(ctx, tx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "a.txt", Op: api.SourceChangeOpCreate,
-		Origin: api.SourceChangeOriginUser, After: []byte("a"),
-	})
+		RecordLocation: RecordLocation{RootID: "r1", Path: "a.txt"},
+		ProjectID:      "p1", Op: api.SourceChangeOpCreate,
+		Origin: api.SourceChangeOriginUser, After: []byte("a")})
 	testutil.FailErr(t, "record transaction", err)
 	testutil.FailErr(t, "rollback transaction", tx.Rollback())
 	var count int

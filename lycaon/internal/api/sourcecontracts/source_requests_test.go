@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/desktoptrash"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -13,13 +14,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	hostapi "github.com/lycaon/lycaon/internal/api"
+	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/api/sourceapi"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/fileops"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/testutil"
-	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
-	hostapi "github.com/lycaon/lycaon/internal/api"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -43,7 +44,11 @@ func TestSourceRequestSurvivesDisconnectAndReturnsOriginalResult(t *testing.T) {
 	var once sync.Once
 	unblock := func() { once.Do(func() { close(release) }) }
 	t.Cleanup(unblock)
-	srv.Sources.Mutations.SourceMutations.Effects.SetTrashMover(func(_ context.Context, path string) error { close(started); <-release; return os.Remove(path) })
+	srv.Sources.Mutations.SourceMutations.Effects.SetTrashMover(func(_ context.Context, path string) (desktoptrash.Receipt, error) {
+		close(started)
+		<-release
+		return desktoptrash.Receipt{}, os.Remove(path)
+	})
 	id := uuid.NewString()
 	path := "/v1/projects/" + p.ID + "/source?path=file&root_id=" + p.Roots[0].ID + "&operation_id=" + id
 	request := contractfixture.NewAuthedRequest(http.MethodDelete, path, nil)

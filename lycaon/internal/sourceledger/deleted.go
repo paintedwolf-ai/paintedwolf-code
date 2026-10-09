@@ -20,6 +20,13 @@ type DeletedPath struct {
 }
 
 func (s *History) ResolveDeletedPath(ctx context.Context, projectID string, branch sourcebranch.ID, rootID, path string) (DeletedPath, error) {
+	_, liveErr := s.queries.GetSourceBranchHeadByPath(ctx, db.GetSourceBranchHeadByPathParams{ProjectID: projectID, BranchID: branch.String(), RootID: rootID, Path: path})
+	if liveErr == nil {
+		return DeletedPath{}, ErrHistoryNotFound
+	}
+	if !errors.Is(liveErr, sql.ErrNoRows) {
+		return DeletedPath{}, liveErr
+	}
 	head, err := s.queries.GetDeletedSourcePathHead(ctx, db.GetDeletedSourcePathHeadParams{
 		ProjectID: projectID, BranchID: branch.String(), RootID: rootID, Path: path,
 	})
@@ -36,7 +43,7 @@ func (s *History) ResolveDeletedPath(ctx context.Context, projectID string, bran
 	return DeletedPath{FileID: head.FileID, VersionID: head.VersionID, DeletedTS: timestamp}, err
 }
 
-// DeletedPathContent reads the parent version of the deletion on this branch.
+// DeletedPathContent reads retained content from before the entry became absent.
 func (s *History) DeletedPathContent(ctx context.Context, projectID string, deleted DeletedPath) (ComparisonSide, error) {
 	version, err := s.queries.GetSourceVersion(ctx, deleted.VersionID)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -45,8 +52,12 @@ func (s *History) DeletedPathContent(ctx context.Context, projectID string, dele
 	if err != nil {
 		return ComparisonSide{}, err
 	}
-	if version.ProjectID != projectID || version.FileID != deleted.FileID || version.State != "absent" {
+	if version.ProjectID != projectID || version.FileID != deleted.FileID {
 		return ComparisonSide{}, ErrHistoryNotFound
+	}
+	if version.State != "absent" {
+		// A parent-directory deletion retains the child's own content version.
+		return s.comparisons.comparisonSide(ctx, projectID, version.ID)
 	}
 	if version.ParentVersionID == "" {
 		return ComparisonSide{State: "unresolved", Availability: ContentNotCaptured, Reason: "content_not_captured"}, nil
@@ -103,13 +114,9 @@ func (s *History) DeletedPaths(ctx context.Context, projectID string, baseline B
   SELECT CAST(r.key AS TEXT) AS root_id, CAST(r.value AS TEXT) AS branch_id
   FROM scope_input,json_each(CASE WHEN roots='' THEN '{}' ELSE roots END) r
  )
- SELECT DISTINCT h.root_id,h.path FROM source_branch_heads h
+ SELECT DISTINCT h.root_id,h.path,h.branch_id,h.file_id FROM source_branch_heads h
  JOIN requested r ON r.file_id=h.file_id
  WHERE h.project_id=? AND h.state='absent'
- AND h.version_id=(SELECT v.id FROM source_versions v
-   WHERE v.project_id=h.project_id AND v.branch_id=h.branch_id
-   AND v.root_id=h.root_id AND v.path=h.path AND v.landing='working_file'
-   ORDER BY v.seq DESC LIMIT 1)
  AND EXISTS(SELECT 1 FROM source_files f WHERE f.id=h.file_id AND f.entry_kind='file')
  AND (((SELECT roots FROM scope_input)='' AND (h.branch_id='' OR substr(h.branch_id,1,9)='worktree:'))
  OR EXISTS(SELECT 1 FROM scoped_roots s WHERE s.root_id=h.root_id AND s.branch_id=h.branch_id))
@@ -118,12 +125,35 @@ func (s *History) DeletedPaths(ctx context.Context, projectID string, baseline B
 		return out, err
 	}
 	defer func() { _ = rows.Close() }()
+	type candidate struct{ root, path, branch, file string }
+	var candidates []candidate
 	for rows.Next() {
-		var path ScopedDeletedPath
-		if err := rows.Scan(&path.RootID, &path.Path); err != nil {
+		var entry candidate
+		if err := rows.Scan(&entry.root, &entry.path, &entry.branch, &entry.file); err != nil {
 			return out, err
 		}
-		out.Paths = append(out.Paths, path)
+		candidates = append(candidates, entry)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return out, err
+	}
+	if err := rows.Close(); err != nil {
+		return out, err
+	}
+	seen := map[ScopedDeletedPath]bool{}
+	for _, entry := range candidates {
+		deleted, err := s.ResolveDeletedPath(ctx, projectID, sourcebranch.ID(entry.branch), entry.root, entry.path)
+		if errors.Is(err, ErrHistoryNotFound) {
+			continue
+		}
+		if err != nil {
+			return out, err
+		}
+		address := ScopedDeletedPath{RootID: entry.root, Path: entry.path}
+		if deleted.FileID == entry.file && !seen[address] {
+			out.Paths = append(out.Paths, address)
+			seen[address] = true
+		}
+	}
+	return out, nil
 }

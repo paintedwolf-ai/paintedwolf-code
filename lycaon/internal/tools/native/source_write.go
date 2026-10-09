@@ -478,16 +478,15 @@ func agentCommitInputs(tctx tools.ToolContext, m agentMutation) (sourceledger.Re
 		return sourceledger.RecordInput{}, sourcefeed.Change{}, false
 	}
 	in := sourceledger.RecordInput{
-		ProjectID: tctx.Identity.ProjectID,
-		BranchID:  branch,
-		RootID:    root.ID, Path: path, FromPath: fromPath,
-		Op: m.Op, Origin: api.SourceChangeOriginAgent,
+		RecordLocation: sourceledger.RecordLocation{RootID: root.ID, Path: path, FromPath: fromPath, EntryKind: sourceledger.EntryKindFile},
+		ProjectID:      tctx.Identity.ProjectID,
+		BranchID:       branch,
+		Op:             m.Op, Origin: api.SourceChangeOriginAgent,
 		SessionID: tctx.Identity.SessionID, JobID: tctx.Identity.WorkerJobID, ToolCallID: tctx.Identity.ToolCallID,
 		ToolName:     tctx.Invocation.ToolName,
 		Turn:         tctx.Identity.UserTurn,
 		BeforeSHA256: m.BeforeSHA256, AfterSHA256: m.AfterSHA256, Before: m.Before, After: m.After,
-		BeforeSize: max(m.BeforeSize, int64(len(m.Before))), AfterSize: max(m.AfterSize, int64(len(m.After))), EntryKind: sourceledger.EntryKindFile,
-	}
+		BeforeSize: max(m.BeforeSize, int64(len(m.Before))), AfterSize: max(m.AfterSize, int64(len(m.After)))}
 	var isDir *bool
 	if m.IsDir {
 		value := true

@@ -25,7 +25,7 @@ const (
 // ErrPinNotFound reports a missing named boundary.
 var ErrPinNotFound = errors.New("pin not found")
 
-// Checkpoint is an immutable manifest boundary.
+// Checkpoint is an immutable source-history boundary.
 type Checkpoint struct {
 	ID             string
 	ProjectID      string
@@ -80,7 +80,7 @@ type StructuralCheckpointInput struct {
 	Turn      int
 }
 
-// CreateStructuralCheckpoint stores a structural manifest delta.
+// CreateStructuralCheckpoint stores a structural history boundary.
 func (s *Checkpoints) CreateStructuralCheckpoint(ctx context.Context, in StructuralCheckpointInput) (Checkpoint, error) {
 	if in.Kind == CheckpointNamed {
 		return Checkpoint{}, fmt.Errorf("named boundaries are pins")
@@ -88,7 +88,7 @@ func (s *Checkpoints) CreateStructuralCheckpoint(ctx context.Context, in Structu
 	return s.createCheckpoint(ctx, in)
 }
 
-// CreatePin stores a named manifest delta.
+// CreatePin stores a named history boundary.
 func (s *Checkpoints) CreatePin(ctx context.Context, projectID, label string) (Pin, error) {
 	checkpoint, err := s.createCheckpoint(ctx, StructuralCheckpointInput{
 		ProjectID: projectID, Kind: CheckpointNamed, Label: label,
@@ -162,11 +162,9 @@ func (s *Checkpoints) createCheckpoint(ctx context.Context, in StructuralCheckpo
 	}
 	now := time.Now().UTC()
 	parentID := ""
-	parentOrdinal := int64(-1)
 	parent, parentErr := q.LatestStructuralSourceCheckpoint(ctx, in.ProjectID)
 	if parentErr == nil {
 		parentID = parent.ID
-		parentOrdinal = parent.CreatedOrdinal
 	} else if !errors.Is(parentErr, sql.ErrNoRows) {
 		return Checkpoint{}, parentErr
 	}
@@ -181,20 +179,6 @@ func (s *Checkpoints) createCheckpoint(ctx context.Context, in StructuralCheckpo
 		CreatedOrdinal: out.CreatedOrdinal, CreatedTs: now.Format(checkpointTimeLayout),
 	}); err != nil {
 		return Checkpoint{}, err
-	}
-	heads, err := q.ListTrunkSourceHeadsAfterOrdinal(ctx, db.ListTrunkSourceHeadsAfterOrdinalParams{
-		ProjectID: in.ProjectID, Ordinal: parentOrdinal,
-	})
-	if err != nil {
-		return Checkpoint{}, err
-	}
-	for _, head := range heads {
-		if err := q.InsertSourceCheckpointEntry(ctx, db.InsertSourceCheckpointEntryParams{
-			CheckpointID: out.ID, FileID: head.FileID,
-			VersionID: head.VersionID, Ordinal: head.Ordinal,
-		}); err != nil {
-			return Checkpoint{}, err
-		}
 	}
 	// The boundary carries the git position as last observed; no repository
 	// read runs inside the transaction.

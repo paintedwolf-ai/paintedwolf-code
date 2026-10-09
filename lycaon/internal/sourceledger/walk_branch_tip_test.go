@@ -16,17 +16,17 @@ func TestWalkTipsReadTheRequestedBranch(t *testing.T) {
 	store, ctx := openLedger(t)
 	const worktree = sourcebranch.ID("worktree:w1")
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "a.go",
-		Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginAgent,
-		SessionID: "s1", Turn: 1, OperationID: "trunk-write", After: []byte("trunk\n"),
-	})
+		RecordLocation: RecordLocation{RootID: "r1", Path: "a.go"},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpCreate, Origin: api.SourceChangeOriginAgent,
+		SessionID: "s1", Turn: 1, OperationID: "trunk-write", After: []byte("trunk\n")})
 	fileID, trunkVersion := mustResolve(t, store, ctx, "a.go")
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", BranchID: worktree, RootID: "r1", Path: "a.go", FileID: fileID,
+		RecordLocation: RecordLocation{RootID: "r1", Path: "a.go"},
+		ProjectID:      "p1", BranchID: worktree, FileID: fileID,
 		DerivedFromVersionID: trunkVersion,
 		Op:                   api.SourceChangeOpWrite, Origin: api.SourceChangeOriginAgent,
-		SessionID: "s1", Turn: 1, OperationID: "worktree-write", After: []byte("tree\n"),
-	})
+		SessionID: "s1", Turn: 1, OperationID: "worktree-write", After: []byte("tree\n")})
 	_, treeVersion, err := store.History.ResolveFile(ctx, "p1", worktree, "r1", "a.go")
 	testutil.FailErr(t, "resolve worktree head", err)
 	if treeVersion == trunkVersion {
@@ -70,10 +70,10 @@ func TestWalkTipsReadTheRequestedBranch(t *testing.T) {
 func TestWalkTurnZeroListsNothing(t *testing.T) {
 	store, ctx := openLedger(t)
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "idle.go",
-		Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
-		SessionID: "s1", OperationID: "idle-edit", After: []byte("idle\n"),
-	})
+		RecordLocation: RecordLocation{RootID: "r1", Path: "idle.go"},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
+		SessionID: "s1", OperationID: "idle-edit", After: []byte("idle\n")})
 	walk, err := store.Walk.QueryWalk(ctx, "p1", Baseline{Kind: BaselineTurn, SessionID: "s1"}, 10, 0, CommitLens{Available: true})
 	testutil.FailErr(t, "query walk", err)
 	if len(walk.Files) != 0 || walk.NextBeforeOrdinal != 0 {

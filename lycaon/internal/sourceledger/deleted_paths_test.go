@@ -12,7 +12,8 @@ func TestDeletedPathsScopePaginationAndCurrentOccupant(t *testing.T) {
 	checkout := sourcebranch.ForWorktree("checkout")
 	record := func(branch sourcebranch.ID, path string, op api.SourceChangeOp, origin api.SourceChangeOrigin) {
 		t.Helper()
-		input := RecordInput{ProjectID: "p1", RootID: "r1", Path: path, BranchID: branch, Op: op, Origin: origin, SessionID: "chat"}
+		input := RecordInput{
+			RecordLocation: RecordLocation{RootID: "r1", Path: path}, ProjectID: "p1", BranchID: branch, Op: op, Origin: origin, SessionID: "chat"}
 		if op == api.SourceChangeOpDelete {
 			input.Before = []byte("old\n")
 		} else {

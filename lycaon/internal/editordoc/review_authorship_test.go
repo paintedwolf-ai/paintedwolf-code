@@ -122,8 +122,8 @@ func TestSavedLineListsEachAuthorOnce(t *testing.T) {
 
 func TestOpeningSharedDocumentInheritsRecordedAuthorship(t *testing.T) {
 	f, ledger := newLedgerAgentFixture(t, map[string]string{"a.txt": "prior agent\n"})
-	err := ledger.Record(t.Context(), sourceledger.RecordInput{ProjectID: f.project.ID, RootID: f.rootID,
-		Path: "a.txt", OperationID: uuid.NewString(), Op: api.SourceChangeOpCreate,
+	err := ledger.Record(t.Context(), sourceledger.RecordInput{
+		RecordLocation: sourceledger.RecordLocation{RootID: f.rootID, Path: "a.txt"}, ProjectID: f.project.ID, OperationID: uuid.NewString(), Op: api.SourceChangeOpCreate,
 		Origin: api.SourceChangeOriginAgent, SessionID: "prior-chat", Turn: 1,
 		After: []byte("prior agent\n")})
 	testutil.FailErr(t, "record pre-document agent write", err)
@@ -142,8 +142,8 @@ func TestOpeningSharedDocumentInheritsRecordedAuthorship(t *testing.T) {
 
 func TestComparisonAcrossSnapshotHistoryKeepsMixedPublicationAuthors(t *testing.T) {
 	f, ledger := newLedgerAgentFixture(t, map[string]string{"a.txt": "base\n"})
-	err := ledger.Record(t.Context(), sourceledger.RecordInput{ProjectID: f.project.ID, RootID: f.rootID,
-		Path: "a.txt", OperationID: uuid.NewString(), Op: api.SourceChangeOpCreate,
+	err := ledger.Record(t.Context(), sourceledger.RecordInput{
+		RecordLocation: sourceledger.RecordLocation{RootID: f.rootID, Path: "a.txt"}, ProjectID: f.project.ID, OperationID: uuid.NewString(), Op: api.SourceChangeOpCreate,
 		Origin: api.SourceChangeOriginUser, After: []byte("base\n")})
 	testutil.FailErr(t, "record initial snapshot", err)
 	document := f.open(t, "a.txt")

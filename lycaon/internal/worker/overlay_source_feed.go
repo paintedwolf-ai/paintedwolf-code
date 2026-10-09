@@ -184,17 +184,16 @@ func (s *MergeService) promotedSourceFacts(
 			after, afterSHA = nil, ""
 		}
 		record := sourceledger.RecordInput{
-			ProjectID: projectID,
-			RootID:    target.rootID, Path: target.relPath, EntryKind: sourceledger.EntryKindFile,
-			Op: op, Origin: api.SourceChangeOriginAgent,
+			RecordLocation: sourceledger.RecordLocation{RootID: target.rootID, Path: target.relPath, EntryKind: sourceledger.EntryKindFile},
+			ProjectID:      projectID,
+			Op:             op, Origin: api.SourceChangeOriginAgent,
 			SessionID: sessionID, JobID: task.ID, ToolCallID: toolCallID,
 			ToolName: "promote_overlay",
 			Turn:     userTurn, OperationID: txID,
 			Cause:        sourceledger.CauseOverlayPromote,
 			BeforeSHA256: target.beforeSHA, AfterSHA256: afterSHA,
 			Before: target.before, After: after,
-			BeforeSize: int64(len(target.before)), AfterSize: int64(len(after)),
-		}
+			BeforeSize: int64(len(target.before)), AfterSize: int64(len(after))}
 		if documents != nil {
 			documents.syncs = append(documents.syncs, editordoc.PromotedDocumentSync{
 				RootID: target.rootID, Path: target.relPath,

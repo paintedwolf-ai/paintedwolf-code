@@ -13,7 +13,8 @@ func TestWalkScopesCheckoutsBeforePagination(t *testing.T) {
 	store, ctx := openLedger(t)
 	checkout := sourcebranch.ForWorktree("checkout")
 	for _, branch := range []sourcebranch.ID{sourcebranch.Trunk, checkout} {
-		mustRecord(t, store, ctx, RecordInput{ProjectID: "p1", RootID: "r1", Path: "a.txt", BranchID: branch,
+		mustRecord(t, store, ctx, RecordInput{
+			RecordLocation: RecordLocation{RootID: "r1", Path: "a.txt"}, ProjectID: "p1", BranchID: branch,
 			Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginAgent, SessionID: "chat", Turn: 1,
 			OperationID: "write-" + branch.String(), After: []byte("from " + branch.String())})
 	}

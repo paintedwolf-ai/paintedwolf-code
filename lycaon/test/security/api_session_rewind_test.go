@@ -152,7 +152,8 @@ func TestRewindRestoresFilesAndTruncatesTranscript(t *testing.T) {
 	ledger := sourceledger.New(f.h.DB, filepath.Join(filepath.Dir(dbPath), enginepaths.SourceContentDirName))
 	turn, err := f.h.Store.UserTurnOrdinal(ctx, f.sessionID)
 	testutil.FailErr(t, "resolve source turn", err)
-	testutil.FailErr(t, "record agent effect", ledger.Record(ctx, sourceledger.RecordInput{ProjectID: f.projectID, RootID: rootID, Path: "note.txt", Origin: wire.SourceChangeOriginAgent, Op: wire.SourceChangeOpWrite, SessionID: f.sessionID, Turn: turn, Before: []byte("before"), After: []byte("after")}))
+	testutil.FailErr(t, "record agent effect", ledger.Record(ctx, sourceledger.RecordInput{
+		RecordLocation: sourceledger.RecordLocation{RootID: rootID, Path: "note.txt"}, ProjectID: f.projectID, Origin: wire.SourceChangeOriginAgent, Op: wire.SourceChangeOpWrite, SessionID: f.sessionID, Turn: turn, Before: []byte("before"), After: []byte("after")}))
 
 	before := listMessagesOpenAPI(t, f.base, map[string]string{"id": f.sessionID}, http.StatusOK)
 

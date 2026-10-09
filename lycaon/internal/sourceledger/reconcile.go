@@ -158,8 +158,8 @@ func (s *Inventory) recordObservationTx(
 		}
 	}
 	in := cause.apply(RecordInput{
-		ProjectID: projectID, BranchID: sourcebranch.ID(head.BranchID),
-		RootID: head.RootID, Path: head.Path, FileID: head.FileID,
+		RecordLocation: RecordLocation{RootID: head.RootID, Path: head.Path},
+		ProjectID:      projectID, BranchID: sourcebranch.ID(head.BranchID), FileID: head.FileID,
 		Op:           op,
 		BeforeSHA256: head.ContentSha256, AfterSHA256: afterSHA,
 		Before: beforeBytes, After: afterBytes,
@@ -169,8 +169,7 @@ func (s *Inventory) recordObservationTx(
 			}
 			return after.size
 		}(),
-		OperationID: transactionID,
-	})
+		OperationID: transactionID})
 	if err := validateBatch([]RecordInput{in}); err != nil {
 		return false, err
 	}

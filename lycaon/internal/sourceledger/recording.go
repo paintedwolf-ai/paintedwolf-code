@@ -199,6 +199,16 @@ func normalizedInput(in RecordInput) RecordInput {
 
 // recordEffect lands one effect and reports the file and version it produced.
 func (s *Store) recordEffect(ctx context.Context, q *db.Queries, operationID string, in RecordInput, recorded *TrackedFile) error {
+	if recovery := in.NativeRecovery; recovery != nil && recovery.Restore && recovery.Key != "" {
+		fileID, err := q.GetSourceRecoveryFile(ctx, db.GetSourceRecoveryFileParams{ProjectID: in.ProjectID, BranchID: in.BranchID.String(), RootID: in.RootID, OperationKey: recovery.Key})
+		if err != nil {
+			return err
+		}
+		if in.FileID != "" && in.FileID != fileID {
+			return fmt.Errorf("native recovery refers to another file")
+		}
+		in.FileID = fileID
+	}
 	lookupPath := in.Path
 	if in.Op == api.SourceChangeOpRename && in.FromPath != "" {
 		lookupPath = in.FromPath
@@ -216,6 +226,10 @@ func (s *Store) recordEffect(ctx context.Context, q *db.Queries, operationID str
 	}
 	if headErr != nil && !errors.Is(headErr, sql.ErrNoRows) {
 		return headErr
+	}
+	// A published creation is a new identity unless recovery names the original.
+	if in.Op == api.SourceChangeOpCreate && in.FileID == "" {
+		headErr = sql.ErrNoRows
 	}
 	if errors.Is(headErr, sql.ErrNoRows) && in.FileID == "" && in.BranchID.IsWorker() {
 		trunk, err := q.GetTrunkSourceHeadByPath(ctx, db.GetTrunkSourceHeadByPathParams{
@@ -266,6 +280,18 @@ func (s *Store) recordEffect(ctx context.Context, q *db.Queries, operationID str
 	needsPreimage := in.Op != api.SourceChangeOpCreate && beforeVersionID == ""
 	if headErr == nil && preSHA != "" && head.ContentSha256 != preSHA {
 		needsPreimage = true
+	}
+	if headErr == nil && in.Op != api.SourceChangeOpCreate {
+		previous, err := q.GetSourceVersion(ctx, beforeVersionID)
+		if err != nil {
+			return err
+		}
+		if previous.RootID != head.RootID || previous.Path != head.Path || previous.State != head.State {
+			needsPreimage = true
+			if preSHA == "" && head.State != "absent" {
+				preSHA, preSize = head.ContentSha256, previous.ByteSize
+			}
+		}
 	}
 	if needsPreimage {
 		versionID, err := s.insertVersion(ctx, q, versionSpec{
@@ -329,7 +355,10 @@ func (s *Store) recordEffect(ctx context.Context, q *db.Queries, operationID str
 	}); err != nil {
 		return err
 	}
-	if err := q.UpsertSourceBranchHead(ctx, db.UpsertSourceBranchHeadParams{
+	if err := transitionDirectory(ctx, q, in, ordinal); err != nil {
+		return err
+	}
+	if err := upsertSourceHead(ctx, q, db.SourceBranchHeads{
 		ProjectID: in.ProjectID, BranchID: in.BranchID.String(),
 		FileID: fileID, VersionID: afterVersionID,
 		RootID: in.RootID, Path: in.Path, State: state, ContentSha256: afterSHA,
@@ -351,84 +380,7 @@ func (s *Store) recordEffect(ctx context.Context, q *db.Queries, operationID str
 	if err := updateLineAttribution(ctx, q, in, fileID, effectID); err != nil {
 		return err
 	}
-	if in.EntryKind == EntryKindDirectory &&
-		(in.Op == api.SourceChangeOpRename || in.Op == api.SourceChangeOpDelete) {
-		return s.followDirectoryTransition(ctx, q, operationID, in)
-	}
-	return nil
-}
 
-// followDirectoryTransition advances tracked descendants.
-func (s *Store) followDirectoryTransition(
-	ctx context.Context,
-	q *db.Queries,
-	operationID string,
-	in RecordInput,
-) error {
-	fromPath := in.Path
-	if in.Op == api.SourceChangeOpRename {
-		fromPath = in.FromPath
-	}
-	heads, err := q.ListSourceBranchHeadsUnderPath(ctx, db.ListSourceBranchHeadsUnderPathParams{
-		ProjectID: in.ProjectID, BranchID: in.BranchID.String(), RootID: in.RootID,
-		ParentPath: fromPath,
-	})
-	if err != nil {
-		return err
-	}
-	for _, head := range heads {
-		parent, err := q.GetSourceVersion(ctx, head.VersionID)
-		if err != nil {
-			return err
-		}
-		file, err := q.GetSourceFile(ctx, head.FileID)
-		if err != nil {
-			return err
-		}
-		path, state, sha, size := head.Path, "absent", "", int64(0)
-		if in.Op == api.SourceChangeOpRename {
-			path = in.Path + strings.TrimPrefix(head.Path, fromPath)
-			state, sha, size = head.State, head.ContentSha256, parent.ByteSize
-		}
-		versionID, err := s.insertVersion(ctx, q, versionSpec{
-			FileID: head.FileID, ProjectID: in.ProjectID, BranchID: in.BranchID,
-			ParentVersionID: head.VersionID,
-			OperationID:     operationID, RootID: in.RootID, Path: path,
-			EntryKind: file.EntryKind, State: state,
-			SHA256: sha, Size: size, CaptureQuality: in.CaptureQuality, TS: in.TS,
-		})
-		if err != nil {
-			return err
-		}
-		ordinal, err := q.AdvanceSourceOrdinal(ctx, in.ProjectID)
-		if err != nil {
-			return err
-		}
-		effectID := newID()
-		fromRootID, priorPath := "", ""
-		if in.Op == api.SourceChangeOpRename {
-			fromRootID, priorPath = in.RootID, head.Path
-		}
-		if err := q.InsertSourceEffect(ctx, db.InsertSourceEffectParams{
-			ID: effectID, ProjectID: in.ProjectID, OperationID: operationID,
-			FileID: head.FileID, BeforeVersionID: nullableString(head.VersionID),
-			AfterVersionID: versionID, RootID: in.RootID, Path: path,
-			FromRootID: fromRootID, FromPath: priorPath, Op: string(in.Op),
-			EntryKind: file.EntryKind, Ordinal: ordinal,
-			WalkVisible: 0, CreatedTs: in.TS.Format(time.RFC3339Nano),
-		}); err != nil {
-			return err
-		}
-		if err := q.UpsertSourceBranchHead(ctx, db.UpsertSourceBranchHeadParams{
-			ProjectID: in.ProjectID, BranchID: in.BranchID.String(),
-			FileID:    head.FileID,
-			VersionID: versionID, RootID: in.RootID, Path: path, State: state,
-			ContentSha256: sha, Ordinal: ordinal,
-			ObservedTs: in.TS.Format(time.RFC3339Nano),
-		}); err != nil {
-			return err
-		}
-	}
 	return nil
 }
 

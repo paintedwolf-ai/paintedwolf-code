@@ -79,6 +79,7 @@ func (s *SourceMutationService) lifecycle(ctx context.Context, operationID strin
 			plan.BeforeSize = info.Size()
 		}
 		if kind == "copy" {
+			plan.NativeTrash = &sourceTrashRecovery{}
 			plan.StageAbs = filepath.Join(filepath.Dir(toAbs), ".paintedwolf-copy-"+operationID)
 			if _, statErr := os.Lstat(plan.StageAbs); statErr == nil {
 				return nil, ErrSourceExists
@@ -141,7 +142,7 @@ func (s *SourceMutationService) Delete(ctx context.Context, operationID string, 
 		}
 		plan := &sourceMutationPlan{
 			sourceMutationContent:     sourceMutationContent{BeforeSize: info.Size()},
-			sourceMutationRecovery:    sourceMutationRecovery{RecoveryID: operationID, Disposal: sourceDisposalTrash},
+			sourceMutationRecovery:    sourceMutationRecovery{NativeTrash: &sourceTrashRecovery{}, Disposal: sourceDisposalTrash},
 			sourceMutationAttribution: sourceMutationAttribution{ProjectID: p.SourceID(), WorkspaceID: p.WorkspaceID(), SessionID: req.SessionID, Turn: req.Turn},
 			Kind:                      "delete",
 			RootID:                    root.ID,
@@ -152,6 +153,10 @@ func (s *SourceMutationService) Delete(ctx context.Context, operationID string, 
 			EntryKind:                 sourceEntryKind(info),
 			Changed:                   true,
 			Response:                  json.RawMessage(`{}`),
+		}
+		plan.EntryIdentity, statErr = fspath.EntryIdentity(abs)
+		if statErr != nil {
+			return nil, statErr
 		}
 		return plan, nil
 	})

@@ -197,6 +197,11 @@ func (s *Comparisons) CompareScope(
 		out.PresentationAfterOrdinal = &ordinal
 	}
 	out.InRange, out.FileID = true, head.FileID
+	out.After.RootID, out.After.Path = head.RootID, head.Path
+	if head.State == "absent" {
+		out.After.State, out.After.Availability = "absent", ContentAbsent
+		out.After.Content, out.After.SHA256, out.After.SizeBytes = "", "", 0
+	}
 	out.LocationChanged = out.Before.RootID != out.After.RootID || out.Before.Path != out.After.Path
 	if err := s.attachComparisonAttribution(ctx, baseline, opts, &out); err != nil {
 		return Comparison{}, err

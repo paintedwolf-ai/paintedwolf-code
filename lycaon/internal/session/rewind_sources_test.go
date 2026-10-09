@@ -171,7 +171,8 @@ func TestSourceRewindResolvesEachRootAndRenamedFile(t *testing.T) {
 	recordRewindTestEffect(t, mgr, id, "same.txt", nil, []byte("primary"), api.SourceChangeOpCreate)
 	testutil.FailErr(t, "write secondary file", os.WriteFile(filepath.Join(secondary, "renamed.txt"), []byte("secondary"), 0o644))
 	ledger := mgr.ToolContext.SourceLedger.(*sourceledger.Store)
-	err = ledger.Record(ctx, sourceledger.RecordInput{ProjectID: p.ID, RootID: change.Added.ID, FromRootID: change.Added.ID, FromPath: "same.txt", Path: "renamed.txt", SessionID: id, Turn: 1, Origin: api.SourceChangeOriginAgent, Op: api.SourceChangeOpRename, Before: []byte("secondary"), After: []byte("secondary")})
+	err = ledger.Record(ctx, sourceledger.RecordInput{
+		RecordLocation: sourceledger.RecordLocation{RootID: change.Added.ID, FromRootID: change.Added.ID, FromPath: "same.txt", Path: "renamed.txt"}, ProjectID: p.ID, SessionID: id, Turn: 1, Origin: api.SourceChangeOriginAgent, Op: api.SourceChangeOpRename, Before: []byte("secondary"), After: []byte("secondary")})
 	testutil.FailErr(t, "record secondary rename", err)
 	preview, err := mgr.Chats.Rewinds.PreviewRewind(ctx, id, anchor)
 	testutil.FailErr(t, "preview multiple roots", err)

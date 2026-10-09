@@ -165,7 +165,7 @@ func (s *SourceMutationService) Create(ctx context.Context, operationID string, 
 		}
 		encoded, _ := json.Marshal(struct{ Path string }{rel})
 		plan := &sourceMutationPlan{
-			sourceMutationRecovery:    sourceMutationRecovery{RecoveryID: operationID},
+			sourceMutationRecovery:    sourceMutationRecovery{NativeTrash: &sourceTrashRecovery{}},
 			sourceMutationAttribution: sourceMutationAttribution{ProjectID: p.SourceID(), WorkspaceID: p.WorkspaceID(), SessionID: req.SessionID, Turn: req.Turn},
 			Kind:                      "create",
 			RootID:                    root.ID,
