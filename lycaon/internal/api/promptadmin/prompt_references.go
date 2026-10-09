@@ -103,7 +103,7 @@ func (s *References) resolveReferencePath(ctx context.Context, projectID, rootID
 
 // lookupReferenceArtifact validates reused artifacts before they become provider image blocks.
 func (s *References) lookupReferenceArtifact(ctx context.Context, sessionID, artifactID string) (string, error) {
-	root := sessiontree.RootSessionID(ctx, s.Store, sessionID)
+	root := sessiontree.RootID(ctx, s.Store, sessionID)
 	id, res := visual.ResolveRef(ctx, s.VisualStore, root, artifactID)
 	if !res.IsPresent() {
 		return "", fmt.Errorf("artifact %s: %s", artifactID, res.Note())
