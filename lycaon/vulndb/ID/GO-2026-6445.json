@@ -1,0 +1,65 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/lf-edge/ekuiper"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/lf-edge/ekuiper/v2"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "2.4.1"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2025-58363",
+  "GHSA-c23q-fw86-9h5x"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6445"
+ },
+ "details": "LF Edge eKuiper: Arbitrary File and Directory Deletion via Path Traversal in Plugin Installation Endpoint in github.com/lf-edge/ekuiper",
+ "id": "GO-2026-6445",
+ "modified": "2026-09-16T16:56:22Z",
+ "published": "2026-09-16T16:56:22Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/lf-edge/ekuiper/security/advisories/GHSA-c23q-fw86-9h5x"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/lf-edge/ekuiper/releases/tag/v2.4.1"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "LF Edge eKuiper: Arbitrary File and Directory Deletion via Path Traversal in Plugin Installation Endpoint in github.com/lf-edge/ekuiper"
+}

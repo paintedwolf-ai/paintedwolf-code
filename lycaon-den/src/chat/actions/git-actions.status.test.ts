@@ -5,7 +5,8 @@ import type { GitMutationResult } from "../../api/types.ts";
 import type { GitWorkspaceStatus } from "./git-workspace-status.ts";
 import { gitStatusReads, gitWorkspaceStatus } from "../../test/git-status-fixture.ts";
 import { createAppStore } from "../../store/app-state.ts";
-import { checkoutBranch, refreshGitStatus } from "./git-actions.ts";
+import { bindWorktree, checkoutBranch } from "./git-actions.ts";
+import { gitStatusRefreshPending, refreshGitStatus } from "./git-status-reads.ts";
 
 function statusFor(repoId: string): GitWorkspaceStatus {
   return gitWorkspaceStatus({ repo_id: repoId });
@@ -104,5 +105,32 @@ describe("refreshGitStatus", () => {
     expect(appStore.state.gitActiveRepoId).toBe("repo-new");
     expect(valueOf(appStore.state.gitStatus)).toEqual(freshStatus);
     expect(oldClient.getGitStatus).not.toHaveBeenCalled();
+  });
+
+  it("publishes the repository set when a failed worktree bind displaces the first read", async () => {
+    const appStore = createAppStore();
+    const repos = [{ available: true, repo_id: "repo-1", root_ids: ["root-1"] }];
+    let resolveFirstSet!: (view: { active_repo_id: string; repos: typeof repos }) => void;
+    const bindError = Object.assign(new Error("Fixture bind refusal"), { code: "worktree_bind_failed" });
+    const status = gitWorkspaceStatus({ repo_id: "repo-1", root_ids: ["root-1"] });
+    const client = stubClient({
+      listGitRepos: vi.fn()
+        .mockImplementationOnce(() => new Promise((resolve) => { resolveFirstSet = resolve; }))
+        .mockResolvedValue({ active_repo_id: "repo-1", repos }),
+      bindGitWorktree: vi.fn(async () => {
+        throw bindError;
+      }),
+      ...gitStatusReads(() => status),
+    });
+
+    const firstRead = refreshGitStatus(appStore, client, "project-1", "session-1");
+    await vi.waitFor(() => expect(client.listGitRepos).toHaveBeenCalledOnce());
+    await expect(bindWorktree(appStore, client, "project-1", "session-1", "repo-1")).rejects.toBe(bindError);
+    resolveFirstSet({ active_repo_id: "repo-1", repos });
+    await firstRead;
+    await vi.waitFor(() => expect(gitStatusRefreshPending(appStore)).toBe(false));
+
+    expect(appStore.state.gitRepos).toEqual(repos);
+    expect(valueOf(appStore.state.gitStatus)).toEqual(status);
   });
 });

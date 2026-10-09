@@ -10,4 +10,4 @@ export const updateServiceFixture = (over: Partial<UpdateService> = {}): UpdateS
   setChannel: async (channel) => updateFixture({ channel }), check: async () => updateFixture(), download: async () => updateFixture(),
   retry: async () => updateFixture(), restart: async () => {}, subscribe: async () => () => {}, ...over,
 });
-export const stagedFixture = (): NativeUpdateState => updateFixture({ installation: "staged", staged_release_id: "release-1", capabilities: { can_check: true, can_download: false, can_restart_to_update: true, can_install_automatically: true, blocked_reason: null } });
+export const stagedFixture = (over: Partial<NativeUpdateState> = {}): NativeUpdateState => updateFixture({ offer_confirmed_at: 1800000000, installation: "staged", staged_release_id: "release-1", capabilities: { can_check: true, can_download: false, can_restart_to_update: true, can_install_automatically: true, blocked_reason: null }, ...over });

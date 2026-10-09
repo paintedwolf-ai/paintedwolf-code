@@ -1410,12 +1410,21 @@ type CompletionReportMeta struct {
 	// The assessed conclusions the report states, most severe first. These are the report's own findings, distinct from raw scanner rows.
 	Findings []CompletionReportFinding `json:"findings,omitempty"`
 	// Coverage gaps the report declares, one per entry: what was not checked, run, or reached. Rendered as a boxed list so a gap survives a reader who never reaches the closing paragraph.
-	Limits []string             `json:"limits,omitempty"`
-	Ask    *CompletionReportAsk `json:"ask,omitempty"`
+	Limits []string                `json:"limits,omitempty"`
+	Ask    *CompletionReportAsk    `json:"ask,omitempty"`
+	Rating *CompletionReportRating `json:"rating,omitempty"`
 	// Scanner groups the report accounts for without assessing them one by one, each with its reason.
 	SetAsides []CompletionReportSetAside `json:"set_asides,omitempty"`
 	// Run scope only. The document requirements this report still failed when its repairs ran out and the host stored it as drafted, one per failing requirement. Absent on a report the host accepted; a report that carries defects ends its run as not accepted.
 	Defects []CompletionReportDefect `json:"defects,omitempty"`
+}
+
+// CompletionReportRating The report's own answer to the workflow's rating question, made from all the run's work: one declared level and the reason for it.
+type CompletionReportRating struct {
+	// A level label the workflow's brief declares.
+	Level string `json:"level"`
+	// One line saying what decided the level.
+	Why string `json:"why"`
 }
 
 // CompletionReportSetAside Scanner groups accounted for together: named by id, or selected as every group one scanner reported entirely inside the listed path globs.
@@ -3416,6 +3425,13 @@ type HealthResponse struct {
 	RecoverySnapshotAt time.Time `json:"recovery_snapshot_at,omitempty"`
 }
 
+// HistoryClassUsage
+type HistoryClassUsage struct {
+	Class string `json:"class"`
+	// Uncompressed retained content referenced by this class, deduplicated within the class. SQLite classes count serialized detail fields, excluding row and page overhead. Shared bodies can appear in multiple classes; this is neither exclusive disk allocation nor reclaimable bytes.
+	ContentBytes int64 `json:"content_bytes"`
+}
+
 // HistoryProtection
 type HistoryProtection struct {
 	ScopeType string `json:"scope_type"`
@@ -3490,6 +3506,7 @@ type HistoryStorageLane struct {
 // HistoryStorageStatus
 type HistoryStorageStatus struct {
 	Policy      HistoryRetentionPolicy `json:"policy"`
+	Classes     []HistoryClassUsage    `json:"classes,omitempty"`
 	Lanes       []HistoryStorageLane   `json:"lanes"`
 	Protections []HistoryProtection    `json:"protections"`
 }

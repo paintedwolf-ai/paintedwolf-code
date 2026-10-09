@@ -1,0 +1,56 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/coder/code-marketplace"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.2.3-0.20260402184705-988440dee05f"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-35454",
+  "GHSA-8x9r-hvwg-c55h"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5270"
+ },
+ "details": "Code Extension Marketplace: Zip Slip Path Traversal in github.com/coder/code-marketplace",
+ "id": "GO-2026-5270",
+ "modified": "2026-06-25T18:43:15Z",
+ "published": "2026-06-25T18:43:15Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/coder/code-marketplace/security/advisories/GHSA-8x9r-hvwg-c55h"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-35454"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/coder/code-marketplace/commit/988440dee05fceef8400ed725badc604dbf90792"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/coder/code-marketplace/releases/tag/v2.4.2"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Code Extension Marketplace: Zip Slip Path Traversal in github.com/coder/code-marketplace"
+}

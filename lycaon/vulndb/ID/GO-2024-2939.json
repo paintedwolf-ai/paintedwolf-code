@@ -1,0 +1,52 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/authzed/spicedb"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.33.1"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2024-38361",
+  "GHSA-grjv-gjgr-66g2"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2024-2939"
+ },
+ "details": "SpiceDB exclusions can result in no permission returned when permission expected in github.com/authzed/spicedb",
+ "id": "GO-2024-2939",
+ "modified": "2024-06-28T15:28:30Z",
+ "published": "2024-06-28T15:28:30Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/authzed/spicedb/security/advisories/GHSA-grjv-gjgr-66g2"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2024-38361"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/authzed/spicedb/commit/ecef31d2b266fde17eb2c3415e2ec4ceff96fbeb"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "SpiceDB exclusions can result in no permission returned when permission expected in github.com/authzed/spicedb"
+}

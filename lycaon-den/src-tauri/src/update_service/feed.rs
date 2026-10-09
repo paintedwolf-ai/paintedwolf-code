@@ -1,11 +1,7 @@
-//! Signed feed discovery: the channel pointer, its signature, and the offer it carries.
-//!
-//! The pointer is fetched directly from the release origin without proxies or redirects,
-//! verified with the embedded feed key, and ordered by its signed timestamp before any
-//! field is read. The artifact signature inside it is verified again when bytes arrive.
+//! Channel pointers are authenticated and replay-checked before their offers are accepted.
 use super::{
-    persistence, verification, Candidate, Failure, RolloutEligibility, UpdateChannel,
-    UpdateError, CHECK_REQUEST_TIMEOUT, DOWNLOAD_ORIGIN,
+    persistence, verification, Candidate, Failure, RolloutEligibility, UpdateChannel, UpdateError,
+    CHECK_REQUEST_TIMEOUT, DOWNLOAD_ORIGIN,
 };
 use futures_util::StreamExt;
 use serde::Deserialize;
@@ -64,6 +60,7 @@ pub fn target() -> &'static str {
 struct Manifest {
     version: String,
     notes: String,
+    #[serde(default)]
     pub_date: String,
     platforms: BTreeMap<String, PlatformEntry>,
     update_keys: UpdateKeys,
@@ -93,10 +90,43 @@ pub struct Offer {
     pub published_age_secs: Option<u64>,
 }
 
+#[derive(Debug, Clone)]
+pub enum FeedFailure {
+    Transient(UpdateError),
+    Rejected(UpdateError),
+    State(UpdateError),
+}
+impl FeedFailure {
+    pub fn error(self) -> UpdateError {
+        match self {
+            Self::Transient(error) | Self::State(error) => error,
+            Self::Rejected(error) => UpdateError::new(Failure::FeedRejected, error),
+        }
+    }
+}
+impl From<UpdateError> for FeedFailure {
+    fn from(error: UpdateError) -> Self {
+        match error.code {
+            Failure::CheckFailed => Self::Transient(error),
+            Failure::InvalidRelease | Failure::InvalidVersion => Self::Rejected(error),
+            _ => Self::State(error),
+        }
+    }
+}
+
 pub async fn fetch(
     channel: UpdateChannel,
     running_version: &str,
-) -> Result<Option<Offer>, UpdateError> {
+) -> Result<Option<Offer>, FeedFailure> {
+    fetch_with_deadline(channel, running_version, CHECK_REQUEST_TIMEOUT).await
+}
+
+pub async fn fetch_with_deadline(
+    channel: UpdateChannel,
+    running_version: &str,
+    deadline: std::time::Duration,
+) -> Result<Option<Offer>, FeedFailure> {
+    let deadline = tokio::time::Instant::now() + deadline;
     let running = semver::Version::parse(running_version)
         .map_err(|e| UpdateError::new(Failure::InvalidVersion, e))?;
     let client = reqwest::Client::builder()
@@ -106,23 +136,51 @@ pub async fn fetch(
         .build()
         .map_err(|e| UpdateError::new(Failure::CheckFailed, e))?;
     let endpoint = channel.endpoint();
-    let manifest = fetch_bytes(&client, &endpoint, MAX_MANIFEST_BYTES).await?;
-    let signature = fetch_bytes(&client, &format!("{endpoint}.sig"), MAX_SIGNATURE_BYTES).await?;
-    let signature = String::from_utf8(signature)
-        .map_err(|e| UpdateError::new(Failure::InvalidRelease, e))?;
+    let (manifest, signature) = tokio::time::timeout_at(deadline, async {
+        let manifest = fetch_bytes(&client, &endpoint, MAX_MANIFEST_BYTES).await?;
+        let signature =
+            fetch_bytes(&client, &format!("{endpoint}.sig"), MAX_SIGNATURE_BYTES).await?;
+        Ok::<_, UpdateError>((manifest, signature))
+    })
+    .await
+    .map_err(|_| {
+        UpdateError::new(
+            Failure::CheckFailed,
+            "The update feed did not respond in time",
+        )
+    })??;
+    let signature =
+        String::from_utf8(signature).map_err(|e| UpdateError::new(Failure::InvalidRelease, e))?;
     let (generation, _) = embedded_key();
     let feed_name = channel.feed_name();
     let comment = verification::verify_feed(&manifest, &signature, &feed_key(), &feed_name)
         .map_err(|e| UpdateError::new(Failure::InvalidRelease, e))?;
-    persistence::accept_feed_timestamp(
-        &persistence::preferences_dir()?,
-        &feed_name,
-        comment.timestamp,
-    )?;
-    offer(&manifest, &comment.version, channel, generation, &running, super::now())
+    tokio::time::timeout_at(
+        deadline,
+        super::feed_state::accept(
+            &persistence::preferences_dir()?,
+            &feed_name,
+            comment.timestamp,
+        ),
+    )
+    .await
+    .map_err(|_| UpdateError::new(Failure::StateUnavailable, "The update feed record is busy"))??;
+    offer(
+        &manifest,
+        &comment.version,
+        channel,
+        generation,
+        &running,
+        super::now(),
+    )
+    .map_err(Into::into)
 }
 
-async fn fetch_bytes(client: &reqwest::Client, url: &str, cap: u64) -> Result<Vec<u8>, UpdateError> {
+async fn fetch_bytes(
+    client: &reqwest::Client,
+    url: &str,
+    cap: u64,
+) -> Result<Vec<u8>, UpdateError> {
     let response = client
         .get(url)
         .header("Cache-Control", "no-cache, no-store")
@@ -136,7 +194,10 @@ async fn fetch_bytes(client: &reqwest::Client, url: &str, cap: u64) -> Result<Ve
         } else {
             Failure::InvalidRelease
         };
-        return Err(UpdateError::new(code, format!("{url} returned HTTP {status}")));
+        return Err(UpdateError::new(
+            code,
+            format!("{url} returned HTTP {status}"),
+        ));
     }
     if response.content_length().is_some_and(|length| length > cap) {
         return Err(UpdateError::new(
@@ -335,17 +396,38 @@ mod tests {
     #[test]
     fn signed_version_manifest_version_and_running_version_are_reconciled() {
         assert_eq!(
-            offer(&manifest("1.1.0", ""), "1.1.1", UpdateChannel::Stable, 1, &running(), 0)
-                .unwrap_err()
-                .code,
+            offer(
+                &manifest("1.1.0", ""),
+                "1.1.1",
+                UpdateChannel::Stable,
+                1,
+                &running(),
+                0
+            )
+            .unwrap_err()
+            .code,
             Failure::InvalidRelease
         );
-        assert!(offer(&manifest("1.0.0", ""), "1.0.0", UpdateChannel::Stable, 1, &running(), 0)
-            .unwrap()
-            .is_none());
-        assert!(offer(&manifest("0.9.0", ""), "0.9.0", UpdateChannel::Stable, 1, &running(), 0)
-            .unwrap()
-            .is_none());
+        assert!(offer(
+            &manifest("1.0.0", ""),
+            "1.0.0",
+            UpdateChannel::Stable,
+            1,
+            &running(),
+            0
+        )
+        .unwrap()
+        .is_none());
+        assert!(offer(
+            &manifest("0.9.0", ""),
+            "0.9.0",
+            UpdateChannel::Stable,
+            1,
+            &running(),
+            0
+        )
+        .unwrap()
+        .is_none());
     }
     #[test]
     fn withdrawn_prerelease_and_foreign_feeds_are_handled() {
@@ -364,9 +446,16 @@ mod tests {
             ("1.1.0", UpdateChannel::Stable, 2),
         ] {
             assert_eq!(
-                offer(&manifest(version, ""), version, channel, generation, &running(), 0)
-                    .unwrap_err()
-                    .code,
+                offer(
+                    &manifest(version, ""),
+                    version,
+                    channel,
+                    generation,
+                    &running(),
+                    0
+                )
+                .unwrap_err()
+                .code,
                 Failure::InvalidRelease
             );
         }
@@ -384,9 +473,16 @@ mod tests {
             .unwrap()
             .replace(DOWNLOAD_ORIGIN, "https://example.test");
         assert_eq!(
-            offer(foreign.as_bytes(), "1.1.0", UpdateChannel::Stable, 1, &running(), 0)
-                .unwrap_err()
-                .code,
+            offer(
+                foreign.as_bytes(),
+                "1.1.0",
+                UpdateChannel::Stable,
+                1,
+                &running(),
+                0
+            )
+            .unwrap_err()
+            .code,
             Failure::InvalidRelease
         );
     }
@@ -398,7 +494,10 @@ mod tests {
             parse_rfc3339("2026-02-01T02:30:00.250+02:30"),
             Some(1_769_904_000)
         );
-        assert_eq!(parse_rfc3339("2026-01-31T23:00:00-01:00"), Some(1_769_904_000));
+        assert_eq!(
+            parse_rfc3339("2026-01-31T23:00:00-01:00"),
+            Some(1_769_904_000)
+        );
         assert_eq!(parse_rfc3339("2026-02-01"), None);
         assert_eq!(parse_rfc3339("2026-13-01T00:00:00Z"), None);
     }
@@ -413,6 +512,10 @@ mod tests {
             .iter()
             .map(|row| row["updater_key"].as_str().unwrap())
             .collect();
-        assert!(keys.contains(&target()), "{} is not a release platform", target());
+        assert!(
+            keys.contains(&target()),
+            "{} is not a release platform",
+            target()
+        );
     }
 }

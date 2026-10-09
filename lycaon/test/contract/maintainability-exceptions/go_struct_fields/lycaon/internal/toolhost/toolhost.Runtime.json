@@ -1,0 +1,6 @@
+{
+  "category": "go_struct_fields",
+  "artifact": "lycaon/internal/toolhost/toolhost.Runtime",
+  "cap": 36,
+  "reason": "Past the limit before #356, which folds the status cache and its release into one field; the split is tracked in #363."
+}

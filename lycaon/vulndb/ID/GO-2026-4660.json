@@ -1,0 +1,56 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/gtsteffaniak/filebrowser"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "0.0.0-20260307130210-09713b32a5f6"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-30934",
+  "GHSA-r633-fcgp-m532"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-4660"
+ },
+ "details": "FileBrowser Quantum: Stored XSS in public share page via unsanitized share metadata (text/template misuse) in github.com/gtsteffaniak/filebrowser",
+ "id": "GO-2026-4660",
+ "modified": "2026-03-11T16:00:40Z",
+ "published": "2026-03-11T16:00:40Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/gtsteffaniak/filebrowser/security/advisories/GHSA-r633-fcgp-m532"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-30934"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/gtsteffaniak/filebrowser/releases/tag/v1.2.2-stable"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/gtsteffaniak/filebrowser/releases/tag/v1.3.1-beta"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "FileBrowser Quantum: Stored XSS in public share page via unsanitized share metadata (text/template misuse) in github.com/gtsteffaniak/filebrowser"
+}
