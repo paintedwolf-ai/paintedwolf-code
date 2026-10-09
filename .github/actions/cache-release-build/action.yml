@@ -33,7 +33,7 @@ runs:
     # start from an older entry.
     - if: ${{ inputs.save == 'true' && github.ref == 'refs/heads/main' }}
       id: save
-      uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: |
           lycaon-den/src-tauri/target
@@ -41,7 +41,7 @@ runs:
         key: ${{ steps.paths.outputs.build_key }}${{ hashFiles('rust-toolchain.toml', 'lycaon-den/src-tauri/Cargo.lock', 'lycaon/internal/platformfloor/macos_floor.txt') }}
     - if: ${{ inputs.save != 'true' || github.ref != 'refs/heads/main' }}
       id: restore
-      uses: actions/cache/restore@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: |
           lycaon-den/src-tauri/target

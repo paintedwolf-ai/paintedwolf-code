@@ -85,7 +85,7 @@ function shellSwitchDeps(appStore: ReturnType<typeof createAppStore>): SessionSw
 }
 
 describe("session transcript hydrate integration", () => {
-  beforeAll(() => mswServer.listen({ onUnhandledRequest: "error" }));
+  beforeAll(() => mswServer.listen({ onUnhandledFrame: "error" }));
   // Clear process-wide buffers between cases.
   afterEach(() => {
     mswServer.resetHandlers();

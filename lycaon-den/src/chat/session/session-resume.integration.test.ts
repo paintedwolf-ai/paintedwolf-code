@@ -21,7 +21,7 @@ import { emptyProjects } from "../../test/projects-fixture.ts";
 const connection = { baseUrl: MSW_API_BASE, apiToken: "msw-tok" };
 
 describe("session resume MSW integration", () => {
-  beforeAll(() => mswServer.listen({ onUnhandledRequest: "error" }));
+  beforeAll(() => mswServer.listen({ onUnhandledFrame: "error" }));
   afterEach(() => mswServer.resetHandlers());
   afterAll(() => mswServer.close());
 

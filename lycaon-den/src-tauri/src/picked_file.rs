@@ -50,7 +50,7 @@ impl GrantTable {
         self.entries
             .retain(|_, g| now.duration_since(g.minted) < GRANT_TTL);
         let mut bytes = [0u8; 32];
-        rand::thread_rng().fill_bytes(&mut bytes);
+        rand::rng().fill_bytes(&mut bytes);
         let handle = URL_SAFE_NO_PAD.encode(bytes);
         self.entries.insert(
             handle.clone(),

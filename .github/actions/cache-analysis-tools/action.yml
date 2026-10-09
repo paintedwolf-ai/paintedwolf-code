@@ -20,7 +20,7 @@ runs:
         printf 'vulnerabilities=%s\n' "$(python3 scripts/analysis_tools.py key vulnerabilities)" >> "${GITHUB_OUTPUT}"
 
     - if: inputs.save != 'true' && (inputs.tools == 'lint' || inputs.tools == 'all')
-      uses: actions/cache/restore@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: |
           ${{ steps.paths.outputs.bin }}/golangci-lint
@@ -28,14 +28,14 @@ runs:
         key: analyzers-${{ runner.os }}-${{ runner.arch }}-${{ steps.paths.outputs.lint }}
 
     - if: inputs.save != 'true' && (inputs.tools == 'vulnerabilities' || inputs.tools == 'all')
-      uses: actions/cache/restore@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ steps.paths.outputs.bin }}/govulncheck
         key: analyzers-${{ runner.os }}-${{ runner.arch }}-${{ steps.paths.outputs.vulnerabilities }}
 
     # Publication runs after preparation, with resolved paths in the current action scope.
     - if: inputs.save == 'true' && github.ref == 'refs/heads/main' && (inputs.tools == 'lint' || inputs.tools == 'all')
-      uses: actions/cache/save@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: |
           ${{ steps.paths.outputs.bin }}/golangci-lint
@@ -43,7 +43,7 @@ runs:
         key: analyzers-${{ runner.os }}-${{ runner.arch }}-${{ steps.paths.outputs.lint }}
 
     - if: inputs.save == 'true' && github.ref == 'refs/heads/main' && (inputs.tools == 'vulnerabilities' || inputs.tools == 'all')
-      uses: actions/cache/save@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ steps.paths.outputs.bin }}/govulncheck
         key: analyzers-${{ runner.os }}-${{ runner.arch }}-${{ steps.paths.outputs.vulnerabilities }}

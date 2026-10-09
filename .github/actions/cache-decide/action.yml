@@ -23,7 +23,7 @@ runs:
     # a target without its metallib would skip the MLX build that writes it.
     - if: ${{ inputs.save == 'true' && github.ref == 'refs/heads/main' }}
       id: save
-      uses: actions/cache/save@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: |
           ${{ steps.paths.outputs.target }}
@@ -31,7 +31,7 @@ runs:
         key: decide-${{ runner.os }}-${{ runner.arch }}-${{ env.DEVELOPER_DIR }}-${{ hashFiles('rust-toolchain.toml', 'lycaon/internal/decide/native/Cargo.toml', 'lycaon/internal/decide/native/Cargo.lock', 'lycaon/internal/platformfloor/macos_floor.txt', 'scripts/decide-features.sh', 'scripts/build-decide.sh') }}
     - if: ${{ inputs.save != 'true' || github.ref != 'refs/heads/main' }}
       id: restore
-      uses: actions/cache/restore@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: |
           ${{ steps.paths.outputs.target }}

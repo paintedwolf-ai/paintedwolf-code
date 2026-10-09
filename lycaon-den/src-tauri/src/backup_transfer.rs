@@ -335,7 +335,7 @@ async fn receive_archive(
     if total.is_some_and(|n| n != received) {
         return Err("Backup download was incomplete".into());
     }
-    if format!("{:x}", digest.finalize()) != expected_digest {
+    if hex::encode(digest.finalize()) != expected_digest {
         return Err("Backup download failed its integrity check".into());
     }
     file.sync_all().await.map_err(|e| e.to_string())?;
@@ -399,7 +399,7 @@ mod tests {
             hash.update(&block[..count]);
             remaining -= count as u64;
         }
-        let expected = format!("{:x}", hash.finalize());
+        let expected = hex::encode(hash.finalize());
         let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("scale listener");
         let address = listener.local_addr().expect("scale address");
         let digest_header = expected.clone();
@@ -448,7 +448,7 @@ mod tests {
             }
             digest.update(&buffer[..count]);
         }
-        assert_eq!(format!("{:x}", digest.finalize()), expected);
+        assert_eq!(hex::encode(digest.finalize()), expected);
         assert_eq!(
             std::fs::read_dir(&dir).expect("no temporary files").count(),
             2
@@ -476,7 +476,7 @@ mod tests {
     }
 
     fn server(length: u64, body: Vec<u8>, delay: Duration) -> String {
-        let digest = format!("{:x}", Sha256::digest(&body));
+        let digest = hex::encode(Sha256::digest(&body));
         server_with_digest(length, body, delay, digest)
     }
 

@@ -73,6 +73,9 @@ export default defineConfig({
     testTimeout: VITEST_DEFAULT_TIMEOUT_MS,
     hookTimeout: VITEST_HOOK_TIMEOUT_MS,
     setupFiles: ["./vitest.setup.ts"],
+    // The Solid plugin adds the browser condition, which externals would
+    // resolve through Node; MSW's node entries are null under it.
+    server: { deps: { inline: ["msw", "@mswjs/interceptors"] } },
     projects: [
       {
         extends: true,

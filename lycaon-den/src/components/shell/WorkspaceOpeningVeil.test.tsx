@@ -18,7 +18,7 @@ describe("WorkspaceOpeningVeil", () => {
     const veil = screen.getByTestId("shell-workspace-veil");
     const style = getComputedStyle(veil);
     expect(style.position).toBe("absolute");
-    expect(style.inset).toBe("0");
+    expect(style.inset).toBe("0px");
     expect(style.left).not.toContain("--den-nav-slot-width");
     expect(style.right).not.toContain("--den-nav-slot-width");
     expect(veil.classList.contains("den-shell-workspace-veil--hidden")).toBe(false);
