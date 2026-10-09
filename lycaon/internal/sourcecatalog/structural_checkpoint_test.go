@@ -546,6 +546,11 @@ func TestStructuralCheckpointSkipsUnchangedMembership(t *testing.T) {
 	first, err := os.ReadFile(store.structureFile)
 	testutil.FailErr(t, "read first checkpoint", err)
 	installStructuralIncrement(t, store, 2, "a")
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if _, err := store.checkpointStructure(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("unchanged checkpoint ignored cancellation: %v", err)
+	}
 	written, err = store.checkpointStructure(t.Context())
 	testutil.FailErr(t, "checkpoint unchanged membership", err)
 	if written {
@@ -555,6 +560,11 @@ func TestStructuralCheckpointSkipsUnchangedMembership(t *testing.T) {
 	testutil.FailErr(t, "read unchanged checkpoint", err)
 	if !bytes.Equal(first, same) {
 		t.Fatal("unchanged checkpoint bytes moved")
+	}
+	root, found, err := store.structure.directories.Get(t.Context(), ".")
+	testutil.FailErr(t, "read live revision", err)
+	if !found || store.structure.id != 2 || root.observation.Sequence != 2 {
+		t.Fatal("skipped checkpoint moved live generation or revision")
 	}
 	installStructuralIncrement(t, store, 3, "a", "b")
 	written, err = store.checkpointStructure(t.Context())
