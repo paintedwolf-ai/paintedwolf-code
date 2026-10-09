@@ -46,7 +46,7 @@ func TestStateStartAfterSlash(t *testing.T) {
 	if !handled {
 		t.Fatal("expected /plan handled")
 	}
-	active, err := h.WorkflowMgr.GetActive(context.Background(), sess.ID)
+	active, err := h.WorkflowMgr.Store.Runs.ActiveBySession(context.Background(), sess.ID)
 	testutil.FailErr(t, "h.WorkflowMgr.GetActive failed", err)
 	if active.WorkflowID != "plan" {
 		t.Fatalf("workflow_id = %q", active.WorkflowID)

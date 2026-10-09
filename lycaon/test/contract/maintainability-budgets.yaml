@@ -20,10 +20,16 @@ exceptions:
         lycaon/internal/session/session.Manager:
             cap: 12700
             reason: Predates the limits; fixes still land here while the package is decomposed (#271).
+        lycaon/internal/workflow/workflow.RunManager:
+            cap: 6500
+            reason: The workflow run lifecycle (advance, gates, topology settlement, closeout, report delivery, runtime snapshots) shares one manager's run locks and ledger; splitting it needs its own change with a lifecycle and locking review.
     go_receiver_methods:
         lycaon/internal/session/session.Manager:
             cap: 720
             reason: Predates the limits; fixes still land here while the package is decomposed (#271).
+        lycaon/internal/workflow/workflow.RunManager:
+            cap: 250
+            reason: The workflow run lifecycle (advance, gates, topology settlement, closeout, report delivery, runtime snapshots) shares one manager's run locks and ledger; splitting it needs its own change with a lifecycle and locking review.
     go_struct_fields:
         lycaon/internal/session/session.Manager:
             cap: 145

@@ -101,7 +101,7 @@ func TestCustomDesignDocWorkflowLiveGolden(t *testing.T) {
 	}
 
 	parentID := run.ID
-	child, err := h.WorkflowMgr.GetActive(ctx, sess.ID)
+	child, err := h.WorkflowMgr.Store.Runs.ActiveBySession(ctx, sess.ID)
 	testutil.FailErr(t, "GetActive child", err)
 	if child == nil || child.WorkflowID != "implement" {
 		t.Fatalf("active child = %+v want implement subroutine", child)

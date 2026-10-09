@@ -24,7 +24,7 @@ func TestOptionsSlashRequestStartsFanOut(t *testing.T) {
 	if !handled {
 		t.Fatal("expected /options slash handled")
 	}
-	run, err := h.WorkflowMgr.GetActive(ctx, sess.ID)
+	run, err := h.WorkflowMgr.Store.Runs.ActiveBySession(ctx, sess.ID)
 	testutil.FailErr(t, "GetActive", err)
 	vars, err := h.WorkflowMgr.Store.Runs.GetScaffoldVars(ctx, run.ID)
 	testutil.FailErr(t, "GetScaffoldVars", err)

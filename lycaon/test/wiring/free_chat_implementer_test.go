@@ -78,7 +78,7 @@ func TestFreeChatImplementerTask(t *testing.T) {
 	if !foundTask {
 		t.Fatal("coordinator completion request must expose task tool")
 	}
-	run, err := h.WorkflowMgr.GetActive(ctx, sess.ID)
+	run, err := h.WorkflowMgr.Store.Runs.ActiveBySession(ctx, sess.ID)
 	testutil.FailErr(t, "h.WorkflowMgr.GetActive failed", err)
 	if run == nil || run.WorkflowID != "implement" {
 		t.Fatalf("expected ambient implement run, got %+v", run)

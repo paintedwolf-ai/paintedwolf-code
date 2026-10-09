@@ -21,12 +21,14 @@ func reportClaims(claims []workflowpresentation.RunClaim) []report.ReportClaim {
 	return out
 }
 
-// reportBrief rates the findings that need attention, preferring the answers
-// of a review claim with the same id; unreadable answers rate as unknown. A
-// claim the review left open or overturned that no finding carries is rated
-// too, as its review answered it or as unknown: an unstated conclusion is not
-// a cleared one.
-func reportBrief(brief *workflowdef.Brief, findings []assembledFinding, claims, unreported []workflowpresentation.RunClaim) *report.ReportBrief {
+// reportBrief states the review's call on the brief question and rates the
+// findings that need attention beneath it, preferring the answers of a review
+// claim with the same id; unreadable answers rate as unknown. A claim the
+// review left open or overturned that no finding carries is rated too, as its
+// review answered it or as unknown: an unstated conclusion is not a cleared
+// one. Without an accepted call the answers alone decide, as a range when an
+// unknown leaves one.
+func reportBrief(brief *workflowdef.Brief, findings []assembledFinding, claims, unreported []workflowpresentation.RunClaim, call *wire.CompletionReportRating) *report.ReportBrief {
 	if brief == nil {
 		return nil
 	}
@@ -68,6 +70,11 @@ func reportBrief(brief *workflowdef.Brief, findings []assembledFinding, claims, 
 	out.Worst, out.Best = rating.Worst, rating.Best
 	if rating.Decider >= 0 {
 		out.Basis = brief.BasisPhrase(items[rating.Decider])
+	}
+	if call != nil {
+		if level, ok := brief.LevelIndex(call.Level); ok {
+			out.Worst, out.Best, out.Call = level, level, strings.TrimSpace(call.Why)
+		}
 	}
 	return out
 }
