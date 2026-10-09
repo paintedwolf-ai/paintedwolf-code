@@ -226,7 +226,7 @@ func New(responses *httpio.Responder, background *taskgroup.Group, operations Op
 	)
 	hub := deps.Events
 	deps.FileOperations.Observe(func(request fileops.Request) { publishSourceRequest(hub, request) })
-	// Editor saves apply through the same mutation service as other writes.
+	// Editor publications share source path reservations.
 	deps.EditorDocuments.SetSourcePaths(deps.SourceMutations.Paths)
 
 	editor := editoradmin.New(responses, background, editoradmin.Dependencies{EditorClients: deps.EditorClients, EditorDocuments: deps.EditorDocuments, Events: deps.Events, ManagedSecrets: deps.ManagedSecrets, MutationGate: deps.MutationGate, ProjectRegistry: deps.ProjectRegistry, SecretSpans: deps.SecretSpans, SessionStore: deps.SessionStore, TryRunPromotion: deps.TryRunPromotion})
