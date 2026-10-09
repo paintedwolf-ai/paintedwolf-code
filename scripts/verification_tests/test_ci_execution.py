@@ -225,27 +225,13 @@ class HostedVerificationTests(unittest.TestCase):
                     ci.run_lane("behavior", "1/2")
                     self.assertEqual(run.call_args.kwargs["env"]["PW_GO_TEST_TIMEOUT_SECONDS"], expected)
 
-    def test_release_commit_needs_a_passing_full_tier_check(self):
-        def fake(runs, events):
-            def github(path, **query):
-                if path.endswith("/check-runs"):
-                    self.assertEqual(query, {"check_name": "check", "filter": "all"})
-                    return {"check_runs": [{"app": {"slug": slug}, "conclusion": conclusion, "check_suite": {"id": suite}}
-                                           for slug, conclusion, suite in runs]}
-                return {"workflow_runs": [{"event": events[query["check_suite_id"]]}]}
-            return github
-        actions = "github-actions"
-        for runs, events in [([(actions, "success", 1)], {1: "merge_group"}),
-                             ([(actions, "failure", 1), (actions, "success", 2)], {1: "merge_group", 2: "workflow_dispatch"})]:
-            with patch.object(ci, "github", fake(runs, events)):
-                ci.require_full_tier("owner/repo", "abc")
-        for runs, events in [([], {}),
-                             ([(actions, "success", 1)], {1: "pull_request"}),
-                             ([(actions, "success", 1)], {1: "push"}),
-                             ([(actions, "failure", 1)], {1: "merge_group"}),
-                             ([("impostor", "success", 1)], {1: "merge_group"})]:
-            with self.subTest(runs=runs, events=events), patch.object(ci, "github", fake(runs, events)), \
-                    self.assertRaises(ValueError):
+    def test_release_commit_needs_exact_main_qualification(self):
+        good = {"head_sha": "abc", "head_branch": "main", "conclusion": "success", "event": "push"}
+        with patch.object(ci, "github", return_value={"workflow_runs": [good]}):
+            ci.require_full_tier("owner/repo", "abc")
+        for changed in ({"head_sha": "other"}, {"head_branch": "feature"}, {"conclusion": "failure"},
+                        {"event": "merge_group"}, {"event": "pull_request"}):
+            with patch.object(ci, "github", return_value={"workflow_runs": [{**good, **changed}]}), self.assertRaises(ValueError):
                 ci.require_full_tier("owner/repo", "abc")
 
     def test_prune_cancels_only_runs_whose_merge_group_is_gone(self):

@@ -109,6 +109,21 @@ runs:
       shell: bash
       run: ./task gitengine:fetch
 
+    - name: Restore pinned frontend packages
+      uses: actions/cache/restore@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+      with:
+        path: ~/.bun/install/cache
+        key: bun-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.bun-version', 'lycaon-den/bun.lock') }}
+
+    - name: Provision pinned Go modules
+      shell: bash
+      run: ./task setup-dev -- --ci-inputs
+
+    - name: Provision native dependencies
+      if: inputs.setup == 'shell' || inputs.notices == 'true'
+      shell: bash
+      run: cargo fetch --locked --manifest-path lycaon-den/src-tauri/Cargo.toml
+
     - name: Install frontend dependencies
       shell: bash
       working-directory: lycaon-den
@@ -121,7 +136,7 @@ runs:
 
     # Preparation writes resources into this checkout; verification checks use isolated snapshots.
     - name: Prepare shell resource notices
-      if: inputs.setup == 'shell'
+      if: inputs.setup == 'shell' || inputs.notices == 'true'
       shell: bash
       run: ./task setup-dev -- --shell-resources
 
@@ -130,3 +145,10 @@ runs:
       uses: ./.github/actions/cache-analysis-tools
       with:
         tools: ${{ inputs.analysis }}
+
+    - name: Save pinned frontend packages
+      if: inputs.save-caches == 'true' && github.ref == 'refs/heads/main'
+      uses: actions/cache/save@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+      with:
+        path: ~/.bun/install/cache
+        key: bun-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.bun-version', 'lycaon-den/bun.lock') }}

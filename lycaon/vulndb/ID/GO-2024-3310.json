@@ -1,0 +1,65 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/cli/cli"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/cli/cli/v2"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "2.63.1"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2024-54132",
+  "GHSA-2m9h-r57g-45pj"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2024-3310"
+ },
+ "details": "Downloading malicious GitHub Actions workflow artifact results in path traversal vulnerability in github.com/cli/cli",
+ "id": "GO-2024-3310",
+ "modified": "2024-12-04T16:25:24Z",
+ "published": "2024-12-04T16:25:24Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/cli/cli/security/advisories/GHSA-2m9h-r57g-45pj"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/cli/cli/commit/1136764c369aaf0cae4ec2ee09dc35d871076932"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Downloading malicious GitHub Actions workflow artifact results in path traversal vulnerability in github.com/cli/cli"
+}

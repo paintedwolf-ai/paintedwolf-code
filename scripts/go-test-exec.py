@@ -16,6 +16,8 @@ import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import verification_reuse as reuse  # noqa: E402
+from ci_policy.resources import Monitor, budget  # noqa: E402
+from ci_policy.quarantine import arguments as quarantine_arguments  # noqa: E402
 
 CONTROL_ENV = ("PW_TEST_STAGE_EVENTS", "PW_TEST_REUSE_STORE", "PW_TEST_ENVIRONMENT_IDENTITY", "PW_TEST_PACKAGE_IDENTITIES",
                "PW_TEST_SCRATCH_ROOT", "PW_TEST_SOURCE_ROOT", "PW_TEST_MODULE_ROOT", "PW_TEST_STAGE_ID",
@@ -32,7 +34,7 @@ def write_all(data):
         view = view[os.write(1, view):]
 
 
-def execute(binary, arguments, env, observe_forks):
+def execute(binary, arguments, env, observe_forks, resource_limit=None):
     """Run the binary with combined output streamed through; returns (wait status, output, forked)."""
     output_read, output_write = os.pipe()
     ready_read, ready_write = os.pipe()
@@ -57,6 +59,7 @@ def execute(binary, arguments, env, observe_forks):
                                      flags=select.KQ_EV_ADD | select.KQ_EV_CLEAR,
                                      fflags=select.KQ_NOTE_FORK)], 0, 0)
     running = True
+    monitor = Monitor(pid, resource_limit) if resource_limit and Path("/proc").is_dir() else None
 
     def forward(number, _frame):
         if running:
@@ -93,6 +96,9 @@ def execute(binary, arguments, env, observe_forks):
             else:
                 open_output = False
         if status is None:
+            if monitor and monitor.sample():
+                # The PID was forked above and has not been reaped, so it cannot have been reused.
+                os.kill(pid, signal.SIGKILL)
             finished, code = os.waitpid(pid, os.WNOHANG)
             if finished:
                 status, exited, running = code, time.monotonic(), False
@@ -100,7 +106,7 @@ def execute(binary, arguments, env, observe_forks):
             open_output = False
     os.close(output_read)
     drain_forks()
-    return status, bytes(captured), (forked if watch is not None else None)
+    return status, bytes(captured), (forked if watch is not None else None), monitor.violation if monitor else None
 
 
 def failure_report(events, package, output):
@@ -126,7 +132,9 @@ def main():
         os.execve(binary, [binary, *arguments], child_environment)
     context = reuse.Context.from_environment(environment)
     package = context.package(os.getcwd())
+    arguments = quarantine_arguments(package, arguments, environment.get("PW_QUARANTINE_OBSERVE") == "1")
     store = Path(environment["PW_TEST_REUSE_STORE"]) if environment.get("PW_TEST_REUSE_STORE") else None
+    environment["PW_PACKAGE_RESOURCE_IDENTITY"] = str(budget(package))
     key = reuse.result_key(arguments, package, environment) if store and reuse.fork_observable() else None
     started = time.monotonic()
     if key:
@@ -142,11 +150,19 @@ def main():
         log = Path(environment["PW_TEST_SCRATCH_ROOT"]) / "test-logs" / f"{os.getpid()}.log"
         log.parent.mkdir(exist_ok=True)
         arguments = [f"-test.testlogfile={log}", *arguments]
-    status, output, forked = execute(binary, arguments, child_environment, reuse.fork_observable())
+    status, output, forked, resource_limit = execute(binary, arguments, child_environment, reuse.fork_observable(), budget(package))
     elapsed = time.monotonic() - started
     code = os.waitstatus_to_exitcode(status)
+    if resource_limit:
+        code = 1
+        diagnostic = (f"\npackage resource budget exceeded: {package}: "
+                      f"{resource_limit['measured_bytes']} bytes RSS > {resource_limit['limit_bytes']}\n").encode()
+        output += diagnostic
+        write_all(diagnostic)
     event = {"package": package, "exit_code": code, "elapsed": round(elapsed, 3), "reused": False,
              "forked": forked, "recorded": False}
+    if resource_limit:
+        event["resource_limit"] = resource_limit
     if code != 0:
         event.update(failure_report(events, package, output))
     elif key and forked is False and log is not None and log.is_file():

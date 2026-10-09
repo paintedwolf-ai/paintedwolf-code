@@ -78,7 +78,7 @@ func requireHostedGate(t *testing.T, jobs map[string]hostedJob, gate string, dep
 
 func TestHostedVerificationAggregatesRequireEveryJob(t *testing.T) {
 	t.Parallel()
-	for workflow, gate := range map[string]string{"ci": "check", "nightly": "nightly"} {
+	for workflow, gate := range map[string]string{"ci": "check", "nightly": "nightly", "qualification": "qualification"} {
 		jobs := hostedJobs(t, workflow)
 		var dependencies []string
 		for name := range jobs {
@@ -114,9 +114,8 @@ func TestReusableVerificationFailsWithItsPlanOrAnyMatrixJob(t *testing.T) {
 	}
 }
 
-// Pull requests get the fast tier; main advances only through the merge queue,
-// whose single required check judges the full tier on the commit that lands.
-func TestCIRunsTheFastTierOnPullRequestsAndTheFullTierBeforeMain(t *testing.T) {
+// Pull requests and queue commits share admission; qualification follows main.
+func TestCIUsesSharedAdmissionAndSeparateQualification(t *testing.T) {
 	t.Parallel()
 	workflow := hostedWorkflowFile(t, "ci")
 	for _, event := range []string{"pull_request", "merge_group", "workflow_dispatch"} {
@@ -137,19 +136,19 @@ func TestCIRunsTheFastTierOnPullRequestsAndTheFullTierBeforeMain(t *testing.T) {
 		t.Error("the required check must report on every pull request")
 	}
 	jobs := workflow.Jobs
-	if jobs["verification"].With["profile"] != "${{ github.event_name == 'pull_request' && 'fast' || 'check' }}" {
-		t.Error("pull requests must run the fast profile and every other event the check profile")
+	if jobs["verification"].With["profile"] != "${{ github.event_name == 'workflow_dispatch' && 'check' || 'integration' }}" {
+		t.Error("pull requests and merge groups must share the integration profile")
 	}
 	if platform := jobs["platform"]; platform.Uses != "./.github/workflows/platform-verification.yml" ||
-		platform.If != "github.event_name != 'pull_request'" {
-		t.Error("platform verification must run in every full-tier event and only there")
+		platform.If != "github.event_name == 'workflow_dispatch'" {
+		t.Error("manual CI dispatch must include platform qualification")
 	}
 	requireHostedGate(t, jobs, "check", []string{"verification", "platform"})
 	for _, step := range jobs["check"].Steps {
 		if strings.HasPrefix(step.Run, "python3 scripts/ci_verification.py gate") &&
-			(step.Env["SKIPPED"] != "${{ github.event_name == 'pull_request' && 'platform' || '' }}" ||
+			(step.Env["SKIPPED"] != "${{ github.event_name != 'workflow_dispatch' && 'platform' || '' }}" ||
 				!strings.Contains(step.Run, `--skipped "$SKIPPED"`)) {
-			t.Error("the gate may excuse only the platform job, and only on pull requests")
+			t.Error("admission may excuse only the separate platform qualification job")
 		}
 	}
 }
@@ -230,7 +229,7 @@ func TestHostedVerificationBudgetsAndEvidence(t *testing.T) {
 	}
 	for _, workflow := range []string{"ci", "nightly", "verification", "platform-verification", "e2e-verification"} {
 		for name, job := range hostedJobs(t, workflow) {
-			if job.Continue || job.Uses == "" && job.Timeout == "" {
+			if job.Continue && !(workflow == "nightly" && name == "quarantine") || job.Uses == "" && job.Timeout == "" {
 				t.Errorf("%s/%s must be blocking and have an explicit deadline", workflow, name)
 			}
 			for _, step := range job.Steps {
@@ -261,7 +260,7 @@ func TestEndToEndVerificationRunsOnlyInTheSelectedNightlyTier(t *testing.T) {
 	if nightly["e2e"].Uses != "./.github/workflows/e2e-verification.yml" || nightly["e2e"].If != selected {
 		t.Fatal("scheduled, full, and explicit E2E nightly runs must include browser verification")
 	}
-	requireHostedGate(t, nightly, "nightly", []string{"verification", "upgrade-path", "e2e"})
+	requireHostedGate(t, nightly, "nightly", []string{"verification", "upgrade-path", "e2e", "quarantine"})
 	const skipped = "${{ github.event_name != 'schedule' && inputs.suite != 'all' && inputs.suite != 'e2e' && 'e2e' || '' }}"
 	for _, step := range nightly["nightly"].Steps {
 		if strings.HasPrefix(step.Run, "python3 scripts/ci_verification.py gate") &&

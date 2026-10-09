@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/lycaon/lycaon/internal/scan/scanworker"
 	gittestsetup "github.com/lycaon/lycaon/internal/testsetup/git"
+	"github.com/lycaon/lycaon/internal/testutil/resourceguard"
 	"os"
 	"testing"
 )
@@ -19,5 +20,5 @@ func TestMain(m *testing.M) {
 			os.Exit(0)
 		}
 	}
-	os.Exit(m.Run())
+	os.Exit(resourceguard.Run(m, resourceguard.Budget{HeapBytes: 256 << 20, Goroutines: 16}))
 }

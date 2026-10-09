@@ -1,0 +1,52 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/openfga/openfga"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "1.4.0"
+      },
+      {
+       "fixed": "1.11.1"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2025-64751",
+  "GHSA-2c64-vmv2-hgfc"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2025-4150"
+ },
+ "details": "OpenFGA Improper Policy Enforcement in github.com/openfga/openfga",
+ "id": "GO-2025-4150",
+ "modified": "2025-11-25T18:12:18Z",
+ "published": "2025-11-25T18:12:18Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/openfga/openfga/security/advisories/GHSA-2c64-vmv2-hgfc"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-64751"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/openfga/openfga/releases/tag/v1.11.1"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "OpenFGA Improper Policy Enforcement in github.com/openfga/openfga"
+}

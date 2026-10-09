@@ -1,0 +1,86 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/projectdiscovery/nuclei"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/projectdiscovery/nuclei/v2"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/projectdiscovery/nuclei/v3"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "3.0.0"
+      },
+      {
+       "fixed": "3.3.2"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2024-43405",
+  "GHSA-7h5p-mmpp-hgmm"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2024-3114"
+ },
+ "details": "Nuclei Template Signature Verification Bypass in github.com/projectdiscovery/nuclei",
+ "id": "GO-2024-3114",
+ "modified": "2024-09-06T20:43:50Z",
+ "published": "2024-09-06T20:43:50Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/projectdiscovery/nuclei/security/advisories/GHSA-7h5p-mmpp-hgmm"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2024-43405"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/projectdiscovery/nuclei/commit/0da993afe6d41b4b1b814e8fad23a2acba13c60a"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Nuclei Template Signature Verification Bypass in github.com/projectdiscovery/nuclei"
+}
