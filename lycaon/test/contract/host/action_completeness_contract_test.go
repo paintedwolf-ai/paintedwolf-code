@@ -10,15 +10,24 @@ import (
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
-func TestWorkflowSQLStoreHasNoRawWorkerCancelUpdate(t *testing.T) {
+func TestWorkflowPersistenceHasNoRawWorkerCancelUpdate(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	path := filepath.Join(root, "lycaon", "internal", "workflow", "sql_store.go")
-	body, err := os.ReadFile(path)
-	testutil.FailErr(t, "read sql_store", err)
-	text := string(body)
-	if strings.Contains(text, "CancelWorkersByRunID") || strings.Contains(text, "HoldPendingWorkersByRunID") {
-		t.Fatalf("workflow sql_store must not define raw worker cancel/hold UPDATE helpers")
+	paths, err := filepath.Glob(filepath.Join(root, "lycaon", "internal", "workflow", "persistence", "*.go"))
+	testutil.FailErr(t, "list workflow persistence files", err)
+	if len(paths) == 0 {
+		t.Fatal("workflow persistence sources missing")
+	}
+	for _, path := range paths {
+		if strings.HasSuffix(path, "_test.go") {
+			continue
+		}
+		body, err := os.ReadFile(path)
+		testutil.FailErr(t, "read workflow persistence source", err)
+		text := string(body)
+		if strings.Contains(text, "CancelWorkersByRunID") || strings.Contains(text, "HoldPendingWorkersByRunID") {
+			t.Fatalf("%s defines raw worker cancel/hold UPDATE helpers", path)
+		}
 	}
 }
 

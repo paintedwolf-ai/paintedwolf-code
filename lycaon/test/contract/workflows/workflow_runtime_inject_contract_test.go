@@ -37,8 +37,8 @@ func TestInjectBuildersDoNotImportBlueprints(t *testing.T) {
 	targets := []string{
 		filepath.Join(root, "lycaon", "internal", "coordinator", "inject", "inject_dto.go"),
 		filepath.Join(root, "lycaon", "internal", "coordinator", "inject", "active_workflow_inject.go"),
-		filepath.Join(root, "lycaon", "internal", "workflow", "coordinator_turn_frame_loader.go"),
-		filepath.Join(root, "lycaon", "internal", "workflow", "session_runtime_snapshot.go"),
+		filepath.Join(root, "lycaon", "internal", "workflow", "runtime", "coordinator_frames.go"),
+		filepath.Join(root, "lycaon", "internal", "workflow", "runtime", "snapshots.go"),
 	}
 	for _, path := range targets {
 		imports, err := goFileImports(path)
@@ -167,7 +167,7 @@ func TestPlanResearchObligationsInInject(t *testing.T) {
 	run, err = wfMgr.Store.Runs.Get(ctx, run.ID)
 	contractcheck.FailErr(t, "reload run after rejected advance", err)
 	run.CurrentPhase = "research"
-	contractcheck.FailErr(t, "CommitState", wfMgr.Store.CommitState(ctx, run, "", vars))
+	contractcheck.FailErr(t, "CommitState", wfMgr.Store.State.CommitState(ctx, run, "", vars))
 
 	block = renderWorkflowFrame(t, ctx, frameLoader, "sess-posture", nil, hintCfg, gateCfg)
 	if idx := strings.Index(block, "### Phase obligations"); idx >= 0 {

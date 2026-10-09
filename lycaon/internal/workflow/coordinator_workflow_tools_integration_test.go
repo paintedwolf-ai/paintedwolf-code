@@ -96,7 +96,7 @@ func TestAdvanceToolMatchesHTTPGateShape(t *testing.T) {
 
 	out, err := reg.Run(ctx, "workflow_advance", map[string]any{}, tctx)
 	testutil.FailErr(t, "reg.Run failed", err)
-	var toolResult AdvanceToolResult
+	var toolResult workflowphases.AdvanceToolResult
 	if err := json.Unmarshal([]byte(out), &toolResult); err != nil {
 		testutil.FailErr(t, "unmarshal JSON document", err)
 	}

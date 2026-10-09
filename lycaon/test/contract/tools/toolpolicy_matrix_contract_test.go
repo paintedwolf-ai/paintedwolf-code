@@ -187,7 +187,7 @@ func wireToolpolicyMatrixContract(
 	if err := workflow.RegisterFanoutPlanTool(reg, workflowMgr.Fanout); err != nil {
 		contractcheck.FailErr(t, "workflow.RegisterFanoutPlanTool failed", err)
 	}
-	if err := workflow.RegisterFeedbackTool(reg, workflowMgr); err != nil {
+	if err := workflowinputs.RegisterFeedbackTool(reg, workflowMgr.Feedback); err != nil {
 		contractcheck.FailErr(t, "workflow.RegisterFeedbackTool failed", err)
 	}
 	if err := workflowinputs.RegisterAskUserTool(reg, workflowMgr.Asks, nil); err != nil {

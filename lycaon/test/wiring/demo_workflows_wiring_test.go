@@ -158,7 +158,7 @@ func TestBugbashWorkflowEndToEnd(t *testing.T) {
 	}
 	now := time.Now().UTC()
 	child.Status, child.CompletedAt, child.UpdatedAt = api.WorkflowRunStatusComplete, &now, now
-	testutil.FailErr(t, "complete implementation child", h.WorkflowMgr.Store.Update(ctx, child))
+	testutil.FailErr(t, "complete implementation child", h.WorkflowMgr.Store.State.Update(ctx, child))
 	testutil.FailErr(t, "resume bugbash after implementation", h.WorkflowMgr.Children.ReconcileTerminalRun(ctx, child))
 	waitWorkflowPhase(t, ctx, h.WorkflowMgr, run.ID, "closeout")
 

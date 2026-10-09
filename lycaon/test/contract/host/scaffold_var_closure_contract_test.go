@@ -60,12 +60,12 @@ var hostVarProducers = []struct {
 	},
 	{
 		key:       "host_auto_advanced_from",
-		readerRE:  `vars\[workflowphases.HostAutoAdvancedFromKey\]`,
+		readerRE:  `vars\[HostAutoAdvancedFromKey\]`,
 		rationale: "marker consumed by workflow_advance tool already_advanced response",
 	},
 	{
 		key:       "pre_workflow_posture",
-		readerRE:  `vars\[hostVarBaselinePosture\]`,
+		readerRE:  `vars\[(?:runstate\.)?BaselinePostureKey\]`,
 		rationale: "boundary code restores posture on workflow end",
 	},
 	{

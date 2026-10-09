@@ -1,6 +1,6 @@
 //go:build integration
 
-package workflow_test
+package inputs_test
 
 import (
 	"encoding/json"
