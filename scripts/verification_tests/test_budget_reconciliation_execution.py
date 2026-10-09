@@ -136,7 +136,7 @@ class ReconciliationTests(unittest.TestCase):
                     patch.object(tracker, 'pages', return_value=[]), \
                     patch.object(tracker, 'read_snapshot', return_value=validate(report(), 'a' * 40, 'b' * 40)), \
                     patch.object(tracker, 'checkpoint', return_value=None), \
-                    patch.object(tracker, 'intake', return_value=set()):
+                    patch.object(tracker, 'intake', return_value=set(validate(report(), 'a' * 40, 'b' * 40)[1])):
                 result = tracker.reconcile(run())
             self.assertTrue('skipped' in result or 'stopped' in result)
             self.assertFalse(any(len(call.args) > 1 for call in api.call_args_list))
