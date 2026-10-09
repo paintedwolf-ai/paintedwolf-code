@@ -292,7 +292,7 @@ func (r *Runtime) wireApprovalRationaleAttacher() {
 		enabledFn = perms.AIRationaleEnabled
 	}
 	attacher := toolhost.NewApprovalRationaleAttacher(toolhost.ApprovalRationaleDeps{
-		Messages:    r.deps.Sessions.Manager,
+		Messages:    r.deps.Sessions.Manager.Runner.Transcript,
 		Workers:     r.deps.Delegations.Queue,
 		Progress:    r.Progress,
 		Root:        sessionRootResolver{store: r.deps.Storage.Sessions},
