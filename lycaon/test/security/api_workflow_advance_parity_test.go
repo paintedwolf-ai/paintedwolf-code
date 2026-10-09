@@ -138,6 +138,8 @@ func TestAdvanceToolAndHTTPParity(t *testing.T) {
 		// HTTP advance queues feedback; tool advance returns the gate details directly.
 		parity := newAdvanceParityRig(t)
 		httpRun := parity.startRunHTTP(t, "parity-coord", "1.0.0")
+		// A startup turn already in flight ignores the held lane and would take the kick.
+		parity.sessionMgr.WaitForCoordinatorAsyncTurns(t.Context())
 		// Holding the execution lane keeps the coordinator loop from consuming the
 		// kick before it is read.
 		finishExecution := parity.sessionMgr.BeginPromptExecutionForTest(t.Context(), parity.httpSession.ID)

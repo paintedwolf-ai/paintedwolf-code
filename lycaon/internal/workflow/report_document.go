@@ -79,7 +79,10 @@ func (m *RunManager) CheckRunReportDocument(ctx context.Context, sessionID strin
 	if err != nil {
 		return nil, err
 	}
-	verdicts := ReviewVerdicts(ctx, m, run, manifest)
+	verdicts, err := ReviewVerdicts(ctx, m, run, manifest)
+	if err != nil {
+		return nil, err
+	}
 	return CheckReportDocument(report, ReportDocumentFacts{
 		Brief:     manifest.ReportBrief(),
 		Claims:    ReconcileClaims(verdicts),
