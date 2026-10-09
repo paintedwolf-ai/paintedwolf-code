@@ -14,16 +14,17 @@ import (
 	"testing"
 	"time"
 
-	hostapi "github.com/lycaon/lycaon/internal/api"
-	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/api/sourceapi"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/watchfd"
 	"github.com/lycaon/lycaon/internal/worker"
+	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
+	hostapi "github.com/lycaon/lycaon/internal/api"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -34,7 +35,7 @@ func TestMakeProjectSourceEditableRoute(t *testing.T) {
 	testutil.FailErr(t, "write fixture", os.WriteFile(path, []byte("locked\n"), 0o444))
 	p, err := project.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, root)
 	testutil.FailErr(t, "create project", err)
-	read, err := project.ReadProjectSource(p, project.SourceReadRequest{RootID: p.Roots[0].ID, Path: "locked.txt"})
+	read, err := projectsource.ReadProjectSource(p, projectsource.SourceReadRequest{RootID: p.Roots[0].ID, Path: "locked.txt"})
 	testutil.FailErr(t, "read source", err)
 
 	body, err := json.Marshal(wire.MakeProjectSourceEditableRequest{

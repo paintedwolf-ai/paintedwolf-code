@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/filebriefing"
 	"github.com/lycaon/lycaon/internal/fileops"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	scancadence "github.com/lycaon/lycaon/internal/scan/cadence"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretspan"
@@ -47,7 +48,7 @@ type Deps struct {
 	SourceInventory InventoryService
 	SourceLedger    *sourceledger.Store
 	// SourceMutations applies source writes.
-	SourceMutations *project.SourceMutationService
+	SourceMutations *projectsource.SourceMutationService
 	VisualStore     visual.Store
 	Workers         worker.WorkerQueue
 	AttachmentStore func(context.Context, string) (blobstore.Store, bool)
@@ -75,7 +76,7 @@ type Analysis struct {
 	SessionStore    session.Store
 	Workspace       *Workspace
 	responses       *httpio.Responder
-	sourceIndexes   *project.SourceIndexCache
+	sourceIndexes   *projectsource.SourceIndexCache
 	warmupPolls     *warmupClock
 }
 
@@ -128,7 +129,7 @@ type Mutations struct {
 	ProjectRegistry project.Registry
 	SessionStore    session.Store
 	SourceLedger    *sourceledger.Store
-	SourceMutations *project.SourceMutationService
+	SourceMutations *projectsource.SourceMutationService
 	Workspace       *Workspace
 	background      *taskgroup.Group
 	operations      Operations
@@ -225,15 +226,15 @@ func New(responses *httpio.Responder, background *taskgroup.Group, operations Op
 	)
 	hub := deps.Events
 	deps.FileOperations.Observe(func(request fileops.Request) { publishSourceRequest(hub, request) })
-	// Editor saves apply through the same mutation service as other writes.
-	deps.EditorDocuments.SetSourceMutations(deps.SourceMutations)
+	// Editor publications share source path reservations.
+	deps.EditorDocuments.SetSourcePaths(deps.SourceMutations.Paths)
 
 	editor := editoradmin.New(responses, background, editoradmin.Dependencies{EditorClients: deps.EditorClients, EditorDocuments: deps.EditorDocuments, Events: deps.Events, ManagedSecrets: deps.ManagedSecrets, MutationGate: deps.MutationGate, ProjectRegistry: deps.ProjectRegistry, SecretSpans: deps.SecretSpans, SessionStore: deps.SessionStore, TryRunPromotion: deps.TryRunPromotion})
 	sourceViews := &sourceViewService{}
 	sourceReaders := &sourcecomparison.Cache{}
 	warmupPolls := newWarmupClock()
 	h := Handler{Editor: editor}
-	h.Analysis = &Analysis{ProjectRegistry: deps.ProjectRegistry, SessionStore: deps.SessionStore, responses: responses, sourceIndexes: project.NewSourceIndexCache(), warmupPolls: warmupPolls}
+	h.Analysis = &Analysis{ProjectRegistry: deps.ProjectRegistry, SessionStore: deps.SessionStore, responses: responses, sourceIndexes: projectsource.NewSourceIndexCache(), warmupPolls: warmupPolls}
 	h.ComparisonViews = &ComparisonViews{ManagedSecrets: deps.ManagedSecrets, SecretSpans: deps.SecretSpans, background: background, sourceReaders: sourceReaders, sourceViews: sourceViews}
 	h.Comparisons = &Comparisons{EditorDocuments: deps.EditorDocuments, Git: deps.Git, ManagedSecrets: deps.ManagedSecrets, ProjectRegistry: deps.ProjectRegistry, SecretSpans: deps.SecretSpans, SessionStore: deps.SessionStore, SourceLedger: deps.SourceLedger, responses: responses, sourceReaders: sourceReaders}
 	h.History = &History{AttachmentStore: deps.AttachmentStore, ProjectRegistry: deps.ProjectRegistry, SessionStore: deps.SessionStore, SourceLedger: deps.SourceLedger, VisualStore: deps.VisualStore, Workers: deps.Workers, responses: responses}

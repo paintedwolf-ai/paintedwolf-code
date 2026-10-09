@@ -8,6 +8,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/sourceblob"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -48,7 +49,7 @@ func readWorkingCommit(p *project.Project, rootID, rootAbs, path string) commitW
 		state.Side = side
 		return state
 	}
-	observation, err := project.ObserveProjectSource(p, project.SourceReadRequest{RootID: rootID, Path: path})
+	observation, err := projectsource.ObserveProjectSource(p, projectsource.SourceReadRequest{RootID: rootID, Path: path})
 	if err != nil {
 		side.Reason = "content_unavailable"
 		state.Side = side

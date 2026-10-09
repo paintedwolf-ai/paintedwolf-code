@@ -48,8 +48,8 @@ func (s *Projects) HandleCreateProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, root := range p.Roots {
-		if s.sourceWorkspace.SourceLedger != nil && s.sourceWorkspace.SourceLedger.SnapshotStore() != nil {
-			if err := s.sourceWorkspace.SourceLedger.SnapshotStore().DiscardObservations(r.Context(), root.Path); err != nil {
+		if s.sourceWorkspace.SourceLedger != nil && s.sourceWorkspace.SourceLedger.Snapshots != nil {
+			if err := s.sourceWorkspace.SourceLedger.Snapshots.DiscardObservations(r.Context(), root.Path); err != nil {
 				slog.WarnContext(r.Context(), "discard stale source observations", "path", root.Path, "err", err)
 			}
 		}

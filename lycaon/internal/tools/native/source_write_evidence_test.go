@@ -10,10 +10,11 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
-	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/textfile"
+	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -36,7 +37,12 @@ func TestStreamOverwriteRecordsAddressableEvidence(t *testing.T) {
 	tctx := nativefixture.Context(dir)
 	tctx.Identity.ProjectID, tctx.Identity.SessionID, tctx.Identity.UserTurn = "p1", "s1", 1
 	tctx.Source.SourceLedger = st
-	tctx.Source.SourceMutations = project.NewSourceMutationService(st.LedgerDB(), st)
+	tctx.Source.History = tools.SourceHistory{Files: st.History, Comparison: st.Comparisons, Git: st.Git, Authorship: st.Walk}
+	tctx.Source.Commands = st.Commands
+	tctx.Source.Observations = st.Inventory
+	tctx.Source.GitMutations = st.Git
+	tctx.Source.SourceMutations = projectsource.NewSourceMutationService(st.LedgerDB(), st)
+
 	path := filepath.Join(dir, "copy.txt")
 	testutil.FailErr(t, "seed destination", os.WriteFile(path, []byte("before\n"), 0o644))
 
@@ -46,7 +52,7 @@ func TestStreamOverwriteRecordsAddressableEvidence(t *testing.T) {
 	})
 	testutil.FailErr(t, "stream overwrite", err)
 
-	res, err := st.QueryWalk(t.Context(), "p1",
+	res, err := st.Walk.QueryWalk(t.Context(), "p1",
 		sourceledger.Baseline{Kind: sourceledger.BaselineSession, SessionID: "s1"},
 		10, 0, sourceledger.CommitLens{})
 	testutil.FailErr(t, "query stream change", err)
@@ -54,7 +60,7 @@ func TestStreamOverwriteRecordsAddressableEvidence(t *testing.T) {
 		len(res.Files[0].Effects) != 1 || res.Files[0].Effects[0].Op != wire.SourceChangeOpWrite {
 		t.Fatalf("stream evidence = %+v", res.Files)
 	}
-	diff, err := st.CompareEffect(t.Context(), "p1", res.Files[0].Effects[0].ID)
+	diff, err := st.Comparisons.CompareEffect(t.Context(), "p1", res.Files[0].Effects[0].ID)
 	testutil.FailErr(t, "diff stream change", err)
 	if diff.Before.Content != "before\n" || diff.After.Content != "after\n" {
 		t.Fatalf("stream diff = %+v", diff)
@@ -67,7 +73,12 @@ func TestLargeStreamRecordsDigestAndSizeWithoutRetainingBody(t *testing.T) {
 	tctx := nativefixture.Context(dir)
 	tctx.Identity.ProjectID, tctx.Identity.SessionID = "p1", "s1"
 	tctx.Source.SourceLedger = ledger
-	tctx.Source.SourceMutations = project.NewSourceMutationService(ledger.LedgerDB(), ledger)
+	tctx.Source.History = tools.SourceHistory{Files: ledger.History, Comparison: ledger.Comparisons, Git: ledger.Git, Authorship: ledger.Walk}
+	tctx.Source.Commands = ledger.Commands
+	tctx.Source.Observations = ledger.Inventory
+	tctx.Source.GitMutations = ledger.Git
+	tctx.Source.SourceMutations = projectsource.NewSourceMutationService(ledger.LedgerDB(), ledger)
+
 	body := bytes.Repeat([]byte("x"), sourceledger.MaxRevisionContentBytes+1)
 	path := filepath.Join(dir, "large.txt")
 	_, err := applyAgentStream(t.Context(), tctx, agentStreamRequest{
@@ -94,16 +105,20 @@ func TestDeleteRecordsPreImageAndRenameRecordsTip(t *testing.T) {
 	tctx := nativefixture.Context(dir)
 	tctx.Identity.ProjectID, tctx.Identity.SessionID, tctx.Identity.UserTurn = "p1", "s1", 2
 	tctx.Source.SourceLedger = st
-	tctx.Source.SourceMutations = project.NewSourceMutationService(st.LedgerDB(), st)
+	tctx.Source.History = tools.SourceHistory{Files: st.History, Comparison: st.Comparisons, Git: st.Git, Authorship: st.Walk}
+	tctx.Source.Commands = st.Commands
+	tctx.Source.Observations = st.Inventory
+	tctx.Source.GitMutations = st.Git
+	tctx.Source.SourceMutations = projectsource.NewSourceMutationService(st.LedgerDB(), st)
 
 	deleted := filepath.Join(dir, "deleted.txt")
 	testutil.FailErr(t, "seed deletion", os.WriteFile(deleted, []byte("gone\n"), 0o644))
 	testutil.FailErr(t, "delete", removeAgentPath(t.Context(), tctx, testMutationTarget(deleted)))
-	deletedChanges, err := st.QueryWalk(t.Context(), "p1",
+	deletedChanges, err := st.Walk.QueryWalk(t.Context(), "p1",
 		sourceledger.Baseline{Kind: sourceledger.BaselineSession, SessionID: "s1"},
 		10, 0, sourceledger.CommitLens{})
 	testutil.FailErr(t, "query deletion", err)
-	diff, err := st.CompareEffect(t.Context(), "p1", deletedChanges.Files[0].Effects[0].ID)
+	diff, err := st.Comparisons.CompareEffect(t.Context(), "p1", deletedChanges.Files[0].Effects[0].ID)
 	testutil.FailErr(t, "diff deletion", err)
 	if diff.Before.Content != "gone\n" || diff.After.Availability != sourceledger.ContentAbsent {
 		t.Fatalf("delete diff = %+v", diff)
@@ -113,7 +128,7 @@ func TestDeleteRecordsPreImageAndRenameRecordsTip(t *testing.T) {
 	to := filepath.Join(dir, "to.txt")
 	testutil.FailErr(t, "seed rename", os.WriteFile(from, []byte("moved\n"), 0o644))
 	testutil.FailErr(t, "rename", renameAgentPath(t.Context(), tctx, testMutationTarget(from), testMutationTarget(to)))
-	res, err := st.QueryWalk(t.Context(), "p1",
+	res, err := st.Walk.QueryWalk(t.Context(), "p1",
 		sourceledger.Baseline{Kind: sourceledger.BaselineSession, SessionID: "s1"},
 		10, 0, sourceledger.CommitLens{})
 	testutil.FailErr(t, "query rename", err)
@@ -136,13 +151,18 @@ func TestExternalMutationDoorDoesNotCreateProjectSource(t *testing.T) {
 	tctx := nativefixture.Context(projectDir)
 	tctx.Identity.ProjectID, tctx.Identity.SessionID, tctx.Identity.UserTurn = "p1", "s1", 3
 	tctx.Source.SourceLedger = st
-	tctx.Source.SourceMutations = project.NewSourceMutationService(st.LedgerDB(), st)
+	tctx.Source.History = tools.SourceHistory{Files: st.History, Comparison: st.Comparisons, Git: st.Git, Authorship: st.Walk}
+	tctx.Source.Commands = st.Commands
+	tctx.Source.Observations = st.Inventory
+	tctx.Source.GitMutations = st.Git
+	tctx.Source.SourceMutations = projectsource.NewSourceMutationService(st.LedgerDB(), st)
+
 	external := filepath.Join(t.TempDir(), "host-data.txt")
 
 	testutil.FailErr(t, "external write", applyAgentFile(
 		t.Context(), tctx, testMutationTarget(external), []byte("host data\n"), nil, "",
 	))
-	res, err := st.QueryWalk(t.Context(), "p1",
+	res, err := st.Walk.QueryWalk(t.Context(), "p1",
 		sourceledger.Baseline{Kind: sourceledger.BaselineSession, SessionID: "s1"},
 		10, 0, sourceledger.CommitLens{})
 	testutil.FailErr(t, "query project changes", err)

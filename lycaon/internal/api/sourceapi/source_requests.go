@@ -18,7 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/fileops"
-	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -64,10 +64,10 @@ func (s *Mutations) startSourceRequest(w http.ResponseWriter, r *http.Request, o
 		s.background.Go(r.Context(), func(ctx context.Context) {
 			defer release()
 			run.Execute(ctx, func(ctx context.Context) fileops.Outcome {
-				ctx = project.WithSourceProgress(ctx, func(progress project.SourceProgress) {
+				ctx = projectsource.WithSourceProgress(ctx, func(progress projectsource.SourceProgress) {
 					run.Report(ctx, progress.Phase, progress.Entries, progress.Bytes)
 				})
-				ctx = project.WithSourceEffect(ctx, func() error { return run.BeginEffect(ctx) })
+				ctx = projectsource.WithSourceEffect(ctx, func() error { return run.BeginEffect(ctx) })
 				ctx = context.WithValue(ctx, sourceRequestProjectKey{}, p)
 				affiliation := run.Snapshot()
 				ctx = context.WithValue(ctx, sourceRequestAffiliationKey{}, sourceRequestAffiliation{sessionID: affiliation.SessionID, turn: affiliation.Turn})
@@ -220,7 +220,7 @@ func (s *Mutations) writeSourceRequestError(w http.ResponseWriter, r *http.Reque
 // RecoverFileOperations runs after filesystem and editor-document reconciliation.
 func (s *Mutations) RecoverFileOperations(ctx context.Context) error {
 	return s.FileOperations.Recover(ctx, func(ctx context.Context, job fileops.Request) (fileops.Outcome, bool, error) {
-		raw, committed, err := s.SourceMutations.CommittedSourceResult(ctx, job.ID)
+		raw, committed, err := s.SourceMutations.Journal.CommittedSourceResult(ctx, job.ID)
 		if err != nil || !committed {
 			return fileops.Outcome{}, false, err
 		}
@@ -237,13 +237,13 @@ func (s *Mutations) RecoverFileOperations(ctx context.Context) error {
 			result = wire.ProjectSourceEntryCreatedResponse{Path: value.Path}
 			status = http.StatusCreated
 		case s.operations.CopyProjectSource.ID, s.operations.RenameProjectSource.ID:
-			var value project.SourceLifecycleResult
+			var value projectsource.SourceLifecycleResult
 			if err := json.Unmarshal(raw, &value); err != nil {
 				return fileops.Outcome{}, false, err
 			}
 			result = wire.ProjectSourceLifecycleResponse{RootID: value.RootID, Path: value.Path}
 		case s.operations.UndoProjectSourceHistory.ID, s.operations.RedoProjectSourceHistory.ID:
-			var value project.SourceHistoryMutationResult
+			var value projectsource.SourceHistoryMutationResult
 			if err := json.Unmarshal(raw, &value); err != nil {
 				return fileops.Outcome{}, false, err
 			}

@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 
 	"github.com/lycaon/lycaon/internal/git"
-	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
@@ -65,8 +64,8 @@ func commitBulkDenied(max, got int) error {
 
 // sessionAuthoredPaths returns no paths when the ledger cannot establish authorship.
 func sessionAuthoredPaths(ctx context.Context, tctx tools.ToolContext) ([]string, error) {
-	reader, ok := tctx.Source.SourceLedger.(sourceledger.AuthorshipReader)
-	if !ok {
+	reader := tctx.Source.History.Authorship
+	if reader == nil {
 		return nil, nil
 	}
 	return reader.SessionAuthoredPaths(ctx, tctx.Identity.ProjectID, tctx.Identity.SessionID, tctx.Source.ActiveRootID)

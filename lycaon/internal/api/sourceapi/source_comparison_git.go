@@ -13,7 +13,7 @@ import (
 
 func (s *Comparisons) loadSourceGitReview(ctx context.Context, p *project.Project, id string, movement *bool, parent *int) (sourceGitReviewRequest, error) {
 	var req sourceGitReviewRequest
-	changes, err := s.SourceLedger.GitTransitionsByIDs(ctx, []string{id})
+	changes, err := s.SourceLedger.Git.GitTransitionsByIDs(ctx, []string{id})
 	if err != nil {
 		return req, err
 	}

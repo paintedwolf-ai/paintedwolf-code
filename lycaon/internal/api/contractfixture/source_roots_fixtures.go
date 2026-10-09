@@ -83,7 +83,7 @@ func NewTestSources(t *testing.T, workers worker.WorkerQueue) *sourceapi.Handler
 	sources := sourceapi.New(&httpio.Responder{Logger: slog.Default()}, &taskgroup.Group{}, sourceapi.Operations{}, sourceapi.Deps{
 		EditorDocuments: deps.EditorDocuments, FileBriefings: deps.FileBriefings, ManagedSecrets: deps.ManagedSecrets,
 		MutationGate: deps.MutationGate, ProjectRegistry: deps.Projects, SessionStore: deps.Store,
-		SourceLedger: deps.SourceLedger, SourceMutations: deps.SourceMutations, FileOperations: deps.FileOperations,
+		SourceLedger: deps.SourceLedger, SourceInventory: deps.SourceLedger.Inventory, SourceMutations: deps.SourceMutations, FileOperations: deps.FileOperations,
 		Workers: workers,
 	})
 	return &sources
@@ -91,7 +91,7 @@ func NewTestSources(t *testing.T, workers worker.WorkerQueue) *sourceapi.Handler
 
 func PublishSnapshotFor(t *testing.T, srv *hostapi.Server, root string) {
 	t.Helper()
-	store := srv.Sources.Workspace.SourceLedger.SnapshotStore()
+	store := srv.Sources.Workspace.SourceLedger.Snapshots
 	if store == nil {
 		t.Fatal("test server has no snapshot store")
 	}

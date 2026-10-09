@@ -11,16 +11,17 @@ import (
 	"testing"
 	"time"
 
-	hostapi "github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/api/briefingadmin"
-	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/filebriefing"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
+	hostapi "github.com/lycaon/lycaon/internal/api"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -133,7 +134,7 @@ func TestFileBriefingReadsImmutableRetainedVersion(t *testing.T) {
 		ProjectID: p.ID, RootID: p.Roots[0].ID, Path: "main.go", Op: wire.SourceChangeOpWrite,
 		Origin: wire.SourceChangeOriginUser, SessionID: "briefing-version", Before: oldSource, After: currentSource,
 	}))
-	walk, err := ledger.QueryWalk(t.Context(), p.ID,
+	walk, err := ledger.Walk.QueryWalk(t.Context(), p.ID,
 		sourceledger.Baseline{Kind: sourceledger.BaselineSession, SessionID: "briefing-version"},
 		10, 0, sourceledger.CommitLens{})
 	testutil.FailErr(t, "query source versions", err)
@@ -141,7 +142,7 @@ func TestFileBriefingReadsImmutableRetainedVersion(t *testing.T) {
 		t.Fatalf("walk = %+v", walk.Files)
 	}
 	versionID := walk.Files[0].Effects[0].BeforeVersionID
-	version, err := ledger.CompareVersions(t.Context(), p.ID, versionID)
+	version, err := ledger.Comparisons.CompareVersions(t.Context(), p.ID, versionID)
 	testutil.FailErr(t, "read retained version", err)
 
 	body, err := json.Marshal(wire.FileBriefingRequest{
@@ -198,7 +199,7 @@ func TestGetFileBriefingResumesOrphanedPendingWork(t *testing.T) {
 	request := wire.FileBriefingRequest{
 		RootID: p.Roots[0].ID, Path: "main.go", Presentation: "current", Trigger: "automatic",
 	}
-	read, err := project.ReadProjectSource(p, project.SourceReadRequest{Path: request.Path, RootID: request.RootID})
+	read, err := projectsource.ReadProjectSource(p, projectsource.SourceReadRequest{Path: request.Path, RootID: request.RootID})
 	testutil.FailErr(t, "read briefing source", err)
 	input := filebriefing.Input{Path: read.Path, Presentation: request.Presentation, Source: read.Content, SourceSHA256: read.SHA256}
 	targetKey := srv.Sources.Briefings.FileBriefings.TargetKey(filebriefing.Target{ProjectID: p.ID, RootID: read.RootID, ProjectDir: p.Roots[0].Path, Input: input})

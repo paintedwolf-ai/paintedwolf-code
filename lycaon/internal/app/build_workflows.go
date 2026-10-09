@@ -61,7 +61,7 @@ func (b *serveBuilder) wireWorkflowScanServices() error {
 		b.execution.Host.Survey.SetGitStatusCache(b.git.status)
 	}
 
-	snapshotStore := b.storage.SourceLedger.SnapshotStore()
+	snapshotStore := b.storage.SourceLedger.Snapshots
 
 	var err error
 	b.scanning, err = scanning.Build(b.startup.ctx, scanning.Dependencies{
@@ -162,7 +162,7 @@ func (b *serveBuilder) wireWorkflowConditions() error {
 		DelegationStore:         b.delegations.Store,
 		ScanStore:               b.scanning.Store,
 		ScanObligation:          b.scanning.Obligation,
-		Snapshots:               b.storage.SourceLedger.SnapshotStore(),
+		Snapshots:               b.storage.SourceLedger.Snapshots,
 		GatesCfg:                b.scanning.GatesCfg,
 		SecurityScannersEnabled: scannersEnabled,
 		Checkpoints:             b.sessions.Checkpoints,

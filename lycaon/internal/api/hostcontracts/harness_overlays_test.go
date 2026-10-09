@@ -38,7 +38,7 @@ func TestHarnessPreparesOverlaysThroughAuthenticatedApplicationRoute(t *testing.
 	testutil.FailErr(t, "create session", err)
 	queue := worker.NewSQLQueue(database, 2)
 	ledger := sourceledger.New(database, filepath.Join(testbaseline.DataDir(t, database), "source-content"))
-	queue.SetBaselineStore(ledger.BaselineStore())
+	queue.SetBaselineStore(ledger.Baselines)
 	queue.SetProjectStore(projects)
 	queue.SetWorkerWorkspaceManager(workspace.NewManager(filepath.Join(testbaseline.DataDir(t, database), "worker-branches"), t.TempDir()))
 	server := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: sessions, Projects: projects}, Workflow: hostapi.WorkflowDependencies{Workers: queue}}), nil, hostapi.TestAPIToken)

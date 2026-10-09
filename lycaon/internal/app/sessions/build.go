@@ -89,7 +89,10 @@ func Build(ctx context.Context, deps Dependencies) (*Runtime, error) {
 		}
 	}
 
-	mgr.SetSourceLedger(deps.Storage.SourceLedger)
+	ledger := deps.Storage.SourceLedger
+	mgr.SetSourceLedger(ledger, tools.SourceHistory{
+		Files: ledger.History, Comparison: ledger.Comparisons, Git: ledger.Git, Authorship: ledger.Walk,
+	}, ledger.Commands, ledger.Git, ledger.Checkpoints, ledger.Inventory)
 	mgr.Profiles.SetAgentRegistry(deps.Agents.Registry)
 	mgr.Profiles.SetHostResources(deps.Settings.HostResources)
 	if deps.Settings.HostResources != nil && deps.Settings.Service != nil && deps.Settings.Service.Approvals != nil {

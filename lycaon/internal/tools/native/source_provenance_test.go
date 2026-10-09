@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"testing"
@@ -15,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/textfile"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
@@ -22,8 +22,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// fakeSourceLedger satisfies sourceledger.Recorder plus the provenance read
-// surface, so tests exercise the tool plumbing without a database.
+// fakeSourceLedger supplies recording and history fixtures without a database.
 type fakeSourceLedger struct {
 	heads        map[string]sourceledger.BranchHead
 	headErr      error
@@ -145,10 +144,11 @@ func writeProvenanceFile(t *testing.T, dir, name, content string) (abs, sha stri
 	return abs, textfile.SHA256([]byte(content))
 }
 
-func provenanceCtx(dir string, ledger sourceledger.Recorder) tools.ToolContext {
+func provenanceCtx(dir string, ledger *fakeSourceLedger) tools.ToolContext {
 	tctx := nativefixture.Context(dir)
 	tctx.Identity.ProjectID = "p1"
 	tctx.Source.SourceLedger = ledger
+	tctx.Source.History = tools.SourceHistory{Files: ledger, Comparison: ledger, Git: ledger, Authorship: ledger}
 	return tctx
 }
 
@@ -347,4 +347,17 @@ func TestReadSourceStampPreservesWorkerDestination(t *testing.T) {
 	if stamp == nil || stamp.Navigation != "source://r1/a%20%23b.go?job_id=worker-1" {
 		t.Fatalf("worker source stamp=%+v", stamp)
 	}
+}
+
+func (f *fakeSourceLedger) ResolveHeadByFile(context.Context, string, sourcebranch.ID, string) (sourceledger.BranchHead, error) {
+	return sourceledger.BranchHead{}, sourceledger.ErrHistoryNotFound
+}
+func (f *fakeSourceLedger) TurnCheckpoint(context.Context, string, string, int) (sourceledger.Checkpoint, bool, error) {
+	return sourceledger.Checkpoint{}, false, nil
+}
+func (f *fakeSourceLedger) EffectsBetween(context.Context, string, int64, int64, int) ([]sourceledger.Effect, error) {
+	return nil, nil
+}
+func (f *fakeSourceLedger) GitTransitionsBetween(context.Context, string, int64, int64, int) ([]sourceledger.GitTransition, error) {
+	return nil, nil
 }

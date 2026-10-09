@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 )
 
@@ -43,6 +44,10 @@ func TestAgentWriteStampsUserTurnOnLedgerRow(t *testing.T) {
 	tctx.Identity.UserTurn = 3
 	tctx.Source.SourceLedger = st
 
+	tctx.Source.History = tools.SourceHistory{Files: st.History, Comparison: st.Comparisons, Git: st.Git, Authorship: st.Walk}
+	tctx.Source.Commands = st.Commands
+	tctx.Source.Observations = st.Inventory
+	tctx.Source.GitMutations = st.Git
 	tool := &WriteTool{Boundary: nativefixture.Boundary(t)}
 	_, err := tool.Run(context.Background(), map[string]any{
 		"path":    "a.go",
@@ -53,7 +58,7 @@ func TestAgentWriteStampsUserTurnOnLedgerRow(t *testing.T) {
 		testutil.FailErr(t, "written file missing", err)
 	}
 
-	res, err := st.QueryWalk(t.Context(), "p1",
+	res, err := st.Walk.QueryWalk(t.Context(), "p1",
 		sourceledger.Baseline{Kind: sourceledger.BaselineTurn, SessionID: "s1", Turn: 3},
 		10, 0, sourceledger.CommitLens{})
 	testutil.FailErr(t, "turn lens query failed", err)
@@ -62,7 +67,7 @@ func TestAgentWriteStampsUserTurnOnLedgerRow(t *testing.T) {
 	}
 
 	// And the ordinal is addressed exactly: a neighbouring turn holds nothing.
-	other, err := st.QueryWalk(t.Context(), "p1",
+	other, err := st.Walk.QueryWalk(t.Context(), "p1",
 		sourceledger.Baseline{Kind: sourceledger.BaselineTurn, SessionID: "s1", Turn: 2},
 		10, 0, sourceledger.CommitLens{})
 	testutil.FailErr(t, "turn lens query failed", err)

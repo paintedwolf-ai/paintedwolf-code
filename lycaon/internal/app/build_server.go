@@ -30,6 +30,7 @@ import (
 	"github.com/lycaon/lycaon/internal/pkgregistry"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectliveness"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/scan"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/sourcefeed"
@@ -267,9 +268,9 @@ func wireFileBriefings(b *serveBuilder, deps *api.Dependencies) error {
 // and the contribution runtime that reads document revisions.
 func wireSourceEditing(b *serveBuilder, deps *api.Dependencies) error {
 	if b.storage.SourceLedger != nil {
-		deps.Source.SourceLedger, deps.Source.SourceInventory = b.storage.SourceLedger, b.storage.SourceLedger
+		deps.Source.SourceLedger, deps.Source.SourceInventory = b.storage.SourceLedger, b.storage.SourceLedger.Inventory
 	}
-	sourceMutations := project.NewSourceMutationService(b.storage.Database, b.storage.SourceLedger)
+	sourceMutations := projectsource.NewSourceMutationService(b.storage.Database, b.storage.SourceLedger)
 	if err := b.registerRecovery(bootrecovery.Entry{
 		Name: "source-mutations", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseBuild,
 		Run: sourceMutations.Recover,
@@ -279,7 +280,7 @@ func wireSourceEditing(b *serveBuilder, deps *api.Dependencies) error {
 	deps.Source.SourceMutations = sourceMutations
 	deps.Source.FileOperations = fileops.NewService(fileops.NewStore(b.storage.Database))
 	b.sessions.Manager.ToolContext.SetSourceMutations(sourceMutations)
-	editorDocuments := editordoc.New(editordoc.NewStore(b.storage.Database), b.storage.SourceLedger, b.storage.Projects)
+	editorDocuments := editordoc.New(editordoc.NewStore(b.storage.Database), b.storage.SourceLedger, b.storage.SourceLedger.History, b.storage.Projects)
 	if b.worker.merge != nil {
 		b.worker.merge.Documents = editorDocuments
 	}
@@ -319,7 +320,7 @@ func wireSourceEditing(b *serveBuilder, deps *api.Dependencies) error {
 	})
 	// A file the person has open is the document, for reads and writes alike.
 	b.sessions.Manager.ToolContext.SetEditorDocuments(editorDocumentsAdapter{service: editorDocuments})
-	b.sessions.Manager.Chats.Rewinds.SetSourceRewinds(&sourcerewind.Service{Ledger: b.storage.SourceLedger, Mutations: sourceMutations, Documents: editorDocuments})
+	b.sessions.Manager.Chats.Rewinds.SetSourceRewinds(&sourcerewind.Service{Planner: b.storage.SourceLedger.Comparisons, Mutations: sourceMutations, Documents: editorDocuments})
 	// Contribution dispatch uses durable receipts and policy-derived authority.
 	deps.Extensions.Contributions = extensionadmin.ContributionRuntime{
 		Receipts: commandinvoke.SQLReceipts{DB: b.storage.Database},

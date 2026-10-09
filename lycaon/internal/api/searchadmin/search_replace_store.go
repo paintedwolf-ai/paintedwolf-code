@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/search"
 )
 
@@ -13,7 +14,7 @@ type projectReplaceStore struct {
 }
 
 func (s projectReplaceStore) ReadReplaceContent(rootID, path string) (search.ReplaceContentRead, error) {
-	read, err := project.ReadProjectSource(s.project, project.SourceReadRequest{
+	read, err := projectsource.ReadProjectSource(s.project, projectsource.SourceReadRequest{
 		Path:   path,
 		RootID: rootID,
 	})
@@ -34,15 +35,15 @@ func mapReplaceStoreErr(err error) error {
 		return nil
 	}
 	switch {
-	case errors.Is(err, project.ErrSourceWriteConflict):
+	case errors.Is(err, projectsource.ErrSourceWriteConflict):
 		return search.ErrReplaceWriteConflict
-	case errors.Is(err, project.ErrSourceWriteTooLarge):
+	case errors.Is(err, projectsource.ErrSourceWriteTooLarge):
 		return search.ErrReplaceTooLarge
-	case errors.Is(err, project.ErrSourceBinary):
+	case errors.Is(err, projectsource.ErrSourceBinary):
 		return search.ErrReplaceBinary
-	case errors.Is(err, project.ErrSourceNotFound):
+	case errors.Is(err, projectsource.ErrSourceNotFound):
 		return search.ErrReplaceNotFound
-	case errors.Is(err, project.ErrSourcePathDenied):
+	case errors.Is(err, projectsource.ErrSourcePathDenied):
 		return search.ErrReplacePathDenied
 	default:
 		return err

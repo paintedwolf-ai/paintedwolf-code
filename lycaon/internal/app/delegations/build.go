@@ -58,7 +58,7 @@ func (r *Runtime) BuildWorkers(ctx context.Context, deps Dependencies) error {
 	r.SeedRoot = enginepaths.WorkerSeedsRootUnder(deps.Storage.Directory)
 	r.Workspace = workspace.NewManager(r.BranchRoot, r.SeedRoot)
 	r.Queue.SetWorkerWorkspaceManager(r.Workspace)
-	r.Queue.SetBaselineStore(deps.Storage.SourceLedger.BaselineStore())
+	r.Queue.SetBaselineStore(deps.Storage.SourceLedger.Baselines)
 	r.Queue.SetProjectStore(deps.Storage.Projects)
 
 	r.Cancel = &worker.CancelService{

@@ -9,6 +9,7 @@ import (
 )
 
 type ReviewCheckpointer interface {
+	TurnCheckpoint(context.Context, string, string, int) (sourceledger.Checkpoint, bool, error)
 	CreateStructuralCheckpoint(context.Context, sourceledger.StructuralCheckpointInput) (sourceledger.Checkpoint, error)
 }
 

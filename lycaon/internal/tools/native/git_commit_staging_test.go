@@ -45,7 +45,7 @@ func stagingCtx(paths []string) tools.ToolContext {
 		Identity: tools.InvocationIdentity{ProjectID: "p1",
 			SessionID: "s1"},
 		Source: tools.InvocationSource{ActiveRootID: "r1",
-			SourceLedger: stubAuthorship{paths: paths}},
+			History: tools.SourceHistory{Authorship: stubAuthorship{paths: paths}}},
 	}
 }
 

@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sourceledger"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -26,13 +27,17 @@ type Roots interface {
 }
 
 type Service struct {
-	store  Store
-	roots  Roots
-	ledger Ledger
+	store       Store
+	roots       Roots
+	history     tools.SourceHistory
+	checkpoints Checkpoints
 }
 
 func New(store Store, roots Roots) *Service { return &Service{store: store, roots: roots} }
-func (m *Service) SetLedger(ledger Ledger)  { m.ledger = ledger }
+func (m *Service) SetSources(history tools.SourceHistory, checkpoints Checkpoints) {
+	m.history = history
+	m.checkpoints = checkpoints
+}
 
 const (
 	// sourceChangeBriefEffectCap bounds the effects pulled for one window. An
@@ -44,12 +49,8 @@ const (
 	sourceChangeBriefGitCap = 10
 )
 
-// sourceProvenanceReader is the ledger read surface the change brief consumes.
-type Ledger interface {
-	TurnCheckpoint(ctx context.Context, projectID, sessionID string, turn int) (sourceledger.Checkpoint, bool, error)
-	EffectsBetween(ctx context.Context, projectID string, afterOrdinal, throughOrdinal int64, limit int) ([]sourceledger.Effect, error)
-	GitTransitionsBetween(ctx context.Context, projectID string, afterOrdinal, throughOrdinal int64, limit int) ([]sourceledger.GitTransition, error)
-	SessionAuthoredPaths(ctx context.Context, projectID, sessionID, rootID string) ([]string, error)
+type Checkpoints interface {
+	TurnCheckpoint(context.Context, string, string, int) (sourceledger.Checkpoint, bool, error)
 }
 
 // Record stores the source-change brief a coordinator turn
@@ -97,23 +98,23 @@ func (m *Service) Build(ctx context.Context, sess *api.Session) inject.SourceCha
 	if m == nil || sess == nil || sess.ProjectID == "" {
 		return inject.SourceChangeBrief{}
 	}
-	reader := m.ledger
-	if reader == nil || m.store == nil {
+	reader := m.history
+	if reader.Files == nil || reader.Git == nil || reader.Authorship == nil || m.checkpoints == nil || m.store == nil {
 		return inject.SourceChangeBrief{}
 	}
 	turn, err := m.store.UserTurnOrdinal(ctx, sess.ID)
 	if err != nil || turn < 2 {
 		return inject.SourceChangeBrief{}
 	}
-	current, foundCurrent, err := reader.TurnCheckpoint(ctx, sess.ProjectID, sess.ID, turn)
+	current, foundCurrent, err := m.checkpoints.TurnCheckpoint(ctx, sess.ProjectID, sess.ID, turn)
 	if err != nil || !foundCurrent {
 		return inject.SourceChangeBrief{}
 	}
-	previous, foundPrevious, err := reader.TurnCheckpoint(ctx, sess.ProjectID, sess.ID, turn-1)
+	previous, foundPrevious, err := m.checkpoints.TurnCheckpoint(ctx, sess.ProjectID, sess.ID, turn-1)
 	if err != nil || !foundPrevious {
 		return inject.SourceChangeBrief{}
 	}
-	effects, err := reader.EffectsBetween(
+	effects, err := reader.Files.EffectsBetween(
 		ctx, sess.ProjectID, previous.CreatedOrdinal, current.CreatedOrdinal, sourceChangeBriefEffectCap+1,
 	)
 	if err != nil {
@@ -121,7 +122,7 @@ func (m *Service) Build(ctx context.Context, sess *api.Session) inject.SourceCha
 	}
 	// Ref movements are part of the same window: a bare commit changes what
 	// "since last commit" means even when no file byte moved.
-	transitions, err := reader.GitTransitionsBetween(
+	transitions, err := reader.Git.GitTransitionsBetween(
 		ctx, sess.ProjectID, previous.CreatedOrdinal, current.CreatedOrdinal, sourceChangeBriefGitCap,
 	)
 	if err != nil {
@@ -211,7 +212,7 @@ func assembleSourceChangeBrief(in sourceChangeBriefInputs) inject.SourceChangeBr
 func (m *Service) sessionTouchedPaths(
 	ctx context.Context,
 	sess *api.Session,
-	reader Ledger,
+	reader tools.SourceHistory,
 	roots []projectroot.RootRef,
 ) map[string]bool {
 	touched := make(map[string]bool)
@@ -223,7 +224,7 @@ func (m *Service) sessionTouchedPaths(
 		}
 	}
 	for _, root := range roots {
-		authored, err := reader.SessionAuthoredPaths(ctx, sess.ProjectID, sess.ID, root.ID)
+		authored, err := reader.Authorship.SessionAuthoredPaths(ctx, sess.ProjectID, sess.ID, root.ID)
 		if err != nil {
 			continue
 		}

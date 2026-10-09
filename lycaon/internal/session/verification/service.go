@@ -35,7 +35,7 @@ type Service struct {
 	workflows          Workflow
 	evidenceStore      inspector.EvidenceStore
 	verifyConfig       VerifyConfigResolver
-	sourceLedger       sourceledger.Recorder
+	sourceObservations *sourceledger.Inventory
 	verificationSource func(context.Context, string) (string, string)
 	dataDir            string
 }
@@ -43,10 +43,12 @@ type Service struct {
 func New(store Store, workspace *sessionscope.Service, transcript *transcript.Service) *Service {
 	return &Service{store: store, workspace: workspace, transcript: transcript}
 }
-func (m *Service) SetDataDir(dir string)                        { m.dataDir = strings.TrimSpace(dir) }
-func (m *Service) SetWorkers(workers Workers)                   { m.workerQueue = workers }
-func (m *Service) SetWorkflow(workflow Workflow)                { m.workflows = workflow }
-func (m *Service) SetSourceLedger(source sourceledger.Recorder) { m.sourceLedger = source }
+func (m *Service) SetDataDir(dir string)         { m.dataDir = strings.TrimSpace(dir) }
+func (m *Service) SetWorkers(workers Workers)    { m.workerQueue = workers }
+func (m *Service) SetWorkflow(workflow Workflow) { m.workflows = workflow }
+func (m *Service) SetSourceObservations(source *sourceledger.Inventory) {
+	m.sourceObservations = source
+}
 func (m *Service) SetRevisionSource(source func(context.Context, string) (string, string)) {
 	m.verificationSource = source
 }

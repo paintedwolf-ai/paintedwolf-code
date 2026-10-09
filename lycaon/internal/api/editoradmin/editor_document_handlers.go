@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/documentcore"
 	"github.com/lycaon/lycaon/internal/editordoc"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/textfile"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -421,19 +422,19 @@ func (s *Handler) writeEditorDocumentError(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	switch {
-	case errors.Is(err, project.ErrSourceBusy):
+	case errors.Is(err, projectsource.ErrSourceBusy):
 		s.responses.Fail(w, wire.ApiErrorCodeSourcePathBusy, "another file operation is using this path")
 	case errors.Is(err, editordoc.ErrInvalidEOL):
 		s.responses.FailReason(w, wire.ApiErrorCodeInvalidRequest, "line ending must be lf or crlf")
-	case errors.Is(err, textfile.ErrRawTooLarge), errors.Is(err, textfile.ErrTextTooLarge), errors.Is(err, project.ErrSourceWriteTooLarge):
+	case errors.Is(err, textfile.ErrRawTooLarge), errors.Is(err, textfile.ErrTextTooLarge), errors.Is(err, projectsource.ErrSourceWriteTooLarge):
 		s.responses.Fail(w, wire.ApiErrorCodeSourceContentTooLarge, "content exceeds the 4 MiB editor cap")
 	case errors.Is(err, textfile.ErrBinary), errors.Is(err, textfile.ErrUnsupported):
 		s.responses.FailReason(w, wire.ApiErrorCodeInvalidRequest, "content must be valid text in the document encoding")
-	case errors.Is(err, editordoc.ErrNotFound), errors.Is(err, project.ErrSourceNotFound):
+	case errors.Is(err, editordoc.ErrNotFound), errors.Is(err, projectsource.ErrSourceNotFound):
 		s.responses.Fail(w, wire.ApiErrorCodeEditorDocumentNotFound, "editor document not found")
 	case errors.Is(err, editordoc.ErrOperationConflict):
 		s.responses.Fail(w, wire.ApiErrorCodeIdempotencyConflict, "operation_id was already used for different editor save input")
-	case errors.Is(err, editordoc.ErrRevisionConflict), errors.Is(err, project.ErrSourceWriteConflict):
+	case errors.Is(err, editordoc.ErrRevisionConflict), errors.Is(err, projectsource.ErrSourceWriteConflict):
 		s.responses.Fail(w, wire.ApiErrorCodeEditorRevisionConflict, "the editor document or file changed")
 	case errors.Is(err, editordoc.ErrReplicaEpoch):
 		s.responses.Fail(w, wire.ApiErrorCodeEditorReplicaEpoch, "the editor document identity changed before synchronization")
@@ -441,11 +442,11 @@ func (s *Handler) writeEditorDocumentError(w http.ResponseWriter, r *http.Reques
 		s.responses.Fail(w, wire.ApiErrorCodeEditorReplicaIdentity, "the editor replica must synchronize before submitting changes")
 	case errors.Is(err, editordoc.ErrRootDetached):
 		s.responses.Fail(w, wire.ApiErrorCodeEditorRootDetached, "the file's root is no longer attached to this project")
-	case errors.Is(err, project.ErrSourcePathDenied):
+	case errors.Is(err, projectsource.ErrSourcePathDenied):
 		s.responses.Fail(w, wire.ApiErrorCodeSourcePathDenied, "source path is outside the project")
 	case errors.Is(err, editordoc.ErrReadOnly):
 		s.responses.Fail(w, wire.ApiErrorCodeSourceReadOnly, "the file is read-only")
-	case errors.Is(err, project.ErrSourceBinary):
+	case errors.Is(err, projectsource.ErrSourceBinary):
 		s.responses.Fail(w, wire.ApiErrorCodeSourceBinary, "only editable text files can be opened as documents")
 	default:
 		s.responses.InternalError(w, r, err)

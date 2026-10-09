@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/api/httpio"
-	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/search"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -120,19 +120,19 @@ func (s *Handler) HandleApplySearchReplacement(w http.ResponseWriter, r *http.Re
 		})
 	}
 	sessionID, turn := s.chatAffiliation(r)
-	response, err := s.sourceMutations.BatchWrite(r.Context(), operationID.String(), p, project.SourceBatchWriteRequest{
+	response, err := s.sourceMutations.BatchWrite(r.Context(), operationID.String(), p, projectsource.SourceBatchWriteRequest{
 		Input: req, SessionID: sessionID, Turn: turn,
-		Prepare: func() (project.SourceBatchWritePlan, error) {
+		Prepare: func() (projectsource.SourceBatchWritePlan, error) {
 			plan, planErr := search.PlanReplace(search.ReplacePlanRequest{
 				Query: plan.Code.Query, Replacement: req.Replacement, Flags: compileCtx.Flags,
 				Store: projectReplaceStore{project: p}, Files: files,
 			})
 			if planErr != nil {
-				return project.SourceBatchWritePlan{}, planErr
+				return projectsource.SourceBatchWritePlan{}, planErr
 			}
-			writes := make([]project.SourceWriteRequest, 0, len(plan.Writes))
+			writes := make([]projectsource.SourceWriteRequest, 0, len(plan.Writes))
 			for _, write := range plan.Writes {
-				writes = append(writes, project.SourceWriteRequest{
+				writes = append(writes, projectsource.SourceWriteRequest{
 					RootID: write.RootID, Path: write.Path, Content: write.Content,
 					Encoding: write.Encoding, BaseSHA256: write.BaseSHA256,
 				})
@@ -145,16 +145,16 @@ func (s *Handler) HandleApplySearchReplacement(w http.ResponseWriter, r *http.Re
 				})
 			}
 			encoded, marshalErr := json.Marshal(wire.SearchReplaceApplyResponse{Files: out, BatchID: operationID.String()})
-			return project.SourceBatchWritePlan{Writes: writes, Response: encoded}, marshalErr
+			return projectsource.SourceBatchWritePlan{Writes: writes, Response: encoded}, marshalErr
 		},
 	})
 	if err != nil {
 		if s.writeSearchQueryError(w, err) {
 			return
 		}
-		if errors.Is(err, project.ErrSourceMutationConflict) || errors.Is(err, project.ErrSourceMutationDiverged) ||
-			errors.Is(err, project.ErrSourceWriteConflict) || errors.Is(err, project.ErrSourceNotFound) ||
-			errors.Is(err, project.ErrSourcePathDenied) {
+		if errors.Is(err, projectsource.ErrSourceMutationConflict) || errors.Is(err, projectsource.ErrSourceMutationDiverged) ||
+			errors.Is(err, projectsource.ErrSourceWriteConflict) || errors.Is(err, projectsource.ErrSourceNotFound) ||
+			errors.Is(err, projectsource.ErrSourcePathDenied) {
 			s.writeSourceError(w, r, err)
 			return
 		}

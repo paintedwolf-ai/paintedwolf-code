@@ -6,6 +6,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/api/secretview"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -19,12 +20,12 @@ func (s *Workspace) ResolveNavigationPaths(ctx context.Context, p *project.Proje
 		if ref.Status != wire.NavigationMissing {
 			continue
 		}
-		path, err := project.ResolveAbsentSourcePath(p, ref.RootID, ref.Path)
+		path, err := projectsource.ResolveAbsentSourcePath(p, ref.RootID, ref.Path)
 		if err != nil {
 			ref.Status = wire.NavigationUnavailable
 			continue
 		}
-		_, err = s.SourceLedger.ResolveDeletedPath(ctx, p.ID, branch, ref.RootID, path)
+		_, err = s.SourceLedger.History.ResolveDeletedPath(ctx, p.ID, branch, ref.RootID, path)
 		switch {
 		case err == nil:
 			ref.Status, ref.EntryKind, ref.Deleted = wire.NavigationResolved, wire.NavigationEntryKind("file"), true
@@ -36,28 +37,28 @@ func (s *Workspace) ResolveNavigationPaths(ctx context.Context, p *project.Proje
 }
 
 // readDeletedSource serves retained content only while the exact address is absent.
-func (s *Workspace) readDeletedSource(ctx context.Context, p *project.Project, req project.SourceReadRequest, scope sourceViewerWorkspace) (*wire.ProjectSourceReadResponse, error) {
-	path, err := project.ResolveAbsentSourcePath(p, req.RootID, req.Path)
+func (s *Workspace) readDeletedSource(ctx context.Context, p *project.Project, req projectsource.SourceReadRequest, scope sourceViewerWorkspace) (*wire.ProjectSourceReadResponse, error) {
+	path, err := projectsource.ResolveAbsentSourcePath(p, req.RootID, req.Path)
 	if err != nil {
 		return nil, err
 	}
-	deleted, err := s.SourceLedger.ResolveDeletedPath(ctx, p.ID, scope.branch, req.RootID, path)
+	deleted, err := s.SourceLedger.History.ResolveDeletedPath(ctx, p.ID, scope.branch, req.RootID, path)
 	if errors.Is(err, sourceledger.ErrHistoryNotFound) {
-		return nil, project.ErrSourceNotFound
+		return nil, projectsource.ErrSourceNotFound
 	}
 	if err != nil {
 		return nil, err
 	}
-	previous, err := s.SourceLedger.DeletedPathContent(ctx, p.ID, deleted)
+	previous, err := s.SourceLedger.History.DeletedPathContent(ctx, p.ID, deleted)
 	if err != nil {
 		return nil, err
 	}
-	currentPath, err := project.ResolveAbsentSourcePath(p, req.RootID, req.Path)
+	currentPath, err := projectsource.ResolveAbsentSourcePath(p, req.RootID, req.Path)
 	if err != nil {
 		return nil, err
 	}
 	if currentPath != path {
-		return nil, project.ErrSourceNotFound
+		return nil, projectsource.ErrSourceNotFound
 	}
 	side := mapSourceComparisonSide(previous)
 	if side.Availability == "available" {

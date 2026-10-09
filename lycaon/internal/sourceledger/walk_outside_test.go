@@ -13,7 +13,7 @@ import (
 
 func sessionWalkPaths(t *testing.T, store *Store, sessionID string, outside bool) map[string]Effect {
 	t.Helper()
-	walk, err := store.QueryWalk(t.Context(), "p1", Baseline{
+	walk, err := store.Walk.QueryWalk(t.Context(), "p1", Baseline{
 		Kind: BaselineSession, SessionID: sessionID, WithOutsideChanges: outside,
 	}, 50, 0, CommitLens{})
 	testutil.FailErr(t, "query session walk", err)

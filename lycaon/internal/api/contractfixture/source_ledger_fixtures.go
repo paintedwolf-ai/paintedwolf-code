@@ -10,7 +10,7 @@ import (
 
 	hostapi "github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/db"
-	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -68,7 +68,7 @@ func PrepareLedgerInventory(t *testing.T, srv *hostapi.Server, ledger *sourceled
 	for _, root := range p.Roots {
 		roots = append(roots, sourceledger.RootSpec{ID: root.ID, Path: root.Path})
 	}
-	testutil.FailErr(t, "prepare source inventory", ledger.EnsureInventory(t.Context(), sourceledger.InventoryRequest{
+	testutil.FailErr(t, "prepare source inventory", ledger.Inventory.EnsureInventory(t.Context(), sourceledger.InventoryRequest{
 		ProjectID: p.ID, RootsGeneration: p.RootsGeneration, Roots: roots,
 	}))
 }
@@ -78,8 +78,8 @@ func TestSourceLedger(t *testing.T) (*sourceledger.Store, *db.Store, TestDeps) {
 	sqlDB := testdbfixture.Open(t, "store.db")
 	st := sourceledger.New(sqlDB, t.TempDir())
 	return st, sqlDB, func(d *hostapi.Dependencies) {
-		d.Source.SourceLedger, d.Source.SourceInventory = st, st
-		d.Source.SourceMutations = project.NewSourceMutationService(sqlDB, st)
+		d.Source.SourceLedger, d.Source.SourceInventory = st, st.Inventory
+		d.Source.SourceMutations = projectsource.NewSourceMutationService(sqlDB, st)
 	}
 }
 

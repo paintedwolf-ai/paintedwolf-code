@@ -115,8 +115,8 @@ func NewMergedHistoryFixture(t *testing.T) MergedHistoryFixture {
 	}))
 	reader := NewScriptedGitStateReader(t, nested,
 		gitstate.State{Repo: gitstate.RepoPresent, HeadCommit: commitA, HeadRef: "main"})
-	ledger.SetGitReader(reader)
-	_, err := ledger.ObserveGitState(t.Context(), p.ID,
+	ledger.Git.SetGitReader(reader)
+	_, err := ledger.Git.ObserveGitState(t.Context(), p.ID,
 		[]sourceledger.RootSpec{{ID: rootID, Path: nested}})
 	testutil.FailErr(t, "seed git state", err)
 
@@ -145,7 +145,7 @@ func NewMergedHistoryFixture(t *testing.T) MergedHistoryFixture {
 		{Commit: commitC, Subject: "commit: landed work"},
 		{Commit: commitA, Subject: "commit: init"},
 	})
-	terminal, err := ledger.ObserveGitState(t.Context(), p.ID,
+	terminal, err := ledger.Git.ObserveGitState(t.Context(), p.ID,
 		[]sourceledger.RootSpec{{ID: rootID, Path: nested}})
 	testutil.FailErr(t, "observe offline commits", err)
 	if terminal[rootID] == "" {
@@ -159,7 +159,7 @@ func NewMergedHistoryFixture(t *testing.T) MergedHistoryFixture {
 		Before: trackedBytes, After: []byte("landed\n"),
 		GitTransitionID: terminal[rootID],
 	}))
-	fileID, _, err := ledger.ResolveFile(t.Context(), p.ID, sourcebranch.Trunk, rootID, "src/app.ts")
+	fileID, _, err := ledger.History.ResolveFile(t.Context(), p.ID, sourcebranch.Trunk, rootID, "src/app.ts")
 	testutil.FailErr(t, "resolve file", err)
 
 	return MergedHistoryFixture{

@@ -142,7 +142,7 @@ func TestSourceComparisonRefusesForeignEffectID(t *testing.T) {
 	p, _, _ := contractfixture.SeedRewrittenReadme(t, srv)
 	other := contractfixture.CreateProjectForTest(t, srv, t.TempDir())
 
-	res, err := srv.Sources.Workspace.SourceLedger.QueryWalk(t.Context(), p.ID,
+	res, err := srv.Sources.Workspace.SourceLedger.Walk.QueryWalk(t.Context(), p.ID,
 		sourceledger.Baseline{Kind: sourceledger.BaselineSession, SessionID: "s1"}, 10, 0,
 		sourceledger.CommitLens{})
 	testutil.FailErr(t, "query effects", err)
@@ -160,12 +160,12 @@ func TestReviewedComparisonUsesTheNamedLook(t *testing.T) {
 	_, _, withLedger := contractfixture.TestSourceLedger(t)
 	srv := contractfixture.NewTestServer(t, withLedger)
 	p, _, fileID := contractfixture.SeedRewrittenReadme(t, srv)
-	walk, err := srv.Sources.Workspace.SourceLedger.QueryWalk(t.Context(), p.ID,
+	walk, err := srv.Sources.Workspace.SourceLedger.Walk.QueryWalk(t.Context(), p.ID,
 		sourceledger.Baseline{Kind: sourceledger.BaselinePresentation}, 10, 0, sourceledger.CommitLens{})
 	testutil.FailErr(t, "query review effects", err)
 	effects := walk.Files[0].Effects
 	look := effects[1]
-	testutil.FailErr(t, "acknowledge displayed version", srv.Sources.Workspace.SourceLedger.CompletePresentation(t.Context(), p.ID, fileID, look.ID, look.Ordinal))
+	testutil.FailErr(t, "acknowledge displayed version", srv.Sources.Workspace.SourceLedger.Checkpoints.CompletePresentation(t.Context(), p.ID, fileID, look.ID, look.Ordinal))
 	q := url.Values{"file_id": {fileID}, "reviewed_through_ordinal": {strconv.FormatInt(look.Ordinal, 10)}}
 	code, comparison := contractfixture.GetSourceComparison(t, srv, p.ID, q)
 	if code != http.StatusOK || comparison.Before.Content != contractfixture.DiffReadmeV0 || comparison.After.Content != contractfixture.DiffReadmeV2 {
@@ -183,7 +183,7 @@ func TestReviewedComparisonUsesTheNamedLook(t *testing.T) {
 		t.Fatalf("held comparison response = %d %+v", code, held)
 	}
 	latest := effects[0]
-	testutil.FailErr(t, "acknowledge latest version", srv.Sources.Workspace.SourceLedger.CompletePresentation(t.Context(), p.ID, fileID, latest.ID, latest.Ordinal))
+	testutil.FailErr(t, "acknowledge latest version", srv.Sources.Workspace.SourceLedger.Checkpoints.CompletePresentation(t.Context(), p.ID, fileID, latest.ID, latest.Ordinal))
 	code, _ = contractfixture.GetSourceComparison(t, srv, p.ID, q)
 	if code != http.StatusConflict {
 		t.Fatalf("superseded reviewed response = %d", code)

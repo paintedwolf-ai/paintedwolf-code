@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/textfile"
 )
 
@@ -75,7 +76,7 @@ func (s *Service) recoverMutation(ctx context.Context, p *project.Project, mutat
 			}
 		case mutation.ExpectedSHA256:
 		default:
-			return s.abandonRecovery(ctx, document, mutation, project.ErrSourceWriteConflict)
+			return s.abandonRecovery(ctx, document, mutation, projectsource.ErrSourceWriteConflict)
 		}
 	}
 	_, err = s.finishMutation(ctx, p, document, mutation)

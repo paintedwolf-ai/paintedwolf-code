@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/people"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	sessioncheckpoint "github.com/lycaon/lycaon/internal/session/checkpoint"
 	"github.com/lycaon/lycaon/internal/session/checkpointcontrol"
 	sessionstore "github.com/lycaon/lycaon/internal/session/store"
@@ -18,6 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -36,10 +38,10 @@ func newCheckpointTestSession(t *testing.T) (*Host, string, string) {
 	mgr := newTestManagerWithStore(t, st)
 	mgr.SetProjectRegistry(project.NewSQLRegistry(database))
 	ledger := sourceledger.New(database, filepath.Join(mgr.Workspace.DataDir, "source-content"))
-	mgr.SetSourceLedger(ledger)
-	mutations := project.NewSourceMutationService(database, ledger)
+	mgr.SetSourceLedger(ledger, tools.SourceHistory{Files: ledger.History, Comparison: ledger.Comparisons, Git: ledger.Git, Authorship: ledger.Walk}, ledger.Commands, ledger.Git, ledger.Checkpoints, ledger.Inventory)
+	mutations := projectsource.NewSourceMutationService(database, ledger)
 	mgr.ToolContext.SetSourceMutations(mutations)
-	mgr.Chats.Rewinds.SetSourceRewinds(&sourcerewind.Service{Ledger: ledger, Mutations: mutations})
+	mgr.Chats.Rewinds.SetSourceRewinds(&sourcerewind.Service{Planner: ledger.Comparisons, Mutations: mutations})
 	ctx := context.Background()
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)

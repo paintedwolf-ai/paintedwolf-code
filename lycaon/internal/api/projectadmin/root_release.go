@@ -49,10 +49,10 @@ func (s *Roots) releaseUnattachedSourceRoots(ctx context.Context, candidates []s
 			slog.WarnContext(ctx, "release source catalog for unattached root", "path", root.Path, "err", err)
 		}
 	}
-	if s.sourceWorkspace.SourceLedger == nil || s.sourceWorkspace.SourceLedger.SnapshotStore() == nil {
+	if s.sourceWorkspace.SourceLedger == nil || s.sourceWorkspace.SourceLedger.Snapshots == nil {
 		return
 	}
-	if err := s.sourceWorkspace.SourceLedger.SnapshotStore().ReleaseRoots(ctx, roots); err != nil {
+	if err := s.sourceWorkspace.SourceLedger.Snapshots.ReleaseRoots(ctx, roots); err != nil {
 		slog.WarnContext(ctx, "release source snapshots for unattached roots", "err", err)
 	}
 }

@@ -36,6 +36,10 @@ type Service struct {
 	projects        Projects
 	loopbackProv    tools.ContainerRecorder
 	SourceLedger    sourceledger.Recorder
+	history         tools.SourceHistory
+	commands        sourceledger.CommandWindowOpener
+	gitMutations    tools.SourceGitMutations
+	observations    *sourceledger.Inventory
 	sourceMutations sourceeffect.Journal
 	editorDocuments tools.EditorDocuments
 	credentialFiles tools.CredentialFiles
@@ -51,7 +55,13 @@ func (m *Service) SetDataDir(dir string)         { m.dataDir = strings.TrimSpace
 func (m *Service) SetContainers(containers tools.ContainerRecorder) {
 	m.loopbackProv = containers
 }
-func (m *Service) SetSourceLedger(source sourceledger.Recorder)       { m.SourceLedger = source }
+func (m *Service) SetSourceLedger(source sourceledger.Recorder, history tools.SourceHistory, commands sourceledger.CommandWindowOpener, mutations tools.SourceGitMutations, observations *sourceledger.Inventory) {
+	m.SourceLedger = source
+	m.history = history
+	m.commands = commands
+	m.gitMutations = mutations
+	m.observations = observations
+}
 func (m *Service) SetSourceMutations(source sourceeffect.Journal)     { m.sourceMutations = source }
 func (m *Service) SetEditorDocuments(documents tools.EditorDocuments) { m.editorDocuments = documents }
 func (m *Service) SetCredentialFiles(files tools.CredentialFiles)     { m.credentialFiles = files }

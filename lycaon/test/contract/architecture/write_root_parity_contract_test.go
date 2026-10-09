@@ -74,7 +74,7 @@ func TestWriteRootChokePointsPinned(t *testing.T) {
 		rel  string
 		want string
 	}{
-		{filepath.Join("lycaon", "internal", "project", "registry.go"), "AttachedWriteRootRefused"},
+		{filepath.Join("lycaon", "internal", "project", "roots.go"), "AttachedWriteRootRefused"},
 		{filepath.Join("lycaon", "internal", "session", "sandbox_write_root_broker.go"), "ControlPlanePathDenied"},
 		// The grant door and the boundary read one granted-lane predicate: what
 		// the broker grants as a plain root, prepareRequest applies.

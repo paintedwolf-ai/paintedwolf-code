@@ -98,18 +98,18 @@ func (b *Runtime) Open(ctx context.Context, dbPath string, startup startupprotoc
 	b.Projects = project.NewSQLRegistry(b.Database)
 	wireAgentPolicyRoots(b.ctx, b.Projects)
 	b.SourceLedger = sourceledger.New(b.Database, filepath.Join(b.Directory, enginepaths.SourceContentDirName))
-	b.SourceLedger.SetStoreGuard(b.Claim)
-	b.SourceLedger.SetGitReader(gitStateReader{mgr: git.NewManager()})
+	b.SourceLedger.Content.SetGuard(b.Claim)
+	b.SourceLedger.Git.SetGitReader(gitStateReader{mgr: git.NewManager()})
 	b.trackSourceStorage()
 	return nil
 }
 
 func (b *Runtime) trackSourceStorage() {
-	if b.SourceLedger == nil || b.SourceLedger.SnapshotStore() == nil {
+	if b.SourceLedger == nil || b.SourceLedger.Snapshots == nil {
 		return
 	}
-	baselines := b.SourceLedger.BaselineStore()
-	snapshots := b.SourceLedger.SnapshotStore()
+	baselines := b.SourceLedger.Baselines
+	snapshots := b.SourceLedger.Snapshots
 	b.resources.Track("worker-baselines", 81, func(context.Context) error { return baselines.Close() })
 	b.resources.Track("source-snapshots", 82, func(context.Context) error { return snapshots.Close() })
 }

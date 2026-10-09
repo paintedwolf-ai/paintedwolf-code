@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/pagedview"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/sourcetree"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -162,7 +163,7 @@ func (s *Trees) loadTreeReview(ctx context.Context, view *sourceView, scope *wir
 	} else {
 		before := int64(0)
 		for {
-			page, err := s.SourceLedger.DeletedPaths(ctx, p.ID, baseline, 200, before)
+			page, err := s.SourceLedger.History.DeletedPaths(ctx, p.ID, baseline, 200, before)
 			if err != nil {
 				return nil, err
 			}
@@ -180,8 +181,8 @@ func (s *Trees) loadTreeReview(ctx context.Context, view *sourceView, scope *wir
 	return builder.Finish()
 }
 func addAbsentReviewPath(p *project.Project, builder *sourcetree.ReviewBuilder, root, path string) error {
-	_, err := project.ResolveAbsentSourcePath(p, root, path)
-	if errors.Is(err, project.ErrSourceExists) || errors.Is(err, project.ErrSourcePathDenied) || errors.Is(err, project.ErrSourceNotFound) {
+	_, err := projectsource.ResolveAbsentSourcePath(p, root, path)
+	if errors.Is(err, projectsource.ErrSourceExists) || errors.Is(err, projectsource.ErrSourcePathDenied) || errors.Is(err, projectsource.ErrSourceNotFound) {
 		return nil
 	}
 	if err != nil {

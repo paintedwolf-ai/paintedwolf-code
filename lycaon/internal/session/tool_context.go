@@ -3,20 +3,17 @@ package session
 import (
 	"github.com/lycaon/lycaon/internal/agentpresence"
 	"github.com/lycaon/lycaon/internal/session/instructions"
-	"github.com/lycaon/lycaon/internal/session/sourcebrief"
 	"github.com/lycaon/lycaon/internal/sourceledger"
+	"github.com/lycaon/lycaon/internal/tools"
 )
 
 // SetSourceLedger wires the app-scoped source mutation recorder into every tool invocation.
-func (m *Host) SetSourceLedger(recorder sourceledger.Recorder) {
+func (m *Host) SetSourceLedger(recorder sourceledger.Recorder, history tools.SourceHistory, commands sourceledger.CommandWindowOpener, mutations tools.SourceGitMutations, checkpoints instructions.ReviewCheckpointer, observations *sourceledger.Inventory) {
 	if m != nil {
-		m.ToolContext.SourceLedger = recorder
-		m.ToolContext.SetSourceLedger(recorder)
-		m.Verification.SetSourceLedger(recorder)
-		checkpointer, _ := recorder.(instructions.ReviewCheckpointer)
-		m.Runner.Instructions.SetReviewCheckpointer(checkpointer)
-		reader, _ := recorder.(sourcebrief.Ledger)
-		m.SourceBriefs.SetLedger(reader)
+		m.ToolContext.SetSourceLedger(recorder, history, commands, mutations, observations)
+		m.Verification.SetSourceObservations(observations)
+		m.Runner.Instructions.SetReviewCheckpointer(checkpoints)
+		m.SourceBriefs.SetSources(history, checkpoints)
 	}
 }
 

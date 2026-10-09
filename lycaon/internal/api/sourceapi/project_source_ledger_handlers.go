@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/pagecursor"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -36,7 +37,7 @@ func (s *History) HandleListProjectSourceVersions(w http.ResponseWriter, r *http
 	versions := []wire.SourceFileVersion{}
 	var next sourceVersionsPosition
 	if req.readRetained {
-		result, err := s.SourceLedger.QueryFileVersions(
+		result, err := s.SourceLedger.History.QueryFileVersions(
 			r.Context(), p.ID, req.fileID, req.limit, req.from.RetainedBefore,
 		)
 		if err != nil {
@@ -78,7 +79,7 @@ func (s *History) HandleListProjectSourceVersions(w http.ResponseWriter, r *http
 			return
 		}
 	}
-	if since, tracked, sinceErr := s.SourceLedger.FileTrackedSince(r.Context(), p.ID, req.fileID); sinceErr == nil && tracked {
+	if since, tracked, sinceErr := s.SourceLedger.History.FileTrackedSince(r.Context(), p.ID, req.fileID); sinceErr == nil && tracked {
 		out.TrackedAt = &since
 	}
 	httpio.WriteJSON(w, http.StatusOK, out)
@@ -174,7 +175,7 @@ func (s *Mutations) HandleRestoreProjectSourceVersion(w http.ResponseWriter, r *
 		s.responses.FailReason(w, wire.ApiErrorCodeInvalidRequest, "file_id, root_id, and path are required")
 		return
 	}
-	version, err := s.SourceLedger.ReadRestorableVersion(r.Context(), p.ID, versionID)
+	version, err := s.SourceLedger.History.ReadRestorableVersion(r.Context(), p.ID, versionID)
 	blobUnavailable := errors.Is(err, sourceledger.ErrVersionUnavailable)
 	if errors.Is(err, sourceledger.ErrHistoryNotFound) {
 		s.responses.Fail(w, wire.ApiErrorCodeSourceVersionNotFound, "source version not found")
@@ -193,7 +194,7 @@ func (s *Mutations) HandleRestoreProjectSourceVersion(w http.ResponseWriter, r *
 		return
 	}
 	sessionID, turn := s.Workspace.UserSourceChatAffiliation(r)
-	result, err := s.SourceMutations.RestoreVersion(r.Context(), operationID.String(), p, project.SourceVersionRestoreRequest{
+	result, err := s.SourceMutations.Versions.Restore(r.Context(), operationID.String(), p, projectsource.SourceVersionRestoreRequest{
 		Version: version, FileID: strings.TrimSpace(req.FileID), RootID: strings.TrimSpace(req.RootID),
 		Path: req.Path, Base: req.Base, SessionID: sessionID, Turn: turn,
 	})
@@ -222,7 +223,7 @@ func (s *Comparisons) gitSourcedVersion(
 	p *project.Project,
 	versionID string,
 ) (sourceledger.RestorableVersion, bool) {
-	src, err := s.SourceLedger.ReadVersionGitSource(ctx, p.ID, versionID)
+	src, err := s.SourceLedger.History.ReadVersionGitSource(ctx, p.ID, versionID)
 	if err != nil || src.State != "content" || src.SHA256 == "" {
 		return sourceledger.RestorableVersion{}, false
 	}

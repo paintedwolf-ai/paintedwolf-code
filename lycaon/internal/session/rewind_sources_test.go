@@ -41,7 +41,7 @@ func TestSourceRewindRestoresEntireSuffixAndRecordsUserVersions(t *testing.T) {
 	ledger := mgr.ToolContext.SourceLedger.(*sourceledger.Store)
 	fileIDs := map[string]string{}
 	for _, name := range []string{"first.txt", "second.txt"} {
-		head, err := ledger.ResolveHead(ctx, p.ID, p.BranchForRoot(p.Roots[0].ID), p.Roots[0].ID, name)
+		head, err := ledger.History.ResolveHead(ctx, p.ID, p.BranchForRoot(p.Roots[0].ID), p.Roots[0].ID, name)
 		testutil.FailErr(t, "read original head", err)
 		fileIDs[name] = head.FileID
 	}
@@ -62,14 +62,14 @@ func TestSourceRewindRestoresEntireSuffixAndRecordsUserVersions(t *testing.T) {
 		t.Fatalf("replay=%+v", replay)
 	}
 	for _, name := range []string{"first.txt", "second.txt"} {
-		head, err := ledger.ResolveHeadByFile(ctx, p.ID, p.BranchForRoot(p.Roots[0].ID), fileIDs[name])
+		head, err := ledger.History.ResolveHeadByFile(ctx, p.ID, p.BranchForRoot(p.Roots[0].ID), fileIDs[name])
 		testutil.FailErr(t, "read restored version", err)
 		if head.State != "absent" {
 			t.Fatalf("head=%+v", head)
 		}
 	}
 	next := appendRewindAsk(t, mgr, id)
-	summaries, err := ledger.WalkSummary(ctx, p.ID, id, []string{next})
+	summaries, err := ledger.Walk.WalkSummary(ctx, p.ID, id, []string{next})
 	testutil.FailErr(t, "read next turn changes", err)
 	if len(summaries) != 1 || summaries[0].Steps != 0 {
 		t.Fatalf("discarded changes attributed to new turn: %+v", summaries)

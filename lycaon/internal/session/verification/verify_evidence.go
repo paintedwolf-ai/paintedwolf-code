@@ -312,7 +312,7 @@ func (m *Service) Revision(ctx context.Context, root string) (string, string) {
 	if m.verificationSource != nil {
 		return m.verificationSource(ctx, root)
 	}
-	return sourceledger.VerificationState(ctx, m.sourceLedger, root)
+	return sourceledger.VerificationState(ctx, m.sourceObservations, root)
 }
 
 // boundaryTime is the current user-intent boundary; older evidence does not count.

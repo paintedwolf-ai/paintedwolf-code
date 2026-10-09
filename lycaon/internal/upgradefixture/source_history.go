@@ -57,7 +57,7 @@ func SeedSourceHistory(ctx context.Context, database db.Handle, dataDir, project
 		return SourceEvidence{}, err
 	}
 	ledger := sourceledger.New(database, filepath.Join(dataDir, enginepaths.SourceContentDirName))
-	defer func() { _ = ledger.SnapshotStore().Close() }()
+	defer func() { _ = ledger.Snapshots.Close() }()
 	if err := ledger.Record(ctx, sourceledger.RecordInput{
 		ProjectID: projectID, RootID: rootID, Path: sourceHistoryPath,
 		Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
@@ -65,7 +65,7 @@ func SeedSourceHistory(ctx context.Context, database db.Handle, dataDir, project
 	}); err != nil {
 		return SourceEvidence{}, fmt.Errorf("record fixture source body: %w", err)
 	}
-	fileID, versionID, err := ledger.ResolveFile(ctx, projectID, sourcebranch.Trunk, rootID, sourceHistoryPath)
+	fileID, versionID, err := ledger.History.ResolveFile(ctx, projectID, sourcebranch.Trunk, rootID, sourceHistoryPath)
 	if err != nil {
 		return SourceEvidence{}, err
 	}
@@ -91,7 +91,7 @@ func SeedSourceHistory(ctx context.Context, database db.Handle, dataDir, project
 	}); err != nil {
 		return SourceEvidence{}, fmt.Errorf("record changed fixture source body: %w", err)
 	}
-	_, evidence.CurrentVersionID, err = ledger.ResolveFile(ctx, projectID, sourcebranch.Trunk, rootID, sourceHistoryPath)
+	_, evidence.CurrentVersionID, err = ledger.History.ResolveFile(ctx, projectID, sourcebranch.Trunk, rootID, sourceHistoryPath)
 	return evidence, err
 }
 
@@ -109,15 +109,15 @@ func VerifySourceHistory(ctx context.Context, database db.Handle, dataDir, proje
 	}
 	contentDir := filepath.Join(dataDir, enginepaths.SourceContentDirName)
 	ledger := sourceledger.New(database, contentDir)
-	defer func() { _ = ledger.SnapshotStore().Close() }()
-	version, err := ledger.ReadRestorableVersion(ctx, projectID, evidence.SourceVersionID)
+	defer func() { _ = ledger.Snapshots.Close() }()
+	version, err := ledger.History.ReadRestorableVersion(ctx, projectID, evidence.SourceVersionID)
 	if err != nil {
 		return fmt.Errorf("read retained source version: %w", err)
 	}
 	if version.FileID != evidence.SourceFileID || version.SHA256 != evidence.BodySHA256 || !bytes.Equal(version.Content, sourceHistoryBody()) {
 		return fmt.Errorf("retained source version changed identity or bytes")
 	}
-	current, err := ledger.ReadRestorableVersion(ctx, projectID, evidence.CurrentVersionID)
+	current, err := ledger.History.ReadRestorableVersion(ctx, projectID, evidence.CurrentVersionID)
 	if err != nil {
 		return fmt.Errorf("read current source version: %w", err)
 	}

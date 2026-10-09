@@ -42,6 +42,7 @@ import (
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectignore"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/scan"
 	scancadence "github.com/lycaon/lycaon/internal/scan/cadence"
 	"github.com/lycaon/lycaon/internal/secretcap"
@@ -83,7 +84,7 @@ type Deps struct {
 	ManagedSecrets    *secretcap.Service
 	SecretIgnores     *projectignore.SecretService
 	SourceLedger      *sourceledger.Store
-	SourceMutations   *project.SourceMutationService
+	SourceMutations   *projectsource.SourceMutationService
 	FileOperations    *fileops.Service
 	EditorDocuments   *editordoc.Service
 	FileBriefings     *filebriefing.Service
@@ -427,13 +428,13 @@ func fillSources(t *testing.T, d *Deps) {
 		d.SourceLedger = sourceledger.New(d.Database, t.TempDir())
 	}
 	if d.SourceMutations == nil {
-		d.SourceMutations = project.NewSourceMutationService(d.Database, d.SourceLedger)
+		d.SourceMutations = projectsource.NewSourceMutationService(d.Database, d.SourceLedger)
 	}
 	if d.FileOperations == nil {
 		d.FileOperations = fileops.NewService(fileops.NewStore(d.Database))
 	}
 	if d.EditorDocuments == nil {
-		documents := editordoc.New(editordoc.NewStore(d.Database), d.SourceLedger, d.Projects)
+		documents := editordoc.New(editordoc.NewStore(d.Database), d.SourceLedger, d.SourceLedger.History, d.Projects)
 		t.Cleanup(func() { _ = documents.Close(context.Background()) })
 		d.EditorDocuments = documents
 	}

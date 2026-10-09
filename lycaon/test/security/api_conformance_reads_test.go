@@ -17,8 +17,8 @@ import (
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/testutil"
-	wire "github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/wiring"
+	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 // conformanceEffects observes host state changes around one read. The sweep
@@ -58,16 +58,16 @@ func (s *conformanceSweep) sweepReads(ctx context.Context) {
 
 // observedRead sends one read and names what changed while it ran.
 func (s *conformanceSweep) observedRead(ctx context.Context, req conformanceRequest) (conformanceExchange, []string) {
-	if s.effects == nil {
+	if s.Effects == nil {
 		return s.send(ctx, req), nil
 	}
-	mark, err := s.effects.mark(ctx)
+	mark, err := s.Effects.mark(ctx)
 	if err != nil {
 		s.findings.add(ruleReadsHaveNoEffects, req.op.ID, req.probe, "could not observe host state: %v", err)
 		return s.send(ctx, req), nil
 	}
 	ex := s.send(ctx, req)
-	changes, err := s.effects.since(ctx, mark)
+	changes, err := s.Effects.since(ctx, mark)
 	if err != nil {
 		s.findings.add(ruleReadsHaveNoEffects, req.op.ID, req.probe, "could not observe host state: %v", err)
 		return ex, nil

@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/search"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -129,7 +130,7 @@ func TestApplySearchReplacementWritesSelectedHunks(t *testing.T) {
 
 	req.Replacement = "different"
 	requireErrorCode(t, f.post(t, "/v1/search/replace/apply", jsonBody(t, req)), wire.ApiErrorCodeSourceWriteConflict)
-	if len(f.sourceErrors) != 1 || !errors.Is(f.sourceErrors[0], project.ErrSourceMutationConflict) {
+	if len(f.sourceErrors) != 1 || !errors.Is(f.sourceErrors[0], projectsource.ErrSourceMutationConflict) {
 		t.Fatalf("source errors = %v", f.sourceErrors)
 	}
 }
@@ -170,11 +171,11 @@ func TestReplaceStoreMapsSourceErrors(t *testing.T) {
 		in, want error
 	}{
 		{nil, nil},
-		{project.ErrSourceWriteConflict, search.ErrReplaceWriteConflict},
-		{fmt.Errorf("wrapped: %w", project.ErrSourceWriteTooLarge), search.ErrReplaceTooLarge},
-		{project.ErrSourceBinary, search.ErrReplaceBinary},
-		{project.ErrSourceNotFound, search.ErrReplaceNotFound},
-		{project.ErrSourcePathDenied, search.ErrReplacePathDenied},
+		{projectsource.ErrSourceWriteConflict, search.ErrReplaceWriteConflict},
+		{fmt.Errorf("wrapped: %w", projectsource.ErrSourceWriteTooLarge), search.ErrReplaceTooLarge},
+		{projectsource.ErrSourceBinary, search.ErrReplaceBinary},
+		{projectsource.ErrSourceNotFound, search.ErrReplaceNotFound},
+		{projectsource.ErrSourcePathDenied, search.ErrReplacePathDenied},
 		{other, other},
 	} {
 		if got := mapReplaceStoreErr(tc.in); !errors.Is(got, tc.want) {

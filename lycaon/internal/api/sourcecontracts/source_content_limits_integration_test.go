@@ -11,20 +11,20 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/uuid"
-	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
-	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/textfile"
+	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestSourceContentRoundTripAtSupportedLimits(t *testing.T) {
 	cases := []struct{ name, text, encoding, eol string }{
 		{"above ordinary JSON limit", strings.Repeat("a", 2<<20), textfile.UTF8, "lf"},
-		{"exact raw limit", strings.Repeat("a", project.SourceReadMaxBytes), textfile.UTF8, "lf"},
-		{"JSON escaping", strings.Repeat("<", project.SourceReadMaxBytes), textfile.UTF8, "lf"},
-		{"UTF-16 expansion", strings.Repeat("界", (project.SourceReadMaxBytes-2)/2), textfile.UTF16LEBOM, "lf"},
-		{"CRLF expansion", strings.Repeat(strings.Repeat("x", 1022)+"\n", project.SourceReadMaxBytes/1024), textfile.UTF8, "crlf"},
+		{"exact raw limit", strings.Repeat("a", projectsource.SourceReadMaxBytes), textfile.UTF8, "lf"},
+		{"JSON escaping", strings.Repeat("<", projectsource.SourceReadMaxBytes), textfile.UTF8, "lf"},
+		{"UTF-16 expansion", strings.Repeat("界", (projectsource.SourceReadMaxBytes-2)/2), textfile.UTF16LEBOM, "lf"},
+		{"CRLF expansion", strings.Repeat(strings.Repeat("x", 1022)+"\n", projectsource.SourceReadMaxBytes/1024), textfile.UTF8, "crlf"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -32,7 +32,7 @@ func TestSourceContentRoundTripAtSupportedLimits(t *testing.T) {
 			if tc.eol == "crlf" {
 				serialized = strings.ReplaceAll(serialized, "\n", "\r\n")
 			}
-			raw, err := textfile.EncodeBounded(serialized, tc.encoding, textfile.LimitsForRaw(project.SourceWriteMaxBytes))
+			raw, err := textfile.EncodeBounded(serialized, tc.encoding, textfile.LimitsForRaw(projectsource.SourceWriteMaxBytes))
 			testutil.FailErr(t, "encode fixture", err)
 			f := contractfixture.NewSourceContentFixture(t, raw)
 			doc := f.Open(t)
@@ -53,7 +53,7 @@ func TestSourceContentRoundTripAtSupportedLimits(t *testing.T) {
 			if tc.eol == "crlf" {
 				wantText = strings.ReplaceAll(wantText, "\n", "\r\n")
 			}
-			want, err := textfile.EncodeBounded(wantText, tc.encoding, textfile.LimitsForRaw(project.SourceWriteMaxBytes))
+			want, err := textfile.EncodeBounded(wantText, tc.encoding, textfile.LimitsForRaw(projectsource.SourceWriteMaxBytes))
 			testutil.FailErr(t, "encode expected bytes", err)
 			got, err := os.ReadFile(f.Path)
 			testutil.FailErr(t, "read saved bytes", err)
@@ -89,9 +89,9 @@ func TestEditorDraftRejectsUnsavableContentWithoutChangingRevision(t *testing.T)
 		status             int
 		code               string
 	}{
-		{"raw overflow", strings.Repeat("a", project.SourceWriteMaxBytes+1), "lf", http.StatusRequestEntityTooLarge, "source_content_too_large"},
-		{"decoded overflow", strings.Repeat("a", 2*project.SourceWriteMaxBytes+1), "lf", http.StatusRequestEntityTooLarge, "source_content_too_large"},
-		{"EOL overflow", strings.Repeat("\n", project.SourceWriteMaxBytes/2+1), "crlf", http.StatusRequestEntityTooLarge, "source_content_too_large"},
+		{"raw overflow", strings.Repeat("a", projectsource.SourceWriteMaxBytes+1), "lf", http.StatusRequestEntityTooLarge, "source_content_too_large"},
+		{"decoded overflow", strings.Repeat("a", 2*projectsource.SourceWriteMaxBytes+1), "lf", http.StatusRequestEntityTooLarge, "source_content_too_large"},
+		{"EOL overflow", strings.Repeat("\n", projectsource.SourceWriteMaxBytes/2+1), "crlf", http.StatusRequestEntityTooLarge, "source_content_too_large"},
 		{"binary", "a\x00b", "lf", http.StatusBadRequest, "invalid_request"},
 		{"invalid line ending", "base\n", "unknown", http.StatusBadRequest, "invalid_request"},
 	} {
@@ -109,7 +109,7 @@ func TestEditorDraftRejectsUnsavableContentWithoutChangingRevision(t *testing.T)
 }
 
 func TestEditorOpenRejectsOversizeFile(t *testing.T) {
-	f := contractfixture.NewSourceContentFixture(t, []byte(strings.Repeat("a", project.SourceReadMaxBytes+1)))
+	f := contractfixture.NewSourceContentFixture(t, []byte(strings.Repeat("a", projectsource.SourceReadMaxBytes+1)))
 	w := contractfixture.SourceJSONRequest(t, f.Server, http.MethodPost, f.Url+"/editor-documents", wire.OpenEditorDocumentRequest{
 		Path: "content.txt", RootID: f.Project.Roots[0].ID, ClientID: "window",
 	})

@@ -9,10 +9,8 @@ import (
 
 // GitHistoryContext supplies invocation identity without teaching Git about tools.
 func GitHistoryContext(ctx context.Context, tc ToolContext) (context.Context, error) {
-	ledger, ok := tc.Source.SourceLedger.(interface {
-		GitMutationContext(context.Context, string, []sourceledger.RootSpec, sourceledger.Contributor) context.Context
-	})
-	if !ok {
+	ledger := tc.Source.GitMutations
+	if ledger == nil {
 		return ctx, nil
 	}
 	roots := make([]sourceledger.RootSpec, 0, len(tc.Source.Roots))

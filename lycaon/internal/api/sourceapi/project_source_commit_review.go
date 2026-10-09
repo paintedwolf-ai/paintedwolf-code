@@ -138,7 +138,7 @@ func (s *Review) writeCommitReview(w http.ResponseWriter, r *http.Request, p *pr
 	}
 	for _, path := range paths[start:end] {
 		working := readWorkingCommit(p, path.rootID, path.rootAbs, path.path)
-		history, err := s.SourceLedger.ReviewPathHistory(r.Context(), p.ID, p.BranchForRoot(path.rootID), path.rootID, path.path, working.Side.State == "absent")
+		history, err := s.SourceLedger.History.ReviewPathHistory(r.Context(), p.ID, p.BranchForRoot(path.rootID), path.rootID, path.path, working.Side.State == "absent")
 		if err != nil {
 			s.responses.InternalError(w, r, err)
 			return

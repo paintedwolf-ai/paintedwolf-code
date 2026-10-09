@@ -17,7 +17,7 @@ func TestStressRecoveryManifestLargeTree(t *testing.T) {
 	root, err := os.OpenRoot(t.TempDir())
 	testutil.FailErr(t, "open root", err)
 	defer func() { _ = root.Close() }()
-	writer, err := store.BeginRecovery(ctx, "p1", "large-tree")
+	writer, err := store.Retention.BeginRecovery(ctx, "p1", "large-tree")
 	testutil.FailErr(t, "begin recovery", err)
 	defer writer.Close()
 	const files = 15000
@@ -31,9 +31,9 @@ func TestStressRecoveryManifestLargeTree(t *testing.T) {
 	}
 	testutil.FailErr(t, "flush manifest", writer.Flush(ctx))
 	count := 0
-	testutil.FailErr(t, "stream manifest", store.WalkRecovery(ctx, "p1", "large-tree", files, false, func(entry RecoveryEntry) error {
+	testutil.FailErr(t, "stream manifest", store.Retention.WalkRecovery(ctx, "p1", "large-tree", files, false, func(entry RecoveryEntry) error {
 		count++
-		return store.CopyRecoveryFile(ctx, entry.SHA, io.Discard)
+		return store.Retention.CopyRecoveryFile(ctx, entry.SHA, io.Discard)
 	}))
 	if count != files {
 		t.Fatalf("recovered entries=%d want=%d", count, files)
@@ -43,7 +43,7 @@ func TestStressRecoveryManifestLargeTree(t *testing.T) {
 
 func TestStressRecoveryManifestLargeReverseTraversal(t *testing.T) {
 	store, ctx := openLedger(t)
-	writer, err := store.BeginRecovery(ctx, "p1", "large-manifest")
+	writer, err := store.Retention.BeginRecovery(ctx, "p1", "large-manifest")
 	testutil.FailErr(t, "begin recovery", err)
 	defer writer.Close()
 	const count = 100001
@@ -53,7 +53,7 @@ func TestStressRecoveryManifestLargeReverseTraversal(t *testing.T) {
 	}
 	testutil.FailErr(t, "flush manifest", writer.Flush(ctx))
 	read := 0
-	testutil.FailErr(t, "read reverse manifest", store.WalkRecovery(ctx, "p1", "large-manifest", count, true, func(entry RecoveryEntry) error {
+	testutil.FailErr(t, "read reverse manifest", store.Retention.WalkRecovery(ctx, "p1", "large-manifest", count, true, func(entry RecoveryEntry) error {
 		if entry.Path != fmt.Sprintf("%06d", count-1-read) {
 			return fmt.Errorf("manifest order at %d: %s", read, entry.Path)
 		}
@@ -82,7 +82,7 @@ func TestStressRecoverySingleLargeFile(t *testing.T) {
 	const size = 128 << 20
 	testutil.FailErr(t, "size source beyond decoder memory budget", file.Truncate(size))
 	testutil.FailErr(t, "close source", file.Close())
-	writer, err := store.BeginRecovery(ctx, "p1", "large-file")
+	writer, err := store.Retention.BeginRecovery(ctx, "p1", "large-file")
 	testutil.FailErr(t, "begin recovery", err)
 	defer writer.Close()
 	saved, err := writer.Append(ctx, RecoveryEntry{Path: ".", Mode: 0o600}, root, "large", nil)
@@ -90,7 +90,7 @@ func TestStressRecoverySingleLargeFile(t *testing.T) {
 	testutil.FailErr(t, "flush recovery", writer.Flush(ctx))
 	writer.Close()
 	var restored recoveryByteCounter
-	testutil.FailErr(t, "stream large recovery", store.CopyRecoveryFile(ctx, saved.SHA, &restored))
+	testutil.FailErr(t, "stream large recovery", store.Retention.CopyRecoveryFile(ctx, saved.SHA, &restored))
 	if int64(restored) != size {
 		t.Fatalf("restored bytes = %d, want %d", restored, size)
 	}

@@ -82,7 +82,7 @@ func registerBackgroundRunners(b *serveBuilder, app *ServeApp) {
 	}
 	if b.storage.SourceLedger != nil {
 		byName["source-blob-gc"] = registration{run: func(ctx context.Context) error {
-			return b.storage.SourceLedger.RunBlobGC(ctx, sourceledger.BlobGCInterval, sourceledger.BlobGCRetry)
+			return b.storage.SourceLedger.Retention.RunBlobGC(ctx, sourceledger.BlobGCInterval, sourceledger.BlobGCRetry)
 		}}
 	}
 	if b.storage.Database != nil && b.storage.Directory != "" {

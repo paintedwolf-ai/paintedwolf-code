@@ -23,7 +23,7 @@ func TestClaimNextDoesNotProvisionBranch(t *testing.T) {
 	testdbseed.InsertProjectRootWithID(t, sqlDB, testdbseed.DefaultProjectID, "root-id", dir)
 
 	q := NewSQLQueue(sqlDB, 4)
-	q.SetBaselineStore(sourceledger.New(sqlDB, filepath.Join(testbaseline.DataDir(t, sqlDB), "source-content")).BaselineStore())
+	q.SetBaselineStore(sourceledger.New(sqlDB, filepath.Join(testbaseline.DataDir(t, sqlDB), "source-content")).Baselines)
 	q.SetWorkerWorkspaceManager(workspace.NewManager(filepath.Join(testbaseline.DataDir(t, sqlDB), "worker-branches"), t.TempDir()))
 
 	id, err := q.Enqueue(context.Background(), api.WorkerTask{

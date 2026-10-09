@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/providerwire"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/promptattach"
 	"github.com/lycaon/lycaon/internal/search"
 	"github.com/lycaon/lycaon/internal/session/store"
@@ -68,7 +69,7 @@ func (s *References) readReferenceLines(ctx context.Context, projectID, rootID, 
 			return promptattach.SliceLines(document.Draft, startLine, endLine)
 		}
 	}
-	read, err := project.ReadProjectSource(p, project.SourceReadRequest{Path: rel, RootID: root.ID})
+	read, err := projectsource.ReadProjectSource(p, projectsource.SourceReadRequest{Path: rel, RootID: root.ID})
 	if err != nil {
 		return "", err
 	}

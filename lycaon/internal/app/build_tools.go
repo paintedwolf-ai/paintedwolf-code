@@ -106,19 +106,20 @@ func (b *serveBuilder) registerCoordinatorTools() error {
 	}
 	b.execution.Host.Boundary.SetMergeReconcileAllowlister(b.sessions.Manager.Promotion)
 	workerMergeSvc := &worker.MergeService{
-		Queue:        b.delegations.Queue,
-		Store:        b.delegations.Queue,
-		Workspace:    b.delegations.Workspace,
-		Reject:       b.execution.Rejections,
-		Sessions:     b.delegations.Queue,
-		Reconcile:    b.sessions.Manager.Promotion,
-		Captures:     b.sessions.Manager.Chats.Captures,
-		Coord:        b.sessions.Manager.Workers.Workspaces,
-		Closeout:     b.delegations.Manager,
-		Projects:     b.storage.Projects,
-		Scans:        b.scanning.Triggers,
-		SourceLedger: b.storage.SourceLedger,
-		DataDir:      b.storage.Directory,
+		Queue:         b.delegations.Queue,
+		Store:         b.delegations.Queue,
+		Workspace:     b.delegations.Workspace,
+		Reject:        b.execution.Rejections,
+		Sessions:      b.delegations.Queue,
+		Reconcile:     b.sessions.Manager.Promotion,
+		Captures:      b.sessions.Manager.Chats.Captures,
+		Coord:         b.sessions.Manager.Workers.Workspaces,
+		Closeout:      b.delegations.Manager,
+		Projects:      b.storage.Projects,
+		Scans:         b.scanning.Triggers,
+		SourceLedger:  b.storage.SourceLedger,
+		SourceHistory: b.storage.SourceLedger.Walk,
+		DataDir:       b.storage.Directory,
 		Reports: worker.ChangeReportDeps{
 			SourceRuns: b.sessions.Manager.Verification.WorkerSourceRuns,
 			Messages: func(ctx context.Context, childSessionID string) ([]wire.Message, error) {

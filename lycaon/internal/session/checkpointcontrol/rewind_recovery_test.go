@@ -6,6 +6,7 @@ import (
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/people"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	sessioncheckpoint "github.com/lycaon/lycaon/internal/session/checkpoint"
 	"github.com/lycaon/lycaon/internal/session/promptstate"
 	sessionscope "github.com/lycaon/lycaon/internal/session/scope"
@@ -94,7 +95,7 @@ func newRewindControlFixture(t *testing.T) (*Rewinds, *sessionstore.SQL, *source
 	workspace.SetProjects(projects)
 	captures := NewCapture(t.TempDir(), repository, workspace)
 	ledger := sourceledger.New(database, filepath.Join(captures.dataDir, "source-content"))
-	mutations := project.NewSourceMutationService(database, ledger)
+	mutations := projectsource.NewSourceMutationService(database, ledger)
 	rewinds := NewRewinds(repository, captures, &promptstate.MutexRegistry{}, workspace, projects, &sourcerewind.Service{Ledger: ledger, Mutations: mutations}, nil, Runtime{WorkersInFlight: func(context.Context, *api.Session) int { return 0 }})
 	session, err := repository.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)

@@ -112,7 +112,7 @@ func (s *Lifecycle) createPreparingSession(ctx context.Context, req wire.CreateS
 		return nil, err
 	}
 	if s.sourceWorkspace.SourceLedger != nil {
-		if _, checkpointErr := s.sourceWorkspace.SourceLedger.CreateStructuralCheckpoint(ctx, sourceledger.StructuralCheckpointInput{
+		if _, checkpointErr := s.sourceWorkspace.SourceLedger.Checkpoints.CreateStructuralCheckpoint(ctx, sourceledger.StructuralCheckpointInput{
 			ProjectID: projectID, Kind: sourceledger.CheckpointSession,
 			Label: "Task start", SessionID: sess.ID,
 		}); checkpointErr != nil {

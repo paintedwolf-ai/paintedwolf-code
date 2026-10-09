@@ -106,7 +106,7 @@ func runCommandTerminalCapture(
 	}
 	var sourceRevision, sourceRootDigest string
 	if tctx.Execution.VerificationCheck {
-		sourceRevision, sourceRootDigest = sourceledger.VerificationState(ctx, tctx.Source.SourceLedger, tools.HostWriteRoot(tctx))
+		sourceRevision, sourceRootDigest = sourceledger.VerificationState(ctx, tctx.Source.Observations, tools.HostWriteRoot(tctx))
 	}
 	captured, runErr := registry.Terminal.RunPTYCapture(
 		ctx, tctx.Identity.SessionID, tctx.Identity.ParentSessionID, tctx.Identity.ProjectID, request, runner,

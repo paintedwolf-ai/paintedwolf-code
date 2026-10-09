@@ -8,7 +8,7 @@ import (
 
 // A saved version can contain several authors on the same line. Character
 // identities retain that authorship independently of who published the file.
-func (s *Store) savedTextAttribution(ctx context.Context, projectID, versionID string, fallback AttributionResult) (AttributionResult, error) {
+func (s *Comparisons) savedTextAttribution(ctx context.Context, projectID, versionID string, fallback AttributionResult) (AttributionResult, error) {
 	state, err := s.versionTextState(ctx, versionID)
 	if err != nil || state == nil {
 		return fallback, err

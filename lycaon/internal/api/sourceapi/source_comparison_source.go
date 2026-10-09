@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/sourcecomparison"
 	"github.com/lycaon/lycaon/internal/sourceledger"
@@ -35,9 +36,9 @@ func (s *Comparisons) loadComparisonSource(ctx context.Context, p *project.Proje
 	var err error
 	switch {
 	case source.Effect != nil:
-		diff, err = s.SourceLedger.CompareEffect(ctx, p.ID, source.Effect.EffectID)
+		diff, err = s.SourceLedger.Comparisons.CompareEffect(ctx, p.ID, source.Effect.EffectID)
 	case source.Version != nil:
-		diff, err = s.SourceLedger.CompareVersions(ctx, p.ID, source.Version.VersionID)
+		diff, err = s.SourceLedger.Comparisons.CompareVersions(ctx, p.ID, source.Version.VersionID)
 	case source.Scope != nil:
 		diff, err = s.loadScopeComparison(ctx, p, *source.Scope)
 	case source.Turn != nil:
@@ -117,7 +118,7 @@ func (s *Comparisons) loadChatComparison(ctx context.Context, projectID, session
 }
 
 func comparisonText(before, after wire.SourceComparisonSide) (wire.SourceComparison, error) {
-	if len(before.Content) > project.SourceReadMaxBytes || len(after.Content) > project.SourceReadMaxBytes {
+	if len(before.Content) > projectsource.SourceReadMaxBytes || len(after.Content) > projectsource.SourceReadMaxBytes {
 		return wire.SourceComparison{}, &comparisonFailure{wire.ApiErrorCodeSourceTextTooLarge, "The source exceeds the supported text size."}
 	}
 	return wire.SourceComparison{InRange: true, Before: &before, After: &after}, nil
