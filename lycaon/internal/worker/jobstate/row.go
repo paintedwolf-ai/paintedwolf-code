@@ -10,7 +10,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// workerTaskFromRow maps a generated worker_jobs row onto the wire type.
+// FromRow maps a generated worker_jobs row onto the wire type.
 func FromRow(ctx context.Context, database db.DBTX, r db.WorkerJobs) (*api.WorkerTask, error) {
 	task := api.WorkerTask{
 		ID:               r.ID,

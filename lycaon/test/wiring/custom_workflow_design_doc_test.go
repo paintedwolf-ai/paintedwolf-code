@@ -120,7 +120,7 @@ func TestCustomDesignDocWorkflowLiveGolden(t *testing.T) {
 		child.Status = api.WorkflowRunStatusComplete
 		child.CompletedAt = &now
 		child.UpdatedAt = now
-		err = h.WorkflowMgr.Store.Update(ctx, child)
+		err = h.WorkflowMgr.Store.State.Update(ctx, child)
 		if !errors.Is(err, runstate.ErrRevisionConflict) {
 			break
 		}

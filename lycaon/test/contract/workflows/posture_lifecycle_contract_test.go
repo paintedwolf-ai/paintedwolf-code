@@ -40,7 +40,7 @@ func TestPlanWorkflowPostureLifecycleContract(t *testing.T) {
 	}
 	assertSessionPosture(t, ctx, sessStore, "sess-posture", api.SessionPostureSpec)
 
-	run, err = mgr.Advance(ctx, run.ID)
+	run, err = mgr.Phases.Advance(ctx, run.ID)
 	if err != nil {
 		t.Fatalf("advance expand: %v", err)
 	}

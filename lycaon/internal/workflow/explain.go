@@ -26,7 +26,7 @@ type ObligationPassSource interface {
 	ExplainFullPass(ctx context.Context, run *api.WorkflowRun, params map[string]any) (*api.WorkflowExplainFullPass, error)
 }
 
-// appendPhaseExplain writes the phase's explain note once its obligations
+// Append writes the phase's explain note once its obligations
 // have started, so the note can name the record they produced.
 func (m *Explanations) Append(ctx context.Context, run *api.WorkflowRun, def workflowdef.PhaseDef) {
 	if m == nil || run == nil || def.Explain == nil || m.Sessions == nil {

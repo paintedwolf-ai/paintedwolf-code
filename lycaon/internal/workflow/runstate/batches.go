@@ -14,7 +14,7 @@ type Batches struct {
 	Vars *Variables
 }
 
-// applyCoordinatorBatchEvent is the single serialized writer for coordinator_batch scaffold vars.
+// ApplyCoordinatorBatchEvent is the single serialized writer for coordinator_batch scaffold vars.
 func (m *Batches) ApplyCoordinatorBatchEvent(ctx context.Context, sessionID string, ev batch.Event, eventSeq int) error {
 	if m == nil {
 		return nil

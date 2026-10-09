@@ -46,7 +46,7 @@ func TestFollowUpAfterCompletedWorkflowCanAskAndReceiveAnswer(t *testing.T) {
 	original.Status = api.WorkflowRunStatusComplete
 	completedAt := time.Now().UTC()
 	original.CompletedAt = &completedAt
-	testutil.FailErr(t, "complete original workflow", h.WorkflowMgr.Store.Update(ctx, original))
+	testutil.FailErr(t, "complete original workflow", h.WorkflowMgr.Store.State.Update(ctx, original))
 	active, err := h.WorkflowMgr.GetActive(ctx, sess.ID)
 	testutil.FailErr(t, "check workflow gap", err)
 	if active != nil {

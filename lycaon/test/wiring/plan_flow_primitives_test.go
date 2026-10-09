@@ -97,7 +97,7 @@ func TestPlanFlowPrimitivesWorkflow(t *testing.T) {
 	}
 
 	vars = runstate.SetGateSatisfied(vars, "evidence_passed:peer_review", true)
-	if err := h.WorkflowMgr.Store.UpdateVars(ctx, run, dir, vars); err != nil {
+	if err := h.WorkflowMgr.Store.State.UpdateVars(ctx, run, dir, vars); err != nil {
 		testutil.FailErr(t, "UpsertScaffoldVars review evidence", err)
 	}
 	run, err = h.WorkflowMgr.Phases.TryAutoAdvance(ctx, run.ID)

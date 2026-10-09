@@ -2,6 +2,7 @@ package contract
 
 import (
 	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
+	"gopkg.in/yaml.v3"
 	"os"
 	"path/filepath"
 	"testing"
