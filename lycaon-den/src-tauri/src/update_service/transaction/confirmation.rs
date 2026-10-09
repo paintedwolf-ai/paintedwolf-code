@@ -59,7 +59,7 @@ pub async fn confirm_startup(
         }
         drop(inner);
         tauri::async_runtime::spawn_blocking(move || {
-            if previous.exists() && !installer::owned_directory(&previous) {
+            if previous.exists() && !installer::current_user_directory(&previous) {
                 return Err(Failure::VerificationFailed.into());
             }
             match fs::remove_dir_all(previous) {

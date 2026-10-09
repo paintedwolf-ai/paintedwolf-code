@@ -110,7 +110,7 @@ pub fn valid_prepared_path(target: &Path, candidate: &Candidate, path: &Path) ->
         && (prepared_path(target, candidate).is_ok_and(|p| p == path)
             || legacy_prepared_path(target, candidate).is_ok_and(|p| p == path))
 }
-pub fn owned_directory(path: &Path) -> bool {
+pub fn current_user_directory(path: &Path) -> bool {
     fs::symlink_metadata(path).is_ok_and(|metadata| {
         #[cfg(unix)]
         {
@@ -137,7 +137,7 @@ pub fn cleanup_prepared(target: &Path, keep: &[String]) -> Result<(), UpdateErro
         };
         if super::persistence::hex_digest(id)
             && !keep.iter().any(|kept| kept == id)
-            && owned_directory(&entry.path())
+            && current_user_directory(&entry.path())
         {
             fs::remove_dir_all(entry.path())
                 .map_err(|e| UpdateError::new(Failure::StateUnavailable, e))?;

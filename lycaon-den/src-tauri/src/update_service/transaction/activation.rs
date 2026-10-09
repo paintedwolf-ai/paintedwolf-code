@@ -20,7 +20,7 @@ pub(super) fn activate(t: &mut Transaction, lease: &mut Lease) -> Result<(), Upd
         |target, candidate| {
             let prepared = recorded_prepared;
             // The preparation receipt binds every file, link, and permission.
-            if installer::owned_directory(&prepared)
+            if installer::current_user_directory(&prepared)
                 && hash(&executable(&prepared)).is_ok_and(|actual| actual == expected)
                 && installer::bundle_hash(&prepared).is_ok_and(|actual| actual == expected_bundle)
                 && installer::verify_bundle(&prepared).is_ok()
@@ -31,7 +31,7 @@ pub(super) fn activate(t: &mut Transaction, lease: &mut Lease) -> Result<(), Upd
             let rebuilt_path = installer::prepared_path(target, candidate)?;
             if rebuilt_path != prepared {
                 if prepared.exists() {
-                    if !installer::owned_directory(&prepared) {
+                    if !installer::current_user_directory(&prepared) {
                         return Err(Failure::VerificationFailed.into());
                     }
                     fs::remove_dir_all(&prepared)
