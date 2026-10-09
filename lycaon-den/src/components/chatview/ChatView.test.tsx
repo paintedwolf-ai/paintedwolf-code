@@ -343,7 +343,7 @@ describe("ChatView surface", () => {
       blob_id: "a".repeat(64), filename, mime: "text/plain", kind: "text", bytes: 5,
     }));
     mountChat({ client: { uploadAttachment } });
-    // The shell owns the composer attachment sink for the visible chat.
+    // The shell registers the composer attachment sink for the visible chat.
     onTestFinished(registerComposerAttachmentSink({
       sessionId: () => SESSION,
       blockReason: () => null,

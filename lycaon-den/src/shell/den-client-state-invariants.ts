@@ -314,13 +314,10 @@ function assertCache03(): void {
     `projectsRegistry outside ${PROJECTS_REGISTRY_ALLOWLIST.join(", ")}\n${registryHits.join("\n")}`,
   ).toEqual([]);
 
-  const shell = shellSource();
-  expect(shell).toMatch(/projects=\{props\.projects\}/);
-
-  const chatView = readSourceText(join(denSrc, "components/chatview/ChatView.tsx"));
-  expect(chatView).toMatch(/props:\s*ChatViewProps/);
-  const chatViewProps = readSourceText(join(denSrc, "components/chatview/chat-view-props.ts"));
-  expect(chatViewProps).toMatch(/projects:\s*ProjectsStore/);
+  expect(shellSource()).toMatch(/projects=\{props\.projects\}/);
+  const chatView = (file: string) => readSourceText(join(denSrc, "components/chatview", file));
+  expect(chatView("ChatView.tsx")).toMatch(/props:\s*ChatViewProps/);
+  expect(chatView("chat-view-props.ts")).toMatch(/projects:\s*ProjectsStore/);
 }
 
 function assertBoot01(): void {
