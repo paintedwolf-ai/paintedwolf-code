@@ -207,6 +207,7 @@ type harnessStreamChunk struct {
 	ToolCalls []wire.ToolCall `json:"tool_calls"`
 	Done      bool            `json:"done"`
 	Progress  bool            `json:"progress"`
+	Error     string          `json:"error"`
 }
 
 func (s *Server) handleHarnessLLMRespond(w http.ResponseWriter, r *http.Request) {
@@ -221,11 +222,16 @@ func (s *Server) handleHarnessLLMRespond(w http.ResponseWriter, r *http.Request)
 	}
 	var chunks []modelcall.StreamChunk
 	for _, c := range req.StreamChunks {
+		var streamErr error
+		if c.Error != "" {
+			streamErr = errors.New(c.Error)
+		}
 		chunks = append(chunks, modelcall.StreamChunk{
 			Content:   c.Content,
 			ToolCalls: c.ToolCalls,
 			Done:      c.Done,
 			Progress:  c.Progress,
+			Err:       streamErr,
 		})
 	}
 	if err := s.manualLLM.RespondWithChunks(req.ID, req.Content, req.ToolCalls, chunks); err != nil {
