@@ -1,0 +1,129 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/mattermost/mattermost"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "10.5.0+incompatible"
+      },
+      {
+       "fixed": "10.5.13+incompatible"
+      },
+      {
+       "introduced": "10.11.0+incompatible"
+      },
+      {
+       "fixed": "10.11.5+incompatible"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/mattermost/mattermost-server"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/mattermost/mattermost-server/v5"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/mattermost/mattermost-server/v6"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/mattermost/mattermost/server/v8"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "8.0.0-20251212204551-54f2e9b4afd5"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2025-13870",
+  "GHSA-58w6-w55x-6wq8"
+ ],
+ "database_specific": {
+  "review_status": "REVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2025-4178"
+ },
+ "details": "Mattermost fails to validate user permissions in Boards in github.com/mattermost/mattermost",
+ "id": "GO-2025-4178",
+ "modified": "2025-12-16T16:21:59Z",
+ "published": "2025-12-08T21:31:36Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-58w6-w55x-6wq8"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/mattermost/mattermost/commit/ba86dfc5876b354b9d3c20ff45c08ca6f8426149"
+  },
+  {
+   "type": "WEB",
+   "url": "https://mattermost.com/security-updates"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Mattermost fails to validate user permissions in Boards in github.com/mattermost/mattermost"
+}

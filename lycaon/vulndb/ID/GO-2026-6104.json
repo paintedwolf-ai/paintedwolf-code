@@ -1,0 +1,82 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/cloudreve/Cloudreve"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/cloudreve/Cloudreve/v3"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/cloudreve/Cloudreve/v4"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "4.0.0-20260626022433-f3347130ac48"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-62323",
+  "GHSA-c3jm-gv5r-9wcp"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6104"
+ },
+ "details": "Cloudreve WOPI view sessions can write files and WOPI access token secret is ignored in github.com/cloudreve/Cloudreve",
+ "id": "GO-2026-6104",
+ "modified": "2026-08-18T14:32:29Z",
+ "published": "2026-08-18T14:32:29Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/cloudreve/cloudreve/security/advisories/GHSA-c3jm-gv5r-9wcp"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/cloudreve/cloudreve/commit/f3347130ac48f2ff996af9ef66c97be2dda9cba9"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Cloudreve WOPI view sessions can write files and WOPI access token secret is ignored in github.com/cloudreve/Cloudreve"
+}

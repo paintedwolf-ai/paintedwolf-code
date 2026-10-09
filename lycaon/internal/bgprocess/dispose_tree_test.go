@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	osexec "os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -56,4 +57,38 @@ func waitForJobPID(t *testing.T, path string) int {
 	})
 	t.Cleanup(func() { _ = syscall.Kill(pid, syscall.SIGKILL) })
 	return pid
+}
+
+func TestDetachedOutputHolder(t *testing.T) {
+	switch os.Getenv("PW_BG_PIPE_HELPER") {
+	case "holder":
+		time.Sleep(time.Minute)
+		os.Exit(0)
+	case "leader":
+		child := osexec.Command(os.Args[0], "-test.run=^TestDetachedOutputHolder$")
+		child.Env = append(os.Environ(), "PW_BG_PIPE_HELPER=holder")
+		child.Stdout, child.Stderr = os.Stdout, os.Stderr
+		child.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+		testutil.FailErr(t, "start detached output holder", child.Start())
+		testutil.FailErr(t, "record detached output holder", os.WriteFile(os.Getenv("PW_BG_PIPE_PID"), []byte(strconv.Itoa(child.Process.Pid)), 0600))
+		os.Exit(0)
+	}
+}
+
+func TestDisposeSessionWaitsForBoundedDetachedOutputDrain(t *testing.T) {
+	binary, err := os.Executable()
+	testutil.FailErr(t, "locate test binary", err)
+	dir := t.TempDir()
+	pidFile := filepath.Join(dir, "holder.pid")
+	reg := newTestRegistry(t, bgprocess.Config{MaxBackground: 4}, bgprocess.Hooks{})
+	_, err = startBackground(context.Background(), reg, "sess-1", "proj-1", hostcmd.Request{
+		Launch: exec.HostLaunch("detached output regression"), ProjectDir: dir,
+		IOParams: hostcmd.IOParams{InlineEnv: map[string]string{"PW_BG_PIPE_HELPER": "leader", "PW_BG_PIPE_PID": pidFile}},
+		Stages:   []exec.Stage{{Name: binary, Args: []string{"-test.run=^TestDetachedOutputHolder$"}}},
+	}, hostcmd.NewRunner())
+	testutil.FailErr(t, "start background with detached output holder", err)
+	_ = waitForJobPID(t, pidFile)
+	ctx, cancel := context.WithTimeout(context.Background(), exec.TerminateGrace+exec.PipelineWaitDelay+5*time.Second)
+	defer cancel()
+	testutil.FailErr(t, "dispose detached output drain", reg.DisposeSession(ctx, "sess-1"))
 }

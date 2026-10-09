@@ -1,0 +1,64 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "gitea.dev"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.27.0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-58432",
+  "GHSA-q9pg-jj6x-j9p6"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6070"
+ },
+ "details": "Gitea: draft release attachment disclosure via missing web authorization in gitea.dev",
+ "id": "GO-2026-6070",
+ "modified": "2026-07-27T15:32:45Z",
+ "published": "2026-07-27T15:32:45Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/go-gitea/gitea/security/advisories/GHSA-q9pg-jj6x-j9p6"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/go-gitea/gitea/commit/ab10e37acf7fabf7829a485cc3e13d118638a856"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/go-gitea/gitea/commit/f7fd51022495737cf960b8c4053a27d69148f664"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/go-gitea/gitea/pull/38318"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/go-gitea/gitea/pull/38325"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/go-gitea/gitea/releases/tag/v1.27.0"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Gitea: draft release attachment disclosure via missing web authorization in gitea.dev"
+}

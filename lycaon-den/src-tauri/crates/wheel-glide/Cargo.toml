@@ -22,3 +22,8 @@ objc2-web-kit.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true
+
+# AppKit event conversion must run on the process main thread.
+[[test]]
+name = "native_events"
+harness = false

@@ -1,0 +1,76 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/mattermost/mattermost-server"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "3.6.7-rc1+incompatible"
+      },
+      {
+       "introduced": "3.7.0+incompatible"
+      },
+      {
+       "fixed": "3.7.5+incompatible"
+      },
+      {
+       "introduced": "3.8.0+incompatible"
+      },
+      {
+       "fixed": "3.8.2+incompatible"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2017-18911",
+  "GHSA-m462-mqw4-2c8m"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-4464"
+ },
+ "details": "Mattermost Server has X.509 Improper Certificate Validation in github.com/mattermost/mattermost-server",
+ "id": "GO-2026-4464",
+ "modified": "2026-02-17T18:09:06Z",
+ "published": "2026-02-17T18:09:06Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-m462-mqw4-2c8m"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2017-18911"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/mattermost/mattermost/commit/222bce0c5c1abb2f58c3a6de1fe8c5d3accffb21"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/mattermost/mattermost/commit/691c18157025d4808b5b11de1d6de01050e54fa6"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/mattermost/mattermost/commit/e9bb8cdfb4915067349a4840ab15ff941c4eb070"
+  },
+  {
+   "type": "WEB",
+   "url": "https://mattermost.com/security-updates"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Mattermost Server has X.509 Improper Certificate Validation in github.com/mattermost/mattermost-server"
+}
