@@ -32,6 +32,10 @@ type hostedJob struct {
 }
 
 type hostedWorkflow struct {
+	Concurrency struct {
+		Group  string
+		Cancel yaml.Node `yaml:"cancel-in-progress"`
+	}
 	On   map[string]yaml.Node
 	Jobs map[string]hostedJob
 }
@@ -328,5 +332,13 @@ func TestHostedProfilesAndSetupAreReachable(t *testing.T) {
 		if !setup {
 			t.Errorf("%s/%s has no shared verification setup", workflow, job)
 		}
+	}
+}
+
+func TestRecoveryConcurrencyPreservesDistinctCompletedRuns(t *testing.T) {
+	t.Parallel()
+	workflow := hostedWorkflowFile(t, "verification-recovery")
+	if workflow.Concurrency.Group != "verification-recovery-${{ github.event.workflow_run.id }}" || workflow.Concurrency.Cancel.Value != "false" {
+		t.Fatal("recovery must retain each completed run independently")
 	}
 }

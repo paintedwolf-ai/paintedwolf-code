@@ -9,7 +9,7 @@ permissions:
   issues: write
   pull-requests: write
 concurrency:
-  group: verification-recovery
+  group: verification-recovery-${{ github.event.workflow_run.id }}
   cancel-in-progress: false
 jobs:
   recover:
