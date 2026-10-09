@@ -24,12 +24,12 @@ type credentialFiles struct {
 
 func (b sessionWiring) newCredentialFiles() *credentialFiles {
 	return &credentialFiles{
-		harvest: b.secretHarvest, fp: b.secretFingerprinter, queries: db.New(b.storage.Database),
+		harvest: b.security.Harvest, fp: b.security.Fingerprinter, queries: db.New(b.storage.Database),
 		managed: func(projectID string) []secretmatch.Remembered {
-			if b.secretCaps == nil {
+			if b.security.Capabilities == nil {
 				return nil
 			}
-			return b.secretCaps.DurableScreeningValues(projectID)
+			return b.security.Capabilities.DurableScreeningValues(projectID)
 		},
 		exposure: b.storage.Sessions.MarkSecretExposureOnRead,
 	}

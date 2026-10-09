@@ -5,10 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/app/configuration"
+	"github.com/lycaon/lycaon/internal/app/eventing"
 	"github.com/lycaon/lycaon/internal/app/persistence"
 	"github.com/lycaon/lycaon/internal/app/providers"
+	"github.com/lycaon/lycaon/internal/app/security"
 
-	"github.com/lycaon/lycaon/internal/agentpresence"
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/authzcontext"
 	"github.com/lycaon/lycaon/internal/bgprocess"
@@ -25,8 +26,6 @@ import (
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/delegation"
-	"github.com/lycaon/lycaon/internal/eventoutbox"
-	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/findings"
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/grantedpath"
@@ -41,9 +40,7 @@ import (
 	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/orchestration"
-	"github.com/lycaon/lycaon/internal/presence"
 	"github.com/lycaon/lycaon/internal/progress"
-	"github.com/lycaon/lycaon/internal/projectignore"
 	"github.com/lycaon/lycaon/internal/projectliveness"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/repoinfo"
@@ -53,10 +50,6 @@ import (
 	scancadence "github.com/lycaon/lycaon/internal/scan/cadence"
 	scancfg "github.com/lycaon/lycaon/internal/scan/configuration"
 	scanexecution "github.com/lycaon/lycaon/internal/scan/execution"
-	"github.com/lycaon/lycaon/internal/secretcap"
-	"github.com/lycaon/lycaon/internal/secretharvest"
-	"github.com/lycaon/lycaon/internal/secretmatch"
-	"github.com/lycaon/lycaon/internal/secretspan"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
 	"github.com/lycaon/lycaon/internal/sourcescope"
@@ -94,19 +87,13 @@ type serveBuilder struct {
 	// refusalWatchStarted records that this build reads kernel refusal reports.
 	refusalWatchStarted bool
 	// storeClaim's release transfers to runtimeResources after construction.
-	sourceScopes      *sourcescope.Provider
-	sourceFeedUnbinds []func()
-	hub               events.ReplayHub
-	presence          *events.Presence
-	eventPub          *events.Publisher
-	agentPresence     *agentpresence.Tracker
-	eventOutbox       *eventoutbox.Outbox
-	bgRegistry        *bgprocess.Registry
-	heldCalls         *heldcall.Registry
-	browserPool       *browser.Pool
-	browserRaster     *browser.Rasterizer
-	pageRegistry      *pagesession.Registry
-	previewCtrl       *preview.Controller
+	sourceScopes  *sourcescope.Provider
+	bgRegistry    *bgprocess.Registry
+	heldCalls     *heldcall.Registry
+	browserPool   *browser.Pool
+	browserRaster *browser.Rasterizer
+	pageRegistry  *pagesession.Registry
+	previewCtrl   *preview.Controller
 
 	webWarmer   *webresearch.Warmer
 	warmRunner  *webresearch.WarmRunner
@@ -117,19 +104,12 @@ type serveBuilder struct {
 	turnLoads *turnload.Ledger
 	// decider is the local decision model; nil resolves to an absent engine.
 	// rerank carries it with the catalog policies into every ranking site.
-	decider             decide.Decider
-	rerank              decide.Reranker
-	toolReg             *tools.ExecutorRegistry
-	detections          detectionRuntime
-	secretMatcher       *secretmatch.Matcher
-	secretIgnores       *projectignore.SecretService
-	secretHarvest       *secretharvest.Runtime
-	secretCaps          *secretcap.Service
-	secretFingerprinter *secretmatch.Fingerprinter
-	// presenceBroker verifies that a person is at this device; vaultUnlocks
-	// holds the chats their presence unlocked.
-	presenceBroker   *presence.Broker
-	vaultUnlocks     *presence.Unlocks
+	decider          decide.Decider
+	rerank           decide.Reranker
+	toolReg          *tools.ExecutorRegistry
+	detections       detectionRuntime
+	security         *security.Runtime
+	events           *eventing.Runtime
 	rejectFmt        *guidance.StaticRejectFormatter
 	hintCfg          *guidance.HintConfig
 	agentRegistry    *orchestration.MemoryAgentRegistry
@@ -201,7 +181,6 @@ type serveBuilder struct {
 	authzCapturer        *authzcontext.Capturer
 	socketCapabilityRT   *approvalstate.SocketCapabilityRuntime
 	gateRepeatRT         *approvalstate.GateRepeatLedger
-	secretSpans          *secretspan.Screener
 	webDiscoverer        webresearch.DirectDiscovererFactory
 	harnessWorkers       *harnessfixture.Workers
 	directIPCapabilityRT *approvalstate.DirectIPCapabilityRuntime
@@ -231,7 +210,11 @@ func Build(ctx context.Context, cfg configuration.Config) (*ServeApp, error) {
 			if err != nil {
 				return err
 			}
-			return b.storage.Open(ctx, path, cfg.Startup, b.startup.logger, resources)
+			if err := b.storage.Open(ctx, path, cfg.Startup, b.startup.logger, resources); err != nil {
+				return err
+			}
+			b.security = security.New(ctx, b.storage.Database, b.storage.Sessions, b.storage.Projects, nil)
+			return nil
 		}},
 		{"config", startupprotocol.PhaseConfiguration, b.loadConfig},
 		{"egress-broker", startupprotocol.PhaseConfiguration, b.wireEgressBroker},
@@ -243,7 +226,7 @@ func Build(ctx context.Context, cfg configuration.Config) (*ServeApp, error) {
 			return b.providers.Build(ctx, providers.Options{Client: cfg.TestLLMClient, Pricer: cfg.TestCostPricer, Startup: cfg.Startup}, b.storage.Database, b.storage.Directory, b.settings.Service, resources, b.startup.recovery)
 		}},
 		{"tool-runtime", startupprotocol.PhaseTools, b.wireToolRuntime},
-		{"presence", startupprotocol.PhaseTools, b.wirePresence},
+		{"presence", startupprotocol.PhaseTools, func() error { return b.security.BuildPresence(b.toolRuntime.Executor.Secrets) }},
 		{"agents", startupprotocol.PhaseAgents, b.wireAgents},
 		{"session-manager", startupprotocol.PhaseSessions, sessionWiring{b}.wireSessionManager},
 		{"oar-block-plane", startupprotocol.PhasePolicy, toolWiring{b}.wireOARBlockPlane},

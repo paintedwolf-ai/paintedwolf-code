@@ -1,4 +1,4 @@
-package app
+package security
 
 import (
 	"context"
@@ -8,11 +8,11 @@ import (
 
 // Background scans carry root identity. A root shared by multiple projects
 // cannot borrow either project's classifier acceptance.
-func (b toolWiring) scanSecretIgnores(ctx context.Context, root string) map[string]projectignore.SecretEntry {
-	if b.storage.Projects == nil || b.secretIgnores == nil || b.secretFingerprinter == nil {
+func (b *Runtime) ScanIgnores(ctx context.Context, root string) map[string]projectignore.SecretEntry {
+	if b.projects == nil || b.Ignores == nil || b.Fingerprinter == nil {
 		return nil
 	}
-	projects, err := b.storage.Projects.List(ctx)
+	projects, err := b.projects.List(ctx)
 	if err != nil {
 		return nil
 	}
@@ -33,8 +33,8 @@ func (b toolWiring) scanSecretIgnores(ctx context.Context, root string) map[stri
 		return nil
 	}
 	out := map[string]projectignore.SecretEntry{}
-	for _, entry := range b.secretIgnores.ActiveValues(ctx, projectID) {
-		out[string(b.secretFingerprinter.ScannerFingerprint(entry.Value))] = entry
+	for _, entry := range b.Ignores.ActiveValues(ctx, projectID) {
+		out[string(b.Fingerprinter.ScannerFingerprint(entry.Value))] = entry
 	}
 	return out
 }

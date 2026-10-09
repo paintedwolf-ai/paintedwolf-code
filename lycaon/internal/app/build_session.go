@@ -52,6 +52,7 @@ func (b sessionWiring) wireSessionManager() error {
 		b.providers.Service.Preparation = preparation
 	}
 	b.mgr = session.NewManagerWithLLMService(b.storage.Sessions, b.providers.Client, b.providers.Service, b.toolReg, b.settings.SessionLimits, b.providers.Costs)
+	b.security.BindRemember(b.mgr.SetRememberSecrets)
 	b.mgr.SetMintedCredentialSource(b.detections.mintedCredentialSource)
 	invocations := invocation.NewSQLRecorder(b.storage.Database)
 	b.invocations = invocations
@@ -263,10 +264,10 @@ func (b sessionWiring) wireCheckpointRuntime() error {
 		return fmt.Errorf("authz: capturer required before checkpoint manager wiring")
 	}
 	checkpointStore := hitl.NewSQLStore(b.storage.Database)
-	checkpointStore.SetEventOutbox(b.eventOutbox)
-	checkpointMgr := hitl.NewManager(checkpointStore, b.eventPub, b.authzCapturer.Recorder)
+	checkpointStore.SetEventOutbox(b.events.Outbox)
+	checkpointMgr := hitl.NewManager(checkpointStore, b.events.Publisher, b.authzCapturer.Recorder)
 	checkpointMgr.SetSessionAdmission(b.mgr.WithSessionTreeAdmission)
-	checkpointMgr.SetVaultUnlock(b.presenceBroker, b.vaultUnlocks, unlockRecorder{})
+	checkpointMgr.SetVaultUnlock(b.security.Presence, b.security.Unlocks, unlockRecorder{})
 	b.toolRuntime.Executor.Secrets.SetPresenceAvailable(checkpointMgr.PresenceAvailable)
 	checkpointMgr.SetCheckpointWaitObserver(b.mgr.BeginCheckpointWait)
 	var authzRec authzledger.Recorder = b.authzCapturer.Recorder
@@ -280,7 +281,7 @@ func (b sessionWiring) wireCheckpointRuntime() error {
 	if err := b.wireGrantedAccess(); err != nil {
 		return err
 	}
-	if b.secretHarvest != nil {
+	if b.security.Harvest != nil {
 		b.mgr.SetCredentialFiles(b.newCredentialFiles())
 	}
 	b.wireCredentialObservations()
@@ -500,7 +501,7 @@ func (b sessionWiring) wireGrantedAccess() error {
 	}
 	// The secret matcher loads lazily.
 	return b.mgr.RegisterSessionCleanup("harvested-secrets", 53, func(_ context.Context, sessionID string) error {
-		b.secretHarvest.Forget(sessionID)
+		b.security.Harvest.Forget(sessionID)
 		return nil
 	})
 }

@@ -2,41 +2,19 @@ package app
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/lycaon/lycaon/internal/secretcap"
-	"github.com/lycaon/lycaon/internal/secretmatch"
-	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/workflow"
 )
 
 func (b sessionWiring) wireSecretCapabilities() error {
-	if b.secretCaps != nil {
+	if b.security.Capabilities != nil {
 		return nil
 	}
-	remember := func(rootSessionID string, values []secretmatch.Remembered) {
-		if b.secretHarvest != nil {
-			b.secretHarvest.Remember(rootSessionID, values...)
-		}
-	}
-	service, err := secretcap.New(b.storage.Database, remember)
-	if err != nil {
-		return fmt.Errorf("secret capability store: %w", err)
-	}
-	service.SetPresence(b.presenceBroker)
-	service.SetUnlocks(b.vaultUnlocks)
-	service.SetFingerprinter(b.secretFingerprinter)
-	// Unlocks live in memory, so none survived the last engine.
-	if err := service.CloseUnlocksLeftOpen(b.startup.ctx); err != nil {
+	if err := b.security.BuildCapabilities(b.toolRuntime.Registry, b.toolRuntime.Executor.Secrets); err != nil {
 		return err
 	}
-	if err := service.Reconcile(b.startup.ctx); err != nil {
-		return fmt.Errorf("reconcile secret capabilities: %w", err)
-	}
-	if err := native.RegisterSecretCapabilityTools(b.toolRuntime.Registry, service); err != nil {
-		return fmt.Errorf("secret capability tools: %w", err)
-	}
-	b.toolRuntime.Executor.Secrets.SetSecretResolver(service)
+	service := b.security.Capabilities
 	if b.workflowMgr != nil {
 		b.workflowMgr.SetSecretCapture(func(ctx context.Context, req workflow.SecretCaptureRequest) (workflow.SecretCaptureResult, error) {
 			put, err := service.Put(ctx, secretcap.PutRequest{
@@ -54,6 +32,5 @@ func (b sessionWiring) wireSecretCapabilities() error {
 			return result, err
 		})
 	}
-	b.secretCaps = service
 	return nil
 }

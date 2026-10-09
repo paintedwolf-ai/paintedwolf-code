@@ -3,32 +3,28 @@ package app
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/app/eventing"
 	"log/slog"
 	"os"
-	"strings"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/agentpresence"
+	"github.com/lycaon/lycaon/internal/api/capabilityadmin"
 	"github.com/lycaon/lycaon/internal/bootrecovery"
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/decide/bialy"
-	"github.com/lycaon/lycaon/internal/eventoutbox"
-	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/hostidentity"
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/orchestration"
+	"github.com/lycaon/lycaon/internal/presence"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/skills"
-	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tsparse"
 	"github.com/lycaon/lycaon/internal/worker"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func (b *serveBuilder) wireToolRuntime() error {
@@ -158,90 +154,18 @@ func (b *serveBuilder) warmDecider(ctx context.Context) error {
 }
 
 func (b *serveBuilder) wireEvents() error {
-	var err error
-	b.hub = events.WrapDebugHub(events.NewMemoryHub())
-	b.eventOutbox = eventoutbox.New(b.storage.Database, b.hub)
-	// An absent outbox would silently drop mutation events.
-	if b.eventOutbox == nil {
-		return fmt.Errorf("event outbox: nil after construction; every store wired below would drop its events")
-	}
-	b.storage.Sessions.SetEventOutbox(b.eventOutbox)
-	b.storage.Projects.SetEventOutbox(b.eventOutbox)
-	b.presence = events.NewPresence(b.hub, events.DefaultUserActionWindow)
 	b.settings.BuildHostPower(b.startup.resources)
-	eventLookup := project.ScopeLookup{Registry: b.storage.Projects}
-	b.eventPub = &events.Publisher{
-		Hub:               b.hub,
-		Lookup:            eventLookup,
-		Untrusted:         b.storage.Sessions,
-		UserTurns:         b.storage.Sessions,
-		ActivityObserver:  b.settings.Power,
-		TurnClockObserver: b.settings.Power,
-		SessionProject: func(ctx context.Context, sessionID string) (string, bool) {
-			if b.storage.Sessions == nil {
-				return "", false
-			}
-			sess, err := b.storage.Sessions.Get(ctx, sessionID)
-			if err != nil || sess == nil || strings.TrimSpace(sess.ProjectID) == "" {
-				return "", false
-			}
-			return sess.ProjectID, true
-		},
-		SessionLister: events.FuncSessionLister(func(ctx context.Context, projectID string) ([]string, error) {
-			if b.mgr == nil {
-				return nil, nil
-			}
-			page, err := b.mgr.ListProjectSessions(ctx, store.SummaryQuery{ProjectID: projectID, Limit: boardRepublishSessionLimit})
-			if err != nil {
-				return nil, err
-			}
-			ids := make([]string, 0, len(page.Sessions))
-			for _, summary := range page.Sessions {
-				ids = append(ids, summary.ID)
-			}
-			return ids, nil
-		}),
-		SessionRoots: events.FuncSessionRoots(func(ctx context.Context, sessionID string) (string, bool) {
-			if b.storage.Sessions == nil {
-				return "", false
-			}
-			sess, err := b.storage.Sessions.Get(ctx, sessionID)
-			if err != nil || sess == nil {
-				return "", false
-			}
-			path := strings.TrimSpace(sess.WorkspacePath)
-			if path == "" {
-				return "", false
-			}
-			return path, true
-		}),
+	eventRuntime, err := eventing.Build(b.startup.ctx, b.storage.Database, b.storage.Sessions, b.storage.Projects, b.settings.Power, b.mgr, b.mgr, b.mgr, b.startup.resources)
+	if err != nil {
+		return err
 	}
-	// Chats follow their turns from session events; documents arrive with the server.
-	b.agentPresence = agentpresence.New(&presenceChats{store: b.storage.Sessions, workerJobs: func(ctx context.Context, childSessionID string) (*api.WorkerTask, bool) {
-		if b.workerQueue == nil {
-			return nil, false
-		}
-		return b.workerQueue.GetLatestByChildSessionID(ctx, childSessionID)
-	}}, b.eventPub)
-	b.eventPub.SessionObserver = b.agentPresence
-	b.mgr.SetAgentPresence(b.agentPresence)
-	// One revision counter across the direct and outbox session-event paths.
-	b.storage.Sessions.SetSessionRevisions(b.eventPub)
-	// Both paths read prompt_pending from the manager.
-	b.storage.Sessions.SetPromptPending(b.mgr)
-	b.eventPub.SessionState = b.mgr
-	b.eventOutbox.OnDelivered = func(ctx context.Context, delivered eventoutbox.DeliveredEvent) {
-		if err := b.settings.Power.ObserveDelivered(delivered.Topic, delivered.Data); err != nil {
-			slog.WarnContext(ctx, "observe host power activity", "topic", delivered.Topic, "error", err)
-		}
-		if err := b.agentPresence.ObserveDelivered(ctx, delivered.Topic, delivered.Data); err != nil {
-			slog.WarnContext(ctx, "observe agent presence", "topic", delivered.Topic, "error", err)
-		}
-		if events.AttentionLifecycleTopic(delivered.Topic) {
-			b.eventPub.PublishAttention(ctx)
-		}
-	}
-	b.eventOutbox.Start(b.startup.ctx)
+	b.events = eventRuntime
+	b.mgr.OARPipeline().SetEventPublisher(oarHostEventPublisher{publisher: eventRuntime.Publisher})
+	b.mgr.SetAgentPresence(eventRuntime.Agents)
+	publisher, vaultContext := eventRuntime.Publisher, b.startup.ctx
+	b.security.BindVaultPublisher(func(chat string, unlocks *presence.Unlocks) {
+		publisher.PublishChatVault(vaultContext, capabilityadmin.ChatVaultState(chat, unlocks))
+	})
 	if err := (delegationWiring{b}).registerRecovery(bootrecovery.Entry{
 		Name: "rewind-operations", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseBuild,
 		After: []string{"tool-invocations", "source-mutations", "editor-documents"},
@@ -249,9 +173,6 @@ func (b *serveBuilder) wireEvents() error {
 	}); err != nil {
 		return err
 	}
-	b.sourceFeedUnbinds = append(b.sourceFeedUnbinds,
-		sourcefeed.Bind(outboxSourceFeed{outbox: b.eventOutbox, lookup: eventLookup}))
-
 	if err := (sessionWiring{b}).wireCheckpointRuntime(); err != nil {
 		return err
 	}
@@ -289,5 +210,6 @@ func (b *serveBuilder) loadConfig() error {
 	if err := b.settings.Load(b.startup.cfg); err != nil {
 		return err
 	}
+	b.security.BindTrust(b.settings.Service.TrustSurfaces)
 	return b.catalog.Load(b.startup.ctx, b.startup.logger)
 }

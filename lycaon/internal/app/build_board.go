@@ -55,8 +55,8 @@ func (b boardWiring) wireBoardAndResearch() error {
 	b.mgr.SetRepoProvider(b.repoProvider)
 	// Background brief completion publishes its own board update.
 	b.repoProvider.SetOnSettled(func(projectDir string) {
-		if b.eventPub != nil {
-			b.eventPub.PublishBoardForRoot(context.Background(), projectDir)
+		if b.events.Publisher != nil {
+			b.events.Publisher.PublishBoardForRoot(context.Background(), projectDir)
 		}
 	})
 	scopeCfg, scopeErr := toolscope.Load()
@@ -138,7 +138,7 @@ func (b boardWiring) wireBoardAndResearch() error {
 		// Presence is evaluated for each warm cycle.
 		b.warmRunner = &webresearch.WarmRunner{
 			W: b.webWarmer, Roots: b.projectRootPaths, ProjectIDForRoot: b.projectIDForRoot, Repo: b.repoProvider,
-			Live: func() bool { return b.presence.Live() },
+			Live: func() bool { return b.events.Presence.Live() },
 		}
 	}
 	deps := webresearch.ToolDeps{
@@ -156,11 +156,11 @@ func (b boardWiring) wireBoardAndResearch() error {
 			b.mgr.WarmIndexForFetch(ctx, sessionID, toolCallID, pageURL, title, projectDir)
 		},
 	}
-	if matcher, err := sessionWiring(b).loadSecretMatcher(); err != nil {
+	if matcher, err := b.security.LoadMatcher(b.startup.cfg.TestSecretMatcher); err != nil {
 		return err
 	} else {
 		deps.SecretMatcher = matcher
-		deps.SecretAsk = sessionWiring(b).secretAskFunc()
+		deps.SecretAsk = b.security.Ask(b.toolRuntime.Executor.Secrets, b.toolRuntime.Authority.ApprovalsDisabled)
 		deps.VisualStore = b.visualStore
 		deps.VisualScreen = visualscreen.NewGate(visualscreen.NewScanner(nil).WithRenderedReferences(browser.RenderLoadsReference), matcher, deps.SecretAsk)
 		if err := sessionWiring(b).wireSecretCapabilities(); err != nil {
@@ -172,7 +172,7 @@ func (b boardWiring) wireBoardAndResearch() error {
 	}
 	if err := httpaction.Register(b.toolRuntime.Registry, httpaction.Deps{
 		Boundary: b.toolRuntime.Boundary, SecretMatcher: deps.SecretMatcher, SecretAsk: deps.SecretAsk,
-		Secrets: b.secretCaps,
+		Secrets: b.security.Capabilities,
 	}); err != nil {
 		return fmt.Errorf("http request tool: %w", err)
 	}
@@ -268,12 +268,12 @@ func (b boardWiring) wireGroundingCoordinators() error {
 	groundingState := grounding.NewStateStore()
 	b.delegationMgr.Grounding = delegation.NewGroundingCoordinator(b.delegationStore, b.workerQueue, groundingGate, groundingCfg, groundingState, b.mgr)
 	b.delegationMgr.Grounding.InspectorCloseout = b.delegationMgr.InspectorCloseout
-	b.delegationMgr.Grounding.Events = b.eventPub
+	b.delegationMgr.Grounding.Events = b.events.Publisher
 	b.delegationMgr.Grounding.Pipeline = b.mgr.OARPipeline()
 	ambientGate := delegation.NewSimpleAmbientGroundingGate(groundingCfg)
 	ambientState := grounding.NewStateStore()
 	ambientCoord := delegation.NewAmbientGroundingCoordinator(b.delegationStore, b.workerQueue, ambientGate, groundingCfg, ambientState, b.mgr)
-	ambientCoord.Events = b.eventPub
+	ambientCoord.Events = b.events.Publisher
 	ambientCoord.Pipeline = b.mgr.OARPipeline()
 	b.mgr.SetGroundingHook(&delegation.ChainedGroundingCoordinator{
 		Delegation: b.delegationMgr.Grounding,
@@ -328,7 +328,7 @@ func (b boardWiring) wireFindingAndProgressTools() error {
 }
 
 func (b boardWiring) wireVisualAndRenderTools() error {
-	artifactRecords := visual.NewRecords(b.storage.Database, b.eventOutbox, visual.ArtifactProjection{
+	artifactRecords := visual.NewRecords(b.storage.Database, b.events.Outbox, visual.ArtifactProjection{
 		Write: func(ctx context.Context, tx *sql.Tx, projectID string, rec visual.ArtifactRecord) error {
 			return search.ProjectArtifactTx(ctx, tx, projectID, search.ProjectArtifactInput{
 				ID:             rec.ID,
@@ -403,8 +403,8 @@ func (b boardWiring) wireVisualAndRenderTools() error {
 	}); err != nil {
 		return err
 	}
-	matcher, _ := sessionWiring(b).loadSecretMatcher()
-	screen := visualscreen.NewGate(visualscreen.NewScanner(nil).WithRenderedReferences(browser.RenderLoadsReference), matcher, sessionWiring(b).secretAskFunc())
+	matcher, _ := b.security.LoadMatcher(b.startup.cfg.TestSecretMatcher)
+	screen := visualscreen.NewGate(visualscreen.NewScanner(nil).WithRenderedReferences(browser.RenderLoadsReference), matcher, b.security.Ask(b.toolRuntime.Executor.Secrets, b.toolRuntime.Authority.ApprovalsDisabled))
 	if err := native.RegisterViewImageTool(b.toolRuntime.Registry, page.ViewImageDeps{
 		Boundary:      b.toolRuntime.Boundary,
 		Raster:        b.browserRaster,

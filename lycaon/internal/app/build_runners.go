@@ -81,11 +81,11 @@ func (b delegationWiring) registerBackgroundRunners(app *ServeApp) {
 			return db.RunIntegrityAudit(ctx, b.storage.Database)
 		}}
 	}
-	if b.secretCaps != nil {
-		byName["managed-secret-maintenance"] = registration{run: b.secretCaps.RunMaintenance}
+	if b.security.Capabilities != nil {
+		byName["managed-secret-maintenance"] = registration{run: b.security.Capabilities.RunMaintenance}
 	}
-	if b.vaultUnlocks != nil {
-		byName["vault-unlock-sweep"] = registration{run: b.vaultUnlocks.RunSweeper}
+	if b.security.Unlocks != nil {
+		byName["vault-unlock-sweep"] = registration{run: b.security.Unlocks.RunSweeper}
 	}
 	if b.workerPoller != nil {
 		byName["worker-poller"] = registration{run: b.workerPoller.Run}

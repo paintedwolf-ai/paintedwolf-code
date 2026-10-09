@@ -40,7 +40,7 @@ func (b toolWiring) wireOARBlockPlane() error {
 	if err := oar.InstallCapabilityBundled(schemaDir); err != nil {
 		return fmt.Errorf("oar: %w", err)
 	}
-	matcher, err := sessionWiring(b).loadSecretMatcher()
+	matcher, err := b.security.LoadMatcher(b.startup.cfg.TestSecretMatcher)
 	if err != nil {
 		return fmt.Errorf("oar secretmatch detector: %w", err)
 	}
@@ -55,7 +55,6 @@ func (b toolWiring) wireOARBlockPlane() error {
 		return err
 	}
 	pipeline := oar.NewGuardPipeline(rs, loader, oar.NewCounterStore())
-	pipeline.SetEventPublisher(oarHostEventPublisher{publisher: b.eventPub})
 	pipeline.SetDetectors(detectors)
 	pipeline.SetFactProvider("secret_matches", func(gc *oar.GuardContext) error {
 		findings, err := (oar.SecretMatchDetector{Matcher: matcher}).Inspect(gc)

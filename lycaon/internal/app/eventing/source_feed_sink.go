@@ -1,4 +1,4 @@
-package app
+package eventing
 
 import (
 	"context"

@@ -56,20 +56,20 @@ type serverWiring struct{ *serveBuilder }
 // wireRuntimeServices builds background processes, page sessions, and live
 // previews, registers their tools, and installs process-wide observers.
 func (b serverWiring) wireRuntimeServices() error {
-	b.eventPub.Board = b.boardSnap
+	b.events.Publisher.Board = b.boardSnap
 	b.bgRegistry = bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{
 		Publish: func(ctx context.Context, projectID, sessionID string, ev wire.BackgroundProcessEvent) {
-			b.eventPub.PublishProcess(ctx, projectID, sessionID, ev)
+			b.events.Publisher.PublishProcess(ctx, projectID, sessionID, ev)
 		},
 		Complete: b.mgr.HandleCommandCompletion,
 		Refused:  b.mgr.HandleCommandRefusal,
 	})
 	b.heldCalls = heldcall.New(func(ctx context.Context, projectID, sessionID string, ev wire.BackgroundProcessEvent) {
-		b.eventPub.PublishProcess(ctx, projectID, sessionID, ev)
+		b.events.Publisher.PublishProcess(ctx, projectID, sessionID, ev)
 	}, b.mgr.HandleHeldCallSettled)
 	b.pageRegistry = pagesession.NewRegistry(pagesession.DefaultConfig())
 	b.previewCtrl = preview.NewController(preview.DefaultConfig(), func(ctx context.Context, projectID, sessionID string, ev wire.PreviewEvent) {
-		b.eventPub.PublishPreview(ctx, projectID, sessionID, ev)
+		b.events.Publisher.PublishPreview(ctx, projectID, sessionID, ev)
 	})
 	if err := b.mgr.RegisterSessionCleanup("preview-streams", 40, b.previewCtrl.DisposeSession); err != nil {
 		return fmt.Errorf("register preview cleanup: %w", err)
@@ -102,14 +102,14 @@ func (b serverWiring) wireRuntimeServices() error {
 }
 
 func (b serverWiring) wireRuntimeObservers() error {
-	b.mgr.SetEventPublisher(b.eventPub)
-	b.workerQueue.SetEventPublisher(b.eventPub)
-	if b.providers.Service != nil && b.eventPub != nil {
-		b.providers.Service.Lifecycle = utilityLanePublisher{pub: b.eventPub}
+	b.mgr.SetEventPublisher(b.events.Publisher)
+	b.workerQueue.SetEventPublisher(b.events.Publisher)
+	if b.providers.Service != nil && b.events.Publisher != nil {
+		b.providers.Service.Lifecycle = utilityLanePublisher{pub: b.events.Publisher}
 	}
-	if b.providers.Service != nil && b.providers.Service.Utility != nil && b.eventPub != nil {
+	if b.providers.Service != nil && b.providers.Service.Utility != nil && b.events.Publisher != nil {
 		b.providers.Service.Utility.SetOnChange(func(llm.SlotSnapshot) {
-			b.eventPub.PublishPreflight(context.Background(), preflight.ProbeLiteSlot)
+			b.events.Publisher.PublishPreflight(context.Background(), preflight.ProbeLiteSlot)
 		})
 	}
 	findings.RegisterAppendObserver(func(ctx context.Context, evt findings.AppendEvent) {
@@ -117,7 +117,7 @@ func (b serverWiring) wireRuntimeObservers() error {
 			return
 		}
 		rev := findings.BumpRevision(evt.SessionID)
-		b.eventPub.PublishFindings(ctx, evt.SessionID, rev)
+		b.events.Publisher.PublishFindings(ctx, evt.SessionID, rev)
 	})
 	repochange.RegisterObserver(func(ctx context.Context, ev repochange.Event) {
 		if b.repoProvider != nil {
@@ -128,15 +128,15 @@ func (b serverWiring) wireRuntimeObservers() error {
 		}
 	})
 	activeRun := activeRunIDFromWorkflow(b.workflowMgr)
-	progressCoalescer := progress.NewCoalescer(progress.DefaultCoalesceWindow, newProgressChangeEmitter(b.storage.Sessions, b.eventPub, activeRun, b.progressStore))
+	progressCoalescer := progress.NewCoalescer(progress.DefaultCoalesceWindow, newProgressChangeEmitter(b.storage.Sessions, b.events.Publisher, activeRun, b.progressStore))
 	progress.RegisterWriteObserver(func(ctx context.Context, evt progress.WriteEvent) {
 		if strings.TrimSpace(evt.SessionID) == "" {
 			return
 		}
 		rev := progress.BumpRevision(evt.SessionID)
-		b.eventPub.PublishProgress(ctx, evt.SessionID, rev)
+		b.events.Publisher.PublishProgress(ctx, evt.SessionID, rev)
 		progressCoalescer.Record(evt.SessionID, evt.Prev, b.progressStore.Get(ctx, evt.SessionID))
-		emitProgressCompletion(ctx, b.storage.Sessions, b.eventPub, b.progressStore, activeRun, evt.SessionID)
+		emitProgressCompletion(ctx, b.storage.Sessions, b.events.Publisher, b.progressStore, activeRun, evt.SessionID)
 		// Progress closure releases the post-worker latch.
 		if b.mgr != nil {
 			b.mgr.MaybeClearProgressClosureAfterWrite(ctx, evt.SessionID)
@@ -152,17 +152,17 @@ func (b serverWiring) wireServer() error {
 	deps := api.Dependencies{Core: api.CoreDependencies{
 		Database: b.storage.Database, Store: b.storage.Sessions, PersonActions: personactions.New(b.storage.Database), Projects: b.storage.Projects, Sessions: b.mgr, Settings: b.settings.Service,
 		Invocations: b.invocations, MutationGate: project.NewMutationGate()}, Providers: api.ProvidersDependencies{LLM: b.providers.Service, CostTracker: b.providers.Costs, Rerank: b.rerank}, Host: api.HostDependencies{
-		Events: b.hub, EventPublisher: b.eventPub, Presence: b.presence, HostIdentity: b.hostIdentity,
+		Events: b.events.Hub, EventPublisher: b.events.Publisher, Presence: b.events.Presence, HostIdentity: b.hostIdentity,
 		HostResources: b.settings.HostResources, HostPower: b.settings.Power, Pricing: b.providers.Pricing, Preview: b.previewCtrl,
 		PreflightEnv: b.buildPreflightEnv()}, Storage: api.StorageDependencies{
 		DataDir: b.storage.Directory, StorePath: b.storage.Path, WorkerBranchRoot: b.workerBranchRoot, WorkerSeedRoot: b.workerSeedRoot,
 		ModuleRoot: b.catalog.ModuleRoot, StoreRevision: b.storage.Revision, MinDenVersion: os.Getenv("LYCAON_MIN_DEN_VERSION")}, Approvals: api.ApprovalsDependencies{
-		SecretIgnores: b.secretIgnores, ManagedSecrets: b.secretCaps, SecretSpans: b.secretSpans,
+		SecretIgnores: b.security.Ignores, ManagedSecrets: b.security.Capabilities, SecretSpans: b.security.Spans,
 		Checkpoints: b.checkpointMgr, ApprovalGate: b.toolRuntime.Authority.ApprovalGate(),
 		Authority: capabilityadmin.Authority{
 			DirectIP: b.directIPCapabilityRT, GrantedPaths: b.grantedPathRT, Listen: b.sandboxListenRT,
 			Loopback: b.sandboxLoopbackRT, ReadPaths: b.sandboxReadPathRT, WriteRoots: b.sandboxWriteRootRT,
-			Sockets: b.socketCapabilityRT, ChatGrants: chatGrantLedger(b.checkpointMgr), Vault: b.vaultUnlocks,
+			Sockets: b.socketCapabilityRT, ChatGrants: chatGrantLedger(b.checkpointMgr), Vault: b.security.Unlocks,
 		}}, Scans: api.ScansDependencies{
 		ScanCoordinator: b.scanCoordinator, ScannerRegistry: b.scannerReg, ScanCadence: b.scanCadence,
 		GateRepeatLedger: b.gateRepeatRT, PublishDetections: b.detections.publish}, Workflow: api.WorkflowDependencies{
@@ -170,7 +170,7 @@ func (b serverWiring) wireServer() error {
 		WorkflowRuns: b.workflowStore, WorkflowComposer: b.workflowComposer, WorkflowPersister: b.workflowPersister,
 		Blueprints: b.blueprintMgr, Orchestrator: b.orch, Delegations: b.delegationMgr, Workers: b.workerQueue,
 		WorkerCancel: b.workerCancelSvc, Board: b.boardSnap, RepoSetCache: b.gitRepoSetCache}, Source: api.SourceDependencies{
-		AgentPresence: b.agentPresence, ProjectRules: b.projectRulesOverlay, HintConfig: b.hintCfg,
+		AgentPresence: b.events.Agents, ProjectRules: b.projectRulesOverlay, HintConfig: b.hintCfg,
 		FileAgeWarmer: b.toolRuntime.Survey.WarmFileAge, VisualStore: b.visualStore, ProgressStore: b.progressStore,
 		Video: toolWiring(b).videoDecoder()}, Extensions: api.ExtensionsDependencies{
 		ExtensionViews: b.catalog.ViewCache, ExtensionJournal: extensionJournal}, External: api.ExternalDependencies{
@@ -230,7 +230,7 @@ func (b serverWiring) wireServer() error {
 		Finishes:    b.storage.Sessions,
 		Projects:    attention.RegistryNamer{Registry: b.storage.Projects},
 	}
-	b.eventPub.Attention = deps.Host.Attention
+	b.events.Publisher.Attention = deps.Host.Attention
 	if manager, ok := b.checkpointMgr.(*hitl.Manager); ok {
 		if err := delegationWiring(b).registerRecovery(bootrecovery.Entry{
 			Name: "approval-operations", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseBuild,
@@ -338,7 +338,7 @@ func (b serverWiring) wireFileBriefings(deps *api.Dependencies) error {
 	}
 	deps.Source.FileBriefings = filebriefing.NewService(b.startup.ctx, filebriefing.Dependencies{
 		Store: fileBriefingStore, Config: fileBriefingConfig, Generator: filebriefing.NewModelGenerator(b.providers.Service, b.mgr.CostTracker()),
-		Events: b.hub, Settings: b.settings.Service.FileSummaries, Logger: b.startup.logger,
+		Events: b.events.Hub, Settings: b.settings.Service.FileSummaries, Logger: b.startup.logger,
 	})
 	return nil
 }
@@ -375,8 +375,8 @@ func (b serverWiring) wireSourceEditing(deps *api.Dependencies) error {
 	}); err != nil {
 		return err
 	}
-	b.agentPresence.SetAnchors(presenceAnchors{service: editorDocuments})
-	b.agentPresence.SetDrafts(presenceDrafts{projects: b.storage.Projects, documents: editorDocuments,
+	b.events.Agents.SetAnchors(presenceAnchors{service: editorDocuments})
+	b.events.Agents.SetDrafts(presenceDrafts{projects: b.storage.Projects, documents: editorDocuments,
 		tasks: func(jobID string) (*wire.WorkerTask, bool) {
 			if b.workerQueue == nil {
 				return nil, false
@@ -481,7 +481,7 @@ func (b serverWiring) serveApp() *ServeApp {
 		CheckpointMgr:        b.checkpointMgr,
 		VisualStore:          b.visualStore,
 		DB:                   b.storage.Database,
-		Events:               b.hub,
+		Events:               b.events.Hub,
 		ConfigRoot:           b.catalog.ModuleRoot,
 		ListenAddr:           b.startup.addr,
 		APIToken:             b.apiToken,
@@ -491,7 +491,7 @@ func (b serverWiring) serveApp() *ServeApp {
 		resources:            b.startup.resources,
 		storeClaim:           b.storage.Claim,
 		projects:             b.storage.Projects,
-		eventPub:             b.eventPub,
+		eventPub:             b.events.Publisher,
 	}
 	delegationWiring(b).registerBackgroundRunners(app)
 	return app
@@ -568,7 +568,7 @@ func (b serverWiring) restoreWorkerDrafts(ctx context.Context) error {
 			jobs = append(jobs, agentpresence.ReadyJob{ChatSessionID: job.ParentSessionID, JobID: job.JobID})
 		}
 	}
-	b.agentPresence.RestoreReadyDrafts(ctx, jobs)
+	b.events.Agents.RestoreReadyDrafts(ctx, jobs)
 	return nil
 }
 

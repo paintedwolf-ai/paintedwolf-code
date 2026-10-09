@@ -79,14 +79,6 @@ func (r *runtimeResources) capture(b *serveBuilder) {
 	if provider := b.repoProvider; provider != nil {
 		r.Track("repo-provider", 70, func(context.Context) error { return provider.Close() })
 	}
-	if unbinds := append([]func(){}, b.sourceFeedUnbinds...); len(unbinds) > 0 {
-		r.Track("source-feeds", 80, func(context.Context) error {
-			for i := len(unbinds) - 1; i >= 0; i-- {
-				unbinds[i]()
-			}
-			return nil
-		})
-	}
 	r.Track("source-watchers", 85, func(context.Context) error {
 		repochange.CloseWatchers()
 		return nil
@@ -97,12 +89,6 @@ func (r *runtimeResources) capture(b *serveBuilder) {
 	if registry := b.mcpReg; registry != nil {
 		r.mcpRegistry = registry
 		r.Track("mcp", 110, func(context.Context) error { return registry.Close() }) //nolint:contextcheck // Close has no context.
-	}
-	if outbox := b.eventOutbox; outbox != nil {
-		r.Track("event-outbox", 120, func(context.Context) error { return outbox.Close() })
-	}
-	if publisher := b.eventPub; publisher != nil {
-		r.Track("event-publisher", 125, publisher.Close)
 	}
 	r.Track("debug-captures", 150, func(context.Context) error {
 		observability.CloseDebugCaptures()

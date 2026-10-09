@@ -47,7 +47,7 @@ func (b toolWiring) wireCoordinatorRuntime() error {
 	waitStore := &awaitstore.Store{DB: b.storage.Database}
 	if err := loopwake.RegisterWaitTool(b.toolRuntime.Registry, b.coordRuntime.CoordinatorLoop(), loopwake.WaitToolDeps{
 		Store: waitStore, ProfileConditions: waitConditions,
-		SecretMatcher: b.secretMatcher, RuntimeContext: b.startup.ctx,
+		SecretMatcher: b.security.Matcher, RuntimeContext: b.startup.ctx,
 	}); err != nil {
 		return fmt.Errorf("wait tool: %w", err)
 	}
@@ -273,8 +273,8 @@ func recordedVerdictsForLeg(ctx context.Context, mgr *workflow.RunManager, sessi
 func (b toolWiring) wireMCP() error {
 	mcpOpts := mcp.RuntimeOptions{
 		OnSettingsChange: func() {
-			if b.hub != nil {
-				_ = b.hub.Publish(b.startup.ctx, wire.EventTopicSettings, events.PublishKey{Facet: string(wire.SettingsAreaMcp)}, wire.SettingsEvent{
+			if b.events.Hub != nil {
+				_ = b.events.Hub.Publish(b.startup.ctx, wire.EventTopicSettings, events.PublishKey{Facet: string(wire.SettingsAreaMcp)}, wire.SettingsEvent{
 					Area:   wire.SettingsAreaMcp,
 					Action: "updated",
 				})
@@ -309,16 +309,16 @@ func (b toolWiring) wireMCP() error {
 		}
 		return paths
 	})
-	if matcher, err := sessionWiring(b).loadSecretMatcher(); err != nil {
+	if matcher, err := b.security.LoadMatcher(b.startup.cfg.TestSecretMatcher); err != nil {
 		return err
 	} else {
 		var capturePrimer captureprojection.ManagedSecretPrimer
-		if b.secretCaps != nil {
-			capturePrimer = b.secretCaps.RememberProjectValues
+		if b.security.Capabilities != nil {
+			capturePrimer = b.security.Capabilities.RememberProjectValues
 		}
 		captureProjector := captureprojection.New(matcher, capturePrimer)
-		if b.secretCaps != nil {
-			captureProjector.SetManagedSecretGeneration(b.secretCaps.ScreeningGeneration)
+		if b.security.Capabilities != nil {
+			captureProjector.SetManagedSecretGeneration(b.security.Capabilities.ScreeningGeneration)
 		}
 		if b.bgRegistry != nil {
 			b.bgRegistry.SetCaptureProjector(captureProjector)
@@ -332,20 +332,20 @@ func (b toolWiring) wireMCP() error {
 		if b.browserRaster != nil {
 			b.browserRaster.SetCaptureProjector(captureProjector)
 		}
-		b.mcpReg.Calls.SetSecretScreen(matcher, sessionWiring(b).secretAskFunc())
+		b.mcpReg.Calls.SetSecretScreen(matcher, b.security.Ask(b.toolRuntime.Executor.Secrets, b.toolRuntime.Authority.ApprovalsDisabled))
 		if b.toolRuntime != nil && b.toolRuntime.Executor != nil {
 			b.toolRuntime.Executor.Secrets.SetSecretMatcher(matcher)
-			b.toolRuntime.Executor.Secrets.SetSecretIgnores(b.secretIgnores)
+			b.toolRuntime.Executor.Secrets.SetSecretIgnores(b.security.Ignores)
 		}
 		// Editor spans preview outbound screening.
-		b.secretSpans = secretspan.New(matcher)
-		sessionWiring(b).wireMessageSecretRedaction(matcher)
+		b.security.Spans = secretspan.New(matcher)
+		b.security.BindTranscript(matcher, b.mgr.SetMessageStorageRedactor, b.mgr.SweepSessionTree)
 		if b.providers.Service != nil && b.providers.Service.Registry != nil {
-			screen := llm.NewModelSecretScreen(matcher, sessionWiring(b).secretAskFunc())
-			if b.secretCaps != nil {
-				screen.SetManagedSecretEvidence(b.secretCaps.ScreeningValues)
+			screen := llm.NewModelSecretScreen(matcher, b.security.Ask(b.toolRuntime.Executor.Secrets, b.toolRuntime.Authority.ApprovalsDisabled))
+			if b.security.Capabilities != nil {
+				screen.SetManagedSecretEvidence(b.security.Capabilities.ScreeningValues)
 				screen.SetManagedSecretAdopter(func(ctx context.Context, req llm.ManagedSecretAdoptRequest) (string, error) {
-					put, putErr := b.secretCaps.Put(ctx, secretcap.PutRequest{
+					put, putErr := b.security.Capabilities.Put(ctx, secretcap.PutRequest{
 						ProjectID: req.ProjectID, ChatSessionID: req.RootSessionID, SessionID: req.SessionID,
 						OperationID: req.OperationID, Name: req.Name, Purpose: req.Purpose,
 						Scope: secretcap.ScopeChat, Origin: secretcap.OriginDetected, Value: req.Value,

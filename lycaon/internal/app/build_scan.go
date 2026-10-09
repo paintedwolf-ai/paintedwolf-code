@@ -22,7 +22,7 @@ import (
 )
 
 func (b toolWiring) wireScan() error {
-	if _, err := sessionWiring(b).loadSecretMatcher(); err != nil {
+	if _, err := b.security.LoadMatcher(b.startup.cfg.TestSecretMatcher); err != nil {
 		return err
 	}
 	if err := b.wireSourceScope(); err != nil {
@@ -33,7 +33,7 @@ func (b toolWiring) wireScan() error {
 		b.scannerReg = b.startup.cfg.TestScanRegistry
 	} else {
 		reg, err := scanregistry.New(scanregistry.Options{
-			ScannerFingerprintKey: b.secretFingerprinter.ScannerKey(),
+			ScannerFingerprintKey: b.security.Fingerprinter.ScannerKey(),
 			ModuleRoot:            b.catalog.ModuleRoot,
 			ProcessPriority:       runnerCfg.ExecProcessPriority(),
 			ProjectTierApplies:    b.settings.ProjectSurfaceGate(projectcontrib.SurfaceScanConfig, b.storage.Projects).AppliesPath,
@@ -44,9 +44,9 @@ func (b toolWiring) wireScan() error {
 		b.scannerReg = reg
 	}
 	b.scanCoordinator.Registry = b.scannerReg
-	b.scanStore.SecretIgnores = b.scanSecretIgnores
+	b.scanStore.SecretIgnores = b.security.ScanIgnores
 	scanIngester := &scan.IngesterImpl{
-		SecretIgnores:           b.scanSecretIgnores,
+		SecretIgnores:           b.security.ScanIgnores,
 		Inspector:               b.simpleInspector,
 		Module:                  scancfg.DefaultModuleConfig(),
 		Budget:                  scancfg.NewFindingBudget(b.gatesCfg.Gates.AgentBudget),
@@ -54,7 +54,7 @@ func (b toolWiring) wireScan() error {
 		OverlayRootsApply:       b.settings.ProjectSurfaceGate(projectcontrib.SurfaceScanConfig, b.storage.Projects).FilterPaths,
 		RecordWithoutDelegation: true,
 	}
-	b.scanRunner = scanexecution.NewRunner(b.scanStore, b.scannerReg, scanIngester, runnerCfg, b.eventPub)
+	b.scanRunner = scanexecution.NewRunner(b.scanStore, b.scannerReg, scanIngester, runnerCfg, b.events.Publisher)
 	b.scanRunner.DataDir = b.storage.Directory
 	if b.storage.SourceLedger != nil {
 		b.scanRunner.Snapshots = b.storage.SourceLedger.SnapshotStore()

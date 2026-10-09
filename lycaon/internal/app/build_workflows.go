@@ -34,7 +34,7 @@ import (
 
 func (b boardWiring) wireWorkflows() error {
 	b.delegationStore = delegation.NewSQLStore(b.storage.Database)
-	b.delegationStore.SetEventOutbox(b.eventOutbox)
+	b.delegationStore.SetEventOutbox(b.events.Outbox)
 	b.mgr.SetDelegationLegLookup(b.delegationStore)
 	blueprintStore := blueprint.NewFileStore(func(ctx context.Context, projectID string) (string, error) {
 		p, err := b.storage.Projects.Get(ctx, projectID)
@@ -79,12 +79,12 @@ func (b boardWiring) wireWorkflows() error {
 		},
 	}
 	b.workflowStore = workflow.NewSQLStore(b.storage.Database)
-	b.workflowStore.SetEventOutbox(b.eventOutbox)
+	b.workflowStore.SetEventOutbox(b.events.Outbox)
 	b.workflowStore.SetSessionMutations(b.storage.Sessions)
 	if b.authzCapturer != nil {
 		b.workflowStore.SetAuthzRecorder(b.authzCapturer.Recorder)
 	}
-	b.workflowMgr = workflow.NewManager(b.workflowStore, b.storage.Sessions, b.manifestRegistry, b.eventPub)
+	b.workflowMgr = workflow.NewManager(b.workflowStore, b.storage.Sessions, b.manifestRegistry, b.events.Publisher)
 	b.workflowMgr.ReviewSpawnFilter = func(_ context.Context, _, _ string, candidates []string) []string {
 		if b.webResearchRuntime.Config != nil && !b.webResearchRuntime.Config.SearchEnabled() {
 			return agentdef.FilterExternalSourceAgents(candidates)
@@ -95,7 +95,7 @@ func (b boardWiring) wireWorkflows() error {
 	b.workflowMgr.VerdictGrounding = b.mgr.EvaluateVerdictGrounding
 	b.workflowMgr.Resolver = b.manifestResolver
 	b.workflowMgr.SessionScaffold = workflow.NewSessionScaffoldSQLStore(b.storage.Database)
-	b.eventPub.SessionUI = session.UIWithProtection{Inner: b.workflowMgr, Mgr: b.mgr}
+	b.events.Publisher.SessionUI = session.UIWithProtection{Inner: b.workflowMgr, Mgr: b.mgr}
 	b.workflowMgr.BlueprintCreate = blueprint.WorkflowBlueprintCreator{Manager: b.blueprintMgr}
 	b.workflowMgr.BlueprintGet = b.blueprintMgr
 	workflowStore := b.workflowStore
@@ -202,7 +202,7 @@ func (b boardWiring) wireWorkflowScanServices() error {
 
 	b.gatesCfg = scancfg.DefaultGatesConfig()
 	b.scanStore = scan.NewSQLStore(b.storage.Database)
-	b.scanStore.SetEventOutbox(b.eventOutbox)
+	b.scanStore.SetEventOutbox(b.events.Outbox)
 	b.workflowMgr.Inventory = workflowScanInventory{store: b.scanStore}
 	b.mgr.SetReportDocumentChecker(b.workflowMgr)
 	b.mgr.SetScanEvidenceRuns(b.workflowMgr)
@@ -216,7 +216,8 @@ func (b boardWiring) wireWorkflowScanServices() error {
 	}
 
 	b.workerQueue = worker.NewSQLQueue(b.storage.Database, b.workersCfg.Poller.MaxConcurrency)
-	b.workerQueue.SetEventOutbox(b.eventOutbox)
+	b.events.BindWorkers(b.workerQueue)
+	b.workerQueue.SetEventOutbox(b.events.Outbox)
 	b.workerQueue.SetWorkersConfig(b.workersCfg)
 	b.workerQueue.SetWorkflowRunChecker(b.workflowMgr)
 	b.workflowStore.SetWorkerRunnableNotifier(b.workerQueue)

@@ -1,10 +1,9 @@
-package app
+package security
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/app/persistence"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -25,7 +24,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func managedScreeningFixture(t *testing.T) (*serveBuilder, *secretmatch.Matcher, *sessionstore.SQL, *credentialstore.Store) {
+func managedScreeningFixture(t *testing.T) (*Runtime, *secretmatch.Matcher, *sessionstore.SQL, *credentialstore.Store) {
 	t.Helper()
 	database := testdbfixture.Open(t, "store.db")
 	testdbseed.InsertProject(t, database, testdbseed.DefaultProjectID)
@@ -34,15 +33,15 @@ func managedScreeningFixture(t *testing.T) (*serveBuilder, *secretmatch.Matcher,
 		Path:      filepath.Join(t.TempDir(), credentialstore.VaultBasename),
 		Namespace: credentialstore.NamespaceManagedSecrets, Context: "durable screening test",
 	}, func(string) bool { return true })
-	b := &serveBuilder{startup: startupBootstrap{ctx: t.Context()}, storage: persistence.Runtime{Database: database}}
+	b := New(t.Context(), database, nil, nil, nil)
 	matcher, err := secretmatch.BuildMatcher(secretmatch.Bundled())
 	testutil.FailErr(t, "build matcher", err)
 	fp, err := secretmatch.NewFingerprinter(bytes.Repeat([]byte{0x5a}, 32))
 	testutil.FailErr(t, "build fingerprinter", err)
 	matcher.SetFingerprinter(fp)
-	sessionWiring{b}.wireSecretEvidence(matcher, fp)
-	b.secretCaps = secretcap.NewWithStore(database, values, func(root string, values []secretmatch.Remembered) { b.secretHarvest.Remember(root, values...) })
-	sessionWiring{b}.wireMessageSecretRedaction(matcher)
+	b.InstallEvidence(matcher, fp)
+	b.Capabilities = secretcap.NewWithStore(database, values, func(root string, values []secretmatch.Remembered) { b.Harvest.Remember(root, values...) })
+	b.BindTranscript(matcher, nil, nil)
 	t.Cleanup(func() { sessionstore.SetMessageRedactor(nil); observability.SetCaptureRedactor(nil) })
 	return b, matcher, sessionstore.NewSQL(database), values
 }
@@ -52,7 +51,7 @@ func TestManagedSecretsAreScreenedBeforeTranscriptPersistenceAndPublication(t *t
 	database := store.DB()
 	owner := testdbseed.OwnerID(t, database)
 	raw := "orchard-secret-synthetic-only-9d41"
-	put, err := b.secretCaps.Put(t.Context(), secretcap.PutRequest{
+	put, err := b.Capabilities.Put(t.Context(), secretcap.PutRequest{
 		ProjectID: testdbseed.DefaultProjectID, OperationID: "file-mark", Name: "Orchard file token",
 		Purpose: "durable screening test", Scope: secretcap.ScopeProject, Origin: secretcap.OriginFileMarked,
 		PersonID: owner, Value: raw,
@@ -81,7 +80,7 @@ func TestManagedSecretsAreScreenedBeforeTranscriptPersistenceAndPublication(t *t
 		t.Fatal("unattributed diagnostic retained managed bytes")
 	}
 	// Scoped request evidence supplies the current capability reference.
-	evidence, err := b.secretCaps.ScreeningValues(t.Context(), testdbseed.DefaultProjectID, "root-1")
+	evidence, err := b.Capabilities.ScreeningValues(t.Context(), testdbseed.DefaultProjectID, "root-1")
 	testutil.FailErr(t, "resolve request evidence", err)
 	request := secretmatch.WithScreeningValues(t.Context(), evidence)
 	projected, _ := llm.RedactMessageForStorage(request, matcher, wire.Message{Content: raw})
@@ -89,12 +88,12 @@ func TestManagedSecretsAreScreenedBeforeTranscriptPersistenceAndPublication(t *t
 		t.Fatalf("current request lost its scoped handle: %q", projected.Content)
 	}
 
-	_, err = b.secretCaps.ReplaceValue(t.Context(), secretcap.ReplaceValueRequest{ProjectID: testdbseed.DefaultProjectID, Reference: put.Metadata.Reference, Value: "orchard-rotated-secret-only"})
+	_, err = b.Capabilities.ReplaceValue(t.Context(), secretcap.ReplaceValueRequest{ProjectID: testdbseed.DefaultProjectID, Reference: put.Metadata.Reference, Value: "orchard-rotated-secret-only"})
 	testutil.FailErr(t, "rotate project secret", err)
-	_, err = b.secretCaps.RevokeProject(t.Context(), testdbseed.DefaultProjectID, put.Metadata.Reference, owner)
+	_, err = b.Capabilities.RevokeProject(t.Context(), testdbseed.DefaultProjectID, put.Metadata.Reference, owner)
 	testutil.FailErr(t, "revoke project secret", err)
-	b.secretCaps = secretcap.NewWithStore(database, values, nil)
-	testutil.FailErr(t, "restore evidence after restart", b.secretCaps.Reconcile(t.Context()))
+	b.Capabilities = secretcap.NewWithStore(database, values, nil)
+	testutil.FailErr(t, "restore evidence after restart", b.Capabilities.Reconcile(t.Context()))
 	retained, _ := llm.RedactMessageForStorage(t.Context(), matcher, wire.Message{Content: raw + " orchard-rotated-secret-only"})
 	assertManagedMessageScreened(t, retained, raw, "orchard-rotated-secret-only")
 }
@@ -122,11 +121,11 @@ func TestMarkingAProjectSecretRescreensExistingTaskHistory(t *testing.T) {
 			requestCtx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 			if cancelOnCommit {
-				b.secretCaps.AddScreeningInvalidationObserver(func(context.Context, string) { cancel() })
+				b.Capabilities.AddScreeningInvalidationObserver(func(context.Context, string) { cancel() })
 			}
-			b.mgr = session.NewManager(store, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
-			sessionWiring{b}.wireMessageSecretRedaction(matcher)
-			_, err := b.secretCaps.Put(requestCtx, secretcap.PutRequest{
+			mgr := session.NewManager(store, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+			b.BindTranscript(matcher, mgr.SetMessageStorageRedactor, mgr.SweepSessionTree)
+			_, err := b.Capabilities.Put(requestCtx, secretcap.PutRequest{
 				ProjectID: testdbseed.DefaultProjectID, OperationID: "late-mark", Name: "Late token", Purpose: "screen earlier reads",
 				Scope: secretcap.ScopeProject, Origin: secretcap.OriginFileMarked, PersonID: testdbseed.OwnerID(t, store.DB()), Value: raw,
 			})
