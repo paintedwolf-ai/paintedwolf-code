@@ -36,10 +36,10 @@ func TestWorkflowRequestsCurateRootChatAfterAdmission(t *testing.T) {
 				manifest.Request.Default = text
 			}
 			mgr.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"request-curation@1.0.0": manifest})
-			curator := session.NewManager(sessions, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
-			defer curator.WaitForPromptCuration(t.Context())
+			curator := session.NewHost(sessions, session.Models{Limits: settings.DefaultSessionLimits()}, tools.NewStubRegistry())
+			defer curator.Runner.Curation.Wait(t.Context())
 			if surface == "manual title" {
-				_, err := curator.SetTitle(t.Context(), "sess-1", "Manual irrigation decision")
+				_, err := curator.Chats.Naming.SetTitle(t.Context(), "sess-1", "Manual irrigation decision")
 				testutil.FailErr(t, "set manual title", err)
 			}
 			admission := &observingStartAdmission{}
@@ -53,7 +53,7 @@ func TestWorkflowRequestsCurateRootChatAfterAdmission(t *testing.T) {
 					t.Fatalf("accepted request = %q want %q", request, text)
 				}
 				calls++
-				curator.CurateAcceptedWorkflowRequest(ctx, id, request)
+				curator.Runner.Curation.AcceptedWorkflowRequest(ctx, id, request)
 			}
 			req := api.StartWorkflowRunRequest{WorkflowID: manifest.ID, WorkflowVersion: manifest.Version, OperationID: uuid.NewString(), Request: text}
 			start := func() error {
@@ -88,7 +88,7 @@ func TestWorkflowRequestsCurateRootChatAfterAdmission(t *testing.T) {
 					t.Fatal("duplicate answer accepted")
 				}
 			}
-			curator.WaitForPromptCuration(t.Context())
+			curator.Runner.Curation.Wait(t.Context())
 			got, err := sessions.Get(t.Context(), "sess-1")
 			testutil.FailErr(t, "get named session", err)
 			want := session.NameSession(t.Context(), nil, text)

@@ -47,13 +47,13 @@ func feedbackFlowManifest() workflowdef.Manifest {
 	})
 }
 
-func setupFeedbackIntegration(t *testing.T) (*workflow.RunManager, *session.Manager, *wire.Session, context.Context) {
+func setupFeedbackIntegration(t *testing.T) (*workflow.RunManager, *session.Host, *wire.Session, context.Context) {
 	t.Helper()
 	sqlDB := testdbfixture.Open(t, "feedback-int.db")
 
 	store := store.NewSQL(sqlDB)
-	sessMgr := session.NewManager(store, llm.NewMockProvider(nil), tools.NewStubRegistry(), settings.DefaultSessionLimits())
-	testutil.FailErr(t, "install anchor registry", sessMgr.InstallAnchorRegistry())
+	sessMgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(nil), Limits: settings.DefaultSessionLimits()}, tools.NewStubRegistry())
+	testutil.FailErr(t, "install anchor registry", sessMgr.Coordinator.Guidance.InstallAnchorRegistry())
 
 	manifest := feedbackFlowManifest()
 	manifestReg := workflowdef.NewRegistry(map[string]workflowdef.Manifest{
@@ -64,7 +64,7 @@ func setupFeedbackIntegration(t *testing.T) (*workflow.RunManager, *session.Mana
 	testutil.FailErr(t, "build conditions registry", err)
 	wfMgr.SetConditionRegistry(reg)
 	wfMgr.Feedback.OnFeedbackPending = func(_ context.Context, sessionID, _ string) {
-		sessMgr.Emit(context.Background(), sessionID, anchor.FeedbackPending, anchor.Envelope{})
+		sessMgr.Coordinator.Guidance.Emit(context.Background(), sessionID, anchor.FeedbackPending, anchor.Envelope{})
 	}
 
 	dir := t.TempDir()
@@ -117,8 +117,8 @@ func TestFeedbackKickQueuedOnPhaseEntry(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "feedback-kick.db")
 
 	store := store.NewSQL(sqlDB)
-	sessMgr := session.NewManager(store, llm.NewMockProvider(nil), tools.NewStubRegistry(), settings.DefaultSessionLimits())
-	testutil.FailErr(t, "install anchor registry", sessMgr.InstallAnchorRegistry())
+	sessMgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(nil), Limits: settings.DefaultSessionLimits()}, tools.NewStubRegistry())
+	testutil.FailErr(t, "install anchor registry", sessMgr.Coordinator.Guidance.InstallAnchorRegistry())
 
 	manifest := feedbackFlowManifest()
 	wfMgr := workflow.NewManager(workflowpersistence.New(sqlDB), store, workflowdef.NewRegistry(map[string]workflowdef.Manifest{
@@ -133,7 +133,7 @@ func TestFeedbackKickQueuedOnPhaseEntry(t *testing.T) {
 		if phaseID != "clarify" {
 			t.Fatalf("phase = %q want clarify", phaseID)
 		}
-		sessMgr.Emit(context.Background(), sessionID, anchor.FeedbackPending, anchor.Envelope{})
+		sessMgr.Coordinator.Guidance.Emit(context.Background(), sessionID, anchor.FeedbackPending, anchor.Envelope{})
 	}
 
 	dir := t.TempDir()

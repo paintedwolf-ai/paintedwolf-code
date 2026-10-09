@@ -28,7 +28,7 @@ func TestBuildSealsAcquiredMCPInventoryAndLiveChanges(t *testing.T) {
 	testutil.FailErr(t, "build acquired MCP graph", err)
 	t.Cleanup(func() { _ = app.Close() })
 	testdbseed.InsertProjectRoot(t, app.DB, testdbseed.DefaultProjectID, t.TempDir())
-	sess, err := app.Sessions.Manager.CreateForProject(t.Context(), testdbseed.DefaultProjectID, wire.SessionPostureBuild)
+	sess, err := app.Sessions.Manager.Chats.CreateForProject(t.Context(), testdbseed.DefaultProjectID, wire.SessionPostureBuild)
 	testutil.FailErr(t, "create inventory session", err)
 	handle, ok := app.DB.(db.Handle)
 	if !ok {
@@ -37,7 +37,7 @@ func TestBuildSealsAcquiredMCPInventoryAndLiveChanges(t *testing.T) {
 	contexts := authzcontext.NewSQLStore(handle)
 	seal := func() *authzcontext.Context {
 		t.Helper()
-		_, err := app.Sessions.Manager.Prompt(t.Context(), sess.ID, "Say hello.")
+		_, err := app.Sessions.Manager.Submissions.Prompt(t.Context(), sess.ID, "Say hello.")
 		testutil.FailErr(t, "run production sealing path", err)
 		row, err := contexts.LatestContext(t.Context(), sess.ID)
 		testutil.FailErr(t, "read durable authorization context", err)

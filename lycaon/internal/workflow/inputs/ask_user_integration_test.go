@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	workflowinputs "github.com/lycaon/lycaon/internal/workflow/inputs"
+	"slices"
 	"strings"
 	"testing"
 
@@ -46,7 +47,7 @@ func askUserHostManifest() workflowdef.Manifest {
 
 type askUserFixture struct {
 	wfMgr   *workflow.RunManager
-	sessMgr *session.Manager
+	sessMgr *session.Host
 	sess    *wire.Session
 	toolReg *tools.DefaultRegistry
 	pending bool
@@ -64,8 +65,8 @@ func setupAskUserIntegration(t *testing.T) *askUserFixture {
 	sqlDB := testdbfixture.Open(t, "ask-user-int.db")
 
 	store := store.NewSQL(sqlDB)
-	sessMgr := session.NewManager(store, llm.NewMockProvider(nil), tools.NewStubRegistry(), settings.DefaultSessionLimits())
-	testutil.FailErr(t, "install anchor registry", sessMgr.InstallAnchorRegistry())
+	sessMgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(nil), Limits: settings.DefaultSessionLimits()}, tools.NewStubRegistry())
+	testutil.FailErr(t, "install anchor registry", sessMgr.Coordinator.Guidance.InstallAnchorRegistry())
 
 	manifest := askUserHostManifest()
 	manifestReg := workflowdef.NewRegistry(map[string]workflowdef.Manifest{
@@ -84,12 +85,12 @@ func setupAskUserIntegration(t *testing.T) *askUserFixture {
 	wfMgr.Feedback.OnFeedbackPending = func(_ context.Context, sessionID, _ string) {
 		fx.pending = true
 		fx.kicks = append(fx.kicks, anchor.InformRender(anchor.FeedbackPending))
-		sessMgr.Emit(context.Background(), sessionID, anchor.FeedbackPending, anchor.Envelope{})
+		sessMgr.Coordinator.Guidance.Emit(context.Background(), sessionID, anchor.FeedbackPending, anchor.Envelope{})
 	}
 	wfMgr.Feedback.OnFeedbackResolved = func(_ context.Context, sessionID, _, _, _ string) {
 		fx.kicks = append(fx.kicks, anchor.InformRender(anchor.FeedbackReceived))
-		sessMgr.DropCoordinatorKick(sessionID, anchor.FeedbackPending)
-		sessMgr.Emit(context.Background(), sessionID, anchor.FeedbackReceived, anchor.Envelope{})
+		sessMgr.Coordinator.Guidance.Drop(sessionID, anchor.FeedbackPending)
+		sessMgr.Coordinator.Guidance.Emit(context.Background(), sessionID, anchor.FeedbackReceived, anchor.Envelope{})
 	}
 
 	toolReg := tools.NewDefaultRegistry()
@@ -192,8 +193,8 @@ func TestAskUserTextResolveAndKick(t *testing.T) {
 	}
 
 	// Answer delivery replaces the pending-feedback kick.
-	if id, ok := fx.sessMgr.PendingKickIDForTest(fx.sess.ID); !ok || id != anchor.InformRender(anchor.FeedbackReceived) {
-		t.Fatalf("pending kick after resolve = %q ok=%v want %s", id, ok, anchor.InformRender(anchor.FeedbackReceived))
+	if ids := fx.sessMgr.Coordinator.Guidance.PendingIDs(ctx, fx.sess.ID); !slices.Contains(ids, anchor.InformRender(anchor.FeedbackReceived)) {
+		t.Fatalf("pending kicks after resolve = %v want %s", ids, anchor.InformRender(anchor.FeedbackReceived))
 	}
 }
 

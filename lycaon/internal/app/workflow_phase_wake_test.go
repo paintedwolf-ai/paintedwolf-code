@@ -49,11 +49,11 @@ func TestCrossPhaseHostAdvanceQueuesCoordinatorWake(t *testing.T) {
 	sessionMgr.SetLoopWorkflowSource(&loopwake.WorkflowDomains{Runs: wfMgr.Store.Runs, Approvals: wfMgr.Policy, Obligations: wfMgr.Obligations})
 	delegationsRt := delegations.New(sqlDB, nil, worker.WorkersConfig{})
 	delegationsRt.SetDependencies(delegations.Dependencies{Workflows: &workflows.Runtime{Manager: wfMgr}, Sessions: &sessions.Runtime{Manager: sessionMgr}})
-	finishExecution := sessionMgr.BeginPromptExecutionForTest(t.Context(), sess.ID)
+	finishExecution := sessionMgr.Coordinator.Runtime.CoordinatorLoop().Admission.BeginPromptExecution(t.Context(), sess.ID)
 	defer finishExecution()
 	delegationsRt.OnWorkflowPhaseAutoAdvanced(ctx, sess.ID, run.ID, "triage", "expand")
 
-	got, ok := sessionMgr.PendingLoopNudgeForTest(sess.ID)
+	got, ok := sessionMgr.Coordinator.Runtime.CoordinatorLoop().Nudges.Pending(sess.ID)
 	if !ok || got != anchor.PhaseAdvanced {
 		t.Fatalf("pending wake = %q, %v want %q, true", got, ok, anchor.PhaseAdvanced)
 	}
@@ -94,7 +94,7 @@ func TestTerminalCompletionSettlesWithoutAmbientWake(t *testing.T) {
 		t.Fatalf("status = %q, want idle after workflow approval", settled.Status)
 	}
 
-	if got, ok := sessionMgr.PendingLoopNudgeForTest(sess.ID); ok {
+	if got, ok := sessionMgr.Coordinator.Runtime.CoordinatorLoop().Nudges.Pending(sess.ID); ok {
 		t.Fatalf("terminal workflow queued ambient wake %q", got)
 	}
 }
@@ -133,11 +133,11 @@ func TestHumanApprovalAdvanceQueuesWakeForRunningChild(t *testing.T) {
 	sessionMgr.SetLoopWorkflowSource(&loopwake.WorkflowDomains{Runs: wfMgr.Store.Runs, Approvals: wfMgr.Policy, Obligations: wfMgr.Obligations})
 	delegationsChildRt := delegations.New(sqlDB, nil, worker.WorkersConfig{})
 	delegationsChildRt.SetDependencies(delegations.Dependencies{Workflows: &workflows.Runtime{Manager: wfMgr}, Sessions: &sessions.Runtime{Manager: sessionMgr}})
-	finishExecution := sessionMgr.BeginPromptExecutionForTest(t.Context(), sess.ID)
+	finishExecution := sessionMgr.Coordinator.Runtime.CoordinatorLoop().Admission.BeginPromptExecution(t.Context(), sess.ID)
 	defer finishExecution()
 	delegationsChildRt.OnWorkflowHumanApprovalAdvanced(ctx, parent)
 
-	got, ok := sessionMgr.PendingLoopNudgeForTest(sess.ID)
+	got, ok := sessionMgr.Coordinator.Runtime.CoordinatorLoop().Nudges.Pending(sess.ID)
 	if !ok || got != anchor.PhaseAdvanced {
 		t.Fatalf("pending child wake = %q, %v want %q, true", got, ok, anchor.PhaseAdvanced)
 	}

@@ -21,10 +21,10 @@ func TestBuildDetectionObservationBeforeSettingsAndAcrossReloads(t *testing.T) {
 	testutil.FailErr(t, "build app", err)
 	t.Cleanup(func() { _ = app.Close() })
 	testdbseed.InsertProjectRoot(t, app.DB, testdbseed.DefaultProjectID, t.TempDir())
-	sess, err := app.Sessions.Manager.CreateForProject(t.Context(), testdbseed.DefaultProjectID, wire.SessionPostureBuild)
+	sess, err := app.Sessions.Manager.Chats.CreateForProject(t.Context(), testdbseed.DefaultProjectID, wire.SessionPostureBuild)
 	testutil.FailErr(t, "create observation session", err)
 	var remembered []secretmatch.Remembered
-	app.Sessions.Manager.SetRememberSecrets(func(_ string, values []secretmatch.Remembered) {
+	app.Sessions.Manager.ToolPolicy.SetRememberSecrets(func(_ string, values []secretmatch.Remembered) {
 		remembered = append(remembered, values...)
 	})
 	const token = "67ff6e39282cb4d81f8da08b44df3e8b524a5960"
@@ -49,7 +49,7 @@ func TestBuildDetectionObservationBeforeSettingsAndAcrossReloads(t *testing.T) {
 				}
 			}
 			remembered = nil
-			app.Sessions.Manager.ObserveMintedCredential(t.Context(), sess, "command",
+			app.Sessions.Manager.ToolPolicy.ObserveMintedCredential(t.Context(), sess, "command",
 				map[string]any{"command": "gitea admin user generate-access-token --username fixture"}, token)
 			if len(remembered) != step.want {
 				t.Fatalf("remembered %d values, want %d", len(remembered), step.want)
