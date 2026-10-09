@@ -1,0 +1,48 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/gravitl/netmaker"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.5.0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-32599",
+  "GHSA-r8cr-4f9w-7r75"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6485"
+ },
+ "details": "Netmaker has a boolean\u2011based SQL Injection in github.com/gravitl/netmaker",
+ "id": "GO-2026-6485",
+ "modified": "2026-09-28T16:43:40Z",
+ "published": "2026-09-28T16:43:40Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/gravitl/netmaker/security/advisories/GHSA-r8cr-4f9w-7r75"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/gravitl/netmaker/releases/tag/v1.5.0"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Netmaker has a boolean\u2011based SQL Injection in github.com/gravitl/netmaker"
+}

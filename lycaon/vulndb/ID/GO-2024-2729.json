@@ -1,0 +1,52 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/openfga/openfga"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "1.5.0"
+      },
+      {
+       "fixed": "1.5.3"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2024-31452",
+  "GHSA-8cph-m685-6v6r"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2024-2729"
+ },
+ "details": "OpenFGA Authorization Bypass in github.com/openfga/openfga",
+ "id": "GO-2024-2729",
+ "modified": "2024-06-04T15:19:21Z",
+ "published": "2024-06-04T15:19:21Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/openfga/openfga/security/advisories/GHSA-8cph-m685-6v6r"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2024-31452"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/openfga/openfga/commit/b6a6d99b2bdbf8c3781503989576076289f48ed2"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "OpenFGA Authorization Bypass in github.com/openfga/openfga"
+}

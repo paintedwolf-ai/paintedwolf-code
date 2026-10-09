@@ -1,0 +1,65 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/cli/cli"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "1.6.0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/cli/cli/v2"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "2.92.0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-45803",
+  "GHSA-crc3-h8v6-qh57"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5335"
+ },
+ "details": "GitHub CLI: GitHub Actions log output in `gh run view` allows terminal escape sequence injection in github.com/cli/cli",
+ "id": "GO-2026-5335",
+ "modified": "2026-06-25T18:43:19Z",
+ "published": "2026-06-25T18:43:19Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/cli/cli/security/advisories/GHSA-crc3-h8v6-qh57"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-45803"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "GitHub CLI: GitHub Actions log output in `gh run view` allows terminal escape sequence injection in github.com/cli/cli"
+}

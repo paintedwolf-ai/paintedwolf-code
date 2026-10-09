@@ -1,0 +1,94 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "go.woodpecker-ci.org/woodpecker"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "go.woodpecker-ci.org/woodpecker/v2"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "go.woodpecker-ci.org/woodpecker/v3"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "3.0.0"
+      },
+      {
+       "fixed": "3.14.1"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-50141",
+  "GHSA-g7mm-9vx7-jm7h"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5976"
+ },
+ "details": "Woodpecker gRPC agent_id metadata can be spoofed- cross-tenant agent impersonation in go.woodpecker-ci.org/woodpecker",
+ "id": "GO-2026-5976",
+ "modified": "2026-07-17T19:42:05Z",
+ "published": "2026-07-17T19:42:05Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/woodpecker-ci/woodpecker/security/advisories/GHSA-g7mm-9vx7-jm7h"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-50141"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/woodpecker-ci/woodpecker/issues/6541"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/woodpecker-ci/woodpecker/pull/6567"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/woodpecker-ci/woodpecker/pull/6569"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Woodpecker gRPC agent_id metadata can be spoofed- cross-tenant agent impersonation in go.woodpecker-ci.org/woodpecker"
+}

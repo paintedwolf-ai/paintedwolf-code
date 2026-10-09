@@ -1,0 +1,48 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/fleetdm/fleet/v4"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "4.81.0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-34389",
+  "GHSA-4f9r-x588-pp2h"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-4912"
+ },
+ "details": "Fleet's user account creation via invite does not enforce invited email address in github.com/fleetdm/fleet",
+ "id": "GO-2026-4912",
+ "modified": "2026-04-02T18:42:30Z",
+ "published": "2026-04-02T18:42:30Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/fleetdm/fleet/security/advisories/GHSA-4f9r-x588-pp2h"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-34389"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Fleet's user account creation via invite does not enforce invited email address in github.com/fleetdm/fleet"
+}
