@@ -2,11 +2,12 @@ package hitl
 
 import (
 	"fmt"
+	"slices"
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/pkg/api"
-	"slices"
-	"strings"
 )
 
 // Validate enforces the invariants that make the plan safe to render and apply.

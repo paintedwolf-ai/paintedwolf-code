@@ -2,9 +2,10 @@ package hitl
 
 import (
 	"fmt"
-	"github.com/lycaon/lycaon/pkg/api"
 	"sort"
 	"strings"
+
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func validApprovalRung(rung ApprovalOptionRung) bool { return rungRank(rung) < len(approvalRungOrder) }

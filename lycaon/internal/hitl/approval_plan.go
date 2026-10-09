@@ -5,9 +5,10 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
 )
 
 // ApprovalStage names the enforcement boundary currently holding the action.

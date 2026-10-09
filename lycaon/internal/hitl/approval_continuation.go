@@ -1,7 +1,5 @@
 package hitl
 
-import ()
-
 func (p ApprovalPlan) OptionContinues(option ApprovalOption) bool {
 	if option.Kind == ApprovalOptionRedacted || option.Kind == ApprovalOptionTracked {
 		return p.Subject.Kind == ApprovalSubjectSecret

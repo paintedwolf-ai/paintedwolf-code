@@ -854,7 +854,10 @@ func TestDirectoryHierarchyMintsDistinctOptionsAndDefaultsToContainingFolder(t *
 	dir := canonDir(t, t.TempDir())
 	folder := filepath.Join(dir, "src", "pkg")
 	file := filepath.Join(folder, "file.go")
-	action := hitl.ProposedAction{Tool: "read", Files: []string{file}, ProjectID: "project", ProjectDir: t.TempDir(), SessionID: "chat"}
+	action := hitl.ProposedAction{
+		Invocation: hitl.ActionInvocation{Tool: "read", Files: []string{file}},
+		Scope: hitl.ActionScope{ProjectID: "project", ProjectDir: t.TempDir(), SessionID: "chat"},
+	}
 	target := gate.FileTarget{Path: file, Mode: gate.ModeRead, OutsideRoots: true}
 	decision := &gate.Decision{Primary: api.GateOutsideRootsRead}
 	offers := settings.GrantedPathOffers(action, target, decision, nil)
@@ -898,7 +901,10 @@ func TestCredentialStoreReadAsksInsideAnAttachedHome(t *testing.T) {
 	sources.Locations = locations
 	g := settings.NewRuleApprovalGate(store, sources)
 	path := filepath.Join(home(t), ".aws", "credentials")
-	action := hitl.ProposedAction{Tool: "read", Files: []string{path}, ProjectID: "project", ProjectDir: home(t), SessionID: "chat"}
+	action := hitl.ProposedAction{
+		Invocation: hitl.ActionInvocation{Tool: "read", Files: []string{path}},
+		Scope: hitl.ActionScope{ProjectID: "project", ProjectDir: home(t), SessionID: "chat"},
+	}
 	res, err := g.Evaluate(context.Background(), action)
 	testutil.FailErr(t, "review credential read", err)
 	if !res.Required() || res.Decision.Primary != api.GateSensitiveLocation {
@@ -915,7 +921,10 @@ func TestMultipleReadTargetsOfferOneCrossingHierarchy(t *testing.T) {
 	base := filepath.Join(filepath.VolumeName(os.TempDir())+string(filepath.Separator), "unattached", t.Name())
 	first := filepath.Join(base, "first", "file.go")
 	second := filepath.Join(base, "second", "file.go")
-	action := hitl.ProposedAction{Tool: "read", Files: []string{first, second}, ProjectDir: t.TempDir(), ProjectID: "project", SessionID: "chat"}
+	action := hitl.ProposedAction{
+		Invocation: hitl.ActionInvocation{Tool: "read", Files: []string{first, second}},
+		Scope: hitl.ActionScope{ProjectID: "project", ProjectDir: t.TempDir(), SessionID: "chat"},
+	}
 	_, offers := filesystemCard(t, action)
 	if len(offers) == 0 || offers[0].DirectoryScope != filepath.Dir(first) {
 		t.Fatalf("wrong selected crossing hierarchy: %+v", offers)
