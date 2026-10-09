@@ -216,15 +216,28 @@ class RunnerPriorityTests(unittest.TestCase):
                 with patch.object(rp, "catalog", return_value=data), self.assertRaises(ValueError):
                     rp.workflow_classes()
 
-    def test_qualification_yields_after_pull_requests_and_resumes_on_latest_push(self):
+    def test_qualification_yields_before_ready_pull_requests_and_resumes_on_latest_push(self):
         queue = run(1, 'ci.yml', 'merge_group', branch=GROUP)
         qualification = run(2, 'qualification.yml', 'push')
         ready = run(3, 'ci.yml', 'pull_request', sha='ready')
         repository = Repository([queue, qualification, ready], groups=[GROUP],
-                                pulls=[{'draft': False, 'head': {'sha': 'ready'}}],
+                                pulls=[('ready', False)],
                                 jobs={1: jobs(queued=['linux'], age=10), 2: jobs(running=['linux']),
                                       3: jobs(running=['linux'])})
         cancelled_ids, _ = rp.schedule('owner/repo', repository, NOW)
-        self.assertEqual(cancelled_ids, [3])
+        self.assertEqual(cancelled_ids, [2])
         latest = cancelled(20, 'qualification.yml', 'push')
         self.assertEqual(rp.resumptions([], {rp.QUALIFICATION: [latest]}, set(), {rp.QUALIFICATION}), [latest])
+
+    def test_starved_ready_checks_take_runners_from_qualification_only(self):
+        queue = run(1, "ci.yml", "merge_group", branch=GROUP)
+        qualification = run(2, "qualification.yml", "push")
+        waiting = run(3, "ci.yml", "pull_request", sha="waiting")
+        running = run(4, "ci.yml", "pull_request", sha="running")
+        repository = Repository([queue, qualification, waiting, running], groups=[GROUP],
+                                pulls=[("waiting", False), ("running", False)],
+                                jobs={1: jobs(running=["linux"] * 2), 2: jobs(running=["linux"] * 12),
+                                      3: jobs(queued=["linux"] * 4, age=10), 4: jobs(running=["linux"] * 4)})
+        cancelled_ids, _ = repository.schedule()
+        # Ready checks feed the queue, so qualification yields to them; the queue and other ready runs keep theirs.
+        self.assertEqual(cancelled_ids, [2])
