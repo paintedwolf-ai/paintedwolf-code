@@ -2,6 +2,7 @@ package projectsource
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -34,8 +35,11 @@ func TestNativeTrashInterruptionDoesNotInventRecoveryReceipt(t *testing.T) {
 	testutil.FailErr(t, "recover interrupted operation", restarted.Recover(t.Context()))
 	row, found, err := restarted.Journal.load(t.Context(), id)
 	testutil.FailErr(t, "read interrupted operation", err)
-	if !found || row.Status != sourceMutationFailed {
+	if !found || row.Status != sourceMutationFailed || row.Error == "" {
 		t.Fatalf("unacknowledged receipt became successful: %+v", row)
+	}
+	if err := restarted.Delete(t.Context(), id, p, SourceDeleteRequest{RootID: p.Roots[0].ID, Path: "selected"}); !errors.Is(err, ErrSourceTrashUnavailable) {
+		t.Fatalf("explicit replay invented recovery: %v", err)
 	}
 	history, err := restarted.History.State(t.Context(), p.ID)
 	testutil.FailErr(t, "read recovery history", err)
