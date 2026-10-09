@@ -40,7 +40,7 @@ func (b *serveBuilder) wireCoordinatorRuntime() error {
 		waitConditions[profile.ID] = allowed
 	}
 	waitStore := &awaitstore.Store{DB: b.storage.Database}
-	if err := loopwake.RegisterWaitTool(b.execution.Host.Registry, b.server.Coordinator.CoordinatorLoop(), loopwake.WaitToolDeps{
+	if err := loopwake.RegisterWaitTool(b.execution.Host.Registry, b.server.Coordinator.CoordinatorLoop().Waits, loopwake.WaitToolDeps{
 		Store: waitStore, ProfileConditions: waitConditions,
 		SecretMatcher: b.security.Matcher, RuntimeContext: b.startup.ctx,
 	}); err != nil {
@@ -49,7 +49,7 @@ func (b *serveBuilder) wireCoordinatorRuntime() error {
 	if err := b.registerRecovery(bootrecovery.Entry{
 		Name: "agent-wait-leases", Kind: bootrecovery.KindReconcile, Phase: bootrecovery.PhaseServe,
 		Run: func(ctx context.Context) error {
-			return loopwake.RecoverWaitLeases(ctx, b.server.Coordinator.CoordinatorLoop(), waitStore)
+			return loopwake.RecoverWaitLeases(ctx, b.server.Coordinator.CoordinatorLoop().Waits, waitStore)
 		},
 	}); err != nil {
 		return err
