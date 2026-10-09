@@ -16,9 +16,9 @@ function installationStatus(state: NativeUpdateState): string {
     case "downloading": return "Downloading…";
     case "verifying":
     case "preparing": return "Preparing update…";
-    case "staged": return state.automatic_updates_enabled ? "It will install when you quit. Restart now to use it sooner." : "Update downloaded. Restart to install it.";
+    case "staged": return state.offer_confirmed_at === null ? "Update downloaded. Check for updates again before installing." : state.automatic_updates_enabled ? "Update downloaded. It will install when you quit after a final safety check." : "Update downloaded. Restart to install it.";
     case "awaiting_exit": return "Finishing your work before the update installs…";
-    case "committed": return "The update installs when the last Painted Wolf Code window closes. Restart now to use it sooner.";
+    case "committed": return "The update is committed and is waiting for running copies of this installation to quit. Reopen this copy if the update remains pending.";
     case "awaiting_startup": return "The update is installed. The previous application is retained until the engine finishes starting successfully.";
     case "recovery_required": return "The update handoff was committed but could not be recorded.";
     default: return "";

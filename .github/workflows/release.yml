@@ -46,9 +46,8 @@ jobs:
           bash scripts/release-source-validate.sh \
             "${RELEASE_TAG}" "${GITHUB_SHA}" refs/remotes/origin/main
 
-      # Main only advances through the merge queue, which runs the full tier on the
-      # exact commit it lands; a release ships nothing that tier has not passed.
-      - name: Require full-tier verification of the release commit
+      # Qualification follows main; admission alone never authorizes a release.
+      - name: Require exact-commit qualification
         if: ${{ github.ref_type == 'tag' }}
         env:
           GH_TOKEN: ${{ github.token }}
@@ -577,8 +576,7 @@ jobs:
       - name: Activate release channel last
         env:
           CHANNEL: ${{ needs.classify.outputs.channel }}
-          FEED_SIGNING_PRIVATE_KEY: ${{ secrets.FEED_SIGNING_PRIVATE_KEY }}
-          FEED_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.FEED_SIGNING_PRIVATE_KEY_PASSWORD }}
+          FEED_SIGNING_KEYS_JSON: ${{ secrets.FEED_SIGNING_KEYS_JSON }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           R2_BUCKET: ${{ secrets.R2_BUCKET }}

@@ -157,13 +157,21 @@ class ReleaseControlTests(unittest.TestCase):
         found = {"success": True, "result": [{"key": "release", "etag": hashlib.md5(raw).hexdigest()}]}
         missing = urllib.error.HTTPError("https://example.test", 404, "missing", {}, None)
         env = {"CLOUDFLARE_ACCOUNT_ID": "account", "R2_BUCKET": "bucket", "CLOUDFLARE_API_TOKEN": "secret"}
-        with patch.dict(distribution.os.environ, env), patch.object(distribution, "storage_json", side_effect=[(b"", found), missing, (raw, json.loads(raw))]), patch.object(distribution.time, "sleep"):
+        with patch.dict(distribution.os.environ, env), patch.object(distribution, "storage_json", return_value=(b"", found)), patch.object(distribution, "storage_bytes", side_effect=[missing, raw]), patch.object(distribution.time, "sleep"):
             self.assertEqual(distribution.read_storage("release"), {"version": "1.0.0"})
         with patch.dict(distribution.os.environ, env), patch.object(distribution, "storage_json", return_value=(b"", {"success": True, "result": []})):
             self.assertIsNone(distribution.read_storage("release"))
-        with patch.dict(distribution.os.environ, env), patch.object(distribution, "storage_json", side_effect=[(b"", found)] + [missing] * 12), patch.object(distribution.time, "sleep"):
+        with patch.dict(distribution.os.environ, env), patch.object(distribution, "storage_json", return_value=(b"", found)), patch.object(distribution, "storage_bytes", side_effect=[missing] * 12), patch.object(distribution.time, "sleep"):
             with self.assertRaisesRegex(ValueError, "converge"):
                 distribution.read_storage("release")
+
+    def test_authenticated_storage_preserves_the_signed_bytes(self):
+        import hashlib
+        raw = b'{ "version": "1.0.0" }\n'
+        env = {"CLOUDFLARE_ACCOUNT_ID": "account", "R2_BUCKET": "bucket", "CLOUDFLARE_API_TOKEN": "token"}
+        found = {"success": True, "result": [{"key": "release", "etag": hashlib.md5(raw).hexdigest()}]}
+        with patch.dict(distribution.os.environ, env), patch.object(distribution, "storage_json", return_value=(b"", found)), patch.object(distribution, "storage_bytes", return_value=raw):
+            self.assertEqual(distribution.read_storage_bytes("release"), raw)
 
     def test_canonical_pointer_requires_final_response_no_store(self):
         from release_pointer_headers import validate
@@ -196,20 +204,72 @@ class HaltPlanTests(unittest.TestCase):
         import sys
         import tempfile
         from pathlib import Path
-        plan = {"source_generation": 1, "feeds": [{"generation": 1, "channel": channel, "bad": "1.0.0", "last_good": "0.9.0"} for channel in ("stable", "preview")]}
+        index = {"distribution": {}, "feeds": [
+            {"generation": number, "channel": channel, "bad": "1.0.0", "pointer_sha256": "a", "signature_sha256": "b"}
+            for number, channel in [(1, "stable"), (2, "preview")]]}
         with tempfile.TemporaryDirectory() as tmp:
-            source = Path(tmp) / "plan.json"
-            source.write_text(json.dumps(plan))
-            with patch.object(sys, "argv", ["halt-plan", "--plan", str(source)]), \
-                 patch.object(self.plan, "load_registry", return_value={"generations": [{}]}), \
-                 patch.object(self.plan, "generation"), patch.object(self.plan, "validate_binding"), \
-                 patch.object(self.plan, "read_storage", return_value={"version": "1.0.0"}), \
-                 patch.object(self.plan.subprocess, "run", side_effect=[subprocess.CompletedProcess([], code) for code in [0, 0, 1, 0]]) as run:
+            with patch.object(self.plan.subprocess, "run", side_effect=[subprocess.CompletedProcess([], code) for code in [0, 1, 0]]) as run:
                 with self.assertRaisesRegex(ValueError, "some feeds"):
-                    self.plan.main()
-                self.assertEqual(run.call_count, 4)
+                    self.plan.apply(index, Path(tmp))
+                self.assertEqual(run.call_count, 3)
                 self.assertIn("preview", run.call_args.args[0])
-                self.assertNotIn("--dry-run", run.call_args.args[0])
+                self.assertIn("--signature", run.call_args.args[0])
+                receipt = json.loads((Path(tmp) / "application.json").read_text())
+                self.assertEqual([row["exit_code"] for row in receipt["feeds"]], [1, 0])
+
+    def test_preparation_failure_never_writes_a_complete_receipt_or_withdraws(self):
+        import subprocess
+        import tempfile
+        from pathlib import Path
+        rows = {(n, "stable"): {"bad": "2.0.0", "last_good": "1.0.0"} for n in [1, 2]}
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            def run(command, **kwargs):
+                if command[command.index("--generation") + 1] == "2":
+                    raise subprocess.CalledProcessError(1, command)
+                (directory / "latest-stable-key-1.json").write_text("{}")
+                (directory / "latest-stable-key-1.json.sig").write_text("signature")
+                return subprocess.CompletedProcess(command, 0)
+            with patch.object(self.plan, "read_storage_bytes", return_value=b'{"version":"2.0.0"}'), patch.object(self.plan.subprocess, "run", side_effect=run) as calls:
+                with self.assertRaises(subprocess.CalledProcessError):
+                    self.plan.prepare(rows, {}, {}, directory)
+                self.assertFalse((directory / "prepared.json").exists())
+                self.assertTrue(all("--prepare-output" in call.args[0] for call in calls.call_args_list))
+
+    def test_prepared_halt_refuses_changed_bytes_or_feeds_and_accepts_a_completed_retry(self):
+        import tempfile
+        import hashlib
+        from pathlib import Path
+        from update_keys import load_registry, release_binding
+        fixture = json.loads(Path(__file__).resolve().parents[2].joinpath("lycaon-den/src-tauri/src/update_service/fixtures/signed-feed.json").read_text())
+        registry = load_registry()
+        registry["generations"][0]["feed_public_key"] = fixture["feed_public_key"]
+        rows = {(1, "stable"): {"generation": 1, "channel": "stable", "bad": "1.3.0", "last_good": "1.2.3"}}
+        plan = {"source_generation": 1, "feeds": list(rows.values())}
+        manifest = {"version": "1.2.3", "update_keys": release_binding(registry, "1.2.3")}
+        before = {"version": "1.3.0"}
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            pointer = directory / "latest-stable-key-1.json"
+            signature = directory / "latest-stable-key-1.json.sig"
+            pointer.write_text(json.dumps(manifest))
+            signature.write_text(fixture["signature"])
+            item = {"generation": 1, "channel": "stable", "bad": "1.3.0", "before": before,
+                    "pointer_sha256": self.plan.digest(pointer), "signature_sha256": self.plan.digest(signature),
+                    "before_pointer_sha256": hashlib.sha256(json.dumps(before).encode()).hexdigest(), "before_signature_sha256": None}
+            index = {"format_version": 1, "plan": plan, "distribution": self.plan.distribution_plan(list(rows.values())), "feeds": [item]}
+            (directory / "prepared.json").write_text(json.dumps(index))
+            with patch.object(self.plan, "read_storage_bytes", side_effect=lambda key: None if key.endswith(".sig") else json.dumps(before).encode()) as read:
+                self.plan.validate_prepared(rows, plan, directory, registry)
+                read.side_effect = lambda key: signature.read_bytes() if key.endswith(".sig") else pointer.read_bytes()
+                self.plan.validate_prepared(rows, plan, directory, registry)
+                read.side_effect = lambda key: None if key.endswith(".sig") else b'{"version":"1.4.0"}'
+                with self.assertRaisesRegex(ValueError, "feed changed"):
+                    self.plan.validate_prepared(rows, plan, directory, registry)
+                read.side_effect = lambda key: None if key.endswith(".sig") else json.dumps(before).encode()
+                pointer.write_text(json.dumps(manifest) + "\n")
+                with self.assertRaisesRegex(ValueError, "bytes changed"):
+                    self.plan.validate_prepared(rows, plan, directory, registry)
 
     def test_unactivated_release_still_has_a_distribution_withdrawal(self):
         with patch.object(self.plan, "generation"), patch.object(self.plan, "read_storage", return_value=None):

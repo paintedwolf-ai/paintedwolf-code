@@ -10,7 +10,8 @@ type UpdateNotice = (typeof codes)[number];
 
 function noticeFor(state: NativeUpdateState | null): UpdateNotice | undefined {
   if (!state) return undefined;
-  if (state.capabilities.can_restart_to_update) return "update_ready";
+  if (state.last_error?.code === "feed_rejected") return "update_failed";
+  if (state.capabilities.can_restart_to_update && state.offer_confirmed_at !== null) return "update_ready";
   if (state.installation === "failed" && state.last_error && state.last_error.code !== "check_failed" && state.last_error.code !== "cancelled") return "update_failed";
   if (!state.automatic_updates_enabled && state.capabilities.can_download && state.candidate?.rollout_eligibility === "eligible") return "update_available";
   return undefined;
