@@ -227,6 +227,8 @@ backfill. Each apply creates at most 25 new issues, spaces mutations one second
 apart, and records applied/deferred counts. Deferred intake does not advance the
 checkpoint; later runs or another explicit backfill dispatch continue it. The workflow never runs downloaded code or changes admission limits.
 
+#### Prompt budgets
+
 The host assembles a prompt per turn: instruction units render only while
 their tools are offered, requestable tool schemas load on demand, and the
 decision engine may leave out the units it is confident a request does not
@@ -246,6 +248,8 @@ figure is context for the runtime rather than a static guarantee. Kicks and proj
 (AGENTS.md chains, MCP schemas, source briefs, skill bodies) are sized by
 the project at runtime; they ride in the reserved session budget, which
 compaction calibrates against the provider's reported token counts.
+
+#### Inspecting sizes
 
 Look before editing something large:
 `PW_BUDGETS_INSPECT="lycaon/internal/hitl" ./task budgets` reports those
