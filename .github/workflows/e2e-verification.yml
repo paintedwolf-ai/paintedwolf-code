@@ -2,6 +2,11 @@ name: End-to-end verification
 
 on:
   workflow_call:
+    inputs:
+      web-parallel:
+        description: Web shards that run at once, beside the desktop job; the caller's runner budget sets it
+        required: true
+        type: number
 
 permissions:
   contents: read
@@ -16,6 +21,7 @@ jobs:
     timeout-minutes: 60
     strategy:
       fail-fast: false
+      max-parallel: ${{ inputs.web-parallel }}
       matrix:
         shard: [1, 2, 3]
     steps:
