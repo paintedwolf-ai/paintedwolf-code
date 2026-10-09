@@ -2,16 +2,17 @@ package review
 
 import (
 	"context"
+	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
+	"slices"
+	"strings"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/guidance"
 	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
 	"github.com/lycaon/lycaon/pkg/api"
-	"slices"
-	"strings"
-	"testing"
 )
 
 func surveyPhases() (workflowdef.ReviewLoopDef, workflowdef.ReviewLoopDef) {

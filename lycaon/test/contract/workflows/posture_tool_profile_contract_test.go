@@ -1,12 +1,13 @@
 package contract
 
 import (
+	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/session"
-	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
-	"testing"
 )
 
 // The coordinator surface machinery keys on the coordinator profile id, so a

@@ -1,10 +1,11 @@
 package contract
 
 import (
+	"testing"
+
 	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
 	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"github.com/lycaon/lycaon/test/contract/internal/workflowfixture"
-	"testing"
 )
 
 func TestBundledManifestsUserInteractionGatesAligned(t *testing.T) {

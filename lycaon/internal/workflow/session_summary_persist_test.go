@@ -2,6 +2,8 @@ package workflow_test
 
 import (
 	"context"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/session/store"
@@ -11,7 +13,6 @@ import (
 	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
 	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
 func TestComposeUpsertPersistsEffectiveSummary(t *testing.T) {

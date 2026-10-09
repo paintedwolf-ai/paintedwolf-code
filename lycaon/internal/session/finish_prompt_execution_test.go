@@ -3,10 +3,16 @@
 package session_test
 
 import (
+	loopwake "github.com/lycaon/lycaon/internal/coordinator/loopwake"
+
 	"context"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
+	"path/filepath"
+	"testing"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
-	loopwake "github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/orchestration"
@@ -21,11 +27,7 @@ import (
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
-	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"path/filepath"
-	"testing"
-	"time"
 )
 
 func TestFinishPromptExecutionDrainsLoopPendingAfterCanceledRequestCtx(t *testing.T) {

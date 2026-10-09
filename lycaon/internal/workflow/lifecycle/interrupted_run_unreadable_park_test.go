@@ -3,11 +3,12 @@ package lifecycle_test
 import (
 	"context"
 	"errors"
+	workflowlifecycle "github.com/lycaon/lycaon/internal/workflow/lifecycle"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	workflowlifecycle "github.com/lycaon/lycaon/internal/workflow/lifecycle"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
 // scaffoldVarsFailingStore fails exactly the read hasDurableHumanWait depends

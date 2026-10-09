@@ -4,11 +4,12 @@ package workflow_test
 
 import (
 	"encoding/json"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
 func TestAskUserTextResolveStampsHitlConsultedCurrentPhase(t *testing.T) {

@@ -2,11 +2,12 @@ package workflow
 
 import (
 	"context"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
 	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	"strings"
 	"testing"
+
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 )
 
 func TestReviewLoopDeclaredAgentsUnionsRoles(t *testing.T) {

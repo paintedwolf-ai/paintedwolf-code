@@ -1,14 +1,15 @@
 package contract
 
 import (
-	"github.com/lycaon/lycaon/internal/guidance/feedback"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/guidance/feedback"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
 func TestManifestAdvancePolicyEnumsParseAndRejectNever(t *testing.T) {

@@ -1,6 +1,8 @@
 package workflowadmin
 
 import (
+	"sync"
+
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/sessionadmin"
 	"github.com/lycaon/lycaon/internal/api/sessionview"
@@ -18,7 +20,6 @@ import (
 	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
-	"sync"
 )
 
 // Deps are the workflow routes' dependencies, fixed at construction.

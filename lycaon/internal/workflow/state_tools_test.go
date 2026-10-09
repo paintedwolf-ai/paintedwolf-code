@@ -2,6 +2,9 @@ package workflow
 
 import (
 	"context"
+	workflowstatetools "github.com/lycaon/lycaon/internal/workflow/statetools"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -11,9 +14,7 @@ import (
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
-	workflowstatetools "github.com/lycaon/lycaon/internal/workflow/statetools"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
 func TestStateQueryReturnsVars(t *testing.T) {

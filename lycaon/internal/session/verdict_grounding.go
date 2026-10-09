@@ -2,13 +2,14 @@ package session
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/evidence"
-	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
-	"github.com/lycaon/lycaon/pkg/api"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/evidence"
+	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // EvaluateVerdictGrounding checks citations against coordinator and required-reviewer evidence.

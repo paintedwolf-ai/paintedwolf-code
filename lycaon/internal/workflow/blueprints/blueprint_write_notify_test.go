@@ -2,6 +2,10 @@ package blueprints_test
 
 import (
 	"context"
+	"path/filepath"
+	"strings"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
@@ -10,9 +14,6 @@ import (
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
-	"path/filepath"
-	"strings"
-	"testing"
 )
 
 func TestPlanStartMintsConventionPath(t *testing.T) {

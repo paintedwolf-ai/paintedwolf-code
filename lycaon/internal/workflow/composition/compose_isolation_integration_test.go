@@ -4,9 +4,10 @@ package composition_test
 
 import (
 	"context"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
-	"testing"
 )
 
 func TestComposeSetsRequiresIsolation(t *testing.T) {

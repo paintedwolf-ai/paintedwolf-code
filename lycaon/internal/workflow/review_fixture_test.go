@@ -1,8 +1,6 @@
 package workflow
 
-import (
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-)
+import workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 
 func reviewLoopTestManifest() workflowdef.Manifest {
 	return workflowdef.FinalizeManifest(workflowdef.Manifest{

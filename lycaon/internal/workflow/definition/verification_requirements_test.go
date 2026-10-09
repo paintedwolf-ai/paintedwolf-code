@@ -1,8 +1,9 @@
 package definition_test
 
 import (
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"testing"
+
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 )
 
 func TestVerificationRequirementsDistinguishDeliveryFromTests(t *testing.T) {

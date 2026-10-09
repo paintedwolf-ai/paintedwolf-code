@@ -1,13 +1,14 @@
 package contract
 
 import (
+	"strings"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/workflowfixture"
-	"strings"
-	"testing"
 )
 
 // Every coordinator surface declares one exit class.

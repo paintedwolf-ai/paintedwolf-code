@@ -3,10 +3,11 @@ package app
 import (
 	"context"
 	"fmt"
+	workflowinputs "github.com/lycaon/lycaon/internal/workflow/inputs"
+
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/tools/native"
-	workflowinputs "github.com/lycaon/lycaon/internal/workflow/inputs"
 )
 
 func (b sessionWiring) wireSecretCapabilities() error {

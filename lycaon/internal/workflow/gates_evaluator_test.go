@@ -2,14 +2,15 @@ package workflow
 
 import (
 	"context"
+	"os"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
-	"os"
-	"testing"
 )
 
 func TestRegistryGateEvaluatorGatesList(t *testing.T) {

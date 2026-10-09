@@ -209,7 +209,7 @@ func TestRecoverWaitLeasesRebuildsParkedState(t *testing.T) {
 	if err := RecoverWaitLeases(context.Background(), loop.Subscriptions, store); err != nil {
 		t.Fatalf("recover wait leases: %v", err)
 	}
-	if !loop.Waits.IsSleeping(lease.SessionID) || !loop.Subscriptions.SessionSleepingOnProcess(lease.SessionID, "command-1") {
+	if !loop.Waits.IsSleeping(lease.SessionID) || !loop.Waits.SessionSleepingOnProcess(lease.SessionID, "command-1") {
 		t.Fatalf("recovered triggers = %v", waitSubscriptionForTest(loop.Subscriptions, lease.SessionID))
 	}
 }

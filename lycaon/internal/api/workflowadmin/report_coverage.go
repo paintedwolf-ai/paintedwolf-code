@@ -3,14 +3,15 @@ package workflowadmin
 import (
 	"context"
 	"fmt"
+	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
+	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/report"
 	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
-	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"strings"
 )
 
 // runAccount is the host's account of a run's work: the recorded facts behind

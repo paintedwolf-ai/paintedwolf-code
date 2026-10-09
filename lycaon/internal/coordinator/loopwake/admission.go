@@ -59,22 +59,7 @@ func (l *Admission) PromptExecutionActive(sessionID string) bool {
 	_, ok := l.promptExecution.Load(strings.TrimSpace(sessionID))
 	return ok
 }
-func (l *Admission) BeginUserTurnSettlement(ctx context.Context, sessionID string) (func(), bool) {
-	if l == nil || strings.TrimSpace(sessionID) == "" {
-		return func() {}, false
-	}
-	if l.PromptExecutionActive(sessionID) || (!l.Turns.hostTurnBlocked(ctx, sessionID) && l.Nudges.HasPendingLoopWakes(sessionID)) {
-		return func() {}, false
-	}
-	if _, loaded := l.Turns.promptActive.LoadOrStore(sessionID, struct{}{}); loaded {
-		return func() {}, false
-	}
-	if l.PromptExecutionActive(sessionID) || (!l.Turns.hostTurnBlocked(ctx, sessionID) && l.Nudges.HasPendingLoopWakes(sessionID)) {
-		l.Turns.releasePromptActiveAndRedrain(ctx, sessionID)
-		return func() {}, false
-	}
-	return func() { l.Turns.releasePromptActiveAndRedrain(ctx, sessionID) }, true
-}
+
 func (l *Admission) ResetBudget(runID string) {
 	if l == nil || strings.TrimSpace(runID) == "" {
 		return

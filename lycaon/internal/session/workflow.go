@@ -3,8 +3,9 @@ package session
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/pkg/api"
 	"strings"
+
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // workflowfacts.ActiveWorkflowManifest holds runtime fields from the active workflow manifest.

@@ -1,5 +1,7 @@
 package runstate
 
+import "testing"
+
 func TestForgetReleasesTerminalRunGuard(t *testing.T) {
 	vars := NewVariables(nil, nil, nil)
 	vars.Lock("terminal")()

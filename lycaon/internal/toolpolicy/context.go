@@ -2,12 +2,13 @@ package toolpolicy
 
 import (
 	"context"
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/rules"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
 )
 
 // BuildEvalContext assembles rule evaluation context for a tool invoke.

@@ -3,13 +3,14 @@ package workflowadmin
 import (
 	"context"
 	"github.com/go-chi/chi/v5"
+	"net/http"
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/secretview"
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"net/http"
-	"strings"
 )
 
 func (s *Handler) HandleResolveWorkflowDecision(w http.ResponseWriter, r *http.Request) {

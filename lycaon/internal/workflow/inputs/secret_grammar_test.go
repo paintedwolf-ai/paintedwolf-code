@@ -2,10 +2,11 @@ package inputs
 
 import (
 	"errors"
-	"github.com/lycaon/lycaon/internal/testutil"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 )
 
 func TestNormalizeSecretAskRejectsUnusableLifecycleMetadataBeforePrompting(t *testing.T) {

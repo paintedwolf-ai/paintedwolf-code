@@ -3,6 +3,8 @@ package workflow_test
 import (
 	"context"
 	"encoding/json"
+	"testing"
+
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/projectroot"
@@ -12,7 +14,6 @@ import (
 	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
 	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
-	"testing"
 )
 
 func TestWorkflowCatalogSummariesTool(t *testing.T) {

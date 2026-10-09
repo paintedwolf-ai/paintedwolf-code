@@ -1,10 +1,11 @@
 package workflow
 
+import workflowreview "github.com/lycaon/lycaon/internal/workflow/review"
+
 import (
 	"context"
 	"github.com/lycaon/lycaon/internal/guidance"
 	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
-	workflowreview "github.com/lycaon/lycaon/internal/workflow/review"
 )
 
 func (m *Reports) CheckRunReportDocument(ctx context.Context, sessionID string, report guidance.CoordinatorCompletionReport) ([]guidance.ReportDocumentIssue, error) {

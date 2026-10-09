@@ -1,8 +1,6 @@
 package contract
 
 import (
-	"github.com/lycaon/lycaon/internal/testutil"
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -12,6 +10,10 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
+	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
+	"gopkg.in/yaml.v3"
 )
 
 // TestHookInventoryCoversWireBindings checks callback coverage and lock notes.

@@ -2,10 +2,6 @@ package security
 
 import (
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/testutil"
-	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
-	wire "github.com/lycaon/lycaon/pkg/api"
-	"github.com/lycaon/lycaon/test/wiring"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -13,6 +9,11 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
+	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
+	wire "github.com/lycaon/lycaon/pkg/api"
+	"github.com/lycaon/lycaon/test/wiring"
 )
 
 func TestWorkflowPersistE2E(t *testing.T) {

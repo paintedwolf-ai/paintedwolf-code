@@ -3,6 +3,12 @@ package api
 import (
 	"context"
 	"github.com/go-chi/chi/v5"
+	"log/slog"
+	"net/http"
+	"os"
+	"strings"
+	"sync/atomic"
+
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/lycaon/lycaon/internal/agentpresence"
@@ -83,11 +89,6 @@ import (
 	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"log/slog"
-	"net/http"
-	"os"
-	"strings"
-	"sync/atomic"
 )
 
 type Server struct {

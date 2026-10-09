@@ -2,12 +2,13 @@ package lifecycle
 
 import (
 	"context"
+	"log/slog"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/scaffoldvars"
 	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
-	"log/slog"
-	"time"
 )
 
 // Recovery preserves durable waits while settling inactive runs from a prior boot.

@@ -3,12 +3,13 @@ package workflow
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/spawn"
-	"github.com/lycaon/lycaon/internal/tools"
 	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	toolguard "github.com/lycaon/lycaon/internal/workflow/toolguard"
-	"github.com/lycaon/lycaon/pkg/api"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/spawn"
+	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // runstate.FanoutLegCoverage accounts for attempts, independently of model conclusions.

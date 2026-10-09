@@ -2,9 +2,10 @@ package inputs
 
 import (
 	"context"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"strings"
+
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 )
 
 // ValidateUserFacingStart allows catalog-tier bundled workflows or composed/persisted overlays.

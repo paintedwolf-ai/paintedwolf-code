@@ -1,6 +1,8 @@
 package publication
 
 import (
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/eventoutbox"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -8,7 +10,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
 func TestManagerDoesNotDuplicateOutboxedWorkflowMutation(t *testing.T) {

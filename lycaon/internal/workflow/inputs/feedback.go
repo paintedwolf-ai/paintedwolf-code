@@ -3,15 +3,17 @@ package inputs
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/people"
-	"github.com/lycaon/lycaon/internal/workflow/catalog"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	"github.com/lycaon/lycaon/internal/workflow/lifecycle"
-	"github.com/lycaon/lycaon/internal/workflow/publication"
-	"github.com/lycaon/lycaon/internal/workflow/runstate"
-	"github.com/lycaon/lycaon/pkg/api"
 	"strings"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/people"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
+	"github.com/lycaon/lycaon/pkg/api"
+
+	"github.com/lycaon/lycaon/internal/workflow/catalog"
+	"github.com/lycaon/lycaon/internal/workflow/lifecycle"
+	"github.com/lycaon/lycaon/internal/workflow/publication"
 )
 
 func (m *Feedback) TryResolveUserFeedback(ctx context.Context, sessionID, messageID, authorPersonID, message string) error {

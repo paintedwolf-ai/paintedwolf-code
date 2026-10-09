@@ -2,11 +2,12 @@ package inputs_test
 
 import (
 	"context"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
 func requestTestManifest(id string, cadence workflowdef.RequestCadence, fallback string) workflowdef.Manifest {

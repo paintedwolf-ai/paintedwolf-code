@@ -3,9 +3,10 @@ package catalog
 import (
 	"context"
 	"errors"
+	"testing"
+
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
 type sessionLookup func(context.Context, string) (*api.Session, error)

@@ -1,12 +1,13 @@
 package workflowadmin
 
 import (
-	"github.com/lycaon/lycaon/internal/report"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
 	workflowreview "github.com/lycaon/lycaon/internal/workflow/review"
-	wire "github.com/lycaon/lycaon/pkg/api"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/report"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 // reportClaims states each claim as the run's review phases left it.

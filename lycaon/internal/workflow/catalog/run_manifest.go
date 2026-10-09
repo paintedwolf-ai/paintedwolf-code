@@ -3,9 +3,10 @@ package catalog
 import (
 	"context"
 	"fmt"
+	"strings"
+
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
 )
 
 type SessionReader interface {

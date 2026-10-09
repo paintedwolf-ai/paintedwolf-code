@@ -1,5 +1,7 @@
 package runstate
 
+import "github.com/lycaon/lycaon/pkg/api"
+
 // VerdictSubmission is the journaled submit_verdict input.
 type VerdictSubmission struct {
 	SessionID string                               `json:"session_id"`

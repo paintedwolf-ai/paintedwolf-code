@@ -6,17 +6,18 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
+	workflowstatetools "github.com/lycaon/lycaon/internal/workflow/statetools"
+	"strings"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
-	workflowstatetools "github.com/lycaon/lycaon/internal/workflow/statetools"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
-	"testing"
 )
 
 func TestComposeProposalHumanStartAdvanceToolPath(t *testing.T) {

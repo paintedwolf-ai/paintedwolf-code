@@ -1,11 +1,12 @@
 package definition_test
 
 import (
-	"github.com/lycaon/lycaon/internal/testutil"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 )
 
 func TestTransitionOnlyPhaseSurvivesFinalize(t *testing.T) {

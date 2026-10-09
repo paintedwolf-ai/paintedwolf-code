@@ -1,11 +1,13 @@
 package session
 
 import (
-	"context"
 	workflowfacts "github.com/lycaon/lycaon/internal/session/workflowfacts"
-	"github.com/lycaon/lycaon/pkg/api"
+
+	"context"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // verdictPendingView reports a review_loop phase with an open evidence gate.

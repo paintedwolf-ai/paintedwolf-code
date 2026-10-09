@@ -3,6 +3,10 @@ package session
 import (
 	"context"
 	"fmt"
+	"sync"
+	"sync/atomic"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/agentpresence"
 	"github.com/lycaon/lycaon/internal/authzcontext"
 	"github.com/lycaon/lycaon/internal/bgprocess"
@@ -59,9 +63,6 @@ import (
 	"github.com/lycaon/lycaon/internal/webresearch"
 	"github.com/lycaon/lycaon/pkg/api"
 	"golang.org/x/sync/singleflight"
-	"sync"
-	"sync/atomic"
-	"time"
 )
 
 type Manager struct {

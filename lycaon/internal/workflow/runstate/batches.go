@@ -2,9 +2,10 @@ package runstate
 
 import (
 	"context"
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/coordinator/batch"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
 )
 
 // Batches serializes coordinator batch transitions against current run state.

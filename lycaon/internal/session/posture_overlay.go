@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"fmt"
+
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectcontrib"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"

@@ -1,15 +1,16 @@
 package contract
 
 import (
-	"github.com/lycaon/lycaon/internal/workflow/runstate"
-	"github.com/lycaon/lycaon/pkg/api"
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
+	"github.com/lycaon/lycaon/pkg/api"
+	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
 // allWorkflowRunStatuses mirrors WorkflowRunStatus in pkg/api/workflow_types.go. Each entry

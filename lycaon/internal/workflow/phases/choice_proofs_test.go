@@ -1,9 +1,10 @@
 package phases
 
 import (
+	"testing"
+
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
-	"testing"
 )
 
 func TestClearChoiceEntryProofsRequiresFreshFanoutPlan(t *testing.T) {

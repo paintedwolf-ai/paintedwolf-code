@@ -1,9 +1,10 @@
 package runstate
 
 import (
+	"time"
+
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
-	"time"
 )
 
 type VerdictOperation struct {

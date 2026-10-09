@@ -6,12 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/orchestration"
+	"math"
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/tools"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
-	"math"
-	"strings"
 )
 
 // RegisterAskUserTool registers coordinator-only ask_user. Workspace image

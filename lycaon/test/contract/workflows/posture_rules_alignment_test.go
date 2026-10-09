@@ -1,13 +1,14 @@
 package contract
 
 import (
+	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
+	"strings"
+	"testing"
+
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/rules"
-	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
-	"strings"
-	"testing"
 )
 
 // postureRulesFile maps rules/*.yaml basename → expected posture_is value.

@@ -2,13 +2,14 @@ package rules_test
 
 import (
 	"context"
+	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/rules"
 	"github.com/lycaon/lycaon/internal/session"
-	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
 func TestPostureRuleEngineSpecDeniesDelegation(t *testing.T) {

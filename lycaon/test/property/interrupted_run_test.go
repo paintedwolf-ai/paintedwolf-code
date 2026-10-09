@@ -4,6 +4,8 @@ package property
 
 import (
 	"context"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -11,7 +13,6 @@ import (
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	"github.com/lycaon/lycaon/pkg/api"
 	"pgregory.net/rapid"
-	"testing"
 )
 
 // Orphaned non-ambient runs reconcile to one interrupted boundary.

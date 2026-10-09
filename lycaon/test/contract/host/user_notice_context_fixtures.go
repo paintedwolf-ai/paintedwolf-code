@@ -3,6 +3,12 @@ package contract
 import (
 	"context"
 	"errors"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"syscall"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/gitengine"
 	"github.com/lycaon/lycaon/internal/llm"
@@ -13,11 +19,6 @@ import (
 	"github.com/lycaon/lycaon/internal/usernotice"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"io/fs"
-	"os"
-	"path/filepath"
-	"syscall"
-	"time"
 )
 
 // Forces every probe down its failure path. This non-test file cannot use

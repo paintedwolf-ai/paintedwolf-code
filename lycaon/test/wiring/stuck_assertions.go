@@ -2,11 +2,12 @@ package wiring
 
 import (
 	"context"
+	"strings"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
-	"strings"
-	"testing"
 )
 
 // AssertSessionNotStuck fails when the session's active run is non-terminal and

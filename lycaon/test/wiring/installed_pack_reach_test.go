@@ -2,6 +2,10 @@ package wiring
 
 import (
 	"context"
+	"path/filepath"
+	"strings"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/contribution"
 	"github.com/lycaon/lycaon/internal/extpacks"
@@ -11,9 +15,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/usernotice"
 	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
-	"path/filepath"
-	"strings"
-	"testing"
 )
 
 func examplePackDir(t *testing.T, name string) string {

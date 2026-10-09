@@ -2,12 +2,13 @@ package session
 
 import (
 	"context"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/verification"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
 func assessedCloseout(t *testing.T, history []api.Message, method string) []api.Message {

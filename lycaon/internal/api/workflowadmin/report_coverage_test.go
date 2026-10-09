@@ -2,16 +2,17 @@ package workflowadmin
 
 import (
 	"context"
+	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
+	"strings"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/report"
 	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/worker"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"strings"
-	"testing"
 )
 
 // The scan account counts only the run's own inventory: a group is used when a

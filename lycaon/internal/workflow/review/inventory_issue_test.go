@@ -1,8 +1,9 @@
 package review
 
 import (
-	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
 	"testing"
+
+	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
 )
 
 func TestInventoryShortfallNamesWhatAResubmissionDropped(t *testing.T) {

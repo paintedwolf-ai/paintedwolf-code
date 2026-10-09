@@ -2,9 +2,10 @@ package boot
 
 import (
 	"fmt"
+	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
+
 	"github.com/lycaon/lycaon/internal/rules"
 	"github.com/lycaon/lycaon/internal/session"
-	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
 	"github.com/lycaon/lycaon/internal/workflow"
 )
 

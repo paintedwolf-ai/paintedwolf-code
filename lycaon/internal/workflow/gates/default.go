@@ -2,9 +2,10 @@ package gates
 
 import (
 	"context"
+	"strings"
+
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
 )
 
 // GateCheckResult captures gate evaluation outcome for Advance and auto-advance.

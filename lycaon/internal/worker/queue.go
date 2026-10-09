@@ -4,6 +4,7 @@ package worker
 import (
 	"context"
 	"fmt"
+
 	"github.com/lycaon/lycaon/internal/workerprogress"
 	"github.com/lycaon/lycaon/pkg/api"
 )

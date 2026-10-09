@@ -1,11 +1,12 @@
 package review
 
 import (
+	"testing"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/reviewcoverage"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
-	"time"
 )
 
 func TestCoverageReviewerAdmissionRequiresCurrentExplicitOutcomes(t *testing.T) {

@@ -1,13 +1,14 @@
 package review
 
 import (
+	"testing"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/reviewcoverage"
 	"github.com/lycaon/lycaon/internal/tools"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
-	"time"
 )
 
 func TestQuestionClosureRequiresInvestigationOrBoundedImmateriality(t *testing.T) {

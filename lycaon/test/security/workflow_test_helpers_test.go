@@ -3,6 +3,11 @@ package security
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/conditions"
@@ -11,10 +16,6 @@ import (
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/wiring"
-	"net/http"
-	"net/http/httptest"
-	"strings"
-	"testing"
 )
 
 const planStartBody = `{"workflow_id":"plan","workflow_version":"1.0.0","request":"Plan the fixture change"}`

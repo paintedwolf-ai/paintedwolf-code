@@ -2,15 +2,16 @@ package review_test
 
 import (
 	"context"
+	workflow "github.com/lycaon/lycaon/internal/workflow"
+	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/inspector"
 	"github.com/lycaon/lycaon/internal/testutil"
-	workflow "github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
 func reviewLoopTestManifest() workflowdef.Manifest {

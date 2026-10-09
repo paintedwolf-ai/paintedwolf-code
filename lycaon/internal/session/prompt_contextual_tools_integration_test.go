@@ -4,16 +4,17 @@ package session_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
+	"strings"
+	"testing"
+
 	coordinatorsurface "github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
-	"testing"
 )
 
 func TestMockLLMReceivesWorkflowFilteredTools(t *testing.T) {

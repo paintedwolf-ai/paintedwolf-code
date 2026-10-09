@@ -1,12 +1,13 @@
 package contract
 
 import (
-	"github.com/lycaon/lycaon/internal/session"
 	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
+	"testing"
+
+	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/workflowfixture"
-	"testing"
 )
 
 func TestWorkflowCatalogSummaryPosturesValid(t *testing.T) {

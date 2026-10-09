@@ -228,13 +228,13 @@ func TestQueueAdmissionPreventsPrematureUserTurnSettlement(t *testing.T) {
 	if !f.loop.Nudges.HasPendingLoopWakes("session") {
 		t.Fatal("admission was reported as quiescent")
 	}
-	release, claimed := f.loop.Admission.BeginUserTurnSettlement(t.Context(), "session")
+	release, claimed := f.loop.Turns.BeginUserTurnSettlement(t.Context(), "session")
 	if claimed {
 		release()
 		t.Fatal("user turn settled while queue admission was in flight")
 	}
 	f.loop.Nudges.pendingDrain.Delete("session")
-	release, claimed = f.loop.Admission.BeginUserTurnSettlement(t.Context(), "session")
+	release, claimed = f.loop.Turns.BeginUserTurnSettlement(t.Context(), "session")
 	if !claimed {
 		t.Fatal("quiescent user turn could not settle")
 	}

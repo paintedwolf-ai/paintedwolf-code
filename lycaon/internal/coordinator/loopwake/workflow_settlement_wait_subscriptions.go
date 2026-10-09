@@ -32,10 +32,6 @@ func (l *WaitSubscriptions) CloseCompletedWorkflowWait(ctx context.Context, sess
 			return false, err
 		}
 	}
-	l.Waits.breakSleep(ctx, sessionID, "workflow_complete", false)
-	st := l.Waits.sleep.state(sessionID)
-	st.mu.Lock()
-	st.waitThisTurn = false
-	st.mu.Unlock()
+	l.Waits.clearCompletedWorkflowWait(ctx, sessionID)
 	return true, nil
 }

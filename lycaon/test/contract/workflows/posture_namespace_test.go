@@ -1,12 +1,13 @@
 package contract
 
 import (
-	"github.com/lycaon/lycaon/internal/evidence"
 	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
+	"testing"
+
+	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/workflowfixture"
-	"testing"
 )
 
 func TestPostureNamespaceDisjointFromWorkflowsAndPhases(t *testing.T) {

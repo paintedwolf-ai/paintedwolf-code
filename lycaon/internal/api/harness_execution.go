@@ -2,11 +2,12 @@ package api
 
 import (
 	"github.com/go-chi/chi/v5"
+	"net/http"
+
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/session"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"net/http"
 )
 
 // harnessRequestRejected refuses a harness request with host copy; the cause

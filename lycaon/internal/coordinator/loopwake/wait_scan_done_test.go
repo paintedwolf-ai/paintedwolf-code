@@ -46,13 +46,13 @@ func TestSessionsSleepingOnScanDone(t *testing.T) {
 	loop.Waits.EnterSleep(context.Background(), "scan-waiter", deadline, "waiting for scan", []WaitTrigger{WaitTriggerTimer, WaitTriggerScanDone}, nil, SleepMoverHost)
 	loop.Waits.EnterSleep(context.Background(), "worker-waiter", deadline, "waiting for workers", DefaultCoordinatorWaitTriggers(false), nil, SleepMoverHost)
 
-	got := loop.Subscriptions.SessionsSleepingOn(WaitTriggerScanDone)
+	got := loop.Waits.SessionsSleepingOn(WaitTriggerScanDone)
 	if len(got) != 1 || got[0] != "scan-waiter" {
 		t.Fatalf("SessionsSleepingOn = %v want [scan-waiter]", got)
 	}
 
 	loop.Waits.breakSleep(t.Context(), "scan-waiter", "scan_done", true)
-	if got := loop.Subscriptions.SessionsSleepingOn(WaitTriggerScanDone); len(got) != 0 {
+	if got := loop.Waits.SessionsSleepingOn(WaitTriggerScanDone); len(got) != 0 {
 		t.Fatalf("after break SessionsSleepingOn = %v want empty", got)
 	}
 }

@@ -34,7 +34,7 @@ func (m *Manager) NudgeCoordinatorScanDone(ctx context.Context, scan api.CodeSca
 		return
 	}
 	loop := m.ensureCoordinatorRuntime().CoordinatorLoop()
-	for _, sessionID := range loop.Subscriptions.SessionsSleepingOn(loopwake.WaitTriggerScanDone) {
+	for _, sessionID := range loop.Waits.SessionsSleepingOn(loopwake.WaitTriggerScanDone) {
 		if !m.scanWaits.Requested(ctx, sessionID, scan.ID) {
 			continue
 		}

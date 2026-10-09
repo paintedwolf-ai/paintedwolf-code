@@ -147,7 +147,7 @@ func (m *Manager) settleDeferredUserTurn(ctx context.Context, sessionID string) 
 		return nil
 	}
 	loop := m.ensureCoordinatorRuntime().CoordinatorLoop()
-	release, claimed := loop.Admission.BeginUserTurnSettlement(ctx, sessionID)
+	release, claimed := loop.Turns.BeginUserTurnSettlement(ctx, sessionID)
 	if !claimed {
 		if hadDeferred {
 			m.deferredTurnSettlement.put(sessionID, disposition)

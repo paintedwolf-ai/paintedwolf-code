@@ -1,8 +1,9 @@
 package conditions_test
 
 import (
-	"github.com/lycaon/lycaon/internal/conditions"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/conditions"
 )
 
 func TestConditionRegistryRegisterAndEvaluate(t *testing.T) {

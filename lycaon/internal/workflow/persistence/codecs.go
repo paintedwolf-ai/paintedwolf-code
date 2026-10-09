@@ -5,13 +5,14 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"sort"
+	"strings"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/pagecursor"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
-	"sort"
-	"strings"
-	"time"
 )
 
 func decodeWorkflowCommandReceipt(storedKind, storedDigest, response, rejectionJSON, kind, inputDigest string) (*api.WorkflowRun, bool, error) {

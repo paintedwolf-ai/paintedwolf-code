@@ -9,9 +9,9 @@ func (l *WaitSubscriptions) matchesActiveWait(ctx context.Context, sessionID str
 	if !l.Waits.IsSleeping(sessionID) {
 		return false
 	}
-	_, matched := waitConditionForWake(l.Triggers(sessionID), waitMatchInput{
+	_, matched := waitConditionForWake(l.Waits.Triggers(sessionID), waitMatchInput{
 		Wake: pending.wake, CompletingJobID: pending.completingJobID, ProcessHandle: pending.legID,
-		ProcessHandles: l.ActiveProcessHandles(sessionID), WorkerHandles: l.activeWorkerHandles(sessionID),
+		ProcessHandles: l.Waits.ActiveProcessHandles(sessionID), WorkerHandles: l.Waits.activeWorkerHandles(sessionID),
 		CycleIdle:         l.Cycles.workerCycleIdle(ctx, sessionID, pending.completingJobID),
 		OverlayPromoteDue: l.overlayPromoteDue(ctx, sessionID, pending.env), NeedsDecision: pending.env.HasWorkerDecision(),
 	})
@@ -23,7 +23,7 @@ func (l *WaitSubscriptions) routeWaitWake(ctx context.Context, sessionID string,
 	if l.resumePendingWait(ctx, sessionID, wake) {
 		return true
 	}
-	triggers := l.Triggers(sessionID)
+	triggers := l.Waits.Triggers(sessionID)
 	if !l.waitWakeAccepted(ctx, sessionID, wake, inform, legID, completingJobID, env) {
 		if shouldDeferForAllWorkersIdle(triggers, wake, completingJobID) && !l.Cycles.workerCycleIdle(ctx, sessionID, completingJobID) {
 			loopLogNudge(sessionID, wake, inform, legID, completingJobID, "defer_subscription_all_idle")

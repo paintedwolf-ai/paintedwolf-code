@@ -1,10 +1,12 @@
 package presentation
 
 import (
+	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
+
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
-	"strings"
 )
 
 // Phase exit kinds projected into the active-workflow inject.

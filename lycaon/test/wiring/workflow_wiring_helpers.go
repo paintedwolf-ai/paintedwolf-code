@@ -2,6 +2,10 @@ package wiring
 
 import (
 	"context"
+	"strings"
+	"testing"
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/evidence"
@@ -16,9 +20,6 @@ import (
 	"github.com/lycaon/lycaon/internal/workflow"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
-	"testing"
-	"time"
 )
 
 const topologyWaitBudget = 30 * time.Second

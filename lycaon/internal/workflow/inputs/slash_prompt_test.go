@@ -1,17 +1,19 @@
 package inputs_test
 
 import (
+	session "github.com/lycaon/lycaon/internal/session"
+
 	"context"
 	"encoding/json"
-	"github.com/google/uuid"
-	"github.com/lycaon/lycaon/internal/events"
-	session "github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/testdbseed"
-	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/workflow"
-	"github.com/lycaon/lycaon/pkg/api"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/events"
+	"github.com/lycaon/lycaon/internal/testdbseed"
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func userRowByID(t *testing.T, mgr *workflow.RunManager, sessionID, messageID string) api.Message {

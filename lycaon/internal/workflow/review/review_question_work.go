@@ -3,14 +3,15 @@ package review
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/reviewcoverage"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	toolguard "github.com/lycaon/lycaon/internal/workflow/toolguard"
-	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
-	"github.com/lycaon/lycaon/pkg/api"
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/reviewcoverage"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func checkQuestionClosure(def workflowdef.ReviewLoopDef, claims []workflowvalidation.VerdictClaim, questions []reviewQuestionWork, tasks []api.WorkerTask, phase string, review *api.CoverageReview) error {

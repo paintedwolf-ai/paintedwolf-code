@@ -3,12 +3,13 @@ package security
 import (
 	"context"
 	"encoding/json"
-	"github.com/lycaon/lycaon/pkg/api"
-	"github.com/lycaon/lycaon/test/wiring"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/pkg/api"
+	"github.com/lycaon/lycaon/test/wiring"
 )
 
 func TestGetSessionPendingWorkflowStartOpenAPI(t *testing.T) {

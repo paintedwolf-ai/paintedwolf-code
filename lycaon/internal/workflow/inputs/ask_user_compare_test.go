@@ -3,16 +3,18 @@
 package inputs_test
 
 import (
+	session "github.com/lycaon/lycaon/internal/session"
+
 	"context"
 	"encoding/json"
+	"strings"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/orchestration"
-	session "github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/visual"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"strings"
-	"testing"
 )
 
 func TestAskUserComparePreference(t *testing.T) {

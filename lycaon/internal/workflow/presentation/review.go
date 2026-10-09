@@ -2,13 +2,14 @@ package presentation
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/guidance"
+	"strings"
+
+	"github.com/lycaon/lycaon/internal/evidence"
 	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
 )
 
 // PhaseVerdict is one review phase's last decided record, with the schema it

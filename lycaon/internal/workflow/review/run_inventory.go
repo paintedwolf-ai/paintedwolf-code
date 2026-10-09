@@ -2,17 +2,18 @@ package review
 
 import (
 	"context"
+	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
+	"sort"
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/scan"
 	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"github.com/lycaon/lycaon/pkg/api"
-	"sort"
-	"strings"
 )
 
 // SubmitVerdictScanGroupUnknownCode rejects a verdict whose claims cite

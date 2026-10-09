@@ -5,6 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"github.com/go-chi/chi/v5"
+	"net/http"
+	"strings"
+
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/promptadmin"
@@ -23,8 +26,6 @@ import (
 	"github.com/lycaon/lycaon/internal/usernotice"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"net/http"
-	"strings"
 )
 
 // invokeScope is one invocation, resolved from its route.

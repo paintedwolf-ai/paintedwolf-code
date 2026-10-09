@@ -2,9 +2,10 @@ package review
 
 import (
 	"context"
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/inspector"
-	"strings"
 )
 
 // ListReviewLoopEvidence returns review-family gate records for a workflow run's

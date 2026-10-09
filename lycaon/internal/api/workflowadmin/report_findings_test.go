@@ -2,8 +2,9 @@ package workflowadmin
 
 import (
 	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
-	wire "github.com/lycaon/lycaon/pkg/api"
 	"testing"
+
+	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 // The findings are the closeout's own conclusions, most severe first, with

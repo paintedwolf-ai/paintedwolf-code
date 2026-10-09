@@ -1,5 +1,7 @@
 package definition
 
+import "strings"
+
 const evidenceLeafPrefix = "evidence_passed:"
 
 func PhaseEvidenceRequirements(manifest Manifest, phaseID string) []string {

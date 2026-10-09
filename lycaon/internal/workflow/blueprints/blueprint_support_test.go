@@ -1,9 +1,10 @@
 package blueprints
 
 import (
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/blueprint"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	"testing"
 )
 
 func TestSupportsBlueprints(t *testing.T) {

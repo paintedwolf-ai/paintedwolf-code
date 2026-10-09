@@ -1,10 +1,11 @@
 package catalog_test
 
 import (
+	"testing"
+
 	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
 func TestFilterProductCatalogSummaries(t *testing.T) {

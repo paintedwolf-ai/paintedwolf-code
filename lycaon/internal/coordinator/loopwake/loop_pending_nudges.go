@@ -42,7 +42,7 @@ func (l *Nudges) schedulePendingDrain(ctx context.Context, sessionID string, pos
 	if l.Admission.PromptExecutionActive(sessionID) {
 		return
 	}
-	if _, active := l.Turns.promptActive.Load(sessionID); active {
+	if l.Turns.Active(sessionID) {
 		return
 	}
 	if l.Turns.hostTurnBlocked(ctx, sessionID) {

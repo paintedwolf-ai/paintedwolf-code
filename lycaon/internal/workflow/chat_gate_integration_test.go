@@ -4,9 +4,10 @@ package workflow
 
 import (
 	"context"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"testing"
 )
 
 func TestTryResolveUserFeedbackDoesNotApprovePlanViaChat(t *testing.T) {

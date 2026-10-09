@@ -1,12 +1,14 @@
 package session
 
 import (
-	"context"
-	"github.com/lycaon/lycaon/internal/oar"
 	workflowfacts "github.com/lycaon/lycaon/internal/session/workflowfacts"
-	"github.com/lycaon/lycaon/pkg/api"
+
+	"context"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 type phaseGuardWorkflowView struct {

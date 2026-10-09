@@ -2,10 +2,11 @@ package session
 
 import (
 	"context"
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
 )
 
 var coordinatorMutationTools = map[string]struct{}{

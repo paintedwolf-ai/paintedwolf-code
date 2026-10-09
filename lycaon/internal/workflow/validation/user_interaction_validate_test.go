@@ -1,9 +1,10 @@
 package validation
 
 import (
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"strings"
 	"testing"
+
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 )
 
 func TestValidateUserInteractionGatesRejectsMismatchedFeedbackPhase(t *testing.T) {

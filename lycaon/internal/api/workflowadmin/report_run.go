@@ -4,14 +4,15 @@ import (
 	"context"
 	"fmt"
 	"github.com/go-chi/chi/v5"
-	"github.com/lycaon/lycaon/internal/report"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
-	"github.com/lycaon/lycaon/internal/workflow/runstate"
-	wire "github.com/lycaon/lycaon/pkg/api"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/report"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
+	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 func (s *Handler) HandleGetWorkflowRunReport(w http.ResponseWriter, r *http.Request) {

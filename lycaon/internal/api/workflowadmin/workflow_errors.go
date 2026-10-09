@@ -2,12 +2,13 @@ package workflowadmin
 
 import (
 	"errors"
+	"net/http"
+
 	"github.com/lycaon/lycaon/internal/session/lifecycle"
 	"github.com/lycaon/lycaon/internal/session/store"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"net/http"
 )
 
 // workflowFailure is the answer for one workflow sentinel error.

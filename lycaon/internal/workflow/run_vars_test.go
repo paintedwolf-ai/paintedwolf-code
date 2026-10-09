@@ -3,12 +3,13 @@ package workflow
 import (
 	"context"
 	"errors"
+	"sync"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
-	"sync"
-	"testing"
 )
 
 // A revision bumped between the caller's load and its commit is not a conflict:

@@ -3,9 +3,10 @@ package worker
 import (
 	"context"
 	"fmt"
+	"strings"
+
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
 )
 
 // Enqueue adds a worker task.

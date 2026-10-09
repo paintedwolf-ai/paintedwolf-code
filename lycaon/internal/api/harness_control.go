@@ -5,6 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"github.com/go-chi/chi/v5"
+	workflowinputs "github.com/lycaon/lycaon/internal/workflow/inputs"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
@@ -17,12 +23,7 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/visual"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	workflowinputs "github.com/lycaon/lycaon/internal/workflow/inputs"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"net/http"
-	"strconv"
-	"strings"
-	"time"
 )
 
 // registerHarnessRoutes registers authenticated controls for an isolated harness.

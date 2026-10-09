@@ -2,7 +2,6 @@ package contract
 
 import (
 	"fmt"
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -10,6 +9,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
 // Vars writes load the run after locking so their CAS revision belongs to the critical section.

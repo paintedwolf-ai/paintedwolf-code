@@ -79,7 +79,7 @@ func TestProcessDoneOnlySleepSurvivesPastAdvisoryDeadline(t *testing.T) {
 	if !loop.Waits.IsSleeping("proc-waiter") {
 		t.Fatal("process_done-only sleep must stay armed after the advisory wake_at")
 	}
-	if !loop.Subscriptions.SessionSleepingOnProcess("proc-waiter", "handle-1") {
+	if !loop.Waits.SessionSleepingOnProcess("proc-waiter", "handle-1") {
 		t.Fatal("exact handle must still match after the advisory wake_at")
 	}
 	loop.Nudges.NudgeProcessFinished(context.Background(), "proc-waiter", "handle-1", anchor.Envelope{})

@@ -1,9 +1,10 @@
 package workflow
 
 import (
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
-	"strings"
 )
 
 // SetBoardOrientReadyVar stamps the board orientation gate.

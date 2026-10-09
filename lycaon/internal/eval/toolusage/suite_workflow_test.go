@@ -1,13 +1,14 @@
 package toolusage
 
 import (
+	"os"
+	"path/filepath"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
-	"os"
-	"path/filepath"
-	"testing"
 )
 
 func TestWorkflowFixturesUseValidProjectManifests(t *testing.T) {

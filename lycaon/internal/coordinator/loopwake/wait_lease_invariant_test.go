@@ -65,10 +65,10 @@ func leaseTestDeps(rec *leaseRecorder) LoopDeps {
 // leaseMatchesSleep checks lease parity with host-mover sleep state.
 func leaseMatchesSleep(t *testing.T, step string, loop *LoopEngine, rec *leaseRecorder, sessionID string) {
 	t.Helper()
-	armedForHost := loop.Waits.IsSleeping(sessionID) && loop.Subscriptions.activeSleepMover(sessionID) == SleepMoverHost
+	armedForHost := loop.Waits.IsSleeping(sessionID) && loop.Waits.activeSleepMover(sessionID) == SleepMoverHost
 	if got := waitLeaseOpenForTest(loop.Waits, sessionID); got != armedForHost {
 		t.Fatalf("%s: engine lease open = %v, want %v (sleeping=%v mover=%v)",
-			step, got, armedForHost, loop.Waits.IsSleeping(sessionID), loop.Subscriptions.activeSleepMover(sessionID))
+			step, got, armedForHost, loop.Waits.IsSleeping(sessionID), loop.Waits.activeSleepMover(sessionID))
 	}
 	want := 0
 	if armedForHost {

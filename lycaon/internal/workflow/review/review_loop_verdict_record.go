@@ -6,15 +6,16 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/google/uuid"
-	"github.com/lycaon/lycaon/internal/evidence"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
-	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
-	"github.com/lycaon/lycaon/pkg/api"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/evidence"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 type verdictOperationContextKey struct{}

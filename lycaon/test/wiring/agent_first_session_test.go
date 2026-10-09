@@ -2,12 +2,13 @@ package wiring
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/llm"
-	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
-	wire "github.com/lycaon/lycaon/pkg/api"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/llm"
+	"github.com/lycaon/lycaon/internal/testutil"
+	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestFirstPromptAttachesDefaultWorkflow(t *testing.T) {

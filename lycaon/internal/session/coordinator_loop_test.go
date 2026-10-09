@@ -3,12 +3,19 @@
 package session_test
 
 import (
+	loopwake "github.com/lycaon/lycaon/internal/coordinator/loopwake"
+
 	"context"
+	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
-	loopwake "github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/coordinator/reenter"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/llm"
@@ -26,13 +33,8 @@ import (
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
-	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"path/filepath"
-	"strings"
-	"testing"
-	"time"
 )
 
 func wireImplementConvergenceHooks(t *testing.T, mgr *session.Manager, wfMgr *workflow.RunManager, q session.WorkerCycleLister) {

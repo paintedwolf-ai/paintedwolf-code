@@ -4,13 +4,14 @@ import (
 	"context"
 	"errors"
 	"github.com/go-chi/chi/v5"
+	"net/http"
+
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
 	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"net/http"
 )
 
 func (s *Handler) HandleComposeWorkflow(w http.ResponseWriter, r *http.Request) {

@@ -111,7 +111,6 @@ type sessionSleep struct {
 	activityStartedAt time.Time
 }
 
-
 // UserTurnContinuation describes the next visible-turn transition.
 type UserTurnContinuation uint8
 

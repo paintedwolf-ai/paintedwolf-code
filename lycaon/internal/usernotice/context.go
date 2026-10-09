@@ -3,6 +3,11 @@ package usernotice
 import (
 	"errors"
 	"fmt"
+	"strings"
+	"time"
+	"unicode"
+	"unicode/utf8"
+
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/providerretry"
@@ -11,10 +16,6 @@ import (
 	"github.com/lycaon/lycaon/internal/runeclamp"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"strings"
-	"time"
-	"unicode"
-	"unicode/utf8"
 )
 
 // hostFaultNotice matches host-fault prompt errors without importing their package.

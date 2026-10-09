@@ -1,15 +1,16 @@
 package contract
 
 import (
-	"github.com/lycaon/lycaon/internal/coordinator/surface"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
-	"github.com/lycaon/lycaon/pkg/api"
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"regexp"
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/pkg/api"
+	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
 // phaseExitChannel names a tool required to leave a phase.

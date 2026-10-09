@@ -3,13 +3,14 @@ package worker
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/worker/jobstate"
+	"strings"
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/project"
-	"github.com/lycaon/lycaon/internal/worker/jobstate"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
-	"time"
 )
 
 // refreshBoard runs outside q.mu because board reads can re-enter the queue.

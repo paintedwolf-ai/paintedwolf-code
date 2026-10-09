@@ -2,6 +2,12 @@ package validation_test
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -10,11 +16,6 @@ import (
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"github.com/lycaon/lycaon/internal/workflow/verdictcall"
-	"os"
-	"path/filepath"
-	"slices"
-	"strings"
-	"testing"
 )
 
 // reviewLoopFixture ties a live workflow review_loop phase to its verdict fixture, so the

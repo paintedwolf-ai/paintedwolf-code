@@ -3,11 +3,12 @@ package worker
 import (
 	"context"
 	"errors"
+	"strings"
+	"sync"
+
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/keylock"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
-	"sync"
 )
 
 // ErrNoPendingJobs is returned when ClaimNext finds no queued work.

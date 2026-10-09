@@ -1,11 +1,6 @@
 package contract
 
 import (
-	"github.com/lycaon/lycaon/internal/extpacks"
-	"github.com/lycaon/lycaon/internal/guidance/feedback"
-	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -14,6 +9,12 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/extpacks"
+	"github.com/lycaon/lycaon/internal/guidance/feedback"
+	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
 // Catalog revisions bind the captured unit bytes used by loaders.

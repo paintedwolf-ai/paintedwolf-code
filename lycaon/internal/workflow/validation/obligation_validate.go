@@ -2,11 +2,12 @@ package validation
 
 import (
 	"fmt"
+	"sort"
+	"strings"
+
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflowdiag"
 	"github.com/lycaon/lycaon/pkg/api"
-	"sort"
-	"strings"
 )
 
 // ValidatePhaseObligations checks declarations, gates, and host advancement.

@@ -23,7 +23,7 @@ func TestFailedTurnHoldsQueuedPhaseWakeUntilExplicitExecution(t *testing.T) {
 	if f.prompts.Load() != 0 || !f.loop.Nudges.HasPendingLoopWakes("session") {
 		t.Fatalf("prompts=%d, pending=%v", f.prompts.Load(), f.loop.Nudges.HasPendingLoopWakes("session"))
 	}
-	release, ok := f.loop.Admission.BeginUserTurnSettlement(t.Context(), "session")
+	release, ok := f.loop.Turns.BeginUserTurnSettlement(t.Context(), "session")
 	if !ok {
 		t.Fatal("held wake prevented failed-turn settlement")
 	}

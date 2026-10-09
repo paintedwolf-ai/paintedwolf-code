@@ -1,8 +1,10 @@
 package toolpolicy
 
 import (
-	"context"
 	workflowfacts "github.com/lycaon/lycaon/internal/session/workflowfacts"
+
+	"context"
+
 	"github.com/lycaon/lycaon/pkg/api"
 )
 

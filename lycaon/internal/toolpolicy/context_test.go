@@ -1,11 +1,13 @@
 package toolpolicy
 
 import (
-	"context"
-	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	workflowfacts "github.com/lycaon/lycaon/internal/session/workflowfacts"
-	"github.com/lycaon/lycaon/pkg/api"
+
+	"context"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/coordinator/inject"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 type recordingWorkflowView struct {

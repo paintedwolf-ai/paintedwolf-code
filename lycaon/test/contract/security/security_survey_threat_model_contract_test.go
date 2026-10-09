@@ -1,14 +1,15 @@
 package contract
 
 import (
-	"github.com/lycaon/lycaon/internal/configlayout"
-	"github.com/lycaon/lycaon/internal/testutil"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/configlayout"
+	"github.com/lycaon/lycaon/internal/testutil"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 )
 
 func TestSecuritySurveyPlanRequiresThreatModel(t *testing.T) {

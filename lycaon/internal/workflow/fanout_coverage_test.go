@@ -2,9 +2,10 @@ package workflow
 
 import (
 	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
-	"github.com/lycaon/lycaon/pkg/api"
 	"testing"
 	"time"
+
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestFanoutCoverageAccountsForEveryLegAndRecovery(t *testing.T) {

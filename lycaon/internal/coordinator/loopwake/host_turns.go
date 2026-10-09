@@ -5,6 +5,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/promptresult"
+	"strings"
 	"sync"
 )
 
@@ -175,4 +176,25 @@ func (l *HostTurns) WaitForAsyncTurns(ctx context.Context) {
 	}
 	l.cancelAllAsyncTurns()
 	<-done
+}
+
+func (l *HostTurns) BeginUserTurnSettlement(ctx context.Context, sessionID string) (func(), bool) {
+	if l == nil || strings.TrimSpace(sessionID) == "" {
+		return func() {}, false
+	}
+	if l.Admission.PromptExecutionActive(sessionID) || (!l.hostTurnBlocked(ctx, sessionID) && l.Nudges.HasPendingLoopWakes(sessionID)) {
+		return func() {}, false
+	}
+	if _, loaded := l.promptActive.LoadOrStore(sessionID, struct{}{}); loaded {
+		return func() {}, false
+	}
+	if l.Admission.PromptExecutionActive(sessionID) || (!l.hostTurnBlocked(ctx, sessionID) && l.Nudges.HasPendingLoopWakes(sessionID)) {
+		l.releasePromptActiveAndRedrain(ctx, sessionID)
+		return func() {}, false
+	}
+	return func() { l.releasePromptActiveAndRedrain(ctx, sessionID) }, true
+}
+func (l *HostTurns) Active(sessionID string) bool {
+	_, active := l.promptActive.Load(sessionID)
+	return active
 }

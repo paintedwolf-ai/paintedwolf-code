@@ -3,6 +3,9 @@ package toolpolicy
 import (
 	"context"
 	"errors"
+	"path/filepath"
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/rules"
@@ -12,8 +15,6 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
-	"path/filepath"
-	"strings"
 )
 
 // Engine answers whether a tool may appear in the LLM schema and whether it may run.

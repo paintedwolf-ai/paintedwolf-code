@@ -2,6 +2,9 @@ package contract
 
 import (
 	"context"
+	"strings"
+	"testing"
+
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/guidance"
@@ -9,8 +12,6 @@ import (
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
-	"strings"
-	"testing"
 )
 
 // specPlanGateCase mirrors spec-posture plan gate reject_codes shapes (code + phase + min_required).

@@ -1,7 +1,16 @@
 package session_test
 
 import (
+	workflowruntime "github.com/lycaon/lycaon/internal/workflow/runtime"
+	workflowstatetools "github.com/lycaon/lycaon/internal/workflow/statetools"
+
 	"context"
+	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
+	workflowinputs "github.com/lycaon/lycaon/internal/workflow/inputs"
+	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
+	"path/filepath"
+	"testing"
+
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/conditions"
@@ -13,7 +22,6 @@ import (
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/rules"
 	"github.com/lycaon/lycaon/internal/session"
-	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -28,14 +36,8 @@ import (
 	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
-	workflowinputs "github.com/lycaon/lycaon/internal/workflow/inputs"
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
-	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
-	workflowruntime "github.com/lycaon/lycaon/internal/workflow/runtime"
-	workflowstatetools "github.com/lycaon/lycaon/internal/workflow/statetools"
 	"github.com/lycaon/lycaon/pkg/api"
-	"path/filepath"
-	"testing"
 )
 
 type contextualToolsFixture struct {

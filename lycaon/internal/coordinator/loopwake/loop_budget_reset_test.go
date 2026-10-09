@@ -1,5 +1,9 @@
 package loopwake
 
+import (
+	"testing"
+)
+
 func TestLoopResetBudget(t *testing.T) {
 	engine := NewLoopEngine()
 	key := loopBudgetKey{sessionID: "session-1", runID: "run-1"}

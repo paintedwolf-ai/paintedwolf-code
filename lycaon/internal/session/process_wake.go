@@ -21,7 +21,7 @@ func (m *Manager) nudgeProcessWait(ctx context.Context, sessionID, handle string
 		return false
 	}
 	loop := m.ensureCoordinatorRuntime().CoordinatorLoop()
-	if !loop.Subscriptions.SessionSleepingOnProcess(sessionID, handle) {
+	if !loop.Waits.SessionSleepingOnProcess(sessionID, handle) {
 		return false
 	}
 	if wake == anchor.ProcessRefused {

@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/pkg/api"
 )

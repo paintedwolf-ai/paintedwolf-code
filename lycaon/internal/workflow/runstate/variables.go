@@ -3,9 +3,10 @@ package runstate
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/pkg/api"
 	"strings"
 	"sync"
+
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 type VarsReader interface {

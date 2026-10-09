@@ -2,13 +2,14 @@ package session
 
 import (
 	"fmt"
-	"github.com/lycaon/lycaon/config"
 	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
-	"github.com/lycaon/lycaon/pkg/api"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/lycaon/lycaon/config"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // PostureSpec is one entry from session-postures.yaml. A posture names a stage

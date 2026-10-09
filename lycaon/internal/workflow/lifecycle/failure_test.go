@@ -1,11 +1,12 @@
 package lifecycle_test
 
 import (
+	"testing"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
-	"time"
 )
 
 func TestFailCommitsStructuredTerminalState(t *testing.T) {

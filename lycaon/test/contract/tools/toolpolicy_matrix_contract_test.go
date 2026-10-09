@@ -1,7 +1,17 @@
 package contract
 
 import (
+	workflowruntime "github.com/lycaon/lycaon/internal/workflow/runtime"
+	workflowstatetools "github.com/lycaon/lycaon/internal/workflow/statetools"
+
 	"context"
+	workflowinputs "github.com/lycaon/lycaon/internal/workflow/inputs"
+	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/conditions"
@@ -23,17 +33,9 @@ import (
 	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
-	workflowinputs "github.com/lycaon/lycaon/internal/workflow/inputs"
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
-	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
-	workflowruntime "github.com/lycaon/lycaon/internal/workflow/runtime"
-	workflowstatetools "github.com/lycaon/lycaon/internal/workflow/statetools"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
-	"os"
-	"path/filepath"
-	"strings"
-	"testing"
 )
 
 type postureToolExpectation struct {

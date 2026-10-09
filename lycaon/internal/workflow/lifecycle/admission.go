@@ -3,6 +3,10 @@ package lifecycle
 import (
 	"context"
 	"fmt"
+	"strings"
+	"sync"
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/hostctx"
@@ -11,9 +15,6 @@ import (
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
-	"sync"
-	"time"
 )
 
 // Admission owns session start serialization and reviewed workflow activation.

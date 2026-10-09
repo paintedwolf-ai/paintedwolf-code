@@ -2,12 +2,13 @@ package session
 
 import (
 	"context"
+	"strings"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/internal/pagecursor"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
-	"time"
 )
 
 // CreateForProject opens a project-bound session.

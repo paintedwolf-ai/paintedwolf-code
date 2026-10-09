@@ -1,10 +1,11 @@
 package runstate
 
 import (
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	"github.com/lycaon/lycaon/pkg/api"
 	"strings"
 	"time"
+
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func PendingPromptFromVars(vars map[string]any) (phaseID string, fb *workflowdef.UserFeedbackPrompt, ok bool) {

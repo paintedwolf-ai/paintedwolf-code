@@ -1,6 +1,10 @@
 package review
 
 import (
+	"path/filepath"
+	"strings"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/anchorcatalog"
 	"github.com/lycaon/lycaon/internal/curationctx"
 	"github.com/lycaon/lycaon/internal/guidance"
@@ -10,9 +14,6 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"github.com/lycaon/lycaon/pkg/api"
-	"path/filepath"
-	"strings"
-	"testing"
 )
 
 func TestWorkflowVerdictRefusalsRetainPolicyOccurrenceAndStructuredCause(t *testing.T) {

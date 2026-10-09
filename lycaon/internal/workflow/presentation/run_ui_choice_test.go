@@ -2,11 +2,12 @@ package presentation_test
 
 import (
 	"context"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
 func TestComputeRunUIChoiceTransitions(t *testing.T) {

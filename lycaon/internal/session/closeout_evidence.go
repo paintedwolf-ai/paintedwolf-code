@@ -2,12 +2,13 @@ package session
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/evidence"
-	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
-	"github.com/lycaon/lycaon/pkg/api"
 	"strings"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/evidence"
+	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // CloseoutEvidence reads what a session's closeout may cite: its own ledger

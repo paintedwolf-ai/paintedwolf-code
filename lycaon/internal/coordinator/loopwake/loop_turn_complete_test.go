@@ -352,7 +352,7 @@ func TestUserTurnSettlementClaimOrdersLaterWakeAfterBoundary(t *testing.T) {
 		},
 	})
 
-	release, claimed := loop.Admission.BeginUserTurnSettlement(t.Context(), "sess-settling")
+	release, claimed := loop.Turns.BeginUserTurnSettlement(t.Context(), "sess-settling")
 	if !claimed {
 		t.Fatal("settlement lane was not claimed")
 	}

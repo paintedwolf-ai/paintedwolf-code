@@ -3,13 +3,15 @@ package composition
 import (
 	"context"
 	"fmt"
+	"os"
+	"regexp"
+	"strings"
+
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
 	"github.com/lycaon/lycaon/pkg/api"
-	"os"
-	"regexp"
-	"strings"
+	"gopkg.in/yaml.v3"
 )
 
 var templateParamRef = regexp.MustCompile(`\$\{params\.([a-zA-Z0-9_]+)\}`)

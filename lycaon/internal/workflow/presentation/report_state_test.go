@@ -1,10 +1,11 @@
 package presentation
 
 import (
+	"testing"
+
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
 func TestReportAvailabilityRequiresEnabledDeliveredTerminalRun(t *testing.T) {

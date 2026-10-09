@@ -2,16 +2,17 @@ package usernotice
 
 import (
 	"errors"
+	"path/filepath"
+	"strings"
+	"testing"
+	"unicode/utf8"
+
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/providerretry"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"path/filepath"
-	"strings"
-	"testing"
-	"unicode/utf8"
 )
 
 func TestContextFromPromptErrorProvider(t *testing.T) {

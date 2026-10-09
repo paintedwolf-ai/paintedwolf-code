@@ -37,7 +37,7 @@ func (l *Waits) InterruptSleep(ctx context.Context, sessionID string) {
 	if store := l.Subscriptions.durableWaitStore(); store != nil {
 		_ = store.InterruptSession(ctx, sessionID, "interrupted")
 	}
-	l.Deliveries.waitWinners.Delete(strings.TrimSpace(sessionID))
+	l.Deliveries.ForgetSession(strings.TrimSpace(sessionID))
 	l.breakSleep(ctx, sessionID, "user_prompt", false)
 	l.Nudges.ClearPending(sessionID)
 }
@@ -279,4 +279,12 @@ func (l *Waits) IsSleeping(sessionID string) bool {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	return sleepArmedLocked(st, time.Now())
+}
+
+func (l *Waits) clearCompletedWorkflowWait(ctx context.Context, sessionID string) {
+	l.breakSleep(ctx, sessionID, "workflow_complete", false)
+	st := l.sleep.state(sessionID)
+	st.mu.Lock()
+	st.waitThisTurn = false
+	st.mu.Unlock()
 }

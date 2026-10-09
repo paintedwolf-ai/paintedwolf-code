@@ -1,13 +1,14 @@
 package contract
 
 import (
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
 	"testing"
+
+	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
 // hostVarProducers pairs each SetHostVar key with a regex proving a live

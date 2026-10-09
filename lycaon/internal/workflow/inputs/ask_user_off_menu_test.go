@@ -5,12 +5,13 @@ package inputs_test
 import (
 	"context"
 	"encoding/json"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
 // answeredAskBody returns the resolved tool row.

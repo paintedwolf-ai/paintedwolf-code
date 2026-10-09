@@ -2,9 +2,6 @@ package security
 
 import (
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/testutil"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	wire "github.com/lycaon/lycaon/pkg/api"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -12,6 +9,10 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 func loadChoiceTransitionsManifest(t *testing.T) workflowdef.Manifest {

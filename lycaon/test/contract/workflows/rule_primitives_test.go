@@ -2,15 +2,16 @@ package contract
 
 import (
 	"context"
+	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
+	"strings"
+	"testing"
+
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/rules"
 	"github.com/lycaon/lycaon/internal/session"
-	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
-	"strings"
-	"testing"
 )
 
 func knownRuleWhenKeys() map[string]struct{} {

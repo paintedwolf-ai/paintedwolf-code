@@ -1,18 +1,20 @@
 package phases_test
 
 import (
+	workflow "github.com/lycaon/lycaon/internal/workflow"
+
 	"context"
 	"encoding/json"
 	"errors"
+	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/scaffoldvars"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
-	workflow "github.com/lycaon/lycaon/internal/workflow"
-	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
 func registerTransitionToolTestRegistry(t *testing.T, mgr *workflow.RunManager) *tools.DefaultRegistry {

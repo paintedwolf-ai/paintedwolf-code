@@ -64,7 +64,7 @@ func (l *WaitDeliveries) runWaitResumeAsync(ctx context.Context, sessionID strin
 	if l.Admission.PromptExecutionActive(sessionID) || l.Turns.hostTurnBlocked(ctx, sessionID) {
 		return
 	}
-	if _, active := l.Turns.promptActive.Load(sessionID); active {
+	if l.Turns.Active(sessionID) {
 		return
 	}
 	l.Turns.spawnAsyncTurn(ctx, sessionID, func(ctx context.Context) {

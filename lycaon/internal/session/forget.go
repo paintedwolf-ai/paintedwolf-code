@@ -2,10 +2,11 @@ package session
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/progress"
-	"github.com/lycaon/lycaon/internal/resourcelifecycle"
 	"log/slog"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/progress"
+	"github.com/lycaon/lycaon/internal/resourcelifecycle"
 )
 
 // RegisterSessionCleanup adds one session-scoped cleanup rule.

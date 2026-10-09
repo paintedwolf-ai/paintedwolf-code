@@ -2,15 +2,16 @@ package catalog
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"runtime"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
 	"github.com/lycaon/lycaon/pkg/api"
-	"os"
-	"path/filepath"
-	"runtime"
-	"testing"
 )
 
 func bundledWorkflowsDir(t *testing.T) string {

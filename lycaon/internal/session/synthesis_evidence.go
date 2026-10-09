@@ -2,6 +2,8 @@ package session
 
 import (
 	"context"
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/curationctx"
@@ -9,7 +11,6 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/survey"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
 )
 
 // SetSynthesisCurator wires the lite curator for synthesis evidence.

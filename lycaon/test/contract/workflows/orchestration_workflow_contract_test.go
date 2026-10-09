@@ -2,6 +2,10 @@ package contract
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"testing"
+
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/orchestration"
@@ -11,9 +15,6 @@ import (
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/wirespec"
 	"github.com/lycaon/lycaon/test/contract/internal/workflowfixture"
-	"os"
-	"path/filepath"
-	"testing"
 )
 
 func TestBugbashInWorkflowCatalog(t *testing.T) {

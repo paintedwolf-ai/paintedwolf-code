@@ -1,6 +1,8 @@
 package boot_test
 
 import (
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/boot"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/rules"
@@ -12,7 +14,6 @@ import (
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
-	"testing"
 )
 
 func TestValidateServeWiringAcceptsProductionShape(t *testing.T) {

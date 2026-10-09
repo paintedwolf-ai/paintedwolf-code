@@ -3,10 +3,17 @@
 package session_test
 
 import (
+	loopwake "github.com/lycaon/lycaon/internal/coordinator/loopwake"
+
 	"context"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
+	"path/filepath"
+	"sync"
+	"testing"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
-	loopwake "github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
@@ -22,12 +29,7 @@ import (
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
-	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"path/filepath"
-	"sync"
-	"testing"
-	"time"
 )
 
 // silentProviderClient reports an exhausted silent request.

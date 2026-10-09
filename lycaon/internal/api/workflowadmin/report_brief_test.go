@@ -1,11 +1,12 @@
 package workflowadmin
 
 import (
+	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/report"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
-	"testing"
 )
 
 // The rating is decided from the findings that need attention: the review's

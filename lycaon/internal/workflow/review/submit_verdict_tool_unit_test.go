@@ -1,9 +1,10 @@
 package review
 
 import (
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	"testing"
 )
 
 func TestParseSubmitVerdictArgsUsesDeclaredTypes(t *testing.T) {

@@ -2,9 +2,10 @@ package reenter
 
 import (
 	"context"
+	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
+
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
 )
 
 // CoordinatorNudger schedules coordinator loop wakes after manifest same-phase re-enter.

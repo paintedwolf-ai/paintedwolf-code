@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"github.com/go-chi/chi/v5"
+	"net/http"
+	"strings"
+
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
@@ -12,8 +15,6 @@ import (
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"net/http"
-	"strings"
 )
 
 func (s *Handler) HandleStartWorkflowRun(w http.ResponseWriter, r *http.Request) {

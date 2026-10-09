@@ -4,6 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
+	"path/filepath"
+	"strings"
+	"syscall"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/providerretry"
@@ -13,11 +19,6 @@ import (
 	"github.com/lycaon/lycaon/internal/usernotice"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"net/url"
-	"path/filepath"
-	"strings"
-	"syscall"
-	"testing"
 )
 
 func testUserNoticeCatalog(t *testing.T) *usernotice.Catalog {

@@ -1,12 +1,14 @@
 package session
 
 import (
+	workflowfacts "github.com/lycaon/lycaon/internal/session/workflowfacts"
+
 	"context"
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/session/store"
-	workflowfacts "github.com/lycaon/lycaon/internal/session/workflowfacts"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
 )
 
 // workflowfacts.ResolvedWorkflowRequest binds request text to its workflow start.

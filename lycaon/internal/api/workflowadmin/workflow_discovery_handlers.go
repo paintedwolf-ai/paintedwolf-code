@@ -3,14 +3,15 @@ package workflowadmin
 import (
 	"errors"
 	"github.com/go-chi/chi/v5"
+	"net/http"
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/project"
 	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"net/http"
-	"strings"
 )
 
 func (s *Handler) HandleListWorkflows(w http.ResponseWriter, r *http.Request) {

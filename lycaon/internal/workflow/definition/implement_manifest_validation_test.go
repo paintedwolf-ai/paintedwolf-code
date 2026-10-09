@@ -1,10 +1,11 @@
 package definition_test
 
 import (
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	"testing"
 )
 
 func TestBundledImplementManifestLoadValidation(t *testing.T) {

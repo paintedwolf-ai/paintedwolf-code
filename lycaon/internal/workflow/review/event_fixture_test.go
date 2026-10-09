@@ -1,15 +1,16 @@
 package review_test
 
 import (
+	workflow "github.com/lycaon/lycaon/internal/workflow"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
-	workflow "github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
-	"testing"
 )
 
 func newRunManagerForEvents(t *testing.T, name string) (*workflow.RunManager, *events.MemoryHub, *store.SQL, db.Handle) {

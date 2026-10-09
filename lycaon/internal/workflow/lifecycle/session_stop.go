@@ -3,10 +3,11 @@ package lifecycle
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/workflow/runstate"
-	"github.com/lycaon/lycaon/pkg/api"
 	"log/slog"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 type StopRepairKey struct{}

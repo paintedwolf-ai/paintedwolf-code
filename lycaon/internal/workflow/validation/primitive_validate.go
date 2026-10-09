@@ -2,11 +2,12 @@ package validation
 
 import (
 	"fmt"
+	"strings"
+
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowintake "github.com/lycaon/lycaon/internal/workflow/intake"
 	"github.com/lycaon/lycaon/internal/workflowdiag"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
 )
 
 // ValidatePrimitiveManifest checks intake, depth, review_loop, and human_approval invariants.

@@ -1,12 +1,13 @@
 package contract
 
 import (
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/tools"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
-	"testing"
 )
 
 func TestSubmitVerdictSchemaRequiresEveryPhaseDiscriminant(t *testing.T) {

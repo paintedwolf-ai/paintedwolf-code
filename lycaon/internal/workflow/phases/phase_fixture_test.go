@@ -1,14 +1,17 @@
 package phases_test
 
 import (
-	"context"
-	blueprint "github.com/lycaon/lycaon/internal/blueprint"
-	"github.com/lycaon/lycaon/internal/testutil"
-	workflow "github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+
+	blueprint "github.com/lycaon/lycaon/internal/blueprint"
+
+	"context"
+	workflow "github.com/lycaon/lycaon/internal/workflow"
+	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
 func startRun(ctx context.Context, mgr *workflow.RunManager, sessionID, workflowID, version string) (*api.WorkflowRun, error) {

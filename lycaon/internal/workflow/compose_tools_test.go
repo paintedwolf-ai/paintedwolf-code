@@ -3,6 +3,9 @@ package workflow_test
 import (
 	"context"
 	"encoding/json"
+	"strings"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/projectroot"
@@ -11,8 +14,6 @@ import (
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
 	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
-	"strings"
-	"testing"
 )
 
 func TestComposeToolOmitsEffectiveYAML(t *testing.T) {

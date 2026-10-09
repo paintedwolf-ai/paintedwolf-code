@@ -1,5 +1,7 @@
 package runstate
 
+import "github.com/lycaon/lycaon/pkg/api"
+
 const ReportNotAcceptedFailureCode = "REPORT_NOT_ACCEPTED"
 
 func ReportNotAcceptedRun(run *api.WorkflowRun) bool {

@@ -2,10 +2,11 @@ package inputs
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/scaffoldvars"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
-	"github.com/lycaon/lycaon/pkg/api"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/scaffoldvars"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // PendingAsk reports a pending question or approval and its start time.

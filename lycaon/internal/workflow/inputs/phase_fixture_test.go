@@ -2,11 +2,12 @@ package inputs_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/testutil"
 	workflow "github.com/lycaon/lycaon/internal/workflow"
+	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
 func startRun(ctx context.Context, mgr *workflow.RunManager, sessionID, workflowID, version string) (*api.WorkflowRun, error) {

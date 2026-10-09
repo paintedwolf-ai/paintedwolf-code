@@ -4,10 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/worker/jobstate"
-	"github.com/lycaon/lycaon/pkg/api"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // GetLatestByChildSessionID returns the newest run for a child session.

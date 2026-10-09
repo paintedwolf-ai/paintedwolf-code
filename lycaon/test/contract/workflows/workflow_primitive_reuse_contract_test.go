@@ -2,14 +2,15 @@ package contract
 
 import (
 	"context"
-	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
-	"github.com/lycaon/lycaon/test/contract/internal/workflowfixture"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
+	"github.com/lycaon/lycaon/test/contract/internal/workflowfixture"
 )
 
 // Workflow primitives stay independent of a specific workflow.

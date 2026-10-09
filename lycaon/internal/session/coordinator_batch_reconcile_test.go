@@ -3,11 +3,15 @@
 package session_test
 
 import (
+	loopwake "github.com/lycaon/lycaon/internal/coordinator/loopwake"
+
 	"context"
+	"path/filepath"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/batch"
-	loopwake "github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/progress"
@@ -23,8 +27,6 @@ import (
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"path/filepath"
-	"testing"
 )
 
 func TestFinishPromptExecutionQueuesOverlayIntegrateCompleteKick(t *testing.T) {

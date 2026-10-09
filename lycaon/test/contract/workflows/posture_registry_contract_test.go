@@ -1,15 +1,16 @@
 package contract
 
 import (
-	"github.com/lycaon/lycaon/config"
-	"github.com/lycaon/lycaon/internal/rules"
-	"github.com/lycaon/lycaon/internal/session"
 	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
-	"github.com/lycaon/lycaon/pkg/api"
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/lycaon/lycaon/config"
+	"github.com/lycaon/lycaon/internal/rules"
+	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/pkg/api"
+	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
 func TestPostureRegistryClosure(t *testing.T) {

@@ -2,10 +2,11 @@ package blueprints
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/scaffoldvars"
-	"github.com/lycaon/lycaon/pkg/api"
 	"path/filepath"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/scaffoldvars"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // AfterWrite implements native.BlueprintWriteObserver.

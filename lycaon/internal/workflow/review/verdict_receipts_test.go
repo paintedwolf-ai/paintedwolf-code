@@ -1,20 +1,29 @@
 package review_test
 
 import (
-	authzcontext "github.com/lycaon/lycaon/internal/authzcontext"
-	blueprint "github.com/lycaon/lycaon/internal/blueprint"
-	"github.com/lycaon/lycaon/internal/conditions"
-	db "github.com/lycaon/lycaon/internal/db"
-	store "github.com/lycaon/lycaon/internal/session/store"
-	testdbfixture "github.com/lycaon/lycaon/internal/testdbfixture"
 	testdbseed "github.com/lycaon/lycaon/internal/testdbseed"
-	"github.com/lycaon/lycaon/internal/testutil"
 	workflow "github.com/lycaon/lycaon/internal/workflow"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	workflowreview "github.com/lycaon/lycaon/internal/workflow/review"
-	"github.com/lycaon/lycaon/internal/workflow/runstate"
+
+	testdbfixture "github.com/lycaon/lycaon/internal/testdbfixture"
+
+	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
+
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+
+	store "github.com/lycaon/lycaon/internal/session/store"
+
+	authzcontext "github.com/lycaon/lycaon/internal/authzcontext"
+
+	db "github.com/lycaon/lycaon/internal/db"
+
+	blueprint "github.com/lycaon/lycaon/internal/blueprint"
+
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/conditions"
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 )
 
 func TestVerdictReceiptsPreserveSubmittedValuesAndPhaseIdentity(t *testing.T) {

@@ -2,13 +2,14 @@ package composition_test
 
 import (
 	"context"
+	"path/filepath"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
-	"path/filepath"
-	"testing"
 )
 
 func testComposePolicy(t *testing.T) *workflowcomposition.ComposePolicy {

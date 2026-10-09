@@ -5,17 +5,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
+	"slices"
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/reviewcoverage"
 	"github.com/lycaon/lycaon/internal/scan"
 	scancoverage "github.com/lycaon/lycaon/internal/scan/coverage"
 	"github.com/lycaon/lycaon/internal/tools"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"github.com/lycaon/lycaon/pkg/api"
-	"slices"
-	"strings"
 )
 
 // CoverageFacts loads the same observations used by verdict admission and

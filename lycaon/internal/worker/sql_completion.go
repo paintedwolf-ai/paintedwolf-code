@@ -4,13 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"github.com/google/uuid"
-	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/worker/jobstate"
-	"github.com/lycaon/lycaon/internal/workspacebaseline"
-	"github.com/lycaon/lycaon/pkg/api"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/workspacebaseline"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // JobCompletion records the durable outcome of settling one worker claim.
