@@ -41,6 +41,12 @@
        "introduced": "1.84.0-dev"
       },
       {
+       "fixed": "1.84.0-dev.0.20260825144003-d5a41119e0e3"
+      },
+      {
+       "introduced": "1.85.0-dev"
+      },
+      {
        "fixed": "1.85.0-dev.0.20260825072537-93e31b48545e"
       }
      ],
@@ -59,7 +65,7 @@
  },
  "details": "In google.golang.org/grpc, servers configured with xDS routing can panic when processing requests that lack both :authority and Host headers. The HTTP/2 transport layer accepted requests missing these headers, and the xDS server routing interceptor attempted to index the empty authority slice, causing an unhandled panic and terminating the server.",
  "id": "GO-2026-6443",
- "modified": "2026-09-15T18:39:25Z",
+ "modified": "2026-10-06T21:18:54Z",
  "published": "2026-09-15T18:39:25Z",
  "references": [
   {

@@ -1,0 +1,63 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {
+    "imports": [
+     {
+      "path": "cmd/go"
+     }
+    ]
+   },
+   "package": {
+    "ecosystem": "Go",
+    "name": "toolchain"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.26.9"
+      },
+      {
+       "introduced": "1.27.0-0"
+      },
+      {
+       "fixed": "1.27.2"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-94447"
+ ],
+ "database_specific": {
+  "review_status": "REVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6602"
+ },
+ "details": "Previously, a user operating inside of a malicious Go project that defines a bogus golang.org/toolchain go.sum entry and operates a malicious GOMODPROXY the user chooses to use can bypass the intended checksum.\n\nWe now ensure that golang.org/toolchain always goes to the network for the canonical checksum.",
+ "id": "GO-2026-6602",
+ "modified": "2026-10-08T22:31:09Z",
+ "published": "2026-10-08T22:31:09Z",
+ "references": [
+  {
+   "type": "FIX",
+   "url": "https://go.dev/cl/840785"
+  },
+  {
+   "type": "REPORT",
+   "url": "https://go.dev/issue/81834"
+  },
+  {
+   "type": "WEB",
+   "url": "https://groups.google.com/g/golang-announce/c/U2fTuyDJznI"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Checksum database bypass for golang.org/toolchain in cmd/go"
+}

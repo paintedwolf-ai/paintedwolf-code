@@ -102,7 +102,7 @@ services:
 
   sidecar:
     # Match the module's pinned toolchain.
-    image: golang:1.26.8-bookworm
+    image: golang:1.26.9-bookworm
     network_mode: ${LYCAON_E2E_NETWORK_MODE:-}
     # The tests read the store, restore marker, and staging files it writes.
     user: ${LYCAON_E2E_UID:-0}:${LYCAON_E2E_GID:-0}

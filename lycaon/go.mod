@@ -1,6 +1,6 @@
 module github.com/lycaon/lycaon
 
-go 1.26.8
+go 1.26.9
 
 require (
 	codeberg.org/readeck/go-readability/v2 v2.1.3
@@ -62,7 +62,7 @@ require (
 	go.uber.org/goleak v1.3.0
 	golang.org/x/image v0.46.0
 	golang.org/x/mod v0.41.0
-	golang.org/x/net v0.59.0
+	golang.org/x/net v0.60.0
 	golang.org/x/oauth2 v0.37.0
 	golang.org/x/sync v0.23.0
 	golang.org/x/sys v0.48.0

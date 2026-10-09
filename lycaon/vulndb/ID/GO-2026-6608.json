@@ -1,0 +1,85 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {
+    "imports": [
+     {
+      "path": "net/textproto",
+      "symbols": [
+       "Reader.ReadContinuedLine",
+       "Reader.ReadContinuedLineBytes",
+       "Reader.ReadMIMEHeader",
+       "Reader.readContinuedLineSlice",
+       "readMIMEHeader"
+      ]
+     },
+     {
+      "path": "mime/multipart",
+      "symbols": [
+       "Part.populateHeaders",
+       "Reader.NextPart",
+       "Reader.NextRawPart",
+       "Reader.ReadForm",
+       "Reader.readForm"
+      ]
+     }
+    ]
+   },
+   "package": {
+    "ecosystem": "Go",
+    "name": "stdlib"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.26.9"
+      },
+      {
+       "introduced": "1.27.0-0"
+      },
+      {
+       "fixed": "1.27.2"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-94440"
+ ],
+ "credits": [
+  {
+   "name": "Jakub Ciolek (https://ciolek.dev)"
+  }
+ ],
+ "database_specific": {
+  "review_status": "REVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6608"
+ },
+ "details": "Parsing a multipart form can bypass memory limits and read an arbitrarily long line into memory when the remaining limit at the start of a part is less than 400 bytes.",
+ "id": "GO-2026-6608",
+ "modified": "2026-10-08T22:31:09Z",
+ "published": "2026-10-08T22:31:09Z",
+ "references": [
+  {
+   "type": "FIX",
+   "url": "https://go.dev/cl/847307"
+  },
+  {
+   "type": "REPORT",
+   "url": "https://go.dev/issue/81741"
+  },
+  {
+   "type": "WEB",
+   "url": "https://groups.google.com/g/golang-announce/c/U2fTuyDJznI"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Memory limit bypass when parsing MIME headers in net/textproto, mime/multipart"
+}

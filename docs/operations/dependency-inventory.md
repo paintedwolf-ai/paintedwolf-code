@@ -86,8 +86,8 @@ An entry counts as high urgency when rated Critical or High, and as high frictio
 
 | Name | Pinned | Upstream | Urgency | Friction | Notes |
 |---|---|---|---|---|---|
-| Go point releases | `1.26.8` | current | **High** | **Low** | **Urgency:** The standard library (`net/http`, `crypto/tls`, `os`, `archive/*`) forms the sidecar's execution boundary, and point releases carry its security fixes.<br>**Friction:** Set by the `go` directive in `lycaon/go.mod`. Wrapper scripts derive `GOTOOLCHAIN` from it, CI reads it as `go-version-file`, and `scripts/setup-dev.sh` checks against it. |
-| Go release | `1.26.8` | `1.27.1` | **Moderate** | **Moderate** | **Urgency:** Go supports the two newest releases, and upstream modules raise their minimum Go version over time.<br>**Friction:** Run `./task build:cross` and `./task test:race`. Confirm the pinned `golangci-lint` and `deadcode` understand the new release; `deadcode` is pinned separately from the module's `golang.org/x/tools`. |
+| Go point releases | `1.26.9` | `1.26.8` | **High** | **Low** | **Urgency:** The standard library (`net/http`, `crypto/tls`, `os`, `archive/*`) forms the sidecar's execution boundary, and point releases carry its security fixes.<br>**Friction:** Set by the `go` directive in `lycaon/go.mod`. Wrapper scripts derive `GOTOOLCHAIN` from it, CI reads it as `go-version-file`, and `scripts/setup-dev.sh` checks against it. |
+| Go release | `1.26.9` | `1.27.1` | **Moderate** | **Moderate** | **Urgency:** Go supports the two newest releases, and upstream modules raise their minimum Go version over time.<br>**Friction:** Run `./task build:cross` and `./task test:race`. Confirm the pinned `golangci-lint` and `deadcode` understand the new release; `deadcode` is pinned separately from the module's `golang.org/x/tools`. |
 | Bun | `1.3.14` | `1.4.2` | **Moderate** | **Low** | **Urgency:** Runs Den installs, Vite, and Vitest.<br>**Friction:** Pinned in `.bun-version`, which CI and `scripts/setup-dev.sh` read. Check `bun install --frozen-lockfile` against `bun.lock`. |
 | Node | `26.3.0` | `26.10.0` | **Low** | **Low** | **Urgency:** Offline tool runner for `@redocly/cli`, `scripts/codegen-den-types.sh`, and `scripts/den-coverage-check.sh`.<br>**Friction:** Pinned in `.node-version`, which CI and `scripts/setup-dev.sh` read. |
 | Rust | `1.97.1` | `1.99.0` | **Moderate** | **Moderate** | **Urgency:** Compiles the Tauri shell and the document-core WASM.<br>**Friction:** rustup, CI, and `scripts/setup-dev.sh` read `rust-toolchain.toml`. `scripts/build-document-core.sh` pins the same version for its reproducible WASM sysroot, so a bump also updates it, rebuilds `core.wasm`, and refreshes `core.manifest.json`. |
@@ -290,7 +290,7 @@ the vulnerability database.
 | `github.com/tsawler/tabula` | `v1.6.14` | current | **High** | **Low** |  | Document extraction for prompt attachments. |
 | `github.com/ulikunitz/xz` | `v0.5.17` | current | **High** | **Low** |  | Decompression of attachments. |
 | `github.com/yuin/goldmark` | `v1.8.6` | current | **High** | **Low** |  | Markdown parsing for reports, repo maps, and navigation. |
-| `golang.org/x/net` | `v0.59.0` | current | **High** | **Low** |  | HTML, HTTP/2, and proxy code used by web research, egress, and scanning. |
+| `golang.org/x/net` | `v0.60.0` | `v0.59.0` | **High** | **Low** |  | HTML, HTTP/2, and proxy code used by web research, egress, and scanning. |
 
 ### Terminal UI
 
@@ -365,11 +365,8 @@ Windows build runs.
 | `minisign-verify` | `0.3.0` | current | **Critical** | **Low** |  | Verifies release artifacts and signed channel pointers in the native updater, and backs `scripts/verify-updater-signature.sh` through the `verify_updater_signature` example. Prove the chain with `scripts/release-validate-updater-manifest.sh` and `scripts/feed_signature.py` against the keys in `packaging/update-keys.json`; see [Release operations](release.md). |
 | `objc2` · macOS | `0.6.4` | `0.6.5` | **Moderate** | **High** |  | Cocoa, WebKit, LocalAuthentication, and notification bindings. Treat 0.x minor bumps as breaking. |
 | `objc2-app-kit` · macOS | `0.3.2` | current | **Moderate** | **High** |  |  |
-| `objc2-core-foundation` · macOS | `0.3.2` | current |  |  |  |  |
-| `objc2-core-graphics` · macOS | `0.3.2` | current |  |  |  |  |
 | `objc2-foundation` · macOS | `0.3.2` | current | **Moderate** | **High** |  |  |
 | `objc2-local-authentication` · macOS | `0.3.2` | current | **Moderate** | **High** |  |  |
-| `objc2-quartz-core` · macOS | `0.3.2` | current |  |  |  |  |
 | `objc2-user-notifications` · macOS | `0.3.2` | current | **Moderate** | **High** |  |  |
 | `objc2-web-kit` · macOS | `0.3.2` | current | **Moderate** | **High** |  |  |
 | `rand` | `0.8.6` | `0.10.3` | **High** | **Moderate** |  | Supplies `OsRng` to `ed25519-dalek`. |
@@ -389,6 +386,7 @@ Windows build runs.
 | `tokio` | `1.53.1` | `1.53.2` | **Moderate** | **Low** |  |  |
 | `ureq` | `2.12.1` | `3.4.2` | **Low** | **High** | No majors | Blocking localhost calls to the sidecar (attachment import, secret reveal). Version 3 rewrites the API. |
 | `uuid` | `1.26.1` | `1.27.0` |  |  |  |  |
+| `wheel-glide` | `0.1.0` | not refreshed |  |  |  |  |
 | `which` | `8.0.6` | current | **Low** | **Low** |  | Executable lookup. |
 | `windows` · Windows | `0.61.3` | `0.62.2` | **Moderate** | **Moderate** |  | Credential UI and window APIs; unverified on Windows. |
 | `windows-sys` · Windows | `0.61.2` | current | **Moderate** | **Moderate** |  |  |
