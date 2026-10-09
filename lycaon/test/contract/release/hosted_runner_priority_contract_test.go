@@ -148,6 +148,10 @@ func TestRunnerSchedulerSweepsAndReactsToProtectedDemand(t *testing.T) {
 		for _, step := range job.Steps {
 			swept = swept || step.Run == "python3 scripts/ci_verification.py schedule" && job.Timeout != ""
 		}
+		// Ready pull requests outrank qualification and drafts, so their runs are demand too.
+		if job.If != "" {
+			t.Errorf("the runner scheduler must sweep on every triggering run, not filter on %q", job.If)
+		}
 	}
 	if len(scheduler.Jobs) != 1 || !swept {
 		t.Error("the runner scheduler must be one bounded job running the catalog's scheduling step")
