@@ -12,7 +12,9 @@ import (
 	"github.com/lycaon/lycaon/internal/api/sessionadmin"
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/workflow"
 	workflowblueprints "github.com/lycaon/lycaon/internal/workflow/blueprints"
+	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -28,7 +30,7 @@ type blueprintRoutes struct {
 type blueprintDeps struct {
 	Blueprints   *blueprint.Manager
 	Projects     project.Registry
-	Catalog      workflow.ManifestResolver
+	Catalog      workflowcatalog.Resolver
 	Workflows    *workflow.RunManager
 	SessionAdmin *sessionadmin.Handler
 }
