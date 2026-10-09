@@ -126,7 +126,7 @@ func (r *Runtime) wireWorkerContext(deps Dependencies) error {
 		AgentsFor:     agentsForSession,
 		Tools:         legToolLister,
 		Scans:         deps.Scanning.Coordinator,
-		AgentsMDChain: deps.Sessions.Manager.Coordinator.PolicyIndex.Chain,
+		AgentsMDChain: deps.Sessions.Manager.Coordinator.PolicyIndex.ForPaths,
 		Repo:          nil, // Set when repo provider is wired via SetRepoProvider
 		Topology: func(workflowID string) string {
 			if strings.TrimSpace(workflowID) == "default-pipeline" {
