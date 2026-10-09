@@ -310,7 +310,7 @@ export async function goto(deps: JumpDeps, scenario: string, opts?: Json): Promi
         body: JSON.stringify({ session_id: sessionId, messages }),
       });
       if (seeded.ok !== true) return { ok: false, error: "scroll transcript admission failed", seeded };
-      return { ok: true, scenario: name, seeded, state: deps.readState() };
+      return { ok: true, scenario: name, seeded, sessionId, lastMessageId: messages.at(-1)!.id, state: deps.readState() };
     }
     case "huge-transcript": {
       const count = typeof options.count === "number" ? options.count : 200;

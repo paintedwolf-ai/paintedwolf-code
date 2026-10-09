@@ -12,12 +12,11 @@ import {
 } from "./den-scroll-debug.ts";
 import {
   requireScrollportMotionForViewport,
-  scrollportClientHeight,
   scrollportMotionForViewport,
   setScrollportTailPolicy,
   type ScrollportMotion,
-  type ScrollportCommitSource,
 } from "../../platform/scrolling/scrollport-motion.ts";
+import { scrollportClientHeight, type ScrollportCommitSource } from "../../platform/scrolling/scrollport-motion-types.ts";
 import { updateThemedViewportScrollbar } from "../../platform/scrolling/themed-scrollbars.ts";
 import { cancelScrollportFrame, scheduleScrollportFrame } from "../../platform/scrolling/scrollport-frame.ts";
 import { observeScrollportOffset } from "../../platform/scrolling/scrollport-offset.ts";

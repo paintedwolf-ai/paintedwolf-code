@@ -20,12 +20,15 @@ beforeEach(() => vi.clearAllMocks());
 
 it("admits fixture rows to the currently selected session without model work", async () => {
   control.mockResolvedValue({ ok: true });
-  expect(await goto(deps, "scroll-transcript", { turns: 5, activity: true })).toMatchObject({ ok: true });
+  const result = await goto(deps, "scroll-transcript", { turns: 5, activity: true });
+  expect(result).toMatchObject({ ok: true });
   expect(control).toHaveBeenCalledOnce();
   const [path, init] = control.mock.calls[0]!;
   expect(path).toBe("/harness/transcript");
   const body = JSON.parse(String(init?.body));
   expect(body.session_id).toBe("current-session");
+  expect(result).toHaveProperty("sessionId", body.session_id);
+  expect(result).toHaveProperty("lastMessageId", body.messages.at(-1).id);
   expect(body.messages.filter((row: { role: string }) => row.role === "tool")).toHaveLength(3);
   expect(deps.sendPrompt).not.toHaveBeenCalled();
   expect(deps.llmRespond).not.toHaveBeenCalled();

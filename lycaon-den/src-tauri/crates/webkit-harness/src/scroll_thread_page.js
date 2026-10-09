@@ -1,7 +1,27 @@
 // Page side of the scroll-thread invariants, evaluated in the harness Den.
 window.__scrollThread = {
   stream() {
-    return document.querySelector(".den-scrollport__viewport.den-chat-stream");
+    const sessionId = this.sessionId;
+    return sessionId ? document.querySelector(`[data-testid="chat-stream"][data-session-id="${CSS.escape(sessionId)}"]`) : null;
+  },
+
+  async admitTranscript(options) {
+    const result = await __harness.goto("scroll-transcript", options);
+    if (result?.ok !== true || !result.sessionId || !result.lastMessageId) {
+      throw new Error(`scroll transcript admission: ${JSON.stringify(result)}`);
+    }
+    this.sessionId = result.sessionId;
+    const delivered = () => this.stream()?.querySelector(`[data-msg-id="${CSS.escape(result.lastMessageId)}"]`);
+    for (let i = 0; i < 60 && !delivered(); i++) {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    if (!delivered()) {
+      throw new Error(`admitted transcript tail did not mount: ${JSON.stringify({
+        lastMessageId: result.lastMessageId,
+        state: __harness.state(), transcript: __harness.transcript(),
+        stream: this.stream()?.innerHTML,
+      })}`);
+    }
   },
 
   /** A chat long enough to scroll, ending in a turn with tool cards. */
@@ -15,9 +35,9 @@ window.__scrollThread = {
     // Driver steps report failure as { ok: false } rather than throwing.
     const must = async (label, result) => {
       const r = await result;
-      if (r && r.ok === false) {
+      if (r?.ok !== true) {
         const composer = document.querySelector('[data-testid="chat-composer"]');
-        throw new Error(`${label}: ${r.error ?? JSON.stringify(r)}; composer reads "${composer?.getAttribute("placeholder") ?? "missing"}"`);
+        throw new Error(`${label}: ${r?.error ?? JSON.stringify(r)}; composer reads "${composer?.getAttribute("placeholder") ?? "missing"}"`);
       }
       return r;
     };
@@ -26,13 +46,10 @@ window.__scrollThread = {
     mark("opening a session");
     await must("new session", __harness.newSession());
     mark("admitting the transcript fixture");
-    await must("scroll transcript", __harness.goto("scroll-transcript", { turns: 5, activity: true }));
-    mark("waiting for transcript rows");
-    for (let i = 0; i < 60 && document.querySelectorAll(".transcript-viewport-row").length < 3; i++) {
-      await new Promise((r) => setTimeout(r, 250));
-    }
+    await this.admitTranscript({ turns: 5, activity: true });
+    mark("settling transcript geometry");
     await new Promise((r) => setTimeout(r, 1000));
-    return document.querySelectorAll(".transcript-viewport-row").length;
+    return this.stream().querySelectorAll(".transcript-viewport-row").length;
   },
 
   /**
@@ -40,8 +57,7 @@ window.__scrollThread = {
    * enough to virtualize and rows mount away from their estimates. Returns the scroll extent.
    */
   async extend(turns) {
-    const result = await __harness.goto("scroll-transcript", { turns, start: 5 });
-    if (!result || result.ok !== true) throw new Error(`extend transcript: ${JSON.stringify(result)}`);
+    await this.admitTranscript({ turns, start: 5 });
     await new Promise((r) => setTimeout(r, 1500));
     return this.stream().scrollHeight;
   },

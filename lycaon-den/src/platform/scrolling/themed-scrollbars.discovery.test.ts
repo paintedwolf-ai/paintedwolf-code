@@ -17,9 +17,9 @@ import {
 import { attachThemedViewportScrollbar, beginScrollMeasureQuiet, resetScrollMeasureQuietForTests, setupThemedScrollbars, syncThemedScrollbar, updateThemedViewportScrollbar } from "./themed-scrollbars.ts";
 import { wrapInScrollportFrame } from "./scrollport-frame-dom.ts";
 import {
-  DEN_SCROLLPORT_INPUT_EVENT,
   scrollportMotionForHost,
 } from "./scrollport-motion.ts";
+import { DEN_SCROLLPORT_INPUT_EVENT } from "./scrollport-motion-types.ts";
 
 describe("discovered attach under a measurement hold", () => {
   let stop: (() => void) | undefined;

@@ -8,7 +8,14 @@
  * The frame carries the scrollbar chrome outside the viewport so the thumb
  * stays stable during off-thread scrolling.
  */
-import { DEN_SCROLLPORT_CLASS, DEN_SCROLLPORT_VIEWPORT_CLASS, DEN_SCROLLPORT_CONTENT_CLASS, DEN_SCROLLPORT_AXIS_ATTR, DEN_SCROLLPORT_DEFER_ATTR } from "./themed-scrollbars.ts";
+export const DEN_SCROLLPORT_CLASS = "den-scrollport";
+export const DEN_SCROLLPORT_VIEWPORT_CLASS = "den-scrollport__viewport";
+export const DEN_SCROLLPORT_CONTENT_CLASS = "den-scrollport__content";
+/** Marks a frame and names the axes its viewport scrolls. */
+export const DEN_SCROLLPORT_AXIS_ATTR = "data-den-scrollport";
+/** Frames repeated through long documents attach only once they approach view. */
+export const DEN_SCROLLPORT_DEFER_ATTR = "data-den-scrollport-defer";
+
 
 export type ScrollportAxis = "x" | "y" | "both";
 
