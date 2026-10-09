@@ -167,6 +167,7 @@ func NewProviderTestServerWithCatalogs(t *testing.T, shipYAML, localYAML string,
 		opt(&deps)
 	}
 	srv := hostapi.NewServer(RequiredTestDeps(t, deps), nil, hostapi.TestAPIToken)
+	StopBackgroundOnCleanup(t, srv)
 	return srv, StartTestHTTPServer(t, srv)
 }
 
