@@ -100,12 +100,12 @@ const excerpt = "# E2E minimal Go project";
 
 webE2e("Keep going preserves completed workflow reviewers through accepted verdict", async ({ page, request }, testInfo) => {
   webE2e.setTimeout(180_000);
-  await bootstrapChatSession(page, request);
+  const project = await bootstrapChatSession(page, request);
   const sessionId = await settledChatSessionId(page);
   let runId: string | undefined;
   let failed = false;
   const workers = async () => (await apiJson<{ workers: WorkerTask[] }>(
-    request, "GET", `/v1/workers?session_id=${sessionId}`,
+    request, "GET", `/v1/workers?project_id=${project.id}&session_id=${sessionId}`,
   )).workers;
   const messages = async () => (await apiJson<{ messages: Message[] }>(
     request, "GET", `/v1/sessions/${sessionId}/messages`,
