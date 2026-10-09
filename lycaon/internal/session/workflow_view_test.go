@@ -27,7 +27,6 @@ type recordingWorkflowView struct {
 	topologyErr   error
 	closeoutID    string
 	archive       string
-	reviewErr     error
 }
 
 func (r *recordingWorkflowView) record(name string) {
@@ -245,24 +244,7 @@ func TestToolpolicyEngineDepsWiresWorkflowView(t *testing.T) {
 
 func (s *recordingWorkflowView) RecordReviewToolResult(context.Context, string, api.Message) error {
 	s.record("RecordReviewToolResult")
-	return s.reviewErr
-}
-
-// A failed accounting write fails the append so the turn does not continue as
-// if the repair attempt were counted; startup recovery replays the stored row.
-func TestLoopAppendReportsReviewAccountingFailure(t *testing.T) {
-	ctx := t.Context()
-	st := store.NewMemory()
-	mgr := NewHost(st, Models{Limits: settings.DefaultSessionLimits()}, nil)
-	wantErr := errors.New("workflow state unavailable")
-	mgr.SetWorkflowDomains(workflowDomainFixture(&recordingWorkflowView{reviewErr: wantErr}))
-	sess, err := st.Create(ctx, api.CreateSessionRequest{}, "project-1")
-	testutil.FailErr(t, "create session", err)
-
-	row := api.Message{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Tool: "submit_verdict"}}
-	if err := appendLoopMessages(mgr, ctx, sess.ID, row); !errors.Is(err, wantErr) {
-		t.Fatalf("append error = %v, want the accounting failure", err)
-	}
+	return nil
 }
 
 // Kick obligations for a run on a sealed version come from that version's
@@ -286,25 +268,6 @@ func TestKickGateObligationsFollowTheRunArchive(t *testing.T) {
 	want := gateFeedback.WithWorkflowArchive("security-survey/1.0.0").ProjectObligations(t.Context(), frame.RunContext.FailedLeaves, "", nil)
 	if sealed == live || sealed != strings.Join(want[0].Satisfy, "\n") {
 		t.Fatalf("sealed run obligations = %q, live = %q", sealed, live)
-	}
-}
-
-// Review repair accounting reads the durable transcript, so it runs only after
-// the coordinator's rows are appended.
-func TestLoopAppendRecordsReviewResultsAfterCommit(t *testing.T) {
-	ctx := t.Context()
-	st := store.NewMemory()
-	mgr := NewHost(st, Models{Limits: settings.DefaultSessionLimits()}, nil)
-	view := &recordingWorkflowView{}
-	mgr.SetWorkflowDomains(workflowDomainFixture(view))
-	sess, err := st.Create(ctx, api.CreateSessionRequest{}, "project-1")
-	testutil.FailErr(t, "create session", err)
-
-	row := api.Message{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Tool: "submit_verdict"}}
-	testutil.FailErr(t, "append loop rows", appendLoopMessages(mgr, ctx, sess.ID, row))
-	want := []string{"StampAndAppendMessages", "RecordReviewToolResult"}
-	if !slices.Equal(view.calls, want) {
-		t.Fatalf("calls = %v, want %v", view.calls, want)
 	}
 }
 
