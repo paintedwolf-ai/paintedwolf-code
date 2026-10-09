@@ -101,15 +101,14 @@ func changeReviewFor(g *recordingGate, tool, path string) (hitl.ProposedAction, 
 	defer g.mu.Unlock()
 	want := fspath.CanonicalPath(path)
 	for _, action := range g.actions {
-		if action.Tool != tool || len(action.FileChanges) == 0 {
+		if action.Invocation.Tool != tool || len(action.Mutations.FileChanges) == 0 {
 			continue
 		}
-		if slices.ContainsFunc(action.Files, func(f string) bool { return fspath.CanonicalPath(f) == want }) {
+		if slices.ContainsFunc(action.Invocation.Files, func(f string) bool { return fspath.CanonicalPath(f) == want }) {
 			return action, true
 		}
 	}
-	return hitl.ProposedAction{
-}, false
+	return hitl.ProposedAction{}, false
 }
 
 // retarget points a recorded review at another file of the same root.
