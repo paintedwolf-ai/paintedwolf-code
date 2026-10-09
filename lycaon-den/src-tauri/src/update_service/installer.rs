@@ -13,14 +13,15 @@ pub struct PreparedIdentity {
     pub bundle_hash: String,
 }
 #[cfg(target_os = "macos")]
+mod coordination;
+#[cfg(target_os = "macos")]
 mod macos;
 #[cfg(target_os = "macos")]
-pub use macos::{
-    acquire_gate, acquire_lease, acquire_preparation, downgrade, exchange, try_activation,
-    InstallationLease,
+pub use coordination::{
+    acquire_gate, acquire_lease, acquire_preparation, downgrade, exchange_coordinated,
+    try_activation, InstallationLease,
 };
 
-/// Where a bundle declares its product version; reads are bounded by `PRODUCT_VERSION_LIMIT`.
 pub const PRODUCT_VERSION_RESOURCE: &str = "Contents/Resources/release-version";
 const PRODUCT_VERSION_LIMIT: u64 = 128;
 
@@ -47,7 +48,6 @@ pub fn supported() -> bool {
         false
     }
 }
-/// The product version a bundle declares, or the failure code for an unreadable resource.
 pub fn product_version(bundle: &Path, failure: Failure) -> Result<String, UpdateError> {
     use std::io::Read;
     let file = fs::File::open(bundle.join(PRODUCT_VERSION_RESOURCE))
@@ -80,9 +80,48 @@ pub fn prepared_path(target: &Path, candidate: &Candidate) -> Result<PathBuf, Up
 pub fn prepared_prefix(target: &Path) -> String {
     use sha2::{Digest, Sha256};
     format!(
-        ".paintedwolf-update-{}-",
-        hex::encode(Sha256::digest(target.as_os_str().as_encoded_bytes()))
+        ".paintedwolf-update-{}-uid-{}-",
+        hex::encode(Sha256::digest(target.as_os_str().as_encoded_bytes())),
+        current_uid()
     )
+}
+pub fn current_uid() -> u32 {
+    #[cfg(unix)]
+    {
+        unsafe { libc::geteuid() }
+    }
+    #[cfg(not(unix))]
+    {
+        0
+    }
+}
+pub fn legacy_prepared_path(target: &Path, candidate: &Candidate) -> Result<PathBuf, UpdateError> {
+    Ok(target
+        .parent()
+        .ok_or(Failure::InvalidRelease)?
+        .join(format!(
+            ".paintedwolf-update-{}-{}.app",
+            super::persistence::installation_id(target),
+            candidate.release_id
+        )))
+}
+pub fn valid_prepared_path(target: &Path, candidate: &Candidate, path: &Path) -> bool {
+    candidate.valid_identity()
+        && (prepared_path(target, candidate).is_ok_and(|p| p == path)
+            || legacy_prepared_path(target, candidate).is_ok_and(|p| p == path))
+}
+pub fn current_user_directory(path: &Path) -> bool {
+    fs::symlink_metadata(path).is_ok_and(|metadata| {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            metadata.is_dir() && metadata.uid() == current_uid()
+        }
+        #[cfg(not(unix))]
+        {
+            metadata.is_dir()
+        }
+    })
 }
 pub fn cleanup_prepared(target: &Path, keep: &[String]) -> Result<(), UpdateError> {
     let parent = target.parent().ok_or(Failure::UnsupportedInstallation)?;
@@ -98,7 +137,7 @@ pub fn cleanup_prepared(target: &Path, keep: &[String]) -> Result<(), UpdateErro
         };
         if super::persistence::hex_digest(id)
             && !keep.iter().any(|kept| kept == id)
-            && entry.file_type().is_ok_and(|kind| kind.is_dir())
+            && current_user_directory(&entry.path())
         {
             fs::remove_dir_all(entry.path())
                 .map_err(|e| UpdateError::new(Failure::StateUnavailable, e))?;
@@ -170,7 +209,7 @@ pub fn prepare_at(target: &Path, candidate: &Candidate) -> Result<PreparedIdenti
         Err(Failure::UnsupportedInstallation.into())
     }
 }
-// Eviction belongs to archive verification, independently of UI state or relaunch.
+// Failed verification evicts the cached archive.
 fn retain_verified_artifact(
     path: &Path,
     verified: Result<(), UpdateError>,
@@ -254,13 +293,19 @@ fn signing_requirement() -> Result<String, UpdateError> {
 fn publisher_requirement(team: Option<&str>, development: bool) -> Result<String, UpdateError> {
     let identifier = "identifier \"dev.paintedwolf.code\"";
     match team {
-        Some(team) if team.len() == 10 && team.bytes().all(|b| b.is_ascii_uppercase() || b.is_ascii_digit()) =>
+        Some(team)
+            if team.len() == 10
+                && team
+                    .bytes()
+                    .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit()) =>
+        {
             Ok(format!(
                 "{identifier} and anchor apple generic \
                  and certificate 1[field.1.2.840.113635.100.6.2.6] \
                  and certificate leaf[field.1.2.840.113635.100.6.1.13] \
                  and certificate leaf[subject.OU] = \"{team}\""
-            )),
+            ))
+        }
         Some("not set") | None if development => Ok(identifier.into()),
         _ => Err(Failure::VerificationFailed.into()),
     }
@@ -286,7 +331,10 @@ mod tests {
         let resource = root.join(PRODUCT_VERSION_RESOURCE);
         fs::create_dir_all(resource.parent().unwrap()).unwrap();
         fs::write(&resource, "1.2.3\n").unwrap();
-        assert_eq!(product_version(&root, Failure::StateUnavailable).unwrap(), "1.2.3");
+        assert_eq!(
+            product_version(&root, Failure::StateUnavailable).unwrap(),
+            "1.2.3"
+        );
         fs::write(&resource, "9".repeat(PRODUCT_VERSION_LIMIT as usize + 1)).unwrap();
         assert_eq!(
             product_version(&root, Failure::VerificationFailed)

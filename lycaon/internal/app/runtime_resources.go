@@ -40,6 +40,15 @@ func (r *runtimeResources) track(name string, order int, cleanup func(context.Co
 	})
 }
 
+// releaseObserver unregisters a process-wide observer hook after the processes
+// that raise its events stop and before the subsystems it calls into close.
+func (r *runtimeResources) releaseObserver(name string, release func()) {
+	if release == nil {
+		return
+	}
+	r.track(name+"-observer", 65, func(context.Context) error { release(); return nil })
+}
+
 // capture records resources acquired by a build phase.
 func (r *runtimeResources) capture(b *serveBuilder) {
 	if r == nil || b == nil {

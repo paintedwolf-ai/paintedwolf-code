@@ -33,6 +33,7 @@ func (b toolWiring) wireScan() error {
 	} else {
 		reg, err := scanregistry.New(scanregistry.Options{
 			ScannerFingerprintKey: b.secretFingerprinter.ScannerKey(),
+			AdvisoryDatabase:      b.cfg.TestAdvisoryDatabase,
 			ModuleRoot:            b.configRoot,
 			ProcessPriority:       runnerCfg.ExecProcessPriority(),
 			ProjectTierApplies:    b.projectScanConfigGate().AppliesPath,
@@ -41,6 +42,8 @@ func (b toolWiring) wireScan() error {
 			return fmt.Errorf("scan registry: %w", err)
 		}
 		b.scannerReg = reg
+		// Library scanners keep a worker process per adapter.
+		b.resources.track("scanner-workers", 52, func(context.Context) error { return reg.Close() })
 	}
 	b.scanCoordinator.Registry = b.scannerReg
 	b.scanStore.SecretIgnores = b.scanSecretIgnores
@@ -122,7 +125,7 @@ func (b toolWiring) wireScan() error {
 	b.scanCadence.OverlayRootsApply = b.projectScanConfigGate().FilterPaths
 	b.scanCadence.Preempt = b.scanRunner.Preempt
 	b.scanCadence.Scopes = b.sourceScopes
-	b.scanCadence.ObserveRepochange()
+	b.resources.releaseObserver("scan-cadence-repochange", b.scanCadence.ObserveRepochange())
 	if b.workerMergeSvc != nil {
 		b.workerMergeSvc.Scans = b.scanCadence
 	}

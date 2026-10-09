@@ -7,8 +7,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/lycaon/lycaon/internal/editoroutbox"
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/editoroutbox"
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/localdata"
 	"github.com/lycaon/lycaon/internal/project"
@@ -36,6 +36,10 @@ func (s *Service) classBytes(ctx context.Context, class, projectID string) (int6
 }
 
 func (s *Service) refreshUsage(ctx context.Context) error {
+	classUsage, err := s.classUsage(ctx)
+	if err != nil {
+		return err
+	}
 	lanes := []api.HistoryStorageLane{}
 	for _, suffix := range []string{"", "-wal", "-shm", "-journal"} {
 		info, err := os.Stat(s.StorePath + suffix)
@@ -121,6 +125,7 @@ func (s *Service) refreshUsage(ctx context.Context) error {
 	}
 	s.mu.Lock()
 	s.lanes = lanes
+	s.classUsageCache = classUsage
 	s.mu.Unlock()
 	return nil
 }

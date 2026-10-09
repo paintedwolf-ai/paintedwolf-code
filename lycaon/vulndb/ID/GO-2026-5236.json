@@ -1,0 +1,65 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/oauth2-proxy/oauth2-proxy"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/oauth2-proxy/oauth2-proxy/v7"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "7.5.0"
+      },
+      {
+       "fixed": "7.15.2"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-40575",
+  "GHSA-7x63-xv5r-3p2x"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5236"
+ },
+ "details": "OAuth2 Proxy has an Authentication Bypass via X-Forwarded-Uri Header Spoofing in github.com/oauth2-proxy/oauth2-proxy",
+ "id": "GO-2026-5236",
+ "modified": "2026-06-25T18:43:15Z",
+ "published": "2026-06-25T18:43:15Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/oauth2-proxy/oauth2-proxy/security/advisories/GHSA-7x63-xv5r-3p2x"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-40575"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "OAuth2 Proxy has an Authentication Bypass via X-Forwarded-Uri Header Spoofing in github.com/oauth2-proxy/oauth2-proxy"
+}

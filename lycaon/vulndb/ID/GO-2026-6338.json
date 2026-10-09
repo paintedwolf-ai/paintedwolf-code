@@ -1,0 +1,72 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "code.gitea.io/gitea"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.25.5"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-22547",
+  "GHSA-922f-hfwp-p56f"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6338"
+ },
+ "details": "Gitea repository creation accepts insufficiently validated fields in code.gitea.io/gitea",
+ "id": "GO-2026-6338",
+ "modified": "2026-09-02T18:37:32Z",
+ "published": "2026-09-02T18:37:32Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-922f-hfwp-p56f"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-22547"
+  },
+  {
+   "type": "WEB",
+   "url": "https://blog.gitea.com/release-of-1.25.5"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/go-gitea/gitea/commit/569c49debe06f30a2bbb50b3812e705c556b8adf"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/go-gitea/gitea/commit/b3bc79262d106f4259f82a26609e4738b618152b"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/go-gitea/gitea/pull/36671"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/go-gitea/gitea/pull/36757"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/go-gitea/gitea/releases/tag/v1.25.5"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Gitea repository creation accepts insufficiently validated fields in code.gitea.io/gitea"
+}

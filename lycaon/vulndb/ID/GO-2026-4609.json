@@ -1,0 +1,41 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/bishopfox/sliver"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-29781",
+  "GHSA-hx52-cv84-jr5v"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-4609"
+ },
+ "details": "Sliver is Vulnerable to Authenticated Nil-Pointer Dereference through its Handlers in github.com/bishopfox/sliver",
+ "id": "GO-2026-4609",
+ "modified": "2026-03-10T18:28:10Z",
+ "published": "2026-03-10T18:28:10Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/BishopFox/sliver/security/advisories/GHSA-hx52-cv84-jr5v"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Sliver is Vulnerable to Authenticated Nil-Pointer Dereference through its Handlers in github.com/bishopfox/sliver"
+}

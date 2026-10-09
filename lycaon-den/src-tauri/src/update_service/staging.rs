@@ -11,7 +11,8 @@ pub struct Staged {
     pub candidate: Candidate,
     pub verified_at: u64,
     /// When the release origin last confirmed this offer.
-    pub offer_confirmed_at: u64,
+    pub offer_confirmed_at: Option<u64>,
+    pub prepared_bundle: PathBuf,
     pub executable_hash: String,
     pub bundle_hash: String,
 }
@@ -28,10 +29,12 @@ pub fn root(candidate: &Candidate) -> Result<PathBuf, UpdateError> {
 pub fn publish(
     candidate: &Candidate,
     identity: super::installer::PreparedIdentity,
-    offer_confirmed_at: u64,
+    offer_confirmed_at: Option<u64>,
 ) -> Result<(), UpdateError> {
+    let _lock = lock()?;
     write_ready(&Staged {
-        format_version: 1,
+        format_version: 2,
+        prepared_bundle: super::installer::prepared_path(&super::installer::bundle()?, candidate)?,
         candidate: candidate.clone(),
         verified_at: super::now(),
         offer_confirmed_at,
@@ -50,27 +53,112 @@ fn write_ready(staged: &Staged) -> Result<(), UpdateError> {
 }
 /// Records a fresh confirmation of the staged offer so an offline quit can still install it.
 pub fn confirm_offer(release_id: &str, at: u64) -> Result<(), UpdateError> {
-    if let Some(mut staged) = read_ready()? {
-        if staged.candidate.release_id == release_id && staged.offer_confirmed_at < at {
-            staged.offer_confirmed_at = at;
+    let _lock = lock()?;
+    if let Some(mut staged) = read_ready_unlocked()? {
+        if staged.candidate.release_id == release_id && staged.offer_confirmed_at != Some(at) {
+            staged.offer_confirmed_at = Some(at);
             write_ready(&staged)?;
         }
     }
     Ok(())
 }
+fn lock() -> Result<fs::File, UpdateError> {
+    super::record_lock::acquire(&persistence::update_dir()?, "records.lock")
+}
+pub fn invalidate_confirmation() -> Result<(), UpdateError> {
+    let _lock = lock()?;
+    if let Some(mut staged) = read_ready_unlocked()? {
+        staged.offer_confirmed_at = None;
+        write_ready(&staged)?;
+    }
+    Ok(())
+}
 pub fn read_ready() -> Result<Option<Staged>, UpdateError> {
-    persistence::read_or_quarantine(
-        &persistence::update_dir()?.join(READY_FILE),
+    let _lock = lock()?;
+    read_ready_unlocked()
+}
+#[derive(Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LegacyStaged {
+    format_version: u8,
+    candidate: Candidate,
+    verified_at: u64,
+    offer_confirmed_at: u64,
+    executable_hash: String,
+    bundle_hash: String,
+}
+#[derive(Clone, Deserialize)]
+#[serde(untagged)]
+enum ReadyRecord {
+    Current(Staged),
+    Legacy(LegacyStaged),
+}
+impl ReadyRecord {
+    fn convert(self, target: &std::path::Path) -> Result<Staged, UpdateError> {
+        let staged = match self {
+            Self::Current(staged) => staged,
+            Self::Legacy(old) if old.format_version == 1 => Staged {
+                format_version: 2,
+                prepared_bundle: super::installer::legacy_prepared_path(target, &old.candidate)?,
+                candidate: old.candidate,
+                verified_at: old.verified_at,
+                offer_confirmed_at: Some(old.offer_confirmed_at),
+                executable_hash: old.executable_hash,
+                bundle_hash: old.bundle_hash,
+            },
+            Self::Legacy(_) => return Err(Failure::JournalUnavailable.into()),
+        };
+        if staged.format_version != 2
+            || !staged.candidate.valid_identity()
+            || !persistence::hex_digest(&staged.executable_hash)
+            || !persistence::hex_digest(&staged.bundle_hash)
+            || !super::installer::valid_prepared_path(
+                target,
+                &staged.candidate,
+                &staged.prepared_bundle,
+            )
+        {
+            return Err(Failure::JournalUnavailable.into());
+        }
+        Ok(staged)
+    }
+}
+pub(super) fn read_ready_unlocked() -> Result<Option<Staged>, UpdateError> {
+    let path = persistence::update_dir()?.join(READY_FILE);
+    if !path
+        .try_exists()
+        .map_err(|e| UpdateError::new(Failure::JournalUnavailable, e))?
+    {
+        return Ok(None);
+    }
+    let target = super::installer::bundle()?;
+    let record: Option<ReadyRecord> = persistence::read_or_quarantine(
+        &path,
         Failure::JournalUnavailable,
-        |staged: &Staged| {
-            staged.format_version == 1
-                && staged.candidate.valid_identity()
-                && persistence::hex_digest(&staged.executable_hash)
-                && persistence::hex_digest(&staged.bundle_hash)
-        },
-    )
+        |record: &ReadyRecord| record.clone().convert(&target).is_ok(),
+    )?;
+    let Some(record) = record else {
+        return Ok(None);
+    };
+    let legacy = matches!(record, ReadyRecord::Legacy(_));
+    let staged = record.convert(&target)?;
+    if legacy {
+        write_ready(&staged)?;
+    }
+    Ok(Some(staged))
+}
+pub fn forget_ready_for(release_id: &str) -> Result<(), UpdateError> {
+    let _lock = lock()?;
+    if read_ready_unlocked()?.is_some_and(|ready| ready.candidate.release_id == release_id) {
+        persistence::remove_if_present(
+            &persistence::update_dir()?.join(READY_FILE),
+            Failure::JournalUnavailable,
+        )?;
+    }
+    Ok(())
 }
 pub fn forget_ready() -> Result<(), UpdateError> {
+    let _lock = lock()?;
     persistence::remove_if_present(
         &persistence::update_dir()?.join(READY_FILE),
         Failure::JournalUnavailable,
@@ -91,7 +179,7 @@ pub fn restore(state: &mut NativeUpdateState) -> Result<(), UpdateError> {
     // Activation validates the prepared executable against this authenticated receipt.
     state.staged_release_id = Some(staged.candidate.release_id.clone());
     state.candidate = Some(staged.candidate);
-    state.offer_confirmed_at = Some(staged.offer_confirmed_at);
+    state.offer_confirmed_at = staged.offer_confirmed_at;
     state.discovery = Discovery::Available;
     state.installation = Installation::Staged;
     Ok(())
@@ -125,6 +213,10 @@ struct Rejected {
 }
 /// A release whose signed contents failed verification; automatic preparation skips it.
 pub fn rejected() -> Result<Option<String>, UpdateError> {
+    let _lock = lock()?;
+    read_rejected()
+}
+fn read_rejected() -> Result<Option<String>, UpdateError> {
     Ok(persistence::read_or_quarantine(
         &persistence::update_dir()?.join(REJECTED_FILE),
         Failure::JournalUnavailable,
@@ -135,6 +227,7 @@ pub fn rejected() -> Result<Option<String>, UpdateError> {
     .map(|rejected| rejected.release_id))
 }
 pub fn reject(release_id: String) -> Result<(), UpdateError> {
+    let _lock = lock()?;
     persistence::write_json_atomic(
         &persistence::update_dir()?,
         REJECTED_FILE,
@@ -147,7 +240,8 @@ pub fn reject(release_id: String) -> Result<(), UpdateError> {
     )
 }
 pub fn clear_rejected(release_id: &str) -> Result<(), UpdateError> {
-    if rejected()?.as_deref() == Some(release_id) {
+    let _lock = lock()?;
+    if read_rejected()?.as_deref() == Some(release_id) {
         persistence::remove_if_present(
             &persistence::update_dir()?.join(REJECTED_FILE),
             Failure::JournalUnavailable,
@@ -171,4 +265,27 @@ pub fn clean_partials(candidate: &Candidate) -> Result<(), UpdateError> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn released_ready_record_retains_its_prepared_path_and_confirmation() {
+        let root = crate::test_support::TempDir::new("update-ready-migration");
+        let target = root.join("App.app");
+        let record: ReadyRecord =
+            serde_json::from_str(include_str!("fixtures/ready-v1.json")).unwrap();
+        let mut staged = record.convert(&target).unwrap();
+        assert_eq!(staged.format_version, 2);
+        assert_eq!(staged.offer_confirmed_at, Some(20));
+        assert_eq!(
+            staged.prepared_bundle,
+            super::super::installer::legacy_prepared_path(&target, &staged.candidate).unwrap()
+        );
+        staged.offer_confirmed_at = None;
+        let reloaded: ReadyRecord =
+            serde_json::from_value(serde_json::to_value(staged).unwrap()).unwrap();
+        assert_eq!(reloaded.convert(&target).unwrap().offer_confirmed_at, None);
+    }
 }

@@ -1,8 +1,7 @@
-//! Device records: preferences, feed freshness, and the per-installation namespace.
+//! Device preferences and records scoped to each installed application.
 use super::{Failure, InstallSource, UpdateChannel, UpdateError};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{
-    collections::BTreeMap,
     fs,
     io::Write,
     path::{Path, PathBuf},
@@ -249,51 +248,6 @@ fn validate_preferences(p: &Preferences) -> Result<(), UpdateError> {
     Ok(())
 }
 
-/// The newest signed pointer timestamp accepted per feed; an older pointer is a replay.
-#[derive(Debug, Default, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct FeedState {
-    format_version: u8,
-    feeds: BTreeMap<String, u64>,
-}
-const FEED_STATE_FILE: &str = "feed-state.json";
-fn read_feed_state(dir: &Path) -> Result<FeedState, UpdateError> {
-    Ok(read_or_quarantine(
-        &dir.join(FEED_STATE_FILE),
-        Failure::JournalUnavailable,
-        |state: &FeedState| state.format_version == 1,
-    )?
-    .unwrap_or(FeedState {
-        format_version: 1,
-        feeds: BTreeMap::new(),
-    }))
-}
-/// Accepts a pointer timestamp for a feed unless a newer one was already accepted.
-pub(super) fn accept_feed_timestamp(
-    dir: &Path,
-    feed: &str,
-    timestamp: u64,
-) -> Result<(), UpdateError> {
-    let mut state = read_feed_state(dir)?;
-    match state.feeds.get(feed) {
-        Some(&newest) if newest > timestamp => Err(UpdateError::new(
-            Failure::InvalidRelease,
-            "The update feed is older than one this device already accepted",
-        )),
-        Some(&newest) if newest == timestamp => Ok(()),
-        _ => {
-            state.feeds.insert(feed.into(), timestamp);
-            write_json_atomic(
-                dir,
-                FEED_STATE_FILE,
-                "feed-state.tmp",
-                &state,
-                Failure::JournalUnavailable,
-            )
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -338,41 +292,6 @@ mod tests {
         fs::write(root.join("preferences.json"), bytes).unwrap();
         assert!(load_preferences(&root, UpdateChannel::Stable, 0).is_err());
         assert_eq!(fs::read(root.join("preferences.json")).unwrap(), bytes);
-    }
-    #[test]
-    fn feed_timestamps_only_advance_and_a_replayed_pointer_is_refused() {
-        let root = TempDir::new("update-feed-state");
-        accept_feed_timestamp(&root, "latest-stable-key-1.json", 100).unwrap();
-        accept_feed_timestamp(&root, "latest-stable-key-1.json", 100).unwrap();
-        accept_feed_timestamp(&root, "latest-stable-key-1.json", 150).unwrap();
-        let replay = accept_feed_timestamp(&root, "latest-stable-key-1.json", 120).unwrap_err();
-        assert_eq!(replay.code, Failure::InvalidRelease);
-        accept_feed_timestamp(&root, "latest-preview-key-1.json", 5).unwrap();
-        assert_eq!(
-            read_feed_state(&root).unwrap().feeds["latest-stable-key-1.json"],
-            150
-        );
-    }
-    #[test]
-    fn unreadable_ephemeral_records_are_quarantined_and_rebuilt() {
-        let root = TempDir::new("update-record-quarantine");
-        let path = root.join(FEED_STATE_FILE);
-        for bytes in [
-            b"not json".as_slice(),
-            br#"{"format_version":99,"feeds":{}}"#,
-        ] {
-            fs::write(&path, bytes).unwrap();
-            assert!(read_json(&path, Failure::JournalUnavailable, |state: &FeedState| {
-                state.format_version == 1
-            })
-            .is_err());
-            assert!(read_feed_state(&root).unwrap().feeds.is_empty());
-            assert!(!path.exists());
-            assert!(fs::read_dir(&*root)
-                .unwrap()
-                .filter_map(Result::ok)
-                .any(|entry| fs::read(entry.path()).is_ok_and(|saved| saved == bytes)));
-        }
     }
 }
 

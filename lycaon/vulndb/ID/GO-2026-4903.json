@@ -1,0 +1,45 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/0xJacky/Nginx-UI"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-33026",
+  "GHSA-fhh2-gg7w-gwpq"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-4903"
+ },
+ "details": "nginx-ui Backup Restore Allows Tampering with Encrypted Backups in github.com/0xJacky/Nginx-UI",
+ "id": "GO-2026-4903",
+ "modified": "2026-04-02T18:42:30Z",
+ "published": "2026-04-02T18:42:30Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/0xJacky/nginx-ui/security/advisories/GHSA-fhh2-gg7w-gwpq"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/advisories/GHSA-g9w5-qffc-6762"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "nginx-ui Backup Restore Allows Tampering with Encrypted Backups in github.com/0xJacky/Nginx-UI"
+}

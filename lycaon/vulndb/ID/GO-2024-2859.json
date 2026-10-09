@@ -1,0 +1,56 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/fluxcd/source-controller"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.2.5"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2024-31216",
+  "GHSA-v554-xwgw-hc3w"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2024-2859"
+ },
+ "details": "source-controller leaks Azure Storage SAS token into logs in github.com/fluxcd/source-controller",
+ "id": "GO-2024-2859",
+ "modified": "2024-06-04T15:19:21Z",
+ "published": "2024-06-04T15:19:21Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/fluxcd/source-controller/security/advisories/GHSA-v554-xwgw-hc3w"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2024-31216"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/fluxcd/source-controller/commit/915d1a072a4f37dd460ba33079dc094aa6e72fa9"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/fluxcd/source-controller/pull/1430"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "source-controller leaks Azure Storage SAS token into logs in github.com/fluxcd/source-controller"
+}
