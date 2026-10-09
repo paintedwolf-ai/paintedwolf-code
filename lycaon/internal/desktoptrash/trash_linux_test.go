@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestLinuxTrashMetadataAndRecovery(t *testing.T) {
@@ -73,5 +74,21 @@ func TestLinuxTrashRejectsUnsafeDirectories(t *testing.T) {
 				t.Fatalf("source changed: %q, %v", body, err)
 			}
 		})
+	}
+}
+
+func TestLinuxTrashPreservesMaximumLengthName(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", root)
+	name := strings.Repeat("x", 255)
+	path := filepath.Join(root, name)
+	testutil.FailErr(t, "create maximum length file", os.WriteFile(path, []byte("kept"), 0600))
+	receipt, err := Move(t.Context(), path)
+	testutil.FailErr(t, "trash maximum length file", err)
+	testutil.FailErr(t, "restore original name", Restore(t.Context(), receipt, fseffect.Location{Root: root, Rel: name}))
+	body, err := os.ReadFile(path)
+	testutil.FailErr(t, "read restored file", err)
+	if string(body) != "kept" {
+		t.Fatal("recovery lost contents")
 	}
 }

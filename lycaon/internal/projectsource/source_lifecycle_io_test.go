@@ -5,12 +5,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/desktoptrash"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/desktoptrash"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
 )

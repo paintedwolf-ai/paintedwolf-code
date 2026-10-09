@@ -4,9 +4,10 @@ package desktoptrash
 
 import (
 	"fmt"
-	"golang.org/x/sys/windows"
 	"syscall"
 	"unsafe"
+
+	"golang.org/x/sys/windows"
 )
 
 // IFileOperation retains this sink only during synchronous PerformOperations.

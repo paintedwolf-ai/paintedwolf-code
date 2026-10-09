@@ -32,7 +32,7 @@ func platformMove(path string) (Receipt, error) {
 			return Receipt{}, err
 		}
 	}
-	name := filepath.Base(path) + "." + uuid.NewString()
+	name := uuid.NewString()
 	infoPath := filepath.Join(metadata, name+".trashinfo")
 	info, err := os.OpenFile(infoPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
 	if err != nil {

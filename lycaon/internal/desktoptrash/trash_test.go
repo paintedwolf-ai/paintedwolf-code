@@ -2,10 +2,11 @@ package desktoptrash
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/fseffect"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/fseffect"
 )
 
 func TestMoveValidatesAbsolutePath(t *testing.T) {
