@@ -78,6 +78,8 @@ A chat is retired through one call, `EntityRetire.session` (`lifecycle/entity-re
 
 SSE may collapse message snapshots and sort their rendering by transcript sequence. Replay checkpoints still advance only through the fully applied prefix of the original delivery order. Retries carry their cursor through that same ordered prefix; a failed handler reconnects without skipping unapplied events or reapplying successful deliveries.
 
+The app connection composes host attachment and handshake, project event subscription lifetime, cache reconciliation, and invalidation schedulers. Each service owns its state and cleanup; the public integration module binds their operations and registers stores. Async health and host replies check the bound generation before updating caches, so a replaced backend cannot publish its old response.
+
 Details: [Den session switch](den-session-switch.md) · [Den chat items](den-chat-items.md).
 
 ---
