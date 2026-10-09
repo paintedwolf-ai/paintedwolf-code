@@ -8,7 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools/native"
+	"github.com/lycaon/lycaon/internal/tools/native/command"
 )
 
 // The broker reads the invocation's scratch from the ask, the fact its
@@ -26,9 +26,9 @@ func TestWriteRootBrokerReadsScratchFromTheAsk(t *testing.T) {
 		Checkpoints: unusedWriteRootCheckpoints{t: t},
 		Runtime:     approvalstate.NewSandboxPathGrantRuntime(),
 	}
-	ask := func(proposed, scratch string) native.SandboxWriteRootResult {
+	ask := func(proposed, scratch string) command.SandboxWriteRootResult {
 		t.Helper()
-		got, err := broker.Authorize(t.Context(), native.SandboxWriteRootAsk{
+		got, err := broker.Authorize(t.Context(), command.SandboxWriteRootAsk{
 			SessionID: "chat-own", ToolName: "command", ProposedWriteRoot: proposed, SessionScratchRoot: scratch,
 		})
 		testutil.FailErr(t, "authorize "+proposed, err)

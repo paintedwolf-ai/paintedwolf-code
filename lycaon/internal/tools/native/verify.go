@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native/command"
 	"github.com/lycaon/lycaon/internal/tools/native/toolkit"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -25,14 +26,12 @@ type VerifyTool struct {
 	Runner         *hostcmd.Runner
 	Boundary       *sandbox.Boundary
 	Background     *bgprocess.Registry
-	FailureTracker *CommandFailureTracker
+	FailureTracker *command.CommandFailureTracker
 	// WriteRootGate handles cache writes outside default roots.
-	WriteRootGate SandboxWriteRootGate
+	WriteRootGate command.SandboxWriteRootGate
 	// DeclaredCommand resolves the project's verification command.
-	DeclaredCommand DeclaredVerifyCommand
+	DeclaredCommand command.DeclaredVerifyCommand
 }
-
-type DeclaredVerifyCommand func(projectDir string) string
 
 func (t *VerifyTool) declaredFor(tctx tools.ToolContext) string {
 	if t == nil || t.DeclaredCommand == nil {
@@ -102,30 +101,30 @@ func (t *VerifyTool) Run(ctx context.Context, args map[string]any, tctx tools.To
 		return "", fmt.Errorf("verify runner not configured")
 	}
 	if t.FailureTracker == nil {
-		t.FailureTracker = NewCommandFailureTracker()
+		t.FailureTracker = command.NewCommandFailureTracker()
 	}
 	declared := t.declaredFor(tctx)
 	// The declared check is compared as written, before the host expanded its globs.
 	requested := tctx.RequestedArgs
 	if requested == nil {
-		requested = canonicalToolArgs(tctx, args)
+		requested = command.CanonicalToolArgs(tctx, args)
 	}
 	if err := rejectDeclaredCommandOverride(declared, requested); err != nil {
 		return "", err
 	}
 	run := t.confined()
 	if toolkit.BoolArg(args, "background", false) {
-		return runCommandBackground(ctx, t.Background, t.Runner, t.Boundary, args, tctx, run.sessionWriteRoots(ctx, tctx), VerifyToolName)
+		return command.RunBackground(ctx, t.Background, t.Runner, t.Boundary, args, tctx, run.SessionWriteRoots(ctx, tctx), VerifyToolName)
 	}
-	res, outcome, err := run.run(ctx, args, tctx)
+	res, outcome, err := run.Run(ctx, args, tctx)
 	if err != nil {
 		return "", err
 	}
 	if !outcome.Finished {
-		return encodeCommandRunning(tctx, outcome, commandWaitBudget(args))
+		return command.EncodeCommandRunning(tctx, outcome, command.WaitBudget(args))
 	}
-	stampBoundaryRefusal(tctx, res)
-	stampIndexWatch(tctx, outcome.IndexWatch)
+	command.StampBoundaryRefusal(tctx, res)
+	command.StampIndexWatch(tctx, outcome.IndexWatch)
 	tail := res.Tail
 	verdict, reason := verdictFor(res)
 	stampSourceRun(tctx, res, verdict, outcome)
@@ -145,7 +144,7 @@ func (t *VerifyTool) Run(ctx context.Context, args map[string]any, tctx tools.To
 		Report:             res.Report,
 	}
 	if reason == unverifiableReasonDeadline {
-		vr.DeadlineSeconds = int(commandTimeout(args, VerifyToolName) / time.Second)
+		vr.DeadlineSeconds = int(command.CommandTimeout(args, VerifyToolName) / time.Second)
 	}
 	if capped, truncated, orig := CapOpaqueTail(tail, 0); truncated {
 		vr.Tail = capped
@@ -179,22 +178,12 @@ func rejectDeclaredCommandOverride(declared string, args map[string]any) error {
 }
 
 // stampSourceRun attaches terminal evidence to the invocation receipt.
-func stampSourceRun(tctx tools.ToolContext, res *hostcmd.Result, verdict VerifyOutcome, outcome commandRunOutcome) {
-	if tctx.Out == nil || res == nil {
-		return
-	}
-	tctx.Out.SourceRun = &tools.SourceRunCapture{
-		CheckID: tctx.ToolCallID, IsCheck: outcome.IsCheck,
-		Command:        hostcmd.CommandLine(res.Stages),
-		ExitCode:       res.ExitCode,
-		Verdict:        string(verdict),
-		SourceRevision: outcome.SourceRevision, SourceRootDigest: outcome.SourceRootDigest, Cwd: outcome.Cwd,
-	}
+func stampSourceRun(tctx tools.ToolContext, res *hostcmd.Result, verdict VerifyOutcome, outcome command.RunOutcome) {
+	command.StampSourceRun(tctx, res, string(verdict), outcome)
 }
 
 func verificationRequested(args map[string]any) bool {
-	requested, _ := args["verification"].(bool)
-	return requested
+	return command.VerificationRequested(args)
 }
 
 // stampUnverifiableFacts records an unverifiable receipt.
@@ -206,8 +195,8 @@ func stampUnverifiableFacts(tctx tools.ToolContext, verdict VerifyOutcome) {
 }
 
 // confined binds this tool's wiring to the shared confined-foreground path.
-func (t *VerifyTool) confined() confinedForeground {
-	return confinedForeground{
+func (t *VerifyTool) confined() command.ConfinedForeground {
+	return command.ConfinedForeground{
 		Background:     t.Background,
 		FailureTracker: t.FailureTracker,
 		Runner:         t.Runner,

@@ -23,7 +23,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/tools/native"
+	"github.com/lycaon/lycaon/internal/tools/native/command"
 )
 
 type capabilityReviewCheckpoints struct {
@@ -161,11 +161,11 @@ func newCapabilityReviewFixture(t *testing.T, approve bool) *capabilityReviewFix
 	f.executor.SetSessionWriteRootOverlay(broker.SessionWriteRoots)
 	f.executor.SetSessionReadPathOverlay(broker.SessionReadPaths)
 	f.executor.SetWriteRootPreflight(func(ctx context.Context, tool string, _ map[string]any, tc tools.ToolContext, path string) (bool, bool, string, error) {
-		result, err := broker.Authorize(ctx, native.SandboxWriteRootAsk{SessionID: tc.SessionID, ProjectID: tc.ProjectID, ToolCallID: tc.ToolCallID, ProjectDir: tc.ActiveRootPath(), ToolName: tool, ProposedWriteRoot: path})
+		result, err := broker.Authorize(ctx, command.SandboxWriteRootAsk{SessionID: tc.SessionID, ProjectID: tc.ProjectID, ToolCallID: tc.ToolCallID, ProjectDir: tc.ActiveRootPath(), ToolName: tool, ProposedWriteRoot: path})
 		return result.Authorized, result.Denied, result.UserGuidance, err
 	})
 	f.executor.SetReadPathPreflight(func(ctx context.Context, tool string, _ map[string]any, tc tools.ToolContext, path string) (bool, bool, string, error) {
-		result, err := broker.AuthorizeRead(ctx, native.SandboxReadPathAsk{SessionID: tc.SessionID, ProjectID: tc.ProjectID, ToolCallID: tc.ToolCallID, ProjectDir: tc.ActiveRootPath(), ToolName: tool, ProposedReadPath: path, ReadDenyPaths: []string{read}})
+		result, err := broker.AuthorizeRead(ctx, command.SandboxReadPathAsk{SessionID: tc.SessionID, ProjectID: tc.ProjectID, ToolCallID: tc.ToolCallID, ProjectDir: tc.ActiveRootPath(), ToolName: tool, ProposedReadPath: path, ReadDenyPaths: []string{read}})
 		return result.Authorized, result.Denied, result.UserGuidance, err
 	})
 	f.executor.SetSessionListenGrant(func(_ context.Context, session, _ string) (bool, []uint16) {

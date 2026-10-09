@@ -25,6 +25,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
+	"github.com/lycaon/lycaon/internal/tools/native/command"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -135,7 +136,7 @@ func TestSecretCanaryNeverEchoedByAnyReferenceTool(t *testing.T) {
 	background := bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{})
 	background.SetCaptureProjector(captureprojection.New(secretmatch.NewInertMatcher(), nil))
 	runner := hostcmd.NewRunner()
-	command := &native.CommandTool{Runner: runner, Boundary: boundary, Background: background}
+	command := &command.CommandTool{Runner: runner, Boundary: boundary, Background: background}
 	verify := &native.VerifyTool{Runner: runner, Boundary: boundary, Background: background}
 	testutil.FailErr(t, "register command", registry.Register("command", command.Run))
 	testutil.FailErr(t, "register verify", registry.Register("verify", verify.Run))

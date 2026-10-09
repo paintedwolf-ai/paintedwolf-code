@@ -24,6 +24,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
+	"github.com/lycaon/lycaon/internal/tools/native/command"
 	"github.com/lycaon/lycaon/internal/workspace"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -191,7 +192,7 @@ func TestWorktreeReach_commandCwdFollows(t *testing.T) {
 	testutil.FailErr(t, "buildToolContext", err)
 
 	reg := bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{})
-	tool := &native.CommandTool{
+	tool := &command.CommandTool{
 		Runner:     hostcmd.NewRunner(),
 		Boundary:   writeBoundary(t),
 		Background: reg,

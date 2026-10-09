@@ -18,7 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/tools/native"
+	"github.com/lycaon/lycaon/internal/tools/native/command"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -93,7 +93,7 @@ func TestCommandRedirectIntoCredentialFileAsksAsProtectedWrite(t *testing.T) {
 			approvalGate := settings.NewRuleApprovalGate(store, settings.NoSources())
 			boundary := sandbox.NewBoundary(fixtureSandboxConfig(), fixtureToolProfiles(t))
 			registry := tools.NewDefaultRegistry()
-			command := &native.CommandTool{
+			command := &command.CommandTool{
 				Runner: hostcmd.NewRunner(), Boundary: boundary,
 				Background: bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{}),
 			}

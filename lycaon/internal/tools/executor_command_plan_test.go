@@ -17,7 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/tools/native"
+	"github.com/lycaon/lycaon/internal/tools/native/command"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -67,7 +67,7 @@ func newCommandPlanFixture(t *testing.T) commandPlanFixture {
 	root := t.TempDir()
 	boundary := sandbox.NewBoundary(fixtureSandboxConfig(), fixtureToolProfiles(t))
 	registry := tools.NewDefaultRegistry()
-	command := &native.CommandTool{
+	command := &command.CommandTool{
 		Runner: hostcmd.NewRunner(), Boundary: boundary,
 		Background: bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{}),
 	}

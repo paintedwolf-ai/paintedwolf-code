@@ -10,6 +10,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native/command"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 	surveytools "github.com/lycaon/lycaon/internal/tools/native/survey"
 )
@@ -207,7 +208,7 @@ func TestEditToolReplaceAllFalseStillAmbiguous(t *testing.T) {
 }
 
 func TestCommandToolRequiresRunner(t *testing.T) {
-	tool := &CommandTool{}
+	tool := &command.CommandTool{}
 	_, err := tool.Run(context.Background(), map[string]any{"command": "echo hi"}, nativefixture.Context(t.TempDir()))
 	if err == nil || !strings.Contains(err.Error(), "not configured") {
 		t.Fatalf("err = %v", err)

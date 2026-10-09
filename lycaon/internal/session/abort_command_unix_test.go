@@ -24,7 +24,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/tools/native"
+	"github.com/lycaon/lycaon/internal/tools/native/command"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -50,7 +50,7 @@ func TestAbortEndsATurnBlockedInACommand(t *testing.T) {
 	pidFile := filepath.Join(root, "job.pid")
 	testutil.FailErr(t, "write script", os.WriteFile(filepath.Join(root, "serve.sh"),
 		[]byte("set -m\nsleep 1000 &\necho $! > \"$1\"\nwait\n"), 0o600))
-	tool := &native.CommandTool{
+	tool := &command.CommandTool{
 		Runner: hostcmd.NewRunner(),
 		Boundary: sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true}, []sandbox.ToolProfile{
 			{ID: "implement", Tools: map[string]bool{"command": true}},

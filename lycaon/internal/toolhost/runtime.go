@@ -33,6 +33,7 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/fileage"
 	"github.com/lycaon/lycaon/internal/tools/native"
+	"github.com/lycaon/lycaon/internal/tools/native/command"
 	nativejq "github.com/lycaon/lycaon/internal/tools/native/jq"
 	skilltools "github.com/lycaon/lycaon/internal/tools/native/skills"
 	surveytools "github.com/lycaon/lycaon/internal/tools/native/survey"
@@ -75,10 +76,10 @@ type Runtime struct {
 	directDiscovererFactory webresearch.DirectDiscovererFactory
 	profilePolicy           *tools.ProfilePolicyEngine
 	bgRegistry              *bgprocess.Registry
-	commandTool             *native.CommandTool
+	commandTool             *command.CommandTool
 	verifyTool              *native.VerifyTool
-	commandOutputTool       *native.CommandOutputTool
-	commandStopTool         *native.CommandStopTool
+	commandOutputTool       *command.CommandOutputTool
+	commandStopTool         *command.CommandStopTool
 	skillsReadTool          *skilltools.SkillsReadTool
 	fileAge                 *fileage.Provider
 	// gitStatusCache is shared with the board GET path when the host wires it.
@@ -416,7 +417,7 @@ func (r *Runtime) ApprovalGate() hitl.ApprovalGate {
 }
 
 // SetSandboxWriteRootGate installs write-root review and grants.
-func (r *Runtime) SetSandboxWriteRootGate(writeRoot native.SandboxWriteRootGate) {
+func (r *Runtime) SetSandboxWriteRootGate(writeRoot command.SandboxWriteRootGate) {
 	if r == nil {
 		return
 	}
@@ -429,21 +430,19 @@ func (r *Runtime) SetSandboxWriteRootGate(writeRoot native.SandboxWriteRootGate)
 	if r.Executor != nil {
 		r.Executor.SetSessionWriteRootOverlay(writeRoot.SessionWriteRoots)
 		r.Executor.SetWriteRootPreflight(func(ctx context.Context, tool string, args map[string]any, tc tools.ToolContext, root string) (bool, bool, string, error) {
-			result, err := writeRoot.Authorize(ctx, native.SandboxWriteRootAsk{
+			result, err := writeRoot.Authorize(ctx, command.SandboxWriteRootAsk{
 				SessionID: tc.SessionID, ParentSessionID: tc.ParentSessionID,
 				ProjectID: tc.ProjectID, ToolCallID: tc.ToolCallID, ProjectDir: tc.ActiveRootPath(),
-				ToolName: tool, Command: commandsurface.PrimaryCommandLine(args, nil), ProposedWriteRoot: root,
-				SessionScratchRoot: tc.SessionScratchDir,
+				ToolName: tool, Command: commandsurface.PrimaryCommandLine(args, nil), ProposedWriteRoot: root, SessionScratchRoot: tc.SessionScratchDir,
 			})
 			return result.Authorized, result.Denied, result.UserGuidance, err
 		})
 		r.Executor.SetSessionReadPathOverlay(writeRoot.SessionReadPaths)
 		r.Executor.SetReadPathPreflight(func(ctx context.Context, tool string, args map[string]any, tc tools.ToolContext, path string) (bool, bool, string, error) {
-			result, err := writeRoot.AuthorizeRead(ctx, native.SandboxReadPathAsk{
+			result, err := writeRoot.AuthorizeRead(ctx, command.SandboxReadPathAsk{
 				SessionID: tc.SessionID, ParentSessionID: tc.ParentSessionID,
 				ProjectID: tc.ProjectID, ToolCallID: tc.ToolCallID, ProjectDir: tc.ActiveRootPath(),
-				ToolName: tool, Command: commandsurface.PrimaryCommandLine(args, nil), ProposedReadPath: path,
-				ReadDenyPaths: tools.ActionConfineInputsForContext(tc, nil).ReadDenyPaths,
+				ToolName: tool, Command: commandsurface.PrimaryCommandLine(args, nil), ProposedReadPath: path, ReadDenyPaths: tools.ActionConfineInputsForContext(tc, nil).ReadDenyPaths,
 			})
 			return result.Authorized, result.Denied, result.UserGuidance, err
 		})
@@ -451,7 +450,7 @@ func (r *Runtime) SetSandboxWriteRootGate(writeRoot native.SandboxWriteRootGate)
 }
 
 // SetVerifyDeclaredCommand shares project check identity across execution tools.
-func (r *Runtime) SetVerifyDeclaredCommand(resolve native.DeclaredVerifyCommand) {
+func (r *Runtime) SetVerifyDeclaredCommand(resolve command.DeclaredVerifyCommand) {
 	if r == nil {
 		return
 	}
@@ -810,10 +809,10 @@ type nativeMutationTools struct {
 	codeRewrite       *native.CodeRewriteTool
 	restoreVersion    *native.RestoreVersionTool
 	jqEdit            *native.JqEditTool
-	commandTool       *native.CommandTool
+	commandTool       *command.CommandTool
 	verifyTool        *native.VerifyTool
-	commandOutputTool *native.CommandOutputTool
-	commandStopTool   *native.CommandStopTool
+	commandOutputTool *command.CommandOutputTool
+	commandStopTool   *command.CommandStopTool
 	skillsRead        *skilltools.SkillsReadTool
 }
 
@@ -904,10 +903,10 @@ func buildNativeRegistry(deps buildDeps) (*tools.DefaultRegistry, *nativeMutatio
 	surveyRepo := &survey.RepoTool{
 		Boundary: boundary, BaseCatalog: deps.surveyCatalog, Caps: survey.DefaultCaps(), SourceCatalog: catalog,
 	}
-	var commandTool *native.CommandTool
+	var commandTool *command.CommandTool
 	var verifyTool *native.VerifyTool
-	var commandOutputTool *native.CommandOutputTool
-	var commandStopTool *native.CommandStopTool
+	var commandOutputTool *command.CommandOutputTool
+	var commandStopTool *command.CommandStopTool
 
 	if err := registerCoreNativeTools(register, read, write, edit, replaceLines, codeRewrite, restoreVersion, find, summarizeTool, grep, jqTool, jqEdit, stat, wc, listDir, chmod, deleteTool, copyTool, moveTool, mkdirTool, diffTool, extractArchiveTool, chownTool, surveyRepo); err != nil {
 		return nil, nil, err
@@ -1006,10 +1005,10 @@ func registerCommandTools(
 	reg *tools.DefaultRegistry,
 	runner *hostcmd.Runner,
 	boundary *sandbox.Boundary,
-	commandTool **native.CommandTool,
+	commandTool **command.CommandTool,
 	verifyTool **native.VerifyTool,
-	commandOutputTool **native.CommandOutputTool,
-	commandStopTool **native.CommandStopTool,
+	commandOutputTool **command.CommandOutputTool,
+	commandStopTool **command.CommandStopTool,
 ) error {
 	service, err := hostprocess.New()
 	if err != nil {
@@ -1022,11 +1021,11 @@ func registerCommandTools(
 	if err := reg.Register("process_signal", processTools.Signal); err != nil {
 		return err
 	}
-	ft := native.NewCommandFailureTracker()
-	*commandTool = &native.CommandTool{Runner: runner, Boundary: boundary, FailureTracker: ft}
+	ft := command.NewCommandFailureTracker()
+	*commandTool = &command.CommandTool{Runner: runner, Boundary: boundary, FailureTracker: ft}
 	*verifyTool = &native.VerifyTool{Runner: runner, Boundary: boundary, FailureTracker: ft}
-	*commandOutputTool = &native.CommandOutputTool{}
-	*commandStopTool = &native.CommandStopTool{}
+	*commandOutputTool = &command.CommandOutputTool{}
+	*commandStopTool = &command.CommandStopTool{}
 	if err := reg.Register("command", (*commandTool).Run); err != nil {
 		return err
 	}
