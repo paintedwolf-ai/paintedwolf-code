@@ -2,10 +2,9 @@ package session
 
 import (
 	"context"
-	"strings"
-
 	"github.com/lycaon/lycaon/internal/coordinator/batch"
 	"github.com/lycaon/lycaon/pkg/api"
+	"strings"
 )
 
 // rollbackEphemeralState reconciles volatile state with the truncated timeline.
@@ -44,8 +43,8 @@ func (m *Manager) rollbackCoordinatorBatch(ctx context.Context, sessionID string
 	m.resetCoordinatorBatchTurnGuard(sessionID)
 	rt := m.ensureCoordinatorRuntime()
 	rt.Kicks().ClearPending(sessionID)
-	rt.CoordinatorLoop().ClearPending(sessionID)
-	rt.CoordinatorLoop().InterruptSleep(ctx, sessionID)
+	rt.CoordinatorLoop().Nudges.ClearPending(sessionID)
+	rt.CoordinatorLoop().Waits.InterruptSleep(ctx, sessionID)
 }
 
 func (m *Manager) rollbackTurnLedgers(sessionID, rootID string) {

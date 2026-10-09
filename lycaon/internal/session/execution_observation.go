@@ -3,7 +3,6 @@ package session
 import (
 	"context"
 	"fmt"
-
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -101,7 +100,7 @@ func (m *Manager) executionBlockers(ctx context.Context, s store.ExecutionSessio
 		add("session", s.ID)
 	}
 	loop := m.ensureCoordinatorRuntime().CoordinatorLoop()
-	if loop.PromptExecutionActive(s.ID) || (loop.HasPendingLoopWakes(s.ID) && !m.hostTurnBlocked(ctx, s.ID)) {
+	if loop.Admission.PromptExecutionActive(s.ID) || (loop.Nudges.HasPendingLoopWakes(s.ID) && !m.hostTurnBlocked(ctx, s.ID)) {
 		add("continuation", s.ID)
 	}
 	idle, err := ParentSessionWorkerCycleIdle(ctx, m.workerQueue, s.ProjectID, s.ID, "")

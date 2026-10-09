@@ -1,17 +1,11 @@
 package app
 
 import (
-	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
-	workflowruntime "github.com/lycaon/lycaon/internal/workflow/runtime"
-
 	"context"
 	"fmt"
-	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
-	"log/slog"
-	"strings"
-
 	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
+	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/coordinator/reenter"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/delegation"
@@ -25,9 +19,13 @@ import (
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
+	workflowruntime "github.com/lycaon/lycaon/internal/workflow/runtime"
 	"github.com/lycaon/lycaon/internal/workspace"
 	wire "github.com/lycaon/lycaon/pkg/api"
+	"log/slog"
+	"strings"
 )
 
 // delegationWiring wires delegation workers, workflow hooks, and background runners.
@@ -305,7 +303,7 @@ func (b delegationWiring) onWorkflowPhaseEnter(ctx context.Context, rc *workflow
 		if !rc.IsRunStart() {
 			b.mgr.CancelInFlightPrompt(rc.SessionID)
 		}
-		b.coordRuntime.CoordinatorLoop().ParkForHostObligation(ctx, rc.SessionID)
+		b.coordRuntime.CoordinatorLoop().Waits.ParkForHostObligation(ctx, rc.SessionID)
 	}
 	if mode := workflowdef.ForceExecutionMode(def.OnEnter.SetExecutionMode); mode != "" {
 		b.mgr.PushExecutionModeTransitionCause(rc.SessionID, surface.ModeTransitionCause{
@@ -361,7 +359,7 @@ func (b delegationWiring) onWorkflowPhaseAutoAdvanced(ctx context.Context, sessi
 		}
 		if held, heldErr := b.workflowMgr.Obligations.HostObligationHeld(postStartCtx, sessionID); heldErr == nil && held {
 			b.mgr.CancelInFlightPrompt(sessionID)
-			b.coordRuntime.CoordinatorLoop().ParkForHostObligation(postStartCtx, sessionID)
+			b.coordRuntime.CoordinatorLoop().Waits.ParkForHostObligation(postStartCtx, sessionID)
 			return
 		}
 		b.mgr.NudgeCoordinatorLoop(ctx, sessionID, anchor.PhaseAdvanced, "", "", anchor.Envelope{})
@@ -371,7 +369,7 @@ func (b delegationWiring) onWorkflowPhaseAutoAdvanced(ctx context.Context, sessi
 	if strings.TrimSpace(previousPhase) != strings.TrimSpace(newPhase) {
 		postAdvanceCtx := context.WithoutCancel(ctx)
 		if held, heldErr := b.workflowMgr.Obligations.HostObligationHeld(postAdvanceCtx, sessionID); heldErr == nil && held {
-			b.coordRuntime.CoordinatorLoop().ParkForHostObligation(postAdvanceCtx, sessionID)
+			b.coordRuntime.CoordinatorLoop().Waits.ParkForHostObligation(postAdvanceCtx, sessionID)
 			return
 		}
 		b.mgr.NudgeCoordinatorLoop(postAdvanceCtx, sessionID, anchor.PhaseAdvanced, "", "", anchor.Envelope{})
@@ -395,7 +393,7 @@ func (b delegationWiring) onWorkflowRunResumed(ctx context.Context, run *wire.Wo
 		return
 	}
 	if held, heldErr := b.workflowMgr.Obligations.HostObligationHeld(ctx, run.SessionID); heldErr == nil && held {
-		b.coordRuntime.CoordinatorLoop().ParkForHostObligation(ctx, run.SessionID)
+		b.coordRuntime.CoordinatorLoop().Waits.ParkForHostObligation(ctx, run.SessionID)
 		return
 	}
 	b.mgr.NudgeCoordinatorLoop(ctx, run.SessionID, anchor.PhaseAdvanced, "", "", anchor.Envelope{})
@@ -412,7 +410,7 @@ func (b delegationWiring) onWorkflowHumanApprovalAdvanced(ctx context.Context, r
 	}
 	b.mgr.CancelInFlightPrompt(sessionID)
 	if held, heldErr := b.workflowMgr.Obligations.HostObligationHeld(ctx, sessionID); heldErr == nil && held {
-		b.coordRuntime.CoordinatorLoop().ParkForHostObligation(ctx, sessionID)
+		b.coordRuntime.CoordinatorLoop().Waits.ParkForHostObligation(ctx, sessionID)
 		return
 	}
 	b.mgr.NudgeCoordinatorLoop(ctx, sessionID, anchor.PhaseAdvanced, "", "", anchor.Envelope{})
@@ -423,7 +421,7 @@ func (b delegationWiring) onWorkflowFeedbackPending(ctx context.Context, session
 }
 
 func (b delegationWiring) onWorkflowToolAskOpened(ctx context.Context, sessionID, _ string) {
-	b.coordRuntime.CoordinatorLoop().ParkForPendingUserInput(ctx, sessionID, "waiting for user ask")
+	b.coordRuntime.CoordinatorLoop().Waits.ParkForPendingUserInput(ctx, sessionID, "waiting for user ask")
 }
 
 func (b delegationWiring) onWorkflowFeedbackResolved(ctx context.Context, sessionID, _, _, _ string) {

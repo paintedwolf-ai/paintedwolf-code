@@ -2,14 +2,13 @@ package loopwake
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/promptresult"
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/pkg/api"
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"github.com/lycaon/lycaon/internal/coordinator/anchor"
-	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestWakeQueuedAfterExecutionReleaseStartsWithoutAnotherEvent(t *testing.T) {
@@ -23,7 +22,7 @@ func TestWakeQueuedAfterExecutionReleaseStartsWithoutAnotherEvent(t *testing.T) 
 	deps.WorkflowSource = workflowFixturePorts(StubLoopWF{
 		run: &api.WorkflowRun{ID: "work", Status: api.WorkflowRunStatusRunning, CurrentPhase: "work"},
 	})
-	finish := engine.BeginPromptExecution(t.Context(), id)
+	finish := engine.Admission.BeginPromptExecution(t.Context(), id)
 	defer finish()
 	deps.QueueInform = func(context.Context, string, anchor.ID, anchor.Envelope) {
 		// evaluate saw execution active, but the turn releases before the wake is queued.
@@ -34,25 +33,25 @@ func TestWakeQueuedAfterExecutionReleaseStartsWithoutAnotherEvent(t *testing.T) 
 		return &promptresult.Result{}, nil
 	}
 	engine.SetDeps(deps)
-	engine.Nudge(t.Context(), id, anchor.WorkerTaskFinished, anchor.WorkerTaskFinished, "", anchor.Envelope{})
+	engine.Nudges.Nudge(t.Context(), id, anchor.WorkerTaskFinished, anchor.WorkerTaskFinished, "", anchor.Envelope{})
 	testutil.WaitFor(t, 2*time.Second, func() bool { return prompts.Load() == 1 })
-	engine.asyncTurns.Wait()
-	if engine.HasPendingLoopWakes(id) || prompts.Load() != 1 {
-		t.Fatalf("wake settlement: pending=%v prompts=%d", engine.HasPendingLoopWakes(id), prompts.Load())
+	engine.Turns.asyncTurns.Wait()
+	if engine.Nudges.HasPendingLoopWakes(id) || prompts.Load() != 1 {
+		t.Fatalf("wake settlement: pending=%v prompts=%d", engine.Nudges.HasPendingLoopWakes(id), prompts.Load())
 	}
 }
 
 func TestExecutionReleaseCannotClearANewerOwner(t *testing.T) {
 	engine := NewLoopEngine()
-	first := engine.BeginPromptExecution(t.Context(), "owner")
-	second := engine.BeginPromptExecution(t.Context(), "owner")
+	first := engine.Admission.BeginPromptExecution(t.Context(), "owner")
+	second := engine.Admission.BeginPromptExecution(t.Context(), "owner")
 	defer second()
 	first()
-	if !engine.PromptExecutionActive("owner") {
+	if !engine.Admission.PromptExecutionActive("owner") {
 		t.Fatal("earlier release cleared the newer execution owner")
 	}
 	second()
-	if engine.PromptExecutionActive("owner") {
+	if engine.Admission.PromptExecutionActive("owner") {
 		t.Fatal("current owner did not release execution")
 	}
 }
@@ -75,16 +74,16 @@ func TestWorkerCycleTerminalDoesNotOccupyTheWorkerDuringHostPrompt(t *testing.T)
 		return &promptresult.Result{}, nil
 	}
 	engine.SetDeps(deps)
-	engine.enqueuePending(id, pendingLoopWake{wake: anchor.WorkerTaskFinished, seq: engine.nudgeSeq.Add(1)})
+	engine.Nudges.enqueuePending(id, pendingLoopWake{wake: anchor.WorkerTaskFinished, seq: engine.Nudges.nudgeSeq.Add(1)})
 	returned := make(chan struct{})
 	go func() {
-		engine.OnWorkerCycleTerminal(t.Context(), id, "worker")
+		engine.Cycles.OnWorkerCycleTerminal(t.Context(), id, "worker")
 		close(returned)
 	}()
 	t.Cleanup(func() {
 		close(release)
 		<-returned
-		engine.asyncTurns.Wait()
+		engine.Turns.asyncTurns.Wait()
 	})
 	select {
 	case <-returned:

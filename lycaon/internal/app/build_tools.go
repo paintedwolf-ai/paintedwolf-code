@@ -3,8 +3,6 @@ package app
 import (
 	"context"
 	"fmt"
-	workflowstatetools "github.com/lycaon/lycaon/internal/workflow/statetools"
-
 	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/boot"
@@ -27,6 +25,7 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workflow"
+	workflowstatetools "github.com/lycaon/lycaon/internal/workflow/statetools"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -47,7 +46,7 @@ func (b toolWiring) wireCoordinatorRuntime() error {
 		waitConditions[profile.ID] = allowed
 	}
 	waitStore := &awaitstore.Store{DB: b.db}
-	if err := loopwake.RegisterWaitTool(b.toolRuntime.Registry, b.coordRuntime.CoordinatorLoop(), loopwake.WaitToolDeps{
+	if err := loopwake.RegisterWaitTool(b.toolRuntime.Registry, b.coordRuntime.CoordinatorLoop().Subscriptions, loopwake.WaitToolDeps{
 		Store: waitStore, ProfileConditions: waitConditions,
 		SecretMatcher: b.secretMatcher, RuntimeContext: b.ctx,
 	}); err != nil {
@@ -56,7 +55,7 @@ func (b toolWiring) wireCoordinatorRuntime() error {
 	if err := delegationWiring(b).registerRecovery(bootrecovery.Entry{
 		Name: "agent-wait-leases", Kind: bootrecovery.KindReconcile, Phase: bootrecovery.PhaseServe,
 		Run: func(ctx context.Context) error {
-			return loopwake.RecoverWaitLeases(ctx, b.coordRuntime.CoordinatorLoop(), waitStore)
+			return loopwake.RecoverWaitLeases(ctx, b.coordRuntime.CoordinatorLoop().Subscriptions, waitStore)
 		},
 	}); err != nil {
 		return err

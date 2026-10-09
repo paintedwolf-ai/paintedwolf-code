@@ -3,13 +3,8 @@ package app
 import (
 	"context"
 	"errors"
-	"path/filepath"
-	"strings"
-	"testing"
-
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/config/configtest"
-
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
@@ -20,6 +15,9 @@ import (
 	"github.com/lycaon/lycaon/internal/worker"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
+	"path/filepath"
+	"strings"
+	"testing"
 )
 
 func testBuildConfig(t *testing.T, configRoot string) Config {
@@ -159,7 +157,7 @@ func TestBuildPreservesExplicitSessionLimits(t *testing.T) {
 	testdbseed.InsertProjectRoot(t, app.DB, testdbseed.DefaultProjectID, t.TempDir())
 	sess, err := app.SessionMgr.CreateForProject(t.Context(), testdbseed.DefaultProjectID, wire.SessionPostureBuild)
 	testutil.FailErr(t, "create session with explicit limits", err)
-	allowed, reason, err := app.CoordinatorRuntime.CoordinatorLoop().ShouldLoopWake(t.Context(), sess.ID, anchor.PhaseAdvanced)
+	allowed, reason, err := app.CoordinatorRuntime.CoordinatorLoop().Admission.ShouldLoopWake(t.Context(), sess.ID, anchor.PhaseAdvanced)
 	testutil.FailErr(t, "evaluate workflow phase wake", err)
 	if allowed || reason != "feature_disabled" {
 		t.Fatalf("workflow wake allowed=%v reason=%q; explicit disabled loop was replaced by live settings", allowed, reason)

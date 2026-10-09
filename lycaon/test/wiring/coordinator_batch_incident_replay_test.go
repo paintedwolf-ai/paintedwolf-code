@@ -2,20 +2,19 @@ package wiring
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/promptresult"
-	"sync/atomic"
-	"testing"
-	"time"
-
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/batch"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/llm"
+	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/scaffoldvars"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
+	"sync/atomic"
+	"testing"
+	"time"
 )
 
 type batchRunLoopWF struct {
@@ -67,27 +66,27 @@ func TestStackedWakeFactsAreConsumedByOneObservedPrompt(t *testing.T) {
 	deps.GetSession = func(context.Context, string) (*api.Session, error) { return sess, nil }
 	deps.WorkflowSource = &loopwake.WorkflowDomains{Runs: synthesizeWF, Approvals: synthesizeWF, Obligations: synthesizeWF}
 	deps.RunPrompt = func(context.Context, string) (*promptresult.Result, error) {
-		engine.ObservePrompt("s1")(inject.CoordinatorTurnFrame{})
+		engine.Observations.ObservePrompt("s1")(inject.CoordinatorTurnFrame{})
 		prompts.Add(1)
 		return &promptresult.Result{}, nil
 	}
 	engine.SetDeps(deps)
-	finishExecution := engine.BeginPromptExecution(t.Context(), "s1")
+	finishExecution := engine.Admission.BeginPromptExecution(t.Context(), "s1")
 	// Distinct terminal events arrive while synthesis is still in flight.
 	for _, jobID := range []string{"implementation-job", "verifier-job"} {
-		engine.NudgeAfterWorkerJobTerminal(
+		engine.Nudges.NudgeAfterWorkerJobTerminal(
 			t.Context(), "s1", jobID, anchor.WorkerTaskFinished, anchor.WorkerTaskFinished, "", anchor.Envelope{},
 		)
 	}
-	engine.Nudge(context.Background(), "s1", anchor.WaitTimerFired, anchor.WaitTimerFired, "", anchor.Envelope{})
+	engine.Nudges.Nudge(context.Background(), "s1", anchor.WaitTimerFired, anchor.WaitTimerFired, "", anchor.Envelope{})
 	if prompts.Load() != 0 {
 		t.Fatalf("prompts = %d want 0 while session busy", prompts.Load())
 	}
-	if _, ok := engine.PendingForTest("s1"); !ok {
+	if _, ok := engine.Nudges.Pending("s1"); !ok {
 		t.Fatal("worker wake should defer while session busy")
 	}
 	finishExecution()
-	engine.WaitForAsyncTurns(testutil.BoundedContext(t, time.Second))
+	engine.Turns.WaitForAsyncTurns(testutil.BoundedContext(t, time.Second))
 	if got := prompts.Load(); got != 1 {
 		t.Fatalf("deferred worker wake prompts = %d want 1 after idle drain", got)
 	}

@@ -3,11 +3,10 @@ package loopwake
 import (
 	"context"
 	"errors"
-	"testing"
-
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/pkg/api"
+	"testing"
 )
 
 type boardRunFrame struct{ err error }
@@ -44,7 +43,7 @@ func TestBoardReinjectionRequiresKnownRun(t *testing.T) {
 				return true
 			}
 			engine.SetDeps(deps)
-			engine.Nudge(t.Context(), sess.ID, anchor.LegFinished, anchor.LegFinished, "leg-1", anchor.Envelope{})
+			engine.Nudges.Nudge(t.Context(), sess.ID, anchor.LegFinished, anchor.LegFinished, "leg-1", anchor.Envelope{})
 			if informed != tc.wantInform || predicted != tc.wantPrediction {
 				t.Fatalf("inform calls=%d prediction calls=%d, want %d and %d", informed, predicted, tc.wantInform, tc.wantPrediction)
 			}

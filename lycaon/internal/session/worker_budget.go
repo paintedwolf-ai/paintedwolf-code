@@ -2,12 +2,11 @@ package session
 
 import (
 	"context"
-	"strings"
-
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/kick"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/pkg/api"
+	"strings"
 )
 
 // WorkerBudgetExhaustedCode is emitted on partial worker summaries when the child
@@ -71,7 +70,7 @@ func (m *Manager) NotifyWorkerBudgetRequested(ctx context.Context, task api.Work
 		return
 	}
 	facts := workerBudgetFacts(&task, m.workerToolBudgetForTask(ctx, &task))
-	m.ensureCoordinatorRuntime().CoordinatorLoop().NudgeWorkerBudgetRequested(ctx, parentID, task.ID, anchor.Envelope{WorkerBudget: &facts})
+	m.ensureCoordinatorRuntime().CoordinatorLoop().Nudges.NudgeWorkerBudgetRequested(ctx, parentID, task.ID, anchor.Envelope{WorkerBudget: &facts})
 }
 
 // workerBudgetRequestOpen reports a live job still carrying an unanswered

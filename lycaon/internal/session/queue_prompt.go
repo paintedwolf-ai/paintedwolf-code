@@ -5,18 +5,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/promptresult"
-	"log/slog"
-	"strings"
-
 	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/session/lifecycle"
 	"github.com/lycaon/lycaon/internal/session/promptstate"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/pkg/api"
+	"log/slog"
+	"strings"
 )
 
 // PromptHostSignal is the machine identity persisted on a host turn receipt.
@@ -232,10 +231,10 @@ func (m *Manager) queueRoundComplete(ctx context.Context, sessionID string) bool
 	if loop == nil {
 		return true
 	}
-	if loop.HasPendingLoopWakes(sessionID) && !m.hostTurnBlocked(ctx, sessionID) {
+	if loop.Nudges.HasPendingLoopWakes(sessionID) && !m.hostTurnBlocked(ctx, sessionID) {
 		return false
 	}
-	return loop.WorkerCycleIsIdle(ctx, sessionID)
+	return loop.Cycles.WorkerCycleIsIdle(ctx, sessionID)
 }
 
 // queueHeadIsDispatchable preserves durable receipt order across draft-ineligible inputs.

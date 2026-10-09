@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"testing"
-
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/llm/failure"
@@ -14,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
+	"testing"
 )
 
 type sliceTurnError []string
@@ -136,8 +135,8 @@ func TestFailedTurnBlocksAutomaticAdmissionButAllowsExplicitRetry(t *testing.T) 
 			t.Fatalf("turn status=%s", status)
 		}
 		loop := mgr.ensureCoordinatorRuntime().CoordinatorLoop()
-		loop.Nudge(t.Context(), sess.ID, anchor.PhaseAdvanced, "", "", anchor.Envelope{})
-		if !loop.HasPendingLoopWakes(sess.ID) {
+		loop.Nudges.Nudge(t.Context(), sess.ID, anchor.PhaseAdvanced, "", "", anchor.Envelope{})
+		if !loop.Nudges.HasPendingLoopWakes(sess.ID) {
 			t.Fatal("failed turn discarded a new wake")
 		}
 		if !mgr.queueRoundComplete(t.Context(), sess.ID) {

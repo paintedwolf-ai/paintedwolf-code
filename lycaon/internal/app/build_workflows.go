@@ -3,11 +3,6 @@ package app
 import (
 	"context"
 	"fmt"
-	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
-	workflowblueprintfiles "github.com/lycaon/lycaon/internal/workflow/blueprintfiles"
-	"strings"
-	"time"
-
 	"github.com/lycaon/lycaon/internal/agentdef"
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/bootrecovery"
@@ -24,10 +19,12 @@ import (
 	scancfg "github.com/lycaon/lycaon/internal/scan/configuration"
 	"github.com/lycaon/lycaon/internal/search"
 	"github.com/lycaon/lycaon/internal/session"
+	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
 	"github.com/lycaon/lycaon/internal/toolhost"
 	"github.com/lycaon/lycaon/internal/vocabulary"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workflow"
+	workflowblueprintfiles "github.com/lycaon/lycaon/internal/workflow/blueprintfiles"
 	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
@@ -35,6 +32,8 @@ import (
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	"github.com/lycaon/lycaon/internal/workflowdiag"
 	"github.com/lycaon/lycaon/pkg/api"
+	"strings"
+	"time"
 )
 
 func (b boardWiring) wireWorkflows() error {

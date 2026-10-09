@@ -1,21 +1,19 @@
-package loopwake_test
+package loopwake
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/promptresult"
-	"testing"
-	"time"
-
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
-	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
+	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
+	"testing"
+	"time"
 )
 
 func TestOnTurnCompleteHostProseOnlyDoesNotAutoPark(t *testing.T) {
-	loop := loopwake.NewLoopEngine()
-	loop.SetDeps(loopwake.LoopDeps{
+	loop := NewLoopEngine()
+	loop.SetDeps(LoopDeps{
 		GetSession: func(context.Context, string) (*api.Session, error) {
 			return &api.Session{ID: "sess-1"}, nil
 		},
@@ -23,18 +21,18 @@ func TestOnTurnCompleteHostProseOnlyDoesNotAutoPark(t *testing.T) {
 			return false, nil
 		},
 	})
-	continuation := loop.OnTurnComplete(context.Background(), "sess-1", true)
-	if continuation != loopwake.UserTurnContinues {
+	continuation := loop.Waits.OnTurnComplete(context.Background(), "sess-1", true)
+	if continuation != UserTurnContinues {
 		t.Fatalf("continuation = %v want host continuation while workers remain", continuation)
 	}
-	if loop.IsSleeping("sess-1") {
+	if loop.Waits.IsSleeping("sess-1") {
 		t.Fatal("host prose-only turns with workers in flight must not auto-park")
 	}
 }
 
 func TestOnTurnCompleteHostIdleParksWithoutTimer(t *testing.T) {
-	loop := loopwake.NewLoopEngine()
-	loop.SetDeps(loopwake.LoopDeps{
+	loop := NewLoopEngine()
+	loop.SetDeps(LoopDeps{
 		GetSession: func(context.Context, string) (*api.Session, error) {
 			return &api.Session{ID: "sess-idle"}, nil
 		},
@@ -42,15 +40,15 @@ func TestOnTurnCompleteHostIdleParksWithoutTimer(t *testing.T) {
 			return true, nil
 		},
 	})
-	continuation := loop.OnTurnComplete(context.Background(), "sess-idle", true)
-	if continuation != loopwake.UserTurnSettled {
+	continuation := loop.Waits.OnTurnComplete(context.Background(), "sess-idle", true)
+	if continuation != UserTurnSettled {
 		t.Fatalf("continuation = %v want settled at an idle host boundary", continuation)
 	}
-	if !loop.IsSleeping("sess-idle") {
+	if !loop.Waits.IsSleeping("sess-idle") {
 		t.Fatal("expected park after idle host turn without wait()/task()")
 	}
-	triggers := loop.WaitSubscriptionForTest("sess-idle")
-	if containsWaitTrigger(triggers, loopwake.WaitTriggerTimer) {
+	triggers := waitSubscriptionForTest(loop.Subscriptions, "sess-idle")
+	if containsWaitTrigger(triggers, WaitTriggerTimer) {
 		t.Fatalf("idle host park triggers = %v must omit timer", triggers)
 	}
 	if len(triggers) != 0 {
@@ -59,19 +57,19 @@ func TestOnTurnCompleteHostIdleParksWithoutTimer(t *testing.T) {
 }
 
 func TestOnTurnCompleteUserProseOnlyDoesNotPark(t *testing.T) {
-	loop := loopwake.NewLoopEngine()
-	continuation := loop.OnTurnComplete(context.Background(), "sess-chat", false)
-	if continuation != loopwake.UserTurnSettled {
+	loop := NewLoopEngine()
+	continuation := loop.Waits.OnTurnComplete(context.Background(), "sess-chat", false)
+	if continuation != UserTurnSettled {
 		t.Fatalf("continuation = %v want prose-only user turn settled", continuation)
 	}
-	if loop.IsSleeping("sess-chat") {
+	if loop.Waits.IsSleeping("sess-chat") {
 		t.Fatal("user prose-only turns must not auto-park")
 	}
 }
 
 func TestOnTurnCompleteParksForHumanApproval(t *testing.T) {
-	loop := loopwake.NewLoopEngine()
-	loop.SetDeps(loopwake.LoopDeps{
+	loop := NewLoopEngine()
+	loop.SetDeps(LoopDeps{
 		GetSession: func(context.Context, string) (*api.Session, error) {
 			return &api.Session{ID: "sess-hitl"}, nil
 		},
@@ -82,18 +80,18 @@ func TestOnTurnCompleteParksForHumanApproval(t *testing.T) {
 			run: &api.WorkflowRun{ID: "run-1", Status: api.WorkflowRunStatusRunning, CurrentPhase: "decide"},
 		}),
 	})
-	continuation := loop.OnTurnComplete(context.Background(), "sess-hitl", false)
-	if continuation != loopwake.UserTurnContinues {
+	continuation := loop.Waits.OnTurnComplete(context.Background(), "sess-hitl", false)
+	if continuation != UserTurnContinues {
 		t.Fatalf("continuation = %v want checkpoint to remain in the current turn", continuation)
 	}
-	if !loop.IsSleeping("sess-hitl") {
+	if !loop.Waits.IsSleeping("sess-hitl") {
 		t.Fatal("expected park while human approval is awaiting")
 	}
-	if got := loop.SleepReasonForTest("sess-hitl"); got != "awaiting human approval" {
+	if got := sleepReasonForTest(loop.Waits, "sess-hitl"); got != "awaiting human approval" {
 		t.Fatalf("reason = %q", got)
 	}
-	triggers := loop.WaitSubscriptionForTest("sess-hitl")
-	if containsWaitTrigger(triggers, loopwake.WaitTriggerTimer) {
+	triggers := waitSubscriptionForTest(loop.Subscriptions, "sess-hitl")
+	if containsWaitTrigger(triggers, WaitTriggerTimer) {
 		t.Fatalf("human-approval park triggers = %v must omit timer", triggers)
 	}
 }
@@ -121,8 +119,8 @@ func (humanApprovalParkWF) HostObligationHeld(context.Context, string) (bool, er
 func (humanApprovalParkWF) HostObligationHoldKinds(context.Context, string) []string { return nil }
 
 func TestOnTurnCompleteParksForHostObligation(t *testing.T) {
-	loop := loopwake.NewLoopEngine()
-	loop.SetDeps(loopwake.LoopDeps{
+	loop := NewLoopEngine()
+	loop.SetDeps(LoopDeps{
 		GetSession: func(context.Context, string) (*api.Session, error) {
 			return &api.Session{ID: "sess-ob"}, nil
 		},
@@ -135,25 +133,25 @@ func TestOnTurnCompleteParksForHostObligation(t *testing.T) {
 			run: &api.WorkflowRun{ID: "run-1", Status: api.WorkflowRunStatusRunning, CurrentPhase: "ingest"},
 		}),
 	})
-	continuation := loop.OnTurnComplete(context.Background(), "sess-ob", true)
-	if continuation != loopwake.UserTurnContinues {
+	continuation := loop.Waits.OnTurnComplete(context.Background(), "sess-ob", true)
+	if continuation != UserTurnContinues {
 		t.Fatalf("continuation = %v want host obligation to continue the turn", continuation)
 	}
-	if !loop.IsSleeping("sess-ob") {
+	if !loop.Waits.IsSleeping("sess-ob") {
 		t.Fatal("expected park while a host obligation holds the phase")
 	}
-	if got := loop.SleepReasonForTest("sess-ob"); got != "awaiting host obligation: scan" {
+	if got := sleepReasonForTest(loop.Waits, "sess-ob"); got != "awaiting host obligation: scan" {
 		t.Fatalf("reason = %q", got)
 	}
-	triggers := loop.WaitSubscriptionForTest("sess-ob")
-	if containsWaitTrigger(triggers, loopwake.WaitTriggerTimer) {
+	triggers := waitSubscriptionForTest(loop.Subscriptions, "sess-ob")
+	if containsWaitTrigger(triggers, WaitTriggerTimer) {
 		t.Fatalf("host-obligation park triggers = %v must omit timer", triggers)
 	}
 }
 
 func TestLoopWakeDeniedWhileHostObligationHeld(t *testing.T) {
-	loop := loopwake.NewLoopEngine()
-	loop.SetDeps(loopwake.LoopDeps{
+	loop := NewLoopEngine()
+	loop.SetDeps(LoopDeps{
 		GetSession: func(context.Context, string) (*api.Session, error) {
 			return &api.Session{ID: "sess-ob"}, nil
 		},
@@ -168,7 +166,7 @@ func TestLoopWakeDeniedWhileHostObligationHeld(t *testing.T) {
 			run: &api.WorkflowRun{ID: "run-1", Status: api.WorkflowRunStatusRunning, CurrentPhase: "ingest"},
 		}),
 	})
-	allow, reason, err := loop.ShouldLoopWake(context.Background(), "sess-ob", anchor.PhaseAdvanced)
+	allow, reason, err := loop.Admission.ShouldLoopWake(context.Background(), "sess-ob", anchor.PhaseAdvanced)
 	if err != nil {
 		t.Fatalf("ShouldLoopWake: %v", err)
 	}
@@ -205,21 +203,21 @@ func (hostObligationParkWF) HostObligationHoldKinds(context.Context, string) []s
 }
 
 func TestOnTurnCompleteSkipsWhenWaitCalled(t *testing.T) {
-	loop := loopwake.NewLoopEngine()
+	loop := NewLoopEngine()
 	until := time.Now().UTC().Add(5 * time.Minute)
-	loop.EnterSleep(context.Background(), "sess-3", until, "worker in flight", loopwake.DefaultCoordinatorWaitTriggers(false), nil, loopwake.SleepMoverHost)
-	loop.MarkWaitCalled("sess-3")
-	continuation := loop.OnTurnComplete(context.Background(), "sess-3", true)
-	if continuation != loopwake.UserTurnContinues {
+	loop.Waits.EnterSleep(context.Background(), "sess-3", until, "worker in flight", DefaultCoordinatorWaitTriggers(false), nil, SleepMoverHost)
+	loop.Waits.MarkWaitCalled("sess-3")
+	continuation := loop.Waits.OnTurnComplete(context.Background(), "sess-3", true)
+	if continuation != UserTurnContinues {
 		t.Fatalf("continuation = %v want wait subscription to continue the turn", continuation)
 	}
-	st := loop.SleepUntilForTest("sess-3")
+	st := sleepUntilForTest(loop.Waits, "sess-3")
 	if st.IsZero() || !st.Equal(until) {
 		t.Fatalf("wait() sleep should not be overwritten by OnTurnComplete, got %v want %v", st, until)
 	}
 }
 
-func containsWaitTrigger(triggers []loopwake.WaitTrigger, want loopwake.WaitTrigger) bool {
+func containsWaitTrigger(triggers []WaitTrigger, want WaitTrigger) bool {
 	for _, t := range triggers {
 		if t == want {
 			return true
@@ -229,8 +227,8 @@ func containsWaitTrigger(triggers []loopwake.WaitTrigger, want loopwake.WaitTrig
 }
 
 func TestOnTurnCompleteObligationsOpenArmsWorkflowRetry(t *testing.T) {
-	loop := loopwake.NewLoopEngine()
-	loop.SetDeps(loopwake.LoopDeps{
+	loop := NewLoopEngine()
+	loop.SetDeps(LoopDeps{
 		GetSession: func(context.Context, string) (*api.Session, error) {
 			return &api.Session{ID: "sess-oblig"}, nil
 		},
@@ -239,28 +237,28 @@ func TestOnTurnCompleteObligationsOpenArmsWorkflowRetry(t *testing.T) {
 		},
 		WorkflowObligationsOpen: func(context.Context, string) bool { return true },
 	})
-	continuation := loop.OnTurnComplete(context.Background(), "sess-oblig", true)
-	if continuation != loopwake.UserTurnContinues {
+	continuation := loop.Waits.OnTurnComplete(context.Background(), "sess-oblig", true)
+	if continuation != UserTurnContinues {
 		t.Fatalf("continuation = %v want workflow obligation to continue the turn", continuation)
 	}
-	if !loop.IsSleeping("sess-oblig") {
+	if !loop.Waits.IsSleeping("sess-oblig") {
 		t.Fatal("expected workflow-obligation park after idle host turn")
 	}
-	if got := loop.SleepReasonForTest("sess-oblig"); got != "workflow obligations open" {
+	if got := sleepReasonForTest(loop.Waits, "sess-oblig"); got != "workflow obligations open" {
 		t.Fatalf("sleep reason = %q want workflow obligations open", got)
 	}
-	triggers := loop.WaitSubscriptionForTest("sess-oblig")
-	if !containsWaitTrigger(triggers, loopwake.WaitTriggerTimer) {
+	triggers := waitSubscriptionForTest(loop.Subscriptions, "sess-oblig")
+	if !containsWaitTrigger(triggers, WaitTriggerTimer) {
 		t.Fatalf("obligation park triggers = %v must include timer", triggers)
 	}
-	if d := time.Until(loop.SleepUntilForTest("sess-oblig")); d <= 0 || d > 3*time.Minute {
+	if d := time.Until(sleepUntilForTest(loop.Waits, "sess-oblig")); d <= 0 || d > 3*time.Minute {
 		t.Fatalf("obligation park deadline %v want a short retry interval", d)
 	}
 }
 
 func TestOnTurnCompleteObligationsOpenAppliesToUserTurns(t *testing.T) {
-	loop := loopwake.NewLoopEngine()
-	loop.SetDeps(loopwake.LoopDeps{
+	loop := NewLoopEngine()
+	loop.SetDeps(LoopDeps{
 		GetSession: func(context.Context, string) (*api.Session, error) {
 			return &api.Session{ID: "sess-oblig-user"}, nil
 		},
@@ -269,18 +267,18 @@ func TestOnTurnCompleteObligationsOpenAppliesToUserTurns(t *testing.T) {
 		},
 		WorkflowObligationsOpen: func(context.Context, string) bool { return true },
 	})
-	loop.OnTurnComplete(context.Background(), "sess-oblig-user", false)
-	if !loop.IsSleeping("sess-oblig-user") {
+	loop.Waits.OnTurnComplete(context.Background(), "sess-oblig-user", false)
+	if !loop.Waits.IsSleeping("sess-oblig-user") {
 		t.Fatal("expected workflow-obligation park after idle user turn")
 	}
-	if got := loop.SleepReasonForTest("sess-oblig-user"); got != "workflow obligations open" {
+	if got := sleepReasonForTest(loop.Waits, "sess-oblig-user"); got != "workflow obligations open" {
 		t.Fatalf("sleep reason = %q want workflow obligations open", got)
 	}
 }
 
 func TestOnTurnCompleteObligationsSettledParksForUser(t *testing.T) {
-	loop := loopwake.NewLoopEngine()
-	loop.SetDeps(loopwake.LoopDeps{
+	loop := NewLoopEngine()
+	loop.SetDeps(LoopDeps{
 		GetSession: func(context.Context, string) (*api.Session, error) {
 			return &api.Session{ID: "sess-settled"}, nil
 		},
@@ -289,18 +287,18 @@ func TestOnTurnCompleteObligationsSettledParksForUser(t *testing.T) {
 		},
 		WorkflowObligationsOpen: func(context.Context, string) bool { return false },
 	})
-	loop.OnTurnComplete(context.Background(), "sess-settled", true)
-	if got := loop.SleepReasonForTest("sess-settled"); got != "awaiting user after idle host turn" {
+	loop.Waits.OnTurnComplete(context.Background(), "sess-settled", true)
+	if got := sleepReasonForTest(loop.Waits, "sess-settled"); got != "awaiting user after idle host turn" {
 		t.Fatalf("sleep reason = %q want awaiting user after idle host turn", got)
 	}
-	if containsWaitTrigger(loop.WaitSubscriptionForTest("sess-settled"), loopwake.WaitTriggerTimer) {
+	if containsWaitTrigger(waitSubscriptionForTest(loop.Subscriptions, "sess-settled"), WaitTriggerTimer) {
 		t.Fatal("settled-obligation idle park must omit timer")
 	}
 }
 
 func TestLoopWakeBusyUsesPromptExecutionNotVisibleTurnStatus(t *testing.T) {
-	loop := loopwake.NewLoopEngine()
-	loop.SetDeps(loopwake.LoopDeps{
+	loop := NewLoopEngine()
+	loop.SetDeps(LoopDeps{
 		GetSession: func(context.Context, string) (*api.Session, error) {
 			// Visible turn status does not occupy the prompt execution lane.
 			return &api.Session{ID: "sess-live", Status: api.SessionStatusBusy}, nil
@@ -315,26 +313,26 @@ func TestLoopWakeBusyUsesPromptExecutionNotVisibleTurnStatus(t *testing.T) {
 		WorkflowSource: workflowFixturePorts(activeLoopWorkflow{}),
 	})
 
-	allow, busy := loop.EvaluateForTest(context.Background(), "sess-live", anchor.PhaseAdvanced)
+	allow, busy := evaluateForTest(loop.Admission, context.Background(), "sess-live", anchor.PhaseAdvanced)
 	if !allow || busy {
 		t.Fatalf("between executions = allow %v busy %v, want allow true busy false", allow, busy)
 	}
 
-	finish := loop.BeginPromptExecution(t.Context(), "sess-live")
-	allow, busy = loop.EvaluateForTest(context.Background(), "sess-live", anchor.PhaseAdvanced)
+	finish := loop.Admission.BeginPromptExecution(t.Context(), "sess-live")
+	allow, busy = evaluateForTest(loop.Admission, context.Background(), "sess-live", anchor.PhaseAdvanced)
 	if !allow || !busy {
 		t.Fatalf("during execution = allow %v busy %v, want allow true busy true", allow, busy)
 	}
 	finish()
-	if loop.PromptExecutionActive("sess-live") {
+	if loop.Admission.PromptExecutionActive("sess-live") {
 		t.Fatal("prompt execution remained active after its runner finished")
 	}
 }
 
 func TestUserTurnSettlementClaimOrdersLaterWakeAfterBoundary(t *testing.T) {
-	loop := loopwake.NewLoopEngine()
+	loop := NewLoopEngine()
 	prompts := 0
-	loop.SetDeps(loopwake.LoopDeps{
+	loop.SetDeps(LoopDeps{
 		GetSession: func(context.Context, string) (*api.Session, error) {
 			return &api.Session{ID: "sess-settling", Status: api.SessionStatusBusy}, nil
 		},
@@ -346,23 +344,23 @@ func TestUserTurnSettlementClaimOrdersLaterWakeAfterBoundary(t *testing.T) {
 			return true, nil
 		},
 		WorkflowSource:     workflowFixturePorts(activeLoopWorkflow{}),
-		HostWakeActionable: func(context.Context, loopwake.HostWakeActionableInput) bool { return true },
+		HostWakeActionable: func(context.Context, HostWakeActionableInput) bool { return true },
 		RunPrompt: func(context.Context, string) (*promptresult.Result, error) {
 			prompts++
 			return &promptresult.Result{}, nil
 		},
 	})
 
-	release, claimed := loop.BeginUserTurnSettlement(t.Context(), "sess-settling")
+	release, claimed := loop.Turns.BeginUserTurnSettlement(t.Context(), "sess-settling")
 	if !claimed {
 		t.Fatal("settlement lane was not claimed")
 	}
-	loop.Nudge(t.Context(), "sess-settling", anchor.PhaseAdvanced, "", "", anchor.Envelope{})
-	if _, ok := loop.PendingForTest("sess-settling"); !ok {
+	loop.Nudges.Nudge(t.Context(), "sess-settling", anchor.PhaseAdvanced, "", "", anchor.Envelope{})
+	if _, ok := loop.Nudges.Pending("sess-settling"); !ok {
 		t.Fatal("wake arriving after settlement claim was not ordered for redrain")
 	}
 	release()
-	loop.WaitForAsyncTurns(testutil.BoundedContext(t, 5*time.Second))
+	loop.Turns.WaitForAsyncTurns(testutil.BoundedContext(t, 5*time.Second))
 	if prompts != 1 {
 		t.Fatalf("redrained prompts = %d want 1", prompts)
 	}

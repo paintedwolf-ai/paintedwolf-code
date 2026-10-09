@@ -4,12 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	workflowinputs "github.com/lycaon/lycaon/internal/workflow/inputs"
-	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
-	workflowreview "github.com/lycaon/lycaon/internal/workflow/review"
-	"log/slog"
-	"path/filepath"
-
 	"github.com/lycaon/lycaon/internal/scan"
 	scancadence "github.com/lycaon/lycaon/internal/scan/cadence"
 	scancfg "github.com/lycaon/lycaon/internal/scan/configuration"
@@ -21,7 +15,12 @@ import (
 	"github.com/lycaon/lycaon/internal/sourcescope"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
+	workflowinputs "github.com/lycaon/lycaon/internal/workflow/inputs"
+	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
+	workflowreview "github.com/lycaon/lycaon/internal/workflow/review"
 	"github.com/lycaon/lycaon/pkg/api"
+	"log/slog"
+	"path/filepath"
 )
 
 func (b toolWiring) wireScan() error {

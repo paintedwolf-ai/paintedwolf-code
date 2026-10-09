@@ -23,7 +23,11 @@ func TestLoopEvaluateDeniesWhenDisabled(t *testing.T) {
 		Limits:               func(context.Context, *api.Session) settings.SessionLimits { return disabled },
 		IsCoordinatorSession: func(context.Context, *api.Session) bool { return true },
 	})
-	allow, busy := engine.EvaluateForTest(context.Background(), "s1", anchor.LegFinished)
+	allow, reason, err := engine.Admission.ShouldLoopWake(context.Background(), "s1", anchor.LegFinished)
+	if err != nil {
+		t.Fatal(err)
+	}
+	busy := reason == "session_busy"
 	if allow || busy {
 		t.Fatalf("allow=%v busy=%v", allow, busy)
 	}
@@ -43,10 +47,10 @@ func TestLoopBudgetConsumption(t *testing.T) {
 		IsCoordinatorSession: func(context.Context, *api.Session) bool { return true },
 	})
 	ctx := context.Background()
-	if !engine.TryConsumeBudgetForTest(ctx, "s1", "run-1") {
+	if !engine.Admission.ConsumeBudget(ctx, "s1", "run-1", anchor.LegFinished) {
 		t.Fatal("first consume should succeed")
 	}
-	if engine.TryConsumeBudgetForTest(ctx, "s1", "run-1") {
+	if engine.Admission.ConsumeBudget(ctx, "s1", "run-1", anchor.LegFinished) {
 		t.Fatal("second consume should fail at max=1")
 	}
 }
@@ -90,17 +94,17 @@ func TestLoopScheduleAndDrain(t *testing.T) {
 		IsCoordinatorSession: func(context.Context, *api.Session) bool { return true },
 	})
 	ctx := context.Background()
-	finishExecution := engine.BeginPromptExecution(t.Context(), "s1")
-	engine.Nudge(ctx, "s1", anchor.LegFinished, anchor.LegFinished, "leg-1", anchor.Envelope{})
-	if _, ok := engine.PendingForTest("s1"); !ok {
+	finishExecution := engine.Admission.BeginPromptExecution(t.Context(), "s1")
+	engine.Nudges.Nudge(ctx, "s1", anchor.LegFinished, anchor.LegFinished, "leg-1", anchor.Envelope{})
+	if _, ok := engine.Nudges.Pending("s1"); !ok {
 		t.Fatal("expected pending loop wake while prompt execution is active")
 	}
 	finishExecution()
-	if !engine.TryConsumeBudgetForTest(ctx, "s1", "run-1") {
+	if !engine.Admission.ConsumeBudget(ctx, "s1", "run-1", anchor.LegFinished) {
 		t.Fatal("expected budget consume on drain path")
 	}
-	engine.DrainPending(ctx, "s1")
-	if _, ok := engine.PendingForTest("s1"); ok {
+	engine.Nudges.DrainPending(ctx, "s1")
+	if _, ok := engine.Nudges.Pending("s1"); ok {
 		t.Fatal("pending should be cleared")
 	}
 }
@@ -123,7 +127,7 @@ func TestLoopShouldLoopWakeHumanApprovalAwaiting(t *testing.T) {
 		}},
 	})
 	engine.SetDeps(deps)
-	allow, reason, err := engine.ShouldLoopWake(context.Background(), "s1", anchor.LegFinished)
+	allow, reason, err := engine.Admission.ShouldLoopWake(context.Background(), "s1", anchor.LegFinished)
 	if err != nil || allow || reason != "human_approval_awaiting" {
 		t.Fatalf("allow=%v reason=%q err=%v", allow, reason, err)
 	}
@@ -144,7 +148,7 @@ func TestLoopShouldLoopWakeIgnoresApprovePhaseName(t *testing.T) {
 		run: &api.WorkflowRun{ID: "run-1", Status: api.WorkflowRunStatusRunning, CurrentPhase: "approve"},
 	})
 	engine.SetDeps(deps)
-	allow, reason, err := engine.ShouldLoopWake(context.Background(), "s1", anchor.LegFinished)
+	allow, reason, err := engine.Admission.ShouldLoopWake(context.Background(), "s1", anchor.LegFinished)
 	if err != nil {
 		t.Fatalf("ShouldLoopWake: %v", err)
 	}
@@ -177,7 +181,7 @@ func TestLoopScheduleLegFinished(t *testing.T) {
 		informed = env
 	}
 	engine.SetDeps(deps)
-	engine.NudgeLegFinished(context.Background(), "s1", time.Now(), "leg-1")
+	engine.Nudges.NudgeLegFinished(context.Background(), "s1", time.Now(), "leg-1")
 	if !kicked {
 		t.Fatal("expected leg finished kick while session busy")
 	}
