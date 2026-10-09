@@ -13,7 +13,6 @@ import (
 	"github.com/lycaon/lycaon/internal/runeclamp"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
 	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 

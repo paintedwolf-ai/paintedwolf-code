@@ -200,11 +200,9 @@ func (m *Service) ObserveMintedCredential(ctx context.Context, sess *api.Session
 	if source == nil {
 		return
 	}
-	hit, ok := source.MintedCredentialRule(hitl.ProposedAction{
-		Tool:       tool,
-		Args:       args,
-		ProjectDir: m.workspace.SettingsPath(ctx, sess),
-		SessionID:  sess.ID,
+	hit, ok := source.MintedCredentialRule(hitl.ProposedAction{Scope: hitl.ActionScope{ProjectDir: m.workspace.SettingsPath(ctx, sess),
+		SessionID: sess.ID}, Invocation: hitl.ActionInvocation{Tool: tool,
+		Args: args},
 	})
 	if !ok {
 		return

@@ -10,7 +10,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	sessiondecisions "github.com/lycaon/lycaon/internal/session/decisions"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 

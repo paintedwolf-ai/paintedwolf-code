@@ -5,7 +5,6 @@ import (
 	"github.com/lycaon/lycaon/internal/toolfeedback"
 
 	"github.com/lycaon/lycaon/internal/toolpolicy"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -36,8 +35,6 @@ func (m *Service) PolicyDependencies() toolpolicy.EngineDeps {
 		Rules:            m.rules,
 		Workflows:        m.policyWorkflows(),
 		Postures:         posturesFn,
-		Limits:           m.Limits.Effective,
-		HasComposeDraft:  m.HasComposeDraft,
 		ToolAccess:       m.Profiles.ResolveToolAccess,
 		RejectFormatter:  m.toolRejectFormatter,
 		BlockPlane:       &toolfeedback.BlockPlane{Pipeline: m.ToolPolicy.Pipeline, Renderer: m.Feedback.Renderer()},

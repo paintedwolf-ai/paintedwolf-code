@@ -232,15 +232,7 @@ func TestToolpolicyEngineDepsWiresWorkflowView(t *testing.T) {
 		t.Fatalf("vars = %v", eval.Vars)
 	}
 
-	want := []string{
-		"CurrentPhase",
-		"AllowedAgents",
-		"ActiveManifest",
-		"ActivePhaseHasReviewLoop",
-		"ActiveBySession",
-		"ActivePlan",
-		"ScaffoldVarsForSession",
-	}
+	want := []string{"PolicySnapshot"}
 	if len(view.calls) != len(want) {
 		t.Fatalf("calls = %v want %v", view.calls, want)
 	}
@@ -314,4 +306,9 @@ func TestLoopAppendRecordsReviewResultsAfterCommit(t *testing.T) {
 	if !slices.Equal(view.calls, want) {
 		t.Fatalf("calls = %v, want %v", view.calls, want)
 	}
+}
+
+func (r *recordingWorkflowView) PolicySnapshot(context.Context, string) (toolpolicy.WorkflowSnapshot, error) {
+	r.record("PolicySnapshot")
+	return toolpolicy.WorkflowSnapshot{Phase: "phase-a", AllowedAgents: []string{"coordinator"}, ManifestRules: []string{"manifest-rules.yaml"}, BlueprintPath: "plan-1", PlanContent: "plan body", Vars: map[string]any{"k": "v"}}, nil
 }
