@@ -70,6 +70,11 @@ func promptUserInstruction(in PromptInput) string {
 
 // Prompt runs one synchronous coordinator turn and drains host follow-ups.
 func (m *Manager) Prompt(ctx context.Context, id string, text string) (*promptresult.Result, error) {
+	ctx, finishWork, beginErr := m.engineWork.Begin(ctx)
+	if beginErr != nil {
+		return nil, beginErr
+	}
+	defer finishWork()
 	ctx, unlockDispatch := m.lockPromptSubmissionDispatch(ctx, id)
 	defer unlockDispatch()
 	runCtx := context.WithValue(ctx, userPromptReceiptContextKey{}, true)
@@ -82,6 +87,11 @@ func (m *Manager) Prompt(ctx context.Context, id string, text string) (*promptre
 
 // PromptWorker runs the turn bound to a worker job.
 func (m *Manager) PromptWorker(ctx context.Context, id, jobID, text string) (*promptresult.Result, error) {
+	ctx, finishWork, beginErr := m.engineWork.Begin(ctx)
+	if beginErr != nil {
+		return nil, beginErr
+	}
+	defer finishWork()
 	ctx, unlockDispatch := m.lockPromptSubmissionDispatch(ctx, id)
 	defer unlockDispatch()
 	resp, err := m.promptInput(ctx, id, PromptInput{Text: text, WorkerJobID: strings.TrimSpace(jobID)})
@@ -169,14 +179,14 @@ func (m *Manager) runTurnAndDrain(ctx context.Context, id string, in PromptInput
 	}()
 	m.logTurnFailure(ctx, id, err)
 	err = m.reportTurnFailure(ctx, id, err)
-	if m.stopState.MayDrain(turn) {
+	if !m.engineStopping.Load() && m.stopState.MayDrain(turn) {
 		if drainErr := m.drainPendingLoopWakes(ctx, id); drainErr != nil {
 			err = errors.Join(err, drainErr)
 		}
 		m.maybeRunPromotion(ctx, id)
 	}
 	// Drain a Send reserved after the loop's final boundary check.
-	if m.queue != nil && m.queue.Snapshot(id).Sending {
+	if !m.engineStopping.Load() && m.queue != nil && m.queue.Snapshot(id).Sending {
 		if drainErr := m.DrainPromptSubmissions(context.WithoutCancel(ctx), id); drainErr != nil {
 			err = errors.Join(err, drainErr)
 		}

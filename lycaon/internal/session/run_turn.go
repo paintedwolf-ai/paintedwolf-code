@@ -27,8 +27,11 @@ import (
 var RunTurnBusyWindowFaultForTest func()
 
 func (m *Manager) runTurnLocked(ctx context.Context, id string, in PromptInput) (resp *promptresult.Result, runErr error) {
-	ctx = m.attachPromptCancel(ctx, id)
-	defer m.detachPromptCancel(id)
+	ctx, endCancelScope, err := m.beginTurnCancelScope(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	defer endCancelScope()
 
 	sess, err := m.store.Get(ctx, id)
 	if err != nil {

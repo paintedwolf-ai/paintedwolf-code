@@ -53,6 +53,12 @@ func (m *Manager) runHostTurnWithAdmission(
 	if m == nil || m.store == nil {
 		return nil, fmt.Errorf("prompt manager unavailable")
 	}
+	ctx, finishWork, err := m.engineWork.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer finishWork()
+
 	if !origin.HostInitiated() {
 		return nil, fmt.Errorf("host turn requires a host origin, got %q", origin)
 	}
