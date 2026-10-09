@@ -16,10 +16,10 @@ import (
 	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
-	"github.com/lycaon/lycaon/pkg/api"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
+	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
 	surveytools "github.com/lycaon/lycaon/internal/tools/native/survey"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // fakeSourceLedger supplies recording and history fixtures without a database.
@@ -95,7 +95,7 @@ func (f *fakeSourceLedger) ResolveHead(_ context.Context, _ string, _ sourcebran
 }
 
 func (f *fakeSourceLedger) LatestFileEffect(_ context.Context, _, fileID string) (sourceledger.Effect, bool, error) {
-	effects := f.Effects[fileID]
+	effects := f.effects[fileID]
 	if len(effects) == 0 {
 		return sourceledger.Effect{}, false, nil
 	}
@@ -112,7 +112,7 @@ func (f *fakeSourceLedger) GitTransitionsByIDs(context.Context, []string) (map[s
 
 func (f *fakeSourceLedger) QueryFileEffects(_ context.Context, _, fileID string, afterOrdinal, _ int64, limit int) (sourceledger.FileEffectsResult, error) {
 	out := sourceledger.FileEffectsResult{}
-	for _, effect := range f.Effects[fileID] {
+	for _, effect := range f.effects[fileID] {
 		if effect.Ordinal <= afterOrdinal || len(out.Effects) >= limit {
 			continue
 		}
