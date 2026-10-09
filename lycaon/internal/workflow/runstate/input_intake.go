@@ -2,11 +2,10 @@ package runstate
 
 import (
 	"fmt"
-	"slices"
-	"strings"
-
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowintake "github.com/lycaon/lycaon/internal/workflow/intake"
+	"slices"
+	"strings"
 )
 
 func NextPendingIntakeKey(def workflowdef.PhaseDef, vars map[string]any) (string, bool) {

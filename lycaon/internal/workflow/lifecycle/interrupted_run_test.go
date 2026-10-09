@@ -2,11 +2,11 @@ package lifecycle_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/configlayout"
 	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbseed"

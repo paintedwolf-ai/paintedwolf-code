@@ -47,12 +47,12 @@ func feedbackFlowManifest() workflowdef.Manifest {
 	})
 }
 
-func setupFeedbackIntegration(t *testing.T) (*workflow.RunManager, *session.Host, *wire.Session, context.Context) {
+func setupFeedbackIntegration(t *testing.T) (*workflow.RunManager, *session.Manager, *wire.Session, context.Context) {
 	t.Helper()
 	sqlDB := testdbfixture.Open(t, "feedback-int.db")
 
 	store := store.NewSQL(sqlDB)
-	sessMgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	sessMgr := session.NewManager(store, llm.NewMockProvider(nil), tools.NewStubRegistry(), settings.DefaultSessionLimits())
 	testutil.FailErr(t, "install anchor registry", sessMgr.InstallAnchorRegistry())
 
 	manifest := feedbackFlowManifest()
@@ -117,7 +117,7 @@ func TestFeedbackKickQueuedOnPhaseEntry(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "feedback-kick.db")
 
 	store := store.NewSQL(sqlDB)
-	sessMgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	sessMgr := session.NewManager(store, llm.NewMockProvider(nil), tools.NewStubRegistry(), settings.DefaultSessionLimits())
 	testutil.FailErr(t, "install anchor registry", sessMgr.InstallAnchorRegistry())
 
 	manifest := feedbackFlowManifest()

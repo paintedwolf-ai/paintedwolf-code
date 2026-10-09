@@ -4,9 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
-	"time"
-
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/session"
@@ -17,6 +14,8 @@ import (
 	"github.com/lycaon/lycaon/internal/workflow/publication"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
+	"strings"
+	"time"
 )
 
 // ErrSubworkflowDepthExceeded is returned when a child run attempts to invoke another workflow.
@@ -149,10 +148,11 @@ func (m *Children) InvokeChild(ctx context.Context, parentRunID string, spec wor
 		m.Entries.Trigger(ctx, childRun, projectDir, def)
 		if m.Phases.PhaseEnterHook != nil {
 			m.Phases.PhaseEnterHook(ctx, &workflowphases.RunContext{
-				SessionID:  childRun.SessionID,
-				RunID:      childRun.ID,
-				WorkflowID: childRun.WorkflowID,
-				Phase:      childRun.CurrentPhase,
+				SessionID:       childRun.SessionID,
+				RunID:           childRun.ID,
+				WorkflowID:      childRun.WorkflowID,
+				WorkflowVersion: childRun.WorkflowVersion,
+				Phase:           childRun.CurrentPhase,
 			}, def)
 		}
 	}

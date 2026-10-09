@@ -1,17 +1,18 @@
 package phases_test
 
 import (
+	workflow "github.com/lycaon/lycaon/internal/workflow"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
+
 	"context"
 	"encoding/json"
+	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
-	workflow "github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
-	"github.com/lycaon/lycaon/internal/workflow/runstate"
 )
 
 func registerAdvanceToolTestRegistry(t *testing.T, mgr *workflow.RunManager) *tools.DefaultRegistry {

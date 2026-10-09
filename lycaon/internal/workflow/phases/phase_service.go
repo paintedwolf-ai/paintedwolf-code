@@ -2,7 +2,6 @@ package phases
 
 import (
 	"context"
-
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/observability"
 	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"

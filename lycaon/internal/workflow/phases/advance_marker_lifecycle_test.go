@@ -1,6 +1,8 @@
 package phases_test
 
 import (
+	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
+
 	"context"
 	"encoding/json"
 	"testing"
@@ -9,7 +11,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 )
 

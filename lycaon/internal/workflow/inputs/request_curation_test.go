@@ -36,8 +36,8 @@ func TestWorkflowRequestsCurateRootChatAfterAdmission(t *testing.T) {
 				manifest.Request.Default = text
 			}
 			mgr.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"request-curation@1.0.0": manifest})
-			curator := session.NewHost(sessions, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
-			defer curator.WaitForPromptCuration()
+			curator := session.NewManager(sessions, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+			defer curator.WaitForPromptCuration(t.Context())
 			if surface == "manual title" {
 				_, err := curator.SetTitle(t.Context(), "sess-1", "Manual irrigation decision")
 				testutil.FailErr(t, "set manual title", err)
@@ -81,14 +81,14 @@ func TestWorkflowRequestsCurateRootChatAfterAdmission(t *testing.T) {
 				}
 				run, err := mgr.Store.Runs.ActiveBySession(t.Context(), "sess-1")
 				testutil.FailErr(t, "get pending run", err)
-				_, err = mgr.Coordinator.Feedback.ResolveUserFeedback(workflowCaller(t, mgr), "sess-1", run.ID, runstate.WorkflowRequestFeedbackID, text)
+				_, err = mgr.Feedback.ResolveUserFeedback(workflowCaller(t, mgr), "sess-1", run.ID, runstate.WorkflowRequestFeedbackID, text)
 				testutil.FailErr(t, "answer workflow request", err)
-				_, err = mgr.Coordinator.Feedback.ResolveUserFeedback(workflowCaller(t, mgr), "sess-1", run.ID, runstate.WorkflowRequestFeedbackID, text)
+				_, err = mgr.Feedback.ResolveUserFeedback(workflowCaller(t, mgr), "sess-1", run.ID, runstate.WorkflowRequestFeedbackID, text)
 				if err == nil {
 					t.Fatal("duplicate answer accepted")
 				}
 			}
-			curator.WaitForPromptCuration()
+			curator.WaitForPromptCuration(t.Context())
 			got, err := sessions.Get(t.Context(), "sess-1")
 			testutil.FailErr(t, "get named session", err)
 			want := session.NameSession(t.Context(), nil, text)

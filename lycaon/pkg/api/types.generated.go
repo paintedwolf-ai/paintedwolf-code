@@ -3425,6 +3425,13 @@ type HealthResponse struct {
 	RecoverySnapshotAt time.Time `json:"recovery_snapshot_at,omitempty"`
 }
 
+// HistoryClassUsage
+type HistoryClassUsage struct {
+	Class string `json:"class"`
+	// Uncompressed retained content referenced by this class, deduplicated within the class. SQLite classes count serialized detail fields, excluding row and page overhead. Shared bodies can appear in multiple classes; this is neither exclusive disk allocation nor reclaimable bytes.
+	ContentBytes int64 `json:"content_bytes"`
+}
+
 // HistoryProtection
 type HistoryProtection struct {
 	ScopeType string `json:"scope_type"`
@@ -3499,6 +3506,7 @@ type HistoryStorageLane struct {
 // HistoryStorageStatus
 type HistoryStorageStatus struct {
 	Policy      HistoryRetentionPolicy `json:"policy"`
+	Classes     []HistoryClassUsage    `json:"classes,omitempty"`
 	Lanes       []HistoryStorageLane   `json:"lanes"`
 	Protections []HistoryProtection    `json:"protections"`
 }
@@ -8497,7 +8505,8 @@ type WorkerCompletionFinding struct {
 
 // WorkerCompletionReport
 type WorkerCompletionReport struct {
-	CoverageReview *CoverageReview `json:"coverage_review,omitempty"`
+	CoverageGaps   []WorkerCoverageGap `json:"coverage_gaps,omitempty"`
+	CoverageReview *CoverageReview     `json:"coverage_review,omitempty"`
 	// Leg status the worker declared; leg_status is the host-graded status.
 	DeclaredLegStatus string `json:"declared_leg_status,omitempty"`
 	// Host-graded leg status.
@@ -8520,6 +8529,15 @@ type WorkerContextUsage struct {
 	Window int `json:"window,omitempty"`
 	// Prompt-token level at which compaction fires for this worker
 	CompactionThreshold int `json:"compaction_threshold,omitempty"`
+}
+
+// WorkerCoverageGap
+type WorkerCoverageGap struct {
+	// Worker-local gap id; the host scopes it to the task.
+	ID      string   `json:"id"`
+	Subject string   `json:"subject"`
+	Reason  string   `json:"reason"`
+	Paths   []string `json:"paths,omitempty"`
 }
 
 // WorkerDecisionRequest

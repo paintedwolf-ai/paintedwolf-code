@@ -3,14 +3,14 @@ package workflow
 import (
 	"context"
 	"fmt"
+	workflowgates "github.com/lycaon/lycaon/internal/workflow/gates"
+	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
 	"log/slog"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	workflowgates "github.com/lycaon/lycaon/internal/workflow/gates"
-	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )

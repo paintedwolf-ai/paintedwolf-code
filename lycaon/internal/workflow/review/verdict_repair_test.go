@@ -1,13 +1,13 @@
 package review
 
 import (
+	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/tools"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 )
 

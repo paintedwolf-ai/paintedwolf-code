@@ -76,7 +76,7 @@ func surveyBrief(t *testing.T) *workflowdef.Brief {
 	t.Helper()
 	manifests, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "RegistryFromDirs", err)
-	m, err := manifests.Get("security-survey", "1.0.1")
+	m, err := manifests.Get("security-survey", "2.0.0")
 	testutil.FailErr(t, "manifest", err)
 	if m.ReportBrief() == nil {
 		t.Fatal("security survey declares no rating")

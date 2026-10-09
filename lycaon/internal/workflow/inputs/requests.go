@@ -2,14 +2,14 @@ package inputs
 
 import (
 	"context"
+	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
+	"github.com/lycaon/lycaon/internal/workflow/publication"
 	"strings"
 
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/promptresult"
-	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	"github.com/lycaon/lycaon/internal/workflow/publication"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )

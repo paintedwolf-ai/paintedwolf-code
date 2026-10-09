@@ -3,11 +3,11 @@ package lifecycle_test
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/session/lifecycle"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 

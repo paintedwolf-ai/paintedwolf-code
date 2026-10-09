@@ -3,12 +3,12 @@ package workflow
 import (
 	"context"
 	"fmt"
+	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
+	toolguard "github.com/lycaon/lycaon/internal/workflow/toolguard"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/tools"
-	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
-	toolguard "github.com/lycaon/lycaon/internal/workflow/toolguard"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -54,7 +54,11 @@ func (m *Fanout) WorkflowWork(ctx context.Context, sessionID, workID string) (sp
 	}
 	for _, leg := range plan.Legs {
 		if leg.ID == workID {
-			return spawn.WorkflowWork{RunID: run.ID, Phase: run.CurrentPhase, AgentType: leg.AgentType, Scope: leg.Scope, MaxToolLoops: leg.MaxToolLoops}, true, nil
+			work := spawn.WorkflowWork{RunID: run.ID, Phase: run.CurrentPhase, AgentType: leg.AgentType, Scope: leg.Scope, MaxToolLoops: leg.MaxToolLoops}
+			if len(leg.DoneWhen) > 0 {
+				work.Charter = &api.WorkerTaskCharter{Goal: leg.Prompt, DoneWhen: leg.DoneWhen, SharedContext: plan.ThreatModel}
+			}
+			return work, true, nil
 		}
 	}
 	return spawn.WorkflowWork{}, false, nil

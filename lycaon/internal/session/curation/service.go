@@ -57,6 +57,11 @@ func (s *Service) Cancel(sessionID string) {
 		s.work.Cancel(sessionID)
 	}
 }
+func (s *Service) Stop() {
+	if s != nil {
+		s.work.Stop()
+	}
+}
 
 // SharesCoordinatorCapacity reports whether curation shares coordinator capacity.
 func (m *Service) SharesCoordinatorCapacity(ctx context.Context, sess *wire.Session) bool {
@@ -120,7 +125,7 @@ func (m *Service) Kick(ctx context.Context, sess *wire.Session, userPrompt strin
 		bg, cancel = context.WithCancel(curationctx.WithoutLane(context.WithoutCancel(ctx)))
 		work = m.work.Register(sess.ID, cancel)
 		return nil
-	}); err != nil {
+	}); err != nil || work == nil {
 		return
 	}
 	//nolint:contextcheck // Session stop controls this context.
@@ -135,9 +140,9 @@ func (m *Service) run(ctx context.Context, sess *wire.Session, userPrompt string
 	m.naming.ProjectFromPrompt(ctx, sess, userPrompt)
 }
 
-func (m *Service) Wait() {
+func (m *Service) Wait(ctx context.Context) {
 	if m != nil {
-		m.work.Wait()
+		m.work.Wait(ctx)
 	}
 }
 
@@ -145,6 +150,7 @@ func (m *Service) Wait() {
 // so forget and stop can cancel it and shutdown can drain it.
 type promptCurations struct {
 	mu        sync.Mutex
+	stopped   bool
 	bySession map[string]map[*curationWork]struct{}
 	idle      chan struct{}
 }
@@ -155,8 +161,13 @@ type curationWork struct {
 }
 
 func (m *promptCurations) Register(sessionID string, cancel context.CancelFunc) *curationWork {
-	work := &curationWork{cancel: cancel, done: make(chan struct{})}
 	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.stopped {
+		cancel()
+		return nil
+	}
+	work := &curationWork{cancel: cancel, done: make(chan struct{})}
 	if m.bySession == nil {
 		m.bySession = make(map[string]map[*curationWork]struct{})
 	}
@@ -167,8 +178,23 @@ func (m *promptCurations) Register(sessionID string, cancel context.CancelFunc) 
 		m.bySession[sessionID] = make(map[*curationWork]struct{})
 	}
 	m.bySession[sessionID][work] = struct{}{}
-	m.mu.Unlock()
 	return work
+}
+
+func (m *promptCurations) Stop() {
+	m.mu.Lock()
+	m.stopped = true
+	var works []*curationWork
+	for _, sessionWorks := range m.bySession {
+		for work := range sessionWorks {
+			works = append(works, work)
+			work.cancel()
+		}
+	}
+	m.mu.Unlock()
+	for _, work := range works {
+		<-work.done
+	}
 }
 
 func (m *promptCurations) Finish(sessionID string, work *curationWork) {
@@ -202,7 +228,7 @@ func (m *promptCurations) Cancel(sessionID string) {
 }
 
 // Wait drains in-flight prompt curation.
-func (m *promptCurations) Wait() {
+func (m *promptCurations) Wait(ctx context.Context) {
 	if m == nil {
 		return
 	}
@@ -212,6 +238,9 @@ func (m *promptCurations) Wait() {
 	m.mu.Unlock()
 	if !idle {
 		// A new busy interval cannot invalidate an earlier waiter's completion.
-		<-done
+		select {
+		case <-done:
+		case <-ctx.Done():
+		}
 	}
 }

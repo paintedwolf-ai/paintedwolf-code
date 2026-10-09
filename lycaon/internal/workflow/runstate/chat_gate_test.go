@@ -1,10 +1,10 @@
 package runstate_test
 
 import (
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/conditions"
-	"github.com/lycaon/lycaon/internal/workflow/runstate"
 )
 
 func TestSatisfyGateInVarsHumanApproval(t *testing.T) {

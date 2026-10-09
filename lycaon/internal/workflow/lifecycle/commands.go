@@ -3,15 +3,14 @@ package lifecycle
 import (
 	"context"
 	"fmt"
-	"log/slog"
-	"strings"
-	"time"
-
 	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
 	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
+	"log/slog"
+	"strings"
+	"time"
 )
 
 // Commands owns pause, resume, cancellation, failure, and lineage exit.
@@ -215,6 +214,11 @@ func (m *Commands) Resume(ctx context.Context, runID string) (*api.WorkflowRun, 
 	}
 	if run.Status != api.WorkflowRunStatusPaused {
 		return nil, runstate.ErrInvalidTransition
+	}
+	if m.Resolver != nil {
+		if _, err := m.Resolver.ForRun(ctx, run); err != nil {
+			return nil, err
+		}
 	}
 	run.Status = api.WorkflowRunStatusRunning
 	run.PauseReason = ""

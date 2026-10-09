@@ -59,7 +59,7 @@ func TestEffectiveAdvancePolicyShippedManifestContractParity(t *testing.T) {
 		"implement@1.0.0":       {},
 		"plan@1.0.0":            {},
 		"recon-pack@1.0.0":      {},
-		"security-survey@1.0.1": {},
+		"security-survey@2.0.0": {},
 		"security-survey@1.0.0": {},
 		"options@1.0.0":         {},
 		// bugbash host-advances so a human triage approval never sits waiting

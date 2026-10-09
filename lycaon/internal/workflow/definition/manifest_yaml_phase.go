@@ -2,11 +2,11 @@ package definition
 
 import (
 	"fmt"
+	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
 	"slices"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/blueprint"
-	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
 )
 
 func parsePhaseYAML(p phaseYAML) (PhaseDef, error) {
@@ -77,7 +77,7 @@ func parsePhaseYAML(p phaseYAML) (PhaseDef, error) {
 		}
 	}
 	if p.Fanout != nil {
-		def.Fanout = FanoutOptions{RequireThreatModel: p.Fanout.RequireThreatModel, MaxAttempts: p.Fanout.MaxAttempts}
+		def.Fanout = FanoutOptions{RequireThreatModel: p.Fanout.RequireThreatModel, RequireTaskCharter: p.Fanout.RequireTaskCharter, MaxAttempts: p.Fanout.MaxAttempts}
 	}
 	if p.Touch != nil && len(p.Touch.Paths) > 0 {
 		def.TouchPaths = append([]string(nil), p.Touch.Paths...)

@@ -1,0 +1,60 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/mattermost/mattermost-server"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "3.2.0+incompatible"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2016-11068",
+  "GHSA-7vmw-6c7h-rrrv"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2025-4048"
+ },
+ "details": "Mattermost Server is vulnerable to Code Injection through its LDAP fields in github.com/mattermost/mattermost-server",
+ "id": "GO-2025-4048",
+ "modified": "2025-10-30T15:02:33Z",
+ "published": "2025-10-30T15:02:33Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-7vmw-6c7h-rrrv"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2016-11068"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/mattermost/mattermost"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/mattermost/mattermost/commit/6c5a8be6bfe1d6b9d8f71a6b0dc4d8cf93a03aab"
+  },
+  {
+   "type": "WEB",
+   "url": "https://mattermost.com/security-updates"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Mattermost Server is vulnerable to Code Injection through its LDAP fields in github.com/mattermost/mattermost-server"
+}

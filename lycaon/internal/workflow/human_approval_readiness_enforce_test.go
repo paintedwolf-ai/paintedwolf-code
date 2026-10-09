@@ -3,13 +3,13 @@ package workflow
 import (
 	"context"
 	"errors"
+	workflowgates "github.com/lycaon/lycaon/internal/workflow/gates"
+	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	workflowgates "github.com/lycaon/lycaon/internal/workflow/gates"
-	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )

@@ -1,9 +1,8 @@
 package runstate
 
 import (
-	"sort"
-
 	"github.com/lycaon/lycaon/pkg/api"
+	"sort"
 )
 
 type FanoutLegCoverage struct {

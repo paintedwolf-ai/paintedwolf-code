@@ -3,15 +3,14 @@ package presentation
 import (
 	"context"
 	"fmt"
-	"log/slog"
-	"strings"
-
 	"github.com/lycaon/lycaon/internal/scaffoldvars"
 	workflowblueprintfiles "github.com/lycaon/lycaon/internal/workflow/blueprintfiles"
 	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
+	"log/slog"
+	"strings"
 )
 
 // ComputeSessionUI derives host-managed session chrome for GET /sessions/{id}.

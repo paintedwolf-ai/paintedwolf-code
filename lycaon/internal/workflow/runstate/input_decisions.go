@@ -1,11 +1,10 @@
 package runstate
 
 import (
-	"strings"
-	"time"
-
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
+	"strings"
+	"time"
 )
 
 func FeedbackPending(vars map[string]any, phaseID string) bool {

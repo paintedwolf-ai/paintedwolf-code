@@ -3,8 +3,6 @@ package workflow
 import (
 	"context"
 	"fmt"
-	"strings"
-
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/scaffoldvars"
@@ -15,6 +13,7 @@ import (
 	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
+	"strings"
 )
 
 type Approvals struct {

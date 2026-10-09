@@ -1,10 +1,9 @@
 package blueprints
 
 import (
-	"strings"
-
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/blueprintfile"
+	"strings"
 )
 
 func blueprintTitleFromSlashText(text string) string {

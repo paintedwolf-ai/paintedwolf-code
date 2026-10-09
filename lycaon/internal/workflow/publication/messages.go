@@ -7,6 +7,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
+
 	"github.com/lycaon/lycaon/pkg/api"
 )
 

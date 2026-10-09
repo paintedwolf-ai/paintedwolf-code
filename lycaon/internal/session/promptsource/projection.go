@@ -22,6 +22,11 @@ type ProjectionRepository interface {
 	MarkModelOutputProjected(ctx context.Context, outputID string) error
 	SettleModelOutput(ctx context.Context, out store.ModelOutput) (store.ModelOutput, error)
 }
+
+type WorkflowReviews interface {
+	RecordReviewToolResult(ctx context.Context, sessionID string, msg api.Message) error
+}
+
 type Projection struct {
 	Events     *events.Publisher
 	Rejections *workeroutcomes.PeerRejectionFeed
@@ -29,13 +34,28 @@ type Projection struct {
 	Stash      *toolpresentation.Stash
 	Transcript *transcript.Service
 	Workflow   WorkflowAsks
+	Reviews    WorkflowReviews
 }
 
 func (m *Projection) Build() promptloop.ProjectionDeps {
+	appendMsgs := m.Transcript.Append
+	if m != nil && m.Reviews != nil {
+		appendMsgs = func(ctx context.Context, sessionID string, msgs ...api.Message) error {
+			if err := m.Transcript.Append(ctx, sessionID, msgs...); err != nil {
+				return err
+			}
+			for _, msg := range msgs {
+				if err := m.Reviews.RecordReviewToolResult(ctx, sessionID, msg); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}
 	deps := promptloop.ProjectionDeps{
 		Events:                  m.Events,
 		RedactMessageForStorage: m.Transcript.Redact,
-		AppendMessages:          m.Transcript.Append,
+		AppendMessages:          appendMsgs,
 		Streams:                 m.Transcript.Streams,
 	}
 	deps.OnToolReject = func(ctx context.Context, sessionID, toolCallID, code, content string, facts guidance.ToolResultFacts) {

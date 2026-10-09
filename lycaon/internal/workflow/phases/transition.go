@@ -3,12 +3,12 @@ package phases
 import (
 	"context"
 	"fmt"
+	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
 	"strings"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/scaffoldvars"
-	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -133,11 +133,12 @@ func (m *Service) FireTransition(ctx context.Context, runID, transitionID, actor
 	if def, ok := manifest.PhaseByID(edge.To); ok && !terminalSink {
 		m.Entries.Trigger(ctx, run, projectDir, def)
 		rc := &RunContext{
-			SessionID:     run.SessionID,
-			RunID:         run.ID,
-			WorkflowID:    run.WorkflowID,
-			Phase:         edge.To,
-			PreviousPhase: prevPhase,
+			SessionID:       run.SessionID,
+			RunID:           run.ID,
+			WorkflowID:      run.WorkflowID,
+			WorkflowVersion: run.WorkflowVersion,
+			Phase:           edge.To,
+			PreviousPhase:   prevPhase,
 		}
 		if m.PhaseEnterHook != nil {
 			m.PhaseEnterHook(ctx, rc, def)

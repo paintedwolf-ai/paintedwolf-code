@@ -1,12 +1,13 @@
 package phases_test
 
 import (
+	workflow "github.com/lycaon/lycaon/internal/workflow"
+
 	"context"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/testutil"
-	workflow "github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
 )

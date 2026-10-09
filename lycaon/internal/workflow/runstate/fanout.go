@@ -3,10 +3,9 @@ package runstate
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
-
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
+	"strings"
 )
 
 type FanoutPlanLeg struct {
@@ -14,9 +13,10 @@ type FanoutPlanLeg struct {
 	AgentType string `json:"agent_type"`
 	// Subject names the area the leg covers for a reader who never saw the
 	// plan, such as "Desktop app".
-	Subject string         `json:"subject"`
-	Prompt  string         `json:"prompt"`
-	Scope   *api.TaskScope `json:"scope,omitempty"`
+	Subject  string         `json:"subject"`
+	Prompt   string         `json:"prompt"`
+	DoneWhen []string       `json:"done_when,omitempty"`
+	Scope    *api.TaskScope `json:"scope,omitempty"`
 	// MaxToolLoops is the leg's planned ceiling; zero selects the host default.
 	MaxToolLoops int `json:"max_tool_loops,omitempty"`
 }

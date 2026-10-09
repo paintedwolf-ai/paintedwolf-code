@@ -1,6 +1,8 @@
 package persistence_test
 
 import (
+	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
+
 	"context"
 	"database/sql"
 	"testing"
@@ -11,7 +13,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
-	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 

@@ -2,16 +2,16 @@ package inputs
 
 import (
 	"context"
+	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
+	"github.com/lycaon/lycaon/internal/workflow/lifecycle"
+	"github.com/lycaon/lycaon/internal/workflow/publication"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/slash"
-	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	"github.com/lycaon/lycaon/internal/workflow/lifecycle"
-	"github.com/lycaon/lycaon/internal/workflow/publication"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )

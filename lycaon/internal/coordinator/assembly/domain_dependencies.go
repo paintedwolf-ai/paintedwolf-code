@@ -32,6 +32,7 @@ type promptSurfaceDeps struct {
 	WebSearchEnabled        func() bool
 	WorkspaceRoots          WorkspaceRootsLoader
 	CoordinatorProfile      func(context.Context, string) string
+	WorkflowArchive         func(context.Context, string) string
 }
 
 type turnContextDeps struct {
@@ -52,6 +53,7 @@ type turnContextDeps struct {
 	TurnSourceBriefs    func(ctx context.Context, sess *api.Session) map[string]inject.SourceChangeBrief
 	WorkerContext       WorkerContextBuilder
 	WorkflowHints       *guidance.HintConfig
+	WorkflowArchive     func(context.Context, string) string
 	PromptConfigured    bool
 }
 
@@ -90,6 +92,14 @@ func newAssemblyDomains(snapshot AssemblyDeps, cache *SessionPromptCache) (*prom
 			}
 			return manifest.CoordinatorProfile
 		}
+		// A retired run reads guidance from its sealed version.
+		surfaceDeps.WorkflowArchive = func(ctx context.Context, sessionID string) string {
+			manifest, ok := workflows.ActiveManifest(ctx, sessionID)
+			if !ok {
+				return ""
+			}
+			return manifest.Archive
+		}
 	}
 	prompt := &promptSurface{deps: surfaceDeps, cache: cache}
 	turn := &turnContextAssembler{surface: prompt, deps: turnContextDeps{
@@ -110,6 +120,7 @@ func newAssemblyDomains(snapshot AssemblyDeps, cache *SessionPromptCache) (*prom
 		TurnSourceBriefs:    snapshot.TurnSourceBriefs,
 		WorkerContext:       snapshot.WorkerContext,
 		WorkflowHints:       snapshot.WorkflowHints,
+		WorkflowArchive:     surfaceDeps.WorkflowArchive,
 		PromptConfigured:    snapshot.Prompts != nil,
 	}}
 	return prompt, turn

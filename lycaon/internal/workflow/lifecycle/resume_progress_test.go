@@ -2,12 +2,12 @@ package lifecycle_test
 
 import (
 	"context"
+	workflow "github.com/lycaon/lycaon/internal/workflow"
+	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
-	workflow "github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )

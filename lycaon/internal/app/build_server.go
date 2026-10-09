@@ -112,24 +112,26 @@ func (b serverWiring) wireRuntimeObservers() error {
 			b.eventPub.PublishPreflight(context.Background(), preflight.ProbeLiteSlot)
 		})
 	}
-	findings.RegisterAppendObserver(func(ctx context.Context, evt findings.AppendEvent) {
+	// The observer registries are process-wide; each hook captures this
+	// host's services, so Close must release it.
+	b.resources.releaseObserver("findings-append", findings.RegisterAppendObserver(func(ctx context.Context, evt findings.AppendEvent) {
 		if strings.TrimSpace(evt.SessionID) == "" {
 			return
 		}
 		rev := findings.BumpRevision(evt.SessionID)
 		b.eventPub.PublishFindings(ctx, evt.SessionID, rev)
-	})
-	repochange.RegisterObserver(func(ctx context.Context, ev repochange.Event) {
+	}))
+	b.resources.releaseObserver("repo-change", repochange.RegisterObserver(func(ctx context.Context, ev repochange.Event) {
 		if b.repoProvider != nil {
 			b.repoProvider.Changed(ctx, ev.ProjectDir)
 		}
 		if ev.Kind == repochange.HeadMoved {
 			b.toolRuntime.InvalidateFileAge(ev.ProjectDir)
 		}
-	})
+	}))
 	activeRun := activeRunIDFromWorkflow(b.workflowMgr.Store.Runs)
 	progressCoalescer := progress.NewCoalescer(progress.DefaultCoalesceWindow, newProgressChangeEmitter(b.store, b.eventPub, activeRun, b.progressStore))
-	progress.RegisterWriteObserver(func(ctx context.Context, evt progress.WriteEvent) {
+	b.resources.releaseObserver("progress-write", progress.RegisterWriteObserver(func(ctx context.Context, evt progress.WriteEvent) {
 		if strings.TrimSpace(evt.SessionID) == "" {
 			return
 		}
@@ -141,7 +143,7 @@ func (b serverWiring) wireRuntimeObservers() error {
 		if b.mgr != nil {
 			b.mgr.Coordinator.ProgressClosure.AfterWrite(ctx, evt.SessionID)
 		}
-	})
+	}))
 	return nil
 }
 
@@ -255,6 +257,17 @@ func (b serverWiring) wireServer() error {
 		return err
 	}
 	b.srv = api.NewServer(deps, b.logger, b.apiToken)
+	registry := b.registry
+	// Project watches are process-wide and their observers call back into
+	// this host's services.
+	b.resources.track("source-watches", 79, func(ctx context.Context) error {
+		// The drain deadline may have passed; the store is still open here.
+		projects, err := registry.List(context.WithoutCancel(ctx))
+		for _, p := range projects {
+			sourcefeed.StopProjectWatch(ctx, p.ID)
+		}
+		return err
+	})
 	return b.registerServerHooks(extensionJournal)
 }
 

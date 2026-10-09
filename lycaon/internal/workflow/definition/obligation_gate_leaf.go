@@ -1,9 +1,8 @@
 package definition
 
 import (
-	"strings"
-
 	"github.com/lycaon/lycaon/internal/conditions"
+	"strings"
 )
 
 func ObligationGateLeaf(kind string) string {

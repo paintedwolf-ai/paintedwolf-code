@@ -2,9 +2,8 @@ package phases
 
 import (
 	"context"
-	"strings"
-
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"strings"
 )
 
 // PhaseEnterHook runs after cross-phase auto-advance.
@@ -15,11 +14,20 @@ type PhaseReenterHook func(ctx context.Context, run *RunContext, def workflowdef
 
 // RunContext is the active run snapshot passed to phase hooks.
 type RunContext struct {
-	SessionID     string
-	RunID         string
-	WorkflowID    string
-	Phase         string
-	PreviousPhase string // empty on workflow start
+	SessionID       string
+	RunID           string
+	WorkflowID      string
+	WorkflowVersion string
+	Phase           string
+	PreviousPhase   string // empty on workflow start
+}
+
+// WorkflowIdentity returns the workflow ID and version for anchor matching.
+func (rc *RunContext) WorkflowIdentity() (string, string) {
+	if rc == nil {
+		return "", ""
+	}
+	return rc.WorkflowID, rc.WorkflowVersion
 }
 
 // IsRunStart reports the initial phase entry.

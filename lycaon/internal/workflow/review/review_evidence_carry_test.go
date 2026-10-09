@@ -2,13 +2,13 @@ package review_test
 
 import (
 	"context"
+	workflow "github.com/lycaon/lycaon/internal/workflow"
+	workflowreview "github.com/lycaon/lycaon/internal/workflow/review"
+	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	workflow "github.com/lycaon/lycaon/internal/workflow"
-	workflowreview "github.com/lycaon/lycaon/internal/workflow/review"
-	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -23,7 +23,7 @@ func startSecuritySurveyRun(t *testing.T) (*workflow.RunManager, string) {
 	_, err = mgr.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{
 		OperationID:     "op-" + sess.ID,
 		WorkflowID:      "security-survey",
-		WorkflowVersion: "1.0.1",
+		WorkflowVersion: "2.0.0",
 	})
 	testutil.FailErr(t, "Start security-survey", err)
 	return mgr, sess.ID

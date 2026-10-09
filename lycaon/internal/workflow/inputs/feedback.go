@@ -7,12 +7,13 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/people"
-	"github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	"github.com/lycaon/lycaon/internal/workflow/lifecycle"
-	"github.com/lycaon/lycaon/internal/workflow/publication"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
+
+	"github.com/lycaon/lycaon/internal/workflow/catalog"
+	"github.com/lycaon/lycaon/internal/workflow/lifecycle"
+	"github.com/lycaon/lycaon/internal/workflow/publication"
 )
 
 func (m *Feedback) TryResolveUserFeedback(ctx context.Context, sessionID, messageID, authorPersonID, message string) error {
@@ -88,7 +89,10 @@ func (m *Feedback) resolveUserFeedback(ctx context.Context, answererID, sessionI
 		}
 		return nil, fmt.Errorf("%w: run %s is not running", runstate.ErrRevisionConflict, run.ID)
 	}
-	manifest, _ := m.Resolver.ForRun(ctx, run)
+	manifest, err := m.Resolver.ForRun(ctx, run)
+	if err != nil {
+		return nil, err
+	}
 	if phaseID == runstate.WorkflowRequestFeedbackID && manifest.Request != nil {
 		return m.Requests.ResolveWorkflowRequest(ctx, answererID, sessionID, run, manifest, response)
 	}

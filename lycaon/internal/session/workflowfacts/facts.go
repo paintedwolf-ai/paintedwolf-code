@@ -4,6 +4,7 @@ type ActiveWorkflowManifest struct {
 	CoordinatorProfile string
 	Rules              []string
 	HostPhaseAdvance   bool
+	Archive            string
 }
 type WorkflowPhaseGuardState struct {
 	Phase string

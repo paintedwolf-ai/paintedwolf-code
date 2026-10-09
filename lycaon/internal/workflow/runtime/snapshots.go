@@ -3,8 +3,6 @@ package runtime
 import (
 	"context"
 	"encoding/json"
-	"strings"
-
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
@@ -14,6 +12,7 @@ import (
 	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
+	"strings"
 )
 
 // Project projects state from one loaded workflow revision.
@@ -78,7 +77,8 @@ func (m *Snapshots) Project(
 		if err != nil {
 			snap.CoverageReview = "Coverage facts unavailable: " + err.Error()
 		} else {
-			prior := workflowpresentation.RunCoverageReview(workflowpresentation.ReviewVerdicts(ctx, m.Verdicts, active, manifest))
+			verdicts, _ := workflowpresentation.ReviewVerdicts(ctx, m.Verdicts, active, manifest)
+			prior := workflowpresentation.RunCoverageReview(verdicts)
 			raw, marshalErr := json.Marshal(struct {
 				Facts any `json:"facts"`
 				Prior any `json:"prior_review,omitempty"`

@@ -10,10 +10,13 @@ import (
 )
 
 // roundEndDrains coalesces round-end dispatch of queued prompts per session.
+// A pass may start while wait is blocked, so passes are counted under mu
+// rather than with a WaitGroup, whose Add from zero must precede Wait.
 type roundEndDrains struct {
 	mu        sync.Mutex
 	bySession map[string]*roundEndDrain
-	wg        sync.WaitGroup
+	running   int
+	idle      []chan struct{}
 }
 
 type roundEndDrain struct {
@@ -35,7 +38,7 @@ func (d *roundEndDrains) start(parent context.Context, sessionID string) (contex
 	ctx, cancel := context.WithCancel(parent)
 	work := &roundEndDrain{cancel: cancel}
 	d.bySession[sessionID] = work
-	d.wg.Add(1)
+	d.running++
 	return ctx, work
 }
 
@@ -60,9 +63,15 @@ func (d *roundEndDrains) finish(sessionID string, work *roundEndDrain) {
 	if d.bySession[sessionID] == work {
 		delete(d.bySession, sessionID)
 	}
+	d.running--
+	if d.running == 0 {
+		for _, ch := range d.idle {
+			close(ch)
+		}
+		d.idle = nil
+	}
 	d.mu.Unlock()
 	work.cancel()
-	d.wg.Done()
 }
 
 func (d *roundEndDrains) cancelAll() {
@@ -73,12 +82,17 @@ func (d *roundEndDrains) cancelAll() {
 	}
 }
 
+// wait blocks until no pass is running; once ctx ends it cancels the passes
+// and still waits for them to exit.
 func (d *roundEndDrains) wait(ctx context.Context) {
+	d.mu.Lock()
+	if d.running == 0 {
+		d.mu.Unlock()
+		return
+	}
 	done := make(chan struct{})
-	go func() {
-		d.wg.Wait()
-		close(done)
-	}()
+	d.idle = append(d.idle, done)
+	d.mu.Unlock()
 	select {
 	case <-done:
 		return

@@ -2,12 +2,12 @@ package assembly
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/packboard"
-	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/pkg/api"

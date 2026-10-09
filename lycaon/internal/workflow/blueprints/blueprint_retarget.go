@@ -2,12 +2,12 @@ package blueprints
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"path/filepath"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/blueprintfile"
-	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 

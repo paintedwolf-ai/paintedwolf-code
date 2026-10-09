@@ -3,11 +3,10 @@ package toolguard
 import (
 	"context"
 	"fmt"
-	"strings"
-
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
+	"strings"
 )
 
 type Sessions interface {

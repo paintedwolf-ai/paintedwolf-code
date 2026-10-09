@@ -7,11 +7,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
-	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
 )

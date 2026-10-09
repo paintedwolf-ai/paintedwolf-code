@@ -1,6 +1,8 @@
 package review
 
 import (
+	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
+	"github.com/lycaon/lycaon/pkg/api"
 	"strings"
 	"testing"
 
@@ -8,9 +10,7 @@ import (
 	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
 	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func challengeWithSetAsides() workflowdef.ReviewLoopDef {

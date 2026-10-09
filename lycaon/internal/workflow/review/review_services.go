@@ -2,7 +2,6 @@ package review
 
 import (
 	"context"
-
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/inspector"

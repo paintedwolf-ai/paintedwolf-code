@@ -29,7 +29,7 @@ func (m *Host) SetWebResearchConfig(cfg *webresearch.ConfigStore) {
 
 }
 
-func (m *Host) acquireCoordinatorSources(store Store, client modelcall.LLMClient, svc *llm.Service, registry tools.ToolRegistry, tracker cost.CostTracker) {
+func acquireCoordinatorSources(m *Host, store Store, client modelcall.LLMClient, svc *llm.Service, registry tools.ToolRegistry, tracker cost.CostTracker) {
 	stash := toolpresentation.NewStash()
 	scanWait := &m.Coordinator.Scans.Wait
 	scanInFlight := func(ctx context.Context, id string) bool {

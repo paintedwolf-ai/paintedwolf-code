@@ -292,11 +292,7 @@ func (b delegationWiring) onWorkflowPhaseEnter(ctx context.Context, rc *workflow
 			}
 		}
 	}
-	b.mgr.EmitMatch(ctx, rc.SessionID, anchor.PhaseEntered, env, anchor.MatchContext{
-		Surface:  "phase",
-		Phase:    rc.Phase,
-		Workflow: rc.WorkflowID,
-	})
+	b.mgr.EmitMatch(ctx, rc.SessionID, anchor.PhaseEntered, env, anchor.RunMatch(rc, "phase", rc.Phase))
 	// Host-held phases park the coordinator.
 	heldByHost := false
 	if def.MayHostHold() {

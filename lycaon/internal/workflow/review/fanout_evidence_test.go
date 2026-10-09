@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/internal/session/workercompletion"
+	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -21,7 +21,7 @@ func (s fanoutMessageStore) GetMessages(_ context.Context, _ string) ([]api.Mess
 
 func TestStampFanoutExecuteOutputMergesTopology(t *testing.T) {
 	block := "worker body for topology merge"
-	envelope := workercompletion.FormatWorkerCompletionEnvelope(workercompletion.WorkerCompletionEnvelope{
+	envelope := session.FormatWorkerCompletionEnvelope(session.WorkerCompletionEnvelope{
 		JobID:     "job-1",
 		AgentType: "scout",
 		State:     "complete",

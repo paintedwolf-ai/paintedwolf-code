@@ -49,7 +49,7 @@ func (s *Server) WaitForBackground(ctx context.Context) {
 		}()
 		go func() {
 			defer wg.Done()
-			s.sessions.Runner.Curation.Wait()
+			s.sessions.Runner.Curation.Wait(ctx)
 		}()
 	}
 	wg.Wait()

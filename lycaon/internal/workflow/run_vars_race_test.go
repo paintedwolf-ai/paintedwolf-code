@@ -1,14 +1,14 @@
 package workflow
 
 import (
+	workflowinputs "github.com/lycaon/lycaon/internal/workflow/inputs"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"sync"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/batch"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	workflowinputs "github.com/lycaon/lycaon/internal/workflow/inputs"
-	"github.com/lycaon/lycaon/internal/workflow/runstate"
 )
 
 // An ask injected while turn-boundary batch events write the same scaffold blob

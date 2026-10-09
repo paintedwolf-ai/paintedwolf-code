@@ -2,13 +2,13 @@ package workflow
 
 import (
 	"context"
+	workflowgates "github.com/lycaon/lycaon/internal/workflow/gates"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/boolexpr"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/observability"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	workflowgates "github.com/lycaon/lycaon/internal/workflow/gates"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 

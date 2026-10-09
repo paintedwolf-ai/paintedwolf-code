@@ -213,6 +213,17 @@ func (r *Runtime) ForgetSession(ctx context.Context, sessionID string) {
 	r.Kicks().ForgetSession(sessionID)
 }
 
+// StopSleepTimers disarms the loop engine's wait timers at host shutdown.
+func (r *Runtime) StopSleepTimers() {
+	if r == nil {
+		return
+	}
+	r.depsMu.Lock()
+	loop := r.coordLoop
+	r.depsMu.Unlock()
+	loop.StopSleepTimers()
+}
+
 // DrainLoopPending runs deferred loop wakes with deps refreshed.
 func (r *Runtime) DrainLoopPending(ctx context.Context, sessionID string) {
 	if r == nil {

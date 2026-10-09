@@ -3,13 +3,13 @@ package review
 import (
 	"context"
 	"fmt"
+	toolguard "github.com/lycaon/lycaon/internal/workflow/toolguard"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/reviewcoverage"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	toolguard "github.com/lycaon/lycaon/internal/workflow/toolguard"
 	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"github.com/lycaon/lycaon/pkg/api"
 )

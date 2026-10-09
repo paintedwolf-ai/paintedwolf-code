@@ -2,9 +2,9 @@ package review
 
 import (
 	"context"
+	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
 	"strings"
 
-	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
 	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -18,7 +18,11 @@ func (m *Verdicts) VerdictRulesFor(ctx context.Context, run *api.WorkflowRun) (w
 		return workflowvalidation.VerdictRules{}, err
 	}
 	rules := workflowvalidation.VerdictRules{KnownClaims: map[string]bool{}, Brief: manifest.ReportBrief()}
-	for _, v := range workflowpresentation.ReviewVerdicts(ctx, m, run, manifest) {
+	verdicts, err := workflowpresentation.ReviewVerdicts(ctx, m, run, manifest)
+	if err != nil {
+		return workflowvalidation.VerdictRules{}, err
+	}
+	for _, v := range verdicts {
 		byField, err := workflowvalidation.ParseVerdictClaims(v.Def, workflowpresentation.VerdictMembers(v.Record.Artifacts))
 		if err != nil {
 			continue
@@ -41,5 +45,9 @@ func (m *Verdicts) RunClaims(ctx context.Context, run *api.WorkflowRun) ([]workf
 	if err != nil {
 		return nil, err
 	}
-	return workflowpresentation.ReconcileClaims(workflowpresentation.ReviewVerdicts(ctx, m, run, manifest)), nil
+	verdicts, err := workflowpresentation.ReviewVerdicts(ctx, m, run, manifest)
+	if err != nil {
+		return nil, err
+	}
+	return workflowpresentation.ReconcileClaims(verdicts), nil
 }

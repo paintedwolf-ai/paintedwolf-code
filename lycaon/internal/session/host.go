@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"errors"
 
 	"github.com/lycaon/lycaon/internal/coordinator"
 	"github.com/lycaon/lycaon/internal/cost"
@@ -223,7 +224,7 @@ func NewHost(store Store, modelSources Models, registry tools.ToolRegistry) *Hos
 	m.RewindRuntime.Settlement = turnSettlement
 	m.RewindRuntime.Batch = m.Coordinator.Batch
 	m.RewindRuntime.Touches = m.Workers.Workspaces.Touches
-	m.acquireCoordinatorSources(store, client, svc, registry, tracker)
+	acquireCoordinatorSources(m, store, client, svc, registry, tracker)
 	runtime := coordinator.NewRuntime(m.Coordinator.RuntimeDependencies())
 	m.Coordinator.Runtime = runtime
 	m.Stops.SetCoordinator(runtime)
@@ -264,4 +265,35 @@ type Models struct {
 	Provider *llm.Service
 	Limits   settings.SessionLimits
 	Cost     cost.CostTracker
+}
+
+// BeginEngineShutdown marks torn-down turns as interrupted and stops background work.
+func (m *Host) BeginEngineShutdown() {
+	if m == nil {
+		return
+	}
+	m.Runner.Settlement.BeginShutdown()
+	m.Catalog.Stop()
+	if m.Runner.Curation != nil {
+		m.Runner.Curation.Stop()
+	}
+	if m.Runner.History != nil && m.Runner.History.Runner != nil {
+		m.Runner.History.Runner.Stop()
+	}
+}
+
+// WaitForEngineShutdown joins turns and detached catalog work before resource release.
+func (m *Host) WaitForEngineShutdown(ctx context.Context) error {
+	if m == nil {
+		return nil
+	}
+	var errs []error
+	if m.Runner.Curation != nil {
+		m.Runner.Curation.Wait(ctx)
+	}
+	if m.Runner.History != nil && m.Runner.History.Runner != nil {
+		errs = append(errs, m.Runner.History.Runner.WaitContext(ctx))
+	}
+	errs = append(errs, m.Catalog.Wait(ctx))
+	return errors.Join(errs...)
 }

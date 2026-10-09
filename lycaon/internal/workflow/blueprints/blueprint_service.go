@@ -3,8 +3,6 @@ package blueprints
 import (
 	"context"
 	"errors"
-	"strings"
-
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/blueprintfile"
 	"github.com/lycaon/lycaon/internal/session"
@@ -15,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/workflow/publication"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
+	"strings"
 )
 
 type Service struct {

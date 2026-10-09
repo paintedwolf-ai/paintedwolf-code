@@ -2,6 +2,7 @@ package review
 
 import (
 	"fmt"
+	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
 	"slices"
 	"sort"
 	"strings"
@@ -9,7 +10,6 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 

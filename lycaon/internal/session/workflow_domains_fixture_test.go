@@ -17,5 +17,6 @@ func workflowDomainFixture(v any) *WorkflowDomains {
 	d.Reports, _ = v.(WorkflowReports)
 	d.Recovery, _ = v.(WorkflowRecovery)
 	d.Cleanup, _ = v.(WorkflowCleanup)
+	d.Reviews, _ = v.(WorkflowReviews)
 	return d
 }

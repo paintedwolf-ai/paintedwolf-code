@@ -3,14 +3,14 @@ package phases
 import (
 	"context"
 	"fmt"
+	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
+	workflowgates "github.com/lycaon/lycaon/internal/workflow/gates"
 	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/conditions"
-	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	workflowgates "github.com/lycaon/lycaon/internal/workflow/gates"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -170,11 +170,12 @@ func (m *Service) advanceToNextPhase(ctx context.Context, run *api.WorkflowRun, 
 		if def, found := manifest.PhaseByID(next); found && !terminalSink {
 			m.Entries.Trigger(ctx, run, projectDir, def)
 			rc := &RunContext{
-				SessionID:     run.SessionID,
-				RunID:         run.ID,
-				WorkflowID:    run.WorkflowID,
-				Phase:         next,
-				PreviousPhase: prevPhase,
+				SessionID:       run.SessionID,
+				RunID:           run.ID,
+				WorkflowID:      run.WorkflowID,
+				WorkflowVersion: run.WorkflowVersion,
+				Phase:           next,
+				PreviousPhase:   prevPhase,
 			}
 			sameReenter := strings.TrimSpace(prevPhase) == strings.TrimSpace(next) && prevPhase != ""
 			if sameReenter {

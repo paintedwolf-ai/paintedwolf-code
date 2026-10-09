@@ -439,12 +439,12 @@ func TestTaskToolCapsAggregateBriefText(t *testing.T) {
 	_, err := exec.Invoke(context.Background(), "task", map[string]any{
 		"agent_type": "implementer",
 		"brief": map[string]any{
-			"goal":      strings.Repeat("x", worker.MaxTaskCharterRunes),
+			"goal":      strings.Repeat("x", spawn.MaxTaskCharterRunes),
 			"done_when": []any{"done"},
 		},
 	}, toolContext("parent-1", t.TempDir()))
 	reject := tools.AsToolReject(err)
-	if reject == nil || reject.Code != "TOOL_ARGS_INVALID" || reject.Data["max_runes"] != worker.MaxTaskCharterRunes {
+	if reject == nil || reject.Code != "TOOL_ARGS_INVALID" || reject.Data["max_runes"] != spawn.MaxTaskCharterRunes {
 		t.Fatalf("err = %v want aggregate brief cap reject", err)
 	}
 }

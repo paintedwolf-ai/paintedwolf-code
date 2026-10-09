@@ -2,7 +2,6 @@ package inputs
 
 import (
 	"context"
-
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"

@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -10,7 +11,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 

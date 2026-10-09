@@ -2,9 +2,8 @@ package runtime_test
 
 import (
 	"context"
-	"testing"
-
 	"github.com/lycaon/lycaon/internal/testutil"
+	"testing"
 )
 
 func TestAssertSessionRunnable(t *testing.T) {

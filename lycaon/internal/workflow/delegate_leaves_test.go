@@ -1,10 +1,10 @@
 package workflow
 
 import (
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"testing"
 
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	"github.com/lycaon/lycaon/internal/workflow/runstate"
 )
 
 func TestSetWorkerCycleEvalVars(t *testing.T) {

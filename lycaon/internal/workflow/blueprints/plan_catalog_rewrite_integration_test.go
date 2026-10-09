@@ -4,6 +4,7 @@ package blueprints_test
 
 import (
 	"context"
+	workflow "github.com/lycaon/lycaon/internal/workflow"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/blueprint"
@@ -12,7 +13,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	workflow "github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
 )

@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance/feedback"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
+	"github.com/lycaon/lycaon/internal/session/workflowfacts"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -34,6 +35,7 @@ type WorkflowDomains struct {
 type WorkflowPolicy interface {
 	ActiveReviewVerdictPending(ctx context.Context, sessionID string) bool
 	ScaffoldVarsForSession(ctx context.Context, sessionID string) (map[string]any, error)
+	ActiveManifest(ctx context.Context, sessionID string) (workflowfacts.ActiveWorkflowManifest, bool)
 }
 type WorkflowRuns interface {
 	ActiveBySession(context.Context, string) (*api.WorkflowRun, error)

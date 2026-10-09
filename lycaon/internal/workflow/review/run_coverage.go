@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	"slices"
 	"strings"
 
@@ -14,7 +15,6 @@ import (
 	scancoverage "github.com/lycaon/lycaon/internal/scan/coverage"
 	"github.com/lycaon/lycaon/internal/tools"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -204,6 +204,11 @@ func scanCoverageFacts(scans []api.CodeScan) []reviewcoverage.Fact {
 func workerCoverageFacts(tasks []api.WorkerTask) []reviewcoverage.Fact {
 	var gaps []reviewcoverage.Fact
 	for _, task := range tasks {
+		if task.Result != nil && task.Result.CompletionReport != nil {
+			for _, gap := range task.Result.CompletionReport.CoverageGaps {
+				gaps = append(gaps, reviewcoverage.Fact{ID: "worker/" + task.ID + "/" + gap.ID, Kind: "worker_scope", Subject: gap.Subject, Paths: gap.Paths, Question: gap.Reason, Tasks: []string{task.ID}, Phase: task.WorkflowPhase})
+			}
+		}
 		if task.WorkflowWorkID != "" {
 			continue
 		}
@@ -275,7 +280,12 @@ func (m *Coverage) ValidateReview(ctx context.Context, run *api.WorkflowRun, def
 // coverageReject refuses a coverage review the model can repair. The
 // submit_verdict handler adds the call the phase accepts to every repair.
 func coverageReject(_ workflowdef.ReviewLoopDef, cause error) *tools.ToolReject {
-	return &tools.ToolReject{Code: workflowvalidation.ReviewLoopVerdictInvalidCode, Data: map[string]any{"reason": cause.Error()}}
+	data := map[string]any{"reason": cause.Error()}
+	var validation *reviewcoverage.ValidationError
+	if errors.As(cause, &validation) {
+		data["issues"] = validation.Issues
+	}
+	return &tools.ToolReject{Code: workflowvalidation.ReviewLoopVerdictInvalidCode, Data: data}
 }
 
 // Coverage ends at the final assessment phase; report and follow-on work do not

@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/workflow/toolguard"
 	"math"
 	"strings"
 
-	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/tools"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
@@ -25,7 +25,7 @@ func RegisterAskUserTool(reg *tools.DefaultRegistry, runs *Asks, boundary *sandb
 		return fmt.Errorf("workflow run manager required")
 	}
 	return reg.Register("ask_user", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-		if strings.TrimSpace(tctx.Agent) != orchestration.ProfileCoordinator {
+		if !toolguard.IsCoordinatorAgent(tctx.Agent) {
 			return "", fmt.Errorf("ask_user requires coordinator role")
 		}
 		req, err := parseAskUserArgs(args)

@@ -2,9 +2,8 @@ package blueprintfiles
 
 import (
 	"context"
-	"strings"
-
 	"github.com/lycaon/lycaon/pkg/api"
+	"strings"
 )
 
 func ResolveContent(ctx context.Context, run *api.WorkflowRun, projectDir, relPath string) (string, error) {

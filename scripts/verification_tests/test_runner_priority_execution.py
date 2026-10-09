@@ -28,6 +28,12 @@ def jobs(running=(), queued=(), age=0):
             + [{"status": "queued", "labels": [LABELS[name]], "created_at": stamp(age)} for name in queued])
 
 
+def unfinished(linux=0, macos=0):
+    """A cancelled attempt's jobs: the ones a re-run claims runners for."""
+    return [{"status": "completed", "conclusion": "cancelled", "labels": [LABELS[name]], "created_at": stamp(0)}
+            for name, number in (("linux", linux), ("macos", macos)) for _ in range(number)]
+
+
 def cancelled(number, workflow, event, **fields):
     return run(number, workflow, event, status="completed", conclusion="cancelled", **fields)
 
@@ -153,6 +159,30 @@ class RunnerPriorityTests(unittest.TestCase):
                 if not expected:
                     self.assertFalse([call for call in repository.calls if "/workflows/" in call[1]])
 
+    def test_preempted_work_resumes_only_into_spare_runners(self):
+        history = {("ci.yml", "pull_request"): [
+            cancelled(31, "ci.yml", "pull_request", sha="newer", age=5),
+            cancelled(30, "ci.yml", "pull_request", sha="older", age=20)]}
+        pulls = [("older", False), ("newer", False)]
+        queue = run(1, "ci.yml", "merge_group", branch=GROUP)
+        # Fifteen merge jobs run, so five runners are spare: room for the longer-waiting run only.
+        repository = Repository(runs=[queue], groups=[GROUP], pulls=pulls, history=history,
+                                jobs={1: jobs(running=["linux"] * 15), 30: unfinished(linux=3), 31: unfinished(linux=3)})
+        _, resumed = repository.schedule()
+        self.assertEqual(resumed, [30])
+
+    def test_resumption_respects_the_macos_ceiling(self):
+        history = {("ci.yml", "pull_request"): [
+            cancelled(41, "ci.yml", "pull_request", sha="mac", age=20),
+            cancelled(40, "ci.yml", "pull_request", sha="linux", age=5)]}
+        pulls = [("mac", False), ("linux", False)]
+        queue = run(1, "ci.yml", "merge_group", branch=GROUP)
+        repository = Repository(runs=[queue], groups=[GROUP], pulls=pulls, history=history,
+                                jobs={1: jobs(running=["macos"] * rp.LIMITS["macos"]),
+                                      40: unfinished(linux=2), 41: unfinished(linux=1, macos=1)})
+        _, resumed = repository.schedule()
+        self.assertEqual(resumed, [40])
+
     def test_a_refused_action_is_reported_and_the_sweep_continues(self):
         history = {("build-caches.yml", "push"): [cancelled(20, "build-caches.yml", "push")],
                    ("nightly.yml", "schedule"): [cancelled(21, "nightly.yml", "schedule")]}
@@ -169,7 +199,8 @@ class RunnerPriorityTests(unittest.TestCase):
                  (run(3, "ci.yml", "pull_request"), rp.DRAFT), (run(4, "ci.yml", "workflow_dispatch"), None),
                  (run(5, "release-halt.yml", "workflow_dispatch"), rp.RELEASE),
                  (run(6, "build-caches.yml", "push"), rp.WARMING), (run(7, "issue-sweep.yml", "schedule"), rp.BACKGROUND),
-                 (run(8, "issue-sweep.yml", "issues"), None), (run(9, "runner-priority.yml", "schedule"), None)]
+                 (run(8, "issue-sweep.yml", "issues"), None), (run(9, "runner-priority.yml", "schedule"), None),
+                 (run(10, "verification-recovery.yml", "workflow_run"), None)]
         for item, expected in cases:
             with self.subTest(run=item["id"]):
                 self.assertEqual(rp.run_class(item, classes, ready), expected)
@@ -185,3 +216,54 @@ class RunnerPriorityTests(unittest.TestCase):
                     declared["urgent"] = ["build-caches.yml"]
                 with patch.object(rp, "catalog", return_value=data), self.assertRaises(ValueError):
                     rp.workflow_classes()
+
+    def test_qualification_yields_before_ready_pull_requests_and_resumes_on_latest_push(self):
+        queue = run(1, 'ci.yml', 'merge_group', branch=GROUP)
+        qualification = run(2, 'qualification.yml', 'push')
+        ready = run(3, 'ci.yml', 'pull_request', sha='ready')
+        repository = Repository([queue, qualification, ready], groups=[GROUP],
+                                pulls=[('ready', False)],
+                                jobs={1: jobs(queued=['linux'], age=10), 2: jobs(running=['linux']),
+                                      3: jobs(running=['linux'])})
+        cancelled_ids, _ = rp.schedule('owner/repo', repository, NOW)
+        self.assertEqual(cancelled_ids, [2])
+        latest = cancelled(20, 'qualification.yml', 'push')
+        self.assertEqual(rp.resumptions([], {rp.QUALIFICATION: [latest]}, set(), {rp.QUALIFICATION}), [latest])
+
+    def test_waiting_one_shot_runs_preempt_nothing(self):
+        # Each recovery run handles one completed run: never cancelled, and never a reason to cancel others.
+        recovery = run(1, "verification-recovery.yml", "workflow_run", age=10)
+        ready = run(2, "ci.yml", "pull_request", sha="ready")
+        repository = Repository([recovery, ready], pulls=[("ready", False)],
+                                jobs={1: jobs(queued=["linux"], age=10), 2: jobs(running=["linux"] * 20)})
+        cancelled_ids, _ = repository.schedule()
+        self.assertEqual(cancelled_ids, [])
+
+    def test_work_preempted_for_ready_checks_stays_down_while_they_wait(self):
+        qualification = run(2, "qualification.yml", "push")
+        waiting = run(3, "ci.yml", "pull_request", sha="waiting")
+        history = {("qualification.yml", "push"): [cancelled(20, "qualification.yml", "push")],
+                   ("build-caches.yml", "push"): [cancelled(21, "build-caches.yml", "push")],
+                   ("ci.yml", "pull_request"): [cancelled(22, "ci.yml", "pull_request", sha="resumable")]}
+        repository = Repository([qualification, waiting], pulls=[("waiting", False), ("resumable", False)],
+                                history=history,
+                                jobs={2: jobs(running=["linux"] * 16), 3: jobs(queued=["linux"] * 4, age=10),
+                                      20: unfinished(linux=2), 21: unfinished(linux=1), 22: unfinished(linux=1)})
+        cancelled_ids, resumed = repository.schedule()
+        # The runners qualification gave up belong to the waiting checks, so it and warming are not re-run
+        # into them; only other ready work may resume, and only into runners spare after every queued job.
+        self.assertEqual(cancelled_ids, [2])
+        self.assertEqual(resumed, [22])
+
+    def test_starved_ready_checks_take_runners_from_qualification_only(self):
+        queue = run(1, "ci.yml", "merge_group", branch=GROUP)
+        qualification = run(2, "qualification.yml", "push")
+        waiting = run(3, "ci.yml", "pull_request", sha="waiting")
+        running = run(4, "ci.yml", "pull_request", sha="running")
+        repository = Repository([queue, qualification, waiting, running], groups=[GROUP],
+                                pulls=[("waiting", False), ("running", False)],
+                                jobs={1: jobs(running=["linux"] * 2), 2: jobs(running=["linux"] * 12),
+                                      3: jobs(queued=["linux"] * 4, age=10), 4: jobs(running=["linux"] * 4)})
+        cancelled_ids, _ = repository.schedule()
+        # Ready checks feed the queue, so qualification yields to them; the queue and other ready runs keep theirs.
+        self.assertEqual(cancelled_ids, [2])

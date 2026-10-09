@@ -3,16 +3,16 @@ package workflow
 import (
 	"context"
 	"fmt"
-	"strings"
-
-	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/workflow/catalog"
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/lifecycle"
 	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
 	workflowreview "github.com/lycaon/lycaon/internal/workflow/review"
 	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
+	"strings"
+
+	"github.com/lycaon/lycaon/internal/guidance"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 

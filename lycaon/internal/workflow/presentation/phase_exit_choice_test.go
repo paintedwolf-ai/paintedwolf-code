@@ -1,6 +1,7 @@
 package presentation_test
 
 import (
+	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
 	"os"
 	"path/filepath"
 	"strings"
@@ -8,7 +9,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
 )
 
 func TestProjectPhaseExitListsChoiceArms(t *testing.T) {

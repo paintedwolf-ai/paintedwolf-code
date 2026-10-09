@@ -2,14 +2,15 @@ name: Runner priority
 
 # Hosted runners start jobs first come, first served. This sweep gives them to
 # work in priority order: the merge queue and releases, ready pull requests,
-# drafts, main cache warming, then background work. It cancels CI of merge
-# groups that no longer exist, cancels lower-priority runs while merge-queue or
-# release jobs wait for a runner, keeps background work out of a busy queue, and
-# re-runs the cancelled jobs once nothing that outranks them is waiting.
+# main qualification, drafts, main cache warming, then background work. It
+# cancels CI of merge groups that no longer exist, cancels lower-priority runs
+# while merge-queue, release or ready pull request jobs wait for a runner, keeps
+# background work out of a busy queue, and re-runs the cancelled jobs once
+# nothing that outranks them is waiting.
 on:
-  # Merge groups and releases claim runners; finished groups free them.
+  # Merge groups, releases and ready pull requests claim runners; finished runs free them.
   workflow_run:
-    workflows: [CI, release, release-halt, nightly, dependency inventory, release-system-live-test]
+    workflows: [CI, Qualification, release, release-halt, nightly, dependency inventory, release-system-live-test]
     types: [requested, completed]
   # Workflows cannot trigger on a merge group's removal or a job waiting for a
   # runner, so a periodic sweep covers what the events miss.
@@ -28,8 +29,6 @@ concurrency:
 
 jobs:
   schedule:
-    # Pull request CI changes no higher-priority demand.
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.event != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

@@ -1,12 +1,12 @@
 package workflow
 
 import (
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/workflow/runstate"
 )
 
 func TestFanoutPlanSeedsAnEmptyChecklistOnly(t *testing.T) {

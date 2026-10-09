@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/coordinator/assembly"
 	"github.com/lycaon/lycaon/internal/coordinator/batch"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/guidance/feedback"
@@ -36,6 +37,11 @@ type WorkflowDomains struct {
 	Reports    WorkflowReports
 	Recovery   WorkflowRecovery
 	Cleanup    WorkflowCleanup
+	Reviews    WorkflowReviews
+}
+
+type WorkflowReviews interface {
+	RecordReviewToolResult(context.Context, string, api.Message) error
 }
 
 type WorkflowRuns interface {
@@ -118,17 +124,41 @@ type WorkerPhaseTouchPathsSource interface {
 	PhaseTouchPaths(ctx context.Context, parentSessionID string) []string
 }
 
+type workflowManifestAdapter struct {
+	policy WorkflowPolicy
+}
+
+func (a workflowManifestAdapter) ActiveManifest(ctx context.Context, sessionID string) (assembly.ActiveWorkflowManifest, bool) {
+	if a.policy == nil {
+		return assembly.ActiveWorkflowManifest{}, false
+	}
+	m, ok := a.policy.ActiveManifest(ctx, sessionID)
+	if !ok {
+		return assembly.ActiveWorkflowManifest{}, false
+	}
+	return assembly.ActiveWorkflowManifest{
+		CoordinatorProfile: m.CoordinatorProfile,
+		Archive:            m.Archive,
+	}, true
+}
+
 // SetWorkflowDomains wires the workflow resources for prompts, tools, and messages.
 func (m *Host) SetWorkflowDomains(v *WorkflowDomains) {
 
 	m.Coordinator.Control.Workflow = nil
 	m.Coordinator.Projection.Workflow = nil
+	m.Coordinator.Projection.Reviews = nil
 	m.Coordinator.Assembly.Workflow = promptsource.AssemblyWorkflow{}
 	m.Coordinator.Loop.ActiveRuns = nil
 	if v != nil {
 		m.Coordinator.Control.Workflow = v.Policy
 		m.Coordinator.Projection.Workflow = v.Asks
-		m.Coordinator.Assembly.Workflow = promptsource.AssemblyWorkflow{Manifests: v.Policy, Orientation: v.Fanout}
+		m.Coordinator.Projection.Reviews = v.Reviews
+		var manifests assembly.WorkflowManifestSource
+		if v.Policy != nil {
+			manifests = workflowManifestAdapter{policy: v.Policy}
+		}
+		m.Coordinator.Assembly.Workflow = promptsource.AssemblyWorkflow{Manifests: manifests, Orientation: v.Fanout}
 		m.Coordinator.Loop.ActiveRuns = v.Runs
 	}
 	if v == nil {

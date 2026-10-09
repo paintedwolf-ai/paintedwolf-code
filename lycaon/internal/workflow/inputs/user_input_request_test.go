@@ -4,13 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	workflowinputs "github.com/lycaon/lycaon/internal/workflow/inputs"
 	"strings"
 	"sync"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	workflowinputs "github.com/lycaon/lycaon/internal/workflow/inputs"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )

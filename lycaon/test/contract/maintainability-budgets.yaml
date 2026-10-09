@@ -1,11 +1,4 @@
-# Maintainability limits. Every artifact a change touches must be within its
-# category limit: a file it edits, a directory it adds files to or removes
-# files from, a Go type whose declaration or methods it edits. Artifacts the
-# change does not touch are counted, and meet the standard when next touched.
-#
-# An exception admits one artifact up to its cap. Write one only when the
-# artifact must be that large, give the cap room for ordinary edits, and say
-# why in terms a reviewer can weigh. No exception may be outgrown.
+# Category limits; artifact exceptions live in maintainability-exceptions/.
 limits:
     source_files: {warn: 400, limit: 600}
     test_files: {warn: 500, limit: 800}
@@ -15,18 +8,3 @@ limits:
     go_receiver_methods: {warn: 20, limit: 40}
     go_receiver_lines: {warn: 400, limit: 1000}
     ts_local_dependencies: {warn: 20, limit: 30}
-exceptions:
-    test_directories:
-        lycaon/internal/session:
-            cap: 265
-            reason: Predates the limits; fixes still land here while the package is decomposed (#271).
-        lycaon/internal/coordinator/promptloop:
-            cap: 110
-            reason: Prompt loop testing covers coordinator turn stages, streaming, tools, and closeouts; decomposed from session (#271).
-        lycaon/internal/worker:
-            cap: 100
-            reason: Worker execution, outcomes, and peer contract invariants decomposed from session (#271).
-    source_directories:
-        scripts:
-            cap: 170
-            reason: Task and CI entry points are invoked by path and import sibling modules by name; the change-scoped budget and coverage reports joined them here.

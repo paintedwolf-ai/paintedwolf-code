@@ -1,10 +1,10 @@
 package review
 
 import (
+	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
 	"testing"
 
 	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
-	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
 )
 
 func TestReviewInventoryUsesInheritedLinksAndSetAsides(t *testing.T) {

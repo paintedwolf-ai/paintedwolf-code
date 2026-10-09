@@ -1,0 +1,151 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/falcosecurity/plugins/plugins/k8saudit"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "0.18.0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/falcosecurity/plugins/plugins/k8saudit-aks"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "0.6.0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/falcosecurity/plugins/plugins/k8saudit-eks"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "0.12.0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/falcosecurity/plugins/plugins/k8saudit-gke"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "0.9.0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/falcosecurity/plugins/plugins/k8saudit-ovh"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "0.6.0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "GHSA-jhjp-4c2q-xmx4"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6538"
+ },
+ "details": "k8saudit shipped rules do not detect privileged/sensitive settings on init or ephemeral containers in github.com/falcosecurity/plugins/plugins/k8saudit",
+ "id": "GO-2026-6538",
+ "modified": "2026-09-28T16:43:40Z",
+ "published": "2026-09-28T16:43:40Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/falcosecurity/plugins/security/advisories/GHSA-jhjp-4c2q-xmx4"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/falcosecurity/plugins/commit/0adb9b3c7e2c8bad53f30d01c057e038b2afa5e1"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/falcosecurity/plugins/pull/1400"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/falcosecurity/plugins/releases/tag/plugins/k8saudit-aks/v0.6.0"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/falcosecurity/plugins/releases/tag/plugins/k8saudit-eks/v0.12.0"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/falcosecurity/plugins/releases/tag/plugins/k8saudit-gke/v0.9.0"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/falcosecurity/plugins/releases/tag/plugins/k8saudit-ovh/v0.6.0"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/falcosecurity/plugins/releases/tag/plugins/k8saudit/v0.18.0"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "k8saudit shipped rules do not detect privileged/sensitive settings on init or ephemeral containers in github.com/falcosecurity/plugins/plugins/k8saudit"
+}

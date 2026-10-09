@@ -2,9 +2,8 @@ package publication
 
 import (
 	"context"
-	"testing"
-
 	"github.com/lycaon/lycaon/pkg/api"
+	"testing"
 )
 
 // Publication reads run state without writing to it.

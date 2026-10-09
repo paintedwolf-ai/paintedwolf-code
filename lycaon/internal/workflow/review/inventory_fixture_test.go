@@ -2,7 +2,6 @@ package review_test
 
 import (
 	"context"
-
 	"github.com/lycaon/lycaon/pkg/api"
 )
 

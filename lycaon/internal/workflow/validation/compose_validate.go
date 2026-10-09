@@ -2,11 +2,11 @@ package validation
 
 import (
 	"fmt"
+	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/boolexpr"
 	"github.com/lycaon/lycaon/internal/conditions"
-	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
 	"github.com/lycaon/lycaon/internal/theme"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflowdiag"

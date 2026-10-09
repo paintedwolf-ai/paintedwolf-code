@@ -1,9 +1,8 @@
 package definition
 
 import (
-	"strings"
-
 	"github.com/lycaon/lycaon/internal/boolexpr"
+	"strings"
 )
 
 func DecomposeGateExpression(expr string) []string {

@@ -2,7 +2,6 @@ package workflow
 
 import (
 	"context"
-
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/spawn"

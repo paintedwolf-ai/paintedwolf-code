@@ -3,6 +3,7 @@ package inputs
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/workflow/publication"
 	"strings"
 	"sync"
 	"time"
@@ -12,7 +13,6 @@ import (
 	"github.com/lycaon/lycaon/internal/scaffoldvars"
 	"github.com/lycaon/lycaon/internal/visual"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	"github.com/lycaon/lycaon/internal/workflow/publication"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )

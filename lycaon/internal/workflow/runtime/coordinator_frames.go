@@ -2,10 +2,12 @@ package runtime
 
 import (
 	"context"
-	"log/slog"
+	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
+	"github.com/lycaon/lycaon/internal/reviewcoverage"
 	"github.com/lycaon/lycaon/internal/spawn"
 	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
@@ -15,6 +17,14 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
+type ReviewRepairBlocker interface {
+	BlockContract(ctx context.Context, runID string, cause error) error
+}
+
+type CoverageFactsLoader interface {
+	CoverageFacts(ctx context.Context, run *api.WorkflowRun, manifest workflowdef.Manifest) (reviewcoverage.Facts, error)
+}
+
 // CoordinatorFrames loads workflow state for coordinator turns.
 type CoordinatorFrames struct {
 	Runs         runstate.RunsRepository
@@ -22,6 +32,8 @@ type CoordinatorFrames struct {
 	Snapshots    *Snapshots
 	Policy       *SessionPolicy
 	Obligations  ObligationHolds
+	Coverage     CoverageFactsLoader
+	Repairs      ReviewRepairBlocker
 	SessionStore workflowdrafts.Store
 	ConfigRoot   string
 	// VerdictCatalog is a session's effective submit_verdict schema, which a
@@ -70,7 +82,18 @@ func (l *CoordinatorFrames) BuildCoordinatorTurnFrame(
 		return inject.CoordinatorTurnFrame{WorkflowRevision: active.Revision, RunContext: out}, err
 	}
 	runtime := l.Snapshots.Project(ctx, active, manifest, vars)
-	l.attachPhaseVerdictCall(ctx, sessionID, active, manifest, runtime.PhaseExit)
+	if err := l.attachPhaseVerdictCall(ctx, sessionID, active, manifest, runtime.PhaseExit); err != nil {
+		var invalid *reviewContractError
+		if !errors.As(err, &invalid) {
+			return inject.CoordinatorTurnFrame{}, err
+		}
+		if l.Repairs != nil {
+			if blockErr := l.Repairs.BlockContract(ctx, active.ID, err); blockErr != nil {
+				return inject.CoordinatorTurnFrame{}, blockErr
+			}
+		}
+		return inject.CoordinatorTurnFrame{}, &runstate.NotRunnableError{RunID: active.ID, Status: api.WorkflowRunStatusPaused, Reason: runstate.ReviewBlockedReason}
+	}
 	out.WorkflowID = active.WorkflowID
 	out.WorkflowVersion = active.WorkflowVersion
 	out.CurrentPhase = active.CurrentPhase
@@ -204,21 +227,34 @@ func hostStringSliceVar(vars map[string]any, key string) []string {
 
 var _ inject.CoordinatorTurnFrameSource = (*CoordinatorFrames)(nil)
 
+// reviewContractError identifies an invalid phase verdict contract.
+type reviewContractError struct{ error }
+
 // attachPhaseVerdictCall gives a review phase's exit the submit_verdict call it
 // accepts, composed from the session's effective catalog.
-func (l *CoordinatorFrames) attachPhaseVerdictCall(ctx context.Context, sessionID string, active *api.WorkflowRun, manifest workflowdef.Manifest, exit *inject.PhaseExitView) {
+func (l *CoordinatorFrames) attachPhaseVerdictCall(ctx context.Context, sessionID string, active *api.WorkflowRun, manifest workflowdef.Manifest, exit *inject.PhaseExitView) error {
 	if exit == nil || l.VerdictCatalog == nil {
-		return
+		return nil
 	}
 	def, ok := manifest.PhaseForRun(active, active.CurrentPhase)
 	if !ok || def.ReviewLoop == nil {
-		return
+		return nil
 	}
 	catalog := l.VerdictCatalog(ctx, sessionID)
 	if catalog == nil {
-		return
+		return nil
 	}
 	if err := verdictcall.Attach(exit, catalog, *def.ReviewLoop, manifest.ReportBrief()); err != nil {
-		slog.ErrorContext(ctx, "compose phase verdict call", "run_id", active.ID, "phase", def.ID, "error", err)
+		return &reviewContractError{err}
 	}
+	if def.ReviewLoop.CarriesCoverage() && l.Coverage != nil {
+		facts, err := l.Coverage.CoverageFacts(ctx, active, manifest)
+		if err != nil {
+			return fmt.Errorf("load coverage contract facts: %w", err)
+		}
+		if err = verdictcall.CheckCoverageIDs(exit.SubmitVerdictArgsSchema, *def.ReviewLoop, facts); err != nil {
+			return &reviewContractError{err}
+		}
+	}
+	return nil
 }

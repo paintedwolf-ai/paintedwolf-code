@@ -1,10 +1,10 @@
 package workflow
 
 import (
+	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	"testing"
 	"time"
 
-	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 

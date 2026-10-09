@@ -2,6 +2,7 @@ package review
 
 import (
 	"context"
+	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
 	"slices"
 	"strings"
 	"testing"
@@ -11,7 +12,6 @@ import (
 	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 

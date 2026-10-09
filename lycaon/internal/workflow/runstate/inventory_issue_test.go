@@ -1,10 +1,9 @@
 package runstate
 
 import (
-	"testing"
-
 	"github.com/lycaon/lycaon/internal/guidance"
 	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
+	"testing"
 )
 
 func TestInventoryIssueDetailsCarryEveryIdAndTheDroppedOnes(t *testing.T) {

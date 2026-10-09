@@ -2,11 +2,10 @@ package phases
 
 import (
 	"context"
-	"log/slog"
-
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
+	"log/slog"
 )
 
 type PhaseObligations interface {

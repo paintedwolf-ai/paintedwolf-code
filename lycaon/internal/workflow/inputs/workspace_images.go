@@ -15,12 +15,13 @@ import (
 	"path/filepath"
 	"strings"
 
+	_ "golang.org/x/image/webp"
+
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/internal/visual"
-	_ "golang.org/x/image/webp"
 )
 
 // WorkspaceImage is a project image file read under the tool read floor.

@@ -2,12 +2,13 @@ package workflow
 
 import (
 	"context"
+	workflowreview "github.com/lycaon/lycaon/internal/workflow/review"
 	"strings"
 
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	workflowreview "github.com/lycaon/lycaon/internal/workflow/review"
 	"github.com/lycaon/lycaon/pkg/api"
 )
+
 
 // RecordBoardOrientReady stamps the board orientation gate.
 func (m *Fanout) RecordBoardOrientReady(ctx context.Context, sessionID, injectKey string) error {

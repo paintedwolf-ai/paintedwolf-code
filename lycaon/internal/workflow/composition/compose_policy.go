@@ -2,13 +2,13 @@ package composition
 
 import (
 	"fmt"
+	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
+	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"strings"
 
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/boolexpr"
-	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 

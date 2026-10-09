@@ -37,8 +37,7 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       R2_BUCKET: ${{ secrets.R2_BUCKET }}
-      FEED_SIGNING_PRIVATE_KEY: ${{ secrets.FEED_SIGNING_PRIVATE_KEY }}
-      FEED_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.FEED_SIGNING_PRIVATE_KEY_PASSWORD }}
+      FEED_SIGNING_KEYS_JSON: ${{ secrets.FEED_SIGNING_KEYS_JSON }}
       DOWNLOAD_BASE_URL: ${{ vars.DOWNLOAD_BASE_URL }}
       HOMEBREW_TAP_REPO: ${{ vars.HOMEBREW_TAP_REPO }}
       HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
@@ -84,18 +83,16 @@ jobs:
           fi
           python3 scripts/release-halt-plan.py "${args[@]}" --dry-run \
             --write-plan "${RUNNER_TEMP}/halt-plan.json" \
+            --prepare-output "${RUNNER_TEMP}/prepared-halt" \
             --distribution-output "${RUNNER_TEMP}/halt-distribution.json"
       - name: Prepare package and website withdrawal
         id: distribution_plan
         run: |
           python3 scripts/release_withdrawal.py prepare --file "${RUNNER_TEMP}/halt-distribution.json" \
             --output "${RUNNER_TEMP}/withdrawal.json"
-      - name: Record permanent withdrawal before changing discovery
-        if: ${{ !cancelled() && !inputs.dry_run && steps.feed_plan.outcome == 'success' }}
-        run: python3 scripts/release_distribution.py withdraw --file "${RUNNER_TEMP}/halt-distribution.json"
       - name: Halt all affected updater feeds
         if: ${{ !cancelled() && !inputs.dry_run && steps.feed_plan.outcome == 'success' }}
-        run: ./task release:halt -- --plan "${RUNNER_TEMP}/halt-plan.json"
+        run: ./task release:halt -- --plan "${RUNNER_TEMP}/halt-plan.json" --apply-prepared "${RUNNER_TEMP}/prepared-halt"
       - name: Withdraw package and website discovery
         if: ${{ !cancelled() && !inputs.dry_run && steps.distribution_plan.outcome == 'success' }}
         run: python3 scripts/release_withdrawal.py apply --file "${RUNNER_TEMP}/withdrawal.json"
@@ -108,5 +105,6 @@ jobs:
             ${{ runner.temp }}/halt-plan.json
             ${{ runner.temp }}/halt-distribution.json
             ${{ runner.temp }}/withdrawal.json
+            ${{ runner.temp }}/prepared-halt/
           retention-days: 90
           if-no-files-found: ignore

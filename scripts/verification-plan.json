@@ -51,7 +51,6 @@
       "codegen:contribution-facts:check",
       "codegen:contribution-inventory:check",
       "codegen:theme-tokens:check",
-      "codegen:dependency-inventory:check",
       "codegen:den-fonts:check",
       "codegen:client-notices:check",
       "codegen:host-markers:check",
@@ -765,7 +764,8 @@
       "minutes": 45,
       "profiles": [
         "fast",
-        "check"
+        "check",
+        "integration"
       ],
       "suite": "all",
       "setup": "verification"
@@ -794,7 +794,8 @@
       "minutes": 120,
       "profiles": [
         "check",
-        "release"
+        "release",
+        "integration"
       ],
       "suite": "all",
       "setup": "verification"
@@ -807,7 +808,8 @@
       ],
       "minutes": 90,
       "profiles": [
-        "check"
+        "check",
+        "integration"
       ],
       "suite": "all",
       "setup": "verification"
@@ -819,7 +821,8 @@
       "minutes": 60,
       "profiles": [
         "check",
-        "release"
+        "release",
+        "integration"
       ],
       "suite": "all",
       "setup": "verification"
@@ -830,7 +833,8 @@
       ],
       "minutes": 60,
       "profiles": [
-        "check"
+        "check",
+        "integration"
       ],
       "suite": "all",
       "setup": "verification"
@@ -843,7 +847,8 @@
       "profiles": [
         "check",
         "release",
-        "nightly"
+        "nightly",
+        "integration"
       ],
       "suite": "behavior",
       "setup": "verification",
@@ -859,7 +864,8 @@
       "minutes": 90,
       "profiles": [
         "check",
-        "release"
+        "release",
+        "integration"
       ],
       "suite": "all",
       "setup": "verification"
@@ -871,7 +877,8 @@
       "minutes": 90,
       "profiles": [
         "check",
-        "release"
+        "release",
+        "integration"
       ],
       "suite": "all",
       "setup": "shell"
@@ -998,6 +1005,18 @@
       ],
       "suite": "performance",
       "setup": "verification"
+    },
+    "integration-build": {
+      "targets": [
+        "build",
+        "licenses:notices"
+      ],
+      "minutes": 120,
+      "profiles": [
+        "integration"
+      ],
+      "suite": "all",
+      "setup": "verification"
     }
   },
   "runner_priority": {
@@ -1015,7 +1034,14 @@
       "release-system-live-test.yml",
       "issue-intake.yml",
       "issue-stale.yml",
-      "issue-sweep.yml"
+      "issue-sweep.yml",
+      "queue-health.yml"
+    ],
+    "qualification": [
+      "qualification.yml"
+    ],
+    "one_shot": [
+      "verification-recovery.yml"
     ]
   }
 }

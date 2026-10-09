@@ -1,10 +1,10 @@
 package runstate_test
 
 import (
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/workflow/runstate"
 )
 
 // A vars snapshot taken before runstate.LatchIntakeKey does not observe mutations of the

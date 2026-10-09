@@ -2,13 +2,13 @@ package inputs_test
 
 import (
 	"context"
+	workflowinputs "github.com/lycaon/lycaon/internal/workflow/inputs"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	workflowinputs "github.com/lycaon/lycaon/internal/workflow/inputs"
 )
 
 func TestWorkflowUserFeedbackPending(t *testing.T) {

@@ -2,7 +2,6 @@ package persistence
 
 import (
 	"errors"
-
 	"github.com/lycaon/lycaon/internal/pagecursor"
 )
 

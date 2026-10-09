@@ -1,11 +1,10 @@
 package runstate
 
 import (
-	"strings"
-	"time"
-
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
+	"strings"
+	"time"
 )
 
 func StampPendingAnnouncement(run *api.WorkflowRun, vars map[string]any) (map[string]any, *api.Message) {

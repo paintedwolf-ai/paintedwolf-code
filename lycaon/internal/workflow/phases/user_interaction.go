@@ -3,10 +3,9 @@ package phases
 import (
 	"context"
 	"fmt"
-	"strings"
-
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
+	"strings"
 )
 
 // MarkTopologyStageComplete records stage output for topology gates.

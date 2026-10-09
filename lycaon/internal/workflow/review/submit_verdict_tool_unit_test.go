@@ -9,7 +9,7 @@ import (
 
 func TestParseSubmitVerdictArgsUsesDeclaredTypes(t *testing.T) {
 	def := workflowdef.ReviewLoopDef{VerdictSchema: map[string]string{"verdict": "ADJUDICATED", "vulnerabilities": workflowdef.VerdictClaimsType, "dismissed": workflowdef.VerdictSetAsidesType}}
-	verdict, cited, citedURLs, err := parseSubmitVerdictArgs(def, map[string]any{
+	verdict, cited, citedURLs, err := ParseSubmitVerdictArgs(def, map[string]any{
 		"verdict": map[string]any{
 			"verdict":         "ADJUDICATED",
 			"vulnerabilities": []any{},
@@ -20,7 +20,7 @@ func TestParseSubmitVerdictArgsUsesDeclaredTypes(t *testing.T) {
 		},
 		"cited_urls": []any{" https://example.com/advisory "},
 	})
-	testutil.FailErr(t, "parseSubmitVerdictArgs", err)
+	testutil.FailErr(t, "ParseSubmitVerdictArgs", err)
 	if verdict["verdict"] != "ADJUDICATED" {
 		t.Fatalf("verdict = %q", verdict["verdict"])
 	}
@@ -37,10 +37,10 @@ func TestParseSubmitVerdictArgsUsesDeclaredTypes(t *testing.T) {
 		t.Fatalf("citedURLs = %+v", citedURLs)
 	}
 
-	if _, _, _, err := parseSubmitVerdictArgs(def, map[string]any{}); err == nil {
+	if _, _, _, err := ParseSubmitVerdictArgs(def, map[string]any{}); err == nil {
 		t.Fatal("expected error for missing verdict object")
 	}
-	if _, _, _, err := parseSubmitVerdictArgs(def, map[string]any{
+	if _, _, _, err := ParseSubmitVerdictArgs(def, map[string]any{
 		"verdict":        map[string]any{"verdict": "X"},
 		"cited_evidence": []any{map[string]any{"line": float64(3)}},
 	}); err == nil {
@@ -66,8 +66,8 @@ func TestParseSubmitVerdictArgsUsesDeclaredTypes(t *testing.T) {
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			if _, _, _, err := parseSubmitVerdictArgs(def, args); err == nil {
-				t.Fatalf("parseSubmitVerdictArgs(%s) unexpectedly succeeded", name)
+			if _, _, _, err := ParseSubmitVerdictArgs(def, args); err == nil {
+				t.Fatalf("ParseSubmitVerdictArgs(%s) unexpectedly succeeded", name)
 			}
 		})
 	}
@@ -82,7 +82,7 @@ func TestVerdictFieldTypesRejectCoercion(t *testing.T) {
 		{"claims", "[]"}, {"claims", map[string]any{}}, {"claims", nil},
 		{"coverage", "{}"}, {"coverage", []any{}}, {"coverage", nil},
 	} {
-		_, _, _, err := parseSubmitVerdictArgs(def, map[string]any{"verdict": map[string]any{"verdict": "ACCEPTED", tc.field: tc.value}})
+		_, _, _, err := ParseSubmitVerdictArgs(def, map[string]any{"verdict": map[string]any{"verdict": "ACCEPTED", tc.field: tc.value}})
 		if err == nil {
 			t.Errorf("field %s accepted %T", tc.field, tc.value)
 		}

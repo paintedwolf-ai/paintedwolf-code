@@ -26,6 +26,7 @@ func (l *toolBatch) persistClassifiedToolOutcome(
 ) ([]api.Message, error) {
 	ctx = context.WithoutCancel(ctx)
 	stampCommitOrderTS(&out.toolMsg, lastToolTS)
+	bindReviewResult(&out.toolMsg, st)
 	stored, transient := l.Projection.storageSafeMessage(ctx, out.toolMsg)
 	history, err := l.Tools.commitToolResultWithOptionalNote(
 		ctx, sessionID, history, stored, transient, out.agentNote, lastToolTS, st,
@@ -203,6 +204,7 @@ func (l *toolBatch) appendParallelOutcomeLocked(
 	} else {
 		stampCommitOrderTS(&out.toolMsg, commit.lastToolTS)
 	}
+	bindReviewResult(&out.toolMsg, commit.st)
 	stored, transient := l.Projection.storageSafeMessage(ctx, out.toolMsg)
 	rows, transients := l.Tools.classifiedResultRows(ctx, stored, transient, out.agentNote, commit.lastToolTS)
 	if err := l.Projection.persistStorageSafeMessages(ctx, commit.sessionID, rows); err != nil {

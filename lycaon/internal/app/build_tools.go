@@ -34,6 +34,8 @@ type toolWiring struct{ *serveBuilder }
 
 func (b toolWiring) wireCoordinatorRuntime() error {
 	b.coordRuntime = b.mgr.Coordinator.Runtime
+	coordRuntime := b.coordRuntime
+	b.resources.track("coordinator-sleep-timers", 65, func(context.Context) error { coordRuntime.StopSleepTimers(); return nil })
 	waitConditions := make(map[string]map[string]bool, len(b.toolProfiles))
 	for _, profile := range b.toolProfiles {
 		allowed := make(map[string]bool, len(profile.WaitConditions))

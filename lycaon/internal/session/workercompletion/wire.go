@@ -6,6 +6,7 @@ import "github.com/lycaon/lycaon/pkg/api"
 func ReportWire(in WorkerCompletionReport) *api.WorkerCompletionReport {
 	out := &api.WorkerCompletionReport{
 		CoverageReview:    in.CoverageReview,
+		CoverageGaps:      append([]api.WorkerCoverageGap(nil), in.CoverageGaps...),
 		DeclaredLegStatus: in.DeclaredLegStatus,
 		LegStatus:         in.LegStatus, FilesModified: append([]string(nil), in.FilesModified...),
 		ObjectivesMet:     append([]string(nil), in.ObjectivesMet...),
@@ -36,6 +37,7 @@ func ReportFromWire(in *api.WorkerCompletionReport) WorkerCompletionReport {
 	}
 	out := WorkerCompletionReport{
 		CoverageReview:    in.CoverageReview,
+		CoverageGaps:      append([]api.WorkerCoverageGap(nil), in.CoverageGaps...),
 		DeclaredLegStatus: in.DeclaredLegStatus,
 		LegStatus:         in.LegStatus, FilesModified: append([]string(nil), in.FilesModified...),
 		ObjectivesMet:     append([]string(nil), in.ObjectivesMet...),

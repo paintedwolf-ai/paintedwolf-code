@@ -3,10 +3,10 @@ package inputs
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/workflow/publication"
 	"strings"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/workflow/publication"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )

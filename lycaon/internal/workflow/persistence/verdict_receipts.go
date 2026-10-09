@@ -3,7 +3,6 @@ package persistence
 import (
 	"context"
 	"encoding/json"
-
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 )
 

@@ -205,7 +205,7 @@ func (m *Service) renderContext(ctx context.Context, sessionID string) kick.Coor
 			rc.FailedLeaves = append([]string(nil), frame.RunContext.FailedLeaves...)
 		}
 	}
-	rc.GateObligations = m.gateObligations(ctx, frame)
+	rc.GateObligations = m.GateObligations(ctx, sessionID, frame)
 	rc.ProgressOpenItems, rc.ProgressClosureArmed = m.closureState(ctx, sessionID)
 	return rc
 }
@@ -261,9 +261,16 @@ func unsatisfiedFrameGateLeaves(frame inject.CoordinatorTurnFrame) []string {
 	return leaves
 }
 
-func (m *Service) gateObligations(ctx context.Context, frame inject.CoordinatorTurnFrame) []kick.GateObligation {
+// GateObligations projects unmet gate obligations for the coordinator turn frame.
+func (m *Service) GateObligations(ctx context.Context, sessionID string, frame inject.CoordinatorTurnFrame) []kick.GateObligation {
 	if m == nil || m.gateFeedback == nil {
 		return nil
+	}
+	fb := m.gateFeedback
+	if m.workflows != nil && m.workflows.Policy != nil {
+		if manifest, ok := m.workflows.Policy.ActiveManifest(ctx, sessionID); ok {
+			fb = fb.WithWorkflowArchive(manifest.Archive)
+		}
 	}
 	runCtx := frame.RunContext
 	leaves := unsatisfiedFrameGateLeaves(frame)
@@ -271,7 +278,7 @@ func (m *Service) gateObligations(ctx context.Context, frame inject.CoordinatorT
 	if frame.Runtime.PhaseExit != nil {
 		extras = feedback.WithReviewAgents(extras, frame.Runtime.PhaseExit.ReviewAgents)
 	}
-	rows := m.gateFeedback.ProjectObligations(ctx, leaves, runCtx.AdvanceWhenGateMet, extras)
+	rows := fb.ProjectObligations(ctx, leaves, runCtx.AdvanceWhenGateMet, extras)
 	if len(rows) == 0 {
 		return nil
 	}

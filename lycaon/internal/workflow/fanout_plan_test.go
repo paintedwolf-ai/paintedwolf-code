@@ -2,13 +2,13 @@ package workflow
 
 import (
 	"context"
+	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
+	workflowruntime "github.com/lycaon/lycaon/internal/workflow/runtime"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/spawn"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
-	workflowruntime "github.com/lycaon/lycaon/internal/workflow/runtime"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 

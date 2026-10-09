@@ -3,15 +3,15 @@ package review_test
 import (
 	"encoding/json"
 	"errors"
+	workflow "github.com/lycaon/lycaon/internal/workflow"
+	workflowreview "github.com/lycaon/lycaon/internal/workflow/review"
+	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
-	workflow "github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	workflowreview "github.com/lycaon/lycaon/internal/workflow/review"
-	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 

@@ -2,13 +2,12 @@ package persistence
 
 import (
 	"context"
-	"testing"
-	"time"
-
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"testing"
+	"time"
 )
 
 func TestSessionScaffoldRejectsWrongJSONShape(t *testing.T) {

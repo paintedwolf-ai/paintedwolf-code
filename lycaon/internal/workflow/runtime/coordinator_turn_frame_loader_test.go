@@ -1,6 +1,8 @@
 package runtime_test
 
 import (
+	workflowruntime "github.com/lycaon/lycaon/internal/workflow/runtime"
+
 	"context"
 	"encoding/json"
 	"strings"
@@ -19,7 +21,6 @@ import (
 	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
-	workflowruntime "github.com/lycaon/lycaon/internal/workflow/runtime"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
