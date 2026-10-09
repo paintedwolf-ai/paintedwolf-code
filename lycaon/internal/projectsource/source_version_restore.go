@@ -242,9 +242,14 @@ func prepareRestoreOverAbsent(
 		return nil, err
 	}
 	plan := &sourceMutationPlan{
-		Kind: "create", ProjectID: p.SourceID(), WorkspaceID: p.WorkspaceID(),
-		RootID: root.ID, RootPath: root.Path, Path: rel, AbsPath: abs,
-		EntryKind: SourceEntryFile, CreateParents: true,
+		sourceMutationAttribution: sourceMutationAttribution{ProjectID: p.SourceID(), WorkspaceID: p.WorkspaceID()},
+		Kind:                      "create",
+		RootID:                    root.ID,
+		RootPath:                  root.Path,
+		Path:                      rel,
+		AbsPath:                   abs,
+		EntryKind:                 SourceEntryFile,
+		CreateParents:             true,
 	}
 	if req.Version.State == string(api.SourceTipStateAbsent) {
 		plan.Kind = "write"
@@ -287,21 +292,37 @@ func prepareRestoreOverContent(
 			return nil, fingerprintErr
 		}
 		return &sourceMutationPlan{
-			Kind: "delete", ProjectID: p.SourceID(), WorkspaceID: p.WorkspaceID(),
-			RootID: root.ID, RootPath: root.Path, Path: rel, AbsPath: abs,
-			RecoveryID: operationID, TreeSHA: treeSHA, EntryKind: SourceEntryFile, Disposal: sourceDisposalTrash,
-			Before: before.content, BaseSHA256: before.sha256, BeforeSize: before.size,
-			Changed: true,
+			sourceMutationAttribution: sourceMutationAttribution{ProjectID: p.SourceID(), WorkspaceID: p.WorkspaceID()},
+			Kind:                      "delete",
+			RootID:                    root.ID,
+			RootPath:                  root.Path,
+			Path:                      rel,
+			AbsPath:                   abs,
+			RecoveryID:                operationID,
+			TreeSHA:                   treeSHA,
+			EntryKind:                 SourceEntryFile,
+			Disposal:                  sourceDisposalTrash,
+			Before:                    before.content,
+			BaseSHA256:                before.sha256,
+			BeforeSize:                before.size,
+			Changed:                   true,
 		}, nil
 	}
 	changed := before.sha256 != req.Version.SHA256
 	return &sourceMutationPlan{
-		Kind: "write", ProjectID: p.SourceID(), WorkspaceID: p.WorkspaceID(),
-		RootID: root.ID, RootPath: root.Path, Path: rel, AbsPath: abs,
-		EntryKind: SourceEntryFile,
-		Before:    before.content, BaseSHA256: before.sha256, BeforeSize: before.size,
-		After:    append([]byte(nil), req.Version.Content...),
-		AfterSHA: req.Version.SHA256, AfterSize: int64(len(req.Version.Content)),
-		Changed: changed,
+		sourceMutationAttribution: sourceMutationAttribution{ProjectID: p.SourceID(), WorkspaceID: p.WorkspaceID()},
+		Kind:                      "write",
+		RootID:                    root.ID,
+		RootPath:                  root.Path,
+		Path:                      rel,
+		AbsPath:                   abs,
+		EntryKind:                 SourceEntryFile,
+		Before:                    before.content,
+		BaseSHA256:                before.sha256,
+		BeforeSize:                before.size,
+		After:                     append([]byte(nil), req.Version.Content...),
+		AfterSHA:                  req.Version.SHA256,
+		AfterSize:                 int64(len(req.Version.Content)),
+		Changed:                   changed,
 	}, nil
 }

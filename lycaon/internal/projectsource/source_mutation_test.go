@@ -69,10 +69,20 @@ func TestSourceMutationRecoveryFinishesAppliedWrite(t *testing.T) {
 	response, err := sourceMutationDigest(req)
 	testutil.FailErr(t, "digest", err)
 	opID := uuid.NewString()
-	plan := sourceMutationPlan{Kind: "write", ProjectID: p.ID, WorkspaceID: p.WorkspaceID(), RootID: writePlan.Result.RootID, RootPath: rootPath,
-		Path: writePlan.Result.Path, AbsPath: writePlan.Result.AbsPath, BaseSHA256: writePlan.BaseSHA256,
-		AfterSHA: writePlan.Result.SHA256, Before: writePlan.Result.Before,
-		After: writePlan.Result.After, Changed: true, Response: []byte(`{"Path":"recover.txt"}`)}
+	plan := sourceMutationPlan{
+		sourceMutationAttribution: sourceMutationAttribution{ProjectID: p.ID, WorkspaceID: p.WorkspaceID()},
+		Kind:                      "write",
+		RootID:                    writePlan.Result.RootID,
+		RootPath:                  rootPath,
+		Path:                      writePlan.Result.Path,
+		AbsPath:                   writePlan.Result.AbsPath,
+		BaseSHA256:                writePlan.BaseSHA256,
+		AfterSHA:                  writePlan.Result.SHA256,
+		Before:                    writePlan.Result.Before,
+		After:                     writePlan.Result.After,
+		Changed:                   true,
+		Response:                  []byte(`{"Path":"recover.txt"}`),
+	}
 	now := time.Now().UTC()
 	row := &sourceMutationRow{ID: opID, ProjectID: p.ID, Kind: "write", InputDigest: response,
 		Plan: plan, Status: sourceMutationPrepared, CreatedAt: now, UpdatedAt: now}
@@ -140,10 +150,19 @@ func TestSourceMutationBatchWriteRollsBackOnConflict(t *testing.T) {
 		planned, err := planProjectSourceWrite(p, SourceWriteRequest{Path: item.path, RootID: p.Roots[0].ID,
 			Content: item.content, Encoding: textfile.UTF8, BaseSHA256: textfile.SHA256([]byte("before"))})
 		testutil.FailErr(t, "plan "+item.path, err)
-		writes = append(writes, sourceMutationPlan{Kind: "write", ProjectID: p.ID, RootID: planned.Result.RootID,
-			RootPath: rootPath, Path: planned.Result.Path, AbsPath: planned.Result.AbsPath, BaseSHA256: planned.BaseSHA256,
-			AfterSHA: planned.Result.SHA256, Before: planned.Result.Before,
-			After: planned.Result.After, Changed: true})
+		writes = append(writes, sourceMutationPlan{
+			sourceMutationAttribution: sourceMutationAttribution{ProjectID: p.ID},
+			Kind:                      "write",
+			RootID:                    planned.Result.RootID,
+			RootPath:                  rootPath,
+			Path:                      planned.Result.Path,
+			AbsPath:                   planned.Result.AbsPath,
+			BaseSHA256:                planned.BaseSHA256,
+			AfterSHA:                  planned.Result.SHA256,
+			Before:                    planned.Result.Before,
+			After:                     planned.Result.After,
+			Changed:                   true,
+		})
 	}
 	testutil.FailErr(t, "race b.txt", os.WriteFile(filepath.Join(rootPath, "b.txt"), []byte("raced"), 0o640))
 	err := applySourceBatchWrite(t.Context(), &sourceMutationPlan{Kind: "batch_write", Writes: writes})
@@ -250,10 +269,18 @@ func TestFileAppliedReceiptReprovesAndReappliesLostFilesystemEffect(t *testing.T
 		ID: uuid.NewString(), ProjectID: p.ID, Kind: "write", InputDigest: "digest",
 		Status: sourceMutationFileApplied, CreatedAt: now, UpdatedAt: now,
 		Plan: sourceMutationPlan{
-			Kind: "write", ProjectID: p.ID, WorkspaceID: p.WorkspaceID(), RootID: p.Roots[0].ID, RootPath: rootPath,
-			Path: "note.txt", AbsPath: path, BaseSHA256: textfile.SHA256(before),
-			AfterSHA: textfile.SHA256(after), Before: before, After: after,
-			Changed: true, Response: json.RawMessage(`{}`),
+			sourceMutationAttribution: sourceMutationAttribution{ProjectID: p.ID, WorkspaceID: p.WorkspaceID()},
+			Kind:                      "write",
+			RootID:                    p.Roots[0].ID,
+			RootPath:                  rootPath,
+			Path:                      "note.txt",
+			AbsPath:                   path,
+			BaseSHA256:                textfile.SHA256(before),
+			AfterSHA:                  textfile.SHA256(after),
+			Before:                    before,
+			After:                     after,
+			Changed:                   true,
+			Response:                  json.RawMessage(`{}`),
 		},
 	}
 	testutil.FailErr(t, "insert file-applied receipt", service.Journal.insert(t.Context(), row))

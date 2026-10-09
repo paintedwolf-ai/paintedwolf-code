@@ -60,7 +60,14 @@ func TestSourceCapturePreservesRecordedContentExpectation(t *testing.T) {
 			service, p, root, _ := sourceMutationFixture(t)
 			path := filepath.Join(root, "file")
 			testutil.FailErr(t, "seed concurrent contents", os.WriteFile(path, []byte("external edit"), 0o600))
-			plan := &sourceMutationPlan{Kind: kind, ProjectID: p.ID, RootPath: root, Path: "file", RecoveryID: uuid.NewString(), EntryKind: SourceEntryFile}
+			plan := &sourceMutationPlan{
+				sourceMutationAttribution: sourceMutationAttribution{ProjectID: p.ID},
+				Kind:                      kind,
+				RootPath:                  root,
+				Path:                      "file",
+				RecoveryID:                uuid.NewString(),
+				EntryKind:                 SourceEntryFile,
+			}
 			expected := textfile.SHA256([]byte("recorded contents"))
 			if kind == "delete" {
 				plan.BaseSHA256 = expected

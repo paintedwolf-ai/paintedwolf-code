@@ -38,12 +38,19 @@ func (s *SourceMutationService) Write(ctx context.Context, operationID string, p
 			return nil, ErrSourceNotFound
 		}
 		return &sourceMutationPlan{
-			Kind: "write", ProjectID: p.SourceID(), WorkspaceID: p.WorkspaceID(), RootID: writePlan.Result.RootID, RootPath: root.Path,
-			Path: writePlan.Result.Path, AbsPath: writePlan.Result.AbsPath, Encoding: req.Encoding,
-			BaseSHA256: writePlan.BaseSHA256, AfterSHA: writePlan.Result.SHA256,
-			Before: writePlan.Result.Before, After: writePlan.Result.After, SessionID: req.SessionID, Turn: req.Turn,
-			Changed:  writePlan.Result.Changed,
-			Response: encoded,
+			sourceMutationAttribution: sourceMutationAttribution{ProjectID: p.SourceID(), WorkspaceID: p.WorkspaceID(), SessionID: req.SessionID, Turn: req.Turn},
+			Kind:                      "write",
+			RootID:                    writePlan.Result.RootID,
+			RootPath:                  root.Path,
+			Path:                      writePlan.Result.Path,
+			AbsPath:                   writePlan.Result.AbsPath,
+			Encoding:                  req.Encoding,
+			BaseSHA256:                writePlan.BaseSHA256,
+			AfterSHA:                  writePlan.Result.SHA256,
+			Before:                    writePlan.Result.Before,
+			After:                     writePlan.Result.After,
+			Changed:                   writePlan.Result.Changed,
+			Response:                  encoded,
 		}, nil
 	})
 	if err != nil {
@@ -107,15 +114,27 @@ func (s *SourceMutationService) BatchWrite(ctx context.Context, operationID stri
 				return nil, ErrSourceNotFound
 			}
 			writes = append(writes, sourceMutationPlan{
-				Kind: "write", ProjectID: p.SourceID(), WorkspaceID: p.WorkspaceID(), RootID: planned.Result.RootID, RootPath: root.Path,
-				Path: planned.Result.Path, AbsPath: planned.Result.AbsPath, Encoding: write.Encoding,
-				BaseSHA256: planned.BaseSHA256, AfterSHA: planned.Result.SHA256,
-				Before: planned.Result.Before, After: planned.Result.After, SessionID: req.SessionID, Turn: req.Turn,
-				Changed: planned.Result.Changed,
+				sourceMutationAttribution: sourceMutationAttribution{ProjectID: p.SourceID(), WorkspaceID: p.WorkspaceID(), SessionID: req.SessionID, Turn: req.Turn},
+				Kind:                      "write",
+				RootID:                    planned.Result.RootID,
+				RootPath:                  root.Path,
+				Path:                      planned.Result.Path,
+				AbsPath:                   planned.Result.AbsPath,
+				Encoding:                  write.Encoding,
+				BaseSHA256:                planned.BaseSHA256,
+				AfterSHA:                  planned.Result.SHA256,
+				Before:                    planned.Result.Before,
+				After:                     planned.Result.After,
+				Changed:                   planned.Result.Changed,
 			})
 		}
-		return &sourceMutationPlan{Kind: "batch_write", ProjectID: p.SourceID(), WorkspaceID: p.WorkspaceID(), BatchID: operationID,
-			Writes: writes, Changed: len(writes) > 0, Response: append(json.RawMessage(nil), prepared.Response...)}, nil
+		return &sourceMutationPlan{
+			sourceMutationAttribution: sourceMutationAttribution{ProjectID: p.SourceID(), WorkspaceID: p.WorkspaceID(), BatchID: operationID},
+			Kind:                      "batch_write",
+			Writes:                    writes,
+			Changed:                   len(writes) > 0,
+			Response:                  append(json.RawMessage(nil), prepared.Response...),
+		}, nil
 	})
 }
 
@@ -153,8 +172,18 @@ func (s *SourceMutationService) Create(ctx context.Context, operationID string, 
 			return nil, resolveErr
 		}
 		encoded, _ := json.Marshal(struct{ Path string }{rel})
-		plan := &sourceMutationPlan{Kind: "create", RecoveryID: operationID, ProjectID: p.SourceID(), WorkspaceID: p.WorkspaceID(), RootID: root.ID, RootPath: root.Path,
-			Path: rel, AbsPath: abs, EntryKind: req.Kind, SessionID: req.SessionID, Turn: req.Turn, Changed: true, Response: encoded}
+		plan := &sourceMutationPlan{
+			sourceMutationAttribution: sourceMutationAttribution{ProjectID: p.SourceID(), WorkspaceID: p.WorkspaceID(), SessionID: req.SessionID, Turn: req.Turn},
+			Kind:                      "create",
+			RecoveryID:                operationID,
+			RootID:                    root.ID,
+			RootPath:                  root.Path,
+			Path:                      rel,
+			AbsPath:                   abs,
+			EntryKind:                 req.Kind,
+			Changed:                   true,
+			Response:                  encoded,
+		}
 		if req.Kind == SourceEntryFile {
 			plan.After, plan.AfterSHA = []byte{}, textfile.SHA256(nil)
 		}

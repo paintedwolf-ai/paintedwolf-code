@@ -154,7 +154,20 @@ func TestTrashRecoveryFinishesInterruptedNativeEffect(t *testing.T) {
 	fingerprint, err := sourceTreeFingerprint(t.Context(), abs)
 	testutil.FailErr(t, "fingerprint", err)
 	id := uuid.NewString()
-	plan := sourceMutationPlan{Kind: "delete", ProjectID: p.ID, WorkspaceID: p.WorkspaceID(), RootID: p.Roots[0].ID, RootPath: root, Path: "file", AbsPath: abs, RecoveryID: id, TreeSHA: fingerprint, EntryKind: SourceEntryFile, Disposal: sourceDisposalTrash, Changed: true, Response: []byte(`{}`)}
+	plan := sourceMutationPlan{
+		sourceMutationAttribution: sourceMutationAttribution{ProjectID: p.ID, WorkspaceID: p.WorkspaceID()},
+		Kind:                      "delete",
+		RootID:                    p.Roots[0].ID,
+		RootPath:                  root,
+		Path:                      "file",
+		AbsPath:                   abs,
+		RecoveryID:                id,
+		TreeSHA:                   fingerprint,
+		EntryKind:                 SourceEntryFile,
+		Disposal:                  sourceDisposalTrash,
+		Changed:                   true,
+		Response:                  []byte(`{}`),
+	}
 	testutil.FailErr(t, "capture", service.recovery.captureRecovery(t.Context(), &plan, abs))
 	row := &sourceMutationRow{ID: id, ProjectID: p.ID, Kind: "delete", Plan: plan, Status: sourceMutationPrepared, CreatedAt: time.Now(), UpdatedAt: time.Now()}
 	testutil.FailErr(t, "persist intent", service.Journal.insert(t.Context(), row))
@@ -205,7 +218,13 @@ func TestInterruptedPreparationReleasesUnclaimedRecovery(t *testing.T) {
 	testutil.FailErr(t, "seed", os.WriteFile(abs, []byte("still here"), 0o600))
 	fingerprint, err := sourceTreeFingerprint(t.Context(), abs)
 	testutil.FailErr(t, "fingerprint", err)
-	plan := sourceMutationPlan{ProjectID: p.ID, RootPath: root, Path: "file", RecoveryID: uuid.NewString(), TreeSHA: fingerprint}
+	plan := sourceMutationPlan{
+		sourceMutationAttribution: sourceMutationAttribution{ProjectID: p.ID},
+		RootPath:                  root,
+		Path:                      "file",
+		RecoveryID:                uuid.NewString(),
+		TreeSHA:                   fingerprint,
+	}
 	testutil.FailErr(t, "capture before interruption", service.recovery.captureRecovery(t.Context(), &plan, abs))
 	restarted := NewSourceMutationService(service.Journal.db, service.settlement.recorder.(*sourceledger.Store))
 	testutil.FailErr(t, "startup", restarted.Recover(t.Context()))
@@ -264,7 +283,20 @@ func TestTrashPreflightFailureWaitsForExplicitRetry(t *testing.T) {
 	fingerprint, err := sourceTreeFingerprint(t.Context(), abs)
 	testutil.FailErr(t, "fingerprint", err)
 	id := uuid.NewString()
-	plan := sourceMutationPlan{Kind: "delete", ProjectID: p.ID, WorkspaceID: p.WorkspaceID(), RootID: p.Roots[0].ID, RootPath: root, Path: "file", AbsPath: abs, RecoveryID: id, TreeSHA: fingerprint, EntryKind: SourceEntryFile, Disposal: sourceDisposalTrash, Changed: true, Response: []byte(`{}`)}
+	plan := sourceMutationPlan{
+		sourceMutationAttribution: sourceMutationAttribution{ProjectID: p.ID, WorkspaceID: p.WorkspaceID()},
+		Kind:                      "delete",
+		RootID:                    p.Roots[0].ID,
+		RootPath:                  root,
+		Path:                      "file",
+		AbsPath:                   abs,
+		RecoveryID:                id,
+		TreeSHA:                   fingerprint,
+		EntryKind:                 SourceEntryFile,
+		Disposal:                  sourceDisposalTrash,
+		Changed:                   true,
+		Response:                  []byte(`{}`),
+	}
 	testutil.FailErr(t, "capture", service.recovery.captureRecovery(t.Context(), &plan, abs))
 	row := &sourceMutationRow{ID: id, ProjectID: p.ID, Kind: "delete", Plan: plan, Status: sourceMutationPrepared, CreatedAt: time.Now(), UpdatedAt: time.Now()}
 	testutil.FailErr(t, "persist intent", service.Journal.insert(t.Context(), row))

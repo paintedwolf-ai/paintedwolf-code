@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sync"
 	"testing"
 	"time"
@@ -32,7 +33,20 @@ func pendingObservationWrite(t *testing.T, status sourceMutationStatus) (*Source
 	testutil.FailErr(t, "plan pending write", err)
 	now := time.Now().UTC()
 	row := &sourceMutationRow{ID: uuid.NewString(), ProjectID: p.ID, Kind: "write", InputDigest: "input", Status: status, CreatedAt: now, UpdatedAt: now,
-		Plan: sourceMutationPlan{Kind: "write", ProjectID: p.ID, WorkspaceID: p.WorkspaceID(), RootID: p.Roots[0].ID, RootPath: root, Path: "a.txt", AbsPath: write.Result.AbsPath, Before: write.Result.Before, After: write.Result.After, BaseSHA256: write.BaseSHA256, AfterSHA: write.Result.SHA256, Changed: true, Response: json.RawMessage(`{}`)}}
+		Plan: sourceMutationPlan{
+			sourceMutationAttribution: sourceMutationAttribution{ProjectID: p.ID, WorkspaceID: p.WorkspaceID()},
+			Kind:                      "write",
+			RootID:                    p.Roots[0].ID,
+			RootPath:                  root,
+			Path:                      "a.txt",
+			AbsPath:                   write.Result.AbsPath,
+			Before:                    write.Result.Before,
+			After:                     write.Result.After,
+			BaseSHA256:                write.BaseSHA256,
+			AfterSHA:                  write.Result.SHA256,
+			Changed:                   true,
+			Response:                  json.RawMessage(`{}`),
+		}}
 	testutil.FailErr(t, "persist pending write", service.Journal.insert(t.Context(), row))
 	testutil.FailErr(t, "publish before attribution", applyProjectSourceWrite(write))
 	return service, p, row
@@ -190,5 +204,22 @@ func TestRecoveryKeepsAdmissionIdentityAndRefusesDivergedBytes(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestMutationAttributionPreservesDurableFlatPlan(t *testing.T) {
+	const stored = `{"project_id":"p","workspace_id":"worktree:w","branch_id":"worktree:w","session_id":"session","turn":4,"person_id":"person","batch_id":"batch","cause":"restore","kind":"write","root_id":"root","root_path":"/root","changed":true,"response":{}}`
+	var plan sourceMutationPlan
+	testutil.FailErr(t, "decode durable plan", json.Unmarshal([]byte(stored), &plan))
+	if plan.ProjectID != "p" || plan.PersonID != "person" || plan.BranchID != sourcebranch.ForWorktree("w") {
+		t.Fatal("durable admission identity changed")
+	}
+	encoded, err := json.Marshal(plan)
+	testutil.FailErr(t, "encode durable plan", err)
+	var before, after map[string]any
+	testutil.FailErr(t, "decode stored keys", json.Unmarshal([]byte(stored), &before))
+	testutil.FailErr(t, "decode emitted keys", json.Unmarshal(encoded, &after))
+	if !reflect.DeepEqual(before, after) {
+		t.Fatalf("durable plan keys changed: %s", encoded)
 	}
 }

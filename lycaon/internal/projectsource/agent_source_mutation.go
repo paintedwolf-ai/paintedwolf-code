@@ -99,8 +99,11 @@ func (s *SourceMutationService) PrepareEffect(ctx context.Context, effect source
 	effect.Record.TS = now
 	effect.Change.TS = now
 	plan := sourceMutationPlan{
-		Kind: kind, ProjectID: effect.Record.ProjectID, Changed: true,
-		AgentEffect: &effect, Response: json.RawMessage(`{}`),
+		sourceMutationAttribution: sourceMutationAttribution{ProjectID: effect.Record.ProjectID},
+		Kind:                      kind,
+		Changed:                   true,
+		AgentEffect:               &effect,
+		Response:                  json.RawMessage(`{}`),
 	}
 	row := &sourceMutationRow{ID: id, ProjectID: plan.ProjectID, Kind: kind,
 		InputDigest: hex.EncodeToString(digest[:]), Plan: plan, Status: sourceMutationPrepared,
