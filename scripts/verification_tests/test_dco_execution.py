@@ -120,7 +120,7 @@ class DCOExecutionTests(unittest.TestCase):
             github.queue("main")
 
     def test_pr_check_publishes_on_original_head_and_failure_does_not_pass(self):
-        event = {"pull_request": {"number": 1, "head": {"sha": "head"}, "draft": False}}
+        event = {"pull_request": {"number": 1, "head": {"sha": "head"}, "base": {"sha": "base"}, "draft": False}}
         github = FakeGitHub()
         self.assertEqual(dco.run(github, "pull_request_target", event), 0)
         self.assertEqual(github.writes[0][1]["head_sha"], "head")
@@ -132,7 +132,7 @@ class DCOExecutionTests(unittest.TestCase):
     def test_live_draft_before_creation_remains_untouched(self):
         github = FakeGitHub()
         github.original["isDraft"] = True
-        self.assertEqual(dco.run(github, "pull_request_target", {"pull_request": {"number": 1, "head": {"sha": "head"}}}), 0)
+        self.assertEqual(dco.run(github, "pull_request_target", {"pull_request": {"number": 1, "head": {"sha": "head"}, "base": {"sha": "base"}}}), 0)
         self.assertEqual(github.writes, [])
 
     def test_race_during_certification_cannot_publish_success(self):
@@ -162,9 +162,18 @@ class DCOExecutionTests(unittest.TestCase):
             self.assertEqual(dco.run(github, "merge_group", event), 1)
         self.assertEqual(github.writes[-1][1]["conclusion"], "failure")
 
+
+    def test_stale_event_base_cannot_certify_same_head(self):
+        github = FakeGitHub()
+        event = {"pull_request": {"number": 1, "head": {"sha": "head"}, "base": {"sha": "oldbase"}}}
+        with self.assertRaises(dco.Refused):
+            dco.run(github, "pull_request_target", event)
+        self.assertEqual(github.writes, [])
+
     def test_trusted_workflow_does_not_checkout_pr_or_run_scripts_from_pr(self):
         workflow = (Path(__file__).parents[2] / ".github/workflows/dco.yml").read_text()
         self.assertIn("pull_request_target:", workflow)
+        self.assertIn("ready_for_review, edited", workflow)
         self.assertIn("merge_group:", workflow)
         self.assertIn("ref: ${{ github.event.repository.default_branch }}", workflow)
         self.assertIn("persist-credentials: false", workflow)

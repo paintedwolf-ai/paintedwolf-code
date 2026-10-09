@@ -168,7 +168,8 @@ def target(event_name, event, github):
         pr = event["pull_request"] if event_name == "pull_request_target" else github.pull(int(event["inputs"]["pull_request"]))
         if pr.get("draft", pr.get("isDraft", False)):
             return None
-        expected = {"number": pr["number"], "headRefOid": pr.get("headRefOid") or pr["head"]["sha"]}
+        expected = {"number": pr["number"], "headRefOid": pr.get("headRefOid") or pr["head"]["sha"],
+                    "baseRefOid": pr.get("baseRefOid") or pr["base"]["sha"]}
         return expected["headRefOid"], [expected], None
     if event_name == "merge_group":
         group = event["merge_group"]
