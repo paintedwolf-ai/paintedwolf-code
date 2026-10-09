@@ -26,7 +26,7 @@ import (
 
 // commandCancelCleanupTimeout outlasts the kill fallback so a cancelled command
 // settles inline instead of being promoted as still running.
-const commandCancelCleanupTimeout = exec.TerminateGrace + 3*time.Second
+const commandCancelCleanupTimeout = exec.TerminateGrace + exec.PipelineWaitDelay + 3*time.Second
 
 // commandRunOutcome carries an inline completion or a promoted process handle.
 type commandRunOutcome struct {

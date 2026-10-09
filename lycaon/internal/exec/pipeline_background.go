@@ -55,7 +55,7 @@ func StartPipelineAsync(
 
 	// The first group starts before the handle is returned, so a launch failure
 	// reaches the caller as an error instead of an immediate completion.
-	run := newSequenceRun(stages, opts, newCallStreams(opts, stdout, stderr, redirect), stdinReader, 0)
+	run := newSequenceRun(stages, opts, newCallStreams(opts, stdout, stderr, redirect), stdinReader, PipelineWaitDelay)
 	if err := run.start(runCtx); err != nil {
 		redirect.close()
 		if stdinReader != nil {

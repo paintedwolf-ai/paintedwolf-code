@@ -300,7 +300,7 @@ func (s *sequenceRun) finalize(buf []byte, truncated bool, maxOut int) (*Pipelin
 		return res, nil
 	}
 	for i, err := range s.waitErrs {
-		if s.skipped[i] || err == nil {
+		if s.skipped[i] || err == nil || errors.Is(err, osexec.ErrWaitDelay) {
 			continue
 		}
 		var exitErr *osexec.ExitError
