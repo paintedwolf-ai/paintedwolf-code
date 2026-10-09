@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 
-	"github.com/lycaon/lycaon/internal/coordinator"
 	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
@@ -225,36 +224,7 @@ func NewHost(store Store, modelSources Models, registry tools.ToolRegistry) *Hos
 	m.RewindRuntime.Batch = m.Coordinator.Batch
 	m.RewindRuntime.Touches = m.Workers.Workspaces.Touches
 	acquireCoordinatorSources(m, store, client, svc, registry, tracker)
-	runtime := coordinator.NewRuntime(m.Coordinator.RuntimeDependencies())
-	m.Coordinator.Runtime = runtime
-	m.Stops.SetCoordinator(runtime)
-	m.Coordinator.Guidance.Bind(runtime.Kicks(), runtime.Anchors())
-	m.ToolPolicy.SetSurface(runtime)
-	m.Coordinator.Context.Runtime = runtime
-	m.Coordinator.Tools.Runtime = runtime
-	m.Coordinator.Control.Runtime = runtime
-	m.Coordinator.Assembly.Runtime = runtime
-	m.Coordinator.Loop.Runtime = runtime
-	m.Resources.Work.Coordinator = runtime
-	m.RewindRuntime.Coordinator = runtime
-	m.Observations = sessionobservation.New(store, runtime.CoordinatorLoop().Admission, runtime.CoordinatorLoop().Nudges, m.Runner.Turns)
-	m.Processes.SetLoop(runtime.CoordinatorLoop().Waits, runtime.CoordinatorLoop().Nudges)
-	m.Admission.SetLoop(runtime.CoordinatorLoop().Nudges, runtime.CoordinatorLoop().Cycles)
-	m.ProjectControl.SetAnchors(runtime.Anchors())
-	m.Coordinator.Nudges.SetSurface(runtime)
-	m.Coordinator.Guards.SetSurface(runtime)
-	m.Coordinator.Batch.SetLoop(runtime.CoordinatorLoop().Waits)
-	turnSettlement.SetRuntime(runtime)
-	m.Runner.SetRuntime(runtime)
-
-	m.Coordinator.Admission = m.Admission
-	m.Coordinator.Runtime = runtime
-	m.Coordinator.Workers = &coordinatorcontrol.Workers{Runtime: runtime, Batch: m.Coordinator.Batch, Settlement: turnSettlement, Admission: m.Admission, Digests: workerDigests, Results: workerResults}
-	m.Coordinator.Scans.Runtime = runtime
-
-	m.Coordinator.Profiles = m.Profiles
-
-	m.Coordinator.ToolPolicy = m.ToolPolicy
+	bindCoordinatorRuntime(m, store)
 
 	return m
 }
