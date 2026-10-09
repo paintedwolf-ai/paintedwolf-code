@@ -82,14 +82,13 @@ func (m *Manager) kickPromptCuration(ctx context.Context, sess *wire.Session, us
 	}); err != nil {
 		return
 	}
-	//nolint:contextcheck // Session stop controls this context.
-	go func() {
-		defer finish()
-		m.runPromptCuration(bg, sess, userPrompt, work)
-	}()
+	//nolint:contextcheck // Session and engine stop control this context.
+	go m.runPromptCuration(bg, sess, userPrompt, work, finish)
 }
 
-func (m *Manager) runPromptCuration(ctx context.Context, sess *wire.Session, userPrompt string, work *curationWork) {
+// runPromptCuration releases its engine lease only after the session registry.
+func (m *Manager) runPromptCuration(ctx context.Context, sess *wire.Session, userPrompt string, work *curationWork, releaseEngine func()) {
+	defer releaseEngine()
 	defer m.curation.Finish(sess.ID, work)
 	defer observability.GuardPanic("session.prompt_curation")
 	m.warmIndexForDeclaredURLs(ctx, sess.ID, sess.ProjectID, userPrompt, sess.WorkspacePath)
