@@ -16,7 +16,6 @@ func TestMain(m *testing.M) {
 	gittestsetup.Enable()
 	guidancetestsetup.Install()
 	anchortestsetup.Install()
-	defer func() { _ = sourcecatalog.Process().Drain(context.Background()) }()
 	code := m.Run()
 	_ = sourcecatalog.Process().Drain(context.Background())
 	os.Exit(code)
