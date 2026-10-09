@@ -5,11 +5,15 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/hitl"
+	"github.com/lycaon/lycaon/internal/llm"
+	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/session/store"
@@ -123,5 +127,49 @@ func TestHarnessSecretSeedDerivesFactsFromTheSurface(t *testing.T) {
 		if cpReq.Explanation == nil || cpReq.Explanation.What == "" {
 			t.Errorf("%s: seeded card has no impact sentence", tc.surface)
 		}
+	}
+}
+
+func TestHarnessResponsePreservesProviderStreamFailure(t *testing.T) {
+	provider := llm.NewManualProvider()
+	provider.SetAuto(false, "")
+	stream, err := provider.Stream(t.Context(), modelcall.CompletionRequest{})
+	testutil.FailErr(t, "start manual stream", err)
+	pending, ok := provider.Pending(t.Context(), "", time.Second)
+	if !ok {
+		t.Fatal("manual request was not pending")
+	}
+	body, err := json.Marshal(map[string]any{
+		"id": pending.ID,
+		"stream_chunks": []map[string]any{
+			{"content": "partial response"},
+			{"error": "fixture provider disconnected", "done": true},
+		},
+	})
+	testutil.FailErr(t, "encode failed response", err)
+	server := NewServer(requiredTestDeps(t, Dependencies{Core: CoreDependencies{Store: store.NewMemory()}, Harness: HarnessDependencies{ManualLLM: provider}}), nil, "harness-test-token")
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/harness/llm/respond", strings.NewReader(string(body)))
+	request.Header.Set("Content-Type", "application/json")
+	server.Routes.HarnessControl.handleHarnessLLMRespond(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("response = %d: %s", response.Code, response.Body.String())
+	}
+	first := <-stream
+	if first.Content != "partial response" || first.Err != nil || first.Done {
+		t.Fatalf("partial chunk = %+v", first)
+	}
+	last := <-stream
+	if last.Err == nil || last.Err.Error() != "fixture provider disconnected" || !last.Done {
+		t.Fatalf("terminal chunk = %+v", last)
+	}
+	if _, open := <-stream; open {
+		t.Fatal("failed stream stayed open")
+	}
+	if _, pending := provider.Pending(t.Context(), "", 0); pending {
+		t.Fatal("failed stream retained its pending request")
+	}
+	if err := provider.RespondWithChunks(pending.ID, "duplicate", nil, nil); err == nil {
+		t.Fatal("settled failure accepted a second response")
 	}
 }

@@ -34,6 +34,11 @@ func TestReviewerScopePreservesExplicitRunsAndIsolatesAmbientIntents(t *testing.
 		t.Fatal("ambient workflow lost the current intent's review")
 	}
 	run.AttachPolicy = ""
+	reviewer.WorkflowPhase = "previous-phase"
+	if missing := verdicts.missingReviewAgents(t.Context(), run, []string{"skeptic"}); len(missing) != 1 {
+		t.Fatal("superseded phase supplied the required review")
+	}
+	reviewer.WorkflowPhase = run.CurrentPhase
 	reviewer.WorkflowRunID = "other-run"
 	if missing := verdicts.missingReviewAgents(t.Context(), run, []string{"skeptic"}); len(missing) != 1 {
 		t.Fatal("another workflow supplied the required review")

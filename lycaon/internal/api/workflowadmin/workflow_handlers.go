@@ -146,7 +146,7 @@ func (s *RunControl) HandleAdvanceWorkflowRun(w http.ResponseWriter, r *http.Req
 			if active, gerr := s.Workflows.Store.Runs.Get(r.Context(), runID); gerr == nil && active != nil {
 				// A committed gate rejection emits one coordinator nudge.
 				s.Sessions.Coordinator.Guidance.Emit(r.Context(), active.SessionID, anchor.GateBlocked, anchor.Envelope{})
-				s.Sessions.Coordinator.Runtime.CoordinatorLoop().Nudge(
+				s.Sessions.Coordinator.Runtime.CoordinatorLoop().Nudges.Nudge(
 					r.Context(),
 					active.SessionID,
 					anchor.PhaseAdvanced,

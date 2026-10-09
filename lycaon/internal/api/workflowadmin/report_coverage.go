@@ -181,7 +181,7 @@ func (s *Reports) workAccount(ctx context.Context, a *runAccount, run *wire.Work
 		a.coverage = append(a.coverage, report.ReportCoverageItem{Subject: "Workers", Status: "Unavailable", Detail: "Worker accounting is unavailable."})
 		return nil
 	}
-	vars, err := s.Runs.Runs.Runs.GetScaffoldVars(ctx, run.ID)
+	vars, err := s.Runs.Runs.GetScaffoldVars(ctx, run.ID)
 	if err != nil {
 		return err
 	}

@@ -94,7 +94,7 @@ func (s *RunControl) HandleListSessionWorkflowRuns(w http.ResponseWriter, r *htt
 			}
 		}
 	}
-	page, err := s.Runs.Runs.Runs.ListPageBySession(r.Context(), sessionID, pq.Limit, statusFilter, pq.Cursor)
+	page, err := s.Runs.Runs.ListPageBySession(r.Context(), sessionID, pq.Limit, statusFilter, pq.Cursor)
 	if err != nil {
 		if errors.Is(err, workflowpersistence.ErrInvalidRunPageCursor) {
 			s.responses.PageCursorError(w, r, "cursor", err)

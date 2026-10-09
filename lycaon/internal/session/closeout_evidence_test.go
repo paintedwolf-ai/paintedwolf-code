@@ -76,15 +76,18 @@ func TestWorkflowEvidenceSurvivesLaterUserMessagesAndCompaction(t *testing.T) {
 	run := &api.WorkflowRun{ID: "review-run", CurrentPhase: "challenge"}
 	mgr.SetWorkflowDomains(workflowDomainFixture(&evidenceWorkflowView{run: run}))
 	before := time.Unix(100, 0)
-	mgr.SetWorkerQueue(jobLister{tasks: []api.WorkerTask{
+	tasks := []api.WorkerTask{
 		{ID: "original", ParentSessionID: parent.ID, ChildSessionID: child.ID, AgentType: "skeptic", Status: api.WorkerStatusComplete, Result: &api.WorkerResult{CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"}}, WorkflowRunID: run.ID, WorkflowPhase: run.CurrentPhase, CreatedAt: before},
 		{ID: "unrelated", ParentSessionID: parent.ID, ChildSessionID: "other", AgentType: "skeptic", Status: api.WorkerStatusComplete, Result: &api.WorkerResult{CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"}}, WorkflowRunID: "another-run", CreatedAt: before.Add(time.Hour)},
-	}})
+	}
+	mgr.SetWorkerQueue(jobLister{tasks: tasks})
 	legs, err := mgr.Verification.Evidence.WorkerLegs(t.Context(), parent.ID, before.Add(time.Minute))
 	testutil.FailErr(t, "read run evidence", err)
 	if len(legs) != 1 || legs[0].ChildSessionID != child.ID {
 		t.Fatalf("run evidence = %+v", legs)
 	}
+	tasks = append(tasks, api.WorkerTask{ID: "previous-phase", ParentSessionID: parent.ID, ChildSessionID: "earlier-phase-child", AgentType: "skeptic", Status: api.WorkerStatusComplete, Result: &api.WorkerResult{CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"}}, WorkflowRunID: run.ID, WorkflowPhase: "claims", CreatedAt: before})
+	mgr.SetWorkerQueue(jobLister{tasks: tasks})
 	reviewers, err := mgr.Coordinator.Closeout.ReviewerEvidence(t.Context(), parent.ID, []api.Message{{Role: api.MessageRoleUser, CreatedAt: before.Add(time.Minute)}}, []string{"skeptic"})
 	testutil.FailErr(t, "read reviewers without summaries", err)
 	if len(reviewers) != 1 || len(reviewers[0].LegIDs) != 1 || reviewers[0].LegIDs[0] != child.ID {

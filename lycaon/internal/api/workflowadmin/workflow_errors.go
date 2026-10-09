@@ -47,7 +47,7 @@ var workflowFailures = []workflowFailure{
 
 // writeRunLookupError answers a failed read of one workflow run.
 func (s *RunControl) writeRunLookupError(w http.ResponseWriter, r *http.Request, err error) {
-	if errors.Is(err, workflow.ErrRunNotFound) {
+	if errors.Is(err, runstate.ErrNotFound) {
 		s.responses.Fail(w, wire.ApiErrorCodeWorkflowRunNotFound, "workflow run not found")
 		return
 	}

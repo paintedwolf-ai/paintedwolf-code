@@ -18,9 +18,6 @@ import (
 	hostapi "github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/api/apitest"
 	"github.com/lycaon/lycaon/internal/api/httpio"
-	"github.com/lycaon/lycaon/internal/api/sessionadmin"
-	"github.com/lycaon/lycaon/internal/api/sessionview"
-	"github.com/lycaon/lycaon/internal/api/taskgroup"
 	"github.com/lycaon/lycaon/internal/api/workflowadmin"
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/extpacks"
@@ -29,7 +26,6 @@ import (
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/workflow"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -58,16 +54,15 @@ func newRoutesFixture(t *testing.T, orchestrator orchestration.Orchestrator) *ro
 	deps := apitest.Dependencies(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: sessions, Projects: projects}})
 	deps.Workflow.Workflows.Blueprints.Getter = deps.Workflow.Blueprints
 	deps.Workflow.Workflows.Presentation.BlueprintGetter = deps.Workflow.Blueprints
-	view := sessionview.New(sessionview.Projector{
-		Workflows: deps.Workflow.Workflows, Store: sessions, Sessions: deps.Core.Sessions, Projects: projects,
+	deps.Workflow.Orchestrator = orchestrator
+	server := hostapi.NewServer(deps, slog.New(slog.DiscardHandler), hostapi.TestAPIToken)
+	t.Cleanup(func() {
+		server.StopBackground()
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+		server.WaitForBackground(ctx)
 	})
-	h := workflowadmin.New(&httpio.Responder{Logger: slog.New(slog.DiscardHandler)}, &taskgroup.Group{}, workflowadmin.Deps{
-		Workflows: deps.Workflow.Workflows, Runs: deps.Workflow.WorkflowRuns,
-		Composer: deps.Workflow.WorkflowComposer, Persister: deps.Workflow.WorkflowPersister, Blueprints: deps.Workflow.Blueprints,
-		Orchestrator: orchestrator, EventPublisher: deps.Host.EventPublisher, ManagedSecrets: deps.Approvals.ManagedSecrets,
-		Projects: projects, Store: sessions, Sessions: deps.Core.Sessions,
-		SessionAdmin: &sessionadmin.Handler{}, SessionView: &view,
-	})
+	h := server.Admin.Workflow
 	return &routesFixture{
 		router: workflowRouter(h), handler: h, sessions: sessions, runs: deps.Workflow.WorkflowRuns,
 		blueprints: deps.Workflow.Blueprints, project: p, workDir: workDir,
@@ -122,8 +117,8 @@ func (f *routesFixture) seedRun(t *testing.T, blueprintPath string) *wire.Workfl
 		Status: wire.WorkflowRunStatusRunning, CurrentPhase: "build", BlueprintPath: blueprintPath,
 		CreatedAt: at, UpdatedAt: at,
 	}
-	testutil.FailErr(t, "create run", f.runs.CreateState(t.Context(), run, f.workDir, nil))
-	stored, err := f.runs.Get(t.Context(), run.ID)
+	testutil.FailErr(t, "create run", f.runs.State.CreateState(t.Context(), run, f.workDir, nil))
+	stored, err := f.runs.Runs.Get(t.Context(), run.ID)
 	testutil.FailErr(t, "reload run", err)
 	return stored
 }
