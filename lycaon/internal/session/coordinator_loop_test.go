@@ -160,7 +160,7 @@ func setupLoopFixture(t *testing.T, cfg settings.SessionLimits) loopFixture {
 	}
 	run.CurrentPhase = "research"
 	run.Status = wire.WorkflowRunStatusRunning
-	if err := wfMgr.Store.Update(ctx, run); err != nil {
+	if err := wfMgr.Store.State.Update(ctx, run); err != nil {
 		testutil.FailErr(t, "wfMgr.Store.Update failed", err)
 	}
 	drainCoordinatorAsyncTurnsOnCleanup(t, mgr)
@@ -175,14 +175,14 @@ func TestShouldLoopWakeDeniesHumanApprovalAwaiting(t *testing.T) {
 		t.Fatal("missing run")
 	}
 	run.CurrentPhase = "approve"
-	if err := fix.wfMgr.Store.Update(ctx, run); err != nil {
+	if err := fix.wfMgr.Store.State.Update(ctx, run); err != nil {
 		testutil.FailErr(t, "fix.wfMgr.Store.Update failed", err)
 	}
 	vars, err := fix.wfMgr.Store.Runs.GetScaffoldVars(ctx, run.ID)
 	testutil.FailErr(t, "GetScaffoldVars", err)
 	vars = runstate.StampHumanApprovalPhase(vars, &workflowdef.HumanApprovalConfig{}, run.BlueprintPath)
 	vars = runstate.SetHumanApprovalReady(vars, true)
-	testutil.FailErr(t, "UpdateVars", fix.wfMgr.Store.UpdateVars(ctx, run, t.TempDir(), vars))
+	testutil.FailErr(t, "UpdateVars", fix.wfMgr.Store.State.UpdateVars(ctx, run, t.TempDir(), vars))
 	allow, reason, err := fix.mgr.Coordinator.Runtime.CoordinatorLoop().ShouldLoopWake(ctx, fix.sess.ID, anchor.LegFinished)
 	testutil.FailErr(t, "fix.mgr.ShouldLoopWake failed", err)
 	if allow {
@@ -201,7 +201,7 @@ func TestShouldLoopWakeIgnoresApprovePhaseName(t *testing.T) {
 		t.Fatal("missing run")
 	}
 	run.CurrentPhase = "approve"
-	if err := fix.wfMgr.Store.Update(ctx, run); err != nil {
+	if err := fix.wfMgr.Store.State.Update(ctx, run); err != nil {
 		testutil.FailErr(t, "fix.wfMgr.Store.Update failed", err)
 	}
 	allow, reason, err := fix.mgr.Coordinator.Runtime.CoordinatorLoop().ShouldLoopWake(ctx, fix.sess.ID, anchor.LegFinished)
@@ -262,7 +262,7 @@ func TestShouldLoopWakeDeniesPendingDecision(t *testing.T) {
 			"implement": map[string]any{"pending": true, "prompt": "choose", "options": []any{"yes", "no"}},
 		},
 	}
-	if err := fix.wfMgr.Store.UpdateVars(ctx, run, fix.sess.WorkspacePath, vars); err != nil {
+	if err := fix.wfMgr.Store.State.UpdateVars(ctx, run, fix.sess.WorkspacePath, vars); err != nil {
 		testutil.FailErr(t, "fix.wfMgr.Store.UpdateVars failed", err)
 	}
 	allow, reason, err := fix.mgr.Coordinator.Runtime.CoordinatorLoop().ShouldLoopWake(ctx, fix.sess.ID, anchor.LegFinished)

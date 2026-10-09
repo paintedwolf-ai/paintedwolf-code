@@ -93,7 +93,7 @@ func assertFanOutWorkers(t *testing.T, legs []api.Leg, wantProfile string, wantC
 // Expected worker profiles and counts come from the run's topology.
 func assertFanOutWorkersMatchTopology(t *testing.T, h *Harness, runID string, legs []api.Leg) {
 	t.Helper()
-	m, err := h.WorkflowMgr.ManifestForRunID(context.Background(), runID)
+	m, err := h.WorkflowMgr.Resolver.ForRunID(context.Background(), runID)
 	testutil.FailErr(t, "manifest for run "+runID, err)
 	workflowID := m.ID
 	spec, err := orchestration.LoadTopologyFromFile(extpacks.Bundled(config.PlatformFlows.Join("_topologies", m.Topology+".yaml")))
@@ -115,14 +115,14 @@ func deliverTopologyReport(t *testing.T, h *Harness, ctx context.Context, sess *
 	}
 	run, err := h.WorkflowMgr.Store.Runs.Get(ctx, runID)
 	testutil.FailErr(t, "load report phase", err)
-	manifest, err := h.WorkflowMgr.ManifestForRunID(ctx, runID)
+	manifest, err := h.WorkflowMgr.Resolver.ForRunID(ctx, runID)
 	testutil.FailErr(t, "load report manifest", err)
 	scope := api.CompletionReportScopePhase
 	if manifest.ReportEnabled() {
 		scope = api.CompletionReportScopeRun
 	}
 	messageID := uuid.NewString()
-	testutil.FailErr(t, "persist grounded completion", h.WorkflowMgr.Policy.Sessions.AppendMessages(ctx, sess.ID, api.Message{
+	testutil.FailErr(t, "persist grounded completion", h.WorkflowMgr.Transcript.Sessions.AppendMessages(ctx, sess.ID, api.Message{
 		ID: messageID, Role: api.MessageRoleAssistant, Kind: api.MessageKindCompletionReport,
 		Content: "Completed assessment.", CreatedAt: time.Now().UTC(), WorkflowRunID: runID,
 		Visibility: api.MessageVisibilityTranscript, Grounding: &api.CitationGrounding{Traced: true},
@@ -180,7 +180,7 @@ func satisfyFanoutPlannedAndAdvance(t *testing.T, h *Harness, ctx context.Contex
 	}
 	plans[run.CurrentPhase] = map[string]any{"legs": rawLegs}
 	vars["fanout_plans"] = plans
-	if err := h.WorkflowMgr.Store.UpdateVars(ctx, run, dir, vars); err != nil {
+	if err := h.WorkflowMgr.Store.State.UpdateVars(ctx, run, dir, vars); err != nil {
 		testutil.FailErr(t, "UpdateVars plan", err)
 	}
 	run, err = h.WorkflowMgr.Phases.Advance(ctx, runID)
@@ -290,7 +290,7 @@ func satisfyWorkerCycleAndAdvance(t *testing.T, h *Harness, ctx context.Context,
 	vars["topology_stages"] = map[string]any{
 		orchestration.TopologyBindStageFanOut: map[string]any{"complete": true},
 	}
-	if err := h.WorkflowMgr.Store.UpdateVars(ctx, run, dir, vars); err != nil {
+	if err := h.WorkflowMgr.Store.State.UpdateVars(ctx, run, dir, vars); err != nil {
 		testutil.FailErr(t, "UpdateVars execute", err)
 	}
 	if _, err := h.WorkflowMgr.Phases.TryAutoAdvance(ctx, runID); err != nil {
@@ -311,7 +311,7 @@ func completeQueuedFixtureWork(t *testing.T, h *Harness, ctx context.Context, pr
 		if claimed.WorkflowRunID != "" {
 			run, err := h.WorkflowMgr.Store.Runs.Get(ctx, claimed.WorkflowRunID)
 			testutil.FailErr(t, "load fixture review run", err)
-			manifest, err := h.WorkflowMgr.ManifestForRunID(ctx, run.ID)
+			manifest, err := h.WorkflowMgr.Resolver.ForRunID(ctx, run.ID)
 			testutil.FailErr(t, "load fixture review manifest", err)
 			assignment, err := h.WorkflowMgr.Coverage.CoverageAssignment(ctx, run, manifest, claimed.AgentType)
 			testutil.FailErr(t, "load fixture coverage assignment", err)

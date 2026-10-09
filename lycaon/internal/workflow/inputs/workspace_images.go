@@ -56,7 +56,7 @@ func workspaceUnsupported(ref, mime, reason string) error {
 	})
 }
 
-// workspaceImageReader resolves a path the way read does: attached roots,
+// WorkspaceImageReaderForBoundary resolves a path the way read does: attached roots,
 // profile read scope, the control-plane deny, and descriptor-relative opens
 // that cannot follow a symlink out of its root.
 func WorkspaceImageReaderForBoundary(boundary *sandbox.Boundary, tctx tools.ToolContext) WorkspaceImageReader {
