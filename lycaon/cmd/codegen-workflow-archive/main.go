@@ -12,6 +12,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path"
 	"path/filepath"
@@ -28,28 +29,35 @@ import (
 const sumsFile = "SHA256SUMS"
 
 func main() {
-	checkOnly := flag.Bool("check", false, "verify the archive matches the tag without writing")
-	flag.Parse()
-	args := flag.Args()
-	if len(args) != 3 {
-		fmt.Fprintln(os.Stderr, "usage: codegen-workflow-archive [--check] <pack> <workflow> <tag>")
-		fmt.Fprintln(os.Stderr, "example: codegen-workflow-archive painted-wolf/security-survey security-survey v1.0.0")
-		os.Exit(2)
-	}
 	moduleRoot := configlayout.FindModuleRoot()
 	if moduleRoot == "" {
 		fmt.Fprintln(os.Stderr, "codegen-workflow-archive: run inside a checkout")
 		os.Exit(1)
 	}
-	repoRoot := filepath.Dir(moduleRoot)
-	release := gitRelease{ctx: context.Background(), repoRoot: repoRoot, tag: strings.TrimSpace(args[2])}
+	os.Exit(run(context.Background(), filepath.Dir(moduleRoot), os.Args[1:], os.Stdout, os.Stderr))
+}
+
+// run seals or checks one workflow version of the checkout at repoRoot and
+// returns the process exit code.
+func run(ctx context.Context, repoRoot string, argv []string, stdout, stderr io.Writer) int {
+	flags := flag.NewFlagSet("codegen-workflow-archive", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	checkOnly := flags.Bool("check", false, "verify the archive matches the tag without writing")
+	if err := flags.Parse(argv); err != nil || flags.NArg() != 3 {
+		fmt.Fprintln(stderr, "usage: codegen-workflow-archive [--check] <pack> <workflow> <tag>")
+		fmt.Fprintln(stderr, "example: codegen-workflow-archive painted-wolf/security-survey security-survey v1.0.0")
+		return 2
+	}
+	args := flags.Args()
+	release := gitRelease{ctx: ctx, repoRoot: repoRoot, tag: strings.TrimSpace(args[2])}
 	packRel := path.Join("lycaon", "config", "packs", strings.Trim(args[0], "/"))
 	report, err := seal(release, packRel, strings.Trim(args[1], "/"), filepath.Join(repoRoot, filepath.FromSlash(packRel)), *checkOnly)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "codegen-workflow-archive: %v\n", err)
-		os.Exit(1)
+		fmt.Fprintf(stderr, "codegen-workflow-archive: %v\n", err)
+		return 1
 	}
-	fmt.Println(report)
+	fmt.Fprintln(stdout, report)
+	return 0
 }
 
 // releaseSource reads one release's tree.

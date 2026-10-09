@@ -118,12 +118,16 @@ func (b boardWiring) wireWorkflows() error {
 	}
 	if err := delegationWiring(b).registerRecovery(bootrecovery.Entry{
 		Name: "workflow-verdicts", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseServe,
-		Run: func(ctx context.Context) error {
-			if err := b.workflowMgr.RecoverVerdictOperations(ctx); err != nil {
-				return err
-			}
-			return workflow.ReviewRepairs{RunManager: b.workflowMgr}.Recover(ctx)
-		},
+		Run: b.workflowMgr.RecoverVerdictOperations,
+	}); err != nil {
+		return err
+	}
+	// Repair accounting replays rejections after the last accepted verdict, so
+	// interrupted verdict commits settle first.
+	if err := delegationWiring(b).registerRecovery(bootrecovery.Entry{
+		Name: "workflow-review-repairs", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseServe,
+		After: []string{"workflow-verdicts"},
+		Run:   workflow.ReviewRepairs{RunManager: b.workflowMgr}.Recover,
 	}); err != nil {
 		return err
 	}

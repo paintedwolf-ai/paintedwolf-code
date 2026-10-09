@@ -10,7 +10,9 @@ import (
 	"sort"
 	"testing"
 
+	gittestsetup "github.com/lycaon/lycaon/internal/testsetup/git"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/gittest"
 )
 
 // treeRelease serves a release from an in-memory tree of repo-relative paths.
@@ -92,6 +94,48 @@ func TestSealReproducesTheCommittedArchive(t *testing.T) {
 	testutil.FailErr(t, "alter sealed guidance", os.WriteFile(filepath.Join(sealed, "guidance", "coordinator-security-plan.md"), []byte("edited\n"), 0o600))
 	if _, err := seal(committedRelease(t), securityPack, "security-survey", packDir, true); err == nil {
 		t.Fatal("check accepted an archive that differs from the release")
+	}
+}
+
+func TestMain(m *testing.M) {
+	gittestsetup.Enable()
+	os.Exit(m.Run())
+}
+
+// The command reads a tagged release through git and seals it into the
+// checkout; --check then accepts the result, and a tag the repository lacks
+// fails without writing.
+func TestRunSealsATaggedReleaseFromGit(t *testing.T) {
+	repo := t.TempDir()
+	for rel, data := range committedRelease(t) {
+		target := filepath.Join(repo, filepath.FromSlash(rel))
+		testutil.FailErr(t, "mkdir release", os.MkdirAll(filepath.Dir(target), 0o755))
+		testutil.FailErr(t, "write release", os.WriteFile(target, data, 0o600))
+	}
+	gittest.InitCommit(t, repo, "release")
+	gittest.Run(t, repo, "tag", "v1.0.0")
+	args := []string{"painted-wolf/security-survey", "security-survey", "v1.0.0"}
+
+	var stdout, stderr bytes.Buffer
+	if code := run(t.Context(), repo, args, &stdout, &stderr); code != 0 {
+		t.Fatalf("seal exit %d: %s", code, stderr.String())
+	}
+	sealed, err := os.ReadFile(filepath.Join(repo, filepath.FromSlash(securityPack), "archive", "security-survey", "1.0.0", sumsFile))
+	testutil.FailErr(t, "read sealed ledger", err)
+	committed, err := os.ReadFile(filepath.Join(securityArchive, sumsFile))
+	testutil.FailErr(t, "read committed ledger", err)
+	if !bytes.Equal(sealed, committed) {
+		t.Fatalf("sealed ledger from git differs from the committed archive:\n%s", sealed)
+	}
+	if code := run(t.Context(), repo, append([]string{"--check"}, args...), &stdout, &stderr); code != 0 {
+		t.Fatalf("check exit %d: %s", code, stderr.String())
+	}
+	stderr.Reset()
+	if code := run(t.Context(), repo, []string{"painted-wolf/security-survey", "security-survey", "v9.9.9"}, &stdout, &stderr); code != 1 || stderr.Len() == 0 {
+		t.Fatalf("unknown tag exit %d: %s", code, stderr.String())
+	}
+	if code := run(t.Context(), repo, []string{"--check"}, &stdout, &stderr); code != 2 {
+		t.Fatalf("missing arguments exit %d", code)
 	}
 }
 
