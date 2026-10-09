@@ -10,13 +10,43 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
+	"github.com/lycaon/lycaon/internal/api/sessionadmin"
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/project"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Handler) HandleCreateBlueprint(w http.ResponseWriter, r *http.Request) {
+// blueprintRoutes serve a project's blueprints: their edits, approval, and
+// launch into a workflow run.
+type blueprintRoutes struct {
+	blueprintDeps
+	responses *httpio.Responder
+}
+
+// blueprintDeps are the blueprint routes' dependencies, a subset of Deps.
+type blueprintDeps struct {
+	Blueprints   *blueprint.Manager
+	Projects     project.Registry
+	Catalog      workflow.ManifestResolver
+	Workflows    *workflow.RunManager
+	SessionAdmin *sessionadmin.Handler
+}
+
+func newBlueprintRoutes(responses *httpio.Responder, deps Deps) blueprintRoutes {
+	return blueprintRoutes{
+		blueprintDeps: blueprintDeps{
+			Blueprints:   deps.Blueprints,
+			Projects:     deps.Projects,
+			Catalog:      deps.Catalog,
+			Workflows:    deps.Workflows,
+			SessionAdmin: deps.SessionAdmin,
+		},
+		responses: responses,
+	}
+}
+
+func (s *blueprintRoutes) HandleCreateBlueprint(w http.ResponseWriter, r *http.Request) {
 	var req wire.CreateBlueprintRequest
 	if err := httpio.DecodeJSON(w, r, &req); err != nil {
 		s.responses.DecodeError(w, r, err)
@@ -50,7 +80,7 @@ func (s *Handler) HandleCreateBlueprint(w http.ResponseWriter, r *http.Request) 
 	httpio.WriteJSON(w, http.StatusCreated, out)
 }
 
-func (s *Handler) HandleListBlueprints(w http.ResponseWriter, r *http.Request) {
+func (s *blueprintRoutes) HandleListBlueprints(w http.ResponseWriter, r *http.Request) {
 	projectID := chi.URLParam(r, "id")
 	if _, ok := requestscope.ProjectByID(s.Projects, s.responses, w, r, projectID); !ok {
 		return
@@ -69,7 +99,7 @@ func (s *Handler) HandleListBlueprints(w http.ResponseWriter, r *http.Request) {
 }
 
 // writeBlueprintAtPath answers the list filtered to one convention path.
-func (s *Handler) writeBlueprintAtPath(w http.ResponseWriter, r *http.Request, projectID string, values []string) {
+func (s *blueprintRoutes) writeBlueprintAtPath(w http.ResponseWriter, r *http.Request, projectID string, values []string) {
 	if len(values) != 1 || strings.TrimSpace(values[0]) == "" {
 		s.responses.InvalidQueryParam(w, "path", "must be one project-relative blueprint path")
 		return
@@ -98,7 +128,7 @@ func (s *Handler) writeBlueprintAtPath(w http.ResponseWriter, r *http.Request, p
 
 // blueprintAddress resolves {id}/{blueprint_id} to the blueprint's project and
 // convention path, writing the lookup error when either names nothing.
-func (s *Handler) blueprintAddress(w http.ResponseWriter, r *http.Request) (string, string, bool) {
+func (s *blueprintRoutes) blueprintAddress(w http.ResponseWriter, r *http.Request) (string, string, bool) {
 	projectID := chi.URLParam(r, "id")
 	if _, ok := requestscope.ProjectByID(s.Projects, s.responses, w, r, projectID); !ok {
 		return "", "", false
@@ -115,7 +145,7 @@ func (s *Handler) blueprintAddress(w http.ResponseWriter, r *http.Request) (stri
 	return projectID, path, true
 }
 
-func (s *Handler) HandleGetBlueprint(w http.ResponseWriter, r *http.Request) {
+func (s *blueprintRoutes) HandleGetBlueprint(w http.ResponseWriter, r *http.Request) {
 	projectID, path, ok := s.blueprintAddress(w, r)
 	if !ok {
 		return
@@ -135,7 +165,7 @@ func (s *Handler) HandleGetBlueprint(w http.ResponseWriter, r *http.Request) {
 	httpio.WriteJSON(w, http.StatusOK, out)
 }
 
-func (s *Handler) HandleUpdateBlueprint(w http.ResponseWriter, r *http.Request) {
+func (s *blueprintRoutes) HandleUpdateBlueprint(w http.ResponseWriter, r *http.Request) {
 	projectID, path, ok := s.blueprintAddress(w, r)
 	if !ok {
 		return
@@ -184,7 +214,7 @@ func (s *Handler) HandleUpdateBlueprint(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
-func (s *Handler) HandleDeleteBlueprint(w http.ResponseWriter, r *http.Request) {
+func (s *blueprintRoutes) HandleDeleteBlueprint(w http.ResponseWriter, r *http.Request) {
 	projectID, path, ok := s.blueprintAddress(w, r)
 	if !ok {
 		return
@@ -204,7 +234,7 @@ func (s *Handler) HandleDeleteBlueprint(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Handler) attachCompatibleWorkflows(ctx context.Context, projectID string, rows []wire.BlueprintSummary) {
+func (s *blueprintRoutes) attachCompatibleWorkflows(ctx context.Context, projectID string, rows []wire.BlueprintSummary) {
 	if len(rows) == 0 {
 		return
 	}
@@ -221,7 +251,7 @@ func (s *Handler) attachCompatibleWorkflows(ctx context.Context, projectID strin
 	}
 }
 
-func (s *Handler) compatibleWorkflowsFor(ctx context.Context, projectID, path string) []string {
+func (s *blueprintRoutes) compatibleWorkflowsFor(ctx context.Context, projectID, path string) []string {
 	projectDir := ""
 	if p, err := s.Projects.Get(ctx, projectID); err == nil {
 		projectDir = project.PrimaryRootPath(p)
@@ -233,7 +263,7 @@ func (s *Handler) compatibleWorkflowsFor(ctx context.Context, projectID, path st
 	return workflowblueprints.CompatibleWorkflowIDs(path, manifests)
 }
 
-func (s *Handler) blueprintCatalogManifests(ctx context.Context, projectDir string) ([]workflowdef.Manifest, error) {
+func (s *blueprintRoutes) blueprintCatalogManifests(ctx context.Context, projectDir string) ([]workflowdef.Manifest, error) {
 	reg, _, err := s.Catalog.Resolve(ctx, projectDir, "")
 	if err != nil {
 		return nil, err
