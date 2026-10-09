@@ -164,4 +164,10 @@ func TestHarnessResponsePreservesProviderStreamFailure(t *testing.T) {
 	if _, open := <-stream; open {
 		t.Fatal("failed stream stayed open")
 	}
+	if _, pending := provider.Pending(t.Context(), "", 0); pending {
+		t.Fatal("failed stream retained its pending request")
+	}
+	if err := provider.RespondWithChunks(pending.ID, "duplicate", nil, nil); err == nil {
+		t.Fatal("settled failure accepted a second response")
+	}
 }
