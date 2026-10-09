@@ -3,6 +3,8 @@ package session_test
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolexecution"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/session"
@@ -39,7 +41,7 @@ func TestBeforeWorkerWriteRejectsReadScopedMutation(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected read-scoped mutation reject")
 	}
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) {
 		t.Fatalf("expected ToolReject: %T %v", err, err)
 	}
@@ -110,13 +112,13 @@ func TestWorkerReadToolsIgnoreSuggestedPaths(t *testing.T) {
 		})
 		testutil.FailErr(t, "register "+name, err)
 	}
-	executor := tools.NewDefaultToolExecutor(nil, registry, "implement")
+	executor := toolexecution.NewExecutor(nil, registry, "implement")
 	for _, call := range []struct {
 		name string
 		args map[string]any
 	}{
 		{name: "list_dir", args: map[string]any{"path": "."}},
-		{name: "read", args: map[string]any{"path": "lycaon/internal/tools/executor_impl.go"}},
+		{name: "read", args: map[string]any{"path": "lycaon/internal/toolexecution/executor_impl.go"}},
 	} {
 		out, invokeErr := executor.Invoke(ctx, call.name, call.args, tctx)
 		testutil.FailErr(t, "invoke "+call.name, invokeErr)

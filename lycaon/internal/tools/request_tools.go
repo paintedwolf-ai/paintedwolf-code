@@ -3,6 +3,8 @@ package tools
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"slices"
 	"sort"
 	"strings"
@@ -63,17 +65,17 @@ func (t requestTools) run(ctx context.Context, args map[string]any, tctx ToolCon
 	need, _ := args["need"].(string)
 	need = strings.TrimSpace(need)
 	if need == "" {
-		return "", RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": "need is required"})
+		return "", toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": "need is required"})
 	}
 	need, cursor, err := turnload.ParseDiscoveryNeed(need)
 	if err != nil {
-		return "", RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": err.Error()})
+		return "", toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": err.Error()})
 	}
 	browsing := cursor != ""
 	started := time.Now()
 	profileID := strings.TrimSpace(tctx.Agent)
 	if profileID == "" {
-		profileID = DefaultToolProfileID
+		profileID = toolprofiles.DefaultToolProfileID
 	}
 	plan := tctx.TurnToolPlan
 	constrained := strings.TrimSpace(tctx.TurnSurfaceID) != "" || plan.Compiled()
@@ -106,7 +108,7 @@ func (t requestTools) run(ctx context.Context, args map[string]any, tctx ToolCon
 		for _, meta := range requestable {
 			available = append(available, meta.Name)
 		}
-		return "", formatRequestToolsReject(t.deps, profileID, need, available)
+		return "", FormatRequestToolsReject(t.deps, profileID, need, available)
 	}
 	if browsing || outcome.Failure != "" {
 		status := "ranking_unavailable"
@@ -196,13 +198,13 @@ func (t requestTools) activationResult(ctx context.Context, tctx ToolContext, pr
 	return result
 }
 
-func formatRequestToolsReject(deps RequestToolsDeps, profileID, need string, available []string) error {
+func FormatRequestToolsReject(deps RequestToolsDeps, profileID, need string, available []string) error {
 	sort.Strings(available)
 	var fmtr *guidance.StaticRejectFormatter
 	if deps.RejectFmt != nil {
 		fmtr = deps.RejectFmt()
 	}
-	return FormatDecisionReject("TOOL_REQUEST_UNMATCHED", map[string]any{
+	return toolrejection.FormatDecisionReject("TOOL_REQUEST_UNMATCHED", map[string]any{
 		"need":      need,
 		"available": available,
 		"profile":   profileID,

@@ -2,6 +2,7 @@ package native
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -19,13 +20,13 @@ func writeEditorConfig(t *testing.T, dir, body string) {
 
 func mismatchDetails(t *testing.T, out *tools.ToolInvocationOut) map[string]any {
 	t.Helper()
-	if !out.Facts.HasCode(tools.EditorConfigMismatchCode) {
-		t.Fatalf("facts = %+v, want %s", out.Facts, tools.EditorConfigMismatchCode)
+	if !out.Facts.HasCode(toolrejection.EditorConfigMismatchCode) {
+		t.Fatalf("facts = %+v, want %s", out.Facts, toolrejection.EditorConfigMismatchCode)
 	}
 	if !out.Facts.Succeeded() {
 		t.Fatalf("a mismatch must not change the write outcome: %+v", out.Facts)
 	}
-	return out.Facts.FeedbackFor(tools.EditorConfigMismatchCode).Details
+	return out.Facts.FeedbackFor(toolrejection.EditorConfigMismatchCode).Details
 }
 
 func TestWriteReportsDeclaredEditorConfigMismatchWithoutRewriting(t *testing.T) {
@@ -65,7 +66,7 @@ func TestEditReportsOnlyLinesItWrote(t *testing.T) {
 	clean.Out = &tools.ToolInvocationOut{}
 	_, err := edit.Run(context.Background(), map[string]any{"path": "a.txt", "old_string": "keep", "new_string": "kept"}, clean)
 	testutil.FailErr(t, "clean edit", err)
-	if clean.Out.Facts.HasCode(tools.EditorConfigMismatchCode) {
+	if clean.Out.Facts.HasCode(toolrejection.EditorConfigMismatchCode) {
 		t.Fatalf("trailing whitespace the edit left alone was attributed to it: %+v", clean.Out.Facts)
 	}
 
@@ -86,7 +87,7 @@ func TestWriteWithoutEditorConfigReportsNothing(t *testing.T) {
 		"path": "notes.md", "content": "line with hard break  \n\t\n",
 	}, tctx)
 	testutil.FailErr(t, "write", err)
-	if tctx.Out.Facts.HasCode(tools.EditorConfigMismatchCode) {
+	if tctx.Out.Facts.HasCode(toolrejection.EditorConfigMismatchCode) {
 		t.Fatalf("no rule is declared, so nothing may be reported: %+v", tctx.Out.Facts)
 	}
 }

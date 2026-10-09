@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 	"time"
 
@@ -77,7 +78,7 @@ func secretCapabilityFailure(err error) error {
 	case errors.Is(err, secretcap.ErrInvalidGenerate):
 		code, retryable = "SECRET_GENERATE_INVALID", true
 	}
-	reject := &tools.ToolReject{Code: code, Retryable: retryable}
+	reject := &toolrejection.ToolReject{Code: code, Retryable: retryable}
 	var invalid *secretcap.ValidationError
 	if code == "SECRET_GENERATE_INVALID" && errors.As(err, &invalid) {
 		reject.Data = map[string]any{"field": invalid.Field, "reason": invalid.Reason}
@@ -114,7 +115,7 @@ func secretGenerateInteger(args map[string]any, field string, minimum, maximum, 
 }
 
 func invalidSecretGenerateInteger(field string, minimum, maximum int) error {
-	return &tools.ToolReject{Code: "SECRET_GENERATE_INVALID", Retryable: true, Data: map[string]any{"field": field, "reason": "must be an integer within the declared bounds", "min": minimum, "max": maximum}}
+	return &toolrejection.ToolReject{Code: "SECRET_GENERATE_INVALID", Retryable: true, Data: map[string]any{"field": field, "reason": "must be an integer within the declared bounds", "min": minimum, "max": maximum}}
 }
 
 func secretGenerateString(args map[string]any, field string, optional bool) (string, error) {
@@ -124,7 +125,7 @@ func secretGenerateString(args map[string]any, field string, optional bool) (str
 	}
 	value, ok := raw.(string)
 	if !ok || strings.TrimSpace(value) == "" {
-		return "", &tools.ToolReject{Code: "SECRET_GENERATE_INVALID", Retryable: true, Data: map[string]any{"field": field, "reason": "must be a nonempty string when supplied"}}
+		return "", &toolrejection.ToolReject{Code: "SECRET_GENERATE_INVALID", Retryable: true, Data: map[string]any{"field": field, "reason": "must be a nonempty string when supplied"}}
 	}
 	return value, nil
 }

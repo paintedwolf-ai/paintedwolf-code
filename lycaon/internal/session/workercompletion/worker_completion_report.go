@@ -3,6 +3,7 @@ package workercompletion
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"sort"
 	"strconv"
 	"strings"
@@ -118,7 +119,7 @@ func ReportFromCompleteLegArgs(args map[string]any) (WorkerCompletionReport, boo
 func CompleteLegDecoder(_ context.Context, args map[string]any, _ tools.ToolContext) (workertools.CompleteLegRecord, error) {
 	report, ok := ReportFromCompleteLegArgs(args)
 	if !ok {
-		return workertools.CompleteLegRecord{}, &tools.ToolReject{Code: "COMPLETE_LEG_STATUS_REQUIRED", Data: map[string]any{"tool": workertools.CompleteLegTool}}
+		return workertools.CompleteLegRecord{}, &toolrejection.ToolReject{Code: "COMPLETE_LEG_STATUS_REQUIRED", Data: map[string]any{"tool": workertools.CompleteLegTool}}
 	}
 	return workertools.CompleteLegRecord{LegStatus: report.LegStatus, Findings: len(report.Findings)}, nil
 }

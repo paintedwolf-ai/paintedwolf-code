@@ -3,12 +3,12 @@ package survey
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/summarize"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
@@ -71,13 +71,13 @@ func (g *summarizeGatherer) gatherRepo(ctx context.Context, req summarize.Reques
 	for _, target := range targets {
 		resolved, rerr := projectpaths.ResolveRead(ctx, g.boundary, g.tctx, target)
 		if rerr != nil {
-			var reject *tools.ToolReject
+			var reject *toolrejection.ToolReject
 			if errors.As(rerr, &reject) {
 				return repoGather{}, rerr
 			}
 			var scope *sandbox.ScopeError
 			if errors.As(rerr, &scope) || errors.Is(rerr, sandbox.ErrPathEscape) {
-				return repoGather{}, &tools.ToolReject{Code: "SURVEY_PATH_ESCAPE", Data: map[string]any{"path": target, "reason": rerr.Error()}}
+				return repoGather{}, &toolrejection.ToolReject{Code: "SURVEY_PATH_ESCAPE", Data: map[string]any{"path": target, "reason": rerr.Error()}}
 			}
 			return repoGather{}, rerr
 		}
@@ -109,7 +109,7 @@ func (g *summarizeGatherer) gatherRepo(ctx context.Context, req summarize.Reques
 		out.pathIsFile = false
 	}
 	if len(missing) > 0 {
-		return repoGather{}, &tools.ToolReject{
+		return repoGather{}, &toolrejection.ToolReject{
 			Code: "SUMMARIZE_PATHS_MISSING",
 			Data: map[string]any{"missing_paths": missing},
 		}

@@ -3,6 +3,8 @@ package contract
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolexecution"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
@@ -102,7 +104,7 @@ func TestTerminalOpenRejectsShellStringAndPipeline(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected pipeline reject")
 	}
-	var rej *tools.ToolReject
+	var rej *toolrejection.ToolReject
 	if !errors.As(err, &rej) || rej.Code != "TOOL_ARGS_INVALID" {
 		t.Fatalf("err = %v, want TOOL_ARGS_INVALID for pipeline", err)
 	}
@@ -113,7 +115,7 @@ func TestTerminalOpenNotArgvRejectObservation(t *testing.T) {
 	reg := tools.NewDefaultRegistry()
 	contractcheck.FailErr(t, "register", native.RegisterTerminalSessionTools(reg, bg))
 
-	exec := tools.NewDefaultToolExecutor(nil, reg, "implement")
+	exec := toolexecution.NewExecutor(nil, reg, "implement")
 
 	_, err := exec.Invoke(context.Background(), "terminal_open", map[string]any{"command": "go test; rm -rf /"}, tools.ToolContext{
 		SessionID:    "sess",
@@ -125,7 +127,7 @@ func TestTerminalOpenNotArgvRejectObservation(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected argv deny")
 	}
-	tr := tools.AsToolReject(err)
+	tr := toolrejection.AsToolReject(err)
 	if tr == nil || tr.Code != "COMMAND_NOT_ARGV" {
 		t.Fatalf("want COMMAND_NOT_ARGV ToolReject, got %v", err)
 	}

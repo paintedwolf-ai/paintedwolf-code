@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -79,7 +81,7 @@ func TestRedactionReusesReviewedUploadBytes(t *testing.T) {
 		"headers":            []any{map[string]any{"name": "X-Subscription-Token", "value": plantedBraveKey}},
 		"form":               []any{map[string]any{"name": "upload", "path": "upload.txt"}},
 		"capability_request": loopbackCapability(t, server.URL),
-	}, tools.ToolContext{Agent: tools.DefaultToolProfileID, Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}}, ActiveRootID: "root"})
+	}, tools.ToolContext{Agent: toolprofiles.DefaultToolProfileID, Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}}, ActiveRootID: "root"})
 	testutil.FailErr(t, "send reviewed upload", err)
 	if received != "reviewed bytes" {
 		t.Fatal("redaction reread an upload after review")
@@ -182,7 +184,7 @@ func TestManagedSecretPolicySurvivesHTTPEncoding(t *testing.T) {
 				_, runErr := registry.Run(t.Context(), "http_request", resolved.Arguments, tools.ToolContext{CanonicalArgs: args, Secrets: resolved})
 				resolved.Finish(t.Context())
 				if decision == secretmatch.Withhold {
-					if reject := tools.AsToolReject(runErr); reject == nil || reject.Code != tools.OutboundSecretDeniedCode {
+					if reject := toolrejection.AsToolReject(runErr); reject == nil || reject.Code != toolrejection.OutboundSecretDeniedCode {
 						t.Fatalf("unexpected withhold result: %v", runErr)
 					}
 				} else {

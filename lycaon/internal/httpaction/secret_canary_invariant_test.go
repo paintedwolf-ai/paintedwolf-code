@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolexecution"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -181,14 +182,14 @@ func TestSecretCanaryNeverEchoedByHTTPRequestResult(t *testing.T) {
 	authority := settings.NewRuleApprovalGate(store, settings.NoSources())
 	review := &canaryReview{t: t, authority: authority}
 	registry := tools.NewDefaultRegistry()
-	executor := tools.NewDefaultToolExecutor(nil, registry, "implement")
-	executor.SetCheckpointManager(review, authority)
+	executor := toolexecution.NewExecutor(nil, registry, "implement")
+	executor.Approvals.SetCheckpointManager(review, authority)
 	t.Cleanup(func() { confine.SetEgressResolver(nil) })
-	executor.SetSecretResolver(service)
+	executor.Secrets.SetSecretResolver(service)
 	matcher := testSecretMatcher(t)
-	executor.SetSecretMatcher(matcher)
-	executor.SetLoopbackConnectGate(review)
-	executor.SetSessionLoopbackGrant(review.SessionLoopbackGrant)
+	executor.Secrets.SetSecretMatcher(matcher)
+	executor.Capabilities.SetLoopbackConnectGate(review)
+	executor.Boundary.SetSessionLoopbackGrant(review.SessionLoopbackGrant)
 	testutil.FailErr(t, "register http_request", Register(registry, Deps{
 		Boundary: testBoundary(), SecretMatcher: matcher, SecretAsk: executor.AskSecretScreen, Secrets: service,
 	}))

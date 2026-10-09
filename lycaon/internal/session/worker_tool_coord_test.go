@@ -1,6 +1,8 @@
 package session
 
 import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+
 	"context"
 	"testing"
 
@@ -15,7 +17,7 @@ func TestBeforeWorkerWriteRecordsInvestigateSurface(t *testing.T) {
 
 	tctx := tools.ToolContext{
 		WorkerJobID:      "job-1",
-		TurnSurfaceID:    tools.SurfaceImplementInvestigate,
+		TurnSurfaceID:    toolcontract.SurfaceImplementInvestigate,
 		HandoffSessionID: "parent",
 		HandoffAgentID:   "job-1",
 	}

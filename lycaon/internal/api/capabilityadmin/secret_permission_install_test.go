@@ -16,7 +16,7 @@ type secretInstallRecorder struct {
 }
 
 func (r *secretInstallRecorder) ApplyGrant(grant hitl.ApprovalGrant) (bool, error) {
-	created, err := r.ApprovalGate.ApplyGrant(grant)
+	created, err := r.Authority.ApprovalGate.ApplyGrant(grant)
 	if err == nil && created && grant.Predicate.Category == hitl.ApprovalGrantCategorySecret {
 		r.installed = true
 	}

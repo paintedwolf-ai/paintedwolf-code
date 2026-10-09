@@ -2,6 +2,7 @@ package contract
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"testing"
@@ -66,7 +67,7 @@ func TestControlPlaneFloorGateAndResolverAgree(t *testing.T) {
 			} else {
 				_, resolveErr = projectpaths.ResolveRead(context.Background(), nil, tctx, tc.path)
 			}
-			var reject *tools.ToolReject
+			var reject *toolrejection.ToolReject
 			resolverCode := ""
 			if asToolReject(resolveErr, &reject) {
 				resolverCode = reject.Code

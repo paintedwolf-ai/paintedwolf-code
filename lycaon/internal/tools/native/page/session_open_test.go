@@ -3,6 +3,7 @@ package page
 import (
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"testing"
@@ -11,8 +12,8 @@ import (
 	"github.com/lycaon/lycaon/internal/browser/pagesession"
 	"github.com/lycaon/lycaon/internal/browserengine/browsertest"
 	"github.com/lycaon/lycaon/internal/captureprojection"
-	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 )
@@ -66,7 +67,7 @@ func TestOpenHandlerIdempotentReopen(t *testing.T) {
 
 	// A distinct target on a registry capped at 1 is refused with PAGE_CAP_REACHED.
 	_, err = handler(t.Context(), map[string]any{"project_dir": "other"}, tctx)
-	var rejection *tools.ToolReject
+	var rejection *toolrejection.ToolReject
 	if !errors.As(err, &rejection) || rejection.Code != "PAGE_CAP_REACHED" {
 		t.Fatalf("expected PAGE_CAP_REACHED for distinct target, got: %v", err)
 	}

@@ -2,11 +2,11 @@ package mcp
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/safecmd"
 )
 
@@ -48,7 +48,7 @@ func TestCallToolBridgesDeclaredCode(t *testing.T) {
 		MCPProviderEntry: MCPProviderEntry{ID: "fixture", Command: bin, Enabled: true},
 	}}
 	_, err = reg.CallTool(context.Background(), CallScope{}, "fixture", "fail_coded", nil)
-	tr := tools.AsToolReject(err)
+	tr := toolrejection.AsToolReject(err)
 	want := MCPServerCodePrefix + "FIXTURE_MCP_DENIED"
 	if tr == nil || tr.Code != want {
 		t.Fatalf("err = %v want ToolReject %s", err, want)
@@ -68,7 +68,7 @@ func TestCallToolGenericCodeWhenAbsent(t *testing.T) {
 		MCPProviderEntry: MCPProviderEntry{ID: "fixture", Command: bin, Enabled: true},
 	}}
 	_, err = reg.CallTool(context.Background(), CallScope{}, "fixture", "fail_plain", nil)
-	tr := tools.AsToolReject(err)
+	tr := toolrejection.AsToolReject(err)
 	if tr == nil || tr.Code != GenericMCPRejectCode {
 		t.Fatalf("err = %v want ToolReject %s", err, GenericMCPRejectCode)
 	}

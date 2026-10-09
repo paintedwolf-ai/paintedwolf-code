@@ -1,6 +1,8 @@
 package promptloop_test
 
 import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+
 	"context"
 	"sort"
 	"strings"
@@ -97,7 +99,7 @@ func TestLoopRunsConcurrentTools(t *testing.T) {
 }
 
 func TestLoopCoordinatorReadsGetHandlesAcrossSurfaces(t *testing.T) {
-	for _, surface := range []string{tools.SurfaceImplementInvestigate, "decision_adjudicate", "recon_reconcile"} {
+	for _, surface := range []string{toolcontract.SurfaceImplementInvestigate, "decision_adjudicate", "recon_reconcile"} {
 		t.Run(surface, func(t *testing.T) {
 			reg := tools.NewStubRegistry()
 			_ = reg.Register("read", func(_ context.Context, args map[string]any, _ tools.ToolContext) (string, error) {
@@ -390,7 +392,7 @@ func TestLoopPublishesClassifiedResultBeforeEvidence(t *testing.T) {
 		History:    userHistory("review"),
 		UserPrompt: "review",
 		ProfileID:  "coordinator",
-		ToolCtx:    tools.ToolContext{TurnSurfaceID: tools.SurfaceImplementInvestigate},
+		ToolCtx:    tools.ToolContext{TurnSurfaceID: toolcontract.SurfaceImplementInvestigate},
 	})
 	testutil.FailErr(t, "loop.Run", err)
 	if len(order) < 2 || order[0] != "append" || order[1] != "evidence" {

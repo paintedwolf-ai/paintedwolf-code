@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -212,7 +213,7 @@ func runCommandForeground(
 		sourceRevision, sourceRootDigest = sourceledger.VerificationState(ctx, tctx.SourceLedger, tools.HostWriteRoot(tctx))
 	}
 	if err := tctx.Secrets.HandOff(ctx, nil); err != nil {
-		return commandRunOutcome{}, tools.HeldHandOffReject(toolName, err)
+		return commandRunOutcome{}, toolrejection.HeldHandOffReject(toolName, err)
 	}
 	index := watchIndex(tctx, confinement)
 	handle, err := registry.StartPipeline(ctx, bgprocess.PipelineSpec{
@@ -448,7 +449,7 @@ func commandFailureApproachKey(args map[string]any) string {
 
 // rejectLoop blocks a command/verify invocation that has already failed with
 // the same approach 3 or more times in a row.
-func (ft *CommandFailureTracker) rejectLoop(sessionID, approach, command string) *tools.ToolReject {
+func (ft *CommandFailureTracker) rejectLoop(sessionID, approach, command string) *toolrejection.ToolReject {
 	if ft == nil || approach == "" {
 		return nil
 	}
@@ -461,7 +462,7 @@ func (ft *CommandFailureTracker) rejectLoop(sessionID, approach, command string)
 	if st.Count < 3 {
 		return nil
 	}
-	return &tools.ToolReject{
+	return &toolrejection.ToolReject{
 		Code: "COMMAND_FAILURE_LOOP",
 		Data: map[string]any{
 			"command": command,
@@ -490,7 +491,7 @@ func (ft *CommandFailureTracker) record(sessionID, approach string, ok bool) {
 }
 
 // rejectPwdEnvMismatch rejects conflicting working-directory inputs.
-func rejectPwdEnvMismatch(args map[string]any, canonicalCommand, cwd string) *tools.ToolReject {
+func rejectPwdEnvMismatch(args map[string]any, canonicalCommand, cwd string) *toolrejection.ToolReject {
 	env, ok := args["env"].(map[string]any)
 	if !ok {
 		return nil
@@ -510,7 +511,7 @@ func rejectPwdEnvMismatch(args map[string]any, canonicalCommand, cwd string) *to
 	if pwd == filepath.Clean(cwd) {
 		return nil
 	}
-	return &tools.ToolReject{
+	return &toolrejection.ToolReject{
 		Code: "COMMAND_PWD_NOT_CWD",
 		Data: map[string]any{
 			"command": canonicalCommand,

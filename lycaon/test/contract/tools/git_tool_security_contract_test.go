@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
@@ -31,7 +32,7 @@ func TestGitShowPathEscapeSecurity(t *testing.T) {
 		ActiveRootID: "r1",
 		Agent:        "implement",
 	})
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "SURVEY_PATH_ESCAPE" {
 		t.Fatalf("err = %v want SURVEY_PATH_ESCAPE", err)
 	}
@@ -51,7 +52,7 @@ func TestGitRestoreOutsideScopeSecurity(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected restore path denial")
 	}
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "GIT_INTERNALS_WRITE_DENIED" {
 		t.Fatalf("err = %v want GIT_INTERNALS_WRITE_DENIED", err)
 	}
@@ -72,7 +73,7 @@ func TestGitCommitOutsideScopeSecurity(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected commit path denial")
 	}
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "GIT_INTERNALS_WRITE_DENIED" {
 		t.Fatalf("err = %v want GIT_INTERNALS_WRITE_DENIED", err)
 	}

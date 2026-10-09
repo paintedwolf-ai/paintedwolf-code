@@ -3,6 +3,7 @@ package projectpaths_test
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"testing"
@@ -105,7 +106,7 @@ func TestResolveReadRejectsRelativeWorkerBranchEscapeWithoutBoundary(t *testing.
 		BranchWorkspace:  testutil.CompleteBranchWorkspace{},
 	}
 	_, err := projectpaths.ResolveRead(t.Context(), nil, tctx, "../outside")
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "SURVEY_PATH_ESCAPE" {
 		t.Fatalf("relative worker escape = %v, want SURVEY_PATH_ESCAPE", err)
 	}
@@ -151,7 +152,7 @@ func TestResolveWriteWorkerWithoutBranchRejected(t *testing.T) {
 	}
 
 	_, err := projectpaths.ResolveWrite(context.Background(), nil, tctx, "pkg/x.go")
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "WORKER_WRITE_WITHOUT_BRANCH" {
 		t.Fatalf("write without branch: got err %v, want WORKER_WRITE_WITHOUT_BRANCH reject", err)
 	}

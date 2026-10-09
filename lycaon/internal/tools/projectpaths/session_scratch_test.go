@@ -3,6 +3,8 @@ package projectpaths_test
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"testing"
@@ -32,13 +34,13 @@ func scratchToolContext(t *testing.T) (tools.ToolContext, string, *mockMutationR
 		ActiveRootID:      "r1",
 		SessionScratchDir: scratchDir,
 		MutationRecorder:  rec,
-		Agent:             tools.DefaultToolProfileID,
+		Agent:             toolprofiles.DefaultToolProfileID,
 	}, scratchDir, rec
 }
 
 func requireReject(t *testing.T, err error, code string) {
 	t.Helper()
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != code {
 		t.Fatalf("err = %v, want %s", err, code)
 	}

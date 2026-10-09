@@ -3,6 +3,7 @@ package webresearch
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 	"testing"
 
@@ -182,7 +183,7 @@ func TestFetchURLToolRejectsIncompleteRange(t *testing.T) {
 	_, _, err := fetchURLTool(context.Background(), fetchURLToolArgs{
 		URL: "https://example.com/docs", Offset: 2,
 	})
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "TOOL_ARGS_INVALID" {
 		t.Fatalf("err = %#v want TOOL_ARGS_INVALID", err)
 	}

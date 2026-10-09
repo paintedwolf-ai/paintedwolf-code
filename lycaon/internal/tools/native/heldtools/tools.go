@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 	"time"
 
@@ -115,7 +116,7 @@ func (t *StopTool) Run(_ context.Context, args map[string]any, tctx tools.ToolCo
 }
 
 func notFound(handle string) error {
-	return &tools.ToolReject{Code: "HELD_CALL_NOT_FOUND", Data: map[string]any{"handle": handle}}
+	return &toolrejection.ToolReject{Code: "HELD_CALL_NOT_FOUND", Data: map[string]any{"handle": handle}}
 }
 
 // Register adds the held-call tools to a registry.

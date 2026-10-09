@@ -1,6 +1,8 @@
 package api
 
 import (
+	"github.com/lycaon/lycaon/internal/capabilitygrants"
+
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -19,7 +21,6 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/visual"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
@@ -407,7 +408,7 @@ func applyHarnessSocketCapability(
 		IfWrong:   hitl.SocketIfWrong,
 		AllowLine: "connections to " + approved,
 	}
-	cpReq.GrantOffers = tools.SocketExecutionGrantOffers(
+	cpReq.GrantOffers = capabilitygrants.SocketExecutionGrantOffers(
 		hitl.ProposedAction{Tool: "command", SessionID: cpReq.SessionID, ProjectID: cpReq.ProjectID},
 		[]confine.SocketGrant{{ApprovedPath: approved, ResolvedPath: resolved}},
 	)
@@ -476,7 +477,7 @@ func applyHarnessDirectIPCapability(
 		IfWrong:   hitl.DirectIPIfWrong,
 		AllowLine: hitl.DirectIPAllowLine,
 	}
-	cpReq.GrantOffers = tools.DirectIPExecutionGrantOffers(
+	cpReq.GrantOffers = capabilitygrants.DirectIPExecutionGrantOffers(
 		hitl.ProposedAction{Tool: "command", SessionID: cpReq.SessionID, ProjectID: cpReq.ProjectID, Command: command},
 		hitl.DirectIPLease{
 			ActionDigest:         "harness-direct-ip",

@@ -1,6 +1,7 @@
 package page
 
 import (
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"net/url"
 	"strconv"
 	"strings"
@@ -23,7 +24,7 @@ func requireLoopbackAuthority(rawURL string, tctx tools.ToolContext) error {
 	if tctx.LoopbackConnectGranted && portGranted(tctx.LoopbackConnectPorts, port) {
 		return nil
 	}
-	return &tools.ToolReject{
+	return &toolrejection.ToolReject{
 		Code: isolation.CodeTryLoopbackConnect,
 		Data: map[string]any{"port": port, "url": rawURL},
 	}

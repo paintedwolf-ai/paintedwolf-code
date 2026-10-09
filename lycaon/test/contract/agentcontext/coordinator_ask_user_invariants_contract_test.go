@@ -1,6 +1,8 @@
 package contract
 
 import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+
 	"os"
 	"path/filepath"
 	"strings"
@@ -8,7 +10,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/test/contract/internal/catalogfixture"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"gopkg.in/yaml.v3"
@@ -53,8 +54,8 @@ func TestCoordinatorAskUserInvariantSurfacesIncludeAskUser(t *testing.T) {
 	t.Parallel()
 	surfaces := loadImplementSurfaces(t)
 	for _, id := range []string{
-		tools.SurfaceImplementInvestigate,
-		tools.SurfaceImplementDispatch,
+		toolcontract.SurfaceImplementInvestigate,
+		toolcontract.SurfaceImplementDispatch,
 		"implement_overlay_promote",
 		"implement_park",
 		"implement_routing",
@@ -276,7 +277,7 @@ func TestCoordinatorAskUserInvariantCapturePageRequestableOnInvestigateAndAllowe
 	root := contractcheck.RepoRoot(t)
 	lycaonRoot := filepath.Join(root, "lycaon")
 	t.Parallel()
-	plan, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: tools.SurfaceImplementInvestigate}, 1)
+	plan, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: toolcontract.SurfaceImplementInvestigate}, 1)
 	contractcheck.FailErr(t, "compile investigate tool plan", err)
 	requestable := plan.DeferredNames()
 	for _, tool := range []string{"capture_page", "render_view"} {

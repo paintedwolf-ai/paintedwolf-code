@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
@@ -116,7 +117,7 @@ func approvedAccess(tctx tools.ToolContext, rootSession, abs string, write bool)
 
 // controlPlaneReject refuses an absolute path inside the host's own state tree
 // with the approval gate's code. Relative paths are answered by root resolution.
-func controlPlaneReject(tctx tools.ToolContext, modelPath string, op sandbox.PathOp) *tools.ToolReject {
+func controlPlaneReject(tctx tools.ToolContext, modelPath string, op sandbox.PathOp) *toolrejection.ToolReject {
 	abs := strings.TrimSpace(modelPath)
 	if abs == "" || !filepath.IsAbs(abs) {
 		return nil
@@ -129,7 +130,7 @@ func controlPlaneReject(tctx tools.ToolContext, modelPath string, op sandbox.Pat
 	if op != sandbox.PathOpRead {
 		mode = "write"
 	}
-	return &tools.ToolReject{
+	return &toolrejection.ToolReject{
 		Code: isolation.CodeControlPlaneDenied,
 		Data: map[string]any{"path": filepath.ToSlash(abs), "mode": mode},
 	}
@@ -207,7 +208,7 @@ func repositoryMetadataClass(path string) (string, bool) {
 }
 
 func gitInternalsWriteReject(path, class string) error {
-	return &tools.ToolReject{
+	return &toolrejection.ToolReject{
 		Code: "GIT_INTERNALS_WRITE_DENIED",
 		Data: map[string]any{
 			"path":  filepath.ToSlash(strings.TrimSpace(path)),
@@ -467,18 +468,18 @@ func resolveHostDataRead(tctx tools.ToolContext, modelPath string) (Resolved, bo
 func mapResolveErr(err error, modelPath string) error {
 	var scope *sandbox.ScopeError
 	if errors.As(err, &scope) || errors.Is(err, sandbox.ErrPathEscape) {
-		return &tools.ToolReject{Code: "SURVEY_PATH_ESCAPE", Data: map[string]any{"path": modelPath, "reason": err.Error()}}
+		return &toolrejection.ToolReject{Code: "SURVEY_PATH_ESCAPE", Data: map[string]any{"path": modelPath, "reason": err.Error()}}
 	}
 	switch {
 	case errors.Is(err, projectroot.ErrNoProjectRoots):
 		return noRootsReject()
 	case errors.Is(err, projectroot.ErrUnknownRootLabel):
-		return &tools.ToolReject{
+		return &toolrejection.ToolReject{
 			Code: "UNKNOWN_ROOT_LABEL",
 			Data: map[string]any{"path": modelPath, "reason": err.Error()},
 		}
 	case errors.Is(err, projectroot.ErrPathEscape):
-		return &tools.ToolReject{
+		return &toolrejection.ToolReject{
 			Code: "SURVEY_PATH_ESCAPE",
 			Data: map[string]any{"path": modelPath, "reason": err.Error()},
 		}
@@ -488,11 +489,11 @@ func mapResolveErr(err error, modelPath string) error {
 }
 
 func noRootsReject() error {
-	return &tools.ToolReject{Code: "PROJECT_HAS_NO_ROOTS", Data: map[string]any{}}
+	return &toolrejection.ToolReject{Code: "PROJECT_HAS_NO_ROOTS", Data: map[string]any{}}
 }
 
 func workerWriteWithoutBranchReject(path string) error {
-	return &tools.ToolReject{Code: "WORKER_WRITE_WITHOUT_BRANCH", Data: map[string]any{"path": filepath.ToSlash(strings.TrimSpace(path))}}
+	return &toolrejection.ToolReject{Code: "WORKER_WRITE_WITHOUT_BRANCH", Data: map[string]any{"path": filepath.ToSlash(strings.TrimSpace(path))}}
 }
 
 // UnionDiscoveryRoots returns roots for a union walk when modelPath is a union sentinel.
@@ -560,14 +561,14 @@ func CommandCwd(ctx context.Context, tctx tools.ToolContext, cwdArg string) (abs
 	}
 	resolved, _, resolveErr := projectroot.ResolveAbs(tctx.Roots, tctx.ActiveRootID, cwdClean)
 	if resolveErr != nil {
-		return "", "", &tools.ToolReject{
+		return "", "", &toolrejection.ToolReject{
 			Code: "CWD_OUT_OF_SCOPE",
 			Data: map[string]any{"cwd": cwdArg},
 		}
 	}
 	info, statErr := os.Stat(resolved)
 	if statErr != nil || !info.IsDir() {
-		return "", "", &tools.ToolReject{
+		return "", "", &toolrejection.ToolReject{
 			Code: "CWD_NOT_DIRECTORY",
 			Data: map[string]any{"cwd": cwdArg},
 		}
@@ -579,25 +580,25 @@ func CommandCwd(ctx context.Context, tctx tools.ToolContext, cwdArg string) (abs
 // verification check never does: its receipt describes the project.
 func commandCwdInScratch(ctx context.Context, tctx tools.ToolContext, cwdArg string) (abs, display string, err error) {
 	if tctx.VerificationCheck {
-		return "", "", &tools.ToolReject{
+		return "", "", &toolrejection.ToolReject{
 			Code: "CWD_SCRATCH_NOT_VERIFICATION",
 			Data: map[string]any{"cwd": cwdArg},
 		}
 	}
 	res, _, err := resolveSessionScratch(ctx, nil, tctx, cwdArg, sandbox.PathOpRead)
 	if err != nil {
-		var reject *tools.ToolReject
+		var reject *toolrejection.ToolReject
 		if errors.As(err, &reject) && reject.Code == tools.SessionScratchUnavailableCode {
 			return "", "", reject
 		}
-		return "", "", &tools.ToolReject{
+		return "", "", &toolrejection.ToolReject{
 			Code: "CWD_OUT_OF_SCOPE",
 			Data: map[string]any{"cwd": cwdArg},
 		}
 	}
 	info, statErr := os.Stat(res.Abs)
 	if statErr != nil || !info.IsDir() {
-		return "", "", &tools.ToolReject{
+		return "", "", &toolrejection.ToolReject{
 			Code: "CWD_NOT_DIRECTORY",
 			Data: map[string]any{"cwd": cwdArg},
 		}
@@ -611,7 +612,7 @@ func commandCwdUnderBranch(ctx context.Context, tctx tools.ToolContext, branch, 
 		return branch, ".", nil
 	}
 	if filepath.IsAbs(cwdArg) {
-		return "", "", &tools.ToolReject{
+		return "", "", &toolrejection.ToolReject{
 			Code: "CWD_OUT_OF_SCOPE",
 			Data: map[string]any{"cwd": cwdArg},
 		}
@@ -621,14 +622,14 @@ func commandCwdUnderBranch(ctx context.Context, tctx tools.ToolContext, branch, 
 	}
 	branchRel, displayPath, mapErr := projectroot.WorkerBranchRelative(tctx.Roots, tctx.ActiveRootID, cwdArg)
 	if mapErr != nil {
-		return "", "", &tools.ToolReject{
+		return "", "", &toolrejection.ToolReject{
 			Code: "CWD_OUT_OF_SCOPE",
 			Data: map[string]any{"cwd": cwdArg},
 		}
 	}
 	scopeRel := filepath.ToSlash(filepath.Clean(branchRel))
 	if scopeRel == ".." || strings.HasPrefix(scopeRel, "../") {
-		return "", "", &tools.ToolReject{
+		return "", "", &toolrejection.ToolReject{
 			Code: "CWD_OUT_OF_SCOPE",
 			Data: map[string]any{"cwd": cwdArg},
 		}
@@ -638,7 +639,7 @@ func commandCwdUnderBranch(ctx context.Context, tctx tools.ToolContext, branch, 
 	}
 	if branchErr := prepareBranchPath(ctx, tctx, scopeRel, sandbox.PathOpRead); branchErr != nil {
 		if os.IsNotExist(branchErr) || errors.Is(branchErr, os.ErrNotExist) {
-			return "", "", &tools.ToolReject{
+			return "", "", &toolrejection.ToolReject{
 				Code: "CWD_NOT_DIRECTORY",
 				Data: map[string]any{"cwd": cwdArg},
 			}
@@ -648,14 +649,14 @@ func commandCwdUnderBranch(ctx context.Context, tctx tools.ToolContext, branch, 
 	abs = filepath.Join(branch, filepath.FromSlash(scopeRel))
 	rel, relErr := filepath.Rel(branch, abs)
 	if relErr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return "", "", &tools.ToolReject{
+		return "", "", &toolrejection.ToolReject{
 			Code: "CWD_OUT_OF_SCOPE",
 			Data: map[string]any{"cwd": cwdArg},
 		}
 	}
 	info, statErr := os.Stat(abs)
 	if statErr != nil || !info.IsDir() {
-		return "", "", &tools.ToolReject{
+		return "", "", &toolrejection.ToolReject{
 			Code: "CWD_NOT_DIRECTORY",
 			Data: map[string]any{"cwd": cwdArg},
 		}
@@ -742,7 +743,7 @@ func scratchRelOfAbs(dir, raw string) (string, bool) {
 }
 
 func sessionScratchUnavailableReject(path string) error {
-	return &tools.ToolReject{
+	return &toolrejection.ToolReject{
 		Code: tools.SessionScratchUnavailableCode,
 		Data: map[string]any{"path": filepath.ToSlash(strings.TrimSpace(path))},
 	}

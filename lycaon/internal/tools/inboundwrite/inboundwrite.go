@@ -2,10 +2,13 @@
 package inboundwrite
 
 import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+
 	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"io"
 	"path/filepath"
 	"strings"
@@ -37,7 +40,7 @@ func WriteFrom(ctx context.Context, boundary *sandbox.Boundary, tctx tools.ToolC
 		if detail != "" {
 			data["detail"] = detail
 		}
-		return &tools.ToolReject{Code: deniedCode, Data: data}
+		return &toolrejection.ToolReject{Code: deniedCode, Data: data}
 	}
 	if dest == "" {
 		return Receipt{}, denied("empty path")
@@ -50,7 +53,7 @@ func WriteFrom(ctx context.Context, boundary *sandbox.Boundary, tctx tools.ToolC
 	}
 	resolved, err := projectpaths.ResolveWrite(ctx, boundary, tctx, dest)
 	if err != nil {
-		var reject *tools.ToolReject
+		var reject *toolrejection.ToolReject
 		if errors.As(err, &reject) && reject.Code == "WORKER_WRITE_WITHOUT_BRANCH" {
 			return Receipt{}, reject
 		}
@@ -143,14 +146,14 @@ func DestDenied(rel string) bool {
 // Worker writes are recorded against the private branch; the investigate
 // surface writes into the live tree and records nothing.
 func beforeWorkerWrite(ctx context.Context, tctx tools.ToolContext, relPath string) error {
-	if strings.TrimSpace(tctx.WorkerJobID) == "" || tctx.WorkerCoord == nil || tctx.TurnSurfaceID == tools.SurfaceImplementInvestigate {
+	if strings.TrimSpace(tctx.WorkerJobID) == "" || tctx.WorkerCoord == nil || tctx.TurnSurfaceID == toolcontract.SurfaceImplementInvestigate {
 		return nil
 	}
 	return tctx.WorkerCoord.BeforeWorkerWrite(ctx, tctx, relPath)
 }
 
 func afterWorkerWrite(ctx context.Context, tctx tools.ToolContext, relPath string) {
-	if strings.TrimSpace(tctx.WorkerJobID) == "" || tctx.WorkerCoord == nil || tctx.TurnSurfaceID == tools.SurfaceImplementInvestigate {
+	if strings.TrimSpace(tctx.WorkerJobID) == "" || tctx.WorkerCoord == nil || tctx.TurnSurfaceID == toolcontract.SurfaceImplementInvestigate {
 		return
 	}
 	tctx.WorkerCoord.AfterWorkerWrite(ctx, tctx, relPath)

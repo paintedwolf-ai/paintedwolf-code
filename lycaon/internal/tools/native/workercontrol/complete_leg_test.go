@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
@@ -33,7 +34,7 @@ func TestCompleteLegRejectsAddressedSession(t *testing.T) {
 		"leg_status": "complete",
 		"brief":      "done",
 	}, tools.ToolContext{SessionID: "child"})
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "COMPLETE_LEG_ADDRESSED_SESSION" {
 		t.Fatalf("err = %v want COMPLETE_LEG_ADDRESSED_SESSION", err)
 	}
@@ -97,7 +98,7 @@ func TestCompleteLegRejectsMissingStatus(t *testing.T) {
 	_, err := invokeCompleteLeg(t, map[string]any{
 		"brief": "done",
 	}, tools.ToolContext{SessionID: "child", ParentSessionID: "parent"})
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "COMPLETE_LEG_STATUS_REQUIRED" {
 		t.Fatalf("err = %v", err)
 	}
@@ -109,7 +110,7 @@ func TestCompleteLegRejectsAliasStatus(t *testing.T) {
 			"leg_status": status,
 			"brief":      "done",
 		}, tools.ToolContext{SessionID: "child", ParentSessionID: "parent"})
-		var reject *tools.ToolReject
+		var reject *toolrejection.ToolReject
 		if !errors.As(err, &reject) || reject.Code != "COMPLETE_LEG_STATUS_REQUIRED" {
 			t.Fatalf("status %q err = %v", status, err)
 		}
@@ -117,7 +118,7 @@ func TestCompleteLegRejectsAliasStatus(t *testing.T) {
 }
 
 func TestCompleteLegPreservesHostContractRejection(t *testing.T) {
-	rejection := &tools.ToolReject{Code: "COMPLETE_LEG_COVERAGE_INVALID", Data: map[string]any{"detail": "missing assessment"}}
+	rejection := &toolrejection.ToolReject{Code: "COMPLETE_LEG_COVERAGE_INVALID", Data: map[string]any{"detail": "missing assessment"}}
 	handler := workertools.CompleteLegHandler(func(_ context.Context, _ map[string]any, tc tools.ToolContext) (workertools.CompleteLegRecord, error) {
 		if tc.WorkerJobID != "job" {
 			t.Fatal("lost worker identity")

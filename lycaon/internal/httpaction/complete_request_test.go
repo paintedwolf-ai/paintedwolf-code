@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -55,7 +57,7 @@ func newTestSecrets(t *testing.T) (*secretcap.Service, *[]secretmatch.Remembered
 
 func sessionContext(root, call string) tools.ToolContext {
 	return tools.ToolContext{
-		Agent: tools.DefaultToolProfileID, ProjectID: testdbseed.DefaultProjectID,
+		Agent: toolprofiles.DefaultToolProfileID, ProjectID: testdbseed.DefaultProjectID,
 		SessionID: "root-1", ToolCallID: call,
 		Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}}, ActiveRootID: "root",
 	}
@@ -144,7 +146,7 @@ func TestHTTPRequestCookieJarPersistsALoginSessionWithoutDisclosingValues(t *tes
 	_, err = runRequest(t, Deps{Boundary: testBoundary()}, map[string]any{
 		"url": server.URL + "/me", "cookie_jar": "registry", "capability_request": capability,
 	}, sessionContext(t.TempDir(), "call-4"))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != CookieJarFailedCode {
 		t.Fatalf("jar without a secret store = %v, want %s", err, CookieJarFailedCode)
 	}
@@ -221,7 +223,7 @@ func TestHTTPRequestAuthQueryAndFormReachTheServer(t *testing.T) {
 		{"url": server.URL, "query": []any{map[string]any{"name": "", "value": "1"}}},
 	} {
 		_, err := runRequest(t, Deps{Boundary: testBoundary()}, args, sessionContext(root, "call-3"))
-		var reject *tools.ToolReject
+		var reject *toolrejection.ToolReject
 		if !errors.As(err, &reject) || reject.Code != "TOOL_ARGS_INVALID" {
 			t.Fatalf("args %v error = %v, want TOOL_ARGS_INVALID", args, err)
 		}

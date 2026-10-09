@@ -3,6 +3,7 @@ package promptloop_test
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"sync"
 	"testing"
 
@@ -33,7 +34,7 @@ func TestBatchRejectionsEscalateOnlyAcrossResponses(t *testing.T) {
 			deps := promptloop.StoreDeps(messages)
 			deps.LLM, deps.Tools, deps.Policy, deps.DoomLoop = client, tools.NewStubRegistry(), &recordingToolPolicy{}, guard
 			refusal := func() error {
-				return guidance.NewRefusal("TOOL_NOT_OFFERED", "schema not loaded").WithCause(&tools.ToolReject{Code: "TOOL_NOT_OFFERED", FailureClass: api.FailureClassPolicyRejection})
+				return guidance.NewRefusal("TOOL_NOT_OFFERED", "schema not loaded").WithCause(&toolrejection.ToolReject{Code: "TOOL_NOT_OFFERED", FailureClass: api.FailureClassPolicyRejection})
 			}
 			if beforeInvoke {
 				deps.BeforeToolRun = func(context.Context, *api.Session, []api.Message, string, string, map[string]any) (string, bool, error) {

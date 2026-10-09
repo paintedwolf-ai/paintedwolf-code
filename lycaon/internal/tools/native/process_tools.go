@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/hostprocess"
@@ -77,7 +78,7 @@ func (t *ProcessTools) Signal(ctx context.Context, args map[string]any, tc tools
 		row := map[string]any{"pid": process.PID, "instance": process.Instance, "signal": signal, "delivered": err == nil}
 		if err != nil {
 			row["error"] = err.Error()
-			row["code"] = tools.AsToolReject(processError(err)).Code
+			row["code"] = toolrejection.AsToolReject(processError(err)).Code
 		}
 		results = append(results, row)
 	}

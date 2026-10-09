@@ -3,6 +3,8 @@ package httpaction
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/toolexecution"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -117,14 +119,14 @@ func TestSecretCanaryNeverEchoedByAnyReferenceTool(t *testing.T) {
 	authority := settings.NewRuleApprovalGate(store, settings.NoSources())
 	review := &canaryReview{t: t, authority: authority}
 	registry := tools.NewDefaultRegistry()
-	executor := tools.NewDefaultToolExecutor(nil, registry, "implement")
-	executor.SetCheckpointManager(review, authority)
+	executor := toolexecution.NewExecutor(nil, registry, "implement")
+	executor.Approvals.SetCheckpointManager(review, authority)
 	t.Cleanup(func() { confine.SetEgressResolver(nil) })
-	executor.SetSecretResolver(service)
+	executor.Secrets.SetSecretResolver(service)
 	matcher := testSecretMatcher(t)
-	executor.SetSecretMatcher(matcher)
-	executor.SetLoopbackConnectGate(review)
-	executor.SetSessionLoopbackGrant(review.SessionLoopbackGrant)
+	executor.Secrets.SetSecretMatcher(matcher)
+	executor.Capabilities.SetLoopbackConnectGate(review)
+	executor.Boundary.SetSessionLoopbackGrant(review.SessionLoopbackGrant)
 
 	testutil.FailErr(t, "register http_request", Register(registry, Deps{
 		Boundary: testBoundary(), SecretMatcher: matcher, SecretAsk: executor.AskSecretScreen, Secrets: service,
@@ -221,7 +223,7 @@ func TestSecretCanaryNeverEchoedByAnyReferenceTool(t *testing.T) {
 				ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 				defer cancel()
 				out, err := executor.Invoke(ctx, tool, call.args, tctx)
-				if err != nil && tools.AsToolReject(err) == nil && !strings.HasPrefix(tool, "mcp_") {
+				if err != nil && toolrejection.AsToolReject(err) == nil && !strings.HasPrefix(tool, "mcp_") {
 					t.Fatalf("%s (%s): %v", tool, call.scheme, err)
 				}
 				if got := waitReceived(call.received); got != canaryValue {
@@ -233,7 +235,7 @@ func TestSecretCanaryNeverEchoedByAnyReferenceTool(t *testing.T) {
 					assertNoCanary(t, tool, call.scheme+" error", err.Error())
 					echoed += err.Error()
 				}
-				if reject := tools.AsToolReject(err); reject != nil {
+				if reject := toolrejection.AsToolReject(err); reject != nil {
 					data, marshalErr := json.Marshal(reject.Data)
 					testutil.FailErr(t, "encode reject data", marshalErr)
 					assertNoCanary(t, tool, call.scheme+" reject data", string(data))
@@ -248,7 +250,7 @@ func TestSecretCanaryNeverEchoedByAnyReferenceTool(t *testing.T) {
 }
 
 // openCanaryShell starts an interactive shell for terminal_send.
-func openCanaryShell(t *testing.T, executor *tools.DefaultToolExecutor, root string) string {
+func openCanaryShell(t *testing.T, executor *toolexecution.Executor, root string) string {
 	t.Helper()
 	out, err := executor.Invoke(t.Context(), "terminal_open", map[string]any{"command": "sh"}, sessionContext(root, "terminal-shell"))
 	testutil.FailErr(t, "open canary shell", err)

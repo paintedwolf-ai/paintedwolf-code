@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/hintregistry"
 	"github.com/lycaon/lycaon/internal/llm"
-	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/project"
@@ -40,7 +40,7 @@ func newTestManager(t *testing.T) (*Manager, *store.Memory) {
 	registry := tools.NewStubRegistry()
 	mgr := NewManager(store, llm.NewMockProvider(testMockConfig(t)), registry, settings.DefaultSessionLimits())
 	oartest.InstallCloseoutPolicy(t, mgr)
-	mgr.SetToolInvoker(testtool.RegistryInvoker{Registry: registry})
+	mgr.SetToolInvoker(testtool.RegistryInvoker{Registry: registry}, testtool.RegistryInvoker{Registry: registry})
 	// Rewind checkpoints use a state root separate from the project.
 	mgr.SetDataDir(t.TempDir())
 	return mgr, store
@@ -224,7 +224,7 @@ func TestToolCallError(t *testing.T) {
 	reg.SetFail("read", fmt.Errorf("read failed"))
 	mgr := NewManager(store, llm.NewMockProvider(testMockConfig(t)), reg, settings.DefaultSessionLimits())
 	oartest.InstallCloseoutPolicy(t, mgr)
-	mgr.SetToolInvoker(testtool.RegistryInvoker{Registry: reg})
+	mgr.SetToolInvoker(testtool.RegistryInvoker{Registry: reg}, testtool.RegistryInvoker{Registry: reg})
 	projectID := attachTestProject(t, mgr)
 	ctx := context.Background()
 

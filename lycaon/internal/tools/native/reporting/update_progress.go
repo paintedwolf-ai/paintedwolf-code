@@ -3,6 +3,7 @@ package reporting
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/progress"
@@ -26,7 +27,7 @@ func ProgressHandler(store progress.Store, scopeKey ProgressScopeKey) tools.Tool
 			return "", fmt.Errorf("content is required")
 		}
 		if code, data, ok := progress.ValidateAuthorProgress(content); !ok {
-			return "", &tools.ToolReject{Code: code, Data: data}
+			return "", &toolrejection.ToolReject{Code: code, Data: data}
 		}
 		prev := store.Get(ctx, root)
 		// An identical checklist writes nothing, so a replay adds no revision or

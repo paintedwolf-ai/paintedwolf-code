@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 	"testing"
 
@@ -43,7 +44,7 @@ func TestConfinedMCPSeamConformance(t *testing.T) {
 	}
 
 	_, err = reg.CallTool(context.Background(), CallScope{}, "fixture", "fail_coded", nil)
-	tr := tools.AsToolReject(err)
+	tr := toolrejection.AsToolReject(err)
 	if tr == nil || tr.Code != MCPServerCodePrefix+"FIXTURE_MCP_DENIED" {
 		t.Fatalf("err = %v want %sFIXTURE_MCP_DENIED", err, MCPServerCodePrefix)
 	}
@@ -52,7 +53,7 @@ func TestConfinedMCPSeamConformance(t *testing.T) {
 	}
 
 	_, err = reg.CallTool(context.Background(), CallScope{}, "fixture", "fail_plain", nil)
-	tr = tools.AsToolReject(err)
+	tr = toolrejection.AsToolReject(err)
 	if tr == nil || tr.Code != GenericMCPRejectCode {
 		t.Fatalf("err = %v want %s", err, GenericMCPRejectCode)
 	}
@@ -143,7 +144,7 @@ func TestDeclaredServerErrorKeepsSession(t *testing.T) {
 	reg := newFixtureRegistry(t, buildFakeStdioServer(t))
 
 	for i := 0; i < 3; i++ {
-		if _, err := reg.CallTool(context.Background(), CallScope{}, "fixture", "fail_coded", nil); tools.AsToolReject(err) == nil {
+		if _, err := reg.CallTool(context.Background(), CallScope{}, "fixture", "fail_coded", nil); toolrejection.AsToolReject(err) == nil {
 			t.Fatalf("call %d: err = %v want ToolReject", i, err)
 		}
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -96,7 +97,7 @@ func TestSecretGenerateProjectScopeRequiresPurpose(t *testing.T) {
 	}, tools.ToolContext{
 		ProjectID: testdbseed.DefaultProjectID, SessionID: "root-chat", ToolCallID: "generate-project",
 	})
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "SECRET_GENERATE_INVALID" {
 		t.Fatalf("error = %v want SECRET_GENERATE_INVALID", err)
 	}

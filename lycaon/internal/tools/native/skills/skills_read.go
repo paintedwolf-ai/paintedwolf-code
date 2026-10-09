@@ -3,6 +3,7 @@ package skills
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
@@ -48,11 +49,11 @@ func (t *SkillsReadTool) Run(ctx context.Context, args map[string]any, tctx tool
 	}
 	need, cursor, err := turnload.ParseDiscoveryNeed(need)
 	if err != nil {
-		return "", tools.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": err.Error()})
+		return "", toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": err.Error()})
 	}
 	if cursor != "" {
 		if resource != "" {
-			return "", tools.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": "discovery continuation cannot be combined with resource"})
+			return "", toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": "discovery continuation cannot be combined with resource"})
 		}
 		return skillDiscovery(tctx, need, cursor, "catalog", "", catalog)
 	}

@@ -2,7 +2,7 @@ package workflow
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
 	"testing"
@@ -41,7 +41,7 @@ func TestQuestionTaskAdmissionUsesDurableAttempts(t *testing.T) {
 				}
 				return
 			}
-			rejection := tools.AsToolReject(err)
+			rejection := toolrejection.AsToolReject(err)
 			if rejection == nil || rejection.Data["reason"] != tc.reason {
 				t.Fatalf("rejection = %v, want %s", err, tc.reason)
 			}

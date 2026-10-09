@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,7 +12,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 )
 
@@ -72,7 +72,7 @@ func TestCopyToolRejectsDirectory(t *testing.T) {
 			map[string]any{"from": "pkg", "to": "pkg-copy"},
 		},
 	}, nativefixture.Context(tmpDir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "COPY_IS_DIRECTORY" {
 		t.Fatalf("err = %v want COPY_IS_DIRECTORY", err)
 	}
@@ -91,7 +91,7 @@ func TestCopyToolRejectsSizeExceeded(t *testing.T) {
 		},
 		"max_file_bytes": 50,
 	}, nativefixture.Context(tmpDir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "COPY_SIZE_EXCEEDED" {
 		t.Fatalf("err = %v want COPY_SIZE_EXCEEDED", err)
 	}
@@ -105,7 +105,7 @@ func TestCopyToolRejectsBulk(t *testing.T) {
 	}
 	tool := &CopyTool{Boundary: nativefixture.Boundary(t)}
 	_, err := tool.Run(context.Background(), map[string]any{"copies": copies}, nativefixture.Context(tmpDir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "COPY_BULK_DENIED" {
 		t.Fatalf("err = %v want COPY_BULK_DENIED", err)
 	}
@@ -125,7 +125,7 @@ func TestCopyToolRejectsGitPath(t *testing.T) {
 			map[string]any{"from": ".git/config", "to": "config-copy"},
 		},
 	}, nativefixture.Context(tmpDir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "GIT_INTERNALS_WRITE_DENIED" {
 		t.Fatalf("err = %v want GIT_INTERNALS_WRITE_DENIED", err)
 	}
@@ -184,7 +184,7 @@ func TestMoveToolRejectsNotFound(t *testing.T) {
 			map[string]any{"from": "missing.go", "to": "new.go"},
 		},
 	}, nativefixture.Context(tmpDir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "MOVE_NOT_FOUND" {
 		t.Fatalf("err = %v want MOVE_NOT_FOUND", err)
 	}
@@ -202,7 +202,7 @@ func TestMoveToolRejectsCrossRootRename(t *testing.T) {
 	_, err := tool.Run(context.Background(), map[string]any{
 		"moves": []any{map[string]any{"from": "old.go", "to": "@other/new.go"}},
 	}, tctx)
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "MOVE_CROSS_ROOT" {
 		t.Fatalf("err = %v want MOVE_CROSS_ROOT", err)
 	}
@@ -256,7 +256,7 @@ func TestMkdirToolRejectsFileExists(t *testing.T) {
 	_, err := tool.Run(context.Background(), map[string]any{
 		"paths": []any{"file.txt"},
 	}, nativefixture.Context(tmpDir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "MKDIR_FILE_EXISTS" {
 		t.Fatalf("err = %v want MKDIR_FILE_EXISTS", err)
 	}
@@ -269,7 +269,7 @@ func TestMkdirToolRejects777(t *testing.T) {
 		"paths": []any{"bad"},
 		"mode":  "777",
 	}, nativefixture.Context(tmpDir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "MKDIR_MODE_DENIED" {
 		t.Fatalf("err = %v want MKDIR_MODE_DENIED", err)
 	}

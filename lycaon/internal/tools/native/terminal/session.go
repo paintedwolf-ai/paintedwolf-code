@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strconv"
 	"strings"
 
@@ -48,13 +49,13 @@ func parseTerminalObserve(args map[string]any) (terminalObserveMode, error) {
 	}
 	observe, ok := raw.(string)
 	if !ok {
-		return "", tools.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": "observe_must_be_string"})
+		return "", toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": "observe_must_be_string"})
 	}
 	switch terminalObserveMode(strings.TrimSpace(observe)) {
 	case terminalObserveAck, terminalObserveDelta, terminalObserveScreen:
 		return terminalObserveMode(strings.TrimSpace(observe)), nil
 	default:
-		return "", tools.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": "observe_invalid"})
+		return "", toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": "observe_invalid"})
 	}
 }
 
@@ -73,7 +74,7 @@ func mapTerminalLifecycleReject(err error, id string) error {
 		return nil
 	}
 	if errors.Is(err, lycexec.ErrPTYUnsupported) {
-		return &tools.ToolReject{Code: "TERMINAL_UNSUPPORTED", Data: map[string]any{"reason": "pty_unsupported"}}
+		return &toolrejection.ToolReject{Code: "TERMINAL_UNSUPPORTED", Data: map[string]any{"reason": "pty_unsupported"}}
 	}
 	code, reason := "TERMINAL_NOT_FOUND", "not_found"
 	switch {
@@ -98,5 +99,5 @@ func mapTerminalLifecycleReject(err error, id string) error {
 	if id != "" {
 		data["id"] = id
 	}
-	return &tools.ToolReject{Code: code, Data: data}
+	return &toolrejection.ToolReject{Code: code, Data: data}
 }

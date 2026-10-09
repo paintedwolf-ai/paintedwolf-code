@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
@@ -56,7 +57,7 @@ func MeasureHandler(pool *browser.Pool, pages *pagesession.Registry, bg *bgproce
 					data[key] = value
 				}
 				data["capture_held_target"], data["measure_page_id"] = in.ID != "", in.ID
-				return "", &tools.ToolReject{Code: rej.Code, Data: data}
+				return "", &toolrejection.ToolReject{Code: rej.Code, Data: data}
 			}
 			return "", err
 		}
@@ -121,33 +122,33 @@ func parseMeasurePageArgs(args map[string]any) (measurePageArgs, error) {
 	in.Caption = strings.TrimSpace(in.Caption)
 	if in.ID != "" {
 		if in.URL != "" || in.ProjectDir != "" || in.Path != "" || in.ProcessHandle != "" || in.Viewport != nil || in.Wait != "" {
-			return measurePageArgs{}, &tools.ToolReject{Code: "CAPTURE_TARGET_INVALID", Data: map[string]any{"reason": "id_with_navigation_target", "capture_held_target": true}}
+			return measurePageArgs{}, &toolrejection.ToolReject{Code: "CAPTURE_TARGET_INVALID", Data: map[string]any{"reason": "id_with_navigation_target", "capture_held_target": true}}
 		}
 		if len(in.Selectors) == 0 {
-			return measurePageArgs{}, &tools.ToolReject{Code: "MEASURE_SELECTORS_REQUIRED", Data: map[string]any{"reason": "empty_selectors"}}
+			return measurePageArgs{}, &toolrejection.ToolReject{Code: "MEASURE_SELECTORS_REQUIRED", Data: map[string]any{"reason": "empty_selectors"}}
 		}
 		return in, nil
 	}
 	if in.URL == "" && in.ProjectDir == "" {
-		return measurePageArgs{}, &tools.ToolReject{Code: "CAPTURE_TARGET_INVALID", Data: map[string]any{"reason": "missing_target"}}
+		return measurePageArgs{}, &toolrejection.ToolReject{Code: "CAPTURE_TARGET_INVALID", Data: map[string]any{"reason": "missing_target"}}
 	}
 	if in.URL != "" && in.ProjectDir != "" {
-		return measurePageArgs{}, &tools.ToolReject{Code: "CAPTURE_TARGET_INVALID", Data: map[string]any{"reason": "url_and_project_dir"}}
+		return measurePageArgs{}, &toolrejection.ToolReject{Code: "CAPTURE_TARGET_INVALID", Data: map[string]any{"reason": "url_and_project_dir"}}
 	}
 	if in.Path != "" && in.ProjectDir == "" {
-		return measurePageArgs{}, &tools.ToolReject{Code: "CAPTURE_TARGET_INVALID", Data: map[string]any{"reason": "path_without_project_dir"}}
+		return measurePageArgs{}, &toolrejection.ToolReject{Code: "CAPTURE_TARGET_INVALID", Data: map[string]any{"reason": "path_without_project_dir"}}
 	}
 	if in.ProcessHandle != "" && in.ProjectDir != "" {
-		return measurePageArgs{}, &tools.ToolReject{Code: "CAPTURE_TARGET_INVALID", Data: map[string]any{"reason": "process_handle_with_project_dir"}}
+		return measurePageArgs{}, &toolrejection.ToolReject{Code: "CAPTURE_TARGET_INVALID", Data: map[string]any{"reason": "process_handle_with_project_dir"}}
 	}
 	if len(in.Selectors) == 0 {
-		return measurePageArgs{}, &tools.ToolReject{Code: "MEASURE_SELECTORS_REQUIRED", Data: map[string]any{"reason": "empty_selectors"}}
+		return measurePageArgs{}, &toolrejection.ToolReject{Code: "MEASURE_SELECTORS_REQUIRED", Data: map[string]any{"reason": "empty_selectors"}}
 	}
 	if in.Path != "" {
 		if _, err := browser.JoinStaticEntry(in.Path); err != nil {
 			rej := &browserengine.RejectError{}
 			if errors.As(err, &rej) {
-				return measurePageArgs{}, &tools.ToolReject{Code: rej.Code, Data: rej.Data}
+				return measurePageArgs{}, &toolrejection.ToolReject{Code: rej.Code, Data: rej.Data}
 			}
 			return measurePageArgs{}, err
 		}

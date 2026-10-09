@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"reflect"
 	"testing"
 
@@ -33,7 +34,7 @@ func TestStateUpdateCannotForgeHostWorkflowProof(t *testing.T) {
 		HostAutoAdvancedFromKey, "workflow_compose_summary_id", "last_failed_leaves", "evidence_digest",
 	} {
 		_, err := reg.Run(t.Context(), "state_update", map[string]any{"path": path, "value": true}, tctx)
-		var reject *tools.ToolReject
+		var reject *toolrejection.ToolReject
 		if !errors.As(err, &reject) || reject.Code != "TOOL_ARGS_INVALID" || reject.Data["reason"] != "host_managed_workflow_state" {
 			t.Fatalf("%s: expected host-state rejection, got %v", path, err)
 		}

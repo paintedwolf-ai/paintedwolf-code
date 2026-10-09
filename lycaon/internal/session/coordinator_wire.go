@@ -1,6 +1,8 @@
 package session
 
 import (
+	"github.com/lycaon/lycaon/internal/toolfeedback"
+
 	"context"
 	"errors"
 	"fmt"
@@ -234,7 +236,7 @@ func (m *Manager) buildPromptLoopDeps() promptloop.PromptLoopDeps {
 		HeldCalls:  heldCallPort{m: m},
 		DoomLoop:   m.doomLoop,
 		RejectFmt:  m.rejectFmt,
-		BlockPlane: &tools.BlockPlane{Pipeline: m.oarPipeline, Renderer: m.oarRenderer},
+		BlockPlane: &toolfeedback.BlockPlane{Pipeline: m.oarPipeline, Renderer: m.oarRenderer},
 		HintConfig: m.workflowHints,
 		FormatDoomLoopReject: func(ctx context.Context, sessionID, tool string, args map[string]any, count int, repeatedCode string) (*guidance.Refusal, error) {
 			return m.formatDoomLoopReject(ctx, sessionID, tool, args, count, repeatedCode)

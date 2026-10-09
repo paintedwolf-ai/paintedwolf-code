@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"testing"
@@ -23,7 +25,7 @@ func surveyRepoBoundary(t *testing.T) *sandbox.Boundary {
 		ProjectRootRequired: true,
 		RejectSymlinkEscape: true,
 	}, []sandbox.ToolProfile{{
-		ID:    tools.DefaultToolProfileID,
+		ID:    toolprofiles.DefaultToolProfileID,
 		Tools: map[string]bool{"grep": true, "find": true, "list_dir": true, "survey_repo": true},
 	}})
 }
@@ -32,7 +34,7 @@ func surveyRepoCtx(dir string) tools.ToolContext {
 	return tools.ToolContext{
 		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}},
 		ActiveRootID: "r1",
-		Agent:        tools.DefaultToolProfileID,
+		Agent:        toolprofiles.DefaultToolProfileID,
 	}
 }
 
@@ -107,7 +109,7 @@ func TestSurveyRepoLayoutUsesQualifiedSecondaryRoot(t *testing.T) {
 			{ID: "primary", Label: "primary", Path: primary, IsPrimary: true},
 			{ID: "secondary", Label: "secondary", Path: secondary},
 		},
-		ActiveRootID: "primary", Agent: tools.DefaultToolProfileID,
+		ActiveRootID: "primary", Agent: toolprofiles.DefaultToolProfileID,
 	}
 	out, err := tool.Run(context.Background(), map[string]any{
 		"bundle": "layout_overview", "path": "@secondary",
@@ -183,7 +185,7 @@ func TestSurveyRepoUnknownBundle(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for unknown bundle")
 	}
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject == nil || reject.Code != "SURVEY_BUNDLE_UNKNOWN" {
 		t.Fatalf("err = %v want SURVEY_BUNDLE_UNKNOWN", err)
 	}
@@ -195,7 +197,7 @@ func TestSurveyRepoBundleRequired(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for missing bundle")
 	}
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject == nil || reject.Code != "SURVEY_BUNDLE_REQUIRED" {
 		t.Fatalf("err = %v want SURVEY_BUNDLE_REQUIRED", err)
 	}

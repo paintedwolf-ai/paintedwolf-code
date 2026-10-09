@@ -2,6 +2,7 @@ package page
 
 import (
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/tools"
@@ -21,7 +22,7 @@ func TestURLModeRequiresTheLoopbackConnectGrant(t *testing.T) {
 		"http://[::1]:3000/",
 	} {
 		err := requireLoopbackAuthority(target, ungranted)
-		var reject *tools.ToolReject
+		var reject *toolrejection.ToolReject
 		if !errors.As(err, &reject) || reject.Code != "SANDBOX_TRY_LOOPBACK_CONNECT" {
 			t.Fatalf("ungranted %s: err=%v, want SANDBOX_TRY_LOOPBACK_CONNECT", target, err)
 		}

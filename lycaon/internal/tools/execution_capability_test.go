@@ -1,12 +1,11 @@
 package tools
 
 import (
-	"path/filepath"
+	"github.com/lycaon/lycaon/internal/capabilityrequest"
+
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
-	"github.com/lycaon/lycaon/internal/packageexec"
-	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
@@ -19,24 +18,24 @@ func TestExecutionCapabilityGrammar(t *testing.T) {
 	for _, name := range []string{"process_control", "host_execution"} {
 		for _, value := range []any{true, map[string]any{}} {
 			args := map[string]any{"capability_request": map[string]any{name: value}}
-			request, reject := ParseCapabilityRequest(args)
+			request, reject := capabilityrequest.ParseCapabilityRequest(args)
 			if reject != nil || request == nil {
 				t.Fatalf("parse %s: %v", name, reject)
 			}
-			if reject := ValidateCapabilityContract(commandContract, args); reject != nil {
+			if reject := capabilityrequest.ValidateCapabilityContract(commandContract, args); reject != nil {
 				t.Fatalf("command %s: %v", name, reject)
 			}
-			if reject := ValidateCapabilityContract(terminalContract, args); reject == nil {
+			if reject := capabilityrequest.ValidateCapabilityContract(terminalContract, args); reject == nil {
 				t.Fatalf("held session accepted %s", name)
 			}
 		}
 		for _, value := range []any{false, nil, "true", map[string]any{"extra": true}} {
-			if _, reject := ParseCapabilityRequest(map[string]any{"capability_request": map[string]any{name: value}}); reject == nil {
+			if _, reject := capabilityrequest.ParseCapabilityRequest(map[string]any{"capability_request": map[string]any{name: value}}); reject == nil {
 				t.Fatalf("accepted invalid %s: %#v", name, value)
 			}
 		}
 	}
-	if _, reject := ParseCapabilityRequest(map[string]any{"capability_request": map[string]any{"host_execution": true, "direct_ip": true}}); reject == nil {
+	if _, reject := capabilityrequest.ParseCapabilityRequest(map[string]any{"capability_request": map[string]any{"host_execution": true, "direct_ip": true}}); reject == nil {
 		t.Fatal("accepted conflicting authority")
 	}
 }
@@ -45,7 +44,7 @@ func TestExecutionPermitBindsBoundaryAndIsSingleUse(t *testing.T) {
 	req := confine.Request{ProcessControl: true, Roots: []string{"/tmp/project"}}
 	tc := ToolContext{SessionID: "task", ToolCallID: "call", ProcessControl: true}
 	permit := func() *executionPermit {
-		return &executionPermit{session: tc.SessionID, call: tc.ToolCallID, processControl: true, boundary: executionBoundaryDigest(req), arguments: executionArgumentsDigest(tc.CanonicalArgs)}
+		return &executionPermit{session: tc.SessionID, call: tc.ToolCallID, processControl: true, boundary: ExecutionBoundaryDigest(req), arguments: executionArgumentsDigest(tc.CanonicalArgs)}
 	}
 	tc.executionPermit = permit()
 	changed := req
@@ -75,22 +74,11 @@ func TestExecutionBoundaryIdentityTreatsGrantsAsSets(t *testing.T) {
 	replay := first
 	replay.GrantedWriteRoots = []string{"/output", "/cache", "/cache"}
 	replay.LocalListenPorts = []uint16{9000, 8000}
-	if executionBoundaryDigest(first) != executionBoundaryDigest(replay) {
+	if ExecutionBoundaryDigest(first) != ExecutionBoundaryDigest(replay) {
 		t.Fatal("reordered grants changed the reviewed boundary")
 	}
 	replay.LocalListenPorts = []uint16{8000, 9001}
-	if executionBoundaryDigest(first) == executionBoundaryDigest(replay) {
+	if ExecutionBoundaryDigest(first) == ExecutionBoundaryDigest(replay) {
 		t.Fatal("changed port reused the reviewed boundary")
-	}
-}
-
-func TestExecutionReviewPreservesPackageAndPolicyFacts(t *testing.T) {
-	root := t.TempDir()
-	execution := &packageexec.Execution{Manager: "npm"}
-	tc := ToolContext{Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}}, ActiveRootID: "root", ProcessControl: true, PackageExecution: execution, PolicyWriteGrants: []confine.ProtectedPathGrant{confine.NewProtectedPathGrant(filepath.Join(root, "AGENTS.md"))}}
-	executor := NewDefaultToolExecutor(nil, nil, "implement")
-	action := executor.executionCapabilityAction(t.Context(), "command", map[string]any{"command": "example"}, tc)
-	if action.PackageExecution != execution || len(action.AgentPolicy) != 1 {
-		t.Fatalf("execution capability dropped independent review facts: %+v", action)
 	}
 }

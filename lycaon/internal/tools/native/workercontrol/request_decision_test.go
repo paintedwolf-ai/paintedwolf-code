@@ -3,6 +3,7 @@ package workercontrol_test
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 	"testing"
 
@@ -34,7 +35,7 @@ func TestRequestDecisionRejectsAddressedSession(t *testing.T) {
 		"question": "Refactor or work around?",
 		"options":  []any{"refactor", "work around"},
 	}, tools.ToolContext{SessionID: "s1"})
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "REQUEST_DECISION_ADDRESSED_SESSION" {
 		t.Fatalf("err = %v want REQUEST_DECISION_ADDRESSED_SESSION", err)
 	}
@@ -118,7 +119,7 @@ func TestDecisionAttachmentsCannotDisappearDuringParsing(t *testing.T) {
 			args[k] = v
 		}
 		_, err := reg.Run(t.Context(), workertools.RequestDecisionTool, args, tools.ToolContext{SessionID: "child", ParentSessionID: "parent", WorkerJobID: "job"})
-		var reject *tools.ToolReject
+		var reject *toolrejection.ToolReject
 		if !errors.As(err, &reject) || (reject.Code != "REQUEST_DECISION_ARTIFACT_SHAPE" && reject.Code != "REQUEST_DECISION_ARTIFACT_ARITY") || rec.calls != 0 {
 			t.Fatalf("malformed attachments were lost or recorded: args=%v err=%v calls=%d", attachment, err, rec.calls)
 		}

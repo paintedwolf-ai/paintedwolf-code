@@ -296,7 +296,7 @@ func (l toolBatch) batchStartHolds(ctx context.Context, sessionID, turnSurfaceID
 	}
 	return batchHolds{
 		approval: l.Deps.HumanApprovalAwaiting != nil && l.Deps.HumanApprovalAwaiting(ctx, sessionID),
-		answeringUnderHost: strings.TrimSpace(turnSurfaceID) == tools.SurfaceAwaitHost &&
+		answeringUnderHost: strings.TrimSpace(turnSurfaceID) == toolcontract.SurfaceAwaitHost &&
 			l.Deps.HostObligationHeld != nil && l.Deps.HostObligationHeld(ctx, sessionID),
 	}
 }

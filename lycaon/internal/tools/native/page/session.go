@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/browser"
@@ -76,7 +77,7 @@ type pageActResult struct {
 	ID            string            `json:"id"`
 	ActionResults []json.RawMessage `json:"action_results,omitempty"`
 	browser.PageEvidence
-	RoutesActive int                      `json:"routes_active,omitempty"`
+	RoutesActive int                     `json:"routes_active,omitempty"`
 	Timeline     *timelinearchive.Report `json:"timeline,omitempty"`
 	// Coverage tells the reader whether the recording's text was fully screened.
 	Coverage  *browser.MaskCoverage `json:"coverage,omitempty"`
@@ -183,7 +184,7 @@ func reopenHeld(ctx context.Context, pages *pagesession.Registry, tctx tools.Too
 func capacityReject(err error, sessionID string) error {
 	var capacity *pagesession.CapacityError
 	if errors.As(err, &capacity) {
-		return &tools.ToolReject{
+		return &toolrejection.ToolReject{
 			Code: "PAGE_CAP_REACHED",
 			Data: map[string]any{
 				"max_pages":     capacity.Limit,
@@ -211,7 +212,7 @@ func mapPageLifecycleReject(err error, id string) error {
 		code = "PAGE_NOT_RUNNING"
 		reason = "not_running"
 	}
-	return &tools.ToolReject{Code: code, Data: map[string]any{"id": id, "reason": reason}}
+	return &toolrejection.ToolReject{Code: code, Data: map[string]any{"id": id, "reason": reason}}
 }
 
 // attachPageVisual makes a page result's raster or recording the tool's visual. A timeline
@@ -236,7 +237,7 @@ func attachPageVisual(tctx tools.ToolContext, out browser.CaptureResult) {
 func mapBrowserReject(err error) error {
 	rej := &browserengine.RejectError{}
 	if errors.As(err, &rej) {
-		return &tools.ToolReject{Code: rej.Code, Data: rej.Data}
+		return &toolrejection.ToolReject{Code: rej.Code, Data: rej.Data}
 	}
 	return err
 }
@@ -259,5 +260,5 @@ func recordedFailure(tctx tools.ToolContext, out browser.CaptureResult, err erro
 	}
 	data["timeline"] = out.Timeline
 	data["recorded"] = true
-	return &tools.ToolReject{Code: rej.Code, Data: data}
+	return &toolrejection.ToolReject{Code: rej.Code, Data: data}
 }

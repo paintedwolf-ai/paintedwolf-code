@@ -3,6 +3,7 @@ package native
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 
 	"github.com/lycaon/lycaon/internal/git"
@@ -40,7 +41,7 @@ func resolveCommitStaging(
 		return git.CommitStaging{}, err
 	}
 	if len(authored) == 0 {
-		return git.CommitStaging{}, &tools.ToolReject{
+		return git.CommitStaging{}, &toolrejection.ToolReject{
 			Code: "GIT_COMMIT_NO_SESSION_AUTHORSHIP",
 			Data: map[string]any{"git_changed_path_count": len(changed)},
 		}
@@ -56,7 +57,7 @@ func resolveCommitStaging(
 }
 
 func commitBulkDenied(max, got int) error {
-	return &tools.ToolReject{
+	return &toolrejection.ToolReject{
 		Code: "GIT_COMMIT_BULK_DENIED",
 		Data: map[string]any{"max_paths": max, "requested": got},
 	}

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,7 +13,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -86,7 +86,7 @@ func TestGrepCancellationJoinsReaders(t *testing.T) {
 func TestDiscoveryRejectsInvalidGlob(t *testing.T) {
 	dir := t.TempDir()
 	_, err := (&GrepTool{Boundary: nativefixture.Boundary(t)}).Run(t.Context(), map[string]any{"pattern": "x", "path_glob": "*.{go,ts"}, nativefixture.Context(dir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "SURVEY_GLOB_INVALID" {
 		t.Fatalf("grep invalid glob: %v", err)
 	}
@@ -110,7 +110,7 @@ func TestGrepReadFailureDoesNotClaimAbsence(t *testing.T) {
 }
 
 func TestGrepDeadlineIsNotAnEmptySearch(t *testing.T) {
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if err := grepExecutionError(nil, context.DeadlineExceeded); !errors.As(err, &reject) || reject.Code != "GREP_DEADLINE_EXCEEDED" {
 		t.Fatalf("deadline error = %v", err)
 	}

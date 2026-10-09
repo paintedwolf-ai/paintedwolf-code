@@ -3,6 +3,8 @@ package inboundwrite
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"testing"
@@ -14,13 +16,13 @@ import (
 
 func testBoundary() *sandbox.Boundary {
 	return sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{
-		ID: tools.DefaultToolProfileID, Tools: map[string]bool{"http_request": true},
+		ID: toolprofiles.DefaultToolProfileID, Tools: map[string]bool{"http_request": true},
 	}})
 }
 
 func projectContext(root string) tools.ToolContext {
 	return tools.ToolContext{
-		Agent: tools.DefaultToolProfileID,
+		Agent: toolprofiles.DefaultToolProfileID,
 		Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}}, ActiveRootID: "root",
 	}
 }
@@ -42,7 +44,7 @@ func TestWriteLandsBytesUnderTheProject(t *testing.T) {
 func TestWriteRefusesProtectedAndEscapingPaths(t *testing.T) {
 	for _, dest := range []string{"", "../out", ".git/HEAD", ".env.local", "id_rsa.key", "/etc/hosts"} {
 		_, err := Write(t.Context(), testBoundary(), projectContext(t.TempDir()), dest, []byte("x"), "DENIED")
-		var reject *tools.ToolReject
+		var reject *toolrejection.ToolReject
 		if !errors.As(err, &reject) || reject.Code != "DENIED" {
 			t.Fatalf("dest %q error = %v, want the caller's denied code", dest, err)
 		}

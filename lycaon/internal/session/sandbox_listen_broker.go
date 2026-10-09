@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strconv"
 	"strings"
 	"time"
@@ -210,7 +211,7 @@ func (b *ListenCheckpointBroker) buildListenCard(
 		ConsequenceCode: string(api.ConsequenceCodeLocalListen),
 	}, reasons, options, hitl.FaceContext{})
 	if err != nil {
-		return sandboxAskCard{}, tools.ApprovalPlanInvalid()
+		return sandboxAskCard{}, toolrejection.ApprovalPlanInvalid()
 	}
 	return composeSandboxSecretCard(sandboxAskCard{Action: grantAction, Title: title, Plan: plan, Decision: decision}, in.SecretPermission)
 }

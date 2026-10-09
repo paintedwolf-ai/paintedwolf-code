@@ -2,6 +2,8 @@ package contract
 
 import (
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/toolexecution"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -39,7 +41,7 @@ func TestApprovedCommandPlanIsTheExecutedPlan(t *testing.T) {
 	contractcheck.FailErr(t, "register command", registry.Register("command", command.Run))
 	contractcheck.FailErr(t, "register verify", registry.Register("verify", verify.Run))
 	gate := &recordingGate{}
-	executor := tools.NewDefaultToolExecutor(tools.NewApprovalPolicyEngine(tools.NewProfilePolicyEngine(boundary), gate), registry, "implement")
+	executor := toolexecution.NewExecutor(toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), gate), registry, "implement")
 
 	for _, tool := range []string{"command", "verify"} {
 		for _, tc := range commandPlanCorpus() {

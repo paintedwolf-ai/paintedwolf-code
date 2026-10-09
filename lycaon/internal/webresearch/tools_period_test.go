@@ -3,6 +3,7 @@ package webresearch
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 	"testing"
 
@@ -58,7 +59,7 @@ func TestWebSearchRejectsUnreadableWindow(t *testing.T) {
 	fake := &FakeDirectDiscoverer{Hits: fakeHits()}
 	_, err := runWebSearch(t, periodToolRegistry(t, fake),
 		map[string]any{"query": "widget guide", "period": "last year"})
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) {
 		t.Fatalf("want ToolReject, got %T %v", err, err)
 	}

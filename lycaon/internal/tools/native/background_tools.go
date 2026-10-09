@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strconv"
 	"strings"
 	"time"
@@ -30,7 +31,7 @@ func (t *CommandOutputTool) Run(ctx context.Context, args map[string]any, tctx t
 	}
 	handle, _ := args["handle"].(string)
 	if handle == "" {
-		return "", &tools.ToolReject{Code: "BACKGROUND_HANDLE_REQUIRED", Data: map[string]any{}}
+		return "", &toolrejection.ToolReject{Code: "BACKGROUND_HANDLE_REQUIRED", Data: map[string]any{}}
 	}
 	subject, _ := t.Registry.CommandLine(tctx.SessionID, handle)
 	tctx.SetDisplaySubject(subject)
@@ -126,7 +127,7 @@ func (t *CommandStopTool) Run(ctx context.Context, args map[string]any, tctx too
 	}
 	handle, _ := args["handle"].(string)
 	if handle == "" {
-		return "", &tools.ToolReject{Code: "BACKGROUND_HANDLE_REQUIRED", Data: map[string]any{}}
+		return "", &toolrejection.ToolReject{Code: "BACKGROUND_HANDLE_REQUIRED", Data: map[string]any{}}
 	}
 	subject, _ := t.Registry.CommandLine(tctx.SessionID, handle)
 	tctx.SetDisplaySubject(subject)
@@ -150,16 +151,16 @@ func (t *CommandStopTool) Run(ctx context.Context, args map[string]any, tctx too
 func missingCommandHandleReject(reg *bgprocess.Registry, sessionID, handle string) error {
 	data := map[string]any{"handle": handle}
 	if reg == nil || !reg.HasRunning(sessionID) {
-		return &tools.ToolReject{Code: "COMMAND_OUTPUT_NO_LIVE_JOB", Data: data}
+		return &toolrejection.ToolReject{Code: "COMMAND_OUTPUT_NO_LIVE_JOB", Data: data}
 	}
-	return &tools.ToolReject{Code: "BACKGROUND_HANDLE_NOT_FOUND", Data: data}
+	return &toolrejection.ToolReject{Code: "BACKGROUND_HANDLE_NOT_FOUND", Data: data}
 }
 
 // rejectBackgroundCapture refuses capture modes that need a foreground run.
 func rejectBackgroundCapture(args map[string]any) error {
 	for _, capture := range []string{"terminal_capture", "snapshot_capture"} {
 		if _, ok := args[capture]; ok {
-			return tools.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": capture + "_incompatible", "field": "background"})
+			return toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": capture + "_incompatible", "field": "background"})
 		}
 	}
 	return nil
@@ -233,7 +234,7 @@ func runCommandBackground(
 		tools.LocalNetworkGrantOf(tctx), tctx.PackageExecution,
 	), Action: egressLease, Network: egressLease.ObservedHosts}
 	if err := tctx.Secrets.HandOff(ctx, nil); err != nil {
-		return "", tools.HeldHandOffReject(toolName, err)
+		return "", toolrejection.HeldHandOffReject(toolName, err)
 	}
 	window := openCommandWindow(ctx, tctx, toolName, commandLine)
 	var sourceRevision, sourceRootDigest string
@@ -376,14 +377,14 @@ func commandStartError(err error) error {
 	}
 	var backgroundCapacity *bgprocess.BackgroundCapacityError
 	if errors.As(err, &backgroundCapacity) {
-		return &tools.ToolReject{
+		return &toolrejection.ToolReject{
 			Code: "BACKGROUND_CAP_REACHED",
 			Data: map[string]any{"background_limit": backgroundCapacity.Limit, "live_terminal_ids": backgroundCapacity.TerminalIDs, "live_command_handles": backgroundCapacity.CommandHandles},
 		}
 	}
 	var capacity *bgprocess.AwaitedCapacityError
 	if errors.As(err, &capacity) {
-		return &tools.ToolReject{Code: "COMMAND_CONCURRENCY_CAP_REACHED", Data: map[string]any{
+		return &toolrejection.ToolReject{Code: "COMMAND_CONCURRENCY_CAP_REACHED", Data: map[string]any{
 			"max_awaited": capacity.Limit, "count": len(capacity.Handles),
 			"live_command_handles": capacity.Handles,
 		}}
@@ -396,7 +397,7 @@ func commandStartError(err error) error {
 	if errors.Is(conflict, bgprocess.ErrDuplicateRunning) {
 		code = "COMMAND_DUPLICATE_RUNNING"
 	}
-	return &tools.ToolReject{Code: code, Data: map[string]any{
+	return &toolrejection.ToolReject{Code: code, Data: map[string]any{
 		"handles": conflict.Handles, "handles_text": strings.Join(conflict.Handles, ", "),
 	}}
 }

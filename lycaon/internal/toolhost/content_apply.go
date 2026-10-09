@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"strings"
 
@@ -161,11 +162,11 @@ func (s *ContentApplyService) GateApply(ctx context.Context, tool, path string, 
 	}
 	switch final.ContentResult.Decision {
 	case api.ContentApplyReject:
-		reject := &tools.ToolReject{
+		reject := &toolrejection.ToolReject{
 			Code: "CONTENT_APPLY_REJECTED",
 			Data: map[string]any{"path": filepath.ToSlash(strings.TrimSpace(path))},
 		}
-		tools.AttachUserGuidance(reject, final.ContentResult.Guidance)
+		toolrejection.AttachUserGuidance(reject, final.ContentResult.Guidance)
 		return "", reject
 	case api.ContentApplyApprove, api.ContentApplyApprovePartial:
 		if reviewedPath != "" {

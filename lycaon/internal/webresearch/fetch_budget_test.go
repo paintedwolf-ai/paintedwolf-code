@@ -3,6 +3,7 @@ package webresearch
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -62,7 +63,7 @@ func TestFetchBudgetSessionExceededRejects(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected session budget reject")
 	}
-	rej := &tools.ToolReject{}
+	rej := &toolrejection.ToolReject{}
 	ok := errors.As(err, &rej)
 	if !ok || rej.Code != "FETCH_URL_BUDGET_EXCEEDED" {
 		t.Fatalf("got %#v want FETCH_URL_BUDGET_EXCEEDED", err)
@@ -176,7 +177,7 @@ func TestFetchBudgetRefundsSessionOnHostCancel(t *testing.T) {
 	testutil.FailErr(t, "after refund", err)
 	rel()
 	_, err = b.Acquire(ctx, "sess-r", "https://hold.example/over")
-	rej := &tools.ToolReject{}
+	rej := &toolrejection.ToolReject{}
 	ok := errors.As(err, &rej)
 	if !ok || rej.Code != "FETCH_URL_BUDGET_EXCEEDED" {
 		t.Fatalf("got %#v want session budget exceed", err)
@@ -210,7 +211,7 @@ func TestFetchURLToolHonorsSessionBudget(t *testing.T) {
 		Budget: budget,
 		Tctx:   tctx,
 	})
-	rej := &tools.ToolReject{}
+	rej := &toolrejection.ToolReject{}
 	ok := errors.As(err, &rej)
 	if !ok || rej.Code != "FETCH_URL_BUDGET_EXCEEDED" {
 		t.Fatalf("second fetch got %#v want FETCH_URL_BUDGET_EXCEEDED", err)
@@ -256,7 +257,7 @@ func TestFetchBudgetRefundKeepsOtherReservationExpiry(t *testing.T) {
 	testutil.FailErr(t, "reserve after expiry", err)
 	b.refundSession("session", expired)
 	_, err = b.reserveSession("session")
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "FETCH_URL_BUDGET_EXCEEDED" {
 		t.Fatalf("stale refund released another fetch: %v", err)
 	}

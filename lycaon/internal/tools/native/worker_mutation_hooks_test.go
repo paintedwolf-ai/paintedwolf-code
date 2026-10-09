@@ -1,6 +1,8 @@
 package native
 
 import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+
 	"context"
 	"testing"
 
@@ -33,7 +35,7 @@ func TestWorkerMutationHooksRunOnInvestigateSurface(t *testing.T) {
 	spy := &workerCoordSpy{}
 	tctx := tools.ToolContext{
 		WorkerJobID:   "job-1",
-		TurnSurfaceID: tools.SurfaceImplementInvestigate,
+		TurnSurfaceID: toolcontract.SurfaceImplementInvestigate,
 		WorkerCoord:   spy,
 	}
 	if err := beforeWorkerMutation(context.Background(), tctx, "src/foo.go"); err != nil {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"os"
 	"path/filepath"
 	"strings"
@@ -105,7 +106,7 @@ func TestCodeRewriteMultiFilePartialWriteScopeBlock(t *testing.T) {
 	boundary := sandbox.NewBoundary(sandbox.Config{
 		ProjectRootRequired: true,
 	}, []sandbox.ToolProfile{{
-		ID:         tools.DefaultToolProfileID,
+		ID:         toolprofiles.DefaultToolProfileID,
 		WriteGlobs: []string{"allowed/**"},
 		Tools:      map[string]bool{"code_rewrite": true, "read": true},
 	}})

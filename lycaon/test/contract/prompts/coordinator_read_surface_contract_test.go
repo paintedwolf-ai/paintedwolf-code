@@ -63,7 +63,7 @@ func TestCoordinatorProfileReadWriteAllowlists(t *testing.T) {
 
 func TestCoordinatorProfileToolsIncludeSurveyRead(t *testing.T) {
 	exec := toolfixture.ContractToolExecutor(t)
-	names := toolfixture.SortedToolNames(context.Background(), exec, "coordinator")
+	names := toolfixture.SortedToolNames(context.Background(), exec.Metadata, "coordinator")
 	// Profile grant; the turn surface gates invoke.
 	for _, want := range []string{"find", "grep", "read", "command"} {
 		if !slices.Contains(names, want) {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"strings"
 
@@ -68,7 +69,7 @@ func (t *RestoreVersionTool) Run(ctx context.Context, args map[string]any, tctx 
 
 	ledger, ok := tctx.SourceLedger.(restoreVersionLedger)
 	if !ok || ledger == nil {
-		return "", &tools.ToolReject{
+		return "", &toolrejection.ToolReject{
 			Code: "SOURCE_VERSION_UNAVAILABLE",
 			Data: map[string]any{
 				"path":   path,
@@ -94,7 +95,7 @@ func (t *RestoreVersionTool) Run(ctx context.Context, args map[string]any, tctx 
 
 	targetContent, ok := targetVer.Text()
 	if !ok {
-		return "", &tools.ToolReject{
+		return "", &toolrejection.ToolReject{
 			Code: "SOURCE_VERSION_UNAVAILABLE",
 			Data: map[string]any{
 				"path":       path,
@@ -122,7 +123,7 @@ func resolveRestorableVersion(
 	targetVersionID := versionID
 	if targetVersionID == "" {
 		if errors.Is(err, sourceledger.ErrHistoryNotFound) || head.FileID == "" {
-			return sourceledger.RestorableVersion{}, "", &tools.ToolReject{
+			return sourceledger.RestorableVersion{}, "", &toolrejection.ToolReject{
 				Code: "SOURCE_VERSION_NOT_FOUND",
 				Data: map[string]any{
 					"path":   path,
@@ -135,7 +136,7 @@ func resolveRestorableVersion(
 			return sourceledger.RestorableVersion{}, "", fmt.Errorf("query file versions: %w", qErr)
 		}
 		if len(versionsResult.Versions) < 2 {
-			return sourceledger.RestorableVersion{}, "", &tools.ToolReject{
+			return sourceledger.RestorableVersion{}, "", &toolrejection.ToolReject{
 				Code: "SOURCE_VERSION_NO_PREDECESSOR",
 				Data: map[string]any{
 					"path":   path,
@@ -152,7 +153,7 @@ func resolveRestorableVersion(
 			curr = "untracked"
 		}
 		if curr != baseVersionID {
-			return sourceledger.RestorableVersion{}, "", &tools.ToolReject{
+			return sourceledger.RestorableVersion{}, "", &toolrejection.ToolReject{
 				Code: "SOURCE_VERSION_BASE_MISMATCH",
 				Data: map[string]any{
 					"path":     path,
@@ -167,7 +168,7 @@ func resolveRestorableVersion(
 	targetVer, err := ledger.ReadRestorableVersion(ctx, projectID, targetVersionID)
 	if err != nil {
 		if errors.Is(err, sourceledger.ErrHistoryNotFound) {
-			return sourceledger.RestorableVersion{}, "", &tools.ToolReject{
+			return sourceledger.RestorableVersion{}, "", &toolrejection.ToolReject{
 				Code: "SOURCE_VERSION_NOT_FOUND",
 				Data: map[string]any{
 					"path":       path,
@@ -177,7 +178,7 @@ func resolveRestorableVersion(
 			}
 		}
 		if errors.Is(err, sourceledger.ErrVersionUnavailable) {
-			return sourceledger.RestorableVersion{}, "", &tools.ToolReject{
+			return sourceledger.RestorableVersion{}, "", &toolrejection.ToolReject{
 				Code: "SOURCE_VERSION_UNAVAILABLE",
 				Data: map[string]any{
 					"path":       path,
@@ -190,7 +191,7 @@ func resolveRestorableVersion(
 	}
 
 	if head.FileID != "" && targetVer.FileID != "" && targetVer.FileID != head.FileID {
-		return sourceledger.RestorableVersion{}, "", &tools.ToolReject{
+		return sourceledger.RestorableVersion{}, "", &toolrejection.ToolReject{
 			Code: "SOURCE_VERSION_PATH_MISMATCH",
 			Data: map[string]any{
 				"path":       path,

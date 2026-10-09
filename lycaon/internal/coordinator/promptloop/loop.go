@@ -1,6 +1,8 @@
 package promptloop
 
 import (
+	"github.com/lycaon/lycaon/internal/toolfeedback"
+
 	"context"
 	"errors"
 	"fmt"
@@ -8,10 +10,9 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/agentpresence"
+	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
-	"github.com/lycaon/lycaon/internal/coordinator/anchor"
-	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/events"
@@ -25,6 +26,7 @@ import (
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolpolicy"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -57,7 +59,7 @@ type PromptLoopDeps struct {
 	Policy                toolpolicy.Engine
 	DoomLoop              DoomLoopGuard
 	RejectFmt             *guidance.StaticRejectFormatter
-	BlockPlane            *tools.BlockPlane
+	BlockPlane            *toolfeedback.BlockPlane
 	HintConfig            *guidance.HintConfig
 	FormatDoomLoopReject  func(ctx context.Context, sessionID, tool string, args map[string]any, count int, repeatedCode string) (*guidance.Refusal, error)
 	// EscalateRepeatedCode evaluates repeated rejection codes after recording the outcome.

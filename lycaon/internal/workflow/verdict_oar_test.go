@@ -1,6 +1,9 @@
 package workflow
 
 import (
+	"github.com/lycaon/lycaon/internal/toolfeedback"
+
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -27,7 +30,7 @@ func TestWorkflowVerdictRefusalsRetainPolicyOccurrenceAndStructuredCause(t *test
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
 	pipeline := oar.NewGuardPipeline(rules, loader, oar.NewCounterStore())
 	pipeline.EnableAnchor(oar.AnchorToolRejected)
-	plane := tools.BlockPlane{Pipeline: pipeline, Renderer: oar.NewRenderer(guidance.NewStaticRejectFormatter(hints), nil)}
+	plane := toolfeedback.BlockPlane{Pipeline: pipeline, Renderer: oar.NewRenderer(guidance.NewStaticRejectFormatter(hints), nil)}
 	for _, code := range []string{
 		ReviewLoopVerdictInvalidCode, SubmitVerdictUnavailableCode, SubmitVerdictIterationCapCode,
 		SubmitVerdictReviewerMissingCode, guidance.VerdictCitationsRequiredCode,
@@ -51,7 +54,7 @@ func TestWorkflowVerdictRefusalsRetainPolicyOccurrenceAndStructuredCause(t *test
 			reject := requireVerdictRejection(t, body, original, code)
 			failure := plane.RejectObservation(ctx, "submit_verdict", "coordinator", nil, reject)
 			refusal, ok := guidance.RefusalFromError(failure)
-			if !ok || refusal.Code() != code || tools.AsToolReject(failure) != reject || len(refusal.Copy) != 5 {
+			if !ok || refusal.Code() != code || toolrejection.AsToolReject(failure) != reject || len(refusal.Copy) != 5 {
 				t.Fatalf("lost evaluated refusal or original cause: %v", failure)
 			}
 			if count := pipeline.Counters().Get(t.Name(), rule.Qualified(), oar.CounterFire); count != 1 {

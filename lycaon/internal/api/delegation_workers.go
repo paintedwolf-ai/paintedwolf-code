@@ -2,11 +2,12 @@ package api
 
 import (
 	"errors"
+	"github.com/go-chi/chi/v5"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"net/http"
 	"strings"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
@@ -14,7 +15,6 @@ import (
 	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session/lifecycle"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -206,7 +206,7 @@ func validWorkerStatus(status wire.WorkerStatus) bool {
 func (s *Server) handleWorkerCancel(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	if _, err := s.workerCancel.CancelJob(r.Context(), id, ""); err != nil {
-		var reject *tools.ToolReject
+		var reject *toolrejection.ToolReject
 		if errors.As(err, &reject) && reject.Code == worker.WorkerCancelNotFoundCode {
 			s.responses.Fail(w, wire.ApiErrorCodeWorkerNotFound, "worker not found")
 			return

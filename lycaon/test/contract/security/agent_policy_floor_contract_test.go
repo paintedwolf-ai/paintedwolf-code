@@ -3,6 +3,7 @@ package contract
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -268,11 +269,11 @@ func approvalGateForFloor(t *testing.T) hitl.ApprovalGate {
 	return settings.NewRuleApprovalGate(store, settings.NoSources())
 }
 
-func asToolReject(err error, out **tools.ToolReject) bool {
+func asToolReject(err error, out **toolrejection.ToolReject) bool {
 	if err == nil {
 		return false
 	}
-	r := &tools.ToolReject{}
+	r := &toolrejection.ToolReject{}
 	if errors.As(err, &r) {
 		*out = r
 		return true

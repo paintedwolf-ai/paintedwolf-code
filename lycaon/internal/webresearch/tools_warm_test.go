@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"sync/atomic"
 	"testing"
@@ -59,7 +60,7 @@ func TestWebSearchDisabledWhenSettingsOff(t *testing.T) {
 		testutil.FailErr(t, "RegisterToolsWithFactory failed", err)
 	}
 	_, err := reg.Run(context.Background(), "web_search", map[string]any{"query": "blocked"}, tools.ToolContext{})
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) {
 		t.Fatalf("want ToolReject, got %T %v", err, err)
 	}
@@ -109,7 +110,7 @@ func TestWebSearchRejectsInvalidQueryWithoutWarmHook(t *testing.T) {
 		testutil.FailErr(t, "RegisterToolsWithFactory failed", err)
 	}
 	_, err := reg.Run(context.Background(), "web_search", map[string]any{"query": ""}, tools.ToolContext{})
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) {
 		t.Fatalf("want ToolReject, got %T %v", err, err)
 	}
@@ -136,7 +137,7 @@ func TestWebSearchRejectsWhenEveryProviderFails(t *testing.T) {
 		testutil.FailErr(t, "register web tools", err)
 	}
 	_, err := reg.Run(context.Background(), "web_search", map[string]any{"query": "current widget guide"}, tools.ToolContext{})
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) {
 		t.Fatalf("want ToolReject, got %T %v", err, err)
 	}

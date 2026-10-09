@@ -3,6 +3,7 @@ package promptloop
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"slices"
 	"strings"
 	"sync"
@@ -61,7 +62,7 @@ type toolCaptures struct {
 
 // toolResultProjection keeps result facts separate from display text.
 type toolResultProjection struct {
-	reject  *tools.ToolReject
+	reject  *toolrejection.ToolReject
 	content string
 	facts   guidance.ToolResultFacts
 	// limit records how session output limits cut what the model receives.
@@ -142,10 +143,10 @@ func ownerFailureFromError(err error, tool string, contract toolcontract.Contrac
 		ownerRef = strings.TrimSpace(contract.Owner)
 	}
 	if errors.Is(err, context.Canceled) {
-		return &api.InvocationFailure{Code: tools.ToolOwnerInterruptedCode, Class: "interrupted", Retryable: true, OwnerRef: ownerRef}
+		return &api.InvocationFailure{Code: toolrejection.ToolOwnerInterruptedCode, Class: "interrupted", Retryable: true, OwnerRef: ownerRef}
 	}
-	if reject := tools.AsToolReject(err); reject != nil {
-		reject = tools.CompleteFailureMetadata(reject, tool, ownerRef)
+	if reject := toolrejection.AsToolReject(err); reject != nil {
+		reject = toolrejection.CompleteFailureMetadata(reject, tool, ownerRef)
 		return &api.InvocationFailure{
 			Code: reject.Code, Class: reject.FailureClass,
 			Retryable: reject.Retryable, OwnerRef: reject.OwnerRef, Details: reject.Data,
@@ -155,7 +156,7 @@ func ownerFailureFromError(err error, tool string, contract toolcontract.Contrac
 	ownerFailureLog.Warn("tool subsystem owner failed without a structured reject",
 		"tool", tool, "owner_ref", ownerRef, "error", err)
 	return &api.InvocationFailure{
-		Code: tools.ToolOwnerFailedCode, Class: "owner_error", Retryable: false, OwnerRef: ownerRef,
+		Code: toolrejection.ToolOwnerFailedCode, Class: "owner_error", Retryable: false, OwnerRef: ownerRef,
 		Details: map[string]any{"reason": err.Error()},
 	}
 }
@@ -170,7 +171,7 @@ func statedOrOwnerFailure(facts guidance.ToolResultFacts, contract toolcontract.
 		}
 	}
 	return &api.InvocationFailure{
-		Code: tools.ToolOwnerFailedCode, Class: "owner_error", Retryable: false, OwnerRef: ownerRef,
+		Code: toolrejection.ToolOwnerFailedCode, Class: "owner_error", Retryable: false, OwnerRef: ownerRef,
 	}
 }
 
@@ -254,16 +255,16 @@ func (l toolInvocations) executeToolCall(
 	}
 	if l.Deps.Tools == nil {
 		out := failedInvocation("", toolCaptures{})
-		out.facts = out.facts.WithCode(tools.ToolOwnerFailedCode)
+		out.facts = out.facts.WithCode(toolrejection.ToolOwnerFailedCode)
 		return out
 	}
 	def, ok := l.Deps.Tools.Definition(tc.Name)
 	if !ok {
-		return refusedInvocation(l.rejectToolOccurrence(ctx, sess, tc, toolCtx, tools.ToolOwnerFailedCode, nil))
+		return refusedInvocation(l.rejectToolOccurrence(ctx, sess, tc, toolCtx, toolrejection.ToolOwnerFailedCode, nil))
 	}
 	argsDigest, err := invocation.ArgsDigest(tc.Args)
 	if err != nil {
-		return toolInvocation{content: err.Error(), facts: guidance.ToolResultFacts{Outcome: api.ToolResultOutcomeError}.WithCode(tools.ToolOwnerFailedCode)}
+		return toolInvocation{content: err.Error(), facts: guidance.ToolResultFacts{Outcome: api.ToolResultOutcomeError}.WithCode(toolrejection.ToolOwnerFailedCode)}
 	}
 	// Open the ledger row before any pre-invoke outcome.
 	invocationID := uuid.NewString()
@@ -277,7 +278,7 @@ func (l toolInvocations) executeToolCall(
 			ToolName: tc.Name, Args: tc.Args, Contract: def.Contract,
 		})
 		if err != nil {
-			return toolInvocation{content: err.Error(), facts: guidance.ToolResultFacts{Outcome: api.ToolResultOutcomeError}.WithCode(tools.ToolOwnerFailedCode)}
+			return toolInvocation{content: err.Error(), facts: guidance.ToolResultFacts{Outcome: api.ToolResultOutcomeError}.WithCode(toolrejection.ToolOwnerFailedCode)}
 		}
 		invocationID = receipt.ID
 	}
@@ -376,7 +377,7 @@ func (l toolInvocations) finalizeToolRun(ctx context.Context, sess *api.Session,
 			out.invoked = ownerInvoked
 			out.captures = captures
 			out.receipt, out.contract = run.receipt, run.contract
-			if tools.AsToolReject(run.runErr) != nil {
+			if toolrejection.AsToolReject(run.runErr) != nil {
 				out.failure = ownerFailureFromError(run.runErr, run.call.Name, run.contract, captures)
 				out.failure.Code = reject.Code()
 			} else {

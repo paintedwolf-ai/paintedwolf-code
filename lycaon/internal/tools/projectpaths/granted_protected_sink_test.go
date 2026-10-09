@@ -3,6 +3,7 @@ package projectpaths_test
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
@@ -171,7 +172,7 @@ func TestControlPlanePathsRefuseGrantsWithTheGateCode(t *testing.T) {
 	}
 	expectCode := func(t *testing.T, err error, code string) {
 		t.Helper()
-		var reject *tools.ToolReject
+		var reject *toolrejection.ToolReject
 		if err == nil || !errors.As(err, &reject) || reject.Code != code {
 			t.Fatalf("err = %v want %s", err, code)
 		}

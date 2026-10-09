@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -143,7 +144,7 @@ func TestBreakerOpenSurfacesStructuredReject(t *testing.T) {
 	for i := 0; i < int(defaultBreakerThreshold)+2; i++ {
 		_, last = reg.CallTool(context.Background(), scope, "svc", "query", nil)
 	}
-	reject := tools.AsToolReject(last)
+	reject := toolrejection.AsToolReject(last)
 	if reject == nil || reject.Code != MCPTransportUnavailableCode {
 		t.Fatalf("after the breaker opened, err = %v want %s", last, MCPTransportUnavailableCode)
 	}

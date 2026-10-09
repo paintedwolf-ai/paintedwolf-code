@@ -2,6 +2,7 @@ package projectpaths_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"io"
 	"os"
 	"path/filepath"
@@ -23,7 +24,7 @@ func readSessionContext(t *testing.T) (tools.ToolContext, string) {
 	return tools.ToolContext{
 		Roots:        []projectroot.RootRef{{ID: "r1", Label: "ws", Path: ws, IsPrimary: true}},
 		ActiveRootID: "r1",
-		Agent:        tools.DefaultToolProfileID,
+		Agent:        toolprofiles.DefaultToolProfileID,
 	}, ws
 }
 
@@ -95,7 +96,7 @@ func TestReadSessionRefusesLinksLeavingTheRoot(t *testing.T) {
 func TestReadSessionEnforcesReadGlobs(t *testing.T) {
 	tctx, _ := readSessionContext(t)
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{
-		ID: tools.DefaultToolProfileID, Tools: map[string]bool{"read": true}, ReadGlobs: []string{"pkg/**"},
+		ID: toolprofiles.DefaultToolProfileID, Tools: map[string]bool{"read": true}, ReadGlobs: []string{"pkg/**"},
 	}})
 	session := projectpaths.NewReadSession(boundary, tctx)
 	defer session.Close()

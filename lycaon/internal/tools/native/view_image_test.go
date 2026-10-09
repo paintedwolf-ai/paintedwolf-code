@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"image"
 	"image/color"
 	"image/png"
@@ -81,7 +82,7 @@ func TestViewImageTool(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected reject")
 		}
-		var rej *tools.ToolReject
+		var rej *toolrejection.ToolReject
 		if !errors.As(err, &rej) || rej.Code != "IMAGE_FORMAT_UNSUPPORTED" {
 			t.Fatalf("got %#v want IMAGE_FORMAT_UNSUPPORTED", err)
 		}
@@ -94,7 +95,7 @@ func TestViewImageTool(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected reject")
 		}
-		var rej *tools.ToolReject
+		var rej *toolrejection.ToolReject
 		if !errors.As(err, &rej) || rej.Code != "IMAGE_NOT_FOUND" {
 			t.Fatalf("got %#v want IMAGE_NOT_FOUND", err)
 		}
@@ -110,7 +111,7 @@ func TestViewImageTool(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected reject")
 		}
-		var rej *tools.ToolReject
+		var rej *toolrejection.ToolReject
 		if !errors.As(err, &rej) || rej.Code != "IMAGE_IS_DIRECTORY" {
 			t.Fatalf("got %#v want IMAGE_IS_DIRECTORY", err)
 		}
@@ -126,7 +127,7 @@ func TestViewImageTool(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected reject")
 		}
-		var rej *tools.ToolReject
+		var rej *toolrejection.ToolReject
 		if !errors.As(err, &rej) || rej.Code != "IMAGE_CORRUPTED" {
 			t.Fatalf("got %#v want IMAGE_CORRUPTED", err)
 		}
@@ -162,7 +163,7 @@ func TestViewImageTool(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected reject")
 		}
-		var rej *tools.ToolReject
+		var rej *toolrejection.ToolReject
 		if !errors.As(err, &rej) || rej.Code != "RENDER_HANDLE_NOT_FOUND" {
 			t.Fatalf("got %#v want RENDER_HANDLE_NOT_FOUND", err)
 		}
@@ -209,7 +210,7 @@ func TestViewImageToolSecretScreening(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected secret withheld reject")
 	}
-	var rej *tools.ToolReject
+	var rej *toolrejection.ToolReject
 	if !errors.As(err, &rej) || rej.Code != "IMAGE_SECRET_WITHHELD" {
 		t.Fatalf("expected IMAGE_SECRET_WITHHELD, got: %#v", err)
 	}
@@ -226,7 +227,7 @@ func TestViewImageToolRejectsURLSource(t *testing.T) {
 	}))
 	tctx := nativefixture.Context(t.TempDir())
 	_, err := reg.Run(context.Background(), page.ViewImageToolName, map[string]any{"url": "https://example.com/mockup.png"}, tctx)
-	var rej *tools.ToolReject
+	var rej *toolrejection.ToolReject
 	if !errors.As(err, &rej) || rej.Code != "TOOL_ARGS_INVALID" {
 		t.Fatalf("err = %#v, want TOOL_ARGS_INVALID", err)
 	}
@@ -283,7 +284,7 @@ func TestViewImageRejectsOversizedRasterBeforeOCR(t *testing.T) {
 		Screen:   visualscreen.NewGate(visualscreen.NewScanner(ocr), nil, nil),
 	}))
 	_, err := reg.Run(context.Background(), page.ViewImageToolName, map[string]any{"path": "wide.png"}, nativefixture.Context(dir))
-	var rej *tools.ToolReject
+	var rej *toolrejection.ToolReject
 	if !errors.As(err, &rej) || rej.Code != "IMAGE_DIMENSIONS_EXCEEDED" {
 		t.Fatalf("err = %#v, want IMAGE_DIMENSIONS_EXCEEDED", err)
 	}
@@ -305,7 +306,7 @@ func TestViewImageRefusesOversizedFileBeforeReading(t *testing.T) {
 		Screen:   visualscreen.NewGate(visualscreen.NewScanner(ocr), nil, nil),
 	}))
 	_, err := reg.Run(context.Background(), page.ViewImageToolName, map[string]any{"path": "huge.png"}, nativefixture.Context(dir))
-	var rej *tools.ToolReject
+	var rej *toolrejection.ToolReject
 	if !errors.As(err, &rej) || rej.Code != "IMAGE_BYTES_EXCEEDED" {
 		t.Fatalf("err = %#v, want IMAGE_BYTES_EXCEEDED", err)
 	}

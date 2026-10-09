@@ -1,6 +1,8 @@
 package contract
 
 import (
+	"github.com/lycaon/lycaon/internal/toolexecution"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"path/filepath"
 	"slices"
 	"testing"
@@ -33,10 +35,10 @@ func TestCommandRedirectTargetsAreReviewedLikeNativeWrites(t *testing.T) {
 	contractcheck.FailErr(t, "register command", registry.Register("command", command.Run))
 	contractcheck.FailErr(t, "register verify", registry.Register("verify", verify.Run))
 	recorder := &recordingGate{}
-	executor := tools.NewDefaultToolExecutor(tools.NewApprovalPolicyEngine(tools.NewProfilePolicyEngine(boundary), recorder), registry, "implement")
+	executor := toolexecution.NewExecutor(toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), recorder), registry, "implement")
 	// Prepared changes reach the gate the executor was given; the recorder
 	// never asks, so no checkpoint manager is needed.
-	executor.SetCheckpointManager(nil, recorder)
+	executor.Approvals.SetCheckpointManager(nil, recorder)
 	store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "approvals.yaml"))
 	contractcheck.FailErr(t, "approval store", err)
 	realGate := settings.NewRuleApprovalGate(store, settings.NoSources())

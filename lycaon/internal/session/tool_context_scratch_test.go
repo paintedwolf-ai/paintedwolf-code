@@ -1,6 +1,7 @@
 package session
 
 import (
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"os"
 	"path/filepath"
 	"testing"
@@ -44,7 +45,7 @@ func newScratchFixture(t *testing.T) scratchFixture {
 
 func (f scratchFixture) toolContext(t *testing.T, sess *api.Session) tools.ToolContext {
 	t.Helper()
-	tctx, err := f.mgr.buildToolContext(t.Context(), sess, tools.DefaultToolProfileID, inject.Machine{})
+	tctx, err := f.mgr.buildToolContext(t.Context(), sess, toolprofiles.DefaultToolProfileID, inject.Machine{})
 	testutil.FailErr(t, "build tool context", err)
 	return tctx
 }

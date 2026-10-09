@@ -2,6 +2,7 @@ package projectpaths_test
 
 import (
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"testing"
 
@@ -53,7 +54,7 @@ func TestStagingRetainsRepositoryAndWorkerBoundaries(t *testing.T) {
 	}
 	tc.WorkerJobID = "unclaimed-worker"
 	_, err := projectpaths.ResolveGitStage(t.Context(), nil, tc, "AGENTS.md")
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "WORKER_WRITE_WITHOUT_BRANCH" {
 		t.Fatalf("worker staged on primary tree: %v", err)
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"runtime"
 	"strings"
 	"testing"
@@ -181,7 +182,7 @@ func TestCommandForegroundReturnsStructuredLiveJobConflicts(t *testing.T) {
 	_, err = tool.Run(context.Background(), map[string]any{
 		"command": "sleep 4", "wait_ms": float64(50),
 	}, tctx)
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "COMMAND_IN_FLIGHT" {
 		t.Fatalf("second awaited command error = %#v want COMMAND_IN_FLIGHT", err)
 	}

@@ -3,6 +3,7 @@ package native
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 	"time"
 
@@ -172,7 +173,7 @@ func rejectDeclaredCommandOverride(declared string, args map[string]any) error {
 	if commandsurface.SameCommandLine(requested, declared) && args["pipeline"] == nil {
 		return nil
 	}
-	return &tools.ToolReject{Code: "VERIFY_DECLARED_COMMAND_OVERRIDE", Data: map[string]any{
+	return &toolrejection.ToolReject{Code: "VERIFY_DECLARED_COMMAND_OVERRIDE", Data: map[string]any{
 		"declared":  declared,
 		"requested": requested,
 	}}
@@ -202,7 +203,7 @@ func stampUnverifiableFacts(tctx tools.ToolContext, verdict VerifyOutcome) {
 	if tctx.Out == nil || verdict != VerifyOutcomeUnverifiable {
 		return
 	}
-	tctx.Out.Facts = guidance.ToolResultFacts{}.WithCode(tools.VerifyUnverifiableCode).Merge(tctx.Out.Facts)
+	tctx.Out.Facts = guidance.ToolResultFacts{}.WithCode(toolrejection.VerifyUnverifiableCode).Merge(tctx.Out.Facts)
 }
 
 // confined binds this tool's wiring to the shared confined-foreground path.

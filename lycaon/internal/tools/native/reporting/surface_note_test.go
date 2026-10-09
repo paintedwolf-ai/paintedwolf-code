@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"strings"
 	"testing"
@@ -127,7 +128,7 @@ func TestSurfaceNoteRequiresExplicitCitation(t *testing.T) {
 		Agent:     orchestration.ProfileCoordinator,
 		Out:       out,
 	})
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "SURFACE_NOTE_UNGROUNDED" {
 		t.Fatalf("err = %v want SURFACE_NOTE_UNGROUNDED", err)
 	}
@@ -176,7 +177,7 @@ func TestSurfaceNoteUngrounded(t *testing.T) {
 		Agent:     orchestration.ProfileCoordinator,
 		Out:       out,
 	})
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "SURFACE_NOTE_UNGROUNDED" {
 		t.Fatalf("err = %v want SURFACE_NOTE_UNGROUNDED", err)
 	}
@@ -209,7 +210,7 @@ func TestSurfaceNoteURLOnlyWithEmptyLedger(t *testing.T) {
 		Agent:     orchestration.ProfileCoordinator,
 		Out:       out,
 	})
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "SURFACE_NOTE_URL_ONLY_UNGROUND" {
 		t.Fatalf("err = %v want SURFACE_NOTE_URL_ONLY_UNGROUND", err)
 	}
@@ -238,7 +239,7 @@ func TestSurfaceNoteHandleUngroundNamesOffender(t *testing.T) {
 		Agent:     orchestration.ProfileCoordinator,
 		Out:       &tools.ToolInvocationOut{},
 	})
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "SURFACE_NOTE_HANDLE_UNGROUND" {
 		t.Fatalf("err = %v want SURFACE_NOTE_HANDLE_UNGROUND", err)
 	}
@@ -298,7 +299,7 @@ func TestSurfaceNoteHandleMembershipIsChecked(t *testing.T) {
 				}
 				return
 			}
-			var reject *tools.ToolReject
+			var reject *toolrejection.ToolReject
 			if !errors.As(err, &reject) || reject.Code != "SURFACE_NOTE_HANDLE_UNGROUND" {
 				t.Fatalf("%q: err = %v want SURFACE_NOTE_HANDLE_UNGROUND", tc.handle, err)
 			}
@@ -329,7 +330,7 @@ func TestSurfaceNoteHandleUngroundRendersOffender(t *testing.T) {
 		Agent:     orchestration.ProfileCoordinator,
 		Out:       &tools.ToolInvocationOut{},
 	})
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) {
 		t.Fatalf("err = %v want ToolReject", err)
 	}
@@ -373,7 +374,7 @@ func TestSurfaceNoteHandleUnground(t *testing.T) {
 		Agent:     orchestration.ProfileCoordinator,
 		Out:       out,
 	})
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "SURFACE_NOTE_HANDLE_UNGROUND" {
 		t.Fatalf("err = %v want SURFACE_NOTE_HANDLE_UNGROUND", err)
 	}
@@ -403,7 +404,7 @@ func TestSurfaceNoteUnobservedURLIsStrict(t *testing.T) {
 		Agent:     orchestration.ProfileCoordinator,
 		Out:       out,
 	})
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "SURFACE_NOTE_HANDLE_UNGROUND" {
 		t.Fatalf("err = %v want SURFACE_NOTE_HANDLE_UNGROUND", err)
 	}
@@ -430,7 +431,7 @@ func TestSurfaceNoteSurveyOnlyEvidenceIsStrict(t *testing.T) {
 		Agent:     orchestration.ProfileCoordinator,
 		Out:       out,
 	})
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "SURFACE_NOTE_HANDLE_UNGROUND" {
 		t.Fatalf("err = %v want SURFACE_NOTE_HANDLE_UNGROUND", err)
 	}
@@ -458,7 +459,7 @@ func TestSurfaceNoteRejectedInWorkerSession(t *testing.T) {
 		Agent:           orchestration.ProfileImplementer,
 		Out:             out,
 	})
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "SURFACE_NOTE_WORKER_SESSION" {
 		t.Fatalf("err = %v want SURFACE_NOTE_WORKER_SESSION", err)
 	}
@@ -491,7 +492,7 @@ func TestSurfaceNoteInvalidArgs(t *testing.T) {
 				Agent:     orchestration.ProfileCoordinator,
 				Out:       &tools.ToolInvocationOut{},
 			})
-			var reject *tools.ToolReject
+			var reject *toolrejection.ToolReject
 			if !errors.As(err, &reject) || reject.Code != "SURFACE_NOTE_INVALID_ARGS" {
 				t.Fatalf("err = %v want SURFACE_NOTE_INVALID_ARGS", err)
 			}
@@ -578,7 +579,7 @@ func TestSurfaceNoteRejectsArtifactThisTurnNeverProduced(t *testing.T) {
 			Agent:     orchestration.ProfileCoordinator,
 			Out:       out,
 		})
-		rej := &tools.ToolReject{}
+		rej := &toolrejection.ToolReject{}
 		if !errors.As(err, &rej) || rej.Code != "SURFACE_NOTE_ARTIFACT_UNKNOWN" {
 			t.Fatalf("id %q: err=%v", id, err)
 		}

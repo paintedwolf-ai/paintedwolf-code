@@ -3,6 +3,7 @@ package jq
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,7 +13,6 @@ import (
 	"github.com/lycaon/lycaon/internal/bytebound"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tooloutput"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/safecmd"
 )
 
@@ -70,7 +70,7 @@ func TestJqRejectsDecodedInputBeforeQueryPagination(t *testing.T) {
 	ctx.MaxToolSpillBytes = int(safecmd.JQCaps().InputBytes)
 	tool := &Tool{Boundary: testBoundary(t)}
 	out, err := tool.Run(t.Context(), map[string]any{"path": blob.Rel, "query": ".value", "offset": 0, "limit": 1}, ctx)
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if out != "" || !errors.As(err, &reject) || reject.Code != "JQ_INPUT_TOO_LARGE" || reject.Data["max_bytes"] != safecmd.JQCaps().InputBytes {
 		t.Fatalf("oversized decoded input reached query: len=%d err=%v", len(out), err)
 	}
@@ -97,7 +97,7 @@ func TestJqSlicesLargeRetainedStringsWithinTheSpillBound(t *testing.T) {
 	}
 	writeJSONFile(t, dir, "ordinary.json", body)
 	_, err := tool.Run(t.Context(), map[string]any{"path": "ordinary.json", "query": ".value[-13:]"}, ctx)
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "JQ_INPUT_TOO_LARGE" || reject.Data["max_bytes"] != safecmd.JQCaps().InputBytes {
 		t.Fatalf("spill allowance leaked into project query: %v", err)
 	}

@@ -3,6 +3,7 @@ package native
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"testing"
 
@@ -29,7 +30,7 @@ func TestProcessListRequiresOwnerReview(t *testing.T) {
 		t.Fatalf("list bypassed review: %q %v %d", result, err, calls)
 	}
 	_, err = native.List(t.Context(), nil, tools.ToolContext{})
-	if tools.AsToolReject(err) == nil {
+	if toolrejection.AsToolReject(err) == nil {
 		t.Fatal("list without reviewer was not rejected")
 	}
 }
@@ -60,7 +61,7 @@ func TestProcessSignalSharesReferencesWithinTaskAndStopsAtReview(t *testing.T) {
 	}
 	tc.ParentSessionID = "other-task"
 	_, err = native.Signal(t.Context(), args, tc)
-	reject := tools.AsToolReject(err)
+	reject := toolrejection.AsToolReject(err)
 	if reject == nil || reject.Code != "PROCESS_REFERENCE_STALE" {
 		t.Fatalf("reference crossed task boundary: %v", err)
 	}

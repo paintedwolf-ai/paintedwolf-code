@@ -69,7 +69,7 @@ func TestOwnerFallbackIsLimitedToAdmittedAuthorship(t *testing.T) {
 func TestAgentToolCallsCarryNoRequestCaller(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	corp, err := contractcheck.LoadGoASTCorpus(filepath.Join(root, "lycaon", "internal", "tools"))
+	corp, err := contractcheck.LoadGoASTCorpus(filepath.Join(root, "lycaon", "internal", "toolexecution"))
 	contractcheck.FailErr(t, "load AST corpus", err)
 	found := false
 	for _, gf := range corp.Files() {
@@ -78,18 +78,18 @@ func TestAgentToolCallsCarryNoRequestCaller(t *testing.T) {
 		}
 		alias := contractcheck.ImportAliasFor(gf.AST, peoplePkg)
 		for _, fn := range funcDecls(gf.AST) {
-			if fn.Name.Name != "Invoke" || receiverName(fn) != "DefaultToolExecutor" {
+			if fn.Name.Name != "Invoke" || receiverName(fn) != "Executor" {
 				continue
 			}
 			found = true
 			if alias == "" || !callsSelector(fn.Body, alias, "WithoutCaller") {
-				t.Errorf("DefaultToolExecutor.Invoke must strip the request caller with people.WithoutCaller " +
+				t.Errorf("Executor.Invoke must strip the request caller with people.WithoutCaller " +
 					"so agent effects are never recorded as a person's")
 			}
 		}
 	}
 	if !found {
-		t.Fatal("DefaultToolExecutor.Invoke not found")
+		t.Fatal("Executor.Invoke not found")
 	}
 }
 

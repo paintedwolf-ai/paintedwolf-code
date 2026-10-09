@@ -3,6 +3,7 @@ package loopwake
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"testing"
 	"time"
 
@@ -130,7 +131,7 @@ func TestWaitRejectsConditionShapeWithStructuredCode(t *testing.T) {
 	_, err := registry.Run(t.Context(), "wait", map[string]any{
 		"conditions": []any{map[string]any{"kind": "next_worker_done", "url": "https://example.test"}},
 	}, tools.ToolContext{SessionID: "s1", Agent: orchestration.ProfileCoordinator})
-	reject := tools.AsToolReject(err)
+	reject := toolrejection.AsToolReject(err)
 	if reject == nil || reject.Code != "TOOL_ARGS_INVALID" {
 		t.Fatalf("error = %#v, want TOOL_ARGS_INVALID", err)
 	}

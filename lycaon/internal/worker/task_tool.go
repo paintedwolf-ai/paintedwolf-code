@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 
 	"github.com/google/uuid"
@@ -80,7 +81,7 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 			budget = deps.ToolBudget(tctx.ActiveRootPath())
 		}
 		if code := session.ValidateTaskMaxToolLoopsCode(maxToolLoops, budget); code != "" {
-			return "", &tools.ToolReject{Code: code, Data: map[string]any{"max_tool_loops": maxToolLoops, "min_required": budget.Min, "host_max": budget.Max}}
+			return "", &toolrejection.ToolReject{Code: code, Data: map[string]any{"max_tool_loops": maxToolLoops, "min_required": budget.Min, "host_max": budget.Max}}
 		}
 		identity, err := resolveTaskIdentity(ctx, deps, tctx, args, maxToolLoops, budget)
 		if err != nil {
@@ -88,7 +89,7 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 		}
 		agentType := identity.AgentType
 		if _, err := deps.Agents.Get(agentType); err != nil {
-			return "", &tools.ToolReject{
+			return "", &toolrejection.ToolReject{
 				Code: "WORKER_TYPE_UNAVAILABLE",
 				Data: map[string]any{"agent_type": agentType, "reason": "unknown_agent_type"},
 			}
@@ -118,7 +119,7 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 				return "", fmt.Errorf("load pending decision: %w", err)
 			}
 			if ok {
-				return "", &tools.ToolReject{
+				return "", &toolrejection.ToolReject{
 					Code: "TASK_DECISION_PENDING",
 					Data: map[string]any{
 						"child_session_id": childSessionID,
@@ -139,7 +140,7 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 			prompt = composed
 		}
 		if prior := identity.Prior; prior != nil && overlayDiscarded(prior.MergeStatus) {
-			return "", &tools.ToolReject{
+			return "", &toolrejection.ToolReject{
 				Code: "WORKER_RESUME_OVERLAY_DISCARDED",
 				Data: map[string]any{
 					"child_session_id": childSessionID,
@@ -151,13 +152,13 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 
 		projScope := project.ScopeFromToolContext(tctx.ProjectID, tctx.ActiveRootID, tctx.Roots, tctx.ActiveRootPath())
 		if !projScope.HasRoots && !prompts.AgentRunsWithoutWorkspace(agentType) {
-			return "", &tools.ToolReject{
+			return "", &toolrejection.ToolReject{
 				Code: "WORKER_WORKSPACE_REQUIRED",
 				Data: map[string]any{"agent_type": agentType, "reason": "project_roots_required"},
 			}
 		}
 		if agentdef.DeclaresAny(agentType, agentdef.CapabilityExternal) && deps.WebSearchEnabled != nil && !deps.WebSearchEnabled() {
-			return "", &tools.ToolReject{
+			return "", &toolrejection.ToolReject{
 				Code: "WEB_SEARCH_DISABLED",
 				Data: map[string]any{"agent_type": agentType},
 			}

@@ -3,6 +3,7 @@ package native
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
@@ -64,7 +65,7 @@ func TestReplaceLinesBeyondEOF(t *testing.T) {
 	_, err := tool.Run(context.Background(), map[string]any{
 		"path": "a.txt", "start_line": 2, "end_line": 5, "new_content": "x",
 	}, nativefixture.Context(tmpDir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if err == nil || !errors.As(err, &reject) || reject.Code != "REPLACE_LINES_BEYOND_EOF" {
 		t.Fatalf("err = %v want REPLACE_LINES_BEYOND_EOF", err)
 	}
@@ -79,7 +80,7 @@ func TestReplaceLinesInvalidRange(t *testing.T) {
 	_, err := tool.Run(context.Background(), map[string]any{
 		"path": "a.txt", "start_line": 3, "end_line": 1, "new_content": "x",
 	}, nativefixture.Context(tmpDir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if err == nil || !errors.As(err, &reject) || reject.Code != "REPLACE_LINES_INVALID_RANGE" {
 		t.Fatalf("err = %v want REPLACE_LINES_INVALID_RANGE", err)
 	}
@@ -89,7 +90,7 @@ func TestReplaceLinesRejectsNonIntegralCoordinates(t *testing.T) {
 	_, err := parseLineOperations("a.txt", map[string]any{
 		"start_line": 1.5, "end_line": float64(2), "new_content": "x",
 	})
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if err == nil || !errors.As(err, &reject) || reject.Code != "REPLACE_LINES_INVALID_RANGE" {
 		t.Fatalf("err = %v want REPLACE_LINES_INVALID_RANGE", err)
 	}
@@ -104,7 +105,7 @@ func TestReplaceLinesEnforcesAtomicOperationLimit(t *testing.T) {
 		}
 	}
 	_, err := parseLineOperations("a.txt", map[string]any{"operations": operations})
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if err == nil || !errors.As(err, &reject) || reject.Code != "REPLACE_LINES_INVALID_RANGE" {
 		t.Fatalf("err = %v want REPLACE_LINES_INVALID_RANGE", err)
 	}
@@ -209,7 +210,7 @@ func TestReplaceLinesDedentMismatchDoesNotWrite(t *testing.T) {
 			map[string]any{"kind": "shift_indent", "start_line": float64(2), "end_line": float64(3), "direction": "dedent", "prefix": "  "},
 		},
 	}, nativefixture.Context(tmpDir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if err == nil || !errors.As(err, &reject) || reject.Code != "REPLACE_LINES_INDENT_MISMATCH" {
 		t.Fatalf("err = %v want REPLACE_LINES_INDENT_MISMATCH", err)
 	}
@@ -232,7 +233,7 @@ func TestReplaceLinesOverlappingOperationsDoNotWrite(t *testing.T) {
 			map[string]any{"kind": "shift_indent", "start_line": float64(3), "end_line": float64(4), "direction": "indent", "prefix": "  "},
 		},
 	}, nativefixture.Context(tmpDir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if err == nil || !errors.As(err, &reject) || reject.Code != "REPLACE_LINES_INVALID_RANGE" {
 		t.Fatalf("err = %v want REPLACE_LINES_INVALID_RANGE", err)
 	}
@@ -258,7 +259,7 @@ func TestEditOldStringNotFoundNearLine(t *testing.T) {
 	_, err := tool.Run(context.Background(), map[string]any{
 		"path": "file.go", "old_string": "func main() { }", "new_string": "x",
 	}, nativefixture.Context(tmpDir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if err == nil || !errors.As(err, &reject) || reject.Code != "EDIT_OLD_STRING_NOT_FOUND" {
 		t.Fatalf("err = %v want EDIT_OLD_STRING_NOT_FOUND", err)
 	}
@@ -299,4 +300,3 @@ func TestReplaceLinesSyntaxOverride(t *testing.T) {
 		t.Fatalf("expected overridden content, got %q", string(got))
 	}
 }
-

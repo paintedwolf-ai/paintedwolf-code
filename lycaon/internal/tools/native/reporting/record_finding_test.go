@@ -3,6 +3,8 @@ package reporting_test
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -92,7 +94,7 @@ func TestRecordFindingRequiresReference(t *testing.T) {
 	dir := t.TempDir()
 	testutil.FailErr(t, "register", native.RegisterRecordFindingTool(reg, reporttools.RecordFindingGates{}, findings.NewMemoryStore(), testFindingsScopeKey(dir)))
 	_, err := reg.Run(context.Background(), "record_finding", map[string]any{"summary": "A useful observation"}, findingContext(dir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "FINDING_UNGROUNDED" {
 		t.Fatalf("err = %v", err)
 	}
@@ -112,7 +114,7 @@ func TestRecordFindingRejectsOversizeSummary(t *testing.T) {
 
 func TestRecordFindingGroundingBlockNotStored(t *testing.T) {
 	reg := tools.NewDefaultRegistry()
-	gate := &fakeFindingGate{findingErr: &tools.ToolReject{Code: "FINDING_UNGROUNDED"}}
+	gate := &fakeFindingGate{findingErr: &toolrejection.ToolReject{Code: "FINDING_UNGROUNDED"}}
 	store := findings.NewMemoryStore()
 	dir := t.TempDir()
 	testutil.FailErr(t, "register", native.RegisterRecordFindingTool(reg, reporttools.RecordFindingGates{Grounding: gate}, store, testFindingsScopeKey(dir)))
@@ -122,7 +124,7 @@ func TestRecordFindingGroundingBlockNotStored(t *testing.T) {
 	_, err := reg.Run(context.Background(), "record_finding",
 		map[string]any{"summary": "ungrounded claim about something"},
 		tctx)
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "FINDING_UNGROUNDED" {
 		t.Fatalf("err = %v", err)
 	}
@@ -181,7 +183,7 @@ func findingContext(dir string) tools.ToolContext {
 		Roots:               roots,
 		ActiveRootID:        "r1",
 		SourceWorkspaceKind: api.SourceWorkspaceKindProject,
-		Agent:               tools.DefaultToolProfileID,
+		Agent:               toolprofiles.DefaultToolProfileID,
 		SessionID:           "test-session",
 		RepoFileCount:       100,
 		RepoFileCountKnown:  true,
@@ -203,7 +205,7 @@ func TestRecordFindingUnicodeDetailAndCorrections(t *testing.T) {
 		t.Fatalf("findings: %+v", rows)
 	}
 	_, err := reg.Run(t.Context(), "record_finding", map[string]any{"summary": "detail too large", "ref": "source.go:2", "body": strings.Repeat("界", 3000)}, ctx)
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "TOOL_ARGS_INVALID" {
 		t.Fatalf("oversize body error: %v", err)
 	}

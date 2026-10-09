@@ -34,7 +34,7 @@ func TestNonHTTPContractMandatoryAuthzDetailForSocketAndDirect(t *testing.T) {
 	if !strings.Contains(sock, "recordSocketCapabilityApplied") || !strings.Contains(sock, "authzledger.ActionCapabilityApplied") {
 		t.Fatal("applied sockets must emit capability_applied records")
 	}
-	direct := contractcheck.ReadRepoFile(t, root, "lycaon/internal/tools/direct_ip_capability.go")
+	direct := contractcheck.ReadRepoFile(t, root, "lycaon/internal/toolexecution/direct_ip_capability.go")
 	if !strings.Contains(direct, "emitDirectIPLifecycle") || !strings.Contains(direct, "DirectIPLifecycleStarted") {
 		t.Fatal("direct execution must emit lifecycle authz detail")
 	}

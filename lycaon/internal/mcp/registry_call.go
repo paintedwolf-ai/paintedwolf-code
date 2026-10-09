@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"sort"
 	"strings"
 	"time"
@@ -117,7 +118,7 @@ func (r *RegistryImpl) CallTool(ctx context.Context, scope CallScope, providerID
 	defer cancel()
 	// Pin the approved definition immediately before invocation.
 	if err := r.acceptToolDefinition(providerID, toolName); err != nil {
-		return "", &tools.ToolReject{
+		return "", &toolrejection.ToolReject{
 			Code: MCPConsentStateUnavailableCode,
 			Data: map[string]any{"provider": providerID, "tool": toolName},
 		}
@@ -126,7 +127,7 @@ func (r *RegistryImpl) CallTool(ctx context.Context, scope CallScope, providerID
 	// A refused handoff is the host's decision, not a provider failure, so it
 	// stays outside the breaker.
 	if err := secretcap.ResolutionFrom(ctx).HandOff(ctx, mcpOutboundArgument); err != nil {
-		return "", tools.HeldHandOffReject("mcp", err)
+		return "", toolrejection.HeldHandOffReject("mcp", err)
 	}
 	br := r.breakerFor(providerID)
 	raw, err := br.Execute(func() (any, error) {
@@ -142,7 +143,7 @@ func (r *RegistryImpl) CallTool(ctx context.Context, scope CallScope, providerID
 		}
 		if res.IsError {
 			text := ExtractToolResultText(res)
-			return "", &tools.ToolReject{
+			return "", &toolrejection.ToolReject{
 				Code: declaredMCPRejectCode(res.StructuredContent),
 				Data: map[string]any{
 					"provider":    providerID,
@@ -177,7 +178,7 @@ func breakerReject(providerID, toolName string, err error) error {
 	if !errors.Is(err, gobreaker.ErrOpenState) && !errors.Is(err, gobreaker.ErrTooManyRequests) {
 		return err
 	}
-	return &tools.ToolReject{
+	return &toolrejection.ToolReject{
 		Code: MCPTransportUnavailableCode,
 		Data: map[string]any{
 			"provider":            providerID,
@@ -263,8 +264,8 @@ func (r *RegistryImpl) screenCallToolArgs(ctx context.Context, entry MCPProvider
 	}
 	secretcap.ResolutionFrom(ctx).Withhold(ctx)
 	// Blocking outcomes return redaction-safe reject data.
-	reject := &tools.ToolReject{
-		Code: tools.OutboundSecretDeniedCode,
+	reject := &toolrejection.ToolReject{
+		Code: toolrejection.OutboundSecretDeniedCode,
 		Data: map[string]any{
 			"surface": string(secretmatch.SurfaceMCP),
 			"rule_id": strings.TrimSpace(primary.match.RuleID),
@@ -272,18 +273,18 @@ func (r *RegistryImpl) screenCallToolArgs(ctx context.Context, entry MCPProvider
 			"shape":   strings.TrimSpace(primary.match.GenericShape),
 		},
 	}
-	tools.AttachUserGuidance(reject, resolution.Guidance)
+	toolrejection.AttachUserGuidance(reject, resolution.Guidance)
 	return nil, mcpRedactionReceipt{}, reject
 }
 
 // Screen failures carry no user guidance.
-func mcpSecretFaultReject(destination string, primary mcpArgHit, err error) *tools.ToolReject {
+func mcpSecretFaultReject(destination string, primary mcpArgHit, err error) *toolrejection.ToolReject {
 	stage := secretmatch.FaultStageRaise
 	if fault, ok := secretmatch.Faulted(err); ok {
 		stage = fault.Stage
 	}
-	return &tools.ToolReject{
-		Code: tools.OutboundSecretScreenFailedCode,
+	return &toolrejection.ToolReject{
+		Code: toolrejection.OutboundSecretScreenFailedCode,
 		Data: map[string]any{
 			"surface":     string(secretmatch.SurfaceMCP),
 			"rule_id":     strings.TrimSpace(primary.match.RuleID),
@@ -428,7 +429,7 @@ func (r *RegistryImpl) breakerFor(providerID string) *gobreaker.CircuitBreaker {
 			if err == nil {
 				return true
 			}
-			return tools.AsToolReject(err) != nil
+			return toolrejection.AsToolReject(err) != nil
 		},
 	})
 	r.breakers[providerID] = br

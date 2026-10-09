@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/lycaon/lycaon/internal/promptresult"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -57,7 +58,7 @@ func TestCompletionWaitRejectsUnownedOrUnboundedConditions(t *testing.T) {
 				args["until_complete"] = "true"
 			}
 			_, err := reg.Run(t.Context(), "wait", args, tools.ToolContext{SessionID: "s1", ProjectID: testdbseed.DefaultProjectID})
-			if reject := tools.AsToolReject(err); reject == nil || reject.Code != "TOOL_ARGS_INVALID" {
+			if reject := toolrejection.AsToolReject(err); reject == nil || reject.Code != "TOOL_ARGS_INVALID" {
 				t.Fatalf("invalid completion wait = %v", err)
 			}
 			if loop.IsSleeping("s1") {

@@ -29,15 +29,15 @@ func TestRuntimeDetectionReloadPreservesSealedGate(t *testing.T) {
 		Catalog: extpackstest.StockCatalog(t), Approvals: store})
 	testutil.FailErr(t, "build tool runtime", err)
 	var published atomic.Pointer[runtimeDetectionFixture]
-	r.SetDetectionSource(func() settings.DetectionSource {
+	r.Authority.SetDetectionSource(func() settings.DetectionSource {
 		if source := published.Load(); source != nil {
 			return source
 		}
 		return nil
 	})
-	r.SealApprovalGate()
-	sealed := r.gateBuilder.Seal()
-	if _, ok := r.approvalGate.PutAskQuiet(hitl.AskQuiet{ChatSessionID: "session", Key: "retained"}, 0); !ok {
+	r.Authority.SealApprovalGate()
+	sealed := r.Authority.gateBuilder.Seal()
+	if _, ok := r.Authority.approvalGate.PutAskQuiet(hitl.AskQuiet{ChatSessionID: "session", Key: "retained"}, 0); !ok {
 		t.Fatal("install ask quiet")
 	}
 	action := hitl.ProposedAction{Tool: "command", SessionID: "session",
@@ -50,12 +50,12 @@ func TestRuntimeDetectionReloadPreservesSealedGate(t *testing.T) {
 			fixture := source.(runtimeDetectionFixture)
 			published.Store(&fixture)
 		}
-		result, err := r.approvalGate.Evaluate(t.Context(), action)
+		result, err := r.Authority.approvalGate.Evaluate(t.Context(), action)
 		testutil.FailErr(t, "evaluate reloaded detection source", err)
-		if r.gateBuilder.Seal() != sealed {
+		if r.Authority.gateBuilder.Seal() != sealed {
 			t.Fatal("detection reload replaced the sealed gate")
 		}
-		if _, ok := r.approvalGate.AskQuietLive("session", "retained"); !ok {
+		if _, ok := r.Authority.approvalGate.AskQuietLive("session", "retained"); !ok {
 			t.Fatal("detection reload discarded session state")
 		}
 		if source == nil {
@@ -74,7 +74,7 @@ func TestRuntimeDetectionReloadPreservesSealedGate(t *testing.T) {
 		workers.Go(func() {
 			for range 100 {
 				published.Store(&runtimeDetectionFixture{})
-				_, err := r.approvalGate.Evaluate(t.Context(), action)
+				_, err := r.Authority.approvalGate.Evaluate(t.Context(), action)
 				if err != nil {
 					t.Errorf("evaluate concurrent reload: %v", err)
 				}

@@ -3,6 +3,7 @@ package projectpaths_test
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolexecution"
 	"os"
 	"path/filepath"
 	"testing"
@@ -93,7 +94,7 @@ func assertApprovalPathIdentity(t *testing.T, tc tools.ToolContext, path, target
 			return "ok", nil
 		},
 	}))
-	executor := tools.NewDefaultToolExecutor(policy, registry, "implement")
+	executor := toolexecution.NewExecutor(policy, registry, "implement")
 	_, err := executor.Invoke(t.Context(), tool, map[string]any{"path": path}, tc)
 	testutil.FailErr(t, "invoke path probe", err)
 }

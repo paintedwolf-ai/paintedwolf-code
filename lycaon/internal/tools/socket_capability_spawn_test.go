@@ -1,6 +1,8 @@
 package tools
 
 import (
+	"github.com/lycaon/lycaon/internal/capabilitygrants"
+
 	"net"
 	"os"
 	"path/filepath"
@@ -16,7 +18,7 @@ import (
 func TestSocketDayGrantOfferIdentity(t *testing.T) {
 	action := hitl.ProposedAction{Tool: "command", SessionID: "sess-sock"}
 	grant := confine.SocketGrant{ApprovedPath: "/tmp/svc.sock", ResolvedPath: "/private/tmp/svc.sock"}
-	offers := SocketExecutionGrantOffers(action, []confine.SocketGrant{grant})
+	offers := capabilitygrants.SocketExecutionGrantOffers(action, []confine.SocketGrant{grant})
 	day, task := offers[0], offers[1]
 	if day.ID == task.ID {
 		t.Fatal("day and task socket offers must never share an id")
@@ -52,7 +54,7 @@ func TestSocketDayGrantOfferIdentity(t *testing.T) {
 func TestSocketDayRungRidesProjectWhileDurableRungStaysTask(t *testing.T) {
 	action := hitl.ProposedAction{Tool: "command", SessionID: "sess-sock", ProjectID: "proj-sock", ProjectDir: "/tmp/proj"}
 	grant := confine.SocketGrant{ApprovedPath: "/tmp/svc.sock", ResolvedPath: "/private/tmp/svc.sock"}
-	offers := SocketExecutionGrantOffers(action, []confine.SocketGrant{grant})
+	offers := capabilitygrants.SocketExecutionGrantOffers(action, []confine.SocketGrant{grant})
 	if len(offers) != 3 {
 		t.Fatalf("socket offers = %d, want day, task, and project: %+v", len(offers), offers)
 	}
@@ -100,7 +102,7 @@ func TestSocketDayRungRidesProjectWhileDurableRungStaysTask(t *testing.T) {
 func TestSocketDayRungRidesIdentityWithoutFolder(t *testing.T) {
 	action := hitl.ProposedAction{Tool: "command", SessionID: "sess-sock", ProjectID: "proj-sock"}
 	grant := confine.SocketGrant{ApprovedPath: "/tmp/svc.sock", ResolvedPath: "/private/tmp/svc.sock"}
-	offers := SocketExecutionGrantOffers(action, []confine.SocketGrant{grant})
+	offers := capabilitygrants.SocketExecutionGrantOffers(action, []confine.SocketGrant{grant})
 	if offers[0].Scope != hitl.ApprovalGrantScopeProject || offers[0].Grant.ProjectID != "proj-sock" {
 		t.Fatalf("no-folder socket day = %+v, want project identity", offers[0])
 	}
@@ -109,7 +111,7 @@ func TestSocketDayRungRidesIdentityWithoutFolder(t *testing.T) {
 func TestSocketDayRungStaysTaskWithoutProjectIdentity(t *testing.T) {
 	action := hitl.ProposedAction{Tool: "command", SessionID: "sess-sock", ProjectDir: "/tmp/proj"}
 	grant := confine.SocketGrant{ApprovedPath: "/tmp/svc.sock", ResolvedPath: "/private/tmp/svc.sock"}
-	offers := SocketExecutionGrantOffers(action, []confine.SocketGrant{grant})
+	offers := capabilitygrants.SocketExecutionGrantOffers(action, []confine.SocketGrant{grant})
 	if offers[0].Scope != hitl.ApprovalGrantScopeChat {
 		t.Fatalf("folder-only socket day = %+v, want task", offers[0])
 	}

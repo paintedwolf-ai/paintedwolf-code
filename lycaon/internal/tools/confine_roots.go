@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"strings"
 
@@ -40,24 +41,24 @@ func ConfineReadRootsForAction(tctx ToolContext) []string {
 	if branch := strings.TrimSpace(tctx.WorkerBranchRoot); branch != "" {
 		out = append(out, branch)
 	}
-	return uniqueRoots(out)
+	return UniqueRoots(out)
 }
 
 // ValidateAttachedRootsForAction converts an attached-lane boundary refusal
 // into a structured tool reject.
-func ValidateAttachedRootsForAction(roots []string) *ToolReject {
+func ValidateAttachedRootsForAction(roots []string) *toolrejection.ToolReject {
 	return writeRootRefusalReject(confine.ValidateAttachedWriteRoots(roots))
 }
 
 // ValidateGrantedRootsForAction converts a granted-lane boundary refusal into
 // a structured tool reject.
-func ValidateGrantedRootsForAction(roots []string) *ToolReject {
+func ValidateGrantedRootsForAction(roots []string) *toolrejection.ToolReject {
 	return writeRootRefusalReject(confine.ValidateGrantedWriteRoots(roots))
 }
 
 // writeRootRefusalReject publishes refusals under the registered guidance code;
 // the confine lane code rides along as the machine reason.
-func writeRootRefusalReject(err *confine.WriteRootRefusalError) *ToolReject {
+func writeRootRefusalReject(err *confine.WriteRootRefusalError) *toolrejection.ToolReject {
 	if err == nil {
 		return nil
 	}
@@ -65,7 +66,7 @@ func writeRootRefusalReject(err *confine.WriteRootRefusalError) *ToolReject {
 	if err.Code == confine.WriteRootCodeControlPlane {
 		code = isolation.CodeControlPlaneDenied
 	}
-	return &ToolReject{
+	return &toolrejection.ToolReject{
 		Code: code,
 		Data: map[string]any{
 			"path":   filepath.ToSlash(err.Path),

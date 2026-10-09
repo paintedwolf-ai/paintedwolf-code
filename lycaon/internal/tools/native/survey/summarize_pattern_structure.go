@@ -4,12 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"sort"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/summarize"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
@@ -168,7 +168,7 @@ func scopeStructureToMatches(sc summarize.StructureCandidate, pattern string, ma
 	return sc
 }
 
-func patternNoMaterialReject(ctx context.Context, g *summarizeGatherer, paths []string, pattern string, skipped []string) *tools.ToolReject {
+func patternNoMaterialReject(ctx context.Context, g *summarizeGatherer, paths []string, pattern string, skipped []string) *toolrejection.ToolReject {
 	for _, path := range skipped {
 		g.noteSkippedPath(path)
 	}
@@ -179,7 +179,7 @@ func patternNoMaterialReject(ctx context.Context, g *summarizeGatherer, paths []
 			data["sample_identifiers"] = strings.Join(samples, ", ")
 		}
 	}
-	return &tools.ToolReject{Code: "SUMMARIZE_NO_MATERIAL", Data: data}
+	return &toolrejection.ToolReject{Code: "SUMMARIZE_NO_MATERIAL", Data: data}
 }
 
 func (g *summarizeGatherer) sampleOutlineIdentifiers(ctx context.Context, display string, max int) []string {

@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/call"
@@ -109,7 +110,7 @@ func (m *Manager) BeforeWorkerWrite(ctx context.Context, tctx tools.ToolContext,
 	if m.workerQueue != nil {
 		if task, ok := m.workerQueue.Get(tctx.WorkerJobID); ok && task != nil {
 			if scope := task.EffectiveScope(); !scope.IsWrite() {
-				return &tools.ToolReject{
+				return &toolrejection.ToolReject{
 					Code: TaskScopeReadMutationDeniedCode,
 					Data: map[string]any{
 						"path":       relPath,

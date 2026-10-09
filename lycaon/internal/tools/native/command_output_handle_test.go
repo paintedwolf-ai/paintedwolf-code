@@ -1,16 +1,16 @@
 package native
 
 import (
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
-	"github.com/lycaon/lycaon/internal/tools"
 )
 
 func TestMissingCommandHandleRejectNoLiveJob(t *testing.T) {
 	reg := bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{})
 	err := missingCommandHandleReject(reg, "sess", "command-1")
-	tr := tools.AsToolReject(err)
+	tr := toolrejection.AsToolReject(err)
 	if tr == nil || tr.Code != "COMMAND_OUTPUT_NO_LIVE_JOB" {
 		t.Fatalf("got %v", err)
 	}
@@ -21,7 +21,7 @@ func TestMissingCommandHandleRejectNoLiveJob(t *testing.T) {
 
 func TestMissingCommandHandleRejectNilRegistry(t *testing.T) {
 	err := missingCommandHandleReject(nil, "sess", "command-1")
-	tr := tools.AsToolReject(err)
+	tr := toolrejection.AsToolReject(err)
 	if tr == nil || tr.Code != "COMMAND_OUTPUT_NO_LIVE_JOB" {
 		t.Fatalf("got %v", err)
 	}
@@ -29,7 +29,7 @@ func TestMissingCommandHandleRejectNilRegistry(t *testing.T) {
 
 func TestCommandCapacityUsesRefusedAdmission(t *testing.T) {
 	err := &bgprocess.AwaitedCapacityError{Limit: 2, Handles: []string{"a", "b"}}
-	reject := tools.AsToolReject(commandStartError(err))
+	reject := toolrejection.AsToolReject(commandStartError(err))
 	if reject == nil || reject.Code != "COMMAND_CONCURRENCY_CAP_REACHED" || reject.Data["max_awaited"] != 2 || reject.Data["count"] != 2 {
 		t.Fatalf("configured admission facts lost: %+v", reject)
 	}

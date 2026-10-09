@@ -144,6 +144,10 @@ Every subprocess crosses [`internal/exec`](../lycaon/internal/exec) with a manda
 
 ### Native tool-family subpackages
 
+Tool invocation contracts and the one-call execution permit remain in `internal/tools`. The permit is private and can be consumed only by the launch boundary. `internal/toolexecution.Executor` composes definition metadata, approval coordination, confinement, process/network capabilities, endpoint discovery, secret release, and structured rejection domains. Each domain retains its own state; consumers configure the owner directly. `internal/toolhost.Runtime` composes skill, survey, command, mutation, web, and authority services without copying their state into a second runtime facade.
+
+The pure command grammar lives in `toolcommand`, profile policy in `toolprofiles`, approval presentation contracts in `toolapproval`, and capability request/grant vocabulary in `capabilityrequest` and `capabilitygrants`. `toolrejection` owns rejection codes and observations; `toolfeedback` projects those observations into OAR and renders the result. These internal boundaries change no persisted shape, wire field, public rejection-code meaning, or published OAR fact.
+
 The `internal/tools/native` hub holds the mutating tools and their write pipeline. **Self-contained tool families** live in subpackages that never import `native`. Two places register them:
 
 - `native` registers the families behind its `Register*` functions (page, terminal, reporting, worker control), so `app` keeps one import for them.

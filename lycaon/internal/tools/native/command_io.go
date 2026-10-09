@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"io"
 	"os"
 	"path/filepath"
@@ -52,7 +53,7 @@ func CommandIO(ctx context.Context, boundary *sandbox.Boundary, tctx tools.ToolC
 	if len(inlineEnv) > 0 {
 		if err := exec.ValidateInlineEnv(inlineEnv); err != nil {
 			if errors.Is(err, exec.ErrInvalidEnvKey) || errors.Is(err, exec.ErrBlockedEnvKey) {
-				return out, &tools.ToolReject{Code: "ENV_KEY_INVALID", Data: map[string]any{"reason": err.Error()}}
+				return out, &toolrejection.ToolReject{Code: "ENV_KEY_INVALID", Data: map[string]any{"reason": err.Error()}}
 			}
 			return out, err
 		}

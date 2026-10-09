@@ -1,8 +1,11 @@
 package native
 
 import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"maps"
 	"os"
 	"path/filepath"
@@ -92,7 +95,7 @@ func TestCommandIORedirectRejectsOutOfScope(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected write-scope rejection")
 	}
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "WRITE_SCOPE_DENIED" {
 		t.Fatalf("err = %v want WRITE_SCOPE_DENIED ToolReject", err)
 	}
@@ -117,7 +120,7 @@ func TestCommandIORedirectRejectsOutOfScopeVerify(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected write-scope rejection")
 	}
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "WRITE_SCOPE_DENIED" {
 		t.Fatalf("err = %v want WRITE_SCOPE_DENIED ToolReject", err)
 	}
@@ -139,7 +142,7 @@ func TestCommandIORedirectRejectsCoordinator(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected write-scope rejection")
 	}
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "WRITE_SCOPE_DENIED" {
 		t.Fatalf("err = %v want WRITE_SCOPE_DENIED ToolReject (coordinator redirect)", err)
 	}
@@ -172,7 +175,7 @@ func TestCommandIORedirectSharesInvestigateWriteScope(t *testing.T) {
 	b.SetPathScopes(scopes)
 	tctx := testToolContext(root)
 	tctx.Agent = "coordinator"
-	tctx.TurnSurfaceID = tools.SurfaceImplementInvestigate
+	tctx.TurnSurfaceID = toolcontract.SurfaceImplementInvestigate
 
 	io, err := commandIOFor(context.Background(), b, tctx, map[string]any{
 		"stdout_to": "scratch/git-status.txt",

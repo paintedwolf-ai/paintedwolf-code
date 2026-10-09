@@ -1,6 +1,8 @@
 package contract
 
 import (
+	"github.com/lycaon/lycaon/internal/capabilitygrants"
+
 	"go/ast"
 	"path/filepath"
 	"strings"
@@ -10,7 +12,6 @@ import (
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/settings"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -102,11 +103,11 @@ func TestPlanOptionTitlesAreFrozen(t *testing.T) {
 		Decision: &gate.Decision{Primary: api.GateExplicitApprovalRequest},
 	}))
 
-	checkOffers("socket", tools.SocketExecutionGrantOffers(cmd, []confine.SocketGrant{{
+	checkOffers("socket", capabilitygrants.SocketExecutionGrantOffers(cmd, []confine.SocketGrant{{
 		ApprovedPath: "/tmp/svc.sock", ResolvedPath: "/private/tmp/svc.sock",
 	}}))
 
-	checkOffers("direct ip", tools.DirectIPExecutionGrantOffers(cmd, hitl.DirectIPLease{
+	checkOffers("direct ip", capabilitygrants.DirectIPExecutionGrantOffers(cmd, hitl.DirectIPLease{
 		ActionDigest: "action-a", RequestDigest: "req-a", ConfinementDigest: "conf-a",
 		DeclaredDestinations: []string{"udp://1.2.3.4:123"}, CommandSummary: "ntpdate",
 	}))

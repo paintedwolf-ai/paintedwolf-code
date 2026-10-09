@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"io"
 	"log/slog"
 	"net"
@@ -16,8 +17,6 @@ import (
 	"syscall"
 
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
-
-	"github.com/lycaon/lycaon/internal/tools"
 )
 
 // sessionRef identifies one provider connection within one scope.
@@ -227,7 +226,7 @@ func (r *RegistryImpl) authRequiredNow(providerID string) bool {
 
 // transportDead distinguishes closed transports from declared tool errors.
 func transportDead(err error) bool {
-	if err == nil || tools.AsToolReject(err) != nil {
+	if err == nil || toolrejection.AsToolReject(err) != nil {
 		return false
 	}
 	return errors.Is(err, sdkmcp.ErrConnectionClosed) ||

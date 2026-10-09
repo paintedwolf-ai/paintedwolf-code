@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"testing"
@@ -24,13 +25,13 @@ import (
 // fakeSourceLedger satisfies sourceledger.Recorder plus the provenance read
 // surface, so tests exercise the tool plumbing without a database.
 type fakeSourceLedger struct {
-	heads       map[string]sourceledger.BranchHead
-	headErr     error
-	effects     map[string][]sourceledger.Effect
-	attribution map[string]sourceledger.AttributionResult
-	authored    map[string][]string
-	floor       int64
-	floorFound  bool
+	heads        map[string]sourceledger.BranchHead
+	headErr      error
+	effects      map[string][]sourceledger.Effect
+	attribution  map[string]sourceledger.AttributionResult
+	authored     map[string][]string
+	floor        int64
+	floorFound   bool
 	versions     map[string]sourceledger.RestorableVersion
 	fileVersions map[string][]sourceledger.Version
 	comparisons  map[string]sourceledger.Comparison
@@ -278,7 +279,7 @@ func TestEditMissWithForeignChangeStatesProvenance(t *testing.T) {
 	_, err := edit.Run(context.Background(), map[string]any{
 		"path": "main.go", "old_string": "package moved", "new_string": "package main",
 	}, provenanceCtx(dir, ledger))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "EDIT_TARGET_CHANGED_BY_OTHERS" {
 		t.Fatalf("edit miss = %v, want EDIT_TARGET_CHANGED_BY_OTHERS", err)
 	}
@@ -307,7 +308,7 @@ func TestEditMissWithOnlyOwnChangesKeepsPlainReject(t *testing.T) {
 	_, err := edit.Run(context.Background(), map[string]any{
 		"path": "main.go", "old_string": "package moved", "new_string": "package main",
 	}, provenanceCtx(dir, ledger))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "EDIT_OLD_STRING_NOT_FOUND" {
 		t.Fatalf("edit miss = %v, want plain EDIT_OLD_STRING_NOT_FOUND", err)
 	}
@@ -329,7 +330,7 @@ func TestEditMissWithoutRecordedFloorKeepsPlainReject(t *testing.T) {
 	_, err := edit.Run(context.Background(), map[string]any{
 		"path": "main.go", "old_string": "package moved", "new_string": "package main",
 	}, provenanceCtx(dir, ledger))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "EDIT_OLD_STRING_NOT_FOUND" {
 		t.Fatalf("edit miss without floor = %v, want plain reject — an unknown baseline states nothing", err)
 	}

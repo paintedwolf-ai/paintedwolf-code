@@ -3,6 +3,7 @@ package survey_test
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"os"
 	"path/filepath"
 	"strings"
@@ -22,7 +23,7 @@ func testScope(t *testing.T, dir string) survey.Scope {
 		ProjectRootRequired: true,
 		RejectSymlinkEscape: true,
 	}, []sandbox.ToolProfile{{
-		ID:    tools.DefaultToolProfileID,
+		ID:    toolprofiles.DefaultToolProfileID,
 		Tools: map[string]bool{"grep": true, "find": true, "list_dir": true},
 	}})
 	return survey.Scope{
@@ -30,7 +31,7 @@ func testScope(t *testing.T, dir string) survey.Scope {
 		ToolCtx: tools.ToolContext{
 			Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}},
 			ActiveRootID: "r1",
-			Agent:        tools.DefaultToolProfileID,
+			Agent:        toolprofiles.DefaultToolProfileID,
 		},
 	}
 }

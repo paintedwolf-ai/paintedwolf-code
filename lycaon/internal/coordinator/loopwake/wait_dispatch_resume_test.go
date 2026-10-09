@@ -3,6 +3,7 @@ package loopwake
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"testing"
 	"time"
 
@@ -88,7 +89,7 @@ func TestWaitResumeRechecksLoopbackAuthority(t *testing.T) {
 			_, err = registry.Run(t.Context(), "wait", map[string]any{"resume": true}, tools.ToolContext{
 				SessionID: id, ProjectID: testdbseed.DefaultProjectID, Agent: "coordinator", ToolCallID: "resume-call",
 			})
-			reject := tools.AsToolReject(err)
+			reject := toolrejection.AsToolReject(err)
 			if reject == nil || reject.Code != isolation.CodeTryLoopbackConnect {
 				t.Fatalf("resume must review restored local access: %v", err)
 			}

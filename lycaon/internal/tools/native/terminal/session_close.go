@@ -2,6 +2,7 @@ package terminal
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
@@ -49,7 +50,7 @@ func parseTerminalCloseArgs(args map[string]any) (terminalCloseArgs, error) {
 	id, _ := args["id"].(string)
 	id = strings.TrimSpace(id)
 	if id == "" {
-		return terminalCloseArgs{}, tools.RejectInvalidArguments("TERMINAL_ID_REQUIRED", map[string]any{"reason": "missing_id"})
+		return terminalCloseArgs{}, toolrejection.RejectInvalidArguments("TERMINAL_ID_REQUIRED", map[string]any{"reason": "missing_id"})
 	}
 	return terminalCloseArgs{ID: id}, nil
 }

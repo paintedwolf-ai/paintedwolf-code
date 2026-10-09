@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 	"testing"
 
@@ -60,7 +61,7 @@ func TestDispatchRejectWhenNoDelegation(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected reject when session has no delegation")
 	}
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "COORDINATOR_DELEGATE_DISPATCH_USE_TASK" {
 		t.Fatalf("expected COORDINATOR_DELEGATE_DISPATCH_USE_TASK reject, got %v", err)
 	}
@@ -68,7 +69,7 @@ func TestDispatchRejectWhenNoDelegation(t *testing.T) {
 	cfg, err := guidance.LoadHintConfigStock()
 	testutil.FailErr(t, "LoadHintConfig", err)
 	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
-	formatted := tools.FormatDecisionReject(reject.Code, reject.Data, guidance.NewStaticRejectFormatter(cfg))
+	formatted := toolrejection.FormatDecisionReject(reject.Code, reject.Data, guidance.NewStaticRejectFormatter(cfg))
 	if formatted == nil {
 		t.Fatal("expected formatted reject")
 	}

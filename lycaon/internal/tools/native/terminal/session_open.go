@@ -3,6 +3,7 @@ package terminal
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/argv"
@@ -52,7 +53,7 @@ func OpenHandler(bg *bgprocess.Registry) tools.ToolHandler {
 			return "", err
 		}
 		if _, hasPipeline := args["pipeline"]; hasPipeline {
-			return "", tools.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": "pipeline_not_supported", "field": "pipeline"})
+			return "", toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": "pipeline_not_supported", "field": "pipeline"})
 		}
 		plan, err := tctx.CommandPlan(map[string]any{"command": in.Command})
 		if err != nil {
@@ -60,7 +61,7 @@ func OpenHandler(bg *bgprocess.Registry) tools.ToolHandler {
 				errors.Is(err, argv.ErrRedirectionUnsupported) {
 				return "", err
 			}
-			return "", tools.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": err.Error()})
+			return "", toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": err.Error()})
 		}
 		stages := plan.Stages
 		if len(stages) != 1 {
@@ -76,7 +77,7 @@ func OpenHandler(bg *bgprocess.Registry) tools.ToolHandler {
 			return "", err
 		}
 		if cwd == "" {
-			return "", &tools.ToolReject{Code: "PROJECT_HAS_NO_ROOTS"}
+			return "", &toolrejection.ToolReject{Code: "PROJECT_HAS_NO_ROOTS"}
 		}
 		if err := tools.ValidateWorkerBranch(ctx, tctx); err != nil {
 			return "", err
@@ -134,7 +135,7 @@ func OpenHandler(bg *bgprocess.Registry) tools.ToolHandler {
 		}
 		facts := confine.SpawnFacts{Report: report, Network: egressLease.ObservedHosts}
 		if err := tctx.Secrets.HandOff(ctx, nil); err != nil {
-			return "", tools.HeldHandOffReject("terminal_open", err)
+			return "", toolrejection.HeldHandOffReject("terminal_open", err)
 		}
 		handle, err := bg.StartPTY(
 			ctx, tctx.SessionID, tctx.ParentSessionID, tctx.ProjectID,
@@ -205,7 +206,7 @@ func parseTerminalOpenArgs(args map[string]any) (terminalOpenArgs, error) {
 	cmd, _ := args["command"].(string)
 	cmd = strings.TrimSpace(cmd)
 	if cmd == "" {
-		return terminalOpenArgs{}, tools.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": "missing_command"})
+		return terminalOpenArgs{}, toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": "missing_command"})
 	}
 	out := terminalOpenArgs{Command: cmd}
 	if c, ok := args["cwd"].(string); ok {
@@ -214,12 +215,12 @@ func parseTerminalOpenArgs(args map[string]any) (terminalOpenArgs, error) {
 	if raw, exists := args["winsize"]; exists {
 		winSize, ok := raw.(map[string]any)
 		if !ok {
-			return terminalOpenArgs{}, tools.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": "winsize_must_be_object"})
+			return terminalOpenArgs{}, toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": "winsize_must_be_object"})
 		}
 		cols, colsOK := winSize["cols"].(float64)
 		rows, rowsOK := winSize["rows"].(float64)
 		if !colsOK || !rowsOK || cols != float64(int(cols)) || rows != float64(int(rows)) || cols < 1 || rows < 1 || cols > maxTerminalColumns || rows > maxTerminalRows {
-			return terminalOpenArgs{}, tools.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": "winsize_out_of_range"})
+			return terminalOpenArgs{}, toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": "winsize_out_of_range"})
 		}
 		out.WinSize = lycexec.WinSize{Cols: uint16(cols), Rows: uint16(rows)}
 	}
@@ -228,7 +229,7 @@ func parseTerminalOpenArgs(args map[string]any) (terminalOpenArgs, error) {
 		for k, v := range raw {
 			s, ok := v.(string)
 			if !ok {
-				return terminalOpenArgs{}, tools.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": "env_values_must_be_strings"})
+				return terminalOpenArgs{}, toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": "env_values_must_be_strings"})
 			}
 			env[k] = s
 		}

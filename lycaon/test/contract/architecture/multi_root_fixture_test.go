@@ -2,6 +2,7 @@ package contract
 
 import (
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"sort"
@@ -119,7 +120,7 @@ func toolRejectCode(err error) string {
 	if err == nil {
 		return ""
 	}
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if errors.As(err, &reject) && reject != nil {
 		return reject.Code
 	}

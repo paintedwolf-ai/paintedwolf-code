@@ -109,12 +109,12 @@ func TestNonHTTPContractPreSpawnDetectionOverlaySeamForSocketAndDirect(t *testin
 		t.Fatal("approval Evaluate must decide through the single gate evaluation")
 	}
 
-	exec := contractcheck.ReadRepoFile(t, root, "lycaon/internal/tools/executor_impl.go")
+	exec := contractcheck.ReadRepoFile(t, root, "lycaon/internal/toolexecution/executor_impl.go")
 	if !strings.Contains(exec, "applyPreInvokeBoundary") {
 		t.Fatal("executor must run capability preflight before spawn/policy")
 	}
-	sock := contractcheck.ReadRepoFile(t, root, "lycaon/internal/tools/socket_capability.go")
-	boundary := contractcheck.ReadRepoFile(t, root, "lycaon/internal/tools/invocation_boundary.go")
+	sock := contractcheck.ReadRepoFile(t, root, "lycaon/internal/toolexecution/socket_capability.go")
+	boundary := contractcheck.ReadRepoFile(t, root, "lycaon/internal/toolexecution/invocation_boundary.go")
 	pre := mustFindFunc(t, boundary, "invocation_boundary.go", "applyPreInvokeBoundary")
 	pbody := boundary[pre.Body.Pos()-1 : pre.Body.End()]
 	if !strings.Contains(pbody, "preflightSocketCapability") || !strings.Contains(pbody, "preflightDirectIPCapability") {
@@ -129,7 +129,7 @@ func TestNonHTTPContractPreSpawnDetectionOverlaySeamForSocketAndDirect(t *testin
 	if !strings.Contains(sock, "evaluatePreSpawn") {
 		t.Fatal("capability cards must consume the single pre-spawn approval result")
 	}
-	direct := contractcheck.ReadRepoFile(t, root, "lycaon/internal/tools/direct_ip_capability.go")
+	direct := contractcheck.ReadRepoFile(t, root, "lycaon/internal/toolexecution/direct_ip_capability.go")
 	if !strings.Contains(direct, "evaluatePreSpawn") {
 		t.Fatal("direct cards must consume the single pre-spawn approval result")
 	}
@@ -199,7 +199,7 @@ func TestNonHTTPContractCapabilityAndDetectionRemainSeparateRecords(t *testing.T
 	if !strings.Contains(seal, "authzledger.ActionDetectionResolved") {
 		t.Fatal("the detection seal must write the detection_resolved action, not a capability action")
 	}
-	sock := contractcheck.ReadRepoFile(t, root, "lycaon/internal/tools/socket_capability.go")
+	sock := contractcheck.ReadRepoFile(t, root, "lycaon/internal/toolexecution/socket_capability.go")
 	if !strings.Contains(sock, "recordCapability") {
 		t.Fatal("capability scope must emit capability records separately from detection")
 	}
@@ -266,7 +266,7 @@ func TestNonHTTPContractDirectDeclarationsDoNotClaimEgressObservation(t *testing
 	}
 
 	root := contractcheck.RepoRoot(t)
-	direct := contractcheck.ReadRepoFile(t, root, "lycaon/internal/tools/direct_ip_capability.go")
+	direct := contractcheck.ReadRepoFile(t, root, "lycaon/internal/toolexecution/direct_ip_capability.go")
 	if strings.Contains(direct, "egress_observed") || strings.Contains(direct, "NewEgressEvent") || strings.Contains(direct, "EgressObservation") {
 		t.Fatal("direct capability must not emit egress_observed or claim destination coverage")
 	}
@@ -342,7 +342,7 @@ func TestNonHTTPContractCorrelationIDNeverAuthorizationIdentity(t *testing.T) {
 	banned := []string{
 		"lycaon/internal/hitl/grant_key.go",
 		"lycaon/internal/session/approvalstate/tool_approval_coalesce.go",
-		"lycaon/internal/tools/direct_ip_capability.go",
+		"lycaon/internal/toolexecution/direct_ip_capability.go",
 	}
 	banned = append(banned, socketCapabilityPaths...)
 	for _, rel := range banned {
@@ -360,7 +360,7 @@ func TestNonHTTPContractCorrelationIDNeverAuthorizationIdentity(t *testing.T) {
 		t.Fatalf("GrantKey must not embed correlation material: %q", key)
 	}
 	// Detection approval identity derives from pack, rule, and level.
-	impl := contractcheck.ReadRepoFile(t, root, "lycaon/internal/tools/executor_egress_ask.go")
+	impl := contractcheck.ReadRepoFile(t, root, "lycaon/internal/toolexecution/executor_egress_ask.go")
 	fn := "func (s egressAskSubject) withDetection("
 	idx := strings.Index(impl, fn)
 	if idx < 0 {

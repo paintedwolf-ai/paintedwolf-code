@@ -3,6 +3,7 @@ package survey
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"strings"
 
@@ -349,7 +350,7 @@ func (t *ReadTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 }
 
 func readOffsetBeyondEOF(path string, offset, totalLines int) error {
-	return &tools.ToolReject{
+	return &toolrejection.ToolReject{
 		Code: "READ_OFFSET_BEYOND_EOF",
 		Data: map[string]any{
 			"path":            path,

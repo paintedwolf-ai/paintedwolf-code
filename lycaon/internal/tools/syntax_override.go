@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 	"unicode/utf8"
 
@@ -19,7 +20,7 @@ func WithSyntaxOverride(ctx context.Context, args map[string]any) (context.Conte
 	}
 	reason, ok := raw.(string)
 	if !ok || strings.TrimSpace(reason) == "" || utf8.RuneCountInString(reason) > 1024 {
-		return ctx, RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"field": "syntax_override_reason", "reason": "syntax_override_reason must contain 1 to 1024 nonblank characters"})
+		return ctx, toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"field": "syntax_override_reason", "reason": "syntax_override_reason must contain 1 to 1024 nonblank characters"})
 	}
 	return syntaxhealth.WithOverride(ctx, strings.TrimSpace(reason)), nil
 }

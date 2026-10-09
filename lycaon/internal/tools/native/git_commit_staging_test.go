@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/git"
@@ -90,7 +91,7 @@ func TestCommitStagingRejectsWithoutSessionAuthorship(t *testing.T) {
 	gm := changedPathsGit{changed: []string{"peer.go"}}
 	_, err := resolveCommitStaging(
 		context.Background(), map[string]any{}, gm, stagingCtx(nil), "/repo")
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) {
 		t.Fatalf("err = %v, want a structured reject", err)
 	}
@@ -104,7 +105,7 @@ func TestCommitStagingRejectsWhenLedgerCannotAnswer(t *testing.T) {
 	gm := changedPathsGit{changed: []string{"peer.go"}}
 	tctx := tools.ToolContext{ProjectID: "p1", SessionID: "s1", ActiveRootID: "r1"}
 	_, err := resolveCommitStaging(context.Background(), map[string]any{}, gm, tctx, "/repo")
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "GIT_COMMIT_NO_SESSION_AUTHORSHIP" {
 		t.Fatalf("err = %v, want GIT_COMMIT_NO_SESSION_AUTHORSHIP", err)
 	}

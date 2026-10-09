@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"net/url"
 	"path"
 	"strings"
@@ -93,7 +94,7 @@ func RegisterToolsWithFactory(reg *tools.DefaultRegistry, deps ToolDeps, getFact
 		rawPeriod, _ := args["period"].(string)
 		period, err := ParsePeriod(rawPeriod)
 		if err != nil {
-			return "", &tools.ToolReject{
+			return "", &toolrejection.ToolReject{
 				Code:        webSearchPeriodInvalidCode,
 				Observation: webSearchPeriodInvalidObservation,
 				Data:        map[string]any{"period": strings.TrimSpace(rawPeriod), "detail": err.Error(), "period_min_year": periodFloorYear, "period_max_year": periodCeilingYear},
@@ -101,7 +102,7 @@ func RegisterToolsWithFactory(reg *tools.DefaultRegistry, deps ToolDeps, getFact
 		}
 		settings := settingsFn()
 		if !settings.SearchEnabled {
-			return "", &tools.ToolReject{
+			return "", &toolrejection.ToolReject{
 				Code:        webSearchDisabledCode,
 				Observation: webSearchDisabledObservation,
 			}
@@ -144,14 +145,14 @@ func RegisterToolsWithFactory(reg *tools.DefaultRegistry, deps ToolDeps, getFact
 			for _, skipped := range result.ProvidersSkipped {
 				statuses = append(statuses, skipped.Provider+": "+skipped.Reason)
 			}
-			return "", &tools.ToolReject{
+			return "", &toolrejection.ToolReject{
 				Code:        webSearchProvidersFailedCode,
 				Observation: webSearchProvidersFailedObservation,
 				Data:        map[string]any{"detail": result.Error, "search_provider_statuses": statuses},
 			}
 		}
 		if !result.OK {
-			return "", &tools.ToolReject{
+			return "", &toolrejection.ToolReject{
 				Code: "TOOL_ARGS_INVALID",
 				Data: map[string]any{"reason": result.Error},
 			}
@@ -328,7 +329,7 @@ type fetchURLToolArgs struct {
 // fetchURLTool returns a cached line range or a fetched structural view.
 func fetchURLTool(ctx context.Context, a fetchURLToolArgs) (string, *FetchURLResult, error) {
 	if a.Offset < 0 || a.Limit < 0 {
-		return "", nil, &tools.ToolReject{
+		return "", nil, &toolrejection.ToolReject{
 			Code: "TOOL_ARGS_INVALID",
 			Data: map[string]any{"reason": "offset and limit must be at least 1"},
 		}
@@ -338,7 +339,7 @@ func fetchURLTool(ctx context.Context, a fetchURLToolArgs) (string, *FetchURLRes
 		a.Offset = 1
 	}
 	if a.Offset > 0 && a.Limit == 0 {
-		return "", nil, &tools.ToolReject{
+		return "", nil, &toolrejection.ToolReject{
 			Code: "TOOL_ARGS_INVALID",
 			Data: map[string]any{"reason": "offset needs a limit — an open-ended range is the head-and-map default"},
 		}
@@ -348,14 +349,14 @@ func fetchURLTool(ctx context.Context, a fetchURLToolArgs) (string, *FetchURLRes
 		mode = "text"
 	}
 	if mode != "text" && mode != "raw" {
-		return "", nil, &tools.ToolReject{
+		return "", nil, &toolrejection.ToolReject{
 			Code: "FETCH_URL_MODE_INVALID",
 			Data: map[string]any{"mode": a.Mode},
 		}
 	}
 	dest := strings.TrimSpace(a.Dest)
 	if dest != "" && mode != "raw" {
-		return "", nil, &tools.ToolReject{
+		return "", nil, &toolrejection.ToolReject{
 			Code: "FETCH_URL_DEST_INVALID",
 			Data: map[string]any{"dest": dest},
 		}
@@ -461,7 +462,7 @@ func fetchURLRawTool(ctx context.Context, a fetchURLToolArgs, rawURL, dest strin
 	class, reason := classifyFetchMIME(live.ContentType, urlPath, live.Body)
 	switch class {
 	case mimeUnsupported:
-		return "", nil, &tools.ToolReject{
+		return "", nil, &toolrejection.ToolReject{
 			Code: "FETCH_URL_TYPE_UNSUPPORTED",
 			Data: map[string]any{
 				"content_type": mediaTypeOnly(live.ContentType),
@@ -473,7 +474,7 @@ func fetchURLRawTool(ctx context.Context, a fetchURLToolArgs, rawURL, dest strin
 			if isImageMIME(live.ContentType) || isImageExtension(urlPath) {
 				return handleFetchVisual(ctx, a, live)
 			}
-			return "", nil, &tools.ToolReject{
+			return "", nil, &toolrejection.ToolReject{
 				Code: "FETCH_URL_DEST_REQUIRED",
 				Data: map[string]any{"content_type": mediaTypeOnly(live.ContentType)},
 			}
@@ -581,7 +582,7 @@ func handleFetchVisual(ctx context.Context, a fetchURLToolArgs, live FetchRawRes
 		})
 		if err != nil {
 			if errors.Is(err, visualscreen.ErrVisualSecretWithheld) {
-				return "", nil, &tools.ToolReject{
+				return "", nil, &toolrejection.ToolReject{
 					Code: "FETCH_URL_SECRET_WITHHELD",
 					Data: map[string]any{"url": live.URL},
 				}
@@ -631,14 +632,14 @@ func fetchImageReject(err error, data map[string]any) error {
 		for k, v := range data {
 			out[k] = v
 		}
-		return &tools.ToolReject{Code: "IMAGE_DIMENSIONS_EXCEEDED", Data: out}
+		return &toolrejection.ToolReject{Code: "IMAGE_DIMENSIONS_EXCEEDED", Data: out}
 	}
 	if errors.Is(err, visualscreen.ErrImageUndecodable) {
 		out := map[string]any{"rejection_reason": err.Error()}
 		for k, v := range data {
 			out[k] = v
 		}
-		return &tools.ToolReject{Code: "IMAGE_CORRUPTED", Data: out}
+		return &toolrejection.ToolReject{Code: "IMAGE_CORRUPTED", Data: out}
 	}
 	return err
 }
@@ -720,7 +721,7 @@ func mapFetchToolErr(err error) error {
 	if err == nil {
 		return nil
 	}
-	toolReject := &tools.ToolReject{}
+	toolReject := &toolrejection.ToolReject{}
 	if errors.As(err, &toolReject) {
 		return err
 	}
@@ -738,7 +739,7 @@ func mapFetchToolErr(err error) error {
 	}
 	var tooLarge FetchBodyTooLargeError
 	if errors.As(err, &tooLarge) {
-		return &tools.ToolReject{
+		return &toolrejection.ToolReject{
 			Code: "FETCH_URL_BODY_TOO_LARGE",
 			Data: map[string]any{
 				"bytes":          tooLarge.Actual,
@@ -749,14 +750,14 @@ func mapFetchToolErr(err error) error {
 	}
 	var invalidURL *InvalidURLError
 	if errors.As(err, &invalidURL) {
-		return &tools.ToolReject{
+		return &toolrejection.ToolReject{
 			Code: "FETCH_URL_INVALID_URL",
 			Data: map[string]any{"detail": invalidURL.Error()},
 		}
 	}
 	var destinationDenied *egress.DestinationDeniedError
 	if errors.As(err, &destinationDenied) {
-		return &tools.ToolReject{
+		return &toolrejection.ToolReject{
 			Code: "FETCH_URL_BLOCKED",
 			Data: map[string]any{"detail": destinationDenied.Error()},
 		}

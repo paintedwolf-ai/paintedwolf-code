@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -413,7 +414,7 @@ func compileGrepPattern(opts grepOptions) (*regexp.Regexp, error) {
 	}
 	re, err := compileGrepRegex(opts.pattern, opts.caseInsensitive)
 	if err != nil {
-		var toolReject *tools.ToolReject
+		var toolReject *toolrejection.ToolReject
 		if errors.As(err, &toolReject) {
 			return nil, toolReject
 		}

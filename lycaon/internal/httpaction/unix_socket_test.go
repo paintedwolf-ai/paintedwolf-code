@@ -1,6 +1,7 @@
 package httpaction
 
 import (
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"net"
 	"net/http"
 	"os"
@@ -48,7 +49,7 @@ func TestHTTPRequestUnixSocketRequiresReviewedAuthority(t *testing.T) {
 	_, err := runRequest(t, Deps{Boundary: testBoundary()}, map[string]any{
 		"url": "http://localhost/info", "unix_socket": path,
 	}, sessionContext(t.TempDir(), "call-sock"))
-	reject := tools.AsToolReject(err)
+	reject := toolrejection.AsToolReject(err)
 	if reject == nil || reject.Code != isolation.CodeSocketPathChanged {
 		t.Fatalf("err = %v, want %s", err, isolation.CodeSocketPathChanged)
 	}
@@ -87,7 +88,7 @@ func TestHTTPRequestUnixSocketRefusesRedirectToAnotherOrigin(t *testing.T) {
 	_, err := runRequest(t, Deps{Boundary: testBoundary()}, map[string]any{
 		"url": "http://localhost/start", "unix_socket": path, "redirects": "safe",
 	}, reviewedSocket(t, t.TempDir(), path))
-	reject := tools.AsToolReject(err)
+	reject := toolrejection.AsToolReject(err)
 	if reject == nil || reject.Code != "HTTP_REQUEST_FAILED" || !strings.Contains(reject.Data["reason"].(string), "unix socket") {
 		t.Fatalf("err = %v, want a refused cross-origin redirect", err)
 	}

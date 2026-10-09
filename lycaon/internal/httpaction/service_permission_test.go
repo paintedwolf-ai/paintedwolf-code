@@ -3,6 +3,7 @@ package httpaction
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolexecution"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -85,14 +86,14 @@ func TestSetupPermissionCoversRepeatedAuthenticatedServiceUse(t *testing.T) {
 	authority := settings.NewRuleApprovalGate(store, settings.NoSources())
 	review := &servicePermissionReview{t: t, authority: authority}
 	registry := tools.NewDefaultRegistry()
-	executor := tools.NewDefaultToolExecutor(nil, registry, "implement")
-	executor.SetCheckpointManager(review, authority)
+	executor := toolexecution.NewExecutor(nil, registry, "implement")
+	executor.Approvals.SetCheckpointManager(review, authority)
 	t.Cleanup(func() { confine.SetEgressResolver(nil) })
-	executor.SetSecretResolver(service)
+	executor.Secrets.SetSecretResolver(service)
 	matcher := testSecretMatcher(t)
-	executor.SetSecretMatcher(matcher)
-	executor.SetLoopbackConnectGate(review)
-	executor.SetSessionLoopbackGrant(review.SessionLoopbackGrant)
+	executor.Secrets.SetSecretMatcher(matcher)
+	executor.Capabilities.SetLoopbackConnectGate(review)
+	executor.Boundary.SetSessionLoopbackGrant(review.SessionLoopbackGrant)
 	testutil.FailErr(t, "register setup consumer", registry.Register("command", func(_ context.Context, args map[string]any, tc tools.ToolContext) (string, error) {
 		if !strings.Contains(args["command"].(string), value) {
 			t.Fatal("setup did not receive value")

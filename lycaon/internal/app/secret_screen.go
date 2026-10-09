@@ -162,10 +162,10 @@ func (b sessionWiring) secretAskFunc() secretmatch.AskFunc {
 				secretmatch.FaultStageScreenUnwired, nil)
 		}
 		// Recorded redactions also apply when approvals are disabled.
-		if b.toolRuntime.ApprovalsDisabled(secretmatch.AskAttributionFrom(ctx).ProjectDir) {
-			return b.toolRuntime.Executor.ResolveSecretScreenUnasked(ctx, finding)
+		if b.toolRuntime.Authority.ApprovalsDisabled(secretmatch.AskAttributionFrom(ctx).ProjectDir) {
+			return b.toolRuntime.Executor.Secrets.ResolveSecretScreenUnasked(ctx, finding)
 		}
-		resolution, err := b.toolRuntime.Executor.AskSecretScreen(ctx, finding)
+		resolution, err := b.toolRuntime.Executor.Secrets.AskSecretScreen(ctx, finding)
 		if err != nil {
 			// Ask faults have no card or ledger entry.
 			slog.ErrorContext(ctx, "outbound secret screen could not ask",

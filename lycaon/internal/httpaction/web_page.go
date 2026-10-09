@@ -1,6 +1,7 @@
 package httpaction
 
 import (
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"mime"
 	"net/url"
 	"strconv"
@@ -37,7 +38,7 @@ func reportWebPage(tctx tools.ToolContext, spec requestSpec, resp outboundhttp.R
 	if final, err := url.Parse(finalURL); err == nil && final.Hostname() != "" {
 		host = final.Hostname()
 	}
-	tctx.Out.Facts = tctx.Out.Facts.WithFeedback(tools.HTTPRequestWebPageCode, map[string]any{
+	tctx.Out.Facts = tctx.Out.Facts.WithFeedback(toolrejection.HTTPRequestWebPageCode, map[string]any{
 		"host":               host,
 		"bytes":              strconv.FormatInt(resp.Bytes, 10),
 		"content_type":       resp.ContentType,

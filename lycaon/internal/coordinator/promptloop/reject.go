@@ -3,6 +3,8 @@ package promptloop
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolcommand"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"maps"
 	"strings"
 	"time"
@@ -172,17 +174,17 @@ func (l toolInvocations) rejectToolOccurrence(ctx context.Context, sess *api.Ses
 		loadable := toolCtx.TurnToolPlan.Deferred(tc.Name) && tools.ToolOffered(ctx, "request_tools")
 		data["tool_loadable"] = loadable
 		if loadable {
-			data["replacement_calls"] = []tools.ReplacementCall{{Tool: "request_tools", Args: map[string]any{"need": tc.Name}}}
+			data["replacement_calls"] = []toolcommand.ReplacementCall{{Tool: "request_tools", Args: map[string]any{"need": tc.Name}}}
 		}
 	}
-	tr := &tools.ToolReject{Code: code, FailureClass: api.FailureClassPolicyRejection, Data: data}
-	if code == tools.ToolOwnerFailedCode {
+	tr := &toolrejection.ToolReject{Code: code, FailureClass: api.FailureClassPolicyRejection, Data: data}
+	if code == toolrejection.ToolOwnerFailedCode {
 		tr.FailureClass = api.FailureClassOwnerError
 		tr.Data["reason"] = "tool definition unavailable"
 	}
 	err := l.Deps.BlockPlane.RejectObservation(ctx, tc.Name, toolCtx.Agent, tc.Args, tr)
 	if err == nil {
-		err = tools.RenderReject(tr, l.Deps.RejectFmt)
+		err = toolrejection.RenderReject(tr, l.Deps.RejectFmt)
 	}
 	if refusal, ok := guidance.RefusalFromError(err); ok {
 		return refusal

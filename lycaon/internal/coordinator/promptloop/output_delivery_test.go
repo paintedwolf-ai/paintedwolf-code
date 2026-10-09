@@ -1,6 +1,8 @@
 package promptloop
 
 import (
+	"github.com/lycaon/lycaon/internal/toolfeedback"
+
 	"path/filepath"
 	"strings"
 	"testing"
@@ -25,7 +27,7 @@ func TestOutputDeliveryRefusalRetainsExecutionAndEvaluatesOnce(t *testing.T) {
 	testutil.FailErr(t, "load policy", err)
 	pipeline := oar.NewGuardPipeline(rules, loader, oar.NewCounterStore())
 	pipeline.EnableAnchor(oar.AnchorToolRejected)
-	loop := NewPromptLoopForTest(PromptLoopDeps{BlockPlane: &tools.BlockPlane{Pipeline: pipeline, Renderer: oar.NewRenderer(nil, nil)}})
+	loop := NewPromptLoopForTest(PromptLoopDeps{BlockPlane: &toolfeedback.BlockPlane{Pipeline: pipeline, Renderer: oar.NewRenderer(nil, nil)}})
 	for _, code := range []string{tooloutput.ToolResultTooLargeCode, tooloutput.ToolOutputSpillCapExceededCode, tooloutput.ToolOutputSpillUnavailableCode} {
 		rule, _ := rules.Get(code)
 		rule.OnFire = []oar.OnFireAction{oar.OnFireIncrementCounter}

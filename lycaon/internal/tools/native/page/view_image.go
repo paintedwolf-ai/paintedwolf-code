@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
@@ -135,7 +136,7 @@ func screenVisual(ctx context.Context, gate *visualscreen.Gate, tool string, tct
 	outcome, err := gate.Screen(ctx, in)
 	if err != nil {
 		if errors.Is(err, visualscreen.ErrVisualSecretWithheld) {
-			return out, &tools.ToolReject{Code: "IMAGE_SECRET_WITHHELD", Data: rejectData}
+			return out, &toolrejection.ToolReject{Code: "IMAGE_SECRET_WITHHELD", Data: rejectData}
 		}
 		return out, imageRejectFor(err, rejectData)
 	}
@@ -150,12 +151,12 @@ func screenVisual(ctx context.Context, gate *visualscreen.Gate, tool string, tct
 func imageRejectFor(err error, data map[string]any) error {
 	var dims *visualscreen.DimensionsError
 	if errors.As(err, &dims) {
-		return &tools.ToolReject{Code: "IMAGE_DIMENSIONS_EXCEEDED", Data: withImageFacts(data, map[string]any{
+		return &toolrejection.ToolReject{Code: "IMAGE_DIMENSIONS_EXCEEDED", Data: withImageFacts(data, map[string]any{
 			"width": dims.Width, "height": dims.Height, "max_dimension": dims.Max,
 		})}
 	}
 	if errors.Is(err, visualscreen.ErrImageUndecodable) {
-		return &tools.ToolReject{Code: "IMAGE_CORRUPTED", Data: withImageFacts(data, map[string]any{
+		return &toolrejection.ToolReject{Code: "IMAGE_CORRUPTED", Data: withImageFacts(data, map[string]any{
 			"rejection_reason": err.Error(),
 		})}
 	}
@@ -199,7 +200,7 @@ func handleViewImageByHandle(ctx context.Context, deps ViewImageDeps, tctx tools
 	meta := res.Meta()
 	raw := res.Bytes()
 	if !visual.IsRasterMime(meta.Mime) {
-		return "", &tools.ToolReject{Code: "IMAGE_FORMAT_UNSUPPORTED", Data: map[string]any{
+		return "", &toolrejection.ToolReject{Code: "IMAGE_FORMAT_UNSUPPORTED", Data: map[string]any{
 			"path": in.Handle, "handle": in.Handle, "extension": meta.Mime, "supported_formats": strings.Join(supportedExtensionsList(), ", "),
 		}}
 	}
@@ -231,7 +232,7 @@ func handleViewImageByHandle(ctx context.Context, deps ViewImageDeps, tctx tools
 }
 
 func renderHandleNotFound(handle string) error {
-	return &tools.ToolReject{Code: "RENDER_HANDLE_NOT_FOUND", Data: map[string]any{"handle": handle}}
+	return &toolrejection.ToolReject{Code: "RENDER_HANDLE_NOT_FOUND", Data: map[string]any{"handle": handle}}
 }
 
 func emitHandleView(tctx tools.ToolContext, renderHandle, storedID string, raw []byte, mime string, source api.VisualArtifactSource,
@@ -286,7 +287,7 @@ func handleViewImageByPath(ctx context.Context, deps ViewImageDeps, tctx tools.T
 	ext := strings.ToLower(filepath.Ext(resolved.DisplayPath))
 	declared, ok := supportedImageExts[ext]
 	if !ok {
-		return "", &tools.ToolReject{
+		return "", &toolrejection.ToolReject{
 			Code: "IMAGE_FORMAT_UNSUPPORTED",
 			Data: map[string]any{
 				"path":              in.Path,
@@ -324,9 +325,9 @@ func readWorkspaceImage(resolved projectpaths.Resolved, modelPath string, maxByt
 	case err == nil:
 		return raw, nil
 	case errors.Is(err, os.ErrNotExist):
-		return nil, &tools.ToolReject{Code: "IMAGE_NOT_FOUND", Data: map[string]any{"path": modelPath}}
+		return nil, &toolrejection.ToolReject{Code: "IMAGE_NOT_FOUND", Data: map[string]any{"path": modelPath}}
 	case errors.Is(err, projectpaths.ErrIsDirectory):
-		return nil, &tools.ToolReject{Code: "IMAGE_IS_DIRECTORY", Data: map[string]any{"path": modelPath}}
+		return nil, &toolrejection.ToolReject{Code: "IMAGE_IS_DIRECTORY", Data: map[string]any{"path": modelPath}}
 	case errors.As(err, &tooLarge):
 		return nil, imageBytesExceeded(modelPath, tooLarge.Size, maxBytes)
 	default:
@@ -335,7 +336,7 @@ func readWorkspaceImage(resolved projectpaths.Resolved, modelPath string, maxByt
 }
 
 func imageBytesExceeded(modelPath string, size int64, maxBytes int) error {
-	return &tools.ToolReject{Code: "IMAGE_BYTES_EXCEEDED", Data: map[string]any{
+	return &toolrejection.ToolReject{Code: "IMAGE_BYTES_EXCEEDED", Data: map[string]any{
 		"path": modelPath, "bytes": size, "max_bytes": maxBytes,
 	}}
 }
@@ -358,7 +359,7 @@ func renderSVGView(
 		scale = 1.0
 	}
 	if scale < 0.1 || scale > 4.0 {
-		return "", tools.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{
+		return "", toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{
 			"reason": "invalid_scale",
 			"scale":  scale,
 			"min":    0.1,
@@ -396,7 +397,7 @@ func renderSVGView(
 	if err != nil {
 		rej := &browserengine.RejectError{}
 		if errors.As(err, &rej) {
-			return "", &tools.ToolReject{Code: rej.Code, Data: rej.Data}
+			return "", &toolrejection.ToolReject{Code: rej.Code, Data: rej.Data}
 		}
 		return "", err
 	}
@@ -441,7 +442,7 @@ func renderRasterView(tctx tools.ToolContext, rawBytes []byte, displayPath strin
 	if view.perceive() {
 		norm, err := providerwire.NormalizeImageBytes(view.bytes, view.mime, visual.MaxRasterBytes())
 		if err != nil {
-			return "", &tools.ToolReject{Code: "IMAGE_CORRUPTED", Data: withImageFacts(rejectData, map[string]any{
+			return "", &toolrejection.ToolReject{Code: "IMAGE_CORRUPTED", Data: withImageFacts(rejectData, map[string]any{
 				"rejection_reason": err.Error(),
 			})}
 		}
@@ -473,13 +474,13 @@ func parseViewImageArgs(args map[string]any) (viewImageArgs, error) {
 	in.Path = strings.TrimSpace(in.Path)
 	in.Handle = strings.TrimSpace(in.Handle)
 	if (in.Path == "") == (in.Handle == "") {
-		return viewImageArgs{}, tools.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{
+		return viewImageArgs{}, toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{
 			"reason":  "source_required",
 			"message": "exactly one of path or handle is required",
 		})
 	}
 	if in.Scale < 0 {
-		return viewImageArgs{}, tools.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{
+		return viewImageArgs{}, toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{
 			"reason": "negative_scale",
 		})
 	}

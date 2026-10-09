@@ -3,6 +3,8 @@ package contract
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolexecution"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -77,7 +79,7 @@ func TestPreInvokePipelineNeverMutatesCallerArguments(t *testing.T) {
 
 // stubbedContractExecutor is the contract executor with every boot-registered
 // tool's handler replaced by a no-op, so only the pre-invoke pipeline runs.
-func stubbedContractExecutor(t *testing.T) (*tools.DefaultToolExecutor, []tools.Definition) {
+func stubbedContractExecutor(t *testing.T) (*toolexecution.Executor, []tools.Definition) {
 	t.Helper()
 	rt, err := toolhost.NewRuntime(toolhost.RuntimeConfig{
 		ConfigRoot: filepath.Join(contractcheck.RepoRoot(t), "lycaon"),
@@ -86,16 +88,16 @@ func stubbedContractExecutor(t *testing.T) (*tools.DefaultToolExecutor, []tools.
 	contractcheck.FailErr(t, "toolhost.NewRuntime", err)
 	schemas, _, err := extpacks.LoadEffectiveToolSchemas(contractcheck.StockCatalog(t))
 	contractcheck.FailErr(t, "load effective tool schemas", err)
-	rt.Executor.SetToolSchemas(schemas)
+	rt.Executor.Metadata.SetToolSchemas(schemas)
 	hints, err := guidance.LoadHintConfigStock()
 	contractcheck.FailErr(t, "load hint registry", err)
 	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
-	rt.ApplyGuidanceRejects(guidance.NewStaticRejectFormatter(hints))
+	rt.Authority.ApplyGuidanceRejects(guidance.NewStaticRejectFormatter(hints))
 	toolfixture.WireContractBlockPlane(t, rt, guidance.NewStaticRejectFormatter(hints))
 
 	boot := toolfixture.ContractServeBootRegistry(t)
 	var defs []tools.Definition
-	for _, meta := range boot.List() {
+	for _, meta := range boot.Metadata.List() {
 		def, ok := boot.Definition(meta.Name)
 		if !ok {
 			continue
@@ -116,7 +118,7 @@ func noopHandler(context.Context, map[string]any, tools.ToolContext) (string, er
 }
 
 // invokeQuietly reports a handler-free invocation's outcome; a panic is an outcome too.
-func invokeQuietly(ctx context.Context, executor *tools.DefaultToolExecutor, name string, args map[string]any, tc tools.ToolContext) (out string, err error) {
+func invokeQuietly(ctx context.Context, executor *toolexecution.Executor, name string, args map[string]any, tc tools.ToolContext) (out string, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("panic: %v", r)
@@ -131,10 +133,10 @@ func outcomeCode(err error) string {
 	if err == nil {
 		return "ok"
 	}
-	if reject := tools.AsToolReject(err); reject != nil {
+	if reject := toolrejection.AsToolReject(err); reject != nil {
 		return reject.Code
 	}
-	if refusal := tools.HostRefusal(err); refusal != nil {
+	if refusal := toolrejection.HostRefusal(err); refusal != nil {
 		return "host refusal"
 	}
 	return "error"

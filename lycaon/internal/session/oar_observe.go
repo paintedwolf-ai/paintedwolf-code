@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"maps"
 	"slices"
 	"strconv"
@@ -23,7 +24,7 @@ import (
 var sandboxPostInvokeCodes = []string{
 	isolation.CodeBoundaryRefused,
 	isolation.CodeRemotePackageDestinationDenied,
-	tools.VerifyUnverifiableCode,
+	toolrejection.VerifyUnverifiableCode,
 }
 
 // ObserveConfine publishes post-invoke boundary facts.
@@ -133,9 +134,9 @@ func ObserveSourceParsingFeedback(gc *oar.GuardContext, raised guidance.ToolResu
 	if gc == nil {
 		return
 	}
-	if raised.HasCode(tools.SourceAnalysisUnavailableCode) {
+	if raised.HasCode(toolrejection.SourceAnalysisUnavailableCode) {
 		gc.Source.SourceAnalysisUnavailable = true
-		gc.PutRejectData(tools.SourceAnalysisUnavailableCode, raised.FeedbackFor(tools.SourceAnalysisUnavailableCode).Details)
+		gc.PutRejectData(toolrejection.SourceAnalysisUnavailableCode, raised.FeedbackFor(toolrejection.SourceAnalysisUnavailableCode).Details)
 	}
 	if raised.HasCode(tools.SyntaxCheckOverriddenCode) {
 		gc.Source.SyntaxCheckOverridden = true
@@ -224,21 +225,21 @@ func (m *Manager) ObserveMintedCredential(ctx context.Context, sess *api.Session
 // ObserveEditorConfigMismatch publishes a tool-stated mismatch and its details
 // to post-tool policy.
 func ObserveEditorConfigMismatch(gc *oar.GuardContext, raised guidance.ToolResultFacts) {
-	if gc == nil || !raised.HasCode(tools.EditorConfigMismatchCode) {
+	if gc == nil || !raised.HasCode(toolrejection.EditorConfigMismatchCode) {
 		return
 	}
 	gc.Source.EditorConfigMismatch = true
-	gc.PutRejectData(tools.EditorConfigMismatchCode, raised.FeedbackFor(tools.EditorConfigMismatchCode).Details)
+	gc.PutRejectData(toolrejection.EditorConfigMismatchCode, raised.FeedbackFor(toolrejection.EditorConfigMismatchCode).Details)
 }
 
 // ObserveHTTPRequestWebPage publishes a web page http_request delivered and
 // its details to post-tool policy.
 func ObserveHTTPRequestWebPage(gc *oar.GuardContext, raised guidance.ToolResultFacts) {
-	if gc == nil || !raised.HasCode(tools.HTTPRequestWebPageCode) {
+	if gc == nil || !raised.HasCode(toolrejection.HTTPRequestWebPageCode) {
 		return
 	}
 	gc.Invocation.HTTPRequestWebPage = true
-	gc.PutRejectData(tools.HTTPRequestWebPageCode, raised.FeedbackFor(tools.HTTPRequestWebPageCode).Details)
+	gc.PutRejectData(toolrejection.HTTPRequestWebPageCode, raised.FeedbackFor(toolrejection.HTTPRequestWebPageCode).Details)
 }
 
 // deferredUnactivatedCount is how many of surfaceID's deferred tools this

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,7 +14,6 @@ import (
 	"github.com/lycaon/lycaon/internal/bytebound"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tooloutput"
-	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 	surveytools "github.com/lycaon/lycaon/internal/tools/native/survey"
 	"github.com/lycaon/lycaon/internal/tools/readcaps"
@@ -110,7 +110,7 @@ func TestReadLargeToolSpillUsesRetentionBound(t *testing.T) {
 	}
 	ctx.MaxToolSpillBytes = len(plain) - 1
 	_, err := tool.Run(t.Context(), map[string]any{"path": spill.SpillPath, "offset": 2051, "limit": 1}, ctx)
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "READ_FILE_TOO_LARGE" || reject.Data["max_file_bytes"] != int64(len(plain)-1) {
 		t.Fatalf("retention read ignored configured bound: %v", err)
 	}

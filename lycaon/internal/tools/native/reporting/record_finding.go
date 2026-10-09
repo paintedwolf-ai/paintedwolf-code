@@ -3,6 +3,7 @@ package reporting
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 	"unicode/utf8"
 
@@ -38,18 +39,18 @@ func FindingsHandler(gates RecordFindingGates, store findings.Store, scopeKey Fi
 		}
 		body, _ := args["body"].(string)
 		if utf8.RuneCountInString(summary) > findings.SummaryMaxChars {
-			return "", &tools.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"field": "summary", "reason": "summary_exceeds_320_characters", "maximum": findings.SummaryMaxChars, "actual": utf8.RuneCountInString(summary), "unit": "characters"}}
+			return "", &toolrejection.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"field": "summary", "reason": "summary_exceeds_320_characters", "maximum": findings.SummaryMaxChars, "actual": utf8.RuneCountInString(summary), "unit": "characters"}}
 		}
 		if len(body) > findings.BodyMaxBytes {
-			return "", &tools.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"field": "body", "reason": "body_exceeds_8192_bytes", "maximum": findings.BodyMaxBytes, "actual": len(body), "unit": "bytes"}}
+			return "", &toolrejection.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"field": "body", "reason": "body_exceeds_8192_bytes", "maximum": findings.BodyMaxBytes, "actual": len(body), "unit": "bytes"}}
 		}
 		ref, _ := args["ref"].(string)
 		ref = strings.TrimSpace(ref)
 		if len(ref) > 512 {
-			return "", &tools.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"field": "ref", "reason": "ref_exceeds_512_bytes", "maximum": 512, "unit": "bytes"}}
+			return "", &toolrejection.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"field": "ref", "reason": "ref_exceeds_512_bytes", "maximum": 512, "unit": "bytes"}}
 		}
 		if ref == "" {
-			return "", &tools.ToolReject{Code: "FINDING_UNGROUNDED", Data: map[string]any{"reason": "reference_required"}}
+			return "", &toolrejection.ToolReject{Code: "FINDING_UNGROUNDED", Data: map[string]any{"reason": "reference_required"}}
 		}
 
 		agent := strings.TrimSpace(tctx.WorkerJobID)

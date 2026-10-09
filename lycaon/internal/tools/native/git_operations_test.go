@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"testing"
@@ -66,7 +67,7 @@ func (partialOperationGit) Operate(context.Context, string, git.OperationRequest
 func TestGitPartialOperationKeepsStateAndRaisesPolicyOccurrence(t *testing.T) {
 	tool := GitOperationTool{Git: partialOperationGit{}, Boundary: nativefixture.Boundary(t), Kind: "merge"}
 	out, err := tool.Run(t.Context(), map[string]any{}, nativefixture.Context(t.TempDir()))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "GIT_OPERATION_FAILED" {
 		t.Fatalf("partial operation lost failure occurrence: %v", err)
 	}

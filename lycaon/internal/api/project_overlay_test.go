@@ -36,7 +36,7 @@ func newProjectOverlayTestServer(t *testing.T, opts ...testDeps) (*Server, *proj
 	})
 	toolRegistry := tools.NewStubRegistry()
 	mgr := session.NewManager(sessionStore, mock, toolRegistry, settings.DefaultSessionLimits())
-	mgr.SetToolInvoker(testtool.RegistryInvoker{Registry: toolRegistry})
+	mgr.SetToolInvoker(testtool.RegistryInvoker{Registry: toolRegistry}, testtool.RegistryInvoker{Registry: toolRegistry})
 
 	postures, err := session.LoadPostureRegistry()
 	testutil.FailErr(t, "load posture registry", err)

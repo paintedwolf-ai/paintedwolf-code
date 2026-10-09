@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 	"time"
 
@@ -12,7 +13,6 @@ import (
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/sensitivepath"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -168,7 +168,7 @@ func (b *WriteRootCheckpointBroker) buildReadPathCard(
 		ConsequenceBand: string(band), ConsequenceCode: string(code),
 	}, reasons, options, hitl.FaceContext{})
 	if err != nil {
-		return sandboxAskCard{}, tools.ApprovalPlanInvalid()
+		return sandboxAskCard{}, toolrejection.ApprovalPlanInvalid()
 	}
 	return sandboxAskCard{Action: grantAction, Title: subjectTitle, Plan: plan, Decision: decision}, nil
 }

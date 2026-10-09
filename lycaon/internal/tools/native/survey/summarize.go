@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"regexp"
 	"strings"
@@ -161,13 +162,13 @@ func (t *SummarizeTool) Run(ctx context.Context, args map[string]any, tctx tools
 	}
 
 	if pattern != "" && pathArg == "" && len(paths) == 0 {
-		return "", &tools.ToolReject{
+		return "", &toolrejection.ToolReject{
 			Code: "SUMMARIZE_PATTERN_NEEDS_PATH",
 			Data: map[string]any{},
 		}
 	}
 	if content == "" && !hasRepo {
-		return "", &tools.ToolReject{
+		return "", &toolrejection.ToolReject{
 			Code: "SUMMARIZE_NO_INPUT",
 			Data: map[string]any{
 				"need_one_of": []string{"path", "paths", "content"},
@@ -178,7 +179,7 @@ func (t *SummarizeTool) Run(ctx context.Context, args map[string]any, tctx tools
 	if content != "" {
 		n := len(content)
 		if n > t.Caps.Gather.InlineMaxBytes {
-			return "", &tools.ToolReject{Code: "SUMMARIZE_CONTENT_TOO_LARGE", Data: map[string]any{"bytes": n, "cap": t.Caps.Gather.InlineMaxBytes}}
+			return "", &toolrejection.ToolReject{Code: "SUMMARIZE_CONTENT_TOO_LARGE", Data: map[string]any{"bytes": n, "cap": t.Caps.Gather.InlineMaxBytes}}
 		}
 		// Preserve short unstructured content verbatim.
 		if n < t.Caps.Gather.InlineMinBytes && !hasRepo {
@@ -235,10 +236,10 @@ func (t *SummarizeTool) Run(ctx context.Context, args map[string]any, tctx tools
 	}
 	if err != nil {
 		if errors.Is(err, summarize.ErrNoMaterial) {
-			return "", &tools.ToolReject{Code: "SUMMARIZE_NO_MATERIAL", Data: gatherer.noMaterialData(req)}
+			return "", &toolrejection.ToolReject{Code: "SUMMARIZE_NO_MATERIAL", Data: gatherer.noMaterialData(req)}
 		}
 		if errors.Is(err, summarize.ErrInvalidCursor) || errors.Is(err, sourcecatalog.ErrTreeCursor) {
-			return "", &tools.ToolReject{Code: "SUMMARIZE_CURSOR_STALE", Data: map[string]any{"cursor": cursor}}
+			return "", &toolrejection.ToolReject{Code: "SUMMARIZE_CURSOR_STALE", Data: map[string]any{"cursor": cursor}}
 		}
 		return "", err
 	}

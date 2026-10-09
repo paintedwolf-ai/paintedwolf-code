@@ -4,12 +4,12 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"io"
 	"reflect"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/summarize"
-	"github.com/lycaon/lycaon/internal/tools"
 )
 
 func TestSummarizeNoMaterialRetainsScopeAndOmissions(t *testing.T) {
@@ -19,7 +19,7 @@ func TestSummarizeNoMaterialRetainsScopeAndOmissions(t *testing.T) {
 	writeFile(t, dir, roots[1], "matching\x00binary\n")
 	g := testSummarizeGatherer(t, dir, summarize.DefaultCaps())
 	_, err := g.Gather(t.Context(), summarize.Request{Paths: roots, Pattern: "matching"})
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "SUMMARIZE_NO_MATERIAL" {
 		t.Fatalf("gather: %v", err)
 	}

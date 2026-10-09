@@ -2,6 +2,7 @@ package native
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"log/slog"
 	"slices"
 	"strconv"
@@ -69,7 +70,7 @@ func reportEditorConfigMismatch(tctx tools.ToolContext, m editorConfigMismatch) 
 	if tctx.Out == nil || len(m.violations) == 0 {
 		return
 	}
-	code := tools.EditorConfigMismatchCode
+	code := toolrejection.EditorConfigMismatchCode
 	previous := tctx.Out.Facts.FeedbackFor(code)
 	paths, _ := previous.Details["path"].(string)
 	rules, _ := previous.Details["editorconfig_rules"].([]string)

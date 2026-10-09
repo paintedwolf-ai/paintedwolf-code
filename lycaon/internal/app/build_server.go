@@ -77,7 +77,7 @@ func (b serverWiring) wireRuntimeServices() error {
 	b.pageRegistry.SetOnClose(func(sessionID, pageID string) {
 		b.previewCtrl.Detach(context.Background(), sessionID, pageID)
 	})
-	b.toolRuntime.SetBackgroundRegistry(b.bgRegistry)
+	b.toolRuntime.Commands.SetBackgroundRegistry(b.bgRegistry)
 	b.mgr.SetBackgroundRegistry(b.bgRegistry)
 	b.mgr.SetHeldCalls(b.heldCalls)
 	if err := heldtools.Register(b.toolRuntime.Registry, b.heldCalls); err != nil {
@@ -124,7 +124,7 @@ func (b serverWiring) wireRuntimeObservers() error {
 			b.repoProvider.Changed(ctx, ev.ProjectDir)
 		}
 		if ev.Kind == repochange.HeadMoved {
-			b.toolRuntime.InvalidateFileAge(ev.ProjectDir)
+			b.toolRuntime.Survey.InvalidateFileAge(ev.ProjectDir)
 		}
 	})
 	activeRun := activeRunIDFromWorkflow(b.workflowMgr)
@@ -156,7 +156,7 @@ func (b serverWiring) wireServer() error {
 		DataDir: b.dataDir, StorePath: b.storePath, WorkerBranchRoot: b.workerBranchRoot, WorkerSeedRoot: b.workerSeedRoot,
 		ModuleRoot: b.configRoot, StoreRevision: b.storeRevision, MinDenVersion: os.Getenv("LYCAON_MIN_DEN_VERSION"),
 		SecretIgnores: b.secretIgnores, ManagedSecrets: b.secretCaps, SecretSpans: b.secretSpans,
-		Checkpoints: b.checkpointMgr, ApprovalGate: b.toolRuntime.ApprovalGate(), Rerank: b.rerank,
+		Checkpoints: b.checkpointMgr, ApprovalGate: b.toolRuntime.Authority.ApprovalGate(), Rerank: b.rerank,
 		Authority: capabilityadmin.Authority{
 			DirectIP: b.directIPCapabilityRT, GrantedPaths: b.grantedPathRT, Listen: b.sandboxListenRT,
 			Loopback: b.sandboxLoopbackRT, ReadPaths: b.sandboxReadPathRT, WriteRoots: b.sandboxWriteRootRT,
@@ -169,7 +169,7 @@ func (b serverWiring) wireServer() error {
 		Blueprints: b.blueprintMgr, Orchestrator: b.orch, Delegations: b.delegationMgr, Workers: b.workerQueue,
 		WorkerCancel: b.workerCancelSvc, Board: b.boardSnap, RepoSetCache: b.gitRepoSetCache,
 		AgentPresence: b.agentPresence, ProjectRules: b.projectRulesOverlay, HintConfig: b.hintCfg,
-		FileAgeWarmer: b.toolRuntime.WarmFileAge, VisualStore: b.visualStore, ProgressStore: b.progressStore,
+		FileAgeWarmer: b.toolRuntime.Survey.WarmFileAge, VisualStore: b.visualStore, ProgressStore: b.progressStore,
 		ExtensionViews: b.viewCache, ExtensionJournal: extensionJournal,
 		MCP: b.mcpReg, WebResearch: b.webResearchRuntime, WebDiscoverer: b.webDiscoverer, WebIndex: b.webIndex,
 		HostResources: b.hostResources, HostPower: b.hostPower, Pricing: b.pricingHost, Preview: b.previewCtrl,
@@ -503,8 +503,8 @@ func (b serverWiring) sealApprovalGate() error {
 	if b.toolRuntime == nil {
 		return nil
 	}
-	b.toolRuntime.SealApprovalGate()
-	if !b.toolRuntime.ApprovalGateSealed() {
+	b.toolRuntime.Authority.SealApprovalGate()
+	if !b.toolRuntime.Authority.ApprovalGateSealed() {
 		return fmt.Errorf("approval gate did not seal")
 	}
 	return nil
@@ -520,7 +520,7 @@ func (b serverWiring) wireDestinationConfig() error {
 	if err != nil {
 		return err
 	}
-	b.toolRuntime.Executor.SetPackageRegistries(registries)
+	b.toolRuntime.Executor.Network.SetPackageRegistries(registries)
 	reg := destconfig.NewRegistry()
 	if b.llmSvc != nil && b.llmSvc.Registry != nil {
 		reg.Add(destconfig.Source{
@@ -551,7 +551,7 @@ func (b serverWiring) wireDestinationConfig() error {
 			return destconfig.GitRemoteHostsForRoots(roots...)
 		},
 	})
-	b.toolRuntime.Executor.SetDestinationConfig(reg)
+	b.toolRuntime.Executor.Network.SetDestinationConfig(reg)
 	return nil
 }
 

@@ -2,6 +2,7 @@ package projectpaths_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"os"
 	"path/filepath"
 	"testing"
@@ -24,7 +25,7 @@ func TestResolveReadAllowsHostDataDir(t *testing.T) {
 		Roots:        []projectroot.RootRef{{ID: "r1", Path: ws, IsPrimary: true}},
 		ActiveRootID: "r1",
 		HostDataDir:  host,
-		Agent:        tools.DefaultToolProfileID,
+		Agent:        toolprofiles.DefaultToolProfileID,
 	}
 	// Absolute spill leftovers resolve (durable seatbelt); DisplayPath is relative.
 	resolved, err := projectpaths.ResolveRead(context.Background(), nil, tctx, spill)
@@ -67,7 +68,7 @@ func TestResolveReadMarksBlobstoreManagedDirsCompressed(t *testing.T) {
 		Roots:        []projectroot.RootRef{{ID: "r1", Path: ws, IsPrimary: true}},
 		ActiveRootID: "r1",
 		HostDataDir:  host,
-		Agent:        tools.DefaultToolProfileID,
+		Agent:        toolprofiles.DefaultToolProfileID,
 	}
 
 	cases := []struct {
@@ -99,7 +100,7 @@ func TestResolveReadRejectsNonSpillUnderHostDataDir(t *testing.T) {
 		Roots:        []projectroot.RootRef{{ID: "r1", Path: ws, IsPrimary: true}},
 		ActiveRootID: "r1",
 		HostDataDir:  host,
-		Agent:        tools.DefaultToolProfileID,
+		Agent:        toolprofiles.DefaultToolProfileID,
 	}
 	_, err := projectpaths.ResolveRead(context.Background(), nil, tctx, evidence)
 	if err == nil {
@@ -114,7 +115,7 @@ func TestResolveReadRejectsAbsoluteOutsideHostAndWorkspace(t *testing.T) {
 		Roots:        []projectroot.RootRef{{ID: "r1", Path: ws, IsPrimary: true}},
 		ActiveRootID: "r1",
 		HostDataDir:  host,
-		Agent:        tools.DefaultToolProfileID,
+		Agent:        toolprofiles.DefaultToolProfileID,
 	}
 	outside := filepath.Join(filepath.VolumeName(ws)+string(filepath.Separator), "unattached", t.Name(), "secret.txt")
 	_, err := projectpaths.ResolveRead(context.Background(), nil, tctx, outside)
@@ -142,7 +143,7 @@ func TestResolveMisplacedSpillFindsTheReferencedSpill(t *testing.T) {
 		Roots:        []projectroot.RootRef{{ID: "r1", Path: t.TempDir(), IsPrimary: true}},
 		ActiveRootID: "r1",
 		HostDataDir:  host,
-		Agent:        tools.DefaultToolProfileID,
+		Agent:        toolprofiles.DefaultToolProfileID,
 	}
 	resolved, ok := projectpaths.ResolveMisplacedSpill(tctx, "@scratch/"+rel)
 	if !ok || resolved.DisplayPath != rel || resolved.Abs != filepath.Join(host, filepath.FromSlash(rel)) {

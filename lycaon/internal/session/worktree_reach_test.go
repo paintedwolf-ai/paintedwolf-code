@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"go/parser"
 	"go/token"
 	"os"
@@ -119,14 +120,14 @@ func writeBoundary(t *testing.T) *sandbox.Boundary {
 		ProjectRootRequired: true,
 		RejectSymlinkEscape: true,
 	}, []sandbox.ToolProfile{
-		{ID: tools.DefaultToolProfileID, Tools: map[string]bool{"write": true, "command": true}},
+		{ID: toolprofiles.DefaultToolProfileID, Tools: map[string]bool{"write": true, "command": true}},
 	})
 }
 
 func TestWorktreeReach_writeLandsInWorktree(t *testing.T) {
 	f := newReachFixture(t, initReachRepo(t))
 	f.bind(t)
-	tctx, err := f.mgr.buildToolContext(t.Context(), f.sess, tools.DefaultToolProfileID, inject.Machine{})
+	tctx, err := f.mgr.buildToolContext(t.Context(), f.sess, toolprofiles.DefaultToolProfileID, inject.Machine{})
 	testutil.FailErr(t, "buildToolContext", err)
 
 	tool := &native.WriteTool{Boundary: writeBoundary(t)}
@@ -187,7 +188,7 @@ func TestWorktreeReach_commandCwdFollows(t *testing.T) {
 	testutil.FailErr(t, "wt marker", os.WriteFile(filepath.Join(f.wtPath, "marker"), []byte("worktree"), 0o644))
 	testutil.FailErr(t, "proj marker", os.WriteFile(filepath.Join(f.repoDir, "marker"), []byte("project"), 0o644))
 
-	tctx, err := f.mgr.buildToolContext(t.Context(), f.sess, tools.DefaultToolProfileID, inject.Machine{})
+	tctx, err := f.mgr.buildToolContext(t.Context(), f.sess, toolprofiles.DefaultToolProfileID, inject.Machine{})
 	testutil.FailErr(t, "buildToolContext", err)
 
 	reg := bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{})

@@ -1,6 +1,8 @@
 package contract
 
 import (
+	"github.com/lycaon/lycaon/internal/capabilityrequest"
+
 	"go/ast"
 	"go/token"
 	"os"
@@ -19,7 +21,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/toolcontract"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/pkg/testcorpus"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
@@ -296,7 +297,7 @@ func TestIsolationBypassReachesEffectsButNotControlPlane(t *testing.T) {
 	configDir := t.TempDir()
 	t.Setenv("LYCAON_CONFIG_DIR", configDir)
 	for _, capability := range []string{"read_path", "write_root"} {
-		_, reject := tools.ParseCapabilityRequest(map[string]any{"capability_request": map[string]any{
+		_, reject := capabilityrequest.ParseCapabilityRequest(map[string]any{"capability_request": map[string]any{
 			capability: filepath.Join(configDir, "approvals.yaml"),
 		}})
 		if reject == nil || reject.Code != isolation.CodeControlPlaneDenied {
@@ -492,7 +493,7 @@ func TestProtectedPathsRemainDeclarableForApproval(t *testing.T) {
 		filepath.Join(t.TempDir(), "outside-project"),
 	} {
 		for _, capability := range []string{"read_path", "write_root"} {
-			request, reject := tools.ParseCapabilityRequest(map[string]any{"capability_request": map[string]any{
+			request, reject := capabilityrequest.ParseCapabilityRequest(map[string]any{"capability_request": map[string]any{
 				capability: path,
 			}})
 			if reject != nil {

@@ -3,6 +3,7 @@ package native
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"io"
 	"os"
 	"strings"
@@ -223,23 +224,23 @@ func verifyTextWriteBase(target fseffect.Target, fullPath, baseSHA256 string) er
 		} else if err != nil {
 			return fmt.Errorf("stat write base: %w", err)
 		}
-		return &tools.ToolReject{Code: "TEXT_WRITE_CONFLICT", Data: map[string]any{"path": fullPath, "text_base_changed": true}}
+		return &toolrejection.ToolReject{Code: "TEXT_WRITE_CONFLICT", Data: map[string]any{"path": fullPath, "text_base_changed": true}}
 	}
 	currentFile, err := target.Open()
 	if err != nil {
-		return &tools.ToolReject{Code: "TEXT_WRITE_CONFLICT", Data: map[string]any{"path": fullPath}}
+		return &toolrejection.ToolReject{Code: "TEXT_WRITE_CONFLICT", Data: map[string]any{"path": fullPath}}
 	}
 	defer func() { _ = currentFile.Close() }()
 	info, err := currentFile.Stat()
 	if err != nil || !info.Mode().IsRegular() || info.Size() > readcaps.MaxMutationBytes {
-		return &tools.ToolReject{Code: "TEXT_WRITE_CONFLICT", Data: map[string]any{"path": fullPath}}
+		return &toolrejection.ToolReject{Code: "TEXT_WRITE_CONFLICT", Data: map[string]any{"path": fullPath}}
 	}
 	current, err := io.ReadAll(io.LimitReader(currentFile, readcaps.MaxMutationBytes+1))
 	if err != nil {
-		return &tools.ToolReject{Code: "TEXT_WRITE_CONFLICT", Data: map[string]any{"path": fullPath}}
+		return &toolrejection.ToolReject{Code: "TEXT_WRITE_CONFLICT", Data: map[string]any{"path": fullPath}}
 	}
 	if textfile.SHA256(current) != baseSHA256 {
-		return &tools.ToolReject{Code: "TEXT_WRITE_CONFLICT", Data: map[string]any{"path": fullPath, "text_base_changed": true}}
+		return &toolrejection.ToolReject{Code: "TEXT_WRITE_CONFLICT", Data: map[string]any{"path": fullPath, "text_base_changed": true}}
 	}
 	return nil
 }

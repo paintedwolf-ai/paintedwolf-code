@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/tools"
@@ -33,10 +34,10 @@ func RegisterDeclineWorkerBudgetTool(reg *tools.DefaultRegistry, deps DeclineBud
 		}
 		task, ok := deps.Queue.Get(jobID)
 		if !ok || task == nil {
-			return "", &tools.ToolReject{Code: workerBudgetDeclineNoRequestCode, Data: map[string]any{"job_id": jobID}}
+			return "", &toolrejection.ToolReject{Code: workerBudgetDeclineNoRequestCode, Data: map[string]any{"job_id": jobID}}
 		}
 		if strings.TrimSpace(task.ParentSessionID) != strings.TrimSpace(tctx.SessionID) {
-			return "", &tools.ToolReject{Code: workerBudgetDeclineSessionMismatchCode, Data: map[string]any{"job_id": jobID}}
+			return "", &toolrejection.ToolReject{Code: workerBudgetDeclineSessionMismatchCode, Data: map[string]any{"job_id": jobID}}
 		}
 		tctx.SetDisplaySubject(task.Brief)
 		declined, err := deps.Ledger.Decline(ctx, jobID)
@@ -44,7 +45,7 @@ func RegisterDeclineWorkerBudgetTool(reg *tools.DefaultRegistry, deps DeclineBud
 			return "", err
 		}
 		if !declined {
-			return "", &tools.ToolReject{Code: workerBudgetDeclineNoRequestCode, Data: map[string]any{"job_id": jobID, "status": string(task.Status)}}
+			return "", &toolrejection.ToolReject{Code: workerBudgetDeclineNoRequestCode, Data: map[string]any{"job_id": jobID, "status": string(task.Status)}}
 		}
 		out := map[string]any{
 			"job_id":          jobID,

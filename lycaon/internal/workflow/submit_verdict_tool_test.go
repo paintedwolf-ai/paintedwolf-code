@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 	"testing"
 
@@ -443,9 +444,9 @@ func TestRecoverVerdictOperationUndecodableInputResolves(t *testing.T) {
 	}
 }
 
-func requireVerdictRejection(t *testing.T, output string, err error, code string) *tools.ToolReject {
+func requireVerdictRejection(t *testing.T, output string, err error, code string) *toolrejection.ToolReject {
 	t.Helper()
-	reject := tools.AsToolReject(err)
+	reject := toolrejection.AsToolReject(err)
 	if output != "" || reject == nil || reject.Code != code {
 		t.Fatalf("verdict refusal: output=%q error=%v want %s", output, err, code)
 	}

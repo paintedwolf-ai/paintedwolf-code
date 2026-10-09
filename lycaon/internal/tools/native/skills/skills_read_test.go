@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"reflect"
 	"strings"
@@ -132,7 +133,7 @@ func TestSkillsReadReturnsListedResource(t *testing.T) {
 	_, err = tool.Run(context.Background(), map[string]any{
 		"need": "example", "resource": "../outside.md",
 	}, tools.ToolContext{})
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "SKILL_RESOURCE_UNKNOWN" {
 		t.Fatalf("invalid resource err = %v", err)
 	}
@@ -368,7 +369,7 @@ func TestSkillsReadTemplateInvalid(t *testing.T) {
 		},
 	}
 	_, err := tool.Run(context.Background(), map[string]any{"need": "broken"}, tools.ToolContext{})
-	var tr *tools.ToolReject
+	var tr *toolrejection.ToolReject
 	if !errors.As(err, &tr) || tr.Code != "SKILL_TEMPLATE_INVALID" {
 		t.Fatalf("err=%v want SKILL_TEMPLATE_INVALID", err)
 	}

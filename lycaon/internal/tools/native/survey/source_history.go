@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/hostmarker"
@@ -125,7 +126,7 @@ func (t *SourceHistoryTool) Run(ctx context.Context, args map[string]any, tctx t
 	case "diff":
 		return t.runDiff(ctx, args, tctx)
 	default:
-		return "", &tools.ToolReject{
+		return "", &toolrejection.ToolReject{
 			Code: "SOURCE_HISTORY_MODE_INVALID",
 			Data: map[string]any{"mode": mode, "detail": "mode must be effects, lines, mine, version, or diff"},
 		}
@@ -137,7 +138,7 @@ func (t *SourceHistoryTool) Run(ctx context.Context, args map[string]any, tctx t
 func historyLedger(tctx tools.ToolContext) (sourceHistoryLedger, error) {
 	ledger, ok := tctx.SourceLedger.(sourceHistoryLedger)
 	if !ok {
-		return nil, &tools.ToolReject{
+		return nil, &toolrejection.ToolReject{
 			Code: "SOURCE_HISTORY_UNAVAILABLE",
 			Data: map[string]any{"detail": "the source ledger is not configured for this session"},
 		}
@@ -355,7 +356,7 @@ func (t *SourceHistoryTool) runVersion(
 	versionID, _ := args["version_id"].(string)
 	versionID = strings.TrimSpace(versionID)
 	if versionID == "" {
-		return "", &tools.ToolReject{
+		return "", &toolrejection.ToolReject{
 			Code: "SOURCE_VERSION_REQUIRED",
 			Data: map[string]any{
 				"mode":   "version",
@@ -369,7 +370,7 @@ func (t *SourceHistoryTool) runVersion(
 	}
 	ver, err := ledger.ReadRestorableVersion(ctx, tctx.ProjectID, versionID)
 	if errors.Is(err, sourceledger.ErrHistoryNotFound) {
-		return "", &tools.ToolReject{
+		return "", &toolrejection.ToolReject{
 			Code: "SOURCE_VERSION_NOT_FOUND",
 			Data: map[string]any{
 				"version_id": versionID,
@@ -378,7 +379,7 @@ func (t *SourceHistoryTool) runVersion(
 		}
 	}
 	if errors.Is(err, sourceledger.ErrVersionUnavailable) {
-		return "", &tools.ToolReject{
+		return "", &toolrejection.ToolReject{
 			Code: "SOURCE_VERSION_UNAVAILABLE",
 			Data: map[string]any{
 				"version_id": versionID,
@@ -391,7 +392,7 @@ func (t *SourceHistoryTool) runVersion(
 	}
 
 	if ver.Path != rel || (ver.RootID != "" && rootID != "" && ver.RootID != rootID) {
-		return "", &tools.ToolReject{
+		return "", &toolrejection.ToolReject{
 			Code: "SOURCE_VERSION_PATH_MISMATCH",
 			Data: map[string]any{
 				"version_id":    versionID,
@@ -424,7 +425,7 @@ func (t *SourceHistoryTool) runVersion(
 
 	text, ok := ver.Text()
 	if !ok {
-		return "", &tools.ToolReject{
+		return "", &toolrejection.ToolReject{
 			Code: "SOURCE_VERSION_UNAVAILABLE",
 			Data: map[string]any{
 				"version_id": versionID,
@@ -462,7 +463,7 @@ func (t *SourceHistoryTool) runDiff(
 	versionID, _ := args["version_id"].(string)
 	versionID = strings.TrimSpace(versionID)
 	if versionID == "" {
-		return "", &tools.ToolReject{
+		return "", &toolrejection.ToolReject{
 			Code: "SOURCE_VERSION_REQUIRED",
 			Data: map[string]any{
 				"mode":   "diff",
@@ -482,7 +483,7 @@ func (t *SourceHistoryTool) runDiff(
 	if baseVersionID == "current" || baseVersionID == "head" {
 		head, err := ledger.ResolveHead(ctx, tctx.ProjectID, branch, rootID, rel)
 		if err != nil {
-			return "", &tools.ToolReject{
+			return "", &toolrejection.ToolReject{
 				Code: "SOURCE_VERSION_NOT_FOUND",
 				Data: map[string]any{
 					"version_id": baseVersionID,
@@ -500,7 +501,7 @@ func (t *SourceHistoryTool) runDiff(
 	}
 
 	if errors.Is(err, sourceledger.ErrHistoryNotFound) {
-		return "", &tools.ToolReject{
+		return "", &toolrejection.ToolReject{
 			Code: "SOURCE_VERSION_NOT_FOUND",
 			Data: map[string]any{
 				"version_id": versionID,
@@ -517,7 +518,7 @@ func (t *SourceHistoryTool) runDiff(
 		if expectedPath == "" {
 			expectedPath = comp.Before.Path
 		}
-		return "", &tools.ToolReject{
+		return "", &toolrejection.ToolReject{
 			Code: "SOURCE_VERSION_PATH_MISMATCH",
 			Data: map[string]any{
 				"version_id":    versionID,
@@ -529,7 +530,7 @@ func (t *SourceHistoryTool) runDiff(
 	}
 
 	if comp.After.Availability == sourceledger.ContentUnavailable {
-		return "", &tools.ToolReject{
+		return "", &toolrejection.ToolReject{
 			Code: "SOURCE_VERSION_UNAVAILABLE",
 			Data: map[string]any{
 				"version_id": versionID,
@@ -538,7 +539,7 @@ func (t *SourceHistoryTool) runDiff(
 		}
 	}
 	if comp.Before.Availability == sourceledger.ContentUnavailable {
-		return "", &tools.ToolReject{
+		return "", &toolrejection.ToolReject{
 			Code: "SOURCE_VERSION_UNAVAILABLE",
 			Data: map[string]any{
 				"version_id": comp.Before.VersionID,

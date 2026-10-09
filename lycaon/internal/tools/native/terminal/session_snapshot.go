@@ -3,6 +3,7 @@ package terminal
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 	"time"
 
@@ -185,7 +186,7 @@ func parseTerminalSnapshotArgs(args map[string]any) (terminalSnapshotArgs, error
 	id, _ := args["id"].(string)
 	id = strings.TrimSpace(id)
 	if id == "" {
-		return terminalSnapshotArgs{}, tools.RejectInvalidArguments("TERMINAL_ID_REQUIRED", map[string]any{"reason": "missing_id"})
+		return terminalSnapshotArgs{}, toolrejection.RejectInvalidArguments("TERMINAL_ID_REQUIRED", map[string]any{"reason": "missing_id"})
 	}
 	out := terminalSnapshotArgs{ID: id}
 	if v, ok := args["idle_ms"].(float64); ok && v > 0 {

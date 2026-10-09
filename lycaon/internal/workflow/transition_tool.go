@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/tools"
@@ -32,7 +33,7 @@ func RegisterTransitionTool(reg *tools.DefaultRegistry, runs *RunManager) error 
 		transitionID, _ := args["transition_id"].(string)
 		transitionID = strings.TrimSpace(transitionID)
 		if transitionID == "" {
-			return "", &tools.ToolReject{
+			return "", &toolrejection.ToolReject{
 				Code: "WORKFLOW_TRANSITION_UNKNOWN",
 				Data: map[string]any{"detail": "transition_id required"},
 			}
@@ -52,7 +53,7 @@ func RegisterTransitionTool(reg *tools.DefaultRegistry, runs *RunManager) error 
 			return "", err
 		}
 		if active == nil {
-			return "", &tools.ToolReject{
+			return "", &toolrejection.ToolReject{
 				Code: "WORKFLOW_TRANSITION_INACTIVE",
 				Data: map[string]any{"detail": "no active workflow run"},
 			}
@@ -70,7 +71,7 @@ func mapTransitionToolError(err error, transitionID, phase string) error {
 	switch {
 	case errors.Is(err, ErrTransitionPendingInput):
 		// Pending input uses the shared workflow hint.
-		return &tools.ToolReject{
+		return &toolrejection.ToolReject{
 			Code: "WORKFLOW_FEEDBACK_PENDING",
 			Data: map[string]any{
 				"phase":         phase,
@@ -79,23 +80,23 @@ func mapTransitionToolError(err error, transitionID, phase string) error {
 			},
 		}
 	case errors.Is(err, ErrTransitionUnknown):
-		return &tools.ToolReject{
+		return &toolrejection.ToolReject{
 			Code: "WORKFLOW_TRANSITION_UNKNOWN",
 			Data: map[string]any{"transition_id": transitionID, "phase": phase},
 		}
 	case errors.Is(err, ErrTransitionActorDenied):
-		return &tools.ToolReject{
+		return &toolrejection.ToolReject{
 			Code: "WORKFLOW_TRANSITION_ACTOR_DENIED",
 			Data: map[string]any{"transition_id": transitionID, "phase": phase},
 		}
 	case errors.Is(err, ErrTransitionNotArmed):
-		return &tools.ToolReject{
+		return &toolrejection.ToolReject{
 			Code: "WORKFLOW_TRANSITION_NOT_ARMED",
 			Data: map[string]any{"transition_id": transitionID, "phase": phase},
 		}
 	default:
 		if nr, ok := IsNotRunnable(err); ok {
-			return &tools.ToolReject{
+			return &toolrejection.ToolReject{
 				Code: "WORKFLOW_TRANSITION_INACTIVE",
 				Data: map[string]any{"detail": nr.Error(), "phase": phase},
 			}

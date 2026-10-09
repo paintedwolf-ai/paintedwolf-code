@@ -6,6 +6,7 @@ import (
 	"context"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	repotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
+	"github.com/lycaon/lycaon/internal/toolexecution"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -21,7 +22,7 @@ import (
 	"github.com/lycaon/lycaon/internal/worker"
 )
 
-func boardToolFixture(t *testing.T) (*tools.DefaultToolExecutor, *tools.DefaultRegistry) {
+func boardToolFixture(t *testing.T) (*toolexecution.Executor, *tools.DefaultRegistry) {
 	t.Helper()
 	_, file, _, ok := runtime.Caller(0)
 	if !ok {
@@ -46,7 +47,7 @@ func boardToolFixture(t *testing.T) (*tools.DefaultToolExecutor, *tools.DefaultR
 
 func TestCoordinatorProfileListsBoardTools(t *testing.T) {
 	exec, _ := boardToolFixture(t)
-	tools := tools.ListToolsForProfile(context.Background(), exec, platform.ToolFilter{ProfileID: "coordinator"})
+	tools := tools.ListToolsForProfile(context.Background(), exec.Metadata, platform.ToolFilter{ProfileID: "coordinator"})
 	names := make(map[string]bool, len(tools))
 	for _, meta := range tools {
 		names[meta.Name] = true

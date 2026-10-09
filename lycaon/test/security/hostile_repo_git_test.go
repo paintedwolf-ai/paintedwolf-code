@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	gittestsetup "github.com/lycaon/lycaon/internal/testsetup/git"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	osexec "os/exec"
 	"path/filepath"
@@ -78,19 +80,19 @@ func TestHostileRepoGitJourney(t *testing.T) {
 		ProjectRootRequired: true,
 		RejectSymlinkEscape: true,
 	}, []sandbox.ToolProfile{{
-		ID:    tools.DefaultToolProfileID,
+		ID:    toolprofiles.DefaultToolProfileID,
 		Tools: map[string]bool{"write": true, "edit": true},
 	}})
 	tctx := tools.ToolContext{
 		Roots:              []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}},
 		ActiveRootID:       "r1",
-		Agent:              tools.DefaultToolProfileID,
+		Agent:              toolprofiles.DefaultToolProfileID,
 		SessionID:          "hostile-repo",
 		RepoFileCount:      10,
 		RepoFileCountKnown: true,
 	}
 	_, err = projectpaths.ResolveWrite(ctx, boundary, tctx, ".git/hooks/pre-commit")
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "GIT_INTERNALS_WRITE_DENIED" {
 		t.Fatalf("ResolveWrite(.git/hooks/pre-commit) = %v, want GIT_INTERNALS_WRITE_DENIED", err)
 	}

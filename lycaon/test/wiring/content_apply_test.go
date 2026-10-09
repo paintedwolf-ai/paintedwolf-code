@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"testing"
@@ -164,7 +165,7 @@ func TestContentApplyRejectStructuredError(t *testing.T) {
 		testutil.FailErr(t, "reject content_apply checkpoint", err)
 	}
 	gateErr := <-done
-	reject := tools.AsToolReject(gateErr)
+	reject := toolrejection.AsToolReject(gateErr)
 	if reject == nil {
 		t.Fatalf("err = %v want structured ToolReject", gateErr)
 	}

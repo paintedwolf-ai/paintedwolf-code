@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"slices"
 	"strings"
 
@@ -175,7 +176,7 @@ func (b *LocalNetworkCheckpointBroker) buildCard(in tools.LocalNetworkAsk, invok
 		ConsequenceCode: string(api.ConsequenceCodeLocalListen),
 	}, reasons, options, hitl.FaceContext{})
 	if err != nil {
-		return sandboxAskCard{}, tools.ApprovalPlanInvalid()
+		return sandboxAskCard{}, toolrejection.ApprovalPlanInvalid()
 	}
 	return composeSandboxSecretCard(sandboxAskCard{Action: action, Title: title, Plan: plan, Decision: decision}, in.SecretPermission)
 }

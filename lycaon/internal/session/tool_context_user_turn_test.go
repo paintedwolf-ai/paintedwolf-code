@@ -1,6 +1,7 @@
 package session
 
 import (
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"testing"
 	"time"
 
@@ -9,7 +10,6 @@ import (
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -41,7 +41,7 @@ func TestToolContextUserTurnTracksSessionCurrentTurn(t *testing.T) {
 
 	assertTurn := func(step string, want int) {
 		t.Helper()
-		tctx, err := mgr.buildToolContext(ctx, sess, tools.DefaultToolProfileID, inject.Machine{})
+		tctx, err := mgr.buildToolContext(ctx, sess, toolprofiles.DefaultToolProfileID, inject.Machine{})
 		if err != nil {
 			t.Fatalf("%s: buildToolContext: %v", step, err)
 		}

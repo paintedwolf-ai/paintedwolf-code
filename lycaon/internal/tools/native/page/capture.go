@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
@@ -206,7 +207,7 @@ func parseCapturePageArgs(args map[string]any) (capturePageArgs, error) {
 		return capturePageArgs{}, mapBrowserReject(err)
 	}
 	if in.Record != nil && mode != browser.CaptureModeTimeline {
-		return capturePageArgs{}, &tools.ToolReject{Code: "CAPTURE_RECORD_INVALID", Data: map[string]any{"reason": "record_without_timeline", "capture": in.Capture}}
+		return capturePageArgs{}, &toolrejection.ToolReject{Code: "CAPTURE_RECORD_INVALID", Data: map[string]any{"reason": "record_without_timeline", "capture": in.Capture}}
 	}
 	if in.Record != nil {
 		if err := browser.ValidateRecordOpts(*in.Record); err != nil {
@@ -214,16 +215,16 @@ func parseCapturePageArgs(args map[string]any) (capturePageArgs, error) {
 		}
 	}
 	if in.URL == "" && in.ProjectDir == "" {
-		return capturePageArgs{}, &tools.ToolReject{Code: "CAPTURE_TARGET_INVALID", Data: map[string]any{"reason": "missing_target"}}
+		return capturePageArgs{}, &toolrejection.ToolReject{Code: "CAPTURE_TARGET_INVALID", Data: map[string]any{"reason": "missing_target"}}
 	}
 	if in.URL != "" && in.ProjectDir != "" {
-		return capturePageArgs{}, &tools.ToolReject{Code: "CAPTURE_TARGET_INVALID", Data: map[string]any{"reason": "url_and_project_dir"}}
+		return capturePageArgs{}, &toolrejection.ToolReject{Code: "CAPTURE_TARGET_INVALID", Data: map[string]any{"reason": "url_and_project_dir"}}
 	}
 	if in.Path != "" && in.ProjectDir == "" {
-		return capturePageArgs{}, &tools.ToolReject{Code: "CAPTURE_TARGET_INVALID", Data: map[string]any{"reason": "path_without_project_dir"}}
+		return capturePageArgs{}, &toolrejection.ToolReject{Code: "CAPTURE_TARGET_INVALID", Data: map[string]any{"reason": "path_without_project_dir"}}
 	}
 	if in.ProcessHandle != "" && in.ProjectDir != "" {
-		return capturePageArgs{}, &tools.ToolReject{Code: "CAPTURE_TARGET_INVALID", Data: map[string]any{"reason": "process_handle_with_project_dir"}}
+		return capturePageArgs{}, &toolrejection.ToolReject{Code: "CAPTURE_TARGET_INVALID", Data: map[string]any{"reason": "process_handle_with_project_dir"}}
 	}
 	if in.Path != "" {
 		if _, err := browser.JoinStaticEntry(in.Path); err != nil {
@@ -241,10 +242,10 @@ func requireCaptureProcess(bg *bgprocess.Registry, sessionID, urlStr, handle str
 		return nil
 	}
 	if strings.TrimSpace(urlStr) == "" {
-		return &tools.ToolReject{Code: "CAPTURE_TARGET_INVALID", Data: map[string]any{"reason": "process_handle_without_url"}}
+		return &toolrejection.ToolReject{Code: "CAPTURE_TARGET_INVALID", Data: map[string]any{"reason": "process_handle_without_url"}}
 	}
 	if bg == nil {
-		return &tools.ToolReject{Code: "CAPTURE_PROCESS_NOT_RUNNING", Data: map[string]any{"reason": "registry_unavailable", "handle": handle}}
+		return &toolrejection.ToolReject{Code: "CAPTURE_PROCESS_NOT_RUNNING", Data: map[string]any{"reason": "registry_unavailable", "handle": handle}}
 	}
 	if err := bg.RequireRunning(sessionID, handle); err != nil {
 		code := "CAPTURE_PROCESS_NOT_RUNNING"
@@ -252,7 +253,7 @@ func requireCaptureProcess(bg *bgprocess.Registry, sessionID, urlStr, handle str
 		if errors.Is(err, bgprocess.ErrProcessNotFound) {
 			reason = "not_found"
 		}
-		return &tools.ToolReject{Code: code, Data: map[string]any{"handle": handle, "reason": reason}}
+		return &toolrejection.ToolReject{Code: code, Data: map[string]any{"handle": handle, "reason": reason}}
 	}
 	return nil
 }

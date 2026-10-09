@@ -2,6 +2,7 @@ package mcp_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -109,7 +110,7 @@ func TestMCPCircuitBreakerIgnoresToolReportedErrors(t *testing.T) {
 		if err == nil {
 			t.Fatalf("call %d: expected tool-reported error to surface", i)
 		}
-		tr := tools.AsToolReject(err)
+		tr := toolrejection.AsToolReject(err)
 		if tr == nil || tr.Code != "MCP_TOOL_ERROR" {
 			t.Fatalf("call %d: err = %v want ToolReject MCP_TOOL_ERROR (breaker must not be open)", i, err)
 		}
@@ -128,7 +129,7 @@ func TestMockCallIsErrorBecomesToolReject(t *testing.T) {
 		testutil.FailErr(t, "enable", err)
 	}
 	_, err := reg.CallTool(context.Background(), mcp.CallScope{}, "svca", "do", nil)
-	tr := tools.AsToolReject(err)
+	tr := toolrejection.AsToolReject(err)
 	if tr == nil || tr.Code != "MCP_TOOL_ERROR" {
 		t.Fatalf("err = %v want MCP_TOOL_ERROR", err)
 	}
@@ -177,7 +178,7 @@ func TestMCPPeerDiagnosticIsBoundedWithoutLosingOriginal(t *testing.T) {
 	reg := newTestRegistry(t, conn, "svca")
 	testutil.FailErr(t, "enable provider", reg.SetProviderEnabled(t.Context(), mcp.CallScope{}, "svca", true, ""))
 	_, err := reg.CallTool(t.Context(), mcp.CallScope{}, "svca", "do", nil)
-	reject := tools.AsToolReject(err)
+	reject := toolrejection.AsToolReject(err)
 	if reject == nil || reject.Code != "MCP_TOOL_ERROR" {
 		t.Fatalf("peer failure misclassified: %v", err)
 	}

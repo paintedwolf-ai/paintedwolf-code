@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"testing"
@@ -18,7 +20,7 @@ import (
 
 func TestRejectReturnsToolReject(t *testing.T) {
 	err := Reject("JQ_TIMEOUT", map[string]any{"query": "."})
-	var rej *tools.ToolReject
+	var rej *toolrejection.ToolReject
 	if !errors.As(err, &rej) {
 		t.Fatalf("got %T, want *tools.ToolReject", err)
 	}
@@ -32,7 +34,7 @@ func TestRejectReturnsToolReject(t *testing.T) {
 
 func TestRejectNilDataIsEmptyMap(t *testing.T) {
 	err := Reject("JQ_PATH_REQUIRED", nil)
-	var rej *tools.ToolReject
+	var rej *toolrejection.ToolReject
 	if !errors.As(err, &rej) {
 		t.Fatal("expected ToolReject")
 	}
@@ -45,7 +47,7 @@ func TestResolvePathRejectsDotDot(t *testing.T) {
 	dir := t.TempDir()
 	b := testBoundary(t)
 	_, err := ResolvePath(context.Background(), b, testCtx(dir), "../etc/passwd")
-	var rej *tools.ToolReject
+	var rej *toolrejection.ToolReject
 	if !errors.As(err, &rej) || rej.Code != "SURVEY_PATH_ESCAPE" {
 		t.Fatalf("err = %v, want SURVEY_PATH_ESCAPE", err)
 	}
@@ -80,7 +82,7 @@ func TestCapsEnforceInputBytes(t *testing.T) {
 		t.Fatalf("under cap: %v", err)
 	}
 	err := c.EnforceInputBytes(11, "JQ_INPUT_TOO_LARGE", map[string]any{"path": "x"})
-	var rej *tools.ToolReject
+	var rej *toolrejection.ToolReject
 	if !errors.As(err, &rej) || rej.Code != "JQ_INPUT_TOO_LARGE" {
 		t.Fatalf("err = %v", err)
 	}
@@ -161,7 +163,7 @@ func testBoundary(t *testing.T) *sandbox.Boundary {
 		ProjectRootRequired: true,
 		RejectSymlinkEscape: true,
 	}, []sandbox.ToolProfile{{
-		ID:    tools.DefaultToolProfileID,
+		ID:    toolprofiles.DefaultToolProfileID,
 		Tools: map[string]bool{"stat": true},
 	}})
 }
@@ -170,7 +172,7 @@ func testCtx(dir string) tools.ToolContext {
 	return tools.ToolContext{
 		Roots:              []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}},
 		ActiveRootID:       "r1",
-		Agent:              tools.DefaultToolProfileID,
+		Agent:              toolprofiles.DefaultToolProfileID,
 		SessionID:          "test-session",
 		RepoFileCount:      100,
 		RepoFileCountKnown: true,

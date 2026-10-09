@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
@@ -245,7 +246,7 @@ func TestEditMatchesAgainstTheDocumentNotDisk(t *testing.T) {
 	_, err := edit.Run(context.Background(), map[string]any{
 		"path": "a.go", "old_string": "disk", "new_string": "agent",
 	}, editorCtx(dir, docs))
-	reject := tools.AsToolReject(err)
+	reject := toolrejection.AsToolReject(err)
 	if reject == nil || reject.Code != "EDIT_OLD_STRING_NOT_FOUND" {
 		t.Fatalf("err = %v, want EDIT_OLD_STRING_NOT_FOUND against the editor text", err)
 	}
@@ -267,7 +268,7 @@ func TestEditRetriesKeepTheAgentRead(t *testing.T) {
 	_, err := edit.Run(context.Background(), map[string]any{
 		"path": "a.txt", "old_string": "target", "new_string": "done",
 	}, editorCtx(dir, docs))
-	reject := tools.AsToolReject(err)
+	reject := toolrejection.AsToolReject(err)
 	if reject == nil || reject.Code != "EDITOR_DOCUMENT_CHANGING" {
 		t.Fatalf("stale edit rejection: %v", err)
 	}
@@ -293,7 +294,7 @@ func TestEditReportsADocumentThatKeepsChanging(t *testing.T) {
 	_, err := edit.Run(context.Background(), map[string]any{
 		"path": "a.txt", "old_string": "target", "new_string": "done",
 	}, editorCtx(dir, docs))
-	reject := tools.AsToolReject(err)
+	reject := toolrejection.AsToolReject(err)
 	if reject == nil || reject.Code != "EDITOR_DOCUMENT_CHANGING" {
 		t.Fatalf("err = %v, want EDITOR_DOCUMENT_CHANGING", err)
 	}
@@ -498,7 +499,7 @@ func TestMutationRequiresASuccessfulRead(t *testing.T) {
 	assertReadRequired := func() {
 		t.Helper()
 		_, err := write.Run(t.Context(), args, tctx)
-		reject := tools.AsToolReject(err)
+		reject := toolrejection.AsToolReject(err)
 		if reject == nil || reject.Code != "EDITOR_DOCUMENT_READ_REQUIRED" {
 			t.Fatalf("read requirement: %v", err)
 		}
@@ -536,7 +537,7 @@ func TestRewritePreviewDoesNotRequireOrAuthorizeAnAgentRead(t *testing.T) {
 	_, err := loadRewriteSource(t.Context(), tctx, resolved, true)
 	testutil.FailErr(t, "preview without a prior read", err)
 	_, err = loadRewriteSource(t.Context(), tctx, resolved, false)
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "EDITOR_DOCUMENT_READ_REQUIRED" {
 		t.Fatalf("preview authorized an unseen full snapshot: %v", err)
 	}

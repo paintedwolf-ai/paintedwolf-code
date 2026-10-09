@@ -2,6 +2,7 @@ package terminal
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 	"time"
 
@@ -109,7 +110,7 @@ func parseTerminalReadArgs(args map[string]any) (terminalReadArgs, error) {
 	id, _ := args["id"].(string)
 	id = strings.TrimSpace(id)
 	if id == "" {
-		return terminalReadArgs{}, tools.RejectInvalidArguments("TERMINAL_ID_REQUIRED", map[string]any{"reason": "missing_id"})
+		return terminalReadArgs{}, toolrejection.RejectInvalidArguments("TERMINAL_ID_REQUIRED", map[string]any{"reason": "missing_id"})
 	}
 	out := terminalReadArgs{ID: id}
 	if v, ok := args["idle_ms"].(float64); ok && v > 0 {
@@ -121,7 +122,7 @@ func parseTerminalReadArgs(args map[string]any) (terminalReadArgs, error) {
 	if v, ok := args["max_bytes"].(float64); ok {
 		out.MaxBytes = int(v)
 		if out.MaxBytes < 1024 || out.MaxBytes > maxTerminalReadBytes {
-			return terminalReadArgs{}, tools.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": "max_bytes_out_of_range"})
+			return terminalReadArgs{}, toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": "max_bytes_out_of_range"})
 		}
 	}
 	return out, nil

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"strings"
 
@@ -54,7 +55,7 @@ func writeFetchAsset(
 	body []byte,
 ) (displayPath string, n int, err error) {
 	if strings.TrimSpace(dest) == "" {
-		return "", 0, &tools.ToolReject{
+		return "", 0, &toolrejection.ToolReject{
 			Code: "FETCH_URL_DEST_REQUIRED",
 			Data: map[string]any{"content_type": "unknown"},
 		}

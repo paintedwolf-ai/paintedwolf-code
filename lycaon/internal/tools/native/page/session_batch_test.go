@@ -3,6 +3,7 @@ package page
 import (
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"testing"
@@ -39,7 +40,7 @@ func TestActHandlerRetainsOriginalIndexAndCompletedEffects(t *testing.T) {
 			map[string]any{"type": "click", "selector": "#missing"},
 		},
 	}, tools.ToolContext{SessionID: "batch"})
-	var rejection *tools.ToolReject
+	var rejection *toolrejection.ToolReject
 	if !errors.As(err, &rejection) || rejection.Code != "CAPTURE_ACTION_FAILED" {
 		t.Fatalf("tool rejection = %v", err)
 	}

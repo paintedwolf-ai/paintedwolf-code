@@ -337,7 +337,7 @@ func fillSessions(t *testing.T, d *Deps) {
 	d.Sessions = session.NewManager(d.Store, llm.NewMockProvider(nil), registry, settings.DefaultSessionLimits())
 	d.Sessions.SetDataDir(t.TempDir())
 	d.Sessions.SetProjectRegistry(d.Projects)
-	d.Sessions.SetToolInvoker(testtool.RegistryInvoker{Registry: registry})
+	d.Sessions.SetToolInvoker(testtool.RegistryInvoker{Registry: registry}, testtool.RegistryInvoker{Registry: registry})
 }
 
 func fillSettings(t *testing.T, d *Deps) {

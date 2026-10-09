@@ -3,6 +3,7 @@ package native
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
@@ -21,7 +22,7 @@ func TestWriteToolRejectsBinaryContent(t *testing.T) {
 		"path":    "bad.py",
 		"content": "a\x00b",
 	}, nativefixture.AgentContext(tmpDir, "implement"))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if err == nil || !errors.As(err, &reject) || reject.Code != "WRITE_BINARY_DENIED" {
 		t.Fatalf("err = %v want WRITE_BINARY_DENIED", err)
 	}
@@ -66,7 +67,7 @@ func TestWriteToolRejectsParseRegression(t *testing.T) {
 		"path":    "a.go",
 		"content": "package p\n\nfunc A() int {\n\treturn (\n}\n",
 	}, nativefixture.AgentContext(tmpDir, "implement"))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if err == nil || !errors.As(err, &reject) || reject.Code != "MUTATION_BROKE_PARSE" {
 		t.Fatalf("err = %v want MUTATION_BROKE_PARSE", err)
 	}
@@ -150,7 +151,7 @@ func TestEditToolOldStringNotFound(t *testing.T) {
 	_, err := tool.Run(context.Background(), map[string]any{
 		"path": "file.go", "old_string": "missing", "new_string": "x",
 	}, nativefixture.Context(tmpDir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if err == nil || !errors.As(err, &reject) || reject.Code != "EDIT_OLD_STRING_NOT_FOUND" {
 		t.Fatalf("err = %v want EDIT_OLD_STRING_NOT_FOUND", err)
 	}
@@ -165,7 +166,7 @@ func TestEditToolOldStringAmbiguous(t *testing.T) {
 	_, err := tool.Run(context.Background(), map[string]any{
 		"path": "file.go", "old_string": "foo", "new_string": "baz",
 	}, nativefixture.Context(tmpDir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if err == nil || !errors.As(err, &reject) || reject.Code != "EDIT_OLD_STRING_AMBIGUOUS" {
 		t.Fatalf("err = %v want EDIT_OLD_STRING_AMBIGUOUS", err)
 	}
@@ -200,7 +201,7 @@ func TestEditToolReplaceAllFalseStillAmbiguous(t *testing.T) {
 	_, err := tool.Run(context.Background(), map[string]any{
 		"path": "file.go", "old_string": "foo", "new_string": "baz", "replace_all": false,
 	}, nativefixture.Context(tmpDir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if err == nil || !errors.As(err, &reject) || reject.Code != "EDIT_OLD_STRING_AMBIGUOUS" {
 		t.Fatalf("err = %v want EDIT_OLD_STRING_AMBIGUOUS", err)
 	}

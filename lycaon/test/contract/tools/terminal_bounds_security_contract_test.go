@@ -3,6 +3,7 @@ package contract
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -27,7 +28,7 @@ func TestTerminalOpenRequiresProjectRoot(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected PROJECT_HAS_NO_ROOTS reject")
 	}
-	var rej *tools.ToolReject
+	var rej *toolrejection.ToolReject
 	if !errors.As(err, &rej) || rej.Code != "PROJECT_HAS_NO_ROOTS" {
 		t.Fatalf("err = %v, want PROJECT_HAS_NO_ROOTS", err)
 	}
@@ -119,7 +120,7 @@ func TestTerminalUnsupportedMapsOnWindowsCI(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected TERMINAL_UNSUPPORTED on windows")
 	}
-	var rej *tools.ToolReject
+	var rej *toolrejection.ToolReject
 	if !errors.As(err, &rej) || rej.Code != "TERMINAL_UNSUPPORTED" {
 		t.Fatalf("err = %v, want TERMINAL_UNSUPPORTED", err)
 	}

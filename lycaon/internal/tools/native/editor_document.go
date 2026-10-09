@@ -3,6 +3,7 @@ package native
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -23,11 +24,11 @@ func loadAgentSourceText(ctx context.Context, tool string, tctx tools.ToolContex
 	}
 	documents, ok := sourceview.DocumentsFor(tctx, resolved)
 	if !ok {
-		return sourceview.Text{}, &tools.ToolReject{Code: "EDITOR_DOCUMENT_CHANGING", Data: map[string]any{"path": resolved.DisplayPath}}
+		return sourceview.Text{}, &toolrejection.ToolReject{Code: "EDITOR_DOCUMENT_CHANGING", Data: map[string]any{"path": resolved.DisplayPath}}
 	}
 	base, err := documents.AgentReadBase(ctx, tctx.ProjectID, tctx.SessionID, st.Editor.ID, tctx.EditorReadBases)
 	if errors.Is(err, tools.ErrEditorReadRequired) {
-		return sourceview.Text{}, &tools.ToolReject{Code: "EDITOR_DOCUMENT_READ_REQUIRED", Data: map[string]any{"path": resolved.DisplayPath}}
+		return sourceview.Text{}, &toolrejection.ToolReject{Code: "EDITOR_DOCUMENT_READ_REQUIRED", Data: map[string]any{"path": resolved.DisplayPath}}
 	}
 	if err != nil && base.ID == "" {
 		return sourceview.Text{}, err
@@ -109,7 +110,7 @@ func landEditedText(ctx context.Context, tctx tools.ToolContext, tool string, re
 	}
 	documents, ok := sourceview.DocumentsFor(tctx, resolved)
 	if !ok {
-		return landing{}, &tools.ToolReject{Code: "EDITOR_DOCUMENT_CHANGING", Data: map[string]any{"path": resolved.DisplayPath}}
+		return landing{}, &toolrejection.ToolReject{Code: "EDITOR_DOCUMENT_CHANGING", Data: map[string]any{"path": resolved.DisplayPath}}
 	}
 
 	edit := tools.EditorDocumentEdit{DocumentID: st.Editor.ID, ExpectedRevision: st.Editor.Revision, Content: newContent,
@@ -150,7 +151,7 @@ func retryEditorDocument(ctx context.Context, path string, body func() (string, 
 			return "", ctxErr
 		}
 	}
-	return "", &tools.ToolReject{
+	return "", &toolrejection.ToolReject{
 		Code: "EDITOR_DOCUMENT_CHANGING",
 		Data: map[string]any{"path": path, "attempts": editorDocumentRetries},
 	}

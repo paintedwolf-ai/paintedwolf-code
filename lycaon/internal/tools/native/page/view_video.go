@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"strings"
 
@@ -85,7 +86,7 @@ func ViewVideoHandler(deps ViewVideoDeps) tools.ToolHandler {
 		}
 		detected := format.Detect(resolved.DisplayPath, "", raw[:min(len(raw), format.PeekBytes)])
 		if detected.Kind != format.KindVideo {
-			return "", &tools.ToolReject{Code: "VIDEO_FORMAT_UNSUPPORTED", Data: map[string]any{"path": in.Path, "mime": detected.MIME}}
+			return "", &toolrejection.ToolReject{Code: "VIDEO_FORMAT_UNSUPPORTED", Data: map[string]any{"path": in.Path, "mime": detected.MIME}}
 		}
 		sheet, err := deps.Pool.DecodeVideoSheet(ctx, browser.VideoMedia{MIME: detected.MIME, Bytes: raw}, in.frameRequest())
 		if err != nil {
@@ -186,15 +187,15 @@ func readWorkspaceVideo(resolved projectpaths.Resolved, modelPath string, maxByt
 	switch {
 	case err == nil:
 		if len(raw) == 0 {
-			return nil, &tools.ToolReject{Code: "VIDEO_FORMAT_UNSUPPORTED", Data: map[string]any{"path": modelPath}}
+			return nil, &toolrejection.ToolReject{Code: "VIDEO_FORMAT_UNSUPPORTED", Data: map[string]any{"path": modelPath}}
 		}
 		return raw, nil
 	case errors.Is(err, os.ErrNotExist):
-		return nil, &tools.ToolReject{Code: "VIDEO_NOT_FOUND", Data: map[string]any{"path": modelPath}}
+		return nil, &toolrejection.ToolReject{Code: "VIDEO_NOT_FOUND", Data: map[string]any{"path": modelPath}}
 	case errors.Is(err, projectpaths.ErrIsDirectory):
-		return nil, &tools.ToolReject{Code: "VIDEO_IS_DIRECTORY", Data: map[string]any{"path": modelPath}}
+		return nil, &toolrejection.ToolReject{Code: "VIDEO_IS_DIRECTORY", Data: map[string]any{"path": modelPath}}
 	case errors.As(err, &tooLarge):
-		return nil, &tools.ToolReject{Code: "VIDEO_BYTES_EXCEEDED", Data: map[string]any{
+		return nil, &toolrejection.ToolReject{Code: "VIDEO_BYTES_EXCEEDED", Data: map[string]any{
 			"path": modelPath, "bytes": tooLarge.Size, "max_bytes": maxBytes,
 		}}
 	default:
@@ -212,7 +213,7 @@ func videoReject(err error, modelPath string) error {
 	for k, v := range rej.Data {
 		data[k] = v
 	}
-	return &tools.ToolReject{Code: rej.Code, Data: data}
+	return &toolrejection.ToolReject{Code: rej.Code, Data: data}
 }
 
 func parseViewVideoArgs(args map[string]any) (viewVideoArgs, error) {
@@ -222,11 +223,11 @@ func parseViewVideoArgs(args map[string]any) (viewVideoArgs, error) {
 	}
 	var in viewVideoArgs
 	if err := json.Unmarshal(raw, &in); err != nil {
-		return viewVideoArgs{}, tools.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": "decode", "message": err.Error()})
+		return viewVideoArgs{}, toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": "decode", "message": err.Error()})
 	}
 	in.Path = strings.TrimSpace(in.Path)
 	invalid := func(reason, message string) (viewVideoArgs, error) {
-		return viewVideoArgs{}, tools.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": reason, "message": message})
+		return viewVideoArgs{}, toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": reason, "message": message})
 	}
 	switch {
 	case in.Path == "":
@@ -237,7 +238,7 @@ func parseViewVideoArgs(args map[string]any) (viewVideoArgs, error) {
 		return invalid("end_before_start", "end_ms must be later than start_ms")
 	}
 	if n := max(len(in.TimesMS), in.Count); n > browser.MaxVideoFrames {
-		return viewVideoArgs{}, &tools.ToolReject{Code: "VIDEO_FRAMES_BOUNDS", Data: map[string]any{"count": n, "max": browser.MaxVideoFrames}}
+		return viewVideoArgs{}, &toolrejection.ToolReject{Code: "VIDEO_FRAMES_BOUNDS", Data: map[string]any{"count": n, "max": browser.MaxVideoFrames}}
 	}
 	for _, t := range in.TimesMS {
 		if t < 0 {

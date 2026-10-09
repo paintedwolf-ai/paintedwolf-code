@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"maps"
 	"net/url"
 	"slices"
@@ -11,8 +12,8 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/workflow/verdictcall"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/internal/workflow/verdictcall"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -344,7 +345,7 @@ func rejectSubmitVerdict(tctx tools.ToolContext, code, phase string, details map
 	for key, value := range details {
 		data["review_"+key] = value
 	}
-	return "", &tools.ToolReject{Code: code, Data: data}
+	return "", &toolrejection.ToolReject{Code: code, Data: data}
 }
 
 // scanGroupRejectDetails names the cited ids that are not the run's groups,

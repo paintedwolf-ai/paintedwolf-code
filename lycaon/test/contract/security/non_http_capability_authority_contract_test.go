@@ -36,7 +36,7 @@ func TestNonHTTPContractRawCapabilityRequestCannotReachConfineWithoutPermit(t *t
 func TestNonHTTPContractSocketAndDirectToolBoundaries(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	sock := contractcheck.ReadRepoFile(t, root, "lycaon/internal/tools/socket_capability.go")
+	sock := contractcheck.ReadRepoFile(t, root, "lycaon/internal/toolexecution/socket_capability.go")
 	fn := mustFindFunc(t, sock, "socket_capability.go", "preflightSocketCapability")
 	body := sock[fn.Body.Pos()-1 : fn.Body.End()]
 	if !strings.Contains(body, "toolcontract.CapabilitySocket") || !strings.Contains(body, "toolcontract.CapabilityDirectIP") {
@@ -45,14 +45,14 @@ func TestNonHTTPContractSocketAndDirectToolBoundaries(t *testing.T) {
 	if !strings.Contains(body, "isolation.CodeDirectIPRequestInvalid") {
 		t.Fatal("socket-only invocations must reject direct_ip capability_request")
 	}
-	boundarySource := contractcheck.ReadRepoFile(t, root, "lycaon/internal/tools/invocation_boundary.go")
+	boundarySource := contractcheck.ReadRepoFile(t, root, "lycaon/internal/toolexecution/invocation_boundary.go")
 	boundary := mustFindFunc(t, boundarySource, "invocation_boundary.go", "applyPreInvokeBoundary")
 	boundaryBody := boundarySource[boundary.Body.Pos()-1 : boundary.Body.End()]
 	if !strings.Contains(boundaryBody, "preflightSocketCapability") {
 		t.Fatal("pre-invoke boundary must run socket capability preflight")
 	}
 
-	direct := contractcheck.ReadRepoFile(t, root, "lycaon/internal/tools/direct_ip_capability.go")
+	direct := contractcheck.ReadRepoFile(t, root, "lycaon/internal/toolexecution/direct_ip_capability.go")
 	dfn := mustFindFunc(t, direct, "direct_ip_capability.go", "preflightDirectIPCapability")
 	dbody := direct[dfn.Body.Pos()-1 : dfn.Body.End()]
 	if !strings.Contains(dbody, "toolcontract.CapabilityDirectIP") {
@@ -96,7 +96,7 @@ func TestNonHTTPContractCurrentPermitsNonserializableAndCallBound(t *testing.T) 
 	if strings.Contains(socketRT, "type SocketPermit struct") || strings.Contains(directRT, "type DirectIPPermit struct") {
 		t.Fatal("runtime must not retain dead exported permit DTOs")
 	}
-	finalize := contractcheck.ReadRepoFile(t, root, "lycaon/internal/tools/direct_ip_capability.go")
+	finalize := contractcheck.ReadRepoFile(t, root, "lycaon/internal/toolexecution/direct_ip_capability.go")
 	if !strings.Contains(finalize, "FinalizeDirectIPForSpawn") || !strings.Contains(finalize, "ConsumePermit") {
 		t.Fatal("direct spawn must consume current-call permit")
 	}
@@ -172,7 +172,7 @@ func TestNonHTTPContractDirectAndExecutionSocketOfferScopes(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
 	// Direct IP does not offer reusable approval scopes.
-	direct := contractcheck.ReadRepoFile(t, root, "lycaon/internal/tools/direct_ip_capability.go")
+	direct := contractcheck.ReadRepoFile(t, root, "lycaon/internal/toolexecution/direct_ip_capability.go")
 	for _, banned := range []string{
 		"ApprovalGrantScopeChat", "ApprovalGrantScopeProject", "ApprovalGrantScopeDevice",
 		"ApprovalGrantOffer{", "capability_scope_choices",
@@ -226,7 +226,7 @@ func TestNonHTTPContractSettingsDurableSocketUsesSharedResolver(t *testing.T) {
 
 func TestNonHTTPContractNeverAskStandsDownAsksKeepsValidationAndRecords(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
-	sock := contractcheck.ReadRepoFile(t, root, "lycaon/internal/tools/socket_capability.go")
+	sock := contractcheck.ReadRepoFile(t, root, "lycaon/internal/toolexecution/socket_capability.go")
 	fn := mustFindFunc(t, sock, "socket_capability.go", "preflightSocketCapability")
 	body := sock[fn.Body.Pos()-1 : fn.Body.End()]
 	if !strings.Contains(body, "approvalsDisabled") || !strings.Contains(body, "IssuePermit") {
@@ -239,7 +239,7 @@ func TestNonHTTPContractNeverAskStandsDownAsksKeepsValidationAndRecords(t *testi
 		t.Fatal("never_ask must not skip socket path validation/resolution")
 	}
 
-	direct := contractcheck.ReadRepoFile(t, root, "lycaon/internal/tools/direct_ip_capability.go")
+	direct := contractcheck.ReadRepoFile(t, root, "lycaon/internal/toolexecution/direct_ip_capability.go")
 	dfn := mustFindFunc(t, direct, "direct_ip_capability.go", "preflightDirectIPCapability")
 	dbody := direct[dfn.Body.Pos()-1 : dfn.Body.End()]
 	if !strings.Contains(dbody, "approvalsDisabled") || !strings.Contains(dbody, "IssuePermit") {

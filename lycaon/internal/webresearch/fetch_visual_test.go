@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"hash/crc32"
 	"image"
 	"image/png"
@@ -169,7 +170,7 @@ func TestFetchURLNonImageBinaryRequiresDest(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected FETCH_URL_DEST_REQUIRED error")
 	}
-	var rej *tools.ToolReject
+	var rej *toolrejection.ToolReject
 	if !errors.As(err, &rej) || rej.Code != "FETCH_URL_DEST_REQUIRED" {
 		t.Fatalf("expected FETCH_URL_DEST_REQUIRED, got: %#v", err)
 	}
@@ -217,7 +218,7 @@ func TestFetchURLImageSecretScreeningWithheld(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected secret withheld reject")
 	}
-	var rej *tools.ToolReject
+	var rej *toolrejection.ToolReject
 	if !errors.As(err, &rej) || rej.Code != "FETCH_URL_SECRET_WITHHELD" {
 		t.Fatalf("expected FETCH_URL_SECRET_WITHHELD, got: %#v", err)
 	}

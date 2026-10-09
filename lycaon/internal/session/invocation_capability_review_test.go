@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolexecution"
 	"net"
 	"os"
 	"path/filepath"
@@ -103,7 +104,7 @@ func (r capabilityReviewSocketRuntime) GrantChat(session string, socket confine.
 }
 
 type capabilityReviewFixture struct {
-	executor    *tools.DefaultToolExecutor
+	executor    *toolexecution.Executor
 	checkpoints *capabilityReviewCheckpoints
 	context     tools.ToolContext
 	args        map[string]any
@@ -155,26 +156,26 @@ func newCapabilityReviewFixture(t *testing.T, approve bool) *capabilityReviewFix
 		}
 		return "verified", nil
 	}))
-	f.executor = tools.NewDefaultToolExecutor(nil, registry, "implement")
-	f.executor.SetCheckpointManager(c, authority)
-	f.executor.SetSocketCapabilityRuntime(capabilityReviewSocketRuntime{c.sockets})
-	f.executor.SetSessionWriteRootOverlay(broker.SessionWriteRoots)
-	f.executor.SetSessionReadPathOverlay(broker.SessionReadPaths)
-	f.executor.SetWriteRootPreflight(func(ctx context.Context, tool string, _ map[string]any, tc tools.ToolContext, path string) (bool, bool, string, error) {
+	f.executor = toolexecution.NewExecutor(nil, registry, "implement")
+	f.executor.Approvals.SetCheckpointManager(c, authority)
+	f.executor.Capabilities.SetSocketCapabilityRuntime(capabilityReviewSocketRuntime{c.sockets})
+	f.executor.Boundary.SetSessionWriteRootOverlay(broker.SessionWriteRoots)
+	f.executor.Boundary.SetSessionReadPathOverlay(broker.SessionReadPaths)
+	f.executor.Boundary.SetWriteRootPreflight(func(ctx context.Context, tool string, _ map[string]any, tc tools.ToolContext, path string) (bool, bool, string, error) {
 		result, err := broker.Authorize(ctx, native.SandboxWriteRootAsk{SessionID: tc.SessionID, ProjectID: tc.ProjectID, ToolCallID: tc.ToolCallID, ProjectDir: tc.ActiveRootPath(), ToolName: tool, ProposedWriteRoot: path})
 		return result.Authorized, result.Denied, result.UserGuidance, err
 	})
-	f.executor.SetReadPathPreflight(func(ctx context.Context, tool string, _ map[string]any, tc tools.ToolContext, path string) (bool, bool, string, error) {
+	f.executor.Boundary.SetReadPathPreflight(func(ctx context.Context, tool string, _ map[string]any, tc tools.ToolContext, path string) (bool, bool, string, error) {
 		result, err := broker.AuthorizeRead(ctx, native.SandboxReadPathAsk{SessionID: tc.SessionID, ProjectID: tc.ProjectID, ToolCallID: tc.ToolCallID, ProjectDir: tc.ActiveRootPath(), ToolName: tool, ProposedReadPath: path, ReadDenyPaths: []string{read}})
 		return result.Authorized, result.Denied, result.UserGuidance, err
 	})
-	f.executor.SetSessionListenGrant(func(_ context.Context, session, _ string) (bool, []uint16) {
+	f.executor.Boundary.SetSessionListenGrant(func(_ context.Context, session, _ string) (bool, []uint16) {
 		return c.listen.SessionPorts(session)
 	})
-	f.executor.SetSessionLoopbackGrant(func(_ context.Context, session, _ string) (bool, []uint16) {
+	f.executor.Boundary.SetSessionLoopbackGrant(func(_ context.Context, session, _ string) (bool, []uint16) {
 		return c.loopback.SessionPorts(session)
 	})
-	f.executor.SetLocalNetworkGate(&LocalNetworkCheckpointBroker{Checkpoints: c, Listen: c.listen, Loopback: c.loopback, Authority: authority})
+	f.executor.Capabilities.SetLocalNetworkGate(&LocalNetworkCheckpointBroker{Checkpoints: c, Listen: c.listen, Loopback: c.loopback, Authority: authority})
 	return f
 }
 
@@ -311,8 +312,8 @@ func TestInvocationCapabilityOnceKeepsSecretReviewStable(t *testing.T) {
 	fingerprinter, err := secretmatch.NewFingerprinter([]byte(strings.Repeat("h", 32)))
 	testutil.FailErr(t, "build fixture fingerprinter", err)
 	matcher.SetFingerprinter(fingerprinter)
-	f.executor.SetSecretResolver(service)
-	f.executor.SetSecretMatcher(matcher)
+	f.executor.Secrets.SetSecretResolver(service)
+	f.executor.Secrets.SetSecretMatcher(matcher)
 	f.args["command"] = "setup --password " + meta.Reference
 	_, err = f.executor.Invoke(t.Context(), "command", f.args, f.context)
 	testutil.FailErr(t, "invoke capabilities with one-action disclosure", err)

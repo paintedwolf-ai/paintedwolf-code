@@ -2,11 +2,11 @@ package native
 
 import (
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/hostcmd"
-	"github.com/lycaon/lycaon/internal/tools"
 )
 
 func TestRejectCommandExecDeniedFromConfineExit(t *testing.T) {
@@ -16,7 +16,7 @@ func TestRejectCommandExecDeniedFromConfineExit(t *testing.T) {
 		OK:       false,
 	}
 	err := rejectCommandExecDenied(res, map[string]any{"command": "./ntp_check.py --json"})
-	tr := tools.AsToolReject(err)
+	tr := toolrejection.AsToolReject(err)
 	if tr == nil {
 		t.Fatalf("want ToolReject, got %v", err)
 	}
@@ -44,7 +44,7 @@ func TestRejectCommandExecDeniedIgnoresPermissionProse(t *testing.T) {
 
 func TestRejectStartCommandExecDenied(t *testing.T) {
 	err := rejectStartCommandExecDenied(&confine.ExecDeniedError{Path: "./script"})
-	tr := tools.AsToolReject(err)
+	tr := toolrejection.AsToolReject(err)
 	if tr == nil || tr.Code != "COMMAND_EXEC_DENIED" {
 		t.Fatalf("got %v", err)
 	}

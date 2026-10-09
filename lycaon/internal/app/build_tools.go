@@ -8,25 +8,25 @@ import (
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/boot"
 	"github.com/lycaon/lycaon/internal/bootrecovery"
+	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/coordinator"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/delegation"
+	"github.com/lycaon/lycaon/internal/events"
+	"github.com/lycaon/lycaon/internal/llm"
+	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/parse"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/scan"
+	"github.com/lycaon/lycaon/internal/secretcap"
+	"github.com/lycaon/lycaon/internal/secretspan"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workflow"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"github.com/lycaon/lycaon/internal/captureprojection"
-	"github.com/lycaon/lycaon/internal/events"
-	"github.com/lycaon/lycaon/internal/llm"
-	"github.com/lycaon/lycaon/internal/mcp"
-	"github.com/lycaon/lycaon/internal/secretcap"
-	"github.com/lycaon/lycaon/internal/secretspan"
 )
 
 // toolWiring wires the coordinator tools, scanning, detection packs, and the OAR block plane.
@@ -294,7 +294,7 @@ func (b toolWiring) wireMCP() error {
 	b.mcpReg.SetToolRegistry(b.toolRuntime.Registry)
 	b.mcpReg.SetAPIAccess(b.apiToken)
 	if b.toolRuntime != nil {
-		b.toolRuntime.SetMCPToolPinSource(b.mcpReg)
+		b.toolRuntime.Authority.SetMCPToolPinSource(b.mcpReg)
 	}
 	b.mcpReg.SetProjectOverlayGate(b.projectMCPGate().AppliesPath)
 	if err := serverWiring(b).wireDestinationConfig(); err != nil {
@@ -333,8 +333,8 @@ func (b toolWiring) wireMCP() error {
 		}
 		b.mcpReg.SetSecretScreen(matcher, sessionWiring(b).secretAskFunc())
 		if b.toolRuntime != nil && b.toolRuntime.Executor != nil {
-			b.toolRuntime.Executor.SetSecretMatcher(matcher)
-			b.toolRuntime.Executor.SetSecretIgnores(b.secretIgnores)
+			b.toolRuntime.Executor.Secrets.SetSecretMatcher(matcher)
+			b.toolRuntime.Executor.Secrets.SetSecretIgnores(b.secretIgnores)
 		}
 		// Editor spans preview outbound screening.
 		b.secretSpans = secretspan.New(matcher)
@@ -359,7 +359,7 @@ func (b toolWiring) wireMCP() error {
 		return fmt.Errorf("mcp registry: %w", err)
 	}
 	if b.toolRuntime != nil && b.toolRuntime.Executor != nil {
-		b.toolRuntime.Executor.SetMCPCatalog(b.mcpReg)
+		b.toolRuntime.Executor.Metadata.SetMCPCatalog(b.mcpReg)
 	}
 	if b.mgr != nil {
 		b.mgr.SetMCPRuntime(b.mcpReg)

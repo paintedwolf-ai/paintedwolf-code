@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
@@ -40,7 +41,7 @@ func TestCommandSnapshotCaptureIncompatibleArgs(t *testing.T) {
 		}
 
 		_, err := cmd.Run(context.Background(), args, tctx)
-		tr := tools.AsToolReject(err)
+		tr := toolrejection.AsToolReject(err)
 		if tr == nil || tr.Code != "TOOL_ARGS_INVALID" {
 			t.Fatalf("field %s: expected TOOL_ARGS_INVALID reject, got %v", field, err)
 		}
@@ -57,7 +58,7 @@ func TestCommandDisallowedDesktopCapture(t *testing.T) {
 			"command": disallowed,
 		}
 		_, err := cmd.Run(context.Background(), args, tctx)
-		tr := tools.AsToolReject(err)
+		tr := toolrejection.AsToolReject(err)
 		if tr == nil || tr.Code != "DESKTOP_CAPTURE_DISALLOWED" {
 			t.Fatalf("command %q: expected DESKTOP_CAPTURE_DISALLOWED, got %v", disallowed, err)
 		}
@@ -77,7 +78,7 @@ func TestCommandSnapshotCaptureMissingFileRejection(t *testing.T) {
 		},
 	}
 	_, err := cmd.Run(context.Background(), args, tctx)
-	tr := tools.AsToolReject(err)
+	tr := toolrejection.AsToolReject(err)
 	if tr == nil || tr.Code != "SNAPSHOT_FILE_NOT_PRODUCED" {
 		t.Fatalf("expected SNAPSHOT_FILE_NOT_PRODUCED, got %v", err)
 	}

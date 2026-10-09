@@ -3,6 +3,8 @@ package contract
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolexecution"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -23,7 +25,7 @@ import (
 	"github.com/lycaon/lycaon/test/contract/internal/toolfixture"
 )
 
-func securityNativeExecutor(t *testing.T) *tools.DefaultToolExecutor {
+func securityNativeExecutor(t *testing.T) *toolexecution.Executor {
 	t.Helper()
 	_, file, _, ok := runtime.Caller(0)
 	if !ok {
@@ -36,11 +38,11 @@ func securityNativeExecutor(t *testing.T) *tools.DefaultToolExecutor {
 	hints, err := guidance.LoadHintConfigStock()
 	testutil.FailErr(t, "LoadHintConfig", err)
 	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
-	rt.ApplyGuidanceRejects(guidance.NewStaticRejectFormatter(hints))
+	rt.Authority.ApplyGuidanceRejects(guidance.NewStaticRejectFormatter(hints))
 	toolfixture.WireContractBlockPlane(t, rt, guidance.NewStaticRejectFormatter(hints))
 	schemas, err := toolschema.LoadSchemaDir(filepath.Join(configRoot, "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
 	testutil.FailErr(t, "LoadSchemaDir", err)
-	rt.Executor.SetToolSchemas(schemas)
+	rt.Executor.Metadata.SetToolSchemas(schemas)
 	return rt.Executor
 }
 
@@ -64,7 +66,7 @@ func TestNativeFindPathEscapeE2E(t *testing.T) {
 		ActiveRootID: "r1",
 		Agent:        "implement",
 	})
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if err == nil || !errors.As(err, &reject) || reject.Code != "SURVEY_PATH_ESCAPE" {
 		t.Fatalf("err = %v want SURVEY_PATH_ESCAPE", err)
 	}
@@ -80,7 +82,7 @@ func TestNativeListDirControlPlaneE2E(t *testing.T) {
 		ActiveRootID: "r1",
 		Agent:        "implement",
 	})
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if err == nil || !errors.As(err, &reject) || reject.Code != "SANDBOX_CONTROL_PLANE_DENIED" {
 		t.Fatalf("err = %v want SANDBOX_CONTROL_PLANE_DENIED", err)
 	}
@@ -130,7 +132,7 @@ func TestNativeSummarizeNoInputStructuredRejectE2E(t *testing.T) {
 	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
 	formatter := guidance.NewStaticRejectFormatter(hints)
 
-	formatted := tools.FormatDecisionReject("SUMMARIZE_NO_INPUT", map[string]any{"need_one_of": []string{"path", "paths", "pattern", "content"}}, formatter)
+	formatted := toolrejection.FormatDecisionReject("SUMMARIZE_NO_INPUT", map[string]any{"need_one_of": []string{"path", "paths", "pattern", "content"}}, formatter)
 	assertStructuredRejectCode(t, formatted, "SUMMARIZE_NO_INPUT")
 	if !strings.Contains(formatted.Error(), "sibling") && !strings.Contains(formatted.Error(), "path") {
 		t.Fatalf("expected path/sibling fix guidance, got %q", formatted.Error())
@@ -395,7 +397,7 @@ func TestNativeReadRejectsDirectoryE2E(t *testing.T) {
 		ActiveRootID: "r1",
 		Agent:        "explore_readonly",
 	})
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if err == nil || !errors.As(err, &reject) || reject.Code != "READ_IS_DIRECTORY" {
 		t.Fatalf("read on directory err = %v want READ_IS_DIRECTORY", err)
 	}

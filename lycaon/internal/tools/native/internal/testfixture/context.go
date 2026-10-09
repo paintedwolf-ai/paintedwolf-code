@@ -2,6 +2,7 @@ package testfixture
 
 import (
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/projectroot"
@@ -18,7 +19,7 @@ func Boundary(t *testing.T) *sandbox.Boundary {
 		RejectSymlinkEscape: true,
 	}, []sandbox.ToolProfile{
 		{
-			ID:    tools.DefaultToolProfileID,
+			ID:    toolprofiles.DefaultToolProfileID,
 			Tools: map[string]bool{"read": true, "write": true, "edit": true, "replace_lines": true, "grep": true, "find": true, "stat": true, "wc": true, "list_dir": true, "chmod": true, "delete": true, "survey_repo": true},
 		},
 		{
@@ -35,7 +36,7 @@ func Context(dir string) tools.ToolContext {
 		Roots:               roots,
 		ActiveRootID:        "r1",
 		SourceWorkspaceKind: api.SourceWorkspaceKindProject,
-		Agent:               tools.DefaultToolProfileID,
+		Agent:               toolprofiles.DefaultToolProfileID,
 		SessionID:           "test-session",
 		RepoFileCount:       100,
 		RepoFileCountKnown:  true,

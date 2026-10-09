@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/santhosh-tekuri/jsonschema/v6"
 	"strings"
 	"sync"
-
-	"github.com/santhosh-tekuri/jsonschema/v6"
 
 	"github.com/lycaon/lycaon/internal/tools/argdiag"
 )
@@ -16,7 +16,7 @@ import (
 var schemaCache sync.Map // string(cache key) -> *jsonschema.Schema
 
 // schemaRequiresValidation reports whether ArgsSchema imposes constraints beyond a bare object type.
-func schemaRequiresValidation(schema map[string]any) bool {
+func SchemaRequiresValidation(schema map[string]any) bool {
 	if len(schema) == 0 {
 		return false
 	}
@@ -38,7 +38,7 @@ func schemaRequiresValidation(schema map[string]any) bool {
 
 // ValidateToolArgs checks args against a JSON Schema object when the schema is non-trivial.
 func ValidateToolArgs(schema map[string]any, args map[string]any) error {
-	if !schemaRequiresValidation(schema) {
+	if !SchemaRequiresValidation(schema) {
 		return nil
 	}
 	schemaBytes, err := json.Marshal(schema)
@@ -94,21 +94,16 @@ func mutationRecoveryTool(tool string, addressable []string) string {
 	return ""
 }
 
-// RejectInvalidArguments marks an observed argument check independently of its diagnostic.
-func RejectInvalidArguments(code string, data map[string]any) *ToolReject {
-	return &ToolReject{Code: code, Data: data, ArgumentValidation: true}
-}
-
 // ValidateCallArguments checks transport integrity and argument shape before policy reads them.
-func ValidateCallArguments(qualifiedName string, args, schema map[string]any, tc ToolContext) *ToolReject {
+func ValidateCallArguments(qualifiedName string, args, schema map[string]any, tc ToolContext) *toolrejection.ToolReject {
 	if tc.ArgsTruncated {
-		return RejectInvalidArguments("TOOL_ARGS_TRUNCATED", map[string]any{"tool": qualifiedName})
+		return toolrejection.RejectInvalidArguments("TOOL_ARGS_TRUNCATED", map[string]any{"tool": qualifiedName})
 	}
 	if tc.ArgsMalformed {
-		return RejectInvalidArguments("TOOL_ARGS_MALFORMED", map[string]any{"tool": qualifiedName})
+		return toolrejection.RejectInvalidArguments("TOOL_ARGS_MALFORMED", map[string]any{"tool": qualifiedName})
 	}
 	if _, err := json.Marshal(args); err != nil {
-		return RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{
+		return toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{
 			"tool": qualifiedName, "reason": "arguments cannot be encoded as JSON",
 		})
 	}
@@ -116,7 +111,7 @@ func ValidateCallArguments(qualifiedName string, args, schema map[string]any, tc
 		if err := ValidateToolArgs(schema, args); err != nil {
 			var invalid *jsonschema.ValidationError
 			if !errors.As(err, &invalid) {
-				return &ToolReject{Code: ToolOwnerFailedCode, Data: map[string]any{"tool": qualifiedName, "reason": err.Error()}}
+				return &toolrejection.ToolReject{Code: toolrejection.ToolOwnerFailedCode, Data: map[string]any{"tool": qualifiedName, "reason": err.Error()}}
 			}
 			diag := argdiag.Diagnose(schema, args, ValidateToolArgs)
 			data := map[string]any{
@@ -127,7 +122,7 @@ func ValidateCallArguments(qualifiedName string, args, schema map[string]any, tc
 			if sibling := mutationRecoveryTool(qualifiedName, tc.TurnToolPlan.AddressableNames()); sibling != "" {
 				data["suggested_tool"] = sibling
 			}
-			return RejectInvalidArguments("TOOL_ARGS_INVALID", data)
+			return toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", data)
 		}
 	}
 	return nil

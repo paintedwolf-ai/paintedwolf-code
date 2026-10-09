@@ -3,6 +3,7 @@ package contract
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"os"
 	"path/filepath"
 	"strings"
@@ -27,7 +28,7 @@ func altitudeBoundary(t *testing.T) *sandbox.Boundary {
 		RejectSymlinkEscape: true,
 	}, []sandbox.ToolProfile{
 		{
-			ID:    tools.DefaultToolProfileID,
+			ID:    toolprofiles.DefaultToolProfileID,
 			Tools: map[string]bool{"read": true, "grep": true, "find": true, "list_dir": true},
 		},
 	})
@@ -35,7 +36,7 @@ func altitudeBoundary(t *testing.T) *sandbox.Boundary {
 
 func altitudeCtx(dir, sessionID string) tools.ToolContext {
 	roots := []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}}
-	ctx := tools.ToolContext{Roots: roots, ActiveRootID: "r1", Agent: tools.DefaultToolProfileID}
+	ctx := tools.ToolContext{Roots: roots, ActiveRootID: "r1", Agent: toolprofiles.DefaultToolProfileID}
 	ctx.SessionID = sessionID
 	// Publish a below-threshold count for open-root altitude tests.
 	ctx.RepoFileCount = 100

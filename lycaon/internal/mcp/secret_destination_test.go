@@ -2,6 +2,7 @@ package mcp_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
@@ -44,7 +45,7 @@ func mcpDestinationID(t *testing.T, catalog string) string {
 	_, err = reg.CallTool(context.Background(), mcp.CallScope{}, "fixture", "query", map[string]any{
 		"message": plantedAWS,
 	})
-	if tools.AsToolReject(err) == nil {
+	if toolrejection.AsToolReject(err) == nil {
 		t.Fatalf("screened call did not block: %v", err)
 	}
 	if destination == "" {

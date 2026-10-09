@@ -8,8 +8,8 @@ import (
 )
 
 var socketCapabilityPaths = []string{
-	"lycaon/internal/tools/socket_capability.go",
-	"lycaon/internal/tools/invocation_boundary.go",
+	"lycaon/internal/toolexecution/socket_capability.go",
+	"lycaon/internal/toolexecution/invocation_boundary.go",
 	"lycaon/internal/tools/package_execution_boundary.go",
 	"lycaon/internal/tools/socket_realization.go",
 	"lycaon/internal/tools/socket_approval.go",

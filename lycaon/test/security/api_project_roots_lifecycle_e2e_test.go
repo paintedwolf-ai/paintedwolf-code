@@ -2,6 +2,7 @@ package security
 
 import (
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -64,7 +65,7 @@ func TestDetachThenReadDenied(t *testing.T) {
 		SessionID: sess.ID,
 		Roots:     nil,
 	})
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "PROJECT_HAS_NO_ROOTS" {
 		t.Fatalf("read err = %v want PROJECT_HAS_NO_ROOTS", err)
 	}

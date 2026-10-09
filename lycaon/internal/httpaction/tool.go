@@ -2,9 +2,12 @@
 package httpaction
 
 import (
+	"github.com/lycaon/lycaon/internal/capabilityrequest"
+
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"io"
 	"net/netip"
 	"net/url"
@@ -100,7 +103,7 @@ func Register(reg *tools.DefaultRegistry, deps Deps) error {
 		if err != nil {
 			return "", invalid(err)
 		}
-		capability, reject := tools.ParseCapabilityRequest(args)
+		capability, reject := capabilityrequest.ParseCapabilityRequest(args)
 		if reject != nil {
 			return "", reject
 		}
@@ -334,7 +337,7 @@ func send(
 		}
 	}
 	if err := tctx.Secrets.HandOff(ctx, spec.outgoing); err != nil {
-		return outboundhttp.Response{}, nil, nil, tools.HeldHandOffReject("http_request", err)
+		return outboundhttp.Response{}, nil, nil, toolrejection.HeldHandOffReject("http_request", err)
 	}
 	resp, err := outboundhttp.Do(ctx, req)
 	return resp, landed, bufferedResponsePathBytes, err
@@ -344,10 +347,10 @@ func send(
 func sendReject(
 	ctx context.Context, deps Deps, jarReq secretcap.CookieJarRequest, jar *secretcap.CookieJar,
 	tokenJarReq secretcap.TokenJarRequest, tokenJar *secretcap.TokenJar, err error,
-) *tools.ToolReject {
+) *toolrejection.ToolReject {
 	cookies := saveCookieJar(ctx, deps, jarReq, jar)
 	tokens := heldTokens(tokenJar)
-	attach := func(reject *tools.ToolReject) *tools.ToolReject {
+	attach := func(reject *toolrejection.ToolReject) *toolrejection.ToolReject {
 		var exchange *outboundhttp.ExchangeError
 		if errors.As(err, &exchange) {
 			if reject.Data == nil {
@@ -388,13 +391,13 @@ func sendReject(
 		return reject
 	}
 	if host, denied := egressgate.Denied(ctx); denied {
-		return attach(&tools.ToolReject{Code: "HTTP_REQUEST_HOST_DENIED", Data: map[string]any{"host": host}})
+		return attach(&toolrejection.ToolReject{Code: "HTTP_REQUEST_HOST_DENIED", Data: map[string]any{"host": host}})
 	}
 	var denied *egress.DestinationDeniedError
 	if errors.As(err, &denied) {
-		return attach(&tools.ToolReject{Code: "HTTP_REQUEST_HOST_DENIED", Data: map[string]any{"reason": denied.Error()}})
+		return attach(&toolrejection.ToolReject{Code: "HTTP_REQUEST_HOST_DENIED", Data: map[string]any{"reason": denied.Error()}})
 	}
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if errors.As(err, &reject) {
 		return attach(reject)
 	}
@@ -411,7 +414,7 @@ func sendReject(
 	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, os.ErrDeadlineExceeded) {
 		data["deadline"] = "timeout_ms"
 	}
-	return attach(&tools.ToolReject{
+	return attach(&toolrejection.ToolReject{
 		Code: "HTTP_REQUEST_FAILED", FailureClass: api.FailureClassOwnerError,
 		Retryable: retryable, Data: data,
 	})
@@ -453,18 +456,18 @@ func (spec requestSpec) dialsLoopback() bool {
 	return ok
 }
 
-func checkLoopbackAuthority(spec requestSpec, allowAddress func(netip.Addr, uint16) bool) *tools.ToolReject {
+func checkLoopbackAuthority(spec requestSpec, allowAddress func(netip.Addr, uint16) bool) *toolrejection.ToolReject {
 	addr, port, ok := spec.firstHop()
 	if !ok || (allowAddress != nil && allowAddress(addr, port)) {
 		return nil
 	}
-	return &tools.ToolReject{
+	return &toolrejection.ToolReject{
 		Code: isolation.CodeTryLoopbackConnect,
 		Data: map[string]any{"port": port, "url": spec.target.String()},
 	}
 }
 
-func loopbackPolicy(request *tools.CapabilityRequest, tctx tools.ToolContext) (func(netip.Addr, uint16) bool, *tools.ToolReject) {
+func loopbackPolicy(request *capabilityrequest.CapabilityRequest, tctx tools.ToolContext) (func(netip.Addr, uint16) bool, *toolrejection.ToolReject) {
 	ports := make(map[uint16]bool)
 	allLoopback := false
 	if tctx.LoopbackConnectGranted {
@@ -497,7 +500,6 @@ func loopbackPolicy(request *tools.CapabilityRequest, tctx tools.ToolContext) (f
 	}, nil
 }
 
-func invalid(err error) *tools.ToolReject {
-	return &tools.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"reason": err.Error(), "tool": "http_request"}}
+func invalid(err error) *toolrejection.ToolReject {
+	return &toolrejection.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"reason": err.Error(), "tool": "http_request"}}
 }
-

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/conditions"
@@ -92,7 +93,7 @@ func RegisterStateTools(reg *tools.DefaultRegistry, deps StateToolDeps) error {
 			return "", fmt.Errorf("path required")
 		}
 		if hostWorkflowStatePath(path) {
-			return "", &tools.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"tool": "state_update", "field": "path", "reason": "host_managed_workflow_state", "path": path}}
+			return "", &toolrejection.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"tool": "state_update", "field": "path", "reason": "host_managed_workflow_state", "path": path}}
 		}
 		value, ok := args["value"]
 		if !ok {
@@ -179,7 +180,7 @@ func runStateStartTool(ctx context.Context, deps StateToolDeps, args map[string]
 	if err != nil {
 		if errors.Is(err, ErrWorkflowStartRequiresHumanApproval) {
 			_ = deps.Runs.NoteWorkflowStartProposal(ctx, tctx.SessionID, req.WorkflowID, req.WorkflowVersion)
-			return "", &tools.ToolReject{
+			return "", &toolrejection.ToolReject{
 				Code: "WORKFLOW_START_REQUIRES_HUMAN_APPROVAL",
 				Data: map[string]any{"workflow_id": req.WorkflowID},
 			}

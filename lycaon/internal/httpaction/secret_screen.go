@@ -2,6 +2,7 @@ package httpaction
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/outboundhttp"
@@ -94,9 +95,9 @@ func primaryMatch(matches []secretmatch.Match) secretmatch.Match {
 	return primary
 }
 
-func screenFaultReject(stage string) *tools.ToolReject {
-	return &tools.ToolReject{
-		Code: tools.OutboundSecretScreenFailedCode,
+func screenFaultReject(stage string) *toolrejection.ToolReject {
+	return &toolrejection.ToolReject{
+		Code: toolrejection.OutboundSecretScreenFailedCode,
 		Data: map[string]any{"surface": "http_request", "fault_stage": stage},
 	}
 }
@@ -154,10 +155,10 @@ func screenRequest(ctx context.Context, deps Deps, spec requestSpec, args map[st
 	}
 	if resolution.Decision.Blocks() {
 		tc.Secrets.Withhold(ctx)
-		reject := &tools.ToolReject{Code: tools.OutboundSecretDeniedCode, Data: map[string]any{
+		reject := &toolrejection.ToolReject{Code: toolrejection.OutboundSecretDeniedCode, Data: map[string]any{
 			"surface": "http_request", "rule_id": match.RuleID, "host": destinationLabel, "shape": match.GenericShape,
 		}}
-		tools.AttachUserGuidance(reject, resolution.Guidance)
+		toolrejection.AttachUserGuidance(reject, resolution.Guidance)
 		return outboundRequest{}, reject
 	}
 	if resolution.Decision != secretmatch.SendRedacted {

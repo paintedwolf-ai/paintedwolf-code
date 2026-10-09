@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -122,7 +123,7 @@ func TestTerminalOpenRejectsOversizedWinSize(t *testing.T) {
 	_, err := reg.Run(context.Background(), terminal.OpenToolName, map[string]any{
 		"command": "echo hi", "winsize": map[string]any{"cols": 241.0, "rows": 24.0},
 	}, tctx)
-	reject := tools.AsToolReject(err)
+	reject := toolrejection.AsToolReject(err)
 	if reject == nil || reject.Code != "TOOL_ARGS_INVALID" || reject.Data["reason"] != "winsize_out_of_range" {
 		t.Fatalf("oversized winsize reject = %#v (err = %v)", reject, err)
 	}

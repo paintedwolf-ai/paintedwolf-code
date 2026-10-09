@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
@@ -62,7 +63,7 @@ func TestGrepDenseRootDensenessThenReject(t *testing.T) {
 	}
 
 	_, err = tool.Run(context.Background(), args, tctx)
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != GrepScopeRequiredCode {
 		t.Fatalf("second call err = %v want %s", err, GrepScopeRequiredCode)
 	}

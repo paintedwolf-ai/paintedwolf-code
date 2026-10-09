@@ -4,12 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"testing"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 	surveytools "github.com/lycaon/lycaon/internal/tools/native/survey"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -134,7 +134,7 @@ func TestSourceHistoryRejectsUnknownModeAndMissingLedger(t *testing.T) {
 	tool := &surveytools.SourceHistoryTool{Boundary: nativefixture.Boundary(t)}
 
 	_, err := tool.Run(context.Background(), map[string]any{"path": "main.go", "mode": "blame"}, provenanceCtx(dir, &fakeSourceLedger{}))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "SOURCE_HISTORY_MODE_INVALID" {
 		t.Fatalf("unknown mode = %v, want SOURCE_HISTORY_MODE_INVALID", err)
 	}
@@ -260,7 +260,7 @@ func TestSourceHistoryVersionRejections(t *testing.T) {
 	_, err := tool.Run(context.Background(), map[string]any{
 		"path": "main.go", "mode": "version",
 	}, tctx)
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "SOURCE_VERSION_REQUIRED" {
 		t.Fatalf("missing version_id err = %v, want SOURCE_VERSION_REQUIRED", err)
 	}

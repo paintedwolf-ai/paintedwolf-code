@@ -3,6 +3,7 @@ package reporting
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"net/url"
 	"strings"
 	"unicode/utf8"
@@ -54,7 +55,7 @@ type SurfaceNoteDeps struct {
 
 func RunSurfaceNote(ctx context.Context, args map[string]any, tctx tools.ToolContext, deps SurfaceNoteDeps) (string, error) {
 	if tools.OutOfSessionScope(SurfaceNoteTool, tctx) {
-		return "", &tools.ToolReject{Code: surfaceNoteWorkerSession, Data: map[string]any{}}
+		return "", &toolrejection.ToolReject{Code: surfaceNoteWorkerSession, Data: map[string]any{}}
 	}
 	if tctx.Out == nil {
 		return "", fmt.Errorf("tool output required")
@@ -92,7 +93,7 @@ func RunSurfaceNote(ctx context.Context, args map[string]any, tctx tools.ToolCon
 
 	// A note presents only stills this turn produced, like its citations.
 	if unknown := unpresentableArtifactIDs(artifactIDs, history); len(unknown) > 0 {
-		return "", &tools.ToolReject{Code: surfaceNoteArtifactUnknown, Data: map[string]any{
+		return "", &toolrejection.ToolReject{Code: surfaceNoteArtifactUnknown, Data: map[string]any{
 			"artifact_ids":            unknown,
 			"surface_presentable_ids": guidance.PresentableVisualArtifactIDs(history),
 		}}
@@ -103,7 +104,7 @@ func RunSurfaceNote(ctx context.Context, args map[string]any, tctx tools.ToolCon
 		if surfaceNoteFrictionCodes[rejectCode] && deps.Friction != nil {
 			deps.Friction(ctx, sessionID, rejectCode)
 		}
-		return "", &tools.ToolReject{Code: rejectCode, Data: rejectData}
+		return "", &toolrejection.ToolReject{Code: rejectCode, Data: rejectData}
 	}
 
 	noteID := uuid.NewString()
@@ -156,7 +157,7 @@ func parseSurfaceNoteArgs(args map[string]any) (
 	artifactIDs []string,
 	err error,
 ) {
-	invalid := &tools.ToolReject{Code: surfaceNoteInvalidArgs, Data: map[string]any{"field": "summary", "reason": "must be nonempty within the character bound", "max": surfaceNoteSummaryMaxChars}}
+	invalid := &toolrejection.ToolReject{Code: surfaceNoteInvalidArgs, Data: map[string]any{"field": "summary", "reason": "must be nonempty within the character bound", "max": surfaceNoteSummaryMaxChars}}
 	if args == nil {
 		return "", nil, nil, nil, invalid
 	}
@@ -181,7 +182,7 @@ func parseSurfaceNoteArgs(args map[string]any) (
 }
 
 func surfaceNoteStringList(raw any, max int, field string) ([]string, error) {
-	invalid := &tools.ToolReject{Code: surfaceNoteInvalidArgs, Data: map[string]any{"field": field, "reason": "must be an array of nonempty strings within the item bound", "max": max}}
+	invalid := &toolrejection.ToolReject{Code: surfaceNoteInvalidArgs, Data: map[string]any{"field": field, "reason": "must be an array of nonempty strings within the item bound", "max": max}}
 	if raw == nil {
 		return nil, nil
 	}
@@ -274,7 +275,7 @@ func parseSurfaceNoteCitedURLs(raw any) ([]string, error) {
 	for _, s := range items {
 		u, err := url.Parse(s)
 		if err != nil || u.Scheme == "" || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-			return nil, &tools.ToolReject{Code: surfaceNoteInvalidArgs, Data: map[string]any{"field": "cited_urls", "reason": "must contain absolute HTTP(S) URLs"}}
+			return nil, &toolrejection.ToolReject{Code: surfaceNoteInvalidArgs, Data: map[string]any{"field": "cited_urls", "reason": "must contain absolute HTTP(S) URLs"}}
 		}
 		out = append(out, s)
 	}

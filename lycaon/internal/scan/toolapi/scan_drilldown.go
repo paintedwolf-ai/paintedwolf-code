@@ -3,6 +3,7 @@ package toolapi
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"strings"
 	"time"
@@ -38,7 +39,7 @@ func rejectSuppliedProjectDir(args map[string]any, sessionProjectDir string) err
 	if filepath.Clean(supplied) == sessionProjectDir {
 		return nil
 	}
-	return &tools.ToolReject{
+	return &toolrejection.ToolReject{
 		Code: ScanProjectDirHostBoundCode,
 		Data: map[string]any{"supplied": supplied},
 	}

@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 	"testing"
 
@@ -139,7 +140,7 @@ func TestResolveDecisionOption(t *testing.T) {
 func TestAnswerDecisionMissingJobRetainsTypedDecisionFacts(t *testing.T) {
 	svc, _ := answerDecisionService(t, &answerStubQueue{}, session.NewMemoryDecisionStore())
 	_, err := svc.AnswerJob(t.Context(), "parent", "missing", "a", "coordinator")
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != DecisionNotFoundCode || reject.Data["job_id"] != "missing" {
 		t.Fatalf("lost decision refusal: %#v / %v", reject, err)
 	}

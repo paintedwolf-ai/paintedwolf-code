@@ -2,6 +2,7 @@ package mcp_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
@@ -69,7 +70,7 @@ func TestMCPCallToolScreenStdio(t *testing.T) {
 	_, err = reg.CallTool(context.Background(), mcp.CallScope{}, "fixture", "query", map[string]any{
 		"message": plantedAWS,
 	})
-	rej := tools.AsToolReject(err)
+	rej := toolrejection.AsToolReject(err)
 	if rej == nil || rej.Code != "OUTBOUND_SECRET_DENIED" {
 		t.Fatalf("want OUTBOUND_SECRET_DENIED, got %v", err)
 	}

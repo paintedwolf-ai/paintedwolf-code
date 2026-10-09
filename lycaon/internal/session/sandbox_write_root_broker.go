@@ -1,9 +1,12 @@
 package session
 
 import (
+	"github.com/lycaon/lycaon/internal/toolapproval"
+
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 	"time"
 
@@ -14,7 +17,6 @@ import (
 	"github.com/lycaon/lycaon/internal/sensitivepath"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
 	"github.com/lycaon/lycaon/internal/settings"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -27,7 +29,7 @@ type WriteRootCheckpointBroker struct {
 	// ReadRuntime holds chat read-path leases, a separate namespace from
 	// write roots: a grant in one never covers the other.
 	ReadRuntime *approvalstate.SandboxPathGrantRuntime
-	Consequence tools.ConsequenceDeriver
+	Consequence toolapproval.ConsequenceDeriver
 	Authority   hitl.ApprovalGate
 	// ApprovalsDisabled authorizes the request without a prompt.
 	ApprovalsDisabled func(projectDir string) bool
@@ -309,7 +311,7 @@ func (b *WriteRootCheckpointBroker) buildWriteRootCard(
 		ConsequenceBand: string(band), ConsequenceCode: string(code),
 	}, reasons, options, hitl.FaceContext{})
 	if err != nil {
-		return sandboxAskCard{}, tools.ApprovalPlanInvalid()
+		return sandboxAskCard{}, toolrejection.ApprovalPlanInvalid()
 	}
 	return sandboxAskCard{
 		Action: grantAction, Title: card.subjectTitle, Plan: plan,

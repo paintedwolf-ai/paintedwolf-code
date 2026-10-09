@@ -3,6 +3,7 @@ package native
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 	"testing"
 
@@ -38,7 +39,7 @@ func TestRenderViewToolRejectsMissingMarkup(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected reject")
 	}
-	rej := &tools.ToolReject{}
+	rej := &toolrejection.ToolReject{}
 	ok := errors.As(err, &rej)
 	if !ok || rej.Code != "TOOL_ARGS_INVALID" {
 		t.Fatalf("got %#v want TOOL_ARGS_INVALID", err)
@@ -61,7 +62,7 @@ func TestRenderViewToolRejectsNonPngDest(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected reject")
 	}
-	rej := &tools.ToolReject{}
+	rej := &toolrejection.ToolReject{}
 	ok := errors.As(err, &rej)
 	if !ok || rej.Code != "TOOL_ARGS_INVALID" {
 		t.Fatalf("got %#v want TOOL_ARGS_INVALID", err)
@@ -89,7 +90,7 @@ func TestRenderViewToolRejectsInvalidScale(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected reject")
 	}
-	rej := &tools.ToolReject{}
+	rej := &toolrejection.ToolReject{}
 	ok := errors.As(err, &rej)
 	if !ok || rej.Code != "TOOL_ARGS_INVALID" {
 		t.Fatalf("got %#v want TOOL_ARGS_INVALID", err)
@@ -158,7 +159,7 @@ func TestRenderViewToolHandleLifecycle(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error on nonexistent patch string")
 		}
-		var rej *tools.ToolReject
+		var rej *toolrejection.ToolReject
 		if !errors.As(err, &rej) || rej.Code != "RENDER_PATCH_NOT_FOUND" {
 			t.Fatalf("expected RENDER_PATCH_NOT_FOUND, got %#v", err)
 		}
@@ -174,7 +175,7 @@ func TestRenderViewToolHandleLifecycle(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error on nonexistent handle")
 		}
-		var rej *tools.ToolReject
+		var rej *toolrejection.ToolReject
 		if !errors.As(err, &rej) || rej.Code != "RENDER_HANDLE_NOT_FOUND" {
 			t.Fatalf("expected RENDER_HANDLE_NOT_FOUND, got %#v", err)
 		}
@@ -208,7 +209,7 @@ func TestRenderViewToolFailedPatchKeepsRevision(t *testing.T) {
 		"old_string": `<rect fill="#3b82f6"/>`,
 		"new_string": `<script>alert(1)</script>`,
 	}, tools.ToolContext{SessionID: sessionID, Out: &tools.ToolInvocationOut{}})
-	var rej *tools.ToolReject
+	var rej *toolrejection.ToolReject
 	if !errors.As(err, &rej) || rej.Code != "RENDER_MARKUP_FORBIDDEN" {
 		t.Fatalf("err = %#v, want RENDER_MARKUP_FORBIDDEN", err)
 	}

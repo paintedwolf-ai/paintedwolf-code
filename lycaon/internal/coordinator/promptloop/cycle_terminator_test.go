@@ -1,6 +1,8 @@
 package promptloop
 
 import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+
 	"context"
 	"strings"
 	"sync/atomic"
@@ -129,7 +131,7 @@ func TestExecuteToolCallsInTurnAnsweringUnderHostHoldContinues(t *testing.T) {
 	var held atomic.Bool
 	held.Store(true)
 	var ran atomic.Bool
-	if runHostHoldBatch(t, &held, tools.SurfaceAwaitHost, func() { ran.Store(true) }) {
+	if runHostHoldBatch(t, &held, toolcontract.SurfaceAwaitHost, func() { ran.Store(true) }) {
 		t.Fatal("an await_host turn that started under the hold must continue to the reply")
 	}
 	if !ran.Load() {
@@ -140,7 +142,7 @@ func TestExecuteToolCallsInTurnAnsweringUnderHostHoldContinues(t *testing.T) {
 // A batch that moves the run into a host-held phase ends, whatever its surface.
 func TestExecuteToolCallsInTurnEnteringHostHoldEndsCycle(t *testing.T) {
 	var held atomic.Bool
-	if !runHostHoldBatch(t, &held, tools.SurfaceAwaitHost, func() { held.Store(true) }) {
+	if !runHostHoldBatch(t, &held, toolcontract.SurfaceAwaitHost, func() { held.Store(true) }) {
 		t.Fatal("entering a host-held phase must end the tool cycle")
 	}
 }

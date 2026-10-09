@@ -2,6 +2,7 @@ package toolhost
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/delegation"
@@ -81,5 +82,5 @@ func (s *GroundingService) AuditFinding(ctx context.Context, summary, ref string
 }
 
 func (s *GroundingService) formatReject(code string, data map[string]any) error {
-	return &tools.ToolReject{Code: code, Data: data}
+	return &toolrejection.ToolReject{Code: code, Data: data}
 }

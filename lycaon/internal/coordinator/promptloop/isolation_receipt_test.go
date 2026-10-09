@@ -1,6 +1,7 @@
 package promptloop
 
 import (
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"testing"
 	"time"
 
@@ -49,7 +50,7 @@ func TestOwnerSeamTerminalRefusalKeepsInvokedIsolationRejection(t *testing.T) {
 		t.Fatal("missing contract for write")
 	}
 	loop := NewPromptLoopForTest(PromptLoopDeps{})
-	runErr := tools.RenderReject(&tools.ToolReject{
+	runErr := toolrejection.RenderReject(&toolrejection.ToolReject{
 		Code: isolation.CodeControlPlaneDenied, Data: map[string]any{"path": "/state/approvals.yaml", "tool": "write"},
 	}, nil)
 	run := toolInvocations{loop}.finalizeToolRun(t.Context(), &api.Session{ID: "session"}, completedToolRun{

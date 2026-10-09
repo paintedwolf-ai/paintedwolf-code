@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,7 +12,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/summarize"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 )
 
@@ -135,7 +135,7 @@ func TestSummarizeGatherPatternNoMatchSamples(t *testing.T) {
 	_, err := g.Gather(context.Background(), summarize.Request{
 		Path: "pkg/server.go", Pattern: `func handle[A-Z]`,
 	})
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "SUMMARIZE_NO_MATERIAL" {
 		t.Fatalf("err = %v, want SUMMARIZE_NO_MATERIAL", err)
 	}
@@ -222,7 +222,7 @@ func TestSummarizeGatherBoundaryReject(t *testing.T) {
 	dir := t.TempDir()
 	g := testSummarizeGatherer(t, dir, summarize.DefaultCaps())
 	_, err := g.Gather(context.Background(), summarize.Request{Path: "../outside"})
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if err == nil || !errors.As(err, &reject) || reject.Code != "SURVEY_PATH_ESCAPE" {
 		t.Fatalf("err = %v, want SURVEY_PATH_ESCAPE", err)
 	}
@@ -341,7 +341,7 @@ func TestSummarizeGatherPathsRejectsPartialMissing(t *testing.T) {
 	_, err := g.Gather(context.Background(), summarize.Request{
 		Paths: []string{"README.md", "go.mod", "pkg/a.go"},
 	})
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "SUMMARIZE_PATHS_MISSING" {
 		t.Fatalf("err = %v, want SUMMARIZE_PATHS_MISSING", err)
 	}
@@ -355,7 +355,7 @@ func TestSummarizeGatherPathsAllMissing(t *testing.T) {
 	_, err := g.Gather(context.Background(), summarize.Request{
 		Paths: []string{"go.mod", "package.json"},
 	})
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "SUMMARIZE_PATHS_MISSING" {
 		t.Fatalf("err = %v, want SUMMARIZE_PATHS_MISSING", err)
 	}
@@ -367,7 +367,7 @@ func TestSummarizeGatherSinglePathMissing(t *testing.T) {
 	g := testSummarizeGatherer(t, dir, summarize.DefaultCaps())
 
 	_, err := g.Gather(context.Background(), summarize.Request{Path: "ghost/missing.go"})
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "SUMMARIZE_PATHS_MISSING" {
 		t.Fatalf("err = %v, want SUMMARIZE_PATHS_MISSING", err)
 	}

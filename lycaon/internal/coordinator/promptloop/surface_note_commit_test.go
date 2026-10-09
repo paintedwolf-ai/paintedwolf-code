@@ -3,6 +3,7 @@ package promptloop
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 	"testing"
 	"time"
@@ -135,7 +136,7 @@ func TestExecuteOneToolCallDiscardsNoteOnHandlerReject(t *testing.T) {
 				Content:   "should not land",
 			}
 		}
-		return "", &tools.ToolReject{Code: "SURFACE_NOTE_UNGROUNDED", Data: map[string]any{}}
+		return "", &toolrejection.ToolReject{Code: "SURFACE_NOTE_UNGROUNDED", Data: map[string]any{}}
 	})
 	loop := NewPromptLoopForTest(PromptLoopDeps{Tools: reg})
 	out := toolBatch{loop}.executeOneToolCall(context.Background(), &api.Session{ID: "s1"}, "s1", "", nil, api.ToolCall{

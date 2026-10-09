@@ -3,6 +3,7 @@ package native
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"strings"
 
@@ -30,7 +31,7 @@ func (t *GitOperationTool) Run(ctx context.Context, args map[string]any, tc tool
 	req.IncludeUntracked, _ = args["include_untracked"].(bool)
 	req.ReinstateIndex, _ = args["reinstate_index"].(bool)
 	if tc.WorkerJobID != "" {
-		return "", &tools.ToolReject{Code: "GIT_OPERATION_PRECONDITION", Data: map[string]any{"reason": "addressed_session_required", "git_addressed_session_required": true}}
+		return "", &toolrejection.ToolReject{Code: "GIT_OPERATION_PRECONDITION", Data: map[string]any{"reason": "addressed_session_required", "git_addressed_session_required": true}}
 	}
 	tool := "git_" + t.Kind
 	for _, path := range req.Paths {
@@ -53,7 +54,7 @@ func (t *GitOperationTool) Run(ctx context.Context, args map[string]any, tc tool
 		var precondition *git.OperationError
 		if errors.As(err, &precondition) {
 			paths := precondition.Paths[:min(len(precondition.Paths), 80)]
-			return "", &tools.ToolReject{Code: precondition.Code(), Data: map[string]any{"reason": precondition.Reason, "paths": precondition.Paths, "path": strings.Join(paths, ", "), "tool": tool}}
+			return "", &toolrejection.ToolReject{Code: precondition.Code(), Data: map[string]any{"reason": precondition.Reason, "paths": precondition.Paths, "path": strings.Join(paths, ", "), "tool": tool}}
 		}
 		return "", err
 	}
@@ -69,7 +70,7 @@ func (t *GitOperationTool) Run(ctx context.Context, args map[string]any, tc tool
 		return "", errors.Join(err, marshalErr)
 	}
 	if result.Status == "failed" || result.Status == "conflicts" {
-		return output, &tools.ToolReject{Code: "GIT_OPERATION_FAILED", FailureClass: api.FailureClassOwnerError, Data: map[string]any{
+		return output, &toolrejection.ToolReject{Code: "GIT_OPERATION_FAILED", FailureClass: api.FailureClassOwnerError, Data: map[string]any{
 			"status": result.Status, "attempted": result.Attempted, "exit_code": result.ExitCode,
 			"git_after_observed": result.AfterObserved,
 			"git_merge_active":   result.AfterObserved && result.After.MergeHead != "",
@@ -126,7 +127,7 @@ func (t *GitStashListTool) Run(ctx context.Context, args map[string]any, tc tool
 
 func assertGitOperationPath(ctx context.Context, boundary *sandbox.Boundary, tc tools.ToolContext, path, tool string) error {
 	_, err := assertWritePath(ctx, boundary, tc, path, tc.ProfileID(), tool, func(path string) error {
-		return &tools.ToolReject{Code: "GIT_PATH_DENIED", Data: map[string]any{"path": filepath.ToSlash(path), "tool": tool}}
+		return &toolrejection.ToolReject{Code: "GIT_PATH_DENIED", Data: map[string]any{"path": filepath.ToSlash(path), "tool": tool}}
 	})
 	return err
 }

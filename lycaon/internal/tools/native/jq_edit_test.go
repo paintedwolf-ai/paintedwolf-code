@@ -3,6 +3,7 @@ package native
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
@@ -112,7 +113,7 @@ func TestJqEditRefusalLeavesFileUntouched(t *testing.T) {
 	}
 	tool := &JqEditTool{Boundary: nativefixture.Boundary(t)}
 	_, err := tool.Run(context.Background(), map[string]any{"path": "Cargo.toml", "query": `.package.version = "0.2.0"`}, tc)
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "JQ_EDIT_LOSSY" {
 		t.Fatalf("err = %v want JQ_EDIT_LOSSY", err)
 	}

@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/lycaon/lycaon/internal/promptresult"
+	"github.com/lycaon/lycaon/internal/toolexecution"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 	"testing"
 
@@ -42,7 +44,7 @@ func TestTaskToolResumeInheritsTheChild(t *testing.T) {
 		Sessions: &fakeTaskSessions{}, Queue: q,
 		Agents: orchestration.NewMemoryAgentRegistryForTest(), Workers: worker.DefaultWorkersConfig(),
 	}))
-	exec := tools.NewDefaultToolExecutor(nil, reg, "coordinator")
+	exec := toolexecution.NewExecutor(nil, reg, "coordinator")
 	out, err := exec.Invoke(context.Background(), "task", map[string]any{
 		"brief":            taskBrief("continue"),
 		"child_session_id": "child-1",
@@ -88,7 +90,7 @@ func TestTaskToolResumeRefusesToChangeTheChild(t *testing.T) {
 				args[k] = v
 			}
 			_, err := reg.Run(t.Context(), "task", args, toolContext("parent-1", t.TempDir()))
-			reject := tools.AsToolReject(err)
+			reject := toolrejection.AsToolReject(err)
 			if reject == nil || reject.Code != "WORKER_RESUME_MISMATCH" || reject.Data["resume_field"] != tc.field {
 				t.Fatalf("err = %v want WORKER_RESUME_MISMATCH on %s", err, tc.field)
 			}
@@ -105,7 +107,7 @@ func TestTaskToolResumeOfUnknownChildRejects(t *testing.T) {
 	_, err := reg.Run(t.Context(), "task", map[string]any{
 		"agent_type": "implementer", "brief": taskBrief("continue"), "child_session_id": "missing",
 	}, toolContext("parent-1", t.TempDir()))
-	if reject := tools.AsToolReject(err); reject == nil || reject.Code != "WORKER_RESUME_CHILD_UNKNOWN" {
+	if reject := toolrejection.AsToolReject(err); reject == nil || reject.Code != "WORKER_RESUME_CHILD_UNKNOWN" {
 		t.Fatalf("err = %v want WORKER_RESUME_CHILD_UNKNOWN", err)
 	}
 }
@@ -201,7 +203,7 @@ func TestTaskToolOmittedBudgetIsTheHostDefault(t *testing.T) {
 				ToolBudget: func(string) spawn.WorkerToolBudget { return budget },
 			})
 			testutil.FailErr(t, "register task tool", err)
-			exec := tools.NewDefaultToolExecutor(nil, reg, "coordinator")
+			exec := toolexecution.NewExecutor(nil, reg, "coordinator")
 			_, err = exec.Invoke(t.Context(), "task", map[string]any{
 				"agent_type": tc.agent,
 				"brief":      taskBrief("bounded work"),
@@ -259,14 +261,14 @@ func TestTaskToolResumeRejectsPendingDecision(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	exec := tools.NewDefaultToolExecutor(nil, reg, "coordinator")
+	exec := toolexecution.NewExecutor(nil, reg, "coordinator")
 	_, err := exec.Invoke(context.Background(), "task", map[string]any{
 		"agent_type":       "repo-researcher",
 		"brief":            taskBrief("continue the same audit"),
 		"child_session_id": "child-1",
 		"scope":            map[string]any{"mode": "read", "paths": []any{"src/**"}},
 	}, toolContext("parent-1", t.TempDir()))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if err == nil || !errors.As(err, &reject) || reject.Code != "TASK_DECISION_PENDING" {
 		t.Fatalf("err = %v want TASK_DECISION_PENDING reject", err)
 	}
@@ -294,14 +296,14 @@ func TestTaskToolResumeRejectsDiscardedOverlay(t *testing.T) {
 			}); err != nil {
 				t.Fatal(err)
 			}
-			exec := tools.NewDefaultToolExecutor(nil, reg, "coordinator")
+			exec := toolexecution.NewExecutor(nil, reg, "coordinator")
 			_, err := exec.Invoke(context.Background(), "task", map[string]any{
 				"agent_type":       "implementer",
 				"brief":            taskBrief("fix it"),
 				"child_session_id": "child-1",
 				"scope":            map[string]any{"mode": "write", "paths": []any{"pkg"}},
 			}, toolContext("parent-1", t.TempDir()))
-			var reject *tools.ToolReject
+			var reject *toolrejection.ToolReject
 			if err == nil || !errors.As(err, &reject) || reject.Code != "WORKER_RESUME_OVERLAY_DISCARDED" {
 				t.Fatalf("err = %v want WORKER_RESUME_OVERLAY_DISCARDED reject", err)
 			}
@@ -328,7 +330,7 @@ func TestTaskToolResumePendingOverlayAllowed(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	exec := tools.NewDefaultToolExecutor(nil, reg, "coordinator")
+	exec := toolexecution.NewExecutor(nil, reg, "coordinator")
 	_, err := exec.Invoke(context.Background(), "task", map[string]any{
 		"agent_type":       "implementer",
 		"brief":            taskBrief("continue the live overlay"),
@@ -390,7 +392,7 @@ func TestTaskToolDraftScratchSpawnsImplementerWithWorkspacePath(t *testing.T) {
 	if len(roots) != 1 {
 		t.Fatalf("len(roots) = %d want 1", len(roots))
 	}
-	exec := tools.NewDefaultToolExecutor(nil, reg, "coordinator")
+	exec := toolexecution.NewExecutor(nil, reg, "coordinator")
 	_, err = exec.Invoke(ctx, "task", map[string]any{
 		"agent_type": "implementer",
 		"brief":      taskBrief("ship core module"),
@@ -421,7 +423,7 @@ func TestTaskToolFreshDispatchRequiresAgentType(t *testing.T) {
 	_, err := reg.Run(t.Context(), "task", map[string]any{
 		"brief": taskBrief("new work"),
 	}, toolContext("p", t.TempDir()))
-	reject := tools.AsToolReject(err)
+	reject := toolrejection.AsToolReject(err)
 	if reject == nil || reject.Code != "TOOL_ARGS_INVALID" {
 		t.Fatalf("err = %v want TOOL_ARGS_INVALID", err)
 	}
@@ -439,7 +441,7 @@ func TestTaskToolCapsAggregateBriefText(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	exec := tools.NewDefaultToolExecutor(nil, reg, "coordinator")
+	exec := toolexecution.NewExecutor(nil, reg, "coordinator")
 	_, err := exec.Invoke(context.Background(), "task", map[string]any{
 		"agent_type": "implementer",
 		"brief": map[string]any{
@@ -447,7 +449,7 @@ func TestTaskToolCapsAggregateBriefText(t *testing.T) {
 			"done_when": []any{"done"},
 		},
 	}, toolContext("parent-1", t.TempDir()))
-	reject := tools.AsToolReject(err)
+	reject := toolrejection.AsToolReject(err)
 	if reject == nil || reject.Code != "TOOL_ARGS_INVALID" || reject.Data["max_runes"] != worker.MaxTaskCharterRunes {
 		t.Fatalf("err = %v want aggregate brief cap reject", err)
 	}
@@ -478,7 +480,7 @@ func TestTaskToolDoesNotClampExplicitBudget(t *testing.T) {
 		testutil.FailErr(t, "register budgeted task", err)
 		_, err = reg.Run(t.Context(), "task", map[string]any{"agent_type": "repo-researcher", "brief": taskBrief("bounded work"), "scope": map[string]any{"mode": "read"}, "max_tool_loops": requested}, toolContext("parent", t.TempDir()))
 		if requested < budget.Min || requested > budget.Max {
-			var reject *tools.ToolReject
+			var reject *toolrejection.ToolReject
 			if !errors.As(err, &reject) || reject.Code != session.TaskMaxToolLoopsInvalidCode || reject.Data["max_tool_loops"] != requested || reject.Data["host_max"] != budget.Max || enqueued.ID != "" {
 				t.Fatalf("explicit budget changed or enqueued: requested=%d err=%v task=%+v", requested, err, enqueued)
 			}

@@ -2,6 +2,7 @@ package page
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/tools"
@@ -15,11 +16,11 @@ func resolveCaptureProjectDir(ctx context.Context, tctx tools.ToolContext, model
 		return "", nil
 	}
 	if len(tctx.Roots) == 0 {
-		return "", &tools.ToolReject{Code: "CAPTURE_PROJECT_DIR_MISSING", Data: map[string]any{"path": modelPath}}
+		return "", &toolrejection.ToolReject{Code: "CAPTURE_PROJECT_DIR_MISSING", Data: map[string]any{"path": modelPath}}
 	}
 	resolved, err := projectpaths.ResolveRead(ctx, nil, tctx, modelPath)
 	if err != nil {
-		return "", &tools.ToolReject{Code: "CAPTURE_NAVIGATION_DENIED", Data: map[string]any{
+		return "", &toolrejection.ToolReject{Code: "CAPTURE_NAVIGATION_DENIED", Data: map[string]any{
 			"reason":                 "project_dir_escape",
 			"capture_project_escape": true,
 			"path":                   modelPath,

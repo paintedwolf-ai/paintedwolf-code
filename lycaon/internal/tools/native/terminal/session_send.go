@@ -2,6 +2,7 @@ package terminal
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
@@ -50,13 +51,13 @@ func SendHandler(bg *bgprocess.Registry) tools.ToolHandler {
 		tctx.SetDisplaySubject(subject)
 		payload, err := ptyinput.ExpandControlInput(in.Input)
 		if err != nil {
-			return "", &tools.ToolReject{
+			return "", &toolrejection.ToolReject{
 				Code: "TERMINAL_CONTROL_UNKNOWN",
 				Data: map[string]any{"reason": err.Error()},
 			}
 		}
 		if err := tctx.Secrets.HandOff(ctx, nil); err != nil {
-			return "", tools.HeldHandOffReject("terminal_send", err)
+			return "", toolrejection.HeldHandOffReject("terminal_send", err)
 		}
 		if err := bg.WritePTY(tctx.SessionID, in.ID, payload); err != nil {
 			return "", mapTerminalLifecycleReject(err, in.ID)
@@ -112,11 +113,11 @@ func parseTerminalSendArgs(args map[string]any) (terminalSendArgs, error) {
 	id, _ := args["id"].(string)
 	id = strings.TrimSpace(id)
 	if id == "" {
-		return terminalSendArgs{}, tools.RejectInvalidArguments("TERMINAL_ID_REQUIRED", map[string]any{"reason": "missing_id"})
+		return terminalSendArgs{}, toolrejection.RejectInvalidArguments("TERMINAL_ID_REQUIRED", map[string]any{"reason": "missing_id"})
 	}
 	input, _ := args["input"].(string)
 	if input == "" {
-		return terminalSendArgs{}, tools.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": "missing_input"})
+		return terminalSendArgs{}, toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": "missing_input"})
 	}
 	observe, err := parseTerminalObserve(args)
 	if err != nil {

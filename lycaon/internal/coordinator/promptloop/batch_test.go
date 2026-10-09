@@ -22,7 +22,7 @@ func TestToolContextForCallPreservesCompiledSurface(t *testing.T) {
 	}}
 	base := tools.ToolContext{
 		EditorReadBases:      tools.NewAgentReadBases(map[string]int64{"document": 7}),
-		TurnSurfaceID:        tools.SurfaceImplementInvestigate,
+		TurnSurfaceID:        toolcontract.SurfaceImplementInvestigate,
 		TurnToolPlan:         toolsurface.Compile([]string{"read"}, []string{"write", "verify"}),
 		TurnOfferedToolNames: []string{"read"},
 		TurnWritePinRootID:   "root-2",
