@@ -95,7 +95,7 @@ func TestImplementDefaultParitySmoke(t *testing.T) {
 		t.Fatalf("main.go = %q want TODO comment after worker", string(data))
 	}
 
-	run, err := h.WorkflowMgr.GetActive(ctx, sess.ID)
+	run, err := h.WorkflowMgr.Store.Runs.ActiveBySession(ctx, sess.ID)
 	testutil.FailErr(t, "h.WorkflowMgr.GetActive failed", err)
 	if run == nil || run.WorkflowID != "implement" {
 		t.Fatalf("expected ambient implement run, got %+v", run)

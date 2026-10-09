@@ -47,11 +47,9 @@ func TestStateQueryReturnsVars(t *testing.T) {
 		testutil.FailErr(t, "store.UpdateVars failed", err)
 	}
 
-	raw, err := toolReg.Run(context.Background(), "state_query", map[string]any{"path": "plan.status"}, tools.ToolContext{
-		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}},
-			ActiveRootID: "r1"},
-		Identity: tools.InvocationIdentity{SessionID: sess.ID},
-	})
+	raw, err := toolReg.Run(context.Background(), "state_query", map[string]any{"path": "plan.status"}, tools.ToolContext{Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}},
+		ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{SessionID: sess.ID}})
 	testutil.FailErr(t, "toolReg.Run failed", err)
 	if raw == "" || raw == "{}" {
 		t.Fatalf("unexpected response: %s", raw)

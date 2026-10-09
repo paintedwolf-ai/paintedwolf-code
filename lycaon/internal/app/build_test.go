@@ -158,7 +158,7 @@ func TestBuildPreservesExplicitSessionLimits(t *testing.T) {
 	testdbseed.InsertProjectRoot(t, app.DB, testdbseed.DefaultProjectID, t.TempDir())
 	sess, err := app.SessionMgr.Chats.CreateForProject(t.Context(), testdbseed.DefaultProjectID, wire.SessionPostureBuild)
 	testutil.FailErr(t, "create session with explicit limits", err)
-	allowed, reason, err := app.CoordinatorRuntime.CoordinatorLoop().Coordinator.Runtime.CoordinatorLoop().ShouldLoopWake(t.Context(), sess.ID, anchor.PhaseAdvanced)
+	allowed, reason, err := app.CoordinatorRuntime.CoordinatorLoop().Admission.ShouldLoopWake(t.Context(), sess.ID, anchor.PhaseAdvanced)
 	testutil.FailErr(t, "evaluate workflow phase wake", err)
 	if allowed || reason != "feature_disabled" {
 		t.Fatalf("workflow wake allowed=%v reason=%q; explicit disabled loop was replaced by live settings", allowed, reason)

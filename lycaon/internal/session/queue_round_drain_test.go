@@ -36,7 +36,7 @@ func TestQueuedPromptDispatchesWhenRoundCompletesAfterTurnEndCheck(t *testing.T)
 	}
 
 	workers.jobs[0].Status = api.WorkerStatusComplete
-	mgr.Runner.Coordinator.CoordinatorLoop().DrainPending(ctx, sess.ID)
+	mgr.Runner.Coordinator.CoordinatorLoop().Nudges.DrainPending(ctx, sess.ID)
 	mgr.Coordinator.WaitForTurns(ctx)
 
 	closed, err := mgr.Submissions.GetPromptSubmission(ctx, row.ID)
@@ -49,7 +49,7 @@ func TestQueuedPromptDispatchesWhenRoundCompletesAfterTurnEndCheck(t *testing.T)
 	}
 
 	// A later quiescence finds nothing queued and does not replay the turn.
-	mgr.Runner.Coordinator.CoordinatorLoop().DrainPending(ctx, sess.ID)
+	mgr.Runner.Coordinator.CoordinatorLoop().Nudges.DrainPending(ctx, sess.ID)
 	mgr.Coordinator.WaitForTurns(ctx)
 	msgs, err := mgr.Runner.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "get messages", err)

@@ -118,7 +118,7 @@ func (s *HarnessControl) handleHarnessTranscript(w http.ResponseWriter, r *http.
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "messages must contain 1 to 1000 rows")
 		return
 	}
-	if err := s.sessions.Transcript.AppendPlain(
+	if err := s.sessions.Runner.Transcript.AppendPlain(
 		r.Context(),
 		sessionID,
 		s.stampActiveRun(r, sessionID, req.Messages)...,
@@ -293,7 +293,7 @@ func (s *HarnessControl) handleHarnessAskUser(w http.ResponseWriter, r *http.Req
 		},
 		harnessToolResultMessage(toolMsgID, assistantID, toolCallID, "ask_user", pendingBody),
 	}
-	if err := s.sessions.Transcript.AppendPlain(r.Context(), sessionID, s.stampActiveRun(r, sessionID, msgs)...); err != nil {
+	if err := s.sessions.Runner.Transcript.AppendPlain(r.Context(), sessionID, s.stampActiveRun(r, sessionID, msgs)...); err != nil {
 		s.responses.InternalError(w, r, err)
 		return
 	}

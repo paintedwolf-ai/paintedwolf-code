@@ -56,7 +56,8 @@ func newRoutesFixture(t *testing.T, orchestrator orchestration.Orchestrator) *ro
 	testutil.FailErr(t, "create project", err)
 
 	deps := apitest.Dependencies(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: sessions, Projects: projects}})
-	deps.Workflow.Workflows.BlueprintGet = deps.Workflow.Blueprints
+	deps.Workflow.Workflows.Blueprints.Getter = deps.Workflow.Blueprints
+	deps.Workflow.Workflows.Presentation.BlueprintGetter = deps.Workflow.Blueprints
 	view := sessionview.New(sessionview.Projector{
 		Workflows: deps.Workflow.Workflows, Store: sessions, Sessions: deps.Core.Sessions, Projects: projects,
 	})

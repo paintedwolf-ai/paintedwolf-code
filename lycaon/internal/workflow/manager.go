@@ -147,6 +147,7 @@ func NewManager(store *runstate.Repository, sessions session.Store, manifests *w
 		store.Transactions.SetSessionMutations(mutations)
 	}
 
+	manager.Policy.Blueprints = manager.Blueprints
 	return manager
 }
 

@@ -154,12 +154,10 @@ func TestAutoAdvanceMarkerLifecycle(t *testing.T) {
 
 func runAdvanceTool(t *testing.T, reg *tools.DefaultRegistry, projectDir string) workflowphases.AdvanceToolResult {
 	t.Helper()
-	out, err := reg.Run(context.Background(), "workflow_advance", map[string]any{}, tools.ToolContext{
-		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: projectDir, IsPrimary: true}},
-			ActiveRootID: "r1"},
+	out, err := reg.Run(context.Background(), "workflow_advance", map[string]any{}, tools.ToolContext{Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: projectDir, IsPrimary: true}},
+		ActiveRootID: "r1"},
 		Identity: tools.InvocationIdentity{Agent: "coordinator",
-			SessionID: "sess-1"},
-	})
+			SessionID: "sess-1"}})
 	if err != nil {
 		t.Fatalf("workflow_advance returned bare error: %v", err)
 	}
@@ -232,13 +230,11 @@ func TestAdvanceMarkerConsumeReplaysThroughCommandJournal(t *testing.T) {
 
 func runAdvanceToolWithCallID(t *testing.T, reg *tools.DefaultRegistry, projectDir, toolCallID string) workflowphases.AdvanceToolResult {
 	t.Helper()
-	out, err := reg.Run(context.Background(), "workflow_advance", map[string]any{}, tools.ToolContext{
-		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: projectDir, IsPrimary: true}},
-			ActiveRootID: "r1"},
+	out, err := reg.Run(context.Background(), "workflow_advance", map[string]any{}, tools.ToolContext{Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: projectDir, IsPrimary: true}},
+		ActiveRootID: "r1"},
 		Identity: tools.InvocationIdentity{Agent: "coordinator",
 			SessionID:  "sess-1",
-			ToolCallID: toolCallID},
-	})
+			ToolCallID: toolCallID}})
 	if err != nil {
 		t.Fatalf("workflow_advance returned bare error: %v", err)
 	}

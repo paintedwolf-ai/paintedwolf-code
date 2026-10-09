@@ -2,14 +2,13 @@ package loopwake
 
 import (
 	"context"
-	"sync"
-	"testing"
-	"time"
-
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/kick"
 	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/pkg/api"
+	"sync"
+	"testing"
+	"time"
 )
 
 // budgetRequestEnvelope drives an asynchronous host turn for jobID.
@@ -46,7 +45,7 @@ func TestWaitForAsyncTurnsForceCancelsAndBlocksUntilExit(t *testing.T) {
 	}
 	engine.SetDeps(deps)
 
-	engine.NudgeWorkerBudgetRequested(context.Background(), "s1", "job-1", budgetRequestEnvelope("job-1"))
+	engine.Nudges.NudgeWorkerBudgetRequested(context.Background(), "s1", "job-1", budgetRequestEnvelope("job-1"))
 
 	select {
 	case <-started:
@@ -59,7 +58,7 @@ func TestWaitForAsyncTurnsForceCancelsAndBlocksUntilExit(t *testing.T) {
 		defer close(waitDone)
 		ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 		defer cancel()
-		engine.WaitForAsyncTurns(ctx)
+		engine.Turns.WaitForAsyncTurns(ctx)
 	}()
 
 	select {
@@ -106,7 +105,7 @@ func TestForgetSessionCancelsAndDrainsInFlightAsyncTurn(t *testing.T) {
 	}
 	engine.SetDeps(deps)
 
-	engine.NudgeWorkerBudgetRequested(context.Background(), "s1", "job-1", budgetRequestEnvelope("job-1"))
+	engine.Nudges.NudgeWorkerBudgetRequested(context.Background(), "s1", "job-1", budgetRequestEnvelope("job-1"))
 
 	select {
 	case <-started:
@@ -147,8 +146,8 @@ func TestForgetSessionCancelsAndDrainsInFlightAsyncTurn(t *testing.T) {
 	}
 
 	for name, state := range map[string]*sync.Map{
-		"pending":       &engine.pendingQueues,
-		"prompt active": &engine.promptActive,
+		"pending":       &engine.Nudges.pendingQueues,
+		"prompt active": &engine.Turns.promptActive,
 	} {
 		if _, ok := state.Load("s1"); ok {
 			t.Fatalf("%s state repopulated by the in-flight turn's own cleanup after ForgetSession", name)
@@ -175,7 +174,7 @@ func TestSpawnAsyncTurnPanicDoesNotLeakRegistryOrWaitGroup(t *testing.T) {
 	}
 	engine.SetDeps(deps)
 
-	engine.NudgeWorkerBudgetRequested(context.Background(), "s1", "job-1", budgetRequestEnvelope("job-1"))
+	engine.Nudges.NudgeWorkerBudgetRequested(context.Background(), "s1", "job-1", budgetRequestEnvelope("job-1"))
 
 	select {
 	case <-started:
@@ -185,14 +184,14 @@ func TestSpawnAsyncTurnPanicDoesNotLeakRegistryOrWaitGroup(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	engine.WaitForAsyncTurns(ctx)
+	engine.Turns.WaitForAsyncTurns(ctx)
 	if ctx.Err() != nil {
 		t.Fatal("WaitForAsyncTurns timed out — a panicking turn leaked its WaitGroup slot")
 	}
 
-	engine.asyncTurnsMu.Lock()
-	_, leaked := engine.asyncTurnsBySession["s1"]
-	engine.asyncTurnsMu.Unlock()
+	engine.Turns.asyncTurnsMu.Lock()
+	_, leaked := engine.Turns.asyncTurnsBySession["s1"]
+	engine.Turns.asyncTurnsMu.Unlock()
 	if leaked {
 		t.Fatal("panicking turn left a stale entry in the per-session async-turn registry")
 	}

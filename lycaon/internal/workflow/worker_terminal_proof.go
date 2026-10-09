@@ -9,7 +9,6 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-
 // RecordBoardOrientReady stamps the board orientation gate.
 func (m *Fanout) RecordBoardOrientReady(ctx context.Context, sessionID, injectKey string) error {
 	if m == nil || strings.TrimSpace(sessionID) == "" {

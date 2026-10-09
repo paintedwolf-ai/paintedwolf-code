@@ -2,9 +2,6 @@ package toolfixture
 
 import (
 	"context"
-	"path/filepath"
-	"testing"
-
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/blueprint"
@@ -57,6 +54,8 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/workflowfixture"
+	"path/filepath"
+	"testing"
 )
 
 func registerCatalogToolsOnto(t *testing.T, reg *tools.DefaultRegistry) {
@@ -66,7 +65,7 @@ func registerCatalogToolsOnto(t *testing.T, reg *tools.DefaultRegistry) {
 		contractcheck.FailErr(t, "parse.RegisterParseTools failed", err)
 	}
 	delegationStore := delegation.NewMemoryStore()
-	delegationMgr := delegation.NewManager(delegationStore, worker.NewInMemoryQueue(2), session.NewHost(store.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry()), nil)
+	delegationMgr := delegation.NewManager(delegationStore, worker.NewInMemoryQueue(2), session.NewManager(store.NewMemory(), nil, tools.NewStubRegistry(), settings.DefaultSessionLimits()), nil)
 	if err := delegation.RegisterDelegationTools(reg, delegationMgr); err != nil {
 		contractcheck.FailErr(t, "delegation.RegisterDelegationTools failed", err)
 	}
@@ -199,14 +198,16 @@ func ContractServeBootRegistry(t *testing.T) *tools.DefaultRegistry {
 
 	agents := orchestration.NewMemoryAgentRegistry()
 	contractcheck.FailErr(t, "LoadRequiredAgentRegistry", orchestration.LoadRequiredAgentRegistry(context.Background(), agents))
+	sessMgr := session.NewManager(store.NewMemory(), nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
 	if err := worker.RegisterTaskTool(rt.Registry, worker.TaskToolDeps{
-		Queue:   worker.NewInMemoryQueue(2),
-		Agents:  agents,
-		Workers: worker.DefaultWorkersConfig(),
+		Sessions: sessMgr,
+		Queue:    worker.NewInMemoryQueue(2),
+		Agents:   agents,
+		Workers:  worker.DefaultWorkersConfig(),
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := loopwake.RegisterWaitTool(rt.Registry, loopwake.NewLoopEngine(), loopwake.WaitToolDeps{}); err != nil {
+	if err := loopwake.RegisterWaitTool(rt.Registry, loopwake.NewLoopEngine().Subscriptions, loopwake.WaitToolDeps{}); err != nil {
 		contractcheck.FailErr(t, "loopwake.RegisterWaitTool failed", err)
 	}
 	renderBudgets, err := browser.LoadRenderBudgets()
@@ -246,7 +247,7 @@ func ContractServeBootRegistry(t *testing.T) *tools.DefaultRegistry {
 	}
 	memStore := store.NewMemory()
 	if err := native.RegisterSurfaceNoteTool(rt.Registry, reporttools.SurfaceNoteDeps{
-		Ledger: session.NewHost(memStore, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry()).Verification.Evidence,
+		Ledger: session.NewManager(memStore, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits()).CloseoutEvidence(),
 		Messages: func(ctx context.Context, sessionID string) ([]api.Message, error) {
 			return memStore.GetMessages(ctx, sessionID)
 		},

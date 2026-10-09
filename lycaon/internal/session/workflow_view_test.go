@@ -214,7 +214,8 @@ func TestToolpolicyEngineDepsWiresWorkflowView(t *testing.T) {
 	mgr.SetWorkflowDomains(&WorkflowDomains{Runs: workflowFixture2, Policy: workflowFixture2, Ambient: workflowFixture2, Blueprints: workflowFixture2, Batch: workflowFixture2, Slash: workflowFixture2, Requests: workflowFixture2, Feedback: workflowFixture2, Transcript: workflowFixture2, Asks: workflowFixture2, Fanout: workflowFixture2, Phases: workflowFixture2, Reports: workflowFixture2, Recovery: workflowFixture2, Cleanup: workflowFixture2})
 	sess := &api.Session{ID: "s1", Posture: api.SessionPostureSpec}
 
-	eval := toolpolicy.BuildEvalContext(context.Background(), mgr.Coordinator.Guards.PolicyDependencies(), sess, "read_file", map[string]any{"path": "x"})
+	eval, err := toolpolicy.BuildEvalContext(context.Background(), mgr.Coordinator.Guards.PolicyDependencies(), sess, "read_file", map[string]any{"path": "x"})
+	testutil.FailErr(t, "capture tool policy", err)
 	if eval.Phase != "phase-a" {
 		t.Fatalf("phase = %q want phase-a", eval.Phase)
 	}

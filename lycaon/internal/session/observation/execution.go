@@ -101,8 +101,8 @@ func (m *Service) executionBlockers(ctx context.Context, s store.ExecutionSessio
 	if s.Status == api.SessionStatusBusy || s.Status == api.SessionStatusPreparing {
 		add("session", s.ID)
 	}
-	loop := m.loop
-	if loop.PromptExecutionActive(s.ID) || (loop.HasPendingLoopWakes(s.ID) && !m.turns.HostTurnBlocked(ctx, s.ID)) {
+	admission, nudges := m.admission, m.nudges
+	if admission.PromptExecutionActive(s.ID) || (nudges.HasPendingLoopWakes(s.ID) && !m.turns.HostTurnBlocked(ctx, s.ID)) {
 		add("continuation", s.ID)
 	}
 	idle, err := workeroutcomes.ParentSessionWorkerCycleIdle(ctx, m.workers, s.ProjectID, s.ID, "")

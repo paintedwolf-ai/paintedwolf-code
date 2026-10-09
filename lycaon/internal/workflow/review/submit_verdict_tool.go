@@ -384,13 +384,6 @@ func scanGroupRejectDetails(check ScanGroupCheck) map[string]any {
 	}
 }
 
-func verdictInvalidDetails(outline string, err error) map[string]any {
-	return map[string]any{
-		"reason":        err.Error(),
-		"expected_call": describeVerdictCall(outline),
-	}
-}
-
 // describeVerdictCall renders the call a review phase accepts from its
 // verdict outline; the offered submit_verdict schema carries the types.
 func describeVerdictCall(outline string) string {

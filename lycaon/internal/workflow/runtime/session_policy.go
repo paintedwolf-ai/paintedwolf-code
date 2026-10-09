@@ -312,13 +312,18 @@ func (m *SessionPolicy) AssertRunnable(ctx context.Context, runID string) error 
 	}
 }
 
+type PolicyBlueprints interface {
+	PolicyContent(context.Context, string, string) (string, error)
+}
+
 type SessionPolicy struct {
-	Runs      runstate.RunsRepository
-	Resolver  *workflowcatalog.Resolver
-	Sessions  Sessions
-	Registry  *conditions.ConditionRegistry
-	Gates     workflowgates.GateEvaluator
-	Approvals ApprovalState
+	Blueprints PolicyBlueprints
+	Runs       runstate.RunsRepository
+	Resolver   *workflowcatalog.Resolver
+	Sessions   Sessions
+	Registry   *conditions.ConditionRegistry
+	Gates      workflowgates.GateEvaluator
+	Approvals  ApprovalState
 }
 
 func (m *SessionPolicy) gateEvaluator() workflowgates.GateEvaluator {

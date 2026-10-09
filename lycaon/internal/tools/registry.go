@@ -110,7 +110,7 @@ type ToolInvocationOut struct {
 type WorkerWriteCoordinator interface {
 	BeforeWorkerWrite(ctx context.Context, tctx ToolContext, relPath string) error
 	AfterWorkerWrite(ctx context.Context, tctx ToolContext, relPath string)
-	ReleaseWorkerReservations(ctx context.Context, parentSessionID, jobID string) error
+	ReleaseReservations(ctx context.Context, parentSessionID, jobID string) error
 	// EnsureBranch prepares a write worker's private branch.
 	EnsureBranch(ctx context.Context, tctx ToolContext) (ToolContext, error)
 }

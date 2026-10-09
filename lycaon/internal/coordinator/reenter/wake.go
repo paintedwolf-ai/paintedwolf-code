@@ -35,5 +35,5 @@ func NudgeOnManifestReenter(
 	if hasDef && anchor.SameInform(def.OnReenter.InjectKick, anchor.WorkerTaskFinished) {
 		return
 	}
-	n.Coordinator.Runtime.CoordinatorLoop().Nudge(ctx, sessionID, anchor.LegFinished, anchor.LegFinished, legID, anchor.Envelope{})
+	n.NudgeCoordinatorLoop(ctx, sessionID, anchor.LegFinished, anchor.LegFinished, legID, anchor.Envelope{})
 }

@@ -83,7 +83,7 @@ func TestHumanInputScaffoldDeniesCoordinatorLoop(t *testing.T) {
 					Sessions: store, SessionID: sess.ID, Manifest: m, PhaseID: phase.ID,
 				})
 				contractcheck.FailErr(t, "workflowphases.ApplyPhaseOnEnter failed", err)
-				if err := wfMgr.Store.CommitState(ctx, run, dir, vars); err != nil {
+				if err := wfMgr.Store.State.CommitState(ctx, run, dir, vars); err != nil {
 					contractcheck.FailErr(t, "wfMgr.Store.CommitState failed", err)
 				}
 				if !scaffoldvars.HasPendingUserInput(vars) {

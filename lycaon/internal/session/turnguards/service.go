@@ -49,6 +49,7 @@ type WorkflowDomains struct {
 	Runs       WorkflowRuns
 }
 type WorkflowPolicy interface {
+	PolicySnapshot(context.Context, string) (toolpolicy.WorkflowSnapshot, error)
 	ActiveCloseoutGateState(ctx context.Context, sessionID string) workflowfacts.WorkflowCloseoutGateState
 	ActiveManifest(ctx context.Context, sessionID string) (workflowfacts.ActiveWorkflowManifest, bool)
 	ActivePhaseGuardState(ctx context.Context, sessionID string) workflowfacts.WorkflowPhaseGuardState
@@ -107,9 +108,9 @@ func (m *Service) SetProgress(progress Progress)                 { m.progress = 
 func (m *Service) SetWorkspaceCheck(check workercompletion.WorkspaceChangeChecker) {
 	m.workspaceCheck = check
 }
-func (m *Service) SetRepoProvider(provider repoinfo.Provider) { m.repoProvider = provider }
+func (m *Service) SetRepoProvider(provider repoinfo.Provider)     { m.repoProvider = provider }
 func (m *Service) SetToolMetadata(lister tools.ToolProfileLister) { m.toolLister = lister }
-func (m *Service) SetRules(rules toolpolicy.RuleEvaluator)    { m.rules = rules }
+func (m *Service) SetRules(rules toolpolicy.RuleEvaluator)        { m.rules = rules }
 func (m *Service) SetRejects(formatter *guidance.StaticRejectFormatter, toolFormatter *guidance.ToolRejectFormatter) {
 	m.Rejects = formatter
 	m.toolRejectFormatter = toolFormatter

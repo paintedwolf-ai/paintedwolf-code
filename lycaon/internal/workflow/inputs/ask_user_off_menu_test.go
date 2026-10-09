@@ -41,11 +41,9 @@ func openChoiceAsk(t *testing.T, fx *askUserFixture, ctx context.Context, toolCa
 		"prompt":        "Which capability first?",
 		"response_type": "single_choice",
 		"options":       []any{"IOC reputation", "Log triage"},
-	}, tools.ToolContext{
-		Identity: tools.InvocationIdentity{SessionID: fx.sess.ID,
-			Agent:      orchestration.ProfileCoordinator,
-			ToolCallID: toolCallID},
-	})
+	}, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: fx.sess.ID,
+		Agent:      orchestration.ProfileCoordinator,
+		ToolCallID: toolCallID}})
 	testutil.FailErr(t, "ask_user", err)
 	var body map[string]any
 	testutil.FailErr(t, "unmarshal", json.Unmarshal([]byte(out), &body))

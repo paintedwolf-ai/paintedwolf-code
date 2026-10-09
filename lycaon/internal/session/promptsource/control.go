@@ -76,7 +76,7 @@ func (m *Control) ParkBlockedLiveCommands(ctx context.Context, sessionID string)
 		return false
 	}
 	loop := m.Runtime.CoordinatorLoop()
-	loop.EnterSleep(
+	loop.Waits.EnterSleep(
 		ctx,
 		sessionID,
 		time.Now().UTC().Add(time.Duration(loopwake.DefaultWaitSeconds)*time.Second),
@@ -85,10 +85,10 @@ func (m *Control) ParkBlockedLiveCommands(ctx context.Context, sessionID string)
 		handles,
 		loopwake.SleepMoverHost,
 	)
-	loop.MarkWaitCalled(sessionID)
+	loop.Waits.MarkWaitCalled(sessionID)
 	// Completion between the job snapshot and EnterSleep needs an explicit wake.
 	if !m.Processes.Background.HasRunningHandles(sessionID, handles) {
-		loop.NudgeProcessFinished(ctx, sessionID, handles[0], anchor.Envelope{})
+		loop.Nudges.NudgeProcessFinished(ctx, sessionID, handles[0], anchor.Envelope{})
 	}
 	return true
 }

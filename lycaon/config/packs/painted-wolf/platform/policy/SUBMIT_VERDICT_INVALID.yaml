@@ -7,15 +7,16 @@ requires:
     - tool
   facts:
     - paintedwolf.rejection_code
+    - paintedwolf.offenders_sample
     - paintedwolf.review_expected_call
     - paintedwolf.review_reason
 when: paintedwolf.rejection_code == "SUBMIT_VERDICT_INVALID"
 effect: block
 copy:
   what: "The verdict payload does not match the active review phase contract."
-  cause: "{{ paintedwolf.review_reason }}"
+  cause: "{{ paintedwolf.review_reason }}. Affected fields or stamped claims: {{ paintedwolf.offenders_sample }}."
   why: "The host records only the declared verdict schema and top-level citation channels."
-  fix: "Use the current schema: {{ paintedwolf.review_expected_call }}. Keep adjudication citations top-level and required claim or coverage citations within their entries; evidence-handle objects use handle, not evidence."
+  fix: "Use the current schema: {{ paintedwolf.review_expected_call }}. Copy stamped claim IDs verbatim; the host feedback lists missing_claim_ids and expected_claim_ids. Correct omitted or misspelled claim IDs; do not register a follow-up question to repair them. Keep adjudication citations top-level and required claim or coverage citations within their entries; evidence-handle objects use handle, not evidence."
   instead: "Correct only the invalid fields and resubmit the current expected call with observed citations."
 x-paintedwolf-category: recoverable
 x-paintedwolf-severity: error
@@ -26,4 +27,14 @@ x-paintedwolf-scenarios:
       review_reason: 'verdict has undeclared field(s): cited_evidence'
       review_expected_call: 'submit_verdict(verdict={verdict: CHALLENGED}, cited_evidence=[{"handle":"<observed-handle>"}], cited_urls=["<observed-url>"])'
     expect_contains: ['Code: SUBMIT_VERDICT_INVALID', 'cited_evidence', 'expected']
+  - id: stamped_claim_missing
+    vars:
+      review_reason: claim_outcome_required
+      offenders_sample: secret-gates-hold
+      review_expected_call: 'submit_verdict(verdict={verdict: CHALLENGED, challenges: [...]})'
+    expect_contains:
+      - 'Code: SUBMIT_VERDICT_INVALID'
+      - 'Affected fields or stamped claims: secret-gates-hold'
+      - 'Copy stamped claim IDs verbatim'
+      - 'do not register a follow-up question'
 x-paintedwolf-emit: guard:workflow

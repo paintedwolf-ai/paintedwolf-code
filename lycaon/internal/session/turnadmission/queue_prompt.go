@@ -57,12 +57,12 @@ func (m *Service) RoundComplete(ctx context.Context, sessionID string) bool {
 	if m == nil {
 		return true
 	}
-	loop := m.loop
-	if loop == nil {
+	nudges, cycles := m.nudges, m.cycles
+	if nudges == nil || cycles == nil {
 		return true
 	}
-	if loop.HasPendingLoopWakes(sessionID) && !m.Turns.HostTurnBlocked(ctx, sessionID) {
+	if nudges.HasPendingLoopWakes(sessionID) && !m.Turns.HostTurnBlocked(ctx, sessionID) {
 		return false
 	}
-	return loop.WorkerCycleIsIdle(ctx, sessionID)
+	return cycles.WorkerCycleIsIdle(ctx, sessionID)
 }

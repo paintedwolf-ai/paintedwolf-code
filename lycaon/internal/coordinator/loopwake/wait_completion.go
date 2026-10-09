@@ -1,13 +1,10 @@
 package loopwake
 
 import (
-	"context"
 	"encoding/json"
 	"strings"
-	"time"
 
 	awaitstore "github.com/lycaon/lycaon/internal/await"
-	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -57,45 +54,4 @@ func toolResultStatus(content string) string {
 		return ""
 	}
 	return strings.TrimSpace(result.Status)
-}
-
-// ParkForPendingUserInput waits for feedback or the ask deadline.
-func (l *LoopEngine) ParkForPendingUserInput(ctx context.Context, sessionID, reason string) {
-	if l == nil {
-		return
-	}
-	sessionID = strings.TrimSpace(sessionID)
-	if sessionID == "" || !l.sessionHasPendingUserInput(ctx, sessionID) {
-		return
-	}
-	reason = strings.TrimSpace(reason)
-	if reason == "" {
-		reason = "waiting for user ask"
-	}
-	until := l.pendingUserInputWaitDeadline(ctx, sessionID)
-	// The timer bounds the park; user input ends it.
-	l.EnterSleep(ctx, sessionID, until, reason, []WaitTrigger{WaitTriggerTimer}, nil, SleepMoverUser)
-	l.MarkWaitCalled(sessionID)
-}
-
-// ParkForHostObligation waits for the current host-held phase.
-func (l *LoopEngine) ParkForHostObligation(ctx context.Context, sessionID string) {
-	if l == nil {
-		return
-	}
-	sessionID = strings.TrimSpace(sessionID)
-	if sessionID == "" || !l.sessionHostObligationHeld(ctx, sessionID) {
-		return
-	}
-	overlayPromoteDue := l.overlayPromoteDue(ctx, sessionID, anchor.Envelope{})
-	l.EnterSleep(
-		ctx,
-		sessionID,
-		time.Now().UTC().Add(l.sessionLimits(ctx, sessionID).CoordinatorMaxSleep()),
-		l.hostObligationParkReason(ctx, sessionID),
-		HostObligationWaitTriggers(overlayPromoteDue),
-		nil,
-		SleepMoverHost,
-	)
-	l.MarkWaitCalled(sessionID)
 }

@@ -67,13 +67,13 @@ func wireImplementConvergenceHooks(t *testing.T, mgr *session.Host, wfMgr *workf
 			}
 		}
 		if strings.TrimSpace(previousPhase) == "" && strings.TrimSpace(newPhase) != "" {
-			mgr.Coordinator.Runtime.CoordinatorLoop().Nudge(ctx, sessionID, anchor.PhaseAdvanced, anchor.PhaseAdvanced, "", anchor.Envelope{})
+			mgr.Coordinator.Runtime.CoordinatorLoop().Nudges.Nudge(ctx, sessionID, anchor.PhaseAdvanced, anchor.PhaseAdvanced, "", anchor.Envelope{})
 			return
 		}
 		if strings.TrimSpace(previousPhase) != strings.TrimSpace(newPhase) {
 			return
 		}
-		mgr.Coordinator.Runtime.CoordinatorLoop().Nudge(ctx, sessionID, anchor.PhaseAdvanced, anchor.PhaseAdvanced, "", anchor.Envelope{})
+		mgr.Coordinator.Runtime.CoordinatorLoop().Nudges.Nudge(ctx, sessionID, anchor.PhaseAdvanced, anchor.PhaseAdvanced, "", anchor.Envelope{})
 	}
 	wfMgr.Phases.PhaseEnterHook = func(ctx context.Context, rc *workflowphases.RunContext, def workflowdef.PhaseDef) {
 		if rc == nil {
@@ -183,7 +183,7 @@ func TestShouldLoopWakeDeniesHumanApprovalAwaiting(t *testing.T) {
 	vars = runstate.StampHumanApprovalPhase(vars, &workflowdef.HumanApprovalConfig{}, run.BlueprintPath)
 	vars = runstate.SetHumanApprovalReady(vars, true)
 	testutil.FailErr(t, "UpdateVars", fix.wfMgr.Store.State.UpdateVars(ctx, run, t.TempDir(), vars))
-	allow, reason, err := fix.mgr.Coordinator.Runtime.CoordinatorLoop().ShouldLoopWake(ctx, fix.sess.ID, anchor.LegFinished)
+	allow, reason, err := fix.mgr.Coordinator.Runtime.CoordinatorLoop().Admission.ShouldLoopWake(ctx, fix.sess.ID, anchor.LegFinished)
 	testutil.FailErr(t, "fix.mgr.ShouldLoopWake failed", err)
 	if allow {
 		t.Fatal("expected deny while human approval is awaiting")
@@ -204,7 +204,7 @@ func TestShouldLoopWakeIgnoresApprovePhaseName(t *testing.T) {
 	if err := fix.wfMgr.Store.State.Update(ctx, run); err != nil {
 		testutil.FailErr(t, "fix.wfMgr.Store.Update failed", err)
 	}
-	allow, reason, err := fix.mgr.Coordinator.Runtime.CoordinatorLoop().ShouldLoopWake(ctx, fix.sess.ID, anchor.LegFinished)
+	allow, reason, err := fix.mgr.Coordinator.Runtime.CoordinatorLoop().Admission.ShouldLoopWake(ctx, fix.sess.ID, anchor.LegFinished)
 	testutil.FailErr(t, "fix.mgr.ShouldLoopWake failed", err)
 	if reason == "approve_phase" || reason == "human_approval_awaiting" {
 		t.Fatalf("phase name must not deny, reason=%q", reason)
@@ -220,9 +220,9 @@ func TestShouldLoopWakeDeniesWhenBusy(t *testing.T) {
 	if err := fix.store.SetSessionStatus(ctx, fix.sess.ID, wire.SessionStatusBusy); err != nil {
 		testutil.FailErr(t, "fix.store.SetSessionStatus failed", err)
 	}
-	finishExecution := fix.mgr.Runner.Coordinator.CoordinatorLoop().BeginPromptExecution(t.Context(), fix.sess.ID)
+	finishExecution := fix.mgr.Runner.Coordinator.CoordinatorLoop().Admission.BeginPromptExecution(t.Context(), fix.sess.ID)
 	defer finishExecution()
-	allow, reason, err := fix.mgr.Coordinator.Runtime.CoordinatorLoop().ShouldLoopWake(ctx, fix.sess.ID, anchor.LegFinished)
+	allow, reason, err := fix.mgr.Coordinator.Runtime.CoordinatorLoop().Admission.ShouldLoopWake(ctx, fix.sess.ID, anchor.LegFinished)
 	testutil.FailErr(t, "fix.mgr.ShouldLoopWake failed", err)
 	if allow {
 		t.Fatal("expected deny while busy")
@@ -241,7 +241,7 @@ func TestShouldLoopWakeRespectsBudget(t *testing.T) {
 	if run == nil {
 		t.Fatal("missing run")
 	}
-	fix.mgr.Coordinator.Runtime.CoordinatorLoop().ResetBudget(run.ID)
+	fix.mgr.Coordinator.Runtime.CoordinatorLoop().Admission.ResetBudget(run.ID)
 	if !fix.mgr.Runner.Coordinator.CoordinatorLoop().TryConsumeBudgetForTest(ctx, fix.sess.ID, run.ID) {
 		t.Fatal("expected first consume")
 	}
@@ -265,7 +265,7 @@ func TestShouldLoopWakeDeniesPendingDecision(t *testing.T) {
 	if err := fix.wfMgr.Store.State.UpdateVars(ctx, run, fix.sess.WorkspacePath, vars); err != nil {
 		testutil.FailErr(t, "fix.wfMgr.Store.UpdateVars failed", err)
 	}
-	allow, reason, err := fix.mgr.Coordinator.Runtime.CoordinatorLoop().ShouldLoopWake(ctx, fix.sess.ID, anchor.LegFinished)
+	allow, reason, err := fix.mgr.Coordinator.Runtime.CoordinatorLoop().Admission.ShouldLoopWake(ctx, fix.sess.ID, anchor.LegFinished)
 	testutil.FailErr(t, "fix.mgr.ShouldLoopWake failed", err)
 	if allow {
 		t.Fatal("expected deny with pending decision")
@@ -281,9 +281,9 @@ func TestLoopDefersUntilIdle(t *testing.T) {
 	if err := fix.store.SetSessionStatus(ctx, fix.sess.ID, wire.SessionStatusBusy); err != nil {
 		testutil.FailErr(t, "fix.store.SetSessionStatus failed", err)
 	}
-	finishExecution := fix.mgr.Runner.Coordinator.CoordinatorLoop().BeginPromptExecution(t.Context(), fix.sess.ID)
+	finishExecution := fix.mgr.Runner.Coordinator.CoordinatorLoop().Admission.BeginPromptExecution(t.Context(), fix.sess.ID)
 	defer finishExecution()
-	fix.mgr.Coordinator.Runtime.CoordinatorLoop().Nudge(ctx, fix.sess.ID, anchor.LegFinished, anchor.LegFinished, "leg-1", anchor.Envelope{})
+	fix.mgr.Coordinator.Runtime.CoordinatorLoop().Nudges.Nudge(ctx, fix.sess.ID, anchor.LegFinished, anchor.LegFinished, "leg-1", anchor.Envelope{})
 	if _, ok := fix.mgr.Runner.Coordinator.CoordinatorLoop().PendingForTest(fix.sess.ID); !ok {
 		t.Fatal("expected deferred loop wake")
 	}
@@ -291,7 +291,7 @@ func TestLoopDefersUntilIdle(t *testing.T) {
 		testutil.FailErr(t, "fix.store.SetSessionStatus failed", err)
 	}
 	finishExecution()
-	fix.mgr.Runner.Coordinator.CoordinatorLoop().DrainPending(ctx, fix.sess.ID)
+	fix.mgr.Runner.Coordinator.CoordinatorLoop().Nudges.DrainPending(ctx, fix.sess.ID)
 	testutil.WaitFor(t, 3*time.Second, func() bool {
 		msgs, err := fix.store.GetMessages(ctx, fix.sess.ID)
 		if err != nil {
@@ -608,7 +608,7 @@ func TestLegFinishedQueuesKickAndAutoPrompts(t *testing.T) {
 	}); err != nil {
 		testutil.FailErr(t, "append leg summary", err)
 	}
-	fix.mgr.Coordinator.Runtime.CoordinatorLoop().Nudge(ctx, fix.sess.ID, anchor.LegFinished, anchor.LegFinished, "leg-1", anchor.Envelope{
+	fix.mgr.Coordinator.Runtime.CoordinatorLoop().Nudges.Nudge(ctx, fix.sess.ID, anchor.LegFinished, anchor.LegFinished, "leg-1", anchor.Envelope{
 		CompletedAt: autoContinuePtrTime(time.Now().UTC()),
 	})
 

@@ -37,6 +37,12 @@ Scope is rechecked where the effect occurs. A model-visible schema, prompt instr
 
 ---
 
+## Prompt tool policy
+
+One prompt listing captures workflow policy facts when its first eligible tool reaches rule evaluation. The active run and scaffold variables come from one stored revision; that run's manifest is resolved once. Each tool still runs its own pre-invoke guard and rule evaluation with its own arguments and detached mutable facts. A later listing or invocation captures again unless its context already binds a coordinator turn frame, whose authority remains in effect. The listing never stores its snapshot in the session or caller context.
+
+An absent workflow and a failed state read are distinct. A failed capture cannot grant ordinary tool access. A missing blueprint retains its known path and empty content so normal rules can admit repair; other blueprint read failures propagate. The existing invalid-overlay repair exception remains limited to the declared overlay files.
+
 ## Tool lifecycle
 
 Dispatch selects one complete definition (metadata, schema, handler, contract, presentation), freezes it with the structured arguments, and opens a receipt before generic pre-invoke checks. An admitted call crosses exactly one [subsystem-owner boundary](architecture.md#subsystem-owners), and the runtime settles the receipt exactly once. Unknown or off-surface names select no definition and create no receipt; once a definition is selected, every path settles it, including a pre-invoke refusal with `invoked: false`.

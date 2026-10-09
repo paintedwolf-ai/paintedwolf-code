@@ -74,11 +74,11 @@ func TestWorkflowCompletionSettlesAfterExecutionDrains(t *testing.T) {
 			workers := &settlementWorkerQueue{}
 			workers.idle.Store(blocker != "workers")
 			mgr.SetWorkerQueue(workers)
-			loop.EnterSleep(ctx, sess.ID, time.Now().Add(time.Hour), "phase wait", loopwake.HostObligationWaitTriggers(false), nil, loopwake.SleepMoverHost)
+			loop.Waits.EnterSleep(ctx, sess.ID, time.Now().Add(time.Hour), "phase wait", loopwake.HostObligationWaitTriggers(false), nil, loopwake.SleepMoverHost)
 			unblock := func() {}
 			switch blocker {
 			case "execution":
-				unblock = loop.BeginPromptExecution(ctx, sess.ID)
+				unblock = loop.Admission.BeginPromptExecution(ctx, sess.ID)
 			case "workers":
 				unblock = func() { workers.idle.Store(true) }
 			case "session lock":
@@ -102,8 +102,8 @@ func TestWorkflowCompletionSettlesAfterExecutionDrains(t *testing.T) {
 			}
 			current, err := st.Get(ctx, sess.ID)
 			testutil.FailErr(t, "read settled session", err)
-			if current.Status != api.SessionStatusIdle || loop.IsSleeping(sess.ID) {
-				t.Fatalf("status=%q sleeping=%v", current.Status, loop.IsSleeping(sess.ID))
+			if current.Status != api.SessionStatusIdle || loop.Waits.IsSleeping(sess.ID) {
+				t.Fatalf("status=%q sleeping=%v", current.Status, loop.Waits.IsSleeping(sess.ID))
 			}
 			testutil.FailErr(t, "replay completed notification", mgr.Runner.Settlement.CompleteWorkflow(ctx, sess.ID, "finished-run"))
 			assertNoSessionIdleEvent(t, eventCh)

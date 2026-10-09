@@ -90,7 +90,7 @@ func (m *Service) Run(ctx context.Context, id string, in promptinput.Input) (res
 		return nil, err
 	}
 	defer m.Execution.ClaimTurn(sess.ProjectID, turnExecution.Turn.ID)()
-	finishPromptExecution := m.Coordinator.CoordinatorLoop().BeginPromptExecution(ctx, id)
+	finishPromptExecution := m.Coordinator.CoordinatorLoop().Admission.BeginPromptExecution(ctx, id)
 	defer finishPromptExecution()
 	ctx = workercontext.WithJob(ctx, in.WorkerJobID)
 	finalOutputID, closeoutID := "", ""
@@ -152,7 +152,7 @@ func (m *Service) Run(ctx context.Context, id string, in promptinput.Input) (res
 	m.Settlement.Begin(id, m.Guidance.PendingIDs(ctx, id)...)
 	userPrompt := strings.TrimSpace(text)
 	if !hostTurn && (strings.TrimSpace(in.Text) != "" || len(in.ArtifactIDs) > 0) {
-		m.Coordinator.CoordinatorLoop().InterruptSleep(ctx, id)
+		m.Coordinator.CoordinatorLoop().Waits.InterruptSleep(ctx, id)
 	}
 	promptFailed := true
 	defer func() {

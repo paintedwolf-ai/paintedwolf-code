@@ -32,10 +32,8 @@ func TestWorkflowUserFeedbackPending(t *testing.T) {
 	run, err := startRun(ctx, mgr, "sess-1", "feedback-tool", "1.0.0")
 	testutil.FailErr(t, "startRun failed", err)
 	_ = run
-	out, err := reg.Run(ctx, "workflow_user_feedback", map[string]any{}, tools.ToolContext{
-		Identity: tools.InvocationIdentity{Agent: "coordinator",
-			SessionID: "sess-1"},
-	})
+	out, err := reg.Run(ctx, "workflow_user_feedback", map[string]any{}, tools.ToolContext{Identity: tools.InvocationIdentity{Agent: "coordinator",
+		SessionID: "sess-1"}})
 	testutil.FailErr(t, "reg.Run failed", err)
 	if !strings.Contains(out, `"pending":true`) || !strings.Contains(out, `"phase_id":"clarify"`) {
 		t.Fatalf("out = %q", out)
@@ -51,10 +49,8 @@ func TestWorkflowUserFeedbackNotPending(t *testing.T) {
 	if err := workflowinputs.RegisterFeedbackTool(reg, mgr.Feedback); err != nil {
 		testutil.FailErr(t, "RegisterFeedbackTool failed", err)
 	}
-	out, err := reg.Run(context.Background(), "workflow_user_feedback", map[string]any{}, tools.ToolContext{
-		Identity: tools.InvocationIdentity{Agent: "coordinator",
-			SessionID: "sess-no-run"},
-	})
+	out, err := reg.Run(context.Background(), "workflow_user_feedback", map[string]any{}, tools.ToolContext{Identity: tools.InvocationIdentity{Agent: "coordinator",
+		SessionID: "sess-no-run"}})
 	testutil.FailErr(t, "reg.Run failed", err)
 	if !strings.Contains(out, `"pending":false`) {
 		t.Fatalf("out = %q", out)
@@ -67,10 +63,8 @@ func TestWorkflowUserFeedbackCoordinatorOnly(t *testing.T) {
 	if err := workflowinputs.RegisterFeedbackTool(reg, mgr.Feedback); err != nil {
 		testutil.FailErr(t, "RegisterFeedbackTool failed", err)
 	}
-	_, err := reg.Run(context.Background(), "workflow_user_feedback", map[string]any{}, tools.ToolContext{
-		Identity: tools.InvocationIdentity{Agent: "implementer",
-			SessionID: "sess-1"},
-	})
+	_, err := reg.Run(context.Background(), "workflow_user_feedback", map[string]any{}, tools.ToolContext{Identity: tools.InvocationIdentity{Agent: "implementer",
+		SessionID: "sess-1"}})
 	if err == nil || !strings.Contains(err.Error(), "coordinator") {
 		t.Fatalf("err = %v", err)
 	}

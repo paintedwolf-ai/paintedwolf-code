@@ -18,7 +18,7 @@ func (s *HarnessPreparation) harnessRequestRejected(w http.ResponseWriter, r *ht
 }
 
 func (s *HarnessPreparation) handleHarnessExecution(w http.ResponseWriter, r *http.Request) {
-	observation, err := s.sessions.ObserveExecution(r.Context(), chi.URLParam(r, "sessionID"), chi.URLParam(r, "submissionID"))
+	observation, err := s.sessions.Observations.Observe(r.Context(), chi.URLParam(r, "sessionID"), chi.URLParam(r, "submissionID"))
 	if err != nil {
 		s.harnessRequestRejected(w, r, "the execution could not be observed", err)
 		return

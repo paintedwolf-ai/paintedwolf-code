@@ -22,7 +22,7 @@ func TestComposeToolRequiresCoordinator(t *testing.T) {
 	}
 	_, err = reg.Run(context.Background(), "workflow_compose", map[string]any{
 		"manifest_yaml": "id: x\nversion: 1.0.0\nextends: plan@1.0.0\nphases:\n  - id: intake\n    next: build\n  - id: build\n    complete_when: delegation_closeout_complete\n",
-	}, tools.ToolContext{Agent: "implementer", SessionID: "s"})
+	}, tools.ToolContext{Identity: tools.InvocationIdentity{Agent: "implementer", SessionID: "s"}})
 	if err == nil || !strings.Contains(err.Error(), "coordinator") {
 		t.Fatalf("err = %v", err)
 	}

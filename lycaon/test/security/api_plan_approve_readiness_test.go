@@ -49,7 +49,7 @@ func TestApprovePlanHTTPRejectsWhenNotReady(t *testing.T) {
 	testutil.FailErr(t, "GetScaffoldVars", err)
 	vars = runstate.SetHostVar(vars, "phase_skipped.review", true)
 	run.CurrentPhase = "approve"
-	testutil.FailErr(t, "CommitState", h.WorkflowMgr.Store.CommitState(ctx, &run, sess.WorkspacePath, vars))
+	testutil.FailErr(t, "CommitState", h.WorkflowMgr.Store.State.CommitState(ctx, &run, sess.WorkspacePath, vars))
 
 	plan, err := h.BlueprintMgr.Get(ctx, run.ProjectID, run.BlueprintPath)
 	testutil.FailErr(t, "Get plan before reject", err)
@@ -151,7 +151,7 @@ func TestApprovePlanHTTPPersistsBeforeAdvanceAndWakesCoordinator(t *testing.T) {
 	if !testutil.WaitForNoFatal(promptIdleBudget, func() bool {
 		return len(h.Recording.AllRequests()) > requestCountBeforeApproval
 	}) {
-		active, activeErr := h.WorkflowMgr.GetActive(ctx, sess.ID)
+		active, activeErr := h.WorkflowMgr.Store.Runs.ActiveBySession(ctx, sess.ID)
 		testutil.FailErr(t, "get active run after approval wake", activeErr)
 		if active == nil {
 			t.Fatal("approval did not leave an active workflow")

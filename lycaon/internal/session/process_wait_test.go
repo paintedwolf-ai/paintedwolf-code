@@ -21,14 +21,14 @@ func TestCommandCompletionWakesWorkerProcessWait(t *testing.T) {
 		s.ParentSessionID = "parent"
 	}))
 	loop := mgr.Coordinator.Runtime.CoordinatorLoop()
-	loop.EnterSleep(t.Context(), sess.ID, time.Time{}, "waiting for command completion",
+	loop.Waits.EnterSleep(t.Context(), sess.ID, time.Time{}, "waiting for command completion",
 		[]loopwake.WaitTrigger{loopwake.WaitTriggerProcessDone}, []string{"command-1"}, loopwake.SleepMoverHost)
 	mgr.Processes.HandleCommandCompletion(t.Context(), bgprocess.Completion{SessionID: sess.ID, Handle: "other"})
-	if !loop.IsSleeping(sess.ID) {
+	if !loop.Waits.IsSleeping(sess.ID) {
 		t.Fatal("unrelated completion broke worker wait")
 	}
 	mgr.Processes.HandleCommandCompletion(t.Context(), bgprocess.Completion{SessionID: sess.ID, Handle: "command-1"})
-	if loop.IsSleeping(sess.ID) {
+	if loop.Waits.IsSleeping(sess.ID) {
 		t.Fatal("worker wait ignored command completion")
 	}
 }

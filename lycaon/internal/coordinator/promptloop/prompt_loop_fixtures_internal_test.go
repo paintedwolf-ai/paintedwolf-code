@@ -39,7 +39,7 @@ type frameCheckingToolPolicy struct {
 }
 
 func (p *frameCheckingToolPolicy) ListForPrompt(ctx context.Context, sess *api.Session, _ string) []tools.ToolMeta {
-	p.eval = toolpolicy.BuildEvalContext(ctx, toolpolicy.EngineDeps{}, sess, "read", nil)
+	p.eval, _ = toolpolicy.BuildEvalContext(ctx, toolpolicy.EngineDeps{}, sess, "read", nil)
 	return promptLoopFixtureTools()
 }
 

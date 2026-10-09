@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/api/httpio"
-	"github.com/lycaon/lycaon/internal/workflow"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 )
 
 // A run whose pinned version left the catalog answers with its own code, not

@@ -315,7 +315,7 @@ func (l *toolInvocations) executeToolCall(
 		runToolCtx := toolCtx
 		if presence := l.Deps.AgentPresence; presence != nil {
 			call := agentpresence.Call{SessionID: sessionID, ToolCallID: tc.ID, Tool: tc.Name}
-			runToolCtx.Presence = callPresence{ctx: runCtx, tracker: presence, call: call}
+			runToolCtx.Effects.Presence = callPresence{ctx: runCtx, tracker: presence, call: call}
 			defer presence.CallEnded(runCtx, call)
 		}
 		start := time.Now()
@@ -335,12 +335,12 @@ func (l *toolInvocations) executeToolCall(
 }
 
 func (l *toolInvocations) finalizeToolRun(ctx context.Context, sess *api.Session, run completedToolRun) (result toolInvocation) {
-	ownerInvoked := run.toolCtx.Out != nil && run.toolCtx.Out.OwnerInvoked
-	captures := toolCapturesFrom(run.toolCtx.Out)
+	ownerInvoked := run.toolCtx.Effects.Out != nil && run.toolCtx.Effects.Out.OwnerInvoked
+	captures := toolCapturesFrom(run.toolCtx.Effects.Out)
 	toolContent := run.output
 	defer func() {
-		if run.toolCtx.Out != nil {
-			result.facts = result.facts.Merge(run.toolCtx.Out.Facts)
+		if run.toolCtx.Effects.Out != nil {
+			result.facts = result.facts.Merge(run.toolCtx.Effects.Out.Facts)
 		}
 		// [OAR-PROF-10] Every returned result, including failures, crosses policy before logging or delivery.
 		if ownerInvoked || run.runErr == nil {
@@ -357,7 +357,7 @@ func (l *toolInvocations) finalizeToolRun(ctx context.Context, sess *api.Session
 			}
 		}
 		observability.LogToolInvocation(observability.ToolInvocationCapture{
-			SessionID: run.sessionID, Tool: run.call.Name, Profile: run.toolCtx.Agent,
+			SessionID: run.sessionID, Tool: run.call.Name, Profile: run.toolCtx.Identity.Agent,
 			Duration: time.Since(run.startedAt), Output: result.content, Succeeded: result.facts.Succeeded(),
 		})
 	}()
@@ -366,7 +366,7 @@ func (l *toolInvocations) finalizeToolRun(ctx context.Context, sess *api.Session
 		if trimmed := strings.TrimSpace(run.output); trimmed != "" {
 			content = trimmed + "\n" + content
 			if l.Deps.AfterToolRun != nil && tooloutput.IsOverlayPromoteTool(run.call.Name) {
-				content = l.Deps.AfterToolRun(ctx, sess, run.call.Name, run.call.Args, content, false, run.toolCtx.Out)
+				content = l.Deps.AfterToolRun(ctx, sess, run.call.Name, run.call.Args, content, false, run.toolCtx.Effects.Out)
 			}
 		}
 		// Typed refusals retain their structured facts.
@@ -394,12 +394,12 @@ func (l *toolInvocations) finalizeToolRun(ctx context.Context, sess *api.Session
 		return out
 	}
 	if l.Deps.AfterToolRun != nil {
-		toolContent = l.Deps.AfterToolRun(ctx, sess, run.call.Name, run.call.Args, toolContent, true, run.toolCtx.Out)
+		toolContent = l.Deps.AfterToolRun(ctx, sess, run.call.Name, run.call.Args, toolContent, true, run.toolCtx.Effects.Out)
 	}
 	// Lifecycle hooks contribute facts before this merge.
 	facts := guidance.ToolResultFacts{}
-	if run.toolCtx.Out != nil {
-		facts = facts.Merge(run.toolCtx.Out.Facts)
+	if run.toolCtx.Effects.Out != nil {
+		facts = facts.Merge(run.toolCtx.Effects.Out.Facts)
 	}
 	// Record search outcomes before enrichment changes structured output.
 	l.Nudges.recordSearchOutcome(ctx, run.sessionID, run.call.Name, run.call.Args, run.output)

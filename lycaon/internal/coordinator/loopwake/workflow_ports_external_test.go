@@ -1,6 +1,8 @@
 package loopwake_test
 
-import "github.com/lycaon/lycaon/internal/coordinator/loopwake"
+import (
+	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
+)
 
 type workflowFixtureSource interface {
 	loopwake.WorkflowRuns

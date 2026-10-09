@@ -38,7 +38,7 @@ func (s *Reports) BuildRunReportInput(ctx context.Context, runID string) (report
 	if run == nil {
 		return report.ReportInput{}, false, nil
 	}
-	if !runstate.IsTerminal(run.Status) && run.PauseReason != workflow.ReviewBlockedReason {
+	if !runstate.IsTerminal(run.Status) && run.PauseReason != runstate.ReviewBlockedReason {
 		return report.ReportInput{}, false, nil
 	}
 
@@ -50,7 +50,7 @@ func (s *Reports) BuildRunReportInput(ctx context.Context, runID string) (report
 		return report.ReportInput{}, false, nil
 	}
 
-	if run.PauseReason == workflow.ReviewBlockedReason || run.Status == wire.WorkflowRunStatusCanceled {
+	if run.PauseReason == runstate.ReviewBlockedReason || run.Status == wire.WorkflowRunStatusCanceled {
 		input, ok, err := s.blockedRunReport(ctx, run, manifest)
 		if err != nil || ok {
 			return input, ok, err
@@ -74,7 +74,10 @@ func (s *Reports) BuildRunReportInput(ctx context.Context, runID string) (report
 		name = strings.TrimSpace(run.WorkflowID)
 	}
 
-	phaseVerdicts := workflowpresentation.ReviewVerdicts(ctx, s.Workflows.Verdicts, run, manifest)
+	phaseVerdicts, err := workflowpresentation.ReviewVerdicts(ctx, s.Workflows.Verdicts, run, manifest)
+	if err != nil {
+		return report.ReportInput{}, false, err
+	}
 	claims := workflowpresentation.ReconcileClaims(phaseVerdicts)
 	verdicts, channels, verdictURLs := projectVerdicts(phaseVerdicts)
 	cites := append(closeoutCitations(completion.Grounding), verdictCitations(verdicts, channels)...)
@@ -222,7 +225,7 @@ func artifactIDsForRun(msgs []wire.Message, runID string) []string {
 }
 
 func (s *Reports) reportManifest(ctx context.Context, run *wire.WorkflowRun) (workflowdef.Manifest, bool, error) {
-	m, err := s.Workflows.ManifestForRunID(ctx, run.ID)
+	m, err := s.Workflows.Resolver.ForRunID(ctx, run.ID)
 	if err != nil {
 		return workflowdef.Manifest{}, false, err
 	}

@@ -229,7 +229,7 @@ func (m *Tools) EnrichTool(
 	merged := facts.Merge(enriched.Facts)
 	if merged.HasCode("WORKFLOW_GATE_BLOCKED") {
 		m.Guidance.Emit(ctx, sess.ID, anchor.GateBlocked, anchor.Envelope{})
-		m.Runtime.CoordinatorLoop().Nudge(ctx, sess.ID, anchor.PhaseAdvanced, anchor.GateBlocked, "", anchor.Envelope{})
+		m.Runtime.CoordinatorLoop().Nudges.Nudge(ctx, sess.ID, anchor.PhaseAdvanced, anchor.GateBlocked, "", anchor.Envelope{})
 	}
 	return enriched.Output, merged
 }

@@ -95,7 +95,7 @@ func (s *HarnessControl) handleHarnessToolApprovalCheckpoint(w http.ResponseWrit
 			toolMsgID, assistantID, toolCallID, toolName, "awaiting approval",
 		))
 	}
-	if err := s.sessions.AppendAndPublishMessages(r.Context(), sessionID, s.stampActiveRun(r, sessionID, msgs)...); err != nil {
+	if err := s.sessions.Runner.Transcript.AppendPlain(r.Context(), sessionID, s.stampActiveRun(r, sessionID, msgs)...); err != nil {
 		s.responses.InternalError(w, r, err)
 		return
 	}

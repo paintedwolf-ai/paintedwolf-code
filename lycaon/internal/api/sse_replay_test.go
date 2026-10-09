@@ -119,7 +119,7 @@ func TestSettledLiveSubscriptionRechecksTranscript(t *testing.T) {
 	srv := newTestServer(t)
 	sess := createSessionAtPathOnServer(t, srv, t.TempDir(), wire.SessionPostureBuild)
 	messageID := uuid.NewString()
-	srv.Admin.SessionAdmin.Lifecycle.Sessions.Streams().CacheReplay(messageID, "removed content", nil)
+	srv.Admin.SessionAdmin.Lifecycle.Sessions.Runner.Transcript.Streams.CacheReplay(messageID, "removed content", nil)
 	w := httptest.NewRecorder()
 	r := newAuthedRequest(http.MethodGet, "/v1/sessions/"+sess.ID+"/stream?message="+messageID, nil)
 	srv.Routes.Conversation.followLiveStream(r, w, w, sess.ID, messageID)

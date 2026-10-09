@@ -8,12 +8,12 @@ import (
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/rules"
 	"github.com/lycaon/lycaon/internal/sandbox"
-	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -38,10 +38,8 @@ type PreInvokeGuard func(ctx context.Context, sess *api.Session, toolName string
 type EngineDeps struct {
 	ToolLister       tools.ToolProfileLister
 	Rules            RuleEvaluator
-	Workflows        *WorkflowDomains
+	Workflows        WorkflowSource
 	Postures         func(context.Context, *api.Session) (PostureRegistry, error)
-	Limits           func(context.Context, *api.Session) settings.SessionLimits
-	HasComposeDraft  func(context.Context, *api.Session) bool
 	ToolAccess       func(context.Context, *api.Session) sandbox.ToolAccess
 	RejectFormatter  *guidance.ToolRejectFormatter
 	BlockPlane       *toolfeedback.BlockPlane
@@ -75,6 +73,7 @@ func (e *engine) ListForPrompt(ctx context.Context, sess *api.Session, profileID
 	base := tools.ListToolsForProfile(ctx, e.deps.ToolLister, filter)
 	workerChild := sess.IsWorkerChild()
 	out := make([]tools.ToolMeta, 0, len(base))
+	facts := sync.OnceValues(func() (policyFacts, error) { return capturePolicyFacts(ctx, e.deps, sess) })
 	for _, meta := range base {
 		// A profile grants capability; only the session says which shape is running.
 		if !toolcontract.AdmitsSession(meta.Name, workerChild) {
@@ -85,7 +84,7 @@ func (e *engine) ListForPrompt(ctx context.Context, sess *api.Session, profileID
 			out = append(out, meta)
 			continue
 		}
-		_, outcome, err := e.checkInvocation(ctx, sess, meta.Name, nil)
+		_, outcome, err := e.checkInvocation(ctx, sess, meta.Name, nil, facts)
 		if err != nil || (outcome != nil && !outcome.Allowed) {
 			continue
 		}
@@ -95,7 +94,7 @@ func (e *engine) ListForPrompt(ctx context.Context, sess *api.Session, profileID
 }
 
 func (e *engine) EvaluateInvoke(ctx context.Context, sess *api.Session, toolName string, args map[string]any) error {
-	evalCtx, outcome, err := e.checkInvocation(ctx, sess, toolName, args)
+	evalCtx, outcome, err := e.checkInvocation(ctx, sess, toolName, args, func() (policyFacts, error) { return capturePolicyFacts(ctx, e.deps, sess) })
 	if err != nil {
 		return err
 	}
@@ -106,7 +105,7 @@ func (e *engine) EvaluateInvoke(ctx context.Context, sess *api.Session, toolName
 }
 
 // Listing asks the same host requirements without inventing a tool.rejected occurrence.
-func (e *engine) checkInvocation(ctx context.Context, sess *api.Session, tool string, args map[string]any) (rules.EvalContext, *rules.RuleOutcome, error) {
+func (e *engine) checkInvocation(ctx context.Context, sess *api.Session, tool string, args map[string]any, capture func() (policyFacts, error)) (rules.EvalContext, *rules.RuleOutcome, error) {
 	if e == nil || sess == nil {
 		return rules.EvalContext{}, nil, nil
 	}
@@ -116,7 +115,11 @@ func (e *engine) checkInvocation(ctx context.Context, sess *api.Session, tool st
 	if e.deps.Rules == nil {
 		return rules.EvalContext{}, nil, nil
 	}
-	eval := BuildEvalContext(ctx, e.deps, sess, tool, args)
+	facts, err := capture()
+	if err != nil {
+		return rules.EvalContext{}, nil, err
+	}
+	eval := facts.forTool(sess, tool, args)
 	outcome, err := e.deps.Rules.Evaluate(ctx, eval)
 	if err != nil && errors.Is(err, settingsoverlay.ErrFormatInvalid) && isOverlayRemediationWrite(tool, args) {
 		return eval, outcome, nil

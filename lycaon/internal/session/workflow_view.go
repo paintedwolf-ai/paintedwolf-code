@@ -1,6 +1,7 @@
 package session
 
 import (
+	"github.com/lycaon/lycaon/internal/toolpolicy"
 	"context"
 	"strings"
 
@@ -49,6 +50,7 @@ type WorkflowRuns interface {
 }
 
 type WorkflowPolicy interface {
+	PolicySnapshot(context.Context, string) (toolpolicy.WorkflowSnapshot, error)
 	AssertSessionRunnable(ctx context.Context, sessionID string) error
 	CurrentPhase(ctx context.Context, sessionID string) string
 	ActivePhaseHasReviewLoop(ctx context.Context, sessionID string) bool

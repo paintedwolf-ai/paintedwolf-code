@@ -45,7 +45,7 @@ func TestCrossPhaseHostAdvanceQueuesCoordinatorWake(t *testing.T) {
 	sessionMgr := session.NewHost(sessionStore, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	sessionMgr.SetLoopWorkflowSource(&loopwake.WorkflowDomains{Runs: wfMgr.Store.Runs, Approvals: wfMgr.Policy, Obligations: wfMgr.Obligations})
 	b := &serveBuilder{mgr: sessionMgr, workflowMgr: wfMgr}
-	finishExecution := sessionMgr.Runner.Coordinator.CoordinatorLoop().BeginPromptExecution(t.Context(), sess.ID)
+	finishExecution := sessionMgr.Runner.Coordinator.CoordinatorLoop().Admission.BeginPromptExecution(t.Context(), sess.ID)
 	defer finishExecution()
 	delegationWiring{b}.onWorkflowPhaseAutoAdvanced(ctx, sess.ID, run.ID, "triage", "expand")
 
@@ -126,7 +126,7 @@ func TestHumanApprovalAdvanceQueuesWakeForRunningChild(t *testing.T) {
 
 	sessionMgr := session.NewHost(sessionStore, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	sessionMgr.SetLoopWorkflowSource(&loopwake.WorkflowDomains{Runs: wfMgr.Store.Runs, Approvals: wfMgr.Policy, Obligations: wfMgr.Obligations})
-	finishExecution := sessionMgr.Runner.Coordinator.CoordinatorLoop().BeginPromptExecution(t.Context(), sess.ID)
+	finishExecution := sessionMgr.Runner.Coordinator.CoordinatorLoop().Admission.BeginPromptExecution(t.Context(), sess.ID)
 	defer finishExecution()
 	b := &serveBuilder{mgr: sessionMgr, workflowMgr: wfMgr}
 	delegationWiring{b}.onWorkflowHumanApprovalAdvanced(ctx, parent)

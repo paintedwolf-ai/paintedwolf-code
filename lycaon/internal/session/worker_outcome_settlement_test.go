@@ -34,11 +34,11 @@ func TestWorkerSynthesisSettlesAfterOutcomeAcknowledgement(t *testing.T) {
 	}}}
 	mgr.SetWorkerQueue(q)
 	loop := mgr.Coordinator.Runtime.CoordinatorLoop()
-	finishExecution := loop.BeginPromptExecution(t.Context(), sess.ID)
+	finishExecution := loop.Admission.BeginPromptExecution(t.Context(), sess.ID)
 	defer finishExecution()
-	loop.Nudge(ctx, sess.ID, anchor.PhaseAdvanced, anchor.PhaseAdvanced, "", anchor.Envelope{})
-	loop.OnWorkerCycleTerminal(ctx, sess.ID, "job-a")
-	if !loop.HasPendingLoopWakes(sess.ID) {
+	loop.Nudges.Nudge(ctx, sess.ID, anchor.PhaseAdvanced, anchor.PhaseAdvanced, "", anchor.Envelope{})
+	loop.Cycles.OnWorkerCycleTerminal(ctx, sess.ID, "job-a")
+	if !loop.Nudges.HasPendingLoopWakes(sess.ID) {
 		t.Fatal("phase wake must wait for outcome acknowledgement")
 	}
 
@@ -52,7 +52,7 @@ func TestWorkerSynthesisSettlesAfterOutcomeAcknowledgement(t *testing.T) {
 	if settled.Status != api.SessionStatusIdle {
 		t.Fatalf("status after acknowledged worker synthesis = %q want idle", settled.Status)
 	}
-	if loop.HasPendingLoopWakes(sess.ID) {
+	if loop.Nudges.HasPendingLoopWakes(sess.ID) {
 		t.Fatal("completed worker synthesis retained a deferred wake")
 	}
 }

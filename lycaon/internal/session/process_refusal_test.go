@@ -2,10 +2,6 @@ package session
 
 import (
 	"context"
-	"strings"
-	"testing"
-	"time"
-
 	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/confine"
@@ -18,6 +14,9 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
+	"strings"
+	"testing"
+	"time"
 )
 
 func refusalObservation() confine.Observation {
@@ -57,13 +56,13 @@ func TestHandleCommandRefusalWakesWithDigest(t *testing.T) {
 		}
 	}
 	loop.SetDeps(deps)
-	loop.EnterSleep(t.Context(), sess.ID, time.Time{}, "waiting for command",
+	loop.Waits.EnterSleep(t.Context(), sess.ID, time.Time{}, "waiting for command",
 		[]loopwake.WaitTrigger{loopwake.WaitTriggerProcessDone}, []string{"command-1"}, loopwake.SleepMoverHost)
 	mgr.Processes.HandleCommandRefusal(t.Context(), bgprocess.RefusalNotice{
 		SessionID: sess.ID, Handle: "command-1", OriginTool: "command", Mode: bgprocess.JobModeBackground,
 		StartedAt: time.Now(), Unshown: 2, Stages: []hostcmd.StageResult{{Command: "vm start"}}, Observation: refusalObservation(),
 	})
-	if loop.IsSleeping(sess.ID) {
+	if loop.Waits.IsSleeping(sess.ID) {
 		t.Fatal("refusal left the matching process wait asleep")
 	}
 	select {
@@ -75,7 +74,7 @@ func TestHandleCommandRefusalWakesWithDigest(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("refusal wake omitted the report")
 	}
-	loop.WaitForAsyncTurns(testutil.BoundedContext(t, time.Second))
+	loop.Turns.WaitForAsyncTurns(testutil.BoundedContext(t, time.Second))
 }
 
 func TestCommandCompletionDigestIncludesRefusalsAndTimeout(t *testing.T) {

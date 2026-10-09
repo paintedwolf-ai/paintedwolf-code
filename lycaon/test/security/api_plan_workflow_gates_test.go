@@ -43,7 +43,7 @@ func TestPlanWorkflowAdvanceToImplementInvokesChildRun(t *testing.T) {
 	if run.Status != wire.WorkflowRunStatusPausedOnChild {
 		t.Fatalf("status = %q want paused_on_child", run.Status)
 	}
-	active, err := h.WorkflowMgr.GetActive(ctx, sess.ID)
+	active, err := h.WorkflowMgr.Store.Runs.ActiveBySession(ctx, sess.ID)
 	testutil.FailErr(t, "GetActive", err)
 	if active == nil || active.WorkflowID != "implement" {
 		t.Fatalf("active child = %+v want implement workflow", active)

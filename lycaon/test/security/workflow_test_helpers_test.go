@@ -70,7 +70,7 @@ func completePlanIntakeHTTP(t *testing.T, h *wiring.Harness, runID string) wire.
 	if sess, err := h.WorkflowMgr.Policy.Sessions.Get(ctx, run.SessionID); err == nil && sess != nil {
 		projectDir = sess.WorkspacePath
 	}
-	if err := h.WorkflowMgr.Store.UpdateVars(ctx, run, projectDir, vars); err != nil {
+	if err := h.WorkflowMgr.Store.State.UpdateVars(ctx, run, projectDir, vars); err != nil {
 		testutil.FailErr(t, "update scaffold vars", err)
 	}
 	out, err := h.WorkflowMgr.Phases.Advance(ctx, run.ID)
@@ -103,7 +103,7 @@ func completePlanDepthAtNoneHTTP(t *testing.T, h *wiring.Harness, runID, phaseID
 	if sess, getErr := h.WorkflowMgr.Policy.Sessions.Get(ctx, run.SessionID); getErr == nil && sess != nil {
 		projectDir = sess.WorkspacePath
 	}
-	if err := h.WorkflowMgr.Store.UpdateVars(ctx, run, projectDir, vars); err != nil {
+	if err := h.WorkflowMgr.Store.State.UpdateVars(ctx, run, projectDir, vars); err != nil {
 		testutil.FailErr(t, "persist depth parameter", err)
 	}
 	return advancePlanRunHTTP(t, h.Server, runID)
