@@ -8,6 +8,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 type versionSpec struct {
@@ -91,4 +92,43 @@ func (s *Store) insertVersion(ctx context.Context, q *db.Queries, spec versionSp
 		return "", err
 	}
 	return id, nil
+}
+
+func (s *Store) preserveObservedPreimage(ctx context.Context, q *db.Queries, in RecordInput, tracked TrackedFile, head *db.SourceBranchHeads) (string, error) {
+	// Preserve the observed pre-image when it differs from the tracked head.
+	preSHA, preBytes, preSize, preRoot, prePath := in.BeforeSHA256, in.Before, in.BeforeSize, in.RootID, in.Path
+	if in.Op == api.SourceChangeOpRename {
+		preRoot, prePath = in.RootID, in.FromPath
+		if preSHA == "" {
+			preSHA, preBytes, preSize = in.AfterSHA256, in.After, in.AfterSize
+		}
+	}
+	needsPreimage := in.Op != api.SourceChangeOpCreate && tracked.VersionID == ""
+	if head != nil && preSHA != "" && head.ContentSha256 != preSHA {
+		needsPreimage = true
+	}
+	if head != nil && in.Op != api.SourceChangeOpCreate {
+		previous, err := q.GetSourceVersion(ctx, tracked.VersionID)
+		if err != nil {
+			return "", err
+		}
+		if previous.RootID != head.RootID || previous.Path != head.Path || previous.State != head.State {
+			needsPreimage = true
+			if preSHA == "" && head.State != "absent" {
+				preSHA, preSize = head.ContentSha256, previous.ByteSize
+			}
+		}
+	}
+	if needsPreimage {
+		return s.insertVersion(ctx, q, versionSpec{
+			FileID: tracked.FileID, ProjectID: in.ProjectID, BranchID: in.BranchID,
+			ParentVersionID:      tracked.VersionID,
+			DerivedFromVersionID: in.DerivedFromVersionID,
+			RootID:               preRoot, Path: prePath, EntryKind: in.EntryKind,
+			SHA256: preSHA, Content: preBytes, Size: preSize,
+			CaptureQuality: in.CaptureQuality, TS: in.TS,
+		})
+	}
+
+	return tracked.VersionID, nil
 }

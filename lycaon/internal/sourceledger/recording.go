@@ -269,43 +269,13 @@ func (s *Store) recordEffect(ctx context.Context, q *db.Queries, operationID str
 		}
 	}
 
-	// Preserve the observed pre-image when it differs from the tracked head.
-	preSHA, preBytes, preSize, preRoot, prePath := in.BeforeSHA256, in.Before, in.BeforeSize, in.RootID, in.Path
-	if in.Op == api.SourceChangeOpRename {
-		preRoot, prePath = in.RootID, in.FromPath
-		if preSHA == "" {
-			preSHA, preBytes, preSize = in.AfterSHA256, in.After, in.AfterSize
-		}
+	var priorHead *db.SourceBranchHeads
+	if headErr == nil {
+		priorHead = &head
 	}
-	needsPreimage := in.Op != api.SourceChangeOpCreate && beforeVersionID == ""
-	if headErr == nil && preSHA != "" && head.ContentSha256 != preSHA {
-		needsPreimage = true
-	}
-	if headErr == nil && in.Op != api.SourceChangeOpCreate {
-		previous, err := q.GetSourceVersion(ctx, beforeVersionID)
-		if err != nil {
-			return err
-		}
-		if previous.RootID != head.RootID || previous.Path != head.Path || previous.State != head.State {
-			needsPreimage = true
-			if preSHA == "" && head.State != "absent" {
-				preSHA, preSize = head.ContentSha256, previous.ByteSize
-			}
-		}
-	}
-	if needsPreimage {
-		versionID, err := s.insertVersion(ctx, q, versionSpec{
-			FileID: fileID, ProjectID: in.ProjectID, BranchID: in.BranchID,
-			ParentVersionID:      beforeVersionID,
-			DerivedFromVersionID: in.DerivedFromVersionID,
-			RootID:               preRoot, Path: prePath, EntryKind: in.EntryKind,
-			SHA256: preSHA, Content: preBytes, Size: preSize,
-			CaptureQuality: in.CaptureQuality, TS: in.TS,
-		})
-		if err != nil {
-			return err
-		}
-		beforeVersionID = versionID
+	beforeVersionID, err := s.preserveObservedPreimage(ctx, q, in, TrackedFile{FileID: fileID, VersionID: beforeVersionID}, priorHead)
+	if err != nil {
+		return err
 	}
 
 	parentVersionID := beforeVersionID
