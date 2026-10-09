@@ -188,3 +188,24 @@ func TestObservationOfReplacementFileRetiresDirectory(t *testing.T) {
 		}
 	}
 }
+
+func TestDirectoryMoveIntoDescendantRollsBack(t *testing.T) {
+	store, ctx := openLedger(t)
+	mustRecord(t, store, ctx, RecordInput{RecordLocation: RecordLocation{RootID: "r1", Path: "tree/child"}, ProjectID: "p1", Origin: api.SourceChangeOriginUser, Op: api.SourceChangeOpCreate, After: []byte("kept")})
+	before, err := store.History.ResolveHead(ctx, "p1", sourcebranch.Trunk, "r1", "tree/child")
+	testutil.FailErr(t, "resolve original child", err)
+	err = store.Record(ctx, RecordInput{RecordLocation: RecordLocation{RootID: "r1", Path: "tree/nested/moved", FromPath: "tree", EntryKind: EntryKindDirectory}, ProjectID: "p1", Origin: api.SourceChangeOriginUser, Op: api.SourceChangeOpRename})
+	if err == nil {
+		t.Fatal("directory cycle accepted")
+	}
+	after, err := store.History.ResolveHead(ctx, "p1", sourcebranch.Trunk, "r1", "tree/child")
+	testutil.FailErr(t, "resolve child after refused move", err)
+	if before != after {
+		t.Fatalf("refused move changed child: before=%+v after=%+v", before, after)
+	}
+	var created int
+	testutil.FailErr(t, "count rolled-back destination parents", store.sqlDB.QueryRowContext(ctx, `SELECT count(*) FROM source_directories WHERE name='nested'`).Scan(&created))
+	if created != 0 {
+		t.Fatal("refused move retained destination namespace")
+	}
+}

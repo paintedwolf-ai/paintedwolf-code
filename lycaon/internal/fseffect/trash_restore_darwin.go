@@ -4,9 +4,10 @@ package fseffect
 
 import (
 	"fmt"
+	"path/filepath"
+
 	"github.com/lycaon/lycaon/internal/fspath"
 	"golang.org/x/sys/unix"
-	"path/filepath"
 )
 
 // RestoreNativeTrash consumes an exact OS-returned Trash location. macOS permits
