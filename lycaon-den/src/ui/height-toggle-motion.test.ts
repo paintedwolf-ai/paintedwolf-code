@@ -204,8 +204,8 @@ type AnimationStub = Animation & { keyframes: unknown; timing: KeyframeAnimation
 function followSurface(initial: { shell: number; body: number }) {
   const shell = document.createElement("div");
   const body = document.createElement("div");
-  shell.style.borderTopWidth = "1px";
-  shell.style.borderBottomWidth = "1px";
+  shell.style.borderTop = "1px solid";
+  shell.style.borderBottom = "1px solid";
   shell.append(body);
   document.body.append(shell);
   const heights = { ...initial };

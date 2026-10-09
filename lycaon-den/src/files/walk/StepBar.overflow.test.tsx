@@ -143,7 +143,7 @@ describe("long walk browsing", () => {
     fireEvent.keyDown(screen.getByRole("searchbox"), { key: "ArrowDown" });
     fireEvent.keyDown(document.activeElement!, { key: "End" });
     expect(document.activeElement?.textContent).toContain("Step 240");
-    fireEvent.click(screen.getByRole("button", { name: /a.ts Step 97 Modified/ }));
+    fireEvent.click(screen.getByRole("button", { name: /a\.ts\s*Step 97\s*Modified/ }));
     await waitFor(() => expect(walkState("p1").at).toBe(96));
     expect(document.activeElement).toBe(counter);
     fireEvent.click(counter);
@@ -153,7 +153,7 @@ describe("long walk browsing", () => {
     fireEvent.input(screen.getByRole("searchbox"), { target: { value: "" } });
     expect(screen.getByRole("toolbar", { name: "Changes by turn" }).querySelectorAll("button[data-walk-destination]")).toHaveLength(240);
     fireEvent.input(screen.getByRole("searchbox"), { target: { value: "Make change 20" } });
-    fireEvent.click(screen.getByRole("button", { name: /a.ts Step 191 Modified/ }));
+    fireEvent.click(screen.getByRole("button", { name: /a\.ts\s*Step 191\s*Modified/ }));
     await waitFor(() => expect(walkState("p1").at).toBe(190));
     fireEvent.click(counter);
     fireEvent.input(screen.getByRole("searchbox"), { target: { value: "no-such-file" } });

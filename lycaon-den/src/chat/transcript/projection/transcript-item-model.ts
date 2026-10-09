@@ -1,4 +1,4 @@
-import type { CheckpointDecisionMeta, IndexWarmingMeta, CitationGrounding, NavigationReference, BlueprintMeta, ProgressChange, ProgressStep, TurnLoad } from "../../../api/types.ts";
+import type { MessageContentPart, CheckpointDecisionMeta, IndexWarmingMeta, CitationGrounding, NavigationReference, BlueprintMeta, ProgressChange, ProgressStep, TurnLoad } from "../../../api/types.ts";
 import type { PendingSend } from "../../send/pending-sends.ts";
 import type { FileEditFold } from "../../file-edit/file-edit-fold.ts";
 import type { TranscriptLayout } from "../layout/transcript-layout.ts";
@@ -25,6 +25,7 @@ export type TranscriptItem =
       kind: "user";
       key: string;
       text: string;
+      contentParts?: MessageContentPart[];
       artifactIds?: string[];
     }
   | {

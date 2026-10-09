@@ -43,6 +43,22 @@ function bootstrap(
 }
 
 describe("reconcileActiveScope", () => {
+  it("rejects delayed bootstrap chrome and transcript after an additional authority gate expires", async () => {
+    const store = createAppStore();
+    const session: Session = { id: "kept", owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: "p1", workspace_path: "/project", posture: "build", status: "idle", created_at: "t", activity_at: "t", updated_at: "t" };
+    store.actions.setCurrentSession(session);
+    let finish!: (value: SessionBootstrap) => void;
+    let current = true;
+    const client = stubClient({ getSessionBootstrap: () => new Promise(resolve => { finish = resolve; }) });
+    const reading = reconcileActiveScope(store, client, [], { resumeVisible: true, shouldApply: () => current });
+    current = false;
+    const incoming: Message = { id: "old-message", role: "assistant", origin: "model", authority: "none", trust_tier: "trusted", content: "Old host reply", created_at: "t", seq: 1 };
+    finish(bootstrap({ ...session, title: "Old host title" }, [incoming], 1));
+    await reading;
+    expect(store.state.currentSession?.title).not.toBe("Old host title");
+    expect(store.state.messages).toEqual([]);
+  });
+
   it.each(["running_tool", "awaiting_wake", "preparing_context"] as const)(
     "replaces missed %s activity edges from the host snapshot without touching another chat",
     async (kind) => {
@@ -80,6 +96,7 @@ describe("reconcileActiveScope", () => {
     const persistence = new Promise<void>((resolve) => { finish = resolve; });
     const old = reconcileActiveScope(store, stubClient({ getSessionBootstrap: async () => { throw new LycaonApiError("Missing", 404, "session_not_found"); } }), [], {
       onSessionGone: async () => { entered(); await persistence; },
+      shouldApply: () => true,
     });
     await started;
     store.actions.setCurrentSession({ ...session, id: "b" });

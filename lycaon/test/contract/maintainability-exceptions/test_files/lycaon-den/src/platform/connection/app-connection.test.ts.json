@@ -1,6 +1,0 @@
-{
-  "category": "test_files",
-  "artifact": "lycaon-den/src/platform/connection/app-connection.test.ts",
-  "cap": 1150,
-  "reason": "Den's app connection owns attachment, handshake, event subscription and cache reconcile in one module; it is split along those seams in #355."
-}

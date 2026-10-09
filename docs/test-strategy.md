@@ -496,9 +496,31 @@ allocation before claiming an end-to-end speedup.
 
 ### Hosted admission and qualification
 
-Pull requests and merge groups share the `integration` profile and the same
-conservative change planner. Both always compile the host and run repository
-contracts and smoke tests. Go changes add integration-enabled reverse import
+A ready pull request runs the `fast` profile; the merge queue runs the
+`integration` profile on the exact commit that lands. Both report the required
+`check` from [`ci.yml`](../.github/workflows/ci.yml). The fast tier is one
+static job, `ready`: it compiles the host and runs `lint:fast`, size budgets,
+Den typecheck, and Den lint, in about ten minutes with setup, `lint:fast` being
+the longest stage at about seven. The planner requires its stages to be a subset
+of `./task check-fast`. Nothing that runs tests runs here: repository
+contracts, changed coverage, and every suite wait for the merge queue, which
+starts each group with its cheapest, most frequently failing lanes (`limits`,
+for budgets and changed coverage, and `lint`) and stops the group at its first
+failure, freeing its runners for the next.
+
+Pull requests no longer run the integration gate themselves. Running it for
+the pull request and again for its merge group doubled demand on twenty
+runners, so the queue competed with pull request CI for them; and with groups
+of one built in parallel, a failure in the queue costs one rebuild of the group
+behind it. Marking a pull request ready and enabling auto-merge
+(`gh pr merge <number> --auto --squash`) is how work enters the queue: GitHub
+adds it once the fast tier's `check` passes. Auto-merge is enabled with the
+author's own credentials. No workflow enables it, because a merge enabled with
+a workflow's `GITHUB_TOKEN` would not start main's push workflows, qualification
+and cache warming.
+
+The integration gate uses a conservative change planner. It always compiles
+the host and runs repository contracts and smoke tests. Go changes add integration-enabled reverse import
 closure, including test imports; Den changes run the complete frontend suite.
 Frontend execution deliberately stays broad because source-scanning tests and
 runtime discovery are not represented by static imports alone. Unknown paths,
@@ -516,12 +538,15 @@ cross compilation; broad changes include that too. Ordinary source changes
 select only relevant lanes. Each lane still enters through `./task`, capturing
 source and producing normal receipts.
 
-[`ci.yml`](../.github/workflows/ci.yml) reports the required `check`. Drafts spend
-no verification runners and cannot pass admission. Manual dispatch runs the
-complete check and platform tier. [`qualification.yml`](../.github/workflows/qualification.yml)
-runs the complete check, platform confinement and upgrade corpus, and browser
-and desktop journeys on main. It does not cancel an in-progress qualification
-for a newer push. Nightly retains race, fuzz, WebKit, stress, and performance
+Drafts spend no verification runners and cannot pass `check`. Manual dispatch
+runs the complete check and platform tier, or with `profile: fast` the fast
+tier for a pull request whose events start no CI, such as the dependency
+inventory's. [`qualification.yml`](../.github/workflows/qualification.yml)
+runs the complete check, then platform confinement and upgrade corpus, then
+browser and desktop journeys on main. One qualification runs at a time: it does
+not cancel an in-progress run for a newer push, and a newer push replaces a
+pending one, so a busy main qualifies its newest commit rather than every
+commit. Nightly retains race, fuzz, WebKit, stress, and performance
 coverage. A release requires a successful **Qualification** run for its exact
 commit on main; passing merge admission is insufficient.
 
@@ -543,22 +568,25 @@ PRs created using `GITHUB_TOKEN` do not trigger another workflow automatically.
 Nightly additionally checks fresh upstream advisories.
 
 The reviewed queue parameters are in
-[`queue-settings.json`](../scripts/ci_policy/queue-settings.json). Both build
-concurrency and maximum merge group size are one, with `ALLGREEN`. This avoids
-speculative predecessor cascades; setting only the merge group size cannot.
-The 20-minute queue objective and 15-minute integration objective are measured
-service objectives, not claims established by timeout settings. Broad changes
-may require longer verification. Hosted priority is enforced by the integrated runner-priority scheduler;
-qualification yields after PR jobs and before protected merge or release work.
+[`queue-settings.json`](../scripts/ci_policy/queue-settings.json): two groups
+build at once, each holding one pull request, with `ALLGREEN`, and a group's
+checks must report within 90 minutes. The second group builds on the first, so
+a failure invalidates only the group behind it, and a group of one never sends
+other pull requests back. When the queue invalidates a group, GitHub deletes its
+`gh-readonly-queue/...` branch but lets its run continue. Each verification job
+therefore starts [`merge-group-watch`](../.github/actions/merge-group-watch/action.yml),
+which polls its own branch with `git ls-remote` about once a minute, spending no
+REST API quota, and cancels the run with one API call once the branch is gone.
+Merge-group CI is the only CI granted `actions: write`, for that call; pull
+request CI, which runs unreviewed code, keeps a read-only token. Queue-to-merge
+time and lane durations are measured service objectives, not claims
+established by timeout settings.
 
 Apply queue settings only after this workflow is available on main:
 `GITHUB_REPOSITORY=paintedwolf-ai/paintedwolf-code PYTHONPATH=scripts python3 -m ci_policy.queue_settings 24657984`
 prints the proposed ruleset while preserving unrelated protections. Add `--apply`
 to apply that reviewed configuration. This is an administrative rollout step,
-not something feature CI performs. Dedicated runners require a separately
-provisioned ephemeral runner group restricted by GitHub to trusted workflow refs
-and events. No pull request, including one from the same repository, is admitted
-to a self-hosted runner by this configuration.
+not something feature CI performs.
 
 #### Failure evidence and recovery
 
@@ -605,6 +633,8 @@ dependency change, and the workflow's summary reports total cache usage.
 A running warmer finishes before the next push starts warming, so frequent
 merges cannot repeatedly cancel cold preparation before it saves; a newer push
 replaces a warmer still pending, so only main's newest commit waits to warm.
+Its Linux and macOS jobs and the release compile run one after another, on one
+runner at a time.
 Release builds restore the shared Go cache; their separate cache retains only
 Tauri release builds. The cache actions enforce the main-ref write boundary
 themselves. Pinned Go analyzers have separate lint and vulnerability caches; their module versions
@@ -626,80 +656,73 @@ lane durations, and unsuccessful merge-group runs. Three distinct runs sharing
 one failure signature open a deduplicated incident. Missing artifacts remain a
 coverage gap; cancellation is reported separately from an attributed test failure.
 
-### Runner priority
+### Runner capacity
 
-Hosted runners have no priority setting: they start queued jobs roughly first
-come, first served. The GitHub Free plan runs twenty jobs at once across the
-organization, five of them on macOS.
-[`runner-priority.yml`](../.github/workflows/runner-priority.yml) gives that
-capacity to work in this order, highest first:
+The GitHub Free plan runs twenty hosted jobs at once across the organization,
+five of them on macOS, and starts waiting jobs first come, first served. The
+project uses no larger or self-hosted runners, so those limits are fixed.
+Contention is ruled out by construction instead: each class of work holds a
+fixed number of runners, through one run at a time, capped matrices, and a
+run's stages in turn wherever running them side by side would widen it. The
+merge queue's own settings budget its class: groups built at once times the
+gate's cap. The `capacity` table in
+[`verification-plan.json`](../scripts/verification-plan.json) declares each
+triggered workflow's footprint and each verification profile's
+`max_parallel`. The reusable verification workflow's plan job reads that cap
+from the catalog and orders the matrix: lanes the catalog marks `first`, the
+cheap ones that fail most often, then the rest longest budget first, so a
+capped matrix neither finishes on its slowest lane nor runs long before a
+cheap failure.
 
-| Priority | Work | Gives up runners |
-|---|---|---|
-| 1 | Merge-queue CI and release workflows | Never; only CI of a merge group that no longer exists is cancelled |
-| 2 | CI of ready pull requests | Newest first, after everything below |
-| 3 | Main qualification | Before ready pull requests |
-| 4 | CI of draft pull requests, closed pull requests, and superseded heads | Before qualification |
-| 5 | Main cache warming (`build-caches.yml`) | Before pull requests |
-| 6 | Scheduled and background work: nightly, dependency inventory, the release-system live test, and issue automation | First, and whenever the merge queue holds a group |
+| Class | Workflows | One run at a time | Runners (macOS) |
+|---|---|---|---|
+| Qualification | `qualification.yml` | `qualification` | 3 (1): the `check` profile capped at three, then platform's two jobs, then two browser shards beside the desktop journey |
+| Cache warming | `build-caches.yml` | `build-caches` | 1 (1): Linux, macOS, then the release compile |
+| Nightly | `nightly.yml` | `nightly` | 2 (1): the `nightly` profile capped at two, then one browser shard beside the desktop journey, then the upgrade rehearsal beside quarantine observation |
+| Releases | `release.yml`, `release-halt.yml` | `release-static-update` | 2 (2): preflight or the upgrade rehearsal beside one signed build |
+| Maintenance | dependency inventory, release-system live test, queue health, issue staleness, the issue sweep, release secrets check | `maintenance`, shared | 1 |
+| Merge queue | CI of merge groups | one run per group, two groups at once | 8: two groups × the `integration` cap of four |
+| Ready pull requests | CI of pull requests | one run per pull request; a newer push cancels it | 1 per pull request, for about ten minutes |
 
-The `runner_priority` table in
-[`scripts/verification-plan.json`](../scripts/verification-plan.json) declares
-each workflow's class; CI's class follows its event. Contract tests require
-every workflow with its own trigger, other than CI and the sweep, to declare
-one. Dispatched CI, often a release candidate's verification, is never
-cancelled, and neither is issue automation an issue event starts or a
-`one_shot` workflow such as verification recovery, since each such run handles
-the one event that started it. Those runs claim no priority either: they wait
-for a runner without preempting anything.
+A newer run replaces a pending one in its group and a started run finishes, so
+a long nightly or qualification never multiplies. The maintenance workflows
+share one group across workflows; their schedules are staggered so that no two
+are pending at once, and a scheduled run replaced by a manual one returns at
+its next schedule. Issue intake, an issue's lifecycle nudge, and verification
+recovery handle one event per run instead: each run is a single job bounded to
+fifteen minutes.
 
-Each sweep runs `python3 scripts/ci_verification.py schedule` and decides from
-structured facts only: run events, states, and attempts; job states and runner
-labels; merge-queue branches; and each pull request's draft state and head.
+These caps are maxima, not reservations. Hosted runners start waiting jobs in
+the order they were queued, so a merge-queue job waits behind every job queued
+before it, whatever its class. What bounds that wait is that every class's
+footprint is small and each pull request's is a single job of about ten
+minutes. Nothing reorders or preempts runs.
 
-1. It force-cancels CI of merge groups whose branch is gone.
-2. For each platform, it counts the runners that waiting merge-queue and
-   release jobs need: those queued beyond the runners this repository leaves
-   free, and any queued for five minutes, since other repositories share the
-   plan.
-3. It cancels runs in reverse priority order until the runners they hold cover
-   that need. Waiting ready pull request jobs then claim runners the same way
-   from every class below them, since their checks are what admits work to the
-   queue; qualification gates releases and runs on the runners left over. Waiting macOS jobs preempt only runs holding macOS runners, and
-   waiting Linux jobs only runs holding Linux runners. A lower-priority run
-   that holds nothing but waits on that platform is cancelled too, since it
-   would take the next free runner. A run is the unit of cancellation, so a
-   run chosen for one platform also frees its jobs on the other.
-4. While the merge queue holds any group, it cancels scheduled and background
-   runs.
-5. Once no merge-queue or release job waits, it re-runs the cancelled jobs of
-   the newest CI run of each ready pull request's head. Once ready pull
-   request jobs no longer wait either, it does the same for main's newest
-   cache-warming or qualification push, so work preempted for those checks
-   doesn't restart into the runners it just gave them. Once the merge queue is
-   also empty, it does the same for each background workflow's newest
-   scheduled run. A run resumes only when
-   its re-run jobs fit the runners left after every queued job starts, in
-   priority order and longest-waiting first, so resumed work never crowds the
-   merge queue it yielded to.
+At their widest the bounded classes hold 3 + 1 + 2 + 2 + 1 = 9 runners and the
+merge queue 8, leaving three that long work never claims; a pull request's CI
+run holds one. Under a burst of ten pull request pushes at once, their ten jobs
+queue ahead of a merge-queue job. With every bounded class at its widest, the
+three spare runners serve them four rounds of about ten minutes, so the
+merge-queue job starts after at most about 40 minutes. That worst case needs
+qualification, nightly, a release, warming, maintenance, and both groups all at
+their widest together. With the queue's two groups, qualification, and nightly
+running (13 runners), the ten jobs take seven runners at once and the
+merge-queue job starts with the last three, after about ten minutes. On macOS,
+qualification, warming, and nightly hold one runner each and a release two,
+five in all; the merge queue and the fast tier run on Linux. With `limits`,
+`lint`, and both behavior shards in its first wave, a full-scope group capped
+at four finishes in about 32 minutes of measured lane times, against about 26
+uncapped and about 44 at a cap of three; a group whose budgets or changed
+coverage fail stops after about six. A third group of four would not fit
+beside the other classes.
 
-Preempted work is delayed, not lost. Run history is the record: a resumable
-run is one that ended cancelled while still the newest run of its pull request
-head, warming push, or schedule, so a re-run sweep finds nothing left to do. A
-newer push or schedule supersedes it, and so does converting the pull request
-to draft, the way to stop a pull request's CI for good. Resumption keeps the
-jobs that already passed and stops at a run's fifth attempt; past that, the
-next push or schedule carries the work. Runs started by hand are re-run by
-whoever started them.
-
-The sweep runs when CI, release, release-halt, nightly, dependency inventory,
-or the release-system live test is requested or completes, and every ten
-minutes, because workflows cannot trigger on a merge group's removal or a job
-waiting for a runner. Pull request CI triggers it too, since ready checks are
-demand and their completions free runners. One sweep runs at a time and a newer
-trigger replaces a pending one, so every trigger must run the sweep: a trigger
-that skipped it would still displace the pending sweep it replaced. It is
-itself a short Linux job that waits for a runner like any other.
+Contract tests in
+[`hosted_capacity_contract_test.go`](../lycaon/test/contract/release/hosted_capacity_contract_test.go)
+compute each workflow's widest set of jobs that can run at once, following
+`needs`, event conditions, matrix caps, and reusable workflows, and require it
+within the declared footprint. They also require the classes, the merge queue
+at its queue settings, and one pull request's CI run to fit the plan together,
+and a pull request's run to hold one runner.
 
 ## Released-version compatibility
 

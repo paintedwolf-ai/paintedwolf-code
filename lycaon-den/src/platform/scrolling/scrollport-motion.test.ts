@@ -72,6 +72,10 @@ describe("ScrollportMotion native input", () => {
     const nestedHost = document.createElement("div");
     const nestedViewport = document.createElement("div");
     nestedHost.appendChild(nestedViewport);
+    Object.defineProperties(nestedViewport, {
+      clientHeight: { value: 100, configurable: true },
+      scrollHeight: { value: 500, configurable: true },
+    });
     outer.viewport.firstElementChild?.appendChild(nestedHost);
     const nested = bindScrollportMotion(nestedHost, nestedViewport, nestedViewport);
     const stopOuter = bindScrollportNativeInput(outer.motion);
