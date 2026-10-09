@@ -33,35 +33,35 @@ func TestBackgroundRecoveryPreservesSessionOwnershipAndCompletedOutput(t *testin
 	})
 	testutil.FailErr(t, "start recoverable process", err)
 	testutil.WaitFor(t, 5*time.Second, func() bool {
-		output, readErr := manager.GetBackgroundProcessOutput(t.Context(), "owner", handle)
+		output, readErr := manager.Processes.GetBackgroundProcessOutput(t.Context(), "owner", handle)
 		return readErr == nil && len(output.Chunks) > 0
 	})
-	processes := manager.ListBackgroundProcesses(t.Context(), "owner")
+	processes := manager.Processes.ListBackgroundProcesses(t.Context(), "owner")
 	if len(processes) != 1 || processes[0].ProcessID != handle || processes[0].Output == nil {
 		t.Fatalf("recovery omitted owned process output: %+v", processes)
 	}
-	if len(manager.ListBackgroundProcesses(t.Context(), "other")) != 0 {
+	if len(manager.Processes.ListBackgroundProcesses(t.Context(), "other")) != 0 {
 		t.Fatal("recovery listed another session's process")
 	}
-	_, err = manager.GetBackgroundProcessOutput(t.Context(), "other", handle)
+	_, err = manager.Processes.GetBackgroundProcessOutput(t.Context(), "other", handle)
 	if !errors.Is(err, bgprocess.ErrProcessNotFound) {
 		t.Fatalf("foreign read = %v", err)
 	}
-	_, err = manager.StopBackgroundProcess("other", handle)
+	_, err = manager.Processes.StopBackgroundProcess("other", handle)
 	if !errors.Is(err, bgprocess.ErrProcessNotFound) {
 		t.Fatalf("foreign stop = %v", err)
 	}
 	if !registry.HasRunning("owner") {
 		t.Fatal("foreign stop terminated the owner's process")
 	}
-	_, err = manager.StopBackgroundProcess("owner", handle)
+	_, err = manager.Processes.StopBackgroundProcess("owner", handle)
 	testutil.FailErr(t, "stop owned recovered process", err)
 	done, err := registry.Lifecycle.Await(t.Context(), "owner", handle, 5*time.Second)
 	testutil.FailErr(t, "await recovered process settlement", err)
 	if !done {
 		t.Fatal("recovered process did not settle")
 	}
-	output, err := manager.GetBackgroundProcessOutput(t.Context(), "owner", handle)
+	output, err := manager.Processes.GetBackgroundProcessOutput(t.Context(), "owner", handle)
 	testutil.FailErr(t, "recover completed output", err)
 	var text strings.Builder
 	for _, chunk := range output.Chunks {

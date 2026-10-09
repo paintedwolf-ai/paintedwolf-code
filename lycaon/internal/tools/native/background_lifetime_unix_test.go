@@ -13,7 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools/native"
+	"github.com/lycaon/lycaon/internal/tools/native/command"
 )
 
 func TestBackgroundHandleOutlivesInvocationAndStopsThroughTool(t *testing.T) {
@@ -33,7 +33,7 @@ func TestBackgroundHandleOutlivesInvocationAndStopsThroughTool(t *testing.T) {
 		t.Fatalf("live command was not promoted: %s", raw)
 	}
 	cancel()
-	outputTool := &native.CommandOutputTool{Registry: registry}
+	outputTool := &command.CommandOutputTool{Registry: registry}
 	testutil.WaitFor(t, 5*time.Second, func() bool {
 		output, readErr := outputTool.Run(t.Context(), map[string]any{"handle": started.Handle}, tctx)
 		return readErr == nil && strings.Contains(output, "background-ready")
@@ -41,7 +41,7 @@ func TestBackgroundHandleOutlivesInvocationAndStopsThroughTool(t *testing.T) {
 	if !registry.HasRunning("owner") {
 		t.Fatal("invocation cancellation terminated the background handle")
 	}
-	_, err = (&native.CommandStopTool{Registry: registry}).Run(t.Context(), map[string]any{"handle": started.Handle}, tctx)
+	_, err = (&command.CommandStopTool{Registry: registry}).Run(t.Context(), map[string]any{"handle": started.Handle}, tctx)
 	testutil.FailErr(t, "stop background through public tool", err)
 	done, err := registry.Lifecycle.Await(t.Context(), "owner", started.Handle, 5*time.Second)
 	testutil.FailErr(t, "await stopped background command", err)
