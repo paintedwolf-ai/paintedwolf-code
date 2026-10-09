@@ -1,0 +1,55 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {
+    "custom_ranges": [
+     {
+      "events": [
+       {
+        "introduced": "0"
+       },
+       {
+        "fixed": "3.5.10"
+       }
+      ],
+      "type": "ECOSYSTEM"
+     }
+    ]
+   },
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/siyuan-note/siyuan/kernel"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-30869",
+  "GHSA-2h2p-mvfx-868w"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-4646"
+ },
+ "details": "SiYuan Vulnerable to Path Traversal in /export Endpoint Allows Arbitrary File Read and Secret Leakage in github.com/siyuan-note/siyuan/kernel.\n\nNOTE: The source advisory for this report contains additional versions that could not be automatically mapped to standard Go module versions.\n\n(If this is causing false-positive reports from vulnerability scanners, please suggest an edit to the report.)\n\nThe additional affected modules and versions are: github.com/siyuan-note/siyuan/kernel before v3.5.10.",
+ "id": "GO-2026-4646",
+ "modified": "2026-03-10T18:28:10Z",
+ "published": "2026-03-10T18:28:10Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/siyuan-note/siyuan/security/advisories/GHSA-2h2p-mvfx-868w"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "SiYuan Vulnerable to Path Traversal in /export Endpoint Allows Arbitrary File Read and Secret Leakage in github.com/siyuan-note/siyuan/kernel"
+}

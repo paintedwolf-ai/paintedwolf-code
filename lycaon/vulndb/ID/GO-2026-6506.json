@@ -1,0 +1,56 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/coredns/coredns"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.14.7"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-86003",
+  "GHSA-9gm5-9rfh-m6vx"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6506"
+ },
+ "details": "CoreDNS DoH/DoQ/gRPC bypass UPDATE rejection enforced on UDP/TCP in github.com/coredns/coredns",
+ "id": "GO-2026-6506",
+ "modified": "2026-09-28T16:43:40Z",
+ "published": "2026-09-28T16:43:40Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/coredns/coredns/security/advisories/GHSA-9gm5-9rfh-m6vx"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-86003"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/coredns/coredns/commit/530b0a5ff2ad68cc0421f10dd93568945cc671c9"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/coredns/coredns/releases/tag/v1.14.7"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "CoreDNS DoH/DoQ/gRPC bypass UPDATE rejection enforced on UDP/TCP in github.com/coredns/coredns"
+}

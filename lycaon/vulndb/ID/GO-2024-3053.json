@@ -1,0 +1,56 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/AlexxIT/go2rtc"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.9.0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2024-29193",
+  "GHSA-rh4r-f7f7-r99m"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2024-3053"
+ },
+ "details": "gotortc Cross-site Scripting vulnerability in github.com/AlexxIT/go2rtc",
+ "id": "GO-2024-3053",
+ "modified": "2024-08-06T22:40:50Z",
+ "published": "2024-08-06T22:40:50Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-rh4r-f7f7-r99m"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2024-29193"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://securitylab.github.com/advisories/GHSL-2023-205_GHSL-2023-207_go2rtc"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/AlexxIT/go2rtc/commit/3b3d5b033aac3a019af64f83dec84f70ed2c8aba"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "gotortc Cross-site Scripting vulnerability in github.com/AlexxIT/go2rtc"
+}

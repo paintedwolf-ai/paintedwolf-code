@@ -211,6 +211,27 @@ describe("WorkflowsTab", () => {
     expect(screen.queryByTestId("workflow-download-report")).toBeNull();
   });
 
+  it("offers the incomplete report and lifecycle controls for a blocked review", () => {
+    const onResume = vi.fn();
+    const onExit = vi.fn();
+    render(() => (
+      <WorkflowsTab
+        {...baseProps()}
+        activeRun={{ ...completeSurveyRun, status: "paused", pause_reason: "review_blocked" }}
+        catalog={planCatalog}
+        downloadReport={vi.fn()}
+        onResume={onResume}
+        onExit={onExit}
+      />
+    ));
+    expect(screen.getByTestId("workflow-download-report")).toBeTruthy();
+    expect(screen.getByTestId("workflow-state-hint").textContent).toContain("incomplete report");
+    fireEvent.click(screen.getByTestId("workflow-resume"));
+    expect(onResume).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByTestId("workflow-leave"));
+    expect(onExit).toHaveBeenCalledOnce();
+  });
+
   it("downloads the report blob via downloadReport then downloadExport", async () => {
     const blob = new Blob(["%PDF"], { type: "application/pdf" });
     const downloadReport = vi.fn().mockResolvedValue({ blob, filename: "survey.pdf" });

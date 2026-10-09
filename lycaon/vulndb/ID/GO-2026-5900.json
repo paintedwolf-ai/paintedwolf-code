@@ -1,0 +1,61 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/drakkan/sftpgo"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/drakkan/sftpgo/v2"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "2.2.0"
+      },
+      {
+       "fixed": "2.7.3"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-49245",
+  "GHSA-3vcg-pv95-pq54"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-5900"
+ },
+ "details": "SFTPGo has stored XSS via inline parameter on public shares and user file download in github.com/drakkan/sftpgo",
+ "id": "GO-2026-5900",
+ "modified": "2026-07-07T15:26:37Z",
+ "published": "2026-07-07T15:26:37Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/drakkan/sftpgo/security/advisories/GHSA-3vcg-pv95-pq54"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "SFTPGo has stored XSS via inline parameter on public shares and user file download in github.com/drakkan/sftpgo"
+}

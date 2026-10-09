@@ -1,0 +1,86 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/elastic/beats"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {
+    "imports": [
+     {
+      "path": "github.com/elastic/beats/v7/metricbeat/module/prometheus/remote_write",
+      "symbols": [
+       "MetricSet.handleFunc",
+       "MetricSetBuilder",
+       "defaultConfig"
+      ]
+     },
+     {
+      "path": "github.com/elastic/beats/v7/x-pack/metricbeat/module/prometheus/remote_write",
+      "symbols": [
+       "init"
+      ]
+     }
+    ]
+   },
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/elastic/beats/v7"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "7.0.0-alpha2.0.20260112100137-de072c4e371e"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-26931",
+  "GHSA-5vrw-qjxw-89r5"
+ ],
+ "database_specific": {
+  "review_status": "REVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-4790"
+ },
+ "details": "Metricbeat Allocates Memory with Excessive Size Value Leading to Denial of Service in github.com/elastic/beats",
+ "id": "GO-2026-4790",
+ "modified": "2026-04-07T14:58:41Z",
+ "published": "2026-04-07T14:58:41Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-5vrw-qjxw-89r5"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/elastic/beats/commit/de072c4e371eafeb2a42d65b9ad513f666e4ffd7"
+  },
+  {
+   "type": "WEB",
+   "url": "https://discuss.elastic.co/t/metricbeat-8-19-13-9-2-5-security-update-esa-2026-09/385532"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Metricbeat Allocates Memory with Excessive Size Value Leading to Denial of Service in github.com/elastic/beats"
+}

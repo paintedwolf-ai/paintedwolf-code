@@ -26,7 +26,7 @@ func registerNativeScanTools(t *testing.T) (*tools.DefaultRegistry, scanbase.Sca
 	store := scanbase.NewSQLStore(sqlDB)
 	coord := newTestCoordinator(t, store, nil)
 	reg := tools.NewDefaultRegistry()
-	if err := scantoolapi.RegisterScanTools(reg, coord, &scanbase.MockRegistry{Scanner: &scanbase.MockScanner{}}, scancadence.New(scanbase.StoreFromCoordinator(coord), coord, &scanbase.MockRegistry{Scanner: &scanbase.MockScanner{}}, nil, scancfg.DefaultGatesConfig(), nil), nil, nil); err != nil {
+	if err := scantoolapi.RegisterScanTools(reg, coord, &scanbase.MockRegistry{Scanner: &scanbase.MockScanner{}}, scancadence.New(scanbase.StoreFromCoordinator(coord), coord, &scanbase.MockRegistry{Scanner: &scanbase.MockScanner{}}, nil, scancfg.DefaultGatesConfig(), nil), nil, nil, nil); err != nil {
 		testutil.FailErr(t, "RegisterScanTools failed", err)
 	}
 	return reg, coord, store, projectDir

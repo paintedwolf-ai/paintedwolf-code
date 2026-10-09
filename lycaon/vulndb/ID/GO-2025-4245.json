@@ -1,0 +1,48 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/expr-lang/expr"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.17.7"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2025-68156",
+  "GHSA-cfpf-hrx2-8rv6"
+ ],
+ "database_specific": {
+  "review_status": "REVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2025-4245"
+ },
+ "details": "Expr has Denial of Service via Unbounded Recursion in Builtin Functions in github.com/expr-lang/expr",
+ "id": "GO-2025-4245",
+ "modified": "2025-12-22T18:15:35Z",
+ "published": "2025-12-22T18:15:35Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/expr-lang/expr/security/advisories/GHSA-cfpf-hrx2-8rv6"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/expr-lang/expr/pull/870"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Expr has Denial of Service via Unbounded Recursion in Builtin Functions in github.com/expr-lang/expr"
+}

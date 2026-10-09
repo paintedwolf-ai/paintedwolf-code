@@ -116,6 +116,9 @@ export function workflowRunStepProgress(
 
 /** Running feedback prompt shown inline. */
 export function workflowRunStateHint(run: WorkflowRun): string | undefined {
+  if (run.status === "paused" && run.pause_reason === "review_blocked") {
+    return "The review could not record its verdict. Download the incomplete report, then resume after addressing the blocker.";
+  }
   const failureMessage = run.failure?.message?.trim();
   if (run.status === "failed" && failureMessage) {
     return failureMessage;

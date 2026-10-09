@@ -6,6 +6,8 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CHANNEL=""
 GENERATION=""
 HALT_PLAN=""
+PREPARE_OUTPUT=""
+APPLY_PREPARED=""
 DISTRIBUTION_OUTPUT=""
 REVIEWED_PLAN=0
 MANIFEST_KEY=""
@@ -32,6 +34,8 @@ EOF
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --prepare-output) PREPARE_OUTPUT="${2:-}"; shift 2 ;;
+    --apply-prepared) APPLY_PREPARED="${2:-}"; shift 2 ;;
     --bad) BAD_VERSION="${2:-}"; shift 2 ;;
     --last-good) LAST_GOOD_VERSION="${2:-}"; shift 2 ;;
     --channel) CHANNEL="${2:-}"; shift 2 ;;
@@ -67,6 +71,8 @@ fi
 
 if [[ -n "${HALT_PLAN}" ]]; then
   plan_args=(--plan "${HALT_PLAN}")
+  [[ -z "${PREPARE_OUTPUT}" ]] || plan_args+=(--prepare-output "${PREPARE_OUTPUT}")
+  [[ -z "${APPLY_PREPARED}" ]] || plan_args+=(--apply-prepared "${APPLY_PREPARED}")
   [[ "${DRY_RUN}" -eq 0 ]] || plan_args+=(--dry-run)
   [[ -z "${DISTRIBUTION_OUTPUT}" ]] || plan_args+=(--distribution-output "${DISTRIBUTION_OUTPUT}")
   exec python3 "${ROOT}/scripts/release-halt-plan.py" "${plan_args[@]}"
@@ -182,14 +188,20 @@ if parse(sys.argv[2]).channel != "stable":
 PYSTABLE
 fi
 
-if [[ "${DRY_RUN}" -eq 1 ]]; then
+if [[ "${DRY_RUN}" -eq 1 && -z "${CURRENT_FILE}" && -z "${PREPARE_OUTPUT}" ]]; then
+  PREPARE_OUTPUT="${WORKDIR}/prepared"
+fi
+if [[ "${DRY_RUN}" -eq 1 && -z "${PREPARE_OUTPUT}" ]]; then
   echo "release-halt: dry-run ok — verified ${BAD_VERSION} → ${LAST_GOOD_VERSION:-withdrawn}" >&2
   exit 0
 fi
 
+prepare_args=()
+[[ -z "${PREPARE_OUTPUT}" ]] || prepare_args+=(--prepare-output "${PREPARE_OUTPUT}")
 bash "${ROOT}/scripts/release-r2-publish-pointer.sh" \
   --file "${RELEASE_LOCAL}" \
   --channel "${CHANNEL}" --generation "${GENERATION}" --storage-prefix "${STORAGE_PREFIX}" \
-  --from-version "${BAD_VERSION}"
+  --from-version "${BAD_VERSION}" ${prepare_args[@]+"${prepare_args[@]}"}
+[[ -z "${PREPARE_OUTPUT}" ]] || exit 0
 echo "release-halt: stopped new direct-download discovery of ${BAD_VERSION}; ${CHANNEL} now advertises ${LAST_GOOD_VERSION:-no release}" >&2
 echo "release-halt: installed ${BAD_VERSION} clients remain installed; publish a higher signed recovery release" >&2

@@ -25,12 +25,12 @@ func TestSecuritySurveyFanOutWorkflowEndToEnd(t *testing.T) {
 	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureVet}, dir)
 	testutil.FailErr(t, "create session", err)
 
-	run, err := h.WorkflowMgr.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{WorkflowID: "security-survey", WorkflowVersion: "1.0.1"})
-	testutil.FailErr(t, "start security patch workflow", err)
+	run, err := h.WorkflowMgr.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{WorkflowID: "security-survey", WorkflowVersion: "2.0.0"})
+	testutil.FailErr(t, "start security workflow", err)
 	settleScanObligationAndAdvance(t, h, ctx, run.ID, "plan")
 	satisfyFanoutPlannedAndAdvance(t, h, ctx, run.ID, dir, []workflow.FanoutPlanLeg{
-		{AgentType: "security-reviewer", Subject: "Dependencies", Prompt: "Survey dependency risk"},
-		{AgentType: "security-reviewer", Subject: "Sign-in", Prompt: "Survey auth patterns"},
+		{AgentType: "security-reviewer", Subject: "Dependencies", Prompt: "Survey dependency risk", DoneWhen: []string{"Account for dependency risk and unexamined scope"}},
+		{AgentType: "security-reviewer", Subject: "Sign-in", Prompt: "Survey auth patterns", DoneWhen: []string{"Trace authentication boundaries and unexamined scope"}},
 	}, "execute")
 	satisfyWorkerCycleAndAdvance(t, h, ctx, sess, run.ID, dir)
 	waitWorkflowPhase(t, ctx, h.WorkflowMgr, run.ID, "claims")

@@ -1,0 +1,76 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/mattermost/mattermost-server"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "4.0.5+incompatible"
+      },
+      {
+       "introduced": "4.1.0+incompatible"
+      },
+      {
+       "fixed": "4.1.1+incompatible"
+      },
+      {
+       "introduced": "4.2.0-rc1+incompatible"
+      },
+      {
+       "fixed": "4.2.0+incompatible"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2017-18895",
+  "GHSA-h742-xx59-r9pq"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-4295"
+ },
+ "details": "Mattermost Server exposes sensitive user status information via REST API version 4 endpoint in github.com/mattermost/mattermost-server",
+ "id": "GO-2026-4295",
+ "modified": "2026-01-13T16:42:40Z",
+ "published": "2026-01-13T16:42:40Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-h742-xx59-r9pq"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2017-18895"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/mattermost/mattermost/commit/3c34e2b2dcb0fde96a10e68d877aa7d0ab511669"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/mattermost/mattermost/commit/722fb1947a2e7395ccf16adce9206736d803a9f3"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/mattermost/mattermost/commit/d38328976e2c8bb0fab91e656042a0d8ac37bc76"
+  },
+  {
+   "type": "WEB",
+   "url": "https://mattermost.com/security-updates"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Mattermost Server exposes sensitive user status information via REST API version 4 endpoint in github.com/mattermost/mattermost-server"
+}

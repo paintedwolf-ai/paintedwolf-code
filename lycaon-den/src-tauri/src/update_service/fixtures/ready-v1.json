@@ -1,0 +1,18 @@
+{
+  "format_version": 1,
+  "candidate": {
+    "version": "1.1.0",
+    "channel": "stable",
+    "platform": "darwin-aarch64",
+    "signing_generation": 1,
+    "artifact_url": "https://downloads.paintedwolf.dev/release.tar.gz",
+    "artifact_signature": "signature",
+    "release_id": "50f0fe52e0fd2930b2b5692bb5e4fe17fff809c1012d26facef9b6f95c628de6",
+    "notes": null,
+    "rollout_eligibility": "eligible"
+  },
+  "verified_at": 10,
+  "offer_confirmed_at": 20,
+  "executable_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "bundle_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+}
