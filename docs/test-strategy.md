@@ -207,6 +207,8 @@ the block, and updates evidence without adding a comment on every run. Untouched
 whose measurements and thresholds are unchanged retain their previous evidence. Completed
 issues reopen when the same debt returns. Closing an issue as **not planned**
 suppresses future reopening for that identity. Renames create new identities.
+Bot-authored issues carrying the tracking marker are exempt from ordinary issue
+intake, stale closure, and locking; their lifecycle follows the measured debt.
 Only automation-authored issues can be adopted or mutated; exact older automatic
 titles are adopted when their artifact is still above the threshold. Duplicate
 automatic issues point to the oldest canonical issue and close as not planned.
