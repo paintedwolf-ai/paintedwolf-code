@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/project"
@@ -19,9 +20,9 @@ import (
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
-	"github.com/lycaon/lycaon/internal/testutil"
-	catalogtest "github.com/lycaon/lycaon/internal/testsetup/sourcecatalog"
 	gittestsetup "github.com/lycaon/lycaon/internal/testsetup/git"
+	catalogtest "github.com/lycaon/lycaon/internal/testsetup/sourcecatalog"
+	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
