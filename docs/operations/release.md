@@ -58,7 +58,9 @@ reuse the public bucket and domain or point at a scratch bucket.
   keeps browser journeys in nightly and runs one macOS confinement/Git-parity
   job per group. Full Go behavior uses two Linux shards. Calibrate queue
   concurrency from current runner wait and execution times after cache warming;
-  additional groups can still hold back pull requests' fast tiers. Confirm the queue is live afterwards:
+  each additional group preempts more pull request CI, which
+  [runner priority](../test-strategy.md#runner-priority) resumes once the
+  queue's jobs have runners. Confirm the queue is live afterwards:
   the repository's `mergeQueue(branch: "main")` in the GraphQL API is not null.
 - [ ] Configure public repository presentation: description (`Local-first AI coding agent`), website (`https://paintedwolf.ai`), topics (`ai`, `agent`, `tauri`, `golang`, `solidjs`, `local-first`), and social preview image.
 
@@ -90,6 +92,8 @@ release, update both the host manifest and the action's revision pin together.
    the commit that lands, and wait for
    [Build caches](../../.github/workflows/build-caches.yml) to
    pass; the release build restores the Go and Tauri compiles that run saved.
+   Warming yields runners to the merge queue and resumes once its jobs have
+   runners.
    Tag that exact commit as `v<VERSION>` and push the tag. This starts
    [Release](../../.github/workflows/release.yml), which refuses a commit
    without a passing full-tier `CI/check`. A dependency-inventory refresh
