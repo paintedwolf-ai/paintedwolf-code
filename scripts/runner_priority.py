@@ -1,8 +1,10 @@
-"""Hosted runner priority: the merge queue and releases, then ready pull requests, drafts, main cache warming, and background work.
+"""Hosted runner priority: the merge queue and releases, then ready pull requests, main qualification, drafts,
+main cache warming, and background work.
 
 Hosted runners start jobs first come, first served. Each sweep reads run, job, branch, and pull request
-facts, cancels the lowest-priority runs only as far as waiting merge-queue and release jobs need runners,
-and re-runs the cancelled jobs of preempted work once nothing that outranks it is waiting.
+facts. Waiting merge-queue and release jobs, then waiting ready pull request jobs, take runners from strictly
+lower classes, cancelling the lowest-priority runs only as far as they need. Cancelled jobs re-run once their
+runners are spare.
 """
 
 from collections import Counter, namedtuple
@@ -27,7 +29,7 @@ QUEUE, RELEASE, READY, DRAFT, WARMING, BACKGROUND = "queue", "release", "ready",
 QUALIFICATION = "qualification"
 PROTECTED = {QUEUE, RELEASE}
 # Lowest priority first: the order in which runs give up runners.
-YIELD_ORDER = (BACKGROUND, WARMING, DRAFT, READY, QUALIFICATION)
+YIELD_ORDER = (BACKGROUND, WARMING, DRAFT, QUALIFICATION, READY)
 # The event whose newest run resumes; runs started by hand are re-run by whoever started them.
 RESUMED_EVENTS = {WARMING: "push", QUALIFICATION: "push", BACKGROUND: "schedule"}
 
@@ -130,6 +132,13 @@ def decide(runs, kinds, jobs, live_groups, now):
         held = count(jobs.get(run["id"], []), "in_progress")
         need = {name: need[name] - held[name] for name in PLATFORMS}
     preempted = yielded + preemptions([(run, jobs.get(run["id"], [])) for run in candidates if run not in yielded], need)
+    # Ready pull request checks feed the queue, so they claim runners from every lower class in turn.
+    remaining = [run for run in live if run not in preempted]
+    ready = [job for run in remaining if kinds[run["id"]] == READY for job in jobs.get(run["id"], [])]
+    need = shortfall(ready, [job for run in remaining for job in jobs.get(run["id"], [])], now)
+    lower = [run for run in candidates
+             if run not in preempted and YIELD_ORDER.index(kinds[run["id"]]) < YIELD_ORDER.index(READY)]
+    preempted += preemptions([(run, jobs.get(run["id"], [])) for run in lower], need)
     if any(job["status"] == "queued" for job in protected):
         resumable = set()
     else:
@@ -200,7 +209,7 @@ def schedule(repository, github, now=None):
                                   filter="latest", per_page=100)["jobs"] for run in selected}
 
     live = [run for run in runs if kinds[run["id"]] != QUEUE or run["head_branch"] in live_groups]
-    jobs = load(run for run in live if kinds[run["id"]] in PROTECTED)
+    jobs = load(run for run in live if kinds[run["id"]] in PROTECTED | {READY})
     if any(job["status"] == "queued" for values in jobs.values() for job in values):
         jobs.update(load(run for run in live if run["id"] not in jobs))
     plan = decide(runs, kinds, jobs, live_groups, now)
