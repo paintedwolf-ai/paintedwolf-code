@@ -1,5 +1,7 @@
 package loopwake
 
+import "sync"
+
 // sessionSleeps maps a session ID to its *sessionSleep.
 type sessionSleeps struct{ sync.Map }
 
