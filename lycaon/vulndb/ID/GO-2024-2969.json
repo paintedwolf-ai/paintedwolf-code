@@ -1,0 +1,53 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/gogs/gogs"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2024-39930",
+  "GHSA-p69r-v3h4-rj4f"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2024-2969"
+ },
+ "details": "github.com/gogs/gogs affected by CVE-2024-39930",
+ "id": "GO-2024-2969",
+ "modified": "2024-07-29T18:12:24Z",
+ "published": "2024-07-09T19:34:07Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-p69r-v3h4-rj4f"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2024-39930"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/gogs/gogs/releases"
+  },
+  {
+   "type": "WEB",
+   "url": "https://www.sonarsource.com/blog/securing-developer-tools-unpatched-code-vulnerabilities-in-gogs-1"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "github.com/gogs/gogs affected by CVE-2024-39930"
+}

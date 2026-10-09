@@ -1,7 +1,7 @@
 import { confirmDestructive } from "../interaction/confirm-dialog.ts";
 import { clickSelectedText } from "../interaction/selection-gesture.ts";
 import type { BrowserPreset } from "../../../shared/app-state-types.ts";
-import { ISSUES_URL, REPOSITORY_URL, WEBSITE_URL } from "../../../shared/brand.ts";
+import { REPOSITORY_URL, WEBSITE_URL } from "../../../shared/brand.ts";
 import {
   externalOpenPrefs,
   resolveExternalOpenPrefs,
@@ -131,15 +131,27 @@ export async function confirmAndOpenExternalLink(
   return true;
 }
 
-/** Destinations the app itself defines; only these open without the prompt. */
-const APP_LINK_URLS: ReadonlySet<string> = new Set([WEBSITE_URL, REPOSITORY_URL, ISSUES_URL]);
+/** Only app-authored surfaces may bypass confirmation for these destinations. */
+export function isAppLink(url: string): boolean {
+  if (url !== url.trim()) return false;
+  try {
+    const target = new URL(url);
+    if (target.username || target.password) return false;
+    return [WEBSITE_URL, REPOSITORY_URL].some((value) => {
+      const base = new URL(value);
+      const path = base.pathname.replace(/\/$/, "");
+      return target.origin === base.origin &&
+        (target.pathname === path || target.pathname.startsWith(`${path}/`));
+    });
+  } catch { return false; }
+}
 
 /** Opens one of the app's own destinations in the preferred browser without confirmation; false for any other URL. */
 export async function openAppLink(
   url: string,
   options?: Pick<ConfirmAndOpenExternalLinkOptions, "openInBrowser">,
 ): Promise<boolean> {
-  if (!APP_LINK_URLS.has(url)) return false;
+  if (!isAppLink(url)) return false;
   const prefs = resolveExternalOpenPrefs(externalOpenPrefs());
   const open = options?.openInBrowser ?? openInBrowser;
   await open(url, {

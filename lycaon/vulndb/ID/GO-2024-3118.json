@@ -1,0 +1,65 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/windmill-labs/windmill"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2024-8462"
+ ],
+ "credits": [
+  {
+   "name": "DeepCove (VulDB User)"
+  }
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2024-3118"
+ },
+ "details": "Windmill HTTP Request users.rs excessive authentication in github.com/windmill-labs/windmill",
+ "id": "GO-2024-3118",
+ "modified": "2024-09-06T20:43:50Z",
+ "published": "2024-09-06T20:43:50Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2024-8462"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/windmill-labs/windmill/commit/acfe7786152f036f2476f93ab5536571514fa9e3"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/windmill-labs/windmill/releases/tag/v1.390.1"
+  },
+  {
+   "type": "WEB",
+   "url": "https://vuldb.com/?ctiid.276630"
+  },
+  {
+   "type": "WEB",
+   "url": "https://vuldb.com/?id.276630"
+  },
+  {
+   "type": "WEB",
+   "url": "https://vuldb.com/?submit.401826"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Windmill HTTP Request users.rs excessive authentication in github.com/windmill-labs/windmill"
+}

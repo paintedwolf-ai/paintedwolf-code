@@ -13,29 +13,28 @@ import threading
 import time
 
 from artifact_paths import artifact_root
+from ci_policy.evidence import oom_events, classify, failure_signature
+import runner_priority
 from verification_plan import catalog, expand
 
 
 ROOT = Path(__file__).resolve().parent.parent
-PROFILES = {"fast", "check", "nightly", "release"}
+PROFILES = {"fast", "check", "nightly", "release", "integration"}
 # Each profile on the left runs exactly the stages of the local gate on the right.
 GATES = {"fast": "check-fast", "check": "check"}
-# Runs of `CI/check` that executed the full tier; pull requests run the fast tier on a merge preview.
-FULL_TIER_EVENTS = {"merge_group", "workflow_dispatch"}
-# Run states that still hold, or will claim, a runner.
-UNFINISHED_RUNS = ("requested", "waiting", "pending", "queued", "in_progress")
-QUEUE_BRANCHES = "gh-readonly-queue/"
 # Output lines kept per failure in the job log and summary; the full logs travel with the evidence.
 EXCERPT_LINES = 60
 # Go's progress lines for tests that are running or passed; they bury a parallel package's failure.
 GO_PROGRESS = re.compile(r"^=== (RUN|PAUSE|CONT|NAME)\b|^\s*--- (PASS|SKIP):")
-SUITES = {"all", "behavior", "race", "coverage", "performance", "fuzz"}
+SUITES = {"all", "behavior", "race", "coverage", "performance", "fuzz", "e2e"}
 # What a lane installs: the shared toolchains, plus the Tauri shell and its staged engine,
 # or the Den Rust workspace and harness stack without the shell's packaging inputs.
 SETUPS = {"verification", "shell", "harness"}
 
 
 def lanes():
+    from ci_policy.quarantine import entries
+    entries()
     values = catalog()["ci"]
     taskfile = (ROOT / "Taskfile.yml").read_text()
     targets = set(re.findall(r"^  ([\w:-]+):$", taskfile, re.M))
@@ -65,6 +64,11 @@ def lanes():
         if actual != expected:
             raise ValueError(f"CI {profile} partition differs from {gate}: "
                              f"missing={expected - actual}, extra={actual - expected}")
+    expected = Counter(stage["name"] for stage in expand(["check"]) if stage["name"] != "build:cross")
+    actual = Counter(stage["name"] for lane in values.values() if "integration" in lane["profiles"]
+                     for stage in expand(lane["targets"]))
+    if actual != expected:
+        raise ValueError(f"integration partition differs from check minus cross compilation: {expected - actual}, {actual - expected}")
     return values
 
 
@@ -74,11 +78,20 @@ def analysis_set(targets):
     return "all" if lint and vulnerabilities else "lint" if lint else "vulnerabilities" if vulnerabilities else "none"
 
 
-def matrix(profile, suite="all"):
+def matrix(profile, suite="all", scope=None):
     if profile not in PROFILES or suite not in SUITES or profile != "nightly" and suite != "all":
         raise ValueError(f"unsupported CI selection: {profile}/{suite}")
+    if profile == "integration" and scope is not None and scope["full"]:
+        profile = "check"
     result = []
-    for name, lane in lanes().items():
+    values = lanes()
+    selected = set(values)
+    if profile == "integration" and scope is not None:
+        from ci_policy.impact import selected_lanes
+        selected = selected_lanes(scope, values)
+    for name, lane in values.items():
+        if name not in selected:
+            continue
         if profile not in lane["profiles"] or suite != "all" and lane["suite"] not in {"all", suite}:
             continue
         count = lane.get("shards", 1)
@@ -94,8 +107,10 @@ def matrix(profile, suite="all"):
     return {"include": result}
 
 
-def require_success(results, skipped=()):
+def require_success(results, skipped=(), draft=False):
     """Every job passed, except those the caller's tier skips on purpose, which must not have run."""
+    if draft:
+        raise ValueError("draft pull requests are not verified; mark the pull request ready for review to run its checks")
     if not isinstance(results, dict) or not results:
         raise ValueError("required-job results are missing")
     unknown = set(skipped) - set(results)
@@ -111,25 +126,6 @@ def github(path, method="GET", **query):
     command = ["gh", "api", "--method", method, path, *(f"-f{key}={value}" for key, value in query.items())]
     output = subprocess.run(command, check=True, capture_output=True, text=True).stdout
     return json.loads(output) if output.strip() else None
-
-
-def prune_merge_queue(repository):
-    """Cancel CI runs for merge groups the queue already merged, rebuilt, or dropped.
-
-    The queue deletes a group's branch when the group ends but leaves its runs holding runners.
-    Runs are listed before branches, so a group created in between counts as live.
-    """
-    runs = [run for status in UNFINISHED_RUNS
-            for run in github(f"repos/{repository}/actions/workflows/ci.yml/runs",
-                              event="merge_group", status=status, per_page=100)["workflow_runs"]]
-    live = {ref["ref"].removeprefix("refs/heads/")
-            for ref in github(f"repos/{repository}/git/matching-refs/heads/{QUEUE_BRANCHES}")}
-    stale = [run for run in runs if run["head_branch"] not in live]
-    for run in stale:
-        # A plain cancel still schedules a stale run's always() steps; force-cancel stops it outright.
-        github(f"repos/{repository}/actions/runs/{run['id']}/force-cancel", method="POST")
-        print(f"cancelled run {run['id']}: merge group {run['head_branch']} no longer exists", flush=True)
-    return [run["id"] for run in stale]
 
 
 def task_json(arguments):
@@ -159,18 +155,14 @@ def release_leftover_requests(step):
     return unreleased
 
 
-def require_full_tier(repository, sha):
-    """The commit itself passed `CI/check` in the full tier, as every commit the merge queue lands has."""
-    runs = github(f"repos/{repository}/commits/{sha}/check-runs", check_name="check", filter="all")["check_runs"]
-    events = set()
-    for run in runs:
-        if run["app"]["slug"] != "github-actions" or run["conclusion"] != "success":
-            continue
-        suite = run["check_suite"]["id"]
-        events |= {item["event"] for item in github(f"repos/{repository}/actions/runs", check_suite_id=suite)["workflow_runs"]}
-    if not events & FULL_TIER_EVENTS:
-        raise ValueError(f"{sha} has no passing full-tier CI/check; land it through the merge queue "
-                         "or dispatch CI on it before releasing")
+def require_qualification(repository, sha):
+    """Release eligibility comes from qualification of this exact commit."""
+    runs = github(f"repos/{repository}/actions/workflows/qualification.yml/runs",
+                  head_sha=sha, per_page=100)["workflow_runs"]
+    if not any(run["head_sha"] == sha and run["head_branch"] == "main"
+               and run["event"] in {"push", "workflow_dispatch"}
+               and run["conclusion"] == "success" for run in runs):
+        raise ValueError(f"{sha} has no passing exact-commit qualification; qualify it before releasing")
 
 
 def invocation(targets):
@@ -211,13 +203,20 @@ def run_lane(name, shard=""):
     if (shard == "") != (count == 1) or shard and shard not in {f"{k}/{count}" for k in range(1, count + 1)}:
         raise ValueError(f"CI lane {name} has {count} shard(s); got {shard!r}")
     targets = lane["targets"]
+    scope = None
+    if os.environ.get("PW_CI_AFFECTED") == "1":
+        from ci_policy.impact import change
+        scope = change()
     directory = artifact_root(ROOT) / "ci"
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / "run.json"
-    record = {"lane": name, "shard": shard, "targets": targets, "started_at": time.time(), "status": "running"}
+    record = {"lane": name, "shard": shard, "targets": targets, "started_at": time.time(), "status": "running", "scope": scope}
+    record["oom_before"] = oom_events()
     path.write_text(json.dumps(record, indent=2) + "\n")
     # Hosted runners are slower than development hosts; the lane budget, not the local default, bounds Go runs.
     environment = {"PW_GO_TEST_TIMEOUT_SECONDS": str(lane["minutes"] * 60), **os.environ}
+    if scope and scope["base"]:
+        environment["PW_CHANGE_BASE"] = scope["base"]
     # A lane whose peak memory outgrows the runner caps its parallelism below the CPU count.
     if "workers" in lane:
         environment["PW_TEST_WORKERS"] = str(lane["workers"])
@@ -228,12 +227,26 @@ def run_lane(name, shard=""):
     stop = threading.Event()
     if os.environ.get("PW_TEST_HOST") == "dedicated" and Path("/proc/meminfo").exists():
         threading.Thread(target=sample_resources, args=(stop,), daemon=True).start()
+    command = ["./task", *invocation(targets)]
+    if scope and name == "behavior":
+        from ci_policy.impact import go_scope
+        packages = go_scope(scope)
+        if packages:
+            # Deal after selection, so a small closure cannot produce an empty shard.
+            if shard:
+                index, total = map(int, shard.split("/"))
+                packages = packages[(index - 1) % len(packages)::min(total, len(packages))]
+                environment.pop("PW_GO_SHARD", None)
+            command += ["--", *packages]
+            record["packages"] = packages
     try:
-        code = subprocess.call(["./task", *invocation(targets)], cwd=ROOT, env=environment)
+        code = subprocess.call(command, cwd=ROOT, env=environment)
     finally:
         stop.set()
+    record["oom_after"] = oom_events()
     record.update(finished_at=time.time(), exit_code=code,
                   status="passed" if code == 0 else "failed" if code == 1 else "unverified")
+    record["classification"] = classify(record, failures(artifact_root(ROOT)))
     path.write_text(json.dumps(record, indent=2) + "\n")
     return code
 
@@ -247,8 +260,8 @@ def failures(root):
         record = json.loads(receipt.read_text())
         if record.get("status") == "passed":
             continue
-        stages = [{"stage": evidence["stage"], "subject": subject, "status": result.get("status"),
-                   "tests": result.get("tests", []), "output": result.get("output"), "log": result.get("log")}
+        stages = [{"stage": evidence["stage"], "subject": subject, "status": result.get("status"), "exit_code": result.get("exit_code"),
+                   "tests": result.get("tests", []), "output": result.get("output"), "log": result.get("log"), "resource_limit": result.get("resource_limit")}
                   for evidence in record.get("evidence", [])
                   for subject, result in evidence.get("results", {}).items() if result.get("status") != "passed"]
         # A run stopped before any stage reported, such as a cancellation, has only the receipt's reason.
@@ -295,6 +308,11 @@ def report(status):
     root = artifact_root(ROOT)
     path = root / "ci" / "run.json"
     record = json.loads(path.read_text()) if path.exists() else {}
+    found = failures(root)
+    for failure in found:
+        failure["signature"] = failure_signature(failure)
+    (root / "ci").mkdir(parents=True, exist_ok=True)
+    (root / "ci" / "failures.json").write_text(json.dumps(found, indent=2) + "\n")
     lines = [f"### Verification: {status}", ""]
     if record:
         elapsed = (record.get("finished_at", time.time()) - record["started_at"]) / 60
@@ -320,6 +338,7 @@ def main():
     commands = parser.add_subparsers(dest="command", required=True)
     plan = commands.add_parser("matrix")
     plan.add_argument("profile", choices=sorted(PROFILES))
+    plan.add_argument("--affected", action="store_true")
     plan.add_argument("--suite", default="all", choices=sorted(SUITES))
     run = commands.add_parser("run")
     run.add_argument("lane")
@@ -327,24 +346,31 @@ def main():
     gate = commands.add_parser("gate")
     gate.add_argument("--skipped", type=lambda value: [name for name in value.split(",") if name], default=[],
                       help="comma-separated jobs this tier skips on purpose")
+    gate.add_argument("--draft", choices=["true", "false"], default="false",
+                      help="whether the run verifies a draft pull request")
     summary = commands.add_parser("report")
     summary.add_argument("status")
     verified = commands.add_parser("verified")
     verified.add_argument("sha")
-    commands.add_parser("prune")
+    commands.add_parser("schedule", help="give hosted runners to work in priority order")
     release = commands.add_parser("release")
     release.add_argument("step", help="the step whose leftover requests are withdrawn")
     args = parser.parse_args()
     if args.command == "matrix":
-        print(json.dumps(matrix(args.profile, args.suite), separators=(",", ":")))
+        from ci_policy.impact import change
+        scope = change() if args.affected else None
+        if scope and os.environ.get("GITHUB_STEP_SUMMARY"):
+            with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as summary:
+                summary.write("### Integration scope\n\n```json\n" + json.dumps(scope, indent=2) + "\n```\n")
+        print(json.dumps(matrix(args.profile, args.suite, scope), separators=(",", ":")))
     elif args.command == "run":
         return run_lane(args.lane, args.shard)
     elif args.command == "gate":
-        require_success(json.loads(os.environ["NEEDS_JSON"]), args.skipped)
+        require_success(json.loads(os.environ["NEEDS_JSON"]), args.skipped, args.draft == "true")
     elif args.command == "verified":
-        require_full_tier(os.environ["GITHUB_REPOSITORY"], args.sha)
-    elif args.command == "prune":
-        prune_merge_queue(os.environ["GITHUB_REPOSITORY"])
+        require_qualification(os.environ["GITHUB_REPOSITORY"], args.sha)
+    elif args.command == "schedule":
+        runner_priority.schedule(os.environ["GITHUB_REPOSITORY"], github)
     elif args.command == "release":
         # Cleanup still runs; a request that would not release is reported, not fatal.
         unreleased = release_leftover_requests(args.step)
