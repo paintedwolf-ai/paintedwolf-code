@@ -141,6 +141,9 @@ def decide(runs, kinds, jobs, live_groups, now):
     preempted += preemptions([(run, jobs.get(run["id"], [])) for run in lower], need)
     if any(job["status"] == "queued" for job in protected):
         resumable = set()
+    elif any(need.values()):
+        # Lower classes stay down while ready checks still wait for the runners they gave up.
+        resumable = {READY}
     else:
         resumable = {READY, WARMING, QUALIFICATION} | (set() if live_groups else {BACKGROUND})
     return Plan(stale, [(run, kinds[run["id"]]) for run in preempted], resumable)

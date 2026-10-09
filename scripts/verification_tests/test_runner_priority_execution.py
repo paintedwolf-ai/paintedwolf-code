@@ -229,6 +229,22 @@ class RunnerPriorityTests(unittest.TestCase):
         latest = cancelled(20, 'qualification.yml', 'push')
         self.assertEqual(rp.resumptions([], {rp.QUALIFICATION: [latest]}, set(), {rp.QUALIFICATION}), [latest])
 
+    def test_work_preempted_for_ready_checks_stays_down_while_they_wait(self):
+        qualification = run(2, "qualification.yml", "push")
+        waiting = run(3, "ci.yml", "pull_request", sha="waiting")
+        history = {("qualification.yml", "push"): [cancelled(20, "qualification.yml", "push")],
+                   ("build-caches.yml", "push"): [cancelled(21, "build-caches.yml", "push")],
+                   ("ci.yml", "pull_request"): [cancelled(22, "ci.yml", "pull_request", sha="resumable")]}
+        repository = Repository([qualification, waiting], pulls=[("waiting", False), ("resumable", False)],
+                                history=history,
+                                jobs={2: jobs(running=["linux"] * 16), 3: jobs(queued=["linux"] * 4, age=10),
+                                      20: unfinished(linux=2), 21: unfinished(linux=1), 22: unfinished(linux=1)})
+        cancelled_ids, resumed = repository.schedule()
+        # The runners qualification gave up belong to the waiting checks, so it and warming are not re-run
+        # into them; only other ready work may resume, and only into runners spare after every queued job.
+        self.assertEqual(cancelled_ids, [2])
+        self.assertEqual(resumed, [22])
+
     def test_starved_ready_checks_take_runners_from_qualification_only(self):
         queue = run(1, "ci.yml", "merge_group", branch=GROUP)
         qualification = run(2, "qualification.yml", "push")

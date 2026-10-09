@@ -671,9 +671,12 @@ labels; merge-queue branches; and each pull request's draft state and head.
 4. While the merge queue holds any group, it cancels scheduled and background
    runs.
 5. Once no merge-queue or release job waits, it re-runs the cancelled jobs of
-   the newest CI run of each ready pull request's head and of main's newest
-   cache-warming or qualification push. Once the merge queue is also empty, it does the same for
-   each background workflow's newest scheduled run. A run resumes only when
+   the newest CI run of each ready pull request's head. Once ready pull
+   request jobs no longer wait either, it does the same for main's newest
+   cache-warming or qualification push, so work preempted for those checks
+   doesn't restart into the runners it just gave them. Once the merge queue is
+   also empty, it does the same for each background workflow's newest
+   scheduled run. A run resumes only when
    its re-run jobs fit the runners left after every queued job starts, in
    priority order and longest-waiting first, so resumed work never crowds the
    merge queue it yielded to.
@@ -688,10 +691,13 @@ next push or schedule carries the work. Runs started by hand are re-run by
 whoever started them.
 
 The sweep runs when CI, release, release-halt, nightly, dependency inventory,
-or the release-system live test is requested or completes, other than pull
-request CI, and every ten minutes, because workflows cannot trigger on a merge
-group's removal or a job waiting for a runner. It is itself a short Linux job
-that waits for a runner like any other.
+or the release-system live test is requested or completes, and every ten
+minutes, because workflows cannot trigger on a merge group's removal or a job
+waiting for a runner. Pull request CI triggers it too, since ready checks are
+demand and their completions free runners. One sweep runs at a time and a newer
+trigger replaces a pending one, so every trigger must run the sweep: a trigger
+that skipped it would still displace the pending sweep it replaced. It is
+itself a short Linux job that waits for a runner like any other.
 
 ## Released-version compatibility
 
