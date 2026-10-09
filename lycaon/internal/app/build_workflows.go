@@ -192,9 +192,9 @@ func (b boardWiring) wireWorkflowEvidence() error {
 	b.mgr.SetEvidenceStore(b.evidenceStore)
 	if b.settings.Service != nil {
 		b.mgr.SetVerifyConfig(b.settings.Service.Verify)
-		if b.toolRuntime != nil {
+		if b.execution.Host != nil {
 			// The tool and gate share one declared-command resolver.
-			b.toolRuntime.Commands.SetVerifyDeclaredCommand(b.settings.Service.Verify.VerifyTestCommand)
+			b.execution.Host.Commands.SetVerifyDeclaredCommand(b.settings.Service.Verify.VerifyTestCommand)
 		}
 	}
 	return b.wireWorkflowScanServices()
@@ -206,8 +206,8 @@ func (b boardWiring) wireWorkflowScanServices() error {
 	b.gitStatusCache = git.NewStatusCache(b.gitMgr)
 	b.gitStatusCache.RegisterRepochangeObserver()
 	b.gitRepoSetCache = git.NewRepoSetCache(git.DefaultStatusCacheTTL)
-	if b.toolRuntime != nil {
-		b.toolRuntime.Survey.SetGitStatusCache(b.gitStatusCache)
+	if b.execution.Host != nil {
+		b.execution.Host.Survey.SetGitStatusCache(b.gitStatusCache)
 	}
 
 	b.gatesCfg = scancfg.DefaultGatesConfig()
@@ -333,10 +333,10 @@ func (b boardWiring) wireWorkflowConditions() error {
 				Runs: b.workflowMgr.Policy,
 			},
 		}
-		b.toolRuntime.Mutations.SetContentApply(contentApply)
+		b.execution.Host.Mutations.SetContentApply(contentApply)
 	}
-	if b.toolRuntime != nil && b.workflowMgr != nil {
-		b.toolRuntime.Mutations.SetBlueprintWriteObserver(b.workflowMgr.Blueprints)
+	if b.execution.Host != nil && b.workflowMgr != nil {
+		b.execution.Host.Mutations.SetBlueprintWriteObserver(b.workflowMgr.Blueprints)
 	}
 	b.workflowMgr.Obligations.Register(b.scanObligation)
 	workflowTaskQuery1 := func(ctx context.Context, runID string) ([]api.WorkerTask, error) {

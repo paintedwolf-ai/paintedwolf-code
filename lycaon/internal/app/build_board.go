@@ -64,7 +64,7 @@ func (b boardWiring) wireBoardAndResearch() error {
 	if scopeErr != nil {
 		return fmt.Errorf("toolscope: %w", scopeErr)
 	}
-	b.toolRuntime.Survey.SetScopeGuards(scopeCfg, b.repoCatalogFileCount)
+	b.execution.Host.Survey.SetScopeGuards(scopeCfg, b.repoCatalogFileCount)
 	b.boardSnap = &board.SnapshotBuilder{
 		Delegations:            b.delegationStore,
 		Workers:                b.workerQueue,
@@ -92,7 +92,7 @@ func (b boardWiring) wireBoardAndResearch() error {
 		}
 		return b.settings.Service.SecurityScanners.Effective().Enabled
 	})
-	if err := board.RegisterBoardTools(b.toolRuntime.Registry, board.ToolDeps{
+	if err := board.RegisterBoardTools(b.execution.Host.Registry, board.ToolDeps{
 		Builder:            b.boardSnap,
 		Findings:           func() findings.Store { return b.findingsStore },
 		RootSession:        b.rootSessionKey,
@@ -102,7 +102,7 @@ func (b boardWiring) wireBoardAndResearch() error {
 	}); err != nil {
 		return fmt.Errorf("board tools: %w", err)
 	}
-	b.toolRuntime.Survey.SetListDirUnionBrief(func(ctx context.Context, tctx tools.ToolContext, subpath string) (string, error) {
+	b.execution.Host.Survey.SetListDirUnionBrief(func(ctx context.Context, tctx tools.ToolContext, subpath string) (string, error) {
 		if len(tctx.Source.Roots) < 2 {
 			return "", nil
 		}
@@ -115,9 +115,9 @@ func (b boardWiring) wireBoardAndResearch() error {
 		}
 		return repoinfo.FormatOrientationBriefText(mrb.OrientationRoots()), nil
 	})
-	b.mgr.SetTurnLoads(b.turnLoads)
+	b.mgr.SetTurnLoads(b.execution.TurnLoads)
 	b.mgr.SetDecider(b.decisions.Decider)
-	b.mgr.SetSkillBodyRenderer(b.toolRuntime.Skills.RenderSkillBody)
+	b.mgr.SetSkillBodyRenderer(b.execution.Host.Skills.RenderSkillBody)
 	b.webResearchRuntime, err = webresearch.WireRuntime()
 	if err != nil {
 		return fmt.Errorf("web research runtime: %w", err)
@@ -126,7 +126,7 @@ func (b boardWiring) wireBoardAndResearch() error {
 	webCat, webCfg, webReg := b.webResearchRuntime.Catalog, b.webResearchRuntime.Config, b.webResearchRuntime.Registry
 	var llmReg, llmPol = b.providers.RegistryPolicy()
 	b.webDiscoverer = webresearch.NewDirectDiscovererFactory(b.storage.WebIndex, webReg, b.webResearchCreds, webCfg, webCat, b.decisions.Rerank)
-	b.toolRuntime.Web.SetDirectDiscovererFactory(b.webDiscoverer)
+	b.execution.Host.Web.SetDirectDiscovererFactory(b.webDiscoverer)
 	if b.storage.WebIndex != nil {
 		webReg.AttachQuotaStore(b.storage.WebIndex)
 		// Session activity and schedules warm the index.
@@ -151,7 +151,7 @@ func (b boardWiring) wireBoardAndResearch() error {
 		Registry: webReg,
 		Index:    b.storage.WebIndex,
 		Rerank:   b.decisions.Rerank,
-		Boundary: b.toolRuntime.Boundary,
+		Boundary: b.execution.Host.Boundary,
 		SearchWarmHook: func(ctx context.Context, sessionID, toolCallID, query, projectDir string, hitURLs, residualURLs []string, strongHits, maxResults int, directParticipated bool) {
 			b.mgr.WarmIndexForSearch(ctx, sessionID, toolCallID, query, projectDir, hitURLs, residualURLs, strongHits, maxResults, directParticipated)
 		},
@@ -163,23 +163,23 @@ func (b boardWiring) wireBoardAndResearch() error {
 		return err
 	} else {
 		deps.SecretMatcher = matcher
-		deps.SecretAsk = b.security.Ask(b.toolRuntime.Executor.Secrets, b.toolRuntime.Authority.ApprovalsDisabled)
+		deps.SecretAsk = b.security.Ask(b.execution.Host.Executor.Secrets, b.execution.Host.Authority.ApprovalsDisabled)
 		deps.VisualStore = b.visualStore
 		deps.VisualScreen = visualscreen.NewGate(visualscreen.NewScanner(nil).WithRenderedReferences(browser.RenderLoadsReference), matcher, deps.SecretAsk)
 		if err := sessionWiring(b).wireSecretCapabilities(); err != nil {
 			return err
 		}
 	}
-	if err := webresearch.RegisterToolsWithFactory(b.toolRuntime.Registry, deps, b.toolRuntime.Web.DirectFactoryGetter()); err != nil {
+	if err := webresearch.RegisterToolsWithFactory(b.execution.Host.Registry, deps, b.execution.Host.Web.DirectFactoryGetter()); err != nil {
 		return fmt.Errorf("web research tools: %w", err)
 	}
-	if err := httpaction.Register(b.toolRuntime.Registry, httpaction.Deps{
-		Boundary: b.toolRuntime.Boundary, SecretMatcher: deps.SecretMatcher, SecretAsk: deps.SecretAsk,
+	if err := httpaction.Register(b.execution.Host.Registry, httpaction.Deps{
+		Boundary: b.execution.Host.Boundary, SecretMatcher: deps.SecretMatcher, SecretAsk: deps.SecretAsk,
 		Secrets: b.security.Capabilities,
 	}); err != nil {
 		return fmt.Errorf("http request tool: %w", err)
 	}
-	b.toolRuntime.Web.SetWebResearchConfig(webCfg)
+	b.execution.Host.Web.SetWebResearchConfig(webCfg)
 	b.mgr.SetWebResearchConfig(webCfg)
 	return nil
 }
@@ -286,7 +286,7 @@ func (b boardWiring) wireGroundingCoordinators() error {
 		Config:    groundingCfg,
 		State:     grounding.NewStateStore(),
 		Ledger:    b.storage.Sessions,
-		RejectFmt: b.rejectFmt,
+		RejectFmt: b.execution.Rejections,
 		Nudger:    b.mgr,
 	}
 	return nil
@@ -296,12 +296,12 @@ func (b boardWiring) wireFindingAndProgressTools() error {
 	b.findingsStore = findings.NewSQLStore(b.storage.Database)
 	b.mgr.SetFindingsStore(b.findingsStore)
 	b.mgr.SetPeerRejectionFeed(session.NewPeerRejectionFeed())
-	if err := native.RegisterRecordFindingTool(b.toolRuntime.Registry, reporttools.RecordFindingGates{
+	if err := native.RegisterRecordFindingTool(b.execution.Host.Registry, reporttools.RecordFindingGates{
 		Grounding: b.groundingSvc,
 	}, b.findingsStore, b.rootSessionKey); err != nil {
 		return fmt.Errorf("record_finding tool: %w", err)
 	}
-	if err := native.RegisterSurfaceNoteTool(b.toolRuntime.Registry, reporttools.SurfaceNoteDeps{
+	if err := native.RegisterSurfaceNoteTool(b.execution.Host.Registry, reporttools.SurfaceNoteDeps{
 		Ledger: b.mgr.CloseoutEvidence(),
 		Messages: func(ctx context.Context, sessionID string) ([]api.Message, error) {
 			return b.storage.Sessions.GetMessages(ctx, sessionID)
@@ -317,14 +317,14 @@ func (b boardWiring) wireFindingAndProgressTools() error {
 	b.progressStore = progress.NewSQLStore(b.storage.Database)
 	b.workflowMgr.Fanout.Progress = b.progressStore
 	b.mgr.SetProgressStore(b.progressStore)
-	if err := native.RegisterUpdateProgressTool(b.toolRuntime.Registry, b.progressStore, b.rootSessionKey); err != nil {
+	if err := native.RegisterUpdateProgressTool(b.execution.Host.Registry, b.progressStore, b.rootSessionKey); err != nil {
 		return fmt.Errorf("update_progress tool: %w", err)
 	}
-	if err := native.RegisterCompleteLegTool(b.toolRuntime.Registry, delegationWiring(b).decodeCompleteLeg); err != nil {
+	if err := native.RegisterCompleteLegTool(b.execution.Host.Registry, delegationWiring(b).decodeCompleteLeg); err != nil {
 		return fmt.Errorf("complete_leg tool: %w", err)
 	}
 	// Recall reach follows session topology.
-	if err := native.RegisterRecallTool(b.toolRuntime.Registry, recall.NewService(b.storage.Database, b.storage.Directory)); err != nil {
+	if err := native.RegisterRecallTool(b.execution.Host.Registry, recall.NewService(b.storage.Database, b.storage.Directory)); err != nil {
 		return fmt.Errorf("recall tool: %w", err)
 	}
 	return nil
@@ -387,7 +387,7 @@ func (b boardWiring) wireVisualAndRenderTools() error {
 	if b.workflowMgr != nil {
 		b.workflowMgr.SetVisualArtifacts(b.visualStore, b.rootSessionKey)
 	}
-	if err := visual.RegisterTestProducer(b.toolRuntime.Registry); err != nil {
+	if err := visual.RegisterTestProducer(b.execution.Host.Registry); err != nil {
 		return fmt.Errorf("emit_visual_fixture tool: %w", err)
 	}
 	browserCache := browserengine.ManagedCacheDir()
@@ -397,7 +397,7 @@ func (b boardWiring) wireVisualAndRenderTools() error {
 	}
 	b.browserRaster = browser.NewRasterizer(browserCache, renderBudgets)
 	handleStore := renderhandle.NewStore()
-	if err := native.RegisterRenderViewTool(b.toolRuntime.Registry, b.toolRuntime.Boundary, b.browserRaster, handleStore); err != nil {
+	if err := native.RegisterRenderViewTool(b.execution.Host.Registry, b.execution.Host.Boundary, b.browserRaster, handleStore); err != nil {
 		return fmt.Errorf("render_view tool: %w", err)
 	}
 	if err := b.mgr.RegisterSessionCleanup("render-handles", 54, func(_ context.Context, sessionID string) error {
@@ -407,9 +407,9 @@ func (b boardWiring) wireVisualAndRenderTools() error {
 		return err
 	}
 	matcher, _ := b.security.LoadMatcher(b.startup.cfg.TestSecretMatcher)
-	screen := visualscreen.NewGate(visualscreen.NewScanner(nil).WithRenderedReferences(browser.RenderLoadsReference), matcher, b.security.Ask(b.toolRuntime.Executor.Secrets, b.toolRuntime.Authority.ApprovalsDisabled))
-	if err := native.RegisterViewImageTool(b.toolRuntime.Registry, page.ViewImageDeps{
-		Boundary:      b.toolRuntime.Boundary,
+	screen := visualscreen.NewGate(visualscreen.NewScanner(nil).WithRenderedReferences(browser.RenderLoadsReference), matcher, b.security.Ask(b.execution.Host.Executor.Secrets, b.execution.Host.Authority.ApprovalsDisabled))
+	if err := native.RegisterViewImageTool(b.execution.Host.Registry, page.ViewImageDeps{
+		Boundary:      b.execution.Host.Boundary,
 		Raster:        b.browserRaster,
 		HandleStore:   handleStore,
 		VisualStore:   b.visualStore,
@@ -421,8 +421,8 @@ func (b boardWiring) wireVisualAndRenderTools() error {
 	b.browserPool = browser.NewPool(browserCache)
 	pool := b.browserPool
 	b.startup.resources.Track("browser-pool", 60, func(context.Context) error { pool.Close(); return nil })
-	if err := native.RegisterViewVideoTool(b.toolRuntime.Registry, page.ViewVideoDeps{
-		Boundary: b.toolRuntime.Boundary,
+	if err := native.RegisterViewVideoTool(b.execution.Host.Registry, page.ViewVideoDeps{
+		Boundary: b.execution.Host.Boundary,
 		Pool:     b.browserPool,
 		Screen:   screen,
 		MaxBytes: promptattach.Active().Video.MaxBody.Int64(),
@@ -436,7 +436,7 @@ func (b boardWiring) wireDecisionAndCallTools() error {
 	b.decisionStore = session.NewSQLDecisionStore(b.storage.Database)
 	b.mgr.SetDecisionStore(b.decisionStore)
 	b.workerBudgetLedger = worker.NewSQLBudgetLedger(b.storage.Sessions, b.workerQueue)
-	if err := worker.RegisterRequestBudgetTool(b.toolRuntime.Registry, worker.RequestBudgetToolDeps{
+	if err := worker.RegisterRequestBudgetTool(b.execution.Host.Registry, worker.RequestBudgetToolDeps{
 		Queue:      b.workerQueue,
 		Ledger:     b.workerBudgetLedger,
 		ToolBudget: b.workerToolBudgetFor,
@@ -448,9 +448,9 @@ func (b boardWiring) wireDecisionAndCallTools() error {
 		Queue:     b.workerQueue,
 		Decisions: b.decisionStore,
 		Resolver:  worker.NewSQLDecisionResolver(b.storage.Sessions, b.workerQueue),
-		Reject:    b.rejectFmt,
+		Reject:    b.execution.Rejections,
 	}
-	if err := native.RegisterRequestDecisionTool(b.toolRuntime.Registry, workertools.RequestDecisionDeps{
+	if err := native.RegisterRequestDecisionTool(b.execution.Host.Registry, workertools.RequestDecisionDeps{
 		Recorder:      b.decisionStore,
 		Artifacts:     b.visualStore,
 		RootSessionID: b.rootSessionKey,
@@ -477,7 +477,7 @@ func (b boardWiring) wireDecisionAndCallTools() error {
 	b.mgr.SetSessionWorkerAbort(b.workerCancelSvc)
 	b.parentWorkerWaiter = worker.NewParentWorkerWaiter()
 
-	if err := call.RegisterHandoffTools(b.toolRuntime.Registry, call.HandoffToolDeps{Calls: b.callMgr, Sessions: callLookup}); err != nil {
+	if err := call.RegisterHandoffTools(b.execution.Host.Registry, call.HandoffToolDeps{Calls: b.callMgr, Sessions: callLookup}); err != nil {
 		return fmt.Errorf("handoff tools: %w", err)
 	}
 	return nil
@@ -489,7 +489,7 @@ func (b boardWiring) rootSessionKey(ctx context.Context, sessionID string) strin
 
 // wireApprovalRationaleAttacher records rationale after checkpoint creation.
 func (b boardWiring) wireApprovalRationaleAttacher() {
-	if b.toolRuntime == nil || b.checkpointMgr == nil || b.mgr == nil || b.progressStore == nil {
+	if b.execution.Host == nil || b.checkpointMgr == nil || b.mgr == nil || b.progressStore == nil {
 		return
 	}
 	// An unavailable model leaves the rationale unset.
@@ -516,7 +516,7 @@ func (b boardWiring) wireApprovalRationaleAttacher() {
 		Checkpoints: b.checkpointMgr,
 		EnabledFn:   enabledFn,
 	})
-	b.toolRuntime.Executor.Approvals.SetAIRationaleAttacher(attacher)
+	b.execution.Host.Executor.Approvals.SetAIRationaleAttacher(attacher)
 }
 
 type sessionRootResolver struct {

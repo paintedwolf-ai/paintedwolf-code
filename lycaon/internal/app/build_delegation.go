@@ -64,7 +64,7 @@ func (b delegationWiring) wireWorkerServices() error {
 	b.workerCancelSvc = &worker.CancelService{
 		Queue:    b.workerQueue,
 		Sessions: b.mgr,
-		Reject:   b.rejectFmt,
+		Reject:   b.execution.Rejections,
 		Reports: worker.ChangeReportDeps{
 			Messages: func(ctx context.Context, childSessionID string) ([]wire.Message, error) {
 				return b.storage.Sessions.GetMessages(ctx, childSessionID)
@@ -119,14 +119,14 @@ func (b delegationWiring) configureDelegationWorkflow() error {
 	b.workflowMgr.Starts.Barrier = b.mgr
 	b.workflowMgr.Controls.SessionExit = b.mgr
 	b.workflowMgr.Requests.OnRequestAccepted = b.mgr.CurateAcceptedWorkflowRequest
-	if b.hintCfg == nil {
+	if b.execution.Hints == nil {
 		return fmt.Errorf("hint registry: not loaded")
 	}
 	gateCfg, gateErr := feedback.LoadGateFeedbackCatalog()
 	if gateErr != nil {
 		return fmt.Errorf("gate feedback: %w", gateErr)
 	}
-	b.mgr.SetWorkflowHints(b.hintCfg, gateCfg)
+	b.mgr.SetWorkflowHints(b.execution.Hints, gateCfg)
 	if evidenceBinding, err := evidence.LoadBinding(); err != nil {
 		return fmt.Errorf("evidence binding: %w", err)
 	} else {
@@ -458,7 +458,7 @@ func (b delegationWiring) sessionVerdictCatalog(ctx context.Context, sessionID s
 			return meta.ArgsSchema
 		}
 	}
-	if meta, ok := b.toolRuntime.Registry.Meta("submit_verdict"); ok {
+	if meta, ok := b.execution.Host.Registry.Meta("submit_verdict"); ok {
 		return meta.ArgsSchema
 	}
 	return nil

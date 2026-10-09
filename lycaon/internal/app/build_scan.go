@@ -146,41 +146,41 @@ func (b toolWiring) wireScan() error {
 		},
 	}
 	b.mgr.SetScanGuidance(b.scanGuidance)
-	if err := scantoolapi.RegisterScanTools(b.toolRuntime.Registry, b.scanCoordinator, b.scannerReg, b.scanCadence, b.rejectFmt, b.settings.Service.SecurityScanners); err != nil {
+	if err := scantoolapi.RegisterScanTools(b.execution.Host.Registry, b.scanCoordinator, b.scannerReg, b.scanCadence, b.execution.Rejections, b.settings.Service.SecurityScanners); err != nil {
 		return fmt.Errorf("scan tools: %w", err)
 	}
-	if err := workflow.RegisterComposeTool(b.toolRuntime.Registry, b.workflowComposer); err != nil {
+	if err := workflow.RegisterComposeTool(b.execution.Host.Registry, b.workflowComposer); err != nil {
 		return fmt.Errorf("workflow_compose tool: %w", err)
 	}
-	if err := workflow.RegisterComposeFromTemplateTool(b.toolRuntime.Registry, b.workflowComposer); err != nil {
+	if err := workflow.RegisterComposeFromTemplateTool(b.execution.Host.Registry, b.workflowComposer); err != nil {
 		return fmt.Errorf("workflow_compose_from_template tool: %w", err)
 	}
 	catalogResolver := workflowcatalog.Resolver{
 		SessionStore:       b.sessionWorkflowStore,
 		ProjectTierApplies: b.settings.ProjectSurfaceGate(projectcontrib.SurfaceScanConfig, b.storage.Projects).AppliesPath,
 	}
-	if err := workflow.RegisterCatalogSummariesTool(b.toolRuntime.Registry, catalogResolver, b.sessionWorkflowStore, b.workflowComposer.Templates); err != nil {
+	if err := workflow.RegisterCatalogSummariesTool(b.execution.Host.Registry, catalogResolver, b.sessionWorkflowStore, b.workflowComposer.Templates); err != nil {
 		return fmt.Errorf("workflow_catalog_summaries tool: %w", err)
 	}
-	if err := workflow.RegisterPersistTool(b.toolRuntime.Registry, b.workflowPersister); err != nil {
+	if err := workflow.RegisterPersistTool(b.execution.Host.Registry, b.workflowPersister); err != nil {
 		return fmt.Errorf("workflow_persist tool: %w", err)
 	}
-	if err := workflowinputs.RegisterFeedbackTool(b.toolRuntime.Registry, b.workflowMgr.Feedback); err != nil {
+	if err := workflowinputs.RegisterFeedbackTool(b.execution.Host.Registry, b.workflowMgr.Feedback); err != nil {
 		return fmt.Errorf("workflow_user_feedback tool: %w", err)
 	}
-	if err := workflowinputs.RegisterAskUserTool(b.toolRuntime.Registry, b.workflowMgr.Asks, b.toolRuntime.Boundary); err != nil {
+	if err := workflowinputs.RegisterAskUserTool(b.execution.Host.Registry, b.workflowMgr.Asks, b.execution.Host.Boundary); err != nil {
 		return fmt.Errorf("ask_user tool: %w", err)
 	}
-	if err := workflowphases.RegisterAdvanceTool(b.toolRuntime.Registry, b.workflowMgr.Phases); err != nil {
+	if err := workflowphases.RegisterAdvanceTool(b.execution.Host.Registry, b.workflowMgr.Phases); err != nil {
 		return fmt.Errorf("workflow_advance tool: %w", err)
 	}
-	if err := workflowphases.RegisterTransitionTool(b.toolRuntime.Registry, b.workflowMgr.Phases); err != nil {
+	if err := workflowphases.RegisterTransitionTool(b.execution.Host.Registry, b.workflowMgr.Phases); err != nil {
 		return fmt.Errorf("workflow_transition tool: %w", err)
 	}
-	if err := workflow.RegisterFanoutPlanTool(b.toolRuntime.Registry, b.workflowMgr.Fanout); err != nil {
+	if err := workflow.RegisterFanoutPlanTool(b.execution.Host.Registry, b.workflowMgr.Fanout); err != nil {
 		return fmt.Errorf("fanout_plan tool: %w", err)
 	}
-	if err := workflowreview.RegisterSubmitVerdictTool(b.toolRuntime.Registry, b.workflowMgr.Verdicts); err != nil {
+	if err := workflowreview.RegisterSubmitVerdictTool(b.execution.Host.Registry, b.workflowMgr.Verdicts); err != nil {
 		return fmt.Errorf("submit_verdict tool: %w", err)
 	}
 	return nil

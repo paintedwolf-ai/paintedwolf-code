@@ -10,7 +10,7 @@ func (b sessionWiring) wireSecretCapabilities() error {
 	if b.security.Capabilities != nil {
 		return nil
 	}
-	if err := b.security.BuildCapabilities(b.toolRuntime.Registry, b.toolRuntime.Executor.Secrets); err != nil {
+	if err := b.security.BuildCapabilities(b.execution.Host.Registry, b.execution.Host.Executor.Secrets); err != nil {
 		return err
 	}
 	service := b.security.Capabilities

@@ -5,12 +5,11 @@ import (
 	"github.com/lycaon/lycaon/internal/api/capabilityadmin"
 	"github.com/lycaon/lycaon/internal/app/deviceidentity"
 	"github.com/lycaon/lycaon/internal/app/eventing"
+	"github.com/lycaon/lycaon/internal/app/execution"
 	"github.com/lycaon/lycaon/internal/bootrecovery"
-	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/presence"
 	"github.com/lycaon/lycaon/internal/project"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tsparse"
 	"github.com/lycaon/lycaon/internal/worker"
 	"os"
@@ -21,30 +20,14 @@ func (b *serveBuilder) wireToolRuntime() error {
 		return err
 	}
 	var err error
-	b.turnLoads = turnload.NewLedger()
-	b.toolRuntime, err = loadToolRuntime(b.settings.Service, b.catalog.ModuleRoot, b.catalog.Effective, b.turnLoads, b.decisions.Rerank)
+	b.execution, err = execution.Build(b.settings.Service, b.catalog.ModuleRoot, b.catalog.Effective, b.decisions.Rerank)
 	if err != nil {
-		return fmt.Errorf("tool runtime: %w", err)
+		return err
 	}
 	b.providers.BindCurator()
-	b.toolRuntime.Survey.SetReadEvidenceLedger(b.storage.Sessions)
-	b.security.Detections.Load(b.storage.Directory, b.catalog.DeviceView.DetectionPacks(), b.toolRuntime.Authority)
-	hintCfg, rejectFmt, err := loadStockHintRegistry()
-	if err != nil {
-		return fmt.Errorf("hint registry: %w", err)
-	}
-	b.hintCfg = hintCfg
-	b.rejectFmt = rejectFmt
-	if b.rejectFmt != nil {
-		b.toolRuntime.Authority.ApplyGuidanceRejects(b.rejectFmt)
-	}
-	schemaCfg, err := loadToolSchemas()
-	if err != nil {
-		return fmt.Errorf("tool schemas: %w", err)
-	}
-	b.toolRuntime.Executor.Metadata.SetToolSchemas(schemaCfg)
-	b.toolReg = tools.NewExecutorRegistry(b.toolRuntime.Executor, b.toolRuntime.Registry)
-	return nil
+	b.execution.Host.Survey.SetReadEvidenceLedger(b.storage.Sessions)
+	b.security.Detections.Load(b.storage.Directory, b.catalog.DeviceView.DetectionPacks(), b.execution.Host.Authority)
+	return b.execution.LoadGuidance()
 }
 
 func (b *serveBuilder) wireEvents() error {

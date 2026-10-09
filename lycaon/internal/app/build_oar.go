@@ -1,11 +1,8 @@
 package app
 
 import (
-	"github.com/lycaon/lycaon/internal/toolfeedback"
-
 	"context"
 	"fmt"
-
 	"github.com/lycaon/lycaon/internal/anchorcatalog"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
@@ -13,13 +10,14 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/mcp/bindings"
 	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/toolfeedback"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // wireOARBlockPlane loads OAR rules, enables catalog Anchors for active
 // families, and attaches the Emit/Binding block plane.
 func (b toolWiring) wireOARBlockPlane() error {
-	if b.toolRuntime == nil || b.mgr == nil {
+	if b.execution.Host == nil || b.mgr == nil {
 		return fmt.Errorf("oar: tool runtime and session manager required")
 	}
 	if b.catalog.DeviceView == nil || b.catalog.DeviceView.Rules == nil {
@@ -95,9 +93,9 @@ func (b toolWiring) wireOARBlockPlane() error {
 		return view.Anchors
 	})
 
-	renderer := oar.NewRenderer(b.rejectFmt, nudgeFormatter{f: b.rejectFmt})
+	renderer := oar.NewRenderer(b.execution.Rejections, nudgeFormatter{f: b.execution.Rejections})
 	bp := &toolfeedback.BlockPlane{Pipeline: pipeline, Renderer: renderer}
-	b.toolRuntime.Executor.Rejections.SetBlockPlane(bp)
+	b.execution.Host.Executor.Rejections.SetBlockPlane(bp)
 	b.mgr.SetOARPipeline(pipeline, renderer)
 
 	pipeline.SetMCPBindingsFor(func(ctx context.Context, sessionID string) []bindings.Binding {

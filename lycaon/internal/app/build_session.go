@@ -4,11 +4,6 @@ import (
 	"context"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/app/configuration"
-	"github.com/lycaon/lycaon/internal/projectcontrib"
-	"log/slog"
-	"path/filepath"
-	"strings"
-
 	"github.com/lycaon/lycaon/internal/approvals"
 	"github.com/lycaon/lycaon/internal/authzledger"
 	"github.com/lycaon/lycaon/internal/bootrecovery"
@@ -20,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/progress"
+	"github.com/lycaon/lycaon/internal/projectcontrib"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/scratch"
@@ -33,6 +29,9 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/internal/toolschema"
+	"log/slog"
+	"path/filepath"
+	"strings"
 )
 
 // sessionWiring wires the session manager, its authorization and checkpoints, and secret handling.
@@ -49,9 +48,9 @@ func (b sessionWiring) wireSessionManager() error {
 		}
 		b.providers.Service.Preparation = preparation
 	}
-	b.mgr = session.NewManagerWithLLMService(b.storage.Sessions, b.providers.Client, b.providers.Service, b.toolReg, b.settings.SessionLimits, b.providers.Costs)
+	b.mgr = session.NewManagerWithLLMService(b.storage.Sessions, b.providers.Client, b.providers.Service, b.execution.Registry, b.settings.SessionLimits, b.providers.Costs)
 	b.security.BindRemember(b.mgr.SetRememberSecrets)
-	b.toolRuntime.Skills.BindTurnSources(b.mgr.ResolveToolRequest, b.mgr.RecordToolRequest, b.mgr.LookupSkills)
+	b.execution.Host.Skills.BindTurnSources(b.mgr.ResolveToolRequest, b.mgr.RecordToolRequest, b.mgr.LookupSkills)
 	b.mgr.SetMintedCredentialSource(b.security.Detections.MintedCredentialSource)
 	invocations := invocation.NewSQLRecorder(b.storage.Database)
 	b.invocations = invocations
@@ -64,7 +63,7 @@ func (b sessionWiring) wireSessionManager() error {
 	}
 	b.wireSessionToolSources()
 	b.wireWorkerToolBudget()
-	if err := b.security.BuildAuthorization(b.catalog.ModuleRoot, b.agents.ToolProfiles, b.settings.Service.Approvals, b.toolRuntime.Authority.ApprovalGate, b.toolRuntime.Registry.List, b.mgr.ResolveToolAccess, b.workerToolBudgetFor); err != nil {
+	if err := b.security.BuildAuthorization(b.catalog.ModuleRoot, b.agents.ToolProfiles, b.settings.Service.Approvals, b.execution.Host.Authority.ApprovalGate, b.execution.Host.Registry.List, b.mgr.ResolveToolAccess, b.workerToolBudgetFor); err != nil {
 		return err
 	}
 	b.mgr.SetAuthzSealer(b.security.Authority.Sealer)
@@ -96,12 +95,12 @@ func (b sessionWiring) configureSessionManager() error {
 		b.storage.Sessions.SetDataDir(b.storage.Directory)
 	}
 	b.mgr.SetDoomLoopGuard(loopguard.NewMemoryDoomLoopGuard())
-	b.mgr.SetRejectFormatter(b.rejectFmt)
+	b.mgr.SetRejectFormatter(b.execution.Rejections)
 	b.mgr.SetProfileRuntimeRules(loadProfileRuntimeRules())
 	if err := progress.InitProgressGatedTools(b.catalog.ModuleRoot); err != nil {
 		return fmt.Errorf("init progress-gated tools: %w", err)
 	}
-	b.mgr.SetToolInvoker(b.toolRuntime.Executor, b.toolRuntime.Executor.Metadata)
+	b.mgr.SetToolInvoker(b.execution.Host.Executor, b.execution.Host.Executor.Metadata)
 	if b.settings.Service != nil {
 		if b.startup.cfg.TestSessionLimits == nil {
 			b.mgr.SetLimitsProvider(settings.ProjectLimitsAdapter{Store: b.settings.Service.Limits})
@@ -116,17 +115,17 @@ func (b sessionWiring) configureSessionManager() error {
 }
 
 func (b sessionWiring) wireSessionToolSources() {
-	if b.toolRuntime != nil && b.toolRuntime.Boundary != nil {
+	if b.execution.Host != nil && b.execution.Host.Boundary != nil {
 		mgr := b.mgr
-		b.toolRuntime.Boundary.SetProfileSource(func(ctx context.Context, sessionID string) []sandbox.ToolProfile {
+		b.execution.Host.Boundary.SetProfileSource(func(ctx context.Context, sessionID string) []sandbox.ToolProfile {
 			view := mgr.Catalog().ViewForSessionID(ctx, sessionID)
 			if view == nil {
 				return nil
 			}
 			return view.ToolProfiles
 		})
-		if b.toolRuntime.Executor != nil {
-			b.toolRuntime.Executor.Metadata.SetToolSchemaSource(func(ctx context.Context, sessionID string) *toolschema.Config {
+		if b.execution.Host.Executor != nil {
+			b.execution.Host.Executor.Metadata.SetToolSchemaSource(func(ctx context.Context, sessionID string) *toolschema.Config {
 				view := mgr.Catalog().ViewForSessionID(ctx, sessionID)
 				if view == nil {
 					return nil
@@ -135,11 +134,11 @@ func (b sessionWiring) wireSessionToolSources() {
 			})
 		}
 	}
-	if b.toolRuntime != nil {
+	if b.execution.Host != nil {
 		mgr := b.mgr
-		b.toolRuntime.Authority.SetApprovalRuleSource(mgr)
-		b.toolRuntime.Executor.Network.SetHostResourceConnectionSource(b.settings.HostResources.ResolveAction)
-		b.toolRuntime.Skills.SetSkillsCatalog(func(ctx context.Context, tctx tools.ToolContext) []skills.Skill {
+		b.execution.Host.Authority.SetApprovalRuleSource(mgr)
+		b.execution.Host.Executor.Network.SetHostResourceConnectionSource(b.settings.HostResources.ResolveAction)
+		b.execution.Host.Skills.SetSkillsCatalog(func(ctx context.Context, tctx tools.ToolContext) []skills.Skill {
 			roots := make([]string, 0, len(tctx.Source.Roots))
 			for _, r := range tctx.Source.Roots {
 				if path := strings.TrimSpace(r.Path); path != "" {
@@ -150,14 +149,14 @@ func (b sessionWiring) wireSessionToolSources() {
 			loaded, _ := mgr.EffectiveSkillsForProfile(ctx, sess, tctx.Identity.Agent, roots)
 			return loaded
 		})
-		b.toolRuntime.Skills.SetSkillTemplateVars(func(_ context.Context, tctx tools.ToolContext) map[string]any {
+		b.execution.Host.Skills.SetSkillTemplateVars(func(_ context.Context, tctx tools.ToolContext) map[string]any {
 			budget := spawn.DefaultWorkerToolBudget()
 			if b.workerToolBudgetFor != nil {
 				budget = b.workerToolBudgetFor(strings.TrimSpace(tctx.ActiveRootPath()))
 			}
 			return spawn.PolicyTemplateVars(budget)
 		})
-		b.toolRuntime.Skills.SetSkillPackConfiguration(
+		b.execution.Host.Skills.SetSkillPackConfiguration(
 			func(ctx context.Context, tctx tools.ToolContext, packID string) map[string]any {
 				view := mgr.Catalog().ViewForSessionID(ctx, tctx.Identity.SessionID)
 				if view == nil {
@@ -216,16 +215,16 @@ func (b sessionWiring) wireCheckpointRuntime() error {
 	b.startup.resources.Track("checkpoint-expiries", 25, func(context.Context) error { checkpointMgr.StopExpiryTimers(); return nil })
 	checkpointMgr.Sessions.SetSessionAdmission(b.mgr.WithSessionTreeAdmission)
 	checkpointMgr.Presence.SetVaultUnlock(b.security.Presence, b.security.Unlocks, unlockRecorder{})
-	b.toolRuntime.Executor.Secrets.SetPresenceAvailable(checkpointMgr.Presence.PresenceAvailable)
+	b.execution.Host.Executor.Secrets.SetPresenceAvailable(checkpointMgr.Presence.PresenceAvailable)
 	checkpointMgr.Sessions.SetCheckpointWaitObserver(b.mgr.BeginCheckpointWait)
 	var authzRec authzledger.Recorder = b.security.Authority.Recorder
-	if b.toolRuntime != nil {
-		b.toolRuntime.Authority.SetAuthzRecorder(authzRec)
+	if b.execution.Host != nil {
+		b.execution.Host.Authority.SetAuthzRecorder(authzRec)
 	}
 	b.checkpointMgr = checkpointMgr
 	b.mgr.SetSessionCheckpointStop(checkpointMgr)
 	b.mgr.SetExecutionCheckpoints(checkpointMgr)
-	b.toolRuntime.Authority.SetCheckpointManager(b.checkpointMgr)
+	b.execution.Host.Authority.SetCheckpointManager(b.checkpointMgr)
 	if err := b.wireGrantedAccess(); err != nil {
 		return err
 	}
@@ -233,15 +232,15 @@ func (b sessionWiring) wireCheckpointRuntime() error {
 		b.mgr.SetCredentialFiles(b.newCredentialFiles())
 	}
 	b.wireCredentialObservations()
-	b.toolRuntime.Executor.Secrets.SetSecretExposureSource(func(ctx context.Context, chatSessionID string) (bool, error) {
+	b.execution.Host.Executor.Secrets.SetSecretExposureSource(func(ctx context.Context, chatSessionID string) (bool, error) {
 		return b.storage.Sessions.SessionSecretExposure(ctx, chatSessionID)
 	})
-	b.toolRuntime.Executor.Secrets.SetUntrustedIngestionSource(func(ctx context.Context, chatSessionID string) (bool, error) {
+	b.execution.Host.Executor.Secrets.SetUntrustedIngestionSource(func(ctx context.Context, chatSessionID string) (bool, error) {
 		return b.storage.Sessions.SessionUntrustedContentResult(ctx, chatSessionID)
 	})
 	// Observe posture delegates mediated destinations to the grant gate.
 	confine.SetUntrustedIngestionSource(untrustedIngestionStore{store: b.storage.Sessions})
-	b.toolRuntime.Executor.Network.SetSessionHostLedger(b.storage.Sessions)
+	b.execution.Host.Executor.Network.SetSessionHostLedger(b.storage.Sessions)
 	writeRootRT := approvalstate.NewSandboxPathGrantRuntime()
 	b.sandboxWriteRootRT = writeRootRT
 	b.mgr.SetSandboxPathGrantRuntime(writeRootRT)
@@ -261,7 +260,7 @@ func (b sessionWiring) wireCheckpointRuntime() error {
 		return fmt.Errorf("consequence-band paths: %w", err)
 	}
 	deriver := checkpointConsequenceDeriver{dests: sensitiveDests}
-	b.toolRuntime.Executor.Approvals.SetConsequenceDeriver(deriver)
+	b.execution.Host.Executor.Approvals.SetConsequenceDeriver(deriver)
 	locations, locErr := sensitivepath.Load(
 		sensitivepath.Bundled(),
 		sensitivepath.Dir(filepath.Join(b.storage.Directory, "ask-triggers")),
@@ -269,53 +268,53 @@ func (b sessionWiring) wireCheckpointRuntime() error {
 	if locErr != nil {
 		slog.Warn("sensitive locations catalog unavailable", "error", locErr)
 	}
-	b.toolRuntime.Commands.SetSandboxWriteRootGate(&session.WriteRootCheckpointBroker{
+	b.execution.Host.Commands.SetSandboxWriteRootGate(&session.WriteRootCheckpointBroker{
 		Checkpoints:       b.checkpointMgr,
 		Store:             b.storage.Sessions,
 		Runtime:           writeRootRT,
 		ReadRuntime:       readPathRT,
 		Consequence:       deriver,
-		Authority:         b.toolRuntime.Authority.ApprovalGate(),
-		ApprovalsDisabled: b.toolRuntime.Authority.ApprovalsDisabled,
-		Posture:           b.toolRuntime.Authority.ApprovalPosture,
-		Rule:              b.toolRuntime.Authority.WriteRootRule,
+		Authority:         b.execution.Host.Authority.ApprovalGate(),
+		ApprovalsDisabled: b.execution.Host.Authority.ApprovalsDisabled,
+		Posture:           b.execution.Host.Authority.ApprovalPosture,
+		Rule:              b.execution.Host.Authority.WriteRootRule,
 		Locations:         locations,
 		Authz:             authzRec,
 	})
-	b.toolRuntime.Authority.SetSandboxListenGate(&session.ListenCheckpointBroker{
+	b.execution.Host.Authority.SetSandboxListenGate(&session.ListenCheckpointBroker{
 		Checkpoints:       b.checkpointMgr,
 		Store:             b.storage.Sessions,
 		Runtime:           listenRT,
 		Loopback:          loopbackRT,
-		Authority:         b.toolRuntime.Authority.ApprovalGate(),
-		ApprovalsDisabled: b.toolRuntime.Authority.ApprovalsDisabled,
-		Posture:           b.toolRuntime.Authority.ApprovalPosture,
+		Authority:         b.execution.Host.Authority.ApprovalGate(),
+		ApprovalsDisabled: b.execution.Host.Authority.ApprovalsDisabled,
+		Posture:           b.execution.Host.Authority.ApprovalPosture,
 		Provenance:        loopbackProv,
 		Authz:             authzRec,
 	})
-	b.toolRuntime.Authority.SetSandboxLoopbackGate(&session.LoopbackCheckpointBroker{
+	b.execution.Host.Authority.SetSandboxLoopbackGate(&session.LoopbackCheckpointBroker{
 		Checkpoints:       b.checkpointMgr,
 		Store:             b.storage.Sessions,
 		Runtime:           loopbackRT,
 		Provenance:        loopbackProv,
-		Authority:         b.toolRuntime.Authority.ApprovalGate(),
-		ApprovalsDisabled: b.toolRuntime.Authority.ApprovalsDisabled,
-		Posture:           b.toolRuntime.Authority.ApprovalPosture,
+		Authority:         b.execution.Host.Authority.ApprovalGate(),
+		ApprovalsDisabled: b.execution.Host.Authority.ApprovalsDisabled,
+		Posture:           b.execution.Host.Authority.ApprovalPosture,
 		Authz:             authzRec,
 	})
-	b.toolRuntime.Authority.SetLocalNetworkGate(&session.LocalNetworkCheckpointBroker{
+	b.execution.Host.Authority.SetLocalNetworkGate(&session.LocalNetworkCheckpointBroker{
 		Checkpoints:       b.checkpointMgr,
 		Store:             b.storage.Sessions,
 		Listen:            listenRT,
 		Loopback:          loopbackRT,
 		Provenance:        loopbackProv,
-		Authority:         b.toolRuntime.Authority.ApprovalGate(),
-		ApprovalsDisabled: b.toolRuntime.Authority.ApprovalsDisabled,
-		Posture:           b.toolRuntime.Authority.ApprovalPosture,
+		Authority:         b.execution.Host.Authority.ApprovalGate(),
+		ApprovalsDisabled: b.execution.Host.Authority.ApprovalsDisabled,
+		Posture:           b.execution.Host.Authority.ApprovalPosture,
 		Authz:             authzRec,
 	})
 	toolApprovalRT := b.wireAskSpamGuards()
-	if err := b.security.BuildExceptional(b.toolRuntime.Executor.Capabilities, b.settings.Service.Approvals, b.toolRuntime.Authority.ApprovalsDisabled, b.mgr, b.security.Authority.Recorder, b.mgr.SetDirectIPReconstructHook); err != nil {
+	if err := b.security.BuildExceptional(b.execution.Host.Executor.Capabilities, b.settings.Service.Approvals, b.execution.Host.Authority.ApprovalsDisabled, b.mgr, b.security.Authority.Recorder, b.mgr.SetDirectIPReconstructHook); err != nil {
 		return err
 	}
 	return b.wireToolApprovalCheckpointHooks(toolApprovalRT)
@@ -341,10 +340,10 @@ func (b sessionWiring) assertAuthzCapturer() error {
 func (b sessionWiring) wireAskSpamGuards() *approvalstate.ToolApprovalCoalesce {
 	toolApprovalRT := approvalstate.NewToolApprovalCoalesce()
 	b.mgr.SetToolApprovalCoalesce(toolApprovalRT)
-	b.toolRuntime.Authority.SetToolApprovalCoalesce(toolApprovalRT)
+	b.execution.Host.Authority.SetToolApprovalCoalesce(toolApprovalRT)
 	gateRepeatRT := approvalstate.NewGateRepeatLedger()
 	b.mgr.SetGateRepeatLedger(gateRepeatRT)
-	b.toolRuntime.Authority.SetGateRepeatLedger(gateRepeatRT)
+	b.execution.Host.Authority.SetGateRepeatLedger(gateRepeatRT)
 	// The API server is built later; wireServer hands it the same ledger.
 	b.gateRepeatRT = gateRepeatRT
 	return toolApprovalRT
@@ -413,7 +412,7 @@ func (b sessionWiring) wireGrantedAccess() error {
 	grantedRT := grantedpath.NewRuntime()
 	b.grantedPathRT = grantedRT
 	// Durable grants are read through their revocation source.
-	approvalGate := b.toolRuntime.Authority.ApprovalGate()
+	approvalGate := b.execution.Host.Authority.ApprovalGate()
 	grantedRT.SetDurableSource(func(projectID string) []grantedpath.Grant {
 		if approvalGate == nil {
 			return nil
@@ -432,7 +431,7 @@ func (b sessionWiring) wireGrantedAccess() error {
 		return projectpaths.Access{Path: g.Path, Tree: g.Tree}, true
 	})
 	if err := b.mgr.RegisterSessionCleanup("approval-run", 50, func(_ context.Context, sessionID string) error {
-		b.toolRuntime.Authority.ReleaseSessionRun(sessionID)
+		b.execution.Host.Authority.ReleaseSessionRun(sessionID)
 		b.sandboxReadPathRT.ReleaseRun(sessionID)
 		return nil
 	}); err != nil {
@@ -440,7 +439,7 @@ func (b sessionWiring) wireGrantedAccess() error {
 	}
 	// Chat approvals outlive Stop and end when the chat is disposed.
 	if err := b.mgr.RegisterSessionDisposal("approvals", 50, func(_ context.Context, sessionID string) error {
-		b.toolRuntime.Authority.ForgetSessionAuthorization(sessionID)
+		b.execution.Host.Authority.ForgetSessionAuthorization(sessionID)
 		grantedRT.Forget(sessionID)
 		b.sandboxReadPathRT.ForgetSession(sessionID)
 		return nil

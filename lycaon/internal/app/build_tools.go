@@ -45,7 +45,7 @@ func (b toolWiring) wireCoordinatorRuntime() error {
 		waitConditions[profile.ID] = allowed
 	}
 	waitStore := &awaitstore.Store{DB: b.storage.Database}
-	if err := loopwake.RegisterWaitTool(b.toolRuntime.Registry, b.coordRuntime.CoordinatorLoop(), loopwake.WaitToolDeps{
+	if err := loopwake.RegisterWaitTool(b.execution.Host.Registry, b.coordRuntime.CoordinatorLoop(), loopwake.WaitToolDeps{
 		Store: waitStore, ProfileConditions: waitConditions,
 		SecretMatcher: b.security.Matcher, RuntimeContext: b.startup.ctx,
 	}); err != nil {
@@ -73,48 +73,48 @@ func (b toolWiring) wireCoordinatorRuntime() error {
 }
 
 func (b toolWiring) registerCoordinatorTools() error {
-	if err := delegation.RegisterDelegationTools(b.toolRuntime.Registry, b.delegationMgr); err != nil {
+	if err := delegation.RegisterDelegationTools(b.execution.Host.Registry, b.delegationMgr); err != nil {
 		return fmt.Errorf("delegation tools: %w", err)
 	}
 	parseSvc := parse.NewDefaultService()
-	if err := parse.RegisterParseTools(b.toolRuntime.Registry, parseSvc); err != nil {
+	if err := parse.RegisterParseTools(b.execution.Host.Registry, parseSvc); err != nil {
 		return fmt.Errorf("parse tools: %w", err)
 	}
-	if err := workflowstatetools.RegisterStateTools(b.toolRuntime.Registry, workflowstatetools.StateToolDeps{Runs: b.workflowMgr.Store.Runs, Vars: b.workflowMgr.Phases.Vars, Journal: b.workflowMgr.Phases.Journal, Resolver: &b.workflowMgr.Resolver, Starts: b.workflowMgr.Starts, Controls: b.workflowMgr.Controls, Scaffold: b.workflowMgr.Blueprints.Scaffold,
+	if err := workflowstatetools.RegisterStateTools(b.execution.Host.Registry, workflowstatetools.StateToolDeps{Runs: b.workflowMgr.Store.Runs, Vars: b.workflowMgr.Phases.Vars, Journal: b.workflowMgr.Phases.Journal, Resolver: &b.workflowMgr.Resolver, Starts: b.workflowMgr.Starts, Controls: b.workflowMgr.Controls, Scaffold: b.workflowMgr.Blueprints.Scaffold,
 		Sessions: b.storage.Sessions,
 	}); err != nil {
 		return fmt.Errorf("state tools: %w", err)
 	}
-	if err := blueprint.RegisterPlanTools(b.toolRuntime.Registry, b.blueprintMgr); err != nil {
+	if err := blueprint.RegisterPlanTools(b.execution.Host.Registry, b.blueprintMgr); err != nil {
 		return fmt.Errorf("plan tools: %w", err)
 	}
-	if err := worker.RegisterTaskTool(b.toolRuntime.Registry, b.taskToolDeps()); err != nil {
+	if err := worker.RegisterTaskTool(b.execution.Host.Registry, b.taskToolDeps()); err != nil {
 		return fmt.Errorf("task tool: %w", err)
 	}
-	if err := worker.RegisterAnswerDecisionTool(b.toolRuntime.Registry, worker.AnswerDecisionToolDeps{
+	if err := worker.RegisterAnswerDecisionTool(b.execution.Host.Registry, worker.AnswerDecisionToolDeps{
 		Answer: b.answerDecisionSvc,
 	}); err != nil {
 		return fmt.Errorf("answer_decision tool: %w", err)
 	}
-	if err := worker.RegisterExtendWorkerBudgetTool(b.toolRuntime.Registry, worker.ExtendBudgetToolDeps{
+	if err := worker.RegisterExtendWorkerBudgetTool(b.execution.Host.Registry, worker.ExtendBudgetToolDeps{
 		Queue:      b.workerQueue,
 		Ledger:     b.workerBudgetLedger,
 		ToolBudget: b.workerToolBudgetFor,
 	}); err != nil {
 		return fmt.Errorf("extend_worker_budget tool: %w", err)
 	}
-	if err := worker.RegisterDeclineWorkerBudgetTool(b.toolRuntime.Registry, worker.DeclineBudgetToolDeps{
+	if err := worker.RegisterDeclineWorkerBudgetTool(b.execution.Host.Registry, worker.DeclineBudgetToolDeps{
 		Queue:  b.workerQueue,
 		Ledger: b.workerBudgetLedger,
 	}); err != nil {
 		return fmt.Errorf("decline_worker_budget tool: %w", err)
 	}
-	b.toolRuntime.Boundary.SetMergeReconcileAllowlister(b.mgr)
+	b.execution.Host.Boundary.SetMergeReconcileAllowlister(b.mgr)
 	workerMergeSvc := &worker.MergeService{
 		Queue:        b.workerQueue,
 		Store:        b.workerQueue,
 		Workspace:    b.wsMgr,
-		Reject:       b.rejectFmt,
+		Reject:       b.execution.Rejections,
 		Sessions:     b.workerQueue,
 		Reconcile:    b.mgr,
 		Coord:        b.mgr,
@@ -147,18 +147,18 @@ func (b toolWiring) registerCoordinatorTools() error {
 	}); err != nil {
 		return err
 	}
-	if err := worker.RegisterWorkerCancelTool(b.toolRuntime.Registry, worker.CancelToolDeps{
+	if err := worker.RegisterWorkerCancelTool(b.execution.Host.Registry, worker.CancelToolDeps{
 		Cancel: b.workerCancelSvc,
 	}); err != nil {
 		return fmt.Errorf("worker_cancel tool: %w", err)
 	}
 	b.mgr.SetOverlayPromoter(workerMergeSvc)
-	if err := worker.RegisterOverlayTools(b.toolRuntime.Registry, worker.OverlayToolDeps{
+	if err := worker.RegisterOverlayTools(b.execution.Host.Registry, worker.OverlayToolDeps{
 		Merge: workerMergeSvc,
 	}); err != nil {
 		return fmt.Errorf("overlay tools: %w", err)
 	}
-	if err := tools.ValidateBootToolClaimsHonest(b.toolRuntime.Registry); err != nil {
+	if err := tools.ValidateBootToolClaimsHonest(b.execution.Host.Registry); err != nil {
 		return fmt.Errorf("boot tool claims: %w", err)
 	}
 	profileByID := make(map[string]sandbox.ToolProfile, len(b.agents.ToolProfiles))
@@ -293,10 +293,10 @@ func (b toolWiring) wireMCP() error {
 	}
 	b.startup.resources.setMCP(b.mcpReg)
 	b.security.BindMCPInventory(b.mcpReg.Catalog)
-	b.mcpReg.Tools.SetToolRegistry(b.toolRuntime.Registry)
+	b.mcpReg.Tools.SetToolRegistry(b.execution.Host.Registry)
 	b.mcpReg.Connections.SetAPIAccess(b.identity.Token)
-	if b.toolRuntime != nil {
-		b.toolRuntime.Authority.SetMCPToolPinSource(b.mcpReg.Tools)
+	if b.execution.Host != nil {
+		b.execution.Host.Authority.SetMCPToolPinSource(b.mcpReg.Tools)
 	}
 	b.mcpReg.Catalog.SetProjectOverlayGate(b.settings.ProjectSurfaceGate(projectcontrib.SurfaceProjectMCP, b.storage.Projects).AppliesPath)
 	if err := serverWiring(b).wireDestinationConfig(); err != nil {
@@ -333,16 +333,16 @@ func (b toolWiring) wireMCP() error {
 		if b.browserRaster != nil {
 			b.browserRaster.SetCaptureProjector(captureProjector)
 		}
-		b.mcpReg.Calls.SetSecretScreen(matcher, b.security.Ask(b.toolRuntime.Executor.Secrets, b.toolRuntime.Authority.ApprovalsDisabled))
-		if b.toolRuntime != nil && b.toolRuntime.Executor != nil {
-			b.toolRuntime.Executor.Secrets.SetSecretMatcher(matcher)
-			b.toolRuntime.Executor.Secrets.SetSecretIgnores(b.security.Ignores)
+		b.mcpReg.Calls.SetSecretScreen(matcher, b.security.Ask(b.execution.Host.Executor.Secrets, b.execution.Host.Authority.ApprovalsDisabled))
+		if b.execution.Host != nil && b.execution.Host.Executor != nil {
+			b.execution.Host.Executor.Secrets.SetSecretMatcher(matcher)
+			b.execution.Host.Executor.Secrets.SetSecretIgnores(b.security.Ignores)
 		}
 		// Editor spans preview outbound screening.
 		b.security.Spans = secretspan.New(matcher)
 		b.security.BindTranscript(matcher, b.mgr.SetMessageStorageRedactor, b.mgr.SweepSessionTree)
 		if b.providers.Service != nil && b.providers.Service.Registry != nil {
-			screen := llm.NewModelSecretScreen(matcher, b.security.Ask(b.toolRuntime.Executor.Secrets, b.toolRuntime.Authority.ApprovalsDisabled))
+			screen := llm.NewModelSecretScreen(matcher, b.security.Ask(b.execution.Host.Executor.Secrets, b.execution.Host.Authority.ApprovalsDisabled))
 			if b.security.Capabilities != nil {
 				screen.SetManagedSecretEvidence(b.security.Capabilities.ScreeningValues)
 				screen.SetManagedSecretAdopter(func(ctx context.Context, req llm.ManagedSecretAdoptRequest) (string, error) {
@@ -360,8 +360,8 @@ func (b toolWiring) wireMCP() error {
 	if err := b.mcpReg.Catalog.Load(b.startup.ctx); err != nil {
 		return fmt.Errorf("mcp registry: %w", err)
 	}
-	if b.toolRuntime != nil && b.toolRuntime.Executor != nil {
-		b.toolRuntime.Executor.Rejections.SetMCPCatalog(b.mcpReg.Catalog)
+	if b.execution.Host != nil && b.execution.Host.Executor != nil {
+		b.execution.Host.Executor.Rejections.SetMCPCatalog(b.mcpReg.Catalog)
 	}
 	if b.mgr != nil {
 		b.mgr.SetMCPRuntime(b.mcpReg.Catalog)

@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/app/decisions"
 	"github.com/lycaon/lycaon/internal/app/deviceidentity"
 	"github.com/lycaon/lycaon/internal/app/eventing"
+	"github.com/lycaon/lycaon/internal/app/execution"
 	"github.com/lycaon/lycaon/internal/app/interactions"
 	"github.com/lycaon/lycaon/internal/app/persistence"
 	"github.com/lycaon/lycaon/internal/app/processes"
@@ -21,13 +22,11 @@ import (
 	"github.com/lycaon/lycaon/internal/call"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/coordinator"
-	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/findings"
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/grantedpath"
-	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/harnessfixture"
 	"github.com/lycaon/lycaon/internal/historyretention"
 	"github.com/lycaon/lycaon/internal/hitl"
@@ -51,7 +50,6 @@ import (
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/startupprotocol"
 	"github.com/lycaon/lycaon/internal/toolhost"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/usernotice"
 	"github.com/lycaon/lycaon/internal/visual"
 	"github.com/lycaon/lycaon/internal/webresearch"
@@ -66,6 +64,7 @@ import (
 )
 
 type serveBuilder struct {
+	execution           execution.Runtime
 	identity            deviceidentity.Credentials
 	interactions        interactions.Runtime
 	providers           providers.Runtime
@@ -84,20 +83,12 @@ type serveBuilder struct {
 	browserPool   *browser.Pool
 	browserRaster *browser.Rasterizer
 
-	webWarmer   *webresearch.Warmer
-	warmRunner  *webresearch.WarmRunner
-	invocations invocation.Recorder
-	toolRuntime *toolhost.Runtime
-	// turnLoads is the loaded-schema ledger shared by request_tools and the coordinator turn.
-	turnLoads *turnload.Ledger
-	// decider is the local decision model; nil resolves to an absent engine.
-	// rerank carries it with the catalog policies into every ranking site.
-	toolReg          *tools.ExecutorRegistry
+	webWarmer        *webresearch.Warmer
+	warmRunner       *webresearch.WarmRunner
+	invocations      invocation.Recorder
 	security         *security.Runtime
 	events           *eventing.Runtime
 	processes        *processes.Runtime
-	rejectFmt        *guidance.StaticRejectFormatter
-	hintCfg          *guidance.HintConfig
 	promptEngine     *prompts.FileTemplateEngine
 	mgr              *session.Manager
 	projectLiveness  *projectliveness.Tracker
@@ -209,7 +200,7 @@ func Build(ctx context.Context, cfg configuration.Config) (*ServeApp, error) {
 			return b.providers.Build(ctx, providers.Options{Client: cfg.TestLLMClient, Pricer: cfg.TestCostPricer, Startup: cfg.Startup}, b.storage.Database, b.storage.Directory, b.settings.Service, resources, b.startup.recovery)
 		}},
 		{"tool-runtime", startupprotocol.PhaseTools, b.wireToolRuntime},
-		{"presence", startupprotocol.PhaseTools, func() error { return b.security.BuildPresence(b.toolRuntime.Executor.Secrets) }},
+		{"presence", startupprotocol.PhaseTools, func() error { return b.security.BuildPresence(b.execution.Host.Executor.Secrets) }},
 		{"agents", startupprotocol.PhaseAgents, func() error { return b.agents.Load(ctx) }},
 		{"session-manager", startupprotocol.PhaseSessions, sessionWiring{b}.wireSessionManager},
 		{"oar-block-plane", startupprotocol.PhasePolicy, toolWiring{b}.wireOARBlockPlane},
