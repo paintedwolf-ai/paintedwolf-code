@@ -10,6 +10,7 @@ export const UPDATE_ERROR_MESSAGES = {
   preferences_unavailable: "Update preferences could not be read or saved. Check storage permissions and available space, then try again.",
   journal_unavailable: "Update recovery information could not be read or saved. Check storage permissions and available space. Technical details may identify a record that needs recovery.",
   interrupted: "The update was interrupted. Check for updates to try again.",
+  feed_rejected: "The update feed could not be verified. Installation is paused until a valid check succeeds.",
   check_failed: "Could not check for updates. Check your connection and try again. Your installed version is unaffected.",
   download_failed: "The update could not be downloaded. Check your connection and try again. Your installed version is unaffected.",
   verification_failed: "The update could not be verified and was not installed. Check for updates again. Your installed version is unaffected.",

@@ -1,0 +1,23 @@
+{
+  "format_version": 1,
+  "id": "716f7e6a-c343-4d38-ab11-b6f10d90c80a",
+  "candidate": {
+    "version": "1.1.0",
+    "channel": "stable",
+    "platform": "darwin-aarch64",
+    "signing_generation": 1,
+    "artifact_url": "https://downloads.paintedwolf.dev/release.tar.gz",
+    "artifact_signature": "signature",
+    "release_id": "50f0fe52e0fd2930b2b5692bb5e4fe17fff809c1012d26facef9b6f95c628de6",
+    "notes": null,
+    "rollout_eligibility": "eligible"
+  },
+  "target": "/Applications/Painted Wolf Code.app",
+  "previous_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "next_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "next_bundle_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "phase": "committed",
+  "relaunch": true,
+  "recovery_relaunch_attempted": false,
+  "error": null
+}

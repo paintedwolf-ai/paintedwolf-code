@@ -37,6 +37,23 @@ fn offered(s: &mut NativeUpdateState, version: &str, automatic: bool, bucket: u8
     );
 }
 #[test]
+fn rejected_feed_revokes_confirmation_until_a_valid_offer_returns() {
+    let mut s = state();
+    offered(&mut s, "1.1.0", false, 99);
+    s.staged_release_id = s.candidate.as_ref().map(|c| c.release_id.clone());
+    s.installation = Installation::Staged;
+    check::apply_offer(&mut s, Err(Failure::FeedRejected.into()), true, 99, NOW);
+    s.refresh_capabilities(true);
+    assert_eq!(s.installation, Installation::Staged);
+    assert_eq!(s.offer_confirmed_at, None);
+    assert!(!s.capabilities.can_install_automatically);
+    check::apply_offer(&mut s, Err(Failure::CheckFailed.into()), true, 99, NOW + 1);
+    assert_eq!(s.offer_confirmed_at, None);
+    offered(&mut s, "1.1.0", false, 99);
+    s.refresh_capabilities(true);
+    assert!(s.capabilities.can_install_automatically);
+}
+#[test]
 fn staged_release_survives_network_failure_but_not_withdrawal() {
     let mut s = state();
     offered(&mut s, "1.1.0", false, 99);
@@ -120,7 +137,10 @@ fn an_uncoordinated_process_cannot_install_and_says_why() {
     s.refresh_capabilities(true);
     assert!(s.capabilities.can_check);
     assert!(!s.capabilities.can_download);
-    assert_eq!(s.capabilities.blocked_reason.as_deref(), Some("state_unavailable"));
+    assert_eq!(
+        s.capabilities.blocked_reason.as_deref(),
+        Some("state_unavailable")
+    );
     s.refresh_capabilities(false);
     assert_eq!(
         s.capabilities.blocked_reason.as_deref(),
@@ -266,6 +286,7 @@ fn service_for_test() -> UpdateService {
         preparation_generation: AtomicU64::new(0),
         wake: tokio::sync::watch::channel(0).0,
         startup_ready: tokio::sync::watch::channel(false).0,
+        install_at_startup: true,
         engine_admission: std::sync::Arc::new(tokio::sync::RwLock::new(())),
         preparation: std::sync::Arc::new(tokio::sync::Mutex::new(())),
         activation: std::sync::Arc::new(tokio::sync::Mutex::new(())),

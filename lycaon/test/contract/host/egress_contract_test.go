@@ -261,7 +261,7 @@ func TestNonHTTPOutboundAdaptersBindInventoryClasses(t *testing.T) {
 		".no_proxy()",
 		".redirect(reqwest::redirect::Policy::none())",
 		"verification::verify_feed(",
-		"persistence::accept_feed_timestamp(",
+		"feed_state::accept(",
 	} {
 		if !strings.Contains(service, needle) {
 			t.Fatalf("update manifest class is missing %q", needle)

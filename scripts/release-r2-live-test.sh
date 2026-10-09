@@ -43,9 +43,20 @@ VERSIONS=(0.0.900001 0.0.900002 0.0.900003)
 WORKDIR="$(mktemp -d "${TMPDIR:-/tmp}/release-r2-live-test.XXXXXX")"
 # Pointers under the isolated prefix are signed with a key that exists only for this run.
 (cd "${ROOT}/lycaon-den" && bun run tauri signer generate --ci -w "${WORKDIR}/feed.key" >/dev/null 2>&1)
-FEED_SIGNING_PRIVATE_KEY="$(cat "${WORKDIR}/feed.key")"
-export FEED_SIGNING_PRIVATE_KEY
-export FEED_SIGNING_PRIVATE_KEY_PASSWORD=""
+FEED_SIGNING_KEYS_JSON="$(python3 - "${WORKDIR}/feed.key" "${GENERATION}" <<'PYKEY'
+import json, pathlib, sys
+print(json.dumps({"format_version": 1, "generations": {sys.argv[2]: {"private_key": pathlib.Path(sys.argv[1]).read_text(), "password": ""}}}))
+PYKEY
+)"
+export FEED_SIGNING_KEYS_JSON
+FEED_TEST_REGISTRY="${WORKDIR}/update-keys.json"
+export FEED_TEST_REGISTRY
+python3 - "${ROOT}/packaging/update-keys.json" "${WORKDIR}/feed.key.pub" "${FEED_TEST_REGISTRY}" <<'PYREG'
+import json, pathlib, sys
+registry = json.loads(pathlib.Path(sys.argv[1]).read_text())
+registry["generations"][-1]["feed_public_key"] = pathlib.Path(sys.argv[2]).read_text().strip()
+pathlib.Path(sys.argv[3]).write_text(json.dumps(registry))
+PYREG
 declare -a CREATED_KEYS=()
 CLEANED=0
 
@@ -299,7 +310,7 @@ curl --fail --silent --show-error -H 'Cache-Control: no-cache' \
   "${DOWNLOAD_BASE_URL}/${POINTER_REL}.sig?live_test=${RUN_ID}" --output "${WORKDIR}/pointer.sig"
 python3 "${ROOT}/scripts/feed_signature.py" --signature "${WORKDIR}/pointer.sig" \
   --file "latest-stable-key-${GENERATION}.json" --version "${VERSIONS[1]}" \
-  --generation "${GENERATION}" --rehearsal >/dev/null
+  --generation "${GENERATION}" --registry "${FEED_TEST_REGISTRY}" --storage-prefix "${STORAGE_PREFIX}" >/dev/null
 echo "release-live-test: pointer activation, retry, public bytes, signature, and caching verified" >&2
 
 require_absent "${PREVIEW_POINTER_KEY}"

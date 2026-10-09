@@ -1,9 +1,5 @@
-//! Minisign verification of release artifacts and of the signed feed pointer.
-//!
-//! Every signature's trusted comment is written by `tauri signer sign` as
-//! `timestamp:<unix>\tfile:<name>\tversion:<product version>`. The artifact signature binds
-//! the offered version; the feed signature additionally binds the pointer's channel and key
-//! generation through its file name and orders pointers by timestamp.
+//! Signatures bind `timestamp:<unix>\tfile:<name>\tversion:<product version>`.
+//! Pointer filenames bind the channel and key generation; timestamps order accepted feeds.
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use minisign_verify::{PublicKey, Signature};
 use std::{

@@ -85,6 +85,9 @@ pub(super) fn apply_offer(
             state.last_error = None;
         }
         Err(error) => {
+            if error.code == super::Failure::FeedRejected {
+                state.offer_confirmed_at = None;
+            }
             state.discovery = Discovery::Failed;
             state.last_error = Some(error);
         }
@@ -122,7 +125,7 @@ pub(super) async fn run_check(app: &AppHandle, automatic: bool) -> Result<Check,
         )
     };
     let checked = tokio::select! {
-        result = feed::fetch(channel, &version) => result,
+        result = feed::fetch(channel, &version) => result.map_err(feed::FeedFailure::error),
         _ = wake.wait_for(|_| !service.current(generation)) => Err(super::Failure::Cancelled.into()),
     };
     let failure = checked.as_ref().err().cloned();
@@ -138,6 +141,16 @@ pub(super) async fn run_check(app: &AppHandle, automatic: bool) -> Result<Check,
     apply_offer(&mut inner.state, checked, automatic, bucket, now);
     if source_error.is_some() {
         inner.state.last_error = source_error;
+    }
+    if failure
+        .as_ref()
+        .is_some_and(|e| e.code == super::Failure::FeedRejected)
+    {
+        if let Err(error) = super::staging::invalidate_confirmation() {
+            inner.state.last_error = Some(error.clone());
+            emit(app, &mut inner.state);
+            return Err(error);
+        }
     }
     let staged_confirmed = inner.state.staged_release_id.clone().filter(|staged| {
         inner

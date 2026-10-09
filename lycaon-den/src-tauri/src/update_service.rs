@@ -3,10 +3,12 @@ pub(crate) mod check;
 pub(crate) mod download;
 mod error;
 pub(crate) mod feed;
+mod feed_state;
 mod installer;
 mod model;
 mod persistence;
 pub(crate) mod preferences;
+mod record_lock;
 mod scheduler;
 mod staging;
 pub(crate) mod startup;
@@ -41,6 +43,7 @@ pub struct UpdateService {
     preparation: std::sync::Arc<tokio::sync::Mutex<()>>,
     activation: std::sync::Arc<tokio::sync::Mutex<()>>,
     startup_ready: tokio::sync::watch::Sender<bool>,
+    install_at_startup: bool,
     engine_admission: std::sync::Arc<tokio::sync::RwLock<()>>,
     /// Held for the life of the process so no exchange can happen beneath it.
     _lease: Option<transaction::Lease>,
@@ -122,6 +125,7 @@ impl UpdateService {
             wake: tokio::sync::watch::channel(0).0,
             preparation_generation: AtomicU64::new(0),
             startup_ready: tokio::sync::watch::channel(false).0,
+            install_at_startup: launch.install_at_startup,
             engine_admission: std::sync::Arc::new(tokio::sync::RwLock::new(())),
             preparation: std::sync::Arc::new(tokio::sync::Mutex::new(())),
             activation: std::sync::Arc::new(tokio::sync::Mutex::new(())),

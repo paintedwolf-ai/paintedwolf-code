@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import hashlib
+import tempfile
 from pathlib import Path
 import subprocess
 
 from update_keys import feed_key, generation, load_registry, validate_binding
 from release_semver import compare, parse
-from release_distribution import read_storage
+from release_distribution import read_storage, read_storage_bytes
 
 # Clients embedding these generations ignore a pointer's `withdrawn` marker, so their
 # feeds can only stop a release by pointing at a replacement.
@@ -54,7 +56,7 @@ def plan_withdrawal(registry: dict, source: int, bad: str, last_good: str | None
             else:
                 row["keep_version"] = version
             rows.append(row)
-    return {"source_generation": source, "feeds": rows}
+    return {"source_generation": source, "feeds": rows, "distribution": distribution_plan(rows, bad, last_good)}
 
 
 def main() -> None:
@@ -66,6 +68,8 @@ def main() -> None:
     parser.add_argument("--write-plan", type=Path)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--distribution-output", type=Path)
+    parser.add_argument("--prepare-output", type=Path)
+    parser.add_argument("--apply-prepared", type=Path)
     args = parser.parse_args()
     registry = load_registry()
     if bool(args.plan) == bool(args.bad):
@@ -73,8 +77,8 @@ def main() -> None:
     plan = json.loads(args.plan.read_text()) if args.plan else plan_withdrawal(registry, args.source_generation, args.bad, args.last_good)
     if args.write_plan:
         args.write_plan.write_text(json.dumps(plan, indent=2) + "\n")
-    if set(plan) != {"source_generation", "feeds"}:
-        raise ValueError("halt plan requires source_generation and feeds")
+    if set(plan) not in ({"source_generation", "feeds"}, {"source_generation", "feeds", "distribution"}):
+        raise ValueError("halt plan requires source_generation, feeds, and optional distribution")
     source = plan["source_generation"]
     generation(registry, source)
     rows = {}
@@ -111,27 +115,107 @@ def main() -> None:
     for row in rows.values():
         if "keep_version" in row and (row["generation"], row["keep_version"]) in withdrawals:
             raise ValueError("a withdrawn bridge cannot remain offered on the other source channel")
-    script = Path(__file__).with_name("release-halt.sh")
-    commands = []
-    for (number, channel), row in rows.items():
-        if "bad" in row:
-            command = ["bash", str(script), "--generation", str(number), "--channel", channel,
-                       "--bad", row["bad"], "--reviewed-plan"]
-            if row["last_good"] is not None:
-                command += ["--last-good", row["last_good"]]
-            commands.append(command)
-    for command in commands:
-        subprocess.run(command + ["--dry-run"], check=True)
+    distribution = plan.get("distribution", distribution_plan(list(rows.values())))
     if args.distribution_output:
-        args.distribution_output.write_text(json.dumps(distribution_plan(list(rows.values()), args.bad, args.last_good)))
-    if not args.dry_run:
-        failures = []
-        for command in commands:
-            result = subprocess.run(command, check=False)
-            if result.returncode:
-                failures.append(f"{command}: exit {result.returncode}")
-        if failures:
-            raise ValueError("withdrawal failed for some feeds: " + "; ".join(failures))
+        args.distribution_output.write_text(json.dumps(distribution))
+    if args.prepare_output and args.apply_prepared:
+        raise ValueError("choose prepare-output or apply-prepared")
+    with tempfile.TemporaryDirectory(prefix="prepared-halt-") as temporary:
+        directory = args.apply_prepared or args.prepare_output or Path(temporary)
+        if not args.apply_prepared:
+            prepare(rows, plan, distribution, directory)
+        prepared = validate_prepared(rows, plan, directory, registry)
+        if not args.dry_run:
+            apply(prepared, directory)
+
+
+def digest(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def prepare(rows: dict, plan: dict, distribution: dict, directory: Path) -> None:
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / "prepared.json").unlink(missing_ok=True)
+    index = {"format_version": 1, "plan": plan, "distribution": distribution, "feeds": []}
+    script = Path(__file__).with_name("release-halt.sh")
+    for (number, channel), row in rows.items():
+        if "bad" not in row:
+            continue
+        key = feed_key(channel, number)
+        before_bytes = read_storage_bytes(key)
+        if before_bytes is None:
+            raise ValueError("feed disappeared during preparation")
+        before_signature = read_storage_bytes(key + ".sig")
+        before = json.loads(before_bytes)
+        command = ["bash", str(script), "--generation", str(number), "--channel", channel,
+                   "--bad", row["bad"], "--reviewed-plan", "--prepare-output", str(directory)]
+        if row["last_good"] is not None:
+            command += ["--last-good", row["last_good"]]
+        subprocess.run(command, check=True)
+        name = f"latest-{channel}-key-{number}.json"
+        index["feeds"].append({"generation": number, "channel": channel, "bad": row["bad"],
+                               "before": before, "before_pointer_sha256": hashlib.sha256(before_bytes).hexdigest(),
+                               "before_signature_sha256": hashlib.sha256(before_signature).hexdigest() if before_signature is not None else None,
+                               "pointer_sha256": digest(directory / name),
+                               "signature_sha256": digest(directory / (name + ".sig"))})
+    # This receipt is written only after every signing operation has succeeded.
+    (directory / "prepared.json").write_text(json.dumps(index, indent=2) + "\n")
+
+
+def validate_prepared(rows: dict, plan: dict, directory: Path, registry: dict) -> dict:
+    from feed_signature import check
+    from update_keys import validate_publication
+    index = json.loads((directory / "prepared.json").read_text())
+    if set(index) != {"format_version", "plan", "distribution", "feeds"} or index["format_version"] != 1 or index["plan"] != plan:
+        raise ValueError("prepared halt does not match the reviewed plan")
+    if index["distribution"] != plan.get("distribution", distribution_plan(list(rows.values()))):
+        raise ValueError("prepared distribution withdrawal differs from the reviewed plan")
+    expected = {key for key, row in rows.items() if "bad" in row}
+    seen = set()
+    for item in index["feeds"]:
+        number, channel = item["generation"], item["channel"]
+        key = (number, channel)
+        if key not in expected or key in seen or item["bad"] != rows[key]["bad"]:
+            raise ValueError("prepared halt has unexpected or duplicate feeds")
+        seen.add(key)
+        name = f"latest-{channel}-key-{number}.json"
+        pointer, signature = directory / name, directory / (name + ".sig")
+        if digest(pointer) != item["pointer_sha256"] or digest(signature) != item["signature_sha256"]:
+            raise ValueError("prepared halt bytes changed")
+        manifest = json.loads(pointer.read_text())
+        validate_publication(registry, manifest, number, halt=True)
+        row = rows[key]
+        if manifest["version"] != (row["last_good"] or row["bad"]) or bool(manifest.get("withdrawn")) != (row["last_good"] is None):
+            raise ValueError("prepared pointer does not implement the reviewed withdrawal")
+        check(signature.read_text(), file=name, version=manifest["version"], number=number, registry=registry)
+        current = read_storage_bytes(feed_key(channel, number))
+        current_signature = read_storage_bytes(feed_key(channel, number) + ".sig")
+        current_hash = hashlib.sha256(current).hexdigest() if current is not None else None
+        signature_hash = hashlib.sha256(current_signature).hexdigest() if current_signature is not None else None
+        if current_hash not in {item["before_pointer_sha256"], item["pointer_sha256"]} or signature_hash not in {item["before_signature_sha256"], item["signature_sha256"]}:
+            raise ValueError(f"feed changed since preparation: {key}")
+    if seen != expected:
+        raise ValueError("prepared halt is incomplete")
+    return index
+
+
+def apply(index: dict, directory: Path) -> None:
+    distribution = directory / "distribution.json"
+    distribution.write_text(json.dumps(index["distribution"]))
+    subprocess.run(["python3", str(Path(__file__).with_name("release_distribution.py")),
+                    "withdraw", "--file", str(distribution)], check=True)
+    receipts = []
+    for item in index["feeds"]:
+        number, channel = item["generation"], item["channel"]
+        name = f"latest-{channel}-key-{number}.json"
+        result = subprocess.run(["bash", str(Path(__file__).with_name("release-r2-publish-pointer.sh")),
+            "--file", str(directory / name), "--signature", str(directory / (name + ".sig")),
+            "--channel", channel, "--generation", str(number), "--from-version", item["bad"]], check=False)
+        receipts.append({"generation": number, "channel": channel, "exit_code": result.returncode,
+                         "pointer_sha256": item["pointer_sha256"], "signature_sha256": item["signature_sha256"]})
+        (directory / "application.json").write_text(json.dumps({"format_version": 1, "feeds": receipts}, indent=2) + "\n")
+    if any(row["exit_code"] for row in receipts):
+        raise ValueError("some feeds failed to publish; inspect application.json and retry the prepared halt")
 
 
 if __name__ == "__main__":

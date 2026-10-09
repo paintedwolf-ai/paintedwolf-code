@@ -37,6 +37,18 @@ describe("update notices", () => {
       expect(f.rows()).toHaveLength(0);
     } finally { f.stop(); }
   });
+  it("withdraws readiness after a rejected feed and restores it after a valid check", async () => {
+    const f = await fixture();
+    try {
+      await f.send(stagedFixture());
+      await f.send(stagedFixture({ offer_confirmed_at: null, last_error: { code: "feed_rejected" } }));
+      expect(f.rows().map(row => row.code)).toEqual(["update_failed"]);
+      await f.send(stagedFixture({ offer_confirmed_at: null, last_error: { code: "check_failed" } }));
+      expect(f.rows()).toHaveLength(0);
+      await f.send(stagedFixture());
+      expect(f.rows().map(row => row.code)).toEqual(["update_ready"]);
+    } finally { f.stop(); }
+  });
   it("keeps held-back and offline checks quiet and uses the existing notice rail for failures", async () => {
     const f = await fixture();
     try {

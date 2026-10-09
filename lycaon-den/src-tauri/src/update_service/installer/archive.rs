@@ -1,8 +1,5 @@
-//! Bounded extraction of a release archive into a private directory.
-//!
-//! The archive must hold exactly one `*.app` root. Entries are regular files, directories,
-//! and relative symlinks that stay inside the bundle; links are created after every file so
-//! no write can follow a link, and the finished tree is checked again by canonical path.
+//! Extraction confines entries to one app bundle and bounds expanded size.
+//! Links are created last so file writes cannot follow them.
 use super::{verification, Failure, UpdateError};
 use std::{
     fs,

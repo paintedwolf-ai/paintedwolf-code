@@ -16,6 +16,7 @@ pub enum UpdateErrorCode {
     JournalUnavailable,
     Interrupted,
     CheckFailed,
+    FeedRejected,
     DownloadFailed,
     VerificationFailed,
     InstallFailed,
@@ -61,7 +62,10 @@ impl UpdateError {
     /// Transport failures are retried; everything else about a feed response is a release defect.
     pub fn transport(error: reqwest::Error) -> Self {
         // A client error says the origin has no such release; everything else is transient.
-        let code = if error.status().is_some_and(|status| status.is_client_error()) {
+        let code = if error
+            .status()
+            .is_some_and(|status| status.is_client_error())
+        {
             UpdateErrorCode::InvalidRelease
         } else {
             UpdateErrorCode::CheckFailed

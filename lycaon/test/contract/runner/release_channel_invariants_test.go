@@ -293,15 +293,15 @@ func TestReleaseSigningAndPublicationCustodyAreSeparated(t *testing.T) {
 	// The feed key signs pointers at publication and never signs code; the artifact key never
 	// leaves the signing environment.
 	activate := extractYAMLJob(workflow, "activate-updater")
-	if !strings.Contains(activate, "FEED_SIGNING_PRIVATE_KEY: ${{ secrets.FEED_SIGNING_PRIVATE_KEY }}") ||
+	if !strings.Contains(activate, "FEED_SIGNING_KEYS_JSON: ${{ secrets.FEED_SIGNING_KEYS_JSON }}") ||
 		strings.Contains(activate, "TAURI_SIGNING_PRIVATE_KEY") {
 		t.Fatal("channel activation must sign pointers with the feed key only")
 	}
-	if strings.Contains(build, "FEED_SIGNING_PRIVATE_KEY") {
+	if strings.Contains(build, "FEED_SIGNING_KEYS_JSON") {
 		t.Fatal("signed build receives the feed signing key")
 	}
 	halt := contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), ".github/workflows/release-halt.yml")
-	if !strings.Contains(halt, "FEED_SIGNING_PRIVATE_KEY: ${{ secrets.FEED_SIGNING_PRIVATE_KEY }}") ||
+	if !strings.Contains(halt, "FEED_SIGNING_KEYS_JSON: ${{ secrets.FEED_SIGNING_KEYS_JSON }}") ||
 		strings.Contains(halt, "TAURI_SIGNING_PRIVATE_KEY") {
 		t.Fatal("release halt must sign replacement pointers with the feed key only")
 	}
@@ -486,7 +486,7 @@ func TestUpdaterSignaturesBindTheProductVersion(t *testing.T) {
 		!strings.Contains(pointer, `release-validate-updater-manifest.sh" --file "${CURRENT}" --existing`) {
 		t.Fatal("the pointer publisher must validate the new manifest strictly and read the current one as existing")
 	}
-	if !strings.Contains(pointer, `bun run tauri signer sign --app-version "${EXPECTED_VERSION}" "${SIGNED_COPY}"`) ||
+	if !strings.Contains(pointer, `feed_signing.py" --file "${SIGNED_COPY}"`) ||
 		!strings.Contains(pointer, `feed_signature.py" --signature "${SIGNATURE}" --file "${FEED_NAME}"`) ||
 		strings.Index(pointer, "publish_signature()") > strings.Index(pointer, `r2 object put "${R2_BUCKET}/${OBJECT_KEY}"`) {
 		t.Fatal("the pointer publisher must sign the pointer under its feed name and publish the signature before the pointer")

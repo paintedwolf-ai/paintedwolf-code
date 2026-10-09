@@ -239,7 +239,7 @@ export const CLIENT_NOTICES: Readonly<Record<ClientNoticeKind, ClientNoticeCopy>
   update_ready: {
     title: "Update ready",
     message: "A verified update is ready for Painted Wolf Code.",
-    suggestedAction: "It will install when you quit if automatic updates are on. To apply it now, open Settings → General → Updates and choose Restart to update.",
+    suggestedAction: "With automatic updates on, it installs when you quit after a final safety check. To install sooner, open Settings → General → Updates and choose Restart to update.",
     scope: "app",
   },
   view_render_failed: {

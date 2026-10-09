@@ -43,17 +43,19 @@ class FeedSignatureCheck(unittest.TestCase):
 
     def test_signature_bindings_are_checked_before_publication(self):
         feed_signature, fixture = self.load()
-        timestamp = feed_signature.check(fixture["signature"], file="latest-stable-key-1.json", version="1.2.3", number=1, rehearsal=True)
+        keys = registry()
+        keys["generations"][0]["feed_public_key"] = fixture["feed_public_key"]
+        timestamp = feed_signature.check(fixture["signature"], file="latest-stable-key-1.json", version="1.2.3", number=1, registry=keys)
         self.assertGreater(timestamp, 1_700_000_000)
         with self.assertRaises(ValueError):
-            feed_signature.check(fixture["signature"], file="latest-preview-key-1.json", version="1.2.3", number=1, rehearsal=True)
+            feed_signature.check(fixture["signature"], file="latest-preview-key-1.json", version="1.2.3", number=1, registry=keys)
         with self.assertRaises(ValueError):
-            feed_signature.check(fixture["signature"], file="latest-stable-key-1.json", version="1.2.4", number=1, rehearsal=True)
+            feed_signature.check(fixture["signature"], file="latest-stable-key-1.json", version="1.2.4", number=1, registry=keys)
         with self.assertRaises(ValueError):
-            feed_signature.check(fixture["unbound_signature"], file="latest-stable-key-1.json", version="1.2.3", number=1, rehearsal=True)
-        # Outside a rehearsal the signer must be the registered feed key of the generation.
+            feed_signature.check(fixture["unbound_signature"], file="latest-stable-key-1.json", version="1.2.3", number=1, registry=keys)
+        # A different registry never bypasses the signer binding.
         with self.assertRaises(ValueError):
-            feed_signature.check(fixture["signature"], file="latest-stable-key-1.json", version="1.2.3", number=1, rehearsal=False)
+            feed_signature.check(fixture["signature"], file="latest-stable-key-1.json", version="1.2.3", number=1, registry=registry())
 
 
 class UpdateKeyRehearsal(unittest.TestCase):
@@ -147,27 +149,28 @@ class UpdateKeyRehearsal(unittest.TestCase):
         self.assertEqual(planner.distribution_plan(all_bad)["channels"], [all_bad[-1]])
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp) / "plan.json"
-            with patch.object(planner, "load_registry", return_value=keys), patch.object(sys, "argv", ["halt", "--plan", str(path)]), patch.object(planner, "read_storage", side_effect=feeds.get), patch.object(planner.subprocess, "run") as run:
-                run.return_value.returncode = 0
+            with patch.object(planner, "load_registry", return_value=keys), patch.object(sys, "argv", ["halt", "--plan", str(path)]), patch.object(planner, "read_storage", side_effect=feeds.get), patch.object(planner, "prepare") as prepare, patch.object(planner, "validate_prepared", return_value={}) as validate, patch.object(planner, "apply") as apply:
+                calls = []
+                prepare.side_effect = lambda *args: calls.append("prepare")
+                validate.side_effect = lambda *args: calls.append("validate") or {}
+                apply.side_effect = lambda *args: calls.append("apply")
                 path.write_text(json.dumps({"source_generation": 1, "feeds": rows[:-1]}))
                 with self.assertRaises(ValueError):
                     planner.main()
-                run.assert_not_called()
+                prepare.assert_not_called()
                 bad_keep = copy.deepcopy(rows)
                 bad_keep[1] = {"generation": 1, "channel": "preview", "keep_version": "2.0.0"}
                 path.write_text(json.dumps({"source_generation": 1, "feeds": bad_keep}))
                 with self.assertRaises(ValueError):
                     planner.main()
-                run.assert_not_called()
+                prepare.assert_not_called()
                 path.write_text(json.dumps({"source_generation": 1, "feeds": rows}))
                 planner.main()
-                self.assertEqual(len(run.call_args_list), 4)
-                self.assertTrue(all("--dry-run" in call.args[0] for call in run.call_args_list[:2]))
-                self.assertTrue(all("--dry-run" not in call.args[0] for call in run.call_args_list[2:]))
+                self.assertEqual(calls, ["prepare", "validate", "apply"])
                 feeds[feed_key("stable", 1)] = {**feeds[feed_key("stable", 1)], "version": "1.9.0"}
-                run.reset_mock()
+                calls.clear()
                 planner.main()
-                self.assertEqual(len(run.call_args_list), 4)
+                self.assertEqual(calls, ["prepare", "validate", "apply"])
 
     def test_generation_one_feeds_halt_only_to_a_replacement(self):
         spec = importlib.util.spec_from_file_location("halt_plan", Path(__file__).with_name("release-halt-plan.py"))

@@ -56,10 +56,27 @@ describe("update settings", () => {
     const restart = vi.fn(async () => {}); setConfirmDestructivePresenter(async () => true);
     const state = stagedFixture(); state.installation = "committed"; state.capabilities = { ...state.capabilities, can_check: false };
     render(() => <UpdatesSettingsPanel updateService={updateServiceFixture({ restart, getState: async () => state })} />);
-    expect((await screen.findByTestId("updates-installation-status")).textContent).toContain("last Painted Wolf Code window closes");
+    expect((await screen.findByTestId("updates-installation-status")).textContent).toContain("running copies of this installation to quit");
     expect(screen.getByTestId("updates-check-now")).toHaveProperty("disabled", true);
     fireEvent.click(screen.getByRole("button", { name: "Restart to update" }));
     await waitFor(() => expect(restart).toHaveBeenCalledWith("release-1"));
+  });
+  it("requires renewed host confirmation after a rejected feed", async () => {
+    const confirmed = stagedFixture();
+    const check = vi.fn(async () => confirmed);
+    const rejected = stagedFixture({ offer_confirmed_at: null, last_error: { code: "feed_rejected" }, capabilities: { ...confirmed.capabilities, can_install_automatically: false } });
+    render(() => <UpdatesSettingsPanel updateService={updateServiceFixture({ check, getState: async () => rejected })} />);
+    expect((await screen.findByRole("alert")).textContent).toContain("Installation is paused");
+    expect(screen.getByTestId("updates-installation-status").textContent).toContain("Check for updates again");
+    fireEvent.click(screen.getByRole("button", { name: "Check now" }));
+    await waitFor(() => expect(check).toHaveBeenCalledOnce());
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+    expect(screen.getByTestId("updates-installation-status").textContent).toContain("final safety check");
+  });
+  it("describes an explicitly staged update without promising an automatic install", async () => {
+    const state = stagedFixture({ automatic_updates_enabled: false });
+    render(() => <UpdatesSettingsPanel updateService={updateServiceFixture({ getState: async () => state })} />);
+    expect((await screen.findByTestId("updates-installation-status")).textContent).toBe("Update downloaded. Restart to install it.");
   });
   it("holds every control while the restart confirmation is open", async () => {
     let decide!: (value: boolean) => void; const restart = vi.fn(async () => {});
