@@ -43,30 +43,30 @@ func TestBundledCommandBranchesOnContainmentNotCommandText(t *testing.T) {
 		"git push origin main",
 	} {
 		approved := evalBundled(t, hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-Args: map[string]any{"command": command},
-},
-Scope: hitl.ActionScope{
-ProjectDir: dir,
-},
-Execution: hitl.ActionExecution{
-Contained: contained,
-},
-})
+			Invocation: hitl.ActionInvocation{
+				Tool: "command",
+				Args: map[string]any{"command": command},
+			},
+			Scope: hitl.ActionScope{
+				ProjectDir: dir,
+			},
+			Execution: hitl.ActionExecution{
+				Contained: contained,
+			},
+		})
 		if !approved.AutoApproved() || approved.Required() || approved.Denied {
 			t.Errorf("contained command %q must run: %+v", command, approved)
 		}
 
 		asked := evalBundled(t, hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-Args: map[string]any{"command": command},
-},
-Scope: hitl.ActionScope{
-ProjectDir: dir,
-},
-})
+			Invocation: hitl.ActionInvocation{
+				Tool: "command",
+				Args: map[string]any{"command": command},
+			},
+			Scope: hitl.ActionScope{
+				ProjectDir: dir,
+			},
+		})
 		if !asked.Required() || asked.Denied {
 			t.Errorf("uncontained command %q must ask: %+v", command, asked)
 		}
@@ -83,17 +83,17 @@ func TestBundledContainedFSBlastAutoApproves(t *testing.T) {
 		"rm --force ./tmp.o",
 	} {
 		res := evalBundled(t, hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-Args: map[string]any{"command": cmd},
-},
-Scope: hitl.ActionScope{
-ProjectDir: dir,
-},
-Execution: hitl.ActionExecution{
-Contained: contained,
-},
-})
+			Invocation: hitl.ActionInvocation{
+				Tool: "command",
+				Args: map[string]any{"command": cmd},
+			},
+			Scope: hitl.ActionScope{
+				ProjectDir: dir,
+			},
+			Execution: hitl.ActionExecution{
+				Contained: contained,
+			},
+		})
 		if !res.AutoApproved() || res.Required() {
 			t.Fatalf("Contained FS command %q must auto-approve: %+v", cmd, res)
 		}
@@ -105,26 +105,26 @@ func TestBundledStandardChownPathEscapeAsksOutsideRoots(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	inProject := evalBundled(t, hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "chown",
-Files: []string{filepath.Join(dir, "run.sh")},
-},
-Scope: hitl.ActionScope{
-ProjectDir: dir,
-},
-})
+		Invocation: hitl.ActionInvocation{
+			Tool:  "chown",
+			Files: []string{filepath.Join(dir, "run.sh")},
+		},
+		Scope: hitl.ActionScope{
+			ProjectDir: dir,
+		},
+	})
 	if !inProject.AutoApproved() || inProject.Required() {
 		t.Fatalf("in-project chown must auto-approve (recoverable): %+v", inProject)
 	}
 	escaping := evalBundled(t, hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "chown",
-Files: []string{"/etc/passwd"},
-},
-Scope: hitl.ActionScope{
-ProjectDir: dir,
-},
-})
+		Invocation: hitl.ActionInvocation{
+			Tool:  "chown",
+			Files: []string{"/etc/passwd"},
+		},
+		Scope: hitl.ActionScope{
+			ProjectDir: dir,
+		},
+	})
 	if !escaping.Required() || escaping.Gate() != api.GateOutsideRootsWrite {
 		t.Fatalf("native path escape must ask outside_roots at Balanced: %+v", escaping)
 	}
@@ -133,14 +133,14 @@ ProjectDir: dir,
 func TestBundledStandardNativePathEscapeAsksOutsideRoots(t *testing.T) {
 	t.Parallel()
 	res := evalBundled(t, hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "write",
-Files: []string{"/unattached/outside-write.txt"},
-},
-Scope: hitl.ActionScope{
-ProjectDir: t.TempDir(),
-},
-})
+		Invocation: hitl.ActionInvocation{
+			Tool:  "write",
+			Files: []string{"/unattached/outside-write.txt"},
+		},
+		Scope: hitl.ActionScope{
+			ProjectDir: t.TempDir(),
+		},
+	})
 	if !res.Required() || res.Gate() != api.GateOutsideRootsWrite {
 		t.Fatalf("native path escape must ask outside_roots at Balanced: %+v", res)
 	}
@@ -150,13 +150,13 @@ ProjectDir: t.TempDir(),
 func TestBundledBalancedRunsMCPSilently(t *testing.T) {
 	t.Parallel()
 	res := evalBundled(t, hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "mcp.example.do_thing",
-},
-Scope: hitl.ActionScope{
-ProjectDir: t.TempDir(),
-},
-})
+		Invocation: hitl.ActionInvocation{
+			Tool: "mcp.example.do_thing",
+		},
+		Scope: hitl.ActionScope{
+			ProjectDir: t.TempDir(),
+		},
+	})
 	if !res.AutoApproved() || res.Required() {
 		t.Fatalf("MCP tool must run silently at Balanced: %+v", res)
 	}
@@ -173,18 +173,18 @@ func TestStrictAsksOnMCPUntilLeased(t *testing.T) {
 	gate := settings.NewRuleApprovalGate(store, settings.NoSources())
 
 	action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "mcp_example_do_thing",
-},
-Resources: hitl.ActionResources{
-ApprovalCategory: string(settings.ApprovalCategoryMCP),
-ApprovalSubject: "example.do_thing",
-},
-Scope: hitl.ActionScope{
-ProjectDir: t.TempDir(),
-SessionID: "chat-1",
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool: "mcp_example_do_thing",
+		},
+		Resources: hitl.ActionResources{
+			ApprovalCategory: string(settings.ApprovalCategoryMCP),
+			ApprovalSubject:  "example.do_thing",
+		},
+		Scope: hitl.ActionScope{
+			ProjectDir: t.TempDir(),
+			SessionID:  "chat-1",
+		},
+	}
 	res, err := gate.Evaluate(t.Context(), action)
 	contractcheck.FailErr(t, "gate Evaluate", err)
 	if !res.Required() {
@@ -240,13 +240,13 @@ func TestClassifyTierNativeScanDrillDownReversible(t *testing.T) {
 	t.Parallel()
 	for _, tool := range []string{"scan_list", "scan_summary", "scan_query", "scan_compare"} {
 		tier := settings.ClassifyTier(hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: tool,
-},
-Scope: hitl.ActionScope{
-ProjectDir: "/proj",
-},
-})
+			Invocation: hitl.ActionInvocation{
+				Tool: tool,
+			},
+			Scope: hitl.ActionScope{
+				ProjectDir: "/proj",
+			},
+		})
 		if tier != settings.TierReversible {
 			t.Fatalf("%s: got tier %v want reversible", tool, tier)
 		}
@@ -258,13 +258,13 @@ func TestBundledStandardRunsNativeScanDrillDownSilently(t *testing.T) {
 	dir := t.TempDir()
 	for _, tool := range []string{"scan_list", "scan_summary", "scan_query", "scan_compare"} {
 		res := evalBundled(t, hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: tool,
-},
-Scope: hitl.ActionScope{
-ProjectDir: dir,
-},
-})
+			Invocation: hitl.ActionInvocation{
+				Tool: tool,
+			},
+			Scope: hitl.ActionScope{
+				ProjectDir: dir,
+			},
+		})
 		if !res.AutoApproved() || res.Required() {
 			t.Fatalf("native scan drill-down %q must auto-approve under Standard: %+v", tool, res)
 		}
@@ -275,13 +275,13 @@ func TestBundledStandardRunsContainedEditsAndDeletesSilently(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	for _, action := range []hitl.ProposedAction{
-		{Tool: "write", Files: []string{filepath.Join(dir, "a.go")}, ProjectDir: dir},
-		{Tool: "edit", Files: []string{filepath.Join(dir, "b.go")}, ProjectDir: dir},
-		{Tool: "delete", Files: []string{filepath.Join(dir, "c.go")}, ProjectDir: dir},
+		{Invocation: hitl.ActionInvocation{Tool: "write", Files: []string{filepath.Join(dir, "a.go")}}, Scope: hitl.ActionScope{ProjectDir: dir}},
+		{Invocation: hitl.ActionInvocation{Tool: "edit", Files: []string{filepath.Join(dir, "b.go")}}, Scope: hitl.ActionScope{ProjectDir: dir}},
+		{Invocation: hitl.ActionInvocation{Tool: "delete", Files: []string{filepath.Join(dir, "c.go")}}, Scope: hitl.ActionScope{ProjectDir: dir}},
 	} {
 		res := evalBundled(t, action)
 		if !res.AutoApproved() || res.Required() {
-			t.Fatalf("contained %s must auto-approve under Standard: %+v", action.Tool, res)
+			t.Fatalf("contained %s must auto-approve under Standard: %+v", action.Invocation.Tool, res)
 		}
 	}
 }

@@ -2,7 +2,6 @@ package contract
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/toolcontract"
 	"go/ast"
 	"go/parser"
 	"go/token"
