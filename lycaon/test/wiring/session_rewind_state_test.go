@@ -198,7 +198,7 @@ func mustMessages(t *testing.T, h *Harness, ctx context.Context, sessionID strin
 
 func rewindDigest(t *testing.T, mgr *session.Host, ctx context.Context, sessionID, anchor string) string {
 	t.Helper()
-	preview, err := mgr.Rewinds.PreviewRewind(ctx, sessionID, anchor)
+	preview, err := mgr.Chats.Rewinds.PreviewRewind(ctx, sessionID, anchor)
 	testutil.FailErr(t, "preview rewind", err)
 	if len(preview.Issues) > 0 {
 		t.Fatalf("rewind issues: %+v", preview.Issues)
