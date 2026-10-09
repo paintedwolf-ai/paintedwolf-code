@@ -16,7 +16,7 @@ import (
 )
 
 // HandleResolveProjectSourceRevisions answers which commits a typed revision names in each root.
-func (s *Handler) HandleResolveProjectSourceRevisions(w http.ResponseWriter, r *http.Request) {
+func (s *Review) HandleResolveProjectSourceRevisions(w http.ResponseWriter, r *http.Request) {
 	p, ok := requestscope.ProjectByURLID(s.ProjectRegistry, s.responses, w, r)
 	if !ok {
 		return
@@ -42,7 +42,7 @@ func (s *Handler) HandleResolveProjectSourceRevisions(w http.ResponseWriter, r *
 	}
 	out := wire.SourceRevisionsResponse{Comparisons: []wire.SourceRevisionComparison{}}
 	for _, root := range roots {
-		rootAbs, _, mapped := s.resolveRootRepoPosition(r.Context(), p, root.ID)
+		rootAbs, _, mapped := s.Comparisons.resolveRootRepoPosition(r.Context(), p, root.ID)
 		if !mapped {
 			continue
 		}
@@ -78,7 +78,7 @@ func revisionRoots(p *project.Project, rootID string) ([]projectroot.RootRef, bo
 	return ordered, rootID == "" || len(ordered) > 0
 }
 
-func (s *Handler) HandleGetProjectSourceRevisionReview(w http.ResponseWriter, r *http.Request) {
+func (s *Review) HandleGetProjectSourceRevisionReview(w http.ResponseWriter, r *http.Request) {
 	p, ok := requestscope.ProjectByURLID(s.ProjectRegistry, s.responses, w, r)
 	if !ok {
 		return
@@ -107,7 +107,7 @@ func (s *Handler) HandleGetProjectSourceRevisionReview(w http.ResponseWriter, r 
 	}
 	req, err := s.loadRevisionReview(r.Context(), p, rootID, before, after)
 	if err != nil {
-		s.writeComparisonError(w, r, err)
+		s.Comparisons.writeComparisonError(w, r, err)
 		return
 	}
 	page, nextCursor, ok := s.readReviewPage(w, r, revisionReviewPages, req, input)
@@ -123,10 +123,10 @@ func (s *Handler) HandleGetProjectSourceRevisionReview(w http.ResponseWriter, r 
 
 // loadRevisionReview addresses two full commit ids in one root's repository;
 // nothing is recorded.
-func (s *Handler) loadRevisionReview(ctx context.Context, p *project.Project, rootID, before, after string) (sourceGitReviewRequest, error) {
+func (s *Review) loadRevisionReview(ctx context.Context, p *project.Project, rootID, before, after string) (sourceGitReviewRequest, error) {
 	var req sourceGitReviewRequest
 	mgr := s.Git.Manager()
-	rootAbs, _, mapped := s.resolveRootRepoPosition(ctx, p, rootID)
+	rootAbs, _, mapped := s.Comparisons.resolveRootRepoPosition(ctx, p, rootID)
 	if !mapped {
 		return req, &comparisonFailure{wire.ApiErrorCodeSourceVersionUnavailable, "The repository for this folder is unavailable."}
 	}
@@ -135,7 +135,7 @@ func (s *Handler) loadRevisionReview(ctx context.Context, p *project.Project, ro
 	return req, nil
 }
 
-func (s *Handler) loadGitRangeComparison(ctx context.Context, p *project.Project, source wire.GitRangeComparisonSource) (sourceledger.Comparison, error) {
+func (s *Review) loadGitRangeComparison(ctx context.Context, p *project.Project, source wire.GitRangeComparisonSource) (sourceledger.Comparison, error) {
 	if err := gitReviewPathFailure(source.Path); err != nil {
 		return sourceledger.Comparison{}, err
 	}

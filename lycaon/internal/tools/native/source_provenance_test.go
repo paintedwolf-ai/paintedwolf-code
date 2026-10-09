@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"testing"
@@ -24,13 +25,13 @@ import (
 // fakeSourceLedger satisfies sourceledger.Recorder plus the provenance read
 // surface, so tests exercise the tool plumbing without a database.
 type fakeSourceLedger struct {
-	heads       map[string]sourceledger.BranchHead
-	headErr     error
-	effects     map[string][]sourceledger.Effect
-	attribution map[string]sourceledger.AttributionResult
-	authored    map[string][]string
-	floor       int64
-	floorFound  bool
+	heads        map[string]sourceledger.BranchHead
+	headErr      error
+	effects      map[string][]sourceledger.Effect
+	attribution  map[string]sourceledger.AttributionResult
+	authored     map[string][]string
+	floor        int64
+	floorFound   bool
 	versions     map[string]sourceledger.RestorableVersion
 	fileVersions map[string][]sourceledger.Version
 	comparisons  map[string]sourceledger.Comparison
@@ -146,8 +147,8 @@ func writeProvenanceFile(t *testing.T, dir, name, content string) (abs, sha stri
 
 func provenanceCtx(dir string, ledger sourceledger.Recorder) tools.ToolContext {
 	tctx := nativefixture.Context(dir)
-	tctx.ProjectID = "p1"
-	tctx.SourceLedger = ledger
+	tctx.Identity.ProjectID = "p1"
+	tctx.Source.SourceLedger = ledger
 	return tctx
 }
 
@@ -251,7 +252,7 @@ func TestReadReceiptWithoutLedgerMakesNoClaim(t *testing.T) {
 	writeProvenanceFile(t, dir, "main.go", "package main\n")
 	read := &surveytools.ReadTool{Boundary: nativefixture.Boundary(t)}
 	tctx := nativefixture.Context(dir)
-	tctx.ProjectID = "p1"
+	tctx.Identity.ProjectID = "p1"
 	out, err := read.Run(context.Background(), map[string]any{"path": "main.go"}, tctx)
 	testutil.FailErr(t, "read", err)
 	if source := receiptSource(t, out); source != nil {
@@ -278,7 +279,7 @@ func TestEditMissWithForeignChangeStatesProvenance(t *testing.T) {
 	_, err := edit.Run(context.Background(), map[string]any{
 		"path": "main.go", "old_string": "package moved", "new_string": "package main",
 	}, provenanceCtx(dir, ledger))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "EDIT_TARGET_CHANGED_BY_OTHERS" {
 		t.Fatalf("edit miss = %v, want EDIT_TARGET_CHANGED_BY_OTHERS", err)
 	}
@@ -307,7 +308,7 @@ func TestEditMissWithOnlyOwnChangesKeepsPlainReject(t *testing.T) {
 	_, err := edit.Run(context.Background(), map[string]any{
 		"path": "main.go", "old_string": "package moved", "new_string": "package main",
 	}, provenanceCtx(dir, ledger))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "EDIT_OLD_STRING_NOT_FOUND" {
 		t.Fatalf("edit miss = %v, want plain EDIT_OLD_STRING_NOT_FOUND", err)
 	}
@@ -329,7 +330,7 @@ func TestEditMissWithoutRecordedFloorKeepsPlainReject(t *testing.T) {
 	_, err := edit.Run(context.Background(), map[string]any{
 		"path": "main.go", "old_string": "package moved", "new_string": "package main",
 	}, provenanceCtx(dir, ledger))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "EDIT_OLD_STRING_NOT_FOUND" {
 		t.Fatalf("edit miss without floor = %v, want plain reject — an unknown baseline states nothing", err)
 	}
@@ -339,9 +340,9 @@ func TestReadSourceStampPreservesWorkerDestination(t *testing.T) {
 	dir := t.TempDir()
 	abs, sha := writeProvenanceFile(t, dir, "a #b.go", "file")
 	ctx := provenanceCtx(dir, &fakeSourceLedger{})
-	ctx.WorkerJobID = "worker-1"
-	ctx.WorkerBranchRoot = dir
-	ctx.SourceWorkspaceKind = api.SourceWorkspaceKindWorker
+	ctx.Identity.WorkerJobID = "worker-1"
+	ctx.Source.WorkerBranchRoot = dir
+	ctx.Source.SourceWorkspaceKind = api.SourceWorkspaceKindWorker
 	stamp := sourceview.ReadStamp(t.Context(), ctx, abs, sha)
 	if stamp == nil || stamp.Navigation != "source://r1/a%20%23b.go?job_id=worker-1" {
 		t.Fatalf("worker source stamp=%+v", stamp)

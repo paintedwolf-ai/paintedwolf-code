@@ -73,7 +73,7 @@ type workerSummaryObs struct {
 	CitedHandleRanges   string
 	UnobservedCitedURLs []string
 	NoArtifact          bool
-	RejectDataCodes        []string // PutRejectData keys for render vars only
+	RejectDataCodes     []string // PutRejectData keys for render vars only
 }
 
 // EvaluateWorkerSummary validates worker completion report fields against child tool evidence.
@@ -192,8 +192,8 @@ func decideWorkerSummary(
 		return WorkerSummaryEvalResult{Status: "complete", Summary: summary, Report: report, Grounding: audit.finish(observedValid, "", report)}, nil
 	}
 	gc := oar.NewGuardContext()
-	gc.SessionID = in.ChildSessionID
-	gc.Profile = "worker"
+	gc.Session.SessionID = in.ChildSessionID
+	gc.Session.Profile = "worker"
 	publishWorkerSummaryFacts(gc, in.AgentType, obs)
 	putWorkerRejectData(gc, obs, data)
 	var code string
@@ -228,27 +228,27 @@ func publishWorkerSummaryFacts(gc *oar.GuardContext, agentType string, obs worke
 	if gc == nil {
 		return
 	}
-	gc.AgentIsScout = prompts.AgentIsReadScout(agentType)
+	gc.Workers.AgentIsScout = prompts.AgentIsReadScout(agentType)
 	if fetches, ok := prompts.AgentFetchesURLs(agentType); ok {
-		gc.ProfileFetchesURLs = fetches
+		gc.Grounding.ProfileFetchesURLs = fetches
 	}
-	gc.AgentIsImplementer = isImplementerAgent(agentType)
-	gc.WorkerSummaryPresent = !obs.NoProse && !obs.MissingReport
+	gc.Workers.AgentIsImplementer = isImplementerAgent(agentType)
+	gc.Grounding.WorkerSummaryPresent = !obs.NoProse && !obs.MissingReport
 	if obs.MissingReport {
-		gc.Missing = true
+		gc.Rejection.Missing = true
 	}
 	if obs.MaxChars > 0 {
-		gc.RejectObservation = "summary_too_long"
+		gc.Rejection.RejectObservation = "summary_too_long"
 	}
-	gc.ScoutSurveyEvidencePresent = !obs.NoSurveyEvidence
-	gc.WorkerArtifactPresent = !obs.NoArtifact
-	gc.SurfaceClaimUngrounded = obs.SurfaceClaimUngrounded
-	gc.PageMeasureUngrounded = obs.PageMeasureUngrounded
+	gc.Grounding.ScoutSurveyEvidencePresent = !obs.NoSurveyEvidence
+	gc.Grounding.WorkerArtifactPresent = !obs.NoArtifact
+	gc.Grounding.SurfaceClaimUngrounded = obs.SurfaceClaimUngrounded
+	gc.Grounding.PageMeasureUngrounded = obs.PageMeasureUngrounded
 	if len(obs.UnobservedCitedHandles) > 0 {
-		gc.UnobservedCitedHandles = append([]string(nil), obs.UnobservedCitedHandles...)
+		gc.Grounding.UnobservedCitedHandles = append([]string(nil), obs.UnobservedCitedHandles...)
 	}
 	if len(obs.UnobservedCitedURLs) > 0 {
-		gc.UnobservedCitedURLs = append([]string(nil), obs.UnobservedCitedURLs...)
+		gc.Grounding.UnobservedCitedURLs = append([]string(nil), obs.UnobservedCitedURLs...)
 	}
 }
 

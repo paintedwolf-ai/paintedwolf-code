@@ -38,9 +38,9 @@ func (m *Manager) maybeRejectCloseoutBeforeReportPhase(
 		return nil, false
 	}
 	return m.tryOARFinishBlock(ctx, sess, func(gc *oar.GuardContext) error {
-		gc.Phase = state.Phase
-		gc.HasCompletionReport = true
-		gc.WorkflowReportPhasePending = true
+		gc.Session.Phase = state.Phase
+		gc.Progress.HasCompletionReport = true
+		gc.Workflow.WorkflowReportPhasePending = true
 		gc.PutRejectData(workflowReportPhaseRequiredCode, map[string]any{"phase": state.Phase})
 		return nil
 	})

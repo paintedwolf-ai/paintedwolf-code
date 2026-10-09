@@ -41,7 +41,7 @@ func (b *serveBuilder) wirePresence() error {
 		},
 	})
 	b.presenceBroker, b.vaultUnlocks = broker, unlocks
-	b.toolRuntime.Executor.SetVaultUnlocks(unlocks)
+	b.toolRuntime.Executor.Secrets.SetVaultUnlocks(unlocks)
 	return nil
 }
 

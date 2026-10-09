@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
@@ -124,7 +123,7 @@ func TestSourceProjectionInvalidatesOnlyAffectedAncestors(t *testing.T) {
 	}
 }
 
-func TestSourceProjectionTTLBackstopsIncompleteWatchCoverage(t *testing.T) {
+func TestSourceProjectionUnwatchedReadsFreshMembership(t *testing.T) {
 	p, rootPath := browseFixtureProject(t)
 	projection := &sourceDirectoryProjection{
 		listings: make(map[sourceProjectionKey]projectedSourceListing),
@@ -139,19 +138,44 @@ func TestSourceProjectionTTLBackstopsIncompleteWatchCoverage(t *testing.T) {
 	testutil.FailErr(t, "browse projected root", err)
 	testutil.FailErr(t, "write unwatched source", os.WriteFile(filepath.Join(rootPath, "late.go"), []byte("x"), 0o644))
 
-	projection.mu.Lock()
-	record := projection.listings[key]
-	record.loadedAt = time.Now().Add(-sourceProjectionTTL - time.Millisecond)
-	projection.listings[key] = record
-	projection.mu.Unlock()
 	listing, err := projection.get(key, root)
-	testutil.FailErr(t, "browse after ttl", err)
+	testutil.FailErr(t, "browse unwatched directory again", err)
 	found := false
 	for _, entry := range listing.Entries {
 		found = found || entry.Name == "late.go"
 	}
 	if !found {
-		t.Fatalf("ttl listing = %+v, want late.go", listing.Entries)
+		t.Fatalf("fresh listing = %+v, want late.go", listing.Entries)
+	}
+}
+
+// A watched directory's listing is projected once and served from the cache.
+func TestSourceProjectionCachesWatchedMembership(t *testing.T) {
+	p, rootPath := browseFixtureProject(t)
+	repochange.ResetWatchersForTest()
+	t.Cleanup(repochange.ResetWatchersForTest)
+	repochange.EnsureRoot(t.Context(), rootPath)
+	projection := &sourceDirectoryProjection{
+		listings: make(map[sourceProjectionKey]projectedSourceListing),
+		flights:  make(map[sourceProjectionKey]*sourceProjectionFlight),
+	}
+	root, err := resolveSourceBrowseRoot(p, "r1")
+	testutil.FailErr(t, "resolve root", err)
+	key := sourceProjectionKey{
+		workspaceID: p.WorkspaceID(), rootID: "r1", rootPath: rootPath, dir: ".",
+	}
+	first, err := projection.get(key, root)
+	testutil.FailErr(t, "browse watched root", err)
+	if !first.WatchComplete {
+		t.Fatal("the watched root reported no watch coverage")
+	}
+	if _, ok := projection.listings[key]; !ok {
+		t.Fatal("a watched listing was not kept as projected membership")
+	}
+	second, err := projection.get(key, root)
+	testutil.FailErr(t, "browse watched root again", err)
+	if len(second.Entries) != len(first.Entries) || !second.WatchComplete {
+		t.Fatalf("cached listing = %+v, want the projected %+v", second, first)
 	}
 }
 

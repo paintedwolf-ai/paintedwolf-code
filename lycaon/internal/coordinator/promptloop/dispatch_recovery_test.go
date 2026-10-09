@@ -25,7 +25,7 @@ func TestPartialDispatchRepairsFailedPeerWhileAcceptedWorkerRuns(t *testing.T) {
 	testutil.FailErr(t, "register task", reg.Register("task", func(_ context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
 		goal := args["goal"].(string)
 		accepted[goal]++
-		tctx.Out.Dispatch = &api.WorkerDispatch{WorkerID: goal}
+		tctx.Effects.Out.Dispatch = &api.WorkerDispatch{WorkerID: goal}
 		return "queued " + goal, nil
 	}))
 	wakes := loopwake.NewLoopEngine()
@@ -52,7 +52,9 @@ func TestPartialDispatchRepairsFailedPeerWhileAcceptedWorkerRuns(t *testing.T) {
 		}
 		return "", false, nil
 	}
-	result, err := promptloop.NewPromptLoopForTest(deps).Run(t.Context(), promptloop.PromptRunInput{SessionID: sess.ID, Session: sess, History: userHistory("build both deliverables"), ProfileID: "coordinator", ToolCtx: tools.ToolContext{SessionID: sess.ID}})
+	result, err := promptloop.NewPromptLoopForTest(deps).Run(t.Context(), promptloop.PromptRunInput{SessionID: sess.ID, Session: sess, History: userHistory("build both deliverables"), ProfileID: "coordinator", ToolCtx: tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: sess.ID},
+	}})
 	testutil.FailErr(t, "run coordinator", err)
 	if result.TasksDispatchedCount != 2 {
 		t.Fatalf("dispatch count = %d, want both accepted workers", result.TasksDispatchedCount)

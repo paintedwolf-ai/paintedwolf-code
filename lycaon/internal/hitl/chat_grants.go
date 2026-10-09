@@ -157,7 +157,7 @@ func (s *SQLStore) forgetChatGrant(ctx context.Context, id string) (bool, error)
 // RestoreChatGrants replays each chat's live approvals into the runtime
 // stores at boot. A grant that no longer installs is dropped from the ledger,
 // so the next matching action asks again.
-func (m *Manager) RestoreChatGrants(ctx context.Context) error {
+func (m *ApprovalAuthority) RestoreChatGrants(ctx context.Context) error {
 	release := m.LockApprovalAuthority()
 	defer release()
 	now := time.Now().UTC()
@@ -182,12 +182,12 @@ func (m *Manager) RestoreChatGrants(ctx context.Context) error {
 }
 
 // ForgetChatGrant removes a revoked chat grant from the ledger.
-func (m *Manager) ForgetChatGrant(ctx context.Context, id string) (bool, error) {
+func (m *ApprovalAuthority) ForgetChatGrant(ctx context.Context, id string) (bool, error) {
 	return m.store.forgetChatGrant(ctx, strings.TrimSpace(id))
 }
 
 // LockApprovalAuthority serializes install-and-seal with saved authority revocation.
-func (m *Manager) LockApprovalAuthority() func() {
+func (m *ApprovalAuthority) LockApprovalAuthority() func() {
 	m.authorityMutation.Lock()
 	return m.authorityMutation.Unlock
 }

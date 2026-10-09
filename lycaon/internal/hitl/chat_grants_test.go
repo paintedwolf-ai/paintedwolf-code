@@ -73,7 +73,15 @@ func TestChatGrantSurvivesRestartAndRevoke(t *testing.T) {
 	sqlDB, mgr, sessionID := newTestManager(t)
 	ctx := testdbseed.OwnerCaller(t, context.Background(), sqlDB)
 	insertSession(t, sqlDB, sessionID)
-	action := hitl.ProposedAction{Tool: "command", SessionID: sessionID, Args: map[string]any{"command": "make"}}
+	action := hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": "make"},
+},
+Scope: hitl.ActionScope{
+SessionID: sessionID,
+},
+}
 	chat := hitl.ApprovalGrant{ElevatedEffects: []api.ElevatedAccessEffect{api.ElevatedAccessEffectHostExecution}, ID: "grant_make", Scope: hitl.ApprovalGrantScopeChat, ChatSessionID: sessionID, Title: hitl.TitleAllowForThisChat}
 	day := hitl.ApprovalGrant{ID: "grant_make_day", Scope: hitl.ApprovalGrantScopeChat, ChatSessionID: sessionID, Title: hitl.TitleAllowFor1Day, TTLSeconds: hitl.DayRungTTLSeconds}
 	presentation, reasons := approvalPlanPresentation()
@@ -102,14 +110,14 @@ func TestChatGrantSurvivesRestartAndRevoke(t *testing.T) {
 		SessionID: sessionID, Kind: api.CheckpointKindToolApproval, ProposedAction: &action, ApprovalPlan: plan,
 	})
 	testutil.FailErr(t, "RequestCheckpoint", err)
-	mgr.SetApprovalAuthorityInstaller(noopApprovalInstaller{})
+	mgr.Authority.SetApprovalAuthorityInstaller(noopApprovalInstaller{})
 	owner := hostOwner(t, sqlDB)
-	_, err = mgr.ResolveApprovalOption(people.WithCaller(ctx, owner), sessionID, resp.CheckpointID, "chat")
+	_, err = mgr.Authority.ResolveApprovalOption(people.WithCaller(ctx, owner), sessionID, resp.CheckpointID, "chat")
 	testutil.FailErr(t, "ResolveApprovalOption", err)
 
 	restarted := &recordingInstaller{}
-	mgr.SetApprovalAuthorityInstaller(restarted)
-	testutil.FailErr(t, "RestoreChatGrants", mgr.RestoreChatGrants(ctx))
+	mgr.Authority.SetApprovalAuthorityInstaller(restarted)
+	testutil.FailErr(t, "RestoreChatGrants", mgr.Authority.RestoreChatGrants(ctx))
 	if got := restarted.grantIDs(); len(got) != 1 || got[0] != chat.ID {
 		t.Fatalf("restored grants = %v, want [%s]", got, chat.ID)
 	}
@@ -120,14 +128,14 @@ func TestChatGrantSurvivesRestartAndRevoke(t *testing.T) {
 		t.Fatalf("restored grant = %+v, want it granted by %s", grant, owner.ID)
 	}
 
-	revoked, err := mgr.ForgetChatGrant(ctx, chat.ID)
+	revoked, err := mgr.Authority.ForgetChatGrant(ctx, chat.ID)
 	testutil.FailErr(t, "ForgetChatGrant", err)
 	if !revoked {
 		t.Fatal("the recorded chat grant was not found to revoke")
 	}
 	again := &recordingInstaller{}
-	mgr.SetApprovalAuthorityInstaller(again)
-	testutil.FailErr(t, "RestoreChatGrants after revoke", mgr.RestoreChatGrants(ctx))
+	mgr.Authority.SetApprovalAuthorityInstaller(again)
+	testutil.FailErr(t, "RestoreChatGrants after revoke", mgr.Authority.RestoreChatGrants(ctx))
 	if got := again.grantIDs(); len(got) != 0 {
 		t.Fatalf("revoked grant came back after restart: %v", got)
 	}
@@ -137,7 +145,15 @@ func TestDayRungKeepsItsDeadlineAcrossRestart(t *testing.T) {
 	sqlDB, mgr, sessionID := newTestManager(t)
 	ctx := testdbseed.OwnerCaller(t, context.Background(), sqlDB)
 	insertSession(t, sqlDB, sessionID)
-	action := hitl.ProposedAction{Tool: "command", SessionID: sessionID, Args: map[string]any{"command": "make"}}
+	action := hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": "make"},
+},
+Scope: hitl.ActionScope{
+SessionID: sessionID,
+},
+}
 	day := hitl.ApprovalGrant{ID: "grant_make_day", Scope: hitl.ApprovalGrantScopeChat, ChatSessionID: sessionID, Title: hitl.TitleAllowFor1Day, TTLSeconds: hitl.DayRungTTLSeconds}
 	presentation, reasons := approvalPlanPresentation()
 	plan, err := hitl.NewApprovalPlan(action, hitl.ApprovalStagePreSpawn, hitl.ApprovalSubject{
@@ -154,14 +170,14 @@ func TestDayRungKeepsItsDeadlineAcrossRestart(t *testing.T) {
 		SessionID: sessionID, Kind: api.CheckpointKindToolApproval, ProposedAction: &action, ApprovalPlan: plan,
 	})
 	testutil.FailErr(t, "RequestCheckpoint", err)
-	mgr.SetApprovalAuthorityInstaller(noopApprovalInstaller{})
+	mgr.Authority.SetApprovalAuthorityInstaller(noopApprovalInstaller{})
 	approvedAt := time.Now()
-	_, err = mgr.ResolveApprovalOption(ctx, sessionID, resp.CheckpointID, "day")
+	_, err = mgr.Authority.ResolveApprovalOption(ctx, sessionID, resp.CheckpointID, "day")
 	testutil.FailErr(t, "ResolveApprovalOption", err)
 
 	restarted := &recordingInstaller{}
-	mgr.SetApprovalAuthorityInstaller(restarted)
-	testutil.FailErr(t, "RestoreChatGrants", mgr.RestoreChatGrants(ctx))
+	mgr.Authority.SetApprovalAuthorityInstaller(restarted)
+	testutil.FailErr(t, "RestoreChatGrants", mgr.Authority.RestoreChatGrants(ctx))
 	if len(restarted.installed) != 1 {
 		t.Fatalf("restored %d options, want 1", len(restarted.installed))
 	}

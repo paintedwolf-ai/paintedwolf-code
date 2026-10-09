@@ -260,10 +260,10 @@ func TestCoordinatorPackBoardShowsInFlightRosterE2E(t *testing.T) {
 	}
 
 	raw, err := h.ToolRegistry.Run(ctx, "pack_board", map[string]any{"detail_level": "compact"}, tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}},
-		ActiveRootID: "r1",
-		SessionID:    sess.ID,
-		Agent:        "coordinator",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{SessionID: sess.ID,
+			Agent: "coordinator"},
 	})
 	testutil.FailErr(t, "pack_board", err)
 	for _, want := range []string{"in flight", "repo-researcher", "path-explorer", "implementer"} {

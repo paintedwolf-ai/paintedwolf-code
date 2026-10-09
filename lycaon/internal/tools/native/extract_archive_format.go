@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"io"
 	"os"
 	"path/filepath"
@@ -43,7 +44,7 @@ type extractBudget struct {
 
 func (b *extractBudget) checkEntry() error {
 	if b.entries >= hostExtractMaxEntries {
-		return &tools.ToolReject{Code: "EXTRACT_ENTRY_LIMIT", Data: map[string]any{
+		return &toolrejection.ToolReject{Code: "EXTRACT_ENTRY_LIMIT", Data: map[string]any{
 			"max_entries": hostExtractMaxEntries, "entries": b.entries,
 		}}
 	}
@@ -64,7 +65,7 @@ func archiveFormat(path string) (string, error) {
 	case strings.HasSuffix(lower, ".zip"):
 		return "zip", nil
 	default:
-		return "", &tools.ToolReject{
+		return "", &toolrejection.ToolReject{
 			Code: "EXTRACT_FORMAT_UNSUPPORTED",
 			Data: map[string]any{
 				"path":    filepath.ToSlash(path),
@@ -101,7 +102,7 @@ func safeArchiveEntryName(name string) (string, error) {
 }
 
 func extractZipSlip(name string) error {
-	return &tools.ToolReject{
+	return &toolrejection.ToolReject{
 		Code: "EXTRACT_ZIP_SLIP",
 		Data: map[string]any{"entry": name},
 	}
@@ -243,7 +244,7 @@ func writeExtractFile(sink extractSink, target mutationTarget, r io.Reader, budg
 			if staged.Bytes <= remaining {
 				return nil
 			}
-			return &tools.ToolReject{
+			return &toolrejection.ToolReject{
 				Code: "EXTRACT_SIZE_EXCEEDED",
 				Data: map[string]any{
 					"max_uncompressed_bytes": hostExtractMaxUncompressedBytes,

@@ -3,8 +3,8 @@ package workflow
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 
-	"github.com/lycaon/lycaon/internal/tools"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -31,7 +31,7 @@ func (m *RunManager) validateReviewSubmission(ctx context.Context, active *api.W
 		questionVars, err = m.prepareReviewQuestions(ctx, active, rl, verdict, vars)
 		if err != nil {
 			out.Valid = false
-			if rejection := tools.AsToolReject(err); rejection != nil {
+			if rejection := toolrejection.AsToolReject(err); rejection != nil {
 				out.QuestionIssue = rejection
 			} else {
 				return reviewValidation{}, err

@@ -49,7 +49,7 @@ type boardWiring struct{ *serveBuilder }
 
 func (b boardWiring) wireBoardAndResearch() error {
 	var err error
-	b.repoProvider = repoinfo.NewProvider(sourcecatalog.Process(), b.repoCatalogRoot, filepath.Join(enginepaths.RepoOrientationRootUnder(b.dataDir), "v1"))
+	b.repoProvider = repoinfo.NewProvider(sourcecatalog.Process().Trees, b.repoCatalogRoot, filepath.Join(enginepaths.RepoOrientationRootUnder(b.dataDir), "v1"))
 	b.resources.track("source-catalog", 86, sourcecatalog.Process().Drain)
 	b.mgr.SetRepoProvider(b.repoProvider)
 	// Background brief completion publishes its own board update.
@@ -62,7 +62,7 @@ func (b boardWiring) wireBoardAndResearch() error {
 	if scopeErr != nil {
 		return fmt.Errorf("toolscope: %w", scopeErr)
 	}
-	b.toolRuntime.SetScopeGuards(scopeCfg, b.repoCatalogFileCount)
+	b.toolRuntime.Survey.SetScopeGuards(scopeCfg, b.repoCatalogFileCount)
 	b.boardSnap = &board.SnapshotBuilder{
 		Delegations:            b.delegationStore,
 		Workers:                b.workerQueue,
@@ -100,14 +100,14 @@ func (b boardWiring) wireBoardAndResearch() error {
 	}); err != nil {
 		return fmt.Errorf("board tools: %w", err)
 	}
-	b.toolRuntime.SetListDirUnionBrief(func(ctx context.Context, tctx tools.ToolContext, subpath string) (string, error) {
-		if len(tctx.Roots) < 2 {
+	b.toolRuntime.Survey.SetListDirUnionBrief(func(ctx context.Context, tctx tools.ToolContext, subpath string) (string, error) {
+		if len(tctx.Source.Roots) < 2 {
 			return "", nil
 		}
 		if subpath != "" && !projectroot.IsUnionDiscoveryPath(subpath) {
 			return "", nil
 		}
-		mrb, err := repoinfo.AnalyzeRoots(ctx, tctx.Roots, repoinfo.DefaultBriefBudget(), b.repoProvider)
+		mrb, err := repoinfo.AnalyzeRoots(ctx, tctx.Source.Roots, repoinfo.DefaultBriefBudget(), b.repoProvider)
 		if err != nil {
 			return "", err
 		}
@@ -115,7 +115,7 @@ func (b boardWiring) wireBoardAndResearch() error {
 	})
 	b.mgr.SetTurnLoads(b.turnLoads)
 	b.mgr.SetDecider(b.decider)
-	b.mgr.SetSkillBodyRenderer(b.toolRuntime.RenderSkillBody)
+	b.mgr.SetSkillBodyRenderer(b.toolRuntime.Skills.RenderSkillBody)
 	b.webResearchRuntime, err = webresearch.WireRuntime()
 	if err != nil {
 		return fmt.Errorf("web research runtime: %w", err)
@@ -124,7 +124,7 @@ func (b boardWiring) wireBoardAndResearch() error {
 	webCat, webCfg, webReg := b.webResearchRuntime.Catalog, b.webResearchRuntime.Config, b.webResearchRuntime.Registry
 	var llmReg, llmPol = b.llmRegistryPolicy()
 	b.webDiscoverer = webresearch.NewDirectDiscovererFactory(b.webIndex, webReg, b.webResearchCreds, webCfg, webCat, b.rerank)
-	b.toolRuntime.SetDirectDiscovererFactory(b.webDiscoverer)
+	b.toolRuntime.Web.SetDirectDiscovererFactory(b.webDiscoverer)
 	if b.webIndex != nil {
 		webReg.AttachQuotaStore(b.webIndex)
 		// Session activity and schedules warm the index.
@@ -166,7 +166,7 @@ func (b boardWiring) wireBoardAndResearch() error {
 			return err
 		}
 	}
-	if err := webresearch.RegisterToolsWithFactory(b.toolRuntime.Registry, deps, b.toolRuntime.DirectFactoryGetter()); err != nil {
+	if err := webresearch.RegisterToolsWithFactory(b.toolRuntime.Registry, deps, b.toolRuntime.Web.DirectFactoryGetter()); err != nil {
 		return fmt.Errorf("web research tools: %w", err)
 	}
 	if err := httpaction.Register(b.toolRuntime.Registry, httpaction.Deps{
@@ -175,7 +175,7 @@ func (b boardWiring) wireBoardAndResearch() error {
 	}); err != nil {
 		return fmt.Errorf("http request tool: %w", err)
 	}
-	b.toolRuntime.SetWebResearchConfig(webCfg)
+	b.toolRuntime.Web.SetWebResearchConfig(webCfg)
 	b.mgr.SetWebResearchConfig(webCfg)
 	return nil
 }
@@ -510,7 +510,7 @@ func (b boardWiring) wireApprovalRationaleAttacher() {
 		Checkpoints: b.checkpointMgr,
 		EnabledFn:   enabledFn,
 	})
-	b.toolRuntime.SetAIRationaleAttacher(attacher)
+	b.toolRuntime.Executor.Approvals.SetAIRationaleAttacher(attacher)
 }
 
 type sessionRootResolver struct {

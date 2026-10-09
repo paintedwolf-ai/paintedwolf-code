@@ -28,7 +28,7 @@ func (c *readCapture) lines(start, end int) {
 // record appends the captured spans to the invocation's source reads. Reads
 // served by an editor document carry its identity so presence anchors that revision.
 func (c *readCapture) record(tctx tools.ToolContext, target agentpresence.Target, editor *tools.EditorDocumentText) {
-	if tctx.Out == nil || (!c.whole && len(c.spans) == 0) {
+	if tctx.Effects.Out == nil || (!c.whole && len(c.spans) == 0) {
 		return
 	}
 	read := agentpresence.Read{Target: target, Extent: api.AgentPresenceExtentRange, Spans: c.spans}
@@ -38,12 +38,12 @@ func (c *readCapture) record(tctx tools.ToolContext, target agentpresence.Target
 	if editor != nil {
 		read.Document = agentpresence.Document{ID: editor.ID, Revision: editor.Revision}
 	}
-	tctx.Out.SourceReads = append(tctx.Out.SourceReads, read)
+	tctx.Effects.Out.SourceReads = append(tctx.Effects.Out.SourceReads, read)
 }
 
 // reportGrepScope reports a single-root search below the root as the call's target.
 func reportGrepScope(tctx tools.ToolContext, targets []grepTarget) {
-	if tctx.Presence == nil || len(targets) != 1 {
+	if tctx.Effects.Presence == nil || len(targets) != 1 {
 		return
 	}
 	target := targets[0]
@@ -51,14 +51,14 @@ func reportGrepScope(tctx tools.ToolContext, targets []grepTarget) {
 	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || strings.TrimSpace(target.root.ID) == "" {
 		return
 	}
-	tctx.Presence.Target(agentpresence.Target{RootID: target.root.ID, Path: filepath.ToSlash(rel)}, api.AgentActivityKindReading)
+	tctx.Effects.Presence.Target(agentpresence.Target{RootID: target.root.ID, Path: filepath.ToSlash(rel)}, api.AgentActivityKindReading)
 }
 
 // recordGrepMatches captures the matches a search returned. Each match's path
 // is the host's own display path, resolved back to its root; each entry
 // contributes one span per occurrence of the pattern on its line.
 func recordGrepMatches(ctx context.Context, boundary *sandbox.Boundary, tctx tools.ToolContext, re *regexp.Regexp, structural bool, matches []grepMatch) {
-	if tctx.Out == nil || len(matches) == 0 {
+	if tctx.Effects.Out == nil || len(matches) == 0 {
 		return
 	}
 	var reads []agentpresence.Read
@@ -85,7 +85,7 @@ func recordGrepMatches(ctx context.Context, boundary *sandbox.Boundary, tctx too
 		read.Spans = append(read.Spans, spans...)
 		read.ItemSpans = append(read.ItemSpans, len(spans))
 	}
-	tctx.Out.SourceReads = append(tctx.Out.SourceReads, reads...)
+	tctx.Effects.Out.SourceReads = append(tctx.Effects.Out.SourceReads, reads...)
 }
 
 // grepMatchSpans returns one character span per pattern occurrence on a text

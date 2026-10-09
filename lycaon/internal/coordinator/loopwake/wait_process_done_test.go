@@ -128,8 +128,8 @@ func TestWaitProcessDoneAlreadySatisfiedWhenNothingRunning(t *testing.T) {
 	out, err := reg.Run(context.Background(), "wait", map[string]any{
 		"conditions": []any{map[string]any{"kind": "process_done"}},
 	}, tools.ToolContext{
-		SessionID: "s1",
-		Agent:     orchestration.ProfileCoordinator,
+		Identity: tools.InvocationIdentity{SessionID: "s1",
+			Agent: orchestration.ProfileCoordinator},
 	})
 	if err != nil {
 		t.Fatalf("wait(process_done) with nothing running: %v", err)
@@ -159,9 +159,9 @@ func TestWaitProcessDoneArmsSleepWhileRunning(t *testing.T) {
 		"conditions": []any{map[string]any{"kind": "process_done"}},
 		"reason":     "waiting for the build to finish",
 	}, tools.ToolContext{
-		SessionID: "s1",
-		Agent:     orchestration.ProfileCoordinator,
-		Out:       invocationOut,
+		Identity: tools.InvocationIdentity{SessionID: "s1",
+			Agent: orchestration.ProfileCoordinator},
+		Effects: tools.InvocationEffects{Out: invocationOut},
 	})
 	if err != nil {
 		t.Fatalf("wait(process_done) with a running command: %v", err)
@@ -189,8 +189,8 @@ func TestWaitProcessDoneOnlyAutoAddsTimerBackstop(t *testing.T) {
 		"conditions": []any{map[string]any{"kind": "process_done", "handles": []any{"handle-1"}}},
 		"reason":     "Wait for the repository's short test command to finish.",
 	}, tools.ToolContext{
-		SessionID: "s1",
-		Agent:     orchestration.ProfileCoordinator,
+		Identity: tools.InvocationIdentity{SessionID: "s1",
+			Agent: orchestration.ProfileCoordinator},
 	})
 	if err != nil {
 		t.Fatalf("wait(process_done) without timer: %v", err)
@@ -232,7 +232,10 @@ func TestWaitProcessDoneFastPathUsesExactHandles(t *testing.T) {
 	}
 	out, err := reg.Run(context.Background(), "wait", map[string]any{
 		"conditions": []any{map[string]any{"kind": "process_done", "handles": []any{"command-2"}}},
-	}, tools.ToolContext{SessionID: "s1", Agent: orchestration.ProfileCoordinator})
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "s1",
+			Agent: orchestration.ProfileCoordinator},
+	})
 	if err != nil {
 		t.Fatalf("wait exact process handle: %v", err)
 	}
@@ -263,7 +266,10 @@ func TestWaitResumePreservesExactProcessHandles(t *testing.T) {
 	}
 	out, err := reg.Run(context.Background(), "wait", map[string]any{
 		"resume": true,
-	}, tools.ToolContext{SessionID: "s1", Agent: orchestration.ProfileCoordinator})
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "s1",
+			Agent: orchestration.ProfileCoordinator},
+	})
 	if err != nil {
 		t.Fatalf("wait resume exact process handle: %v", err)
 	}

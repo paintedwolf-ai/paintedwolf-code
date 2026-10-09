@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -33,9 +34,9 @@ func TestSecretCapabilityToolsExposeReferencesAndLifecycleOnly(t *testing.T) {
 	reg := tools.NewDefaultRegistry()
 	testutil.FailErr(t, "register secret tools", native.RegisterSecretCapabilityTools(reg, service))
 	tctx := tools.ToolContext{
-		ProjectID:  testdbseed.DefaultProjectID,
-		SessionID:  "root-chat",
-		ToolCallID: "generate-call",
+		Identity: tools.InvocationIdentity{ProjectID: testdbseed.DefaultProjectID,
+			SessionID:  "root-chat",
+			ToolCallID: "generate-call"},
 	}
 
 	generated := invokeSecretTool(t, reg, native.SecretGenerateTool, map[string]any{
@@ -94,9 +95,11 @@ func TestSecretGenerateProjectScopeRequiresPurpose(t *testing.T) {
 	_, err := def.Handler(context.Background(), map[string]any{
 		"name": "Shared test key", "scope": "project",
 	}, tools.ToolContext{
-		ProjectID: testdbseed.DefaultProjectID, SessionID: "root-chat", ToolCallID: "generate-project",
+		Identity: tools.InvocationIdentity{ProjectID: testdbseed.DefaultProjectID,
+			SessionID:  "root-chat",
+			ToolCallID: "generate-project"},
 	})
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "SECRET_GENERATE_INVALID" {
 		t.Fatalf("error = %v want SECRET_GENERATE_INVALID", err)
 	}

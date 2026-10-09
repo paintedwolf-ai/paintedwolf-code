@@ -4,12 +4,12 @@ import (
 	"context"
 	"time"
 
-	"github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/toolpolicy"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // settleUnattemptedCalls records calls skipped after a cycle boundary.
@@ -91,7 +91,7 @@ func (l toolBatch) settleToolResult(
 	ownerRef := invocationOwnerRef(run.captures.ownerRef, toolMsg.ToolResult)
 	run.sourceRevision, run.sourceRootDigest = invocation.SourceRevisionForRoot(tools.HostWriteRoot(toolCtx))
 	if tc.Name == "complete_leg" {
-		run.sourceRevision, run.sourceRootDigest = sourceledger.VerificationState(ctx, toolCtx.SourceLedger, tools.HostWriteRoot(toolCtx))
+		run.sourceRevision, run.sourceRootDigest = sourceledger.VerificationState(ctx, toolCtx.Source.SourceLedger, tools.HostWriteRoot(toolCtx))
 	}
 	if source := run.captures.sourceRun; source != nil {
 		run.sourceRevision, run.sourceRootDigest = source.SourceRevision, source.SourceRootDigest

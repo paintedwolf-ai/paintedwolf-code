@@ -3,6 +3,7 @@ package native
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/browser"
@@ -20,9 +21,10 @@ func TestPageOpenMissingTarget(t *testing.T) {
 	defer pages.Close(t.Context())
 	testutil.FailErr(t, "register", RegisterPageSessionTools(reg, pool, pages, nil, nil))
 	_, err := reg.Run(context.Background(), page.OpenToolName, map[string]any{}, tools.ToolContext{
-		SessionID: "s", Out: &tools.ToolInvocationOut{},
+		Identity: tools.InvocationIdentity{SessionID: "s"},
+		Effects:  tools.InvocationEffects{Out: &tools.ToolInvocationOut{}},
 	})
-	rej := &tools.ToolReject{}
+	rej := &toolrejection.ToolReject{}
 	ok := errors.As(err, &rej)
 	if !ok || rej.Code != "CAPTURE_TARGET_INVALID" {
 		t.Fatalf("err=%v", err)

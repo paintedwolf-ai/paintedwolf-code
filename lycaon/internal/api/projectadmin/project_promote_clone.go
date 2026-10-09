@@ -14,7 +14,7 @@ import (
 )
 
 // HandlePromoteProject records a durable save-to-folder intent and resumes it.
-func (s *Handler) HandlePromoteProject(w http.ResponseWriter, r *http.Request) {
+func (s *Promotion) HandlePromoteProject(w http.ResponseWriter, r *http.Request) {
 
 	id := strings.TrimSpace(chi.URLParam(r, "id"))
 	var req wire.PromoteProjectRequest
@@ -68,7 +68,7 @@ func (s *Handler) HandlePromoteProject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !quiescent {
-		s.publishProjectLifecycleEvent(r.Context(), wire.ProjectEventUpdated, queued)
+		s.Projects.publishProjectLifecycleEvent(r.Context(), wire.ProjectEventUpdated, queued)
 		httpio.WriteJSON(w, http.StatusAccepted, project.ToAPI(queued))
 		return
 	}
@@ -80,20 +80,20 @@ func (s *Handler) HandlePromoteProject(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if errors.Is(promoteErr, project.ErrMutationInProgress) || errors.Is(promoteErr, project.ErrProjectBusy) {
-			s.publishProjectLifecycleEvent(r.Context(), wire.ProjectEventUpdated, queued)
+			s.Projects.publishProjectLifecycleEvent(r.Context(), wire.ProjectEventUpdated, queued)
 			httpio.WriteJSON(w, http.StatusAccepted, project.ToAPI(queued))
 			return
 		}
 		s.responses.ProjectRegistryError(w, r, promoteErr)
 		return
 	}
-	s.publishProjectLifecycleEvent(r.Context(), wire.ProjectEventUpdated, p)
+	s.Projects.publishProjectLifecycleEvent(r.Context(), wire.ProjectEventUpdated, p)
 	httpio.WriteJSON(w, http.StatusCreated, project.ToAPI(p))
 }
 
 // HandleCloneProject clones a remote into a new folder under parent_dir and opens
 // it as a saved project.
-func (s *Handler) HandleCloneProject(w http.ResponseWriter, r *http.Request) {
+func (s *Promotion) HandleCloneProject(w http.ResponseWriter, r *http.Request) {
 
 	var req wire.CloneProjectRequest
 	if err := httpio.DecodeJSON(w, r, &req); err != nil {
@@ -143,10 +143,10 @@ func (s *Handler) HandleCloneProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, root := range p.Roots {
-		s.afterRootAttached(r.Context(), p.ID, root.Path)
+		s.Roots.afterRootAttached(r.Context(), p.ID, root.Path)
 	}
-	s.detectVerifyAsync(r.Context(), p.ID)
-	s.publishProjectLifecycleEvent(r.Context(), wire.ProjectEventCreated, p)
+	s.Verification.detectVerifyAsync(r.Context(), p.ID)
+	s.Projects.publishProjectLifecycleEvent(r.Context(), wire.ProjectEventCreated, p)
 	httpio.WriteJSON(w, http.StatusCreated, project.ToAPI(p))
 }
 

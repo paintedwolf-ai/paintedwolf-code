@@ -122,7 +122,7 @@ func TestTreeReconcileTruncatesWriteAheadLog(t *testing.T) {
 	}
 }
 
-func TestTreeStoreRetentionRemovesOnlyUnusedGenerations(t *testing.T) {
+func TestdefaultTreeStorePolicy().retentionRemovesOnlyUnusedGenerations(t *testing.T) {
 	c := treeTestCatalog(t)
 	root := Root{ID: "root", Path: t.TempDir()}
 	writeTreeTestFile(t, root.Path, "a.go", "package source")
@@ -130,16 +130,16 @@ func TestTreeStoreRetentionRemovesOnlyUnusedGenerations(t *testing.T) {
 	live := summaryStoreFor(t, c, root, TreeScope{Key: "all"})
 	stale := time.Now().Add(-2 * defaultTreeStorePolicy().retention)
 	testutil.FailErr(t, "age live generation", os.Chtimes(live.file, stale, stale))
-	orphan := filepath.Join(c.treeDir, "0000deadbeef"+treeFileSuffix)
+	orphan := filepath.Join(c.Trees.treeDir, "0000deadbeef"+treeFileSuffix)
 	for _, path := range append([]string{orphan}, treeSidecarPaths(orphan)...) {
 		testutil.FailErr(t, "write orphan generation", os.WriteFile(path, []byte("stale"), 0o600))
 		testutil.FailErr(t, "age orphan generation", os.Chtimes(path, stale, stale))
 	}
-	recent := filepath.Join(c.treeDir, "0000cafef00d"+treeFileSuffix)
+	recent := filepath.Join(c.Trees.treeDir, "0000cafef00d"+treeFileSuffix)
 	recentDB, err := openTreeDB(t.Context(), recent)
-	testutil.FailErr(t, "open recent generation", err)
-	testutil.FailErr(t, "close recent generation", recentDB.Close())
-	removed, err := c.ReconcileTreeStores(t.Context())
+ testutil.FailErr(t, "open recent generation", err)
+ testutil.FailErr(t, "close recent generation", recentDB.Close())
+	removed, err := c.Trees.ReconcileTreeStores(t.Context())
 	testutil.FailErr(t, "reconcile generations", err)
 	if removed != 1 {
 		t.Fatalf("removed %d generations, want the one stale orphan", removed)
@@ -185,7 +185,7 @@ func TestClearTreeStoresRebuildsOnNextOpen(t *testing.T) {
 	first := readySummary(t, c, root, TreeScope{Key: "all"})
 	file := summaryStoreFor(t, c, root, TreeScope{Key: "all"}).file
 	testutil.FailErr(t, "release reader", first.Close())
-	testutil.FailErr(t, "clear generations", c.ClearTreeStores(context.Background(), nil))
+	testutil.FailErr(t, "clear generations", c.Trees.ClearTreeStores(context.Background(), nil))
 	testutil.FailErr(t, "remove generation files", removeTreeStore(file))
 	rebuilt := readySummary(t, c, root, TreeScope{Key: "all"})
 	n, err := rebuilt.Node(t.Context(), ".")
@@ -198,26 +198,26 @@ func TestClearTreeStoresRebuildsOnNextOpen(t *testing.T) {
 func TestClearTreeStoresExcludesNewAdmissionAndRetiresCapturedStore(t *testing.T) {
 	c := treeTestCatalog(t)
 	root := Root{ID: "root", Path: t.TempDir()}
-	stale, err := c.indexStore(t.Context(), "p", root)
+	stale, err := c.Trees.indexStore(t.Context(), "p", root)
 	testutil.FailErr(t, "create initial store", err)
 	entered := make(chan struct{})
 	release := make(chan struct{})
 	cleared := make(chan error, 1)
 	go func() {
-		cleared <- c.ClearTreeStores(t.Context(), func() error {
+		cleared <- c.Trees.ClearTreeStores(t.Context(), func() error {
 			close(entered)
 			<-release
 			return nil
 		})
 	}()
 	<-entered
-	if _, err := openStore(t.Context(), stale, 0, c.broker); !errors.Is(err, pagedview.ErrExpired) {
+	if _, err := openStore(t.Context(), stale, 0, c.Trees.broker); !errors.Is(err, pagedview.ErrExpired) {
 		t.Fatalf("captured store admitted work during clear: %v", err)
 	}
 	opened := make(chan *indexStore, 1)
 	openErr := make(chan error, 1)
 	go func() {
-		store, err := c.indexStore(t.Context(), "p", root)
+		store, err := c.Trees.indexStore(t.Context(), "p", root)
 		opened <- store
 		openErr <- err
 	}()
@@ -243,7 +243,7 @@ func TestReleaseTreeRootRemovesObsoleteCache(t *testing.T) {
 	testutil.FailErr(t, "close reader", reader.Close())
 	file := summaryStoreFor(t, c, root, TreeScope{Key: "all"}).file
 
-	testutil.FailErr(t, "release detached root", c.ReleaseTreeRoot(t.Context(), root.Path))
+	testutil.FailErr(t, "release detached root", c.Trees.ReleaseTreeRoot(t.Context(), root.Path))
 	if _, err := os.Stat(file); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("detached root cache remains: %v", err)
 	}
@@ -252,14 +252,14 @@ func TestReleaseTreeRootRemovesObsoleteCache(t *testing.T) {
 func TestClearTreeStoresJoinsPreviouslyAdmittedWriter(t *testing.T) {
 	c := treeTestCatalog(t)
 	root := Root{ID: "root", Path: t.TempDir()}
-	store, err := c.indexStore(t.Context(), "p", root)
+	store, err := c.Trees.indexStore(t.Context(), "p", root)
 	testutil.FailErr(t, "create store", err)
-	unwrite, err := store.write(t.Context())
+	unwrite, err := store.writer.Write(t.Context(), store.writable)
 	testutil.FailErr(t, "admit writer", err)
 	clearing := make(chan struct{})
 	done := make(chan error, 1)
 	go func() {
-		done <- c.ClearTreeStores(t.Context(), func() error {
+		done <- c.Trees.ClearTreeStores(t.Context(), func() error {
 			close(clearing)
 			return nil
 		})
@@ -276,7 +276,7 @@ func TestClearTreeStoresJoinsPreviouslyAdmittedWriter(t *testing.T) {
 		t.Fatal("storage clear did not join released writer")
 	}
 	testutil.FailErr(t, "clear tree stores", <-done)
-	if _, err := store.write(t.Context()); !errors.Is(err, pagedview.ErrExpired) {
+	if _, err := store.writer.Write(t.Context(), store.writable); !errors.Is(err, pagedview.ErrExpired) {
 		t.Fatalf("retired store admitted writer: %v", err)
 	}
 }
@@ -287,8 +287,8 @@ func TestTreeStoreBudgetIncludesOpenStoreAndEvictsClosedLRU(t *testing.T) {
 	writeTreeTestFile(t, root.Path, "a.go", "package source")
 	_ = readySummary(t, c, root, TreeScope{Key: "all"})
 	live := summaryStoreFor(t, c, root, TreeScope{Key: "all"})
-	old := filepath.Join(c.treeDir, "old.db")
-	recent := filepath.Join(c.treeDir, "recent.db")
+	old := filepath.Join(c.Trees.treeDir, "old.db")
+	recent := filepath.Join(c.Trees.treeDir, "recent.db")
 	for _, file := range []string{old, recent} {
 		database, err := openTreeDB(t.Context(), file)
 		testutil.FailErr(t, "open closed fixture", err)
@@ -299,7 +299,7 @@ func TestTreeStoreBudgetIncludesOpenStoreAndEvictsClosedLRU(t *testing.T) {
 	aged := time.Now().Add(-time.Hour)
 	testutil.FailErr(t, "age LRU fixture", os.Chtimes(old, aged, aged))
 	budget := treeStoreBytes(live.file) + treeStoreBytes(recent)
-	removed, err := c.reconcileTreeStores(t.Context(), treeStorePolicy{retention: 24 * time.Hour, maxBytes: budget, vacuumPages: 2048})
+	removed, err := c.Trees.reconcileTreeStores(t.Context(), treeStorePolicy{retention: 24 * time.Hour, maxBytes: budget, vacuumPages: 2048})
 	testutil.FailErr(t, "reconcile shared budget", err)
 	if removed != 1 {
 		t.Fatalf("removed=%d, want only closed LRU", removed)
@@ -316,7 +316,7 @@ func TestTreeStoreBudgetIncludesOpenStoreAndEvictsClosedLRU(t *testing.T) {
 
 func TestRetainedTreeStoreReturnsFreePagesToFilesystem(t *testing.T) {
 	c := treeTestCatalog(t)
-	file := filepath.Join(c.treeDir, "retained.db")
+	file := filepath.Join(c.Trees.treeDir, "retained.db")
 	database, err := openTreeDB(t.Context(), file)
 	testutil.FailErr(t, "open vacuum fixture", err)
 	var mode int
@@ -330,7 +330,7 @@ func TestRetainedTreeStoreReturnsFreePagesToFilesystem(t *testing.T) {
 	_, err = database.ExecContext(t.Context(), "DELETE FROM fixture; PRAGMA wal_checkpoint(TRUNCATE)")
 	testutil.FailErr(t, "free fixture pages", err)
 	testutil.FailErr(t, "close vacuum fixture", database.Close())
-	_, err = c.ReconcileTreeStores(t.Context())
+	_, err = c.Trees.ReconcileTreeStores(t.Context())
 	testutil.FailErr(t, "reclaim free pages", err)
 	if after := treeStoreBytes(file); after >= before {
 		t.Fatalf("retained store did not shrink: before=%d after=%d", before, after)

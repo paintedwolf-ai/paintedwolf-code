@@ -34,10 +34,10 @@ func newCommandCwdTool(t *testing.T) (*native.CommandTool, *bgprocess.Registry) 
 
 func commandCwdToolContext(roots []projectroot.RootRef, sessionID, workerJobID string) tools.ToolContext {
 	return tools.ToolContext{
-		SessionID:   sessionID,
-		WorkerJobID: workerJobID,
-		Agent:       "implement",
-		Roots:       roots,
+		Identity: tools.InvocationIdentity{SessionID: sessionID,
+			WorkerJobID: workerJobID,
+			Agent:       "implement"},
+		Source: tools.InvocationSource{Roots: roots},
 	}
 }
 
@@ -136,8 +136,8 @@ func TestCommandCwdWorkerBranchResolvesArgUnderBranch(t *testing.T) {
 	writeCwdMarker(t, branchPkg, "pkg")
 
 	tctx := commandCwdToolContext([]projectroot.RootRef{{ID: "primary", Path: root, IsPrimary: true}}, "sess", "job")
-	tctx.WorkerBranchRoot = branch
-	tctx.BranchWorkspace = testutil.CompleteBranchWorkspace{}
+	tctx.Source.WorkerBranchRoot = branch
+	tctx.Source.BranchWorkspace = testutil.CompleteBranchWorkspace{}
 	testutil.FailErr(t, "WriteJobMeta", workspace.WriteJobMeta(enginepaths.MetaDirForBranchRoot(branch), workspace.JobMeta{
 		Roots: []workspace.JobMetaRoot{{ID: "root", Path: root, IsPrimary: true}},
 	}))
@@ -170,8 +170,8 @@ func TestCommandCwdWorkerBranchEmptyDefaultsToBranchRoot(t *testing.T) {
 	writeCwdMarker(t, branch, "branch")
 
 	tctx := commandCwdToolContext([]projectroot.RootRef{{ID: "primary", Path: root, IsPrimary: true}}, "sess", "job")
-	tctx.WorkerBranchRoot = branch
-	tctx.BranchWorkspace = testutil.CompleteBranchWorkspace{}
+	tctx.Source.WorkerBranchRoot = branch
+	tctx.Source.BranchWorkspace = testutil.CompleteBranchWorkspace{}
 	testutil.FailErr(t, "WriteJobMeta", workspace.WriteJobMeta(enginepaths.MetaDirForBranchRoot(branch), workspace.JobMeta{
 		Roots: []workspace.JobMetaRoot{{ID: "root", Path: root, IsPrimary: true}},
 	}))
@@ -192,8 +192,8 @@ func TestCommandCwdWorkerBranchOutOfScope(t *testing.T) {
 	testutil.FailErr(t, "mkdir branch", os.MkdirAll(branch, 0o755))
 
 	tctx := commandCwdToolContext([]projectroot.RootRef{{ID: "primary", Path: root, IsPrimary: true}}, "sess", "job")
-	tctx.WorkerBranchRoot = branch
-	tctx.BranchWorkspace = testutil.CompleteBranchWorkspace{}
+	tctx.Source.WorkerBranchRoot = branch
+	tctx.Source.BranchWorkspace = testutil.CompleteBranchWorkspace{}
 	testutil.FailErr(t, "WriteJobMeta", workspace.WriteJobMeta(enginepaths.MetaDirForBranchRoot(branch), workspace.JobMeta{
 		Roots: []workspace.JobMetaRoot{{ID: "root", Path: root, IsPrimary: true}},
 	}))

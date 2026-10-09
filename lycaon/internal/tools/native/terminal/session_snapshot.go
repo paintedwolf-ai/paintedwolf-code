@@ -3,6 +3,7 @@ package terminal
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 	"time"
 
@@ -55,7 +56,7 @@ func CaptureFromScreen(
 	screen bgprocess.ScreenSnapshot, caption string,
 ) SnapshotResult {
 	if safe, err := bg.ProjectCapturedText(
-		ctx, tctx.ProjectID, tctx.ParentSessionID, tctx.SessionID,
+		ctx, tctx.Identity.ProjectID, tctx.Identity.ParentSessionID, tctx.Identity.SessionID,
 		"capture.terminal.caption", caption,
 	); err == nil {
 		caption = safe
@@ -74,8 +75,8 @@ func CaptureFromScreen(
 	payload.Snapshot, payload.Coverage = boundedTerminalGrid(screen)
 	if mime, png, width, height, err := renderTerminalGridPNG(screen); err == nil && len(png) > 0 {
 		payload.Mime, payload.Width, payload.Height = mime, width, height
-		if tctx.Out != nil {
-			tctx.Out.Visual = &tools.VisualCapture{
+		if tctx.Effects.Out != nil {
+			tctx.Effects.Out.Visual = &tools.VisualCapture{
 				Mime: mime, Bytes: png, Source: api.VisualArtifactSourceCapture,
 				Caption: caption, Perceive: true, Projected: true,
 			}
@@ -93,10 +94,10 @@ func SnapshotHandler(bg *bgprocess.Registry) tools.ToolHandler {
 		if err != nil {
 			return "", err
 		}
-		if err := bg.LookupPTY(tctx.SessionID, in.ID); err != nil {
+		if err := bg.LookupPTY(tctx.Identity.SessionID, in.ID); err != nil {
 			return "", mapTerminalLifecycleReject(err, in.ID)
 		}
-		subject, _ := bg.CommandLine(tctx.SessionID, in.ID)
+		subject, _ := bg.CommandLine(tctx.Identity.SessionID, in.ID)
 		tctx.SetDisplaySubject(subject)
 		payload, err := captureTerminalSnapshot(ctx, bg, tctx, SnapshotToolName, in.ID, in.IdleMS, in.TimeoutMS, in.Caption, false)
 		if err != nil {
@@ -124,12 +125,12 @@ func captureTerminalSnapshot(
 	if timeoutMS > 0 {
 		opts.Timeout = time.Duration(timeoutMS) * time.Millisecond
 	}
-	res, err := bg.SnapshotPTY(ctx, tctx.SessionID, id, opts)
+	res, err := bg.SnapshotPTY(ctx, tctx.Identity.SessionID, id, opts)
 	if err != nil {
 		return SnapshotResult{}, mapTerminalLifecycleReject(err, id)
 	}
 	caption, err = bg.ProjectCapturedText(
-		ctx, tctx.ProjectID, tctx.ParentSessionID, tctx.SessionID,
+		ctx, tctx.Identity.ProjectID, tctx.Identity.ParentSessionID, tctx.Identity.SessionID,
 		"capture.terminal.caption", caption,
 	)
 	if err != nil {
@@ -158,8 +159,8 @@ func captureTerminalSnapshot(
 		payload.Mime = mime
 		payload.Width = w
 		payload.Height = h
-		if tctx.Out != nil {
-			tctx.Out.Visual = &tools.VisualCapture{
+		if tctx.Effects.Out != nil {
+			tctx.Effects.Out.Visual = &tools.VisualCapture{
 				Mime:      mime,
 				Bytes:     png,
 				Source:    api.VisualArtifactSourceCapture,
@@ -185,7 +186,7 @@ func parseTerminalSnapshotArgs(args map[string]any) (terminalSnapshotArgs, error
 	id, _ := args["id"].(string)
 	id = strings.TrimSpace(id)
 	if id == "" {
-		return terminalSnapshotArgs{}, tools.RejectInvalidArguments("TERMINAL_ID_REQUIRED", map[string]any{"reason": "missing_id"})
+		return terminalSnapshotArgs{}, toolrejection.RejectInvalidArguments("TERMINAL_ID_REQUIRED", map[string]any{"reason": "missing_id"})
 	}
 	out := terminalSnapshotArgs{ID: id}
 	if v, ok := args["idle_ms"].(float64); ok && v > 0 {

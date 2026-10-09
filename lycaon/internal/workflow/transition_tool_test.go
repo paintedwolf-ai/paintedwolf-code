@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/scaffoldvars"
@@ -35,7 +36,7 @@ func TestWorkflowTransitionHappyPath(t *testing.T) {
 	testutil.FailErr(t, "StartHuman", err)
 
 	tctx := toolContext("coordinator", sess.ID, sess.WorkspacePath)
-	tctx.ToolCallID = "transition-call-1"
+	tctx.Identity.ToolCallID = "transition-call-1"
 	out, err := reg.Run(ctx, "workflow_transition", map[string]any{"transition_id": "critique"}, tctx)
 	testutil.FailErr(t, "workflow_transition critique", err)
 	var result TransitionToolResult
@@ -88,7 +89,7 @@ func TestWorkflowTransitionActorDenied(t *testing.T) {
 	testutil.FailErr(t, "StartHuman", err)
 
 	_, err = reg.Run(ctx, "workflow_transition", map[string]any{"transition_id": "side_quest"}, toolContext("coordinator", sess.ID, sess.WorkspacePath))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "WORKFLOW_TRANSITION_ACTOR_DENIED" {
 		t.Fatalf("err = %v want WORKFLOW_TRANSITION_ACTOR_DENIED", err)
 	}
@@ -107,7 +108,7 @@ func TestWorkflowTransitionUnknownID(t *testing.T) {
 	testutil.FailErr(t, "StartHuman", err)
 
 	_, err = reg.Run(ctx, "workflow_transition", map[string]any{"transition_id": "nope"}, toolContext("coordinator", sess.ID, sess.WorkspacePath))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "WORKFLOW_TRANSITION_UNKNOWN" {
 		t.Fatalf("err = %v want WORKFLOW_TRANSITION_UNKNOWN", err)
 	}
@@ -164,7 +165,7 @@ func TestWorkflowTransitionPendingFeedbackReusesHint(t *testing.T) {
 	testutil.FailErr(t, "UpdateVars", mgr.Store.UpdateVars(ctx, run, dir, vars))
 
 	_, err = reg.Run(ctx, "workflow_transition", map[string]any{"transition_id": "critique"}, toolContext("coordinator", sess.ID, sess.WorkspacePath))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "WORKFLOW_FEEDBACK_PENDING" {
 		t.Fatalf("err = %v want WORKFLOW_FEEDBACK_PENDING", err)
 	}
@@ -178,7 +179,7 @@ func TestWorkflowTransitionInactive(t *testing.T) {
 	testutil.FailErr(t, "create session", err)
 
 	_, err = reg.Run(ctx, "workflow_transition", map[string]any{"transition_id": "critique"}, toolContext("coordinator", sess.ID, sess.WorkspacePath))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "WORKFLOW_TRANSITION_INACTIVE" {
 		t.Fatalf("err = %v want WORKFLOW_TRANSITION_INACTIVE", err)
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
@@ -36,7 +37,7 @@ func padTo(prefix, comment string, size int) string {
 
 func requireSizeReject(t *testing.T, err error, minSize int) {
 	t.Helper()
-	reject := tools.AsToolReject(err)
+	reject := toolrejection.AsToolReject(err)
 	if reject == nil || reject.Code != "EDIT_FILE_TOO_LARGE" {
 		t.Fatalf("err = %v, want EDIT_FILE_TOO_LARGE", err)
 	}
@@ -194,7 +195,7 @@ func TestReadServesFilesBetweenTheBudgets(t *testing.T) {
 
 func TestGuardMutationContent(t *testing.T) {
 	testutil.FailErr(t, "text content", guardMutationContent("write", "a.py", "ok"))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if err := guardMutationContent("write", "a.bin", "a\x00b"); !errors.As(err, &reject) || reject.Code != "WRITE_BINARY_DENIED" {
 		t.Fatalf("binary content = %v, want WRITE_BINARY_DENIED", err)
 	}

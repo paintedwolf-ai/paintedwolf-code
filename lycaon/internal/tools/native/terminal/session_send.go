@@ -2,6 +2,7 @@ package terminal
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
@@ -43,27 +44,27 @@ func SendHandler(bg *bgprocess.Registry) tools.ToolHandler {
 		if err != nil {
 			return "", err
 		}
-		if err := requireTerminalRunning(bg, tctx.SessionID, in.ID); err != nil {
+		if err := requireTerminalRunning(bg, tctx.Identity.SessionID, in.ID); err != nil {
 			return "", err
 		}
-		subject, _ := bg.CommandLine(tctx.SessionID, in.ID)
+		subject, _ := bg.CommandLine(tctx.Identity.SessionID, in.ID)
 		tctx.SetDisplaySubject(subject)
 		payload, err := ptyinput.ExpandControlInput(in.Input)
 		if err != nil {
-			return "", &tools.ToolReject{
+			return "", &toolrejection.ToolReject{
 				Code: "TERMINAL_CONTROL_UNKNOWN",
 				Data: map[string]any{"reason": err.Error()},
 			}
 		}
-		if err := tctx.Secrets.HandOff(ctx, nil); err != nil {
-			return "", tools.HeldHandOffReject("terminal_send", err)
+		if err := tctx.Effects.Secrets.HandOff(ctx, nil); err != nil {
+			return "", toolrejection.HeldHandOffReject("terminal_send", err)
 		}
-		if err := bg.WritePTY(tctx.SessionID, in.ID, payload); err != nil {
+		if err := bg.WritePTY(tctx.Identity.SessionID, in.ID, payload); err != nil {
 			return "", mapTerminalLifecycleReject(err, in.ID)
 		}
-		running := bg.RequireRunning(tctx.SessionID, in.ID) == nil
+		running := bg.RequireRunning(tctx.Identity.SessionID, in.ID) == nil
 		outPayload := SendResult{ID: in.ID, Running: running, Observe: in.Observe}
-		if report, reportErr := bg.PTYReport(tctx.SessionID, in.ID); reportErr == nil {
+		if report, reportErr := bg.PTYReport(tctx.Identity.SessionID, in.ID); reportErr == nil {
 			outPayload.Report = report
 		}
 		switch in.Observe {
@@ -112,11 +113,11 @@ func parseTerminalSendArgs(args map[string]any) (terminalSendArgs, error) {
 	id, _ := args["id"].(string)
 	id = strings.TrimSpace(id)
 	if id == "" {
-		return terminalSendArgs{}, tools.RejectInvalidArguments("TERMINAL_ID_REQUIRED", map[string]any{"reason": "missing_id"})
+		return terminalSendArgs{}, toolrejection.RejectInvalidArguments("TERMINAL_ID_REQUIRED", map[string]any{"reason": "missing_id"})
 	}
 	input, _ := args["input"].(string)
 	if input == "" {
-		return terminalSendArgs{}, tools.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": "missing_input"})
+		return terminalSendArgs{}, toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": "missing_input"})
 	}
 	observe, err := parseTerminalObserve(args)
 	if err != nil {

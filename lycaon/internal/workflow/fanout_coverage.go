@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"slices"
 	"sort"
 	"strings"
@@ -105,7 +106,7 @@ func (m *RunManager) WorkflowWork(ctx context.Context, sessionID, workID string)
 
 // BindWorkflowTask stamps provenance before the native task enters the queue.
 func (m *RunManager) BindWorkflowTask(ctx context.Context, tctx tools.ToolContext, workID string, task *api.WorkerTask) error {
-	run, err := m.Store.ActiveBySession(ctx, tctx.SessionID)
+	run, err := m.Store.ActiveBySession(ctx, tctx.Identity.SessionID)
 	if err != nil {
 		return err
 	}
@@ -187,7 +188,7 @@ func (m *RunManager) AssertWorkerTask(ctx context.Context, task *api.WorkerTask)
 }
 
 func rejectFanoutTask(reason string, task *api.WorkerTask) error {
-	return &tools.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"tool": "task", "field": "workflow_work_id", "reason": reason, "workflow_work_id": task.WorkflowWorkID, "workflow_phase": task.WorkflowPhase}}
+	return &toolrejection.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"tool": "task", "field": "workflow_work_id", "reason": reason, "workflow_work_id": task.WorkflowWorkID, "workflow_phase": task.WorkflowPhase}}
 }
 
 func (m *RunManager) stampFanoutCoverage(ctx context.Context, run *api.WorkflowRun, vars map[string]any) (map[string]any, error) {

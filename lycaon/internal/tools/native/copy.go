@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"io"
 	"math"
 	"path/filepath"
@@ -64,7 +65,7 @@ func (t *CopyTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 		}
 		n, err := copyFileWithinLimit(ctx, tctx, resolvedMutationTarget(srcResolved), resolvedMutationTarget(dstResolved), maxBytes)
 		if err != nil {
-			reject := &tools.ToolReject{}
+			reject := &toolrejection.ToolReject{}
 			if errors.As(err, &reject) {
 				return "", reject
 			}
@@ -95,7 +96,7 @@ func copyFileWithinLimit(ctx context.Context, tctx tools.ToolContext, source, ta
 		return 0, err
 	}
 	if info.Size() > maxBytes {
-		return 0, &tools.ToolReject{
+		return 0, &toolrejection.ToolReject{
 			Code: "COPY_SIZE_EXCEEDED",
 			Data: map[string]any{
 				"max_file_bytes": maxBytes,
@@ -113,7 +114,7 @@ func copyFileWithinLimit(ctx context.Context, tctx tools.ToolContext, source, ta
 			if staged.Bytes <= maxBytes {
 				return nil
 			}
-			return &tools.ToolReject{
+			return &toolrejection.ToolReject{
 				Code: "COPY_SIZE_EXCEEDED",
 				Data: map[string]any{
 					"max_file_bytes": maxBytes,

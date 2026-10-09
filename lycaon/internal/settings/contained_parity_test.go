@@ -49,9 +49,17 @@ func TestCommandApprovalDependsOnAppliedContainmentNotCommandText(t *testing.T) 
 		} {
 			t.Run(tc.name+"/"+command, func(t *testing.T) {
 				result, evalErr := gate.Evaluate(context.Background(), hitl.ProposedAction{
-					Tool: "command", Args: map[string]any{"command": command}, ProjectDir: proj,
-					Contained: tc.contained,
-				})
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": command},
+},
+Scope: hitl.ActionScope{
+ProjectDir: proj,
+},
+Execution: hitl.ActionExecution{
+Contained: tc.contained,
+},
+})
 				testutil.FailErr(t, "evaluate command action", evalErr)
 				if result.Denied || result.Required() != tc.wantAsk {
 					t.Fatalf("result=%+v want required=%v", result, tc.wantAsk)

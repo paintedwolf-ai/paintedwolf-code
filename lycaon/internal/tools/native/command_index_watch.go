@@ -17,9 +17,9 @@ func watchIndex(tctx tools.ToolContext, confinement *confine.Confinement) indexw
 
 // stampIndexWatch hands the capture to the result's facts, which release it.
 func stampIndexWatch(tctx tools.ToolContext, snapshot indexwatch.Snapshot) {
-	if tctx.Out == nil {
+	if tctx.Effects.Out == nil {
 		snapshot.Release()
 		return
 	}
-	tctx.Out.Facts.IndexWatch = snapshot
+	tctx.Effects.Out.Facts.IndexWatch = snapshot
 }

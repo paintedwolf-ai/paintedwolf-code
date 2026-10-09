@@ -1,11 +1,11 @@
 package promptloop_test
 
 import (
-	"github.com/lycaon/lycaon/internal/llm/failure"
-	"errors"
-	"strconv"
 	"context"
 	"encoding/json"
+	"errors"
+	"github.com/lycaon/lycaon/internal/llm/failure"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -28,9 +28,9 @@ type alwaysSameToolClient struct {
 	// ignoreCloseout keeps calling the tool on the final, tool-less turn.
 	ignoreCloseout bool
 	calls          int
-	args       map[string]any
-	iterations []int
-	toolCounts []int
+	args           map[string]any
+	iterations     []int
+	toolCounts     []int
 }
 
 func (c *alwaysSameToolClient) Complete(ctx context.Context, req modelcall.CompletionRequest) (*modelcall.Completion, error) {
@@ -108,7 +108,9 @@ func TestBlockedLoopClosesOutInsteadOfSpinning(t *testing.T) {
 		Session:   sess,
 		History:   userHistory("go"),
 		ProfileID: "coordinator",
-		ToolCtx:   tools.ToolContext{SessionID: sess.ID},
+		ToolCtx: tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: sess.ID},
+		},
 	})
 	testutil.FailErr(t, "loop.Run", err)
 	if result.LastAssistantContent != "Stopping: the same call keeps being blocked." {
@@ -177,7 +179,9 @@ func TestBlockedLoopFinalTurnToolCallIsReportedAsTheModelsMiss(t *testing.T) {
 	loop := promptloop.NewPromptLoopForTest(deps)
 	_, err = loop.Run(ctx, promptloop.PromptRunInput{
 		SessionID: sess.ID, Session: sess, History: userHistory("go"), ProfileID: "coordinator",
-		ToolCtx: tools.ToolContext{SessionID: sess.ID},
+		ToolCtx: tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: sess.ID},
+		},
 	})
 	var miss *promptloop.ProseTurnToolCallError
 	if !errors.As(err, &miss) {
@@ -247,7 +251,9 @@ func TestBlockedLoopEarlyCloseoutAssemblesWhenFinishBlocked(t *testing.T) {
 		Session:   sess,
 		History:   userHistory("go"),
 		ProfileID: "coordinator",
-		ToolCtx:   tools.ToolContext{SessionID: sess.ID},
+		ToolCtx: tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: sess.ID},
+		},
 	})
 	testutil.FailErr(t, "loop.Run", err)
 	if res == nil || res.LastAssistantID == "" {
@@ -323,7 +329,9 @@ func TestBlockedLoopStreakResetsOnProgress(t *testing.T) {
 		Session:   sess,
 		History:   userHistory("go"),
 		ProfileID: "coordinator",
-		ToolCtx:   tools.ToolContext{SessionID: sess.ID},
+		ToolCtx: tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: sess.ID},
+		},
 	})
 	testutil.FailErr(t, "loop.Run", err)
 	if res == nil {
@@ -363,7 +371,9 @@ func TestSchemaRejectsDoNotForceBlockedLoopCloseout(t *testing.T) {
 		Session:   sess,
 		History:   userHistory("fix the port"),
 		ProfileID: "coordinator",
-		ToolCtx:   tools.ToolContext{SessionID: sess.ID},
+		ToolCtx: tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: sess.ID},
+		},
 	})
 	testutil.FailErr(t, "loop.Run", err)
 	if res == nil {
@@ -464,7 +474,9 @@ func TestPreInvokeRejectAccruesCodeTotalAndEscalates(t *testing.T) {
 		Session:   sess,
 		History:   userHistory("go"),
 		ProfileID: "coordinator",
-		ToolCtx:   tools.ToolContext{SessionID: sess.ID},
+		ToolCtx: tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: sess.ID},
+		},
 	})
 	testutil.FailErr(t, "loop.Run", err)
 	if result.LastAssistantContent != "Stopping: the same call keeps being blocked." {

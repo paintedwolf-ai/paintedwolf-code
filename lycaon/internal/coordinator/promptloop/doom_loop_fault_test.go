@@ -2,6 +2,7 @@ package promptloop
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/guidance"
@@ -46,9 +47,9 @@ func settleFailure(t *testing.T, guard *recordingDoomLoop, failure *api.Invocati
 func TestOwnerFailureIsNotChargedToTheCaller(t *testing.T) {
 	guard := &recordingDoomLoop{}
 	settleFailure(t, guard, &api.InvocationFailure{
-		Code:  tools.ToolOwnerFailedCode,
+		Code:  toolrejection.ToolOwnerFailedCode,
 		Class: api.FailureClassOwnerError,
-	}, tools.ToolOwnerFailedCode)
+	}, toolrejection.ToolOwnerFailedCode)
 
 	if len(guard.codes) != 0 {
 		t.Errorf("recorded %v against the caller, want nothing for a host-managed failure", guard.codes)
@@ -68,7 +69,7 @@ func TestCallerRejectionIsStillCharged(t *testing.T) {
 }
 
 func TestRenderedOwnerFailureKeepsOwnershipClassification(t *testing.T) {
-	rendered := guidance.NewRefusal("HTTP_REQUEST_FAILED", "request failed").WithCause(&tools.ToolReject{
+	rendered := guidance.NewRefusal("HTTP_REQUEST_FAILED", "request failed").WithCause(&toolrejection.ToolReject{
 		Code: "HTTP_TRANSPORT_ENDED", FailureClass: api.FailureClassOwnerError, Retryable: true,
 		Data: map[string]any{"reason": "remote ended the response"},
 	})
@@ -79,7 +80,9 @@ func TestRenderedOwnerFailureKeepsOwnershipClassification(t *testing.T) {
 	loop := NewPromptLoopForTest(PromptLoopDeps{Tools: registry})
 	run := toolInvocations{loop}.executeToolCall(t.Context(), &api.Session{ID: "s1"}, "s1", "", nil, api.ToolCall{
 		ID: "call-1", Name: "read", Args: map[string]any{},
-	}, tools.ToolContext{SessionID: "s1"}, nil, 0, "", api.CoordinatorRunContext{})
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "s1"},
+	}, nil, 0, "", api.CoordinatorRunContext{})
 	failure := run.failure
 	if failure == nil {
 		t.Fatal("rendered tool rejection has no invocation failure")

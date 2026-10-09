@@ -1,10 +1,11 @@
 package session
 
 import (
+	"github.com/lycaon/lycaon/internal/toolfeedback"
+
 	"context"
 
 	"github.com/lycaon/lycaon/internal/toolpolicy"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -100,7 +101,7 @@ func (m *Manager) toolpolicyEngineDeps() toolpolicy.EngineDeps {
 		return postureRegistryAdapter{reg: reg}, nil
 	}
 	return toolpolicy.EngineDeps{
-		ToolInvoker:      m.toolInvoker,
+		ToolLister:       m.toolLister,
 		Rules:            m.rules,
 		Workflows:        toolpolicyWorkflowView{v: m.workflows},
 		Postures:         posturesFn,
@@ -108,7 +109,7 @@ func (m *Manager) toolpolicyEngineDeps() toolpolicy.EngineDeps {
 		HasComposeDraft:  m.hasComposeDraft,
 		ToolAccess:       m.ResolveToolAccess,
 		RejectFormatter:  m.toolRejectFormatter,
-		BlockPlane:       &tools.BlockPlane{Pipeline: m.oarPipeline, Renderer: m.oarRenderer},
+		BlockPlane:       &toolfeedback.BlockPlane{Pipeline: m.oarPipeline, Renderer: m.oarRenderer},
 		PreInvoke:        m.coordinatorPreInvoke,
 		ProjectRootCount: m.projectRootCount,
 		OverlayRootPaths: m.overlayRootPaths,

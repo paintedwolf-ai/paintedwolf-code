@@ -1,10 +1,11 @@
 package surface
 
 import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/orchestration"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -23,7 +24,7 @@ func TestSelectSurfaceIdleLoopWakeStaysSynthesisAfterInternalScheduledKick(t *te
 		history,
 		batchReadySessionState(),
 	)
-	if profile.SurfaceID == tools.SurfaceImplementInvestigate {
+	if profile.SurfaceID == toolcontract.SurfaceImplementInvestigate {
 		t.Fatal("loop-wake after worker + internal scheduled kick must not select investigate")
 	}
 	if profile.SurfaceID != "implement_synthesis" {

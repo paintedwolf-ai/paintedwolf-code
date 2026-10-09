@@ -53,7 +53,7 @@ func TestRecursiveWatchIsCompleteBeyondTheDirectoryCap(t *testing.T) {
 	}
 }
 
-// The recursive stream covers every directory under its root.
+// Recursive coverage follows the eager plane within the root.
 func TestRecursiveDirWatchedFollowsTheRootGeometry(t *testing.T) {
 	skipUnlessRecursive(t)
 	root := t.TempDir()
@@ -65,14 +65,14 @@ func TestRecursiveDirWatchedFollowsTheRootGeometry(t *testing.T) {
 	t.Cleanup(reg.CloseAll)
 	reg.Ensure(t.Context(), root)
 
-	for _, dir := range []string{".", "a", "a/b/c", "a/b/c/never-listed", ".git", ".git/refs"} {
+	for _, dir := range []string{".", "a", "a/b/c", "a/b/c/never-listed"} {
 		if !reg.DirWatched(root, dir) {
 			t.Fatalf("DirWatched(%q) = false under a recursive root stream", dir)
 		}
 	}
-	for _, dir := range []string{"..", "../sibling"} {
+	for _, dir := range []string{"..", "../sibling", ".git", ".git/refs"} {
 		if reg.DirWatched(root, dir) {
-			t.Fatalf("DirWatched(%q) = true, want the foreign directory reported unwatched", dir)
+			t.Fatalf("DirWatched(%q) = true, want the outside or policy boundary reported unwatched", dir)
 		}
 	}
 }
@@ -84,7 +84,7 @@ func TestRecursiveWatchObservesWritesInUnseededDirectories(t *testing.T) {
 	t.Cleanup(ResetObserversForTest)
 	t.Cleanup(func() { ResetDebouncerForTest(context.Background()) })
 	root := t.TempDir()
-	deep := filepath.Join(root, "build", "out", "nested")
+	deep := filepath.Join(root, "src", "generated", "nested")
 	testutil.FailErr(t, "mkdir deep", os.MkdirAll(deep, 0o755))
 
 	var seen atomic.Bool
@@ -93,7 +93,7 @@ func TestRecursiveWatchObservesWritesInUnseededDirectories(t *testing.T) {
 			return
 		}
 		for _, p := range ev.Paths {
-			if p == "build/out/nested/artifact.bin" {
+			if p == "src/generated/nested/artifact.bin" {
 				seen.Store(true)
 			}
 		}

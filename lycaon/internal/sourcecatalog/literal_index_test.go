@@ -33,7 +33,7 @@ func TestLiteralCandidatesCoverIgnoredAndHiddenTextAtRequestedAltitude(t *testin
 
 	catalog := New()
 	snapshot := observeRoot(t, catalog, root)
-	candidates, err := catalog.LiteralCandidates(context.Background(), snapshot, LiteralQuery{
+	candidates, err := catalog.Literals.LiteralCandidates(context.Background(), snapshot, LiteralQuery{
 		RootID: "root", Base: "module", Require: litprefilter.AnyOf("CompleteNeedle"), Open: literalTestOpener(root),
 	})
 	testutil.FailErr(t, "query module literals", err)
@@ -42,7 +42,7 @@ func TestLiteralCandidatesCoverIgnoredAndHiddenTextAtRequestedAltitude(t *testin
 		t.Fatalf("module candidates = %v", got)
 	}
 
-	candidates, err = catalog.LiteralCandidates(context.Background(), snapshot, LiteralQuery{
+	candidates, err = catalog.Literals.LiteralCandidates(context.Background(), snapshot, LiteralQuery{
 		RootID: "root", Base: ".", Require: litprefilter.AnyOf("CompleteNeedle"), Open: literalTestOpener(root),
 	})
 	testutil.FailErr(t, "query root literals", err)
@@ -57,7 +57,7 @@ func TestLiteralCandidatesMoveWithCatalogGeneration(t *testing.T) {
 	writeLiteralFixture(t, root, "source.txt", "before")
 	catalog := New()
 	query := LiteralQuery{RootID: "root", Base: ".", Require: litprefilter.AnyOf("before"), Open: literalTestOpener(root)}
-	candidates, err := catalog.LiteralCandidates(context.Background(), observeRoot(t, catalog, root), query)
+	candidates, err := catalog.Literals.LiteralCandidates(context.Background(), observeRoot(t, catalog, root), query)
 	testutil.FailErr(t, "query first generation", err)
 	if got := literalCandidatePaths(candidates); !slices.Equal(got, []string{"source.txt"}) {
 		t.Fatalf("first generation candidates = %v", literalCandidatePaths(candidates))
@@ -65,7 +65,7 @@ func TestLiteralCandidatesMoveWithCatalogGeneration(t *testing.T) {
 	writeLiteralFixture(t, root, "added.txt", "after")
 	catalog.InvalidateRoot(root)
 	query.Require = litprefilter.AnyOf("before", "after")
-	candidates, err = catalog.LiteralCandidates(context.Background(), observeRoot(t, catalog, root), query)
+	candidates, err = catalog.Literals.LiteralCandidates(context.Background(), observeRoot(t, catalog, root), query)
 	testutil.FailErr(t, "query next generation", err)
 	if got := literalCandidatePaths(candidates); !slices.Equal(got, []string{"added.txt", "source.txt"}) {
 		t.Fatalf("next generation candidates = %v", got)
@@ -80,7 +80,7 @@ func TestLiteralCandidatesInvalidateContentWhenMetadataIsUnchanged(t *testing.T)
 	testutil.FailErr(t, "stat initial fixture", err)
 	catalog := New()
 	query := LiteralQuery{RootID: "root", Base: ".", Require: litprefilter.AnyOf("AlphaNeedle"), Open: literalTestOpener(root)}
-	candidates, err := catalog.LiteralCandidates(context.Background(), observeRoot(t, catalog, root), query)
+	candidates, err := catalog.Literals.LiteralCandidates(context.Background(), observeRoot(t, catalog, root), query)
 	testutil.FailErr(t, "query initial content", err)
 	if got := literalCandidatePaths(candidates); !slices.Equal(got, []string{rel}) {
 		t.Fatalf("initial candidates = %v", got)
@@ -90,7 +90,7 @@ func TestLiteralCandidatesInvalidateContentWhenMetadataIsUnchanged(t *testing.T)
 	testutil.FailErr(t, "restore fixture timestamp", os.Chtimes(filepath.Join(root, rel), info.ModTime(), info.ModTime()))
 	catalog.InvalidateRoot(root, rel)
 	query.Require = litprefilter.AnyOf("OmegaNeedle")
-	candidates, err = catalog.LiteralCandidates(context.Background(), observeRoot(t, catalog, root), query)
+	candidates, err = catalog.Literals.LiteralCandidates(context.Background(), observeRoot(t, catalog, root), query)
 	testutil.FailErr(t, "query invalidated content", err)
 	if got := literalCandidatePaths(candidates); !slices.Equal(got, []string{rel}) {
 		t.Fatalf("invalidated candidates = %v", got)
@@ -104,7 +104,7 @@ func TestLiteralCandidatesFollowEditsUnderAStaleGeneration(t *testing.T) {
 	writeLiteralFixture(t, root, "other.txt", "unrelated")
 	catalog := New()
 	stale := observeRoot(t, catalog, root)
-	candidates, err := catalog.LiteralCandidates(context.Background(), stale, LiteralQuery{
+	candidates, err := catalog.Literals.LiteralCandidates(context.Background(), stale, LiteralQuery{
 		RootID: "root", Base: ".", Require: litprefilter.AnyOf("NewNeedle"), Open: literalTestOpener(root),
 	})
 	testutil.FailErr(t, "query before edit", err)
@@ -114,7 +114,7 @@ func TestLiteralCandidatesFollowEditsUnderAStaleGeneration(t *testing.T) {
 
 	writeLiteralFixture(t, root, "edited.txt", "NewNeedle")
 	catalog.InvalidateRoot(root, "edited.txt")
-	candidates, err = catalog.LiteralCandidates(context.Background(), stale, LiteralQuery{
+	candidates, err = catalog.Literals.LiteralCandidates(context.Background(), stale, LiteralQuery{
 		RootID: "root", Base: ".", Require: litprefilter.AnyOf("NewNeedle"), Open: literalTestOpener(root),
 	})
 	testutil.FailErr(t, "query same generation after edit", err)
@@ -133,7 +133,7 @@ func TestLiteralCandidatesKeepUnreadableFilesAsCandidates(t *testing.T) {
 	testutil.FailErr(t, "chmod locked file", os.Chmod(locked, 0o000))
 	t.Cleanup(func() { _ = os.Chmod(locked, 0o600) })
 	catalog := New()
-	candidates, err := catalog.LiteralCandidates(context.Background(), observeRoot(t, catalog, root), LiteralQuery{
+	candidates, err := catalog.Literals.LiteralCandidates(context.Background(), observeRoot(t, catalog, root), LiteralQuery{
 		RootID: "root", Base: ".", Require: litprefilter.AnyOf("needle"), Open: literalTestOpener(root),
 	})
 	testutil.FailErr(t, "query with an unreadable file", err)
@@ -164,7 +164,7 @@ func TestLiteralCandidatesHonourEveryClause(t *testing.T) {
 	}
 	for _, tc := range cases {
 		query := LiteralQuery{RootID: "root", Base: ".", Require: tc.require, Open: literalTestOpener(root)}
-		candidates, err := catalog.LiteralCandidates(context.Background(), snapshot, query)
+		candidates, err := catalog.Literals.LiteralCandidates(context.Background(), snapshot, query)
 		testutil.FailErr(t, tc.name+" query", err)
 		if got := literalCandidatePaths(candidates); !slices.Equal(got, tc.want) {
 			t.Fatalf("%s candidates = %v, want %v", tc.name, got, tc.want)
@@ -174,7 +174,7 @@ func TestLiteralCandidatesHonourEveryClause(t *testing.T) {
 
 func TestLiteralCandidatesRequireAReadyGeneration(t *testing.T) {
 	catalog := New()
-	_, err := catalog.LiteralCandidates(context.Background(), Snapshot{State: StateWarming}, LiteralQuery{
+	_, err := catalog.Literals.LiteralCandidates(context.Background(), Snapshot{State: StateWarming}, LiteralQuery{
 		RootID: "root", Require: litprefilter.AnyOf("needle"), Open: literalTestOpener(t.TempDir()),
 	})
 	if err == nil {
@@ -198,7 +198,7 @@ func TestLiteralCandidatesFoldCase(t *testing.T) {
 		"istanbul":       {"istanbul.txt"},
 	}
 	for literal, want := range cases {
-		candidates, err := catalog.LiteralCandidates(context.Background(), snapshot, LiteralQuery{
+		candidates, err := catalog.Literals.LiteralCandidates(context.Background(), snapshot, LiteralQuery{
 			RootID: "root", Base: ".", Require: litprefilter.AnyOf(literal), Open: literalTestOpener(root),
 		})
 		testutil.FailErr(t, "query folded literal "+literal, err)
@@ -214,7 +214,7 @@ func TestLiteralCandidatesSkipNULWithoutDroppingOtherText(t *testing.T) {
 	writeLiteralFixture(t, root, "control.txt", "before\x1bCompleteNeedle")
 	writeLiteralFixture(t, root, "source.unknown", "CompleteNeedle")
 	catalog := New()
-	candidates, err := catalog.LiteralCandidates(context.Background(), observeRoot(t, catalog, root), LiteralQuery{
+	candidates, err := catalog.Literals.LiteralCandidates(context.Background(), observeRoot(t, catalog, root), LiteralQuery{
 		RootID: "root", Base: ".", Require: litprefilter.AnyOf("CompleteNeedle"), Open: literalTestOpener(root),
 	})
 	testutil.FailErr(t, "query text candidates", err)
@@ -255,7 +255,7 @@ func TestLiteralCandidatesCoalesceConcurrentScopeBuilds(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, err := catalog.LiteralCandidates(context.Background(), snapshot, LiteralQuery{
+			_, err := catalog.Literals.LiteralCandidates(context.Background(), snapshot, LiteralQuery{
 				RootID: "root", Base: ".", Require: litprefilter.AnyOf(fmt.Sprintf("term%d", queryIndex)),
 				IncludeKey: "same-scope", Open: opener,
 			})
@@ -288,7 +288,7 @@ func TestLiteralCandidatesReuseFileBloomsAcrossGenerations(t *testing.T) {
 		return os.Open(filepath.Join(root, filepath.FromSlash(entry.Path))) // #nosec G304 -- test fixture root
 	}
 	query := LiteralQuery{RootID: "root", Base: ".", Require: litprefilter.AnyOf("steady"), Open: opener}
-	_, err := catalog.LiteralCandidates(context.Background(), observeRoot(t, catalog, root), query)
+	_, err := catalog.Literals.LiteralCandidates(context.Background(), observeRoot(t, catalog, root), query)
 	testutil.FailErr(t, "first build", err)
 	mu.Lock()
 	opened = opened[:0]
@@ -297,7 +297,7 @@ func TestLiteralCandidatesReuseFileBloomsAcrossGenerations(t *testing.T) {
 	writeLiteralFixture(t, root, "edit.txt", "changed")
 	catalog.InvalidateRoot(root, "edit.txt")
 	next := observeRoot(t, catalog, root)
-	_, err = catalog.LiteralCandidates(context.Background(), next, query)
+	_, err = catalog.Literals.LiteralCandidates(context.Background(), next, query)
 	testutil.FailErr(t, "rebuild for the next generation", err)
 	mu.Lock()
 	defer mu.Unlock()
@@ -319,18 +319,18 @@ func TestLiteralCandidatesPathlessInvalidationRevalidatesFileBlooms(t *testing.T
 	}
 	query := LiteralQuery{RootID: "root", Base: ".", Require: litprefilter.AnyOf("needle"), Open: opener}
 	stale := observeRoot(t, catalog, root)
-	_, err := catalog.LiteralCandidates(context.Background(), stale, query)
+	_, err := catalog.Literals.LiteralCandidates(context.Background(), stale, query)
 	testutil.FailErr(t, "first build", err)
 	before := opens.Load()
 
 	catalog.InvalidateRoot(root)
-	candidates, err := catalog.LiteralCandidates(context.Background(), stale, query)
+	candidates, err := catalog.Literals.LiteralCandidates(context.Background(), stale, query)
 	testutil.FailErr(t, "query under the dirty generation", err)
 	if got := literalCandidatePaths(candidates); !slices.Equal(got, []string{"src/a.txt", "src/b.txt"}) {
 		t.Fatalf("dirty-root candidates = %v, want every file", got)
 	}
 	next := observeRoot(t, catalog, root)
-	candidates, err = catalog.LiteralCandidates(context.Background(), next, query)
+	candidates, err = catalog.Literals.LiteralCandidates(context.Background(), next, query)
 	testutil.FailErr(t, "rebuild for the next generation", err)
 	if got := literalCandidatePaths(candidates); !slices.Equal(got, []string{"src/a.txt"}) {
 		t.Fatalf("next-generation candidates = %v", got)
@@ -353,13 +353,13 @@ func TestLiteralCandidatesKeepIndexAcrossUnrelatedWrites(t *testing.T) {
 	}
 	query := LiteralQuery{RootID: "root", Base: ".", Require: litprefilter.AnyOf("needle"), Open: opener}
 	snapshot := observeRoot(t, catalog, root)
-	_, err := catalog.LiteralCandidates(context.Background(), snapshot, query)
+	_, err := catalog.Literals.LiteralCandidates(context.Background(), snapshot, query)
 	testutil.FailErr(t, "first build", err)
 	before := opens.Load()
 
 	writeLiteralFixture(t, root, "build/out.log", "log line")
 	catalog.InvalidateRoot(root, "build/out.log")
-	candidates, err := catalog.LiteralCandidates(context.Background(), snapshot, query)
+	candidates, err := catalog.Literals.LiteralCandidates(context.Background(), snapshot, query)
 	testutil.FailErr(t, "query after unrelated write", err)
 	if got := literalCandidatePaths(candidates); !slices.Equal(got, []string{"src/a.txt"}) {
 		t.Fatalf("candidates = %v", got)
@@ -387,13 +387,13 @@ func TestLiteralBloomReadAcrossAWriteIsNotRetained(t *testing.T) {
 		return f, err
 	}
 	query := LiteralQuery{RootID: "root", Base: ".", Require: litprefilter.AnyOf("before"), Open: opener}
-	_, err := catalog.LiteralCandidates(context.Background(), snapshot, query)
+	_, err := catalog.Literals.LiteralCandidates(context.Background(), snapshot, query)
 	testutil.FailErr(t, "build across the write", err)
 
 	// Same generation metadata again: a retained bloom would answer from cache.
 	query.IncludeKey = "second-scope"
 	query.Include = func(Entry) bool { return true }
-	_, err = catalog.LiteralCandidates(context.Background(), snapshot, query)
+	_, err = catalog.Literals.LiteralCandidates(context.Background(), snapshot, query)
 	testutil.FailErr(t, "rebuild after the racy read", err)
 	if got := opens.Load(); got != 2 {
 		t.Fatalf("opens = %d, want the racy read discarded and the file reread", got)
@@ -406,7 +406,7 @@ func TestLiteralCandidatesApplyIncludeBeforeOpeningContent(t *testing.T) {
 	writeLiteralFixture(t, root, "private/secret.txt", "needle")
 	var opened []string
 	catalog := New()
-	candidates, err := catalog.LiteralCandidates(context.Background(), observeRoot(t, catalog, root), LiteralQuery{
+	candidates, err := catalog.Literals.LiteralCandidates(context.Background(), observeRoot(t, catalog, root), LiteralQuery{
 		RootID: "root", Base: ".",
 		Require: litprefilter.AnyOf("needle"), IncludeKey: "allowed-only",
 		Include: func(entry Entry) bool { return strings.HasPrefix(entry.Path, "allowed/") },
@@ -447,23 +447,23 @@ func TestLiteralCandidatesCanceledWaiterDoesNotAbortSharedBuild(t *testing.T) {
 	firstCtx, cancelFirst := context.WithCancel(context.Background())
 	firstErr := make(chan error, 1)
 	go func() {
-		_, err := catalog.LiteralCandidates(firstCtx, snapshot, query)
+		_, err := catalog.Literals.LiteralCandidates(firstCtx, snapshot, query)
 		firstErr <- err
 	}()
 	<-started
 
 	secondResult := make(chan error, 1)
 	go func() {
-		candidates, err := catalog.LiteralCandidates(context.Background(), snapshot, query)
+		candidates, err := catalog.Literals.LiteralCandidates(context.Background(), snapshot, query)
 		if err == nil && !slices.Equal(literalCandidatePaths(candidates), []string{"source.go"}) {
 			err = fmt.Errorf("candidates = %v", literalCandidatePaths(candidates))
 		}
 		secondResult <- err
 	}()
 	testutil.WaitFor(t, time.Second, func() bool {
-		catalog.literals.mu.Lock()
-		defer catalog.literals.mu.Unlock()
-		for _, record := range catalog.literals.records {
+		catalog.Literals.cache.mu.Lock()
+		defer catalog.Literals.cache.mu.Unlock()
+		for _, record := range catalog.Literals.cache.records {
 			if record.waiters == 2 {
 				return true
 			}
@@ -513,7 +513,7 @@ func TestLiteralBudgetFallsBackWithoutOpeningContent(t *testing.T) {
 	for i := range 1024 {
 		snapshot.Entries = append(snapshot.Entries, Entry{RootID: "root", Path: fmt.Sprintf("%04d.txt", i), Size: 1 << 30})
 	}
-	candidates, err := catalog.LiteralCandidates(t.Context(), snapshot, LiteralQuery{RootID: "root", Base: ".", Require: litprefilter.AnyOf("needle"), Open: func(Entry) (io.ReadCloser, error) {
+	candidates, err := catalog.Literals.LiteralCandidates(t.Context(), snapshot, LiteralQuery{RootID: "root", Base: ".", Require: litprefilter.AnyOf("needle"), Open: func(Entry) (io.ReadCloser, error) {
 		t.Error("oversized scope opened content")
 		return nil, os.ErrNotExist
 	}})
@@ -576,14 +576,14 @@ func TestInvalidatedNonTextFileRemainsSearchable(t *testing.T) {
 	catalog := New()
 	snapshot := observeRoot(t, catalog, root)
 	query := LiteralQuery{RootID: "root", Base: ".", Require: litprefilter.AnyOf("needle"), Open: literalTestOpener(root)}
-	candidates, err := catalog.LiteralCandidates(t.Context(), snapshot, query)
+	candidates, err := catalog.Literals.LiteralCandidates(t.Context(), snapshot, query)
 	testutil.FailErr(t, "index non-text source", err)
 	if len(candidates) != 0 {
 		t.Fatalf("binary candidates=%v", candidates)
 	}
 	writeLiteralFixture(t, root, "changed.dat", "needle")
-	catalog.literals.invalidate(root, []string{"changed.dat"})
-	candidates, err = catalog.LiteralCandidates(t.Context(), snapshot, query)
+	catalog.Literals.cache.invalidate(root, []string{"changed.dat"})
+	candidates, err = catalog.Literals.LiteralCandidates(t.Context(), snapshot, query)
 	testutil.FailErr(t, "search invalidated generation", err)
 	if !slices.Equal(literalCandidatePaths(candidates), []string{"changed.dat"}) {
 		t.Fatalf("changed text omitted: %v", candidates)
@@ -596,7 +596,7 @@ func TestLiteralRootInvalidationDropsUncertainFileBlooms(t *testing.T) {
 	catalog := New()
 	query := LiteralQuery{RootID: "root", Base: ".", Require: litprefilter.AnyOf("new text"), Open: literalTestOpener(root)}
 	initial := observeRoot(t, catalog, root)
-	_, err := catalog.LiteralCandidates(t.Context(), initial, query)
+	_, err := catalog.Literals.LiteralCandidates(t.Context(), initial, query)
 	testutil.FailErr(t, "build initial index", err)
 	info, err := os.Stat(filepath.Join(root, "a.txt"))
 	testutil.FailErr(t, "stat source", err)
@@ -604,7 +604,7 @@ func TestLiteralRootInvalidationDropsUncertainFileBlooms(t *testing.T) {
 	testutil.FailErr(t, "preserve modification time", os.Chtimes(filepath.Join(root, "a.txt"), info.ModTime(), info.ModTime()))
 	catalog.InvalidateRoot(root, ".")
 	next := observeRoot(t, catalog, root)
-	candidates, err := catalog.LiteralCandidates(t.Context(), next, query)
+	candidates, err := catalog.Literals.LiteralCandidates(t.Context(), next, query)
 	testutil.FailErr(t, "search after root invalidation", err)
 	if got := literalCandidatePaths(candidates); !slices.Equal(got, []string{"a.txt"}) {
 		t.Fatalf("candidates=%v", got)

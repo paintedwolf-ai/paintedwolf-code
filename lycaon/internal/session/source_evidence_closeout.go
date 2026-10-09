@@ -41,8 +41,8 @@ func (m *Manager) maybeRejectCloseoutForSourceEvidence(
 		return nil, false
 	}
 	return m.tryOARFinishBlock(ctx, sess, func(gc *oar.GuardContext) error {
-		gc.VerifyRequired = true
-		gc.VerifierPass = false
+		gc.Progress.VerifyRequired = true
+		gc.Progress.VerifierPass = false
 		revision, _ := m.verificationRevision(ctx, m.sourceEvidenceRoot(ctx, sess))
 		gc.PutRejectData(sourceEvidenceUnmetBeforeCloseoutCode, map[string]any{
 			"source_revision": revision,

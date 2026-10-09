@@ -35,7 +35,15 @@ func TestEveryDiscretionaryGateProducesAQuietSubject(t *testing.T) {
 func TestInstructionReviewCannotBeQuietedByAnotherGate(t *testing.T) {
 	t.Parallel()
 	decision := &gate.Decision{Primary: api.GateUserRule, Also: []api.ApprovalGate{api.GateAgentPolicyChange}}
-	action := hitl.ProposedAction{Tool: "write", SessionID: "chat", RootSessionID: "chat"}
+	action := hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "write",
+},
+Scope: hitl.ActionScope{
+SessionID: "chat",
+RootSessionID: "chat",
+},
+}
 	if subjects := hitl.QuietSubjectsFromDecision(decision, nil, "digest"); len(subjects) != 0 {
 		t.Fatalf("a decision carrying agent policy exposed quiet subjects: %+v", subjects)
 	}
@@ -74,7 +82,7 @@ func TestEveryToolApprovalMintSiteOffersQuiet(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
 	sites := []string{
-		"lycaon/internal/tools/socket_approval.go",
+		"lycaon/internal/toolexecution/socket_approval.go",
 		"lycaon/internal/tools/direct_ip_capability.go",
 		"lycaon/internal/session/sandbox_write_root_broker.go",
 		"lycaon/internal/session/sandbox_listen_broker.go",

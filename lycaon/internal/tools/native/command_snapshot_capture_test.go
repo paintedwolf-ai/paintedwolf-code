@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
@@ -40,7 +41,7 @@ func TestCommandSnapshotCaptureIncompatibleArgs(t *testing.T) {
 		}
 
 		_, err := cmd.Run(context.Background(), args, tctx)
-		tr := tools.AsToolReject(err)
+		tr := toolrejection.AsToolReject(err)
 		if tr == nil || tr.Code != "TOOL_ARGS_INVALID" {
 			t.Fatalf("field %s: expected TOOL_ARGS_INVALID reject, got %v", field, err)
 		}
@@ -57,7 +58,7 @@ func TestCommandDisallowedDesktopCapture(t *testing.T) {
 			"command": disallowed,
 		}
 		_, err := cmd.Run(context.Background(), args, tctx)
-		tr := tools.AsToolReject(err)
+		tr := toolrejection.AsToolReject(err)
 		if tr == nil || tr.Code != "DESKTOP_CAPTURE_DISALLOWED" {
 			t.Fatalf("command %q: expected DESKTOP_CAPTURE_DISALLOWED, got %v", disallowed, err)
 		}
@@ -77,7 +78,7 @@ func TestCommandSnapshotCaptureMissingFileRejection(t *testing.T) {
 		},
 	}
 	_, err := cmd.Run(context.Background(), args, tctx)
-	tr := tools.AsToolReject(err)
+	tr := toolrejection.AsToolReject(err)
 	if tr == nil || tr.Code != "SNAPSHOT_FILE_NOT_PRODUCED" {
 		t.Fatalf("expected SNAPSHOT_FILE_NOT_PRODUCED, got %v", err)
 	}
@@ -87,7 +88,7 @@ func TestCommandSnapshotCaptureSuccess(t *testing.T) {
 	cmd, _ := newCommandTool(t)
 	root := t.TempDir()
 	tctx := commandToolContext(root, "sess-1", "worker-1")
-	tctx.Out = &tools.ToolInvocationOut{}
+	tctx.Effects.Out = &tools.ToolInvocationOut{}
 
 	helperScript := filepath.Join(root, "snapshot_app.sh")
 	pngFile := filepath.Join(root, "sample.png")
@@ -113,20 +114,20 @@ func TestCommandSnapshotCaptureSuccess(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if tctx.Out.Visual == nil {
-		t.Fatal("expected tctx.Out.Visual to be populated")
+	if tctx.Effects.Out.Visual == nil {
+		t.Fatal("expected tctx.Effects.Out.Visual to be populated")
 	}
-	if !tctx.Out.Visual.Perceive {
+	if !tctx.Effects.Out.Visual.Perceive {
 		t.Fatal("expected Visual.Perceive to be true")
 	}
-	if tctx.Out.Visual.Source != api.VisualArtifactSourceCapture {
-		t.Fatalf("expected source %q, got %q", api.VisualArtifactSourceCapture, tctx.Out.Visual.Source)
+	if tctx.Effects.Out.Visual.Source != api.VisualArtifactSourceCapture {
+		t.Fatalf("expected source %q, got %q", api.VisualArtifactSourceCapture, tctx.Effects.Out.Visual.Source)
 	}
-	if tctx.Out.Visual.Caption != "Chess board preview" {
-		t.Fatalf("caption = %q", tctx.Out.Visual.Caption)
+	if tctx.Effects.Out.Visual.Caption != "Chess board preview" {
+		t.Fatalf("caption = %q", tctx.Effects.Out.Visual.Caption)
 	}
-	if tctx.Out.Visual.Width != 1 || tctx.Out.Visual.Height != 1 {
-		t.Fatalf("dimensions = %dx%d, want 1x1", tctx.Out.Visual.Width, tctx.Out.Visual.Height)
+	if tctx.Effects.Out.Visual.Width != 1 || tctx.Effects.Out.Visual.Height != 1 {
+		t.Fatalf("dimensions = %dx%d, want 1x1", tctx.Effects.Out.Visual.Width, tctx.Effects.Out.Visual.Height)
 	}
 
 	var parsed struct {

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -21,7 +22,6 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -88,7 +88,7 @@ func TestValidateProfileConditionsUsesRoleContract(t *testing.T) {
 		t.Fatalf("implement process_done: %v", err)
 	}
 	err := validateProfileConditions("worker_readonly", []awaitstore.Condition{{Kind: "process_done"}}, profiles)
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "WAIT_CONDITION_NOT_ALLOWED" {
 		t.Fatalf("error = %v, want WAIT_CONDITION_NOT_ALLOWED", err)
 	}

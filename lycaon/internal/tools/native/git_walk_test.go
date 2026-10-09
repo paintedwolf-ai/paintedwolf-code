@@ -60,8 +60,8 @@ func newNativeWalkFixture(t *testing.T) nativeWalkFixture {
 	ledger := sourceledger.New(sqlDB, t.TempDir())
 	ledger.SetGitReader(walkGitReader{manager})
 	tc := nativefixture.Context(dir)
-	tc.ProjectID, tc.SessionID, tc.ActiveRootID, tc.UserTurn = "p1", "s1", "r1", 1
-	tc.SourceLedger = ledger
+	tc.Identity.ProjectID, tc.Identity.SessionID, tc.Source.ActiveRootID, tc.Identity.UserTurn = "p1", "s1", "r1", 1
+	tc.Source.SourceLedger = ledger
 	return nativeWalkFixture{dir: dir, manager: manager, ledger: ledger, tc: tc}
 }
 
@@ -72,7 +72,7 @@ func TestNativeCommitAndAmendProduceStandaloneWalkSteps(t *testing.T) {
 	tool := &GitCommitTool{Git: manager, Boundary: nativefixture.Boundary(t)}
 	for i, name := range []string{"first.txt", "second.txt"} {
 		testutil.FailErr(t, "write existing work", os.WriteFile(filepath.Join(dir, name), []byte(name), 0o644))
-		tc.ToolCallID = name
+		tc.Identity.ToolCallID = name
 		out, err := tool.Run(t.Context(), map[string]any{"message": name, "paths": []any{name}, "amend": i == 1}, tc)
 		testutil.FailErr(t, "commit existing work", err)
 		var receipt struct {
@@ -115,8 +115,8 @@ func TestNativeCheckoutRecordsReviewedPathsWithItsGitMovement(t *testing.T) {
 		Content: []byte("feature"), SHA256: sourceblob.ContentSHA([]byte("feature")), Size: 7,
 	})
 	testutil.FailErr(t, "track current file", err)
-	f.tc.ToolCallID, f.tc.Invocation.ToolName = "checkout-call", "git_checkout"
-	f.tc.FileChangeReview = func(context.Context, []tools.FileChange) error { return nil }
+	f.tc.Identity.ToolCallID, f.tc.Invocation.ToolName = "checkout-call", "git_checkout"
+	f.tc.Files.FileChangeReview = func(context.Context, []tools.FileChange) error { return nil }
 	tool := GitOperationTool{Git: f.manager, Boundary: nativefixture.Boundary(t), Kind: "checkout"}
 	_, err = tool.Run(t.Context(), map[string]any{"branch": "main"}, f.tc)
 	testutil.FailErr(t, "checkout main", err)

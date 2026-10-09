@@ -49,10 +49,10 @@ phases:
 		"manifest_yaml": manifest,
 		"dry_run":       true,
 	}, tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
-		ActiveRootID: "r1",
-		SessionID:    "sess-1",
-		Agent:        orchestration.ProfileCoordinator,
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{SessionID: "sess-1",
+			Agent: orchestration.ProfileCoordinator},
 	})
 	testutil.FailErr(t, "reg.Run failed", err)
 	var payload map[string]json.RawMessage

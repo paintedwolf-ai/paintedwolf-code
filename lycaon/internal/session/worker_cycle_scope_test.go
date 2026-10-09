@@ -311,7 +311,7 @@ func TestParallelReadScoutsAllowedUnderReadCap(t *testing.T) {
 	}
 	for i := 0; i < 3; i++ {
 		gc := observeTaskInFlight(t, ctx, deps, sess, readScoutArgs)
-		if evaluateHasCode(t, gc, session.CoordinatorWorkerInFlightCode) || gc.WorkerSpawnBlocked {
+		if evaluateHasCode(t, gc, session.CoordinatorWorkerInFlightCode) || gc.Workers.WorkerSpawnBlocked {
 			t.Fatalf("expected read scout %d allowed", i+1)
 		}
 		_, err := q.Enqueue(ctx, api.WorkerTask{
@@ -325,11 +325,11 @@ func TestParallelReadScoutsAllowedUnderReadCap(t *testing.T) {
 		testutil.FailErr(t, "Enqueue", err)
 	}
 	gc := observeTaskInFlight(t, ctx, deps, sess, readScoutArgs)
-	if !evaluateHasCode(t, gc, session.CoordinatorWorkerInFlightCode) || !gc.WorkerSpawnBlocked {
+	if !evaluateHasCode(t, gc, session.CoordinatorWorkerInFlightCode) || !gc.Workers.WorkerSpawnBlocked {
 		t.Fatal("expected reject at read cap")
 	}
-	if gc.MaxReadWorkers != 3 || gc.ActiveReadCount != 3 {
-		t.Fatalf("read cap facts = %d/%d, want 3/3", gc.ActiveReadCount, gc.MaxReadWorkers)
+	if gc.Workers.MaxReadWorkers != 3 || gc.Workers.ActiveReadCount != 3 {
+		t.Fatalf("read cap facts = %d/%d, want 3/3", gc.Workers.ActiveReadCount, gc.Workers.MaxReadWorkers)
 	}
 }
 

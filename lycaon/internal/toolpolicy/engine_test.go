@@ -1,8 +1,11 @@
 package toolpolicy
 
 import (
+	"github.com/lycaon/lycaon/internal/toolfeedback"
+
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -39,7 +42,7 @@ func TestEngineEvaluateInvokeDeniedUsesMessage(t *testing.T) {
 		}},
 	})
 	err := eng.EvaluateInvoke(context.Background(), &api.Session{ID: "s1"}, "write", nil)
-	if refusal, ok := guidance.RefusalFromError(err); !ok || refusal.Code() != "RULE_DENY" || tools.AsToolReject(err).Data["reason"] != "not allowed" {
+	if refusal, ok := guidance.RefusalFromError(err); !ok || refusal.Code() != "RULE_DENY" || toolrejection.AsToolReject(err).Data["reason"] != "not allowed" {
 		t.Fatalf("err = %v", err)
 	}
 }
@@ -52,7 +55,7 @@ func TestEngineEvaluateInvokeDeniedUsesCodeWhenMessageEmpty(t *testing.T) {
 		}},
 	})
 	err := eng.EvaluateInvoke(context.Background(), &api.Session{ID: "s1"}, "write", nil)
-	if refusal, ok := guidance.RefusalFromError(err); !ok || refusal.Code() != "RULE_DENY" || tools.AsToolReject(err) == nil {
+	if refusal, ok := guidance.RefusalFromError(err); !ok || refusal.Code() != "RULE_DENY" || toolrejection.AsToolReject(err) == nil {
 		t.Fatalf("err = %v", err)
 	}
 }
@@ -124,7 +127,7 @@ func (f *filterRecordingInvoker) List(_ context.Context, filter platform.ToolFil
 func TestListForPromptUsesBoundCoordinatorRootSnapshot(t *testing.T) {
 	invoker := &filterRecordingInvoker{}
 	eng := NewEngine(EngineDeps{
-		ToolInvoker: invoker,
+		ToolLister: invoker,
 		ProjectRootCount: func(context.Context, *api.Session) int {
 			return 1
 		},
@@ -142,8 +145,8 @@ func TestListForPromptIncludesDeferredWhenInvokeWouldDeny(t *testing.T) {
 		{Name: "mcp_coropa_intel_search", Source: tools.ToolSourceMCP, SourceID: "coropa"},
 	}}
 	eng := NewEngine(EngineDeps{
-		ToolInvoker: inv,
-		Rules:       denyMCPInvoke{},
+		ToolLister: inv,
+		Rules:      denyMCPInvoke{},
 	})
 	listed := eng.ListForPrompt(context.Background(), &api.Session{ID: "s1"}, "coordinator")
 	names := make([]string, 0, len(listed))
@@ -164,7 +167,7 @@ func TestListForPromptFiltersBySessionScope(t *testing.T) {
 		{Name: "complete_leg"},     // worker_child
 		{Name: "request_decision"}, // worker_child
 	}}
-	eng := NewEngine(EngineDeps{ToolInvoker: inv})
+	eng := NewEngine(EngineDeps{ToolLister: inv})
 
 	addressed := listedNames(eng.ListForPrompt(context.Background(),
 		&api.Session{ID: "s1"}, "explore_readonly"))
@@ -210,8 +213,8 @@ func containsName(names []string, want string) bool {
 func TestListForPromptFiltersDeniedTools(t *testing.T) {
 	inv := listInvoker{metas: []tools.ToolMeta{{Name: "read"}, {Name: "write"}}}
 	eng := NewEngine(EngineDeps{
-		ToolInvoker: inv,
-		Rules:       toolNameRuleEvaluator{},
+		ToolLister: inv,
+		Rules:      toolNameRuleEvaluator{},
 	})
 	listed := eng.ListForPrompt(context.Background(), &api.Session{ID: "s1"}, "coordinator")
 	if len(listed) != 1 || listed[0].Name != "read" {
@@ -238,8 +241,8 @@ func TestListForPromptNilInvokerReturnsNil(t *testing.T) {
 func TestListInvokeParityEmptyArgs(t *testing.T) {
 	inv := listInvoker{metas: []tools.ToolMeta{{Name: "read"}, {Name: "write"}}}
 	eng := NewEngine(EngineDeps{
-		ToolInvoker: inv,
-		Rules:       toolNameRuleEvaluator{},
+		ToolLister: inv,
+		Rules:      toolNameRuleEvaluator{},
 	})
 	listed := eng.ListForPrompt(context.Background(), &api.Session{ID: "s1"}, "coordinator")
 	for _, meta := range listed {
@@ -252,7 +255,7 @@ func TestListInvokeParityEmptyArgs(t *testing.T) {
 func TestListSpecHidesDelegateDispatch(t *testing.T) {
 	inv := listInvoker{metas: []tools.ToolMeta{{Name: "delegate_dispatch"}, {Name: "read"}}}
 	eng := NewEngine(EngineDeps{
-		ToolInvoker: inv,
+		ToolLister: inv,
 		Rules: staticRuleEvaluator{outcome: &rules.RuleOutcome{
 			Allowed: false,
 			Code:    "DENY",
@@ -266,7 +269,7 @@ func TestListSpecHidesDelegateDispatch(t *testing.T) {
 	}
 }
 
-func phaseTestBlockPlane(t *testing.T) *tools.BlockPlane {
+func phaseTestBlockPlane(t *testing.T) *toolfeedback.BlockPlane {
 	t.Helper()
 	root := testutil.CheckoutRoot(t)
 	testutil.FailErr(t, "install anchors", anchorcatalog.InstallFile(filepath.Join(root, "lycaon/config/packs/painted-wolf/platform/host/anchors/catalog.yaml")))
@@ -276,7 +279,7 @@ func phaseTestBlockPlane(t *testing.T) *tools.BlockPlane {
 	testutil.FailErr(t, "load policy", err)
 	pipeline := oar.NewGuardPipeline(rules, loader, oar.NewCounterStore())
 	pipeline.EnableAnchor(oar.AnchorToolRejected)
-	return &tools.BlockPlane{Pipeline: pipeline, Renderer: oar.NewRenderer(nil, nil)}
+	return &toolfeedback.BlockPlane{Pipeline: pipeline, Renderer: oar.NewRenderer(nil, nil)}
 }
 
 func TestPromptListingDoesNotFireRejectionRules(t *testing.T) {
@@ -286,9 +289,9 @@ func TestPromptListingDoesNotFireRejectionRules(t *testing.T) {
 	rule, _ := bp.Pipeline.Rules().Get(code)
 	rule.OnFire = []oar.OnFireAction{oar.OnFireIncrementCounter}
 	eng := NewEngine(EngineDeps{
-		ToolInvoker: listInvoker{metas: []tools.ToolMeta{{Name: "state_update"}}},
-		Rules:       staticRuleEvaluator{outcome: &rules.RuleOutcome{Code: code}},
-		BlockPlane:  bp,
+		ToolLister: listInvoker{metas: []tools.ToolMeta{{Name: "state_update"}}},
+		Rules:      staticRuleEvaluator{outcome: &rules.RuleOutcome{Code: code}},
+		BlockPlane: bp,
 	})
 	sess := &api.Session{ID: "listing", AgentType: "coordinator", Posture: api.SessionPostureSpec}
 	if got := eng.ListForPrompt(t.Context(), sess, "coordinator"); len(got) != 0 {

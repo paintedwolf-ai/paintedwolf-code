@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
@@ -38,13 +39,13 @@ func TestGrepDenseRootDensenessThenReject(t *testing.T) {
 	scope.RootStructuralFileCount = 100
 	tool := &GrepTool{Boundary: nativefixture.Boundary(t), Scope: &scope}
 	tctx := tools.ToolContext{
-		SessionID:          "s-dense",
-		ProjectID:          "p1",
-		Roots:              []projectroot.RootRef{{ID: "r1", Path: dir, IsPrimary: true}},
-		ActiveRootID:       "r1",
-		RepoFileCount:      200_000,
-		RepoFileCountKnown: true,
-		RepoTopLevel:       []string{"browser", "dom"},
+		Identity: tools.InvocationIdentity{SessionID: "s-dense",
+			ProjectID: "p1"},
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Path: dir, IsPrimary: true}},
+			ActiveRootID:       "r1",
+			RepoFileCount:      200_000,
+			RepoFileCountKnown: true,
+			RepoTopLevel:       []string{"browser", "dom"}},
 	}
 	args := map[string]any{"pattern": "CVE-2026", "path": ".", "path_glob": "*"}
 	out, err := tool.Run(context.Background(), args, tctx)
@@ -62,7 +63,7 @@ func TestGrepDenseRootDensenessThenReject(t *testing.T) {
 	}
 
 	_, err = tool.Run(context.Background(), args, tctx)
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != GrepScopeRequiredCode {
 		t.Fatalf("second call err = %v want %s", err, GrepScopeRequiredCode)
 	}
@@ -77,10 +78,9 @@ func TestGrepUnknownCountFailSafeDenseness(t *testing.T) {
 		FileCount: func(string) (int, bool) { return 0, false },
 	}
 	tctx := tools.ToolContext{
-		SessionID:    "s-unknown",
-		Roots:        []projectroot.RootRef{{ID: "r1", Path: dir, IsPrimary: true}},
-		ActiveRootID: "r1",
-		// RepoFileCountKnown false = unknown
+		Identity: tools.InvocationIdentity{SessionID: "s-unknown"},
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Path: dir, IsPrimary: true}},
+			ActiveRootID: "r1"},
 	}
 	out, err := tool.Run(context.Background(), map[string]any{"pattern": "needle", "path": "."}, tctx)
 	testutil.FailErr(t, "unknown denseness", err)
@@ -98,11 +98,11 @@ func TestGrepScopedPathBypassesGuard(t *testing.T) {
 	scope.RootStructuralFileCount = 10
 	tool := &GrepTool{Boundary: nativefixture.Boundary(t), Scope: &scope}
 	tctx := tools.ToolContext{
-		SessionID:          "s-scoped",
-		Roots:              []projectroot.RootRef{{ID: "r1", Path: dir, IsPrimary: true}},
-		ActiveRootID:       "r1",
-		RepoFileCount:      200_000,
-		RepoFileCountKnown: true,
+		Identity: tools.InvocationIdentity{SessionID: "s-scoped"},
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Path: dir, IsPrimary: true}},
+			ActiveRootID:       "r1",
+			RepoFileCount:      200_000,
+			RepoFileCountKnown: true},
 	}
 	out, err := tool.Run(context.Background(), map[string]any{
 		"pattern": "needle",
@@ -122,11 +122,11 @@ func TestGrepNarrowPathGlobBypassesGuard(t *testing.T) {
 	scope.RootStructuralFileCount = 10
 	tool := &GrepTool{Boundary: nativefixture.Boundary(t), Scope: &scope}
 	tctx := tools.ToolContext{
-		SessionID:          "s-glob",
-		Roots:              []projectroot.RootRef{{ID: "r1", Path: dir, IsPrimary: true}},
-		ActiveRootID:       "r1",
-		RepoFileCount:      200_000,
-		RepoFileCountKnown: true,
+		Identity: tools.InvocationIdentity{SessionID: "s-glob"},
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Path: dir, IsPrimary: true}},
+			ActiveRootID:       "r1",
+			RepoFileCount:      200_000,
+			RepoFileCountKnown: true},
 	}
 	out, err := tool.Run(context.Background(), map[string]any{
 		"pattern":   "needle",

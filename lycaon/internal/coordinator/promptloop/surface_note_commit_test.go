@@ -3,6 +3,7 @@ package promptloop
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 	"testing"
 	"time"
@@ -99,8 +100,8 @@ func TestCommitToolResultNilNoteSingleAppend(t *testing.T) {
 func TestExecuteOneToolCallDiscardsNoteOnEmitReject(t *testing.T) {
 	reg := tools.NewStubRegistry()
 	_ = reg.Register("surface_note", func(_ context.Context, _ map[string]any, tctx tools.ToolContext) (string, error) {
-		if tctx.Out != nil {
-			tctx.Out.AgentNote = &tools.AgentNoteCapture{
+		if tctx.Effects.Out != nil {
+			tctx.Effects.Out.AgentNote = &tools.AgentNoteCapture{
 				MessageID: "note-should-drop",
 				Content:   "should not land",
 				Grounding: &api.CitationGrounding{Traced: true},
@@ -112,7 +113,10 @@ func TestExecuteOneToolCallDiscardsNoteOnEmitReject(t *testing.T) {
 	sess := &api.Session{ID: "s1"}
 	out := toolBatch{loop}.executeOneToolCall(context.Background(), sess, "s1", "", nil, api.ToolCall{
 		ID: "tc1", Name: "surface_note", Args: map[string]any{"summary": "x"},
-	}, tools.ToolContext{SessionID: "s1", Agent: "coordinator"}, nil, "", api.CoordinatorRunContext{}, false)
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "s1",
+			Agent: "coordinator"},
+	}, nil, "", api.CoordinatorRunContext{}, false)
 	testutil.FailErr(t, "executeOneToolCall", out.endTurn)
 	if out.agentNote != nil {
 		t.Fatalf("note capture must be discarded after emit reject: %+v", out.agentNote)
@@ -129,18 +133,21 @@ func TestExecuteOneToolCallDiscardsNoteOnEmitReject(t *testing.T) {
 func TestExecuteOneToolCallDiscardsNoteOnHandlerReject(t *testing.T) {
 	reg := tools.NewStubRegistry()
 	_ = reg.Register("surface_note", func(_ context.Context, _ map[string]any, tctx tools.ToolContext) (string, error) {
-		if tctx.Out != nil {
-			tctx.Out.AgentNote = &tools.AgentNoteCapture{
+		if tctx.Effects.Out != nil {
+			tctx.Effects.Out.AgentNote = &tools.AgentNoteCapture{
 				MessageID: "note-should-drop",
 				Content:   "should not land",
 			}
 		}
-		return "", &tools.ToolReject{Code: "SURFACE_NOTE_UNGROUNDED", Data: map[string]any{}}
+		return "", &toolrejection.ToolReject{Code: "SURFACE_NOTE_UNGROUNDED", Data: map[string]any{}}
 	})
 	loop := NewPromptLoopForTest(PromptLoopDeps{Tools: reg})
 	out := toolBatch{loop}.executeOneToolCall(context.Background(), &api.Session{ID: "s1"}, "s1", "", nil, api.ToolCall{
 		ID: "tc1", Name: "surface_note", Args: map[string]any{"summary": "x"},
-	}, tools.ToolContext{SessionID: "s1", Agent: "coordinator"}, nil, "", api.CoordinatorRunContext{}, false)
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "s1",
+			Agent: "coordinator"},
+	}, nil, "", api.CoordinatorRunContext{}, false)
 	testutil.FailErr(t, "executeOneToolCall", out.endTurn)
 	if out.agentNote != nil {
 		t.Fatalf("note capture must be discarded on handler reject: %+v", out.agentNote)
@@ -191,8 +198,8 @@ func TestCommitToolResultWithOptionalNoteRetryYieldsOnePair(t *testing.T) {
 func TestSurfaceNoteThenSiblingToolContinues(t *testing.T) {
 	reg := tools.NewStubRegistry()
 	_ = reg.Register("surface_note", func(_ context.Context, _ map[string]any, tctx tools.ToolContext) (string, error) {
-		if tctx.Out != nil {
-			tctx.Out.AgentNote = &tools.AgentNoteCapture{
+		if tctx.Effects.Out != nil {
+			tctx.Effects.Out.AgentNote = &tools.AgentNoteCapture{
 				MessageID: "note-1",
 				Content:   "Auth lives in middleware.go.",
 				Grounding: &api.CitationGrounding{Traced: true},
@@ -230,7 +237,10 @@ func TestSurfaceNoteThenSiblingToolContinues(t *testing.T) {
 		sess,
 		sess.ID,
 		calls,
-		tools.ToolContext{SessionID: sess.ID, Agent: "coordinator"},
+		tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: sess.ID,
+				Agent: "coordinator"},
+		},
 		history,
 		"investigate",
 		assistantID,
@@ -265,7 +275,7 @@ func TestOps8ToolResultPolicyControlsEveryDeliveredCapture(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			reg := tools.NewStubRegistry()
 			testutil.FailErr(t, "register captured tool", reg.Register("surface_note", func(_ context.Context, _ map[string]any, tc tools.ToolContext) (string, error) {
-				tc.Out.AgentNote = &tools.AgentNoteCapture{MessageID: "note", Content: "unreviewed-secret"}
+				tc.Effects.Out.AgentNote = &tools.AgentNoteCapture{MessageID: "note", Content: "unreviewed-secret"}
 				return "unreviewed-secret", nil
 			}))
 			seen := 0
@@ -284,7 +294,10 @@ func TestOps8ToolResultPolicyControlsEveryDeliveredCapture(t *testing.T) {
 			})
 			out := toolBatch{loop}.executeOneToolCall(t.Context(), &api.Session{ID: "session"}, "session", "", nil,
 				api.ToolCall{ID: "call", Name: "surface_note", Args: map[string]any{"summary": "observed-input"}},
-				tools.ToolContext{SessionID: "session", Agent: "coordinator"}, nil, "", api.CoordinatorRunContext{}, false)
+				tools.ToolContext{
+					Identity: tools.InvocationIdentity{SessionID: "session",
+						Agent: "coordinator"},
+				}, nil, "", api.CoordinatorRunContext{}, false)
 			testutil.FailErr(t, "execute tool delivery", out.endTurn)
 			encoded, err := json.Marshal(out.toolMsg)
 			testutil.FailErr(t, "encode delivered result", err)

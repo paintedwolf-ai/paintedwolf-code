@@ -1,19 +1,20 @@
 package toolhost
 
 import (
+	"github.com/lycaon/lycaon/internal/toolapproval"
+
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
-	"github.com/lycaon/lycaon/internal/tools"
 )
 
-// toolApprovalCoalesceAdapter adapts approvalstate.ToolApprovalCoalesce to tools.ToolApprovalCoalesce
+// toolApprovalCoalesceAdapter adapts approvalstate.ToolApprovalCoalesce to the execution approval port
 // (named Begin result types differ across packages).
 type toolApprovalCoalesceAdapter struct {
 	rt *approvalstate.ToolApprovalCoalesce
 }
 
-func (a toolApprovalCoalesceAdapter) Begin(chatSessionID, grantKey string) (tools.ToolApprovalCoalesceBegin, string) {
+func (a toolApprovalCoalesceAdapter) Begin(chatSessionID, grantKey string) (toolapproval.ToolApprovalCoalesceBegin, string) {
 	b, id := a.rt.Begin(chatSessionID, grantKey)
-	return tools.ToolApprovalCoalesceBegin(b), id
+	return toolapproval.ToolApprovalCoalesceBegin(b), id
 }
 
 func (a toolApprovalCoalesceAdapter) RegisterPending(chatSessionID, grantKey, checkpointID, toolCallID string) {

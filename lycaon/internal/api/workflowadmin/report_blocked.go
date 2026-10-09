@@ -14,7 +14,7 @@ import (
 )
 
 // blockedRunReport renders retained work without manufacturing a completion.
-func (s *Handler) blockedRunReport(ctx context.Context, run *wire.WorkflowRun, manifest workflowdef.Manifest) (report.ReportInput, bool, error) {
+func (s *Reports) blockedRunReport(ctx context.Context, run *wire.WorkflowRun, manifest workflowdef.Manifest) (report.ReportInput, bool, error) {
 	vars, err := s.Runs.GetScaffoldVars(ctx, run.ID)
 	if err != nil {
 		return report.ReportInput{}, false, err

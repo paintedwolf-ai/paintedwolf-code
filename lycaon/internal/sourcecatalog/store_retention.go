@@ -9,7 +9,10 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/backgroundwork"
 )
 
 // treeTouchInterval bounds how often an open stamps last use on the file.
@@ -23,11 +26,11 @@ var treeSidecarSuffixes = []string{"-wal", "-shm", "-journal"}
 const structuralScratchGrace = time.Minute
 
 // ReconcileTreeStores expires unused generations and reclaims inactive storage toward the retention target.
-func (c *Catalog) ReconcileTreeStores(ctx context.Context) (int, error) {
+func (c *TreeStores) ReconcileTreeStores(ctx context.Context) (int, error) {
 	return c.reconcileTreeStores(ctx, defaultTreeStorePolicy())
 }
 
-func (c *Catalog) reconcileTreeStores(ctx context.Context, policy treeStorePolicy) (int, error) {
+func (c *TreeStores) reconcileTreeStores(ctx context.Context, policy treeStorePolicy) (int, error) {
 	if c == nil || policy.retention <= 0 {
 		return 0, nil
 	}
@@ -156,7 +159,7 @@ func checkpointTreeStore(ctx context.Context, file string, vacuumPages int) erro
 // ClearTreeStores drains all cache writers and runs clearStorage while new
 // stores are excluded. Existing generation pins keep their immutable storage
 // until the last reader releases them.
-func (c *Catalog) ClearTreeStores(ctx context.Context, clearStorage func() error) error {
+func (c *TreeStores) ClearTreeStores(ctx context.Context, clearStorage func() error) error {
 	if c == nil {
 		return nil
 	}
@@ -196,7 +199,7 @@ func (c *Catalog) ClearTreeStores(ctx context.Context, clearStorage func() error
 // ReleaseTreeRoot retires rebuildable stores after the last project detaches a
 // filesystem root. Readers that already pinned a generation keep their open
 // handles; no new writer can enter the retired stores.
-func (c *Catalog) ReleaseTreeRoot(ctx context.Context, rootPath string) error {
+func (c *TreeStores) ReleaseTreeRoot(ctx context.Context, rootPath string) error {
 	if c == nil {
 		return nil
 	}
@@ -224,7 +227,7 @@ func (c *Catalog) ReleaseTreeRoot(ctx context.Context, rootPath string) error {
 				pending = append(pending, index.inventory.done)
 			}
 			pending = append(pending, index.observations.CancelAll()...)
-			if done := index.drainStructuralCheckpointLocked(); done != nil {
+			if done := index.checkpoint.Drain(); done != nil {
 				pending = append(pending, done)
 			}
 			index.pins.drained = true
@@ -233,7 +236,7 @@ func (c *Catalog) ReleaseTreeRoot(ctx context.Context, rootPath string) error {
 				index.structure = nil
 			}
 			index.releaseCompletedStructureLocked()
-			if idle := index.drainNavigationLocked(); idle != nil {
+			if idle := index.navigation.Drain(); idle != nil {
 				pending = append(pending, idle)
 			}
 			files = append(files, index.structureFile)
@@ -280,7 +283,7 @@ func (c *Catalog) ReleaseTreeRoot(ctx context.Context, rootPath string) error {
 	return errors.Join(errs...)
 }
 
-func (c *Catalog) lockTreeWriters(ctx context.Context) func() {
+func (c *TreeStores) lockTreeWriters(ctx context.Context) func() {
 	c.mu.Lock()
 	stores := make([]projectionStore, 0, len(c.trees))
 	for _, store := range c.trees {
@@ -297,7 +300,7 @@ func lockProjectionWriters(ctx context.Context, stores []projectionStore) func()
 		if !ok {
 			continue
 		}
-		release, err := index.lockWriter(ctx)
+		release, err := index.writer.Lock(ctx)
 		if err == nil {
 			releases = append(releases, release)
 		}
@@ -345,4 +348,137 @@ func (s *storeCore) touch(now time.Time) {
 	}
 	s.touched = now
 	_ = os.Chtimes(s.file, now, now)
+}
+
+// SuspendProjectStores retires in-memory projection stores for a parked project
+// while keeping the persisted SQLite generation files intact on disk.
+func (c *TreeStores) SuspendProjectStores(projectID string) {
+	if c == nil {
+		return
+	}
+	projectID = strings.TrimSpace(projectID)
+	if projectID == "" {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for key, s := range c.trees {
+		core := s.core()
+		if core.projectID == projectID {
+			if retireTreeStore(s) {
+				delete(c.trees, key)
+			}
+		}
+	}
+}
+
+func (c *TreeStores) evictTreeStores(keep string) {
+	limit := max(1, c.limit)
+	for len(c.trees) > limit {
+		oldest := ""
+		for key, s := range c.trees {
+			core := s.core()
+			core.mu.Lock()
+			eligible := key != keep && treeStoreEvictableLocked(s)
+			core.mu.Unlock()
+			if eligible && (oldest == "" || core.lastUsed.Before(c.trees[oldest].core().lastUsed)) {
+				oldest = key
+			}
+		}
+		if oldest == "" {
+			return
+		}
+		if !retireTreeStore(c.trees[oldest]) {
+			continue
+		}
+		delete(c.trees, oldest)
+	}
+}
+
+// Drain cancels in-flight catalog builds and waits for them and the tree
+// stores to settle, or for ctx to end.
+func (c *Catalog) Drain(ctx context.Context) error {
+	if c == nil {
+		return nil
+	}
+	c.mu.Lock()
+	var pending []<-chan struct{}
+	for _, rec := range c.records {
+		if rec.building {
+			rec.cancel()
+			pending = append(pending, rec.done)
+		}
+	}
+
+	c.mu.Unlock()
+	for _, done := range pending {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-done:
+		}
+	}
+	return c.Trees.Drain(ctx)
+}
+
+func (c *TreeStores) Drain(ctx context.Context) error {
+	if c == nil {
+		return nil
+	}
+	c.mu.Lock()
+	var pending []<-chan struct{}
+	for _, s := range c.trees {
+		core := s.core()
+		core.mu.Lock()
+		if index, ok := s.(*indexStore); ok {
+			if index.inventory.cancel != nil {
+				index.inventory.cancel()
+				pending = append(pending, index.inventory.done)
+			}
+			pending = append(pending, index.observations.CancelAll()...)
+			if done := index.checkpoint.Drain(); done != nil {
+				pending = append(pending, done)
+			}
+			index.pins.drained = true
+			index.releaseCompletedStructureLocked()
+			if index.structure != nil && index.pins.held[index.structure.id] == nil {
+				index.structure.close()
+				index.structure = nil
+			}
+			if idle := index.navigation.Drain(); idle != nil {
+				pending = append(pending, idle)
+			}
+		}
+		if core.building {
+			core.cancel()
+			pending = append(pending, core.done)
+		}
+		for _, build := range s.contentBuilds() {
+			build.cancel()
+			pending = append(pending, build.done)
+		}
+		core.mu.Unlock()
+	}
+	c.mu.Unlock()
+	for _, done := range pending {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-done:
+		}
+	}
+	return nil
+}
+
+// TreeStores owns rebuildable disk generations and their writer lifetimes.
+type TreeStores struct {
+	mu            sync.Mutex
+	trees         map[string]projectionStore
+	limit         int
+	treeDir       string
+	treeLifecycle sync.RWMutex
+	broker        *backgroundwork.Broker
+	Directories   *Directories
+	scopesMu      sync.RWMutex
+	scopes        ScopeProvider
 }

@@ -444,7 +444,7 @@ func TestCodeExecutorIndexNarrowsCandidatesBeforeOpening(t *testing.T) {
 	catalog := sourcecatalog.Process()
 	snapshot, err := catalog.Snapshot(t.Context(), "p1", []sourcecatalog.Root{{ID: "root", Path: root}})
 	testutil.FailErr(t, "prepare metadata", err)
-	_, err = catalog.LiteralCandidates(t.Context(), snapshot, sourcecatalog.LiteralQuery{RootID: "root", IncludeKey: "test-warm", Require: litprefilter.AnyOf("unique_target"), Open: func(entry sourcecatalog.Entry) (io.ReadCloser, error) {
+	_, err = catalog.Literals.LiteralCandidates(t.Context(), snapshot, sourcecatalog.LiteralQuery{RootID: "root", IncludeKey: "test-warm", Require: litprefilter.AnyOf("unique_target"), Open: func(entry sourcecatalog.Entry) (io.ReadCloser, error) {
 		return os.Open(filepath.Join(root, entry.Path))
 	}})
 	testutil.FailErr(t, "prepare shared file observations", err)

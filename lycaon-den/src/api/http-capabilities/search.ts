@@ -13,6 +13,7 @@ import type {
 
 /** Code-match flags default to false. */
 export type SearchMatchOptions = {
+  includeDependencies?: boolean;
   regex?: boolean;
   caseSensitive?: boolean;
   wholeWord?: boolean;
@@ -52,6 +53,7 @@ export function createSearchClient(j: JsonRequester, connection: BackendConnecti
       j("/v1/search", { ...jsonRequest("POST", {
         query,
         ...(originProjectId ? { origin_project_id: originProjectId } : {}),
+        ...(match?.includeDependencies ? { include_dependencies: true } : {}),
         ...(match?.regex ? { regex: true } : {}),
         ...(match?.caseSensitive ? { case_sensitive: true } : {}),
         ...(match?.wholeWord ? { whole_word: true } : {}),
@@ -77,7 +79,8 @@ export function createSearchClient(j: JsonRequester, connection: BackendConnecti
           query,
           format,
           ...(originProjectId ? { origin_project_id: originProjectId } : {}),
-          ...(match?.regex ? { regex: true } : {}),
+          ...(match?.includeDependencies ? { include_dependencies: true } : {}),
+        ...(match?.regex ? { regex: true } : {}),
           ...(match?.caseSensitive ? { case_sensitive: true } : {}),
           ...(match?.wholeWord ? { whole_word: true } : {}),
           ...(match?.include?.length ? { include: match.include } : {}),

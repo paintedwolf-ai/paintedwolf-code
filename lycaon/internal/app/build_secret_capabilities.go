@@ -36,7 +36,7 @@ func (b sessionWiring) wireSecretCapabilities() error {
 	if err := native.RegisterSecretCapabilityTools(b.toolRuntime.Registry, service); err != nil {
 		return fmt.Errorf("secret capability tools: %w", err)
 	}
-	b.toolRuntime.Executor.SetSecretResolver(service)
+	b.toolRuntime.Executor.Secrets.SetSecretResolver(service)
 	if b.workflowMgr != nil {
 		b.workflowMgr.SetSecretCapture(func(ctx context.Context, req workflow.SecretCaptureRequest) (workflow.SecretCaptureResult, error) {
 			put, err := service.Put(ctx, secretcap.PutRequest{

@@ -23,7 +23,7 @@ const (
 )
 
 // HandleUploadAttachment streams one body into project host data.
-func (s *Handler) HandleUploadAttachment(w http.ResponseWriter, r *http.Request) {
+func (s *Attachments) HandleUploadAttachment(w http.ResponseWriter, r *http.Request) {
 	p, ok := requestscope.ProjectByURLID(s.Projects, s.responses, w, r)
 	if !ok {
 		return
@@ -62,7 +62,7 @@ func (s *Handler) HandleUploadAttachment(w http.ResponseWriter, r *http.Request)
 
 	receipt, err := promptattach.Upload(r.Context(), store, caps, s.Video, filename, reportedMIME, body)
 	if err != nil {
-		s.WriteAttachmentError(w, err)
+		s.Submission.WriteAttachmentError(w, err)
 		return
 	}
 	if err := s.Store.RecordPromptAttachmentBlob(r.Context(), projectID, receipt.BlobID, receipt.Bytes); err != nil {
@@ -87,7 +87,7 @@ func (s *Handler) HandleUploadAttachment(w http.ResponseWriter, r *http.Request)
 }
 
 // attachmentStore resolves one project's attachment store.
-func (s *Handler) AttachmentStore(ctx context.Context, projectID string) (blobstore.Store, bool) {
+func (s *Attachments) AttachmentStore(ctx context.Context, projectID string) (blobstore.Store, bool) {
 	root := strings.TrimSpace(s.Sessions.HostDataDirFor(projectID))
 	if root == "" {
 		return blobstore.Store{}, false
@@ -119,7 +119,7 @@ const promptAttachmentMaintenanceInterval = time.Hour
 
 // RunPromptAttachmentMaintenance sweeps every project's staged attachments at
 // boot and on an hourly cadence.
-func (s *Handler) RunPromptAttachmentMaintenance(ctx context.Context) error {
+func (s *Attachments) RunPromptAttachmentMaintenance(ctx context.Context) error {
 	sweep := func() {
 		projects, err := s.Projects.List(ctx)
 		if err != nil {
@@ -149,7 +149,7 @@ func (s *Handler) RunPromptAttachmentMaintenance(ctx context.Context) error {
 	}
 }
 
-func (s *Handler) maintainPromptAttachments(ctx context.Context, projectID string, store blobstore.Store) error {
+func (s *Attachments) maintainPromptAttachments(ctx context.Context, projectID string, store blobstore.Store) error {
 	cutoff := time.Now().Add(-promptattach.StagedTTL)
 	candidates, err := s.Store.ListPromptAttachmentReclaimCandidates(ctx, projectID, cutoff, attachmentReclaimBatchSize)
 	if err != nil {
