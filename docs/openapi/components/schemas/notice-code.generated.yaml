@@ -29,4 +29,5 @@ components:
         - user_image_not_visible
         - workflow_active
         - workflow_not_runnable
+        - workflow_version_unavailable
         - worktree_stale

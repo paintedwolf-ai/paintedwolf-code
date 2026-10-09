@@ -15,7 +15,8 @@ func toolFeedbackParts(msg api.Message) []api.MessageContentPart {
 	}
 	type entry struct {
 		api.ToolFeedback
-		DetailsOmitted bool `json:"details_omitted,omitempty"`
+		DetailsOmitted  bool   `json:"details_omitted,omitempty"`
+		ResultMessageID string `json:"result_message_id,omitempty"`
 	}
 	var entries []json.RawMessage
 	budget := maxToolFeedbackBytes - 128
@@ -26,7 +27,14 @@ func toolFeedbackParts(msg api.Message) []api.MessageContentPart {
 		}
 		raw, err := json.Marshal(entry{ToolFeedback: feedback})
 		if err != nil || len(raw) > budget {
-			raw, err = json.Marshal(entry{ToolFeedback: api.ToolFeedback{Code: feedback.Code}, DetailsOmitted: true})
+			compact := api.ToolFeedback{Code: feedback.Code}
+			if msg.ToolResult.Tool == "submit_verdict" {
+				compact.Details = boundedVerdictDiagnostics(feedback.Details)
+			}
+			raw, err = json.Marshal(entry{ToolFeedback: compact, DetailsOmitted: true, ResultMessageID: msg.ID})
+			if err != nil || len(raw)+1 > budget {
+				raw, err = json.Marshal(entry{ToolFeedback: api.ToolFeedback{Code: feedback.Code}, DetailsOmitted: true, ResultMessageID: msg.ID})
+			}
 		}
 		if err != nil || len(raw)+1 > budget || len(entries) >= 32 {
 			omitted++
@@ -50,4 +58,50 @@ func toolFeedbackParts(msg api.Message) []api.MessageContentPart {
 		Authority: api.ContentAuthorityNone, TrustTier: api.ContentTrustTierTrusted,
 		Source: "tool_feedback",
 	}}
+}
+
+// The durable result retains the full diagnostic set. Projection keeps whole
+// issue records so a large candidate example cannot hide the repairs.
+func boundedVerdictDiagnostics(details map[string]any) map[string]any {
+	raw, err := json.Marshal(details)
+	if err != nil {
+		return nil
+	}
+	var source map[string]any
+	if json.Unmarshal(raw, &source) != nil {
+		return nil
+	}
+	out := map[string]any{}
+	budget := 12 << 10
+	for _, key := range []string{"workflow_phase", "field", "field_path", "issues", "schema_issues", "repairs", "unknown_groups", "unaccounted_group_ids", "reason"} {
+		value, ok := source[key]
+		if !ok {
+			continue
+		}
+		if rows, ok := value.([]any); ok {
+			kept := []any{}
+			for _, row := range rows[:min(len(rows), 8)] {
+				if repair, ok := row.(map[string]any); ok && key == "repairs" {
+					row = map[string]any{"code": repair["code"], "details": boundedVerdictDiagnosticsMap(repair["details"])}
+				}
+				encoded, err := json.Marshal(row)
+				if err != nil || len(encoded)+1 > budget {
+					break
+				}
+				kept = append(kept, row)
+				budget -= len(encoded) + 1
+			}
+			out[key] = kept
+			out[key+"_omitted"] = len(rows) - len(kept)
+		} else if encoded, err := json.Marshal(value); err == nil && len(encoded) <= budget {
+			out[key] = value
+			budget -= len(encoded)
+		}
+	}
+	return out
+}
+
+func boundedVerdictDiagnosticsMap(value any) map[string]any {
+	details, _ := value.(map[string]any)
+	return boundedVerdictDiagnostics(details)
 }

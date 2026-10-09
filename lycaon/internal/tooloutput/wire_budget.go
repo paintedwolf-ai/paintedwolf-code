@@ -24,6 +24,12 @@ func FitWireJSON(content string, maxBytes int) (string, bool) {
 	if decoder.Decode(&original) != nil {
 		return content, false
 	}
+	if out, fitted, declared := fitPageJSON(original, prefix, suffix, maxBytes); declared {
+		if fitted {
+			return out, true
+		}
+		return content, false
+	}
 	for _, textBytes := range []int{1024, 256, 64, 0} {
 		for _, window := range []int{40, 20, 10, 5, 2, 1, 0} {
 			projected := budgetObject(original, window, textBytes, 0)

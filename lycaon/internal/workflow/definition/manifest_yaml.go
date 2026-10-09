@@ -282,7 +282,7 @@ func assignWorkflowInjects(m *Manifest, raw []anchor.WorkflowInject) error {
 	}
 	m.Injects = append([]anchor.WorkflowInject(nil), raw...)
 	for i := range m.Injects {
-		if _, err := m.Injects[i].Binding(m.ID); err != nil {
+		if _, err := anchor.NewWorkflowBinding(m.Injects[i], m.ID, m.Version); err != nil {
 			return fmt.Errorf("workflow manifest %s: injects[%d]: %w", m.ID, i, err)
 		}
 	}

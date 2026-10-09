@@ -96,6 +96,12 @@ func (m *RunManager) RecordReviewLoopVerdict(
 		committedVars = bumpReviewLoopAttempt(vars, active.CurrentPhase)
 		out.Attempt = ReviewLoopAttempt(committedVars, active.CurrentPhase)
 	}
+	if out.Valid && committedVars != nil {
+		committedVars, err = resolveReviewRepair(committedVars, active.CurrentPhase)
+		if err != nil {
+			return out, err
+		}
+	}
 	evidenceID := uuid.NewSHA1(uuid.NameSpaceOID, []byte("verdict-evidence:"+operationID)).String()
 	op := verdictOperation{
 		ToolCallID: operationID, RunID: active.ID, SourceRevision: active.Revision,
@@ -133,7 +139,9 @@ func (m *RunManager) RecordReviewLoopVerdict(
 	}
 	if !out.Valid {
 		// Only an exceeded iteration cap requests a decision.
-		m.notifyReviewLoopHeld(ctx, sessionID, out.IterationCapExceeded)
+		if out.IterationCapExceeded {
+			m.notifyReviewLoopHeld(ctx, sessionID, true)
+		}
 		return out, nil
 	}
 	if rl.FollowupAttempts > 0 {

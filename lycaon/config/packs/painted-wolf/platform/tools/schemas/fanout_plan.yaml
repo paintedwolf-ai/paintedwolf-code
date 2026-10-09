@@ -24,6 +24,11 @@ schema:
               plan (at most 60 characters), such as "Desktop app".
             type: string
             maxLength: 60
+          done_when:
+            description: Measurable completion criteria retained for dispatch.
+            type: array
+            minItems: 1
+            items: {type: string, minLength: 1}
           prompt:
             description: "Narrow prompt for this leg."
             type: string

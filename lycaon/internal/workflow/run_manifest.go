@@ -2,9 +2,11 @@ package workflow
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
+	"github.com/lycaon/lycaon/internal/extpacks"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -74,7 +76,19 @@ func (m *RunManager) manifestForRun(ctx context.Context, run *api.WorkflowRun) (
 	if run == nil {
 		return workflowdef.Manifest{}, fmt.Errorf("workflow run required")
 	}
-	return m.manifestForSession(ctx, m.projectDirForRun(ctx, run), run.SessionID, run.WorkflowID, run.WorkflowVersion)
+	manifest, err := m.manifestForSession(ctx, m.projectDirForRun(ctx, run), run.SessionID, run.WorkflowID, run.WorkflowVersion)
+	if errors.Is(err, workflowdef.ErrUnknownWorkflow) {
+		return workflowdef.Manifest{}, &WorkflowVersionUnavailableError{WorkflowID: run.WorkflowID, Version: run.WorkflowVersion}
+	}
+	return manifest, err
+}
+
+// runArchive names the sealed version a retired run reads its guidance from.
+func runArchive(manifest workflowdef.Manifest) string {
+	if !manifest.Retired {
+		return ""
+	}
+	return extpacks.ArchiveKey(manifest.ID, manifest.Version)
 }
 
 func (m *RunManager) projectDirForRun(ctx context.Context, run *api.WorkflowRun) string {

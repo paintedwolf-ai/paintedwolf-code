@@ -33,6 +33,7 @@ var surveyJSONMarshalExemptFile = map[string]string{
 	"lycaon/internal/scan/bundled/release_audit.go":    "offline release audit artifact",
 	"lycaon/internal/scan/bundled/release_evidence.go": "authenticated release evidence artifact",
 	"lycaon/internal/scan/dedup.go":                    "internal dedup hash; payload never reaches LLM",
+	"lycaon/internal/scan/findings/inventory_revision.go": "inventory revision hash; payload never reaches LLM",
 	"lycaon/internal/scan/store_results.go":            "SQL persistence; payload never reaches LLM directly",
 	"lycaon/internal/scan/store_execution.go":          "SQL persistence of runtime policy and progress; payload never reaches LLM directly",
 	"lycaon/internal/scan/result_spill.go":             "oversized result_json spill file + SQLite stub; never LLM wire",

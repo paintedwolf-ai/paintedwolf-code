@@ -53,3 +53,29 @@ func TestToolFeedbackBoundsWholeRecords(t *testing.T) {
 		t.Fatalf("feedback bound lost useful records: %+v", parts)
 	}
 }
+
+func TestOversizedVerdictFeedbackRetainsRepairIssues(t *testing.T) {
+	msg := feedbackMessage()
+	msg.ID = "durable-result"
+	msg.ToolResult.Tool = "submit_verdict"
+	issues := make([]any, 20)
+	for i := range issues {
+		issues[i] = map[string]any{"kind": "missing_assessment", "fact_id": "execute/leg-1"}
+	}
+	msg.ToolResult.Feedback[0].Details = map[string]any{"expected_call": strings.Repeat("x", maxToolFeedbackBytes), "issues": issues}
+	parts := toolFeedbackParts(msg)
+	var payload struct {
+		Feedback []struct {
+			Details         map[string]any `json:"details"`
+			ResultMessageID string         `json:"result_message_id"`
+		} `json:"tool_feedback"`
+	}
+	testutil.FailErr(t, "decode projected diagnostics", json.Unmarshal([]byte(parts[0].Content), &payload))
+	entry := payload.Feedback[0]
+	if len(entry.Details["issues"].([]any)) != 8 || entry.Details["issues_omitted"] != float64(12) || entry.ResultMessageID != msg.ID {
+		t.Fatalf("repair issues or durable reference lost: %+v", entry)
+	}
+	if len(parts[0].Content) > maxToolFeedbackBytes || len(msg.ToolResult.Feedback[0].Details["issues"].([]any)) != 20 {
+		t.Fatal("projection changed durable diagnostics or exceeded budget")
+	}
+}

@@ -213,7 +213,7 @@ func validatePhaseDef(p PhaseDef) error {
 			return fmt.Errorf("phase %q: review_loop.evidence_key required", p.ID)
 		}
 	}
-	if p.Fanout.RequireThreatModel && !PhaseHasGate(p, "fanout_planned") {
+	if (p.Fanout.RequireThreatModel || p.Fanout.RequireTaskCharter) && !PhaseHasGate(p, "fanout_planned") {
 		return fmt.Errorf("phase %q: fanout.require_threat_model requires a fanout_planned gate", p.ID)
 	}
 	if p.Fanout.MaxAttempts < 0 || p.Fanout.MaxAttempts > 3 {

@@ -165,3 +165,20 @@ Do not create a second copy registry in tests or documentation. Contract validat
 - Tool success and no-op state are producer facts.
 - Deduplication uses structured identity.
 - Feedback never teaches a bypass of the enforcing boundary.
+
+### Review repair accounting
+
+A refused `submit_verdict` has no phase-progress effect. Schema admission publishes
+structured instance paths and keyword paths; coverage validation publishes issue
+kinds, field paths, fact ids, and expected values. Diagnostic prose is explanatory
+and never selects a control branch. The workflows subsystem observes screened,
+durable result rows, retaining the run and phase that offered the call. Multiple
+results from one assistant response consume one repair attempt; replay does not
+replace a later candidate with an earlier result.
+
+Three consecutive equivalent structured defects, or eight rejected responses,
+pause the phase as `review_blocked`. Missing workers and unsettled scans retain
+their existing wait semantics. An impossible offered coverage-id contract blocks
+before a model call. Pausing records the report snapshot and worker hold in the
+workflow command transaction; startup replays the transcript-to-accounting crash
+window. Neither pause nor snapshot delivery stamps an evidence verdict.

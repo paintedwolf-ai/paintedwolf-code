@@ -74,11 +74,7 @@ func wireImplementConvergenceHooks(t *testing.T, mgr *session.Manager, wfMgr *wo
 		if rc == nil {
 			return
 		}
-		mgr.EmitMatch(ctx, rc.SessionID, anchor.PhaseEntered, anchor.Envelope{}, anchor.MatchContext{
-			Surface:  "phase",
-			Phase:    rc.Phase,
-			Workflow: rc.WorkflowID,
-		})
+		mgr.EmitMatch(ctx, rc.SessionID, anchor.PhaseEntered, anchor.Envelope{}, anchor.RunMatch(rc, "phase", rc.Phase))
 	}
 }
 

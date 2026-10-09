@@ -31,7 +31,7 @@ func TestScanPackRejectsLintWithStructuredCode(t *testing.T) {
 	testutil.FailErr(t, "LoadHintConfig", err)
 	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
 	rejectFmt := guidance.NewStaticRejectFormatter(cfg)
-	testutil.FailErr(t, "RegisterScanTools", scantoolapi.RegisterScanTools(toolReg, coord, reg, scancadence.New(scanbase.StoreFromCoordinator(coord), coord, reg, nil, scancfg.DefaultGatesConfig(), nil), rejectFmt, nil))
+	testutil.FailErr(t, "RegisterScanTools", scantoolapi.RegisterScanTools(toolReg, coord, reg, scancadence.New(scanbase.StoreFromCoordinator(coord), coord, reg, nil, scancfg.DefaultGatesConfig(), nil), rejectFmt, nil, nil))
 
 	_, err = toolReg.Run(context.Background(), "scan_pack", map[string]any{
 		"categories": []any{string(api.ScanCategorySecret)},

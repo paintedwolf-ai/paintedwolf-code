@@ -168,9 +168,9 @@ schema:
             required: [id, disposition, reason, cited_evidence]
             properties:
               id:
-                description: The obligation or gap id.
+                description: Exact id from the current host coverage facts; copy it unchanged.
                 type: string
-                pattern: '^[a-zA-Z0-9_.-]+$'
+                minLength: 1
               disposition:
                 description: satisfied answers an obligation; covered or immaterial settles a gap; material_open or essential_open leaves work open.
                 type: string

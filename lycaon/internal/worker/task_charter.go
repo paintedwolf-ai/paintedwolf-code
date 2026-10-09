@@ -2,15 +2,12 @@ package worker
 
 import (
 	"strings"
-	"unicode/utf8"
 
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
-
-// MaxTaskCharterRunes bounds the coordinator-authored text that starts a worker leg.
-const MaxTaskCharterRunes = 4096
 
 func parseTaskCharter(args map[string]any) (api.WorkerTaskCharter, error) {
 	raw, ok := args["brief"].(map[string]any)
@@ -41,12 +38,12 @@ func parseTaskCharter(args map[string]any) (api.WorkerTaskCharter, error) {
 		Goal: goal, KnownFacts: knownFacts, Constraints: constraints,
 		DoneWhen: doneWhen, ContextRefs: contextRefs,
 	}
-	if taskCharterRunes(charter) > MaxTaskCharterRunes {
+	if spawn.TaskCharterRunes(charter) > spawn.MaxTaskCharterRunes {
 		return api.WorkerTaskCharter{}, &tools.ToolReject{
 			Code: "TOOL_ARGS_INVALID",
 			Data: map[string]any{
 				"field": "brief", "tool": "task", "reason": "brief_too_long",
-				"max_runes": MaxTaskCharterRunes,
+				"max_runes": spawn.MaxTaskCharterRunes,
 			},
 		}
 	}
@@ -112,16 +109,6 @@ func taskCharterStrings(raw map[string]any, field string, required bool) ([]stri
 	return items, nil
 }
 
-func taskCharterRunes(charter api.WorkerTaskCharter) int {
-	total := utf8.RuneCountInString(charter.Goal)
-	for _, values := range [][]string{charter.KnownFacts, charter.Constraints, charter.DoneWhen, charter.ContextRefs} {
-		for _, value := range values {
-			total += utf8.RuneCountInString(value)
-		}
-	}
-	return total
-}
-
 func formatTaskCharter(charter api.WorkerTaskCharter) string {
 	var out strings.Builder
 	out.WriteString("Goal:\n")
@@ -154,4 +141,31 @@ func invalidTaskCharter(field, reason string) error {
 		Code: "TOOL_ARGS_INVALID",
 		Data: map[string]any{"field": field, "tool": "task", "reason": reason},
 	}
+}
+
+func plannedTaskCharter(planned *api.WorkerTaskCharter, args map[string]any) (api.WorkerTaskCharter, error) {
+	if planned == nil {
+		return parseTaskCharter(args)
+	}
+	charter := *planned
+	if strings.TrimSpace(charter.Goal) == "" || len(charter.DoneWhen) == 0 || spawn.TaskCharterRunes(charter) > spawn.MaxTaskCharterRunes {
+		return charter, invalidTaskCharter("workflow_work_id", "invalid_planned_charter")
+	}
+	if _, given := args["brief"]; given {
+		supplemental, err := parseTaskCharter(args)
+		if err != nil {
+			return charter, err
+		}
+		charter.SharedContext += "\n\nCoordinator supplement:\n" + formatTaskCharter(supplemental)
+	} else if value, exists := args["shared_context"]; exists {
+		text, ok := value.(string)
+		if !ok || len(text) > 8192 {
+			return charter, invalidTaskCharter("shared_context", "expected_text_up_to_8192_bytes")
+		}
+		charter.SharedContext += "\n\n" + guidance.StripHostBlocks(text)
+	}
+	if len(charter.SharedContext) > 16384 {
+		return charter, invalidTaskCharter("shared_context", "combined_context_too_long")
+	}
+	return charter, nil
 }

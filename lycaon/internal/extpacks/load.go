@@ -93,6 +93,54 @@ func TopologyUnitID(id string) string {
 // WorkflowTemplateUnitIDPrefix namespaces the workflow template provide units.
 const WorkflowTemplateUnitIDPrefix = WorkflowUnitIDPrefix + "_templates/"
 
+// ArchiveKindRoot holds sealed copies of released workflow versions:
+// archive/<workflow>/<version>/ with workflow.yaml, guidance/<stem>.md, and
+// guidance/gate-feedback/<stem>.yaml.
+const ArchiveKindRoot = "archive"
+
+// ArchiveKey names one sealed workflow version.
+func ArchiveKey(workflowID, version string) string {
+	return strings.ToLower(strings.TrimSpace(workflowID)) + "/" + strings.TrimSpace(version)
+}
+
+// ArchiveWorkflowUnitID returns the unit id of a sealed manifest.
+func ArchiveWorkflowUnitID(key string) string {
+	return ArchiveKindRoot + "/" + key + "/workflow"
+}
+
+// ArchiveGuidanceUnitID returns the unit id of sealed guidance, where stem is
+// relative to guidance/ (gate-feedback/<id> for gate feedback).
+func ArchiveGuidanceUnitID(key, stem string) string {
+	return ArchiveKindRoot + "/" + key + "/" + GuidanceUnitID(stem)
+}
+
+// SplitArchiveUnitID returns the archive key and the unit's path inside it.
+func SplitArchiveUnitID(unitID string) (key, rest string, ok bool) {
+	parts := strings.SplitN(unitID, "/", 4)
+	if len(parts) != 4 || parts[0] != ArchiveKindRoot || parts[1] == "" || parts[2] == "" {
+		return "", "", false
+	}
+	return parts[1] + "/" + parts[2], parts[3], true
+}
+
+// archiveUnitID maps a pack-relative archive path to its unit id.
+func archiveUnitID(parts []string) string {
+	if len(parts) < 4 || parts[1] == "" || parts[2] == "" {
+		return ""
+	}
+	key := ArchiveKey(parts[1], parts[2])
+	switch rest := parts[3:]; {
+	case len(rest) == 1 && rest[0] == "workflow.yaml":
+		return ArchiveWorkflowUnitID(key)
+	case len(rest) == 2 && rest[0] == "guidance" && strings.HasSuffix(rest[1], ".md"):
+		return ArchiveGuidanceUnitID(key, strings.TrimSuffix(rest[1], ".md"))
+	case len(rest) == 3 && rest[0] == "guidance" && rest[1] == GuidanceGateFeedbackDir && strings.HasSuffix(rest[2], ".yaml"):
+		return ArchiveGuidanceUnitID(key, GuidanceGateFeedbackDir+"/"+strings.TrimSuffix(rest[2], ".yaml"))
+	default:
+		return ""
+	}
+}
+
 // StockFloorCatalog resolves stock content and records the rejected state.
 func StockFloorCatalog(ctx context.Context, scanners ScannerRequirementChecker, cause error) (*EffectiveCatalog, error) {
 	eff, err := ResolveStockCatalog(ctx, scanners)

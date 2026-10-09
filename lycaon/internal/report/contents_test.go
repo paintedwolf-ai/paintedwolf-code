@@ -12,7 +12,7 @@ import (
 // pagination the document is laid out with; a short one does without.
 func TestContents_NumbersFollowTheLayout(t *testing.T) {
 	ms := testMeasurer(t)
-	cfg, err := newConfig(ReportInput{Title: "T"}, mustTime(t, "2026-07-08T15:04:05Z"))
+	cfg, err := newConfig(ReportInput{ReportHeader: ReportHeader{Title: "T"}}, mustTime(t, "2026-07-08T15:04:05Z"))
 	testutil.FailErr(t, "config", err)
 
 	var synthesis strings.Builder
@@ -27,7 +27,12 @@ func TestContents_NumbersFollowTheLayout(t *testing.T) {
 		synthesis.WriteString("\n\n")
 	}
 	long := ReportInput{
-		Title: "Long", RunID: "run_long", Project: "acme/app", CompletedAt: "2026-07-08T15:04:05Z",
+		ReportHeader: ReportHeader{
+			Title:       "Long",
+			RunID:       "run_long",
+			Project:     "acme/app",
+			CompletedAt: "2026-07-08T15:04:05Z",
+		},
 		Synthesis: synthesis.String(),
 		ScanRows:  []ReportScanRow{{Severity: "high", RuleID: "r", File: "a.go", Line: 1, Message: "m"}},
 	}
@@ -66,7 +71,12 @@ func TestContents_NumbersFollowTheLayout(t *testing.T) {
 	}
 
 	short := ReportInput{
-		Title: "Short", RunID: "run_short", Project: "acme/app", CompletedAt: "2026-07-08T15:04:05Z",
+		ReportHeader: ReportHeader{
+			Title:       "Short",
+			RunID:       "run_short",
+			Project:     "acme/app",
+			CompletedAt: "2026-07-08T15:04:05Z",
+		},
 		Synthesis: "## Done\n\nAll good.",
 	}
 	if joined := joinRowValues(layoutBlocks(ms, cfg, short)); strings.Contains(joined, sectionContents) {
@@ -78,7 +88,7 @@ func TestContents_NumbersFollowTheLayout(t *testing.T) {
 // with what the library will print.
 func TestDocBuilder_TracksPages(t *testing.T) {
 	ms := testMeasurer(t)
-	cfg, err := newConfig(ReportInput{Title: "T"}, mustTime(t, "2026-07-08T15:04:05Z"))
+	cfg, err := newConfig(ReportInput{ReportHeader: ReportHeader{Title: "T"}}, mustTime(t, "2026-07-08T15:04:05Z"))
 	testutil.FailErr(t, "config", err)
 
 	var blocks []block
@@ -109,7 +119,7 @@ func TestDocBuilder_TracksPages(t *testing.T) {
 // break: the block after it starts on the following page.
 func TestDocBuilder_BreakAfterAdvancesOnePage(t *testing.T) {
 	ms := testMeasurer(t)
-	cfg, err := newConfig(ReportInput{Title: "T"}, mustTime(t, "2026-07-08T15:04:05Z"))
+	cfg, err := newConfig(ReportInput{ReportHeader: ReportHeader{Title: "T"}}, mustTime(t, "2026-07-08T15:04:05Z"))
 	testutil.FailErr(t, "config", err)
 
 	line := func() block { return rowsBlock(textRows(ms, []inlineRun{{Text: "line"}}, bodyProp())...) }

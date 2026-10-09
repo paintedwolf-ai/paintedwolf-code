@@ -74,7 +74,12 @@ func (m *RunManager) workflowRuntimeSnapshot(
 		if err != nil {
 			snap.CoverageReview = "Coverage facts unavailable: " + err.Error()
 		} else {
-			prior := RunCoverageReview(ReviewVerdicts(ctx, m, active, manifest))
+			verdicts, err := ReviewVerdicts(ctx, m, active, manifest)
+			if err != nil {
+				snap.CoverageReview = "Review evidence unavailable: " + err.Error()
+				break
+			}
+			prior := RunCoverageReview(verdicts)
 			raw, marshalErr := json.Marshal(struct {
 				Facts any `json:"facts"`
 				Prior any `json:"prior_review,omitempty"`

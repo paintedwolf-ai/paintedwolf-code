@@ -2,16 +2,16 @@ package promptloop
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
-	"fmt"
 
-	"github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/visual"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // persistClassifiedToolOutcome stores and enriches one tool result.
@@ -26,6 +26,7 @@ func (l toolBatch) persistClassifiedToolOutcome(
 ) ([]api.Message, error) {
 	ctx = context.WithoutCancel(ctx)
 	stampCommitOrderTS(&out.toolMsg, lastToolTS)
+	bindReviewResult(&out.toolMsg, st)
 	stored, transient := toolInvocations(l).storageSafeMessage(ctx, out.toolMsg)
 	history, err := toolInvocations(l).commitToolResultWithOptionalNote(
 		ctx, sessionID, history, stored, transient, out.agentNote, lastToolTS, st,
@@ -203,6 +204,7 @@ func (l toolBatch) appendParallelOutcomeLocked(
 	} else {
 		stampCommitOrderTS(&out.toolMsg, commit.lastToolTS)
 	}
+	bindReviewResult(&out.toolMsg, commit.st)
 	stored, transient := toolInvocations(l).storageSafeMessage(ctx, out.toolMsg)
 	rows, transients := toolInvocations(l).classifiedResultRows(ctx, stored, transient, out.agentNote, commit.lastToolTS)
 	if err := toolInvocations(l).persistStorageSafeMessages(ctx, commit.sessionID, rows); err != nil {

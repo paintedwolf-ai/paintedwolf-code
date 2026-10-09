@@ -137,7 +137,7 @@ func LoadRegistryFromConfigRootWithCatalog(catalog *extpacks.EffectiveCatalog) (
 				return nil, fmt.Errorf("%s: %w", id, err)
 			}
 			r.add(b)
-		case workflowManifestUnit(id):
+		case workflowManifestUnit(id), archivedManifestUnit(id):
 			if err := r.loadWorkflowInjects(id, content); err != nil {
 				return nil, err
 			}
@@ -149,6 +149,11 @@ func LoadRegistryFromConfigRootWithCatalog(catalog *extpacks.EffectiveCatalog) (
 func workflowManifestUnit(id string) bool {
 	rel, ok := strings.CutPrefix(strings.TrimSpace(id), "workflows/")
 	return ok && rel != "" && !strings.HasPrefix(rel, "_") && !strings.Contains(rel, "/")
+}
+
+func archivedManifestUnit(id string) bool {
+	_, rest, ok := extpacks.SplitArchiveUnitID(id)
+	return ok && rest == "workflow"
 }
 
 type bindingDoc struct {
@@ -267,9 +272,13 @@ func (r *Registry) InformRender(id ID) string {
 
 // ResolveInform picks the most specific matching binding.
 // Workflow bindings precede device bindings.
-func (r *Registry) ResolveInform(id ID, ctx MatchContext) (*Binding, bool) {
+// If ctx specifies a workflow without a workflow version, ResolveInform fails closed with ErrWorkflowVersionMissing.
+func (r *Registry) ResolveInform(id ID, ctx MatchContext) (*Binding, error) {
 	if r == nil {
-		return nil, false
+		return nil, nil
+	}
+	if strings.TrimSpace(ctx.Workflow) != "" && strings.TrimSpace(ctx.WorkflowVersion) == "" {
+		return nil, ErrWorkflowVersionMissing
 	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -278,27 +287,62 @@ func (r *Registry) ResolveInform(id ID, ctx MatchContext) (*Binding, bool) {
 		if b == nil || !b.IsInform() {
 			continue
 		}
-		if !b.Selector.Matches(ctx) {
+		if !b.Matches(ctx) {
 			continue
 		}
-		if strings.EqualFold(strings.TrimSpace(b.Tier), "workflow") {
+		if b.IsWorkflowTier() {
 			workflowHits = append(workflowHits, b)
 		} else {
 			builtinHits = append(builtinHits, b)
 		}
 	}
 	if pick := pickMostSpecificInform(workflowHits); pick != nil {
-		return pick, true
+		return pick, nil
 	}
 	if pick := pickMostSpecificInform(builtinHits); pick != nil {
-		return pick, true
+		return pick, nil
 	}
 	if ctx == (MatchContext{}) {
 		if b, ok := r.informPrimary[id]; ok && b != nil && !strings.EqualFold(strings.TrimSpace(b.Tier), "workflow") {
-			return b, true
+			return b, nil
 		}
 	}
-	return nil, false
+	return nil, nil
+}
+
+func (r *Registry) checkWorkflowDuplicate(b *Binding) error {
+	if b == nil || !b.IsWorkflowTier() {
+		return nil
+	}
+	wf := ""
+	if b.Selector.Workflow != nil {
+		wf = strings.TrimSpace(*b.Selector.Workflow)
+	}
+	phase := ""
+	if b.Selector.Phase != nil {
+		phase = strings.TrimSpace(*b.Selector.Phase)
+	}
+	for _, existing := range r.byAnchor[b.On] {
+		if existing == nil || !existing.IsWorkflowTier() {
+			continue
+		}
+		exWf := ""
+		if existing.Selector.Workflow != nil {
+			exWf = strings.TrimSpace(*existing.Selector.Workflow)
+		}
+		exPhase := ""
+		if existing.Selector.Phase != nil {
+			exPhase = strings.TrimSpace(*existing.Selector.Phase)
+		}
+		if strings.TrimSpace(existing.Selector.Surface) == strings.TrimSpace(b.Selector.Surface) &&
+			exPhase == phase &&
+			exWf == wf &&
+			strings.TrimSpace(existing.workflowVersion) == strings.TrimSpace(b.workflowVersion) {
+			return fmt.Errorf("duplicate workflow anchor binding on %s: workflow=%q, version=%q, phase=%q, surface=%q",
+				b.On, wf, b.workflowVersion, phase, b.Selector.Surface)
+		}
+	}
+	return nil
 }
 
 func pickMostSpecificInform(cands []*Binding) *Binding {

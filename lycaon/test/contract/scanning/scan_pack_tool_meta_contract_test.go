@@ -34,7 +34,7 @@ func TestScanPackToolMetaMatchesBundledRegistry(t *testing.T) {
 	toolReg, err := tools.NewCatalogRegistry(schemas)
 	contractcheck.FailErr(t, "new catalog registry", err)
 	coord := scantest.Coordinator(t, scan.NewSQLStore(sqlDB), nil)
-	if err := scantoolapi.RegisterScanTools(toolReg, coord, reg, scancadence.New(scan.StoreFromCoordinator(coord), coord, reg, nil, scancfg.DefaultGatesConfig(), nil), nil, nil); err != nil {
+	if err := scantoolapi.RegisterScanTools(toolReg, coord, reg, scancadence.New(scan.StoreFromCoordinator(coord), coord, reg, nil, scancfg.DefaultGatesConfig(), nil), nil, nil, nil); err != nil {
 		contractcheck.FailErr(t, "RegisterScanTools", err)
 	}
 	meta, ok := toolReg.Meta("scan_pack")

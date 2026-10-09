@@ -32,17 +32,17 @@ func TestInformCatalogBound(t *testing.T) {
 		if !planesOK {
 			continue
 		}
-		b, ok := reg.ResolveInform(anchor.ID(id), anchor.MatchContext{})
-		if !ok || b == nil || strings.TrimSpace(b.Render) == "" {
+		b, err := reg.ResolveInform(anchor.ID(id), anchor.MatchContext{})
+		if err != nil || b == nil || strings.TrimSpace(b.Render) == "" {
 			// Try surface-scoped selectors used by Bindings.
 			for _, surface := range []string{"coordinator", "worker"} {
-				b, ok = reg.ResolveInform(anchor.ID(id), anchor.MatchContext{Surface: surface})
-				if ok && b != nil && strings.TrimSpace(b.Render) != "" {
+				b, err = reg.ResolveInform(anchor.ID(id), anchor.MatchContext{Surface: surface})
+				if err == nil && b != nil && strings.TrimSpace(b.Render) != "" {
 					break
 				}
 			}
 		}
-		if !ok || b == nil || strings.TrimSpace(b.Render) == "" {
+		if b == nil || strings.TrimSpace(b.Render) == "" {
 			missing = append(missing, id)
 		}
 	}

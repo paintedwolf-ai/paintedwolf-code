@@ -15,8 +15,11 @@ func ResolveInformRender(ctx context.Context, id ID, match MatchContext) (string
 	if reg == nil {
 		return "", fmt.Errorf("anchor: Binding registry not installed")
 	}
-	b, ok := reg.ResolveInform(id, match)
-	if !ok || b == nil {
+	b, err := reg.ResolveInform(id, match)
+	if err != nil {
+		return "", err
+	}
+	if b == nil {
 		return "", fmt.Errorf("anchor: no inform Binding for %s", id)
 	}
 	stem := strings.TrimSpace(b.Render)
@@ -32,8 +35,8 @@ func InformRenderFor(ctx context.Context, id ID, match MatchContext) string {
 	if reg == nil {
 		return ""
 	}
-	b, ok := reg.ResolveInform(id, match)
-	if !ok || b == nil {
+	b, err := reg.ResolveInform(id, match)
+	if err != nil || b == nil {
 		return ""
 	}
 	gc := oar.NewGuardContext()

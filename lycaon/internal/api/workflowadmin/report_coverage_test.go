@@ -160,7 +160,7 @@ func TestReportAdvisoryDetailsNameMalwareAndEveryAlias(t *testing.T) {
 func TestWorkAccountListsEachAttemptOnce(t *testing.T) {
 	manifests, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "RegistryFromDirs", err)
-	manifest, err := manifests.Get("security-survey", "1.0.1")
+	manifest, err := manifests.Get("security-survey", "2.0.0")
 	testutil.FailErr(t, "manifest", err)
 	var phase string
 	for _, p := range manifest.PhaseDefs {

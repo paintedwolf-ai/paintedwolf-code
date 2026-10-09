@@ -1,6 +1,11 @@
 package anchor
 
-import "testing"
+import (
+	"errors"
+	"testing"
+
+	"gopkg.in/yaml.v3"
+)
 
 func TestSelectorMatches_WorkflowIsolation(t *testing.T) {
 	wf := "recon-pack"
@@ -65,24 +70,50 @@ func TestResolveInform_WorkflowTierPreferSpecific(t *testing.T) {
 	}
 	workflow := &Binding{
 		On: PhaseEntered, Effect: "inform", Render: "coordinator-fanout-plan", Tier: "workflow",
-		Selector: Selector{Surface: "phase", Workflow: &wf, Phase: &phase},
+		Selector:        Selector{Surface: "phase", Workflow: &wf, Phase: &phase},
+		workflowVersion: "1.0.0",
 	}
 	r.add(builtin)
 	r.add(workflow)
 
-	got, ok := r.ResolveInform(PhaseEntered, MatchContext{Surface: "phase", Workflow: "recon-pack", Phase: "plan"})
-	if !ok || got.Render != "coordinator-fanout-plan" {
-		t.Fatalf("want workflow binding, got ok=%v render=%q", ok, bindingRender(got))
+	got, err := r.ResolveInform(PhaseEntered, MatchContext{Surface: "phase", Workflow: "recon-pack", WorkflowVersion: "1.0.0", Phase: "plan"})
+	if err != nil || got == nil || got.Render != "coordinator-fanout-plan" {
+		t.Fatalf("want workflow binding, got err=%v render=%q", err, bindingRender(got))
+	}
+	// Different workflow version must not match workflow binding; falls back to builtin.
+	got, err = r.ResolveInform(PhaseEntered, MatchContext{Surface: "phase", Workflow: "recon-pack", WorkflowVersion: "1.0.1", Phase: "plan"})
+	if err != nil || got == nil || got.Render != "coordinator-phase-advanced" {
+		t.Fatalf("want builtin fallback for version mismatch, got err=%v render=%q", err, bindingRender(got))
 	}
 	// Different workflow must not leak the recon-pack inject; fall through only if builtin matches.
-	got, ok = r.ResolveInform(PhaseEntered, MatchContext{Surface: "phase", Workflow: "options", Phase: "plan"})
-	if !ok || got.Render != "coordinator-phase-advanced" {
-		t.Fatalf("want builtin fallback for other workflow, got ok=%v render=%q", ok, bindingRender(got))
+	got, err = r.ResolveInform(PhaseEntered, MatchContext{Surface: "phase", Workflow: "options", WorkflowVersion: "1.0.0", Phase: "plan"})
+	if err != nil || got == nil || got.Render != "coordinator-phase-advanced" {
+		t.Fatalf("want builtin fallback for other workflow, got err=%v render=%q", err, bindingRender(got))
 	}
 	// Empty match context: primary/builtin only (no workflow leak).
-	got, ok = r.ResolveInform(PhaseEntered, MatchContext{})
-	if !ok || got.Tier != "builtin" || got.Render != "coordinator-phase-advanced" {
-		t.Fatalf("empty ctx should resolve builtin primary, got ok=%v tier=%q render=%q", ok, bindingTier(got), bindingRender(got))
+	got, err = r.ResolveInform(PhaseEntered, MatchContext{})
+	if err != nil || got == nil || got.Tier != "builtin" || got.Render != "coordinator-phase-advanced" {
+		t.Fatalf("empty ctx should resolve builtin primary, got err=%v tier=%q render=%q", err, bindingTier(got), bindingRender(got))
+	}
+}
+
+func TestResolveInform_WorkflowVersionMissingError(t *testing.T) {
+	r := &Registry{
+		byAnchor:       make(map[ID][]*Binding),
+		informPrimary:  make(map[ID]*Binding),
+		renderToAnchor: make(map[string]ID),
+	}
+	wf := "recon-pack"
+	phase := "plan"
+	r.add(&Binding{
+		On: PhaseEntered, Effect: "inform", Render: "coordinator-fanout-plan", Tier: "workflow",
+		Selector:        Selector{Surface: "phase", Workflow: &wf, Phase: &phase},
+		workflowVersion: "1.0.0",
+	})
+	// Workflow specified without WorkflowVersion must fail closed with ErrWorkflowVersionMissing.
+	got, err := r.ResolveInform(PhaseEntered, MatchContext{Surface: "phase", Workflow: "recon-pack", Phase: "plan"})
+	if !errors.Is(err, ErrWorkflowVersionMissing) {
+		t.Fatalf("expected ErrWorkflowVersionMissing, got err=%v, binding=%v", err, got)
 	}
 }
 
@@ -96,10 +127,56 @@ func TestResolveInform_WorkflowOnlyNoEmptyCtxLeak(t *testing.T) {
 	phase := "plan"
 	r.add(&Binding{
 		On: PhaseEntered, Effect: "inform", Render: "coordinator-fanout-plan", Tier: "workflow",
-		Selector: Selector{Surface: "phase", Workflow: &wf, Phase: &phase},
+		Selector:        Selector{Surface: "phase", Workflow: &wf, Phase: &phase},
+		workflowVersion: "1.0.0",
 	})
-	if _, ok := r.ResolveInform(PhaseEntered, MatchContext{}); ok {
-		t.Fatal("workflow-only Binding must not resolve under empty MatchContext")
+	if got, err := r.ResolveInform(PhaseEntered, MatchContext{}); err != nil || got != nil {
+		t.Fatalf("workflow-only Binding must not resolve under empty MatchContext, got binding=%v, err=%v", got, err)
+	}
+}
+
+func TestRegistry_WorkflowDuplicateRejection(t *testing.T) {
+	r := &Registry{
+		byAnchor:       make(map[ID][]*Binding),
+		informPrimary:  make(map[ID]*Binding),
+		renderToAnchor: make(map[string]ID),
+	}
+	wf := "security-survey"
+	phase := "challenge"
+	b1 := &Binding{
+		On: PhaseEntered, Effect: "inform", Render: "coordinator-security-challenge", Tier: "workflow",
+		Selector:        Selector{Surface: "phase", Workflow: &wf, Phase: &phase},
+		workflowVersion: "1.0.0",
+	}
+	b2 := &Binding{
+		On: PhaseEntered, Effect: "inform", Render: "coordinator-security-challenge-dup", Tier: "workflow",
+		Selector:        Selector{Surface: "phase", Workflow: &wf, Phase: &phase},
+		workflowVersion: "1.0.0",
+	}
+	r.add(b1)
+	if err := r.checkWorkflowDuplicate(b2); err == nil {
+		t.Fatal("expected duplicate error for same event, surface, phase, workflow, and version")
+	}
+	// Different version is permitted
+	b3 := &Binding{
+		On: PhaseEntered, Effect: "inform", Render: "coordinator-security-challenge-v1-0-1", Tier: "workflow",
+		Selector:        Selector{Surface: "phase", Workflow: &wf, Phase: &phase},
+		workflowVersion: "1.0.1",
+	}
+	if err := r.checkWorkflowDuplicate(b3); err != nil {
+		t.Fatalf("different version should not be duplicate: %v", err)
+	}
+}
+
+func TestSelector_WorkflowVersionYAMLForbidden(t *testing.T) {
+	badYAML := `
+surface: phase
+workflow: security-survey
+workflow_version: 1.0.0
+`
+	var sel Selector
+	if err := yaml.Unmarshal([]byte(badYAML), &sel); err == nil {
+		t.Fatal("expected error for YAML containing selector.workflow_version, got nil")
 	}
 }
 

@@ -283,6 +283,7 @@ components:
         - blueprint_draft_required
         - workflow_not_found
         - workflow_not_runnable
+        - workflow_version_unavailable
         - workflow_run_not_found
         - report_not_found
         - managed_secret_revoked

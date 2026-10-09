@@ -2,6 +2,7 @@ package anchor
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/anchorcatalog"
@@ -71,8 +72,14 @@ func (b *Bus) EmitMatch(ctx context.Context, sessionID string, id ID, partial En
 	if reg == nil {
 		return
 	}
-	binding, ok := reg.ResolveInform(id, match)
-	if !ok || binding == nil || binding.Render == "" {
+	binding, err := reg.ResolveInform(id, match)
+	if err != nil {
+		// A run context without its workflow version is a host defect, not
+		// something the model can repair.
+		slog.ErrorContext(ctx, "anchor inform unresolved", "anchor", string(id), "session_id", sessionID, "error", err)
+		return
+	}
+	if binding == nil || binding.Render == "" {
 		return
 	}
 	gc := oar.NewGuardContext()
@@ -111,8 +118,8 @@ func (b *Bus) EmitEager(ctx context.Context, sessionID string, id ID, data map[s
 	if reg == nil {
 		return
 	}
-	binding, ok := reg.ResolveInform(id, MatchContext{SessionID: sessionID, Surface: anchorcatalog.SurfaceFor(string(id))})
-	if !ok || binding == nil || strings.TrimSpace(binding.Render) == "" {
+	binding, err := reg.ResolveInform(id, MatchContext{SessionID: sessionID, Surface: anchorcatalog.SurfaceFor(string(id))})
+	if err != nil || binding == nil || strings.TrimSpace(binding.Render) == "" {
 		return
 	}
 	b.kicks.QueueEager(sessionID, binding.Render, data)

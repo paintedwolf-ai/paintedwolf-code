@@ -132,9 +132,10 @@ func TestRegistryCarriesBothEntryKinds(t *testing.T) {
 
 // These recoveries can launch turns and require the completed service graph.
 var requiredServePhaseRecovery = map[string]string{
-	"workflow-verdicts":    "a recovered verdict can auto-advance a workflow",
-	"prompt-submissions":   "a recovered submission launches a coordinator turn",
-	"worker-merge-applies": "resuming a merge can close out worker work",
+	"workflow-verdicts":       "a recovered verdict can auto-advance a workflow",
+	"workflow-review-repairs": "a replayed repair can pause a run and hold its workers",
+	"prompt-submissions":      "a recovered submission launches a coordinator turn",
+	"worker-merge-applies":    "resuming a merge can close out worker work",
 }
 
 func TestTurnLaunchingRecoveryStaysInTheServePhase(t *testing.T) {

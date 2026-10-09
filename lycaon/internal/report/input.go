@@ -10,31 +10,17 @@ import (
 	"github.com/lycaon/lycaon/internal/reviewcoverage"
 )
 
+// BlockedReviewSnapshot marks a report retained from a review paused before
+// any terminal verdict; it never claims a completion.
+const BlockedReviewSnapshot = "blocked_review_snapshot"
+
 // ReportInput contains the host-assembled report and its supporting records.
 type ReportInput struct {
+	ReportHeader
 	// CoverageReview is present only for workflows declaring reviewed coverage.
 	CoverageReview *api.CoverageReview   `json:"coverage_review,omitempty"`
 	CoverageFacts  *reviewcoverage.Facts `json:"coverage_facts,omitempty"`
 
-	// Title names the workflow document.
-	Title string `json:"title"`
-	// Headline is the closeout's one-sentence conclusion. It opens the working
-	// summary; the brief leads with the host's rating instead.
-	Headline string `json:"headline,omitempty"`
-	// Summary is the plain-language assessment, a short paragraph, written for
-	// a reader who will not open the detail behind it.
-	Summary string `json:"summary,omitempty"`
-	RunID   string `json:"run_id"`
-	Project string `json:"project"`
-	// StartedAt and CompletedAt bound the work, RFC 3339.
-	StartedAt   string `json:"started_at,omitempty"`
-	CompletedAt string `json:"completed_at"`
-	HeadSHA     string `json:"head_sha"`
-	// Workflow identifies the declared deliverable's workflow at run scope.
-	Workflow *ReportWorkflow `json:"workflow,omitempty"`
-	// Workforce is what produced the work: the model, and the worker legs
-	// that ran, by agent type.
-	Workforce *ReportWorkforce `json:"workforce,omitempty"`
 	// Findings are the assessed conclusions a reader acts on, most severe
 	// first. They are the report's subject, not the scanner's output.
 	Findings []ReportFinding `json:"findings,omitempty"`
@@ -83,6 +69,32 @@ type ReportInput struct {
 	Sources []ReportSource `json:"sources,omitempty"`
 	// Evidence handles distinguish appendix captures from featured renders.
 	Artifacts []ReportArtifact `json:"artifacts,omitempty"`
+}
+
+// ReportHeader identifies the document: what kind it is, what it concludes,
+// and the run, project, and workforce it reports on.
+type ReportHeader struct {
+	// Kind distinguishes a retained snapshot from an accepted report.
+	Kind string `json:"kind,omitempty"`
+	// Title names the workflow document.
+	Title string `json:"title"`
+	// Headline is the closeout's one-sentence conclusion. It opens the working
+	// summary; the brief leads with the host's rating instead.
+	Headline string `json:"headline,omitempty"`
+	// Summary is the plain-language assessment, a short paragraph, written for
+	// a reader who will not open the detail behind it.
+	Summary string `json:"summary,omitempty"`
+	RunID   string `json:"run_id"`
+	Project string `json:"project"`
+	// StartedAt and CompletedAt bound the work, RFC 3339.
+	StartedAt   string `json:"started_at,omitempty"`
+	CompletedAt string `json:"completed_at"`
+	HeadSHA     string `json:"head_sha"`
+	// Workflow identifies the declared deliverable's workflow at run scope.
+	Workflow *ReportWorkflow `json:"workflow,omitempty"`
+	// Workforce is what produced the work: the model, and the worker legs
+	// that ran, by agent type.
+	Workforce *ReportWorkforce `json:"workforce,omitempty"`
 }
 
 // ReportWorkflow names the workflow a run-scoped report delivers.
@@ -259,6 +271,9 @@ const (
 // Completeness retains hard failures, then applies the accepted coverage review.
 // Workflows without a declared review use the observed gap classification.
 func (in ReportInput) Completeness() string {
+	if in.Kind == BlockedReviewSnapshot {
+		return CompletenessIncomplete
+	}
 	if len(in.Defects) > 0 || in.UnreportedClaims > 0 || (in.Inventory != nil && in.Inventory.Unaccounted > 0) {
 		return CompletenessIncomplete
 	}

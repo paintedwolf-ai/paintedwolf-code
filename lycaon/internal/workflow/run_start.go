@@ -213,11 +213,12 @@ func (m *RunManager) activateInitialWorkflowPhase(ctx context.Context, run *api.
 		m.triggerPhaseEnter(ctx, run, projectDir, def)
 		if m.PhaseEnterHook != nil {
 			m.PhaseEnterHook(ctx, &RunContext{
-				SessionID:     run.SessionID,
-				RunID:         run.ID,
-				WorkflowID:    run.WorkflowID,
-				Phase:         run.CurrentPhase,
-				PreviousPhase: "",
+				SessionID:       run.SessionID,
+				RunID:           run.ID,
+				WorkflowID:      run.WorkflowID,
+				WorkflowVersion: run.WorkflowVersion,
+				Phase:           run.CurrentPhase,
+				PreviousPhase:   "",
 			}, def)
 		}
 		if err := m.maybeInvokeOnPhaseEnter(ctx, run, def); err != nil {

@@ -129,6 +129,11 @@ func ValidateCatalog(ctx context.Context, opts CatalogValidateOptions) ([]api.Co
 		if path == "" {
 			path = key
 		}
+		if src.Origin == workflowdef.OriginArchive {
+			// Released bytes are not held to rules written after they shipped.
+			out = append(out, checkArchivedGuidance(path, m)...)
+			continue
+		}
 		out = append(out, validateOne(opts, condReg, agents, path, m, src.Origin == workflowdef.OriginOverlay)...)
 	}
 

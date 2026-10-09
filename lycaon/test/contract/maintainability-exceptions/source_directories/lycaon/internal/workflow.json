@@ -1,0 +1,6 @@
+{
+  "category": "source_directories",
+  "artifact": "lycaon/internal/workflow",
+  "cap": 125,
+  "reason": "Review repair and inventory accounting leave RunManager as their own services in this package because they share its unexported run state; the package splits into subpackages as #351 extracts services (#353)."
+}

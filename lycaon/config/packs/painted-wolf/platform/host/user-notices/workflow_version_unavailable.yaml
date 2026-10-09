@@ -1,0 +1,31 @@
+surfaces:
+  - host_error
+  - http
+notification: { tier: non_catastrophic, scope: session }
+context_schema:
+  optional:
+    - workflow_id
+    - version
+title: Workflow version unavailable
+message: >-
+  {% if workflow_id and version -%}
+  Workflow {{ workflow_id }}@{{ version }} is unavailable and cannot be resumed.
+  {%- else -%}
+  The requested workflow version is unavailable and cannot be resumed.
+  {%- endif %}
+suggested_action: Start a new run with the current version or exit the workflow with /exit.
+actions:
+  - '{% if turn_progress == "made" %}prompt_keep_going{% elif turn_progress == "none" %}prompt_retry{% endif %}'
+  - '{% if turn_progress == "made" %}prompt_rewind_and_retry{% endif %}'
+scenarios:
+  - id: versioned
+    vars:
+      workflow_id: security-survey
+      version: 1.0.0
+    expect_contains:
+      - security-survey@1.0.0
+      - unavailable
+  - id: generic
+    vars: {}
+    expect_contains:
+      - unavailable

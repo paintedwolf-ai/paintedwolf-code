@@ -167,6 +167,17 @@ func ContextFromPromptError(err error) map[string]any {
 		}
 		return out
 	}
+	var unavailable *workflow.WorkflowVersionUnavailableError
+	if errors.As(err, &unavailable) && unavailable != nil {
+		out := map[string]any{}
+		if id := trimContextString(unavailable.WorkflowID); id != "" {
+			out["workflow_id"] = id
+		}
+		if version := trimContextString(unavailable.Version); version != "" {
+			out["version"] = version
+		}
+		return out
+	}
 	var fault hostFaultNotice
 	if errors.As(err, &fault) && fault != nil {
 		out := map[string]any{}

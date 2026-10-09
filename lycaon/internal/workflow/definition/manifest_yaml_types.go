@@ -193,6 +193,7 @@ type parallelTaskYAML struct {
 
 type fanoutYAML struct {
 	RequireThreatModel bool `yaml:"require_threat_model"`
+	RequireTaskCharter bool `yaml:"require_task_charter"`
 	MaxAttempts        int  `yaml:"max_attempts,omitempty"`
 }
 

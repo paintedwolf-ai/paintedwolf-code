@@ -2,6 +2,21 @@ description: Finish this worker leg when the assignment is done or blocked. The 
 schema:
   type: object
   properties:
+    coverage_gaps:
+      description: Unexamined or inconclusive scope, including areas with no findings; empty when none remain.
+      type: array
+      items:
+        type: object
+        additionalProperties: false
+        required: [id, subject, reason]
+        properties:
+          id: {type: string, pattern: '^[A-Za-z0-9_.-]+$', description: Stable id for this gap within the leg.}
+          subject: {type: string, minLength: 1, description: The scope left unexamined or inconclusive.}
+          reason: {type: string, minLength: 1, description: Why it remains open.}
+          paths:
+            type: array
+            description: Affected paths, when known.
+            items: {type: string}
     coverage_review:
       type: object
       description: Required when the host assignment declares coverage review. Use its revision and assess every supplied id, including exclusions, against full-scope facts.

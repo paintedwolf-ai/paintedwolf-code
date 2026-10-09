@@ -63,6 +63,10 @@ components:
       additionalProperties: false
       required: [leg_status]
       properties:
+        coverage_gaps:
+          type: array
+          items:
+            $ref: worker.yaml#/components/schemas/WorkerCoverageGap
         coverage_review:
           x-go-pointer: true
           $ref: worker.yaml#/components/schemas/CoverageReview
@@ -97,6 +101,18 @@ components:
           type: array
           items:
             $ref: worker.yaml#/components/schemas/WorkerEvidenceObligation
+    WorkerCoverageGap:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [id, subject, reason]
+      properties:
+        id: {type: string, pattern: '^[A-Za-z0-9_.-]+$', description: Worker-local gap id; the host scopes it to the task.}
+        subject: {type: string, minLength: 1}
+        reason: {type: string, minLength: 1}
+        paths:
+          type: array
+          items: {type: string}
     CoverageReview:
       x-go-generate: true
       type: object

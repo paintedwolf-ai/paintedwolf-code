@@ -112,6 +112,8 @@ const (
 	OriginBundled ManifestSourceOrigin = iota
 	OriginDisk
 	OriginOverlay
+	// OriginArchive is a sealed copy of a released version.
+	OriginArchive
 )
 
 // ManifestSource ties a registry key to its authored path.

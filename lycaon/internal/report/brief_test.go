@@ -29,8 +29,12 @@ func securityBrief() *ReportBrief {
 // briefInput is the survey run as its records left it.
 func briefInput() ReportInput {
 	return ReportInput{
-		Title: "Security survey", Project: "lycaon", RunID: "9d6fda3b-8b63-5dbe-baaa-11f13b985143",
-		CompletedAt: "2026-09-18T22:50:08Z", Synthesis: "ok",
+		ReportHeader: ReportHeader{
+			Title:       "Security survey",
+			Project:     "lycaon",
+			RunID:       "9d6fda3b-8b63-5dbe-baaa-11f13b985143",
+			CompletedAt: "2026-09-18T22:50:08Z",
+		}, Synthesis: "ok",
 		Brief: securityBrief(),
 		Ask:   &ReportAsk{Do: "Approve a routine update to one outside software component.", Effort: "small", Why: "The fix is available."},
 		Findings: []ReportFinding{

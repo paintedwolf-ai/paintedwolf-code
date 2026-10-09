@@ -2,6 +2,7 @@ package usernotice
 
 import (
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -104,6 +105,23 @@ func TestContextFromPromptErrorNotRunnable(t *testing.T) {
 	ctx := ContextFromPromptError(&workflow.NotRunnableError{Reason: "paused", Status: wire.WorkflowRunStatusPaused})
 	if ctx["reason"] != "paused" {
 		t.Fatalf("ctx = %#v", ctx)
+	}
+}
+
+// The notice names the exact version a run is pinned to, even when the error
+// arrives wrapped by the turn that hit it.
+func TestWorkflowVersionUnavailableNoticeNamesThePinnedVersion(t *testing.T) {
+	err := fmt.Errorf("prompt turn: %w", &workflow.WorkflowVersionUnavailableError{WorkflowID: "security-survey", Version: "1.0.0"})
+	ctx := ContextFromPromptError(err)
+	if ctx["workflow_id"] != "security-survey" || ctx["version"] != "1.0.0" {
+		t.Fatalf("ctx = %#v", ctx)
+	}
+	copy := loadTestCatalog(t).RenderWire(string(wire.NoticeCodeWorkflowVersionUnavailable), ctx)
+	if !strings.Contains(copy.Message, "security-survey@1.0.0") {
+		t.Fatalf("notice does not name the pinned version: %q", copy.Message)
+	}
+	if blank := ContextFromPromptError(&workflow.WorkflowVersionUnavailableError{}); len(blank) != 0 {
+		t.Fatalf("an unidentified version must render the generic copy, got ctx %#v", blank)
 	}
 }
 

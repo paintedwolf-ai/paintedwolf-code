@@ -28,8 +28,7 @@ const (
 // accepts: the catalog call with `verdict` narrowed to the phase's declared
 // members. The catalog fragments carry the copy; the phase supplies the
 // decision values, claim statuses, rating questions, and follow-up policy.
-// Citations nested in claims and assessments are described by reference to
-// the call-level entry rather than restated; the verdict owner validates them.
+// Nested citations use the same entry contract as call-level citations.
 func Compose(base map[string]any, rl workflowdef.ReviewLoopDef, brief *workflowdef.Brief) (map[string]any, error) {
 	fragments, _ := base[verdictFragmentsKey].(map[string]any)
 	if len(fragments) == 0 {
@@ -62,6 +61,7 @@ func Compose(base map[string]any, rl workflowdef.ReviewLoopDef, brief *workflowd
 		case workflowdef.VerdictClaimsType:
 			fillClaimsSchema(member, rl, brief)
 		}
+		bindCitations(member, props["cited_evidence"])
 		members[field] = member
 		required = append(required, field)
 	}
@@ -173,4 +173,23 @@ func anySlice(values []string) []any {
 		out[i] = v
 	}
 	return out
+}
+
+// bindCitations expands the catalog citation contract at each declared channel.
+func bindCitations(node map[string]any, citation any) {
+	for key, value := range node {
+		child, ok := value.(map[string]any)
+		if !ok {
+			continue
+		}
+		if key == "cited_evidence" {
+			if schema, ok := citation.(map[string]any); ok {
+				replacement := jsonvalue.CloneMap(schema)
+				replacement["description"] = child["description"]
+				node[key] = replacement
+			}
+		} else {
+			bindCitations(child, citation)
+		}
+	}
 }

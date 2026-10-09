@@ -1,0 +1,141 @@
+package assembly
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+
+	"github.com/lycaon/lycaon/internal/catalogview"
+	"github.com/lycaon/lycaon/internal/orchestration"
+	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/pkg/api"
+)
+
+// ResolveSystemPromptTemplate selects the session's system prompt.
+func ResolveSystemPromptTemplate(sess *api.Session, agents AgentProfileResolver, coordinatorProfile string) string {
+	if sess != nil && strings.TrimSpace(sess.AgentType) != "" && agents != nil {
+		if p, err := agents.Get(strings.TrimSpace(sess.AgentType)); err == nil {
+			if ref := strings.TrimSpace(p.SystemPromptTemplate); ref != "" {
+				return ref
+			}
+		}
+	}
+	if cp := strings.TrimSpace(coordinatorProfile); cp != "" && agents != nil {
+		if p, err := agents.Get(cp); err == nil {
+			if ref := strings.TrimSpace(p.SystemPromptTemplate); ref != "" {
+				return ref
+			}
+		}
+	}
+	if agents != nil {
+		if p, err := agents.Get(orchestration.ProfileCoordinator); err == nil {
+			if ref := strings.TrimSpace(p.SystemPromptTemplate); ref != "" {
+				return ref
+			}
+		}
+	}
+	return defaultCoordinatorPromptTemplate
+}
+
+func (e *AssemblyEngine) resolveSystemPromptRef(ctx context.Context, sess *api.Session) (string, error) {
+	coordinatorProfile := ""
+	if e != nil && e.deps().Workflows != nil {
+		if manifest, ok := e.deps().Workflows.ActiveManifest(ctx, sess.ID); ok {
+			coordinatorProfile = manifest.CoordinatorProfile
+		}
+	}
+	return ResolveSystemPromptTemplate(sess, e.agentsForSession(ctx, sess), coordinatorProfile), nil
+}
+
+func (e *AssemblyEngine) agentsForSession(ctx context.Context, sess *api.Session) AgentProfileResolver {
+	if view := e.sessionCatalogView(ctx, sess); view != nil {
+		return view
+	}
+	return e.deps().Agents
+}
+
+// projectPrompts returns the session-scoped prompt engine.
+func (e *AssemblyEngine) projectPrompts(ctx context.Context, sess *api.Session) prompts.PromptTemplateEngine {
+	pe := e.deps().Prompts
+	fe, ok := pe.(*prompts.FileTemplateEngine)
+	if !ok || fe == nil || sess == nil {
+		return pe
+	}
+	if e.deps().Workflows != nil {
+		if manifest, ok := e.deps().Workflows.ActiveManifest(ctx, sess.ID); ok {
+			fe = fe.WithWorkflowArchive(manifest.Archive)
+		}
+	}
+	// Empty trusted roots disable project prompt layers.
+	if resolve := e.deps().ProjectOverlayRootPaths; resolve != nil {
+		paths := resolve(ctx, sess)
+		if len(paths) == 0 {
+			return e.attachSessionCatalog(ctx, sess, fe)
+		}
+		return e.attachSessionCatalog(ctx, sess, fe.WithProjectOverlays(paths))
+	}
+	return e.attachSessionCatalog(ctx, sess, fe.WithProjectOverlay(sess.WorkspacePath))
+}
+
+// projectPromptsSnapshot binds one immutable prompt source for the whole turn.
+func (e *AssemblyEngine) projectPromptsSnapshot(ctx context.Context, sess *api.Session) (prompts.PromptTemplateEngine, string, error) {
+	pe := e.projectPrompts(ctx, sess)
+	if pe == nil {
+		return nil, "", nil
+	}
+	fe, ok := pe.(*prompts.FileTemplateEngine)
+	if !ok {
+		return pe, "", nil
+	}
+	snapshot, err := fe.Snapshot()
+	if err != nil {
+		return nil, "", fmt.Errorf("prompt source snapshot: %w", err)
+	}
+	revision := snapshot.Revision()
+	return snapshot, revision, nil
+}
+
+func (e *AssemblyEngine) attachSessionCatalog(ctx context.Context, sess *api.Session, fe *prompts.FileTemplateEngine) *prompts.FileTemplateEngine {
+	if e == nil || fe == nil {
+		return fe
+	}
+	if resolve := e.deps().SessionView; resolve != nil {
+		if view := resolve(ctx, sess); view != nil && view.Catalog != nil {
+			return fe.WithEffectiveCatalog(view.Catalog)
+		}
+		return fe
+	}
+	return fe
+}
+
+// sessionCatalogView resolves the turn view once (nil when unwired).
+func (e *AssemblyEngine) sessionCatalogView(ctx context.Context, sess *api.Session) *catalogview.View {
+	if e == nil {
+		return nil
+	}
+	if resolve := e.deps().SessionView; resolve != nil {
+		return resolve(ctx, sess)
+	}
+	return nil
+}
+
+func (e *AssemblyEngine) renderSystemPromptWithEngine(ctx context.Context, pe prompts.PromptTemplateEngine, sess *api.Session, templateRef string, vars map[string]any) (string, error) {
+	if e == nil || pe == nil {
+		return "", errPromptEngineNotConfigured
+	}
+	agentType := ""
+	if sess != nil {
+		agentType = strings.TrimSpace(sess.AgentType)
+	}
+	if fe, ok := pe.(*prompts.FileTemplateEngine); ok && agentType != "" {
+		out, err := prompts.RenderPersona(ctx, fe, agentType, vars)
+		if err == nil {
+			return out, nil
+		}
+		if !errors.Is(err, prompts.ErrUnknownAgent) {
+			return "", err
+		}
+	}
+	return pe.Render(ctx, templateRef, vars)
+}

@@ -125,10 +125,11 @@ func (m *RunManager) InvokeChild(ctx context.Context, parentRunID string, spec w
 		m.triggerPhaseEnter(ctx, childRun, projectDir, def)
 		if m.PhaseEnterHook != nil {
 			m.PhaseEnterHook(ctx, &RunContext{
-				SessionID:  childRun.SessionID,
-				RunID:      childRun.ID,
-				WorkflowID: childRun.WorkflowID,
-				Phase:      childRun.CurrentPhase,
+				SessionID:       childRun.SessionID,
+				RunID:           childRun.ID,
+				WorkflowID:      childRun.WorkflowID,
+				WorkflowVersion: childRun.WorkflowVersion,
+				Phase:           childRun.CurrentPhase,
 			}, def)
 		}
 	}

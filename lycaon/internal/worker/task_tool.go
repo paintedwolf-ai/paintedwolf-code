@@ -93,7 +93,7 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 				Data: map[string]any{"agent_type": agentType, "reason": "unknown_agent_type"},
 			}
 		}
-		brief, err := parseTaskCharter(args)
+		brief, err := plannedTaskCharter(identity.Charter, args)
 		if err != nil {
 			return "", err
 		}

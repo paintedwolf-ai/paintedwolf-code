@@ -13,6 +13,7 @@ import (
 
 // WorkflowSessionView supplies session workflow operations.
 type WorkflowSessionView interface {
+	RecordReviewToolResult(context.Context, string, api.Message) error
 	GetActive(ctx context.Context, sessionID string) (*api.WorkflowRun, error)
 	IsAmbientRun(run *api.WorkflowRun) bool
 	// Manifest-derived gate state.

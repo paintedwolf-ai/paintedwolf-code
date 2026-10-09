@@ -21,7 +21,8 @@ type taskIdentity struct {
 	WorkflowWorkID string
 	MaxToolLoops   int
 	// Prior is the resumed child's latest job.
-	Prior *api.WorkerTask
+	Prior   *api.WorkerTask
+	Charter *api.WorkerTaskCharter
 }
 
 // Resumed children retain their recorded identity and pending budget request.
@@ -56,6 +57,9 @@ func resolveTaskIdentity(ctx context.Context, deps TaskToolDeps, tctx tools.Tool
 		return id, err
 	}
 	if planned {
+		if id.Prior == nil {
+			id.Charter = leg.Charter
+		}
 		if id.AgentType == "" {
 			id.AgentType = leg.AgentType
 		}
@@ -100,7 +104,7 @@ func (id *taskIdentity) inheritFrom(prior *api.WorkerTask, scopeGiven bool, chil
 	return nil
 }
 
-// Resumed work retains ownership only within its active run and phase.
+// Resumed work retains its assignment only within its active run and phase.
 func (id *taskIdentity) workflowWork(ctx context.Context, deps TaskToolDeps, tctx tools.ToolContext, inherited bool) (spawn.WorkflowWork, bool, error) {
 	if id.WorkflowWorkID == "" || deps.WorkflowWork == nil {
 		return spawn.WorkflowWork{}, false, nil

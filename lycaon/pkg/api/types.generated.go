@@ -8505,7 +8505,8 @@ type WorkerCompletionFinding struct {
 
 // WorkerCompletionReport
 type WorkerCompletionReport struct {
-	CoverageReview *CoverageReview `json:"coverage_review,omitempty"`
+	CoverageGaps   []WorkerCoverageGap `json:"coverage_gaps,omitempty"`
+	CoverageReview *CoverageReview     `json:"coverage_review,omitempty"`
 	// Leg status the worker declared; leg_status is the host-graded status.
 	DeclaredLegStatus string `json:"declared_leg_status,omitempty"`
 	// Host-graded leg status.
@@ -8528,6 +8529,15 @@ type WorkerContextUsage struct {
 	Window int `json:"window,omitempty"`
 	// Prompt-token level at which compaction fires for this worker
 	CompactionThreshold int `json:"compaction_threshold,omitempty"`
+}
+
+// WorkerCoverageGap
+type WorkerCoverageGap struct {
+	// Worker-local gap id; the host scopes it to the task.
+	ID      string   `json:"id"`
+	Subject string   `json:"subject"`
+	Reason  string   `json:"reason"`
+	Paths   []string `json:"paths,omitempty"`
 }
 
 // WorkerDecisionRequest

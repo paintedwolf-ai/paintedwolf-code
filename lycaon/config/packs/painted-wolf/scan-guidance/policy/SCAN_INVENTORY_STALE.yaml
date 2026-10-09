@@ -1,0 +1,24 @@
+oar: '1.0'
+id: SCAN_INVENTORY_STALE
+kind: schema
+anchor: tool.rejected
+selector:
+  tool: [scan_query]
+requires:
+  facts: [paintedwolf.rejection_code]
+  profiles: [filesystem, tool]
+when: paintedwolf.rejection_code == "SCAN_INVENTORY_STALE"
+effect: block
+copy:
+  what: The scan inventory changed between pages.
+  cause: The requested inventory revision is no longer current.
+  why: Continuing with the old offset could omit groups.
+  fix: Restart paging at offset zero using the current inventory revision.
+  instead: Preserve prior observations but recheck group membership against the current inventory.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:scan_drilldown
+x-paintedwolf-message: Scan inventory changed.
+x-paintedwolf-scenarios:
+  - id: stale
+    vars: {}
+    expect_contains: ['Code: SCAN_INVENTORY_STALE', revision]

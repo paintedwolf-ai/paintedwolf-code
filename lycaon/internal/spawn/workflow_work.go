@@ -8,5 +8,6 @@ type WorkflowWork struct {
 	Phase        string
 	AgentType    string
 	Scope        *api.TaskScope
+	Charter      *api.WorkerTaskCharter
 	MaxToolLoops int
 }

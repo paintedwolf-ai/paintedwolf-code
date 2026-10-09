@@ -1,12 +1,43 @@
 package feedback_test
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/config"
+	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/guidance/feedback"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/extpackstest"
 )
+
+// A run on a sealed version reads that version's gate feedback; live runs and
+// gates the archive does not seal keep the current definitions.
+func TestSealedVersionReadsItsOwnGateFeedback(t *testing.T) {
+	eff := extpackstest.StockCatalog(t)
+	live, err := feedback.LoadGateFeedbackCatalogWithCatalog(eff)
+	testutil.FailErr(t, "load gate feedback", err)
+	sealed := live.WithWorkflowArchive("security-survey/1.0.0")
+	if live.WithWorkflowArchive("") != live || live.WithWorkflowArchive("unknown/9.9.9") != live {
+		t.Fatal("a version without sealed feedback must read the live catalog")
+	}
+
+	archived, _, ok := eff.UnitContent(extpacks.ArchiveGuidanceUnitID("security-survey/1.0.0", "gate-feedback/evidence_passed-survey_challenged"))
+	if !ok {
+		t.Fatal("stock catalog does not seal the challenge gate feedback")
+	}
+	var want feedback.GateFeedbackDef
+	testutil.FailErr(t, "decode sealed feedback", config.DecodeYAML(archived, &want))
+	got, _ := sealed.Def("evidence_passed:survey_challenged")
+	current, _ := live.Def("evidence_passed:survey_challenged")
+	if !reflect.DeepEqual(got, want) || reflect.DeepEqual(current, want) {
+		t.Fatalf("sealed run read %+v, want the sealed definition %+v (live %+v)", got, want, current)
+	}
+	if !sealed.Has("worker_cycle_ready") {
+		t.Fatal("gates the archive does not seal must stay resolvable")
+	}
+}
 
 func TestLoadGateFeedbackCatalog(t *testing.T) {
 	catalog, err := feedback.LoadGateFeedbackCatalog()

@@ -1,16 +1,12 @@
-{% if root_count > 1 %}Finish through **`complete_leg`**, not prose JSON.
+Finish through **`complete_leg`**, not prose JSON.
 
 - `leg_status`: `complete` | `blocked` | `partial`
-- Cite only this leg's observations. Copy tool-result `path` exactly, including its root label; include `line` and verbatim `excerpt`. Excerpts from tool output, such as scanner results, also need that result's handle in `evidence`. Read named-only files before citing them.
-{% else %}Finish through **`complete_leg`**, not prose JSON.
-
-- `leg_status`: `complete` | `blocked` | `partial`
-- Cite only this leg's observations: a repo-relative `path` you read or grepped, with `line` and verbatim `excerpt`. Excerpts from tool output, such as scanner results, also need that result's handle in `evidence`. Read named-only files before citing them.
-{% endif %}
+- Source citations require an observed path, line, and verbatim excerpt. {% if root_count > 1 %}Preserve the tool result's root label.{% else %}Use repo-relative paths.{% endif %} Scanner observations cite the `scan#N` result in `evidence`; do not present scanner JSON as a source-file excerpt. Read the source separately before making a source claim.
+- Record unexamined or inconclusive scope in `coverage_gaps`, even without findings. Use `[]` when none remain.
 - Status: `complete` = delivery proved; `partial` = work remains; `blocked` = a required project or machine change exceeds your isolated copy. Name that change in `request_decision(blocker_class=sandbox)`.
 - `findings[]`: strongest excerpts; counts and report-file requests belong in narrative fields. Optional: `adversary`, `precondition`, and `claim`: `vulnerability` (exploitable within scope), `hardening` (improvement without an in-scope exploit), `accepted_residual` (documented, accepted risk), or `model` (assets, entry points, trust boundaries). Only `vulnerability` retains `severity`: `high` | `medium` | `low`.
 - `excerpt` is verbatim file/diff/command text at `path`, never a count or “no result”.
-- URLs use `cited_urls`; changed files come from the host. With no repo reads, keep `findings` empty.
+- URLs use `cited_urls`; changed files come from the host. Without source reads, cite only observed non-source evidence.
 {% if profile_has_write_tools and profile_has_verify %}- Source edits need the validation described under **Validate your changes**. Report its scope and limits honestly; incomplete delivery is `partial`, while completed work may have blocked validation. Explicit workflow checks still require passing evidence.
 {% endif %}
 - Board `Scan:` tails are not proof; cite the `scan#N` result itself.

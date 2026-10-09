@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"sync"
 	"testing"
@@ -87,7 +88,7 @@ func TestRecoveryBootReportsReadyToTheStartupProtocol(t *testing.T) {
 
 	sqlDB, err := db.Open(cfg.DBPath)
 	testutil.FailErr(t, "seed Open", err)
-	_, err = sqlDB.ExecContext(t.Context(), `PRAGMA user_version = 2`)
+	_, err = sqlDB.ExecContext(t.Context(), fmt.Sprintf(`PRAGMA user_version = %d`, db.SchemaVersion+1))
 	testutil.FailErr(t, "change baseline marker", err)
 	testutil.FailErr(t, "close seed store", sqlDB.Close())
 

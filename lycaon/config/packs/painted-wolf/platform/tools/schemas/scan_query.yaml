@@ -7,6 +7,21 @@ description: >-
 schema:
   type: object
   properties:
+    selector:
+      description: Preview a set-aside against every location of each group in accounting view.
+      type: object
+      additionalProperties: false
+      required: [scanner, paths]
+      properties:
+        scanner: {type: string, minLength: 1, description: Scanner whose groups the set-aside selects.}
+        paths:
+          type: array
+          description: Path globs every selected group must lie wholly inside.
+          minItems: 1
+          items: {type: string, minLength: 1}
+    inventory_revision:
+      type: string
+      description: Revision returned by the preceding groups page; rejects a changed inventory.
     scan_ids:
       type: array
       minItems: 1
@@ -42,7 +57,7 @@ schema:
       description: Exact primary finding fingerprint.
     view:
       type: string
-      enum: [findings, groups, coverage]
+      enum: [findings, groups, coverage, accounting]
       description: Groups pages the rule/advisory index. Coverage returns full-scope distributions and paginated diagnostic locations; filter by path, warning_kind, construct, or rule_id. Samples do not establish the rest of the scope.
     warning_kind:
       type: string

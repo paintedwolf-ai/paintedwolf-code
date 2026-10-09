@@ -19,7 +19,9 @@ Assess every fact in `facts` independently. Check exclusions against the full di
 
 Return `complete_leg.coverage_review` with `facts.revision` and one assessment per fact: id, disposition, reason, affected obligations for gaps, and cited_evidence. Use satisfied for obligations, covered or immaterial for resolved gaps, material_open or essential_open for unfinished work. Explain why evidence supports the affected scope, not only a sampled file.
 
-{% endif %}Leg assignment ({{ agent_type }}):
+{% endif %}Host scan execution, coverage, and result-availability fields describe the bound evidence. Coordinator commentary does not change those facts.
+
+Leg assignment ({{ agent_type }}):
 {% if scope_mode %}Scope: {{ scope_mode }}{% if scope_mode == "write" %} (overlay){% endif %}.
 
 {% endif %}{% if scope_mode == "write" %}Your files are a private snapshot captured when this job starts. Sibling edits never appear here live. A missing producer module is not evidence that its API is absent: use shared context and peer findings, or request a decision. Resuming keeps this snapshot; the coordinator must start a fresh worker after promotion when newer files are needed.

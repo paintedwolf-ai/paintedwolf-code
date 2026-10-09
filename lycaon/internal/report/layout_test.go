@@ -180,7 +180,7 @@ func TestTable_ReprintsHeaderOnEachNewPage(t *testing.T) {
 		}
 	}
 
-	cfg, err := newConfig(ReportInput{Title: "T"}, mustTime(t, "2026-07-08T15:04:05Z"))
+	cfg, err := newConfig(ReportInput{ReportHeader: ReportHeader{Title: "T"}}, mustTime(t, "2026-07-08T15:04:05Z"))
 	testutil.FailErr(t, "config", err)
 
 	m := maroto.New(cfg)
