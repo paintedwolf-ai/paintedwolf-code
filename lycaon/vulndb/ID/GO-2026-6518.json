@@ -1,0 +1,52 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/perses/perses"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "0.54.0-beta.3"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-63458",
+  "GHSA-cjgj-2fwf-4c2w"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6518"
+ },
+ "details": "Perses's project query parameter authorization bypass exposes cross-project resources in github.com/perses/perses",
+ "id": "GO-2026-6518",
+ "modified": "2026-09-28T16:43:40Z",
+ "published": "2026-09-28T16:43:40Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/perses/perses/security/advisories/GHSA-cjgj-2fwf-4c2w"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/perses/perses/commit/8015fb340bdc625953e73a7a688be5b939159540"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/perses/perses/releases/tag/v0.54.0-beta.3"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Perses's project query parameter authorization bypass exposes cross-project resources in github.com/perses/perses"
+}
