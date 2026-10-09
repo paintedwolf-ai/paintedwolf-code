@@ -63,6 +63,9 @@ func (s *SourceMutationService) recoverOne(ctx context.Context, row *sourceMutat
 			identity, statErr := fspath.EntryIdentity(current.Plan.AbsPath)
 			applied = current.Plan.DeleteStarted && (os.IsNotExist(statErr) || (statErr == nil && identity != current.Plan.DeleteIdentity))
 		}
+		if current.Plan.NativeTrash != nil && !nativeTrashReceiptRecorded(&current.Plan) {
+			applied = false
+		}
 		if !applied {
 			current.Status, current.Error = sourceMutationFailed, "File operation was interrupted before completion. Retry explicitly to continue."
 			if err := s.cancelSourcePreparation(ctx, current); err != nil {

@@ -161,6 +161,9 @@ func (s *SourceEffects) applyNativeTrash(ctx context.Context, row *sourceMutatio
 	plan := &row.Plan
 	identity, err := fspath.EntryIdentity(plan.AbsPath)
 	if os.IsNotExist(err) && plan.DeleteStarted {
+		if !nativeTrashReceiptRecorded(plan) {
+			return ErrSourceTrashUnavailable
+		}
 		return nil
 	}
 	if err != nil {
