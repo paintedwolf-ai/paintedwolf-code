@@ -51,7 +51,7 @@ func TestDCOCertificationUsesTrustedBoundedSerializedCaller(t *testing.T) {
 	if job.RunsOn != "ubuntu-24.04" || job.Timeout != 15 || len(job.Permissions) != 0 {
 		t.Errorf("certification must use supported bounded runner and workflow permissions: %+v", job)
 	}
-	guard := "(github.event_name != 'pull_request_target' || github.event.pull_request.draft == false) && (github.event_name != 'workflow_run' || github.event.workflow_run.event == 'pull_request')"
+	guard := "(github.event_name != 'pull_request_target' || (github.event.pull_request.draft == false && github.actor != 'dependabot[bot]')) && (github.event_name != 'workflow_run' || github.event.workflow_run.event == 'pull_request')"
 	if job.If != guard {
 		t.Errorf("draft events and non-PR CI runs must not enter privileged certification: %q", job.If)
 	}
