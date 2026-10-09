@@ -6,9 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/db"
 	"sync"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/db"
 )
 
 const (

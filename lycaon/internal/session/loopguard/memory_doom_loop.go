@@ -263,7 +263,7 @@ func (g *MemoryDoomLoopGuard) Check(ctx context.Context, sessionID, responseID, 
 
 // Another mutation invalidates this invocation's repetition count.
 func (g *MemoryDoomLoopGuard) supersededLocked(sessionID, key string, st *doomLoopState) bool {
-	effects, _ := g.Effects.Load(sessionID)
+	effects, _ := g.effects.Load(sessionID)
 	return effects.seq > st.seenEffectSeq && effects.key != key
 }
 
@@ -324,13 +324,13 @@ func (g *MemoryDoomLoopGuard) RecordAttempt(
 	if g.supersededLocked(sessionID, key, st) {
 		*st = doomLoopState{}
 	}
-	effects, _ := g.Effects.Load(sessionID)
+	effects, _ := g.effects.Load(sessionID)
 	st.seenEffectSeq = effects.seq
 	if mutated {
 		effects.seq++
 		effects.key = key
 		st.seenEffectSeq = effects.seq
-		g.Effects.Store(sessionID, effects)
+		g.effects.Store(sessionID, effects)
 	}
 	st.recordResponse(responseID, rejectCode)
 	return nil

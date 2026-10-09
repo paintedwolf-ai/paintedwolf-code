@@ -5,10 +5,11 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/db"
-	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"slices"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/sourcebranch"
 )
 
 // DeletedPath identifies the deletion of the latest working-file occupant at an address.

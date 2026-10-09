@@ -3,11 +3,11 @@ package sourceledger
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"slices"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
