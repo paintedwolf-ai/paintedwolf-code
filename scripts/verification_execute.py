@@ -490,10 +490,11 @@ class Executor:
                          f"{', '.join(failed)} failed in {stage_id} before the stage finished")
 
     def finish_stage(self, job):
-        """Results publish before the stage's reservation releases, so work waiting on its resources sees
-        which requests no longer need it."""
+        """Results publish and the requests they settle are answered before the stage's reservation releases,
+        so work waiting on its resources sees which requests no longer need it."""
         try:
             self.publish_stage(job)
+            self.ready()
         finally:
             job["reservation"].__exit__(None, None, None)
 

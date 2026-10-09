@@ -265,9 +265,11 @@ class Reservation:
             return reason is None
 
     def acquire(self, interested):
+        """Interest is rechecked once admitted: the release that admitted this work may have answered the
+        requests it served."""
         while interested():
             if self.try_acquire():
-                return True
+                return interested()
             time.sleep(0.1)
         return False
 
