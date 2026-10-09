@@ -75,3 +75,19 @@ func TestEmitMatchHonorsConditionWhenPhase(t *testing.T) {
 		t.Fatalf("when phase==plan must queue, got %q", id)
 	}
 }
+
+// A run context without its workflow version is a host defect: the bus
+// resolves nothing rather than guessing a version, and the model is not asked
+// to repair it.
+func TestEmitMatchWorkflowVersionMissingFailsClosed(t *testing.T) {
+	kicks := &kick.KickEngine{}
+	bus := anchor.NewBus(kicks)
+	bus.SetRegistry(loadTestRegistry(t))
+
+	matchCtx := anchor.MatchContext{Surface: "phase", Workflow: "security-survey", Phase: "challenge"}
+	bus.EmitMatch(context.Background(), "sess-missing-ver", anchor.PhaseEntered, anchor.Envelope{}, matchCtx)
+
+	if kickID, ok := kicks.PeekPendingKickID("sess-missing-ver"); ok {
+		t.Fatalf("missing workflow version queued %q", kickID)
+	}
+}

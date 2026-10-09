@@ -90,5 +90,5 @@ func TestDisposeSessionWaitsForBoundedDetachedOutputDrain(t *testing.T) {
 	_ = waitForJobPID(t, pidFile)
 	ctx, cancel := context.WithTimeout(context.Background(), exec.TerminateGrace+exec.PipelineWaitDelay+5*time.Second)
 	defer cancel()
-	testutil.FailErr(t, "dispose detached output drain", reg.DisposeSession(ctx, "sess-1"))
+	testutil.FailErr(t, "dispose detached output drain", reg.Lifecycle.DisposeSession(ctx, "sess-1"))
 }
