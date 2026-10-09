@@ -74,7 +74,12 @@ func (m *RunManager) workflowRuntimeSnapshot(
 		if err != nil {
 			snap.CoverageReview = "Coverage facts unavailable: " + err.Error()
 		} else {
-			prior := RunCoverageReview(ReviewVerdicts(ctx, m, active, manifest))
+			verdicts, err := ReviewVerdicts(ctx, m, active, manifest)
+			if err != nil {
+				snap.CoverageReview = "Review evidence unavailable: " + err.Error()
+				break
+			}
+			prior := RunCoverageReview(verdicts)
 			raw, marshalErr := json.Marshal(struct {
 				Facts any `json:"facts"`
 				Prior any `json:"prior_review,omitempty"`
@@ -124,7 +129,7 @@ func (m *RunManager) workflowRuntimeSnapshot(
 		snap.ReportDocumentEnabled = manifest.ReportEnabled() && workflowdef.PhaseHasGate(def, "topology_report_delivered")
 		snap.CloseoutRetries = def.CloseoutRetries
 		if brief := manifest.ReportBrief(); snap.ReportDocumentEnabled && brief != nil {
-			snap.ReportRating = &inject.ReportRatingView{Dimensions: brief.DimensionIDs(), Questions: brief.PromptText()}
+			snap.ReportRating = &inject.ReportRatingView{Question: brief.Question, Levels: strings.Join(brief.LevelLabels(), ", "), Dimensions: brief.DimensionIDs(), Questions: brief.PromptText()}
 		}
 		if plan, found := FanoutPlanForPhase(vars, def); found {
 			snap.FanoutPlan = FormatFanoutPlan(plan)

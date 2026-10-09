@@ -1,0 +1,64 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "code.gitea.io/gitea"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.26.3"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-25038",
+  "GHSA-v73x-hx65-6pf4"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6076"
+ },
+ "details": "Gitea: Unauthorized Access to Labels of Private Organizations in code.gitea.io/gitea",
+ "id": "GO-2026-6076",
+ "modified": "2026-07-27T15:32:45Z",
+ "published": "2026-07-27T15:32:45Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/go-gitea/gitea/security/advisories/GHSA-v73x-hx65-6pf4"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-25038"
+  },
+  {
+   "type": "WEB",
+   "url": "https://blog.gitea.com/release-of-1.26.3-and-1.26.4"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/go-gitea/gitea/commit/99f8b3d9a1d32f4c39828e07971455a18191e0b9"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/go-gitea/gitea/pull/38151"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/go-gitea/gitea/releases/tag/v1.26.3"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Gitea: Unauthorized Access to Labels of Private Organizations in code.gitea.io/gitea"
+}

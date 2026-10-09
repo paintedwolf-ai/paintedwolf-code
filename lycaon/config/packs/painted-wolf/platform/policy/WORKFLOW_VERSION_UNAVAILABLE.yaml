@@ -1,0 +1,29 @@
+oar: '1.0'
+id: WORKFLOW_VERSION_UNAVAILABLE
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.rejection_reason
+when: paintedwolf.rejection_code == "WORKFLOW_VERSION_UNAVAILABLE"
+effect: block
+copy:
+  cause: '{{ paintedwolf.rejection_reason }}'
+  why: The requested workflow version is not available and cannot be resumed.
+  fix: Start a new run with the current workflow version or exit the workflow with /exit.
+  instead: Follow the current workflow version and task intent
+  what: The workflow version is unavailable.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: rule:coordinator
+x-paintedwolf-message: Workflow version is unavailable
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    profile: coordinator
+    rejection_reason: workflow version is unavailable
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: WORKFLOW_VERSION_UNAVAILABLE'

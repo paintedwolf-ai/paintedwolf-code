@@ -122,6 +122,15 @@ func (b boardWiring) wireWorkflows() error {
 	}); err != nil {
 		return err
 	}
+	// Repair accounting replays rejections after the last accepted verdict, so
+	// interrupted verdict commits settle first.
+	if err := delegationWiring(b).registerRecovery(bootrecovery.Entry{
+		Name: "workflow-review-repairs", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseServe,
+		After: []string{"workflow-verdicts"},
+		Run:   workflow.ReviewRepairs{RunManager: b.workflowMgr}.Recover,
+	}); err != nil {
+		return err
+	}
 	if err := delegationWiring(b).registerRecovery(bootrecovery.Entry{
 		Name: "workflow-teardowns", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseServe,
 		Run: b.workflowMgr.RecoverTeardownOperations,
@@ -193,7 +202,7 @@ func (b boardWiring) wireWorkflowScanServices() error {
 	b.gitMgr = git.NewManager()
 	gitexec.SetHostConfig(gitexec.HostConfigResolver())
 	b.gitStatusCache = git.NewStatusCache(b.gitMgr)
-	b.gitStatusCache.RegisterRepochangeObserver()
+	b.resources.releaseObserver("git-status-repochange", b.gitStatusCache.RegisterRepochangeObserver())
 	b.gitRepoSetCache = git.NewRepoSetCache(git.DefaultStatusCacheTTL)
 	if b.toolRuntime != nil {
 		b.toolRuntime.SetGitStatusCache(b.gitStatusCache)

@@ -1,0 +1,68 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/1Panel-dev/1Panel"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.10.1-lts"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2024-2352",
+  "GHSA-x2vg-5wrf-vj6v"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2024-2636"
+ },
+ "details": "1Panel is vulnerable to command injection in github.com/1Panel-dev/1Panel",
+ "id": "GO-2024-2636",
+ "modified": "2024-06-04T15:19:21Z",
+ "published": "2024-06-04T15:19:21Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-x2vg-5wrf-vj6v"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2024-2352"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/1Panel-dev/1Panel/pull/4131"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/1Panel-dev/1Panel/pull/4131#issue-2176105990"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/1Panel-dev/1Panel/pull/4131/commits/0edd7a9f6f5100aab98a0ea6e5deedff7700396c"
+  },
+  {
+   "type": "WEB",
+   "url": "https://vuldb.com/?ctiid.256304"
+  },
+  {
+   "type": "WEB",
+   "url": "https://vuldb.com/?id.256304"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "1Panel is vulnerable to command injection in github.com/1Panel-dev/1Panel"
+}

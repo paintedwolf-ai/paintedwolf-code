@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/scopedstore"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/workscope"
 	"github.com/lycaon/lycaon/pkg/api"
 	"golang.org/x/sync/singleflight"
 )
@@ -18,6 +19,7 @@ type SessionReader interface {
 	Get(context.Context, string) (*api.Session, error)
 }
 type Service struct {
+	work                    workscope.Group
 	store                   SessionReader
 	projects                project.Registry
 	catalogMu               sync.RWMutex
@@ -41,3 +43,9 @@ func (m *Service) Configure(moduleRoot string, boot *extpacks.EffectiveCatalog, 
 	m.trustSurfaces = surfaces
 	extpacks.SetActiveRefresher(m.reinstallActive)
 }
+
+// Stop cancels detached resolutions and prevents new catalog work.
+func (m *Service) Stop() { m.work.Stop() }
+
+// Wait joins resolutions before their device dependencies are released.
+func (m *Service) Wait(ctx context.Context) error { return m.work.Wait(ctx) }

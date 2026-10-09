@@ -200,6 +200,12 @@ func (m *Manager) RunPromptSubmission(ctx context.Context, submissionID string) 
 	if m == nil || m.store == nil {
 		return nil, fmt.Errorf("prompt manager unavailable")
 	}
+	ctx, finishWork, err := m.engineWork.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer finishWork()
+
 	row, err := m.store.GetPromptSubmission(ctx, submissionID)
 	if err != nil {
 		return nil, err
@@ -239,9 +245,15 @@ func (m *Manager) DrainPromptSubmissions(ctx context.Context, sessionID string) 
 	if m == nil || m.store == nil {
 		return fmt.Errorf("prompt manager unavailable")
 	}
+	ctx, finishWork, err := m.engineWork.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer finishWork()
+
 	ctx, unlock := m.lockPromptSubmissionDispatch(ctx, sessionID)
 	defer unlock()
-	_, err := m.dispatchPromptSubmissions(ctx, sessionID, "")
+	_, err = m.dispatchPromptSubmissions(ctx, sessionID, "")
 	return err
 }
 

@@ -1,0 +1,45 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/ollama/ollama"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2025-0317",
+  "GHSA-9gcr-28rp-cc24"
+ ],
+ "database_specific": {
+  "review_status": "REVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2025-3559"
+ },
+ "details": "Ollama Divide By Zero vulnerability in github.com/ollama/ollama",
+ "id": "GO-2025-3559",
+ "modified": "2025-03-31T17:03:53Z",
+ "published": "2025-03-31T17:03:53Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-9gcr-28rp-cc24"
+  },
+  {
+   "type": "WEB",
+   "url": "https://huntr.com/bounties/a9951bca-9bd8-49b2-b143-4cd4219f9fa0"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Ollama Divide By Zero vulnerability in github.com/ollama/ollama"
+}

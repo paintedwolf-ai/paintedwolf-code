@@ -1,0 +1,52 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/filecoin-project/go-f3"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "0.8.9"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2025-59941",
+  "GHSA-7pq9-rf9p-wcrf"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2025-3989"
+ },
+ "details": "go-f3 Vulnerable to Cached Justification Verification Bypass in github.com/filecoin-project/go-f3",
+ "id": "GO-2025-3989",
+ "modified": "2025-10-23T16:25:09Z",
+ "published": "2025-10-23T16:25:09Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/filecoin-project/go-f3/security/advisories/GHSA-7pq9-rf9p-wcrf"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-59941"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/filecoin-project/go-f3/commit/76fff18cf07b21baccf537024bdb2fb41f75f6e2#diff-e1f646cea41790e1642e4e649c9e3c526344736d67222201703e1c29c23e9625"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "go-f3 Vulnerable to Cached Justification Verification Bypass in github.com/filecoin-project/go-f3"
+}

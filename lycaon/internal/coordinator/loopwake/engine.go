@@ -116,14 +116,14 @@ type LoopEngine struct {
 	deps      LoopDeps
 	waitStore *awaitstore.Store
 	// ForgetSession releases every session-keyed store below.
-	budget              sync.Map       // loopBudgetKey -> int
-	pendingDrain        sync.Map       // sessionID -> struct{} (queue consumer)
-	pendingQueues       sync.Map       // sessionID -> *sessionNudgeQueue
-	pendingWorkerQueues sync.Map       // sessionID -> *deferredNudgeQueue
-	kickDedup           sync.Map       // loopKickKey -> loopKickStamp
-	promptActive        sync.Map       // sessionID -> struct{}
-	promptExecution     sync.Map       // sessionID -> *promptExecutionToken
-	sleep               sync.Map       // sessionID -> *sessionSleep
+	budget              sync.Map // loopBudgetKey -> int
+	pendingDrain        sync.Map // sessionID -> struct{} (queue consumer)
+	pendingQueues       sync.Map // sessionID -> *sessionNudgeQueue
+	pendingWorkerQueues sync.Map // sessionID -> *deferredNudgeQueue
+	kickDedup           sync.Map // loopKickKey -> loopKickStamp
+	promptActive        sync.Map // sessionID -> struct{}
+	promptExecution     sync.Map // sessionID -> *promptExecutionToken
+	sleep               sessionSleeps
 	asyncTurns          sync.WaitGroup // in-flight host turns
 	asyncTurnsMu        sync.Mutex
 	asyncTurnsBySession map[string]map[*asyncTurnWork]struct{}
@@ -578,7 +578,7 @@ func (l *LoopEngine) enterSleep(ctx context.Context, sessionID string, arm sleep
 	if triggers == nil {
 		triggers = DefaultCoordinatorWaitTriggers(l.overlayPromoteDue(ctx, sessionID, anchor.Envelope{}))
 	}
-	st := l.sleepState(sessionID)
+	st := l.sleep.state(sessionID)
 	// Preserve context values for the later timer wake.
 	wakeCtx := context.WithoutCancel(ctx)
 
@@ -652,7 +652,7 @@ func (l *LoopEngine) armSleepTimerLocked(st *sessionSleep, wakeCtx context.Conte
 
 // MarkWaitCalled records that wait() ended the current cycle.
 func (l *LoopEngine) MarkWaitCalled(sessionID string) {
-	st := l.sleepState(sessionID)
+	st := l.sleep.state(sessionID)
 	st.mu.Lock()
 	st.waitThisTurn = true
 	st.mu.Unlock()
@@ -702,7 +702,7 @@ func (l *LoopEngine) OnTurnComplete(ctx context.Context, sessionID string, hostT
 	if l == nil {
 		return UserTurnSettled
 	}
-	st := l.sleepState(sessionID)
+	st := l.sleep.state(sessionID)
 	st.mu.Lock()
 	waited := st.waitThisTurn
 	st.waitThisTurn = false
@@ -755,7 +755,7 @@ func (l *LoopEngine) breakSleep(ctx context.Context, sessionID, reason string, p
 	if l == nil {
 		return
 	}
-	st := l.sleepState(sessionID)
+	st := l.sleep.state(sessionID)
 	st.mu.Lock()
 	cancelSleepTimerLocked(st)
 	if !st.until.IsZero() {
@@ -788,7 +788,7 @@ func (l *LoopEngine) ResolveWaitUntil(ctx context.Context, sessionID string, res
 	if l == nil || strings.TrimSpace(sessionID) == "" {
 		return now.Add(l.capSleepDuration(ctx, sessionID, requested)), false
 	}
-	st := l.sleepState(sessionID)
+	st := l.sleep.state(sessionID)
 	st.mu.Lock()
 	interrupted := st.interruptedUntil
 	st.interruptedUntil = time.Time{}
@@ -804,24 +804,10 @@ func (l *LoopEngine) InterruptedUntilForTest(sessionID string) time.Time {
 	if l == nil {
 		return time.Time{}
 	}
-	st := l.sleepState(sessionID)
+	st := l.sleep.state(sessionID)
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	return st.interruptedUntil
-}
-
-func (l *LoopEngine) sleepState(sessionID string) *sessionSleep {
-	if v, ok := l.sleep.Load(sessionID); ok {
-		if st, ok := v.(*sessionSleep); ok && st != nil {
-			return st
-		}
-	}
-	st := &sessionSleep{}
-	actual, _ := l.sleep.LoadOrStore(sessionID, st)
-	if s, ok := actual.(*sessionSleep); ok && s != nil {
-		return s
-	}
-	return st
 }
 
 // ForgetSession releases coordinator state that cannot be observed after deletion.
@@ -899,7 +885,7 @@ func (l *LoopEngine) SleepReasonForTest(sessionID string) string {
 	if l == nil {
 		return ""
 	}
-	st := l.sleepState(sessionID)
+	st := l.sleep.state(sessionID)
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	return st.reason
@@ -910,7 +896,7 @@ func (l *LoopEngine) SleepUntilForTest(sessionID string) time.Time {
 	if l == nil {
 		return time.Time{}
 	}
-	st := l.sleepState(sessionID)
+	st := l.sleep.state(sessionID)
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	return st.until
@@ -921,7 +907,7 @@ func (l *LoopEngine) IsSleeping(sessionID string) bool {
 	if l == nil {
 		return false
 	}
-	st := l.sleepState(sessionID)
+	st := l.sleep.state(sessionID)
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	return sleepArmedLocked(st, time.Now())

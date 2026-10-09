@@ -1,0 +1,43 @@
+name: Qualification
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One run at a time: a newer push replaces a pending run, and a running one finishes.
+concurrency:
+  group: qualification
+  cancel-in-progress: false
+
+# The stages run in turn, so one run holds at most three runners.
+jobs:
+  verification:
+    uses: ./.github/workflows/verification.yml
+    with:
+      profile: check
+
+  platform:
+    needs: verification
+    uses: ./.github/workflows/platform-verification.yml
+
+  e2e:
+    needs: platform
+    uses: ./.github/workflows/e2e-verification.yml
+    with:
+      web-parallel: 2
+
+  qualification:
+    if: ${{ !cancelled() }}
+    needs: [verification, platform, e2e]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Require exact-commit qualification
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: python3 scripts/ci_verification.py gate
