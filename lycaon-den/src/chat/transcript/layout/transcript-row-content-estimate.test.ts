@@ -15,6 +15,27 @@ function assistant(text: string): TranscriptItem {
 }
 
 describe("transcript row content estimate", () => {
+  it("accounts for the pending attachment rail independently of prose", () => {
+    const pending = { kind: "prompt" as const, operationId: "op", text: "", createdAt: 0, state: "sending" as const, attachmentLabels: ["report.pdf"] };
+    const withChip = transcriptRowContentEstimate({ kind: "pending_user", key: "pending", text: "", pending }, metrics, []);
+    const withoutChip = transcriptRowContentEstimate({ kind: "pending_user", key: "pending", text: "", pending: { ...pending, attachmentLabels: [] } }, metrics, []);
+    expect(withChip! - withoutChip!).toBe(28);
+  });
+
+  it.each([632, 898, 1129])("ignores hidden PDF bodies at width %i while retaining the chip rail", (widthPx) => {
+    const prose = "Review this document and explain its conclusions.";
+    const user = (length: number): TranscriptItem => ({ kind: "user", key: "pdf", text: prose + "x".repeat(length), contentParts: [
+      { content: prose, origin: "user", authority: "user", trust_tier: "trusted" },
+      { content: "x".repeat(length), origin: "attachment", authority: "none", trust_tier: "untrusted", source: "report.pdf", media_type: "application/pdf", blob_id: "blob", size_bytes: length },
+    ] });
+    const rowMetrics = { widthPx, remPx: 14, bodyPx: 14 };
+    const short = transcriptRowContentEstimate(user(100), rowMetrics, []);
+    const long = transcriptRowContentEstimate(user(17000), rowMetrics, []);
+    expect(long).toBe(short);
+    expect(long).toBeLessThan(150);
+    expect(long).toBeGreaterThan(transcriptRowContentEstimate({ kind: "user", key: "plain", text: prose }, rowMetrics, [])!);
+  });
+
   it("wraps prose to the column width", () => {
     const text = "x".repeat(1_000);
 

@@ -1,3 +1,5 @@
+import { projectUserMessageParts } from "../content/user-message-parts.ts";
+import { attachmentRailHeight } from "./user-message-height-estimate.ts";
 import { DEFAULT_TRANSCRIPT_SPACING, type TranscriptSpacing } from "./transcript-spacing.ts";
 import type { TranscriptItem } from "../projection/transcript-item-model.ts";
 import { markdownHeightEstimate } from "./markdown-height-estimate.ts";
@@ -102,10 +104,15 @@ export function transcriptRowContentEstimate(
     case "pending_user":
     case "user": {
       const bubbleWidth = widthPx * spacing.userWidth / 100 - 2 * spacing.userPaddingX * remPx;
+      const projection = projectUserMessageParts(item.text, item.kind === "user" ? item.contentParts : undefined);
+      const labels = projection.chips.map((chip) => `${chip.label} ${chip.detail}`.trim());
+      const pendingLabels = item.kind === "pending_user" ? item.pending.attachmentLabels ?? [] : [];
       return Math.round(
+        attachmentRailHeight(labels, bubbleWidth, remPx, bodyPx) +
+        attachmentRailHeight(pendingLabels, bubbleWidth, remPx, bodyPx) +
         2 * spacing.userPaddingY * remPx +
           presentedVisualsHeight(visuals, bubbleWidth, remPx, spacing) +
-          proseHeight(item.text, bubbleWidth, bodyPx, spacing.userLineHeight),
+          proseHeight(projection.prose, bubbleWidth, bodyPx, spacing.userLineHeight),
       );
     }
     case "progress_complete":

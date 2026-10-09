@@ -18,6 +18,11 @@ permissions:
   contents: read
   issues: write
 
+# Maintenance runs one workflow at a time; staggered schedules keep a pending run from being replaced.
+concurrency:
+  group: maintenance
+  cancel-in-progress: false
+
 env:
   ISSUE_AUTOMATION_EXEMPT_USERS: ${{ vars.ISSUE_AUTOMATION_EXEMPT_USERS }}
 

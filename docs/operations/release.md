@@ -57,19 +57,15 @@ reuse the public bucket and domain or point at a scratch bucket.
 - [ ] Protect `main` with the `main-protection` ruleset: pull requests merged by
   squash through a merge queue, the required checks `check` (GitHub Actions) and
   `DCO`, no force-pushes or deletions, and the dependency-inventory deploy key
-  as the only bypass actor. `check` is the aggregate of every CI tier, so no
-  individual job is listed. The queue builds up to three groups at once and
-  merges up to five pull requests when the newest passing group's head passes
-  (`HEADGREEN`). Each group contains every pull request ahead of it, so main
-  still advances only to a commit the full tier passed, and a flaky earlier
-  group no longer sends the entries behind it back to rebuild. A full-tier run
-  keeps browser journeys in nightly and runs one macOS confinement/Git-parity
-  job per group. Full Go behavior uses two Linux shards. Calibrate queue
-  concurrency from current runner wait and execution times after cache warming;
-  each additional group preempts more pull request CI, which
-  [runner priority](../test-strategy.md#runner-priority) resumes once the
-  queue's jobs have runners. Confirm the queue is live afterwards:
-  the repository's `mergeQueue(branch: "main")` in the GraphQL API is not null.
+  as the only bypass actor. `check` is the aggregate of each CI tier, so no
+  individual job is listed: a pull request's fast tier admits it to the queue,
+  and its merge group's integration gate admits it to main. Apply the reviewed
+  [queue parameters](../test-strategy.md#determinism-and-capacity), two groups
+  of one pull request each with `ALLGREEN`, whose gate caps leave the
+  [runner capacity](../test-strategy.md#runner-capacity) for the other
+  classes. Enable **Allow auto-merge**: it is how a ready pull request enters
+  the queue. Confirm the queue is live afterwards: the repository's
+  `mergeQueue(branch: "main")` in the GraphQL API is not null.
 - [ ] Configure public repository presentation: description (`Local-first AI coding agent`), website (`https://paintedwolf.ai`), topics (`ai`, `agent`, `tauri`, `golang`, `solidjs`, `local-first`), and social preview image.
 
 ## Release
@@ -96,17 +92,18 @@ release, update both the host manifest and the action's revision pin together.
    A schema change ships its registered migration step and recorded released
    baseline with the candidate ([compatibility](../compatibility.md)).
 3. If provider integrations changed, run the [provider checks](#provider-integration-checks).
-4. Merge the candidate through the merge queue, which runs the full CI tier on
-   the commit that lands, and wait for
-   [Build caches](../../.github/workflows/build-caches.yml) to
-   pass; the release build restores the Go and Tauri compiles that run saved.
-   Warming yields runners to the merge queue and resumes once its jobs have
-   runners.
+4. Mark the candidate ready and enable auto-merge; the merge queue runs the
+   integration gate on the commit that lands. Wait for
+   [Qualification](../../.github/workflows/qualification.yml) and
+   [Build caches](../../.github/workflows/build-caches.yml) to pass on that
+   commit; the release build restores the Go and Tauri compiles the warmer
+   saved. One qualification runs at a time and a newer push replaces a pending
+   one, so when main moves on first, tag the newest qualified commit that
+   contains the candidate, after reviewing what else it brings.
    Tag that exact commit as `v<VERSION>` and push the tag. This starts
    [Release](../../.github/workflows/release.yml), which refuses a commit
-   without a passing full-tier `CI/check`. A dependency-inventory refresh
-   pushed after the candidate bypasses the queue: dispatch
-   [CI](../../.github/workflows/ci.yml) on `main` and tag once it passes.
+   without a passing exact-commit qualification. A dependency-inventory refresh
+   pushed to main bypasses the queue but is qualified like any other push.
 5. The workflow tests, builds, signs, notarizes, publishes the downloads,
    updates the tap and website, and activates the updater feeds. Manual dispatch
    never publishes.
