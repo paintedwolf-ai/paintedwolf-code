@@ -693,9 +693,9 @@ merge queue 8, so 17 of the twenty are spoken for and three, one fast tier and
 a spare, are never claimed by long work. More ready pull requests than that
 wait first come, first served, but their jobs last minutes, so a merge-queue
 job waits at most for one of them to finish. Nothing reorders or preempts
-runs: no priority is needed when every long class fits. On macOS, qualification, warming, and nightly
-hold one runner each and a release two, five in all; the merge queue and the
-fast tier run on Linux. With its lanes started longest first, a full-scope
+runs: no priority is needed when every long class fits. On macOS,
+qualification, warming, and nightly hold one runner each and a release two,
+five in all; the merge queue and the fast tier run on Linux. With its lanes started longest first, a full-scope
 group capped at four finishes in about 35 minutes of measured lane times,
 against about 26 uncapped; a cap of three would add about eight more, and a
 third group of four would not fit beside the other classes.
