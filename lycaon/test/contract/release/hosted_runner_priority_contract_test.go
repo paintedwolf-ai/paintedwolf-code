@@ -60,7 +60,7 @@ func TestEveryTriggeredWorkflowDeclaresItsRunnerPriority(t *testing.T) {
 	workflows := prioritizedWorkflows(t)
 	declared := map[string]string{}
 	for class, files := range runnerPriorityClasses(t) {
-		if !slices.Contains([]string{"release", "qualification", "warming", "background"}, class) {
+		if !slices.Contains([]string{"release", "qualification", "warming", "background", "one_shot"}, class) {
 			t.Errorf("unknown runner priority class %q", class)
 		}
 		for _, file := range files {
@@ -82,11 +82,12 @@ func TestEveryTriggeredWorkflowDeclaresItsRunnerPriority(t *testing.T) {
 	}
 }
 
-// Merge groups and releases are never cancelled for newer work of their own kind.
+// Merge groups, releases, and one-shot runs are never cancelled for newer work of their own kind.
 func TestProtectedWorkflowsNeverCancelInProgress(t *testing.T) {
 	t.Parallel()
 	workflows := prioritizedWorkflows(t)
-	for _, file := range runnerPriorityClasses(t)["release"] {
+	classes := runnerPriorityClasses(t)
+	for _, file := range slices.Concat(classes["release"], classes["one_shot"]) {
 		if cancel := workflows[file].Concurrency.Cancel; cancel != "" && cancel != "false" {
 			t.Errorf("%s must finish once started, got cancel-in-progress %q", file, cancel)
 		}
@@ -147,6 +148,10 @@ func TestRunnerSchedulerSweepsAndReactsToProtectedDemand(t *testing.T) {
 		contractcheck.FailErr(t, "decode runner scheduler job", node.Decode(&job))
 		for _, step := range job.Steps {
 			swept = swept || step.Run == "python3 scripts/ci_verification.py schedule" && job.Timeout != ""
+		}
+		// Ready pull requests outrank qualification and drafts, so their runs are demand too.
+		if job.If != "" {
+			t.Errorf("the runner scheduler must sweep on every triggering run, not filter on %q", job.If)
 		}
 	}
 	if len(scheduler.Jobs) != 1 || !swept {

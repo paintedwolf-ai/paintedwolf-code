@@ -1023,8 +1023,7 @@
     "release": [
       "release.yml",
       "release-halt.yml",
-      "release-secrets-check.yml",
-      "verification-recovery.yml"
+      "release-secrets-check.yml"
     ],
     "warming": [
       "build-caches.yml"
@@ -1040,6 +1039,9 @@
     ],
     "qualification": [
       "qualification.yml"
+    ],
+    "one_shot": [
+      "verification-recovery.yml"
     ]
   }
 }
