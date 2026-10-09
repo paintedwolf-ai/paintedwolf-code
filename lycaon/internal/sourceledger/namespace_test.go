@@ -168,3 +168,23 @@ func TestPublicationRetiresStaleDestination(t *testing.T) {
 		})
 	}
 }
+
+func TestObservationOfReplacementFileRetiresDirectory(t *testing.T) {
+	store, ctx := openLedger(t)
+	old, err := store.TrackFile(ctx, TrackInput{ProjectID: "p1", RootID: "r1", Path: "replaced", EntryKind: EntryKindDirectory})
+	testutil.FailErr(t, "observe original directory", err)
+	child, err := store.TrackFile(ctx, TrackInput{ProjectID: "p1", RootID: "r1", Path: "replaced/child", Content: []byte("kept")})
+	testutil.FailErr(t, "observe original child", err)
+	replacement, err := store.TrackFile(ctx, TrackInput{ProjectID: "p1", RootID: "r1", Path: "replaced", Content: []byte("new")})
+	testutil.FailErr(t, "observe replacement file", err)
+	if replacement.FileID == old.FileID {
+		t.Fatal("replacement inherited directory identity")
+	}
+	for _, id := range []string{old.FileID, child.FileID} {
+		head, err := store.History.ResolveHeadByFile(ctx, "p1", sourcebranch.Trunk, id)
+		testutil.FailErr(t, "resolve retired identity", err)
+		if head.State != "absent" {
+			t.Fatalf("replacement left stale directory visible: %+v", head)
+		}
+	}
+}

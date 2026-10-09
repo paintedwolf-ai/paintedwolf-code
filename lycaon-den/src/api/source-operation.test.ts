@@ -89,3 +89,19 @@ it("refuses completion from another host, project, request, or engine generation
   await expect(result).resolves.toBeUndefined();
   expect(vi.getTimerCount()).toBe(0);
 });
+
+
+it("releases the completion follower when its caller stops waiting", async () => {
+  vi.mocked(lycaonFetch).mockResolvedValueOnce(Response.json(status(), { status: 202 }));
+  const controller = new AbortController();
+  const result = sourceOperation(connection, "project", id, path, { method: "DELETE", signal: controller.signal });
+  const rejected = expect(result).rejects.toMatchObject({ name: "AbortError" });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(vi.getTimerCount()).toBe(1);
+  controller.abort();
+  await rejected;
+  expect(vi.getTimerCount()).toBe(0);
+  deliverSourceOperationCompletion(connection, { project_id: "project", operation: status({ complete: true, state: "completed" }) });
+  await vi.advanceTimersByTimeAsync(1600);
+  expect(lycaonJson).not.toHaveBeenCalled();
+});

@@ -285,6 +285,9 @@ func (s *Store) trackFileTx(ctx context.Context, q *db.Queries, in TrackInput) (
 	head, err := q.GetSourceBranchHeadByPath(ctx, db.GetSourceBranchHeadByPathParams{
 		ProjectID: in.ProjectID, BranchID: in.BranchID.String(), RootID: in.RootID, Path: in.Path,
 	})
+	if err == nil && (head.State == "directory") != (in.EntryKind == EntryKindDirectory) {
+		err = sql.ErrNoRows
+	}
 	if err == nil {
 		if in.SHA256 != "" && head.ContentSha256 != "" && head.ContentSha256 != in.SHA256 {
 			if err := s.recordBatchTx(ctx, q, []RecordInput{{
@@ -336,9 +339,9 @@ func (s *Store) trackFileTx(ctx context.Context, q *db.Queries, in TrackInput) (
 		trunk, trunkErr := q.GetTrunkSourceHeadByPath(ctx, db.GetTrunkSourceHeadByPathParams{
 			ProjectID: in.ProjectID, RootID: in.RootID, Path: in.Path,
 		})
-		if trunkErr == nil {
+		if trunkErr == nil && (trunk.State == "directory") == (in.EntryKind == EntryKindDirectory) {
 			fileID, derivedFromVersionID = trunk.FileID, trunk.VersionID
-		} else if !errors.Is(trunkErr, sql.ErrNoRows) {
+		} else if trunkErr != nil && !errors.Is(trunkErr, sql.ErrNoRows) {
 			return TrackedFile{}, trunkErr
 		}
 	}
