@@ -20,8 +20,13 @@ func TestUpgradeRecoveryRetainsPreviousCopiesUntilReadiness(t *testing.T) {
 	database := testdbfixture.OpenPath(t, path)
 	plan, err := db.PlanUpgrade(t.Context(), database)
 	testutil.FailErr(t, "plan source", err)
+	payload, err := json.Marshal(historyretention.DefaultPolicy())
+	testutil.FailErr(t, "encode durable policy", err)
+	testutil.FailErr(t, "seed durable payload", os.WriteFile(filepath.Join(root, historyretention.PolicyFilename), payload, 0o600))
 	opts := CreateOpts{ConfigDir: root, DBPath: path, SQLDB: database, AppVersion: "1.0.0", SchemaUserVersion: db.SchemaVersion}
 	var archives []string
+	var captures []RecoveryCaptureUsage
+	opts.OnRecoveryCapture = func(usage RecoveryCaptureUsage) { captures = append(captures, usage) }
 	for i, target := range []string{"1.0.1", "1.0.2", "1.0.3"} {
 		opts.Now = time.Date(2026, 9, 11, 0, 0, i, 0, time.UTC)
 		testutil.FailErr(t, "capture before update", CaptureUpgradeRecovery(t.Context(), opts, plan, target))
@@ -36,6 +41,19 @@ func TestUpgradeRecoveryRetainsPreviousCopiesUntilReadiness(t *testing.T) {
 		}
 		if i < 2 {
 			testutil.FailErr(t, "mark application ready", CompleteUpgradeRecovery(root, target))
+		}
+	}
+	if len(captures) != 3 {
+		t.Fatalf("fresh capture count = %d, want 3; retries must reuse", len(captures))
+	}
+	for i, usage := range captures {
+		info, err := os.Stat(filepath.Join(archives[i], storeRelPath))
+		testutil.FailErr(t, "stat captured store", err)
+		if usage.PayloadCopiedBytes+usage.PayloadSharedBytes != int64(len(payload)) || usage.CopiedFiles+usage.SharedFiles != 1 {
+			t.Fatalf("payload capture counted incorrectly: %+v", usage)
+		}
+		if usage.DatabaseBytes != info.Size() || usage.DatabaseBytes == 0 {
+			t.Fatalf("database capture bytes = %d, actual = %d", usage.DatabaseBytes, info.Size())
 		}
 	}
 	for _, archive := range archives {

@@ -27,3 +27,32 @@ export function fadeProseArrival(row: HTMLElement): void {
     easing: "ease-out",
   });
 }
+
+export function createProseDelivery(ports: { stream(): HTMLElement | null; following(): boolean }) {
+  let frame: number | undefined;
+  let rowKey: string | null = null;
+  const cancel = () => {
+    if (frame !== undefined) cancelAnimationFrame(frame);
+    frame = undefined;
+    rowKey = null;
+  };
+  return {
+    cancel,
+    pending: (key: string) => rowKey === key,
+    schedule: (key: string) => {
+      cancel();
+      const target = ports.stream();
+      if (!target) return;
+      rowKey = key;
+      frame = requestAnimationFrame(() => {
+        frame = undefined;
+        const current = rowKey;
+        rowKey = null;
+        if (current !== key || ports.stream() !== target || !ports.following()) return;
+        if (!canPresentProse(target)) return;
+        const row = proseDeliveryRow(target, key);
+        if (row) fadeProseArrival(row);
+      });
+    },
+  };
+}

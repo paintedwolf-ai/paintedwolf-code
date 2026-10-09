@@ -1,10 +1,6 @@
 import { expect, vi } from "vitest";
 import { OverlayScrollbars } from "overlayscrollbars";
-import {
-  DEN_SCROLLPORT_AXIS_ATTR,
-  scrollportFrameParts,
-  type ScrollportAxis,
-} from "./themed-scrollbars.ts";
+import { scrollportFrameParts, type ScrollportAxis, DEN_SCROLLPORT_AXIS_ATTR } from "./scrollport-frame-dom.ts";
 
 export type MockInstance = {
   destroy: ReturnType<typeof vi.fn>;

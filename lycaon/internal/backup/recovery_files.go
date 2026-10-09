@@ -14,33 +14,33 @@ import (
 	"github.com/lycaon/lycaon/internal/fssync"
 )
 
-func copySnapshotRegular(ctx context.Context, src, dest string, mode os.FileMode) error {
+func copySnapshotRegular(ctx context.Context, src, dest string, mode os.FileMode) (bool, error) {
 	if err := ctx.Err(); err != nil {
-		return err
+		return false, err
 	}
 	if err := os.MkdirAll(filepath.Dir(dest), 0o700); err != nil {
-		return err
+		return false, err
 	}
 	cloned, err := fileclone.Clone(src, dest)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if cloned {
 		if err := os.Chmod(dest, mode.Perm()); err != nil {
-			return err
+			return false, err
 		}
 		file, err := os.Open(dest)
 		if err != nil {
-			return err
+			return false, err
 		}
 		err = fssync.File(file)
 		closeErr := file.Close()
 		if err != nil {
-			return err
+			return false, err
 		}
-		return closeErr
+		return true, closeErr
 	}
-	return copySnapshotStream(ctx, src, dest, mode)
+	return false, copySnapshotStream(ctx, src, dest, mode)
 }
 
 func copySnapshotStream(ctx context.Context, src, dest string, mode os.FileMode) error {
@@ -94,19 +94,19 @@ func copySnapshotStream(ctx context.Context, src, dest string, mode os.FileMode)
 }
 
 // Snapshot symlinks store their target as regular-file content.
-func copySnapshotSource(ctx context.Context, source archiveSource, dest string) error {
+func copySnapshotSource(ctx context.Context, source archiveSource, dest string) (bool, error) {
 	if source.kind == fileKindRegular {
 		return copySnapshotRegular(ctx, source.path, dest, source.mode)
 	}
 	target, err := os.Readlink(source.path)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if len(target) == 0 || int64(len(target)) > maxSymlinkTargetBytes {
-		return fmt.Errorf("invalid recovery symlink target")
+		return false, fmt.Errorf("invalid recovery symlink target")
 	}
 	_, err = fseffect.Replace(fseffect.ReplaceRequest{Location: fseffect.PathLocation(dest), Source: strings.NewReader(target), Mode: fileMode, DirMode: 0o700})
-	return err
+	return false, err
 }
 
 func snapshotFile(root, rel string) (string, os.FileInfo, error) {

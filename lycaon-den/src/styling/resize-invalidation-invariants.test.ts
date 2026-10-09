@@ -331,7 +331,7 @@ describe("layout epoch", () => {
       /if \(!update\.docChanged && !update\.geometryChanged\) return/,
     );
     expect(scrollbars).toContain("this.view.requestMeasure");
-    expect(scrollbars).toMatch(/read:\s*\(view\) =>\s*\{[\s\S]*?readThemedScrollbarGeometry\(view\.dom\)[\s\S]*?view\.contentHeight/);
+    expect(scrollbars).toMatch(/read:\s*\(view\) =>\s*\{[\s\S]*?scrollbarChrome\.read\(view\.dom\)[\s\S]*?view\.contentHeight/);
     expect(scrollbars).toMatch(/write:\s*\(measurement\) =>[\s\S]*?updateThemedViewportScrollbar\(this\.view\.dom, measurement\.signature, measurement\.geometry\)/);
     expect(scrollbars).not.toContain("new ResizeObserver");
     expect(read("platform/themed-scrollbars.css")).not.toContain("noContent");

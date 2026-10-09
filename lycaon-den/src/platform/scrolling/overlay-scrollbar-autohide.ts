@@ -1,8 +1,8 @@
 import type { Elements } from "overlayscrollbars";
 import {
-  DEN_SCROLLPORT_INPUT_EVENT,
   type ScrollportMotion,
 } from "./scrollport-motion.ts";
+import { DEN_SCROLLPORT_INPUT_EVENT } from "./scrollport-motion-types.ts";
 
 /** Scrollbars carry this class while faded. */
 export const DEN_SCROLLBAR_IDLE_CLASS = "den-scrollbar-idle";
@@ -70,7 +70,7 @@ export function bindOverlayScrollbarAutoHide(
       return;
     }
     // A gesture still running keeps its bar until it settles.
-    if (pointerOverBar || motion.isDirectInputActive()) {
+    if (pointerOverBar || motion.input.isDirectInputActive()) {
       armHide();
       return;
     }

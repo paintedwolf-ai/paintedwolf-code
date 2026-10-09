@@ -11,15 +11,8 @@ import {
   vi,
 } from "vitest";
 import { OverlayScrollbars } from "overlayscrollbars";
-import {
-  attachThemedViewportScrollbar,
-  beginScrollMeasureQuiet,
-  isScrollMeasureQuietForTests,
-  resetScrollMeasureQuietForTests,
-  setupThemedScrollbars,
-  updateThemedViewportScrollbar,
-} from "./themed-scrollbars.ts";
-import { DEN_SCROLLPORT_INPUT_EVENT } from "./scrollport-motion.ts";
+import { attachThemedViewportScrollbar, beginScrollMeasureQuiet, isScrollMeasureQuietForTests, resetScrollMeasureQuietForTests, setupThemedScrollbars, updateThemedViewportScrollbar } from "./themed-scrollbars.ts";
+import { DEN_SCROLLPORT_INPUT_EVENT } from "./scrollport-motion-types.ts";
 import { bindOverlayScrollbarAutoHide } from "./overlay-scrollbar-autohide.ts";
 import { bindOverlayScrollbarInput } from "./overlay-scrollbar-input.ts";
 

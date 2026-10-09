@@ -10,7 +10,7 @@ import (
 
 // Outbox capture precedes the database snapshot so later deliveries remain replayable.
 // Cloning releases editing before database capture and compression.
-func captureEditorOutbox(ctx context.Context, source, destination string) error {
+func captureEditorOutbox(ctx context.Context, source, destination string, usage *RecoveryCaptureUsage) error {
 	release, err := editoroutbox.Acquire(ctx, source)
 	if err != nil {
 		return err
@@ -21,7 +21,12 @@ func captureEditorOutbox(ctx context.Context, source, destination string) error 
 		return err
 	}
 	for relative, file := range files {
-		if err := copySnapshotSource(ctx, file, filepath.Join(destination, filepath.FromSlash(relative))); err != nil {
+		destinationPath := filepath.Join(destination, filepath.FromSlash(relative))
+		shared, err := copySnapshotSource(ctx, file, destinationPath)
+		if err != nil {
+			return err
+		}
+		if err := usage.addFile(destinationPath, shared); err != nil {
 			return err
 		}
 	}
