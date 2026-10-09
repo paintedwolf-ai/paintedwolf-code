@@ -111,7 +111,8 @@ export function streamFixture(opts?: { content?: number; scrollTop?: number }) {
   }) as DOMRect);
   bindScrollportMotion(stream, stream, stream);
   motionHosts.add(stream);
-  const motion = scrollportMotionForHost(stream)!;
+  const motion = scrollportMotionForHost(stream);
+  if (!motion) throw new Error("bindScrollportMotion did not register the stream");
   return {
     stream,
     motion,

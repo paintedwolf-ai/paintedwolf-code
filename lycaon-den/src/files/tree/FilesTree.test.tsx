@@ -238,6 +238,71 @@ describe("Files interactions with host rows", () => {
     await waitFor(() => expect(document.activeElement).toBe(button(".")));
   });
 
+  it("walks folders with arrow keys, opens files with Enter, and returns to the parent folder", async () => {
+    const rows = [treeRow(".", "directory", true), treeRow("docs", "directory"), treeRow("README.md")];
+    const fixture = treeViewFixture(rows);
+    fixture.update(command => {
+      const [disclosure] = command.kind === "disclose" ? command.disclosures : [];
+      const row = rows.find(row => row.address.path === disclosure?.address.path);
+      if (!disclosure || !row) return;
+      row.expanded = disclosure.open;
+      fixture.rows([...rows]);
+    });
+    const view = mount(fixture);
+    await findFileRow("README.md"); button("docs").focus();
+    fireEvent.keyDown(button("docs"), { key: "ArrowRight" });
+    await waitFor(() => expect(button("docs").getAttribute("aria-expanded")).toBe("true"));
+    fireEvent.keyDown(button("docs"), { key: "ArrowRight" });
+    await waitFor(() => expect(document.activeElement).toBe(button("README.md")));
+    fireEvent.keyDown(button("README.md"), { key: "ArrowUp" });
+    await waitFor(() => expect(document.activeElement).toBe(button("docs")));
+    fireEvent.keyDown(button("docs"), { key: "ArrowLeft" });
+    await waitFor(() => expect(button("docs").getAttribute("aria-expanded")).toBe("false"));
+    fireEvent.keyDown(button("docs"), { key: "ArrowLeft" });
+    await waitFor(() => expect(document.activeElement).toBe(button(".")));
+    fireEvent.keyDown(button("README.md"), { key: "Enter" });
+    expect(view.onOpenFile).toHaveBeenCalledWith({ rootId: "r1", rootLabel: "repo", path: "README.md" }, "permanent");
+  });
+
+  it("jumps to rows by typed prefix", async () => {
+    mount(treeViewFixture([treeRow(".", "directory", true), treeRow("alpha.ts"), treeRow("beta.ts"), treeRow("bravo.ts")]));
+    await findFileRow("bravo.ts"); button(".").focus();
+    fireEvent.keyDown(button("."), { key: "b" });
+    await waitFor(() => expect(document.activeElement).toBe(button("beta.ts")));
+    fireEvent.keyDown(button("beta.ts"), { key: "r" });
+    await waitFor(() => expect(document.activeElement).toBe(button("bravo.ts")));
+  });
+
+  it("clears an open filter when Escape is pressed on a row", async () => {
+    const onFilterQueryChange = vi.fn(); const onFilterClose = vi.fn();
+    mount(treeViewFixture(), { filterQuery: "", filterOpen: true, onFilterQueryChange, onFilterClose });
+    await findFileRow("README.md");
+    fireEvent.keyDown(button("README.md"), { key: "Escape" });
+    expect(onFilterQueryChange).toHaveBeenCalledWith("");
+    expect(onFilterClose).toHaveBeenCalledOnce();
+  });
+
+  it("drags a file onto a folder and reports the move until the host finishes it", async () => {
+    let finishMove!: () => void;
+    const onMovePath = vi.fn(() => new Promise<void>(resolve => { finishMove = resolve; }));
+    mount(treeViewFixture([treeRow(".", "directory", true), treeRow("docs", "directory"), treeRow("README.md")]), { onMovePath });
+    await findFileRow("README.md");
+    const docs = button("docs").closest<HTMLElement>("[data-files-ctx='tree-row']");
+    // jsdom has no layout, so hit testing lands on the folder row.
+    Object.defineProperty(document, "elementFromPoint", { configurable: true, value: () => docs });
+    try {
+      button("README.md").dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0, clientX: 10, clientY: 10 }));
+      window.dispatchEvent(new MouseEvent("pointermove", { clientX: 40, clientY: 60 }));
+      expect(await screen.findByText("Move to docs")).toBeTruthy();
+      window.dispatchEvent(new MouseEvent("pointerup", { clientX: 40, clientY: 60 }));
+      expect(onMovePath).toHaveBeenCalledWith("r1", "README.md", "docs", false);
+      expect(screen.queryByText("Move to docs")).toBeNull();
+      expect(await screen.findByText("Moving README.md to docs…")).toBeTruthy();
+      finishMove();
+      await waitFor(() => expect(screen.queryByText("Moving README.md to docs…")).toBeNull());
+    } finally { delete (document as { elementFromPoint?: unknown }).elementFromPoint; }
+  });
+
   it("opens on folder selection, toggles while selected, and transfers selection to a file", async () => {
     const rows = [treeRow(".", "directory", true), treeRow("docs", "directory"), treeRow("other", "directory"), treeRow("README.md")];
     const fixture = treeViewFixture(rows);

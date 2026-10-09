@@ -318,7 +318,9 @@ function assertCache03(): void {
   expect(shell).toMatch(/projects=\{props\.projects\}/);
 
   const chatView = readSourceText(join(denSrc, "components/chatview/ChatView.tsx"));
-  expect(chatView).toMatch(/projects:\s*ProjectsStore/);
+  expect(chatView).toMatch(/props:\s*ChatViewProps/);
+  const chatViewProps = readSourceText(join(denSrc, "components/chatview/chat-view-props.ts"));
+  expect(chatViewProps).toMatch(/projects:\s*ProjectsStore/);
 }
 
 function assertBoot01(): void {
