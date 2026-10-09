@@ -519,9 +519,11 @@ source and producing normal receipts.
 [`ci.yml`](../.github/workflows/ci.yml) reports the required `check`. Drafts spend
 no verification runners and cannot pass admission. Manual dispatch runs the
 complete check and platform tier. [`qualification.yml`](../.github/workflows/qualification.yml)
-runs the complete check, platform confinement and upgrade corpus, and browser
-and desktop journeys on main. It does not cancel an in-progress qualification
-for a newer push. Nightly retains race, fuzz, WebKit, stress, and performance
+runs the complete check, then platform confinement and upgrade corpus, then
+browser and desktop journeys on main. One qualification runs at a time: it does
+not cancel an in-progress run for a newer push, and a newer push replaces a
+pending one, so a busy main qualifies its newest commit rather than every
+commit. Nightly retains race, fuzz, WebKit, stress, and performance
 coverage. A release requires a successful **Qualification** run for its exact
 commit on main; passing merge admission is insufficient.
 
@@ -605,6 +607,8 @@ dependency change, and the workflow's summary reports total cache usage.
 A running warmer finishes before the next push starts warming, so frequent
 merges cannot repeatedly cancel cold preparation before it saves; a newer push
 replaces a warmer still pending, so only main's newest commit waits to warm.
+Its Linux and macOS jobs and the release compile run one after another, on one
+runner at a time.
 Release builds restore the shared Go cache; their separate cache retains only
 Tauri release builds. The cache actions enforce the main-ref write boundary
 themselves. Pinned Go analyzers have separate lint and vulnerability caches; their module versions
@@ -625,6 +629,48 @@ never labels an unexplained failure flaky or quarantines it automatically.
 lane durations, and unsuccessful merge-group runs. Three distinct runs sharing
 one failure signature open a deduplicated incident. Missing artifacts remain a
 coverage gap; cancellation is reported separately from an attributed test failure.
+
+### Runner capacity
+
+The GitHub Free plan runs twenty hosted jobs at once across the organization,
+five of them on macOS, and starts waiting jobs first come, first served. The
+project uses no larger or self-hosted runners, so those limits are fixed.
+Every workflow other than CI
+therefore holds a fixed number of runners: one run at a time, each matrix
+capped, and a run's stages in turn wherever running them side by side would
+widen it. The `capacity` table in
+[`verification-plan.json`](../scripts/verification-plan.json) declares each
+triggered workflow's footprint and each verification profile's
+`max_parallel`. The reusable verification workflow's plan job reads that cap
+from the catalog and orders the matrix longest budget first, so a capped matrix
+starts its slowest lanes first.
+
+| Class | Workflows | One run at a time | Runners (macOS) |
+|---|---|---|---|
+| Qualification | `qualification.yml` | `qualification` | 3 (1): the `check` profile capped at three, then platform's two jobs, then two browser shards beside the desktop journey |
+| Cache warming | `build-caches.yml` | `build-caches` | 1 (1): Linux, macOS, then the release compile |
+| Nightly | `nightly.yml` | `nightly` | 2 (1): the `nightly` profile capped at two, then one browser shard beside the desktop journey, then the upgrade rehearsal beside quarantine observation |
+| Releases | `release.yml`, `release-halt.yml` | `release-static-update` | 2 (2): preflight or the upgrade rehearsal beside one signed build |
+| Maintenance | dependency inventory, release-system live test, queue health, issue staleness, the issue sweep, release secrets check | `maintenance`, shared | 1 |
+| Runner priority sweep | `runner-priority.yml` | `runner-priority` | 1 |
+| Merge queue | CI of merge groups | one group per queue build | queue builds × the `integration` cap |
+
+A newer run replaces a pending one in its group and a started run finishes, so
+a long nightly or qualification never multiplies. The maintenance workflows
+share one group across workflows; their schedules are staggered so that no two
+are pending at once, and a scheduled run replaced by a manual one returns at
+its next schedule. Issue intake, an issue's lifecycle nudge, and verification
+recovery handle one event per run instead: each run is a single job bounded to
+fifteen minutes. Together the bounded classes and the merge queue need at most
+twenty runners and five macOS runners. Pull request CI is the one class still
+sized by demand; [runner priority](#runner-priority) gives the merge queue
+precedence over it.
+
+Contract tests in
+[`hosted_capacity_contract_test.go`](../lycaon/test/contract/release/hosted_capacity_contract_test.go)
+compute each workflow's widest set of jobs that can run at once, following
+`needs`, event conditions, matrix caps, and reusable workflows, and require it
+within the declared footprint, and the sum of the classes within the plan.
 
 ### Runner priority
 

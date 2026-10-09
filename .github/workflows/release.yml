@@ -144,6 +144,8 @@ jobs:
     needs: [classify]
     strategy:
       fail-fast: false
+      # Beside preflight and the upgrade rehearsal, a release holds two macOS runners.
+      max-parallel: 1
       matrix: ${{ fromJSON(needs.classify.outputs.matrix) }}
     runs-on: ${{ matrix.runner }}
     environment: release-signing

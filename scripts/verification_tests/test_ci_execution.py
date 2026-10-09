@@ -114,6 +114,29 @@ class HostedVerificationTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 ci.run_lane("behavior")
 
+    def test_each_profile_caps_the_runners_its_matrix_holds(self):
+        caps = planning.catalog()["capacity"]["max_parallel"]
+        for profile in ci.PROFILES:
+            with self.subTest(profile=profile):
+                self.assertEqual(ci.max_parallel(profile), caps[profile])
+        with self.assertRaises(ValueError):
+            ci.max_parallel("unknown")
+        for mutation in ("missing", "zero", "fraction"):
+            with self.subTest(mutation=mutation):
+                data = copy.deepcopy(planning.catalog())
+                if mutation == "missing":
+                    del data["capacity"]["max_parallel"]["nightly"]
+                else:
+                    data["capacity"]["max_parallel"]["nightly"] = 0 if mutation == "zero" else 1.5
+                with patch.object(ci, "catalog", return_value=data), self.assertRaises(ValueError):
+                    ci.max_parallel("check")
+
+    def test_capped_matrix_starts_its_longest_lanes_first(self):
+        for profile in ci.PROFILES:
+            with self.subTest(profile=profile):
+                minutes = [row["minutes"] for row in ci.matrix(profile)["include"]]
+                self.assertEqual(minutes, sorted(minutes, reverse=True))
+
     def test_combined_analysis_targets_restore_both_tool_sets(self):
         self.assertEqual(ci.analysis_set(["lint:full", "lint:vuln"]), "all")
 

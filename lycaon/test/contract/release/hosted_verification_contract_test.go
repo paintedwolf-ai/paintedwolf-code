@@ -259,7 +259,8 @@ func TestEndToEndVerificationRunsInQualificationAndSelectedNightly(t *testing.T)
 	if web.Strategy.FailFast == nil || *web.Strategy.FailFast || web.Continue {
 		t.Fatal("each web shard must run independently and contribute to the verdict")
 	}
-	const selected = "github.event_name == 'schedule' || inputs.suite == 'all' || inputs.suite == 'e2e'"
+	// Nightly stages run in turn, and each runs whatever an earlier stage concluded.
+	const selected = "${{ !cancelled() && (github.event_name == 'schedule' || inputs.suite == 'all' || inputs.suite == 'e2e') }}"
 	qualification := hostedJobs(t, "qualification")
 	if qualification["e2e"].Uses != "./.github/workflows/e2e-verification.yml" {
 		t.Fatal("main qualification must include browser verification")

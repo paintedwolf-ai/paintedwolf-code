@@ -72,6 +72,16 @@ def lanes():
     return values
 
 
+def max_parallel(profile):
+    """Jobs a profile's matrix runs at once; the catalog's capacity table bounds every hosted class."""
+    caps = catalog()["capacity"]["max_parallel"]
+    if set(caps) != PROFILES or not all(type(cap) is int and cap >= 1 for cap in caps.values()):
+        raise ValueError("every CI profile declares a positive maximum of parallel jobs")
+    if profile not in PROFILES:
+        raise ValueError(f"unsupported CI profile: {profile}")
+    return caps[profile]
+
+
 def analysis_set(targets):
     lint = bool(set(targets) & {"lint:fast", "lint:full"})
     vulnerabilities = bool(set(targets) & {"lint:vuln", "lint:vuln:fresh"})
@@ -104,7 +114,8 @@ def matrix(profile, suite="all", scope=None):
                            "runner": lane.get("runner", "ubuntu-latest")})
     if not result:
         raise ValueError("CI selection contains no verification")
-    return {"include": result}
+    # A capped matrix starts jobs in order, so the longest lanes start first instead of finishing last.
+    return {"include": sorted(result, key=lambda row: -row["minutes"])}
 
 
 def require_success(results, skipped=(), draft=False):
@@ -340,6 +351,8 @@ def main():
     plan.add_argument("profile", choices=sorted(PROFILES))
     plan.add_argument("--affected", action="store_true")
     plan.add_argument("--suite", default="all", choices=sorted(SUITES))
+    parallel = commands.add_parser("max-parallel", help="jobs a profile's matrix runs at once")
+    parallel.add_argument("profile", choices=sorted(PROFILES))
     run = commands.add_parser("run")
     run.add_argument("lane")
     run.add_argument("--shard", default="")
@@ -363,6 +376,8 @@ def main():
             with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as summary:
                 summary.write("### Integration scope\n\n```json\n" + json.dumps(scope, indent=2) + "\n```\n")
         print(json.dumps(matrix(args.profile, args.suite, scope), separators=(",", ":")))
+    elif args.command == "max-parallel":
+        print(max_parallel(args.profile))
     elif args.command == "run":
         return run_lane(args.lane, args.shard)
     elif args.command == "gate":
