@@ -14,8 +14,8 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 )
 
-// pipelineWaitDelay bounds Wait when descendants keep output pipes open.
-const pipelineWaitDelay = 5 * time.Second
+// PipelineWaitDelay bounds output draining after a command leader exits.
+const PipelineWaitDelay = 5 * time.Second
 
 // StageRun records one stage's outcome after a run.
 type StageRun struct {
@@ -417,7 +417,7 @@ func waitWiredStages(runCtx context.Context, wired []wiredStage) (timedOut bool,
 
 // RunPipeline executes connected stages and returns the first counted failure.
 func RunPipeline(ctx context.Context, stages []Stage, opts ExecOpts) (*PipelineResult, error) {
-	return runPipeline(ctx, stages, opts, pipelineWaitDelay)
+	return runPipeline(ctx, stages, opts, PipelineWaitDelay)
 }
 
 func runPipeline(ctx context.Context, stages []Stage, opts ExecOpts, waitDelay time.Duration) (*PipelineResult, error) {
@@ -467,7 +467,7 @@ func runPipeline(ctx context.Context, stages []Stage, opts ExecOpts, waitDelay t
 	}
 
 	if waitDelay <= 0 {
-		waitDelay = pipelineWaitDelay
+		waitDelay = PipelineWaitDelay
 	}
 	call := newCallStreams(opts, capture, errCapture, redirect)
 	run := newSequenceRun(stages, opts, call, stdinReader, waitDelay)
@@ -487,7 +487,7 @@ func runPipeline(ctx context.Context, stages []Stage, opts ExecOpts, waitDelay t
 }
 
 func exitCodeFromWait(err error) int {
-	if err == nil {
+	if err == nil || errors.Is(err, exec.ErrWaitDelay) {
 		return 0
 	}
 	var exitErr *exec.ExitError

@@ -1,0 +1,50 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/mattermost/mattermost-server"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2025-41443",
+  "GHSA-7cr3-38jm-6p45"
+ ],
+ "credits": [
+  {
+   "name": "lordwillmore"
+  }
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2025-4031"
+ },
+ "details": "Guest user can discover active public channels in github.com/mattermost/mattermost-server",
+ "id": "GO-2025-4031",
+ "modified": "2025-10-30T15:02:33Z",
+ "published": "2025-10-30T15:02:33Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2025-41443"
+  },
+  {
+   "type": "WEB",
+   "url": "https://mattermost.com/security-updates"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Guest user can discover active public channels in github.com/mattermost/mattermost-server"
+}

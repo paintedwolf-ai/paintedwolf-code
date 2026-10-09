@@ -1,0 +1,102 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/coder/coder"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/coder/coder/v2"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "2.29.17"
+      },
+      {
+       "introduced": "2.30.0"
+      },
+      {
+       "fixed": "2.32.7"
+      },
+      {
+       "introduced": "2.33.0"
+      },
+      {
+       "fixed": "2.33.8"
+      },
+      {
+       "introduced": "2.34.0"
+      },
+      {
+       "fixed": "2.34.2"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "GHSA-h58c-xccx-75m3"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6267"
+ },
+ "details": "Coder: Stored HTML injection via unescaped ApplicationName and LogoURL appearance settings in github.com/coder/coder",
+ "id": "GO-2026-6267",
+ "modified": "2026-08-25T19:43:10Z",
+ "published": "2026-08-25T19:43:10Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/coder/coder/security/advisories/GHSA-h58c-xccx-75m3"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/coder/coder/commit/ec19bc41d80568c0eb9f74b526e8cc8ffbe3be9a"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/coder/coder/pull/25804"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/coder/coder/releases/tag/v2.29.17"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/coder/coder/releases/tag/v2.32.7"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/coder/coder/releases/tag/v2.33.8"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/coder/coder/releases/tag/v2.34.2"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Coder: Stored HTML injection via unescaped ApplicationName and LogoURL appearance settings in github.com/coder/coder"
+}

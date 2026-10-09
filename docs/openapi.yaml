@@ -26786,6 +26786,22 @@ components:
         why:
           type: string
           description: The consequence that makes the ask worth the reader's time.
+    CompletionReportRating:
+      x-go-generate: true
+      type: object
+      required:
+        - level
+        - why
+      additionalProperties: false
+      description: |
+        The report's own answer to the workflow's rating question, made from all the run's work: one declared level and the reason for it.
+      properties:
+        level:
+          type: string
+          description: A level label the workflow's brief declares.
+        why:
+          type: string
+          description: One line saying what decided the level.
     CompletionReportSetAside:
       x-go-generate: true
       type: object
@@ -26881,6 +26897,9 @@ components:
         ask:
           x-go-pointer: true
           $ref: '#/components/schemas/CompletionReportAsk'
+        rating:
+          x-go-pointer: true
+          $ref: '#/components/schemas/CompletionReportRating'
         set_asides:
           type: array
           items:
@@ -36491,6 +36510,27 @@ components:
           $ref: '#/components/schemas/HistoryRetentionRule'
         receipt_detail:
           $ref: '#/components/schemas/HistoryRetentionRule'
+    HistoryClassUsage:
+      type: object
+      x-go-generate: true
+      additionalProperties: false
+      required:
+        - class
+        - content_bytes
+      properties:
+        class:
+          type: string
+          enum:
+            - recordings
+            - checkpoints
+            - source_revisions
+            - scan_detail
+            - receipt_detail
+        content_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Uncompressed retained content referenced by this class, deduplicated within the class. SQLite classes count serialized detail fields, excluding row and page overhead. Shared bodies can appear in multiple classes; this is neither exclusive disk allocation nor reclaimable bytes.
     HistoryStorageLane:
       type: object
       x-go-generate: true
@@ -36545,6 +36585,10 @@ components:
       properties:
         policy:
           $ref: '#/components/schemas/HistoryRetentionPolicy'
+        classes:
+          type: array
+          items:
+            $ref: '#/components/schemas/HistoryClassUsage'
         lanes:
           type: array
           items:

@@ -1,0 +1,68 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {
+    "imports": [
+     {
+      "path": "github.com/caddyserver/caddy/v2/modules/caddyhttp/rewrite",
+      "symbols": [
+       "Rewrite.Provision",
+       "Rewrite.Rewrite",
+       "Rewrite.ServeHTTP",
+       "queryOpsReplacement.Provision"
+      ]
+     }
+    ]
+   },
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/caddyserver/caddy/v2"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "2.11.4"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-77281",
+  "GHSA-j8px-rmrx-76h9"
+ ],
+ "database_specific": {
+  "review_status": "REVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6512"
+ },
+ "details": "Rewrite placeholder re-expansion, unbounded body buffer DoS, and fileHidden case-sensitivity bypass in github.com/caddyserver/caddy",
+ "id": "GO-2026-6512",
+ "modified": "2026-10-01T20:23:42Z",
+ "published": "2026-10-01T20:23:42Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/caddyserver/caddy/security/advisories/GHSA-j8px-rmrx-76h9"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/caddyserver/caddy/commit/176b043b0104cee3f894023cd5a598ac29e404bb"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/caddyserver/caddy/pull/7761"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/caddyserver/caddy/releases/tag/v2.11.4"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Vulnerabilities in handler/placeholder layer in github.com/caddyserver/caddy"
+}

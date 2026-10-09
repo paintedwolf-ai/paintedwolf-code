@@ -248,9 +248,7 @@ func (c *Catalog) publish(key string, snapshot Snapshot, buildErr error) Snapsho
 		rec.mustAdvanceRevision = false
 		rec.validatedAt = c.now()
 	}
-	rec.building = false
-	rec.cancel()
-	close(rec.done)
+	rec.settle()
 	c.evictLocked(key)
 	return rec.snapshot
 }

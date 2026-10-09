@@ -1,0 +1,57 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/greenpau/caddy-security"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2024-21492",
+  "GHSA-vp66-gf7w-9m4x"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2024-2557"
+ },
+ "details": "Insufficient Session Expiration in github.com/greenpau/caddy-security",
+ "id": "GO-2024-2557",
+ "modified": "2024-06-28T15:28:53Z",
+ "published": "2024-06-28T15:28:53Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-vp66-gf7w-9m4x"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2024-21492"
+  },
+  {
+   "type": "REPORT",
+   "url": "https://github.com/greenpau/caddy-security/issues/272"
+  },
+  {
+   "type": "WEB",
+   "url": "https://blog.trailofbits.com/2023/09/18/security-flaws-in-an-sso-plugin-for-caddy"
+  },
+  {
+   "type": "WEB",
+   "url": "https://security.snyk.io/vuln/SNYK-GOLANG-GITHUBCOMGREENPAUCADDYSECURITY-5920787"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Insufficient Session Expiration in github.com/greenpau/caddy-security"
+}

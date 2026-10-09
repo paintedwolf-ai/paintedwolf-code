@@ -1,0 +1,60 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/NVIDIA/nvidia-container-toolkit"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.16.2"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2024-0133",
+  "GHSA-f748-7hpg-88ch"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2024-3237"
+ },
+ "details": "NVIDIA Container Toolkit allows specially crafted container image to create empty files on the host file system in github.com/NVIDIA/nvidia-container-toolkit",
+ "id": "GO-2024-3237",
+ "modified": "2024-11-04T15:44:16Z",
+ "published": "2024-11-04T15:44:16Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/NVIDIA/nvidia-container-toolkit/security/advisories/GHSA-f748-7hpg-88ch"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2024-0133"
+  },
+  {
+   "type": "WEB",
+   "url": "https://advisory-inbox.githubapp.com/advisory_reviews/GHSA-wqq7-v22c-gpfp"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/NVIDIA/libnvidia-container/security/advisories/GHSA-xff4-h7r9-vrpf"
+  },
+  {
+   "type": "WEB",
+   "url": "https://nvidia.custhelp.com/app/answers/detail/a_id/5582"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "NVIDIA Container Toolkit allows specially crafted container image to create empty files on the host file system in github.com/NVIDIA/nvidia-container-toolkit"
+}
