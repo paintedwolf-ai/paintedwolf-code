@@ -139,3 +139,39 @@ func TestSupervisedPTYInteractiveShellOwnsForeground(t *testing.T) {
 		t.Fatal("terminal output did not settle")
 	}
 }
+
+func TestSupervisedCommandSeesOnlyItsIntendedDescriptors(t *testing.T) {
+	python, err := exec.LookPath("python3")
+	testutil.FailErr(t, "locate descriptor fixture runtime", err)
+	// fstat probes descriptors without opening one, unlike listing /proc/self/fd.
+	const probe = `import os
+open_fds = []
+for fd in range(256):
+    try:
+        os.fstat(fd)
+        open_fds.append(str(fd))
+    except OSError:
+        pass
+print(" ".join(open_fds))`
+	for name, extra := range map[string]int{"standard streams only": 0, "one extra file": 1} {
+		t.Run(name, func(t *testing.T) {
+			cmd, cleanup, err := PrepareCommand(t.Context(), python, []string{"-c", probe}, ExecOpts{Launch: HostLaunch("descriptor inheritance regression")})
+			testutil.FailErr(t, "prepare descriptor probe", err)
+			defer cleanup()
+			want := "0 1 2"
+			if extra > 0 {
+				read, write, err := os.Pipe()
+				testutil.FailErr(t, "open intended descriptor", err)
+				defer func() { _ = read.Close(); _ = write.Close() }()
+				cmd.ExtraFiles = []*os.File{write}
+				want += " 3"
+			}
+			var out strings.Builder
+			cmd.Stdout = &out
+			testutil.FailErr(t, "run supervised descriptor probe", RunInOwnGroup(cmd))
+			if got := strings.TrimSpace(out.String()); got != want {
+				t.Fatalf("supervised command descriptors = %q, want %q", got, want)
+			}
+		})
+	}
+}

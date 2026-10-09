@@ -189,10 +189,14 @@ func runCommandSupervisor(args []string) int {
 	events := make(chan os.Signal, 4)
 	signal.Notify(events, syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP, syscall.SIGUSR2)
 	defer signal.Stop(events)
-	gone := awaitEngineLoss(os.NewFile(uintptr(3+target.extraFiles), "engine-lifetime"))
+	lifetime, status := 3+target.extraFiles, 4+target.extraFiles
+	// Exec cleared close-on-exec on the supervisor's own pipes; keep them from the target.
+	syscall.CloseOnExec(lifetime)
+	syscall.CloseOnExec(status)
+	gone := awaitEngineLoss(os.NewFile(uintptr(lifetime), "engine-lifetime"))
 	cmd := target.command()
 	started := startSupervisorTarget(cmd, target.priority)
-	reported := reportLaunch(os.NewFile(uintptr(4+target.extraFiles), "command-startup"), started)
+	reported := reportLaunch(os.NewFile(uintptr(status), "command-startup"), started)
 	if started != nil {
 		return 127
 	}
