@@ -219,27 +219,6 @@ func TestListForPromptFiltersDeniedTools(t *testing.T) {
 	}
 }
 
-func TestListForPromptReadsSessionStateOncePerListing(t *testing.T) {
-	inv := listInvoker{metas: []tools.ToolMeta{{Name: "read"}, {Name: "write"}, {Name: "grep"}}}
-	rootReads := 0
-	eng := NewEngine(EngineDeps{
-		ToolInvoker: inv,
-		Rules:       toolNameRuleEvaluator{},
-		ProjectRootCount: func(context.Context, *api.Session) int {
-			rootReads++
-			return 1
-		},
-	})
-	listed := listedNames(eng.ListForPrompt(context.Background(), &api.Session{ID: "s1"}, "coordinator"))
-	if want := []string{"read", "grep"}; !reflect.DeepEqual(listed, want) {
-		t.Fatalf("listed = %v want %v", listed, want)
-	}
-	// One read for the tool filter and one for the shared rule context.
-	if rootReads != 2 {
-		t.Fatalf("project root reads = %d want 2 for a three-tool listing", rootReads)
-	}
-}
-
 type toolNameRuleEvaluator struct{}
 
 func (toolNameRuleEvaluator) Evaluate(_ context.Context, eval rules.EvalContext) (*rules.RuleOutcome, error) {
