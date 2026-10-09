@@ -8,10 +8,12 @@ on:
 permissions:
   contents: read
 
+# One run at a time: a newer push replaces a pending run, and a running one finishes.
 concurrency:
-  group: qualification-${{ github.ref }}
+  group: qualification
   cancel-in-progress: false
 
+# The stages run in turn, so one run holds at most three runners.
 jobs:
   verification:
     uses: ./.github/workflows/verification.yml
@@ -19,10 +21,14 @@ jobs:
       profile: check
 
   platform:
+    needs: verification
     uses: ./.github/workflows/platform-verification.yml
 
   e2e:
+    needs: platform
     uses: ./.github/workflows/e2e-verification.yml
+    with:
+      web-parallel: 2
 
   qualification:
     if: ${{ !cancelled() }}

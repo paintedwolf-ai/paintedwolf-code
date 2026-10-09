@@ -1,6 +1,7 @@
 package session
 
 import (
+	"context"
 	"sync"
 	"testing"
 )
@@ -13,12 +14,12 @@ func TestPromptCurationConcurrentAdmissionAndDrain(t *testing.T) {
 			for range 250 {
 				work := m.Register("root", func() {})
 				go m.Finish("root", work)
-				m.Wait()
+				m.Wait(t.Context())
 			}
 		})
 	}
 	workers.Wait()
-	m.Wait()
+	m.Wait(t.Context())
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if len(m.bySession) != 0 {
@@ -37,7 +38,7 @@ func TestPromptCurationDrainIncludesEveryRegisteredSession(t *testing.T) {
 	default:
 	}
 	m.Finish("second", second)
-	m.Wait()
+	m.Wait(t.Context())
 	select {
 	case <-first.done:
 	default:
@@ -47,5 +48,20 @@ func TestPromptCurationDrainIncludesEveryRegisteredSession(t *testing.T) {
 	case <-second.done:
 	default:
 		t.Fatal("second session completion was lost")
+	}
+}
+
+func TestPromptCurationDrainHonorsShutdownCancellation(t *testing.T) {
+	m := &Manager{}
+	work := m.curation.Register("root", func() {})
+	defer m.curation.Finish("root", work)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	m.WaitForPromptCuration(ctx)
+	select {
+	case <-work.done:
+		t.Fatal("canceling the drain completed unfinished curation")
+	default:
 	}
 }

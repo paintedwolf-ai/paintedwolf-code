@@ -716,39 +716,15 @@
     ]
   },
   "ci": {
-    "fast-build": {
+    "ready": {
       "targets": [
         "build",
         "lint:fast",
-        "licenses:notices"
-      ],
-      "minutes": 60,
-      "profiles": [
-        "fast"
-      ],
-      "suite": "all",
-      "setup": "verification"
-    },
-    "fast-go": {
-      "targets": [
-        "test:short",
-        "test:contract"
-      ],
-      "minutes": 45,
-      "profiles": [
-        "fast"
-      ],
-      "suite": "all",
-      "setup": "verification",
-      "shards": 2
-    },
-    "fast-frontend": {
-      "targets": [
+        "budgets",
         "den:typecheck",
-        "den:lint",
-        "den:test:fast"
+        "den:lint"
       ],
-      "minutes": 45,
+      "minutes": 15,
       "profiles": [
         "fast"
       ],
@@ -763,12 +739,12 @@
       ],
       "minutes": 45,
       "profiles": [
-        "fast",
         "check",
         "integration"
       ],
       "suite": "all",
-      "setup": "verification"
+      "setup": "verification",
+      "first": true
     },
     "build": {
       "targets": [
@@ -812,7 +788,8 @@
         "integration"
       ],
       "suite": "all",
-      "setup": "verification"
+      "setup": "verification",
+      "first": true
     },
     "vulnerabilities": {
       "targets": [
@@ -1019,29 +996,31 @@
       "setup": "verification"
     }
   },
-  "runner_priority": {
-    "release": [
-      "release.yml",
-      "release-halt.yml",
-      "release-secrets-check.yml"
-    ],
-    "warming": [
-      "build-caches.yml"
-    ],
-    "background": [
-      "nightly.yml",
-      "dependency-inventory.yml",
-      "release-system-live-test.yml",
-      "issue-intake.yml",
-      "issue-stale.yml",
-      "issue-sweep.yml",
-      "queue-health.yml"
-    ],
-    "qualification": [
-      "qualification.yml"
-    ],
-    "one_shot": [
-      "verification-recovery.yml"
-    ]
+  "capacity": {
+    "runners": 20,
+    "macos_runners": 5,
+    "max_parallel": {
+      "fast": 1,
+      "integration": 4,
+      "check": 3,
+      "nightly": 2,
+      "release": 3
+    },
+    "footprints": {
+      "ci.yml": 1,
+      "qualification.yml": 3,
+      "build-caches.yml": 1,
+      "nightly.yml": 2,
+      "release.yml": 2,
+      "release-halt.yml": 1,
+      "release-secrets-check.yml": 1,
+      "dependency-inventory.yml": 1,
+      "release-system-live-test.yml": 1,
+      "queue-health.yml": 1,
+      "issue-stale.yml": 1,
+      "issue-sweep.yml": 1,
+      "issue-intake.yml": 1,
+      "verification-recovery.yml": 1
+    }
   }
 }

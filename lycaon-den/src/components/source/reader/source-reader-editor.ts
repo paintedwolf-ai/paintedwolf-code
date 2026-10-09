@@ -392,15 +392,16 @@ export class ReaderEditor {
     const restored = this.restoredViewport;
     if (restored?.revision === this.viewportRevision && (restored.top === undefined || restored.top === this.view.scrollDOM.scrollTop)) return restored.anchor;
     this.restoredViewport = undefined;
-    const top = this.view.scrollDOM.getBoundingClientRect().top - this.view.documentTop;
+    const viewport = this.view.scrollDOM;
+    // Read the end affinity before line lookup, whose measure can move the scrollport.
+    const maximum = viewport.scrollHeight - viewport.clientHeight;
+    const affinity = viewport.clientHeight > 0 && maximum > 0 && Math.abs(maximum - viewport.scrollTop) <= 1 ? { atEnd: true } : {};
+    const top = viewport.getBoundingClientRect().top - this.view.documentTop;
     const block = this.view.lineBlockAtHeight(top);
     const entry = this.document.at(block.from);
     if (!entry) return undefined;
     const start = displayStart(entry.slot), count = displayEnd(entry.slot) - start;
     const relative = top - block.top;
-    const viewport = this.view.scrollDOM;
-    const maximum = viewport.scrollHeight - viewport.clientHeight;
-    const affinity = viewport.clientHeight > 0 && maximum > 0 && Math.abs(maximum - viewport.scrollTop) <= 1 ? { atEnd: true } : {};
     if (!entry.slot.pending) return { rank: start, fraction: relative / Math.max(1, block.height), ...affinity };
     const rowHeight = Math.max(1, block.height) / Math.max(1, count);
     const rank = Math.min(Math.max(0, count - 1), Math.max(0, Math.floor(relative / rowHeight)));

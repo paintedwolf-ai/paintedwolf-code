@@ -110,7 +110,7 @@ impl Candidate {
             self.artifact_signature.as_str(),
         ))
         .expect("release identity");
-        format!("{:x}", Sha256::digest(identity))
+        hex::encode(Sha256::digest(identity))
     }
     pub fn valid_identity(&self) -> bool {
         self.release_id == self.identity()

@@ -21,6 +21,11 @@ permissions:
   contents: read
   issues: write
 
+# A label's nudge runs per issue; the sweep joins scheduled maintenance, one workflow at a time.
+concurrency:
+  group: ${{ github.event_name == 'issues' && format('issue-sweep-{0}', github.event.issue.number) || 'maintenance' }}
+  cancel-in-progress: false
+
 env:
   ISSUE_AUTOMATION_EXEMPT_USERS: ${{ vars.ISSUE_AUTOMATION_EXEMPT_USERS }}
   LOCK_CLOSED_AFTER_DAYS: "14"
@@ -36,7 +41,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const { isExempt } = require("./.github/scripts/issue-policy.cjs");
@@ -81,7 +86,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           # Manual runs default to a dry run; scheduled runs always act.
           DEBUG_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_only || 'false' }}

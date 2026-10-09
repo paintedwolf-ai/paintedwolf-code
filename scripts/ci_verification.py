@@ -14,14 +14,15 @@ import time
 
 from artifact_paths import artifact_root
 from ci_policy.evidence import oom_events, classify, failure_signature
-import runner_priority
 from verification_plan import catalog, expand
 
 
 ROOT = Path(__file__).resolve().parent.parent
 PROFILES = {"fast", "check", "nightly", "release", "integration"}
-# Each profile on the left runs exactly the stages of the local gate on the right.
-GATES = {"fast": "check-fast", "check": "check"}
+# The check profile runs exactly the stages of the local gate of the same name.
+GATE = "check"
+# Ready pull requests run a quick subset of the local handoff gate; the merge queue runs the rest.
+FAST_GATE = "check-fast"
 # Output lines kept per failure in the job log and summary; the full logs travel with the evidence.
 EXCERPT_LINES = 60
 # Go's progress lines for tests that are running or passed; they bury a parallel package's failure.
@@ -41,8 +42,10 @@ def lanes():
     for name, lane in values.items():
         if not re.fullmatch(r"[a-z][a-z0-9-]*", name):
             raise ValueError(f"invalid CI lane: {name}")
-        if set(lane) - {"targets", "minutes", "profiles", "suite", "setup", "runner", "workers", "shards"}:
+        if set(lane) - {"targets", "minutes", "profiles", "suite", "setup", "runner", "workers", "shards", "first"}:
             raise ValueError(f"unknown CI lane fields: {name}")
+        if lane.get("first", True) is not True:
+            raise ValueError(f"CI lane {name} marks itself first or leaves the field out")
         if not lane["targets"] or not set(lane["targets"]).issubset(targets):
             raise ValueError(f"CI lane {name} must name existing task targets")
         if type(lane["minutes"]) is not int or not 1 <= lane["minutes"] <= 300:
@@ -57,19 +60,33 @@ def lanes():
             raise ValueError(f"CI lane {name} workers must be an integer from 1 through 8")
         if "shards" in lane and (type(lane["shards"]) is not int or not 2 <= lane["shards"] <= 8):
             raise ValueError(f"CI lane {name} shards must be an integer from 2 through 8")
-    for profile, gate in GATES.items():
-        expected = Counter(stage["name"] for stage in expand([gate]))
-        actual = Counter(stage["name"] for lane in values.values() if profile in lane["profiles"]
-                         for stage in expand(lane["targets"]))
-        if actual != expected:
-            raise ValueError(f"CI {profile} partition differs from {gate}: "
-                             f"missing={expected - actual}, extra={actual - expected}")
+    expected = Counter(stage["name"] for stage in expand([GATE]))
+    actual = Counter(stage["name"] for lane in values.values() if GATE in lane["profiles"]
+                     for stage in expand(lane["targets"]))
+    if actual != expected:
+        raise ValueError(f"CI {GATE} profile differs from the {GATE} gate: "
+                         f"missing={expected - actual}, extra={actual - expected}")
+    fast = Counter(stage["name"] for lane in values.values() if "fast" in lane["profiles"]
+                   for stage in expand(lane["targets"]))
+    extra = set(fast) - {stage["name"] for stage in expand([FAST_GATE])}
+    if not fast or extra or max(fast.values()) > 1:
+        raise ValueError(f"CI fast tier must run stages of {FAST_GATE} once each: extra={extra}, counts={dict(fast)}")
     expected = Counter(stage["name"] for stage in expand(["check"]) if stage["name"] != "build:cross")
     actual = Counter(stage["name"] for lane in values.values() if "integration" in lane["profiles"]
                      for stage in expand(lane["targets"]))
     if actual != expected:
         raise ValueError(f"integration partition differs from check minus cross compilation: {expected - actual}, {actual - expected}")
     return values
+
+
+def max_parallel(profile):
+    """Jobs a profile's matrix runs at once; the catalog's capacity table bounds every hosted class."""
+    caps = catalog()["capacity"]["max_parallel"]
+    if set(caps) != PROFILES or not all(type(cap) is int and cap >= 1 for cap in caps.values()):
+        raise ValueError("every CI profile declares a positive maximum of parallel jobs")
+    if profile not in PROFILES:
+        raise ValueError(f"unsupported CI profile: {profile}")
+    return caps[profile]
 
 
 def analysis_set(targets):
@@ -104,7 +121,9 @@ def matrix(profile, suite="all", scope=None):
                            "runner": lane.get("runner", "ubuntu-latest")})
     if not result:
         raise ValueError("CI selection contains no verification")
-    return {"include": result}
+    # A capped matrix starts jobs in order: the cheap lanes that fail most often come first, so a
+    # failing group stops early, then the longest lanes, so they don't finish last.
+    return {"include": sorted(result, key=lambda row: (not values[row["lane"]].get("first"), -row["minutes"]))}
 
 
 def require_success(results, skipped=(), draft=False):
@@ -340,6 +359,8 @@ def main():
     plan.add_argument("profile", choices=sorted(PROFILES))
     plan.add_argument("--affected", action="store_true")
     plan.add_argument("--suite", default="all", choices=sorted(SUITES))
+    parallel = commands.add_parser("max-parallel", help="jobs a profile's matrix runs at once")
+    parallel.add_argument("profile", choices=sorted(PROFILES))
     run = commands.add_parser("run")
     run.add_argument("lane")
     run.add_argument("--shard", default="")
@@ -352,7 +373,6 @@ def main():
     summary.add_argument("status")
     verified = commands.add_parser("verified")
     verified.add_argument("sha")
-    commands.add_parser("schedule", help="give hosted runners to work in priority order")
     release = commands.add_parser("release")
     release.add_argument("step", help="the step whose leftover requests are withdrawn")
     args = parser.parse_args()
@@ -361,16 +381,16 @@ def main():
         scope = change() if args.affected else None
         if scope and os.environ.get("GITHUB_STEP_SUMMARY"):
             with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as summary:
-                summary.write("### Integration scope\n\n```json\n" + json.dumps(scope, indent=2) + "\n```\n")
+                summary.write("### Change scope\n\n```json\n" + json.dumps(scope, indent=2) + "\n```\n")
         print(json.dumps(matrix(args.profile, args.suite, scope), separators=(",", ":")))
+    elif args.command == "max-parallel":
+        print(max_parallel(args.profile))
     elif args.command == "run":
         return run_lane(args.lane, args.shard)
     elif args.command == "gate":
         require_success(json.loads(os.environ["NEEDS_JSON"]), args.skipped, args.draft == "true")
     elif args.command == "verified":
         require_qualification(os.environ["GITHUB_REPOSITORY"], args.sha)
-    elif args.command == "schedule":
-        runner_priority.schedule(os.environ["GITHUB_REPOSITORY"], github)
     elif args.command == "release":
         # Cleanup still runs; a request that would not release is reported, not fatal.
         unreleased = release_leftover_requests(args.step)
