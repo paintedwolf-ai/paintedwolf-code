@@ -148,19 +148,21 @@ the same rules and the same words, so CI says nothing `check-fast` did not.
 | Maintainability (`test/contract/maintainability`) | Code-bearing lines per production and test file; handwritten files per production and test directory; Go struct fields; Go receiver methods and receiver lines summed across files and platform variants, so splitting a file cannot hide concentration; distinct local TypeScript imports per module. Generated and vendored files are classified from generator inventories. | [`maintainability-budgets.yaml`](../lycaon/test/contract/maintainability-budgets.yaml) |
 | Prompts (`test/contract/agentcontext`) | UTF-8 bytes of every rendered worker persona, coordinator tripartite fixture, inject, agent template, kick, and instruction unit; the tools each coordinator surface and worker profile sends upfront, limited as two classes; and each turn kind's widest static prompt against the model window | `sizes` and `absolute_maximums` in [`prompt-budgets.yaml`](../lycaon/config/packs/painted-wolf/platform/host/prompt-budgets.yaml) |
 
-Each category has a warning line and a limit. Maintainability measures both the
-change base and current source using the same rules. An artifact that must stay
+Each maintainability category has a cleanup threshold (`warn`) and a hard limit
+(`limit`). Warnings permit admission and become cleanup issues after merge; hard
+limits reject new or growing excess. Maintainability measures both the change
+base and current source using the same rules. An artifact that must stay
 larger can have an explicit cap and reason in its own file under
 [`maintainability-exceptions`](../lycaon/test/contract/maintainability-exceptions/).
 Prompt limits remain absolute because they protect the model window.
 
 | Standing | Result |
 |---|---|
-| A touched artifact past its warning line | Warning |
+| A touched artifact past its warning line | Warning; creates or updates a post-merge cleanup issue |
 | A new or growing artifact past its limit, with no exception | Fails |
-| An unchanged or shrinking legacy artifact past its limit | Warning; recovery creates a tracking issue from the queue receipt |
+| An unchanged or shrinking legacy artifact past its limit | Warning; post-merge cleanup issue |
 | Any artifact past its exception cap | Fails |
-| A touched artifact within its exception | Notice naming the reason |
+| A touched artifact within its exception | Notice naming the reason; cleanup issue if above `warn` |
 | An untouched artifact past its limit | Counted |
 | An exception the change adds or raises | Notice for review |
 
@@ -170,6 +172,56 @@ with the [change base](#the-change-base). Editing a helper beside a large type
 does not make the change answer for the type. Prompts are few, so every
 prompt past its limit needs an exception, and warnings name the prompts whose
 sources a change edited.
+
+#### Maintainability cleanup issues
+
+[`maintainability-issues.yml`](../.github/workflows/maintainability-issues.yml)
+reconciles cleanup issues after a completed Qualification push on main. It checks
+that the commit is the current main tip and is associated with a PR merged into
+this repository's main branch. PR, merge-group, foreign-repository, direct-push,
+and qualification-dispatch observations cannot create issues. A qualification
+failure in another lane does not hide maintainability debt already merged.
+
+The maintainability report contains a complete inventory of every artifact above
+`warn`, including untouched artifacts and artifacts admitted by an exception.
+Each entry records its category, artifact ID, measurement, cleanup threshold,
+hard limit, effective exception cap, touch status, and source paths. Source commit,
+tree, change base, and a content digest bind the report to the measured source.
+Admission still uses change-scoped findings; a complete tracking inventory does
+not turn untouched debt into a gate failure.
+
+Ordinary intake creates issues for artifacts touched by merged changes. The
+complete inventory updates existing issues and closes them when they fall to the
+cleanup threshold or disappear. This avoids dumping the entire legacy inventory
+into GitHub on rollout. A persisted checkpoint and replay of intervening merged
+qualification receipts carry warning intake across superseded workflow runs.
+Missing history stops reconciliation; it never silently treats missing evidence
+as completed cleanup.
+
+Identity is the SHA-256 of the canonical JSON array
+`["maintainability", category, artifact_id]`. A machine-owned issue-body block
+stores that identity and the latest observation. The reconciler enumerates open
+and closed issues without GitHub search, preserves titles and human prose outside
+the block, and updates evidence without adding a comment on every run. Completed
+issues reopen when the same debt returns. Closing an issue as **not planned**
+suppresses future reopening for that identity. Renames create new identities.
+Only automation-authored issues can be adopted or mutated; exact older automatic
+titles are adopted when their artifact is still above the threshold. Duplicate
+automatic issues point to the oldest canonical issue and close as not planned.
+
+The workflow serializes reconciliation across runs. It reads one bounded current-
+attempt limits receipt, validates the entire snapshot and plan before writing,
+and checks main before each mutation. A concurrently edited issue stops the run
+rather than overwriting the edit. Repeated observations produce no writes. A later
+complete snapshot converges a partially applied run. Checkpoints are retained for
+90 days; expiration or unavailable receipts requires explicit replay/backfill.
+
+To preview or recover, dispatch **Maintainability cleanup** with `run_id` set to
+a completed Qualification push for the current main tip. `dry_run` defaults to
+true. `backfill` defaults to false; setting it true includes untouched baseline
+debt and establishes a fresh checkpoint after a successful apply. Review the
+retained `maintainability-issues.json` plan and category counts before applying a
+backfill. The workflow never runs downloaded code or changes admission limits.
 
 The host assembles a prompt per turn: instruction units render only while
 their tools are offered, requestable tool schemas load on demand, and the
@@ -601,9 +653,8 @@ privileged token.
 
 [`verification-recovery.yml`](../.github/workflows/verification-recovery.yml)
 runs code from main, parses bounded JSON without extracting or executing
-artifacts, and opens deduplicated issues only for maintainability findings above
-a category limit or exception cap, including tracked legacy debt. Other failures
-remain in run annotations, summaries, and retained evidence. It
+artifacts, and recovers measured runner faults. Failure details remain in run
+annotations, summaries, and retained evidence. It
 proposes a draft revert only for a source failure on the current main tip with
 one introducing merged PR and a qualified immediate parent. Ambiguous attribution,
 advanced main, and conflicts require investigation from the qualification run.

@@ -48,7 +48,7 @@ def summarize(runs, get_evidence):
     signatures, lanes = defaultdict(dict), defaultdict(list)
     missing = []
     for run in runs:
-        records, failures, _ = get_evidence(run)
+        records, failures = get_evidence(run)
         if not records:
             missing.append(run['id'])
         for record in records:

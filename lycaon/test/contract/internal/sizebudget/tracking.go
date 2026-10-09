@@ -12,6 +12,7 @@ type TrackingReport struct {
 type TrackingArtifact struct {
 	Category        string   `json:"category"`
 	ID              string   `json:"id"`
+	Touched         bool     `json:"touched"`
 	Measured        int      `json:"measured"`
 	Warn            int      `json:"warn"`
 	Limit           int      `json:"limit"`

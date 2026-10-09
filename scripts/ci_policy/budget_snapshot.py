@@ -33,7 +33,7 @@ def validate(report, sha, tree):
     if not isinstance(report, dict) or report.get('suite') != 'maintainability':
         raise ValueError('not a maintainability report')
     snapshot = report.get('tracking')
-    if not isinstance(snapshot, dict) or snapshot.get('schema_version') != 1 or snapshot.get('complete') is not True:
+    if not isinstance(snapshot, dict) or type(snapshot.get('schema_version')) is not int or snapshot.get('schema_version') != 1 or snapshot.get('complete') is not True:
         raise ValueError('missing complete tracking snapshot')
     for name, expected in [('source_sha', sha), ('source_tree', tree)]:
         if not isinstance(expected, str) or not SHA.fullmatch(expected) or snapshot.get(name) != expected:
@@ -49,6 +49,8 @@ def validate(report, sha, tree):
     for row in artifacts:
         if not isinstance(row, dict) or row.get('category') not in CATEGORIES or not relative(row.get('id')):
             raise ValueError('invalid artifact identity')
+        if type(row.get('touched')) is not bool:
+            raise ValueError('invalid artifact touch status')
         if any(type(row.get(field)) is not int for field in ['measured', 'warn', 'limit', 'effective_cap']):
             raise ValueError('invalid artifact measurement')
         if not 0 < row['warn'] < row['limit'] <= row['effective_cap'] or row['measured'] <= row['warn']:

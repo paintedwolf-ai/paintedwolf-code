@@ -11,14 +11,14 @@ import re
 import subprocess
 import zipfile
 
-from .github import api, pages, repository, ensure_issue
+from .github import api, pages, repository
 from .evidence import retryable
 
 MAX_ARTIFACT_BYTES = 32 * 1024 * 1024
 
 
 def evidence(run):
-    records, failures, debt = [], [], []
+    records, failures = [], []
     for artifact in pages(f"{repository()}/actions/runs/{run['id']}/artifacts", 'artifacts'):
         if not artifact['name'].startswith('receipt-'):
             continue
@@ -34,16 +34,14 @@ def evidence(run):
                 if member.file_size > 1024 * 1024:
                     continue
                 path = member.filename
-                if not path.endswith(('ci/run.json', 'ci/failures.json', 'reports/maintainability.json')):
+                if not path.endswith(('ci/run.json', 'ci/failures.json')):
                     continue
                 value = json.loads(archive.read(member))
                 if path.endswith('ci/run.json') and isinstance(value, dict):
                     records.append(value)
                 elif path.endswith('ci/failures.json') and isinstance(value, list):
                     failures.extend(value)
-                elif isinstance(value, dict):
-                    debt.extend(f for f in value.get('findings', []) if f.get('kind') in {'legacy_debt', 'over_limit', 'over_cap'})
-    return records, failures, debt
+    return records, failures
 
 
 def qualified(sha):
@@ -103,11 +101,7 @@ def recover(run):
     # Fork artifacts cannot authorize privileged recovery and need not be downloaded.
     if run.get('event') == 'pull_request':
         return
-    records, failures, debt = evidence(run)
-    for item in debt:
-        ensure_issue(f"Maintainability debt: {item['category']} {item['id']}",
-                     f"Measured {item['measured']}; limit {item['bound']}. "
-                     f"[Evidence]({run['html_url']}). Reduce this artifact along cohesive domain boundaries.")
+    records, failures = evidence(run)
     if run.get('conclusion') != 'failure':
         return
     jobs = list(pages(f"{repository()}/actions/runs/{run['id']}/attempts/{run['run_attempt']}/jobs", 'jobs'))

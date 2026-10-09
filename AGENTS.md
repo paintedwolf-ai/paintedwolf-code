@@ -84,10 +84,13 @@ failures to get green. Test conventions: [backend](lycaon/AGENTS.md#testing) and
 
 **Both gates enforce size budgets and changed-statement coverage.** Files,
 directories, and Go types must not grow above category limits without justified
-exceptions. Unchanged legacy excess is tracked; explicit caps and prompt limits
-remain absolute. Before editing large code, run
-`PW_BUDGETS_INSPECT="<path>" ./task budgets`. Above the warning line, put new
-behavior in a new file/package; resolve failures by reshaping or trimming.
+exceptions. Warnings create cleanup obligations after merge; hard limits block new or
+growing excess. Unchanged legacy excess is tracked; explicit caps and prompt
+limits remain absolute. Before editing large code, run
+`PW_BUDGETS_INSPECT="<path>" ./task budgets`. Above the warning line, prefer adding behavior in a cohesive new file/package
+and reduce the artifact toward its warning threshold. Warnings do not block
+admission; post-merge maintainability issues track the cleanup. Resolve hard-limit
+failures by reshaping or trimming.
 `coverage:changes` and `den:coverage:changes` require tests for added statements.
 See [size budgets and changed coverage](docs/test-strategy.md#size-budgets-and-changed-coverage).
 

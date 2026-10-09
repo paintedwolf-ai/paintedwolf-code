@@ -223,7 +223,7 @@ def run_lane(name, shard=""):
         raise ValueError(f"CI lane {name} has {count} shard(s); got {shard!r}")
     targets = lane["targets"]
     scope = None
-    if os.environ.get("PW_CI_AFFECTED") == "1":
+    if os.environ.get("PW_CI_AFFECTED") == "1" or "budgets" in targets:
         from ci_policy.impact import change
         scope = change()
     directory = artifact_root(ROOT) / "ci"

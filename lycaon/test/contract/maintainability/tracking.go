@@ -7,7 +7,7 @@ import (
 	"github.com/lycaon/lycaon/test/contract/internal/sizebudget"
 )
 
-func trackingReport(policy sizebudget.Policy, inv *inventory) *sizebudget.TrackingReport {
+func trackingReport(policy sizebudget.Policy, inv *inventory, touched sizebudget.Touched) *sizebudget.TrackingReport {
 	report := &sizebudget.TrackingReport{SchemaVersion: 1, Complete: true, Artifacts: []sizebudget.TrackingArtifact{}}
 	sources := artifactSources(inv)
 	for category, artifacts := range inv.measured {
@@ -20,7 +20,7 @@ func trackingReport(policy sizebudget.Policy, inv *inventory) *sizebudget.Tracki
 			files := slices.Clone(sources[category][id])
 			slices.Sort(files)
 			report.Artifacts = append(report.Artifacts, sizebudget.TrackingArtifact{
-				Category: category, ID: id, Measured: value, Warn: limit.Warn, Limit: limit.Limit,
+				Category: category, ID: id, Touched: touched(category, id), Measured: value, Warn: limit.Warn, Limit: limit.Limit,
 				EffectiveCap: cap, ExceptionReason: policy.Exceptions[category][id].Reason, Sources: files,
 			})
 		}
