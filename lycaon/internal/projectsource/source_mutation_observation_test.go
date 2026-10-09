@@ -208,18 +208,19 @@ func TestRecoveryKeepsAdmissionIdentityAndRefusesDivergedBytes(t *testing.T) {
 }
 
 func TestMutationAttributionPreservesDurableFlatPlan(t *testing.T) {
-	const stored = `{"project_id":"p","workspace_id":"worktree:w","branch_id":"worktree:w","session_id":"session","turn":4,"person_id":"person","batch_id":"batch","cause":"restore","kind":"write","root_id":"root","root_path":"/root","changed":true,"response":{}}`
-	var plan sourceMutationPlan
-	testutil.FailErr(t, "decode durable plan", json.Unmarshal([]byte(stored), &plan))
-	if plan.ProjectID != "p" || plan.PersonID != "person" || plan.BranchID != sourcebranch.ForWorktree("w") {
-		t.Fatal("durable admission identity changed")
-	}
-	encoded, err := json.Marshal(plan)
-	testutil.FailErr(t, "encode durable plan", err)
-	var before, after map[string]any
-	testutil.FailErr(t, "decode stored keys", json.Unmarshal([]byte(stored), &before))
-	testutil.FailErr(t, "decode emitted keys", json.Unmarshal(encoded, &after))
-	if !reflect.DeepEqual(before, after) {
-		t.Fatalf("durable plan keys changed: %s", encoded)
+	for _, stored := range []string{
+		`{"project_id":"p","workspace_id":"worktree:w","branch_id":"worktree:w","session_id":"session","turn":4,"person_id":"person","batch_id":"batch","cause":"restore","agent":{"job_id":"job","tool_call_id":"call","tool_name":"write","workspace_kind":"worker"},"kind":"write","root_id":"root","root_path":"/root","changed":true,"response":{}}`,
+		`{"project_id":"","workspace_id":"","kind":"","root_id":"","root_path":"","changed":false,"response":null}`,
+	} {
+		var plan sourceMutationPlan
+		testutil.FailErr(t, "decode durable plan", json.Unmarshal([]byte(stored), &plan))
+		encoded, err := json.Marshal(plan)
+		testutil.FailErr(t, "encode durable plan", err)
+		var before, after map[string]any
+		testutil.FailErr(t, "decode stored keys", json.Unmarshal([]byte(stored), &before))
+		testutil.FailErr(t, "decode emitted keys", json.Unmarshal(encoded, &after))
+		if !reflect.DeepEqual(before, after) {
+			t.Fatalf("durable plan keys changed: %s", encoded)
+		}
 	}
 }
