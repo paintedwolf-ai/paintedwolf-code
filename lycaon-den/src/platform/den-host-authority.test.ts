@@ -132,8 +132,13 @@ describe("den host authority registry", () => {
   });
 
   it("app-connection hydrates SSE authority keys", () => {
+    const events = readFileSync(
+      join(denSrc, "platform/connection/connection-events.ts"),
+      "utf8",
+    );
+    expect(events).toContain("onInvalidate: (keys, scope) => ports.invalidation.invalidate(");
     const src = readFileSync(
-      join(denSrc, "platform/connection/app-connection.ts"),
+      join(denSrc, "platform/connection/connection-invalidation.ts"),
       "utf8",
     );
     for (const [key, hydrators] of Object.entries(

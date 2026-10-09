@@ -124,7 +124,8 @@ export async function reconcileActiveScope(
   let epoch = appStore.state.sessionViewEpoch;
   const matchesView = () =>
     appStore.state.sessionViewEpoch === epoch &&
-    (opts?.shouldApply?.() ?? stillForegroundSession(appStore, sessionId));
+    stillForegroundSession(appStore, sessionId) &&
+    (opts?.shouldApply?.() ?? true);
 
   if (!matchesView()) return;
 
