@@ -17,10 +17,15 @@ import (
 )
 
 // GrantedPathOffers builds the reuse ladder for a filesystem crossing.
-func GrantedPathOffers(
-	action hitl.ProposedAction, target gate.FileTarget, decision *gate.Decision,
-	locations *sensitivepath.Catalog,
-) []hitl.ApprovalGrantOffer {
+func GrantedPathOffers(action hitl.ProposedAction, target gate.FileTarget, decision *gate.Decision, locations *sensitivepath.Catalog) []hitl.ApprovalGrantOffer {
+	var offers []hitl.ApprovalGrantOffer
+	for _, access := range grantedPathCandidates(target, locations) {
+		offers = append(offers, grantedPathOffersForAccess(action, target, decision, access)...)
+	}
+	return offers
+}
+
+func grantedPathOffersForAccess(action hitl.ProposedAction, target gate.FileTarget, decision *gate.Decision, access hitl.GrantedPathDelta) []hitl.ApprovalGrantOffer {
 	ceiling := decision.Reuse().Scope
 	if ceiling == gate.ScopeNone || strings.TrimSpace(target.Path) == "" {
 		return nil
@@ -34,7 +39,6 @@ func GrantedPathOffers(
 	if !filepath.IsAbs(abs) {
 		return nil
 	}
-	access := grantedPathAccess(target, locations)
 	coverage := grantedPathCoverage(access)
 	reaskWhen := hitl.ReaskWhenDifferentPath
 	if access.Tree {
@@ -122,6 +126,9 @@ func GrantedPathOffers(
 			ExpiresWhen: rung.expires, ReaskWhen: reaskWhen, TTLSeconds: ttlSeconds,
 			Subject: gate.ReusePredicate, Grant: grant, Authority: authority,
 		}
+		if access.Tree {
+			offer.DirectoryScope = access.Path
+		}
 		if note != "" {
 			offer = hitl.DisabledOffer(offer, note)
 		}
@@ -150,9 +157,6 @@ func grantedPathAccess(target gate.FileTarget, locations *sensitivepath.Catalog)
 	}
 	if locations != nil {
 		if _, ok := locations.Match(folder, sensitivepath.ModeRead); ok {
-			return exact
-		}
-		if _, ok := locations.MatchCovering(folder, sensitivepath.ModeRead); ok {
 			return exact
 		}
 	}
@@ -186,4 +190,28 @@ func grantedPathGrantID(
 		action.Scope.ChatSession(), action.Scope.ProjectID,
 	}, "\x00")))
 	return "grant_" + hex.EncodeToString(sum[:8])
+}
+
+// grantedPathCandidates orders canonical read scopes from the target folder outward.
+func grantedPathCandidates(target gate.FileTarget, locations *sensitivepath.Catalog) []hitl.GrantedPathDelta {
+	access := grantedPathAccess(target, locations)
+	out := []hitl.GrantedPathDelta{access}
+	if !access.Tree {
+		return out
+	}
+	for dir := filepath.Dir(access.Path); dir != access.Path; dir = filepath.Dir(dir) {
+		if refused, _ := confine.AttachedWriteRootRefused(dir); refused {
+			break
+		}
+		if locations != nil {
+			if _, sensitive := locations.Match(dir, sensitivepath.ModeRead); sensitive {
+				break
+			}
+		}
+		out = append(out, hitl.GrantedPathDelta{Path: dir, Tree: true})
+		if filepath.Dir(dir) == dir {
+			break
+		}
+	}
+	return out
 }

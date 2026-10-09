@@ -439,11 +439,11 @@ ProjectID: "proj-1",
 	_, offers := filesystemCard(t, action)
 	for _, offer := range offers {
 		gp := offer.Grant.GrantedPath
-		if gp == nil || !gp.Tree || gp.Path != dir || gp.Write {
+		if gp == nil || !gp.Tree || !grantedpath.CoversPath(gp.Path, true, file) || gp.Write {
 			t.Fatalf("%s: ordinary outside read must grant the folder tree, got %+v", offer.Scope, gp)
 		}
-		if offer.Coverage != hitl.CoverageReadsOfTree(dir) &&
-			offer.Coverage != hitl.CoverageReadsOfTree(dir)+hitl.DeviceCoverageSuffix {
+		if offer.Coverage != hitl.CoverageReadsOfTree(gp.Path) &&
+			offer.Coverage != hitl.CoverageReadsOfTree(gp.Path)+hitl.DeviceCoverageSuffix {
 			t.Fatalf("%s coverage = %q", offer.Scope, offer.Coverage)
 		}
 	}
@@ -474,7 +474,7 @@ ProjectID: "proj-1",
 	}
 }
 
-func TestHomeFileReadStaysExact(t *testing.T) {
+func TestHomeFileReadOffersHomeAndAncestors(t *testing.T) {
 	file := filepath.Join(home(t), "granted-path-exact.txt")
 	action := hitl.ProposedAction{
 Invocation: hitl.ActionInvocation{
@@ -495,8 +495,8 @@ ProjectID: "proj-1",
 	}
 	for _, offer := range offers {
 		gp := offer.Grant.GrantedPath
-		if gp == nil || gp.Tree || gp.Path != file {
-			t.Fatalf("%s: a file in $HOME must stay exact, got %+v", offer.Scope, gp)
+		if gp == nil || !gp.Tree || !grantedpath.CoversPath(gp.Path, true, file) {
+			t.Fatalf("%s: home scope must cover the file as a tree, got %+v", offer.Scope, gp)
 		}
 	}
 }
@@ -847,5 +847,100 @@ ProjectID: "proj-1",
 	testutil.FailErr(t, "Evaluate mixed failed", err)
 	if !res.Required() {
 		t.Fatal("a second path outside the granted tree must still raise a card")
+	}
+}
+
+func TestDirectoryHierarchyMintsDistinctOptionsAndDefaultsToContainingFolder(t *testing.T) {
+	dir := canonDir(t, t.TempDir())
+	folder := filepath.Join(dir, "src", "pkg")
+	file := filepath.Join(folder, "file.go")
+	action := hitl.ProposedAction{
+		Invocation: hitl.ActionInvocation{Tool: "read", Files: []string{file}},
+		Scope: hitl.ActionScope{ProjectID: "project", ProjectDir: t.TempDir(), SessionID: "chat"},
+	}
+	target := gate.FileTarget{Path: file, Mode: gate.ModeRead, OutsideRoots: true}
+	decision := &gate.Decision{Primary: api.GateOutsideRootsRead}
+	offers := settings.GrantedPathOffers(action, target, decision, nil)
+	ids := map[string]bool{}
+	scopes := []string{}
+	options := []hitl.ApprovalOption{}
+	for _, offer := range offers {
+		if ids[offer.ID] {
+			t.Fatalf("duplicate opaque id %s", offer.ID)
+		}
+		ids[offer.ID] = true
+		if len(scopes) == 0 || scopes[len(scopes)-1] != offer.DirectoryScope {
+			scopes = append(scopes, offer.DirectoryScope)
+		}
+		options = append(options, hitl.GrantOption(offer))
+	}
+	if len(scopes) < 3 || scopes[0] != folder || scopes[1] != filepath.Dir(folder) || scopes[len(scopes)-1] != string(filepath.Separator) {
+		t.Fatalf("candidate scopes %v", scopes)
+	}
+	plan, err := hitl.NewApprovalPlan(action, hitl.ApprovalStagePreSpawn, hitl.ApprovalSubject{Kind: hitl.ApprovalSubjectAction, Title: "Read file", Targets: []hitl.ApprovalTarget{{Kind: "file", Label: file}}}, hitl.ApprovalPresentation{Action: "Read file", Impact: "Read the selected directory", Gate: api.GateOutsideRootsRead, Cited: []hitl.PresentedFact{{Gate: api.GateOutsideRootsRead, Key: "path", Value: file, Source: "action"}}}, []api.ApprovalGate{api.GateOutsideRootsRead}, options, hitl.FaceContext{})
+	testutil.FailErr(t, "compile directory plan", err)
+	option, ok := plan.Option(plan.RecommendedOptionID)
+	if !ok || option.DirectoryScope != folder || len(plan.DirectoryScopes) != len(scopes) {
+		t.Fatalf("wrong default: %+v scopes=%v", option, plan.DirectoryScopes)
+	}
+	plan.DirectoryScopes[0] += string(filepath.Separator) + "."
+	if err := plan.Validate(); err == nil {
+		t.Fatal("noncanonical directory scope was admitted")
+	}
+}
+
+func TestCredentialStoreReadAsksInsideAnAttachedHome(t *testing.T) {
+	tmp := t.TempDir()
+	stageBundledApprovals(t, nil)
+	store, err := settings.NewApprovalStoreAt(filepath.Join(tmp, "approvals.yaml"))
+	testutil.FailErr(t, "open approvals", err)
+	testutil.FailErr(t, "set balanced", store.PutGlobal(settings.ApprovalConfig{Posture: gate.PostureBalanced}))
+	locations, err := sensitivepath.Load(sensitivepath.Bundled())
+	testutil.FailErr(t, "load locations", err)
+	sources := settings.NoSources()
+	sources.Locations = locations
+	g := settings.NewRuleApprovalGate(store, sources)
+	path := filepath.Join(home(t), ".aws", "credentials")
+	action := hitl.ProposedAction{
+		Invocation: hitl.ActionInvocation{Tool: "read", Files: []string{path}},
+		Scope: hitl.ActionScope{ProjectID: "project", ProjectDir: home(t), SessionID: "chat"},
+	}
+	res, err := g.Evaluate(context.Background(), action)
+	testutil.FailErr(t, "review credential read", err)
+	if !res.Required() || res.Decision.Primary != api.GateSensitiveLocation {
+		t.Fatalf("credential read inside home did not ask: %+v", res)
+	}
+	for _, offer := range g.GrantOffers(action, res) {
+		if offer.Grant.GrantedPath == nil || offer.Grant.GrantedPath.Tree || offer.Grant.GrantedPath.Path != path {
+			t.Fatalf("credential read widened: %+v", offer)
+		}
+	}
+}
+
+func TestMultipleReadTargetsOfferOneCrossingHierarchy(t *testing.T) {
+	base := filepath.Join(filepath.VolumeName(os.TempDir())+string(filepath.Separator), "unattached", t.Name())
+	first := filepath.Join(base, "first", "file.go")
+	second := filepath.Join(base, "second", "file.go")
+	action := hitl.ProposedAction{
+		Invocation: hitl.ActionInvocation{Tool: "read", Files: []string{first, second}},
+		Scope: hitl.ActionScope{ProjectID: "project", ProjectDir: t.TempDir(), SessionID: "chat"},
+	}
+	_, offers := filesystemCard(t, action)
+	if len(offers) == 0 || offers[0].DirectoryScope != filepath.Dir(first) {
+		t.Fatalf("wrong selected crossing hierarchy: %+v", offers)
+	}
+	if grantedpath.CoversPath(offers[0].DirectoryScope, true, second) {
+		t.Fatal("nearest directory grant silently covered a sibling crossing")
+	}
+	previous := offers[0].DirectoryScope
+	for _, offer := range offers {
+		path := offer.DirectoryScope
+		if path == "" || filepath.Clean(path) != path || !grantedpath.CoversPath(path, true, first) {
+			t.Fatalf("option did not belong to selected crossing: %+v", offer)
+		}
+		if path != previous && !grantedpath.CoversPath(path, true, previous) {
+			t.Fatalf("unrelated crossing added to hierarchy: %q after %q", path, previous)
+		}
+		previous = path
 	}
 }

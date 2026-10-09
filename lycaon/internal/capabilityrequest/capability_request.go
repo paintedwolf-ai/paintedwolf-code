@@ -225,25 +225,20 @@ func ParseCapabilityRequest(args map[string]any) (*CapabilityRequest, *toolrejec
 }
 
 func parseWriteRoot(raw any) (string, *toolrejection.ToolReject) {
-	return parseCapabilityPath(raw, "write_root", "a directory")
+	return parseCapabilityPath(raw, "write_root")
 }
 
 func parseReadPath(raw any) (string, *toolrejection.ToolReject) {
-	return parseCapabilityPath(raw, "read_path", "a file or directory")
+	return parseCapabilityPath(raw, "read_path")
 }
 
 // parseCapabilityPath validates syntax; authority requires the invocation scratch root.
-func parseCapabilityPath(raw any, capability, target string) (string, *toolrejection.ToolReject) {
+func parseCapabilityPath(raw any, capability string) (string, *toolrejection.ToolReject) {
 	path, ok := raw.(string)
 	path = filepath.Clean(strings.TrimSpace(path))
 	if !ok || !filepath.IsAbs(path) || strings.ContainsRune(path, 0) || !utf8.ValidString(path) || len(path) > 1024 {
 		return "", toolrejection.RejectInvalidArguments(isolation.CodeCapabilityRequestInvalid, map[string]any{
 			"reason": capability + " must be one absolute path of at most 1024 bytes", "capability": capability,
-		})
-	}
-	if path == string(filepath.Separator) {
-		return "", toolrejection.RejectInvalidArguments(isolation.CodeCapabilityRequestInvalid, map[string]any{
-			"reason": capability + " must name " + target + ", not the filesystem root", "capability": capability,
 		})
 	}
 	return confine.NormalizeWriteRootKey(path), nil
