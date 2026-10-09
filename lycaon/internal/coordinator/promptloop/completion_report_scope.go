@@ -43,6 +43,7 @@ func completionReportMeta(
 		meta.Findings = reportFindingsMeta(report.Findings)
 		meta.Limits = append([]string(nil), report.Limits...)
 		meta.Ask = reportAskMeta(report.Ask)
+		meta.Rating = reportRatingMeta(report.Rating)
 		meta.SetAsides = reportSetAsidesMeta(report.SetAsides)
 		return meta
 	}
@@ -87,6 +88,14 @@ func reportFindingsMeta(findings []guidance.CoordinatorFinding) []api.Completion
 		out = append(out, row)
 	}
 	return out
+}
+
+// reportRatingMeta projects the review's call onto the wire record.
+func reportRatingMeta(rating *guidance.CoordinatorRating) *api.CompletionReportRating {
+	if rating == nil || strings.TrimSpace(rating.Level) == "" {
+		return nil
+	}
+	return &api.CompletionReportRating{Level: strings.TrimSpace(rating.Level), Why: strings.TrimSpace(rating.Why)}
 }
 
 // reportAskMeta drops an ask whose effort is off the enum; only a host-stored

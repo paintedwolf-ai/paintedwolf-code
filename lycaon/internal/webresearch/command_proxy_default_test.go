@@ -2,9 +2,11 @@ package webresearch_test
 
 import (
 	"context"
+	"net/netip"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/egress"
 	"github.com/lycaon/lycaon/internal/webresearch"
 )
 
@@ -38,6 +40,7 @@ func TestWebToolsUnaffectedByCommandProxyOnlyDefault(t *testing.T) {
 		}
 	}
 
+	egress.TestingResolve(t, egress.StaticLookup(netip.MustParseAddr("1.1.1.1")))
 	if err := webresearch.ValidateProviderConfigEndpoint(
 		context.Background(), "https://search.brave.com/", false,
 	); err != nil {

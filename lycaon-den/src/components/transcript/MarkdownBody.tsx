@@ -26,10 +26,13 @@ type Props = {
   /** Tokens retain references resolved by whole-document lexing. */
   source: string | Token[];
   class?: string;
+  /** Compact labels accept inline formatting only. */
+  inline?: boolean;
   /** Surface link destinations and disable project-path opens. */
   untrusted?: boolean;
   /** Project context for project-path links. */
   projectId?: string;
+  onExternalLink?: (href: string) => void | Promise<unknown>;
   /** Cited-path index — citation layer for prose path opens. */
   citations?: ProseCitationIndex;
   /** Durable host-validated targets, independent of grounding. */
@@ -54,7 +57,7 @@ export function MarkdownBody(props: Props) {
 
   const html = createMemo(() => {
     const source = props.source;
-    const src = typeof source === "string" ? prepareMarkdownSource(source) : source;
+    const src = typeof source === "string" ? (props.inline ? source : prepareMarkdownSource(source)) : source;
     if (typeof src === "string" && !src.trim()) return "";
     return renderMarkdownHtml(src, {
       untrusted: props.untrusted === true,
@@ -63,6 +66,7 @@ export function MarkdownBody(props: Props) {
       navigation: props.navigation,
       requireValidatedProjectPaths: props.requireValidatedProjectPaths,
       literalHtml: props.literalHtml,
+      inline: props.inline,
     });
   });
 
@@ -80,6 +84,17 @@ export function MarkdownBody(props: Props) {
         }
         const url = remoteImagePlaceholderURL(btn);
         if (url) void confirmAndOpenExternalLink(url);
+        return;
+      }
+    }
+    if (props.onExternalLink && target instanceof Element) {
+      const anchor = target.closest("a.den-external-link[href]");
+      if (anchor instanceof HTMLAnchorElement) {
+        if (e instanceof KeyboardEvent && e.key !== "Enter") return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (e instanceof MouseEvent && clickSelectedText(e, anchor)) return;
+        void props.onExternalLink(anchor.getAttribute("href") ?? "");
         return;
       }
     }
@@ -136,6 +151,7 @@ export function MarkdownBody(props: Props) {
         innerHTML={html()}
         onClick={onClick}
         onKeyDown={onClick}
+        onAuxClick={onClick}
         onContextMenu={onContextMenu}
       />
       <Show when={menu()} keyed>

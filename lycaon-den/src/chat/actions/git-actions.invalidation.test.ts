@@ -58,4 +58,29 @@ describe("Git mutation workspace projections", () => {
       }
     });
   }
+
+  for (const [name, mutate] of Object.entries(mutations)) {
+    it(`a failed ${name} still refreshes every resident view of the project`, async () => {
+      const store = createAppStore();
+      const status = gitWorkspaceStatus({ repo_id: "repo", root_ids: ["root"] });
+      const refusal = Object.assign(new Error(`Fixture ${name} refusal`), { code: `git_${name}_failed` });
+      const refuse = async () => { throw refusal; };
+      const client = stubClient({ checkoutGit: refuse, commitGit: refuse, discardGit: refuse, createGitRepo: refuse,
+        pullGit: refuse, pushGit: refuse, stashGit: refuse, landGitWorktree: refuse, ...gitStatusReads(() => status),
+        listGitRepos: async () => ({ repos: [], active_repo_id: "repo" }),
+      });
+      const current = vi.fn(), sibling = vi.fn();
+      const cleanups = [
+        observeWorkspaceInvalidation(client, "project", () => "chat", current),
+        observeWorkspaceInvalidation(client, "project", () => "sibling", sibling),
+      ];
+      try {
+        await expect(mutate(store, client)).rejects.toBe(refusal);
+        expect(current).toHaveBeenCalledOnce();
+        expect(sibling).toHaveBeenCalledOnce();
+      } finally {
+        cleanups.forEach((cleanup) => cleanup());
+      }
+    });
+  }
 });

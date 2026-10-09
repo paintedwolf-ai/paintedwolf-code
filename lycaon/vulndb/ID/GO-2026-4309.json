@@ -1,0 +1,93 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/sigstore/cosign"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/sigstore/cosign/v2"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "2.6.2"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  },
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/sigstore/cosign/v3"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "3.0.4"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-22703",
+  "GHSA-whqx-f9j3-ch6m"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-4309"
+ },
+ "details": "Cosign verification accepts any valid Rekor entry under certain conditions in github.com/sigstore/cosign",
+ "id": "GO-2026-4309",
+ "modified": "2026-01-13T16:42:40Z",
+ "published": "2026-01-13T16:42:40Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/sigstore/cosign/security/advisories/GHSA-whqx-f9j3-ch6m"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-22703"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/sigstore/cosign/commit/6832fba4928c1ad69400235bbc41212de5006176"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/sigstore/cosign/pull/4623"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Cosign verification accepts any valid Rekor entry under certain conditions in github.com/sigstore/cosign"
+}
