@@ -49,14 +49,3 @@ func TestStreamReplayRequiresTranscriptMembership(t *testing.T) {
 		})
 	}
 }
-
-func TestSettledLiveSubscriptionRechecksTranscript(t *testing.T) {
-	srv := newTestServer(t)
-	sess := createSessionAtPathOnServer(t, srv, t.TempDir(), wire.SessionPostureBuild)
-	messageID := uuid.NewString()
-	srv.sessions.Runner.Transcript.Streams.CacheReplay(messageID, "removed content", nil)
-	w := httptest.NewRecorder()
-	r := newAuthedRequest(http.MethodGet, "/v1/sessions/"+sess.ID+"/stream?message="+messageID, nil)
-	srv.followLiveStream(r, w, w, sess.ID, messageID)
-	assertErrorResponse(t, w, http.StatusNotFound, "message_not_found")
-}

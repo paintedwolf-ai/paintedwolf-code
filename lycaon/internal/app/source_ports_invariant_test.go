@@ -42,4 +42,23 @@ func TestBuildSourceInvocationRecordsAndReadsOneDurableHistory(t *testing.T) {
 	if string(version.Content) != content {
 		t.Fatalf("recording and history ports disagree: retained=%q", version.Content)
 	}
+
+	manager := app.Sessions.Manager
+	first := wire.Message{Role: wire.MessageRoleUser, Origin: wire.MessageOriginUser,
+		Authority: wire.ContentAuthorityUser, Content: "First source turn"}
+	manager.Runner.Instructions.ReviewCheckpoint(t.Context(), sess.ID, first)
+	testutil.FailErr(t, "open first source turn", manager.Runner.Transcript.AppendPlain(t.Context(), sess.ID, first))
+	testutil.FailErr(t, "record foreign change between turns", source.SourceLedger.Record(t.Context(), sourceledger.RecordInput{
+		ProjectID: sess.ProjectID, RootID: source.ActiveRootID, Path: path,
+		BranchID: source.ProjectSourceBranch, Op: wire.SourceChangeOpWrite,
+		Origin: wire.SourceChangeOriginExternal, Before: []byte(content), After: []byte("outside change\n"),
+	}))
+	second := wire.Message{Role: wire.MessageRoleUser, Origin: wire.MessageOriginUser,
+		Authority: wire.ContentAuthorityUser, Content: "Second source turn"}
+	manager.Runner.Instructions.ReviewCheckpoint(t.Context(), sess.ID, second)
+	testutil.FailErr(t, "open second source turn", manager.Runner.Transcript.AppendPlain(t.Context(), sess.ID, second))
+	brief := manager.SourceBriefs.Build(t.Context(), sess)
+	if brief.OtherFiles != 1 || brief.OtherEffects != 1 || len(brief.Files) != 0 {
+		t.Fatalf("source brief lost the checkpoint-bound foreign change: %+v", brief)
+	}
 }
