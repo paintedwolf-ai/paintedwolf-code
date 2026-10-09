@@ -130,7 +130,7 @@ func TestSecretCanaryNeverEchoedByAnyReferenceTool(t *testing.T) {
 	executor.Boundary.SetSessionLoopbackGrant(review.SessionLoopbackGrant)
 
 	testutil.FailErr(t, "register http_request", Register(registry, Deps{
-		Boundary: testBoundary(), SecretMatcher: matcher, SecretAsk: executor.AskSecretScreen, Secrets: service,
+		Boundary: testBoundary(), SecretMatcher: matcher, SecretAsk: executor.Secrets.AskSecretScreen, Secrets: service,
 	}))
 	profiles, err := sandbox.LoadToolProfiles()
 	testutil.FailErr(t, "load tool profiles", err)
@@ -153,7 +153,7 @@ func TestSecretCanaryNeverEchoedByAnyReferenceTool(t *testing.T) {
 	})
 	testutil.FailErr(t, "open mcp registry", err)
 	providers.Tools.SetToolRegistry(registry)
-	providers.Calls.SetSecretScreen(matcher, executor.AskSecretScreen)
+	providers.Calls.SetSecretScreen(matcher, executor.Secrets.AskSecretScreen)
 	testutil.FailErr(t, "load mcp providers", providers.Catalog.Load(t.Context()))
 	mcpReceived := func() string {
 		if len(received) == 0 {
