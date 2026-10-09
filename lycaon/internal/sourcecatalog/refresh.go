@@ -241,12 +241,7 @@ func (c *Catalog) publish(key string, snapshot Snapshot, buildErr error) Snapsho
 		rec.mustAdvanceRevision = false
 		rec.validatedAt = c.now()
 	}
-	rec.building = false
-	// The build context carries its caller's values, such as an HTTP request
-	// and the host serving it; the record outlives both.
-	rec.cancel()
-	rec.cancel = nil
-	close(rec.done)
+	rec.settle()
 	c.evictLocked(key)
 	return rec.snapshot
 }
