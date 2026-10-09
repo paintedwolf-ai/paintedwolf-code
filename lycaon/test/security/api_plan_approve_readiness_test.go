@@ -151,7 +151,7 @@ func TestApprovePlanHTTPPersistsBeforeAdvanceAndWakesCoordinator(t *testing.T) {
 	if !testutil.WaitForNoFatal(promptIdleBudget, func() bool {
 		return len(h.Recording.AllRequests()) > requestCountBeforeApproval
 	}) {
-		active, activeErr := h.WorkflowMgr.GetActive(ctx, sess.ID)
+		active, activeErr := h.WorkflowMgr.Store.Runs.ActiveBySession(ctx, sess.ID)
 		testutil.FailErr(t, "get active run after approval wake", activeErr)
 		if active == nil {
 			t.Fatal("approval did not leave an active workflow")
