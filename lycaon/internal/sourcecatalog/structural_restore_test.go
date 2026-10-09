@@ -190,11 +190,19 @@ func TestStructuralCheckpointRestoresAcrossEnginesByDirectoryStamp(t *testing.T)
 			t.Fatalf("listing of %q recorded no directory stamp", dir)
 		}
 	}
-	written, err := firstStore.checkpointStructure(t.Context())
+	_, err = firstStore.checkpointStructure(t.Context())
 	testutil.FailErr(t, "write checkpoint", err)
-	if !written {
-		t.Fatal("complete structure was not checkpointed")
+	checkpoint, err := loadStructuralCheckpoint(t.Context(), firstStore, true)
+	testutil.FailErr(t, "load persisted checkpoint", err)
+	for _, dir := range dirs {
+		record, found, err := checkpoint.directories.Get(t.Context(), dir)
+		testutil.FailErr(t, "read persisted directory", err)
+		if !found {
+			t.Fatalf("checkpoint omitted %q", dir)
+		}
+		before[dir] = record.observation
 	}
+	checkpoint.close()
 	testutil.FailErr(t, "drain first engine", first.Drain(context.Background()))
 
 	// One directory changes while no engine is running.
