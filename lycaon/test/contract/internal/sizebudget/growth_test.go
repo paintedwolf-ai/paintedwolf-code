@@ -21,3 +21,25 @@ func TestGrowthDistinguishesDebtFromNewExcess(t *testing.T) {
 		t.Fatal("shrinking must not excuse exceeding an explicit cap")
 	}
 }
+
+func TestGrowthWarningAndHardLimitBoundaries(t *testing.T) {
+	policy := Policy{Limits: map[string]Limit{"files": {Warn: 10, Limit: 20}}}
+	for _, tc := range []struct {
+		measured int
+		want     Kind
+		fails    bool
+	}{
+		{10, "", false}, {11, OverWarn, false}, {20, OverWarn, false}, {21, OverLimit, true},
+	} {
+		findings := EvaluateGrowth(policy, Measurements{"files": {}}, Measurements{"files": {"new": tc.measured}}, func(_, _ string) bool { return true })
+		if tc.want == "" {
+			if len(findings) != 0 {
+				t.Fatalf("measurement %d: unexpected finding %v", tc.measured, findings)
+			}
+			continue
+		}
+		if len(findings) != 1 || findings[0].Kind != tc.want || (len(Failures(findings)) > 0) != tc.fails {
+			t.Fatalf("measurement %d: got %v, want %s (fails=%v)", tc.measured, findings, tc.want, tc.fails)
+		}
+	}
+}

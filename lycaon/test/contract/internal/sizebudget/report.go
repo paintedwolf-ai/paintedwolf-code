@@ -45,6 +45,7 @@ type ReportedFinding struct {
 
 // Report is the machine-readable result of one suite.
 type Report struct {
+	Tracking   *TrackingReport           `json:"tracking,omitempty"`
 	Suite      string                    `json:"suite"`
 	Policy     string                    `json:"policy"`
 	Categories map[string]reportCategory `json:"categories"`

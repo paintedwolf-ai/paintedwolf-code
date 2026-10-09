@@ -1,0 +1,51 @@
+name: Maintainability cleanup
+on:
+  workflow_run:
+    workflows: [Qualification]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Completed qualification run for the current main commit
+        required: true
+        type: string
+      dry_run:
+        description: Preview issue transitions without writing
+        default: true
+        type: boolean
+      backfill:
+        description: Include untouched existing debt in issue creation
+        default: false
+        type: boolean
+permissions:
+  actions: read
+  contents: read
+  pull-requests: read
+  issues: write
+concurrency:
+  group: maintainability-issues
+  cancel-in-progress: false
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Reconcile merged maintainability debt
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PYTHONPATH: scripts
+        run: python3 -m ci_policy.maintainability_issues
+      - name: Retain reconciliation plan
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: maintainability-issues-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            maintainability-issues.json
+            maintainability-checkpoint.json
+          if-no-files-found: ignore
+          retention-days: 90

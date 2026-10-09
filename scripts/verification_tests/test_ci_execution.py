@@ -372,3 +372,13 @@ class HostedVerificationTests(unittest.TestCase):
         refused = ci.subprocess.CompletedProcess([], 1, stdout="")
         with patch.object(ci.subprocess, "run", return_value=refused):
             self.assertEqual(ci.task_json(["test:cancel"]), (1, None))
+
+    def test_full_qualification_budgets_receive_push_change_base(self):
+        scope = dict(base='b' * 40, head='a' * 40, paths=['lycaon/internal/a/a.go'], full=True, reasons=[])
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.dict('os.environ', PW_CI_AFFECTED='0'), \
+                patch('ci_policy.impact.change', return_value=scope), \
+                patch.object(ci, 'artifact_root', return_value=Path(directory)), \
+                patch.object(ci.subprocess, 'call', return_value=0) as command:
+            ci.run_lane('limits')
+        self.assertEqual(command.call_args.kwargs['env']['PW_CHANGE_BASE'], 'b' * 40)

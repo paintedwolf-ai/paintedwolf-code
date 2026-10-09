@@ -27,12 +27,3 @@ def pages(path, key=None):
 
 def repository():
     return 'repos/' + os.environ['GITHUB_REPOSITORY']
-
-
-def ensure_issue(title, body):
-    root = repository()
-    # Exact machine-generated titles deduplicate without relying on search-index freshness.
-    for issue in pages(f'{root}/issues?state=open'):
-        if 'pull_request' not in issue and issue['title'] == title:
-            return issue
-    return api(f'{root}/issues', 'POST', {'title': title, 'body': body})

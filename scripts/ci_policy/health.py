@@ -5,7 +5,7 @@ import json
 import os
 from pathlib import Path
 
-from .github import api, pages, repository, ensure_issue
+from .github import api, pages, repository
 from .recovery import evidence
 
 
@@ -48,7 +48,7 @@ def summarize(runs, get_evidence):
     signatures, lanes = defaultdict(dict), defaultdict(list)
     missing = []
     for run in runs:
-        records, failures, _ = get_evidence(run)
+        records, failures = get_evidence(run)
         if not records:
             missing.append(run['id'])
         for record in records:
@@ -73,10 +73,6 @@ def main():
     report['queue_p95_seconds'] = quantile([r['seconds'] for r in report['queue_to_merge']], .95)
     report['unsuccessful_runs'] = [{'run': r['id'], 'conclusion': r['conclusion'], 'url': r['html_url']}
                               for r in runs if r['conclusion'] != 'success']
-    for signature, urls in report['recurring'].items():
-        ensure_issue('Recurring queue failure: ' + signature,
-                     'This structured failure occurred in at least three distinct queue runs in 24 hours.\n\n'
-                     + '\n'.join(f'- [Evidence]({url})' for url in urls))
     Path('queue-health.json').write_text(json.dumps(report, indent=2) + '\n')
     with Path(os.environ['GITHUB_STEP_SUMMARY']).open('a') as summary:
         summary.write('### Queue health\n\n```json\n' + json.dumps(report, indent=2) + '\n```\n')
