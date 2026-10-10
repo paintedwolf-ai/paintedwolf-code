@@ -362,7 +362,7 @@ func testTrashRelocate(from, to string) (desktoptrash.Receipt, error) {
 		return desktoptrash.Receipt{}, err
 	}
 	err = fseffect.RelocateGuarded(fseffect.Location{Root: filepath.Dir(from), Rel: filepath.Base(from)}, fseffect.Location{Root: filepath.Dir(to), Rel: filepath.Base(to)}, identity)
-	return desktoptrash.Receipt{Platform: runtime.GOOS, Path: to, Identity: identity}, err
+	return desktoptrash.Receipt{FormatVersion: 1, Platform: runtime.GOOS, Path: to, Identity: identity}, err
 }
 
 // Load a persisted pre-native intent to exercise the shipped retained contract.

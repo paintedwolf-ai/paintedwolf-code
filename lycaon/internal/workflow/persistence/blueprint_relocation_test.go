@@ -32,6 +32,7 @@ func TestBlueprintRelocationAnnouncesEveryCommittedRevision(t *testing.T) {
 			completed := time.Now().UTC()
 			run.CompletedAt = &completed
 		}
+		run.ReviewRevision = 7
 		run.ProjectID = testdbseed.DefaultProjectID
 		run.WorkflowID, run.WorkflowVersion, run.CurrentPhase = "plan", "1.0.0", "research"
 		testutil.FailErr(t, "create run", store.State.CreateState(ctx, run, "", nil))
@@ -53,7 +54,7 @@ func TestBlueprintRelocationAnnouncesEveryCommittedRevision(t *testing.T) {
 		testutil.FailErr(t, "read event", rows.Scan(&id, &revision, &raw))
 		var event api.WorkflowEvent
 		testutil.FailErr(t, "decode event", json.Unmarshal([]byte(raw), &event))
-		if seen[id] || event.Event != api.WorkflowEventKindRunUpdated || event.WorkflowRunID != id || event.Run == nil || event.Run.Revision != revision || event.Run.BlueprintPath != "blueprints/new.md" {
+		if seen[id] || event.Event != api.WorkflowEventKindRunUpdated || event.WorkflowRunID != id || event.Run == nil || event.Run.Revision != revision || event.Run.BlueprintPath != "blueprints/new.md" || event.Run.ReviewRevision != 7 {
 			t.Fatalf("incorrect relocation event: facet=%s revision=%d event=%+v", id, revision, event)
 		}
 		seen[id] = true

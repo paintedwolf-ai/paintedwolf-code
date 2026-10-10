@@ -35,3 +35,28 @@ func TestSourcePathLookupUsesIndexedNamespaceEdges(t *testing.T) {
 		t.Fatalf("missing indexed point lookup: root=%v child=%v entry=%v head=%v", indexedRoot, indexedChild, indexedEntry, indexedHead)
 	}
 }
+
+func TestSourceSubtreeLookupUsesIndexedNamespaceEdges(t *testing.T) {
+	database, err := Open(filepath.Join(t.TempDir(), "store.db"))
+	testutil.FailErr(t, "open namespace", err)
+	t.Cleanup(func() { _ = database.Close() })
+	rows, err := database.QueryContext(t.Context(), "EXPLAIN QUERY PLAN "+listSourceBranchHeadsUnderPath, "tree/nested", "project", "", "root")
+	testutil.FailErr(t, "explain subtree lookup", err)
+	defer func() { _ = rows.Close() }()
+	indexedRoot, indexedEntry, indexedHead := false, false, false
+	for rows.Next() {
+		var id, parent, unused int
+		var detail string
+		testutil.FailErr(t, "read subtree plan", rows.Scan(&id, &parent, &unused, &detail))
+		if strings.HasPrefix(detail, "SCAN e") || strings.HasPrefix(detail, "SCAN h") {
+			t.Fatalf("subtree scans unrelated heads: %s", detail)
+		}
+		indexedRoot = indexedRoot || strings.Contains(detail, "SEARCH root USING INDEX idx_source_directories_root")
+		indexedEntry = indexedEntry || strings.Contains(detail, "SEARCH e USING INDEX idx_source_head_entries_live_name")
+		indexedHead = indexedHead || strings.Contains(detail, "SEARCH h USING PRIMARY KEY")
+	}
+	testutil.FailErr(t, "finish subtree plan", rows.Err())
+	if !indexedRoot || !indexedEntry || !indexedHead {
+		t.Fatalf("missing indexed subtree lookup: root=%v entry=%v head=%v", indexedRoot, indexedEntry, indexedHead)
+	}
+}

@@ -56,6 +56,9 @@ func TestNativeTrashRefusesMissingOrReplacedReceipt(t *testing.T) {
 	for _, replace := range []bool{false, true} {
 		t.Run(map[bool]string{false: "emptied", true: "replaced"}[replace], func(t *testing.T) {
 			service, p, root, _ := sourceMutationFixture(t)
+			older := uuid.NewString()
+			_, err := service.Create(t.Context(), older, p, SourceEntryCreateRequest{RootID: p.Roots[0].ID, Path: "older", Kind: SourceEntryFile})
+			testutil.FailErr(t, "create older history", err)
 			testutil.FailErr(t, "seed source", os.WriteFile(filepath.Join(root, "file"), []byte("selected"), 0600))
 			id := uuid.NewString()
 			testutil.FailErr(t, "trash", service.Delete(t.Context(), id, p, SourceDeleteRequest{RootID: p.Roots[0].ID, Path: "file"}))
@@ -74,6 +77,14 @@ func TestNativeTrashRefusesMissingOrReplacedReceipt(t *testing.T) {
 			if _, err := os.Lstat(filepath.Join(root, "file")); !os.IsNotExist(err) {
 				t.Fatalf("unavailable item restored: %v", err)
 			}
+			var availability string
+			testutil.FailErr(t, "retained unavailable entry", service.Journal.db.QueryRowContext(t.Context(), `SELECT availability FROM source_history_entries WHERE id=?`, id).Scan(&availability))
+			if availability != "unavailable" {
+				t.Fatalf("availability = %q", availability)
+			}
+			restarted := NewSourceMutationService(service.Journal.db, service.settlement.recorder.(*sourceledger.Store))
+			installTestTrash(t, restarted)
+			undoHistoryHead(t, restarted, p, older)
 			if replace {
 				assertSourceHistoryFile(t, filepath.Dir(path), filepath.Base(path), "someone else")
 			}
@@ -129,4 +140,25 @@ func TestNativeTrashRestoresLogicalFileIdentity(t *testing.T) {
 	if restored.FileID != original.FileID {
 		t.Fatalf("native recovery forked file identity: %s to %s", original.FileID, restored.FileID)
 	}
+}
+
+func TestNativeTrashUnavailableRedoDoesNotBlockLaterHistory(t *testing.T) {
+	service, p, _, _ := sourceMutationFixture(t)
+	first, second := uuid.NewString(), uuid.NewString()
+	for _, item := range []struct{ id, path string }{{first, "first"}, {second, "second"}} {
+		_, err := service.Create(t.Context(), item.id, p, SourceEntryCreateRequest{RootID: p.Roots[0].ID, Path: item.path, Kind: SourceEntryFile})
+		testutil.FailErr(t, "create history", err)
+	}
+	undoHistoryHead(t, service, p, second)
+	undoHistoryHead(t, service, p, first)
+	entry, err := service.History.historyEntry(t.Context(), p.ID, "undone", "ASC")
+	testutil.FailErr(t, "read redo receipt", err)
+	testutil.FailErr(t, "empty Trash item", os.Remove(entry.RedoPlan.NativeTrash.Receipt.Path))
+	_, err = service.Redo(t.Context(), uuid.NewString(), p, SourceHistoryMutationRequest{ExpectedEntryID: first})
+	if !errors.Is(err, ErrSourceTrashUnavailable) {
+		t.Fatalf("unavailable redo = %v", err)
+	}
+	restarted := NewSourceMutationService(service.Journal.db, service.settlement.recorder.(*sourceledger.Store))
+	installTestTrash(t, restarted)
+	redoHistoryHead(t, restarted, p, second)
 }

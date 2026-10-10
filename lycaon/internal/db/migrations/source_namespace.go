@@ -24,6 +24,9 @@ var namespaceImplementation []byte
 var reviewAssignmentsMigration []byte
 
 func migrateSourceNamespace(ctx context.Context, tx *sql.Tx) error {
+	if _, err := tx.ExecContext(ctx, `ALTER TABLE source_history_entries ADD COLUMN availability TEXT NOT NULL DEFAULT 'available' CHECK (availability IN ('available', 'unavailable'))`); err != nil {
+		return err
+	}
 	if _, err := tx.ExecContext(ctx, `ALTER TABLE source_branch_heads RENAME TO source_branch_heads_v1`); err != nil {
 		return err
 	}
