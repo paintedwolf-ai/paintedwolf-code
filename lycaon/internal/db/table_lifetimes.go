@@ -201,6 +201,8 @@ var tableLifetimes = map[string]TableLifetime{
 	"worker_outcome_deliveries":      cascadeOwnedBy("worker_jobs"),
 	"worker_results":                 cascadeOwnedBy("worker_jobs"),
 	"worker_turns":                   cascadeOwnedBy("worker_jobs"),
+	"workflow_review_assignments":    cascadeOwnedBy("workflow_runs"),
+	"workflow_review_subjects":       cascadeOwnedBy("workflow_runs"),
 	"workflow_runs":                  cascadeOwnedBy("sessions"),
 	"workflow_scan_bindings":         cascadeOwnedBy("workflow_runs"),
 }
