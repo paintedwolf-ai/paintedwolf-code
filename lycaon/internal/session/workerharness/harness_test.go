@@ -7,6 +7,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -31,7 +32,7 @@ func (f *preparationFixture) Build(_ context.Context, s *api.Session, p string, 
 	return tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: s.ID}}, nil
 }
 func (f *preparationFixture) Enrich(_ context.Context, _ *api.Session, c tools.ToolContext) (tools.ToolContext, error) {
-	c.Source.ProjectDir = "/isolated/worker"
+	c.Source.Roots = []projectroot.RootRef{{ID: "worker-root", Path: "/isolated/worker", IsPrimary: true}}
 	return c, nil
 }
 func (f *preparationFixture) ActivePath(context.Context, *api.Session) (string, error) {
@@ -39,7 +40,7 @@ func (f *preparationFixture) ActivePath(context.Context, *api.Session) (string, 
 }
 func (f *preparationFixture) Run(_ context.Context, name string, args map[string]any, c tools.ToolContext) (string, error) {
 	f.call = c
-	if c.Identity.WorkerJobID != "job" || c.Identity.ToolCallID == "" || c.Identity.MessageID == "" || c.Source.ProjectDir != "/isolated/worker" || c.Effects.Out == nil {
+	if c.Identity.WorkerJobID != "job" || c.Identity.ToolCallID == "" || c.Identity.MessageID == "" || c.ActiveRootPath() != "/isolated/worker" || c.Effects.Out == nil {
 		f.t.Fatalf("unbound invocation=%+v", c)
 	}
 	if name == "verify" {
