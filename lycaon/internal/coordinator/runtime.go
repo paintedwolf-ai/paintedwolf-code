@@ -223,6 +223,20 @@ func (r *Runtime) StopSleepTimers() {
 	loop.Waits.StopSleepTimers()
 }
 
+// WaitSleepTimers drains callbacks admitted before host shutdown.
+func (r *Runtime) WaitSleepTimers(ctx context.Context) error {
+	if r == nil {
+		return nil
+	}
+	r.depsMu.Lock()
+	loop := r.coordLoop
+	r.depsMu.Unlock()
+	if loop == nil {
+		return nil
+	}
+	return loop.Waits.WaitSleepTimers(ctx)
+}
+
 // DrainLoopPending runs deferred loop wakes with deps refreshed.
 func (r *Runtime) DrainLoopPending(ctx context.Context, sessionID string) {
 	if r == nil {
