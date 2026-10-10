@@ -1,6 +1,7 @@
 package session
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
@@ -14,7 +15,7 @@ func TestTerminalRefusalsRetainPathsWithoutRecoverableGrants(t *testing.T) {
 		{Operation: "file-read-data", Target: "/state/store.db", Layer: confine.FloorReadControlPlane, Recovery: confine.RecoverNone},
 		{Operation: "file-write-data", Target: "/state/approvals.yaml", Layer: confine.FloorControlPlane, Recovery: confine.RecoverNone},
 	}}})
-	if len(gc.Refusals.RefusedTerminalReadPaths) != 1 || len(gc.Refusals.RefusedTerminalWritePaths) != 1 || len(gc.Refusals.RefusedReadGrants) != 0 || len(gc.Refusals.RefusedWriteGrants) != 0 || gc.Refusals.SandboxRefusalWitness != string(confine.WitnessKernel) {
+	if !slices.Equal(gc.Refusals.RefusedTerminalReadPaths, []string{"/state/store.db"}) || !slices.Equal(gc.Refusals.RefusedTerminalWritePaths, []string{"/state/approvals.yaml"}) || len(gc.Refusals.RefusedReadGrants) != 0 || len(gc.Refusals.RefusedWriteGrants) != 0 || gc.Refusals.SandboxRefusalWitness != string(confine.WitnessKernel) {
 		t.Fatalf("terminal facts=%+v", gc)
 	}
 }
