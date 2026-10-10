@@ -182,7 +182,10 @@ func Build(ctx context.Context, deps Dependencies) (*Runtime, error) {
 		cadence.OverlayRootsApply = filterPaths
 		cadence.Preempt = runner.Preempt
 		cadence.Scopes = scopes
-		cadence.ObserveRepochange()
+		releaseCadence := cadence.ObserveRepochange()
+		if deps.Resources != nil {
+			deps.Resources.Track("scan-cadence-observer", 22, releaseCadence)
+		}
 	}
 
 	obligation.Triggers = triggers
