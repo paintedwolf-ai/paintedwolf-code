@@ -48,12 +48,14 @@ class GoDigestTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             result = self.digest(events, directory)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("test results: 1 passed, 0 failed, 1 skipped", result.stdout)
-        self.assertIn("1 package without tests", result.stdout)
+        self.assertIn("test and subtest results: 1 passed, 0 failed, 1 skipped", result.stdout)
+        self.assertIn("1 package with no captured test results", result.stdout)
 
     def test_all_skipped_and_no_test_reports_never_claim_executed_tests(self):
         cases = [
             ([{"Package": "fixture/no_tests", "Action": "skip"}], 0, 1),
+            ([{"Package": "fixture/filtered", "Action": "pass"}], 0, 1),
+            ([{"Package": "fixture/build_failed", "Action": "fail"}], 0, 1),
             ([{"Package": "fixture/skipped", "Test": "TestResource", "Action": "skip"},
               {"Package": "fixture/skipped", "Action": "pass"}], 1, 0),
         ]
@@ -61,9 +63,20 @@ class GoDigestTests(unittest.TestCase):
             for events, skipped, empty in cases:
                 with self.subTest(events=events):
                     result = self.digest(events, directory)
-                    self.assertEqual(result.returncode, 0, result.stderr)
-                    self.assertIn(f"test results: 0 passed, 0 failed, {skipped} skipped", result.stdout)
+                    expected_status = 1 if events[-1]["Action"] == "fail" else 0
+                    self.assertEqual(result.returncode, expected_status, result.stderr)
+                    self.assertIn(f"test and subtest results: 0 passed, 0 failed, {skipped} skipped", result.stdout)
                     self.assertIn(f"{empty} package", result.stdout)
+
+    def test_repeated_test_and_subtest_completions_are_not_deduplicated(self):
+        events = [{"Package": "fixture/repeated", "Test": name, "Action": "pass"}
+                  for _ in range(2) for name in ("TestRepeated/child", "TestRepeated")]
+        events.append({"Package": "fixture/repeated", "Action": "pass"})
+        with tempfile.TemporaryDirectory() as directory:
+            result = self.digest(events, directory)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("test and subtest results: 4 passed, 0 failed, 0 skipped", result.stdout)
+        self.assertIn("0 packages with no captured test results", result.stdout)
 
     def test_skipped_package_establishes_completion(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -101,7 +101,7 @@ def main(argv: list[str]) -> int:
     packages_finished: set[str] = set()
     timings: dict[tuple[str, str], float] = {}
     cached: set[str] = set()
-    test_results: dict[tuple[str, str], str] = {}
+    test_results = {action: 0 for action in ("pass", "fail", "skip")}
     packages_with_tests: set[str] = set()
 
     for line in sys.stdin:
@@ -132,7 +132,7 @@ def main(argv: list[str]) -> int:
         if pkg and test:
             packages_with_tests.add(pkg)
             if action in {"pass", "fail", "skip"}:
-                test_results[key] = action
+                test_results[action] += 1
         elapsed = seconds(ev.get("Elapsed"))
         if action in {"pass", "fail"} and pkg and elapsed is not None:
             timings[key] = max(timings.get(key, 0), elapsed)
@@ -175,12 +175,10 @@ def main(argv: list[str]) -> int:
     has_failures = bool(all_failed_pkgs or build_errors)
 
     def write_coverage():
-        counts = {action: sum(result == action for result in test_results.values())
-                  for action in ("pass", "fail", "skip")}
-        out.write(f"    test results: {counts['pass']} passed, {counts['fail']} failed, "
-                  f"{counts['skip']} skipped\n")
+        out.write(f"    test and subtest results: {test_results['pass']} passed, "
+                  f"{test_results['fail']} failed, {test_results['skip']} skipped\n")
         empty = len(packages_finished - packages_with_tests)
-        out.write(f"    {empty} package{'s' if empty != 1 else ''} without tests\n")
+        out.write(f"    {empty} package{'s' if empty != 1 else ''} with no captured test results\n")
 
     def write_timings():
         write_slowest(out, "packages", ((pkg, elapsed) for (pkg, test), elapsed in timings.items()
