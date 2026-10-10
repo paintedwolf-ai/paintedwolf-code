@@ -16,7 +16,10 @@ func (b *Runtime) BindTranscript(matcher *secretmatch.Matcher, redactor func(fun
 	redact := func(ctx context.Context, msg wire.Message) (wire.Message, bool) {
 		return llm.RedactMessageForStorage(ctx, matcher, msg)
 	}
-	sessionstore.SetMessageRedactor(redact)
+	if b.releaseMessageRedactor != nil {
+		b.releaseMessageRedactor()
+	}
+	b.releaseMessageRedactor = sessionstore.SetMessageRedactor(redact)
 	b.sweep = sweep
 	if redactor != nil {
 		redactor(redact)
