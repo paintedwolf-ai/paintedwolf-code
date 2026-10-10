@@ -1,11 +1,14 @@
 package catalog
 
 import (
+	"runtime"
 	"testing"
+	"weak"
 
 	"github.com/lycaon/lycaon/internal/catalogview"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -48,5 +51,34 @@ func TestRuleLayersFromViewsDoesNotDuplicateOnePublishedCatalog(t *testing.T) {
 	layers := ruleLayersFromViews(device, &catalogview.View{Catalog: catalog, ApprovalRules: device.ApprovalRules})
 	if len(layers.Device) != 1 || len(layers.Project) != 0 {
 		t.Fatalf("layers = %#v, want device only", layers)
+	}
+}
+
+// The service is embedded in its host, so a bound method retains the entire allocation.
+type catalogLifetimeHost struct {
+	Catalog  Service
+	retained [1024]byte
+}
+
+func stoppedCatalogHost(t *testing.T) weak.Pointer[catalogLifetimeHost] {
+	t.Helper()
+	host := &catalogLifetimeHost{Catalog: New(nil)}
+	host.Catalog.Configure("", nil, nil)
+	host.Catalog.Configure("", nil, nil)
+	host.Catalog.Stop()
+	host.Catalog.Stop()
+	host.Catalog.Configure("", nil, nil)
+	testutil.FailErr(t, "drain stopped catalog", host.Catalog.Wait(t.Context()))
+	if _, _, err := host.Catalog.work.Begin(t.Context()); err == nil {
+		t.Fatal("stopped catalog admitted work")
+	}
+	return weak.Make(host)
+}
+
+func TestStoppedCatalogReleasesItsHost(t *testing.T) {
+	host := stoppedCatalogHost(t)
+	runtime.GC()
+	if host.Value() != nil {
+		t.Fatal("active refresher retained a stopped host")
 	}
 }

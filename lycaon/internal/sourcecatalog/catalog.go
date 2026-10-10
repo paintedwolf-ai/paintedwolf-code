@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/backgroundwork"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/sourcescope"
+	"github.com/lycaon/lycaon/internal/workscope"
 )
 
 // Root and scoped generations have independent retention limits.
@@ -79,14 +80,44 @@ type Catalog struct {
 	Literals    *LiteralSearch
 }
 
-// SetScopes replaces bundled budgets and traversal priority with a provider.
-func (c *Catalog) SetScopes(scopes ScopeProvider) {
-	if c == nil || scopes == nil {
-		return
+type scopeRegistration struct {
+	provider ScopeProvider
+	work     workscope.Group
+}
+
+func (r *scopeRegistration) Catalog(ctx context.Context, root string) *sourcescope.Scope {
+	workCtx, finish, err := r.work.Begin(ctx)
+	if err != nil {
+		return nil
 	}
+	defer finish()
+	return r.provider.Catalog(workCtx, root)
+}
+
+// SetScopes installs traversal policy and returns its owner's drain.
+func (c *Catalog) SetScopes(scopes ScopeProvider) func(context.Context) error {
+	if c == nil || scopes == nil {
+		return func(context.Context) error { return nil }
+	}
+	registration := &scopeRegistration{provider: scopes}
 	c.Trees.scopesMu.Lock()
-	c.Trees.scopes = scopes
+	c.Trees.scopes = registration
 	c.Trees.scopesMu.Unlock()
+	return func(ctx context.Context) error {
+		c.Trees.scopesMu.Lock()
+		if c.Trees.scopes == registration {
+			c.Trees.scopes = nil
+		}
+		c.Trees.scopesMu.Unlock()
+		registration.work.Stop()
+		if err := registration.work.Wait(ctx); err != nil {
+			return err
+		}
+		c.Trees.scopesMu.Lock()
+		registration.provider = nil
+		c.Trees.scopesMu.Unlock()
+		return nil
+	}
 }
 
 func New() *Catalog {

@@ -2,8 +2,10 @@ package native
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/projectsource"
@@ -160,4 +162,84 @@ func seedFile(t *testing.T, dir, rel, content string) {
 	full := filepath.Join(dir, rel)
 	testutil.FailErr(t, "mkdir seed", os.MkdirAll(filepath.Dir(full), 0o755))
 	testutil.FailErr(t, "seed file", os.WriteFile(full, []byte(content), 0o644))
+}
+
+type blueprintObserverFunc func(context.Context, string, string)
+
+func (f blueprintObserverFunc) AfterWrite(ctx context.Context, sessionID, path string) {
+	f(ctx, sessionID, path)
+}
+
+func TestBlueprintObserverReleaseDrainsCopiedWriteFencing(t *testing.T) {
+	entered, canceled, resume, finished := make(chan struct{}), make(chan struct{}), make(chan struct{}), make(chan struct{})
+	unblock := sync.OnceFunc(func() { close(resume) })
+	oldRelease := SetBlueprintWriteObserver(blueprintObserverFunc(func(ctx context.Context, sessionID, path string) {
+		if sessionID != "session" || path != "blueprint.md" {
+			t.Errorf("write subject = %q/%q", sessionID, path)
+		}
+		close(entered)
+		<-ctx.Done()
+		close(canceled)
+		<-resume
+	}))
+	t.Cleanup(func() { unblock(); testutil.FailErr(t, "drain old blueprint observer", oldRelease(t.Context())) })
+	tctx := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: " session "}}
+	go func() {
+		notifyBlueprintWrite(t.Context(), tctx, "", ".", " blueprint.md ")
+		close(finished)
+	}()
+	<-entered
+	var observed []string
+	currentRelease := SetBlueprintWriteObserver(blueprintObserverFunc(func(_ context.Context, sessionID, path string) {
+		observed = append(observed, sessionID+":"+path)
+	}))
+	t.Cleanup(func() { testutil.FailErr(t, "drain current blueprint observer", currentRelease(t.Context())) })
+	deadline, cancel := context.WithCancel(t.Context())
+	cancel()
+	if err := oldRelease(deadline); !errors.Is(err, context.Canceled) {
+		t.Fatalf("unfinished observer release = %v, want cancellation evidence", err)
+	}
+	<-canceled
+	select {
+	case <-finished:
+		t.Fatal("release reported drained before the copied write callback returned")
+	default:
+	}
+	notifyBlueprintWrite(t.Context(), tctx, "current.md")
+	if len(observed) != 1 || observed[0] != "session:current.md" {
+		t.Fatalf("old owner release changed current write fencing: %v", observed)
+	}
+	unblock()
+	<-finished
+	testutil.FailErr(t, "retry old observer drain", oldRelease(t.Context()))
+	notifyBlueprintWrite(t.Context(), tctx, "next.md")
+	if len(observed) != 2 || observed[1] != "session:next.md" {
+		t.Fatalf("completed old drain erased replacement: %v", observed)
+	}
+	testutil.FailErr(t, "release current blueprint observer", currentRelease(t.Context()))
+	notifyBlueprintWrite(t.Context(), tctx, "closed.md")
+	if len(observed) != 2 {
+		t.Fatal("closed owner admitted a new write callback")
+	}
+}
+
+func TestNativeWriteDeliversActiveBlueprintObserver(t *testing.T) {
+	dir := t.TempDir()
+	ledger := bindLedgerForWrites(t, dir)
+	tctx := nativefixture.Context(dir)
+	tctx.Identity.ProjectID, tctx.Identity.SessionID, tctx.Identity.ToolCallID = "p1", "session", "write"
+	tctx.Source.SourceLedger = ledger
+	tctx.Source.History = tools.SourceHistory{Files: ledger.History, Comparison: ledger.Comparisons, Git: ledger.Git, Authorship: ledger.Walk}
+	tctx.Source.Commands, tctx.Source.Observations, tctx.Source.GitMutations = ledger.Commands, ledger.Inventory, ledger.Git
+	tctx.Source.SourceMutations = projectsource.NewSourceMutationService(ledger.LedgerDB(), ledger)
+	var subjects []string
+	release := SetBlueprintWriteObserver(blueprintObserverFunc(func(_ context.Context, sessionID, path string) {
+		subjects = append(subjects, sessionID+":"+path)
+	}))
+	t.Cleanup(func() { testutil.FailErr(t, "release native write observer", release(t.Context())) })
+	_, err := (&WriteTool{Boundary: nativefixture.Boundary(t)}).Run(t.Context(), map[string]any{"path": "blueprint.md", "content": "# Plan"}, tctx)
+	testutil.FailErr(t, "write bound blueprint", err)
+	if len(subjects) != 1 || subjects[0] != "session:blueprint.md" {
+		t.Fatalf("successful native write missed its active blueprint fence: %v", subjects)
+	}
 }

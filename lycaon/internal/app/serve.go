@@ -108,6 +108,10 @@ func (a *ServeApp) Close() error {
 	if a == nil {
 		return nil
 	}
+	if a.Sessions != nil && a.Sessions.Manager != nil {
+		a.Sessions.Manager.BeginEngineShutdown()
+	}
+
 	a.stopRunners()
 	drainCtx, cancel := context.WithTimeout(context.Background(), resourceReleaseTimeout)
 	defer cancel()
