@@ -11,14 +11,14 @@ import (
 
 // The host owns its default scanner generation; injected registries remain caller-owned.
 func loadScannerRegistry(ctx context.Context, deps Dependencies, priority exec.ProcessPriority, appliesPath func(context.Context, string) bool) (scan.CodeScannerRegistry, error) {
-	if deps.TestRegistry != nil {
-		return deps.TestRegistry, nil
+	if deps.Fixtures.Registry != nil {
+		return deps.Fixtures.Registry, nil
 	}
 	var key []byte
 	if deps.FingerprintScannerKey != nil {
 		key = deps.FingerprintScannerKey()
 	}
-	reg, err := scanregistry.New(ctx, scanregistry.Options{ScannerFingerprintKey: key, ModuleRoot: deps.ModuleRoot, ProcessPriority: priority, ProjectTierApplies: appliesPath})
+	reg, err := scanregistry.New(ctx, scanregistry.Options{ScannerFingerprintKey: key, AdvisoryDatabase: deps.Fixtures.AdvisoryDatabase, ModuleRoot: deps.ModuleRoot, ProcessPriority: priority, ProjectTierApplies: appliesPath})
 	if err != nil {
 		return nil, fmt.Errorf("scan registry: %w", err)
 	}
