@@ -2,9 +2,12 @@ package inputs
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/tools"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
+	"github.com/lycaon/lycaon/pkg/api"
 	"testing"
 )
 
@@ -71,5 +74,42 @@ func TestDeferredBlueprintLaunchIsConsumedOnceWithoutLosingScaffold(t *testing.T
 	service.ClearStartState(t.Context(), "session")
 	if store.vars["retained"] != "fact" {
 		t.Fatalf("scaffold clearing lost unrelated fact=%v", store.vars)
+	}
+}
+
+type feedbackReceiptRuns struct {
+	runstate.RunsRepository
+	vars   map[string]any
+	active *api.WorkflowRun
+}
+
+func (r feedbackReceiptRuns) ActiveBySession(context.Context, string) (*api.WorkflowRun, error) {
+	return r.active, nil
+}
+func (r feedbackReceiptRuns) GetScaffoldVars(context.Context, string) (map[string]any, error) {
+	return r.vars, nil
+}
+func TestFeedbackToolReturnsRetainedInputWithoutIssuingAnotherQuestion(t *testing.T) {
+	for _, pending := range []bool{false, true} {
+		runs := feedbackReceiptRuns{}
+		if pending {
+			runs.active = &api.WorkflowRun{ID: "run"}
+			runs.vars = map[string]any{"user_feedback": map[string]any{"phase": map[string]any{"pending": true, "prompt": "Retained question"}}}
+		}
+		reg := tools.NewDefaultRegistry()
+		if err := RegisterFeedbackTool(reg, &Feedback{Runs: runs}); err != nil {
+			t.Fatalf("register feedback: %v", err)
+		}
+		out, err := reg.Run(t.Context(), "workflow_user_feedback", nil, tools.ToolContext{Identity: tools.InvocationIdentity{Agent: "coordinator", SessionID: "session"}})
+		if err != nil {
+			t.Fatalf("project pending input: %v", err)
+		}
+		var result FeedbackToolResult
+		if err := json.Unmarshal([]byte(out), &result); err != nil {
+			t.Fatalf("decode feedback projection: %v", err)
+		}
+		if result.Pending != pending || (pending && result.PhaseID != "phase") {
+			t.Fatalf("feedback projection=%+v pending=%v", result, pending)
+		}
 	}
 }
