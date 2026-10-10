@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"strings"
@@ -279,20 +278,20 @@ func (e *Approvals) recordToolDenied(
 		return
 	}
 	action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: eval.ToolName,
-Args: eval.ToolArgs,
-Files: filesFromArgs(eval.ToolName, eval.ToolArgs),
-ResolvedFiles: eval.ResolvedFiles,
-},
-Scope: hitl.ActionScope{
-ProjectID: eval.ProjectID,
-ProjectDir: eval.ProjectDir,
-SessionID: eval.SessionID,
-RootSessionID: eval.ChatSessionID(),
-SessionScratchRoot: eval.ConfineRequest.SessionScratchRoot,
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool:          eval.ToolName,
+			Args:          eval.ToolArgs,
+			Files:         filesFromArgs(eval.ToolName, eval.ToolArgs),
+			ResolvedFiles: eval.ResolvedFiles,
+		},
+		Scope: hitl.ActionScope{
+			ProjectID:          eval.ProjectID,
+			ProjectDir:         eval.ProjectDir,
+			SessionID:          eval.SessionID,
+			RootSessionID:      eval.ChatSessionID(),
+			SessionScratchRoot: eval.ConfineRequest.SessionScratchRoot,
+		},
+	}
 	record := authzledger.ToolDeniedRecord{
 		SessionID:       eval.SessionID,
 		ParentSessionID: eval.ParentSessionID,
@@ -314,14 +313,6 @@ SessionScratchRoot: eval.ConfineRequest.SessionScratchRoot,
 		}
 	}
 	e.authzRecorder.AppendToolDenied(ctx, record)
-}
-
-func (e *Approvals) SetCheckpointManager(mgr hitl.CheckpointManager, gate hitl.ApprovalGate) {
-	if e != nil {
-		e.checkpointMgr = mgr
-		e.approvalGate = gate
-		confine.SetEgressResolver(e.Network.resolveEgress)
-	}
 }
 
 func (e *Approvals) SetToolApprovalCoalesce(rt toolapproval.ToolApprovalCoalesce) {

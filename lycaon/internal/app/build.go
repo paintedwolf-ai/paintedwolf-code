@@ -89,6 +89,7 @@ func Build(ctx context.Context, cfg configuration.Config) (*ServeApp, error) {
 				return err
 			}
 			b.security = security.New(ctx, b.storage.Database, b.storage.Sessions, b.storage.Projects, nil)
+			resources.Track("secret-redactors", 160, func(context.Context) error { b.security.ReleaseRedactors(); return nil })
 			return nil
 		}},
 		{"config", startupprotocol.PhaseConfiguration, b.loadConfig},

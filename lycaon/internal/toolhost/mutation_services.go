@@ -1,6 +1,7 @@
 package toolhost
 
 import (
+	"context"
 	"github.com/lycaon/lycaon/internal/tools/native"
 )
 
@@ -38,9 +39,9 @@ func (r *MutationServices) SetContentApply(contentApply native.ContentApplyGate)
 	}
 }
 
-func (r *MutationServices) SetBlueprintWriteObserver(o native.BlueprintWriteObserver) {
+func (r *MutationServices) SetBlueprintWriteObserver(o native.BlueprintWriteObserver) func(context.Context) error {
 	if r == nil {
-		return
+		return func(context.Context) error { return nil }
 	}
-	native.SetBlueprintWriteObserver(o)
+	return native.SetBlueprintWriteObserver(o)
 }

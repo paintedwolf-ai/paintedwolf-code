@@ -5,8 +5,10 @@ import (
 	"errors"
 	"github.com/lycaon/lycaon/internal/app/configuration"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+	"weak"
 
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/config/configtest"
@@ -15,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/mcp"
+	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -176,5 +179,28 @@ func TestBuildStopsWhenShutdownArrivesDuringStartup(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "startup interrupted before observability") {
 		t.Fatalf("error = %v, want the step it stopped before", err)
+	}
+}
+
+func closeBuiltHostWithoutServing(t *testing.T) weak.Pointer[session.Host] {
+	t.Helper()
+	app, err := Build(t.Context(), testBuildConfig(t, configlayout.FindModuleRoot()))
+	testutil.FailErr(t, "build without serving", err)
+	host := app.Sessions.Manager
+	testutil.FailErr(t, "close without serving", app.Close())
+	if host.Runner.Settlement.Disposition(true) != wire.SessionIdleDispositionInterrupted {
+		t.Fatal("Close did not mark the host as shutting down")
+	}
+	return weak.Make(host)
+}
+
+func TestBuildCloseWithoutServeReleasesSessionHost(t *testing.T) {
+	testutil.SkipIfShort(t, "assembles the full app graph")
+	t.Setenv("LYCAON_LLM_MOCK", "1")
+	t.Setenv("LYCAON_API_TOKEN", "test-token")
+	host := closeBuiltHostWithoutServing(t)
+	runtime.GC()
+	if host.Value() != nil {
+		t.Fatal("Close without Serve retained the session host")
 	}
 }

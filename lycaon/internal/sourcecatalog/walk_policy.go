@@ -106,6 +106,9 @@ func (c *TreeStores) policyFor(ctx context.Context, root string) walkPolicy {
 		return defaultCatalogPolicy(root)
 	}
 	scope := scopes.Catalog(ctx, root)
+	if scope == nil {
+		return defaultCatalogPolicy(root)
+	}
 	return walkPolicy{budgets: scope.Budgets(), scope: scope, base: "."}
 }
 

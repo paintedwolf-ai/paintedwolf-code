@@ -6,8 +6,10 @@ import (
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+	"weak"
 
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/isolation"
@@ -202,5 +204,52 @@ func TestControlPlanePathsRefuseGrantsWithTheGateCode(t *testing.T) {
 	testutil.FailErr(t, "ResolveRead draft through grant", err)
 	if !res.External {
 		t.Fatal("an agent workspace under the state tree must resolve through its grant")
+	}
+}
+
+func ownedPathGrant(path string) (func(), weak.Pointer[projectpaths.Access]) {
+	owner := &projectpaths.Access{Path: path}
+	release := projectpaths.SetGrantedAccessSource(func(_, _, abs string, write bool) (projectpaths.Access, bool) {
+		if write || abs != owner.Path {
+			return projectpaths.Access{}, false
+		}
+		return *owner, true
+	})
+	return release, weak.Make(owner)
+}
+
+func TestReleasedGrantOwnerDoesNotReplaceCurrentPathAuthority(t *testing.T) {
+	project := t.TempDir()
+	outside := filepath.Join(filepath.VolumeName(os.TempDir())+string(filepath.Separator), "unattached", t.Name())
+	oldPath, currentPath := filepath.Join(outside, "old.txt"), filepath.Join(outside, "current.txt")
+	tctx := tools.ToolContext{Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "p", Path: project, IsPrimary: true}}}, Identity: tools.InvocationIdentity{SessionID: "chat"}}
+	oldRelease, oldOwner := ownedPathGrant(oldPath)
+	t.Cleanup(oldRelease)
+	currentRelease, currentOwner := ownedPathGrant(currentPath)
+	t.Cleanup(currentRelease)
+	oldRelease()
+	oldRelease()
+	runtime.GC()
+	if oldOwner.Value() != nil {
+		t.Fatal("released registration handle retained its path authority owner")
+	}
+	if _, err := projectpaths.ResolveRead(t.Context(), nil, tctx, oldPath); err == nil {
+		t.Fatal("replacement retained the previous owner's grant")
+	}
+	resolved, err := projectpaths.ResolveRead(t.Context(), nil, tctx, currentPath)
+	testutil.FailErr(t, "resolve current owner's grant after old owner release", err)
+	if !resolved.External {
+		t.Fatal("current grant did not resolve as external authority")
+	}
+	if _, err := projectpaths.ResolveWrite(t.Context(), nil, tctx, currentPath); err == nil {
+		t.Fatal("read-only registration widened write authority")
+	}
+	currentRelease()
+	runtime.GC()
+	if currentOwner.Value() != nil {
+		t.Fatal("current release handle retained its owner")
+	}
+	if _, err := projectpaths.ResolveRead(t.Context(), nil, tctx, currentPath); err == nil {
+		t.Fatal("closed owner still supplied external path authority")
 	}
 }
