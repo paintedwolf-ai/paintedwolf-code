@@ -216,7 +216,15 @@ func closeBuiltHostWithArmedWait(t *testing.T) weak.Pointer[session.Host] {
 	sess, err := app.Sessions.Store.Create(t.Context(), wire.CreateSessionRequest{ProjectID: testdbseed.DefaultProjectID, Posture: wire.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create waiting session", err)
 	host := app.Sessions.Manager
-	host.Coordinator.Runtime.CoordinatorLoop().Waits.EnterSleep(t.Context(), sess.ID, time.Now().Add(time.Hour), "fixture", []loopwake.WaitTrigger{loopwake.WaitTriggerTimer}, nil, loopwake.SleepMoverHost)
+	waits := host.Coordinator.Runtime.CoordinatorLoop().Waits
+	waits.EnterSleep(t.Context(), sess.ID, time.Now().Add(time.Hour), "fixture", []loopwake.WaitTrigger{loopwake.WaitTriggerTimer}, nil, loopwake.SleepMoverHost)
+	if !waits.IsSleeping(sess.ID) {
+		t.Fatal("coordinator wait was not armed before Close")
+	}
+	triggers := waits.Triggers(sess.ID)
+	if len(triggers) != 1 || triggers[0] != loopwake.WaitTriggerTimer {
+		t.Fatalf("armed wait triggers = %v, want timer", triggers)
+	}
 	testutil.FailErr(t, "close with armed wait", app.Close())
 	return weak.Make(host)
 }
