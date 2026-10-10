@@ -15,9 +15,10 @@ import (
 )
 
 type enrichmentJobs struct {
-	task     *api.WorkerTask
-	claimErr error
-	claims   int
+	task      *api.WorkerTask
+	claimErr  error
+	claimTask *api.WorkerTask
+	claims    int
 }
 
 func (j *enrichmentJobs) Get(id string) (*api.WorkerTask, bool) {
@@ -25,7 +26,7 @@ func (j *enrichmentJobs) Get(id string) (*api.WorkerTask, bool) {
 }
 func (j *enrichmentJobs) ClaimWorkerBranch(context.Context, string) (*api.WorkerTask, error) {
 	j.claims++
-	return nil, j.claimErr
+	return j.claimTask, j.claimErr
 }
 
 func TestReadWorkerEnrichmentKeepsProjectSourcesAndContextIdentity(t *testing.T) {
@@ -92,5 +93,17 @@ func TestWorkerWriteReservesNormalizedTouchAndRefusesReadScopedMutation(t *testi
 	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != TaskScopeReadMutationDeniedCode || len(calls.paths) != 1 || len(service.Touches.Paths("job")) != 1 {
 		t.Fatalf("read worker changed touch/reservation err=%v calls=%+v", err, calls)
+	}
+}
+
+func TestReadBranchClaimKeepsProjectSourceRouting(t *testing.T) {
+	service := New(nil, nil, nil)
+	jobs := &enrichmentJobs{claimTask: &api.WorkerTask{ID: "read-job", Scope: &api.TaskScope{Mode: api.TaskScopeModeRead}}}
+	service.SetTasks(jobs)
+	input := tools.ToolContext{Identity: tools.InvocationIdentity{WorkerJobID: "read-job"}, Source: tools.InvocationSource{SourceWorkspaceKind: api.SourceWorkspaceKindWorker}}
+	out, err := service.EnsureBranch(t.Context(), input)
+	testutil.FailErr(t, "resolve read worker branch", err)
+	if jobs.claims != 1 || out.Identity.WorkerJobID != "read-job" || out.Source.SourceWorkspaceKind != api.SourceWorkspaceKindProject || out.Source.WorkerBranchRoot != "" {
+		t.Fatalf("read branch claim=%+v claims=%d", out, jobs.claims)
 	}
 }
