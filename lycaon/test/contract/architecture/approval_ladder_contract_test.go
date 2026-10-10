@@ -36,12 +36,18 @@ func TestRecommendedOptionOnlySetInPlanConstruction(t *testing.T) {
 	corpus, err := contractcheck.LoadGoASTCorpus(filepath.Join(root, "lycaon", "internal"))
 	contractcheck.FailErr(t, "load internal Go corpus", err)
 	for _, source := range corpus.Files() {
-		base := filepath.Base(source.Path)
-		if source.IsTest || base == "approval_plan.go" || base == "checkpoint_wire.go" {
+		if source.IsTest || source.Rel == "hitl/approval_plan.go" || source.Rel == "hitl/checkpoint_wire.go" {
 			continue
 		}
 		rel, _ := filepath.Rel(root, source.Path)
 		ast.Inspect(source.AST, func(n ast.Node) bool {
+			if fn, ok := n.(*ast.FuncDecl); ok && source.Rel == "hitl/approval_offers.go" && fn.Name.Name == "refaceAfterFilter" && fn.Recv != nil && len(fn.Recv.List) == 1 {
+				if ptr, ok := fn.Recv.List[0].Type.(*ast.StarExpr); ok {
+					if owner, ok := ptr.X.(*ast.Ident); ok && owner.Name == "ApprovalPlan" {
+						return false
+					}
+				}
+			}
 			switch node := n.(type) {
 			case *ast.KeyValueExpr:
 				if key, ok := node.Key.(*ast.Ident); ok && key.Name == "RecommendedOptionID" {
@@ -59,7 +65,7 @@ func TestRecommendedOptionOnlySetInPlanConstruction(t *testing.T) {
 	}
 
 	if len(faceWriters) > 0 {
-		t.Fatalf("face may only be computed in approval_plan.go:\n  %s", strings.Join(faceWriters, "\n  "))
+		t.Fatalf("face may only be computed by approval plan construction/refacing or checkpoint wire projection:\n  %s", strings.Join(faceWriters, "\n  "))
 	}
 }
 

@@ -15,8 +15,13 @@ import (
 
 func countSourceDefs(t *testing.T, anchor string) map[string]int {
 	t.Helper()
+	return countSourceDefsIn(t, "", anchor)
+}
+
+func countSourceDefsIn(t *testing.T, domain, anchor string) map[string]int {
+	t.Helper()
 	root := contractcheck.RepoRoot(t)
-	base := filepath.Join(root, "lycaon", "internal")
+	base := filepath.Join(root, "lycaon", "internal", domain)
 	hits := map[string]int{}
 	err := contractcheck.WalkFiles(base, map[string]struct{}{".go": {}}, true, func(path string, data []byte) error {
 		n := strings.Count(string(data), anchor)
@@ -39,18 +44,24 @@ func totalDefs(hits map[string]int) int {
 
 func TestOneCloseoutLifecycle(t *testing.T) {
 	t.Parallel()
-	if hits := countSourceDefs(t, "type closeoutLifecycle struct"); totalDefs(hits) != 1 {
-		t.Fatalf("closeoutLifecycle defined %d times, want exactly 1: %v", totalDefs(hits), hits)
+	if hits := countSourceDefsIn(t, "session/closeouts", "type Service struct"); totalDefs(hits) != 1 {
+		t.Fatalf("closeouts.Service defined %d times, want exactly 1: %v", totalDefs(hits), hits)
 	}
-	if hits := countSourceDefs(t, "func (m *Manager) RecordGroundingFriction("); totalDefs(hits) != 1 {
+	if hits := countSourceDefs(t, "type closeoutLifecycle struct"); totalDefs(hits) != 0 {
+		t.Fatalf("parallel legacy closeout lifecycle remains: %v", hits)
+	}
+	if hits := countSourceDefs(t, "func (m *Service) RecordGroundingFriction("); totalDefs(hits) != 1 {
 		t.Fatalf("RecordGroundingFriction defined %d times, want exactly 1 shared seam: %v", totalDefs(hits), hits)
 	}
 }
 
 func TestOneLedgerCloseoutAssembler(t *testing.T) {
 	t.Parallel()
-	if hits := countSourceDefs(t, "func (m *Manager) assembleLedgerCloseout("); totalDefs(hits) != 1 {
-		t.Fatalf("assembleLedgerCloseout defined %d times, want exactly 1 surface-aware assembler: %v", totalDefs(hits), hits)
+	if hits := countSourceDefsIn(t, "session/closeoutassembly", "func (m *Service) Assemble("); totalDefs(hits) != 1 {
+		t.Fatalf("closeoutassembly.Service.Assemble defined %d times, want exactly 1 surface-aware assembler: %v", totalDefs(hits), hits)
+	}
+	if hits := countSourceDefs(t, "func (m *Manager) assembleLedgerCloseout("); totalDefs(hits) != 0 {
+		t.Fatalf("parallel legacy ledger closeout assembler remains: %v", hits)
 	}
 	if hits := countSourceDefs(t, "func (l turnCloseout) emitAssembledCloseout("); totalDefs(hits) != 1 {
 		t.Fatalf("emitAssembledCloseout defined %d times, want exactly 1: %v", totalDefs(hits), hits)
