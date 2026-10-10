@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 
 from feed_signature import check
 from update_keys import load_registry
@@ -59,15 +60,36 @@ def sign(pointer: Path, number: int, registry: dict) -> Path:
     return signature
 
 
+
+def check_credentials(registry: dict) -> None:
+    """Prove every retained feed can be signed before touching distribution."""
+    rows = credentials(os.environ.get("FEED_SIGNING_KEYS_JSON", ""))
+    for row in registry["generations"]:
+        number = row["generation"]
+        if str(number) not in rows:
+            raise ValueError(f"no feed signing credential for generation {number}")
+    with tempfile.TemporaryDirectory(prefix="feed-credentials-") as directory:
+        for row in registry["generations"]:
+            pointer = Path(directory) / f"latest-stable-key-{row['generation']}.json"
+            pointer.write_text('{"version":"0.0.0"}')
+            sign(pointer, row["generation"], registry)
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--file", type=Path, required=True)
-    parser.add_argument("--generation", type=int, required=True)
+    parser.add_argument("--check-credentials", action="store_true")
+    parser.add_argument("--file", type=Path)
+    parser.add_argument("--generation", type=int)
     parser.add_argument("--registry", type=Path)
     parser.add_argument("--storage-prefix", default="")
     args = parser.parse_args()
     try:
-        sign(args.file, args.generation, signing_registry(args.registry, args.storage_prefix))
+        registry = signing_registry(args.registry, args.storage_prefix)
+        if args.check_credentials:
+            check_credentials(registry)
+        elif args.file is not None and args.generation is not None:
+            sign(args.file, args.generation, registry)
+        else:
+            parser.error("supply --check-credentials or --file and --generation")
     except (OSError, ValueError, KeyError) as error:
         print(f"error: {error}", file=sys.stderr)
         raise SystemExit(1) from None
