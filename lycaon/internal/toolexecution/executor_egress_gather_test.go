@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -126,5 +127,39 @@ func TestRepeatedHostsKeepBalancedTaskScope(t *testing.T) {
 		if !found {
 			t.Fatal("explicit wider choice disappeared")
 		}
+	}
+}
+
+func TestCheckpointOwnerReleaseKeepsCurrentBrokerApproval(t *testing.T) {
+	confine.SetEgressPosture(confine.PostureAsk)
+	t.Cleanup(func() { confine.SetEgressPosture(confine.PostureObserve) })
+	old, oldManager := gatherExecutor(t)
+	current, currentManager := gatherExecutor(t)
+	// Parsed HTTP is ingestion at Balanced; Strict reviews the first host.
+	current.Network.SetEgressPostureSource(func(string) gate.Posture { return gate.PostureStrict })
+	t.Cleanup(func() {
+		if err := current.Approvals.ReleaseEgressResolver(context.Background()); err != nil {
+			t.Errorf("release current checkpoint owner: %v", err)
+		}
+	})
+	if err := old.Approvals.ReleaseEgressResolver(t.Context()); err != nil {
+		t.Fatalf("release old checkpoint owner: %v", err)
+	}
+	cmd := confine.EgressCommand{SessionID: "current-owner", RootSessionID: "current-owner", ToolCallID: "current-dial"}
+	if !confine.DecideAttributedHost(t.Context(), cmd, "owner-approval.test") {
+		t.Fatal("current checkpoint owner did not approve its broker dial")
+	}
+	if len(oldManager.requests()) != 0 || len(currentManager.requests()) != 1 {
+		t.Fatalf("broker reached wrong checkpoint owner: old=%d current=%d", len(oldManager.requests()), len(currentManager.requests()))
+	}
+	if err := current.Approvals.ReleaseEgressResolver(t.Context()); err != nil {
+		t.Fatalf("release current checkpoint owner: %v", err)
+	}
+	cmd.ToolCallID = "closed-dial"
+	if confine.DecideAttributedHost(t.Context(), cmd, "closed-owner.test") {
+		t.Fatal("closed checkpoint owner authorized a new broker dial")
+	}
+	if len(currentManager.requests()) != 1 {
+		t.Fatal("closed owner minted an additional checkpoint")
 	}
 }

@@ -166,7 +166,7 @@ func (r *Runtime) wireVisualAndRenderTools() error {
 		Records: artifactRecords,
 	})
 	r.deps.Sessions.Manager.SetVisualStore(r.Visual)
-	providerwire.SetVisualBytesResolver(func(sessionID, artifactID string) ([]byte, string, bool) {
+	releaseVisual := providerwire.SetVisualBytesResolver(func(sessionID, artifactID string) ([]byte, string, bool) {
 		root := sessiontree.RootID(context.Background(), r.deps.Storage.Sessions, sessionID)
 		res := r.Visual.Resolve(context.Background(), root, artifactID)
 		if !res.IsPresent() {
@@ -174,6 +174,7 @@ func (r *Runtime) wireVisualAndRenderTools() error {
 		}
 		return res.Bytes(), res.Meta().Mime, true
 	})
+	r.deps.Resources.Track("visual-bytes-resolver", 22, func(context.Context) error { releaseVisual(); return nil })
 	if r.deps.Workflows != nil && r.deps.Workflows.Manager != nil {
 		r.deps.Workflows.Manager.SetVisualArtifacts(r.Visual, r.rootSessionKey)
 	}

@@ -145,7 +145,10 @@ func (b *Runtime) InstallEvidence(m *secretmatch.Matcher, fp *secretmatch.Finger
 		go b.sweep(context.WithoutCancel(context.Background()), rootSessionID, generation)
 	})
 	// Capture tags correlate redacted occurrences.
-	observability.SetCaptureRedactor(func(text string) string {
+	if b.releaseCaptureRedactor != nil {
+		b.releaseCaptureRedactor()
+	}
+	b.releaseCaptureRedactor = observability.SetCaptureRedactor(func(text string) string {
 		redacted, spans := m.RedactLabeledSpansWhere(context.Background(), "", text, nil)
 		return secretmatch.ApplyPseudonyms(redacted, spans)
 	})
