@@ -1,20 +1,22 @@
-package workflow
+package review
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
+	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"slices"
 
 	"github.com/lycaon/lycaon/internal/reviewcoverage"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func (r reviewAssignments) subject(ctx context.Context, run *api.WorkflowRun, manifest workflowdef.Manifest, def workflowdef.ReviewLoopDef) (*reviewcoverage.Assignment, error) {
-	m := r.runs
-	facts, err := m.CoverageFacts(ctx, run, manifest)
+func (r Assignments) subject(ctx context.Context, run *api.WorkflowRun, manifest workflowdef.Manifest, def workflowdef.ReviewLoopDef) (*reviewcoverage.Assignment, error) {
+	m := r
+	facts, err := m.Coverage.CoverageFacts(ctx, run, manifest)
 	if err != nil {
 		return nil, err
 	}
@@ -24,8 +26,8 @@ func (r reviewAssignments) subject(ctx context.Context, run *api.WorkflowRun, ma
 // subjectFromFacts seals the subject an independent reviewer assesses: the
 // candidate review over the facts minus gaps other gates own. Reviewer
 // assessments must carry its revision.
-func (r reviewAssignments) subjectFromFacts(ctx context.Context, run *api.WorkflowRun, manifest workflowdef.Manifest, def workflowdef.ReviewLoopDef, facts reviewcoverage.Facts) (*reviewcoverage.Assignment, error) {
-	m := r.runs
+func (r Assignments) subjectFromFacts(ctx context.Context, run *api.WorkflowRun, manifest workflowdef.Manifest, def workflowdef.ReviewLoopDef, facts reviewcoverage.Facts) (*reviewcoverage.Assignment, error) {
+	m := r
 	if def.ReconcilesPhase == "" {
 		assignment := reviewcoverage.Assign(facts, api.CoverageReview{}, run.CurrentPhase)
 		return &assignment, nil
@@ -34,11 +36,11 @@ func (r reviewAssignments) subjectFromFacts(ctx context.Context, run *api.Workfl
 	if !ok || source.ReviewLoop == nil {
 		return nil, fmt.Errorf("coverage review source phase %q unavailable", def.ReconcilesPhase)
 	}
-	vars, err := m.Store.GetScaffoldVars(ctx, run.ID)
+	vars, err := m.Runs.GetScaffoldVars(ctx, run.ID)
 	if err != nil {
 		return nil, err
 	}
-	candidate, err := ParseVerdictCoverage(*source.ReviewLoop, ReviewVerdictFromVars(vars, source.ReviewLoop.EvidenceKey))
+	candidate, err := workflowvalidation.ParseVerdictCoverage(*source.ReviewLoop, runstate.ReviewVerdictFromVars(vars, source.ReviewLoop.EvidenceKey))
 	if err != nil {
 		return nil, err
 	}
@@ -46,7 +48,7 @@ func (r reviewAssignments) subjectFromFacts(ctx context.Context, run *api.Workfl
 		return nil, fmt.Errorf("coverage candidate unavailable for phase %q", source.ID)
 	}
 	assignment := reviewcoverage.Assign(facts, *candidate, run.CurrentPhase)
-	claims, err := questionClaims(*source.ReviewLoop, ReviewVerdictFromVars(vars, source.ReviewLoop.EvidenceKey))
+	claims, err := questionClaims(*source.ReviewLoop, runstate.ReviewVerdictFromVars(vars, source.ReviewLoop.EvidenceKey))
 	if err != nil {
 		return nil, err
 	}
@@ -59,7 +61,7 @@ func (r reviewAssignments) subjectFromFacts(ctx context.Context, run *api.Workfl
 }
 
 // ValidateCoverageCompletion validates historical assignment inputs, not current applicability.
-func (m *RunManager) ValidateCoverageCompletion(ctx context.Context, task *api.WorkerTask, review *api.CoverageReview) error {
+func (m *Assignments) ValidateCoverageCompletion(ctx context.Context, task *api.WorkerTask, review *api.CoverageReview) error {
 	binding, err := m.TaskCoverageAssignment(ctx, task)
 	if err != nil {
 		return err
@@ -68,20 +70,20 @@ func (m *RunManager) ValidateCoverageCompletion(ctx context.Context, task *api.W
 		if task.WorkflowRunID == "" {
 			return nil
 		}
-		run, err := m.Store.Get(ctx, task.WorkflowRunID)
+		run, err := m.Runs.Get(ctx, task.WorkflowRunID)
 		if err != nil {
 			return err
 		}
 		if run == nil {
 			return fmt.Errorf("review run unavailable")
 		}
-		manifest, err := m.manifestForRun(ctx, run)
+		manifest, err := m.Resolver.ForRun(ctx, run)
 		if err != nil {
 			return err
 		}
 		phase, ok := manifest.PhaseByID(task.WorkflowPhase)
 		if ok && phase.ReviewLoop != nil && slices.Contains(phase.ReviewLoop.CoverageReviewers, task.AgentType) {
-			return &tools.ToolReject{Code: "COMPLETE_LEG_REVIEW_ASSIGNMENT_MISSING", Data: map[string]any{"action": "resolve_dependency", "work_id": reviewWorkID(task.AgentType)}}
+			return &toolrejection.ToolReject{Code: "COMPLETE_LEG_REVIEW_ASSIGNMENT_MISSING", Data: map[string]any{"action": "resolve_dependency", "work_id": reviewWorkID(task.AgentType)}}
 		}
 		return nil
 	}
@@ -100,5 +102,5 @@ func (m *RunManager) ValidateCoverageCompletion(ctx context.Context, task *api.W
 	if err != nil {
 		return err
 	}
-	return &tools.ToolReject{Code: "COMPLETE_LEG_COVERAGE_INVALID", Data: map[string]any{"detail": detail, "assignment": string(raw)}}
+	return &toolrejection.ToolReject{Code: "COMPLETE_LEG_COVERAGE_INVALID", Data: map[string]any{"detail": detail, "assignment": string(raw)}}
 }

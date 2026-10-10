@@ -13,11 +13,11 @@ const submitVerdictQuestionInvalidCode = "SUBMIT_VERDICT_QUESTION_INVALID"
 func rejectReviewQuestion(reason, id string) error {
 	switch reason {
 	case "current_review_required":
-		return &tools.ToolReject{Code: ReviewRequiredCode, Data: map[string]any{"action": "dispatch_work", "work_ids": []string{questionReviewWorkID(id)}, "question_id": id}}
+		return &toolrejection.ToolReject{Code: ReviewRequiredCode, Data: map[string]any{"action": "dispatch_work", "work_ids": []string{questionReviewWorkID(id)}, "question_id": id}}
 	case "investigation_required":
-		return &tools.ToolReject{Code: ReviewRequiredCode, Data: map[string]any{"action": "dispatch_work", "work_ids": []string{id}, "question_id": id}}
+		return &toolrejection.ToolReject{Code: ReviewRequiredCode, Data: map[string]any{"action": "dispatch_work", "work_ids": []string{id}, "question_id": id}}
 	case "work_active":
-		return &tools.ToolReject{Code: ReviewRequiredCode, Data: map[string]any{"action": "wait_for_work", "work_ids": []string{id, questionReviewWorkID(id)}, "question_id": id}}
+		return &toolrejection.ToolReject{Code: ReviewRequiredCode, Data: map[string]any{"action": "wait_for_work", "work_ids": []string{id, questionReviewWorkID(id)}, "question_id": id}}
 	}
 	var subjects []string
 	if id != "" {

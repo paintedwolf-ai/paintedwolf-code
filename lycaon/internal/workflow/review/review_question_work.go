@@ -1,30 +1,33 @@
-package workflow
+package review
 
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/workflow/toolguard"
 	"slices"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/reviewcoverage"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
+	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func checkQuestionClosure(def workflowdef.ReviewLoopDef, claims []VerdictClaim, questions []reviewQuestionWork, tasks []api.WorkerTask, phase string, review *api.CoverageReview) error {
+func checkQuestionClosure(def workflowdef.ReviewLoopDef, claims []workflowvalidation.VerdictClaim, questions []reviewQuestionWork, tasks []api.WorkerTask, phase string, review *api.CoverageReview) error {
 	if review == nil {
 		return rejectReviewQuestion("coverage_required", "")
 	}
 	for _, q := range questions {
-		index := slices.IndexFunc(claims, func(c VerdictClaim) bool { return c.ID == q.ClaimID })
+		index := slices.IndexFunc(claims, func(c workflowvalidation.VerdictClaim) bool { return c.ID == q.ClaimID })
 		if index < 0 {
 			return rejectReviewQuestion("claim_outcome_required", q.ID)
 		}
 		completed, active := questionAttempts(tasks, phase, q.ID)
 		_, reviewing := questionAttempts(tasks, phase, questionReviewWorkID(q.ID))
 		if active || reviewing {
-			rejected := tools.AsToolReject(rejectReviewQuestion("work_active", q.ID))
+			rejected := toolrejection.AsToolReject(rejectReviewQuestion("work_active", q.ID))
 			var jobs []string
 			for _, task := range tasks {
 				if task.WorkflowPhase == phase && (task.WorkflowWorkID == q.ID || task.WorkflowWorkID == questionReviewWorkID(q.ID)) && !task.Status.IsTerminal() {
@@ -82,9 +85,9 @@ func questionAttempts(tasks []api.WorkerTask, phase, id string) (int, bool) {
 	return completed, active
 }
 
-func (m *RunManager) assertQuestionTask(ctx context.Context, run *api.WorkflowRun, def workflowdef.ReviewLoopDef, vars map[string]any, task *api.WorkerTask) error {
+func (m *Questions) AssertTask(ctx context.Context, run *api.WorkflowRun, def workflowdef.ReviewLoopDef, vars map[string]any, task *api.WorkerTask) error {
 	if task.EffectiveScope().Mode != "read" {
-		return rejectFanoutTask("review_question_requires_read_scope", task)
+		return toolguard.RejectFanoutTask("review_question_requires_read_scope", task)
 	}
 	questions, err := reviewQuestions(vars, run.CurrentPhase)
 	if err != nil {
@@ -93,7 +96,7 @@ func (m *RunManager) assertQuestionTask(ctx context.Context, run *api.WorkflowRu
 	if !slices.ContainsFunc(questions, func(q reviewQuestionWork) bool {
 		return q.ID == task.WorkflowWorkID || questionReviewWorkID(q.ID) == task.WorkflowWorkID
 	}) {
-		return rejectFanoutTask("unknown_review_question", task)
+		return toolguard.RejectFanoutTask("unknown_review_question", task)
 	}
 	if m.WorkerTasks == nil {
 		return fmt.Errorf("review worker ledger unavailable")
@@ -107,35 +110,35 @@ func (m *RunManager) assertQuestionTask(ctx context.Context, run *api.WorkflowRu
 			return nil
 		}
 		if task.ChildSessionID != "" && prior.ChildSessionID == task.ChildSessionID && prior.WorkflowWorkID != task.WorkflowWorkID {
-			return rejectFanoutTask("recovery_child_belongs_to_another_question", task)
+			return toolguard.RejectFanoutTask("recovery_child_belongs_to_another_question", task)
 		}
 	}
 	if strings.HasSuffix(task.WorkflowWorkID, "/review") {
 		if task.ChildSessionID != "" || task.EffectiveScope().BaseOverlayID != "" {
-			return &tools.ToolReject{Code: "TASK_REVIEW_FRESH_WORKSPACE_REQUIRED", Data: map[string]any{"workflow_work_id": task.WorkflowWorkID}}
+			return &toolrejection.ToolReject{Code: "TASK_REVIEW_FRESH_WORKSPACE_REQUIRED", Data: map[string]any{"workflow_work_id": task.WorkflowWorkID}}
 		}
 		if !slices.Contains(def.RequiredAgents, task.AgentType) {
-			return rejectFanoutTask("review_question_requires_declared_reviewer", task)
+			return toolguard.RejectFanoutTask("review_question_requires_declared_reviewer", task)
 		}
 		questionID := strings.TrimSuffix(task.WorkflowWorkID, "/review")
 		completed, active := questionAttempts(tasks, run.CurrentPhase, questionID)
 		if active {
-			return rejectFanoutTask("review_question_investigation_active", task)
+			return toolguard.RejectFanoutTask("review_question_investigation_active", task)
 		}
 		if completed == 0 || !slices.ContainsFunc(tasks, func(prior api.WorkerTask) bool {
 			return prior.WorkflowPhase == run.CurrentPhase && prior.WorkflowWorkID == questionID && api.WorkerReviewSucceeded(prior)
 		}) {
-			return rejectFanoutTask("review_question_investigation_required", task)
+			return toolguard.RejectFanoutTask("review_question_investigation_required", task)
 		}
 		reviewed := questionReviewed(tasks, run.CurrentPhase, questionID, []string{task.AgentType})
 		if reviewed && slices.Contains(def.CoverageReviewers, task.AgentType) {
-			reviewed, err = (reviewAssignments{m}).questionCurrent(ctx, run, def, tasks, questionID, task.AgentType)
+			reviewed, err = m.Assignments.questionCurrent(ctx, run, def, tasks, questionID, task.AgentType)
 			if err != nil {
 				return err
 			}
 		}
 		if reviewed {
-			return rejectFanoutTask("review_question_already_reviewed", task)
+			return toolguard.RejectFanoutTask("review_question_already_reviewed", task)
 		}
 	}
 	if strings.HasSuffix(task.WorkflowWorkID, "/review") {
@@ -143,10 +146,10 @@ func (m *RunManager) assertQuestionTask(ctx context.Context, run *api.WorkflowRu
 	}
 	completed, active := questionAttempts(tasks, run.CurrentPhase, task.WorkflowWorkID)
 	if active {
-		return rejectFanoutTask("review_question_already_active", task)
+		return toolguard.RejectFanoutTask("review_question_already_active", task)
 	}
 	if !strings.HasSuffix(task.WorkflowWorkID, "/review") && completed >= def.FollowupAttempts {
-		return rejectFanoutTask("review_question_attempts_exhausted", task)
+		return toolguard.RejectFanoutTask("review_question_attempts_exhausted", task)
 	}
 	return nil
 }

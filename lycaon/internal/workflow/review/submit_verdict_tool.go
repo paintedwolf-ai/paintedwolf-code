@@ -104,7 +104,7 @@ func RegisterSubmitVerdictTool(reg *tools.DefaultRegistry, runs *Verdicts) error
 		ctx = WithOperationID(ctx, tctx.Identity.ToolCallID)
 		outcome, err := runs.RecordReviewLoopVerdict(ctx, tctx.Identity.SessionID, verdict, cited, citedURLs)
 		if err != nil {
-			if rejection := tools.AsToolReject(err); rejection != nil {
+			if rejection := toolrejection.AsToolReject(err); rejection != nil {
 				return rejectSubmitVerdict(tctx, rejection.Code, active.CurrentPhase, rejection.Data)
 			}
 			return "", err

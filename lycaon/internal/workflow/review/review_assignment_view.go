@@ -1,4 +1,4 @@
-package workflow
+package review
 
 import (
 	"context"
@@ -6,16 +6,18 @@ import (
 	"strconv"
 
 	"github.com/lycaon/lycaon/internal/reviewcoverage"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 )
 
 func rejectReviewView(reason, field string) error {
-	return &tools.ToolReject{Code: "WORKFLOW_REVIEW_VIEW_INVALID", Data: map[string]any{"reason": reason, "field": field}}
+	return &toolrejection.ToolReject{Code: "WORKFLOW_REVIEW_VIEW_INVALID", Data: map[string]any{"reason": reason, "field": field}}
 }
 
 // ReviewAssignmentsView exposes bounded review context through the coordination board.
-func ReviewAssignmentsView(ctx context.Context, m *RunManager, args map[string]any, tctx tools.ToolContext) (string, error) {
-	if m == nil || m.Store == nil || m.WorkerTasks == nil {
+func (m *Assignments) View(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
+	if m == nil || m.Runs == nil || m.WorkerTasks == nil {
 		return "", rejectReviewView("review_unavailable", "review_view")
 	}
 	for _, key := range []string{"finding_id", "findings_after", "detail_level"} {
@@ -23,11 +25,11 @@ func ReviewAssignmentsView(ctx context.Context, m *RunManager, args map[string]a
 			return "", rejectReviewView("exclusive_view", key)
 		}
 	}
-	sessionID := tctx.SessionID
-	if tctx.WorkerJobID != "" {
-		sessionID = tctx.ParentSessionID
+	sessionID := tctx.Identity.SessionID
+	if tctx.Identity.WorkerJobID != "" {
+		sessionID = tctx.Identity.ParentSessionID
 	}
-	run, err := m.Store.ActiveBySession(ctx, sessionID)
+	run, err := m.Runs.ActiveBySession(ctx, sessionID)
 	if err != nil {
 		return "", err
 	}
@@ -44,8 +46,8 @@ func ReviewAssignmentsView(ctx context.Context, m *RunManager, args map[string]a
 		return "", rejectReviewView("summary_has_no_cursor", "cursor")
 	}
 	var out any
-	if tctx.WorkerJobID != "" {
-		if view != "subject" || id != tctx.WorkerJobID {
+	if tctx.Identity.WorkerJobID != "" {
+		if view != "subject" || id != tctx.Identity.WorkerJobID {
 			return "", rejectReviewView("assigned_subject_only", "assignment_id")
 		}
 		tasks, err := m.WorkerTasks(ctx, run.ID)
@@ -54,7 +56,7 @@ func ReviewAssignmentsView(ctx context.Context, m *RunManager, args map[string]a
 		}
 		allowed := false
 		for _, task := range tasks {
-			allowed = allowed || task.ID == id && task.ChildSessionID == tctx.SessionID
+			allowed = allowed || task.ID == id && task.ChildSessionID == tctx.Identity.SessionID
 		}
 		if !allowed {
 			return "", rejectReviewView("assignment_not_bound_to_child", "assignment_id")
@@ -62,7 +64,7 @@ func ReviewAssignmentsView(ctx context.Context, m *RunManager, args map[string]a
 	}
 	switch view {
 	case "summary":
-		manifest, err := m.manifestForRun(ctx, run)
+		manifest, err := m.Resolver.ForRun(ctx, run)
 		if err != nil {
 			return "", err
 		}
@@ -70,7 +72,7 @@ func ReviewAssignmentsView(ctx context.Context, m *RunManager, args map[string]a
 		if !ok || phase.ReviewLoop == nil {
 			return "", rejectReviewView("phase_not_review", "review_view")
 		}
-		vars, err := m.Store.GetScaffoldVars(ctx, run.ID)
+		vars, err := m.Runs.GetScaffoldVars(ctx, run.ID)
 		if err != nil {
 			return "", err
 		}
@@ -78,7 +80,7 @@ func ReviewAssignmentsView(ctx context.Context, m *RunManager, args map[string]a
 		if err != nil {
 			return "", err
 		}
-		agents, _ := effectiveReviewAgents(run.CurrentPhase, *phase.ReviewLoop, vars)
+		agents, _ := runstate.EffectiveReviewAgents(run.CurrentPhase, *phase.ReviewLoop, vars)
 		work := map[string]string{}
 		for _, agent := range agents {
 			work[agent] = reviewWorkID(agent)
@@ -94,7 +96,7 @@ func ReviewAssignmentsView(ctx context.Context, m *RunManager, args map[string]a
 		if err != nil {
 			return "", err
 		}
-		service := reviewAssignments{m}
+		service := m
 		subject, err := service.subjectFromFacts(ctx, run, manifest, *phase.ReviewLoop, facts)
 		if err != nil {
 			return "", err
@@ -109,7 +111,7 @@ func ReviewAssignmentsView(ctx context.Context, m *RunManager, args map[string]a
 		}
 		out = map[string]any{"run_id": run.ID, "phase": run.CurrentPhase, "revision": facts.Revision, "work_ids": work, "questions": questions, "review_prerequisite": nextAction}
 	case "assignments":
-		bindings, err := m.Store.ReviewBindings(ctx, run.ID, run.CurrentPhase, cursor, 50)
+		bindings, err := m.Records.ReviewBindings(ctx, run.ID, run.CurrentPhase, cursor, 50)
 		if err != nil {
 			return "", err
 		}
@@ -123,7 +125,7 @@ func ReviewAssignmentsView(ctx context.Context, m *RunManager, args map[string]a
 		}
 		out = map[string]any{"assignments": rows, "next_cursor": next}
 	case "subject":
-		binding, err := m.Store.ReviewBinding(ctx, id)
+		binding, err := m.Records.ReviewBinding(ctx, id)
 		if err != nil {
 			return "", err
 		}

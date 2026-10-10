@@ -1,7 +1,9 @@
-package workflow
+package review
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
+	"github.com/lycaon/lycaon/internal/workflow/toolguard"
 	"net/url"
 	"slices"
 
@@ -11,11 +13,9 @@ import (
 
 func reviewWorkID(agent string) string { return "review/" + url.PathEscape(agent) }
 
-type reviewAssignments struct{ runs *RunManager }
-
-func (r reviewAssignments) bind(ctx context.Context, run *api.WorkflowRun, task *api.WorkerTask) error {
-	m := r.runs
-	manifest, err := m.manifestForRun(ctx, run)
+func (r Assignments) Bind(ctx context.Context, run *api.WorkflowRun, task *api.WorkerTask) error {
+	m := r
+	manifest, err := m.Resolver.ForRun(ctx, run)
 	if err != nil {
 		return err
 	}
@@ -28,7 +28,7 @@ func (r reviewAssignments) bind(ctx context.Context, run *api.WorkflowRun, task 
 		return nil
 	}
 	binding := reviewcoverage.Binding{ID: task.ID, RunID: run.ID, Phase: task.WorkflowPhase, WorkID: task.WorkflowWorkID, Agent: task.AgentType, Purpose: reviewcoverage.IndependentReview, CoverageRequired: slices.Contains(def.CoverageReviewers, task.AgentType)}
-	vars, err := m.Store.GetScaffoldVars(ctx, run.ID)
+	vars, err := m.Runs.GetScaffoldVars(ctx, run.ID)
 	if err != nil {
 		return err
 	}
@@ -50,7 +50,7 @@ func (r reviewAssignments) bind(ctx context.Context, run *api.WorkflowRun, task 
 			binding.Purpose = reviewcoverage.QuestionReview
 		}
 	}
-	if binding.QuestionID == "" && !slices.Contains(dedupeReviewAgents(def.RequiredAgents, def.IfSpawnable), task.AgentType) {
+	if binding.QuestionID == "" && !slices.Contains(runstate.DedupeReviewAgents(def.RequiredAgents, def.IfSpawnable), task.AgentType) {
 		return nil
 	}
 	subject, err := r.subject(ctx, run, manifest, def)
@@ -72,7 +72,7 @@ func (r reviewAssignments) bind(ctx context.Context, run *api.WorkflowRun, task 
 				binding.InvestigationJobs = append(binding.InvestigationJobs, prior.ID)
 			}
 			if prior.AgentType == task.AgentType {
-				priorBinding, err := m.Store.ReviewBinding(ctx, prior.ID)
+				priorBinding, err := m.Records.ReviewBinding(ctx, prior.ID)
 				if err != nil {
 					return err
 				}
@@ -89,26 +89,26 @@ func (r reviewAssignments) bind(ctx context.Context, run *api.WorkflowRun, task 
 			task.AfterWorkers = slices.Compact(task.AfterWorkers)
 		}
 	}
-	return m.Store.RecordReviewBinding(ctx, run, binding)
+	return m.Records.RecordReviewBinding(ctx, run, binding)
 }
 
 // TaskCoverageAssignment reads the exact context recorded before prompt composition.
-func (m *RunManager) TaskCoverageAssignment(ctx context.Context, task *api.WorkerTask) (*reviewcoverage.Binding, error) {
-	binding, err := m.Store.ReviewBinding(ctx, task.ID)
+func (m *Assignments) TaskCoverageAssignment(ctx context.Context, task *api.WorkerTask) (*reviewcoverage.Binding, error) {
+	binding, err := m.Records.ReviewBinding(ctx, task.ID)
 	if err != nil || binding == nil {
 		return binding, err
 	}
 	if binding.RunID != task.WorkflowRunID || binding.Phase != task.WorkflowPhase || binding.Agent != task.AgentType || binding.WorkID != task.WorkflowWorkID {
-		return nil, rejectFanoutTask("review_assignment_mismatch", task)
+		return nil, toolguard.RejectFanoutTask("review_assignment_mismatch", task)
 	}
 	return binding, nil
 }
 
-func (r reviewAssignments) assertInitial(ctx context.Context, run *api.WorkflowRun, task *api.WorkerTask) error {
-	if r.runs.WorkerTasks == nil {
+func (r Assignments) AssertInitial(ctx context.Context, run *api.WorkflowRun, task *api.WorkerTask) error {
+	if r.WorkerTasks == nil {
 		return nil
 	}
-	tasks, err := r.runs.WorkerTasks(ctx, run.ID)
+	tasks, err := r.WorkerTasks(ctx, run.ID)
 	if err != nil {
 		return err
 	}
@@ -117,7 +117,7 @@ func (r reviewAssignments) assertInitial(ctx context.Context, run *api.WorkflowR
 			continue
 		}
 		if prior.WorkflowPhase == task.WorkflowPhase && prior.AgentType == task.AgentType && prior.WorkflowWorkID == task.WorkflowWorkID && !prior.Status.IsTerminal() {
-			return rejectFanoutTask("review_assignment_already_active", task)
+			return toolguard.RejectFanoutTask("review_assignment_already_active", task)
 		}
 	}
 	return nil

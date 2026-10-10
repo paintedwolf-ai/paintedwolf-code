@@ -1,4 +1,4 @@
-package workflow
+package review
 
 import (
 	"context"
@@ -11,8 +11,10 @@ import (
 
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/reviewcoverage"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
+	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -54,20 +56,20 @@ func reviewQuestions(vars map[string]any, phase string) ([]reviewQuestionWork, e
 	return out, nil
 }
 
-func questionClaims(def workflowdef.ReviewLoopDef, verdict map[string]string) ([]VerdictClaim, error) {
-	fields, err := ParseVerdictClaims(def, verdict)
+func questionClaims(def workflowdef.ReviewLoopDef, verdict map[string]string) ([]workflowvalidation.VerdictClaim, error) {
+	fields, err := workflowvalidation.Parseworkflowvalidation.VerdictClaims(def, verdict)
 	if err != nil {
 		return nil, err
 	}
-	var out []VerdictClaim
-	for _, field := range sortedClaimFields(fields) {
+	var out []workflowvalidation.VerdictClaim
+	for _, field := range workflowvalidation.SortedClaimFields(fields) {
 		out = append(out, fields[field]...)
 	}
 	return out, nil
 }
 
 // Registered questions keep their identity through investigation and closure.
-func (m *RunManager) prepareReviewQuestions(ctx context.Context, run *api.WorkflowRun, def workflowdef.ReviewLoopDef, verdict map[string]string, vars map[string]any) (map[string]any, error) {
+func (m *Questions) Prepare(ctx context.Context, run *api.WorkflowRun, def workflowdef.ReviewLoopDef, verdict map[string]string, vars map[string]any) (map[string]any, error) {
 	if def.FollowupAttempts == 0 {
 		return vars, nil
 	}
@@ -79,31 +81,31 @@ func (m *RunManager) prepareReviewQuestions(ctx context.Context, run *api.Workfl
 	if err != nil {
 		return vars, err
 	}
-	manifest, err := m.manifestForRun(ctx, run)
+	manifest, err := m.Resolver.ForRun(ctx, run)
 	if err != nil {
 		return vars, err
 	}
-	facts, err := m.CoverageFacts(ctx, run, manifest)
+	facts, err := m.Coverage.CoverageFacts(ctx, run, manifest)
 	if err != nil {
 		return vars, err
 	}
-	terminal := ReviewLoopVerdictTerminal(def, verdict)
+	terminal := workflowvalidation.ReviewLoopVerdictTerminal(def, verdict)
 	if terminal {
-		rules, err := m.VerdictRulesFor(ctx, run)
+		rules, err := m.Verdicts.VerdictRulesFor(ctx, run)
 		if err != nil {
 			return vars, err
 		}
 		var missing, expected []string
 		for id := range rules.KnownClaims {
 			expected = append(expected, id)
-			if !slices.ContainsFunc(claims, func(c VerdictClaim) bool { return c.ID == id }) {
+			if !slices.ContainsFunc(claims, func(c workflowvalidation.VerdictClaim) bool { return c.ID == id }) {
 				missing = append(missing, id)
 			}
 		}
 		if len(missing) > 0 {
 			slices.Sort(missing)
 			slices.Sort(expected)
-			return vars, &tools.ToolReject{Code: ReviewLoopVerdictInvalidCode, Data: map[string]any{"action": "edit_submission", "missing_claim_ids": missing, "expected_claim_ids": expected, "reason": "missing_claim_outcomes"}}
+			return vars, &toolrejection.ToolReject{Code: workflowvalidation.ReviewLoopVerdictInvalidCode, Data: map[string]any{"action": "edit_submission", "missing_claim_ids": missing, "expected_claim_ids": expected, "reason": "missing_claim_outcomes"}}
 		}
 	}
 	known, err = registerReviewQuestions(def, claims, known, facts, terminal)
@@ -121,7 +123,7 @@ func (m *RunManager) prepareReviewQuestions(ctx context.Context, run *api.Workfl
 		if err != nil {
 			return vars, err
 		}
-		review, err := ParseVerdictCoverage(def, verdict)
+		review, err := workflowvalidation.ParseVerdictCoverage(def, verdict)
 		if err != nil {
 			return vars, err
 		}
@@ -130,7 +132,9 @@ func (m *RunManager) prepareReviewQuestions(ctx context.Context, run *api.Workfl
 		}
 		return vars, nil
 	}
-	if !slices.ContainsFunc(claims, func(claim VerdictClaim) bool { return def.ClassOf(claim.Status) == workflowdef.ClaimOpen }) {
+	if !slices.ContainsFunc(claims, func(claim workflowvalidation.VerdictClaim) bool {
+		return def.ClassOf(claim.Status) == workflowdef.ClaimOpen
+	}) {
 		return vars, rejectReviewQuestion("open_question_required", "")
 	}
 	if m.WorkerTasks == nil {
@@ -147,10 +151,10 @@ func (m *RunManager) prepareReviewQuestions(ctx context.Context, run *api.Workfl
 	if err != nil {
 		return vars, err
 	}
-	return SetHostVar(vars, reviewQuestionPath(run.CurrentPhase), string(raw)), nil
+	return runstate.SetHostVar(vars, reviewQuestionPath(run.CurrentPhase), string(raw)), nil
 }
 
-func registerReviewQuestions(def workflowdef.ReviewLoopDef, claims []VerdictClaim, known []reviewQuestionWork, facts reviewcoverage.Facts, terminal bool) ([]reviewQuestionWork, error) {
+func registerReviewQuestions(def workflowdef.ReviewLoopDef, claims []workflowvalidation.VerdictClaim, known []reviewQuestionWork, facts reviewcoverage.Facts, terminal bool) ([]reviewQuestionWork, error) {
 	for _, claim := range claims {
 		if def.ClassOf(claim.Status) != workflowdef.ClaimOpen {
 			continue
@@ -176,4 +180,17 @@ func registerReviewQuestions(def workflowdef.ReviewLoopDef, claims []VerdictClai
 		known = append(known, reviewQuestionWork{ID: "question/" + url.PathEscape(claim.ID), ClaimID: claim.ID, ReviewQuestion: *claim.Question})
 	}
 	return known, nil
+}
+
+func (m *Questions) WorkKnown(vars map[string]any, phase, workID string) (bool, error) {
+	questions, err := reviewQuestions(vars, phase)
+	if err != nil {
+		return false, err
+	}
+	for _, q := range questions {
+		if q.ID == workID || q.ID+"/review" == workID {
+			return true, nil
+		}
+	}
+	return false, nil
 }
