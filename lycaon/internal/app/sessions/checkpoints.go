@@ -100,7 +100,8 @@ func (r *Runtime) WireCheckpoints(ctx context.Context, deps CheckpointDependenci
 	deps.Execution.Host.Executor.Secrets.SetUntrustedIngestionSource(func(c context.Context, chatSessionID string) (bool, error) {
 		return deps.Sessions.SessionUntrustedContentResult(c, chatSessionID)
 	})
-	confine.SetUntrustedIngestionSource(untrustedIngestionStore{store: deps.Sessions})
+	releaseIngestion := confine.SetUntrustedIngestionSource(untrustedIngestionStore{store: deps.Sessions})
+	deps.Resources.Track("untrusted-ingestion-source", 22, func(context.Context) error { releaseIngestion(); return nil })
 	deps.Execution.Host.Executor.Network.SetSessionHostLedger(deps.Sessions)
 
 	sensitiveDests, err := approvals.LoadMergedConsequenceBandPaths(deps.Directory)
@@ -250,7 +251,7 @@ func wireGrantedAccess(r *Runtime, deps CheckpointDependencies) error {
 		}
 		return durableGrantedPaths(approvalGate.ListGrants(""), projectID)
 	})
-	projectpaths.SetGrantedAccessSource(func(rootSession, projectID, abs string, write bool) (projectpaths.Access, bool) {
+	releaseGrantedAccess := projectpaths.SetGrantedAccessSource(func(rootSession, projectID, abs string, write bool) (projectpaths.Access, bool) {
 		mode := grantedpath.ModeRead
 		if write {
 			mode = grantedpath.ModeWrite
@@ -261,6 +262,7 @@ func wireGrantedAccess(r *Runtime, deps CheckpointDependencies) error {
 		}
 		return projectpaths.Access{Path: g.Path, Tree: g.Tree}, true
 	})
+	deps.Resources.Track("granted-access-source", 22, func(context.Context) error { releaseGrantedAccess(); return nil })
 	if err := r.Manager.Resources.RegisterCleanup("approval-run", 50, func(_ context.Context, sessionID string) error {
 		deps.Execution.Host.Authority.ReleaseSessionRun(sessionID)
 		r.SandboxReadPath.ReleaseRun(sessionID)

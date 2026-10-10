@@ -42,6 +42,7 @@ type Dependencies struct {
 	Agents            configuration.Agents
 	TestSessionLimits *settings.SessionLimits
 	RegisterRecovery  func(bootrecovery.Entry) error
+	Resources         ResourceTracker
 }
 
 // Build creates the session manager, prompt engine, and crash recovery handlers.
@@ -55,6 +56,12 @@ func Build(ctx context.Context, deps Dependencies) (*Runtime, error) {
 	}
 
 	mgr := session.NewHost(deps.Storage.Sessions, session.Models{Client: deps.Providers.Client, Provider: deps.Providers.Service, Limits: deps.Settings.SessionLimits, Cost: deps.Providers.Costs}, deps.Execution.Registry)
+	if deps.Resources != nil {
+		deps.Resources.Track("session-host", 21, func(c context.Context) error {
+			mgr.BeginEngineShutdown()
+			return mgr.WaitForEngineShutdown(c)
+		})
+	}
 	deps.Security.BindRemember(mgr.ToolPolicy.SetRememberSecrets)
 	if err := deps.Execution.TurnSources.Bind(mgr.Coordinator.Loading); err != nil {
 		return nil, err

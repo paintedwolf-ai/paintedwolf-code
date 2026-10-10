@@ -94,3 +94,29 @@ func assertStoredRowIsScreened(t *testing.T, ctx context.Context, st *SQL, sessi
 	}
 	t.Fatalf("message %s not found in the transcript", messageID)
 }
+
+func TestMessageRedactorReleasePreservesReplacementOnDurableWrites(t *testing.T) {
+	install := func(marker string) func() {
+		return SetMessageRedactor(func(_ context.Context, msg api.Message) (api.Message, bool) {
+			msg.Content = strings.ReplaceAll(msg.Content, "owner-marker", marker)
+			return msg, true
+		})
+	}
+	releaseOld := install("old-owner")
+	releaseCurrent := install("current-owner")
+	defer releaseOld()
+	defer releaseCurrent()
+	st := openTurnSQLStore(t).(*SQL)
+	sess, err := st.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create owner test session", err)
+	releaseOld()
+	releaseOld()
+	testutil.FailErr(t, "append through replacement", st.AppendMessages(t.Context(), sess.ID, userMessage("before-release", "owner-marker")))
+	releaseCurrent()
+	testutil.FailErr(t, "append after owner release", st.AppendMessages(t.Context(), sess.ID, userMessage("after-release", "owner-marker")))
+	messages, err := st.GetMessages(t.Context(), sess.ID)
+	testutil.FailErr(t, "read screened durable rows", err)
+	if len(messages) != 2 || messages[0].Content != "current-owner" || messages[1].Content != "owner-marker" {
+		t.Fatalf("owner lifetime changed durable screening: %#v", messages)
+	}
+}

@@ -144,10 +144,6 @@ func NewRuntime(cfg RuntimeConfig) (*Runtime, error) {
 	policy := toolexecution.NewApprovalPolicyEngine(profilePolicy, approvalGate)
 	executor := toolexecution.NewExecutor(policy, registry, toolprofiles.DefaultToolProfileID)
 
-	if cfg.Approvals != nil {
-		wireEgressPolicy(runtime.Authority, cfg.Approvals)
-	}
-
 	runtime.Executor = executor
 	runtime.Authority.reviews = executor.Approvals
 	runtime.Authority.paths = executor.Boundary
@@ -171,6 +167,9 @@ func NewRuntime(cfg RuntimeConfig) (*Runtime, error) {
 		return nil, fmt.Errorf("approval outcome catalog: %w", err)
 	}
 	runtime.Executor.Approvals.SetApprovalOutcomeRenderer(newCatalogOutcomeRenderer(approvaloutcome.NewCatalog(outcomeCfg)))
+	if cfg.Approvals != nil {
+		wireEgressPolicy(runtime.Authority, cfg.Approvals)
+	}
 	return runtime, nil
 }
 

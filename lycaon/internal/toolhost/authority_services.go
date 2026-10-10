@@ -20,19 +20,20 @@ import (
 
 // AuthorityServices owns host approval and confinement wiring.
 type AuthorityServices struct {
-	approvalGate  hitl.ApprovalGate
-	approvalRules settings.ApprovalRuleCatalogSource
-	authzRecorder authzledger.Recorder
-	gateBuilder   *settings.GateBuilder
-	gateHandle    *settings.DeferredGate
-	approvals     *settings.ApprovalStore
-	rejectFmt     *guidance.StaticRejectFormatter
-	profilePolicy *toolprofiles.ProfilePolicyEngine
-	reviews       *toolexecution.Approvals
-	paths         *toolexecution.Boundary
-	capabilities  *toolexecution.Capabilities
-	metadata      *toolexecution.Metadata
-	rejections    *toolexecution.Rejections
+	approvalGate        hitl.ApprovalGate
+	approvalRules       settings.ApprovalRuleCatalogSource
+	authzRecorder       authzledger.Recorder
+	gateBuilder         *settings.GateBuilder
+	gateHandle          *settings.DeferredGate
+	approvals           *settings.ApprovalStore
+	rejectFmt           *guidance.StaticRejectFormatter
+	profilePolicy       *toolprofiles.ProfilePolicyEngine
+	reviews             *toolexecution.Approvals
+	paths               *toolexecution.Boundary
+	capabilities        *toolexecution.Capabilities
+	metadata            *toolexecution.Metadata
+	rejections          *toolexecution.Rejections
+	releaseEgressPolicy func()
 }
 
 func (r *AuthorityServices) SetApprovalRuleSource(src settings.ApprovalRuleCatalogSource) {
@@ -235,7 +236,7 @@ func recordEgressRuleDeny(
 }
 
 func wireEgressPolicy(runtime *AuthorityServices, store *settings.ApprovalStore) {
-	confine.SetEgressRuleEvaluator(func(ctx context.Context, cmd confine.EgressCommand, host string) confine.EgressRuleResult {
+	runtime.releaseEgressPolicy = confine.SetEgressRuleEvaluator(func(ctx context.Context, cmd confine.EgressCommand, host string) confine.EgressRuleResult {
 		layers := effectiveEgressApprovalRules(ctx, runtime, store, cmd)
 		rule, ok := settings.EvaluateHostRuleLayers(layers, host)
 		if !ok {
@@ -272,4 +273,20 @@ func effectiveEgressApprovalConfig(store *settings.ApprovalStore, cmd confine.Eg
 		return store.Get(llm.SettingsScopeProject, settings.ProjectRef{ID: cmd.ProjectID, Dir: projectDir})
 	}
 	return store.Get(llm.SettingsScopeGlobal, settings.ProjectRef{})
+}
+
+// ReleaseEgressPolicy detaches this host's process policy callback.
+func (r *AuthorityServices) ReleaseEgressPolicy() {
+	if r != nil && r.releaseEgressPolicy != nil {
+		r.releaseEgressPolicy()
+		r.releaseEgressPolicy = nil
+	}
+}
+
+// ReleaseEgressApprovals stops and drains this host's broker approval callbacks.
+func (r *AuthorityServices) ReleaseEgressApprovals(ctx context.Context) error {
+	if r == nil || r.reviews == nil {
+		return nil
+	}
+	return r.reviews.ReleaseEgressResolver(ctx)
 }
