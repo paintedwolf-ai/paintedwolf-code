@@ -2,10 +2,10 @@
 .den-shell-stage-host--split {
   --den-split-divider-px: 1px;
   --den-split-chat-min: 340px;
-  --den-split-stage-min: 736px;
+  --den-split-stage-min: 560px;
 
   /* Zero below the combined column minimum. */
-  --den-split-fits: max(0px, calc((100% - 1076px) * 1000));
+  --den-split-fits: max(0px, calc((100% - 900px) * 1000));
 
   /* The conversation keeps its width, so window resizes land on the stage. */
   --den-split-chat-fit: clamp(
@@ -77,53 +77,53 @@
 }
 
 /* Narrow bands hide the column excluded by the host selection. */
-.den-shell-stage-host--split:where([data-host-band~="max-1076"]):not(
+.den-shell-stage-host--split:where([data-host-band~="max-900"]):not(
     [data-conversation-hidden], [data-context-hidden]
   ) .den-split-divider {
   display: none;
 }
 
 .den-shell-stage-host--split:where(
-    [data-host-band~="max-1076"][data-narrow-survivor="conversation"]
+    [data-host-band~="max-900"][data-narrow-survivor="conversation"]
   ):not([data-conversation-hidden], [data-context-hidden]) .den-split-col--stage {
   display: none;
 }
 
 .den-shell-stage-host--split:where(
-    [data-host-band~="max-1076"][data-narrow-survivor="stage"]
+    [data-host-band~="max-900"][data-narrow-survivor="stage"]
   ):not([data-conversation-hidden], [data-context-hidden]) {
   grid-template-columns: minmax(0, 1fr) 0 0;
 }
 
 .den-shell-stage-host--split:where(
-    [data-host-band~="max-1076"][data-narrow-survivor="stage"]
+    [data-host-band~="max-900"][data-narrow-survivor="stage"]
   ):not([data-conversation-hidden], [data-context-hidden])[data-stage-leading="false"] {
   grid-template-columns: 0 0 minmax(0, 1fr);
 }
 
 .den-shell-stage-host--split:where(
-    [data-host-band~="max-1076"][data-narrow-survivor="stage"]
+    [data-host-band~="max-900"][data-narrow-survivor="stage"]
   ):not([data-conversation-hidden], [data-context-hidden]) .den-split-col--chat {
   display: none;
 }
 
 /* Narrow splits replace the hide control with the widen control. */
-.den-shell-stage-host--split:where([data-host-band~="max-1076"])
+.den-shell-stage-host--split:where([data-host-band~="max-900"])
   :is(.den-pane-toggle--hide-conversation, .den-pane-toggle--hide-context),
-.den-shell-stage-host--split:where([data-host-band~="min-1077"])
+.den-shell-stage-host--split:where([data-host-band~="min-901"])
   .den-split-fit-restore {
   display: none;
 }
 
 /* The pane away from the sidebar restores it only when its neighbor yields. */
-.den-shell-stage-host--split:where([data-host-band~="min-1077"])
+.den-shell-stage-host--split:where([data-host-band~="min-901"])
   .den-nav-split-fallback {
   display: none;
 }
 
-.den-shell-stage-host--split:where([data-host-band~="min-1077"])
+.den-shell-stage-host--split:where([data-host-band~="min-901"])
   :is(.tabs__rail-leading, .tabs__rail-trailing):has(> .den-nav-split-fallback:only-child),
-.den-shell-stage-host--split:where([data-host-band~="min-1077"])
+.den-shell-stage-host--split:where([data-host-band~="min-901"])
   .den-shell-header-titlebar__edge:not(
     :has(> :not(.den-nav-split-fallback, .den-split-fit-restore))
   ) {

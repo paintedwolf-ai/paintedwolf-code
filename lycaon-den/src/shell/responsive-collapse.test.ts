@@ -164,7 +164,7 @@ describe("responsive sidebar collapse", () => {
         splitColumns: true,
         chatWidthPx: CHAT_COL_MIN,
       }),
-    ).toBe(381);
+    ).toBe(205);
     expect(
       stageOpenWindowDeficitPx({
         viewportWidthPx: 1600,
@@ -187,7 +187,7 @@ describe("responsive sidebar collapse", () => {
         splitColumns: true,
         chatWidthPx: CHAT_COL_MIN,
       }),
-    ).toBe(81);
+    ).toBe(0);
   });
 
   it("shows Files beside the conversation at its own width", () => {
@@ -200,7 +200,7 @@ describe("responsive sidebar collapse", () => {
         splitColumns: true,
         chatWidthPx: 520,
       }),
-    ).toBe(81 + 520 - CHAT_COL_MIN);
+    ).toBe(85);
   });
 
   it("accounts for a visible app nav at the split minimum", () => {
@@ -213,11 +213,11 @@ describe("responsive sidebar collapse", () => {
         splitColumns: true,
         chatWidthPx: CHAT_COL_MIN,
       }),
-    ).toBe(196);
+    ).toBe(20);
   });
 
   it("uses the Files floor for every live-split companion", () => {
-    expect(STAGE_COL_MIN).toBeGreaterThan(APP_NAV_STAGE_MIN_PX);
+    expect(STAGE_COL_MIN).toBe(240 + 320);
     expect(
       workspaceStageFloorPx({ splitLive: true, stageId: "files" }),
     ).toBe(STAGE_COL_MIN);

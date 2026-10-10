@@ -60,7 +60,7 @@
 .den-custom-chrome .den-shell-header--window-leading .den-shell-header-titlebar,
 .den-custom-chrome
   .den-shell-stage-host--split:where(
-    [data-host-band~="max-1076"][data-narrow-survivor="stage"]
+    [data-host-band~="max-900"][data-narrow-survivor="stage"]
   ):not([data-conversation-hidden])[data-stage-leading="false"]
   .den-shell-header:not(.den-shell-header-chat)
   .den-shell-header-titlebar {

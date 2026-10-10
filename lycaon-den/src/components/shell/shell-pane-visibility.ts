@@ -4,7 +4,7 @@ import { widenWindowBy, windowGeometryClaimPending } from "../../platform/window
 import type { WindowSubject } from "../../platform/windows/window-subject.ts";
 import {
   hiddenSplitPanePref, commitHiddenSplitPane, commitNavCollapsedPref, conversationHidePreviewed, effectiveNavWidthPx,
-  layoutViewportWidthPx, narrowSurvivorPref, navCollapsedPref, navHidePreviewed, preferredChatWidthPx,
+  layoutViewportWidthPx, narrowSurvivorPref, navCollapsedPref, navHidePreviewed, requestedChatWidthPx,
   preferredNavWidthPx, setSplitFocusRegion, splitOrderPref, workspaceOrientationPref,
 } from "../../shell/layout-store.ts";
 import { createSplitPaneVisibility } from "../../shell/split-pane-visibility.ts";
@@ -79,7 +79,7 @@ export function createShellPaneVisibility({ windowSubject, splitLive, presentedS
       navWidthPx,
       stageMinWidthPx: responsiveStageFloorPx(),
       splitColumns: live && hiddenSplitPanePref() === null,
-      chatWidthPx: preferredChatWidthPx(),
+      chatWidthPx: requestedChatWidthPx(),
     });
     const automatic = windowSubject == null && shouldCollapse;
     navWasAutomaticallyCollapsed = automatic;
@@ -100,7 +100,7 @@ export function createShellPaneVisibility({ windowSubject, splitLive, presentedS
           countNavWidth: true,
           stageMinWidthPx: responsiveStageFloorPx(),
           splitColumns: splitLive() && hiddenSplitPanePref() === null,
-          chatWidthPx: preferredChatWidthPx(),
+          chatWidthPx: requestedChatWidthPx(),
         }),
       ),
     paintOpen: () => {
@@ -125,7 +125,7 @@ export function createShellPaneVisibility({ windowSubject, splitLive, presentedS
           countNavWidth: !windowNavCollapsed(),
           stageMinWidthPx: workspaceStageFloorPx({ splitLive: true, stageId: presentedStageId() }),
           splitColumns: true,
-          chatWidthPx: preferredChatWidthPx(),
+          chatWidthPx: requestedChatWidthPx(),
         });
 
   const splitVisibility = createSplitPaneVisibility({

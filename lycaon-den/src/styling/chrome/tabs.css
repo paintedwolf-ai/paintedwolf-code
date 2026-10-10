@@ -69,7 +69,7 @@
 /* A hidden split stage leaves the conversation against the window controls. */
 .den-custom-chrome
   .den-shell-nav-collapsed
-  .den-shell-stage-host--split:where([data-host-band~="max-1076"]):not(
+  .den-shell-stage-host--split:where([data-host-band~="max-900"]):not(
     [data-conversation-hidden]
   )
   .den-shell-header-chat
@@ -79,7 +79,7 @@
 
 .den-custom-chrome
   .den-shell-nav-collapsed
-  .den-shell-stage-host--split:where([data-host-band~="max-1076"]):not(
+  .den-shell-stage-host--split:where([data-host-band~="max-900"]):not(
     [data-conversation-hidden]
   )
   .den-shell-header-chat
@@ -92,7 +92,7 @@
 
 .den-custom-chrome
   .den-shell-nav-collapsed
-  .den-shell-stage-host--split:where([data-host-band~="max-1076"]):not(
+  .den-shell-stage-host--split:where([data-host-band~="max-900"]):not(
     [data-conversation-hidden]
   )
   .den-shell-header-chat

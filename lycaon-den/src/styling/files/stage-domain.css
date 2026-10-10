@@ -188,7 +188,7 @@
   line-height: 1.45;
 }
 
-:where(.den-split-col--stage[data-stage-band~="max-735"]) {
+:where(.den-split-col--stage[data-stage-band~="max-559"]) {
   .project-files-view:not(.project-files-view--tree-collapsed):not(
       .project-files-view--tree-claimed
     )

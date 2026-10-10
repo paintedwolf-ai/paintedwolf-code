@@ -16,6 +16,7 @@ import {
   listPanePrefs,
   preferredNavWidthPx,
   preferredChatWidthPx,
+  requestedChatWidthPx,
   resetChatWidthPx,
   resetLayoutStoreForTests,
   saveStagePlacementMode,
@@ -196,9 +197,19 @@ describe("layout store", () => {
 
   it("stops a drag where the stage would fold its Files tree", () => {
     const session = beginChatWidthResize(1400);
-    session.preview(900);
+    session.preview(1200);
     expect(effectiveChatWidthPx(1400)).toBe(1400 - DIVIDER_PX - STAGE_COL_MIN);
     session.cancel();
+  });
+
+  it("lets a split drag request sidebar space before the workspace grows", () => {
+    const session = beginChatWidthResize(1400);
+    session.preview(800);
+    expect(requestedChatWidthPx()).toBe(800);
+    expect(effectiveChatWidthPx(1120)).toBe(1120 - DIVIDER_PX - STAGE_COL_MIN);
+    expect(effectiveChatWidthPx(1400)).toBe(800);
+    session.cancel();
+    expect(requestedChatWidthPx()).toBe(CHAT_WIDTH_DEFAULT_PX);
   });
 
   it("keeps the stored width when the companion changes", async () => {
@@ -220,11 +231,11 @@ describe("layout store", () => {
       },
     });
     syncLayoutFromSnapshot();
-    expect(effectiveChatWidthPx(1100)).toBe(
-      1100 - DIVIDER_PX - STAGE_COL_MIN,
+    expect(effectiveChatWidthPx(1000)).toBe(
+      1000 - DIVIDER_PX - STAGE_COL_MIN,
     );
 
-    beginChatWidthResize(1100).commit();
+    beginChatWidthResize(1000).commit();
     expect(preferredChatWidthPx()).toBe(600);
     expect(getAppStateSnapshot().layout?.chatWidthPx).toBe(600);
   });
