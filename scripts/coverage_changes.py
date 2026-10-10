@@ -127,7 +127,7 @@ def go_changed_files(scope):
 
 
 def read_go_profile(profile, module):
-    """Blocks by file: (first line, last line, statements, covered), merged across test binaries."""
+    """Blocks by file: (start coordinate, end coordinate, statements, covered)."""
     blocks = {}
     for row in profile.read_text().splitlines()[1:]:
         location, statements, count = row.rsplit(" ", 2)
@@ -140,7 +140,7 @@ def read_go_profile(profile, module):
     by_file = {}
     for (name, start, end), (statements, covered) in blocks.items():
         path = "lycaon" + name[len(module):] if name.startswith(module) else name
-        by_file.setdefault(path, []).append((int(start.split(".")[0]), int(end.split(".")[0]), statements, covered))
+        by_file.setdefault(path, []).append((start, end, statements, covered))
     return by_file
 
 
@@ -172,7 +172,8 @@ def go_units(touched, blocks, lines, module):
     for package, files in touched.items():
         unit = units.setdefault(package, Unit(package.removeprefix(module + "/")))
         for path in files:
-            for first, last, statements, covered in blocks.get(path, []):
+            for start, end, statements, covered in blocks.get(path, []):
+                first, last = int(start.split(".")[0]), int(end.split(".")[0])
                 if any(line in lines.get(path, ()) for line in range(first, last + 1)):
                     unit.add(path, first, last, statements, covered, lines[path])
     return units
