@@ -53,6 +53,13 @@ func (s *Assignments) RecordReviewBinding(ctx context.Context, run *api.Workflow
 	if stored.BindingJson != string(body) || stored.SubjectID != subjectID {
 		return fmt.Errorf("review assignment identity reused with different inputs")
 	}
+	retained, err := queries.GetWorkflowReviewBinding(ctx, binding.ID)
+	if err != nil {
+		return err
+	}
+	if retained.SubjectJson != string(subject) {
+		return fmt.Errorf("review subject identity reused with different inputs")
+	}
 	return tx.Commit()
 }
 

@@ -1,16 +1,18 @@
-package workflow
+package review
 
 import (
 	"github.com/lycaon/lycaon/internal/guidance"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
+	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"strings"
 	"testing"
 )
 
 func TestVerdictRepairReportsIndependentShapeErrors(t *testing.T) {
 	def := workflowdef.ReviewLoopDef{VerdictSchema: map[string]string{"verdict": "ACCEPTED|REVISE", "coverage": workflowdef.VerdictCoverageType, "claims": workflowdef.VerdictClaimsType, "explanation": "string"}, ClaimStatuses: map[string]workflowdef.ClaimClass{"claimed": workflowdef.ClaimOpen}}
-	err := ValidateReviewLoopVerdict(def, map[string]string{"verdict": "WRONG", "unexpected": "value", "claims": `[{"id":"c1","statement":"Claim","status":"bad","title":"Claim"}]`, "coverage": `{"revision":"x","assessments":[]}`}, VerdictRules{})
+	err := workflowvalidation.ValidateReviewLoopVerdict(def, map[string]string{"verdict": "WRONG", "unexpected": "value", "claims": `[{"id":"c1","statement":"Claim","status":"bad","title":"Claim"}]`, "coverage": `{"revision":"x","assessments":[]}`}, workflowvalidation.VerdictRules{})
 	if err == nil {
 		t.Fatal("invalid shape accepted")
 	}
@@ -22,15 +24,15 @@ func TestVerdictRepairReportsIndependentShapeErrors(t *testing.T) {
 }
 
 func TestVerdictRepairsRetainEveryStructuredCode(t *testing.T) {
-	out := ReviewLoopVerdictOutcome{
-		InventoryIssue: &InventoryIssue{ReportDocumentIssue: guidance.ReportDocumentIssue{Code: SubmitVerdictScansPendingCode}},
+	out := runstate.ReviewOutcome{
+		InventoryIssue: &runstate.InventoryIssue{ReportDocumentIssue: guidance.ReportDocumentIssue{Code: SubmitVerdictScansPendingCode}},
 		MissingAgents:  []string{"skeptic"},
 		GroundingCode:  "SUBMIT_VERDICT_UNGROUNDED",
-		QuestionIssue:  tools.AsToolReject(rejectReviewQuestion("current_review_required", "question/c1")),
-		CoverageIssue:  &tools.ToolReject{Code: ReviewLoopVerdictInvalidCode, Data: map[string]any{"reason": "stale coverage revision"}},
+		QuestionIssue:  toolrejection.AsToolReject(rejectReviewQuestion("current_review_required", "question/c1")),
+		CoverageIssue:  &toolrejection.ToolReject{Code: workflowvalidation.ReviewLoopVerdictInvalidCode, Data: map[string]any{"reason": "stale coverage revision"}},
 	}
 	repairs := verdictRepairs("", out)
-	want := []string{SubmitVerdictScansPendingCode, SubmitVerdictReviewerMissingCode, out.GroundingCode, ReviewRequiredCode, ReviewLoopVerdictInvalidCode}
+	want := []string{SubmitVerdictScansPendingCode, SubmitVerdictReviewerMissingCode, out.GroundingCode, ReviewRequiredCode, workflowvalidation.ReviewLoopVerdictInvalidCode}
 	if len(repairs) != len(want) {
 		t.Fatalf("repairs = %+v", repairs)
 	}
@@ -48,9 +50,9 @@ func TestVerdictRepairsRetainEveryStructuredCode(t *testing.T) {
 }
 
 func TestVerdictRepairsStateEachCodeOnce(t *testing.T) {
-	out := ReviewLoopVerdictOutcome{
-		InventoryIssue: &InventoryIssue{ReportDocumentIssue: guidance.ReportDocumentIssue{Code: SubmitVerdictScansPendingCode}},
-		CoverageIssue:  &tools.ToolReject{Code: SubmitVerdictScansPendingCode, Data: map[string]any{}},
+	out := runstate.ReviewOutcome{
+		InventoryIssue: &runstate.InventoryIssue{ReportDocumentIssue: guidance.ReportDocumentIssue{Code: SubmitVerdictScansPendingCode}},
+		CoverageIssue:  &toolrejection.ToolReject{Code: SubmitVerdictScansPendingCode, Data: map[string]any{}},
 	}
 	repairs := verdictRepairs("", out)
 	if len(repairs) != 1 || repairs[0].Code != SubmitVerdictScansPendingCode {
@@ -59,7 +61,7 @@ func TestVerdictRepairsStateEachCodeOnce(t *testing.T) {
 }
 
 func TestVerdictInventoryRepairUsesToolCode(t *testing.T) {
-	repairs := verdictRepairs("", ReviewLoopVerdictOutcome{InventoryIssue: &InventoryIssue{ReportDocumentIssue: guidance.ReportDocumentIssue{Code: guidance.ReportInventoryUnaccountedCode}}})
+	repairs := verdictRepairs("", runstate.ReviewOutcome{InventoryIssue: &runstate.InventoryIssue{ReportDocumentIssue: guidance.ReportDocumentIssue{Code: guidance.ReportInventoryUnaccountedCode}}})
 	if len(repairs) != 1 || repairs[0].Code != SubmitVerdictInventoryUnaccountedCode {
 		t.Fatalf("report code escaped into verdict rejection: %+v", repairs)
 	}
