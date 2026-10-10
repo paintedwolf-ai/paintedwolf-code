@@ -54,6 +54,7 @@ func newRoutesFixture(t *testing.T, orchestrator orchestration.Orchestrator) *ro
 	deps := apitest.Dependencies(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: sessions, Projects: projects}})
 	deps.Workflow.Workflows.Blueprints.Getter = deps.Workflow.Blueprints
 	deps.Workflow.Workflows.Presentation.BlueprintGetter = deps.Workflow.Blueprints
+	deps.Workflow.Workflows.Approvals.Getter = deps.Workflow.Blueprints
 	deps.Workflow.Orchestrator = orchestrator
 	server := hostapi.NewServer(deps, slog.New(slog.DiscardHandler), hostapi.TestAPIToken)
 	t.Cleanup(func() {
