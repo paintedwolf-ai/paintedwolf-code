@@ -59,3 +59,24 @@ class FeedSigningTests(unittest.TestCase):
         for prefix in ["", "updates", "release-system-tests/../updates"]:
             with self.assertRaisesRegex(ValueError, "isolated"):
                 feed_signing.signing_registry(Path("fixture.json"), prefix)
+
+    def test_credential_preflight_checks_every_generation_before_signing(self):
+        registry = {"generations": [{"generation": 1}, {"generation": 2}]}
+        secret = json.dumps({"format_version": 1, "generations": {"1": {"private_key": "secret", "password": ""}}})
+        with patch.dict(os.environ, {"FEED_SIGNING_KEYS_JSON": secret}), patch.object(feed_signing, "sign") as sign:
+            with self.assertRaisesRegex(ValueError, "generation 2"):
+                feed_signing.check_credentials(registry)
+            sign.assert_not_called()
+
+    def test_credential_preflight_signs_only_temporary_probes(self):
+        registry = {"generations": [{"generation": 1}, {"generation": 2}]}
+        secret = json.dumps({"format_version": 1, "generations": {str(n): {"private_key": "secret", "password": ""} for n in (1, 2)}})
+        paths = []
+        def sign(pointer, number, keys):
+            self.assertEqual(json.loads(pointer.read_text()), {"version": "0.0.0"})
+            self.assertEqual(keys, registry)
+            paths.append(pointer)
+        with patch.dict(os.environ, {"FEED_SIGNING_KEYS_JSON": secret}), patch.object(feed_signing, "sign", side_effect=sign):
+            feed_signing.check_credentials(registry)
+        self.assertEqual(len(paths), 2)
+        self.assertTrue(all(not path.exists() for path in paths))
