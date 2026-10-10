@@ -117,7 +117,7 @@ func (s *Reports) BuildRunReportInput(ctx context.Context, runID string) (report
 		Sources:          sourcesFromGrounding(completion.Grounding, verdicts, verdictURLs),
 	}
 
-	vars, err := s.Runs.GetScaffoldVars(ctx, run.ID)
+	vars, err := s.Runs.Runs.GetScaffoldVars(ctx, run.ID)
 	if err != nil {
 		return report.ReportInput{}, false, err
 	}
