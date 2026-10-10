@@ -181,6 +181,8 @@ Keep results with the release evidence. A local unit pass is not a claim of Gate
 3. Verify the public download state. Existing installations are not downgraded.
    Publish a fixed version and explain the affected versions and recovery steps.
 
+A feed halt changes discovery, not an installed application's database. v1.0.1 refuses a revision-2 store. After a user has migrated to 1.0.2, publish a higher-version fix that supports the migrated schema; repackaging v1.0.1 under a higher version does not make it compatible. Restoring a verified pre-upgrade snapshot is an explicit recovery operation and discards subsequent store changes. Preserve the migrated store and recovery evidence before attempting it. Device credentials and configuration must survive recovery.
+
 Halt preparation signs and validates every affected pointer before recording a permanent withdrawal or changing discovery. Dry runs perform the same signing checks. The workflow retains `prepared-halt/` with the reviewed plan (including its distribution scope), original pointers, exact prepared pointer/signature bytes and their SHA-256 digests. Apply validates the complete set and rechecks every feed before writing withdrawal markers, then uses those exact signed bytes. `application.json` records each attempted feed and its result; failures do not prevent attempts on the other prepared feeds. A retry accepts an unchanged original pointer or the already-applied replacement. A changed feed requires a new reviewed preparation. Pointer and signature objects are separate writes, so clients can briefly reject a mismatched pair; they must never install through that rejection.
 
 For a retained preparation, run `./task release:halt -- --plan <halt-plan.json> --apply-prepared <prepared-halt-directory>` with publication credentials. Do not edit the signed files. Keep the generation feed keys available offline as part of recovery custody.
@@ -275,3 +277,8 @@ private provider configuration:
 This makes paid provider calls. Resolve failed or inconclusive results before
 shipping the changed integration. The coordinator benchmark runs independently
 and is not a release gate.
+
+
+## 1.0.2 release review
+
+The [independent readiness review](release-readiness-1.0.2.md) records the reviewed candidate, corrections, and outstanding qualification. Review fixes are not release qualification. Provision the retained feed signing key map, qualify the exact assembled commit, and complete the packaged Preview updater rehearsal before publishing Stable.

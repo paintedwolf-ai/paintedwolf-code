@@ -21,6 +21,12 @@ for the host/desktop stream (`VERSION` + `v*` git tags). See
 - Source history upgrades transactionally to directory identities, preserving
   saved pins and retained content while removing redundant checkpoint copies.
 
+- The previous “check for updates” preference now enables automatic checks and
+  silent downloads, with installation on quit. Turning automatic updates off
+  keeps manual update actions available.
+- Workflow runs pin sealed definitions and guidance. Project guidance overlays
+  do not change a sealed run; retained shipped workflow versions remain available.
+
 ## [1.0.1]
 
 ### Fixed
