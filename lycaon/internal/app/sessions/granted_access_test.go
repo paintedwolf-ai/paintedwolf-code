@@ -1,4 +1,4 @@
-package app
+package sessions
 
 import (
 	"testing"
