@@ -3,7 +3,9 @@ package eventing
 import (
 	"context"
 	"github.com/lycaon/lycaon/internal/eventoutbox"
+	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 	"testing"
@@ -60,5 +62,32 @@ func TestSourceChangeFacetsSeparateWorkspaceKinds(t *testing.T) {
 	event.WorkspaceKind = api.SourceWorkspaceKindWorker
 	if workerFacet := sourceChangesFacet(event); workerFacet == projectFacet {
 		t.Fatalf("workspace facets collided: %q", workerFacet)
+	}
+}
+
+func TestWorkerPresenceResolvesParentChatAndKeepsWorkerTaskIdentity(t *testing.T) {
+	database := testdbfixture.Open(t, "presence-placement.db")
+	testdbseed.InsertSessionWithRoot(t, database, "parent", testdbseed.DefaultProjectID, t.TempDir())
+	sessions := store.NewSQL(database)
+	parent, err := sessions.Get(t.Context(), "parent")
+	testutil.FailErr(t, "read parent chat", err)
+	child, err := sessions.CreateChild(t.Context(), parent, api.SpawnChildRequest{AgentType: "implementer"})
+	testutil.FailErr(t, "create worker session", err)
+	chats := presenceChats{store: sessions, workerJobs: func(_ context.Context, id string) (*api.WorkerTask, bool) {
+		if id != child.ID {
+			t.Fatalf("task lookup changed session:%q", id)
+		}
+		return &api.WorkerTask{ID: "task"}, true
+	}}
+	first, ok := chats.Chat(t.Context(), " "+child.ID+" ")
+	if !ok || first.SessionID != parent.ID || first.JobID != "task" || first.ProjectID != parent.ProjectID {
+		t.Fatalf("worker placement=%+v,%v", first, ok)
+	}
+	cached, ok := chats.Chat(t.Context(), child.ID)
+	if !ok || cached.SessionID != first.SessionID || cached.JobID != first.JobID || cached.Title != "" {
+		t.Fatalf("cached placement changed durable identity:%+v", cached)
+	}
+	if _, ok := chats.Chat(t.Context(), "missing"); ok {
+		t.Fatal("missing chat acquired a presence placement")
 	}
 }
