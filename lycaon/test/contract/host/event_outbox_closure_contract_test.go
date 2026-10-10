@@ -68,7 +68,7 @@ var outboxSilentMutators = map[string]string{
 	"lycaon/internal/session/store/rewind.go:PrepareRewind":                                  "opens a rewind operation row",
 	"lycaon/internal/session/store/rewind.go:SetRewindPhase":                                 "advances a rewind operation's phase",
 	"lycaon/internal/session/store/rewind.go:DeleteRewindOperation":                          "removes a committed rewind's internal recovery receipt after retention",
-	"lycaon/internal/session/decision_sql.go:Put":                                            "stores a decision surfaced by worker completion",
+	"lycaon/internal/session/decisions/sql.go:Put":                                           "stores a decision surfaced by worker completion",
 	"lycaon/internal/session/decisions/sql.go:Clear":                                         "removes a decision after the worker resumes",
 
 	// Worker and workflow internal receipts and leases.
