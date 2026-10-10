@@ -10,7 +10,6 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/session/workerworkspace"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -163,8 +162,7 @@ func TestRewindPastAWorkerDispatchLeavesNoGhostState(t *testing.T) {
 		Status:          api.WorkerStatusComplete,
 	})
 	testutil.FailErr(t, "enqueue worker", err)
-	touches := workerworkspace.NewTouchLedger()
-	h.Sessions.Manager.Workers.Workspaces.SetTouchLedger(touches)
+	touches := h.Sessions.Manager.Workers.Workspaces.Touches
 	touches.RecordTouch(jobID, "src/leg.go")
 	if len(h.Sessions.Manager.Workers.Workspaces.Touches.Paths(jobID)) == 0 {
 		t.Fatal("touch-ledger setup failed")
