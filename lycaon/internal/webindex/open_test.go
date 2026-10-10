@@ -66,7 +66,7 @@ func TestCanceledOpenPreservesMismatchedCache(t *testing.T) {
 func TestOpenDoesNotReplaceBlockingParentFile(t *testing.T) {
 	parent := filepath.Join(t.TempDir(), "retained")
 	if err := os.WriteFile(parent, []byte("keep"), 0600); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "create blocking parent file", err)
 	}
 	store, err := Open(t.Context(), filepath.Join(parent, "web-index.db"))
 	if store != nil || err == nil {

@@ -59,7 +59,7 @@ func TestBlockPlaneWithoutAuthorityDoesNotObserveOrReject(t *testing.T) {
 			t.Fatal("absent pipeline claims enforcement")
 		}
 		if err := plane.Evaluate(t.Context(), oar.AnchorToolPreInvoke, "read", "implement", nil, func(*oar.GuardContext) error { t.Fatal("absent pipeline observed"); return nil }); err != nil {
-			t.Fatal(err)
+			t.Fatalf("evaluate absent policy pipeline: %v", err)
 		}
 	}
 }

@@ -73,3 +73,15 @@ func TestWriteStartupDiagnosticsRejectsAnyOtherInvocation(t *testing.T) {
 		t.Fatalf("invalid diagnostics invocation wrote %d bytes", out.Len())
 	}
 }
+
+func TestServeRejectsUnsupportedStartupProtocolBeforeOpeningStore(t *testing.T) {
+	t.Setenv("LYCAON_STARTUP_PROTOCOL", "unsupported")
+	path := filepath.Join(t.TempDir(), "store.db")
+	err := runServe(t.Context(), path)
+	if err == nil || !strings.Contains(err.Error(), "unsupported startup protocol version") {
+		t.Fatalf("serve startup error = %v, want protocol refusal", err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("protocol refusal touched store: %v", err)
+	}
+}
