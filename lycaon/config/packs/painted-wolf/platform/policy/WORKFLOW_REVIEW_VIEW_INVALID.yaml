@@ -18,4 +18,4 @@ x-paintedwolf-message: The requested review view is unavailable or invalid.
 x-paintedwolf-scenarios:
 - id: rejected
   vars: {}
-  expect_contains: ['Code: WORKFLOW_REVIEW_VIEW_INVALID']
+  expect_contains: ['Code: WORKFLOW_REVIEW_VIEW_INVALID', 'assignment_id']

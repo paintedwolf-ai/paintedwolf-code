@@ -18,4 +18,4 @@ x-paintedwolf-message: A question reassessment requires a fresh worker workspace
 x-paintedwolf-scenarios:
 - id: rejected
   vars: {}
-  expect_contains: ['Code: TASK_REVIEW_FRESH_WORKSPACE_REQUIRED']
+  expect_contains: ['Code: TASK_REVIEW_FRESH_WORKSPACE_REQUIRED', 'child_session_id']
