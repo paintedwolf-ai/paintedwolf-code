@@ -130,3 +130,48 @@ func TestProtectedInputWireMetadataRetainsBoundedLifetime(t *testing.T) {
 		}
 	}
 }
+
+type askAnswerRows struct {
+	Sessions
+	rows    []api.Message
+	updated []api.Message
+}
+
+func (s *askAnswerRows) GetMessages(context.Context, string) ([]api.Message, error) {
+	return s.rows, nil
+}
+func (s *askAnswerRows) UpdateMessage(_ context.Context, _ string, _ string, msg api.Message) (api.Message, error) {
+	s.updated = append(s.updated, msg)
+	return msg, nil
+}
+func TestAnswerProjectionUpdatesOnlyTheMatchingAskToolRow(t *testing.T) {
+	rows := &askAnswerRows{rows: []api.Message{
+		{ID: "target", Role: api.MessageRoleTool, ToolResult: &api.ToolResult{ToolCallID: "operation", Tool: "ask_user"}},
+		{ID: "foreign tool", Role: api.MessageRoleTool, ToolResult: &api.ToolResult{ToolCallID: "operation", Tool: "other"}},
+		{ID: "foreign operation", Role: api.MessageRoleTool, ToolResult: &api.ToolResult{ToolCallID: "other", Tool: "ask_user"}},
+		{ID: "missing result", Role: api.MessageRoleTool}, {ID: "user", Role: api.MessageRoleUser},
+	}}
+	cards := &Cards{Sessions: rows}
+	cards.PersistAskUserAnswerForToolCall(t.Context(), "session", "operation", AskUserAnswerBody{Status: "answered", PhaseID: "phase", Response: "retained answer"})
+	if len(rows.updated) != 1 || rows.updated[0].ID != "target" || rows.updated[0].Content != rows.updated[0].ToolResult.Content {
+		t.Fatalf("answer changed unrelated rows=%+v", rows.updated)
+	}
+	var answer AskUserAnswerBody
+	if err := json.Unmarshal([]byte(rows.updated[0].Content), &answer); err != nil {
+		t.Fatalf("decode persisted answer: %v", err)
+	}
+	if answer.Response != "retained answer" || answer.PhaseID != "phase" {
+		t.Fatalf("answer projection=%+v", answer)
+	}
+}
+func TestAskToolPreservesStructuredRequestRejection(t *testing.T) {
+	reg := tools.NewDefaultRegistry()
+	if err := RegisterAskUserTool(reg, &Asks{}, nil); err != nil {
+		t.Fatalf("register ask tool: %v", err)
+	}
+	_, err := reg.Run(t.Context(), "ask_user", map[string]any{"prompt": "Provide input", "response_type": "unsupported"}, tools.ToolContext{Identity: tools.InvocationIdentity{Agent: "coordinator", SessionID: "session"}})
+	var reject *toolrejection.ToolReject
+	if !errors.As(err, &reject) || reject.Code != "ASK_USER_RESPONSE_TYPE_INVALID" || reject.Data["response_type"] != "unsupported" {
+		t.Fatalf("structured request refusal=%v", err)
+	}
+}
