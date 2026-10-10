@@ -24,6 +24,9 @@ var namespaceImplementation []byte
 var reviewAssignmentsMigration []byte
 
 func migrateSourceNamespace(ctx context.Context, tx *sql.Tx) error {
+	if _, err := tx.ExecContext(ctx, `ALTER TABLE source_history_entries ADD COLUMN availability TEXT NOT NULL DEFAULT 'available' CHECK (availability IN ('available', 'unavailable'))`); err != nil {
+		return err
+	}
 	if _, err := tx.ExecContext(ctx, `ALTER TABLE source_branch_heads RENAME TO source_branch_heads_v1`); err != nil {
 		return err
 	}
@@ -58,9 +61,6 @@ func migrateSourceNamespace(ctx context.Context, tx *sql.Tx) error {
 		return err
 	}
 	if err := rows.Close(); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `DROP TABLE source_branch_heads_v1; DROP TABLE source_checkpoint_entries`); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, string(namespaceProjection)); err != nil {
@@ -99,4 +99,21 @@ func migrateDirectoryPath(ctx context.Context, tx *sql.Tx, project, branch, root
 		id = next
 	}
 	return id, nil
+}
+
+// Validate while both representations exist, then retire the shipped table.
+func validateSourceNamespace(ctx context.Context, tx *sql.Tx) error {
+	const columns = "project_id,branch_id,file_id,version_id,root_id,path,state,content_sha256,ordinal,observed_ts"
+	for _, pair := range [][2]string{{"source_branch_heads_v1", "source_branch_heads"}, {"source_branch_heads", "source_branch_heads_v1"}} {
+		var changed bool
+		query := "SELECT EXISTS(SELECT " + columns + " FROM " + pair[0] + " EXCEPT SELECT " + columns + " FROM " + pair[1] + ")"
+		if err := tx.QueryRowContext(ctx, query).Scan(&changed); err != nil {
+			return err
+		}
+		if changed {
+			return fmt.Errorf("source namespace projection differs from released history")
+		}
+	}
+	_, err := tx.ExecContext(ctx, `DROP TABLE source_branch_heads_v1; DROP TABLE source_checkpoint_entries`)
+	return err
 }

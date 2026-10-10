@@ -170,7 +170,7 @@ func (s *SourceHistory) historyEntry(ctx context.Context, projectID, state, orde
 		defer s.stateMu.Unlock()
 		var selected *sourceHistoryEntry
 		for _, entry := range s.history {
-			if entry.ProjectID != projectID || entry.State != state {
+			if entry.ProjectID != projectID || entry.State != state || entry.Unavailable {
 				continue
 			}
 			if selected == nil || (order == "DESC" && entry.Seq > selected.Seq) || (order == "ASC" && entry.Seq < selected.Seq) {
@@ -180,7 +180,7 @@ func (s *SourceHistory) historyEntry(ctx context.Context, projectID, state, orde
 		}
 		return selected, nil
 	}
-	query := `SELECT seq,id,project_id,kind,state,undo_label,redo_label,undo_plan_json,redo_plan_json,created_at,updated_at FROM source_history_entries WHERE project_id=? AND state=? ORDER BY seq ` + order + ` LIMIT 1`
+	query := `SELECT seq,id,project_id,kind,state,undo_label,redo_label,undo_plan_json,redo_plan_json,created_at,updated_at FROM source_history_entries WHERE project_id=? AND state=? AND availability='available' ORDER BY seq ` + order + ` LIMIT 1`
 	entry := &sourceHistoryEntry{}
 	var undoJSON, redoJSON, createdAt, updatedAt string
 	err := s.db.QueryRowContext(ctx, query, projectID, state).Scan(

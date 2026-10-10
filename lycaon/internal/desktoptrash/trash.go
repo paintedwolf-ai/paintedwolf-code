@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -16,10 +17,11 @@ import (
 // Receipt identifies the exact entry returned by the native Trash service.
 // It retains no file contents and is unavailable after that entry is removed or replaced.
 type Receipt struct {
-	Platform string `json:"platform"`
-	Path     string `json:"path"`
-	Identity string `json:"identity"`
-	Metadata string `json:"metadata,omitempty"`
+	FormatVersion int    `json:"format_version"`
+	Platform      string `json:"platform"`
+	Path          string `json:"path"`
+	Identity      string `json:"identity"`
+	Metadata      string `json:"metadata,omitempty"`
 }
 
 var ErrUnavailable = errors.New("the item is no longer available in Trash")
@@ -39,6 +41,7 @@ func Move(ctx context.Context, path string) (Receipt, error) {
 		}
 		return receipt, moveErr
 	}
+	receipt.FormatVersion = 1
 	receipt.Platform = runtime.GOOS
 	identity, identityErr := fspath.EntryIdentity(receipt.Path)
 	receipt.Identity = identity
@@ -50,12 +53,18 @@ func Restore(ctx context.Context, receipt Receipt, destination fseffect.Location
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if receipt.Platform != runtime.GOOS || !filepath.IsAbs(receipt.Path) || receipt.Identity == "" {
+	if receipt.FormatVersion != 1 || receipt.Platform != runtime.GOOS || !filepath.IsAbs(receipt.Path) || receipt.Identity == "" {
 		return ErrUnavailable
 	}
 	identity, err := fspath.EntryIdentity(receipt.Path)
-	if err != nil || identity != receipt.Identity {
+	if os.IsNotExist(err) {
 		return errors.Join(ErrUnavailable, err)
+	}
+	if err != nil {
+		return err
+	}
+	if identity != receipt.Identity {
+		return ErrUnavailable
 	}
 	if err := restoreEntry(receipt, destination); err != nil {
 		return err
