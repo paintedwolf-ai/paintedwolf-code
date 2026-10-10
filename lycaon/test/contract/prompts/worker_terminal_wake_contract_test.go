@@ -36,9 +36,9 @@ func TestOutcomeProjectionNudgesOnEveryMethod(t *testing.T) {
 		t.Fatal("OutcomeProjection interface not found")
 	}
 	wakeNames := discoverWakeCallNames(files)
-	recorders := structsWithFieldType(files, "WorkerSessionOutcomes")
+	recorders := structsWithFieldType(files, "WorkerResultProjection")
 	if len(recorders) == 0 {
-		t.Fatal("no struct holds WorkerSessionOutcomes")
+		t.Fatal("no struct holds WorkerResultProjection")
 	}
 	for _, recorder := range recorders {
 		for _, method := range recorderMethods {
