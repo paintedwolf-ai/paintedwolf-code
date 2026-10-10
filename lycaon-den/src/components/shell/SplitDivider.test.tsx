@@ -29,6 +29,12 @@ function pointerEvent(type: string, clientX: number): MouseEvent {
   return event;
 }
 
+function mockHostBox(separator: HTMLElement): void {
+  vi.spyOn(separator.parentElement!, "getBoundingClientRect").mockReturnValue({
+    left: 0, right: 1200, width: 1200,
+  } as DOMRect);
+}
+
 describe("SplitDivider", () => {
   it("exposes the effective constrained range and commits one keyboard transaction", () => {
     const [chatWidth, setChatWidth] = createSignal(360);
@@ -36,7 +42,7 @@ describe("SplitDivider", () => {
     render(() => (
       <div style={{ width: "1400px", display: "grid" }}>
         <SplitDivider
-          hostWidthPx={() => 1400}
+          availableWidthPx={() => 1400}
           chatWidthPx={chatWidth}
           onBegin={tx.onBegin}
           onReset={vi.fn()}
@@ -64,9 +70,48 @@ describe("SplitDivider", () => {
     expect(tx.preview).toHaveBeenCalledWith(360 - 16);
     expect(tx.commit).toHaveBeenCalledOnce();
 
-    // Home takes the conversation to that same floor, not past it.
+    // Home reserves the stage minimum.
     fireEvent.keyDown(separator, { key: "Home" });
     expect(tx.preview.mock.lastCall?.[0]).toBe(usable - STAGE_COL_MIN);
+  });
+
+  it.each([true, false])("keeps the rounded drag edge stable across sidebar collapse (stage left: %s)", async (stageOnLeft) => {
+    const [hostWidth, setHostWidth] = createSignal(1120);
+    const [chatWidth, setChatWidth] = createSignal(440);
+    const tx = sessionHarness(setChatWidth);
+    render(() => (
+      <div>
+        <SplitDivider availableWidthPx={() => 1400}
+          chatWidthPx={chatWidth} stageOnLeft={() => stageOnLeft}
+          onBegin={tx.onBegin} onReset={vi.fn()} />
+      </div>
+    ));
+    const separator = screen.getByTestId("split-divider") as HTMLElement;
+    vi.spyOn(separator.parentElement!, "getBoundingClientRect").mockImplementation(() => ({
+      left: stageOnLeft ? 1400 - hostWidth() : 0,
+      right: stageOnLeft ? 1400 : hostWidth(), width: hostWidth(),
+    }) as DOMRect);
+    separator.setPointerCapture = vi.fn();
+    separator.releasePointerCapture = vi.fn();
+    const pointerX = stageOnLeft ? 600 : 800;
+    separator.dispatchEvent(pointerEvent("pointerdown", stageOnLeft ? 960 : 440));
+    window.dispatchEvent(pointerEvent("pointermove", pointerX));
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    // Width preferences use whole pixels; the 1px divider straddles the pointer.
+    expect(tx.preview.mock.lastCall?.[0]).toBe(800);
+
+    setHostWidth(1400);
+    window.dispatchEvent(pointerEvent("pointermove", pointerX));
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    expect(tx.preview.mock.lastCall?.[0]).toBe(800);
+    const releaseX = pointerX + (stageOnLeft ? -1 : 1);
+    window.dispatchEvent(pointerEvent("pointerup", releaseX));
+    expect(tx.preview.mock.lastCall?.[0]).toBe(801);
+    const dividerCenter = stageOnLeft
+      ? 1400 - chatWidth() - DIVIDER_PX / 2
+      : chatWidth() + DIVIDER_PX / 2;
+    expect(Math.abs(dividerCenter - releaseX)).toBeLessThanOrEqual(DIVIDER_PX / 2);
+    expect(tx.commit).toHaveBeenCalledOnce();
   });
 
   it("does not preview a no-op pointer gesture", () => {
@@ -75,7 +120,7 @@ describe("SplitDivider", () => {
     render(() => (
       <div style={{ width: "1200px" }}>
         <SplitDivider
-          hostWidthPx={() => 1200}
+          availableWidthPx={() => 1200}
           chatWidthPx={chatWidth}
           onBegin={tx.onBegin}
           onReset={vi.fn()}
@@ -84,6 +129,7 @@ describe("SplitDivider", () => {
       </div>
     ));
     const separator = screen.getByTestId("split-divider") as HTMLElement;
+    mockHostBox(separator);
     separator.setPointerCapture = vi.fn();
     separator.releasePointerCapture = vi.fn();
     separator.dispatchEvent(pointerEvent("pointerdown", 600));
@@ -99,7 +145,7 @@ describe("SplitDivider", () => {
     render(() => (
       <div style={{ width: "1200px" }}>
         <SplitDivider
-          hostWidthPx={() => 1200}
+          availableWidthPx={() => 1200}
           chatWidthPx={chatWidth}
           onBegin={tx.onBegin}
           onReset={vi.fn()}
@@ -108,6 +154,7 @@ describe("SplitDivider", () => {
       </div>
     ));
     const separator = screen.getByTestId("split-divider") as HTMLElement;
+    mockHostBox(separator);
     separator.setPointerCapture = vi.fn();
     separator.releasePointerCapture = vi.fn();
     separator.dispatchEvent(pointerEvent("pointerdown", 600));
@@ -130,7 +177,7 @@ describe("SplitDivider", () => {
     render(() => (
       <div style={{ width: "1200px" }}>
         <SplitDivider
-          hostWidthPx={() => 1200}
+          availableWidthPx={() => 1200}
           chatWidthPx={chatWidth}
           onBegin={tx.onBegin}
           onReset={vi.fn()}
@@ -139,10 +186,11 @@ describe("SplitDivider", () => {
       </div>
     ));
     const separator = screen.getByTestId("split-divider") as HTMLElement;
+    mockHostBox(separator);
     separator.setPointerCapture = vi.fn();
     separator.releasePointerCapture = vi.fn();
 
-    // The host box measures zero wide here, so clientX is the stage width.
+    // Releasing below half the chat minimum commits a hide.
     const hideAt = 1199 - CHAT_COL_MIN / 2 + 1;
     separator.dispatchEvent(pointerEvent("pointerdown", 720));
     window.dispatchEvent(pointerEvent("pointerup", hideAt));
@@ -163,7 +211,7 @@ describe("conversation on the left", () => {
     const tx = sessionHarness(setChatWidth);
     render(() => (
       <div>
-        <SplitDivider hostWidthPx={() => 1400} chatWidthPx={chatWidth}
+        <SplitDivider availableWidthPx={() => 1400} chatWidthPx={chatWidth}
           stageOnLeft={stageOnLeft} onBegin={tx.onBegin} onReset={vi.fn()} />
       </div>
     ));

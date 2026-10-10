@@ -20,7 +20,7 @@
   max-width: 100%;
 }
 
-.den-shell-stage-host--split:where([data-host-band~="min-1077"])
+.den-shell-stage-host--split:where([data-host-band~="min-901"])
   .den-split-col--chat
   .den-chat-transcript-visual
   .progress-strip--snapshot {

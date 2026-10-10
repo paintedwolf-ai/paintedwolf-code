@@ -8,8 +8,8 @@ import {
   type WorkspaceOrientation,
 } from "../../shared/app-state-types.ts";
 
-/** A 240px Files tree and 496px editor set the shared split-width floor. */
-export const STAGE_COL_MIN = 736;
+/** A 240px Files tree and 320px editor set the shared split-width floor. */
+export const STAGE_COL_MIN = 560;
 export const CHAT_COL_MIN = 340;
 export const DIVIDER_PX = 1;
 export const SPLIT_MIN_HOST = STAGE_COL_MIN + CHAT_COL_MIN + DIVIDER_PX;
