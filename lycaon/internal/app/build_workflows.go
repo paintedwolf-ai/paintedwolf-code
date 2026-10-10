@@ -66,6 +66,7 @@ func (b *serveBuilder) wireWorkflowScanServices() error {
 
 	var err error
 	b.scanning, err = scanning.Build(b.startup.ctx, scanning.Dependencies{
+		Resources:             b.startup.resources,
 		Database:              b.storage.Database,
 		DataDir:               b.storage.Directory,
 		ModuleRoot:            b.catalog.ModuleRoot,
