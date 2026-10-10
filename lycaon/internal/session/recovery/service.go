@@ -20,26 +20,41 @@ type Service struct{ store Store }
 
 func New(store Store) *Service { return &Service{store: store} }
 
-// ErrStale rejects a recovery action whose premise no longer
-// holds. Each refusal wraps it with the fact that failed, in the person's terms;
-// the HTTP layer answers with prompt_recovery_stale and that reason.
+// ErrStale identifies recovery whose transcript premise no longer holds.
 var ErrStale = errors.New("prompt recovery is stale")
+var ErrInvalid = errors.New("invalid prompt recovery request")
 
-type staleError struct{ reason string }
+type Reason string
 
-func (e *staleError) Error() string { return e.reason }
-func (e *staleError) Unwrap() error { return ErrStale }
+const (
+	TurnRunning       Reason = "turn_running"
+	PromptPending     Reason = "prompt_pending"
+	TurnCompleted     Reason = "turn_completed"
+	TurnMissing       Reason = "turn_missing"
+	TranscriptChanged Reason = "transcript_changed"
+	RetryHasProgress  Reason = "retry_has_progress"
+)
 
-func staleRecovery(reason string) error { return &staleError{reason: reason} }
+type StaleError struct {
+	Reason  Reason
+	Message string
+}
+
+func (e *StaleError) Error() string { return e.Message }
+func (e *StaleError) Unwrap() error { return ErrStale }
+
+func staleRecovery(reason Reason, message string) error {
+	return &StaleError{Reason: reason, Message: message}
+}
 
 // Prepare binds the action to the interrupted turn and transcript.
 func (m *Service) Prepare(ctx context.Context, sessionID string, in promptinput.Input) (promptinput.Input, error) {
 	action := in.Recovery
-	if action.Action != "continue" && action.Action != "retry" {
-		return in, staleRecovery(fmt.Sprintf("%q is not a recovery action", action.Action))
+	if action == nil || action.Action != "continue" && action.Action != "retry" {
+		return in, fmt.Errorf("%w: action must be continue or retry", ErrInvalid)
 	}
 	if len(in.ArtifactIDs) != 0 || len(in.ContentParts) != 0 || in.SourceContext != nil {
-		return in, staleRecovery("Recovery cannot add attachments, references, or source context; send them as a new message")
+		return in, fmt.Errorf("%w: recovery cannot add attachments, references, or source context", ErrInvalid)
 	}
 	state, err := m.store.ReadExecutionState(ctx, sessionID)
 	if err != nil {
@@ -48,7 +63,7 @@ func (m *Service) Prepare(ctx context.Context, sessionID string, in promptinput.
 	recoverable := false
 	for _, s := range state.Sessions {
 		if s.ID == sessionID && s.Status == api.SessionStatusBusy {
-			return in, staleRecovery("A turn is still running in this chat")
+			return in, staleRecovery(TurnRunning, "A turn is still running in this chat")
 		}
 	}
 	for _, s := range state.Submissions {
@@ -59,11 +74,11 @@ func (m *Service) Prepare(ctx context.Context, sessionID string, in promptinput.
 		case store.PromptSubmissionFailed, store.PromptSubmissionInterrupted, store.PromptSubmissionCanceled:
 			recoverable = true
 		default:
-			return in, staleRecovery("Another prompt is already queued or running in this chat")
+			return in, staleRecovery(PromptPending, "Another prompt is already queued or running in this chat")
 		}
 	}
 	if !recoverable {
-		return in, staleRecovery("The last turn finished on its own; send a new message to carry on")
+		return in, staleRecovery(TurnCompleted, "The last turn finished on its own; send a new message to carry on")
 	}
 	history, err := m.store.GetMessages(ctx, sessionID)
 	if err != nil {
@@ -81,15 +96,15 @@ func (m *Service) Prepare(ctx context.Context, sessionID string, in promptinput.
 	}
 	boundary := api.UserIntentBoundary(history)
 	if boundary == 0 {
-		return in, staleRecovery("No turn has started in this chat")
+		return in, staleRecovery(TurnMissing, "No turn has started in this chat")
 	}
 	if latestVisible == "" || (action.AfterMessageID != latest && action.AfterMessageID != latestVisible) {
-		return in, staleRecovery("The chat has moved on since this notice; refresh it and choose again")
+		return in, staleRecovery(TranscriptChanged, "The chat has moved on since this notice; refresh it and choose again")
 	}
 	if action.Action == "retry" {
 		for _, msg := range history[boundary:] {
 			if msg.Role == api.MessageRoleAssistant || msg.Role == api.MessageRoleTool || len(msg.ToolCalls) != 0 {
-				return in, staleRecovery("The interrupted turn already made progress; use Keep going instead of Retry")
+				return in, staleRecovery(RetryHasProgress, "The interrupted turn already made progress; use Keep going instead of Retry")
 			}
 		}
 		original, err := m.store.GetPromptSubmission(ctx, history[boundary-1].ID)

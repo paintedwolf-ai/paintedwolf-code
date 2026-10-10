@@ -2,15 +2,15 @@ surfaces: [http]
 notification: { tier: non_catastrophic, scope: session }
 context_schema:
   optional:
-    - reason
+    - explanation
 title: Can't continue from here
 message: >-
-  {% if reason %}{{ reason }}.{% else %}The interrupted turn has changed since this notice.{% endif %}
+  {% if explanation %}{{ explanation }}.{% else %}The interrupted turn has changed since this notice.{% endif %}
 suggested_action: Send a new message to carry on from the current state of the chat.
 scenarios:
   - id: moved_on
     vars:
-      reason: The chat has moved on since this notice; refresh it and choose again
+      explanation: The chat has moved on since this notice; refresh it and choose again
     expect_contains:
       - moved on
   - id: default
