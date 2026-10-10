@@ -82,7 +82,10 @@ func (b *serveBuilder) wireWorkflowScanServices() error {
 		FingerprintScannerKey: b.security.Fingerprinter.ScannerKey,
 		ScanIgnores:           b.security.ScanIgnores,
 		InjectRenderer:        b.delegations.InjectRenderer,
-		TestRegistry:          b.startup.cfg.TestScanRegistry,
+		Fixtures: scanning.ScannerFixtures{
+			Registry:         b.startup.cfg.TestScanRegistry,
+			AdvisoryDatabase: b.startup.cfg.TestAdvisoryDatabase,
+		},
 		DelegationBySession: func(sessionID string) (string, string, bool) {
 			delegationID, ok := b.delegations.Store.DelegationBySessionID(sessionID)
 			if !ok {
