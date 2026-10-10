@@ -12,9 +12,8 @@ import {
 } from "../../shell/stage-placement.ts";
 
 export type SplitDividerProps = {
-  hostWidthPx: () => number;
   /** Workspace width available after the main sidebar yields. */
-  availableWidthPx?: () => number;
+  availableWidthPx: () => number;
   /** Live conversation column width, including drag preview. */
   chatWidthPx: () => number;
   onBegin: () => ResizeSession | null;
@@ -27,24 +26,20 @@ export function SplitDivider(props: SplitDividerProps) {
   let el: HTMLDivElement | undefined;
   let cancelActive: (() => void) | undefined;
 
-  const availableWidth = () => props.availableWidthPx?.() ?? props.hostWidthPx();
-  const clampChat = (px: number) => clampChatWidthPx(px, availableWidth());
+  const clampChat = (px: number) => clampChatWidthPx(px, props.availableWidthPx());
   /** The separator's value is the stage share, in percent. */
   const percentFor = (chatPx: number) =>
-    Math.round(stageShare(chatPx, availableWidth()) * 100);
-
-  /** Capture the starting host; sidebar collapse may move its edges. */
-  let hostEdges: { left: number; right: number } | undefined;
+    Math.round(stageShare(chatPx, props.availableWidthPx()) * 100);
 
   const chatWidthFromClientX = (clientX: number): number => {
     const rect = el?.parentElement?.getBoundingClientRect();
-    const host = rect && rect.width > 0 ? rect.width : props.hostWidthPx();
-    if (!hostEdges || host <= DIVIDER_PX) return props.chatWidthPx();
-    const edges = rect && rect.width > 0 ? rect : hostEdges;
+    if (!rect || rect.width <= DIVIDER_PX) return props.chatWidthPx();
+    // Sidebar collapse can move either host edge during a drag.
+    const host = rect.width;
     const usable = host - DIVIDER_PX;
     const stagePx = props.stageOnLeft()
-      ? clientX - edges.left - DIVIDER_PX / 2
-      : edges.right - clientX - DIVIDER_PX / 2;
+      ? clientX - rect.left - DIVIDER_PX / 2
+      : rect.right - clientX - DIVIDER_PX / 2;
     const chatPx = usable - stagePx;
     // Dragging the conversation below half its floor hides it.
     if (dragRequestsHide(chatPx, CHAT_COL_MIN)) return PANE_HIDDEN_PX;
@@ -57,9 +52,6 @@ export function SplitDivider(props: SplitDividerProps) {
     const handle = el;
     if (!handle) return;
     cancelActive?.();
-    const rect = handle.parentElement?.getBoundingClientRect();
-    if (!rect) return;
-    hostEdges = { left: rect.left, right: rect.right };
     const session = props.onBegin();
     if (!session) return;
     const startX = e.clientX;
@@ -87,7 +79,7 @@ export function SplitDivider(props: SplitDividerProps) {
     commitChatWidth(clampChat(props.chatWidthPx() - sign * deltaPx));
   };
 
-  const widestChat = () => maxChatWidthPx(availableWidth());
+  const widestChat = () => maxChatWidthPx(props.availableWidthPx());
 
   const onKeyDown = (e: KeyboardEvent) => {
     switch (e.key) {

@@ -29,6 +29,12 @@ function pointerEvent(type: string, clientX: number): MouseEvent {
   return event;
 }
 
+function mockHostBox(separator: HTMLElement): void {
+  vi.spyOn(separator.parentElement!, "getBoundingClientRect").mockReturnValue({
+    left: 0, right: 1200, width: 1200,
+  } as DOMRect);
+}
+
 describe("SplitDivider", () => {
   it("exposes the effective constrained range and commits one keyboard transaction", () => {
     const [chatWidth, setChatWidth] = createSignal(360);
@@ -36,7 +42,7 @@ describe("SplitDivider", () => {
     render(() => (
       <div style={{ width: "1400px", display: "grid" }}>
         <SplitDivider
-          hostWidthPx={() => 1400}
+          availableWidthPx={() => 1400}
           chatWidthPx={chatWidth}
           onBegin={tx.onBegin}
           onReset={vi.fn()}
@@ -64,7 +70,7 @@ describe("SplitDivider", () => {
     expect(tx.preview).toHaveBeenCalledWith(360 - 16);
     expect(tx.commit).toHaveBeenCalledOnce();
 
-    // Home takes the conversation to that same floor, not past it.
+    // Home reserves the stage minimum.
     fireEvent.keyDown(separator, { key: "Home" });
     expect(tx.preview.mock.lastCall?.[0]).toBe(usable - STAGE_COL_MIN);
   });
@@ -75,7 +81,7 @@ describe("SplitDivider", () => {
     const tx = sessionHarness(setChatWidth);
     render(() => (
       <div>
-        <SplitDivider hostWidthPx={hostWidth} availableWidthPx={() => 1400}
+        <SplitDivider availableWidthPx={() => 1400}
           chatWidthPx={chatWidth} stageOnLeft={() => true}
           onBegin={tx.onBegin} onReset={vi.fn()} />
       </div>
@@ -103,7 +109,7 @@ describe("SplitDivider", () => {
     render(() => (
       <div style={{ width: "1200px" }}>
         <SplitDivider
-          hostWidthPx={() => 1200}
+          availableWidthPx={() => 1200}
           chatWidthPx={chatWidth}
           onBegin={tx.onBegin}
           onReset={vi.fn()}
@@ -112,6 +118,7 @@ describe("SplitDivider", () => {
       </div>
     ));
     const separator = screen.getByTestId("split-divider") as HTMLElement;
+    mockHostBox(separator);
     separator.setPointerCapture = vi.fn();
     separator.releasePointerCapture = vi.fn();
     separator.dispatchEvent(pointerEvent("pointerdown", 600));
@@ -127,7 +134,7 @@ describe("SplitDivider", () => {
     render(() => (
       <div style={{ width: "1200px" }}>
         <SplitDivider
-          hostWidthPx={() => 1200}
+          availableWidthPx={() => 1200}
           chatWidthPx={chatWidth}
           onBegin={tx.onBegin}
           onReset={vi.fn()}
@@ -136,6 +143,7 @@ describe("SplitDivider", () => {
       </div>
     ));
     const separator = screen.getByTestId("split-divider") as HTMLElement;
+    mockHostBox(separator);
     separator.setPointerCapture = vi.fn();
     separator.releasePointerCapture = vi.fn();
     separator.dispatchEvent(pointerEvent("pointerdown", 600));
@@ -158,7 +166,7 @@ describe("SplitDivider", () => {
     render(() => (
       <div style={{ width: "1200px" }}>
         <SplitDivider
-          hostWidthPx={() => 1200}
+          availableWidthPx={() => 1200}
           chatWidthPx={chatWidth}
           onBegin={tx.onBegin}
           onReset={vi.fn()}
@@ -167,10 +175,11 @@ describe("SplitDivider", () => {
       </div>
     ));
     const separator = screen.getByTestId("split-divider") as HTMLElement;
+    mockHostBox(separator);
     separator.setPointerCapture = vi.fn();
     separator.releasePointerCapture = vi.fn();
 
-    // The host box measures zero wide here, so clientX is the stage width.
+    // Releasing below half the chat minimum commits a hide.
     const hideAt = 1199 - CHAT_COL_MIN / 2 + 1;
     separator.dispatchEvent(pointerEvent("pointerdown", 720));
     window.dispatchEvent(pointerEvent("pointerup", hideAt));
@@ -191,7 +200,7 @@ describe("conversation on the left", () => {
     const tx = sessionHarness(setChatWidth);
     render(() => (
       <div>
-        <SplitDivider hostWidthPx={() => 1400} chatWidthPx={chatWidth}
+        <SplitDivider availableWidthPx={() => 1400} chatWidthPx={chatWidth}
           stageOnLeft={stageOnLeft} onBegin={tx.onBegin} onReset={vi.fn()} />
       </div>
     ));

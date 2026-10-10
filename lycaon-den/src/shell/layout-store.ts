@@ -319,9 +319,9 @@ export function preferredChatWidthPx(): number {
 /** Conversation width requested by a drag or the saved layout, before fitting. */
 export function requestedChatWidthPx(): number {
   const preview = resizePreview("split");
-  const px =
-    preview == null || preview === PANE_HIDDEN_PX ? preferredChatWidthPx() : preview;
-  return px;
+  return preview == null || preview === PANE_HIDDEN_PX
+    ? preferredChatWidthPx()
+    : preview;
 }
 
 /** Conversation width to render; the stage takes the rest of the host. */

@@ -260,13 +260,7 @@ describe("resize measurement", () => {
     expect(handle).toContain("new ResizeObserver(syncAxis)");
   });
 
-  it("captures split host edges once per drag", () => {
-    const divider = read("components/shell/SplitDivider.tsx");
-    const widthFn =
-      /const chatWidthFromClientX[\s\S]*?\n  \};/.exec(divider)?.[0] ?? "";
-    expect(widthFn).not.toBe("");
-    expect(widthFn).not.toContain("getBoundingClientRect");
-  });
+
 });
 
 describe("split responsive authority", () => {
@@ -279,9 +273,9 @@ describe("split responsive authority", () => {
     expect(read("shell/layout-store.ts")).not.toMatch(/isSplitAvailable/);
   });
 
-  it("keeps the measured host width for action and drag time only", () => {
+  it("lets the split divider claim the viewport width as the sidebar yields", () => {
     expect(read("components/shell/shell-stage-placement.ts")).toMatch(/widenWindowBy\(stageChromeDeficitPx\(/);
-    expect(read("components/shell/Shell.tsx")).toMatch(/hostWidthPx=\{splitHostWidthPx\}/);
+    expect(read("components/shell/Shell.tsx")).toMatch(/availableWidthPx=\{layoutViewportWidthPx\}/);
   });
 });
 

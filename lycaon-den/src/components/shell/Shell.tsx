@@ -2029,7 +2029,6 @@ export function Shell(props: Props) {
         }}
         divider={
           <SplitDivider
-            hostWidthPx={splitHostWidthPx}
             availableWidthPx={layoutViewportWidthPx}
             chatWidthPx={publishedChatWidthPx}
             onBegin={() =>
