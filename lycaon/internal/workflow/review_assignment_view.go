@@ -3,18 +3,24 @@ package workflow
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"strconv"
 
 	"github.com/lycaon/lycaon/internal/reviewcoverage"
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
+func rejectReviewView(reason, field string) error {
+	return &tools.ToolReject{Code: "WORKFLOW_REVIEW_VIEW_INVALID", Data: map[string]any{"reason": reason, "field": field}}
+}
+
 // ReviewAssignmentsView exposes bounded review context through the coordination board.
 func ReviewAssignmentsView(ctx context.Context, m *RunManager, args map[string]any, tctx tools.ToolContext) (string, error) {
+	if m == nil || m.Store == nil || m.WorkerTasks == nil {
+		return "", rejectReviewView("review_unavailable", "review_view")
+	}
 	for _, key := range []string{"finding_id", "findings_after", "detail_level"} {
 		if args[key] != nil {
-			return "", &tools.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"tool": "pack_board", "field": key, "reason": "review view is exclusive"}}
+			return "", rejectReviewView("exclusive_view", key)
 		}
 	}
 	sessionID := tctx.SessionID
@@ -26,15 +32,21 @@ func ReviewAssignmentsView(ctx context.Context, m *RunManager, args map[string]a
 		return "", err
 	}
 	if run == nil {
-		return "", fmt.Errorf("no active workflow review")
+		return "", rejectReviewView("no_active_review", "review_view")
 	}
 	view, _ := args["review_view"].(string)
 	id, _ := args["assignment_id"].(string)
 	cursor, _ := args["cursor"].(string)
+	if view == "subject" && id == "" || view != "subject" && id != "" {
+		return "", rejectReviewView("subject_requires_assignment_id", "assignment_id")
+	}
+	if view == "summary" && cursor != "" {
+		return "", rejectReviewView("summary_has_no_cursor", "cursor")
+	}
 	var out any
 	if tctx.WorkerJobID != "" {
 		if view != "subject" || id != tctx.WorkerJobID {
-			return "", fmt.Errorf("worker review view requires its assigned subject")
+			return "", rejectReviewView("assigned_subject_only", "assignment_id")
 		}
 		tasks, err := m.WorkerTasks(ctx, run.ID)
 		if err != nil {
@@ -45,7 +57,7 @@ func ReviewAssignmentsView(ctx context.Context, m *RunManager, args map[string]a
 			allowed = allowed || task.ID == id && task.ChildSessionID == tctx.SessionID
 		}
 		if !allowed {
-			return "", fmt.Errorf("review assignment is not bound to this child")
+			return "", rejectReviewView("assignment_not_bound_to_child", "assignment_id")
 		}
 	}
 	switch view {
@@ -56,7 +68,7 @@ func ReviewAssignmentsView(ctx context.Context, m *RunManager, args map[string]a
 		}
 		phase, ok := manifest.PhaseByID(run.CurrentPhase)
 		if !ok || phase.ReviewLoop == nil {
-			return "", fmt.Errorf("current phase is not a review")
+			return "", rejectReviewView("phase_not_review", "review_view")
 		}
 		vars, err := m.Store.GetScaffoldVars(ctx, run.ID)
 		if err != nil {
@@ -76,7 +88,7 @@ func ReviewAssignmentsView(ctx context.Context, m *RunManager, args map[string]a
 			return "", err
 		}
 		for i := range questions {
-			questions[i].ReviewWorkID = questions[i].ID + "/review"
+			questions[i].ReviewWorkID = questionReviewWorkID(questions[i].ID)
 		}
 		tasks, err := m.WorkerTasks(ctx, run.ID)
 		if err != nil {
@@ -103,7 +115,7 @@ func ReviewAssignmentsView(ctx context.Context, m *RunManager, args map[string]a
 		}
 		rows := make([]map[string]any, 0, len(bindings))
 		for _, b := range bindings {
-			rows = append(rows, map[string]any{"assignment_id": b.ID, "work_id": b.WorkID, "agent": b.Agent, "purpose": b.Purpose, "revision": b.Subject.Facts.Revision, "predecessor_job_ids": b.PredecessorJobs})
+			rows = append(rows, map[string]any{"assignment_id": b.ID, "work_id": b.WorkID, "agent": b.Agent, "purpose": b.Purpose, "job_status": b.JobStatus, "revision": b.Subject.Facts.Revision, "predecessor_job_ids": b.PredecessorJobs})
 		}
 		next := ""
 		if len(bindings) == 50 {
@@ -116,23 +128,23 @@ func ReviewAssignmentsView(ctx context.Context, m *RunManager, args map[string]a
 			return "", err
 		}
 		if binding == nil || binding.RunID != run.ID {
-			return "", fmt.Errorf("review assignment unavailable in this run")
+			return "", rejectReviewView("assignment_unavailable", "assignment_id")
 		}
 		offset := 0
 		if cursor != "" {
 			offset, err = strconv.Atoi(cursor)
 			if err != nil || offset < 0 {
-				return "", fmt.Errorf("invalid subject cursor")
+				return "", rejectReviewView("invalid_cursor", "cursor")
 			}
 		}
 		page, next, err := reviewcoverage.Page(binding.Subject, offset, reviewcoverage.SubjectPageSize)
 		if err != nil {
-			return "", err
+			return "", rejectReviewView("invalid_cursor", "cursor")
 		}
 		facts := append(page.Facts.Obligations, page.Facts.Gaps...)
 		out = map[string]any{"assignment_id": id, "purpose": binding.Purpose, "coverage_required": binding.CoverageRequired, "revision": binding.Subject.Facts.Revision, "facts": facts, "candidate": page.Candidate, "next_cursor": next}
 	default:
-		return "", fmt.Errorf("unknown review view")
+		return "", rejectReviewView("unknown_view", "review_view")
 	}
 	raw, err := json.Marshal(out)
 	return string(raw), err

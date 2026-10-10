@@ -2,13 +2,14 @@ package worker
 
 import (
 	"context"
+	"errors"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
 func TestEnqueueReplaysSourceToolCallAndRejectsDifferentArguments(t *testing.T) {
@@ -81,13 +82,9 @@ func TestReviewJobInsertionFencesDuplicateReservations(t *testing.T) {
 	task := api.WorkerTask{ID: "first", ParentSessionID: "parent-1", ProjectID: testdbseed.DefaultProjectID, WorkspacePath: root, AgentType: "skeptic", Status: api.WorkerStatusPending, ExecutionTarget: api.ExecutionTargetLocal, Prompt: "Review the subject", Brief: "Review the subject", WorkflowRunID: "run", WorkflowPhase: "challenge", WorkflowWorkID: "review/skeptic"}
 	testutil.FailErr(t, "insert first reservation", store.InsertTask(t.Context(), task))
 	task.ID = "second"
-	rejected := tools.AsToolReject(store.InsertTask(t.Context(), task))
-	if rejected == nil || rejected.Data["action"] != "wait_for_work" {
-		t.Fatalf("duplicate reservation was admitted: %+v", rejected)
-	}
-	jobs, _ := rejected.Data["job_ids"].([]string)
-	if len(jobs) != 1 || jobs[0] != "first" {
-		t.Fatalf("missing active job identity: %+v", rejected.Data)
+	var active *ReviewAssignmentActiveError
+	if !errors.As(store.InsertTask(t.Context(), task), &active) || active.JobID != "first" {
+		t.Fatalf("duplicate reservation did not identify the active job: %+v", active)
 	}
 	_, err := database.ExecContext(t.Context(), "UPDATE worker_jobs SET status='canceled' WHERE id='first'")
 	testutil.FailErr(t, "cancel first review", err)

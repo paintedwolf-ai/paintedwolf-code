@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/workflow"
 	"path/filepath"
 	"strings"
 
@@ -42,6 +41,7 @@ import (
 	"github.com/lycaon/lycaon/internal/visualscreen"
 	"github.com/lycaon/lycaon/internal/webresearch"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/workflow"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 

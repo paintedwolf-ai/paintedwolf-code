@@ -13,15 +13,17 @@ VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO NOTHING;
 SELECT binding_json, subject_id FROM workflow_review_assignments WHERE id = ?;
 
 -- name: GetWorkflowReviewBinding :one
-SELECT a.binding_json, s.subject_json
+SELECT a.binding_json, s.subject_json, CAST(COALESCE(j.status, 'reserved') AS TEXT) AS job_status
 FROM workflow_review_assignments a
 JOIN workflow_review_subjects s ON s.id = a.subject_id
+LEFT JOIN worker_jobs j ON j.id = a.id
 WHERE a.id = ?;
 
 -- name: ListWorkflowReviewBindings :many
-SELECT a.binding_json, s.subject_json
+SELECT a.binding_json, s.subject_json, CAST(COALESCE(j.status, 'reserved') AS TEXT) AS job_status
 FROM workflow_review_assignments a
 JOIN workflow_review_subjects s ON s.id = a.subject_id
+LEFT JOIN worker_jobs j ON j.id = a.id
 WHERE a.run_id = ? AND a.phase = ? AND a.id > ?
 ORDER BY a.id LIMIT ?;
 

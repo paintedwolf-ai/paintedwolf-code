@@ -22,12 +22,12 @@ func checkQuestionClosure(def workflowdef.ReviewLoopDef, claims []VerdictClaim, 
 			return rejectReviewQuestion("claim_outcome_required", q.ID)
 		}
 		completed, active := questionAttempts(tasks, phase, q.ID)
-		_, reviewing := questionAttempts(tasks, phase, q.ID+"/review")
+		_, reviewing := questionAttempts(tasks, phase, questionReviewWorkID(q.ID))
 		if active || reviewing {
 			rejected := tools.AsToolReject(rejectReviewQuestion("work_active", q.ID))
 			var jobs []string
 			for _, task := range tasks {
-				if task.WorkflowPhase == phase && (task.WorkflowWorkID == q.ID || task.WorkflowWorkID == q.ID+"/review") && !task.Status.IsTerminal() {
+				if task.WorkflowPhase == phase && (task.WorkflowWorkID == q.ID || task.WorkflowWorkID == questionReviewWorkID(q.ID)) && !task.Status.IsTerminal() {
 					jobs = append(jobs, task.ID)
 				}
 			}
@@ -91,7 +91,7 @@ func (m *RunManager) assertQuestionTask(ctx context.Context, run *api.WorkflowRu
 		return err
 	}
 	if !slices.ContainsFunc(questions, func(q reviewQuestionWork) bool {
-		return q.ID == task.WorkflowWorkID || q.ID+"/review" == task.WorkflowWorkID
+		return q.ID == task.WorkflowWorkID || questionReviewWorkID(q.ID) == task.WorkflowWorkID
 	}) {
 		return rejectFanoutTask("unknown_review_question", task)
 	}
@@ -111,6 +111,9 @@ func (m *RunManager) assertQuestionTask(ctx context.Context, run *api.WorkflowRu
 		}
 	}
 	if strings.HasSuffix(task.WorkflowWorkID, "/review") {
+		if task.ChildSessionID != "" || task.EffectiveScope().BaseOverlayID != "" {
+			return &tools.ToolReject{Code: "TASK_REVIEW_FRESH_WORKSPACE_REQUIRED", Data: map[string]any{"workflow_work_id": task.WorkflowWorkID}}
+		}
 		if !slices.Contains(def.RequiredAgents, task.AgentType) {
 			return rejectFanoutTask("review_question_requires_declared_reviewer", task)
 		}
@@ -159,7 +162,7 @@ func questionReviewed(tasks []api.WorkerTask, phase, id string, agents []string)
 	for _, agent := range agents {
 		found := false
 		for _, task := range tasks {
-			if task.WorkflowPhase == phase && task.WorkflowWorkID == id+"/review" && task.AgentType == agent && api.WorkerReviewSucceeded(task) && len(investigations) > 0 && !slices.ContainsFunc(investigations, func(job string) bool { return !slices.Contains(task.AfterWorkers, job) }) {
+			if task.WorkflowPhase == phase && task.WorkflowWorkID == questionReviewWorkID(id) && task.AgentType == agent && api.WorkerReviewSucceeded(task) && len(investigations) > 0 && !slices.ContainsFunc(investigations, func(job string) bool { return !slices.Contains(task.AfterWorkers, job) }) {
 				found = true
 			}
 		}
@@ -173,11 +176,11 @@ func questionReviewed(tasks []api.WorkerTask, phase, id string, agents []string)
 func questionBlocked(tasks []api.WorkerTask, phase, id string) bool {
 	latest := map[string]api.WorkerTask{}
 	for _, task := range tasks {
-		if task.WorkflowPhase != phase || (task.WorkflowWorkID != id && task.WorkflowWorkID != id+"/review") {
+		if task.WorkflowPhase != phase || (task.WorkflowWorkID != id && task.WorkflowWorkID != questionReviewWorkID(id)) {
 			continue
 		}
 		key := task.WorkflowWorkID
-		if key == id+"/review" {
+		if key == questionReviewWorkID(id) {
 			key += "/" + task.AgentType
 		}
 		prior, exists := latest[key]
@@ -197,7 +200,7 @@ func questionCoverageFact(q reviewQuestionWork, tasks []api.WorkerTask, phase wo
 	completed, active := questionAttempts(tasks, phase.ID, q.ID)
 	fact := reviewcoverage.Fact{ID: q.ID, Kind: "review_question", Subject: q.ClaimID, Question: q.MissingFact, Obligations: q.Obligations, InvestigationAttempts: completed, FollowupLimit: phase.ReviewLoop.FollowupAttempts, InvestigationActive: active, ReviewRequired: completed > 0 && !questionReviewed(tasks, phase.ID, q.ID, phase.ReviewLoop.RequiredAgents)}
 	for _, task := range tasks {
-		if task.WorkflowPhase == phase.ID && (task.WorkflowWorkID == q.ID || task.WorkflowWorkID == q.ID+"/review") {
+		if task.WorkflowPhase == phase.ID && (task.WorkflowWorkID == q.ID || task.WorkflowWorkID == questionReviewWorkID(q.ID)) {
 			fact.Tasks = append(fact.Tasks, task.ID)
 		}
 	}

@@ -3,9 +3,12 @@ package workflow
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/conditions"
+	"github.com/lycaon/lycaon/internal/evidence"
+	"github.com/lycaon/lycaon/internal/inspector"
 	"github.com/lycaon/lycaon/internal/reviewcoverage"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -252,11 +255,11 @@ func TestFocusedAssignmentBindsSuccessfulInvestigationAndPreservesBase(t *testin
 	investigation.Status = api.WorkerStatusComplete
 	investigation.Result = &api.WorkerResult{CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"}}
 	tasks = append(tasks, investigation)
-	focused := api.WorkerTask{ID: "focused", WorkflowRunID: run.ID, WorkflowPhase: run.CurrentPhase, WorkflowWorkID: "question/c1/review", AgentType: "auditor"}
+	focused := api.WorkerTask{AfterWorkers: []string{"extra", "investigation"}, ID: "focused", WorkflowRunID: run.ID, WorkflowPhase: run.CurrentPhase, WorkflowWorkID: "question/c1/review", AgentType: "auditor"}
 	testutil.FailErr(t, "bind focused review", service.bind(t.Context(), run, &focused))
 	binding, err := mgr.TaskCoverageAssignment(t.Context(), &focused)
 	testutil.FailErr(t, "read focused review", err)
-	if binding.Purpose != reviewcoverage.QuestionReview || len(binding.InvestigationJobs) != 1 || binding.InvestigationJobs[0] != investigation.ID || len(binding.PredecessorJobs) != 1 || binding.PredecessorJobs[0] != base.ID || len(focused.AfterWorkers) != 1 {
+	if binding.Purpose != reviewcoverage.QuestionReview || len(binding.InvestigationJobs) != 1 || binding.InvestigationJobs[0] != investigation.ID || len(binding.PredecessorJobs) != 1 || binding.PredecessorJobs[0] != base.ID || len(focused.AfterWorkers) != 2 {
 		t.Fatalf("lost explicit dependencies: %+v", binding)
 	}
 	focused.Status = api.WorkerStatusComplete
@@ -266,5 +269,141 @@ func TestFocusedAssignmentBindsSuccessfulInvestigationAndPreservesBase(t *testin
 	testutil.FailErr(t, "load completed reviews", err)
 	if len(completed) != 2 || !applicableReview(completed[0], completed, baseBinding.Subject) {
 		t.Fatal("focused work displaced the independent assessment")
+	}
+}
+
+type beforeVerdictCommitStore struct {
+	RunStore
+	before func()
+}
+
+func (s beforeVerdictCommitStore) prepareVerdictOperation(ctx context.Context, op verdictOperation) (*verdictOperation, bool, error) {
+	stored, created, err := s.RunStore.prepareVerdictOperation(ctx, op)
+	if err == nil {
+		s.before()
+	}
+	return stored, created, err
+}
+
+type failingReviewEvidence struct {
+	inspector.EvidenceStore
+	fail     bool
+	appended int
+}
+
+func (s *failingReviewEvidence) Append(ctx context.Context, dir string, record evidence.Record) error {
+	if s.fail {
+		return errors.New("injected publication failure")
+	}
+	s.appended++
+	return s.EvidenceStore.Append(ctx, dir, record)
+}
+
+func TestVerdictAcceptancePrecedesEvidenceAndRecoveryDoesNotRevalidate(t *testing.T) {
+	for _, race := range []bool{true, false} {
+		t.Run(map[bool]string{true: "concurrent input", false: "publication recovery"}[race], func(t *testing.T) {
+			mgr, run, manifest := reviewAssignmentFixture(t)
+			task := api.WorkerTask{ID: "review", WorkflowRunID: run.ID, WorkflowPhase: run.CurrentPhase, AgentType: "auditor"}
+			testutil.FailErr(t, "bind review", (reviewAssignments{mgr}).bind(t.Context(), run, &task))
+			binding, err := mgr.TaskCoverageAssignment(t.Context(), &task)
+			testutil.FailErr(t, "read binding", err)
+			task.Status = api.WorkerStatusComplete
+			task.Result = &api.WorkerResult{CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete", CoverageReview: &api.CoverageReview{Revision: binding.Subject.Facts.Revision, Assessments: []api.CoverageAssessment{}}}}
+			mgr.WorkerTasks = func(context.Context, string) ([]api.WorkerTask, error) { return []api.WorkerTask{task}, nil }
+			facts, err := mgr.CoverageFacts(t.Context(), run, manifest)
+			testutil.FailErr(t, "read facts", err)
+			dir := t.TempDir()
+			ledger := &failingReviewEvidence{EvidenceStore: inspector.NewJSONLStore(inspector.DefaultEvidenceDir), fail: !race}
+			mgr.EvidenceStore = ledger
+			mgr.EvidenceProjectDir = func(context.Context, string) (string, error) { return dir, nil }
+			store := mgr.Store.(*SQLStore)
+			if race {
+				mgr.Store = beforeVerdictCommitStore{RunStore: store, before: func() {
+					_, err := store.db.ExecContext(t.Context(), "UPDATE workflow_runs SET review_revision=review_revision+1 WHERE id=?", run.ID)
+					testutil.FailErr(t, "race input", err)
+				}}
+			}
+			reg := catalogRegistry(t)
+			testutil.FailErr(t, "register submit", RegisterSubmitVerdictTool(reg, mgr))
+			tctx := toolContext("coordinator", "sess-1", dir)
+			tctx.ToolCallID = "fenced-verdict"
+			tctx.Out = &tools.ToolInvocationOut{}
+			args := map[string]any{"verdict": map[string]any{"verdict": "SELECTED", "coverage": map[string]any{"revision": facts.Revision, "assessments": []any{}}}, "cited_evidence": []any{map[string]any{"handle": "read#1"}}}
+			_, err = reg.Run(t.Context(), "submit_verdict", args, tctx)
+			op, found, readErr := store.getVerdictOperation(t.Context(), tctx.ToolCallID)
+			testutil.FailErr(t, "read journal", readErr)
+			if !found {
+				t.Fatalf("no operation: %v", err)
+			}
+			if race {
+				rejected := tools.AsToolReject(err)
+				if rejected == nil || rejected.Code != ReviewContextChangedCode || rejected.Data["review_action"] != "refresh_context" || tctx.Out.Facts.Resolution() != api.ToolResultOutcomeRejected {
+					t.Fatalf("missing structured fence feedback: %v", err)
+				}
+				if op.Status != "diverged" || ledger.appended != 0 {
+					t.Fatalf("unaccepted evidence escaped: %+v / %d", op, ledger.appended)
+				}
+				mgr.Store = store
+				testutil.FailErr(t, "recover rejected operation", mgr.RecoverVerdictOperations(t.Context()))
+				pending, err := store.pendingVerdictOperations(t.Context())
+				testutil.FailErr(t, "read pending", err)
+				if len(pending) != 0 || ledger.appended != 0 {
+					t.Fatal("fenced verdict replayed")
+				}
+			} else {
+				if err == nil || op.Status != "committed" || op.EvidencePublished {
+					t.Fatalf("publication failure lost committed receipt: %+v / %v", op, err)
+				}
+				ledger.fail = false
+				mgr.WorkerTasks = func(context.Context, string) ([]api.WorkerTask, error) {
+					return nil, errors.New("recovery must not revalidate current inputs")
+				}
+				testutil.FailErr(t, "recover publication", mgr.RecoverVerdictOperations(t.Context()))
+				testutil.FailErr(t, "repeat recovery", mgr.RecoverVerdictOperations(t.Context()))
+				op, _, err = store.getVerdictOperation(t.Context(), tctx.ToolCallID)
+				testutil.FailErr(t, "read published receipt", err)
+				if !op.EvidencePublished || ledger.appended != 1 {
+					t.Fatalf("publication replay mismatch: %+v / %d", op, ledger.appended)
+				}
+			}
+		})
+	}
+}
+
+func TestAdHocWorkersDoNotAcquireReviewDedupe(t *testing.T) {
+	mgr, run, _ := reviewAssignmentFixture(t)
+	prior := api.WorkerTask{ID: "one", WorkflowRunID: run.ID, WorkflowPhase: run.CurrentPhase, AgentType: "repo-researcher", Status: api.WorkerStatusRunning}
+	mgr.WorkerTasks = func(context.Context, string) ([]api.WorkerTask, error) { return []api.WorkerTask{prior}, nil }
+	next := prior
+	next.ID = "two"
+	testutil.FailErr(t, "allow independent ad hoc worker", mgr.AssertWorkerTask(t.Context(), &next))
+}
+
+func TestReviewViewValidatesSelectorsAndMarksReservations(t *testing.T) {
+	mgr, run, _ := reviewAssignmentFixture(t)
+	task := api.WorkerTask{ID: "reserved", WorkflowRunID: run.ID, WorkflowPhase: run.CurrentPhase, AgentType: "auditor"}
+	testutil.FailErr(t, "reserve review", (reviewAssignments{mgr}).bind(t.Context(), run, &task))
+	tctx := tools.ToolContext{SessionID: run.SessionID}
+	raw, err := ReviewAssignmentsView(t.Context(), mgr, map[string]any{"review_view": "assignments"}, tctx)
+	testutil.FailErr(t, "list reservations", err)
+	var page struct {
+		Assignments []struct {
+			Status string `json:"job_status"`
+		} `json:"assignments"`
+	}
+	testutil.FailErr(t, "decode assignments", json.Unmarshal([]byte(raw), &page))
+	if len(page.Assignments) != 1 || page.Assignments[0].Status != "reserved" {
+		t.Fatalf("orphan reservation shown as job: %s", raw)
+	}
+	for _, args := range []map[string]any{{"cursor": "50"}, {"review_view": "subject"}, {"review_view": "summary", "assignment_id": "reserved"}, {"review_view": "summary", "cursor": "50"}, {"review_view": "subject", "assignment_id": "reserved", "cursor": "999"}, {"review_view": "assignments", "finding_id": 1}} {
+		_, err := ReviewAssignmentsView(t.Context(), mgr, args, tctx)
+		if rejected := tools.AsToolReject(err); rejected == nil || rejected.Code != "WORKFLOW_REVIEW_VIEW_INVALID" {
+			t.Fatalf("selector refusal not registered: %v", err)
+		}
+	}
+	mgr.WorkerTasks = nil
+	_, err = ReviewAssignmentsView(t.Context(), mgr, map[string]any{"review_view": "summary"}, tctx)
+	if tools.AsToolReject(err) == nil {
+		t.Fatalf("missing ledger not refused: %v", err)
 	}
 }

@@ -73,6 +73,7 @@ func (s *SQLStore) ReviewBinding(ctx context.Context, id string) (*reviewcoverag
 	if err := json.Unmarshal([]byte(row.SubjectJson), &binding.Subject); err != nil {
 		return nil, err
 	}
+	binding.JobStatus = row.JobStatus
 	return &binding, nil
 }
 
@@ -90,6 +91,7 @@ func (s *SQLStore) ReviewBindings(ctx context.Context, runID, phase, after strin
 		if err := json.Unmarshal([]byte(row.SubjectJson), &binding.Subject); err != nil {
 			return nil, err
 		}
+		binding.JobStatus = row.JobStatus
 		out = append(out, binding)
 	}
 	return out, nil
@@ -160,10 +162,16 @@ func (r reviewAssignments) retainAccepted(ctx context.Context, active *api.Workf
 	if err != nil {
 		return reviewValidation{}, err
 	}
-	facts, err := r.runs.CoverageFacts(ctx, active, manifest)
+	inputRevision, err := r.runs.Store.ReviewInputRevision(ctx, active.ID)
 	if err != nil {
 		return reviewValidation{}, err
 	}
+	snapshot := (ReviewRepairs{r.runs}).captureSnapshot(ctx, active, manifest, validated.Vars, nil)
+	if len(snapshot.Unavailable) > 0 {
+		return reviewValidation{}, fmt.Errorf("accepted review inputs unavailable: %v", snapshot.Unavailable)
+	}
+	facts := BuildCoverageFacts(manifest, validated.Vars, snapshot.Workers, snapshot.Scans)
+	facts.InputRevision = inputRevision
 	review, err := ParseVerdictCoverage(rl, verdict)
 	if err != nil {
 		return reviewValidation{}, err
@@ -172,10 +180,6 @@ func (r reviewAssignments) retainAccepted(ctx context.Context, active *api.Workf
 		validated.Outcome.Valid = false
 		validated.Outcome.CoverageIssue = &tools.ToolReject{Code: ReviewContextChangedCode, Data: map[string]any{"action": "refresh_context", "revision": facts.Revision}}
 	} else {
-		snapshot := (ReviewRepairs{r.runs}).captureSnapshot(ctx, active, manifest, validated.Vars, nil)
-		if len(snapshot.Unavailable) > 0 {
-			return reviewValidation{}, fmt.Errorf("accepted review inputs unavailable: %v", snapshot.Unavailable)
-		}
 		accepted := AcceptedReviewInputs{Facts: facts, Snapshot: snapshot}
 		for _, task := range snapshot.Workers {
 			if task.WorkflowPhase != active.CurrentPhase || !api.WorkerReviewSucceeded(task) {

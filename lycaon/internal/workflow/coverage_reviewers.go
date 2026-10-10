@@ -21,7 +21,7 @@ func (r reviewAssignments) subject(ctx context.Context, run *api.WorkflowRun, ma
 	return r.subjectFromFacts(ctx, run, manifest, def, facts)
 }
 
-// assignCoverage seals the subject an independent reviewer assesses: the
+// subjectFromFacts seals the subject an independent reviewer assesses: the
 // candidate review over the facts minus gaps other gates own. Reviewer
 // assessments must carry its revision.
 func (r reviewAssignments) subjectFromFacts(ctx context.Context, run *api.WorkflowRun, manifest workflowdef.Manifest, def workflowdef.ReviewLoopDef, facts reviewcoverage.Facts) (*reviewcoverage.Assignment, error) {

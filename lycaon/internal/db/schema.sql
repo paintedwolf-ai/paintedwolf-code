@@ -1005,12 +1005,13 @@ CREATE TABLE IF NOT EXISTS workflow_verdict_operations (
     response_json TEXT CHECK (response_json = '' OR json_valid(response_json)),
     error TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+    evidence_published INTEGER NOT NULL DEFAULT 0 CHECK (evidence_published IN (0, 1))
 ) STRICT;
 
 CREATE INDEX IF NOT EXISTS idx_workflow_verdict_operations_recovery
     ON workflow_verdict_operations(status, created_at, tool_call_id)
-    WHERE status IN ('prepared', 'evidence_applied');
+    WHERE status IN ('prepared', 'evidence_applied') OR (status = 'committed' AND evidence_published = 0);
 
 -- Prompt admission receipts independent of provider execution.
 -- Recovery resumes user receipts and interrupts host receipts.

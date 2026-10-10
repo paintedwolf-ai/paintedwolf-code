@@ -20,16 +20,17 @@ type VerdictSubmission struct {
 }
 
 type verdictOperation struct {
-	ToolCallID       string
-	RunID            string
-	SourceRevision   int64
-	Phase            string
-	InputDigest      string
-	EvidenceRecordID string
-	EvidenceJSON     string
-	Status           string
-	ResponseJSON     string
-	Error            string
+	ToolCallID        string
+	RunID             string
+	SourceRevision    int64
+	Phase             string
+	InputDigest       string
+	EvidenceRecordID  string
+	EvidenceJSON      string
+	EvidencePublished bool
+	Status            string
+	ResponseJSON      string
+	Error             string
 	// CreatedAt is when the verdict was submitted; recovery replays keep it.
 	CreatedAt time.Time
 }
@@ -105,8 +106,8 @@ func (s *SQLStore) rebaseVerdictOperation(ctx context.Context, toolCallID string
 	return err
 }
 
-func (s *SQLStore) markVerdictEvidenceApplied(ctx context.Context, toolCallID string) error {
-	return s.queries.MarkWorkflowVerdictEvidenceApplied(ctx, db.MarkWorkflowVerdictEvidenceAppliedParams{
+func (s *SQLStore) markVerdictEvidencePublished(ctx context.Context, toolCallID string) error {
+	return s.queries.MarkWorkflowVerdictEvidencePublished(ctx, db.MarkWorkflowVerdictEvidencePublishedParams{
 		UpdatedAt: db.FormatTime(time.Now().UTC()), ToolCallID: toolCallID,
 	})
 }
@@ -136,7 +137,7 @@ func verdictOperationFromRow(row db.WorkflowVerdictOperations) (verdictOperation
 		ToolCallID: row.ToolCallID, RunID: row.RunID, SourceRevision: row.SourceRevision,
 		Phase: row.Phase, InputDigest: row.InputDigest, EvidenceRecordID: row.EvidenceRecordID,
 		EvidenceJSON: row.EvidenceJson, Status: row.Status, ResponseJSON: row.ResponseJson.String,
-		Error: row.Error, CreatedAt: createdAt,
+		Error: row.Error, CreatedAt: createdAt, EvidencePublished: row.EvidencePublished != 0,
 	}, nil
 }
 
@@ -231,4 +232,37 @@ func (s *SQLStore) commitVerdictOperation(ctx context.Context, op verdictOperati
 		s.outbox.Notify()
 	}
 	return nil
+}
+
+// publishVerdictEvidence is an idempotent outbox delivery of an accepted receipt.
+func publishVerdictEvidence(ctx context.Context, m *RunManager, op verdictOperation, outcome ReviewLoopVerdictOutcome) error {
+	if op.EvidencePublished {
+		return nil
+	}
+	if outcome.Valid {
+		var input VerdictSubmission
+		if err := json.Unmarshal([]byte(op.EvidenceJSON), &input); err != nil {
+			return err
+		}
+		run, err := m.Store.Get(ctx, op.RunID)
+		if err != nil {
+			return err
+		}
+		manifest, err := m.manifestForRun(ctx, run)
+		if err != nil {
+			return err
+		}
+		phase, ok := manifest.PhaseByID(op.Phase)
+		if !ok || phase.ReviewLoop == nil {
+			return fmt.Errorf("committed review phase unavailable: %s", op.Phase)
+		}
+		cited := allVerdictCitations(*phase.ReviewLoop, input.Verdict, input.Cited)
+		if outcome.Grounding != nil && len(outcome.Grounding.CitedEvidence) > 0 {
+			cited = outcome.Grounding.CitedEvidence
+		}
+		if err := m.persistReviewLoopEvidence(ctx, input.SessionID, run, *phase.ReviewLoop, op.Phase, input.Verdict, cited, input.CitedURLs, op.EvidenceRecordID, op.CreatedAt, outcome.Attempt); err != nil {
+			return err
+		}
+	}
+	return m.Store.markVerdictEvidencePublished(ctx, op.ToolCallID)
 }

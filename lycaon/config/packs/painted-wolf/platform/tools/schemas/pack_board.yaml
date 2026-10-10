@@ -25,29 +25,3 @@ schema:
       enum: [status, compact, full, forensic]
       description: "status: summary + board only (~20 lines). compact (default): slim roster with changed_paths. full: roster + worker briefs + extra board lines. forensic: adds full job records with baselines for host debugging."
   additionalProperties: false
-
-  allOf:
-    - if:
-        required: [review_view]
-      then:
-        not:
-          anyOf:
-            - required: [detail_level]
-            - required: [finding_id]
-            - required: [findings_after]
-    - if:
-        properties:
-          review_view: {const: subject}
-        required: [review_view]
-      then:
-        required: [assignment_id]
-    - if:
-        required: [assignment_id]
-      then:
-        properties:
-          review_view: {const: subject}
-        required: [review_view]
-    - if:
-        required: [cursor]
-      then:
-        required: [review_view]

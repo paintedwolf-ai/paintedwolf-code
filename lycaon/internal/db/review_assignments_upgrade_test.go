@@ -20,8 +20,11 @@ func TestReviewAssignmentMigrationPreservesBaseline(t *testing.T) {
 	schema, err := schemaFS.ReadFile("schema.sql")
 	testutil.FailErr(t, "read schema", err)
 	_, additions, _ := strings.Cut(string(reviewAssignmentsMigration), "\n")
+	additions, _, _ = strings.Cut(additions, "\nALTER TABLE workflow_verdict_operations")
 	old := strings.TrimSuffix(string(schema), additions)
 	old = strings.Replace(old, "    review_revision INTEGER NOT NULL DEFAULT 0 CHECK (review_revision >= 0),\n", "", 1)
+	old = strings.Replace(old, "    updated_at TEXT NOT NULL,\n    evidence_published INTEGER NOT NULL DEFAULT 0 CHECK (evidence_published IN (0, 1))\n", "    updated_at TEXT NOT NULL\n", 1)
+	old = strings.Replace(old, " OR (status = 'committed' AND evidence_published = 0)", "", 1)
 	if old == string(schema) {
 		t.Fatal("migration is not appended to fresh schema")
 	}

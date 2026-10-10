@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -193,6 +194,10 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 		task.SourceArgsDigest = sourceDigest
 		enqueuedID, err := deps.Queue.Enqueue(ctx, task)
 		if err != nil {
+			var active *ReviewAssignmentActiveError
+			if errors.As(err, &active) {
+				return "", &tools.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"tool": "task", "field": "workflow_work_id", "reason": "review_assignment_already_active", "action": "wait_for_work", "job_ids": []string{active.JobID}, "workflow_work_id": task.WorkflowWorkID}}
+			}
 			return "", err
 		}
 		task.ID = enqueuedID

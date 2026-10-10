@@ -111,11 +111,13 @@ func (r reviewAssignments) validate(ctx context.Context, run *api.WorkflowRun, d
 		}
 		agents, _ = effectiveReviewAgents(run.CurrentPhase, def, vars)
 	}
+	assessed := map[string][]assessedAssignment{}
 	for _, agent := range agents {
 		completed, active, err := r.completed(ctx, run.ID, run.CurrentPhase, agent, tasks)
 		if err != nil {
 			return nil, err
 		}
+		assessed[agent] = completed
 		accepted := slices.ContainsFunc(completed, func(a assessedAssignment) bool {
 			return a.binding.Purpose == reviewcoverage.IndependentReview && applicableReview(a, completed, current)
 		})
@@ -141,22 +143,18 @@ func (r reviewAssignments) validate(ctx context.Context, run *api.WorkflowRun, d
 			continue
 		}
 		for _, agent := range def.CoverageReviewers {
-			valid, err := r.questionCurrent(ctx, run, def, tasks, q.ID, agent)
-			if err != nil {
-				return nil, err
-			}
-			if !valid {
+			if !questionSubjectCurrent(assessed[agent], current, q.ID) {
 				action := "dispatch_work"
 				var active []string
 				for _, task := range tasks {
-					if task.WorkflowPhase == run.CurrentPhase && task.AgentType == agent && task.WorkflowWorkID == q.ID+"/review" && !task.Status.IsTerminal() {
+					if task.WorkflowPhase == run.CurrentPhase && task.AgentType == agent && task.WorkflowWorkID == questionReviewWorkID(q.ID) && !task.Status.IsTerminal() {
 						active = append(active, task.ID)
 					}
 				}
 				if len(active) > 0 {
 					action = "wait_for_work"
 				}
-				return &tools.ToolReject{Code: ReviewRequiredCode, Data: map[string]any{"action": action, "work_ids": []string{q.ID + "/review"}, "agent": agent, "job_ids": active}}, nil
+				return &tools.ToolReject{Code: ReviewRequiredCode, Data: map[string]any{"action": action, "work_ids": []string{questionReviewWorkID(q.ID)}, "agent": agent, "job_ids": active}}, nil
 			}
 		}
 	}
@@ -185,14 +183,18 @@ func (r reviewAssignments) questionCurrent(ctx context.Context, run *api.Workflo
 	if err != nil {
 		return false, err
 	}
+	return questionSubjectCurrent(completed, *current, question), nil
+}
+
+func questionSubjectCurrent(completed []assessedAssignment, current reviewcoverage.Assignment, question string) bool {
 	for _, a := range completed {
 		if a.binding.Purpose != reviewcoverage.QuestionReview || a.binding.QuestionID != question {
 			continue
 		}
-		scoped := reviewcoverage.Scoped(*current, reviewObligationIDs(a.binding.Subject.Facts), a.binding.ClaimIDs...)
+		scoped := reviewcoverage.Scoped(current, reviewObligationIDs(a.binding.Subject.Facts), a.binding.ClaimIDs...)
 		if len(reviewcoverage.ChangedItems(a.binding.Subject, scoped)) == 0 {
-			return true, nil
+			return true
 		}
 	}
-	return false, nil
+	return false
 }

@@ -2,6 +2,7 @@ package reviewcoverage
 
 import (
 	"encoding/json"
+
 	"github.com/lycaon/lycaon/pkg/api"
 )
 

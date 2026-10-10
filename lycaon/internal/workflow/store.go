@@ -2,8 +2,8 @@ package workflow
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/reviewcoverage"
 
+	"github.com/lycaon/lycaon/internal/reviewcoverage"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -44,7 +44,7 @@ type RunStore interface {
 	BlueprintApprovalMatches(ctx context.Context, projectID, path, runID string, revision int64, digest string) (bool, error)
 	getVerdictOperation(ctx context.Context, toolCallID string) (*verdictOperation, bool, error)
 	prepareVerdictOperation(ctx context.Context, op verdictOperation) (*verdictOperation, bool, error)
-	markVerdictEvidenceApplied(ctx context.Context, toolCallID string) error
+	markVerdictEvidencePublished(ctx context.Context, toolCallID string) error
 	pendingVerdictOperations(ctx context.Context) ([]verdictOperation, error)
 	commitVerdictOperation(ctx context.Context, op verdictOperation, run *api.WorkflowRun, projectDir string, vars map[string]any, outcome ReviewLoopVerdictOutcome) error
 	resolveVerdictOperationDiverged(ctx context.Context, toolCallID, reason string) error

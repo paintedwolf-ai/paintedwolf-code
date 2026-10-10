@@ -233,7 +233,7 @@ func settleScanObligationAndAdvance(t *testing.T, h *Harness, ctx context.Contex
 func appendSucceededReviewAgent(t *testing.T, h *Harness, ctx context.Context, sess *api.Session, agent, workID string) string {
 	t.Helper()
 	task := api.WorkerTask{
-		ParentSessionID: sess.ID, AgentType: agent, Prompt: "review " + agent, Brief: "review " + agent,
+		ID: uuid.NewString(), ParentSessionID: sess.ID, AgentType: agent, Prompt: "review " + agent, Brief: "review " + agent,
 		Status: api.WorkerStatusPending, SpawnReason: api.SpawnReasonHumanRequest, Scope: &api.TaskScope{Mode: "read"},
 	}
 	testutil.FailErr(t, "bind reviewer "+agent, h.WorkflowMgr.BindWorkflowTask(ctx, tools.ToolContext{SessionID: sess.ID}, workID, &task))
@@ -310,7 +310,7 @@ func completeQueuedFixtureWork(t *testing.T, h *Harness, ctx context.Context, pr
 		if claimed.WorkflowRunID != "" {
 			assignment, err := h.WorkflowMgr.TaskCoverageAssignment(ctx, claimed)
 			testutil.FailErr(t, "load fixture coverage assignment", err)
-			if assignment != nil {
+			if assignment != nil && assignment.CoverageRequired {
 				report.CoverageReview = coverageReviewFixture(assignment.Subject.Facts)
 			}
 		}
