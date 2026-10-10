@@ -38,14 +38,22 @@ func TestRunStopServiceRoutesCancelThroughSessionAppend(t *testing.T) {
 	body, err := os.ReadFile(path)
 	testutil.FailErr(t, "read run_stop_service", err)
 	text := string(body)
-	for _, needle := range []string{
-		"AppendWorkerCancellation",
-		"AppendWorkerHold",
-		"CancelActiveByWorkflowRunID",
-	} {
+	for _, needle := range []string{"s.Cancellations.Append", "s.Holds.Hold", "CancelActiveByWorkflowRunID"} {
 		if !strings.Contains(text, needle) {
 			t.Fatalf("run_stop_service.go must route stop through %s", needle)
 		}
+	}
+	bindings := contractcheck.ReadRepoFile(t, root, "lycaon/internal/app/delegations/build.go")
+	for _, needle := range []string{"Holds:         deps.Sessions.Manager.Workers.Cards", "Cancellations: deps.Sessions.Manager.Workers.Cancellations"} {
+		if !strings.Contains(bindings, needle) {
+			t.Fatalf("run stop must bind the actual session outcome owner: %s", needle)
+		}
+	}
+	cancellations := contractcheck.ReadRepoFile(t, root, "lycaon/internal/session/workeroutcomes/cancellations.go")
+	cards := contractcheck.ReadRepoFile(t, root, "lycaon/internal/session/workerresults/cards.go")
+	holds := contractcheck.ReadRepoFile(t, root, "lycaon/internal/session/workerresults/hold.go")
+	if !strings.Contains(cancellations, "m.cards.Project") || !strings.Contains(holds, "m.Project") || !strings.Contains(cards, "m.transcript.Append") || !strings.Contains(cards, "m.transcript.Update") {
+		t.Fatal("worker outcomes must reach the authoritative session transcript")
 	}
 }
 
