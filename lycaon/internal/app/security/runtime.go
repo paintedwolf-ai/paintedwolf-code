@@ -22,7 +22,7 @@ type Runtime struct {
 	spawnAgents            func(context.Context, string) []string
 	Sockets                *approvalstate.SocketCapabilityRuntime
 	DirectIP               *approvalstate.DirectIPCapabilityRuntime
-	Detections             Detections
+	Detections             *Detections
 	Presence               *presence.Broker
 	Unlocks                *presence.Unlocks
 	Spans                  *secretspan.Screener
@@ -44,7 +44,7 @@ type Runtime struct {
 }
 
 func New(ctx context.Context, database *db.Store, sessions *store.SQL, projects *project.SQLRegistry, trust *settings.TrustSurfacesStore) *Runtime {
-	return &Runtime{ctx: ctx, database: database, sessions: sessions, projects: projects, trust: trust}
+	return &Runtime{ctx: ctx, database: database, sessions: sessions, projects: projects, trust: trust, Detections: &Detections{}}
 }
 func (b *Runtime) BindRemember(set func(secretmatch.RememberFunc)) {
 	b.remember = set
