@@ -43,7 +43,7 @@ func TestMCPCorruptToolPinsIsolatesUnaffectedProviders(t *testing.T) {
 	})
 	testutil.FailErr(t, "NewRuntime", err)
 	reg.Tools.SetToolRegistry(toolReg)
-	t.Cleanup(func() { _ = reg.Close() })
+	t.Cleanup(func() { _ = reg.Close(t.Context()) })
 	testutil.FailErr(t, "load", reg.Catalog.Load(context.Background()))
 
 	// local-b never consults pins (stdio, not pin-tracked) and must still

@@ -145,12 +145,12 @@ var customBuilders = map[string]func(*Registry){
 }
 
 // RegisterCatalogProviders registers every catalog provider.
-func RegisterCatalogProviders(r *Registry) error {
+func RegisterCatalogProviders(ctx context.Context, r *Registry) error {
 	if r == nil || r.catalog == nil {
 		return nil
 	}
 	for _, entry := range r.catalog.Entries() {
-		if err := r.registerCatalogEntry(entry); err != nil {
+		if err := r.registerCatalogEntry(ctx, entry); err != nil {
 			return fmt.Errorf("register catalog provider %q: %w", entry.ID, err)
 		}
 	}
@@ -203,9 +203,9 @@ var catalogProviderFactories = catalogruntime.NewFactorySet(
 	nil,
 )
 
-func (r *Registry) registerCatalogEntry(entry CatalogEntry) error {
+func (r *Registry) registerCatalogEntry(ctx context.Context, entry CatalogEntry) error {
 	_, err := catalogProviderFactories.Build(
-		context.Background(), string(entry.EffectiveFamily()), catalogProviderBuild{registry: r, entry: entry},
+		ctx, string(entry.EffectiveFamily()), catalogProviderBuild{registry: r, entry: entry},
 	)
 	return err
 }

@@ -101,14 +101,14 @@ func (r *ProviderCredentials) CompleteOAuth(ctx context.Context, scope CallScope
 }
 
 // CancelOAuth retires one pending sign-in without changing saved credentials.
-func (r *ProviderCredentials) CancelOAuth(scope CallScope, providerID, state string) error {
+func (r *ProviderCredentials) CancelOAuth(ctx context.Context, scope CallScope, providerID, state string) error {
 	if _, ok := r.Catalog.deviceEntry(providerID); !ok {
 		return ErrUnknownMCPProvider(providerID)
 	}
 	if r.oauth == nil {
 		return AdminErr(CodeOAuthUnavailable)
 	}
-	r.oauth.Cancel(providerID, scope.ProjectID, state)
+	r.oauth.Cancel(ctx, providerID, scope.ProjectID, state)
 	return nil
 }
 
@@ -120,7 +120,7 @@ func (r *ProviderCredentials) RevokeOAuth(ctx context.Context, scope CallScope, 
 	if r.oauth == nil {
 		return api.McpProvider{}, AdminErr(CodeOAuthUnavailable)
 	}
-	if err := r.oauth.Revoke(providerID); err != nil { //nolint:contextcheck // Revoke tears down a process-local loopback listener
+	if err := r.oauth.Revoke(ctx, providerID); err != nil {
 		return api.McpProvider{}, oauthErr(err)
 	}
 	r.markAuthRequired(providerID)

@@ -152,7 +152,7 @@ func newCapabilityReviewFixture(t *testing.T, approve bool) *capabilityReviewFix
 		return "verified", nil
 	}))
 	f.executor = toolexecution.NewExecutor(nil, registry, "implement")
-	f.executor.Approvals.SetCheckpointManager(c, authority)
+	f.executor.Approvals.SetCheckpointManager(t.Context(), c, authority)
 	f.executor.Capabilities.SetSocketCapabilityRuntime(c.sockets)
 	f.executor.Boundary.SetSessionWriteRootOverlay(broker.SessionWriteRoots)
 	f.executor.Boundary.SetSessionReadPathOverlay(broker.SessionReadPaths)

@@ -319,7 +319,7 @@ func TestWatchOwnerReplacementPreservesPendingRouting(t *testing.T) {
 	if EnsureProjectWatch(t.Context(), current, "owner-replacement", "", roots, func(context.Context, string, ExternalBatch) { newCalls.Add(1) }) {
 		t.Fatal("same roots replaced pending window")
 	}
-	old.Stop()
+	old.Stop(t.Context())
 	testutil.FailErr(t, "drain replaced owner", old.Wait(t.Context()))
 	copied(t.Context(), "owner-replacement", ExternalBatch{HeadMoved: true})
 	watchRegMu.Lock()
@@ -335,7 +335,7 @@ func TestWatchOwnerReplacementPreservesPendingRouting(t *testing.T) {
 	if !repochange.Coverage(roots[0].Path).Watching {
 		t.Fatal("old owner stopped shared root")
 	}
-	current.Stop()
+	current.Stop(t.Context())
 	testutil.FailErr(t, "drain current owner", current.Wait(t.Context()))
 }
 
@@ -361,7 +361,7 @@ func TestWatchOwnerStopCancelsAndDrainsCopiedCallback(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("copied callback did not enter")
 	}
-	owner.Stop()
+	owner.Stop(t.Context())
 	select {
 	case <-canceled:
 	case <-time.After(5 * time.Second):
@@ -382,7 +382,7 @@ func TestWatchOwnerStopCancelsAndDrainsCopiedCallback(t *testing.T) {
 	if EnsureProjectWatch(t.Context(), owner, "owner-drain", "", roots, nil) {
 		t.Fatal("stopped owner rebound project")
 	}
-	owner.Stop()
+	owner.Stop(t.Context())
 }
 
 func TestWatchOwnerIdleWaitKeepsLiveObserver(t *testing.T) {
@@ -398,7 +398,7 @@ func TestWatchOwnerIdleWaitKeepsLiveObserver(t *testing.T) {
 	if calls.Load() != 1 {
 		t.Fatal("idle wait cleared live callback")
 	}
-	owner.Stop()
+	owner.Stop(t.Context())
 	testutil.FailErr(t, "release owner", owner.Wait(t.Context()))
 }
 
@@ -431,7 +431,7 @@ func TestWatchOwnerStopDrainsWholeFlushPublication(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("flush publication did not enter")
 	}
-	owner.Stop()
+	owner.Stop(t.Context())
 	select {
 	case <-pub.cancelled:
 	case <-time.After(5 * time.Second):

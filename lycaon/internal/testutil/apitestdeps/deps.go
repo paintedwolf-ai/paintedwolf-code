@@ -180,7 +180,7 @@ func fillWebResearch(t *testing.T, d *Deps) {
 	}
 	if d.WebResearch.Registry == nil {
 		registry := webresearch.NewRegistry(d.WebResearch.Catalog)
-		testutil.FailErr(t, "web research providers", webresearch.RegisterCatalogProviders(registry))
+		testutil.FailErr(t, "web research providers", webresearch.RegisterCatalogProviders(t.Context(), registry))
 		d.WebResearch.Registry = registry
 	}
 	if d.WebResearch.Config == nil {

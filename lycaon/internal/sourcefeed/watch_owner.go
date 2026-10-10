@@ -52,7 +52,7 @@ func (c *ownedObserver) observe(parent context.Context, projectID string, batch 
 }
 
 // Stop seals copied callback admission and removes this owner's current routing.
-func (o *WatchOwner) Stop() {
+func (o *WatchOwner) Stop(ctx context.Context) {
 	o.stopped.Store(true)
 	o.work.Stop()
 	watchRegMu.Lock()
@@ -73,7 +73,7 @@ func (o *WatchOwner) Stop() {
 	}
 	watchRegMu.Unlock()
 	for _, watch := range removed {
-		watch.changes.close(context.Background())
+		watch.changes.close(context.WithoutCancel(ctx))
 	}
 }
 
