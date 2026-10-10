@@ -9,7 +9,9 @@ import (
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/secretharvest"
 	"github.com/lycaon/lycaon/internal/secretmatch"
+	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 )
@@ -128,5 +130,46 @@ func TestCredentialReadRecordsExposureFirst(t *testing.T) {
 	}
 	if len(harvestedSecrets(files, "root")) != 0 {
 		t.Fatal("evidence was admitted without an exposure record")
+	}
+}
+
+func TestCredentialDeliveryPersistsExposureWithoutHarvest(t *testing.T) {
+	database := testdbfixture.Open(t, "delivery.db")
+	testdbseed.InsertSession(t, database, "reader", testdbseed.DefaultProjectID)
+	testdbseed.InsertSession(t, database, "other", testdbseed.DefaultProjectID)
+	sessions := store.NewSQL(database)
+	files := newCredentialFiles(nil, nil, database, nil, sessions)
+	read := tools.CredentialFileRead{ProjectID: testdbseed.DefaultProjectID, SessionID: "reader", RootSessionID: "reader", Container: ".env", Content: "API_TOKEN=person-typed-token"}
+	testutil.FailErr(t, "deliver credential read without harvesting", files.Delivered(t.Context(), read))
+	// A fresh reader must recover exposure from durable evidence, not a warm cache.
+	reopened := store.NewSQL(database)
+	exposed, err := reopened.SessionSecretExposure(t.Context(), "reader")
+	testutil.FailErr(t, "recover credential exposure", err)
+	other, err := reopened.SessionSecretExposure(t.Context(), "other")
+	testutil.FailErr(t, "read unrelated chat exposure", err)
+	if !exposed || other {
+		t.Fatalf("exposure crossed chat identity: reader=%v other=%v", exposed, other)
+	}
+	read.SessionID = "missing"
+	if err := files.Delivered(t.Context(), read); err == nil {
+		t.Fatal("missing chat admitted credential delivery")
+	}
+	var unavailable *credentialFiles
+	if err := unavailable.Delivered(t.Context(), read); err == nil {
+		t.Fatal("absent exposure recorder admitted credential delivery")
+	}
+}
+
+func TestCredentialAuthorshipCancellationDoesNotExemptFutureRead(t *testing.T) {
+	files := credentialFilesFixture(t)
+	canceled, cancel := context.WithCancel(t.Context())
+	cancel()
+	write := tools.AuthoredCredentialValues{ProjectID: "proj-1", RootSessionID: "root", SessionID: "root", ToolCallID: "write-1", RootID: "r1", Path: ".env", Values: []string{"person-typed-token"}}
+	if err := files.Authored(canceled, write); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled authorship returned %v", err)
+	}
+	testutil.FailErr(t, "read after canceled authorship", files.Delivered(t.Context(), tools.CredentialFileRead{ProjectID: "proj-1", RootSessionID: "root", RootID: "r1", Path: ".env", Container: ".env", Content: "API_TOKEN=person-typed-token"}))
+	if !harvestedSecrets(files, "root")["person-typed-token"] {
+		t.Fatal("canceled write exempted credential evidence")
 	}
 }
