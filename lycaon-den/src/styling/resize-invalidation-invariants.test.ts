@@ -557,7 +557,7 @@ describe("ordered responsive sidebars", () => {
     expect(SPLIT_MIN_HOST - 1).toBeGreaterThanOrEqual(STAGE_COL_MIN);
   });
 
-  it("places the stage seam above the native window minimum", () => {
+  it("keeps both split columns above the native window minimum", () => {
     const configs = [
       "src-tauri/tauri.conf.json",
       "src-tauri/tauri.macos.conf.json",
@@ -567,7 +567,7 @@ describe("ordered responsive sidebars", () => {
       const parsed = JSON.parse(readDenFile(config)) as {
         app: { windows: Array<{ minWidth: number }> };
       };
-      expect(STAGE_COL_MIN).toBeGreaterThan(parsed.app.windows[0]!.minWidth);
+      expect(SPLIT_MIN_HOST).toBeGreaterThan(parsed.app.windows[0]!.minWidth);
     }
   });
 

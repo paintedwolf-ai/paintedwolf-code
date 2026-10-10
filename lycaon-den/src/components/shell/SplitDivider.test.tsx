@@ -69,6 +69,34 @@ describe("SplitDivider", () => {
     expect(tx.preview.mock.lastCall?.[0]).toBe(usable - STAGE_COL_MIN);
   });
 
+  it("continues a drag across sidebar collapse without moving the chat edge", async () => {
+    const [hostWidth, setHostWidth] = createSignal(1120);
+    const [chatWidth, setChatWidth] = createSignal(440);
+    const tx = sessionHarness(setChatWidth);
+    render(() => (
+      <div>
+        <SplitDivider hostWidthPx={hostWidth} availableWidthPx={() => 1400}
+          chatWidthPx={chatWidth} stageOnLeft={() => true}
+          onBegin={tx.onBegin} onReset={vi.fn()} />
+      </div>
+    ));
+    const separator = screen.getByTestId("split-divider") as HTMLElement;
+    vi.spyOn(separator.parentElement!, "getBoundingClientRect").mockImplementation(() => ({
+      left: 1400 - hostWidth(), right: 1400, width: hostWidth(),
+    }) as DOMRect);
+    separator.setPointerCapture = vi.fn();
+    separator.releasePointerCapture = vi.fn();
+    separator.dispatchEvent(pointerEvent("pointerdown", 960));
+    window.dispatchEvent(pointerEvent("pointermove", 600));
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    expect(tx.preview.mock.lastCall?.[0]).toBe(799.5);
+
+    setHostWidth(1400);
+    window.dispatchEvent(pointerEvent("pointerup", 599));
+    expect(tx.preview.mock.lastCall?.[0]).toBe(800.5);
+    expect(tx.commit).toHaveBeenCalledOnce();
+  });
+
   it("does not preview a no-op pointer gesture", () => {
     const [chatWidth, setChatWidth] = createSignal(440);
     const tx = sessionHarness(setChatWidth);

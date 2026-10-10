@@ -13,6 +13,8 @@ import {
 
 export type SplitDividerProps = {
   hostWidthPx: () => number;
+  /** Workspace width available after the main sidebar yields. */
+  availableWidthPx?: () => number;
   /** Live conversation column width, including drag preview. */
   chatWidthPx: () => number;
   onBegin: () => ResizeSession | null;
@@ -25,21 +27,24 @@ export function SplitDivider(props: SplitDividerProps) {
   let el: HTMLDivElement | undefined;
   let cancelActive: (() => void) | undefined;
 
-  const clampChat = (px: number) => clampChatWidthPx(px, props.hostWidthPx());
+  const availableWidth = () => props.availableWidthPx?.() ?? props.hostWidthPx();
+  const clampChat = (px: number) => clampChatWidthPx(px, availableWidth());
   /** The separator's value is the stage share, in percent. */
   const percentFor = (chatPx: number) =>
-    Math.round(stageShare(chatPx, props.hostWidthPx()) * 100);
+    Math.round(stageShare(chatPx, availableWidth()) * 100);
 
-  /** Host edges stay fixed for one pointer drag. */
+  /** Capture the starting host; sidebar collapse may move its edges. */
   let hostEdges: { left: number; right: number } | undefined;
 
   const chatWidthFromClientX = (clientX: number): number => {
-    const host = props.hostWidthPx();
+    const rect = el?.parentElement?.getBoundingClientRect();
+    const host = rect && rect.width > 0 ? rect.width : props.hostWidthPx();
     if (!hostEdges || host <= DIVIDER_PX) return props.chatWidthPx();
+    const edges = rect && rect.width > 0 ? rect : hostEdges;
     const usable = host - DIVIDER_PX;
     const stagePx = props.stageOnLeft()
-      ? clientX - hostEdges.left - DIVIDER_PX / 2
-      : hostEdges.right - clientX - DIVIDER_PX / 2;
+      ? clientX - edges.left - DIVIDER_PX / 2
+      : edges.right - clientX - DIVIDER_PX / 2;
     const chatPx = usable - stagePx;
     // Dragging the conversation below half its floor hides it.
     if (dragRequestsHide(chatPx, CHAT_COL_MIN)) return PANE_HIDDEN_PX;
@@ -82,7 +87,7 @@ export function SplitDivider(props: SplitDividerProps) {
     commitChatWidth(clampChat(props.chatWidthPx() - sign * deltaPx));
   };
 
-  const widestChat = () => maxChatWidthPx(props.hostWidthPx());
+  const widestChat = () => maxChatWidthPx(availableWidth());
 
   const onKeyDown = (e: KeyboardEvent) => {
     switch (e.key) {

@@ -90,7 +90,7 @@ import { requestSettingReveal } from "../../settings/settings-reveal.ts";
 
 import { createVerifyTestSuggestion } from "../../settings/extensions/verify-test-suggestion.ts";
 import { dismissLayoutDockOnOutsidePress } from "../../shell/layout-dock-dismiss.ts";
-import { beginChatWidthResize, hiddenSplitPanePref, companionPref, companionStageId, currentSplitFocusRegion, effectiveNavWidthPx, effectiveChatWidthPx, narrowSurvivorPref, resetChatWidthPx, setSplitFocusRegion, setSplitHostWidth, setSplitProjectId, splitHostWidthPx, stagePlacementMode, toggleWorkspaceOrientation, swapSplitColumns, workspaceOrientationPref } from "../../shell/layout-store.ts";
+import { beginChatWidthResize, hiddenSplitPanePref, companionPref, companionStageId, currentSplitFocusRegion, effectiveNavWidthPx, effectiveChatWidthPx, layoutViewportWidthPx, narrowSurvivorPref, resetChatWidthPx, setSplitFocusRegion, setSplitHostWidth, setSplitProjectId, splitHostWidthPx, stagePlacementMode, toggleWorkspaceOrientation, swapSplitColumns, workspaceOrientationPref } from "../../shell/layout-store.ts";
 import { isHomePresentation } from "../../shell/project-presentation.ts";
 
 import { resolveSplitCompanion, resolveStageColumn, splitColumnsOnScreen } from "../../shell/stage-placement.ts";
@@ -2030,9 +2030,10 @@ export function Shell(props: Props) {
         divider={
           <SplitDivider
             hostWidthPx={splitHostWidthPx}
+            availableWidthPx={layoutViewportWidthPx}
             chatWidthPx={publishedChatWidthPx}
             onBegin={() =>
-              beginChatWidthResize(splitHostWidthPx(), hideConversation)
+              beginChatWidthResize(layoutViewportWidthPx(), hideConversation)
             }
             onReset={() => {
               void resetChatWidthPx();
