@@ -140,12 +140,12 @@ class AdmissionTests(unittest.TestCase):
         runs = [{'id': n, 'html_url': str(n)} for n in range(3)]
         def get(_run):
             return ([{'lane': 'behavior', 'started_at': 0, 'finished_at': 10}],
-                    [{'signature': 'a' * 20}, {'signature': 'a' * 20}], [])
+                    [{'signature': 'a' * 20}, {'signature': 'a' * 20}])
         report = summarize(runs, get)
         self.assertEqual(report['recurring'], {'a' * 20: ['0', '1', '2']})
         self.assertEqual(report['lanes']['behavior']['p95_seconds'], 10)
         self.assertEqual(report['runs_without_receipts'], [])
-        self.assertEqual(summarize(runs, lambda _: ([], [], []))['runs_without_receipts'], [0, 1, 2])
+        self.assertEqual(summarize(runs, lambda _: ([], []))['runs_without_receipts'], [0, 1, 2])
         self.assertEqual(summarize(runs[:2], get)['recurring'], {})
         times = queue_times([{'number': 1, 'mergedAt': '2026-10-08T12:20:00Z', 'timelineItems': {'nodes': [
             {'__typename': 'AddedToMergeQueueEvent', 'createdAt': '2026-10-08T10:00:00Z'},
