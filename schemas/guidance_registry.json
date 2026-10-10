@@ -2672,7 +2672,7 @@
       "summary": "Some submitted citations do not resolve to the active review evidence union."
     },
     "SUBMIT_VERDICT_INVALID": {
-      "branch_instruction": "Correct the named fields using exact missing_claim_ids and expected_claim_ids when supplied, then resubmit with observed citations.",
+      "branch_instruction": "Correct the named fields using exact missing_claim_ids and expected_claim_ids when supplied, then resubmit the current expected call with observed citations.",
       "category": "recoverable",
       "emit": "guard:workflow",
       "summary": "The verdict payload does not match the active review phase contract."
