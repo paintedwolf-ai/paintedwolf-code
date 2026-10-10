@@ -38,6 +38,13 @@ func TestCompletionCoverageValidationUsesDurableWorkerIdentity(t *testing.T) {
 	if _, err := runtime.DecodeCompleteLeg(t.Context(), args, invocation, validate); err == nil || calls != 1 {
 		t.Fatalf("missing worker bypassed durable validation: %v, calls=%d", err, calls)
 	}
+	// An invocation without worker identity has no durable job whose coverage
+	// can be validated; it must not borrow the previous worker's review context.
+	invocation.Identity.WorkerJobID = ""
+	record, err = runtime.DecodeCompleteLeg(t.Context(), args, invocation, validate)
+	if err != nil || record.LegStatus != "complete" || calls != 1 {
+		t.Fatalf("non-worker completion borrowed worker review context: %+v,%v,calls=%d", record, err, calls)
+	}
 	invocation.Identity.WorkerJobID = id
 	if _, err := runtime.DecodeCompleteLeg(t.Context(), map[string]any{}, invocation, validate); err == nil || calls != 1 {
 		t.Fatalf("invalid completion reached coverage validator: %v, calls=%d", err, calls)
