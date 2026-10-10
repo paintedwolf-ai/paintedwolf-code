@@ -18,6 +18,7 @@ func (b *serveBuilder) wireSessionManager() error {
 		Agents:            b.agents,
 		TestSessionLimits: b.startup.cfg.TestSessionLimits,
 		RegisterRecovery:  b.registerRecovery,
+		Resources:         b.startup.resources,
 	})
 	if err != nil {
 		return err
