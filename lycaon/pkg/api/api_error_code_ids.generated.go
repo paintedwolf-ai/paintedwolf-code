@@ -86,8 +86,11 @@ const (
 	// running
 	ApiErrorCodeSessionNotIdle ApiErrorCode = "session_not_idle"
 	// ApiErrorCodePromptRecoveryStale a Keep going or Retry recovery no longer
-	// matches the chat (turn running, newer messages, or nothing interrupted);
-	// details.reason says which
+	// matches the chat (turn running, newer messages, or nothing interrupted).
+	// details.reason is one of turn_running, prompt_pending, turn_completed,
+	// turn_missing, transcript_changed, or retry_has_progress. details.explanation
+	// is display prose, never a discriminator. Malformed recovery requests return
+	// invalid_request.
 	ApiErrorCodePromptRecoveryStale ApiErrorCode = "prompt_recovery_stale"
 	// ApiErrorCodeRewindAnchorNotFound rewind anchor message id is not in the
 	// transcript
