@@ -1607,6 +1607,7 @@ type SourceHistoryEntries struct {
 	RedoPlanJson string `json:"redo_plan_json"`
 	CreatedAt    string `json:"created_at"`
 	UpdatedAt    string `json:"updated_at"`
+	Availability string `json:"availability"`
 }
 
 type SourceInventoryState struct {

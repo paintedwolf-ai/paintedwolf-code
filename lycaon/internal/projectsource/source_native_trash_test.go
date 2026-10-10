@@ -141,3 +141,24 @@ func TestNativeTrashRestoresLogicalFileIdentity(t *testing.T) {
 		t.Fatalf("native recovery forked file identity: %s to %s", original.FileID, restored.FileID)
 	}
 }
+
+func TestNativeTrashUnavailableRedoDoesNotBlockLaterHistory(t *testing.T) {
+	service, p, _, _ := sourceMutationFixture(t)
+	first, second := uuid.NewString(), uuid.NewString()
+	for _, item := range []struct{ id, path string }{{first, "first"}, {second, "second"}} {
+		_, err := service.Create(t.Context(), item.id, p, SourceEntryCreateRequest{RootID: p.Roots[0].ID, Path: item.path, Kind: SourceEntryFile})
+		testutil.FailErr(t, "create history", err)
+	}
+	undoHistoryHead(t, service, p, second)
+	undoHistoryHead(t, service, p, first)
+	entry, err := service.History.historyEntry(t.Context(), p.ID, "undone", "ASC")
+	testutil.FailErr(t, "read redo receipt", err)
+	testutil.FailErr(t, "empty Trash item", os.Remove(entry.RedoPlan.NativeTrash.Receipt.Path))
+	_, err = service.Redo(t.Context(), uuid.NewString(), p, SourceHistoryMutationRequest{ExpectedEntryID: first})
+	if !errors.Is(err, ErrSourceTrashUnavailable) {
+		t.Fatalf("unavailable redo = %v", err)
+	}
+	restarted := NewSourceMutationService(service.Journal.db, service.settlement.recorder.(*sourceledger.Store))
+	installTestTrash(t, restarted)
+	redoHistoryHead(t, restarted, p, second)
+}
