@@ -3,6 +3,7 @@ package presentation
 import (
 	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 
+	"net/url"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
@@ -104,7 +105,7 @@ func ProjectPhaseExit(manifest workflowdef.Manifest, phase workflowdef.PhaseDef,
 		if phase.ReviewLoop.AssignmentBinding == "explicit" {
 			out.ReviewWorkIDs = map[string]string{}
 			for _, agent := range reviewAgents {
-				out.ReviewWorkIDs[agent] = reviewWorkID(agent)
+				out.ReviewWorkIDs[agent] = "review/" + url.PathEscape(agent)
 			}
 		}
 	case phase.HumanApproval != nil:

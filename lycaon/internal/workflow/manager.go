@@ -1,7 +1,6 @@
 package workflow
 
 import (
-	"context"
 	workflowblueprints "github.com/lycaon/lycaon/internal/workflow/blueprints"
 	workflowgates "github.com/lycaon/lycaon/internal/workflow/gates"
 	workflowinputs "github.com/lycaon/lycaon/internal/workflow/inputs"
@@ -30,6 +29,7 @@ type RunManager struct {
 	Fanout       *Fanout
 	Ambient      *Ambient
 	Coverage     *workflowreview.Coverage
+	Assignments  *workflowreview.Assignments
 	Verdicts     *workflowreview.Verdicts
 	Repairs      *ReviewRepairs
 	Children     *Children
@@ -83,12 +83,7 @@ func NewManager(store *runstate.Repository, sessions session.Store, manifests *w
 	manager.Recovery = &workflowlifecycle.Recovery{Runs: store.Runs, Sessions: sessions, Resolver: &manager.Resolver, Journal: journal, Cleanup: cleanup}
 
 	manager.Obligations = &Obligations{Runs: store.Runs, Vars: vars, Resolver: &manager.Resolver}
-	manager.Coverage = &workflowreview.Coverage{Runs: store.Runs, Resolver: &manager.Resolver}
-	questions := &workflowreview.Questions{Runs: store.Runs, Resolver: &manager.Resolver, Coverage: manager.Coverage}
-	manager.Verdicts = &workflowreview.Verdicts{Runs: store.Runs, Records: store.Verdicts, Vars: vars, Resolver: &manager.Resolver, Sessions: sessions, Coverage: manager.Coverage, Questions: questions}
-	manager.Repairs = &ReviewRepairs{RunManager: manager}
-	questions.Verdicts = manager.Verdicts
-	manager.Coverage.Reviews = manager.Verdicts
+	questions := manager.buildReviewDomains(store)
 	entries := &workflowphases.Entries{Obligations: manager.Obligations}
 	manager.Phases = &workflowphases.Service{Runs: store.Runs, Vars: vars, Journal: journal, Resolver: &manager.Resolver, Sessions: sessions, Gates: gates, Registry: nil, Publication: manager.Publication, Entries: entries}
 	manager.Obligations.Phases = manager.Phases
@@ -124,7 +119,7 @@ func NewManager(store *runstate.Repository, sessions session.Store, manifests *w
 	manager.Verdicts.Evidence = reviewEvidence
 	manager.Requests.Ambient = manager.Ambient
 	manager.Controls.Ambient = manager.Ambient
-	manager.Fanout = &Fanout{Runs: store.Runs, Vars: vars, Resolver: &manager.Resolver, Journal: journal, Sessions: sessions, Phases: manager.Phases, Questions: questions}
+	manager.Fanout = &Fanout{Runs: store.Runs, Vars: vars, Resolver: &manager.Resolver, Journal: journal, Sessions: sessions, Phases: manager.Phases, Questions: questions, Assignments: manager.Assignments}
 	manager.Phases.Settlement = manager.Children
 	manager.Controls.Settlement = manager.Children
 	manager.Recovery.Settlement = manager.Children
