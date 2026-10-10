@@ -189,7 +189,7 @@ func TestPopulatedBackupRestoresRetainedFiles(t *testing.T) {
 	testutil.FailErr(t, "close live store", database.Shutdown(t.Context()))
 	alias := filepath.Join(t.TempDir(), "config")
 	testutil.FailErr(t, "alias configuration directory", os.Symlink(config, alias))
-	testutil.FailErr(t, "apply populated archive through alias", backup.ApplyPending(alias))
+	testutil.FailErr(t, "apply populated archive through alias", backup.ApplyPending(t.Context(), alias))
 	for i := range 32 {
 		body, err := os.ReadFile(filepath.Join(filesDir, fmt.Sprintf("capture-%02d.txt", i)))
 		testutil.FailErr(t, "read restored evidence", err)

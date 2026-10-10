@@ -305,7 +305,10 @@ func mutationRollbackError(action string, cause, rollback error) error {
 }
 
 // NewService loads catalog, credentials, policy, registry, and router.
-func NewService(mock modelcall.LLMClient) (*Service, error) {
+func NewService(ctx context.Context, mock modelcall.LLMClient) (*Service, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	catalog, err := NewProviderCatalog()
 	if err != nil {
 		return nil, err
@@ -318,7 +321,7 @@ func NewService(mock modelcall.LLMClient) (*Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	registry, err := NewRegistry(catalog, credentials)
+	registry, err := NewRegistry(ctx, catalog, credentials)
 	if err != nil {
 		return nil, err
 	}
@@ -327,7 +330,7 @@ func NewService(mock modelcall.LLMClient) (*Service, error) {
 	if feedErr != nil {
 		return nil, fmt.Errorf("modelfeed: %w", feedErr)
 	}
-	registry.SetModelFeed(feed)
+	registry.SetModelFeed(ctx, feed)
 	var refreshCancel context.CancelFunc
 	var refreshDone <-chan struct{}
 	if ProviderUtilityCallsEnabled() {

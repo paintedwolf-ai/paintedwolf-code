@@ -206,7 +206,7 @@ func fillLLM(t *testing.T, d *Deps) {
 	credentials := providercredentials.NewAt(filepath.Join(dir, "credential-vault.age"))
 	policy, err := llm.NewPolicyStoreAt(filepath.Join(dir, "model-policy.yaml"))
 	testutil.FailErr(t, "model policy", err)
-	registry, err := llm.NewRegistry(catalog, credentials)
+	registry, err := llm.NewRegistry(t.Context(), catalog, credentials)
 	testutil.FailErr(t, "provider registry", err)
 	d.LLM = &llm.Service{
 		Catalog: catalog, Credentials: credentials, Registry: registry, Policy: policy,

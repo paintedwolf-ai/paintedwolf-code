@@ -125,11 +125,14 @@ func DefaultPath() (string, error) {
 }
 
 // Open opens (or creates) the index, wiping it on schema version mismatch.
-func Open(path string) (*Store, error) {
+func Open(ctx context.Context, path string) (*Store, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, fmt.Errorf("create index directory: %w", err)
 	}
-	db, err := openVersioned(path)
+	db, err := openVersioned(ctx, path)
 	if err != nil {
 		return nil, err
 	}
@@ -172,34 +175,44 @@ func openReadPool(path string) (*sql.DB, error) {
 	return db, nil
 }
 
-func openVersioned(path string) (*sql.DB, error) {
-	if !currentVersion(path) {
+func openVersioned(ctx context.Context, path string) (*sql.DB, error) {
+	current, err := currentVersion(ctx, path)
+	if err != nil {
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if !current {
 		// Recreate an unreadable or mismatched cache.
 		for _, suffix := range []string{"", "-wal", "-shm"} {
 			_ = os.Remove(path + suffix)
 		}
 	}
-	return openFile(path)
+	return openFile(ctx, path)
 }
 
 // currentVersion accepts missing files for fresh creation.
-func currentVersion(path string) bool {
+func currentVersion(ctx context.Context, path string) (bool, error) {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return true
+		return true, nil
 	}
-	db, err := sql.Open("sqlite", "file:"+path)
+	database, err := sql.Open("sqlite", "file:"+path)
 	if err != nil {
-		return false
+		return false, nil
 	}
-	defer func() { _ = db.Close() }()
+	defer func() { _ = database.Close() }()
 	var version int
-	if err := db.QueryRowContext(context.Background(), "PRAGMA user_version").Scan(&version); err != nil {
-		return false
+	if err := database.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version); err != nil {
+		if contextErr := ctx.Err(); contextErr != nil {
+			return false, contextErr
+		}
+		return false, nil
 	}
-	return version == schemaVersion
+	return version == schemaVersion, nil
 }
 
-func openFile(path string) (*sql.DB, error) {
+func openFile(ctx context.Context, path string) (*sql.DB, error) {
 	// Configure incremental vacuum before the file header is initialized.
 	dsn := fmt.Sprintf("file:%s?_pragma=auto_vacuum(2)&_pragma=busy_timeout(10000)&_pragma=journal_mode(WAL)", path)
 	db, err := sql.Open("sqlite", dsn)
@@ -213,7 +226,6 @@ func openFile(path string) (*sql.DB, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("read schema: %w", err)
 	}
-	ctx := context.Background()
 	if _, err := db.ExecContext(ctx, string(schema)); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("apply schema: %w", err)

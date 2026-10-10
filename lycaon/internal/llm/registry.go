@@ -52,7 +52,10 @@ const providerListCacheTTL = 30 * time.Second
 const cloudflareUsageFetchTimeout = 2 * time.Second
 
 // NewRegistry builds providers from catalog and stored credentials.
-func NewRegistry(catalog *ProviderCatalog, credentials *providercredentials.Store) (*Registry, error) {
+func NewRegistry(ctx context.Context, catalog *ProviderCatalog, credentials *providercredentials.Store) (*Registry, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	roleExclusions, err := LoadRoleExclusions()
 	if err != nil {
 		return nil, err
@@ -71,8 +74,8 @@ func NewRegistry(catalog *ProviderCatalog, credentials *providercredentials.Stor
 		roleExclusions:  roleExclusions,
 		listCache:       catalogruntime.NewSnapshotCache(providerListCacheTTL, cloneProviderMetaList),
 	}
-	// Build the initial snapshot without a request context.
-	if err := r.rebuild(context.Background()); err != nil {
+	// Initial discovery belongs to the allocating startup.
+	if err := r.rebuild(ctx); err != nil {
 		return nil, err
 	}
 	return r, nil
@@ -87,7 +90,7 @@ func (r *Registry) RoleExclusions() RoleExclusions {
 }
 
 // SetModelFeed sets the shared model feed.
-func (r *Registry) SetModelFeed(feed *modelfeed.Feed) {
+func (r *Registry) SetModelFeed(ctx context.Context, feed *modelfeed.Feed) {
 	r.modelFeed.Store(feed)
 	r.InvalidateListCache()
 	if feed == nil {
@@ -100,7 +103,7 @@ func (r *Registry) SetModelFeed(feed *modelfeed.Feed) {
 		_ = r.rebuild(context.Background())
 	})
 	// Publish an existing disk snapshot immediately.
-	_ = r.rebuild(context.Background())
+	_ = r.rebuild(ctx)
 }
 
 // SetOutboundSecretScreen sets the final plaintext screen.

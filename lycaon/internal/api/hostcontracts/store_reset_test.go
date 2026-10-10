@@ -50,7 +50,7 @@ func TestRecoveryServerStagesFreshStoreReset(t *testing.T) {
 		t.Fatalf("recovery copy=%q want %q", recovered, refused)
 	}
 
-	testutil.FailErr(t, "apply reset", backup.ApplyPending(configDir))
+	testutil.FailErr(t, "apply reset", backup.ApplyPending(t.Context(), configDir))
 	fresh := testdbfixture.OpenPath(t, dbPath)
 	version, err := db.ReadUserVersion(context.Background(), fresh)
 	testutil.FailErr(t, "read fresh schema", err)

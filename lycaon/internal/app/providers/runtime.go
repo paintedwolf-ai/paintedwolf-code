@@ -46,14 +46,14 @@ func (b *Runtime) Build(ctx context.Context, options Options, database *db.Store
 		b.Client = llm.WrapLLMClientIfDebug(b.Client, "mock")
 	}
 
-	b.Service, err = llm.NewService(b.Client)
+	b.Service, err = llm.NewService(ctx, b.Client)
 	if err != nil {
 		return fmt.Errorf("llm service: %w", err)
 	}
 	service := b.Service
 	resources.Track("llm-service", 45, service.Close)
 	if !mockEnabled && (b.Service == nil || b.Service.Registry == nil || !b.Service.Registry.AnyConfigured()) {
-		slog.Warn("no LLM provider configured; prompts will fail until a provider API key is set")
+		slog.WarnContext(ctx, "no LLM provider configured; prompts will fail until a provider API key is set")
 	}
 	if options.Startup != nil {
 		if err := options.Startup.Phase(startupprotocol.PhasePricing); err != nil {

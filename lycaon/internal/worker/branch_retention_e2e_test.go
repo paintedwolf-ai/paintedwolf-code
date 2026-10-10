@@ -165,7 +165,7 @@ func relocateWorkerInstallation(t *testing.T, original db.Handle, jobID string) 
 	newRoot := t.TempDir()
 	_, err = backup.Stage(ctx, backup.StageOpts{ConfigDir: newRoot, ArchivePath: archive, SchemaVersion: db.SchemaVersion})
 	testutil.FailErr(t, "stage relocated worker archive", err)
-	testutil.FailErr(t, "apply relocated worker archive", backup.ApplyPending(newRoot))
+	testutil.FailErr(t, "apply relocated worker archive", backup.ApplyPending(t.Context(), newRoot))
 	restored := testdbfixture.OpenPath(t, filepath.Join(newRoot, "store.db"))
 	var baselineID, branchRel string
 	var overlayID sql.NullString

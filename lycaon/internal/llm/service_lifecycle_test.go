@@ -2,6 +2,8 @@ package llm
 
 import (
 	"context"
+	"errors"
+	"os"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -26,5 +28,22 @@ func TestServiceCloseWaitsForModelFeedRefresh(t *testing.T) {
 	case <-exited:
 	default:
 		t.Fatal("model feed refresh still running")
+	}
+}
+
+func TestCanceledServiceAllocationDoesNotCreateDeviceState(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", home)
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	service, err := NewService(ctx, nil)
+	if service != nil || !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled allocation = %v, %v", service, err)
+	}
+	entries, err := os.ReadDir(home)
+	testutil.FailErr(t, "read untouched device directory", err)
+	if len(entries) != 0 {
+		t.Fatalf("canceled allocation created device state: %v", entries)
 	}
 }
