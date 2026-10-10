@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -134,6 +135,8 @@ func TestCheckpointOwnerReleaseKeepsCurrentBrokerApproval(t *testing.T) {
 	t.Cleanup(func() { confine.SetEgressPosture(confine.PostureObserve) })
 	old, oldManager := gatherExecutor(t)
 	current, currentManager := gatherExecutor(t)
+	// Parsed HTTP is ingestion at Balanced; Strict reviews the first host.
+	current.Network.SetEgressPostureSource(func(string) gate.Posture { return gate.PostureStrict })
 	t.Cleanup(func() {
 		if err := current.Approvals.ReleaseEgressResolver(context.Background()); err != nil {
 			t.Errorf("release current checkpoint owner: %v", err)
