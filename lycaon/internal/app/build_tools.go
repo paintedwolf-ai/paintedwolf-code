@@ -242,7 +242,7 @@ func (b *serveBuilder) wireMCP() error {
 		}
 		return paths
 	})
-	if matcher, err := b.security.LoadMatcher(b.startup.cfg.TestSecretMatcher); err != nil {
+	if matcher, err := b.security.LoadMatcher(b.startup.ctx, b.startup.cfg.TestSecretMatcher); err != nil {
 		return err
 	} else {
 		var capturePrimer captureprojection.ManagedSecretPrimer

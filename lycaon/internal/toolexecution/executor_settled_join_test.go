@@ -91,7 +91,7 @@ func TestExecutorSettledJoinReviewsItsOwnAction(t *testing.T) {
 	rt := approvalstate.NewToolApprovalCoalesce()
 	policy := toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), gate)
 	exec := toolexecution.NewExecutor(policy, reg, "implement")
-	exec.Approvals.SetCheckpointManager(mgr, gate)
+	exec.Approvals.SetCheckpointManager(t.Context(), mgr, gate)
 	exec.Approvals.SetToolApprovalCoalesce(coalesceAdapter{rt: rt})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

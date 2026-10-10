@@ -138,7 +138,7 @@ func runInvariant1Case1B(t *testing.T, m *secretmatch.Matcher, chatSecretRef, ch
 				exec.Secrets.SetSecretMatcher(m)
 				exec.Approvals.SetAuthzRecorder(recorder)
 				exec.Network.SetEgressPostureSource(func(string) gate.Posture { return tcCase.posture })
-				exec.Approvals.SetCheckpointManager(mgr, nil)
+				exec.Approvals.SetCheckpointManager(t.Context(), mgr, nil)
 
 				exec.Secrets.secretResolver = func(_ context.Context, canonical map[string]any, access secretcap.ResolveContext) (*secretcap.Resolution, error) {
 					id := "11111111-1111-1111-1111-111111111111"
@@ -203,7 +203,7 @@ func runInvariant1Case1B(t *testing.T, m *secretmatch.Matcher, chatSecretRef, ch
 				exec.Secrets.SetSecretMatcher(m)
 				exec.Approvals.SetAuthzRecorder(recorder)
 				exec.Network.SetEgressPostureSource(func(string) gate.Posture { return tcCase.posture })
-				exec.Approvals.SetCheckpointManager(mgr, nil)
+				exec.Approvals.SetCheckpointManager(t.Context(), mgr, nil)
 
 				exec.Secrets.secretResolver = func(_ context.Context, canonical map[string]any, access secretcap.ResolveContext) (*secretcap.Resolution, error) {
 					id := "11111111-1111-1111-1111-111111111111"
@@ -260,7 +260,7 @@ func runInvariant1Case1C(t *testing.T, m *secretmatch.Matcher, projSecretRef, pr
 		exec.Secrets.SetSecretMatcher(m)
 		exec.Approvals.SetAuthzRecorder(recorder)
 		exec.Network.SetEgressPostureSource(func(string) gate.Posture { return gate.PostureStrict })
-		exec.Approvals.SetCheckpointManager(mgr, nil)
+		exec.Approvals.SetCheckpointManager(t.Context(), mgr, nil)
 
 		exec.Secrets.secretResolver = func(_ context.Context, canonical map[string]any, access secretcap.ResolveContext) (*secretcap.Resolution, error) {
 			res := secretcap.NewResolutionForTest(map[string]any{

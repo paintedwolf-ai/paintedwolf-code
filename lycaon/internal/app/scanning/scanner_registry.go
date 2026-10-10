@@ -10,7 +10,7 @@ import (
 )
 
 // The host owns its default scanner generation; injected registries remain caller-owned.
-func loadScannerRegistry(deps Dependencies, priority exec.ProcessPriority, appliesPath func(context.Context, string) bool) (scan.CodeScannerRegistry, error) {
+func loadScannerRegistry(ctx context.Context, deps Dependencies, priority exec.ProcessPriority, appliesPath func(context.Context, string) bool) (scan.CodeScannerRegistry, error) {
 	if deps.TestRegistry != nil {
 		return deps.TestRegistry, nil
 	}
@@ -18,12 +18,12 @@ func loadScannerRegistry(deps Dependencies, priority exec.ProcessPriority, appli
 	if deps.FingerprintScannerKey != nil {
 		key = deps.FingerprintScannerKey()
 	}
-	reg, err := scanregistry.New(scanregistry.Options{ScannerFingerprintKey: key, ModuleRoot: deps.ModuleRoot, ProcessPriority: priority, ProjectTierApplies: appliesPath})
+	reg, err := scanregistry.New(ctx, scanregistry.Options{ScannerFingerprintKey: key, ModuleRoot: deps.ModuleRoot, ProcessPriority: priority, ProjectTierApplies: appliesPath})
 	if err != nil {
 		return nil, fmt.Errorf("scan registry: %w", err)
 	}
 	if deps.Resources != nil {
-		deps.Resources.Track("scanner-registry", 89, func(context.Context) error { return reg.Close() })
+		deps.Resources.Track("scanner-registry", 89, func(ctx context.Context) error { return reg.Close(ctx) })
 	}
 	return reg, nil
 }

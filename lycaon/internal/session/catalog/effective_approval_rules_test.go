@@ -56,8 +56,7 @@ func TestRuleLayersFromViewsDoesNotDuplicateOnePublishedCatalog(t *testing.T) {
 
 // The service is embedded in its host, so a bound method retains the entire allocation.
 type catalogLifetimeHost struct {
-	Catalog  Service
-	retained [1024]byte
+	Catalog Service
 }
 
 func stoppedCatalogHost(t *testing.T) weak.Pointer[catalogLifetimeHost] {

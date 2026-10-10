@@ -22,8 +22,8 @@ func TestUnwritableRecoveryMetadataKeepsRecoveryRoutesEligible(t *testing.T) {
 	testutil.FailErr(t, "stamp current application", db.New(database).UpsertStoreMeta(t.Context(), db.UpsertStoreMetaParams{Key: "app_version", Value: version.Version}))
 	testutil.FailErr(t, "close source", database.Close())
 	testutil.FailErr(t, "block recovery metadata with directory", os.MkdirAll(filepath.Join(root, db.UpgradeRecoveryDirName, "pending.json"), 0o700))
-	builder := &Runtime{ctx: t.Context(), logger: slog.Default()}
-	database, err = builder.openUpgradeableStore(dbPath)
+	builder := &Runtime{logger: slog.Default()}
+	database, err = builder.openUpgradeableStore(t.Context(), dbPath)
 	if database != nil {
 		_ = database.Close()
 		t.Fatal("store exposed despite recovery metadata failure")
@@ -46,8 +46,8 @@ func TestRecoverySnapshotPrecedesRetention(t *testing.T) {
 	bodyPath := filepath.Join(root, "drafts", "retained.txt")
 	testutil.FailErr(t, "write durable body", os.WriteFile(bodyPath, []byte("preserved body"), 0o600))
 	testutil.FailErr(t, "close source", database.Close())
-	builder := &Runtime{ctx: ctx, logger: slog.Default()}
-	database, err = builder.openUpgradeableStore(dbPath)
+	builder := &Runtime{logger: slog.Default()}
+	database, err = builder.openUpgradeableStore(t.Context(), dbPath)
 	testutil.FailErr(t, "open application update", err)
 	defer database.Close()
 	_, err = db.RunRetention(ctx, database, db.RetentionConfig{Enabled: true, OperationJournals: time.Nanosecond})
@@ -64,7 +64,7 @@ func TestRecoverySnapshotPrecedesRetention(t *testing.T) {
 	testutil.FailErr(t, "relocate complete recovery", os.CopyFS(filepath.Join(restored, db.UpgradeRecoveryDirName), os.DirFS(filepath.Join(root, db.UpgradeRecoveryDirName))))
 	_, err = backup.StageLatestUpgradeRecovery(ctx, backup.StageOpts{ConfigDir: restored, SchemaVersion: db.SchemaVersion})
 	testutil.FailErr(t, "stage self-contained recovery", err)
-	testutil.FailErr(t, "apply recovery", backup.ApplyPending(restored))
+	testutil.FailErr(t, "apply recovery", backup.ApplyPending(t.Context(), restored))
 	recovered, err := db.OpenReadOnly(ctx, filepath.Join(restored, "store.db"))
 	testutil.FailErr(t, "open recovered database", err)
 	defer recovered.Close()
@@ -88,14 +88,14 @@ func TestStoreOpenDetachesEmbeddedRecoveryBeforeWritersStart(t *testing.T) {
 	testutil.FailErr(t, "open source", err)
 	testutil.FailErr(t, "stamp older application", db.New(database).UpsertStoreMeta(ctx, db.UpsertStoreMetaParams{Key: "app_version", Value: "0.0.1"}))
 	testutil.FailErr(t, "close source", database.Close())
-	builder := &Runtime{ctx: ctx, logger: slog.Default()}
-	database, err = builder.openUpgradeableStore(dbPath)
+	builder := &Runtime{logger: slog.Default()}
+	database, err = builder.openUpgradeableStore(t.Context(), dbPath)
 	testutil.FailErr(t, "capture application update", err)
 	testutil.FailErr(t, "stamp current application", db.New(database).UpsertStoreMeta(ctx, db.UpsertStoreMetaParams{Key: "app_version", Value: version.Version}))
 	testutil.FailErr(t, "close updated store", database.Close())
 	testutil.FailErr(t, "simulate missing pending publication", os.Remove(filepath.Join(root, db.UpgradeRecoveryDirName, "pending.json")))
-	restarted := &Runtime{ctx: ctx, logger: slog.Default()}
-	database, err = restarted.openUpgradeableStore(dbPath)
+	restarted := &Runtime{logger: slog.Default()}
+	database, err = restarted.openUpgradeableStore(t.Context(), dbPath)
 	testutil.FailErr(t, "restart current application", err)
 	defer database.Close()
 	if restarted.UpgradeReady == nil {

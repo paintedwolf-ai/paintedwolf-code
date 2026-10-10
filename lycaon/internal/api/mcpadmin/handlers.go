@@ -212,7 +212,7 @@ func (s *Handler) CancelOAuth(w http.ResponseWriter, r *http.Request) {
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "state is required")
 		return
 	}
-	if err := s.credentials.CancelOAuth(scope, id, req.State); err != nil {
+	if err := s.credentials.CancelOAuth(r.Context(), scope, id, req.State); err != nil {
 		s.writeMCPAdminError(w, err)
 		return
 	}

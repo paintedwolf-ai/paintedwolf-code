@@ -6,7 +6,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolschema"
 )
 
@@ -20,15 +19,6 @@ func shippedToolSchemas(t *testing.T) *toolschema.Config {
 	cfg, err := toolschema.LoadSchemaDir(filepath.Join(configlayout.FindModuleRoot(), "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
 	testutil.FailErr(t, "LoadSchemaDir", err)
 	return cfg
-}
-
-// catalogRegistry registers tools with their shipped metadata, which
-// submit_verdict composes review phase schemas from.
-func catalogRegistry(t *testing.T) *tools.DefaultRegistry {
-	t.Helper()
-	reg, err := tools.NewCatalogRegistry(shippedToolSchemas(t))
-	testutil.FailErr(t, "NewCatalogRegistry", err)
-	return reg
 }
 
 // catalogSubmitVerdictSchema loads the shipped submit_verdict call schema.

@@ -116,7 +116,7 @@ func (a *ServeApp) Close() error {
 	drainCtx, cancel := context.WithTimeout(context.Background(), resourceReleaseTimeout)
 	defer cancel()
 	if a.Server != nil {
-		a.Server.StopBackground()
+		a.Server.StopBackground(drainCtx)
 		a.Server.WaitForBackground(drainCtx)
 	}
 	// Store shutdown retains its reserved cleanup floor.
@@ -279,13 +279,13 @@ func (a *ServeApp) Run(ctx context.Context) error {
 		_ = closer.Close()
 	}
 
-	a.Server.StopBackground()
+	a.Server.StopBackground(context.WithoutCancel(ctx))
 
 	// One deadline covers runner and HTTP draining.
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), serveDrainTimeout)
+	shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), serveDrainTimeout)
 	defer cancel()
-	a.stopRunnersWithin(shutdownCtx)                                                      //nolint:contextcheck // shutdown outlives the canceled run ctx
-	if err := a.resources.httpServer.Shutdown(shutdownCtx); err != nil && runErr == nil { //nolint:contextcheck // shutdown outlives the canceled run ctx
+	a.stopRunnersWithin(shutdownCtx)
+	if err := a.resources.httpServer.Shutdown(shutdownCtx); err != nil && runErr == nil {
 		runErr = err
 	}
 	return runErr

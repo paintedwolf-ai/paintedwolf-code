@@ -187,7 +187,7 @@ type Watch struct {
 	WatchNeedsSeed  func(rootPath string) bool
 	background      *taskgroup.Group
 	responses       *httpio.Responder
-	watches         sourcefeed.WatchOwner
+	watches         sourcefeed.WatchLifetime
 	watchWork       workscope.Group
 	sourceWatchJobs map[string]*sourceWatchJob
 	sourceWatchMu   sync.Mutex

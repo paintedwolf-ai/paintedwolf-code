@@ -87,7 +87,7 @@ func TestSetupPermissionCoversRepeatedAuthenticatedServiceUse(t *testing.T) {
 	review := &servicePermissionReview{t: t, authority: authority}
 	registry := tools.NewDefaultRegistry()
 	executor := toolexecution.NewExecutor(nil, registry, "implement")
-	executor.Approvals.SetCheckpointManager(review, authority)
+	executor.Approvals.SetCheckpointManager(t.Context(), review, authority)
 	t.Cleanup(func() { confine.SetEgressResolver(nil) })
 	executor.Secrets.SetSecretResolver(service)
 	matcher := testSecretMatcher(t)

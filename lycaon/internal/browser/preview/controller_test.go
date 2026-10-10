@@ -252,7 +252,7 @@ func TestStopCastClearsPendingFrame(t *testing.T) {
 
 	c.offerFrame(context.Background(), st, h, []byte{0xff, 0xd8}, "", "", browser.PageRegions{})
 	c.mu.Lock()
-	stop := c.stopCastLocked(st)
+	stop := c.stopCastLocked(t.Context(), st)
 	pendingCleared := st.pending == nil
 	castCleared := st.cast == nil
 	c.mu.Unlock()

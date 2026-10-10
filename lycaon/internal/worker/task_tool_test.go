@@ -12,10 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectroot"
-	"github.com/lycaon/lycaon/internal/promptresult"
-	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/workeradmission"
-	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -341,20 +338,8 @@ func TestTaskToolResumePendingOverlayAllowed(t *testing.T) {
 	}
 }
 
-type fakeTaskSessions struct{}
-
 func taskBrief(goal string) map[string]any {
 	return map[string]any{"goal": goal, "done_when": []any{"Return grounded results."}}
-}
-
-func (f *fakeTaskSessions) Prompt(context.Context, string, string) (*promptresult.Result, error) {
-	return &promptresult.Result{}, nil
-}
-func (f *fakeTaskSessions) SpawnChild(context.Context, string, api.SpawnChildRequest) (*api.Session, error) {
-	return &api.Session{ID: "child"}, nil
-}
-func (f *fakeTaskSessions) AppendWorkerSummary(context.Context, string, workeroutcomes.SummaryInput) (string, error) {
-	return "complete", nil
 }
 
 type captureQueue struct {
@@ -452,14 +437,6 @@ func TestTaskToolCapsAggregateBriefText(t *testing.T) {
 func toolContext(sessionID, dir string) tools.ToolContext {
 	roots := []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}}
 	return tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sessionID, ProjectID: testdbseed.DefaultProjectID}, Source: tools.InvocationSource{Roots: roots, ActiveRootID: "r1"}}
-}
-
-func (f *fakeTaskSessions) PromptHostTurn(context.Context, string, store.PromptSubmissionOrigin, string) (*promptresult.Result, error) {
-	return &promptresult.Result{}, nil
-}
-
-func (f *fakeTaskSessions) PromptWorker(context.Context, string, string, string) (*promptresult.Result, error) {
-	return nil, nil
 }
 
 func TestTaskToolDoesNotClampExplicitBudget(t *testing.T) {

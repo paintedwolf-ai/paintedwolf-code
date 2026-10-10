@@ -38,9 +38,9 @@ func (b *Runtime) ResolvePath(ctx context.Context) error {
 	if reason := snapshot.Reason(); reason != "" {
 		// Record why shell PATH resolution fell back.
 		attrs = append(attrs, "reason", reason)
-		slog.Warn("resolved user PATH from fallback", attrs...)
+		slog.WarnContext(ctx, "resolved user PATH from fallback", attrs...)
 		return nil
 	}
-	slog.Info("resolved user PATH", attrs...)
+	slog.InfoContext(ctx, "resolved user PATH", attrs...)
 	return nil
 }

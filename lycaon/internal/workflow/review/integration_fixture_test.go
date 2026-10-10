@@ -10,7 +10,6 @@ import (
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/db"
-	"github.com/lycaon/lycaon/internal/people"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -101,43 +100,6 @@ func testManagerWithRegistry(t *testing.T) (*workflow.RunManager, session.Store,
 	mgr, store, blueprintMgr, projectDir := testManager(t)
 	setTestRegistry(t, mgr, blueprintMgr, conditions.TestRegistryDeps())
 	return mgr, store, blueprintMgr, projectDir
-}
-
-func workflowCaller(t testing.TB, mgr *workflow.RunManager) context.Context {
-	t.Helper()
-	owner, err := mgr.Policy.Sessions.(session.Store).HostOwner(context.Background())
-	testutil.FailErr(t, "host owner", err)
-	return people.WithCaller(context.Background(), owner)
-}
-
-func testWorkflowManager(t *testing.T) (*workflow.RunManager, string, string) {
-	t.Helper()
-	projectDir := t.TempDir()
-	sqlDB := testdbfixture.Open(t, "wf.db")
-	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, projectDir)
-
-	sessStore := store.NewSQL(sqlDB)
-	sess, err := sessStore.Create(context.Background(), api.CreateSessionRequest{
-		Posture:   api.SessionPostureBuild,
-		ProjectID: testdbseed.DefaultProjectID,
-	}, testdbseed.DefaultProjectID)
-	testutil.FailErr(t, "sessStore.Create failed", err)
-	manifestRegistry, err := workflowdef.RegistryFromDirs("")
-	testutil.FailErr(t, "RegistryFromDirs failed", err)
-	blueprintStore := blueprint.NewFileStoreForTest(projectDir)
-	blueprintMgr := blueprint.NewManager(blueprintStore)
-	runStore := workflowpersistence.New(sqlDB)
-	mgr := workflow.NewManager(runStore, sessStore, manifestRegistry, nil)
-	mgr.Blueprints.Scaffold.Store = workflowpersistence.NewSessionScaffoldSQLStore(sqlDB)
-	blueprintMgr.AfterRetarget = mgr.Blueprints.RebindBlueprintPath
-	mgr.Blueprints.Creator = blueprint.WorkflowBlueprintCreator{Manager: blueprintMgr}
-	mgr.Blueprints.Getter = blueprintMgr
-	mgr.Presentation.BlueprintGetter = blueprintMgr
-	mgr.Approvals.Getter = blueprintMgr
-	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{})
-	testutil.FailErr(t, "conditions.NewDefaultRegistry", err)
-	mgr.SetConditionRegistry(reg)
-	return mgr, sess.ID, projectDir
 }
 
 func setReviewWorkerTasks(mgr *workflow.RunManager, query func(context.Context, string) ([]api.WorkerTask, error)) {
