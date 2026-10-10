@@ -2,6 +2,7 @@ package visual
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"testing"
 
 	"github.com/lycaon/lycaon/pkg/api"
@@ -13,7 +14,7 @@ func TestCommittedEvidenceBindingPreservesContext(t *testing.T) {
 	hot := NewMemoryStore()
 	artifact, err := hot.Put(t.Context(), "tree", Entry{Meta: api.VisualArtifact{Mime: "image/png", Source: api.VisualArtifactSourceCapture}, Bytes: TestPNG1x1Bytes()})
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "store visual artifact", err)
 	}
 	records := &Records{}
 	NewDurableStore(DurableConfig{DataDir: t.TempDir(), Hot: hot, Records: records})
