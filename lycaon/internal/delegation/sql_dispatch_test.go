@@ -20,7 +20,7 @@ func TestSQLDispatchCommitsItsWorkerAndRetriesTheSameLeg(t *testing.T) {
 	leg := d.Legs[0]
 	leg.WorkerID, leg.Prompt = "first-job", "Inspect declaration"
 	d.Phase = api.DelegationPhaseWorker
-	task := api.WorkerTask{ID: leg.WorkerID, ProjectID: d.ProjectID, ParentSessionID: "coordinator", DelegationID: d.ID, LegID: leg.ID, Prompt: "Inspect declaration", Brief: "Inspect"}
+	task := api.WorkerTask{ID: leg.WorkerID, ProjectID: d.ProjectID, ParentSessionID: "coordinator", DelegationID: d.ID, LegID: leg.ID, Prompt: "Inspect declaration", Brief: "Inspect", ExecutionTarget: api.ExecutionTargetLocal}
 	invalid := task
 	invalid.Prompt = ""
 	if err := store.DispatchLegWithJob(t.Context(), leg, *d, invalid); err == nil {

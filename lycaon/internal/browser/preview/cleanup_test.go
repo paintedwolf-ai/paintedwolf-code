@@ -8,16 +8,24 @@ import (
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/cdp"
 	"github.com/lycaon/lycaon/internal/browser"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-type cleanupProtocol struct{ stops int }
+type cleanupProtocol struct {
+	stops  int
+	events chan *cdp.Event
+}
 
-func (*cleanupProtocol) Event() <-chan *cdp.Event { return nil }
+func (p *cleanupProtocol) Event() <-chan *cdp.Event { return p.events }
 func (p *cleanupProtocol) Call(ctx context.Context, _, method string, _ interface{}) ([]byte, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	switch method {
+	case "Target.setDiscoverTargets", "Page.enable":
+		return []byte(`{}`), nil
+	case "Target.attachToTarget":
+		return []byte(`{"sessionId":"protocol-session"}`), nil
 	case "Target.getTargetInfo":
 		return []byte(`{"targetInfo":{"targetId":"page","type":"page","title":"Preview","url":"https://example.test"}}`), nil
 	case "Page.stopScreencast":
@@ -31,8 +39,14 @@ func (p *cleanupProtocol) Call(ctx context.Context, _, method string, _ interfac
 func TestPreviewCleanupStopsItsCastAfterTheRequestEnds(t *testing.T) {
 	for _, action := range []string{"replace", "detach", "unwatch", "close"} {
 		t.Run(action, func(t *testing.T) {
-			protocol := &cleanupProtocol{}
-			page := rod.New().Client(protocol).PageFromSession("protocol-session")
+			protocol := &cleanupProtocol{events: make(chan *cdp.Event)}
+			ctx, stop := context.WithCancel(t.Context())
+			t.Cleanup(stop)
+			t.Cleanup(func() { close(protocol.events) })
+			client := rod.New().Context(ctx).NoDefaultDevice().Client(protocol)
+			testutil.FailErr(t, "connect fixture protocol", client.Connect())
+			page, err := client.PageFromTarget("page")
+			testutil.FailErr(t, "attach fixture target", err)
 			controller := NewController(DefaultConfig(), nil)
 			configurePreviewProjection(controller)
 			opts := AttachOpts{ProjectID: "project", SessionID: "session", PageID: "page", AssistantMessageID: "message", ToolCallID: "call", Held: &browser.HeldPage{Page: page, TargetURL: "https://example.test"}}
