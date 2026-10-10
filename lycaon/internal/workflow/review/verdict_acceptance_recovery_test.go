@@ -126,7 +126,7 @@ func TestVerdictAcceptancePrecedesEvidenceAndRecoveryDoesNotRevalidate(t *testin
 			testutil.FailErr(t, "register submit", workflowreview.RegisterSubmitVerdictTool(reg, mgr.Verdicts))
 			tctx := toolContext("coordinator", "sess-1", dir)
 			tctx.Identity.ToolCallID = "fenced-verdict"
-			tctx.Turn.Out = &tools.ToolInvocationOut{}
+			tctx.Effects.Out = &tools.ToolInvocationOut{}
 			args := map[string]any{"verdict": map[string]any{"verdict": "SELECTED", "coverage": map[string]any{"revision": facts.Revision, "assessments": []any{}}}, "cited_evidence": []any{map[string]any{"handle": "read#1"}}}
 			_, err = reg.Run(t.Context(), "submit_verdict", args, tctx)
 			op, found, readErr := store.GetVerdictOperation(t.Context(), tctx.Identity.ToolCallID)
@@ -136,7 +136,7 @@ func TestVerdictAcceptancePrecedesEvidenceAndRecoveryDoesNotRevalidate(t *testin
 			}
 			if race {
 				rejected := toolrejection.AsToolReject(err)
-				if rejected == nil || rejected.Code != runstate.ReviewContextChangedCode || rejected.Data["review_action"] != "refresh_context" || tctx.Turn.Out.Facts.Resolution() != api.ToolResultOutcomeRejected {
+				if rejected == nil || rejected.Code != runstate.ReviewContextChangedCode || rejected.Data["review_action"] != "refresh_context" || tctx.Effects.Out.Facts.Resolution() != api.ToolResultOutcomeRejected {
 					t.Fatalf("missing structured fence feedback: %v", err)
 				}
 				if op.Status != "diverged" || ledger.appended != 0 {
