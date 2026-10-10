@@ -2,8 +2,10 @@ package desktoptrash
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
@@ -62,5 +64,20 @@ func TestMoveDirectoryToTrash(t *testing.T) {
 	}
 	if err := Restore(ctx, receipt, fseffect.Location{Root: tmpDir, Rel: filepath.Base(subDir)}); err != nil {
 		t.Fatalf("restore native directory receipt: %v", err)
+	}
+}
+
+func TestRestoreRefusesUnknownReceiptVersion(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "recorded")
+	if err := os.WriteFile(path, []byte("preserved"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	err := Restore(t.Context(), Receipt{FormatVersion: 999, Platform: runtime.GOOS, Path: path, Identity: "unknown"}, fseffect.Location{Root: root, Rel: "destination"})
+	if !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("unknown receipt = %v", err)
+	}
+	if body, err := os.ReadFile(path); err != nil || string(body) != "preserved" {
+		t.Fatalf("recorded item changed: %q %v", body, err)
 	}
 }

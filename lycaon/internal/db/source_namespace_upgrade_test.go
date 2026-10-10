@@ -60,11 +60,11 @@ func TestSourceNamespaceMigratesReleasedHistory(t *testing.T) {
 
 func namespaceTableContents(t *testing.T, database *sql.DB, table string) string {
 	t.Helper()
-	columns := "*"
+	selection := "*"
 	if table == "source_history_entries" {
-		columns = "seq,id,project_id,kind,state,undo_label,redo_label,undo_plan_json,redo_plan_json,created_at,updated_at"
+		selection = "seq,id,project_id,kind,state,undo_label,redo_label,undo_plan_json,redo_plan_json,created_at,updated_at"
 	}
-	rows, err := database.QueryContext(t.Context(), `SELECT `+columns+` FROM `+table+` ORDER BY 1,2,3`)
+	rows, err := database.QueryContext(t.Context(), `SELECT `+selection+` FROM `+table+` ORDER BY 1,2,3`)
 	testutil.FailErr(t, "read retained table", err)
 	defer func() { _ = rows.Close() }()
 	columns, err := rows.Columns()
