@@ -23,7 +23,7 @@ func TestHookInventoryCoversWireBindings(t *testing.T) {
 	inventoryPath := filepath.Join(root, "lycaon", "config", "fixtures", "hook_inventory.yaml")
 
 	var bindings []wireHookBinding
-	for _, buildPath := range contractcheck.ServeBuildFilePaths(t, root) {
+	for _, buildPath := range appProductionFilePaths(t, root) {
 		bindings = append(bindings, parseWireHookBindings(t, buildPath)...)
 	}
 	declared := loadHookInventory(t, inventoryPath)
@@ -124,6 +124,12 @@ func parseWireHookBindings(t *testing.T, path string) []wireHookBinding {
 			return true
 		}
 		managerVar := strings.TrimPrefix(hookReceiverPath(sel.X), "b.")
+		managerVar = strings.ReplaceAll(managerVar, "deps.Workflows.Manager", "workflowMgr")
+		if strings.Contains(filepath.ToSlash(path), "/app/workflows/") {
+			managerVar = strings.ReplaceAll(managerVar, "r.Manager", "workflowMgr")
+		} else if strings.Contains(filepath.ToSlash(path), "/app/delegations/") {
+			managerVar = strings.ReplaceAll(managerVar, "r.Manager", "delegationMgr")
+		}
 		if !isHookField(sel.Sel.Name) {
 			return true
 		}
@@ -197,4 +203,24 @@ func hookReceiverPath(expr ast.Expr) string {
 		}
 	}
 	return ""
+}
+
+func appProductionFilePaths(t *testing.T, root string) []string {
+	t.Helper()
+	var paths []string
+	err := filepath.WalkDir(filepath.Join(root, "lycaon", "internal", "app"), func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !entry.IsDir() && strings.HasSuffix(path, ".go") && !strings.HasSuffix(path, "_test.go") {
+			paths = append(paths, path)
+		}
+		return nil
+	})
+	contractcheck.FailErr(t, "walk app composition sources", err)
+	sort.Strings(paths)
+	if len(paths) == 0 {
+		t.Fatal("no app composition sources")
+	}
+	return paths
 }

@@ -15,20 +15,18 @@ import (
 func TestBuildSessionWiresAuthzCapturer(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	path := filepath.Join(root, "lycaon", "internal", "app", "build_session.go")
-	src, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read build_session.go: %v", err)
-	}
-	body := string(src)
-	for _, want := range []string{
-		"authzcontext.NewSQLCapturer",
-		"Authorization.SetSealer",
-		"SetAuthzRecorder",
-		"assertAuthzCapturer",
+	for path, wants := range map[string][]string{
+		"app/security/authorization.go": {"authzcontext.NewSQLCapturer"},
+		"app/sessions/build.go":         {"Runner.Authorization.SetSealer"},
+		"app/sessions/checkpoints.go":   {"SetAuthzRecorder"},
+		"app/build_session.go":          {"assertAuthzCapturer", "Runner.Authorization.Wired"},
 	} {
-		if !strings.Contains(body, want) {
-			t.Fatalf("build_session.go must reference %q", want)
+		src, err := os.ReadFile(filepath.Join(root, "lycaon", "internal", path))
+		contractcheck.FailErr(t, "read "+path, err)
+		for _, want := range wants {
+			if !strings.Contains(string(src), want) {
+				t.Fatalf("%s must reference %q", path, want)
+			}
 		}
 	}
 }
@@ -40,8 +38,9 @@ func TestAuthzSealNoSilentNilSkip(t *testing.T) {
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, path, nil, 0)
 	if err != nil {
-		t.Fatalf("parse authz_seal.go: %v", err)
+		t.Fatalf("parse authorization/service.go: %v", err)
 	}
+	foundGuard := false
 	ast.Inspect(f, func(n ast.Node) bool {
 		ifStmt, ok := n.(*ast.IfStmt)
 		if !ok {
@@ -59,11 +58,15 @@ func TestAuthzSealNoSilentNilSkip(t *testing.T) {
 		if !ok || right.Name != "nil" {
 			return true
 		}
+		foundGuard = true
 		if !ifStmtContainsIdent(ifStmt.Body, "authzSealRequired") {
-			t.Fatal("authz_seal.go must not return nil on nil authzSealer without authzSealRequired guard")
+			t.Fatal("authorization/service.go must not return nil on nil authzSealer without authzSealRequired guard")
 		}
 		return true
 	})
+	if !foundGuard {
+		t.Fatal("authorization.Seal is missing its nil-sealer guard")
+	}
 }
 
 func ifStmtContainsIdent(block ast.Node, name string) bool {
@@ -82,10 +85,10 @@ func ifStmtContainsIdent(block ast.Node, name string) bool {
 func TestAuthzSealFailureSurfacesViaNudge(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	path := filepath.Join(root, "lycaon", "internal", "session", "authz_seal.go")
+	path := filepath.Join(root, "lycaon", "internal", "session", "turnexecution", "run.go")
 	src, err := os.ReadFile(path)
 	if err != nil {
-		t.Fatalf("read authz_seal.go: %v", err)
+		t.Fatalf("read turnexecution/run.go: %v", err)
 	}
 	body := string(src)
 	if !strings.Contains(body, "anchor.AuthzSealFailed") {

@@ -91,7 +91,7 @@ func TestCoordinatorOnlyGuardInventory(t *testing.T) {
 	// A tool is guarded when the guard call appears between its Register("X",
 	// and the next Register( call.
 	registerRE := regexp.MustCompile(`reg\.Register\("([a-z_][a-z0-9_]*)",`)
-	const guard = "toolguard.IsCoordinatorAgent(tctx.Agent)"
+	const guard = "toolguard.IsCoordinatorAgent(tctx.Identity.Agent)"
 
 	guarded := map[string]bool{}
 	for _, path := range sources {

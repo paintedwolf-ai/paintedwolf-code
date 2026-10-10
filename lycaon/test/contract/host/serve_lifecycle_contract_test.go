@@ -52,12 +52,14 @@ func TestServeBuildAndCloseShareResourceRegistry(t *testing.T) {
 	contractcheck.FailErr(t, "read build", err)
 	server, err := os.ReadFile(filepath.Join(root, "lycaon", "internal/app/build_server.go"))
 	contractcheck.FailErr(t, "read build server", err)
-	if !strings.Contains(string(build), "resources: newRuntimeResources()") ||
-		!strings.Contains(string(build), "b.resources.capture(b)") ||
-		!strings.Contains(string(build), "b.resources.Close(ctx)") {
+	startup := contractcheck.ReadRepoFile(t, root, "lycaon/internal/app/bootstrap_startup.go")
+	if !strings.Contains(string(build), "resources := newRuntimeResources()") ||
+		!strings.Contains(string(build), "resources: resources") ||
+		!strings.Contains(string(build), "b.startup.closeFailedBuild") ||
+		!strings.Contains(startup, "b.resources.Close(ctx)") {
 		t.Fatal("build phases and failed-build cleanup must share runtimeResources")
 	}
-	if !strings.Contains(string(server), "resources:            b.resources") {
+	if !strings.Contains(string(server), "resources:            b.startup.resources") {
 		t.Fatal("completed ServeApp must receive the builder's runtimeResources")
 	}
 }
@@ -65,27 +67,33 @@ func TestServeBuildAndCloseShareResourceRegistry(t *testing.T) {
 func TestResourceRegistryClosesSessionResourcesBeforeDurableState(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	path := filepath.Join(root, "lycaon", "internal/app/runtime_resources.go")
-	src, err := os.ReadFile(path)
-	contractcheck.FailErr(t, "read file", err)
-	body := string(src)
+	var source strings.Builder
+	for _, path := range appProductionFilePaths(t, root) {
+		data, err := os.ReadFile(path)
+		contractcheck.FailErr(t, "read resource owner "+path, err)
+		source.Write(data)
+	}
+	body := source.String()
+	if !strings.Contains(body, "r.lifecycle.Dispose(ctx, resourcelifecycle.DeviceScope())") {
+		t.Fatal("resource registry must dispose the device scope")
+	}
 	needles := []string{
-		`r.track("preview", 30`,
-		`r.track("browser-pages", 40`,
-		`r.track("llm-service", 45`,
-		`r.track("background-processes", 50`,
-		`r.track("browser-pool", 60`,
-		`r.track("repo-provider", 70`,
-		`r.track("source-feeds", 80`,
-		`r.track("source-snapshots", 82`,
-		`r.track("source-watchers", 85`,
-		`r.track("web-warmer", 90`,
-		`r.track("web-index", 100`,
-		`r.track("mcp", 110`,
-		`r.track("event-outbox", 120`,
-		`r.track("database", 130`,
-		`r.track("instance-lock", 140`,
-		`r.track("debug-captures", 150`,
+		`Track("preview", 30`,
+		`Track("browser-pages", 40`,
+		`Track("llm-service", 45`,
+		`Track("background-processes", 50`,
+		`Track("browser-pool", 60`,
+		`Track("repo-provider", 70`,
+		`Track("source-feeds", 80`,
+		`Track("source-snapshots", 82`,
+		`Track("source-watchers", 85`,
+		`Track("web-warmer", 90`,
+		`Track("web-index", 100`,
+		`Track("mcp", 110`,
+		`Track("event-outbox", 120`,
+		`Track("database", 130`,
+		`Track("instance-lock", 140`,
+		`Track("debug-captures", 150`,
 	}
 	for _, needle := range needles {
 		if !strings.Contains(body, needle) {
@@ -133,7 +141,7 @@ func TestRegisterBackgroundRunnersUsesRunnerOrderSSOT(t *testing.T) {
 func TestWarmRunnerWiredWithPresenceGate(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	relFile := "internal/app/build_board.go"
+	relFile := "internal/app/boards/build.go"
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, filepath.Join(root, "lycaon", relFile), nil, parser.SkipObjectResolution)
 	if err != nil {

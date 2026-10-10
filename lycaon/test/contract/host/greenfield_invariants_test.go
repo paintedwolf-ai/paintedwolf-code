@@ -18,7 +18,7 @@ import (
 
 func TestServeWiresConditionRegistry(t *testing.T) {
 	t.Parallel()
-	text := contractcheck.ServeWireSource(t)
+	text := contractcheck.ServeWireSource(t) + contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), "lycaon/internal/app/workflows/conditions.go")
 	for _, required := range []string{
 		"SetConditionRegistry",
 		"DelegationCloseout:",

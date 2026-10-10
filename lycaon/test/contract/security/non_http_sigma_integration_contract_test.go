@@ -51,31 +51,31 @@ detection:
 	}}}))
 
 	action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-Args: map[string]any{"command": "echo hi"},
-ActionID: "call-1",
-},
-Scope: hitl.ActionScope{
-ProjectDir: "/proj",
-SessionID: "s1",
-},
-Execution: hitl.ActionExecution{
-Contained: hitl.Contained{
-			FSJailed:          true,
-			Egress:            hitl.ContainedEgressDirectIP,
-			DirectIP:          true,
-			SocketPathsDigest: "sock-digest",
-			SocketCount:       2,
-			Roots:             []string{"/proj"},
+		Invocation: hitl.ActionInvocation{
+			Tool:     "command",
+			Args:     map[string]any{"command": "echo hi"},
+			ActionID: "call-1",
 		},
-},
-Egress: hitl.ActionEgress{
-DirectIPRequested: true,
-Visibility: "unobserved",
-DeclaredDestinations: []string{"db.example.com:22"},
-},
-}
+		Scope: hitl.ActionScope{
+			ProjectDir: "/proj",
+			SessionID:  "s1",
+		},
+		Execution: hitl.ActionExecution{
+			Contained: hitl.Contained{
+				FSJailed:          true,
+				Egress:            hitl.ContainedEgressDirectIP,
+				DirectIP:          true,
+				SocketPathsDigest: "sock-digest",
+				SocketCount:       2,
+				Roots:             []string{"/proj"},
+			},
+		},
+		Egress: hitl.ActionEgress{
+			DirectIPRequested:    true,
+			Visibility:           "unobserved",
+			DeclaredDestinations: []string{"db.example.com:22"},
+		},
+	}
 	_, ok := src.MatchAction(action, "strict")
 	if !ok {
 		t.Fatal("GateSource must match tool_exec against Contained-bearing action")
@@ -152,18 +152,18 @@ func TestNonHTTPContractCapabilityGrantsCannotSuppressDetection(t *testing.T) {
 	}
 	approvalGate := sigmaGateWithDetection(t, gate.PostureBalanced, src)
 	action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-Args: map[string]any{"command": "echo hi"},
-},
-Execution: hitl.ActionExecution{
-Contained: hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressProxy, Roots: []string{"/tmp/proj"}},
-},
-Scope: hitl.ActionScope{
-ProjectDir: "/tmp/proj",
-SessionID: "s1",
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+			Args: map[string]any{"command": "echo hi"},
+		},
+		Execution: hitl.ActionExecution{
+			Contained: hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressProxy, Roots: []string{"/tmp/proj"}},
+		},
+		Scope: hitl.ActionScope{
+			ProjectDir: "/tmp/proj",
+			SessionID:  "s1",
+		},
+	}
 	// Family host leases leave exact-action detection asks intact.
 	hostGrant := hitl.ApprovalGrant{
 		ID: "grant_host_family_sigma", Scope: hitl.ApprovalGrantScopeChat,
@@ -235,9 +235,21 @@ func TestNonHTTPContractHTTPSocksStillReachPreDialMatch(t *testing.T) {
 	}
 	_, files := contractcheck.ParseNonTestGoTree(t, filepath.Join(root, "lycaon", "internal", "app"))
 	wiring := map[string]bool{
-		"wireToolRuntime/wireDetectionPacks":          false,
-		"wireDetectionPacks/SetEgressDetectionSource": false,
-		"publish/detectionpack.NewEgressSource":       false,
+		"wireToolRuntime/b.security.Detections.Load": false,
+		"Load/authority.SetEgressDetectionSource":    false,
+		"Load/b.Publish":                        false,
+		"Publish/detectionpack.NewEgressSource": false,
+	}
+	var callPath func(ast.Expr) string
+	callPath = func(expr ast.Expr) string {
+		switch node := expr.(type) {
+		case *ast.Ident:
+			return node.Name
+		case *ast.SelectorExpr:
+			return callPath(node.X) + "." + node.Sel.Name
+		default:
+			return ""
+		}
 	}
 	for _, file := range files {
 		for _, decl := range file.Decls {
@@ -247,7 +259,7 @@ func TestNonHTTPContractHTTPSocksStillReachPreDialMatch(t *testing.T) {
 			}
 			ast.Inspect(fn.Body, func(node ast.Node) bool {
 				if call, ok := node.(*ast.CallExpr); ok {
-					key := fn.Name.Name + "/" + contractcheck.CallName(call)
+					key := fn.Name.Name + "/" + callPath(call.Fun)
 					if _, required := wiring[key]; required {
 						wiring[key] = true
 					}
@@ -369,17 +381,17 @@ func TestNonHTTPContractCorrelationIDNeverAuthorizationIdentity(t *testing.T) {
 		}
 	}
 	action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-Args: map[string]any{"command": "echo"},
-},
-Scope: hitl.ActionScope{
-ProjectDir: "/p",
-},
-Execution: hitl.ActionExecution{
-Contained: hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressProxy, Roots: []string{"/p"}},
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+			Args: map[string]any{"command": "echo"},
+		},
+		Scope: hitl.ActionScope{
+			ProjectDir: "/p",
+		},
+		Execution: hitl.ActionExecution{
+			Contained: hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressProxy, Roots: []string{"/p"}},
+		},
+	}
 	key := hitl.GrantKey(action)
 	if strings.Contains(key, "det_") || strings.Contains(strings.ToLower(key), "correlation") {
 		t.Fatalf("GrantKey must not embed correlation material: %q", key)

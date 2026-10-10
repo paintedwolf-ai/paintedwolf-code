@@ -34,7 +34,7 @@ func TestNonHTTPContractMandatoryAuthzDetailForSocketAndDirect(t *testing.T) {
 	if !strings.Contains(sock, "recordSocketCapabilityApplied") || !strings.Contains(sock, "authzledger.ActionCapabilityApplied") {
 		t.Fatal("applied sockets must emit capability_applied records")
 	}
-	direct := contractcheck.ReadRepoFile(t, root, "lycaon/internal/tools/native/command_exec.go")
+	direct := contractcheck.ReadRepoFile(t, root, "lycaon/internal/tools/native/command/command_exec.go")
 	if !strings.Contains(direct, "EmitDirectIPLifecycle") || !strings.Contains(direct, "DirectIPLifecycleStarted") {
 		t.Fatal("direct execution must emit lifecycle authz detail")
 	}
@@ -164,7 +164,7 @@ func TestNonHTTPContractMediationUnavailableDistinctFromBypass(t *testing.T) {
 	if !strings.Contains(banners, "protection-mediation-unavailable") || !strings.Contains(banners, "protection-sandbox-bypass") {
 		t.Fatal("Den must keep distinct protection banner test ids")
 	}
-	prot := contractcheck.ReadRepoFile(t, root, "lycaon/internal/session/protection_state.go")
+	prot := contractcheck.ReadRepoFile(t, root, "lycaon/internal/session/protection/state.go")
 	if !strings.Contains(prot, "MediationUnavailable") {
 		t.Fatal("session protection state must expose mediation unavailable")
 	}
