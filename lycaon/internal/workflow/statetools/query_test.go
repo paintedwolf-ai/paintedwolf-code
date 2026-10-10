@@ -65,7 +65,7 @@ func TestStateQueryReadsActiveScaffoldAndRefusesMissingState(t *testing.T) {
 				if tc.name == "idle" && out != tc.want {
 					t.Fatalf("idle=%q", out)
 				}
-				if tc.name == "whole state" && decoded.(map[string]any)["answer"] != tc.want {
+				if tc.name == "whole state" && decoded.(map[string]any)["vars"].(map[string]any)["answer"] != tc.want {
 					t.Fatalf("retained scaffold=%v", decoded)
 				}
 				if tc.name == "nested" {
