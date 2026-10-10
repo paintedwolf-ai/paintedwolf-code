@@ -121,7 +121,7 @@ func (s *Reports) BuildRunReportInput(ctx context.Context, runID string) (report
 	if err != nil {
 		return report.ReportInput{}, false, err
 	}
-	accepted, err := workflow.AcceptedReviewInputsFromVars(vars, manifest)
+	accepted, err := runstate.AcceptedReviewInputsFromVars(vars, manifest)
 	if err != nil {
 		return report.ReportInput{}, false, err
 	}
