@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/lycaon/lycaon/internal/api/httpio"
+	"github.com/lycaon/lycaon/internal/api/sourceapi"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/project"
@@ -28,10 +29,11 @@ type Handler struct {
 	writeSourceError func(http.ResponseWriter, *http.Request, error)
 	responses        *httpio.Responder
 	searchPages      *searchPageCache
+	symbolExecutor   *sourceapi.SymbolExecutor
 }
 
 func New(responses *httpio.Responder, deps Dependencies) Handler {
 	return Handler{database: deps.Database, projectRegistry: deps.Projects, rerank: deps.Rerank,
 		sourceMutations: deps.SourceMutations, chatAffiliation: deps.ChatAffiliation, writeSourceError: deps.WriteSourceError,
-		responses: responses, searchPages: newSearchPageCache()}
+		responses: responses, searchPages: newSearchPageCache(), symbolExecutor: sourceapi.NewSymbolExecutor(deps.Projects)}
 }

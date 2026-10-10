@@ -163,5 +163,5 @@ func searchProjectDisplayName(p *project.Project) string {
 
 // searchService reads the evidence index through the host database.
 func (s *Handler) searchService() *search.Service {
-	return search.NewService(s.database, s.rerank, sourceapi.NewSymbolExecutor(s.projectRegistry))
+	return search.NewService(s.database, s.rerank, s.symbolExecutor)
 }
