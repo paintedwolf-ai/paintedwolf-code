@@ -72,3 +72,11 @@ func TestCommandSettlementRetainsReportAndWakesOnlySubscribedWait(t *testing.T) 
 		t.Fatal("foreign session read completion report")
 	}
 }
+
+func TestBackgroundPreviewPreservesUTF8AndMostRecentOutput(t *testing.T) {
+	output := &api.BackgroundProcessOutput{Chunks: []api.BackgroundProcessChunk{{Text: "old"}, {Text: "aéz"}}}
+	capBackgroundOutput(output, 3)
+	if !output.Truncated || len(output.Chunks) != 1 || output.Chunks[0].Text != "éz" {
+		t.Fatalf("bounded screened output=%+v", output)
+	}
+}

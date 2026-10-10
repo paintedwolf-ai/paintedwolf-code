@@ -83,3 +83,27 @@ func TestProjectDeleteStopsDependenciesAndRetargetsDetachedSessions(t *testing.T
 		t.Fatal("workspace invalidation crossed project")
 	}
 }
+
+type quiescentAdmission struct{ complete bool }
+
+func (a quiescentAdmission) RoundComplete(context.Context, string) bool { return a.complete }
+func (a quiescentAdmission) MaybePromote(context.Context, string)       {}
+func TestProjectPromotionWaitsForIdleCompletedRounds(t *testing.T) {
+	for _, tc := range []struct {
+		name           string
+		status         api.SessionStatus
+		complete, want bool
+	}{
+		{"busy", api.SessionStatusBusy, true, false}, {"unfinished round", api.SessionStatusIdle, false, false}, {"settled", api.SessionStatusIdle, true, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sessions := &detachSessions{sessions: []*api.Session{nil, {ID: "foreign", ProjectID: "foreign", Status: api.SessionStatusBusy}, {ID: "local", ProjectID: "project", Status: tc.status}}}
+			s := New(sessions, nil, nil, quiescentAdmission{tc.complete}, nil, nil, nil)
+			s.SetProjects(detachProjects{&project.Project{ID: "project", Roots: []project.Root{{ID: "root", Path: t.TempDir(), IsPrimary: true}}}})
+			got, err := s.ProjectPromoteQuiescent(t.Context(), "project")
+			if err != nil || got != tc.want {
+				t.Fatalf("promotion readiness=%v err=%v", got, err)
+			}
+		})
+	}
+}

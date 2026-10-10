@@ -80,6 +80,10 @@ func TestStateQueryReadsActiveScaffoldAndRefusesMissingState(t *testing.T) {
 	if err := RegisterStateTools(reg, StateToolDeps{Runs: queryRuns{}, Sessions: querySessions{root}}); err != nil {
 		t.Fatalf("RegisterStateTools failed: %v", err)
 	}
+	_, startErr := reg.Run(t.Context(), "state_start", map[string]any{"workflow_id": "requested"}, tctx)
+	if startErr == nil {
+		t.Fatal("workflow start accepted missing version")
+	}
 	for _, name := range []string{"state_close", "state_start", "state_update"} {
 		if _, err := reg.Run(t.Context(), name, nil, tctx); err == nil {
 			t.Fatalf("%s accepted missing active state/arguments", name)

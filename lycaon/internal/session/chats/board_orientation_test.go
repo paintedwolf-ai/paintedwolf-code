@@ -25,3 +25,13 @@ func TestReopenOrientationKeepsOtherProjectsUnchanged(t *testing.T) {
 		t.Fatalf("orientation invalidations=%v", changes)
 	}
 }
+
+func TestOrientationRefreshRejectsUnboundProjectAndMissingProjection(t *testing.T) {
+	service := &Service{store: orientationStore{sessions: []*api.Session{{ID: "target", ProjectID: "project"}}}}
+	var changes orientationChanges
+	service.ReopenOrientation(t.Context(), "", &changes)
+	service.ReopenOrientation(t.Context(), "project", nil)
+	if len(changes) != 0 {
+		t.Fatalf("unbound refresh invalidated sessions=%v", changes)
+	}
+}
