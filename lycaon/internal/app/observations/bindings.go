@@ -51,5 +51,6 @@ func Bind(publisher *events.Publisher, sessions *store.SQL, progressStore progre
 		releaseProgress()
 		releaseRepository()
 		releaseFindings()
+		coalescer.Close()
 	}
 }
