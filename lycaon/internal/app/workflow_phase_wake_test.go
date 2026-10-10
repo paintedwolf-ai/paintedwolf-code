@@ -1,12 +1,16 @@
 package app
 
 import (
+	"context"
 	"github.com/lycaon/lycaon/internal/app/delegations"
 	"github.com/lycaon/lycaon/internal/app/sessions"
 	"github.com/lycaon/lycaon/internal/app/workflows"
+	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/kick"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
+	"github.com/lycaon/lycaon/internal/progress"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -20,6 +24,8 @@ import (
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
 	"github.com/lycaon/lycaon/pkg/api"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 )
@@ -50,12 +56,37 @@ func TestCrossPhaseHostAdvanceQueuesCoordinatorWake(t *testing.T) {
 	sessionMgr := session.NewHost(sessionStore, session.Models{Client: nil, Limits: settings.DefaultSessionLimits()}, tools.NewStubRegistry())
 	sessionMgr.SetLoopWorkflowSource(&loopwake.WorkflowDomains{Runs: wfMgr.Store.Runs, Approvals: wfMgr.Policy, Obligations: wfMgr.Obligations})
 	delegationsRt := delegations.New(sqlDB, nil, worker.WorkersConfig{})
-	delegationsRt.SetDependencies(delegations.Dependencies{Workflows: &workflows.Runtime{Manager: wfMgr}, Sessions: &sessions.Runtime{Manager: sessionMgr}})
+	starts := 0
+	delegationsRt.SetDependencies(delegations.Dependencies{Workflows: &workflows.Runtime{Manager: wfMgr}, Sessions: &sessions.Runtime{Manager: sessionMgr}, StartOrchestratedTopology: func(c context.Context, id string, started *api.WorkflowRun) {
+		if c.Err() != nil || id != sess.ID || started.ID != run.ID {
+			t.Fatalf("initial topology start crossed run identity: %s, %+v, %v", id, started, c.Err())
+		}
+		starts++
+	}})
 	finishExecution := sessionMgr.Coordinator.Runtime.CoordinatorLoop().Admission.BeginPromptExecution(t.Context(), sess.ID)
 	defer finishExecution()
 	delegationsRt.OnWorkflowPhaseAutoAdvanced(ctx, sess.ID, run.ID, "triage", "expand")
 
-	got, ok := sessionMgr.Coordinator.Runtime.CoordinatorLoop().Nudges.Pending(sess.ID)
+	nudges := sessionMgr.Coordinator.Runtime.CoordinatorLoop().Nudges
+	nudges.ClearPending(sess.ID)
+	delegationsRt.OnWorkflowPhaseAutoAdvanced(ctx, sess.ID, run.ID, "", "expand")
+	if starts != 1 {
+		t.Fatalf("initial phase topology starts=%d", starts)
+	}
+	nudges.ClearPending(sess.ID)
+	delegationsRt.OnWorkflowRunResumed(ctx, run)
+	if got, ok := nudges.Pending(sess.ID); !ok || got != anchor.PhaseAdvanced {
+		t.Fatalf("resumed run wake=%s,%v", got, ok)
+	}
+	nudges.ClearPending(sess.ID)
+	stale := *run
+	stale.ID = "stale-run"
+	delegationsRt.OnWorkflowRunResumed(ctx, &stale)
+	if got, ok := nudges.Pending(sess.ID); ok {
+		t.Fatalf("stale run resumed active coordinator: %s", got)
+	}
+	delegationsRt.OnWorkflowPhaseAutoAdvanced(ctx, sess.ID, run.ID, "triage", "expand")
+	got, ok := nudges.Pending(sess.ID)
 	if !ok || got != anchor.PhaseAdvanced {
 		t.Fatalf("pending wake = %q, %v want %q, true", got, ok, anchor.PhaseAdvanced)
 	}
@@ -180,5 +211,104 @@ func TestPhaseEntryGuidanceUsesTheRunWorkflowVersion(t *testing.T) {
 				t.Fatalf("unregistered workflow version queued %q", got)
 			}
 		})
+	}
+}
+
+func TestPhaseHandoffCarriesDurableEvidenceAndResetsPreviousRunProgress(t *testing.T) {
+	ctx := t.Context()
+	database := testdbfixture.Open(t, "handoff-guidance.db")
+	root := t.TempDir()
+	testdbseed.InsertSessionWithRoot(t, database, "chat", testdbseed.DefaultProjectID, root)
+	sessionsStore := store.NewSQL(database)
+	manifests, err := workflowdef.RegistryFromDirs("")
+	testutil.FailErr(t, "load handoff manifests", err)
+	wfStore := workflowpersistence.New(database)
+	manager := workflow.NewManager(wfStore, sessionsStore, manifests, nil)
+	now := time.Now().UTC()
+	run := &api.WorkflowRun{ID: "handoff", SessionID: "chat", ProjectID: testdbseed.DefaultProjectID, WorkflowID: "security-survey", WorkflowVersion: "1.0.0", Status: api.WorkflowRunStatusRunning, CurrentPhase: "claims", CreatedAt: now, UpdatedAt: now}
+	vars := map[string]any{"evidence_digest": "retained-evidence-identity", "topology_outputs": map[string]any{"fan_out": "retained-topology-output"}, "options": map[string]any{"criterion": "explicit-selection-criterion"}, "review_verdict": map[string]any{"claim": "approved"}}
+	testutil.FailErr(t, "create handoff state", wfStore.State.CreateState(ctx, run, root, vars))
+	host := session.NewHost(sessionsStore, session.Models{Limits: settings.DefaultSessionLimits()}, tools.NewStubRegistry())
+	kicks := &kick.KickEngine{}
+	bus := anchor.NewBus(kicks)
+	registry, err := anchor.LoadRegistryFromConfigRoot()
+	testutil.FailErr(t, "load handoff guidance", err)
+	bus.SetRegistry(registry)
+	previousRegistry := anchor.DefaultRegistry()
+	anchor.SetDefaultRegistry(registry)
+	t.Cleanup(func() { anchor.SetDefaultRegistry(previousRegistry) })
+	host.Coordinator.Guidance.Bind(kicks, bus)
+	progressStore := progress.NewMemoryStore()
+	progressStore.BindRun("chat", "previous-run")
+	testutil.FailErr(t, "seed old progress", progressStore.Set("chat", "old run checklist"))
+	runtime := delegations.New(database, nil, worker.WorkersConfig{})
+	topologyCalls := 0
+	runtime.SetDependencies(delegations.Dependencies{Sessions: &sessions.Runtime{Manager: host}, Workflows: &workflows.Runtime{Manager: manager}, Progress: func() progress.RunScopedStore { return progressStore }, StartOrchestratedTopology: func(_ context.Context, id string, snapshot *api.WorkflowRun) {
+		topologyCalls++
+		if id != "chat" || snapshot.ID != run.ID || snapshot.CurrentPhase != "claims" {
+			t.Fatalf("topology handoff used wrong run:%q,%+v", id, snapshot)
+		}
+	}})
+	runtime.OnWorkflowPhaseEnter(ctx, &workflowphases.RunContext{SessionID: "chat", RunID: run.ID, WorkflowID: run.WorkflowID, WorkflowVersion: run.WorkflowVersion, PreviousPhase: "execute", Phase: "claims"}, workflowdef.PhaseDef{ID: "claims", BindTopologyStage: "claims"})
+	if topologyCalls != 1 || progressStore.BoundRunID("chat") != run.ID || strings.Contains(progressStore.Get(ctx, "chat"), "old run checklist") {
+		t.Fatal("phase handoff retained previous run progress or missed topology")
+	}
+	kicks.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: configlayout.FindModuleRoot()}))
+	if got := kicks.TakePendingKickID("chat"); got != "coordinator-security-claims" {
+		t.Fatalf("phase handoff guidance=%q", got)
+	}
+	text, _, ok, err := kicks.RenderPendingNudge(ctx, "chat", kick.CoordinatorKickRenderContext{WorkflowID: run.WorkflowID, CurrentPhase: run.CurrentPhase})
+	testutil.FailErr(t, "render durable phase evidence", err)
+	if !ok || !strings.Contains(text, "retained-evidence-identity") {
+		t.Fatalf("phase handoff lost retained evidence:%q,%v", text, ok)
+	}
+}
+
+func TestFeedbackAndReviewCallbacksRetainGuidanceUntilCoordinatorWake(t *testing.T) {
+	ctx := t.Context()
+	database := testdbfixture.Open(t, "feedback-guidance.db")
+	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
+	sessionStore := store.NewSQL(database)
+	sess, err := sessionStore.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create coordinator feedback session", err)
+	host := session.NewHost(sessionStore, session.Models{Limits: settings.DefaultSessionLimits()}, tools.NewStubRegistry())
+	manifests, err := workflowdef.RegistryFromDirs("")
+	testutil.FailErr(t, "load feedback workflow catalog", err)
+	manager := workflow.NewManager(workflowpersistence.New(database), sessionStore, manifests, nil)
+	host.SetLoopWorkflowSource(&loopwake.WorkflowDomains{Runs: manager.Store.Runs, Approvals: manager.Policy, Obligations: manager.Obligations})
+	kicks := &kick.KickEngine{}
+	bus := anchor.NewBus(kicks)
+	registry, err := anchor.LoadRegistryFromConfigRoot()
+	testutil.FailErr(t, "load feedback guidance", err)
+	bus.SetRegistry(registry)
+	previousRegistry := anchor.DefaultRegistry()
+	anchor.SetDefaultRegistry(registry)
+	t.Cleanup(func() { anchor.SetDefaultRegistry(previousRegistry) })
+	host.Coordinator.Guidance.Bind(kicks, bus)
+	runtime := delegations.New(database, nil, worker.WorkersConfig{})
+	runtime.SetDependencies(delegations.Dependencies{Sessions: &sessions.Runtime{Manager: host}})
+	finish := host.Coordinator.Runtime.CoordinatorLoop().Admission.BeginPromptExecution(ctx, sess.ID)
+	defer finish()
+	runtime.OnWorkflowFeedbackPending(ctx, sess.ID, "run")
+	if ids := kicks.PendingKickIDsUnless(sess.ID, nil); !slices.Contains(ids, anchor.InformRender(anchor.FeedbackPending)) {
+		t.Fatalf("feedback missing pending guidance:%v", ids)
+	}
+	runtime.OnWorkflowFeedbackResolved(ctx, sess.ID, "run", "prompt", "answer")
+	ids := kicks.PendingKickIDsUnless(sess.ID, nil)
+	if slices.Contains(ids, anchor.InformRender(anchor.FeedbackPending)) || !slices.Contains(ids, anchor.InformRender(anchor.FeedbackReceived)) {
+		t.Fatalf("resolved feedback left stale guidance:%v", ids)
+	}
+	for _, decision := range []bool{false, true} {
+		runtime.OnWorkflowReviewLoopHeld(ctx, sess.ID, decision)
+		want := anchor.ReviewLoopContinue
+		if decision {
+			want = anchor.ReviewLoopDecide
+		}
+		if ids := kicks.PendingKickIDsUnless(sess.ID, nil); !slices.Contains(ids, anchor.InformRender(want)) {
+			t.Fatalf("review decision %v missing guidance:%v", decision, ids)
+		}
+	}
+	if id, ok := host.Coordinator.Runtime.CoordinatorLoop().Nudges.Pending(sess.ID); !ok || id != anchor.PhaseAdvanced {
+		t.Fatalf("feedback/review callbacks did not wake coordinator:%q,%v", id, ok)
 	}
 }
