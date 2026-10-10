@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/workflow"
 	"path/filepath"
 	"strings"
 
@@ -91,6 +92,9 @@ func (b boardWiring) wireBoardAndResearch() error {
 		return b.settingsSvc.SecurityScanners.Effective().Enabled
 	})
 	if err := board.RegisterBoardTools(b.toolRuntime.Registry, board.ToolDeps{
+		ReviewView: func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
+			return workflow.ReviewAssignmentsView(ctx, b.workflowMgr, args, tctx)
+		},
 		Builder:            b.boardSnap,
 		Findings:           func() findings.Store { return b.findingsStore },
 		RootSession:        b.rootSessionKey,

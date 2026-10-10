@@ -31,7 +31,7 @@ type RecordedVerdict struct {
 
 // WorkerTaskAssignmentInput is the host-defined charter for a worker leg.
 type WorkerTaskAssignmentInput struct {
-	CoverageAssignment *reviewcoverage.Assignment
+	CoverageAssignment *reviewcoverage.Binding
 	ScanInventory      string
 	SessionID          string
 	ProjectDir         string
@@ -47,6 +47,7 @@ type WorkerTaskAssignmentInput struct {
 
 // WorkerTaskAssignmentData is the pongo data model for inject/worker-task-assignment.md.
 type WorkerTaskAssignmentData struct {
+	CoverageRequired   bool
 	CoverageAssignment string
 	ScanInventory      string
 	AgentType          string
@@ -123,6 +124,7 @@ func BuildWorkerTaskAssignmentData(ctx context.Context, in WorkerTaskAssignmentI
 		}
 	}
 	if in.CoverageAssignment != nil {
+		data.CoverageRequired = in.CoverageAssignment.CoverageRequired
 		if raw, err := json.Marshal(in.CoverageAssignment); err == nil {
 			data.CoverageAssignment = string(raw)
 		}
@@ -194,6 +196,7 @@ func WorkerTaskAssignmentToMap(data WorkerTaskAssignmentData) map[string]any {
 	return map[string]any{
 		"scan_inventory":      data.ScanInventory,
 		"coverage_assignment": data.CoverageAssignment,
+		"coverage_required":   data.CoverageRequired,
 		"agent_type":          data.AgentType,
 		"worker_job_id":       data.WorkerJobID,
 		"goal":                data.Goal,

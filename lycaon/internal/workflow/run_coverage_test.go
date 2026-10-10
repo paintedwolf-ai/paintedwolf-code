@@ -67,7 +67,7 @@ func TestCoverageAdmissionRejectsStaleReviewWithoutSpendingRound(t *testing.T) {
 	if err != nil {
 		t.Fatalf("coverage fixture: %v", err)
 	}
-	if out.Valid || out.Terminal || out.CoverageIssue == nil || out.CoverageIssue.Code != ReviewLoopVerdictInvalidCode {
+	if out.Valid || out.Terminal || out.CoverageIssue == nil || out.CoverageIssue.Code != ReviewContextChangedCode {
 		t.Fatalf("stale coverage advanced: %+v", out)
 	}
 	vars, err := mgr.Store.GetScaffoldVars(t.Context(), run.ID)
@@ -159,7 +159,9 @@ func TestCoverageAdmissionJudgesReviewersAgainstTheirAssignment(t *testing.T) {
 	// the sealed assignment, so the assignment is read first and the
 	// coordinator's verdict is built after the reviewer's leg is final.
 	reviewerTasks = []api.WorkerTask{reviewerTask("")}
-	assignment, err := mgr.CoverageAssignment(t.Context(), run, manifest, "auditor")
+	testutil.FailErr(t, "bind reviewer", (reviewAssignments{mgr}).bind(t.Context(), run, &reviewerTasks[0]))
+	binding, err := mgr.TaskCoverageAssignment(t.Context(), &reviewerTasks[0])
+	assignment := binding.Subject
 	testutil.FailErr(t, "load assignment", err)
 	judgeVerdict := func() (map[string]string, string) {
 		current, err := mgr.CoverageFacts(t.Context(), run, manifest)
@@ -184,7 +186,7 @@ func TestCoverageAdmissionJudgesReviewersAgainstTheirAssignment(t *testing.T) {
 	verdict, _ = judgeVerdict()
 	reject, err = mgr.checkReviewCoverage(t.Context(), run, *judge.ReviewLoop, verdict)
 	testutil.FailErr(t, "judge reviewer sealed at the raw facts", err)
-	if reject == nil || reject.Code != ReviewLoopVerdictInvalidCode {
+	if reject == nil || reject.Code != ReviewRequiredCode {
 		t.Fatalf("reviewer assessment sealed outside its assignment was admitted: %+v", reject)
 	}
 }

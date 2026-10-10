@@ -82,7 +82,7 @@ func (m *RunManager) RecordReviewLoopVerdict(
 	case out.Valid && ReviewLoopVerdictTerminal(rl, verdict):
 		out.Terminal = true
 		out.Attempt = attemptSoFar
-		committedVars = StampReviewVerdict(vars, key, verdict)
+		committedVars = StampReviewVerdict(questionVars, key, verdict)
 		committedVars = SatisfyGateInVars(committedVars, "evidence_passed:"+key)
 	case out.Valid && rl.FollowupAttempts > 0:
 		committedVars = questionVars

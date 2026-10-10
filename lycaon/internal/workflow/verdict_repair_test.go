@@ -30,7 +30,7 @@ func TestVerdictRepairsRetainEveryStructuredCode(t *testing.T) {
 		CoverageIssue:  &tools.ToolReject{Code: ReviewLoopVerdictInvalidCode, Data: map[string]any{"reason": "stale coverage revision"}},
 	}
 	repairs := verdictRepairs("", out)
-	want := []string{SubmitVerdictScansPendingCode, SubmitVerdictReviewerMissingCode, out.GroundingCode, submitVerdictQuestionInvalidCode, ReviewLoopVerdictInvalidCode}
+	want := []string{SubmitVerdictScansPendingCode, SubmitVerdictReviewerMissingCode, out.GroundingCode, ReviewRequiredCode, ReviewLoopVerdictInvalidCode}
 	if len(repairs) != len(want) {
 		t.Fatalf("repairs = %+v", repairs)
 	}

@@ -11,6 +11,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/reviewcoverage"
+	"github.com/lycaon/lycaon/internal/tools"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -22,8 +23,9 @@ type ReviewQuestion struct {
 }
 
 type reviewQuestionWork struct {
-	ID      string `json:"id"`
-	ClaimID string `json:"claim_id"`
+	ReviewWorkID string `json:"review_work_id,omitempty"`
+	ID           string `json:"id"`
+	ClaimID      string `json:"claim_id"`
 	ReviewQuestion
 }
 
@@ -89,13 +91,23 @@ func (m *RunManager) prepareReviewQuestions(ctx context.Context, run *api.Workfl
 		if err != nil {
 			return vars, err
 		}
+		var missing, expected []string
 		for id := range rules.KnownClaims {
+			expected = append(expected, id)
 			if !slices.ContainsFunc(claims, func(c VerdictClaim) bool { return c.ID == id }) {
-				return vars, rejectReviewQuestion("claim_outcome_required", "question/"+url.PathEscape(id))
+				missing = append(missing, id)
 			}
+		}
+		if len(missing) > 0 {
+			slices.Sort(missing)
+			slices.Sort(expected)
+			return vars, &tools.ToolReject{Code: ReviewLoopVerdictInvalidCode, Data: map[string]any{"action": "edit_submission", "missing_claim_ids": missing, "expected_claim_ids": expected, "reason": "missing_claim_outcomes"}}
 		}
 	}
 	known, err = registerReviewQuestions(def, claims, known, facts, terminal)
+	for i := range known {
+		known[i].ReviewWorkID = known[i].ID + "/review"
+	}
 	if err != nil {
 		return vars, err
 	}

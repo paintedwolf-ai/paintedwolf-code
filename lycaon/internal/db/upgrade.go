@@ -13,8 +13,8 @@ import (
 //go:embed released-baselines.json
 var releasedBaselinesJSON []byte
 
-// registeredMigrations stays empty until the first change to a released schema.
-var registeredMigrations = []migrations.Step{}
+//go:embed migrations/review_assignments.sql
+var reviewAssignmentsMigration []byte
 
 // Before captures recovery data; After records the upgrade commit.
 type UpgradeHooks struct {
@@ -32,7 +32,7 @@ func schemaRegistry(ctx context.Context) (*migrations.Registry, error) {
 	if err := json.Unmarshal(releasedBaselinesJSON, &released); err != nil {
 		return nil, fmt.Errorf("decode released schemas: %w", err)
 	}
-	return migrations.New(current, released, registeredMigrations)
+	return migrations.New(current, released, []migrations.Step{reviewAssignmentsStep(current)})
 }
 
 // CurrentBaseline identifies the fresh-install schema.

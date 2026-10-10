@@ -41,6 +41,7 @@ func (a PhaseExitChoiceArm) CoordinatorMayFire() bool {
 // only — the sentences an agent reads are written in the catalog, by
 // guidance/active-workflow.md under "### Phase exit".
 type PhaseExitView struct {
+	ReviewWorkIDs    map[string]string
 	Kind             string
 	AdvanceAuthority string
 	DepthParam       string
@@ -53,7 +54,7 @@ type PhaseExitView struct {
 	// failures: the phase work is what activates them.
 	DormantGates []string
 	// CompleteWhen is a non-gate completion expression, when the phase declares one.
-	CompleteWhen string
+	CompleteWhen     string
 	ReviewLoopKey    string
 	ReviewLoopCap    int
 	FollowupAttempts int
@@ -98,6 +99,12 @@ func ProjectPhaseExit(manifest workflowdef.Manifest, phase workflowdef.PhaseDef,
 			reviewAgents = dedupeReviewAgents(phase.ReviewLoop.RequiredAgents, phase.ReviewLoop.IfSpawnable)
 		}
 		out.ReviewAgents = append([]string(nil), reviewAgents...)
+		if phase.ReviewLoop.AssignmentBinding == "explicit" {
+			out.ReviewWorkIDs = map[string]string{}
+			for _, agent := range reviewAgents {
+				out.ReviewWorkIDs[agent] = reviewWorkID(agent)
+			}
+		}
 	case phase.HumanApproval != nil:
 		out.Kind = PhaseExitKindHumanApproval
 		out.HumanApproval = true
@@ -173,6 +180,7 @@ func choiceExitArms(edges []workflowdef.PhaseTransitionDef) []PhaseExitChoiceArm
 func (exit PhaseExitView) InjectView() *inject.PhaseExitView {
 	pe := &inject.PhaseExitView{
 		Kind:                exit.Kind,
+		ReviewWorkIDs:       exit.ReviewWorkIDs,
 		DepthParam:          exit.DepthParam,
 		CoordinatorAdvances: exit.CoordinatorAdvances,
 		OpenGates:           append([]string(nil), exit.OpenGates...),

@@ -566,6 +566,12 @@
       "emit": "guard:tool",
       "summary": "The coverage assessment is missing, incomplete, or stale."
     },
+    "COMPLETE_LEG_REVIEW_ASSIGNMENT_MISSING": {
+      "branch_instruction": "Preserve the evidence already gathered and report this dependency; do not invent a revision.",
+      "category": "recoverable",
+      "emit": "guard:tool",
+      "summary": "This review has no recorded assignment subject."
+    },
     "COMPLETE_LEG_STATUS_REQUIRED": {
       "branch_instruction": "Correct the report shape and actual status, then submit complete_leg",
       "category": "recoverable",
@@ -2648,7 +2654,7 @@
       "summary": "Some submitted citations do not resolve to the active review evidence union."
     },
     "SUBMIT_VERDICT_INVALID": {
-      "branch_instruction": "Correct only the invalid fields and resubmit the current expected call with observed citations.",
+      "branch_instruction": "Correct the named fields using exact missing_claim_ids and expected_claim_ids when supplied, then resubmit with observed citations.",
       "category": "recoverable",
       "emit": "guard:workflow",
       "summary": "The verdict payload does not match the active review phase contract."
@@ -2682,6 +2688,18 @@
       "category": "recoverable",
       "emit": "guard:workflow",
       "summary": "The verdict does not cite these required reviewer envelopes: {{ paintedwolf.review_uncited_reviewers }}."
+    },
+    "SUBMIT_VERDICT_REVIEW_CONTEXT_CHANGED": {
+      "branch_instruction": "Reconcile the resulting evidence before resubmitting the verdict.",
+      "category": "recoverable",
+      "emit": "guard:workflow",
+      "summary": "The review context changed after this submission was prepared."
+    },
+    "SUBMIT_VERDICT_REVIEW_REQUIRED": {
+      "branch_instruction": "Reconcile the resulting evidence before resubmitting the verdict.",
+      "category": "recoverable",
+      "emit": "guard:workflow",
+      "summary": "Required review evidence is unavailable for these inputs."
     },
     "SUBMIT_VERDICT_SCANS_PENDING": {
       "branch_instruction": "Do not submit a partial inventory or start another scan to replace one that is still running.",

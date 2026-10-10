@@ -26,7 +26,7 @@ type TaskToolDeps struct {
 	Agents           orchestration.AgentRegistry
 	Workers          WorkersConfig
 	ToolBudget       func(projectDir string) spawn.WorkerToolBudget
-	ComposePrompt    func(ctx context.Context, tctx tools.ToolContext, agentType string, brief api.WorkerTaskCharter, workerJobID string, scope *api.TaskScope, maxToolLoops int) (string, error)
+	ComposePrompt    func(ctx context.Context, tctx tools.ToolContext, agentType string, brief api.WorkerTaskCharter, task *api.WorkerTask) (string, error)
 	WebSearchEnabled func() bool
 	// PendingDecision returns a child's open decision.
 	PendingDecision  func(context.Context, string) (jobID string, ok bool, err error)
@@ -131,13 +131,6 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 		effectiveMaxToolLoops := identity.MaxToolLoops
 		scopePtr := &normalizedScope
 		jobID := uuid.NewString()
-		if deps.ComposePrompt != nil {
-			composed, err := deps.ComposePrompt(ctx, tctx, agentType, brief, jobID, scopePtr, effectiveMaxToolLoops)
-			if err != nil {
-				return "", err
-			}
-			prompt = composed
-		}
 		if prior := identity.Prior; prior != nil && overlayDiscarded(prior.MergeStatus) {
 			return "", &tools.ToolReject{
 				Code: "WORKER_RESUME_OVERLAY_DISCARDED",
@@ -189,6 +182,14 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 				return "", err
 			}
 		}
+		if deps.ComposePrompt != nil {
+			composed, err := deps.ComposePrompt(ctx, tctx, agentType, brief, &task)
+			if err != nil {
+				return "", err
+			}
+			task.Prompt = composed
+		}
+
 		task.SourceArgsDigest = sourceDigest
 		enqueuedID, err := deps.Queue.Enqueue(ctx, task)
 		if err != nil {

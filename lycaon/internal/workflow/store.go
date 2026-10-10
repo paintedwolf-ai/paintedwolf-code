@@ -2,12 +2,18 @@ package workflow
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/reviewcoverage"
 
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // RunStore persists workflow run instances.
 type RunStore interface {
+	ReviewInputRevision(context.Context, string) (int64, error)
+	RecordReviewBinding(context.Context, *api.WorkflowRun, reviewcoverage.Binding) error
+	ReviewBinding(context.Context, string) (*reviewcoverage.Binding, error)
+	ReviewBindings(context.Context, string, string, string, int) ([]reviewcoverage.Binding, error)
+
 	MutationEventsOutboxed() bool
 	CreateState(ctx context.Context, run *api.WorkflowRun, projectDir string, vars map[string]any) error
 	StartChild(ctx context.Context, parent, child *api.WorkflowRun, mutation workflowChildStartMutation) error

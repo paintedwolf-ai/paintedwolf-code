@@ -36,6 +36,12 @@ func TestTaskToolReplaysReceiptAfterWorkflowMovedOn(t *testing.T) {
 			task.WorkflowRunID, task.WorkflowPhase, task.WorkflowWorkID = "run", "execute", id
 			return nil
 		},
+		ComposePrompt: func(_ context.Context, _ tools.ToolContext, _ string, _ api.WorkerTaskCharter, task *api.WorkerTask) (string, error) {
+			if bound != 1 || task.WorkflowRunID != "run" || task.WorkflowWorkID != "leg-1" {
+				t.Fatal("prompt composed before workflow binding")
+			}
+			return "Bound assignment", nil
+		},
 		TaskReceipt: func(_ context.Context, parent, call string) (*api.WorkerTask, error) {
 			if enqueued.SourceToolCallID == call && enqueued.ParentSessionID == parent {
 				return &enqueued, nil

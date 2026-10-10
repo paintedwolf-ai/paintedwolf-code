@@ -2050,6 +2050,24 @@ type WorkflowCommands struct {
 	CommittedAt    string `json:"committed_at"`
 }
 
+type WorkflowReviewAssignments struct {
+	ID          string `json:"id"`
+	RunID       string `json:"run_id"`
+	SubjectID   string `json:"subject_id"`
+	Phase       string `json:"phase"`
+	WorkID      string `json:"work_id"`
+	Agent       string `json:"agent"`
+	BindingJson string `json:"binding_json"`
+}
+
+type WorkflowReviewSubjects struct {
+	ID          string `json:"id"`
+	RunID       string `json:"run_id"`
+	Phase       string `json:"phase"`
+	Revision    string `json:"revision"`
+	SubjectJson string `json:"subject_json"`
+}
+
 type WorkflowRunPageOrdinals struct {
 	Ordinal int64  `json:"ordinal"`
 	RunID   string `json:"run_id"`
@@ -2077,6 +2095,7 @@ type WorkflowRuns struct {
 	UpdatedAt       string         `json:"updated_at"`
 	PausedAt        sql.NullString `json:"paused_at"`
 	CompletedAt     sql.NullString `json:"completed_at"`
+	ReviewRevision  int64          `json:"review_revision"`
 }
 
 type WorkflowScanBindings struct {

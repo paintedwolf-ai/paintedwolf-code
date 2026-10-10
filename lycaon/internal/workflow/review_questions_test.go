@@ -49,7 +49,7 @@ func TestQuestionClosureRequiresFreshSuccessfulReview(t *testing.T) {
 	questions := []reviewQuestionWork{{ID: "question/c6", ClaimID: "c6"}}
 	review := &api.CoverageReview{Assessments: []api.CoverageAssessment{{ID: "question/c6", Disposition: reviewcoverage.Covered}}}
 	now := time.Now().UTC()
-	tasks := []api.WorkerTask{{WorkflowPhase: "challenge", WorkflowWorkID: "question/c6", Status: api.WorkerStatusComplete, CompletedAt: &now}}
+	tasks := []api.WorkerTask{{ID: "investigation", WorkflowPhase: "challenge", WorkflowWorkID: "question/c6", Status: api.WorkerStatusComplete, Result: &api.WorkerResult{CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"}}, CompletedAt: &now}}
 	if err := checkQuestionClosure(def, claims, questions, tasks, "challenge", review); err == nil {
 		t.Fatal("resolved question bypassed reviewer")
 	}
@@ -58,7 +58,7 @@ func TestQuestionClosureRequiresFreshSuccessfulReview(t *testing.T) {
 	if err := checkQuestionClosure(def, claims, questions, tasks, "challenge", review); err == nil {
 		t.Fatal("stale reviewer accepted")
 	}
-	tasks[1].CreatedAt = now
+	tasks[1].AfterWorkers = []string{"investigation"}
 	if err := checkQuestionClosure(def, claims, questions, tasks, "challenge", review); err != nil {
 		t.Fatalf("fresh reviewer rejected: %v", err)
 	}

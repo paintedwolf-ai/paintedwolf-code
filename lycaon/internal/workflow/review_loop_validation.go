@@ -77,5 +77,9 @@ func (m *RunManager) validateReviewSubmission(ctx context.Context, active *api.W
 			}
 		}
 	}
-	return reviewValidation{Outcome: out, Vars: questionVars}, nil
+	validated := reviewValidation{Outcome: out, Vars: questionVars}
+	if out.Valid && ReviewLoopVerdictTerminal(rl, verdict) && rl.CarriesCoverage() {
+		return (reviewAssignments{m}).retainAccepted(ctx, active, rl, verdict, validated)
+	}
+	return validated, nil
 }

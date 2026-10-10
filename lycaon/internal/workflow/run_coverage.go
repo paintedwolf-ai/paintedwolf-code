@@ -22,13 +22,44 @@ import (
 // CoverageFacts loads the same observations used by verdict admission and
 // reports. Before the run's bound scans settle it returns ErrCoverageScansPending.
 func (m *RunManager) CoverageFacts(ctx context.Context, run *api.WorkflowRun, manifest workflowdef.Manifest) (reviewcoverage.Facts, error) {
-	facts, _, err := m.coverageFacts(ctx, run, manifest)
+	return (reviewAssignments{m}).factsForReport(ctx, run, manifest)
+}
+
+func (r reviewAssignments) factsForReport(ctx context.Context, run *api.WorkflowRun, manifest workflowdef.Manifest) (reviewcoverage.Facts, error) {
+	m := r.runs
+	last := ""
+	activeReview := false
+	for _, phase := range manifest.PhaseDefs {
+		if phase.ReviewLoop != nil && phase.ReviewLoop.CarriesCoverage() {
+			last = phase.ID
+			activeReview = activeReview || phase.ID == run.CurrentPhase
+		}
+	}
+	if last != "" && (!activeReview || run.Status == api.WorkflowRunStatusComplete) {
+		vars, err := m.Store.GetScaffoldVars(ctx, run.ID)
+		if err != nil {
+			return reviewcoverage.Facts{}, err
+		}
+		accepted, err := AcceptedReviewInputsFromVars(vars, manifest)
+		if err != nil {
+			return reviewcoverage.Facts{}, err
+		}
+		if accepted != nil {
+			return accepted.Facts, nil
+		}
+	}
+	facts, _, err := (reviewAssignments{m}).facts(ctx, run, manifest)
 	return facts, err
 }
 
 // coverageFacts also returns the worker tasks the facts were built from, so a
 // caller judging reviewer results reads the same ledger snapshot.
-func (m *RunManager) coverageFacts(ctx context.Context, run *api.WorkflowRun, manifest workflowdef.Manifest) (reviewcoverage.Facts, []api.WorkerTask, error) {
+func (r reviewAssignments) facts(ctx context.Context, run *api.WorkflowRun, manifest workflowdef.Manifest) (reviewcoverage.Facts, []api.WorkerTask, error) {
+	m := r.runs
+	inputRevision, err := m.Store.ReviewInputRevision(ctx, run.ID)
+	if err != nil {
+		return reviewcoverage.Facts{}, nil, err
+	}
 	if m.Inventory == nil {
 		return reviewcoverage.Facts{}, nil, fmt.Errorf("coverage scan ledger unavailable")
 	}
@@ -50,7 +81,16 @@ func (m *RunManager) coverageFacts(ctx context.Context, run *api.WorkflowRun, ma
 	if err != nil {
 		return reviewcoverage.Facts{}, nil, err
 	}
-	return BuildCoverageFacts(manifest, vars, tasks, inventory.Scans), tasks, nil
+	current, err := m.Store.ReviewInputRevision(ctx, run.ID)
+	if err != nil {
+		return reviewcoverage.Facts{}, nil, err
+	}
+	if current != inputRevision {
+		return reviewcoverage.Facts{}, nil, &tools.ToolReject{Code: ReviewContextChangedCode, Data: map[string]any{"action": "refresh_context"}}
+	}
+	facts := BuildCoverageFacts(manifest, vars, tasks, inventory.Scans)
+	facts.InputRevision = inputRevision
+	return facts, tasks, nil
 }
 
 // BuildCoverageFacts keeps full identities while bounding prompt path samples.
@@ -94,7 +134,7 @@ func BuildCoverageFacts(manifest workflowdef.Manifest, vars map[string]any, task
 					ids = append(ids, scan.ID)
 				}
 				slices.Sort(ids)
-				facts.Obligations = append(facts.Obligations, reviewcoverage.Fact{ID: phase.ID + "/scans", Kind: "scan_inventory", Subject: "Assess the required scanner inventory", Scans: ids})
+				facts.Obligations = append(facts.Obligations, reviewcoverage.Fact{ID: phase.ID + "/scans", Kind: "scan_inventory", EvidenceRevision: scanReviewRevision(scans), Subject: "Assess the required scanner inventory", Scans: ids})
 				break
 			}
 		}
@@ -105,7 +145,7 @@ func BuildCoverageFacts(manifest workflowdef.Manifest, vars map[string]any, task
 	// Evidence identities change even when the summarized state stays the same.
 	ids := append([]string(nil), plans...)
 	for _, s := range scans {
-		ids = append(ids, reviewcoverage.Identity(struct{ ID, Snapshot, Status, Coverage string }{s.ID, s.SourceSnapshotID, string(s.Status), string(s.CoverageStatus)}))
+		ids = append(ids, reviewcoverage.Identity(struct{ ID, Snapshot, FindingSet, Execution, Status, Coverage string }{s.ID, s.SourceSnapshotID, s.FindingSetID, s.ExecutionFingerprint, string(s.Status), string(s.CoverageStatus)}))
 	}
 	for _, t := range tasks {
 		ids = append(ids, reviewcoverage.Identity(struct {
@@ -295,28 +335,28 @@ func (m *RunManager) checkReviewCoverage(ctx context.Context, run *api.WorkflowR
 	if err != nil {
 		return nil, err
 	}
-	facts, tasks, err := m.coverageFacts(ctx, run, manifest)
+	facts, tasks, err := (reviewAssignments{m}).facts(ctx, run, manifest)
 	if errors.Is(err, ErrCoverageScansPending) {
 		return &tools.ToolReject{Code: SubmitVerdictScansPendingCode, Data: map[string]any{}}, nil
 	}
 	if err != nil {
 		return nil, err
 	}
+	if review.Revision != facts.Revision {
+		return &tools.ToolReject{Code: ReviewContextChangedCode, Data: map[string]any{"action": "refresh_context", "revision": facts.Revision}}, nil
+	}
 	if err := reviewcoverage.Validate(facts, *review); err != nil {
 		return coverageReject(def, err), nil
 	}
-	if len(def.CoverageReviewers) == 0 {
+	if len(def.CoverageReviewers) == 0 && def.AssignmentBinding != "explicit" {
 		return nil, nil
 	}
 	// Independent reviewers assess the sealed assignment, not the raw facts.
-	assignment, err := m.assignCoverage(ctx, run, manifest, def, facts)
+	assignment, err := (reviewAssignments{m}).subjectFromFacts(ctx, run, manifest, def, facts)
 	if err != nil {
 		return coverageReject(def, err), nil
 	}
-	if err := validateCoverageReviewerResults(run, def, assignment.Facts, tasks); err != nil {
-		return coverageReject(def, err), nil
-	}
-	return nil, nil
+	return (reviewAssignments{m}).validate(ctx, run, def, *assignment, tasks)
 }
 
 // coverageReject refuses a coverage review the model can repair. The
@@ -347,4 +387,13 @@ func coverageReviewTasks(manifest workflowdef.Manifest, tasks []api.WorkerTask) 
 		later[phase.ID] = true
 	}
 	return slices.DeleteFunc(slices.Clone(tasks), func(task api.WorkerTask) bool { return later[task.WorkflowPhase] })
+}
+
+func scanReviewRevision(scans []api.CodeScan) string {
+	identities := make([]string, 0, len(scans))
+	for _, s := range scans {
+		identities = append(identities, reviewcoverage.Identity(struct{ ID, Snapshot, FindingSet, Execution, Status, Coverage string }{s.ID, s.SourceSnapshotID, s.FindingSetID, s.ExecutionFingerprint, string(s.Status), string(s.CoverageStatus)}))
+	}
+	slices.Sort(identities)
+	return reviewcoverage.Identity(identities)
 }

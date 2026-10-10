@@ -15,10 +15,9 @@ Use `scan_query` with these `scan_ids`, `kind: sca`, `view: groups` and `offset:
 
 {{ coverage_assignment }}
 
-Assess every fact in `facts` independently. Check exclusions against the full directory, extension and construct counts; path samples do not establish the role of unsampled files. Use `scan_query(view: coverage, scan_ids, warning_kind, path?, construct?, offset?, limit?)` for bounded drilldown, then inspect relevant source or build configuration. Do not enumerate every warning. Reuse this leg's evidence and tool budget; identify remaining material or essential uncertainty explicitly.
-
-Return `complete_leg.coverage_review` with `facts.revision` and one assessment per fact: id, disposition, reason, affected obligations for gaps, and cited_evidence. Use satisfied for obligations, covered or immaterial for resolved gaps, material_open or essential_open for unfinished work. Explain why evidence supports the affected scope, not only a sampled file.
-
+{% if coverage_required %}Assess the assigned `subject.facts` and candidate judgments. Use `scan_query(view: coverage)` for bounded drilldown and inspect relevant source; samples do not establish full scope. Return `complete_leg.coverage_review` using `subject.facts.revision`, with a cited assessment for every assigned fact. Use satisfied for obligations, covered or immaterial for resolved gaps, and material_open or essential_open for unanswered work. Report additional discoveries separately; they do not expand this assignment.
+{% else %}Complete the assigned investigation or advisory review using its stated criteria. No whole-survey coverage assessment is required.
+{% endif %}
 {% endif %}Host scan execution, coverage, and result-availability fields describe the bound evidence. Coordinator commentary does not change those facts.
 
 Leg assignment ({{ agent_type }}):

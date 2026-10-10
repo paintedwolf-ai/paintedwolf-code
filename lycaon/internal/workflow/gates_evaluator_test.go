@@ -93,3 +93,22 @@ func TestCollectFailedLeavesUnknownIgnored(t *testing.T) {
 		t.Fatalf("failed = %v", failed)
 	}
 }
+
+func TestReviewGateRequiresCommittedWorkflowAcceptance(t *testing.T) {
+	mgr, run, manifest := reviewAssignmentFixture(t)
+	vars, err := mgr.Store.GetScaffoldVars(t.Context(), run.ID)
+	testutil.FailErr(t, "read review variables", err)
+	// The fixture's evidence provider reports success even before submission.
+	evaluator := RegistryGateEvaluator{Registry: mgr.Registry}
+	passed, _, err := evaluator.PhaseGateMet(t.Context(), manifest, run, vars)
+	testutil.FailErr(t, "check prepared evidence", err)
+	if passed {
+		t.Fatal("external evidence bypassed verdict commit")
+	}
+	vars = SetGateSatisfied(vars, "evidence_passed:rl_key", true)
+	passed, _, err = evaluator.PhaseGateMet(t.Context(), manifest, run, vars)
+	testutil.FailErr(t, "check committed acceptance", err)
+	if !passed {
+		t.Fatal("committed review gate did not pass")
+	}
+}

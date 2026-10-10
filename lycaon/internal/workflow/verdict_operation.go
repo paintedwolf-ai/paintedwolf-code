@@ -183,6 +183,11 @@ func (s *SQLStore) commitVerdictOperation(ctx context.Context, op verdictOperati
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if outcome.Valid && outcome.Terminal {
+		if err := verifyReviewInputsTx(ctx, tx, run.ID, op.Phase, vars); err != nil {
+			return err
+		}
+	}
 	if vars != nil {
 		now := time.Now().UTC()
 		raw, marshalErr := json.Marshal(vars)

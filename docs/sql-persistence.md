@@ -161,6 +161,12 @@ Turn checkpoints name restart-safe phases (`preparing`, `model`, `tools`, `decis
 
 Workers follow the same rule. `worker_jobs` is the small scheduler head, `worker_attempts` records every fenced claim, and `worker_results` holds the one immutable terminal semantic result. A decision request closes its attempt as `suspended` and leaves a replaceable checkpoint on the held job head; it does not consume the terminal-result slot. The parent task card and wake are outcome projections delivered after the result or suspension checkpoint commits; a projector failure leaves a pending delivery, not a failed worker. Reused child sessions are queried through the indexed `worker_job_id`.
 
+Workflow review subjects and assignments are immutable run-scoped context. Worker
+results remain the authoritative assessments. The run's `review_revision` advances
+transactionally with worker state and bound scan changes; review acceptance checks
+that revision in the verdict transaction. Accepted report snapshots are retained
+projections over those inputs, so later work cannot rewrite a completed review.
+
 This is a fact-plus-head design, not full event sourcing. Small mutable heads answer current-state questions without replay; immutable attempts, outputs, receipts, and results preserve the execution facts needed for audit and recovery. There is no generic event reducer, global sequence, or whole-history boot replay. Domain-specific projectors consume exact pending rows in bounded batches.
 
 ### Compaction views

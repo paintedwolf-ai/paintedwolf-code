@@ -15,6 +15,7 @@ import (
 
 // ToolDeps holds dependencies for board orientation tools.
 type ToolDeps struct {
+	ReviewView         func(context.Context, map[string]any, tools.ToolContext) (string, error)
 	Builder            *SnapshotBuilder
 	Findings           func() findings.Store
 	RootSession        func(context.Context, string) string
@@ -29,6 +30,12 @@ func RegisterBoardTools(reg *tools.DefaultRegistry, deps ToolDeps) error {
 		return fmt.Errorf("registry and snapshot builder required")
 	}
 	if err := reg.Register("pack_board", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
+		if args["review_view"] != nil {
+			if deps.ReviewView == nil {
+				return "", fmt.Errorf("review view unavailable")
+			}
+			return deps.ReviewView(ctx, args, tctx)
+		}
 		if args["finding_id"] != nil || args["findings_after"] != nil {
 			return readFindings(ctx, args, tctx, deps)
 		}

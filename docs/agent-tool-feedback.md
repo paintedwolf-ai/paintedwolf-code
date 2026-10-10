@@ -178,7 +178,12 @@ replace a later candidate with an earlier result.
 
 Three consecutive equivalent structured defects, or eight rejected responses,
 pause the phase as `review_blocked`. Missing workers and unsettled scans retain
-their existing wait semantics. An impossible offered coverage-id contract blocks
+their existing wait semantics. `SUBMIT_VERDICT_REVIEW_REQUIRED` supplies a dispatch
+or wait action with exact work/job IDs. `SUBMIT_VERDICT_REVIEW_CONTEXT_CHANGED`
+requests refreshed review context. Neither spends the malformed-submission
+budget. Missing stamped outcomes name `missing_claim_ids` and
+`expected_claim_ids`; an unregistered claim never receives a fabricated question
+identity. An impossible offered coverage-id contract blocks
 before a model call. Pausing records the report snapshot and worker hold in the
 workflow command transaction; startup replays the transcript-to-accounting crash
 window. Neither pause nor snapshot delivery stamps an evidence verdict.

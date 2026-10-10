@@ -8,25 +8,25 @@ import (
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/boot"
 	"github.com/lycaon/lycaon/internal/bootrecovery"
+	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/coordinator"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/delegation"
+	"github.com/lycaon/lycaon/internal/events"
+	"github.com/lycaon/lycaon/internal/llm"
+	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/parse"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/scan"
+	"github.com/lycaon/lycaon/internal/secretcap"
+	"github.com/lycaon/lycaon/internal/secretspan"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workflow"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"github.com/lycaon/lycaon/internal/captureprojection"
-	"github.com/lycaon/lycaon/internal/events"
-	"github.com/lycaon/lycaon/internal/llm"
-	"github.com/lycaon/lycaon/internal/mcp"
-	"github.com/lycaon/lycaon/internal/secretcap"
-	"github.com/lycaon/lycaon/internal/secretspan"
 )
 
 // toolWiring wires the coordinator tools, scanning, detection packs, and the OAR block plane.
@@ -198,7 +198,7 @@ func (b toolWiring) taskToolDeps() worker.TaskToolDeps {
 			}
 			return dec.WorkerID, true, nil
 		},
-		ComposePrompt: func(ctx context.Context, tctx tools.ToolContext, agentType string, brief wire.WorkerTaskCharter, workerJobID string, scope *wire.TaskScope, maxToolLoops int) (string, error) {
+		ComposePrompt: func(ctx context.Context, tctx tools.ToolContext, agentType string, brief wire.WorkerTaskCharter, task *wire.WorkerTask) (string, error) {
 			msgs, err := b.store.GetMessages(ctx, tctx.SessionID)
 			if err != nil {
 				return brief.Goal, err
@@ -208,13 +208,13 @@ func (b toolWiring) taskToolDeps() worker.TaskToolDeps {
 				ProjectDir:       tctx.ActiveRootPath(),
 				Charter:          brief,
 				AgentType:        agentType,
-				WorkerJobID:      workerJobID,
-				MaxToolLoops:     maxToolLoops,
+				WorkerJobID:      task.ID,
+				MaxToolLoops:     task.MaxToolLoops,
 				Attachments:      surface.SessionForwardedAttachments(msgs),
 				RecordedVerdicts: recordedVerdictsForLeg(ctx, b.workflowMgr, tctx.SessionID),
 			}
-			if scope != nil {
-				in.Scope = *scope
+			if task.Scope != nil {
+				in.Scope = *task.Scope
 			}
 			run, err := b.workflowMgr.GetActive(ctx, tctx.SessionID)
 			if err != nil {
@@ -225,11 +225,11 @@ func (b toolWiring) taskToolDeps() worker.TaskToolDeps {
 				if err != nil {
 					return "", err
 				}
-				in.CoverageAssignment, err = b.workflowMgr.CoverageAssignment(ctx, run, manifest, agentType)
+				in.CoverageAssignment, err = b.workflowMgr.TaskCoverageAssignment(ctx, task)
 				if err != nil {
 					return "", err
 				}
-				if def, ok := manifest.PhaseByID(run.CurrentPhase); ok && def.ReviewLoop != nil && def.ReviewLoop.IncludeScanInventory {
+				if def, ok := manifest.PhaseByID(run.CurrentPhase); ok && def.ReviewLoop != nil && def.ReviewLoop.IncludeScanInventory && (in.CoverageAssignment == nil || in.CoverageAssignment.QuestionID == "") {
 					inventory, err := scan.WorkflowAdvisoryInventory(ctx, b.scanStore, run.ID)
 					if err != nil {
 						return "", err

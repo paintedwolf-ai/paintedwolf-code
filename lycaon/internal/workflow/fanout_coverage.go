@@ -77,6 +77,13 @@ func (m *RunManager) WorkflowWork(ctx context.Context, sessionID, workID string)
 	if err != nil {
 		return spawn.WorkflowWork{}, false, err
 	}
+	if def.ReviewLoop != nil {
+		for _, agent := range dedupeReviewAgents(def.ReviewLoop.RequiredAgents, def.ReviewLoop.IfSpawnable) {
+			if workID == reviewWorkID(agent) {
+				return spawn.WorkflowWork{RunID: run.ID, Phase: run.CurrentPhase, AgentType: agent, Scope: &api.TaskScope{Mode: "read"}}, true, nil
+			}
+		}
+	}
 	plan, planned := FanoutPlanForPhase(vars, def)
 	if !planned {
 		if def.ReviewLoop == nil || def.ReviewLoop.FollowupAttempts == 0 {
@@ -116,7 +123,10 @@ func (m *RunManager) BindWorkflowTask(ctx context.Context, tctx tools.ToolContex
 		return nil
 	}
 	task.WorkflowRunID, task.WorkflowPhase, task.WorkflowWorkID = run.ID, run.CurrentPhase, strings.TrimSpace(workID)
-	return m.AssertWorkerTask(ctx, task)
+	if err := m.AssertWorkerTask(ctx, task); err != nil {
+		return err
+	}
+	return (reviewAssignments{m}).bind(ctx, run, task)
 }
 
 // AssertWorkerTask is called again under queue admission to serialize attempts.
@@ -142,6 +152,18 @@ func (m *RunManager) AssertWorkerTask(ctx context.Context, task *api.WorkerTask)
 	}
 	plan, planned := FanoutPlanForPhase(vars, def)
 	if !planned {
+		if def.ReviewLoop != nil && (task.WorkflowWorkID == reviewWorkID(task.AgentType) || task.WorkflowWorkID == "") {
+			if def.ReviewLoop.AssignmentBinding == "explicit" && slices.Contains(dedupeReviewAgents(def.ReviewLoop.RequiredAgents, def.ReviewLoop.IfSpawnable), task.AgentType) && task.WorkflowWorkID == "" {
+				return rejectFanoutTask("review_work_id_required", task)
+			}
+			if task.WorkflowWorkID != "" && !slices.Contains(dedupeReviewAgents(def.ReviewLoop.RequiredAgents, def.ReviewLoop.IfSpawnable), task.AgentType) {
+				return rejectFanoutTask("undeclared_reviewer", task)
+			}
+			if def.ReviewLoop.AssignmentBinding == "explicit" || len(def.ReviewLoop.CoverageReviewers) > 0 || task.WorkflowWorkID != "" {
+				return (reviewAssignments{m}).assertInitial(ctx, run, task)
+			}
+			return nil
+		}
 		if def.ReviewLoop != nil && def.ReviewLoop.FollowupAttempts > 0 && task.WorkflowWorkID != "" {
 			return m.assertQuestionTask(ctx, run, *def.ReviewLoop, vars, task)
 		}

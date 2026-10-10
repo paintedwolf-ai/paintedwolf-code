@@ -107,7 +107,7 @@ func TestRenderWorkerTaskAssignmentForwardsAttachmentsWhenBriefSet(t *testing.T)
 
 func TestWorkerAssignmentCarriesCoverageIndependentlyOfClaims(t *testing.T) {
 	assignment := reviewcoverage.Assign(reviewcoverage.Facts{Gaps: []reviewcoverage.Fact{{ID: "gap/all", Kind: "partial", FileCount: 654, Paths: []string{"server/entry.go"}}}}, api.CoverageReview{Revision: "candidate"}, "check")
-	in := WorkerTaskAssignmentInput{SessionID: "parent", ProjectDir: t.TempDir(), AgentType: "reviewer", WorkerJobID: "job", Charter: testWorkerCharter("Challenge one claim"), CoverageAssignment: &assignment}
+	in := WorkerTaskAssignmentInput{SessionID: "parent", ProjectDir: t.TempDir(), AgentType: "reviewer", WorkerJobID: "job", Charter: testWorkerCharter("Challenge one claim"), CoverageAssignment: &reviewcoverage.Binding{Subject: assignment, CoverageRequired: true}}
 	out, err := RenderWorkerTaskAssignment(t.Context(), testInjectRenderer(t), in)
 	testutil.FailErr(t, "render coverage assignment", err)
 	raw, err := json.Marshal(assignment)
