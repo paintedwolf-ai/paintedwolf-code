@@ -16,7 +16,6 @@ import (
 	scancadence "github.com/lycaon/lycaon/internal/scan/cadence"
 	scancfg "github.com/lycaon/lycaon/internal/scan/configuration"
 	scanexecution "github.com/lycaon/lycaon/internal/scan/execution"
-	scanregistry "github.com/lycaon/lycaon/internal/scan/registry"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/sourcescope"
@@ -128,23 +127,10 @@ func Build(ctx context.Context, deps Dependencies) (*Runtime, error) {
 		return nil, err
 	}
 
-	scannerReg := deps.TestRegistry
 	runnerCfg := scancfg.DefaultRunnerConfig()
-	if scannerReg == nil {
-		var scannerKey []byte
-		if deps.FingerprintScannerKey != nil {
-			scannerKey = deps.FingerprintScannerKey()
-		}
-		reg, regErr := scanregistry.New(scanregistry.Options{
-			ScannerFingerprintKey: scannerKey,
-			ModuleRoot:            deps.ModuleRoot,
-			ProcessPriority:       runnerCfg.ExecProcessPriority(),
-			ProjectTierApplies:    appliesPath,
-		})
-		if regErr != nil {
-			return nil, fmt.Errorf("scan registry: %w", regErr)
-		}
-		scannerReg = reg
+	scannerReg, err := loadScannerRegistry(deps, runnerCfg.ExecProcessPriority(), appliesPath)
+	if err != nil {
+		return nil, err
 	}
 	coord.Registry = scannerReg
 
