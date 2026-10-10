@@ -7,124 +7,165 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
+	"golang.org/x/tools/go/packages"
 )
 
-// An enqueue against a nil outbox drops the event silently, so every package
-// that can hold an outbox receives the builder's outbox in the composition
-// root. Resolution is by package: several packages declare SetEventOutbox on a
-// type named SQLStore.
-
-const outboxComposeRoot = "../../../internal/app"
-
-// outboxSetterName is the method a store exposes to receive the outbox.
 const outboxSetterName = "SetEventOutbox"
+const outboxImportPrefix = "github.com/lycaon/lycaon/"
 
-// outboxBuilderField is the single constructed outbox every store must get.
-const outboxBuilderField = "eventOutbox"
+var outboxGraph struct {
+	once     sync.Once
+	packages []*packages.Package
+	errors   []string
+}
+
+// Resolve setters by their declared Go method owner, including typed peers in
+// app subpackages. Package aliases and similarly named store types are distinct.
+func outboxComposePackages(t *testing.T) []*packages.Package {
+	t.Helper()
+	outboxGraph.once.Do(func() {
+		cfg := &packages.Config{Dir: filepath.Join(contractcheck.RepoRoot(t), "lycaon"), Mode: packages.NeedName | packages.NeedFiles | packages.NeedImports | packages.NeedTypes | packages.NeedSyntax | packages.NeedTypesInfo}
+		pkgs, err := packages.Load(cfg, "./internal/app/...")
+		if err != nil {
+			outboxGraph.errors = append(outboxGraph.errors, err.Error())
+		}
+		for _, pkg := range pkgs {
+			for _, err := range pkg.Errors {
+				outboxGraph.errors = append(outboxGraph.errors, err.Error())
+			}
+		}
+		outboxGraph.packages = pkgs
+	})
+	if len(outboxGraph.errors) != 0 {
+		t.Fatalf("load typed app composition: %s", strings.Join(outboxGraph.errors, "\n"))
+	}
+	if len(outboxGraph.packages) == 0 {
+		t.Fatal("typed app composition scan is empty")
+	}
+	return outboxGraph.packages
+}
 
 func TestEveryOutboxBearingStoreIsWired(t *testing.T) {
 	t.Parallel()
 	declared := outboxSetterPackages(t)
 	if len(declared) == 0 {
-		t.Fatal("no SetEventOutbox declarations found; the scan is broken, not the wiring")
+		t.Fatal("no SetEventOutbox declarations found; the scan is broken")
 	}
-	wired := outboxWiredPackages(t)
-
+	wired := map[string]bool{}
+	walkOutboxCalls(t, func(pkg *packages.Package, call *ast.CallExpr, sel *ast.SelectorExpr) {
+		method := pkg.TypesInfo.Selections[sel]
+		if method == nil || method.Obj().Pkg() == nil {
+			t.Fatalf("%s: outbox method owner is unresolved", pkg.Fset.Position(call.Pos()))
+		}
+		wired[method.Obj().Pkg().Path()] = true
+	})
 	var violations []string
 	for pkg, where := range declared {
 		if !wired[pkg] {
-			violations = append(violations, pkg+" declares "+outboxSetterName+
-				" at "+where+" but internal/app never wires it — its events would be dropped silently")
+			violations = append(violations, pkg+" declares SetEventOutbox at "+where+" but app never wires it")
 		}
 	}
 	contractcheck.FailViolations(t, "event-outbox wiring drift", violations)
 }
 
-// TestOutboxWiringPassesTheBuiltOutbox fails when a call site hands a store
-// something other than the builder's field. A literal nil, or a second outbox
-// nobody starts, drops events exactly as an unwired store does.
 func TestOutboxWiringPassesTheBuiltOutbox(t *testing.T) {
 	t.Parallel()
-	fset := token.NewFileSet()
+	root := contractcheck.RepoRoot(t)
+	// The typed dependency ports below derive from the one eventing runtime.
+	for file, bindings := range map[string][]string{
+		"build_infra.go":     {"eventRuntime, err := eventing.Build(", "b.events = eventRuntime"},
+		"build_workflows.go": {"delegations.New(b.storage.Database, b.events.Outbox,", "EventsOutbox:        b.events.Outbox", "Events:                b.events.Outbox"},
+		"build_session.go":   {"EventsOutbox:    b.events.Outbox"},
+	} {
+		source := contractcheck.ReadRepoFile(t, root, "lycaon/internal/app/"+file)
+		for _, binding := range bindings {
+			if !strings.Contains(source, binding) {
+				t.Fatalf("%s missing canonical outbox binding %q", file, binding)
+			}
+		}
+	}
 	var violations []string
-
-	walkOutboxComposeRoot(t, fset, func(path string, file *ast.File) {
-		ast.Inspect(file, func(n ast.Node) bool {
-			call, ok := n.(*ast.CallExpr)
-			if !ok {
-				return true
-			}
-			sel, ok := call.Fun.(*ast.SelectorExpr)
-			if !ok || sel.Sel.Name != outboxSetterName || len(call.Args) != 1 {
-				return true
-			}
-			if !isBuilderOutboxArg(call.Args[0]) {
-				violations = append(violations, filepath.Base(path)+":"+
-					lineOf(fset, call.Pos())+" passes "+exprText(call.Args[0])+
-					" instead of b."+outboxBuilderField)
-			}
-			return true
-		})
+	count := 0
+	walkOutboxCalls(t, func(pkg *packages.Package, call *ast.CallExpr, _ *ast.SelectorExpr) {
+		count++
+		allowed := map[string]string{
+			outboxImportPrefix + "internal/app/eventing":    "b.Outbox",
+			outboxImportPrefix + "internal/app/delegations": "outbox",
+			outboxImportPrefix + "internal/app/scanning":    "deps.Events",
+			outboxImportPrefix + "internal/app/sessions":    "deps.EventsOutbox",
+			outboxImportPrefix + "internal/app/workflows":   "deps.EventsOutbox",
+		}
+		if len(call.Args) != 1 || allowed[pkg.PkgPath] == "" || exprText(call.Args[0]) != allowed[pkg.PkgPath] {
+			violations = append(violations, pkg.Fset.Position(call.Pos()).String()+": setter does not receive its canonical outbox port")
+		}
 	})
+	if count == 0 {
+		t.Fatal("no outbox wiring calls found")
+	}
 	contractcheck.FailViolations(t, "event-outbox wiring argument drift", violations)
 }
 
-// TestOutboxConstructionIsGuarded fails if the composition root stops refusing
-// to boot on a nil outbox. Without that refusal the wiring above is satisfied
-// by calls that hand every store the same nil.
 func TestOutboxConstructionIsGuarded(t *testing.T) {
 	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	paths, err := filepath.Glob(filepath.Join(root, "lycaon", "internal", "app", "*.go"))
-	contractcheck.FailErr(t, "list composition root", err)
-	var constructs, guards bool
-	for _, path := range paths {
-		if strings.HasSuffix(path, "_test.go") {
-			continue
-		}
-		src, err := os.ReadFile(path)
-		contractcheck.FailErr(t, "read "+filepath.Base(path), err)
-		body := string(src)
-		constructs = constructs || strings.Contains(body, "b."+outboxBuilderField+" = eventoutbox.New(")
-		guards = guards || strings.Contains(body, "if b."+outboxBuilderField+" == nil {")
+	source := contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), "lycaon/internal/app/eventing/runtime.go")
+	construct := strings.Index(source, "b.Outbox = eventoutbox.New(")
+	guard := strings.Index(source, "if b.Outbox == nil {")
+	wire := strings.Index(source, ".SetEventOutbox(b.Outbox)")
+	if construct < 0 || guard <= construct || wire <= guard {
+		t.Fatal("eventing must construct and refuse a nil outbox before wiring stores")
 	}
-	if !constructs {
-		t.Fatal("the composition root must construct the event outbox")
-	}
-	if !guards {
-		t.Fatal("the composition root must refuse to boot when the constructed outbox is nil — " +
-			"every store below would silently drop its events")
+	if !strings.Contains(source[guard:wire], "return nil,") {
+		t.Fatal("nil-outbox guard must refuse boot")
 	}
 }
 
-// outboxSetterPackages maps each package declaring SetEventOutbox to the
-// file:line that declares it.
+func walkOutboxCalls(t *testing.T, visit func(*packages.Package, *ast.CallExpr, *ast.SelectorExpr)) {
+	t.Helper()
+	for _, pkg := range outboxComposePackages(t) {
+		for _, file := range pkg.Syntax {
+			ast.Inspect(file, func(n ast.Node) bool {
+				call, ok := n.(*ast.CallExpr)
+				if !ok {
+					return true
+				}
+				sel, ok := call.Fun.(*ast.SelectorExpr)
+				if ok && sel.Sel.Name == outboxSetterName {
+					visit(pkg, call, sel)
+				}
+				return true
+			})
+		}
+	}
+}
+
 func outboxSetterPackages(t *testing.T) map[string]string {
 	t.Helper()
 	root := filepath.Join(contractcheck.RepoRoot(t), "lycaon", "internal")
 	out := map[string]string{}
 	fset := token.NewFileSet()
-
 	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
 			return err
 		}
-		file, perr := parser.ParseFile(fset, path, nil, parser.SkipObjectResolution)
-		if perr != nil {
-			return perr
+		file, err := parser.ParseFile(fset, path, nil, parser.SkipObjectResolution)
+		if err != nil {
+			return err
 		}
 		for _, decl := range file.Decls {
 			fn, ok := decl.(*ast.FuncDecl)
 			if !ok || fn.Name.Name != outboxSetterName || fn.Recv == nil {
 				continue
 			}
-			rel, _ := filepath.Rel(root, path)
-			if _, seen := out[file.Name.Name]; !seen {
-				out[file.Name.Name] = "internal/" + filepath.ToSlash(rel) + ":" + lineOf(fset, fn.Pos())
+			rel, err := filepath.Rel(root, path)
+			if err != nil {
+				return err
 			}
+			pkg := outboxImportPrefix + "internal/" + filepath.ToSlash(filepath.Dir(rel))
+			out[pkg] = "internal/" + filepath.ToSlash(rel) + ":" + lineOf(fset, fn.Pos())
 		}
 		return nil
 	})
@@ -132,112 +173,17 @@ func outboxSetterPackages(t *testing.T) map[string]string {
 	return out
 }
 
-// outboxWiredPackages reports which packages the composition root wires. A call
-// target resolves through the serveBuilder field it is invoked on, or through a
-// local whose constructor names its package.
-func outboxWiredPackages(t *testing.T) map[string]bool {
-	t.Helper()
-	fields := builderFieldTypes(t)
-	fset := token.NewFileSet()
-	wired := map[string]bool{}
-
-	walkOutboxComposeRoot(t, fset, func(_ string, file *ast.File) {
-		locals := localConstructorPackages(file)
-		ast.Inspect(file, func(n ast.Node) bool {
-			call, ok := n.(*ast.CallExpr)
-			if !ok {
-				return true
-			}
-			sel, ok := call.Fun.(*ast.SelectorExpr)
-			if !ok || sel.Sel.Name != outboxSetterName {
-				return true
-			}
-			switch target := sel.X.(type) {
-			case *ast.SelectorExpr:
-				if pkg := packageOf(fields[target.Sel.Name]); pkg != "" {
-					wired[pkg] = true
-				}
-			case *ast.Ident:
-				if pkg := locals[target.Name]; pkg != "" {
-					wired[pkg] = true
-				}
-			}
-			return true
-		})
-	})
-	return wired
-}
-
-// localConstructorPackages maps a local variable to the package of the
-// constructor that produced it, for `x := pkg.NewThing(...)`.
-func localConstructorPackages(file *ast.File) map[string]string {
-	out := map[string]string{}
-	ast.Inspect(file, func(n ast.Node) bool {
-		assign, ok := n.(*ast.AssignStmt)
-		if !ok || len(assign.Lhs) == 0 || len(assign.Rhs) != 1 {
-			return true
-		}
-		call, ok := assign.Rhs[0].(*ast.CallExpr)
-		if !ok {
-			return true
-		}
-		sel, ok := call.Fun.(*ast.SelectorExpr)
-		if !ok {
-			return true
-		}
-		pkg, ok := sel.X.(*ast.Ident)
-		if !ok {
-			return true
-		}
-		if name, ok := assign.Lhs[0].(*ast.Ident); ok {
-			out[name.Name] = pkg.Name
-		}
-		return true
-	})
-	return out
-}
-
-// packageOf renders the package half of a pkg.Type name.
-func packageOf(typeName string) string {
-	if idx := strings.Index(typeName, "."); idx > 0 {
-		return typeName[:idx]
+func exprText(expr ast.Expr) string {
+	switch typ := expr.(type) {
+	case *ast.Ident:
+		return typ.Name
+	case *ast.SelectorExpr:
+		return exprText(typ.X) + "." + typ.Sel.Name
 	}
-	return ""
+	return "a non-field expression"
 }
 
-// builderFieldTypes maps serveBuilder field names to their bare type names.
-func builderFieldTypes(t *testing.T) map[string]string {
-	t.Helper()
-	fset := token.NewFileSet()
-	path := filepath.Join(contractcheck.RepoRoot(t), "lycaon", "internal/app/build.go")
-	file, err := parser.ParseFile(fset, path, nil, parser.SkipObjectResolution)
-	contractcheck.FailErr(t, "parse build.go", err)
-
-	out := map[string]string{}
-	ast.Inspect(file, func(n ast.Node) bool {
-		spec, ok := n.(*ast.TypeSpec)
-		if !ok || spec.Name.Name != "serveBuilder" {
-			return true
-		}
-		st, ok := spec.Type.(*ast.StructType)
-		if !ok {
-			return false
-		}
-		for _, field := range st.Fields.List {
-			name := receiverTypeName(field.Type)
-			if name == "" {
-				continue
-			}
-			for _, ident := range field.Names {
-				out[ident.Name] = name
-			}
-		}
-		return false
-	})
-	return out
-}
-
-// receiverTypeName renders *pkg.T, pkg.T, *T, and T as their bare type name.
+// receiverTypeName is shared with the pongo template owner contract.
 func receiverTypeName(expr ast.Expr) string {
 	switch typ := expr.(type) {
 	case *ast.StarExpr:
@@ -251,39 +197,4 @@ func receiverTypeName(expr ast.Expr) string {
 		return typ.Name
 	}
 	return ""
-}
-
-func isBuilderOutboxArg(arg ast.Expr) bool {
-	sel, ok := arg.(*ast.SelectorExpr)
-	if !ok {
-		return false
-	}
-	recv, ok := sel.X.(*ast.Ident)
-	return ok && recv.Name == "b" && sel.Sel.Name == outboxBuilderField
-}
-
-func exprText(expr ast.Expr) string {
-	switch typ := expr.(type) {
-	case *ast.Ident:
-		return typ.Name
-	case *ast.SelectorExpr:
-		return exprText(typ.X) + "." + typ.Sel.Name
-	}
-	return "a non-field expression"
-}
-
-func walkOutboxComposeRoot(t *testing.T, fset *token.FileSet, visit func(string, *ast.File)) {
-	t.Helper()
-	entries, err := os.ReadDir(outboxComposeRoot)
-	contractcheck.FailErr(t, "read composition root", err)
-	for _, entry := range entries {
-		name := entry.Name()
-		if entry.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
-			continue
-		}
-		path := filepath.Join(outboxComposeRoot, name)
-		file, err := parser.ParseFile(fset, path, nil, parser.SkipObjectResolution)
-		contractcheck.FailErr(t, "parse "+name, err)
-		visit(path, file)
-	}
 }
