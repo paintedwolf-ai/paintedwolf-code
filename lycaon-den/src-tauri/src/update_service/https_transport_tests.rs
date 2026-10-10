@@ -5,13 +5,15 @@ use tokio::io::AsyncReadExt;
 #[tokio::test]
 async fn https_requests_start_a_tls_handshake() {
     if std::env::var_os("PW_TEST_FRESH_HTTPS_PROCESS").is_none() {
+        let results = crate::test_support::TempDir::new("native-https-probe");
+        let result = results.join("clienthello");
         let mut child = std::process::Command::new(std::env::current_exe().unwrap())
             .args([
                 "--exact",
                 "update_service::https_transport_tests::https_requests_start_a_tls_handshake",
                 "--nocapture",
             ])
-            .env("PW_TEST_FRESH_HTTPS_PROCESS", "1")
+            .env("PW_TEST_FRESH_HTTPS_PROCESS", &result)
             .spawn()
             .expect("start isolated HTTPS transport test");
         let deadline = std::time::Instant::now() + Duration::from_secs(15);
@@ -20,6 +22,11 @@ async fn https_requests_start_a_tls_handshake() {
                 assert!(
                     status.success(),
                     "fresh-process HTTPS transport failed: {status}"
+                );
+                assert_eq!(
+                    std::fs::read(&result).expect("read completed HTTPS probe result"),
+                    b"tls-clienthello-observed",
+                    "child must execute the HTTPS probe before reporting success"
                 );
                 return;
             }
@@ -61,4 +68,9 @@ async fn https_requests_start_a_tls_handshake() {
         .await
         .is_err());
     server.await.unwrap();
+    std::fs::write(
+        std::env::var_os("PW_TEST_FRESH_HTTPS_PROCESS").unwrap(),
+        b"tls-clienthello-observed",
+    )
+    .expect("record completed HTTPS probe");
 }
