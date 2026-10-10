@@ -7,11 +7,14 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/call"
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/session/workercontext"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/workspace"
 	"github.com/lycaon/lycaon/pkg/api"
+	"os"
 )
 
 type enrichmentJobs struct {
@@ -105,5 +108,29 @@ func TestReadBranchClaimKeepsProjectSourceRouting(t *testing.T) {
 	testutil.FailErr(t, "resolve read worker branch", err)
 	if jobs.claims != 1 || out.Identity.WorkerJobID != "read-job" || out.Source.SourceWorkspaceKind != api.SourceWorkspaceKindProject || out.Source.WorkerBranchRoot != "" {
 		t.Fatalf("read branch claim=%+v claims=%d", out, jobs.claims)
+	}
+}
+
+type boundBranch struct{}
+
+func (*boundBranch) ValidateMeta(context.Context) error          { return nil }
+func (*boundBranch) EnsureParents(context.Context, string) error { return nil }
+func TestWriteWorkerEnrichmentBindsPersistedBranchRoots(t *testing.T) {
+	root := t.TempDir()
+	meta := enginepaths.MetaDirForBranchRoot(root)
+	testutil.FailErr(t, "create branch metadata directory", os.MkdirAll(meta, 0700))
+	testutil.FailErr(t, "persist complete branch layout", workspace.WriteJobMeta(meta, workspace.JobMeta{SnapshotComplete: true, Roots: []workspace.JobMetaRoot{{ID: "root", Path: root, IsPrimary: true}}}))
+	branch := &boundBranch{}
+	service := New(nil, nil, func(path string) (tools.BranchWorkspace, error) {
+		if path != root {
+			t.Fatalf("branch lookup=%q", path)
+		}
+		return branch, nil
+	})
+	service.SetTasks(&enrichmentJobs{task: &api.WorkerTask{ID: "write-job", WorkspaceRoot: root, Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite}}})
+	out, err := service.Enrich(t.Context(), &api.Session{ID: "child", ParentSessionID: "parent"}, tools.ToolContext{Identity: tools.InvocationIdentity{WorkerJobID: "write-job"}})
+	testutil.FailErr(t, "bind write branch invocation", err)
+	if out.Source.WorkerBranchRoot != root || out.Source.BranchWorkspace != branch || out.Source.SourceWorkspaceKind != api.SourceWorkspaceKindWorker || len(out.Source.Roots) != 1 || out.Source.Roots[0].ID != "root" || !reflect.DeepEqual(out.Source.WorkerSourceRoots, []string{root}) {
+		t.Fatalf("write branch context=%+v", out.Source)
 	}
 }
