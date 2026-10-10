@@ -36,10 +36,15 @@ func SettledSearch(t *testing.T, srv *hostapi.Server, p *project.Project, body m
 	raw, err := json.Marshal(body)
 	testutil.FailErr(t, "encode search", err)
 	var resp wire.SearchResponse
-	deadline := time.Now().Add(testutil.Timeout(15 * time.Second))
+	started := time.Now()
+	deadline := started.Add(testutil.Timeout(15 * time.Second))
+	attempts := 0
+	statuses := map[int]int{}
 	for {
+		attempts++
 		w := httptest.NewRecorder()
 		srv.ServeHTTP(w, NewAuthedRequest(http.MethodPost, "/v1/search", strings.NewReader(string(raw))))
+		statuses[w.Code]++
 		wait := SearchSettlePoll
 		switch w.Code {
 		case http.StatusOK:
@@ -55,7 +60,9 @@ func SettledSearch(t *testing.T, srv *hostapi.Server, p *project.Project, body m
 			t.Fatalf("search = %d %s", w.Code, w.Body.String())
 		}
 		if time.Now().Add(wait).After(deadline) {
-			t.Fatalf("search never settled: issues %+v", resp.Issues)
+			response, err := json.Marshal(resp)
+			testutil.FailErr(t, "encode unsettled search response", err)
+			t.Fatalf("search never settled after %s: attempts=%d statuses=%v last_status=%d next_wait=%s last_response=%s", time.Since(started), attempts, statuses, w.Code, wait, response)
 		}
 		time.Sleep(wait)
 	}
