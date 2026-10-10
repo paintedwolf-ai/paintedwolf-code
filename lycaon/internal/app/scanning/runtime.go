@@ -45,8 +45,14 @@ type Runtime struct {
 	Scopes      *sourcescope.Provider
 }
 
+// ResourceTracker owns scanning bindings from their allocation through shutdown.
+type ResourceTracker interface {
+	Track(string, int, func(context.Context) error)
+}
+
 // Dependencies specifies external inputs required to bootstrap scanning services.
 type Dependencies struct {
+	Resources             ResourceTracker
 	Database              *db.Store
 	DataDir               string
 	ModuleRoot            string
@@ -94,10 +100,10 @@ func Build(ctx context.Context, deps Dependencies) (*Runtime, error) {
 	}
 
 	obligation := &scan.WorkflowObligation{
-		Ledger:   store,
-		History:  store,
-		Runs:     deps.WorkflowRunsGet,
-		Params:   deps.WorkflowRunParams,
+		Ledger:  store,
+		History: store,
+		Runs:    deps.WorkflowRunsGet,
+		Params:  deps.WorkflowRunParams,
 		Projects: func(c context.Context, projectID string) (string, error) {
 			p, err := deps.Projects.Get(c, projectID)
 			if err != nil {
@@ -117,7 +123,7 @@ func Build(ctx context.Context, deps Dependencies) (*Runtime, error) {
 		filterPaths = deps.SurfaceGate.FilterPaths
 	}
 
-	scopes, err := loadSourceScope(deps.DataDir, appliesPath, deps.Snapshots)
+	scopes, err := loadSourceScope(deps.DataDir, appliesPath, deps.Snapshots, deps.Resources)
 	if err != nil {
 		return nil, err
 	}
@@ -228,7 +234,7 @@ func Build(ctx context.Context, deps Dependencies) (*Runtime, error) {
 	}, nil
 }
 
-func loadSourceScope(dataDir string, appliesPath func(context.Context, string) bool, snapshots *sourcesnapshot.Store) (*sourcescope.Provider, error) {
+func loadSourceScope(dataDir string, appliesPath func(context.Context, string) bool, snapshots *sourcesnapshot.Store, resources ResourceTracker) (*sourcescope.Provider, error) {
 	cfg, err := sourcescope.LoadConfig(filepath.Join(dataDir, "source-scope.yaml"))
 	if err != nil {
 		return nil, fmt.Errorf("source scope: %w", err)
@@ -240,6 +246,9 @@ func loadSourceScope(dataDir string, appliesPath func(context.Context, string) b
 	if snapshots != nil {
 		snapshots.SetScopes(provider)
 	}
-	sourcecatalog.Process().SetScopes(provider)
+	releaseScopes := sourcecatalog.Process().SetScopes(provider)
+	if resources != nil {
+		resources.Track("source-catalog-scope", 22, releaseScopes)
+	}
 	return provider, nil
 }
