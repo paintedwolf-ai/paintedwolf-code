@@ -110,6 +110,29 @@ A choice phase declares named edges with stable ids, labels, actor, and gate con
 
 ### `review_loop`
 
+#### Review assignment contract
+
+The review assignment redesign binds each worker to a sealed subject before
+prompt composition. Subjects contain the exact candidate judgments and host
+facts under review; assignments identify the reviewer, purpose, scoped items,
+and predecessor results. The existing immutable worker result remains the sole
+assessment record. Completion validates against the assigned subject, while
+verdict admission separately checks whether its dependencies still apply.
+
+Independent reviews, question investigations, and question reassessments have
+distinct completion requirements. A reassessment supplements or supersedes only
+its registered items; unrelated accepted assessments remain available. New
+reviewer discoveries are outputs for reconciliation, never retroactive inputs to
+the assignment that produced them. A committed verdict retains its exact review
+inputs for reporting, independently of later worker activity.
+
+Normal scanner limitations are disclosed without failing execution or reducing
+report completeness. A survey can require available scanner results while other
+workflows retain explicitly strict scan gates. Repair feedback identifies exact
+claim and work identities and distinguishes argument correction, prerequisite
+work, waiting, and changed context.
+
+
 A review loop declares who reviews, what evidence they owe, and which verdicts re-enter or leave. A terminal verdict is recorded through `submit_verdict` and cites the review evidence. Review prose alone does not satisfy the gate.
 
 A `coverage_review` verdict member binds review judgment to the host's current coverage revision. The host projects every planned area and scanner obligation plus typed scanner gaps with stable identities, scan references, counts, and bounded path samples. Each assessment supplies its fact ID, disposition, reason, evidence citations, and (for a gap) affected obligation IDs. Obligations are `satisfied`, `material_open`, or `essential_open`; gaps may instead be `covered` by alternative evidence or `immaterial`. Counts never decide materiality. Missing, duplicate, unknown, ungrounded, and stale assessments cannot advance a review phase. The reconciling reviewer challenges candidate exclusions alongside claims; the last declared coverage phase must record its own accepted assessment. Coverage revisions include review work through that phase; later report-production tasks do not invalidate the assessment. Live coverage facts are injected only during coverage-review phases.
