@@ -12,8 +12,7 @@ import (
 
 func TestBeforeWorkerWriteRecordsInvestigateSurface(t *testing.T) {
 	mgr := New(nil, nil, nil)
-	touches := NewTouchLedger()
-	mgr.SetTouchLedger(touches)
+	touches := mgr.Touches
 
 	tctx := tools.ToolContext{
 		Identity: tools.InvocationIdentity{WorkerJobID: "job-1",
@@ -29,8 +28,7 @@ func TestBeforeWorkerWriteRecordsInvestigateSurface(t *testing.T) {
 
 func TestBeforeWorkerWriteRecordsWorkerTouchOnOrchestrateSurface(t *testing.T) {
 	mgr := New(nil, nil, nil)
-	touches := NewTouchLedger()
-	mgr.SetTouchLedger(touches)
+	touches := mgr.Touches
 
 	tctx := tools.ToolContext{
 		Identity: tools.InvocationIdentity{WorkerJobID: "job-1",

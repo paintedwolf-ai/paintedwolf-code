@@ -42,4 +42,3 @@ func New(sessions Sessions, workspace Workspace, branchState func(string) (tools
 }
 func (m *Service) SetTasks(tasks Tasks)                     { m.tasks = tasks }
 func (m *Service) SetPublisher(publisher *events.Publisher) { m.events = publisher }
-func (m *Service) SetTouchLedger(touches *TouchLedger)      { m.Touches = touches }
