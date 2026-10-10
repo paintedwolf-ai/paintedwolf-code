@@ -12,7 +12,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// GracefulCancelSession supports graceful worker cancellation closeout.
+// TerminalNotice publishes a worker cancellation to its parent.
 type TerminalNotice interface {
 	Terminal(ctx context.Context, parentSessionID, jobID string)
 }
