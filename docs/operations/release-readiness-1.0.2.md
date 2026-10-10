@@ -21,6 +21,8 @@ Reviewed on 2026-10-10 against aggregate candidate `e2ec2693c523860c50868ef5ef0e
 | Retired rule facts | [#487](https://github.com/paintedwolf-ai/paintedwolf-code/pull/487) publishes retirement/successor notes for the three removed facts. No aliases restore their old meanings. |
 | Shutdown expiry drain | Timer shutdown did not drain an already-running expiry callback. [#488](https://github.com/paintedwolf-ai/paintedwolf-code/pull/488) waits for callbacks before persistence cleanup under the shutdown deadline. |
 
+Recovery reasons (#478) and retry bounds (#483) were incorporated into #471 and their follow-up PRs closed. Migration comparison (#479) was incorporated into #440 and #470 and closed. The incorporated source was inspected; its parent PRs still require landing qualification. The retry integration also preserves the symbol budget across catalog-warming responses and resets it for an explicit same-query retry.
+
 ## Findings without a code change
 
 - The v1.0.0 and v1.0.1 SQL baselines are byte-identical. The registry can represent both with one released shape.
