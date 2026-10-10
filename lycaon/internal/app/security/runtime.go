@@ -22,7 +22,7 @@ type Runtime struct {
 	spawnAgents            func(context.Context, string) []string
 	Sockets                *approvalstate.SocketCapabilityRuntime
 	DirectIP               *approvalstate.DirectIPCapabilityRuntime
-	Detections             Detections
+	Detections             *Detections
 	Presence               *presence.Broker
 	Unlocks                *presence.Unlocks
 	Spans                  *secretspan.Screener
