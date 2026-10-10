@@ -100,6 +100,9 @@ func (e *CodeExecutor) Run(ctx context.Context, leg PlanLeg) (ExecutorReport, er
 		terms:        queryTextTerms(leg.Code.Query),
 		maxBytes:     codeExecutorMaxFileBytes,
 	}
+	if leg.Code.Candidates {
+		return e.discoverCandidates(ctx, leg.Code, paths, spec)
+	}
 	legCtx, cancel := context.WithTimeout(ctx, e.legWallBudget(leg.Code))
 	defer cancel()
 

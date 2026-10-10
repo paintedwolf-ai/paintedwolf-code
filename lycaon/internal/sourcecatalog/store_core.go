@@ -29,6 +29,8 @@ const treeJournalSizeLimit = 64 << 20
 
 // TreeStatus describes the generation available to bounded metadata queries.
 type TreeStatus struct {
+	// Instance distinguishes file-index incarnations whose revision counters may repeat.
+	Instance uint64
 	State    State
 	Revision uint64
 	// Complete means the generation covers every path its budget admitted.
@@ -57,6 +59,7 @@ func publishGeneration(ctx context.Context, tx *sql.Tx, complete bool) (TreeStat
 // storeCore shares projection storage, one background reconciliation, and
 // watch state for full or incremental refreshes.
 type storeCore struct {
+	instance  uint64
 	projectID string
 	mu        sync.Mutex
 	root      Root
@@ -320,6 +323,7 @@ func openStore(ctx context.Context, s projectionStore, wait time.Duration, broke
 	}
 	core.mu.Lock()
 	status := core.status
+	status.Instance = core.instance
 	status.Refreshing = core.refreshingLocked()
 	core.mu.Unlock()
 	return status, nil

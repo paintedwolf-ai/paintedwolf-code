@@ -7147,7 +7147,7 @@ export interface components {
         /** @enum {string} */
         SearchCountRelation: "exact" | "lower_bound";
         /**
-         * @description Why a generation is not exhaustive. `time_budget`: the code leg's
+         * @description Why a generation is not exhaustive. `time_budget`: a source leg's
          *     wall-clock budget ended with files unscanned. `catalog_warming`: `count`
          *     project roots had no source generation at all in time; their files
          *     are absent and the build they started continues, so the same query
@@ -7161,11 +7161,13 @@ export interface components {
          *     `catalog_failed`: count directories could not be discovered.
          *     `catalog_refresh_failed`: count readable roots failed to refresh.
          *     `catalog_refreshing`: count roots serve an older generation while updating.
-         *     `symbol_budget`: declaration discovery in `count` projects stopped at
-         *     its line cap, clock, or file budget, so more declarations may match.
+         *     `symbol_pending`: bounded declaration work remains in a disposable
+         *     continuation; retrying the same query advances it.
+         *     `symbol_budget`: a terminal declaration resource bound stopped discovery,
+         *     so more declarations may match; retrying alone does not resolve it.
          * @enum {string}
          */
-        SearchIssueReason: "result_limit" | "executor_error" | "files_skipped" | "time_budget" | "catalog_warming" | "catalog_incomplete" | "catalog_bounded" | "catalog_failed" | "catalog_refresh_failed" | "catalog_refreshing" | "index_warming" | "symbol_budget";
+        SearchIssueReason: "result_limit" | "executor_error" | "files_skipped" | "time_budget" | "catalog_warming" | "catalog_incomplete" | "catalog_bounded" | "catalog_failed" | "catalog_refresh_failed" | "catalog_refreshing" | "index_warming" | "symbol_pending" | "symbol_budget";
         SearchIssue: {
             executor: string;
             reason: components["schemas"]["SearchIssueReason"];

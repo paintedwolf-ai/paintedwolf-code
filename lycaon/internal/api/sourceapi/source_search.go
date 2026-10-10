@@ -2,7 +2,9 @@ package sourceapi
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/api/httpio"
@@ -59,7 +61,8 @@ var searchDeclarations = declarationSearchIn(nil, nil, nil)
 // executor, each pattern ANDed with scope and bounded by the include and
 // exclude globs, so discovery sees the files the query's paths name.
 func declarationSearchIn(scope []search.Node, include, exclude []string) project.DeclarationSearch {
-	return func(ctx context.Context, query project.DeclarationSearchQuery) ([]project.DeclarationSearchHit, bool, error) {
+	progress := map[project.DeclarationMatch]*search.CodeProgress{}
+	return func(ctx context.Context, query project.DeclarationSearchQuery) ([]project.DeclarationSearchHit, project.DeclarationCoverage, error) {
 		hitCap := query.HitCap
 		if hitCap <= 0 {
 			hitCap = project.DefinitionSearchHitCap
@@ -73,7 +76,7 @@ func declarationSearchIn(scope []search.Node, include, exclude []string) project
 			flags.Regex = true
 			flags.CaseSensitive = true
 		default:
-			return nil, false, fmt.Errorf("unknown declaration match %d", query.Match)
+			return nil, project.DeclarationCoverage{}, fmt.Errorf("unknown declaration match %d", query.Match)
 		}
 		roots := make([]search.CodeRoot, 0, len(query.Roots))
 		for _, root := range query.Roots {
@@ -85,12 +88,26 @@ func declarationSearchIn(scope []search.Node, include, exclude []string) project
 			pattern = search.AndExpr{Exprs: append([]search.Node{pattern}, scope...)}
 		}
 		probeCap := hitCap + 1
+		var cursor *search.CodeProgress
+		if query.Continue {
+			if progress[query.Match] == nil {
+				progress[query.Match] = &search.CodeProgress{}
+			}
+			cursor = progress[query.Match]
+			probeCap = hitCap
+		}
+		var checkpoint search.CodeProgress
+		if cursor != nil {
+			checkpoint = *cursor
+		}
 		// A declaration lookup is a literal pattern with no task to rank against.
 		report, err := search.NewCodeExecutor(decide.Reranker{}).Run(ctx, search.PlanLeg{
 			Executor: search.ExecutorCode,
 			Cap:      probeCap,
 			Code: &search.CodePlanLeg{
 				Query:           pattern,
+				Candidates:      query.Continue,
+				Progress:        cursor,
 				PathRoots:       roots,
 				Cap:             probeCap,
 				Lines:           true,
@@ -100,19 +117,28 @@ func declarationSearchIn(scope []search.Node, include, exclude []string) project
 			},
 		})
 		if err != nil {
-			return nil, false, err
+			if !query.Continue || (!errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded)) {
+				if cursor != nil {
+					*cursor = checkpoint
+				}
+				return nil, project.DeclarationCoverage{}, err
+			}
+			report.TimedOut = true
 		}
 		out := make([]project.DeclarationSearchHit, 0, len(report.Hits))
 		for _, h := range report.Hits {
 			if h.HitKind != search.HitKindCode {
 				continue
 			}
-			out = append(out, project.DeclarationSearchHit{RootID: h.RootID, Path: h.Path, Snippet: h.Snippet})
+			out = append(out, project.DeclarationSearchHit{RootID: h.RootID, Path: h.Path, Snippet: strings.Clone(h.Snippet)})
 		}
-		limited := report.Limited || len(report.CoverageIssues(search.ExecutorCode)) > 0 || len(out) > hitCap
+		coverage := project.DeclarationCoverage{Limited: report.Limited || len(out) > hitCap}
+		for _, issue := range report.CoverageIssues(search.ExecutorCode) {
+			coverage.Gaps = append(coverage.Gaps, project.DeclarationGap{Reason: project.DeclarationGapReason(issue.Reason), Count: issue.Count, Limit: issue.Limit, Message: issue.Message})
+		}
 		if len(out) > hitCap {
 			out = out[:hitCap]
 		}
-		return out, limited, nil
+		return out, coverage, nil
 	}
 }

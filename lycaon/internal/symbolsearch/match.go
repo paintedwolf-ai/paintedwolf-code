@@ -1,9 +1,11 @@
-package project
+package symbolsearch
 
 import (
 	"regexp"
 	"strings"
 	"unicode"
+
+	"github.com/lycaon/lycaon/internal/project"
 )
 
 // symbolMatchTier orders how a declaration name answers a query; lower ranks first.
@@ -42,14 +44,14 @@ func newSymbolNameMatcher(query string) symbolNameMatcher {
 }
 
 // match returns the name's tier and the matched ranges as code point offsets.
-func (m symbolNameMatcher) match(name string) (symbolMatchTier, []SourceTextRange) {
+func (m symbolNameMatcher) match(name string) (symbolMatchTier, []project.SourceTextRange) {
 	runes := []rune(name)
 	query := m.folded
 	if len(query) == 0 || len(query) > len(runes) {
 		return symbolTierNone, nil
 	}
 	folded := foldSymbolRunes(runes)
-	whole := []SourceTextRange{{Start: 0, End: len(query)}}
+	whole := []project.SourceTextRange{{Start: 0, End: len(query)}}
 	if len(query) == len(runes) && runesEqual(folded, query) {
 		if name == m.query {
 			return symbolTierExactCase, whole
@@ -66,7 +68,7 @@ func (m symbolNameMatcher) match(name string) (symbolMatchTier, []SourceTextRang
 			continue
 		}
 		if starts[at] {
-			return symbolTierWordStart, []SourceTextRange{{Start: at, End: at + len(query)}}
+			return symbolTierWordStart, []project.SourceTextRange{{Start: at, End: at + len(query)}}
 		}
 		if substring < 0 {
 			substring = at
@@ -76,14 +78,14 @@ func (m symbolNameMatcher) match(name string) (symbolMatchTier, []SourceTextRang
 		return symbolTierHump, rangesOfPositions(positions)
 	}
 	if substring >= 0 {
-		return symbolTierSubstring, []SourceTextRange{{Start: substring, End: substring + len(query)}}
+		return symbolTierSubstring, []project.SourceTextRange{{Start: substring, End: substring + len(query)}}
 	}
 	return symbolTierNone, nil
 }
 
 // spelledExactly reports whether the name's matched characters, in order,
 // are the query as typed.
-func (m symbolNameMatcher) spelledExactly(name string, highlights []SourceTextRange) bool {
+func (m symbolNameMatcher) spelledExactly(name string, highlights []project.SourceTextRange) bool {
 	runes := []rune(name)
 	spelled := make([]rune, 0, len(m.folded))
 	for _, span := range highlights {
@@ -226,14 +228,14 @@ func isRuneSubsequence(query, name []rune) bool {
 	return j == len(query)
 }
 
-func rangesOfPositions(positions []int) []SourceTextRange {
-	out := make([]SourceTextRange, 0, len(positions))
+func rangesOfPositions(positions []int) []project.SourceTextRange {
+	out := make([]project.SourceTextRange, 0, len(positions))
 	for _, at := range positions {
 		if n := len(out); n > 0 && out[n-1].End == at {
 			out[n-1].End = at + 1
 			continue
 		}
-		out = append(out, SourceTextRange{Start: at, End: at + 1})
+		out = append(out, project.SourceTextRange{Start: at, End: at + 1})
 	}
 	return out
 }

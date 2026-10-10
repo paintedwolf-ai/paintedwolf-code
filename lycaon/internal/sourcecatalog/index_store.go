@@ -69,7 +69,6 @@ CREATE TRIGGER IF NOT EXISTS totals_update AFTER UPDATE OF regular,indexed,hidde
 
 // The persistent frontier supports partial queries and resumes interrupted discovery.
 type indexStore struct {
-	pageCacheID     uint64
 	writer          chan struct{}
 	publicationGate chan struct{}
 	structureFile   string
@@ -185,8 +184,8 @@ func (c *Catalog) indexStore(ctx context.Context, projectID string, root Root) (
 	sum := sha256.Sum256([]byte(indexSchema + "\x00" + key))
 	// Projects attached to the same filesystem root share its structural checkpoint.
 	structureSum := sha256.Sum256([]byte(structuralFormat + "\x00" + rangePageFormat + "\x00" + root.Path))
-	s := &indexStore{catalog: c, pageCacheID: pageCacheSerial.Add(1), structureFile: filepath.Join(dir, hex.EncodeToString(structureSum[:])+structuralFileSuffix), storeCore: storeCore{
-		projectID: projectID, root: root, file: filepath.Join(dir, hex.EncodeToString(sum[:])+treeFileSuffix),
+	s := &indexStore{catalog: c, structureFile: filepath.Join(dir, hex.EncodeToString(structureSum[:])+structuralFileSuffix), storeCore: storeCore{
+		instance: pageCacheSerial.Add(1), projectID: projectID, root: root, file: filepath.Join(dir, hex.EncodeToString(sum[:])+treeFileSuffix),
 		full: true, lastUsed: time.Now(), policy: c.policyFor(ctx, root.Path),
 	}}
 	s.invalidateObservationsLocked(nil)

@@ -26,8 +26,8 @@ func TestSourceSymbolsReportsIncompleteInsteadOfEmpty(t *testing.T) {
 	dir := t.TempDir()
 	p, err := CreateWithRoot(t.Context(), NewMemoryRegistry(), dir)
 	testutil.FailErr(t, "create project", err)
-	search := func(context.Context, DeclarationSearchQuery) ([]DeclarationSearchHit, bool, error) {
-		return []DeclarationSearchHit{{RootID: p.Roots[0].ID, Path: "unavailable.go"}}, false, nil
+	search := func(context.Context, DeclarationSearchQuery) ([]DeclarationSearchHit, DeclarationCoverage, error) {
+		return []DeclarationSearchHit{{RootID: p.Roots[0].ID, Path: "unavailable.go"}}, DeclarationCoverage{}, nil
 	}
 	result, err := ResolveProjectSourceDefinitions(t.Context(), p, SourceDefinitionRequest{
 		RootID: p.Roots[0].ID, Path: "unavailable.go", Symbol: "missing",

@@ -49,3 +49,18 @@ it("schedules a retry for a partial generation so late hits arrive on their own"
   vi.advanceTimersByTime(750);
   expect(rerun).toHaveBeenCalledTimes(1);
 });
+
+it("advances pending symbol discovery and stops at terminal coverage gaps", () => {
+  vi.useFakeTimers();
+  const refresh = createSearchRefresh();
+  const rerun = vi.fn();
+  refresh.schedule({ issues: [{ executor: "symbol", reason: "symbol_pending" }] }, rerun);
+  vi.advanceTimersByTime(750);
+  expect(rerun).toHaveBeenCalledTimes(1);
+  for (const reason of ["catalog_bounded", "files_skipped", "symbol_budget", "result_limit"] as const) {
+    refresh.schedule({ issues: [{ executor: "symbol", reason }] }, rerun);
+    expect(vi.getTimerCount()).toBe(0);
+  }
+  refresh.schedule({ issues: [{ executor: "code", reason: "time_budget" }] }, rerun);
+  expect(vi.getTimerCount()).toBe(0);
+});

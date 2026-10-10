@@ -67,7 +67,7 @@ func ResolveProjectSourceDefinitions(
 		return SourceDefinitionResult{Candidates: []SourceDefinitionCandidate{}, Truncated: true}, nil //nolint:nilerr // cancellation is a truncated result
 	}
 
-	hits, truncated, err := search(ctx, DeclarationSearchQuery{
+	hits, coverage, err := search(ctx, DeclarationSearchQuery{
 		ProjectID:   p.ID,
 		Roots:       []DeclarationSearchRoot{{ID: root.ID, Path: root.Path}},
 		Pattern:     symbol,
@@ -78,25 +78,26 @@ func ResolveProjectSourceDefinitions(
 	if err != nil {
 		return SourceDefinitionResult{}, err
 	}
-	files := declarationFilesFromHits(hits)
+	truncated := coverage.Incomplete()
+	files := DeclarationFilesFromHits(hits)
 	if len(files) > DefinitionFileCap {
 		truncated = true
 		files = files[:DefinitionFileCap]
 	}
 
-	perFile, incomplete := parseDeclarations(ctx, p, files, func(file declarationFile, symbols []SourceSymbol, content string) []SourceDefinitionCandidate {
+	perFile, incomplete := parseDeclarations(ctx, p, files, func(file DeclarationFile, symbols []SourceSymbol, content string) []SourceDefinitionCandidate {
 		var out []SourceDefinitionCandidate
 		for _, sym := range symbols {
 			if sym.Name != symbol {
 				continue
 			}
-			snippet := lineSnippet(content, sym.Line)
-			if snippet == "" && len(file.snippets) > 0 {
-				snippet = file.snippets[0]
+			snippet := DeclarationLine(content, sym.Line)
+			if snippet == "" && len(file.Snippets) > 0 {
+				snippet = file.Snippets[0]
 			}
 			out = append(out, SourceDefinitionCandidate{
-				RootID:  file.rootID,
-				Path:    file.path,
+				RootID:  file.RootID,
+				Path:    file.Path,
 				Line:    sym.Line,
 				Kind:    sym.Kind,
 				Snippet: snippet,
@@ -172,7 +173,8 @@ func definitionLineDistance(line, originLine int) int {
 	return line - originLine
 }
 
-func lineSnippet(content string, line int) string {
+// DeclarationLine extracts the trimmed source line at a declaration.
+func DeclarationLine(content string, line int) string {
 	if line < 1 || content == "" {
 		return ""
 	}

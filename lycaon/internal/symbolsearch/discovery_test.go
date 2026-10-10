@@ -1,10 +1,11 @@
-package project
+package symbolsearch
 
 import (
 	"context"
 	"fmt"
 
 	"github.com/lycaon/lycaon/internal/decide"
+	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/search"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	catalogtest "github.com/lycaon/lycaon/internal/testsetup/sourcecatalog"
@@ -13,28 +14,28 @@ import (
 // testDeclarationSearch mirrors the API's code-executor discovery over a
 // settled catalog. It ignores the wall clock so a loaded test host cannot
 // turn a small fixture into a timed-out pass.
-func testDeclarationSearch(ctx context.Context, query DeclarationSearchQuery) ([]DeclarationSearchHit, DeclarationCoverage, error) {
+func testDeclarationSearch(ctx context.Context, query project.DeclarationSearchQuery) ([]project.DeclarationSearchHit, project.DeclarationCoverage, error) {
 	roots := make([]search.CodeRoot, 0, len(query.Roots))
 	for _, root := range query.Roots {
 		if err := catalogtest.AwaitIndex(ctx, sourcecatalog.Process(), query.ProjectID, sourcecatalog.Root{ID: root.ID, Path: root.Path}); err != nil {
-			return nil, DeclarationCoverage{}, err
+			return nil, project.DeclarationCoverage{}, err
 		}
 		roots = append(roots, search.CodeRoot{ProjectID: query.ProjectID, RootID: root.ID, Path: root.Path})
 	}
 	hitCap := query.HitCap
 	if hitCap <= 0 {
-		hitCap = DefinitionSearchHitCap
+		hitCap = project.DefinitionSearchHitCap
 	}
 	var flags search.MatchFlags
 	switch query.Match {
-	case DeclarationMatchWholeWord:
+	case project.DeclarationMatchWholeWord:
 		flags.WholeWord = true
-	case DeclarationMatchSubstring:
-	case DeclarationMatchRegexp:
+	case project.DeclarationMatchSubstring:
+	case project.DeclarationMatchRegexp:
 		flags.Regex = true
 		flags.CaseSensitive = true
 	default:
-		return nil, DeclarationCoverage{}, fmt.Errorf("unknown declaration match %d", query.Match)
+		return nil, project.DeclarationCoverage{}, fmt.Errorf("unknown declaration match %d", query.Match)
 	}
 	probeCap := hitCap + 1
 	report, err := search.NewCodeExecutor(decide.Reranker{}).Run(ctx, search.PlanLeg{
@@ -51,19 +52,19 @@ func testDeclarationSearch(ctx context.Context, query DeclarationSearchQuery) ([
 		},
 	})
 	if err != nil {
-		return nil, DeclarationCoverage{}, err
+		return nil, project.DeclarationCoverage{}, err
 	}
-	out := make([]DeclarationSearchHit, 0, len(report.Hits))
+	out := make([]project.DeclarationSearchHit, 0, len(report.Hits))
 	for _, h := range report.Hits {
 		if h.HitKind != search.HitKindCode {
 			continue
 		}
-		out = append(out, DeclarationSearchHit{RootID: h.RootID, Path: h.Path, Snippet: h.Snippet})
+		out = append(out, project.DeclarationSearchHit{RootID: h.RootID, Path: h.Path, Snippet: h.Snippet})
 	}
 	limited := report.Limited || report.TimedOut || report.Code.WarmingRoots > 0 ||
 		report.Code.IncompleteRoots > 0 || report.SkippedFiles > 0 || len(out) > hitCap
 	if len(out) > hitCap {
 		out = out[:hitCap]
 	}
-	return out, DeclarationCoverage{Limited: limited}, nil
+	return out, project.DeclarationCoverage{Limited: limited}, nil
 }

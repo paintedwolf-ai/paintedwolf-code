@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/search"
+	"github.com/lycaon/lycaon/internal/symbolsearch"
 )
 
 // symbolProjectWorkers bounds projects searched at once on one symbol leg.
@@ -20,6 +21,7 @@ const symbolProjectWorkers = 4
 // names rank by how they match, the pipeline Go to definition shares.
 type SymbolExecutor struct {
 	registry project.Registry
+	progress symbolProgressCache
 }
 
 // NewSymbolExecutor returns the symbol leg over the project registry.
@@ -39,7 +41,7 @@ type symbolProject struct {
 type symbolProjectResult struct {
 	hits          []search.Hit
 	limited       bool
-	incomplete    bool
+	coverage      project.DeclarationCoverage
 	filesOutlined int
 	err           error
 }
@@ -65,8 +67,13 @@ func (e *SymbolExecutor) Run(ctx context.Context, leg search.PlanLeg) (search.Ex
 	sem := make(chan struct{}, symbolProjectWorkers)
 	var wg sync.WaitGroup
 	for i, p := range projects {
+		select {
+		case sem <- struct{}{}:
+		case <-legCtx.Done():
+			results[i].coverage.Gaps = []project.DeclarationGap{{Reason: project.DeclarationTimeBudget}, {Reason: project.DeclarationPending}}
+			continue
+		}
 		wg.Add(1)
-		sem <- struct{}{}
 		go func() {
 			defer wg.Done()
 			defer func() { <-sem }()
@@ -79,9 +86,13 @@ func (e *SymbolExecutor) Run(ctx context.Context, leg search.PlanLeg) (search.Ex
 	}
 
 	report := search.ExecutorReport{Symbol: search.SymbolLegReport{Projects: len(projects)}}
-	limited, incomplete := 0, 0
+	limited := 0
 	for i, result := range results {
 		if result.err != nil {
+			if legCtx.Err() != nil {
+				report.Issues = append(report.Issues, search.Issue{Executor: search.ExecutorSymbol, Reason: search.IssueTimeBudget}, search.Issue{Executor: search.ExecutorSymbol, Reason: search.IssueSymbolPending})
+				continue
+			}
 			report.Issues = append(report.Issues, search.Issue{
 				Executor: search.ExecutorSymbol,
 				Reason:   search.IssueExecutorError,
@@ -94,8 +105,8 @@ func (e *SymbolExecutor) Run(ctx context.Context, leg search.PlanLeg) (search.Ex
 		if result.limited {
 			limited++
 		}
-		if result.incomplete {
-			incomplete++
+		for _, gap := range result.coverage.Gaps {
+			report.Issues = append(report.Issues, search.Issue{Executor: search.ExecutorSymbol, Reason: search.IssueReason(gap.Reason), Count: gap.Count, Limit: gap.Limit, Message: gap.Message})
 		}
 	}
 	report.Symbol.Declarations = len(report.Hits)
@@ -104,11 +115,7 @@ func (e *SymbolExecutor) Run(ctx context.Context, leg search.PlanLeg) (search.Ex
 			Executor: search.ExecutorSymbol, Reason: search.IssueResultLimit, Limit: leg.Symbol.Cap, Count: limited,
 		})
 	}
-	if incomplete > 0 {
-		report.Issues = append(report.Issues, search.Issue{
-			Executor: search.ExecutorSymbol, Reason: search.IssueSymbolBudget, Count: incomplete,
-		})
-	}
+
 	return report, nil
 }
 
@@ -117,20 +124,34 @@ func (e *SymbolExecutor) searchProject(ctx context.Context, leg *search.SymbolPl
 	if err != nil {
 		return symbolProjectResult{err: err}
 	}
-	started := time.Now()
-	result, err := project.SearchProjectSourceSymbols(ctx, p, project.SourceSymbolSearchRequest{
-		Query:         leg.Name,
-		RootIDs:       target.rootIDs,
-		Limit:         leg.Cap,
-		CaseSensitive: leg.Flags.CaseSensitive,
-		Exact:         leg.Flags.WholeWord,
-		ExcludeDirs:   leg.ExcludeDirs,
-	}, declarationSearchIn(leg.DiscoveryScope(), leg.Flags.Include, leg.Flags.Exclude))
+	entry, release, err := e.progress.acquire(ctx, p, leg, target.rootIDs)
 	if err != nil {
 		return symbolProjectResult{err: err}
 	}
+	defer release()
+	allocation := leg.Budget.SymbolAllocation()
+	started := time.Now()
+	result, err := symbolsearch.Run(ctx, p, symbolsearch.Request{
+		Query:            leg.Name,
+		RootIDs:          target.rootIDs,
+		Limit:            leg.Cap,
+		CaseSensitive:    leg.Flags.CaseSensitive,
+		Exact:            leg.Flags.WholeWord,
+		ExcludeDirs:      leg.ExcludeDirs,
+		Wall:             allocation.Discovery,
+		AbbreviationWall: allocation.Abbreviation,
+		OutlineWall:      allocation.Outline,
+		Progress:         &entry.state,
+	}, entry.discovery)
+	if err != nil {
+		return symbolProjectResult{err: err}
+	}
+	if !symbolEpochsCurrent(entry.stamp) {
+		entry.discovery = nil
+		return symbolProjectResult{coverage: project.DeclarationCoverage{Gaps: []project.DeclarationGap{{Reason: project.DeclarationCatalogRefreshing}}}}
+	}
 	logSymbolSearchDone(target.id, result, started)
-	out := symbolProjectResult{limited: result.Limited, incomplete: result.Incomplete}
+	out := symbolProjectResult{limited: result.Limited, coverage: result.Coverage}
 	for _, pass := range result.Passes {
 		out.filesOutlined += pass.Files
 	}
@@ -180,7 +201,7 @@ func symbolProjects(roots []search.CodeRoot) []symbolProject {
 
 // logSymbolSearchDone is the one line per project symbol search that says
 // where its time went.
-func logSymbolSearchDone(projectID string, result project.SourceSymbolSearchResult, started time.Time) {
+func logSymbolSearchDone(projectID string, result symbolsearch.Result, started time.Time) {
 	passes := make([]string, 0, len(result.Passes))
 	for _, pass := range result.Passes {
 		passes = append(passes, fmt.Sprintf("%s:hits=%d,files=%d,partial=%t,discover_ms=%d,outline_ms=%d",

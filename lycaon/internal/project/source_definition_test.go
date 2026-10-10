@@ -154,9 +154,9 @@ func TestResolveDefinitionsEmptySymbolNoSearch(t *testing.T) {
 	p, err := CreateWithRoot(context.Background(), NewMemoryRegistry(), dir)
 	testutil.FailErr(t, "create project", err)
 	searchCalled := false
-	search := func(context.Context, DeclarationSearchQuery) ([]DeclarationSearchHit, bool, error) {
+	search := func(context.Context, DeclarationSearchQuery) ([]DeclarationSearchHit, DeclarationCoverage, error) {
 		searchCalled = true
-		return nil, false, nil
+		return nil, DeclarationCoverage{}, nil
 	}
 
 	got, err := ResolveProjectSourceDefinitions(context.Background(), p, SourceDefinitionRequest{
@@ -197,8 +197,8 @@ func TestResolveDefinitionsReturnsSearchError(t *testing.T) {
 	p, err := CreateWithRoot(context.Background(), NewMemoryRegistry(), dir)
 	testutil.FailErr(t, "create project", err)
 	want := errors.New("search failed")
-	search := func(context.Context, DeclarationSearchQuery) ([]DeclarationSearchHit, bool, error) {
-		return nil, false, want
+	search := func(context.Context, DeclarationSearchQuery) ([]DeclarationSearchHit, DeclarationCoverage, error) {
+		return nil, DeclarationCoverage{}, want
 	}
 
 	_, err = ResolveProjectSourceDefinitions(context.Background(), p, SourceDefinitionRequest{

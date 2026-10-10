@@ -51,6 +51,10 @@ type CodeRoot struct {
 
 // CodePlanLeg is the live code executor arm.
 type CodePlanLeg struct {
+	// Candidates nominates one content hit per file for declaration confirmation.
+	Candidates bool
+	// Progress is caller-owned disposable candidate scan state.
+	Progress  *CodeProgress
 	Query     Node
 	PathRoots []CodeRoot
 	Cap       int

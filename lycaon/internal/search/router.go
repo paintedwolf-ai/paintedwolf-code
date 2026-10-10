@@ -46,8 +46,9 @@ const (
 	IssueCatalogFailed        IssueReason = "catalog_failed"
 	IssueCatalogRefreshFailed IssueReason = "catalog_refresh_failed"
 	IssueCatalogRefreshing    IssueReason = "catalog_refreshing"
-	// IssueSymbolBudget: declaration discovery stopped at its line cap, clock,
-	// or file budget, so more declarations may match.
+	// IssueSymbolPending: a retained frontier can advance on another request.
+	IssueSymbolPending IssueReason = "symbol_pending"
+	// IssueSymbolBudget: a terminal declaration resource bound stopped discovery.
 	IssueSymbolBudget IssueReason = "symbol_budget"
 )
 

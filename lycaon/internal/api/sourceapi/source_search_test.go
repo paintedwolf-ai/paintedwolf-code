@@ -51,7 +51,7 @@ func TestDeclarationSearchUsesExtraRowAsLimitProbe(t *testing.T) {
 			testutil.FailErr(t, "write definition match", os.WriteFile(name, []byte("package p\n\nfunc Target() {}\n"), 0o644))
 		}
 		hits, limited, err := searchDeclarations(context.Background(), declarationQuery("Target", "p1", root, project.DeclarationMatchWholeWord, 3))
-		return len(hits), limited, err
+		return len(hits), limited.Incomplete(), err
 	}
 
 	count, limited, err := searchMatches(3)
@@ -77,7 +77,7 @@ func TestDeclarationSearchReportsColdCatalogAsPartial(t *testing.T) {
 	defer release()
 	hits, partial, err := searchDeclarations(t.Context(), declarationQuery("Target", "cold-definition", root, project.DeclarationMatchWholeWord, 3))
 	testutil.FailErr(t, "search cold definition", err)
-	if len(hits) != 0 || !partial {
+	if len(hits) != 0 || !partial.Incomplete() || len(partial.Gaps) != 1 || partial.Gaps[0].Reason != project.DeclarationCatalogWarming || partial.Gaps[0].Count != 1 {
 		t.Fatalf("cold definition hits=%d partial=%v", len(hits), partial)
 	}
 }

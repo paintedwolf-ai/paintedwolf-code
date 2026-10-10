@@ -186,7 +186,7 @@ func (n *Navigation) ChildRank(ctx context.Context, dir string, entry Entry, rec
 // Each frame bounds decoded pages while generations retain compact bytes.
 func (n *Navigation) pageReader() *structuralPageReader {
 	if n.reader == nil {
-		n.reader = &structuralPageReader{generation: n.pages, shared: &n.pin.store.catalog.structurePages, cacheID: n.pin.store.pageCacheID, cache: pagedview.NewCache[uint64, pagedview.RangePage[TreeItem]](128, 2<<20)}
+		n.reader = &structuralPageReader{generation: n.pages, shared: &n.pin.store.catalog.structurePages, cacheID: n.pin.store.instance, cache: pagedview.NewCache[uint64, pagedview.RangePage[TreeItem]](128, 2<<20)}
 	}
 	return n.reader
 }
