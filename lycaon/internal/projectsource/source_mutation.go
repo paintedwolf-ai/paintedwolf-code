@@ -154,7 +154,7 @@ func (s *SourceMutationService) resume(ctx context.Context, row *sourceMutationR
 				return nil, fmt.Errorf("%w: %w", ErrSourceMutationDiverged, err)
 			}
 			row.Error = err.Error()
-			if row.Plan.Kind == "delete" {
+			if row.Plan.Kind == "delete" || sourceFailureLeavesInput(&row.Plan) {
 				row.Status = sourceMutationFailed
 			}
 			_ = s.Journal.update(context.WithoutCancel(ctx), row)
