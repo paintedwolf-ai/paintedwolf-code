@@ -82,7 +82,7 @@ func NestedRootRepo(t *testing.T) (repo, nested string) {
 func NewMergedHistoryFixture(t *testing.T) MergedHistoryFixture {
 	t.Helper()
 	ledger, ledgerDB, withLedger := TestSourceLedger(t)
-	srv := NewTestServer(t, WithTestGitManager, withLedger, WithoutSourceInventory, WithSessionStore(sessionstore.NewSQL(ledgerDB)))
+	srv := NewTestServer(t, WithTestGitManager, withLedger, WithPassiveSourceInventory, WithSessionStore(sessionstore.NewSQL(ledgerDB)))
 	repo, nested := NestedRootRepo(t) // init commit: nested/src/app.ts "committed\n"
 
 	p := CreateProjectForTest(t, srv, nested)
@@ -247,4 +247,6 @@ func WithTestGitManager(d *hostapi.Dependencies) {
 
 // Nested roots resolve paths from their attachment point.
 
-func WithoutSourceInventory(d *hostapi.Dependencies) { d.Source.SourceInventory = nil }
+func WithPassiveSourceInventory(d *hostapi.Dependencies) {
+	d.Source.SourceInventory = &RecordingInventoryService{}
+}
